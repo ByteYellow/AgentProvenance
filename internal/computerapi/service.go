@@ -12,7 +12,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/control"
 	"github.com/byteyellow/agentprovenance/internal/ids"
-	"github.com/byteyellow/agentprovenance/internal/node"
+	runtimeplane "github.com/byteyellow/agentprovenance/internal/runtime"
 	"github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
@@ -185,11 +185,11 @@ func (s Service) Call(sessionID, module, function string, args map[string]string
 	if command == "" {
 		return "", security.DecisionRecord{}, fmt.Errorf("call arg command is required")
 	}
-	rt, err := node.NewDockerRuntime()
+	driver, err := runtimeplane.NewDriver("docker", s.Paths)
 	if err != nil {
 		return "", security.DecisionRecord{}, err
 	}
-	processID, err := control.Service{DB: s.DB, Paths: s.Paths, Runtime: rt}.Exec(sessionID, []string{"sh", "-lc", command}, stream)
+	processID, err := control.Service{DB: s.DB, Paths: s.Paths, Driver: driver}.Exec(sessionID, []string{"sh", "-lc", command}, stream)
 	if err != nil {
 		return "", security.DecisionRecord{}, err
 	}
