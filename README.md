@@ -189,8 +189,8 @@ forensics, and cost.
 
 **vs. full cloud sandbox platforms.** This project is not trying to be a hosted
 multi-tenant platform yet. The current goal is a local, inspectable, hackable
-MVP that proves the agent-computer abstraction before adding a daemon, API
-server, and real multi-node scheduler.
+MVP that proves the agent-computer abstraction before adding a real multi-node
+scheduler.
 
 ## Architecture
 
@@ -230,12 +230,16 @@ then correlated back to Control and State context.
 | **Security** | Policy, telemetry correlation, response, forensics |
 | **Economics** | Active CPU, warm pool, overcommit, cost accounting |
 
-The current binary is `agentprov`. A daemon/API server is planned, but the CLI is
-the stable first interface.
+The current binary is `agentprov`. It can run in direct local mode, or act as a
+client for the local daemon/API server.
 
 ## What works now
 
 - Docker-backed sessions can be created, executed, stopped, and removed.
+- `agentprov daemon serve` provides a local API server that owns the SQLite state
+  store, runtime driver, scheduler, and Docker adapter.
+- Core lifecycle commands can run as daemon clients through `--daemon-url` or
+  `ACF_DAEMON_URL`.
 - `exec --stream` records process rows and streams stdout/stderr.
 - `port expose` provides a local HTTP preview proxy.
 - Directory snapshots can be created and forked into independent workspaces.
@@ -253,11 +257,23 @@ the stable first interface.
   written into workspace files, container environment, SQLite event payloads, or
   normal logs.
 - Cost output includes run-level CPU, wall time, snapshot bytes, policy block
-  count, quarantine count, session-level cost, node-level cost, and a simple
-  cost estimate.
+  count, quarantine count, fanout cost, saved cost, session-level cost,
+  node-level cost, and a simple cost estimate.
 - Session creation goes through a single-node scheduler/admission path that
   reads node capacity, active sessions, memory pressure, warm pool signals, and
   snapshot locality.
+- Active CPU accounting samples Docker stats into `cpu_samples`, keeps an EWMA
+  active-CPU signal, tracks throttling and memory pressure, and shrinks the
+  effective CPU overcommit ratio when throttling is observed.
+- Snapshot planning records a file-level manifest and a snapshot edge DAG.
+  `snapshot plan`, `fork`, `resume`, and `graph trace` expose the chosen plan,
+  planner score, reason, lineage, taint, and storage bytes.
+- Warm pool items track hit count, last hit time, cold-start savings, memory,
+  disk bytes, GDSF priority, and eviction reason. Session creation can consume a
+  matching warm item.
+- Best-of-forks supports strategy budgets, score parsers, artifact refs,
+  max-fanout, max-cost, early stop, and winner selection by score/cost/risk
+  signals instead of exit code alone.
 
 ## Runtime driver capabilities
 
@@ -295,6 +311,13 @@ snapshot/restore is intentionally left false until a VM-capable backend exists.
 
 ## Command surface
 
+Daemon mode:
+
+```sh
+agentprov daemon serve --listen 127.0.0.1:8574
+export ACF_DAEMON_URL=http://127.0.0.1:8574
+```
+
 Core workflow:
 
 ```sh
@@ -304,9 +327,13 @@ agentprov session create --lease <lease_id>
 agentprov exec <session_id> --stream -- <command...>
 agentprov port expose <session_id> <port>
 agentprov snapshot create <session_id> --type directory --path /workspace --name ready
+agentprov snapshot plan ready
 agentprov fork ready --count 3
 agentprov snapshot resume ready --lease <lease_id>
-agentprov attempt best-of --snapshot ready --strategy "name::command"
+agentprov attempt best-of --snapshot ready \
+  --max-fanout 2 --max-cost 1 --early-stop \
+  --strategy "probe::printf 42::budget=2::score=number::artifact=probe.txt" \
+  --strategy "full::pytest -q::budget=30::score=contains:passed::artifact=pytest.log"
 agentprov cost show <run_id>
 ```
 
@@ -331,15 +358,16 @@ agentprov runtime list
 agentprov runtime inspect docker
 agentprov node register --address localhost --runtime docker --cpu 8 --memory-mb 8192
 agentprov node list
-agentprov pool create --template bugfix --size 2
-agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --physical-cpu 8
+agentprov pool create --template bugfix --size 2 --seed-workspace ./seed --max-size 2
+agentprov pool status
+agentprov cost sample <session_id>
+agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty --physical-cpu 8
 ```
 
 ## Roadmap
 
 Near term:
 
-- Daemon/API server behind `agentprov`
 - JSON output mode for automation
 - Snapshot taint propagation and memory resume capability gates
 - Stronger process manager and process tree enforcement

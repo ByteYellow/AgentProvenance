@@ -6,7 +6,9 @@ The first binary is `agentprov`. It manages local leases, Docker-backed sandbox
 sessions, preview URL proxies, runtime/template registries, directory
 snapshots, prepared workspace forks, structured Agent Computer API calls,
 telemetry, MVP policy decisions, provenance traces, forensics bundles, and
-run/session/node-level cost counters.
+run/session/node-level cost counters. It can run directly against local state or
+as a client for `agentprov daemon serve`, where the daemon owns SQLite, the runtime
+driver, scheduler, state store, and Docker adapter.
 
 ## Quick path
 
@@ -23,9 +25,12 @@ agentprov snapshot stack --template bugfix
 agentprov snapshot create <session_id> --type directory --path /workspace --name ready
 agentprov snapshot list
 agentprov snapshot inspect ready
+agentprov snapshot plan ready
 agentprov fork ready --count 2
 agentprov snapshot resume ready --lease <lease_id>
-agentprov attempt best-of --snapshot ready --strategy "pass::test -f hello.txt" --strategy "fail::test -f missing.txt"
+agentprov attempt best-of --snapshot ready --max-fanout 2 --max-cost 1 --early-stop \
+  --strategy "probe::printf 42::budget=2::score=number::artifact=probe.txt" \
+  --strategy "full::test -f hello.txt && echo passed::budget=5::score=contains:passed::artifact=hello.txt"
 agentprov policy test examples/events/metadata-egress.jsonl
 agentprov policy decisions --run run-demo-bugfix
 agentprov api write-file <session_id> --path notes.txt --content hello
@@ -34,7 +39,17 @@ agentprov graph trace --run run-demo-bugfix
 agentprov forensics export run-demo-bugfix
 agentprov cost sample <session_id>
 agentprov cost show run-demo-bugfix
-agentprov bench overcommit --sessions 20 --idle-ratio 0.8
+agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty
+```
+
+Daemon-backed equivalent:
+
+```sh
+agentprov daemon serve --listen 127.0.0.1:8574
+export ACF_DAEMON_URL=http://127.0.0.1:8574
+agentprov lease create --task examples/tasks/bugfix.yaml
+agentprov session create --lease <lease_id>
+agentprov exec <session_id> --stream -- sh -lc 'echo hello'
 ```
 
 ## Demos
@@ -100,11 +115,14 @@ agentprov template build --task examples/tasks/bugfix.yaml --name bugfix
 agentprov snapshot stack --template bugfix
 agentprov snapshot list
 agentprov snapshot inspect <ready_snapshot_id>
+agentprov snapshot plan <ready_snapshot_id>
+agentprov graph trace --run run-demo-bugfix
 ```
 
 This records `template -> ready snapshot -> attempt workspace` lineage. Use
 `snapshot inspect <snapshot_id>` to see kind, parent, manifest hash, status, and
-storage bytes.
+storage bytes. `snapshot plan` and `graph trace` expose the selected snapshot,
+copy plan, planner score, reason, and DAG edges for fork/resume operations.
 
 ### demo_best_of_forks
 
@@ -116,13 +134,16 @@ Equivalent manual flow:
 
 ```sh
 agentprov attempt best-of --snapshot ready \
-  --strategy "pass::test -f hello.txt" \
-  --strategy "fail::test -f missing.txt"
+  --max-fanout 2 --max-cost 1 --early-stop \
+  --strategy "probe::printf 42::budget=2::score=number::artifact=probe.txt" \
+  --strategy "full::test -f hello.txt && echo passed::budget=5::score=contains:passed::artifact=hello.txt"
 ```
 
 The command forks one workspace per strategy, executes each command in its own
 attempt workspace, records exit code, wall time, output summary, score, and
-marks the winning attempt.
+marks the winning attempt. Strategy metadata can include `budget`,
+`score=contains:<text>` or `score=number`, and `artifact`. Cost output includes
+fanout cost and saved cost when early stop or max fanout avoids extra work.
 
 ### demo_metadata_egress_quarantine
 
@@ -190,16 +211,26 @@ agentprov node register --address localhost --runtime docker --cpu 8 --memory-mb
 agentprov node list
 ```
 
+Warm pool entries track hit count, cold-start savings, memory, disk footprint,
+GDSF priority, and eviction reason. For seeded demo workspaces:
+
+```sh
+agentprov pool create --template bugfix --size 3 --seed-workspace ./seed --max-size 2
+agentprov pool status
+```
+
 ### demo_active_cpu_overcommit
 
 ```sh
-agentprov bench overcommit --sessions 20 --idle-ratio 0.8
+agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty
 ```
 
 This simulation uses the same single-node scheduler admission function as
 `session create`. It shows how idle-heavy sessions are admitted using
 `active_cpu_request + idle_cpu_request * idle_discount`, while memory is not
-overcommitted.
+overcommitted. The bursty mode simulates periodic active-CPU spikes and reports
+`effective_cpu`, `active_cpu_debt`, `burst_risk`, overcommit ratio, memory
+pressure, and structured reject reason.
 
 ## MVP limits
 
