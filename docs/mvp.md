@@ -17,7 +17,10 @@ agentprov session inspect <session_id>
 agentprov exec <session_id> --stream -- go version
 agentprov exec <session_id> --stream -- sh -lc 'echo hello > hello.txt'
 agentprov snapshot create <session_id> --type directory --path /workspace --name ready
+agentprov snapshot list
+agentprov snapshot inspect ready
 agentprov fork ready --count 2
+agentprov attempt best-of --snapshot ready --strategy "pass::test -f hello.txt" --strategy "fail::test -f missing.txt"
 agentprov policy test examples/events/metadata-egress.jsonl
 agentprov policy decisions --run run-demo-bugfix
 agentprov cost show run-demo-bugfix
@@ -39,12 +42,38 @@ agentprov exec "$session_id" --stream -- go version
 ```sh
 agentprov exec "$session_id" --stream -- sh -lc 'echo base > hello.txt'
 agentprov snapshot create "$session_id" --type directory --path /workspace --name ready
+agentprov snapshot list
+agentprov snapshot inspect ready
 agentprov fork ready --count 3
 ```
 
 Each forked attempt prints an `attempt_id`, workspace path, and `fork_ms`.
 Modify files under one attempt workspace and verify the other attempt workspaces
 do not change.
+
+### demo_snapshot_stack
+
+```sh
+agentprov snapshot stack --task examples/tasks/bugfix.yaml
+agentprov snapshot list
+agentprov snapshot inspect <ready_snapshot_id>
+```
+
+This records `template -> ready snapshot -> attempt workspace` lineage. Use
+`snapshot inspect <snapshot_id>` to see kind, parent, manifest hash, status, and
+storage bytes.
+
+### demo_best_of_forks
+
+```sh
+agentprov attempt best-of --snapshot ready \
+  --strategy "pass::test -f hello.txt" \
+  --strategy "fail::test -f missing.txt"
+```
+
+The command forks one workspace per strategy, executes each command in its own
+attempt workspace, records exit code, wall time, output summary, score, and
+marks the winning attempt.
 
 ### demo_metadata_egress_quarantine
 

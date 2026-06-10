@@ -34,7 +34,12 @@ session_id=$(./agentprov session create --lease "$lease_id")
 ./agentprov exec "$session_id" --stream -- sh -lc 'echo hello > hello.txt'
 
 ./agentprov snapshot create "$session_id" --type directory --path /workspace --name ready
+./agentprov snapshot list
+./agentprov snapshot inspect ready
 ./agentprov fork ready --count 3
+./agentprov attempt best-of --snapshot ready \
+  --strategy "pass::test -f hello.txt" \
+  --strategy "fail::test -f missing.txt"
 
 ./agentprov policy test examples/events/metadata-egress.jsonl
 ./agentprov policy decisions --run run-demo-bugfix
@@ -62,7 +67,11 @@ agentprov exec <session_id> --stream -- <command...>
 agentprov process interrupt <process_id>
 agentprov port expose <session_id> <port>
 agentprov snapshot create <session_id> --type directory --path /workspace --name ready
+agentprov snapshot stack --task examples/tasks/bugfix.yaml
+agentprov snapshot list
+agentprov snapshot inspect <snapshot_name_or_id>
 agentprov fork ready --count 3
+agentprov attempt best-of --snapshot ready --strategy "name::command"
 agentprov policy test examples/events/metadata-egress.jsonl
 agentprov policy decisions --run <run_id>
 agentprov cost show <run_id>
