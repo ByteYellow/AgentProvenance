@@ -3,8 +3,10 @@
 `agentprovenance` is a CLI-first single-node Agent Computer Control Plane.
 
 The first binary is `agentprov`. It manages local leases, Docker-backed sandbox
-sessions, directory snapshots, prepared workspace forks, MVP policy decisions,
-and run-level cost counters.
+sessions, preview URL proxies, runtime/template registries, directory
+snapshots, prepared workspace forks, structured Agent Computer API calls,
+telemetry, MVP policy decisions, provenance traces, forensics bundles, and
+run-level cost counters.
 
 ## Quick path
 
@@ -14,8 +16,10 @@ agentprov lease create --task examples/tasks/bugfix.yaml
 agentprov session create --lease <lease_id>
 agentprov session list
 agentprov session inspect <session_id>
-agentprov exec <session_id> --stream -- go version
 agentprov exec <session_id> --stream -- sh -lc 'echo hello > hello.txt'
+agentprov runtime list
+agentprov template build --task examples/tasks/bugfix.yaml --name bugfix
+agentprov snapshot stack --template bugfix
 agentprov snapshot create <session_id> --type directory --path /workspace --name ready
 agentprov snapshot list
 agentprov snapshot inspect ready
@@ -23,6 +27,11 @@ agentprov fork ready --count 2
 agentprov attempt best-of --snapshot ready --strategy "pass::test -f hello.txt" --strategy "fail::test -f missing.txt"
 agentprov policy test examples/events/metadata-egress.jsonl
 agentprov policy decisions --run run-demo-bugfix
+agentprov api write-file <session_id> --path notes.txt --content hello
+agentprov telemetry list --session <session_id>
+agentprov graph trace --run run-demo-bugfix
+agentprov forensics export run-demo-bugfix
+agentprov cost sample <session_id>
 agentprov cost show run-demo-bugfix
 agentprov bench overcommit --sessions 20 --idle-ratio 0.8
 ```
@@ -34,10 +43,26 @@ agentprov bench overcommit --sessions 20 --idle-ratio 0.8
 ```sh
 lease_id=$(agentprov lease create --task examples/tasks/bugfix.yaml)
 session_id=$(agentprov session create --lease "$lease_id")
-agentprov exec "$session_id" --stream -- go version
+agentprov exec "$session_id" --stream -- sh -lc 'echo hello'
 ```
 
+### demo_preview_url
+
+```sh
+./scripts/demo_preview_url.sh
+```
+
+This starts a tiny HTTP service inside the sandbox and exposes it through a
+host-local preview URL. `port list` shows the proxy and `port close` shuts it
+down without leaving a residual proxy process.
+
 ### demo_snapshot_fanout
+
+```sh
+./scripts/demo_snapshot_fanout.sh
+```
+
+Equivalent manual flow:
 
 ```sh
 agentprov exec "$session_id" --stream -- sh -lc 'echo base > hello.txt'
@@ -54,7 +79,8 @@ do not change.
 ### demo_snapshot_stack
 
 ```sh
-agentprov snapshot stack --task examples/tasks/bugfix.yaml
+agentprov template build --task examples/tasks/bugfix.yaml --name bugfix
+agentprov snapshot stack --template bugfix
 agentprov snapshot list
 agentprov snapshot inspect <ready_snapshot_id>
 ```
@@ -64,6 +90,12 @@ This records `template -> ready snapshot -> attempt workspace` lineage. Use
 storage bytes.
 
 ### demo_best_of_forks
+
+```sh
+./scripts/demo_best_of_forks.sh
+```
+
+Equivalent manual flow:
 
 ```sh
 agentprov attempt best-of --snapshot ready \
@@ -78,21 +110,55 @@ marks the winning attempt.
 ### demo_metadata_egress_quarantine
 
 ```sh
-agentprov policy test examples/events/metadata-egress.jsonl
+./scripts/demo_policy_quarantine.sh
+```
+
+Equivalent manual flow:
+
+```sh
+agentprov egress check --run run-demo-bugfix --session <session_id> --dst-ip 169.254.169.254 --host metadata.local
 agentprov policy decisions --run run-demo-bugfix
 ```
 
-The metadata IP event produces a `quarantine` decision. If the referenced
-session exists locally, it is marked `quarantined` and its snapshots are tainted.
+The metadata IP event produces a `quarantine` decision and marks the local
+session as quarantined.
 
 ### demo_cost_per_run
 
 ```sh
+./scripts/demo_cost_accounting.sh
+```
+
+Equivalent manual flow:
+
+```sh
+agentprov cost sample <session_id>
 agentprov cost show run-demo-bugfix
 ```
 
 The output includes `active_cpu_seconds`, `idle_seconds`, `wall_seconds`,
-`snapshot_bytes`, `policy_block_count`, `quarantine_count`, and `cost_per_run`.
+`snapshot_bytes`, `policy_block_count`, `quarantine_count`, `overcommit_ratio`,
+`active_cpu_debt`, `queue_pressure`, and `cost_per_run`.
+
+### demo_provenance_trace
+
+```sh
+./scripts/demo_provenance_trace.sh
+```
+
+This records file, artifact, process, tool call, policy decision, and forensics
+bundle data, then prints `telemetry list` and `graph trace` output.
+
+### demo_baseline_pool_node
+
+```sh
+agentprov baseline learn --template bugfix --run run-demo-bugfix
+agentprov baseline check --template bugfix --run run-demo-bugfix
+agentprov pool create --template bugfix --size 2
+agentprov pool status
+agentprov node register --address localhost --runtime docker --cpu 8 --memory-mb 8192
+agentprov node list
+```
 
 ### demo_active_cpu_overcommit
 
@@ -100,12 +166,13 @@ The output includes `active_cpu_seconds`, `idle_seconds`, `wall_seconds`,
 agentprov bench overcommit --sessions 20 --idle-ratio 0.8
 ```
 
-This is a simulation for v1. It shows how idle-heavy sessions are admitted using
-`active_cpu_request + idle_cpu_request * idle_discount`.
+This simulation complements `cost sample`. It shows how idle-heavy sessions are
+admitted using `active_cpu_request + idle_cpu_request * idle_discount`.
 
 ## MVP limits
 
 - Docker must be running for `session`, `exec`, and `process` commands.
 - Directory snapshots are supported; memory snapshots are intentionally not.
-- `port expose` records a preview URL event. Real dynamic port proxying is a
-  follow-up because Docker cannot add host port bindings after container create.
+- `port expose` is an HTTP preview proxy, not a raw TCP tunnel.
+- The node registry is local metadata. Multi-node scheduling is still a
+  follow-up.
