@@ -131,7 +131,9 @@ storage bytes. `snapshot plan` and `graph trace` expose the selected snapshot,
 copy plan, planner score, source policy, candidate count, semantic/physical
 snapshot type, file-level delta, reason, and DAG edges for fork/resume
 operations. Source policy currently supports `latest-ready`, `smallest-delta`,
-`local`, and `untainted`.
+`local`, and `untainted`. `graph trace --run <run_id>` keeps snapshot and
+planner output scoped to that run, so parallel rollouts do not leak unrelated
+snapshot decisions into the evidence chain.
 
 ### demo_best_of_forks
 

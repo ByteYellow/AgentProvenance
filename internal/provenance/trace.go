@@ -13,6 +13,14 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 	if runID == "" {
 		return fmt.Errorf("run_id is required")
 	}
+	runSnapshotIDs, err := collectRunSnapshotIDs(db, runID)
+	if err != nil {
+		return err
+	}
+	runGraphIDs, err := collectRunGraphIDs(db, runID, runSnapshotIDs)
+	if err != nil {
+		return err
+	}
 	fmt.Fprintf(out, "run_id=%s\n", runID)
 
 	rows, err := db.Query(`SELECT id, lease_id, status, workspace_host_path, COALESCE(container_id, '') FROM sessions WHERE run_id = ? ORDER BY created_at ASC`, runID)
@@ -114,9 +122,7 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 		return err
 	}
 
-	snapRows, err := db.Query(`SELECT id, COALESCE(name, ''), COALESCE(parent_id, ''), kind, status, manifest_hash, bytes FROM snapshots
-		WHERE session_id IN (SELECT id FROM sessions WHERE run_id = ?) OR id IN (SELECT snapshot_id FROM fork_attempts WHERE snapshot_id IN (SELECT id FROM snapshots))
-		ORDER BY created_at ASC`, runID)
+	snapRows, err := db.Query(`SELECT id, COALESCE(name, ''), COALESCE(parent_id, ''), kind, status, manifest_hash, bytes FROM snapshots ORDER BY created_at ASC`)
 	if err != nil {
 		return err
 	}
@@ -127,6 +133,9 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 		var bytes int64
 		if err := snapRows.Scan(&id, &name, &parentID, &kind, &status, &hash, &bytes); err != nil {
 			return err
+		}
+		if !runSnapshotIDs[id] {
+			continue
 		}
 		fmt.Fprintf(out, "  snapshot=%s name=%s kind=%s status=%s parent=%s bytes=%d hash=%s\n", id, name, kind, status, parentID, bytes, hash)
 	}
@@ -146,9 +155,36 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 		if err := edgeRows.Scan(&parentID, &childID, &edgeType, &plan, &reason, &score, &createdAt); err != nil {
 			return err
 		}
+		if !runGraphIDs[parentID] || !runGraphIDs[childID] {
+			continue
+		}
 		fmt.Fprintf(out, "  parent=%s child=%s type=%s plan=%s score=%.3f reason=%q created_at=%s\n", parentID, childID, edgeType, plan, score, reason, createdAt)
 	}
 	if err := edgeRows.Err(); err != nil {
+		return err
+	}
+
+	planRows, err := db.Query(`SELECT parent_id, child_id, edge_type, plan, COALESCE(plan_reason, ''), COALESCE(planner_score, 0), created_at
+		FROM snapshot_edges
+		WHERE COALESCE(plan_reason, '') != ''
+		ORDER BY created_at ASC`)
+	if err != nil {
+		return err
+	}
+	defer planRows.Close()
+	fmt.Fprintln(out, "snapshot_plans:")
+	for planRows.Next() {
+		var parentID, childID, edgeType, plan, reason, createdAt string
+		var score float64
+		if err := planRows.Scan(&parentID, &childID, &edgeType, &plan, &reason, &score, &createdAt); err != nil {
+			return err
+		}
+		if !runGraphIDs[parentID] || !runGraphIDs[childID] {
+			continue
+		}
+		fmt.Fprintf(out, "  source=%s target=%s type=%s selected_plan=%s score=%.3f created_at=%s explanation=%q\n", parentID, childID, edgeType, plan, score, createdAt, reason)
+	}
+	if err := planRows.Err(); err != nil {
 		return err
 	}
 
@@ -227,4 +263,94 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 	}
 
 	return nil
+}
+
+func collectRunGraphIDs(db *sql.DB, runID string, snapshotIDs map[string]bool) (map[string]bool, error) {
+	ids := map[string]bool{}
+	for id := range snapshotIDs {
+		ids[id] = true
+	}
+	rows, err := db.Query(`SELECT a.id FROM fork_attempts a JOIN rollouts r ON a.rollout_id = r.id WHERE r.run_id = ?`, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids[id] = true
+	}
+	return ids, rows.Err()
+}
+
+func collectRunSnapshotIDs(db *sql.DB, runID string) (map[string]bool, error) {
+	ids := map[string]bool{}
+	rows, err := db.Query(`SELECT id, COALESCE(parent_id, '') FROM snapshots WHERE session_id IN (SELECT id FROM sessions WHERE run_id = ?)`, runID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id, parentID string
+		if err := rows.Scan(&id, &parentID); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		addSnapshotWithParents(db, ids, id)
+		addSnapshotWithParents(db, ids, parentID)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	rows, err = db.Query(`SELECT base_snapshot_id FROM rollouts WHERE run_id = ?`, runID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		addSnapshotWithParents(db, ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+
+	rows, err = db.Query(`SELECT a.snapshot_id FROM fork_attempts a JOIN rollouts r ON a.rollout_id = r.id WHERE r.run_id = ?`, runID)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		addSnapshotWithParents(db, ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	return ids, nil
+}
+
+func addSnapshotWithParents(db *sql.DB, ids map[string]bool, snapshotID string) {
+	for snapshotID != "" && !ids[snapshotID] {
+		ids[snapshotID] = true
+		var parentID string
+		if err := db.QueryRow(`SELECT COALESCE(parent_id, '') FROM snapshots WHERE id = ?`, snapshotID).Scan(&parentID); err != nil {
+			return
+		}
+		snapshotID = parentID
+	}
 }

@@ -114,6 +114,7 @@ The current repository is a local-first MVP. It currently supports:
 - async evidence and cleanup pipeline
 - I/O-aware snapshot planning with source policies: `latest-ready`, `smallest-delta`, `local`, and `untainted`
 - MVP policy decisions, quarantine, provenance trace, and forensics export
+- run-local provenance trace for snapshot planner explanations
 - capability-gated runtime drivers with Docker active and gVisor/Firecracker/bubblewrap as explicit stubs
 
 ## Current boundaries
@@ -254,6 +255,10 @@ agentprov policy decisions --run <run_id>
 agentprov graph trace --run <run_id>
 agentprov forensics export <run_id>
 ```
+
+`graph trace` includes run-local `snapshot_plans` so rollout debugging can show
+which snapshot source was selected, which copy/resume plan was used, and why
+unrelated rollout snapshots were excluded.
 
 ### Runtime and fleet signals
 
