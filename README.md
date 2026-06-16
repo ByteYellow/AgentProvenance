@@ -107,6 +107,7 @@ The current repository is a local-first MVP. It currently supports:
 - template → ready snapshot → attempt workspace lineage
 - rollout fanout and best-of-forks, including Docker-backed short-lived attempt sessions via `--runtime docker`
 - winner selection by risk, budget, score, and cost instead of exit code alone
+- budget-aware probe-to-top-k rollout pruning
 - BurstGuard admission before synchronized tool phases, with default reject and optional delay/queue policy
 - Docker CPU profile switching between `think` and `tool`
 - promotion barrier with evidence drain, risk finalization, and taint rejection
@@ -150,9 +151,10 @@ SESSION_ID=$(./agentprov session create --lease "$LEASE_ID")
 ./agentprov snapshot create "$SESSION_ID" --type directory --path /workspace --name ready
 
 ./agentprov rollout start --task examples/tasks/bugfix.yaml --snapshot ready --runtime docker --fanout 3 \
-  --strategy 'probe::test -f hello.txt && echo passed::score=contains:passed' \
-  --strategy 'fast::printf 42::score=number' \
-  --strategy 'slow::sleep 1; echo passed::score=contains:passed'
+  --top-k 2 \
+  --strategy 'probe::test -f hello.txt && echo passed::probe=test -f hello.txt && echo passed::score=contains:passed' \
+  --strategy 'fast::printf 42::probe=printf 42::score=number' \
+  --strategy 'slow::sleep 1; echo passed::probe=echo 1::score=contains:passed'
 
 ./agentprov rollout winner run-demo-bugfix
 ./agentprov cost show run-demo-bugfix
@@ -225,15 +227,16 @@ agentprov fork ready --count 3
 agentprov snapshot resume ready --lease <lease_id>
 
 agentprov rollout start --task examples/tasks/bugfix.yaml --snapshot ready --runtime docker --fanout 3 \
-  --strategy "probe::test -f task.yaml && echo passed::score=contains:passed" \
-  --strategy "score::printf 42::score=number" \
-  --strategy "slow::sleep 1; echo passed::score=contains:passed"
+  --top-k 2 \
+  --strategy "probe::test -f task.yaml && echo passed::probe=test -f task.yaml && echo passed::score=contains:passed" \
+  --strategy "score::printf 42::probe=printf 42::score=number" \
+  --strategy "slow::sleep 1; echo passed::probe=echo 1::score=contains:passed"
 agentprov rollout winner <rollout_id_or_run_id>
 
 agentprov attempt best-of --snapshot ready \
-  --max-fanout 2 --max-cost 1 --early-stop \
-  --strategy "probe::printf 42::budget=2::score=number::artifact=probe.txt" \
-  --strategy "full::pytest -q::budget=30::score=contains:passed::artifact=pytest.log"
+  --max-fanout 3 --top-k 1 --max-cost 1 --early-stop \
+  --strategy "probe::printf 42::probe=printf 42::budget=2::score=number::artifact=probe.txt" \
+  --strategy "full::pytest -q::probe=test -f task.yaml && echo 1::budget=30::score=contains:passed::artifact=pytest.log"
 
 agentprov cost show <run_id>
 ```

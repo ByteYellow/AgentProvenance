@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -59,6 +60,7 @@ type Options struct {
 	MaxFanout       int
 	MaxCost         float64
 	EarlyStop       bool
+	TopK            int
 	RunID           string
 	BurstCPURequest float64
 	BurstTTL        time.Duration
@@ -72,6 +74,7 @@ type Options struct {
 type Strategy struct {
 	Name           string
 	Command        string
+	ProbeCommand   string
 	BudgetSeconds  int
 	ScoreParser    string
 	ArtifactResult string
@@ -112,15 +115,20 @@ func (s Service) BestOfWithOptions(snapshotNameOrID string, strategies []string,
 		}
 	}
 	results := make([]Result, len(parsed))
-	var wg sync.WaitGroup
-	for i, fork := range forks {
-		wg.Add(1)
-		go func(i int, fork state.ForkResult, strategy Strategy, toolCallID string) {
-			defer wg.Done()
-			results[i] = s.runAttemptWithBurst(fork.AttemptID, toolCallID, fork.WorkspacePath, strategy, opts)
-		}(i, fork, parsed[i], toolCallIDs[i])
+	prunedCount := 0
+	if shouldRunProbeStage(parsed, opts) {
+		prunedCount = s.runProbeThenTopK(forks, parsed, toolCallIDs, opts, results)
+	} else {
+		var wg sync.WaitGroup
+		for i, fork := range forks {
+			wg.Add(1)
+			go func(i int, fork state.ForkResult, strategy Strategy, toolCallID string) {
+				defer wg.Done()
+				results[i] = s.runAttemptWithBurst(fork.AttemptID, toolCallID, fork.WorkspacePath, strategy, opts)
+			}(i, fork, parsed[i], toolCallIDs[i])
+		}
+		wg.Wait()
 	}
-	wg.Wait()
 
 	winnerIndex := -1
 	var totalCost float64
@@ -150,7 +158,7 @@ func (s Service) BestOfWithOptions(snapshotNameOrID string, strategies []string,
 	if _, err := s.DB.Exec(`UPDATE fork_attempts SET is_winner = CASE WHEN id = ? THEN 1 ELSE 0 END`, winner.AttemptID); err != nil {
 		return results, Result{}, err
 	}
-	saved := float64(len(strategies)-len(results)) * 0.001
+	saved := float64(len(strategies)-len(results)+prunedCount) * 0.001
 	for i := range results {
 		results[i].SavedCost = saved
 		_, _ = s.DB.Exec(`UPDATE fork_attempts SET saved_cost = ? WHERE id = ?`, saved, results[i].AttemptID)
@@ -160,6 +168,105 @@ func (s Service) BestOfWithOptions(snapshotNameOrID string, strategies []string,
 		FROM snapshots sn LEFT JOIN sessions s ON sn.session_id = s.id WHERE sn.id = (SELECT snapshot_id FROM fork_attempts WHERE id = ?)
 		LIMIT 1`, totalCost, saved, time.Now().UTC().Format(time.RFC3339Nano), winner.AttemptID)
 	return results, winner, nil
+}
+
+func shouldRunProbeStage(strategies []Strategy, opts Options) bool {
+	for _, strategy := range strategies {
+		if strings.TrimSpace(strategy.ProbeCommand) != "" {
+			return opts.TopK > 0 || opts.EarlyStop
+		}
+	}
+	return false
+}
+
+func (s Service) runProbeThenTopK(forks []state.ForkResult, strategies []Strategy, toolCallIDs []string, opts Options, results []Result) int {
+	probes := make([]Result, len(strategies))
+	var wg sync.WaitGroup
+	for i, fork := range forks {
+		wg.Add(1)
+		go func(i int, fork state.ForkResult, strategy Strategy, toolCallID string) {
+			defer wg.Done()
+			probeStrategy := strategy
+			if strings.TrimSpace(strategy.ProbeCommand) != "" {
+				probeStrategy.Command = strategy.ProbeCommand
+			}
+			probeStrategy.ArtifactResult = "probe:" + strategy.ArtifactResult
+			probes[i] = s.runAttemptWithBurst(fork.AttemptID, toolCallID, fork.WorkspacePath, probeStrategy, opts)
+			probes[i].Strategy = strategy.Name
+			probes[i].Command = strategy.Command
+			probes[i].ArtifactResult = strategy.ArtifactResult
+			if probes[i].OutputSummary != "" {
+				probes[i].OutputSummary = "probe: " + probes[i].OutputSummary
+			} else {
+				probes[i].OutputSummary = "probe completed"
+			}
+		}(i, fork, strategies[i], toolCallIDs[i])
+	}
+	wg.Wait()
+
+	topK := opts.TopK
+	if topK <= 0 && opts.EarlyStop {
+		topK = 1
+	}
+	if topK <= 0 || topK > len(strategies) {
+		topK = len(strategies)
+	}
+	order := make([]int, len(strategies))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		return better(probes[order[i]], probes[order[j]])
+	})
+	selected := map[int]bool{}
+	for _, index := range order[:topK] {
+		selected[index] = true
+	}
+
+	pruned := 0
+	for i, fork := range forks {
+		if !selected[i] {
+			result := probes[i]
+			result.Status = "pruned"
+			result.OutputSummary = strings.TrimSpace(result.OutputSummary + " | pruned_before_full_command")
+			results[i] = result
+			pruned++
+			continue
+		}
+		full := s.runAttemptWithBurst(fork.AttemptID, toolCallIDs[i], fork.WorkspacePath, strategies[i], opts)
+		full.WallMS += probes[i].WallMS
+		full.CostEstimate += probes[i].CostEstimate
+		if probes[i].BudgetExceeded {
+			full.BudgetExceeded = true
+		}
+		if probes[i].OutputSummary != "" {
+			full.OutputSummary = strings.TrimSpace(probes[i].OutputSummary + " | full: " + full.OutputSummary)
+		}
+		results[i] = full
+		if opts.EarlyStop && full.ExitCode == 0 && !full.BudgetExceeded && full.Score >= 999 {
+			for _, index := range order {
+				if index == i || selected[index] {
+					continue
+				}
+				result := probes[index]
+				result.Status = "pruned"
+				result.OutputSummary = strings.TrimSpace(result.OutputSummary + " | early_stop_after_winner")
+				results[index] = result
+				pruned++
+			}
+			break
+		}
+	}
+	for i := range results {
+		if results[i].AttemptID == "" {
+			result := probes[i]
+			result.Status = "pruned"
+			result.OutputSummary = strings.TrimSpace(result.OutputSummary + " | pruned_before_full_command")
+			results[i] = result
+			pruned++
+		}
+	}
+	return pruned
 }
 
 func (s Service) runAttemptWithBurst(attemptID, toolCallID, workspacePath string, strategy Strategy, opts Options) Result {
@@ -358,6 +465,8 @@ func parseStrategy(raw string, index int) Strategy {
 				strategy.ScoreParser = strings.TrimSpace(value)
 			case "artifact":
 				strategy.ArtifactResult = strings.TrimSpace(value)
+			case "probe":
+				strategy.ProbeCommand = strings.TrimSpace(value)
 			}
 		}
 	}
@@ -419,7 +528,7 @@ func scoreOutput(output, parser string, wallMS int64, exitCode int) float64 {
 		}
 		return -100.0
 	}
-	if strings.HasPrefix(parser, "number:") {
+	if parser == "number" || strings.HasPrefix(parser, "number:") {
 		value := strings.TrimSpace(output)
 		score, err := strconv.ParseFloat(value, 64)
 		if err == nil {
@@ -432,6 +541,9 @@ func scoreOutput(output, parser string, wallMS int64, exitCode int) float64 {
 func better(a, b Result) bool {
 	if riskRank(a.RiskStatus) != riskRank(b.RiskStatus) {
 		return riskRank(a.RiskStatus) > riskRank(b.RiskStatus)
+	}
+	if statusRank(a.Status) != statusRank(b.Status) {
+		return statusRank(a.Status) > statusRank(b.Status)
 	}
 	if a.ExitCode == 0 && b.ExitCode != 0 {
 		return true
@@ -449,6 +561,21 @@ func better(a, b Result) bool {
 		return a.CostEstimate < b.CostEstimate
 	}
 	return a.WallMS < b.WallMS
+}
+
+func statusRank(status string) int {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "passed":
+		return 4
+	case "budget_exceeded":
+		return 3
+	case "failed":
+		return 2
+	case "rejected":
+		return 1
+	default:
+		return 0
+	}
 }
 
 func riskRank(status string) int {

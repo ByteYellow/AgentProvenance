@@ -23,7 +23,8 @@ SESSION_ID="$("$BIN" --data-dir "$DATA_DIR" session create --lease "$LEASE_ID")"
 "$BIN" --data-dir "$DATA_DIR" exec "$SESSION_ID" --stream -- sh -lc 'echo winner > hello.txt'
 "$BIN" --data-dir "$DATA_DIR" snapshot create "$SESSION_ID" --type directory --path /workspace --name ready
 "$BIN" --data-dir "$DATA_DIR" attempt best-of --snapshot ready \
-  --strategy "pass::test -f hello.txt" \
-  --strategy "fail::test -f missing.txt"
+  --max-fanout 2 --top-k 1 \
+  --strategy "strong-probe::test -f hello.txt && echo selected::probe=test -f hello.txt && echo 10::score=number" \
+  --strategy "weak-probe::echo 9999::probe=echo 1::score=number"
 "$BIN" --data-dir "$DATA_DIR" session rm "$SESSION_ID"
 SESSION_ID=""

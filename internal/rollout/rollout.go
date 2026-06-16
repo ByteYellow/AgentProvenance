@@ -30,6 +30,7 @@ type StartRequest struct {
 	BudgetSeconds int
 	MaxCost       float64
 	EarlyStop     bool
+	TopK          int
 	Runtime       string
 }
 
@@ -121,7 +122,7 @@ func (s Service) Start(req StartRequest) (Rollout, []attempt.Result, attempt.Res
 	}
 	stateSvc := state.Service{DB: s.DB, Paths: s.Paths}
 	attemptSvc := attempt.Service{DB: s.DB, State: stateSvc}
-	opts := attempt.Options{MaxFanout: req.Fanout, MaxCost: req.MaxCost, EarlyStop: req.EarlyStop, RunID: req.RunID, Runtime: req.Runtime, TaskPath: req.TaskPath, BaseSnapshotID: baseSnapshotID, Paths: s.Paths}
+	opts := attempt.Options{MaxFanout: req.Fanout, MaxCost: req.MaxCost, EarlyStop: req.EarlyStop, TopK: req.TopK, RunID: req.RunID, Runtime: req.Runtime, TaskPath: req.TaskPath, BaseSnapshotID: baseSnapshotID, Paths: s.Paths}
 	if req.Runtime == "docker" {
 		driver, err := runtimeplane.NewDriver("docker", s.Paths)
 		if err != nil {

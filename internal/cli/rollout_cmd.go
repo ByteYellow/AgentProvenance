@@ -57,6 +57,7 @@ func rolloutStartCmd(dataDir *string) *cobra.Command {
 	c.Flags().IntVar(&req.BudgetSeconds, "budget-seconds", 0, "rollout budget in seconds for accounting")
 	c.Flags().Float64Var(&req.MaxCost, "max-cost", 0, "maximum fanout cost budget before stopping")
 	c.Flags().BoolVar(&req.EarlyStop, "early-stop", false, "stop when a high-scoring passing attempt is found")
+	c.Flags().IntVar(&req.TopK, "top-k", 0, "after probe commands, run full commands only for the top K strategies")
 	c.Flags().StringVar(&req.Runtime, "runtime", "local", "attempt execution runtime: local or docker")
 	_ = c.MarkFlagRequired("snapshot")
 	_ = c.MarkFlagRequired("strategy")

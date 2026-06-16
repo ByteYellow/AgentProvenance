@@ -15,6 +15,7 @@ func attemptCmd(dataDir *string) *cobra.Command {
 	var maxFanout int
 	var maxCost float64
 	var earlyStop bool
+	var topK int
 	bestOf := &cobra.Command{
 		Use:   "best-of",
 		Short: "fork attempts from one snapshot, execute strategies, and choose a winner",
@@ -29,7 +30,7 @@ func attemptCmd(dataDir *string) *cobra.Command {
 			}
 			defer db.Close()
 			service := attempt.Service{DB: db, State: state.Service{DB: db, Paths: paths}}
-			results, winner, err := service.BestOfWithOptions(snapshot, strategies, attempt.Options{MaxFanout: maxFanout, MaxCost: maxCost, EarlyStop: earlyStop})
+			results, winner, err := service.BestOfWithOptions(snapshot, strategies, attempt.Options{MaxFanout: maxFanout, MaxCost: maxCost, EarlyStop: earlyStop, TopK: topK})
 			if err != nil {
 				return err
 			}
@@ -54,6 +55,7 @@ func attemptCmd(dataDir *string) *cobra.Command {
 	bestOf.Flags().IntVar(&maxFanout, "max-fanout", 0, "maximum number of strategies to execute")
 	bestOf.Flags().Float64Var(&maxCost, "max-cost", 0, "maximum fanout cost budget before stopping")
 	bestOf.Flags().BoolVar(&earlyStop, "early-stop", false, "stop when a high-scoring passing attempt is found")
+	bestOf.Flags().IntVar(&topK, "top-k", 0, "after probe commands, run full commands only for the top K strategies")
 	_ = bestOf.MarkFlagRequired("snapshot")
 	_ = bestOf.MarkFlagRequired("strategy")
 	cmd := &cobra.Command{Use: "attempt", Short: "attempt execution and selection commands"}

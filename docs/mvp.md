@@ -29,13 +29,14 @@ agentprov snapshot plan ready
 agentprov fork ready --count 2
 agentprov snapshot resume ready --lease <lease_id>
 agentprov rollout start --task examples/tasks/bugfix.yaml --snapshot ready --runtime docker --fanout 3 \
-  --strategy "probe::test -f hello.txt && echo passed::score=contains:passed::artifact=probe.log" \
-  --strategy "score::printf 42::score=number::artifact=score.txt" \
-  --strategy "slow::sleep 1; echo passed::score=contains:passed::artifact=slow.log"
+  --top-k 2 \
+  --strategy "probe::test -f hello.txt && echo passed::probe=test -f hello.txt && echo passed::score=contains:passed::artifact=probe.log" \
+  --strategy "score::printf 42::probe=printf 42::score=number::artifact=score.txt" \
+  --strategy "slow::sleep 1; echo passed::probe=echo 1::score=contains:passed::artifact=slow.log"
 agentprov rollout winner run-demo-bugfix
-agentprov attempt best-of --snapshot ready --max-fanout 2 --max-cost 1 --early-stop \
-  --strategy "probe::printf 42::budget=2::score=number::artifact=probe.txt" \
-  --strategy "full::test -f hello.txt && echo passed::budget=5::score=contains:passed::artifact=hello.txt"
+agentprov attempt best-of --snapshot ready --max-fanout 2 --top-k 1 --max-cost 1 --early-stop \
+  --strategy "probe::printf 42::probe=printf 42::budget=2::score=number::artifact=probe.txt" \
+  --strategy "full::test -f hello.txt && echo passed::probe=test -f hello.txt && echo 1::budget=5::score=contains:passed::artifact=hello.txt"
 agentprov policy test examples/events/metadata-egress.jsonl
 agentprov policy decisions --run run-demo-bugfix
 agentprov api write-file <session_id> --path notes.txt --content hello
@@ -145,18 +146,21 @@ Equivalent manual flow:
 
 ```sh
 agentprov attempt best-of --snapshot ready \
-  --max-fanout 2 --max-cost 1 --early-stop \
-  --strategy "probe::printf 42::budget=2::score=number::artifact=probe.txt" \
-  --strategy "full::test -f hello.txt && echo passed::budget=5::score=contains:passed::artifact=hello.txt"
+  --max-fanout 2 --top-k 1 --max-cost 1 --early-stop \
+  --strategy "probe::printf 42::probe=printf 42::budget=2::score=number::artifact=probe.txt" \
+  --strategy "full::test -f hello.txt && echo passed::probe=test -f hello.txt && echo 1::budget=5::score=contains:passed::artifact=hello.txt"
 ```
 
-The command forks one workspace per strategy, executes each command in its own
-attempt workspace, records exit code, wall time, output summary, score,
-`risk_status`, `budget_exceeded`, and marks the winning attempt. Strategy
-metadata can include `budget`, `score=contains:<text>` or `score=number`, and
-`artifact`. Winner selection prefers clean, within-budget attempts, then score,
-then lower cost. Cost output includes fanout cost and saved cost when early stop
-or max fanout avoids extra work.
+The command forks one workspace per strategy. When strategy metadata includes
+`probe=<cmd>` and `--top-k` or `--early-stop` is set, AgentProvenance first executes the
+cheap probe command, ranks probe results, runs the full command only for the
+top-k candidates, and marks the rest as `pruned`. It records exit code, wall
+time, output summary, score, `risk_status`, `budget_exceeded`, and the winning
+attempt. Strategy metadata can include `probe`, `budget`,
+`score=contains:<text>` or `score=number`, and `artifact`. Winner selection
+prefers clean, within-budget attempts, then score, then lower cost. Cost output
+includes fanout cost and saved cost when early stop, max fanout, or probe
+pruning avoids full command execution.
 
 ### demo_rollout_control_plane
 
@@ -164,9 +168,10 @@ or max fanout avoids extra work.
 agentprov snapshot stack --task examples/tasks/bugfix.yaml
 ACF_IO_MAX_FANOUT_PER_LOWER=100 ACF_BURST_MAX_INFLIGHT=2 \
   agentprov rollout start --task examples/tasks/bugfix.yaml --snapshot ready --runtime docker --fanout 3 \
-  --strategy "probe::test -f README.md && echo passed::score=contains:passed::artifact=probe.log" \
-  --strategy "score::printf 42::score=number::artifact=score.txt" \
-  --strategy "slow::sleep 1; echo passed::score=contains:passed::artifact=slow.log"
+  --top-k 2 \
+  --strategy "probe::test -f README.md && echo passed::probe=test -f README.md && echo passed::score=contains:passed::artifact=probe.log" \
+  --strategy "score::printf 42::probe=printf 42::score=number::artifact=score.txt" \
+  --strategy "slow::sleep 1; echo passed::probe=echo 1::score=contains:passed::artifact=slow.log"
 agentprov rollout attempts <rollout_id>
 agentprov rollout winner <rollout_id>
 agentprov evidence process

@@ -3,6 +3,7 @@ package attempt
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/byteyellow/agentprovenance/internal/state"
@@ -93,5 +94,57 @@ func TestBestOfPenalizesBudgetExceededAttempts(t *testing.T) {
 	}
 	if exceeded != 1 {
 		t.Fatalf("budget_exceeded count = %d, want 1", exceeded)
+	}
+}
+
+func TestBestOfProbeTopKPrunesBeforeFullCommand(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".acf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	taskPath := filepath.Join(root, "task.yaml")
+	if err := os.WriteFile(taskPath, []byte("run_id: run-test\nimage: alpine:3.20\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stack, err := state.Service{DB: db, Paths: paths}.CreateStack(taskPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	results, winner, err := Service{DB: db, State: state.Service{DB: db, Paths: paths}}.BestOfWithOptions(stack.ReadySnapshotID, []string{
+		"strong-probe::echo selected::probe=echo 10::score=number::artifact=selected.txt",
+		"weak-probe::echo 9999::probe=echo 1::score=number::artifact=pruned.txt",
+	}, Options{MaxFanout: 2, TopK: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %d, want 2", len(results))
+	}
+	if winner.Strategy != "strong-probe" || !winner.IsWinner {
+		t.Fatalf("winner = %+v, want strong-probe", winner)
+	}
+	var pruned Result
+	for _, result := range results {
+		if result.Strategy == "weak-probe" {
+			pruned = result
+		}
+	}
+	if pruned.Status != "pruned" || !strings.Contains(pruned.OutputSummary, "pruned_before_full_command") {
+		t.Fatalf("weak strategy result = %+v, want pruned before full command", pruned)
+	}
+	var prunedCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM fork_attempts WHERE status = 'pruned'`).Scan(&prunedCount); err != nil {
+		t.Fatal(err)
+	}
+	if prunedCount != 1 {
+		t.Fatalf("pruned count = %d, want 1", prunedCount)
 	}
 }
