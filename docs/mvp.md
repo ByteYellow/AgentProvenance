@@ -163,6 +163,10 @@ includes fanout cost and saved cost when early stop, max fanout, or probe
 pruning avoids full command execution. `cost show` also prints
 `rollout_cost_summary` with total attempts, executed attempts, pruned attempts,
 winners, saved cost, and saved ratio.
+`graph trace` prints the compact attempt evidence payload, including strategy,
+score, saved cost, output summary, winner flag, and selection reason, so a
+probe/top-k rollout can be replayed and audited without guessing why a branch
+was pruned or promoted.
 
 ### demo_rollout_control_plane
 

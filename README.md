@@ -114,6 +114,7 @@ The current repository is a local-first MVP. It currently supports:
 - promotion barrier with evidence drain, risk finalization, and taint rejection
 - active CPU / idle / wall-time cost accounting
 - async evidence and cleanup pipeline
+- explainable attempt evidence for pruned and promoted rollout branches
 - I/O-aware snapshot planning with source policies: `latest-ready`, `smallest-delta`, `local`, and `untainted`
 - MVP policy decisions, quarantine, provenance trace, and forensics export
 - run-local provenance trace for snapshot planner explanations

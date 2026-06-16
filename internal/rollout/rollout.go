@@ -2,6 +2,7 @@ package rollout
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -142,7 +143,7 @@ func (s Service) Start(req StartRequest) (Rollout, []attempt.Result, attempt.Res
 		_, _ = s.DB.Exec(`UPDATE fork_attempts SET rollout_id = ?, tool_call_id = ? WHERE id = ?`, rolloutID, result.ToolCallID, result.AttemptID)
 		_, _ = s.DB.Exec(`UPDATE tool_calls SET rollout_id = ?, run_id = ? WHERE id = ?`, rolloutID, req.RunID, result.ToolCallID)
 		_ = s.appendEvidence(req.RunID, rolloutID, result.AttemptID, result.SessionID, result.ToolCallID, baseSnapshotID, "attempt_finished", "normal",
-			fmt.Sprintf(`{"status":%q,"strategy":%q,"score":%.3f,"cost":%.6f,"burst_status":%q,"process_id":%q}`, result.Status, result.Strategy, result.Score, result.CostEstimate, result.BurstStatus, result.ProcessID))
+			attemptEvidencePayload(result, result.AttemptID == winner.AttemptID))
 	}
 	promotion, err := s.promoteWithBarrier(rolloutID, baseSnapshotID, winner.AttemptID)
 	if err != nil {
@@ -176,6 +177,39 @@ func savedCost(results []attempt.Result) float64 {
 		}
 	}
 	return saved
+}
+
+func attemptEvidencePayload(result attempt.Result, winner bool) string {
+	selectionReason := "ranked_by_risk_status_exit_budget_score_cost_wall_time"
+	if result.Status == "pruned" {
+		if result.OutputSummary != "" {
+			selectionReason = result.OutputSummary
+		} else {
+			selectionReason = "pruned_before_full_command"
+		}
+	} else if winner {
+		selectionReason = "winner_selected_by_risk_budget_score_cost"
+	}
+	payload := map[string]any{
+		"status":           result.Status,
+		"strategy":         result.Strategy,
+		"score":            result.Score,
+		"cost":             result.CostEstimate,
+		"saved_cost":       result.SavedCost,
+		"risk_status":      result.RiskStatus,
+		"budget_exceeded":  result.BudgetExceeded,
+		"winner":           winner,
+		"burst_status":     result.BurstStatus,
+		"process_id":       result.ProcessID,
+		"artifact_result":  result.ArtifactResult,
+		"output_summary":   result.OutputSummary,
+		"selection_reason": selectionReason,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Sprintf(`{"status":%q,"strategy":%q,"winner":%t}`, result.Status, result.Strategy, winner)
+	}
+	return string(raw)
 }
 
 func runIDFromTask(path string) string {

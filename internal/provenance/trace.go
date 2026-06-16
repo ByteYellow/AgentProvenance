@@ -205,7 +205,7 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 		return err
 	}
 
-	evidenceRows, err := db.Query(`SELECT id, rollout_id, attempt_id, session_id, tool_call_id, snapshot_id, event_type, priority, status, created_at, COALESCE(processed_at, '')
+	evidenceRows, err := db.Query(`SELECT id, rollout_id, attempt_id, session_id, tool_call_id, snapshot_id, event_type, priority, status, created_at, COALESCE(processed_at, ''), COALESCE(payload, '')
 		FROM evidence_events WHERE run_id = ? ORDER BY created_at ASC`, runID)
 	if err != nil {
 		return err
@@ -213,11 +213,11 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 	defer evidenceRows.Close()
 	fmt.Fprintln(out, "evidence_events:")
 	for evidenceRows.Next() {
-		var id, rolloutID, attemptID, sessionID, toolCallID, snapshotID, eventType, priority, status, createdAt, processedAt string
-		if err := evidenceRows.Scan(&id, &rolloutID, &attemptID, &sessionID, &toolCallID, &snapshotID, &eventType, &priority, &status, &createdAt, &processedAt); err != nil {
+		var id, rolloutID, attemptID, sessionID, toolCallID, snapshotID, eventType, priority, status, createdAt, processedAt, payload string
+		if err := evidenceRows.Scan(&id, &rolloutID, &attemptID, &sessionID, &toolCallID, &snapshotID, &eventType, &priority, &status, &createdAt, &processedAt, &payload); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "  evidence=%s rollout=%s attempt=%s session=%s tool_call=%s snapshot=%s type=%s priority=%s status=%s created_at=%s processed_at=%s\n", id, rolloutID, attemptID, sessionID, toolCallID, snapshotID, eventType, priority, status, createdAt, processedAt)
+		fmt.Fprintf(out, "  evidence=%s rollout=%s attempt=%s session=%s tool_call=%s snapshot=%s type=%s priority=%s status=%s created_at=%s processed_at=%s payload=%s\n", id, rolloutID, attemptID, sessionID, toolCallID, snapshotID, eventType, priority, status, createdAt, processedAt, payload)
 	}
 	if err := evidenceRows.Err(); err != nil {
 		return err
