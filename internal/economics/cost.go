@@ -76,6 +76,16 @@ func ShowCost(db *sql.DB, runID string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	summary, err := rolloutCostSummary(db, runID)
+	if err != nil {
+		return err
+	}
+	if summary.Attempts > 0 {
+		if _, err := fmt.Fprintf(out, "rollout_cost_summary attempts=%d executed=%d pruned=%d winners=%d fanout_cost=%.6f saved_cost=%.6f saved_ratio=%.3f\n",
+			summary.Attempts, summary.Executed, summary.Pruned, summary.Winners, summary.FanoutCost, summary.SavedCost, summary.SavedRatio()); err != nil {
+			return err
+		}
+	}
 	sessionRows, err := db.Query(`SELECT
 			w.session_id,
 			COALESCE(SUM(w.active_cpu_seconds), 0),
@@ -230,6 +240,38 @@ func ShowCost(db *sql.DB, runID string, out io.Writer) error {
 		}
 	}
 	return nodeRows.Err()
+}
+
+type rolloutCost struct {
+	Attempts   int64
+	Executed   int64
+	Pruned     int64
+	Winners    int64
+	FanoutCost float64
+	SavedCost  float64
+}
+
+func (r rolloutCost) SavedRatio() float64 {
+	denominator := r.FanoutCost + r.SavedCost
+	if denominator <= 0 {
+		return 0
+	}
+	return r.SavedCost / denominator
+}
+
+func rolloutCostSummary(db *sql.DB, runID string) (rolloutCost, error) {
+	var summary rolloutCost
+	err := db.QueryRow(`SELECT
+			COALESCE(COUNT(*), 0),
+			COALESCE(SUM(CASE WHEN a.status != 'pruned' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN a.status = 'pruned' THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN a.is_winner != 0 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(a.cost_estimate), 0),
+			COALESCE(MAX(a.saved_cost), 0)
+		FROM fork_attempts a
+		JOIN rollouts r ON a.rollout_id = r.id
+		WHERE r.run_id = ?`, runID).Scan(&summary.Attempts, &summary.Executed, &summary.Pruned, &summary.Winners, &summary.FanoutCost, &summary.SavedCost)
+	return summary, err
 }
 
 func EstimateCost(activeCPUSeconds, wallSeconds float64, snapshotBytes, policyBlocks, quarantines int64) float64 {

@@ -108,6 +108,7 @@ The current repository is a local-first MVP. It currently supports:
 - rollout fanout and best-of-forks, including Docker-backed short-lived attempt sessions via `--runtime docker`
 - winner selection by risk, budget, score, and cost instead of exit code alone
 - budget-aware probe-to-top-k rollout pruning
+- rollout cost summary with executed/pruned/saved ratio
 - BurstGuard admission before synchronized tool phases, with default reject and optional delay/queue policy
 - Docker CPU profile switching between `think` and `tool`
 - promotion barrier with evidence drain, risk finalization, and taint rejection

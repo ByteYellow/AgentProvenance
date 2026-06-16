@@ -160,7 +160,9 @@ attempt. Strategy metadata can include `probe`, `budget`,
 `score=contains:<text>` or `score=number`, and `artifact`. Winner selection
 prefers clean, within-budget attempts, then score, then lower cost. Cost output
 includes fanout cost and saved cost when early stop, max fanout, or probe
-pruning avoids full command execution.
+pruning avoids full command execution. `cost show` also prints
+`rollout_cost_summary` with total attempts, executed attempts, pruned attempts,
+winners, saved cost, and saved ratio.
 
 ### demo_rollout_control_plane
 
