@@ -7,7 +7,10 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -328,6 +331,7 @@ func (s Service) runAttemptWithBurst(attemptID, toolCallID, workspacePath string
 		result.Status = "budget_exceeded"
 		result.Score -= 500
 	}
+	result = s.captureArtifact(result, strategy)
 	result.ToolCallID = toolCallID
 	result.BurstID = reservation.ID
 	result.BurstStatus = "released"
@@ -411,7 +415,7 @@ func (s Service) runDockerAttempt(attemptID, toolCallID, workspacePath string, s
 		result.Status = "budget_exceeded"
 		result.Score -= 500
 	}
-	return result
+	return s.captureArtifact(result, strategy)
 }
 
 func rejectedResult(attemptID, toolCallID, workspacePath string, strategy Strategy, reason string) Result {
@@ -525,6 +529,70 @@ func runAttempt(attemptID, workspacePath string, strategy Strategy) Result {
 	}
 }
 
+func (s Service) captureArtifact(result Result, strategy Strategy) Result {
+	declared := strings.TrimSpace(strategy.ArtifactResult)
+	if declared == "" || result.WorkspacePath == "" || result.Status == "pruned" {
+		return result
+	}
+	artifactRoot := s.State.Paths.Artifacts
+	if artifactRoot == "" {
+		return result
+	}
+	source, err := safeWorkspacePath(result.WorkspacePath, declared)
+	if err != nil {
+		result.OutputSummary = appendSummary(result.OutputSummary, "artifact_error="+err.Error())
+		return result
+	}
+	info, err := os.Stat(source)
+	if err != nil {
+		result.OutputSummary = appendSummary(result.OutputSummary, "artifact_missing="+declared)
+		return result
+	}
+	if info.IsDir() {
+		result.OutputSummary = appendSummary(result.OutputSummary, "artifact_error=directory_not_supported")
+		return result
+	}
+	if err := os.MkdirAll(artifactRoot, 0o755); err != nil {
+		result.OutputSummary = appendSummary(result.OutputSummary, "artifact_error="+err.Error())
+		return result
+	}
+	name := filepath.Base(declared)
+	target := filepath.Join(artifactRoot, result.AttemptID+"-"+name)
+	if err := copyFile(source, target, info.Mode()); err != nil {
+		result.OutputSummary = appendSummary(result.OutputSummary, "artifact_error="+err.Error())
+		return result
+	}
+	result.ArtifactResult = target
+	result.OutputSummary = appendSummary(result.OutputSummary, "artifact_exported="+target)
+	return result
+}
+
+func safeWorkspacePath(workspace, rel string) (string, error) {
+	if filepath.IsAbs(rel) {
+		return "", fmt.Errorf("artifact path must be workspace-relative")
+	}
+	clean := filepath.Clean(rel)
+	if clean == "." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean == ".." {
+		return "", fmt.Errorf("artifact path escapes workspace")
+	}
+	return filepath.Join(workspace, clean), nil
+}
+
+func copyFile(src, dst string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
+}
+
 func scoreOutput(output, parser string, wallMS int64, exitCode int) float64 {
 	if strings.HasPrefix(parser, "contains:") {
 		needle := strings.TrimPrefix(parser, "contains:")
@@ -614,4 +682,15 @@ func summarize(raw string) string {
 		return raw[:240]
 	}
 	return raw
+}
+
+func appendSummary(current, addition string) string {
+	addition = strings.TrimSpace(addition)
+	if addition == "" {
+		return summarize(current)
+	}
+	if strings.TrimSpace(current) == "" {
+		return summarize(addition)
+	}
+	return summarize(current + " | " + addition)
 }

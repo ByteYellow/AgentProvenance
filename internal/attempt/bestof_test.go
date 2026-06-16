@@ -193,3 +193,52 @@ func TestBestOfEarlyStopRunsFullCommandsByProbeRank(t *testing.T) {
 		t.Fatalf("low-probe full command ran before high-probe winner: %+v", low)
 	}
 }
+
+func TestBestOfCapturesDeclaredArtifact(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".acf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	taskPath := filepath.Join(root, "task.yaml")
+	if err := os.WriteFile(taskPath, []byte("run_id: run-test\nimage: alpine:3.20\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stack, err := state.Service{DB: db, Paths: paths}.CreateStack(taskPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	results, winner, err := Service{DB: db, State: state.Service{DB: db, Paths: paths}}.BestOfWithOptions(stack.ReadySnapshotID, []string{
+		"artifact::printf artifact-body > result.txt; echo 7::score=number::artifact=result.txt",
+	}, Options{MaxFanout: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results=%d, want 1", len(results))
+	}
+	if winner.ArtifactResult == "" || !strings.Contains(winner.ArtifactResult, paths.Artifacts) {
+		t.Fatalf("artifact result = %q, want artifact path under %s", winner.ArtifactResult, paths.Artifacts)
+	}
+	body, err := os.ReadFile(winner.ArtifactResult)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "artifact-body" {
+		t.Fatalf("artifact body = %q, want artifact-body", string(body))
+	}
+	var stored string
+	if err := db.QueryRow(`SELECT artifact_result FROM fork_attempts WHERE id = ?`, winner.AttemptID).Scan(&stored); err != nil {
+		t.Fatal(err)
+	}
+	if stored != winner.ArtifactResult {
+		t.Fatalf("stored artifact = %q, want %q", stored, winner.ArtifactResult)
+	}
+}

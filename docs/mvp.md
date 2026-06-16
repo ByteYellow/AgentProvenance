@@ -163,6 +163,9 @@ includes fanout cost and saved cost when early stop, max fanout, or probe
 pruning avoids full command execution. `cost show` also prints
 `rollout_cost_summary` with total attempts, executed attempts, pruned attempts,
 winners, saved cost, and saved ratio.
+When `artifact=<workspace-relative-path>` is set, AgentProvenance copies that file from the
+attempt workspace into `.acf/artifacts/` and stores the exported result ref in
+`artifact_result`; missing artifacts are recorded in the attempt output summary.
 `graph trace` prints the compact attempt evidence payload, including strategy,
 score, saved cost, output summary, winner flag, and selection reason, so a
 probe/top-k rollout can be replayed and audited without guessing why a branch

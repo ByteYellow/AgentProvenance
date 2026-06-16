@@ -115,6 +115,7 @@ The current repository is a local-first MVP. It currently supports:
 - active CPU / idle / wall-time cost accounting
 - async evidence and cleanup pipeline
 - explainable attempt evidence for pruned and promoted rollout branches
+- strategy artifact capture from attempt workspaces into `.acf/artifacts/`
 - I/O-aware snapshot planning with source policies: `latest-ready`, `smallest-delta`, `local`, and `untainted`
 - MVP policy decisions, quarantine, provenance trace, and forensics export
 - run-local provenance trace for snapshot planner explanations
