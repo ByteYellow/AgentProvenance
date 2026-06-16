@@ -148,3 +148,48 @@ func TestBestOfProbeTopKPrunesBeforeFullCommand(t *testing.T) {
 		t.Fatalf("pruned count = %d, want 1", prunedCount)
 	}
 }
+
+func TestBestOfEarlyStopRunsFullCommandsByProbeRank(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".acf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	taskPath := filepath.Join(root, "task.yaml")
+	if err := os.WriteFile(taskPath, []byte("run_id: run-test\nimage: alpine:3.20\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stack, err := state.Service{DB: db, Paths: paths}.CreateStack(taskPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	results, winner, err := Service{DB: db, State: state.Service{DB: db, Paths: paths}}.BestOfWithOptions(stack.ReadySnapshotID, []string{
+		"low-probe::echo SHOULD_NOT_RUN::probe=echo 1::score=number",
+		"high-probe::echo winner::probe=echo 10::score=number",
+	}, Options{MaxFanout: 2, TopK: 2, EarlyStop: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if winner.Strategy != "high-probe" {
+		t.Fatalf("winner = %+v, want high-probe", winner)
+	}
+	var low Result
+	for _, result := range results {
+		if result.Strategy == "low-probe" {
+			low = result
+		}
+	}
+	if low.Status != "pruned" || !strings.Contains(low.OutputSummary, "early_stop_after_winner") {
+		t.Fatalf("low-probe result = %+v, want early-stop pruned", low)
+	}
+	if strings.Contains(low.OutputSummary, "SHOULD_NOT_RUN") {
+		t.Fatalf("low-probe full command ran before high-probe winner: %+v", low)
+	}
+}

@@ -224,15 +224,20 @@ func (s Service) runProbeThenTopK(forks []state.ForkResult, strategies []Strateg
 	}
 
 	pruned := 0
-	for i, fork := range forks {
+	for i := range forks {
 		if !selected[i] {
 			result := probes[i]
 			result.Status = "pruned"
 			result.OutputSummary = strings.TrimSpace(result.OutputSummary + " | pruned_before_full_command")
 			results[i] = result
 			pruned++
+		}
+	}
+	for _, i := range order {
+		if !selected[i] || results[i].AttemptID != "" {
 			continue
 		}
+		fork := forks[i]
 		full := s.runAttemptWithBurst(fork.AttemptID, toolCallIDs[i], fork.WorkspacePath, strategies[i], opts)
 		full.WallMS += probes[i].WallMS
 		full.CostEstimate += probes[i].CostEstimate
@@ -245,7 +250,7 @@ func (s Service) runProbeThenTopK(forks []state.ForkResult, strategies []Strateg
 		results[i] = full
 		if opts.EarlyStop && full.ExitCode == 0 && !full.BudgetExceeded && full.Score >= 999 {
 			for _, index := range order {
-				if index == i || selected[index] {
+				if index == i || !selected[index] || results[index].AttemptID != "" {
 					continue
 				}
 				result := probes[index]
