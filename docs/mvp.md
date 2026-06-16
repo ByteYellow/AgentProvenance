@@ -121,13 +121,17 @@ agentprov snapshot stack --template bugfix
 agentprov snapshot list
 agentprov snapshot inspect <ready_snapshot_id>
 agentprov snapshot plan <ready_snapshot_id>
+agentprov snapshot plan <ready_snapshot_id> --policy smallest-delta
 agentprov graph trace --run run-demo-bugfix
 ```
 
 This records `template -> ready snapshot -> attempt workspace` lineage. Use
 `snapshot inspect <snapshot_id>` to see kind, parent, manifest hash, status, and
 storage bytes. `snapshot plan` and `graph trace` expose the selected snapshot,
-copy plan, planner score, reason, and DAG edges for fork/resume operations.
+copy plan, planner score, source policy, candidate count, semantic/physical
+snapshot type, file-level delta, reason, and DAG edges for fork/resume
+operations. Source policy currently supports `latest-ready`, `smallest-delta`,
+`local`, and `untainted`.
 
 ### demo_best_of_forks
 
@@ -320,7 +324,8 @@ slot becomes available.
 ```
 
 This creates hot metadata paths such as `.git`, `node_modules`, and `.venv`,
-then shows `snapshot plan` output with `copy_up_risk`,
+then shows `snapshot plan` output with `selected_policy`, `candidate_count`,
+`semantic_type`, `physical_type`, file-level delta, `copy_up_risk`,
 `metadata_ops_estimate`, `shared_lower_fanout`, `io_fanout_budget`,
 `upperdir_shard`, `upperdir_device`, and `hot_metadata_paths`. It also
 demonstrates I/O fanout rejection with

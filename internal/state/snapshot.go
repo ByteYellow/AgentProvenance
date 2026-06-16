@@ -54,6 +54,14 @@ type SnapshotPlan struct {
 	Plan                string
 	Reason              string
 	Score               float64
+	SelectedPolicy      string
+	CandidateCount      int
+	SemanticType        string
+	PhysicalType        string
+	OverlaySkipReason   string
+	DeltaFilesAdded     int64
+	DeltaFilesModified  int64
+	DeltaFilesDeleted   int64
 	CopyUpRisk          string
 	MetadataOpsEstimate int64
 	SharedLowerFanout   int64
@@ -164,6 +172,7 @@ func (s Service) CreateStack(taskPath string) (StackResult, error) {
 	if err != nil {
 		return StackResult{}, err
 	}
+	_ = s.recordManifest(templateID, templateDir)
 
 	readyID := ids.New("snap")
 	readyDir := filepath.Join(s.Paths.Snapshots, readyID)
@@ -187,6 +196,7 @@ func (s Service) CreateStack(taskPath string) (StackResult, error) {
 	if err != nil {
 		return StackResult{}, err
 	}
+	_ = s.recordManifest(readyID, readyDir)
 	attempts, err := s.Fork(readyID, 1)
 	if err != nil {
 		return StackResult{}, err
@@ -225,6 +235,7 @@ func (s Service) CreateStackFromTemplate(templateNameOrID string) (StackResult, 
 	if err != nil {
 		return StackResult{}, err
 	}
+	_ = s.recordManifest(templateID, templateDir)
 
 	readyID := ids.New("snap")
 	readyDir := filepath.Join(s.Paths.Snapshots, readyID)
@@ -248,6 +259,7 @@ func (s Service) CreateStackFromTemplate(templateNameOrID string) (StackResult, 
 	if err != nil {
 		return StackResult{}, err
 	}
+	_ = s.recordManifest(readyID, readyDir)
 	attempts, err := s.Fork(readyID, 1)
 	if err != nil {
 		return StackResult{}, err
@@ -297,8 +309,15 @@ func (s Service) Fork(snapshotNameOrID string, count int) ([]ForkResult, error) 
 type deltaCounts struct{ Added, Modified, Deleted int64 }
 
 func (s Service) Plan(snapshotNameOrID string, rejectTainted bool) (SnapshotPlan, error) {
+	return s.PlanWithPolicy(snapshotNameOrID, envString("ACF_SNAPSHOT_SOURCE_POLICY", "latest-ready"), rejectTainted)
+}
+
+func (s Service) PlanWithPolicy(snapshotNameOrID, policy string, rejectTainted bool) (SnapshotPlan, error) {
+	policy = normalizeSnapshotPolicy(policy)
 	rows, err := s.DB.Query(`SELECT id, bytes, COALESCE(tainted, 0), status, created_at,
-			COALESCE(hot_metadata_paths, ''), COALESCE(metadata_ops_estimate, 0), COALESCE(copy_up_risk, 'low'), COALESCE(upperdir_device, '')
+			COALESCE(hot_metadata_paths, ''), COALESCE(metadata_ops_estimate, 0), COALESCE(copy_up_risk, 'low'), COALESCE(upperdir_device, ''),
+			COALESCE(snapshot_semantic_type, 'directory'), COALESCE(snapshot_physical_type, 'copy'),
+			COALESCE(delta_files_added, 0), COALESCE(delta_files_modified, 0), COALESCE(delta_files_deleted, 0)
 		FROM snapshots
 		WHERE id = ? OR name = ? OR parent_id = ?
 		ORDER BY created_at DESC`, snapshotNameOrID, snapshotNameOrID, snapshotNameOrID)
@@ -308,30 +327,41 @@ func (s Service) Plan(snapshotNameOrID string, rejectTainted bool) (SnapshotPlan
 	defer rows.Close()
 	var best SnapshotPlan
 	found := false
+	candidateCount := 0
 	for rows.Next() {
 		var id, status, createdAt string
-		var hotPaths, copyUpRisk, upperdirDevice string
+		var hotPaths, copyUpRisk, upperdirDevice, semanticType, physicalType string
 		var bytes int64
 		var metadataOps int64
+		var deltaAdded, deltaModified, deltaDeleted int64
 		var tainted int
-		if err := rows.Scan(&id, &bytes, &tainted, &status, &createdAt, &hotPaths, &metadataOps, &copyUpRisk, &upperdirDevice); err != nil {
+		if err := rows.Scan(&id, &bytes, &tainted, &status, &createdAt, &hotPaths, &metadataOps, &copyUpRisk, &upperdirDevice, &semanticType, &physicalType, &deltaAdded, &deltaModified, &deltaDeleted); err != nil {
 			return SnapshotPlan{}, err
 		}
+		candidateCount++
 		if rejectTainted && (tainted != 0 || status == "tainted") {
 			continue
 		}
-		score := plannerScore(bytes, tainted != 0 || status == "tainted")
+		score := plannerScoreForPolicy(policy, bytes, tainted != 0 || status == "tainted", deltaAdded+deltaModified+deltaDeleted, createdAt)
 		if !found || score > best.Score {
 			sharedFanout := s.sharedLowerFanout(id)
 			ioFanoutBudget := envInt64("ACF_IO_MAX_FANOUT_PER_LOWER", 32)
 			shard := upperdirShard(id)
-			reason := fmt.Sprintf("latest-local score=%.3f created_at=%s overlay_skipped=true overlay_reason=%q copy_up_risk=%s metadata_ops_estimate=%d shared_lower_fanout=%d io_fanout_budget=%d upperdir_shard=%s upperdir_device=%s hot_metadata_paths=%s",
-				score, createdAt, overlaySkipReason(copyUpRisk, metadataOps, sharedFanout), copyUpRisk, metadataOps, sharedFanout, ioFanoutBudget, shard, emptyDefault(upperdirDevice, "local"), emptyDefault(hotPaths, "none"))
+			overlayReason := overlaySkipReason(copyUpRisk, metadataOps, sharedFanout)
+			reason := fmt.Sprintf("policy=%s score=%.3f created_at=%s semantic_type=%s physical_type=%s delta_added=%d delta_modified=%d delta_deleted=%d overlay_skipped=true overlay_skip_reason=%q copy_up_risk=%s metadata_ops_estimate=%d shared_lower_fanout=%d io_fanout_budget=%d upperdir_shard=%s upperdir_device=%s hot_metadata_paths=%s",
+				policy, score, createdAt, semanticType, physicalType, deltaAdded, deltaModified, deltaDeleted, overlayReason, copyUpRisk, metadataOps, sharedFanout, ioFanoutBudget, shard, emptyDefault(upperdirDevice, "local"), emptyDefault(hotPaths, "none"))
 			best = SnapshotPlan{
 				SnapshotID:          id,
 				Plan:                "copy",
 				Reason:              reason,
 				Score:               score,
+				SelectedPolicy:      policy,
+				SemanticType:        semanticType,
+				PhysicalType:        physicalType,
+				OverlaySkipReason:   overlayReason,
+				DeltaFilesAdded:     deltaAdded,
+				DeltaFilesModified:  deltaModified,
+				DeltaFilesDeleted:   deltaDeleted,
 				CopyUpRisk:          copyUpRisk,
 				MetadataOpsEstimate: metadataOps,
 				SharedLowerFanout:   sharedFanout,
@@ -349,6 +379,7 @@ func (s Service) Plan(snapshotNameOrID string, rejectTainted bool) (SnapshotPlan
 	if !found {
 		return SnapshotPlan{}, fmt.Errorf("no usable snapshot found for %s", snapshotNameOrID)
 	}
+	best.CandidateCount = candidateCount
 	return best, nil
 }
 
@@ -479,6 +510,38 @@ func plannerScore(bytes int64, tainted bool) float64 {
 	return score
 }
 
+func plannerScoreForPolicy(policy string, bytes int64, tainted bool, deltaFiles int64, createdAt string) float64 {
+	score := plannerScore(bytes, tainted)
+	createdScore := 0.0
+	if ts, err := time.Parse(time.RFC3339Nano, createdAt); err == nil {
+		createdScore = float64(ts.UnixNano()) / float64(time.Second)
+	}
+	switch policy {
+	case "smallest-delta":
+		score += 1_000_000 - float64(deltaFiles*1000)
+	case "untainted":
+		if !tainted {
+			score += 1_000_000
+		}
+	case "local":
+		score += 100_000
+	case "latest-ready":
+		score += createdScore
+	}
+	return score
+}
+
+func normalizeSnapshotPolicy(policy string) string {
+	switch strings.ToLower(strings.TrimSpace(policy)) {
+	case "smallest-delta", "local", "untainted", "latest-ready":
+		return strings.ToLower(strings.TrimSpace(policy))
+	case "":
+		return "latest-ready"
+	default:
+		return "latest-ready"
+	}
+}
+
 func (s Service) sharedLowerFanout(snapshotID string) int64 {
 	var count int64
 	_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM fork_attempts WHERE snapshot_id = ?`, snapshotID).Scan(&count)
@@ -582,6 +645,14 @@ func envInt64(name string, fallback int64) int64 {
 		return fallback
 	}
 	return parsed
+}
+
+func envString(name, fallback string) string {
+	value := os.Getenv(name)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 func CopyDir(src, dst string) error {

@@ -181,6 +181,100 @@ func TestAnalyzeIOProfileDetectsHotMetadataPaths(t *testing.T) {
 	}
 }
 
+func TestPlanWithPolicySelectsSmallestDelta(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".acf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	insertPlannerSnapshot(t, db, paths, plannerSnapshot{
+		ID:             "snap-large-delta",
+		Name:           "ready",
+		Bytes:          10,
+		DeltaAdded:     20,
+		DeltaModified:  4,
+		CreatedAt:      time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		CopyUpRisk:     "medium",
+		MetadataOps:    24,
+		SemanticType:   "directory",
+		PhysicalType:   "copy",
+		UpperdirDevice: "local",
+	})
+	insertPlannerSnapshot(t, db, paths, plannerSnapshot{
+		ID:             "snap-small-delta",
+		Name:           "ready",
+		Bytes:          10,
+		DeltaAdded:     1,
+		CreatedAt:      time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+		CopyUpRisk:     "low",
+		MetadataOps:    1,
+		SemanticType:   "directory",
+		PhysicalType:   "copy",
+		UpperdirDevice: "local",
+	})
+
+	plan, err := Service{DB: db, Paths: paths}.PlanWithPolicy("ready", "smallest-delta", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.SnapshotID != "snap-small-delta" {
+		t.Fatalf("snapshot=%s, want snap-small-delta; plan=%+v", plan.SnapshotID, plan)
+	}
+	if plan.SelectedPolicy != "smallest-delta" || plan.CandidateCount != 2 || plan.DeltaFilesAdded != 1 {
+		t.Fatalf("unexpected planner details: %+v", plan)
+	}
+}
+
+func TestPlanWithPolicyRejectsTaintedCandidate(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".acf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	insertPlannerSnapshot(t, db, paths, plannerSnapshot{
+		ID:           "snap-tainted",
+		Name:         "ready",
+		Bytes:        1,
+		CreatedAt:    time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC),
+		Status:       "tainted",
+		Tainted:      true,
+		SemanticType: "directory",
+		PhysicalType: "copy",
+	})
+	insertPlannerSnapshot(t, db, paths, plannerSnapshot{
+		ID:           "snap-clean",
+		Name:         "ready",
+		Bytes:        1,
+		CreatedAt:    time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		Status:       "ready",
+		SemanticType: "directory",
+		PhysicalType: "copy",
+	})
+
+	plan, err := Service{DB: db, Paths: paths}.PlanWithPolicy("ready", "latest-ready", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.SnapshotID != "snap-clean" {
+		t.Fatalf("snapshot=%s, want snap-clean; plan=%+v", plan.SnapshotID, plan)
+	}
+	if plan.CandidateCount != 2 {
+		t.Fatalf("candidate_count=%d, want 2", plan.CandidateCount)
+	}
+}
+
 func insertSession(t *testing.T, db *sql.DB, workspace string) {
 	t.Helper()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -191,6 +285,70 @@ func insertSession(t *testing.T, db *sql.DB, workspace string) {
 	}
 	_, err = db.Exec(`INSERT INTO sessions (id, lease_id, run_id, container_id, workspace_host_path, status, created_at, updated_at)
 		VALUES ('sbx-test', 'lease-test', 'run-test', 'container-test', ?, 'running', ?, ?)`, workspace, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+type plannerSnapshot struct {
+	ID             string
+	Name           string
+	Bytes          int64
+	DeltaAdded     int64
+	DeltaModified  int64
+	DeltaDeleted   int64
+	CreatedAt      time.Time
+	Status         string
+	Tainted        bool
+	CopyUpRisk     string
+	MetadataOps    int64
+	SemanticType   string
+	PhysicalType   string
+	UpperdirDevice string
+}
+
+func insertPlannerSnapshot(t *testing.T, db *sql.DB, paths store.Paths, snapshot plannerSnapshot) {
+	t.Helper()
+	if snapshot.Status == "" {
+		snapshot.Status = "ready"
+	}
+	if snapshot.CopyUpRisk == "" {
+		snapshot.CopyUpRisk = "low"
+	}
+	if snapshot.SemanticType == "" {
+		snapshot.SemanticType = "directory"
+	}
+	if snapshot.PhysicalType == "" {
+		snapshot.PhysicalType = "copy"
+	}
+	snapshotDir := filepath.Join(paths.Snapshots, snapshot.ID)
+	if err := os.MkdirAll(snapshotDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshotDir, "file.txt"), []byte(snapshot.ID), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := BuildManifest(snapshotDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	createdAt := snapshot.CreatedAt.UTC().Format(time.RFC3339Nano)
+	tainted := 0
+	if snapshot.Tainted {
+		tainted = 1
+	}
+	_, err = db.Exec(`INSERT INTO snapshots (
+			id, name, kind, source, path, manifest_hash, file_count, bytes,
+			delta_files_added, delta_files_modified, delta_files_deleted,
+			snapshot_semantic_type, snapshot_physical_type, logical_bytes, physical_bytes,
+			dirty_bytes_estimate, inode_estimate, storage_amplification_ratio,
+			metadata_ops_estimate, copy_up_risk, upperdir_device, tainted, status, created_at
+		) VALUES (?, ?, 'ready', 'test', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`,
+		snapshot.ID, snapshot.Name, snapshotDir, manifest.Hash, manifest.Files, snapshot.Bytes,
+		snapshot.DeltaAdded, snapshot.DeltaModified, snapshot.DeltaDeleted,
+		snapshot.SemanticType, snapshot.PhysicalType, snapshot.Bytes, snapshot.Bytes,
+		snapshot.Bytes, manifest.Files, snapshot.MetadataOps, snapshot.CopyUpRisk,
+		snapshot.UpperdirDevice, tainted, snapshot.Status, createdAt)
 	if err != nil {
 		t.Fatal(err)
 	}

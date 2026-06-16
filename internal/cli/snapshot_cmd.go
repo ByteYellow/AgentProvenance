@@ -102,6 +102,7 @@ func snapshotCmd(dataDir, daemonURL *string) *cobra.Command {
 			return w.Flush()
 		},
 	}
+	var planPolicy string
 	planCmd := &cobra.Command{
 		Use:   "plan <snapshot_name_or_id>",
 		Short: "show snapshot planner decision for fork/resume",
@@ -116,15 +117,16 @@ func snapshotCmd(dataDir, daemonURL *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			plan, err := state.Service{DB: db, Paths: paths}.Plan(args[0], true)
+			plan, err := state.Service{DB: db, Paths: paths}.PlanWithPolicy(args[0], planPolicy, true)
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "snapshot_id=%s plan=%s score=%.3f copy_up_risk=%s metadata_ops_estimate=%d shared_lower_fanout=%d io_fanout_budget=%d upperdir_shard=%s upperdir_device=%s hot_metadata_paths=%s reason=%s\n",
-				plan.SnapshotID, plan.Plan, plan.Score, plan.CopyUpRisk, plan.MetadataOpsEstimate, plan.SharedLowerFanout, plan.IOFanoutBudget, plan.UpperdirShard, plan.UpperdirDevice, plan.HotMetadataPaths, plan.Reason)
+			fmt.Fprintf(cmd.OutOrStdout(), "snapshot_id=%s plan=%s selected_policy=%s candidate_count=%d score=%.3f semantic_type=%s physical_type=%s delta_added=%d delta_modified=%d delta_deleted=%d copy_up_risk=%s metadata_ops_estimate=%d shared_lower_fanout=%d io_fanout_budget=%d upperdir_shard=%s upperdir_device=%s overlay_skip_reason=%q hot_metadata_paths=%s reason=%s\n",
+				plan.SnapshotID, plan.Plan, plan.SelectedPolicy, plan.CandidateCount, plan.Score, plan.SemanticType, plan.PhysicalType, plan.DeltaFilesAdded, plan.DeltaFilesModified, plan.DeltaFilesDeleted, plan.CopyUpRisk, plan.MetadataOpsEstimate, plan.SharedLowerFanout, plan.IOFanoutBudget, plan.UpperdirShard, plan.UpperdirDevice, plan.OverlaySkipReason, plan.HotMetadataPaths, plan.Reason)
 			return nil
 		},
 	}
+	planCmd.Flags().StringVar(&planPolicy, "policy", "latest-ready", "snapshot source policy: latest-ready, smallest-delta, local, untainted")
 	inspect := &cobra.Command{
 		Use:   "inspect <snapshot_name_or_id>",
 		Short: "inspect snapshot manifest, taint status, and lineage",

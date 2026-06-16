@@ -112,7 +112,7 @@ The current repository is a local-first MVP. It currently supports:
 - promotion barrier with evidence drain, risk finalization, and taint rejection
 - active CPU / idle / wall-time cost accounting
 - async evidence and cleanup pipeline
-- I/O-aware snapshot planning
+- I/O-aware snapshot planning with source policies: `latest-ready`, `smallest-delta`, `local`, and `untainted`
 - MVP policy decisions, quarantine, provenance trace, and forensics export
 - capability-gated runtime drivers with Docker active and gVisor/Firecracker/bubblewrap as explicit stubs
 
@@ -219,6 +219,7 @@ agentprov port expose <session_id> <port>
 
 agentprov snapshot create <session_id> --type directory --path /workspace --name ready
 agentprov snapshot plan ready
+agentprov snapshot plan ready --policy smallest-delta
 agentprov fork ready --count 3
 agentprov snapshot resume ready --lease <lease_id>
 
