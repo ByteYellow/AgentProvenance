@@ -61,7 +61,7 @@ ready snapshot
   -> reserve burst budget before tool execution
   -> run each strategy in an isolated workspace
   -> collect cost, telemetry, artifacts, and compact evidence
-  -> score attempts by result, cost, and risk
+  -> score attempts by result, risk, budget, and cost
   -> wait at the promotion barrier
   -> promote the safe winner or quarantine the tainted branch
 ```
@@ -106,6 +106,7 @@ The current repository is a local-first MVP. It currently supports:
 - directory snapshot, fork, and resume
 - template → ready snapshot → attempt workspace lineage
 - rollout fanout and best-of-forks, including Docker-backed short-lived attempt sessions via `--runtime docker`
+- winner selection by risk, budget, score, and cost instead of exit code alone
 - BurstGuard admission before synchronized tool phases, with default reject and optional delay/queue policy
 - Docker CPU profile switching between `think` and `tool`
 - promotion barrier with evidence drain, risk finalization, and taint rejection

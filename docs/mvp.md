@@ -145,10 +145,12 @@ agentprov attempt best-of --snapshot ready \
 ```
 
 The command forks one workspace per strategy, executes each command in its own
-attempt workspace, records exit code, wall time, output summary, score, and
-marks the winning attempt. Strategy metadata can include `budget`,
-`score=contains:<text>` or `score=number`, and `artifact`. Cost output includes
-fanout cost and saved cost when early stop or max fanout avoids extra work.
+attempt workspace, records exit code, wall time, output summary, score,
+`risk_status`, `budget_exceeded`, and marks the winning attempt. Strategy
+metadata can include `budget`, `score=contains:<text>` or `score=number`, and
+`artifact`. Winner selection prefers clean, within-budget attempts, then score,
+then lower cost. Cost output includes fanout cost and saved cost when early stop
+or max fanout avoids extra work.
 
 ### demo_rollout_control_plane
 
@@ -172,7 +174,8 @@ one `tool_call` per admitted strategy, requires BurstGuard admission before
 command execution, switches the container from `think` to `tool` CPU profile,
 writes compact evidence, materializes `rollout -> attempt -> tool_call ->
 session` graph edges asynchronously, and promotes the winning attempt through
-the promotion barrier.
+the promotion barrier. Attempt tables and `cost show` expose risk, budget, score,
+and cost so the winner is explainable.
 
 ### demo_metadata_egress_quarantine
 

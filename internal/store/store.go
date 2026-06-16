@@ -194,6 +194,8 @@ func EnsureSchema(db *sql.DB) error {
 			artifact_result TEXT NOT NULL DEFAULT '',
 			cost_estimate REAL NOT NULL DEFAULT 0,
 			saved_cost REAL NOT NULL DEFAULT 0,
+			risk_status TEXT NOT NULL DEFAULT 'unknown',
+			budget_exceeded INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL,
 			FOREIGN KEY(snapshot_id) REFERENCES snapshots(id)
 		);`,
@@ -544,6 +546,8 @@ func EnsureSchema(db *sql.DB) error {
 		`ALTER TABLE fork_attempts ADD COLUMN saved_cost REAL NOT NULL DEFAULT 0;`,
 		`ALTER TABLE fork_attempts ADD COLUMN rollout_id TEXT NOT NULL DEFAULT '';`,
 		`ALTER TABLE fork_attempts ADD COLUMN tool_call_id TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE fork_attempts ADD COLUMN risk_status TEXT NOT NULL DEFAULT 'unknown';`,
+		`ALTER TABLE fork_attempts ADD COLUMN budget_exceeded INTEGER NOT NULL DEFAULT 0;`,
 		`ALTER TABLE warm_pool_items ADD COLUMN hit_count INTEGER NOT NULL DEFAULT 0;`,
 		`ALTER TABLE warm_pool_items ADD COLUMN last_hit_at TEXT NOT NULL DEFAULT '';`,
 		`ALTER TABLE warm_pool_items ADD COLUMN cold_start_saved_ms INTEGER NOT NULL DEFAULT 0;`,

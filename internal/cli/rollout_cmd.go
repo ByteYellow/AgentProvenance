@@ -37,14 +37,14 @@ func rolloutStartCmd(dataDir *string) *cobra.Command {
 			fmt.Fprintf(cmd.OutOrStdout(), "rollout_id=%s run_id=%s status=%s base_snapshot=%s fanout=%d winner=%s promotion=%s risk=%s cost=%.6f\n",
 				item.ID, item.RunID, item.Status, item.BaseSnapshotID, item.Fanout, winner.AttemptID, promotion.ID, promotion.RiskStatus, item.CostEstimate)
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ATTEMPT\tTOOL_CALL\tSESSION\tPROCESS\tSTRATEGY\tSTATUS\tEXIT\tWALL_MS\tSCORE\tCOST\tWINNER\tWORKSPACE")
+			fmt.Fprintln(w, "ATTEMPT\tTOOL_CALL\tSESSION\tPROCESS\tSTRATEGY\tSTATUS\tRISK\tBUDGET_EXCEEDED\tEXIT\tWALL_MS\tSCORE\tCOST\tWINNER\tWORKSPACE")
 			for _, result := range results {
 				winnerMark := ""
 				if result.IsWinner {
 					winnerMark = "yes"
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%.3f\t%.6f\t%s\t%s\n",
-					result.AttemptID, result.ToolCallID, result.SessionID, result.ProcessID, result.Strategy, result.Status, result.ExitCode, result.WallMS, result.Score, result.CostEstimate, winnerMark, result.WorkspacePath)
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%t\t%d\t%d\t%.3f\t%.6f\t%s\t%s\n",
+					result.AttemptID, result.ToolCallID, result.SessionID, result.ProcessID, result.Strategy, result.Status, result.RiskStatus, result.BudgetExceeded, result.ExitCode, result.WallMS, result.Score, result.CostEstimate, winnerMark, result.WorkspacePath)
 			}
 			return w.Flush()
 		},
@@ -101,7 +101,7 @@ func rolloutAttemptsCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ATTEMPT\tTOOL_CALL\tSTRATEGY\tSTATUS\tEXIT\tWALL_MS\tSCORE\tCOST\tSAVED\tWINNER\tWORKSPACE")
+			fmt.Fprintln(w, "ATTEMPT\tTOOL_CALL\tSTRATEGY\tSTATUS\tRISK\tBUDGET_EXCEEDED\tEXIT\tWALL_MS\tSCORE\tCOST\tSAVED\tWINNER\tWORKSPACE")
 			for _, item := range items {
 				exitCode := ""
 				if item.ExitCode.Valid {
@@ -111,8 +111,8 @@ func rolloutAttemptsCmd(dataDir *string) *cobra.Command {
 				if item.IsWinner {
 					winner = "yes"
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%d\t%.3f\t%.6f\t%.6f\t%s\t%s\n",
-					item.ID, item.ToolCallID, item.Strategy, item.Status, exitCode, item.WallMS, item.Score, item.CostEstimate, item.SavedCost, winner, item.WorkspacePath)
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%t\t%s\t%d\t%.3f\t%.6f\t%.6f\t%s\t%s\n",
+					item.ID, item.ToolCallID, item.Strategy, item.Status, item.RiskStatus, item.BudgetExceeded, exitCode, item.WallMS, item.Score, item.CostEstimate, item.SavedCost, winner, item.WorkspacePath)
 			}
 			return w.Flush()
 		},
@@ -134,8 +134,8 @@ func rolloutWinnerCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "winner=%s tool_call=%s strategy=%s status=%s score=%.3f cost=%.6f workspace=%s promotion=%s promotion_status=%s risk=%s watermark=%s reason=%q\n",
-				winner.ID, winner.ToolCallID, winner.Strategy, winner.Status, winner.Score, winner.CostEstimate, winner.WorkspacePath, promotion.ID, promotion.Status, promotion.RiskStatus, promotion.TelemetryWatermark, promotion.Reason)
+			fmt.Fprintf(cmd.OutOrStdout(), "winner=%s tool_call=%s strategy=%s status=%s attempt_risk=%s budget_exceeded=%t score=%.3f cost=%.6f workspace=%s promotion=%s promotion_status=%s risk=%s watermark=%s reason=%q\n",
+				winner.ID, winner.ToolCallID, winner.Strategy, winner.Status, winner.RiskStatus, winner.BudgetExceeded, winner.Score, winner.CostEstimate, winner.WorkspacePath, promotion.ID, promotion.Status, promotion.RiskStatus, promotion.TelemetryWatermark, promotion.Reason)
 			return nil
 		},
 	}

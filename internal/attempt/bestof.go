@@ -43,6 +43,8 @@ type Result struct {
 	ArtifactResult string
 	CostEstimate   float64
 	SavedCost      float64
+	RiskStatus     string
+	BudgetExceeded bool
 	IsWinner       bool
 	BurstID        string
 	BurstStatus    string
@@ -125,8 +127,8 @@ func (s Service) BestOfWithOptions(snapshotNameOrID string, strategies []string,
 	for i, result := range results {
 		totalCost += result.CostEstimate
 		if _, err := s.DB.Exec(`UPDATE fork_attempts
-			SET tool_call_id = ?, strategy = ?, command = ?, status = ?, exit_code = ?, wall_ms = ?, output_summary = ?, score = ?, budget_seconds = ?, artifact_result = ?, cost_estimate = ?, saved_cost = ?
-			WHERE id = ?`, result.ToolCallID, result.Strategy, result.Command, result.Status, result.ExitCode, result.WallMS, result.OutputSummary, result.Score, result.BudgetSeconds, result.ArtifactResult, result.CostEstimate, result.SavedCost, result.AttemptID); err != nil {
+			SET tool_call_id = ?, strategy = ?, command = ?, status = ?, exit_code = ?, wall_ms = ?, output_summary = ?, score = ?, budget_seconds = ?, artifact_result = ?, cost_estimate = ?, saved_cost = ?, risk_status = ?, budget_exceeded = ?
+			WHERE id = ?`, result.ToolCallID, result.Strategy, result.Command, result.Status, result.ExitCode, result.WallMS, result.OutputSummary, result.Score, result.BudgetSeconds, result.ArtifactResult, result.CostEstimate, result.SavedCost, result.RiskStatus, boolInt(result.BudgetExceeded), result.AttemptID); err != nil {
 			return results, Result{}, err
 		}
 		endedAt := time.Now().UTC().Format(time.RFC3339Nano)
@@ -200,6 +202,7 @@ func (s Service) runAttemptWithBurst(attemptID, toolCallID, workspacePath string
 			Score:          -2000,
 			BudgetSeconds:  strategy.BudgetSeconds,
 			ArtifactResult: strategy.ArtifactResult,
+			RiskStatus:     "unknown",
 			BurstID:        reservation.ID,
 			BurstStatus:    "rejected",
 			BurstReason:    reason,
@@ -207,6 +210,12 @@ func (s Service) runAttemptWithBurst(attemptID, toolCallID, workspacePath string
 	}
 	_, _ = s.DB.Exec(`UPDATE tool_calls SET status = 'running' WHERE id = ?`, toolCallID)
 	result := runAttempt(attemptID, workspacePath, strategy)
+	result.RiskStatus = "clean"
+	result.BudgetExceeded = budgetExceeded(result.WallMS, strategy.BudgetSeconds)
+	if result.BudgetExceeded && result.Status == "passed" {
+		result.Status = "budget_exceeded"
+		result.Score -= 500
+	}
 	result.ToolCallID = toolCallID
 	result.BurstID = reservation.ID
 	result.BurstStatus = "released"
@@ -284,6 +293,12 @@ func (s Service) runDockerAttempt(attemptID, toolCallID, workspacePath string, s
 	if execErr != nil && result.OutputSummary == "" {
 		result.OutputSummary = execErr.Error()
 	}
+	result.RiskStatus = "clean"
+	result.BudgetExceeded = budgetExceeded(result.WallMS, strategy.BudgetSeconds)
+	if result.BudgetExceeded && result.Status == "passed" {
+		result.Status = "budget_exceeded"
+		result.Score -= 500
+	}
 	return result
 }
 
@@ -300,6 +315,7 @@ func rejectedResult(attemptID, toolCallID, workspacePath string, strategy Strate
 		Score:          -2000,
 		BudgetSeconds:  strategy.BudgetSeconds,
 		ArtifactResult: strategy.ArtifactResult,
+		RiskStatus:     "unknown",
 		BurstStatus:    "rejected",
 		BurstReason:    reason,
 	}
@@ -390,6 +406,8 @@ func runAttempt(attemptID, workspacePath string, strategy Strategy) Result {
 		BudgetSeconds:  strategy.BudgetSeconds,
 		ArtifactResult: strategy.ArtifactResult,
 		CostEstimate:   cost,
+		RiskStatus:     "clean",
+		BudgetExceeded: budgetExceeded(wallMS, strategy.BudgetSeconds),
 	}
 }
 
@@ -412,16 +430,49 @@ func scoreOutput(output, parser string, wallMS int64, exitCode int) float64 {
 }
 
 func better(a, b Result) bool {
+	if riskRank(a.RiskStatus) != riskRank(b.RiskStatus) {
+		return riskRank(a.RiskStatus) > riskRank(b.RiskStatus)
+	}
 	if a.ExitCode == 0 && b.ExitCode != 0 {
 		return true
 	}
 	if a.ExitCode != 0 && b.ExitCode == 0 {
 		return false
 	}
+	if a.BudgetExceeded != b.BudgetExceeded {
+		return !a.BudgetExceeded
+	}
 	if a.Score != b.Score {
 		return a.Score > b.Score
 	}
+	if a.CostEstimate != b.CostEstimate {
+		return a.CostEstimate < b.CostEstimate
+	}
 	return a.WallMS < b.WallMS
+}
+
+func riskRank(status string) int {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "clean", "allow":
+		return 3
+	case "unknown", "":
+		return 2
+	case "audit":
+		return 1
+	default:
+		return 0
+	}
+}
+
+func budgetExceeded(wallMS int64, budgetSeconds int) bool {
+	return budgetSeconds > 0 && wallMS > int64(budgetSeconds)*1000
+}
+
+func boolInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }
 
 func summarize(raw string) string {

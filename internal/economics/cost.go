@@ -127,7 +127,7 @@ func ShowCost(db *sql.DB, runID string, out io.Writer) error {
 	if err := rolloutRows.Err(); err != nil {
 		return err
 	}
-	attemptRows, err := db.Query(`SELECT a.id, a.rollout_id, a.status, a.score, a.cost_estimate, a.saved_cost, a.is_winner
+	attemptRows, err := db.Query(`SELECT a.id, a.rollout_id, a.status, a.score, a.cost_estimate, a.saved_cost, COALESCE(a.risk_status, 'unknown'), COALESCE(a.budget_exceeded, 0), a.is_winner
 		FROM fork_attempts a JOIN rollouts r ON a.rollout_id = r.id
 		WHERE r.run_id = ? ORDER BY a.created_at`, runID)
 	if err != nil {
@@ -135,17 +135,17 @@ func ShowCost(db *sql.DB, runID string, out io.Writer) error {
 	}
 	defer attemptRows.Close()
 	for attemptRows.Next() {
-		var attemptID, rolloutID, status string
+		var attemptID, rolloutID, status, riskStatus string
 		var score, attemptCost, saved float64
-		var isWinner int
-		if err := attemptRows.Scan(&attemptID, &rolloutID, &status, &score, &attemptCost, &saved, &isWinner); err != nil {
+		var budgetExceeded, isWinner int
+		if err := attemptRows.Scan(&attemptID, &rolloutID, &status, &score, &attemptCost, &saved, &riskStatus, &budgetExceeded, &isWinner); err != nil {
 			return err
 		}
 		winner := "false"
 		if isWinner != 0 {
 			winner = "true"
 		}
-		if _, err := fmt.Fprintf(out, "attempt_id=%s rollout_id=%s status=%s score=%.3f cost=%.6f saved_cost=%.6f winner=%s\n", attemptID, rolloutID, status, score, attemptCost, saved, winner); err != nil {
+		if _, err := fmt.Fprintf(out, "attempt_id=%s rollout_id=%s status=%s risk=%s budget_exceeded=%t score=%.3f cost=%.6f saved_cost=%.6f winner=%s\n", attemptID, rolloutID, status, riskStatus, budgetExceeded != 0, score, attemptCost, saved, winner); err != nil {
 			return err
 		}
 	}

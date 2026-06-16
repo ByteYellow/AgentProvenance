@@ -63,6 +63,8 @@ type AttemptInfo struct {
 	Score          float64
 	CostEstimate   float64
 	SavedCost      float64
+	RiskStatus     string
+	BudgetExceeded bool
 	IsWinner       bool
 	ArtifactResult string
 	OutputSummary  string
@@ -204,7 +206,7 @@ func (s Service) Inspect(id string) (Rollout, error) {
 
 func (s Service) Attempts(rolloutID string) ([]AttemptInfo, error) {
 	rows, err := s.DB.Query(`SELECT id, tool_call_id, snapshot_id, workspace_path, strategy, command, status, exit_code, wall_ms,
-		score, cost_estimate, saved_cost, is_winner, artifact_result, output_summary, created_at
+		score, cost_estimate, saved_cost, COALESCE(risk_status, 'unknown'), COALESCE(budget_exceeded, 0), is_winner, artifact_result, output_summary, created_at
 		FROM fork_attempts WHERE rollout_id = ? ORDER BY created_at ASC`, rolloutID)
 	if err != nil {
 		return nil, err
@@ -214,11 +216,13 @@ func (s Service) Attempts(rolloutID string) ([]AttemptInfo, error) {
 	for rows.Next() {
 		var item AttemptInfo
 		var isWinner int
+		var budgetExceeded int
 		if err := rows.Scan(&item.ID, &item.ToolCallID, &item.SnapshotID, &item.WorkspacePath, &item.Strategy, &item.Command, &item.Status, &item.ExitCode, &item.WallMS,
-			&item.Score, &item.CostEstimate, &item.SavedCost, &isWinner, &item.ArtifactResult, &item.OutputSummary, &item.CreatedAt); err != nil {
+			&item.Score, &item.CostEstimate, &item.SavedCost, &item.RiskStatus, &budgetExceeded, &isWinner, &item.ArtifactResult, &item.OutputSummary, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		item.IsWinner = isWinner != 0
+		item.BudgetExceeded = budgetExceeded != 0
 		items = append(items, item)
 	}
 	return items, rows.Err()
@@ -231,14 +235,16 @@ func (s Service) Winner(rolloutID string) (AttemptInfo, Promotion, error) {
 	}
 	var item AttemptInfo
 	var isWinner int
+	var budgetExceeded int
 	err = s.DB.QueryRow(`SELECT id, tool_call_id, snapshot_id, workspace_path, strategy, command, status, exit_code, wall_ms,
-		score, cost_estimate, saved_cost, is_winner, artifact_result, output_summary, created_at
+		score, cost_estimate, saved_cost, COALESCE(risk_status, 'unknown'), COALESCE(budget_exceeded, 0), is_winner, artifact_result, output_summary, created_at
 		FROM fork_attempts WHERE id = ?`, rollout.WinnerAttemptID).
 		Scan(&item.ID, &item.ToolCallID, &item.SnapshotID, &item.WorkspacePath, &item.Strategy, &item.Command, &item.Status, &item.ExitCode, &item.WallMS,
-			&item.Score, &item.CostEstimate, &item.SavedCost, &isWinner, &item.ArtifactResult, &item.OutputSummary, &item.CreatedAt)
+			&item.Score, &item.CostEstimate, &item.SavedCost, &item.RiskStatus, &budgetExceeded, &isWinner, &item.ArtifactResult, &item.OutputSummary, &item.CreatedAt)
 	if err != nil {
 		return AttemptInfo{}, Promotion{}, err
 	}
+	item.BudgetExceeded = budgetExceeded != 0
 	item.IsWinner = isWinner != 0
 	promotion, err := s.inspectPromotion(rollout.PromotionID)
 	return item, promotion, err
@@ -318,11 +324,13 @@ func (s Service) TaintDescendants(snapshotID, reason string) error {
 func (s Service) inspectAttempt(attemptID string) (AttemptInfo, error) {
 	var item AttemptInfo
 	var isWinner int
+	var budgetExceeded int
 	err := s.DB.QueryRow(`SELECT id, tool_call_id, snapshot_id, workspace_path, strategy, command, status, exit_code, wall_ms,
-		score, cost_estimate, saved_cost, is_winner, artifact_result, output_summary, created_at
+		score, cost_estimate, saved_cost, COALESCE(risk_status, 'unknown'), COALESCE(budget_exceeded, 0), is_winner, artifact_result, output_summary, created_at
 		FROM fork_attempts WHERE id = ?`, attemptID).
 		Scan(&item.ID, &item.ToolCallID, &item.SnapshotID, &item.WorkspacePath, &item.Strategy, &item.Command, &item.Status, &item.ExitCode, &item.WallMS,
-			&item.Score, &item.CostEstimate, &item.SavedCost, &isWinner, &item.ArtifactResult, &item.OutputSummary, &item.CreatedAt)
+			&item.Score, &item.CostEstimate, &item.SavedCost, &item.RiskStatus, &budgetExceeded, &isWinner, &item.ArtifactResult, &item.OutputSummary, &item.CreatedAt)
+	item.BudgetExceeded = budgetExceeded != 0
 	item.IsWinner = isWinner != 0
 	return item, err
 }

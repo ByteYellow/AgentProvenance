@@ -52,7 +52,7 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 		return err
 	}
 
-	attemptRows, err := db.Query(`SELECT a.id, a.rollout_id, a.snapshot_id, a.status, a.score, a.cost_estimate, a.is_winner
+	attemptRows, err := db.Query(`SELECT a.id, a.rollout_id, a.snapshot_id, a.status, COALESCE(a.risk_status, 'unknown'), COALESCE(a.budget_exceeded, 0), a.score, a.cost_estimate, a.is_winner
 		FROM fork_attempts a JOIN rollouts r ON a.rollout_id = r.id
 		WHERE r.run_id = ? ORDER BY a.created_at ASC`, runID)
 	if err != nil {
@@ -61,13 +61,13 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 	defer attemptRows.Close()
 	fmt.Fprintln(out, "attempts:")
 	for attemptRows.Next() {
-		var id, rolloutID, snapshotID, status string
+		var id, rolloutID, snapshotID, status, riskStatus string
 		var score, cost float64
-		var isWinner int
-		if err := attemptRows.Scan(&id, &rolloutID, &snapshotID, &status, &score, &cost, &isWinner); err != nil {
+		var budgetExceeded, isWinner int
+		if err := attemptRows.Scan(&id, &rolloutID, &snapshotID, &status, &riskStatus, &budgetExceeded, &score, &cost, &isWinner); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "  attempt=%s rollout=%s snapshot=%s status=%s score=%.3f cost=%.6f winner=%t\n", id, rolloutID, snapshotID, status, score, cost, isWinner != 0)
+		fmt.Fprintf(out, "  attempt=%s rollout=%s snapshot=%s status=%s risk=%s budget_exceeded=%t score=%.3f cost=%.6f winner=%t\n", id, rolloutID, snapshotID, status, riskStatus, budgetExceeded != 0, score, cost, isWinner != 0)
 	}
 	if err := attemptRows.Err(); err != nil {
 		return err
