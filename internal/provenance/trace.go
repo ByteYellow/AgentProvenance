@@ -124,6 +124,27 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 		return err
 	}
 
+	bindingRows, err := db.Query(`SELECT id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, COALESCE(ended_at, ''), binding_source, confidence
+		FROM execution_context_bindings WHERE run_id = ? ORDER BY started_at ASC`, runID)
+	if err != nil {
+		return err
+	}
+	defer bindingRows.Close()
+	fmt.Fprintln(out, "execution_context_bindings:")
+	for bindingRows.Next() {
+		var id, sessionID, attemptID, toolCallID, processID, containerID, cgroupID, startedAt, endedAt, source string
+		var rootPID, pid int64
+		var confidence float64
+		if err := bindingRows.Scan(&id, &sessionID, &attemptID, &toolCallID, &processID, &containerID, &cgroupID, &rootPID, &pid, &startedAt, &endedAt, &source, &confidence); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "  binding=%s session=%s attempt=%s tool_call=%s process=%s container=%s cgroup=%s root_pid=%d pid=%d source=%s confidence=%.2f started_at=%s ended_at=%s\n",
+			id, sessionID, attemptID, toolCallID, processID, containerID, cgroupID, rootPID, pid, source, confidence, startedAt, endedAt)
+	}
+	if err := bindingRows.Err(); err != nil {
+		return err
+	}
+
 	procRows, err := db.Query(`SELECT id, session_id, COALESCE(tool_call_id, ''), command, status, COALESCE(exit_code, 0), started_at, COALESCE(ended_at, '') FROM processes
 		WHERE session_id IN (SELECT id FROM sessions WHERE run_id = ?) ORDER BY started_at ASC`, runID)
 	if err != nil {
@@ -269,8 +290,8 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 	}
 	fmt.Fprintln(out, "events:")
 	for _, event := range events {
-		fmt.Fprintf(out, "  event=%s type=%s source=%s session=%s process=%s tool_call=%s snapshot=%s payload=%s\n",
-			event.ID, event.EventType, event.Source, event.SessionID, event.ProcessID, event.ToolCallID, event.SnapshotID, event.Payload)
+		fmt.Fprintf(out, "  event=%s type=%s source=%s session=%s process=%s tool_call=%s snapshot=%s correlation=%s confidence=%.2f container=%s cgroup=%s pid=%d payload=%s\n",
+			event.ID, event.EventType, event.Source, event.SessionID, event.ProcessID, event.ToolCallID, event.SnapshotID, event.CorrelationMethod, event.CorrelationConfidence, event.ContainerID, event.CgroupID, event.PID, event.Payload)
 	}
 
 	decisions, err := security.ListDecisions(db, runID)

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/control"
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/ids"
 	runtimeplane "github.com/byteyellow/agentprovenance/internal/runtime"
 	"github.com/byteyellow/agentprovenance/internal/scheduler"
@@ -304,6 +305,15 @@ func (s Service) runAttemptWithBurst(attemptID, toolCallID, workspacePath string
 		VALUES (?, ?, ?, ?, 'burst_pending', ?)`, processID, sessionID, toolCallID, strategy.Command, startedAt); err != nil {
 		return rejectedResult(attemptID, toolCallID, workspacePath, strategy, err.Error())
 	}
+	_, _ = correlation.RecordBinding(s.DB, correlation.Binding{
+		RunID:         runID,
+		SessionID:     sessionID,
+		AttemptID:     attemptID,
+		ToolCallID:    toolCallID,
+		ProcessID:     processID,
+		StartedAt:     startedAt,
+		BindingSource: "rollout_local",
+	})
 	_, _ = s.DB.Exec(`UPDATE tool_calls SET status = 'burst_pending', started_at = ? WHERE id = ?`, startedAt, toolCallID)
 	reservation, err := (scheduler.Scheduler{DB: s.DB}).ReserveBurst(runID, sessionID, processID, cpuRequest, ttl)
 	if err != nil {
@@ -368,6 +378,7 @@ func (s Service) runAttemptWithBurst(attemptID, toolCallID, workspacePath string
 	}
 	endedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	_, _ = s.DB.Exec(`UPDATE processes SET status = ?, exit_code = ?, ended_at = ? WHERE id = ?`, processStatus, result.ExitCode, endedAt, processID)
+	_ = correlation.CloseBinding(s.DB, processID, endedAt)
 	_, _ = s.DB.Exec(`UPDATE sessions SET status = 'stopped', updated_at = ? WHERE id = ?`, endedAt, sessionID)
 	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
 		VALUES (?, ?, ?, ?, ?, 'rollout', 'exec_end', ?, ?)`,
@@ -473,6 +484,20 @@ func (s Service) runDockerAttempt(attemptID, toolCallID, workspacePath string, s
 		}
 		_, _ = s.DB.Exec(`UPDATE processes SET tool_call_id = ? WHERE id = ?`, toolCallID, processID)
 		_, _ = s.DB.Exec(`UPDATE events SET tool_call_id = ? WHERE process_id = ?`, toolCallID, processID)
+		var containerID, startedAt, endedAt string
+		_ = s.DB.QueryRow(`SELECT COALESCE(s.container_id, ''), p.started_at, COALESCE(p.ended_at, '')
+			FROM processes p JOIN sessions s ON p.session_id = s.id WHERE p.id = ?`, processID).Scan(&containerID, &startedAt, &endedAt)
+		_, _ = correlation.RecordBinding(s.DB, correlation.Binding{
+			RunID:         opts.RunID,
+			SessionID:     sessionID,
+			AttemptID:     attemptID,
+			ToolCallID:    toolCallID,
+			ProcessID:     processID,
+			ContainerID:   containerID,
+			StartedAt:     startedAt,
+			EndedAt:       endedAt,
+			BindingSource: "rollout_docker",
+		})
 	}
 	score := scoreOutput(output.String(), strategy.ScoreParser, wallMS, exitCode)
 	if exitCode != 0 {

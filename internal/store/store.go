@@ -11,7 +11,7 @@ import (
 )
 
 const DefaultDataDir = ".acf"
-const SchemaVersion = 5
+const SchemaVersion = 6
 
 type Paths struct {
 	Root       string
@@ -126,6 +126,23 @@ func EnsureSchema(db *sql.DB) error {
 			started_at TEXT NOT NULL,
 			ended_at TEXT,
 			FOREIGN KEY(session_id) REFERENCES sessions(id)
+		);`,
+		`CREATE TABLE IF NOT EXISTS execution_context_bindings (
+			id TEXT PRIMARY KEY,
+			run_id TEXT NOT NULL DEFAULT '',
+			session_id TEXT NOT NULL DEFAULT '',
+			attempt_id TEXT NOT NULL DEFAULT '',
+			tool_call_id TEXT NOT NULL DEFAULT '',
+			process_id TEXT NOT NULL DEFAULT '',
+			container_id TEXT NOT NULL DEFAULT '',
+			cgroup_id TEXT NOT NULL DEFAULT '',
+			root_pid INTEGER NOT NULL DEFAULT 0,
+			pid INTEGER NOT NULL DEFAULT 0,
+			started_at TEXT NOT NULL,
+			ended_at TEXT NOT NULL DEFAULT '',
+			binding_source TEXT NOT NULL DEFAULT 'control_plane',
+			confidence REAL NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL
 		);`,
 		`CREATE TABLE IF NOT EXISTS snapshots (
 			id TEXT PRIMARY KEY,
@@ -293,6 +310,14 @@ func EnsureSchema(db *sql.DB) error {
 			tool_call_id TEXT NOT NULL DEFAULT '',
 			process_id TEXT NOT NULL DEFAULT '',
 			snapshot_id TEXT NOT NULL DEFAULT '',
+			raw_event_id TEXT NOT NULL DEFAULT '',
+			correlation_method TEXT NOT NULL DEFAULT '',
+			correlation_confidence REAL NOT NULL DEFAULT 0,
+			container_id TEXT NOT NULL DEFAULT '',
+			cgroup_id TEXT NOT NULL DEFAULT '',
+			pid INTEGER NOT NULL DEFAULT 0,
+			tgid INTEGER NOT NULL DEFAULT 0,
+			ppid INTEGER NOT NULL DEFAULT 0,
 			source TEXT NOT NULL,
 			event_type TEXT NOT NULL,
 			payload TEXT NOT NULL,
@@ -520,6 +545,14 @@ func EnsureSchema(db *sql.DB) error {
 		`ALTER TABLE events ADD COLUMN tool_call_id TEXT NOT NULL DEFAULT '';`,
 		`ALTER TABLE events ADD COLUMN process_id TEXT NOT NULL DEFAULT '';`,
 		`ALTER TABLE events ADD COLUMN snapshot_id TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE events ADD COLUMN raw_event_id TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE events ADD COLUMN correlation_method TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE events ADD COLUMN correlation_confidence REAL NOT NULL DEFAULT 0;`,
+		`ALTER TABLE events ADD COLUMN container_id TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE events ADD COLUMN cgroup_id TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE events ADD COLUMN pid INTEGER NOT NULL DEFAULT 0;`,
+		`ALTER TABLE events ADD COLUMN tgid INTEGER NOT NULL DEFAULT 0;`,
+		`ALTER TABLE events ADD COLUMN ppid INTEGER NOT NULL DEFAULT 0;`,
 		`ALTER TABLE egress_proxies ADD COLUMN run_id TEXT NOT NULL DEFAULT '';`,
 		`ALTER TABLE egress_proxies ADD COLUMN session_id TEXT NOT NULL DEFAULT '';`,
 		`ALTER TABLE egress_proxies ADD COLUMN mode TEXT NOT NULL DEFAULT 'host';`,

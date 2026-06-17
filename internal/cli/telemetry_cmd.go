@@ -33,9 +33,9 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tRUN\tSESSION\tTOOL_CALL\tPROCESS\tSNAPSHOT\tSOURCE\tTYPE\tCREATED_AT")
+			fmt.Fprintln(w, "ID\tRUN\tSESSION\tTOOL_CALL\tPROCESS\tSNAPSHOT\tCORRELATION\tCONFIDENCE\tSOURCE\tTYPE\tCREATED_AT")
 			for _, event := range events {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", event.ID, event.RunID, event.SessionID, event.ToolCallID, event.ProcessID, event.SnapshotID, event.Source, event.EventType, event.CreatedAt)
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%.2f\t%s\t%s\t%s\n", event.ID, event.RunID, event.SessionID, event.ToolCallID, event.ProcessID, event.SnapshotID, event.CorrelationMethod, event.CorrelationConfidence, event.Source, event.EventType, event.CreatedAt)
 			}
 			return w.Flush()
 		},
@@ -80,6 +80,13 @@ func telemetryIngestCmd(dataDir *string) *cobra.Command {
 	ingest.Flags().StringVar(&event.ToolCallID, "tool-call", "", "tool call id")
 	ingest.Flags().StringVar(&event.ProcessID, "process", "", "process id")
 	ingest.Flags().StringVar(&event.SnapshotID, "snapshot", "", "snapshot id")
+	ingest.Flags().StringVar(&event.RawEventID, "raw-event", "", "raw telemetry event id from the substrate")
+	ingest.Flags().StringVar(&event.ContainerID, "container-id", "", "container id observed by runtime telemetry")
+	ingest.Flags().StringVar(&event.CgroupID, "cgroup-id", "", "cgroup id observed by runtime telemetry")
+	ingest.Flags().Int64Var(&event.PID, "pid", 0, "pid observed by runtime telemetry")
+	ingest.Flags().Int64Var(&event.TGID, "tgid", 0, "tgid observed by runtime telemetry")
+	ingest.Flags().Int64Var(&event.PPID, "ppid", 0, "parent pid observed by runtime telemetry")
+	ingest.Flags().StringVar(&event.Timestamp, "timestamp", "", "runtime event timestamp; defaults to ingest time")
 	ingest.Flags().StringVar(&event.Source, "source", "filtered_telemetry", "telemetry source")
 	ingest.Flags().StringVar(&event.EventType, "type", "", "filtered event type")
 	ingest.Flags().StringVar(&event.Payload, "payload", "{}", "JSON payload")

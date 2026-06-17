@@ -8,6 +8,10 @@ attempt workspace forks, rollout fanout, process/tool-call traces, artifact
 refs, content-addressed provenance objects, and cost/risk evidence attached to
 promotion decisions.
 
+Phase 1 focuses on the immutable execution ledger and state-diff audit loop:
+`ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame ->
+Taint -> Promotion Barrier`.
+
 Preview URL, egress proxy, credential injection, warm pool, node metadata, and
 baseline commands are kept as experimental local controls. They are useful for
 future drivers, but they are not the main v0.1 product surface.
@@ -45,6 +49,8 @@ agentprov graph log --run run-demo-bugfix
 agentprov graph materialize --run run-demo-bugfix
 agentprov graph diff --run run-demo-bugfix --file calculator.py
 agentprov graph blame --run run-demo-bugfix --file calculator.py
+agentprov telemetry ingest --raw-event raw-execve-1 --process <process_id> --type execve --payload '{"argv":["./test_calculator.sh"]}'
+agentprov telemetry list --run run-demo-bugfix --type execve
 agentprov cost show run-demo-bugfix
 ```
 
@@ -83,10 +89,11 @@ agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty
 
 This is the main AgentProvenance demo. It creates a clean coding workspace,
 snapshots it, forks five attempts, runs different repair strategies, exports
-patch artifacts, quarantines one risky failed branch, promotes the passing
-winner, then runs `graph trace`, `graph refs`, `graph log`, `graph materialize`,
-`graph diff`, and `graph blame` to explain the winner and attribute file
-changes.
+patch artifacts, ingests raw runtime telemetry without `tool_call_id`,
+correlates it through ToolCallScope bindings, quarantines one risky failed
+branch, promotes the passing winner, then runs `graph trace`, `graph refs`,
+`graph log`, `graph materialize`, `graph diff`, and `graph blame` to explain
+the winner and attribute file changes.
 
 ### demo_streaming_terminal
 

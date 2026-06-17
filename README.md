@@ -24,6 +24,7 @@ AgentProvenance is a local-first rollout provenance control plane for high-concu
 
 AgentProvenance does not try to be a generic sandbox runtime, telemetry collector, eBPF platform, or Kubernetes/Ray replacement. It sits above runtime, snapshot, scheduler, and telemetry substrates and owns the agent-side causal model that generic infrastructure does not preserve:
 
+- scope: ToolCallScope bindings from runtime identity to agent context
 - state source: template, ready snapshot, forked attempt workspace
 - execution: tool calls, processes, events, stdout/stderr summaries
 - artifact: result refs, file hashes, artifact lineage
@@ -54,6 +55,7 @@ It answers questions such as:
 - Which snapshots or descendants are tainted?
 - How much active CPU did this run actually consume?
 - What objects, manifests, hashes, and policy decisions are needed to replay or audit this result?
+- Which raw runtime event maps to which `tool_call`, and how confident is that mapping?
 
 ## The core loop
 
@@ -61,6 +63,8 @@ It answers questions such as:
 template / ready snapshot
   -> fork N attempt workspaces
   -> execute tool_call/process steps
+  -> bind runtime identity to ToolCallScope
+  -> correlate raw runtime telemetry into agent context
   -> collect artifacts, cost, telemetry, and compact evidence
   -> score attempts by result, risk, budget, and cost
   -> wait at the promotion barrier
@@ -92,6 +96,11 @@ agentprov graph diff --run run-demo-bugfix --file calculator.py
 agentprov graph blame --run run-demo-bugfix --file calculator.py
 ```
 
+Raw runtime/security events do not need to carry `tool_call_id`. They can be
+ingested with substrate identity such as `process_id`, `container_id`,
+`cgroup_id`, `pid`, and timestamp; AgentProvenance resolves them through
+execution context bindings and records `correlation_method` plus confidence.
+
 ## What AgentProvenance owns vs. what it plugs into
 
 | Layer | AgentProvenance owns | External substrate |
@@ -111,6 +120,7 @@ Core AgentProvenance path:
 
 - Docker-backed sandbox sessions
 - streaming exec and process records
+- ToolCallScope execution context bindings for process/container/cgroup/time-window correlation
 - directory snapshot, fork, and resume
 - template → ready snapshot → attempt workspace lineage
 - rollout fanout and best-of-forks, including Docker-backed short-lived attempt sessions via `--runtime docker`
@@ -149,6 +159,7 @@ AgentProvenance is intentionally narrow at this stage:
 - Egress policy currently covers HTTP/HTTPS proxy workflows and direct-egress blocking from the Docker sandbox bridge; it is not yet a general raw TCP policy engine.
 - Baseline detection is MVP-level event and cost counting, not syscall ML or full eBPF feature modeling.
 - Content-addressed provenance objects exist, but replay and fsck are still early roadmap items. Diff and blame are MVP-level workspace-file queries.
+- eBPF/Falco/Tetragon/LoongCollector are not integrated yet; current correlation works with wrapper/runtime events and is structured for those substrates.
 
 ## Quickstart
 
@@ -206,6 +217,24 @@ content-addressed objects, `diff` compares a file across attempts, and `blame`
 attributes a file version to the attempt, tool call, command, strategy, and
 promotion status that produced it. The main demo also simulates a risky failed
 branch, quarantines it, and keeps that decision in the same provenance trace.
+
+The runtime telemetry path is intentionally layered:
+
+```sh
+./agentprov telemetry ingest \
+  --raw-event raw-execve-1 \
+  --process <process_id> \
+  --source wrapper_runtime \
+  --type execve \
+  --payload '{"argv":["pytest","-q"]}'
+
+./agentprov telemetry list --run <run_id> --type execve
+./agentprov graph trace --run <run_id>
+```
+
+The raw event above omits `tool_call_id`; the correlator fills it from the
+recorded execution context binding and stores the correlation method in both
+telemetry output and graph trace.
 
 Run the full MVP walkthrough:
 
@@ -421,6 +450,7 @@ AgentProvenance owns rollout provenance, not generic infrastructure. Runtime, or
 | Rollout | `run`, `rollout`, `attempt`, fanout, best-of-forks |
 | State | Template, ready snapshot, attempt workspace, snapshot DAG, taint lineage |
 | Execution | `tool_call`, process, event, runtime metadata |
+| Correlation | ToolCallScope bindings from process/container/cgroup/time-window to agent context |
 | Artifact | Result refs, artifact file hash, artifact lineage |
 | Economics | Active CPU windows, burst admission, warm reuse, snapshot physical cost, budget |
 | Risk | Telemetry-context correlation, policy decision, baseline feature, response |

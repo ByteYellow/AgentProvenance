@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/egress"
 	"github.com/byteyellow/agentprovenance/internal/ids"
 	runtimeplane "github.com/byteyellow/agentprovenance/internal/runtime"
@@ -259,6 +260,14 @@ func (s Service) exec(sessionID string, command []string, stream bool, stdout, s
 		s.unlockWrites()
 		return "", err
 	}
+	_, _ = correlation.RecordBinding(s.DB, correlation.Binding{
+		RunID:         runID,
+		SessionID:     sessionID,
+		ProcessID:     processID,
+		ContainerID:   containerID,
+		StartedAt:     now,
+		BindingSource: "control_exec",
+	})
 	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, process_id, source, event_type, payload, created_at)
 		VALUES (?, ?, ?, ?, 'control_plane', 'exec_start', ?, ?)`, ids.New("evt"), runID, sessionID, processID, fmt.Sprintf(`{"command":%q,"stream":%t}`, strings.Join(command, " "), stream), now)
 	cpuRequest := s.sessionCPURequest(sessionID)
@@ -297,6 +306,7 @@ func (s Service) exec(sessionID string, command []string, stream bool, stdout, s
 	}
 	ended := time.Now().UTC().Format(time.RFC3339Nano)
 	_, _ = s.DB.Exec(`UPDATE processes SET exec_id = ?, status = ?, exit_code = ?, ended_at = ? WHERE id = ?`, result.ExecID, status, result.ExitCode, ended, processID)
+	_ = correlation.CloseBinding(s.DB, processID, ended)
 	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, process_id, source, event_type, payload, created_at)
 		VALUES (?, ?, ?, ?, 'control_plane', 'exec_end', ?, ?)`, ids.New("evt"), runID, sessionID, processID, fmt.Sprintf(`{"exec_id":%q,"exit_code":%d,"status":%q,"wall_seconds":%.6f}`, result.ExecID, result.ExitCode, status, wallSeconds), ended)
 	_, _ = s.DB.Exec(`INSERT INTO cost_samples (id, run_id, session_id, node_id, wall_seconds, active_cpu_seconds, created_at)

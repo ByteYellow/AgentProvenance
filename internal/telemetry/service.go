@@ -5,33 +5,47 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/ids"
 )
 
 type EventRecord struct {
-	ID         string
-	RunID      string
-	SessionID  string
-	ToolCallID string
-	ProcessID  string
-	SnapshotID string
-	Source     string
-	EventType  string
-	Payload    string
-	CreatedAt  string
+	ID                    string
+	RunID                 string
+	SessionID             string
+	ToolCallID            string
+	ProcessID             string
+	SnapshotID            string
+	RawEventID            string
+	CorrelationMethod     string
+	CorrelationConfidence float64
+	ContainerID           string
+	CgroupID              string
+	PID                   int64
+	Source                string
+	EventType             string
+	Payload               string
+	CreatedAt             string
 }
 
 type IngestEvent struct {
-	RunID      string
-	RolloutID  string
-	AttemptID  string
-	SessionID  string
-	ToolCallID string
-	ProcessID  string
-	SnapshotID string
-	Source     string
-	EventType  string
-	Payload    string
+	RunID       string
+	RolloutID   string
+	AttemptID   string
+	SessionID   string
+	ToolCallID  string
+	ProcessID   string
+	SnapshotID  string
+	RawEventID  string
+	ContainerID string
+	CgroupID    string
+	PID         int64
+	TGID        int64
+	PPID        int64
+	Timestamp   string
+	Source      string
+	EventType   string
+	Payload     string
 }
 
 type Filter struct {
@@ -47,7 +61,10 @@ func ListEvents(db *sql.DB, runID, sessionID string) ([]EventRecord, error) {
 
 func ListEventsFiltered(db *sql.DB, filter Filter) ([]EventRecord, error) {
 	query := `SELECT id, COALESCE(run_id, ''), COALESCE(session_id, ''), COALESCE(tool_call_id, ''),
-		COALESCE(process_id, ''), COALESCE(snapshot_id, ''), source, event_type, payload, created_at
+		COALESCE(process_id, ''), COALESCE(snapshot_id, ''), COALESCE(raw_event_id, ''),
+		COALESCE(correlation_method, ''), COALESCE(correlation_confidence, 0),
+		COALESCE(container_id, ''), COALESCE(cgroup_id, ''), COALESCE(pid, 0),
+		source, event_type, payload, created_at
 		FROM events`
 	args := []any{}
 	clauses := []string{}
@@ -82,7 +99,7 @@ func ListEventsFiltered(db *sql.DB, filter Filter) ([]EventRecord, error) {
 	var events []EventRecord
 	for rows.Next() {
 		var event EventRecord
-		if err := rows.Scan(&event.ID, &event.RunID, &event.SessionID, &event.ToolCallID, &event.ProcessID, &event.SnapshotID, &event.Source, &event.EventType, &event.Payload, &event.CreatedAt); err != nil {
+		if err := rows.Scan(&event.ID, &event.RunID, &event.SessionID, &event.ToolCallID, &event.ProcessID, &event.SnapshotID, &event.RawEventID, &event.CorrelationMethod, &event.CorrelationConfidence, &event.ContainerID, &event.CgroupID, &event.PID, &event.Source, &event.EventType, &event.Payload, &event.CreatedAt); err != nil {
 			return nil, err
 		}
 		events = append(events, event)
@@ -103,15 +120,73 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 	if event.Payload == "" {
 		event.Payload = "{}"
 	}
+	raw := correlation.RawIdentity{
+		ProcessID:   event.ProcessID,
+		ContainerID: event.ContainerID,
+		CgroupID:    event.CgroupID,
+		PID:         event.PID,
+		TGID:        event.TGID,
+		PPID:        event.PPID,
+		Timestamp:   event.Timestamp,
+	}
+	method := "provided_context"
+	confidence := 1.0
+	if event.RunID == "" || event.SessionID == "" || event.ToolCallID == "" || event.ProcessID == "" {
+		match, ok, err := correlation.Resolve(db, raw)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			if event.RunID == "" {
+				event.RunID = match.RunID
+			}
+			if event.SessionID == "" {
+				event.SessionID = match.SessionID
+			}
+			if event.ToolCallID == "" {
+				event.ToolCallID = match.ToolCallID
+			}
+			if event.ProcessID == "" {
+				event.ProcessID = match.ProcessID
+			}
+			if event.AttemptID == "" {
+				event.AttemptID = match.AttemptID
+			}
+			if event.AttemptID != "" && (event.RolloutID == "" || event.SnapshotID == "") {
+				var rolloutID, snapshotID string
+				_ = db.QueryRow(`SELECT COALESCE(rollout_id, ''), COALESCE(snapshot_id, '') FROM fork_attempts WHERE id = ?`, event.AttemptID).Scan(&rolloutID, &snapshotID)
+				if event.RolloutID == "" {
+					event.RolloutID = rolloutID
+				}
+				if event.SnapshotID == "" {
+					event.SnapshotID = snapshotID
+				}
+			}
+			if event.ContainerID == "" {
+				event.ContainerID = match.ContainerID
+			}
+			if event.CgroupID == "" {
+				event.CgroupID = match.CgroupID
+			}
+			method = match.Method
+			confidence = match.Confidence
+			event.Payload = correlation.EventPayloadWithCorrelation(event.Payload, match, true)
+		} else if event.RunID == "" || event.SessionID == "" || event.ToolCallID == "" {
+			method = "unresolved"
+			confidence = 0
+			event.Payload = correlation.EventPayloadWithCorrelation(event.Payload, correlation.Match{}, false)
+		}
+	}
 	eventID := ids.New("evt")
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	payload := event.Payload
 	if event.RolloutID != "" || event.AttemptID != "" {
 		payload = fmt.Sprintf(`{"rollout_id":%q,"attempt_id":%q,"payload":%s}`, event.RolloutID, event.AttemptID, event.Payload)
 	}
-	_, err := db.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, snapshot_id, source, event_type, payload, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		eventID, event.RunID, event.SessionID, event.ToolCallID, event.ProcessID, event.SnapshotID, event.Source, event.EventType, payload, now)
+	_, err := db.Exec(`INSERT INTO events
+		(id, run_id, session_id, tool_call_id, process_id, snapshot_id, raw_event_id, correlation_method, correlation_confidence, container_id, cgroup_id, pid, tgid, ppid, source, event_type, payload, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		eventID, event.RunID, event.SessionID, event.ToolCallID, event.ProcessID, event.SnapshotID, event.RawEventID, method, confidence, event.ContainerID, event.CgroupID, event.PID, event.TGID, event.PPID, event.Source, event.EventType, payload, now)
 	if err != nil {
 		return "", err
 	}

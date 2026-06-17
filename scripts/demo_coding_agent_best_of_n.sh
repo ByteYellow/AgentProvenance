@@ -58,6 +58,21 @@ ROLLOUT_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" rollout start \
   --strategy "correct-add::sed 's/return a - b/return a + b/' calculator.py > calculator.py.new && mv calculator.py.new calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch")"
 echo "$ROLLOUT_OUTPUT"
 
+CORRECT_PROCESS="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "correct-add" {print $4; exit}')"
+if [[ -z "$CORRECT_PROCESS" ]]; then
+  echo "failed to find correct-add process" >&2
+  exit 1
+fi
+
+echo "== ingest raw runtime telemetry without tool_call_id"
+"$BIN" --data-dir "$DATA_DIR" telemetry ingest \
+  --raw-event raw-execve-correct-add \
+  --process "$CORRECT_PROCESS" \
+  --source wrapper_runtime \
+  --type execve \
+  --payload '{"argv":["./test_calculator.sh"]}'
+"$BIN" --data-dir "$DATA_DIR" telemetry list --run run-demo-bugfix --type execve
+
 RISKY_ATTEMPT="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "wrong-constant" {print $1; exit}')"
 if [[ -z "$RISKY_ATTEMPT" ]]; then
   echo "failed to find wrong-constant attempt" >&2
