@@ -142,7 +142,7 @@ Core AgentProvenance path:
 - explainable attempt evidence for pruned and promoted rollout branches
 - strategy artifact capture from attempt workspaces into `.acf/artifacts/`
 - artifact provenance edges from attempt/tool_call to exported artifact refs
-- Git-like provenance refs, log, trace, diff, blame, and content-addressed materialization under `.acf/provenance/objects/sha256/`
+- Git-like provenance refs, log, trace, diff, blame, verify, and content-addressed materialization under `.acf/provenance/objects/sha256/`
 - I/O-aware snapshot planning with source policies: `latest-ready`, `smallest-delta`, `local`, and `untainted`
 - run-local provenance trace for snapshot planner explanations
 - capability-gated runtime drivers with Docker active and gVisor/Firecracker/bubblewrap as explicit stubs
@@ -211,6 +211,7 @@ SESSION_ID=$(./agentprov session create --lease "$LEASE_ID")
 ./agentprov graph refs --run run-demo-bugfix
 ./agentprov graph log --run run-demo-bugfix
 ./agentprov graph materialize --run run-demo-bugfix
+./agentprov graph verify --run run-demo-bugfix
 ./agentprov graph diff --run run-demo-bugfix --file hello.txt
 ./agentprov graph blame --run run-demo-bugfix --file hello.txt
 ./agentprov effect record --run run-demo-bugfix --type api_call \
@@ -226,6 +227,7 @@ The core provenance commands are:
 ./agentprov graph refs --run <run_id>
 ./agentprov graph log --run <run_id>
 ./agentprov graph materialize --run <run_id>
+./agentprov graph verify --run <run_id>
 ./agentprov graph diff --run <run_id> --file <workspace_relative_file>
 ./agentprov graph blame --run <run_id> --file <workspace_relative_file>
 ./agentprov effect list --run <run_id>
@@ -297,6 +299,9 @@ The primary demo is the provenance path:
 - Non-filesystem side effects are gated, not treated as rollbackable state.
   `effect list --run run-demo-bugfix` and `graph trace` must show an
   `ExternalEffectRecord` for a dry-run API call.
+- The graph is mechanically verifiable.
+  `graph verify --run run-demo-bugfix` must report `status=ok` after
+  materialization.
 - Promotion barrier rejects tainted candidates.
   Unit tests cover a quarantined/tainted attempt being rejected by the promotion barrier before `winner_promoted` is emitted.
 - Snapshot taint propagates through descendants.
@@ -304,8 +309,8 @@ The primary demo is the provenance path:
 
 Implementation entry points:
 
-- CLI: `agentprov graph diff` and `agentprov graph blame`
-- Code: `internal/provenance.DiffFile` and `internal/provenance.BlameFile`
+- CLI: `agentprov graph diff`, `agentprov graph blame`, and `agentprov graph verify`
+- Code: `internal/provenance.DiffFile`, `internal/provenance.BlameFile`, and `internal/provenance.Verify`
 - Taint propagation: `taintSnapshotAndDescendants` plus rollout-level attempt quarantine events
 - Correlation: `execution_context_bindings` plus `correlation_method` / `correlation_confidence` on telemetry events
 - External side effects: `ExternalEffectRecord` captures dry-run/mock/allowlist gate evidence without promising real-world rollback
@@ -393,6 +398,7 @@ agentprov graph trace --process <process_id>
 agentprov graph refs --run <run_id>
 agentprov graph log --run <run_id>
 agentprov graph materialize --run <run_id>
+agentprov graph verify --run <run_id>
 agentprov graph diff --run <run_id> --file <workspace_relative_file>
 agentprov graph blame --run <run_id> --file <workspace_relative_file>
 agentprov effect record --run <run_id> --attempt <attempt_id> --tool-call <tool_call_id> \
@@ -407,7 +413,9 @@ calls, processes, and artifacts. `graph log` prints a chronological rollout
 timeline similar to a compact commit log. `graph materialize` upgrades the
 SQLite trace into content-addressed provenance objects under
 `.acf/provenance/objects/sha256/`, with object hashes, parent hashes, source
-ids, artifact file hashes, and replay-oriented payloads. `graph trace` includes
+ids, artifact file hashes, and replay-oriented payloads. `graph verify` checks
+reference continuity, taint/promotion contradictions, artifact readability, and
+materialized object hashes. `graph trace` includes
 run-local `snapshot_plans` so rollout debugging can show which snapshot source
 was selected, which copy/resume plan was used, and why unrelated rollout
 snapshots were excluded. It can also reverse-trace an artifact ref, attempt id,
@@ -550,7 +558,7 @@ Near term:
 
 - JSON output mode for automation
 - External telemetry watermarks and taint freeze beyond the local evidence drain
-- `graph verify` / fsck for object hashes, artifacts, snapshots, and binding continuity
+- Deeper `graph verify` / fsck coverage for replay manifests and binding continuity
 - `graph replay` MVP for reconstructing an attempt command sequence
 - Stronger process manager and process tree enforcement
 - Raw TCP policy enforcement for non-HTTP protocols

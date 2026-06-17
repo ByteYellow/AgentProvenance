@@ -165,6 +165,24 @@ func graphCmd(dataDir *string) *cobra.Command {
 	blameCmd.Flags().StringVar(&blameRunID, "run", "", "run id")
 	blameCmd.Flags().StringVar(&blameFile, "file", "", "workspace-relative file path")
 
+	var verifyRunID string
+	verifyCmd := &cobra.Command{
+		Use:   "verify",
+		Short: "verify provenance graph references, taint barriers, and object hashes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := openDB()
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			if verifyRunID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			return provenance.VerifyRun(db, verifyRunID, cmd.OutOrStdout())
+		},
+	}
+	verifyCmd.Flags().StringVar(&verifyRunID, "run", "", "run id")
+
 	cmd := &cobra.Command{Use: "graph", Short: "provenance graph commands"}
 	cmd.AddCommand(trace)
 	cmd.AddCommand(refs)
@@ -172,5 +190,6 @@ func graphCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(materialize)
 	cmd.AddCommand(diffCmd)
 	cmd.AddCommand(blameCmd)
+	cmd.AddCommand(verifyCmd)
 	return cmd
 }

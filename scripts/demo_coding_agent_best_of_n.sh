@@ -113,6 +113,7 @@ echo "== refs/log/materialize"
 "$BIN" --data-dir "$DATA_DIR" graph refs --run run-demo-bugfix
 "$BIN" --data-dir "$DATA_DIR" graph log --run run-demo-bugfix
 "$BIN" --data-dir "$DATA_DIR" graph materialize --run run-demo-bugfix
+"$BIN" --data-dir "$DATA_DIR" graph verify --run run-demo-bugfix
 
 echo "== diff attempts for calculator.py"
 "$BIN" --data-dir "$DATA_DIR" graph diff --run run-demo-bugfix --file calculator.py
