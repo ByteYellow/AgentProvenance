@@ -13,6 +13,7 @@ func graphCmd(dataDir *string) *cobra.Command {
 	var artifactRef string
 	var attemptID string
 	var toolCallID string
+	var processID string
 	trace := &cobra.Command{
 		Use:   "trace",
 		Short: "trace run or artifact provenance",
@@ -27,13 +28,16 @@ func graphCmd(dataDir *string) *cobra.Command {
 			}
 			defer db.Close()
 			selected := 0
-			for _, value := range []string{runID, artifactRef, attemptID, toolCallID} {
+			for _, value := range []string{runID, artifactRef, attemptID, toolCallID, processID} {
 				if value != "" {
 					selected++
 				}
 			}
 			if selected > 1 {
-				return fmt.Errorf("use only one of --run, --artifact, --attempt, or --tool-call")
+				return fmt.Errorf("use only one of --run, --artifact, --attempt, --tool-call, or --process")
+			}
+			if processID != "" {
+				return provenance.TraceProcess(db, processID, cmd.OutOrStdout())
 			}
 			if toolCallID != "" {
 				return provenance.TraceToolCall(db, toolCallID, cmd.OutOrStdout())
@@ -47,13 +51,14 @@ func graphCmd(dataDir *string) *cobra.Command {
 			if runID != "" {
 				return provenance.TraceRun(db, runID, cmd.OutOrStdout())
 			}
-			return fmt.Errorf("one of --run, --artifact, --attempt, or --tool-call is required")
+			return fmt.Errorf("one of --run, --artifact, --attempt, --tool-call, or --process is required")
 		},
 	}
 	trace.Flags().StringVar(&runID, "run", "", "run id")
 	trace.Flags().StringVar(&artifactRef, "artifact", "", "artifact result ref")
 	trace.Flags().StringVar(&attemptID, "attempt", "", "attempt id")
 	trace.Flags().StringVar(&toolCallID, "tool-call", "", "tool call id")
+	trace.Flags().StringVar(&processID, "process", "", "process id")
 	cmd := &cobra.Command{Use: "graph", Short: "provenance graph commands"}
 	cmd.AddCommand(trace)
 	return cmd

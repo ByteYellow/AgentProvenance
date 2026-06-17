@@ -523,6 +523,127 @@ func TraceToolCall(db *sql.DB, toolCallID string, out io.Writer) error {
 	return evidenceRows.Err()
 }
 
+func TraceProcess(db *sql.DB, processID string, out io.Writer) error {
+	if processID == "" {
+		return fmt.Errorf("process id is required")
+	}
+	fmt.Fprintf(out, "process=%s\n", processID)
+
+	var sessionID, toolCallID, command, status, startedAt, endedAt, runID string
+	var exitCode int
+	err := db.QueryRow(`SELECT p.session_id, COALESCE(p.tool_call_id, ''), p.command, p.status, COALESCE(p.exit_code, 0),
+			p.started_at, COALESCE(p.ended_at, ''), COALESCE(s.run_id, '')
+		FROM processes p LEFT JOIN sessions s ON p.session_id = s.id
+		WHERE p.id = ?`, processID).Scan(&sessionID, &toolCallID, &command, &status, &exitCode, &startedAt, &endedAt, &runID)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintln(out, "processes:")
+	fmt.Fprintf(out, "  process=%s session=%s tool_call=%s run=%s status=%s exit=%d command=%q started_at=%s ended_at=%s\n",
+		processID, sessionID, toolCallID, runID, status, exitCode, command, startedAt, endedAt)
+
+	if sessionID != "" {
+		var leaseID, workspace, sessionStatus, containerID string
+		err := db.QueryRow(`SELECT lease_id, workspace_host_path, status, COALESCE(container_id, '')
+			FROM sessions WHERE id = ?`, sessionID).Scan(&leaseID, &workspace, &sessionStatus, &containerID)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "sessions:")
+		fmt.Fprintf(out, "  session=%s lease=%s run=%s status=%s container=%s workspace=%s\n",
+			sessionID, leaseID, runID, sessionStatus, containerID, workspace)
+	}
+
+	var rolloutID, attemptID, resultRef string
+	if toolCallID != "" {
+		err := db.QueryRow(`SELECT COALESCE(rollout_id, ''), COALESCE(attempt_id, ''), COALESCE(result_ref, '')
+			FROM tool_calls WHERE id = ?`, toolCallID).Scan(&rolloutID, &attemptID, &resultRef)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "tool_calls:")
+		if err := printArtifactToolCall(db, out, toolCallID); err != nil {
+			return err
+		}
+	}
+
+	fmt.Fprintln(out, "attempts:")
+	if attemptID != "" {
+		if err := printArtifactAttempt(db, out, attemptID); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintln(out, "artifacts:")
+	if resultRef != "" {
+		fmt.Fprintf(out, "  artifact=%s attempt=%s tool_call=%s process=%s\n", resultRef, attemptID, toolCallID, processID)
+	}
+	fmt.Fprintln(out, "rollouts:")
+	if rolloutID != "" {
+		if err := printArtifactRollout(db, out, rolloutID); err != nil {
+			return err
+		}
+	}
+
+	edgeIDs := []string{processID}
+	if toolCallID != "" {
+		edgeIDs = append(edgeIDs, toolCallID)
+	}
+	if attemptID != "" {
+		edgeIDs = append(edgeIDs, attemptID)
+	}
+	fmt.Fprintln(out, "graph_edges:")
+	if err := printEdgesForIDs(db, out, edgeIDs); err != nil {
+		return err
+	}
+
+	eventRows, err := db.Query(`SELECT id, source, event_type, COALESCE(tool_call_id, ''), COALESCE(snapshot_id, ''), payload, created_at
+		FROM events
+		WHERE process_id = ? OR (? != '' AND tool_call_id = ?)
+		ORDER BY created_at ASC`, processID, toolCallID, toolCallID)
+	if err != nil {
+		return err
+	}
+	defer eventRows.Close()
+	fmt.Fprintln(out, "events:")
+	eventIDs := []string{}
+	for eventRows.Next() {
+		var eventID, source, eventType, eventToolCallID, snapshotID, payload, createdAt string
+		if err := eventRows.Scan(&eventID, &source, &eventType, &eventToolCallID, &snapshotID, &payload, &createdAt); err != nil {
+			return err
+		}
+		eventIDs = append(eventIDs, eventID)
+		fmt.Fprintf(out, "  event=%s source=%s type=%s process=%s tool_call=%s snapshot=%s created_at=%s payload=%s\n",
+			eventID, source, eventType, processID, eventToolCallID, snapshotID, createdAt, payload)
+	}
+	if err := eventRows.Err(); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(out, "policy_decisions:")
+	if err := printPolicyDecisionsForEvents(db, out, eventIDs); err != nil {
+		return err
+	}
+
+	evidenceRows, err := db.Query(`SELECT id, event_type, priority, status, COALESCE(processed_at, ''), COALESCE(payload, '')
+		FROM evidence_events
+		WHERE (? != '' AND tool_call_id = ?) OR (? != '' AND attempt_id = ?) OR (? != '' AND session_id = ?)
+		ORDER BY created_at ASC`, toolCallID, toolCallID, attemptID, attemptID, sessionID, sessionID)
+	if err != nil {
+		return err
+	}
+	defer evidenceRows.Close()
+	fmt.Fprintln(out, "evidence_events:")
+	for evidenceRows.Next() {
+		var id, eventType, priority, evidenceStatus, processedAt, payload string
+		if err := evidenceRows.Scan(&id, &eventType, &priority, &evidenceStatus, &processedAt, &payload); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "  evidence=%s type=%s priority=%s status=%s processed_at=%s payload=%s\n", id, eventType, priority, evidenceStatus, processedAt, payload)
+	}
+	return evidenceRows.Err()
+}
+
 func printArtifactAttempt(db *sql.DB, out io.Writer, attemptID string) error {
 	var rolloutID, toolCallID, strategy, status, riskStatus string
 	var score, cost float64
@@ -562,6 +683,66 @@ func printArtifactRollout(db *sql.DB, out io.Writer, rolloutID string) error {
 	_, err = fmt.Fprintf(out, "  rollout=%s run=%s status=%s base_snapshot=%s winner=%s risk=%s cost=%.6f\n",
 		rolloutID, runID, status, baseSnapshotID, winnerAttemptID, riskStatus, cost)
 	return err
+}
+
+func printEdgesForIDs(db *sql.DB, out io.Writer, ids []string) error {
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		rows, err := db.Query(`SELECT run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at
+			FROM graph_edges WHERE from_id = ? OR to_id = ? ORDER BY created_at ASC`, id, id)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var runID, rolloutID, fromID, toID, edgeType, sourceEventID, createdAt string
+			if err := rows.Scan(&runID, &rolloutID, &fromID, &toID, &edgeType, &sourceEventID, &createdAt); err != nil {
+				rows.Close()
+				return err
+			}
+			fmt.Fprintf(out, "  run=%s rollout=%s from=%s to=%s type=%s source_event=%s created_at=%s\n",
+				runID, rolloutID, fromID, toID, edgeType, sourceEventID, createdAt)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+	}
+	return nil
+}
+
+func printPolicyDecisionsForEvents(db *sql.DB, out io.Writer, eventIDs []string) error {
+	seen := map[string]bool{}
+	for _, eventID := range eventIDs {
+		if eventID == "" || seen[eventID] {
+			continue
+		}
+		seen[eventID] = true
+		rows, err := db.Query(`SELECT id, event_id, COALESCE(run_id, ''), COALESCE(session_id, ''), rule_id, decision, reason, created_at
+			FROM policy_decisions WHERE event_id = ? ORDER BY created_at ASC`, eventID)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var id, rowEventID, runID, sessionID, ruleID, decision, reason, createdAt string
+			if err := rows.Scan(&id, &rowEventID, &runID, &sessionID, &ruleID, &decision, &reason, &createdAt); err != nil {
+				rows.Close()
+				return err
+			}
+			fmt.Fprintf(out, "  decision=%s event=%s run=%s session=%s rule=%s action=%s reason=%q created_at=%s\n",
+				id, rowEventID, runID, sessionID, ruleID, decision, reason, createdAt)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+	}
+	return nil
 }
 
 func collectRunGraphIDs(db *sql.DB, runID string, snapshotIDs map[string]bool) (map[string]bool, error) {

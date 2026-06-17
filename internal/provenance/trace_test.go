@@ -290,6 +290,110 @@ func TestTraceToolCallShowsToolCallProvenance(t *testing.T) {
 	}
 }
 
+func TestTraceProcessShowsRolloutProvenance(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".acf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	artifactRef := filepath.Join(paths.Artifacts, "attempt-4-result.txt")
+	insertTraceSnapshot(t, db, "snap-4", "ready", now)
+	_, err = db.Exec(`INSERT INTO leases (id, run_id, task_path, task_yaml, status, created_at, updated_at)
+		VALUES ('lease-4', 'run-4', 'task.yaml', '{}', 'allocated', ?, ?)`, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO sessions
+		(id, lease_id, run_id, workspace_host_path, status, created_at, updated_at)
+		VALUES ('session-4', 'lease-4', 'run-4', ?, 'running', ?, ?)`, filepath.Join(root, "workspace-4"), now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO rollouts (id, run_id, base_snapshot_id, status, fanout, winner_attempt_id, cost_estimate, risk_status, created_at, updated_at)
+		VALUES ('rollout-4', 'run-4', 'snap-4', 'completed', 1, 'attempt-4', 0.004, 'clean', ?, ?)`, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO fork_attempts
+		(id, rollout_id, tool_call_id, snapshot_id, workspace_path, fork_ms, strategy, status, score, cost_estimate, is_winner, artifact_result, created_at)
+		VALUES ('attempt-4', 'rollout-4', 'tool-4', 'snap-4', ?, 1, 'pytest', 'passed', 13, 0.004, 1, ?, ?)`,
+		filepath.Join(root, "attempt-4"), artifactRef, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO tool_calls
+		(id, run_id, rollout_id, attempt_id, session_id, command, status, exit_code, wall_ms, result_ref, created_at)
+		VALUES ('tool-4', 'run-4', 'rollout-4', 'attempt-4', 'session-4', 'pytest -q', 'passed', 0, 40, ?, ?)`, artifactRef, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO processes
+		(id, session_id, tool_call_id, command, status, exit_code, started_at, ended_at)
+		VALUES ('proc-4', 'session-4', 'tool-4', 'pytest -q', 'exited', 0, ?, ?)`, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO events
+		(id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
+		VALUES ('event-4', 'run-4', 'session-4', 'tool-4', 'proc-4', 'wrapper', 'process_exit', '{"exit_code":0}', ?)`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO policy_decisions
+		(id, event_id, run_id, session_id, rule_id, decision, reason, created_at)
+		VALUES ('decision-4', 'event-4', 'run-4', 'session-4', 'process-exit-audit', 'audit', 'process observed', ?)`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO evidence_events
+		(id, run_id, rollout_id, attempt_id, session_id, tool_call_id, snapshot_id, event_type, priority, payload, status, processed_at, created_at)
+		VALUES ('evidence-4', 'run-4', 'rollout-4', 'attempt-4', 'session-4', 'tool-4', 'snap-4', 'attempt_finished', 'normal', '{"selection_reason":"winner_selected_by_risk_budget_score_cost"}', 'processed', ?, ?)`, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO graph_edges (id, run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at)
+		VALUES ('edge-attempt-tool-4', 'run-4', 'rollout-4', 'attempt-4', 'tool-4', 'attempt_tool_call', 'evidence-4', ?)`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO graph_edges (id, run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at)
+		VALUES ('edge-tool-artifact-4', 'run-4', 'rollout-4', 'tool-4', ?, 'tool_call_artifact', 'evidence-4', ?)`, artifactRef, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := TraceProcess(db, "proc-4", &out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"process=proc-4",
+		"session=session-4",
+		"tool_call=tool-4",
+		"attempt=attempt-4",
+		"artifact=" + artifactRef,
+		"rollout=rollout-4",
+		"type=attempt_tool_call",
+		"type=tool_call_artifact",
+		"event=event-4",
+		"decision=decision-4",
+		"selection_reason",
+		"winner=true",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("process trace missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func insertTraceSnapshot(t *testing.T, db *sql.DB, id, name, createdAt string) {
 	t.Helper()
 	_, err := db.Exec(`INSERT INTO snapshots (id, name, kind, source, path, manifest_hash, file_count, bytes, status, created_at)
