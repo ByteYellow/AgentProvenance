@@ -194,6 +194,9 @@ These boundaries are intentional:
 Phase 1 focuses on provenance correlation, state diff/blame, taint propagation,
 promotion barriers, and replay evidence.
 
+See [docs/comparisons.md](docs/comparisons.md) for the difference between
+AgentProvenance, LangSmith-style observability platforms, and LLM gateways.
+
 ## Architecture
 
 ```mermaid
