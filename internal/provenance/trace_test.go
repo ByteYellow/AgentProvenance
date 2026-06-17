@@ -2,7 +2,11 @@ package provenance
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -408,6 +412,10 @@ func TestGitLikeRefsAndLogShowRolloutDAG(t *testing.T) {
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	artifactRef := filepath.Join(paths.Artifacts, "attempt-5-result.txt")
+	artifactBody := []byte("materialized artifact")
+	if err := os.WriteFile(artifactRef, artifactBody, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	insertTraceSnapshot(t, db, "snap-5", "ready", now)
 	_, err = db.Exec(`INSERT INTO leases (id, run_id, task_path, task_yaml, status, created_at, updated_at)
 		VALUES ('lease-5', 'run-5', 'task.yaml', '{}', 'allocated', ?, ?)`, now, now)
@@ -502,6 +510,42 @@ func TestGitLikeRefsAndLogShowRolloutDAG(t *testing.T) {
 		if !strings.Contains(log, want) {
 			t.Fatalf("log missing %q:\n%s", want, log)
 		}
+	}
+
+	result, err := (ObjectStore{DB: db, Paths: paths}).MaterializeRun("run-5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ObjectCount < 8 || result.ObjectRoot == "" || len(result.RootHashes) == 0 {
+		t.Fatalf("materialize result = %+v, want object count, root, and root hashes", result)
+	}
+	var storedObjects int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id = 'run-5'`).Scan(&storedObjects); err != nil {
+		t.Fatal(err)
+	}
+	if storedObjects != result.ObjectCount {
+		t.Fatalf("stored objects = %d, want %d", storedObjects, result.ObjectCount)
+	}
+	var artifactHash, artifactPath string
+	if err := db.QueryRow(`SELECT hash, path FROM provenance_objects WHERE object_type = 'artifact' AND source_id = ?`, artifactRef).Scan(&artifactHash, &artifactPath); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(artifactHash, "sha256:") {
+		t.Fatalf("artifact object hash = %q, want sha256 prefix", artifactHash)
+	}
+	raw, err := os.ReadFile(artifactPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(artifactBody)
+	wantFileHash := "sha256:" + hex.EncodeToString(sum[:])
+	var object map[string]any
+	if err := json.Unmarshal(raw, &object); err != nil {
+		t.Fatal(err)
+	}
+	payload, ok := object["payload"].(map[string]any)
+	if !ok || payload["file_sha256"] != wantFileHash {
+		t.Fatalf("artifact object payload = %#v, want file hash %s", object["payload"], wantFileHash)
 	}
 }
 

@@ -104,9 +104,37 @@ func graphCmd(dataDir *string) *cobra.Command {
 	}
 	logCmd.Flags().StringVar(&logRunID, "run", "", "run id")
 
+	var materializeRunID string
+	materialize := &cobra.Command{
+		Use:   "materialize",
+		Short: "materialize a run into content-addressed provenance objects",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			paths, err := store.Init(*dataDir)
+			if err != nil {
+				return err
+			}
+			db, err := store.Open(paths)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			if materializeRunID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			result, err := (provenance.ObjectStore{DB: db, Paths: paths}).MaterializeRun(materializeRunID)
+			if err != nil {
+				return err
+			}
+			provenance.PrintMaterializeResult(cmd.OutOrStdout(), result)
+			return nil
+		},
+	}
+	materialize.Flags().StringVar(&materializeRunID, "run", "", "run id")
+
 	cmd := &cobra.Command{Use: "graph", Short: "provenance graph commands"}
 	cmd.AddCommand(trace)
 	cmd.AddCommand(refs)
 	cmd.AddCommand(logCmd)
+	cmd.AddCommand(materialize)
 	return cmd
 }

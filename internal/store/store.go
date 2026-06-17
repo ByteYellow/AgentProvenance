@@ -11,7 +11,7 @@ import (
 )
 
 const DefaultDataDir = ".acf"
-const SchemaVersion = 4
+const SchemaVersion = 5
 
 type Paths struct {
 	Root       string
@@ -20,6 +20,7 @@ type Paths struct {
 	Snapshots  string
 	Templates  string
 	Artifacts  string
+	Provenance string
 	Secrets    string
 	Logs       string
 }
@@ -38,6 +39,7 @@ func ResolvePaths(root string) Paths {
 		Snapshots:  filepath.Join(root, "snapshots"),
 		Templates:  filepath.Join(root, "templates"),
 		Artifacts:  filepath.Join(root, "artifacts"),
+		Provenance: filepath.Join(root, "provenance"),
 		Secrets:    filepath.Join(root, "secrets"),
 		Logs:       filepath.Join(root, "logs"),
 	}
@@ -45,7 +47,7 @@ func ResolvePaths(root string) Paths {
 
 func Init(root string) (Paths, error) {
 	paths := ResolvePaths(root)
-	for _, dir := range []string{paths.Root, paths.Workspaces, paths.Snapshots, paths.Templates, paths.Artifacts, paths.Secrets, paths.Logs} {
+	for _, dir := range []string{paths.Root, paths.Workspaces, paths.Snapshots, paths.Templates, paths.Artifacts, paths.Provenance, paths.Secrets, paths.Logs} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return paths, err
 		}
@@ -439,6 +441,17 @@ func EnsureSchema(db *sql.DB) error {
 			sha256 TEXT NOT NULL DEFAULT '',
 			size_bytes INTEGER NOT NULL DEFAULT 0,
 			status TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS provenance_objects (
+			hash TEXT PRIMARY KEY,
+			object_type TEXT NOT NULL,
+			source_id TEXT NOT NULL,
+			run_id TEXT NOT NULL DEFAULT '',
+			rollout_id TEXT NOT NULL DEFAULT '',
+			parent_hashes TEXT NOT NULL DEFAULT '',
+			path TEXT NOT NULL,
+			size_bytes INTEGER NOT NULL DEFAULT 0,
 			created_at TEXT NOT NULL
 		);`,
 		`CREATE TABLE IF NOT EXISTS nodes (

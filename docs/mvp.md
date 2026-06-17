@@ -184,7 +184,11 @@ trace works for quick RL rollout demos without requiring Docker runtime.
 snapshot refs, winner attempt refs, promotion refs, tool call refs, process
 refs, and artifact refs. `graph log --run <run_id>` adds the compact
 chronological provenance log for rollout, attempt, tool call, process,
-promotion, evidence, and telemetry events.
+promotion, evidence, and telemetry events. `graph materialize --run <run_id>`
+turns the current SQLite trace into a content-addressed provenance object DAG
+under `.acf/provenance/objects/sha256/`; each object records source id, parent
+hashes, replay-oriented payload, and artifact file hashes when an artifact file
+exists.
 `graph trace` prints the compact attempt evidence payload, including strategy,
 score, saved cost, output summary, winner flag, and selection reason, so a
 probe/top-k rollout can be replayed and audited without guessing why a branch
