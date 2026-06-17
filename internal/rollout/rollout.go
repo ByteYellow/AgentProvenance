@@ -298,6 +298,8 @@ func (s Service) TaintAttempt(attemptID, reason string) error {
 		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, _ = s.DB.Exec(`UPDATE fork_attempts SET status = 'quarantined', risk_status = 'tainted', output_summary = output_summary || ? WHERE id = ?`,
+		" | quarantined="+reason, attemptID)
 	_, err = s.DB.Exec(`UPDATE snapshots SET status = 'tainted', tainted = 1 WHERE id = ?`, snapshotID)
 	if err != nil {
 		return err
@@ -312,6 +314,9 @@ func (s Service) TaintAttempt(attemptID, reason string) error {
 	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, snapshot_id, source, event_type, payload, created_at)
 		VALUES (?, ?, ?, 'rollout', 'snapshot_tainted', ?, ?)`,
 		ids.New("evt"), runID, snapshotID, fmt.Sprintf(`{"attempt_id":%q,"rollout_id":%q,"reason":%q}`, attemptID, rolloutID, reason), now)
+	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, tool_call_id, snapshot_id, source, event_type, payload, created_at)
+		VALUES (?, ?, ?, ?, 'rollout', 'attempt_quarantined', ?, ?)`,
+		ids.New("evt"), runID, toolCallID, snapshotID, fmt.Sprintf(`{"attempt_id":%q,"rollout_id":%q,"reason":%q}`, attemptID, rolloutID, reason), now)
 	return nil
 }
 

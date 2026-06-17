@@ -204,7 +204,8 @@ The core provenance commands are:
 shows the chronological execution history, `materialize` writes
 content-addressed objects, `diff` compares a file across attempts, and `blame`
 attributes a file version to the attempt, tool call, command, strategy, and
-promotion status that produced it.
+promotion status that produced it. The main demo also simulates a risky failed
+branch, quarantines it, and keeps that decision in the same provenance trace.
 
 Run the full MVP walkthrough:
 

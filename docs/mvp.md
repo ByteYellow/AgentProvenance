@@ -83,9 +83,10 @@ agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty
 
 This is the main AgentProvenance demo. It creates a clean coding workspace,
 snapshots it, forks five attempts, runs different repair strategies, exports
-patch artifacts, promotes the passing winner, then runs `graph trace`,
-`graph refs`, `graph log`, `graph materialize`, `graph diff`, and
-`graph blame` to explain the winner and attribute file changes.
+patch artifacts, quarantines one risky failed branch, promotes the passing
+winner, then runs `graph trace`, `graph refs`, `graph log`, `graph materialize`,
+`graph diff`, and `graph blame` to explain the winner and attribute file
+changes.
 
 ### demo_streaming_terminal
 

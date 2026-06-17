@@ -45,7 +45,7 @@ echo "== snapshot clean state"
 "$BIN" --data-dir "$DATA_DIR" snapshot create "$SESSION_ID" --type directory --path /workspace --name ready
 
 echo "== fan out 5 coding-agent attempts"
-"$BIN" --data-dir "$DATA_DIR" rollout start \
+ROLLOUT_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" rollout start \
   --run run-demo-bugfix \
   --task examples/tasks/bugfix.yaml \
   --snapshot ready \
@@ -55,7 +55,18 @@ echo "== fan out 5 coding-agent attempts"
   --strategy "wrong-constant::sed 's/return a - b/return 42/' calculator.py > calculator.py.new && mv calculator.py.new calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch" \
   --strategy "syntax-error::printf 'def add(a, b):\n    return a +\n' > calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch" \
   --strategy "partial-comment::printf '\n# TODO fix add later\n' >> calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch" \
-  --strategy "correct-add::sed 's/return a - b/return a + b/' calculator.py > calculator.py.new && mv calculator.py.new calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch"
+  --strategy "correct-add::sed 's/return a - b/return a + b/' calculator.py > calculator.py.new && mv calculator.py.new calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch")"
+echo "$ROLLOUT_OUTPUT"
+
+RISKY_ATTEMPT="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "wrong-constant" {print $1; exit}')"
+if [[ -z "$RISKY_ATTEMPT" ]]; then
+  echo "failed to find wrong-constant attempt" >&2
+  exit 1
+fi
+
+echo "== quarantine risky branch"
+"$BIN" --data-dir "$DATA_DIR" rollout taint "$RISKY_ATTEMPT" --reason "risky branch: incorrect arithmetic patch failed tests"
+"$BIN" --data-dir "$DATA_DIR" rollout attempts "$(echo "$ROLLOUT_OUTPUT" | sed -n 's/^rollout_id=\([^ ]*\).*/\1/p')"
 
 echo "== explain promotion"
 "$BIN" --data-dir "$DATA_DIR" rollout winner run-demo-bugfix
