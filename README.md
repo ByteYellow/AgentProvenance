@@ -2,11 +2,11 @@
 
 <h1>AgentProvenance</h1>
 
-### The runtime bridge between AI agent rollouts and sandbox infrastructure.
+### A rollout provenance control plane for AI agents.
 
 <p>
-Fork attempts from reusable snapshots, gate synchronized tool bursts,
-promote winners through a risk barrier, and preserve cost/evidence lineage.
+Turn sandboxed agent execution into content-addressed, queryable, replayable,
+and auditable rollout provenance DAGs.
 </p>
 
 [![Go](https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square)](https://go.dev/)
@@ -20,19 +20,19 @@ promote winners through a risk barrier, and preserve cost/evidence lineage.
 
 ---
 
-AgentProvenance, or AgentProvenance, is a local-first control plane for high-concurrency AI agent rollouts.
+AgentProvenance, or AgentProvenance, is a local-first rollout provenance control plane for high-concurrency AI agents.
 
-It does not try to be a generic sandbox runtime, telemetry collector, or Kubernetes/Ray replacement. Instead, it sits above runtime and telemetry substrates and owns the agent-side rollout semantics that generic infrastructure does not model:
+AgentProvenance does not try to be a generic sandbox runtime, telemetry collector, eBPF platform, or Kubernetes/Ray replacement. It sits above runtime, snapshot, scheduler, and telemetry substrates and owns the agent-side causal model that generic infrastructure does not preserve:
 
-- `run`, `rollout`, `attempt`, and `tool_call`
-- snapshot lineage and fork fanout
-- best-of-forks selection and winner promotion
-- active CPU accounting and burst admission
-- telemetry-to-agent-context correlation
-- policy decisions, quarantine, taint, and response
-- async evidence, provenance, and reproducible replay metadata
+- state source: template, ready snapshot, forked attempt workspace
+- execution: tool calls, processes, events, stdout/stderr summaries
+- artifact: result refs, file hashes, artifact lineage
+- cost: fanout cost, active CPU, saved cost, burst admission
+- risk: telemetry correlation, policy decisions, taint, quarantine
+- promotion: winner selection, telemetry drain, risk finalization
+- evidence: Git-like refs/log/trace and content-addressed provenance objects
 
-AgentProvenance uses Docker today and is designed to plug into Docker, OpenSandbox, Kubernetes, Ray, Firecracker, gVisor, Kata, LoongCollector, Falco, Tetragon, and other runtime or telemetry substrates through capability-gated drivers.
+AgentProvenance uses Docker today and is designed to plug into Docker, OpenSandbox, Kubernetes, Ray, Firecracker, gVisor, Kata, LoongCollector, Falco, Tetragon, and other runtime or telemetry substrates through capability-gated drivers. Those systems provide execution and signals; AgentProvenance turns them into an agent rollout provenance DAG.
 
 ## Why this exists
 
@@ -40,30 +40,30 @@ Modern AI agent workloads are no longer just “run one command in one container
 
 Evaluation, RL training, best-of-N sampling, coding-agent repair loops, and tool-using agents can create hundreds or thousands of short-lived sandbox computers. Most of those attempts spend much of their wall time waiting on model calls, package installs, tests, I/O, or external services. Meanwhile, their useful state, runtime behavior, cost, and security evidence are scattered across containers, filesystems, logs, telemetry streams, and agent traces.
 
-AgentProvenance makes the rollout layer explicit.
+AgentProvenance makes the rollout provenance layer explicit.
 
 It answers questions such as:
 
-- Which `tool_call` created this process, file diff, network edge, or artifact?
 - Which snapshot did this attempt fork from?
+- Which `tool_call` and process produced this artifact?
 - Is this branch cheap enough to continue?
 - Is this winner safe to promote?
 - Did runtime telemetry arrive before promotion?
 - Which snapshots or descendants are tainted?
 - How much active CPU did this run actually consume?
-- What evidence is needed to replay or audit this result?
+- What objects, manifests, hashes, and policy decisions are needed to replay or audit this result?
 
 ## The core loop
 
 ```text
-ready snapshot
-  -> fork N attempts
-  -> reserve burst budget before tool execution
-  -> run each strategy in an isolated workspace
-  -> collect cost, telemetry, artifacts, and compact evidence
+template / ready snapshot
+  -> fork N attempt workspaces
+  -> execute tool_call/process steps
+  -> collect artifacts, cost, telemetry, and compact evidence
   -> score attempts by result, risk, budget, and cost
   -> wait at the promotion barrier
   -> promote the safe winner or quarantine the tainted branch
+  -> materialize content-addressed provenance objects
 ```
 
 In CLI form:
@@ -83,18 +83,19 @@ agentprov rollout start \
 agentprov rollout winner run-demo-bugfix
 agentprov cost show run-demo-bugfix
 agentprov graph trace --run run-demo-bugfix
+agentprov graph materialize --run run-demo-bugfix
 ```
 
 ## What AgentProvenance owns vs. what it plugs into
 
 | Layer | AgentProvenance owns | External substrate |
 |---|---|---|
-| Agent rollout | `run`, `rollout`, `attempt`, `tool_call`, best-of-forks, promotion | Agentix, trainers, evaluators, coding agents |
-| State | snapshot DAG, fork lineage, taint, artifact lineage, replay metadata | Docker workspace copy today; future OverlayFS, reflink, block COW, VM snapshots |
-| Economics | active CPU windows, idle discount, BurstGuard, warm reuse, cost per run/attempt/tool call | OS, cgroups, Docker stats, Kubernetes/Ray resource envelopes |
-| Risk | telemetry-context correlation, policy decision, response, quarantine, forensics trigger | Falco, Tetragon, LoongCollector, eBPF, runtime events |
-| Runtime | capability-gated execution intent | Docker now; future OpenSandbox, gVisor, Firecracker, Kata, Kubernetes, Ray |
-| Evidence | compact events, provenance graph, async bundles, replay metadata | local SQLite/filesystem today; future external stores |
+| Rollout provenance | `run`, `rollout`, `attempt`, `tool_call`, process, artifact, promotion DAG | Agentix, trainers, evaluators, coding agents |
+| State lineage | template, ready snapshot, forked workspace, taint, artifact lineage | Docker workspace copy today; future OverlayFS, reflink, block COW, VM snapshots |
+| Economics lineage | active CPU windows, fanout cost, saved cost, BurstGuard, cost per run/attempt/tool call | OS, cgroups, Docker stats, Kubernetes/Ray resource envelopes |
+| Risk lineage | telemetry-context correlation, policy decision, taint, quarantine, forensics trigger | Falco, Tetragon, LoongCollector, eBPF, runtime events |
+| Runtime intent | capability-gated execution and isolation intent | Docker now; future OpenSandbox, gVisor, Firecracker, Kata, Kubernetes, Ray |
+| Evidence objects | Git-like refs/log/trace, content-addressed object DAG, replay metadata | local SQLite/filesystem today; future external object stores |
 
 ## What works now
 
@@ -117,6 +118,7 @@ The current repository is a local-first MVP. It currently supports:
 - explainable attempt evidence for pruned and promoted rollout branches
 - strategy artifact capture from attempt workspaces into `.acf/artifacts/`
 - artifact provenance edges from attempt/tool_call to exported artifact refs
+- Git-like provenance refs, log, trace, and content-addressed materialization under `.acf/provenance/objects/sha256/`
 - I/O-aware snapshot planning with source policies: `latest-ready`, `smallest-delta`, `local`, and `untainted`
 - MVP policy decisions, quarantine, provenance trace, and forensics export
 - run-local provenance trace for snapshot planner explanations
@@ -132,6 +134,7 @@ AgentProvenance is intentionally narrow at this stage:
 - eBPF/Falco/Tetragon/LoongCollector integration is planned; current telemetry is wrapper/runtime-level MVP telemetry.
 - Egress policy currently covers HTTP/HTTPS proxy workflows and direct-egress blocking from the Docker sandbox bridge; it is not yet a general raw TCP policy engine.
 - Baseline detection is MVP-level event and cost counting, not syscall ML or full eBPF feature modeling.
+- Content-addressed provenance objects exist, but replay, fsck, blame, and diff are still early roadmap items.
 
 ## Quickstart
 
@@ -163,6 +166,9 @@ SESSION_ID=$(./agentprov session create --lease "$LEASE_ID")
 ./agentprov rollout winner run-demo-bugfix
 ./agentprov cost show run-demo-bugfix
 ./agentprov graph trace --run run-demo-bugfix
+./agentprov graph refs --run run-demo-bugfix
+./agentprov graph log --run run-demo-bugfix
+./agentprov graph materialize --run run-demo-bugfix
 
 ./agentprov session rm "$SESSION_ID"
 ```
@@ -304,50 +310,66 @@ agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty --physical-cp
 
 ## Architecture
 
-The long-term shape is an Agent Rollout Control Plane with six AgentProvenance-owned planes and pluggable substrates underneath:
+The long-term shape is an Agent Rollout Provenance Control Plane. The DAG is the product surface; runtime, snapshot, scheduler, and telemetry systems are capability-gated substrates underneath:
 
 ```mermaid
 flowchart TB
-    Client["Agentix / trainer / evaluator / agentprov"] --> Ingress["Fleet Ingress Gateway"]
-    Ingress --> AgentProvenance["AgentProvenance Control Plane"]
+    Client["Agent harness\nAgentix / RL trainer / evaluator / agentprov"] --> Ingress["Rollout Ingress\nlease, run, tool_call, artifact API"]
 
-    subgraph AgentProvenance["AgentProvenance Control Plane"]
-        Rollout["Rollout Plane\nrun, rollout, attempt, tool_call\nfanout, best-of, budget"]
-        State["State Plane\nsnapshot DAG, resume intent\ntaint and artifact lineage"]
-        Economics["Economics Plane\nactive CPU, burst admission\nwarm reuse, cost windows"]
-        Risk["Risk Plane\ntelemetry-context correlation\nbaseline, decision, response"]
-        Evidence["Evidence Plane\nprovenance graph, forensics\nasync GC and replay metadata"]
-        Driver["Driver Plane\nruntime, orchestrator\ntelemetry, snapshot drivers"]
+    subgraph ACFPlane["AgentProvenance Rollout Provenance Control Plane"]
+        Rollout["Rollout DAG\nrun -> rollout -> attempt"]
+        State["Snapshot DAG\ntemplate -> ready -> attempt workspace"]
+        Exec["Execution DAG\nattempt -> tool_call -> process -> event"]
+        Artifact["Artifact DAG\nprocess/tool_call -> artifact -> file hash"]
+        Cost["Cost DAG\nattempt/tool_call -> CPU, wall, storage"]
+        Risk["Risk DAG\ntelemetry -> policy -> taint/quarantine"]
+        Promotion["Promotion DAG\ncandidate -> drain -> risk finalized -> promoted"]
+        Objects["Content-addressed objects\nrefs, log, trace, materialize\nreplay/audit/blame foundation"]
+        Driver["Driver Plane\nruntime, snapshot, scheduler, telemetry"]
     end
 
-    Rollout <--> Economics
+    Ingress --> Rollout
     Rollout --> State
-    State --> Rollout
-    Risk --> Rollout
-    Rollout --> Evidence
-    Risk --> Evidence
-    Driver --> Rollout
-    Driver --> State
-    Driver --> Risk
+    Rollout --> Exec
+    Exec --> Artifact
+    Exec --> Cost
+    Exec --> Risk
+    Risk --> Promotion
+    Cost --> Promotion
+    Artifact --> Promotion
+    State --> Promotion
+    Promotion --> Objects
+    Rollout --> Objects
+    State --> Objects
+    Exec --> Objects
+    Artifact --> Objects
+    Cost --> Objects
+    Risk --> Objects
 
     Driver --> Runtime["Runtime substrate\nDocker, OpenSandbox\nFirecracker, gVisor, Kata"]
-    Driver --> Orchestrator["Orchestration substrate\nKubernetes, Ray, Batch\ncloud provider"]
-    Driver --> Telemetry["Telemetry substrate\nLoongCollector, Falco\nTetragon, eBPF, K8s events"]
-    Runtime --> Kernel["Host kernel / cgroup / namespace boundary"]
-    Kernel --> Telemetry
-    Telemetry -->|"filtered high-value events"| Risk
+    Driver --> Snapshot["Snapshot substrate\ncopy, reflink, overlay\nblock COW, VM checkpoint"]
+    Driver --> Orchestrator["Orchestration substrate\nlocal, Kubernetes, Ray, Batch"]
+    Driver --> Telemetry["Telemetry substrate\nwrapper events, Falco\nTetragon, LoongCollector, eBPF"]
+
+    Runtime --> Exec
+    Snapshot --> State
+    Orchestrator --> Cost
+    Telemetry -->|"filtered high-value events\nrun/session/tool/process context"| Risk
 ```
 
-AgentProvenance owns rollout semantics, not generic infrastructure. Runtime, orchestrator, snapshot, and telemetry implementations are queried through a capability matrix before execution. If a backend cannot do memory snapshot or low-latency resume, the scheduler must degrade to filesystem/directory fork instead of pretending the capability exists.
+AgentProvenance owns rollout provenance, not generic infrastructure. Runtime, orchestrator, snapshot, and telemetry implementations are queried through a capability matrix before execution. If a backend cannot do memory snapshot or low-latency resume, the scheduler must degrade to filesystem/directory fork instead of pretending the capability exists. eBPF/Falco/Tetragon/LoongCollector are Risk Plane drivers: they provide filtered runtime signals that AgentProvenance correlates into `run_id`, `attempt_id`, `tool_call_id`, `process_id`, `snapshot_id`, and artifact lineage.
 
 | Plane | Responsibility |
 |---|---|
-| Rollout | `run`, `rollout`, `attempt`, `tool_call`, fanout, best-of-forks, promotion |
+| Rollout | `run`, `rollout`, `attempt`, fanout, best-of-forks |
 | State | Template, ready snapshot, attempt workspace, snapshot DAG, taint lineage |
+| Execution | `tool_call`, process, event, runtime metadata |
+| Artifact | Result refs, artifact file hash, artifact lineage |
 | Economics | Active CPU windows, burst admission, warm reuse, snapshot physical cost, budget |
 | Risk | Telemetry-context correlation, policy decision, baseline feature, response |
-| Evidence | Async provenance graph, forensics bundle, replay metadata, background GC |
-| Driver | Capability-gated runtime, orchestrator, telemetry, and snapshot substrates |
+| Promotion | Winner selection, telemetry drain, risk finalization, promote/reject |
+| Evidence | Git-like refs/log/trace, content-addressed object DAG, forensics, replay metadata |
+| Driver | Capability-gated runtime, snapshot, orchestrator, and telemetry substrates |
 
 ## Runtime driver capabilities
 
