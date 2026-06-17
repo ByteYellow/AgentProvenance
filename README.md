@@ -98,6 +98,7 @@ agentprov graph trace --run run-demo-bugfix
 agentprov graph refs --run run-demo-bugfix
 agentprov graph log --run run-demo-bugfix
 agentprov graph materialize --run run-demo-bugfix
+agentprov graph replay --run run-demo-bugfix
 agentprov graph diff --run run-demo-bugfix --file calculator.py
 agentprov graph blame --run run-demo-bugfix --file calculator.py
 ```
@@ -142,7 +143,7 @@ Core AgentProvenance path:
 - explainable attempt evidence for pruned and promoted rollout branches
 - strategy artifact capture from attempt workspaces into `.agentprov/artifacts/`
 - artifact provenance edges from attempt/tool_call to exported artifact refs
-- Git-like provenance refs, log, trace, diff, blame, verify, and content-addressed materialization under `.agentprov/provenance/objects/sha256/`
+- Git-like provenance refs, log, trace, replay, diff, blame, verify, and content-addressed materialization under `.agentprov/provenance/objects/sha256/`
 - I/O-aware snapshot planning with source policies: `latest-ready`, `smallest-delta`, `local`, and `untainted`
 - run-local provenance trace for snapshot planner explanations
 - capability-gated runtime drivers with Docker active and gVisor/Firecracker/bubblewrap as explicit stubs
@@ -212,6 +213,7 @@ SESSION_ID=$(./agentprov session create --lease "$LEASE_ID")
 ./agentprov graph log --run run-demo-bugfix
 ./agentprov graph materialize --run run-demo-bugfix
 ./agentprov graph verify --run run-demo-bugfix
+./agentprov graph replay --run run-demo-bugfix
 ./agentprov graph diff --run run-demo-bugfix --file hello.txt
 ./agentprov graph blame --run run-demo-bugfix --file hello.txt
 ./agentprov effect record --run run-demo-bugfix --type api_call \
@@ -228,6 +230,7 @@ The core provenance commands are:
 ./agentprov graph log --run <run_id>
 ./agentprov graph materialize --run <run_id>
 ./agentprov graph verify --run <run_id>
+./agentprov graph replay --run <run_id>
 ./agentprov graph diff --run <run_id> --file <workspace_relative_file>
 ./agentprov graph blame --run <run_id> --file <workspace_relative_file>
 ./agentprov effect list --run <run_id>
@@ -302,6 +305,10 @@ The primary demo is the provenance path:
 - The graph is mechanically verifiable.
   `graph verify --run run-demo-bugfix` must report `status=ok` after
   materialization.
+- The run has a replay plan.
+  `graph replay --run run-demo-bugfix` must emit a plan-only reconstruction of
+  base snapshot, attempts, commands, artifacts, runtime events, and external
+  effect gates.
 - Promotion barrier rejects tainted candidates.
   Unit tests cover a quarantined/tainted attempt being rejected by the promotion barrier before `winner_promoted` is emitted.
 - Snapshot taint propagates through descendants.
@@ -309,8 +316,8 @@ The primary demo is the provenance path:
 
 Implementation entry points:
 
-- CLI: `agentprov graph diff`, `agentprov graph blame`, and `agentprov graph verify`
-- Code: `internal/provenance.DiffFile`, `internal/provenance.BlameFile`, and `internal/provenance.Verify`
+- CLI: `agentprov graph diff`, `agentprov graph blame`, `agentprov graph verify`, and `agentprov graph replay`
+- Code: `internal/provenance.DiffFile`, `internal/provenance.BlameFile`, `internal/provenance.Verify`, and `internal/provenance.ReplayRun`
 - Taint propagation: `taintSnapshotAndDescendants` plus rollout-level attempt quarantine events
 - Correlation: `execution_context_bindings` plus `correlation_method` / `correlation_confidence` on telemetry events
 - External side effects: `ExternalEffectRecord` captures dry-run/mock/allowlist gate evidence without promising real-world rollback
@@ -399,6 +406,8 @@ agentprov graph refs --run <run_id>
 agentprov graph log --run <run_id>
 agentprov graph materialize --run <run_id>
 agentprov graph verify --run <run_id>
+agentprov graph replay --run <run_id>
+agentprov graph replay --attempt <attempt_id>
 agentprov graph diff --run <run_id> --file <workspace_relative_file>
 agentprov graph blame --run <run_id> --file <workspace_relative_file>
 agentprov effect record --run <run_id> --attempt <attempt_id> --tool-call <tool_call_id> \
@@ -415,7 +424,10 @@ SQLite trace into content-addressed provenance objects under
 `.agentprov/provenance/objects/sha256/`, with object hashes, parent hashes, source
 ids, artifact file hashes, and replay-oriented payloads. `graph verify` checks
 reference continuity, taint/promotion contradictions, artifact readability, and
-materialized object hashes. `graph trace` includes
+materialized object hashes. `graph replay` emits a plan-only reconstruction of
+base snapshot, attempt commands, tool calls, process records, artifacts,
+external effect gates, and runtime events; it does not execute commands or
+promise real-world side-effect rollback. `graph trace` includes
 run-local `snapshot_plans` so rollout debugging can show which snapshot source
 was selected, which copy/resume plan was used, and why unrelated rollout
 snapshots were excluded. It can also reverse-trace an artifact ref, attempt id,
@@ -559,7 +571,7 @@ Near term:
 - JSON output mode for automation
 - External telemetry watermarks and taint freeze beyond the local evidence drain
 - Deeper `graph verify` / fsck coverage for replay manifests and binding continuity
-- `graph replay` MVP for reconstructing an attempt command sequence
+- Replay execution mode behind explicit sandbox/runtime guardrails
 - Stronger process manager and process tree enforcement
 - Raw TCP policy enforcement for non-HTTP protocols
 - Falco/Tetragon/LoongCollector JSONL telemetry receivers

@@ -183,6 +183,32 @@ func graphCmd(dataDir *string) *cobra.Command {
 	}
 	verifyCmd.Flags().StringVar(&verifyRunID, "run", "", "run id")
 
+	var replayRunID string
+	var replayAttemptID string
+	replayCmd := &cobra.Command{
+		Use:   "replay",
+		Short: "emit a replay plan for a run or attempt without executing it",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := openDB()
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			if replayRunID != "" && replayAttemptID != "" {
+				return fmt.Errorf("use only one of --run or --attempt")
+			}
+			if replayAttemptID != "" {
+				return provenance.ReplayAttempt(db, replayAttemptID, cmd.OutOrStdout())
+			}
+			if replayRunID != "" {
+				return provenance.ReplayRun(db, replayRunID, cmd.OutOrStdout())
+			}
+			return fmt.Errorf("one of --run or --attempt is required")
+		},
+	}
+	replayCmd.Flags().StringVar(&replayRunID, "run", "", "run id")
+	replayCmd.Flags().StringVar(&replayAttemptID, "attempt", "", "attempt id")
+
 	cmd := &cobra.Command{Use: "graph", Short: "provenance graph commands"}
 	cmd.AddCommand(trace)
 	cmd.AddCommand(refs)
@@ -191,5 +217,6 @@ func graphCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(diffCmd)
 	cmd.AddCommand(blameCmd)
 	cmd.AddCommand(verifyCmd)
+	cmd.AddCommand(replayCmd)
 	return cmd
 }
