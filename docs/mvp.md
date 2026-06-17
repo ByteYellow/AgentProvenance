@@ -180,6 +180,11 @@ from a runtime process and trace back to the session, tool call, attempt,
 artifact, telemetry event, policy decision, rollout, and evidence context.
 Local rollout attempts create local session/process records too, so process
 trace works for quick RL rollout demos without requiring Docker runtime.
+`graph refs --run <run_id>` adds the Git-like ref view: rollout refs, base
+snapshot refs, winner attempt refs, promotion refs, tool call refs, process
+refs, and artifact refs. `graph log --run <run_id>` adds the compact
+chronological provenance log for rollout, attempt, tool call, process,
+promotion, evidence, and telemetry events.
 `graph trace` prints the compact attempt evidence payload, including strategy,
 score, saved cost, output summary, winner flag, and selection reason, so a
 probe/top-k rollout can be replayed and audited without guessing why a branch

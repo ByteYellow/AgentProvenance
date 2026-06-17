@@ -264,17 +264,22 @@ agentprov graph trace --artifact <artifact_ref>
 agentprov graph trace --attempt <attempt_id>
 agentprov graph trace --tool-call <tool_call_id>
 agentprov graph trace --process <process_id>
+agentprov graph refs --run <run_id>
+agentprov graph log --run <run_id>
 agentprov forensics export <run_id>
 ```
 
-`graph trace` includes run-local `snapshot_plans` so rollout debugging can show
-which snapshot source was selected, which copy/resume plan was used, and why
-unrelated rollout snapshots were excluded. It can also reverse-trace an
-artifact ref, attempt id, tool call id, or process id back to the producing
-attempt, tool call, process, rollout, policy decision, evidence, and winner
-status. Local rollout attempts and Docker-backed execs both emit process-linked
-events, so RL rollout evidence can start from either the attempt/tool call layer
-or the runtime process layer.
+Git-like provenance is a first-class AgentProvenance concept. `graph refs` exposes stable
+run-local refs for rollouts, base snapshots, winner attempts, promotions, tool
+calls, processes, and artifacts. `graph log` prints a chronological rollout
+timeline similar to a compact commit log. `graph trace` includes run-local
+`snapshot_plans` so rollout debugging can show which snapshot source was
+selected, which copy/resume plan was used, and why unrelated rollout snapshots
+were excluded. It can also reverse-trace an artifact ref, attempt id, tool call
+id, or process id back to the producing attempt, tool call, process, rollout,
+policy decision, evidence, and winner status. Local rollout attempts and
+Docker-backed execs both emit process-linked events, so RL rollout evidence can
+start from either the attempt/tool call layer or the runtime process layer.
 
 ### Runtime and fleet signals
 

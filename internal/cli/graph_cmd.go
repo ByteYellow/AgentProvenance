@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"database/sql"
 	"fmt"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
@@ -14,15 +15,22 @@ func graphCmd(dataDir *string) *cobra.Command {
 	var attemptID string
 	var toolCallID string
 	var processID string
+	openDB := func() (*sql.DB, error) {
+		paths, err := store.Init(*dataDir)
+		if err != nil {
+			return nil, err
+		}
+		db, err := store.Open(paths)
+		if err != nil {
+			return nil, err
+		}
+		return db, nil
+	}
 	trace := &cobra.Command{
 		Use:   "trace",
 		Short: "trace run or artifact provenance",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			paths, err := store.Init(*dataDir)
-			if err != nil {
-				return err
-			}
-			db, err := store.Open(paths)
+			db, err := openDB()
 			if err != nil {
 				return err
 			}
@@ -59,7 +67,46 @@ func graphCmd(dataDir *string) *cobra.Command {
 	trace.Flags().StringVar(&attemptID, "attempt", "", "attempt id")
 	trace.Flags().StringVar(&toolCallID, "tool-call", "", "tool call id")
 	trace.Flags().StringVar(&processID, "process", "", "process id")
+
+	var refsRunID string
+	refs := &cobra.Command{
+		Use:   "refs",
+		Short: "list Git-like provenance refs for a run",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := openDB()
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			if refsRunID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			return provenance.Refs(db, refsRunID, cmd.OutOrStdout())
+		},
+	}
+	refs.Flags().StringVar(&refsRunID, "run", "", "run id")
+
+	var logRunID string
+	logCmd := &cobra.Command{
+		Use:   "log",
+		Short: "show Git-like provenance timeline for a run",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := openDB()
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			if logRunID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			return provenance.Log(db, logRunID, cmd.OutOrStdout())
+		},
+	}
+	logCmd.Flags().StringVar(&logRunID, "run", "", "run id")
+
 	cmd := &cobra.Command{Use: "graph", Short: "provenance graph commands"}
 	cmd.AddCommand(trace)
+	cmd.AddCommand(refs)
+	cmd.AddCommand(logCmd)
 	return cmd
 }
