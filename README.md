@@ -280,6 +280,10 @@ The primary demo is the provenance path:
   The output must distinguish `unchanged_from_base` and `modified_by_attempt`, and include attempt id, tool call id, strategy, command, artifact, and winner status.
 - Patch artifacts are traceable.
   `graph trace` must show `attempt_artifact` and `tool_call_artifact` edges for generated `fix.patch` files.
+- Promotion barrier rejects tainted candidates.
+  Unit tests cover a quarantined/tainted attempt being rejected by the promotion barrier before `winner_promoted` is emitted.
+- Snapshot taint propagates through descendants.
+  Unit tests cover taint propagation across `snapshot_edges` so descendant snapshots cannot be treated as clean lineage.
 
 Implementation entry points:
 
@@ -524,8 +528,9 @@ The I/O-aware snapshot demo shows hot metadata path detection, I/O fanout reject
 Near term:
 
 - JSON output mode for automation
-- Promotion barrier hardening beyond local evidence drain: external telemetry watermarks and taint freeze
-- Snapshot taint propagation
+- External telemetry watermarks and taint freeze beyond the local evidence drain
+- `graph verify` / fsck for object hashes, artifacts, snapshots, and binding continuity
+- `graph replay` MVP for reconstructing an attempt command sequence
 - Stronger process manager and process tree enforcement
 - Raw TCP policy enforcement for non-HTTP protocols
 - Falco/Tetragon/LoongCollector JSONL telemetry receivers

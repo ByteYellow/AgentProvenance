@@ -477,6 +477,12 @@ func (s Service) drainPromotionEvidence(attemptID string) (bool, string) {
 }
 
 func (s Service) attemptTainted(attemptID, baseSnapshotID string) (bool, string) {
+	var attemptStatus, attemptRisk, toolCallID string
+	_ = s.DB.QueryRow(`SELECT COALESCE(status, ''), COALESCE(risk_status, ''), COALESCE(tool_call_id, '')
+		FROM fork_attempts WHERE id = ?`, attemptID).Scan(&attemptStatus, &attemptRisk, &toolCallID)
+	if attemptStatus == "quarantined" || attemptRisk == "tainted" {
+		return true, "attempt is quarantined or tainted"
+	}
 	var status string
 	var tainted int
 	_ = s.DB.QueryRow(`SELECT status, COALESCE(tainted, 0) FROM snapshots WHERE id = ?`, baseSnapshotID).Scan(&status, &tainted)
@@ -492,8 +498,8 @@ func (s Service) attemptTainted(attemptID, baseSnapshotID string) (bool, string)
 	var blockingDecision int
 	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM policy_decisions
 		WHERE decision IN ('deny', 'kill', 'quarantine', 'taint_snapshot') AND (
-			event_id IN (SELECT id FROM events WHERE process_id = ? OR snapshot_id = ?)
-		)`, attemptID, baseSnapshotID).Scan(&blockingDecision)
+			event_id IN (SELECT id FROM events WHERE tool_call_id = ? OR snapshot_id = ?)
+		)`, toolCallID, baseSnapshotID).Scan(&blockingDecision)
 	if blockingDecision > 0 {
 		return true, "blocking policy decision exists for attempt"
 	}

@@ -112,6 +112,10 @@ Expected output / acceptance:
   command, artifact, and winner status.
 - `graph trace` shows generated patch artifacts linked by `attempt_artifact`
   and `tool_call_artifact` edges.
+- Rollout unit tests prove a quarantined/tainted attempt is rejected by the
+  promotion barrier before `winner_promoted` can be emitted.
+- Rollout unit tests prove snapshot taint propagates through
+  `snapshot_edges` to descendant snapshots.
 
 ### demo_streaming_terminal
 

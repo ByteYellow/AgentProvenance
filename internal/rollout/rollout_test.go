@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/state"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -68,6 +69,83 @@ func TestStartWritesExplainableAttemptEvidence(t *testing.T) {
 	}
 }
 
+func TestPromotionBarrierRejectsTaintedAttempt(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".acf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insertRolloutPromotionFixture(t, db, "run-taint", "rollout-taint", "snap-taint", "attempt-taint", "tool-taint", now)
+	_, err = db.Exec(`UPDATE fork_attempts SET status = 'quarantined', risk_status = 'tainted' WHERE id = 'attempt-taint'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	promotion, err := (Service{DB: db, Paths: paths}).promoteWithBarrier("rollout-taint", "snap-taint", "attempt-taint")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if promotion.Status != "rejected" || promotion.RiskStatus != "tainted" || !strings.Contains(promotion.Reason, "attempt is quarantined or tainted") {
+		t.Fatalf("promotion = %+v, want rejected tainted attempt", promotion)
+	}
+	var promoted int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE event_type = 'winner_promoted' AND json_extract(payload, '$.attempt_id') = 'attempt-taint'`).Scan(&promoted); err != nil {
+		t.Fatal(err)
+	}
+	if promoted != 0 {
+		t.Fatalf("winner_promoted events = %d, want 0", promoted)
+	}
+}
+
+func TestTaintAttemptPropagatesSnapshotDescendants(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".acf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insertRolloutPromotionFixture(t, db, "run-prop", "rollout-prop", "snap-parent", "attempt-prop", "tool-prop", now)
+	insertTestSnapshot(t, db, "snap-child", "child", now)
+	if _, err := db.Exec(`INSERT INTO snapshot_edges (id, parent_id, child_id, edge_type, plan, created_at)
+		VALUES ('edge-prop', 'snap-parent', 'snap-child', 'fork', 'copy', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := (Service{DB: db, Paths: paths}).TaintAttempt("attempt-prop", "test taint propagation"); err != nil {
+		t.Fatal(err)
+	}
+	for _, snapshotID := range []string{"snap-parent", "snap-child"} {
+		var status string
+		var tainted int
+		if err := db.QueryRow(`SELECT status, COALESCE(tainted, 0) FROM snapshots WHERE id = ?`, snapshotID).Scan(&status, &tainted); err != nil {
+			t.Fatal(err)
+		}
+		if status != "tainted" || tainted != 1 {
+			t.Fatalf("snapshot %s status=%s tainted=%d, want tainted/1", snapshotID, status, tainted)
+		}
+	}
+	var eventCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE event_type IN ('snapshot_tainted', 'snapshot_taint_propagated', 'attempt_quarantined')`).Scan(&eventCount); err != nil {
+		t.Fatal(err)
+	}
+	if eventCount < 3 {
+		t.Fatalf("taint event count = %d, want >= 3", eventCount)
+	}
+}
+
 func writeFile(path, content string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -94,4 +172,27 @@ func readEvidencePayloads(t *testing.T, db *sql.DB) []string {
 		t.Fatal(err)
 	}
 	return payloads
+}
+
+func insertRolloutPromotionFixture(t *testing.T, db *sql.DB, runID, rolloutID, snapshotID, attemptID, toolCallID, now string) {
+	t.Helper()
+	insertTestSnapshot(t, db, snapshotID, "ready", now)
+	if _, err := db.Exec(`INSERT INTO rollouts (id, run_id, base_snapshot_id, status, fanout, winner_attempt_id, risk_status, created_at, updated_at)
+		VALUES (?, ?, ?, 'running', 1, ?, 'pending', ?, ?)`, rolloutID, runID, snapshotID, attemptID, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO fork_attempts
+		(id, rollout_id, tool_call_id, snapshot_id, workspace_path, fork_ms, strategy, command, status, risk_status, score, is_winner, created_at)
+		VALUES (?, ?, ?, ?, ?, 1, 'test', 'echo test', 'passed', 'clean', 1, 1, ?)`,
+		attemptID, rolloutID, toolCallID, snapshotID, filepath.Join(t.TempDir(), attemptID), now); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func insertTestSnapshot(t *testing.T, db *sql.DB, snapshotID, name, now string) {
+	t.Helper()
+	if _, err := db.Exec(`INSERT INTO snapshots (id, name, kind, source, path, manifest_hash, file_count, bytes, status, created_at)
+		VALUES (?, ?, 'ready', 'test', ?, 'hash', 1, 1, 'ready', ?)`, snapshotID, name, filepath.Join(t.TempDir(), snapshotID), now); err != nil {
+		t.Fatal(err)
+	}
 }
