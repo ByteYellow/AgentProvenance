@@ -1,8 +1,8 @@
-# agentprovenance MVP
+# AgentProvenance MVP
 
-`agentprovenance` is a CLI-first single-node Agent Computer Control Plane.
+`AgentProvenance` is a CLI-first single-node rollout provenance control plane for sandboxed AI agent execution.
 
-The first binary is `agentprov`. It manages local leases, Docker-backed sandbox
+The current binary remains `agentprov` during the rename transition. It manages local leases, Docker-backed sandbox
 sessions, preview URL proxies, runtime/template registries, directory
 snapshots, prepared workspace forks, structured Agent Computer API calls,
 telemetry, MVP policy decisions, provenance traces, forensics bundles, and

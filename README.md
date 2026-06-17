@@ -2,7 +2,7 @@
 
 <h1>AgentProvenance</h1>
 
-### A rollout provenance control plane for AI agents.
+### Git-like provenance control for sandboxed AI agent execution.
 
 <p>
 Turn sandboxed agent execution into content-addressed, queryable, replayable,
@@ -20,7 +20,7 @@ and auditable rollout provenance DAGs.
 
 ---
 
-AgentProvenance, or AgentProvenance, is a local-first rollout provenance control plane for high-concurrency AI agents.
+AgentProvenance is a local-first rollout provenance control plane for high-concurrency AI agents.
 
 AgentProvenance does not try to be a generic sandbox runtime, telemetry collector, eBPF platform, or Kubernetes/Ray replacement. It sits above runtime, snapshot, scheduler, and telemetry substrates and owns the agent-side causal model that generic infrastructure does not preserve:
 
@@ -33,6 +33,8 @@ AgentProvenance does not try to be a generic sandbox runtime, telemetry collecto
 - evidence: Git-like refs/log/trace and content-addressed provenance objects
 
 AgentProvenance uses Docker today and is designed to plug into Docker, OpenSandbox, Kubernetes, Ray, Firecracker, gVisor, Kata, LoongCollector, Falco, Tetragon, and other runtime or telemetry substrates through capability-gated drivers. Those systems provide execution and signals; AgentProvenance turns them into an agent rollout provenance DAG.
+
+The current CLI remains `agentprov` during the rename transition so existing demos and scripts keep working.
 
 ## Why this exists
 
@@ -316,7 +318,7 @@ The long-term shape is an Agent Rollout Provenance Control Plane. The DAG is the
 flowchart TB
     Client["Agent harness\nAgentix / RL trainer / evaluator / agentprov"] --> Ingress["Rollout Ingress\nlease, run, tool_call, artifact API"]
 
-    subgraph ACFPlane["AgentProvenance Rollout Provenance Control Plane"]
+    subgraph ACFPlane["AgentProvenance Control Plane"]
         Rollout["Rollout DAG\nrun -> rollout -> attempt"]
         State["Snapshot DAG\ntemplate -> ready -> attempt workspace"]
         Exec["Execution DAG\nattempt -> tool_call -> process -> event"]
