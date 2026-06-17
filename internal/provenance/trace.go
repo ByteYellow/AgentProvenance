@@ -286,6 +286,127 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 	return nil
 }
 
+func TraceArtifact(db *sql.DB, artifactRef string, out io.Writer) error {
+	if artifactRef == "" {
+		return fmt.Errorf("artifact ref is required")
+	}
+	fmt.Fprintf(out, "artifact=%s\n", artifactRef)
+
+	rows, err := db.Query(`SELECT run_id, rollout_id, from_id, edge_type, source_event_id, created_at
+		FROM graph_edges WHERE to_id = ? ORDER BY created_at ASC`, artifactRef)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	fmt.Fprintln(out, "artifact_edges:")
+	seenAttempts := map[string]bool{}
+	seenTools := map[string]bool{}
+	seenRollouts := map[string]bool{}
+	for rows.Next() {
+		var runID, rolloutID, fromID, edgeType, sourceEventID, createdAt string
+		if err := rows.Scan(&runID, &rolloutID, &fromID, &edgeType, &sourceEventID, &createdAt); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "  run=%s rollout=%s from=%s to=%s type=%s source_event=%s created_at=%s\n", runID, rolloutID, fromID, artifactRef, edgeType, sourceEventID, createdAt)
+		if rolloutID != "" {
+			seenRollouts[rolloutID] = true
+		}
+		switch edgeType {
+		case "attempt_artifact":
+			seenAttempts[fromID] = true
+		case "tool_call_artifact":
+			seenTools[fromID] = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	directRows, err := db.Query(`SELECT a.id, a.rollout_id, a.tool_call_id
+		FROM fork_attempts a WHERE a.artifact_result = ? ORDER BY a.created_at ASC`, artifactRef)
+	if err != nil {
+		return err
+	}
+	defer directRows.Close()
+	for directRows.Next() {
+		var attemptID, rolloutID, toolCallID string
+		if err := directRows.Scan(&attemptID, &rolloutID, &toolCallID); err != nil {
+			return err
+		}
+		seenAttempts[attemptID] = true
+		if rolloutID != "" {
+			seenRollouts[rolloutID] = true
+		}
+		if toolCallID != "" {
+			seenTools[toolCallID] = true
+		}
+	}
+	if err := directRows.Err(); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(out, "attempts:")
+	for attemptID := range seenAttempts {
+		if err := printArtifactAttempt(db, out, attemptID); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintln(out, "tool_calls:")
+	for toolCallID := range seenTools {
+		if err := printArtifactToolCall(db, out, toolCallID); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintln(out, "rollouts:")
+	for rolloutID := range seenRollouts {
+		if err := printArtifactRollout(db, out, rolloutID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func printArtifactAttempt(db *sql.DB, out io.Writer, attemptID string) error {
+	var rolloutID, toolCallID, strategy, status, riskStatus string
+	var score, cost float64
+	var isWinner int
+	err := db.QueryRow(`SELECT rollout_id, tool_call_id, strategy, status, COALESCE(risk_status, 'unknown'), score, cost_estimate, is_winner
+		FROM fork_attempts WHERE id = ?`, attemptID).Scan(&rolloutID, &toolCallID, &strategy, &status, &riskStatus, &score, &cost, &isWinner)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(out, "  attempt=%s rollout=%s tool_call=%s strategy=%s status=%s risk=%s score=%.3f cost=%.6f winner=%t\n",
+		attemptID, rolloutID, toolCallID, strategy, status, riskStatus, score, cost, isWinner != 0)
+	return err
+}
+
+func printArtifactToolCall(db *sql.DB, out io.Writer, toolCallID string) error {
+	var rolloutID, attemptID, status, resultRef, command string
+	var exitCode int
+	var wallMS int64
+	err := db.QueryRow(`SELECT rollout_id, attempt_id, status, COALESCE(exit_code, 0), wall_ms, result_ref, command
+		FROM tool_calls WHERE id = ?`, toolCallID).Scan(&rolloutID, &attemptID, &status, &exitCode, &wallMS, &resultRef, &command)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(out, "  tool_call=%s rollout=%s attempt=%s status=%s exit=%d wall_ms=%d result=%s command=%q\n",
+		toolCallID, rolloutID, attemptID, status, exitCode, wallMS, resultRef, command)
+	return err
+}
+
+func printArtifactRollout(db *sql.DB, out io.Writer, rolloutID string) error {
+	var runID, status, baseSnapshotID, winnerAttemptID, riskStatus string
+	var cost float64
+	err := db.QueryRow(`SELECT run_id, status, base_snapshot_id, winner_attempt_id, risk_status, cost_estimate
+		FROM rollouts WHERE id = ?`, rolloutID).Scan(&runID, &status, &baseSnapshotID, &winnerAttemptID, &riskStatus, &cost)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(out, "  rollout=%s run=%s status=%s base_snapshot=%s winner=%s risk=%s cost=%.6f\n",
+		rolloutID, runID, status, baseSnapshotID, winnerAttemptID, riskStatus, cost)
+	return err
+}
+
 func collectRunGraphIDs(db *sql.DB, runID string, snapshotIDs map[string]bool) (map[string]bool, error) {
 	ids := map[string]bool{}
 	for id := range snapshotIDs {

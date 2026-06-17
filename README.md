@@ -260,12 +260,15 @@ agentprov policy test examples/events/metadata-egress.jsonl --rules examples/pol
 agentprov policy decisions --run <run_id>
 
 agentprov graph trace --run <run_id>
+agentprov graph trace --artifact <artifact_ref>
 agentprov forensics export <run_id>
 ```
 
 `graph trace` includes run-local `snapshot_plans` so rollout debugging can show
 which snapshot source was selected, which copy/resume plan was used, and why
-unrelated rollout snapshots were excluded.
+unrelated rollout snapshots were excluded. It can also reverse-trace an
+artifact ref back to its producing attempt, tool call, rollout, and winner
+status.
 
 ### Runtime and fleet signals
 
