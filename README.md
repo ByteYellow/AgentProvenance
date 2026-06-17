@@ -20,9 +20,15 @@ and auditable rollout provenance DAGs.
 
 ---
 
-AgentProvenance is a local-first rollout provenance control plane for high-concurrency AI agents.
+AgentProvenance is a local-first immutable execution ledger and state-diff audit engine for autonomous agents, especially Coding Agents.
 
-AgentProvenance does not try to be a generic sandbox runtime, telemetry collector, eBPF platform, or Kubernetes/Ray replacement. It sits above runtime, snapshot, scheduler, and telemetry substrates and owns the agent-side causal model that generic infrastructure does not preserve:
+Phase 1 is deliberately narrow. It is not a generic scheduler, sandbox platform, or eBPF security product. It first proves the AgentProvenance control loop:
+
+```text
+ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame -> Taint -> Promotion Barrier
+```
+
+AgentProvenance sits above runtime, snapshot, scheduler, and telemetry substrates and owns the agent-side causal model that generic infrastructure does not preserve:
 
 - scope: ToolCallScope bindings from runtime identity to agent context
 - state source: template, ready snapshot, forked attempt workspace
@@ -33,7 +39,7 @@ AgentProvenance does not try to be a generic sandbox runtime, telemetry collecto
 - promotion: winner selection, telemetry drain, risk finalization
 - evidence: Git-like refs/log/trace and content-addressed provenance objects
 
-AgentProvenance uses Docker today and is designed to plug into Docker, OpenSandbox, Kubernetes, Ray, Firecracker, gVisor, Kata, LoongCollector, Falco, Tetragon, and other runtime or telemetry substrates through capability-gated drivers. Those systems provide execution and signals; AgentProvenance turns them into an agent rollout provenance DAG.
+AgentProvenance uses Docker today and is designed to plug into Docker, OpenSandbox, Kubernetes, Ray, Firecracker, gVisor, Kata, LoongCollector, Falco, Tetragon, and other runtime or telemetry substrates through capability-gated drivers. Those systems provide execution and signals; AgentProvenance correlates them into an auditable agent rollout provenance DAG.
 
 The current CLI remains `agentprov` during the rename transition so existing demos and scripts keep working.
 
@@ -148,18 +154,17 @@ Experimental or auxiliary paths:
 - behavior baseline counters
 - local node metadata and warm pool simulations
 
-## Current boundaries
+## Current Boundaries
 
 AgentProvenance is intentionally narrow at this stage:
 
 - Docker is the only fully active runtime backend.
 - Directory snapshot/fork/resume is supported; memory snapshots are not.
 - Scheduler/admission is single-node and conservative, not a distributed placement service.
-- eBPF/Falco/Tetragon/LoongCollector integration is planned; current telemetry is wrapper/runtime-level MVP telemetry.
+- Falco/Tetragon/LoongCollector/eBPF are treated as future telemetry substrates. Current telemetry is wrapper/runtime-level MVP telemetry, but it already uses ToolCallScope bindings so those substrate events can be correlated later without changing the DAG model.
 - Egress policy currently covers HTTP/HTTPS proxy workflows and direct-egress blocking from the Docker sandbox bridge; it is not yet a general raw TCP policy engine.
 - Baseline detection is MVP-level event and cost counting, not syscall ML or full eBPF feature modeling.
 - Content-addressed provenance objects exist, but replay and fsck are still early roadmap items. Diff and blame are MVP-level workspace-file queries.
-- eBPF/Falco/Tetragon/LoongCollector are not integrated yet; current correlation works with wrapper/runtime events and is structured for those substrates.
 
 ## Quickstart
 
