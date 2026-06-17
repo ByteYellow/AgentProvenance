@@ -81,6 +81,27 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 		return err
 	}
 
+	artifactRows, err := db.Query(`SELECT a.artifact_result, a.id, a.tool_call_id, a.strategy, a.is_winner
+		FROM fork_attempts a JOIN rollouts r ON a.rollout_id = r.id
+		WHERE r.run_id = ? AND COALESCE(a.artifact_result, '') != ''
+		ORDER BY a.created_at ASC`, runID)
+	if err != nil {
+		return err
+	}
+	defer artifactRows.Close()
+	fmt.Fprintln(out, "artifacts:")
+	for artifactRows.Next() {
+		var artifactRef, attemptID, toolCallID, strategy string
+		var isWinner int
+		if err := artifactRows.Scan(&artifactRef, &attemptID, &toolCallID, &strategy, &isWinner); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "  artifact=%s attempt=%s tool_call=%s strategy=%s winner=%t\n", artifactRef, attemptID, toolCallID, strategy, isWinner != 0)
+	}
+	if err := artifactRows.Err(); err != nil {
+		return err
+	}
+
 	toolRows, err := db.Query(`SELECT id, rollout_id, attempt_id, status, COALESCE(exit_code, 0), wall_ms, cost_estimate, policy_decision, result_ref, command
 		FROM tool_calls WHERE run_id = ? ORDER BY created_at ASC`, runID)
 	if err != nil {

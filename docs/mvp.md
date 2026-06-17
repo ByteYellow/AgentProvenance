@@ -166,6 +166,9 @@ winners, saved cost, and saved ratio.
 When `artifact=<workspace-relative-path>` is set, AgentProvenance copies that file from the
 attempt workspace into `.acf/artifacts/` and stores the exported result ref in
 `artifact_result`; missing artifacts are recorded in the attempt output summary.
+Processed evidence also adds `attempt_artifact` and `tool_call_artifact` graph
+edges, and `graph trace` prints an `artifacts` section for reverse lookup from
+artifact ref to attempt, tool call, strategy, and winner status.
 `graph trace` prints the compact attempt evidence payload, including strategy,
 score, saved cost, output summary, winner flag, and selection reason, so a
 probe/top-k rollout can be replayed and audited without guessing why a branch
