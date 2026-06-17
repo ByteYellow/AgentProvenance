@@ -103,9 +103,10 @@ agentprov graph materialize --run run-demo-bugfix
 
 The current repository is a local-first MVP. It currently supports:
 
+Core AgentProvenance path:
+
 - Docker-backed sandbox sessions
 - streaming exec and process records
-- local preview URL proxy
 - directory snapshot, fork, and resume
 - template → ready snapshot → attempt workspace lineage
 - rollout fanout and best-of-forks, including Docker-backed short-lived attempt sessions via `--runtime docker`
@@ -122,9 +123,16 @@ The current repository is a local-first MVP. It currently supports:
 - artifact provenance edges from attempt/tool_call to exported artifact refs
 - Git-like provenance refs, log, trace, and content-addressed materialization under `.acf/provenance/objects/sha256/`
 - I/O-aware snapshot planning with source policies: `latest-ready`, `smallest-delta`, `local`, and `untainted`
-- MVP policy decisions, quarantine, provenance trace, and forensics export
 - run-local provenance trace for snapshot planner explanations
 - capability-gated runtime drivers with Docker active and gVisor/Firecracker/bubblewrap as explicit stubs
+
+Experimental or auxiliary paths:
+
+- local preview URL proxy
+- MVP policy decisions, quarantine, and forensics export
+- HTTP/HTTPS egress proxy and redacted credential injection
+- behavior baseline counters
+- local node metadata and warm pool simulations
 
 ## Current boundaries
 
@@ -183,18 +191,23 @@ Run the full MVP walkthrough:
 
 ## Demos
 
-Focused demos are kept as shell scripts so they can double as smoke tests:
+The primary demo is the provenance path:
 
 ```sh
-./scripts/demo_preview_url.sh
 ./scripts/demo_snapshot_fanout.sh
 ./scripts/demo_best_of_forks.sh
+./scripts/demo_provenance_trace.sh
+./scripts/demo_ioaware_snapshot_planner.sh
+```
+
+Auxiliary and experimental demos are still available, but they are not the main product surface:
+
+```sh
+./scripts/demo_cost_accounting.sh
+./scripts/demo_cpu_weight_control.sh
+./scripts/demo_preview_url.sh
 ./scripts/demo_policy_quarantine.sh
 ./scripts/demo_egress_proxy.sh
-./scripts/demo_cost_accounting.sh
-./scripts/demo_provenance_trace.sh
-./scripts/demo_cpu_weight_control.sh
-./scripts/demo_ioaware_snapshot_planner.sh
 SESSIONS=50 ./scripts/demo_v01_50_concurrency.sh
 ```
 
@@ -230,7 +243,6 @@ agentprov lease create --task examples/tasks/bugfix.yaml
 agentprov session create --lease <lease_id>
 agentprov session cpu-profile <session_id> --profile think
 agentprov exec <session_id> --stream -- <command...>
-agentprov port expose <session_id> <port>
 
 agentprov snapshot create <session_id> --type directory --path /workspace --name ready
 agentprov snapshot plan ready
@@ -253,13 +265,9 @@ agentprov attempt best-of --snapshot ready \
 agentprov cost show <run_id>
 ```
 
-### Security, telemetry, and provenance
+### Provenance, telemetry, and evidence
 
 ```sh
-agentprov egress allow example.com
-agentprov credential inject --run <run_id> --session <session_id> \
-  --name github-token --host api.github.com --value <secret>
-
 agentprov process list --session <session_id>
 agentprov process inspect <process_id>
 
@@ -293,11 +301,26 @@ rollout, policy decision, evidence, and winner status. Local rollout attempts
 and Docker-backed execs both emit process-linked events, so RL rollout evidence
 can start from either the attempt/tool call layer or the runtime process layer.
 
-### Runtime and fleet signals
+### Runtime capability signals
 
 ```sh
 agentprov runtime list
 agentprov runtime inspect docker
+```
+
+### Experimental controls
+
+These commands are useful for local experiments, but they are not the core AgentProvenance interface yet:
+
+```sh
+agentprov port expose <session_id> <port>
+
+agentprov egress allow example.com
+agentprov credential inject --run <run_id> --session <session_id> \
+  --name github-token --host api.github.com --value <secret>
+
+agentprov cost sample <session_id>
+agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty --physical-cpu 8
 
 agentprov node register --address localhost --runtime docker --cpu 8 --memory-mb 8192
 agentprov node list
@@ -305,9 +328,6 @@ agentprov scheduler status
 
 agentprov pool create --template bugfix --size 2 --seed-workspace ./seed --max-size 2
 agentprov pool status
-
-agentprov cost sample <session_id>
-agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty --physical-cpu 8
 ```
 
 ## Architecture

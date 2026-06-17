@@ -2,15 +2,17 @@
 
 `AgentProvenance` is a CLI-first single-node rollout provenance control plane for sandboxed AI agent execution.
 
-The current binary remains `agentprov` during the rename transition. It manages local leases, Docker-backed sandbox
-sessions, preview URL proxies, runtime/template registries, directory
-snapshots, prepared workspace forks, structured Agent Computer API calls,
-telemetry, MVP policy decisions, provenance traces, forensics bundles, and
-run/session/node-level cost counters. It can run directly against local state or
-as a client for `agentprov daemon serve`, where the daemon owns SQLite, the runtime
-driver, scheduler, state store, and Docker adapter.
+The current binary remains `agentprov` during the rename transition. The core MVP
+manages local leases, Docker-backed sandbox sessions, directory snapshots,
+attempt workspace forks, rollout fanout, process/tool-call traces, artifact
+refs, content-addressed provenance objects, and cost/risk evidence attached to
+promotion decisions.
 
-## Quick path
+Preview URL, egress proxy, credential injection, warm pool, node metadata, and
+baseline commands are kept as experimental local controls. They are useful for
+future drivers, but they are not the main v0.1 product surface.
+
+## Core quick path
 
 ```sh
 agentprov init
@@ -37,15 +39,11 @@ agentprov rollout winner run-demo-bugfix
 agentprov attempt best-of --snapshot ready --max-fanout 2 --top-k 1 --max-cost 1 --early-stop \
   --strategy "probe::printf 42::probe=printf 42::budget=2::score=number::artifact=probe.txt" \
   --strategy "full::test -f hello.txt && echo passed::probe=test -f hello.txt && echo 1::budget=5::score=contains:passed::artifact=hello.txt"
-agentprov policy test examples/events/metadata-egress.jsonl
-agentprov policy decisions --run run-demo-bugfix
-agentprov api write-file <session_id> --path notes.txt --content hello
-agentprov telemetry list --session <session_id>
 agentprov graph trace --run run-demo-bugfix
-agentprov forensics export run-demo-bugfix
-agentprov cost sample <session_id>
+agentprov graph refs --run run-demo-bugfix
+agentprov graph log --run run-demo-bugfix
+agentprov graph materialize --run run-demo-bugfix
 agentprov cost show run-demo-bugfix
-agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty
 ```
 
 Daemon-backed equivalent:
@@ -56,6 +54,21 @@ export ACF_DAEMON_URL=http://127.0.0.1:8574
 agentprov lease create --task examples/tasks/bugfix.yaml
 agentprov session create --lease <lease_id>
 agentprov exec <session_id> --stream -- sh -lc 'echo hello'
+```
+
+## Experimental controls
+
+These commands remain documented for local experiments, but they should not be
+read as the core AgentProvenance contract yet:
+
+```sh
+agentprov api write-file <session_id> --path notes.txt --content hello
+agentprov telemetry list --session <session_id>
+agentprov policy test examples/events/metadata-egress.jsonl
+agentprov policy decisions --run run-demo-bugfix
+agentprov forensics export run-demo-bugfix
+agentprov cost sample <session_id>
+agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty
 ```
 
 ## Demos
