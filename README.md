@@ -262,14 +262,15 @@ agentprov policy decisions --run <run_id>
 agentprov graph trace --run <run_id>
 agentprov graph trace --artifact <artifact_ref>
 agentprov graph trace --attempt <attempt_id>
+agentprov graph trace --tool-call <tool_call_id>
 agentprov forensics export <run_id>
 ```
 
 `graph trace` includes run-local `snapshot_plans` so rollout debugging can show
 which snapshot source was selected, which copy/resume plan was used, and why
 unrelated rollout snapshots were excluded. It can also reverse-trace an
-artifact ref or attempt id back to the producing attempt, tool call, rollout,
-evidence, and winner status.
+artifact ref, attempt id, or tool call id back to the producing attempt, tool
+call, process, rollout, evidence, and winner status.
 
 ### Runtime and fleet signals
 

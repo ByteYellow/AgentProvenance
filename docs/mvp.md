@@ -173,7 +173,9 @@ Use `graph trace --artifact <artifact_ref>` to start from an exported artifact
 and trace back to the attempt, tool call, rollout, run, and graph edge that
 produced it. Use `graph trace --attempt <attempt_id>` to inspect a single
 attempt with its tool call, artifact, rollout, graph edges, evidence payload,
-and winner status.
+and winner status. Use `graph trace --tool-call <tool_call_id>` to start from
+one tool invocation and inspect its process, artifact, graph edges, evidence,
+rollout, and winner context.
 `graph trace` prints the compact attempt evidence payload, including strategy,
 score, saved cost, output summary, winner flag, and selection reason, so a
 probe/top-k rollout can be replayed and audited without guessing why a branch
