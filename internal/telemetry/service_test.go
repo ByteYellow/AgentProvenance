@@ -12,7 +12,7 @@ import (
 
 func TestIngestFilteredCorrelatesRawRuntimeEvent(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestIngestFilteredCorrelatesRawRuntimeEvent(t *testing.T) {
 
 func TestIngestFilteredLeavesUnresolvedRawEvent(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}

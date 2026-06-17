@@ -9,7 +9,7 @@ import (
 func initCmd(dataDir *string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
-		Short: "initialize local acf state",
+		Short: "initialize local agentprov state",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			paths, err := store.Init(*dataDir)
 			if err != nil {

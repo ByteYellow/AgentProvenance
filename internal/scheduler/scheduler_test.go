@@ -9,9 +9,9 @@ import (
 )
 
 func TestReserveBurstRejectsOverInflightLimit(t *testing.T) {
-	t.Setenv("ACF_NODE_CPU", "8")
-	t.Setenv("ACF_BURST_MAX_INFLIGHT", "1")
-	paths, err := store.Init(filepath.Join(t.TempDir(), ".acf"))
+	t.Setenv("AGENTPROV_NODE_CPU", "8")
+	t.Setenv("AGENTPROV_BURST_MAX_INFLIGHT", "1")
+	paths, err := store.Init(filepath.Join(t.TempDir(), ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,11 +49,11 @@ func TestReserveBurstRejectsOverInflightLimit(t *testing.T) {
 }
 
 func TestReserveBurstDelayWaitsForSlot(t *testing.T) {
-	t.Setenv("ACF_NODE_CPU", "8")
-	t.Setenv("ACF_BURST_MAX_INFLIGHT", "1")
-	t.Setenv("ACF_BURST_OVERFLOW_POLICY", "delay")
-	t.Setenv("ACF_BURST_QUEUE_TIMEOUT_MS", "1000")
-	paths, err := store.Init(filepath.Join(t.TempDir(), ".acf"))
+	t.Setenv("AGENTPROV_NODE_CPU", "8")
+	t.Setenv("AGENTPROV_BURST_MAX_INFLIGHT", "1")
+	t.Setenv("AGENTPROV_BURST_OVERFLOW_POLICY", "delay")
+	t.Setenv("AGENTPROV_BURST_QUEUE_TIMEOUT_MS", "1000")
+	paths, err := store.Init(filepath.Join(t.TempDir(), ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}

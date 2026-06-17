@@ -122,10 +122,10 @@ func (s Service) ensureDockerProxy(runID, sessionID string) (ProxyInfo, error) {
 	}
 	defer cli.Close()
 	ctx := context.Background()
-	networkName := "acf-egress-net-" + sessionID
+	networkName := "agentprov-egress-net-" + sessionID
 	proxyID := ids.New("egress")
-	containerName := "acf-egress-" + sessionID
-	containerURL := "http://acf-egress:8080"
+	containerName := "agentprov-egress-" + sessionID
+	containerURL := "http://agentprov-egress:8080"
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = s.DB.Exec(`INSERT INTO egress_proxies (id, run_id, session_id, host_port, proxy_url, container_proxy_url, mode, network_name, status, created_at, updated_at)
 		VALUES (?, ?, ?, 8080, ?, ?, 'docker-sidecar', ?, 'starting', ?, ?)`, proxyID, runID, sessionID, containerURL, containerURL, networkName, now, now)
@@ -136,9 +136,9 @@ func (s Service) ensureDockerProxy(runID, sessionID string) (ProxyInfo, error) {
 		Driver:   "bridge",
 		Internal: true,
 		Labels: map[string]string{
-			"acf.session_id": sessionID,
-			"acf.run_id":     runID,
-			"acf.role":       "egress-network",
+			"agentprov.session_id": sessionID,
+			"agentprov.run_id":     runID,
+			"agentprov.role":       "egress-network",
 		},
 	}); err != nil && !errdefs.IsConflict(err) {
 		return ProxyInfo{}, err
@@ -159,16 +159,16 @@ func (s Service) ensureDockerProxy(runID, sessionID string) (ProxyInfo, error) {
 	resp, err := cli.ContainerCreate(ctx, &container.Config{
 		Image:      "alpine:3.20",
 		Entrypoint: []string{"/usr/local/bin/agentprov"},
-		Cmd:        []string{"--data-dir", "/acf-data", "egress", "serve", proxyID, "--listen", "0.0.0.0:8080"},
+		Cmd:        []string{"--data-dir", "/agentprov-data", "egress", "serve", proxyID, "--listen", "0.0.0.0:8080"},
 		Labels: map[string]string{
-			"acf.session_id": sessionID,
-			"acf.run_id":     runID,
-			"acf.proxy_id":   proxyID,
-			"acf.role":       "egress-proxy",
+			"agentprov.session_id": sessionID,
+			"agentprov.run_id":     runID,
+			"agentprov.proxy_id":   proxyID,
+			"agentprov.role":       "egress-proxy",
 		},
 	}, &container.HostConfig{
 		Mounts: []mount.Mount{
-			{Type: mount.TypeBind, Source: dataRoot, Target: "/acf-data"},
+			{Type: mount.TypeBind, Source: dataRoot, Target: "/agentprov-data"},
 			{Type: mount.TypeBind, Source: binaryPath, Target: "/usr/local/bin/agentprov", ReadOnly: true},
 		},
 	}, nil, nil, containerName)
@@ -185,16 +185,16 @@ func (s Service) ensureDockerProxy(runID, sessionID string) (ProxyInfo, error) {
 		resp, err = cli.ContainerCreate(ctx, &container.Config{
 			Image:      "alpine:3.20",
 			Entrypoint: []string{"/usr/local/bin/agentprov"},
-			Cmd:        []string{"--data-dir", "/acf-data", "egress", "serve", proxyID, "--listen", "0.0.0.0:8080"},
+			Cmd:        []string{"--data-dir", "/agentprov-data", "egress", "serve", proxyID, "--listen", "0.0.0.0:8080"},
 			Labels: map[string]string{
-				"acf.session_id": sessionID,
-				"acf.run_id":     runID,
-				"acf.proxy_id":   proxyID,
-				"acf.role":       "egress-proxy",
+				"agentprov.session_id": sessionID,
+				"agentprov.run_id":     runID,
+				"agentprov.proxy_id":   proxyID,
+				"agentprov.role":       "egress-proxy",
 			},
 		}, &container.HostConfig{
 			Mounts: []mount.Mount{
-				{Type: mount.TypeBind, Source: dataRoot, Target: "/acf-data"},
+				{Type: mount.TypeBind, Source: dataRoot, Target: "/agentprov-data"},
 				{Type: mount.TypeBind, Source: binaryPath, Target: "/usr/local/bin/agentprov", ReadOnly: true},
 			},
 		}, nil, nil, containerName)
@@ -202,7 +202,7 @@ func (s Service) ensureDockerProxy(runID, sessionID string) (ProxyInfo, error) {
 			return ProxyInfo{}, err
 		}
 	}
-	if err := cli.NetworkConnect(ctx, networkName, resp.ID, &network.EndpointSettings{Aliases: []string{"acf-egress"}}); err != nil && !errdefs.IsConflict(err) {
+	if err := cli.NetworkConnect(ctx, networkName, resp.ID, &network.EndpointSettings{Aliases: []string{"agentprov-egress"}}); err != nil && !errdefs.IsConflict(err) {
 		return ProxyInfo{}, err
 	}
 	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
@@ -372,9 +372,18 @@ func (s Service) Check(runID, sessionID, dstIP, host string) (security.DecisionR
 }
 
 func (s Service) handleProxy(w http.ResponseWriter, r *http.Request) {
-	runID := r.Header.Get("X-AgentProvenance-Run-ID")
-	sessionID := r.Header.Get("X-AgentProvenance-Session-ID")
-	toolCallID := r.Header.Get("X-AgentProvenance-Tool-Call-ID")
+	runID := r.Header.Get("X-AGENTPROV-Run-ID")
+	if runID == "" {
+		runID = r.Header.Get("X-ACF-Run-ID")
+	}
+	sessionID := r.Header.Get("X-AGENTPROV-Session-ID")
+	if sessionID == "" {
+		sessionID = r.Header.Get("X-ACF-Session-ID")
+	}
+	toolCallID := r.Header.Get("X-AGENTPROV-Tool-Call-ID")
+	if toolCallID == "" {
+		toolCallID = r.Header.Get("X-ACF-Tool-Call-ID")
+	}
 	if runID == "" {
 		runID = s.DefaultRunID
 	}
@@ -687,7 +696,7 @@ func normalizeHost(value string) string {
 }
 
 func removeProxyHeaders(header http.Header) {
-	for _, key := range []string{"Proxy-Connection", "Proxy-Authorization", "X-AgentProvenance-Run-ID", "X-AgentProvenance-Session-ID", "X-AgentProvenance-Tool-Call-ID"} {
+	for _, key := range []string{"Proxy-Connection", "Proxy-Authorization", "X-AGENTPROV-Run-ID", "X-AGENTPROV-Session-ID", "X-AGENTPROV-Tool-Call-ID", "X-ACF-Run-ID", "X-ACF-Session-ID", "X-ACF-Tool-Call-ID"} {
 		header.Del(key)
 	}
 }

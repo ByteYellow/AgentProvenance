@@ -41,7 +41,7 @@ AgentProvenance sits above runtime, snapshot, scheduler, and telemetry substrate
 
 AgentProvenance uses Docker today and is designed to plug into Docker, OpenSandbox, Kubernetes, Ray, Firecracker, gVisor, Kata, LoongCollector, Falco, Tetragon, and other runtime or telemetry substrates through capability-gated drivers. Those systems provide execution and signals; AgentProvenance correlates them into an auditable agent rollout provenance DAG.
 
-The current CLI remains `agentprov` during the rename transition so existing demos and scripts keep working.
+The command-line interface is `agentprov`.
 
 ## Why this exists
 
@@ -140,9 +140,9 @@ Core AgentProvenance path:
 - active CPU / idle / wall-time cost accounting
 - async evidence and cleanup pipeline
 - explainable attempt evidence for pruned and promoted rollout branches
-- strategy artifact capture from attempt workspaces into `.acf/artifacts/`
+- strategy artifact capture from attempt workspaces into `.agentprov/artifacts/`
 - artifact provenance edges from attempt/tool_call to exported artifact refs
-- Git-like provenance refs, log, trace, diff, blame, verify, and content-addressed materialization under `.acf/provenance/objects/sha256/`
+- Git-like provenance refs, log, trace, diff, blame, verify, and content-addressed materialization under `.agentprov/provenance/objects/sha256/`
 - I/O-aware snapshot planning with source policies: `latest-ready`, `smallest-delta`, `local`, and `untainted`
 - run-local provenance trace for snapshot planner explanations
 - capability-gated runtime drivers with Docker active and gVisor/Firecracker/bubblewrap as explicit stubs
@@ -334,7 +334,7 @@ See [docs/mvp.md](docs/mvp.md) for command-by-command walkthroughs.
 
 ```sh
 agentprov daemon serve --listen 127.0.0.1:8574
-export ACF_DAEMON_URL=http://127.0.0.1:8574
+export AGENTPROV_DAEMON_URL=http://127.0.0.1:8574
 ```
 
 Daemon sampling is bounded and windowed:
@@ -412,7 +412,7 @@ run-local refs for rollouts, base snapshots, winner attempts, promotions, tool
 calls, processes, and artifacts. `graph log` prints a chronological rollout
 timeline similar to a compact commit log. `graph materialize` upgrades the
 SQLite trace into content-addressed provenance objects under
-`.acf/provenance/objects/sha256/`, with object hashes, parent hashes, source
+`.agentprov/provenance/objects/sha256/`, with object hashes, parent hashes, source
 ids, artifact file hashes, and replay-oriented payloads. `graph verify` checks
 reference continuity, taint/promotion contradictions, artifact readability, and
 materialized object hashes. `graph trace` includes
@@ -469,7 +469,7 @@ The long-term shape is an Agent Rollout Provenance Control Plane. The DAG is the
 flowchart TB
     Client["Agent harness\nAgentix / RL trainer / evaluator / agentprov"] --> Ingress["Rollout Ingress\nlease, run, tool_call, artifact API"]
 
-    subgraph ACFPlane["AgentProvenance Control Plane"]
+    subgraph AgentProvPlane["AgentProvenance Control Plane"]
         Rollout["Rollout DAG\nrun -> rollout -> attempt"]
         State["Snapshot DAG\ntemplate -> ready -> attempt workspace"]
         Exec["Execution DAG\nattempt -> tool_call -> process -> event"]
@@ -548,7 +548,7 @@ SESSIONS=50 ./scripts/demo_v01_50_concurrency.sh
 
 The CPU weight demo verifies the control-plane loop with Docker `CpuShares`: `think=2`, `tool=1024`, then back to `think=2` after exec. On Linux cgroup v2, Docker maps this control path to cgroup CPU weight behavior; a direct `cpu.weight` node-agent writer is a later Linux-specific optimization.
 
-The concurrency demo sets `ACF_BURST_MAX_INFLIGHT` and proves that not every simultaneous tool call is promoted to the high-priority CPU profile. Set `ACF_BURST_OVERFLOW_POLICY=delay` with `ACF_BURST_QUEUE_TIMEOUT_MS` to let excess tool phases wait for a burst slot instead of failing immediately.
+The concurrency demo sets `AGENTPROV_BURST_MAX_INFLIGHT` and proves that not every simultaneous tool call is promoted to the high-priority CPU profile. Set `AGENTPROV_BURST_OVERFLOW_POLICY=delay` with `AGENTPROV_BURST_QUEUE_TIMEOUT_MS` to let excess tool phases wait for a burst slot instead of failing immediately.
 
 The I/O-aware snapshot demo shows hot metadata path detection, I/O fanout rejection, and graph trace reasons for not choosing overlay.
 
@@ -578,7 +578,7 @@ Later:
 go test ./...
 ```
 
-Local runtime state lives under `.acf/` by default and is intentionally ignored. Public docs live under [docs/](docs/); runnable examples live under [examples/](examples/) and [scripts/](scripts/).
+Local runtime state lives under `.agentprov/` by default and is intentionally ignored. Public docs live under [docs/](docs/); runnable examples live under [examples/](examples/) and [scripts/](scripts/).
 
 <div align="center">
 <sub>Apache-2.0 licensed | local-first MVP | built around Go, Docker, and SQLite</sub>

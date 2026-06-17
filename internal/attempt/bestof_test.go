@@ -14,7 +14,7 @@ import (
 
 func TestBestOfSelectsPassingWinner(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func TestBestOfSelectsPassingWinner(t *testing.T) {
 
 func TestBestOfPenalizesBudgetExceededAttempts(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestBestOfPenalizesBudgetExceededAttempts(t *testing.T) {
 
 func TestBestOfProbeTopKPrunesBeforeFullCommand(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestBestOfProbeTopKPrunesBeforeFullCommand(t *testing.T) {
 
 func TestBestOfEarlyStopRunsFullCommandsByProbeRank(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +198,7 @@ func TestBestOfEarlyStopRunsFullCommandsByProbeRank(t *testing.T) {
 
 func TestBestOfCapturesDeclaredArtifact(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestBestOfCapturesDeclaredArtifact(t *testing.T) {
 
 func TestBestOfLocalAttemptRecordsProcessTrace(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}

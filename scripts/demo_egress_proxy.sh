@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${ACF_DEMO_DATA_DIR:-.acf-demo-egress}"
+DATA_DIR="${AGENTPROV_DEMO_DATA_DIR:-.agentprov-demo-egress}"
 BIN="./agentprov"
 SESSION_ID=""
 
@@ -52,7 +52,7 @@ if "$BIN" --data-dir "$DATA_DIR" telemetry list --run run-demo-bugfix | grep -q 
   echo "raw secret leaked into telemetry" >&2
   exit 1
 fi
-if grep -R 'SHOULD_NOT_APPEAR' "$DATA_DIR/workspaces" "$DATA_DIR/logs" "$DATA_DIR/acf.db" >/dev/null 2>&1; then
+if grep -R 'SHOULD_NOT_APPEAR' "$DATA_DIR/workspaces" "$DATA_DIR/logs" "$DATA_DIR/agentprov.db" >/dev/null 2>&1; then
   echo "raw secret leaked outside host secret store" >&2
   exit 1
 fi

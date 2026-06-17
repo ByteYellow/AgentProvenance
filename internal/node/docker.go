@@ -63,12 +63,12 @@ func (r *DockerRuntime) CreateSession(req CreateSessionRequest) (string, error) 
 		Cmd:        []string{"sleep", "infinity"},
 		Env:        proxyEnv(req.ProxyURL, req.NoProxy),
 		Labels: map[string]string{
-			"acf.session_id": req.SessionID,
-			"acf.lease_id":   req.LeaseID,
-			"acf.run_id":     req.RunID,
+			"agentprov.session_id": req.SessionID,
+			"agentprov.lease_id":   req.LeaseID,
+			"agentprov.run_id":     req.RunID,
 		},
 	}
-	resp, err := r.Client.ContainerCreate(ctx, cfg, hostCfg, nil, nil, "acf-"+req.SessionID)
+	resp, err := r.Client.ContainerCreate(ctx, cfg, hostCfg, nil, nil, "agentprov-"+req.SessionID)
 	if err != nil {
 		if !isNoSuchImage(err) {
 			return "", err
@@ -79,7 +79,7 @@ func (r *DockerRuntime) CreateSession(req CreateSessionRequest) (string, error) 
 		}
 		_, _ = io.Copy(io.Discard, pull)
 		_ = pull.Close()
-		resp, err = r.Client.ContainerCreate(ctx, cfg, hostCfg, nil, nil, "acf-"+req.SessionID)
+		resp, err = r.Client.ContainerCreate(ctx, cfg, hostCfg, nil, nil, "agentprov-"+req.SessionID)
 		if err != nil {
 			return "", err
 		}
@@ -192,7 +192,7 @@ func proxyEnv(proxyURL, noProxy string) []string {
 		"all_proxy=" + proxyURL,
 		"NO_PROXY=" + noProxy,
 		"no_proxy=" + noProxy,
-		"ACF_EGRESS_PROXY=" + proxyURL,
+		"AGENTPROV_EGRESS_PROXY=" + proxyURL,
 	}
 }
 

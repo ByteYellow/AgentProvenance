@@ -2,6 +2,9 @@
 
 # Local AgentProvenance state and build outputs.
 /agentprov
+/agentprov
+/.agentprov/
+/.agentprov-*/
 /.acf/
 /.acf-*/
 

@@ -17,7 +17,7 @@ import (
 
 func TestTraceRunFiltersSnapshotPlansToRun(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestTraceRunFiltersSnapshotPlansToRun(t *testing.T) {
 
 func TestTraceArtifactShowsReverseProvenance(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestTraceArtifactShowsReverseProvenance(t *testing.T) {
 
 func TestTraceAttemptShowsAttemptProvenance(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestTraceAttemptShowsAttemptProvenance(t *testing.T) {
 
 func TestTraceToolCallShowsToolCallProvenance(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +296,7 @@ func TestTraceToolCallShowsToolCallProvenance(t *testing.T) {
 
 func TestTraceProcessShowsRolloutProvenance(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -400,7 +400,7 @@ func TestTraceProcessShowsRolloutProvenance(t *testing.T) {
 
 func TestGitLikeRefsAndLogShowRolloutDAG(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}

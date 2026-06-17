@@ -2,11 +2,10 @@
 
 `AgentProvenance` is a CLI-first single-node rollout provenance control plane for sandboxed AI agent execution.
 
-The current binary remains `agentprov` during the rename transition. The core MVP
-manages local leases, Docker-backed sandbox sessions, directory snapshots,
-attempt workspace forks, rollout fanout, process/tool-call traces, artifact
-refs, content-addressed provenance objects, and cost/risk evidence attached to
-promotion decisions.
+The command-line interface is `agentprov`. The core MVP manages local leases,
+Docker-backed sandbox sessions, directory snapshots, attempt workspace forks,
+rollout fanout, process/tool-call traces, artifact refs, content-addressed
+provenance objects, and cost/risk evidence attached to promotion decisions.
 
 Phase 1 focuses on the immutable execution ledger and state-diff audit loop:
 `ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame ->
@@ -72,7 +71,7 @@ Daemon-backed equivalent:
 
 ```sh
 agentprov daemon serve --listen 127.0.0.1:8574
-export ACF_DAEMON_URL=http://127.0.0.1:8574
+export AGENTPROV_DAEMON_URL=http://127.0.0.1:8574
 agentprov lease create --task examples/tasks/bugfix.yaml
 agentprov session create --lease <lease_id>
 agentprov exec <session_id> --stream -- sh -lc 'echo hello'
@@ -241,7 +240,7 @@ pruning avoids full command execution. `cost show` also prints
 `rollout_cost_summary` with total attempts, executed attempts, pruned attempts,
 winners, saved cost, and saved ratio.
 When `artifact=<workspace-relative-path>` is set, AgentProvenance copies that file from the
-attempt workspace into `.acf/artifacts/` and stores the exported result ref in
+attempt workspace into `.agentprov/artifacts/` and stores the exported result ref in
 `artifact_result`; missing artifacts are recorded in the attempt output summary.
 Processed evidence also adds `attempt_artifact` and `tool_call_artifact` graph
 edges, and `graph trace` prints an `artifacts` section for reverse lookup from
@@ -263,7 +262,7 @@ refs, and artifact refs. `graph log --run <run_id>` adds the compact
 chronological provenance log for rollout, attempt, tool call, process,
 promotion, evidence, and telemetry events. `graph materialize --run <run_id>`
 turns the current SQLite trace into a content-addressed provenance object DAG
-under `.acf/provenance/objects/sha256/`; each object records source id, parent
+under `.agentprov/provenance/objects/sha256/`; each object records source id, parent
 hashes, replay-oriented payload, and artifact file hashes when an artifact file
 exists. `graph verify --run <run_id>` checks reference continuity,
 taint/promotion contradictions, artifact readability, and materialized object
@@ -277,7 +276,7 @@ was pruned or promoted.
 
 ```sh
 agentprov snapshot stack --task examples/tasks/bugfix.yaml
-ACF_IO_MAX_FANOUT_PER_LOWER=100 ACF_BURST_MAX_INFLIGHT=2 \
+AGENTPROV_IO_MAX_FANOUT_PER_LOWER=100 AGENTPROV_BURST_MAX_INFLIGHT=2 \
   agentprov rollout start --task examples/tasks/bugfix.yaml --snapshot ready --runtime docker --fanout 3 \
   --top-k 2 \
   --strategy "probe::test -f README.md && echo passed::probe=test -f README.md && echo passed::score=contains:passed::artifact=probe.log" \
@@ -323,7 +322,7 @@ session as quarantined.
 ```
 
 This starts a Docker session on a session-scoped internal bridge network with an
-acf egress proxy sidecar, adds `example.com` to the allowlist, verifies an
+agentprov egress proxy sidecar, adds `example.com` to the allowlist, verifies an
 allowed HTTP request through the sidecar, verifies direct egress bypass failure,
 verifies metadata IP denial, and records a redacted credential injection event.
 
@@ -407,8 +406,8 @@ unbounded raw samples.
 BurstGuard adds a forward-looking admission gate for synchronized tool phases:
 `exec` must reserve burst budget before the session can switch from `think` to
 `tool`. If too many sessions enter tool phase at once, the default policy
-rejects before CPU weight is raised. Set `ACF_BURST_OVERFLOW_POLICY=delay` and
-`ACF_BURST_QUEUE_TIMEOUT_MS=<ms>` to queue briefly until a burst slot is
+rejects before CPU weight is raised. Set `AGENTPROV_BURST_OVERFLOW_POLICY=delay` and
+`AGENTPROV_BURST_QUEUE_TIMEOUT_MS=<ms>` to queue briefly until a burst slot is
 released.
 
 ### demo_cpu_weight_control
@@ -447,7 +446,7 @@ then shows `snapshot plan` output with `selected_policy`, `candidate_count`,
 `metadata_ops_estimate`, `shared_lower_fanout`, `io_fanout_budget`,
 `upperdir_shard`, `upperdir_device`, and `hot_metadata_paths`. It also
 demonstrates I/O fanout rejection with
-`ACF_IO_MAX_FANOUT_PER_LOWER=1` and uses `graph trace` to show why overlay was
+`AGENTPROV_IO_MAX_FANOUT_PER_LOWER=1` and uses `graph trace` to show why overlay was
 not selected.
 
 ## MVP limits
@@ -457,7 +456,7 @@ not selected.
   cgroup v2 this maps to cgroup CPU weight behavior; a direct node-agent
   `cpu.weight` writer is a future Linux-specific hardening path.
 - BurstGuard rejects excess synchronized tool phases by default and supports a
-  bounded delay/queue mode with `ACF_BURST_OVERFLOW_POLICY=delay`.
+  bounded delay/queue mode with `AGENTPROV_BURST_OVERFLOW_POLICY=delay`.
 - IO-aware snapshot planning estimates copy-up and metadata risk. It does not
   yet create real OverlayFS/reflink/COW mounts.
 - Directory snapshot/fork/resume is supported; memory snapshots are

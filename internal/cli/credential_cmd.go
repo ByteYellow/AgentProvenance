@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/byteyellow/agentprovenance/internal/egress"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -25,7 +24,7 @@ func credentialCmd(dataDir *string) *cobra.Command {
 			}
 			defer db.Close()
 			if value == "" {
-				value = os.Getenv("ACF_CREDENTIAL_VALUE")
+				value = firstEnv("AGENTPROV_CREDENTIAL_VALUE", "ACF_CREDENTIAL_VALUE")
 			}
 			if err := (egress.Service{DB: db, Paths: paths}).InjectCredential(runID, sessionID, egress.CredentialSpec{
 				Name:       name,
@@ -44,7 +43,7 @@ func credentialCmd(dataDir *string) *cobra.Command {
 	inject.Flags().StringVar(&sessionID, "session", "", "session id")
 	inject.Flags().StringVar(&name, "name", "", "credential name")
 	inject.Flags().StringVar(&host, "host", "", "target host")
-	inject.Flags().StringVar(&value, "value", "", "credential value; alternatively use ACF_CREDENTIAL_VALUE")
+	inject.Flags().StringVar(&value, "value", "", "credential value; alternatively use AGENTPROV_CREDENTIAL_VALUE")
 	inject.Flags().StringVar(&headerName, "header", "Authorization", "header name injected by the proxy")
 	inject.Flags().StringVar(&pathPrefix, "path-prefix", "/", "URL path prefix for injection")
 	_ = inject.MarkFlagRequired("run")

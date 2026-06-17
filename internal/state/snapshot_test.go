@@ -13,7 +13,7 @@ import (
 
 func TestCreateSnapshotAndForkWorkspaces(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestCreateSnapshotAndForkWorkspaces(t *testing.T) {
 
 func TestCreateStackRecordsLineage(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestCreateStackRecordsLineage(t *testing.T) {
 
 func TestCreateStackFromTemplateRecordsBundleLineage(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestAnalyzeIOProfileDetectsHotMetadataPaths(t *testing.T) {
 
 func TestPlanWithPolicySelectsSmallestDelta(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +233,7 @@ func TestPlanWithPolicySelectsSmallestDelta(t *testing.T) {
 
 func TestPlanWithPolicyRejectsTaintedCandidate(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}

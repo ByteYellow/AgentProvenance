@@ -12,7 +12,7 @@ import (
 
 func TestVerifyCleanRun(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestVerifyCleanRun(t *testing.T) {
 
 func TestVerifyRejectsTaintedWinner(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}

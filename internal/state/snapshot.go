@@ -280,7 +280,7 @@ func (s Service) Fork(snapshotNameOrID string, count int) ([]ForkResult, error) 
 	if err := s.DB.QueryRow(`SELECT path FROM snapshots WHERE id = ?`, snapshotID).Scan(&src); err != nil {
 		return nil, err
 	}
-	maxFanout := envInt64("ACF_IO_MAX_FANOUT_PER_LOWER", 32)
+	maxFanout := envInt64("AGENTPROV_IO_MAX_FANOUT_PER_LOWER", 32)
 	if maxFanout > 0 && plan.SharedLowerFanout+int64(count) > maxFanout {
 		return nil, fmt.Errorf("fork rejected by node I/O budget: snapshot=%s shared_lower_fanout=%d requested=%d io_fanout_budget=%d upperdir_shard=%s copy_up_risk=%s metadata_ops_estimate=%d",
 			snapshotID, plan.SharedLowerFanout, count, maxFanout, plan.UpperdirShard, plan.CopyUpRisk, plan.MetadataOpsEstimate)
@@ -309,7 +309,7 @@ func (s Service) Fork(snapshotNameOrID string, count int) ([]ForkResult, error) 
 type deltaCounts struct{ Added, Modified, Deleted int64 }
 
 func (s Service) Plan(snapshotNameOrID string, rejectTainted bool) (SnapshotPlan, error) {
-	return s.PlanWithPolicy(snapshotNameOrID, envString("ACF_SNAPSHOT_SOURCE_POLICY", "latest-ready"), rejectTainted)
+	return s.PlanWithPolicy(snapshotNameOrID, envString("AGENTPROV_SNAPSHOT_SOURCE_POLICY", "latest-ready"), rejectTainted)
 }
 
 func (s Service) PlanWithPolicy(snapshotNameOrID, policy string, rejectTainted bool) (SnapshotPlan, error) {
@@ -345,7 +345,7 @@ func (s Service) PlanWithPolicy(snapshotNameOrID, policy string, rejectTainted b
 		score := plannerScoreForPolicy(policy, bytes, tainted != 0 || status == "tainted", deltaAdded+deltaModified+deltaDeleted, createdAt)
 		if !found || score > best.Score {
 			sharedFanout := s.sharedLowerFanout(id)
-			ioFanoutBudget := envInt64("ACF_IO_MAX_FANOUT_PER_LOWER", 32)
+			ioFanoutBudget := envInt64("AGENTPROV_IO_MAX_FANOUT_PER_LOWER", 32)
 			shard := upperdirShard(id)
 			overlayReason := overlaySkipReason(copyUpRisk, metadataOps, sharedFanout)
 			reason := fmt.Sprintf("policy=%s score=%.3f created_at=%s semantic_type=%s physical_type=%s delta_added=%d delta_modified=%d delta_deleted=%d overlay_skipped=true overlay_skip_reason=%q copy_up_risk=%s metadata_ops_estimate=%d shared_lower_fanout=%d io_fanout_budget=%d upperdir_shard=%s upperdir_device=%s hot_metadata_paths=%s",
@@ -556,7 +556,7 @@ func upperdirShard(snapshotID string) string {
 	for _, ch := range snapshotID {
 		sum += int(ch)
 	}
-	shards := envInt64("ACF_IO_UPPERDIR_SHARDS", 1)
+	shards := envInt64("AGENTPROV_IO_UPPERDIR_SHARDS", 1)
 	if shards <= 0 {
 		shards = 1
 	}
@@ -567,7 +567,7 @@ func overlaySkipReason(copyUpRisk string, metadataOps, sharedFanout int64) strin
 	if copyUpRisk == "high" {
 		return "high copy-up risk from hot metadata paths"
 	}
-	if sharedFanout > envInt64("ACF_IO_MAX_FANOUT_PER_LOWER", 32)/2 {
+	if sharedFanout > envInt64("AGENTPROV_IO_MAX_FANOUT_PER_LOWER", 32)/2 {
 		return "shared lower fanout approaching I/O budget"
 	}
 	if metadataOps > 5000 {
@@ -638,6 +638,9 @@ func emptyDefault(value, fallback string) string {
 func envInt64(name string, fallback int64) int64 {
 	value := os.Getenv(name)
 	if value == "" {
+		value = os.Getenv(legacyEnvName(name))
+	}
+	if value == "" {
 		return fallback
 	}
 	parsed, err := strconv.ParseInt(value, 10, 64)
@@ -650,9 +653,16 @@ func envInt64(name string, fallback int64) int64 {
 func envString(name, fallback string) string {
 	value := os.Getenv(name)
 	if value == "" {
+		value = os.Getenv(legacyEnvName(name))
+	}
+	if value == "" {
 		return fallback
 	}
 	return value
+}
+
+func legacyEnvName(name string) string {
+	return strings.Replace(name, "AGENTPROV_", "ACF_", 1)
 }
 
 func CopyDir(src, dst string) error {

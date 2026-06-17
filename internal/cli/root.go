@@ -18,8 +18,8 @@ func NewRootCommand() *cobra.Command {
 		Use:   "agentprov",
 		Short: "AgentProvenance control CLI",
 	}
-	root.PersistentFlags().StringVar(&dataDir, "data-dir", store.DefaultDataDir, "local acf data directory")
-	root.PersistentFlags().StringVar(&daemonURL, "daemon-url", os.Getenv("ACF_DAEMON_URL"), "local daemon URL; also read from ACF_DAEMON_URL")
+	root.PersistentFlags().StringVar(&dataDir, "data-dir", store.DefaultDataDir, "local AgentProvenance data directory")
+	root.PersistentFlags().StringVar(&daemonURL, "daemon-url", firstEnv("AGENTPROV_DAEMON_URL", "ACF_DAEMON_URL"), "local daemon URL; also read from AGENTPROV_DAEMON_URL")
 
 	root.AddCommand(initCmd(&dataDir))
 	root.AddCommand(daemonCmd(&dataDir))
@@ -58,6 +58,15 @@ func daemonClient(daemonURL string) (daemon.Client, bool) {
 		return daemon.Client{}, false
 	}
 	return daemon.NewClient(daemonURL), true
+}
+
+func firstEnv(names ...string) string {
+	for _, name := range names {
+		if value := os.Getenv(name); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func controlSvc(dataDir string) (control.Service, func(), error) {

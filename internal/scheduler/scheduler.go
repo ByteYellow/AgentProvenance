@@ -100,12 +100,12 @@ func (s Scheduler) Admit(req Request) (Decision, error) {
 
 func (s Scheduler) NodeState(snapshotID string) (NodeState, error) {
 	state := NodeState{
-		NodeID:            envString("ACF_NODE_ID", "local"),
-		PhysicalCPU:       envFloat("ACF_NODE_CPU", float64(runtime.NumCPU())),
-		OvercommitRatio:   envFloat("ACF_CPU_OVERCOMMIT_RATIO", 2.0),
-		IdleDiscount:      envFloat("ACF_IDLE_CPU_DISCOUNT", 0.1),
-		MemoryTotalMB:     envInt64("ACF_NODE_MEMORY_MB", 8192),
-		MemorySafetyRatio: envFloat("ACF_MEMORY_SAFETY_RATIO", 0.9),
+		NodeID:            envString("AGENTPROV_NODE_ID", "local"),
+		PhysicalCPU:       envFloat("AGENTPROV_NODE_CPU", float64(runtime.NumCPU())),
+		OvercommitRatio:   envFloat("AGENTPROV_CPU_OVERCOMMIT_RATIO", 2.0),
+		IdleDiscount:      envFloat("AGENTPROV_IDLE_CPU_DISCOUNT", 0.1),
+		MemoryTotalMB:     envInt64("AGENTPROV_NODE_MEMORY_MB", 8192),
+		MemorySafetyRatio: envFloat("AGENTPROV_MEMORY_SAFETY_RATIO", 0.9),
 		QueuePressure:     "low",
 		TelemetryPressure: "low",
 	}
@@ -121,7 +121,7 @@ func (s Scheduler) NodeState(snapshotID string) (NodeState, error) {
 	if state.MemorySafetyRatio <= 0 || state.MemorySafetyRatio > 1 {
 		state.MemorySafetyRatio = 0.9
 	}
-	state.BurstMaxInflight = envInt64("ACF_BURST_MAX_INFLIGHT", int64(math.Max(1, math.Floor(state.PhysicalCPU))))
+	state.BurstMaxInflight = envInt64("AGENTPROV_BURST_MAX_INFLIGHT", int64(math.Max(1, math.Floor(state.PhysicalCPU))))
 	if state.BurstMaxInflight <= 0 {
 		state.BurstMaxInflight = 1
 	}
@@ -174,8 +174,8 @@ func (s Scheduler) NodeState(snapshotID string) (NodeState, error) {
 	telemetryCutoff := time.Now().UTC().Add(-1 * time.Minute).Format(time.RFC3339Nano)
 	var recentEvents int64
 	_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM events WHERE created_at >= ?`, telemetryCutoff).Scan(&recentEvents)
-	telemetryHigh := envInt64("ACF_TELEMETRY_PRESSURE_HIGH_EVENTS_PER_MIN", 10000)
-	telemetryMedium := envInt64("ACF_TELEMETRY_PRESSURE_MEDIUM_EVENTS_PER_MIN", 1000)
+	telemetryHigh := envInt64("AGENTPROV_TELEMETRY_PRESSURE_HIGH_EVENTS_PER_MIN", 10000)
+	telemetryMedium := envInt64("AGENTPROV_TELEMETRY_PRESSURE_MEDIUM_EVENTS_PER_MIN", 1000)
 	if recentEvents >= telemetryHigh {
 		state.TelemetryPressure = "high"
 	} else if recentEvents >= telemetryMedium {
@@ -199,11 +199,11 @@ func (s Scheduler) NodeState(snapshotID string) (NodeState, error) {
 }
 
 func (s Scheduler) ReserveBurst(runID, sessionID, processID string, cpuRequest float64, ttl time.Duration) (BurstReservation, error) {
-	policy := strings.ToLower(strings.TrimSpace(envString("ACF_BURST_OVERFLOW_POLICY", "reject")))
+	policy := strings.ToLower(strings.TrimSpace(envString("AGENTPROV_BURST_OVERFLOW_POLICY", "reject")))
 	if policy != "delay" && policy != "queue" {
 		return s.reserveBurstOnce(runID, sessionID, processID, cpuRequest, ttl, 0, "rejected")
 	}
-	timeout := time.Duration(envInt64("ACF_BURST_QUEUE_TIMEOUT_MS", 1000)) * time.Millisecond
+	timeout := time.Duration(envInt64("AGENTPROV_BURST_QUEUE_TIMEOUT_MS", 1000)) * time.Millisecond
 	if timeout < 0 {
 		timeout = 0
 	}
@@ -247,12 +247,12 @@ func (s Scheduler) reserveBurstOnce(runID, sessionID, processID string, cpuReque
 	if cpuRequest <= 0 {
 		cpuRequest = 1
 	}
-	nodeID := envString("ACF_NODE_ID", "local")
-	physicalCPU := envFloat("ACF_NODE_CPU", float64(runtime.NumCPU()))
+	nodeID := envString("AGENTPROV_NODE_ID", "local")
+	physicalCPU := envFloat("AGENTPROV_NODE_CPU", float64(runtime.NumCPU()))
 	if physicalCPU <= 0 {
 		physicalCPU = 1
 	}
-	maxInflight := envInt64("ACF_BURST_MAX_INFLIGHT", int64(math.Max(1, math.Floor(physicalCPU))))
+	maxInflight := envInt64("AGENTPROV_BURST_MAX_INFLIGHT", int64(math.Max(1, math.Floor(physicalCPU))))
 	if maxInflight <= 0 {
 		maxInflight = 1
 	}
@@ -523,6 +523,9 @@ func burstRisk(state NodeState, active float64) string {
 func envString(name, fallback string) string {
 	value := os.Getenv(name)
 	if value == "" {
+		value = os.Getenv(legacyEnvName(name))
+	}
+	if value == "" {
 		return fallback
 	}
 	return value
@@ -530,6 +533,9 @@ func envString(name, fallback string) string {
 
 func envFloat(name string, fallback float64) float64 {
 	value := os.Getenv(name)
+	if value == "" {
+		value = os.Getenv(legacyEnvName(name))
+	}
 	if value == "" {
 		return fallback
 	}
@@ -543,6 +549,9 @@ func envFloat(name string, fallback float64) float64 {
 func envInt64(name string, fallback int64) int64 {
 	value := os.Getenv(name)
 	if value == "" {
+		value = os.Getenv(legacyEnvName(name))
+	}
+	if value == "" {
 		return fallback
 	}
 	parsed, err := strconv.ParseInt(value, 10, 64)
@@ -550,4 +559,8 @@ func envInt64(name string, fallback int64) int64 {
 		return fallback
 	}
 	return parsed
+}
+
+func legacyEnvName(name string) string {
+	return strings.Replace(name, "AGENTPROV_", "ACF_", 1)
 }

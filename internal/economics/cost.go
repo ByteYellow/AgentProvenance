@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type AdmissionInput struct {
@@ -62,7 +63,7 @@ func ShowCost(db *sql.DB, runID string, out io.Writer) error {
 	}
 	wall := wallFromSamples + active + idle
 	costPerRun := EstimateCost(active, wall, snapshotBytes, blocks, quarantines)
-	overcommitRatio := envFloat("ACF_CPU_OVERCOMMIT_RATIO", 2.0)
+	overcommitRatio := envFloat("AGENTPROV_CPU_OVERCOMMIT_RATIO", 2.0)
 	queuePressure := "low"
 	if active > 0 && idle == 0 {
 		queuePressure = "medium"
@@ -281,6 +282,9 @@ func EstimateCost(activeCPUSeconds, wallSeconds float64, snapshotBytes, policyBl
 
 func envFloat(name string, fallback float64) float64 {
 	value := os.Getenv(name)
+	if value == "" {
+		value = os.Getenv(strings.Replace(name, "AGENTPROV_", "ACF_", 1))
+	}
 	if value == "" {
 		return fallback
 	}

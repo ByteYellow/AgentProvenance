@@ -10,7 +10,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const DefaultDataDir = ".acf"
+const DefaultDataDir = ".agentprov"
 const SchemaVersion = 7
 
 type Paths struct {
@@ -34,7 +34,7 @@ func ResolvePaths(root string) Paths {
 	}
 	return Paths{
 		Root:       root,
-		DB:         filepath.Join(root, "acf.db"),
+		DB:         filepath.Join(root, "agentprov.db"),
 		Workspaces: filepath.Join(root, "workspaces"),
 		Snapshots:  filepath.Join(root, "snapshots"),
 		Templates:  filepath.Join(root, "templates"),

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${ACF_DEMO_DATA_DIR:-.acf-demo-quarantine}"
+DATA_DIR="${AGENTPROV_DEMO_DATA_DIR:-.agentprov-demo-quarantine}"
 BIN="./agentprov"
 SESSION_ID=""
 

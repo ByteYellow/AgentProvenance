@@ -115,7 +115,7 @@ func objectRoot(paths store.Paths) string {
 }
 
 func (c *materializeContext) put(obj provenanceObject) (string, error) {
-	obj.Schema = "acf.provenance.object.v1"
+	obj.Schema = "agentprov.provenance.object.v1"
 	if obj.RunID == "" {
 		obj.RunID = c.runID
 	}

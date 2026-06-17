@@ -79,7 +79,7 @@ func (fakeDriver) SetCPUWeight(ctx context.Context, containerID string, weight i
 
 func TestCreateLeaseAndSession(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestCreateLeaseAndSession(t *testing.T) {
 
 func TestExecSwitchesCPUProfileForToolPhase(t *testing.T) {
 	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".acf"))
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
 	}

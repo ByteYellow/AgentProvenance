@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/attempt"
@@ -449,7 +450,7 @@ func (s Service) promoteWithBarrier(rolloutID, baseSnapshotID, attemptID string)
 }
 
 func (s Service) drainPromotionEvidence(attemptID string) (bool, string) {
-	timeout := time.Duration(envInt64("ACF_PROMOTION_DRAIN_TIMEOUT_MS", 1000)) * time.Millisecond
+	timeout := time.Duration(envInt64("AGENTPROV_PROMOTION_DRAIN_TIMEOUT_MS", 1000)) * time.Millisecond
 	if timeout < 0 {
 		timeout = 0
 	}
@@ -544,6 +545,9 @@ func (s Service) resolveSnapshotID(nameOrID string) (string, error) {
 
 func envInt64(name string, fallback int64) int64 {
 	value := os.Getenv(name)
+	if value == "" {
+		value = os.Getenv(strings.Replace(name, "AGENTPROV_", "ACF_", 1))
+	}
 	if value == "" {
 		return fallback
 	}

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${ACF_DEMO_DATA_DIR:-.acf-demo-preview}"
+DATA_DIR="${AGENTPROV_DEMO_DATA_DIR:-.agentprov-demo-preview}"
 BIN="./agentprov"
 SESSION_ID=""
 PORT_ID=""
@@ -34,7 +34,7 @@ echo "lease=$LEASE_ID"
 echo "session=$SESSION_ID"
 
 echo "== start sandbox HTTP service"
-"$BIN" --data-dir "$DATA_DIR" exec "$SESSION_ID" --stream -- sh -lc 'nohup sh -c "while true; do printf \"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\npreview-ok\" | nc -l -p 8000; done" >/tmp/acf-httpd.log 2>&1 &'
+"$BIN" --data-dir "$DATA_DIR" exec "$SESSION_ID" --stream -- sh -lc 'nohup sh -c "while true; do printf \"HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\npreview-ok\" | nc -l -p 8000; done" >/tmp/agentprov-httpd.log 2>&1 &'
 
 echo "== expose preview URL"
 EXPOSE_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" port expose "$SESSION_ID" 8000)"
