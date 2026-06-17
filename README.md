@@ -112,16 +112,18 @@ Core graph commands:
 ./agentprov graph materialize --run run-demo-bugfix
 ./agentprov graph verify --run run-demo-bugfix
 ./agentprov graph replay --run run-demo-bugfix
+./agentprov graph replay --run run-demo-bugfix --json
 ./agentprov graph diff --run run-demo-bugfix --file calculator.py
 ./agentprov graph blame --run run-demo-bugfix --file calculator.py
 ```
 
 `trace` shows the causal DAG. `refs` gives stable Git-like names. `log` shows
 chronological execution history. `materialize` writes content-addressed objects.
-`verify` checks object integrity. `replay` emits an execution replay plan.
-`diff` compares file state across attempts. `blame` attributes a file version
-to the attempt, tool call, process, command, strategy, and promotion status that
-produced it.
+`verify` checks object integrity. `replay` emits a plan-only reconstruction and
+`replay --json` emits a structured `agentprovenance.replay/v1` manifest for CI
+or downstream agent harnesses. `diff` compares file state across attempts.
+`blame` attributes a file version to the attempt, tool call, process, command,
+strategy, and promotion status that produced it.
 
 ## Core Demo
 
@@ -157,7 +159,7 @@ ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame
 
 | Area | Current capability |
 |---|---|
-| Provenance DAG | `trace`, `refs`, `log`, `materialize`, `verify`, `replay` |
+| Provenance DAG | `trace`, `refs`, `log`, `materialize`, `verify`, text `replay`, JSON replay manifest |
 | State attribution | MVP `graph diff` and `graph blame` for workspace files |
 | Rollout | local and Docker-backed best-of-N attempts, scoring, top-k pruning, winner selection |
 | ToolCallScope | process/container/cgroup/time-window context binding for raw telemetry correlation |
@@ -252,8 +254,9 @@ Current model:
 - file manifests and artifact refs capture stable hashes;
 - diff/blame explain state changes at file level;
 - external effects are recorded as provenance and gate evidence;
-- replay emits a plan from template/snapshot/attempt/tool/process/artifact
-  objects rather than pretending every side effect can be reversed.
+- replay emits a text plan and structured JSON manifest from
+  template/snapshot/attempt/tool/process/artifact objects rather than pretending
+  every side effect can be reversed.
 
 This is closer to Git provenance than container checkpointing. Memory snapshots,
 block-level COW, and VM restore are future substrate capabilities.
@@ -340,7 +343,7 @@ docs/                 design notes and MVP details
 Phase 1 hardening:
 
 - JSON output for graph queries and demo assertions.
-- Stronger object schema for replay manifests.
+- Stronger replay manifest schema validation and compatibility tests.
 - Deeper graph integrity checks.
 - Telemetry drain watermarks before promotion.
 - ToolCallScope binding receiver for cgroup/container/process identity.

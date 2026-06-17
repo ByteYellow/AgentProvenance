@@ -185,6 +185,7 @@ func graphCmd(dataDir *string) *cobra.Command {
 
 	var replayRunID string
 	var replayAttemptID string
+	var replayJSON bool
 	replayCmd := &cobra.Command{
 		Use:   "replay",
 		Short: "emit a replay plan for a run or attempt without executing it",
@@ -198,9 +199,15 @@ func graphCmd(dataDir *string) *cobra.Command {
 				return fmt.Errorf("use only one of --run or --attempt")
 			}
 			if replayAttemptID != "" {
+				if replayJSON {
+					return provenance.ReplayAttemptJSON(db, replayAttemptID, cmd.OutOrStdout())
+				}
 				return provenance.ReplayAttempt(db, replayAttemptID, cmd.OutOrStdout())
 			}
 			if replayRunID != "" {
+				if replayJSON {
+					return provenance.ReplayRunJSON(db, replayRunID, cmd.OutOrStdout())
+				}
 				return provenance.ReplayRun(db, replayRunID, cmd.OutOrStdout())
 			}
 			return fmt.Errorf("one of --run or --attempt is required")
@@ -208,6 +215,7 @@ func graphCmd(dataDir *string) *cobra.Command {
 	}
 	replayCmd.Flags().StringVar(&replayRunID, "run", "", "run id")
 	replayCmd.Flags().StringVar(&replayAttemptID, "attempt", "", "attempt id")
+	replayCmd.Flags().BoolVar(&replayJSON, "json", false, "emit structured replay manifest JSON")
 
 	cmd := &cobra.Command{Use: "graph", Short: "provenance graph commands"}
 	cmd.AddCommand(trace)

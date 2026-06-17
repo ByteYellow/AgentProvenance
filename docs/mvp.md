@@ -59,6 +59,7 @@ agentprov graph log --run run-demo-bugfix
 agentprov graph materialize --run run-demo-bugfix
 agentprov graph verify --run run-demo-bugfix
 agentprov graph replay --run run-demo-bugfix
+agentprov graph replay --run run-demo-bugfix --json
 agentprov graph diff --run run-demo-bugfix --file calculator.py
 agentprov graph blame --run run-demo-bugfix --file calculator.py
 agentprov effect record --run run-demo-bugfix --type api_call --target api.example.com/v1/tickets --mode dry-run --decision audit
@@ -106,9 +107,10 @@ snapshots it, forks five attempts, runs different repair strategies, exports
 patch artifacts, ingests raw runtime telemetry without `tool_call_id`,
 correlates it through ToolCallScope bindings, quarantines one risky failed
 branch, promotes the passing winner, then runs `graph trace`, `graph refs`,
-`graph log`, `graph materialize`, `graph verify`, `graph replay`, `graph diff`,
-and `graph blame` to explain the winner, verify graph integrity, reconstruct a
-plan-only replay, and attribute file changes.
+`graph log`, `graph materialize`, `graph verify`, `graph replay`, `graph replay
+--json`, `graph diff`, and `graph blame` to explain the winner, verify graph
+integrity, reconstruct a plan-only replay, emit a structured replay manifest,
+and attribute file changes.
 
 Expected output / acceptance:
 
@@ -134,7 +136,8 @@ Expected output / acceptance:
   content-addressed provenance objects.
 - `graph replay --run run-demo-bugfix` emits a plan-only reconstruction of base
   snapshot, attempts, commands, artifacts, runtime events, and external effect
-  gates.
+  gates. `graph replay --run run-demo-bugfix --json` emits the same evidence as
+  an `agentprovenance.replay/v1` manifest for automation.
 - Rollout unit tests prove a quarantined/tainted attempt is rejected by the
   promotion barrier before `winner_promoted` can be emitted.
 - Rollout unit tests prove snapshot taint propagates through
@@ -272,8 +275,9 @@ exists. `graph verify --run <run_id>` checks reference continuity,
 taint/promotion contradictions, artifact readability, and materialized object
 hashes. `graph replay --run <run_id>` and `graph replay --attempt <attempt_id>`
 emit a plan-only reconstruction of snapshot, attempt, tool call, process,
-artifact, telemetry, and external effect records; Phase 1 does not execute the
-plan or roll back real-world side effects.
+artifact, telemetry, and external effect records. Add `--json` to emit the
+structured `agentprovenance.replay/v1` manifest for automation; Phase 1 does
+not execute the plan or roll back real-world side effects.
 `graph trace` prints the compact attempt evidence payload, including strategy,
 score, saved cost, output summary, winner flag, and selection reason, so a
 probe/top-k rollout can be replayed and audited without guessing why a branch
