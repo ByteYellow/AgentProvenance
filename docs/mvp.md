@@ -95,6 +95,24 @@ branch, promotes the passing winner, then runs `graph trace`, `graph refs`,
 `graph log`, `graph materialize`, `graph diff`, and `graph blame` to explain
 the winner and attribute file changes.
 
+Expected output / acceptance:
+
+- `telemetry list --type execve` shows a raw runtime event with
+  `correlation=process_id:process_id`, proving the event did not need to carry
+  `tool_call_id`.
+- `graph trace` shows `execution_context_bindings:` and the correlated
+  `execve` event under the same run/session/attempt/tool/process chain.
+- `rollout attempts` shows `wrong-constant` as `quarantined` with
+  `risk=tainted`.
+- `rollout winner` shows `correct-add` as the promoted clean winner.
+- `graph diff --file calculator.py` prints a unified diff between the base file
+  and modified attempt files.
+- `graph blame --file calculator.py` reports `unchanged_from_base` and
+  `modified_by_attempt` records with attempt id, tool call id, strategy,
+  command, artifact, and winner status.
+- `graph trace` shows generated patch artifacts linked by `attempt_artifact`
+  and `tool_call_artifact` edges.
+
 ### demo_streaming_terminal
 
 ```sh

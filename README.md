@@ -124,6 +124,7 @@ The current repository is a local-first MVP. It currently supports:
 
 Core AgentProvenance path:
 
+- primary coding-agent best-of-N demo: `./scripts/demo_coding_agent_best_of_n.sh`
 - Docker-backed sandbox sessions
 - streaming exec and process records
 - ToolCallScope execution context bindings for process/container/cgroup/time-window correlation
@@ -258,6 +259,34 @@ The primary demo is the provenance path:
 ./scripts/demo_provenance_trace.sh
 ./scripts/demo_ioaware_snapshot_planner.sh
 ```
+
+### Coding Agent Best-of-N Acceptance
+
+`./scripts/demo_coding_agent_best_of_n.sh` is the Phase 1 acceptance demo. It must prove:
+
+- Raw runtime telemetry does not carry `tool_call_id`.
+  The demo ingests a raw `execve` event with `--process <process_id>` and no `--tool-call`; `telemetry list` must show it correlated back to the correct `tool_call`.
+- Delayed runtime telemetry still belongs to the original ToolCallScope.
+  The raw event is ingested after the rollout attempt has already produced its process record; `graph trace` must still show `correlation=process_id:process_id` and the matching binding.
+- The provenance DAG contains the execution anchor.
+  `graph trace` must include an `execution_context_bindings:` section mapping `attempt -> tool_call -> process -> session`.
+- A risky branch is quarantined.
+  The `wrong-constant` attempt is marked `status=quarantined` and `risk=tainted`.
+- The tainted branch is not the promoted winner.
+  `rollout winner` must explain why the clean `correct-add` attempt was promoted.
+- `graph diff` outputs a unified file diff.
+  The demo compares `calculator.py` across attempts and shows the base line removed and the attempted line added.
+- `graph blame` attributes file state.
+  The output must distinguish `unchanged_from_base` and `modified_by_attempt`, and include attempt id, tool call id, strategy, command, artifact, and winner status.
+- Patch artifacts are traceable.
+  `graph trace` must show `attempt_artifact` and `tool_call_artifact` edges for generated `fix.patch` files.
+
+Implementation entry points:
+
+- CLI: `agentprov graph diff` and `agentprov graph blame`
+- Code: `internal/provenance.DiffFile` and `internal/provenance.BlameFile`
+- Taint propagation: `taintSnapshotAndDescendants` plus rollout-level attempt quarantine events
+- Correlation: `execution_context_bindings` plus `correlation_method` / `correlation_confidence` on telemetry events
 
 Auxiliary and experimental demos are still available, but they are not the main product surface:
 
