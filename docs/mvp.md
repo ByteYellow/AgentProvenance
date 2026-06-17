@@ -67,7 +67,9 @@ agentprov graph verify --run run-demo-bugfix
 agentprov graph replay --run run-demo-bugfix
 agentprov graph replay --run run-demo-bugfix --json
 agentprov graph diff --run run-demo-bugfix --file calculator.py
+agentprov graph diff --run run-demo-bugfix --file calculator.py --json
 agentprov graph blame --run run-demo-bugfix --file calculator.py
+agentprov graph blame --run run-demo-bugfix --file calculator.py --json
 agentprov effect record --run run-demo-bugfix --type api_call --target api.example.com/v1/tickets --mode dry-run --decision audit
 agentprov effect list --run run-demo-bugfix
 agentprov telemetry ingest --raw-event raw-execve-1 --process <process_id> --type execve --payload '{"argv":["./test_calculator.sh"]}'
@@ -114,9 +116,10 @@ patch artifacts, ingests raw runtime telemetry without `tool_call_id`,
 correlates it through ToolCallScope bindings, quarantines one risky failed
 branch, promotes the passing winner, then runs `graph trace`, `graph refs`,
 `graph log`, `graph materialize`, `graph verify`, `graph replay`, `graph replay
---json`, `graph diff`, and `graph blame` to explain the winner, verify graph
-integrity, reconstruct a plan-only replay, emit a structured replay manifest,
-and attribute file changes.
+--json`, `graph diff`, `graph diff --json`, `graph blame`, and `graph blame
+--json` to explain the winner, verify graph integrity, reconstruct a plan-only
+replay, emit structured replay/diff/blame manifests, and attribute file
+changes.
 
 Expected output / acceptance:
 
@@ -129,10 +132,12 @@ Expected output / acceptance:
   `risk=tainted`.
 - `rollout winner` shows `correct-add` as the promoted clean winner.
 - `graph diff --file calculator.py` prints a unified diff between the base file
-  and modified attempt files.
+  and modified attempt files. `--json` emits an `agentprovenance.diff/v1`
+  manifest.
 - `graph blame --file calculator.py` reports `unchanged_from_base` and
   `modified_by_attempt` records with attempt id, tool call id, strategy,
-  command, artifact, and winner status.
+  command, artifact, and winner status. `--json` emits an
+  `agentprovenance.blame/v1` manifest.
 - `graph trace` shows generated patch artifacts linked by `attempt_artifact`
   and `tool_call_artifact` edges.
 - `effect list --run run-demo-bugfix` and `graph trace` show an

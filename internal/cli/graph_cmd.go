@@ -133,6 +133,7 @@ func graphCmd(dataDir *string) *cobra.Command {
 
 	var diffRunID string
 	var diffFile string
+	var diffJSON bool
 	diffCmd := &cobra.Command{
 		Use:   "diff",
 		Short: "diff a workspace file across rollout attempts",
@@ -142,14 +143,19 @@ func graphCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
+			if diffJSON {
+				return provenance.DiffFileJSON(db, diffRunID, diffFile, cmd.OutOrStdout())
+			}
 			return provenance.DiffFile(db, diffRunID, diffFile, cmd.OutOrStdout())
 		},
 	}
 	diffCmd.Flags().StringVar(&diffRunID, "run", "", "run id")
 	diffCmd.Flags().StringVar(&diffFile, "file", "", "workspace-relative file path")
+	diffCmd.Flags().BoolVar(&diffJSON, "json", false, "emit structured file diff JSON")
 
 	var blameRunID string
 	var blameFile string
+	var blameJSON bool
 	blameCmd := &cobra.Command{
 		Use:   "blame",
 		Short: "attribute a workspace file to rollout attempts",
@@ -159,11 +165,15 @@ func graphCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
+			if blameJSON {
+				return provenance.BlameFileJSON(db, blameRunID, blameFile, cmd.OutOrStdout())
+			}
 			return provenance.BlameFile(db, blameRunID, blameFile, cmd.OutOrStdout())
 		},
 	}
 	blameCmd.Flags().StringVar(&blameRunID, "run", "", "run id")
 	blameCmd.Flags().StringVar(&blameFile, "file", "", "workspace-relative file path")
+	blameCmd.Flags().BoolVar(&blameJSON, "json", false, "emit structured file blame JSON")
 
 	var verifyRunID string
 	verifyCmd := &cobra.Command{

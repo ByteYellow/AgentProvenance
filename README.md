@@ -120,7 +120,9 @@ Core graph commands:
 ./agentprov graph replay --run run-demo-bugfix
 ./agentprov graph replay --run run-demo-bugfix --json
 ./agentprov graph diff --run run-demo-bugfix --file calculator.py
+./agentprov graph diff --run run-demo-bugfix --file calculator.py --json
 ./agentprov graph blame --run run-demo-bugfix --file calculator.py
+./agentprov graph blame --run run-demo-bugfix --file calculator.py --json
 ```
 
 `trace` shows the causal DAG. `refs` gives stable Git-like names. `log` shows
@@ -131,7 +133,8 @@ plan-only reconstruction and `replay --json` emits a structured
 `agentprovenance.replay/v1` manifest for CI or downstream agent harnesses.
 `diff` compares file state across attempts. `blame` attributes a file version
 to the attempt, tool call, process, command, strategy, and promotion status that
-produced it.
+produced it. `diff --json` and `blame --json` emit structured
+`agentprovenance.diff/v1` and `agentprovenance.blame/v1` manifests.
 
 ## Core Demo
 
@@ -155,6 +158,7 @@ Expected acceptance:
 - Emits `graph trace`, `refs`, `log`, `materialize`, `verify`, and `replay`.
 - Emits `graph diff` for `calculator.py`.
 - Emits `graph blame` with created/modified/deleted/unchanged state.
+- Supports JSON manifests for replay, diff, and blame automation.
 
 This is the Phase 1 product line:
 
@@ -168,7 +172,7 @@ ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame
 | Area | Current capability |
 |---|---|
 | Provenance DAG | `trace`, `refs`, `log`, `materialize`, stronger `verify`, text `replay`, JSON replay manifest |
-| State attribution | MVP `graph diff` and `graph blame` for workspace files |
+| State attribution | MVP `graph diff` and `graph blame` for workspace files, with JSON manifests |
 | Rollout | local and Docker-backed best-of-N attempts, scoring, top-k pruning, winner selection |
 | ToolCallScope | process/container/cgroup/time-window context binding for raw telemetry correlation |
 | Artifacts | exported attempt artifacts linked back to attempt/tool_call/process |
