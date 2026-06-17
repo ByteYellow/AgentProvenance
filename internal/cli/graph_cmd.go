@@ -11,6 +11,7 @@ import (
 func graphCmd(dataDir *string) *cobra.Command {
 	var runID string
 	var artifactRef string
+	var attemptID string
 	trace := &cobra.Command{
 		Use:   "trace",
 		Short: "trace run or artifact provenance",
@@ -24,8 +25,17 @@ func graphCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			if runID != "" && artifactRef != "" {
-				return fmt.Errorf("use only one of --run or --artifact")
+			selected := 0
+			for _, value := range []string{runID, artifactRef, attemptID} {
+				if value != "" {
+					selected++
+				}
+			}
+			if selected > 1 {
+				return fmt.Errorf("use only one of --run, --artifact, or --attempt")
+			}
+			if attemptID != "" {
+				return provenance.TraceAttempt(db, attemptID, cmd.OutOrStdout())
 			}
 			if artifactRef != "" {
 				return provenance.TraceArtifact(db, artifactRef, cmd.OutOrStdout())
@@ -33,11 +43,12 @@ func graphCmd(dataDir *string) *cobra.Command {
 			if runID != "" {
 				return provenance.TraceRun(db, runID, cmd.OutOrStdout())
 			}
-			return fmt.Errorf("one of --run or --artifact is required")
+			return fmt.Errorf("one of --run, --artifact, or --attempt is required")
 		},
 	}
 	trace.Flags().StringVar(&runID, "run", "", "run id")
 	trace.Flags().StringVar(&artifactRef, "artifact", "", "artifact result ref")
+	trace.Flags().StringVar(&attemptID, "attempt", "", "attempt id")
 	cmd := &cobra.Command{Use: "graph", Short: "provenance graph commands"}
 	cmd.AddCommand(trace)
 	return cmd

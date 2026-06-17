@@ -366,6 +366,75 @@ func TraceArtifact(db *sql.DB, artifactRef string, out io.Writer) error {
 	return nil
 }
 
+func TraceAttempt(db *sql.DB, attemptID string, out io.Writer) error {
+	if attemptID == "" {
+		return fmt.Errorf("attempt id is required")
+	}
+	fmt.Fprintf(out, "attempt=%s\n", attemptID)
+
+	var rolloutID, toolCallID, artifactRef string
+	err := db.QueryRow(`SELECT COALESCE(rollout_id, ''), COALESCE(tool_call_id, ''), COALESCE(artifact_result, '')
+		FROM fork_attempts WHERE id = ?`, attemptID).Scan(&rolloutID, &toolCallID, &artifactRef)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintln(out, "attempts:")
+	if err := printArtifactAttempt(db, out, attemptID); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "tool_calls:")
+	if toolCallID != "" {
+		if err := printArtifactToolCall(db, out, toolCallID); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintln(out, "artifacts:")
+	if artifactRef != "" {
+		fmt.Fprintf(out, "  artifact=%s attempt=%s tool_call=%s\n", artifactRef, attemptID, toolCallID)
+	}
+	fmt.Fprintln(out, "rollouts:")
+	if rolloutID != "" {
+		if err := printArtifactRollout(db, out, rolloutID); err != nil {
+			return err
+		}
+	}
+
+	edgeRows, err := db.Query(`SELECT run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at
+		FROM graph_edges WHERE from_id = ? OR to_id = ? ORDER BY created_at ASC`, attemptID, attemptID)
+	if err != nil {
+		return err
+	}
+	defer edgeRows.Close()
+	fmt.Fprintln(out, "graph_edges:")
+	for edgeRows.Next() {
+		var runID, edgeRolloutID, fromID, toID, edgeType, sourceEventID, createdAt string
+		if err := edgeRows.Scan(&runID, &edgeRolloutID, &fromID, &toID, &edgeType, &sourceEventID, &createdAt); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "  run=%s rollout=%s from=%s to=%s type=%s source_event=%s created_at=%s\n", runID, edgeRolloutID, fromID, toID, edgeType, sourceEventID, createdAt)
+	}
+	if err := edgeRows.Err(); err != nil {
+		return err
+	}
+
+	evidenceRows, err := db.Query(`SELECT id, event_type, priority, status, COALESCE(processed_at, ''), COALESCE(payload, '')
+		FROM evidence_events WHERE attempt_id = ? ORDER BY created_at ASC`, attemptID)
+	if err != nil {
+		return err
+	}
+	defer evidenceRows.Close()
+	fmt.Fprintln(out, "evidence_events:")
+	for evidenceRows.Next() {
+		var id, eventType, priority, status, processedAt, payload string
+		if err := evidenceRows.Scan(&id, &eventType, &priority, &status, &processedAt, &payload); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "  evidence=%s type=%s priority=%s status=%s processed_at=%s payload=%s\n", id, eventType, priority, status, processedAt, payload)
+	}
+	return evidenceRows.Err()
+}
+
 func printArtifactAttempt(db *sql.DB, out io.Writer, attemptID string) error {
 	var rolloutID, toolCallID, strategy, status, riskStatus string
 	var score, cost float64

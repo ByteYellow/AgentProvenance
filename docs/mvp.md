@@ -171,7 +171,9 @@ edges, and `graph trace` prints an `artifacts` section for reverse lookup from
 artifact ref to attempt, tool call, strategy, and winner status.
 Use `graph trace --artifact <artifact_ref>` to start from an exported artifact
 and trace back to the attempt, tool call, rollout, run, and graph edge that
-produced it.
+produced it. Use `graph trace --attempt <attempt_id>` to inspect a single
+attempt with its tool call, artifact, rollout, graph edges, evidence payload,
+and winner status.
 `graph trace` prints the compact attempt evidence payload, including strategy,
 score, saved cost, output summary, winner flag, and selection reason, so a
 probe/top-k rollout can be replayed and audited without guessing why a branch

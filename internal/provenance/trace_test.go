@@ -142,6 +142,71 @@ func TestTraceArtifactShowsReverseProvenance(t *testing.T) {
 	}
 }
 
+func TestTraceAttemptShowsAttemptProvenance(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".acf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	artifactRef := filepath.Join(paths.Artifacts, "attempt-2-result.txt")
+	insertTraceSnapshot(t, db, "snap-2", "ready", now)
+	_, err = db.Exec(`INSERT INTO rollouts (id, run_id, base_snapshot_id, status, fanout, winner_attempt_id, cost_estimate, risk_status, created_at, updated_at)
+		VALUES ('rollout-2', 'run-2', 'snap-2', 'completed', 1, 'attempt-2', 0.002, 'clean', ?, ?)`, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO fork_attempts
+		(id, rollout_id, tool_call_id, snapshot_id, workspace_path, fork_ms, strategy, status, score, cost_estimate, is_winner, artifact_result, created_at)
+		VALUES ('attempt-2', 'rollout-2', 'tool-2', 'snap-2', ?, 1, 'artifact', 'passed', 9, 0.002, 1, ?, ?)`,
+		filepath.Join(root, "attempt-2"), artifactRef, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO tool_calls
+		(id, run_id, rollout_id, attempt_id, command, status, exit_code, wall_ms, result_ref, created_at)
+		VALUES ('tool-2', 'run-2', 'rollout-2', 'attempt-2', 'echo artifact2', 'passed', 0, 20, ?, ?)`, artifactRef, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO evidence_events
+		(id, run_id, rollout_id, attempt_id, tool_call_id, snapshot_id, event_type, priority, payload, status, processed_at, created_at)
+		VALUES ('evidence-2', 'run-2', 'rollout-2', 'attempt-2', 'tool-2', 'snap-2', 'attempt_finished', 'normal', '{"selection_reason":"winner_selected_by_risk_budget_score_cost"}', 'processed', ?, ?)`, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO graph_edges (id, run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at)
+		VALUES ('edge-attempt-tool', 'run-2', 'rollout-2', 'attempt-2', 'tool-2', 'attempt_tool_call', 'evidence-2', ?)`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := TraceAttempt(db, "attempt-2", &out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"attempt=attempt-2",
+		"tool_call=tool-2",
+		"artifact=" + artifactRef,
+		"rollout=rollout-2",
+		"type=attempt_tool_call",
+		"selection_reason",
+		"winner=true",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("attempt trace missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func insertTraceSnapshot(t *testing.T, db *sql.DB, id, name, createdAt string) {
 	t.Helper()
 	_, err := db.Exec(`INSERT INTO snapshots (id, name, kind, source, path, manifest_hash, file_count, bytes, status, created_at)
