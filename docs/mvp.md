@@ -43,6 +43,8 @@ agentprov graph trace --run run-demo-bugfix
 agentprov graph refs --run run-demo-bugfix
 agentprov graph log --run run-demo-bugfix
 agentprov graph materialize --run run-demo-bugfix
+agentprov graph diff --run run-demo-bugfix --file calculator.py
+agentprov graph blame --run run-demo-bugfix --file calculator.py
 agentprov cost show run-demo-bugfix
 ```
 
@@ -72,6 +74,18 @@ agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty
 ```
 
 ## Demos
+
+### demo_coding_agent_best_of_n
+
+```sh
+./scripts/demo_coding_agent_best_of_n.sh
+```
+
+This is the main AgentProvenance demo. It creates a clean coding workspace,
+snapshots it, forks five attempts, runs different repair strategies, exports
+patch artifacts, promotes the passing winner, then runs `graph trace`,
+`graph refs`, `graph log`, `graph materialize`, `graph diff`, and
+`graph blame` to explain the winner and attribute file changes.
 
 ### demo_streaming_terminal
 

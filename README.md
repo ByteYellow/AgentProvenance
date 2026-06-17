@@ -85,7 +85,11 @@ agentprov rollout start \
 agentprov rollout winner run-demo-bugfix
 agentprov cost show run-demo-bugfix
 agentprov graph trace --run run-demo-bugfix
+agentprov graph refs --run run-demo-bugfix
+agentprov graph log --run run-demo-bugfix
 agentprov graph materialize --run run-demo-bugfix
+agentprov graph diff --run run-demo-bugfix --file calculator.py
+agentprov graph blame --run run-demo-bugfix --file calculator.py
 ```
 
 ## What AgentProvenance owns vs. what it plugs into
@@ -121,7 +125,7 @@ Core AgentProvenance path:
 - explainable attempt evidence for pruned and promoted rollout branches
 - strategy artifact capture from attempt workspaces into `.acf/artifacts/`
 - artifact provenance edges from attempt/tool_call to exported artifact refs
-- Git-like provenance refs, log, trace, and content-addressed materialization under `.acf/provenance/objects/sha256/`
+- Git-like provenance refs, log, trace, diff, blame, and content-addressed materialization under `.acf/provenance/objects/sha256/`
 - I/O-aware snapshot planning with source policies: `latest-ready`, `smallest-delta`, `local`, and `untainted`
 - run-local provenance trace for snapshot planner explanations
 - capability-gated runtime drivers with Docker active and gVisor/Firecracker/bubblewrap as explicit stubs
@@ -144,7 +148,7 @@ AgentProvenance is intentionally narrow at this stage:
 - eBPF/Falco/Tetragon/LoongCollector integration is planned; current telemetry is wrapper/runtime-level MVP telemetry.
 - Egress policy currently covers HTTP/HTTPS proxy workflows and direct-egress blocking from the Docker sandbox bridge; it is not yet a general raw TCP policy engine.
 - Baseline detection is MVP-level event and cost counting, not syscall ML or full eBPF feature modeling.
-- Content-addressed provenance objects exist, but replay, fsck, blame, and diff are still early roadmap items.
+- Content-addressed provenance objects exist, but replay and fsck are still early roadmap items. Diff and blame are MVP-level workspace-file queries.
 
 ## Quickstart
 
@@ -179,9 +183,28 @@ SESSION_ID=$(./agentprov session create --lease "$LEASE_ID")
 ./agentprov graph refs --run run-demo-bugfix
 ./agentprov graph log --run run-demo-bugfix
 ./agentprov graph materialize --run run-demo-bugfix
+./agentprov graph diff --run run-demo-bugfix --file hello.txt
+./agentprov graph blame --run run-demo-bugfix --file hello.txt
 
 ./agentprov session rm "$SESSION_ID"
 ```
+
+The core provenance commands are:
+
+```sh
+./agentprov graph trace --run <run_id>
+./agentprov graph refs --run <run_id>
+./agentprov graph log --run <run_id>
+./agentprov graph materialize --run <run_id>
+./agentprov graph diff --run <run_id> --file <workspace_relative_file>
+./agentprov graph blame --run <run_id> --file <workspace_relative_file>
+```
+
+`trace` explains the rollout DAG, `refs` gives stable Git-like names, `log`
+shows the chronological execution history, `materialize` writes
+content-addressed objects, `diff` compares a file across attempts, and `blame`
+attributes a file version to the attempt, tool call, command, strategy, and
+promotion status that produced it.
 
 Run the full MVP walkthrough:
 
@@ -194,6 +217,7 @@ Run the full MVP walkthrough:
 The primary demo is the provenance path:
 
 ```sh
+./scripts/demo_coding_agent_best_of_n.sh
 ./scripts/demo_snapshot_fanout.sh
 ./scripts/demo_best_of_forks.sh
 ./scripts/demo_provenance_trace.sh
@@ -283,6 +307,8 @@ agentprov graph trace --process <process_id>
 agentprov graph refs --run <run_id>
 agentprov graph log --run <run_id>
 agentprov graph materialize --run <run_id>
+agentprov graph diff --run <run_id> --file <workspace_relative_file>
+agentprov graph blame --run <run_id> --file <workspace_relative_file>
 agentprov forensics export <run_id>
 ```
 
@@ -300,13 +326,9 @@ tool call id, or process id back to the producing attempt, tool call, process,
 rollout, policy decision, evidence, and winner status. Local rollout attempts
 and Docker-backed execs both emit process-linked events, so RL rollout evidence
 can start from either the attempt/tool call layer or the runtime process layer.
-
-### Runtime capability signals
-
-```sh
-agentprov runtime list
-agentprov runtime inspect docker
-```
+`graph diff` and `graph blame` are MVP file-level provenance queries: they
+compare the base snapshot with each attempt workspace and attribute changes to
+the attempt, tool call, command, strategy, artifact ref, and winner status.
 
 ### Experimental controls
 
@@ -327,6 +349,18 @@ agentprov node list
 agentprov scheduler status
 
 agentprov pool create --template bugfix --size 2 --seed-workspace ./seed --max-size 2
+agentprov pool status
+```
+
+### Substrate signals
+
+These commands expose lower-level runtime and local scheduling substrate state. They are intentionally kept behind the provenance workflow instead of defining the product surface:
+
+```sh
+agentprov runtime list
+agentprov runtime inspect docker
+agentprov scheduler status
+agentprov node list
 agentprov pool status
 ```
 

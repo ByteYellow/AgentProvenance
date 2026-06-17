@@ -131,10 +131,46 @@ func graphCmd(dataDir *string) *cobra.Command {
 	}
 	materialize.Flags().StringVar(&materializeRunID, "run", "", "run id")
 
+	var diffRunID string
+	var diffFile string
+	diffCmd := &cobra.Command{
+		Use:   "diff",
+		Short: "diff a workspace file across rollout attempts",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := openDB()
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			return provenance.DiffFile(db, diffRunID, diffFile, cmd.OutOrStdout())
+		},
+	}
+	diffCmd.Flags().StringVar(&diffRunID, "run", "", "run id")
+	diffCmd.Flags().StringVar(&diffFile, "file", "", "workspace-relative file path")
+
+	var blameRunID string
+	var blameFile string
+	blameCmd := &cobra.Command{
+		Use:   "blame",
+		Short: "attribute a workspace file to rollout attempts",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := openDB()
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			return provenance.BlameFile(db, blameRunID, blameFile, cmd.OutOrStdout())
+		},
+	}
+	blameCmd.Flags().StringVar(&blameRunID, "run", "", "run id")
+	blameCmd.Flags().StringVar(&blameFile, "file", "", "workspace-relative file path")
+
 	cmd := &cobra.Command{Use: "graph", Short: "provenance graph commands"}
 	cmd.AddCommand(trace)
 	cmd.AddCommand(refs)
 	cmd.AddCommand(logCmd)
 	cmd.AddCommand(materialize)
+	cmd.AddCommand(diffCmd)
+	cmd.AddCommand(blameCmd)
 	return cmd
 }
