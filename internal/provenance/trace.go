@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/byteyellow/agentprovenance/internal/effects"
 	"github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
@@ -264,6 +265,13 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 	if err := evidenceRows.Err(); err != nil {
 		return err
 	}
+
+	effectRecords, err := effects.List(db, effects.Filter{RunID: runID})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "external_effects:")
+	effects.Print(effectRecords, out)
 
 	gcRows, err := db.Query(`SELECT id, rollout_id, attempt_id, status, reclaimed_bytes, reclaimed_inodes, gc_latency_ms, failure_reason
 		FROM gc_jobs WHERE run_id = ? ORDER BY created_at ASC`, runID)

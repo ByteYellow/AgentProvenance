@@ -167,6 +167,17 @@ AgentProvenance is intentionally narrow at this stage:
 - Baseline detection is MVP-level event and cost counting, not syscall ML or full eBPF feature modeling.
 - Content-addressed provenance objects exist, but replay and fsck are still early roadmap items. Diff and blame are MVP-level workspace-file queries.
 
+## Phase 1 Risk Boundaries
+
+Phase 1 is scoped around provenance, diff, selection, taint, and promotion
+barriers. These boundaries are part of the product contract:
+
+| Risk | Phase 1 approach | Boundary |
+|---|---|---|
+| Storage/performance | Sparse snapshot semantics, incremental file diff, and content-addressed artifacts | No per-step full snapshot. No memory snapshot. |
+| Non-filesystem state | `ExternalEffectRecord` records external intent, target, mode, gate decision, and optional compensation reference | External side effects are provenance and gate evidence only. AgentProvenance does not promise to roll back real-world systems. |
+| Merge conflict | Best-of-N winner selection and promotion barrier | No arbitrary branch auto-merge. Phase 1 only does diff, blame, select, promote, and quarantine. |
+
 ## Quickstart
 
 Prerequisites:
@@ -202,6 +213,8 @@ SESSION_ID=$(./agentprov session create --lease "$LEASE_ID")
 ./agentprov graph materialize --run run-demo-bugfix
 ./agentprov graph diff --run run-demo-bugfix --file hello.txt
 ./agentprov graph blame --run run-demo-bugfix --file hello.txt
+./agentprov effect record --run run-demo-bugfix --type api_call \
+  --target api.example.com/v1/tickets --mode dry-run --decision audit
 
 ./agentprov session rm "$SESSION_ID"
 ```
@@ -215,6 +228,7 @@ The core provenance commands are:
 ./agentprov graph materialize --run <run_id>
 ./agentprov graph diff --run <run_id> --file <workspace_relative_file>
 ./agentprov graph blame --run <run_id> --file <workspace_relative_file>
+./agentprov effect list --run <run_id>
 ```
 
 `trace` explains the rollout DAG, `refs` gives stable Git-like names, `log`
@@ -280,6 +294,9 @@ The primary demo is the provenance path:
   The output must distinguish `unchanged_from_base` and `modified_by_attempt`, and include attempt id, tool call id, strategy, command, artifact, and winner status.
 - Patch artifacts are traceable.
   `graph trace` must show `attempt_artifact` and `tool_call_artifact` edges for generated `fix.patch` files.
+- Non-filesystem side effects are gated, not treated as rollbackable state.
+  `effect list --run run-demo-bugfix` and `graph trace` must show an
+  `ExternalEffectRecord` for a dry-run API call.
 - Promotion barrier rejects tainted candidates.
   Unit tests cover a quarantined/tainted attempt being rejected by the promotion barrier before `winner_promoted` is emitted.
 - Snapshot taint propagates through descendants.
@@ -291,6 +308,7 @@ Implementation entry points:
 - Code: `internal/provenance.DiffFile` and `internal/provenance.BlameFile`
 - Taint propagation: `taintSnapshotAndDescendants` plus rollout-level attempt quarantine events
 - Correlation: `execution_context_bindings` plus `correlation_method` / `correlation_confidence` on telemetry events
+- External side effects: `ExternalEffectRecord` captures dry-run/mock/allowlist gate evidence without promising real-world rollback
 
 Auxiliary and experimental demos are still available, but they are not the main product surface:
 
@@ -377,6 +395,9 @@ agentprov graph log --run <run_id>
 agentprov graph materialize --run <run_id>
 agentprov graph diff --run <run_id> --file <workspace_relative_file>
 agentprov graph blame --run <run_id> --file <workspace_relative_file>
+agentprov effect record --run <run_id> --attempt <attempt_id> --tool-call <tool_call_id> \
+  --type api_call --target api.example.com/path --mode dry-run --decision audit
+agentprov effect list --run <run_id>
 agentprov forensics export <run_id>
 ```
 

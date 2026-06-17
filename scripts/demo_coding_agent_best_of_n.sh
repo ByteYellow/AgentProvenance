@@ -63,6 +63,12 @@ if [[ -z "$CORRECT_PROCESS" ]]; then
   echo "failed to find correct-add process" >&2
   exit 1
 fi
+CORRECT_ATTEMPT="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "correct-add" {print $1; exit}')"
+CORRECT_TOOL_CALL="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "correct-add" {print $2; exit}')"
+if [[ -z "$CORRECT_ATTEMPT" || -z "$CORRECT_TOOL_CALL" ]]; then
+  echo "failed to find correct-add attempt/tool call" >&2
+  exit 1
+fi
 
 echo "== ingest raw runtime telemetry without tool_call_id"
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest \
@@ -72,6 +78,20 @@ echo "== ingest raw runtime telemetry without tool_call_id"
   --type execve \
   --payload '{"argv":["./test_calculator.sh"]}'
 "$BIN" --data-dir "$DATA_DIR" telemetry list --run run-demo-bugfix --type execve
+
+echo "== record external side-effect gate"
+"$BIN" --data-dir "$DATA_DIR" effect record \
+  --run run-demo-bugfix \
+  --attempt "$CORRECT_ATTEMPT" \
+  --tool-call "$CORRECT_TOOL_CALL" \
+  --process "$CORRECT_PROCESS" \
+  --type api_call \
+  --target api.example.com/v1/tickets \
+  --mode dry-run \
+  --decision audit \
+  --compensation ticket-compensate \
+  --payload '{"redacted":true,"note":"external side effect recorded, not rolled back"}'
+"$BIN" --data-dir "$DATA_DIR" effect list --run run-demo-bugfix
 
 RISKY_ATTEMPT="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "wrong-constant" {print $1; exit}')"
 if [[ -z "$RISKY_ATTEMPT" ]]; then

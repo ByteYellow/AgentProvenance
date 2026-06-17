@@ -32,6 +32,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(templateCmd(&dataDir))
 	root.AddCommand(apiCmd(&dataDir))
 	root.AddCommand(telemetryCmd(&dataDir))
+	root.AddCommand(effectCmd(&dataDir))
 	root.AddCommand(graphCmd(&dataDir))
 	root.AddCommand(forensicsCmd(&dataDir))
 	root.AddCommand(evidenceCmd(&dataDir))

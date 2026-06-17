@@ -11,7 +11,7 @@ import (
 )
 
 const DefaultDataDir = ".acf"
-const SchemaVersion = 6
+const SchemaVersion = 7
 
 type Paths struct {
 	Root       string
@@ -278,6 +278,23 @@ func EnsureSchema(db *sql.DB) error {
 			status TEXT NOT NULL DEFAULT 'queued',
 			created_at TEXT NOT NULL,
 			processed_at TEXT NOT NULL DEFAULT ''
+		);`,
+		`CREATE TABLE IF NOT EXISTS external_effects (
+			id TEXT PRIMARY KEY,
+			run_id TEXT NOT NULL DEFAULT '',
+			rollout_id TEXT NOT NULL DEFAULT '',
+			attempt_id TEXT NOT NULL DEFAULT '',
+			session_id TEXT NOT NULL DEFAULT '',
+			tool_call_id TEXT NOT NULL DEFAULT '',
+			process_id TEXT NOT NULL DEFAULT '',
+			effect_type TEXT NOT NULL,
+			target TEXT NOT NULL,
+			mode TEXT NOT NULL,
+			decision TEXT NOT NULL,
+			compensation_ref TEXT NOT NULL DEFAULT '',
+			payload TEXT NOT NULL DEFAULT '{}',
+			status TEXT NOT NULL DEFAULT 'recorded',
+			created_at TEXT NOT NULL
 		);`,
 		`CREATE TABLE IF NOT EXISTS gc_jobs (
 			id TEXT PRIMARY KEY,

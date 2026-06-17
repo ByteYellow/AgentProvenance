@@ -12,6 +12,17 @@ Phase 1 focuses on the immutable execution ledger and state-diff audit loop:
 `ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame ->
 Taint -> Promotion Barrier`.
 
+## Phase 1 risk boundaries
+
+Phase 1 is not a full state-management or distributed merge system. It keeps
+three hard boundaries:
+
+| Risk | Phase 1 approach | Boundary |
+|---|---|---|
+| Storage/performance | Sparse snapshot semantics, incremental file diff, and content-addressed artifacts | Do not snapshot every step. Do not claim memory snapshot support. |
+| Non-filesystem state | `ExternalEffectRecord` stores external intent, target, dry-run/mock/allowlist mode, policy decision, and optional compensation reference | External API, database, queue, and message side effects are provenance and gate records only. No rollback guarantee for the real world. |
+| Merge conflict | Best-of-N winner promotion with taint and promotion barriers | No arbitrary branch auto-merge. Phase 1 only supports diff, blame, select, promote, and quarantine. |
+
 Preview URL, egress proxy, credential injection, warm pool, node metadata, and
 baseline commands are kept as experimental local controls. They are useful for
 future drivers, but they are not the main v0.1 product surface.
@@ -49,6 +60,8 @@ agentprov graph log --run run-demo-bugfix
 agentprov graph materialize --run run-demo-bugfix
 agentprov graph diff --run run-demo-bugfix --file calculator.py
 agentprov graph blame --run run-demo-bugfix --file calculator.py
+agentprov effect record --run run-demo-bugfix --type api_call --target api.example.com/v1/tickets --mode dry-run --decision audit
+agentprov effect list --run run-demo-bugfix
 agentprov telemetry ingest --raw-event raw-execve-1 --process <process_id> --type execve --payload '{"argv":["./test_calculator.sh"]}'
 agentprov telemetry list --run run-demo-bugfix --type execve
 agentprov cost show run-demo-bugfix
@@ -112,6 +125,9 @@ Expected output / acceptance:
   command, artifact, and winner status.
 - `graph trace` shows generated patch artifacts linked by `attempt_artifact`
   and `tool_call_artifact` edges.
+- `effect list --run run-demo-bugfix` and `graph trace` show an
+  `ExternalEffectRecord` for a dry-run API call, proving external side effects
+  are recorded as gate evidence instead of rollbackable state.
 - Rollout unit tests prove a quarantined/tainted attempt is rejected by the
   promotion barrier before `winner_promoted` can be emitted.
 - Rollout unit tests prove snapshot taint propagates through
