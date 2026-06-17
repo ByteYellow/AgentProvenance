@@ -2,10 +2,10 @@
 
 # AgentProvenance
 
-### Git-like provenance control for sandboxed AI agent execution.
+### Observability and provenance audit for sandboxed AI agent execution.
 
-Turn Coding Agent and RL rollout execution into content-addressed, queryable,
-diffable, replayable, and auditable provenance DAGs.
+Turn agent actions, runtime telemetry, file diffs, artifacts, and decisions into
+content-addressed, queryable, replayable, and auditable execution graphs.
 
 [![Go](https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square)](https://go.dev/)
 [![Runtime](https://img.shields.io/badge/runtime-Docker-2496ED.svg?style=flat-square)](https://www.docker.com/)
@@ -18,12 +18,12 @@ diffable, replayable, and auditable provenance DAGs.
 
 ---
 
-AgentProvenance is a local-first immutable execution ledger and state-diff
-audit engine for autonomous agents, especially Coding Agents.
+AgentProvenance is a local-first observability and provenance audit layer for
+sandboxed AI agents, especially Coding Agents.
 
 It is not a generic sandbox runtime, telemetry collector, scheduler, or
-Kubernetes/Ray replacement. It owns the agent rollout semantics that generic
-infrastructure does not preserve:
+Kubernetes/Ray replacement. It combines application-level agent context with
+system-level telemetry and turns the result into an auditable provenance graph:
 
 ```text
 ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame
@@ -35,6 +35,7 @@ The narrow goal is to answer questions such as:
 - Which snapshot did this artifact come from?
 - Which attempt, tool call, and process produced it?
 - Which process changed which file?
+- Which runtime event maps to which agent action?
 - Which branch was tainted, quarantined, or blocked from promotion?
 - Why was one attempt promoted as the winner?
 - What cost, risk, test, diff, and artifact evidence supports that decision?
@@ -52,14 +53,15 @@ The CLI is `agentprov`.
 
 Modern agent workloads are not "one command in one container."
 
-Coding-agent repair loops, best-of-N sampling, evaluation, and RL rollout can
-fork many short-lived attempts from the same initial state. Each attempt may
-run tests, edit files, call tools, create artifacts, trigger runtime telemetry,
-consume CPU, and produce risk signals. Existing traces, logs, metrics, and
-sandbox managers usually record fragments of this story, but they do not give a
-Git-like causal graph for state, evidence, and promotion decisions.
+Coding-agent repair loops, best-of-N sampling, tool-using agents, and evaluator
+experiments can fork many short-lived attempts from the same initial state. Each
+attempt may run tests, edit files, call tools, create artifacts, trigger runtime
+telemetry, consume CPU, and produce risk signals. Existing traces, logs,
+metrics, and sandbox managers usually record fragments of this story, but they
+do not give a Git-like causal graph for state, evidence, runtime behavior, and
+promotion decisions.
 
-AgentProvenance makes that layer explicit:
+AgentProvenance makes that correlation layer explicit:
 
 ```text
 snapshot -> attempt -> tool_call -> process -> artifact
@@ -81,6 +83,10 @@ The killer use case is a coding-agent best-of-N rollout:
 6. Diff and blame the resulting files.
 7. Promote the winner only after evidence is drained and verified.
 8. Emit a replay plan and content-addressed provenance objects.
+
+RL-style rollout and evaluator pipelines can use the same graph for debugging,
+sample audit, reward-hacking investigation, and trajectory provenance. The
+project does not try to become an RL runtime, trainer, or throughput scheduler.
 
 ## Quickstart
 
@@ -192,7 +198,7 @@ promotion barriers, and replay evidence.
 
 ```mermaid
 flowchart TD
-    Harness["Agent harness / RL trainer / evaluator"] --> CLI["agentprov CLI"]
+    Harness["Agent harness / coding agent / evaluator"] --> CLI["agentprov CLI"]
     CLI --> Control["AgentProvenance control"]
 
     Control --> Scope["ToolCallScope binding"]
@@ -274,7 +280,7 @@ provenance model:
 - Falco, Tetragon, LoongCollector, and eBPF are future telemetry substrates.
 
 The project value is not collecting more logs. The value is correlating
-substrate signals with agent rollout context and making them affect taint,
+substrate signals with agent execution context and making them affect taint,
 promotion, replay, and auditability.
 
 ## Manual Commands

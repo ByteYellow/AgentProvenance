@@ -1,15 +1,21 @@
 # AgentProvenance MVP
 
-`AgentProvenance` is a CLI-first single-node rollout provenance control plane for sandboxed AI agent execution.
+`AgentProvenance` is a CLI-first single-node observability and provenance audit
+layer for sandboxed AI agent execution.
 
 The command-line interface is `agentprov`. The core MVP manages local leases,
 Docker-backed sandbox sessions, directory snapshots, attempt workspace forks,
-rollout fanout, process/tool-call traces, artifact refs, content-addressed
-provenance objects, and cost/risk evidence attached to promotion decisions.
+best-of-N execution, process/tool-call traces, runtime telemetry correlation,
+artifact refs, content-addressed provenance objects, and cost/risk evidence
+attached to promotion decisions.
 
 Phase 1 focuses on the immutable execution ledger and state-diff audit loop:
 `ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame ->
 Taint -> Promotion Barrier`.
+
+This is not an RL runtime, generic telemetry collector, or distributed
+scheduler. RL-style rollout and evaluator pipelines are supported as audit and
+debugging consumers of the graph, not as the primary runtime target.
 
 ## Phase 1 risk boundaries
 
