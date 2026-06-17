@@ -1,11 +1,13 @@
 package attempt
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/state"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
@@ -240,5 +242,83 @@ func TestBestOfCapturesDeclaredArtifact(t *testing.T) {
 	}
 	if stored != winner.ArtifactResult {
 		t.Fatalf("stored artifact = %q, want %q", stored, winner.ArtifactResult)
+	}
+}
+
+func TestBestOfLocalAttemptRecordsProcessTrace(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".acf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	taskPath := filepath.Join(root, "task.yaml")
+	if err := os.WriteFile(taskPath, []byte("run_id: run-local-process\nimage: alpine:3.20\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stack, err := state.Service{DB: db, Paths: paths}.CreateStack(taskPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	results, winner, err := Service{DB: db, State: state.Service{DB: db, Paths: paths}}.BestOfWithOptions(stack.ReadySnapshotID, []string{
+		"artifact::printf trace-body > result.txt; echo 17::score=number::artifact=result.txt",
+	}, Options{MaxFanout: 1, RunID: "run-local-process", Runtime: "local", TaskPath: taskPath, BaseSnapshotID: stack.ReadySnapshotID, Paths: paths})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results=%d, want 1", len(results))
+	}
+	if winner.ProcessID == "" || winner.SessionID == "" || winner.ToolCallID == "" {
+		t.Fatalf("winner missing execution ids: %+v", winner)
+	}
+
+	var processToolCallID, processSessionID, processStatus string
+	if err := db.QueryRow(`SELECT tool_call_id, session_id, status FROM processes WHERE id = ?`, winner.ProcessID).Scan(&processToolCallID, &processSessionID, &processStatus); err != nil {
+		t.Fatal(err)
+	}
+	if processToolCallID != winner.ToolCallID || processSessionID != winner.SessionID || processStatus != "exited" {
+		t.Fatalf("process row = tool:%s session:%s status:%s, want tool:%s session:%s exited", processToolCallID, processSessionID, processStatus, winner.ToolCallID, winner.SessionID)
+	}
+
+	var eventCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE process_id = ? AND tool_call_id = ? AND event_type IN ('exec_start', 'exec_end', 'burst_reserve', 'burst_release')`, winner.ProcessID, winner.ToolCallID).Scan(&eventCount); err != nil {
+		t.Fatal(err)
+	}
+	if eventCount < 4 {
+		t.Fatalf("event count = %d, want at least 4 process-linked rollout events", eventCount)
+	}
+	var runningLocalSessions int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE runtime = 'local' AND status = 'running'`).Scan(&runningLocalSessions); err != nil {
+		t.Fatal(err)
+	}
+	if runningLocalSessions != 0 {
+		t.Fatalf("running local sessions = %d, want 0 after rollout attempt completion", runningLocalSessions)
+	}
+
+	var out bytes.Buffer
+	if err := provenance.TraceProcess(db, winner.ProcessID, &out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"process=" + winner.ProcessID,
+		"session=" + winner.SessionID,
+		"tool_call=" + winner.ToolCallID,
+		"attempt=" + winner.AttemptID,
+		"artifact=" + winner.ArtifactResult,
+		"exec_start",
+		"exec_end",
+		"winner=true",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("process trace missing %q:\n%s", want, got)
+		}
 	}
 }

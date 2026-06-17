@@ -272,7 +272,9 @@ which snapshot source was selected, which copy/resume plan was used, and why
 unrelated rollout snapshots were excluded. It can also reverse-trace an
 artifact ref, attempt id, tool call id, or process id back to the producing
 attempt, tool call, process, rollout, policy decision, evidence, and winner
-status.
+status. Local rollout attempts and Docker-backed execs both emit process-linked
+events, so RL rollout evidence can start from either the attempt/tool call layer
+or the runtime process layer.
 
 ### Runtime and fleet signals
 

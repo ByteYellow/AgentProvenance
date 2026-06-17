@@ -293,21 +293,38 @@ func (s Service) runAttemptWithBurst(attemptID, toolCallID, workspacePath string
 	if runID == "" {
 		runID = "unknown"
 	}
+	sessionID, err := s.ensureLocalAttemptSession(runID, attemptID, workspacePath, opts)
+	if err != nil {
+		return rejectedResult(attemptID, toolCallID, workspacePath, strategy, err.Error())
+	}
+	processID := ids.New("proc")
 	startedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.execWithBusyRetry(`INSERT INTO processes
+		(id, session_id, tool_call_id, command, status, started_at)
+		VALUES (?, ?, ?, ?, 'burst_pending', ?)`, processID, sessionID, toolCallID, strategy.Command, startedAt); err != nil {
+		return rejectedResult(attemptID, toolCallID, workspacePath, strategy, err.Error())
+	}
 	_, _ = s.DB.Exec(`UPDATE tool_calls SET status = 'burst_pending', started_at = ? WHERE id = ?`, startedAt, toolCallID)
-	reservation, err := (scheduler.Scheduler{DB: s.DB}).ReserveBurst(runID, attemptID, toolCallID, cpuRequest, ttl)
+	reservation, err := (scheduler.Scheduler{DB: s.DB}).ReserveBurst(runID, sessionID, processID, cpuRequest, ttl)
 	if err != nil {
 		reason := reservation.Reason
 		if reason == "" {
 			reason = err.Error()
 		}
 		endedAt := time.Now().UTC().Format(time.RFC3339Nano)
+		_, _ = s.DB.Exec(`UPDATE processes SET status = 'rejected', exit_code = 125, ended_at = ? WHERE id = ?`, endedAt, processID)
+		_, _ = s.DB.Exec(`UPDATE sessions SET status = 'stopped', updated_at = ? WHERE id = ?`, endedAt, sessionID)
 		_, _ = s.DB.Exec(`UPDATE tool_calls
 			SET status = 'rejected', exit_code = 125, result_ref = ?, policy_decision = 'allow', ended_at = ?
 			WHERE id = ?`, reason, endedAt, toolCallID)
+		_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
+			VALUES (?, ?, ?, ?, ?, 'rollout', 'burst_reject', ?, ?)`,
+			ids.New("evt"), runID, sessionID, toolCallID, processID, fmt.Sprintf(`{"reservation_id":%q,"reason":%q}`, reservation.ID, reason), endedAt)
 		return Result{
 			AttemptID:      attemptID,
 			ToolCallID:     toolCallID,
+			SessionID:      sessionID,
+			ProcessID:      processID,
 			WorkspacePath:  workspacePath,
 			Strategy:       strategy.Name,
 			Command:        strategy.Command,
@@ -323,7 +340,14 @@ func (s Service) runAttemptWithBurst(attemptID, toolCallID, workspacePath string
 			BurstReason:    reason,
 		}
 	}
+	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
+		VALUES (?, ?, ?, ?, ?, 'rollout', 'burst_reserve', ?, ?)`,
+		ids.New("evt"), runID, sessionID, toolCallID, processID, fmt.Sprintf(`{"reservation_id":%q,"inflight_before":%d,"max_inflight":%d,"reserved_cpu_before":%.3f}`, reservation.ID, reservation.Inflight, reservation.MaxInflight, reservation.ReservedCPU), time.Now().UTC().Format(time.RFC3339Nano))
 	_, _ = s.DB.Exec(`UPDATE tool_calls SET status = 'running' WHERE id = ?`, toolCallID)
+	_, _ = s.DB.Exec(`UPDATE processes SET status = 'running' WHERE id = ?`, processID)
+	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
+		VALUES (?, ?, ?, ?, ?, 'rollout', 'exec_start', ?, ?)`,
+		ids.New("evt"), runID, sessionID, toolCallID, processID, fmt.Sprintf(`{"attempt_id":%q,"command":%q}`, attemptID, strategy.Command), time.Now().UTC().Format(time.RFC3339Nano))
 	result := runAttempt(attemptID, workspacePath, strategy)
 	result.RiskStatus = "clean"
 	result.BudgetExceeded = budgetExceeded(result.WallMS, strategy.BudgetSeconds)
@@ -333,11 +357,78 @@ func (s Service) runAttemptWithBurst(attemptID, toolCallID, workspacePath string
 	}
 	result = s.captureArtifact(result, strategy)
 	result.ToolCallID = toolCallID
+	result.SessionID = sessionID
+	result.ProcessID = processID
 	result.BurstID = reservation.ID
 	result.BurstStatus = "released"
 	result.BurstReason = reservation.Reason
+	processStatus := "exited"
+	if result.Status == "failed" || result.Status == "rejected" {
+		processStatus = result.Status
+	}
+	endedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	_, _ = s.DB.Exec(`UPDATE processes SET status = ?, exit_code = ?, ended_at = ? WHERE id = ?`, processStatus, result.ExitCode, endedAt, processID)
+	_, _ = s.DB.Exec(`UPDATE sessions SET status = 'stopped', updated_at = ? WHERE id = ?`, endedAt, sessionID)
+	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
+		VALUES (?, ?, ?, ?, ?, 'rollout', 'exec_end', ?, ?)`,
+		ids.New("evt"), runID, sessionID, toolCallID, processID, fmt.Sprintf(`{"attempt_id":%q,"exit_code":%d,"status":%q,"wall_ms":%d}`, attemptID, result.ExitCode, result.Status, result.WallMS), endedAt)
 	_ = (scheduler.Scheduler{DB: s.DB}).ReleaseBurst(reservation.ID)
+	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
+		VALUES (?, ?, ?, ?, ?, 'rollout', 'burst_release', ?, ?)`,
+		ids.New("evt"), runID, sessionID, toolCallID, processID, fmt.Sprintf(`{"reservation_id":%q}`, reservation.ID), time.Now().UTC().Format(time.RFC3339Nano))
 	return result
+}
+
+func (s Service) ensureLocalAttemptSession(runID, attemptID, workspacePath string, opts Options) (string, error) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	leaseID := "lease-" + attemptID
+	sessionID := "local-" + attemptID
+	taskPath := opts.TaskPath
+	taskYAML := "{}"
+	if taskPath != "" {
+		if raw, err := os.ReadFile(taskPath); err == nil {
+			taskYAML = string(raw)
+		}
+	}
+	if _, err := s.execWithBusyRetry(`INSERT OR IGNORE INTO leases
+		(id, run_id, task_path, task_yaml, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, 'allocated', ?, ?)`, leaseID, runID, taskPath, taskYAML, now, now); err != nil {
+		return "", err
+	}
+	if _, err := s.execWithBusyRetry(`INSERT OR IGNORE INTO sessions
+		(id, lease_id, run_id, workspace_host_path, runtime, parent_snapshot_id, status, startup_cold_ms, created_at, updated_at)
+		VALUES (?, ?, ?, ?, 'local', ?, 'running', 0, ?, ?)`,
+		sessionID, leaseID, runID, workspacePath, opts.BaseSnapshotID, now, now); err != nil {
+		return "", err
+	}
+	if _, err := s.execWithBusyRetry(`UPDATE sessions SET status = 'running', updated_at = ? WHERE id = ?`, now, sessionID); err != nil {
+		return "", err
+	}
+	return sessionID, nil
+}
+
+func (s Service) execWithBusyRetry(query string, args ...any) (sql.Result, error) {
+	deadline := time.Now().Add(2 * time.Second)
+	var lastErr error
+	for {
+		result, err := s.DB.Exec(query, args...)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+		if !isSQLiteBusy(err) || time.Now().After(deadline) {
+			return nil, lastErr
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func isSQLiteBusy(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "database is locked") || strings.Contains(msg, "sqlite_busy")
 }
 
 func (s Service) runDockerAttempt(attemptID, toolCallID, workspacePath string, strategy Strategy, opts Options) Result {
