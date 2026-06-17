@@ -74,6 +74,12 @@ func Verify(db *sql.DB, runID string) (VerifyResult, error) {
 	if err := verifyExternalEffects(db, runID, add); err != nil {
 		return result, err
 	}
+	if err := verifyExecutionContextBindings(db, runID, add); err != nil {
+		return result, err
+	}
+	if err := verifyReplayManifest(db, runID, add); err != nil {
+		return result, err
+	}
 	if err := verifyObjects(db, runID, add); err != nil {
 		return result, err
 	}
@@ -112,6 +118,9 @@ func verifyRollouts(db *sql.DB, runID string, add issueAdder) error {
 		}
 		if promotionID != "" && !exists(db, `SELECT 1 FROM promotions WHERE id = ? AND rollout_id = ?`, promotionID, id) {
 			add("error", "missing_promotion", id, "promotion_id %s does not belong to rollout", promotionID)
+		}
+		if promotionID != "" && winnerAttemptID != "" && !exists(db, `SELECT 1 FROM promotions WHERE id = ? AND rollout_id = ? AND attempt_id = ?`, promotionID, id, winnerAttemptID) {
+			add("error", "promotion_winner_mismatch", id, "promotion_id %s does not promote winner_attempt_id %s", promotionID, winnerAttemptID)
 		}
 		if status == "completed" && winnerAttemptID == "" {
 			add("error", "missing_winner_attempt", id, "completed rollout has no winner_attempt_id")
@@ -208,14 +217,15 @@ func verifyProcesses(db *sql.DB, runID string, add issueAdder) error {
 }
 
 func verifyEvents(db *sql.DB, runID string, add issueAdder) error {
-	rows, err := db.Query(`SELECT id, COALESCE(session_id, ''), COALESCE(tool_call_id, ''), COALESCE(process_id, ''), COALESCE(snapshot_id, '') FROM events WHERE run_id = ?`, runID)
+	rows, err := db.Query(`SELECT id, COALESCE(session_id, ''), COALESCE(tool_call_id, ''), COALESCE(process_id, ''), COALESCE(snapshot_id, ''), COALESCE(correlation_method, ''), COALESCE(correlation_confidence, 0) FROM events WHERE run_id = ?`, runID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, sessionID, toolCallID, processID, snapshotID string
-		if err := rows.Scan(&id, &sessionID, &toolCallID, &processID, &snapshotID); err != nil {
+		var id, sessionID, toolCallID, processID, snapshotID, correlationMethod string
+		var correlationConfidence float64
+		if err := rows.Scan(&id, &sessionID, &toolCallID, &processID, &snapshotID, &correlationMethod, &correlationConfidence); err != nil {
 			return err
 		}
 		if sessionID != "" && !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) {
@@ -229,6 +239,12 @@ func verifyEvents(db *sql.DB, runID string, add issueAdder) error {
 		}
 		if snapshotID != "" && !exists(db, `SELECT 1 FROM snapshots WHERE id = ?`, snapshotID) {
 			add("error", "missing_snapshot", id, "event snapshot_id %s does not exist", snapshotID)
+		}
+		if correlationMethod != "" && correlationConfidence <= 0 {
+			add("error", "invalid_correlation_confidence", id, "event correlation_method %s has confidence %.2f", correlationMethod, correlationConfidence)
+		}
+		if toolCallID != "" && processID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ? AND tool_call_id = ?`, processID, toolCallID) {
+			add("error", "event_process_tool_call_mismatch", id, "event process_id %s is not bound to tool_call_id %s", processID, toolCallID)
 		}
 	}
 	return rows.Err()
@@ -299,6 +315,89 @@ func verifyObjects(db *sql.DB, runID string, add issueAdder) error {
 		}
 	}
 	return rows.Err()
+}
+
+func verifyExecutionContextBindings(db *sql.DB, runID string, add issueAdder) error {
+	rows, err := db.Query(`SELECT id, session_id, attempt_id, tool_call_id, process_id, confidence FROM execution_context_bindings WHERE run_id = ?`, runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	bindings := 0
+	for rows.Next() {
+		bindings++
+		var id, sessionID, attemptID, toolCallID, processID string
+		var confidence float64
+		if err := rows.Scan(&id, &sessionID, &attemptID, &toolCallID, &processID, &confidence); err != nil {
+			return err
+		}
+		if confidence <= 0 {
+			add("error", "invalid_binding_confidence", id, "execution context binding confidence %.2f must be positive", confidence)
+		}
+		if sessionID != "" && !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) {
+			add("error", "missing_session", id, "binding session_id %s does not exist", sessionID)
+		}
+		if attemptID != "" && !exists(db, `SELECT 1 FROM fork_attempts WHERE id = ?`, attemptID) {
+			add("error", "missing_attempt", id, "binding attempt_id %s does not exist", attemptID)
+		}
+		if toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID) {
+			add("error", "missing_tool_call", id, "binding tool_call_id %s does not exist", toolCallID)
+		}
+		if processID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ?`, processID) {
+			add("error", "missing_process", id, "binding process_id %s does not exist", processID)
+		}
+		if processID != "" && toolCallID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ? AND tool_call_id = ?`, processID, toolCallID) {
+			add("error", "binding_process_tool_call_mismatch", id, "binding process_id %s is not bound to tool_call_id %s", processID, toolCallID)
+		}
+		if attemptID != "" && toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ? AND attempt_id = ?`, toolCallID, attemptID) {
+			add("error", "binding_attempt_tool_call_mismatch", id, "binding tool_call_id %s is not bound to attempt_id %s", toolCallID, attemptID)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	var correlatedEvents int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id = ? AND COALESCE(correlation_method, '') != ''`, runID).Scan(&correlatedEvents); err != nil {
+		return err
+	}
+	if correlatedEvents > 0 && bindings == 0 {
+		add("error", "missing_execution_context_binding", runID, "run has %d correlated events but no execution_context_bindings", correlatedEvents)
+	}
+	return nil
+}
+
+func verifyReplayManifest(db *sql.DB, runID string, add issueAdder) error {
+	manifest, err := BuildReplayRun(db, runID)
+	if err != nil {
+		add("error", "replay_manifest_failed", runID, "replay manifest cannot be built: %v", err)
+		return nil
+	}
+	if manifest.SchemaVersion != "agentprovenance.replay/v1" {
+		add("error", "invalid_replay_schema", runID, "unexpected replay schema %s", manifest.SchemaVersion)
+	}
+	if len(manifest.Rollouts) == 0 {
+		add("error", "empty_replay_manifest", runID, "replay manifest has no rollouts")
+	}
+	for _, rollout := range manifest.Rollouts {
+		if rollout.Status == "completed" && rollout.WinnerAttemptID == "" {
+			add("error", "replay_missing_winner", rollout.ID, "completed rollout has no winner in replay manifest")
+		}
+		if rollout.BaseSnapshotID != "" && rollout.BaseSnapshot == nil {
+			add("error", "replay_missing_base_snapshot", rollout.ID, "base snapshot %s missing from replay manifest", rollout.BaseSnapshotID)
+		}
+		for _, attempt := range rollout.Attempts {
+			if attempt.IsWinner && attempt.ReplayBlocked {
+				add("error", "replay_blocked_winner", attempt.ID, "winner attempt is replay_blocked reasons=%v", attempt.BlockReasons)
+			}
+			if attempt.ArtifactResult != "" && (attempt.ArtifactDigest == nil || !attempt.ArtifactDigest.Exists) {
+				add("warning", "replay_missing_artifact_digest", attempt.ID, "artifact_result %s has no readable digest", attempt.ArtifactResult)
+			}
+			if attempt.ToolCallID != "" && attempt.ToolCall == nil {
+				add("error", "replay_missing_tool_call", attempt.ID, "tool_call_id %s missing from replay manifest", attempt.ToolCallID)
+			}
+		}
+	}
+	return nil
 }
 
 func attemptIsTainted(db *sql.DB, attemptID string) bool {

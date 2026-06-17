@@ -119,11 +119,13 @@ Core graph commands:
 
 `trace` shows the causal DAG. `refs` gives stable Git-like names. `log` shows
 chronological execution history. `materialize` writes content-addressed objects.
-`verify` checks object integrity. `replay` emits a plan-only reconstruction and
-`replay --json` emits a structured `agentprovenance.replay/v1` manifest for CI
-or downstream agent harnesses. `diff` compares file state across attempts.
-`blame` attributes a file version to the attempt, tool call, process, command,
-strategy, and promotion status that produced it.
+`verify` checks references, object hashes, replay manifest generation,
+ToolCallScope correlation drift, and taint/promotion barriers. `replay` emits a
+plan-only reconstruction and `replay --json` emits a structured
+`agentprovenance.replay/v1` manifest for CI or downstream agent harnesses.
+`diff` compares file state across attempts. `blame` attributes a file version
+to the attempt, tool call, process, command, strategy, and promotion status that
+produced it.
 
 ## Core Demo
 
@@ -159,7 +161,7 @@ ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame
 
 | Area | Current capability |
 |---|---|
-| Provenance DAG | `trace`, `refs`, `log`, `materialize`, `verify`, text `replay`, JSON replay manifest |
+| Provenance DAG | `trace`, `refs`, `log`, `materialize`, stronger `verify`, text `replay`, JSON replay manifest |
 | State attribution | MVP `graph diff` and `graph blame` for workspace files |
 | Rollout | local and Docker-backed best-of-N attempts, scoring, top-k pruning, winner selection |
 | ToolCallScope | process/container/cgroup/time-window context binding for raw telemetry correlation |

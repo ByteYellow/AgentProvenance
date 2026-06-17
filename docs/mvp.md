@@ -132,8 +132,9 @@ Expected output / acceptance:
 - `effect list --run run-demo-bugfix` and `graph trace` show an
   `ExternalEffectRecord` for a dry-run API call, proving external side effects
   are recorded as gate evidence instead of rollbackable state.
-- `graph verify --run run-demo-bugfix` reports `status=ok` after materializing
-  content-addressed provenance objects.
+- `graph verify --run run-demo-bugfix` reports `status=ok` after checking
+  references, content-addressed object hashes, replay manifest generation,
+  ToolCallScope correlation drift, and taint/promotion barrier consistency.
 - `graph replay --run run-demo-bugfix` emits a plan-only reconstruction of base
   snapshot, attempts, commands, artifacts, runtime events, and external effect
   gates. `graph replay --run run-demo-bugfix --json` emits the same evidence as
@@ -272,8 +273,9 @@ turns the current SQLite trace into a content-addressed provenance object DAG
 under `.agentprov/provenance/objects/sha256/`; each object records source id, parent
 hashes, replay-oriented payload, and artifact file hashes when an artifact file
 exists. `graph verify --run <run_id>` checks reference continuity,
-taint/promotion contradictions, artifact readability, and materialized object
-hashes. `graph replay --run <run_id>` and `graph replay --attempt <attempt_id>`
+taint/promotion contradictions, artifact readability, materialized object
+hashes, replay manifest generation, and ToolCallScope correlation drift.
+`graph replay --run <run_id>` and `graph replay --attempt <attempt_id>`
 emit a plan-only reconstruction of snapshot, attempt, tool call, process,
 artifact, telemetry, and external effect records. Add `--json` to emit the
 structured `agentprovenance.replay/v1` manifest for automation; Phase 1 does
