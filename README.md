@@ -125,6 +125,13 @@ JSON diff, and JSON blame semantics.
 Core graph commands:
 
 ```sh
+./agentprov telemetry bind --run run-demo-bugfix --session <session_id> \
+  --attempt <attempt_id> --tool-call <tool_call_id> --process <process_id> \
+  --container-id <container_id> --cgroup-id <cgroup_id> --pid <pid>
+./agentprov telemetry ingest --raw-event raw-execve-1 --pid <pid> \
+  --timestamp <event_time> --source tetragon_jsonl --type execve \
+  --payload '{"argv":["./async_child.sh"]}'
+./agentprov telemetry bindings --run run-demo-bugfix
 ./agentprov graph trace --run run-demo-bugfix
 ./agentprov graph refs --run run-demo-bugfix
 ./agentprov graph log --run run-demo-bugfix
@@ -171,6 +178,8 @@ Expected acceptance:
 - Ingests raw runtime telemetry without requiring `tool_call_id` in the raw event.
 - Resolves ToolCallScope through process id, cgroup id, and container id runtime
   context.
+- Registers explicit ToolCallScope bindings through `telemetry bind`, then
+  resolves a PID-only async child event back to the same attempt/tool_call.
 - Records an external side effect as `ExternalEffectRecord` in dry-run mode.
 - Quarantines and taints the risky failed branch.
 - Blocks tainted branches from being considered promotable.
@@ -201,7 +210,7 @@ ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame
 | Provenance DAG | `trace`, `refs`, `log`, `materialize`, stronger `verify`, text `replay`, JSON replay manifest, trajectory evidence manifest |
 | State attribution | MVP `graph diff` and `graph blame` for workspace files, with JSON manifests |
 | Rollout | local and Docker-backed best-of-N attempts, scoring, top-k pruning, and candidate eligibility evidence |
-| ToolCallScope | process/container/cgroup/time-window context binding for raw telemetry correlation |
+| ToolCallScope | `telemetry bind`, `telemetry bindings`, and process/container/cgroup/pid time-window correlation for raw telemetry |
 | Artifacts | exported attempt artifacts linked back to attempt/tool_call/process |
 | Risk | policy decisions, quarantine, taint, promotion barrier |
 | External effects | `ExternalEffectRecord` with target, mode, gate decision, and redacted payload |
@@ -284,6 +293,17 @@ Then telemetry ingestion resolves raw events into the DAG and records the
 correlation method and confidence. This keeps the future eBPF/Falco/Tetragon
 path realistic: probes provide substrate facts; AgentProvenance performs agent
 context correlation.
+
+External harnesses and telemetry adapters can register the scope explicitly:
+
+```sh
+agentprov telemetry bind --run <run_id> --session <session_id> \
+  --attempt <attempt_id> --tool-call <tool_call_id> --process <process_id> \
+  --container-id <container_id> --cgroup-id <cgroup_id> --pid <pid>
+```
+
+Raw events still do not need `tool_call_id`; `telemetry ingest` resolves them
+through process, cgroup, container, or PID time windows.
 
 ## Storage And Replay
 
@@ -389,8 +409,6 @@ Phase 1 hardening:
 - Stronger replay and trajectory manifest schema compatibility tests.
 - Deeper graph integrity checks.
 - Telemetry drain watermarks before promotion.
-- ToolCallScope binding receiver for cgroup/container/process identity.
-- Larger best-of-N coding-agent demo with patch export and replay comparison.
 
 Phase 2 risk and response:
 

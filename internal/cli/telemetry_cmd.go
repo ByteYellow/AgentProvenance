@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 	"github.com/spf13/cobra"
@@ -46,8 +47,88 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 	list.Flags().StringVar(&toolCallID, "tool-call", "", "filter by tool call id")
 	cmd := &cobra.Command{Use: "telemetry", Short: "telemetry inspection commands"}
 	cmd.AddCommand(list)
+	cmd.AddCommand(telemetryBindCmd(dataDir))
+	cmd.AddCommand(telemetryBindingsCmd(dataDir))
 	cmd.AddCommand(telemetryIngestCmd(dataDir))
 	return cmd
+}
+
+func telemetryBindCmd(dataDir *string) *cobra.Command {
+	var binding correlation.Binding
+	bind := &cobra.Command{
+		Use:   "bind",
+		Short: "register a ToolCallScope binding for runtime telemetry correlation",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			paths, err := store.Init(*dataDir)
+			if err != nil {
+				return err
+			}
+			db, err := store.Open(paths)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			id, err := correlation.RecordBinding(db, binding)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "binding_id=%s run=%s session=%s attempt=%s tool_call=%s process=%s container=%s cgroup=%s pid=%d source=%s confidence=%.2f\n",
+				id, binding.RunID, binding.SessionID, binding.AttemptID, binding.ToolCallID, binding.ProcessID, binding.ContainerID, binding.CgroupID, binding.PID, binding.BindingSource, binding.Confidence)
+			return nil
+		},
+	}
+	bind.Flags().StringVar(&binding.RunID, "run", "", "run id")
+	bind.Flags().StringVar(&binding.SessionID, "session", "", "session id")
+	bind.Flags().StringVar(&binding.AttemptID, "attempt", "", "attempt id")
+	bind.Flags().StringVar(&binding.ToolCallID, "tool-call", "", "tool call id")
+	bind.Flags().StringVar(&binding.ProcessID, "process", "", "process id")
+	bind.Flags().StringVar(&binding.ContainerID, "container-id", "", "container id visible to runtime telemetry")
+	bind.Flags().StringVar(&binding.CgroupID, "cgroup-id", "", "cgroup id visible to runtime telemetry")
+	bind.Flags().Int64Var(&binding.RootPID, "root-pid", 0, "root pid for the tool scope")
+	bind.Flags().Int64Var(&binding.PID, "pid", 0, "pid or child pid visible to runtime telemetry")
+	bind.Flags().StringVar(&binding.StartedAt, "started-at", "", "binding start time; defaults to now")
+	bind.Flags().StringVar(&binding.EndedAt, "ended-at", "", "binding end time; empty means open")
+	bind.Flags().StringVar(&binding.BindingSource, "source", "harness_tool_call_scope", "binding source")
+	bind.Flags().Float64Var(&binding.Confidence, "confidence", 1, "binding confidence")
+	_ = bind.MarkFlagRequired("run")
+	_ = bind.MarkFlagRequired("tool-call")
+	return bind
+}
+
+func telemetryBindingsCmd(dataDir *string) *cobra.Command {
+	var filter correlation.BindingFilter
+	bindings := &cobra.Command{
+		Use:   "bindings",
+		Short: "list ToolCallScope bindings",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			paths, err := store.Init(*dataDir)
+			if err != nil {
+				return err
+			}
+			db, err := store.Open(paths)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			items, err := correlation.ListBindings(db, filter)
+			if err != nil {
+				return err
+			}
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "ID\tRUN\tSESSION\tATTEMPT\tTOOL_CALL\tPROCESS\tCONTAINER\tCGROUP\tROOT_PID\tPID\tSOURCE\tCONFIDENCE\tSTARTED_AT\tENDED_AT")
+			for _, item := range items {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\t%.2f\t%s\t%s\n",
+					item.ID, item.RunID, item.SessionID, item.AttemptID, item.ToolCallID, item.ProcessID, item.ContainerID, item.CgroupID, item.RootPID, item.PID, item.BindingSource, item.Confidence, item.StartedAt, item.EndedAt)
+			}
+			return w.Flush()
+		},
+	}
+	bindings.Flags().StringVar(&filter.RunID, "run", "", "filter by run id")
+	bindings.Flags().StringVar(&filter.SessionID, "session", "", "filter by session id")
+	bindings.Flags().StringVar(&filter.AttemptID, "attempt", "", "filter by attempt id")
+	bindings.Flags().StringVar(&filter.ToolCallID, "tool-call", "", "filter by tool call id")
+	bindings.Flags().StringVar(&filter.ProcessID, "process", "", "filter by process id")
+	return bindings
 }
 
 func telemetryIngestCmd(dataDir *string) *cobra.Command {

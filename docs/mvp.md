@@ -76,7 +76,10 @@ agentprov graph blame --run run-demo-bugfix --file calculator.py
 agentprov graph blame --run run-demo-bugfix --file calculator.py --json
 agentprov effect record --run run-demo-bugfix --type api_call --target api.example.com/v1/tickets --mode dry-run --decision audit
 agentprov effect list --run run-demo-bugfix
+agentprov telemetry bind --run run-demo-bugfix --session <session_id> --attempt <attempt_id> --tool-call <tool_call_id> --process <process_id> --container-id <container_id> --cgroup-id <cgroup_id> --pid <pid>
 agentprov telemetry ingest --raw-event raw-execve-1 --process <process_id> --type execve --payload '{"argv":["./test_calculator.sh"]}'
+agentprov telemetry ingest --raw-event raw-execve-pid-child --pid <pid> --type execve --payload '{"argv":["./async_child.sh"]}'
+agentprov telemetry bindings --run run-demo-bugfix
 agentprov telemetry list --run run-demo-bugfix --type execve
 agentprov cost show run-demo-bugfix
 ```
@@ -91,6 +94,8 @@ The acceptance script runs the coding-agent best-of-N scenario and asserts
 telemetry correlation, external effect recording, quarantine/taint,
 promotion-barrier eligibility, `graph verify`, JSON verify, JSON replay, JSON
 trajectory evidence, JSON diff, and JSON blame semantics.
+It also verifies that an explicit `telemetry bind` receiver can map a raw
+PID-only async child event back to the same `ToolCallScope`.
 
 Daemon-backed equivalent:
 
@@ -146,6 +151,8 @@ Expected output / acceptance:
 - The same acceptance run ingests cgroup-scoped and container-scoped raw events
   and verifies `cgroup_time_window:cgroup_id+time` and
   `container_time_window:container_id+time` correlation.
+- `telemetry bind` registers an explicit harness-provided ToolCallScope binding,
+  and a PID-only raw event resolves through `pid_time_window:pid+time`.
 - `graph trace` shows `execution_context_bindings:` and the correlated
   `execve` event under the same run/session/attempt/tool/process chain.
 - `rollout attempts` shows `wrong-constant` as `quarantined` with

@@ -41,6 +41,14 @@ type Match struct {
 	Confidence float64
 }
 
+type BindingFilter struct {
+	RunID      string
+	SessionID  string
+	AttemptID  string
+	ToolCallID string
+	ProcessID  string
+}
+
 func RecordBinding(db *sql.DB, binding Binding) (string, error) {
 	if binding.StartedAt == "" {
 		binding.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -59,6 +67,54 @@ func RecordBinding(db *sql.DB, binding Binding) (string, error) {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		binding.ID, binding.RunID, binding.SessionID, binding.AttemptID, binding.ToolCallID, binding.ProcessID, binding.ContainerID, binding.CgroupID, binding.RootPID, binding.PID, binding.StartedAt, binding.EndedAt, binding.BindingSource, binding.Confidence, time.Now().UTC().Format(time.RFC3339Nano))
 	return binding.ID, err
+}
+
+func ListBindings(db *sql.DB, filter BindingFilter) ([]Binding, error) {
+	query := `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
+		FROM execution_context_bindings`
+	args := []any{}
+	clauses := []string{}
+	if filter.RunID != "" {
+		clauses = append(clauses, "run_id = ?")
+		args = append(args, filter.RunID)
+	}
+	if filter.SessionID != "" {
+		clauses = append(clauses, "session_id = ?")
+		args = append(args, filter.SessionID)
+	}
+	if filter.AttemptID != "" {
+		clauses = append(clauses, "attempt_id = ?")
+		args = append(args, filter.AttemptID)
+	}
+	if filter.ToolCallID != "" {
+		clauses = append(clauses, "tool_call_id = ?")
+		args = append(args, filter.ToolCallID)
+	}
+	if filter.ProcessID != "" {
+		clauses = append(clauses, "process_id = ?")
+		args = append(args, filter.ProcessID)
+	}
+	if len(clauses) > 0 {
+		query += " WHERE " + clauses[0]
+		for i := 1; i < len(clauses); i++ {
+			query += " AND " + clauses[i]
+		}
+	}
+	query += " ORDER BY started_at ASC, created_at ASC"
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var bindings []Binding
+	for rows.Next() {
+		var binding Binding
+		if err := rows.Scan(&binding.ID, &binding.RunID, &binding.SessionID, &binding.AttemptID, &binding.ToolCallID, &binding.ProcessID, &binding.ContainerID, &binding.CgroupID, &binding.RootPID, &binding.PID, &binding.StartedAt, &binding.EndedAt, &binding.BindingSource, &binding.Confidence); err != nil {
+			return nil, err
+		}
+		bindings = append(bindings, binding)
+	}
+	return bindings, rows.Err()
 }
 
 func CloseBinding(db *sql.DB, processID, endedAt string) error {

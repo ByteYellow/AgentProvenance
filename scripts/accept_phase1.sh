@@ -73,10 +73,11 @@ echo "$ROLLOUT_OUTPUT"
 ROLLOUT_ID="$(echo "$ROLLOUT_OUTPUT" | sed -n 's/^rollout_id=\([^ ]*\).*/\1/p')"
 CORRECT_ATTEMPT="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "correct-add" {print $1; exit}')"
 CORRECT_TOOL_CALL="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "correct-add" {print $2; exit}')"
+CORRECT_SESSION="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "correct-add" {print $3; exit}')"
 CORRECT_PROCESS="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "correct-add" {print $4; exit}')"
 RISKY_ATTEMPT="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "wrong-constant" {print $1; exit}')"
 
-if [[ -z "$ROLLOUT_ID" || -z "$CORRECT_ATTEMPT" || -z "$CORRECT_TOOL_CALL" || -z "$CORRECT_PROCESS" || -z "$RISKY_ATTEMPT" ]]; then
+if [[ -z "$ROLLOUT_ID" || -z "$CORRECT_ATTEMPT" || -z "$CORRECT_TOOL_CALL" || -z "$CORRECT_SESSION" || -z "$CORRECT_PROCESS" || -z "$RISKY_ATTEMPT" ]]; then
   echo "failed to parse rollout ids" >&2
   exit 1
 fi
@@ -87,6 +88,17 @@ if [[ -z "$CORRECT_PROCESS_STARTED" ]]; then
 fi
 
 echo "== telemetry correlation"
+"$BIN" --data-dir "$DATA_DIR" telemetry bind \
+  --run run-phase1-accept \
+  --session "$CORRECT_SESSION" \
+  --attempt "$CORRECT_ATTEMPT" \
+  --tool-call "$CORRECT_TOOL_CALL" \
+  --process "$CORRECT_PROCESS" \
+  --container-id "agentprov-local-$CORRECT_ATTEMPT" \
+  --cgroup-id "agentprov-cgroup-$CORRECT_ATTEMPT" \
+  --pid 424242 \
+  --started-at "$CORRECT_PROCESS_STARTED" \
+  --source harness_tool_call_scope >/dev/null
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest \
   --raw-event raw-execve-correct-add \
   --process "$CORRECT_PROCESS" \
@@ -101,6 +113,13 @@ echo "== telemetry correlation"
   --type execve \
   --payload '{"argv":["./delayed_child.sh"],"note":"no tool_call_id in raw event"}' >/dev/null
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest \
+  --raw-event raw-execve-pid-child-correct-add \
+  --pid 424242 \
+  --timestamp "$CORRECT_PROCESS_STARTED" \
+  --source tetragon_jsonl \
+  --type execve \
+  --payload '{"argv":["./async_child.sh"],"note":"pid scoped event without tool_call_id"}' >/dev/null
+"$BIN" --data-dir "$DATA_DIR" telemetry ingest \
   --raw-event raw-network-container-correct-add \
   --container-id "agentprov-local-$CORRECT_ATTEMPT" \
   --timestamp "$CORRECT_PROCESS_STARTED" \
@@ -110,7 +129,11 @@ echo "== telemetry correlation"
 TELEMETRY_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept --type execve)"
 assert_contains "$TELEMETRY_OUTPUT" "process_id:process_id"
 assert_contains "$TELEMETRY_OUTPUT" "cgroup_time_window:cgroup_id+time"
+assert_contains "$TELEMETRY_OUTPUT" "pid_time_window:pid+time"
 assert_contains "$TELEMETRY_OUTPUT" "$CORRECT_TOOL_CALL"
+BINDINGS_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" telemetry bindings --run run-phase1-accept --tool-call "$CORRECT_TOOL_CALL")"
+assert_contains "$BINDINGS_OUTPUT" "harness_tool_call_scope"
+assert_contains "$BINDINGS_OUTPUT" "424242"
 NETWORK_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept --type network_connect)"
 assert_contains "$NETWORK_OUTPUT" "container_time_window:container_id+time"
 assert_contains "$NETWORK_OUTPUT" "$CORRECT_TOOL_CALL"
@@ -211,6 +234,7 @@ assert winner["replay_blocked"] is False, winner
 assert winner["tool_call"]["status"] == "passed", winner
 assert any(e["event_type"] == "execve" and e["correlation_method"] == "process_id:process_id" for e in winner["events"]), winner.get("events")
 assert any(e["event_type"] == "execve" and e["correlation_method"] == "cgroup_time_window:cgroup_id+time" for e in winner["events"]), winner.get("events")
+assert any(e["event_type"] == "execve" and e["correlation_method"] == "pid_time_window:pid+time" for e in winner["events"]), winner.get("events")
 assert any(e["event_type"] == "network_connect" and e["correlation_method"] == "container_time_window:container_id+time" for e in winner["events"]), winner.get("events")
 assert winner["external_effects"][0]["mode"] == "dry-run", winner.get("external_effects")
 risky = by_id[risky_attempt]
@@ -225,6 +249,7 @@ correct_trajectory = trajectory_by_id[correct_attempt]
 assert correct_trajectory["local_candidate_eligible"] is True, correct_trajectory
 assert correct_trajectory["tool_call"]["status"] == "passed", correct_trajectory
 assert any(e.get("correlation_method") == "cgroup_time_window:cgroup_id+time" for e in correct_trajectory["runtime_events"]), correct_trajectory["runtime_events"]
+assert any(e.get("correlation_method") == "pid_time_window:pid+time" for e in correct_trajectory["runtime_events"]), correct_trajectory["runtime_events"]
 assert any(e.get("correlation_method") == "container_time_window:container_id+time" for e in correct_trajectory["runtime_events"]), correct_trajectory["runtime_events"]
 assert correct_trajectory["external_effects"][0]["mode"] == "dry-run", correct_trajectory["external_effects"]
 change_types = {c["path"]: c["change_type"] for c in correct_trajectory["file_changes"]}

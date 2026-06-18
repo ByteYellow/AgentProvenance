@@ -65,13 +65,25 @@ if [[ -z "$CORRECT_PROCESS" ]]; then
 fi
 CORRECT_ATTEMPT="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "correct-add" {print $1; exit}')"
 CORRECT_TOOL_CALL="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "correct-add" {print $2; exit}')"
-if [[ -z "$CORRECT_ATTEMPT" || -z "$CORRECT_TOOL_CALL" ]]; then
-  echo "failed to find correct-add attempt/tool call" >&2
+CORRECT_SESSION="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "correct-add" {print $3; exit}')"
+if [[ -z "$CORRECT_ATTEMPT" || -z "$CORRECT_TOOL_CALL" || -z "$CORRECT_SESSION" ]]; then
+  echo "failed to find correct-add attempt/tool call/session" >&2
   exit 1
 fi
 CORRECT_PROCESS_STARTED="$("$BIN" --data-dir "$DATA_DIR" process inspect "$CORRECT_PROCESS" | sed -n 's/^started_at=//p')"
 
 echo "== ingest raw runtime telemetry without tool_call_id"
+"$BIN" --data-dir "$DATA_DIR" telemetry bind \
+  --run run-demo-bugfix \
+  --session "$CORRECT_SESSION" \
+  --attempt "$CORRECT_ATTEMPT" \
+  --tool-call "$CORRECT_TOOL_CALL" \
+  --process "$CORRECT_PROCESS" \
+  --container-id "agentprov-local-$CORRECT_ATTEMPT" \
+  --cgroup-id "agentprov-cgroup-$CORRECT_ATTEMPT" \
+  --pid 424242 \
+  --started-at "$CORRECT_PROCESS_STARTED" \
+  --source harness_tool_call_scope
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest \
   --raw-event raw-execve-correct-add \
   --process "$CORRECT_PROCESS" \
@@ -86,12 +98,20 @@ echo "== ingest raw runtime telemetry without tool_call_id"
   --type execve \
   --payload '{"argv":["./delayed_child.sh"],"note":"no tool_call_id in raw event"}'
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest \
+  --raw-event raw-execve-pid-child-correct-add \
+  --pid 424242 \
+  --timestamp "$CORRECT_PROCESS_STARTED" \
+  --source tetragon_jsonl \
+  --type execve \
+  --payload '{"argv":["./async_child.sh"],"note":"pid scoped event without tool_call_id"}'
+"$BIN" --data-dir "$DATA_DIR" telemetry ingest \
   --raw-event raw-network-container-correct-add \
   --container-id "agentprov-local-$CORRECT_ATTEMPT" \
   --timestamp "$CORRECT_PROCESS_STARTED" \
   --source falco_jsonl \
   --type network_connect \
   --payload '{"dst":"api.example.com:443","note":"container scoped event"}'
+"$BIN" --data-dir "$DATA_DIR" telemetry bindings --run run-demo-bugfix --tool-call "$CORRECT_TOOL_CALL"
 "$BIN" --data-dir "$DATA_DIR" telemetry list --run run-demo-bugfix --type execve
 "$BIN" --data-dir "$DATA_DIR" telemetry list --run run-demo-bugfix --type network_connect
 
