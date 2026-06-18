@@ -55,7 +55,7 @@ ROLLOUT_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" rollout start \
   --strategy "wrong-constant::sed 's/return a - b/return 42/' calculator.py > calculator.py.new && mv calculator.py.new calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch" \
   --strategy "syntax-error::printf 'def add(a, b):\n    return a +\n' > calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch" \
   --strategy "partial-comment::printf '\n# TODO fix add later\n' >> calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch" \
-  --strategy "correct-add::sed 's/return a - b/return a + b/' calculator.py > calculator.py.new && mv calculator.py.new calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch")"
+  --strategy "correct-add::sed 's/return a - b/return a + b/' calculator.py > calculator.py.new && mv calculator.py.new calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; echo fixed > fix-notes.txt; rm calculator.py.bug; ./test_calculator.sh::score=contains:passed::artifact=fix.patch")"
 echo "$ROLLOUT_OUTPUT"
 
 CORRECT_PROCESS="$(echo "$ROLLOUT_OUTPUT" | awk '$5 == "correct-add" {print $4; exit}')"
@@ -137,6 +137,10 @@ echo "== diff attempts for calculator.py"
 
 echo "== blame calculator.py"
 "$BIN" --data-dir "$DATA_DIR" graph blame --run run-demo-bugfix --file calculator.py
+
+echo "== blame created and deleted files"
+"$BIN" --data-dir "$DATA_DIR" graph blame --run run-demo-bugfix --file fix-notes.txt
+"$BIN" --data-dir "$DATA_DIR" graph blame --run run-demo-bugfix --file calculator.py.bug
 
 echo "== trace winning patch artifacts"
 "$BIN" --data-dir "$DATA_DIR" graph trace --run run-demo-bugfix | sed -n '1,220p'

@@ -168,7 +168,8 @@ Expected acceptance:
 - Selects a clean winner using score, tests, risk, and cost evidence.
 - Emits `graph trace`, `refs`, `log`, `materialize`, `verify`, and `replay`.
 - Emits `graph diff` for `calculator.py`.
-- Emits `graph blame` with created/modified/deleted/unchanged state.
+- Emits `graph blame` with created/modified/deleted/unchanged state, and the
+  acceptance gate asserts those state classes.
 - Supports JSON manifests for replay, diff, and blame automation.
 
 The acceptance script verifies these expectations with command output and JSON

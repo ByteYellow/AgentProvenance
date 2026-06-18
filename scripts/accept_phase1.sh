@@ -67,7 +67,7 @@ ROLLOUT_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" rollout start \
   --strategy "wrong-constant::sed 's/return a - b/return 42/' calculator.py > calculator.py.new && mv calculator.py.new calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch" \
   --strategy "syntax-error::printf 'def add(a, b):\n    return a +\n' > calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch" \
   --strategy "partial-comment::printf '\n# TODO fix add later\n' >> calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch" \
-  --strategy "correct-add::sed 's/return a - b/return a + b/' calculator.py > calculator.py.new && mv calculator.py.new calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; ./test_calculator.sh::score=contains:passed::artifact=fix.patch")"
+  --strategy "correct-add::sed 's/return a - b/return a + b/' calculator.py > calculator.py.new && mv calculator.py.new calculator.py; diff -u calculator.py.bug calculator.py > fix.patch || true; echo fixed > fix-notes.txt; rm calculator.py.bug; ./test_calculator.sh::score=contains:passed::artifact=fix.patch")"
 echo "$ROLLOUT_OUTPUT"
 
 ROLLOUT_ID="$(echo "$ROLLOUT_OUTPUT" | sed -n 's/^rollout_id=\([^ ]*\).*/\1/p')"
@@ -159,16 +159,22 @@ VERIFY_JSON="$DATA_DIR/verify.json"
 REPLAY_JSON="$DATA_DIR/replay.json"
 DIFF_JSON="$DATA_DIR/diff.json"
 BLAME_JSON="$DATA_DIR/blame.json"
+CREATED_DIFF_JSON="$DATA_DIR/created-diff.json"
+CREATED_BLAME_JSON="$DATA_DIR/created-blame.json"
+DELETED_BLAME_JSON="$DATA_DIR/deleted-blame.json"
 "$BIN" --data-dir "$DATA_DIR" graph verify --run run-phase1-accept --json > "$VERIFY_JSON"
 "$BIN" --data-dir "$DATA_DIR" graph replay --run run-phase1-accept --json > "$REPLAY_JSON"
 "$BIN" --data-dir "$DATA_DIR" graph diff --run run-phase1-accept --file calculator.py --json > "$DIFF_JSON"
 "$BIN" --data-dir "$DATA_DIR" graph blame --run run-phase1-accept --file calculator.py --json > "$BLAME_JSON"
+"$BIN" --data-dir "$DATA_DIR" graph diff --run run-phase1-accept --file fix-notes.txt --json > "$CREATED_DIFF_JSON"
+"$BIN" --data-dir "$DATA_DIR" graph blame --run run-phase1-accept --file fix-notes.txt --json > "$CREATED_BLAME_JSON"
+"$BIN" --data-dir "$DATA_DIR" graph blame --run run-phase1-accept --file calculator.py.bug --json > "$DELETED_BLAME_JSON"
 
-"$PYTHON_BIN" - "$VERIFY_JSON" "$REPLAY_JSON" "$DIFF_JSON" "$BLAME_JSON" "$CORRECT_ATTEMPT" "$RISKY_ATTEMPT" <<'PY'
+"$PYTHON_BIN" - "$VERIFY_JSON" "$REPLAY_JSON" "$DIFF_JSON" "$BLAME_JSON" "$CREATED_DIFF_JSON" "$CREATED_BLAME_JSON" "$DELETED_BLAME_JSON" "$CORRECT_ATTEMPT" "$RISKY_ATTEMPT" <<'PY'
 import json
 import sys
 
-verify_path, replay_path, diff_path, blame_path, correct_attempt, risky_attempt = sys.argv[1:]
+verify_path, replay_path, diff_path, blame_path, created_diff_path, created_blame_path, deleted_blame_path, correct_attempt, risky_attempt = sys.argv[1:]
 
 with open(verify_path, "r", encoding="utf-8") as f:
     verify = json.load(f)
@@ -178,6 +184,12 @@ with open(diff_path, "r", encoding="utf-8") as f:
     diff = json.load(f)
 with open(blame_path, "r", encoding="utf-8") as f:
     blame = json.load(f)
+with open(created_diff_path, "r", encoding="utf-8") as f:
+    created_diff = json.load(f)
+with open(created_blame_path, "r", encoding="utf-8") as f:
+    created_blame = json.load(f)
+with open(deleted_blame_path, "r", encoding="utf-8") as f:
+    deleted_blame = json.load(f)
 
 assert verify["schema_version"] == "agentprovenance.verify/v1", verify
 assert verify["status"] == "ok", verify
@@ -211,6 +223,17 @@ assert blame["schema_version"] == "agentprovenance.blame/v1", blame
 blame_by_id = {e["attempt_id"]: e for e in blame["entries"]}
 assert blame_by_id[correct_attempt]["reason"] == "modified_by_attempt", blame_by_id[correct_attempt]
 assert blame_by_id[correct_attempt]["is_winner"] is True, blame_by_id[correct_attempt]
+
+created_diff_by_id = {a["attempt_id"]: a for a in created_diff["attempts"]}
+assert created_diff_by_id[correct_attempt]["changed"] is True, created_diff_by_id[correct_attempt]
+assert created_diff_by_id[correct_attempt]["file_exists"] is True, created_diff_by_id[correct_attempt]
+assert any(not entry["changed"] for entry in created_diff["attempts"] if entry["attempt_id"] != correct_attempt), created_diff
+
+created_blame_by_id = {e["attempt_id"]: e for e in created_blame["entries"]}
+assert created_blame_by_id[correct_attempt]["reason"] == "created_by_attempt", created_blame_by_id[correct_attempt]
+
+deleted_blame_by_id = {e["attempt_id"]: e for e in deleted_blame["entries"]}
+assert deleted_blame_by_id[correct_attempt]["reason"] == "deleted_by_attempt", deleted_blame_by_id[correct_attempt]
 PY
 
 echo "phase1 acceptance: ok"

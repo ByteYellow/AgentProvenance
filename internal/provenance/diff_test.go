@@ -37,10 +37,19 @@ func TestDiffAndBlameFileAcrossAttempts(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(base, "calculator.py"), []byte("def add(a, b):\n    return a - b\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(base, "old.txt"), []byte("remove me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(attempt1, "calculator.py"), []byte("def add(a, b):\n    return a - b\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(attempt1, "old.txt"), []byte("remove me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(attempt2, "calculator.py"), []byte("def add(a, b):\n    return a + b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(attempt2, "new.txt"), []byte("created\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	insertDiffSnapshot(t, db, "snap-1", base, now)
@@ -113,10 +122,19 @@ func TestDiffAndBlameJSON(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(base, "calculator.py"), []byte("def add(a, b):\n    return a - b\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(base, "old.txt"), []byte("remove me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(attempt1, "calculator.py"), []byte("def add(a, b):\n    return a - b\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(attempt1, "old.txt"), []byte("remove me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(attempt2, "calculator.py"), []byte("def add(a, b):\n    return a + b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(attempt2, "new.txt"), []byte("created\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	insertDiffSnapshot(t, db, "snap-1", base, now)
@@ -158,6 +176,45 @@ func TestDiffAndBlameJSON(t *testing.T) {
 	}
 	if blameManifest.Entries[1].Reason != "modified_by_attempt" || blameManifest.Entries[1].ToolCallID != "tool-2" {
 		t.Fatalf("unexpected blame entry: %+v", blameManifest.Entries[1])
+	}
+
+	var createdOut bytes.Buffer
+	if err := BlameFileJSON(db, "run-1", "new.txt", &createdOut); err != nil {
+		t.Fatal(err)
+	}
+	var createdManifest FileBlameManifest
+	if err := json.Unmarshal(createdOut.Bytes(), &createdManifest); err != nil {
+		t.Fatalf("invalid created blame json: %v\n%s", err, createdOut.String())
+	}
+	if createdManifest.Entries[0].Changed || createdManifest.Entries[0].Reason != "unchanged_from_base" {
+		t.Fatalf("missing file in base and attempt should be unchanged: %+v", createdManifest.Entries[0])
+	}
+	if !createdManifest.Entries[1].Changed || createdManifest.Entries[1].Reason != "created_by_attempt" {
+		t.Fatalf("expected created_by_attempt: %+v", createdManifest.Entries[1])
+	}
+
+	var createdDiffOut bytes.Buffer
+	if err := DiffFileJSON(db, "run-1", "new.txt", &createdDiffOut); err != nil {
+		t.Fatal(err)
+	}
+	var createdDiff FileDiffManifest
+	if err := json.Unmarshal(createdDiffOut.Bytes(), &createdDiff); err != nil {
+		t.Fatalf("invalid created diff json: %v\n%s", err, createdDiffOut.String())
+	}
+	if createdDiff.Attempts[0].Changed || !createdDiff.Attempts[1].Changed {
+		t.Fatalf("unexpected created diff attempts: %+v", createdDiff.Attempts)
+	}
+
+	var deletedOut bytes.Buffer
+	if err := BlameFileJSON(db, "run-1", "old.txt", &deletedOut); err != nil {
+		t.Fatal(err)
+	}
+	var deletedManifest FileBlameManifest
+	if err := json.Unmarshal(deletedOut.Bytes(), &deletedManifest); err != nil {
+		t.Fatalf("invalid deleted blame json: %v\n%s", err, deletedOut.String())
+	}
+	if deletedManifest.Entries[1].Reason != "deleted_by_attempt" || !deletedManifest.Entries[1].Changed {
+		t.Fatalf("expected deleted_by_attempt: %+v", deletedManifest.Entries[1])
 	}
 }
 

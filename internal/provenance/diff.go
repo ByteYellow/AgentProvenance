@@ -127,7 +127,7 @@ func BuildDiffFile(db *sql.DB, runID, filePath string) (FileDiffManifest, error)
 		if err != nil {
 			return FileDiffManifest{}, err
 		}
-		changed := !baseOK || !ok || sha256Hex(baseContent) != sha256Hex(content)
+		changed := fileChanged(baseContent, baseOK, content, ok)
 		attemptHash := "missing"
 		if ok {
 			attemptHash = sha256Hex(content)
@@ -153,6 +153,16 @@ func BuildDiffFile(db *sql.DB, runID, filePath string) (FileDiffManifest, error)
 		manifest.Attempts = append(manifest.Attempts, entry)
 	}
 	return manifest, nil
+}
+
+func fileChanged(baseContent []byte, baseOK bool, attemptContent []byte, attemptOK bool) bool {
+	if !baseOK && !attemptOK {
+		return false
+	}
+	if baseOK != attemptOK {
+		return true
+	}
+	return sha256Hex(baseContent) != sha256Hex(attemptContent)
 }
 
 func PrintDiffFile(out io.Writer, manifest FileDiffManifest) {

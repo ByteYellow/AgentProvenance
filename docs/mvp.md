@@ -153,6 +153,9 @@ Expected output / acceptance:
   `modified_by_attempt` records with attempt id, tool call id, strategy,
   command, artifact, and winner status. `--json` emits an
   `agentprovenance.blame/v1` manifest.
+- The Phase 1 gate also checks `created_by_attempt` and `deleted_by_attempt`
+  records, so file attribution covers created, modified, deleted, and unchanged
+  workspace states.
 - `graph trace` shows generated patch artifacts linked by `attempt_artifact`
   and `tool_call_artifact` edges.
 - `effect list --run run-demo-bugfix` and `graph trace` show an
