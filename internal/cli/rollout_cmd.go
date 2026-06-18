@@ -23,7 +23,7 @@ func rolloutStartCmd(dataDir *string) *cobra.Command {
 	var req rollout.StartRequest
 	c := &cobra.Command{
 		Use:   "start",
-		Short: "fan out attempts from a snapshot, score them, and promote a winner",
+		Short: "fan out attempts from a snapshot and record local candidate evidence",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			service, cleanup, err := rolloutSvc(*dataDir)
 			if err != nil {
@@ -34,8 +34,8 @@ func rolloutStartCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "rollout_id=%s run_id=%s status=%s base_snapshot=%s fanout=%d winner=%s promotion=%s risk=%s cost=%.6f\n",
-				item.ID, item.RunID, item.Status, item.BaseSnapshotID, item.Fanout, winner.AttemptID, promotion.ID, promotion.RiskStatus, item.CostEstimate)
+			fmt.Fprintf(cmd.OutOrStdout(), "rollout_id=%s run_id=%s status=%s base_snapshot=%s fanout=%d candidate=%s winner=%s promotion=%s risk=%s cost=%.6f\n",
+				item.ID, item.RunID, item.Status, item.BaseSnapshotID, item.Fanout, winner.AttemptID, winner.AttemptID, promotion.ID, promotion.RiskStatus, item.CostEstimate)
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "ATTEMPT\tTOOL_CALL\tSESSION\tPROCESS\tSTRATEGY\tSTATUS\tRISK\tBUDGET_EXCEEDED\tEXIT\tWALL_MS\tSCORE\tCOST\tWINNER\tWORKSPACE")
 			for _, result := range results {
@@ -79,8 +79,8 @@ func rolloutStatusCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "rollout_id=%s run_id=%s status=%s base_snapshot=%s fanout=%d budget_seconds=%d max_cost=%.6f winner=%s promotion=%s risk=%s cost=%.6f created_at=%s updated_at=%s\n",
-				item.ID, item.RunID, item.Status, item.BaseSnapshotID, item.Fanout, item.BudgetSeconds, item.MaxCost, item.WinnerAttemptID, item.PromotionID, item.RiskStatus, item.CostEstimate, item.CreatedAt, item.UpdatedAt)
+			fmt.Fprintf(cmd.OutOrStdout(), "rollout_id=%s run_id=%s status=%s base_snapshot=%s fanout=%d budget_seconds=%d max_cost=%.6f candidate=%s winner=%s promotion=%s risk=%s cost=%.6f created_at=%s updated_at=%s\n",
+				item.ID, item.RunID, item.Status, item.BaseSnapshotID, item.Fanout, item.BudgetSeconds, item.MaxCost, item.WinnerAttemptID, item.WinnerAttemptID, item.PromotionID, item.RiskStatus, item.CostEstimate, item.CreatedAt, item.UpdatedAt)
 			return nil
 		},
 	}
@@ -123,7 +123,7 @@ func rolloutAttemptsCmd(dataDir *string) *cobra.Command {
 func rolloutWinnerCmd(dataDir *string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "winner <rollout_id_or_run_id>",
-		Short: "show rollout winner and promotion barrier result",
+		Short: "show local candidate evidence and promotion barrier result",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			service, cleanup, err := rolloutSvc(*dataDir)
@@ -135,8 +135,8 @@ func rolloutWinnerCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "winner=%s tool_call=%s strategy=%s status=%s attempt_risk=%s budget_exceeded=%t score=%.3f cost=%.6f workspace=%s promotion=%s promotion_status=%s risk=%s watermark=%s reason=%q\n",
-				winner.ID, winner.ToolCallID, winner.Strategy, winner.Status, winner.RiskStatus, winner.BudgetExceeded, winner.Score, winner.CostEstimate, winner.WorkspacePath, promotion.ID, promotion.Status, promotion.RiskStatus, promotion.TelemetryWatermark, promotion.Reason)
+			fmt.Fprintf(cmd.OutOrStdout(), "candidate=%s winner=%s tool_call=%s strategy=%s status=%s attempt_risk=%s budget_exceeded=%t score=%.3f cost=%.6f workspace=%s promotion=%s promotion_status=%s risk=%s watermark=%s reason=%q\n",
+				winner.ID, winner.ID, winner.ToolCallID, winner.Strategy, winner.Status, winner.RiskStatus, winner.BudgetExceeded, winner.Score, winner.CostEstimate, winner.WorkspacePath, promotion.ID, promotion.Status, promotion.RiskStatus, promotion.TelemetryWatermark, promotion.Reason)
 			return nil
 		},
 	}

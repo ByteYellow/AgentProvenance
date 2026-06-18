@@ -42,7 +42,7 @@ execution evidence:
 - which process changed a file;
 - which artifact came from which attempt;
 - which runtime event caused risk or taint;
-- why a winner was allowed or blocked at the promotion barrier;
+- why a local candidate was allowed or blocked at the promotion barrier;
 - how to reconstruct the result through a replay manifest.
 
 ## LLM Gateways
@@ -86,5 +86,6 @@ That graph should answer:
 - Which process changed this file?
 - Which runtime event maps to this agent action?
 - Which branch was tainted or quarantined?
-- Why was this winner promoted?
+- Which local candidate passed the promotion barrier, and what evidence should
+  an external evaluator inspect before making the final selection?
 - Can the result be replayed or audited later?

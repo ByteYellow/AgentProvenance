@@ -148,7 +148,7 @@ emits an `agentprovenance.verify/v1` manifest for CI or downstream agent
 harnesses. `replay` emits a plan-only reconstruction and `replay --json` emits
 a structured `agentprovenance.replay/v1` manifest. `trajectories --json` emits
 an `agentprovenance.trajectories/v1` evidence manifest for external evaluators
-and RL pipelines; it does not choose the final winner.
+and RL pipelines; it does not make the final selection decision.
 `diff` compares file state across attempts. `blame` attributes a file version
 to the attempt, tool call, process, command, strategy, and local candidate
 status that produced it. `diff --json` and `blame --json` emit structured
@@ -345,6 +345,8 @@ Rollout workflow:
   --fanout 5 \
   --strategy "correct-add::sed 's/return a - b/return a + b/' calculator.py > calculator.py.new && mv calculator.py.new calculator.py; ./test_calculator.sh::score=contains:passed::artifact=fix.patch"
 
+# Historical command name: prints the local candidate and promotion-barrier
+# evidence. The external evaluator/RL pipeline still owns final selection.
 ./agentprov rollout winner run-demo-bugfix
 ./agentprov graph trace --run run-demo-bugfix
 ```
@@ -384,8 +386,7 @@ docs/                 design notes and MVP details
 
 Phase 1 hardening:
 
-- JSON output for graph queries and demo assertions.
-- Stronger replay manifest schema validation and compatibility tests.
+- Stronger replay and trajectory manifest schema compatibility tests.
 - Deeper graph integrity checks.
 - Telemetry drain watermarks before promotion.
 - ToolCallScope binding receiver for cgroup/container/process identity.

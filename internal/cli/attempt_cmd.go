@@ -18,7 +18,7 @@ func attemptCmd(dataDir *string) *cobra.Command {
 	var topK int
 	bestOf := &cobra.Command{
 		Use:   "best-of",
-		Short: "fork attempts from one snapshot, execute strategies, and choose a winner",
+		Short: "fork attempts from one snapshot and record local candidate evidence",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			paths, err := store.Init(*dataDir)
 			if err != nil {
@@ -46,7 +46,7 @@ func attemptCmd(dataDir *string) *cobra.Command {
 			if err := w.Flush(); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "winner=%s strategy=%s workspace=%s score=%.3f cost=%.6f artifact=%s\n", winner.AttemptID, winner.Strategy, winner.WorkspacePath, winner.Score, winner.CostEstimate, winner.ArtifactResult)
+			fmt.Fprintf(cmd.OutOrStdout(), "candidate=%s winner=%s strategy=%s workspace=%s score=%.3f cost=%.6f artifact=%s\n", winner.AttemptID, winner.AttemptID, winner.Strategy, winner.WorkspacePath, winner.Score, winner.CostEstimate, winner.ArtifactResult)
 			return nil
 		},
 	}

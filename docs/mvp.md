@@ -150,15 +150,16 @@ Expected output / acceptance:
   `execve` event under the same run/session/attempt/tool/process chain.
 - `rollout attempts` shows `wrong-constant` as `quarantined` with
   `risk=tainted`.
-- `rollout winner` shows `correct-add` as the local clean candidate selected by
-  the demo policy. In real RL pipelines this is evidence for the evaluator, not
-  the final reward or training decision.
+- `rollout winner` is a historical command name. It shows `correct-add` as the
+  local clean candidate that passed the demo promotion barrier. In real RL
+  pipelines this is evidence for the evaluator, not the final reward or
+  training decision.
 - `graph diff --file calculator.py` prints a unified diff between the base file
   and modified attempt files. `--json` emits an `agentprovenance.diff/v1`
   manifest.
 - `graph blame --file calculator.py` reports `unchanged_from_base` and
   `modified_by_attempt` records with attempt id, tool call id, strategy,
-  command, artifact, and winner status. `--json` emits an
+  command, artifact, and local candidate status. `--json` emits an
   `agentprovenance.blame/v1` manifest.
 - The Phase 1 gate also checks `created_by_attempt` and `deleted_by_attempt`
   records, so file attribution covers created, modified, deleted, and unchanged
@@ -285,25 +286,25 @@ The command forks one workspace per strategy. When strategy metadata includes
 `probe=<cmd>` and `--top-k` or `--early-stop` is set, AgentProvenance first executes the
 cheap probe command, ranks probe results, runs the full command only for the
 top-k candidates, and marks the rest as `pruned`. It records exit code, wall
-time, output summary, score, `risk_status`, `budget_exceeded`, and the winning
-attempt. Strategy metadata can include `probe`, `budget`,
-`score=contains:<text>` or `score=number`, and `artifact`. Winner selection
-prefers clean, within-budget attempts, then score, then lower cost. Cost output
+time, output summary, score, `risk_status`, `budget_exceeded`, and the local
+candidate attempt. Strategy metadata can include `probe`, `budget`,
+`score=contains:<text>` or `score=number`, and `artifact`. Local candidate
+eligibility prefers clean, within-budget attempts, then score, then lower cost. Cost output
 includes fanout cost and saved cost when early stop, max fanout, or probe
 pruning avoids full command execution. `cost show` also prints
 `rollout_cost_summary` with total attempts, executed attempts, pruned attempts,
-winners, saved cost, and saved ratio.
+local candidates, saved cost, and saved ratio.
 When `artifact=<workspace-relative-path>` is set, AgentProvenance copies that file from the
 attempt workspace into `.agentprov/artifacts/` and stores the exported result ref in
 `artifact_result`; missing artifacts are recorded in the attempt output summary.
 Processed evidence also adds `attempt_artifact` and `tool_call_artifact` graph
 edges, and `graph trace` prints an `artifacts` section for reverse lookup from
-artifact ref to attempt, tool call, strategy, and winner status.
+artifact ref to attempt, tool call, strategy, and local candidate status.
 Use `graph trace --artifact <artifact_ref>` to start from an exported artifact
 and trace back to the attempt, tool call, rollout, run, and graph edge that
 produced it. Use `graph trace --attempt <attempt_id>` to inspect a single
 attempt with its tool call, artifact, rollout, graph edges, evidence payload,
-and winner status. Use `graph trace --tool-call <tool_call_id>` to start from
+and local candidate status. Use `graph trace --tool-call <tool_call_id>` to start from
 one tool invocation and inspect its process, artifact, graph edges, evidence,
 rollout, and winner context. Use `graph trace --process <process_id>` to start
 from a runtime process and trace back to the session, tool call, attempt,
@@ -329,9 +330,9 @@ artifact, telemetry, and external effect records. Add `--json` to emit the
 structured `agentprovenance.replay/v1` manifest for automation; Phase 1 does
 not execute the plan or roll back real-world side effects.
 `graph trace` prints the compact attempt evidence payload, including strategy,
-score, saved cost, output summary, winner flag, and selection reason, so a
-probe/top-k rollout can be replayed and audited without guessing why a branch
-was pruned or promoted.
+score, saved cost, output summary, local candidate flag, and promotion-barrier
+reason, so a probe/top-k rollout can be replayed and audited without guessing
+why a branch was pruned or marked evaluator-eligible.
 
 ### demo_rollout_control_plane
 
@@ -344,7 +345,7 @@ AGENTPROV_IO_MAX_FANOUT_PER_LOWER=100 AGENTPROV_BURST_MAX_INFLIGHT=2 \
   --strategy "score::printf 42::probe=printf 42::score=number::artifact=score.txt" \
   --strategy "slow::sleep 1; echo passed::probe=echo 1::score=contains:passed::artifact=slow.log"
 agentprov rollout attempts <rollout_id>
-agentprov rollout winner <rollout_id>
+agentprov rollout winner <rollout_id> # historical name: local candidate evidence
 agentprov evidence process
 agentprov graph trace --run run-demo-bugfix
 agentprov cost show run-demo-bugfix
