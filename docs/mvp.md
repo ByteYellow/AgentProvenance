@@ -6,16 +6,18 @@ layer for sandboxed AI agent execution.
 The command-line interface is `agentprov`. The core MVP manages local leases,
 Docker-backed sandbox sessions, directory snapshots, attempt workspace forks,
 best-of-N execution, process/tool-call traces, runtime telemetry correlation,
-artifact refs, content-addressed provenance objects, and cost/risk evidence
-attached to promotion decisions.
+artifact refs, content-addressed provenance objects, and cost/risk evidence for
+each trajectory. External RL pipelines, evaluators, or agent harnesses own the
+final selection decision.
 
 Phase 1 focuses on the immutable execution ledger and state-diff audit loop:
 `ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame ->
 Taint -> Promotion Barrier`.
 
-This is not an RL runtime, generic telemetry collector, or distributed
-scheduler. RL-style rollout and evaluator pipelines are supported as audit and
-debugging consumers of the graph, not as the primary runtime target.
+This is not an RL runtime, generic telemetry collector, distributed scheduler,
+or reward/evaluator decision maker. RL-style rollout and evaluator pipelines are
+supported as audit and debugging consumers of the graph, not as the primary
+runtime target.
 
 ## Phase 1 risk boundaries
 
@@ -26,7 +28,7 @@ three hard boundaries:
 |---|---|---|
 | Storage/performance | Sparse snapshot semantics, incremental file diff, and content-addressed artifacts | Do not snapshot every step. Do not claim memory snapshot support. |
 | Non-filesystem state | `ExternalEffectRecord` stores external intent, target, dry-run/mock/allowlist mode, policy decision, and optional compensation reference | External API, database, queue, and message side effects are provenance and gate records only. No rollback guarantee for the real world. |
-| Merge conflict | Best-of-N winner promotion with taint and promotion barriers | No arbitrary branch auto-merge. Phase 1 only supports diff, blame, select, promote, and quarantine. |
+| Merge conflict | Best-of-N candidate eligibility with taint and promotion barriers | No arbitrary branch auto-merge. Phase 1 only supports diff, blame, local candidate marking, promote-barrier checks, and quarantine. |
 
 Preview URL, egress proxy, credential injection, warm pool, node metadata, and
 baseline commands are kept as experimental local controls. They are useful for
@@ -126,7 +128,7 @@ This is the main AgentProvenance demo. It creates a clean coding workspace,
 snapshots it, forks five attempts, runs different repair strategies, exports
 patch artifacts, ingests raw runtime telemetry without `tool_call_id`,
 correlates it through ToolCallScope bindings, quarantines one risky failed
-branch, promotes the passing winner, then runs `graph trace`, `graph refs`,
+branch, marks the passing candidate as locally promotable, then runs `graph trace`, `graph refs`,
 `graph log`, `graph materialize`, `graph verify`, `graph replay`, `graph replay
 --json`, `graph verify --json`, `graph diff`, `graph diff --json`, `graph
 blame`, and `graph blame --json` to explain the winner, verify graph integrity,
@@ -145,7 +147,9 @@ Expected output / acceptance:
   `execve` event under the same run/session/attempt/tool/process chain.
 - `rollout attempts` shows `wrong-constant` as `quarantined` with
   `risk=tainted`.
-- `rollout winner` shows `correct-add` as the promoted clean winner.
+- `rollout winner` shows `correct-add` as the local clean candidate selected by
+  the demo policy. In real RL pipelines this is evidence for the evaluator, not
+  the final reward or training decision.
 - `graph diff --file calculator.py` prints a unified diff between the base file
   and modified attempt files. `--json` emits an `agentprovenance.diff/v1`
   manifest.
@@ -343,9 +347,10 @@ snapshot, forks attempt workspaces, creates one short-lived Docker session and
 one `tool_call` per admitted strategy, requires BurstGuard admission before
 command execution, switches the container from `think` to `tool` CPU profile,
 writes compact evidence, materializes `rollout -> attempt -> tool_call ->
-session` graph edges asynchronously, and promotes the winning attempt through
-the promotion barrier. Attempt tables and `cost show` expose risk, budget, score,
-and cost so the winner is explainable.
+session` graph edges asynchronously, and checks local candidate eligibility
+through the promotion barrier. Attempt tables and `cost show` expose risk,
+budget, score, and cost so an external evaluator can make or audit the final
+selection.
 
 ### demo_metadata_egress_quarantine
 

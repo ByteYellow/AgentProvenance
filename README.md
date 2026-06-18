@@ -38,8 +38,10 @@ The narrow goal is to answer questions such as:
 - Which process changed which file?
 - Which runtime event maps to which agent action?
 - Which branch was tainted, quarantined, or blocked from promotion?
-- Why was one attempt promoted as the winner?
-- What cost, risk, test, diff, and artifact evidence supports that decision?
+- What cost, risk, test, diff, artifact, tool-call, process, and runtime-event
+  evidence exists for each trajectory?
+- Which attempts are eligible for an external evaluator or RL pipeline to
+  promote, reject, replay, or quarantine?
 - Can the result be traced, diffed, blamed, verified, materialized, and replayed?
 
 AgentProvenance sits above runtime, snapshot, orchestration, and telemetry
@@ -60,7 +62,7 @@ attempt may run tests, edit files, call tools, create artifacts, trigger runtime
 telemetry, consume CPU, and produce risk signals. Existing traces, logs,
 metrics, and sandbox managers usually record fragments of this story, but they
 do not give a Git-like causal graph for state, evidence, runtime behavior, and
-promotion decisions.
+promotion-barrier decisions.
 
 AgentProvenance makes that correlation layer explicit:
 
@@ -79,15 +81,19 @@ The killer use case is a coding-agent best-of-N rollout:
 1. Start from a clean snapshot.
 2. Fork multiple attempts.
 3. Let each attempt try a different fix.
-4. Capture patches, tests, process telemetry, cost, and risk.
+4. Capture patches, tests, state diffs, artifacts, tool calls, process/runtime
+   telemetry, cost, and risk.
 5. Quarantine unsafe branches.
 6. Diff and blame the resulting files.
-7. Promote the winner only after evidence is drained and verified.
-8. Emit a replay plan and content-addressed provenance objects.
+7. Emit per-trajectory evidence and eligibility signals after telemetry is
+   drained and verified.
+8. Let the external RL pipeline, evaluator, or agent harness make the final
+   selection decision.
 
 RL-style rollout and evaluator pipelines can use the same graph for debugging,
-sample audit, reward-hacking investigation, and trajectory provenance. The
-project does not try to become an RL runtime, trainer, or throughput scheduler.
+sample audit, reward-hacking investigation, trajectory provenance, and
+post-hoc selection analysis. The project does not try to become an RL runtime,
+trainer, throughput scheduler, or reward/evaluator decision maker.
 
 ## Quickstart
 
@@ -108,13 +114,13 @@ go build ./cmd/agentprov
 
 The demo builds `agentprov`, creates a clean coding workspace, snapshots it,
 forks five attempts, runs different bug-fix strategies, records raw runtime
-telemetry, quarantines a risky branch, promotes a safe winner, and then queries
-the provenance DAG.
+telemetry, quarantines a risky branch, marks one passing candidate as locally
+promotable for demonstration, and then queries the provenance DAG.
 
 `accept_phase1.sh` runs the same core scenario as a machine-checkable acceptance
 gate. It asserts telemetry correlation, external effect recording,
-quarantine/taint, promotion, `graph verify`, JSON replay, JSON diff, and JSON
-blame semantics.
+quarantine/taint, promotion-barrier eligibility, `graph verify`, JSON replay,
+JSON diff, and JSON blame semantics.
 
 Core graph commands:
 
@@ -141,8 +147,8 @@ emits an `agentprovenance.verify/v1` manifest for CI or downstream agent
 harnesses. `replay` emits a plan-only reconstruction and `replay --json` emits
 a structured `agentprovenance.replay/v1` manifest.
 `diff` compares file state across attempts. `blame` attributes a file version
-to the attempt, tool call, process, command, strategy, and promotion status that
-produced it. `diff --json` and `blame --json` emit structured
+to the attempt, tool call, process, command, strategy, and local candidate
+status that produced it. `diff --json` and `blame --json` emit structured
 `agentprovenance.diff/v1` and `agentprovenance.blame/v1` manifests.
 
 ## Core Demo
@@ -164,8 +170,9 @@ Expected acceptance:
   context.
 - Records an external side effect as `ExternalEffectRecord` in dry-run mode.
 - Quarantines and taints the risky failed branch.
-- Blocks tainted branches from promotion.
-- Selects a clean winner using score, tests, risk, and cost evidence.
+- Blocks tainted branches from being considered promotable.
+- Emits clean-candidate evidence using score, tests, risk, and cost signals
+  without claiming to replace the RL pipeline's final selection logic.
 - Emits `graph trace`, `refs`, `log`, `materialize`, `verify`, and `replay`.
 - Emits `graph diff` for `calculator.py`.
 - Emits `graph blame` with created/modified/deleted/unchanged state, and the
@@ -188,7 +195,7 @@ ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame
 |---|---|
 | Provenance DAG | `trace`, `refs`, `log`, `materialize`, stronger `verify`, text `replay`, JSON replay manifest |
 | State attribution | MVP `graph diff` and `graph blame` for workspace files, with JSON manifests |
-| Rollout | local and Docker-backed best-of-N attempts, scoring, top-k pruning, winner selection |
+| Rollout | local and Docker-backed best-of-N attempts, scoring, top-k pruning, and candidate eligibility evidence |
 | ToolCallScope | process/container/cgroup/time-window context binding for raw telemetry correlation |
 | Artifacts | exported attempt artifacts linked back to attempt/tool_call/process |
 | Risk | policy decisions, quarantine, taint, promotion barrier |
