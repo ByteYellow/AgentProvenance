@@ -77,6 +77,16 @@ agentprov telemetry list --run run-demo-bugfix --type execve
 agentprov cost show run-demo-bugfix
 ```
 
+Machine-checkable Phase 1 gate:
+
+```sh
+./scripts/accept_phase1.sh
+```
+
+The acceptance script runs the coding-agent best-of-N scenario and asserts
+telemetry correlation, external effect recording, quarantine/taint, promotion,
+`graph verify`, JSON replay, JSON diff, and JSON blame semantics.
+
 Daemon-backed equivalent:
 
 ```sh
@@ -108,6 +118,7 @@ agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty
 
 ```sh
 ./scripts/demo_coding_agent_best_of_n.sh
+./scripts/accept_phase1.sh
 ```
 
 This is the main AgentProvenance demo. It creates a clean coding workspace,
@@ -150,6 +161,8 @@ Expected output / acceptance:
   snapshot, attempts, commands, artifacts, runtime events, and external effect
   gates. `graph replay --run run-demo-bugfix --json` emits the same evidence as
   an `agentprovenance.replay/v1` manifest for automation.
+- `accept_phase1.sh` validates the same expectations with command output and
+  JSON manifest assertions, so Phase 1 has a machine-checkable gate.
 - Rollout unit tests prove a quarantined/tainted attempt is rejected by the
   promotion barrier before `winner_promoted` can be emitted.
 - Rollout unit tests prove snapshot taint propagates through

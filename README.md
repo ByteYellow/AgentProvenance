@@ -102,12 +102,18 @@ cd AgentProvenance
 go build ./cmd/agentprov
 
 ./scripts/demo_coding_agent_best_of_n.sh
+./scripts/accept_phase1.sh
 ```
 
 The demo builds `agentprov`, creates a clean coding workspace, snapshots it,
 forks five attempts, runs different bug-fix strategies, records raw runtime
 telemetry, quarantines a risky branch, promotes a safe winner, and then queries
 the provenance DAG.
+
+`accept_phase1.sh` runs the same core scenario as a machine-checkable acceptance
+gate. It asserts telemetry correlation, external effect recording,
+quarantine/taint, promotion, `graph verify`, JSON replay, JSON diff, and JSON
+blame semantics.
 
 Core graph commands:
 
@@ -142,6 +148,7 @@ Run:
 
 ```sh
 ./scripts/demo_coding_agent_best_of_n.sh
+./scripts/accept_phase1.sh
 ```
 
 Expected acceptance:
@@ -159,6 +166,9 @@ Expected acceptance:
 - Emits `graph diff` for `calculator.py`.
 - Emits `graph blame` with created/modified/deleted/unchanged state.
 - Supports JSON manifests for replay, diff, and blame automation.
+
+The acceptance script verifies these expectations with command output and JSON
+manifest assertions.
 
 This is the Phase 1 product line:
 
@@ -388,6 +398,7 @@ Phase 4 isolation escalation:
 ```sh
 go test ./...
 ./scripts/demo_coding_agent_best_of_n.sh
+./scripts/accept_phase1.sh
 ```
 
-The demo is the main acceptance path for Phase 1.
+The acceptance script is the main machine-checkable gate for Phase 1.
