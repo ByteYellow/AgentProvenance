@@ -166,6 +166,12 @@ WINNER_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" rollout winner run-phase1-accept)
 assert_contains "$WINNER_OUTPUT" "$CORRECT_ATTEMPT"
 assert_contains "$WINNER_OUTPUT" "promotion_status=promoted"
 assert_contains "$WINNER_OUTPUT" "risk=clean"
+assert_contains "$WINNER_OUTPUT" "watermark="
+assert_contains "$WINNER_OUTPUT" "drain_started_at="
+assert_contains "$WINNER_OUTPUT" "drain_completed_at="
+assert_contains "$WINNER_OUTPUT" "drain_queued_before=1"
+assert_contains "$WINNER_OUTPUT" "drain_processed="
+assert_contains "$WINNER_OUTPUT" "drain_pending_after=0"
 
 echo "== provenance graph"
 "$BIN" --data-dir "$DATA_DIR" graph materialize --run run-phase1-accept >/dev/null
@@ -177,6 +183,7 @@ assert_contains "$TRACE_OUTPUT" "execution_context_bindings:"
 assert_contains "$TRACE_OUTPUT" "external_effects:"
 assert_contains "$TRACE_OUTPUT" "attempt_quarantined"
 assert_contains "$TRACE_OUTPUT" "winner_promoted"
+assert_contains "$TRACE_OUTPUT" "drain_processed"
 
 VERIFY_JSON="$DATA_DIR/verify.json"
 REPLAY_JSON="$DATA_DIR/replay.json"

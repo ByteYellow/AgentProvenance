@@ -161,6 +161,10 @@ Expected output / acceptance:
   local clean candidate that passed the demo promotion barrier. In real RL
   pipelines this is evidence for the evaluator, not the final reward or
   training decision.
+- The same output includes `watermark`, `drain_started_at`,
+  `drain_completed_at`, `drain_queued_before`, `drain_processed`, and
+  `drain_pending_after=0`, proving the candidate barrier drained queued
+  evidence before marking the candidate promotable.
 - `graph diff --file calculator.py` prints a unified diff between the base file
   and modified attempt files. `--json` emits an `agentprovenance.diff/v1`
   manifest.
@@ -178,7 +182,8 @@ Expected output / acceptance:
   are recorded as gate evidence instead of rollbackable state.
 - `graph verify --run run-demo-bugfix` reports `status=ok` after checking
   references, content-addressed object hashes, replay manifest generation,
-  ToolCallScope correlation drift, and taint/promotion barrier consistency.
+  ToolCallScope correlation drift, taint/promotion barrier consistency, and
+  promoted-candidate drain watermark consistency.
 - `graph verify --run run-demo-bugfix --json` emits an
   `agentprovenance.verify/v1` manifest with `status`, `error_count`,
   `warning_count`, and structured issues for automation.
@@ -195,6 +200,9 @@ Expected output / acceptance:
   JSON manifest assertions, so Phase 1 has a machine-checkable gate.
 - Rollout unit tests prove a quarantined/tainted attempt is rejected by the
   promotion barrier before `winner_promoted` can be emitted.
+- Rollout and verifier unit tests prove a promoted candidate must have a durable
+  telemetry/evidence drain window and no queued evidence at or before its
+  watermark.
 - Rollout unit tests prove snapshot taint propagates through
   `snapshot_edges` to descendant snapshots.
 

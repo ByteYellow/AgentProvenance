@@ -76,6 +76,9 @@ func Verify(db *sql.DB, runID string) (VerifyResult, error) {
 	if err := verifyRollouts(db, runID, add); err != nil {
 		return result, err
 	}
+	if err := verifyPromotions(db, runID, add); err != nil {
+		return result, err
+	}
 	if err := verifyAttempts(db, runID, add); err != nil {
 		return result, err
 	}
@@ -153,6 +156,50 @@ func verifyRollouts(db *sql.DB, runID string, add issueAdder) error {
 		}
 		if riskStatus == "clean" && winnerAttemptID != "" && attemptIsTainted(db, winnerAttemptID) {
 			add("error", "tainted_winner", id, "clean rollout points to tainted/quarantined winner %s", winnerAttemptID)
+		}
+	}
+	return rows.Err()
+}
+
+func verifyPromotions(db *sql.DB, runID string, add issueAdder) error {
+	rows, err := db.Query(`SELECT p.id, p.rollout_id, p.attempt_id, p.status, COALESCE(p.telemetry_watermark, ''),
+		COALESCE(p.drain_started_at, ''), COALESCE(p.drain_completed_at, ''), COALESCE(p.drain_queued_before, 0),
+		COALESCE(p.drain_processed, 0), COALESCE(p.drain_pending_after, 0)
+		FROM promotions p JOIN rollouts r ON p.rollout_id = r.id WHERE r.run_id = ?`, runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, rolloutID, attemptID, status, watermark, drainStartedAt, drainCompletedAt string
+		var drainQueuedBefore, drainProcessed, drainPendingAfter int
+		if err := rows.Scan(&id, &rolloutID, &attemptID, &status, &watermark, &drainStartedAt, &drainCompletedAt, &drainQueuedBefore, &drainProcessed, &drainPendingAfter); err != nil {
+			return err
+		}
+		if status != "promoted" && status != "risk_finalized" {
+			continue
+		}
+		if watermark == "" {
+			add("error", "promotion_missing_watermark", id, "promotion %s for rollout %s has no telemetry watermark", id, rolloutID)
+		}
+		if drainStartedAt == "" || drainCompletedAt == "" {
+			add("error", "promotion_missing_drain_window", id, "promotion %s has incomplete drain window start=%q completed=%q", id, drainStartedAt, drainCompletedAt)
+		}
+		if drainPendingAfter != 0 {
+			add("error", "promotion_pending_evidence", id, "promotion %s completed with drain_pending_after=%d", id, drainPendingAfter)
+		}
+		if drainProcessed < 0 || drainQueuedBefore < 0 {
+			add("error", "promotion_invalid_drain_counts", id, "promotion %s has invalid drain counts queued_before=%d processed=%d", id, drainQueuedBefore, drainProcessed)
+		}
+		if watermark != "" {
+			var queuedBeforeWatermark int
+			if err := db.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM evidence_events
+				WHERE attempt_id = ? AND status = 'queued' AND created_at <= ?`, attemptID, watermark).Scan(&queuedBeforeWatermark); err != nil {
+				return err
+			}
+			if queuedBeforeWatermark != 0 {
+				add("error", "promotion_undrained_evidence", id, "promotion %s has %d queued evidence events at or before watermark %s", id, queuedBeforeWatermark, watermark)
+			}
 		}
 	}
 	return rows.Err()

@@ -81,10 +81,25 @@ type Promotion struct {
 	BaseSnapshotID     string
 	Status             string
 	TelemetryWatermark string
+	DrainStartedAt     string
+	DrainCompletedAt   string
+	DrainQueuedBefore  int
+	DrainProcessed     int
+	DrainPendingAfter  int
 	RiskStatus         string
 	Reason             string
 	CreatedAt          string
 	UpdatedAt          string
+}
+
+type drainResult struct {
+	Drained      bool
+	Reason       string
+	StartedAt    string
+	CompletedAt  string
+	QueuedBefore int
+	Processed    int
+	PendingAfter int
 }
 
 func (s Service) Start(req StartRequest) (Rollout, []attempt.Result, attempt.Result, Promotion, error) {
@@ -402,28 +417,28 @@ func (s Service) promoteWithBarrier(rolloutID, baseSnapshotID, attemptID string)
 		SELECT ?, run_id, 'rollout', 'telemetry_drain_pending', ?, ? FROM rollouts WHERE id = ?`,
 		ids.New("evt"), fmt.Sprintf(`{"rollout_id":%q,"attempt_id":%q,"promotion_id":%q,"telemetry_watermark":%q}`, rolloutID, attemptID, promotionID, watermark), updated, rolloutID)
 
-	drained, drainReason := s.drainPromotionEvidence(attemptID)
-	if !drained {
+	drain := s.drainPromotionEvidence(attemptID, promotionID)
+	if !drain.Drained {
 		updated = time.Now().UTC().Format(time.RFC3339Nano)
 		_, _ = s.DB.Exec(`UPDATE promotions
 			SET status = 'rejected', risk_status = 'pending', reason = ?, updated_at = ?
-			WHERE id = ?`, drainReason, updated, promotionID)
+			WHERE id = ?`, drain.Reason, updated, promotionID)
 		_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, source, event_type, payload, created_at)
 			SELECT ?, run_id, 'rollout', 'promotion_rejected', ?, ? FROM rollouts WHERE id = ?`,
-			ids.New("evt"), fmt.Sprintf(`{"rollout_id":%q,"attempt_id":%q,"promotion_id":%q,"reason":%q}`, rolloutID, attemptID, promotionID, drainReason), updated, rolloutID)
+			ids.New("evt"), fmt.Sprintf(`{"rollout_id":%q,"attempt_id":%q,"promotion_id":%q,"reason":%q,"drain_pending_after":%d}`, rolloutID, attemptID, promotionID, drain.Reason, drain.PendingAfter), updated, rolloutID)
 		return s.inspectPromotion(promotionID)
 	}
 
 	updated = time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = s.DB.Exec(`UPDATE promotions
 		SET status = 'risk_finalized', risk_status = 'clean', reason = ?, updated_at = ?
-		WHERE id = ?`, drainReason+"; risk finalized clean", updated, promotionID)
+		WHERE id = ?`, drain.Reason+"; risk finalized clean", updated, promotionID)
 	if err != nil {
 		return Promotion{}, err
 	}
 	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, source, event_type, payload, created_at)
 		SELECT ?, run_id, 'rollout', 'risk_finalized', ?, ? FROM rollouts WHERE id = ?`,
-		ids.New("evt"), fmt.Sprintf(`{"rollout_id":%q,"attempt_id":%q,"promotion_id":%q,"risk_status":"clean","telemetry_watermark":%q}`, rolloutID, attemptID, promotionID, watermark), updated, rolloutID)
+		ids.New("evt"), fmt.Sprintf(`{"rollout_id":%q,"attempt_id":%q,"promotion_id":%q,"risk_status":"clean","telemetry_watermark":%q,"drain_processed":%d,"drain_pending_after":%d}`, rolloutID, attemptID, promotionID, watermark, drain.Processed, drain.PendingAfter), updated, rolloutID)
 
 	if tainted, reason := s.attemptTainted(attemptID, baseSnapshotID); tainted {
 		updated = time.Now().UTC().Format(time.RFC3339Nano)
@@ -439,37 +454,66 @@ func (s Service) promoteWithBarrier(rolloutID, baseSnapshotID, attemptID string)
 	updated = time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = s.DB.Exec(`UPDATE promotions
 		SET status = 'promoted', risk_status = 'clean', reason = ?, updated_at = ?
-		WHERE id = ?`, drainReason+"; risk finalized clean", updated, promotionID)
+		WHERE id = ?`, drain.Reason+"; risk finalized clean", updated, promotionID)
 	if err != nil {
 		return Promotion{}, err
 	}
 	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, source, event_type, payload, created_at)
 		SELECT ?, run_id, 'rollout', 'winner_promoted', ?, ? FROM rollouts WHERE id = ?`,
-		ids.New("evt"), fmt.Sprintf(`{"rollout_id":%q,"attempt_id":%q,"promotion_id":%q}`, rolloutID, attemptID, promotionID), updated, rolloutID)
+		ids.New("evt"), fmt.Sprintf(`{"rollout_id":%q,"attempt_id":%q,"promotion_id":%q,"telemetry_watermark":%q,"drain_processed":%d,"drain_pending_after":%d}`, rolloutID, attemptID, promotionID, watermark, drain.Processed, drain.PendingAfter), updated, rolloutID)
 	return s.inspectPromotion(promotionID)
 }
 
-func (s Service) drainPromotionEvidence(attemptID string) (bool, string) {
+func (s Service) drainPromotionEvidence(attemptID, promotionID string) drainResult {
 	timeout := time.Duration(envInt64("AGENTPROV_PROMOTION_DRAIN_TIMEOUT_MS", 1000)) * time.Millisecond
 	if timeout < 0 {
 		timeout = 0
 	}
+	startedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	deadline := time.Now().Add(timeout)
 	processedTotal := 0
+	queuedBefore := 0
+	_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM evidence_events
+		WHERE attempt_id = ? AND status = 'queued'`, attemptID).Scan(&queuedBefore)
+	_, _ = s.DB.Exec(`UPDATE promotions
+		SET drain_started_at = ?, drain_queued_before = ?, drain_processed = 0, drain_pending_after = ?
+		WHERE id = ?`, startedAt, queuedBefore, queuedBefore, promotionID)
 	for {
 		var queued int
 		_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM evidence_events
 			WHERE attempt_id = ? AND status = 'queued'`, attemptID).Scan(&queued)
 		if queued == 0 {
-			return true, fmt.Sprintf("telemetry/evidence drained: processed=%d", processedTotal)
+			completedAt := time.Now().UTC().Format(time.RFC3339Nano)
+			_, _ = s.DB.Exec(`UPDATE promotions
+				SET drain_completed_at = ?, drain_processed = ?, drain_pending_after = 0
+				WHERE id = ?`, completedAt, processedTotal, promotionID)
+			return drainResult{
+				Drained:      true,
+				Reason:       fmt.Sprintf("telemetry/evidence drained: queued_before=%d processed=%d pending_after=0", queuedBefore, processedTotal),
+				StartedAt:    startedAt,
+				CompletedAt:  completedAt,
+				QueuedBefore: queuedBefore,
+				Processed:    processedTotal,
+			}
 		}
 		result, err := (evidence.Service{DB: s.DB, Paths: s.Paths}).ProcessEvidence(100)
 		if err != nil {
-			return false, "telemetry/evidence drain failed: " + err.Error()
+			completedAt := time.Now().UTC().Format(time.RFC3339Nano)
+			_, _ = s.DB.Exec(`UPDATE promotions
+				SET drain_completed_at = ?, drain_processed = ?, drain_pending_after = ?
+				WHERE id = ?`, completedAt, processedTotal, queued, promotionID)
+			return drainResult{Drained: false, Reason: "telemetry/evidence drain failed: " + err.Error(), StartedAt: startedAt, CompletedAt: completedAt, QueuedBefore: queuedBefore, Processed: processedTotal, PendingAfter: queued}
 		}
 		processedTotal += result.Processed
 		if time.Now().After(deadline) {
-			return false, fmt.Sprintf("telemetry/evidence drain timeout: queued=%d processed=%d timeout_ms=%d", queued, processedTotal, timeout.Milliseconds())
+			completedAt := time.Now().UTC().Format(time.RFC3339Nano)
+			var pendingAfter int
+			_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM evidence_events
+				WHERE attempt_id = ? AND status = 'queued'`, attemptID).Scan(&pendingAfter)
+			_, _ = s.DB.Exec(`UPDATE promotions
+				SET drain_completed_at = ?, drain_processed = ?, drain_pending_after = ?
+				WHERE id = ?`, completedAt, processedTotal, pendingAfter, promotionID)
+			return drainResult{Drained: false, Reason: fmt.Sprintf("telemetry/evidence drain timeout: queued=%d processed=%d timeout_ms=%d", pendingAfter, processedTotal, timeout.Milliseconds()), StartedAt: startedAt, CompletedAt: completedAt, QueuedBefore: queuedBefore, Processed: processedTotal, PendingAfter: pendingAfter}
 		}
 		if result.Processed == 0 {
 			time.Sleep(10 * time.Millisecond)
@@ -528,8 +572,10 @@ func (s Service) enqueueGC(runID, rolloutID, attemptID, workspacePath string) er
 func (s Service) inspectPromotion(id string) (Promotion, error) {
 	var item Promotion
 	err := s.DB.QueryRow(`SELECT id, rollout_id, attempt_id, base_snapshot_id, status, telemetry_watermark,
+		COALESCE(drain_started_at, ''), COALESCE(drain_completed_at, ''), COALESCE(drain_queued_before, 0), COALESCE(drain_processed, 0), COALESCE(drain_pending_after, 0),
 		risk_status, reason, created_at, updated_at FROM promotions WHERE id = ?`, id).
 		Scan(&item.ID, &item.RolloutID, &item.AttemptID, &item.BaseSnapshotID, &item.Status, &item.TelemetryWatermark,
+			&item.DrainStartedAt, &item.DrainCompletedAt, &item.DrainQueuedBefore, &item.DrainProcessed, &item.DrainPendingAfter,
 			&item.RiskStatus, &item.Reason, &item.CreatedAt, &item.UpdatedAt)
 	return item, err
 }

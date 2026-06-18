@@ -453,8 +453,8 @@ func TestGitLikeRefsAndLogShowRolloutDAG(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = db.Exec(`INSERT INTO promotions
-		(id, rollout_id, attempt_id, base_snapshot_id, status, risk_status, reason, created_at, updated_at)
-		VALUES ('promo-5', 'rollout-5', 'attempt-5', 'snap-5', 'promoted', 'clean', 'winner promoted', ?, ?)`, now, now)
+		(id, rollout_id, attempt_id, base_snapshot_id, status, telemetry_watermark, drain_started_at, drain_completed_at, drain_queued_before, drain_processed, drain_pending_after, risk_status, reason, created_at, updated_at)
+		VALUES ('promo-5', 'rollout-5', 'attempt-5', 'snap-5', 'promoted', ?, ?, ?, 1, 1, 0, 'clean', 'candidate promoted', ?, ?)`, now, now, now, now, now)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -183,6 +183,8 @@ Expected acceptance:
 - Records an external side effect as `ExternalEffectRecord` in dry-run mode.
 - Quarantines and taints the risky failed branch.
 - Blocks tainted branches from being considered promotable.
+- Requires the local candidate promotion barrier to record a telemetry/evidence
+  drain watermark with `drain_pending_after=0`.
 - Emits clean-candidate evidence using score, tests, risk, and cost signals
   without claiming to replace the RL pipeline's final selection logic.
 - Emits `graph trace`, `refs`, `log`, `materialize`, `verify`, and `replay`.
@@ -212,7 +214,7 @@ ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame
 | Rollout | local and Docker-backed best-of-N attempts, scoring, top-k pruning, and candidate eligibility evidence |
 | ToolCallScope | `telemetry bind`, `telemetry bindings`, and process/container/cgroup/pid time-window correlation for raw telemetry |
 | Artifacts | exported attempt artifacts linked back to attempt/tool_call/process |
-| Risk | policy decisions, quarantine, taint, promotion barrier |
+| Risk | policy decisions, quarantine, taint, promotion barrier with drain watermark stats |
 | External effects | `ExternalEffectRecord` with target, mode, gate decision, and redacted payload |
 | Snapshots | directory snapshot, fork, resume, lineage, taint propagation |
 | Runtime drivers | Docker active; gVisor/Firecracker/bubblewrap are explicit capability stubs |
@@ -408,7 +410,6 @@ Phase 1 hardening:
 
 - Stronger replay and trajectory manifest schema compatibility tests.
 - Deeper graph integrity checks.
-- Telemetry drain watermarks before promotion.
 
 Phase 2 risk and response:
 

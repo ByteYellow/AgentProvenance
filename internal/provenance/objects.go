@@ -367,15 +367,19 @@ func (c *materializeContext) materializeArtifacts() error {
 }
 
 func (c *materializeContext) materializePromotions() error {
-	rows, err := c.store.DB.Query(`SELECT p.id, p.rollout_id, p.attempt_id, p.base_snapshot_id, p.status, p.risk_status, p.reason, p.created_at, p.updated_at
+	rows, err := c.store.DB.Query(`SELECT p.id, p.rollout_id, p.attempt_id, p.base_snapshot_id, p.status, p.risk_status, p.reason,
+		COALESCE(p.telemetry_watermark, ''), COALESCE(p.drain_started_at, ''), COALESCE(p.drain_completed_at, ''),
+		COALESCE(p.drain_queued_before, 0), COALESCE(p.drain_processed, 0), COALESCE(p.drain_pending_after, 0),
+		p.created_at, p.updated_at
 		FROM promotions p JOIN rollouts r ON p.rollout_id = r.id WHERE r.run_id = ? ORDER BY p.created_at ASC`, c.runID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, rolloutID, attemptID, baseSnapshotID, status, riskStatus, reason, createdAt, updatedAt string
-		if err := rows.Scan(&id, &rolloutID, &attemptID, &baseSnapshotID, &status, &riskStatus, &reason, &createdAt, &updatedAt); err != nil {
+		var id, rolloutID, attemptID, baseSnapshotID, status, riskStatus, reason, watermark, drainStartedAt, drainCompletedAt, createdAt, updatedAt string
+		var drainQueuedBefore, drainProcessed, drainPendingAfter int
+		if err := rows.Scan(&id, &rolloutID, &attemptID, &baseSnapshotID, &status, &riskStatus, &reason, &watermark, &drainStartedAt, &drainCompletedAt, &drainQueuedBefore, &drainProcessed, &drainPendingAfter, &createdAt, &updatedAt); err != nil {
 			return err
 		}
 		hash, err := c.put(provenanceObject{
@@ -384,7 +388,12 @@ func (c *materializeContext) materializePromotions() error {
 			RolloutID: rolloutID,
 			Parents:   c.parent("rollout/"+rolloutID, "attempt/"+attemptID, "snapshot/"+baseSnapshotID),
 			Refs:      map[string]any{"attempt_id": attemptID, "base_snapshot_id": baseSnapshotID},
-			Payload:   map[string]any{"status": status, "risk_status": riskStatus, "reason": reason, "created_at": createdAt, "updated_at": updatedAt},
+			Payload: map[string]any{
+				"status": status, "risk_status": riskStatus, "reason": reason,
+				"telemetry_watermark": watermark, "drain_started_at": drainStartedAt, "drain_completed_at": drainCompletedAt,
+				"drain_queued_before": drainQueuedBefore, "drain_processed": drainProcessed, "drain_pending_after": drainPendingAfter,
+				"created_at": createdAt, "updated_at": updatedAt,
+			},
 		})
 		if err != nil {
 			return err

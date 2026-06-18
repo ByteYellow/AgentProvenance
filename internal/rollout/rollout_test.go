@@ -104,6 +104,47 @@ func TestPromotionBarrierRejectsTaintedAttempt(t *testing.T) {
 	}
 }
 
+func TestPromotionBarrierRecordsDrainWatermark(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insertRolloutPromotionFixture(t, db, "run-drain", "rollout-drain", "snap-drain", "attempt-drain", "tool-drain", now)
+	svc := Service{DB: db, Paths: paths}
+	if err := svc.appendEvidence("run-drain", "rollout-drain", "attempt-drain", "session-drain", "tool-drain", "snap-drain", "attempt_finished", "normal", `{"status":"passed"}`); err != nil {
+		t.Fatal(err)
+	}
+
+	promotion, err := svc.promoteWithBarrier("rollout-drain", "snap-drain", "attempt-drain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if promotion.Status != "promoted" || promotion.RiskStatus != "clean" {
+		t.Fatalf("promotion = %+v, want promoted clean", promotion)
+	}
+	if promotion.TelemetryWatermark == "" || promotion.DrainStartedAt == "" || promotion.DrainCompletedAt == "" {
+		t.Fatalf("promotion missing drain timestamps: %+v", promotion)
+	}
+	if promotion.DrainQueuedBefore != 1 || promotion.DrainProcessed != 1 || promotion.DrainPendingAfter != 0 {
+		t.Fatalf("promotion drain stats = queued_before=%d processed=%d pending_after=%d, want 1/1/0", promotion.DrainQueuedBefore, promotion.DrainProcessed, promotion.DrainPendingAfter)
+	}
+	var queued int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM evidence_events WHERE attempt_id = 'attempt-drain' AND status = 'queued'`).Scan(&queued); err != nil {
+		t.Fatal(err)
+	}
+	if queued != 0 {
+		t.Fatalf("queued evidence after promotion = %d, want 0", queued)
+	}
+}
+
 func TestTaintAttemptPropagatesSnapshotDescendants(t *testing.T) {
 	root := t.TempDir()
 	paths, err := store.Init(filepath.Join(root, ".agentprov"))

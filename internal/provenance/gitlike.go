@@ -230,19 +230,22 @@ func appendProcessEntries(db *sql.DB, runID string, entries *[]logEntry) error {
 }
 
 func appendPromotionEntries(db *sql.DB, runID string, entries *[]logEntry) error {
-	rows, err := db.Query(`SELECT p.id, p.rollout_id, p.attempt_id, p.status, p.risk_status, p.reason, p.created_at, p.updated_at
+	rows, err := db.Query(`SELECT p.id, p.rollout_id, p.attempt_id, p.status, p.risk_status, p.reason,
+		COALESCE(p.telemetry_watermark, ''), COALESCE(p.drain_processed, 0), COALESCE(p.drain_pending_after, 0),
+		p.created_at, p.updated_at
 		FROM promotions p JOIN rollouts r ON p.rollout_id = r.id WHERE r.run_id = ?`, runID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, rolloutID, attemptID, status, riskStatus, reason, createdAt, updatedAt string
-		if err := rows.Scan(&id, &rolloutID, &attemptID, &status, &riskStatus, &reason, &createdAt, &updatedAt); err != nil {
+		var id, rolloutID, attemptID, status, riskStatus, reason, watermark, createdAt, updatedAt string
+		var drainProcessed, drainPendingAfter int
+		if err := rows.Scan(&id, &rolloutID, &attemptID, &status, &riskStatus, &reason, &watermark, &drainProcessed, &drainPendingAfter, &createdAt, &updatedAt); err != nil {
 			return err
 		}
 		*entries = append(*entries, logEntry{At: createdAt, Kind: "promotion", ID: id, Summary: fmt.Sprintf("rollout=%s attempt=%s candidate", rolloutID, attemptID)})
-		*entries = append(*entries, logEntry{At: updatedAt, Kind: "promotion", ID: id, Summary: fmt.Sprintf("status=%s risk=%s reason=%q", status, riskStatus, reason)})
+		*entries = append(*entries, logEntry{At: updatedAt, Kind: "promotion", ID: id, Summary: fmt.Sprintf("status=%s risk=%s watermark=%s drain_processed=%d drain_pending_after=%d reason=%q", status, riskStatus, watermark, drainProcessed, drainPendingAfter, reason)})
 	}
 	return rows.Err()
 }

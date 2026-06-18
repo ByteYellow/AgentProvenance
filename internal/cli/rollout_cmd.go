@@ -135,8 +135,8 @@ func rolloutWinnerCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "candidate=%s winner=%s tool_call=%s strategy=%s status=%s attempt_risk=%s budget_exceeded=%t score=%.3f cost=%.6f workspace=%s promotion=%s promotion_status=%s risk=%s watermark=%s reason=%q\n",
-				winner.ID, winner.ID, winner.ToolCallID, winner.Strategy, winner.Status, winner.RiskStatus, winner.BudgetExceeded, winner.Score, winner.CostEstimate, winner.WorkspacePath, promotion.ID, promotion.Status, promotion.RiskStatus, promotion.TelemetryWatermark, promotion.Reason)
+			fmt.Fprintf(cmd.OutOrStdout(), "candidate=%s winner=%s tool_call=%s strategy=%s status=%s attempt_risk=%s budget_exceeded=%t score=%.3f cost=%.6f workspace=%s promotion=%s promotion_status=%s risk=%s watermark=%s drain_started_at=%s drain_completed_at=%s drain_queued_before=%d drain_processed=%d drain_pending_after=%d reason=%q\n",
+				winner.ID, winner.ID, winner.ToolCallID, winner.Strategy, winner.Status, winner.RiskStatus, winner.BudgetExceeded, winner.Score, winner.CostEstimate, winner.WorkspacePath, promotion.ID, promotion.Status, promotion.RiskStatus, promotion.TelemetryWatermark, promotion.DrainStartedAt, promotion.DrainCompletedAt, promotion.DrainQueuedBefore, promotion.DrainProcessed, promotion.DrainPendingAfter, promotion.Reason)
 			return nil
 		},
 	}
