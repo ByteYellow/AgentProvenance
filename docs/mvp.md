@@ -64,6 +64,7 @@ agentprov graph refs --run run-demo-bugfix
 agentprov graph log --run run-demo-bugfix
 agentprov graph materialize --run run-demo-bugfix
 agentprov graph verify --run run-demo-bugfix
+agentprov graph verify --run run-demo-bugfix --json
 agentprov graph replay --run run-demo-bugfix
 agentprov graph replay --run run-demo-bugfix --json
 agentprov graph diff --run run-demo-bugfix --file calculator.py
@@ -85,7 +86,7 @@ Machine-checkable Phase 1 gate:
 
 The acceptance script runs the coding-agent best-of-N scenario and asserts
 telemetry correlation, external effect recording, quarantine/taint, promotion,
-`graph verify`, JSON replay, JSON diff, and JSON blame semantics.
+`graph verify`, JSON verify, JSON replay, JSON diff, and JSON blame semantics.
 
 Daemon-backed equivalent:
 
@@ -127,10 +128,10 @@ patch artifacts, ingests raw runtime telemetry without `tool_call_id`,
 correlates it through ToolCallScope bindings, quarantines one risky failed
 branch, promotes the passing winner, then runs `graph trace`, `graph refs`,
 `graph log`, `graph materialize`, `graph verify`, `graph replay`, `graph replay
---json`, `graph diff`, `graph diff --json`, `graph blame`, and `graph blame
---json` to explain the winner, verify graph integrity, reconstruct a plan-only
-replay, emit structured replay/diff/blame manifests, and attribute file
-changes.
+--json`, `graph verify --json`, `graph diff`, `graph diff --json`, `graph
+blame`, and `graph blame --json` to explain the winner, verify graph integrity,
+reconstruct a plan-only replay, emit structured verify/replay/diff/blame
+manifests, and attribute file changes.
 
 Expected output / acceptance:
 
@@ -157,6 +158,9 @@ Expected output / acceptance:
 - `graph verify --run run-demo-bugfix` reports `status=ok` after checking
   references, content-addressed object hashes, replay manifest generation,
   ToolCallScope correlation drift, and taint/promotion barrier consistency.
+- `graph verify --run run-demo-bugfix --json` emits an
+  `agentprovenance.verify/v1` manifest with `status`, `error_count`,
+  `warning_count`, and structured issues for automation.
 - `graph replay --run run-demo-bugfix` emits a plan-only reconstruction of base
   snapshot, attempts, commands, artifacts, runtime events, and external effect
   gates. `graph replay --run run-demo-bugfix --json` emits the same evidence as
@@ -299,6 +303,8 @@ hashes, replay-oriented payload, and artifact file hashes when an artifact file
 exists. `graph verify --run <run_id>` checks reference continuity,
 taint/promotion contradictions, artifact readability, materialized object
 hashes, replay manifest generation, and ToolCallScope correlation drift.
+Add `--json` to emit the structured `agentprovenance.verify/v1` manifest for
+automation.
 `graph replay --run <run_id>` and `graph replay --attempt <attempt_id>`
 emit a plan-only reconstruction of snapshot, attempt, tool call, process,
 artifact, telemetry, and external effect records. Add `--json` to emit the

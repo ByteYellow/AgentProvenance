@@ -124,6 +124,7 @@ Core graph commands:
 ./agentprov graph log --run run-demo-bugfix
 ./agentprov graph materialize --run run-demo-bugfix
 ./agentprov graph verify --run run-demo-bugfix
+./agentprov graph verify --run run-demo-bugfix --json
 ./agentprov graph replay --run run-demo-bugfix
 ./agentprov graph replay --run run-demo-bugfix --json
 ./agentprov graph diff --run run-demo-bugfix --file calculator.py
@@ -135,9 +136,10 @@ Core graph commands:
 `trace` shows the causal DAG. `refs` gives stable Git-like names. `log` shows
 chronological execution history. `materialize` writes content-addressed objects.
 `verify` checks references, object hashes, replay manifest generation,
-ToolCallScope correlation drift, and taint/promotion barriers. `replay` emits a
-plan-only reconstruction and `replay --json` emits a structured
-`agentprovenance.replay/v1` manifest for CI or downstream agent harnesses.
+ToolCallScope correlation drift, and taint/promotion barriers. `verify --json`
+emits an `agentprovenance.verify/v1` manifest for CI or downstream agent
+harnesses. `replay` emits a plan-only reconstruction and `replay --json` emits
+a structured `agentprovenance.replay/v1` manifest.
 `diff` compares file state across attempts. `blame` attributes a file version
 to the attempt, tool call, process, command, strategy, and promotion status that
 produced it. `diff --json` and `blame --json` emit structured

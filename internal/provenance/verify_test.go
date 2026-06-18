@@ -1,6 +1,8 @@
 package provenance
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -103,6 +105,21 @@ func TestVerifyCleanRun(t *testing.T) {
 	}
 	if result.ErrorCount != 0 {
 		t.Fatalf("verify errors=%d issues=%+v", result.ErrorCount, result.Issues)
+	}
+	if result.SchemaVersion != "agentprovenance.verify/v1" || result.Status != "ok" {
+		t.Fatalf("unexpected verify manifest header: %+v", result)
+	}
+
+	var out bytes.Buffer
+	if err := PrintVerifyResultJSON(&out, result); err != nil {
+		t.Fatal(err)
+	}
+	var decoded VerifyResult
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.SchemaVersion != "agentprovenance.verify/v1" || decoded.RunID != "run-1" || decoded.Status != "ok" {
+		t.Fatalf("unexpected verify json: %+v", decoded)
 	}
 }
 
@@ -227,6 +244,9 @@ func TestVerifyRejectsTaintedWinner(t *testing.T) {
 	}
 	if result.ErrorCount == 0 {
 		t.Fatalf("expected tainted winner error, got %+v", result)
+	}
+	if result.Status != "failed" {
+		t.Fatalf("expected failed status, got %+v", result)
 	}
 	found := false
 	for _, issue := range result.Issues {

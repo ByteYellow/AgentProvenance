@@ -176,6 +176,7 @@ func graphCmd(dataDir *string) *cobra.Command {
 	blameCmd.Flags().BoolVar(&blameJSON, "json", false, "emit structured file blame JSON")
 
 	var verifyRunID string
+	var verifyJSON bool
 	verifyCmd := &cobra.Command{
 		Use:   "verify",
 		Short: "verify provenance graph references, taint barriers, and object hashes",
@@ -188,10 +189,14 @@ func graphCmd(dataDir *string) *cobra.Command {
 			if verifyRunID == "" {
 				return fmt.Errorf("--run is required")
 			}
+			if verifyJSON {
+				return provenance.VerifyRunJSON(db, verifyRunID, cmd.OutOrStdout())
+			}
 			return provenance.VerifyRun(db, verifyRunID, cmd.OutOrStdout())
 		},
 	}
 	verifyCmd.Flags().StringVar(&verifyRunID, "run", "", "run id")
+	verifyCmd.Flags().BoolVar(&verifyJSON, "json", false, "emit structured graph verification JSON")
 
 	var replayRunID string
 	var replayAttemptID string

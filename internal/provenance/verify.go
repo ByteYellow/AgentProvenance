@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -11,18 +12,20 @@ import (
 )
 
 type VerifyIssue struct {
-	Severity string
-	Kind     string
-	ID       string
-	Message  string
+	Severity string `json:"severity"`
+	Kind     string `json:"kind"`
+	ID       string `json:"id"`
+	Message  string `json:"message"`
 }
 
 type VerifyResult struct {
-	RunID        string
-	IssueCount   int
-	ErrorCount   int
-	WarningCount int
-	Issues       []VerifyIssue
+	SchemaVersion string        `json:"schema_version"`
+	RunID         string        `json:"run_id"`
+	Status        string        `json:"status"`
+	IssueCount    int           `json:"issue_count"`
+	ErrorCount    int           `json:"error_count"`
+	WarningCount  int           `json:"warning_count"`
+	Issues        []VerifyIssue `json:"issues"`
 }
 
 func VerifyRun(db *sql.DB, runID string, out io.Writer) error {
@@ -37,11 +40,25 @@ func VerifyRun(db *sql.DB, runID string, out io.Writer) error {
 	return nil
 }
 
+func VerifyRunJSON(db *sql.DB, runID string, out io.Writer) error {
+	result, err := Verify(db, runID)
+	if err != nil {
+		return err
+	}
+	if err := PrintVerifyResultJSON(out, result); err != nil {
+		return err
+	}
+	if result.ErrorCount > 0 {
+		return fmt.Errorf("graph verify failed: errors=%d warnings=%d", result.ErrorCount, result.WarningCount)
+	}
+	return nil
+}
+
 func Verify(db *sql.DB, runID string) (VerifyResult, error) {
 	if runID == "" {
 		return VerifyResult{}, fmt.Errorf("run_id is required")
 	}
-	result := VerifyResult{RunID: runID}
+	result := VerifyResult{SchemaVersion: "agentprovenance.verify/v1", RunID: runID, Status: "ok"}
 	add := func(severity, kind, id, format string, args ...any) {
 		result.Issues = append(result.Issues, VerifyIssue{
 			Severity: severity,
@@ -83,6 +100,9 @@ func Verify(db *sql.DB, runID string) (VerifyResult, error) {
 	if err := verifyObjects(db, runID, add); err != nil {
 		return result, err
 	}
+	if result.ErrorCount > 0 {
+		result.Status = "failed"
+	}
 	return result, nil
 }
 
@@ -95,6 +115,12 @@ func PrintVerifyResult(out io.Writer, result VerifyResult) {
 	for _, issue := range result.Issues {
 		fmt.Fprintf(out, "issue severity=%s kind=%s id=%s message=%q\n", issue.Severity, issue.Kind, issue.ID, issue.Message)
 	}
+}
+
+func PrintVerifyResultJSON(out io.Writer, result VerifyResult) error {
+	encoder := json.NewEncoder(out)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(result)
 }
 
 type issueAdder func(severity, kind, id, format string, args ...any)

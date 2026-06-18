@@ -132,25 +132,33 @@ assert_contains "$TRACE_OUTPUT" "external_effects:"
 assert_contains "$TRACE_OUTPUT" "attempt_quarantined"
 assert_contains "$TRACE_OUTPUT" "winner_promoted"
 
+VERIFY_JSON="$DATA_DIR/verify.json"
 REPLAY_JSON="$DATA_DIR/replay.json"
 DIFF_JSON="$DATA_DIR/diff.json"
 BLAME_JSON="$DATA_DIR/blame.json"
+"$BIN" --data-dir "$DATA_DIR" graph verify --run run-phase1-accept --json > "$VERIFY_JSON"
 "$BIN" --data-dir "$DATA_DIR" graph replay --run run-phase1-accept --json > "$REPLAY_JSON"
 "$BIN" --data-dir "$DATA_DIR" graph diff --run run-phase1-accept --file calculator.py --json > "$DIFF_JSON"
 "$BIN" --data-dir "$DATA_DIR" graph blame --run run-phase1-accept --file calculator.py --json > "$BLAME_JSON"
 
-"$PYTHON_BIN" - "$REPLAY_JSON" "$DIFF_JSON" "$BLAME_JSON" "$CORRECT_ATTEMPT" "$RISKY_ATTEMPT" <<'PY'
+"$PYTHON_BIN" - "$VERIFY_JSON" "$REPLAY_JSON" "$DIFF_JSON" "$BLAME_JSON" "$CORRECT_ATTEMPT" "$RISKY_ATTEMPT" <<'PY'
 import json
 import sys
 
-replay_path, diff_path, blame_path, correct_attempt, risky_attempt = sys.argv[1:]
+verify_path, replay_path, diff_path, blame_path, correct_attempt, risky_attempt = sys.argv[1:]
 
+with open(verify_path, "r", encoding="utf-8") as f:
+    verify = json.load(f)
 with open(replay_path, "r", encoding="utf-8") as f:
     replay = json.load(f)
 with open(diff_path, "r", encoding="utf-8") as f:
     diff = json.load(f)
 with open(blame_path, "r", encoding="utf-8") as f:
     blame = json.load(f)
+
+assert verify["schema_version"] == "agentprovenance.verify/v1", verify
+assert verify["status"] == "ok", verify
+assert verify["error_count"] == 0, verify
 
 assert replay["schema_version"] == "agentprovenance.replay/v1", replay
 assert replay["mode"] == "plan_only", replay
