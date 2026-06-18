@@ -69,6 +69,7 @@ if [[ -z "$CORRECT_ATTEMPT" || -z "$CORRECT_TOOL_CALL" ]]; then
   echo "failed to find correct-add attempt/tool call" >&2
   exit 1
 fi
+CORRECT_PROCESS_STARTED="$("$BIN" --data-dir "$DATA_DIR" process inspect "$CORRECT_PROCESS" | sed -n 's/^started_at=//p')"
 
 echo "== ingest raw runtime telemetry without tool_call_id"
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest \
@@ -77,7 +78,22 @@ echo "== ingest raw runtime telemetry without tool_call_id"
   --source wrapper_runtime \
   --type execve \
   --payload '{"argv":["./test_calculator.sh"]}'
+"$BIN" --data-dir "$DATA_DIR" telemetry ingest \
+  --raw-event raw-execve-cgroup-correct-add \
+  --cgroup-id "agentprov-cgroup-$CORRECT_ATTEMPT" \
+  --timestamp "$CORRECT_PROCESS_STARTED" \
+  --source tetragon_jsonl \
+  --type execve \
+  --payload '{"argv":["./delayed_child.sh"],"note":"no tool_call_id in raw event"}'
+"$BIN" --data-dir "$DATA_DIR" telemetry ingest \
+  --raw-event raw-network-container-correct-add \
+  --container-id "agentprov-local-$CORRECT_ATTEMPT" \
+  --timestamp "$CORRECT_PROCESS_STARTED" \
+  --source falco_jsonl \
+  --type network_connect \
+  --payload '{"dst":"api.example.com:443","note":"container scoped event"}'
 "$BIN" --data-dir "$DATA_DIR" telemetry list --run run-demo-bugfix --type execve
+"$BIN" --data-dir "$DATA_DIR" telemetry list --run run-demo-bugfix --type network_connect
 
 echo "== record external side-effect gate"
 "$BIN" --data-dir "$DATA_DIR" effect record \

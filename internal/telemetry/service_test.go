@@ -99,3 +99,55 @@ func TestIngestFilteredLeavesUnresolvedRawEvent(t *testing.T) {
 		t.Fatalf("unresolved event = %+v", event)
 	}
 }
+
+func TestIngestFilteredCorrelatesCgroupScopedRuntimeEvent(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	started := time.Now().Add(-time.Second).UTC().Format(time.RFC3339Nano)
+	if _, err := correlation.RecordBinding(db, correlation.Binding{
+		RunID:         "run-1",
+		SessionID:     "session-1",
+		AttemptID:     "attempt-1",
+		ToolCallID:    "tool-1",
+		ProcessID:     "proc-1",
+		ContainerID:   "container-1",
+		CgroupID:      "cgroup-1",
+		StartedAt:     started,
+		BindingSource: "test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := IngestFiltered(db, IngestEvent{
+		RawEventID: "raw-cgroup-1",
+		CgroupID:   "cgroup-1",
+		EventType:  "network_connect",
+		Source:     "tetragon_jsonl",
+		Payload:    `{"dst":"api.example.com:443"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	events, err := ListEventsFiltered(db, Filter{RunID: "run-1", Type: "network_connect"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1", len(events))
+	}
+	event := events[0]
+	if event.ToolCallID != "tool-1" || event.ProcessID != "proc-1" {
+		t.Fatalf("event correlation = %+v, want tool/process", event)
+	}
+	if event.CorrelationMethod != "cgroup_time_window:cgroup_id+time" {
+		t.Fatalf("correlation method = %q", event.CorrelationMethod)
+	}
+}

@@ -160,7 +160,8 @@ Expected acceptance:
 - Runs multiple coding-agent strategies against the same bug.
 - Captures patch artifacts from attempt workspaces.
 - Ingests raw runtime telemetry without requiring `tool_call_id` in the raw event.
-- Resolves ToolCallScope through process/session/runtime context.
+- Resolves ToolCallScope through process id, cgroup id, and container id runtime
+  context.
 - Records an external side effect as `ExternalEffectRecord` in dry-run mode.
 - Quarantines and taints the risky failed branch.
 - Blocks tainted branches from promotion.

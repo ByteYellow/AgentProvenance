@@ -80,6 +80,11 @@ if [[ -z "$ROLLOUT_ID" || -z "$CORRECT_ATTEMPT" || -z "$CORRECT_TOOL_CALL" || -z
   echo "failed to parse rollout ids" >&2
   exit 1
 fi
+CORRECT_PROCESS_STARTED="$("$BIN" --data-dir "$DATA_DIR" process inspect "$CORRECT_PROCESS" | sed -n 's/^started_at=//p')"
+if [[ -z "$CORRECT_PROCESS_STARTED" ]]; then
+  echo "failed to parse process started_at" >&2
+  exit 1
+fi
 
 echo "== telemetry correlation"
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest \
@@ -88,9 +93,27 @@ echo "== telemetry correlation"
   --source wrapper_runtime \
   --type execve \
   --payload '{"argv":["./test_calculator.sh"]}' >/dev/null
+"$BIN" --data-dir "$DATA_DIR" telemetry ingest \
+  --raw-event raw-execve-cgroup-correct-add \
+  --cgroup-id "agentprov-cgroup-$CORRECT_ATTEMPT" \
+  --timestamp "$CORRECT_PROCESS_STARTED" \
+  --source tetragon_jsonl \
+  --type execve \
+  --payload '{"argv":["./delayed_child.sh"],"note":"no tool_call_id in raw event"}' >/dev/null
+"$BIN" --data-dir "$DATA_DIR" telemetry ingest \
+  --raw-event raw-network-container-correct-add \
+  --container-id "agentprov-local-$CORRECT_ATTEMPT" \
+  --timestamp "$CORRECT_PROCESS_STARTED" \
+  --source falco_jsonl \
+  --type network_connect \
+  --payload '{"dst":"api.example.com:443","note":"container scoped event"}' >/dev/null
 TELEMETRY_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept --type execve)"
 assert_contains "$TELEMETRY_OUTPUT" "process_id:process_id"
+assert_contains "$TELEMETRY_OUTPUT" "cgroup_time_window:cgroup_id+time"
 assert_contains "$TELEMETRY_OUTPUT" "$CORRECT_TOOL_CALL"
+NETWORK_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept --type network_connect)"
+assert_contains "$NETWORK_OUTPUT" "container_time_window:container_id+time"
+assert_contains "$NETWORK_OUTPUT" "$CORRECT_TOOL_CALL"
 
 echo "== external effect"
 "$BIN" --data-dir "$DATA_DIR" effect record \
@@ -171,6 +194,8 @@ assert winner["is_winner"] is True, winner
 assert winner["replay_blocked"] is False, winner
 assert winner["tool_call"]["status"] == "passed", winner
 assert any(e["event_type"] == "execve" and e["correlation_method"] == "process_id:process_id" for e in winner["events"]), winner.get("events")
+assert any(e["event_type"] == "execve" and e["correlation_method"] == "cgroup_time_window:cgroup_id+time" for e in winner["events"]), winner.get("events")
+assert any(e["event_type"] == "network_connect" and e["correlation_method"] == "container_time_window:container_id+time" for e in winner["events"]), winner.get("events")
 assert winner["external_effects"][0]["mode"] == "dry-run", winner.get("external_effects")
 risky = by_id[risky_attempt]
 assert risky["replay_blocked"] is True, risky

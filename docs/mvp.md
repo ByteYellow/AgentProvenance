@@ -138,6 +138,9 @@ Expected output / acceptance:
 - `telemetry list --type execve` shows a raw runtime event with
   `correlation=process_id:process_id`, proving the event did not need to carry
   `tool_call_id`.
+- The same acceptance run ingests cgroup-scoped and container-scoped raw events
+  and verifies `cgroup_time_window:cgroup_id+time` and
+  `container_time_window:container_id+time` correlation.
 - `graph trace` shows `execution_context_bindings:` and the correlated
   `execve` event under the same run/session/attempt/tool/process chain.
 - `rollout attempts` shows `wrong-constant` as `quarantined` with

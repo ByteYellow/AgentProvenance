@@ -222,14 +222,18 @@ func verifyToolCalls(db *sql.DB, runID string, add issueAdder) error {
 }
 
 func verifyProcesses(db *sql.DB, runID string, add issueAdder) error {
-	rows, err := db.Query(`SELECT p.id, p.session_id, COALESCE(p.tool_call_id, '') FROM processes p JOIN sessions s ON p.session_id = s.id WHERE s.run_id = ?`, runID)
+	rows, err := db.Query(`SELECT p.id, p.session_id, COALESCE(p.tool_call_id, ''), p.status, COALESCE(tc.status, '')
+		FROM processes p
+		JOIN sessions s ON p.session_id = s.id
+		LEFT JOIN tool_calls tc ON tc.id = p.tool_call_id
+		WHERE s.run_id = ?`, runID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, sessionID, toolCallID string
-		if err := rows.Scan(&id, &sessionID, &toolCallID); err != nil {
+		var id, sessionID, toolCallID, processStatus, toolCallStatus string
+		if err := rows.Scan(&id, &sessionID, &toolCallID, &processStatus, &toolCallStatus); err != nil {
 			return err
 		}
 		if !exists(db, `SELECT 1 FROM sessions WHERE id = ? AND run_id = ?`, sessionID, runID) {
@@ -238,8 +242,29 @@ func verifyProcesses(db *sql.DB, runID string, add issueAdder) error {
 		if toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID) {
 			add("error", "missing_tool_call", id, "process tool_call_id %s does not exist", toolCallID)
 		}
+		if isTerminalToolCallStatus(toolCallStatus) && isNonTerminalProcessStatus(processStatus) {
+			add("error", "stale_process_status", id, "tool_call %s is %s but process is still %s", toolCallID, toolCallStatus, processStatus)
+		}
 	}
 	return rows.Err()
+}
+
+func isTerminalToolCallStatus(status string) bool {
+	switch status {
+	case "passed", "failed", "rejected", "budget_exceeded", "killed":
+		return true
+	default:
+		return false
+	}
+}
+
+func isNonTerminalProcessStatus(status string) bool {
+	switch status {
+	case "running", "burst_pending":
+		return true
+	default:
+		return false
+	}
 }
 
 func verifyEvents(db *sql.DB, runID string, add issueAdder) error {

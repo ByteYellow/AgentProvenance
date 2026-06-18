@@ -258,3 +258,70 @@ func TestVerifyRejectsTaintedWinner(t *testing.T) {
 		t.Fatalf("expected tainted_winner issue, got %+v", result.Issues)
 	}
 }
+
+func TestVerifyRejectsStaleProcessStatus(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	workspace := filepath.Join(root, "attempt-1")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	insertTraceSnapshot(t, db, "snap-1", "ready", now)
+	if _, err := db.Exec(`INSERT INTO rollouts
+		(id, run_id, base_snapshot_id, status, fanout, winner_attempt_id, risk_status, created_at, updated_at)
+		VALUES ('rollout-1', 'run-1', 'snap-1', 'completed', 1, 'attempt-1', 'clean', ?, ?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO fork_attempts
+		(id, rollout_id, tool_call_id, snapshot_id, workspace_path, fork_ms, status, risk_status, is_winner, created_at)
+		VALUES ('attempt-1', 'rollout-1', 'tool-1', 'snap-1', ?, 1, 'passed', 'clean', 1, ?)`, workspace, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO leases
+		(id, run_id, task_path, task_yaml, status, created_at, updated_at)
+		VALUES ('lease-1', 'run-1', 'task.yaml', '{}', 'allocated', ?, ?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO sessions
+		(id, lease_id, run_id, workspace_host_path, status, created_at, updated_at)
+		VALUES ('session-1', 'lease-1', 'run-1', ?, 'stopped', ?, ?)`, workspace, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO tool_calls
+		(id, run_id, rollout_id, attempt_id, session_id, command, status, exit_code, created_at)
+		VALUES ('tool-1', 'run-1', 'rollout-1', 'attempt-1', 'session-1', 'pytest -q', 'passed', 0, ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO processes
+		(id, session_id, tool_call_id, command, status, started_at)
+		VALUES ('process-1', 'session-1', 'tool-1', 'pytest -q', 'running', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Verify(db, "run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ErrorCount == 0 {
+		t.Fatalf("expected stale process error, got %+v", result)
+	}
+	found := false
+	for _, issue := range result.Issues {
+		if issue.Kind == "stale_process_status" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected stale_process_status issue, got %+v", result.Issues)
+	}
+}
