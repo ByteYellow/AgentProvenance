@@ -97,6 +97,9 @@ func Verify(db *sql.DB, runID string) (VerifyResult, error) {
 	if err := verifyExecutionContextBindings(db, runID, add); err != nil {
 		return result, err
 	}
+	if err := verifyRuntimeCausality(db, runID, add); err != nil {
+		return result, err
+	}
 	if err := verifyReplayManifest(db, runID, add); err != nil {
 		return result, err
 	}
@@ -464,6 +467,86 @@ func verifyExecutionContextBindings(db *sql.DB, runID string, add issueAdder) er
 	return nil
 }
 
+func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
+	rows, err := db.Query(`SELECT id, COALESCE(tool_call_id, ''), COALESCE(process_id, ''), event_type, payload,
+		COALESCE(correlation_method, ''),
+		COALESCE(pid, 0), COALESCE(tgid, 0), COALESCE(ppid, 0)
+		FROM events WHERE run_id = ?`, runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, toolCallID, processID, eventType, payload, correlationMethod string
+		var pid, tgid, ppid int64
+		if err := rows.Scan(&id, &toolCallID, &processID, &eventType, &payload, &correlationMethod, &pid, &tgid, &ppid); err != nil {
+			return err
+		}
+		isRuntimeTelemetry := correlationMethod != ""
+		isFileTelemetry := eventType == "file_write" || eventType == "file_open"
+		if !isRuntimeTelemetry && !isFileTelemetry {
+			continue
+		}
+		attemptID := attemptIDForToolCall(db, toolCallID)
+		eventNode := "runtime_event/" + id
+		if isRuntimeTelemetry && attemptID != "" && !edgeExists(db, runID, attemptID, eventNode, "runtime_attempt_event") {
+			add("error", "missing_runtime_attempt_event_edge", id, "attempt %s is not linked to runtime event %s", attemptID, id)
+		}
+		if isRuntimeTelemetry && toolCallID != "" {
+			if !edgeExists(db, runID, toolCallID, eventNode, "runtime_tool_call_event") {
+				add("error", "missing_runtime_tool_call_event_edge", id, "tool_call %s is not linked to runtime event %s", toolCallID, id)
+			}
+			if processID != "" && !edgeExists(db, runID, toolCallID, processID, "runtime_tool_call_process") {
+				add("error", "missing_runtime_tool_call_process_edge", id, "tool_call %s is not linked to process %s", toolCallID, processID)
+			}
+		}
+		if isRuntimeTelemetry && processID != "" && !edgeExists(db, runID, processID, eventNode, "runtime_process_event") {
+			add("error", "missing_runtime_process_event_edge", id, "process %s is not linked to runtime event %s", processID, id)
+		}
+		if isRuntimeTelemetry && pid != 0 && processID != "" {
+			processNode := fmt.Sprintf("runtime_process/pid/%d", pid)
+			if !edgeExists(db, runID, processID, processNode, "runtime_process_observed") {
+				add("error", "missing_runtime_process_observed_edge", id, "process %s is not linked to observed pid %d", processID, pid)
+			}
+		}
+		if isRuntimeTelemetry && pid != 0 && ppid != 0 {
+			parentNode := fmt.Sprintf("runtime_process/pid/%d", ppid)
+			childNode := fmt.Sprintf("runtime_process/pid/%d", pid)
+			if !edgeExists(db, runID, parentNode, childNode, "runtime_process_parent") {
+				add("error", "missing_runtime_process_parent_edge", id, "pid %d is not linked as parent of pid %d", ppid, pid)
+			}
+			if !edgeExists(db, runID, childNode, parentNode, "runtime_process_child_of") {
+				add("error", "missing_runtime_process_child_edge", id, "pid %d is not linked back to parent pid %d", pid, ppid)
+			}
+		}
+		if isRuntimeTelemetry && pid != 0 && tgid != 0 && pid != tgid {
+			threadGroupNode := fmt.Sprintf("runtime_process/tgid/%d", tgid)
+			processNode := fmt.Sprintf("runtime_process/pid/%d", pid)
+			if !edgeExists(db, runID, threadGroupNode, processNode, "runtime_process_thread") {
+				add("error", "missing_runtime_process_thread_edge", id, "tgid %d is not linked to pid %d", tgid, pid)
+			}
+		}
+		if eventType == "file_write" || eventType == "file_open" {
+			if path := verifyPayloadPath(payload); path != "" {
+				fileNode := "workspace_file/" + path
+				if !edgeExists(db, runID, eventNode, fileNode, "runtime_event_file") {
+					add("error", "missing_runtime_event_file_edge", id, "runtime event %s is not linked to file %s", id, path)
+				}
+				if processID != "" && !edgeExists(db, runID, processID, fileNode, "runtime_process_file") {
+					add("error", "missing_runtime_process_file_edge", id, "process %s is not linked to file %s", processID, path)
+				}
+				if toolCallID != "" && !edgeExists(db, runID, toolCallID, fileNode, "runtime_tool_call_file") {
+					add("error", "missing_runtime_tool_call_file_edge", id, "tool_call %s is not linked to file %s", toolCallID, path)
+				}
+				if attemptID != "" && !edgeExists(db, runID, attemptID, fileNode, "runtime_attempt_file") {
+					add("error", "missing_runtime_attempt_file_edge", id, "attempt %s is not linked to file %s", attemptID, path)
+				}
+			}
+		}
+	}
+	return rows.Err()
+}
+
 func verifyReplayManifest(db *sql.DB, runID string, add issueAdder) error {
 	manifest, err := BuildReplayRun(db, runID)
 	if err != nil {
@@ -508,6 +591,58 @@ func exists(db *sql.DB, query string, args ...any) bool {
 	var one int
 	err := db.QueryRow(query, args...).Scan(&one)
 	return err == nil
+}
+
+func edgeExists(db *sql.DB, runID, fromID, toID, edgeType string) bool {
+	return exists(db, `SELECT 1 FROM graph_edges WHERE run_id = ? AND from_id = ? AND to_id = ? AND edge_type = ?`, runID, fromID, toID, edgeType)
+}
+
+func attemptIDForToolCall(db *sql.DB, toolCallID string) string {
+	if toolCallID == "" {
+		return ""
+	}
+	var attemptID string
+	_ = db.QueryRow(`SELECT COALESCE(attempt_id, '') FROM tool_calls WHERE id = ?`, toolCallID).Scan(&attemptID)
+	return attemptID
+}
+
+func verifyPayloadPath(payload string) string {
+	var decoded any
+	if err := json.Unmarshal([]byte(payload), &decoded); err != nil {
+		return ""
+	}
+	path := strings.TrimSpace(findVerifyPayloadPath(decoded))
+	path = strings.TrimPrefix(path, "/workspace/")
+	path = strings.TrimPrefix(path, "./")
+	if path == "." || path == ".." || strings.HasPrefix(path, "../") || strings.HasPrefix(path, "/") {
+		return ""
+	}
+	return path
+}
+
+func findVerifyPayloadPath(value any) string {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, key := range []string{"path", "file"} {
+			if raw, ok := typed[key].(string); ok && raw != "" {
+				return raw
+			}
+		}
+		for _, key := range []string{"raw", "payload", "event"} {
+			if nested, ok := typed[key]; ok {
+				if path := findVerifyPayloadPath(nested); path != "" {
+					return path
+				}
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			if path := findVerifyPayloadPath(item); path != "" {
+				return path
+			}
+		}
+	}
+	return ""
 }
 
 func oneOf(value string, allowed ...string) bool {

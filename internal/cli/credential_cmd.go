@@ -24,7 +24,7 @@ func credentialCmd(dataDir *string) *cobra.Command {
 			}
 			defer db.Close()
 			if value == "" {
-				value = firstEnv("AGENTPROV_CREDENTIAL_VALUE", "ACF_CREDENTIAL_VALUE")
+				value = firstEnv("AGENTPROV_CREDENTIAL_VALUE")
 			}
 			if err := (egress.Service{DB: db, Paths: paths}).InjectCredential(runID, sessionID, egress.CredentialSpec{
 				Name:       name,

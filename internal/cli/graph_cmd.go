@@ -255,6 +255,44 @@ func graphCmd(dataDir *string) *cobra.Command {
 	trajectoriesCmd.Flags().StringVar(&trajectoriesRunID, "run", "", "run id")
 	trajectoriesCmd.Flags().BoolVar(&trajectoriesJSON, "json", false, "emit structured trajectory evidence JSON")
 
+	var explainRunID string
+	var explainArtifact string
+	var explainAttempt string
+	var explainToolCall string
+	var explainProcess string
+	var explainEvent string
+	var explainFile string
+	var explainJSON bool
+	explainCmd := &cobra.Command{
+		Use:   "explain",
+		Short: "explain runtime causality and provenance for a graph target",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := openDB()
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			return provenance.Explain(db, provenance.ExplainOptions{
+				RunID:    explainRunID,
+				Artifact: explainArtifact,
+				Attempt:  explainAttempt,
+				ToolCall: explainToolCall,
+				Process:  explainProcess,
+				Event:    explainEvent,
+				File:     explainFile,
+				WithJSON: explainJSON,
+			}, cmd.OutOrStdout())
+		},
+	}
+	explainCmd.Flags().StringVar(&explainRunID, "run", "", "run id")
+	explainCmd.Flags().StringVar(&explainArtifact, "artifact", "", "artifact result ref")
+	explainCmd.Flags().StringVar(&explainAttempt, "attempt", "", "attempt id")
+	explainCmd.Flags().StringVar(&explainToolCall, "tool-call", "", "tool call id")
+	explainCmd.Flags().StringVar(&explainProcess, "process", "", "process id")
+	explainCmd.Flags().StringVar(&explainEvent, "event", "", "runtime event id")
+	explainCmd.Flags().StringVar(&explainFile, "file", "", "workspace-relative file path")
+	explainCmd.Flags().BoolVar(&explainJSON, "json", false, "emit structured explain JSON")
+
 	cmd := &cobra.Command{Use: "graph", Short: "provenance graph commands"}
 	cmd.AddCommand(trace)
 	cmd.AddCommand(refs)
@@ -265,5 +303,6 @@ func graphCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(verifyCmd)
 	cmd.AddCommand(replayCmd)
 	cmd.AddCommand(trajectoriesCmd)
+	cmd.AddCommand(explainCmd)
 	return cmd
 }

@@ -373,17 +373,8 @@ func (s Service) Check(runID, sessionID, dstIP, host string) (security.DecisionR
 
 func (s Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 	runID := r.Header.Get("X-AGENTPROV-Run-ID")
-	if runID == "" {
-		runID = r.Header.Get("X-ACF-Run-ID")
-	}
 	sessionID := r.Header.Get("X-AGENTPROV-Session-ID")
-	if sessionID == "" {
-		sessionID = r.Header.Get("X-ACF-Session-ID")
-	}
 	toolCallID := r.Header.Get("X-AGENTPROV-Tool-Call-ID")
-	if toolCallID == "" {
-		toolCallID = r.Header.Get("X-ACF-Tool-Call-ID")
-	}
 	if runID == "" {
 		runID = s.DefaultRunID
 	}
@@ -696,7 +687,7 @@ func normalizeHost(value string) string {
 }
 
 func removeProxyHeaders(header http.Header) {
-	for _, key := range []string{"Proxy-Connection", "Proxy-Authorization", "X-AGENTPROV-Run-ID", "X-AGENTPROV-Session-ID", "X-AGENTPROV-Tool-Call-ID", "X-ACF-Run-ID", "X-ACF-Session-ID", "X-ACF-Tool-Call-ID"} {
+	for _, key := range []string{"Proxy-Connection", "Proxy-Authorization", "X-AGENTPROV-Run-ID", "X-AGENTPROV-Session-ID", "X-AGENTPROV-Tool-Call-ID"} {
 		header.Del(key)
 	}
 }

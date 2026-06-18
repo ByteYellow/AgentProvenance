@@ -19,7 +19,7 @@ func NewRootCommand() *cobra.Command {
 		Short: "AgentProvenance control CLI",
 	}
 	root.PersistentFlags().StringVar(&dataDir, "data-dir", store.DefaultDataDir, "local AgentProvenance data directory")
-	root.PersistentFlags().StringVar(&daemonURL, "daemon-url", firstEnv("AGENTPROV_DAEMON_URL", "ACF_DAEMON_URL"), "local daemon URL; also read from AGENTPROV_DAEMON_URL")
+	root.PersistentFlags().StringVar(&daemonURL, "daemon-url", firstEnv("AGENTPROV_DAEMON_URL"), "local daemon URL; also read from AGENTPROV_DAEMON_URL")
 
 	root.AddCommand(initCmd(&dataDir))
 	root.AddCommand(daemonCmd(&dataDir))
@@ -31,6 +31,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(runtimeCmd(&dataDir))
 	root.AddCommand(templateCmd(&dataDir))
 	root.AddCommand(apiCmd(&dataDir))
+	root.AddCommand(recordCmd(&dataDir))
 	root.AddCommand(telemetryCmd(&dataDir))
 	root.AddCommand(effectCmd(&dataDir))
 	root.AddCommand(graphCmd(&dataDir))

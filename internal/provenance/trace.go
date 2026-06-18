@@ -61,7 +61,7 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 		return err
 	}
 
-	attemptRows, err := db.Query(`SELECT a.id, a.rollout_id, a.snapshot_id, a.status, COALESCE(a.risk_status, 'unknown'), COALESCE(a.budget_exceeded, 0), a.score, a.cost_estimate, a.is_winner
+	attemptRows, err := db.Query(`SELECT a.id, a.rollout_id, a.snapshot_id, COALESCE(a.strategy, ''), a.status, COALESCE(a.risk_status, 'unknown'), COALESCE(a.budget_exceeded, 0), a.score, a.cost_estimate, a.is_winner
 		FROM fork_attempts a JOIN rollouts r ON a.rollout_id = r.id
 		WHERE r.run_id = ? ORDER BY a.created_at ASC`, runID)
 	if err != nil {
@@ -70,13 +70,13 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 	defer attemptRows.Close()
 	fmt.Fprintln(out, "attempts:")
 	for attemptRows.Next() {
-		var id, rolloutID, snapshotID, status, riskStatus string
+		var id, rolloutID, snapshotID, strategy, status, riskStatus string
 		var score, cost float64
 		var budgetExceeded, isWinner int
-		if err := attemptRows.Scan(&id, &rolloutID, &snapshotID, &status, &riskStatus, &budgetExceeded, &score, &cost, &isWinner); err != nil {
+		if err := attemptRows.Scan(&id, &rolloutID, &snapshotID, &strategy, &status, &riskStatus, &budgetExceeded, &score, &cost, &isWinner); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "  attempt=%s rollout=%s snapshot=%s status=%s risk=%s budget_exceeded=%t score=%.3f cost=%.6f winner=%t\n", id, rolloutID, snapshotID, status, riskStatus, budgetExceeded != 0, score, cost, isWinner != 0)
+		fmt.Fprintf(out, "  attempt=%s rollout=%s snapshot=%s strategy=%s status=%s risk=%s budget_exceeded=%t score=%.3f cost=%.6f winner=%t\n", id, rolloutID, snapshotID, strategy, status, riskStatus, budgetExceeded != 0, score, cost, isWinner != 0)
 	}
 	if err := attemptRows.Err(); err != nil {
 		return err
@@ -316,8 +316,8 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 	}
 	fmt.Fprintln(out, "events:")
 	for _, event := range events {
-		fmt.Fprintf(out, "  event=%s type=%s source=%s session=%s process=%s tool_call=%s snapshot=%s correlation=%s confidence=%.2f container=%s cgroup=%s pid=%d payload=%s\n",
-			event.ID, event.EventType, event.Source, event.SessionID, event.ProcessID, event.ToolCallID, event.SnapshotID, event.CorrelationMethod, event.CorrelationConfidence, event.ContainerID, event.CgroupID, event.PID, event.Payload)
+		fmt.Fprintf(out, "  event=%s type=%s source=%s session=%s process=%s tool_call=%s snapshot=%s correlation=%s confidence=%.2f container=%s cgroup=%s pid=%d tgid=%d ppid=%d payload=%s\n",
+			event.ID, event.EventType, event.Source, event.SessionID, event.ProcessID, event.ToolCallID, event.SnapshotID, event.CorrelationMethod, event.CorrelationConfidence, event.ContainerID, event.CgroupID, event.PID, event.TGID, event.PPID, event.Payload)
 	}
 
 	decisions, err := security.ListDecisions(db, runID)

@@ -10,7 +10,8 @@ LLM / agent observability platform
   -> traces prompts, model calls, tool calls, latency, cost, feedback, evals
 
 AgentProvenance
-  -> correlates agent context with sandbox runtime telemetry and state changes
+  -> turns execution context, runtime evidence, state changes, artifacts,
+     risk, and promotion evidence into a Git-like provenance DAG
 ```
 
 ## LangSmith
@@ -72,12 +73,13 @@ agent harness -> sandbox runtime -> runtime telemetry / file diff / artifacts
 AgentProvenance consumes observability signals, but it is not a generic
 observability platform. It consumes runtime substrates, but it is not a generic
 sandbox runtime. It can support RL-style rollout experiments, but it is not an
-RL trainer or throughput scheduler.
+RL trainer, winner selector, or throughput scheduler.
 
 Its job is narrower:
 
-> Combine application-level agent context with system-level telemetry and state
-> evidence into a queryable, diffable, replayable, and auditable execution graph.
+> Combine execution context, system-level telemetry, state diff, artifact
+> lineage, risk, and promotion evidence into a queryable, diffable, replayable,
+> and auditable execution graph.
 
 That graph should answer:
 

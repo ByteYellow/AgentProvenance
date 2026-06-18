@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
 func TestTraceRunFiltersSnapshotPlansToRun(t *testing.T) {
@@ -546,6 +547,114 @@ func TestGitLikeRefsAndLogShowRolloutDAG(t *testing.T) {
 	payload, ok := object["payload"].(map[string]any)
 	if !ok || payload["file_sha256"] != wantFileHash {
 		t.Fatalf("artifact object payload = %#v, want file hash %s", object["payload"], wantFileHash)
+	}
+}
+
+func TestExplainFileShowsDiffBlameAndRuntimeEvent(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	baseDir := filepath.Join(root, "snap-base")
+	attemptDir := filepath.Join(root, "attempt-1")
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(attemptDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(baseDir, "calculator.py"), []byte("def add(a, b):\n    return a - b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(attemptDir, "calculator.py"), []byte("def add(a, b):\n    return a + b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO snapshots (id, name, kind, source, path, manifest_hash, file_count, bytes, status, created_at)
+		VALUES ('snap-explain', 'base', 'directory', 'test', ?, 'hash', 1, 1, 'ready', ?)`, baseDir, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO rollouts (id, run_id, base_snapshot_id, status, fanout, winner_attempt_id, cost_estimate, risk_status, created_at, updated_at)
+		VALUES ('rollout-explain', 'run-explain', 'snap-explain', 'completed', 1, 'attempt-explain', 0.001, 'clean', ?, ?)`, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO fork_attempts
+		(id, rollout_id, tool_call_id, snapshot_id, workspace_path, fork_ms, strategy, command, status, score, cost_estimate, is_winner, created_at)
+		VALUES ('attempt-explain', 'rollout-explain', 'tool-explain', 'snap-explain', ?, 1, 'correct-add', 'edit calculator.py', 'passed', 10, 0.001, 1, ?)`,
+		attemptDir, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO tool_calls
+		(id, run_id, rollout_id, attempt_id, command, status, exit_code, wall_ms, created_at)
+		VALUES ('tool-explain', 'run-explain', 'rollout-explain', 'attempt-explain', 'edit calculator.py', 'passed', 0, 10, ?)`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO leases (id, run_id, task_path, task_yaml, status, created_at, updated_at)
+		VALUES ('lease-explain', 'run-explain', 'task.yaml', '{}', 'allocated', ?, ?)`, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO sessions
+		(id, lease_id, run_id, workspace_host_path, status, created_at, updated_at)
+		VALUES ('session-explain', 'lease-explain', 'run-explain', ?, 'stopped', ?, ?)`, attemptDir, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO processes
+		(id, session_id, tool_call_id, command, status, exit_code, started_at, ended_at)
+		VALUES ('proc-explain', 'session-explain', 'tool-explain', 'edit calculator.py', 'exited', 0, ?, ?)`, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := telemetry.IngestFiltered(db, telemetry.IngestEvent{
+		RunID:      "run-explain",
+		RolloutID:  "rollout-explain",
+		AttemptID:  "attempt-explain",
+		SessionID:  "session-explain",
+		ToolCallID: "tool-explain",
+		ProcessID:  "proc-explain",
+		SnapshotID: "snap-explain",
+		PID:        500,
+		TGID:       500,
+		PPID:       400,
+		EventType:  "file_write",
+		Source:     "native_runtime",
+		Payload:    `{"path":"calculator.py","op":"write"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := Explain(db, ExplainOptions{RunID: "run-explain", File: "calculator.py"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	for _, want := range []string{
+		"target=file",
+		"state_diff:",
+		"state_blame:",
+		"runtime_file_events:",
+		"modified_by_attempt",
+		"file_write",
+		"tool_call=tool-explain",
+		"process=proc-explain",
+		"pid=500",
+		"ppid=400",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("explain file missing %q:\n%s", want, got)
+		}
 	}
 }
 

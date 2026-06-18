@@ -115,6 +115,8 @@ echo "== telemetry correlation"
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest \
   --raw-event raw-execve-pid-child-correct-add \
   --pid 424242 \
+  --tgid 424242 \
+  --ppid 424200 \
   --timestamp "$CORRECT_PROCESS_STARTED" \
   --source tetragon_jsonl \
   --type execve \
@@ -122,6 +124,8 @@ echo "== telemetry correlation"
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest \
   --raw-event raw-file-write-correct-add \
   --pid 424242 \
+  --tgid 424242 \
+  --ppid 424200 \
   --timestamp "$CORRECT_PROCESS_STARTED" \
   --source native_runtime \
   --type file_write \
@@ -193,10 +197,44 @@ assert_contains "$TRACE_OUTPUT" "execution_context_bindings:"
 assert_contains "$TRACE_OUTPUT" "runtime_causality:"
 assert_contains "$TRACE_OUTPUT" "runtime_tool_call_event"
 assert_contains "$TRACE_OUTPUT" "runtime_process_event"
+assert_contains "$TRACE_OUTPUT" "runtime_process_parent"
+assert_contains "$TRACE_OUTPUT" "runtime_event_file"
+assert_contains "$TRACE_OUTPUT" "workspace_file/calculator.py"
 assert_contains "$TRACE_OUTPUT" "external_effects:"
 assert_contains "$TRACE_OUTPUT" "attempt_quarantined"
 assert_contains "$TRACE_OUTPUT" "winner_promoted"
 assert_contains "$TRACE_OUTPUT" "drain_processed"
+
+EXPLAIN_FILE_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" graph explain --run run-phase1-accept --file calculator.py)"
+assert_contains "$EXPLAIN_FILE_OUTPUT" "target=file"
+assert_contains "$EXPLAIN_FILE_OUTPUT" "state_diff:"
+assert_contains "$EXPLAIN_FILE_OUTPUT" "state_blame:"
+assert_contains "$EXPLAIN_FILE_OUTPUT" "runtime_file_events:"
+assert_contains "$EXPLAIN_FILE_OUTPUT" "modified_by_attempt"
+assert_contains "$EXPLAIN_FILE_OUTPUT" "file_write"
+assert_contains "$EXPLAIN_FILE_OUTPUT" "ppid=424200"
+
+echo "== zero-sdk record"
+RECORD_WORKDIR="$DATA_DIR/record-workspace"
+mkdir -p "$RECORD_WORKDIR"
+cat > "$RECORD_WORKDIR/app.py" <<'PY'
+value = 1
+PY
+RECORD_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" record --run run-record-accept --name zero-sdk --workdir "$RECORD_WORKDIR" -- sh -lc 'printf "value = 2\n" > app.py && echo artifact > artifact.txt')"
+assert_contains "$RECORD_OUTPUT" "run_id=run-record-accept"
+assert_contains "$RECORD_OUTPUT" "changed_file=app.py"
+assert_contains "$RECORD_OUTPUT" "changed_file=artifact.txt"
+RECORD_TRACE="$("$BIN" --data-dir "$DATA_DIR" graph trace --run run-record-accept)"
+assert_contains "$RECORD_TRACE" "zero-sdk-record"
+assert_contains "$RECORD_TRACE" "runtime_process_parent"
+assert_contains "$RECORD_TRACE" "runtime_event_file"
+assert_contains "$RECORD_TRACE" "workspace_file/app.py"
+RECORD_EXPLAIN="$("$BIN" --data-dir "$DATA_DIR" graph explain --run run-record-accept --file app.py)"
+assert_contains "$RECORD_EXPLAIN" "target=file"
+assert_contains "$RECORD_EXPLAIN" "modified_by_attempt"
+assert_contains "$RECORD_EXPLAIN" "file_write"
+RECORD_EXPLAIN_JSON="$DATA_DIR/explain.json"
+"$BIN" --data-dir "$DATA_DIR" graph explain --run run-record-accept --file app.py --json > "$RECORD_EXPLAIN_JSON"
 
 VERIFY_JSON="$DATA_DIR/verify.json"
 REPLAY_JSON="$DATA_DIR/replay.json"
@@ -215,11 +253,11 @@ DELETED_BLAME_JSON="$DATA_DIR/deleted-blame.json"
 "$BIN" --data-dir "$DATA_DIR" graph blame --run run-phase1-accept --file fix-notes.txt --json > "$CREATED_BLAME_JSON"
 "$BIN" --data-dir "$DATA_DIR" graph blame --run run-phase1-accept --file calculator.py.bug --json > "$DELETED_BLAME_JSON"
 
-"$PYTHON_BIN" - "$VERIFY_JSON" "$REPLAY_JSON" "$TRAJECTORIES_JSON" "$DIFF_JSON" "$BLAME_JSON" "$CREATED_DIFF_JSON" "$CREATED_BLAME_JSON" "$DELETED_BLAME_JSON" "$CORRECT_ATTEMPT" "$RISKY_ATTEMPT" <<'PY'
+"$PYTHON_BIN" - "$VERIFY_JSON" "$REPLAY_JSON" "$TRAJECTORIES_JSON" "$DIFF_JSON" "$BLAME_JSON" "$CREATED_DIFF_JSON" "$CREATED_BLAME_JSON" "$DELETED_BLAME_JSON" "$RECORD_EXPLAIN_JSON" "$CORRECT_ATTEMPT" "$RISKY_ATTEMPT" <<'PY'
 import json
 import sys
 
-verify_path, replay_path, trajectories_path, diff_path, blame_path, created_diff_path, created_blame_path, deleted_blame_path, correct_attempt, risky_attempt = sys.argv[1:]
+verify_path, replay_path, trajectories_path, diff_path, blame_path, created_diff_path, created_blame_path, deleted_blame_path, explain_path, correct_attempt, risky_attempt = sys.argv[1:]
 
 with open(verify_path, "r", encoding="utf-8") as f:
     verify = json.load(f)
@@ -237,6 +275,8 @@ with open(created_blame_path, "r", encoding="utf-8") as f:
     created_blame = json.load(f)
 with open(deleted_blame_path, "r", encoding="utf-8") as f:
     deleted_blame = json.load(f)
+with open(explain_path, "r", encoding="utf-8") as f:
+    explain = json.load(f)
 
 assert verify["schema_version"] == "agentprovenance.verify/v1", verify
 assert verify["status"] == "ok", verify
@@ -300,6 +340,16 @@ assert created_blame_by_id[correct_attempt]["reason"] == "created_by_attempt", c
 
 deleted_blame_by_id = {e["attempt_id"]: e for e in deleted_blame["entries"]}
 assert deleted_blame_by_id[correct_attempt]["reason"] == "deleted_by_attempt", deleted_blame_by_id[correct_attempt]
+
+assert explain["schema_version"] == "agentprovenance.explain/v1", explain
+assert explain["target"]["type"] == "file", explain
+assert explain["target"]["file"] == "app.py", explain
+assert explain["file_diff"]["schema_version"] == "agentprovenance.diff/v1", explain
+assert explain["file_blame"]["schema_version"] == "agentprovenance.blame/v1", explain
+assert any(e["event_type"] == "file_write" for e in explain["runtime_events"]), explain
+edge_types = {e["edge_type"] for e in explain["runtime_edges"]}
+assert "runtime_event_file" in edge_types, edge_types
+assert "runtime_tool_call_file" in edge_types, edge_types
 PY
 
 echo "phase1 acceptance: ok"

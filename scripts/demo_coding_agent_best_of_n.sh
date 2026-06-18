@@ -100,6 +100,8 @@ echo "== ingest raw runtime telemetry without tool_call_id"
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest \
   --raw-event raw-execve-pid-child-correct-add \
   --pid 424242 \
+  --tgid 424242 \
+  --ppid 424200 \
   --timestamp "$CORRECT_PROCESS_STARTED" \
   --source tetragon_jsonl \
   --type execve \
@@ -107,6 +109,8 @@ echo "== ingest raw runtime telemetry without tool_call_id"
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest \
   --raw-event raw-file-write-correct-add \
   --pid 424242 \
+  --tgid 424242 \
+  --ppid 424200 \
   --timestamp "$CORRECT_PROCESS_STARTED" \
   --source native_runtime \
   --type file_write \
@@ -167,9 +171,23 @@ echo "== diff attempts for calculator.py"
 echo "== blame calculator.py"
 "$BIN" --data-dir "$DATA_DIR" graph blame --run run-demo-bugfix --file calculator.py
 
+echo "== explain calculator.py runtime causality"
+"$BIN" --data-dir "$DATA_DIR" graph explain --run run-demo-bugfix --file calculator.py
+
 echo "== blame created and deleted files"
 "$BIN" --data-dir "$DATA_DIR" graph blame --run run-demo-bugfix --file fix-notes.txt
 "$BIN" --data-dir "$DATA_DIR" graph blame --run run-demo-bugfix --file calculator.py.bug
+
+echo "== zero-sdk record demo"
+RECORD_WORKDIR="$DATA_DIR/record-workspace"
+mkdir -p "$RECORD_WORKDIR"
+cat > "$RECORD_WORKDIR/app.py" <<'PY'
+value = 1
+PY
+"$BIN" --data-dir "$DATA_DIR" record --run run-demo-record --name zero-sdk --workdir "$RECORD_WORKDIR" -- sh -lc 'printf "value = 2\n" > app.py && echo artifact > artifact.txt'
+"$BIN" --data-dir "$DATA_DIR" graph trace --run run-demo-record
+"$BIN" --data-dir "$DATA_DIR" graph explain --run run-demo-record --file app.py
+"$BIN" --data-dir "$DATA_DIR" graph explain --run run-demo-record --file app.py --json
 
 echo "== trace winning patch artifacts"
 "$BIN" --data-dir "$DATA_DIR" graph trace --run run-demo-bugfix | sed -n '1,220p'

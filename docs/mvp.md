@@ -1,7 +1,7 @@
 # AgentProvenance MVP
 
-`AgentProvenance` is a CLI-first single-node observability and provenance audit
-layer for sandboxed AI agent execution.
+`AgentProvenance` is a CLI-first Git-like provenance control plane for
+sandboxed agent execution.
 
 The command-line interface is `agentprov`. The core MVP manages local leases,
 Docker-backed sandbox sessions, directory snapshots, attempt workspace forks,
@@ -11,13 +11,15 @@ each trajectory. External RL pipelines, evaluators, or agent harnesses own the
 final selection decision.
 
 Phase 1 focuses on the immutable execution ledger and state-diff audit loop:
-`ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame ->
-Taint -> Promotion Barrier`.
+`Execution Context -> Evidence Ingest -> Runtime Causality Graph -> Provenance
+DAG -> State Diff/Blame -> Taint -> Promotion Barrier -> Replay / Trajectory /
+Audit Manifest`.
 
 This is not an RL runtime, generic telemetry collector, distributed scheduler,
-or reward/evaluator decision maker. RL-style rollout and evaluator pipelines are
-supported as audit and debugging consumers of the graph, not as the primary
-runtime target.
+or reward/evaluator decision maker. Coding agents and autonomous tool-using
+agents are the primary target. RL-style rollout and evaluator pipelines are
+supported as high-concurrency audit and debugging consumers of the graph, not
+as the only runtime target.
 
 ## Phase 1 risk boundaries
 
@@ -74,8 +76,14 @@ agentprov graph diff --run run-demo-bugfix --file calculator.py
 agentprov graph diff --run run-demo-bugfix --file calculator.py --json
 agentprov graph blame --run run-demo-bugfix --file calculator.py
 agentprov graph blame --run run-demo-bugfix --file calculator.py --json
+agentprov graph explain --run run-demo-bugfix --file calculator.py
+agentprov graph explain --run run-demo-bugfix --file calculator.py --json
+agentprov graph explain --tool-call <tool_call_id>
 agentprov effect record --run run-demo-bugfix --type api_call --target api.example.com/v1/tickets --mode dry-run --decision audit
 agentprov effect list --run run-demo-bugfix
+agentprov record --run run-record-demo --workdir /tmp/agentprov-record-demo -- \
+  sh -lc 'printf "value = 2\n" > app.py && echo artifact > artifact.txt'
+agentprov graph explain --run run-record-demo --file app.py
 agentprov telemetry bind --run run-demo-bugfix --session <session_id> --attempt <attempt_id> --tool-call <tool_call_id> --process <process_id> --container-id <container_id> --cgroup-id <cgroup_id> --pid <pid>
 agentprov telemetry ingest --raw-event raw-execve-1 --process <process_id> --type execve --payload '{"argv":["./test_calculator.sh"]}'
 agentprov telemetry ingest --raw-event raw-execve-pid-child --pid <pid> --type execve --payload '{"argv":["./async_child.sh"]}'
@@ -156,6 +164,10 @@ Expected output / acceptance:
 - Native runtime causality edges show `tool_call -> process -> runtime_event`
   and connect a runtime-observed `file_write` event to the same
   attempt/tool_call that produced the file diff.
+- PID/PPID/TGID runtime telemetry creates process-tree causality edges, so
+  delayed child process events can be explained without raw `tool_call_id`.
+- `graph explain --file calculator.py --json` combines state diff, blame, and
+  runtime file events in one `agentprovenance.explain/v1` manifest.
 - `graph trace` shows `execution_context_bindings:` and the correlated
   `execve` event under the same run/session/attempt/tool/process chain.
 - `rollout attempts` shows `wrong-constant` as `quarantined` with
@@ -180,6 +192,9 @@ Expected output / acceptance:
   workspace states.
 - `graph trace` shows generated patch artifacts linked by `attempt_artifact`
   and `tool_call_artifact` edges.
+- `agentprov record -- <command>` proves the zero-SDK path by snapshotting a
+  working directory, running a command, computing changed files, and linking
+  runtime file evidence to diff/blame.
 - `effect list --run run-demo-bugfix` and `graph trace` show an
   `ExternalEffectRecord` for a dry-run API call, proving external side effects
   are recorded as gate evidence instead of rollbackable state.

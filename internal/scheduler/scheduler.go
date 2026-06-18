@@ -523,9 +523,6 @@ func burstRisk(state NodeState, active float64) string {
 func envString(name, fallback string) string {
 	value := os.Getenv(name)
 	if value == "" {
-		value = os.Getenv(legacyEnvName(name))
-	}
-	if value == "" {
 		return fallback
 	}
 	return value
@@ -533,9 +530,6 @@ func envString(name, fallback string) string {
 
 func envFloat(name string, fallback float64) float64 {
 	value := os.Getenv(name)
-	if value == "" {
-		value = os.Getenv(legacyEnvName(name))
-	}
 	if value == "" {
 		return fallback
 	}
@@ -549,9 +543,6 @@ func envFloat(name string, fallback float64) float64 {
 func envInt64(name string, fallback int64) int64 {
 	value := os.Getenv(name)
 	if value == "" {
-		value = os.Getenv(legacyEnvName(name))
-	}
-	if value == "" {
 		return fallback
 	}
 	parsed, err := strconv.ParseInt(value, 10, 64)
@@ -559,8 +550,4 @@ func envInt64(name string, fallback int64) int64 {
 		return fallback
 	}
 	return parsed
-}
-
-func legacyEnvName(name string) string {
-	return strings.Replace(name, "AGENTPROV_", "ACF_", 1)
 }

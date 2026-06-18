@@ -40,6 +40,9 @@ func TestIngestFilteredCorrelatesRawRuntimeEvent(t *testing.T) {
 	if _, err := IngestFiltered(db, IngestEvent{
 		RawEventID:  "raw-1",
 		ContainerID: "container-1",
+		PID:         1234,
+		TGID:        1200,
+		PPID:        42,
 		EventType:   "execve",
 		Source:      "tetragon_jsonl",
 		Payload:     `{"argv":["sh","-lc","echo hi"]}`,
@@ -64,7 +67,7 @@ func TestIngestFilteredCorrelatesRawRuntimeEvent(t *testing.T) {
 	if !strings.Contains(event.Payload, `"binding_id"`) {
 		t.Fatalf("payload missing correlation binding: %s", event.Payload)
 	}
-	for _, edgeType := range []string{"runtime_tool_call_process", "runtime_tool_call_event", "runtime_process_event", "runtime_process_observed"} {
+	for _, edgeType := range []string{"runtime_tool_call_process", "runtime_tool_call_event", "runtime_process_event", "runtime_process_observed", "runtime_process_parent", "runtime_process_child_of", "runtime_process_thread"} {
 		var count int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE edge_type = ?`, edgeType).Scan(&count); err != nil {
 			t.Fatal(err)
@@ -185,6 +188,7 @@ func TestIngestFilteredAcceptsFileRuntimeEvents(t *testing.T) {
 		SessionID:  "session-1",
 		ToolCallID: "tool-1",
 		ProcessID:  "process-1",
+		AttemptID:  "attempt-1",
 		EventType:  "file_write",
 		Source:     "native_runtime",
 		Payload:    `{"path":"calculator.py","op":"write"}`,
@@ -197,5 +201,14 @@ func TestIngestFilteredAcceptsFileRuntimeEvents(t *testing.T) {
 	}
 	if edges != 1 {
 		t.Fatalf("runtime_process_event edges=%d, want 1", edges)
+	}
+	for _, edgeType := range []string{"runtime_event_file", "runtime_process_file", "runtime_tool_call_file", "runtime_attempt_file"} {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE edge_type = ? AND to_id = 'workspace_file/calculator.py'`, edgeType).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%s edges=%d, want 1", edgeType, count)
+		}
 	}
 }

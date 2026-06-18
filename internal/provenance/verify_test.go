@@ -2,14 +2,17 @@ package provenance
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/effects"
 	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
 func TestVerifyCleanRun(t *testing.T) {
@@ -72,9 +75,24 @@ func TestVerifyCleanRun(t *testing.T) {
 		VALUES ('promo-1', 'rollout-1', 'attempt-1', 'snap-1', 'promoted', ?, ?, ?, 0, 0, 0, 'clean', 'ok', ?, ?)`, now, now, now, now, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO events
-		(id, run_id, session_id, tool_call_id, process_id, snapshot_id, source, event_type, payload, created_at, correlation_method, correlation_confidence)
-		VALUES ('evt-1', 'run-1', 'session-1', 'tool-1', 'process-1', 'snap-1', 'wrapper', 'execve', '{}', ?, 'process_id:process_id', 1.0)`, now); err != nil {
+	if _, err := telemetry.IngestFiltered(db, telemetry.IngestEvent{
+		RunID:       "run-1",
+		RolloutID:   "rollout-1",
+		AttemptID:   "attempt-1",
+		SessionID:   "session-1",
+		ToolCallID:  "tool-1",
+		ProcessID:   "process-1",
+		SnapshotID:  "snap-1",
+		RawEventID:  "raw-evt-1",
+		ContainerID: "container-1",
+		CgroupID:    "cgroup-1",
+		PID:         200,
+		TGID:        200,
+		PPID:        100,
+		Source:      "filtered_telemetry",
+		EventType:   "execve",
+		Payload:     "{}",
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`INSERT INTO execution_context_bindings
@@ -386,4 +404,140 @@ func TestVerifyRejectsStaleProcessStatus(t *testing.T) {
 	if !found {
 		t.Fatalf("expected stale_process_status issue, got %+v", result.Issues)
 	}
+}
+
+func TestVerifyRejectsMissingRuntimeFileEdges(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	workspace := filepath.Join(root, "attempt-1")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	insertVerifyRuntimeBase(t, db, workspace, now)
+	if _, err := db.Exec(`INSERT INTO events
+		(id, run_id, session_id, tool_call_id, process_id, snapshot_id, raw_event_id, correlation_method, correlation_confidence,
+		 container_id, cgroup_id, pid, tgid, ppid, source, event_type, payload, created_at)
+		VALUES ('evt-file-1', 'run-1', 'session-1', 'tool-1', 'process-1', 'snap-1', 'raw-file-1', 'cgroup_id:cgroup_id', 1.0,
+		 'container-1', 'cgroup-1', 200, 200, 100, 'filtered_telemetry', 'file_write', '{"path":"calculator.py"}', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Verify(db, "run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertVerifyIssue(t, result, "missing_runtime_event_file_edge")
+	assertVerifyIssue(t, result, "missing_runtime_process_file_edge")
+	assertVerifyIssue(t, result, "missing_runtime_tool_call_file_edge")
+	assertVerifyIssue(t, result, "missing_runtime_process_parent_edge")
+}
+
+func TestVerifyAcceptsRuntimeCausalityEdges(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	workspace := filepath.Join(root, "attempt-1")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	insertVerifyRuntimeBase(t, db, workspace, now)
+	if _, err := telemetry.IngestFiltered(db, telemetry.IngestEvent{
+		RunID:       "run-1",
+		RolloutID:   "rollout-1",
+		AttemptID:   "attempt-1",
+		SessionID:   "session-1",
+		ToolCallID:  "tool-1",
+		ProcessID:   "process-1",
+		SnapshotID:  "snap-1",
+		RawEventID:  "raw-file-1",
+		ContainerID: "container-1",
+		CgroupID:    "cgroup-1",
+		PID:         200,
+		TGID:        200,
+		PPID:        100,
+		Source:      "filtered_telemetry",
+		EventType:   "file_write",
+		Payload:     `{"path":"calculator.py"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Verify(db, "run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, issue := range result.Issues {
+		if strings.HasPrefix(issue.Kind, "missing_runtime_") {
+			t.Fatalf("unexpected runtime causality issue: %+v", result.Issues)
+		}
+	}
+}
+
+func insertVerifyRuntimeBase(t *testing.T, db *sql.DB, workspace, now string) {
+	t.Helper()
+	insertTraceSnapshot(t, db, "snap-1", "ready", now)
+	if _, err := db.Exec(`INSERT INTO rollouts
+		(id, run_id, base_snapshot_id, status, fanout, winner_attempt_id, risk_status, created_at, updated_at)
+		VALUES ('rollout-1', 'run-1', 'snap-1', 'completed', 1, 'attempt-1', 'clean', ?, ?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO fork_attempts
+		(id, rollout_id, tool_call_id, snapshot_id, workspace_path, fork_ms, status, risk_status, is_winner, created_at)
+		VALUES ('attempt-1', 'rollout-1', 'tool-1', 'snap-1', ?, 1, 'passed', 'clean', 1, ?)`, workspace, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO leases
+		(id, run_id, task_path, task_yaml, status, created_at, updated_at)
+		VALUES ('lease-1', 'run-1', 'task.yaml', '{}', 'allocated', ?, ?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO sessions
+		(id, lease_id, run_id, workspace_host_path, status, created_at, updated_at)
+		VALUES ('session-1', 'lease-1', 'run-1', ?, 'stopped', ?, ?)`, workspace, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO tool_calls
+		(id, run_id, rollout_id, attempt_id, session_id, command, status, exit_code, created_at)
+		VALUES ('tool-1', 'run-1', 'rollout-1', 'attempt-1', 'session-1', 'pytest -q', 'passed', 0, ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO processes
+		(id, session_id, tool_call_id, command, status, exit_code, started_at, ended_at)
+		VALUES ('process-1', 'session-1', 'tool-1', 'pytest -q', 'exited', 0, ?, ?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO execution_context_bindings
+		(id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence, created_at)
+		VALUES ('bind-1', 'run-1', 'session-1', 'attempt-1', 'tool-1', 'process-1', 'container-1', 'cgroup-1', 200, 200, ?, ?, 'test', 1.0, ?)`, now, now, now); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertVerifyIssue(t *testing.T, result VerifyResult, kind string) {
+	t.Helper()
+	for _, issue := range result.Issues {
+		if issue.Kind == kind {
+			return
+		}
+	}
+	t.Fatalf("expected issue kind %s, got %+v", kind, result.Issues)
 }

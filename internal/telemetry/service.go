@@ -2,7 +2,9 @@ package telemetry
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
@@ -22,6 +24,8 @@ type EventRecord struct {
 	ContainerID           string
 	CgroupID              string
 	PID                   int64
+	TGID                  int64
+	PPID                  int64
 	Source                string
 	EventType             string
 	Payload               string
@@ -64,6 +68,7 @@ func ListEventsFiltered(db *sql.DB, filter Filter) ([]EventRecord, error) {
 		COALESCE(process_id, ''), COALESCE(snapshot_id, ''), COALESCE(raw_event_id, ''),
 		COALESCE(correlation_method, ''), COALESCE(correlation_confidence, 0),
 		COALESCE(container_id, ''), COALESCE(cgroup_id, ''), COALESCE(pid, 0),
+		COALESCE(tgid, 0), COALESCE(ppid, 0),
 		source, event_type, payload, created_at
 		FROM events`
 	args := []any{}
@@ -99,7 +104,7 @@ func ListEventsFiltered(db *sql.DB, filter Filter) ([]EventRecord, error) {
 	var events []EventRecord
 	for rows.Next() {
 		var event EventRecord
-		if err := rows.Scan(&event.ID, &event.RunID, &event.SessionID, &event.ToolCallID, &event.ProcessID, &event.SnapshotID, &event.RawEventID, &event.CorrelationMethod, &event.CorrelationConfidence, &event.ContainerID, &event.CgroupID, &event.PID, &event.Source, &event.EventType, &event.Payload, &event.CreatedAt); err != nil {
+		if err := rows.Scan(&event.ID, &event.RunID, &event.SessionID, &event.ToolCallID, &event.ProcessID, &event.SnapshotID, &event.RawEventID, &event.CorrelationMethod, &event.CorrelationConfidence, &event.ContainerID, &event.CgroupID, &event.PID, &event.TGID, &event.PPID, &event.Source, &event.EventType, &event.Payload, &event.CreatedAt); err != nil {
 			return nil, err
 		}
 		events = append(events, event)
@@ -246,7 +251,73 @@ func recordRuntimeCausalityEdges(db *sql.DB, event IngestEvent, eventID, now str
 		insert(event.ProcessID, processNode, "runtime_process_observed")
 		insert(processNode, eventNode, "runtime_process_event")
 	}
+	if event.PID != 0 && event.PPID != 0 {
+		parentNode := fmt.Sprintf("runtime_process/pid/%d", event.PPID)
+		childNode := fmt.Sprintf("runtime_process/pid/%d", event.PID)
+		insert(parentNode, childNode, "runtime_process_parent")
+		insert(childNode, parentNode, "runtime_process_child_of")
+	}
+	if event.PID != 0 && event.TGID != 0 && event.TGID != event.PID {
+		threadGroupNode := fmt.Sprintf("runtime_process/tgid/%d", event.TGID)
+		processNode := fmt.Sprintf("runtime_process/pid/%d", event.PID)
+		insert(threadGroupNode, processNode, "runtime_process_thread")
+	}
+	if event.EventType == "file_write" || event.EventType == "file_open" {
+		if path := payloadPath(event.Payload); path != "" {
+			fileNode := "workspace_file/" + path
+			insert(eventNode, fileNode, "runtime_event_file")
+			if event.ProcessID != "" {
+				insert(event.ProcessID, fileNode, "runtime_process_file")
+			}
+			if event.ToolCallID != "" {
+				insert(event.ToolCallID, fileNode, "runtime_tool_call_file")
+			}
+			if event.AttemptID != "" {
+				insert(event.AttemptID, fileNode, "runtime_attempt_file")
+			}
+		}
+	}
 	return nil
+}
+
+func payloadPath(payload string) string {
+	var decoded any
+	if err := json.Unmarshal([]byte(payload), &decoded); err != nil {
+		return ""
+	}
+	path := findPayloadPath(decoded)
+	path = strings.TrimSpace(path)
+	path = strings.TrimPrefix(path, "/workspace/")
+	path = strings.TrimPrefix(path, "./")
+	if path == "." || path == ".." || strings.HasPrefix(path, "../") || strings.HasPrefix(path, "/") {
+		return ""
+	}
+	return path
+}
+
+func findPayloadPath(value any) string {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, key := range []string{"path", "file"} {
+			if raw, ok := typed[key].(string); ok && raw != "" {
+				return raw
+			}
+		}
+		for _, key := range []string{"raw", "payload", "event"} {
+			if nested, ok := typed[key]; ok {
+				if path := findPayloadPath(nested); path != "" {
+					return path
+				}
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			if path := findPayloadPath(item); path != "" {
+				return path
+			}
+		}
+	}
+	return ""
 }
 
 func highRiskEvent(eventType string) bool {

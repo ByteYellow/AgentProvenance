@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/attempt"
@@ -591,9 +590,6 @@ func (s Service) resolveSnapshotID(nameOrID string) (string, error) {
 
 func envInt64(name string, fallback int64) int64 {
 	value := os.Getenv(name)
-	if value == "" {
-		value = os.Getenv(strings.Replace(name, "AGENTPROV_", "ACF_", 1))
-	}
 	if value == "" {
 		return fallback
 	}

@@ -7,7 +7,6 @@ import (
 	"math"
 	"os"
 	"strconv"
-	"strings"
 )
 
 type AdmissionInput struct {
@@ -282,9 +281,6 @@ func EstimateCost(activeCPUSeconds, wallSeconds float64, snapshotBytes, policyBl
 
 func envFloat(name string, fallback float64) float64 {
 	value := os.Getenv(name)
-	if value == "" {
-		value = os.Getenv(strings.Replace(name, "AGENTPROV_", "ACF_", 1))
-	}
 	if value == "" {
 		return fallback
 	}
