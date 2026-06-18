@@ -133,6 +133,7 @@ Core graph commands:
 ./agentprov graph verify --run run-demo-bugfix --json
 ./agentprov graph replay --run run-demo-bugfix
 ./agentprov graph replay --run run-demo-bugfix --json
+./agentprov graph trajectories --run run-demo-bugfix --json
 ./agentprov graph diff --run run-demo-bugfix --file calculator.py
 ./agentprov graph diff --run run-demo-bugfix --file calculator.py --json
 ./agentprov graph blame --run run-demo-bugfix --file calculator.py
@@ -145,7 +146,9 @@ chronological execution history. `materialize` writes content-addressed objects.
 ToolCallScope correlation drift, and taint/promotion barriers. `verify --json`
 emits an `agentprovenance.verify/v1` manifest for CI or downstream agent
 harnesses. `replay` emits a plan-only reconstruction and `replay --json` emits
-a structured `agentprovenance.replay/v1` manifest.
+a structured `agentprovenance.replay/v1` manifest. `trajectories --json` emits
+an `agentprovenance.trajectories/v1` evidence manifest for external evaluators
+and RL pipelines; it does not choose the final winner.
 `diff` compares file state across attempts. `blame` attributes a file version
 to the attempt, tool call, process, command, strategy, and local candidate
 status that produced it. `diff --json` and `blame --json` emit structured
@@ -174,6 +177,8 @@ Expected acceptance:
 - Emits clean-candidate evidence using score, tests, risk, and cost signals
   without claiming to replace the RL pipeline's final selection logic.
 - Emits `graph trace`, `refs`, `log`, `materialize`, `verify`, and `replay`.
+- Emits `graph trajectories --json` as the per-attempt evidence package for
+  external evaluators.
 - Emits `graph diff` for `calculator.py`.
 - Emits `graph blame` with created/modified/deleted/unchanged state, and the
   acceptance gate asserts those state classes.
@@ -193,7 +198,7 @@ ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame
 
 | Area | Current capability |
 |---|---|
-| Provenance DAG | `trace`, `refs`, `log`, `materialize`, stronger `verify`, text `replay`, JSON replay manifest |
+| Provenance DAG | `trace`, `refs`, `log`, `materialize`, stronger `verify`, text `replay`, JSON replay manifest, trajectory evidence manifest |
 | State attribution | MVP `graph diff` and `graph blame` for workspace files, with JSON manifests |
 | Rollout | local and Docker-backed best-of-N attempts, scoring, top-k pruning, and candidate eligibility evidence |
 | ToolCallScope | process/container/cgroup/time-window context binding for raw telemetry correlation |

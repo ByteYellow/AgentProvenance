@@ -157,6 +157,7 @@ assert_contains "$TRACE_OUTPUT" "winner_promoted"
 
 VERIFY_JSON="$DATA_DIR/verify.json"
 REPLAY_JSON="$DATA_DIR/replay.json"
+TRAJECTORIES_JSON="$DATA_DIR/trajectories.json"
 DIFF_JSON="$DATA_DIR/diff.json"
 BLAME_JSON="$DATA_DIR/blame.json"
 CREATED_DIFF_JSON="$DATA_DIR/created-diff.json"
@@ -164,22 +165,25 @@ CREATED_BLAME_JSON="$DATA_DIR/created-blame.json"
 DELETED_BLAME_JSON="$DATA_DIR/deleted-blame.json"
 "$BIN" --data-dir "$DATA_DIR" graph verify --run run-phase1-accept --json > "$VERIFY_JSON"
 "$BIN" --data-dir "$DATA_DIR" graph replay --run run-phase1-accept --json > "$REPLAY_JSON"
+"$BIN" --data-dir "$DATA_DIR" graph trajectories --run run-phase1-accept --json > "$TRAJECTORIES_JSON"
 "$BIN" --data-dir "$DATA_DIR" graph diff --run run-phase1-accept --file calculator.py --json > "$DIFF_JSON"
 "$BIN" --data-dir "$DATA_DIR" graph blame --run run-phase1-accept --file calculator.py --json > "$BLAME_JSON"
 "$BIN" --data-dir "$DATA_DIR" graph diff --run run-phase1-accept --file fix-notes.txt --json > "$CREATED_DIFF_JSON"
 "$BIN" --data-dir "$DATA_DIR" graph blame --run run-phase1-accept --file fix-notes.txt --json > "$CREATED_BLAME_JSON"
 "$BIN" --data-dir "$DATA_DIR" graph blame --run run-phase1-accept --file calculator.py.bug --json > "$DELETED_BLAME_JSON"
 
-"$PYTHON_BIN" - "$VERIFY_JSON" "$REPLAY_JSON" "$DIFF_JSON" "$BLAME_JSON" "$CREATED_DIFF_JSON" "$CREATED_BLAME_JSON" "$DELETED_BLAME_JSON" "$CORRECT_ATTEMPT" "$RISKY_ATTEMPT" <<'PY'
+"$PYTHON_BIN" - "$VERIFY_JSON" "$REPLAY_JSON" "$TRAJECTORIES_JSON" "$DIFF_JSON" "$BLAME_JSON" "$CREATED_DIFF_JSON" "$CREATED_BLAME_JSON" "$DELETED_BLAME_JSON" "$CORRECT_ATTEMPT" "$RISKY_ATTEMPT" <<'PY'
 import json
 import sys
 
-verify_path, replay_path, diff_path, blame_path, created_diff_path, created_blame_path, deleted_blame_path, correct_attempt, risky_attempt = sys.argv[1:]
+verify_path, replay_path, trajectories_path, diff_path, blame_path, created_diff_path, created_blame_path, deleted_blame_path, correct_attempt, risky_attempt = sys.argv[1:]
 
 with open(verify_path, "r", encoding="utf-8") as f:
     verify = json.load(f)
 with open(replay_path, "r", encoding="utf-8") as f:
     replay = json.load(f)
+with open(trajectories_path, "r", encoding="utf-8") as f:
+    trajectories = json.load(f)
 with open(diff_path, "r", encoding="utf-8") as f:
     diff = json.load(f)
 with open(blame_path, "r", encoding="utf-8") as f:
@@ -212,6 +216,21 @@ assert winner["external_effects"][0]["mode"] == "dry-run", winner.get("external_
 risky = by_id[risky_attempt]
 assert risky["replay_blocked"] is True, risky
 assert "risk_tainted" in risky["block_reasons"], risky
+
+assert trajectories["schema_version"] == "agentprovenance.trajectories/v1", trajectories
+assert trajectories["decision_owner"] == "external_evaluator", trajectories
+trajectory_by_id = {t["attempt_id"]: t for t in trajectories["trajectories"]}
+assert correct_attempt in trajectory_by_id, trajectory_by_id.keys()
+correct_trajectory = trajectory_by_id[correct_attempt]
+assert correct_trajectory["local_candidate_eligible"] is True, correct_trajectory
+assert correct_trajectory["tool_call"]["status"] == "passed", correct_trajectory
+assert any(e.get("correlation_method") == "cgroup_time_window:cgroup_id+time" for e in correct_trajectory["runtime_events"]), correct_trajectory["runtime_events"]
+assert any(e.get("correlation_method") == "container_time_window:container_id+time" for e in correct_trajectory["runtime_events"]), correct_trajectory["runtime_events"]
+assert correct_trajectory["external_effects"][0]["mode"] == "dry-run", correct_trajectory["external_effects"]
+change_types = {c["path"]: c["change_type"] for c in correct_trajectory["file_changes"]}
+assert change_types["calculator.py"] == "modified", change_types
+assert change_types["fix-notes.txt"] == "created", change_types
+assert change_types["calculator.py.bug"] == "deleted", change_types
 
 assert diff["schema_version"] == "agentprovenance.diff/v1", diff
 assert diff["file"] == "calculator.py", diff

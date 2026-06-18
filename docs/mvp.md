@@ -69,6 +69,7 @@ agentprov graph verify --run run-demo-bugfix
 agentprov graph verify --run run-demo-bugfix --json
 agentprov graph replay --run run-demo-bugfix
 agentprov graph replay --run run-demo-bugfix --json
+agentprov graph trajectories --run run-demo-bugfix --json
 agentprov graph diff --run run-demo-bugfix --file calculator.py
 agentprov graph diff --run run-demo-bugfix --file calculator.py --json
 agentprov graph blame --run run-demo-bugfix --file calculator.py
@@ -87,8 +88,9 @@ Machine-checkable Phase 1 gate:
 ```
 
 The acceptance script runs the coding-agent best-of-N scenario and asserts
-telemetry correlation, external effect recording, quarantine/taint, promotion,
-`graph verify`, JSON verify, JSON replay, JSON diff, and JSON blame semantics.
+telemetry correlation, external effect recording, quarantine/taint,
+promotion-barrier eligibility, `graph verify`, JSON verify, JSON replay, JSON
+trajectory evidence, JSON diff, and JSON blame semantics.
 
 Daemon-backed equivalent:
 
@@ -130,9 +132,10 @@ patch artifacts, ingests raw runtime telemetry without `tool_call_id`,
 correlates it through ToolCallScope bindings, quarantines one risky failed
 branch, marks the passing candidate as locally promotable, then runs `graph trace`, `graph refs`,
 `graph log`, `graph materialize`, `graph verify`, `graph replay`, `graph replay
---json`, `graph verify --json`, `graph diff`, `graph diff --json`, `graph
-blame`, and `graph blame --json` to explain the winner, verify graph integrity,
-reconstruct a plan-only replay, emit structured verify/replay/diff/blame
+--json`, `graph verify --json`, `graph trajectories --json`, `graph diff`,
+`graph diff --json`, `graph blame`, and `graph blame --json` to expose
+per-trajectory evidence for external evaluators, verify graph integrity,
+reconstruct a plan-only replay, emit structured verify/replay/trajectory/diff/blame
 manifests, and attribute file changes.
 
 Expected output / acceptance:
@@ -175,6 +178,11 @@ Expected output / acceptance:
   snapshot, attempts, commands, artifacts, runtime events, and external effect
   gates. `graph replay --run run-demo-bugfix --json` emits the same evidence as
   an `agentprovenance.replay/v1` manifest for automation.
+- `graph trajectories --run run-demo-bugfix --json` emits an
+  `agentprovenance.trajectories/v1` manifest. It groups each attempt's
+  file changes, artifact, tool call, process/runtime events, external effects,
+  risk, cost, and local candidate eligibility into one record for external
+  evaluators or RL pipelines.
 - `accept_phase1.sh` validates the same expectations with command output and
   JSON manifest assertions, so Phase 1 has a machine-checkable gate.
 - Rollout unit tests prove a quarantined/tainted attempt is rejected by the

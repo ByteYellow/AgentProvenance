@@ -232,6 +232,29 @@ func graphCmd(dataDir *string) *cobra.Command {
 	replayCmd.Flags().StringVar(&replayAttemptID, "attempt", "", "attempt id")
 	replayCmd.Flags().BoolVar(&replayJSON, "json", false, "emit structured replay manifest JSON")
 
+	var trajectoriesRunID string
+	var trajectoriesJSON bool
+	trajectoriesCmd := &cobra.Command{
+		Use:   "trajectories",
+		Short: "emit per-attempt trajectory evidence for external evaluators",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := openDB()
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			if trajectoriesRunID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			if trajectoriesJSON {
+				return provenance.TrajectoriesRunJSON(db, trajectoriesRunID, cmd.OutOrStdout())
+			}
+			return provenance.TrajectoriesRun(db, trajectoriesRunID, cmd.OutOrStdout())
+		},
+	}
+	trajectoriesCmd.Flags().StringVar(&trajectoriesRunID, "run", "", "run id")
+	trajectoriesCmd.Flags().BoolVar(&trajectoriesJSON, "json", false, "emit structured trajectory evidence JSON")
+
 	cmd := &cobra.Command{Use: "graph", Short: "provenance graph commands"}
 	cmd.AddCommand(trace)
 	cmd.AddCommand(refs)
@@ -241,5 +264,6 @@ func graphCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(blameCmd)
 	cmd.AddCommand(verifyCmd)
 	cmd.AddCommand(replayCmd)
+	cmd.AddCommand(trajectoriesCmd)
 	return cmd
 }
