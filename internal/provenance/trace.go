@@ -248,6 +248,24 @@ func TraceRun(db *sql.DB, runID string, out io.Writer) error {
 		return err
 	}
 
+	runtimeRows, err := db.Query(`SELECT from_id, to_id, edge_type, source_event_id, created_at
+		FROM graph_edges WHERE run_id = ? AND edge_type LIKE 'runtime_%' ORDER BY created_at ASC`, runID)
+	if err != nil {
+		return err
+	}
+	defer runtimeRows.Close()
+	fmt.Fprintln(out, "runtime_causality:")
+	for runtimeRows.Next() {
+		var fromID, toID, edgeType, sourceEventID, createdAt string
+		if err := runtimeRows.Scan(&fromID, &toID, &edgeType, &sourceEventID, &createdAt); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "  from=%s to=%s type=%s source_event=%s created_at=%s\n", fromID, toID, edgeType, sourceEventID, createdAt)
+	}
+	if err := runtimeRows.Err(); err != nil {
+		return err
+	}
+
 	evidenceRows, err := db.Query(`SELECT id, rollout_id, attempt_id, session_id, tool_call_id, snapshot_id, event_type, priority, status, created_at, COALESCE(processed_at, ''), COALESCE(payload, '')
 		FROM evidence_events WHERE run_id = ? ORDER BY created_at ASC`, runID)
 	if err != nil {

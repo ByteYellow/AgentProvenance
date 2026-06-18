@@ -105,6 +105,13 @@ echo "== ingest raw runtime telemetry without tool_call_id"
   --type execve \
   --payload '{"argv":["./async_child.sh"],"note":"pid scoped event without tool_call_id"}'
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest \
+  --raw-event raw-file-write-correct-add \
+  --pid 424242 \
+  --timestamp "$CORRECT_PROCESS_STARTED" \
+  --source native_runtime \
+  --type file_write \
+  --payload '{"path":"calculator.py","op":"write","note":"runtime-observed file mutation"}'
+"$BIN" --data-dir "$DATA_DIR" telemetry ingest \
   --raw-event raw-network-container-correct-add \
   --container-id "agentprov-local-$CORRECT_ATTEMPT" \
   --timestamp "$CORRECT_PROCESS_STARTED" \
@@ -113,6 +120,7 @@ echo "== ingest raw runtime telemetry without tool_call_id"
   --payload '{"dst":"api.example.com:443","note":"container scoped event"}'
 "$BIN" --data-dir "$DATA_DIR" telemetry bindings --run run-demo-bugfix --tool-call "$CORRECT_TOOL_CALL"
 "$BIN" --data-dir "$DATA_DIR" telemetry list --run run-demo-bugfix --type execve
+"$BIN" --data-dir "$DATA_DIR" telemetry list --run run-demo-bugfix --type file_write
 "$BIN" --data-dir "$DATA_DIR" telemetry list --run run-demo-bugfix --type network_connect
 
 echo "== record external side-effect gate"

@@ -64,6 +64,15 @@ func TestIngestFilteredCorrelatesRawRuntimeEvent(t *testing.T) {
 	if !strings.Contains(event.Payload, `"binding_id"`) {
 		t.Fatalf("payload missing correlation binding: %s", event.Payload)
 	}
+	for _, edgeType := range []string{"runtime_tool_call_process", "runtime_tool_call_event", "runtime_process_event", "runtime_process_observed"} {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE edge_type = ?`, edgeType).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count == 0 {
+			t.Fatalf("missing runtime causality edge %s", edgeType)
+		}
+	}
 }
 
 func TestIngestFilteredLeavesUnresolvedRawEvent(t *testing.T) {
@@ -149,5 +158,44 @@ func TestIngestFilteredCorrelatesCgroupScopedRuntimeEvent(t *testing.T) {
 	}
 	if event.CorrelationMethod != "cgroup_time_window:cgroup_id+time" {
 		t.Fatalf("correlation method = %q", event.CorrelationMethod)
+	}
+	var edgeCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE edge_type = 'runtime_tool_call_event' AND from_id = 'tool-1'`).Scan(&edgeCount); err != nil {
+		t.Fatal(err)
+	}
+	if edgeCount == 0 {
+		t.Fatalf("missing runtime_tool_call_event edge for cgroup-scoped event")
+	}
+}
+
+func TestIngestFilteredAcceptsFileRuntimeEvents(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := IngestFiltered(db, IngestEvent{
+		RunID:      "run-1",
+		SessionID:  "session-1",
+		ToolCallID: "tool-1",
+		ProcessID:  "process-1",
+		EventType:  "file_write",
+		Source:     "native_runtime",
+		Payload:    `{"path":"calculator.py","op":"write"}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var edges int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE edge_type = 'runtime_process_event'`).Scan(&edges); err != nil {
+		t.Fatal(err)
+	}
+	if edges != 1 {
+		t.Fatalf("runtime_process_event edges=%d, want 1", edges)
 	}
 }

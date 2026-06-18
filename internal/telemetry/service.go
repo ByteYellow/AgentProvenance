@@ -168,6 +168,9 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 			if event.CgroupID == "" {
 				event.CgroupID = match.CgroupID
 			}
+			if event.PID == 0 {
+				event.PID = match.PID
+			}
 			method = match.Method
 			confidence = match.Confidence
 			event.Payload = correlation.EventPayloadWithCorrelation(event.Payload, match, true)
@@ -190,6 +193,7 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	_ = recordRuntimeCausalityEdges(db, event, eventID, now)
 	priority := "normal"
 	if event.EventType == "metadata_ip" || event.EventType == "private_cidr" || event.EventType == "secret_path" || event.EventType == "policy_verdict" {
 		priority = "high"
@@ -208,11 +212,41 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 
 func AllowedEventType(eventType string) bool {
 	switch eventType {
-	case "execve", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure":
+	case "execve", "process_exit", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure":
 		return true
 	default:
 		return false
 	}
+}
+
+func recordRuntimeCausalityEdges(db *sql.DB, event IngestEvent, eventID, now string) error {
+	if event.RunID == "" {
+		return nil
+	}
+	rolloutID := event.RolloutID
+	if rolloutID == "" && event.AttemptID != "" {
+		_ = db.QueryRow(`SELECT COALESCE(rollout_id, '') FROM fork_attempts WHERE id = ?`, event.AttemptID).Scan(&rolloutID)
+	}
+	eventNode := "runtime_event/" + eventID
+	insert := func(fromID, toID, edgeType string) {
+		if fromID == "" || toID == "" {
+			return
+		}
+		_, _ = db.Exec(`INSERT INTO graph_edges (id, run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			ids.New("edge"), event.RunID, rolloutID, fromID, toID, edgeType, eventID, now)
+	}
+	insert(event.AttemptID, eventNode, "runtime_attempt_event")
+	insert(event.ToolCallID, event.ProcessID, "runtime_tool_call_process")
+	insert(event.ToolCallID, eventNode, "runtime_tool_call_event")
+	insert(event.ProcessID, eventNode, "runtime_process_event")
+	insert(event.SnapshotID, eventNode, "runtime_snapshot_event")
+	if event.ProcessID != "" && event.PID != 0 {
+		processNode := fmt.Sprintf("runtime_process/pid/%d", event.PID)
+		insert(event.ProcessID, processNode, "runtime_process_observed")
+		insert(processNode, eventNode, "runtime_process_event")
+	}
+	return nil
 }
 
 func highRiskEvent(eventType string) bool {

@@ -153,6 +153,9 @@ Expected output / acceptance:
   `container_time_window:container_id+time` correlation.
 - `telemetry bind` registers an explicit harness-provided ToolCallScope binding,
   and a PID-only raw event resolves through `pid_time_window:pid+time`.
+- Native runtime causality edges show `tool_call -> process -> runtime_event`
+  and connect a runtime-observed `file_write` event to the same
+  attempt/tool_call that produced the file diff.
 - `graph trace` shows `execution_context_bindings:` and the correlated
   `execve` event under the same run/session/attempt/tool/process chain.
 - `rollout attempts` shows `wrong-constant` as `quarantined` with

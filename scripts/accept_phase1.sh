@@ -120,6 +120,13 @@ echo "== telemetry correlation"
   --type execve \
   --payload '{"argv":["./async_child.sh"],"note":"pid scoped event without tool_call_id"}' >/dev/null
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest \
+  --raw-event raw-file-write-correct-add \
+  --pid 424242 \
+  --timestamp "$CORRECT_PROCESS_STARTED" \
+  --source native_runtime \
+  --type file_write \
+  --payload '{"path":"calculator.py","op":"write","note":"runtime-observed file mutation"}' >/dev/null
+"$BIN" --data-dir "$DATA_DIR" telemetry ingest \
   --raw-event raw-network-container-correct-add \
   --container-id "agentprov-local-$CORRECT_ATTEMPT" \
   --timestamp "$CORRECT_PROCESS_STARTED" \
@@ -131,6 +138,9 @@ assert_contains "$TELEMETRY_OUTPUT" "process_id:process_id"
 assert_contains "$TELEMETRY_OUTPUT" "cgroup_time_window:cgroup_id+time"
 assert_contains "$TELEMETRY_OUTPUT" "pid_time_window:pid+time"
 assert_contains "$TELEMETRY_OUTPUT" "$CORRECT_TOOL_CALL"
+FILE_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept --type file_write)"
+assert_contains "$FILE_OUTPUT" "file_write"
+assert_contains "$FILE_OUTPUT" "$CORRECT_TOOL_CALL"
 BINDINGS_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" telemetry bindings --run run-phase1-accept --tool-call "$CORRECT_TOOL_CALL")"
 assert_contains "$BINDINGS_OUTPUT" "harness_tool_call_scope"
 assert_contains "$BINDINGS_OUTPUT" "424242"
@@ -180,6 +190,9 @@ assert_contains "$VERIFY_OUTPUT" "status=ok"
 
 TRACE_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" graph trace --run run-phase1-accept)"
 assert_contains "$TRACE_OUTPUT" "execution_context_bindings:"
+assert_contains "$TRACE_OUTPUT" "runtime_causality:"
+assert_contains "$TRACE_OUTPUT" "runtime_tool_call_event"
+assert_contains "$TRACE_OUTPUT" "runtime_process_event"
 assert_contains "$TRACE_OUTPUT" "external_effects:"
 assert_contains "$TRACE_OUTPUT" "attempt_quarantined"
 assert_contains "$TRACE_OUTPUT" "winner_promoted"
@@ -242,6 +255,7 @@ assert winner["tool_call"]["status"] == "passed", winner
 assert any(e["event_type"] == "execve" and e["correlation_method"] == "process_id:process_id" for e in winner["events"]), winner.get("events")
 assert any(e["event_type"] == "execve" and e["correlation_method"] == "cgroup_time_window:cgroup_id+time" for e in winner["events"]), winner.get("events")
 assert any(e["event_type"] == "execve" and e["correlation_method"] == "pid_time_window:pid+time" for e in winner["events"]), winner.get("events")
+assert any(e["event_type"] == "file_write" and e["correlation_method"] == "pid_time_window:pid+time" for e in winner["events"]), winner.get("events")
 assert any(e["event_type"] == "network_connect" and e["correlation_method"] == "container_time_window:container_id+time" for e in winner["events"]), winner.get("events")
 assert winner["external_effects"][0]["mode"] == "dry-run", winner.get("external_effects")
 risky = by_id[risky_attempt]
@@ -257,6 +271,7 @@ assert correct_trajectory["local_candidate_eligible"] is True, correct_trajector
 assert correct_trajectory["tool_call"]["status"] == "passed", correct_trajectory
 assert any(e.get("correlation_method") == "cgroup_time_window:cgroup_id+time" for e in correct_trajectory["runtime_events"]), correct_trajectory["runtime_events"]
 assert any(e.get("correlation_method") == "pid_time_window:pid+time" for e in correct_trajectory["runtime_events"]), correct_trajectory["runtime_events"]
+assert any(e.get("event_type") == "file_write" for e in correct_trajectory["runtime_events"]), correct_trajectory["runtime_events"]
 assert any(e.get("correlation_method") == "container_time_window:container_id+time" for e in correct_trajectory["runtime_events"]), correct_trajectory["runtime_events"]
 assert correct_trajectory["external_effects"][0]["mode"] == "dry-run", correct_trajectory["external_effects"]
 change_types = {c["path"]: c["change_type"] for c in correct_trajectory["file_changes"]}

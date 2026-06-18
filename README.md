@@ -180,6 +180,8 @@ Expected acceptance:
   context.
 - Registers explicit ToolCallScope bindings through `telemetry bind`, then
   resolves a PID-only async child event back to the same attempt/tool_call.
+- Builds native runtime causality edges from raw events, including
+  `tool_call -> process -> runtime_event` and runtime-observed `file_write`.
 - Records an external side effect as `ExternalEffectRecord` in dry-run mode.
 - Quarantines and taints the risky failed branch.
 - Blocks tainted branches from being considered promotable.
@@ -209,10 +211,11 @@ ToolCallScope -> Runtime Telemetry -> Provenance DAG -> State Diff/Blame
 
 | Area | Current capability |
 |---|---|
-| Provenance DAG | `trace`, `refs`, `log`, `materialize`, stronger `verify`, text `replay`, JSON replay manifest, trajectory evidence manifest |
+| Provenance DAG | `trace`, `refs`, `log`, `materialize`, native runtime causality edges, stronger `verify`, text `replay`, JSON replay manifest, trajectory evidence manifest |
 | State attribution | MVP `graph diff` and `graph blame` for workspace files, with JSON manifests |
 | Rollout | local and Docker-backed best-of-N attempts, scoring, top-k pruning, and candidate eligibility evidence |
 | ToolCallScope | `telemetry bind`, `telemetry bindings`, and process/container/cgroup/pid time-window correlation for raw telemetry |
+| Runtime causality | native `runtime_*` graph edges for `tool_call/process/attempt/snapshot -> runtime_event`; supports `execve`, `file_open`, `file_write`, network, resource, and risk events |
 | Artifacts | exported attempt artifacts linked back to attempt/tool_call/process |
 | Risk | policy decisions, quarantine, taint, promotion barrier with drain watermark stats |
 | External effects | `ExternalEffectRecord` with target, mode, gate decision, and redacted payload |
