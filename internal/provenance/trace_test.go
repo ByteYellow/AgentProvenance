@@ -548,6 +548,83 @@ func TestGitLikeRefsAndLogShowRolloutDAG(t *testing.T) {
 	if !ok || payload["file_sha256"] != wantFileHash {
 		t.Fatalf("artifact object payload = %#v, want file hash %s", object["payload"], wantFileHash)
 	}
+	manifest, err := ListObjects(db, "run-5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.SchemaVersion != "agentprovenance.objects/v1" || manifest.RunID != "run-5" {
+		t.Fatalf("object list manifest = %+v", manifest)
+	}
+	if manifest.ObjectCount != result.ObjectCount || len(manifest.Objects) != result.ObjectCount {
+		t.Fatalf("object list count = %d/%d, want %d", manifest.ObjectCount, len(manifest.Objects), result.ObjectCount)
+	}
+	foundArtifact := false
+	for _, object := range manifest.Objects {
+		if !strings.HasPrefix(object.Hash, "sha256:") {
+			t.Fatalf("object hash = %q, want sha256 prefix", object.Hash)
+		}
+		if object.Path == "" || object.SizeBytes == 0 {
+			t.Fatalf("object ref missing path/size: %+v", object)
+		}
+		if object.Type == "artifact" && object.SourceID == artifactRef {
+			foundArtifact = true
+		}
+	}
+	if !foundArtifact {
+		t.Fatalf("object list missing artifact %s: %+v", artifactRef, manifest.Objects)
+	}
+	page1, err := ListObjectsPage(db, ObjectListOptions{RunID: "run-5", Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page1.ObjectCount != 2 || !page1.HasMore || page1.NextCursor == "" {
+		t.Fatalf("page1 = %+v, want 2 objects and next cursor", page1)
+	}
+	if page1.ResultSetID == "" || page1.PageHash == "" {
+		t.Fatalf("page1 missing integrity metadata: %+v", page1)
+	}
+	if strings.Contains(page1.NextCursor, "|") || strings.Contains(page1.NextCursor, "sha256:") {
+		t.Fatalf("object cursor should be opaque: %q", page1.NextCursor)
+	}
+	page2, err := ListObjectsPage(db, ObjectListOptions{RunID: "run-5", Limit: 2, Cursor: page1.NextCursor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page2.Cursor != page1.NextCursor || page2.ObjectCount == 0 {
+		t.Fatalf("page2 = %+v, want cursor continuation", page2)
+	}
+	if page2.ResultSetID != page1.ResultSetID {
+		t.Fatalf("paged object result_set_id changed: page1=%s page2=%s", page1.ResultSetID, page2.ResultSetID)
+	}
+	if page2.PageHash == "" || page2.PageHash == page1.PageHash {
+		t.Fatalf("paged object page_hash should be present and different: page1=%s page2=%s", page1.PageHash, page2.PageHash)
+	}
+	if page2.Objects[0].Hash == page1.Objects[0].Hash || page2.Objects[0].Hash == page1.Objects[1].Hash {
+		t.Fatalf("page2 repeated page1 object: page1=%+v page2=%+v", page1.Objects, page2.Objects)
+	}
+	if _, err := ListObjectsPage(db, ObjectListOptions{RunID: "run-5", Limit: 2, Cursor: "artifact|timestamp|sha256:old"}); err == nil {
+		t.Fatalf("old-style object cursor should be rejected")
+	}
+	var objectsOut bytes.Buffer
+	if err := Objects(db, "run-5", &objectsOut); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(objectsOut.String(), "schema=agentprovenance.objects/v1") ||
+		!strings.Contains(objectsOut.String(), "type=artifact") ||
+		!strings.Contains(objectsOut.String(), artifactHash) {
+		t.Fatalf("objects output missing expected refs:\n%s", objectsOut.String())
+	}
+	var objectsJSON bytes.Buffer
+	if err := ObjectsJSON(db, "run-5", &objectsJSON); err != nil {
+		t.Fatal(err)
+	}
+	var decoded ObjectListManifest
+	if err := json.Unmarshal(objectsJSON.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.ObjectCount != result.ObjectCount {
+		t.Fatalf("objects json count = %d, want %d", decoded.ObjectCount, result.ObjectCount)
+	}
 }
 
 func TestExplainFileShowsDiffBlameAndRuntimeEvent(t *testing.T) {

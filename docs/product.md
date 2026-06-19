@@ -123,12 +123,12 @@ execution context + runtime evidence + state diff + artifacts + risk
 
 | Phase | Goal | Output |
 |---|---|---|
-| Phase 1 | Provenance correlation MVP | Execution context, evidence ingest, runtime causality DAG, diff/blame, taint, promotion barrier, replay and trajectory manifests |
-| Phase 2 | Risk and auto-response MVP | RiskSignal, configurable rules, taint propagation, quarantine, promotion block, forensics export |
-| Phase 3 | Zero-SDK substrate integration | deeper process tree capture, cwd/timestamp/file-diff inference, wrapper/audit/eBPF-ready event receivers |
-| Phase 4 | eBPF and runtime telemetry substrate | Falco/Tetragon/LoongCollector JSONL receivers, cgroup/container/pid correlation, kernel-side filtering assumptions |
-| Phase 5 | Isolation and enforcement | IsolationProfile, EscalationPolicy, seccomp/AppArmor/eBPF LSM/gVisor/Firecracker capability gates |
-| Phase 6 | Scale hardening | async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency rollout tests |
+| Phase 1 | Provenance Correlation MVP | ToolCallScope, raw telemetry correlation, runtime causality DAG, diff/blame, taint, promotion barrier, replay and trajectory manifests |
+| Phase 2 | Evidence / Causality Hardening | stable explain JSON, content-addressed objects, object parent hashes, graph verification, bounded traversal, pagination, integrity metadata |
+| Phase 3 | Zero-SDK Recorder Hardening | process-tree capture, delayed child process handling, cwd/time/file-diff inference, orphan lifecycle evidence, low-intrusion record mode |
+| Phase 4 | Real Telemetry Integration | Falco/Tetragon/LoongCollector/auditd/eBPF receivers, cgroup/container/pid correlation, kernel-side filtering assumptions |
+| Phase 5 | Risk / Policy / Control | configurable risk signals, taint propagation, quarantine, promotion block, forensics export, isolation escalation hooks |
+| Phase 6 | Scale / UI / Productization | async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency ingest/query tests, usable UI/API |
 
 ## Phase 1 Definition Of Done
 
@@ -137,7 +137,8 @@ Phase 1 is done when the project can prove:
 - A coding-agent best-of-N demo creates multiple attempts from one base
   snapshot.
 - `agentprov record -- <command>` records a command without SDK integration and
-  produces file diff, blame, and runtime file evidence.
+  produces file diff, blame, sampled descendant process evidence, PID bindings,
+  post-root outlived-process markers, and runtime file evidence.
 - Runtime events can be ingested without raw `tool_call_id`.
 - Events can be bound to execution context through process/container/cgroup/time
   evidence.
@@ -147,8 +148,9 @@ Phase 1 is done when the project can prove:
 - Runtime file events create file nodes that can be explained with diff/blame.
 - `graph diff` and `graph blame` explain state changes.
 - `graph explain --json` can explain a file, event, process, tool call,
-  attempt, or artifact by combining causality and provenance evidence into an
-  `agentprovenance.explain/v1` manifest.
+  attempt, artifact, or risk decision by combining causality and provenance
+  evidence into an `agentprovenance.explain/v1` manifest with depth/limit/cursor
+  controlled `causality_path` and query metadata.
 - Risk marks taint and blocks promotion.
 - Promotion records a telemetry/evidence drain watermark.
 - `graph replay`, `graph verify`, and `graph trajectories --json` produce

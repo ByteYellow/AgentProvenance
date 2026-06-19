@@ -28,6 +28,37 @@ type MaterializeResult struct {
 	RootHashes  []string
 }
 
+type ObjectListManifest struct {
+	SchemaVersion string      `json:"schema_version"`
+	RunID         string      `json:"run_id"`
+	Limit         int         `json:"limit"`
+	Cursor        string      `json:"cursor,omitempty"`
+	NextCursor    string      `json:"next_cursor,omitempty"`
+	HasMore       bool        `json:"has_more"`
+	ResultSetID   string      `json:"result_set_id"`
+	PageHash      string      `json:"page_hash"`
+	ObjectCount   int         `json:"object_count"`
+	Objects       []ObjectRef `json:"objects"`
+}
+
+type ObjectRef struct {
+	Hash         string `json:"hash"`
+	Type         string `json:"type"`
+	SourceID     string `json:"source_id"`
+	RunID        string `json:"run_id"`
+	RolloutID    string `json:"rollout_id"`
+	ParentHashes string `json:"parent_hashes"`
+	Path         string `json:"path"`
+	SizeBytes    int64  `json:"size_bytes"`
+	CreatedAt    string `json:"created_at"`
+}
+
+type ObjectListOptions struct {
+	RunID  string
+	Limit  int
+	Cursor string
+}
+
 type provenanceObject struct {
 	Schema    string         `json:"schema"`
 	Type      string         `json:"type"`
@@ -80,10 +111,28 @@ func (s ObjectStore) MaterializeRun(runID string) (MaterializeResult, error) {
 	if err := ctx.materializeEvents(); err != nil {
 		return MaterializeResult{}, err
 	}
+	if err := ctx.materializeTelemetryBatches(); err != nil {
+		return MaterializeResult{}, err
+	}
 	if err := ctx.materializePolicyDecisions(); err != nil {
 		return MaterializeResult{}, err
 	}
 	if err := ctx.materializeCosts(); err != nil {
+		return MaterializeResult{}, err
+	}
+	if err := ctx.materializeReplayManifest(); err != nil {
+		return MaterializeResult{}, err
+	}
+	if err := ctx.materializeTrajectoryManifest(); err != nil {
+		return MaterializeResult{}, err
+	}
+	if err := ctx.materializeDiffBlameManifests(); err != nil {
+		return MaterializeResult{}, err
+	}
+	if err := ctx.materializeAuditManifest(); err != nil {
+		return MaterializeResult{}, err
+	}
+	if err := ctx.materializeRecordManifest(); err != nil {
 		return MaterializeResult{}, err
 	}
 	sort.Strings(ctx.rootHashes)
@@ -100,6 +149,153 @@ func PrintMaterializeResult(out io.Writer, result MaterializeResult) {
 	for _, hash := range result.RootHashes {
 		fmt.Fprintf(out, "root=%s\n", hash)
 	}
+}
+
+func ListObjects(db *sql.DB, runID string) (ObjectListManifest, error) {
+	return ListObjectsPage(db, ObjectListOptions{RunID: runID})
+}
+
+func ListObjectsPage(db *sql.DB, opts ObjectListOptions) (ObjectListManifest, error) {
+	if opts.RunID == "" {
+		return ObjectListManifest{}, fmt.Errorf("run_id is required")
+	}
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	where := `run_id = ?`
+	args := []any{opts.RunID}
+	if opts.Cursor != "" {
+		cursorType, cursorCreatedAt, cursorHash, err := parseObjectCursor(opts.Cursor)
+		if err != nil {
+			return ObjectListManifest{}, err
+		}
+		where += ` AND (object_type > ? OR (object_type = ? AND created_at > ?) OR (object_type = ? AND created_at = ? AND hash > ?))`
+		args = append(args, cursorType, cursorType, cursorCreatedAt, cursorType, cursorCreatedAt, cursorHash)
+	}
+	args = append(args, limit+1)
+	rows, err := db.Query(`SELECT hash, object_type, source_id, run_id, rollout_id, parent_hashes, path, size_bytes, created_at
+		FROM provenance_objects WHERE `+where+` ORDER BY object_type ASC, created_at ASC, hash ASC LIMIT ?`, args...)
+	if err != nil {
+		return ObjectListManifest{}, err
+	}
+	defer rows.Close()
+	manifest := ObjectListManifest{SchemaVersion: "agentprovenance.objects/v1", RunID: opts.RunID, Limit: limit, Cursor: opts.Cursor}
+	for rows.Next() {
+		var ref ObjectRef
+		if err := rows.Scan(&ref.Hash, &ref.Type, &ref.SourceID, &ref.RunID, &ref.RolloutID, &ref.ParentHashes, &ref.Path, &ref.SizeBytes, &ref.CreatedAt); err != nil {
+			return ObjectListManifest{}, err
+		}
+		manifest.Objects = append(manifest.Objects, ref)
+	}
+	if err := rows.Err(); err != nil {
+		return ObjectListManifest{}, err
+	}
+	if len(manifest.Objects) > limit {
+		manifest.HasMore = true
+		manifest.Objects = manifest.Objects[:limit]
+	}
+	manifest.ObjectCount = len(manifest.Objects)
+	if manifest.HasMore && len(manifest.Objects) > 0 {
+		last := manifest.Objects[len(manifest.Objects)-1]
+		manifest.NextCursor = formatObjectCursor(last)
+	}
+	if err := finalizeObjectListIntegrity(&manifest); err != nil {
+		return ObjectListManifest{}, err
+	}
+	return manifest, nil
+}
+
+func Objects(db *sql.DB, runID string, out io.Writer) error {
+	return ObjectsPage(db, ObjectListOptions{RunID: runID}, out)
+}
+
+func ObjectsPage(db *sql.DB, opts ObjectListOptions, out io.Writer) error {
+	manifest, err := ListObjectsPage(db, opts)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "run=%s schema=%s objects=%d limit=%d has_more=%t result_set=%s page_hash=%s next_cursor=%s\n",
+		manifest.RunID, manifest.SchemaVersion, manifest.ObjectCount, manifest.Limit, manifest.HasMore, manifest.ResultSetID, manifest.PageHash, manifest.NextCursor)
+	for _, object := range manifest.Objects {
+		fmt.Fprintf(out, "object type=%s source=%s hash=%s parents=%s bytes=%d path=%s\n",
+			object.Type, object.SourceID, object.Hash, object.ParentHashes, object.SizeBytes, object.Path)
+	}
+	return nil
+}
+
+func ObjectsJSON(db *sql.DB, runID string, out io.Writer) error {
+	return ObjectsPageJSON(db, ObjectListOptions{RunID: runID}, out)
+}
+
+func ObjectsPageJSON(db *sql.DB, opts ObjectListOptions, out io.Writer) error {
+	manifest, err := ListObjectsPage(db, opts)
+	if err != nil {
+		return err
+	}
+	encoder := json.NewEncoder(out)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(manifest)
+}
+
+func formatObjectCursor(ref ObjectRef) string {
+	cursor, err := encodeCursor("objects", map[string]any{
+		"type":       ref.Type,
+		"created_at": ref.CreatedAt,
+		"hash":       ref.Hash,
+	})
+	if err != nil {
+		return ""
+	}
+	return cursor
+}
+
+func parseObjectCursor(cursor string) (string, string, string, error) {
+	data, err := decodeCursor("objects", cursor)
+	if err != nil {
+		return "", "", "", err
+	}
+	objectType, err := cursorString(data, "type")
+	if err != nil {
+		return "", "", "", fmt.Errorf("invalid object cursor")
+	}
+	createdAt, err := cursorString(data, "created_at")
+	if err != nil {
+		return "", "", "", fmt.Errorf("invalid object cursor")
+	}
+	hash, err := cursorString(data, "hash")
+	if err != nil {
+		return "", "", "", fmt.Errorf("invalid object cursor")
+	}
+	return objectType, createdAt, hash, nil
+}
+
+func finalizeObjectListIntegrity(manifest *ObjectListManifest) error {
+	resultSetID, err := stableDigest(map[string]any{
+		"schema_version": manifest.SchemaVersion,
+		"kind":           "objects",
+		"run_id":         manifest.RunID,
+		"order":          "object_type,created_at,hash",
+	})
+	if err != nil {
+		return err
+	}
+	pageHash, err := stableDigest(map[string]any{
+		"schema_version": manifest.SchemaVersion,
+		"kind":           "objects_page",
+		"run_id":         manifest.RunID,
+		"limit":          manifest.Limit,
+		"cursor":         manifest.Cursor,
+		"next_cursor":    manifest.NextCursor,
+		"has_more":       manifest.HasMore,
+		"objects":        manifest.Objects,
+	})
+	if err != nil {
+		return err
+	}
+	manifest.ResultSetID = resultSetID
+	manifest.PageHash = pageHash
+	return nil
 }
 
 type materializeContext struct {
@@ -454,6 +650,43 @@ func (c *materializeContext) materializeEvents() error {
 	return rows.Err()
 }
 
+func (c *materializeContext) materializeTelemetryBatches() error {
+	rows, err := c.store.DB.Query(`SELECT id, format, path, file_sha256, read_count, ingested_count,
+			skipped_count, failed_count, event_ids_json, event_ids_sha256, created_at
+		FROM telemetry_batches WHERE run_id = ? ORDER BY created_at ASC`, c.runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, format, path, fileSHA, eventIDsJSON, eventIDsSHA, createdAt string
+		var read, ingested, skipped, failed int
+		if err := rows.Scan(&id, &format, &path, &fileSHA, &read, &ingested, &skipped, &failed, &eventIDsJSON, &eventIDsSHA, &createdAt); err != nil {
+			return err
+		}
+		var eventIDs []string
+		_ = json.Unmarshal([]byte(eventIDsJSON), &eventIDs)
+		parentKeys := make([]string, 0, len(eventIDs))
+		for _, eventID := range eventIDs {
+			parentKeys = append(parentKeys, "event/"+eventID)
+		}
+		if _, err := c.put(provenanceObject{
+			Type:     "telemetry_batch",
+			SourceID: id,
+			Parents:  c.parent(parentKeys...),
+			Refs:     map[string]any{"run_id": c.runID, "event_ids": eventIDs},
+			Payload: map[string]any{
+				"format": format, "path": path, "file_sha256": fileSHA,
+				"read": read, "ingested": ingested, "skipped": skipped, "failed": failed,
+				"event_ids": eventIDs, "event_ids_sha256": eventIDsSHA, "created_at": createdAt,
+			},
+		}); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
 func (c *materializeContext) materializePolicyDecisions() error {
 	rows, err := c.store.DB.Query(`SELECT id, COALESCE(event_id, ''), COALESCE(session_id, ''), rule_id, decision, reason, created_at
 		FROM policy_decisions WHERE run_id = ? ORDER BY created_at ASC`, c.runID)
@@ -506,6 +739,342 @@ func (c *materializeContext) materializeCosts() error {
 		}
 	}
 	return rows.Err()
+}
+
+func (c *materializeContext) materializeReplayManifest() error {
+	manifest, err := BuildReplayRun(c.store.DB, c.runID)
+	if err != nil {
+		if err == sql.ErrNoRows || isNoRolloutRun(err) {
+			return nil
+		}
+		return err
+	}
+	payload, err := payloadMap(manifest)
+	if err != nil {
+		return err
+	}
+	hash, err := c.put(provenanceObject{
+		Type:     "replay_manifest",
+		SourceID: c.runID,
+		Parents:  append([]string{}, c.rootHashes...),
+		Refs:     map[string]any{"run_id": c.runID, "schema_version": manifest.SchemaVersion, "mode": manifest.Mode, "scope": manifest.Scope},
+		Payload:  payload,
+	})
+	if err != nil {
+		return err
+	}
+	c.rootHashes = append(c.rootHashes, hash)
+	return nil
+}
+
+func (c *materializeContext) materializeTrajectoryManifest() error {
+	manifest, err := BuildTrajectoriesRun(c.store.DB, c.runID)
+	if err != nil {
+		if err == sql.ErrNoRows || isNoRolloutRun(err) {
+			return nil
+		}
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	payload, err := payloadMap(manifest)
+	if err != nil {
+		return err
+	}
+	hash, err := c.put(provenanceObject{
+		Type:     "trajectory_manifest",
+		SourceID: c.runID,
+		Parents:  c.parent("replay_manifest/" + c.runID),
+		Refs:     map[string]any{"run_id": c.runID, "schema_version": manifest.SchemaVersion, "decision_owner": manifest.DecisionOwner},
+		Payload:  payload,
+	})
+	if err != nil {
+		return err
+	}
+	c.rootHashes = append(c.rootHashes, hash)
+	return nil
+}
+
+func (c *materializeContext) materializeDiffBlameManifests() error {
+	files, err := filesChangedInRun(c.store.DB, c.runID)
+	if err != nil {
+		if os.IsNotExist(err) || isNoRolloutRun(err) {
+			return nil
+		}
+		return err
+	}
+	for _, file := range files {
+		diff, err := BuildDiffFile(c.store.DB, c.runID, file)
+		if err != nil {
+			return err
+		}
+		diffPayload, err := payloadMap(diff)
+		if err != nil {
+			return err
+		}
+		diffHash, err := c.put(provenanceObject{
+			Type:     "diff_manifest",
+			SourceID: c.runID + ":" + file,
+			Parents:  c.parent("trajectory_manifest/"+c.runID, "snapshot/"+diff.BaseSnapshotID),
+			Refs:     map[string]any{"run_id": c.runID, "file": file, "schema_version": diff.SchemaVersion, "base_snapshot_id": diff.BaseSnapshotID},
+			Payload:  diffPayload,
+		})
+		if err != nil {
+			return err
+		}
+		blame, err := BuildBlameFile(c.store.DB, c.runID, file)
+		if err != nil {
+			return err
+		}
+		blamePayload, err := payloadMap(blame)
+		if err != nil {
+			return err
+		}
+		_, err = c.put(provenanceObject{
+			Type:     "blame_manifest",
+			SourceID: c.runID + ":" + file,
+			Parents:  []string{diffHash},
+			Refs:     map[string]any{"run_id": c.runID, "file": file, "schema_version": blame.SchemaVersion, "base_snapshot_id": blame.BaseSnapshotID},
+			Payload:  blamePayload,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func isNoRolloutRun(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "has no rollouts")
+}
+
+func (c *materializeContext) materializeAuditManifest() error {
+	payload := map[string]any{
+		"schema_version": "agentprovenance.audit/v1",
+		"run_id":         c.runID,
+		"object_count":   c.objectCount,
+	}
+	for _, item := range []struct {
+		key   string
+		query string
+	}{
+		{"rollout_count", `SELECT COUNT(*) FROM rollouts WHERE run_id = ?`},
+		{"attempt_count", `SELECT COUNT(*) FROM fork_attempts WHERE rollout_id IN (SELECT id FROM rollouts WHERE run_id = ?)`},
+		{"tool_call_count", `SELECT COUNT(*) FROM tool_calls WHERE run_id = ?`},
+		{"process_count", `SELECT COUNT(*) FROM processes WHERE session_id IN (SELECT id FROM sessions WHERE run_id = ?)`},
+		{"event_count", `SELECT COUNT(*) FROM events WHERE run_id = ?`},
+		{"evidence_count", `SELECT COUNT(*) FROM evidence_events WHERE run_id = ?`},
+		{"policy_decision_count", `SELECT COUNT(*) FROM policy_decisions WHERE run_id = ?`},
+	} {
+		var count int
+		if err := c.store.DB.QueryRow(item.query, c.runID).Scan(&count); err != nil {
+			return err
+		}
+		payload[item.key] = count
+	}
+	hash, err := c.put(provenanceObject{
+		Type:     "audit_manifest",
+		SourceID: c.runID,
+		Parents:  append([]string{}, c.rootHashes...),
+		Refs:     map[string]any{"run_id": c.runID, "schema_version": payload["schema_version"]},
+		Payload:  payload,
+	})
+	if err != nil {
+		return err
+	}
+	c.rootHashes = append(c.rootHashes, hash)
+	return nil
+}
+
+func (c *materializeContext) materializeRecordManifest() error {
+	manifest, err := BuildRecordManifest(c.store.DB, c.runID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return err
+	}
+	hash, err := c.put(provenanceObject{
+		Type:     "record_manifest",
+		SourceID: c.runID,
+		Parents:  c.parent("rollout/"+manifest.RolloutID, "attempt/"+manifest.AttemptID, "tool_call/"+manifest.ToolCallID, "process/"+manifest.ProcessID, "snapshot/"+manifest.BaseSnapshotID),
+		Refs:     map[string]any{"run_id": c.runID, "schema_version": manifest.SchemaVersion, "attempt_id": manifest.AttemptID, "tool_call_id": manifest.ToolCallID, "process_id": manifest.ProcessID},
+		Payload:  map[string]any{"manifest": manifest},
+	})
+	if err != nil {
+		return err
+	}
+	c.rootHashes = append(c.rootHashes, hash)
+	return nil
+}
+
+func filesChangedInRun(db *sql.DB, runID string) ([]string, error) {
+	manifest, err := BuildTrajectoriesRun(db, runID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	seen := map[string]bool{}
+	files := []string{}
+	for _, trajectory := range manifest.Trajectories {
+		for _, change := range trajectory.FileChanges {
+			if !change.BaseExists && !change.NextExists {
+				continue
+			}
+			if seen[change.Path] {
+				continue
+			}
+			seen[change.Path] = true
+			files = append(files, change.Path)
+		}
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
+func payloadMap(value any) (map[string]any, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+type RecordManifest struct {
+	SchemaVersion     string                  `json:"schema_version"`
+	RunID             string                  `json:"run_id"`
+	RolloutID         string                  `json:"rollout_id"`
+	BaseSnapshotID    string                  `json:"base_snapshot_id"`
+	AttemptID         string                  `json:"attempt_id"`
+	SessionID         string                  `json:"session_id"`
+	ToolCallID        string                  `json:"tool_call_id"`
+	ProcessID         string                  `json:"process_id"`
+	Workdir           string                  `json:"workdir"`
+	Command           string                  `json:"command"`
+	Status            string                  `json:"status"`
+	ExitCode          int64                   `json:"exit_code"`
+	WallMS            int64                   `json:"wall_ms"`
+	ChangedFiles      []string                `json:"changed_files"`
+	ChangedFileCount  int                     `json:"changed_file_count"`
+	RootPID           int64                   `json:"root_pid"`
+	ObservedProcesses []RecordObservedProcess `json:"observed_processes,omitempty"`
+	OrphanPolicy      string                  `json:"orphan_policy"`
+	PostRootGraceMS   int64                   `json:"post_root_grace_ms"`
+	CWD               string                  `json:"cwd"`
+	ProcessTreeCount  int                     `json:"process_tree_count"`
+	TimeWindow        map[string]any          `json:"time_window"`
+	ContextMode       string                  `json:"context_mode"`
+	ScopeInference    map[string]any          `json:"scope_inference"`
+}
+
+type RecordObservedProcess struct {
+	PID          int64  `json:"pid"`
+	PPID         int64  `json:"ppid"`
+	Command      string `json:"command"`
+	FirstSeen    string `json:"first_seen"`
+	LastSeen     string `json:"last_seen"`
+	OutlivedRoot bool   `json:"outlived_root"`
+}
+
+func BuildRecordManifest(db *sql.DB, runID string) (RecordManifest, error) {
+	var m RecordManifest
+	m.SchemaVersion = "agentprovenance.record/v1"
+	m.RunID = runID
+	err := db.QueryRow(`SELECT a.id, a.rollout_id, a.tool_call_id, a.snapshot_id, a.workspace_path, a.command, a.status, COALESCE(a.exit_code, 0), a.wall_ms
+		FROM fork_attempts a JOIN rollouts r ON a.rollout_id = r.id
+		WHERE r.run_id = ? AND a.strategy = 'zero-sdk-record'
+		ORDER BY a.created_at ASC LIMIT 1`, runID).Scan(&m.AttemptID, &m.RolloutID, &m.ToolCallID, &m.BaseSnapshotID, &m.Workdir, &m.Command, &m.Status, &m.ExitCode, &m.WallMS)
+	if err != nil {
+		return RecordManifest{}, err
+	}
+	_ = db.QueryRow(`SELECT id FROM sessions WHERE run_id = ? ORDER BY created_at ASC LIMIT 1`, runID).Scan(&m.SessionID)
+	var startedAt, endedAt string
+	_ = db.QueryRow(`SELECT id, started_at, COALESCE(ended_at, '') FROM processes WHERE tool_call_id = ? ORDER BY started_at ASC LIMIT 1`, m.ToolCallID).Scan(&m.ProcessID, &startedAt, &endedAt)
+	_ = db.QueryRow(`SELECT COALESCE(root_pid, 0), started_at, COALESCE(ended_at, '') FROM execution_context_bindings WHERE process_id = ? ORDER BY created_at ASC LIMIT 1`, m.ProcessID).Scan(&m.RootPID, &startedAt, &endedAt)
+	m.CWD = m.Workdir
+	m.ContextMode = "zero_sdk"
+	m.TimeWindow = map[string]any{"started_at": startedAt, "ended_at": endedAt}
+	observed, err := recordObservedProcesses(db, runID)
+	if err != nil {
+		return RecordManifest{}, err
+	}
+	m.ObservedProcesses = observed
+	m.OrphanPolicy = "observe_only"
+	m.PostRootGraceMS = 250
+	m.ProcessTreeCount = 0
+	if m.RootPID != 0 {
+		m.ProcessTreeCount = 1 + len(m.ObservedProcesses)
+	}
+	rows, err := db.Query(`SELECT payload FROM events WHERE run_id = ? AND source = 'record_file_diff' AND event_type = 'file_write' ORDER BY created_at ASC`, runID)
+	if err != nil {
+		return RecordManifest{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			return RecordManifest{}, err
+		}
+		if path := verifyPayloadPath(payload); path != "" {
+			m.ChangedFiles = append(m.ChangedFiles, path)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return RecordManifest{}, err
+	}
+	sort.Strings(m.ChangedFiles)
+	m.ChangedFileCount = len(m.ChangedFiles)
+	m.ScopeInference = map[string]any{
+		"method":             "zero_sdk_root_process+cwd+time_window+file_diff",
+		"root_pid":           m.RootPID,
+		"process_tree_count": m.ProcessTreeCount,
+		"cwd":                m.CWD,
+		"changed_file_count": m.ChangedFileCount,
+		"observed_processes": len(m.ObservedProcesses),
+		"boundary":           "root_pid_descendants+cwd+time_window+file_diff",
+		"orphan_policy":      m.OrphanPolicy,
+		"post_root_grace_ms": m.PostRootGraceMS,
+	}
+	return m, nil
+}
+
+func recordObservedProcesses(db *sql.DB, runID string) ([]RecordObservedProcess, error) {
+	rows, err := db.Query(`SELECT payload FROM events
+		WHERE run_id = ? AND source = 'record_process_sample' AND event_type = 'process_observed'
+		ORDER BY created_at ASC`, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []RecordObservedProcess
+	for rows.Next() {
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var proc RecordObservedProcess
+		if err := json.Unmarshal([]byte(payload), &proc); err != nil {
+			continue
+		}
+		if proc.PID != 0 {
+			out = append(out, proc)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].PID < out[j].PID })
+	return out, nil
 }
 
 func fileDigest(path string) (string, int64, bool) {

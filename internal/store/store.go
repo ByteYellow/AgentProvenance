@@ -11,7 +11,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 7
+const SchemaVersion = 8
 
 type Paths struct {
 	Root       string
@@ -343,6 +343,20 @@ func EnsureSchema(db *sql.DB) error {
 			source TEXT NOT NULL,
 			event_type TEXT NOT NULL,
 			payload TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS telemetry_batches (
+			id TEXT PRIMARY KEY,
+			run_id TEXT NOT NULL DEFAULT '',
+			format TEXT NOT NULL,
+			path TEXT NOT NULL,
+			file_sha256 TEXT NOT NULL,
+			read_count INTEGER NOT NULL DEFAULT 0,
+			ingested_count INTEGER NOT NULL DEFAULT 0,
+			skipped_count INTEGER NOT NULL DEFAULT 0,
+			failed_count INTEGER NOT NULL DEFAULT 0,
+			event_ids_json TEXT NOT NULL DEFAULT '[]',
+			event_ids_sha256 TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL
 		);`,
 		`CREATE TABLE IF NOT EXISTS policy_decisions (

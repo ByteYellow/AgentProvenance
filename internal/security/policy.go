@@ -268,6 +268,15 @@ func persistDecision(db *sql.DB, event Event, rawPayload string, decision Decisi
 	if err != nil {
 		return DecisionRecord{}, err
 	}
+	policyNodeID := "policy_decision/" + record.ID
+	_, _ = db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
+		VALUES (?, ?, ?, ?, 'runtime_event_policy_decision', ?, ?)`,
+		ids.New("edge"), event.RunID, "runtime_event/"+eventID, policyNodeID, eventID, now)
+	if event.SessionID != "" {
+		_, _ = db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
+			VALUES (?, ?, ?, ?, 'policy_decision_session', ?, ?)`,
+			ids.New("edge"), event.RunID, policyNodeID, event.SessionID, eventID, now)
+	}
 	blockCount := int64(0)
 	quarantineCount := int64(0)
 	if decision.Decision != "allow" {

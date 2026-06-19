@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/effects"
+	"github.com/byteyellow/agentprovenance/internal/record"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
@@ -91,7 +92,7 @@ func TestVerifyCleanRun(t *testing.T) {
 		PPID:        100,
 		Source:      "filtered_telemetry",
 		EventType:   "execve",
-		Payload:     "{}",
+		Payload:     `{"argv":["pytest","-q"]}`,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -442,6 +443,96 @@ func TestVerifyRejectsMissingRuntimeFileEdges(t *testing.T) {
 	assertVerifyIssue(t, result, "missing_runtime_process_parent_edge")
 }
 
+func TestVerifyRejectsInvalidTelemetryPayloadSchema(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	workspace := filepath.Join(root, "attempt-1")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	insertVerifyRuntimeBase(t, db, workspace, now)
+	if _, err := db.Exec(`INSERT INTO events
+		(id, run_id, session_id, tool_call_id, process_id, snapshot_id, raw_event_id, correlation_method, correlation_confidence,
+		 container_id, cgroup_id, pid, tgid, ppid, source, event_type, payload, created_at)
+		VALUES ('evt-bad-schema', 'run-1', 'session-1', 'tool-1', 'process-1', 'snap-1', 'raw-bad-schema', 'process_id:process_id', 1.0,
+		 'container-1', 'cgroup-1', 200, 200, 100, 'tetragon_jsonl', 'execve', '{"tool_call_id":"leaked"}', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Verify(db, "run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertVerifyIssue(t, result, "invalid_telemetry_payload_schema")
+}
+
+func TestVerifyRejectsTelemetryBatchHashMismatch(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	workspace := filepath.Join(root, "attempt-1")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	insertVerifyRuntimeBase(t, db, workspace, now)
+	eventID, err := telemetry.IngestFiltered(db, telemetry.IngestEvent{
+		RunID:       "run-1",
+		RolloutID:   "rollout-1",
+		AttemptID:   "attempt-1",
+		SessionID:   "session-1",
+		ToolCallID:  "tool-1",
+		ProcessID:   "process-1",
+		SnapshotID:  "snap-1",
+		RawEventID:  "raw-batch-1",
+		ContainerID: "container-1",
+		CgroupID:    "cgroup-1",
+		PID:         200,
+		TGID:        200,
+		PPID:        100,
+		Source:      "tetragon_jsonl",
+		EventType:   "execve",
+		Payload:     `{"argv":["pytest","-q"]}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eventIDsJSON, err := json.Marshal([]string{eventID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO telemetry_batches
+		(id, run_id, format, path, file_sha256, read_count, ingested_count, skipped_count, failed_count, event_ids_json, event_ids_sha256, created_at)
+		VALUES ('telbatch-bad', 'run-1', 'tetragon', 'events.jsonl', 'abc123', 1, 1, 0, 0, ?, 'tampered', ?)`,
+		string(eventIDsJSON), now); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Verify(db, "run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertVerifyIssue(t, result, "telemetry_batch_event_hash_mismatch")
+}
+
 func TestVerifyAcceptsRuntimeCausalityEdges(t *testing.T) {
 	root := t.TempDir()
 	paths, err := store.Init(filepath.Join(root, ".agentprov"))
@@ -492,6 +583,108 @@ func TestVerifyAcceptsRuntimeCausalityEdges(t *testing.T) {
 	}
 }
 
+func TestVerifyRejectsMissingOrphanLifecycleEvidence(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	workdir := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workdir, "app.py"), []byte("value = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := (record.Service{DB: db, Paths: paths}).Run(record.Request{
+		RunID:   "run-orphan-verify",
+		Name:    "orphan-verify",
+		Workdir: workdir,
+		Command: []string{"sh", "-lc", "sh -c 'sleep 0.5' & sleep 0.08; printf 'value = 2\\n' > app.py"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanupVerifyObservedProcesses(result.Observed)
+
+	clean, err := Verify(db, result.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clean.ErrorCount != 0 {
+		t.Fatalf("clean orphan record should verify: %+v", clean.Issues)
+	}
+
+	if _, err := db.Exec(`DELETE FROM evidence_events WHERE run_id = ? AND event_type = 'orphan_lifecycle_decision'`, result.RunID); err != nil {
+		t.Fatal(err)
+	}
+	broken, err := Verify(db, result.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertVerifyIssue(t, broken, "missing_orphan_lifecycle_evidence")
+	assertVerifyIssue(t, broken, "missing_orphan_lifecycle_policy_decision")
+}
+
+func TestVerifyRejectsMissingPolicyDecisionEdges(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	workspace := filepath.Join(root, "attempt-1")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	insertVerifyRuntimeBase(t, db, workspace, now)
+	if _, err := telemetry.IngestFiltered(db, telemetry.IngestEvent{
+		RunID:      "run-1",
+		RolloutID:  "rollout-1",
+		AttemptID:  "attempt-1",
+		SessionID:  "session-1",
+		ToolCallID: "tool-1",
+		ProcessID:  "process-1",
+		SnapshotID: "snap-1",
+		PID:        200,
+		TGID:       200,
+		PPID:       100,
+		Source:     "filtered_telemetry",
+		EventType:  "execve",
+		Payload:    `{"argv":["pytest","-q"]}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var eventID string
+	if err := db.QueryRow(`SELECT id FROM events WHERE run_id = 'run-1' AND event_type = 'execve' LIMIT 1`).Scan(&eventID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO policy_decisions
+		(id, event_id, run_id, session_id, rule_id, decision, reason, created_at)
+		VALUES ('decision-missing-edge', ?, 'run-1', 'session-1', 'test-rule', 'audit', 'missing edge', ?)`, eventID, now); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Verify(db, "run-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertVerifyIssue(t, result, "missing_policy_decision_edge")
+	assertVerifyIssue(t, result, "missing_policy_session_edge")
+}
+
 func insertVerifyRuntimeBase(t *testing.T, db *sql.DB, workspace, now string) {
 	t.Helper()
 	insertTraceSnapshot(t, db, "snap-1", "ready", now)
@@ -540,4 +733,15 @@ func assertVerifyIssue(t *testing.T, result VerifyResult, kind string) {
 		}
 	}
 	t.Fatalf("expected issue kind %s, got %+v", kind, result.Issues)
+}
+
+func cleanupVerifyObservedProcesses(procs []record.ObservedProcess) {
+	for _, proc := range procs {
+		if proc.PID <= 0 {
+			continue
+		}
+		if p, err := os.FindProcess(int(proc.PID)); err == nil {
+			_ = p.Kill()
+		}
+	}
 }

@@ -1,0 +1,1 @@
+{"process_exec":{"process":{"pid":4242,"binary":"/bin/sh","arguments":"-lc pytest -q","docker":"agentprov-demo-container"}}}

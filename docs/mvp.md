@@ -40,6 +40,9 @@ future drivers, but they are not the main v0.1 product surface.
 
 ```sh
 agentprov init
+agentprov adapter list
+agentprov adapter inspect filtered-jsonl --json
+scripts/demo_telemetry_jsonl.sh
 agentprov lease create --task examples/tasks/bugfix.yaml
 agentprov session create --lease <lease_id>
 agentprov session list
@@ -67,6 +70,9 @@ agentprov graph trace --run run-demo-bugfix
 agentprov graph refs --run run-demo-bugfix
 agentprov graph log --run run-demo-bugfix
 agentprov graph materialize --run run-demo-bugfix
+agentprov graph objects --run run-demo-bugfix
+agentprov graph objects --run run-demo-bugfix --limit 50 --json
+agentprov graph objects --run run-demo-bugfix --limit 50 --cursor <next_cursor> --json
 agentprov graph verify --run run-demo-bugfix
 agentprov graph verify --run run-demo-bugfix --json
 agentprov graph replay --run run-demo-bugfix
@@ -78,7 +84,10 @@ agentprov graph blame --run run-demo-bugfix --file calculator.py
 agentprov graph blame --run run-demo-bugfix --file calculator.py --json
 agentprov graph explain --run run-demo-bugfix --file calculator.py
 agentprov graph explain --run run-demo-bugfix --file calculator.py --json
+agentprov graph explain --run run-demo-bugfix --file calculator.py --depth 4 --limit 200 --json
+agentprov graph explain --run run-demo-bugfix --file calculator.py --depth 4 --limit 200 --cursor <next_cursor> --json
 agentprov graph explain --tool-call <tool_call_id>
+agentprov graph explain --risk <policy_decision_id> --json
 agentprov effect record --run run-demo-bugfix --type api_call --target api.example.com/v1/tickets --mode dry-run --decision audit
 agentprov effect list --run run-demo-bugfix
 agentprov record --run run-record-demo --workdir /tmp/agentprov-record-demo -- \
@@ -144,8 +153,8 @@ snapshots it, forks five attempts, runs different repair strategies, exports
 patch artifacts, ingests raw runtime telemetry without `tool_call_id`,
 correlates it through ToolCallScope bindings, quarantines one risky failed
 branch, marks the passing candidate as locally promotable, then runs `graph trace`, `graph refs`,
-`graph log`, `graph materialize`, `graph verify`, `graph replay`, `graph replay
---json`, `graph verify --json`, `graph trajectories --json`, `graph diff`,
+`graph log`, `graph materialize`, `graph objects`, `graph verify`, `graph replay`, `graph replay
+--json`, `graph objects --json`, `graph verify --json`, `graph trajectories --json`, `graph diff`,
 `graph diff --json`, `graph blame`, and `graph blame --json` to expose
 per-trajectory evidence for external evaluators, verify graph integrity,
 reconstruct a plan-only replay, emit structured verify/replay/trajectory/diff/blame
@@ -166,8 +175,20 @@ Expected output / acceptance:
   attempt/tool_call that produced the file diff.
 - PID/PPID/TGID runtime telemetry creates process-tree causality edges, so
   delayed child process events can be explained without raw `tool_call_id`.
-- `graph explain --file calculator.py --json` combines state diff, blame, and
-  runtime file events in one `agentprovenance.explain/v1` manifest.
+- `graph explain --json` combines state diff, blame, runtime events, evidence,
+  object refs, risks, replay refs, and bounded causality paths in one
+  `agentprovenance.explain/v1` manifest. `--depth` and `--limit` make graph
+  traversal explicit, and `--cursor` pages larger DAGs. Paged outputs include
+  stable `result_set_id` and per-page `page_hash` metadata for evidence
+  integrity checks.
+- `agentprov record --json` includes `observed_processes`,
+  `process_tree_count`, and scope boundary metadata so zero-SDK recordings can
+  explain which child processes were sampled and later correlated. It also
+  exposes `orphan_policy`, `post_root_grace_ms`, and `outlived_root` for
+  descendants observed after the root command exits. When such a descendant is
+  observed, record writes an `audit` policy decision with rule
+  `zero_sdk_orphan_observe_only` and an `orphan_lifecycle_decision` evidence
+  event.
 - `graph trace` shows `execution_context_bindings:` and the correlated
   `execve` event under the same run/session/attempt/tool/process chain.
 - `rollout attempts` shows `wrong-constant` as `quarantined` with
@@ -352,7 +373,10 @@ promotion, evidence, and telemetry events. `graph materialize --run <run_id>`
 turns the current SQLite trace into a content-addressed provenance object DAG
 under `.agentprov/provenance/objects/sha256/`; each object records source id, parent
 hashes, replay-oriented payload, and artifact file hashes when an artifact file
-exists. `graph verify --run <run_id>` checks reference continuity,
+exists. `graph objects --run <run_id> --limit <n> --cursor <next_cursor> --json`
+lists object refs with type, source id, hash, parent hashes, path, size, and
+created time. The object page includes `result_set_id` and `page_hash`, so
+clients can verify paged evidence exports. `graph verify --run <run_id>` checks reference continuity,
 taint/promotion contradictions, artifact readability, materialized object
 hashes, replay manifest generation, and ToolCallScope correlation drift.
 Add `--json` to emit the structured `agentprovenance.verify/v1` manifest for

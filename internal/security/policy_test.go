@@ -75,6 +75,32 @@ func TestEvaluateJSONLWithStatePersistsAndQuarantines(t *testing.T) {
 	if decisionCount != 1 {
 		t.Fatalf("decision count = %d, want 1", decisionCount)
 	}
+	var eventID, decisionID string
+	if err := db.QueryRow(`SELECT id, event_id FROM policy_decisions WHERE run_id = 'run-test' AND decision = 'quarantine'`).Scan(&decisionID, &eventID); err != nil {
+		t.Fatal(err)
+	}
+	var policyEdgeCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges
+		WHERE run_id = 'run-test'
+		  AND from_id = ?
+		  AND to_id = ?
+		  AND edge_type = 'runtime_event_policy_decision'`, "runtime_event/"+eventID, "policy_decision/"+decisionID).Scan(&policyEdgeCount); err != nil {
+		t.Fatal(err)
+	}
+	if policyEdgeCount != 1 {
+		t.Fatalf("policy edge count = %d, want 1", policyEdgeCount)
+	}
+	var sessionEdgeCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges
+		WHERE run_id = 'run-test'
+		  AND from_id = ?
+		  AND to_id = 'sbx-test'
+		  AND edge_type = 'policy_decision_session'`, "policy_decision/"+decisionID).Scan(&sessionEdgeCount); err != nil {
+		t.Fatal(err)
+	}
+	if sessionEdgeCount != 1 {
+		t.Fatalf("policy session edge count = %d, want 1", sessionEdgeCount)
+	}
 	var quarantineCount int
 	if err := db.QueryRow(`SELECT COALESCE(SUM(quarantine_count), 0) FROM cost_samples WHERE run_id = 'run-test'`).Scan(&quarantineCount); err != nil {
 		t.Fatal(err)

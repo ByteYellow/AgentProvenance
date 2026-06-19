@@ -32,6 +32,20 @@ type EventRecord struct {
 	CreatedAt             string
 }
 
+type BatchRecord struct {
+	ID             string `json:"id"`
+	RunID          string `json:"run_id"`
+	Format         string `json:"format"`
+	Path           string `json:"path"`
+	FileSHA256     string `json:"file_sha256"`
+	Read           int    `json:"read"`
+	Ingested       int    `json:"ingested"`
+	Skipped        int    `json:"skipped"`
+	Failed         int    `json:"failed"`
+	EventIDsSHA256 string `json:"event_ids_sha256"`
+	CreatedAt      string `json:"created_at"`
+}
+
 type IngestEvent struct {
 	RunID       string
 	RolloutID   string
@@ -61,6 +75,31 @@ type Filter struct {
 
 func ListEvents(db *sql.DB, runID, sessionID string) ([]EventRecord, error) {
 	return ListEventsFiltered(db, Filter{RunID: runID, SessionID: sessionID})
+}
+
+func ListBatches(db *sql.DB, runID string) ([]BatchRecord, error) {
+	query := `SELECT id, COALESCE(run_id, ''), format, path, file_sha256, read_count, ingested_count,
+		skipped_count, failed_count, event_ids_sha256, created_at FROM telemetry_batches`
+	args := []any{}
+	if strings.TrimSpace(runID) != "" {
+		query += ` WHERE run_id = ?`
+		args = append(args, runID)
+	}
+	query += ` ORDER BY created_at ASC`
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var batches []BatchRecord
+	for rows.Next() {
+		var batch BatchRecord
+		if err := rows.Scan(&batch.ID, &batch.RunID, &batch.Format, &batch.Path, &batch.FileSHA256, &batch.Read, &batch.Ingested, &batch.Skipped, &batch.Failed, &batch.EventIDsSHA256, &batch.CreatedAt); err != nil {
+			return nil, err
+		}
+		batches = append(batches, batch)
+	}
+	return batches, rows.Err()
 }
 
 func ListEventsFiltered(db *sql.DB, filter Filter) ([]EventRecord, error) {
@@ -124,6 +163,9 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 	}
 	if event.Payload == "" {
 		event.Payload = "{}"
+	}
+	if err := ValidateRawPayload(event.EventType, event.Payload); err != nil {
+		return "", err
 	}
 	raw := correlation.RawIdentity{
 		ProcessID:   event.ProcessID,

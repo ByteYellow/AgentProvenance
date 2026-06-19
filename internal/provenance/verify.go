@@ -1,6 +1,7 @@
 package provenance
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -9,6 +10,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
 type VerifyIssue struct {
@@ -94,10 +97,19 @@ func Verify(db *sql.DB, runID string) (VerifyResult, error) {
 	if err := verifyExternalEffects(db, runID, add); err != nil {
 		return result, err
 	}
+	if err := verifyPolicyDecisions(db, runID, add); err != nil {
+		return result, err
+	}
 	if err := verifyExecutionContextBindings(db, runID, add); err != nil {
 		return result, err
 	}
 	if err := verifyRuntimeCausality(db, runID, add); err != nil {
+		return result, err
+	}
+	if err := verifyTelemetryBatches(db, runID, add); err != nil {
+		return result, err
+	}
+	if err := verifyProcessObservations(db, runID, add); err != nil {
 		return result, err
 	}
 	if err := verifyReplayManifest(db, runID, add); err != nil {
@@ -384,15 +396,47 @@ func verifyExternalEffects(db *sql.DB, runID string, add issueAdder) error {
 	return rows.Err()
 }
 
-func verifyObjects(db *sql.DB, runID string, add issueAdder) error {
-	rows, err := db.Query(`SELECT hash, source_id, parent_hashes, path FROM provenance_objects WHERE run_id = ?`, runID)
+func verifyPolicyDecisions(db *sql.DB, runID string, add issueAdder) error {
+	rows, err := db.Query(`SELECT id, COALESCE(event_id, ''), COALESCE(session_id, '') FROM policy_decisions WHERE run_id = ?`, runID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var hash, sourceID, parentHashes, path string
-		if err := rows.Scan(&hash, &sourceID, &parentHashes, &path); err != nil {
+		var id, eventID, sessionID string
+		if err := rows.Scan(&id, &eventID, &sessionID); err != nil {
+			return err
+		}
+		policyNodeID := "policy_decision/" + id
+		if eventID != "" {
+			if !exists(db, `SELECT 1 FROM events WHERE id = ?`, eventID) {
+				add("error", "missing_policy_event", id, "policy decision event_id %s does not exist", eventID)
+			}
+			if !edgeExists(db, runID, "runtime_event/"+eventID, policyNodeID, "runtime_event_policy_decision") {
+				add("error", "missing_policy_decision_edge", id, "runtime event %s is not linked to policy decision %s", eventID, id)
+			}
+		}
+		if sessionID != "" {
+			if !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) {
+				add("error", "missing_policy_session", id, "policy decision session_id %s does not exist", sessionID)
+			}
+			if !edgeExists(db, runID, policyNodeID, sessionID, "policy_decision_session") {
+				add("error", "missing_policy_session_edge", id, "policy decision %s is not linked to session %s", id, sessionID)
+			}
+		}
+	}
+	return rows.Err()
+}
+
+func verifyObjects(db *sql.DB, runID string, add issueAdder) error {
+	rows, err := db.Query(`SELECT hash, object_type, source_id, parent_hashes, path FROM provenance_objects WHERE run_id = ?`, runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var hash, objectType, sourceID, parentHashes, path string
+		if err := rows.Scan(&hash, &objectType, &sourceID, &parentHashes, &path); err != nil {
 			return err
 		}
 		raw, err := os.ReadFile(path)
@@ -405,6 +449,19 @@ func verifyObjects(db *sql.DB, runID string, add issueAdder) error {
 		if actual != hash {
 			add("error", "object_hash_mismatch", sourceID, "object hash=%s actual=%s path=%s", hash, actual, path)
 		}
+		var obj provenanceObject
+		if err := json.Unmarshal(raw, &obj); err != nil {
+			add("error", "invalid_provenance_object_json", sourceID, "object %s is invalid JSON: %v", hash, err)
+			continue
+		}
+		if objectType == "record_manifest" {
+			expected, err := BuildRecordManifest(db, runID)
+			if err != nil {
+				add("error", "record_manifest_rebuild_failed", sourceID, "record manifest cannot be rebuilt: %v", err)
+			} else if !jsonEqual(obj.Payload["manifest"], expected) {
+				add("error", "record_manifest_mismatch", sourceID, "record manifest object does not match rebuilt manifest")
+			}
+		}
 		for _, parent := range strings.Split(parentHashes, ",") {
 			parent = strings.TrimSpace(parent)
 			if parent == "" {
@@ -416,6 +473,24 @@ func verifyObjects(db *sql.DB, runID string, add issueAdder) error {
 		}
 	}
 	return rows.Err()
+}
+
+func jsonEqual(a, b any) bool {
+	aa, errA := normalizedJSON(a)
+	bb, errB := normalizedJSON(b)
+	return errA == nil && errB == nil && bytes.Equal(aa, bb)
+}
+
+func normalizedJSON(value any) ([]byte, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, err
+	}
+	return json.Marshal(decoded)
 }
 
 func verifyExecutionContextBindings(db *sql.DB, runID string, add issueAdder) error {
@@ -470,6 +545,7 @@ func verifyExecutionContextBindings(db *sql.DB, runID string, add issueAdder) er
 func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 	rows, err := db.Query(`SELECT id, COALESCE(tool_call_id, ''), COALESCE(process_id, ''), event_type, payload,
 		COALESCE(correlation_method, ''),
+		COALESCE(source, ''),
 		COALESCE(pid, 0), COALESCE(tgid, 0), COALESCE(ppid, 0)
 		FROM events WHERE run_id = ?`, runID)
 	if err != nil {
@@ -477,10 +553,15 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, toolCallID, processID, eventType, payload, correlationMethod string
+		var id, toolCallID, processID, eventType, payload, correlationMethod, source string
 		var pid, tgid, ppid int64
-		if err := rows.Scan(&id, &toolCallID, &processID, &eventType, &payload, &correlationMethod, &pid, &tgid, &ppid); err != nil {
+		if err := rows.Scan(&id, &toolCallID, &processID, &eventType, &payload, &correlationMethod, &source, &pid, &tgid, &ppid); err != nil {
 			return err
+		}
+		if telemetry.TelemetrySource(source, correlationMethod) {
+			if err := telemetry.ValidateStoredPayload(eventType, payload); err != nil {
+				add("error", "invalid_telemetry_payload_schema", id, "event %s type=%s has invalid telemetry payload: %v", id, eventType, err)
+			}
 		}
 		isRuntimeTelemetry := correlationMethod != ""
 		isFileTelemetry := eventType == "file_write" || eventType == "file_open"
@@ -545,6 +626,144 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 		}
 	}
 	return rows.Err()
+}
+
+func verifyTelemetryBatches(db *sql.DB, runID string, add issueAdder) error {
+	rows, err := db.Query(`SELECT id, format, file_sha256, event_ids_json, event_ids_sha256, ingested_count
+		FROM telemetry_batches WHERE run_id = ?`, runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, format, fileHash, eventIDsJSON, eventIDsHash string
+		var ingestedCount int
+		if err := rows.Scan(&id, &format, &fileHash, &eventIDsJSON, &eventIDsHash, &ingestedCount); err != nil {
+			return err
+		}
+		if strings.TrimSpace(format) == "" {
+			add("error", "telemetry_batch_missing_format", id, "telemetry batch has no source format")
+		}
+		if strings.TrimSpace(fileHash) == "" {
+			add("error", "telemetry_batch_missing_file_hash", id, "telemetry batch has no input file sha256")
+		}
+		var eventIDs []string
+		if err := json.Unmarshal([]byte(eventIDsJSON), &eventIDs); err != nil {
+			add("error", "telemetry_batch_invalid_event_ids", id, "telemetry batch event_ids_json is not valid JSON: %v", err)
+			continue
+		}
+		if len(eventIDs) != ingestedCount {
+			add("error", "telemetry_batch_ingested_count_mismatch", id, "telemetry batch ingested_count=%d but event_ids=%d", ingestedCount, len(eventIDs))
+		}
+		if got := hashVerifyStrings(eventIDs); got != eventIDsHash {
+			add("error", "telemetry_batch_event_hash_mismatch", id, "telemetry batch event_ids_sha256 mismatch got=%s want=%s", got, eventIDsHash)
+		}
+		for _, eventID := range eventIDs {
+			if !exists(db, `SELECT 1 FROM events WHERE id = ? AND run_id = ?`, eventID, runID) {
+				add("error", "telemetry_batch_missing_event", id, "telemetry batch references missing event %s", eventID)
+			}
+		}
+	}
+	return rows.Err()
+}
+
+func hashVerifyStrings(values []string) string {
+	h := sha256.New()
+	for _, value := range values {
+		_, _ = h.Write([]byte(value))
+		_, _ = h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func verifyProcessObservations(db *sql.DB, runID string, add issueAdder) error {
+	rows, err := db.Query(`SELECT id, COALESCE(tool_call_id, ''), COALESCE(process_id, ''), payload
+		FROM events
+		WHERE run_id = ? AND source = 'record_process_sample' AND event_type = 'process_observed'
+		ORDER BY created_at ASC`, runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, toolCallID, processID, payload string
+		if err := rows.Scan(&id, &toolCallID, &processID, &payload); err != nil {
+			return err
+		}
+		var proc struct {
+			PID          int64  `json:"pid"`
+			PPID         int64  `json:"ppid"`
+			Command      string `json:"command"`
+			OutlivedRoot bool   `json:"outlived_root"`
+		}
+		if err := json.Unmarshal([]byte(payload), &proc); err != nil {
+			add("error", "invalid_process_observation_payload", id, "process observation payload is not valid JSON: %v", err)
+			continue
+		}
+		if proc.PID == 0 {
+			add("error", "invalid_process_observation_pid", id, "process observation has empty pid")
+		}
+		if toolCallID == "" {
+			add("error", "missing_process_observation_tool_call", id, "process observation pid %d has no tool_call_id", proc.PID)
+		}
+		if processID == "" {
+			add("error", "missing_process_observation_process", id, "process observation pid %d has no process_id", proc.PID)
+		}
+		if !proc.OutlivedRoot {
+			continue
+		}
+		refs, err := orphanLifecycleVerifyRefs(db, runID, proc.PID)
+		if err != nil {
+			return err
+		}
+		if len(refs.evidenceIDs) == 0 {
+			add("error", "missing_orphan_lifecycle_evidence", id, "outlived process pid %d has no orphan_lifecycle_decision evidence", proc.PID)
+		}
+		if len(refs.policyDecisionIDs) == 0 {
+			add("error", "missing_orphan_lifecycle_policy_decision", id, "outlived process pid %d has no linked orphan lifecycle policy decision", proc.PID)
+		}
+		for _, decisionID := range refs.policyDecisionIDs {
+			if !exists(db, `SELECT 1 FROM policy_decisions WHERE id = ? AND run_id = ? AND rule_id = 'zero_sdk_orphan_observe_only' AND decision = 'audit'`, decisionID, runID) {
+				add("error", "missing_orphan_lifecycle_policy_decision", id, "outlived process pid %d references missing policy decision %s", proc.PID, decisionID)
+			}
+		}
+	}
+	return rows.Err()
+}
+
+type orphanLifecycleRefsForVerify struct {
+	evidenceIDs       []string
+	policyDecisionIDs []string
+}
+
+func orphanLifecycleVerifyRefs(db *sql.DB, runID string, pid int64) (orphanLifecycleRefsForVerify, error) {
+	rows, err := db.Query(`SELECT id, payload FROM evidence_events
+		WHERE run_id = ? AND event_type = 'orphan_lifecycle_decision' ORDER BY created_at ASC`, runID)
+	if err != nil {
+		return orphanLifecycleRefsForVerify{}, err
+	}
+	defer rows.Close()
+	refs := orphanLifecycleRefsForVerify{}
+	decisionSeen := map[string]bool{}
+	for rows.Next() {
+		var id, payload string
+		if err := rows.Scan(&id, &payload); err != nil {
+			return orphanLifecycleRefsForVerify{}, err
+		}
+		var decoded struct {
+			PID              int64  `json:"pid"`
+			PolicyDecisionID string `json:"policy_decision_id"`
+		}
+		if err := json.Unmarshal([]byte(payload), &decoded); err != nil || decoded.PID != pid {
+			continue
+		}
+		refs.evidenceIDs = append(refs.evidenceIDs, id)
+		if decoded.PolicyDecisionID != "" && !decisionSeen[decoded.PolicyDecisionID] {
+			refs.policyDecisionIDs = append(refs.policyDecisionIDs, decoded.PolicyDecisionID)
+			decisionSeen[decoded.PolicyDecisionID] = true
+		}
+	}
+	return refs, rows.Err()
 }
 
 func verifyReplayManifest(db *sql.DB, runID string, add issueAdder) error {

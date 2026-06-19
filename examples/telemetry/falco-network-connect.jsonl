@@ -1,0 +1,1 @@
+{"output_fields":{"evt.type":"connect","proc.pid":4242,"proc.ppid":4000,"container.id":"agentprov-demo-container","fd.rip":"api.example.com:443"}}

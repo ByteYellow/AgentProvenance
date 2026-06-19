@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -11,6 +12,8 @@ import (
 
 func telemetryCmd(dataDir *string) *cobra.Command {
 	var runID, sessionID, eventType, toolCallID string
+	var batchesRunID string
+	var batchesJSON bool
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "list recorded telemetry events",
@@ -50,6 +53,45 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(telemetryBindCmd(dataDir))
 	cmd.AddCommand(telemetryBindingsCmd(dataDir))
 	cmd.AddCommand(telemetryIngestCmd(dataDir))
+	cmd.AddCommand(telemetryIngestJSONLCmd(dataDir))
+	batches := &cobra.Command{
+		Use:   "batches",
+		Short: "list telemetry ingest batch manifests",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			paths, err := store.Init(*dataDir)
+			if err != nil {
+				return err
+			}
+			db, err := store.Open(paths)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			items, err := telemetry.ListBatches(db, batchesRunID)
+			if err != nil {
+				return err
+			}
+			if batchesJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(map[string]any{
+					"schema_version": "agentprovenance.telemetry_batches/v1",
+					"run_id":         batchesRunID,
+					"batches":        items,
+				})
+			}
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "ID\tRUN\tFORMAT\tREAD\tINGESTED\tSKIPPED\tFAILED\tFILE_SHA256\tEVENT_IDS_SHA256\tPATH\tCREATED_AT")
+			for _, item := range items {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\t%s\n",
+					item.ID, item.RunID, item.Format, item.Read, item.Ingested, item.Skipped, item.Failed, item.FileSHA256, item.EventIDsSHA256, item.Path, item.CreatedAt)
+			}
+			return w.Flush()
+		},
+	}
+	batches.Flags().StringVar(&batchesRunID, "run", "", "filter by run id")
+	batches.Flags().BoolVar(&batchesJSON, "json", false, "emit JSON batch manifest list")
+	cmd.AddCommand(batches)
 	return cmd
 }
 
@@ -172,5 +214,52 @@ func telemetryIngestCmd(dataDir *string) *cobra.Command {
 	ingest.Flags().StringVar(&event.EventType, "type", "", "filtered event type")
 	ingest.Flags().StringVar(&event.Payload, "payload", "{}", "JSON payload")
 	_ = ingest.MarkFlagRequired("type")
+	return ingest
+}
+
+func telemetryIngestJSONLCmd(dataDir *string) *cobra.Command {
+	var opts telemetry.JSONLIngestOptions
+	var jsonOut bool
+	ingest := &cobra.Command{
+		Use:   "ingest-jsonl",
+		Short: "ingest filtered substrate telemetry JSONL from Tetragon, Falco, or LoongCollector",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			paths, err := store.Init(*dataDir)
+			if err != nil {
+				return err
+			}
+			db, err := store.Open(paths)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			result, err := telemetry.IngestJSONL(db, opts)
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(result)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "batch=%s format=%s path=%s file_sha256=%s event_ids_sha256=%s read=%d ingested=%d skipped=%d failed=%d\n",
+				result.BatchID, result.Format, result.Path, result.FileSHA256, result.EventIDsSHA256, result.Read, result.Ingested, result.Skipped, result.Failed)
+			for _, msg := range result.Errors {
+				fmt.Fprintf(cmd.OutOrStdout(), "error=%q\n", msg)
+			}
+			return nil
+		},
+	}
+	ingest.Flags().StringVar(&opts.Format, "format", "auto", "jsonl format: auto, tetragon, falco, or loongcollector")
+	ingest.Flags().StringVar(&opts.Path, "file", "", "JSONL file path")
+	ingest.Flags().StringVar(&opts.RunID, "run", "", "default run id")
+	ingest.Flags().StringVar(&opts.RolloutID, "rollout", "", "default rollout id")
+	ingest.Flags().StringVar(&opts.AttemptID, "attempt", "", "default attempt id")
+	ingest.Flags().StringVar(&opts.SessionID, "session", "", "default session id")
+	ingest.Flags().StringVar(&opts.ToolCallID, "tool-call", "", "default tool call id")
+	ingest.Flags().StringVar(&opts.ProcessID, "process", "", "default process id")
+	ingest.Flags().StringVar(&opts.SnapshotID, "snapshot", "", "default snapshot id")
+	ingest.Flags().BoolVar(&jsonOut, "json", false, "emit JSON result")
+	_ = ingest.MarkFlagRequired("file")
 	return ingest
 }

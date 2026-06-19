@@ -212,3 +212,45 @@ func TestIngestFilteredAcceptsFileRuntimeEvents(t *testing.T) {
 		}
 	}
 }
+
+func TestIngestFilteredRejectsContextInRawPayload(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := IngestFiltered(db, IngestEvent{
+		EventType: "execve",
+		Source:    "tetragon_jsonl",
+		Payload:   `{"argv":["pytest","-q"],"tool_call_id":"tool-leaked"}`,
+	}); err == nil || !strings.Contains(err.Error(), "tool_call_id") {
+		t.Fatalf("expected raw payload context rejection, got %v", err)
+	}
+}
+
+func TestIngestFilteredRejectsInvalidEventSchema(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := IngestFiltered(db, IngestEvent{
+		EventType: "file_write",
+		Source:    "native_runtime",
+		Payload:   `{"op":"write"}`,
+	}); err == nil || !strings.Contains(err.Error(), "requires safe relative path") {
+		t.Fatalf("expected file_write schema rejection, got %v", err)
+	}
+}

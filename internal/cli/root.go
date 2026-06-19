@@ -28,6 +28,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(execCmd(&dataDir, &daemonURL))
 	root.AddCommand(processCmd(&dataDir))
 	root.AddCommand(portCmd(&dataDir))
+	root.AddCommand(adapterCmd())
 	root.AddCommand(runtimeCmd(&dataDir))
 	root.AddCommand(templateCmd(&dataDir))
 	root.AddCommand(apiCmd(&dataDir))

@@ -2,7 +2,7 @@
 
 # AgentProvenance
 
-### Git-like provenance for sandboxed agent execution.
+### Execution observability and Git-like provenance for sandboxed agents.
 
 Turn execution context, runtime evidence, file diffs, artifacts, risk signals,
 and promotion decisions into a queryable, replayable, and auditable causality
@@ -72,9 +72,10 @@ base snapshot
   -> replay / audit manifest
 ```
 
-The primary demo is a coding-agent best-of-N repair loop. RL-style rollout and
-evaluator pipelines are important stress cases, but AgentProvenance does not
-choose the reward winner. It emits structured trajectory evidence so an
+The primary path is recording and explaining sandboxed agent execution. A
+coding-agent best-of-N repair loop remains a stress demo because it creates
+branches, artifacts, risk, and competing trajectories, but AgentProvenance does
+not choose the reward winner. It emits structured trajectory evidence so an
 external evaluator or training pipeline can make that decision.
 
 ## Core Model
@@ -131,7 +132,13 @@ Then raw events can be ingested without `tool_call_id`:
 agentprov telemetry ingest --raw-event raw-execve-1 --pid <pid> \
   --timestamp <event_time> --source tetragon_jsonl --type execve \
   --payload '{"argv":["./async_child.sh"]}'
+agentprov telemetry ingest-jsonl --format tetragon --file tetragon-events.jsonl
 ```
+
+`ingest-jsonl` records a telemetry batch manifest with the input file hash,
+mapped event IDs, and event ID hash. It gives the DAG an audit handle for
+external Falco/Tetragon/LoongCollector evidence without turning AgentProvenance
+into a long-term log store.
 
 ## Quickstart
 
@@ -152,6 +159,10 @@ printf 'value = 1\n' > /tmp/agentprov-record-demo/app.py
   sh -lc 'printf "value = 2\n" > app.py && echo artifact > artifact.txt'
 ./agentprov graph explain --run run-record-demo --file app.py
 
+./agentprov adapter list
+./agentprov adapter inspect filtered-jsonl --json
+./scripts/demo_telemetry_jsonl.sh
+./agentprov telemetry batches --run run-telemetry-jsonl-demo
 ./scripts/demo_coding_agent_best_of_n.sh
 ./scripts/accept_phase1.sh
 ```
@@ -160,6 +171,11 @@ The demo builds `agentprov`, creates a clean coding workspace, snapshots it,
 forks five attempts, runs different bug-fix strategies, records runtime
 telemetry, quarantines a risky branch, marks one clean candidate as locally
 promotable for demonstration, and queries the provenance DAG.
+
+`demo_telemetry_jsonl.sh` is the minimal substrate telemetry path. It binds a
+ToolCallScope, ingests Tetragon/Falco/LoongCollector fixture JSONL from
+`examples/telemetry/`, lists normalized events, and explains how one substrate
+event entered the DAG.
 
 `accept_phase1.sh` is the machine-checkable gate for the current MVP.
 
@@ -170,6 +186,9 @@ promotable for demonstration, and queries the provenance DAG.
 ./agentprov graph refs --run run-demo-bugfix
 ./agentprov graph log --run run-demo-bugfix
 ./agentprov graph materialize --run run-demo-bugfix
+./agentprov graph objects --run run-demo-bugfix
+./agentprov graph objects --run run-demo-bugfix --limit 50 --json
+./agentprov graph objects --run run-demo-bugfix --limit 50 --cursor <next_cursor> --json
 ./agentprov graph verify --run run-demo-bugfix
 ./agentprov graph verify --run run-demo-bugfix --json
 ./agentprov graph replay --run run-demo-bugfix
@@ -181,7 +200,10 @@ promotable for demonstration, and queries the provenance DAG.
 ./agentprov graph blame --run run-demo-bugfix --file calculator.py --json
 ./agentprov graph explain --run run-demo-bugfix --file calculator.py
 ./agentprov graph explain --run run-demo-bugfix --file calculator.py --json
+./agentprov graph explain --run run-demo-bugfix --file calculator.py --depth 4 --limit 200 --json
+./agentprov graph explain --run run-demo-bugfix --file calculator.py --depth 4 --limit 200 --cursor <next_cursor> --json
 ./agentprov graph explain --tool-call <tool_call_id>
+./agentprov graph explain --risk <policy_decision_id> --json
 ```
 
 What these mean:
@@ -192,25 +214,28 @@ What these mean:
 | `refs` | Emit stable Git-like references for attempts, snapshots, artifacts, and decisions |
 | `log` | Show chronological execution history |
 | `materialize` | Write content-addressed provenance objects |
-| `verify` | Check graph integrity, taint/promotion barriers, object hashes, replay generation, and drain watermarks |
+| `objects` | List content-addressed object refs, hashes, parent hashes, source IDs, paths, and sizes; supports `--limit` and `--cursor` |
+| `verify` | Check graph integrity, taint/promotion barriers, object hashes, replay generation, drain watermarks, telemetry batch hashes, and orphan lifecycle evidence for outlived zero-SDK child processes |
 | `replay` | Emit a plan-only reconstruction of the run |
 | `trajectories --json` | Emit per-attempt evidence for external evaluators or RL pipelines |
 | `diff` | Compare file state between base and attempts |
 | `blame` | Attribute file state to attempt, tool call, process, strategy, command, and local candidate status |
-| `explain` | Explain a target by combining trace, runtime causality, diff/blame, policy, and promotion evidence; `--json` emits `agentprovenance.explain/v1` |
+| `explain` | Explain a target by combining trace, runtime causality, diff/blame, telemetry receiver details, telemetry batch manifests, process observations, policy, object refs, and promotion evidence; `--json` emits `agentprovenance.explain/v1` with `upstream`, `downstream`, bounded `causality_path`, `query`, `evidence`, `objects`, `risks`, `telemetry_batches`, `process_observations`, and `replay_refs`; runtime events include receiver/source format, normalized event type, identity keys, schema status, and correlation status; use `--depth`, `--limit`, and `--cursor` to bound and page DAG traversal |
 
 ## Current Capability
 
 | Area | Current capability |
 |---|---|
-| Zero-SDK record | `agentprov record -- <command>` snapshots a working directory, runs a command, computes changed files, and records runtime file evidence |
+| Zero-SDK record | `agentprov record -- <command>` snapshots a working directory, samples root-process descendants, applies a post-root grace window, marks observed descendants that outlive the root, creates PID bindings, emits orphan lifecycle audit decisions when applicable, computes changed files, records runtime file evidence, and materializes a `record_manifest` object |
 | Execution context | explicit ToolCallScope binding through run/session/attempt/tool_call/process/container/cgroup/pid |
-| Evidence ingest | raw telemetry ingestion without requiring raw `tool_call_id` |
+| Adapter contracts | `adapter list/inspect` exposes agent, sandbox, telemetry, artifact, and snapshot adapter capabilities, identity keys, boundaries, and QBS impact |
+| Evidence ingest | raw telemetry ingestion without requiring raw `tool_call_id`; ingest and verify enforce event-specific payload schemas, reject application context inside raw runtime payloads, map filtered Tetragon/Falco/LoongCollector JSONL into normalized telemetry events, and record batch manifests with input/event hashes |
 | Runtime causality | native `runtime_*` graph edges for tool call, process, process tree, attempt, snapshot, runtime event, and workspace file correlation |
-| Provenance DAG | `trace`, `refs`, `log`, `materialize`, `verify`, text and JSON replay |
-| Diff / blame | MVP file-level diff and blame with JSON manifests; `graph explain --file --json` combines diff/blame with runtime file events |
+| Provenance DAG | `trace`, `refs`, `log`, `materialize`, `objects`, `verify`, text and JSON replay |
+| Evidence query | `graph explain --json` supports file, artifact, process, event, tool call, attempt, and risk targets with bounded, depth/limit/cursor-controlled causality paths, evidence, object refs, risks, process observations, and replay refs |
+| Diff / blame | MVP file-level diff and blame with JSON manifests; `graph explain --file --json` combines diff/blame with runtime events, evidence, content-addressed object refs, risks, and replay refs |
 | Artifact lineage | exported attempt artifacts linked to attempt/tool_call/process |
-| Risk / taint | policy decisions, quarantine, taint, taint descendant checks |
+| Risk / taint | policy decisions, policy-decision graph edges, quarantine, taint, taint descendant checks |
 | Promotion barrier | candidate eligibility with telemetry/evidence drain watermark |
 | Trajectory evidence | `agentprovenance.trajectories/v1` manifest for external evaluators |
 | Runtime | Docker active; gVisor/Firecracker/bubblewrap are explicit capability stubs |
@@ -223,6 +248,8 @@ The main demo must prove:
 
 - Multiple attempts fork from the same clean snapshot.
 - Raw telemetry does not need `tool_call_id`.
+- Paged `graph objects` and `graph explain` responses expose stable
+  `result_set_id` and per-page `page_hash` integrity metadata.
 - PID, cgroup, container, and time-window bindings can resolve execution
   context.
 - Native runtime causality records `tool_call -> process -> runtime_event`.
@@ -231,6 +258,8 @@ The main demo must prove:
   a file diff.
 - Runtime-observed file events create `workspace_file/<path>` graph nodes and
   can be explained together with diff/blame.
+- Zero-SDK process observations expose outlived child processes and verify that
+  orphan lifecycle evidence and policy decisions exist.
 - A risky branch is quarantined and tainted.
 - A tainted branch cannot pass the promotion barrier.
 - Promotion records a drain watermark with `drain_pending_after=0`.
@@ -250,24 +279,16 @@ Run:
 
 ```mermaid
 flowchart TD
-    Agent["Agent command / harness / evaluator"] --> Context["Execution Context"]
-    Context --> Ingest["Evidence Ingest"]
+    AgentAdapter["Agent Adapter\nSDK / tool router / zero-SDK record"] --> Observability["Observability Core\nExecution context + evidence ingest"]
+    SandboxAdapter["Sandbox Adapter\nDocker now; OpenSandbox/gVisor/Firecracker/Kata later"] --> Observability
+    TelemetryAdapter["Telemetry Adapter\nwrapper now; Falco/Tetragon/LoongCollector/eBPF later"] --> Observability
+    SnapshotAdapter["Snapshot Adapter\ndirectory now; COW/disk/memory later"] --> Observability
+    ArtifactAdapter["Artifact Adapter\nlocal files now; object stores later"] --> Observability
 
-    SDK["White-box SDK / tool router\nrun_id, attempt_id, tool_call_id"] --> Context
-    Record["Zero-SDK record path\nprocess tree, cwd, time, file diff"] --> Context
-
-    Runtime["Runtime substrate\nDocker now; OpenSandbox/gVisor/Firecracker/Kata later"] --> Ingest
-    Telemetry["Telemetry substrate\nwrapper now; Falco/Tetragon/LoongCollector/eBPF later"] --> Ingest
-    Snapshot["Snapshot substrate\ndirectory now; COW/disk/memory later"] --> Ingest
-
-    Ingest --> Causality["Runtime Causality Graph"]
-    Causality --> Provenance["Git-like Provenance DAG"]
-
-    Provenance --> Diff["State Diff / Blame"]
-    Provenance --> Artifacts["Artifact Lineage"]
-    Provenance --> Risk["Risk / Taint"]
-    Provenance --> Barrier["Promotion Barrier"]
-    Provenance --> Replay["Replay / Trajectory / Audit Manifest"]
+    Observability --> Causality["Runtime Causality Graph\nprocess / file / event correlation"]
+    Causality --> Provenance["Git-like Provenance DAG\nrefs / objects / diff / blame"]
+    Provenance --> Query["Evidence Query Surface\ntrace / explain / verify / objects"]
+    Query --> RiskReplayAudit["Risk / Replay / Audit\ntaint / promotion barrier / manifests"]
 ```
 
 Capability gating is a hard design rule. Upper layers must query the runtime,
@@ -284,6 +305,9 @@ Substrate integrations are downstream of the provenance model:
 - OpenSandbox, gVisor, Firecracker, and Kata are future runtime substrates.
 - Kubernetes, Ray, Batch, and cloud systems are orchestration substrates.
 - Falco, Tetragon, LoongCollector, auditd, and eBPF are telemetry substrates.
+  The current MVP consumes already-filtered Tetragon/Falco/LoongCollector JSONL
+  through `agentprov telemetry ingest-jsonl`, records a hashable batch manifest,
+  and does not run kernel probes.
 
 The project value is not collecting more logs. The value is correlating
 substrate signals with execution context and making them affect diff, blame,
@@ -329,12 +353,12 @@ docs/                 product direction, MVP details, comparisons
 
 | Phase | Goal | Main deliverables |
 |---|---|---|
-| Phase 1 | Provenance correlation MVP | execution context, evidence ingest, runtime causality DAG, diff/blame, taint, promotion barrier, replay and trajectory manifests |
-| Phase 2 | Risk and auto-response MVP | configurable rules, RiskSignal, taint propagation, quarantine, promotion block, forensics export |
-| Phase 3 | Zero-SDK substrate integration | deeper process tree capture, cwd/time/file-diff inference, wrapper/audit receivers |
-| Phase 4 | eBPF telemetry substrate | Falco/Tetragon/LoongCollector JSONL receivers, cgroup/container/pid correlation, kernel-side filtering assumptions |
-| Phase 5 | Isolation and enforcement | IsolationProfile, EscalationPolicy, seccomp/AppArmor/eBPF LSM/gVisor/Firecracker capability gates |
-| Phase 6 | Scale hardening | async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency rollout tests |
+| Phase 1 | Provenance Correlation MVP | ToolCallScope, raw telemetry correlation, runtime causality DAG, diff/blame, taint, promotion barrier, replay and trajectory manifests |
+| Phase 2 | Evidence / Causality Hardening | stable explain JSON, content-addressed objects, object parent hashes, graph verification, bounded traversal, pagination, integrity metadata |
+| Phase 3 | Zero-SDK Recorder Hardening | process-tree capture, delayed child process handling, cwd/time/file-diff inference, orphan lifecycle evidence, low-intrusion record mode |
+| Phase 4 | Real Telemetry Integration | Falco/Tetragon/LoongCollector/auditd/eBPF receivers, cgroup/container/pid correlation, kernel-side filtering assumptions |
+| Phase 5 | Risk / Policy / Control | configurable risk signals, taint propagation, quarantine, promotion block, forensics export, isolation escalation hooks |
+| Phase 6 | Scale / UI / Productization | async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency ingest/query tests, usable UI/API |
 
 Near-term hardening:
 

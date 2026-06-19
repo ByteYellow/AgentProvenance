@@ -4,16 +4,19 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/ids"
+	"github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/state"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
@@ -32,19 +35,36 @@ type Request struct {
 }
 
 type Result struct {
-	RunID          string
-	RolloutID      string
-	BaseSnapshotID string
-	AttemptID      string
-	SessionID      string
-	ToolCallID     string
-	ProcessID      string
-	Workdir        string
-	Command        string
-	ExitCode       int
-	Status         string
-	WallMS         int64
-	ChangedFiles   []string
+	RunID           string
+	RolloutID       string
+	BaseSnapshotID  string
+	AttemptID       string
+	SessionID       string
+	ToolCallID      string
+	ProcessID       string
+	Workdir         string
+	Command         string
+	ExitCode        int
+	Status          string
+	WallMS          int64
+	ChangedFiles    []string
+	RootPID         int64
+	Observed        []ObservedProcess
+	OrphanPolicy    string
+	PostRootGraceMS int64
+	CWD             string
+	StartedAt       string
+	EndedAt         string
+	FailureReason   string
+}
+
+type ObservedProcess struct {
+	PID          int64  `json:"pid"`
+	PPID         int64  `json:"ppid"`
+	Command      string `json:"command"`
+	FirstSeen    string `json:"first_seen"`
+	LastSeen     string `json:"last_seen"`
+	OutlivedRoot bool   `json:"outlived_root"`
 }
 
 func (s Service) Run(req Request) (Result, error) {
@@ -144,8 +164,38 @@ func (s Service) Run(req Request) (Result, error) {
 	start := time.Now()
 	startedAt := start.UTC().Format(time.RFC3339Nano)
 	if err := cmd.Start(); err != nil {
+		endedAt := time.Now().UTC().Format(time.RFC3339Nano)
 		_ = s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, err.Error())
-		return Result{}, err
+		_, _ = correlation.RecordBinding(s.DB, correlation.Binding{
+			RunID:         req.RunID,
+			SessionID:     sessionID,
+			AttemptID:     attemptID,
+			ToolCallID:    toolCallID,
+			ProcessID:     processID,
+			ContainerID:   "agentprov-record-" + attemptID,
+			CgroupID:      "agentprov-record-" + attemptID,
+			StartedAt:     startedAt,
+			EndedAt:       endedAt,
+			BindingSource: "zero_sdk_record",
+		})
+		return Result{
+			RunID:          req.RunID,
+			RolloutID:      rolloutID,
+			BaseSnapshotID: baseSnapshotID,
+			AttemptID:      attemptID,
+			SessionID:      sessionID,
+			ToolCallID:     toolCallID,
+			ProcessID:      processID,
+			Workdir:        absWorkdir,
+			Command:        commandText,
+			ExitCode:       125,
+			Status:         "failed",
+			WallMS:         time.Since(start).Milliseconds(),
+			CWD:            absWorkdir,
+			StartedAt:      startedAt,
+			EndedAt:        endedAt,
+			FailureReason:  err.Error(),
+		}, nil
 	}
 	pid := int64(cmd.Process.Pid)
 	_, _ = correlation.RecordBinding(s.DB, correlation.Binding{
@@ -165,7 +215,16 @@ func (s Service) Run(req Request) (Result, error) {
 		VALUES (?, ?, ?, ?, ?, 'record', 'exec_start', ?, ?, ?, ?)`,
 		ids.New("evt"), req.RunID, sessionID, toolCallID, processID, pid, int64(os.Getpid()), fmt.Sprintf(`{"attempt_id":%q,"command":%q,"mode":"zero_sdk"}`, attemptID, commandText), startedAt)
 
+	stopSampler := make(chan struct{})
+	samplerDone := make(chan []ObservedProcess, 1)
+	go sampleProcessTree(pid, 25*time.Millisecond, stopSampler, samplerDone)
+
 	err = cmd.Wait()
+	postRootGrace := 250 * time.Millisecond
+	postRootGraceStarted := time.Now()
+	time.Sleep(postRootGrace)
+	close(stopSampler)
+	observed := markOutlivedRoot(<-samplerDone, postRootGraceStarted.UTC().Format(time.RFC3339Nano))
 	wallMS := time.Since(start).Milliseconds()
 	exitCode := 0
 	status := "passed"
@@ -177,6 +236,31 @@ func (s Service) Run(req Request) (Result, error) {
 		}
 	}
 	endedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	for _, proc := range observed {
+		_, _ = correlation.RecordBinding(s.DB, correlation.Binding{
+			RunID:         req.RunID,
+			SessionID:     sessionID,
+			AttemptID:     attemptID,
+			ToolCallID:    toolCallID,
+			ProcessID:     processID,
+			ContainerID:   "agentprov-record-" + attemptID,
+			CgroupID:      "agentprov-record-" + attemptID,
+			RootPID:       pid,
+			PID:           proc.PID,
+			StartedAt:     proc.FirstSeen,
+			EndedAt:       proc.LastSeen,
+			BindingSource: "zero_sdk_record_descendant",
+			Confidence:    0.9,
+		})
+		payload, _ := json.Marshal(proc)
+		_, _ = s.DB.Exec(`INSERT INTO events
+			(id, run_id, session_id, tool_call_id, process_id, source, event_type, pid, ppid, payload, created_at)
+			VALUES (?, ?, ?, ?, ?, 'record_process_sample', 'process_observed', ?, ?, ?, ?)`,
+			ids.New("evt"), req.RunID, sessionID, toolCallID, processID, proc.PID, proc.PPID, string(payload), proc.FirstSeen)
+		if proc.OutlivedRoot {
+			_ = s.persistOrphanDecision(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, proc, string(payload))
+		}
+	}
 	changed, diffErr := changedFiles(baseDir, absWorkdir)
 	if diffErr != nil {
 		changed = append(changed, "diff_error:"+diffErr.Error())
@@ -218,20 +302,172 @@ func (s Service) Run(req Request) (Result, error) {
 		ids.New("evt"), req.RunID, sessionID, toolCallID, processID, pid, int64(os.Getpid()), fmt.Sprintf(`{"attempt_id":%q,"exit_code":%d,"status":%q,"wall_ms":%d,"changed_files":%d}`, attemptID, exitCode, status, wallMS, len(changed)), endedAt)
 	_ = correlation.CloseBinding(s.DB, processID, endedAt)
 	return Result{
-		RunID:          req.RunID,
-		RolloutID:      rolloutID,
-		BaseSnapshotID: baseSnapshotID,
-		AttemptID:      attemptID,
-		SessionID:      sessionID,
-		ToolCallID:     toolCallID,
-		ProcessID:      processID,
-		Workdir:        absWorkdir,
-		Command:        commandText,
-		ExitCode:       exitCode,
-		Status:         status,
-		WallMS:         wallMS,
-		ChangedFiles:   changed,
+		RunID:           req.RunID,
+		RolloutID:       rolloutID,
+		BaseSnapshotID:  baseSnapshotID,
+		AttemptID:       attemptID,
+		SessionID:       sessionID,
+		ToolCallID:      toolCallID,
+		ProcessID:       processID,
+		Workdir:         absWorkdir,
+		Command:         commandText,
+		ExitCode:        exitCode,
+		Status:          status,
+		WallMS:          wallMS,
+		ChangedFiles:    changed,
+		RootPID:         pid,
+		Observed:        observed,
+		OrphanPolicy:    "observe_only",
+		PostRootGraceMS: postRootGrace.Milliseconds(),
+		CWD:             absWorkdir,
+		StartedAt:       startedAt,
+		EndedAt:         endedAt,
 	}, nil
+}
+
+func (s Service) persistOrphanDecision(runID, rolloutID, attemptID, sessionID, toolCallID, processID string, proc ObservedProcess, payload string) error {
+	record, err := security.PersistDecision(s.DB, security.Event{
+		Source:     "zero_sdk_record",
+		EventType:  "abnormal_process_tree",
+		RunID:      runID,
+		SessionID:  sessionID,
+		ToolCallID: toolCallID,
+		ProcessID:  processID,
+		Args:       []string{proc.Command},
+	}, payload, security.Decision{
+		RuleID:   "zero_sdk_orphan_observe_only",
+		Decision: "audit",
+		Reason:   fmt.Sprintf("observed descendant pid %d outlived root; policy=observe_only", proc.PID),
+	})
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, _ = s.DB.Exec(`INSERT INTO evidence_events
+		(id, run_id, rollout_id, attempt_id, session_id, tool_call_id, event_type, priority, payload, status, created_at, processed_at)
+		VALUES (?, ?, ?, ?, ?, ?, 'orphan_lifecycle_decision', 'normal', ?, 'processed', ?, ?)`,
+		ids.New("evidence"), runID, rolloutID, attemptID, sessionID, toolCallID,
+		fmt.Sprintf(`{"policy_decision_id":%q,"rule_id":"zero_sdk_orphan_observe_only","decision":"audit","action":"observe_only","pid":%d,"payload":%s}`, record.ID, proc.PID, payload),
+		now, now)
+	return nil
+}
+
+func markOutlivedRoot(procs []ObservedProcess, rootEndedAt string) []ObservedProcess {
+	table, _ := processTable()
+	alive := map[int64]bool{}
+	for _, proc := range table {
+		alive[proc.PID] = true
+	}
+	for i := range procs {
+		if procs[i].LastSeen >= rootEndedAt || alive[procs[i].PID] {
+			procs[i].OutlivedRoot = true
+		}
+	}
+	return procs
+}
+
+func sampleProcessTree(rootPID int64, interval time.Duration, stop <-chan struct{}, done chan<- []ObservedProcess) {
+	seen := map[int64]ObservedProcess{}
+	var mu sync.Mutex
+	record := func() {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		procs, err := processTable()
+		if err != nil {
+			return
+		}
+		descendants := descendantsOf(rootPID, procs)
+		mu.Lock()
+		defer mu.Unlock()
+		for _, proc := range descendants {
+			if proc.PID == rootPID {
+				continue
+			}
+			prev, ok := seen[proc.PID]
+			if !ok {
+				proc.FirstSeen = now
+				proc.LastSeen = now
+				seen[proc.PID] = proc
+				continue
+			}
+			prev.PPID = proc.PPID
+			prev.Command = proc.Command
+			prev.LastSeen = now
+			seen[proc.PID] = prev
+		}
+	}
+	record()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			record()
+		case <-stop:
+			record()
+			out := make([]ObservedProcess, 0, len(seen))
+			for _, proc := range seen {
+				out = append(out, proc)
+			}
+			sort.Slice(out, func(i, j int) bool { return out[i].PID < out[j].PID })
+			done <- out
+			return
+		}
+	}
+}
+
+func processTable() ([]ObservedProcess, error) {
+	out, err := exec.Command("ps", "-Ao", "pid=,ppid=,command=").Output()
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(string(out), "\n")
+	var procs []ObservedProcess
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		var pid, ppid int64
+		if _, err := fmt.Sscanf(fields[0], "%d", &pid); err != nil {
+			continue
+		}
+		if _, err := fmt.Sscanf(fields[1], "%d", &ppid); err != nil {
+			continue
+		}
+		command := ""
+		if len(fields) > 2 {
+			command = strings.Join(fields[2:], " ")
+		}
+		procs = append(procs, ObservedProcess{PID: pid, PPID: ppid, Command: command})
+	}
+	return procs, nil
+}
+
+func descendantsOf(rootPID int64, procs []ObservedProcess) []ObservedProcess {
+	children := map[int64][]ObservedProcess{}
+	for _, proc := range procs {
+		children[proc.PPID] = append(children[proc.PPID], proc)
+	}
+	var out []ObservedProcess
+	queue := []int64{rootPID}
+	seen := map[int64]bool{rootPID: true}
+	for len(queue) > 0 {
+		parent := queue[0]
+		queue = queue[1:]
+		for _, child := range children[parent] {
+			if seen[child.PID] {
+				continue
+			}
+			seen[child.PID] = true
+			out = append(out, child)
+			queue = append(queue, child.PID)
+		}
+	}
+	return out
 }
 
 func (s Service) insertGraphEdges(runID, rolloutID, snapshotID, attemptID, sessionID, toolCallID, processID, createdAt string) {

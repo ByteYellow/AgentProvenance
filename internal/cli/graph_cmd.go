@@ -131,6 +131,34 @@ func graphCmd(dataDir *string) *cobra.Command {
 	}
 	materialize.Flags().StringVar(&materializeRunID, "run", "", "run id")
 
+	var objectsRunID string
+	var objectsLimit int
+	var objectsCursor string
+	var objectsJSON bool
+	objectsCmd := &cobra.Command{
+		Use:   "objects",
+		Short: "list content-addressed provenance objects for a run",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := openDB()
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			if objectsRunID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			opts := provenance.ObjectListOptions{RunID: objectsRunID, Limit: objectsLimit, Cursor: objectsCursor}
+			if objectsJSON {
+				return provenance.ObjectsPageJSON(db, opts, cmd.OutOrStdout())
+			}
+			return provenance.ObjectsPage(db, opts, cmd.OutOrStdout())
+		},
+	}
+	objectsCmd.Flags().StringVar(&objectsRunID, "run", "", "run id")
+	objectsCmd.Flags().IntVar(&objectsLimit, "limit", 100, "maximum provenance objects returned")
+	objectsCmd.Flags().StringVar(&objectsCursor, "cursor", "", "pagination cursor from previous graph objects output")
+	objectsCmd.Flags().BoolVar(&objectsJSON, "json", false, "emit structured provenance object refs JSON")
+
 	var diffRunID string
 	var diffFile string
 	var diffJSON bool
@@ -261,7 +289,11 @@ func graphCmd(dataDir *string) *cobra.Command {
 	var explainToolCall string
 	var explainProcess string
 	var explainEvent string
+	var explainRisk string
 	var explainFile string
+	var explainDepth int
+	var explainLimit int
+	var explainCursor string
 	var explainJSON bool
 	explainCmd := &cobra.Command{
 		Use:   "explain",
@@ -279,7 +311,11 @@ func graphCmd(dataDir *string) *cobra.Command {
 				ToolCall: explainToolCall,
 				Process:  explainProcess,
 				Event:    explainEvent,
+				Risk:     explainRisk,
 				File:     explainFile,
+				Depth:    explainDepth,
+				Limit:    explainLimit,
+				Cursor:   explainCursor,
 				WithJSON: explainJSON,
 			}, cmd.OutOrStdout())
 		},
@@ -290,7 +326,11 @@ func graphCmd(dataDir *string) *cobra.Command {
 	explainCmd.Flags().StringVar(&explainToolCall, "tool-call", "", "tool call id")
 	explainCmd.Flags().StringVar(&explainProcess, "process", "", "process id")
 	explainCmd.Flags().StringVar(&explainEvent, "event", "", "runtime event id")
+	explainCmd.Flags().StringVar(&explainRisk, "risk", "", "policy decision id")
 	explainCmd.Flags().StringVar(&explainFile, "file", "", "workspace-relative file path")
+	explainCmd.Flags().IntVar(&explainDepth, "depth", 2, "maximum graph traversal depth for causality_path")
+	explainCmd.Flags().IntVar(&explainLimit, "limit", 100, "maximum graph edges returned in causality_path")
+	explainCmd.Flags().StringVar(&explainCursor, "cursor", "", "pagination cursor from previous graph explain output")
 	explainCmd.Flags().BoolVar(&explainJSON, "json", false, "emit structured explain JSON")
 
 	cmd := &cobra.Command{Use: "graph", Short: "provenance graph commands"}
@@ -298,6 +338,7 @@ func graphCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(refs)
 	cmd.AddCommand(logCmd)
 	cmd.AddCommand(materialize)
+	cmd.AddCommand(objectsCmd)
 	cmd.AddCommand(diffCmd)
 	cmd.AddCommand(blameCmd)
 	cmd.AddCommand(verifyCmd)
