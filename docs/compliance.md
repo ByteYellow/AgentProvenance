@@ -8,7 +8,7 @@ The mapping layer is intentionally downstream of the provenance model:
 
 ```text
 runtime telemetry + execution context + provenance DAG + risk/response evidence
-  -> framework control mapping
+  -> framework item mapping
   -> covered / partial / missing / not_applicable
 ```
 
@@ -31,6 +31,7 @@ agentprov compliance validate --ruleset examples/compliance/custom-ruleset.yaml
 agentprov compliance map --framework owasp-asi --run <run_id>
 agentprov compliance map --framework owasp-asi --run <run_id> --only ASI05,ASI10,TRACE
 agentprov compliance map --framework owasp-asi --run <run_id> --exclude ASI07
+agentprov compliance explain --framework owasp-asi --run <run_id> --item ASI05
 agentprov compliance map --framework enterprise-agent-review --ruleset examples/compliance/custom-ruleset.yaml --run <run_id>
 agentprov compliance map --framework nist-rfi-2026-00206 --run <run_id>
 agentprov compliance report --framework owasp-asi --run <run_id> --json
@@ -39,7 +40,9 @@ agentprov compliance report --framework owasp-asi --run <run_id> --json
 `map` defaults to human output. `report` emits the same mapping as structured
 JSON using schema `agentprovenance.compliance_mapping/v1`.
 Use `validate --ruleset` to check custom ruleset syntax and mapping references.
-Use `--only` and `--exclude` to run a focused subset of controls in CI or an
+Use `explain --item` to expand one item with concrete evidence refs, gap, reason,
+and recommended next step.
+Use `--only` and `--exclude` to run a focused subset of items in CI or an
 enterprise review workflow.
 
 ## Custom Rulesets
@@ -47,11 +50,11 @@ enterprise review workflow.
 Custom rulesets are YAML files with three explicit layers:
 
 - `ruleset`: metadata and one or more custom framework definitions.
-- `rules`: reusable control rules that declare required, partial, and
+- `rules`: reusable check rules that declare required, partial, and
   not-applicable evidence classes.
 - `mappings`: links rules into frameworks.
 
-Mappings can reference both custom rules and built-in controls:
+Mappings can reference both custom rules and built-in items:
 
 ```yaml
 mappings:
@@ -69,6 +72,9 @@ This keeps built-in OWASP/NIST profiles available while allowing local teams to
 compose a smaller enterprise ruleset from selected built-ins plus custom rules.
 Passing `--ruleset` merges the custom ruleset with the built-ins; it does not
 remove the built-in profiles.
+
+JSON output keeps `control_id` for compatibility and also emits `item_id` for
+the current user-facing terminology.
 
 See `examples/compliance/custom-ruleset.yaml`.
 
@@ -112,11 +118,11 @@ export`, or object inspection commands.
 
 ## Status Semantics
 
-- `covered`: required evidence exists for the control.
+- `covered`: required evidence exists for the item.
 - `partial`: related evidence exists, but at least one important evidence class
   is missing.
 - `missing`: no matching run evidence was found.
-- `not_applicable`: the run contains evidence that the control is not relevant
+- `not_applicable`: the run contains evidence that the item is not relevant
   for this execution, such as a single-agent run for inter-agent communication.
 
 ## Boundary

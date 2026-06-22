@@ -319,6 +319,7 @@ load.
 ./agentprov baseline check --template <template_name> --run <run_id>
 ./agentprov compliance frameworks
 ./agentprov compliance map --framework owasp-asi --run <run_id>
+./agentprov compliance explain --framework owasp-asi --run <run_id> --item ASI05
 ./agentprov compliance report --framework nist-rfi-2026-00206 --run <run_id>
 ./agentprov policy test examples/events/metadata-egress.jsonl
 ./agentprov policy decisions --run <run_id>
@@ -334,7 +335,7 @@ These commands are now part of the mainline security evidence surface:
 | `security deviations` | List `BaselineDeviation` records from behavior feature checks |
 | `security responses` | List recorded `ResponseAction` records such as audit, deny, kill, quarantine, taint, export, or notification hooks |
 | `baseline learn/check` | Learn process/file/network/risk/runtime feature vectors and emit deviation records plus baseline-derived risk signals |
-| `compliance frameworks/map/report` | Map run evidence to OWASP Agentic Security and NIST AI agent security assessment profiles as self-assessment evidence |
+| `compliance frameworks/map/explain/report` | Map run evidence to OWASP Agentic Security and NIST AI agent security assessment profiles as item-level self-assessment evidence |
 | `policy test/decisions` | Evaluate events, persist policy decisions, and feed the risk/response graph |
 | `forensics export` | Export auditable evidence for a run |
 
@@ -349,16 +350,17 @@ OWASP Agentic Security and NIST AI agent security assessment questions:
 ./agentprov compliance validate --ruleset examples/compliance/custom-ruleset.yaml
 ./agentprov compliance map --framework owasp-asi --run <run_id>
 ./agentprov compliance map --framework owasp-asi --run <run_id> --only ASI05,ASI10,TRACE
+./agentprov compliance explain --framework owasp-asi --run <run_id> --item ASI05
 ./agentprov compliance map --framework enterprise-agent-review --ruleset examples/compliance/custom-ruleset.yaml --run <run_id>
 ./agentprov compliance report --framework nist-rfi-2026-00206 --run <run_id> --json
 ```
 
 The output is an evidence-backed self-assessment. It does not certify
 compliance, provide legal advice, or replace qualified third-party audit. Each
-control result is derived from evidence already present in the run: timeline
-events, runtime telemetry, ToolCallScope bindings, policy decisions, risk
-signals, baseline deviations, response actions, forensics bundles,
-content-addressed provenance objects, and graph edges.
+check item is derived from evidence already present in the run: timeline events,
+runtime telemetry, ToolCallScope bindings, policy decisions, risk signals,
+baseline deviations, response actions, forensics bundles, content-addressed
+provenance objects, and graph edges.
 
 Each item reports:
 
@@ -372,8 +374,9 @@ reviews without turning AgentProvenance into a GRC platform.
 
 Custom rulesets can add local frameworks and rules without replacing built-ins.
 The YAML model separates `rules`, `frameworks`, and `mappings`; mappings can
-also select built-in controls such as `ASI05`, `ASI10`, or `TRACE` and reuse
-them inside an enterprise-specific review profile.
+also select built-in items such as `ASI05`, `ASI10`, or `TRACE` and reuse them
+inside an enterprise-specific review profile. JSON keeps `control_id` for
+compatibility and also emits `item_id` for the current terminology.
 
 ## Graph Commands
 
@@ -434,7 +437,7 @@ What these mean:
 | Artifact lineage | exported attempt artifacts linked to attempt/tool_call/process |
 | Security evidence | first-class `RiskSignal`, `BaselineDeviation`, and `ResponseAction` records, graph objects, and query commands |
 | Behavior baseline | `baseline learn/check` extracts process, file, network, suspicious runtime, policy block, outlived-process, and resource features; anomalous checks persist deviation records and baseline-derived risk signals |
-| Compliance evidence | `compliance frameworks/map/report` maps run evidence to OWASP Agentic Security and NIST AI agent security profiles with covered/partial/missing/not_applicable status |
+| Compliance evidence | `compliance frameworks/map/explain/report` maps run evidence to OWASP Agentic Security and NIST AI agent security profiles with covered/partial/missing/not_applicable item status |
 | Risk / taint | policy decisions, policy-decision graph edges, quarantine, taint, taint descendant checks |
 | Response gate | eligibility checks with telemetry/evidence drain watermark for tainted or unsafe branches |
 | Trajectory evidence | `agentprovenance.trajectories/v1` manifest for external evaluators, including behavior evidence that can become reward, penalty, filtering, or review signals |

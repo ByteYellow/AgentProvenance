@@ -96,6 +96,7 @@ type MappingSummary struct {
 
 type MappingResult struct {
 	Framework           string        `json:"framework"`
+	ItemID              string        `json:"item_id"`
 	ControlID           string        `json:"control_id"`
 	Title               string        `json:"title"`
 	Status              Status        `json:"status"`
@@ -355,6 +356,7 @@ func mapControl(frameworkID string, control Control, index EvidenceIndex) Mappin
 	}
 	return MappingResult{
 		Framework:           frameworkID,
+		ItemID:              control.ID,
 		ControlID:           control.ID,
 		Title:               control.Title,
 		Status:              status,
@@ -363,6 +365,15 @@ func mapControl(frameworkID string, control Control, index EvidenceIndex) Mappin
 		RecommendedNextStep: control.NextStep,
 		Reason:              reason,
 	}
+}
+
+func FindItem(report MappingReport, itemID string) (MappingResult, bool) {
+	for _, item := range report.Items {
+		if item.ItemID == itemID || item.ControlID == itemID {
+			return item, true
+		}
+	}
+	return MappingResult{}, false
 }
 
 func gapForStatus(status Status, control Control) string {

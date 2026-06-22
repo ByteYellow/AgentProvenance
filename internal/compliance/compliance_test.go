@@ -185,6 +185,26 @@ func TestMapRunOnlyAndExcludeFiltersControls(t *testing.T) {
 	}
 }
 
+func TestFindItemSupportsItemIDAndLegacyControlID(t *testing.T) {
+	report := MappingReport{
+		Items: []MappingResult{
+			{Framework: "owasp-asi", ItemID: "ASI05", ControlID: "ASI05", Title: "Runtime telemetry correlation"},
+		},
+	}
+	item, ok := FindItem(report, "ASI05")
+	if !ok {
+		t.Fatal("FindItem did not find item by item id")
+	}
+	if item.ItemID != "ASI05" || item.ControlID != "ASI05" {
+		t.Fatalf("unexpected item ids: %+v", item)
+	}
+	report.Items[0].ItemID = ""
+	item, ok = FindItem(report, "ASI05")
+	if !ok || item.ControlID != "ASI05" {
+		t.Fatalf("FindItem did not fall back to legacy control id: %+v", item)
+	}
+}
+
 func assertStatus(t *testing.T, report MappingReport, controlID string, want Status) {
 	t.Helper()
 	for _, item := range report.Items {

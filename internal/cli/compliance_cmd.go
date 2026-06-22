@@ -13,13 +13,14 @@ import (
 func complianceCmd(dataDir *string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "compliance",
-		Short: "map run evidence to security framework controls",
-		Long:  "Map AgentProvenance run evidence to security framework controls as evidence-backed self-assessment. This is not certification or legal advice.",
+		Short: "map run evidence to security framework items",
+		Long:  "Map AgentProvenance run evidence to security framework items as evidence-backed self-assessment. This is not certification or legal advice.",
 	}
 	cmd.AddCommand(complianceFrameworksCmd())
 	cmd.AddCommand(complianceValidateCmd())
 	cmd.AddCommand(complianceMapCmd(dataDir, "map"))
 	cmd.AddCommand(complianceMapCmd(dataDir, "report"))
+	cmd.AddCommand(complianceExplainCmd(dataDir))
 	return cmd
 }
 
@@ -85,7 +86,7 @@ func complianceFrameworksCmd() *cobra.Command {
 				})
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tTITLE\tCONTROLS\tDISCLAIMER")
+			fmt.Fprintln(w, "ID\tTITLE\tITEMS\tDISCLAIMER")
 			for _, framework := range frameworks {
 				fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", framework.ID, framework.Title, len(framework.Controls), framework.Disclaimer)
 			}
@@ -145,9 +146,9 @@ func complianceMapCmd(dataDir *string, use string) *cobra.Command {
 				report.Summary.Missing, report.Summary.NotApplicable, report.Summary.Total)
 			fmt.Fprintf(cmd.OutOrStdout(), "disclaimer=%q\n", report.Disclaimer)
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "CONTROL\tSTATUS\tEVIDENCE\tGAP\tNEXT_STEP")
+			fmt.Fprintln(w, "ITEM\tSTATUS\tEVIDENCE\tGAP\tNEXT_STEP")
 			for _, item := range report.Items {
-				fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", item.ControlID, item.Status, len(item.EvidenceRefs), item.Gap, item.RecommendedNextStep)
+				fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", item.ItemID, item.Status, len(item.EvidenceRefs), item.Gap, item.RecommendedNextStep)
 			}
 			return w.Flush()
 		},
@@ -155,8 +156,92 @@ func complianceMapCmd(dataDir *string, use string) *cobra.Command {
 	cmd.Flags().StringVar(&frameworkID, "framework", "", "framework id, such as owasp-asi or nist-rfi-2026-00206")
 	cmd.Flags().StringVar(&runID, "run", "", "run id")
 	cmd.Flags().StringVar(&ruleSetPath, "ruleset", "", "optional custom compliance ruleset YAML")
-	cmd.Flags().StringVar(&onlyCSV, "only", "", "comma-separated control ids to evaluate")
-	cmd.Flags().StringVar(&excludeCSV, "exclude", "", "comma-separated control ids to skip")
+	cmd.Flags().StringVar(&onlyCSV, "only", "", "comma-separated item ids to evaluate")
+	cmd.Flags().StringVar(&excludeCSV, "exclude", "", "comma-separated item ids to skip")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
+	return cmd
+}
+
+func complianceExplainCmd(dataDir *string) *cobra.Command {
+	var frameworkID, runID, itemID, legacyControlID string
+	var jsonOut bool
+	var ruleSetPath string
+	cmd := &cobra.Command{
+		Use:   "explain",
+		Short: "explain evidence for one compliance/security item",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if frameworkID == "" {
+				return fmt.Errorf("--framework is required")
+			}
+			if runID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			if itemID == "" {
+				itemID = legacyControlID
+			}
+			if itemID == "" {
+				return fmt.Errorf("--item is required")
+			}
+			db, cleanup, err := openLocalDB(*dataDir)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+			var ruleSet *compliance.RuleSet
+			if ruleSetPath != "" {
+				loaded, err := compliance.LoadRuleSet(ruleSetPath)
+				if err != nil {
+					return err
+				}
+				ruleSet = &loaded
+			}
+			report, err := compliance.MapRun(db, compliance.MappingOptions{
+				Framework: frameworkID,
+				RunID:     runID,
+				RuleSet:   ruleSet,
+				Only:      []string{itemID},
+			})
+			if err != nil {
+				return err
+			}
+			item, ok := compliance.FindItem(report, itemID)
+			if !ok {
+				return fmt.Errorf("item %q not found in framework %q", itemID, frameworkID)
+			}
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(map[string]any{
+					"schema_version": "agentprovenance.compliance_explain/v1",
+					"framework":      report.Framework,
+					"framework_name": report.FrameworkName,
+					"run_id":         report.RunID,
+					"item":           item,
+				})
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "framework=%s run=%s item=%s status=%s evidence=%d\n",
+				report.Framework, report.RunID, item.ItemID, item.Status, len(item.EvidenceRefs))
+			fmt.Fprintf(cmd.OutOrStdout(), "title=%q\n", item.Title)
+			fmt.Fprintf(cmd.OutOrStdout(), "reason=%q\n", item.Reason)
+			if item.Gap != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "gap=%q\n", item.Gap)
+			}
+			if item.RecommendedNextStep != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "next_step=%q\n", item.RecommendedNextStep)
+			}
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "REF\tKIND\tID\tSUMMARY")
+			for _, ref := range item.EvidenceRefs {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", ref.Ref, ref.Kind, ref.ID, ref.Summary)
+			}
+			return w.Flush()
+		},
+	}
+	cmd.Flags().StringVar(&frameworkID, "framework", "", "framework id, such as owasp-asi or nist-rfi-2026-00206")
+	cmd.Flags().StringVar(&runID, "run", "", "run id")
+	cmd.Flags().StringVar(&itemID, "item", "", "framework item id")
+	cmd.Flags().StringVar(&legacyControlID, "control", "", "deprecated alias for --item")
+	cmd.Flags().StringVar(&ruleSetPath, "ruleset", "", "optional custom compliance ruleset YAML")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	return cmd
 }
