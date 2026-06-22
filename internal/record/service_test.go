@@ -262,6 +262,27 @@ func TestRecordMarksOrphanDescendantDuringGraceWindow(t *testing.T) {
 	if verify.ErrorCount != 0 {
 		t.Fatalf("verify errors=%d issues=%+v", verify.ErrorCount, verify.Issues)
 	}
+	timeline, err := provenance.BuildTimeline(db, provenance.TimelineOptions{RunID: "run-record-orphan-test", Type: "process_observed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundTimelineOutlived := false
+	for _, event := range timeline.Events {
+		if event.Source != "record_process_sample" || event.Type != "process_observed" {
+			continue
+		}
+		if event.Evidence["scope_boundary"] != "root_pid_descendants+cwd+time_window" ||
+			event.Evidence["correlation_source"] != "zero_sdk_record_process_tree" ||
+			event.Evidence["schema_status"] != "valid" {
+			t.Fatalf("process observation timeline missing zero-sdk evidence: %+v", event)
+		}
+		if outlived, ok := event.Evidence["outlived_root"].(bool); ok && outlived {
+			foundTimelineOutlived = true
+		}
+	}
+	if !foundTimelineOutlived {
+		t.Fatalf("timeline missing outlived process observation: %+v", timeline.Events)
+	}
 	_ = os.Remove(marker)
 }
 

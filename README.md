@@ -381,11 +381,11 @@ What these mean:
 
 | Area | Current capability |
 |---|---|
-| Zero-SDK record | `agentprov record -- <command>` snapshots a working directory, samples root-process descendants, applies a post-root grace window, marks observed descendants that outlive the root, creates PID bindings, emits orphan lifecycle audit decisions when applicable, computes changed files, records runtime file evidence, and materializes a `record_manifest` object |
+| Zero-SDK record | `agentprov record -- <command>` snapshots a working directory, samples root-process descendants, applies a post-root grace window, marks observed descendants that outlive the root, creates PID bindings, emits orphan lifecycle audit decisions when applicable, computes changed files, records runtime file evidence, exposes process observations in timeline JSON, and materializes a `record_manifest` object |
 | Execution context | explicit ToolCallScope binding through run/session/attempt/tool_call/process/container/cgroup/pid |
 | Adapter contracts | `adapter list/inspect` exposes agent, sandbox, telemetry, artifact, and snapshot adapter capabilities, identity keys, boundaries, and QBS impact |
 | Evidence ingest | raw telemetry ingestion without requiring raw `tool_call_id`; ingest and verify enforce event-specific payload schemas, reject application context inside raw runtime payloads, map filtered Tetragon/Falco/LoongCollector JSONL into normalized telemetry events, and record batch manifests with input/event hashes |
-| Execution timeline | `timeline --run` emits a human table or `agentprovenance.timeline/v1` JSON across tool calls, processes, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects |
+| Execution timeline | `timeline --run` emits a human table or `agentprovenance.timeline/v1` JSON across tool calls, processes, zero-SDK process observations, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects |
 | Runtime causality | native `runtime_*` graph edges for tool call, process, process tree, attempt, snapshot, runtime event, and workspace file correlation |
 | Provenance DAG | `trace`, `refs`, `log`, `materialize`, `objects`, `verify`, text and JSON replay |
 | Evidence query | `graph explain --json` supports file, artifact, process, event, tool call, attempt, and risk targets with bounded, depth/limit/cursor-controlled causality paths, evidence, object refs, risks, process observations, and replay refs |
@@ -417,6 +417,9 @@ The main demo must prove:
   can be explained together with diff/blame.
 - Zero-SDK process observations expose outlived child processes and verify that
   orphan lifecycle evidence and policy decisions exist.
+- Timeline JSON shows zero-SDK `process_observed` events with pid, ppid,
+  command, first/last seen timestamps, `outlived_root`, and scope boundary
+  metadata.
 - A risky branch is quarantined and tainted.
 - A tainted branch cannot pass the response gate.
 - Response-gate evidence records a drain watermark with

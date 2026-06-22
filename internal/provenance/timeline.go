@@ -193,29 +193,60 @@ func appendTimelineProcesses(db *sql.DB, opts TimelineOptions, events *[]Timelin
 func appendTimelineRuntimeEvents(db *sql.DB, opts TimelineOptions, events *[]TimelineEvent) error {
 	rows, err := db.Query(`SELECT id, COALESCE(session_id, ''), COALESCE(tool_call_id, ''), COALESCE(process_id, ''), COALESCE(snapshot_id, ''),
 		source, event_type, COALESCE(raw_event_id, ''), COALESCE(correlation_method, ''), COALESCE(correlation_confidence, 0),
-		COALESCE(container_id, ''), COALESCE(cgroup_id, ''), COALESCE(pid, 0), COALESCE(ppid, 0), created_at
+		COALESCE(container_id, ''), COALESCE(cgroup_id, ''), COALESCE(pid, 0), COALESCE(ppid, 0), COALESCE(payload, ''), created_at
 		FROM events WHERE run_id = ?`, opts.RunID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, sessionID, toolCallID, processID, snapshotID, source, eventType, rawEventID, method, containerID, cgroupID, createdAt string
+		var id, sessionID, toolCallID, processID, snapshotID, source, eventType, rawEventID, method, containerID, cgroupID, payload, createdAt string
 		var confidence float64
 		var pid, ppid int
-		if err := rows.Scan(&id, &sessionID, &toolCallID, &processID, &snapshotID, &source, &eventType, &rawEventID, &method, &confidence, &containerID, &cgroupID, &pid, &ppid, &createdAt); err != nil {
+		if err := rows.Scan(&id, &sessionID, &toolCallID, &processID, &snapshotID, &source, &eventType, &rawEventID, &method, &confidence, &containerID, &cgroupID, &pid, &ppid, &payload, &createdAt); err != nil {
 			return err
+		}
+		summary := fmt.Sprintf("method=%s confidence=%.2f pid=%d ppid=%d", method, confidence, pid, ppid)
+		evidence := map[string]any{"raw_event_id": rawEventID, "correlation_method": method, "correlation_confidence": confidence, "container_id": containerID, "cgroup_id": cgroupID, "pid": pid, "ppid": ppid}
+		if source == "record_process_sample" && eventType == "process_observed" {
+			summary, evidence = zeroSDKProcessObservationSummary(payload, evidence)
 		}
 		*events = append(*events, TimelineEvent{
 			Time: createdAt, Type: eventType, Source: source, ID: id, RunID: opts.RunID,
 			SessionID: sessionID, ToolCallID: toolCallID, ProcessID: processID, SnapshotID: snapshotID,
 			ObjectRef:         "runtime_event/" + id,
-			Summary:           fmt.Sprintf("method=%s confidence=%.2f pid=%d ppid=%d", method, confidence, pid, ppid),
-			Evidence:          map[string]any{"raw_event_id": rawEventID, "correlation_method": method, "correlation_confidence": confidence, "container_id": containerID, "cgroup_id": cgroupID, "pid": pid, "ppid": ppid},
+			Summary:           summary,
+			Evidence:          evidence,
 			ExplainReplayRefs: []ExplainReplayRef{{Kind: "event", ID: id, Ref: "graph explain --event " + id}},
 		})
 	}
 	return rows.Err()
+}
+
+func zeroSDKProcessObservationSummary(payload string, base map[string]any) (string, map[string]any) {
+	var observed struct {
+		PID          int64  `json:"pid"`
+		PPID         int64  `json:"ppid"`
+		Command      string `json:"command"`
+		FirstSeen    string `json:"first_seen"`
+		LastSeen     string `json:"last_seen"`
+		OutlivedRoot bool   `json:"outlived_root"`
+	}
+	if err := json.Unmarshal([]byte(payload), &observed); err != nil {
+		base["schema_status"] = "invalid_process_observation_payload"
+		return fmt.Sprintf("zero_sdk_process_observed invalid_payload=%v", err), base
+	}
+	base["pid"] = observed.PID
+	base["ppid"] = observed.PPID
+	base["command"] = observed.Command
+	base["first_seen"] = observed.FirstSeen
+	base["last_seen"] = observed.LastSeen
+	base["outlived_root"] = observed.OutlivedRoot
+	base["scope_boundary"] = "root_pid_descendants+cwd+time_window"
+	base["correlation_source"] = "zero_sdk_record_process_tree"
+	base["schema_status"] = "valid"
+	return fmt.Sprintf("zero_sdk_process_observed pid=%d ppid=%d outlived_root=%t command=%q",
+		observed.PID, observed.PPID, observed.OutlivedRoot, observed.Command), base
 }
 
 func appendTimelineEvidenceEvents(db *sql.DB, opts TimelineOptions, events *[]TimelineEvent) error {
