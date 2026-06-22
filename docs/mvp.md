@@ -8,7 +8,7 @@ Docker-backed sandbox sessions, directory snapshots, attempt workspace forks,
 best-of-N execution, process/tool-call traces, runtime telemetry correlation,
 artifact refs, content-addressed provenance objects, and cost/risk evidence for
 each trajectory. External RL pipelines, evaluators, or agent harnesses own the
-final selection decision.
+final reward, penalty, filtering, and selection decisions.
 
 Phase 1 focuses on the immutable execution ledger and state-diff audit loop:
 `Execution Context -> Evidence Ingest -> Runtime Causality Graph -> Provenance
@@ -19,7 +19,8 @@ This is not an RL runtime, generic telemetry collector, distributed scheduler,
 or reward/evaluator decision maker. Coding agents and autonomous tool-using
 agents are the primary target. RL-style rollout and evaluator pipelines are
 supported as high-concurrency audit and debugging consumers of the graph, not
-as the only runtime target.
+as the only runtime target. The RL-facing value is observability over trajectory
+behavior and expectation deviations, not AgentProvenance choosing a winner.
 
 ## Phase 1 risk boundaries
 
@@ -195,8 +196,8 @@ Expected output / acceptance:
   `risk=tainted`.
 - `rollout winner` is a historical command name. It shows `correct-add` as the
   local clean candidate that passed the demo promotion barrier. In real RL
-  pipelines this is evidence for the evaluator, not the final reward or
-  training decision.
+  pipelines this is evidence for reward/penalty scoring, filtering, or human
+  review, not the final reward or training decision.
 - The same output includes `watermark`, `drain_started_at`,
   `drain_completed_at`, `drain_queued_before`, `drain_processed`, and
   `drain_pending_after=0`, proving the candidate barrier drained queued
@@ -415,8 +416,8 @@ command execution, switches the container from `think` to `tool` CPU profile,
 writes compact evidence, materializes `rollout -> attempt -> tool_call ->
 session` graph edges asynchronously, and checks local candidate eligibility
 through the promotion barrier. Attempt tables and `cost show` expose risk,
-budget, score, and cost so an external evaluator can make or audit the final
-selection.
+budget, score, cost, and expectation-deviation evidence so an external
+evaluator can assign reward, penalty, filtering, or review decisions.
 
 ### demo_metadata_egress_quarantine
 

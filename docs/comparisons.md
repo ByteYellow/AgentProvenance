@@ -88,6 +88,7 @@ That graph should answer:
 - Which process changed this file?
 - Which runtime event maps to this agent action?
 - Which branch was tainted or quarantined?
-- Which local candidate passed the promotion barrier, and what evidence should
-  an external evaluator inspect before making the final selection?
+- Which local candidate passed the promotion barrier, and what behavior/risk
+  evidence should an external evaluator score before assigning reward,
+  penalty, filtering, or review decisions?
 - Can the result be replayed or audited later?

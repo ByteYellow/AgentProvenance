@@ -49,8 +49,8 @@ The goal is to answer questions ordinary traces do not answer well:
 - Which evidence supports a risk decision?
 - What response action should be triggered: audit, deny, kill, quarantine,
   taint, export forensics, or notify a human through Feishu/DingTalk?
-- What exact evidence should an external evaluator, RL pipeline, or human
-  reviewer inspect?
+- What exact behavior evidence, deviation signal, and risk context should an
+  external evaluator, RL pipeline, or human reviewer inspect?
 - Can this execution be diffed, blamed, verified, replayed, and audited later?
 
 ## Why
@@ -80,8 +80,15 @@ base snapshot
 The primary path is recording and explaining sandboxed agent execution. A
 coding-agent best-of-N repair loop remains a stress demo because it creates
 branches, artifacts, risk, and competing trajectories, but AgentProvenance does
-not choose the reward winner. It emits structured trajectory evidence so an
-external evaluator or training pipeline can make that decision.
+not choose the reward winner. It emits structured trajectory evidence and
+expectation-deviation signals so an external evaluator or training pipeline can
+turn them into reward, penalty, filtering, or human-review decisions.
+
+For RL pipelines, the useful primitive is not "best-of-one" or automatic winner
+selection. The useful primitive is observability over each trajectory: what the
+agent did, which subprocesses and files were touched, which network/runtime
+events appeared, which behavior violated safety or task expectations, and which
+risk/baseline signals should contribute to reward shaping or rejection.
 
 ## Security Loop
 
@@ -276,7 +283,7 @@ What these mean:
 | `objects` | List content-addressed object refs, hashes, parent hashes, source IDs, paths, and sizes; supports `--limit` and `--cursor` |
 | `verify` | Check graph integrity, taint/promotion barriers, object hashes, replay generation, drain watermarks, telemetry batch hashes, and orphan lifecycle evidence for outlived zero-SDK child processes |
 | `replay` | Emit a plan-only reconstruction of the run |
-| `trajectories --json` | Emit per-attempt evidence for external evaluators or RL pipelines |
+| `trajectories --json` | Emit per-attempt behavior evidence, risk/deviation context, cost, artifacts, and runtime events for external evaluators or RL reward/penalty pipelines |
 | `diff` | Compare file state between base and attempts |
 | `blame` | Attribute file state to attempt, tool call, process, strategy, command, and local candidate status |
 | `explain` | Explain a target by combining trace, runtime causality, diff/blame, telemetry receiver details, telemetry batch manifests, process observations, policy, object refs, and promotion evidence; `--json` emits `agentprovenance.explain/v1` with `upstream`, `downstream`, bounded `causality_path`, `query`, `evidence`, `objects`, `risks`, `telemetry_batches`, `process_observations`, and `replay_refs`; runtime events include receiver/source format, normalized event type, identity keys, schema status, and correlation status; use `--depth`, `--limit`, and `--cursor` to bound and page DAG traversal |
@@ -296,7 +303,7 @@ What these mean:
 | Artifact lineage | exported attempt artifacts linked to attempt/tool_call/process |
 | Risk / taint | policy decisions, policy-decision graph edges, quarantine, taint, taint descendant checks |
 | Promotion barrier | candidate eligibility with telemetry/evidence drain watermark |
-| Trajectory evidence | `agentprovenance.trajectories/v1` manifest for external evaluators |
+| Trajectory evidence | `agentprovenance.trajectories/v1` manifest for external evaluators, including behavior evidence that can become reward, penalty, filtering, or review signals |
 | Runtime | Docker active; gVisor/Firecracker/bubblewrap are explicit capability stubs |
 | Snapshots | directory snapshot, fork, resume, lineage, taint propagation |
 | Cost | run/attempt/session cost records, fanout cost, saved cost, active CPU windows |
@@ -384,7 +391,8 @@ These boundaries are intentional:
 - It does not perform arbitrary branch auto-merge.
 - It does not roll back real external side effects. External actions are
   recorded, gated, and optionally linked to compensation hooks.
-- It does not make final reward or winner decisions for RL pipelines.
+- It does not make final reward, penalty, or winner decisions for RL pipelines;
+  it emits the behavior evidence and deviation signals those systems can score.
 
 See [docs/product.md](docs/product.md) for the product direction and
 [docs/comparisons.md](docs/comparisons.md) for adjacent-system boundaries.

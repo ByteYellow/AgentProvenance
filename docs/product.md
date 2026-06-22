@@ -43,12 +43,14 @@ Primary scenarios:
 Stress scenarios:
 
 - Best-of-N attempt fanout.
-- Evaluator or RL pipelines that need trajectory evidence.
+- Evaluator or RL pipelines that need trajectory evidence, expectation
+  deviation signals, and risk context for reward/penalty shaping.
 - High-concurrency sandbox execution where raw traces are not enough.
 
-AgentProvenance does not choose the winner for an RL pipeline. It emits
-structured trajectory evidence so the external evaluator, trainer, or harness
-can make that decision.
+AgentProvenance does not choose the winner or define the reward function for an
+RL pipeline. It emits structured trajectory evidence, behavior deviations,
+runtime/security signals, and provenance context so the external evaluator,
+trainer, or harness can assign reward, penalty, filtering, or review decisions.
 
 ## Two Context Modes
 
@@ -154,7 +156,8 @@ manifests.
 - Which branch was tainted or quarantined?
 - Why was a candidate blocked by the promotion barrier?
 - Which risk decision and response action are supported by concrete evidence?
-- What evidence should an external evaluator inspect?
+- What evidence and deviation signals should an external evaluator or RL
+  pipeline score?
 - Can this trajectory be replayed or audited later?
 
 ## Phase Plan

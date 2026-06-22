@@ -14,7 +14,10 @@ Agent / Sandbox / Runtime Telemetry
 
 Best-of-N and RL rollout are demo and stress scenarios. They are useful because
 they create branches, artifacts, risk, and competing trajectories, but they are
-not the core product promise.
+not the core product promise. For RL, AgentProvenance should provide
+observability, behavior evidence, expectation-deviation signals, and
+security/risk context that downstream trainers can convert into reward,
+penalty, filtering, or human-review signals.
 
 ## Final Positioning
 
@@ -217,7 +220,8 @@ a stress demo for branching sandboxed agent execution
 
 It should prove that AgentProvenance can observe, trace, diff, blame, materialize,
 query, replay, audit, and risk-gate multiple branches. It should not imply that
-AgentProvenance owns reward selection or RL training policy.
+AgentProvenance owns reward selection or RL training policy. It should emit the
+behavior and risk signals that an external RL system may score.
 
 The stronger primary path should become:
 

@@ -23,7 +23,7 @@ ToolCallScope
 | ToolCallID is not required inside raw runtime/security events | Acceptance script injects raw runtime payloads without `tool_call_id`; correlation attaches `run_id/session_id/tool_call_id` from bindings. |
 | Delayed or asynchronous child process telemetry remains attributable | Runtime events with PID/PPID/TGID are linked into `runtime_process_parent`, `runtime_process_child_of`, `runtime_process_thread`, and process/tool-call event edges. |
 | Runtime causality is a graph invariant, not only display output | `graph verify` now checks runtime event/process/file edges and fails on missing causality edges. Covered by `internal/provenance/verify_test.go`. |
-| Best-of-N coding-agent trajectory can be represented | `scripts/demo_coding_agent_best_of_n.sh` forks attempts, records strategies, emits artifacts, traces winning and risky branches, and demonstrates promotion explanation. |
+| Best-of-N coding-agent trajectory can be represented | `scripts/demo_coding_agent_best_of_n.sh` forks attempts, records strategies, emits artifacts, traces promotable and risky branches, and demonstrates promotion-barrier evidence. |
 | State diff and blame are queryable | `agentprov graph diff`, `agentprov graph blame`, and `agentprov graph explain --file` show changed file state and attribution. JSON schemas are covered by provenance tests. |
 | File mutations connect to runtime evidence | `file_write`/`file_open` events create `runtime_event_file`, `runtime_process_file`, `runtime_tool_call_file`, and `runtime_attempt_file`. |
 | Risk can taint branches and block promotion | Risk events can quarantine attempts and taint snapshot lineage; promotion verifies telemetry drain and refuses tainted winners. |
