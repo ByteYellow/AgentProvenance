@@ -53,6 +53,8 @@ agentprov graph explain --run run-record-demo --file app.py --json
 scripts/demo_telemetry_jsonl.sh
 agentprov telemetry batches --run run-telemetry-jsonl-demo
 agentprov telemetry list --run run-telemetry-jsonl-demo
+agentprov timeline --run run-telemetry-jsonl-demo
+agentprov timeline --run run-telemetry-jsonl-demo --json
 agentprov policy test examples/events/metadata-egress.jsonl
 agentprov security risks --run run-demo-bugfix
 agentprov security deviations --run run-demo-bugfix
@@ -86,6 +88,7 @@ agentprov telemetry ingest --raw-event raw-execve-1 --process <process_id> --typ
 agentprov telemetry ingest --raw-event raw-execve-pid-child --pid <pid> --type execve --payload '{"argv":["./async_child.sh"]}'
 agentprov telemetry bindings --run run-demo-bugfix
 agentprov telemetry list --run run-demo-bugfix --type execve
+agentprov timeline --run run-demo-bugfix --tool-call <tool_call_id> --json
 ```
 
 Machine-checkable Phase 1 gate:
@@ -190,6 +193,10 @@ Expected output / acceptance:
   event.
 - `graph trace` shows `execution_context_bindings:` and the correlated
   `execve` event under the same run/session/attempt/tool/process chain.
+- `timeline --run <run_id> --json` emits `agentprovenance.timeline/v1`, a
+  time-ordered execution view across tool calls, processes, runtime telemetry,
+  evidence, policy decisions, risk signals, baseline deviations, response
+  actions, and external effects.
 - `rollout attempts` shows `wrong-constant` as `quarantined` with
   `risk=tainted`.
 - `rollout winner` is a historical command name. It shows `correct-add` as the

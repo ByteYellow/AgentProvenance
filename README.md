@@ -232,6 +232,8 @@ printf 'value = 1\n' > /tmp/agentprov-record-demo/app.py
 ./agentprov adapter inspect filtered-jsonl --json
 ./scripts/demo_telemetry_jsonl.sh
 ./agentprov telemetry batches --run run-telemetry-jsonl-demo
+./agentprov timeline --run run-telemetry-jsonl-demo
+./agentprov timeline --run run-telemetry-jsonl-demo --json
 ./scripts/accept_phase1.sh
 ```
 
@@ -244,6 +246,11 @@ ToolCallScope, ingests Tetragon/Falco/LoongCollector fixture JSONL from
 event entered the DAG.
 
 `accept_phase1.sh` is the machine-checkable gate for the current MVP.
+
+`timeline` is the system-side execution timeline surface. It merges
+application context, runtime telemetry, evidence, policy decisions, risk
+signals, baseline deviations, response actions, and external effects into one
+time-ordered view. The JSON output is designed to feed a future UI.
 
 The legacy branch-heavy script remains available as a stress demo, not as the
 main product story:
@@ -260,6 +267,10 @@ load.
 ## Security Evidence Commands
 
 ```sh
+./agentprov timeline --run <run_id>
+./agentprov timeline --run <run_id> --tool-call <tool_call_id> --json
+./agentprov timeline --run <run_id> --process <process_id> --json
+./agentprov timeline --run <run_id> --type risk_signal --json
 ./agentprov security risks --run <run_id>
 ./agentprov security deviations --run <run_id>
 ./agentprov security responses --run <run_id>
@@ -274,6 +285,7 @@ These commands are now part of the mainline security evidence surface:
 
 | Command | Purpose |
 |---|---|
+| `timeline` | Show a time-ordered execution view across application context, runtime telemetry, evidence, risk, baseline, response, and external effects |
 | `security risks` | List normalized `RiskSignal` records derived from policy/runtime evidence |
 | `security deviations` | List `BaselineDeviation` records from behavior profile checks |
 | `security responses` | List recorded `ResponseAction` records such as audit, deny, kill, quarantine, taint, export, or notification hooks |
@@ -332,6 +344,7 @@ What these mean:
 | Execution context | explicit ToolCallScope binding through run/session/attempt/tool_call/process/container/cgroup/pid |
 | Adapter contracts | `adapter list/inspect` exposes agent, sandbox, telemetry, artifact, and snapshot adapter capabilities, identity keys, boundaries, and QBS impact |
 | Evidence ingest | raw telemetry ingestion without requiring raw `tool_call_id`; ingest and verify enforce event-specific payload schemas, reject application context inside raw runtime payloads, map filtered Tetragon/Falco/LoongCollector JSONL into normalized telemetry events, and record batch manifests with input/event hashes |
+| Execution timeline | `timeline --run` emits a human table or `agentprovenance.timeline/v1` JSON across tool calls, processes, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects |
 | Runtime causality | native `runtime_*` graph edges for tool call, process, process tree, attempt, snapshot, runtime event, and workspace file correlation |
 | Provenance DAG | `trace`, `refs`, `log`, `materialize`, `objects`, `verify`, text and JSON replay |
 | Evidence query | `graph explain --json` supports file, artifact, process, event, tool call, attempt, and risk targets with bounded, depth/limit/cursor-controlled causality paths, evidence, object refs, risks, process observations, and replay refs |
@@ -391,7 +404,7 @@ flowchart TD
 
     Observability --> Causality["Runtime Causality Graph\nprocess / file / event correlation"]
     Causality --> Provenance["Git-like Provenance DAG\nrefs / objects / diff / blame"]
-    Provenance --> Query["Evidence Query Surface\ntrace / explain / verify / objects"]
+    Provenance --> Query["Evidence Query Surface\ntimeline / trace / explain / verify / objects"]
     Query --> RiskReplayAudit["Risk / Replay / Audit\ntaint / response gate / manifests"]
 ```
 
@@ -459,7 +472,7 @@ docs/                 product direction, MVP details, comparisons
 | Phase | Goal | Main deliverables |
 |---|---|---|
 | Phase 1 | Provenance Correlation MVP | ToolCallScope, raw telemetry correlation, runtime causality DAG, diff/blame, risk/deviation records, response-gate evidence, replay and trajectory manifests |
-| Phase 2 | Evidence / Causality Hardening | stable explain JSON, content-addressed objects, object parent hashes, graph verification, bounded traversal, pagination, integrity metadata |
+| Phase 2 | Evidence / Causality Hardening | execution timeline JSON, stable explain JSON, content-addressed objects, object parent hashes, graph verification, bounded traversal, pagination, integrity metadata |
 | Phase 3 | Zero-SDK Recorder Hardening | process-tree capture, delayed child process handling, cwd/time/file-diff inference, orphan lifecycle evidence, low-intrusion record mode |
 | Phase 4 | Real Telemetry Integration | Falco/Tetragon/LoongCollector/auditd/eBPF receivers, cgroup/container/pid correlation, kernel-side filtering assumptions |
 | Phase 5 | Risk / Policy / Control | configurable risk signals, behavior baselines, response adapters, taint propagation, quarantine, response blocking, forensics export, Feishu/DingTalk/webhook hooks, isolation escalation hooks |

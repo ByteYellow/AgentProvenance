@@ -14,6 +14,7 @@ The core product line is:
 ```text
 Execution Context
   -> Evidence Ingest
+  -> Execution Timeline
   -> Runtime Causality Graph
   -> Provenance DAG
   -> State Diff / Blame / Artifact Lineage
@@ -150,6 +151,8 @@ manifests.
 - Which snapshot did this attempt start from?
 - Which tool call started this process?
 - Which child process produced this runtime event?
+- What is the time-ordered execution story across tool calls, processes,
+  telemetry, risk, and response?
 - Which process changed this file?
 - Which behavior deviated from this task or agent baseline?
 - Which file state is created, modified, deleted, or unchanged from base?
@@ -166,7 +169,7 @@ manifests.
 | Phase | Goal | Output |
 |---|---|---|
 | Phase 1 | Provenance Correlation MVP | ToolCallScope, raw telemetry correlation, runtime causality DAG, diff/blame, risk/deviation records, response-gate evidence, replay and trajectory manifests |
-| Phase 2 | Evidence / Causality Hardening | stable explain JSON, content-addressed objects, object parent hashes, graph verification, bounded traversal, pagination, integrity metadata |
+| Phase 2 | Evidence / Causality Hardening | execution timeline JSON, stable explain JSON, content-addressed objects, object parent hashes, graph verification, bounded traversal, pagination, integrity metadata |
 | Phase 3 | Zero-SDK Recorder Hardening | process-tree capture, delayed child process handling, cwd/time/file-diff inference, orphan lifecycle evidence, low-intrusion record mode |
 | Phase 4 | Real Telemetry Integration | Falco/Tetragon/LoongCollector/auditd/eBPF receivers, cgroup/container/pid correlation, kernel-side filtering assumptions |
 | Phase 5 | Risk / Policy / Control | configurable risk signals, behavior baseline checks, response adapters, taint propagation, quarantine, response blocking, forensics export, Feishu/DingTalk/webhook hooks, isolation escalation hooks |
