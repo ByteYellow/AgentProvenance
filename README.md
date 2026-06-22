@@ -328,9 +328,9 @@ These commands are now part of the mainline security evidence surface:
 |---|---|
 | `timeline` | Show a time-ordered execution view across application context, runtime telemetry, evidence, risk, baseline, response, and external effects |
 | `security risks` | List normalized `RiskSignal` records derived from policy/runtime evidence |
-| `security deviations` | List `BaselineDeviation` records from behavior profile checks |
+| `security deviations` | List `BaselineDeviation` records from behavior feature checks |
 | `security responses` | List recorded `ResponseAction` records such as audit, deny, kill, quarantine, taint, export, or notification hooks |
-| `baseline learn/check` | Build simple behavior profiles and emit deviation records |
+| `baseline learn/check` | Learn process/file/network/risk/runtime feature vectors and emit deviation records plus baseline-derived risk signals |
 | `policy test/decisions` | Evaluate events, persist policy decisions, and feed the risk/response graph |
 | `forensics export` | Export auditable evidence for a run |
 
@@ -392,6 +392,7 @@ What these mean:
 | Diff / blame | MVP file-level diff and blame with JSON manifests; `graph explain --file --json` combines diff/blame with runtime events, evidence, content-addressed object refs, risks, and replay refs |
 | Artifact lineage | exported attempt artifacts linked to attempt/tool_call/process |
 | Security evidence | first-class `RiskSignal`, `BaselineDeviation`, and `ResponseAction` records, graph objects, and query commands |
+| Behavior baseline | `baseline learn/check` extracts process, file, network, suspicious runtime, policy block, outlived-process, and resource features; anomalous checks persist deviation records and baseline-derived risk signals |
 | Risk / taint | policy decisions, policy-decision graph edges, quarantine, taint, taint descendant checks |
 | Response gate | eligibility checks with telemetry/evidence drain watermark for tainted or unsafe branches |
 | Trajectory evidence | `agentprovenance.trajectories/v1` manifest for external evaluators, including behavior evidence that can become reward, penalty, filtering, or review signals |

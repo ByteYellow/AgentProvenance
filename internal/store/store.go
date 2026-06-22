@@ -518,6 +518,7 @@ func EnsureSchema(db *sql.DB) error {
 			network_event_count INTEGER NOT NULL,
 			policy_block_count INTEGER NOT NULL,
 			active_cpu_seconds REAL NOT NULL,
+			payload TEXT NOT NULL DEFAULT '{}',
 			status TEXT NOT NULL,
 			created_at TEXT NOT NULL
 		);`,
@@ -686,6 +687,7 @@ func EnsureSchema(db *sql.DB) error {
 		`ALTER TABLE warm_pool_items ADD COLUMN memory_mb INTEGER NOT NULL DEFAULT 0;`,
 		`ALTER TABLE warm_pool_items ADD COLUMN disk_bytes INTEGER NOT NULL DEFAULT 0;`,
 		`ALTER TABLE warm_pool_items ADD COLUMN eviction_reason TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE baseline_profiles ADD COLUMN payload TEXT NOT NULL DEFAULT '{}';`,
 	}
 	for _, stmt := range alterStmts {
 		if _, err := db.Exec(stmt); err != nil && !isDuplicateColumn(err) {
