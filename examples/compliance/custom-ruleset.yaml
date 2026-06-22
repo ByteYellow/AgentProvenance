@@ -1,0 +1,50 @@
+schema_version: agentprovenance.compliance_ruleset/v1
+id: enterprise-agent-review
+title: Enterprise Agent Review Ruleset
+description: Example custom ruleset that extends built-in AgentProvenance compliance mappings.
+disclaimer: Evidence-backed self-assessment only. This custom ruleset is not certification or legal advice.
+
+frameworks:
+  - id: enterprise-agent-review
+    title: Enterprise Agent Runtime Review
+    description: Local enterprise review profile for sandboxed agent execution.
+
+rules:
+  - id: ENT-001
+    title: Runtime telemetry must be linked to ToolCallScope
+    description: A run should include runtime events and execution-context bindings.
+    evidence:
+      - runtime_event
+      - binding
+    partial:
+      - runtime_event
+      - tool_call
+    gap: Runtime evidence or execution-context binding is missing.
+    recommended_next_step: Bind runtime identity through container/cgroup/pid and ingest telemetry.
+
+  - id: ENT-002
+    title: Risky behavior must produce response evidence
+    description: Risk signals should be paired with response actions.
+    evidence:
+      - risk_signal
+      - response_action
+    partial:
+      - risk_signal
+      - baseline_deviation
+    gap: Risk evidence exists without response action.
+    recommended_next_step: Configure response actions for policy or baseline risk signals.
+
+mappings:
+  - framework: enterprise-agent-review
+    builtin_controls:
+      - ASI05
+      - ASI10
+      - TRACE
+    rules:
+      - ENT-001
+      - ENT-002
+
+  - framework: owasp-asi
+    rules:
+      - ENT-001
+      - ENT-002

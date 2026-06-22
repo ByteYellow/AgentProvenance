@@ -23,11 +23,20 @@ func complianceCmd(dataDir *string) *cobra.Command {
 
 func complianceFrameworksCmd() *cobra.Command {
 	var jsonOut bool
+	var ruleSetPath string
 	cmd := &cobra.Command{
 		Use:   "frameworks",
 		Short: "list built-in compliance evidence mapping profiles",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			frameworks := compliance.Frameworks()
+			var ruleSets []compliance.RuleSet
+			if ruleSetPath != "" {
+				ruleSet, err := compliance.LoadRuleSet(ruleSetPath)
+				if err != nil {
+					return err
+				}
+				ruleSets = append(ruleSets, ruleSet)
+			}
+			frameworks := compliance.Frameworks(ruleSets...)
 			if jsonOut {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
@@ -45,12 +54,14 @@ func complianceFrameworksCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
+	cmd.Flags().StringVar(&ruleSetPath, "ruleset", "", "optional custom compliance ruleset YAML")
 	return cmd
 }
 
 func complianceMapCmd(dataDir *string, use string) *cobra.Command {
 	var frameworkID, runID string
 	var jsonOut bool
+	var ruleSetPath string
 	cmd := &cobra.Command{
 		Use:   use,
 		Short: "map run evidence to a compliance/security framework",
@@ -66,7 +77,15 @@ func complianceMapCmd(dataDir *string, use string) *cobra.Command {
 				return err
 			}
 			defer cleanup()
-			report, err := compliance.MapRun(db, compliance.MappingOptions{Framework: frameworkID, RunID: runID})
+			var ruleSet *compliance.RuleSet
+			if ruleSetPath != "" {
+				loaded, err := compliance.LoadRuleSet(ruleSetPath)
+				if err != nil {
+					return err
+				}
+				ruleSet = &loaded
+			}
+			report, err := compliance.MapRun(db, compliance.MappingOptions{Framework: frameworkID, RunID: runID, RuleSet: ruleSet})
 			if err != nil {
 				return err
 			}
@@ -89,6 +108,7 @@ func complianceMapCmd(dataDir *string, use string) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&frameworkID, "framework", "", "framework id, such as owasp-asi or nist-rfi-2026-00206")
 	cmd.Flags().StringVar(&runID, "run", "", "run id")
+	cmd.Flags().StringVar(&ruleSetPath, "ruleset", "", "optional custom compliance ruleset YAML")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	return cmd
 }

@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"database/sql"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -101,6 +102,60 @@ func TestMapRunNISTReportsMissingWhenEvidenceAbsent(t *testing.T) {
 	assertStatus(t, report, "Q3", StatusMissing)
 }
 
+func TestCustomRuleSetCanMapBuiltInAndCustomRules(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "ruleset.yaml")
+	raw := `
+schema_version: agentprovenance.compliance_ruleset/v1
+id: custom-review
+title: Custom Review
+frameworks:
+  - id: custom-review
+    title: Custom Agent Review
+rules:
+  - id: CUST-001
+    title: Runtime evidence linked to context
+    evidence: [runtime_event, binding]
+    partial: [runtime_event]
+    gap: runtime or binding evidence missing
+    recommended_next_step: add ToolCallScope binding
+mappings:
+  - framework: custom-review
+    builtin_controls: [ASI05, TRACE]
+    rules: [CUST-001]
+  - framework: owasp-asi
+    rules: [CUST-001]
+`
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ruleSet, err := LoadRuleSet(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	custom, ok := GetFramework("custom-review", ruleSet)
+	if !ok {
+		t.Fatalf("custom framework not found")
+	}
+	if len(custom.Controls) != 3 {
+		t.Fatalf("custom controls = %d, want 3: %+v", len(custom.Controls), custom.Controls)
+	}
+	seen := map[string]bool{}
+	for _, control := range custom.Controls {
+		seen[control.ID] = true
+	}
+	if !seen["ASI05"] || !seen["TRACE"] || !seen["CUST-001"] {
+		t.Fatalf("custom framework missing mapped controls: %+v", custom.Controls)
+	}
+	owasp, ok := GetFramework("owasp-asi", ruleSet)
+	if !ok {
+		t.Fatalf("owasp framework not found")
+	}
+	if !hasControl(owasp, "ASI05") || !hasControl(owasp, "CUST-001") {
+		t.Fatalf("owasp framework should keep built-ins and append custom rule: %+v", owasp.Controls)
+	}
+}
+
 func assertStatus(t *testing.T, report MappingReport, controlID string, want Status) {
 	t.Helper()
 	for _, item := range report.Items {
@@ -112,6 +167,15 @@ func assertStatus(t *testing.T, report MappingReport, controlID string, want Sta
 		}
 	}
 	t.Fatalf("missing control %s in %+v", controlID, report.Items)
+}
+
+func hasControl(framework Framework, id string) bool {
+	for _, control := range framework.Controls {
+		if control.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func execSQL(t *testing.T, db *sql.DB, query string, args ...any) {

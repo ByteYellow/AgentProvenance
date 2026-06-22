@@ -26,13 +26,45 @@ They should be reviewed and customized before use in a formal assessment.
 
 ```sh
 agentprov compliance frameworks
+agentprov compliance frameworks --ruleset examples/compliance/custom-ruleset.yaml
 agentprov compliance map --framework owasp-asi --run <run_id>
+agentprov compliance map --framework enterprise-agent-review --ruleset examples/compliance/custom-ruleset.yaml --run <run_id>
 agentprov compliance map --framework nist-rfi-2026-00206 --run <run_id>
 agentprov compliance report --framework owasp-asi --run <run_id> --json
 ```
 
 `map` defaults to human output. `report` emits the same mapping as structured
 JSON using schema `agentprovenance.compliance_mapping/v1`.
+
+## Custom Rulesets
+
+Custom rulesets are YAML files with three explicit layers:
+
+- `ruleset`: metadata and one or more custom framework definitions.
+- `rules`: reusable control rules that declare required, partial, and
+  not-applicable evidence classes.
+- `mappings`: links rules into frameworks.
+
+Mappings can reference both custom rules and built-in controls:
+
+```yaml
+mappings:
+  - framework: enterprise-agent-review
+    builtin_controls:
+      - ASI05
+      - ASI10
+      - TRACE
+    rules:
+      - ENT-001
+      - ENT-002
+```
+
+This keeps built-in OWASP/NIST profiles available while allowing local teams to
+compose a smaller enterprise ruleset from selected built-ins plus custom rules.
+Passing `--ruleset` merges the custom ruleset with the built-ins; it does not
+remove the built-in profiles.
+
+See `examples/compliance/custom-ruleset.yaml`.
 
 ## Evidence Sources
 
