@@ -317,6 +317,9 @@ load.
 ./agentprov security responses --run <run_id>
 ./agentprov baseline learn --template <template_name> --run <run_id>
 ./agentprov baseline check --template <template_name> --run <run_id>
+./agentprov compliance frameworks
+./agentprov compliance map --framework owasp-asi --run <run_id>
+./agentprov compliance report --framework nist-rfi-2026-00206 --run <run_id>
 ./agentprov policy test examples/events/metadata-egress.jsonl
 ./agentprov policy decisions --run <run_id>
 ./agentprov forensics export <run_id>
@@ -331,8 +334,37 @@ These commands are now part of the mainline security evidence surface:
 | `security deviations` | List `BaselineDeviation` records from behavior feature checks |
 | `security responses` | List recorded `ResponseAction` records such as audit, deny, kill, quarantine, taint, export, or notification hooks |
 | `baseline learn/check` | Learn process/file/network/risk/runtime feature vectors and emit deviation records plus baseline-derived risk signals |
+| `compliance frameworks/map/report` | Map run evidence to OWASP Agentic Security and NIST AI agent security assessment profiles as self-assessment evidence |
 | `policy test/decisions` | Evaluate events, persist policy decisions, and feed the risk/response graph |
 | `forensics export` | Export auditable evidence for a run |
+
+## Compliance Evidence, Not Certification
+
+AgentProvenance can map run evidence to security framework profiles such as
+OWASP Agentic Security and NIST AI agent security assessment questions:
+
+```sh
+./agentprov compliance frameworks
+./agentprov compliance map --framework owasp-asi --run <run_id>
+./agentprov compliance report --framework nist-rfi-2026-00206 --run <run_id> --json
+```
+
+The output is an evidence-backed self-assessment. It does not certify
+compliance, provide legal advice, or replace qualified third-party audit. Each
+control result is derived from evidence already present in the run: timeline
+events, runtime telemetry, ToolCallScope bindings, policy decisions, risk
+signals, baseline deviations, response actions, forensics bundles,
+content-addressed provenance objects, and graph edges.
+
+Each item reports:
+
+```text
+covered | partial | missing | not_applicable
+```
+
+with concrete `evidence_refs`, a gap when evidence is incomplete, and a
+recommended next step. This makes agent execution evidence usable for security
+reviews without turning AgentProvenance into a GRC platform.
 
 ## Graph Commands
 
@@ -393,6 +425,7 @@ What these mean:
 | Artifact lineage | exported attempt artifacts linked to attempt/tool_call/process |
 | Security evidence | first-class `RiskSignal`, `BaselineDeviation`, and `ResponseAction` records, graph objects, and query commands |
 | Behavior baseline | `baseline learn/check` extracts process, file, network, suspicious runtime, policy block, outlived-process, and resource features; anomalous checks persist deviation records and baseline-derived risk signals |
+| Compliance evidence | `compliance frameworks/map/report` maps run evidence to OWASP Agentic Security and NIST AI agent security profiles with covered/partial/missing/not_applicable status |
 | Risk / taint | policy decisions, policy-decision graph edges, quarantine, taint, taint descendant checks |
 | Response gate | eligibility checks with telemetry/evidence drain watermark for tainted or unsafe branches |
 | Trajectory evidence | `agentprovenance.trajectories/v1` manifest for external evaluators, including behavior evidence that can become reward, penalty, filtering, or review signals |
@@ -541,7 +574,7 @@ experiments do not define the project identity.
 | Phase 2 | Evidence / Causality Hardening | execution timeline JSON, stable explain JSON, content-addressed objects, object parent hashes, graph verification, bounded traversal, pagination, integrity metadata |
 | Phase 3 | Zero-SDK Recorder Hardening | process-tree capture, delayed child process handling, cwd/time/file-diff inference, orphan lifecycle evidence, low-intrusion record mode |
 | Phase 4 | Real Telemetry Integration | Falco/Tetragon/LoongCollector/auditd/eBPF receivers, cgroup/container/pid correlation, kernel-side filtering assumptions |
-| Phase 5 | Risk / Policy / Control | configurable risk signals, behavior baselines, response adapters, taint propagation, quarantine, response blocking, forensics export, Feishu/DingTalk/webhook hooks, isolation escalation hooks |
+| Phase 5 | Risk / Policy / Control | configurable risk signals, behavior baselines, compliance evidence mapping, response adapters, taint propagation, quarantine, response blocking, forensics export, Feishu/DingTalk/webhook hooks, isolation escalation hooks |
 | Phase 6 | Scale / UI / Productization | async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency ingest/query tests, usable UI/API |
 
 Near-term hardening:
