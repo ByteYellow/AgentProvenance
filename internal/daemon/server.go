@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/control"
-	"github.com/byteyellow/agentprovenance/internal/economics"
 	"github.com/byteyellow/agentprovenance/internal/evidence"
-	runtimeplane "github.com/byteyellow/agentprovenance/internal/runtime"
-	"github.com/byteyellow/agentprovenance/internal/scheduler"
-	"github.com/byteyellow/agentprovenance/internal/state"
+	"github.com/byteyellow/agentprovenance/internal/experimental/economics"
+	"github.com/byteyellow/agentprovenance/internal/experimental/scheduler"
 	"github.com/byteyellow/agentprovenance/internal/store"
+	runtimeplane "github.com/byteyellow/agentprovenance/internal/substrate/runtime"
+	"github.com/byteyellow/agentprovenance/internal/substrate/state"
 )
 
 type Server struct {

@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	runtimeplane "github.com/byteyellow/agentprovenance/internal/runtime"
-	"github.com/byteyellow/agentprovenance/internal/state"
 	"github.com/byteyellow/agentprovenance/internal/store"
+	runtimeplane "github.com/byteyellow/agentprovenance/internal/substrate/runtime"
+	"github.com/byteyellow/agentprovenance/internal/substrate/state"
 )
 
 type fakeDriver struct{}

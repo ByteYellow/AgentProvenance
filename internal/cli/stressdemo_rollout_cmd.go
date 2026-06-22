@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"text/tabwriter"
 
-	"github.com/byteyellow/agentprovenance/internal/rollout"
 	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/stressdemo/rollout"
 	"github.com/spf13/cobra"
 )
 

@@ -12,9 +12,9 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/control"
 	"github.com/byteyellow/agentprovenance/internal/ids"
-	runtimeplane "github.com/byteyellow/agentprovenance/internal/runtime"
 	"github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
+	runtimeplane "github.com/byteyellow/agentprovenance/internal/substrate/runtime"
 )
 
 type Service struct {

@@ -2,7 +2,7 @@ package cli
 
 import (
 	"fmt"
-	"github.com/byteyellow/agentprovenance/internal/fleet"
+	"github.com/byteyellow/agentprovenance/internal/experimental/nodes"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/spf13/cobra"
 	"text/tabwriter"

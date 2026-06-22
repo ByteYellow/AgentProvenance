@@ -2,8 +2,8 @@ package cli
 
 import (
 	"fmt"
-	"github.com/byteyellow/agentprovenance/internal/economics"
-	"github.com/byteyellow/agentprovenance/internal/scheduler"
+	"github.com/byteyellow/agentprovenance/internal/experimental/economics"
+	"github.com/byteyellow/agentprovenance/internal/experimental/scheduler"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/spf13/cobra"
 )

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/byteyellow/agentprovenance/internal/state"
 	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/substrate/state"
 )
 
 func TestStartWritesExplainableAttemptEvidence(t *testing.T) {

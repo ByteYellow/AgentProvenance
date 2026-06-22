@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	runtimeplane "github.com/byteyellow/agentprovenance/internal/runtime"
 	"github.com/byteyellow/agentprovenance/internal/store"
+	runtimeplane "github.com/byteyellow/agentprovenance/internal/substrate/runtime"
 	"github.com/spf13/cobra"
 	"text/tabwriter"
 )

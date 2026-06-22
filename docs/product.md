@@ -116,6 +116,29 @@ agent context + system telemetry + state diff + artifacts + risk
   -> queryable, replayable, auditable security evidence DAG
 ```
 
+## Codebase Boundary
+
+The repository layout follows the product boundary:
+
+```text
+core path:
+  record / telemetry / correlation / provenance / evidence / security /
+  baseline / forensics
+
+substrate path:
+  substrate/runtime / substrate/node / substrate/state / control /
+  computerapi / ports
+
+non-product paths:
+  stressdemo/*       branch-heavy fanout scenarios for load and DAG tests
+  experimental/*     resource, scheduler, fleet, and warm-pool experiments
+```
+
+This separation is intentional. Substrate code can be replaced by Docker,
+OpenSandbox, Kubernetes, Falco, Tetragon, system-side collectors, or future
+native sensors. The core product remains the correlation, provenance, timeline,
+risk, response, replay, and audit model above those facts.
+
 ## Relationship To System observability, HIDS, And OpenTelemetry
 
 system-side systems are valuable because they provide low-intrusion,

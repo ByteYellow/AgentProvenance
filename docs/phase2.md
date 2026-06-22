@@ -30,7 +30,7 @@ Execution Observability Core
 | Adapter readiness | The provenance model clearly separates agent, sandbox, telemetry, artifact, and snapshot adapters from core correlation/query/provenance logic. | MVP done. `agentprov adapter list/inspect` exposes capability contracts for agent, sandbox, telemetry, artifact, and snapshot adapters, including identity keys, boundaries, and QBS impact. |
 | Security evidence | Risk signals, baseline deviations, and response actions are first-class graph objects and queryable records rather than side effects hidden inside policy output. | MVP done for policy-derived risk/response records and baseline deviation records. `agentprov security risks/deviations/responses` exposes the evidence surface. |
 | Demo evidence | The branch-heavy coding demo shows artifact lineage, content hash, diff/blame, taint, response-gate behavior, replay, trajectory, and audit evidence as a stress demo. | MVP done for CLI evidence. Acceptance now checks object refs for artifact, diff, blame, replay, trajectory, audit, record, and policy-decision objects. |
-| README positioning | README explains why this is Git-like provenance rather than a trace dashboard or sandbox manager. | Partial. README has the positioning; Phase 2 object-store semantics are now called out. |
+| README positioning | README explains why this is Git-like provenance rather than a trace dashboard or sandbox manager, and the repository layout separates core, substrate, stress-demo, and experimental code paths. | Done. README has the positioning, Phase 2 object-store semantics, timeline surface, and cleaned implementation layout. |
 
 ## Current Object Types
 

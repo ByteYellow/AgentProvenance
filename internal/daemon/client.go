@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/control"
-	"github.com/byteyellow/agentprovenance/internal/scheduler"
+	"github.com/byteyellow/agentprovenance/internal/experimental/scheduler"
 )
 
 type Client struct {

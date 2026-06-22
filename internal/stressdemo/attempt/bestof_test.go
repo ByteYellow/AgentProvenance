@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
-	"github.com/byteyellow/agentprovenance/internal/state"
 	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/substrate/state"
 )
 
 func TestBestOfSelectsPassingWinner(t *testing.T) {

@@ -2,9 +2,9 @@ package cli
 
 import (
 	"fmt"
-	"github.com/byteyellow/agentprovenance/internal/attempt"
-	"github.com/byteyellow/agentprovenance/internal/state"
 	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/stressdemo/attempt"
+	"github.com/byteyellow/agentprovenance/internal/substrate/state"
 	"github.com/spf13/cobra"
 	"text/tabwriter"
 )

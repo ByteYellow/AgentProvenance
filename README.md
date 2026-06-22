@@ -453,19 +453,34 @@ See [docs/product.md](docs/product.md) for the product direction and
 ```text
 cmd/agentprov/        CLI entrypoint
 internal/cli/         command parsing and output
-internal/control/     leases, sessions, local execution control, legacy fanout stress demo
-internal/runtime/     capability-gated runtime drivers
-internal/state/       snapshots, fork/resume, lineage, taint
-internal/provenance/  graph trace, refs, log, diff, blame, materialize, verify, replay
-internal/evidence/    evidence records and external effects
-internal/telemetry/   raw telemetry ingest and context correlation
+
+internal/record/      zero-SDK command recorder
+internal/telemetry/   normalized runtime event schema, JSONL ingest, correlation inputs
+internal/correlation/ ToolCallScope and runtime identity binding
+internal/provenance/  timeline, graph trace, refs, objects, diff, blame, verify, replay
+internal/evidence/    compact evidence records and external effects
 internal/security/    policy decisions, risk signals, baseline deviations, response actions
-internal/economics/   resource windows and cost/resource evidence
+internal/baseline/    behavior baseline learning and deviation records
+internal/forensics/   evidence bundle export
+
+internal/substrate/   Docker/runtime/snapshot adapters used as execution substrates
+internal/control/     local lease/session control for substrate-backed demos
+internal/computerapi/ file/tool API over local sandbox sessions
+internal/ports/       local preview proxy support
+
+internal/stressdemo/  branch-heavy fanout demos that exercise provenance under load
+internal/experimental/ resource windows, scheduler, node metadata, warm-pool experiments
 internal/store/       SQLite schema and repositories
 examples/             tasks, events, policies
 scripts/              runnable demos
 docs/                 product direction, MVP details, comparisons
 ```
+
+The main product path lives in `record`, `telemetry`, `correlation`,
+`provenance`, `evidence`, `security`, `baseline`, and `forensics`. `substrate`
+contains runtime facts AgentProvenance can consume. `stressdemo` and
+`experimental` are intentionally separated so branch fanout and old resource
+experiments do not define the project identity.
 
 ## Roadmap
 

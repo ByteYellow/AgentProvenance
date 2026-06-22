@@ -17,8 +17,8 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/ids"
 	"github.com/byteyellow/agentprovenance/internal/security"
-	"github.com/byteyellow/agentprovenance/internal/state"
 	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/substrate/state"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 

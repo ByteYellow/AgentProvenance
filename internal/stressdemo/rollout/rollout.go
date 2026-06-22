@@ -8,12 +8,12 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/byteyellow/agentprovenance/internal/attempt"
 	"github.com/byteyellow/agentprovenance/internal/evidence"
 	"github.com/byteyellow/agentprovenance/internal/ids"
-	runtimeplane "github.com/byteyellow/agentprovenance/internal/runtime"
-	"github.com/byteyellow/agentprovenance/internal/state"
 	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/stressdemo/attempt"
+	runtimeplane "github.com/byteyellow/agentprovenance/internal/substrate/runtime"
+	"github.com/byteyellow/agentprovenance/internal/substrate/state"
 	"gopkg.in/yaml.v3"
 )
 

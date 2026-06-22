@@ -13,12 +13,12 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/egress"
+	"github.com/byteyellow/agentprovenance/internal/experimental/scheduler"
+	"github.com/byteyellow/agentprovenance/internal/experimental/warm"
 	"github.com/byteyellow/agentprovenance/internal/ids"
-	runtimeplane "github.com/byteyellow/agentprovenance/internal/runtime"
-	"github.com/byteyellow/agentprovenance/internal/scheduler"
-	"github.com/byteyellow/agentprovenance/internal/state"
 	"github.com/byteyellow/agentprovenance/internal/store"
-	"github.com/byteyellow/agentprovenance/internal/warm"
+	runtimeplane "github.com/byteyellow/agentprovenance/internal/substrate/runtime"
+	"github.com/byteyellow/agentprovenance/internal/substrate/state"
 )
 
 type Service struct {

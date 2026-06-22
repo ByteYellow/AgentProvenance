@@ -7,9 +7,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/byteyellow/agentprovenance/internal/node"
-	"github.com/byteyellow/agentprovenance/internal/state"
 	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/substrate/node"
+	"github.com/byteyellow/agentprovenance/internal/substrate/state"
 )
 
 type DockerDriver struct {
