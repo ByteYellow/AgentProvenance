@@ -2,11 +2,11 @@
 
 # AgentProvenance
 
-### Execution observability and Git-like provenance for sandboxed agents.
+### Security-oriented execution observability and Git-like provenance for sandboxed agents.
 
-Turn execution context, runtime evidence, file diffs, artifacts, risk signals,
-and promotion decisions into a queryable, replayable, and auditable causality
-graph.
+Correlate application-side agent context with system-side telemetry, then turn
+runtime evidence, file diffs, artifacts, risk signals, and response decisions
+into a queryable, replayable, and auditable causality graph.
 
 [![Go](https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square)](https://go.dev/)
 [![CI](https://img.shields.io/github/actions/workflow/status/ByteYellow/AgentProvenance/ci.yml?branch=main&style=flat-square)](https://github.com/ByteYellow/AgentProvenance/actions/workflows/ci.yml)
@@ -20,8 +20,8 @@ graph.
 
 ---
 
-AgentProvenance is a local-first provenance control plane for autonomous,
-tool-using agents, especially coding agents.
+AgentProvenance is a local-first security analysis and provenance control plane
+for autonomous, tool-using agents, especially sandboxed coding agents.
 
 It is not a generic sandbox runtime, generic telemetry collector, Kubernetes/Ray
 replacement, RL trainer, or trace dashboard. It owns a narrower primitive:
@@ -32,9 +32,9 @@ Execution Context
   -> Runtime Causality Graph
   -> Provenance DAG
   -> State Diff / Blame / Artifact Lineage
-  -> Risk / Taint Propagation
-  -> Promotion Barrier
-  -> Replay / Trajectory / Audit Manifest
+  -> Security Analysis / Risk Decision
+  -> Taint / Response Action
+  -> Replay / Forensics / Audit Manifest
 ```
 
 The goal is to answer questions ordinary traces do not answer well:
@@ -44,7 +44,11 @@ The goal is to answer questions ordinary traces do not answer well:
 - Which tool call started this process?
 - Which child process caused this runtime event?
 - Which process changed this file?
-- Which branch was tainted, quarantined, or blocked from promotion?
+- Which behavior is anomalous for this agent or task profile?
+- Which branch was tainted, quarantined, interrupted, or blocked from promotion?
+- Which evidence supports a risk decision?
+- What response action should be triggered: audit, deny, kill, quarantine,
+  taint, export forensics, or notify a human through Feishu/DingTalk?
 - What exact evidence should an external evaluator, RL pipeline, or human
   reviewer inspect?
 - Can this execution be diffed, blamed, verified, replayed, and audited later?
@@ -57,7 +61,8 @@ spawn subprocesses, touch external systems, and trigger runtime telemetry.
 Logs, traces, metrics, and sandbox events each capture pieces of that story,
 but they rarely produce a Git-like causal record of execution state.
 
-AgentProvenance turns sandboxed execution into an evidence graph:
+AgentProvenance turns sandboxed execution into a security-oriented evidence
+graph:
 
 ```text
 base snapshot
@@ -67,9 +72,9 @@ base snapshot
   -> process / child process
   -> runtime_event
   -> file_diff / artifact
-  -> risk / taint
-  -> promotion barrier
-  -> replay / audit manifest
+  -> baseline feature / risk signal
+  -> taint / response action
+  -> replay / forensics / audit manifest
 ```
 
 The primary path is recording and explaining sandboxed agent execution. A
@@ -77,6 +82,38 @@ coding-agent best-of-N repair loop remains a stress demo because it creates
 branches, artifacts, risk, and competing trajectories, but AgentProvenance does
 not choose the reward winner. It emits structured trajectory evidence so an
 external evaluator or training pipeline can make that decision.
+
+## Security Loop
+
+The security model is intentionally simple and concrete:
+
+```text
+application context
+  run / session / attempt / tool_call / user / task / workspace
+
+system telemetry
+  process / file / network / resource / sandbox / eBPF event
+
+correlation
+  container_id / cgroup_id / pid / ppid / cwd / timestamp / file diff
+
+security analysis
+  behavior baseline / suspicious event / taint lineage / risk decision
+
+response
+  audit / deny / kill / quarantine / taint / forensics / Feishu or DingTalk notification
+```
+
+This makes AgentProvenance closer to an AI-era HIDS/control-plane layer than a
+pure LLM trace dashboard. Traditional host monitoring asks "what did this
+process do?" AgentProvenance adds the agent execution context needed to ask
+"which agent/tool/task caused it, what state did it change, what evidence proves
+it, and what response should happen?"
+
+The project currently implements the evidence graph, runtime correlation,
+diff/blame, telemetry batch manifests, policy decisions, taint, quarantine, and
+forensics/export foundations. Deeper eBPF receivers, behavior baselines, and
+Feishu/DingTalk response adapters belong to the next security-control phases.
 
 ## Core Model
 
@@ -139,6 +176,28 @@ agentprov telemetry ingest-jsonl --format tetragon --file tetragon-events.jsonl
 mapped event IDs, and event ID hash. It gives the DAG an audit handle for
 external Falco/Tetragon/LoongCollector evidence without turning AgentProvenance
 into a long-term log store.
+
+## Relationship To Existing Systems
+
+AgentProvenance is designed to coexist with system-level observability projects,
+LLM tracing systems, and sandbox runtimes.
+
+| System category | What it owns | How AgentProvenance differs |
+|---|---|---|
+| system-side system observability | low-intrusion system-side capture, eBPF/runtime event collection, cross-process visibility | AgentProvenance treats those events as evidence input, then builds a Git-like causality/provenance DAG, diff/blame, taint lineage, risk decision, forensics, and response-control surface |
+| OpenTelemetry / LLM trace platforms | spans, logs, metrics, LLM/tool traces, dashboards, latency/cost views | AgentProvenance focuses on state provenance, artifact lineage, sandbox runtime effects, security decisions, replay, and audit manifests |
+| HIDS / EDR / runtime security | host/process/file/network detection and enforcement | AgentProvenance adds agent context: run/session/attempt/tool_call, snapshot lineage, file diffs, artifact provenance, and promotion/response barriers |
+| Sandbox runtimes | isolation, process/container/VM execution, filesystem and network boundaries | AgentProvenance consumes sandbox identity and telemetry; it does not try to replace Docker, OpenSandbox, gVisor, Firecracker, Kata, or Kubernetes |
+
+So the differentiation is not "another zero-SDK eBPF observer." The narrow
+primitive is:
+
+```text
+system-side telemetry + application-side agent context
+  -> evidence DAG
+  -> security analysis and risk judgment
+  -> automated response and audit trail
+```
 
 ## Quickstart
 

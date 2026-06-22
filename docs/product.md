@@ -1,12 +1,13 @@
 # AgentProvenance Product Direction
 
-AgentProvenance is a Git-like provenance control plane for sandboxed agent
-execution.
+AgentProvenance is a security-oriented execution observability and Git-like
+provenance control plane for sandboxed agent execution.
 
-It records how an agent execution context produces state changes, runtime
-events, artifacts, risk signals, and promotion evidence. The project is not a
-generic sandbox runtime, generic observability dashboard, Kubernetes/Ray
-replacement, or RL trainer.
+It correlates application-side agent context with system-side telemetry, then
+records how an agent execution context produces state changes, runtime events,
+artifacts, risk signals, response decisions, and audit evidence. The project is
+not a generic sandbox runtime, generic telemetry collector, generic
+observability dashboard, Kubernetes/Ray replacement, or RL trainer.
 
 The core product line is:
 
@@ -16,9 +17,9 @@ Execution Context
   -> Runtime Causality Graph
   -> Provenance DAG
   -> State Diff / Blame / Artifact Lineage
-  -> Risk / Taint Propagation
-  -> Promotion Barrier
-  -> Replay / Trajectory / Audit Manifest
+  -> Security Analysis / Risk Decision
+  -> Taint / Response Action
+  -> Replay / Forensics / Audit Manifest
 ```
 
 ## Positioning
@@ -31,8 +32,13 @@ Primary scenarios:
 
 - Coding-agent repair, refactor, test, and patch generation.
 - Autonomous agent workflows with long chains of tool calls and subprocesses.
-- Audit of sandboxed agent executions where state, artifacts, risk, and replay
-  matter.
+- Security analysis of sandboxed agent executions where application context,
+  system telemetry, state changes, artifacts, risk, and replay matter.
+- Risk discovery and risk judgment for agent behaviors that cross process,
+  file, network, and sandbox boundaries.
+- Automated response prototypes: audit, deny, kill, quarantine, taint snapshot,
+  export forensics, and notify operators through Feishu/DingTalk-style apps.
+- Behavior baseline and deviation analysis for repeated agent/task profiles.
 
 Stress scenarios:
 
@@ -87,8 +93,8 @@ white-box context where available, runtime inference where not.
 
 ## Product Boundary
 
-AgentProvenance owns agent execution provenance. It does not own generic
-infrastructure.
+AgentProvenance owns agent execution provenance and security evidence
+correlation. It does not own generic infrastructure.
 
 It may consume:
 
@@ -97,13 +103,43 @@ It may consume:
 - Falco, Tetragon, LoongCollector, eBPF, auditd, wrapper telemetry, or runtime
   event streams.
 - LangSmith-style traces or internal agent harness events.
+- system-side low-intrusion system-side observability output.
 
 Its job is to convert those signals into a causality and provenance model:
 
 ```text
-execution context + runtime evidence + state diff + artifacts + risk
-  -> queryable, replayable, auditable DAG
+agent context + system telemetry + state diff + artifacts + risk
+  -> queryable, replayable, auditable security evidence DAG
 ```
+
+## Relationship To System observability, HIDS, And OpenTelemetry
+
+system-side systems are valuable because they provide low-intrusion,
+system-level ground truth for agent behavior: process activity, file access,
+network behavior, and cross-process effects. AgentProvenance should learn from
+that direction and can ingest that class of telemetry, but it should not present
+itself as a clone of a zero-SDK eBPF observer.
+
+The differentiation is the control-plane layer above observation:
+
+```text
+system-side telemetry + application-side agent context
+  -> runtime causality graph
+  -> Git-like provenance DAG
+  -> security analysis / risk judgment
+  -> response action / forensics / audit trail
+```
+
+The HIDS analogy is useful: AI agents in sandboxes still create host-like
+monitoring needs around process, file, network, resource, and policy activity.
+The difference is that AgentProvenance treats the agent context as first-class:
+run, session, attempt, tool call, task, snapshot, artifact, and promotion or
+quarantine state.
+
+OpenTelemetry and LLM tracing tools remain useful inputs or exports. They are
+not the core product surface. AgentProvenance focuses on evidence lineage,
+diff/blame, taint propagation, risk decisions, response hooks, replay, and audit
+manifests.
 
 ## What The Graph Must Answer
 
@@ -112,10 +148,12 @@ execution context + runtime evidence + state diff + artifacts + risk
 - Which tool call started this process?
 - Which child process produced this runtime event?
 - Which process changed this file?
+- Which behavior deviated from this task or agent baseline?
 - Which file state is created, modified, deleted, or unchanged from base?
 - Which external effect was attempted, gated, or denied?
 - Which branch was tainted or quarantined?
 - Why was a candidate blocked by the promotion barrier?
+- Which risk decision and response action are supported by concrete evidence?
 - What evidence should an external evaluator inspect?
 - Can this trajectory be replayed or audited later?
 
@@ -127,7 +165,7 @@ execution context + runtime evidence + state diff + artifacts + risk
 | Phase 2 | Evidence / Causality Hardening | stable explain JSON, content-addressed objects, object parent hashes, graph verification, bounded traversal, pagination, integrity metadata |
 | Phase 3 | Zero-SDK Recorder Hardening | process-tree capture, delayed child process handling, cwd/time/file-diff inference, orphan lifecycle evidence, low-intrusion record mode |
 | Phase 4 | Real Telemetry Integration | Falco/Tetragon/LoongCollector/auditd/eBPF receivers, cgroup/container/pid correlation, kernel-side filtering assumptions |
-| Phase 5 | Risk / Policy / Control | configurable risk signals, taint propagation, quarantine, promotion block, forensics export, isolation escalation hooks |
+| Phase 5 | Risk / Policy / Control | configurable risk signals, behavior baseline checks, taint propagation, quarantine, promotion block, forensics export, Feishu/DingTalk notification hooks, isolation escalation hooks |
 | Phase 6 | Scale / UI / Productization | async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency ingest/query tests, usable UI/API |
 
 ## Phase 1 Definition Of Done
@@ -173,5 +211,5 @@ replay: reconstruction plan and audit manifest
 
 This is the durable differentiation from generic observability:
 AgentProvenance is not only showing that something happened. It explains how an
-agent execution state was produced, changed, branched, tainted, and made
-eligible or ineligible for promotion.
+agent execution state was produced, changed, branched, tainted, judged risky,
+responded to, and made eligible or ineligible for promotion or further use.
