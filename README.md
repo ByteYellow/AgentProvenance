@@ -320,6 +320,7 @@ load.
 ./agentprov compliance frameworks
 ./agentprov compliance map --framework owasp-asi --run <run_id>
 ./agentprov compliance explain --framework owasp-asi --run <run_id> --item ASI05
+./agentprov compliance gaps --framework owasp-asi --run <run_id>
 ./agentprov compliance report --framework nist-rfi-2026-00206 --run <run_id>
 ./agentprov policy test examples/events/metadata-egress.jsonl
 ./agentprov policy decisions --run <run_id>
@@ -335,7 +336,7 @@ These commands are now part of the mainline security evidence surface:
 | `security deviations` | List `BaselineDeviation` records from behavior feature checks |
 | `security responses` | List recorded `ResponseAction` records such as audit, deny, kill, quarantine, taint, export, or notification hooks |
 | `baseline learn/check` | Learn process/file/network/risk/runtime feature vectors and emit deviation records plus baseline-derived risk signals |
-| `compliance frameworks/map/explain/report` | Map run evidence to OWASP Agentic Security and NIST AI agent security assessment profiles as item-level self-assessment evidence |
+| `compliance frameworks/map/explain/gaps/report` | Map run evidence to OWASP Agentic Security and NIST AI agent security assessment profiles as item-level self-assessment evidence and gap lists |
 | `policy test/decisions` | Evaluate events, persist policy decisions, and feed the risk/response graph |
 | `forensics export` | Export auditable evidence for a run |
 
@@ -351,6 +352,8 @@ OWASP Agentic Security and NIST AI agent security assessment questions:
 ./agentprov compliance map --framework owasp-asi --run <run_id>
 ./agentprov compliance map --framework owasp-asi --run <run_id> --only ASI05,ASI10,TRACE
 ./agentprov compliance explain --framework owasp-asi --run <run_id> --item ASI05
+./agentprov compliance gaps --framework owasp-asi --run <run_id>
+./agentprov compliance gaps --framework owasp-asi --run <run_id> --missing-only --json
 ./agentprov compliance map --framework enterprise-agent-review --ruleset examples/compliance/custom-ruleset.yaml --run <run_id>
 ./agentprov compliance report --framework nist-rfi-2026-00206 --run <run_id> --json
 ```
@@ -371,6 +374,8 @@ covered | partial | missing | not_applicable
 with concrete `evidence_refs`, a gap when evidence is incomplete, and a
 recommended next step. This makes agent execution evidence usable for security
 reviews without turning AgentProvenance into a GRC platform.
+`compliance gaps` turns that same mapping into an actionable backlog of missing
+or partial evidence items for a run.
 
 Custom rulesets can add local frameworks and rules without replacing built-ins.
 The YAML model separates `rules`, `frameworks`, and `mappings`; mappings can
@@ -437,7 +442,7 @@ What these mean:
 | Artifact lineage | exported attempt artifacts linked to attempt/tool_call/process |
 | Security evidence | first-class `RiskSignal`, `BaselineDeviation`, and `ResponseAction` records, graph objects, and query commands |
 | Behavior baseline | `baseline learn/check` extracts process, file, network, suspicious runtime, policy block, outlived-process, and resource features; anomalous checks persist deviation records and baseline-derived risk signals |
-| Compliance evidence | `compliance frameworks/map/explain/report` maps run evidence to OWASP Agentic Security and NIST AI agent security profiles with covered/partial/missing/not_applicable item status |
+| Compliance evidence | `compliance frameworks/map/explain/gaps/report` maps run evidence to OWASP Agentic Security and NIST AI agent security profiles with covered/partial/missing/not_applicable item status and evidence gap reports |
 | Risk / taint | policy decisions, policy-decision graph edges, quarantine, taint, taint descendant checks |
 | Response gate | eligibility checks with telemetry/evidence drain watermark for tainted or unsafe branches |
 | Trajectory evidence | `agentprovenance.trajectories/v1` manifest for external evaluators, including behavior evidence that can become reward, penalty, filtering, or review signals |

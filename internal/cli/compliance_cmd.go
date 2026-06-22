@@ -21,6 +21,7 @@ func complianceCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(complianceMapCmd(dataDir, "map"))
 	cmd.AddCommand(complianceMapCmd(dataDir, "report"))
 	cmd.AddCommand(complianceExplainCmd(dataDir))
+	cmd.AddCommand(complianceGapsCmd(dataDir))
 	return cmd
 }
 
@@ -242,6 +243,67 @@ func complianceExplainCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().StringVar(&itemID, "item", "", "framework item id")
 	cmd.Flags().StringVar(&legacyControlID, "control", "", "deprecated alias for --item")
 	cmd.Flags().StringVar(&ruleSetPath, "ruleset", "", "optional custom compliance ruleset YAML")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
+	return cmd
+}
+
+func complianceGapsCmd(dataDir *string) *cobra.Command {
+	var frameworkID, runID string
+	var jsonOut, missingOnly bool
+	var ruleSetPath string
+	var limit int
+	cmd := &cobra.Command{
+		Use:   "gaps",
+		Short: "list missing or partial evidence items for one run",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if frameworkID == "" {
+				return fmt.Errorf("--framework is required")
+			}
+			if runID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			db, cleanup, err := openLocalDB(*dataDir)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+			var ruleSet *compliance.RuleSet
+			if ruleSetPath != "" {
+				loaded, err := compliance.LoadRuleSet(ruleSetPath)
+				if err != nil {
+					return err
+				}
+				ruleSet = &loaded
+			}
+			report, err := compliance.MapRun(db, compliance.MappingOptions{
+				Framework: frameworkID,
+				RunID:     runID,
+				RuleSet:   ruleSet,
+			})
+			if err != nil {
+				return err
+			}
+			gaps := compliance.Gaps(report, missingOnly, limit)
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(gaps)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "framework=%s run=%s schema=%s partial=%d missing=%d total=%d\n",
+				gaps.Framework, gaps.RunID, gaps.SchemaVersion, gaps.Summary.Partial, gaps.Summary.Missing, gaps.Summary.Total)
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "ITEM\tSTATUS\tEVIDENCE\tGAP\tNEXT_STEP")
+			for _, item := range gaps.Items {
+				fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", item.ItemID, item.Status, len(item.EvidenceRefs), item.Gap, item.RecommendedNextStep)
+			}
+			return w.Flush()
+		},
+	}
+	cmd.Flags().StringVar(&frameworkID, "framework", "", "framework id, such as owasp-asi or nist-rfi-2026-00206")
+	cmd.Flags().StringVar(&runID, "run", "", "run id")
+	cmd.Flags().StringVar(&ruleSetPath, "ruleset", "", "optional custom compliance ruleset YAML")
+	cmd.Flags().BoolVar(&missingOnly, "missing-only", false, "only list items with no matching evidence")
+	cmd.Flags().IntVar(&limit, "limit", 0, "maximum number of gap items to return")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	return cmd
 }

@@ -205,6 +205,39 @@ func TestFindItemSupportsItemIDAndLegacyControlID(t *testing.T) {
 	}
 }
 
+func TestGapsFiltersPartialAndMissingItems(t *testing.T) {
+	report := MappingReport{
+		SchemaVersion: SchemaVersion,
+		Framework:     "owasp-asi",
+		FrameworkName: "OWASP Agentic Security Mapping",
+		RunID:         "run-gap",
+		Items: []MappingResult{
+			{ItemID: "covered", ControlID: "covered", Status: StatusCovered},
+			{ItemID: "partial", ControlID: "partial", Status: StatusPartial},
+			{ItemID: "missing", ControlID: "missing", Status: StatusMissing},
+			{ItemID: "na", ControlID: "na", Status: StatusNotApplicable},
+		},
+	}
+	gaps := Gaps(report, false, 0)
+	if gaps.SchemaVersion != GapSchemaVersion || gaps.Framework != "owasp-asi" || gaps.RunID != "run-gap" {
+		t.Fatalf("unexpected gap report header: %+v", gaps)
+	}
+	if gaps.Summary.Total != 2 || gaps.Summary.Partial != 1 || gaps.Summary.Missing != 1 {
+		t.Fatalf("unexpected gap summary: %+v", gaps.Summary)
+	}
+	if gaps.Items[0].ItemID != "partial" || gaps.Items[1].ItemID != "missing" {
+		t.Fatalf("unexpected gap items: %+v", gaps.Items)
+	}
+	missingOnly := Gaps(report, true, 0)
+	if missingOnly.Summary.Total != 1 || missingOnly.Items[0].ItemID != "missing" {
+		t.Fatalf("unexpected missing-only gaps: %+v", missingOnly)
+	}
+	limited := Gaps(report, false, 1)
+	if limited.Summary.Total != 1 || limited.Items[0].ItemID != "partial" {
+		t.Fatalf("unexpected limited gaps: %+v", limited)
+	}
+}
+
 func assertStatus(t *testing.T, report MappingReport, controlID string, want Status) {
 	t.Helper()
 	for _, item := range report.Items {

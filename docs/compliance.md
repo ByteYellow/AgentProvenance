@@ -32,6 +32,8 @@ agentprov compliance map --framework owasp-asi --run <run_id>
 agentprov compliance map --framework owasp-asi --run <run_id> --only ASI05,ASI10,TRACE
 agentprov compliance map --framework owasp-asi --run <run_id> --exclude ASI07
 agentprov compliance explain --framework owasp-asi --run <run_id> --item ASI05
+agentprov compliance gaps --framework owasp-asi --run <run_id>
+agentprov compliance gaps --framework owasp-asi --run <run_id> --missing-only --json
 agentprov compliance map --framework enterprise-agent-review --ruleset examples/compliance/custom-ruleset.yaml --run <run_id>
 agentprov compliance map --framework nist-rfi-2026-00206 --run <run_id>
 agentprov compliance report --framework owasp-asi --run <run_id> --json
@@ -42,6 +44,8 @@ JSON using schema `agentprovenance.compliance_mapping/v1`.
 Use `validate --ruleset` to check custom ruleset syntax and mapping references.
 Use `explain --item` to expand one item with concrete evidence refs, gap, reason,
 and recommended next step.
+Use `gaps` to produce an actionable list of `partial` and `missing` items for
+one run. Add `--missing-only` when CI should only fail on fully absent evidence.
 Use `--only` and `--exclude` to run a focused subset of items in CI or an
 enterprise review workflow.
 

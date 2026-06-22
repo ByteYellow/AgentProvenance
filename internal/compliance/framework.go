@@ -11,6 +11,7 @@ import (
 )
 
 const SchemaVersion = "agentprovenance.compliance_mapping/v1"
+const GapSchemaVersion = "agentprovenance.compliance_gaps/v1"
 
 type Status string
 
@@ -104,6 +105,15 @@ type MappingResult struct {
 	Gap                 string        `json:"gap"`
 	RecommendedNextStep string        `json:"recommended_next_step"`
 	Reason              string        `json:"reason"`
+}
+
+type GapReport struct {
+	SchemaVersion string          `json:"schema_version"`
+	Framework     string          `json:"framework"`
+	FrameworkName string          `json:"framework_name"`
+	RunID         string          `json:"run_id"`
+	Summary       MappingSummary  `json:"summary"`
+	Items         []MappingResult `json:"items"`
 }
 
 type EvidenceRef struct {
@@ -374,6 +384,35 @@ func FindItem(report MappingReport, itemID string) (MappingResult, bool) {
 		}
 	}
 	return MappingResult{}, false
+}
+
+func Gaps(report MappingReport, missingOnly bool, limit int) GapReport {
+	out := GapReport{
+		SchemaVersion: GapSchemaVersion,
+		Framework:     report.Framework,
+		FrameworkName: report.FrameworkName,
+		RunID:         report.RunID,
+	}
+	for _, item := range report.Items {
+		if item.Status != StatusMissing && (!missingOnly && item.Status != StatusPartial) {
+			continue
+		}
+		if missingOnly && item.Status != StatusMissing {
+			continue
+		}
+		out.Items = append(out.Items, item)
+		switch item.Status {
+		case StatusPartial:
+			out.Summary.Partial++
+		case StatusMissing:
+			out.Summary.Missing++
+		}
+		if limit > 0 && len(out.Items) >= limit {
+			break
+		}
+	}
+	out.Summary.Total = len(out.Items)
+	return out
 }
 
 func gapForStatus(status Status, control Control) string {
