@@ -72,6 +72,8 @@ type MappingOptions struct {
 	Framework string
 	RunID     string
 	RuleSet   *RuleSet
+	Only      []string
+	Exclude   []string
 }
 
 type MappingReport struct {
@@ -155,6 +157,9 @@ func MapRun(db *sql.DB, opts MappingOptions) (MappingReport, error) {
 		Disclaimer:    framework.Disclaimer,
 	}
 	for _, control := range framework.Controls {
+		if !includeControl(control.ID, opts.Only, opts.Exclude) {
+			continue
+		}
 		result := mapControl(framework.ID, control, index)
 		report.Items = append(report.Items, result)
 		switch result.Status {
@@ -170,6 +175,27 @@ func MapRun(db *sql.DB, opts MappingOptions) (MappingReport, error) {
 	}
 	report.Summary.Total = len(report.Items)
 	return report, nil
+}
+
+func includeControl(controlID string, only, exclude []string) bool {
+	if len(only) > 0 {
+		found := false
+		for _, id := range only {
+			if id == controlID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	for _, id := range exclude {
+		if id == controlID {
+			return false
+		}
+	}
+	return true
 }
 
 func LoadRuleSet(path string) (RuleSet, error) {

@@ -156,6 +156,35 @@ mappings:
 	}
 }
 
+func TestMapRunOnlyAndExcludeFiltersControls(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	report, err := MapRun(db, MappingOptions{
+		Framework: "owasp-asi",
+		RunID:     "run-filter",
+		Only:      []string{"ASI05", "ASI10", "TRACE"},
+		Exclude:   []string{"TRACE"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Summary.Total != 2 {
+		t.Fatalf("filtered total=%d want 2 items=%+v", report.Summary.Total, report.Items)
+	}
+	if len(report.Items) != 2 || report.Items[0].ControlID != "ASI05" || report.Items[1].ControlID != "ASI10" {
+		t.Fatalf("unexpected filtered items: %+v", report.Items)
+	}
+}
+
 func assertStatus(t *testing.T, report MappingReport, controlID string, want Status) {
 	t.Helper()
 	for _, item := range report.Items {

@@ -346,7 +346,9 @@ OWASP Agentic Security and NIST AI agent security assessment questions:
 ```sh
 ./agentprov compliance frameworks
 ./agentprov compliance frameworks --ruleset examples/compliance/custom-ruleset.yaml
+./agentprov compliance validate --ruleset examples/compliance/custom-ruleset.yaml
 ./agentprov compliance map --framework owasp-asi --run <run_id>
+./agentprov compliance map --framework owasp-asi --run <run_id> --only ASI05,ASI10,TRACE
 ./agentprov compliance map --framework enterprise-agent-review --ruleset examples/compliance/custom-ruleset.yaml --run <run_id>
 ./agentprov compliance report --framework nist-rfi-2026-00206 --run <run_id> --json
 ```

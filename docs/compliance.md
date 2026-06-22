@@ -27,7 +27,10 @@ They should be reviewed and customized before use in a formal assessment.
 ```sh
 agentprov compliance frameworks
 agentprov compliance frameworks --ruleset examples/compliance/custom-ruleset.yaml
+agentprov compliance validate --ruleset examples/compliance/custom-ruleset.yaml
 agentprov compliance map --framework owasp-asi --run <run_id>
+agentprov compliance map --framework owasp-asi --run <run_id> --only ASI05,ASI10,TRACE
+agentprov compliance map --framework owasp-asi --run <run_id> --exclude ASI07
 agentprov compliance map --framework enterprise-agent-review --ruleset examples/compliance/custom-ruleset.yaml --run <run_id>
 agentprov compliance map --framework nist-rfi-2026-00206 --run <run_id>
 agentprov compliance report --framework owasp-asi --run <run_id> --json
@@ -35,6 +38,9 @@ agentprov compliance report --framework owasp-asi --run <run_id> --json
 
 `map` defaults to human output. `report` emits the same mapping as structured
 JSON using schema `agentprovenance.compliance_mapping/v1`.
+Use `validate --ruleset` to check custom ruleset syntax and mapping references.
+Use `--only` and `--exclude` to run a focused subset of controls in CI or an
+enterprise review workflow.
 
 ## Custom Rulesets
 
