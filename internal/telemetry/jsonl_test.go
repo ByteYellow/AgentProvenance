@@ -3,10 +3,12 @@ package telemetry
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
+	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
@@ -79,6 +81,95 @@ func TestIngestJSONLMapsSubstrateEvents(t *testing.T) {
 		}
 		if err := ValidateStoredPayload(events[0].EventType, events[0].Payload); err != nil {
 			t.Fatalf("stored payload for %s is invalid: %v payload=%s", typ, err, events[0].Payload)
+		}
+	}
+}
+
+func TestIngestFalcoMapsRiskEventsAndCorrelates(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := correlation.RecordBinding(db, correlation.Binding{
+		RunID:         "run-falco",
+		SessionID:     "session-falco",
+		AttemptID:     "attempt-falco",
+		ToolCallID:    "tool-falco",
+		ProcessID:     "process-falco",
+		ContainerID:   "container-falco",
+		CgroupID:      "cgroup-falco",
+		PID:           4242,
+		StartedAt:     "2026-01-01T00:00:00Z",
+		BindingSource: "test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	raw := strings.NewReader(strings.Join([]string{
+		`{"time":"2026-01-01T00:00:01Z","rule":"Terminal shell in container","priority":"Notice","output_fields":{"evt.type":"execve","proc.pid":4242,"proc.ppid":4000,"container.id":"container-falco","proc.cmdline":"sh -lc pytest -q"}}`,
+		`{"time":"2026-01-01T00:00:02Z","rule":"Metadata service access","priority":"Critical","output_fields":{"evt.type":"connect","proc.pid":4242,"proc.ppid":4000,"container.id":"container-falco","fd.rip":"169.254.169.254:80"}}`,
+		`{"time":"2026-01-01T00:00:03Z","rule":"Private network access","priority":"Warning","output_fields":{"evt.type":"connect","proc.pid":4242,"proc.ppid":4000,"container.id":"container-falco","fd.rip":"10.0.0.5:443"}}`,
+		`{"time":"2026-01-01T00:00:04Z","rule":"Secret file read","priority":"Critical","output_fields":{"evt.type":"openat","proc.pid":4242,"proc.ppid":4000,"container.id":"container-falco","fd.name":"/workspace/.env","evt.arg.flags":"O_RDONLY"}}`,
+	}, "\n") + "\n")
+
+	result, err := IngestFalco(db, FalcoIngestOptions{Path: "falco-stdout", RunID: ""}, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Read != 4 || result.Ingested != 4 || result.Failed != 0 {
+		t.Fatalf("unexpected falco result: %+v", result)
+	}
+	for _, typ := range []string{"execve", "metadata_ip", "private_cidr", "secret_path"} {
+		events, err := ListEventsFiltered(db, Filter{RunID: "run-falco", Type: typ})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(events) != 1 {
+			t.Fatalf("type %s events=%d, want 1", typ, len(events))
+		}
+		if events[0].ToolCallID != "tool-falco" || events[0].ProcessID != "process-falco" {
+			t.Fatalf("falco %s event not correlated: %+v", typ, events[0])
+		}
+		if events[0].Source != "falco_jsonl" {
+			t.Fatalf("falco source = %s", events[0].Source)
+		}
+	}
+
+	persisted := 0
+	for _, eventID := range result.EventIDs {
+		if _, ok, err := securitymodel.EvaluateRuntimeEvent(db, eventID); err != nil {
+			t.Fatal(err)
+		} else if ok {
+			persisted++
+		}
+	}
+	if persisted != 3 {
+		t.Fatalf("persisted policy decisions = %d, want 3", persisted)
+	}
+	risks, err := securitymodel.ListRiskSignals(db, "run-falco")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(risks) != 3 {
+		t.Fatalf("risk signals = %d, want 3", len(risks))
+	}
+	responses, err := securitymodel.ListResponseActions(db, "run-falco")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(responses) != 3 {
+		t.Fatalf("response actions = %d, want 3", len(responses))
+	}
+	for _, response := range responses {
+		if response.TargetType == "" || response.TargetID == "" || response.ActionType == "" {
+			t.Fatalf("response action missing target/action: %+v", response)
 		}
 	}
 }

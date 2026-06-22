@@ -221,6 +221,23 @@ func EvaluateAndPersist(db *sql.DB, event Event, rawPayload string) (DecisionRec
 	return persistDecision(db, event, rawPayload, decision)
 }
 
+func EvaluateRuntimeEvent(db *sql.DB, eventID string) (DecisionRecord, bool, error) {
+	return EvaluateRuntimeEventWithEngine(db, eventID, DefaultEngine())
+}
+
+func EvaluateRuntimeEventWithEngine(db *sql.DB, eventID string, engine Engine) (DecisionRecord, bool, error) {
+	event, rawPayload, err := runtimeEventForPolicy(db, eventID)
+	if err != nil {
+		return DecisionRecord{}, false, err
+	}
+	decision := engine.Evaluate(event)
+	if decision.Decision == "allow" {
+		return DecisionRecord{}, false, nil
+	}
+	record, err := persistDecisionForEventID(db, eventID, event, rawPayload, decision)
+	return record, true, err
+}
+
 func PersistDecision(db *sql.DB, event Event, rawPayload string, decision Decision) (DecisionRecord, error) {
 	return persistDecision(db, event, rawPayload, decision)
 }
@@ -337,6 +354,15 @@ func persistDecision(db *sql.DB, event Event, rawPayload string, decision Decisi
 	if err != nil {
 		return DecisionRecord{}, err
 	}
+	return persistDecisionWithExistingEvent(db, eventID, event, rawPayload, decision, now)
+}
+
+func persistDecisionForEventID(db *sql.DB, eventID string, event Event, rawPayload string, decision Decision) (DecisionRecord, error) {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	return persistDecisionWithExistingEvent(db, eventID, event, rawPayload, decision, now)
+}
+
+func persistDecisionWithExistingEvent(db *sql.DB, eventID string, event Event, rawPayload string, decision Decision, now string) (DecisionRecord, error) {
 	record := DecisionRecord{
 		ID:        ids.New("dec"),
 		EventID:   eventID,
@@ -347,7 +373,7 @@ func persistDecision(db *sql.DB, event Event, rawPayload string, decision Decisi
 		Reason:    decision.Reason,
 		CreatedAt: now,
 	}
-	_, err = db.Exec(`INSERT INTO policy_decisions (id, event_id, run_id, session_id, rule_id, decision, reason, created_at)
+	_, err := db.Exec(`INSERT INTO policy_decisions (id, event_id, run_id, session_id, rule_id, decision, reason, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, record.ID, eventID, event.RunID, event.SessionID, decision.RuleID, decision.Decision, decision.Reason, now)
 	if err != nil {
 		return DecisionRecord{}, err
@@ -431,6 +457,82 @@ func persistDecision(db *sql.DB, event Event, rawPayload string, decision Decisi
 			VALUES (?, ?, ?, ?, ?, ?)`, ids.New("cost"), event.RunID, event.SessionID, blockCount, quarantineCount, now)
 	}
 	return record, nil
+}
+
+func runtimeEventForPolicy(db *sql.DB, eventID string) (Event, string, error) {
+	var event Event
+	var rawPayload string
+	if err := db.QueryRow(`SELECT source, event_type, COALESCE(run_id, ''), COALESCE(session_id, ''),
+		COALESCE(tool_call_id, ''), COALESCE(process_id, ''), COALESCE(snapshot_id, ''), payload
+		FROM events WHERE id = ?`, eventID).Scan(&event.Source, &event.EventType, &event.RunID, &event.SessionID,
+		&event.ToolCallID, &event.ProcessID, &event.SnapshotID, &rawPayload); err != nil {
+		return Event{}, "", err
+	}
+	event.DstIP = firstPolicyString(rawPayload, "dst_ip", "dst", "host")
+	event.Path = firstPolicyString(rawPayload, "path", "file")
+	event.Args = policyArgs(rawPayload)
+	return event, rawPayload, nil
+}
+
+func policyArgs(payload string) []string {
+	var decoded any
+	if err := json.Unmarshal([]byte(payload), &decoded); err != nil {
+		return nil
+	}
+	values := findPolicyValues(decoded, "argv")
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+			out = append(out, strings.TrimSpace(text))
+		}
+	}
+	return out
+}
+
+func firstPolicyString(payload string, keys ...string) string {
+	var decoded any
+	if err := json.Unmarshal([]byte(payload), &decoded); err != nil {
+		return ""
+	}
+	for _, key := range keys {
+		for _, value := range findPolicyValues(decoded, key) {
+			if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+				if key == "dst" {
+					return strings.Trim(strings.Split(strings.TrimSpace(text), ":")[0], "[]")
+				}
+				return strings.TrimSpace(text)
+			}
+		}
+	}
+	return ""
+}
+
+func findPolicyValues(value any, key string) []any {
+	switch typed := value.(type) {
+	case map[string]any:
+		var out []any
+		if raw, ok := typed[key]; ok {
+			if items, ok := raw.([]any); ok {
+				out = append(out, items...)
+			} else {
+				out = append(out, raw)
+			}
+		}
+		for _, nestedKey := range []string{"payload", "raw", "event"} {
+			if nested, ok := typed[nestedKey]; ok {
+				out = append(out, findPolicyValues(nested, key)...)
+			}
+		}
+		return out
+	case []any:
+		var out []any
+		for _, item := range typed {
+			out = append(out, findPolicyValues(item, key)...)
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func severityForDecision(decision string) string {

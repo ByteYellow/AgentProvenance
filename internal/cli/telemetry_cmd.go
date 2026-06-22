@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/byteyellow/agentprovenance/internal/correlation"
+	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 	"github.com/spf13/cobra"
+	"os"
 	"text/tabwriter"
 )
 
@@ -54,6 +56,7 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(telemetryBindingsCmd(dataDir))
 	cmd.AddCommand(telemetryIngestCmd(dataDir))
 	cmd.AddCommand(telemetryIngestJSONLCmd(dataDir))
+	cmd.AddCommand(telemetryIngestFalcoCmd(dataDir))
 	batches := &cobra.Command{
 		Use:   "batches",
 		Short: "list telemetry ingest batch manifests",
@@ -93,6 +96,81 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 	batches.Flags().BoolVar(&batchesJSON, "json", false, "emit JSON batch manifest list")
 	cmd.AddCommand(batches)
 	return cmd
+}
+
+func telemetryIngestFalcoCmd(dataDir *string) *cobra.Command {
+	var opts telemetry.FalcoIngestOptions
+	var jsonOut bool
+	var noPolicy bool
+	ingest := &cobra.Command{
+		Use:   "ingest-falco",
+		Short: "ingest Falco JSON/stdout events and map them into runtime telemetry",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			paths, err := store.Init(*dataDir)
+			if err != nil {
+				return err
+			}
+			db, err := store.Open(paths)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			var input *os.File
+			if opts.Path == "" || opts.Path == "-" {
+				input = os.Stdin
+				if opts.Path == "" {
+					opts.Path = "stdin"
+				}
+			} else {
+				input, err = os.Open(opts.Path)
+				if err != nil {
+					return err
+				}
+				defer input.Close()
+			}
+			result, err := telemetry.IngestFalco(db, opts, input)
+			if err != nil {
+				return err
+			}
+			decisionCount := 0
+			if !noPolicy {
+				for _, eventID := range result.EventIDs {
+					if _, persisted, err := securitymodel.EvaluateRuntimeEvent(db, eventID); err != nil {
+						result.Errors = append(result.Errors, fmt.Sprintf("event %s: policy failed: %v", eventID, err))
+						result.Failed++
+					} else if persisted {
+						decisionCount++
+					}
+				}
+			}
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(map[string]any{
+					"schema_version":   "agentprovenance.falco_ingest/v1",
+					"batch":            result,
+					"policy_decisions": decisionCount,
+				})
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "batch=%s format=falco path=%s file_sha256=%s event_ids_sha256=%s read=%d ingested=%d skipped=%d failed=%d policy_decisions=%d\n",
+				result.BatchID, result.Path, result.FileSHA256, result.EventIDsSHA256, result.Read, result.Ingested, result.Skipped, result.Failed, decisionCount)
+			for _, msg := range result.Errors {
+				fmt.Fprintf(cmd.OutOrStdout(), "error=%q\n", msg)
+			}
+			return nil
+		},
+	}
+	ingest.Flags().StringVar(&opts.Path, "file", "-", "Falco JSON/stdout file path, or - for stdin")
+	ingest.Flags().StringVar(&opts.RunID, "run", "", "default run id")
+	ingest.Flags().StringVar(&opts.RolloutID, "rollout", "", "default rollout id")
+	ingest.Flags().StringVar(&opts.AttemptID, "attempt", "", "default attempt id")
+	ingest.Flags().StringVar(&opts.SessionID, "session", "", "default session id")
+	ingest.Flags().StringVar(&opts.ToolCallID, "tool-call", "", "default tool call id")
+	ingest.Flags().StringVar(&opts.ProcessID, "process", "", "default process id")
+	ingest.Flags().StringVar(&opts.SnapshotID, "snapshot", "", "default snapshot id")
+	ingest.Flags().BoolVar(&noPolicy, "no-policy", false, "disable automatic policy/risk/response evaluation")
+	ingest.Flags().BoolVar(&jsonOut, "json", false, "emit JSON result")
+	return ingest
 }
 
 func telemetryBindCmd(dataDir *string) *cobra.Command {

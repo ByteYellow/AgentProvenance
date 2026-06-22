@@ -92,6 +92,8 @@ agentprov telemetry ingest-jsonl --format tetragon --file tetragon-events.jsonl
 agentprov telemetry ingest-jsonl --format falco --file falco-events.jsonl
 agentprov telemetry ingest-jsonl --format loongcollector --file loong-events.jsonl
 agentprov telemetry ingest-jsonl --format auto --file mixed-events.jsonl --json
+agentprov telemetry ingest-falco --file falco-events.jsonl --json
+falco -o json_output=true -o json_include_output_property=true | agentprov telemetry ingest-falco --file -
 agentprov telemetry batches --run <run_id>
 agentprov telemetry batches --run <run_id> --json
 ./scripts/demo_telemetry_jsonl.sh
@@ -106,12 +108,20 @@ The receiver maps recognized substrate events into the normalized schema:
 | Tetragon | `process_exec` | `execve` |
 | Tetragon | `process_exit` | `process_exit` |
 | Falco | `execve`, `execveat`, `spawned_process` | `execve` |
-| Falco | `open`, `openat`, `openat2`, `creat` | `file_open` |
-| Falco | `connect` | `network_connect` |
+| Falco | `open`, `openat`, `openat2`, `creat` | `file_open`, `file_write`, or `secret_path` |
+| Falco | `connect` | `network_connect`, `metadata_ip`, or `private_cidr` |
 | LoongCollector | `execve`, `process_exit`, `file_open`, `file_write`, `network_connect` | matching normalized family |
 
 Unrecognized rows are skipped. Malformed rows or rows that fail schema
 validation are counted as failed and reported in the ingest result.
+
+`telemetry ingest-falco` is the dedicated Falco-compatible path. It accepts a
+Falco JSON/stdout file or stdin stream, maps process/file/network rows, then
+runs runtime-policy evaluation by default. Metadata IP, private CIDR, and
+secret-path Falco rows therefore create normalized runtime events plus
+`policy_decisions`, `risk_signals`, `response_actions`, graph edges, and
+timeline rows. Use `--no-policy` when the receiver should only normalize and
+store telemetry.
 
 Each JSONL ingest also writes a compact telemetry batch manifest:
 

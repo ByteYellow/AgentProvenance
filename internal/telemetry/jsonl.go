@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -18,6 +19,17 @@ import (
 
 type JSONLIngestOptions struct {
 	Format     string
+	Path       string
+	RunID      string
+	SessionID  string
+	AttemptID  string
+	ToolCallID string
+	ProcessID  string
+	SnapshotID string
+	RolloutID  string
+}
+
+type FalcoIngestOptions struct {
 	Path       string
 	RunID      string
 	SessionID  string
@@ -99,6 +111,76 @@ func IngestJSONL(db *sql.DB, opts JSONLIngestOptions) (JSONLIngestResult, error)
 	}
 	result.EventIDsSHA256 = hashStrings(result.EventIDs)
 	if err := persistJSONLBatch(db, opts, &result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func IngestFalco(db *sql.DB, opts FalcoIngestOptions, input io.Reader) (JSONLIngestResult, error) {
+	if input == nil {
+		return JSONLIngestResult{}, fmt.Errorf("falco input reader is required")
+	}
+	path := strings.TrimSpace(opts.Path)
+	if path == "" {
+		path = "stdin"
+	}
+	jsonlOpts := JSONLIngestOptions{
+		Format:     "falco",
+		Path:       path,
+		RunID:      opts.RunID,
+		SessionID:  opts.SessionID,
+		AttemptID:  opts.AttemptID,
+		ToolCallID: opts.ToolCallID,
+		ProcessID:  opts.ProcessID,
+		SnapshotID: opts.SnapshotID,
+		RolloutID:  opts.RolloutID,
+	}
+	hasher := sha256.New()
+	result := JSONLIngestResult{Format: "falco", Path: path}
+	scanner := bufio.NewScanner(input)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		rawLine := scanner.Bytes()
+		_, _ = hasher.Write(rawLine)
+		_, _ = hasher.Write([]byte{'\n'})
+		line := strings.TrimSpace(string(rawLine))
+		if line == "" {
+			continue
+		}
+		result.Read++
+		var raw map[string]any
+		if err := json.Unmarshal([]byte(line), &raw); err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("line %d: invalid JSON: %v", lineNo, err))
+			continue
+		}
+		event, ok, err := mapJSONLEvent(jsonlOpts, raw, lineNo)
+		if err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("line %d: %v", lineNo, err))
+			continue
+		}
+		if !ok {
+			result.Skipped++
+			continue
+		}
+		id, err := IngestFiltered(db, event)
+		if err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("line %d: ingest failed: %v", lineNo, err))
+			continue
+		}
+		result.Ingested++
+		result.EventIDs = append(result.EventIDs, id)
+	}
+	if err := scanner.Err(); err != nil {
+		return result, err
+	}
+	result.FileSHA256 = hex.EncodeToString(hasher.Sum(nil))
+	result.EventIDsSHA256 = hashStrings(result.EventIDs)
+	if err := persistJSONLBatch(db, jsonlOpts, &result); err != nil {
 		return result, err
 	}
 	return result, nil
@@ -248,6 +330,7 @@ func mapFalco(raw map[string]any) (IngestEvent, bool, error) {
 	event.PID = firstInt(event.PID, intAt(fields, "proc.pid"))
 	event.PPID = firstInt(event.PPID, intAt(fields, "proc.ppid"))
 	event.ContainerID = firstNonEmpty(event.ContainerID, stringAt(fields, "container.id"))
+	event.CgroupID = firstNonEmpty(event.CgroupID, stringAt(fields, "container.cgroup"), stringAt(fields, "proc.cgroup"))
 	evtType := strings.ToLower(firstNonEmpty(stringAt(fields, "evt.type"), stringAt(raw, "evt.type")))
 	switch evtType {
 	case "execve", "execveat", "spawned_process":
@@ -256,17 +339,91 @@ func mapFalco(raw map[string]any) (IngestEvent, bool, error) {
 		if len(argv) == 0 {
 			argv = []string{"unknown"}
 		}
-		event.Payload = mustJSON(map[string]any{"argv": argv})
+		event.Payload = mustJSON(map[string]any{
+			"argv":       argv,
+			"command":    strings.Join(argv, " "),
+			"rule":       firstNonEmpty(stringAt(raw, "rule"), stringAt(raw, "output")),
+			"priority":   stringAt(raw, "priority"),
+			"falco_time": stringAt(raw, "time"),
+		})
 	case "open", "openat", "openat2", "creat":
-		event.EventType = "file_open"
-		event.Payload = mustJSON(map[string]any{"path": firstNonEmpty(stringAt(fields, "fd.name"), stringAt(fields, "evt.arg.path"))})
+		path := firstNonEmpty(stringAt(fields, "fd.name"), stringAt(fields, "evt.arg.path"), stringAt(fields, "evt.arg.name"))
+		flags := firstNonEmpty(stringAt(fields, "evt.arg.flags"), stringAt(fields, "evt.args"))
+		if secretPath(path) {
+			event.EventType = "secret_path"
+		} else if writeOpenFlags(flags) {
+			event.EventType = "file_write"
+		} else {
+			event.EventType = "file_open"
+		}
+		event.Payload = mustJSON(map[string]any{
+			"path":       path,
+			"flags":      flags,
+			"rule":       firstNonEmpty(stringAt(raw, "rule"), stringAt(raw, "output")),
+			"priority":   stringAt(raw, "priority"),
+			"falco_time": stringAt(raw, "time"),
+		})
 	case "connect":
 		event.EventType = "network_connect"
-		event.Payload = mustJSON(map[string]any{"dst": firstNonEmpty(stringAt(fields, "fd.rip"), stringAt(fields, "fd.name"))})
+		dst := firstNonEmpty(stringAt(fields, "fd.rip"), stringAt(fields, "fd.name"), stringAt(fields, "fd.sip"))
+		host, port := splitFalcoDestination(dst)
+		if host == "169.254.169.254" {
+			event.EventType = "metadata_ip"
+		} else if privateIP(host) {
+			event.EventType = "private_cidr"
+		}
+		event.Payload = mustJSON(map[string]any{
+			"dst":        dst,
+			"dst_ip":     host,
+			"host":       host,
+			"port":       port,
+			"rule":       firstNonEmpty(stringAt(raw, "rule"), stringAt(raw, "output")),
+			"priority":   stringAt(raw, "priority"),
+			"falco_time": stringAt(raw, "time"),
+		})
 	default:
 		return IngestEvent{}, false, nil
 	}
 	return event, true, nil
+}
+
+func splitFalcoDestination(dst string) (string, string) {
+	dst = strings.TrimSpace(dst)
+	if dst == "" {
+		return "", ""
+	}
+	if host, port, err := net.SplitHostPort(dst); err == nil {
+		return strings.Trim(host, "[]"), port
+	}
+	if idx := strings.LastIndex(dst, ":"); idx > -1 && strings.Count(dst, ":") == 1 {
+		return dst[:idx], dst[idx+1:]
+	}
+	return strings.Trim(dst, "[]"), ""
+}
+
+func privateIP(raw string) bool {
+	ip := net.ParseIP(strings.Trim(raw, "[]"))
+	return ip != nil && (ip.IsPrivate() || ip.IsLoopback())
+}
+
+func secretPath(path string) bool {
+	path = strings.ToLower(path)
+	for _, pattern := range []string{".env", "id_rsa", "secret", "credentials"} {
+		if strings.Contains(path, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+func writeOpenFlags(flags string) bool {
+	flags = strings.ToLower(flags)
+	for _, pattern := range []string{"o_wronly", "o_rdwr", "o_creat", "o_trunc", "write"} {
+		if strings.Contains(flags, pattern) {
+			return true
+		}
+	}
+	return false
 }
 
 func mapLoongCollector(raw map[string]any) (IngestEvent, bool, error) {

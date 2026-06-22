@@ -1,0 +1,4 @@
+{"time":"2026-01-01T00:00:01Z","rule":"Terminal shell in container","priority":"Notice","output_fields":{"evt.type":"execve","proc.pid":4242,"proc.ppid":4000,"container.id":"container-falco-demo","proc.cmdline":"sh -lc pytest -q"}}
+{"time":"2026-01-01T00:00:02Z","rule":"Metadata service access","priority":"Critical","output_fields":{"evt.type":"connect","proc.pid":4242,"proc.ppid":4000,"container.id":"container-falco-demo","fd.rip":"169.254.169.254:80"}}
+{"time":"2026-01-01T00:00:03Z","rule":"Private network access","priority":"Warning","output_fields":{"evt.type":"connect","proc.pid":4242,"proc.ppid":4000,"container.id":"container-falco-demo","fd.rip":"10.0.0.5:443"}}
+{"time":"2026-01-01T00:00:04Z","rule":"Secret file read","priority":"Critical","output_fields":{"evt.type":"openat","proc.pid":4242,"proc.ppid":4000,"container.id":"container-falco-demo","fd.name":"/workspace/.env","evt.arg.flags":"O_RDONLY"}}

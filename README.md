@@ -180,12 +180,20 @@ agentprov telemetry ingest --raw-event raw-execve-1 --pid <pid> \
   --timestamp <event_time> --source tetragon_jsonl --type execve \
   --payload '{"argv":["./async_child.sh"]}'
 agentprov telemetry ingest-jsonl --format tetragon --file tetragon-events.jsonl
+agentprov telemetry ingest-falco --file falco-events.jsonl
 ```
 
 `ingest-jsonl` records a telemetry batch manifest with the input file hash,
 mapped event IDs, and event ID hash. It gives the DAG an audit handle for
 external Falco/Tetragon/LoongCollector evidence without turning AgentProvenance
 into a long-term log store.
+
+`ingest-falco` is the Falco-compatible receiver path. It reads Falco JSON/stdout
+from a file or stdin stream, maps recognized `execve`, `open/openat`, and
+`connect` events into normalized runtime events, correlates them by
+PID/container/cgroup/time evidence, and then evaluates policy by default.
+Raw Falco rows do not need `tool_call_id`; ToolCallScope is recovered from the
+binding table when possible.
 
 ## Relationship To Existing Systems
 
@@ -251,6 +259,39 @@ event entered the DAG.
 application context, runtime telemetry, evidence, policy decisions, risk
 signals, baseline deviations, response actions, and external effects into one
 time-ordered view. The JSON output is designed to feed a future UI.
+
+### Falco-compatible Receiver
+
+The dedicated Falco receiver is useful when Falco is already filtering kernel
+or runtime events on the host:
+
+```sh
+./agentprov telemetry bind --run run-falco-demo --session session-falco-demo \
+  --attempt attempt-falco-demo --tool-call tool-falco-demo \
+  --process process-falco-demo --container-id container-falco-demo --pid 4242 \
+  --started-at 2026-01-01T00:00:00Z
+
+./agentprov telemetry ingest-falco \
+  --file examples/telemetry/falco-risk-events.jsonl --json
+
+./agentprov telemetry list --run run-falco-demo
+./agentprov timeline --run run-falco-demo
+./agentprov security risks --run run-falco-demo
+./agentprov security responses --run run-falco-demo
+```
+
+For a live stream, pipe Falco JSON output directly:
+
+```sh
+sudo falco -o json_output=true -o json_include_output_property=true | \
+  ./agentprov telemetry ingest-falco --file -
+```
+
+The receiver maps Falco process, file, and network rows into normalized runtime
+events. Metadata IP, private CIDR, and secret-path rows are promoted into
+security evidence: `RiskSignal`, `ResponseAction`, policy graph edges, and
+timeline entries. Falco remains the substrate collector; AgentProvenance owns
+correlation, causality, provenance, and risk/audit linkage.
 
 The legacy branch-heavy script remains available as a stress demo, not as the
 main product story:
@@ -423,8 +464,14 @@ Substrate integrations are downstream of the provenance model:
 - Kubernetes, Ray, Batch, and cloud systems are orchestration substrates.
 - Falco, Tetragon, LoongCollector, auditd, and eBPF are telemetry substrates.
   The current MVP consumes already-filtered Tetragon/Falco/LoongCollector JSONL
-  through `agentprov telemetry ingest-jsonl`, records a hashable batch manifest,
-  and does not run kernel probes.
+  through `agentprov telemetry ingest-jsonl`, adds a dedicated
+  `agentprov telemetry ingest-falco` receiver for Falco JSON/stdout streams,
+  records a hashable batch manifest, and does not run kernel probes.
+- A future `agentprov-sensor` should be capability-gated: prefer modern eBPF
+  where the kernel and permissions support it, fall back to a legacy eBPF path
+  where appropriate, and only use a kmod-style collector when an operator
+  explicitly accepts that deployment model. The control plane must treat sensor
+  capability as data, not as a hidden assumption.
 
 The project value is not collecting more logs. The value is correlating
 substrate signals with execution context and making them affect diff, blame,
