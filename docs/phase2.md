@@ -7,7 +7,7 @@ The goal is not to expand into a generic sandbox platform. The goal is to make
 AgentProvenance durable enough that an external agent harness, evaluator,
 security workflow, or future adapter can trust the evidence graph.
 
-Best-of-N is not the center of Phase 2. It is only a stress demo. The center is:
+Branch-heavy fanout is not the center of Phase 2. It is only a stress demo. The center is:
 
 ```text
 Execution Observability Core
@@ -26,7 +26,8 @@ Execution Observability Core
 | Evidence query shape | Evidence can be queried from artifact, file, process, event, tool call, attempt, and risk nodes through stable upstream/downstream/evidence JSON. | MVP done. All listed start points are covered with explicit `--depth`, `--limit`, and `--cursor` traversal controls. Policy-decision graph edges are persisted and verified. |
 | QBS impact model | QBS is treated as a workload/evaluation influence that affects execution cadence, evidence volume, storage pressure, adapter boundaries, and downstream consumption. It is not the evidence query layer. | Direction corrected in docs. Concrete QBS assumptions still need to be specified once the exact QBS contract is fixed. |
 | Adapter readiness | The provenance model clearly separates agent, sandbox, telemetry, artifact, and snapshot adapters from core correlation/query/provenance logic. | MVP done. `agentprov adapter list/inspect` exposes capability contracts for agent, sandbox, telemetry, artifact, and snapshot adapters, including identity keys, boundaries, and QBS impact. |
-| Demo evidence | The best-of-N coding demo shows artifact lineage, content hash, diff/blame, taint, promotion barrier, replay, trajectory, and audit evidence as a stress demo. | MVP done for CLI evidence. Acceptance now checks object refs for artifact, diff, blame, replay, trajectory, audit, record, and policy-decision objects. |
+| Security evidence | Risk signals, baseline deviations, and response actions are first-class graph objects and queryable records rather than side effects hidden inside policy output. | MVP done for policy-derived risk/response records and baseline deviation records. `agentprov security risks/deviations/responses` exposes the evidence surface. |
+| Demo evidence | The branch-heavy coding demo shows artifact lineage, content hash, diff/blame, taint, response-gate behavior, replay, trajectory, and audit evidence as a stress demo. | MVP done for CLI evidence. Acceptance now checks object refs for artifact, diff, blame, replay, trajectory, audit, record, and policy-decision objects. |
 | README positioning | README explains why this is Git-like provenance rather than a trace dashboard or sandbox manager. | Partial. README has the positioning; Phase 2 object-store semantics are now called out. |
 
 ## Current Object Types
@@ -39,7 +40,10 @@ Execution Observability Core
 - `tool_call`
 - `process`
 - `artifact`
-- `promotion`
+- `risk_signal`
+- `baseline_deviation`
+- `response_action`
+- `promotion` (legacy stress-demo object)
 - `evidence`
 - `event`
 - `policy_decision`

@@ -11,7 +11,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 8
+const SchemaVersion = 9
 
 type Paths struct {
 	Root       string
@@ -369,6 +369,51 @@ func EnsureSchema(db *sql.DB) error {
 			reason TEXT NOT NULL,
 			created_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS risk_signals (
+			id TEXT PRIMARY KEY,
+			run_id TEXT NOT NULL DEFAULT '',
+			session_id TEXT NOT NULL DEFAULT '',
+			tool_call_id TEXT NOT NULL DEFAULT '',
+			process_id TEXT NOT NULL DEFAULT '',
+			snapshot_id TEXT NOT NULL DEFAULT '',
+			event_id TEXT NOT NULL DEFAULT '',
+			policy_decision_id TEXT NOT NULL DEFAULT '',
+			signal_type TEXT NOT NULL,
+			severity TEXT NOT NULL,
+			reason TEXT NOT NULL,
+			recommended_action TEXT NOT NULL DEFAULT 'audit',
+			payload TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS baseline_deviations (
+			id TEXT PRIMARY KEY,
+			run_id TEXT NOT NULL DEFAULT '',
+			template_name TEXT NOT NULL DEFAULT '',
+			profile_id TEXT NOT NULL DEFAULT '',
+			deviation_type TEXT NOT NULL,
+			status TEXT NOT NULL,
+			expected_value REAL NOT NULL DEFAULT 0,
+			observed_value REAL NOT NULL DEFAULT 0,
+			recommended_action TEXT NOT NULL DEFAULT 'audit',
+			payload TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS response_actions (
+			id TEXT PRIMARY KEY,
+			run_id TEXT NOT NULL DEFAULT '',
+			session_id TEXT NOT NULL DEFAULT '',
+			process_id TEXT NOT NULL DEFAULT '',
+			snapshot_id TEXT NOT NULL DEFAULT '',
+			risk_signal_id TEXT NOT NULL DEFAULT '',
+			policy_decision_id TEXT NOT NULL DEFAULT '',
+			action_type TEXT NOT NULL,
+			target_type TEXT NOT NULL DEFAULT '',
+			target_id TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL,
+			result_ref TEXT NOT NULL DEFAULT '',
+			payload TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL
+		);`,
 		`CREATE TABLE IF NOT EXISTS cost_samples (
 			id TEXT PRIMARY KEY,
 			run_id TEXT NOT NULL,
@@ -652,7 +697,7 @@ func EnsureSchema(db *sql.DB) error {
 		return fmt.Errorf("record schema version: %w", err)
 	}
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_versions (version, description, applied_at)
-		VALUES (?, 'agent rollout tool_call, evidence graph, and resource window schema', datetime('now'))`, SchemaVersion); err != nil {
+		VALUES (?, 'agent provenance, telemetry correlation, security evidence, and resource window schema', datetime('now'))`, SchemaVersion); err != nil {
 		return fmt.Errorf("record schema version: %w", err)
 	}
 	return nil

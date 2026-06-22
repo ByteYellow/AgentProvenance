@@ -113,7 +113,7 @@ func nodeCmd(dataDir *string) *cobra.Command {
 	heartbeat.Flags().Float64Var(&debt, "active-cpu-debt", 0, "active CPU debt")
 	heartbeat.Flags().Int64Var(&warmHits, "warm-hits", 0, "warm hit increment")
 
-	cmd := &cobra.Command{Use: "node", Short: "fleet node commands"}
+	cmd := &cobra.Command{Use: "node", Short: "experimental substrate node commands", Hidden: true}
 	cmd.AddCommand(register)
 	cmd.AddCommand(list)
 	cmd.AddCommand(inspect)

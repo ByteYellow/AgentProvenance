@@ -164,7 +164,7 @@ func graphCmd(dataDir *string) *cobra.Command {
 	var diffJSON bool
 	diffCmd := &cobra.Command{
 		Use:   "diff",
-		Short: "diff a workspace file across rollout attempts",
+		Short: "diff a workspace file across execution attempts",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			db, err := openDB()
 			if err != nil {
@@ -186,7 +186,7 @@ func graphCmd(dataDir *string) *cobra.Command {
 	var blameJSON bool
 	blameCmd := &cobra.Command{
 		Use:   "blame",
-		Short: "attribute a workspace file to rollout attempts",
+		Short: "attribute a workspace file to execution attempts",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			db, err := openDB()
 			if err != nil {

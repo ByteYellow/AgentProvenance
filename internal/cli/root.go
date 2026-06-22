@@ -38,6 +38,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(graphCmd(&dataDir))
 	root.AddCommand(forensicsCmd(&dataDir))
 	root.AddCommand(evidenceCmd(&dataDir))
+	root.AddCommand(securityCmd(&dataDir))
 	root.AddCommand(gcCmd(&dataDir))
 	root.AddCommand(baselineCmd(&dataDir))
 	root.AddCommand(poolCmd(&dataDir))

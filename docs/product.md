@@ -42,7 +42,8 @@ Primary scenarios:
 
 Stress scenarios:
 
-- Best-of-N attempt fanout.
+- Branch/fanout stress scenarios that exercise diff, blame, taint, and
+  response-gate behavior.
 - Evaluator or RL pipelines that need trajectory evidence, expectation
   deviation signals, and risk context for reward/penalty shaping.
 - High-concurrency sandbox execution where raw traces are not enough.
@@ -135,8 +136,8 @@ system-side telemetry + application-side agent context
 The HIDS analogy is useful: AI agents in sandboxes still create host-like
 monitoring needs around process, file, network, resource, and policy activity.
 The difference is that AgentProvenance treats the agent context as first-class:
-run, session, attempt, tool call, task, snapshot, artifact, and promotion or
-quarantine state.
+run, session, attempt, tool call, task, snapshot, artifact, risk signal,
+baseline deviation, response action, and quarantine state.
 
 OpenTelemetry and LLM tracing tools remain useful inputs or exports. They are
 not the core product surface. AgentProvenance focuses on evidence lineage,
@@ -154,7 +155,7 @@ manifests.
 - Which file state is created, modified, deleted, or unchanged from base?
 - Which external effect was attempted, gated, or denied?
 - Which branch was tainted or quarantined?
-- Why was a candidate blocked by the promotion barrier?
+- Why was an execution branch blocked by the response gate?
 - Which risk decision and response action are supported by concrete evidence?
 - What evidence and deviation signals should an external evaluator or RL
   pipeline score?
@@ -164,19 +165,19 @@ manifests.
 
 | Phase | Goal | Output |
 |---|---|---|
-| Phase 1 | Provenance Correlation MVP | ToolCallScope, raw telemetry correlation, runtime causality DAG, diff/blame, taint, promotion barrier, replay and trajectory manifests |
+| Phase 1 | Provenance Correlation MVP | ToolCallScope, raw telemetry correlation, runtime causality DAG, diff/blame, risk/deviation records, response-gate evidence, replay and trajectory manifests |
 | Phase 2 | Evidence / Causality Hardening | stable explain JSON, content-addressed objects, object parent hashes, graph verification, bounded traversal, pagination, integrity metadata |
 | Phase 3 | Zero-SDK Recorder Hardening | process-tree capture, delayed child process handling, cwd/time/file-diff inference, orphan lifecycle evidence, low-intrusion record mode |
 | Phase 4 | Real Telemetry Integration | Falco/Tetragon/LoongCollector/auditd/eBPF receivers, cgroup/container/pid correlation, kernel-side filtering assumptions |
-| Phase 5 | Risk / Policy / Control | configurable risk signals, behavior baseline checks, taint propagation, quarantine, promotion block, forensics export, Feishu/DingTalk notification hooks, isolation escalation hooks |
+| Phase 5 | Risk / Policy / Control | configurable risk signals, behavior baseline checks, response adapters, taint propagation, quarantine, response blocking, forensics export, Feishu/DingTalk/webhook hooks, isolation escalation hooks |
 | Phase 6 | Scale / UI / Productization | async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency ingest/query tests, usable UI/API |
 
 ## Phase 1 Definition Of Done
 
 Phase 1 is done when the project can prove:
 
-- A coding-agent best-of-N demo creates multiple attempts from one base
-  snapshot.
+- A coding-agent fanout stress demo creates multiple attempts from one base
+  snapshot to exercise branch-heavy evidence.
 - `agentprov record -- <command>` records a command without SDK integration and
   produces file diff, blame, sampled descendant process evidence, PID bindings,
   post-root outlived-process markers, and runtime file evidence.
@@ -192,7 +193,7 @@ Phase 1 is done when the project can prove:
   attempt, artifact, or risk decision by combining causality and provenance
   evidence into an `agentprovenance.explain/v1` manifest with depth/limit/cursor
   controlled `causality_path` and query metadata.
-- Risk marks taint and blocks promotion.
+- Risk marks taint and blocks unsafe reuse through a response gate.
 - Promotion records a telemetry/evidence drain watermark.
 - `graph replay`, `graph verify`, and `graph trajectories --json` produce
   machine-readable audit manifests.
@@ -215,4 +216,4 @@ replay: reconstruction plan and audit manifest
 This is the durable differentiation from generic observability:
 AgentProvenance is not only showing that something happened. It explains how an
 agent execution state was produced, changed, branched, tainted, judged risky,
-responded to, and made eligible or ineligible for promotion or further use.
+responded to, and made eligible or ineligible for further use.

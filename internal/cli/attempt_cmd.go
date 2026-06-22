@@ -58,7 +58,7 @@ func attemptCmd(dataDir *string) *cobra.Command {
 	bestOf.Flags().IntVar(&topK, "top-k", 0, "after probe commands, run full commands only for the top K strategies")
 	_ = bestOf.MarkFlagRequired("snapshot")
 	_ = bestOf.MarkFlagRequired("strategy")
-	cmd := &cobra.Command{Use: "attempt", Short: "attempt execution and selection commands"}
+	cmd := &cobra.Command{Use: "attempt", Short: "stress-demo attempt fanout commands", Hidden: true}
 	cmd.AddCommand(bestOf)
 	return cmd
 }

@@ -11,7 +11,7 @@ import (
 func costCmd(dataDir *string) *cobra.Command {
 	show := &cobra.Command{
 		Use:   "show <run_id>",
-		Short: "show run cost metrics",
+		Short: "show resource and cost evidence for a run",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			paths, err := store.Init(*dataDir)
@@ -28,7 +28,7 @@ func costCmd(dataDir *string) *cobra.Command {
 	}
 	sample := &cobra.Command{
 		Use:   "sample <session_id>",
-		Short: "sample Docker stats into run cost metrics",
+		Short: "sample Docker stats into resource evidence",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			paths, err := store.Init(*dataDir)
@@ -49,7 +49,7 @@ func costCmd(dataDir *string) *cobra.Command {
 			return nil
 		},
 	}
-	cmd := &cobra.Command{Use: "cost", Short: "cost operations"}
+	cmd := &cobra.Command{Use: "cost", Short: "resource and cost evidence commands"}
 	cmd.AddCommand(show)
 	cmd.AddCommand(sample)
 	return cmd
@@ -79,7 +79,7 @@ func benchCmd() *cobra.Command {
 	overcommit.Flags().Int64Var(&memoryPerSessionMB, "memory-per-session-mb", 256, "memory request per simulated session")
 	overcommit.Flags().Int64Var(&memoryTotalMB, "memory-total-mb", 8192, "node memory capacity")
 	overcommit.Flags().BoolVar(&bursty, "bursty", false, "simulate periodic CPU bursts instead of fixed idle ratio")
-	cmd := &cobra.Command{Use: "bench", Short: "benchmark and simulation commands"}
+	cmd := &cobra.Command{Use: "bench", Short: "experimental benchmark and simulation commands", Hidden: true}
 	cmd.AddCommand(overcommit)
 	return cmd
 }

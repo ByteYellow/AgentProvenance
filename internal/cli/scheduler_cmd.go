@@ -39,7 +39,7 @@ func schedulerCmd(dataDir, daemonURL *string) *cobra.Command {
 		},
 	}
 	status.Flags().StringVar(&snapshot, "snapshot", "", "snapshot name or id for locality check")
-	cmd := &cobra.Command{Use: "scheduler", Short: "scheduler signal commands"}
+	cmd := &cobra.Command{Use: "scheduler", Short: "experimental scheduler signal commands", Hidden: true}
 	cmd.AddCommand(status)
 	return cmd
 }

@@ -11,7 +11,8 @@ LLM / agent observability platform
 
 AgentProvenance
   -> turns execution context, runtime evidence, state changes, artifacts,
-     risk, and promotion evidence into a Git-like provenance DAG
+     risk signals, baseline deviations, and response evidence into a Git-like
+     provenance DAG
 ```
 
 ## LangSmith
@@ -32,7 +33,7 @@ snapshot -> attempt -> tool_call -> process -> file diff -> artifact
                   runtime event      risk/cost evidence
                          |
                          v
-                 taint / quarantine / promotion barrier
+                 risk signal / quarantine / response gate
 ```
 
 AgentProvenance can complement LangSmith-style systems by exporting lower-level
@@ -43,7 +44,7 @@ execution evidence:
 - which process changed a file;
 - which artifact came from which attempt;
 - which runtime event caused risk or taint;
-- why a local candidate was allowed or blocked at the promotion barrier;
+- why an execution branch was allowed or blocked by a response gate;
 - how to reconstruct the result through a replay manifest.
 
 ## LLM Gateways
@@ -78,8 +79,8 @@ RL trainer, winner selector, or throughput scheduler.
 Its job is narrower:
 
 > Combine execution context, system-level telemetry, state diff, artifact
-> lineage, risk, and promotion evidence into a queryable, diffable, replayable,
-> and auditable execution graph.
+> lineage, risk signals, baseline deviations, and response evidence into a
+> queryable, diffable, replayable, and auditable execution graph.
 
 That graph should answer:
 
@@ -88,7 +89,6 @@ That graph should answer:
 - Which process changed this file?
 - Which runtime event maps to this agent action?
 - Which branch was tainted or quarantined?
-- Which local candidate passed the promotion barrier, and what behavior/risk
-  evidence should an external evaluator score before assigning reward,
-  penalty, filtering, or review decisions?
+- Which behavior/risk evidence should an external evaluator score before
+  assigning reward, penalty, filtering, or review decisions?
 - Can the result be replayed or audited later?

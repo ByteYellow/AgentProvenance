@@ -19,6 +19,20 @@ type Profile struct {
 	CreatedAt         string
 }
 
+type DeviationRecord struct {
+	ID                string
+	RunID             string
+	TemplateName      string
+	ProfileID         string
+	DeviationType     string
+	Status            string
+	ExpectedValue     float64
+	ObservedValue     float64
+	RecommendedAction string
+	Payload           string
+	CreatedAt         string
+}
+
 func Learn(db *sql.DB, templateName, runID string) (Profile, error) {
 	if templateName == "" || runID == "" {
 		return Profile{}, fmt.Errorf("template and run are required")
@@ -55,19 +69,81 @@ func Check(db *sql.DB, templateName, runID string) (string, []string, error) {
 		return "", nil, err
 	}
 	var deviations []string
+	records := []DeviationRecord{}
 	if current.NetworkEventCount > profile.NetworkEventCount+2 {
 		deviations = append(deviations, "network_event_count")
+		records = append(records, deviationRecord(runID, templateName, profile.ID, "network_event_count", float64(profile.NetworkEventCount), float64(current.NetworkEventCount)))
 	}
 	if current.PolicyBlockCount > profile.PolicyBlockCount {
 		deviations = append(deviations, "policy_block_count")
+		records = append(records, deviationRecord(runID, templateName, profile.ID, "policy_block_count", float64(profile.PolicyBlockCount), float64(current.PolicyBlockCount)))
 	}
 	if profile.ActiveCPUSeconds > 0 && current.ActiveCPUSeconds > profile.ActiveCPUSeconds*2 {
 		deviations = append(deviations, "active_cpu_seconds")
+		records = append(records, deviationRecord(runID, templateName, profile.ID, "active_cpu_seconds", profile.ActiveCPUSeconds, current.ActiveCPUSeconds))
 	}
 	if len(deviations) == 0 {
 		return "normal", deviations, nil
 	}
+	if err := persistDeviations(db, records); err != nil {
+		return "", nil, err
+	}
 	return "anomalous", deviations, nil
+}
+
+func ListDeviations(db *sql.DB, runID string) ([]DeviationRecord, error) {
+	query := `SELECT id, run_id, template_name, profile_id, deviation_type, status, expected_value, observed_value,
+		recommended_action, payload, created_at FROM baseline_deviations`
+	args := []any{}
+	if runID != "" {
+		query += ` WHERE run_id = ?`
+		args = append(args, runID)
+	}
+	query += ` ORDER BY created_at DESC`
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var records []DeviationRecord
+	for rows.Next() {
+		var record DeviationRecord
+		if err := rows.Scan(&record.ID, &record.RunID, &record.TemplateName, &record.ProfileID, &record.DeviationType, &record.Status, &record.ExpectedValue, &record.ObservedValue, &record.RecommendedAction, &record.Payload, &record.CreatedAt); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
+func deviationRecord(runID, templateName, profileID, deviationType string, expected, observed float64) DeviationRecord {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	return DeviationRecord{
+		ID:                ids.New("dev"),
+		RunID:             runID,
+		TemplateName:      templateName,
+		ProfileID:         profileID,
+		DeviationType:     deviationType,
+		Status:            "anomalous",
+		ExpectedValue:     expected,
+		ObservedValue:     observed,
+		RecommendedAction: "audit",
+		Payload:           fmt.Sprintf(`{"deviation_type":%q,"expected":%.6f,"observed":%.6f}`, deviationType, expected, observed),
+		CreatedAt:         now,
+	}
+}
+
+func persistDeviations(db *sql.DB, records []DeviationRecord) error {
+	for _, record := range records {
+		if _, err := db.Exec(`INSERT INTO baseline_deviations
+			(id, run_id, template_name, profile_id, deviation_type, status, expected_value, observed_value, recommended_action, payload, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			record.ID, record.RunID, record.TemplateName, record.ProfileID, record.DeviationType, record.Status,
+			record.ExpectedValue, record.ObservedValue, record.RecommendedAction, record.Payload, record.CreatedAt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func latestProfile(db *sql.DB, templateName string) (Profile, error) {

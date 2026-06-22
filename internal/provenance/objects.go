@@ -117,6 +117,15 @@ func (s ObjectStore) MaterializeRun(runID string) (MaterializeResult, error) {
 	if err := ctx.materializePolicyDecisions(); err != nil {
 		return MaterializeResult{}, err
 	}
+	if err := ctx.materializeRiskSignals(); err != nil {
+		return MaterializeResult{}, err
+	}
+	if err := ctx.materializeBaselineDeviations(); err != nil {
+		return MaterializeResult{}, err
+	}
+	if err := ctx.materializeResponseActions(); err != nil {
+		return MaterializeResult{}, err
+	}
 	if err := ctx.materializeCosts(); err != nil {
 		return MaterializeResult{}, err
 	}
@@ -705,6 +714,87 @@ func (c *materializeContext) materializePolicyDecisions() error {
 			Parents:  c.parent("event/" + eventID),
 			Refs:     map[string]any{"event_id": eventID, "session_id": sessionID},
 			Payload:  map[string]any{"rule_id": ruleID, "decision": decision, "reason": reason, "created_at": createdAt},
+		}); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
+func (c *materializeContext) materializeRiskSignals() error {
+	rows, err := c.store.DB.Query(`SELECT id, session_id, tool_call_id, process_id, snapshot_id, event_id,
+			policy_decision_id, signal_type, severity, reason, recommended_action, payload, created_at
+		FROM risk_signals WHERE run_id = ? ORDER BY created_at ASC`, c.runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, sessionID, toolCallID, processID, snapshotID, eventID, decisionID, signalType, severity, reason, action, payload, createdAt string
+		if err := rows.Scan(&id, &sessionID, &toolCallID, &processID, &snapshotID, &eventID, &decisionID, &signalType, &severity, &reason, &action, &payload, &createdAt); err != nil {
+			return err
+		}
+		if _, err := c.put(provenanceObject{
+			Type:     "risk_signal",
+			SourceID: id,
+			Parents:  c.parent("event/"+eventID, "policy_decision/"+decisionID, "tool_call/"+toolCallID, "process/"+processID, "snapshot/"+snapshotID),
+			Refs:     map[string]any{"event_id": eventID, "policy_decision_id": decisionID, "session_id": sessionID, "tool_call_id": toolCallID, "process_id": processID, "snapshot_id": snapshotID},
+			Payload:  map[string]any{"signal_type": signalType, "severity": severity, "reason": reason, "recommended_action": action, "payload": payload, "created_at": createdAt},
+		}); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
+func (c *materializeContext) materializeBaselineDeviations() error {
+	rows, err := c.store.DB.Query(`SELECT id, template_name, profile_id, deviation_type, status, expected_value,
+			observed_value, recommended_action, payload, created_at
+		FROM baseline_deviations WHERE run_id = ? ORDER BY created_at ASC`, c.runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, templateName, profileID, deviationType, status, action, payload, createdAt string
+		var expected, observed float64
+		if err := rows.Scan(&id, &templateName, &profileID, &deviationType, &status, &expected, &observed, &action, &payload, &createdAt); err != nil {
+			return err
+		}
+		if _, err := c.put(provenanceObject{
+			Type:     "baseline_deviation",
+			SourceID: id,
+			Refs:     map[string]any{"run_id": c.runID, "template_name": templateName, "profile_id": profileID},
+			Payload: map[string]any{
+				"deviation_type": deviationType, "status": status, "expected_value": expected,
+				"observed_value": observed, "recommended_action": action, "payload": payload, "created_at": createdAt,
+			},
+		}); err != nil {
+			return err
+		}
+	}
+	return rows.Err()
+}
+
+func (c *materializeContext) materializeResponseActions() error {
+	rows, err := c.store.DB.Query(`SELECT id, session_id, process_id, snapshot_id, risk_signal_id, policy_decision_id,
+			action_type, target_type, target_id, status, result_ref, payload, created_at
+		FROM response_actions WHERE run_id = ? ORDER BY created_at ASC`, c.runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, sessionID, processID, snapshotID, riskID, decisionID, actionType, targetType, targetID, status, resultRef, payload, createdAt string
+		if err := rows.Scan(&id, &sessionID, &processID, &snapshotID, &riskID, &decisionID, &actionType, &targetType, &targetID, &status, &resultRef, &payload, &createdAt); err != nil {
+			return err
+		}
+		if _, err := c.put(provenanceObject{
+			Type:     "response_action",
+			SourceID: id,
+			Parents:  c.parent("risk_signal/"+riskID, "policy_decision/"+decisionID, "process/"+processID, "snapshot/"+snapshotID),
+			Refs:     map[string]any{"session_id": sessionID, "process_id": processID, "snapshot_id": snapshotID, "risk_signal_id": riskID, "policy_decision_id": decisionID},
+			Payload:  map[string]any{"action_type": actionType, "target_type": targetType, "target_id": targetID, "status": status, "result_ref": resultRef, "payload": payload, "created_at": createdAt},
 		}); err != nil {
 			return err
 		}

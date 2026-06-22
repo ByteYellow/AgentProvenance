@@ -108,6 +108,26 @@ func TestEvaluateJSONLWithStatePersistsAndQuarantines(t *testing.T) {
 	if quarantineCount != 1 {
 		t.Fatalf("quarantine count = %d, want 1", quarantineCount)
 	}
+	risks, err := ListRiskSignals(db, "run-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(risks) != 1 {
+		t.Fatalf("risk signals = %d, want 1", len(risks))
+	}
+	if risks[0].PolicyDecisionID != decisionID || risks[0].SignalType != "policy_violation" || risks[0].Severity != "high" || risks[0].RecommendedAction != "quarantine" {
+		t.Fatalf("unexpected risk signal: %+v", risks[0])
+	}
+	responses, err := ListResponseActions(db, "run-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(responses) != 1 {
+		t.Fatalf("response actions = %d, want 1", len(responses))
+	}
+	if responses[0].RiskSignalID != risks[0].ID || responses[0].PolicyDecisionID != decisionID || responses[0].ActionType != "quarantine" || responses[0].TargetType != "session" || responses[0].TargetID != "sbx-test" {
+		t.Fatalf("unexpected response action: %+v", responses[0])
+	}
 }
 
 func insertPolicySession(t *testing.T, db *sql.DB) {

@@ -12,9 +12,10 @@ Agent / Sandbox / Runtime Telemetry
   -> Risk, Replay, Audit, Adapter Integrations
 ```
 
-Best-of-N and RL rollout are demo and stress scenarios. They are useful because
-they create branches, artifacts, risk, and competing trajectories, but they are
-not the core product promise. For RL, AgentProvenance should provide
+Branch-heavy fanout and RL-style rollout are demo and stress scenarios. They are
+useful because they create branches, artifacts, risk, and competing
+trajectories, but they are not the core product promise. For RL,
+AgentProvenance should provide
 observability, behavior evidence, expectation-deviation signals, and
 security/risk context that downstream trainers can convert into reward,
 penalty, filtering, or human-review signals.
@@ -35,7 +36,8 @@ The project should answer:
 - Which child process produced which runtime event?
 - Which process changed which file?
 - Which runtime event contributed to which artifact?
-- Which evidence made a branch risky, tainted, or blocked?
+- Which evidence created a risk signal, baseline deviation, taint, or response
+  action?
 - Can the trajectory be queried, diffed, blamed, replayed, and audited later?
 
 ## What AgentProvenance Is Not
@@ -116,7 +118,7 @@ file     -> who changed it, when, through which process and tool call
 process  -> owning tool_call / attempt / runtime events / artifacts
 event    -> runtime identity / correlation result / impacted files or risk
 attempt  -> state diff / events / artifacts / risk / replay eligibility
-risk     -> taint source / affected descendants / blocked promotion
+risk     -> signal source / affected descendants / response gate
 ```
 
 Near-term commands:
@@ -193,9 +195,11 @@ core.
 
 Required capabilities:
 
-- risk events become graph evidence;
+- risk signals and baseline deviations become graph evidence;
 - taint propagates through snapshot/artifact lineage;
-- promotion barrier blocks tainted or undrained branches;
+- response gates block tainted, undrained, or policy-denied branches;
+- response actions record audit, deny, kill, quarantine, taint, forensics,
+  notification, or isolation-escalation intent;
 - forensics bundle references provenance object IDs;
 - policy and runtime enforcement use the same event/correlation model.
 
@@ -203,16 +207,16 @@ Required capabilities:
 
 | Phase | Goal | Primary output |
 | --- | --- | --- |
-| Phase 1 | Provenance Correlation MVP | ToolCallScope, raw telemetry correlation, runtime causality DAG, diff/blame, taint, promotion barrier, replay and trajectory manifests |
+| Phase 1 | Provenance Correlation MVP | ToolCallScope, raw telemetry correlation, runtime causality DAG, diff/blame, risk/deviation records, response-gate evidence, replay and trajectory manifests |
 | Phase 2 | Evidence / Causality Hardening | stable explain JSON, content-addressed objects, object parent hashes, graph verification, bounded traversal, pagination, integrity metadata |
 | Phase 3 | Zero-SDK Recorder Hardening | process-tree capture, delayed child process handling, cwd/time/file-diff inference, orphan lifecycle evidence, low-intrusion record mode |
 | Phase 4 | Real Telemetry Integration | Falco/Tetragon/LoongCollector/auditd/eBPF receivers, cgroup/container/pid correlation, kernel-side filtering assumptions |
-| Phase 5 | Risk / Policy / Control | configurable risk signals, taint propagation, quarantine, promotion block, forensics export, isolation escalation hooks |
+| Phase 5 | Risk / Policy / Control | configurable risk signals, behavior baselines, response adapters, taint propagation, quarantine, response blocking, forensics export, Feishu/DingTalk/webhook hooks, isolation escalation hooks |
 | Phase 6 | Scale / UI / Productization | async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency ingest/query tests, usable UI/API |
 
 ## Demo Repositioning
 
-Best-of-N coding-agent rollout remains useful, but its role is:
+Branch-heavy coding-agent fanout remains useful, but its role is:
 
 ```text
 a stress demo for branching sandboxed agent execution

@@ -10,7 +10,7 @@ import (
 )
 
 func rolloutCmd(dataDir *string) *cobra.Command {
-	cmd := &cobra.Command{Use: "rollout", Short: "agent rollout control commands"}
+	cmd := &cobra.Command{Use: "rollout", Short: "legacy stress-demo rollout commands", Hidden: true}
 	cmd.AddCommand(rolloutStartCmd(dataDir))
 	cmd.AddCommand(rolloutStatusCmd(dataDir))
 	cmd.AddCommand(rolloutAttemptsCmd(dataDir))
@@ -54,7 +54,7 @@ func rolloutStartCmd(dataDir *string) *cobra.Command {
 	c.Flags().StringVar(&req.Snapshot, "snapshot", "", "base snapshot name or id")
 	c.Flags().StringArrayVar(&req.Strategies, "strategy", nil, "strategy in name::command form; repeat for multiple attempts")
 	c.Flags().IntVar(&req.Fanout, "fanout", 0, "maximum attempts to run; defaults to strategy count")
-	c.Flags().IntVar(&req.BudgetSeconds, "budget-seconds", 0, "rollout budget in seconds for accounting")
+	c.Flags().IntVar(&req.BudgetSeconds, "budget-seconds", 0, "stress-demo budget in seconds for accounting")
 	c.Flags().Float64Var(&req.MaxCost, "max-cost", 0, "maximum fanout cost budget before stopping")
 	c.Flags().BoolVar(&req.EarlyStop, "early-stop", false, "stop when a high-scoring passing attempt is found")
 	c.Flags().IntVar(&req.TopK, "top-k", 0, "after probe commands, run full commands only for the top K strategies")
@@ -123,7 +123,7 @@ func rolloutAttemptsCmd(dataDir *string) *cobra.Command {
 func rolloutWinnerCmd(dataDir *string) *cobra.Command {
 	return &cobra.Command{
 		Use:   "winner <rollout_id_or_run_id>",
-		Short: "show local candidate evidence and promotion barrier result",
+		Short: "show local candidate evidence and response-gate result",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			service, cleanup, err := rolloutSvc(*dataDir)

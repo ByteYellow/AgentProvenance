@@ -3,17 +3,19 @@
 `AgentProvenance` is a CLI-first Git-like provenance control plane for
 sandboxed agent execution.
 
-The command-line interface is `agentprov`. The core MVP manages local leases,
-Docker-backed sandbox sessions, directory snapshots, attempt workspace forks,
-best-of-N execution, process/tool-call traces, runtime telemetry correlation,
-artifact refs, content-addressed provenance objects, and cost/risk evidence for
-each trajectory. External RL pipelines, evaluators, or agent harnesses own the
-final reward, penalty, filtering, and selection decisions.
+The command-line interface is `agentprov`. The core MVP manages execution
+context binding, process/tool-call traces, runtime telemetry correlation,
+file diffs, artifact refs, content-addressed provenance objects, risk signals,
+baseline deviations, response actions, and audit evidence for each trajectory.
+Local leases, Docker-backed sessions, directory snapshots, forks, and fanout
+demos exist as substrate/stress-test support. They are not the product identity.
+External RL pipelines, evaluators, or agent harnesses own final reward,
+penalty, filtering, and selection decisions.
 
-Phase 1 focuses on the immutable execution ledger and state-diff audit loop:
+Phase 1 focuses on the immutable execution ledger and state-diff security loop:
 `Execution Context -> Evidence Ingest -> Runtime Causality Graph -> Provenance
-DAG -> State Diff/Blame -> Taint -> Promotion Barrier -> Replay / Trajectory /
-Audit Manifest`.
+DAG -> State Diff/Blame -> Risk/Deviation -> Response/Taint -> Replay /
+Trajectory / Audit Manifest`.
 
 This is not an RL runtime, generic telemetry collector, distributed scheduler,
 or reward/evaluator decision maker. Coding agents and autonomous tool-using
@@ -31,11 +33,13 @@ three hard boundaries:
 |---|---|---|
 | Storage/performance | Sparse snapshot semantics, incremental file diff, and content-addressed artifacts | Do not snapshot every step. Do not claim memory snapshot support. |
 | Non-filesystem state | `ExternalEffectRecord` stores external intent, target, dry-run/mock/allowlist mode, policy decision, and optional compensation reference | External API, database, queue, and message side effects are provenance and gate records only. No rollback guarantee for the real world. |
-| Merge conflict | Best-of-N candidate eligibility with taint and promotion barriers | No arbitrary branch auto-merge. Phase 1 only supports diff, blame, local candidate marking, promote-barrier checks, and quarantine. |
+| Merge conflict | Branch/fanout demos use taint and response gates to prevent unsafe reuse | No arbitrary branch auto-merge. Phase 1 only supports diff, blame, local candidate marking, response-gate checks, and quarantine. |
 
 Preview URL, egress proxy, credential injection, warm pool, node metadata, and
-baseline commands are kept as experimental local controls. They are useful for
-future drivers, but they are not the main v0.1 product surface.
+resource scheduling commands are kept as experimental local controls. They are
+useful for future drivers, but they are not the main v0.1 product surface.
+Baseline deviation records, risk signals, and response action records are part
+of the main security evidence model.
 
 ## Core quick path
 
@@ -43,30 +47,16 @@ future drivers, but they are not the main v0.1 product surface.
 agentprov init
 agentprov adapter list
 agentprov adapter inspect filtered-jsonl --json
+agentprov record --run run-record-demo --workdir /tmp/agentprov-record-demo -- \
+  sh -lc 'printf "value = 2\n" > app.py && echo artifact > artifact.txt'
+agentprov graph explain --run run-record-demo --file app.py --json
 scripts/demo_telemetry_jsonl.sh
-agentprov lease create --task examples/tasks/bugfix.yaml
-agentprov session create --lease <lease_id>
-agentprov session list
-agentprov session inspect <session_id>
-agentprov exec <session_id> --stream -- sh -lc 'echo hello > hello.txt'
-agentprov runtime list
-agentprov template build --task examples/tasks/bugfix.yaml --name bugfix
-agentprov snapshot stack --template bugfix
-agentprov snapshot create <session_id> --type directory --path /workspace --name ready
-agentprov snapshot list
-agentprov snapshot inspect ready
-agentprov snapshot plan ready
-agentprov fork ready --count 2
-agentprov snapshot resume ready --lease <lease_id>
-agentprov rollout start --task examples/tasks/bugfix.yaml --snapshot ready --runtime docker --fanout 3 \
-  --top-k 2 \
-  --strategy "probe::test -f hello.txt && echo passed::probe=test -f hello.txt && echo passed::score=contains:passed::artifact=probe.log" \
-  --strategy "score::printf 42::probe=printf 42::score=number::artifact=score.txt" \
-  --strategy "slow::sleep 1; echo passed::probe=echo 1::score=contains:passed::artifact=slow.log"
-agentprov rollout winner run-demo-bugfix
-agentprov attempt best-of --snapshot ready --max-fanout 2 --top-k 1 --max-cost 1 --early-stop \
-  --strategy "probe::printf 42::probe=printf 42::budget=2::score=number::artifact=probe.txt" \
-  --strategy "full::test -f hello.txt && echo passed::probe=test -f hello.txt && echo 1::budget=5::score=contains:passed::artifact=hello.txt"
+agentprov telemetry batches --run run-telemetry-jsonl-demo
+agentprov telemetry list --run run-telemetry-jsonl-demo
+agentprov policy test examples/events/metadata-egress.jsonl
+agentprov security risks --run run-demo-bugfix
+agentprov security deviations --run run-demo-bugfix
+agentprov security responses --run run-demo-bugfix
 agentprov graph trace --run run-demo-bugfix
 agentprov graph refs --run run-demo-bugfix
 agentprov graph log --run run-demo-bugfix
@@ -91,15 +81,11 @@ agentprov graph explain --tool-call <tool_call_id>
 agentprov graph explain --risk <policy_decision_id> --json
 agentprov effect record --run run-demo-bugfix --type api_call --target api.example.com/v1/tickets --mode dry-run --decision audit
 agentprov effect list --run run-demo-bugfix
-agentprov record --run run-record-demo --workdir /tmp/agentprov-record-demo -- \
-  sh -lc 'printf "value = 2\n" > app.py && echo artifact > artifact.txt'
-agentprov graph explain --run run-record-demo --file app.py
 agentprov telemetry bind --run run-demo-bugfix --session <session_id> --attempt <attempt_id> --tool-call <tool_call_id> --process <process_id> --container-id <container_id> --cgroup-id <cgroup_id> --pid <pid>
 agentprov telemetry ingest --raw-event raw-execve-1 --process <process_id> --type execve --payload '{"argv":["./test_calculator.sh"]}'
 agentprov telemetry ingest --raw-event raw-execve-pid-child --pid <pid> --type execve --payload '{"argv":["./async_child.sh"]}'
 agentprov telemetry bindings --run run-demo-bugfix
 agentprov telemetry list --run run-demo-bugfix --type execve
-agentprov cost show run-demo-bugfix
 ```
 
 Machine-checkable Phase 1 gate:
@@ -108,9 +94,9 @@ Machine-checkable Phase 1 gate:
 ./scripts/accept_phase1.sh
 ```
 
-The acceptance script runs the coding-agent best-of-N scenario and asserts
+The acceptance script runs a branch-heavy coding-agent stress scenario and asserts
 telemetry correlation, external effect recording, quarantine/taint,
-promotion-barrier eligibility, `graph verify`, JSON verify, JSON replay, JSON
+response-gate eligibility, `graph verify`, JSON verify, JSON replay, JSON
 trajectory evidence, JSON diff, and JSON blame semantics.
 It also verifies that an explicit `telemetry bind` receiver can map a raw
 PID-only async child event back to the same `ToolCallScope`.
@@ -135,9 +121,21 @@ agentprov api write-file <session_id> --path notes.txt --content hello
 agentprov telemetry list --session <session_id>
 agentprov policy test examples/events/metadata-egress.jsonl
 agentprov policy decisions --run run-demo-bugfix
+agentprov security risks --run run-demo-bugfix
+agentprov security deviations --run run-demo-bugfix
+agentprov security responses --run run-demo-bugfix
 agentprov forensics export run-demo-bugfix
 agentprov cost sample <session_id>
 agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty
+agentprov lease create --task examples/tasks/bugfix.yaml
+agentprov session create --lease <lease_id>
+agentprov exec <session_id> --stream -- sh -lc 'echo hello > hello.txt'
+agentprov snapshot create <session_id> --type directory --path /workspace --name ready
+agentprov fork ready --count 2
+agentprov snapshot resume ready --lease <lease_id>
+agentprov rollout start --task examples/tasks/bugfix.yaml --snapshot ready --runtime docker --fanout 3
+agentprov rollout winner run-demo-bugfix
+agentprov attempt best-of --snapshot ready --max-fanout 2 --top-k 1 --max-cost 1 --early-stop
 ```
 
 ## Demos
@@ -195,7 +193,7 @@ Expected output / acceptance:
 - `rollout attempts` shows `wrong-constant` as `quarantined` with
   `risk=tainted`.
 - `rollout winner` is a historical command name. It shows `correct-add` as the
-  local clean candidate that passed the demo promotion barrier. In real RL
+  local clean candidate that passed the demo response gate. In real RL
   pipelines this is evidence for reward/penalty scoring, filtering, or human
   review, not the final reward or training decision.
 - The same output includes `watermark`, `drain_started_at`,
@@ -222,8 +220,8 @@ Expected output / acceptance:
   are recorded as gate evidence instead of rollbackable state.
 - `graph verify --run run-demo-bugfix` reports `status=ok` after checking
   references, content-addressed object hashes, replay manifest generation,
-  ToolCallScope correlation drift, taint/promotion barrier consistency, and
-  promoted-candidate drain watermark consistency.
+  ToolCallScope correlation drift, taint/response-gate consistency, and
+  local-candidate drain watermark consistency.
 - `graph verify --run run-demo-bugfix --json` emits an
   `agentprovenance.verify/v1` manifest with `status`, `error_count`,
   `warning_count`, and structured issues for automation.
@@ -238,12 +236,12 @@ Expected output / acceptance:
   evaluators or RL pipelines.
 - `accept_phase1.sh` validates the same expectations with command output and
   JSON manifest assertions, so Phase 1 has a machine-checkable gate.
-- Rollout unit tests prove a quarantined/tainted attempt is rejected by the
-  promotion barrier before `winner_promoted` can be emitted.
-- Rollout and verifier unit tests prove a promoted candidate must have a durable
+- Fanout stress-demo unit tests prove a quarantined/tainted attempt is rejected
+  by the response gate before local candidate evidence can be emitted.
+- Fanout stress-demo and verifier unit tests prove a local candidate must have a durable
   telemetry/evidence drain window and no queued evidence at or before its
   watermark.
-- Rollout unit tests prove snapshot taint propagates through
+- Fanout stress-demo unit tests prove snapshot taint propagates through
   `snapshot_edges` to descendant snapshots.
 
 ### demo_streaming_terminal
@@ -328,6 +326,11 @@ snapshot decisions into the evidence chain.
 ./scripts/demo_best_of_forks.sh
 ```
 
+This is a legacy branch/fanout stress demo. It is useful for exercising
+diff/blame, taint, response-gate, resource-evidence, and artifact-lineage
+behavior under multiple attempts. It is not the primary product surface and
+does not imply that AgentProvenance owns reward or winner decisions.
+
 Equivalent manual flow:
 
 ```sh
@@ -356,21 +359,21 @@ Processed evidence also adds `attempt_artifact` and `tool_call_artifact` graph
 edges, and `graph trace` prints an `artifacts` section for reverse lookup from
 artifact ref to attempt, tool call, strategy, and local candidate status.
 Use `graph trace --artifact <artifact_ref>` to start from an exported artifact
-and trace back to the attempt, tool call, rollout, run, and graph edge that
+and trace back to the attempt, tool call, stress-demo run, and graph edge that
 produced it. Use `graph trace --attempt <attempt_id>` to inspect a single
-attempt with its tool call, artifact, rollout, graph edges, evidence payload,
+attempt with its tool call, artifact, stress-demo graph edges, evidence payload,
 and local candidate status. Use `graph trace --tool-call <tool_call_id>` to start from
 one tool invocation and inspect its process, artifact, graph edges, evidence,
-rollout, and winner context. Use `graph trace --process <process_id>` to start
+stress-demo context, and local candidate context. Use `graph trace --process <process_id>` to start
 from a runtime process and trace back to the session, tool call, attempt,
-artifact, telemetry event, policy decision, rollout, and evidence context.
-Local rollout attempts create local session/process records too, so process
-trace works for quick RL rollout demos without requiring Docker runtime.
-`graph refs --run <run_id>` adds the Git-like ref view: rollout refs, base
-snapshot refs, winner attempt refs, promotion refs, tool call refs, process
+artifact, telemetry event, policy decision, stress-demo run, and evidence context.
+Local fanout attempts create local session/process records too, so process
+trace works for quick branch-heavy demos without requiring Docker runtime.
+`graph refs --run <run_id>` adds the Git-like ref view: run refs, base
+snapshot refs, local candidate attempt refs, response-gate refs, tool call refs, process
 refs, and artifact refs. `graph log --run <run_id>` adds the compact
-chronological provenance log for rollout, attempt, tool call, process,
-promotion, evidence, and telemetry events. `graph materialize --run <run_id>`
+chronological provenance log for fanout, attempt, tool call, process,
+response-gate, evidence, and telemetry events. `graph materialize --run <run_id>`
 turns the current SQLite trace into a content-addressed provenance object DAG
 under `.agentprov/provenance/objects/sha256/`; each object records source id, parent
 hashes, replay-oriented payload, and artifact file hashes when an artifact file
@@ -378,7 +381,7 @@ exists. `graph objects --run <run_id> --limit <n> --cursor <next_cursor> --json`
 lists object refs with type, source id, hash, parent hashes, path, size, and
 created time. The object page includes `result_set_id` and `page_hash`, so
 clients can verify paged evidence exports. `graph verify --run <run_id>` checks reference continuity,
-taint/promotion contradictions, artifact readability, materialized object
+taint/response-gate contradictions, artifact readability, materialized object
 hashes, replay manifest generation, and ToolCallScope correlation drift.
 Add `--json` to emit the structured `agentprovenance.verify/v1` manifest for
 automation.
@@ -388,7 +391,7 @@ artifact, telemetry, and external effect records. Add `--json` to emit the
 structured `agentprovenance.replay/v1` manifest for automation; Phase 1 does
 not execute the plan or roll back real-world side effects.
 `graph trace` prints the compact attempt evidence payload, including strategy,
-score, saved cost, output summary, local candidate flag, and promotion-barrier
+score, saved cost, output summary, local candidate flag, and response-gate
 reason, so a probe/top-k rollout can be replayed and audited without guessing
 why a branch was pruned or marked evaluator-eligible.
 
@@ -409,13 +412,13 @@ agentprov graph trace --run run-demo-bugfix
 agentprov cost show run-demo-bugfix
 ```
 
-This is the v0.1 Agent Rollout Control Plane path. It starts from a ready
+This is a legacy substrate/fanout stress path. It starts from a ready
 snapshot, forks attempt workspaces, creates one short-lived Docker session and
 one `tool_call` per admitted strategy, requires BurstGuard admission before
 command execution, switches the container from `think` to `tool` CPU profile,
 writes compact evidence, materializes `rollout -> attempt -> tool_call ->
 session` graph edges asynchronously, and checks local candidate eligibility
-through the promotion barrier. Attempt tables and `cost show` expose risk,
+through the response gate. Attempt tables and `cost show` expose risk,
 budget, score, cost, and expectation-deviation evidence so an external
 evaluator can assign reward, penalty, filtering, or review decisions.
 

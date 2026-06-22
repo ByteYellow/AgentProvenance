@@ -76,7 +76,7 @@ func poolCmd(dataDir *string) *cobra.Command {
 			return w.Flush()
 		},
 	}
-	cmd := &cobra.Command{Use: "pool", Short: "warm pool commands"}
+	cmd := &cobra.Command{Use: "pool", Short: "experimental warm pool commands", Hidden: true}
 	cmd.AddCommand(create)
 	cmd.AddCommand(status)
 	return cmd

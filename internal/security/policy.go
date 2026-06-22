@@ -45,6 +45,40 @@ type DecisionRecord struct {
 	CreatedAt string
 }
 
+type RiskSignalRecord struct {
+	ID                string
+	RunID             string
+	SessionID         string
+	ToolCallID        string
+	ProcessID         string
+	SnapshotID        string
+	EventID           string
+	PolicyDecisionID  string
+	SignalType        string
+	Severity          string
+	Reason            string
+	RecommendedAction string
+	Payload           string
+	CreatedAt         string
+}
+
+type ResponseActionRecord struct {
+	ID               string
+	RunID            string
+	SessionID        string
+	ProcessID        string
+	SnapshotID       string
+	RiskSignalID     string
+	PolicyDecisionID string
+	ActionType       string
+	TargetType       string
+	TargetID         string
+	Status           string
+	ResultRef        string
+	Payload          string
+	CreatedAt        string
+}
+
 type Engine struct {
 	SecretPathPatterns []string
 	Rules              []Rule
@@ -216,6 +250,56 @@ func ListDecisions(db *sql.DB, runID string) ([]DecisionRecord, error) {
 	return records, rows.Err()
 }
 
+func ListRiskSignals(db *sql.DB, runID string) ([]RiskSignalRecord, error) {
+	query := `SELECT id, run_id, session_id, tool_call_id, process_id, snapshot_id, event_id, policy_decision_id,
+		signal_type, severity, reason, recommended_action, payload, created_at FROM risk_signals`
+	args := []any{}
+	if runID != "" {
+		query += ` WHERE run_id = ?`
+		args = append(args, runID)
+	}
+	query += ` ORDER BY created_at DESC`
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var records []RiskSignalRecord
+	for rows.Next() {
+		var record RiskSignalRecord
+		if err := rows.Scan(&record.ID, &record.RunID, &record.SessionID, &record.ToolCallID, &record.ProcessID, &record.SnapshotID, &record.EventID, &record.PolicyDecisionID, &record.SignalType, &record.Severity, &record.Reason, &record.RecommendedAction, &record.Payload, &record.CreatedAt); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
+func ListResponseActions(db *sql.DB, runID string) ([]ResponseActionRecord, error) {
+	query := `SELECT id, run_id, session_id, process_id, snapshot_id, risk_signal_id, policy_decision_id,
+		action_type, target_type, target_id, status, result_ref, payload, created_at FROM response_actions`
+	args := []any{}
+	if runID != "" {
+		query += ` WHERE run_id = ?`
+		args = append(args, runID)
+	}
+	query += ` ORDER BY created_at DESC`
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var records []ResponseActionRecord
+	for rows.Next() {
+		var record ResponseActionRecord
+		if err := rows.Scan(&record.ID, &record.RunID, &record.SessionID, &record.ProcessID, &record.SnapshotID, &record.RiskSignalID, &record.PolicyDecisionID, &record.ActionType, &record.TargetType, &record.TargetID, &record.Status, &record.ResultRef, &record.Payload, &record.CreatedAt); err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
+}
+
 func evaluateJSONL(path string, out io.Writer, db *sql.DB, engine Engine) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -269,6 +353,33 @@ func persistDecision(db *sql.DB, event Event, rawPayload string, decision Decisi
 		return DecisionRecord{}, err
 	}
 	policyNodeID := "policy_decision/" + record.ID
+	var riskSignalID string
+	if decision.Decision != "allow" {
+		riskSignalID = ids.New("risk")
+		severity := severityForDecision(decision.Decision)
+		recommendedAction := recommendedActionForDecision(decision.Decision)
+		payload, _ := json.Marshal(map[string]any{
+			"source":     event.Source,
+			"event_type": event.EventType,
+			"dst_ip":     event.DstIP,
+			"path":       event.Path,
+			"args":       event.Args,
+			"rule_id":    decision.RuleID,
+			"decision":   decision.Decision,
+		})
+		_, err = db.Exec(`INSERT INTO risk_signals
+			(id, run_id, session_id, tool_call_id, process_id, snapshot_id, event_id, policy_decision_id,
+			 signal_type, severity, reason, recommended_action, payload, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			riskSignalID, event.RunID, event.SessionID, event.ToolCallID, event.ProcessID, event.SnapshotID, eventID, record.ID,
+			"policy_violation", severity, decision.Reason, recommendedAction, string(payload), now)
+		if err != nil {
+			return DecisionRecord{}, err
+		}
+		_, _ = db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
+			VALUES (?, ?, ?, ?, 'policy_decision_risk_signal', ?, ?)`,
+			ids.New("edge"), event.RunID, policyNodeID, "risk_signal/"+riskSignalID, eventID, now)
+	}
 	_, _ = db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
 		VALUES (?, ?, ?, ?, 'runtime_event_policy_decision', ?, ?)`,
 		ids.New("edge"), event.RunID, "runtime_event/"+eventID, policyNodeID, eventID, now)
@@ -298,11 +409,80 @@ func persistDecision(db *sql.DB, event Event, rawPayload string, decision Decisi
 			_, _ = db.Exec(`UPDATE processes SET status = 'killed', ended_at = ? WHERE id = ?`, now, event.ProcessID)
 		}
 	}
+	if decision.Decision != "allow" {
+		actionType := recommendedActionForDecision(decision.Decision)
+		targetType, targetID := responseTarget(event, actionType)
+		actionID := ids.New("action")
+		payload, _ := json.Marshal(map[string]any{
+			"decision": decision.Decision,
+			"rule_id":  decision.RuleID,
+			"reason":   decision.Reason,
+		})
+		_, _ = db.Exec(`INSERT INTO response_actions
+			(id, run_id, session_id, process_id, snapshot_id, risk_signal_id, policy_decision_id, action_type, target_type, target_id, status, payload, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'recorded', ?, ?)`,
+			actionID, event.RunID, event.SessionID, event.ProcessID, event.SnapshotID, riskSignalID, record.ID, actionType, targetType, targetID, string(payload), now)
+		_, _ = db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
+			VALUES (?, ?, ?, ?, 'risk_signal_response_action', ?, ?)`,
+			ids.New("edge"), event.RunID, "risk_signal/"+riskSignalID, "response_action/"+actionID, eventID, now)
+	}
 	if event.RunID != "" {
 		_, _ = db.Exec(`INSERT INTO cost_samples (id, run_id, session_id, policy_block_count, quarantine_count, created_at)
 			VALUES (?, ?, ?, ?, ?, ?)`, ids.New("cost"), event.RunID, event.SessionID, blockCount, quarantineCount, now)
 	}
 	return record, nil
+}
+
+func severityForDecision(decision string) string {
+	switch decision {
+	case "kill", "quarantine":
+		return "high"
+	case "deny":
+		return "medium"
+	case "audit":
+		return "low"
+	default:
+		return "info"
+	}
+}
+
+func recommendedActionForDecision(decision string) string {
+	switch decision {
+	case "kill":
+		return "kill"
+	case "quarantine":
+		return "quarantine"
+	case "deny":
+		return "deny"
+	case "audit":
+		return "audit"
+	default:
+		return "audit"
+	}
+}
+
+func responseTarget(event Event, actionType string) (string, string) {
+	switch actionType {
+	case "kill":
+		if event.ProcessID != "" {
+			return "process", event.ProcessID
+		}
+	case "quarantine":
+		if event.SessionID != "" {
+			return "session", event.SessionID
+		}
+	case "deny":
+		if event.EventType != "" {
+			return "event", event.EventType
+		}
+	}
+	if event.SessionID != "" {
+		return "session", event.SessionID
+	}
+	if event.ProcessID != "" {
+		return "process", event.ProcessID
+	}
+	return "run", event.RunID
 }
 
 func isPrivateIP(raw string) bool {
