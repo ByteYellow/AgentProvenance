@@ -390,6 +390,9 @@ func TestExplainEventIncludesTelemetryAdapterDetails(t *testing.T) {
 	if event.Telemetry.CorrelationStatus != "resolved" || event.ToolCallID != "tool-jsonl" || event.ProcessID != "process-jsonl" {
 		t.Fatalf("unexpected correlation details event=%+v telemetry=%+v", event, event.Telemetry)
 	}
+	if event.Lane != "runtime_telemetry" || event.CorrelationStatus != "full" || len(event.Drilldowns) == 0 {
+		t.Fatalf("runtime event missing query surface metadata: %+v", event)
+	}
 	if !containsString(event.Telemetry.IdentityKeys, "container_id") || !containsString(event.Telemetry.IdentityKeys, "pid") {
 		t.Fatalf("missing identity keys: %+v", event.Telemetry.IdentityKeys)
 	}

@@ -68,6 +68,9 @@ func TestBuildFlowFromTimelineLinksRuntimeEventRiskPolicyResponse(t *testing.T) 
 	if len(report.Flows[0].RiskSignals) != 0 || report.Flows[0].EventID != "evt-exec" {
 		t.Fatalf("unexpected non-risk flow row: %+v", report.Flows[0])
 	}
+	if report.Flows[0].Lane != "runtime_telemetry" || report.Flows[0].Correlation != "full" {
+		t.Fatalf("flow row missing query surface metadata: %+v", report.Flows[0])
+	}
 	row := report.Flows[1]
 	if row.EventID != "evt-risk" || row.ToolCallID != "tool-1" || row.ProcessID != "proc-1" {
 		t.Fatalf("unexpected risk flow identity: %+v", row)

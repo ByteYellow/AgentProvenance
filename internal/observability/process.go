@@ -21,6 +21,7 @@ type ProcessReport struct {
 	PageHash         string            `json:"page_hash"`
 	Process          ProcessDetail     `json:"process"`
 	Context          EventContext      `json:"context"`
+	Query            QuerySurface      `json:"query"`
 	RuntimeEvents    []EvidenceSummary `json:"runtime_events,omitempty"`
 	RelatedRisks     []EvidenceSummary `json:"related_risks,omitempty"`
 	RelatedPolicies  []EvidenceSummary `json:"related_policies,omitempty"`
@@ -75,6 +76,7 @@ func BuildProcessFromTimeline(manifest provenance.TimelineManifest, opts Process
 			ObjectRef: start.ObjectRef,
 		},
 		Context: context,
+		Query:   querySurface(manifest.RunID, start),
 	}
 	if hasEnd {
 		report.Process.EndedAt = end.Time
@@ -123,6 +125,7 @@ func processReportIntegrity(report ProcessReport) (string, string, error) {
 		"run_id":            report.RunID,
 		"process":           report.Process,
 		"context":           report.Context,
+		"query":             report.Query,
 		"runtime_events":    report.RuntimeEvents,
 		"related_risks":     report.RelatedRisks,
 		"related_policies":  report.RelatedPolicies,

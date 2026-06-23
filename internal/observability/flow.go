@@ -25,6 +25,8 @@ type FlowReport struct {
 
 type FlowItem struct {
 	Time            string   `json:"time"`
+	Lane            string   `json:"lane,omitempty"`
+	Correlation     string   `json:"correlation_status,omitempty"`
 	ToolCallID      string   `json:"tool_call_id,omitempty"`
 	ProcessID       string   `json:"process_id,omitempty"`
 	EventID         string   `json:"event_id"`
@@ -76,6 +78,8 @@ func BuildFlowFromTimeline(manifest provenance.TimelineManifest, opts FlowOption
 		}
 		item := FlowItem{
 			Time:        event.Time,
+			Lane:        querySurface(manifest.RunID, event).Lane,
+			Correlation: querySurface(manifest.RunID, event).CorrelationStatus,
 			ToolCallID:  resolveToolCallForEvent(manifest.Events, event),
 			ProcessID:   event.ProcessID,
 			EventID:     event.ID,
@@ -158,6 +162,8 @@ func flowDigestItems(flows []FlowItem) []map[string]any {
 			"event_id":         flow.EventID,
 			"event_type":       flow.EventType,
 			"event_source":     flow.EventSource,
+			"lane":             flow.Lane,
+			"correlation":      flow.Correlation,
 			"risk_signals":     flow.RiskSignals,
 			"policy_decisions": flow.PolicyDecisions,
 			"response_actions": flow.ResponseActions,

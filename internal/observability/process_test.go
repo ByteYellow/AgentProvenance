@@ -13,17 +13,19 @@ func TestBuildProcessFromTimelineAggregatesRuntimeRiskAndResponse(t *testing.T) 
 		EventCount:    6,
 		Events: []provenance.TimelineEvent{
 			{
-				Time:       "2026-01-01T00:00:00Z",
-				Type:       "process_start",
-				Source:     "runtime",
-				ID:         "proc-1",
-				RunID:      "run-process",
-				SessionID:  "session-1",
-				ToolCallID: "tool-1",
-				ProcessID:  "proc-1",
-				ObjectRef:  "process/proc-1",
-				Summary:    "command=\"pytest -q\"",
-				Evidence:   map[string]any{"command": "pytest -q", "status": "running"},
+				Time:              "2026-01-01T00:00:00Z",
+				Type:              "process_start",
+				Source:            "runtime",
+				Lane:              "runtime_process",
+				CorrelationStatus: "full",
+				ID:                "proc-1",
+				RunID:             "run-process",
+				SessionID:         "session-1",
+				ToolCallID:        "tool-1",
+				ProcessID:         "proc-1",
+				ObjectRef:         "process/proc-1",
+				Summary:           "command=\"pytest -q\"",
+				Evidence:          map[string]any{"command": "pytest -q", "status": "running"},
 			},
 			{
 				Time:       "2026-01-01T00:00:01Z",
@@ -98,6 +100,9 @@ func TestBuildProcessFromTimelineAggregatesRuntimeRiskAndResponse(t *testing.T) 
 	}
 	if report.Process.StartedAt == "" || report.Process.EndedAt == "" {
 		t.Fatalf("missing process lifecycle: %+v", report.Process)
+	}
+	if report.Query.Lane != "runtime_process" || report.Query.CorrelationStatus != "full" || len(report.Query.Drilldowns) == 0 {
+		t.Fatalf("process query surface missing causality metadata: %+v", report.Query)
 	}
 	if len(report.RuntimeEvents) != 1 || len(report.RelatedRisks) != 1 || len(report.RelatedPolicies) != 1 || len(report.RelatedResponses) != 1 {
 		t.Fatalf("unexpected related evidence: runtime=%+v risks=%+v policies=%+v responses=%+v", report.RuntimeEvents, report.RelatedRisks, report.RelatedPolicies, report.RelatedResponses)

@@ -159,6 +159,8 @@ type ExplainEvent struct {
 	ToolCallID            string                      `json:"tool_call_id"`
 	ProcessID             string                      `json:"process_id"`
 	SnapshotID            string                      `json:"snapshot_id"`
+	Lane                  string                      `json:"lane,omitempty"`
+	CorrelationStatus     string                      `json:"correlation_status,omitempty"`
 	RawEventID            string                      `json:"raw_event_id"`
 	CorrelationMethod     string                      `json:"correlation_method"`
 	CorrelationConfidence float64                     `json:"correlation_confidence"`
@@ -172,6 +174,7 @@ type ExplainEvent struct {
 	Payload               string                      `json:"payload"`
 	CreatedAt             string                      `json:"created_at"`
 	Telemetry             *telemetry.EventExplanation `json:"telemetry,omitempty"`
+	Drilldowns            []string                    `json:"drilldowns,omitempty"`
 }
 
 func Explain(db *sql.DB, opts ExplainOptions, out io.Writer) error {
@@ -251,7 +254,7 @@ func BuildExplain(db *sql.DB, opts ExplainOptions) (ExplainManifest, error) {
 		}
 		manifest.FileDiff = &diff
 		manifest.FileBlame = &blame
-		manifest.RuntimeEvents = explainEvents(events)
+		manifest.RuntimeEvents = explainEvents(target.Run, events)
 		manifest.RuntimeEdges, err = runtimeEdgesForFile(db, target.Run, target.File)
 		if err != nil {
 			return ExplainManifest{}, err
@@ -311,7 +314,7 @@ func BuildExplain(db *sql.DB, opts ExplainOptions) (ExplainManifest, error) {
 			if err != nil {
 				return ExplainManifest{}, err
 			}
-			manifest.RuntimeEvents = explainEvents(events)
+			manifest.RuntimeEvents = explainEvents(target.Run, events)
 		}
 	}
 	if err := finalizeExplainIntegrity(&manifest); err != nil {
@@ -728,9 +731,11 @@ func runtimeFileEvents(db *sql.DB, runID, filePath string) ([]telemetry.EventRec
 	return filtered, nil
 }
 
-func explainEvents(events []telemetry.EventRecord) []ExplainEvent {
+func explainEvents(runID string, events []telemetry.EventRecord) []ExplainEvent {
 	out := make([]ExplainEvent, 0, len(events))
 	for _, event := range events {
+		lane := timelineLane(TimelineEvent{Source: event.Source})
+		status := timelineCorrelationStatus(TimelineEvent{Lane: lane, ToolCallID: event.ToolCallID, ProcessID: event.ProcessID})
 		out = append(out, ExplainEvent{
 			ID:                    event.ID,
 			RunID:                 event.RunID,
@@ -738,6 +743,8 @@ func explainEvents(events []telemetry.EventRecord) []ExplainEvent {
 			ToolCallID:            event.ToolCallID,
 			ProcessID:             event.ProcessID,
 			SnapshotID:            event.SnapshotID,
+			Lane:                  lane,
+			CorrelationStatus:     status,
 			RawEventID:            event.RawEventID,
 			CorrelationMethod:     event.CorrelationMethod,
 			CorrelationConfidence: event.CorrelationConfidence,
@@ -751,9 +758,29 @@ func explainEvents(events []telemetry.EventRecord) []ExplainEvent {
 			Payload:               event.Payload,
 			CreatedAt:             event.CreatedAt,
 			Telemetry:             telemetryExplanation(event),
+			Drilldowns:            explainEventDrilldowns(runID, event),
 		})
 	}
 	return out
+}
+
+func explainEventDrilldowns(runID string, event telemetry.EventRecord) []string {
+	if runID == "" {
+		runID = event.RunID
+	}
+	return uniqueTimelineStrings([]string{
+		"observe event --run " + runID + " --event " + event.ID,
+		"graph explain --event " + event.ID,
+		nonEmptyCommand(event.ProcessID != "", "observe process --run "+runID+" --process "+event.ProcessID),
+		nonEmptyCommand(event.ToolCallID != "", "timeline --run "+runID+" --tool-call "+event.ToolCallID+" --view causality"),
+	})
+}
+
+func nonEmptyCommand(ok bool, value string) string {
+	if !ok {
+		return ""
+	}
+	return value
 }
 
 func telemetryExplanation(event telemetry.EventRecord) *telemetry.EventExplanation {
@@ -1409,6 +1436,9 @@ func eventByID(db *sql.DB, eventID string) (ExplainEvent, error) {
 			CreatedAt:             event.CreatedAt,
 		}
 		event.Telemetry = telemetryExplanation(record)
+		event.Lane = timelineLane(TimelineEvent{Source: event.Source})
+		event.CorrelationStatus = timelineCorrelationStatus(TimelineEvent{Lane: event.Lane, ToolCallID: event.ToolCallID, ProcessID: event.ProcessID})
+		event.Drilldowns = explainEventDrilldowns(event.RunID, record)
 	}
 	return event, err
 }

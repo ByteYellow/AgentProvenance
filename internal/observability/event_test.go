@@ -13,17 +13,19 @@ func TestBuildEventFromTimelineLinksRuntimeEventContext(t *testing.T) {
 		EventCount:    4,
 		Events: []provenance.TimelineEvent{
 			{
-				Time:       "2026-01-01T00:00:00Z",
-				Type:       "metadata_ip",
-				Source:     "falco_jsonl",
-				ID:         "evt-1",
-				RunID:      "run-event",
-				SessionID:  "session-1",
-				AttemptID:  "attempt-1",
-				ToolCallID: "tool-1",
-				ProcessID:  "proc-1",
-				ObjectRef:  "runtime_event/evt-1",
-				Summary:    "metadata ip access",
+				Time:              "2026-01-01T00:00:00Z",
+				Type:              "metadata_ip",
+				Source:            "falco_jsonl",
+				Lane:              "runtime_telemetry",
+				CorrelationStatus: "full",
+				ID:                "evt-1",
+				RunID:             "run-event",
+				SessionID:         "session-1",
+				AttemptID:         "attempt-1",
+				ToolCallID:        "tool-1",
+				ProcessID:         "proc-1",
+				ObjectRef:         "runtime_event/evt-1",
+				Summary:           "metadata ip access",
 				Evidence: map[string]any{
 					"correlation_method":     "container_time_window",
 					"correlation_confidence": 0.92,
@@ -81,6 +83,9 @@ func TestBuildEventFromTimelineLinksRuntimeEventContext(t *testing.T) {
 	}
 	if report.Event.CorrelationMethod != "container_time_window" || report.Event.CorrelationConfidence != 0.92 {
 		t.Fatalf("unexpected correlation detail: %+v", report.Event)
+	}
+	if report.Query.Lane != "runtime_telemetry" || report.Query.CorrelationStatus != "full" || len(report.Query.Drilldowns) == 0 {
+		t.Fatalf("event query surface missing causality metadata: %+v", report.Query)
 	}
 	if len(report.RelatedRisks) != 1 || len(report.RelatedPolicies) != 1 || len(report.RelatedResponses) != 1 {
 		t.Fatalf("unexpected related evidence: risks=%+v policies=%+v responses=%+v", report.RelatedRisks, report.RelatedPolicies, report.RelatedResponses)

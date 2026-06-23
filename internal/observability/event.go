@@ -21,6 +21,7 @@ type EventReport struct {
 	PageHash         string            `json:"page_hash"`
 	Event            EventDetail       `json:"event"`
 	Context          EventContext      `json:"context"`
+	Query            QuerySurface      `json:"query"`
 	RelatedRisks     []EvidenceSummary `json:"related_risks,omitempty"`
 	RelatedPolicies  []EvidenceSummary `json:"related_policies,omitempty"`
 	RelatedResponses []EvidenceSummary `json:"related_responses,omitempty"`
@@ -89,6 +90,7 @@ func BuildEventFromTimeline(manifest provenance.TimelineManifest, opts EventOpti
 			Evidence:              event.Evidence,
 		},
 		Context: context,
+		Query:   querySurface(manifest.RunID, event),
 	}
 	directRiskIDs := map[string]bool{}
 	directPolicyIDs := map[string]bool{}
@@ -125,6 +127,7 @@ func eventReportIntegrity(report EventReport) (string, string, error) {
 		"run_id":            report.RunID,
 		"event":             report.Event,
 		"context":           report.Context,
+		"query":             report.Query,
 		"related_risks":     report.RelatedRisks,
 		"related_policies":  report.RelatedPolicies,
 		"related_responses": report.RelatedResponses,
