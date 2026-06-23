@@ -59,3 +59,55 @@ func TestListBindingsFiltersToolCallScope(t *testing.T) {
 		t.Fatalf("unexpected binding: %+v", binding)
 	}
 }
+
+func TestResolveHonorsExplicitRunID(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	started := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano)
+	if _, err := RecordBinding(db, Binding{
+		RunID:         "run-a",
+		SessionID:     "session-a",
+		AttemptID:     "attempt-a",
+		ToolCallID:    "tool-a",
+		ProcessID:     "process-a",
+		ContainerID:   "shared-container",
+		CgroupID:      "shared-cgroup",
+		PID:           4242,
+		StartedAt:     started,
+		BindingSource: "test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	match, ok, err := Resolve(db, RawIdentity{
+		RunID:       "run-b",
+		ContainerID: "shared-container",
+		CgroupID:    "shared-cgroup",
+		PID:         4242,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Fatalf("explicit run-b should not resolve run-a binding: %+v", match)
+	}
+	match, ok, err = Resolve(db, RawIdentity{
+		ContainerID: "shared-container",
+		Timestamp:   time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || match.RunID != "run-a" {
+		t.Fatalf("runless lookup should still resolve by container: ok=%t match=%+v", ok, match)
+	}
+}

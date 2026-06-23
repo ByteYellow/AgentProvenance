@@ -180,12 +180,7 @@ func addIfSet(set map[string]bool, value string) {
 }
 
 func isRuntimeEvent(event provenance.TimelineEvent) bool {
-	switch event.Source {
-	case "falco_jsonl", "tetragon_jsonl", "loongcollector_jsonl", "filtered_telemetry", "wrapper_runtime", "native_runtime", "record_file_diff", "record_process_sample":
-		return true
-	default:
-		return false
-	}
+	return isRuntimeEventSource(event.Source)
 }
 
 func stringFromMap(values map[string]any, key string) (string, bool) {

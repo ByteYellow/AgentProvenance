@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/byteyellow/agentprovenance/internal/observability"
@@ -15,6 +16,7 @@ func observeCmd(dataDir *string) *cobra.Command {
 		Short: "summarize execution observability for agent runs",
 	}
 	cmd.AddCommand(observeSummaryCmd(dataDir))
+	cmd.AddCommand(observeCoverageCmd(dataDir))
 	return cmd
 }
 
@@ -76,6 +78,77 @@ func observeSummaryCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().IntVar(&topN, "top", 8, "maximum evidence refs to show")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	return cmd
+}
+
+func observeCoverageCmd(dataDir *string) *cobra.Command {
+	var runID string
+	var limit int
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "coverage",
+		Short: "show runtime telemetry correlation coverage and gaps",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if runID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			db, cleanup, err := openLocalDB(*dataDir)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+			report, err := observability.BuildCoverage(db, observability.CoverageOptions{RunID: runID, Limit: limit})
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "run=%s schema=%s runtime_events=%d fully_correlated=%d gaps=%d full_coverage=%.2f tool_call_coverage=%.2f process_coverage=%.2f\n",
+				report.RunID, report.SchemaVersion, report.Summary.RuntimeEvents, report.Summary.FullyCorrelated,
+				report.Summary.CorrelationGapCount, report.Summary.FullyCorrelatedRatio,
+				report.Summary.ToolCallCoverageRatio, report.Summary.ProcessCoverageRatio)
+			printCounts(cmd, "MISSING_FIELD", report.MissingFields)
+			printCounts(cmd, "SOURCE", report.BySource)
+			printCounts(cmd, "TYPE", report.ByType)
+			if len(report.Gaps) > 0 {
+				w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+				fmt.Fprintln(w, "EVENT\tSOURCE\tTYPE\tMISSING\tIDENTITY\tMETHOD\tSUGGESTED_BINDING")
+				for _, gap := range report.Gaps {
+					fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+						gap.EventID, gap.Source, gap.Type, strings.Join(gap.Missing, ","), gapIdentity(gap), gap.CorrelationMethod, gap.SuggestedBinding)
+				}
+				if err := w.Flush(); err != nil {
+					return err
+				}
+			}
+			if len(report.NextSteps) > 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "next_steps:")
+				for _, step := range report.NextSteps {
+					fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", step)
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&runID, "run", "", "run id")
+	cmd.Flags().IntVar(&limit, "limit", 20, "maximum correlation gaps to show")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
+	return cmd
+}
+
+func gapIdentity(gap observability.CorrelationGap) string {
+	if gap.ContainerID != "" {
+		return "container=" + gap.ContainerID
+	}
+	if gap.CgroupID != "" {
+		return "cgroup=" + gap.CgroupID
+	}
+	if gap.PID != 0 {
+		return fmt.Sprintf("pid=%d", gap.PID)
+	}
+	return ""
 }
 
 func printCounts(cmd *cobra.Command, title string, counts map[string]int) {

@@ -168,6 +168,7 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 		return "", err
 	}
 	raw := correlation.RawIdentity{
+		RunID:       event.RunID,
 		ProcessID:   event.ProcessID,
 		ContainerID: event.ContainerID,
 		CgroupID:    event.CgroupID,

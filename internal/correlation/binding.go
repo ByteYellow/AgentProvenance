@@ -26,6 +26,7 @@ type Binding struct {
 }
 
 type RawIdentity struct {
+	RunID       string
 	ProcessID   string
 	ContainerID string
 	CgroupID    string
@@ -134,25 +135,25 @@ func Resolve(db *sql.DB, raw RawIdentity) (Match, bool, error) {
 		at = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	if raw.ProcessID != "" {
-		match, ok, err := resolveByProcess(db, raw.ProcessID)
+		match, ok, err := resolveByProcess(db, raw.RunID, raw.ProcessID)
 		if err != nil || ok {
 			return match, ok, err
 		}
 	}
 	if raw.CgroupID != "" {
-		match, ok, err := resolveByCgroup(db, raw.CgroupID, at)
+		match, ok, err := resolveByCgroup(db, raw.RunID, raw.CgroupID, at)
 		if err != nil || ok {
 			return match, ok, err
 		}
 	}
 	if raw.ContainerID != "" {
-		match, ok, err := resolveByContainer(db, raw.ContainerID, at)
+		match, ok, err := resolveByContainer(db, raw.RunID, raw.ContainerID, at)
 		if err != nil || ok {
 			return match, ok, err
 		}
 	}
 	if raw.PID != 0 {
-		match, ok, err := resolveByPID(db, raw.PID, at)
+		match, ok, err := resolveByPID(db, raw.RunID, raw.PID, at)
 		if err != nil || ok {
 			return match, ok, err
 		}
@@ -160,26 +161,48 @@ func Resolve(db *sql.DB, raw RawIdentity) (Match, bool, error) {
 	return Match{}, false, nil
 }
 
-func resolveByProcess(db *sql.DB, processID string) (Match, bool, error) {
+func resolveByProcess(db *sql.DB, runID, processID string) (Match, bool, error) {
+	if runID != "" {
+		return scanOne(db, "process_id", "run_id+process_id", 1, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
+			FROM execution_context_bindings WHERE run_id = ? AND process_id = ? ORDER BY created_at DESC LIMIT 1`, runID, processID)
+	}
 	return scanOne(db, "process_id", "process_id", 1, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
 		FROM execution_context_bindings WHERE process_id = ? ORDER BY created_at DESC LIMIT 1`, processID)
 }
 
-func resolveByCgroup(db *sql.DB, cgroupID, at string) (Match, bool, error) {
+func resolveByCgroup(db *sql.DB, runID, cgroupID, at string) (Match, bool, error) {
+	if runID != "" {
+		return scanOne(db, "cgroup_time_window", "run_id+cgroup_id+time", 0.98, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
+			FROM execution_context_bindings
+			WHERE run_id = ? AND cgroup_id = ? AND started_at <= ? AND (ended_at = '' OR ended_at >= ?)
+			ORDER BY started_at DESC LIMIT 1`, runID, cgroupID, at, at)
+	}
 	return scanOne(db, "cgroup_time_window", "cgroup_id+time", 0.98, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
 		FROM execution_context_bindings
 		WHERE cgroup_id = ? AND started_at <= ? AND (ended_at = '' OR ended_at >= ?)
 		ORDER BY started_at DESC LIMIT 1`, cgroupID, at, at)
 }
 
-func resolveByContainer(db *sql.DB, containerID, at string) (Match, bool, error) {
+func resolveByContainer(db *sql.DB, runID, containerID, at string) (Match, bool, error) {
+	if runID != "" {
+		return scanOne(db, "container_time_window", "run_id+container_id+time", 0.92, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
+			FROM execution_context_bindings
+			WHERE run_id = ? AND container_id = ? AND started_at <= ? AND (ended_at = '' OR ended_at >= ?)
+			ORDER BY started_at DESC LIMIT 1`, runID, containerID, at, at)
+	}
 	return scanOne(db, "container_time_window", "container_id+time", 0.92, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
 		FROM execution_context_bindings
 		WHERE container_id = ? AND started_at <= ? AND (ended_at = '' OR ended_at >= ?)
 		ORDER BY started_at DESC LIMIT 1`, containerID, at, at)
 }
 
-func resolveByPID(db *sql.DB, pid int64, at string) (Match, bool, error) {
+func resolveByPID(db *sql.DB, runID string, pid int64, at string) (Match, bool, error) {
+	if runID != "" {
+		return scanOne(db, "pid_time_window", "run_id+pid+time", 0.85, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
+			FROM execution_context_bindings
+			WHERE run_id = ? AND (pid = ? OR root_pid = ?) AND started_at <= ? AND (ended_at = '' OR ended_at >= ?)
+			ORDER BY started_at DESC LIMIT 1`, runID, pid, pid, at, at)
+	}
 	return scanOne(db, "pid_time_window", "pid+time", 0.85, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
 		FROM execution_context_bindings
 		WHERE (pid = ? OR root_pid = ?) AND started_at <= ? AND (ended_at = '' OR ended_at >= ?)
