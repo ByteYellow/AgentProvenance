@@ -17,6 +17,7 @@ func observeCmd(dataDir *string) *cobra.Command {
 	}
 	cmd.AddCommand(observeSummaryCmd(dataDir))
 	cmd.AddCommand(observeCoverageCmd(dataDir))
+	cmd.AddCommand(observeScopesCmd(dataDir))
 	return cmd
 }
 
@@ -134,6 +135,51 @@ func observeCoverageCmd(dataDir *string) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&runID, "run", "", "run id")
 	cmd.Flags().IntVar(&limit, "limit", 20, "maximum correlation gaps to show")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
+	return cmd
+}
+
+func observeScopesCmd(dataDir *string) *cobra.Command {
+	var runID string
+	var limit int
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "scopes",
+		Short: "summarize observability by tool call scope",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if runID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			db, cleanup, err := openLocalDB(*dataDir)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+			report, err := observability.BuildScopes(db, observability.ScopesOptions{RunID: runID, Limit: limit})
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "run=%s schema=%s scopes=%d\n", report.RunID, report.SchemaVersion, report.ScopeCount)
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "TOOL_CALL\tSESSION\tATTEMPT\tSTATUS\tPROCESSES\tRUNTIME_EVENTS\tRISKS\tPOLICY\tRESPONSES\tCOMMAND")
+			for _, scope := range report.Scopes {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%d\t%d\t%d\t%d\t%s\n",
+					scope.ToolCallID, scope.SessionID, scope.AttemptID, scope.Status, scope.ProcessCount, scope.RuntimeEvents,
+					scope.RiskSignals, scope.PolicyDecisions, scope.ResponseActions, scope.Command)
+			}
+			if err := w.Flush(); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&runID, "run", "", "run id")
+	cmd.Flags().IntVar(&limit, "limit", 0, "maximum tool call scopes to return")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	return cmd
 }

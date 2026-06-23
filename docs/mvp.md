@@ -53,6 +53,7 @@ agentprov graph explain --run run-record-demo --file app.py --json
 scripts/demo_telemetry_jsonl.sh
 agentprov observe summary --run run-telemetry-jsonl-demo
 agentprov observe coverage --run run-telemetry-jsonl-demo
+agentprov observe scopes --run run-telemetry-jsonl-demo
 agentprov telemetry batches --run run-telemetry-jsonl-demo
 agentprov telemetry list --run run-telemetry-jsonl-demo
 agentprov timeline --run run-telemetry-jsonl-demo
@@ -207,6 +208,10 @@ Expected output / acceptance:
   `agentprovenance.observability_coverage/v1`, a correlation-quality report for
   raw runtime telemetry, including missing `session_id`, `tool_call_id`, or
   `process_id` gaps and suggested binding keys.
+- `observe scopes --run <run_id> --json` emits
+  `agentprovenance.observability_scopes/v1`, a per-ToolCallScope view with
+  process counts, runtime event histograms, risk/response counts, evidence refs,
+  and drill-down commands.
 - `rollout attempts` shows `wrong-constant` as `quarantined` with
   `risk=tainted`.
 - `rollout winner` is a historical command name. It shows `correct-add` as the
