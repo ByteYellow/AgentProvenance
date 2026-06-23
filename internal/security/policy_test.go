@@ -128,6 +128,35 @@ func TestEvaluateJSONLWithStatePersistsAndQuarantines(t *testing.T) {
 	if responses[0].RiskSignalID != risks[0].ID || responses[0].PolicyDecisionID != decisionID || responses[0].ActionType != "quarantine" || responses[0].TargetType != "session" || responses[0].TargetID != "sbx-test" {
 		t.Fatalf("unexpected response action: %+v", responses[0])
 	}
+	riskReport, err := BuildRiskSignalsReport(db, "run-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if riskReport.SchemaVersion != "agentprovenance.security_risks/v1" || riskReport.ResultSetID == "" || riskReport.PageHash == "" || riskReport.Count != 1 {
+		t.Fatalf("unexpected risk report: %+v", riskReport)
+	}
+	if !containsCommand(riskReport.Risks[0].Query.Drilldowns, "graph explain --risk "+decisionID) {
+		t.Fatalf("risk report missing graph explain drilldown: %+v", riskReport.Risks[0].Query.Drilldowns)
+	}
+	responseReport, err := BuildResponseActionsReport(db, "run-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if responseReport.SchemaVersion != "agentprovenance.security_responses/v1" || responseReport.ResultSetID == "" || responseReport.PageHash == "" || responseReport.Count != 1 {
+		t.Fatalf("unexpected response report: %+v", responseReport)
+	}
+	if !containsCommand(responseReport.Responses[0].Query.Drilldowns, "graph explain --risk "+decisionID) {
+		t.Fatalf("response report missing graph explain drilldown: %+v", responseReport.Responses[0].Query.Drilldowns)
+	}
+}
+
+func containsCommand(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func insertPolicySession(t *testing.T, db *sql.DB) {

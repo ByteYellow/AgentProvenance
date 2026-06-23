@@ -2,6 +2,7 @@ package cli
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"text/tabwriter"
 
@@ -24,6 +25,7 @@ func securityCmd(dataDir *string) *cobra.Command {
 
 func securityRisksCmd(dataDir *string) *cobra.Command {
 	var runID string
+	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "risks",
 		Short: "list normalized risk signals",
@@ -33,6 +35,15 @@ func securityRisksCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer cleanup()
+			if asJSON {
+				report, err := securitymodel.BuildRiskSignalsReport(db, runID)
+				if err != nil {
+					return err
+				}
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
 			records, err := securitymodel.ListRiskSignals(db, runID)
 			if err != nil {
 				return err
@@ -48,11 +59,13 @@ func securityRisksCmd(dataDir *string) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&runID, "run", "", "filter by run id")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "emit structured risk signal JSON")
 	return cmd
 }
 
 func securityDeviationsCmd(dataDir *string) *cobra.Command {
 	var runID string
+	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "deviations",
 		Short: "list baseline deviation signals",
@@ -62,6 +75,15 @@ func securityDeviationsCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer cleanup()
+			if asJSON {
+				report, err := baseline.BuildDeviationsReport(db, runID)
+				if err != nil {
+					return err
+				}
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
 			records, err := baseline.ListDeviations(db, runID)
 			if err != nil {
 				return err
@@ -77,11 +99,13 @@ func securityDeviationsCmd(dataDir *string) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&runID, "run", "", "filter by run id")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "emit structured baseline deviation JSON")
 	return cmd
 }
 
 func securityResponsesCmd(dataDir *string) *cobra.Command {
 	var runID string
+	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "responses",
 		Short: "list recorded response actions",
@@ -91,6 +115,15 @@ func securityResponsesCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer cleanup()
+			if asJSON {
+				report, err := securitymodel.BuildResponseActionsReport(db, runID)
+				if err != nil {
+					return err
+				}
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
 			records, err := securitymodel.ListResponseActions(db, runID)
 			if err != nil {
 				return err
@@ -106,6 +139,7 @@ func securityResponsesCmd(dataDir *string) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&runID, "run", "", "filter by run id")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "emit structured response action JSON")
 	return cmd
 }
 

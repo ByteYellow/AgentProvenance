@@ -285,8 +285,8 @@ or runtime events on the host:
 ./agentprov telemetry list --run run-falco-demo
 ./agentprov telemetry list --run run-falco-demo --json
 ./agentprov timeline --run run-falco-demo
-./agentprov security risks --run run-falco-demo
-./agentprov security responses --run run-falco-demo
+./agentprov security risks --run run-falco-demo --json
+./agentprov security responses --run run-falco-demo --json
 ```
 
 For a live stream, pipe Falco JSON output directly:
@@ -334,8 +334,11 @@ causal graph.
 ./agentprov timeline --run <run_id> --process <process_id> --json
 ./agentprov timeline --run <run_id> --type risk_signal --json
 ./agentprov security risks --run <run_id>
+./agentprov security risks --run <run_id> --json
 ./agentprov security deviations --run <run_id>
+./agentprov security deviations --run <run_id> --json
 ./agentprov security responses --run <run_id>
+./agentprov security responses --run <run_id> --json
 ./agentprov baseline learn --template <template_name> --run <run_id>
 ./agentprov baseline check --template <template_name> --run <run_id>
 ./agentprov compliance frameworks
@@ -359,9 +362,9 @@ These commands are now part of the mainline security evidence surface:
 | `observe process` | Explain one process with its tool_call context, runtime events, risk/policy/response evidence, and drill-down links |
 | `observe flow` | Show the compact causality flow from runtime events to risk signals, policy decisions, and response actions |
 | `timeline` | Show a time-ordered execution view across application context, runtime telemetry, evidence, risk, baseline, response, and external effects |
-| `security risks` | List normalized `RiskSignal` records derived from policy/runtime evidence |
-| `security deviations` | List `BaselineDeviation` records from behavior feature checks |
-| `security responses` | List recorded `ResponseAction` records such as audit, deny, kill, quarantine, taint, export, or notification hooks |
+| `security risks` | List normalized `RiskSignal` records derived from policy/runtime evidence; `--json` emits schema/hash metadata and drill-down refs to event/process/timeline/explain views |
+| `security deviations` | List `BaselineDeviation` records from behavior feature checks; `--json` emits schema/hash metadata and drill-down refs to timeline and summary views |
+| `security responses` | List recorded `ResponseAction` records such as audit, deny, kill, quarantine, taint, export, or notification hooks; `--json` emits schema/hash metadata and drill-down refs back to risk/process/explain views |
 | `baseline learn/check` | Learn process/file/network/risk/runtime feature vectors and emit deviation records plus baseline-derived risk signals |
 | `compliance frameworks/map/explain/gaps/report` | Map run evidence to OWASP Agentic Security and NIST AI agent security assessment profiles as item-level self-assessment evidence and gap lists |
 | `policy test/decisions` | Evaluate events, persist policy decisions, and feed the risk/response graph |

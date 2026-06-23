@@ -62,9 +62,9 @@ agentprov telemetry list --run run-telemetry-jsonl-demo
 agentprov timeline --run run-telemetry-jsonl-demo
 agentprov timeline --run run-telemetry-jsonl-demo --json
 agentprov policy test examples/events/metadata-egress.jsonl
-agentprov security risks --run run-demo-bugfix
-agentprov security deviations --run run-demo-bugfix
-agentprov security responses --run run-demo-bugfix
+agentprov security risks --run run-demo-bugfix --json
+agentprov security deviations --run run-demo-bugfix --json
+agentprov security responses --run run-demo-bugfix --json
 agentprov graph trace --run run-demo-bugfix
 agentprov graph refs --run run-demo-bugfix
 agentprov graph log --run run-demo-bugfix
@@ -130,9 +130,9 @@ agentprov api write-file <session_id> --path notes.txt --content hello
 agentprov telemetry list --session <session_id>
 agentprov policy test examples/events/metadata-egress.jsonl
 agentprov policy decisions --run run-demo-bugfix
-agentprov security risks --run run-demo-bugfix
-agentprov security deviations --run run-demo-bugfix
-agentprov security responses --run run-demo-bugfix
+agentprov security risks --run run-demo-bugfix --json
+agentprov security deviations --run run-demo-bugfix --json
+agentprov security responses --run run-demo-bugfix --json
 agentprov forensics export run-demo-bugfix
 agentprov cost sample <session_id>
 agentprov bench overcommit --sessions 20 --idle-ratio 0.8 --bursty

@@ -77,6 +77,16 @@ func TestCheckPersistsBaselineDeviations(t *testing.T) {
 	if riskCount != 3 {
 		t.Fatalf("baseline risk signals = %d, want 3", riskCount)
 	}
+	report, err := BuildDeviationsReport(db, "run-anomalous")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.SchemaVersion != "agentprovenance.security_deviations/v1" || report.ResultSetID == "" || report.PageHash == "" || report.Count != 3 {
+		t.Fatalf("unexpected deviations report: %+v", report)
+	}
+	if len(report.Deviations[0].Query.Drilldowns) == 0 {
+		t.Fatalf("deviation report missing drilldowns: %+v", report.Deviations[0])
+	}
 }
 
 func TestLearnStoresRuntimeFeatureVector(t *testing.T) {

@@ -1,7 +1,9 @@
 package baseline
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -39,17 +41,35 @@ type FeatureVector struct {
 }
 
 type DeviationRecord struct {
-	ID                string
-	RunID             string
-	TemplateName      string
-	ProfileID         string
-	DeviationType     string
-	Status            string
-	ExpectedValue     float64
-	ObservedValue     float64
-	RecommendedAction string
-	Payload           string
-	CreatedAt         string
+	ID                string  `json:"id"`
+	RunID             string  `json:"run_id"`
+	TemplateName      string  `json:"template_name"`
+	ProfileID         string  `json:"profile_id"`
+	DeviationType     string  `json:"deviation_type"`
+	Status            string  `json:"status"`
+	ExpectedValue     float64 `json:"expected_value"`
+	ObservedValue     float64 `json:"observed_value"`
+	RecommendedAction string  `json:"recommended_action"`
+	Payload           string  `json:"payload"`
+	CreatedAt         string  `json:"created_at"`
+}
+
+type DeviationQuery struct {
+	Drilldowns []string `json:"drilldowns"`
+}
+
+type DeviationView struct {
+	Deviation DeviationRecord `json:"deviation"`
+	Query     DeviationQuery  `json:"query"`
+}
+
+type DeviationsReport struct {
+	SchemaVersion string          `json:"schema_version"`
+	RunID         string          `json:"run_id,omitempty"`
+	ResultSetID   string          `json:"result_set_id"`
+	PageHash      string          `json:"page_hash"`
+	Count         int             `json:"count"`
+	Deviations    []DeviationView `json:"deviations"`
 }
 
 func Learn(db *sql.DB, templateName, runID string) (Profile, error) {
@@ -151,6 +171,66 @@ func ListDeviations(db *sql.DB, runID string) ([]DeviationRecord, error) {
 		records = append(records, record)
 	}
 	return records, rows.Err()
+}
+
+func BuildDeviationsReport(db *sql.DB, runID string) (DeviationsReport, error) {
+	records, err := ListDeviations(db, runID)
+	if err != nil {
+		return DeviationsReport{}, err
+	}
+	views := make([]DeviationView, 0, len(records))
+	for _, record := range records {
+		views = append(views, DeviationView{Deviation: record, Query: DeviationQuery{Drilldowns: deviationDrilldowns(record)}})
+	}
+	report := DeviationsReport{
+		SchemaVersion: "agentprovenance.security_deviations/v1",
+		RunID:         runID,
+		Count:         len(views),
+		Deviations:    views,
+	}
+	resultSetID, pageHash, err := deviationReportIntegrity(runID, views)
+	if err == nil {
+		report.ResultSetID = resultSetID
+		report.PageHash = pageHash
+	}
+	return report, nil
+}
+
+func deviationDrilldowns(record DeviationRecord) []string {
+	return []string{
+		"timeline --run " + record.RunID + " --type baseline_deviation --json",
+		"timeline --run " + record.RunID + " --view causality",
+		"observe summary --run " + record.RunID + " --json",
+	}
+}
+
+func deviationReportIntegrity(runID string, items []DeviationView) (string, string, error) {
+	resultSetID, err := digestDeviation(map[string]any{
+		"kind":   "security_deviations_result_set",
+		"run_id": runID,
+		"items":  items,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	pageHash, err := digestDeviation(map[string]any{
+		"kind":          "security_deviations_page",
+		"result_set_id": resultSetID,
+		"items":         items,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return resultSetID, pageHash, nil
+}
+
+func digestDeviation(value any) (string, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
 func deviationRecord(runID, templateName, profileID, deviationType string, expected, observed float64, action string) DeviationRecord {

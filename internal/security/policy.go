@@ -2,7 +2,9 @@ package security
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -35,48 +37,80 @@ type Decision struct {
 }
 
 type DecisionRecord struct {
-	ID        string
-	EventID   string
-	RunID     string
-	SessionID string
-	RuleID    string
-	Decision  string
-	Reason    string
-	CreatedAt string
+	ID        string `json:"id"`
+	EventID   string `json:"event_id"`
+	RunID     string `json:"run_id"`
+	SessionID string `json:"session_id"`
+	RuleID    string `json:"rule_id"`
+	Decision  string `json:"decision"`
+	Reason    string `json:"reason"`
+	CreatedAt string `json:"created_at"`
 }
 
 type RiskSignalRecord struct {
-	ID                string
-	RunID             string
-	SessionID         string
-	ToolCallID        string
-	ProcessID         string
-	SnapshotID        string
-	EventID           string
-	PolicyDecisionID  string
-	SignalType        string
-	Severity          string
-	Reason            string
-	RecommendedAction string
-	Payload           string
-	CreatedAt         string
+	ID                string `json:"id"`
+	RunID             string `json:"run_id"`
+	SessionID         string `json:"session_id"`
+	ToolCallID        string `json:"tool_call_id"`
+	ProcessID         string `json:"process_id"`
+	SnapshotID        string `json:"snapshot_id"`
+	EventID           string `json:"event_id"`
+	PolicyDecisionID  string `json:"policy_decision_id"`
+	SignalType        string `json:"signal_type"`
+	Severity          string `json:"severity"`
+	Reason            string `json:"reason"`
+	RecommendedAction string `json:"recommended_action"`
+	Payload           string `json:"payload"`
+	CreatedAt         string `json:"created_at"`
 }
 
 type ResponseActionRecord struct {
-	ID               string
-	RunID            string
-	SessionID        string
-	ProcessID        string
-	SnapshotID       string
-	RiskSignalID     string
-	PolicyDecisionID string
-	ActionType       string
-	TargetType       string
-	TargetID         string
-	Status           string
-	ResultRef        string
-	Payload          string
-	CreatedAt        string
+	ID               string `json:"id"`
+	RunID            string `json:"run_id"`
+	SessionID        string `json:"session_id"`
+	ProcessID        string `json:"process_id"`
+	SnapshotID       string `json:"snapshot_id"`
+	RiskSignalID     string `json:"risk_signal_id"`
+	PolicyDecisionID string `json:"policy_decision_id"`
+	ActionType       string `json:"action_type"`
+	TargetType       string `json:"target_type"`
+	TargetID         string `json:"target_id"`
+	Status           string `json:"status"`
+	ResultRef        string `json:"result_ref"`
+	Payload          string `json:"payload"`
+	CreatedAt        string `json:"created_at"`
+}
+
+type QueryRefs struct {
+	Drilldowns []string `json:"drilldowns"`
+}
+
+type RiskSignalView struct {
+	Risk  RiskSignalRecord `json:"risk"`
+	Query QueryRefs        `json:"query"`
+}
+
+type ResponseActionView struct {
+	Response ResponseActionRecord `json:"response"`
+	Query    QueryRefs            `json:"query"`
+}
+
+type RiskSignalsReport struct {
+	SchemaVersion string           `json:"schema_version"`
+	RunID         string           `json:"run_id,omitempty"`
+	ResultSetID   string           `json:"result_set_id"`
+	PageHash      string           `json:"page_hash"`
+	Count         int              `json:"count"`
+	Risks         []RiskSignalView `json:"risks"`
+}
+
+type ResponseActionsReport struct {
+	SchemaVersion string               `json:"schema_version"`
+	RunID         string               `json:"run_id,omitempty"`
+	ResultSetID   string               `json:"result_set_id"`
+	PageHash      string               `json:"page_hash"`
+	Count         int                  `json:"count"`
+	Responses     []ResponseActionView `json:"responses"`
 }
 
 type Engine struct {
@@ -292,6 +326,29 @@ func ListRiskSignals(db *sql.DB, runID string) ([]RiskSignalRecord, error) {
 	return records, rows.Err()
 }
 
+func BuildRiskSignalsReport(db *sql.DB, runID string) (RiskSignalsReport, error) {
+	records, err := ListRiskSignals(db, runID)
+	if err != nil {
+		return RiskSignalsReport{}, err
+	}
+	views := make([]RiskSignalView, 0, len(records))
+	for _, record := range records {
+		views = append(views, RiskSignalView{Risk: record, Query: QueryRefs{Drilldowns: riskDrilldowns(record)}})
+	}
+	report := RiskSignalsReport{
+		SchemaVersion: "agentprovenance.security_risks/v1",
+		RunID:         runID,
+		Count:         len(views),
+		Risks:         views,
+	}
+	resultSetID, pageHash, err := securityReportIntegrity("security_risks", runID, views)
+	if err == nil {
+		report.ResultSetID = resultSetID
+		report.PageHash = pageHash
+	}
+	return report, nil
+}
+
 func ListResponseActions(db *sql.DB, runID string) ([]ResponseActionRecord, error) {
 	query := `SELECT id, run_id, session_id, process_id, snapshot_id, risk_signal_id, policy_decision_id,
 		action_type, target_type, target_id, status, result_ref, payload, created_at FROM response_actions`
@@ -315,6 +372,97 @@ func ListResponseActions(db *sql.DB, runID string) ([]ResponseActionRecord, erro
 		records = append(records, record)
 	}
 	return records, rows.Err()
+}
+
+func BuildResponseActionsReport(db *sql.DB, runID string) (ResponseActionsReport, error) {
+	records, err := ListResponseActions(db, runID)
+	if err != nil {
+		return ResponseActionsReport{}, err
+	}
+	views := make([]ResponseActionView, 0, len(records))
+	for _, record := range records {
+		views = append(views, ResponseActionView{Response: record, Query: QueryRefs{Drilldowns: responseDrilldowns(record)}})
+	}
+	report := ResponseActionsReport{
+		SchemaVersion: "agentprovenance.security_responses/v1",
+		RunID:         runID,
+		Count:         len(views),
+		Responses:     views,
+	}
+	resultSetID, pageHash, err := securityReportIntegrity("security_responses", runID, views)
+	if err == nil {
+		report.ResultSetID = resultSetID
+		report.PageHash = pageHash
+	}
+	return report, nil
+}
+
+func riskDrilldowns(record RiskSignalRecord) []string {
+	return uniqueCommands([]string{
+		command(record.EventID != "", "observe event --run "+record.RunID+" --event "+record.EventID),
+		command(record.EventID != "", "graph explain --event "+record.EventID),
+		command(record.ProcessID != "", "observe process --run "+record.RunID+" --process "+record.ProcessID),
+		command(record.ToolCallID != "", "timeline --run "+record.RunID+" --tool-call "+record.ToolCallID+" --view causality"),
+		command(record.PolicyDecisionID != "", "graph explain --risk "+record.PolicyDecisionID),
+	})
+}
+
+func responseDrilldowns(record ResponseActionRecord) []string {
+	return uniqueCommands([]string{
+		command(record.ProcessID != "", "observe process --run "+record.RunID+" --process "+record.ProcessID),
+		command(record.RiskSignalID != "", "security risks --run "+record.RunID+" --json"),
+		command(record.PolicyDecisionID != "", "graph explain --risk "+record.PolicyDecisionID),
+		command(record.TargetType == "session" && record.TargetID != "", "timeline --run "+record.RunID+" --view causality"),
+	})
+}
+
+func command(ok bool, value string) string {
+	if !ok {
+		return ""
+	}
+	return value
+}
+
+func uniqueCommands(values []string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, value := range values {
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
+func securityReportIntegrity(kind, runID string, items any) (string, string, error) {
+	resultSetID, err := digestSecurity(map[string]any{
+		"kind":   kind + "_result_set",
+		"run_id": runID,
+		"items":  items,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	pageHash, err := digestSecurity(map[string]any{
+		"kind":          kind + "_page",
+		"result_set_id": resultSetID,
+		"items":         items,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return resultSetID, pageHash, nil
+}
+
+func digestSecurity(value any) (string, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
 func evaluateJSONL(path string, out io.Writer, db *sql.DB, engine Engine) error {

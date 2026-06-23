@@ -116,6 +116,16 @@ assert_contains "$PROCESS_DETAIL_JSON" '"result_set_id": "sha256:'
 assert_contains "$PROCESS_DETAIL_JSON" '"page_hash": "sha256:'
 assert_contains "$PROCESS_DETAIL_JSON" '"tool_call_id": "tool-phase1-accept"'
 
+echo "== assert security evidence JSON"
+RISKS_JSON="$("$BIN" --data-dir "$DATA_DIR" security risks --run run-phase1-accept --json)"
+assert_contains "$RISKS_JSON" '"schema_version": "agentprovenance.security_risks/v1"'
+assert_contains "$RISKS_JSON" '"result_set_id": "sha256:'
+assert_contains "$RISKS_JSON" '"page_hash": "sha256:'
+RESPONSES_JSON="$("$BIN" --data-dir "$DATA_DIR" security responses --run run-phase1-accept --json)"
+assert_contains "$RESPONSES_JSON" '"schema_version": "agentprovenance.security_responses/v1"'
+assert_contains "$RESPONSES_JSON" '"result_set_id": "sha256:'
+assert_contains "$RESPONSES_JSON" '"page_hash": "sha256:'
+
 echo "== assert observability query integrity"
 SUMMARY_JSON="$("$BIN" --data-dir "$DATA_DIR" observe summary --run run-phase1-accept --json)"
 assert_contains "$SUMMARY_JSON" '"schema_version": "agentprovenance.observability_summary/v1"'
