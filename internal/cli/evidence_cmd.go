@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
+	"text/tabwriter"
 
 	"github.com/byteyellow/agentprovenance/internal/evidence"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -10,6 +12,9 @@ import (
 
 func evidenceCmd(dataDir *string) *cobra.Command {
 	var limit int
+	var runID string
+	var objectLimit int
+	var jsonOut bool
 	process := &cobra.Command{
 		Use:   "process",
 		Short: "process queued compact evidence events into materialized graph edges",
@@ -28,8 +33,61 @@ func evidenceCmd(dataDir *string) *cobra.Command {
 		},
 	}
 	process.Flags().IntVar(&limit, "limit", 100, "maximum evidence events to process")
-	cmd := &cobra.Command{Use: "evidence", Short: "async evidence pipeline commands"}
+	manifest := &cobra.Command{
+		Use:   "manifest",
+		Short: "build a run-level evidence manifest across observability, objects, risk, and response data",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if runID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			paths, err := store.Init(*dataDir)
+			if err != nil {
+				return err
+			}
+			db, err := store.Open(paths)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			report, err := evidence.BuildManifest(db, evidence.ManifestOptions{RunID: runID, ObjectLimit: objectLimit})
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "run=%s schema=%s result_set=%s page_hash=%s\n", report.RunID, report.SchemaVersion, report.ResultSetID, report.PageHash)
+			fmt.Fprintf(cmd.OutOrStdout(), "summary events=%d runtime_events=%d risks=%d responses=%d tool_call_coverage=%.2f process_coverage=%.2f\n",
+				report.Summary.EventCount, report.Summary.Runtime.Events, report.Security.RiskCount, report.Security.ResponseCount,
+				report.Summary.Runtime.ToolCallCoverageRatio, report.Summary.Runtime.ProcessCoverageRatio)
+			fmt.Fprintf(cmd.OutOrStdout(), "timeline events=%d result_set=%s page_hash=%s\n", report.Timeline.EventCount, report.Timeline.ResultSetID, report.Timeline.PageHash)
+			fmt.Fprintf(cmd.OutOrStdout(), "objects count=%d bytes=%d result_set=%s page_hash=%s has_more=%t\n",
+				report.Objects.ObjectCount, report.Objects.TotalBytes, report.Objects.ResultSetID, report.Objects.PageHash, report.Objects.HasMore)
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "OBJECT_TYPE\tCOUNT")
+			for typ, count := range report.Objects.ByType {
+				fmt.Fprintf(w, "%s\t%d\n", typ, count)
+			}
+			if err := w.Flush(); err != nil {
+				return err
+			}
+			if len(report.RecommendedViews) > 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "next_views:")
+				for _, view := range report.RecommendedViews {
+					fmt.Fprintf(cmd.OutOrStdout(), "  agentprov %s\n", view)
+				}
+			}
+			return nil
+		},
+	}
+	manifest.Flags().StringVar(&runID, "run", "", "run id")
+	manifest.Flags().IntVar(&objectLimit, "object-limit", 25, "maximum object refs to include")
+	manifest.Flags().BoolVar(&jsonOut, "json", false, "emit JSON evidence manifest")
+	cmd := &cobra.Command{Use: "evidence", Short: "evidence processing and manifest commands"}
 	cmd.AddCommand(process)
+	cmd.AddCommand(manifest)
 	return cmd
 }
 
