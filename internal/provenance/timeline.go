@@ -15,12 +15,15 @@ type TimelineOptions struct {
 	ProcessID string
 	Type      string
 	Limit     int
+	View      string
 }
 
 type TimelineManifest struct {
 	SchemaVersion string          `json:"schema_version"`
 	RunID         string          `json:"run_id"`
 	Filter        TimelineFilter  `json:"filter"`
+	View          string          `json:"view"`
+	Summary       TimelineSummary `json:"summary"`
 	ResultSetID   string          `json:"result_set_id"`
 	PageHash      string          `json:"page_hash"`
 	EventCount    int             `json:"event_count"`
@@ -32,12 +35,24 @@ type TimelineFilter struct {
 	ProcessID string `json:"process_id,omitempty"`
 	Type      string `json:"type,omitempty"`
 	Limit     int    `json:"limit,omitempty"`
+	View      string `json:"view,omitempty"`
+}
+
+type TimelineSummary struct {
+	TotalEvents         int            `json:"total_events"`
+	LaneCounts          map[string]int `json:"lane_counts"`
+	RuntimeEvents       int            `json:"runtime_events"`
+	FullyCorrelated     int            `json:"fully_correlated"`
+	PartiallyCorrelated int            `json:"partially_correlated"`
+	CorrelationGaps     int            `json:"correlation_gaps"`
 }
 
 type TimelineEvent struct {
 	Time              string             `json:"time"`
 	Type              string             `json:"type"`
 	Source            string             `json:"source"`
+	Lane              string             `json:"lane,omitempty"`
+	CorrelationStatus string             `json:"correlation_status,omitempty"`
 	ID                string             `json:"id"`
 	RunID             string             `json:"run_id"`
 	SessionID         string             `json:"session_id,omitempty"`
@@ -50,6 +65,7 @@ type TimelineEvent struct {
 	Evidence          map[string]any     `json:"evidence,omitempty"`
 	Risk              map[string]any     `json:"risk,omitempty"`
 	ExplainReplayRefs []ExplainReplayRef `json:"replay_refs,omitempty"`
+	Drilldowns        []string           `json:"drilldowns,omitempty"`
 }
 
 func BuildTimeline(db *sql.DB, opts TimelineOptions) (TimelineManifest, error) {
@@ -83,6 +99,8 @@ func BuildTimeline(db *sql.DB, opts TimelineOptions) (TimelineManifest, error) {
 		}
 		return events[i].Time < events[j].Time
 	})
+	events = enrichTimelineEvents(opts.RunID, events)
+	summary := summarizeTimeline(events)
 	resultSetID, err := stableDigest(map[string]any{
 		"kind":   "timeline_result_set",
 		"run_id": opts.RunID,
@@ -90,6 +108,7 @@ func BuildTimeline(db *sql.DB, opts TimelineOptions) (TimelineManifest, error) {
 			ToolCall:  opts.ToolCall,
 			ProcessID: opts.ProcessID,
 			Type:      opts.Type,
+			View:      opts.View,
 		},
 		"events": timelineDigestEvents(events),
 	})
@@ -116,7 +135,10 @@ func BuildTimeline(db *sql.DB, opts TimelineOptions) (TimelineManifest, error) {
 			ProcessID: opts.ProcessID,
 			Type:      opts.Type,
 			Limit:     opts.Limit,
+			View:      opts.View,
 		},
+		View:        timelineView(opts.View),
+		Summary:     summary,
 		ResultSetID: resultSetID,
 		PageHash:    pageHash,
 		EventCount:  len(events),
@@ -139,6 +161,7 @@ func timelineDigestEvents(events []TimelineEvent) []map[string]string {
 			"process_id":   event.ProcessID,
 			"snapshot_id":  event.SnapshotID,
 			"object_ref":   event.ObjectRef,
+			"lane":         event.Lane,
 		})
 	}
 	return out
@@ -149,12 +172,32 @@ func PrintTimeline(db *sql.DB, opts TimelineOptions, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if timelineView(opts.View) == "causality" {
+		return PrintTimelineCausality(manifest, out)
+	}
 	fmt.Fprintf(out, "run=%s schema=%s events=%d\n", manifest.RunID, manifest.SchemaVersion, manifest.EventCount)
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "TIME\tTYPE\tSOURCE\tID\tSESSION\tATTEMPT\tTOOL_CALL\tPROCESS\tSUMMARY")
 	for _, event := range manifest.Events {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			event.Time, event.Type, event.Source, event.ID, event.SessionID, event.AttemptID, event.ToolCallID, event.ProcessID, event.Summary)
+	}
+	return w.Flush()
+}
+
+func PrintTimelineCausality(manifest TimelineManifest, out io.Writer) error {
+	fmt.Fprintf(out, "run=%s schema=%s view=causality events=%d runtime=%d correlated=%d partial=%d gaps=%d\n",
+		manifest.RunID, manifest.SchemaVersion, manifest.EventCount, manifest.Summary.RuntimeEvents,
+		manifest.Summary.FullyCorrelated, manifest.Summary.PartiallyCorrelated, manifest.Summary.CorrelationGaps)
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "TIME\tLANE\tTYPE\tTOOL_CALL\tPROCESS\tSTATUS\tSUMMARY\tDRILLDOWN")
+	for _, event := range manifest.Events {
+		drilldown := ""
+		if len(event.Drilldowns) > 0 {
+			drilldown = event.Drilldowns[0]
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			event.Time, event.Lane, event.Type, event.ToolCallID, event.ProcessID, event.CorrelationStatus, event.Summary, drilldown)
 	}
 	return w.Flush()
 }
@@ -167,6 +210,114 @@ func PrintTimelineJSON(db *sql.DB, opts TimelineOptions, out io.Writer) error {
 	enc := json.NewEncoder(out)
 	enc.SetIndent("", "  ")
 	return enc.Encode(manifest)
+}
+
+func timelineView(view string) string {
+	if view == "causality" {
+		return "causality"
+	}
+	return "table"
+}
+
+func enrichTimelineEvents(runID string, events []TimelineEvent) []TimelineEvent {
+	for i := range events {
+		events[i].Lane = timelineLane(events[i])
+		events[i].CorrelationStatus = timelineCorrelationStatus(events[i])
+		events[i].Drilldowns = timelineDrilldowns(runID, events[i])
+	}
+	return events
+}
+
+func summarizeTimeline(events []TimelineEvent) TimelineSummary {
+	summary := TimelineSummary{
+		TotalEvents: len(events),
+		LaneCounts:  map[string]int{},
+	}
+	for _, event := range events {
+		summary.LaneCounts[event.Lane]++
+		if !timelineIsRuntimeObserved(event) {
+			continue
+		}
+		summary.RuntimeEvents++
+		switch event.CorrelationStatus {
+		case "full":
+			summary.FullyCorrelated++
+		case "partial":
+			summary.PartiallyCorrelated++
+		case "gap":
+			summary.CorrelationGaps++
+		}
+	}
+	return summary
+}
+
+func timelineLane(event TimelineEvent) string {
+	switch event.Source {
+	case "application_context":
+		return "agent_context"
+	case "runtime":
+		return "runtime_process"
+	case "security":
+		return "risk_policy"
+	case "evidence":
+		return "evidence"
+	case "effect":
+		return "external_effect"
+	default:
+		return "runtime_telemetry"
+	}
+}
+
+func timelineIsRuntimeObserved(event TimelineEvent) bool {
+	return event.Lane == "runtime_telemetry" || event.Lane == "runtime_process"
+}
+
+func timelineCorrelationStatus(event TimelineEvent) string {
+	if !timelineIsRuntimeObserved(event) {
+		return ""
+	}
+	hasToolCall := event.ToolCallID != ""
+	hasProcess := event.ProcessID != ""
+	switch {
+	case hasToolCall && hasProcess:
+		return "full"
+	case hasToolCall || hasProcess:
+		return "partial"
+	default:
+		return "gap"
+	}
+}
+
+func timelineDrilldowns(runID string, event TimelineEvent) []string {
+	drilldowns := []string{}
+	for _, ref := range event.ExplainReplayRefs {
+		if ref.Ref != "" {
+			drilldowns = append(drilldowns, ref.Ref)
+		}
+	}
+	if event.ID != "" && event.Lane == "runtime_telemetry" {
+		drilldowns = append(drilldowns, "observe event --run "+runID+" --event "+event.ID)
+	}
+	if event.ProcessID != "" {
+		drilldowns = append(drilldowns, "observe process --run "+runID+" --process "+event.ProcessID)
+	}
+	if event.ToolCallID != "" {
+		drilldowns = append(drilldowns, "timeline --run "+runID+" --tool-call "+event.ToolCallID+" --view causality")
+	}
+	return uniqueTimelineStrings(drilldowns)
+}
+
+func uniqueTimelineStrings(values []string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, value := range values {
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }
 
 func appendTimelineToolCalls(db *sql.DB, opts TimelineOptions, events *[]TimelineEvent) error {

@@ -1,8 +1,10 @@
 package provenance
 
 import (
+	"bytes"
 	"database/sql"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -30,6 +32,8 @@ func TestBuildTimelineMergesContextTelemetryRiskAndResponse(t *testing.T) {
 		VALUES ('proc-1', 'session-1', 'tool-1', 'pytest -q', 'completed', 0, '2026-01-01T00:00:03Z', '2026-01-01T00:00:05Z')`)
 	execSQL(t, db, `INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, raw_event_id, source, event_type, payload, correlation_method, correlation_confidence, pid, ppid, created_at)
 		VALUES ('evt-1', 'run-1', 'session-1', 'tool-1', 'proc-1', 'raw-1', 'tetragon_jsonl', 'execve', '{}', 'pid', 1.0, 42, 1, '2026-01-01T00:00:04Z')`)
+	execSQL(t, db, `INSERT INTO events (id, run_id, raw_event_id, source, event_type, payload, correlation_method, correlation_confidence, pid, ppid, created_at)
+		VALUES ('evt-gap', 'run-1', 'raw-gap', 'falco_jsonl', 'network_connect', '{}', 'unmatched', 0, 99, 1, '2026-01-01T00:00:04.500Z')`)
 	execSQL(t, db, `INSERT INTO policy_decisions (id, event_id, run_id, session_id, rule_id, decision, reason, created_at)
 		VALUES ('dec-1', 'evt-1', 'run-1', 'session-1', 'metadata_ip', 'quarantine', 'metadata access', '2026-01-01T00:00:06Z')`)
 	execSQL(t, db, `INSERT INTO risk_signals (id, run_id, session_id, tool_call_id, process_id, event_id, policy_decision_id, signal_type, severity, reason, recommended_action, created_at)
@@ -52,6 +56,15 @@ func TestBuildTimelineMergesContextTelemetryRiskAndResponse(t *testing.T) {
 	if manifest.ResultSetID == "" || manifest.PageHash == "" {
 		t.Fatalf("timeline integrity hashes missing: result_set_id=%q page_hash=%q", manifest.ResultSetID, manifest.PageHash)
 	}
+	if manifest.View != "table" || manifest.Summary.TotalEvents != manifest.EventCount {
+		t.Fatalf("timeline summary/view mismatch: view=%s summary=%+v events=%d", manifest.View, manifest.Summary, manifest.EventCount)
+	}
+	if manifest.Summary.LaneCounts["agent_context"] == 0 || manifest.Summary.LaneCounts["runtime_telemetry"] == 0 || manifest.Summary.LaneCounts["risk_policy"] == 0 {
+		t.Fatalf("timeline lane counts missing expected lanes: %+v", manifest.Summary.LaneCounts)
+	}
+	if manifest.Summary.RuntimeEvents == 0 || manifest.Summary.FullyCorrelated == 0 || manifest.Summary.CorrelationGaps == 0 {
+		t.Fatalf("timeline correlation summary missing expected runtime coverage: %+v", manifest.Summary)
+	}
 	assertTimelineOrder(t, manifest.Events)
 	for _, want := range []string{"tool_call_start", "process_start", "execve", "policy_decision", "risk_signal", "response_action", "baseline_deviation"} {
 		if !timelineHasType(manifest.Events, want) {
@@ -69,6 +82,9 @@ func TestBuildTimelineMergesContextTelemetryRiskAndResponse(t *testing.T) {
 	if filtered.Events[0].ToolCallID != "tool-1" || filtered.Events[0].ProcessID != "proc-1" {
 		t.Fatalf("filtered event lost context: %+v", filtered.Events[0])
 	}
+	if filtered.Events[0].Lane != "runtime_telemetry" || filtered.Events[0].CorrelationStatus != "full" || len(filtered.Events[0].Drilldowns) == 0 {
+		t.Fatalf("filtered event missing causality metadata: %+v", filtered.Events[0])
+	}
 	limited, err := BuildTimeline(db, TimelineOptions{RunID: "run-1", Limit: 1})
 	if err != nil {
 		t.Fatal(err)
@@ -81,6 +97,24 @@ func TestBuildTimelineMergesContextTelemetryRiskAndResponse(t *testing.T) {
 	}
 	if limited.PageHash == manifest.PageHash {
 		t.Fatalf("limited page_hash should differ from full page hash: %s", limited.PageHash)
+	}
+
+	causality, err := BuildTimeline(db, TimelineOptions{RunID: "run-1", View: "causality"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if causality.View != "causality" || causality.Filter.View != "causality" {
+		t.Fatalf("causality view not preserved: %+v", causality)
+	}
+	var out bytes.Buffer
+	if err := PrintTimelineCausality(causality, &out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	for _, want := range []string{"view=causality", "LANE", "runtime_telemetry", "gap"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("causality output missing %q:\n%s", want, got)
+		}
 	}
 }
 

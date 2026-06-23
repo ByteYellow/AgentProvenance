@@ -12,6 +12,7 @@ func timelineCmd(dataDir *string) *cobra.Command {
 	var toolCallID string
 	var processID string
 	var eventType string
+	var view string
 	var limit int
 	var asJSON bool
 
@@ -33,6 +34,7 @@ func timelineCmd(dataDir *string) *cobra.Command {
 				ProcessID: processID,
 				Type:      eventType,
 				Limit:     limit,
+				View:      view,
 			}
 			if asJSON {
 				return provenance.PrintTimelineJSON(db, opts, cmd.OutOrStdout())
@@ -44,6 +46,7 @@ func timelineCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().StringVar(&toolCallID, "tool-call", "", "filter by tool call id")
 	cmd.Flags().StringVar(&processID, "process", "", "filter by process id")
 	cmd.Flags().StringVar(&eventType, "type", "", "filter by normalized timeline event type")
+	cmd.Flags().StringVar(&view, "view", "table", "timeline view: table or causality")
 	cmd.Flags().IntVar(&limit, "limit", 0, "maximum timeline events returned")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "emit structured timeline JSON")
 	return cmd

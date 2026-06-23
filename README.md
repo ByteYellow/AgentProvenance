@@ -242,6 +242,7 @@ printf 'value = 1\n' > /tmp/agentprov-record-demo/app.py
 ./scripts/demo_telemetry_jsonl.sh
 ./agentprov telemetry batches --run run-telemetry-jsonl-demo
 ./agentprov timeline --run run-telemetry-jsonl-demo
+./agentprov timeline --run run-telemetry-jsonl-demo --view causality
 ./agentprov timeline --run run-telemetry-jsonl-demo --json
 ./scripts/accept_phase1.sh
 ```
@@ -262,7 +263,10 @@ event entered the DAG.
 `timeline` is the system-side execution timeline surface. It merges
 application context, runtime telemetry, evidence, policy decisions, risk
 signals, baseline deviations, response actions, and external effects into one
-time-ordered view. The JSON output is designed to feed a future UI.
+time-ordered view. `--view causality` groups rows into agent context, runtime
+process, runtime telemetry, evidence, risk/policy, and external-effect lanes,
+with correlation status and drill-down commands. The JSON output is designed to
+feed a future UI.
 
 ### Falco-compatible Receiver
 
@@ -325,6 +329,7 @@ causal graph.
 ./agentprov observe flow --run <run_id>
 ./agentprov observe flow --run <run_id> --json
 ./agentprov timeline --run <run_id>
+./agentprov timeline --run <run_id> --view causality
 ./agentprov timeline --run <run_id> --tool-call <tool_call_id> --json
 ./agentprov timeline --run <run_id> --process <process_id> --json
 ./agentprov timeline --run <run_id> --type risk_signal --json
@@ -462,7 +467,7 @@ What these mean:
 | Observability event detail | `observe event --run --event` emits `agentprovenance.observability_event/v1` with runtime event context, correlation metadata, related risk/policy/response evidence, drill-down commands, `result_set_id`, and `page_hash` |
 | Observability process detail | `observe process --run --process` emits `agentprovenance.observability_process/v1` with process lifecycle, tool_call context, runtime events, risk/policy/response evidence, drill-down commands, `result_set_id`, and `page_hash` |
 | Observability flow | `observe flow --run` emits `agentprovenance.observability_flow/v1` with event-to-risk-to-policy-to-response rows, drill-down commands, `result_set_id`, and `page_hash` |
-| Execution timeline | `timeline --run` emits a human table or `agentprovenance.timeline/v1` JSON across tool calls, processes, zero-SDK process observations, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects; JSON includes `result_set_id` and `page_hash` for query integrity |
+| Execution timeline | `timeline --run` emits a human table, `--view causality` emits an system-side lane view, and `--json` emits `agentprovenance.timeline/v1` across tool calls, processes, zero-SDK process observations, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects; JSON includes lane, correlation status, drill-down refs, `result_set_id`, and `page_hash` for query integrity |
 | Runtime causality | native `runtime_*` graph edges for tool call, process, process tree, attempt, snapshot, runtime event, and workspace file correlation |
 | Provenance DAG | `trace`, `refs`, `log`, `materialize`, `objects`, `verify`, text and JSON replay |
 | Evidence query | `graph explain --json` supports file, artifact, process, event, tool call, attempt, and risk targets with bounded, depth/limit/cursor-controlled causality paths, evidence, object refs, risks, process observations, and replay refs |
