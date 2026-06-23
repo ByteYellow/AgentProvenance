@@ -96,6 +96,8 @@ agentprov telemetry ingest-falco --file falco-events.jsonl --json
 falco -o json_output=true -o json_include_output_property=true | agentprov telemetry ingest-falco --file -
 agentprov telemetry batches --run <run_id>
 agentprov telemetry batches --run <run_id> --json
+agentprov telemetry correlations --run <run_id> --json
+agentprov telemetry correlations --event <event_id> --json
 ./scripts/demo_telemetry_jsonl.sh
 ```
 
@@ -108,6 +110,12 @@ types, identity keys, resolved/unresolved rows, skipped rows, and failed rows.
 source, raw event id, identity keys, correlation method, and any skip/failure
 reason. This keeps receiver behavior auditable without requiring raw telemetry
 payloads to contain application context such as `tool_call_id`.
+
+`telemetry correlations --json` explains the second half of the path: why a
+normalized runtime event was attached to a ToolCallScope. The report includes
+the raw runtime identity, resolved application context, matched binding,
+matched identity keys such as `pid`, `container_id`, `cgroup_id`, and `time`,
+confidence, time window, and drill-down refs.
 
 The receiver maps recognized substrate events into the normalized schema:
 

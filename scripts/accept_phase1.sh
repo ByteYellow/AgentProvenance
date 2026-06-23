@@ -64,6 +64,11 @@ assert_contains "$TELEMETRY_JSON" '"schema_version": "agentprovenance.telemetry_
 assert_contains "$TELEMETRY_JSON" '"event_count": 3'
 assert_contains "$TELEMETRY_JSON" '"tool_call_id": "tool-phase1-accept"'
 assert_contains "$TELEMETRY_JSON" '"correlation_method": "pid_time_window:pid+time"'
+CORRELATIONS_JSON="$("$BIN" --data-dir "$DATA_DIR" telemetry correlations --run run-phase1-accept --json)"
+assert_contains "$CORRELATIONS_JSON" '"schema_version": "agentprovenance.telemetry_correlations/v1"'
+assert_contains "$CORRELATIONS_JSON" '"result_set_id": "sha256:'
+assert_contains "$CORRELATIONS_JSON" '"tool_call_id": "tool-phase1-accept"'
+assert_contains "$CORRELATIONS_JSON" '"matched_keys"'
 
 EVENT_ID="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept --type execve | awk 'NR == 2 {print $1}')"
 if [[ -z "$EVENT_ID" ]]; then

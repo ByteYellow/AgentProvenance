@@ -328,6 +328,9 @@ causal graph.
 ./agentprov observe process --run <run_id> --process <process_id> --json
 ./agentprov observe flow --run <run_id>
 ./agentprov observe flow --run <run_id> --json
+./agentprov telemetry correlations --run <run_id>
+./agentprov telemetry correlations --run <run_id> --json
+./agentprov telemetry correlations --event <event_id> --json
 ./agentprov timeline --run <run_id>
 ./agentprov timeline --run <run_id> --view causality
 ./agentprov timeline --run <run_id> --tool-call <tool_call_id> --json
@@ -361,6 +364,7 @@ These commands are now part of the mainline security evidence surface:
 | `observe event` | Explain one runtime event with correlated agent context, related risk/policy/response evidence, and drill-down links |
 | `observe process` | Explain one process with its tool_call context, runtime events, risk/policy/response evidence, and drill-down links |
 | `observe flow` | Show the compact causality flow from runtime events to risk signals, policy decisions, and response actions |
+| `telemetry correlations` | Explain why runtime telemetry events were attached to a ToolCallScope, including raw identity, matched binding, matched keys, confidence, time window, and drill-down refs |
 | `timeline` | Show a time-ordered execution view across application context, runtime telemetry, evidence, risk, baseline, response, and external effects |
 | `security risks` | List normalized `RiskSignal` records derived from policy/runtime evidence; `--json` emits schema/hash metadata and drill-down refs to event/process/timeline/explain views |
 | `security deviations` | List `BaselineDeviation` records from behavior feature checks; `--json` emits schema/hash metadata and drill-down refs to timeline and summary views |
@@ -464,6 +468,7 @@ What these mean:
 | Execution context | explicit ToolCallScope binding through run/session/attempt/tool_call/process/container/cgroup/pid |
 | Adapter contracts | `adapter list/inspect` exposes agent, sandbox, telemetry, artifact, and snapshot adapter capabilities, identity keys, boundaries, and QBS impact |
 | Evidence ingest | raw telemetry ingestion without requiring raw `tool_call_id`; ingest and verify enforce event-specific payload schemas, reject application context inside raw runtime payloads, map filtered Tetragon/Falco/LoongCollector JSONL into normalized telemetry events, record batch manifests with input/event hashes, and expose per-row receiver evidence via `receiver_summary` and `row_results` |
+| Correlation explain | `telemetry correlations --run/--event --json` emits `agentprovenance.telemetry_correlations/v1`, explaining raw identity, resolved context, matched binding, matched keys, confidence, time window, and drill-down refs for each telemetry event |
 | Observability summary | `observe summary --run` emits `agentprovenance.observability_summary/v1` with context counts, runtime correlation coverage, risk/baseline/response counts, event/source histograms, top evidence refs, suggested drill-down commands, `result_set_id`, and `page_hash` |
 | Observability coverage | `observe coverage --run` emits `agentprovenance.observability_coverage/v1` with runtime correlation ratios, missing identity fields, uncorrelated event gaps, source/type histograms, binding suggestions, `result_set_id`, and `page_hash` |
 | Observability scopes | `observe scopes --run` emits `agentprovenance.observability_scopes/v1` with per-tool-call process counts, runtime event histograms, risk/response counts, evidence refs, drill-down commands, `result_set_id`, and `page_hash` |

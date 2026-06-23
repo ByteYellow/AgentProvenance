@@ -17,6 +17,9 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 	var listJSON bool
 	var batchesRunID string
 	var batchesJSON bool
+	var correlationsRunID string
+	var correlationsEventID string
+	var correlationsJSON bool
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "list recorded telemetry events",
@@ -74,6 +77,46 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(telemetryIngestCmd(dataDir))
 	cmd.AddCommand(telemetryIngestJSONLCmd(dataDir))
 	cmd.AddCommand(telemetryIngestFalcoCmd(dataDir))
+	correlations := &cobra.Command{
+		Use:   "correlations",
+		Short: "explain how runtime telemetry events map to ToolCallScope bindings",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			paths, err := store.Init(*dataDir)
+			if err != nil {
+				return err
+			}
+			db, err := store.Open(paths)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			report, err := telemetry.BuildCorrelationReport(db, telemetry.CorrelationReportOptions{
+				RunID:   correlationsRunID,
+				EventID: correlationsEventID,
+			})
+			if err != nil {
+				return err
+			}
+			if correlationsJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "EVENT\tTYPE\tSOURCE\tSTATUS\tMETHOD\tCONFIDENCE\tBINDING\tTOOL_CALL\tPROCESS\tMATCHED_KEYS\tREASON")
+			for _, item := range report.Items {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%.2f\t%s\t%s\t%s\t%s\t%s\n",
+					item.Event.ID, item.Event.Type, item.Event.Source, item.Match.Status, item.Match.Method, item.Match.Confidence,
+					item.Match.BindingID, item.ResolvedContext.ToolCallID, item.ResolvedContext.ProcessID,
+					fmt.Sprintf("%v", item.Match.MatchedKeys), item.Match.Reason)
+			}
+			return w.Flush()
+		},
+	}
+	correlations.Flags().StringVar(&correlationsRunID, "run", "", "filter by run id")
+	correlations.Flags().StringVar(&correlationsEventID, "event", "", "explain one event id")
+	correlations.Flags().BoolVar(&correlationsJSON, "json", false, "emit structured correlation evidence JSON")
+	cmd.AddCommand(correlations)
 	batches := &cobra.Command{
 		Use:   "batches",
 		Short: "list telemetry ingest batch manifests",

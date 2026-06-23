@@ -118,6 +118,25 @@ func ListBindings(db *sql.DB, filter BindingFilter) ([]Binding, error) {
 	return bindings, rows.Err()
 }
 
+func GetBinding(db *sql.DB, id string) (Binding, bool, error) {
+	if id == "" {
+		return Binding{}, false, nil
+	}
+	var binding Binding
+	err := db.QueryRow(`SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
+		FROM execution_context_bindings WHERE id = ?`, id).
+		Scan(&binding.ID, &binding.RunID, &binding.SessionID, &binding.AttemptID, &binding.ToolCallID, &binding.ProcessID,
+			&binding.ContainerID, &binding.CgroupID, &binding.RootPID, &binding.PID, &binding.StartedAt, &binding.EndedAt,
+			&binding.BindingSource, &binding.Confidence)
+	if err == sql.ErrNoRows {
+		return Binding{}, false, nil
+	}
+	if err != nil {
+		return Binding{}, false, err
+	}
+	return binding, true, nil
+}
+
 func CloseBinding(db *sql.DB, processID, endedAt string) error {
 	if processID == "" {
 		return nil

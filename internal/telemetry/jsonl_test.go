@@ -96,6 +96,28 @@ func TestIngestJSONLMapsSubstrateEvents(t *testing.T) {
 			t.Fatalf("stored payload for %s is invalid: %v payload=%s", typ, err, events[0].Payload)
 		}
 	}
+	report, err := BuildCorrelationReport(db, CorrelationReportOptions{RunID: "run-jsonl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.SchemaVersion != "agentprovenance.telemetry_correlations/v1" || report.ResultSetID == "" || report.PageHash == "" || report.Count != 3 {
+		t.Fatalf("unexpected correlation report: %+v", report)
+	}
+	for _, item := range report.Items {
+		if item.Match.Status != "resolved" || item.ResolvedContext.ToolCallID != "tool-jsonl" || item.ResolvedContext.ProcessID != "process-jsonl" {
+			t.Fatalf("unexpected correlation item: %+v", item)
+		}
+		if item.Match.BindingID == "" || len(item.Match.MatchedKeys) == 0 || item.Binding == nil {
+			t.Fatalf("correlation item missing binding evidence: %+v", item)
+		}
+	}
+	eventReport, err := BuildCorrelationReport(db, CorrelationReportOptions{EventID: report.Items[0].Event.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eventReport.Count != 1 || eventReport.Items[0].Event.ID != report.Items[0].Event.ID {
+		t.Fatalf("unexpected single-event correlation report: %+v", eventReport)
+	}
 }
 
 func TestIngestFalcoMapsRiskEventsAndCorrelates(t *testing.T) {
