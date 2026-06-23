@@ -279,6 +279,7 @@ or runtime events on the host:
   --file examples/telemetry/falco-risk-events.jsonl --json
 
 ./agentprov telemetry list --run run-falco-demo
+./agentprov telemetry list --run run-falco-demo --json
 ./agentprov timeline --run run-falco-demo
 ./agentprov security risks --run run-falco-demo
 ./agentprov security responses --run run-falco-demo

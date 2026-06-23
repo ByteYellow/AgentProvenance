@@ -12,24 +12,24 @@ import (
 )
 
 type EventRecord struct {
-	ID                    string
-	RunID                 string
-	SessionID             string
-	ToolCallID            string
-	ProcessID             string
-	SnapshotID            string
-	RawEventID            string
-	CorrelationMethod     string
-	CorrelationConfidence float64
-	ContainerID           string
-	CgroupID              string
-	PID                   int64
-	TGID                  int64
-	PPID                  int64
-	Source                string
-	EventType             string
-	Payload               string
-	CreatedAt             string
+	ID                    string  `json:"id"`
+	RunID                 string  `json:"run_id"`
+	SessionID             string  `json:"session_id"`
+	ToolCallID            string  `json:"tool_call_id"`
+	ProcessID             string  `json:"process_id"`
+	SnapshotID            string  `json:"snapshot_id"`
+	RawEventID            string  `json:"raw_event_id"`
+	CorrelationMethod     string  `json:"correlation_method"`
+	CorrelationConfidence float64 `json:"correlation_confidence"`
+	ContainerID           string  `json:"container_id"`
+	CgroupID              string  `json:"cgroup_id"`
+	PID                   int64   `json:"pid"`
+	TGID                  int64   `json:"tgid"`
+	PPID                  int64   `json:"ppid"`
+	Source                string  `json:"source"`
+	EventType             string  `json:"event_type"`
+	Payload               string  `json:"payload"`
+	CreatedAt             string  `json:"created_at"`
 }
 
 type BatchRecord struct {

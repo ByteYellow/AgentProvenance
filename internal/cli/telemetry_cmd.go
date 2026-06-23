@@ -14,6 +14,7 @@ import (
 
 func telemetryCmd(dataDir *string) *cobra.Command {
 	var runID, sessionID, eventType, toolCallID string
+	var listJSON bool
 	var batchesRunID string
 	var batchesJSON bool
 	list := &cobra.Command{
@@ -38,6 +39,21 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if listJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(map[string]any{
+					"schema_version": "agentprovenance.telemetry_events/v1",
+					"filter": map[string]string{
+						"run_id":       runID,
+						"session_id":   sessionID,
+						"type":         eventType,
+						"tool_call_id": toolCallID,
+					},
+					"event_count": len(events),
+					"events":      events,
+				})
+			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "ID\tRUN\tSESSION\tTOOL_CALL\tPROCESS\tSNAPSHOT\tCORRELATION\tCONFIDENCE\tSOURCE\tTYPE\tCREATED_AT")
 			for _, event := range events {
@@ -50,6 +66,7 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 	list.Flags().StringVar(&sessionID, "session", "", "filter by session id")
 	list.Flags().StringVar(&eventType, "type", "", "filter by event type")
 	list.Flags().StringVar(&toolCallID, "tool-call", "", "filter by tool call id")
+	list.Flags().BoolVar(&listJSON, "json", false, "emit structured telemetry event JSON")
 	cmd := &cobra.Command{Use: "telemetry", Short: "telemetry inspection commands"}
 	cmd.AddCommand(list)
 	cmd.AddCommand(telemetryBindCmd(dataDir))

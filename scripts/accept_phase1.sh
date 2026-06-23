@@ -54,6 +54,11 @@ assert_contains "$TELEMETRY_OUTPUT" "execve"
 assert_contains "$TELEMETRY_OUTPUT" "network_connect"
 assert_contains "$TELEMETRY_OUTPUT" "file_write"
 assert_contains "$TELEMETRY_OUTPUT" "tool-phase1-accept"
+TELEMETRY_JSON="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept --json)"
+assert_contains "$TELEMETRY_JSON" '"schema_version": "agentprovenance.telemetry_events/v1"'
+assert_contains "$TELEMETRY_JSON" '"event_count": 3'
+assert_contains "$TELEMETRY_JSON" '"tool_call_id": "tool-phase1-accept"'
+assert_contains "$TELEMETRY_JSON" '"correlation_method": "pid_time_window:pid+time"'
 
 EVENT_ID="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept --type execve | awk 'NR == 2 {print $1}')"
 if [[ -z "$EVENT_ID" ]]; then
@@ -65,11 +70,31 @@ echo "== assert graph explain JSON"
 EXPLAIN_JSON="$("$BIN" --data-dir "$DATA_DIR" graph explain --event "$EVENT_ID" --json)"
 assert_contains "$EXPLAIN_JSON" '"schema_version": "agentprovenance.explain/v1"'
 assert_contains "$EXPLAIN_JSON" '"target"'
+assert_contains "$EXPLAIN_JSON" '"type": "event"'
 assert_contains "$EXPLAIN_JSON" '"upstream"'
 assert_contains "$EXPLAIN_JSON" '"evidence"'
 assert_contains "$EXPLAIN_JSON" '"runtime_edges"'
 assert_contains "$EXPLAIN_JSON" '"replay_refs"'
 assert_contains "$EXPLAIN_JSON" '"tool_call_id": "tool-phase1-accept"'
+assert_contains "$EXPLAIN_JSON" '"process_id": "process-phase1-accept"'
+
+echo "== assert graph explain ToolCallScope JSON"
+TOOL_EXPLAIN_JSON="$("$BIN" --data-dir "$DATA_DIR" graph explain --tool-call tool-phase1-accept --json)"
+assert_contains "$TOOL_EXPLAIN_JSON" '"schema_version": "agentprovenance.explain/v1"'
+assert_contains "$TOOL_EXPLAIN_JSON" '"type": "tool_call"'
+assert_contains "$TOOL_EXPLAIN_JSON" '"id": "tool-phase1-accept"'
+assert_contains "$TOOL_EXPLAIN_JSON" '"runtime_events"'
+assert_contains "$TOOL_EXPLAIN_JSON" '"event_type": "execve"'
+assert_contains "$TOOL_EXPLAIN_JSON" '"event_type": "network_connect"'
+assert_contains "$TOOL_EXPLAIN_JSON" '"event_type": "file_write"'
+
+echo "== assert graph explain process JSON"
+PROCESS_EXPLAIN_JSON="$("$BIN" --data-dir "$DATA_DIR" graph explain --process process-phase1-accept --json)"
+assert_contains "$PROCESS_EXPLAIN_JSON" '"schema_version": "agentprovenance.explain/v1"'
+assert_contains "$PROCESS_EXPLAIN_JSON" '"type": "process"'
+assert_contains "$PROCESS_EXPLAIN_JSON" '"id": "process-phase1-accept"'
+assert_contains "$PROCESS_EXPLAIN_JSON" '"tool_call_id": "tool-phase1-accept"'
+assert_contains "$PROCESS_EXPLAIN_JSON" '"runtime_edges"'
 
 echo "== assert observability flow JSON"
 FLOW_JSON="$("$BIN" --data-dir "$DATA_DIR" observe flow --run run-phase1-accept --json)"
