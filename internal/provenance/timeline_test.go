@@ -49,6 +49,9 @@ func TestBuildTimelineMergesContextTelemetryRiskAndResponse(t *testing.T) {
 	if manifest.EventCount < 8 {
 		t.Fatalf("event_count=%d, want merged timeline events: %+v", manifest.EventCount, manifest.Events)
 	}
+	if manifest.ResultSetID == "" || manifest.PageHash == "" {
+		t.Fatalf("timeline integrity hashes missing: result_set_id=%q page_hash=%q", manifest.ResultSetID, manifest.PageHash)
+	}
 	assertTimelineOrder(t, manifest.Events)
 	for _, want := range []string{"tool_call_start", "process_start", "execve", "policy_decision", "risk_signal", "response_action", "baseline_deviation"} {
 		if !timelineHasType(manifest.Events, want) {
@@ -65,6 +68,19 @@ func TestBuildTimelineMergesContextTelemetryRiskAndResponse(t *testing.T) {
 	}
 	if filtered.Events[0].ToolCallID != "tool-1" || filtered.Events[0].ProcessID != "proc-1" {
 		t.Fatalf("filtered event lost context: %+v", filtered.Events[0])
+	}
+	limited, err := BuildTimeline(db, TimelineOptions{RunID: "run-1", Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if limited.EventCount != 1 {
+		t.Fatalf("limited event_count=%d, want 1", limited.EventCount)
+	}
+	if limited.ResultSetID != manifest.ResultSetID {
+		t.Fatalf("limited result_set_id changed: full=%s limited=%s", manifest.ResultSetID, limited.ResultSetID)
+	}
+	if limited.PageHash == manifest.PageHash {
+		t.Fatalf("limited page_hash should differ from full page hash: %s", limited.PageHash)
 	}
 }
 

@@ -21,6 +21,8 @@ type TimelineManifest struct {
 	SchemaVersion string          `json:"schema_version"`
 	RunID         string          `json:"run_id"`
 	Filter        TimelineFilter  `json:"filter"`
+	ResultSetID   string          `json:"result_set_id"`
+	PageHash      string          `json:"page_hash"`
 	EventCount    int             `json:"event_count"`
 	Events        []TimelineEvent `json:"events"`
 }
@@ -81,8 +83,30 @@ func BuildTimeline(db *sql.DB, opts TimelineOptions) (TimelineManifest, error) {
 		}
 		return events[i].Time < events[j].Time
 	})
+	resultSetID, err := stableDigest(map[string]any{
+		"kind":   "timeline_result_set",
+		"run_id": opts.RunID,
+		"filter": TimelineFilter{
+			ToolCall:  opts.ToolCall,
+			ProcessID: opts.ProcessID,
+			Type:      opts.Type,
+		},
+		"events": timelineDigestEvents(events),
+	})
+	if err != nil {
+		return TimelineManifest{}, err
+	}
 	if opts.Limit > 0 && len(events) > opts.Limit {
 		events = events[:opts.Limit]
+	}
+	pageHash, err := stableDigest(map[string]any{
+		"kind":          "timeline_page",
+		"result_set_id": resultSetID,
+		"limit":         opts.Limit,
+		"events":        timelineDigestEvents(events),
+	})
+	if err != nil {
+		return TimelineManifest{}, err
 	}
 	return TimelineManifest{
 		SchemaVersion: "agentprovenance.timeline/v1",
@@ -93,9 +117,31 @@ func BuildTimeline(db *sql.DB, opts TimelineOptions) (TimelineManifest, error) {
 			Type:      opts.Type,
 			Limit:     opts.Limit,
 		},
-		EventCount: len(events),
-		Events:     events,
+		ResultSetID: resultSetID,
+		PageHash:    pageHash,
+		EventCount:  len(events),
+		Events:      events,
 	}, nil
+}
+
+func timelineDigestEvents(events []TimelineEvent) []map[string]string {
+	out := make([]map[string]string, 0, len(events))
+	for _, event := range events {
+		out = append(out, map[string]string{
+			"time":         event.Time,
+			"type":         event.Type,
+			"source":       event.Source,
+			"id":           event.ID,
+			"run_id":       event.RunID,
+			"session_id":   event.SessionID,
+			"attempt_id":   event.AttemptID,
+			"tool_call_id": event.ToolCallID,
+			"process_id":   event.ProcessID,
+			"snapshot_id":  event.SnapshotID,
+			"object_ref":   event.ObjectRef,
+		})
+	}
+	return out
 }
 
 func PrintTimeline(db *sql.DB, opts TimelineOptions, out io.Writer) error {
