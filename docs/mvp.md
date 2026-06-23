@@ -56,6 +56,7 @@ agentprov observe coverage --run run-telemetry-jsonl-demo
 agentprov observe scopes --run run-telemetry-jsonl-demo
 agentprov observe event --run run-telemetry-jsonl-demo --event <event_id>
 agentprov observe process --run run-telemetry-jsonl-demo --process <process_id>
+agentprov observe flow --run run-telemetry-jsonl-demo
 agentprov telemetry batches --run run-telemetry-jsonl-demo
 agentprov telemetry list --run run-telemetry-jsonl-demo
 agentprov timeline --run run-telemetry-jsonl-demo
@@ -222,6 +223,10 @@ Expected output / acceptance:
   `agentprovenance.observability_process/v1`, a process-level detail with
   lifecycle, ToolCallScope context, runtime events, risk/policy/response
   evidence, and drill-down commands.
+- `observe flow --run <run_id> --json` emits
+  `agentprovenance.observability_flow/v1`, a compact causal table linking
+  runtime events to direct risk signals, policy decisions, response actions, and
+  drill-down commands.
 - `rollout attempts` shows `wrong-constant` as `quarantined` with
   `risk=tainted`.
 - `rollout winner` is a historical command name. It shows `correct-add` as the

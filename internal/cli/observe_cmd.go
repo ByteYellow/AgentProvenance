@@ -20,6 +20,7 @@ func observeCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(observeScopesCmd(dataDir))
 	cmd.AddCommand(observeEventCmd(dataDir))
 	cmd.AddCommand(observeProcessCmd(dataDir))
+	cmd.AddCommand(observeFlowCmd(dataDir))
 	return cmd
 }
 
@@ -286,6 +287,48 @@ func observeProcessCmd(dataDir *string) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&runID, "run", "", "run id")
 	cmd.Flags().StringVar(&processID, "process", "", "process id")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
+	return cmd
+}
+
+func observeFlowCmd(dataDir *string) *cobra.Command {
+	var runID string
+	var limit int
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "flow",
+		Short: "show runtime event to risk and response flow",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if runID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			db, cleanup, err := openLocalDB(*dataDir)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+			report, err := observability.BuildFlow(db, observability.FlowOptions{RunID: runID, Limit: limit})
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "run=%s schema=%s flows=%d\n", report.RunID, report.SchemaVersion, report.FlowCount)
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "TIME\tTOOL_CALL\tPROCESS\tEVENT\tTYPE\tRISKS\tPOLICY\tRESPONSES\tSUMMARY")
+			for _, item := range report.Flows {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					item.Time, item.ToolCallID, item.ProcessID, item.EventID, item.EventType,
+					strings.Join(item.RiskSignals, ","), strings.Join(item.PolicyDecisions, ","), strings.Join(item.ResponseActions, ","), item.Summary)
+			}
+			return w.Flush()
+		},
+	}
+	cmd.Flags().StringVar(&runID, "run", "", "run id")
+	cmd.Flags().IntVar(&limit, "limit", 0, "maximum flow rows to return")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	return cmd
 }
