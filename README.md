@@ -318,6 +318,8 @@ load.
 ./agentprov observe coverage --run <run_id> --json
 ./agentprov observe scopes --run <run_id>
 ./agentprov observe scopes --run <run_id> --json
+./agentprov observe event --run <run_id> --event <event_id>
+./agentprov observe event --run <run_id> --event <event_id> --json
 ./agentprov timeline --run <run_id>
 ./agentprov timeline --run <run_id> --tool-call <tool_call_id> --json
 ./agentprov timeline --run <run_id> --process <process_id> --json
@@ -344,6 +346,7 @@ These commands are now part of the mainline security evidence surface:
 | `observe summary` | Show run-level observability coverage across application context, runtime telemetry, risks, baselines, responses, and evidence refs |
 | `observe coverage` | Show runtime telemetry correlation quality and list events missing session/tool_call/process identity |
 | `observe scopes` | Show per-tool-call observability: processes, runtime events, risks, policy decisions, responses, and drill-down links |
+| `observe event` | Explain one runtime event with correlated agent context, related risk/policy/response evidence, and drill-down links |
 | `timeline` | Show a time-ordered execution view across application context, runtime telemetry, evidence, risk, baseline, response, and external effects |
 | `security risks` | List normalized `RiskSignal` records derived from policy/runtime evidence |
 | `security deviations` | List `BaselineDeviation` records from behavior feature checks |
@@ -450,6 +453,7 @@ What these mean:
 | Observability summary | `observe summary --run` emits `agentprovenance.observability_summary/v1` with context counts, runtime correlation coverage, risk/baseline/response counts, event/source histograms, top evidence refs, and suggested drill-down commands |
 | Observability coverage | `observe coverage --run` emits `agentprovenance.observability_coverage/v1` with runtime correlation ratios, missing identity fields, uncorrelated event gaps, source/type histograms, and binding suggestions |
 | Observability scopes | `observe scopes --run` emits `agentprovenance.observability_scopes/v1` with per-tool-call process counts, runtime event histograms, risk/response counts, evidence refs, and drill-down commands |
+| Observability event detail | `observe event --run --event` emits `agentprovenance.observability_event/v1` with runtime event context, correlation metadata, related risk/policy/response evidence, and drill-down commands |
 | Execution timeline | `timeline --run` emits a human table or `agentprovenance.timeline/v1` JSON across tool calls, processes, zero-SDK process observations, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects |
 | Runtime causality | native `runtime_*` graph edges for tool call, process, process tree, attempt, snapshot, runtime event, and workspace file correlation |
 | Provenance DAG | `trace`, `refs`, `log`, `materialize`, `objects`, `verify`, text and JSON replay |

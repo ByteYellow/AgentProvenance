@@ -18,6 +18,7 @@ func observeCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(observeSummaryCmd(dataDir))
 	cmd.AddCommand(observeCoverageCmd(dataDir))
 	cmd.AddCommand(observeScopesCmd(dataDir))
+	cmd.AddCommand(observeEventCmd(dataDir))
 	return cmd
 }
 
@@ -184,6 +185,58 @@ func observeScopesCmd(dataDir *string) *cobra.Command {
 	return cmd
 }
 
+func observeEventCmd(dataDir *string) *cobra.Command {
+	var runID string
+	var eventID string
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "event",
+		Short: "explain one runtime event with correlated agent context",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if runID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			if eventID == "" {
+				return fmt.Errorf("--event is required")
+			}
+			db, cleanup, err := openLocalDB(*dataDir)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+			report, err := observability.BuildEvent(db, observability.EventOptions{RunID: runID, EventID: eventID})
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "run=%s schema=%s event=%s type=%s source=%s time=%s\n",
+				report.RunID, report.SchemaVersion, report.Event.ID, report.Event.Type, report.Event.Source, report.Event.Time)
+			fmt.Fprintf(cmd.OutOrStdout(), "context session=%s attempt=%s tool_call=%s process=%s snapshot=%s\n",
+				report.Context.SessionID, report.Context.AttemptID, report.Context.ToolCallID, report.Context.ProcessID, report.Context.SnapshotID)
+			fmt.Fprintf(cmd.OutOrStdout(), "correlation method=%s confidence=%.2f\n", report.Event.CorrelationMethod, report.Event.CorrelationConfidence)
+			fmt.Fprintf(cmd.OutOrStdout(), "summary=%q\n", report.Event.Summary)
+			printEvidenceSummaries(cmd, "RELATED_RISK", report.RelatedRisks)
+			printEvidenceSummaries(cmd, "RELATED_POLICY", report.RelatedPolicies)
+			printEvidenceSummaries(cmd, "RELATED_RESPONSE", report.RelatedResponses)
+			if len(report.RecommendedViews) > 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "next_views:")
+				for _, view := range report.RecommendedViews {
+					fmt.Fprintf(cmd.OutOrStdout(), "  agentprov %s\n", view)
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&runID, "run", "", "run id")
+	cmd.Flags().StringVar(&eventID, "event", "", "runtime event id")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
+	return cmd
+}
+
 func gapIdentity(gap observability.CorrelationGap) string {
 	if gap.ContainerID != "" {
 		return "container=" + gap.ContainerID
@@ -195,6 +248,18 @@ func gapIdentity(gap observability.CorrelationGap) string {
 		return fmt.Sprintf("pid=%d", gap.PID)
 	}
 	return ""
+}
+
+func printEvidenceSummaries(cmd *cobra.Command, title string, refs []observability.EvidenceSummary) {
+	if len(refs) == 0 {
+		return
+	}
+	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "%s\tTYPE\tSOURCE\tSUMMARY\n", title)
+	for _, ref := range refs {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", ref.Ref, ref.Type, ref.Source, ref.Summary)
+	}
+	_ = w.Flush()
 }
 
 func printCounts(cmd *cobra.Command, title string, counts map[string]int) {
