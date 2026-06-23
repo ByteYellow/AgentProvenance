@@ -93,6 +93,9 @@ func TestBuildProcessFromTimelineAggregatesRuntimeRiskAndResponse(t *testing.T) 
 	if report.SchemaVersion != ProcessSchemaVersion || report.Context.ToolCallID != "tool-1" {
 		t.Fatalf("unexpected process report: %+v", report)
 	}
+	if report.ResultSetID == "" || report.PageHash == "" {
+		t.Fatalf("process integrity hashes missing: result_set_id=%q page_hash=%q", report.ResultSetID, report.PageHash)
+	}
 	if report.Process.StartedAt == "" || report.Process.EndedAt == "" {
 		t.Fatalf("missing process lifecycle: %+v", report.Process)
 	}

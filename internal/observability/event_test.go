@@ -76,6 +76,9 @@ func TestBuildEventFromTimelineLinksRuntimeEventContext(t *testing.T) {
 	if report.SchemaVersion != EventSchemaVersion || report.Event.ID != "evt-1" || report.Context.ToolCallID != "tool-1" {
 		t.Fatalf("unexpected event report: %+v", report)
 	}
+	if report.ResultSetID == "" || report.PageHash == "" {
+		t.Fatalf("event integrity hashes missing: result_set_id=%q page_hash=%q", report.ResultSetID, report.PageHash)
+	}
 	if report.Event.CorrelationMethod != "container_time_window" || report.Event.CorrelationConfidence != 0.92 {
 		t.Fatalf("unexpected correlation detail: %+v", report.Event)
 	}

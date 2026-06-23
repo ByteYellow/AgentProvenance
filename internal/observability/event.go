@@ -17,6 +17,8 @@ type EventOptions struct {
 type EventReport struct {
 	SchemaVersion    string            `json:"schema_version"`
 	RunID            string            `json:"run_id"`
+	ResultSetID      string            `json:"result_set_id"`
+	PageHash         string            `json:"page_hash"`
 	Event            EventDetail       `json:"event"`
 	Context          EventContext      `json:"context"`
 	RelatedRisks     []EvidenceSummary `json:"related_risks,omitempty"`
@@ -109,7 +111,36 @@ func BuildEventFromTimeline(manifest provenance.TimelineManifest, opts EventOpti
 		}
 	}
 	report.RecommendedViews = eventDrilldowns(manifest.RunID, report)
+	resultSetID, pageHash, err := eventReportIntegrity(report)
+	if err == nil {
+		report.ResultSetID = resultSetID
+		report.PageHash = pageHash
+	}
 	return report, nil
+}
+
+func eventReportIntegrity(report EventReport) (string, string, error) {
+	resultSetID, err := digestObservation(map[string]any{
+		"kind":              "observability_event_result_set",
+		"run_id":            report.RunID,
+		"event":             report.Event,
+		"context":           report.Context,
+		"related_risks":     report.RelatedRisks,
+		"related_policies":  report.RelatedPolicies,
+		"related_responses": report.RelatedResponses,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	pageHash, err := digestObservation(map[string]any{
+		"kind":              "observability_event_page",
+		"result_set_id":     resultSetID,
+		"recommended_views": report.RecommendedViews,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return resultSetID, pageHash, nil
 }
 
 func findTimelineEvent(events []provenance.TimelineEvent, eventID string) (provenance.TimelineEvent, bool) {

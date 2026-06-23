@@ -17,6 +17,8 @@ type FlowOptions struct {
 type FlowReport struct {
 	SchemaVersion string     `json:"schema_version"`
 	RunID         string     `json:"run_id"`
+	ResultSetID   string     `json:"result_set_id"`
+	PageHash      string     `json:"page_hash"`
 	FlowCount     int        `json:"flow_count"`
 	Flows         []FlowItem `json:"flows"`
 }
@@ -106,15 +108,62 @@ func BuildFlowFromTimeline(manifest provenance.TimelineManifest, opts FlowOption
 		}
 		return flows[i].Time < flows[j].Time
 	})
+	allFlows := append([]FlowItem(nil), flows...)
 	if opts.Limit > 0 && len(flows) > opts.Limit {
 		flows = flows[:opts.Limit]
+	}
+	resultSetID, pageHash, err := flowReportIntegrity(manifest.RunID, allFlows, flows, opts.Limit)
+	if err != nil {
+		resultSetID = ""
+		pageHash = ""
 	}
 	return FlowReport{
 		SchemaVersion: FlowSchemaVersion,
 		RunID:         manifest.RunID,
+		ResultSetID:   resultSetID,
+		PageHash:      pageHash,
 		FlowCount:     len(flows),
 		Flows:         flows,
 	}
+}
+
+func flowReportIntegrity(runID string, allFlows, pageFlows []FlowItem, limit int) (string, string, error) {
+	resultSetID, err := digestObservation(map[string]any{
+		"kind":   "observability_flow_result_set",
+		"run_id": runID,
+		"flows":  flowDigestItems(allFlows),
+	})
+	if err != nil {
+		return "", "", err
+	}
+	pageHash, err := digestObservation(map[string]any{
+		"kind":          "observability_flow_page",
+		"result_set_id": resultSetID,
+		"limit":         limit,
+		"flows":         pageFlows,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return resultSetID, pageHash, nil
+}
+
+func flowDigestItems(flows []FlowItem) []map[string]any {
+	out := make([]map[string]any, 0, len(flows))
+	for _, flow := range flows {
+		out = append(out, map[string]any{
+			"time":             flow.Time,
+			"tool_call_id":     flow.ToolCallID,
+			"process_id":       flow.ProcessID,
+			"event_id":         flow.EventID,
+			"event_type":       flow.EventType,
+			"event_source":     flow.EventSource,
+			"risk_signals":     flow.RiskSignals,
+			"policy_decisions": flow.PolicyDecisions,
+			"response_actions": flow.ResponseActions,
+		})
+	}
+	return out
 }
 
 func uniqueStrings(items []string) []string {

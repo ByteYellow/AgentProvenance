@@ -62,6 +62,9 @@ func TestBuildFlowFromTimelineLinksRuntimeEventRiskPolicyResponse(t *testing.T) 
 	if report.SchemaVersion != FlowSchemaVersion || report.RunID != "run-flow" || report.FlowCount != 2 {
 		t.Fatalf("unexpected flow report: %+v", report)
 	}
+	if report.ResultSetID == "" || report.PageHash == "" {
+		t.Fatalf("flow integrity hashes missing: result_set_id=%q page_hash=%q", report.ResultSetID, report.PageHash)
+	}
 	if len(report.Flows[0].RiskSignals) != 0 || report.Flows[0].EventID != "evt-exec" {
 		t.Fatalf("unexpected non-risk flow row: %+v", report.Flows[0])
 	}
@@ -79,4 +82,14 @@ func TestBuildFlowFromTimelineLinksRuntimeEventRiskPolicyResponse(t *testing.T) 
 		t.Fatalf("unexpected response links: %+v", row)
 	}
 	assertContainsStep(t, row.Drilldowns, "observe event --run run-flow --event evt-risk")
+	limited := BuildFlowFromTimeline(manifest, FlowOptions{Limit: 1})
+	if limited.FlowCount != 1 {
+		t.Fatalf("limited flow_count=%d, want 1", limited.FlowCount)
+	}
+	if limited.ResultSetID != report.ResultSetID {
+		t.Fatalf("limited result_set_id changed: full=%s limited=%s", report.ResultSetID, limited.ResultSetID)
+	}
+	if limited.PageHash == report.PageHash {
+		t.Fatalf("limited page_hash should differ from full page hash: %s", limited.PageHash)
+	}
 }

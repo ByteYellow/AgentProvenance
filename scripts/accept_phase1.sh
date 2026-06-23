@@ -99,8 +99,22 @@ assert_contains "$PROCESS_EXPLAIN_JSON" '"runtime_edges"'
 echo "== assert observability flow JSON"
 FLOW_JSON="$("$BIN" --data-dir "$DATA_DIR" observe flow --run run-phase1-accept --json)"
 assert_contains "$FLOW_JSON" '"schema_version": "agentprovenance.observability_flow/v1"'
+assert_contains "$FLOW_JSON" '"result_set_id": "sha256:'
+assert_contains "$FLOW_JSON" '"page_hash": "sha256:'
 assert_contains "$FLOW_JSON" '"tool_call_id": "tool-phase1-accept"'
 assert_contains "$FLOW_JSON" '"event_type": "execve"'
+
+EVENT_DETAIL_JSON="$("$BIN" --data-dir "$DATA_DIR" observe event --run run-phase1-accept --event "$EVENT_ID" --json)"
+assert_contains "$EVENT_DETAIL_JSON" '"schema_version": "agentprovenance.observability_event/v1"'
+assert_contains "$EVENT_DETAIL_JSON" '"result_set_id": "sha256:'
+assert_contains "$EVENT_DETAIL_JSON" '"page_hash": "sha256:'
+assert_contains "$EVENT_DETAIL_JSON" '"tool_call_id": "tool-phase1-accept"'
+
+PROCESS_DETAIL_JSON="$("$BIN" --data-dir "$DATA_DIR" observe process --run run-phase1-accept --process process-phase1-accept --json)"
+assert_contains "$PROCESS_DETAIL_JSON" '"schema_version": "agentprovenance.observability_process/v1"'
+assert_contains "$PROCESS_DETAIL_JSON" '"result_set_id": "sha256:'
+assert_contains "$PROCESS_DETAIL_JSON" '"page_hash": "sha256:'
+assert_contains "$PROCESS_DETAIL_JSON" '"tool_call_id": "tool-phase1-accept"'
 
 echo "== assert observability query integrity"
 SUMMARY_JSON="$("$BIN" --data-dir "$DATA_DIR" observe summary --run run-phase1-accept --json)"

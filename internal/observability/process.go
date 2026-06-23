@@ -17,6 +17,8 @@ type ProcessOptions struct {
 type ProcessReport struct {
 	SchemaVersion    string            `json:"schema_version"`
 	RunID            string            `json:"run_id"`
+	ResultSetID      string            `json:"result_set_id"`
+	PageHash         string            `json:"page_hash"`
 	Process          ProcessDetail     `json:"process"`
 	Context          EventContext      `json:"context"`
 	RuntimeEvents    []EvidenceSummary `json:"runtime_events,omitempty"`
@@ -107,7 +109,37 @@ func BuildProcessFromTimeline(manifest provenance.TimelineManifest, opts Process
 		}
 	}
 	report.RecommendedViews = processDrilldowns(manifest.RunID, report)
+	resultSetID, pageHash, err := processReportIntegrity(report)
+	if err == nil {
+		report.ResultSetID = resultSetID
+		report.PageHash = pageHash
+	}
 	return report, nil
+}
+
+func processReportIntegrity(report ProcessReport) (string, string, error) {
+	resultSetID, err := digestObservation(map[string]any{
+		"kind":              "observability_process_result_set",
+		"run_id":            report.RunID,
+		"process":           report.Process,
+		"context":           report.Context,
+		"runtime_events":    report.RuntimeEvents,
+		"related_risks":     report.RelatedRisks,
+		"related_policies":  report.RelatedPolicies,
+		"related_responses": report.RelatedResponses,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	pageHash, err := digestObservation(map[string]any{
+		"kind":              "observability_process_page",
+		"result_set_id":     resultSetID,
+		"recommended_views": report.RecommendedViews,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return resultSetID, pageHash, nil
 }
 
 func findProcessStart(events []provenance.TimelineEvent, processID string) (provenance.TimelineEvent, bool) {
