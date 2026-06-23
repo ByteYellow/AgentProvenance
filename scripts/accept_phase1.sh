@@ -136,6 +136,36 @@ assert_contains "$RESPONSES_JSON" '"schema_version": "agentprovenance.security_r
 assert_contains "$RESPONSES_JSON" '"result_set_id": "sha256:'
 assert_contains "$RESPONSES_JSON" '"page_hash": "sha256:'
 
+echo "== assert automatic risk/response closure from telemetry ingest"
+"$BIN" --data-dir "$DATA_DIR" telemetry ingest-jsonl --format falco --file examples/telemetry/falco-risk-events.jsonl --json >/tmp/agentprov-accept-risk-ingest.json
+RISK_INGEST_JSON="$(cat /tmp/agentprov-accept-risk-ingest.json)"
+assert_contains "$RISK_INGEST_JSON" '"policy_decisions": 3'
+assert_contains "$RISK_INGEST_JSON" '"policy_decision_ids"'
+RISK_DECISION_ID="$(python3 - <<'PY'
+import json
+with open('/tmp/agentprov-accept-risk-ingest.json') as f:
+    data = json.load(f)
+ids = data.get('policy_decision_ids') or []
+print(ids[0] if ids else '')
+PY
+)"
+if [[ -z "$RISK_DECISION_ID" ]]; then
+  echo "missing risk policy decision id" >&2
+  exit 1
+fi
+RISKS_JSON="$("$BIN" --data-dir "$DATA_DIR" security risks --run run-phase1-accept --json)"
+assert_contains "$RISKS_JSON" '"count": 3'
+assert_contains "$RISKS_JSON" '"recommended_action"'
+RESPONSES_JSON="$("$BIN" --data-dir "$DATA_DIR" security responses --run run-phase1-accept --json)"
+assert_contains "$RESPONSES_JSON" '"count": 3'
+assert_contains "$RESPONSES_JSON" '"action_type"'
+RISK_EXPLAIN_JSON="$("$BIN" --data-dir "$DATA_DIR" graph explain --risk "$RISK_DECISION_ID" --json)"
+assert_contains "$RISK_EXPLAIN_JSON" '"type": "risk"'
+assert_contains "$RISK_EXPLAIN_JSON" '"runtime_events"'
+assert_contains "$RISK_EXPLAIN_JSON" '"risks"'
+assert_contains "$RISK_EXPLAIN_JSON" '"responses"'
+assert_contains "$RISK_EXPLAIN_JSON" '"policy_decision_id"'
+
 echo "== assert observability query integrity"
 SUMMARY_JSON="$("$BIN" --data-dir "$DATA_DIR" observe summary --run run-phase1-accept --json)"
 assert_contains "$SUMMARY_JSON" '"schema_version": "agentprovenance.observability_summary/v1"'

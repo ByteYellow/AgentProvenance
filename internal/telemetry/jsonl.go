@@ -41,19 +41,21 @@ type FalcoIngestOptions struct {
 }
 
 type JSONLIngestResult struct {
-	BatchID         string          `json:"batch_id,omitempty"`
-	Format          string          `json:"format"`
-	Path            string          `json:"path"`
-	FileSHA256      string          `json:"file_sha256,omitempty"`
-	Read            int             `json:"read"`
-	Ingested        int             `json:"ingested"`
-	Skipped         int             `json:"skipped"`
-	Failed          int             `json:"failed"`
-	EventIDs        []string        `json:"event_ids,omitempty"`
-	EventIDsSHA256  string          `json:"event_ids_sha256,omitempty"`
-	ReceiverSummary ReceiverSummary `json:"receiver_summary"`
-	Rows            []RowResult     `json:"row_results,omitempty"`
-	Errors          []string        `json:"errors,omitempty"`
+	BatchID           string          `json:"batch_id,omitempty"`
+	Format            string          `json:"format"`
+	Path              string          `json:"path"`
+	FileSHA256        string          `json:"file_sha256,omitempty"`
+	Read              int             `json:"read"`
+	Ingested          int             `json:"ingested"`
+	Skipped           int             `json:"skipped"`
+	Failed            int             `json:"failed"`
+	EventIDs          []string        `json:"event_ids,omitempty"`
+	EventIDsSHA256    string          `json:"event_ids_sha256,omitempty"`
+	PolicyDecisions   int             `json:"policy_decisions"`
+	PolicyDecisionIDs []string        `json:"policy_decision_ids,omitempty"`
+	ReceiverSummary   ReceiverSummary `json:"receiver_summary"`
+	Rows              []RowResult     `json:"row_results,omitempty"`
+	Errors            []string        `json:"errors,omitempty"`
 }
 
 type ReceiverSummary struct {

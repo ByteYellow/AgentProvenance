@@ -184,9 +184,13 @@ agentprov telemetry ingest-falco --file falco-events.jsonl
 ```
 
 `ingest-jsonl` records a telemetry batch manifest with the input file hash,
-mapped event IDs, and event ID hash. It gives the DAG an audit handle for
-external Falco/Tetragon/LoongCollector evidence without turning AgentProvenance
-into a long-term log store.
+mapped event IDs, event ID hash, receiver summary, and row-level mapping
+results. By default it also evaluates runtime policy for ingested events, so
+metadata-IP, private-CIDR, and secret-path rows become `policy_decisions`,
+`risk_signals`, `response_actions`, graph edges, and timeline rows. Use
+`--no-policy` when the receiver should only normalize and store telemetry. This
+gives the DAG an audit handle for external Falco/Tetragon/LoongCollector
+evidence without turning AgentProvenance into a long-term log store.
 
 `ingest-falco` is the Falco-compatible receiver path. It reads Falco JSON/stdout
 from a file or stdin stream, maps recognized `execve`, `open/openat`, and
@@ -299,8 +303,10 @@ sudo falco -o json_output=true -o json_include_output_property=true | \
 The receiver maps Falco process, file, and network rows into normalized runtime
 events. Metadata IP, private CIDR, and secret-path rows are promoted into
 security evidence: `RiskSignal`, `ResponseAction`, policy graph edges, and
-timeline entries. Falco remains the substrate collector; AgentProvenance owns
-correlation, causality, provenance, and risk/audit linkage.
+timeline entries. `graph explain --risk <policy_decision_id> --json` links the
+risk back to the raw runtime event and forward to the response action. Falco
+remains the substrate collector; AgentProvenance owns correlation, causality,
+provenance, and risk/audit linkage.
 
 The main smoke path is telemetry correlation and graph explanation:
 

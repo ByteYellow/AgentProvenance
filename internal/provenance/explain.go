@@ -36,6 +36,7 @@ type ExplainManifest struct {
 	Evidence         []ExplainEvidence           `json:"evidence,omitempty"`
 	Objects          []ExplainObjectRef          `json:"objects,omitempty"`
 	Risks            []ExplainRisk               `json:"risks,omitempty"`
+	Responses        []ExplainResponseAction     `json:"responses,omitempty"`
 	ReplayRefs       []ExplainReplayRef          `json:"replay_refs,omitempty"`
 	ProcessObs       []ExplainProcessObservation `json:"process_observations,omitempty"`
 	TelemetryBatches []ExplainTelemetryBatch     `json:"telemetry_batches,omitempty"`
@@ -113,6 +114,23 @@ type ExplainRisk struct {
 	Decision  string `json:"decision"`
 	Reason    string `json:"reason"`
 	CreatedAt string `json:"created_at"`
+}
+
+type ExplainResponseAction struct {
+	ID               string `json:"id"`
+	RunID            string `json:"run_id"`
+	SessionID        string `json:"session_id"`
+	ProcessID        string `json:"process_id"`
+	SnapshotID       string `json:"snapshot_id"`
+	RiskSignalID     string `json:"risk_signal_id"`
+	PolicyDecisionID string `json:"policy_decision_id"`
+	ActionType       string `json:"action_type"`
+	TargetType       string `json:"target_type"`
+	TargetID         string `json:"target_id"`
+	Status           string `json:"status"`
+	ResultRef        string `json:"result_ref"`
+	Payload          string `json:"payload"`
+	CreatedAt        string `json:"created_at"`
 }
 
 type ExplainTelemetryBatch struct {
@@ -375,6 +393,11 @@ func enrichExplain(db *sql.DB, manifest *ExplainManifest, runID, targetID string
 		return err
 	}
 	manifest.Risks = risks
+	responses, err := responsesForExplain(db, runID, ids)
+	if err != nil {
+		return err
+	}
+	manifest.Responses = responses
 	processObs, err := processObservationsForExplain(db, runID, ids)
 	if err != nil {
 		return err
@@ -1334,6 +1357,66 @@ func risksForExplain(db *sql.DB, runID string, ids map[string]string) ([]Explain
 		if err := rows.Scan(&item.ID, &item.RunID, &item.EventID, &item.SessionID, &item.RuleID, &item.Decision, &item.Reason, &item.CreatedAt); err != nil {
 			return nil, err
 		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func responsesForExplain(db *sql.DB, runID string, ids map[string]string) ([]ExplainResponseAction, error) {
+	clauses := []string{}
+	args := []any{}
+	if runID != "" {
+		clauses = append(clauses, "run_id = ?")
+		args = append(args, runID)
+	}
+	var match []string
+	if riskID := strings.TrimSpace(ids["risk_id"]); riskID != "" {
+		match = append(match, "policy_decision_id = ?")
+		args = append(args, riskID)
+	}
+	if eventID := strings.TrimSpace(ids["event_id"]); eventID != "" {
+		match = append(match, `policy_decision_id IN (SELECT id FROM policy_decisions WHERE event_id = ?)`)
+		args = append(args, eventID)
+		match = append(match, `risk_signal_id IN (SELECT id FROM risk_signals WHERE event_id = ?)`)
+		args = append(args, eventID)
+	}
+	if sessionID := strings.TrimSpace(ids["session_id"]); sessionID != "" {
+		match = append(match, "session_id = ?")
+		args = append(args, sessionID)
+	}
+	if processID := strings.TrimSpace(ids["process_id"]); processID != "" {
+		match = append(match, "process_id = ?")
+		args = append(args, processID)
+	}
+	if snapshotID := strings.TrimSpace(ids["snapshot_id"]); snapshotID != "" {
+		match = append(match, "snapshot_id = ?")
+		args = append(args, snapshotID)
+	}
+	if len(match) > 0 {
+		clauses = append(clauses, "("+strings.Join(match, " OR ")+")")
+	}
+	if len(clauses) == 0 {
+		return nil, nil
+	}
+	rows, err := db.Query(`SELECT id, COALESCE(run_id, ''), COALESCE(session_id, ''), COALESCE(process_id, ''),
+			COALESCE(snapshot_id, ''), COALESCE(risk_signal_id, ''), COALESCE(policy_decision_id, ''),
+			action_type, target_type, target_id, status, COALESCE(result_ref, ''), payload, created_at
+		FROM response_actions WHERE `+strings.Join(clauses, " AND ")+` ORDER BY created_at ASC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ExplainResponseAction
+	seen := map[string]bool{}
+	for rows.Next() {
+		var item ExplainResponseAction
+		if err := rows.Scan(&item.ID, &item.RunID, &item.SessionID, &item.ProcessID, &item.SnapshotID, &item.RiskSignalID, &item.PolicyDecisionID, &item.ActionType, &item.TargetType, &item.TargetID, &item.Status, &item.ResultRef, &item.Payload, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		if seen[item.ID] {
+			continue
+		}
+		seen[item.ID] = true
 		out = append(out, item)
 	}
 	return out, rows.Err()

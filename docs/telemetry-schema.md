@@ -111,6 +111,13 @@ source, raw event id, identity keys, correlation method, and any skip/failure
 reason. This keeps receiver behavior auditable without requiring raw telemetry
 payloads to contain application context such as `tool_call_id`.
 
+By default, `telemetry ingest-jsonl` also runs runtime-policy evaluation for
+ingested events. Risky substrate rows such as metadata IP access, private CIDR
+access, and secret-path reads create `policy_decisions`, `risk_signals`,
+`response_actions`, graph edges, and timeline rows. The ingest result includes
+`policy_decisions` and `policy_decision_ids`; pass `--no-policy` to run a pure
+normalization-only receiver path.
+
 `telemetry correlations --json` explains the second half of the path: why a
 normalized runtime event was attached to a ToolCallScope. The report includes
 the raw runtime identity, resolved application context, matched binding,
@@ -138,6 +145,10 @@ secret-path Falco rows therefore create normalized runtime events plus
 `policy_decisions`, `risk_signals`, `response_actions`, graph edges, and
 timeline rows. Use `--no-policy` when the receiver should only normalize and
 store telemetry.
+
+`graph explain --risk <policy_decision_id> --json` links the resulting risk
+back to the normalized runtime event and forward to the recorded response
+action, so the receiver path can be audited end to end.
 
 Each JSONL ingest also writes a compact telemetry batch manifest:
 

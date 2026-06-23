@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/byteyellow/agentprovenance/internal/correlation"
@@ -192,16 +193,8 @@ func telemetryIngestFalcoCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			decisionCount := 0
 			if !noPolicy {
-				for _, eventID := range result.EventIDs {
-					if _, persisted, err := securitymodel.EvaluateRuntimeEvent(db, eventID); err != nil {
-						result.Errors = append(result.Errors, fmt.Sprintf("event %s: policy failed: %v", eventID, err))
-						result.Failed++
-					} else if persisted {
-						decisionCount++
-					}
-				}
+				evaluateTelemetryPolicy(db, &result)
 			}
 			if jsonOut {
 				enc := json.NewEncoder(cmd.OutOrStdout())
@@ -209,11 +202,11 @@ func telemetryIngestFalcoCmd(dataDir *string) *cobra.Command {
 				return enc.Encode(map[string]any{
 					"schema_version":   "agentprovenance.falco_ingest/v1",
 					"batch":            result,
-					"policy_decisions": decisionCount,
+					"policy_decisions": result.PolicyDecisions,
 				})
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "batch=%s format=falco path=%s file_sha256=%s event_ids_sha256=%s read=%d ingested=%d skipped=%d failed=%d policy_decisions=%d\n",
-				result.BatchID, result.Path, result.FileSHA256, result.EventIDsSHA256, result.Read, result.Ingested, result.Skipped, result.Failed, decisionCount)
+				result.BatchID, result.Path, result.FileSHA256, result.EventIDsSHA256, result.Read, result.Ingested, result.Skipped, result.Failed, result.PolicyDecisions)
 			for _, msg := range result.Errors {
 				fmt.Fprintf(cmd.OutOrStdout(), "error=%q\n", msg)
 			}
@@ -358,6 +351,7 @@ func telemetryIngestCmd(dataDir *string) *cobra.Command {
 func telemetryIngestJSONLCmd(dataDir *string) *cobra.Command {
 	var opts telemetry.JSONLIngestOptions
 	var jsonOut bool
+	var noPolicy bool
 	ingest := &cobra.Command{
 		Use:   "ingest-jsonl",
 		Short: "ingest filtered substrate telemetry JSONL from Tetragon, Falco, or LoongCollector",
@@ -375,13 +369,16 @@ func telemetryIngestJSONLCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if !noPolicy {
+				evaluateTelemetryPolicy(db, &result)
+			}
 			if jsonOut {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
 				return enc.Encode(result)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "batch=%s format=%s path=%s file_sha256=%s event_ids_sha256=%s read=%d ingested=%d skipped=%d failed=%d\n",
-				result.BatchID, result.Format, result.Path, result.FileSHA256, result.EventIDsSHA256, result.Read, result.Ingested, result.Skipped, result.Failed)
+			fmt.Fprintf(cmd.OutOrStdout(), "batch=%s format=%s path=%s file_sha256=%s event_ids_sha256=%s read=%d ingested=%d skipped=%d failed=%d policy_decisions=%d\n",
+				result.BatchID, result.Format, result.Path, result.FileSHA256, result.EventIDsSHA256, result.Read, result.Ingested, result.Skipped, result.Failed, result.PolicyDecisions)
 			for _, msg := range result.Errors {
 				fmt.Fprintf(cmd.OutOrStdout(), "error=%q\n", msg)
 			}
@@ -397,7 +394,26 @@ func telemetryIngestJSONLCmd(dataDir *string) *cobra.Command {
 	ingest.Flags().StringVar(&opts.ToolCallID, "tool-call", "", "default tool call id")
 	ingest.Flags().StringVar(&opts.ProcessID, "process", "", "default process id")
 	ingest.Flags().StringVar(&opts.SnapshotID, "snapshot", "", "default snapshot id")
+	ingest.Flags().BoolVar(&noPolicy, "no-policy", false, "disable automatic policy/risk/response evaluation")
 	ingest.Flags().BoolVar(&jsonOut, "json", false, "emit JSON result")
 	_ = ingest.MarkFlagRequired("file")
 	return ingest
+}
+
+func evaluateTelemetryPolicy(db *sql.DB, result *telemetry.JSONLIngestResult) {
+	if result == nil {
+		return
+	}
+	for _, eventID := range result.EventIDs {
+		record, persisted, err := securitymodel.EvaluateRuntimeEvent(db, eventID)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("event %s: policy failed: %v", eventID, err))
+			result.Failed++
+			continue
+		}
+		if persisted {
+			result.PolicyDecisions++
+			result.PolicyDecisionIDs = append(result.PolicyDecisionIDs, record.ID)
+		}
+	}
 }
