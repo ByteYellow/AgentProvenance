@@ -17,6 +17,8 @@ type SummaryOptions struct {
 type Summary struct {
 	SchemaVersion    string            `json:"schema_version"`
 	RunID            string            `json:"run_id"`
+	ResultSetID      string            `json:"result_set_id"`
+	PageHash         string            `json:"page_hash"`
 	EventCount       int               `json:"event_count"`
 	Application      ContextSummary    `json:"application"`
 	Runtime          RuntimeSummary    `json:"runtime"`
@@ -170,7 +172,41 @@ func BuildSummaryFromTimeline(manifest provenance.TimelineManifest, opts Summary
 		summary.Runtime.ProcessCoverageRatio = float64(summary.Runtime.EventsWithProcess) / float64(summary.Runtime.Events)
 	}
 	summary.RecommendedViews = recommendedViews(summary)
+	resultSetID, pageHash, err := summaryIntegrity(summary, opts.TopN)
+	if err == nil {
+		summary.ResultSetID = resultSetID
+		summary.PageHash = pageHash
+	}
 	return summary
+}
+
+func summaryIntegrity(summary Summary, topN int) (string, string, error) {
+	resultSetID, err := digestObservation(map[string]any{
+		"kind":        "observability_summary_result_set",
+		"run_id":      summary.RunID,
+		"event_count": summary.EventCount,
+		"application": summary.Application,
+		"runtime":     summary.Runtime,
+		"risk":        summary.Risk,
+		"baseline":    summary.Baseline,
+		"response":    summary.Response,
+		"event_types": summary.EventTypes,
+		"sources":     summary.Sources,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	pageHash, err := digestObservation(map[string]any{
+		"kind":              "observability_summary_page",
+		"result_set_id":     resultSetID,
+		"top":               topN,
+		"top_evidence_refs": summary.TopEvidenceRefs,
+		"recommended_views": summary.RecommendedViews,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return resultSetID, pageHash, nil
 }
 
 func addIfSet(set map[string]bool, value string) {

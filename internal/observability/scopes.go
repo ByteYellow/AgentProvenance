@@ -17,6 +17,8 @@ type ScopesOptions struct {
 type ScopesReport struct {
 	SchemaVersion string         `json:"schema_version"`
 	RunID         string         `json:"run_id"`
+	ResultSetID   string         `json:"result_set_id"`
+	PageHash      string         `json:"page_hash"`
 	ScopeCount    int            `json:"scope_count"`
 	Scopes        []ScopeSummary `json:"scopes"`
 }
@@ -148,15 +150,65 @@ func BuildScopesFromTimeline(manifest provenance.TimelineManifest, opts ScopesOp
 		}
 		return items[i].StartedAt < items[j].StartedAt
 	})
+	allItems := append([]ScopeSummary(nil), items...)
 	if opts.Limit > 0 && len(items) > opts.Limit {
 		items = items[:opts.Limit]
+	}
+	resultSetID, pageHash, err := scopesIntegrity(manifest.RunID, allItems, items, opts.Limit)
+	if err != nil {
+		resultSetID = ""
+		pageHash = ""
 	}
 	return ScopesReport{
 		SchemaVersion: ScopesSchemaVersion,
 		RunID:         manifest.RunID,
+		ResultSetID:   resultSetID,
+		PageHash:      pageHash,
 		ScopeCount:    len(items),
 		Scopes:        items,
 	}
+}
+
+func scopesIntegrity(runID string, allScopes, pageScopes []ScopeSummary, limit int) (string, string, error) {
+	resultSetID, err := digestObservation(map[string]any{
+		"kind":   "observability_scopes_result_set",
+		"run_id": runID,
+		"scopes": scopesDigest(allScopes),
+	})
+	if err != nil {
+		return "", "", err
+	}
+	pageHash, err := digestObservation(map[string]any{
+		"kind":          "observability_scopes_page",
+		"result_set_id": resultSetID,
+		"limit":         limit,
+		"scopes":        pageScopes,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return resultSetID, pageHash, nil
+}
+
+func scopesDigest(scopes []ScopeSummary) []map[string]any {
+	out := make([]map[string]any, 0, len(scopes))
+	for _, scope := range scopes {
+		out = append(out, map[string]any{
+			"tool_call_id":           scope.ToolCallID,
+			"session_id":             scope.SessionID,
+			"attempt_id":             scope.AttemptID,
+			"status":                 scope.Status,
+			"process_count":          scope.ProcessCount,
+			"runtime_events":         scope.RuntimeEvents,
+			"runtime_events_by_type": scope.RuntimeEventsByType,
+			"risk_signals":           scope.RiskSignals,
+			"risk_by_severity":       scope.RiskBySeverity,
+			"policy_decisions":       scope.PolicyDecisions,
+			"response_actions":       scope.ResponseActions,
+			"response_by_action":     scope.ResponseByAction,
+		})
+	}
+	return out
 }
 
 func scopeDrilldowns(runID string, scope ScopeSummary) []string {

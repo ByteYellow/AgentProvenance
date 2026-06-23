@@ -86,6 +86,9 @@ func TestBuildScopesFromTimelineAggregatesToolCallScope(t *testing.T) {
 	if report.SchemaVersion != ScopesSchemaVersion || report.RunID != "run-scopes" || report.ScopeCount != 1 {
 		t.Fatalf("unexpected report header: %+v", report)
 	}
+	if report.ResultSetID == "" || report.PageHash == "" {
+		t.Fatalf("scopes integrity hashes missing: result_set_id=%q page_hash=%q", report.ResultSetID, report.PageHash)
+	}
 	scope := report.Scopes[0]
 	if scope.ToolCallID != "tool-1" || scope.Command != "pytest -q" || scope.Status != "running" {
 		t.Fatalf("unexpected scope identity: %+v", scope)

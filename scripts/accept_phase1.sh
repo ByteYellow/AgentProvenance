@@ -102,6 +102,20 @@ assert_contains "$FLOW_JSON" '"schema_version": "agentprovenance.observability_f
 assert_contains "$FLOW_JSON" '"tool_call_id": "tool-phase1-accept"'
 assert_contains "$FLOW_JSON" '"event_type": "execve"'
 
+echo "== assert observability query integrity"
+SUMMARY_JSON="$("$BIN" --data-dir "$DATA_DIR" observe summary --run run-phase1-accept --json)"
+assert_contains "$SUMMARY_JSON" '"schema_version": "agentprovenance.observability_summary/v1"'
+assert_contains "$SUMMARY_JSON" '"result_set_id": "sha256:'
+assert_contains "$SUMMARY_JSON" '"page_hash": "sha256:'
+COVERAGE_JSON="$("$BIN" --data-dir "$DATA_DIR" observe coverage --run run-phase1-accept --json)"
+assert_contains "$COVERAGE_JSON" '"schema_version": "agentprovenance.observability_coverage/v1"'
+assert_contains "$COVERAGE_JSON" '"result_set_id": "sha256:'
+assert_contains "$COVERAGE_JSON" '"page_hash": "sha256:'
+SCOPES_JSON="$("$BIN" --data-dir "$DATA_DIR" observe scopes --run run-phase1-accept --json)"
+assert_contains "$SCOPES_JSON" '"schema_version": "agentprovenance.observability_scopes/v1"'
+assert_contains "$SCOPES_JSON" '"result_set_id": "sha256:'
+assert_contains "$SCOPES_JSON" '"page_hash": "sha256:'
+
 echo "== assert timeline JSON query integrity"
 TIMELINE_JSON="$("$BIN" --data-dir "$DATA_DIR" timeline --run run-phase1-accept --tool-call tool-phase1-accept --json)"
 assert_contains "$TIMELINE_JSON" '"schema_version": "agentprovenance.timeline/v1"'

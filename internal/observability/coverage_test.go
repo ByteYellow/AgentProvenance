@@ -41,6 +41,9 @@ func TestBuildCoverageFromEventsReportsCorrelationGaps(t *testing.T) {
 	if report.SchemaVersion != CoverageSchemaVersion || report.RunID != "run-coverage" {
 		t.Fatalf("unexpected report header: %+v", report)
 	}
+	if report.ResultSetID == "" || report.PageHash == "" {
+		t.Fatalf("coverage integrity hashes missing: result_set_id=%q page_hash=%q", report.ResultSetID, report.PageHash)
+	}
 	if report.Summary.RuntimeEvents != 2 || report.Summary.FullyCorrelated != 1 || report.Summary.CorrelationGapCount != 1 {
 		t.Fatalf("unexpected summary: %+v", report.Summary)
 	}

@@ -17,6 +17,8 @@ type CoverageOptions struct {
 type CoverageReport struct {
 	SchemaVersion string           `json:"schema_version"`
 	RunID         string           `json:"run_id"`
+	ResultSetID   string           `json:"result_set_id"`
+	PageHash      string           `json:"page_hash"`
 	Summary       CoverageSummary  `json:"summary"`
 	MissingFields map[string]int   `json:"missing_fields"`
 	BySource      map[string]int   `json:"by_source"`
@@ -120,7 +122,37 @@ func BuildCoverageFromEvents(runID string, events []telemetry.EventRecord, opts 
 	}
 	report.NextSteps = coverageNextSteps(report)
 	sort.Strings(report.NextSteps)
+	resultSetID, pageHash, err := coverageIntegrity(report, opts.Limit)
+	if err == nil {
+		report.ResultSetID = resultSetID
+		report.PageHash = pageHash
+	}
 	return report
+}
+
+func coverageIntegrity(report CoverageReport, limit int) (string, string, error) {
+	resultSetID, err := digestObservation(map[string]any{
+		"kind":           "observability_coverage_result_set",
+		"run_id":         report.RunID,
+		"summary":        report.Summary,
+		"missing_fields": report.MissingFields,
+		"by_source":      report.BySource,
+		"by_type":        report.ByType,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	pageHash, err := digestObservation(map[string]any{
+		"kind":          "observability_coverage_page",
+		"result_set_id": resultSetID,
+		"limit":         limit,
+		"gaps":          report.Gaps,
+		"next_steps":    report.NextSteps,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return resultSetID, pageHash, nil
 }
 
 func missingCorrelationFields(event telemetry.EventRecord) []string {

@@ -74,6 +74,9 @@ func TestBuildSummaryFromTimelineAggregatesCoverageRiskAndResponses(t *testing.T
 	if summary.SchemaVersion != SummarySchemaVersion || summary.RunID != "run-observe" {
 		t.Fatalf("unexpected summary header: %+v", summary)
 	}
+	if summary.ResultSetID == "" || summary.PageHash == "" {
+		t.Fatalf("summary integrity hashes missing: result_set_id=%q page_hash=%q", summary.ResultSetID, summary.PageHash)
+	}
 	if summary.Application.Sessions != 1 || summary.Application.ToolCalls != 1 || summary.Application.Processes != 1 {
 		t.Fatalf("unexpected application summary: %+v", summary.Application)
 	}
