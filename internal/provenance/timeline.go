@@ -272,22 +272,27 @@ func appendTimelineRuntimeEvents(db *sql.DB, opts TimelineOptions, events *[]Tim
 func zeroSDKProcessObservationSummary(payload string, base map[string]any) (string, map[string]any) {
 	var observed struct {
 		PID          int64  `json:"pid"`
+		RootPID      int64  `json:"root_pid"`
 		PPID         int64  `json:"ppid"`
 		Command      string `json:"command"`
 		FirstSeen    string `json:"first_seen"`
 		LastSeen     string `json:"last_seen"`
 		OutlivedRoot bool   `json:"outlived_root"`
+		CWD          string `json:"cwd"`
 	}
-	if err := json.Unmarshal([]byte(payload), &observed); err != nil {
+	body := unwrapRecordProcessPayload(payload)
+	if err := json.Unmarshal(body, &observed); err != nil {
 		base["schema_status"] = "invalid_process_observation_payload"
 		return fmt.Sprintf("zero_sdk_process_observed invalid_payload=%v", err), base
 	}
 	base["pid"] = observed.PID
 	base["ppid"] = observed.PPID
+	base["root_pid"] = observed.RootPID
 	base["command"] = observed.Command
 	base["first_seen"] = observed.FirstSeen
 	base["last_seen"] = observed.LastSeen
 	base["outlived_root"] = observed.OutlivedRoot
+	base["cwd"] = observed.CWD
 	base["scope_boundary"] = "root_pid_descendants+cwd+time_window"
 	base["correlation_source"] = "zero_sdk_record_process_tree"
 	base["schema_status"] = "valid"

@@ -228,6 +228,12 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 			event.Payload = correlation.EventPayloadWithCorrelation(event.Payload, correlation.Match{}, false)
 		}
 	}
+	if event.Source == "record_process_sample" && event.EventType == "process_observed" {
+		method = "zero_sdk_process_tree"
+		if confidence == 1.0 {
+			confidence = 0.9
+		}
+	}
 	eventID := ids.New("evt")
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	payload := event.Payload
@@ -260,7 +266,7 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 
 func AllowedEventType(eventType string) bool {
 	switch eventType {
-	case "execve", "process_exit", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure":
+	case "execve", "process_exit", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure":
 		return true
 	default:
 		return false

@@ -36,10 +36,12 @@ func TestRecordRunCreatesZeroSDKProvenance(t *testing.T) {
 	}
 
 	result, err := (Service{DB: db, Paths: paths}).Run(Request{
-		RunID:   "run-record-test",
-		Name:    "record-test",
-		Workdir: workdir,
-		Command: []string{"sh", "-lc", "(sleep 0.2) & printf 'value = 2\\n' > app.py && echo note > note.txt && wait"},
+		RunID:            "run-record-test",
+		Name:             "record-test",
+		Workdir:          workdir,
+		Command:          []string{"sh", "-lc", "(sleep 0.2) & printf 'value = 2\\n' > app.py && echo note > note.txt && wait"},
+		SampleIntervalMS: 10,
+		PostRootGraceMS:  300,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -59,6 +61,9 @@ func TestRecordRunCreatesZeroSDKProvenance(t *testing.T) {
 	if result.OrphanPolicy != "observe_only" || result.PostRootGraceMS == 0 {
 		t.Fatalf("record result missing orphan policy: %+v", result)
 	}
+	if result.SampleIntervalMS != 10 || result.PostRootGraceMS != 300 {
+		t.Fatalf("record result missing configured sampling windows: %+v", result)
+	}
 	changed := strings.Join(result.ChangedFiles, ",")
 	if !strings.Contains(changed, "app.py") || !strings.Contains(changed, "note.txt") {
 		t.Fatalf("changed files = %v, want app.py and note.txt", result.ChangedFiles)
@@ -77,6 +82,25 @@ func TestRecordRunCreatesZeroSDKProvenance(t *testing.T) {
 		}
 		if event.PPID == 0 || event.TGID == 0 {
 			t.Fatalf("event missing process tree identity: %+v", event)
+		}
+	}
+	observedEvents, err := telemetry.ListEventsFiltered(db, telemetry.Filter{RunID: "run-record-test", Type: "process_observed"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(observedEvents) == 0 {
+		t.Fatalf("missing process_observed telemetry")
+	}
+	for _, event := range observedEvents {
+		if event.RawEventID == "" || event.CorrelationMethod != "zero_sdk_process_tree" || event.CorrelationConfidence != 0.9 {
+			t.Fatalf("process_observed missing raw/correlation metadata: %+v", event)
+		}
+		if event.ContainerID == "" || event.CgroupID == "" || event.PID == 0 || event.TGID == 0 || event.PPID == 0 {
+			t.Fatalf("process_observed missing runtime identity: %+v", event)
+		}
+		explained := telemetry.ExplainEventRecord(event)
+		if explained.Receiver != "record_process_sample" || explained.SourceFormat != "normalized" || explained.SchemaStatus != "valid" {
+			t.Fatalf("process_observed explanation = %+v for event %+v", explained, event)
 		}
 	}
 	childPID := result.Observed[0].PID

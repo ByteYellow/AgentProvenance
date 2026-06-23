@@ -1153,7 +1153,7 @@ func recordObservedProcesses(db *sql.DB, runID string) ([]RecordObservedProcess,
 			return nil, err
 		}
 		var proc RecordObservedProcess
-		if err := json.Unmarshal([]byte(payload), &proc); err != nil {
+		if err := json.Unmarshal(unwrapRecordProcessPayload(payload), &proc); err != nil {
 			continue
 		}
 		if proc.PID != 0 {

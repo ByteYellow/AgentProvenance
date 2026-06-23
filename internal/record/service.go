@@ -28,34 +28,37 @@ type Service struct {
 }
 
 type Request struct {
-	RunID   string
-	Name    string
-	Workdir string
-	Command []string
+	RunID            string
+	Name             string
+	Workdir          string
+	Command          []string
+	SampleIntervalMS int64
+	PostRootGraceMS  int64
 }
 
 type Result struct {
-	RunID           string
-	RolloutID       string
-	BaseSnapshotID  string
-	AttemptID       string
-	SessionID       string
-	ToolCallID      string
-	ProcessID       string
-	Workdir         string
-	Command         string
-	ExitCode        int
-	Status          string
-	WallMS          int64
-	ChangedFiles    []string
-	RootPID         int64
-	Observed        []ObservedProcess
-	OrphanPolicy    string
-	PostRootGraceMS int64
-	CWD             string
-	StartedAt       string
-	EndedAt         string
-	FailureReason   string
+	RunID            string
+	RolloutID        string
+	BaseSnapshotID   string
+	AttemptID        string
+	SessionID        string
+	ToolCallID       string
+	ProcessID        string
+	Workdir          string
+	Command          string
+	ExitCode         int
+	Status           string
+	WallMS           int64
+	ChangedFiles     []string
+	RootPID          int64
+	Observed         []ObservedProcess
+	OrphanPolicy     string
+	SampleIntervalMS int64
+	PostRootGraceMS  int64
+	CWD              string
+	StartedAt        string
+	EndedAt          string
+	FailureReason    string
 }
 
 type ObservedProcess struct {
@@ -88,6 +91,14 @@ func (s Service) Run(req Request) (Result, error) {
 	}
 	if req.Name == "" {
 		req.Name = "record"
+	}
+	sampleInterval := time.Duration(req.SampleIntervalMS) * time.Millisecond
+	if sampleInterval <= 0 {
+		sampleInterval = 25 * time.Millisecond
+	}
+	postRootGrace := time.Duration(req.PostRootGraceMS) * time.Millisecond
+	if postRootGrace <= 0 {
+		postRootGrace = 250 * time.Millisecond
 	}
 	commandText := strings.Join(req.Command, " ")
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -217,10 +228,9 @@ func (s Service) Run(req Request) (Result, error) {
 
 	stopSampler := make(chan struct{})
 	samplerDone := make(chan []ObservedProcess, 1)
-	go sampleProcessTree(pid, 25*time.Millisecond, stopSampler, samplerDone)
+	go sampleProcessTree(pid, sampleInterval, stopSampler, samplerDone)
 
 	err = cmd.Wait()
-	postRootGrace := 250 * time.Millisecond
 	postRootGraceStarted := time.Now()
 	time.Sleep(postRootGrace)
 	close(stopSampler)
@@ -252,11 +262,26 @@ func (s Service) Run(req Request) (Result, error) {
 			BindingSource: "zero_sdk_record_descendant",
 			Confidence:    0.9,
 		})
-		payload, _ := json.Marshal(proc)
-		_, _ = s.DB.Exec(`INSERT INTO events
-			(id, run_id, session_id, tool_call_id, process_id, source, event_type, pid, ppid, payload, created_at)
-			VALUES (?, ?, ?, ?, ?, 'record_process_sample', 'process_observed', ?, ?, ?, ?)`,
-			ids.New("evt"), req.RunID, sessionID, toolCallID, processID, proc.PID, proc.PPID, string(payload), proc.FirstSeen)
+		payload, _ := json.Marshal(observedProcessPayload(proc, pid, absWorkdir, "root_pid_descendants+cwd+time_window"))
+		_, _ = telemetry.IngestFiltered(s.DB, telemetry.IngestEvent{
+			RunID:       req.RunID,
+			RolloutID:   rolloutID,
+			AttemptID:   attemptID,
+			SessionID:   sessionID,
+			ToolCallID:  toolCallID,
+			ProcessID:   processID,
+			SnapshotID:  baseSnapshotID,
+			RawEventID:  fmt.Sprintf("record-process-%d", proc.PID),
+			ContainerID: "agentprov-record-" + attemptID,
+			CgroupID:    "agentprov-record-" + attemptID,
+			PID:         proc.PID,
+			TGID:        proc.PID,
+			PPID:        proc.PPID,
+			Timestamp:   proc.FirstSeen,
+			Source:      "record_process_sample",
+			EventType:   "process_observed",
+			Payload:     string(payload),
+		})
 		if proc.OutlivedRoot {
 			_ = s.persistOrphanDecision(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, proc, string(payload))
 		}
@@ -302,27 +327,44 @@ func (s Service) Run(req Request) (Result, error) {
 		ids.New("evt"), req.RunID, sessionID, toolCallID, processID, pid, int64(os.Getpid()), fmt.Sprintf(`{"attempt_id":%q,"exit_code":%d,"status":%q,"wall_ms":%d,"changed_files":%d}`, attemptID, exitCode, status, wallMS, len(changed)), endedAt)
 	_ = correlation.CloseBinding(s.DB, processID, endedAt)
 	return Result{
-		RunID:           req.RunID,
-		RolloutID:       rolloutID,
-		BaseSnapshotID:  baseSnapshotID,
-		AttemptID:       attemptID,
-		SessionID:       sessionID,
-		ToolCallID:      toolCallID,
-		ProcessID:       processID,
-		Workdir:         absWorkdir,
-		Command:         commandText,
-		ExitCode:        exitCode,
-		Status:          status,
-		WallMS:          wallMS,
-		ChangedFiles:    changed,
-		RootPID:         pid,
-		Observed:        observed,
-		OrphanPolicy:    "observe_only",
-		PostRootGraceMS: postRootGrace.Milliseconds(),
-		CWD:             absWorkdir,
-		StartedAt:       startedAt,
-		EndedAt:         endedAt,
+		RunID:            req.RunID,
+		RolloutID:        rolloutID,
+		BaseSnapshotID:   baseSnapshotID,
+		AttemptID:        attemptID,
+		SessionID:        sessionID,
+		ToolCallID:       toolCallID,
+		ProcessID:        processID,
+		Workdir:          absWorkdir,
+		Command:          commandText,
+		ExitCode:         exitCode,
+		Status:           status,
+		WallMS:           wallMS,
+		ChangedFiles:     changed,
+		RootPID:          pid,
+		Observed:         observed,
+		OrphanPolicy:     "observe_only",
+		SampleIntervalMS: sampleInterval.Milliseconds(),
+		PostRootGraceMS:  postRootGrace.Milliseconds(),
+		CWD:              absWorkdir,
+		StartedAt:        startedAt,
+		EndedAt:          endedAt,
 	}, nil
+}
+
+func observedProcessPayload(proc ObservedProcess, rootPID int64, cwd, boundary string) map[string]any {
+	return map[string]any{
+		"pid":             proc.PID,
+		"ppid":            proc.PPID,
+		"root_pid":        rootPID,
+		"command":         proc.Command,
+		"first_seen":      proc.FirstSeen,
+		"last_seen":       proc.LastSeen,
+		"outlived_root":   proc.OutlivedRoot,
+		"cwd":             cwd,
+		"scope_boundary":  boundary,
+		"correlation_key": "pid+root_pid+cwd+time_window",
+		"mode":            "zero_sdk",
+	}
 }
 
 func (s Service) persistOrphanDecision(runID, rolloutID, attemptID, sessionID, toolCallID, processID string, proc ObservedProcess, payload string) error {

@@ -696,7 +696,7 @@ func verifyProcessObservations(db *sql.DB, runID string, add issueAdder) error {
 			Command      string `json:"command"`
 			OutlivedRoot bool   `json:"outlived_root"`
 		}
-		if err := json.Unmarshal([]byte(payload), &proc); err != nil {
+		if err := json.Unmarshal(unwrapRecordProcessPayload(payload), &proc); err != nil {
 			add("error", "invalid_process_observation_payload", id, "process observation payload is not valid JSON: %v", err)
 			continue
 		}

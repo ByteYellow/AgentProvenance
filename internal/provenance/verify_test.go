@@ -606,7 +606,7 @@ func TestVerifyRejectsMissingOrphanLifecycleEvidence(t *testing.T) {
 		RunID:   "run-orphan-verify",
 		Name:    "orphan-verify",
 		Workdir: workdir,
-		Command: []string{"sh", "-lc", "sh -c 'sleep 0.5' & sleep 0.08; printf 'value = 2\\n' > app.py"},
+		Command: []string{"python3", "-c", `import subprocess, time; subprocess.Popen(["sleep", "0.8"]); time.sleep(0.08); open("app.py", "w").write("value = 2\n")`},
 	})
 	if err != nil {
 		t.Fatal(err)

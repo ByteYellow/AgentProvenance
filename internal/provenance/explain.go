@@ -1063,15 +1063,22 @@ func processObservationsForExplain(db *sql.DB, runID string, ids map[string]stri
 		clauses = append(clauses, "run_id = ?")
 		args = append(args, runID)
 	}
-	for key, column := range map[string]string{
-		"session_id":   "session_id",
-		"tool_call_id": "tool_call_id",
-		"process_id":   "process_id",
+	scopeClauses := []string{}
+	for _, keyColumn := range []struct {
+		key    string
+		column string
+	}{
+		{key: "tool_call_id", column: "tool_call_id"},
+		{key: "session_id", column: "session_id"},
+		{key: "process_id", column: "process_id"},
 	} {
-		if value := strings.TrimSpace(ids[key]); value != "" {
-			clauses = append(clauses, column+" = ?")
+		if value := strings.TrimSpace(ids[keyColumn.key]); value != "" {
+			scopeClauses = append(scopeClauses, keyColumn.column+" = ?")
 			args = append(args, value)
 		}
+	}
+	if len(scopeClauses) > 0 {
+		clauses = append(clauses, "("+strings.Join(scopeClauses, " OR ")+")")
 	}
 	rows, err := db.Query(`SELECT id, COALESCE(process_id, ''), COALESCE(tool_call_id, ''), payload
 		FROM events WHERE `+strings.Join(clauses, " AND ")+` ORDER BY created_at ASC`, args...)
@@ -1086,7 +1093,7 @@ func processObservationsForExplain(db *sql.DB, runID string, ids map[string]stri
 			return nil, err
 		}
 		var proc RecordObservedProcess
-		if err := json.Unmarshal([]byte(payload), &proc); err != nil || proc.PID == 0 {
+		if err := json.Unmarshal(unwrapRecordProcessPayload(payload), &proc); err != nil || proc.PID == 0 {
 			continue
 		}
 		obs := ExplainProcessObservation{

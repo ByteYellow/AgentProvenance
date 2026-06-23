@@ -46,7 +46,7 @@ func TelemetrySource(source string, correlationMethod string) bool {
 		return true
 	}
 	switch source {
-	case "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "native_runtime", "record_file_diff":
+	case "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "native_runtime", "record_file_diff", "record_process_sample":
 		return true
 	default:
 		return false
@@ -98,7 +98,7 @@ func receiverName(source string) string {
 		return "falco"
 	case "loongcollector_jsonl":
 		return "loongcollector"
-	case "wrapper_runtime", "native_runtime", "record_file_diff", "filtered_telemetry":
+	case "wrapper_runtime", "native_runtime", "record_file_diff", "record_process_sample", "filtered_telemetry":
 		return source
 	default:
 		if strings.TrimSpace(source) == "" {
@@ -112,7 +112,7 @@ func sourceFormat(source string) string {
 	switch source {
 	case "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl":
 		return "jsonl"
-	case "wrapper_runtime", "native_runtime", "record_file_diff", "filtered_telemetry":
+	case "wrapper_runtime", "native_runtime", "record_file_diff", "record_process_sample", "filtered_telemetry":
 		return "normalized"
 	default:
 		return "unknown"
@@ -202,6 +202,10 @@ func validateEventBody(eventType string, body map[string]any) error {
 	case "process_exit":
 		if _, ok := numberField(body, "exit_code"); !ok {
 			return fmt.Errorf("process_exit payload requires numeric exit_code")
+		}
+	case "process_observed":
+		if _, ok := numberField(body, "pid"); !ok {
+			return fmt.Errorf("process_observed payload requires numeric pid")
 		}
 	case "file_open", "file_write", "secret_path":
 		if payloadPathFromBody(body) == "" {

@@ -13,6 +13,8 @@ func recordCmd(dataDir *string) *cobra.Command {
 	var runID string
 	var name string
 	var workdir string
+	var sampleIntervalMS int64
+	var postRootGraceMS int64
 	var withJSON bool
 	cmd := &cobra.Command{
 		Use:   "record -- <command...>",
@@ -29,10 +31,12 @@ func recordCmd(dataDir *string) *cobra.Command {
 			}
 			defer db.Close()
 			result, err := (record.Service{DB: db, Paths: paths}).Run(record.Request{
-				RunID:   runID,
-				Name:    name,
-				Workdir: workdir,
-				Command: args,
+				RunID:            runID,
+				Name:             name,
+				Workdir:          workdir,
+				Command:          args,
+				SampleIntervalMS: sampleIntervalMS,
+				PostRootGraceMS:  postRootGraceMS,
 			})
 			if err != nil {
 				return err
@@ -51,6 +55,8 @@ func recordCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().StringVar(&runID, "run", "", "run id")
 	cmd.Flags().StringVar(&name, "name", "record", "recording name")
 	cmd.Flags().StringVar(&workdir, "workdir", "", "working directory; defaults to current directory")
+	cmd.Flags().Int64Var(&sampleIntervalMS, "sample-interval-ms", 25, "zero-SDK process tree sampling interval in milliseconds")
+	cmd.Flags().Int64Var(&postRootGraceMS, "post-root-grace-ms", 250, "time to keep sampling after root process exit")
 	cmd.Flags().BoolVar(&withJSON, "json", false, "emit machine-readable zero-SDK record manifest")
 	return cmd
 }
@@ -80,6 +86,7 @@ func printRecordJSON(cmd *cobra.Command, result record.Result) error {
 		"root_pid":           result.RootPID,
 		"observed_processes": result.Observed,
 		"orphan_policy":      result.OrphanPolicy,
+		"sample_interval_ms": result.SampleIntervalMS,
 		"post_root_grace_ms": result.PostRootGraceMS,
 		"cwd":                result.CWD,
 		"process_tree_count": processTreeCount,
@@ -96,6 +103,7 @@ func printRecordJSON(cmd *cobra.Command, result record.Result) error {
 			"observed_processes": len(result.Observed),
 			"boundary":           "root_pid_descendants+cwd+time_window+file_diff",
 			"orphan_policy":      result.OrphanPolicy,
+			"sample_interval_ms": result.SampleIntervalMS,
 			"post_root_grace_ms": result.PostRootGraceMS,
 		},
 	}
