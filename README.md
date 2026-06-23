@@ -234,6 +234,7 @@ mkdir -p /tmp/agentprov-record-demo
 printf 'value = 1\n' > /tmp/agentprov-record-demo/app.py
 ./agentprov record --run run-record-demo --workdir /tmp/agentprov-record-demo -- \
   sh -lc 'printf "value = 2\n" > app.py && echo artifact > artifact.txt'
+./agentprov observe summary --run run-record-demo
 ./agentprov graph explain --run run-record-demo --file app.py
 
 ./agentprov adapter list
@@ -247,6 +248,9 @@ printf 'value = 1\n' > /tmp/agentprov-record-demo/app.py
 
 The quick path builds `agentprov`, records a command, explains the changed file,
 ingests filtered substrate telemetry, and runs the Phase 1 acceptance gate.
+`observe summary` is the run-level observability entry point: it summarizes
+application context, runtime telemetry coverage, risk, baseline, response, and
+top evidence refs before you drill into timeline or graph queries.
 
 `demo_telemetry_jsonl.sh` is the minimal substrate telemetry path. It binds a
 ToolCallScope, ingests Tetragon/Falco/LoongCollector fixture JSONL from
@@ -308,6 +312,8 @@ load.
 ## Security Evidence Commands
 
 ```sh
+./agentprov observe summary --run <run_id>
+./agentprov observe summary --run <run_id> --json
 ./agentprov timeline --run <run_id>
 ./agentprov timeline --run <run_id> --tool-call <tool_call_id> --json
 ./agentprov timeline --run <run_id> --process <process_id> --json
@@ -331,6 +337,7 @@ These commands are now part of the mainline security evidence surface:
 
 | Command | Purpose |
 |---|---|
+| `observe summary` | Show run-level observability coverage across application context, runtime telemetry, risks, baselines, responses, and evidence refs |
 | `timeline` | Show a time-ordered execution view across application context, runtime telemetry, evidence, risk, baseline, response, and external effects |
 | `security risks` | List normalized `RiskSignal` records derived from policy/runtime evidence |
 | `security deviations` | List `BaselineDeviation` records from behavior feature checks |
@@ -434,6 +441,7 @@ What these mean:
 | Execution context | explicit ToolCallScope binding through run/session/attempt/tool_call/process/container/cgroup/pid |
 | Adapter contracts | `adapter list/inspect` exposes agent, sandbox, telemetry, artifact, and snapshot adapter capabilities, identity keys, boundaries, and QBS impact |
 | Evidence ingest | raw telemetry ingestion without requiring raw `tool_call_id`; ingest and verify enforce event-specific payload schemas, reject application context inside raw runtime payloads, map filtered Tetragon/Falco/LoongCollector JSONL into normalized telemetry events, and record batch manifests with input/event hashes |
+| Observability summary | `observe summary --run` emits `agentprovenance.observability_summary/v1` with context counts, runtime correlation coverage, risk/baseline/response counts, event/source histograms, top evidence refs, and suggested drill-down commands |
 | Execution timeline | `timeline --run` emits a human table or `agentprovenance.timeline/v1` JSON across tool calls, processes, zero-SDK process observations, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects |
 | Runtime causality | native `runtime_*` graph edges for tool call, process, process tree, attempt, snapshot, runtime event, and workspace file correlation |
 | Provenance DAG | `trace`, `refs`, `log`, `materialize`, `objects`, `verify`, text and JSON replay |

@@ -51,6 +51,7 @@ agentprov record --run run-record-demo --workdir /tmp/agentprov-record-demo -- \
   sh -lc 'printf "value = 2\n" > app.py && echo artifact > artifact.txt'
 agentprov graph explain --run run-record-demo --file app.py --json
 scripts/demo_telemetry_jsonl.sh
+agentprov observe summary --run run-telemetry-jsonl-demo
 agentprov telemetry batches --run run-telemetry-jsonl-demo
 agentprov telemetry list --run run-telemetry-jsonl-demo
 agentprov timeline --run run-telemetry-jsonl-demo
@@ -197,6 +198,10 @@ Expected output / acceptance:
   time-ordered execution view across tool calls, processes, runtime telemetry,
   evidence, policy decisions, risk signals, baseline deviations, response
   actions, and external effects.
+- `observe summary --run <run_id> --json` emits
+  `agentprovenance.observability_summary/v1`, a run-level coverage summary for
+  application context, runtime telemetry correlation, risk, baseline, response,
+  top evidence refs, and suggested drill-down commands.
 - `rollout attempts` shows `wrong-constant` as `quarantined` with
   `risk=tainted`.
 - `rollout winner` is a historical command name. It shows `correct-add` as the
