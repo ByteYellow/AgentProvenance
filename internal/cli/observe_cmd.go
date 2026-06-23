@@ -19,6 +19,7 @@ func observeCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(observeCoverageCmd(dataDir))
 	cmd.AddCommand(observeScopesCmd(dataDir))
 	cmd.AddCommand(observeEventCmd(dataDir))
+	cmd.AddCommand(observeProcessCmd(dataDir))
 	return cmd
 }
 
@@ -233,6 +234,58 @@ func observeEventCmd(dataDir *string) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&runID, "run", "", "run id")
 	cmd.Flags().StringVar(&eventID, "event", "", "runtime event id")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
+	return cmd
+}
+
+func observeProcessCmd(dataDir *string) *cobra.Command {
+	var runID string
+	var processID string
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "process",
+		Short: "explain one process with runtime events and agent context",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if runID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			if processID == "" {
+				return fmt.Errorf("--process is required")
+			}
+			db, cleanup, err := openLocalDB(*dataDir)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+			report, err := observability.BuildProcess(db, observability.ProcessOptions{RunID: runID, ProcessID: processID})
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "run=%s schema=%s process=%s started_at=%s ended_at=%s\n",
+				report.RunID, report.SchemaVersion, report.Process.ID, report.Process.StartedAt, report.Process.EndedAt)
+			fmt.Fprintf(cmd.OutOrStdout(), "context session=%s attempt=%s tool_call=%s snapshot=%s\n",
+				report.Context.SessionID, report.Context.AttemptID, report.Context.ToolCallID, report.Context.SnapshotID)
+			fmt.Fprintf(cmd.OutOrStdout(), "summary=%q\n", report.Process.Summary)
+			printEvidenceSummaries(cmd, "RUNTIME_EVENT", report.RuntimeEvents)
+			printEvidenceSummaries(cmd, "RELATED_RISK", report.RelatedRisks)
+			printEvidenceSummaries(cmd, "RELATED_POLICY", report.RelatedPolicies)
+			printEvidenceSummaries(cmd, "RELATED_RESPONSE", report.RelatedResponses)
+			if len(report.RecommendedViews) > 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "next_views:")
+				for _, view := range report.RecommendedViews {
+					fmt.Fprintf(cmd.OutOrStdout(), "  agentprov %s\n", view)
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&runID, "run", "", "run id")
+	cmd.Flags().StringVar(&processID, "process", "", "process id")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	return cmd
 }
