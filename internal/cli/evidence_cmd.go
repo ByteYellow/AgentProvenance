@@ -6,6 +6,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/byteyellow/agentprovenance/internal/evidence"
+	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -15,6 +16,7 @@ func evidenceCmd(dataDir *string) *cobra.Command {
 	var runID string
 	var objectLimit int
 	var jsonOut bool
+	var materializeObject bool
 	process := &cobra.Command{
 		Use:   "process",
 		Short: "process queued compact evidence events into materialized graph edges",
@@ -53,12 +55,48 @@ func evidenceCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			output := evidence.MaterializedManifest{Manifest: report}
+			if materializeObject {
+				parentHashes := make([]string, 0, len(report.Objects.TopRefs))
+				for _, ref := range report.Objects.TopRefs {
+					if ref.Hash != "" {
+						parentHashes = append(parentHashes, ref.Hash)
+					}
+				}
+				result, err := (provenance.ObjectStore{DB: db, Paths: paths}).PutExternalObject(provenance.ExternalObjectInput{
+					Type:     "evidence_manifest",
+					SourceID: runID,
+					RunID:    runID,
+					Parents:  parentHashes,
+					Refs: map[string]any{
+						"run_id":                  runID,
+						"schema_version":          report.SchemaVersion,
+						"summary_result_set_id":   report.Summary.ResultSetID,
+						"timeline_result_set_id":  report.Timeline.ResultSetID,
+						"objects_result_set_id":   report.Objects.ResultSetID,
+						"risks_result_set_id":     report.Security.RisksResultSetID,
+						"responses_result_set_id": report.Security.ResponsesResultSetID,
+					},
+					Payload: map[string]any{"manifest": report},
+				})
+				if err != nil {
+					return err
+				}
+				output.ObjectHash = result.Hash
+				output.ObjectPath = result.Path
+			}
 			if jsonOut {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
+				if materializeObject {
+					return enc.Encode(output)
+				}
 				return enc.Encode(report)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "run=%s schema=%s result_set=%s page_hash=%s\n", report.RunID, report.SchemaVersion, report.ResultSetID, report.PageHash)
+			if output.ObjectHash != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "object_hash=%s object_path=%s\n", output.ObjectHash, output.ObjectPath)
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "summary events=%d runtime_events=%d risks=%d responses=%d tool_call_coverage=%.2f process_coverage=%.2f\n",
 				report.Summary.EventCount, report.Summary.Runtime.Events, report.Security.RiskCount, report.Security.ResponseCount,
 				report.Summary.Runtime.ToolCallCoverageRatio, report.Summary.Runtime.ProcessCoverageRatio)
@@ -84,6 +122,7 @@ func evidenceCmd(dataDir *string) *cobra.Command {
 	}
 	manifest.Flags().StringVar(&runID, "run", "", "run id")
 	manifest.Flags().IntVar(&objectLimit, "object-limit", 25, "maximum object refs to include")
+	manifest.Flags().BoolVar(&materializeObject, "materialize", false, "write the evidence manifest as a content-addressed provenance object")
 	manifest.Flags().BoolVar(&jsonOut, "json", false, "emit JSON evidence manifest")
 	cmd := &cobra.Command{Use: "evidence", Short: "evidence processing and manifest commands"}
 	cmd.AddCommand(process)

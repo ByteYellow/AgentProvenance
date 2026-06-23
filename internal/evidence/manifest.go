@@ -20,6 +20,12 @@ type ManifestOptions struct {
 	ObjectLimit int
 }
 
+type MaterializedManifest struct {
+	Manifest   Manifest `json:"manifest"`
+	ObjectHash string   `json:"object_hash,omitempty"`
+	ObjectPath string   `json:"object_path,omitempty"`
+}
+
 type Manifest struct {
 	SchemaVersion    string                  `json:"schema_version"`
 	RunID            string                  `json:"run_id"`

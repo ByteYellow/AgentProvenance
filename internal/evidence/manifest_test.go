@@ -91,6 +91,41 @@ func TestBuildManifestAggregatesRunEvidence(t *testing.T) {
 	if !hasView(manifest.RecommendedViews, "graph verify --run "+result.RunID+" --json") {
 		t.Fatalf("manifest missing verification view: %+v", manifest.RecommendedViews)
 	}
+	var parents []string
+	for _, ref := range manifest.Objects.TopRefs {
+		if ref.Hash != "" {
+			parents = append(parents, ref.Hash)
+		}
+	}
+	object, err := (provenance.ObjectStore{DB: db, Paths: paths}).PutExternalObject(provenance.ExternalObjectInput{
+		Type:     "evidence_manifest",
+		SourceID: result.RunID,
+		RunID:    result.RunID,
+		Parents:  parents,
+		Refs: map[string]any{
+			"run_id":                  result.RunID,
+			"schema_version":          manifest.SchemaVersion,
+			"summary_result_set_id":   manifest.Summary.ResultSetID,
+			"timeline_result_set_id":  manifest.Timeline.ResultSetID,
+			"objects_result_set_id":   manifest.Objects.ResultSetID,
+			"risks_result_set_id":     manifest.Security.RisksResultSetID,
+			"responses_result_set_id": manifest.Security.ResponsesResultSetID,
+		},
+		Payload: map[string]any{"manifest": manifest},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if object.Hash == "" || object.Path == "" {
+		t.Fatalf("missing materialized evidence object refs: %+v", object)
+	}
+	var objectType string
+	if err := db.QueryRow(`SELECT object_type FROM provenance_objects WHERE hash = ?`, object.Hash).Scan(&objectType); err != nil {
+		t.Fatal(err)
+	}
+	if objectType != "evidence_manifest" {
+		t.Fatalf("object_type=%q want evidence_manifest", objectType)
+	}
 }
 
 func hasView(values []string, want string) bool {

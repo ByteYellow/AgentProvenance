@@ -59,6 +59,21 @@ type ObjectListOptions struct {
 	Cursor string
 }
 
+type ExternalObjectInput struct {
+	Type      string
+	SourceID  string
+	RunID     string
+	RolloutID string
+	Parents   []string
+	Refs      map[string]any
+	Payload   map[string]any
+}
+
+type ExternalObjectResult struct {
+	Hash string
+	Path string
+}
+
 type provenanceObject struct {
 	Schema    string         `json:"schema"`
 	Type      string         `json:"type"`
@@ -68,6 +83,38 @@ type provenanceObject struct {
 	Parents   []string       `json:"parents,omitempty"`
 	Refs      map[string]any `json:"refs,omitempty"`
 	Payload   map[string]any `json:"payload,omitempty"`
+}
+
+func (s ObjectStore) PutExternalObject(input ExternalObjectInput) (ExternalObjectResult, error) {
+	if s.DB == nil {
+		return ExternalObjectResult{}, fmt.Errorf("database is required")
+	}
+	if strings.TrimSpace(input.Type) == "" {
+		return ExternalObjectResult{}, fmt.Errorf("object type is required")
+	}
+	if strings.TrimSpace(input.SourceID) == "" {
+		return ExternalObjectResult{}, fmt.Errorf("source id is required")
+	}
+	if strings.TrimSpace(input.RunID) == "" {
+		return ExternalObjectResult{}, fmt.Errorf("run_id is required")
+	}
+	if s.Paths.Provenance == "" {
+		s.Paths.Provenance = filepath.Join(s.Paths.Root, "provenance")
+	}
+	ctx := materializeContext{store: s, runID: input.RunID, refHash: map[string]string{}}
+	hash, err := ctx.put(provenanceObject{
+		Type:      input.Type,
+		SourceID:  input.SourceID,
+		RunID:     input.RunID,
+		RolloutID: input.RolloutID,
+		Parents:   input.Parents,
+		Refs:      input.Refs,
+		Payload:   input.Payload,
+	})
+	if err != nil {
+		return ExternalObjectResult{}, err
+	}
+	return ExternalObjectResult{Hash: hash, Path: ctx.objectPath(hash)}, nil
 }
 
 func (s ObjectStore) MaterializeRun(runID string) (MaterializeResult, error) {

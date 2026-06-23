@@ -336,6 +336,7 @@ causal graph.
 ./agentprov observe flow --run <run_id> --json
 ./agentprov evidence manifest --run <run_id>
 ./agentprov evidence manifest --run <run_id> --json
+./agentprov evidence manifest --run <run_id> --materialize --json
 ./agentprov telemetry correlations --run <run_id>
 ./agentprov telemetry correlations --run <run_id> --json
 ./agentprov telemetry correlations --event <event_id> --json
@@ -372,7 +373,7 @@ These commands are now part of the mainline security evidence surface:
 | `observe event` | Explain one runtime event with correlated agent context, related risk/policy/response evidence, and drill-down links |
 | `observe process` | Explain one process with its tool_call context, runtime events, risk/policy/response evidence, and drill-down links |
 | `observe flow` | Show the compact causality flow from runtime events to risk signals, policy decisions, and response actions |
-| `evidence manifest` | Emit a run-level evidence index that binds observability summary, timeline hash, content-addressed object refs, risk/response report hashes, and recommended drill-down queries |
+| `evidence manifest` | Emit a run-level evidence index that binds observability summary, timeline hash, content-addressed object refs, risk/response report hashes, and recommended drill-down queries; `--materialize` writes it as an `evidence_manifest` provenance object |
 | `telemetry correlations` | Explain why runtime telemetry events were attached to a ToolCallScope, including raw identity, matched binding, matched keys, confidence, time window, and drill-down refs |
 | `timeline` | Show a time-ordered execution view across application context, runtime telemetry, evidence, risk, baseline, response, and external effects |
 | `security risks` | List normalized `RiskSignal` records derived from policy/runtime evidence; `--json` emits schema/hash metadata and drill-down refs to event/process/timeline/explain views |
@@ -484,7 +485,7 @@ What these mean:
 | Observability event detail | `observe event --run --event` emits `agentprovenance.observability_event/v1` with runtime event context, correlation metadata, lane, correlation status, related risk/policy/response evidence, drill-down commands, `result_set_id`, and `page_hash` |
 | Observability process detail | `observe process --run --process` emits `agentprovenance.observability_process/v1` with process lifecycle, tool_call context, lane, correlation status, runtime events, risk/policy/response evidence, drill-down commands, `result_set_id`, and `page_hash` |
 | Observability flow | `observe flow --run` emits `agentprovenance.observability_flow/v1` with event-to-risk-to-policy-to-response rows, lane, correlation status, drill-down commands, `result_set_id`, and `page_hash` |
-| Evidence manifest | `evidence manifest --run` emits `agentprovenance.evidence_manifest/v1`, a run-level evidence index with observability summary hashes, timeline hashes, object-list hashes, risk/response report hashes, and recommended drill-down queries for UI, audit export, and incident review |
+| Evidence manifest | `evidence manifest --run` emits `agentprovenance.evidence_manifest/v1`, a run-level evidence index with observability summary hashes, timeline hashes, object-list hashes, risk/response report hashes, and recommended drill-down queries for UI, audit export, and incident review; `--materialize` stores it as a content-addressed `evidence_manifest` object |
 | Execution timeline | `timeline --run` emits a human table, `--view causality` emits a lane view, and `--json` emits `agentprovenance.timeline/v1` across tool calls, processes, zero-SDK process observations, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects; JSON includes lane, correlation status, drill-down refs, `result_set_id`, and `page_hash` for query integrity |
 | Runtime causality | native `runtime_*` graph edges for tool call, process, process tree, attempt, snapshot, runtime event, and workspace file correlation |
 | Provenance DAG | `trace`, `refs`, `log`, `materialize`, `objects`, `verify`, text and JSON replay |
