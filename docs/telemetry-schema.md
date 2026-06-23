@@ -101,6 +101,14 @@ agentprov telemetry batches --run <run_id> --json
 
 Runnable fixtures live in `examples/telemetry/`.
 
+`telemetry ingest-jsonl --json` returns both batch-level and row-level receiver
+evidence. `receiver_summary` aggregates detected formats, normalized event
+types, identity keys, resolved/unresolved rows, skipped rows, and failed rows.
+`row_results` records the line number, detected format, normalized event type,
+source, raw event id, identity keys, correlation method, and any skip/failure
+reason. This keeps receiver behavior auditable without requiring raw telemetry
+payloads to contain application context such as `tool_call_id`.
+
 The receiver maps recognized substrate events into the normalized schema:
 
 | Source | Input shape | Normalized event |

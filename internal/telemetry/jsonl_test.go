@@ -59,6 +59,19 @@ func TestIngestJSONLMapsSubstrateEvents(t *testing.T) {
 	if result.BatchID == "" || result.FileSHA256 == "" || result.EventIDsSHA256 == "" {
 		t.Fatalf("missing batch evidence fields: %+v", result)
 	}
+	if len(result.Rows) != 3 || result.ReceiverSummary.Resolved != 3 || result.ReceiverSummary.Unresolved != 0 {
+		t.Fatalf("unexpected row receiver summary: rows=%+v summary=%+v", result.Rows, result.ReceiverSummary)
+	}
+	for _, format := range []string{"tetragon", "falco", "loongcollector"} {
+		if result.ReceiverSummary.DetectedFormats[format] != 1 {
+			t.Fatalf("detected format %s count = %d summary=%+v", format, result.ReceiverSummary.DetectedFormats[format], result.ReceiverSummary)
+		}
+	}
+	for _, row := range result.Rows {
+		if row.Status != "ingested" || row.EventID == "" || row.CorrelationMethod == "" || len(row.IdentityKeys) == 0 {
+			t.Fatalf("row missing ingest evidence: %+v", row)
+		}
+	}
 	var batchRunID, eventIDsJSON string
 	var batchIngested int
 	if err := db.QueryRow(`SELECT run_id, ingested_count, event_ids_json FROM telemetry_batches WHERE id = ?`, result.BatchID).Scan(&batchRunID, &batchIngested, &eventIDsJSON); err != nil {
@@ -125,6 +138,14 @@ func TestIngestFalcoMapsRiskEventsAndCorrelates(t *testing.T) {
 	}
 	if result.Read != 4 || result.Ingested != 4 || result.Failed != 0 {
 		t.Fatalf("unexpected falco result: %+v", result)
+	}
+	if result.ReceiverSummary.DetectedFormats["falco"] != 4 || result.ReceiverSummary.Resolved != 4 {
+		t.Fatalf("unexpected falco receiver summary: %+v", result.ReceiverSummary)
+	}
+	for _, row := range result.Rows {
+		if row.DetectedFormat != "falco" || row.Status != "ingested" || row.CorrelationMethod == "" {
+			t.Fatalf("unexpected falco row result: %+v", row)
+		}
 	}
 	for _, typ := range []string{"execve", "metadata_ip", "private_cidr", "secret_path"} {
 		events, err := ListEventsFiltered(db, Filter{RunID: "run-falco", Type: typ})
@@ -203,5 +224,8 @@ func TestIngestJSONLReportsBadRows(t *testing.T) {
 	}
 	if result.BatchID == "" || result.FileSHA256 == "" || result.EventIDsSHA256 == "" {
 		t.Fatalf("missing bad-row batch evidence fields: %+v", result)
+	}
+	if len(result.Rows) != 3 || result.ReceiverSummary.Failed != 2 || result.ReceiverSummary.Skipped != 1 {
+		t.Fatalf("unexpected bad-row receiver evidence: rows=%+v summary=%+v", result.Rows, result.ReceiverSummary)
 	}
 }

@@ -47,6 +47,11 @@ echo "== ingest raw telemetry without tool_call_id"
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest-jsonl --format tetragon --file examples/telemetry/tetragon-process-exec.jsonl --json >/tmp/agentprov-accept-tetragon.json
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest-jsonl --format falco --file examples/telemetry/falco-network-connect.jsonl --json >/tmp/agentprov-accept-falco.json
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest-jsonl --format loongcollector --file examples/telemetry/loongcollector-file-write.jsonl --json >/tmp/agentprov-accept-loongcollector.json
+TETRAGON_INGEST="$(cat /tmp/agentprov-accept-tetragon.json)"
+assert_contains "$TETRAGON_INGEST" '"receiver_summary"'
+assert_contains "$TETRAGON_INGEST" '"row_results"'
+assert_contains "$TETRAGON_INGEST" '"detected_format": "tetragon"'
+assert_contains "$TETRAGON_INGEST" '"correlation_method": "pid_time_window:pid+time"'
 
 echo "== assert normalized telemetry"
 TELEMETRY_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept)"

@@ -41,17 +41,42 @@ type FalcoIngestOptions struct {
 }
 
 type JSONLIngestResult struct {
-	BatchID        string   `json:"batch_id,omitempty"`
-	Format         string   `json:"format"`
-	Path           string   `json:"path"`
-	FileSHA256     string   `json:"file_sha256,omitempty"`
-	Read           int      `json:"read"`
-	Ingested       int      `json:"ingested"`
-	Skipped        int      `json:"skipped"`
-	Failed         int      `json:"failed"`
-	EventIDs       []string `json:"event_ids,omitempty"`
-	EventIDsSHA256 string   `json:"event_ids_sha256,omitempty"`
-	Errors         []string `json:"errors,omitempty"`
+	BatchID         string          `json:"batch_id,omitempty"`
+	Format          string          `json:"format"`
+	Path            string          `json:"path"`
+	FileSHA256      string          `json:"file_sha256,omitempty"`
+	Read            int             `json:"read"`
+	Ingested        int             `json:"ingested"`
+	Skipped         int             `json:"skipped"`
+	Failed          int             `json:"failed"`
+	EventIDs        []string        `json:"event_ids,omitempty"`
+	EventIDsSHA256  string          `json:"event_ids_sha256,omitempty"`
+	ReceiverSummary ReceiverSummary `json:"receiver_summary"`
+	Rows            []RowResult     `json:"row_results,omitempty"`
+	Errors          []string        `json:"errors,omitempty"`
+}
+
+type ReceiverSummary struct {
+	DetectedFormats map[string]int `json:"detected_formats,omitempty"`
+	EventTypes      map[string]int `json:"event_types,omitempty"`
+	IdentityKeys    map[string]int `json:"identity_keys,omitempty"`
+	Resolved        int            `json:"resolved"`
+	Unresolved      int            `json:"unresolved"`
+	Skipped         int            `json:"skipped"`
+	Failed          int            `json:"failed"`
+}
+
+type RowResult struct {
+	Line              int      `json:"line"`
+	Status            string   `json:"status"`
+	DetectedFormat    string   `json:"detected_format,omitempty"`
+	EventID           string   `json:"event_id,omitempty"`
+	EventType         string   `json:"event_type,omitempty"`
+	Source            string   `json:"source,omitempty"`
+	RawEventID        string   `json:"raw_event_id,omitempty"`
+	IdentityKeys      []string `json:"identity_keys,omitempty"`
+	CorrelationMethod string   `json:"correlation_method,omitempty"`
+	Error             string   `json:"error,omitempty"`
 }
 
 func IngestJSONL(db *sql.DB, opts JSONLIngestOptions) (JSONLIngestResult, error) {
@@ -84,27 +109,44 @@ func IngestJSONL(db *sql.DB, opts JSONLIngestOptions) (JSONLIngestResult, error)
 		var raw map[string]any
 		if err := json.Unmarshal([]byte(line), &raw); err != nil {
 			result.Failed++
-			result.Errors = append(result.Errors, fmt.Sprintf("line %d: invalid JSON: %v", lineNo, err))
+			msg := fmt.Sprintf("line %d: invalid JSON: %v", lineNo, err)
+			result.Errors = append(result.Errors, msg)
+			appendRowResult(&result, RowResult{Line: lineNo, Status: "failed", Error: msg})
 			continue
 		}
+		detected := detectedJSONLFormat(opts, raw)
 		event, ok, err := mapJSONLEvent(opts, raw, lineNo)
 		if err != nil {
 			result.Failed++
-			result.Errors = append(result.Errors, fmt.Sprintf("line %d: %v", lineNo, err))
+			msg := fmt.Sprintf("line %d: %v", lineNo, err)
+			result.Errors = append(result.Errors, msg)
+			appendRowResult(&result, RowResult{Line: lineNo, Status: "failed", DetectedFormat: detected, Error: msg})
 			continue
 		}
 		if !ok {
 			result.Skipped++
+			appendRowResult(&result, RowResult{Line: lineNo, Status: "skipped", DetectedFormat: detected})
 			continue
 		}
 		id, err := IngestFiltered(db, event)
 		if err != nil {
 			result.Failed++
-			result.Errors = append(result.Errors, fmt.Sprintf("line %d: ingest failed: %v", lineNo, err))
+			msg := fmt.Sprintf("line %d: ingest failed: %v", lineNo, err)
+			result.Errors = append(result.Errors, msg)
+			appendRowResult(&result, rowResultForEvent(lineNo, "failed", detected, event, "", "", msg))
+			continue
+		}
+		record, err := eventRecordByID(db, id)
+		if err != nil {
+			result.Failed++
+			msg := fmt.Sprintf("line %d: readback failed: %v", lineNo, err)
+			result.Errors = append(result.Errors, msg)
+			appendRowResult(&result, rowResultForEvent(lineNo, "failed", detected, event, id, "", msg))
 			continue
 		}
 		result.Ingested++
 		result.EventIDs = append(result.EventIDs, id)
+		appendRowResult(&result, rowResultForRecord(lineNo, "ingested", detected, record, ""))
 	}
 	if err := scanner.Err(); err != nil {
 		return result, err
@@ -153,27 +195,44 @@ func IngestFalco(db *sql.DB, opts FalcoIngestOptions, input io.Reader) (JSONLIng
 		var raw map[string]any
 		if err := json.Unmarshal([]byte(line), &raw); err != nil {
 			result.Failed++
-			result.Errors = append(result.Errors, fmt.Sprintf("line %d: invalid JSON: %v", lineNo, err))
+			msg := fmt.Sprintf("line %d: invalid JSON: %v", lineNo, err)
+			result.Errors = append(result.Errors, msg)
+			appendRowResult(&result, RowResult{Line: lineNo, Status: "failed", Error: msg})
 			continue
 		}
+		detected := detectedJSONLFormat(jsonlOpts, raw)
 		event, ok, err := mapJSONLEvent(jsonlOpts, raw, lineNo)
 		if err != nil {
 			result.Failed++
-			result.Errors = append(result.Errors, fmt.Sprintf("line %d: %v", lineNo, err))
+			msg := fmt.Sprintf("line %d: %v", lineNo, err)
+			result.Errors = append(result.Errors, msg)
+			appendRowResult(&result, RowResult{Line: lineNo, Status: "failed", DetectedFormat: detected, Error: msg})
 			continue
 		}
 		if !ok {
 			result.Skipped++
+			appendRowResult(&result, RowResult{Line: lineNo, Status: "skipped", DetectedFormat: detected})
 			continue
 		}
 		id, err := IngestFiltered(db, event)
 		if err != nil {
 			result.Failed++
-			result.Errors = append(result.Errors, fmt.Sprintf("line %d: ingest failed: %v", lineNo, err))
+			msg := fmt.Sprintf("line %d: ingest failed: %v", lineNo, err)
+			result.Errors = append(result.Errors, msg)
+			appendRowResult(&result, rowResultForEvent(lineNo, "failed", detected, event, "", "", msg))
+			continue
+		}
+		record, err := eventRecordByID(db, id)
+		if err != nil {
+			result.Failed++
+			msg := fmt.Sprintf("line %d: readback failed: %v", lineNo, err)
+			result.Errors = append(result.Errors, msg)
+			appendRowResult(&result, rowResultForEvent(lineNo, "failed", detected, event, id, "", msg))
 			continue
 		}
 		result.Ingested++
 		result.EventIDs = append(result.EventIDs, id)
+		appendRowResult(&result, rowResultForRecord(lineNo, "ingested", detected, record, ""))
 	}
 	if err := scanner.Err(); err != nil {
 		return result, err
@@ -212,6 +271,103 @@ func persistJSONLBatch(db *sql.DB, opts JSONLIngestOptions, result *JSONLIngestR
 	}
 	result.BatchID = batchID
 	return nil
+}
+
+func detectedJSONLFormat(opts JSONLIngestOptions, raw map[string]any) string {
+	if opts.Format != "" && opts.Format != "auto" {
+		return opts.Format
+	}
+	return detectFormat(raw)
+}
+
+func eventRecordByID(db *sql.DB, id string) (EventRecord, error) {
+	var record EventRecord
+	err := db.QueryRow(`SELECT id, COALESCE(run_id, ''), COALESCE(session_id, ''), COALESCE(tool_call_id, ''),
+		COALESCE(process_id, ''), COALESCE(snapshot_id, ''), COALESCE(raw_event_id, ''),
+		COALESCE(correlation_method, ''), COALESCE(correlation_confidence, 0),
+		COALESCE(container_id, ''), COALESCE(cgroup_id, ''), COALESCE(pid, 0),
+		COALESCE(tgid, 0), COALESCE(ppid, 0), source, event_type, payload, created_at
+		FROM events WHERE id = ?`, id).Scan(&record.ID, &record.RunID, &record.SessionID, &record.ToolCallID,
+		&record.ProcessID, &record.SnapshotID, &record.RawEventID, &record.CorrelationMethod, &record.CorrelationConfidence,
+		&record.ContainerID, &record.CgroupID, &record.PID, &record.TGID, &record.PPID, &record.Source,
+		&record.EventType, &record.Payload, &record.CreatedAt)
+	return record, err
+}
+
+func rowResultForEvent(line int, status, detected string, event IngestEvent, eventID, method, errMsg string) RowResult {
+	return RowResult{
+		Line:              line,
+		Status:            status,
+		DetectedFormat:    detected,
+		EventID:           eventID,
+		EventType:         event.EventType,
+		Source:            event.Source,
+		RawEventID:        event.RawEventID,
+		IdentityKeys:      ingestEventIdentityKeys(event),
+		CorrelationMethod: method,
+		Error:             errMsg,
+	}
+}
+
+func rowResultForRecord(line int, status, detected string, record EventRecord, errMsg string) RowResult {
+	return RowResult{
+		Line:              line,
+		Status:            status,
+		DetectedFormat:    detected,
+		EventID:           record.ID,
+		EventType:         record.EventType,
+		Source:            record.Source,
+		RawEventID:        record.RawEventID,
+		IdentityKeys:      eventIdentityKeys(record),
+		CorrelationMethod: record.CorrelationMethod,
+		Error:             errMsg,
+	}
+}
+
+func appendRowResult(result *JSONLIngestResult, row RowResult) {
+	result.Rows = append(result.Rows, row)
+	if result.ReceiverSummary.DetectedFormats == nil {
+		result.ReceiverSummary.DetectedFormats = map[string]int{}
+	}
+	if result.ReceiverSummary.EventTypes == nil {
+		result.ReceiverSummary.EventTypes = map[string]int{}
+	}
+	if result.ReceiverSummary.IdentityKeys == nil {
+		result.ReceiverSummary.IdentityKeys = map[string]int{}
+	}
+	if row.DetectedFormat != "" {
+		result.ReceiverSummary.DetectedFormats[row.DetectedFormat]++
+	}
+	if row.EventType != "" {
+		result.ReceiverSummary.EventTypes[row.EventType]++
+	}
+	for _, key := range row.IdentityKeys {
+		result.ReceiverSummary.IdentityKeys[key]++
+	}
+	switch row.Status {
+	case "ingested":
+		if row.CorrelationMethod == "unresolved" || row.CorrelationMethod == "" {
+			result.ReceiverSummary.Unresolved++
+		} else {
+			result.ReceiverSummary.Resolved++
+		}
+	case "skipped":
+		result.ReceiverSummary.Skipped++
+	case "failed":
+		result.ReceiverSummary.Failed++
+	}
+}
+
+func ingestEventIdentityKeys(event IngestEvent) []string {
+	record := EventRecord{
+		ProcessID:   event.ProcessID,
+		ContainerID: event.ContainerID,
+		CgroupID:    event.CgroupID,
+		PID:         event.PID,
+		TGID:        event.TGID,
+		PPID:        event.PPID,
+	}
+	return eventIdentityKeys(record)
 }
 
 func inferSingleRunID(db *sql.DB, eventIDs []string) (string, error) {
