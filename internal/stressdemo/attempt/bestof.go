@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -474,7 +475,7 @@ func (s Service) runDockerAttempt(attemptID, toolCallID, workspacePath string, s
 	defer func() { _ = ctrl.RemoveSession(sessionID) }()
 	var output bytes.Buffer
 	start := time.Now()
-	processID, execErr := ctrl.ExecStream(sessionID, []string{"sh", "-lc", strategy.Command}, &output, &output)
+	processID, execErr := ctrl.ExecStream(sessionID, []string{"sh", "-c", strategy.Command}, &output, &output)
 	wallMS := time.Since(start).Milliseconds()
 	exitCode := 0
 	status := "passed"
@@ -617,7 +618,7 @@ func runAttempt(attemptID, workspacePath string, strategy Strategy) Result {
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(strategy.BudgetSeconds)*time.Second)
 	}
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "sh", "-lc", strategy.Command)
+	cmd := exec.CommandContext(ctx, "sh", "-c", strategy.Command)
 	cmd.Dir = workspacePath
 	var output bytes.Buffer
 	cmd.Stdout = &output
@@ -729,13 +730,45 @@ func scoreOutput(output, parser string, wallMS int64, exitCode int) float64 {
 		return -100.0
 	}
 	if parser == "number" || strings.HasPrefix(parser, "number:") {
-		value := strings.TrimSpace(output)
-		score, err := strconv.ParseFloat(value, 64)
-		if err == nil {
+		if score, ok := parseNumericScore(output); ok {
 			return score
 		}
 	}
 	return 1000.0 - float64(wallMS)/1000
+}
+
+var (
+	scoreAssignmentRE = regexp.MustCompile(`(?i)\bscore\s*=\s*([-+]?\d+(?:\.\d+)?)`)
+	numberTokenRE     = regexp.MustCompile(`[-+]?\d+(?:\.\d+)?`)
+)
+
+func parseNumericScore(output string) (float64, bool) {
+	matches := scoreAssignmentRE.FindAllStringSubmatch(output, -1)
+	for i := len(matches) - 1; i >= 0; i-- {
+		if len(matches[i]) < 2 {
+			continue
+		}
+		if score, err := strconv.ParseFloat(matches[i][1], 64); err == nil {
+			return score, true
+		}
+	}
+	lines := strings.Split(output, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		if score, err := strconv.ParseFloat(line, 64); err == nil {
+			return score, true
+		}
+	}
+	tokens := numberTokenRE.FindAllString(output, -1)
+	for i := len(tokens) - 1; i >= 0; i-- {
+		if score, err := strconv.ParseFloat(tokens[i], 64); err == nil {
+			return score, true
+		}
+	}
+	return 0, false
 }
 
 func better(a, b Result) bool {

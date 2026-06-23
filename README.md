@@ -297,17 +297,16 @@ security evidence: `RiskSignal`, `ResponseAction`, policy graph edges, and
 timeline entries. Falco remains the substrate collector; AgentProvenance owns
 correlation, causality, provenance, and risk/audit linkage.
 
-The legacy branch-heavy script remains available as a stress demo, not as the
-main product story:
+The main smoke path is telemetry correlation and graph explanation:
 
 ```sh
-./scripts/demo_coding_agent_best_of_n.sh
+./scripts/demo_telemetry_jsonl.sh
 ```
 
-It creates several attempts from one base workspace, records runtime telemetry,
-quarantines a risky branch, and queries the provenance DAG. It is useful for
-testing fanout, taint, diff/blame, and response-gate behavior under branching
-load.
+It binds a ToolCallScope, ingests raw Falco/Tetragon/LoongCollector-style
+runtime events that do not carry `tool_call_id`, normalizes them into the event
+store, correlates them back to application context, and explains the resulting
+causal graph.
 
 ## Security Evidence Commands
 
@@ -499,10 +498,8 @@ The main demo must prove:
 - Timeline JSON shows zero-SDK `process_observed` events with pid, ppid,
   command, first/last seen timestamps, `outlived_root`, and scope boundary
   metadata.
-- A risky branch is quarantined and tainted.
-- A tainted branch cannot pass the response gate.
-- Response-gate evidence records a drain watermark with
-  `drain_pending_after=0`.
+- Risk events can create taint and response records, but Phase 1 does not make
+  final reward or winner decisions.
 - `graph diff` emits unified diff and JSON.
 - `graph blame` emits created/modified/deleted/unchanged state attribution.
 - `graph trajectories --json` emits a structured evidence package for external
@@ -511,8 +508,8 @@ The main demo must prove:
 Run:
 
 ```sh
-./scripts/demo_coding_agent_best_of_n.sh
-./scripts/accept_phase1.sh
+./scripts/demo_telemetry_jsonl.sh
+./scripts/demo_provenance_trace.sh
 ```
 
 ## Architecture
@@ -630,8 +627,8 @@ Near-term hardening:
 
 ```sh
 go test ./...
-./scripts/demo_coding_agent_best_of_n.sh
 ./scripts/accept_phase1.sh
 ```
 
-The acceptance script is the main machine-checkable gate for Phase 1.
+The acceptance script is the main machine-checkable gate for Phase 1
+observability and provenance correlation.

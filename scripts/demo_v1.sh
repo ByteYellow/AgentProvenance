@@ -40,11 +40,6 @@ echo "== demo_snapshot_fanout"
 "$BIN" --data-dir "$DATA_DIR" snapshot inspect ready
 "$BIN" --data-dir "$DATA_DIR" fork ready --count 3
 
-echo "== demo_best_of_forks"
-"$BIN" --data-dir "$DATA_DIR" attempt best-of --snapshot ready \
-  --strategy "pass::test -f hello.txt" \
-  --strategy "fail::test -f missing.txt"
-
 echo "== demo_snapshot_stack"
 STACK_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" snapshot stack --task examples/tasks/bugfix.yaml)"
 echo "$STACK_OUTPUT"

@@ -142,31 +142,24 @@ agentprov exec <session_id> --stream -- sh -lc 'echo hello > hello.txt'
 agentprov snapshot create <session_id> --type directory --path /workspace --name ready
 agentprov fork ready --count 2
 agentprov snapshot resume ready --lease <lease_id>
-agentprov rollout start --task examples/tasks/bugfix.yaml --snapshot ready --runtime docker --fanout 3
-agentprov rollout winner run-demo-bugfix
-agentprov attempt best-of --snapshot ready --max-fanout 2 --top-k 1 --max-cost 1 --early-stop
+agentprov telemetry bind --run <run_id> --session <session_id> --tool-call <tool_call_id> --process <process_id>
+agentprov telemetry ingest-jsonl --format falco --file examples/telemetry/falco-network-connect.jsonl
+agentprov graph explain --event <event_id> --json
 ```
 
 ## Demos
 
-### demo_coding_agent_best_of_n
+### demo_telemetry_jsonl
 
 ```sh
-./scripts/demo_coding_agent_best_of_n.sh
+./scripts/demo_telemetry_jsonl.sh
 ./scripts/accept_phase1.sh
 ```
 
-This is the main AgentProvenance demo. It creates a clean coding workspace,
-snapshots it, forks five attempts, runs different repair strategies, exports
-patch artifacts, ingests raw runtime telemetry without `tool_call_id`,
-correlates it through ToolCallScope bindings, quarantines one risky failed
-branch, marks the passing candidate as locally promotable, then runs `graph trace`, `graph refs`,
-`graph log`, `graph materialize`, `graph objects`, `graph verify`, `graph replay`, `graph replay
---json`, `graph objects --json`, `graph verify --json`, `graph trajectories --json`, `graph diff`,
-`graph diff --json`, `graph blame`, and `graph blame --json` to expose
-per-trajectory evidence for external evaluators, verify graph integrity,
-reconstruct a plan-only replay, emit structured verify/replay/trajectory/diff/blame
-manifests, and attribute file changes.
+This is the main AgentProvenance Phase 1 demo. It binds application context,
+ingests raw runtime telemetry without `tool_call_id`, correlates events through
+ToolCallScope bindings, and uses `graph explain` to show the causal link between
+substrate events and agent execution context.
 
 Expected output / acceptance:
 
@@ -227,16 +220,8 @@ Expected output / acceptance:
   `agentprovenance.observability_flow/v1`, a compact causal table linking
   runtime events to direct risk signals, policy decisions, response actions, and
   drill-down commands.
-- `rollout attempts` shows `wrong-constant` as `quarantined` with
-  `risk=tainted`.
-- `rollout winner` is a historical command name. It shows `correct-add` as the
-  local clean candidate that passed the demo response gate. In real RL
-  pipelines this is evidence for reward/penalty scoring, filtering, or human
-  review, not the final reward or training decision.
-- The same output includes `watermark`, `drain_started_at`,
-  `drain_completed_at`, `drain_queued_before`, `drain_processed`, and
-  `drain_pending_after=0`, proving the candidate barrier drained queued
-  evidence before marking the candidate promotable.
+- Risk and response evidence can taint unsafe branches, but Phase 1 does not
+  choose reward winners for RL pipelines.
 - `graph diff --file calculator.py` prints a unified diff between the base file
   and modified attempt files. `--json` emits an `agentprovenance.diff/v1`
   manifest.
@@ -357,60 +342,23 @@ operations. Source policy currently supports `latest-ready`, `smallest-delta`,
 planner output scoped to that run, so parallel rollouts do not leak unrelated
 snapshot decisions into the evidence chain.
 
-### demo_best_of_forks
+### Branching Stress Boundary
 
-```sh
-./scripts/demo_best_of_forks.sh
-```
+Branch-heavy attempt data is useful for stress-testing diff/blame, taint,
+response-gate, and artifact-lineage behavior. It is no longer exposed as a
+winner-selection CLI surface. AgentProvenance records branch evidence; external
+evaluators decide reward, filtering, or promotion.
 
-This is a legacy branch/fanout stress demo. It is useful for exercising
-diff/blame, taint, response-gate, resource-evidence, and artifact-lineage
-behavior under multiple attempts. It is not the primary product surface and
-does not imply that AgentProvenance owns reward or winner decisions.
+The supported public query surface is `graph trace`, `graph explain`,
+`graph diff`, `graph blame`, `graph replay`, `graph verify`, `graph refs`,
+`graph log`, `graph materialize`, `graph objects`, `timeline`, `observe`, and
+`telemetry`. These commands expose state, artifact, process, runtime event,
+risk, and replay evidence without making reward or winner decisions.
 
-Equivalent manual flow:
-
-```sh
-agentprov attempt best-of --snapshot ready \
-  --max-fanout 2 --top-k 1 --max-cost 1 --early-stop \
-  --strategy "probe::printf 42::probe=printf 42::budget=2::score=number::artifact=probe.txt" \
-  --strategy "full::test -f hello.txt && echo passed::probe=test -f hello.txt && echo 1::budget=5::score=contains:passed::artifact=hello.txt"
-```
-
-The command forks one workspace per strategy. When strategy metadata includes
-`probe=<cmd>` and `--top-k` or `--early-stop` is set, AgentProvenance first executes the
-cheap probe command, ranks probe results, runs the full command only for the
-top-k candidates, and marks the rest as `pruned`. It records exit code, wall
-time, output summary, score, `risk_status`, `budget_exceeded`, and the local
-candidate attempt. Strategy metadata can include `probe`, `budget`,
-`score=contains:<text>` or `score=number`, and `artifact`. Local candidate
-eligibility prefers clean, within-budget attempts, then score, then lower cost. Cost output
-includes fanout cost and saved cost when early stop, max fanout, or probe
-pruning avoids full command execution. `cost show` also prints
-`rollout_cost_summary` with total attempts, executed attempts, pruned attempts,
-local candidates, saved cost, and saved ratio.
-When `artifact=<workspace-relative-path>` is set, AgentProvenance copies that file from the
-attempt workspace into `.agentprov/artifacts/` and stores the exported result ref in
-`artifact_result`; missing artifacts are recorded in the attempt output summary.
-Processed evidence also adds `attempt_artifact` and `tool_call_artifact` graph
-edges, and `graph trace` prints an `artifacts` section for reverse lookup from
-artifact ref to attempt, tool call, strategy, and local candidate status.
-Use `graph trace --artifact <artifact_ref>` to start from an exported artifact
-and trace back to the attempt, tool call, stress-demo run, and graph edge that
-produced it. Use `graph trace --attempt <attempt_id>` to inspect a single
-attempt with its tool call, artifact, stress-demo graph edges, evidence payload,
-and local candidate status. Use `graph trace --tool-call <tool_call_id>` to start from
-one tool invocation and inspect its process, artifact, graph edges, evidence,
-stress-demo context, and local candidate context. Use `graph trace --process <process_id>` to start
-from a runtime process and trace back to the session, tool call, attempt,
-artifact, telemetry event, policy decision, stress-demo run, and evidence context.
-Local fanout attempts create local session/process records too, so process
-trace works for quick branch-heavy demos without requiring Docker runtime.
 `graph refs --run <run_id>` adds the Git-like ref view: run refs, base
-snapshot refs, local candidate attempt refs, response-gate refs, tool call refs, process
-refs, and artifact refs. `graph log --run <run_id>` adds the compact
-chronological provenance log for fanout, attempt, tool call, process,
-response-gate, evidence, and telemetry events. `graph materialize --run <run_id>`
+snapshot refs, tool call refs, process refs, and artifact refs. `graph log
+--run <run_id>` adds the compact chronological provenance log for execution
+context, tool call, process, evidence, and telemetry events. `graph materialize --run <run_id>`
 turns the current SQLite trace into a content-addressed provenance object DAG
 under `.agentprov/provenance/objects/sha256/`; each object records source id, parent
 hashes, replay-oriented payload, and artifact file hashes when an artifact file
@@ -427,37 +375,6 @@ emit a plan-only reconstruction of snapshot, attempt, tool call, process,
 artifact, telemetry, and external effect records. Add `--json` to emit the
 structured `agentprovenance.replay/v1` manifest for automation; Phase 1 does
 not execute the plan or roll back real-world side effects.
-`graph trace` prints the compact attempt evidence payload, including strategy,
-score, saved cost, output summary, local candidate flag, and response-gate
-reason, so a probe/top-k rollout can be replayed and audited without guessing
-why a branch was pruned or marked evaluator-eligible.
-
-### demo_rollout_control_plane
-
-```sh
-agentprov snapshot stack --task examples/tasks/bugfix.yaml
-AGENTPROV_IO_MAX_FANOUT_PER_LOWER=100 AGENTPROV_BURST_MAX_INFLIGHT=2 \
-  agentprov rollout start --task examples/tasks/bugfix.yaml --snapshot ready --runtime docker --fanout 3 \
-  --top-k 2 \
-  --strategy "probe::test -f README.md && echo passed::probe=test -f README.md && echo passed::score=contains:passed::artifact=probe.log" \
-  --strategy "score::printf 42::probe=printf 42::score=number::artifact=score.txt" \
-  --strategy "slow::sleep 1; echo passed::probe=echo 1::score=contains:passed::artifact=slow.log"
-agentprov rollout attempts <rollout_id>
-agentprov rollout winner <rollout_id> # historical name: local candidate evidence
-agentprov evidence process
-agentprov graph trace --run run-demo-bugfix
-agentprov cost show run-demo-bugfix
-```
-
-This is a legacy substrate/fanout stress path. It starts from a ready
-snapshot, forks attempt workspaces, creates one short-lived Docker session and
-one `tool_call` per admitted strategy, requires BurstGuard admission before
-command execution, switches the container from `think` to `tool` CPU profile,
-writes compact evidence, materializes `rollout -> attempt -> tool_call ->
-session` graph edges asynchronously, and checks local candidate eligibility
-through the response gate. Attempt tables and `cost show` expose risk,
-budget, score, cost, and expectation-deviation evidence so an external
-evaluator can assign reward, penalty, filtering, or review decisions.
 
 ### demo_metadata_egress_quarantine
 

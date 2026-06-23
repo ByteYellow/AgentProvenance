@@ -27,7 +27,7 @@ jobs:
         run: GOTOOLCHAIN=local go test ./...
 
   phase1-acceptance:
-    name: Phase 1 acceptance
+    name: Phase 1 observability smoke
     runs-on: ubuntu-latest
     needs: test
     timeout-minutes: 10
@@ -41,8 +41,5 @@ jobs:
           go-version: "1.23.x"
           cache: true
 
-      - name: Show Docker version
-        run: docker version
-
-      - name: Run Phase 1 acceptance gate
+      - name: Run Phase 1 observability/provenance gate
         run: GOTOOLCHAIN=local ./scripts/accept_phase1.sh
