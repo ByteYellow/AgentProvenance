@@ -131,7 +131,7 @@ substrate path:
 
 non-product paths:
   stressdemo/*       branch-heavy fanout scenarios for load and DAG tests
-  experimental/*     resource, scheduler, fleet, and warm-pool experiments
+  experimental/*     resource, scheduler, node metadata, and warm-pool experiments
 ```
 
 This separation is intentional. Substrate code can be replaced by Docker,

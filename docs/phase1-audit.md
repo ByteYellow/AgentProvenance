@@ -20,7 +20,7 @@ ToolCallScope
 
 | Requirement | Current evidence |
 | --- | --- |
-| Product identity is AgentProvenance, not the legacy runtime-management naming | `cmd/agentprov/main.go`, `README.md`, `docs/product.md`, `docs/mvp.md`; repository search for legacy CLI/project names has no hits outside excluded local experiment material. |
+| Product identity is AgentProvenance, not legacy runtime-management naming | `cmd/agentprov/main.go`, `README.md`, `docs/product.md`, `docs/mvp.md`; repository search for legacy CLI/project names has no hits outside excluded local experiment material. |
 | Application context can be bound to runtime telemetry | `telemetry bind`, `execution_context_bindings`, correlation by `process_id`, `pid`, `container_id`, `cgroup_id`, and time window. Covered by `scripts/accept_phase1.sh`. |
 | ToolCallID is not required inside raw runtime/security events | Acceptance script injects raw runtime payloads without `tool_call_id`; correlation attaches `run_id/session_id/tool_call_id` from bindings. |
 | Delayed or asynchronous child process telemetry remains attributable | Runtime events with PID/PPID/TGID are linked into `runtime_process_parent`, `runtime_process_child_of`, `runtime_process_thread`, and process/tool-call event edges. |

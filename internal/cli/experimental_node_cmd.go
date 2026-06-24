@@ -25,7 +25,7 @@ func nodeCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			node, err := fleet.Register(db, address, runtime, labels, cpu, memoryMB)
+			node, err := nodes.Register(db, address, runtime, labels, cpu, memoryMB)
 			if err != nil {
 				return err
 			}
@@ -52,13 +52,13 @@ func nodeCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			nodes, err := fleet.List(db)
+			nodeList, err := nodes.List(db)
 			if err != nil {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "ID\tADDRESS\tRUNTIME\tCPU\tMEMORY_MB\tACTIVE_CPU_DEBT\tWARM_HITS\tSTATUS\tLABELS")
-			for _, node := range nodes {
+			for _, node := range nodeList {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%.2f\t%d\t%.3f\t%d\t%s\t%s\n", node.ID, node.Address, node.Runtime, node.CPUCapacity, node.MemoryMB, node.ActiveCPUDebt, node.WarmHitCount, node.Status, node.Labels)
 			}
 			return w.Flush()
@@ -79,7 +79,7 @@ func nodeCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			node, err := fleet.Inspect(db, args[0])
+			node, err := nodes.Inspect(db, args[0])
 			if err != nil {
 				return err
 			}
@@ -103,7 +103,7 @@ func nodeCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			if err := fleet.Heartbeat(db, args[0], debt, warmHits); err != nil {
+			if err := nodes.Heartbeat(db, args[0], debt, warmHits); err != nil {
 				return err
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), "heartbeat=ok")
