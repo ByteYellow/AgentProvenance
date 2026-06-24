@@ -474,7 +474,7 @@ What these mean:
 
 | Area | Current capability |
 |---|---|
-| Zero-SDK record | `agentprov record -- <command>` snapshots a working directory, samples root-process descendants with configurable `--sample-interval-ms` and `--post-root-grace-ms`, marks observed descendants that outlive the root, creates PID bindings, emits orphan lifecycle audit decisions when applicable, computes changed files, records runtime file evidence, exposes process observations with raw/correlation/container/cgroup identity in timeline JSON, and materializes a `record_manifest` object |
+| Zero-SDK record | `agentprov record -- <command>` snapshots a working directory, samples root-process descendants with configurable `--sample-interval-ms` and `--post-root-grace-ms`, marks observed descendants that outlive the root, creates PID bindings, emits orphan lifecycle audit decisions when applicable, computes changed files, records runtime file evidence, exposes process observations with raw/correlation/container/cgroup identity in timeline JSON, materializes a `record_manifest` object, and is covered by a realistic acceptance run that modifies, creates, deletes files, observes a child process, and correlates a delayed runtime event without raw `tool_call_id` |
 | Execution context | explicit ToolCallScope binding through run/session/attempt/tool_call/process/container/cgroup/pid |
 | Adapter contracts | `adapter list/inspect` exposes agent, sandbox, telemetry, artifact, and snapshot adapter capabilities, identity keys, boundaries, and QBS impact |
 | Evidence ingest | raw telemetry ingestion without requiring raw `tool_call_id`; ingest and verify enforce event-specific payload schemas, reject application context inside raw runtime payloads, map filtered Tetragon/Falco/LoongCollector JSONL into normalized telemetry events, record batch manifests with input/event hashes, and expose per-row receiver evidence via `receiver_summary` and `row_results` |
@@ -648,13 +648,21 @@ experiments do not define the project identity.
 Near-term hardening:
 
 - Deeper graph integrity checks for process-tree and file-event causality.
+- Realistic zero-SDK acceptance for file modification, file creation, file
+  deletion, child process observation, delayed runtime-event correlation,
+  diff/blame, timeline, evidence manifest, replay, and graph verification.
 
 ## Development
 
 ```sh
 go test ./...
 ./scripts/accept_phase1.sh
+./scripts/accept_zero_sdk_realistic.sh
 ```
 
-The acceptance script is the main machine-checkable gate for Phase 1
-observability and provenance correlation.
+The acceptance scripts are the main machine-checkable gates for Phase 1
+observability and provenance correlation. `accept_phase1.sh` validates the
+cross-layer telemetry path. `accept_zero_sdk_realistic.sh` validates a more
+realistic no-SDK command path with process-tree observation, delayed event
+correlation, file diff/blame, evidence materialization, replay, and graph
+verification.

@@ -30,7 +30,7 @@ ToolCallScope
 | File mutations connect to runtime evidence | `file_write`/`file_open` events create `runtime_event_file`, `runtime_process_file`, `runtime_tool_call_file`, and `runtime_attempt_file`. |
 | Risk can taint branches and block unsafe reuse | Risk events create risk signals, response action records, quarantine attempts, and taint snapshot lineage; the response gate verifies telemetry drain and refuses tainted branches. |
 | Evidence can be replayed/audited | `agentprov graph replay`, `agentprov graph verify`, and materialized provenance objects produce replay and audit manifests. |
-| Zero-SDK capture exists | `agentprov record -- <command>` snapshots a working directory, executes a command, records changed files, emits runtime file events, and makes diff/blame/explain usable without an SDK. |
+| Zero-SDK capture exists | `agentprov record -- <command>` snapshots a working directory, executes a command, records changed files, emits runtime file events, and makes diff/blame/explain usable without an SDK. `scripts/accept_zero_sdk_realistic.sh` covers file modification, creation, deletion, child process observation, delayed child runtime-event correlation without raw `tool_call_id`, evidence materialization, replay, and graph verification. |
 | Old CLI code is removed | The legacy CLI entrypoint is deleted; only `cmd/agentprov/main.go` remains. |
 
 ## Verified Commands
@@ -40,6 +40,7 @@ These commands passed on the current working tree:
 ```sh
 GOTOOLCHAIN=local go test ./...
 ./scripts/accept_phase1.sh
+./scripts/accept_zero_sdk_realistic.sh
 ./scripts/demo_telemetry_jsonl.sh
 git diff --check
 rg "<legacy CLI and project names>" . --glob '!test/**' --glob '!gpt55.md'
