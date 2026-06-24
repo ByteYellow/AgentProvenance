@@ -170,6 +170,7 @@ echo "== assert run evidence manifest"
 "$BIN" --data-dir "$DATA_DIR" graph materialize --run run-phase1-accept >/tmp/agentprov-accept-materialize.txt
 EVIDENCE_MANIFEST_JSON="$("$BIN" --data-dir "$DATA_DIR" evidence manifest --run run-phase1-accept --materialize --json)"
 OBJECTS_JSON="$("$BIN" --data-dir "$DATA_DIR" graph objects --run run-phase1-accept --json)"
+VERIFY_JSON="$("$BIN" --data-dir "$DATA_DIR" graph verify --run run-phase1-accept --json)"
 assert_contains "$EVIDENCE_MANIFEST_JSON" '"schema_version": "agentprovenance.evidence_manifest/v1"'
 assert_contains "$EVIDENCE_MANIFEST_JSON" '"result_set_id": "sha256:'
 assert_contains "$EVIDENCE_MANIFEST_JSON" '"page_hash": "sha256:'
@@ -182,6 +183,8 @@ assert_contains "$EVIDENCE_MANIFEST_JSON" '"risk_count": 3'
 assert_contains "$EVIDENCE_MANIFEST_JSON" '"response_count": 3'
 assert_contains "$EVIDENCE_MANIFEST_JSON" '"graph verify --run run-phase1-accept --json"'
 assert_contains "$OBJECTS_JSON" '"type": "evidence_manifest"'
+assert_contains "$VERIFY_JSON" '"schema_version": "agentprovenance.verify/v1"'
+assert_contains "$VERIFY_JSON" '"status": "ok"'
 
 echo "== assert observability query integrity"
 SUMMARY_JSON="$("$BIN" --data-dir "$DATA_DIR" observe summary --run run-phase1-accept --json)"

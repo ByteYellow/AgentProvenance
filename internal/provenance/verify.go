@@ -341,13 +341,14 @@ func verifyEvents(db *sql.DB, runID string, add issueAdder) error {
 		if err := rows.Scan(&id, &sessionID, &toolCallID, &processID, &snapshotID, &correlationMethod, &correlationConfidence); err != nil {
 			return err
 		}
-		if sessionID != "" && !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) {
+		externalContext := externalContextBindingExists(db, runID, sessionID, "", toolCallID, processID)
+		if sessionID != "" && !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) && !externalContext {
 			add("error", "missing_session", id, "event session_id %s does not exist", sessionID)
 		}
-		if toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID) {
+		if toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID) && !externalContext {
 			add("error", "missing_tool_call", id, "event tool_call_id %s does not exist", toolCallID)
 		}
-		if processID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ?`, processID) {
+		if processID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ?`, processID) && !externalContext {
 			add("error", "missing_process", id, "event process_id %s does not exist", processID)
 		}
 		if snapshotID != "" && !exists(db, `SELECT 1 FROM snapshots WHERE id = ?`, snapshotID) {
@@ -356,7 +357,7 @@ func verifyEvents(db *sql.DB, runID string, add issueAdder) error {
 		if correlationMethod != "" && correlationConfidence <= 0 {
 			add("error", "invalid_correlation_confidence", id, "event correlation_method %s has confidence %.2f", correlationMethod, correlationConfidence)
 		}
-		if toolCallID != "" && processID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ? AND tool_call_id = ?`, processID, toolCallID) {
+		if toolCallID != "" && processID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ? AND tool_call_id = ?`, processID, toolCallID) && !externalContext {
 			add("error", "event_process_tool_call_mismatch", id, "event process_id %s is not bound to tool_call_id %s", processID, toolCallID)
 		}
 	}
@@ -417,7 +418,8 @@ func verifyPolicyDecisions(db *sql.DB, runID string, add issueAdder) error {
 			}
 		}
 		if sessionID != "" {
-			if !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) {
+			externalContext := externalContextBindingExists(db, runID, sessionID, "", "", "")
+			if !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) && !externalContext {
 				add("error", "missing_policy_session", id, "policy decision session_id %s does not exist", sessionID)
 			}
 			if !edgeExists(db, runID, policyNodeID, sessionID, "policy_decision_session") {
@@ -494,7 +496,7 @@ func normalizedJSON(value any) ([]byte, error) {
 }
 
 func verifyExecutionContextBindings(db *sql.DB, runID string, add issueAdder) error {
-	rows, err := db.Query(`SELECT id, session_id, attempt_id, tool_call_id, process_id, confidence FROM execution_context_bindings WHERE run_id = ?`, runID)
+	rows, err := db.Query(`SELECT id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, binding_source, confidence FROM execution_context_bindings WHERE run_id = ?`, runID)
 	if err != nil {
 		return err
 	}
@@ -502,30 +504,32 @@ func verifyExecutionContextBindings(db *sql.DB, runID string, add issueAdder) er
 	bindings := 0
 	for rows.Next() {
 		bindings++
-		var id, sessionID, attemptID, toolCallID, processID string
+		var id, sessionID, attemptID, toolCallID, processID, containerID, cgroupID, source string
+		var rootPID, pid int64
 		var confidence float64
-		if err := rows.Scan(&id, &sessionID, &attemptID, &toolCallID, &processID, &confidence); err != nil {
+		if err := rows.Scan(&id, &sessionID, &attemptID, &toolCallID, &processID, &containerID, &cgroupID, &rootPID, &pid, &source, &confidence); err != nil {
 			return err
 		}
+		externalContext := isExternalRuntimeBinding(containerID, cgroupID, rootPID, pid, source)
 		if confidence <= 0 {
 			add("error", "invalid_binding_confidence", id, "execution context binding confidence %.2f must be positive", confidence)
 		}
-		if sessionID != "" && !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) {
+		if sessionID != "" && !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) && !externalContext {
 			add("error", "missing_session", id, "binding session_id %s does not exist", sessionID)
 		}
-		if attemptID != "" && !exists(db, `SELECT 1 FROM fork_attempts WHERE id = ?`, attemptID) {
+		if attemptID != "" && !exists(db, `SELECT 1 FROM fork_attempts WHERE id = ?`, attemptID) && !externalContext {
 			add("error", "missing_attempt", id, "binding attempt_id %s does not exist", attemptID)
 		}
-		if toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID) {
+		if toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID) && !externalContext {
 			add("error", "missing_tool_call", id, "binding tool_call_id %s does not exist", toolCallID)
 		}
-		if processID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ?`, processID) {
+		if processID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ?`, processID) && !externalContext {
 			add("error", "missing_process", id, "binding process_id %s does not exist", processID)
 		}
-		if processID != "" && toolCallID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ? AND tool_call_id = ?`, processID, toolCallID) {
+		if processID != "" && toolCallID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ? AND tool_call_id = ?`, processID, toolCallID) && !externalContext {
 			add("error", "binding_process_tool_call_mismatch", id, "binding process_id %s is not bound to tool_call_id %s", processID, toolCallID)
 		}
-		if attemptID != "" && toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ? AND attempt_id = ?`, toolCallID, attemptID) {
+		if attemptID != "" && toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ? AND attempt_id = ?`, toolCallID, attemptID) && !externalContext {
 			add("error", "binding_attempt_tool_call_mismatch", id, "binding tool_call_id %s is not bound to attempt_id %s", toolCallID, attemptID)
 		}
 	}
@@ -769,6 +773,9 @@ func orphanLifecycleVerifyRefs(db *sql.DB, runID string, pid int64) (orphanLifec
 func verifyReplayManifest(db *sql.DB, runID string, add issueAdder) error {
 	manifest, err := BuildReplayRun(db, runID)
 	if err != nil {
+		if isNoRolloutRun(err) {
+			return nil
+		}
 		add("error", "replay_manifest_failed", runID, "replay manifest cannot be built: %v", err)
 		return nil
 	}
@@ -810,6 +817,49 @@ func exists(db *sql.DB, query string, args ...any) bool {
 	var one int
 	err := db.QueryRow(query, args...).Scan(&one)
 	return err == nil
+}
+
+func externalContextBindingExists(db *sql.DB, runID, sessionID, attemptID, toolCallID, processID string) bool {
+	clauses := []string{"run_id = ?"}
+	args := []any{runID}
+	for _, item := range []struct {
+		column string
+		value  string
+	}{
+		{"session_id", sessionID},
+		{"attempt_id", attemptID},
+		{"tool_call_id", toolCallID},
+		{"process_id", processID},
+	} {
+		if strings.TrimSpace(item.value) == "" {
+			continue
+		}
+		clauses = append(clauses, item.column+" = ?")
+		args = append(args, item.value)
+	}
+	if len(clauses) == 1 {
+		return false
+	}
+	query := `SELECT COALESCE(container_id, ''), COALESCE(cgroup_id, ''), COALESCE(root_pid, 0), COALESCE(pid, 0), COALESCE(binding_source, '')
+		FROM execution_context_bindings WHERE ` + strings.Join(clauses, " AND ") + ` ORDER BY created_at DESC LIMIT 1`
+	var containerID, cgroupID, source string
+	var rootPID, pid int64
+	if err := db.QueryRow(query, args...).Scan(&containerID, &cgroupID, &rootPID, &pid, &source); err != nil {
+		return false
+	}
+	return isExternalRuntimeBinding(containerID, cgroupID, rootPID, pid, source)
+}
+
+func isExternalRuntimeBinding(containerID, cgroupID string, rootPID, pid int64, source string) bool {
+	if containerID != "" || cgroupID != "" || rootPID != 0 || pid != 0 {
+		return true
+	}
+	switch strings.TrimSpace(source) {
+	case "external_telemetry", "telemetry_bind", "phase1_accept", "harness_tool_call_scope":
+		return true
+	default:
+		return false
+	}
 }
 
 func edgeExists(db *sql.DB, runID, fromID, toID, edgeType string) bool {

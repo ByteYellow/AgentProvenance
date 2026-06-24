@@ -204,6 +204,49 @@ func TestVerifyRejectsPromotedUndrainedEvidence(t *testing.T) {
 	}
 }
 
+func TestVerifyAllowsExternalTelemetryBindings(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(`INSERT INTO execution_context_bindings
+		(id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence, created_at)
+		VALUES ('bind-external', 'run-external', 'session-external', 'attempt-external', 'tool-external', 'process-external', 'container-external', 'cgroup-external', 4242, 4242, ?, '', 'external_telemetry', 0.95, ?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := telemetry.IngestFiltered(db, telemetry.IngestEvent{
+		RunID:       "run-external",
+		RawEventID:  "raw-external-1",
+		ContainerID: "container-external",
+		CgroupID:    "cgroup-external",
+		PID:         4242,
+		TGID:        4242,
+		PPID:        4000,
+		Timestamp:   now,
+		Source:      "filtered_telemetry",
+		EventType:   "execve",
+		Payload:     `{"argv":["python","agent.py"]}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Verify(db, "run-external")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ErrorCount != 0 {
+		t.Fatalf("external telemetry binding should verify cleanly: %+v", result.Issues)
+	}
+}
+
 func TestVerifyRejectsContextDrift(t *testing.T) {
 	root := t.TempDir()
 	paths, err := store.Init(filepath.Join(root, ".agentprov"))

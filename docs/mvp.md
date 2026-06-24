@@ -367,7 +367,9 @@ lists object refs with type, source id, hash, parent hashes, path, size, and
 created time. The object page includes `result_set_id` and `page_hash`, so
 clients can verify paged evidence exports. `graph verify --run <run_id>` checks reference continuity,
 taint/response-gate contradictions, artifact readability, materialized object
-hashes, replay manifest generation, and ToolCallScope correlation drift.
+hashes, replay manifest generation, and ToolCallScope correlation drift. For
+telemetry-only runs, runtime-identity bindings can serve as external context
+anchors when local sandbox session/tool/process tables are intentionally absent.
 Add `--json` to emit the structured `agentprovenance.verify/v1` manifest for
 automation.
 `graph replay --run <run_id>` and `graph replay --attempt <attempt_id>`
