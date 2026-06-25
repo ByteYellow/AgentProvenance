@@ -3,12 +3,14 @@ package forensics
 import (
 	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/evidence"
 	"github.com/byteyellow/agentprovenance/internal/ids"
 	"github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -21,13 +23,14 @@ type Service struct {
 }
 
 type BundleInfo struct {
-	ID        string
-	RunID     string
-	Path      string
-	SHA256    string
-	SizeBytes int64
-	Status    string
-	CreatedAt string
+	SchemaVersion string `json:"schema_version"`
+	ID            string `json:"id"`
+	RunID         string `json:"run_id"`
+	Path          string `json:"path"`
+	SHA256        string `json:"sha256"`
+	SizeBytes     int64  `json:"size_bytes"`
+	Status        string `json:"status"`
+	CreatedAt     string `json:"created_at"`
 }
 
 func (s Service) Export(runID string) (string, error) {
@@ -50,6 +53,22 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 	if err != nil {
 		return BundleInfo{}, err
 	}
+	risks, err := security.ListRiskSignals(s.DB, runID)
+	if err != nil {
+		return BundleInfo{}, err
+	}
+	responses, err := security.ListResponseActions(s.DB, runID)
+	if err != nil {
+		return BundleInfo{}, err
+	}
+	batches, err := telemetry.ListBatches(s.DB, runID)
+	if err != nil {
+		return BundleInfo{}, err
+	}
+	evidenceManifest, err := evidence.BuildManifest(s.DB, evidence.ManifestOptions{RunID: runID})
+	if err != nil {
+		return BundleInfo{}, err
+	}
 	sessions, err := selectRows(s.DB, `SELECT id, lease_id, status, run_id, COALESCE(container_id, '') AS container_id, workspace_host_path, startup_cold_ms, created_at, updated_at
 		FROM sessions WHERE run_id = ? ORDER BY created_at ASC`, runID)
 	if err != nil {
@@ -65,15 +84,38 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 	if err != nil {
 		return BundleInfo{}, err
 	}
+	evidenceEvents, err := selectRows(s.DB, `SELECT id, rollout_id, attempt_id, session_id, tool_call_id, snapshot_id, event_type, priority, status, created_at, COALESCE(processed_at, '') AS processed_at, COALESCE(payload, '') AS payload
+		FROM evidence_events WHERE run_id = ? ORDER BY created_at ASC`, runID)
+	if err != nil {
+		return BundleInfo{}, err
+	}
+	graphEdges, err := selectRows(s.DB, `SELECT id, COALESCE(rollout_id, '') AS rollout_id, from_id, to_id, edge_type, COALESCE(source_event_id, '') AS source_event_id, created_at
+		FROM graph_edges WHERE run_id = ? ORDER BY created_at ASC`, runID)
+	if err != nil {
+		return BundleInfo{}, err
+	}
+	costSamples, err := selectRows(s.DB, `SELECT id, COALESCE(session_id, '') AS session_id, active_cpu_seconds, idle_seconds, wall_seconds, snapshot_bytes, policy_block_count, quarantine_count, node_id, fanout_cost, saved_cost, created_at
+		FROM cost_samples WHERE run_id = ? ORDER BY created_at ASC`, runID)
+	if err != nil {
+		return BundleInfo{}, err
+	}
 
 	bundle := map[string]any{
-		"run_id":           runID,
-		"exported_at":      time.Now().UTC().Format(time.RFC3339Nano),
-		"sessions":         sessions,
-		"processes":        processes,
-		"snapshots":        snapshots,
-		"events":           events,
-		"policy_decisions": decisions,
+		"schema_version":    "agentprovenance.forensics_bundle/v1",
+		"run_id":            runID,
+		"exported_at":       time.Now().UTC().Format(time.RFC3339Nano),
+		"evidence_manifest": evidenceManifest,
+		"sessions":          sessions,
+		"processes":         processes,
+		"snapshots":         snapshots,
+		"events":            events,
+		"telemetry_batches": telemetryBatchSummaries(batches),
+		"policy_decisions":  decisions,
+		"risk_signals":      risks,
+		"response_actions":  responses,
+		"evidence_events":   evidenceEvents,
+		"graph_edges":       graphEdges,
+		"cost_samples":      costSamples,
 	}
 	raw, err := json.MarshalIndent(bundle, "", "  ")
 	if err != nil {
@@ -85,14 +127,35 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 		return BundleInfo{}, err
 	}
 	sum := sha256.Sum256(raw)
-	hash := fmt.Sprintf("%x", sum[:])
+	hash := hex.EncodeToString(sum[:])
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = s.DB.Exec(`INSERT INTO forensics_bundles (id, run_id, path, sha256, size_bytes, status, created_at)
 		VALUES (?, ?, ?, ?, ?, 'ready', ?)`, bundleID, runID, path, hash, len(raw), now)
 	if err != nil {
 		return BundleInfo{}, err
 	}
-	return BundleInfo{ID: bundleID, RunID: runID, Path: path, SHA256: hash, SizeBytes: int64(len(raw)), Status: "ready", CreatedAt: now}, nil
+	return BundleInfo{SchemaVersion: "agentprovenance.forensics_export/v1", ID: bundleID, RunID: runID, Path: path, SHA256: hash, SizeBytes: int64(len(raw)), Status: "ready", CreatedAt: now}, nil
+}
+
+func telemetryBatchSummaries(batches []telemetry.BatchRecord) []map[string]any {
+	out := make([]map[string]any, 0, len(batches))
+	for _, batch := range batches {
+		out = append(out, map[string]any{
+			"id":                batch.ID,
+			"run_id":            batch.RunID,
+			"format":            batch.Format,
+			"path":              batch.Path,
+			"file_sha256":       batch.FileSHA256,
+			"read":              batch.Read,
+			"ingested":          batch.Ingested,
+			"skipped":           batch.Skipped,
+			"failed":            batch.Failed,
+			"event_ids_sha256":  batch.EventIDsSHA256,
+			"created_at":        batch.CreatedAt,
+			"source_query_hint": "telemetry batches --run " + batch.RunID,
+		})
+	}
+	return out
 }
 
 func selectRows(db *sql.DB, query string, args ...any) ([]map[string]any, error) {

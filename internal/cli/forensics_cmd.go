@@ -1,13 +1,16 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
+
 	"github.com/byteyellow/agentprovenance/internal/forensics"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/spf13/cobra"
 )
 
 func forensicsCmd(dataDir *string) *cobra.Command {
+	var jsonOut bool
 	export := &cobra.Command{
 		Use:   "export <run_id>",
 		Short: "export a forensics bundle for a run",
@@ -26,10 +29,16 @@ func forensicsCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(bundle)
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "bundle_id=%s path=%s sha256=%s size_bytes=%d\n", bundle.ID, bundle.Path, bundle.SHA256, bundle.SizeBytes)
 			return nil
 		},
 	}
+	export.Flags().BoolVar(&jsonOut, "json", false, "emit structured forensics export JSON")
 	cmd := &cobra.Command{Use: "forensics", Short: "forensics bundle commands"}
 	cmd.AddCommand(export)
 	return cmd

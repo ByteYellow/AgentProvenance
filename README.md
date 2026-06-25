@@ -382,7 +382,7 @@ These commands are now part of the mainline security evidence surface:
 | `baseline learn/check` | Learn process/file/network/risk/runtime feature vectors and emit deviation records plus baseline-derived risk signals |
 | `compliance frameworks/map/explain/gaps/report` | Map run evidence to OWASP Agentic Security and NIST AI agent security assessment profiles as item-level self-assessment evidence and gap lists |
 | `policy test/decisions` | Evaluate events, persist policy decisions, and feed the risk/response graph |
-| `forensics export` | Export auditable evidence for a run |
+| `forensics export` | Export auditable evidence for a run; `--json` emits `agentprovenance.forensics_export/v1` with bundle path, sha256, size, and status |
 
 ## Compliance Evidence, Not Certification
 
@@ -487,6 +487,7 @@ What these mean:
 | Observability process detail | `observe process --run --process` emits `agentprovenance.observability_process/v1` with process lifecycle, tool_call context, lane, correlation status, runtime events, risk/policy/response evidence, drill-down commands, `result_set_id`, and `page_hash` |
 | Observability flow | `observe flow --run` emits `agentprovenance.observability_flow/v1` with event-to-risk-to-policy-to-response rows, lane, correlation status, drill-down commands, `result_set_id`, and `page_hash` |
 | Evidence manifest | `evidence manifest --run` emits `agentprovenance.evidence_manifest/v1`, a run-level evidence index with observability summary hashes, timeline hashes, object-list hashes, risk/response report hashes, and recommended drill-down queries for UI, audit export, and incident review; `--materialize` stores it as a content-addressed `evidence_manifest` object |
+| Forensics bundle | `forensics export <run_id> --json` emits a hashed `agentprovenance.forensics_bundle/v1` file containing evidence manifest, events, telemetry batches, policy decisions, risk signals, response actions, graph edges, cost samples, sessions, processes, and snapshots |
 | Execution timeline | `timeline --run` emits a human table, `--view causality` emits a lane view, and `--json` emits `agentprovenance.timeline/v1` across tool calls, processes, zero-SDK process observations, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects; JSON includes lane, correlation status, drill-down refs, `result_set_id`, and `page_hash` for query integrity |
 | Runtime causality | native `runtime_*` graph edges for tool call, process, process tree, attempt, snapshot, runtime event, and workspace file correlation |
 | Provenance DAG | `trace`, `refs`, `log`, `materialize`, `objects`, `verify`, text and JSON replay |
@@ -654,6 +655,8 @@ Near-term hardening:
 - Realistic Falco risk acceptance for raw `execve`, metadata-IP, private-CIDR,
   and secret-path rows becoming correlated telemetry, risk signals, response
   actions, graph explanations, evidence manifests, and verified DAG state.
+- Forensics bundle acceptance for risky runtime streams, including bundle
+  sha256 verification and embedded evidence/risk/response/graph-edge checks.
 
 ## Development
 
@@ -662,6 +665,7 @@ go test ./...
 ./scripts/accept_phase1.sh
 ./scripts/accept_zero_sdk_realistic.sh
 ./scripts/accept_falco_risk_realistic.sh
+./scripts/accept_forensics_bundle.sh
 ```
 
 The acceptance scripts are the main machine-checkable gates for Phase 1
@@ -671,4 +675,7 @@ realistic no-SDK command path with process-tree observation, delayed event
 correlation, file diff/blame, evidence materialization, replay, and graph
 verification. `accept_falco_risk_realistic.sh` validates the system-side
 security path from Falco-style runtime rows to risk, response, explain,
-evidence, and graph verification.
+evidence, and graph verification. `accept_forensics_bundle.sh` validates that a
+risky runtime stream can be exported into a hashed forensics bundle with
+embedded evidence manifest, risk/response records, graph edges, and a clean
+`graph verify` result.
