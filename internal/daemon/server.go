@@ -36,6 +36,8 @@ type Server struct {
 	MaxRawSamples    int
 	EvidenceInterval time.Duration
 	EvidenceLimit    int
+	SpoolInterval    time.Duration
+	SpoolLimit       int
 	GCInterval       time.Duration
 	GCLimit          int
 	writeMu          *sync.Mutex
@@ -69,6 +71,8 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/snapshots", s.createSnapshot)
 	mux.HandleFunc("/v1/snapshots/", s.snapshotByID)
 	mux.HandleFunc("POST /v1/telemetry/bind", s.bindTelemetry)
+	mux.HandleFunc("GET /v1/telemetry/spool", s.listTelemetrySpool)
+	mux.HandleFunc("POST /v1/telemetry/spool/process", s.processTelemetrySpool)
 	mux.HandleFunc("POST /v1/telemetry/ingest-falco", s.ingestFalco)
 	mux.HandleFunc("GET /v1/graph/verify", s.graphVerify)
 	mux.HandleFunc("GET /v1/evidence/manifest", s.evidenceManifest)
@@ -82,10 +86,11 @@ func (s Server) control() control.Service {
 
 func (s Server) health(w http.ResponseWriter, r *http.Request) {
 	var lastSample string
-	var queuedEvidence, queuedGC int64
+	var queuedEvidence, queuedGC, queuedSpool int64
 	_ = s.DB.QueryRow(`SELECT COALESCE(MAX(created_at), '') FROM cpu_samples`).Scan(&lastSample)
 	_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM evidence_events WHERE status = 'queued'`).Scan(&queuedEvidence)
 	_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM gc_jobs WHERE status = 'queued'`).Scan(&queuedGC)
+	_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM telemetry_spool_batches WHERE status = 'queued'`).Scan(&queuedSpool)
 	writeJSON(w, map[string]any{
 		"status":               "ok",
 		"runtime":              s.Driver.Name(),
@@ -98,10 +103,13 @@ func (s Server) health(w http.ResponseWriter, r *http.Request) {
 		"background_sampler":   s.SampleInterval > 0,
 		"evidence_interval_ms": s.EvidenceInterval.Milliseconds(),
 		"evidence_limit":       s.EvidenceLimit,
+		"spool_interval_ms":    s.SpoolInterval.Milliseconds(),
+		"spool_limit":          s.SpoolLimit,
 		"gc_interval_ms":       s.GCInterval.Milliseconds(),
 		"gc_limit":             s.GCLimit,
 		"queued_evidence":      queuedEvidence,
 		"queued_gc":            queuedGC,
+		"queued_spool":         queuedSpool,
 	})
 }
 
@@ -153,6 +161,40 @@ func (s Server) StartEvidenceWorker(ctx context.Context) {
 			s.processEvidenceOnce()
 		}
 	}
+}
+
+func (s Server) StartSpoolWorker(ctx context.Context) {
+	if s.SpoolInterval <= 0 {
+		return
+	}
+	ticker := time.NewTicker(s.SpoolInterval)
+	defer ticker.Stop()
+	s.processSpoolOnce()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.processSpoolOnce()
+		}
+	}
+}
+
+func (s Server) processSpoolOnce() {
+	limit := s.SpoolLimit
+	if limit <= 0 {
+		limit = 100
+	}
+	s.lockWrites()
+	defer s.unlockWrites()
+	result, err := (telemetry.SpoolService{DB: s.DB, Paths: s.Paths}).Process(limit)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	payload := fmt.Sprintf(`{"processed":%d,"failed":%d}`, result.Processed, result.Failed)
+	if err != nil {
+		payload = fmt.Sprintf(`{"processed":%d,"failed":%d,"error":%q}`, result.Processed, result.Failed+1, err.Error())
+	}
+	_, _ = s.DB.Exec(`INSERT INTO events (id, source, event_type, payload, created_at)
+		VALUES ('evt-' || lower(hex(randomblob(6))), 'daemon_spool', 'spool_worker', ?, ?)`, payload, now)
 }
 
 func (s Server) processEvidenceOnce() {
@@ -406,8 +448,22 @@ func (s Server) ingestFalco(w http.ResponseWriter, r *http.Request) {
 		File     string `json:"file"`
 		RunID    string `json:"run_id"`
 		NoPolicy bool   `json:"no_policy"`
+		Async    bool   `json:"async"`
+		Queued   bool   `json:"queued"`
 	}
 	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if req.Async || req.Queued {
+		s.lockWrites()
+		defer s.unlockWrites()
+		batch, err := (telemetry.SpoolService{DB: s.DB, Paths: s.Paths}).Enqueue(telemetry.SpoolEnqueueRequest{
+			Format:        "falco",
+			RunID:         req.RunID,
+			SourcePath:    req.File,
+			PolicyEnabled: !req.NoPolicy,
+		})
+		writeResult(w, map[string]any{"spool_batch": batch, "schema_version": "agentprovenance.daemon_falco_spool/v1"}, err)
 		return
 	}
 	s.lockWrites()
@@ -423,6 +479,31 @@ func (s Server) ingestFalco(w http.ResponseWriter, r *http.Request) {
 		evaluateTelemetryPolicy(s.DB, &result)
 	}
 	writeResult(w, map[string]any{"batch": result, "policy_decisions": result.PolicyDecisions, "schema_version": "agentprovenance.daemon_falco_ingest/v1"}, err)
+}
+
+func (s Server) listTelemetrySpool(w http.ResponseWriter, r *http.Request) {
+	items, err := (telemetry.SpoolService{DB: s.DB, Paths: s.Paths}).List(r.URL.Query().Get("run"))
+	writeResult(w, map[string]any{"schema_version": "agentprovenance.telemetry_spool/v1", "batches": items}, err)
+}
+
+func (s Server) processTelemetrySpool(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Limit int `json:"limit"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	limit := req.Limit
+	if limit <= 0 {
+		limit = s.SpoolLimit
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	s.lockWrites()
+	defer s.unlockWrites()
+	result, err := (telemetry.SpoolService{DB: s.DB, Paths: s.Paths}).Process(limit)
+	writeResult(w, map[string]any{"schema_version": "agentprovenance.telemetry_spool_process/v1", "result": result}, err)
 }
 
 func (s Server) graphVerify(w http.ResponseWriter, r *http.Request) {

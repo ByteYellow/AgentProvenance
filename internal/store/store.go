@@ -11,7 +11,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 9
+const SchemaVersion = 10
 
 type Paths struct {
 	Root       string
@@ -23,6 +23,7 @@ type Paths struct {
 	Provenance string
 	Secrets    string
 	Logs       string
+	Spool      string
 }
 
 func ResolvePaths(root string) Paths {
@@ -42,12 +43,13 @@ func ResolvePaths(root string) Paths {
 		Provenance: filepath.Join(root, "provenance"),
 		Secrets:    filepath.Join(root, "secrets"),
 		Logs:       filepath.Join(root, "logs"),
+		Spool:      filepath.Join(root, "spool"),
 	}
 }
 
 func Init(root string) (Paths, error) {
 	paths := ResolvePaths(root)
-	for _, dir := range []string{paths.Root, paths.Workspaces, paths.Snapshots, paths.Templates, paths.Artifacts, paths.Provenance, paths.Secrets, paths.Logs} {
+	for _, dir := range []string{paths.Root, paths.Workspaces, paths.Snapshots, paths.Templates, paths.Artifacts, paths.Provenance, paths.Secrets, paths.Logs, paths.Spool} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return paths, err
 		}
@@ -358,6 +360,26 @@ func EnsureSchema(db *sql.DB) error {
 			event_ids_json TEXT NOT NULL DEFAULT '[]',
 			event_ids_sha256 TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS telemetry_spool_batches (
+			id TEXT PRIMARY KEY,
+			run_id TEXT NOT NULL DEFAULT '',
+			format TEXT NOT NULL,
+			source_path TEXT NOT NULL DEFAULT '',
+			spool_path TEXT NOT NULL,
+			file_sha256 TEXT NOT NULL DEFAULT '',
+			size_bytes INTEGER NOT NULL DEFAULT 0,
+			status TEXT NOT NULL,
+			priority INTEGER NOT NULL DEFAULT 0,
+			attempts INTEGER NOT NULL DEFAULT 0,
+			policy_enabled INTEGER NOT NULL DEFAULT 1,
+			ingest_batch_id TEXT NOT NULL DEFAULT '',
+			ingested_count INTEGER NOT NULL DEFAULT 0,
+			failed_count INTEGER NOT NULL DEFAULT 0,
+			error TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			processed_at TEXT NOT NULL DEFAULT ''
 		);`,
 		`CREATE TABLE IF NOT EXISTS policy_decisions (
 			id TEXT PRIMARY KEY,

@@ -47,6 +47,8 @@ rm -rf "$DATA_DIR" "$DATA_DIR.daemon.log"
 "$BIN" --data-dir "$DATA_DIR" daemon serve \
   --listen "$LISTEN" \
   --sample-interval 0 \
+  --spool-interval 0 \
+  --spool-limit 10 \
   --evidence-interval 0 \
   --gc-interval 0 >"$DATA_DIR.daemon.log" 2>&1 &
 daemon_pid=$!
@@ -78,11 +80,30 @@ assert_contains "$BIND_JSON" '"schema_version":"agentprovenance.daemon_telemetry
 
 echo "== ingest Falco risk stream through daemon API"
 INGEST_JSON="$(post_json /v1/telemetry/ingest-falco '{
-  "file":"examples/telemetry/falco-risk-events.jsonl"
+  "file":"examples/telemetry/falco-risk-events.jsonl",
+  "run_id":"run-daemon-api-accept",
+  "queued":true
 }')"
-assert_contains "$INGEST_JSON" '"schema_version":"agentprovenance.daemon_falco_ingest/v1"'
-assert_contains "$INGEST_JSON" '"policy_decisions":3'
-assert_contains "$INGEST_JSON" '"event_type":"metadata_ip"'
+assert_contains "$INGEST_JSON" '"schema_version":"agentprovenance.daemon_falco_spool/v1"'
+assert_contains "$INGEST_JSON" '"status":"queued"'
+
+echo "== assert control API responds while spool is queued"
+HEALTH_AFTER_ENQUEUE="$(get_json /v1/health)"
+assert_contains "$HEALTH_AFTER_ENQUEUE" '"status":"ok"'
+assert_contains "$HEALTH_AFTER_ENQUEUE" '"queued_spool":1'
+
+SPOOL_JSON="$(get_json '/v1/telemetry/spool?run=run-daemon-api-accept')"
+assert_contains "$SPOOL_JSON" '"schema_version":"agentprovenance.telemetry_spool/v1"'
+assert_contains "$SPOOL_JSON" '"status":"queued"'
+
+echo "== drain telemetry spool explicitly"
+SPOOL_PROCESS_JSON="$(post_json /v1/telemetry/spool/process '{"limit":10}')"
+assert_contains "$SPOOL_PROCESS_JSON" '"schema_version":"agentprovenance.telemetry_spool_process/v1"'
+assert_contains "$SPOOL_PROCESS_JSON" '"processed":1'
+
+SPOOL_JSON="$(get_json '/v1/telemetry/spool?run=run-daemon-api-accept')"
+assert_contains "$SPOOL_JSON" '"status":"processed"'
+assert_contains "$SPOOL_JSON" '"ingested_count":4'
 
 echo "== verify graph through daemon API"
 VERIFY_JSON="$(get_json '/v1/graph/verify?run=run-daemon-api-accept')"

@@ -489,6 +489,7 @@ What these mean:
 | Evidence manifest | `evidence manifest --run` emits `agentprovenance.evidence_manifest/v1`, a run-level evidence index with observability summary hashes, timeline hashes, object-list hashes, risk/response report hashes, and recommended drill-down queries for UI, audit export, and incident review; `--materialize` stores it as a content-addressed `evidence_manifest` object |
 | Forensics bundle | `forensics export <run_id> --json` emits a hashed `agentprovenance.forensics_bundle/v1` file containing evidence manifest, events, telemetry batches, policy decisions, risk signals, response actions, graph edges, cost samples, sessions, processes, and snapshots |
 | Daemon API boundary | `agentprov daemon serve` exposes core evidence-infra APIs for ToolCallScope binding, Falco ingest, graph verification, evidence manifest materialization, and forensics export, so the evidence path can run behind a long-lived control process instead of only a one-shot CLI |
+| Telemetry spool | Daemon Falco ingest supports async enqueue into `telemetry_spool_batches`; a background worker consumes queued batches, applies policy, and `health` exposes `queued_spool` so raw telemetry does not have to block control/query APIs |
 | Execution timeline | `timeline --run` emits a human table, `--view causality` emits a lane view, and `--json` emits `agentprovenance.timeline/v1` across tool calls, processes, zero-SDK process observations, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects; JSON includes lane, correlation status, drill-down refs, `result_set_id`, and `page_hash` for query integrity |
 | Runtime causality | native `runtime_*` graph edges for tool call, process, process tree, attempt, snapshot, runtime event, and workspace file correlation |
 | Provenance DAG | `trace`, `refs`, `log`, `materialize`, `objects`, `verify`, text and JSON replay |
@@ -684,5 +685,6 @@ evidence, and graph verification. `accept_forensics_bundle.sh` validates that a
 risky runtime stream can be exported into a hashed forensics bundle with
 embedded evidence manifest, risk/response records, graph edges, and a clean
 `graph verify` result. `accept_daemon_evidence_api.sh` validates the daemon API
-path for ToolCallScope binding, Falco ingest, graph verify, evidence manifest
+path for ToolCallScope binding, async Falco spool ingest, control API
+responsiveness while a batch is queued, graph verify, evidence manifest
 materialization, and forensics export.

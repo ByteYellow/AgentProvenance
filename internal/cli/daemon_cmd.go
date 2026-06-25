@@ -21,6 +21,8 @@ func daemonCmd(dataDir *string) *cobra.Command {
 	var maxRawSamples int
 	var evidenceInterval time.Duration
 	var evidenceLimit int
+	var spoolInterval time.Duration
+	var spoolLimit int
 	var gcInterval time.Duration
 	var gcLimit int
 	serve := &cobra.Command{
@@ -39,14 +41,17 @@ func daemonCmd(dataDir *string) *cobra.Command {
 			server.MaxRawSamples = maxRawSamples
 			server.EvidenceInterval = evidenceInterval
 			server.EvidenceLimit = evidenceLimit
+			server.SpoolInterval = spoolInterval
+			server.SpoolLimit = spoolLimit
 			server.GCInterval = gcInterval
 			server.GCLimit = gcLimit
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 			go server.StartSampler(ctx)
+			go server.StartSpoolWorker(ctx)
 			go server.StartEvidenceWorker(ctx)
 			go server.StartGCWorker(ctx)
-			fmt.Fprintf(cmd.ErrOrStderr(), "agentprov daemon listening on http://%s sample_interval=%s sample_limit=%d sample_timeout=%s evidence_interval=%s gc_interval=%s\n", listen, sampleInterval, sampleLimit, sampleTimeout, evidenceInterval, gcInterval)
+			fmt.Fprintf(cmd.ErrOrStderr(), "agentprov daemon listening on http://%s sample_interval=%s sample_limit=%d sample_timeout=%s spool_interval=%s evidence_interval=%s gc_interval=%s\n", listen, sampleInterval, sampleLimit, sampleTimeout, spoolInterval, evidenceInterval, gcInterval)
 			httpServer := &http.Server{Addr: listen, Handler: server.Handler()}
 			go func() {
 				<-ctx.Done()
@@ -69,6 +74,8 @@ func daemonCmd(dataDir *string) *cobra.Command {
 	serve.Flags().IntVar(&maxRawSamples, "max-raw-samples", 512, "maximum retained raw cpu samples per session")
 	serve.Flags().DurationVar(&evidenceInterval, "evidence-interval", 2*time.Second, "background evidence materialization interval; set 0 to disable")
 	serve.Flags().IntVar(&evidenceLimit, "evidence-limit", 100, "maximum queued evidence events processed per interval")
+	serve.Flags().DurationVar(&spoolInterval, "spool-interval", 1*time.Second, "background telemetry spool processing interval; set 0 to disable")
+	serve.Flags().IntVar(&spoolLimit, "spool-limit", 100, "maximum queued telemetry spool batches processed per interval")
 	serve.Flags().DurationVar(&gcInterval, "gc-interval", 5*time.Second, "background async GC interval; set 0 to disable")
 	serve.Flags().IntVar(&gcLimit, "gc-limit", 100, "maximum queued GC jobs processed per interval")
 	cmd := &cobra.Command{Use: "daemon", Short: "local daemon/API server commands"}
