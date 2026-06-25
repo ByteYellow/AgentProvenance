@@ -25,7 +25,7 @@ ToolCallScope
 | ToolCallID is not required inside raw runtime/security events | Acceptance script injects raw runtime payloads without `tool_call_id`; correlation attaches `run_id/session_id/tool_call_id` from bindings. |
 | Delayed or asynchronous child process telemetry remains attributable | Runtime events with PID/PPID/TGID are linked into `runtime_process_parent`, `runtime_process_child_of`, `runtime_process_thread`, and process/tool-call event edges. |
 | Runtime causality is a graph invariant, not only display output | `graph verify` now checks runtime event/process/file edges and fails on missing causality edges. Covered by `internal/provenance/verify_test.go`. |
-| Runtime telemetry can be correlated into the graph | `scripts/demo_telemetry_jsonl.sh` binds ToolCallScope context, ingests Falco/Tetragon/LoongCollector-style events without `tool_call_id`, and explains the resulting graph. |
+| Runtime telemetry can be correlated into the graph | `scripts/demo_telemetry_jsonl.sh` binds ToolCallScope context, ingests Falco/Tetragon/LoongCollector-style events without `tool_call_id`, and explains the resulting graph. `scripts/accept_falco_risk_realistic.sh` covers a Falco-style stream where raw rows become correlated telemetry, policy decisions, risk signals, response actions, graph explanations, evidence manifests, and verified DAG state. |
 | State diff and blame are queryable | `agentprov graph diff`, `agentprov graph blame`, and `agentprov graph explain --file` show changed file state and attribution. JSON schemas are covered by provenance tests. |
 | File mutations connect to runtime evidence | `file_write`/`file_open` events create `runtime_event_file`, `runtime_process_file`, `runtime_tool_call_file`, and `runtime_attempt_file`. |
 | Risk can taint branches and block unsafe reuse | Risk events create risk signals, response action records, quarantine attempts, and taint snapshot lineage; the response gate verifies telemetry drain and refuses tainted branches. |
@@ -41,6 +41,7 @@ These commands passed on the current working tree:
 GOTOOLCHAIN=local go test ./...
 ./scripts/accept_phase1.sh
 ./scripts/accept_zero_sdk_realistic.sh
+./scripts/accept_falco_risk_realistic.sh
 ./scripts/demo_telemetry_jsonl.sh
 git diff --check
 rg "<legacy CLI and project names>" . --glob '!test/**' --glob '!gpt55.md'

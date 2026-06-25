@@ -651,6 +651,9 @@ Near-term hardening:
 - Realistic zero-SDK acceptance for file modification, file creation, file
   deletion, child process observation, delayed runtime-event correlation,
   diff/blame, timeline, evidence manifest, replay, and graph verification.
+- Realistic Falco risk acceptance for raw `execve`, metadata-IP, private-CIDR,
+  and secret-path rows becoming correlated telemetry, risk signals, response
+  actions, graph explanations, evidence manifests, and verified DAG state.
 
 ## Development
 
@@ -658,6 +661,7 @@ Near-term hardening:
 go test ./...
 ./scripts/accept_phase1.sh
 ./scripts/accept_zero_sdk_realistic.sh
+./scripts/accept_falco_risk_realistic.sh
 ```
 
 The acceptance scripts are the main machine-checkable gates for Phase 1
@@ -665,4 +669,6 @@ observability and provenance correlation. `accept_phase1.sh` validates the
 cross-layer telemetry path. `accept_zero_sdk_realistic.sh` validates a more
 realistic no-SDK command path with process-tree observation, delayed event
 correlation, file diff/blame, evidence materialization, replay, and graph
-verification.
+verification. `accept_falco_risk_realistic.sh` validates the system-side
+security path from Falco-style runtime rows to risk, response, explain,
+evidence, and graph verification.
