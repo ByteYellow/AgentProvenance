@@ -16,6 +16,8 @@ import (
 func telemetryCmd(dataDir *string) *cobra.Command {
 	var runID, sessionID, eventType, toolCallID string
 	var listJSON bool
+	var listLimit int
+	var listCursor string
 	var batchesRunID string
 	var batchesJSON bool
 	var correlationsRunID string
@@ -34,11 +36,16 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			events, err := telemetry.ListEventsFiltered(db, telemetry.Filter{
+			filter := telemetry.Filter{
 				RunID:      runID,
 				SessionID:  sessionID,
 				Type:       eventType,
 				ToolCallID: toolCallID,
+			}
+			result, err := telemetry.ListEventsPage(db, telemetry.ListOptions{
+				Filter: filter,
+				Limit:  listLimit,
+				Cursor: listCursor,
 			})
 			if err != nil {
 				return err
@@ -46,22 +53,15 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 			if listJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
-				return enc.Encode(map[string]any{
-					"schema_version": "agentprovenance.telemetry_events/v1",
-					"filter": map[string]string{
-						"run_id":       runID,
-						"session_id":   sessionID,
-						"type":         eventType,
-						"tool_call_id": toolCallID,
-					},
-					"event_count": len(events),
-					"events":      events,
-				})
+				return enc.Encode(result)
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "ID\tRUN\tSESSION\tTOOL_CALL\tPROCESS\tSNAPSHOT\tCORRELATION\tCONFIDENCE\tSOURCE\tTYPE\tCREATED_AT")
-			for _, event := range events {
+			for _, event := range result.Events {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%.2f\t%s\t%s\t%s\n", event.ID, event.RunID, event.SessionID, event.ToolCallID, event.ProcessID, event.SnapshotID, event.CorrelationMethod, event.CorrelationConfidence, event.Source, event.EventType, event.CreatedAt)
+			}
+			if result.NextCursor != "" {
+				fmt.Fprintf(w, "next_cursor=%s\n", result.NextCursor)
 			}
 			return w.Flush()
 		},
@@ -70,6 +70,8 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 	list.Flags().StringVar(&sessionID, "session", "", "filter by session id")
 	list.Flags().StringVar(&eventType, "type", "", "filter by event type")
 	list.Flags().StringVar(&toolCallID, "tool-call", "", "filter by tool call id")
+	list.Flags().IntVar(&listLimit, "limit", 100, "maximum telemetry events to return")
+	list.Flags().StringVar(&listCursor, "cursor", "", "pagination cursor from previous telemetry list output")
 	list.Flags().BoolVar(&listJSON, "json", false, "emit structured telemetry event JSON")
 	cmd := &cobra.Command{Use: "telemetry", Short: "telemetry inspection commands"}
 	cmd.AddCommand(list)

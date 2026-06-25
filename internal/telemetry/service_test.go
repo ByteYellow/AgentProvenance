@@ -254,3 +254,69 @@ func TestIngestFilteredRejectsInvalidEventSchema(t *testing.T) {
 		t.Fatalf("expected file_write schema rejection, got %v", err)
 	}
 }
+
+func TestListEventsPageUsesOpaqueCursor(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	for i := 0; i < 5; i++ {
+		if _, err := IngestFiltered(db, IngestEvent{
+			RunID:     "run-page",
+			EventType: "execve",
+			Source:    "native_runtime",
+			Payload:   `{"argv":["echo","page"]}`,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	page1, err := ListEventsPage(db, ListOptions{Filter: Filter{RunID: "run-page"}, Limit: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page1.SchemaVersion != "agentprovenance.telemetry_events/v1" || page1.EventCount != 2 || page1.TotalCount != 5 || !page1.HasMore || page1.NextCursor == "" {
+		t.Fatalf("unexpected page1: %+v", page1)
+	}
+	if strings.Contains(page1.NextCursor, "|") || strings.Contains(page1.NextCursor, "evt-") {
+		t.Fatalf("cursor should be opaque: %q", page1.NextCursor)
+	}
+	if page1.ResultSetID == "" || page1.PageHash == "" {
+		t.Fatalf("missing integrity fields: %+v", page1)
+	}
+
+	page2, err := ListEventsPage(db, ListOptions{Filter: Filter{RunID: "run-page"}, Limit: 2, Cursor: page1.NextCursor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page2.EventCount != 2 || page2.Cursor != page1.NextCursor {
+		t.Fatalf("unexpected page2: %+v", page2)
+	}
+	if page2.Events[0].ID == page1.Events[0].ID || page2.Events[0].ID == page1.Events[1].ID {
+		t.Fatalf("page2 repeated page1 event: page1=%+v page2=%+v", page1.Events, page2.Events)
+	}
+	if page2.ResultSetID != page1.ResultSetID {
+		t.Fatalf("paged result_set_id changed: page1=%s page2=%s", page1.ResultSetID, page2.ResultSetID)
+	}
+	if page2.PageHash == "" || page2.PageHash == page1.PageHash {
+		t.Fatalf("page hash should be present and page-specific: page1=%s page2=%s", page1.PageHash, page2.PageHash)
+	}
+
+	all, err := ListEventsFiltered(db, Filter{RunID: "run-page"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 5 {
+		t.Fatalf("legacy list returned %d events, want 5", len(all))
+	}
+	if _, err := ListEventsPage(db, ListOptions{Filter: Filter{RunID: "run-page"}, Limit: 2, Cursor: "2"}); err == nil {
+		t.Fatalf("old-style cursor should be rejected")
+	}
+}

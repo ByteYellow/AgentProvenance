@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -74,6 +75,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/snapshots", s.createSnapshot)
 	mux.HandleFunc("/v1/snapshots/", s.snapshotByID)
 	mux.HandleFunc("POST /v1/telemetry/bind", s.bindTelemetry)
+	mux.HandleFunc("GET /v1/telemetry/events", s.listTelemetryEvents)
 	mux.HandleFunc("GET /v1/telemetry/spool", s.listTelemetrySpool)
 	mux.HandleFunc("POST /v1/telemetry/spool/process", s.processTelemetrySpool)
 	mux.HandleFunc("POST /v1/telemetry/ingest-falco", s.ingestFalco)
@@ -493,6 +495,25 @@ func (s Server) listTelemetrySpool(w http.ResponseWriter, r *http.Request) {
 	writeResult(w, map[string]any{"schema_version": "agentprovenance.telemetry_spool/v1", "batches": items}, err)
 }
 
+func (s Server) listTelemetryEvents(w http.ResponseWriter, r *http.Request) {
+	limit, err := intQuery(r, "limit", 100)
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	result, err := telemetry.ListEventsPage(s.DB, telemetry.ListOptions{
+		Filter: telemetry.Filter{
+			RunID:      r.URL.Query().Get("run"),
+			SessionID:  r.URL.Query().Get("session"),
+			Type:       r.URL.Query().Get("type"),
+			ToolCallID: r.URL.Query().Get("tool_call"),
+		},
+		Limit:  limit,
+		Cursor: r.URL.Query().Get("cursor"),
+	})
+	writeResult(w, result, err)
+}
+
 func (s Server) processTelemetrySpool(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Limit int `json:"limit"`
@@ -632,6 +653,18 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, out any) bool {
 		return false
 	}
 	return true
+}
+
+func intQuery(r *http.Request, key string, fallback int) (int, error) {
+	raw := strings.TrimSpace(r.URL.Query().Get(key))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s query parameter", key)
+	}
+	return value, nil
 }
 
 func writeResult(w http.ResponseWriter, data any, err error) {

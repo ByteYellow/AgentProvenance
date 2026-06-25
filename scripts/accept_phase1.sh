@@ -62,8 +62,21 @@ assert_contains "$TELEMETRY_OUTPUT" "tool-phase1-accept"
 TELEMETRY_JSON="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept --json)"
 assert_contains "$TELEMETRY_JSON" '"schema_version": "agentprovenance.telemetry_events/v1"'
 assert_contains "$TELEMETRY_JSON" '"event_count": 3'
+assert_contains "$TELEMETRY_JSON" '"result_set_id": "sha256:'
+assert_contains "$TELEMETRY_JSON" '"page_hash": "sha256:'
 assert_contains "$TELEMETRY_JSON" '"tool_call_id": "tool-phase1-accept"'
 assert_contains "$TELEMETRY_JSON" '"correlation_method": "pid_time_window:pid+time"'
+TELEMETRY_PAGE1="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept --limit 2 --json)"
+assert_contains "$TELEMETRY_PAGE1" '"event_count": 2'
+assert_contains "$TELEMETRY_PAGE1" '"has_more": true'
+NEXT_CURSOR="$(python3 - <<'PY' "$TELEMETRY_PAGE1"
+import json, sys
+print(json.loads(sys.argv[1])["next_cursor"])
+PY
+)"
+TELEMETRY_PAGE2="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept --limit 2 --cursor "$NEXT_CURSOR" --json)"
+assert_contains "$TELEMETRY_PAGE2" '"cursor": "'"$NEXT_CURSOR"'"'
+assert_contains "$TELEMETRY_PAGE2" '"result_set_id": "'
 CORRELATIONS_JSON="$("$BIN" --data-dir "$DATA_DIR" telemetry correlations --run run-phase1-accept --json)"
 assert_contains "$CORRELATIONS_JSON" '"schema_version": "agentprovenance.telemetry_correlations/v1"'
 assert_contains "$CORRELATIONS_JSON" '"result_set_id": "sha256:'

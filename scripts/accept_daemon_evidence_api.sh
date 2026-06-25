@@ -105,6 +105,15 @@ SPOOL_JSON="$(get_json '/v1/telemetry/spool?run=run-daemon-api-accept')"
 assert_contains "$SPOOL_JSON" '"status":"processed"'
 assert_contains "$SPOOL_JSON" '"ingested_count":4'
 
+echo "== query paged telemetry events through daemon API"
+EVENTS_PAGE1="$(get_json '/v1/telemetry/events?run=run-daemon-api-accept&limit=2')"
+assert_contains "$EVENTS_PAGE1" '"schema_version":"agentprovenance.telemetry_events/v1"'
+assert_contains "$EVENTS_PAGE1" '"event_count":2'
+assert_contains "$EVENTS_PAGE1" '"has_more":true'
+assert_contains "$EVENTS_PAGE1" '"next_cursor":"'
+assert_contains "$EVENTS_PAGE1" '"result_set_id":"sha256:'
+assert_contains "$EVENTS_PAGE1" '"page_hash":"sha256:'
+
 echo "== verify graph through daemon API"
 VERIFY_JSON="$(get_json '/v1/graph/verify?run=run-daemon-api-accept')"
 assert_contains "$VERIFY_JSON" '"schema_version":"agentprovenance.verify/v1"'

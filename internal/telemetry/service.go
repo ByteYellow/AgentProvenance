@@ -1,7 +1,9 @@
 package telemetry
 
 import (
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -73,6 +75,26 @@ type Filter struct {
 	ToolCallID string
 }
 
+type ListOptions struct {
+	Filter Filter
+	Limit  int
+	Cursor string
+}
+
+type ListResult struct {
+	SchemaVersion string        `json:"schema_version"`
+	Filter        Filter        `json:"filter"`
+	Limit         int           `json:"limit"`
+	Cursor        string        `json:"cursor,omitempty"`
+	NextCursor    string        `json:"next_cursor,omitempty"`
+	HasMore       bool          `json:"has_more"`
+	EventCount    int           `json:"event_count"`
+	TotalCount    int           `json:"total_count"`
+	ResultSetID   string        `json:"result_set_id"`
+	PageHash      string        `json:"page_hash"`
+	Events        []EventRecord `json:"events"`
+}
+
 func ListEvents(db *sql.DB, runID, sessionID string) ([]EventRecord, error) {
 	return ListEventsFiltered(db, Filter{RunID: runID, SessionID: sessionID})
 }
@@ -103,6 +125,26 @@ func ListBatches(db *sql.DB, runID string) ([]BatchRecord, error) {
 }
 
 func ListEventsFiltered(db *sql.DB, filter Filter) ([]EventRecord, error) {
+	result, err := ListEventsPage(db, ListOptions{Filter: filter, Limit: -1})
+	if err != nil {
+		return nil, err
+	}
+	return result.Events, nil
+}
+
+func ListEventsPage(db *sql.DB, opts ListOptions) (ListResult, error) {
+	limit := opts.Limit
+	unbounded := limit < 0
+	if limit == 0 {
+		limit = 100
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	cursorCreatedAt, cursorID, err := parseEventCursor(opts.Cursor)
+	if err != nil {
+		return ListResult{}, err
+	}
 	query := `SELECT id, COALESCE(run_id, ''), COALESCE(session_id, ''), COALESCE(tool_call_id, ''),
 		COALESCE(process_id, ''), COALESCE(snapshot_id, ''), COALESCE(raw_event_id, ''),
 		COALESCE(correlation_method, ''), COALESCE(correlation_confidence, 0),
@@ -111,44 +153,160 @@ func ListEventsFiltered(db *sql.DB, filter Filter) ([]EventRecord, error) {
 		source, event_type, payload, created_at
 		FROM events`
 	args := []any{}
-	clauses := []string{}
-	if filter.RunID != "" {
-		clauses = append(clauses, "run_id = ?")
-		args = append(args, filter.RunID)
-	}
-	if filter.SessionID != "" {
-		clauses = append(clauses, "session_id = ?")
-		args = append(args, filter.SessionID)
-	}
-	if filter.Type != "" {
-		clauses = append(clauses, "event_type = ?")
-		args = append(args, filter.Type)
-	}
-	if filter.ToolCallID != "" {
-		clauses = append(clauses, "tool_call_id = ?")
-		args = append(args, filter.ToolCallID)
+	clauses := eventFilterClauses(opts.Filter, &args)
+	if opts.Cursor != "" {
+		clauses = append(clauses, "(created_at > ? OR (created_at = ? AND id > ?))")
+		args = append(args, cursorCreatedAt, cursorCreatedAt, cursorID)
 	}
 	if len(clauses) > 0 {
-		query += " WHERE " + clauses[0]
-		for i := 1; i < len(clauses); i++ {
-			query += " AND " + clauses[i]
-		}
+		query += " WHERE " + strings.Join(clauses, " AND ")
 	}
-	query += " ORDER BY created_at ASC"
+	query += " ORDER BY created_at ASC, id ASC"
+	if !unbounded {
+		query += " LIMIT ?"
+		args = append(args, limit+1)
+	}
 	rows, err := db.Query(query, args...)
 	if err != nil {
-		return nil, err
+		return ListResult{}, err
 	}
 	defer rows.Close()
 	var events []EventRecord
 	for rows.Next() {
 		var event EventRecord
 		if err := rows.Scan(&event.ID, &event.RunID, &event.SessionID, &event.ToolCallID, &event.ProcessID, &event.SnapshotID, &event.RawEventID, &event.CorrelationMethod, &event.CorrelationConfidence, &event.ContainerID, &event.CgroupID, &event.PID, &event.TGID, &event.PPID, &event.Source, &event.EventType, &event.Payload, &event.CreatedAt); err != nil {
-			return nil, err
+			return ListResult{}, err
 		}
 		events = append(events, event)
 	}
-	return events, rows.Err()
+	if err := rows.Err(); err != nil {
+		return ListResult{}, err
+	}
+	hasMore := !unbounded && len(events) > limit
+	if hasMore {
+		events = events[:limit]
+	}
+	nextCursor := ""
+	if hasMore && len(events) > 0 {
+		last := events[len(events)-1]
+		nextCursor = formatEventCursor(last.CreatedAt, last.ID)
+	}
+	total, err := countEvents(db, opts.Filter)
+	if err != nil {
+		return ListResult{}, err
+	}
+	resultSetID, pageHash, err := eventListIntegrity(opts.Filter, total, events, limit, opts.Cursor)
+	if err != nil {
+		return ListResult{}, err
+	}
+	return ListResult{
+		SchemaVersion: "agentprovenance.telemetry_events/v1",
+		Filter:        opts.Filter,
+		Limit:         limit,
+		Cursor:        opts.Cursor,
+		NextCursor:    nextCursor,
+		HasMore:       hasMore,
+		EventCount:    len(events),
+		TotalCount:    total,
+		ResultSetID:   resultSetID,
+		PageHash:      pageHash,
+		Events:        events,
+	}, nil
+}
+
+func eventFilterClauses(filter Filter, args *[]any) []string {
+	clauses := []string{}
+	if filter.RunID != "" {
+		clauses = append(clauses, "run_id = ?")
+		*args = append(*args, filter.RunID)
+	}
+	if filter.SessionID != "" {
+		clauses = append(clauses, "session_id = ?")
+		*args = append(*args, filter.SessionID)
+	}
+	if filter.Type != "" {
+		clauses = append(clauses, "event_type = ?")
+		*args = append(*args, filter.Type)
+	}
+	if filter.ToolCallID != "" {
+		clauses = append(clauses, "tool_call_id = ?")
+		*args = append(*args, filter.ToolCallID)
+	}
+	return clauses
+}
+
+func countEvents(db *sql.DB, filter Filter) (int, error) {
+	query := `SELECT COALESCE(COUNT(*), 0) FROM events`
+	args := []any{}
+	clauses := eventFilterClauses(filter, &args)
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
+	}
+	var total int
+	err := db.QueryRow(query, args...).Scan(&total)
+	return total, err
+}
+
+func formatEventCursor(createdAt, id string) string {
+	raw, _ := json.Marshal(map[string]any{"v": 1, "created_at": createdAt, "id": id})
+	return base64.RawURLEncoding.EncodeToString(raw)
+}
+
+func parseEventCursor(cursor string) (string, string, error) {
+	cursor = strings.TrimSpace(cursor)
+	if cursor == "" {
+		return "", "", nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return "", "", fmt.Errorf("invalid telemetry cursor")
+	}
+	var payload struct {
+		Version   int    `json:"v"`
+		CreatedAt string `json:"created_at"`
+		ID        string `json:"id"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return "", "", fmt.Errorf("invalid telemetry cursor")
+	}
+	if payload.Version != 1 || payload.CreatedAt == "" || payload.ID == "" {
+		return "", "", fmt.Errorf("invalid telemetry cursor")
+	}
+	return payload.CreatedAt, payload.ID, nil
+}
+
+func eventListIntegrity(filter Filter, total int, events []EventRecord, limit int, cursor string) (string, string, error) {
+	resultPayload := map[string]any{
+		"kind":        "telemetry_events_result_set",
+		"filter":      filter,
+		"total_count": total,
+	}
+	resultRaw, err := json.Marshal(resultPayload)
+	if err != nil {
+		return "", "", err
+	}
+	resultSum := sha256.Sum256(resultRaw)
+	pagePayload := map[string]any{
+		"kind":          "telemetry_events_page",
+		"result_set_id": fmt.Sprintf("sha256:%x", resultSum[:]),
+		"limit":         limit,
+		"cursor":        cursor,
+		"event_ids":     eventIDs(events),
+	}
+	pageRaw, err := json.Marshal(pagePayload)
+	if err != nil {
+		return "", "", err
+	}
+	pageSum := sha256.Sum256(pageRaw)
+	return fmt.Sprintf("sha256:%x", resultSum[:]), fmt.Sprintf("sha256:%x", pageSum[:]), nil
+}
+
+func eventIDs(events []EventRecord) []string {
+	ids := make([]string, 0, len(events))
+	for _, event := range events {
+		ids = append(ids, event.ID)
+	}
+	return ids
 }
 
 func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
