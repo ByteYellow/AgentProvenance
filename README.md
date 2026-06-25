@@ -354,6 +354,8 @@ causal graph.
 ./agentprov security responses --run <run_id> --json
 ./agentprov baseline learn --template <template_name> --run <run_id>
 ./agentprov baseline check --template <template_name> --run <run_id>
+./agentprov signal run --run <run_id>
+./agentprov signal run --run <run_id> --json
 ./agentprov compliance frameworks
 ./agentprov compliance map --framework owasp-asi --run <run_id>
 ./agentprov compliance explain --framework owasp-asi --run <run_id> --item ASI05
@@ -381,6 +383,7 @@ These commands are now part of the mainline security evidence surface:
 | `security deviations` | List `BaselineDeviation` records from behavior feature checks; `--json` emits schema/hash metadata and drill-down refs to timeline and summary views |
 | `security responses` | List recorded `ResponseAction` records such as audit, deny, kill, quarantine, taint, export, or notification hooks; `--json` emits schema/hash metadata and drill-down refs back to risk/process/explain views |
 | `baseline learn/check` | Learn process/file/network/risk/runtime feature vectors and emit deviation records plus baseline-derived risk signals |
+| `signal run` | Run code-based evaluator functions over trajectory/provenance evidence and emit `EvalSignal` records for reward shaping, dataset filtering, quality scoring, or external benchmark consumers |
 | `compliance frameworks/map/explain/gaps/report` | Map run evidence to OWASP Agentic Security and NIST AI agent security assessment profiles as item-level self-assessment evidence and gap lists |
 | `policy test/decisions` | Evaluate events, persist policy decisions, and feed the risk/response graph |
 | `forensics export` | Export auditable evidence for a run; `--json` emits `agentprovenance.forensics_export/v1` with bundle path, sha256, size, and status |
@@ -500,6 +503,7 @@ What these mean:
 | Artifact lineage | exported attempt artifacts linked to attempt/tool_call/process |
 | Security evidence | first-class `RiskSignal`, `BaselineDeviation`, and `ResponseAction` records, graph objects, and query commands |
 | Behavior baseline | `baseline learn/check` extracts process, file, network, suspicious runtime, policy block, outlived-process, and resource features; anomalous checks persist deviation records and baseline-derived risk signals |
+| Code Signal Engine | `signal run --run --json` emits `agentprovenance.eval_signals/v1` from registered code evaluators over trajectory evidence, file deltas, artifacts, risk status, and replay gates. It is separate from YAML-style policy decisions: policy controls runtime risk/response, signals feed evaluator/RL/dataset consumers |
 | Compliance evidence | `compliance frameworks/map/explain/gaps/report` maps run evidence to OWASP Agentic Security and NIST AI agent security profiles with covered/partial/missing/not_applicable item status and evidence gap reports |
 | Risk / taint | policy decisions, policy-decision graph edges, quarantine, taint, taint descendant checks |
 | Response gate | eligibility checks with telemetry/evidence drain watermark for tainted or unsafe branches |
@@ -648,7 +652,7 @@ experiments do not define the project identity.
 | Phase 3 | Zero-SDK Recorder Hardening | process-tree capture, delayed child process handling, cwd/time/file-diff inference, orphan lifecycle evidence, low-intrusion record mode |
 | Phase 4 | Real Telemetry Integration | Falco/Tetragon/LoongCollector/auditd/eBPF receivers, cgroup/container/pid correlation, kernel-side filtering assumptions |
 | Phase 5 | Risk / Policy / Control | configurable risk signals, behavior baselines, compliance evidence mapping, response adapters, taint propagation, quarantine, response blocking, forensics export, Feishu/DingTalk/webhook hooks, isolation escalation hooks |
-| Phase 6 | Scale / UI / Productization | async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency ingest/query tests, usable UI/API |
+| Phase 6 | Scale / UI / Productization | code signal engine for evaluator/RL/dataset consumers, async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency ingest/query tests, usable UI/API |
 
 Near-term hardening:
 
@@ -675,6 +679,7 @@ go test ./...
 ./scripts/accept_forensics_bundle.sh
 ./scripts/accept_daemon_evidence_api.sh
 ./scripts/accept_telemetry_spool_backpressure.sh
+./scripts/accept_signal_engine.sh
 ```
 
 The acceptance scripts are the main machine-checkable gates for Phase 1

@@ -35,6 +35,7 @@ ToolCallScope
 | Daemon API boundary exists | `agentprov daemon serve` exposes HTTP endpoints for ToolCallScope binding, paged telemetry event query, Falco ingest/spool, graph verification, evidence manifest materialization, and forensics export. `scripts/accept_daemon_evidence_api.sh` verifies the same risk/evidence path through daemon APIs. |
 | Data-plane ingest has a spool/backpressure boundary | Daemon Falco ingest can enqueue into `telemetry_spool_batches`; a background worker processes queued batches and `health` reports `queued_spool` / `spool_max_queued` / `spool_drop_policy`. `--spool-drop-policy=reject` returns structured HTTP 429 rejects when the queue is full; `drop_oldest` records bounded data loss with `drop_reason`. `scripts/accept_daemon_evidence_api.sh` asserts control API responsiveness while a telemetry batch is queued, and `scripts/accept_telemetry_spool_backpressure.sh` verifies queue-full rejection without breaking health queries. |
 | Raw telemetry retention is conservative | `telemetry prune` and daemon `POST /v1/telemetry/retention/prune` delete old unreferenced raw telemetry only. Events referenced by telemetry batches, policy decisions, risk signals, or graph edges are protected so `graph verify` and forensics evidence chains remain intact. |
+| Code-based evaluator signals exist | `signal run --run --json` emits `agentprovenance.eval_signals/v1` from registered code evaluators over trajectory evidence, file changes, artifact presence, risk status, and replay gates. `scripts/accept_signal_engine.sh` verifies evaluator output for reward/dataset/quality consumers. |
 | Old CLI code is removed | The legacy CLI entrypoint is deleted; only `cmd/agentprov/main.go` remains. |
 
 ## Verified Commands
@@ -49,6 +50,7 @@ GOTOOLCHAIN=local go test ./...
 ./scripts/accept_forensics_bundle.sh
 ./scripts/accept_daemon_evidence_api.sh
 ./scripts/accept_telemetry_spool_backpressure.sh
+./scripts/accept_signal_engine.sh
 ./scripts/demo_telemetry_jsonl.sh
 git diff --check
 rg "<legacy CLI and project names>" . --glob '!test/**' --glob '!gpt55.md'
