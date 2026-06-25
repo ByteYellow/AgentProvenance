@@ -11,7 +11,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 10
+const SchemaVersion = 11
 
 type Paths struct {
 	Root       string
@@ -379,7 +379,9 @@ func EnsureSchema(db *sql.DB) error {
 			error TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
-			processed_at TEXT NOT NULL DEFAULT ''
+			processed_at TEXT NOT NULL DEFAULT '',
+			dropped_at TEXT NOT NULL DEFAULT '',
+			drop_reason TEXT NOT NULL DEFAULT ''
 		);`,
 		`CREATE TABLE IF NOT EXISTS policy_decisions (
 			id TEXT PRIMARY KEY,
@@ -710,6 +712,8 @@ func EnsureSchema(db *sql.DB) error {
 		`ALTER TABLE warm_pool_items ADD COLUMN disk_bytes INTEGER NOT NULL DEFAULT 0;`,
 		`ALTER TABLE warm_pool_items ADD COLUMN eviction_reason TEXT NOT NULL DEFAULT '';`,
 		`ALTER TABLE baseline_profiles ADD COLUMN payload TEXT NOT NULL DEFAULT '{}';`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN dropped_at TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN drop_reason TEXT NOT NULL DEFAULT '';`,
 	}
 	for _, stmt := range alterStmts {
 		if _, err := db.Exec(stmt); err != nil && !isDuplicateColumn(err) {

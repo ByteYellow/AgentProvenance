@@ -25,6 +25,15 @@ type SpoolEnqueueRequest struct {
 	RunID         string
 	SourcePath    string
 	PolicyEnabled bool
+	MaxQueued     int
+	DropPolicy    string
+}
+
+type SpoolListOptions struct {
+	RunID  string
+	Status string
+	Limit  int
+	Cursor string
 }
 
 type SpoolBatch struct {
@@ -46,6 +55,8 @@ type SpoolBatch struct {
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
 	ProcessedAt   string `json:"processed_at"`
+	DroppedAt     string `json:"dropped_at"`
+	DropReason    string `json:"drop_reason"`
 }
 
 type SpoolProcessResult struct {
@@ -54,9 +65,33 @@ type SpoolProcessResult struct {
 	Errors    []string `json:"errors,omitempty"`
 }
 
+type SpoolPruneResult struct {
+	Deleted int      `json:"deleted"`
+	Errors  []string `json:"errors,omitempty"`
+}
+
+type SpoolListResult struct {
+	Batches    []SpoolBatch `json:"batches"`
+	NextCursor string       `json:"next_cursor,omitempty"`
+	Limit      int          `json:"limit"`
+}
+
+type SpoolBackpressureError struct {
+	Queued    int    `json:"queued"`
+	MaxQueued int    `json:"max_queued"`
+	Reason    string `json:"reason"`
+}
+
+func (e SpoolBackpressureError) Error() string {
+	return fmt.Sprintf("telemetry spool backpressure: queued=%d max_queued=%d reason=%s", e.Queued, e.MaxQueued, e.Reason)
+}
+
 func (s SpoolService) Enqueue(req SpoolEnqueueRequest) (SpoolBatch, error) {
 	if s.DB == nil {
 		return SpoolBatch{}, fmt.Errorf("database is required")
+	}
+	if err := s.applyBackpressure(req.MaxQueued, req.DropPolicy); err != nil {
+		return SpoolBatch{}, err
 	}
 	if req.Format == "" {
 		req.Format = "falco"
@@ -119,6 +154,58 @@ func (s SpoolService) Enqueue(req SpoolEnqueueRequest) (SpoolBatch, error) {
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}, nil
+}
+
+func (s SpoolService) CountQueued() (int, error) {
+	var queued int
+	err := s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM telemetry_spool_batches WHERE status = 'queued'`).Scan(&queued)
+	return queued, err
+}
+
+func (s SpoolService) applyBackpressure(maxQueued int, dropPolicy string) error {
+	if maxQueued <= 0 {
+		return nil
+	}
+	queued, err := s.CountQueued()
+	if err != nil {
+		return err
+	}
+	if queued < maxQueued {
+		return nil
+	}
+	if dropPolicy == "" {
+		dropPolicy = "reject"
+	}
+	switch dropPolicy {
+	case "reject":
+		return SpoolBackpressureError{Queued: queued, MaxQueued: maxQueued, Reason: "telemetry_spool_queue_full"}
+	case "drop_oldest":
+		return s.dropOldestQueued("queue_limit")
+	default:
+		return fmt.Errorf("unsupported telemetry spool drop_policy %q", dropPolicy)
+	}
+}
+
+func (s SpoolService) dropOldestQueued(reason string) error {
+	var id, spoolPath string
+	err := s.DB.QueryRow(`SELECT id, spool_path FROM telemetry_spool_batches
+		WHERE status = 'queued' ORDER BY priority ASC, created_at ASC LIMIT 1`).Scan(&id, &spoolPath)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.DB.Exec(`UPDATE telemetry_spool_batches
+		SET status = 'dropped', drop_reason = ?, dropped_at = ?, updated_at = ?
+		WHERE id = ? AND status = 'queued'`, reason, now, now, id); err != nil {
+		return err
+	}
+	if spoolPath != "" {
+		_ = os.Remove(spoolPath)
+	}
+	return nil
 }
 
 func (s SpoolService) Process(limit int) (SpoolProcessResult, error) {
@@ -216,7 +303,7 @@ func evaluateSpoolPolicy(db *sql.DB, result *JSONLIngestResult) {
 
 func (s SpoolService) List(runID string) ([]SpoolBatch, error) {
 	query := `SELECT id, run_id, format, source_path, spool_path, file_sha256, size_bytes, status, priority, attempts, policy_enabled,
-		ingest_batch_id, ingested_count, failed_count, error, created_at, updated_at, processed_at FROM telemetry_spool_batches`
+		ingest_batch_id, ingested_count, failed_count, error, created_at, updated_at, processed_at, dropped_at, drop_reason FROM telemetry_spool_batches`
 	args := []any{}
 	if runID != "" {
 		query += ` WHERE run_id = ?`
@@ -232,7 +319,7 @@ func (s SpoolService) List(runID string) ([]SpoolBatch, error) {
 	for rows.Next() {
 		var item SpoolBatch
 		var policyEnabled int
-		if err := rows.Scan(&item.ID, &item.RunID, &item.Format, &item.SourcePath, &item.SpoolPath, &item.FileSHA256, &item.SizeBytes, &item.Status, &item.Priority, &item.Attempts, &policyEnabled, &item.IngestBatchID, &item.IngestedCount, &item.FailedCount, &item.Error, &item.CreatedAt, &item.UpdatedAt, &item.ProcessedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.RunID, &item.Format, &item.SourcePath, &item.SpoolPath, &item.FileSHA256, &item.SizeBytes, &item.Status, &item.Priority, &item.Attempts, &policyEnabled, &item.IngestBatchID, &item.IngestedCount, &item.FailedCount, &item.Error, &item.CreatedAt, &item.UpdatedAt, &item.ProcessedAt, &item.DroppedAt, &item.DropReason); err != nil {
 			return nil, err
 		}
 		item.PolicyEnabled = policyEnabled != 0

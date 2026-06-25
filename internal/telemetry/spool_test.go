@@ -91,3 +91,104 @@ func TestSpoolEnqueueAndProcessFalcoBatch(t *testing.T) {
 		t.Fatalf("unexpected spool row after process: %+v", queued)
 	}
 }
+
+func TestSpoolEnqueueRejectsWhenQueueIsFull(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	source := filepath.Join(root, "falco.jsonl")
+	if err := os.WriteFile(source, []byte(`{"rule":"noop"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	service := SpoolService{DB: db, Paths: paths}
+	first, err := service.Enqueue(SpoolEnqueueRequest{Format: "falco", RunID: "run-backpressure", SourcePath: source, MaxQueued: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Status != "queued" {
+		t.Fatalf("first status = %q, want queued", first.Status)
+	}
+	_, err = service.Enqueue(SpoolEnqueueRequest{Format: "falco", RunID: "run-backpressure", SourcePath: source, MaxQueued: 1})
+	if err == nil {
+		t.Fatal("expected backpressure error")
+	}
+	backpressure, ok := err.(SpoolBackpressureError)
+	if !ok {
+		t.Fatalf("error = %T %[1]v, want SpoolBackpressureError", err)
+	}
+	if backpressure.Queued != 1 || backpressure.MaxQueued != 1 || backpressure.Reason != "telemetry_spool_queue_full" {
+		t.Fatalf("unexpected backpressure detail: %+v", backpressure)
+	}
+	items, err := service.List("run-backpressure")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("queued rows = %d, want 1", len(items))
+	}
+}
+
+func TestSpoolEnqueueDropOldestPolicy(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	source := filepath.Join(root, "falco.jsonl")
+	if err := os.WriteFile(source, []byte(`{"rule":"noop"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	service := SpoolService{DB: db, Paths: paths}
+	first, err := service.Enqueue(SpoolEnqueueRequest{Format: "falco", RunID: "run-drop-oldest", SourcePath: source, MaxQueued: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := service.Enqueue(SpoolEnqueueRequest{Format: "falco", RunID: "run-drop-oldest", SourcePath: source, MaxQueued: 1, DropPolicy: "drop_oldest"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ID == first.ID {
+		t.Fatalf("expected a new spool batch after dropping oldest")
+	}
+	if _, err := os.Stat(first.SpoolPath); !os.IsNotExist(err) {
+		t.Fatalf("first spool file should be removed, stat err=%v", err)
+	}
+	items, err := service.List("run-drop-oldest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("spool rows = %d, want 2", len(items))
+	}
+	var dropped, queued int
+	for _, item := range items {
+		switch item.Status {
+		case "dropped":
+			dropped++
+			if item.DropReason != "queue_limit" || item.DroppedAt == "" {
+				t.Fatalf("unexpected dropped row: %+v", item)
+			}
+		case "queued":
+			queued++
+		}
+	}
+	if dropped != 1 || queued != 1 {
+		t.Fatalf("dropped=%d queued=%d, want 1/1; rows=%+v", dropped, queued, items)
+	}
+}

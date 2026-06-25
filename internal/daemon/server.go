@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -38,6 +39,8 @@ type Server struct {
 	EvidenceLimit    int
 	SpoolInterval    time.Duration
 	SpoolLimit       int
+	SpoolMaxQueued   int
+	SpoolDropPolicy  string
 	GCInterval       time.Duration
 	GCLimit          int
 	writeMu          *sync.Mutex
@@ -105,6 +108,8 @@ func (s Server) health(w http.ResponseWriter, r *http.Request) {
 		"evidence_limit":       s.EvidenceLimit,
 		"spool_interval_ms":    s.SpoolInterval.Milliseconds(),
 		"spool_limit":          s.SpoolLimit,
+		"spool_max_queued":     s.SpoolMaxQueued,
+		"spool_drop_policy":    s.SpoolDropPolicy,
 		"gc_interval_ms":       s.GCInterval.Milliseconds(),
 		"gc_limit":             s.GCLimit,
 		"queued_evidence":      queuedEvidence,
@@ -462,8 +467,10 @@ func (s Server) ingestFalco(w http.ResponseWriter, r *http.Request) {
 			RunID:         req.RunID,
 			SourcePath:    req.File,
 			PolicyEnabled: !req.NoPolicy,
+			MaxQueued:     s.SpoolMaxQueued,
+			DropPolicy:    s.SpoolDropPolicy,
 		})
-		writeResult(w, map[string]any{"spool_batch": batch, "schema_version": "agentprovenance.daemon_falco_spool/v1"}, err)
+		writeSpoolEnqueueResult(w, batch, err)
 		return
 	}
 	s.lockWrites()
@@ -634,6 +641,26 @@ func writeResult(w http.ResponseWriter, data any, err error) {
 		return
 	}
 	writeJSON(w, data)
+}
+
+func writeSpoolEnqueueResult(w http.ResponseWriter, batch telemetry.SpoolBatch, err error) {
+	if err != nil {
+		var backpressure telemetry.SpoolBackpressureError
+		if errors.As(err, &backpressure) {
+			w.WriteHeader(http.StatusTooManyRequests)
+			writeJSON(w, map[string]any{
+				"schema_version": "agentprovenance.daemon_falco_spool/v1",
+				"error":          backpressure.Reason,
+				"queued":         backpressure.Queued,
+				"max_queued":     backpressure.MaxQueued,
+				"reject_reason":  backpressure.Reason,
+			})
+			return
+		}
+		writeResult(w, nil, err)
+		return
+	}
+	writeJSON(w, map[string]any{"spool_batch": batch, "schema_version": "agentprovenance.daemon_falco_spool/v1"})
 }
 
 func writeJSON(w http.ResponseWriter, data any) {

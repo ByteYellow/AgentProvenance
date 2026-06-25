@@ -23,6 +23,8 @@ func daemonCmd(dataDir *string) *cobra.Command {
 	var evidenceLimit int
 	var spoolInterval time.Duration
 	var spoolLimit int
+	var spoolMaxQueued int
+	var spoolDropPolicy string
 	var gcInterval time.Duration
 	var gcLimit int
 	serve := &cobra.Command{
@@ -43,6 +45,8 @@ func daemonCmd(dataDir *string) *cobra.Command {
 			server.EvidenceLimit = evidenceLimit
 			server.SpoolInterval = spoolInterval
 			server.SpoolLimit = spoolLimit
+			server.SpoolMaxQueued = spoolMaxQueued
+			server.SpoolDropPolicy = spoolDropPolicy
 			server.GCInterval = gcInterval
 			server.GCLimit = gcLimit
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -76,6 +80,8 @@ func daemonCmd(dataDir *string) *cobra.Command {
 	serve.Flags().IntVar(&evidenceLimit, "evidence-limit", 100, "maximum queued evidence events processed per interval")
 	serve.Flags().DurationVar(&spoolInterval, "spool-interval", 1*time.Second, "background telemetry spool processing interval; set 0 to disable")
 	serve.Flags().IntVar(&spoolLimit, "spool-limit", 100, "maximum queued telemetry spool batches processed per interval")
+	serve.Flags().IntVar(&spoolMaxQueued, "spool-max-queued", 1000, "maximum queued telemetry spool batches accepted before backpressure rejects new ingest")
+	serve.Flags().StringVar(&spoolDropPolicy, "spool-drop-policy", "reject", "telemetry spool queue-full behavior: reject or drop_oldest")
 	serve.Flags().DurationVar(&gcInterval, "gc-interval", 5*time.Second, "background async GC interval; set 0 to disable")
 	serve.Flags().IntVar(&gcLimit, "gc-limit", 100, "maximum queued GC jobs processed per interval")
 	cmd := &cobra.Command{Use: "daemon", Short: "local daemon/API server commands"}
