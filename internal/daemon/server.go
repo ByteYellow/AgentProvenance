@@ -78,6 +78,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/telemetry/events", s.listTelemetryEvents)
 	mux.HandleFunc("GET /v1/telemetry/spool", s.listTelemetrySpool)
 	mux.HandleFunc("POST /v1/telemetry/spool/process", s.processTelemetrySpool)
+	mux.HandleFunc("POST /v1/telemetry/retention/prune", s.pruneTelemetryRetention)
 	mux.HandleFunc("POST /v1/telemetry/ingest-falco", s.ingestFalco)
 	mux.HandleFunc("GET /v1/graph/verify", s.graphVerify)
 	mux.HandleFunc("GET /v1/evidence/manifest", s.evidenceManifest)
@@ -532,6 +533,22 @@ func (s Server) processTelemetrySpool(w http.ResponseWriter, r *http.Request) {
 	defer s.unlockWrites()
 	result, err := (telemetry.SpoolService{DB: s.DB, Paths: s.Paths}).Process(limit)
 	writeResult(w, map[string]any{"schema_version": "agentprovenance.telemetry_spool_process/v1", "result": result}, err)
+}
+
+func (s Server) pruneTelemetryRetention(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RunID            string `json:"run_id"`
+		OlderThanSeconds int64  `json:"older_than_seconds"`
+		MaxDelete        int    `json:"max_delete"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	olderThan := time.Duration(req.OlderThanSeconds) * time.Second
+	s.lockWrites()
+	defer s.unlockWrites()
+	result, err := telemetry.PruneRawEvents(s.DB, telemetry.RetentionOptions{RunID: req.RunID, OlderThan: olderThan, MaxDelete: req.MaxDelete})
+	writeResult(w, result, err)
 }
 
 func (s Server) graphVerify(w http.ResponseWriter, r *http.Request) {

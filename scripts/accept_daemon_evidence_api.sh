@@ -114,6 +114,18 @@ assert_contains "$EVENTS_PAGE1" '"next_cursor":"'
 assert_contains "$EVENTS_PAGE1" '"result_set_id":"sha256:'
 assert_contains "$EVENTS_PAGE1" '"page_hash":"sha256:'
 
+echo "== prune old unreferenced raw telemetry through daemon API"
+sqlite3 "$DATA_DIR/agentprov.db" "INSERT INTO events (id, run_id, source, event_type, payload, created_at) VALUES ('evt-daemon-retention-old', 'run-daemon-api-accept', 'filtered_telemetry', 'execve', '{\"argv\":[\"true\"]}', '2000-01-01T00:00:00.000000000Z')"
+RETENTION_JSON="$(post_json /v1/telemetry/retention/prune '{"run_id":"run-daemon-api-accept","older_than_seconds":3600,"max_delete":10}')"
+assert_contains "$RETENTION_JSON" '"schema_version":"agentprovenance.telemetry_retention/v1"'
+assert_contains "$RETENTION_JSON" '"deleted":1'
+assert_contains "$RETENTION_JSON" '"evt-daemon-retention-old"'
+RETAINED_COUNT="$(sqlite3 "$DATA_DIR/agentprov.db" "SELECT COUNT(*) FROM events WHERE id = 'evt-daemon-retention-old'")"
+if [[ "$RETAINED_COUNT" != "0" ]]; then
+  echo "retention did not delete old unreferenced event" >&2
+  exit 1
+fi
+
 echo "== verify graph through daemon API"
 VERIFY_JSON="$(get_json '/v1/graph/verify?run=run-daemon-api-accept')"
 assert_contains "$VERIFY_JSON" '"schema_version":"agentprovenance.verify/v1"'

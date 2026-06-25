@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -80,6 +82,7 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(telemetryIngestCmd(dataDir))
 	cmd.AddCommand(telemetryIngestJSONLCmd(dataDir))
 	cmd.AddCommand(telemetryIngestFalcoCmd(dataDir))
+	cmd.AddCommand(telemetryPruneCmd(dataDir))
 	correlations := &cobra.Command{
 		Use:   "correlations",
 		Short: "explain how runtime telemetry events map to ToolCallScope bindings",
@@ -159,6 +162,45 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 	batches.Flags().BoolVar(&batchesJSON, "json", false, "emit JSON batch manifest list")
 	cmd.AddCommand(batches)
 	return cmd
+}
+
+func telemetryPruneCmd(dataDir *string) *cobra.Command {
+	var runID string
+	var olderThan time.Duration
+	var maxDelete int
+	var jsonOut bool
+	prune := &cobra.Command{
+		Use:   "prune",
+		Short: "prune old unreferenced raw telemetry events",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			paths, err := store.Init(*dataDir)
+			if err != nil {
+				return err
+			}
+			db, err := store.Open(paths)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			result, err := telemetry.PruneRawEvents(db, telemetry.RetentionOptions{RunID: runID, OlderThan: olderThan, MaxDelete: maxDelete})
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(result)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "schema=%s run=%s cutoff=%s scanned=%d deleted=%d protected=%d max_delete=%d\n",
+				result.SchemaVersion, result.RunID, result.Cutoff, result.Scanned, result.Deleted, result.Protected, result.MaxDelete)
+			return nil
+		},
+	}
+	prune.Flags().StringVar(&runID, "run", "", "filter by run id")
+	prune.Flags().DurationVar(&olderThan, "older-than", 10*time.Minute, "delete unreferenced telemetry events older than this duration")
+	prune.Flags().IntVar(&maxDelete, "max-delete", 1000, "maximum events to delete in one prune run")
+	prune.Flags().BoolVar(&jsonOut, "json", false, "emit structured telemetry retention JSON")
+	return prune
 }
 
 func telemetryIngestFalcoCmd(dataDir *string) *cobra.Command {
