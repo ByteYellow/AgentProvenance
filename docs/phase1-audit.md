@@ -31,6 +31,7 @@ ToolCallScope
 | Risk can taint branches and block unsafe reuse | Risk events create risk signals, response action records, quarantine attempts, and taint snapshot lineage; the response gate verifies telemetry drain and refuses tainted branches. |
 | Evidence can be replayed/audited | `agentprov graph replay`, `agentprov graph verify`, materialized provenance objects, and `forensics export --json` produce replay, audit, and hashed forensics manifests. `scripts/accept_forensics_bundle.sh` verifies bundle sha256 plus embedded evidence/risk/response/graph-edge content. |
 | Zero-SDK capture exists | `agentprov record -- <command>` snapshots a working directory, executes a command, records changed files, emits runtime file events, and makes diff/blame/explain usable without an SDK. `scripts/accept_zero_sdk_realistic.sh` covers file modification, creation, deletion, child process observation, delayed child runtime-event correlation without raw `tool_call_id`, evidence materialization, replay, and graph verification. |
+| Daemon API boundary exists | `agentprov daemon serve` exposes HTTP endpoints for ToolCallScope binding, Falco ingest, graph verification, evidence manifest materialization, and forensics export. `scripts/accept_daemon_evidence_api.sh` verifies the same risk/evidence path through daemon APIs. |
 | Old CLI code is removed | The legacy CLI entrypoint is deleted; only `cmd/agentprov/main.go` remains. |
 
 ## Verified Commands
@@ -43,6 +44,7 @@ GOTOOLCHAIN=local go test ./...
 ./scripts/accept_zero_sdk_realistic.sh
 ./scripts/accept_falco_risk_realistic.sh
 ./scripts/accept_forensics_bundle.sh
+./scripts/accept_daemon_evidence_api.sh
 ./scripts/demo_telemetry_jsonl.sh
 git diff --check
 rg "<legacy CLI and project names>" . --glob '!test/**' --glob '!gpt55.md'

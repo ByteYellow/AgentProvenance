@@ -25,7 +25,7 @@ func daemonCmd(dataDir *string) *cobra.Command {
 	var gcLimit int
 	serve := &cobra.Command{
 		Use:   "serve",
-		Short: "run the local Agent Computer daemon/API server",
+		Short: "run the local AgentProvenance daemon/API server",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			server, closeFn, err := daemon.NewServer(*dataDir)
 			if err != nil {
@@ -47,7 +47,18 @@ func daemonCmd(dataDir *string) *cobra.Command {
 			go server.StartEvidenceWorker(ctx)
 			go server.StartGCWorker(ctx)
 			fmt.Fprintf(cmd.ErrOrStderr(), "agentprov daemon listening on http://%s sample_interval=%s sample_limit=%d sample_timeout=%s evidence_interval=%s gc_interval=%s\n", listen, sampleInterval, sampleLimit, sampleTimeout, evidenceInterval, gcInterval)
-			return http.ListenAndServe(listen, server.Handler())
+			httpServer := &http.Server{Addr: listen, Handler: server.Handler()}
+			go func() {
+				<-ctx.Done()
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = httpServer.Shutdown(shutdownCtx)
+			}()
+			err = httpServer.ListenAndServe()
+			if err == http.ErrServerClosed {
+				return nil
+			}
+			return err
 		},
 	}
 	serve.Flags().StringVar(&listen, "listen", "127.0.0.1:8574", "daemon listen address")

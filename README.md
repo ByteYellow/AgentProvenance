@@ -488,6 +488,7 @@ What these mean:
 | Observability flow | `observe flow --run` emits `agentprovenance.observability_flow/v1` with event-to-risk-to-policy-to-response rows, lane, correlation status, drill-down commands, `result_set_id`, and `page_hash` |
 | Evidence manifest | `evidence manifest --run` emits `agentprovenance.evidence_manifest/v1`, a run-level evidence index with observability summary hashes, timeline hashes, object-list hashes, risk/response report hashes, and recommended drill-down queries for UI, audit export, and incident review; `--materialize` stores it as a content-addressed `evidence_manifest` object |
 | Forensics bundle | `forensics export <run_id> --json` emits a hashed `agentprovenance.forensics_bundle/v1` file containing evidence manifest, events, telemetry batches, policy decisions, risk signals, response actions, graph edges, cost samples, sessions, processes, and snapshots |
+| Daemon API boundary | `agentprov daemon serve` exposes core evidence-infra APIs for ToolCallScope binding, Falco ingest, graph verification, evidence manifest materialization, and forensics export, so the evidence path can run behind a long-lived control process instead of only a one-shot CLI |
 | Execution timeline | `timeline --run` emits a human table, `--view causality` emits a lane view, and `--json` emits `agentprovenance.timeline/v1` across tool calls, processes, zero-SDK process observations, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects; JSON includes lane, correlation status, drill-down refs, `result_set_id`, and `page_hash` for query integrity |
 | Runtime causality | native `runtime_*` graph edges for tool call, process, process tree, attempt, snapshot, runtime event, and workspace file correlation |
 | Provenance DAG | `trace`, `refs`, `log`, `materialize`, `objects`, `verify`, text and JSON replay |
@@ -657,6 +658,9 @@ Near-term hardening:
   actions, graph explanations, evidence manifests, and verified DAG state.
 - Forensics bundle acceptance for risky runtime streams, including bundle
   sha256 verification and embedded evidence/risk/response/graph-edge checks.
+- Daemon evidence API acceptance for the same risk path through HTTP endpoints,
+  proving the first control/query boundary without making the CLI own every
+  lifecycle.
 
 ## Development
 
@@ -666,6 +670,7 @@ go test ./...
 ./scripts/accept_zero_sdk_realistic.sh
 ./scripts/accept_falco_risk_realistic.sh
 ./scripts/accept_forensics_bundle.sh
+./scripts/accept_daemon_evidence_api.sh
 ```
 
 The acceptance scripts are the main machine-checkable gates for Phase 1
@@ -678,4 +683,6 @@ security path from Falco-style runtime rows to risk, response, explain,
 evidence, and graph verification. `accept_forensics_bundle.sh` validates that a
 risky runtime stream can be exported into a hashed forensics bundle with
 embedded evidence manifest, risk/response records, graph edges, and a clean
-`graph verify` result.
+`graph verify` result. `accept_daemon_evidence_api.sh` validates the daemon API
+path for ToolCallScope binding, Falco ingest, graph verify, evidence manifest
+materialization, and forensics export.

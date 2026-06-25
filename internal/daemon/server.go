@@ -6,17 +6,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/control"
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/evidence"
 	"github.com/byteyellow/agentprovenance/internal/experimental/economics"
 	"github.com/byteyellow/agentprovenance/internal/experimental/scheduler"
+	"github.com/byteyellow/agentprovenance/internal/forensics"
+	"github.com/byteyellow/agentprovenance/internal/provenance"
+	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	runtimeplane "github.com/byteyellow/agentprovenance/internal/substrate/runtime"
 	"github.com/byteyellow/agentprovenance/internal/substrate/state"
+	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
 type Server struct {
@@ -62,6 +68,11 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/sessions/", s.sessionByID)
 	mux.HandleFunc("POST /v1/snapshots", s.createSnapshot)
 	mux.HandleFunc("/v1/snapshots/", s.snapshotByID)
+	mux.HandleFunc("POST /v1/telemetry/bind", s.bindTelemetry)
+	mux.HandleFunc("POST /v1/telemetry/ingest-falco", s.ingestFalco)
+	mux.HandleFunc("GET /v1/graph/verify", s.graphVerify)
+	mux.HandleFunc("GET /v1/evidence/manifest", s.evidenceManifest)
+	mux.HandleFunc("POST /v1/forensics/export", s.forensicsExport)
 	return mux
 }
 
@@ -349,6 +360,157 @@ func (s Server) snapshotByID(w http.ResponseWriter, r *http.Request) {
 	defer s.unlockWrites()
 	id, err := s.control().ResumeSnapshot(parts[0], req.LeaseID)
 	writeResult(w, map[string]any{"session_id": id}, err)
+}
+
+func (s Server) bindTelemetry(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RunID         string  `json:"run_id"`
+		SessionID     string  `json:"session_id"`
+		AttemptID     string  `json:"attempt_id"`
+		ToolCallID    string  `json:"tool_call_id"`
+		ProcessID     string  `json:"process_id"`
+		ContainerID   string  `json:"container_id"`
+		CgroupID      string  `json:"cgroup_id"`
+		RootPID       int64   `json:"root_pid"`
+		PID           int64   `json:"pid"`
+		StartedAt     string  `json:"started_at"`
+		EndedAt       string  `json:"ended_at"`
+		BindingSource string  `json:"binding_source"`
+		Confidence    float64 `json:"confidence"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	s.lockWrites()
+	defer s.unlockWrites()
+	id, err := correlation.RecordBinding(s.DB, correlation.Binding{
+		RunID:         req.RunID,
+		SessionID:     req.SessionID,
+		AttemptID:     req.AttemptID,
+		ToolCallID:    req.ToolCallID,
+		ProcessID:     req.ProcessID,
+		ContainerID:   req.ContainerID,
+		CgroupID:      req.CgroupID,
+		RootPID:       req.RootPID,
+		PID:           req.PID,
+		StartedAt:     req.StartedAt,
+		EndedAt:       req.EndedAt,
+		BindingSource: req.BindingSource,
+		Confidence:    req.Confidence,
+	})
+	writeResult(w, map[string]any{"binding_id": id, "schema_version": "agentprovenance.daemon_telemetry_binding/v1"}, err)
+}
+
+func (s Server) ingestFalco(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		File     string `json:"file"`
+		RunID    string `json:"run_id"`
+		NoPolicy bool   `json:"no_policy"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	s.lockWrites()
+	defer s.unlockWrites()
+	file, err := os.Open(req.File)
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	defer file.Close()
+	result, err := telemetry.IngestFalco(s.DB, telemetry.FalcoIngestOptions{Path: req.File, RunID: req.RunID}, file)
+	if err == nil && !req.NoPolicy {
+		evaluateTelemetryPolicy(s.DB, &result)
+	}
+	writeResult(w, map[string]any{"batch": result, "policy_decisions": result.PolicyDecisions, "schema_version": "agentprovenance.daemon_falco_ingest/v1"}, err)
+}
+
+func (s Server) graphVerify(w http.ResponseWriter, r *http.Request) {
+	runID := r.URL.Query().Get("run")
+	result, err := provenance.Verify(s.DB, runID)
+	writeResult(w, result, err)
+}
+
+func (s Server) evidenceManifest(w http.ResponseWriter, r *http.Request) {
+	runID := r.URL.Query().Get("run")
+	materialize := r.URL.Query().Get("materialize") == "1" || r.URL.Query().Get("materialize") == "true"
+	objectLimit := 25
+	if materialize {
+		s.lockWrites()
+		defer s.unlockWrites()
+	}
+	result, err := buildEvidenceManifest(s.DB, s.Paths, runID, objectLimit, materialize)
+	writeResult(w, result, err)
+}
+
+func (s Server) forensicsExport(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RunID string `json:"run_id"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	s.lockWrites()
+	defer s.unlockWrites()
+	bundle, err := (forensics.Service{DB: s.DB, Paths: s.Paths}).ExportBundle(req.RunID)
+	writeResult(w, bundle, err)
+}
+
+func evaluateTelemetryPolicy(db *sql.DB, result *telemetry.JSONLIngestResult) {
+	if result == nil {
+		return
+	}
+	for _, eventID := range result.EventIDs {
+		record, persisted, err := securitymodel.EvaluateRuntimeEvent(db, eventID)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("event %s: policy failed: %v", eventID, err))
+			result.Failed++
+			continue
+		}
+		if persisted {
+			result.PolicyDecisions++
+			result.PolicyDecisionIDs = append(result.PolicyDecisionIDs, record.ID)
+		}
+	}
+}
+
+func buildEvidenceManifest(db *sql.DB, paths store.Paths, runID string, objectLimit int, materialize bool) (evidence.MaterializedManifest, error) {
+	report, err := evidence.BuildManifest(db, evidence.ManifestOptions{RunID: runID, ObjectLimit: objectLimit})
+	if err != nil {
+		return evidence.MaterializedManifest{}, err
+	}
+	output := evidence.MaterializedManifest{Manifest: report}
+	if !materialize {
+		return output, nil
+	}
+	parentHashes := make([]string, 0, len(report.Objects.TopRefs))
+	for _, ref := range report.Objects.TopRefs {
+		if ref.Hash != "" {
+			parentHashes = append(parentHashes, ref.Hash)
+		}
+	}
+	result, err := (provenance.ObjectStore{DB: db, Paths: paths}).PutExternalObject(provenance.ExternalObjectInput{
+		Type:     "evidence_manifest",
+		SourceID: runID,
+		RunID:    runID,
+		Parents:  parentHashes,
+		Refs: map[string]any{
+			"run_id":                  runID,
+			"schema_version":          report.SchemaVersion,
+			"summary_result_set_id":   report.Summary.ResultSetID,
+			"timeline_result_set_id":  report.Timeline.ResultSetID,
+			"objects_result_set_id":   report.Objects.ResultSetID,
+			"risks_result_set_id":     report.Security.RisksResultSetID,
+			"responses_result_set_id": report.Security.ResponsesResultSetID,
+		},
+		Payload: map[string]any{"manifest": report},
+	})
+	if err != nil {
+		return evidence.MaterializedManifest{}, err
+	}
+	output.ObjectHash = result.Hash
+	output.ObjectPath = result.Path
+	return output, nil
 }
 
 func (s Server) lockWrites() {
