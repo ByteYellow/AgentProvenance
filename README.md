@@ -598,16 +598,43 @@ Run:
 
 ```mermaid
 flowchart TD
-    AgentAdapter["Agent Adapter\nSDK / tool router / zero-SDK record"] --> Observability["Observability Core\nExecution context + evidence ingest"]
-    SandboxAdapter["Sandbox Adapter\nDocker now; OpenSandbox/gVisor/Firecracker/Kata later"] --> Observability
-    TelemetryAdapter["Telemetry Adapter\nwrapper now; Falco/Tetragon/LoongCollector/eBPF later"] --> Observability
-    SnapshotAdapter["Snapshot Adapter\ndirectory now; COW/disk/memory later"] --> Observability
-    ArtifactAdapter["Artifact Adapter\nlocal files now; object stores later"] --> Observability
+    Agent["Agent / Harness / Benchmark / Red-team / RL Pipeline"] --> CLI["agentprov CLI"]
+    Agent --> SDK["Optional SDK / Tool Router"]
+    Agent --> Recorder["Zero-SDK Recorder\nagentprov record -- <cmd>"]
 
-    Observability --> Causality["Runtime Causality Graph\nprocess / file / event correlation"]
-    Causality --> Provenance["Git-like Provenance DAG\nrefs / objects / diff / blame"]
-    Provenance --> Query["Evidence Query Surface\ntimeline / trace / explain / verify / objects"]
-    Query --> RiskReplayAudit["Risk / Replay / Audit\ntaint / response gate / manifests"]
+    CLI --> Boundary
+    SDK --> Boundary
+    Recorder --> Boundary
+    RuntimeTelemetry["Runtime Telemetry\nFalco / Tetragon / auditd / future eBPF"] --> Boundary
+    SandboxIdentity["Sandbox Identity\ncontainer / cgroup / pid / cwd / time"] --> Boundary
+    AppContext["Application Context\nrun / session / attempt / tool_call"] --> Boundary
+    ExternalSignals["External Evaluator Signals\nreward_feature / penalty / label / quality"] --> Boundary
+
+    subgraph Boundary["API / Ingest Boundary"]
+        Daemon["Daemon API\ncontrol + query"]
+        Validation["Validation / Normalization\nschema / identity / redaction"]
+        Spool["Spool / Backpressure / Retention"]
+    end
+
+    Daemon --> Validation
+    Validation --> Spool
+    Spool --> Core
+
+    subgraph Core["Observability + Provenance Core"]
+        Correlation["ToolCallScope Correlation\npid / cgroup / container / time window"]
+        Timeline["Execution Timeline\napplication context + runtime events"]
+        Causality["Runtime Causality Graph\nprocess / file / network / event"]
+        Provenance["Git-like Provenance DAG\nrefs / objects / diff / blame"]
+        Evidence["Evidence Manifest\ncontent-addressed refs / hashes"]
+    end
+
+    Core --> Correlation
+    Correlation --> Timeline
+    Timeline --> Causality
+    Causality --> Provenance
+    Provenance --> Evidence
+    Evidence --> Query["Evidence Query Surface\nobserve / timeline / explain / verify / audit"]
+    Evidence --> Security["Security Analysis\nbaseline / policy / risk / response / forensics"]
 ```
 
 Capability gating is a hard design rule. Upper layers must query the runtime,
@@ -615,6 +642,12 @@ snapshot, telemetry, and isolation capabilities before assuming fast fork,
 memory snapshot, restore, identity, or enforcement semantics. Docker-only
 execution degrades to directory/filesystem provenance instead of pretending to
 provide VM-level resume.
+
+All producers enter through the API/Ingest Boundary. Zero-SDK recorders,
+SDK/tool routers, telemetry receivers, sandbox adapters, and external evaluator
+signals are producer inputs; they should not bypass validation, normalization,
+identity binding, redaction, spool/backpressure, or retention controls to write
+directly into the core evidence graph.
 
 ## Substrate Signals
 

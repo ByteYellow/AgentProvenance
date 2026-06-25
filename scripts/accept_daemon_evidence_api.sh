@@ -114,6 +114,27 @@ assert_contains "$EVENTS_PAGE1" '"next_cursor":"'
 assert_contains "$EVENTS_PAGE1" '"result_set_id":"sha256:'
 assert_contains "$EVENTS_PAGE1" '"page_hash":"sha256:'
 
+echo "== query observability summary and timeline through daemon API"
+OBSERVE_JSON="$(get_json '/v1/observe/summary?run=run-daemon-api-accept&top=3')"
+assert_contains "$OBSERVE_JSON" '"schema_version":"agentprovenance.observability_summary/v1"'
+assert_contains "$OBSERVE_JSON" '"run_id":"run-daemon-api-accept"'
+assert_contains "$OBSERVE_JSON" '"result_set_id":"sha256:'
+
+TIMELINE_JSON="$(get_json '/v1/timeline?run=run-daemon-api-accept&view=causality&limit=5')"
+assert_contains "$TIMELINE_JSON" '"schema_version":"agentprovenance.timeline/v1"'
+assert_contains "$TIMELINE_JSON" '"run_id":"run-daemon-api-accept"'
+assert_contains "$TIMELINE_JSON" '"view":"causality"'
+assert_contains "$TIMELINE_JSON" '"page_hash":"sha256:'
+
+echo "== query observability summary and timeline through CLI daemon client"
+OBSERVE_CLI_JSON="$("$BIN" --daemon-url "$DAEMON_URL" observe summary --run run-daemon-api-accept --json)"
+assert_contains "$OBSERVE_CLI_JSON" '"schema_version": "agentprovenance.observability_summary/v1"'
+assert_contains "$OBSERVE_CLI_JSON" '"run_id": "run-daemon-api-accept"'
+
+TIMELINE_CLI_JSON="$("$BIN" --daemon-url "$DAEMON_URL" timeline --run run-daemon-api-accept --view causality --limit 5 --json)"
+assert_contains "$TIMELINE_CLI_JSON" '"schema_version": "agentprovenance.timeline/v1"'
+assert_contains "$TIMELINE_CLI_JSON" '"view": "causality"'
+
 echo "== prune old unreferenced raw telemetry through daemon API"
 sqlite3 "$DATA_DIR/agentprov.db" "INSERT INTO events (id, run_id, source, event_type, payload, created_at) VALUES ('evt-daemon-retention-old', 'run-daemon-api-accept', 'filtered_telemetry', 'execve', '{\"argv\":[\"true\"]}', '2000-01-01T00:00:00.000000000Z')"
 RETENTION_JSON="$(post_json /v1/telemetry/retention/prune '{"run_id":"run-daemon-api-accept","older_than_seconds":3600,"max_delete":10}')"

@@ -11,6 +11,8 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/control"
 	"github.com/byteyellow/agentprovenance/internal/experimental/scheduler"
+	"github.com/byteyellow/agentprovenance/internal/observability"
+	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/signal"
 )
 
@@ -122,6 +124,40 @@ func (c Client) SchedulerStatus(snapshot string) (scheduler.NodeState, error) {
 	}
 	err := c.getJSON(path, &resp)
 	return resp.Node, err
+}
+
+func (c Client) ObserveSummary(runID string, topN int) (observability.Summary, error) {
+	values := url.Values{}
+	values.Set("run", runID)
+	if topN > 0 {
+		values.Set("top", fmt.Sprintf("%d", topN))
+	}
+	var summary observability.Summary
+	err := c.getJSON("/v1/observe/summary?"+values.Encode(), &summary)
+	return summary, err
+}
+
+func (c Client) Timeline(opts provenance.TimelineOptions) (provenance.TimelineManifest, error) {
+	values := url.Values{}
+	values.Set("run", opts.RunID)
+	if opts.ToolCall != "" {
+		values.Set("tool_call", opts.ToolCall)
+	}
+	if opts.ProcessID != "" {
+		values.Set("process", opts.ProcessID)
+	}
+	if opts.Type != "" {
+		values.Set("type", opts.Type)
+	}
+	if opts.View != "" {
+		values.Set("view", opts.View)
+	}
+	if opts.Limit > 0 {
+		values.Set("limit", fmt.Sprintf("%d", opts.Limit))
+	}
+	var manifest provenance.TimelineManifest
+	err := c.getJSON("/v1/timeline?"+values.Encode(), &manifest)
+	return manifest, err
 }
 
 func (c Client) SignalContext(runID string) (signal.EvalContext, error) {

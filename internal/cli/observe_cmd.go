@@ -10,12 +10,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func observeCmd(dataDir *string) *cobra.Command {
+func observeCmd(dataDir, daemonURL *string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "observe",
 		Short: "summarize execution observability for agent runs",
 	}
-	cmd.AddCommand(observeSummaryCmd(dataDir))
+	cmd.AddCommand(observeSummaryCmd(dataDir, daemonURL))
 	cmd.AddCommand(observeCoverageCmd(dataDir))
 	cmd.AddCommand(observeScopesCmd(dataDir))
 	cmd.AddCommand(observeEventCmd(dataDir))
@@ -24,7 +24,7 @@ func observeCmd(dataDir *string) *cobra.Command {
 	return cmd
 }
 
-func observeSummaryCmd(dataDir *string) *cobra.Command {
+func observeSummaryCmd(dataDir, daemonURL *string) *cobra.Command {
 	var runID string
 	var topN int
 	var jsonOut bool
@@ -35,12 +35,7 @@ func observeSummaryCmd(dataDir *string) *cobra.Command {
 			if runID == "" {
 				return fmt.Errorf("--run is required")
 			}
-			db, cleanup, err := openLocalDB(*dataDir)
-			if err != nil {
-				return err
-			}
-			defer cleanup()
-			summary, err := observability.BuildSummary(db, observability.SummaryOptions{RunID: runID, TopN: topN})
+			summary, err := observeSummary(*dataDir, *daemonURL, runID, topN)
 			if err != nil {
 				return err
 			}
@@ -82,6 +77,18 @@ func observeSummaryCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().IntVar(&topN, "top", 8, "maximum evidence refs to show")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	return cmd
+}
+
+func observeSummary(dataDir, daemonURL, runID string, topN int) (observability.Summary, error) {
+	if client, ok := daemonClient(daemonURL); ok {
+		return client.ObserveSummary(runID, topN)
+	}
+	db, cleanup, err := openLocalDB(dataDir)
+	if err != nil {
+		return observability.Summary{}, err
+	}
+	defer cleanup()
+	return observability.BuildSummary(db, observability.SummaryOptions{RunID: runID, TopN: topN})
 }
 
 func observeCoverageCmd(dataDir *string) *cobra.Command {

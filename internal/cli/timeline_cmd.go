@@ -1,13 +1,14 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/spf13/cobra"
 )
 
-func timelineCmd(dataDir *string) *cobra.Command {
+func timelineCmd(dataDir, daemonURL *string) *cobra.Command {
 	var runID string
 	var toolCallID string
 	var processID string
@@ -23,11 +24,6 @@ func timelineCmd(dataDir *string) *cobra.Command {
 			if runID == "" {
 				return fmt.Errorf("--run is required")
 			}
-			db, cleanup, err := openLocalDB(*dataDir)
-			if err != nil {
-				return err
-			}
-			defer cleanup()
 			opts := provenance.TimelineOptions{
 				RunID:     runID,
 				ToolCall:  toolCallID,
@@ -36,10 +32,16 @@ func timelineCmd(dataDir *string) *cobra.Command {
 				Limit:     limit,
 				View:      view,
 			}
-			if asJSON {
-				return provenance.PrintTimelineJSON(db, opts, cmd.OutOrStdout())
+			manifest, err := timelineManifest(*dataDir, *daemonURL, opts)
+			if err != nil {
+				return err
 			}
-			return provenance.PrintTimeline(db, opts, cmd.OutOrStdout())
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(manifest)
+			}
+			return provenance.PrintTimelineManifest(manifest, cmd.OutOrStdout())
 		},
 	}
 	cmd.Flags().StringVar(&runID, "run", "", "run id")
@@ -50,4 +52,16 @@ func timelineCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().IntVar(&limit, "limit", 0, "maximum timeline events returned")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "emit structured timeline JSON")
 	return cmd
+}
+
+func timelineManifest(dataDir, daemonURL string, opts provenance.TimelineOptions) (provenance.TimelineManifest, error) {
+	if client, ok := daemonClient(daemonURL); ok {
+		return client.Timeline(opts)
+	}
+	db, cleanup, err := openLocalDB(dataDir)
+	if err != nil {
+		return provenance.TimelineManifest{}, err
+	}
+	defer cleanup()
+	return provenance.BuildTimeline(db, opts)
 }

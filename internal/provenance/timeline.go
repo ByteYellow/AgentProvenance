@@ -172,7 +172,11 @@ func PrintTimeline(db *sql.DB, opts TimelineOptions, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if timelineView(opts.View) == "causality" {
+	return PrintTimelineManifest(manifest, out)
+}
+
+func PrintTimelineManifest(manifest TimelineManifest, out io.Writer) error {
+	if timelineView(manifest.View) == "causality" {
 		return PrintTimelineCausality(manifest, out)
 	}
 	fmt.Fprintf(out, "run=%s schema=%s events=%d\n", manifest.RunID, manifest.SchemaVersion, manifest.EventCount)

@@ -19,6 +19,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/experimental/economics"
 	"github.com/byteyellow/agentprovenance/internal/experimental/scheduler"
 	"github.com/byteyellow/agentprovenance/internal/forensics"
+	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/signal"
@@ -84,6 +85,8 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/graph/verify", s.graphVerify)
 	mux.HandleFunc("GET /v1/evidence/manifest", s.evidenceManifest)
 	mux.HandleFunc("POST /v1/forensics/export", s.forensicsExport)
+	mux.HandleFunc("GET /v1/observe/summary", s.observeSummary)
+	mux.HandleFunc("GET /v1/timeline", s.timeline)
 	mux.HandleFunc("GET /v1/signal/context", s.signalContext)
 	mux.HandleFunc("POST /v1/signal/run", s.signalRun)
 	mux.HandleFunc("POST /v1/signal/import", s.signalImport)
@@ -584,6 +587,33 @@ func (s Server) forensicsExport(w http.ResponseWriter, r *http.Request) {
 	defer s.unlockWrites()
 	bundle, err := (forensics.Service{DB: s.DB, Paths: s.Paths}).ExportBundle(req.RunID)
 	writeResult(w, bundle, err)
+}
+
+func (s Server) observeSummary(w http.ResponseWriter, r *http.Request) {
+	topN, err := intQuery(r, "top", 8)
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	result, err := observability.BuildSummary(s.DB, observability.SummaryOptions{RunID: r.URL.Query().Get("run"), TopN: topN})
+	writeResult(w, result, err)
+}
+
+func (s Server) timeline(w http.ResponseWriter, r *http.Request) {
+	limit, err := intQuery(r, "limit", 0)
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	result, err := provenance.BuildTimeline(s.DB, provenance.TimelineOptions{
+		RunID:     r.URL.Query().Get("run"),
+		ToolCall:  r.URL.Query().Get("tool_call"),
+		ProcessID: r.URL.Query().Get("process"),
+		Type:      r.URL.Query().Get("type"),
+		Limit:     limit,
+		View:      r.URL.Query().Get("view"),
+	})
+	writeResult(w, result, err)
 }
 
 func (s Server) signalContext(w http.ResponseWriter, r *http.Request) {
