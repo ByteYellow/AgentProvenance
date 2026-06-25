@@ -463,7 +463,7 @@ What these mean:
 | `log` | Show chronological execution history |
 | `materialize` | Write content-addressed provenance objects |
 | `objects` | List content-addressed object refs, hashes, parent hashes, source IDs, paths, and sizes; supports `--limit` and `--cursor` |
-| `verify` | Check graph integrity, taint/response barriers, object hashes, replay generation, drain watermarks, telemetry batch hashes, and orphan lifecycle evidence for outlived zero-SDK child processes |
+| `verify` | Check graph integrity, risk/response evidence chains, taint/response barriers, object hashes, replay generation, drain watermarks, telemetry batch hashes, and orphan lifecycle evidence for outlived zero-SDK child processes |
 | `replay` | Emit a plan-only reconstruction of the run |
 | `trajectories --json` | Emit per-attempt behavior evidence, risk/deviation context, cost, artifacts, and runtime events for external evaluators or RL reward/penalty pipelines |
 | `diff` | Compare file state between base and attempts |
@@ -479,7 +479,7 @@ What these mean:
 | Adapter contracts | `adapter list/inspect` exposes agent, sandbox, telemetry, artifact, and snapshot adapter capabilities, identity keys, boundaries, and QBS impact |
 | Evidence ingest | raw telemetry ingestion without requiring raw `tool_call_id`; ingest and verify enforce event-specific payload schemas, reject application context inside raw runtime payloads, map filtered Tetragon/Falco/LoongCollector JSONL into normalized telemetry events, record batch manifests with input/event hashes, and expose per-row receiver evidence via `receiver_summary` and `row_results` |
 | Correlation explain | `telemetry correlations --run/--event --json` emits `agentprovenance.telemetry_correlations/v1`, explaining raw identity, resolved context, matched binding, matched keys, confidence, time window, and drill-down refs for each telemetry event |
-| Graph verification | `graph verify --run --json` validates both white-box record runs and external telemetry runs. Runtime-identity bindings can anchor session/tool/process IDs even when no local sandbox tables exist; if local rows do exist, context drift and process/tool mismatches are still reported as errors |
+| Graph verification | `graph verify --run --json` validates both white-box record runs and external telemetry runs. Runtime-identity bindings can anchor session/tool/process IDs even when no local sandbox tables exist; if local rows do exist, context drift and process/tool mismatches are still reported as errors. Non-allow policy decisions must have risk signals, response actions, policy/risk/response graph edges, valid response targets, and matching risk/policy references |
 | Observability summary | `observe summary --run` emits `agentprovenance.observability_summary/v1` with context counts, runtime correlation coverage, risk/baseline/response counts, event/source histograms, top evidence refs, suggested drill-down commands, `result_set_id`, and `page_hash` |
 | Observability coverage | `observe coverage --run` emits `agentprovenance.observability_coverage/v1` with runtime correlation ratios, missing identity fields, uncorrelated event gaps, source/type histograms, binding suggestions, `result_set_id`, and `page_hash` |
 | Observability scopes | `observe scopes --run` emits `agentprovenance.observability_scopes/v1` with per-tool-call process counts, runtime event histograms, risk/response counts, evidence refs, drill-down commands, `result_set_id`, and `page_hash` |

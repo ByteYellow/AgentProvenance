@@ -12,6 +12,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/effects"
 	"github.com/byteyellow/agentprovenance/internal/record"
+	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
@@ -245,6 +246,68 @@ func TestVerifyAllowsExternalTelemetryBindings(t *testing.T) {
 	if result.ErrorCount != 0 {
 		t.Fatalf("external telemetry binding should verify cleanly: %+v", result.Issues)
 	}
+}
+
+func TestVerifyRiskResponseChain(t *testing.T) {
+	db := setupRiskVerifyRun(t)
+	defer db.Close()
+
+	result, err := Verify(db, "run-risk-verify")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ErrorCount != 0 {
+		t.Fatalf("risk chain should verify cleanly: %+v", result.Issues)
+	}
+}
+
+func TestVerifyRejectsMissingPolicyRiskSignal(t *testing.T) {
+	db := setupRiskVerifyRun(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`DELETE FROM risk_signals WHERE run_id = 'run-risk-verify'`); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Verify(db, "run-risk-verify")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertVerifyIssue(t, result, "missing_policy_risk_signal")
+	assertVerifyIssue(t, result, "missing_response_risk_signal")
+}
+
+func TestVerifyRejectsMissingRiskResponseAction(t *testing.T) {
+	db := setupRiskVerifyRun(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`DELETE FROM response_actions WHERE run_id = 'run-risk-verify'`); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Verify(db, "run-risk-verify")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertVerifyIssue(t, result, "missing_policy_response_action")
+	assertVerifyIssue(t, result, "missing_risk_response_action")
+}
+
+func TestVerifyRejectsResponseRiskPolicyMismatch(t *testing.T) {
+	db := setupRiskVerifyRun(t)
+	defer db.Close()
+
+	if _, err := db.Exec(`UPDATE response_actions SET policy_decision_id = 'dec-other' WHERE run_id = 'run-risk-verify'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO policy_decisions
+		(id, event_id, run_id, session_id, rule_id, decision, reason, created_at)
+		VALUES ('dec-other', '', 'run-risk-verify', 'session-risk-verify', 'other', 'deny', 'other', ?)`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Verify(db, "run-risk-verify")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertVerifyIssue(t, result, "response_risk_policy_mismatch")
 }
 
 func TestVerifyRejectsContextDrift(t *testing.T) {
@@ -766,6 +829,50 @@ func insertVerifyRuntimeBase(t *testing.T, db *sql.DB, workspace, now string) {
 		VALUES ('bind-1', 'run-1', 'session-1', 'attempt-1', 'tool-1', 'process-1', 'container-1', 'cgroup-1', 200, 200, ?, ?, 'test', 1.0, ?)`, now, now, now); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func setupRiskVerifyRun(t *testing.T) *sql.DB {
+	t.Helper()
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(`INSERT INTO execution_context_bindings
+		(id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, root_pid, pid, started_at, ended_at, binding_source, confidence, created_at)
+		VALUES ('bind-risk', 'run-risk-verify', 'session-risk-verify', 'attempt-risk-verify', 'tool-risk-verify', 'process-risk-verify', 'container-risk-verify', 4242, 4242, ?, '', 'external_telemetry', 0.95, ?)`, now, now); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	eventID, err := telemetry.IngestFiltered(db, telemetry.IngestEvent{
+		RunID:       "run-risk-verify",
+		RawEventID:  "raw-risk-verify",
+		ContainerID: "container-risk-verify",
+		PID:         4242,
+		TGID:        4242,
+		PPID:        4000,
+		Timestamp:   now,
+		Source:      "falco_jsonl",
+		EventType:   "metadata_ip",
+		Payload:     `{"dst":"169.254.169.254"}`,
+	})
+	if err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if _, persisted, err := securitymodel.EvaluateRuntimeEvent(db, eventID); err != nil {
+		db.Close()
+		t.Fatal(err)
+	} else if !persisted {
+		db.Close()
+		t.Fatalf("risk event did not persist policy decision")
+	}
+	return db
 }
 
 func assertVerifyIssue(t *testing.T, result VerifyResult, kind string) {

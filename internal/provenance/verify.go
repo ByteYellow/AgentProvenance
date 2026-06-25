@@ -100,6 +100,9 @@ func Verify(db *sql.DB, runID string) (VerifyResult, error) {
 	if err := verifyPolicyDecisions(db, runID, add); err != nil {
 		return result, err
 	}
+	if err := verifyRiskAndResponses(db, runID, add); err != nil {
+		return result, err
+	}
 	if err := verifyExecutionContextBindings(db, runID, add); err != nil {
 		return result, err
 	}
@@ -428,6 +431,99 @@ func verifyPolicyDecisions(db *sql.DB, runID string, add issueAdder) error {
 		}
 	}
 	return rows.Err()
+}
+
+func verifyRiskAndResponses(db *sql.DB, runID string, add issueAdder) error {
+	policies, err := db.Query(`SELECT id, COALESCE(event_id, ''), decision FROM policy_decisions WHERE run_id = ?`, runID)
+	if err != nil {
+		return err
+	}
+	defer policies.Close()
+	for policies.Next() {
+		var id, eventID, decision string
+		if err := policies.Scan(&id, &eventID, &decision); err != nil {
+			return err
+		}
+		if decision == "allow" {
+			continue
+		}
+		if !exists(db, `SELECT 1 FROM risk_signals WHERE run_id = ? AND policy_decision_id = ?`, runID, id) {
+			add("error", "missing_policy_risk_signal", id, "non-allow policy decision %s has no risk signal", id)
+		}
+		if !exists(db, `SELECT 1 FROM response_actions WHERE run_id = ? AND policy_decision_id = ?`, runID, id) {
+			add("error", "missing_policy_response_action", id, "non-allow policy decision %s has no response action", id)
+		}
+		if eventID != "" && !edgeExists(db, runID, "runtime_event/"+eventID, "policy_decision/"+id, "runtime_event_policy_decision") {
+			add("error", "missing_policy_decision_edge", id, "runtime event %s is not linked to policy decision %s", eventID, id)
+		}
+	}
+	if err := policies.Err(); err != nil {
+		return err
+	}
+
+	risks, err := db.Query(`SELECT id, COALESCE(event_id, ''), COALESCE(policy_decision_id, ''), recommended_action FROM risk_signals WHERE run_id = ?`, runID)
+	if err != nil {
+		return err
+	}
+	defer risks.Close()
+	for risks.Next() {
+		var id, eventID, policyDecisionID, recommendedAction string
+		if err := risks.Scan(&id, &eventID, &policyDecisionID, &recommendedAction); err != nil {
+			return err
+		}
+		if policyDecisionID == "" || !exists(db, `SELECT 1 FROM policy_decisions WHERE id = ? AND run_id = ?`, policyDecisionID, runID) {
+			add("error", "missing_risk_policy_decision", id, "risk signal %s references missing policy decision %s", id, policyDecisionID)
+		}
+		if eventID == "" || !exists(db, `SELECT 1 FROM events WHERE id = ? AND run_id = ?`, eventID, runID) {
+			add("error", "missing_risk_event", id, "risk signal %s references missing runtime event %s", id, eventID)
+		}
+		if policyDecisionID != "" && !edgeExists(db, runID, "policy_decision/"+policyDecisionID, "risk_signal/"+id, "policy_decision_risk_signal") {
+			add("error", "missing_risk_signal_edge", id, "policy decision %s is not linked to risk signal %s", policyDecisionID, id)
+		}
+		if !exists(db, `SELECT 1 FROM response_actions WHERE run_id = ? AND risk_signal_id = ?`, runID, id) {
+			add("error", "missing_risk_response_action", id, "risk signal %s has no response action", id)
+		}
+		if !oneOf(recommendedAction, "audit", "deny", "kill", "quarantine", "taint", "export", "notify") {
+			add("error", "invalid_risk_recommended_action", id, "risk signal %s has invalid recommended action %s", id, recommendedAction)
+		}
+	}
+	if err := risks.Err(); err != nil {
+		return err
+	}
+
+	responses, err := db.Query(`SELECT id, COALESCE(risk_signal_id, ''), COALESCE(policy_decision_id, ''), action_type, target_type, COALESCE(target_id, ''), status FROM response_actions WHERE run_id = ?`, runID)
+	if err != nil {
+		return err
+	}
+	defer responses.Close()
+	for responses.Next() {
+		var id, riskSignalID, policyDecisionID, actionType, targetType, targetID, status string
+		if err := responses.Scan(&id, &riskSignalID, &policyDecisionID, &actionType, &targetType, &targetID, &status); err != nil {
+			return err
+		}
+		if riskSignalID == "" || !exists(db, `SELECT 1 FROM risk_signals WHERE id = ? AND run_id = ?`, riskSignalID, runID) {
+			add("error", "missing_response_risk_signal", id, "response action %s references missing risk signal %s", id, riskSignalID)
+		}
+		if policyDecisionID == "" || !exists(db, `SELECT 1 FROM policy_decisions WHERE id = ? AND run_id = ?`, policyDecisionID, runID) {
+			add("error", "missing_response_policy_decision", id, "response action %s references missing policy decision %s", id, policyDecisionID)
+		}
+		if riskSignalID != "" && policyDecisionID != "" && !exists(db, `SELECT 1 FROM risk_signals WHERE id = ? AND policy_decision_id = ? AND run_id = ?`, riskSignalID, policyDecisionID, runID) {
+			add("error", "response_risk_policy_mismatch", id, "response action %s risk %s is not linked to policy decision %s", id, riskSignalID, policyDecisionID)
+		}
+		if riskSignalID != "" && !edgeExists(db, runID, "risk_signal/"+riskSignalID, "response_action/"+id, "risk_signal_response_action") {
+			add("error", "missing_response_action_edge", id, "risk signal %s is not linked to response action %s", riskSignalID, id)
+		}
+		if !oneOf(actionType, "audit", "deny", "kill", "quarantine", "taint", "export", "notify") {
+			add("error", "invalid_response_action_type", id, "response action %s has invalid action_type %s", id, actionType)
+		}
+		if targetType == "" || targetID == "" {
+			add("error", "missing_response_target", id, "response action %s has target_type=%q target_id=%q", id, targetType, targetID)
+		}
+		if !oneOf(status, "recorded", "pending", "running", "succeeded", "failed", "skipped") {
+			add("error", "invalid_response_status", id, "response action %s has invalid status %s", id, status)
+		}
+	}
+	return responses.Err()
 }
 
 func verifyObjects(db *sql.DB, runID string, add issueAdder) error {
