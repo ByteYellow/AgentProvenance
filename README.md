@@ -494,6 +494,7 @@ What these mean:
 | Forensics bundle | `forensics export <run_id> --json` emits a hashed `agentprovenance.forensics_bundle/v1` file containing evidence manifest, events, telemetry batches, policy decisions, risk signals, response actions, graph edges, cost samples, sessions, processes, and snapshots |
 | Daemon API boundary | `agentprov daemon serve` exposes core evidence-infra APIs for ToolCallScope binding, paged telemetry event query, Falco ingest/spool, graph verification, evidence manifest materialization, and forensics export, so the evidence path can run behind a long-lived control process instead of only a one-shot CLI |
 | Telemetry spool | Daemon Falco ingest supports async enqueue into `telemetry_spool_batches`; a background worker consumes queued batches, applies policy, and `health` exposes `queued_spool` / `spool_max_queued`. `--spool-max-queued` applies hard backpressure, and `--spool-drop-policy` supports `reject` with structured HTTP 429 or `drop_oldest` for bounded data-plane loss |
+| High-volume telemetry pressure | `scripts/accept_telemetry_100k_pressure.sh` generates 100k Falco events, enqueues them through daemon spool, confirms `health` and paged telemetry query stay responsive while queued, drains the batch, and verifies bounded paged query output after ingest. Receiver row details are capped with `row_results_truncated` so summary counts remain complete without returning 100k row objects |
 | Telemetry retention | `telemetry prune` and daemon `POST /v1/telemetry/retention/prune` delete old unreferenced raw telemetry events while preserving events referenced by telemetry batches, policy decisions, risk signals, or graph edges |
 | Execution timeline | `timeline --run` emits a human table, `--view causality` emits a lane view, and `--json` emits `agentprovenance.timeline/v1` across tool calls, processes, zero-SDK process observations, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects; JSON includes lane, correlation status, drill-down refs, `result_set_id`, and `page_hash` for query integrity |
 | Runtime causality | native `runtime_*` graph edges for tool call, process, process tree, attempt, snapshot, runtime event, and workspace file correlation |
@@ -679,6 +680,7 @@ go test ./...
 ./scripts/accept_forensics_bundle.sh
 ./scripts/accept_daemon_evidence_api.sh
 ./scripts/accept_telemetry_spool_backpressure.sh
+./scripts/accept_telemetry_100k_pressure.sh
 ./scripts/accept_signal_engine.sh
 ```
 

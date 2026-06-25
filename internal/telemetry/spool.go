@@ -60,9 +60,18 @@ type SpoolBatch struct {
 }
 
 type SpoolProcessResult struct {
-	Processed int      `json:"processed"`
-	Failed    int      `json:"failed"`
-	Errors    []string `json:"errors,omitempty"`
+	Processed int                   `json:"processed"`
+	Failed    int                   `json:"failed"`
+	Batches   []SpoolProcessedBatch `json:"batches,omitempty"`
+	Errors    []string              `json:"errors,omitempty"`
+}
+
+type SpoolProcessedBatch struct {
+	ID                  string `json:"id"`
+	IngestBatchID       string `json:"ingest_batch_id"`
+	IngestedCount       int    `json:"ingested_count"`
+	FailedCount         int    `json:"failed_count"`
+	RowResultsTruncated bool   `json:"row_results_truncated,omitempty"`
 }
 
 type SpoolPruneResult struct {
@@ -235,25 +244,33 @@ func (s SpoolService) Process(limit int) (SpoolProcessResult, error) {
 	}
 	var result SpoolProcessResult
 	for _, item := range items {
-		if err := s.processOne(item.id, item.runID, item.format, item.spoolPath, item.policyEnabled != 0); err != nil {
+		ingest, err := s.processOne(item.id, item.runID, item.format, item.spoolPath, item.policyEnabled != 0)
+		if err != nil {
 			result.Failed++
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", item.id, err))
 			continue
 		}
 		result.Processed++
+		result.Batches = append(result.Batches, SpoolProcessedBatch{
+			ID:                  item.id,
+			IngestBatchID:       ingest.BatchID,
+			IngestedCount:       ingest.Ingested,
+			FailedCount:         ingest.Failed,
+			RowResultsTruncated: ingest.RowsTruncated,
+		})
 	}
 	return result, nil
 }
 
-func (s SpoolService) processOne(id, runID, format, spoolPath string, policyEnabled bool) error {
+func (s SpoolService) processOne(id, runID, format, spoolPath string, policyEnabled bool) (JSONLIngestResult, error) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := s.DB.Exec(`UPDATE telemetry_spool_batches SET status = 'processing', attempts = attempts + 1, updated_at = ? WHERE id = ? AND status = 'queued'`, now, id); err != nil {
-		return err
+		return JSONLIngestResult{}, err
 	}
 	file, err := os.Open(spoolPath)
 	if err != nil {
 		_ = s.failSpool(id, err)
-		return err
+		return JSONLIngestResult{}, err
 	}
 	defer file.Close()
 	var ingest JSONLIngestResult
@@ -268,13 +285,13 @@ func (s SpoolService) processOne(id, runID, format, spoolPath string, policyEnab
 	}
 	if err != nil {
 		_ = s.failSpool(id, err)
-		return err
+		return ingest, err
 	}
 	now = time.Now().UTC().Format(time.RFC3339Nano)
 	_, err = s.DB.Exec(`UPDATE telemetry_spool_batches
 		SET status = 'processed', ingest_batch_id = ?, ingested_count = ?, failed_count = ?, error = '', updated_at = ?, processed_at = ?
 		WHERE id = ?`, ingest.BatchID, ingest.Ingested, ingest.Failed, now, now, id)
-	return err
+	return ingest, err
 }
 
 func (s SpoolService) failSpool(id string, cause error) error {

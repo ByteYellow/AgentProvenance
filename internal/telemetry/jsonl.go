@@ -55,6 +55,7 @@ type JSONLIngestResult struct {
 	PolicyDecisionIDs []string        `json:"policy_decision_ids,omitempty"`
 	ReceiverSummary   ReceiverSummary `json:"receiver_summary"`
 	Rows              []RowResult     `json:"row_results,omitempty"`
+	RowsTruncated     bool            `json:"row_results_truncated,omitempty"`
 	Errors            []string        `json:"errors,omitempty"`
 }
 
@@ -327,7 +328,7 @@ func rowResultForRecord(line int, status, detected string, record EventRecord, e
 }
 
 func appendRowResult(result *JSONLIngestResult, row RowResult) {
-	result.Rows = append(result.Rows, row)
+	const maxRowResults = 1000
 	if result.ReceiverSummary.DetectedFormats == nil {
 		result.ReceiverSummary.DetectedFormats = map[string]int{}
 	}
@@ -358,6 +359,11 @@ func appendRowResult(result *JSONLIngestResult, row RowResult) {
 	case "failed":
 		result.ReceiverSummary.Failed++
 	}
+	if len(result.Rows) < maxRowResults {
+		result.Rows = append(result.Rows, row)
+		return
+	}
+	result.RowsTruncated = true
 }
 
 func ingestEventIdentityKeys(event IngestEvent) []string {
