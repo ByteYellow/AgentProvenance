@@ -10,7 +10,9 @@ import (
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/control"
+	"github.com/byteyellow/agentprovenance/internal/evidence"
 	"github.com/byteyellow/agentprovenance/internal/experimental/scheduler"
+	"github.com/byteyellow/agentprovenance/internal/forensics"
 	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/signal"
@@ -158,6 +160,29 @@ func (c Client) Timeline(opts provenance.TimelineOptions) (provenance.TimelineMa
 	var manifest provenance.TimelineManifest
 	err := c.getJSON("/v1/timeline?"+values.Encode(), &manifest)
 	return manifest, err
+}
+
+func (c Client) VerifyGraph(runID string) (provenance.VerifyResult, error) {
+	var result provenance.VerifyResult
+	err := c.getJSON("/v1/graph/verify?run="+url.QueryEscape(runID), &result)
+	return result, err
+}
+
+func (c Client) EvidenceManifest(runID string, materialize bool) (evidence.MaterializedManifest, error) {
+	values := url.Values{}
+	values.Set("run", runID)
+	if materialize {
+		values.Set("materialize", "1")
+	}
+	var result evidence.MaterializedManifest
+	err := c.getJSON("/v1/evidence/manifest?"+values.Encode(), &result)
+	return result, err
+}
+
+func (c Client) ExportForensics(runID string) (forensics.BundleInfo, error) {
+	var bundle forensics.BundleInfo
+	err := c.postJSON("/v1/forensics/export", map[string]any{"run_id": runID}, &bundle)
+	return bundle, err
 }
 
 func (c Client) SignalContext(runID string) (signal.EvalContext, error) {

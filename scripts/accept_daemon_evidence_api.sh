@@ -152,6 +152,10 @@ VERIFY_JSON="$(get_json '/v1/graph/verify?run=run-daemon-api-accept')"
 assert_contains "$VERIFY_JSON" '"schema_version":"agentprovenance.verify/v1"'
 assert_contains "$VERIFY_JSON" '"status":"ok"'
 
+VERIFY_CLI_JSON="$("$BIN" --daemon-url "$DAEMON_URL" graph verify --run run-daemon-api-accept --json)"
+assert_contains "$VERIFY_CLI_JSON" '"schema_version": "agentprovenance.verify/v1"'
+assert_contains "$VERIFY_CLI_JSON" '"status": "ok"'
+
 echo "== materialize evidence manifest through daemon API"
 EVIDENCE_JSON="$(get_json '/v1/evidence/manifest?run=run-daemon-api-accept&materialize=1')"
 assert_contains "$EVIDENCE_JSON" '"manifest"'
@@ -159,6 +163,11 @@ assert_contains "$EVIDENCE_JSON" '"schema_version":"agentprovenance.evidence_man
 assert_contains "$EVIDENCE_JSON" '"risk_count":3'
 assert_contains "$EVIDENCE_JSON" '"response_count":3'
 assert_contains "$EVIDENCE_JSON" '"object_hash":"sha256:'
+
+EVIDENCE_CLI_JSON="$("$BIN" --daemon-url "$DAEMON_URL" evidence manifest --run run-daemon-api-accept --materialize --json)"
+assert_contains "$EVIDENCE_CLI_JSON" '"manifest":'
+assert_contains "$EVIDENCE_CLI_JSON" '"schema_version": "agentprovenance.evidence_manifest/v1"'
+assert_contains "$EVIDENCE_CLI_JSON" '"object_hash": "sha256:'
 
 echo "== export forensics through daemon API"
 FORENSICS_JSON="$(post_json /v1/forensics/export '{"run_id":"run-daemon-api-accept"}')"
@@ -185,6 +194,11 @@ assert len(bundle["risk_signals"]) == 3
 assert len(bundle["response_actions"]) == 3
 assert os.path.getsize(exported["path"]) == exported["size_bytes"]
 PY
+
+FORENSICS_CLI_JSON="$("$BIN" --daemon-url "$DAEMON_URL" forensics export run-daemon-api-accept --json)"
+assert_contains "$FORENSICS_CLI_JSON" '"schema_version": "agentprovenance.forensics_export/v1"'
+assert_contains "$FORENSICS_CLI_JSON" '"sha256":'
+assert_contains "$FORENSICS_CLI_JSON" '"size_bytes":'
 
 echo "== export signal context through daemon API"
 SIGNAL_CONTEXT_JSON="$(get_json '/v1/signal/context?run=run-daemon-api-accept')"

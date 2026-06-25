@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"text/tabwriter"
 
 	"github.com/byteyellow/agentprovenance/internal/evidence"
@@ -11,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func evidenceCmd(dataDir *string) *cobra.Command {
+func evidenceCmd(dataDir, daemonURL *string) *cobra.Command {
 	var limit int
 	var runID string
 	var objectLimit int
@@ -42,48 +43,9 @@ func evidenceCmd(dataDir *string) *cobra.Command {
 			if runID == "" {
 				return fmt.Errorf("--run is required")
 			}
-			paths, err := store.Init(*dataDir)
+			output, err := evidenceManifest(*dataDir, *daemonURL, runID, objectLimit, materializeObject)
 			if err != nil {
 				return err
-			}
-			db, err := store.Open(paths)
-			if err != nil {
-				return err
-			}
-			defer db.Close()
-			report, err := evidence.BuildManifest(db, evidence.ManifestOptions{RunID: runID, ObjectLimit: objectLimit})
-			if err != nil {
-				return err
-			}
-			output := evidence.MaterializedManifest{Manifest: report}
-			if materializeObject {
-				parentHashes := make([]string, 0, len(report.Objects.TopRefs))
-				for _, ref := range report.Objects.TopRefs {
-					if ref.Hash != "" {
-						parentHashes = append(parentHashes, ref.Hash)
-					}
-				}
-				result, err := (provenance.ObjectStore{DB: db, Paths: paths}).PutExternalObject(provenance.ExternalObjectInput{
-					Type:     "evidence_manifest",
-					SourceID: runID,
-					RunID:    runID,
-					Parents:  parentHashes,
-					Refs: map[string]any{
-						"run_id":                  runID,
-						"schema_version":          report.SchemaVersion,
-						"summary_result_set_id":   report.Summary.ResultSetID,
-						"timeline_result_set_id":  report.Timeline.ResultSetID,
-						"objects_result_set_id":   report.Objects.ResultSetID,
-						"risks_result_set_id":     report.Security.RisksResultSetID,
-						"responses_result_set_id": report.Security.ResponsesResultSetID,
-					},
-					Payload: map[string]any{"manifest": report},
-				})
-				if err != nil {
-					return err
-				}
-				output.ObjectHash = result.Hash
-				output.ObjectPath = result.Path
 			}
 			if jsonOut {
 				enc := json.NewEncoder(cmd.OutOrStdout())
@@ -91,33 +53,9 @@ func evidenceCmd(dataDir *string) *cobra.Command {
 				if materializeObject {
 					return enc.Encode(output)
 				}
-				return enc.Encode(report)
+				return enc.Encode(output.Manifest)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "run=%s schema=%s result_set=%s page_hash=%s\n", report.RunID, report.SchemaVersion, report.ResultSetID, report.PageHash)
-			if output.ObjectHash != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "object_hash=%s object_path=%s\n", output.ObjectHash, output.ObjectPath)
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "summary events=%d runtime_events=%d risks=%d responses=%d tool_call_coverage=%.2f process_coverage=%.2f\n",
-				report.Summary.EventCount, report.Summary.Runtime.Events, report.Security.RiskCount, report.Security.ResponseCount,
-				report.Summary.Runtime.ToolCallCoverageRatio, report.Summary.Runtime.ProcessCoverageRatio)
-			fmt.Fprintf(cmd.OutOrStdout(), "timeline events=%d result_set=%s page_hash=%s\n", report.Timeline.EventCount, report.Timeline.ResultSetID, report.Timeline.PageHash)
-			fmt.Fprintf(cmd.OutOrStdout(), "objects count=%d bytes=%d result_set=%s page_hash=%s has_more=%t\n",
-				report.Objects.ObjectCount, report.Objects.TotalBytes, report.Objects.ResultSetID, report.Objects.PageHash, report.Objects.HasMore)
-			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "OBJECT_TYPE\tCOUNT")
-			for typ, count := range report.Objects.ByType {
-				fmt.Fprintf(w, "%s\t%d\n", typ, count)
-			}
-			if err := w.Flush(); err != nil {
-				return err
-			}
-			if len(report.RecommendedViews) > 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "next_views:")
-				for _, view := range report.RecommendedViews {
-					fmt.Fprintf(cmd.OutOrStdout(), "  agentprov %s\n", view)
-				}
-			}
-			return nil
+			return printEvidenceManifest(cmd.OutOrStdout(), output)
 		},
 	}
 	manifest.Flags().StringVar(&runID, "run", "", "run id")
@@ -128,6 +66,86 @@ func evidenceCmd(dataDir *string) *cobra.Command {
 	cmd.AddCommand(process)
 	cmd.AddCommand(manifest)
 	return cmd
+}
+
+func evidenceManifest(dataDir, daemonURL, runID string, objectLimit int, materializeObject bool) (evidence.MaterializedManifest, error) {
+	if client, ok := daemonClient(daemonURL); ok {
+		return client.EvidenceManifest(runID, materializeObject)
+	}
+	paths, err := store.Init(dataDir)
+	if err != nil {
+		return evidence.MaterializedManifest{}, err
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		return evidence.MaterializedManifest{}, err
+	}
+	defer db.Close()
+	report, err := evidence.BuildManifest(db, evidence.ManifestOptions{RunID: runID, ObjectLimit: objectLimit})
+	if err != nil {
+		return evidence.MaterializedManifest{}, err
+	}
+	output := evidence.MaterializedManifest{Manifest: report}
+	if !materializeObject {
+		return output, nil
+	}
+	parentHashes := make([]string, 0, len(report.Objects.TopRefs))
+	for _, ref := range report.Objects.TopRefs {
+		if ref.Hash != "" {
+			parentHashes = append(parentHashes, ref.Hash)
+		}
+	}
+	result, err := (provenance.ObjectStore{DB: db, Paths: paths}).PutExternalObject(provenance.ExternalObjectInput{
+		Type:     "evidence_manifest",
+		SourceID: runID,
+		RunID:    runID,
+		Parents:  parentHashes,
+		Refs: map[string]any{
+			"run_id":                  runID,
+			"schema_version":          report.SchemaVersion,
+			"summary_result_set_id":   report.Summary.ResultSetID,
+			"timeline_result_set_id":  report.Timeline.ResultSetID,
+			"objects_result_set_id":   report.Objects.ResultSetID,
+			"risks_result_set_id":     report.Security.RisksResultSetID,
+			"responses_result_set_id": report.Security.ResponsesResultSetID,
+		},
+		Payload: map[string]any{"manifest": report},
+	})
+	if err != nil {
+		return evidence.MaterializedManifest{}, err
+	}
+	output.ObjectHash = result.Hash
+	output.ObjectPath = result.Path
+	return output, nil
+}
+
+func printEvidenceManifest(out io.Writer, output evidence.MaterializedManifest) error {
+	report := output.Manifest
+	fmt.Fprintf(out, "run=%s schema=%s result_set=%s page_hash=%s\n", report.RunID, report.SchemaVersion, report.ResultSetID, report.PageHash)
+	if output.ObjectHash != "" {
+		fmt.Fprintf(out, "object_hash=%s object_path=%s\n", output.ObjectHash, output.ObjectPath)
+	}
+	fmt.Fprintf(out, "summary events=%d runtime_events=%d risks=%d responses=%d tool_call_coverage=%.2f process_coverage=%.2f\n",
+		report.Summary.EventCount, report.Summary.Runtime.Events, report.Security.RiskCount, report.Security.ResponseCount,
+		report.Summary.Runtime.ToolCallCoverageRatio, report.Summary.Runtime.ProcessCoverageRatio)
+	fmt.Fprintf(out, "timeline events=%d result_set=%s page_hash=%s\n", report.Timeline.EventCount, report.Timeline.ResultSetID, report.Timeline.PageHash)
+	fmt.Fprintf(out, "objects count=%d bytes=%d result_set=%s page_hash=%s has_more=%t\n",
+		report.Objects.ObjectCount, report.Objects.TotalBytes, report.Objects.ResultSetID, report.Objects.PageHash, report.Objects.HasMore)
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "OBJECT_TYPE\tCOUNT")
+	for typ, count := range report.Objects.ByType {
+		fmt.Fprintf(w, "%s\t%d\n", typ, count)
+	}
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	if len(report.RecommendedViews) > 0 {
+		fmt.Fprintln(out, "next_views:")
+		for _, view := range report.RecommendedViews {
+			fmt.Fprintf(out, "  agentprov %s\n", view)
+		}
+	}
+	return nil
 }
 
 func gcCmd(dataDir *string) *cobra.Command {

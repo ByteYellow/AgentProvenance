@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func graphCmd(dataDir *string) *cobra.Command {
+func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 	var runID string
 	var artifactRef string
 	var attemptID string
@@ -209,14 +209,31 @@ func graphCmd(dataDir *string) *cobra.Command {
 		Use:   "verify",
 		Short: "verify provenance graph references, taint barriers, and object hashes",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if verifyRunID == "" {
+				return fmt.Errorf("--run is required")
+			}
+			if client, ok := daemonClient(*daemonURL); ok {
+				result, err := client.VerifyGraph(verifyRunID)
+				if err != nil {
+					return err
+				}
+				if verifyJSON {
+					if err := provenance.PrintVerifyResultJSON(cmd.OutOrStdout(), result); err != nil {
+						return err
+					}
+				} else {
+					provenance.PrintVerifyResult(cmd.OutOrStdout(), result)
+				}
+				if result.ErrorCount > 0 {
+					return fmt.Errorf("graph verify failed: errors=%d warnings=%d", result.ErrorCount, result.WarningCount)
+				}
+				return nil
+			}
 			db, err := openDB()
 			if err != nil {
 				return err
 			}
 			defer db.Close()
-			if verifyRunID == "" {
-				return fmt.Errorf("--run is required")
-			}
 			if verifyJSON {
 				return provenance.VerifyRunJSON(db, verifyRunID, cmd.OutOrStdout())
 			}

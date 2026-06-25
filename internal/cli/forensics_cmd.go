@@ -9,23 +9,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func forensicsCmd(dataDir *string) *cobra.Command {
+func forensicsCmd(dataDir, daemonURL *string) *cobra.Command {
 	var jsonOut bool
 	export := &cobra.Command{
 		Use:   "export <run_id>",
 		Short: "export a forensics bundle for a run",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			paths, err := store.Init(*dataDir)
-			if err != nil {
-				return err
-			}
-			db, err := store.Open(paths)
-			if err != nil {
-				return err
-			}
-			defer db.Close()
-			bundle, err := (forensics.Service{DB: db, Paths: paths}).ExportBundle(args[0])
+			bundle, err := exportForensics(*dataDir, *daemonURL, args[0])
 			if err != nil {
 				return err
 			}
@@ -42,4 +33,20 @@ func forensicsCmd(dataDir *string) *cobra.Command {
 	cmd := &cobra.Command{Use: "forensics", Short: "forensics bundle commands"}
 	cmd.AddCommand(export)
 	return cmd
+}
+
+func exportForensics(dataDir, daemonURL, runID string) (forensics.BundleInfo, error) {
+	if client, ok := daemonClient(daemonURL); ok {
+		return client.ExportForensics(runID)
+	}
+	paths, err := store.Init(dataDir)
+	if err != nil {
+		return forensics.BundleInfo{}, err
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		return forensics.BundleInfo{}, err
+	}
+	defer db.Close()
+	return (forensics.Service{DB: db, Paths: paths}).ExportBundle(runID)
 }
