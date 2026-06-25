@@ -421,6 +421,19 @@ The protocol is intentionally small:
 This lets a benchmark harness, RL pipeline, red-team harness, or data filtering
 job decide how evidence becomes score, rejection, or review.
 
+In daemon mode, the same protocol is available through the local API:
+
+```text
+GET  /v1/signal/context?run=<run_id>
+POST /v1/signal/run
+POST /v1/signal/import
+```
+
+The daemon does not expose an HTTP endpoint that runs arbitrary external shell
+commands. A client can fetch `EvalContext`, execute its evaluator in its own
+process boundary, and import the resulting signals back into the daemon for
+validation. The CLI follows that shape when `--daemon-url` is set.
+
 ## Compliance Evidence, Not Certification
 
 AgentProvenance can map run evidence to security framework profiles such as
@@ -525,7 +538,7 @@ What these mean:
 | Observability flow | `observe flow --run` emits `agentprovenance.observability_flow/v1` with event-to-risk-to-policy-to-response rows, lane, correlation status, drill-down commands, `result_set_id`, and `page_hash` |
 | Evidence manifest | `evidence manifest --run` emits `agentprovenance.evidence_manifest/v1`, a run-level evidence index with observability summary hashes, timeline hashes, object-list hashes, risk/response report hashes, and recommended drill-down queries for UI, audit export, and incident review; `--materialize` stores it as a content-addressed `evidence_manifest` object |
 | Forensics bundle | `forensics export <run_id> --json` emits a hashed `agentprovenance.forensics_bundle/v1` file containing evidence manifest, events, telemetry batches, policy decisions, risk signals, response actions, graph edges, cost samples, sessions, processes, and snapshots |
-| Daemon API boundary | `agentprov daemon serve` exposes core evidence-infra APIs for ToolCallScope binding, paged telemetry event query, Falco ingest/spool, graph verification, evidence manifest materialization, and forensics export, so the evidence path can run behind a long-lived control process instead of only a one-shot CLI |
+| Daemon API boundary | `agentprov daemon serve` exposes core evidence-infra APIs for ToolCallScope binding, paged telemetry event query, Falco ingest/spool, graph verification, evidence manifest materialization, forensics export, and evaluator context/import APIs, so the evidence path can run behind a long-lived control process instead of only a one-shot CLI |
 | Telemetry spool | Daemon Falco ingest supports async enqueue into `telemetry_spool_batches`; a background worker consumes queued batches, applies policy, and `health` exposes `queued_spool` / `spool_max_queued`. `--spool-max-queued` applies hard backpressure, and `--spool-drop-policy` supports `reject` with structured HTTP 429 or `drop_oldest` for bounded data-plane loss |
 | High-volume telemetry pressure | `scripts/accept_telemetry_100k_pressure.sh` generates 100k Falco events, enqueues them through daemon spool, confirms `health` and paged telemetry query stay responsive while queued, drains the batch, and verifies bounded paged query output after ingest. Receiver row details are capped with `row_results_truncated` so summary counts remain complete without returning 100k row objects |
 | Telemetry retention | `telemetry prune` and daemon `POST /v1/telemetry/retention/prune` delete old unreferenced raw telemetry events while preserving events referenced by telemetry batches, policy decisions, risk signals, or graph edges |
@@ -537,7 +550,7 @@ What these mean:
 | Artifact lineage | exported attempt artifacts linked to attempt/tool_call/process |
 | Security evidence | first-class `RiskSignal`, `BaselineDeviation`, and `ResponseAction` records, graph objects, and query commands |
 | Behavior baseline | `baseline learn/check` extracts process, file, network, suspicious runtime, policy block, outlived-process, and resource features; anomalous checks persist deviation records and baseline-derived risk signals |
-| External evaluator protocol | `signal context --run` emits `agentprovenance.eval_context/v1`; `signal run --external` passes that JSON to an external process over stdin; `signal import` validates returned `EvalSignal` records. A thin Python helper lives in `python/agentprov_eval`, with an example in `examples/evaluators/python_signal_eval.py`. Built-in signals remain available, but AgentProvenance does not own reward, ranking, or dataset policy |
+| External evaluator protocol | `signal context --run` emits `agentprovenance.eval_context/v1`; `signal run --external` passes that JSON to an external process over stdin; `signal import` validates returned `EvalSignal` records. Daemon API supports context export, built-in smoke signals, and signal import without exposing remote shell execution. A thin Python helper lives in `python/agentprov_eval`, with an example in `examples/evaluators/python_signal_eval.py`. Built-in signals remain available, but AgentProvenance does not own reward, ranking, or dataset policy |
 | Compliance evidence | `compliance frameworks/map/explain/gaps/report` maps run evidence to OWASP Agentic Security and NIST AI agent security profiles with covered/partial/missing/not_applicable item status and evidence gap reports |
 | Risk / taint | policy decisions, policy-decision graph edges, quarantine, taint, taint descendant checks |
 | Response gate | eligibility checks with telemetry/evidence drain watermark for tainted or unsafe branches |

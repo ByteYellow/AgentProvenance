@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func signalCmd(dataDir *string) *cobra.Command {
+func signalCmd(dataDir, daemonURL *string) *cobra.Command {
 	var runID string
 	var jsonOut bool
 	var external string
@@ -21,20 +21,37 @@ func signalCmd(dataDir *string) *cobra.Command {
 		Use:   "run",
 		Short: "run built-in or external evaluators over provenance evidence",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, closeFn, err := signalDB(*dataDir)
-			if err != nil {
-				return err
-			}
-			defer closeFn()
-			ctx, err := signal.BuildEvalContext(db, runID)
-			if err != nil {
-				return err
-			}
 			var report signal.EvalReport
-			if external != "" {
-				report, err = signal.RunExternal(external, ctx)
+			var err error
+			if client, ok := daemonClient(*daemonURL); ok {
+				if external == "" {
+					report, err = client.RunBuiltinSignals(runID)
+				} else {
+					ctx, ctxErr := client.SignalContext(runID)
+					if ctxErr != nil {
+						return ctxErr
+					}
+					localReport, runErr := signal.RunExternal(external, ctx)
+					if runErr != nil {
+						return runErr
+					}
+					report, err = client.ImportSignals(runID, external, localReport.Signals)
+				}
 			} else {
-				report, err = signal.BuildBuiltinReportFromContext(ctx)
+				db, closeFn, openErr := signalDB(*dataDir)
+				if openErr != nil {
+					return openErr
+				}
+				defer closeFn()
+				ctx, ctxErr := signal.BuildEvalContext(db, runID)
+				if ctxErr != nil {
+					return ctxErr
+				}
+				if external != "" {
+					report, err = signal.RunExternal(external, ctx)
+				} else {
+					report, err = signal.BuildBuiltinReportFromContext(ctx)
+				}
 			}
 			if err != nil {
 				return err
@@ -57,12 +74,7 @@ func signalCmd(dataDir *string) *cobra.Command {
 		Use:   "context",
 		Short: "export EvalContext JSON for external evaluators",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, closeFn, err := signalDB(*dataDir)
-			if err != nil {
-				return err
-			}
-			defer closeFn()
-			ctx, err := signal.BuildEvalContext(db, contextRunID)
+			ctx, err := signalContext(*dataDir, *daemonURL, contextRunID)
 			if err != nil {
 				return err
 			}
@@ -81,19 +93,16 @@ func signalCmd(dataDir *string) *cobra.Command {
 		Use:   "import",
 		Short: "validate external evaluator signals",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			raw, err := os.ReadFile(importFile)
+			output, err := readExternalSignals(importFile)
 			if err != nil {
 				return err
 			}
-			var output signal.ExternalEvalOutput
-			if err := json.Unmarshal(raw, &output); err != nil {
-				var signals []signal.EvalSignal
-				if err2 := json.Unmarshal(raw, &signals); err2 != nil {
-					return fmt.Errorf("signal import file must be {signals:[...]} or raw EvalSignal array: %w", err)
-				}
-				output.Signals = signals
+			var report signal.EvalReport
+			if client, ok := daemonClient(*daemonURL); ok {
+				report, err = client.ImportSignals(importRunID, "imported-external-evaluator", output.Signals)
+			} else {
+				report, err = signal.ImportSignals(importRunID, "imported-external-evaluator", output.Signals)
 			}
-			report, err := signal.ImportSignals(importRunID, "imported-external-evaluator", output.Signals)
 			if err != nil {
 				return err
 			}
@@ -128,6 +137,34 @@ func signalDB(dataDir string) (*sql.DB, func(), error) {
 		return nil, nil, err
 	}
 	return db, func() { _ = db.Close() }, nil
+}
+
+func signalContext(dataDir, daemonURL, runID string) (signal.EvalContext, error) {
+	if client, ok := daemonClient(daemonURL); ok {
+		return client.SignalContext(runID)
+	}
+	db, closeFn, err := signalDB(dataDir)
+	if err != nil {
+		return signal.EvalContext{}, err
+	}
+	defer closeFn()
+	return signal.BuildEvalContext(db, runID)
+}
+
+func readExternalSignals(path string) (signal.ExternalEvalOutput, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return signal.ExternalEvalOutput{}, err
+	}
+	var output signal.ExternalEvalOutput
+	if err := json.Unmarshal(raw, &output); err != nil {
+		var signals []signal.EvalSignal
+		if err2 := json.Unmarshal(raw, &signals); err2 != nil {
+			return signal.ExternalEvalOutput{}, fmt.Errorf("signal import file must be {signals:[...]} or raw EvalSignal array: %w", err)
+		}
+		output.Signals = signals
+	}
+	return output, nil
 }
 
 func printSignalReport(out io.Writer, report signal.EvalReport) error {

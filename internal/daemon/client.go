@@ -11,6 +11,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/control"
 	"github.com/byteyellow/agentprovenance/internal/experimental/scheduler"
+	"github.com/byteyellow/agentprovenance/internal/signal"
 )
 
 type Client struct {
@@ -121,6 +122,24 @@ func (c Client) SchedulerStatus(snapshot string) (scheduler.NodeState, error) {
 	}
 	err := c.getJSON(path, &resp)
 	return resp.Node, err
+}
+
+func (c Client) SignalContext(runID string) (signal.EvalContext, error) {
+	var ctx signal.EvalContext
+	err := c.getJSON("/v1/signal/context?run="+url.QueryEscape(runID), &ctx)
+	return ctx, err
+}
+
+func (c Client) RunBuiltinSignals(runID string) (signal.EvalReport, error) {
+	var report signal.EvalReport
+	err := c.postJSON("/v1/signal/run", map[string]any{"run_id": runID}, &report)
+	return report, err
+}
+
+func (c Client) ImportSignals(runID, engine string, signals []signal.EvalSignal) (signal.EvalReport, error) {
+	var report signal.EvalReport
+	err := c.postJSON("/v1/signal/import", map[string]any{"run_id": runID, "engine": engine, "signals": signals}, &report)
+	return report, err
 }
 
 type SnapshotCreateResponse struct {

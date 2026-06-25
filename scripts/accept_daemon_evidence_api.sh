@@ -165,4 +165,43 @@ assert len(bundle["response_actions"]) == 3
 assert os.path.getsize(exported["path"]) == exported["size_bytes"]
 PY
 
+echo "== export signal context through daemon API"
+SIGNAL_CONTEXT_JSON="$(get_json '/v1/signal/context?run=run-daemon-api-accept')"
+assert_contains "$SIGNAL_CONTEXT_JSON" '"schema_version":"agentprovenance.eval_context/v1"'
+assert_contains "$SIGNAL_CONTEXT_JSON" '"run_id":"run-daemon-api-accept"'
+assert_contains "$SIGNAL_CONTEXT_JSON" '"runtime_events"'
+
+echo "== run built-in signals through daemon API"
+SIGNAL_RUN_JSON="$(post_json /v1/signal/run '{"run_id":"run-daemon-api-accept"}')"
+assert_contains "$SIGNAL_RUN_JSON" '"schema_version":"agentprovenance.eval_signals/v1"'
+assert_contains "$SIGNAL_RUN_JSON" '"engine":"builtin-code-signal-engine"'
+assert_contains "$SIGNAL_RUN_JSON" '"decision_owner":"external_evaluator"'
+
+echo "== import external signals through daemon API"
+SIGNAL_IMPORT_JSON="$(post_json /v1/signal/import '{
+  "run_id":"run-daemon-api-accept",
+  "engine":"daemon-accept-evaluator",
+  "signals":[
+    {
+      "name":"daemon.external_quality",
+      "kind":"quality_signal",
+      "score":0.9,
+      "reason":"daemon API accepted externally owned evaluator signal"
+    }
+  ]
+}')"
+assert_contains "$SIGNAL_IMPORT_JSON" '"schema_version":"agentprovenance.eval_signals/v1"'
+assert_contains "$SIGNAL_IMPORT_JSON" '"engine":"daemon-accept-evaluator"'
+assert_contains "$SIGNAL_IMPORT_JSON" '"name":"daemon.external_quality"'
+
+echo "== run signal CLI as daemon client"
+SIGNAL_CLI_JSON="$("$BIN" --daemon-url "$DAEMON_URL" signal run --run run-daemon-api-accept --json)"
+assert_contains "$SIGNAL_CLI_JSON" '"schema_version": "agentprovenance.eval_signals/v1"'
+assert_contains "$SIGNAL_CLI_JSON" '"engine": "builtin-code-signal-engine"'
+
+SIGNAL_EXTERNAL_JSON="$("$BIN" --daemon-url "$DAEMON_URL" signal run --run run-daemon-api-accept --external "PYTHONPATH=python python3 examples/evaluators/python_signal_eval.py" --json)"
+assert_contains "$SIGNAL_EXTERNAL_JSON" '"schema_version": "agentprovenance.eval_signals/v1"'
+assert_contains "$SIGNAL_EXTERNAL_JSON" '"engine": "PYTHONPATH=python python3 examples/evaluators/python_signal_eval.py"'
+assert_contains "$SIGNAL_EXTERNAL_JSON" '"name": "example.dataset_label"'
+
 echo "Daemon evidence API acceptance passed"

@@ -106,7 +106,16 @@ func BuildEvalContext(db *sql.DB, runID string) (EvalContext, error) {
 	}
 	trajectories, err := provenance.BuildTrajectoriesRun(db, runID)
 	if err != nil {
-		return EvalContext{}, err
+		if !strings.Contains(err.Error(), "has no rollouts") {
+			return EvalContext{}, err
+		}
+		trajectories = provenance.TrajectoryManifest{
+			SchemaVersion: "agentprovenance.trajectories/v1",
+			RunID:         runID,
+			DecisionOwner: "external_evaluator",
+			Rollouts:      []provenance.TrajectoryRollout{},
+			Trajectories:  []provenance.TrajectoryEvidence{},
+		}
 	}
 	risks, err := security.ListRiskSignals(db, runID)
 	if err != nil {
@@ -121,6 +130,12 @@ func BuildEvalContext(db *sql.DB, runID string) (EvalContext, error) {
 	for _, trajectory := range trajectories.Trajectories {
 		runtimeEvents = append(runtimeEvents, trajectory.RuntimeEvents...)
 		fileChanges = append(fileChanges, trajectory.FileChanges...)
+	}
+	if len(runtimeEvents) == 0 {
+		runtimeEvents, err = listRunRuntimeEvents(db, runID)
+		if err != nil {
+			return EvalContext{}, err
+		}
 	}
 	if risks == nil {
 		risks = []security.RiskSignalRecord{}
@@ -143,6 +158,27 @@ func BuildEvalContext(db *sql.DB, runID string) (EvalContext, error) {
 		RuntimeEvents: runtimeEvents,
 		FileChanges:   fileChanges,
 	}, nil
+}
+
+func listRunRuntimeEvents(db *sql.DB, runID string) ([]provenance.ReplayEvent, error) {
+	rows, err := db.Query(`SELECT id, event_type, source, COALESCE(process_id, ''), COALESCE(snapshot_id, ''),
+			COALESCE(correlation_method, ''), COALESCE(correlation_confidence, 0), COALESCE(payload, '')
+		FROM events
+		WHERE run_id = ?
+		ORDER BY created_at ASC, id ASC`, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var events []provenance.ReplayEvent
+	for rows.Next() {
+		var event provenance.ReplayEvent
+		if err := rows.Scan(&event.ID, &event.EventType, &event.Source, &event.ProcessID, &event.SnapshotID, &event.CorrelationMethod, &event.CorrelationConfidence, &event.Payload); err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
 }
 
 func BuildBuiltinReportFromContext(evalCtx EvalContext) (EvalReport, error) {
