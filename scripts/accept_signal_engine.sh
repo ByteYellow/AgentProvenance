@@ -81,4 +81,40 @@ assert signals["artifact.presence"]["label"] == "artifact_present"
 assert signals["dataset.filter_label"]["kind"] == "dataset_label"
 PY
 
+echo "== export evaluator context"
+CONTEXT_JSON="$("$BIN" --data-dir "$DATA_DIR" signal context --run run-signal-accept)"
+assert_contains "$CONTEXT_JSON" '"schema_version": "agentprovenance.eval_context/v1"'
+assert_contains "$CONTEXT_JSON" '"run_id": "run-signal-accept"'
+assert_contains "$CONTEXT_JSON" '"runtime_events":'
+assert_contains "$CONTEXT_JSON" '"file_changes":'
+
+echo "== run external python evaluator"
+EXTERNAL_JSON="$("$BIN" --data-dir "$DATA_DIR" signal run --run run-signal-accept --external "PYTHONPATH=python python3 examples/evaluators/python_signal_eval.py" --json)"
+assert_contains "$EXTERNAL_JSON" '"schema_version": "agentprovenance.eval_signals/v1"'
+assert_contains "$EXTERNAL_JSON" '"engine": "PYTHONPATH=python python3 examples/evaluators/python_signal_eval.py"'
+assert_contains "$EXTERNAL_JSON" '"name": "example.file_change_count"'
+assert_contains "$EXTERNAL_JSON" '"name": "example.exec_observed"'
+assert_contains "$EXTERNAL_JSON" '"name": "example.dataset_label"'
+assert_contains "$EXTERNAL_JSON" '"label": "candidate"'
+
+echo "== import external evaluator output"
+IMPORT_FILE="$DATA_DIR/external-signals.json"
+cat > "$IMPORT_FILE" <<'JSON'
+{
+  "signals": [
+    {
+      "name": "external.custom_quality",
+      "kind": "quality_signal",
+      "score": 0.75,
+      "reason": "custom evaluator supplied a quality signal",
+      "evidence": {"source": "acceptance"}
+    }
+  ]
+}
+JSON
+IMPORT_JSON="$("$BIN" --data-dir "$DATA_DIR" signal import --run run-signal-accept --file "$IMPORT_FILE" --json)"
+assert_contains "$IMPORT_JSON" '"schema_version": "agentprovenance.eval_signals/v1"'
+assert_contains "$IMPORT_JSON" '"engine": "imported-external-evaluator"'
+assert_contains "$IMPORT_JSON" '"name": "external.custom_quality"'
+
 echo "Signal engine acceptance passed"

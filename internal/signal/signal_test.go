@@ -92,6 +92,36 @@ func TestBuildRunReportEmitsEvaluatorSignals(t *testing.T) {
 	}
 }
 
+func TestImportSignalsValidatesExternalSignals(t *testing.T) {
+	report, err := ImportSignals("run-import", "pytest-evaluator", []EvalSignal{
+		{
+			Name:   "external.quality",
+			Kind:   KindQualitySignal,
+			Score:  0.8,
+			Reason: "external evaluator provided a score",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Engine != "pytest-evaluator" || report.DecisionOwner != "external_evaluator" || report.SignalCount != 1 {
+		t.Fatalf("unexpected imported report: %+v", report)
+	}
+	if report.Signals[0].RunID != "run-import" || report.Signals[0].ID != "signal-001" {
+		t.Fatalf("signal metadata not normalized: %+v", report.Signals[0])
+	}
+
+	if _, err := ImportSignals("run-import", "", []EvalSignal{{Name: "bad", Kind: Kind("unknown"), Reason: "bad"}}); err == nil {
+		t.Fatal("expected invalid kind to fail")
+	}
+	if _, err := ImportSignals("run-import", "", []EvalSignal{{Name: "bad", Kind: KindPenalty}}); err == nil {
+		t.Fatal("expected missing reason to fail")
+	}
+	if _, err := ImportSignals("run-import", "", []EvalSignal{{Name: "bad", Kind: KindPenalty, RunID: "other", Reason: "bad"}}); err == nil {
+		t.Fatal("expected run_id mismatch to fail")
+	}
+}
+
 func execSQL(t *testing.T, db *sql.DB, query string, args ...any) {
 	t.Helper()
 	if _, err := db.Exec(query, args...); err != nil {

@@ -1,10 +1,12 @@
 package signal
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"sort"
 	"strings"
 
@@ -45,6 +47,20 @@ type EvalReport struct {
 	Signals       []EvalSignal `json:"signals"`
 }
 
+type EvalContext struct {
+	SchemaVersion string                            `json:"schema_version"`
+	RunID         string                            `json:"run_id"`
+	Trajectories  provenance.TrajectoryManifest     `json:"trajectories"`
+	Risks         []security.RiskSignalRecord       `json:"risks"`
+	Responses     []security.ResponseActionRecord   `json:"responses"`
+	RuntimeEvents []provenance.ReplayEvent          `json:"runtime_events"`
+	FileChanges   []provenance.TrajectoryFileChange `json:"file_changes"`
+}
+
+type ExternalEvalOutput struct {
+	Signals []EvalSignal `json:"signals"`
+}
+
 type Context struct {
 	DB           *sql.DB
 	RunID        string
@@ -77,22 +93,60 @@ func (r Registry) Register(name string, evaluator Evaluator) {
 }
 
 func BuildRunReport(db *sql.DB, runID string) (EvalReport, error) {
+	ctx, err := BuildEvalContext(db, runID)
+	if err != nil {
+		return EvalReport{}, err
+	}
+	return BuildBuiltinReportFromContext(ctx)
+}
+
+func BuildEvalContext(db *sql.DB, runID string) (EvalContext, error) {
 	if strings.TrimSpace(runID) == "" {
-		return EvalReport{}, fmt.Errorf("run_id is required")
+		return EvalContext{}, fmt.Errorf("run_id is required")
 	}
 	trajectories, err := provenance.BuildTrajectoriesRun(db, runID)
 	if err != nil {
-		return EvalReport{}, err
+		return EvalContext{}, err
 	}
 	risks, err := security.ListRiskSignals(db, runID)
 	if err != nil {
-		return EvalReport{}, err
+		return EvalContext{}, err
 	}
 	responses, err := security.ListResponseActions(db, runID)
 	if err != nil {
-		return EvalReport{}, err
+		return EvalContext{}, err
 	}
-	ctx := Context{DB: db, RunID: runID, Trajectories: trajectories, Risks: risks, Responses: responses}
+	var runtimeEvents []provenance.ReplayEvent
+	var fileChanges []provenance.TrajectoryFileChange
+	for _, trajectory := range trajectories.Trajectories {
+		runtimeEvents = append(runtimeEvents, trajectory.RuntimeEvents...)
+		fileChanges = append(fileChanges, trajectory.FileChanges...)
+	}
+	if risks == nil {
+		risks = []security.RiskSignalRecord{}
+	}
+	if responses == nil {
+		responses = []security.ResponseActionRecord{}
+	}
+	if runtimeEvents == nil {
+		runtimeEvents = []provenance.ReplayEvent{}
+	}
+	if fileChanges == nil {
+		fileChanges = []provenance.TrajectoryFileChange{}
+	}
+	return EvalContext{
+		SchemaVersion: "agentprovenance.eval_context/v1",
+		RunID:         runID,
+		Trajectories:  trajectories,
+		Risks:         risks,
+		Responses:     responses,
+		RuntimeEvents: runtimeEvents,
+		FileChanges:   fileChanges,
+	}, nil
+}
+
+func BuildBuiltinReportFromContext(evalCtx EvalContext) (EvalReport, error) {
+	ctx := Context{RunID: evalCtx.RunID, Trajectories: evalCtx.Trajectories, Risks: evalCtx.Risks, Responses: evalCtx.Responses}
 	registry := NewRegistry()
 	names := make([]string, 0, len(registry.evaluators))
 	for name := range registry.evaluators {
@@ -116,13 +170,13 @@ func BuildRunReport(db *sql.DB, runID string) (EvalReport, error) {
 	for i := range signals {
 		signals[i].ID = fmt.Sprintf("signal-%03d", i+1)
 	}
-	resultSetID, pageHash, err := integrity(runID, signals)
+	resultSetID, pageHash, err := integrity(evalCtx.RunID, signals)
 	if err != nil {
 		return EvalReport{}, err
 	}
 	return EvalReport{
 		SchemaVersion: "agentprovenance.eval_signals/v1",
-		RunID:         runID,
+		RunID:         evalCtx.RunID,
 		Engine:        "builtin-code-signal-engine",
 		DecisionOwner: "external_evaluator",
 		SignalCount:   len(signals),
@@ -130,6 +184,80 @@ func BuildRunReport(db *sql.DB, runID string) (EvalReport, error) {
 		PageHash:      pageHash,
 		Signals:       signals,
 	}, nil
+}
+
+func ImportSignals(runID, engine string, signals []EvalSignal) (EvalReport, error) {
+	if strings.TrimSpace(runID) == "" {
+		return EvalReport{}, fmt.Errorf("run_id is required")
+	}
+	if strings.TrimSpace(engine) == "" {
+		engine = "external-evaluator"
+	}
+	for i := range signals {
+		if err := validateSignal(&signals[i]); err != nil {
+			return EvalReport{}, fmt.Errorf("signal %d: %w", i+1, err)
+		}
+		if signals[i].RunID == "" {
+			signals[i].RunID = runID
+		}
+		if signals[i].RunID != runID {
+			return EvalReport{}, fmt.Errorf("signal %d run_id %q does not match %q", i+1, signals[i].RunID, runID)
+		}
+		signals[i].ID = fmt.Sprintf("signal-%03d", i+1)
+	}
+	resultSetID, pageHash, err := integrity(runID, signals)
+	if err != nil {
+		return EvalReport{}, err
+	}
+	return EvalReport{
+		SchemaVersion: "agentprovenance.eval_signals/v1",
+		RunID:         runID,
+		Engine:        engine,
+		DecisionOwner: "external_evaluator",
+		SignalCount:   len(signals),
+		ResultSetID:   resultSetID,
+		PageHash:      pageHash,
+		Signals:       signals,
+	}, nil
+}
+
+func RunExternal(command string, evalCtx EvalContext) (EvalReport, error) {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return EvalReport{}, fmt.Errorf("external evaluator command is required")
+	}
+	input, err := json.Marshal(evalCtx)
+	if err != nil {
+		return EvalReport{}, err
+	}
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Stdin = bytes.NewReader(input)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return EvalReport{}, fmt.Errorf("external evaluator failed: %w stderr=%s", err, strings.TrimSpace(stderr.String()))
+	}
+	var output ExternalEvalOutput
+	if err := json.Unmarshal(stdout.Bytes(), &output); err != nil {
+		return EvalReport{}, fmt.Errorf("external evaluator output must be JSON object with signals: %w", err)
+	}
+	return ImportSignals(evalCtx.RunID, command, output.Signals)
+}
+
+func validateSignal(signal *EvalSignal) error {
+	if strings.TrimSpace(signal.Name) == "" {
+		return fmt.Errorf("name is required")
+	}
+	switch signal.Kind {
+	case KindRewardFeature, KindPenalty, KindDatasetLabel, KindQualitySignal:
+	default:
+		return fmt.Errorf("invalid kind %q", signal.Kind)
+	}
+	if strings.TrimSpace(signal.Reason) == "" {
+		return fmt.Errorf("reason is required")
+	}
+	return nil
 }
 
 func riskPenalty(ctx Context) ([]EvalSignal, error) {
