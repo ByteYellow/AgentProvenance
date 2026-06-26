@@ -9,18 +9,29 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
+	"regexp"
+	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
 )
 
-// Run loads the eBPF probes, reads events from the ring buffer, and writes one
-// normalized telemetry event per line (JSONL) to out. It blocks until SIGINT/
-// SIGTERM. Requires root or CAP_BPF + CAP_PERFMON.
+const (
+	eventExec    = 1
+	eventConnect = 2
+	eventOpen    = 3
+)
+
+// Run loads the eBPF probes (exec/connect/openat), reads events from the ring
+// buffer, enriches each with a container id derived from the task's cgroup, and
+// writes one normalized telemetry event per line (JSONL) to out. It blocks until
+// SIGINT/SIGTERM. Requires root or CAP_BPF + CAP_PERFMON.
 func Run(out io.Writer) error {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return fmt.Errorf("remove memlock: %w", err)
@@ -32,11 +43,21 @@ func Run(out io.Writer) error {
 	}
 	defer objs.Close()
 
-	tp, err := link.Tracepoint("sched", "sched_process_exec", objs.HandleExec, nil)
+	tpExec, err := link.Tracepoint("sched", "sched_process_exec", objs.HandleExec, nil)
 	if err != nil {
 		return fmt.Errorf("attach sched_process_exec: %w", err)
 	}
-	defer tp.Close()
+	defer tpExec.Close()
+	tpConnect, err := link.Tracepoint("syscalls", "sys_enter_connect", objs.HandleConnect, nil)
+	if err != nil {
+		return fmt.Errorf("attach sys_enter_connect: %w", err)
+	}
+	defer tpConnect.Close()
+	tpOpen, err := link.Tracepoint("syscalls", "sys_enter_openat", objs.HandleOpenat, nil)
+	if err != nil {
+		return fmt.Errorf("attach sys_enter_openat: %w", err)
+	}
+	defer tpOpen.Close()
 
 	rd, err := ringbuf.NewReader(objs.Events)
 	if err != nil {
@@ -60,24 +81,71 @@ func Run(out io.Writer) error {
 			}
 			continue
 		}
-		var e sensorbpfExecEvent
+		var e sensorbpfSensorEvent
 		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &e); err != nil {
 			continue
 		}
-		// v0 emits the raw exec event; normalized-schema mapping + container_id
-		// derivation from the cgroup path is the next increment.
-		_ = enc.Encode(map[string]any{
-			"source":     "agentprov_ebpf",
-			"event_type": "execve",
-			"pid":        e.Pid,
-			"ppid":       e.Ppid,
-			"comm":       cstr(e.Comm[:]),
-			"filename":   cstr(e.Filename[:]),
-		})
+		_ = enc.Encode(normalize(e))
 	}
 }
 
-// cstr converts a NUL-terminated C char array to a Go string.
+// normalize maps a raw kernel event to the normalized telemetry schema consumed
+// by `telemetry ingest` (container_id, cgroup_id, pid/tgid/ppid, source,
+// event_type, payload). container_id is best-effort from /proc/<pid>/cgroup.
+func normalize(e sensorbpfSensorEvent) map[string]any {
+	containerID := containerIDForPID(e.Pid)
+	ev := map[string]any{
+		"source":       "agentprov_ebpf",
+		"pid":          e.Pid,
+		"tgid":         e.Tgid,
+		"ppid":         e.Ppid,
+		"cgroup_id":    strconv.FormatUint(e.CgroupId, 10),
+		"container_id": containerID,
+		"timestamp":    time.Now().UTC().Format(time.RFC3339Nano),
+		"comm":         cstr(e.Comm[:]),
+	}
+	switch e.Kind {
+	case eventExec:
+		ev["event_type"] = "execve"
+		ev["path"] = cstr(e.Path[:])
+	case eventConnect:
+		ev["event_type"] = "network_connect"
+		ev["dst_ip"] = ipv4(e.Daddr)
+		ev["dst_port"] = ntohs(e.Dport)
+	case eventOpen:
+		ev["event_type"] = "file_open"
+		ev["path"] = cstr(e.Path[:])
+	default:
+		ev["event_type"] = "unknown"
+	}
+	return ev
+}
+
+// dockerCgroupRe extracts a 64-hex container id from a cgroup path line.
+var dockerCgroupRe = regexp.MustCompile(`[0-9a-f]{64}`)
+
+func containerIDForPID(pid uint32) string {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cgroup", pid))
+	if err != nil {
+		return ""
+	}
+	if m := dockerCgroupRe.Find(data); m != nil {
+		return string(m)
+	}
+	return ""
+}
+
+func ipv4(addr uint32) string {
+	// addr is network byte order (big-endian) as read from the kernel.
+	b := make([]byte, 4)
+	binary.LittleEndian.PutUint32(b, addr)
+	return net.IPv4(b[0], b[1], b[2], b[3]).String()
+}
+
+func ntohs(p uint16) uint16 {
+	return (p<<8)&0xff00 | p>>8
+}
+
 func cstr(b []uint8) string {
 	if i := bytes.IndexByte(byteSlice(b), 0); i >= 0 {
 		b = b[:i]
