@@ -26,6 +26,8 @@ Expected properties:
 - default capture stays lightweight: process, file diff, artifact, exit,
   resource, and summary runtime evidence;
 - every trajectory can have its own `run_id`;
+- batch jobs can use `agentprov record batch --file jobs.jsonl --json` to get
+  one `agentprovenance.record_batch/v1` manifest across many trajectories;
 - outputs are JSON-friendly and batch-friendly.
 
 Boundary:

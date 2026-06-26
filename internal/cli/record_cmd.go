@@ -1,8 +1,16 @@
 package cli
 
 import (
+	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"sort"
+	"strings"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/record"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -58,7 +66,276 @@ func recordCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().Int64Var(&sampleIntervalMS, "sample-interval-ms", 25, "zero-SDK process tree sampling interval in milliseconds")
 	cmd.Flags().Int64Var(&postRootGraceMS, "post-root-grace-ms", 250, "time to keep sampling after root process exit")
 	cmd.Flags().BoolVar(&withJSON, "json", false, "emit machine-readable zero-SDK record manifest")
+	cmd.AddCommand(recordBatchCmd(dataDir))
 	return cmd
+}
+
+func recordBatchCmd(dataDir *string) *cobra.Command {
+	var file string
+	var withJSON bool
+	var continueOnError bool
+	var sampleIntervalMS int64
+	var postRootGraceMS int64
+	cmd := &cobra.Command{
+		Use:   "batch",
+		Short: "record many zero-SDK jobs from a JSONL batch file",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			jobs, inputHash, err := readRecordBatchJobs(file)
+			if err != nil {
+				return err
+			}
+			paths, err := store.Init(*dataDir)
+			if err != nil {
+				return err
+			}
+			db, err := store.Open(paths)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			service := record.Service{DB: db, Paths: paths}
+			startedAt := time.Now().UTC().Format(time.RFC3339Nano)
+			items := make([]recordBatchItem, 0, len(jobs))
+			statusCounts := map[string]int{}
+			runIDs := make([]string, 0, len(jobs))
+			shards := map[string]int{}
+			for index, job := range jobs {
+				if job.Name == "" {
+					job.Name = "record-batch"
+				}
+				if job.SampleIntervalMS == 0 {
+					job.SampleIntervalMS = sampleIntervalMS
+				}
+				if job.PostRootGraceMS == 0 {
+					job.PostRootGraceMS = postRootGraceMS
+				}
+				item := recordBatchItem{
+					Index:   index,
+					JobID:   job.JobID,
+					ShardID: job.ShardID,
+					RunID:   job.RunID,
+					Workdir: job.Workdir,
+					Command: strings.Join(job.Command, " "),
+				}
+				result, runErr := service.Run(record.Request{
+					RunID:            job.RunID,
+					Name:             job.Name,
+					Workdir:          job.Workdir,
+					Command:          job.Command,
+					SampleIntervalMS: job.SampleIntervalMS,
+					PostRootGraceMS:  job.PostRootGraceMS,
+				})
+				if runErr != nil {
+					item.Status = "failed"
+					item.Error = runErr.Error()
+					statusCounts[item.Status]++
+					items = append(items, item)
+					if !continueOnError {
+						manifest := buildRecordBatchManifest(inputHash, startedAt, items, statusCounts, runIDs, shards)
+						if withJSON {
+							_ = printJSON(cmd.OutOrStdout(), manifest)
+						}
+						return runErr
+					}
+					continue
+				}
+				item.RunID = result.RunID
+				item.AttemptID = result.AttemptID
+				item.ToolCallID = result.ToolCallID
+				item.ProcessID = result.ProcessID
+				item.Status = result.Status
+				item.ExitCode = result.ExitCode
+				item.WallMS = result.WallMS
+				item.ChangedFileCount = len(result.ChangedFiles)
+				item.ChangedFiles = result.ChangedFiles
+				item.EvidenceManifestCommand = "evidence manifest --run " + result.RunID + " --json"
+				item.EvalContextCommand = "signal context --run " + result.RunID
+				item.ExplainCommand = "graph explain --run " + result.RunID + " --json"
+				statusCounts[item.Status]++
+				runIDs = append(runIDs, result.RunID)
+				if job.ShardID != "" {
+					shards[job.ShardID]++
+				}
+				items = append(items, item)
+			}
+			manifest := buildRecordBatchManifest(inputHash, startedAt, items, statusCounts, runIDs, shards)
+			if withJSON {
+				return printJSON(cmd.OutOrStdout(), manifest)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "schema=%s batch_id=%s jobs=%d passed=%d failed=%d result_set=%s page_hash=%s\n",
+				manifest.SchemaVersion, manifest.BatchID, manifest.JobCount, manifest.Passed, manifest.Failed, manifest.ResultSetID, manifest.PageHash)
+			for _, item := range manifest.Items {
+				fmt.Fprintf(cmd.OutOrStdout(), "job=%s shard=%s run=%s status=%s exit=%d changed_files=%d wall_ms=%d\n",
+					item.JobID, item.ShardID, item.RunID, item.Status, item.ExitCode, item.ChangedFileCount, item.WallMS)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&file, "file", "", "JSONL batch file; use - for stdin")
+	cmd.Flags().BoolVar(&withJSON, "json", false, "emit machine-readable batch manifest")
+	cmd.Flags().BoolVar(&continueOnError, "continue-on-error", true, "continue recording later jobs when one job fails")
+	cmd.Flags().Int64Var(&sampleIntervalMS, "sample-interval-ms", 25, "default zero-SDK process tree sampling interval in milliseconds")
+	cmd.Flags().Int64Var(&postRootGraceMS, "post-root-grace-ms", 250, "default time to keep sampling after root process exit")
+	_ = cmd.MarkFlagRequired("file")
+	return cmd
+}
+
+type recordBatchJob struct {
+	JobID            string   `json:"job_id"`
+	ShardID          string   `json:"shard_id"`
+	RunID            string   `json:"run_id"`
+	Name             string   `json:"name"`
+	Workdir          string   `json:"workdir"`
+	Command          []string `json:"command"`
+	SampleIntervalMS int64    `json:"sample_interval_ms"`
+	PostRootGraceMS  int64    `json:"post_root_grace_ms"`
+}
+
+type recordBatchItem struct {
+	Index                   int      `json:"index"`
+	JobID                   string   `json:"job_id,omitempty"`
+	ShardID                 string   `json:"shard_id,omitempty"`
+	RunID                   string   `json:"run_id,omitempty"`
+	AttemptID               string   `json:"attempt_id,omitempty"`
+	ToolCallID              string   `json:"tool_call_id,omitempty"`
+	ProcessID               string   `json:"process_id,omitempty"`
+	Workdir                 string   `json:"workdir,omitempty"`
+	Command                 string   `json:"command,omitempty"`
+	Status                  string   `json:"status"`
+	ExitCode                int      `json:"exit_code"`
+	WallMS                  int64    `json:"wall_ms"`
+	ChangedFileCount        int      `json:"changed_file_count"`
+	ChangedFiles            []string `json:"changed_files,omitempty"`
+	Error                   string   `json:"error,omitempty"`
+	EvidenceManifestCommand string   `json:"evidence_manifest_command,omitempty"`
+	EvalContextCommand      string   `json:"eval_context_command,omitempty"`
+	ExplainCommand          string   `json:"explain_command,omitempty"`
+}
+
+type recordBatchManifest struct {
+	SchemaVersion string            `json:"schema_version"`
+	BatchID       string            `json:"batch_id"`
+	InputSHA256   string            `json:"input_sha256"`
+	StartedAt     string            `json:"started_at"`
+	EndedAt       string            `json:"ended_at"`
+	JobCount      int               `json:"job_count"`
+	Passed        int               `json:"passed"`
+	Failed        int               `json:"failed"`
+	Skipped       int               `json:"skipped"`
+	StatusCounts  map[string]int    `json:"status_counts"`
+	RunIDs        []string          `json:"run_ids"`
+	Shards        map[string]int    `json:"shards,omitempty"`
+	Items         []recordBatchItem `json:"items"`
+	ResultSetID   string            `json:"result_set_id"`
+	PageHash      string            `json:"page_hash"`
+}
+
+func readRecordBatchJobs(path string) ([]recordBatchJob, string, error) {
+	var raw []byte
+	var err error
+	if path == "-" {
+		raw, err = io.ReadAll(os.Stdin)
+	} else {
+		raw, err = os.ReadFile(path)
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	sum := sha256.Sum256(raw)
+	inputHash := "sha256:" + hex.EncodeToString(sum[:])
+	scanner := bufio.NewScanner(strings.NewReader(string(raw)))
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	var jobs []recordBatchJob
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var job recordBatchJob
+		if err := json.Unmarshal([]byte(line), &job); err != nil {
+			return nil, "", fmt.Errorf("parse batch JSONL line %d: %w", lineNo, err)
+		}
+		if len(job.Command) == 0 {
+			return nil, "", fmt.Errorf("batch JSONL line %d missing command", lineNo)
+		}
+		if job.JobID == "" {
+			job.JobID = fmt.Sprintf("job-%06d", len(jobs)+1)
+		}
+		jobs = append(jobs, job)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, "", err
+	}
+	if len(jobs) == 0 {
+		return nil, "", fmt.Errorf("batch file has no jobs")
+	}
+	return jobs, inputHash, nil
+}
+
+func buildRecordBatchManifest(inputHash, startedAt string, items []recordBatchItem, statusCounts map[string]int, runIDs []string, shards map[string]int) recordBatchManifest {
+	endedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	runIDs = append([]string(nil), runIDs...)
+	sort.Strings(runIDs)
+	statusCounts = copyStringIntMap(statusCounts)
+	shards = copyStringIntMap(shards)
+	manifest := recordBatchManifest{
+		SchemaVersion: "agentprovenance.record_batch/v1",
+		InputSHA256:   inputHash,
+		StartedAt:     startedAt,
+		EndedAt:       endedAt,
+		JobCount:      len(items),
+		Passed:        statusCounts["passed"],
+		Failed:        statusCounts["failed"],
+		Skipped:       statusCounts["skipped"],
+		StatusCounts:  statusCounts,
+		RunIDs:        runIDs,
+		Shards:        shards,
+		Items:         items,
+	}
+	manifest.BatchID = digestMap("record_batch_id", map[string]any{
+		"input_sha256": inputHash,
+		"run_ids":      runIDs,
+		"job_count":    manifest.JobCount,
+		"started_at":   startedAt,
+	})
+	manifest.ResultSetID = digestMap("record_batch_result_set", map[string]any{
+		"schema_version": manifest.SchemaVersion,
+		"batch_id":       manifest.BatchID,
+		"input_sha256":   inputHash,
+		"run_ids":        runIDs,
+	})
+	manifest.PageHash = digestMap("record_batch_page", map[string]any{
+		"schema_version": manifest.SchemaVersion,
+		"batch_id":       manifest.BatchID,
+		"items":          manifest.Items,
+		"status_counts":  manifest.StatusCounts,
+	})
+	return manifest
+}
+
+func copyStringIntMap(in map[string]int) map[string]int {
+	out := map[string]int{}
+	for key, value := range in {
+		if key != "" {
+			out[key] = value
+		}
+	}
+	return out
+}
+
+func digestMap(kind string, value map[string]any) string {
+	value["kind"] = kind
+	raw, _ := json.Marshal(value)
+	sum := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func printJSON(out io.Writer, value any) error {
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(value)
 }
 
 func printRecordJSON(cmd *cobra.Command, result record.Result) error {
@@ -110,7 +387,5 @@ func printRecordJSON(cmd *cobra.Command, result record.Result) error {
 	if result.FailureReason != "" {
 		manifest["failure_reason"] = result.FailureReason
 	}
-	enc := json.NewEncoder(cmd.OutOrStdout())
-	enc.SetIndent("", "  ")
-	return enc.Encode(manifest)
+	return printJSON(cmd.OutOrStdout(), manifest)
 }

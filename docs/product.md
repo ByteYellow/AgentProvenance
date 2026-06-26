@@ -152,9 +152,9 @@ The product has three deployment shapes:
 
 For RL and evaluator pipelines, the first mode is the most important adoption
 path. AgentProvenance should let a pipeline wrap an existing command, emit a
-manifest and `EvalContext`, and leave reward/ranking/dataset decisions to the
-pipeline. Heavy telemetry, daemon mode, and central services are opt-in
-hardening paths, not prerequisites.
+record or batch manifest and `EvalContext`, and leave reward/ranking/dataset
+decisions to the pipeline. Heavy telemetry, daemon mode, and central services
+are opt-in hardening paths, not prerequisites.
 
 ## Relationship To System observability, HIDS, And OpenTelemetry
 

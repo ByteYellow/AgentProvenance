@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Sequence
 
@@ -127,6 +128,26 @@ class Client:
             )
         return manifests
 
+    def record_batch(self, jobs: Iterable[dict[str, Any]]) -> dict[str, Any]:
+        rows = []
+        for job in jobs:
+            if not job.get("command"):
+                raise ValueError("batch record job must include command")
+            rows.append(json.dumps(job, separators=(",", ":")))
+        if not rows:
+            raise ValueError("batch record requires at least one job")
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+            path = handle.name
+            handle.write("\n".join(rows))
+            handle.write("\n")
+        try:
+            return self.run_cli(["record", "batch", "--file", path, "--json"]).json()
+        finally:
+            try:
+                os.unlink(path)
+            except FileNotFoundError:
+                pass
+
     def evidence_manifest(self, run_id: str, *, materialize: bool = False) -> dict[str, Any]:
         args = ["evidence", "manifest", "--run", run_id, "--json"]
         if materialize:
@@ -166,6 +187,17 @@ def batch_record(
     """Record many commands sequentially for batch/evaluator pipelines."""
 
     return Client(binary=binary, data_dir=data_dir).batch_record(jobs)
+
+
+def record_batch(
+    jobs: Iterable[dict[str, Any]],
+    *,
+    binary: str | os.PathLike[str] = "agentprov",
+    data_dir: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """Record many commands through `agentprov record batch` and return one manifest."""
+
+    return Client(binary=binary, data_dir=data_dir).record_batch(jobs)
 
 
 class EvalContext:
@@ -281,6 +313,7 @@ __all__ = [
     "Signal",
     "batch_record",
     "record",
+    "record_batch",
     "KIND_REWARD_FEATURE",
     "KIND_PENALTY",
     "KIND_DATASET_LABEL",

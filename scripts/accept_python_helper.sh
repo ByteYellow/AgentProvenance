@@ -59,4 +59,44 @@ assert report["signal_count"] == 1
 print("python helper acceptance ok")
 PY
 
+echo "== record batch through thin Python helper"
+BATCH_WORKDIR_A="$(mktemp -d "${TMPDIR:-/tmp}/agentprov-python-helper-batch-a.XXXXXX")"
+BATCH_WORKDIR_B="$(mktemp -d "${TMPDIR:-/tmp}/agentprov-python-helper-batch-b.XXXXXX")"
+printf 'a = 1\n' >"$BATCH_WORKDIR_A/app.py"
+printf 'b = 1\n' >"$BATCH_WORKDIR_B/app.py"
+PYTHONPATH=python AGENTPROV_BIN="$BIN" AGENTPROV_DATA_DIR="$DATA_DIR" BATCH_WORKDIR_A="$BATCH_WORKDIR_A" BATCH_WORKDIR_B="$BATCH_WORKDIR_B" python3 - <<'PY'
+import os
+from agentprov_eval import Client
+
+client = Client(binary=os.environ["AGENTPROV_BIN"], data_dir=os.environ["AGENTPROV_DATA_DIR"])
+manifest = client.record_batch(
+    [
+        {
+            "job_id": "job-a",
+            "shard_id": "shard-0",
+            "run_id": "run-python-helper-batch-a",
+            "workdir": os.environ["BATCH_WORKDIR_A"],
+            "command": ["sh", "-c", "printf 'a = 2\n' > app.py"],
+        },
+        {
+            "job_id": "job-b",
+            "shard_id": "shard-0",
+            "run_id": "run-python-helper-batch-b",
+            "workdir": os.environ["BATCH_WORKDIR_B"],
+            "command": ["sh", "-c", "printf 'b = 2\n' > app.py"],
+        },
+    ]
+)
+assert manifest["schema_version"] == "agentprovenance.record_batch/v1"
+assert manifest["job_count"] == 2
+assert manifest["passed"] == 2
+assert manifest["shards"]["shard-0"] == 2
+assert "run-python-helper-batch-a" in manifest["run_ids"]
+assert manifest["items"][0]["evidence_manifest_command"].startswith("evidence manifest --run ")
+ctx = client.eval_context("run-python-helper-batch-a")
+assert ctx["run_id"] == "run-python-helper-batch-a"
+print("python helper batch acceptance ok")
+PY
+rm -rf "$BATCH_WORKDIR_A" "$BATCH_WORKDIR_B"
+
 echo "Python helper acceptance passed"

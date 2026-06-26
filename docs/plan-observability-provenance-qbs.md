@@ -256,6 +256,8 @@ For RL, Tier 1 is the product default:
 
 - install cost is one Go binary plus an optional thin Python helper;
 - call path is `agentprov record -- <agent command>` or a Python wrapper;
+- batch path is `agentprov record batch --file jobs.jsonl --json` for
+  trajectory batches with job/shard metadata;
 - batch jobs control scheduling and reward policy themselves;
 - AgentProvenance emits trajectory evidence, deviations, risk signals, and
   manifests;

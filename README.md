@@ -317,9 +317,9 @@ ctx = client.eval_context(manifest["run_id"])
 Batch pipelines can keep their own scheduler and call:
 
 ```python
-from agentprov_eval import batch_record
+from agentprov_eval import record_batch
 
-manifests = batch_record(
+batch = record_batch(
     [
         {"run_id": "traj-0001", "workdir": "/tmp/job1", "command": ["pytest", "-q"]},
         {"run_id": "traj-0002", "workdir": "/tmp/job2", "command": ["pytest", "-q"]},
@@ -582,6 +582,7 @@ What these mean:
 | Area | Current capability |
 |---|---|
 | Zero-SDK record | `agentprov record -- <command>` snapshots a working directory, samples root-process descendants with configurable `--sample-interval-ms` and `--post-root-grace-ms`, marks observed descendants that outlive the root, creates PID bindings, emits orphan lifecycle audit decisions when applicable, computes changed files, records runtime file evidence, exposes process observations with raw/correlation/container/cgroup identity in timeline JSON, materializes a `record_manifest` object, and is covered by a realistic acceptance run that modifies, creates, deletes files, observes a child process, and correlates a delayed runtime event without raw `tool_call_id` |
+| Batch recorder | `agentprov record batch --file jobs.jsonl --json` records many zero-SDK jobs and emits `agentprovenance.record_batch/v1` with `job_id`, `shard_id`, run IDs, status counts, per-job evidence/eval/explain commands, `result_set_id`, and `page_hash`; the Python helper exposes this as `record_batch(...)` for RL/evaluator pipelines |
 | Execution context | explicit ToolCallScope binding through run/session/attempt/tool_call/process/container/cgroup/pid |
 | Adapter contracts | `adapter list/inspect` exposes agent, sandbox, telemetry, artifact, and snapshot adapter capabilities, identity keys, boundaries, and QBS impact |
 | Evidence ingest | raw telemetry ingestion without requiring raw `tool_call_id`; ingest and verify enforce event-specific payload schemas, reject application context inside raw runtime payloads, map filtered Tetragon/Falco/LoongCollector JSONL into normalized telemetry events, record batch manifests with input/event hashes, expose per-row receiver evidence via `receiver_summary` / `row_results`, and page telemetry event lists with `--limit` / opaque `--cursor` plus result/page hashes |
@@ -836,5 +837,5 @@ embedded evidence manifest, risk/response records, graph edges, and a clean
 path for ToolCallScope binding, async Falco spool ingest, control API
 responsiveness while a batch is queued, graph verify, evidence manifest
 materialization, and forensics export. `accept_python_helper.sh` validates the
-thin Python helper path for CLI-backed record, evidence manifest export,
-EvalContext export, and signal import.
+thin Python helper path for CLI-backed record, batch record, evidence manifest
+export, EvalContext export, and signal import.
