@@ -83,6 +83,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/telemetry/retention/prune", s.pruneTelemetryRetention)
 	mux.HandleFunc("POST /v1/telemetry/ingest-falco", s.ingestFalco)
 	mux.HandleFunc("GET /v1/graph/verify", s.graphVerify)
+	mux.HandleFunc("GET /v1/graph/explain", s.graphExplain)
 	mux.HandleFunc("GET /v1/evidence/manifest", s.evidenceManifest)
 	mux.HandleFunc("POST /v1/forensics/export", s.forensicsExport)
 	mux.HandleFunc("GET /v1/observe/summary", s.observeSummary)
@@ -561,6 +562,33 @@ func (s Server) pruneTelemetryRetention(w http.ResponseWriter, r *http.Request) 
 func (s Server) graphVerify(w http.ResponseWriter, r *http.Request) {
 	runID := r.URL.Query().Get("run")
 	result, err := provenance.Verify(s.DB, runID)
+	writeResult(w, result, err)
+}
+
+func (s Server) graphExplain(w http.ResponseWriter, r *http.Request) {
+	limit, err := intQuery(r, "limit", 100)
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	depth, err := intQuery(r, "depth", 2)
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	result, err := provenance.BuildExplain(s.DB, provenance.ExplainOptions{
+		RunID:    r.URL.Query().Get("run"),
+		Artifact: r.URL.Query().Get("artifact"),
+		Attempt:  r.URL.Query().Get("attempt"),
+		ToolCall: r.URL.Query().Get("tool_call"),
+		Process:  r.URL.Query().Get("process"),
+		Event:    r.URL.Query().Get("event"),
+		Risk:     r.URL.Query().Get("risk"),
+		File:     r.URL.Query().Get("file"),
+		Depth:    depth,
+		Limit:    limit,
+		Cursor:   r.URL.Query().Get("cursor"),
+	})
 	writeResult(w, result, err)
 }
 

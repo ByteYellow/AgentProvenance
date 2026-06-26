@@ -168,6 +168,46 @@ func (c Client) VerifyGraph(runID string) (provenance.VerifyResult, error) {
 	return result, err
 }
 
+func (c Client) ExplainGraph(opts provenance.ExplainOptions) (provenance.ExplainManifest, error) {
+	values := url.Values{}
+	if opts.RunID != "" {
+		values.Set("run", opts.RunID)
+	}
+	if opts.Artifact != "" {
+		values.Set("artifact", opts.Artifact)
+	}
+	if opts.Attempt != "" {
+		values.Set("attempt", opts.Attempt)
+	}
+	if opts.ToolCall != "" {
+		values.Set("tool_call", opts.ToolCall)
+	}
+	if opts.Process != "" {
+		values.Set("process", opts.Process)
+	}
+	if opts.Event != "" {
+		values.Set("event", opts.Event)
+	}
+	if opts.Risk != "" {
+		values.Set("risk", opts.Risk)
+	}
+	if opts.File != "" {
+		values.Set("file", opts.File)
+	}
+	if opts.Depth > 0 {
+		values.Set("depth", fmt.Sprintf("%d", opts.Depth))
+	}
+	if opts.Limit > 0 {
+		values.Set("limit", fmt.Sprintf("%d", opts.Limit))
+	}
+	if opts.Cursor != "" {
+		values.Set("cursor", opts.Cursor)
+	}
+	var manifest provenance.ExplainManifest
+	err := c.getJSON("/v1/graph/explain?"+values.Encode(), &manifest)
+	return manifest, err
+}
+
 func (c Client) EvidenceManifest(runID string, materialize bool) (evidence.MaterializedManifest, error) {
 	values := url.Values{}
 	values.Set("run", runID)

@@ -113,6 +113,13 @@ assert_contains "$EVENTS_PAGE1" '"has_more":true'
 assert_contains "$EVENTS_PAGE1" '"next_cursor":"'
 assert_contains "$EVENTS_PAGE1" '"result_set_id":"sha256:'
 assert_contains "$EVENTS_PAGE1" '"page_hash":"sha256:'
+FIRST_EVENT_ID="$(python3 - <<'PY' "$EVENTS_PAGE1"
+import json
+import sys
+page = json.loads(sys.argv[1])
+print(page["events"][0]["id"])
+PY
+)"
 
 echo "== query observability summary and timeline through daemon API"
 OBSERVE_JSON="$(get_json '/v1/observe/summary?run=run-daemon-api-accept&top=3')"
@@ -155,6 +162,18 @@ assert_contains "$VERIFY_JSON" '"status":"ok"'
 VERIFY_CLI_JSON="$("$BIN" --daemon-url "$DAEMON_URL" graph verify --run run-daemon-api-accept --json)"
 assert_contains "$VERIFY_CLI_JSON" '"schema_version": "agentprovenance.verify/v1"'
 assert_contains "$VERIFY_CLI_JSON" '"status": "ok"'
+
+echo "== explain graph through daemon API"
+EXPLAIN_JSON="$(get_json "/v1/graph/explain?event=$FIRST_EVENT_ID&depth=3&limit=20")"
+assert_contains "$EXPLAIN_JSON" '"schema_version":"agentprovenance.explain/v1"'
+assert_contains "$EXPLAIN_JSON" '"target":{"type":"event"'
+assert_contains "$EXPLAIN_JSON" '"runtime_events":'
+assert_contains "$EXPLAIN_JSON" '"page_hash":"sha256:'
+
+EXPLAIN_CLI_JSON="$("$BIN" --daemon-url "$DAEMON_URL" graph explain --event "$FIRST_EVENT_ID" --depth 3 --limit 20 --json)"
+assert_contains "$EXPLAIN_CLI_JSON" '"schema_version": "agentprovenance.explain/v1"'
+assert_contains "$EXPLAIN_CLI_JSON" '"type": "event"'
+assert_contains "$EXPLAIN_CLI_JSON" '"runtime_events":'
 
 echo "== materialize evidence manifest through daemon API"
 EVIDENCE_JSON="$(get_json '/v1/evidence/manifest?run=run-daemon-api-accept&materialize=1')"

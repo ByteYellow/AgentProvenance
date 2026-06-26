@@ -245,6 +245,33 @@ func Explain(db *sql.DB, opts ExplainOptions, out io.Writer) error {
 	}
 }
 
+func PrintExplainManifestJSON(out io.Writer, manifest ExplainManifest) error {
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(manifest)
+}
+
+func PrintExplainManifest(out io.Writer, manifest ExplainManifest) error {
+	target := manifest.Target
+	fmt.Fprintf(out, "explain:\n")
+	fmt.Fprintf(out, "  target=%s id=%s run=%s file=%s\n", target.Type, target.ID, target.Run, target.File)
+	fmt.Fprintf(out, "  schema=%s result_set=%s page_hash=%s edges=%d truncated=%t\n",
+		manifest.SchemaVersion, manifest.Query.ResultSetID, manifest.Query.PageHash, manifest.Query.EdgeCount, manifest.Query.Truncated)
+	for _, line := range manifest.Summary {
+		fmt.Fprintf(out, "  summary=%s\n", line)
+	}
+	for _, risk := range manifest.Risks {
+		fmt.Fprintf(out, "  risk=%s rule=%s decision=%s event=%s reason=%q\n", risk.ID, risk.RuleID, risk.Decision, risk.EventID, risk.Reason)
+	}
+	for _, response := range manifest.Responses {
+		fmt.Fprintf(out, "  response=%s action=%s target=%s/%s status=%s\n", response.ID, response.ActionType, response.TargetType, response.TargetID, response.Status)
+	}
+	for _, edge := range manifest.CausalityPath {
+		fmt.Fprintf(out, "  edge=%s %s -> %s source_event=%s\n", edge.EdgeType, edge.FromID, edge.ToID, edge.SourceEventID)
+	}
+	return nil
+}
+
 func BuildExplain(db *sql.DB, opts ExplainOptions) (ExplainManifest, error) {
 	target, err := explainTarget(opts)
 	if err != nil {

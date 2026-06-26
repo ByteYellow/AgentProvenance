@@ -316,12 +316,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 		Use:   "explain",
 		Short: "explain runtime causality and provenance for a graph target",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, err := openDB()
-			if err != nil {
-				return err
-			}
-			defer db.Close()
-			return provenance.Explain(db, provenance.ExplainOptions{
+			opts := provenance.ExplainOptions{
 				RunID:    explainRunID,
 				Artifact: explainArtifact,
 				Attempt:  explainAttempt,
@@ -334,7 +329,23 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 				Limit:    explainLimit,
 				Cursor:   explainCursor,
 				WithJSON: explainJSON,
-			}, cmd.OutOrStdout())
+			}
+			if client, ok := daemonClient(*daemonURL); ok {
+				manifest, err := client.ExplainGraph(opts)
+				if err != nil {
+					return err
+				}
+				if explainJSON {
+					return provenance.PrintExplainManifestJSON(cmd.OutOrStdout(), manifest)
+				}
+				return provenance.PrintExplainManifest(cmd.OutOrStdout(), manifest)
+			}
+			db, err := openDB()
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			return provenance.Explain(db, opts, cmd.OutOrStdout())
 		},
 	}
 	explainCmd.Flags().StringVar(&explainRunID, "run", "", "run id")
