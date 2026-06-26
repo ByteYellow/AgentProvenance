@@ -260,6 +260,8 @@ For RL, Tier 1 is the product default:
   trajectory batches with job/shard metadata;
 - batch summary is queryable later through `evidence batch-summary`, so the
   pipeline can aggregate by shard, job, or run;
+- batch EvalContext export is available through `signal batch-context`, so the
+  pipeline can consume JSONL without invoking one command per trajectory;
 - batch jobs control scheduling and reward policy themselves;
 - AgentProvenance emits trajectory evidence, deviations, risk signals, and
   manifests;

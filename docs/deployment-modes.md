@@ -30,6 +30,9 @@ Expected properties:
   one `agentprovenance.record_batch/v1` manifest across many trajectories;
 - `agentprov evidence batch-summary --shard/--job/--run` lets a pipeline query
   stored batch status without parsing stdout logs;
+- `agentprov signal batch-context --batch/--shard/--runs` exports matching
+  trajectories as EvalContext JSONL for reward, filtering, or benchmark
+  consumers;
 - outputs are JSON-friendly and batch-friendly.
 
 Boundary:
