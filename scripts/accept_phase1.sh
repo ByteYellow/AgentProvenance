@@ -28,7 +28,7 @@ GOTOOLCHAIN="${GOTOOLCHAIN:-local}" go build ./cmd/agentprov
 echo "== init"
 "$BIN" --data-dir "$DATA_DIR" init
 
-STARTED_AT="2000-01-01T00:00:00.000000000Z"
+STARTED_AT="$(date -u '+%Y-%m-%dT%H:%M:%S.000000000Z')"
 
 echo "== bind ToolCallScope"
 "$BIN" --data-dir "$DATA_DIR" telemetry bind \
@@ -150,6 +150,15 @@ assert_contains "$RESPONSES_JSON" '"result_set_id": "sha256:'
 assert_contains "$RESPONSES_JSON" '"page_hash": "sha256:'
 
 echo "== assert automatic risk/response closure from telemetry ingest"
+"$BIN" --data-dir "$DATA_DIR" telemetry bind \
+  --run run-phase1-accept \
+  --session session-phase1-accept \
+  --attempt attempt-phase1-accept \
+  --tool-call tool-phase1-accept \
+  --process process-phase1-accept \
+  --container-id container-falco-demo \
+  --started-at "2000-01-01T00:00:00.000000000Z" \
+  --source phase1_accept_risk
 "$BIN" --data-dir "$DATA_DIR" telemetry ingest-jsonl --format falco --file examples/telemetry/falco-risk-events.jsonl --json >/tmp/agentprov-accept-risk-ingest.json
 RISK_INGEST_JSON="$(cat /tmp/agentprov-accept-risk-ingest.json)"
 assert_contains "$RISK_INGEST_JSON" '"policy_decisions": 3'
