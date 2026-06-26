@@ -301,29 +301,11 @@ offline-first:
   are opt-in security controls; offline scoring can run later over captured
   EvalContext JSONL.
 
-Python usage stays thin and CLI-backed:
+Python usage stays thin and CLI-backed. For Deploy 1, the intended RL/evaluator
+entry point is one function that runs the local offline loop end to end:
 
 ```python
-from agentprov_eval import Client
-
-client = Client(binary="./agentprov", data_dir=".agentprov-rl")
-
-manifest = client.record(
-    ["python", "agent_task.py"],
-    run_id="trajectory-0001",
-    workdir="/tmp/agent-task",
-)
-
-evidence = client.evidence_manifest(manifest["run_id"])
-ctx = client.eval_context(manifest["run_id"])
-```
-
-For RL users, custom "rules" are ordinary Python evaluator functions. They run
-offline over evidence; Go keeps ownership of capture, correlation, manifests,
-and query integrity:
-
-```python
-from agentprov import Client, Registry, Signal, evaluate_batch
+from agentprov import Registry, Signal, run_batch_pipeline
 
 registry = Registry(name="rl-reward-signals")
 
@@ -341,26 +323,40 @@ def metadata_penalty(ctx):
         return Signal.penalty("metadata_ip", -1.0, "metadata service access")
     return None
 
-client = Client(binary="./agentprov", data_dir=".agentprov-rl")
-contexts = client.batch_eval_contexts(shard_id="shard-0", latest=True)
-reports = evaluate_batch(contexts, registry=registry)
-
-client.import_signal_reports(reports, engine="rl-reward-signals")
-```
-
-Batch pipelines can keep their own scheduler and call:
-
-```python
-from agentprov_eval import record_batch
-
-batch = record_batch(
+result = run_batch_pipeline(
     [
         {"run_id": "traj-0001", "workdir": "/tmp/job1", "command": ["pytest", "-q"]},
         {"run_id": "traj-0002", "workdir": "/tmp/job2", "command": ["pytest", "-q"]},
     ],
+    registry,
     binary="./agentprov",
-    data_dir=".agentprov-batch",
+    data_dir=".agentprov-rl",
+    engine="rl-reward-signals",
+    import_signals=True,
+    include_forensics=True,
 )
+
+print(result.batch_id, result.signal_count)
+```
+
+For RL users, custom "rules" are ordinary Python evaluator functions. They run
+offline over evidence; Go keeps ownership of capture, correlation, manifests,
+and query integrity. The same workflow can be split into lower-level calls when
+the pipeline already owns scheduling or sharding:
+
+```python
+from agentprov import Client, evaluate_batch
+
+client = Client(binary="./agentprov", data_dir=".agentprov-batch")
+batch = client.record_batch(
+    [
+        {"run_id": "traj-0001", "workdir": "/tmp/job1", "command": ["pytest", "-q"]},
+        {"run_id": "traj-0002", "workdir": "/tmp/job2", "command": ["pytest", "-q"]},
+    ],
+)
+contexts = client.batch_eval_contexts(batch_id=batch["batch_id"])
+reports = evaluate_batch(contexts, registry=registry)
+client.import_signal_reports(reports, engine=registry.name)
 ```
 
 Later, the same local store can be queried by batch, shard, job, or run:
@@ -637,7 +633,7 @@ What these mean:
 | Area | Current capability |
 |---|---|
 | Zero-SDK record | `agentprov record -- <command>` snapshots a working directory, samples root-process descendants with configurable `--sample-interval-ms` and `--post-root-grace-ms`, marks observed descendants that outlive the root, creates PID bindings, emits orphan lifecycle audit decisions when applicable, computes changed files, records runtime file evidence, exposes process observations with raw/correlation/container/cgroup identity in timeline JSON, materializes a `record_manifest` object, and is covered by a realistic acceptance run that modifies, creates, deletes files, observes a child process, and correlates a delayed runtime event without raw `tool_call_id` |
-| Batch recorder | `agentprov record batch --file jobs.jsonl --json` records many zero-SDK jobs, persists batch/item rows, and emits `agentprovenance.record_batch/v1` with `job_id`, `shard_id`, run IDs, status counts, per-job evidence/eval/explain commands, `result_set_id`, and `page_hash`; `evidence batch-summary` queries batches by batch/job/shard/run and emits `agentprovenance.record_batch_summary/v1`; `graph materialize` stores `record_batch` and `record_batch_summary` content-addressed objects; `signal batch-context` exports matching runs as EvalContext JSONL; `forensics export-batch` writes a sha256-verified batch audit bundle with summary, per-run bundle refs, optional EvalContext records, and replay/query commands; the Python helper exposes `record_batch(...)`, `batch_summary(...)`, `batch_eval_contexts(...)`, and `batch_forensics(...)` for RL/evaluator pipelines |
+| Batch recorder | `agentprov record batch --file jobs.jsonl --json` records many zero-SDK jobs, persists batch/item rows, and emits `agentprovenance.record_batch/v1` with `job_id`, `shard_id`, run IDs, status counts, per-job evidence/eval/explain commands, `result_set_id`, and `page_hash`; `evidence batch-summary` queries batches by batch/job/shard/run and emits `agentprovenance.record_batch_summary/v1`; `graph materialize` stores `record_batch` and `record_batch_summary` content-addressed objects; `signal batch-context` exports matching runs as EvalContext JSONL; `forensics export-batch` writes a sha256-verified batch audit bundle with summary, per-run bundle refs, optional EvalContext records, and replay/query commands; the Python helper exposes `run_batch_pipeline(...)` for the full Deploy 1 offline loop plus lower-level `record_batch(...)`, `batch_summary(...)`, `batch_eval_contexts(...)`, and `batch_forensics(...)` for custom RL/evaluator pipelines |
 | Execution context | explicit ToolCallScope binding through run/session/attempt/tool_call/process/container/cgroup/pid |
 | Adapter contracts | `adapter list/inspect` exposes agent, sandbox, telemetry, artifact, and snapshot adapter capabilities, identity keys, boundaries, and QBS impact |
 | Evidence ingest | raw telemetry ingestion without requiring raw `tool_call_id`; ingest and verify enforce event-specific payload schemas, reject application context inside raw runtime payloads, map filtered Tetragon/Falco/LoongCollector JSONL into normalized telemetry events, record batch manifests with input/event hashes, expose per-row receiver evidence via `receiver_summary` / `row_results`, and page telemetry event lists with `--limit` / opaque `--cursor` plus result/page hashes |
@@ -663,7 +659,7 @@ What these mean:
 | Artifact lineage | exported attempt artifacts linked to attempt/tool_call/process |
 | Security evidence | first-class `RiskSignal`, `BaselineDeviation`, and `ResponseAction` records, graph objects, and query commands |
 | Behavior baseline | `baseline learn/check` extracts process, file, network, suspicious runtime, policy block, outlived-process, and resource features; anomalous checks persist deviation records and baseline-derived risk signals |
-| External evaluator protocol | `signal context --run` emits `agentprovenance.eval_context/v1`; `signal batch-context` emits JSONL `EvalContext` records for batch/shard/run-list consumers; `signal run --external` passes one context JSON to an external process over stdin; `signal import` validates returned `EvalSignal` records; `signal import-batch` validates JSONL `EvalReport` batches. Daemon API supports context export, built-in smoke signals, and signal import without exposing remote shell execution. The Python SDK provides `Registry`, `@rule`, `evaluate_batch`, `reports_jsonl`, and CLI-backed capture/query helpers via `agentprov_eval` plus the `agentprov` import alias. Built-in signals remain available, but AgentProvenance does not own reward, ranking, or dataset policy |
+| External evaluator protocol | `signal context --run` emits `agentprovenance.eval_context/v1`; `signal batch-context` emits JSONL `EvalContext` records for batch/shard/run-list consumers; `signal run --external` passes one context JSON to an external process over stdin; `signal import` validates returned `EvalSignal` records; `signal import-batch` validates JSONL `EvalReport` batches. Daemon API supports context export, built-in smoke signals, and signal import without exposing remote shell execution. The Python SDK provides `Registry`, `@rule`, `run_batch_pipeline`, `evaluate_batch`, `reports_jsonl`, and CLI-backed capture/query helpers via `agentprov_eval` plus the `agentprov` import alias. Built-in signals remain available, but AgentProvenance does not own reward, ranking, or dataset policy |
 | Compliance evidence | `compliance frameworks/map/explain/gaps/report` maps run evidence to OWASP Agentic Security and NIST AI agent security profiles with covered/partial/missing/not_applicable item status and evidence gap reports |
 | Risk / taint | policy decisions, policy-decision graph edges, quarantine, taint, taint descendant checks |
 | Response gate | eligibility checks with telemetry/evidence drain watermark for tainted or unsafe branches |
@@ -878,6 +874,7 @@ go test ./...
 ./scripts/accept_telemetry_100k_pressure.sh
 ./scripts/accept_signal_engine.sh
 ./scripts/accept_python_helper.sh
+./scripts/accept_deploy1_batch_pipeline.sh
 ```
 
 The acceptance scripts are the main machine-checkable gates for Phase 1
@@ -899,6 +896,9 @@ responsiveness while a batch is queued, graph verify, evidence manifest
 materialization, and forensics export. `accept_python_helper.sh` validates the
 thin Python helper path for CLI-backed record, batch record, evidence manifest
 export, EvalContext export, batch forensics export, and signal import.
+`accept_deploy1_batch_pipeline.sh` validates the one-call Deploy 1 Python flow:
+record a batch, export EvalContext records, run registered evaluator functions,
+import EvalSignal reports, export batch forensics, and return a summary.
 `accept_evidence_query_pagination.sh` validates timeline cursor pagination,
 daemon-client cursor propagation, and evidence manifest query refs with
 result/page hashes.

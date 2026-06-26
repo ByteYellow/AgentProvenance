@@ -298,6 +298,48 @@ class Client:
             self.import_signal_reports(reports, engine=engine)
         return reports
 
+    def run_batch_pipeline(
+        self,
+        jobs: Iterable[dict[str, Any]],
+        registry: "Registry",
+        *,
+        engine: str | None = None,
+        shard_id: str = "",
+        limit: int = 1000,
+        import_signals: bool = True,
+        include_forensics: bool = True,
+        include_eval_contexts_in_forensics: bool = False,
+    ) -> "BatchPipelineResult":
+        record_manifest = self.record_batch(jobs)
+        selected_engine = engine or registry.name
+        selected_shard = shard_id
+        contexts = self.batch_eval_contexts(
+            batch_id=record_manifest["batch_id"],
+            shard_id=selected_shard,
+            limit=limit,
+        )
+        reports = evaluate_batch(contexts, registry=registry, engine=selected_engine)
+        import_report = None
+        if import_signals:
+            import_report = self.import_signal_reports(reports, engine=selected_engine)
+        forensics_report = None
+        if include_forensics:
+            forensics_report = self.batch_forensics(
+                batch_id=record_manifest["batch_id"],
+                shard_id=selected_shard,
+                limit=limit,
+                include_eval_contexts=include_eval_contexts_in_forensics,
+            )
+        summary = self.batch_summary(batch_id=record_manifest["batch_id"], shard_id=selected_shard, limit=limit)
+        return BatchPipelineResult(
+            record_manifest=record_manifest,
+            contexts=contexts,
+            reports=reports,
+            import_report=import_report,
+            forensics=forensics_report,
+            summary=summary,
+        )
+
 
 def record(
     command: Sequence[str],
@@ -383,6 +425,34 @@ def batch_forensics(
         limit=limit,
         include_run_bundles=include_run_bundles,
         include_eval_contexts=include_eval_contexts,
+    )
+
+
+def run_batch_pipeline(
+    jobs: Iterable[dict[str, Any]],
+    registry: "Registry",
+    *,
+    binary: str | os.PathLike[str] = "agentprov",
+    data_dir: str | os.PathLike[str] | None = None,
+    daemon_url: str | None = None,
+    engine: str | None = None,
+    shard_id: str = "",
+    limit: int = 1000,
+    import_signals: bool = True,
+    include_forensics: bool = True,
+    include_eval_contexts_in_forensics: bool = False,
+) -> "BatchPipelineResult":
+    """Run the Deploy 1 offline batch workflow end to end."""
+
+    return Client(binary=binary, data_dir=data_dir, daemon_url=daemon_url).run_batch_pipeline(
+        jobs,
+        registry,
+        engine=engine,
+        shard_id=shard_id,
+        limit=limit,
+        import_signals=import_signals,
+        include_forensics=include_forensics,
+        include_eval_contexts_in_forensics=include_eval_contexts_in_forensics,
     )
 
 
@@ -478,6 +548,42 @@ class Signal:
     @classmethod
     def quality_signal(cls, name: str, score: float, reason: str, **kwargs: Any) -> "Signal":
         return cls(name=name, kind=KIND_QUALITY_SIGNAL, score=score, reason=reason, **kwargs)
+
+
+@dataclass
+class BatchPipelineResult:
+    record_manifest: dict[str, Any]
+    contexts: list[dict[str, Any]]
+    reports: list[dict[str, Any]]
+    import_report: dict[str, Any] | None = None
+    forensics: dict[str, Any] | None = None
+    summary: dict[str, Any] | None = None
+
+    @property
+    def batch_id(self) -> str:
+        return self.record_manifest.get("batch_id", "")
+
+    @property
+    def run_ids(self) -> list[str]:
+        return list(self.record_manifest.get("run_ids") or [])
+
+    @property
+    def signal_count(self) -> int:
+        return sum(int(report.get("signal_count", 0)) for report in self.reports)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": "agentprovenance.python_batch_pipeline/v1",
+            "batch_id": self.batch_id,
+            "run_ids": self.run_ids,
+            "record_manifest": self.record_manifest,
+            "context_count": len(self.contexts),
+            "report_count": len(self.reports),
+            "signal_count": self.signal_count,
+            "import_report": self.import_report,
+            "forensics": self.forensics,
+            "summary": self.summary,
+        }
 
 
 @dataclass
@@ -687,6 +793,7 @@ __all__ = [
     "Registry",
     "Rule",
     "Signal",
+    "BatchPipelineResult",
     "batch_eval_contexts",
     "batch_forensics",
     "batch_record",
@@ -701,6 +808,7 @@ __all__ = [
     "record",
     "record_batch",
     "rule",
+    "run_batch_pipeline",
     "KIND_REWARD_FEATURE",
     "KIND_PENALTY",
     "KIND_DATASET_LABEL",

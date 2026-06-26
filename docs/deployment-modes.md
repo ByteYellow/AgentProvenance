@@ -37,6 +37,10 @@ Expected properties:
 - Python users can define offline evaluator functions with `Registry` and
   `@rule`; those functions return `EvalSignal` records such as reward
   features, penalties, dataset labels, and quality signals;
+- Python users can call `run_batch_pipeline(...)` to run the Deploy 1 offline
+  loop in one step: record batch, export EvalContext records, evaluate Python
+  rules, import EvalSignal reports, export batch forensics, and return a
+  summary;
 - `agentprov signal import-batch --file reports.jsonl` validates JSONL
   `EvalReport` batches after offline scoring, so RL pipelines do not need one
   import command per trajectory;
