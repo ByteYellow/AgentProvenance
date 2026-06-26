@@ -285,7 +285,8 @@ ingest, retention, and query services.
 | Sidecar / local daemon | `agentprov daemon serve` beside one worker or sandbox host; CLI/SDK acts as client | sandbox worker, CI runner, local security harness, medium-volume telemetry ingest | adds a local service boundary, spool, backpressure, and stable query API |
 | Central evidence service | shared ingest/query service with object storage, retention, auth, and UI/API | enterprise security, audit, SRE, compliance, incident review | highest operational cost; not the default RL entry point |
 
-For RL and evaluator pipelines, the default contract is lightweight:
+For RL and evaluator pipelines, the default contract is lightweight and
+offline-first:
 
 - Install: one Go binary plus an optional thin Python package.
 - Call: wrap an existing command first; SDK/framework integration is optional.
@@ -296,6 +297,9 @@ For RL and evaluator pipelines, the default contract is lightweight:
 - Ownership: AgentProvenance emits evidence, deviation, risk, and trajectory
   signals. The RL system owns reward, ranking, dataset policy, and winner
   selection.
+- Policy: RL mode does not require online deny/kill/quarantine. Those actions
+  are opt-in security controls; offline scoring can run later over captured
+  EvalContext JSONL.
 
 Python usage stays thin and CLI-backed:
 
@@ -312,6 +316,37 @@ manifest = client.record(
 
 evidence = client.evidence_manifest(manifest["run_id"])
 ctx = client.eval_context(manifest["run_id"])
+```
+
+For RL users, custom "rules" are ordinary Python evaluator functions. They run
+offline over evidence; Go keeps ownership of capture, correlation, manifests,
+and query integrity:
+
+```python
+from agentprov import Client, Registry, Signal, evaluate_batch
+
+registry = Registry(name="rl-reward-signals")
+
+@registry.rule("file_change_reward")
+def file_change_reward(ctx):
+    return Signal.reward_feature(
+        "file_change_reward",
+        float(len(ctx.file_changes())),
+        "reward feature from file state changes",
+    )
+
+@registry.rule("metadata_penalty")
+def metadata_penalty(ctx):
+    if ctx.has_event_type("metadata_ip"):
+        return Signal.penalty("metadata_ip", -1.0, "metadata service access")
+    return None
+
+client = Client(binary="./agentprov", data_dir=".agentprov-rl")
+contexts = client.batch_eval_contexts(shard_id="shard-0", latest=True)
+reports = evaluate_batch(contexts, registry=registry)
+
+for report in reports:
+    client.import_signals(report["run_id"], report["signals"])
 ```
 
 Batch pipelines can keep their own scheduler and call:
@@ -489,8 +524,9 @@ The protocol is intentionally small:
   `{ "signals": [...] }`.
 - `EvalSignal` can represent reward features, penalties, dataset labels, or
   quality signals.
-- `python/agentprov_eval` is a thin helper SDK. It does not encode a reward
-  function.
+- `python/agentprov_eval` and the `agentprov` import alias provide a thin
+  helper SDK with `Registry`, `@rule`, `evaluate_batch`, and CLI-backed
+  capture/query helpers. They do not encode a reward function.
 
 This lets a benchmark harness, RL pipeline, red-team harness, or data filtering
 job decide how evidence becomes score, rejection, or review.
@@ -625,7 +661,7 @@ What these mean:
 | Artifact lineage | exported attempt artifacts linked to attempt/tool_call/process |
 | Security evidence | first-class `RiskSignal`, `BaselineDeviation`, and `ResponseAction` records, graph objects, and query commands |
 | Behavior baseline | `baseline learn/check` extracts process, file, network, suspicious runtime, policy block, outlived-process, and resource features; anomalous checks persist deviation records and baseline-derived risk signals |
-| External evaluator protocol | `signal context --run` emits `agentprovenance.eval_context/v1`; `signal batch-context` emits JSONL `EvalContext` records for batch/shard/run-list consumers; `signal run --external` passes one context JSON to an external process over stdin; `signal import` validates returned `EvalSignal` records. Daemon API supports context export, built-in smoke signals, and signal import without exposing remote shell execution. A thin Python helper lives in `python/agentprov_eval`, with an example in `examples/evaluators/python_signal_eval.py`. Built-in signals remain available, but AgentProvenance does not own reward, ranking, or dataset policy |
+| External evaluator protocol | `signal context --run` emits `agentprovenance.eval_context/v1`; `signal batch-context` emits JSONL `EvalContext` records for batch/shard/run-list consumers; `signal run --external` passes one context JSON to an external process over stdin; `signal import` validates returned `EvalSignal` records. Daemon API supports context export, built-in smoke signals, and signal import without exposing remote shell execution. The Python SDK provides `Registry`, `@rule`, `evaluate_batch`, and CLI-backed capture/query helpers via `agentprov_eval` plus the `agentprov` import alias. Built-in signals remain available, but AgentProvenance does not own reward, ranking, or dataset policy |
 | Compliance evidence | `compliance frameworks/map/explain/gaps/report` maps run evidence to OWASP Agentic Security and NIST AI agent security profiles with covered/partial/missing/not_applicable item status and evidence gap reports |
 | Risk / taint | policy decisions, policy-decision graph edges, quarantine, taint, taint descendant checks |
 | Response gate | eligibility checks with telemetry/evidence drain watermark for tainted or unsafe branches |

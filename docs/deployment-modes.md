@@ -20,7 +20,8 @@ agent / evaluator / batch job
 Expected properties:
 
 - one Go binary;
-- optional thin Python helper package;
+- optional thin Python helper package, installable locally with
+  `pip install -e .`;
 - no long-running service required;
 - no framework integration required;
 - default capture stays lightweight: process, file diff, artifact, exit,
@@ -33,6 +34,9 @@ Expected properties:
 - `agentprov signal batch-context --batch/--shard/--runs` exports matching
   trajectories as EvalContext JSONL for reward, filtering, or benchmark
   consumers;
+- Python users can define offline evaluator functions with `Registry` and
+  `@rule`; those functions return `EvalSignal` records such as reward
+  features, penalties, dataset labels, and quality signals;
 - `agentprov forensics export-batch --batch/--shard/--latest` writes one
   sha256-verified batch audit bundle with batch summary, per-run forensics
   refs, optional EvalContext records, and replay/query commands;
@@ -44,6 +48,8 @@ Boundary:
   multi-host telemetry aggregation;
 - it is the easiest path for RL pipelines because the pipeline keeps ownership
   of scheduling, reward, ranking, and dataset policy.
+- online security actions such as deny, kill, quarantine, or taint are not
+  required for RL mode; they are opt-in controls for security deployments.
 
 ## 2. Sidecar / Local Daemon
 

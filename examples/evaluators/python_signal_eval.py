@@ -6,31 +6,38 @@ RL trainer, red-team harness, or dataset pipeline can read evidence and emit
 its own signals without AgentProvenance owning the scoring policy.
 """
 
-from agentprov_eval import Signal, main
+from agentprov import Signal, main, rule
 
 
-def evaluate(ctx):
+@rule("example.file_change_count")
+def file_change_count(ctx):
     file_changes = ctx.file_changes()
-    exec_events = ctx.runtime_events("execve")
-    risks = ctx.risks()
-
-    yield Signal.reward_feature(
+    return Signal.reward_feature(
         "example.file_change_count",
         float(len(file_changes)),
         "external evaluator counted file state changes",
         evidence={"file_change_count": len(file_changes)},
     )
 
+
+@rule("example.exec_observed")
+def exec_observed(ctx):
+    exec_events = ctx.runtime_events("execve")
     if exec_events:
-        yield Signal.quality_signal(
+        return Signal.quality_signal(
             "example.exec_observed",
             1.0,
             "external evaluator observed runtime execution evidence",
             evidence={"exec_event_count": len(exec_events)},
         )
+    return None
 
+
+@rule("example.dataset_label")
+def dataset_label(ctx):
+    risks = ctx.risks()
     label = "needs_review" if risks else "candidate"
-    yield Signal.dataset_label(
+    return Signal.dataset_label(
         "example.dataset_label",
         label,
         1.0 if label == "candidate" else 0.0,
@@ -40,4 +47,4 @@ def evaluate(ctx):
 
 
 if __name__ == "__main__":
-    main(evaluate)
+    main()

@@ -4,9 +4,10 @@ set -euo pipefail
 DATA_DIR="${AGENTPROV_ACCEPT_PYTHON_HELPER_DATA_DIR:-.agentprov-python-helper-accept}"
 BIN="${AGENTPROV_ACCEPT_PYTHON_HELPER_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-python-helper-bin.XXXXXX")}"
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/agentprov-python-helper-work.XXXXXX")"
+PY_TARGET="$(mktemp -d "${TMPDIR:-/tmp}/agentprov-python-helper-pkg.XXXXXX")"
 
 cleanup() {
-  rm -rf "$WORKDIR"
+  rm -rf "$WORKDIR" "$PY_TARGET"
   if [[ "${AGENTPROV_ACCEPT_KEEP_BIN:-0}" != "1" ]]; then
     rm -f "$BIN"
   fi
@@ -20,8 +21,19 @@ echo "== init python helper fixture"
 rm -rf "$DATA_DIR"
 printf 'value = 1\n' >"$WORKDIR/app.py"
 
+echo "== install local Python helper package"
+python3 -m pip install --quiet --no-deps --target "$PY_TARGET" .
+PYTHONPATH="$PY_TARGET" python3 - <<'PY'
+from agentprov import Registry, Signal, rule
+from agentprov_eval import Client
+assert Registry
+assert Signal
+assert rule
+assert Client
+PY
+
 echo "== record through thin Python helper"
-PYTHONPATH=python AGENTPROV_BIN="$BIN" AGENTPROV_DATA_DIR="$DATA_DIR" AGENTPROV_WORKDIR="$WORKDIR" python3 - <<'PY'
+PYTHONPATH="$PY_TARGET" AGENTPROV_BIN="$BIN" AGENTPROV_DATA_DIR="$DATA_DIR" AGENTPROV_WORKDIR="$WORKDIR" python3 - <<'PY'
 import os
 from agentprov_eval import Client, Signal
 
@@ -64,7 +76,7 @@ BATCH_WORKDIR_A="$(mktemp -d "${TMPDIR:-/tmp}/agentprov-python-helper-batch-a.XX
 BATCH_WORKDIR_B="$(mktemp -d "${TMPDIR:-/tmp}/agentprov-python-helper-batch-b.XXXXXX")"
 printf 'a = 1\n' >"$BATCH_WORKDIR_A/app.py"
 printf 'b = 1\n' >"$BATCH_WORKDIR_B/app.py"
-PYTHONPATH=python AGENTPROV_BIN="$BIN" AGENTPROV_DATA_DIR="$DATA_DIR" BATCH_WORKDIR_A="$BATCH_WORKDIR_A" BATCH_WORKDIR_B="$BATCH_WORKDIR_B" python3 - <<'PY'
+PYTHONPATH="$PY_TARGET" AGENTPROV_BIN="$BIN" AGENTPROV_DATA_DIR="$DATA_DIR" BATCH_WORKDIR_A="$BATCH_WORKDIR_A" BATCH_WORKDIR_B="$BATCH_WORKDIR_B" python3 - <<'PY'
 import os
 from agentprov_eval import Client
 
@@ -137,6 +149,52 @@ rows = [json.loads(line) for line in sys.argv[1].splitlines() if line.strip()]
 assert len(rows) == 2
 assert {row["run_id"] for row in rows} == {"run-python-helper-batch-a", "run-python-helper-batch-b"}
 assert all(row["schema_version"] == "agentprovenance.eval_context/v1" for row in rows)
+PY
+
+echo "== evaluate batch through Python rule registry"
+PYTHONPATH="$PY_TARGET" AGENTPROV_BIN="$BIN" AGENTPROV_DATA_DIR="$DATA_DIR" python3 - <<'PY'
+import os
+from agentprov import Client, Registry, Signal, evaluate_batch, rule
+
+client = Client(binary=os.environ["AGENTPROV_BIN"], data_dir=os.environ["AGENTPROV_DATA_DIR"])
+contexts = client.batch_eval_contexts(shard_id="shard-0", latest=True)
+
+registry = Registry(name="acceptance-registry")
+
+@registry.rule("changed_file_reward", tags=["rl", "offline"])
+def changed_file_reward(ctx):
+    return Signal.reward_feature(
+        "changed_file_reward",
+        float(len(ctx.file_changes())),
+        "reward feature from file state changes",
+        evidence={"file_change_count": len(ctx.file_changes())},
+    )
+
+@registry.rule("no_metadata_penalty")
+def no_metadata_penalty(ctx):
+    if ctx.has_event_type("metadata_ip"):
+        return Signal.penalty("metadata_ip", -1.0, "metadata IP access observed")
+    return None
+
+reports = evaluate_batch(contexts, registry=registry)
+assert len(reports) == 2
+assert all(report["schema_version"] == "agentprovenance.eval_signals/v1" for report in reports)
+assert all(report["signal_count"] == 1 for report in reports)
+assert all(report["signals"][0]["kind"] == "reward_feature" for report in reports)
+assert all(report["result_set_id"].startswith("sha256:") for report in reports)
+
+imported = client.import_signals(reports[0]["run_id"], reports[0]["signals"])
+assert imported["schema_version"] == "agentprovenance.eval_signals/v1"
+assert imported["signal_count"] == 1
+
+@rule("default_registry_quality")
+def default_registry_quality(ctx):
+    return Signal.quality_signal("default_registry_quality", 1.0, "default registry works")
+
+default_reports = evaluate_batch(contexts[:1])
+assert default_reports[0]["signal_count"] == 1
+assert default_reports[0]["signals"][0]["name"] == "default_registry_quality"
+print("python evaluator registry acceptance ok")
 PY
 rm -rf "$BATCH_WORKDIR_A" "$BATCH_WORKDIR_B"
 

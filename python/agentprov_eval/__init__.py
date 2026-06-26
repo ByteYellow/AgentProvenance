@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from hashlib import sha256
 from typing import Any, Callable, Iterable, Sequence
 
 
@@ -23,6 +24,10 @@ KIND_REWARD_FEATURE = "reward_feature"
 KIND_PENALTY = "penalty"
 KIND_DATASET_LABEL = "dataset_label"
 KIND_QUALITY_SIGNAL = "quality_signal"
+
+SignalLike = "Signal | dict[str, Any]"
+RuleReturn = "Signal | dict[str, Any] | Iterable[Signal | dict[str, Any]] | None"
+RuleFunction = Callable[["EvalContext"], RuleReturn]
 
 
 @dataclass
@@ -251,6 +256,35 @@ class Client:
             input_text=json.dumps(payload, separators=(",", ":")),
         ).json()
 
+    def evaluate_batch(
+        self,
+        registry: "Registry",
+        *,
+        run_ids: Iterable[str] | None = None,
+        batch_id: str = "",
+        run_id: str = "",
+        job_id: str = "",
+        shard_id: str = "",
+        latest: bool = False,
+        limit: int = 100,
+        import_signals: bool = False,
+        engine: str = "python-sdk",
+    ) -> list[dict[str, Any]]:
+        contexts = self.batch_eval_contexts(
+            run_ids=run_ids,
+            batch_id=batch_id,
+            run_id=run_id,
+            job_id=job_id,
+            shard_id=shard_id,
+            latest=latest,
+            limit=limit,
+        )
+        reports = [evaluate_context(ctx, registry=registry, engine=engine) for ctx in contexts]
+        if import_signals:
+            for report in reports:
+                self.import_signals(report["run_id"], report["signals"])
+        return reports
+
 
 def record(
     command: Sequence[str],
@@ -433,15 +467,199 @@ class Signal:
         return cls(name=name, kind=KIND_QUALITY_SIGNAL, score=score, reason=reason, **kwargs)
 
 
-def main(evaluate: Callable[[EvalContext], Iterable[Signal | dict[str, Any]]]) -> None:
+@dataclass
+class Rule:
+    name: str
+    fn: RuleFunction
+    description: str = ""
+    tags: tuple[str, ...] = ()
+
+
+class Registry:
+    """In-process evaluator registry for RL/evaluator pipelines.
+
+    A registry owns Python-side signal functions. AgentProvenance still owns
+    evidence capture and manifests; these functions only map EvalContext into
+    EvalSignal records.
+    """
+
+    def __init__(self, name: str = "python-sdk"):
+        self.name = name
+        self._rules: list[Rule] = []
+
+    def register(
+        self,
+        fn: RuleFunction,
+        *,
+        name: str | None = None,
+        description: str = "",
+        tags: Iterable[str] = (),
+    ) -> RuleFunction:
+        rule_name = name or getattr(fn, "__name__", "anonymous_rule")
+        self._rules.append(Rule(name=rule_name, fn=fn, description=description, tags=tuple(tags)))
+        return fn
+
+    def rule(
+        self,
+        name: str | None = None,
+        *,
+        description: str = "",
+        tags: Iterable[str] = (),
+    ) -> Callable[[RuleFunction], RuleFunction]:
+        def decorator(fn: RuleFunction) -> RuleFunction:
+            return self.register(fn, name=name, description=description, tags=tags)
+
+        return decorator
+
+    def rules(self) -> list[Rule]:
+        return list(self._rules)
+
+    def evaluate(self, ctx: EvalContext) -> list[Signal | dict[str, Any]]:
+        signals: list[Signal | dict[str, Any]] = []
+        for registered in self._rules:
+            produced = registered.fn(ctx)
+            for signal in _normalize_rule_output(produced):
+                if isinstance(signal, Signal) and not signal.name:
+                    signal.name = registered.name
+                signals.append(signal)
+        return signals
+
+
+default_registry = Registry()
+
+
+def rule(
+    name: str | None = None,
+    *,
+    description: str = "",
+    tags: Iterable[str] = (),
+) -> Callable[[RuleFunction], RuleFunction]:
+    """Register a signal function in the default Python evaluator registry."""
+
+    return default_registry.rule(name=name, description=description, tags=tags)
+
+
+def register(
+    fn: RuleFunction | None = None,
+    *,
+    name: str | None = None,
+    description: str = "",
+    tags: Iterable[str] = (),
+) -> RuleFunction | Callable[[RuleFunction], RuleFunction]:
+    """Register a signal function.
+
+    Supports both `register(fn)` and `@register(name="...")`.
+    """
+
+    if fn is None:
+        return rule(name=name, description=description, tags=tags)
+    return default_registry.register(fn, name=name, description=description, tags=tags)
+
+
+def evaluate(ctx: EvalContext | dict[str, Any], registry: Registry | None = None) -> list[dict[str, Any]]:
+    """Evaluate one context and return EvalSignal dictionaries."""
+
+    context = ctx if isinstance(ctx, EvalContext) else EvalContext(ctx)
+    selected = registry or default_registry
+    return [_signal_to_dict(signal, context.run_id, index) for index, signal in enumerate(selected.evaluate(context), start=1)]
+
+
+def evaluate_context(
+    raw: EvalContext | dict[str, Any],
+    *,
+    registry: Registry | None = None,
+    engine: str = "python-sdk",
+    decision_owner: str = "external_evaluator",
+) -> dict[str, Any]:
+    """Evaluate one EvalContext and return an EvalReport-shaped dictionary."""
+
+    context = raw if isinstance(raw, EvalContext) else EvalContext(raw)
+    signals = evaluate(context, registry=registry)
+    result_set_id, page_hash = _report_hashes(context.run_id, engine, signals)
+    return {
+        "schema_version": "agentprovenance.eval_signals/v1",
+        "run_id": context.run_id,
+        "engine": engine,
+        "decision_owner": decision_owner,
+        "signal_count": len(signals),
+        "result_set_id": result_set_id,
+        "page_hash": page_hash,
+        "signals": signals,
+    }
+
+
+def evaluate_batch(
+    contexts: Iterable[EvalContext | dict[str, Any] | str],
+    *,
+    registry: Registry | None = None,
+    engine: str = "python-sdk",
+) -> list[dict[str, Any]]:
+    """Evaluate many contexts.
+
+    Each item can be an EvalContext object, a raw dict, or one JSONL line.
+    """
+
+    reports = []
+    for item in contexts:
+        if isinstance(item, str):
+            item = json.loads(item)
+        reports.append(evaluate_context(item, registry=registry, engine=engine))
+    return reports
+
+
+def emit_jsonl(reports: Iterable[dict[str, Any]], out: Any = sys.stdout) -> None:
+    for report in reports:
+        json.dump(report, out, separators=(",", ":"))
+        out.write("\n")
+
+
+def _normalize_rule_output(produced: RuleReturn) -> list[Signal | dict[str, Any]]:
+    if produced is None:
+        return []
+    if isinstance(produced, (Signal, dict)):
+        return [produced]
+    return [item for item in produced if item is not None]
+
+
+def _signal_to_dict(signal: Signal | dict[str, Any], run_id: str, index: int) -> dict[str, Any]:
+    item = signal.to_dict() if isinstance(signal, Signal) else dict(signal)
+    item.setdefault("id", f"signal-{index:03d}")
+    if run_id:
+        item.setdefault("run_id", run_id)
+    if "name" not in item or not item["name"]:
+        item["name"] = item["id"]
+    if "kind" not in item or not item["kind"]:
+        item["kind"] = KIND_QUALITY_SIGNAL
+    item.setdefault("score", 0.0)
+    item.setdefault("reason", "")
+    return item
+
+
+def _report_hashes(run_id: str, engine: str, signals: list[dict[str, Any]]) -> tuple[str, str]:
+    result_raw = json.dumps(
+        {"kind": "eval_signals_result_set", "run_id": run_id, "engine": engine, "signals": signals},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    page_raw = json.dumps(
+        {"kind": "eval_signals_page", "run_id": run_id, "engine": engine, "signals": signals},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return "sha256:" + sha256(result_raw).hexdigest(), "sha256:" + sha256(page_raw).hexdigest()
+
+
+def main(evaluate: Callable[[EvalContext], Iterable[Signal | dict[str, Any]]] | Registry | None = None) -> None:
     ctx = EvalContext(json.load(sys.stdin))
-    signals = []
-    for signal in evaluate(ctx):
-        if isinstance(signal, Signal):
-            signals.append(signal.to_dict())
-        else:
-            signals.append(signal)
-    json.dump({"signals": signals}, sys.stdout, separators=(",", ":"))
+    if isinstance(evaluate, Registry):
+        report = evaluate_context(ctx, registry=evaluate, engine=evaluate.name)
+    elif evaluate is None:
+        report = evaluate_context(ctx)
+    else:
+        registry = Registry(name=getattr(evaluate, "__name__", "python-function"))
+        registry.register(evaluate)
+        report = evaluate_context(ctx, registry=registry, engine=registry.name)
+    json.dump({"signals": report["signals"]}, sys.stdout, separators=(",", ":"))
     sys.stdout.write("\n")
 
 
@@ -449,12 +667,22 @@ __all__ = [
     "Client",
     "CommandResult",
     "EvalContext",
+    "Registry",
+    "Rule",
     "Signal",
     "batch_eval_contexts",
     "batch_forensics",
     "batch_record",
+    "default_registry",
+    "emit_jsonl",
+    "evaluate",
+    "evaluate_batch",
+    "evaluate_context",
+    "main",
+    "register",
     "record",
     "record_batch",
+    "rule",
     "KIND_REWARD_FEATURE",
     "KIND_PENALTY",
     "KIND_DATASET_LABEL",
