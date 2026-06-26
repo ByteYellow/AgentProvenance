@@ -259,6 +259,12 @@ func (c Client) ExportForensics(runID string) (forensics.BundleInfo, error) {
 	return bundle, err
 }
 
+func (c Client) ExportBatchForensics(opts forensics.BatchExportOptions) (forensics.BatchBundleInfo, error) {
+	var bundle forensics.BatchBundleInfo
+	err := c.postJSON("/v1/forensics/export-batch", opts, &bundle)
+	return bundle, err
+}
+
 func (c Client) SignalContext(runID string) (signal.EvalContext, error) {
 	var ctx signal.EvalContext
 	err := c.getJSON("/v1/signal/context?run="+url.QueryEscape(runID), &ctx)

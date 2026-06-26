@@ -119,6 +119,11 @@ assert "record_batch" in object_types
 assert "record_batch_summary" in object_types
 batch_objects = [item for item in objects["objects"] if item["type"] == "record_batch"]
 assert batch_objects and batch_objects[0]["source_id"] == manifest["batch_id"]
+batch_forensics = client.batch_forensics(batch_id=manifest["batch_id"], include_eval_contexts=True)
+assert batch_forensics["schema_version"] == "agentprovenance.batch_forensics_export/v1"
+assert batch_forensics["run_count"] == 2
+assert batch_forensics["item_count"] == 2
+assert len(batch_forensics["run_bundles"]) == 2
 print("python helper batch acceptance ok")
 PY
 

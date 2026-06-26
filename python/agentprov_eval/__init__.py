@@ -215,6 +215,35 @@ class Client:
                 contexts.append(json.loads(line))
         return contexts
 
+    def batch_forensics(
+        self,
+        *,
+        batch_id: str = "",
+        run_id: str = "",
+        job_id: str = "",
+        shard_id: str = "",
+        latest: bool = False,
+        limit: int = 100,
+        include_run_bundles: bool = True,
+        include_eval_contexts: bool = False,
+    ) -> dict[str, Any]:
+        args = ["forensics", "export-batch", "--json", "--limit", str(limit)]
+        if batch_id:
+            args.extend(["--batch", batch_id])
+        if run_id:
+            args.extend(["--run", run_id])
+        if job_id:
+            args.extend(["--job", job_id])
+        if shard_id:
+            args.extend(["--shard", shard_id])
+        if latest:
+            args.append("--latest")
+        if not include_run_bundles:
+            args.append("--include-run-bundles=false")
+        if include_eval_contexts:
+            args.append("--include-eval-contexts")
+        return self.run_cli(args).json()
+
     def import_signals(self, run_id: str, signals: Iterable["Signal | dict[str, Any]"]) -> dict[str, Any]:
         payload = {"signals": [signal.to_dict() if isinstance(signal, Signal) else signal for signal in signals]}
         return self.run_cli(
@@ -280,6 +309,33 @@ def batch_eval_contexts(
         shard_id=shard_id,
         latest=latest,
         limit=limit,
+    )
+
+
+def batch_forensics(
+    *,
+    batch_id: str = "",
+    run_id: str = "",
+    job_id: str = "",
+    shard_id: str = "",
+    latest: bool = False,
+    limit: int = 100,
+    include_run_bundles: bool = True,
+    include_eval_contexts: bool = False,
+    binary: str | os.PathLike[str] = "agentprov",
+    data_dir: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """Export a batch-level forensics audit bundle."""
+
+    return Client(binary=binary, data_dir=data_dir).batch_forensics(
+        batch_id=batch_id,
+        run_id=run_id,
+        job_id=job_id,
+        shard_id=shard_id,
+        latest=latest,
+        limit=limit,
+        include_run_bundles=include_run_bundles,
+        include_eval_contexts=include_eval_contexts,
     )
 
 
@@ -395,6 +451,7 @@ __all__ = [
     "EvalContext",
     "Signal",
     "batch_eval_contexts",
+    "batch_forensics",
     "batch_record",
     "record",
     "record_batch",

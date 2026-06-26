@@ -336,6 +336,7 @@ Later, the same local store can be queried by batch, shard, job, or run:
 ./agentprov evidence batch-summary --shard shard-0 --json
 ./agentprov evidence batch-summary --run traj-0001 --json
 ./agentprov signal batch-context --shard shard-0 --latest > eval-contexts.jsonl
+./agentprov forensics export-batch --latest --json
 ```
 
 ### Falco-compatible Receiver
@@ -437,6 +438,8 @@ causal graph.
 ./agentprov policy test examples/events/metadata-egress.jsonl
 ./agentprov policy decisions --run <run_id>
 ./agentprov forensics export <run_id>
+./agentprov forensics export-batch --batch <batch_id>
+./agentprov forensics export-batch --latest --include-eval-contexts --json
 ```
 
 These commands are now part of the mainline security evidence surface:
@@ -460,6 +463,7 @@ These commands are now part of the mainline security evidence surface:
 | `compliance frameworks/map/explain/gaps/report` | Map run evidence to OWASP Agentic Security and NIST AI agent security assessment profiles as item-level self-assessment evidence and gap lists |
 | `policy test/decisions` | Evaluate events, persist policy decisions, and feed the risk/response graph |
 | `forensics export` | Export auditable evidence for a run; `--json` emits `agentprovenance.forensics_export/v1` with bundle path, sha256, size, and status |
+| `forensics export-batch` | Export a batch-level audit bundle for record batches; `--json` emits `agentprovenance.batch_forensics_export/v1` with batch summary, per-run forensics refs, optional EvalContext records, result/page hashes, and a sha256-verified bundle path |
 
 ## External Evaluator Protocol
 
@@ -594,7 +598,7 @@ What these mean:
 | Area | Current capability |
 |---|---|
 | Zero-SDK record | `agentprov record -- <command>` snapshots a working directory, samples root-process descendants with configurable `--sample-interval-ms` and `--post-root-grace-ms`, marks observed descendants that outlive the root, creates PID bindings, emits orphan lifecycle audit decisions when applicable, computes changed files, records runtime file evidence, exposes process observations with raw/correlation/container/cgroup identity in timeline JSON, materializes a `record_manifest` object, and is covered by a realistic acceptance run that modifies, creates, deletes files, observes a child process, and correlates a delayed runtime event without raw `tool_call_id` |
-| Batch recorder | `agentprov record batch --file jobs.jsonl --json` records many zero-SDK jobs, persists batch/item rows, and emits `agentprovenance.record_batch/v1` with `job_id`, `shard_id`, run IDs, status counts, per-job evidence/eval/explain commands, `result_set_id`, and `page_hash`; `evidence batch-summary` queries batches by batch/job/shard/run and emits `agentprovenance.record_batch_summary/v1`; `graph materialize` stores `record_batch` and `record_batch_summary` content-addressed objects; `signal batch-context` exports matching runs as EvalContext JSONL; the Python helper exposes `record_batch(...)`, `batch_summary(...)`, and `batch_eval_contexts(...)` for RL/evaluator pipelines |
+| Batch recorder | `agentprov record batch --file jobs.jsonl --json` records many zero-SDK jobs, persists batch/item rows, and emits `agentprovenance.record_batch/v1` with `job_id`, `shard_id`, run IDs, status counts, per-job evidence/eval/explain commands, `result_set_id`, and `page_hash`; `evidence batch-summary` queries batches by batch/job/shard/run and emits `agentprovenance.record_batch_summary/v1`; `graph materialize` stores `record_batch` and `record_batch_summary` content-addressed objects; `signal batch-context` exports matching runs as EvalContext JSONL; `forensics export-batch` writes a sha256-verified batch audit bundle with summary, per-run bundle refs, optional EvalContext records, and replay/query commands; the Python helper exposes `record_batch(...)`, `batch_summary(...)`, `batch_eval_contexts(...)`, and `batch_forensics(...)` for RL/evaluator pipelines |
 | Execution context | explicit ToolCallScope binding through run/session/attempt/tool_call/process/container/cgroup/pid |
 | Adapter contracts | `adapter list/inspect` exposes agent, sandbox, telemetry, artifact, and snapshot adapter capabilities, identity keys, boundaries, and QBS impact |
 | Evidence ingest | raw telemetry ingestion without requiring raw `tool_call_id`; ingest and verify enforce event-specific payload schemas, reject application context inside raw runtime payloads, map filtered Tetragon/Falco/LoongCollector JSONL into normalized telemetry events, record batch manifests with input/event hashes, expose per-row receiver evidence via `receiver_summary` / `row_results`, and page telemetry event lists with `--limit` / opaque `--cursor` plus result/page hashes |
@@ -607,8 +611,8 @@ What these mean:
 | Observability process detail | `observe process --run --process` emits `agentprovenance.observability_process/v1` with process lifecycle, tool_call context, lane, correlation status, runtime events, risk/policy/response evidence, drill-down commands, `result_set_id`, and `page_hash` |
 | Observability flow | `observe flow --run` emits `agentprovenance.observability_flow/v1` with event-to-risk-to-policy-to-response rows, lane, correlation status, drill-down commands, `result_set_id`, and `page_hash` |
 | Evidence manifest | `evidence manifest --run` emits `agentprovenance.evidence_manifest/v1`, a run-level evidence index with observability summary hashes, timeline hashes, object-list hashes, risk/response report hashes, and recommended drill-down queries for UI, audit export, and incident review; `--materialize` stores it as a content-addressed `evidence_manifest` object |
-| Forensics bundle | `forensics export <run_id> --json` emits a hashed `agentprovenance.forensics_bundle/v1` file containing evidence manifest, events, telemetry batches, policy decisions, risk signals, response actions, graph edges, cost samples, sessions, processes, and snapshots |
-| Daemon API boundary | `agentprov daemon serve` exposes core evidence-infra APIs for ToolCallScope binding, paged telemetry event query, telemetry correlation explain, observability summary, timeline query, graph explain/verify, security risk/deviation/response query, evidence manifest materialization, forensics export, and evaluator context/import APIs. CLI daemon-client mode covers `observe summary`, `timeline`, `telemetry correlations`, `graph explain`, `graph verify`, `security risks/deviations/responses`, `evidence manifest`, `forensics export`, and `signal` paths |
+| Forensics bundle | `forensics export <run_id> --json` emits a hashed `agentprovenance.forensics_bundle/v1` file containing evidence manifest, events, telemetry batches, policy decisions, risk signals, response actions, graph edges, cost samples, sessions, processes, and snapshots; `forensics export-batch --json` emits `agentprovenance.batch_forensics_export/v1` and writes a batch audit bundle across many recorded trajectories |
+| Daemon API boundary | `agentprov daemon serve` exposes core evidence-infra APIs for ToolCallScope binding, paged telemetry event query, telemetry correlation explain, observability summary, timeline query, graph explain/verify, security risk/deviation/response query, evidence manifest materialization, run/batch forensics export, and evaluator context/import APIs. CLI daemon-client mode covers `observe summary`, `timeline`, `telemetry correlations`, `graph explain`, `graph verify`, `security risks/deviations/responses`, `evidence manifest`, `forensics export`, `forensics export-batch`, and `signal` paths |
 | Telemetry spool | Daemon Falco ingest supports async enqueue into `telemetry_spool_batches`; a background worker consumes queued batches, applies policy, and `health` exposes `queued_spool` / `spool_max_queued`. `--spool-max-queued` applies hard backpressure, and `--spool-drop-policy` supports `reject` with structured HTTP 429 or `drop_oldest` for bounded data-plane loss |
 | High-volume telemetry pressure | `scripts/accept_telemetry_100k_pressure.sh` generates 100k Falco events, enqueues them through daemon spool, confirms `health` and paged telemetry query stay responsive while queued, drains the batch, and verifies bounded paged query output after ingest. Receiver row details are capped with `row_results_truncated` so summary counts remain complete without returning 100k row objects |
 | Telemetry retention | `telemetry prune` and daemon `POST /v1/telemetry/retention/prune` delete old unreferenced raw telemetry events while preserving events referenced by telemetry batches, policy decisions, risk signals, or graph edges |
@@ -828,6 +832,7 @@ go test ./...
 ./scripts/accept_zero_sdk_realistic.sh
 ./scripts/accept_falco_risk_realistic.sh
 ./scripts/accept_forensics_bundle.sh
+./scripts/accept_batch_forensics.sh
 ./scripts/accept_daemon_evidence_api.sh
 ./scripts/accept_telemetry_spool_backpressure.sh
 ./scripts/accept_telemetry_100k_pressure.sh
@@ -845,9 +850,12 @@ security path from Falco-style runtime rows to risk, response, explain,
 evidence, and graph verification. `accept_forensics_bundle.sh` validates that a
 risky runtime stream can be exported into a hashed forensics bundle with
 embedded evidence manifest, risk/response records, graph edges, and a clean
-`graph verify` result. `accept_daemon_evidence_api.sh` validates the daemon API
+`graph verify` result. `accept_batch_forensics.sh` validates that a recorded
+batch can be exported into a sha256-verified batch audit bundle with per-run
+bundle refs, optional EvalContext records, summary hashes, and replay/query
+commands. `accept_daemon_evidence_api.sh` validates the daemon API
 path for ToolCallScope binding, async Falco spool ingest, control API
 responsiveness while a batch is queued, graph verify, evidence manifest
 materialization, and forensics export. `accept_python_helper.sh` validates the
 thin Python helper path for CLI-backed record, batch record, evidence manifest
-export, EvalContext export, and signal import.
+export, EvalContext export, batch forensics export, and signal import.

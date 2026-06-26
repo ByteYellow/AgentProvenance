@@ -88,6 +88,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/graph/explain", s.graphExplain)
 	mux.HandleFunc("GET /v1/evidence/manifest", s.evidenceManifest)
 	mux.HandleFunc("POST /v1/forensics/export", s.forensicsExport)
+	mux.HandleFunc("POST /v1/forensics/export-batch", s.forensicsExportBatch)
 	mux.HandleFunc("GET /v1/observe/summary", s.observeSummary)
 	mux.HandleFunc("GET /v1/timeline", s.timeline)
 	mux.HandleFunc("GET /v1/security/risks", s.securityRisks)
@@ -627,6 +628,17 @@ func (s Server) forensicsExport(w http.ResponseWriter, r *http.Request) {
 	s.lockWrites()
 	defer s.unlockWrites()
 	bundle, err := (forensics.Service{DB: s.DB, Paths: s.Paths}).ExportBundle(req.RunID)
+	writeResult(w, bundle, err)
+}
+
+func (s Server) forensicsExportBatch(w http.ResponseWriter, r *http.Request) {
+	var req forensics.BatchExportOptions
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	s.lockWrites()
+	defer s.unlockWrites()
+	bundle, err := (forensics.Service{DB: s.DB, Paths: s.Paths}).ExportBatch(req)
 	writeResult(w, bundle, err)
 }
 

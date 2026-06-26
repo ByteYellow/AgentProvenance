@@ -33,6 +33,9 @@ Expected properties:
 - `agentprov signal batch-context --batch/--shard/--runs` exports matching
   trajectories as EvalContext JSONL for reward, filtering, or benchmark
   consumers;
+- `agentprov forensics export-batch --batch/--shard/--latest` writes one
+  sha256-verified batch audit bundle with batch summary, per-run forensics
+  refs, optional EvalContext records, and replay/query commands;
 - outputs are JSON-friendly and batch-friendly.
 
 Boundary:
