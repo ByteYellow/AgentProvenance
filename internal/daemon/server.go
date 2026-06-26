@@ -79,6 +79,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/snapshots/", s.snapshotByID)
 	mux.HandleFunc("POST /v1/telemetry/bind", s.bindTelemetry)
 	mux.HandleFunc("GET /v1/telemetry/events", s.listTelemetryEvents)
+	mux.HandleFunc("GET /v1/telemetry/windows", s.listTelemetryWindows)
 	mux.HandleFunc("GET /v1/telemetry/correlations", s.telemetryCorrelations)
 	mux.HandleFunc("GET /v1/telemetry/spool", s.listTelemetrySpool)
 	mux.HandleFunc("POST /v1/telemetry/spool/process", s.processTelemetrySpool)
@@ -525,6 +526,23 @@ func (s Server) listTelemetryEvents(w http.ResponseWriter, r *http.Request) {
 		},
 		Limit:  limit,
 		Cursor: r.URL.Query().Get("cursor"),
+	})
+	writeResult(w, result, err)
+}
+
+func (s Server) listTelemetryWindows(w http.ResponseWriter, r *http.Request) {
+	windowSeconds, err := intQuery(r, "window", 0)
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	result, err := telemetry.ListEventWindows(s.DB, telemetry.EventWindowFilter{
+		RunID:         r.URL.Query().Get("run"),
+		SessionID:     r.URL.Query().Get("session"),
+		ToolCallID:    r.URL.Query().Get("tool_call"),
+		Type:          r.URL.Query().Get("type"),
+		Source:        r.URL.Query().Get("source"),
+		WindowSeconds: windowSeconds,
 	})
 	writeResult(w, result, err)
 }

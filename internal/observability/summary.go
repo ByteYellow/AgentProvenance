@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
+	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
 const SummarySchemaVersion = "agentprovenance.observability_summary/v1"
@@ -22,6 +23,7 @@ type Summary struct {
 	EventCount       int               `json:"event_count"`
 	Application      ContextSummary    `json:"application"`
 	Runtime          RuntimeSummary    `json:"runtime"`
+	Windows          WindowSummary     `json:"windows"`
 	Risk             RiskSummary       `json:"risk"`
 	Baseline         BaselineSummary   `json:"baseline"`
 	Response         ResponseSummary   `json:"response"`
@@ -46,6 +48,19 @@ type RuntimeSummary struct {
 	EventsWithProcess     int     `json:"events_with_process"`
 	ToolCallCoverageRatio float64 `json:"tool_call_coverage_ratio"`
 	ProcessCoverageRatio  float64 `json:"process_coverage_ratio"`
+}
+
+type WindowSummary struct {
+	WindowCount       int            `json:"window_count"`
+	WindowSeconds     []int          `json:"window_seconds,omitempty"`
+	AggregateWindow   int            `json:"aggregate_window_seconds,omitempty"`
+	EventCount        int            `json:"event_count"`
+	ResolvedCount     int            `json:"resolved_count"`
+	UnresolvedCount   int            `json:"unresolved_count"`
+	HighRiskCount     int            `json:"high_risk_count"`
+	ByType            map[string]int `json:"by_type,omitempty"`
+	BySource          map[string]int `json:"by_source,omitempty"`
+	LatestWindowStart string         `json:"latest_window_start,omitempty"`
 }
 
 type RiskSummary struct {
@@ -78,7 +93,19 @@ func BuildSummary(db *sql.DB, opts SummaryOptions) (Summary, error) {
 	if err != nil {
 		return Summary{}, err
 	}
-	return BuildSummaryFromTimeline(manifest, opts), nil
+	summary := BuildSummaryFromTimeline(manifest, opts)
+	windowSummary, err := BuildWindowSummary(db, opts.RunID)
+	if err != nil {
+		return Summary{}, err
+	}
+	summary.Windows = windowSummary
+	summary.RecommendedViews = recommendedViews(summary)
+	resultSetID, pageHash, err := summaryIntegrity(summary, opts.TopN)
+	if err == nil {
+		summary.ResultSetID = resultSetID
+		summary.PageHash = pageHash
+	}
+	return summary, nil
 }
 
 func BuildSummaryFromTimeline(manifest provenance.TimelineManifest, opts SummaryOptions) Summary {
@@ -91,6 +118,10 @@ func BuildSummaryFromTimeline(manifest provenance.TimelineManifest, opts Summary
 		EventCount:    manifest.EventCount,
 		EventTypes:    map[string]int{},
 		Sources:       map[string]int{},
+		Windows: WindowSummary{
+			ByType:   map[string]int{},
+			BySource: map[string]int{},
+		},
 		Risk: RiskSummary{
 			BySeverity: map[string]int{},
 			ByDecision: map[string]int{},
@@ -180,6 +211,51 @@ func BuildSummaryFromTimeline(manifest provenance.TimelineManifest, opts Summary
 	return summary
 }
 
+func BuildWindowSummary(db *sql.DB, runID string) (WindowSummary, error) {
+	result, err := telemetry.ListEventWindows(db, telemetry.EventWindowFilter{RunID: runID})
+	if err != nil {
+		return WindowSummary{}, err
+	}
+	summary := WindowSummary{
+		WindowCount:     result.WindowCount,
+		AggregateWindow: 60,
+		ByType:          map[string]int{},
+		BySource:        map[string]int{},
+	}
+	secondsSeen := map[int]bool{}
+	for _, window := range result.Windows {
+		secondsSeen[window.WindowSeconds] = true
+		if window.WindowStart > summary.LatestWindowStart {
+			summary.LatestWindowStart = window.WindowStart
+		}
+		if window.WindowSeconds != summary.AggregateWindow {
+			continue
+		}
+		summary.EventCount += window.EventCount
+		summary.ResolvedCount += window.ResolvedCount
+		summary.UnresolvedCount += window.UnresolvedCount
+		summary.HighRiskCount += window.HighRiskCount
+		summary.ByType[window.EventType] += window.EventCount
+		summary.BySource[window.Source] += window.EventCount
+	}
+	for seconds := range secondsSeen {
+		summary.WindowSeconds = append(summary.WindowSeconds, seconds)
+	}
+	sort.Ints(summary.WindowSeconds)
+	if summary.EventCount == 0 && len(result.Windows) > 0 {
+		summary.AggregateWindow = 0
+		for _, window := range result.Windows {
+			summary.EventCount += window.EventCount
+			summary.ResolvedCount += window.ResolvedCount
+			summary.UnresolvedCount += window.UnresolvedCount
+			summary.HighRiskCount += window.HighRiskCount
+			summary.ByType[window.EventType] += window.EventCount
+			summary.BySource[window.Source] += window.EventCount
+		}
+	}
+	return summary, nil
+}
+
 func summaryIntegrity(summary Summary, topN int) (string, string, error) {
 	resultSetID, err := digestObservation(map[string]any{
 		"kind":        "observability_summary_result_set",
@@ -187,6 +263,7 @@ func summaryIntegrity(summary Summary, topN int) (string, string, error) {
 		"event_count": summary.EventCount,
 		"application": summary.Application,
 		"runtime":     summary.Runtime,
+		"windows":     summary.Windows,
 		"risk":        summary.Risk,
 		"baseline":    summary.Baseline,
 		"response":    summary.Response,
@@ -235,6 +312,9 @@ func recommendedViews(summary Summary) []string {
 	views := []string{"timeline --run " + summary.RunID, "graph verify --run " + summary.RunID}
 	if summary.Runtime.Events > 0 {
 		views = append(views, "telemetry list --run "+summary.RunID)
+	}
+	if summary.Windows.WindowCount > 0 {
+		views = append(views, "telemetry windows --run "+summary.RunID+" --window 60 --json")
 	}
 	if summary.Runtime.Events > 0 && summary.Runtime.ToolCallCoverageRatio < 1 {
 		views = append(views, "telemetry bindings --run "+summary.RunID)

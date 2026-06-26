@@ -131,11 +131,24 @@ CORRELATIONS_CLI_JSON="$("$BIN" --daemon-url "$DAEMON_URL" telemetry correlation
 assert_contains "$CORRELATIONS_CLI_JSON" '"schema_version": "agentprovenance.telemetry_correlations/v1"'
 assert_contains "$CORRELATIONS_CLI_JSON" '"run_id": "run-daemon-api-accept"'
 
+echo "== query telemetry event windows through daemon API"
+WINDOWS_JSON="$(get_json '/v1/telemetry/windows?run=run-daemon-api-accept&window=60')"
+assert_contains "$WINDOWS_JSON" '"schema_version":"agentprovenance.telemetry_event_windows/v1"'
+assert_contains "$WINDOWS_JSON" '"window_count":4'
+assert_contains "$WINDOWS_JSON" '"event_type":"metadata_ip"'
+assert_contains "$WINDOWS_JSON" '"high_risk_count":1'
+assert_contains "$WINDOWS_JSON" '"result_set_id":"sha256:'
+assert_contains "$WINDOWS_JSON" '"page_hash":"sha256:'
+
 echo "== query observability summary and timeline through daemon API"
 OBSERVE_JSON="$(get_json '/v1/observe/summary?run=run-daemon-api-accept&top=3')"
 assert_contains "$OBSERVE_JSON" '"schema_version":"agentprovenance.observability_summary/v1"'
 assert_contains "$OBSERVE_JSON" '"run_id":"run-daemon-api-accept"'
 assert_contains "$OBSERVE_JSON" '"result_set_id":"sha256:'
+assert_contains "$OBSERVE_JSON" '"windows"'
+assert_contains "$OBSERVE_JSON" '"aggregate_window_seconds":60'
+assert_contains "$OBSERVE_JSON" '"high_risk_count":3'
+assert_contains "$OBSERVE_JSON" 'telemetry windows --run run-daemon-api-accept --window 60 --json'
 
 TIMELINE_JSON="$(get_json '/v1/timeline?run=run-daemon-api-accept&view=causality&limit=5')"
 assert_contains "$TIMELINE_JSON" '"schema_version":"agentprovenance.timeline/v1"'

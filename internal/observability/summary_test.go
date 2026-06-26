@@ -1,9 +1,14 @@
 package observability
 
 import (
+	"database/sql"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
+	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
 func TestBuildSummaryFromTimelineAggregatesCoverageRiskAndResponses(t *testing.T) {
@@ -98,6 +103,50 @@ func TestBuildSummaryFromTimelineAggregatesCoverageRiskAndResponses(t *testing.T
 	assertHasView(t, summary.RecommendedViews, "telemetry bindings --run run-observe")
 	assertHasView(t, summary.RecommendedViews, "security risks --run run-observe")
 	assertHasView(t, summary.RecommendedViews, "security responses --run run-observe")
+}
+
+func TestBuildSummaryIncludesTelemetryEventWindows(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	base := time.Date(2026, 1, 1, 12, 0, 1, 0, time.UTC)
+	insertSummaryEvent(t, db, "evt-window-1", "run-window-summary", "session-1", "tool-1", "falco_jsonl", "execve", "container_time_window:container_id+time", base)
+	insertSummaryEvent(t, db, "evt-window-2", "run-window-summary", "session-1", "tool-1", "falco_jsonl", "metadata_ip", "container_time_window:container_id+time", base.Add(time.Second))
+	if _, err := telemetry.RebuildEventWindows(db, "run-window-summary"); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := BuildSummary(db, SummaryOptions{RunID: "run-window-summary", TopN: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Windows.WindowCount != 4 {
+		t.Fatalf("expected 4 windows for 2 events across 10s/60s, got %+v", summary.Windows)
+	}
+	if summary.Windows.AggregateWindow != 60 || summary.Windows.EventCount != 2 || summary.Windows.ResolvedCount != 2 || summary.Windows.HighRiskCount != 1 {
+		t.Fatalf("unexpected window summary: %+v", summary.Windows)
+	}
+	if len(summary.Windows.WindowSeconds) != 2 || summary.Windows.WindowSeconds[0] != 10 || summary.Windows.WindowSeconds[1] != 60 {
+		t.Fatalf("unexpected window seconds: %+v", summary.Windows.WindowSeconds)
+	}
+	assertHasView(t, summary.RecommendedViews, "telemetry windows --run run-window-summary --window 60 --json")
+}
+
+func insertSummaryEvent(t *testing.T, db *sql.DB, id, runID, sessionID, toolCallID, source, eventType, method string, createdAt time.Time) {
+	t.Helper()
+	_, err := db.Exec(`INSERT INTO events
+		(id, run_id, session_id, tool_call_id, source, event_type, payload, correlation_method, correlation_confidence, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, '{}', ?, 1, ?)`,
+		id, runID, sessionID, toolCallID, source, eventType, method, createdAt.Format(time.RFC3339Nano))
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func assertHasView(t *testing.T, views []string, want string) {
