@@ -1,0 +1,16 @@
+//go:build !linux
+
+// Package sensor is the self-owned system-telemetry sensor. On Linux it loads
+// eBPF probes (execve/connect/file_open) and emits normalized telemetry events;
+// on other platforms it is a stub so the module still builds.
+package sensor
+
+import (
+	"fmt"
+	"io"
+)
+
+// Run is unavailable off Linux (eBPF requires a Linux kernel).
+func Run(_ io.Writer) error {
+	return fmt.Errorf("agentprov sensor requires linux (eBPF)")
+}

@@ -14,3 +14,9 @@
 03-readme-showcase-CN.MD
 04-enterprise-session-profile-CN.MD
 docs/north-star-three-pillars.md
+
+# Generated eBPF sensor artifacts (regenerated on Linux via `go generate`)
+internal/sensor/vmlinux.h
+internal/sensor/*_bpfel.go
+internal/sensor/*_bpfeb.go
+internal/sensor/*.o
