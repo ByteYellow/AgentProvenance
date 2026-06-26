@@ -420,6 +420,9 @@ causal graph.
 ./agentprov baseline learn --template <template_name> --run <run_id>
 ./agentprov baseline check --template <template_name> --run <run_id>
 ./agentprov signal context --run <run_id>
+./agentprov signal batch-context --batch <batch_id>
+./agentprov signal batch-context --shard <shard_id>
+./agentprov signal batch-context --runs runs.jsonl
 ./agentprov signal run --run <run_id>
 ./agentprov signal run --run <run_id> --json
 ./agentprov signal run --run <run_id> \
@@ -452,7 +455,7 @@ These commands are now part of the mainline security evidence surface:
 | `security deviations` | List `BaselineDeviation` records from behavior feature checks; `--json` emits schema/hash metadata and drill-down refs to timeline and summary views |
 | `security responses` | List recorded `ResponseAction` records such as audit, deny, kill, quarantine, taint, export, or notification hooks; `--json` emits schema/hash metadata and drill-down refs back to risk/process/explain views |
 | `baseline learn/check` | Learn process/file/network/risk/runtime feature vectors and emit deviation records plus baseline-derived risk signals |
-| `signal context/run/import` | Export `EvalContext`, run built-in or external evaluators, and validate imported `EvalSignal` records for reward shaping, dataset filtering, quality scoring, or external benchmark consumers. AgentProvenance owns the evidence protocol, not the reward policy |
+| `signal context/batch-context/run/import` | Export one `EvalContext` or JSONL `EvalContext` streams for a batch/shard/run list, run built-in or external evaluators, and validate imported `EvalSignal` records for reward shaping, dataset filtering, quality scoring, or external benchmark consumers. AgentProvenance owns the evidence protocol, not the reward policy |
 | `compliance frameworks/map/explain/gaps/report` | Map run evidence to OWASP Agentic Security and NIST AI agent security assessment profiles as item-level self-assessment evidence and gap lists |
 | `policy test/decisions` | Evaluate events, persist policy decisions, and feed the risk/response graph |
 | `forensics export` | Export auditable evidence for a run; `--json` emits `agentprovenance.forensics_export/v1` with bundle path, sha256, size, and status |
@@ -616,7 +619,7 @@ What these mean:
 | Artifact lineage | exported attempt artifacts linked to attempt/tool_call/process |
 | Security evidence | first-class `RiskSignal`, `BaselineDeviation`, and `ResponseAction` records, graph objects, and query commands |
 | Behavior baseline | `baseline learn/check` extracts process, file, network, suspicious runtime, policy block, outlived-process, and resource features; anomalous checks persist deviation records and baseline-derived risk signals |
-| External evaluator protocol | `signal context --run` emits `agentprovenance.eval_context/v1`; `signal run --external` passes that JSON to an external process over stdin; `signal import` validates returned `EvalSignal` records. Daemon API supports context export, built-in smoke signals, and signal import without exposing remote shell execution. A thin Python helper lives in `python/agentprov_eval`, with an example in `examples/evaluators/python_signal_eval.py`. Built-in signals remain available, but AgentProvenance does not own reward, ranking, or dataset policy |
+| External evaluator protocol | `signal context --run` emits `agentprovenance.eval_context/v1`; `signal batch-context` emits JSONL `EvalContext` records for batch/shard/run-list consumers; `signal run --external` passes one context JSON to an external process over stdin; `signal import` validates returned `EvalSignal` records. Daemon API supports context export, built-in smoke signals, and signal import without exposing remote shell execution. A thin Python helper lives in `python/agentprov_eval`, with an example in `examples/evaluators/python_signal_eval.py`. Built-in signals remain available, but AgentProvenance does not own reward, ranking, or dataset policy |
 | Compliance evidence | `compliance frameworks/map/explain/gaps/report` maps run evidence to OWASP Agentic Security and NIST AI agent security profiles with covered/partial/missing/not_applicable item status and evidence gap reports |
 | Risk / taint | policy decisions, policy-decision graph edges, quarantine, taint, taint descendant checks |
 | Response gate | eligibility checks with telemetry/evidence drain watermark for tainted or unsafe branches |

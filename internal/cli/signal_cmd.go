@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"bufio"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/byteyellow/agentprovenance/internal/signal"
@@ -86,6 +88,52 @@ func signalCmd(dataDir, daemonURL *string) *cobra.Command {
 	contextCmd.Flags().StringVar(&contextRunID, "run", "", "run id")
 	_ = contextCmd.MarkFlagRequired("run")
 
+	var batchContextRunsFile string
+	var batchContextBatchID string
+	var batchContextRunID string
+	var batchContextJobID string
+	var batchContextShardID string
+	var batchContextLatest bool
+	var batchContextLimit int
+	batchContextCmd := &cobra.Command{
+		Use:   "batch-context",
+		Short: "export EvalContext JSONL for many runs",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			runIDs, err := batchContextRunIDs(*dataDir, batchContextRunsFile, batchSummaryOptions{
+				BatchID: batchContextBatchID,
+				RunID:   batchContextRunID,
+				JobID:   batchContextJobID,
+				ShardID: batchContextShardID,
+				Latest:  batchContextLatest,
+				Limit:   batchContextLimit,
+			})
+			if err != nil {
+				return err
+			}
+			if len(runIDs) == 0 {
+				return fmt.Errorf("no run ids matched")
+			}
+			enc := json.NewEncoder(cmd.OutOrStdout())
+			for _, runID := range runIDs {
+				ctx, err := signalContext(*dataDir, *daemonURL, runID)
+				if err != nil {
+					return fmt.Errorf("run %s: %w", runID, err)
+				}
+				if err := enc.Encode(ctx); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+	batchContextCmd.Flags().StringVar(&batchContextRunsFile, "runs", "", "JSONL run list; each line may be a run_id string, plain run id, or object with run_id")
+	batchContextCmd.Flags().StringVar(&batchContextBatchID, "batch", "", "record batch id")
+	batchContextCmd.Flags().StringVar(&batchContextRunID, "run", "", "single run id or record-batch run filter")
+	batchContextCmd.Flags().StringVar(&batchContextJobID, "job", "", "record batch job id")
+	batchContextCmd.Flags().StringVar(&batchContextShardID, "shard", "", "record batch shard id")
+	batchContextCmd.Flags().BoolVar(&batchContextLatest, "latest", false, "use only the latest matching record batch")
+	batchContextCmd.Flags().IntVar(&batchContextLimit, "limit", 100, "maximum run contexts to export")
+
 	var importRunID string
 	var importFile string
 	var importJSON bool
@@ -123,6 +171,7 @@ func signalCmd(dataDir, daemonURL *string) *cobra.Command {
 	cmd := &cobra.Command{Use: "signal", Short: "code-based evaluator signal commands"}
 	cmd.AddCommand(run)
 	cmd.AddCommand(contextCmd)
+	cmd.AddCommand(batchContextCmd)
 	cmd.AddCommand(importCmd)
 	return cmd
 }
@@ -149,6 +198,94 @@ func signalContext(dataDir, daemonURL, runID string) (signal.EvalContext, error)
 	}
 	defer closeFn()
 	return signal.BuildEvalContext(db, runID)
+}
+
+func batchContextRunIDs(dataDir, runsFile string, opts batchSummaryOptions) ([]string, error) {
+	if runsFile != "" {
+		return readRunIDList(runsFile)
+	}
+	if opts.RunID != "" && opts.BatchID == "" && opts.JobID == "" && opts.ShardID == "" && !opts.Latest {
+		return []string{opts.RunID}, nil
+	}
+	db, closeFn, err := signalDB(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	defer closeFn()
+	report, err := buildRecordBatchSummary(db, opts)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]struct{}{}
+	runIDs := make([]string, 0, len(report.Items))
+	for _, item := range report.Items {
+		if item.RunID == "" {
+			continue
+		}
+		if _, ok := seen[item.RunID]; ok {
+			continue
+		}
+		seen[item.RunID] = struct{}{}
+		runIDs = append(runIDs, item.RunID)
+	}
+	return runIDs, nil
+}
+
+func readRunIDList(path string) ([]string, error) {
+	var input io.Reader
+	if path == "-" {
+		input = os.Stdin
+	} else {
+		file, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+		input = file
+	}
+	scanner := bufio.NewScanner(input)
+	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	var runIDs []string
+	seen := map[string]struct{}{}
+	for lineNo := 1; scanner.Scan(); lineNo++ {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		runID, err := parseRunIDLine(line)
+		if err != nil {
+			return nil, fmt.Errorf("parse run list line %d: %w", lineNo, err)
+		}
+		if runID == "" {
+			return nil, fmt.Errorf("parse run list line %d: run_id is required", lineNo)
+		}
+		if _, ok := seen[runID]; ok {
+			continue
+		}
+		seen[runID] = struct{}{}
+		runIDs = append(runIDs, runID)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return runIDs, nil
+}
+
+func parseRunIDLine(line string) (string, error) {
+	var asString string
+	if err := json.Unmarshal([]byte(line), &asString); err == nil {
+		return strings.TrimSpace(asString), nil
+	}
+	var asObject struct {
+		RunID string `json:"run_id"`
+	}
+	if err := json.Unmarshal([]byte(line), &asObject); err == nil && asObject.RunID != "" {
+		return strings.TrimSpace(asObject.RunID), nil
+	}
+	if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "[") {
+		return "", fmt.Errorf("JSON line must be a string or object with run_id")
+	}
+	return line, nil
 }
 
 func readExternalSignals(path string) (signal.ExternalEvalOutput, error) {

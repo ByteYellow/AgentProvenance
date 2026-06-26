@@ -102,6 +102,9 @@ assert summary["items"][0]["batch_id"] == manifest["batch_id"]
 run_summary = client.batch_summary(run_id="run-python-helper-batch-a")
 assert run_summary["item_count"] == 1
 assert run_summary["items"][0]["job_id"] == "job-a"
+contexts = client.batch_eval_contexts(batch_id=manifest["batch_id"], shard_id="shard-0")
+assert len(contexts) == 2
+assert {ctx["run_id"] for ctx in contexts} == {"run-python-helper-batch-a", "run-python-helper-batch-b"}
 ctx = client.eval_context("run-python-helper-batch-a")
 assert ctx["run_id"] == "run-python-helper-batch-a"
 print("python helper batch acceptance ok")

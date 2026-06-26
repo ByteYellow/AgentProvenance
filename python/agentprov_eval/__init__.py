@@ -180,6 +180,34 @@ class Client:
     def eval_context(self, run_id: str) -> dict[str, Any]:
         return self.run_cli(["signal", "context", "--run", run_id]).json()
 
+    def batch_eval_contexts(
+        self,
+        *,
+        batch_id: str = "",
+        run_id: str = "",
+        job_id: str = "",
+        shard_id: str = "",
+        latest: bool = False,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        args = ["signal", "batch-context", "--limit", str(limit)]
+        if batch_id:
+            args.extend(["--batch", batch_id])
+        if run_id:
+            args.extend(["--run", run_id])
+        if job_id:
+            args.extend(["--job", job_id])
+        if shard_id:
+            args.extend(["--shard", shard_id])
+        if latest:
+            args.append("--latest")
+        result = self.run_cli(args)
+        contexts = []
+        for line in result.stdout.splitlines():
+            if line.strip():
+                contexts.append(json.loads(line))
+        return contexts
+
     def import_signals(self, run_id: str, signals: Iterable["Signal | dict[str, Any]"]) -> dict[str, Any]:
         payload = {"signals": [signal.to_dict() if isinstance(signal, Signal) else signal for signal in signals]}
         return self.run_cli(
