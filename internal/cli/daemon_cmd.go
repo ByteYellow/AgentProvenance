@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -27,6 +28,7 @@ func daemonCmd(dataDir *string) *cobra.Command {
 	var spoolDropPolicy string
 	var gcInterval time.Duration
 	var gcLimit int
+	var authToken string
 	serve := &cobra.Command{
 		Use:   "serve",
 		Short: "run the local AgentProvenance daemon/API server",
@@ -49,6 +51,10 @@ func daemonCmd(dataDir *string) *cobra.Command {
 			server.SpoolDropPolicy = spoolDropPolicy
 			server.GCInterval = gcInterval
 			server.GCLimit = gcLimit
+			if authToken == "" {
+				authToken = os.Getenv("AGENTPROV_DAEMON_TOKEN")
+			}
+			server.AuthToken = authToken
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 			go server.StartSampler(ctx)
@@ -84,6 +90,7 @@ func daemonCmd(dataDir *string) *cobra.Command {
 	serve.Flags().StringVar(&spoolDropPolicy, "spool-drop-policy", "reject", "telemetry spool queue-full behavior: reject or drop_oldest")
 	serve.Flags().DurationVar(&gcInterval, "gc-interval", 5*time.Second, "background async GC interval; set 0 to disable")
 	serve.Flags().IntVar(&gcLimit, "gc-limit", 100, "maximum queued GC jobs processed per interval")
+	serve.Flags().StringVar(&authToken, "auth-token", "", "require this bearer token on all API routes except GET /v1/health (also AGENTPROV_DAEMON_TOKEN); empty = open")
 	cmd := &cobra.Command{Use: "daemon", Short: "local daemon/API server commands"}
 	cmd.AddCommand(serve)
 	return cmd

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -49,7 +50,10 @@ type Server struct {
 	SpoolDropPolicy  string
 	GCInterval       time.Duration
 	GCLimit          int
-	writeMu          *sync.Mutex
+	// AuthToken, when set, requires every request except GET /v1/health to carry
+	// `Authorization: Bearer <AuthToken>`. Empty = open (backward compatible).
+	AuthToken string
+	writeMu   *sync.Mutex
 }
 
 func NewServer(dataDir string) (Server, func(), error) {
@@ -102,7 +106,32 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/signal/context", s.signalContext)
 	mux.HandleFunc("POST /v1/signal/run", s.signalRun)
 	mux.HandleFunc("POST /v1/signal/import", s.signalImport)
-	return mux
+	return s.withAuth(mux)
+}
+
+// withAuth requires a bearer token on every route except GET /v1/health (kept
+// open for readiness probes). When AuthToken is empty, the mux is returned
+// unwrapped (open, backward compatible). Constant-time comparison avoids leaking
+// the token via timing.
+func (s Server) withAuth(next http.Handler) http.Handler {
+	if s.AuthToken == "" {
+		return next
+	}
+	want := "Bearer " + s.AuthToken
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		got := r.Header.Get("Authorization")
+		if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			w.WriteHeader(http.StatusUnauthorized)
+			writeJSON(w, map[string]any{"error": "unauthorized"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s Server) control() control.Service {
@@ -116,9 +145,13 @@ func (s Server) health(w http.ResponseWriter, r *http.Request) {
 	_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM evidence_events WHERE status = 'queued'`).Scan(&queuedEvidence)
 	_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM gc_jobs WHERE status = 'queued'`).Scan(&queuedGC)
 	_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM telemetry_spool_batches WHERE status = 'queued'`).Scan(&queuedSpool)
+	runtimeName := ""
+	if s.Driver != nil {
+		runtimeName = s.Driver.Name()
+	}
 	writeJSON(w, map[string]any{
 		"status":               "ok",
-		"runtime":              s.Driver.Name(),
+		"runtime":              runtimeName,
 		"sample_interval_ms":   s.SampleInterval.Milliseconds(),
 		"sample_limit":         s.SampleLimit,
 		"sample_timeout_ms":    s.SampleTimeout.Milliseconds(),

@@ -2,11 +2,14 @@
 
 # AgentProvenance
 
-### Security-oriented execution observability and Git-like provenance for sandboxed agents.
+### Correlate application context with system telemetry into a verifiable, signed evidence graph for sandboxed agents.
 
 Correlate application-side agent context with system-side telemetry, then turn
 runtime evidence, file diffs, artifacts, risk signals, and response decisions
-into a queryable, replayable, and auditable causality graph.
+into a queryable, replayable, and auditable causality graph. Evidence is stored
+content-addressed and hash-verified (a model borrowed from Git) and can be
+signed for tamper-evidence -- but this is an audit/provenance layer, **not a
+version-control system**: there is no merge, checkout, or mutable working tree.
 
 [![Go](https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square)](https://go.dev/)
 [![CI](https://img.shields.io/github/actions/workflow/status/ByteYellow/AgentProvenance/ci.yml?branch=main&style=flat-square)](https://github.com/ByteYellow/AgentProvenance/actions/workflows/ci.yml)
@@ -24,7 +27,9 @@ AgentProvenance is a local-first security analysis and provenance control plane
 for autonomous, tool-using agents, especially sandboxed coding agents.
 
 It is not a generic sandbox runtime, generic telemetry collector, Kubernetes/Ray
-replacement, RL trainer, or trace dashboard. It owns a narrower primitive:
+replacement, RL trainer, trace dashboard, or version-control system (it borrows
+Git's content-addressing and verification model, not its branch/merge workflow).
+It owns a narrower primitive:
 
 ```text
 Execution Context
@@ -53,6 +58,30 @@ The goal is to answer questions ordinary traces do not answer well:
 - What exact behavior evidence, deviation signal, and risk context should an
   external evaluator, RL pipeline, or human reviewer inspect?
 - Can this execution be diffed, blamed, verified, replayed, and audited later?
+
+## Contents
+
+- [Why](#why)
+- [Security Loop](#security-loop)
+- [Core Model](#core-model)
+  - [White-box mode](#white-box-mode)
+  - [Zero-SDK mode](#zero-sdk-mode)
+- [Relationship To Existing Systems](#relationship-to-existing-systems)
+- [Quickstart](#quickstart)
+- [Deployment Modes](#deployment-modes)
+  - [Falco-compatible Receiver](#falco-compatible-receiver)
+- [Security Evidence Commands](#security-evidence-commands)
+- [External Evaluator Protocol](#external-evaluator-protocol)
+- [Compliance Evidence, Not Certification](#compliance-evidence-not-certification)
+- [Graph Commands](#graph-commands)
+- [Current Capability](#current-capability)
+- [Core Demo Acceptance](#core-demo-acceptance)
+- [Architecture](#architecture)
+- [Substrate Signals](#substrate-signals)
+- [Boundaries](#boundaries)
+- [Repository Layout](#repository-layout)
+- [Roadmap](#roadmap)
+- [Development](#development)
 
 ## Why
 
@@ -647,7 +676,7 @@ What these mean:
 | Observability flow | `observe flow --run` emits `agentprovenance.observability_flow/v1` with event-to-risk-to-policy-to-response rows, lane, correlation status, drill-down commands, `result_set_id`, and `page_hash` |
 | Evidence manifest | `evidence manifest --run` emits `agentprovenance.evidence_manifest/v1`, a run-level evidence index with observability summary hashes, timeline hashes, object-list hashes, risk/response report hashes, query refs, and recommended drill-down queries for UI, audit export, and incident review; `--materialize` stores it as a content-addressed `evidence_manifest` object |
 | Forensics bundle | `forensics export <run_id> --json` emits a hashed `agentprovenance.forensics_bundle/v1` file containing evidence manifest, events, telemetry batches, policy decisions, risk signals, response actions, graph edges, cost samples, sessions, processes, and snapshots; `forensics export-batch --json` emits `agentprovenance.batch_forensics_export/v1` and writes a batch audit bundle across many recorded trajectories |
-| Daemon API boundary | `agentprov daemon serve` exposes core evidence-infra APIs for ToolCallScope binding, paged telemetry event query, telemetry event windows, telemetry correlation explain, observability summary, unified signal query (`GET /v1/signals`), zero-SDK record (`POST /v1/record`, the RL hot-path that avoids CLI fork-per-trajectory), timeline query, graph explain/verify, security risk/deviation/response query, evidence manifest materialization, run/batch forensics export, and evaluator context/import APIs. CLI daemon-client mode covers `observe summary`, `timeline`, `telemetry correlations`, `graph explain`, `graph verify`, `security risks/deviations/responses`, `evidence manifest`, `forensics export`, `forensics export-batch`, and `signal` paths |
+| Daemon API boundary | `agentprov daemon serve` exposes core evidence-infra APIs for ToolCallScope binding, paged telemetry event query, telemetry event windows, telemetry correlation explain, observability summary, unified signal query (`GET /v1/signals`), zero-SDK record (`POST /v1/record`, the RL hot-path that avoids CLI fork-per-trajectory), timeline query, graph explain/verify, security risk/deviation/response query, evidence manifest materialization, run/batch forensics export, and evaluator context/import APIs. CLI daemon-client mode covers `observe summary`, `timeline`, `telemetry correlations`, `graph explain`, `graph verify`, `security risks/deviations/responses`, `evidence manifest`, `forensics export`, `forensics export-batch`, and `signal` paths. Optional bearer-token auth via `daemon serve --auth-token` (or `AGENTPROV_DAEMON_TOKEN`) gates every route except `GET /v1/health`; the CLI/client send the token automatically from the same env var |
 | Telemetry spool | Daemon Falco ingest supports async enqueue into `telemetry_spool_batches`; a background worker consumes queued batches, applies policy, and `health` exposes `queued_spool` / `spool_max_queued`. `--spool-max-queued` applies hard backpressure, and `--spool-drop-policy` supports `reject` with structured HTTP 429 or `drop_oldest` for bounded data-plane loss |
 | High-volume telemetry pressure | `scripts/accept_telemetry_100k_pressure.sh` generates 100k Falco events, enqueues them through daemon spool, confirms `health` and paged telemetry query stay responsive while queued, drains the batch, and verifies bounded paged query output after ingest. Receiver row details are capped with `row_results_truncated` so summary counts remain complete without returning 100k row objects |
 | Telemetry event windows | JSONL/Falco ingest rebuilds `telemetry_event_windows` for 10s and 60s windows, grouped by run/session/tool_call/source/event_type with event, resolved, unresolved, and high-risk counts. `telemetry windows --run --window --json` and daemon `GET /v1/telemetry/windows` expose `agentprovenance.telemetry_event_windows/v1` with result/page hashes; `observe summary` includes the 60s aggregate so higher-level query and UI paths do not need to scan raw events for every summary |

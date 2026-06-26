@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/baseline"
@@ -24,10 +25,11 @@ import (
 type Client struct {
 	BaseURL string
 	HTTP    *http.Client
+	Token   string
 }
 
 func NewClient(baseURL string) Client {
-	return Client{BaseURL: strings.TrimRight(baseURL, "/"), HTTP: http.DefaultClient}
+	return Client{BaseURL: strings.TrimRight(baseURL, "/"), HTTP: http.DefaultClient, Token: os.Getenv("AGENTPROV_DAEMON_TOKEN")}
 }
 
 func (c Client) CreateLease(task string) (string, error) {
@@ -86,6 +88,7 @@ func (c Client) Exec(sessionID string, command []string, stream bool, out io.Wri
 			return "", err
 		}
 		req.Header.Set("Content-Type", "application/json")
+		c.authorize(req)
 		resp, err := c.HTTP.Do(req)
 		if err != nil {
 			return "", err
@@ -294,6 +297,13 @@ type SnapshotCreateResponse struct {
 	Hash             string `json:"hash"`
 }
 
+// authorize attaches the bearer token to a request when one is configured.
+func (c Client) authorize(req *http.Request) {
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+}
+
 func (c Client) getJSON(path string, out any) error {
 	req, err := http.NewRequest(http.MethodGet, c.BaseURL+path, nil)
 	if err != nil {
@@ -313,6 +323,7 @@ func (c Client) postJSON(path string, payload any, out any) error {
 }
 
 func (c Client) do(req *http.Request, out any) error {
+	c.authorize(req)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		return err

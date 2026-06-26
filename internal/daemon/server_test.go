@@ -216,3 +216,70 @@ func TestRecordCrossModeConsistency(t *testing.T) {
 		t.Fatalf("changed_files count diverged: daemon=%d cli=%d", daemonChanged, len(cliResult.ChangedFiles))
 	}
 }
+
+// TestDaemonAuthToken verifies bearer-token enforcement: with a token set,
+// API routes require it (401 otherwise), health stays open, and the correct
+// token passes. With no token configured the API is open (backward compatible).
+func TestDaemonAuthToken(t *testing.T) {
+	s := testServer(t)
+	s.AuthToken = "secret-token"
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	// Health is open even with auth on (readiness probes).
+	if resp, err := http.Get(srv.URL + "/v1/health"); err != nil {
+		t.Fatal(err)
+	} else {
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("health status = %d, want 200", resp.StatusCode)
+		}
+	}
+
+	// No token -> 401.
+	if resp, err := http.Get(srv.URL + "/v1/signals?run=r"); err != nil {
+		t.Fatal(err)
+	} else {
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("no-token status = %d, want 401", resp.StatusCode)
+		}
+	}
+
+	// Wrong token -> 401.
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/signals?run=r", nil)
+	req.Header.Set("Authorization", "Bearer wrong")
+	if resp, err := http.DefaultClient.Do(req); err != nil {
+		t.Fatal(err)
+	} else {
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("wrong-token status = %d, want 401", resp.StatusCode)
+		}
+	}
+
+	// Correct token -> 200.
+	req2, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/signals?run=r", nil)
+	req2.Header.Set("Authorization", "Bearer secret-token")
+	if resp, err := http.DefaultClient.Do(req2); err != nil {
+		t.Fatal(err)
+	} else {
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("correct-token status = %d, want 200", resp.StatusCode)
+		}
+	}
+
+	// No token configured -> open.
+	open := testServer(t)
+	openSrv := httptest.NewServer(open.Handler())
+	defer openSrv.Close()
+	if resp, err := http.Get(openSrv.URL + "/v1/signals?run=r"); err != nil {
+		t.Fatal(err)
+	} else {
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("open daemon status = %d, want 200", resp.StatusCode)
+		}
+	}
+}
