@@ -154,6 +154,29 @@ class Client:
             args.append("--materialize")
         return self.run_cli(args).json()
 
+    def batch_summary(
+        self,
+        *,
+        batch_id: str = "",
+        run_id: str = "",
+        job_id: str = "",
+        shard_id: str = "",
+        latest: bool = False,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        args = ["evidence", "batch-summary", "--json", "--limit", str(limit)]
+        if batch_id:
+            args.extend(["--batch", batch_id])
+        if run_id:
+            args.extend(["--run", run_id])
+        if job_id:
+            args.extend(["--job", job_id])
+        if shard_id:
+            args.extend(["--shard", shard_id])
+        if latest:
+            args.append("--latest")
+        return self.run_cli(args).json()
+
     def eval_context(self, run_id: str) -> dict[str, Any]:
         return self.run_cli(["signal", "context", "--run", run_id]).json()
 

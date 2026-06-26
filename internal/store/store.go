@@ -11,7 +11,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 11
+const SchemaVersion = 12
 
 type Paths struct {
 	Root       string
@@ -382,6 +382,45 @@ func EnsureSchema(db *sql.DB) error {
 			processed_at TEXT NOT NULL DEFAULT '',
 			dropped_at TEXT NOT NULL DEFAULT '',
 			drop_reason TEXT NOT NULL DEFAULT ''
+		);`,
+		`CREATE TABLE IF NOT EXISTS record_batches (
+			id TEXT PRIMARY KEY,
+			input_sha256 TEXT NOT NULL DEFAULT '',
+			started_at TEXT NOT NULL,
+			ended_at TEXT NOT NULL,
+			job_count INTEGER NOT NULL DEFAULT 0,
+			passed INTEGER NOT NULL DEFAULT 0,
+			failed INTEGER NOT NULL DEFAULT 0,
+			skipped INTEGER NOT NULL DEFAULT 0,
+			status_counts_json TEXT NOT NULL DEFAULT '{}',
+			run_ids_json TEXT NOT NULL DEFAULT '[]',
+			shards_json TEXT NOT NULL DEFAULT '{}',
+			result_set_id TEXT NOT NULL DEFAULT '',
+			page_hash TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS record_batch_items (
+			batch_id TEXT NOT NULL,
+			idx INTEGER NOT NULL,
+			job_id TEXT NOT NULL DEFAULT '',
+			shard_id TEXT NOT NULL DEFAULT '',
+			run_id TEXT NOT NULL DEFAULT '',
+			attempt_id TEXT NOT NULL DEFAULT '',
+			tool_call_id TEXT NOT NULL DEFAULT '',
+			process_id TEXT NOT NULL DEFAULT '',
+			workdir TEXT NOT NULL DEFAULT '',
+			command TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT '',
+			exit_code INTEGER NOT NULL DEFAULT 0,
+			wall_ms INTEGER NOT NULL DEFAULT 0,
+			changed_file_count INTEGER NOT NULL DEFAULT 0,
+			changed_files_json TEXT NOT NULL DEFAULT '[]',
+			error TEXT NOT NULL DEFAULT '',
+			evidence_manifest_command TEXT NOT NULL DEFAULT '',
+			eval_context_command TEXT NOT NULL DEFAULT '',
+			explain_command TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			PRIMARY KEY(batch_id, idx)
 		);`,
 		`CREATE TABLE IF NOT EXISTS policy_decisions (
 			id TEXT PRIMARY KEY,

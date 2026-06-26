@@ -93,6 +93,15 @@ assert manifest["passed"] == 2
 assert manifest["shards"]["shard-0"] == 2
 assert "run-python-helper-batch-a" in manifest["run_ids"]
 assert manifest["items"][0]["evidence_manifest_command"].startswith("evidence manifest --run ")
+summary = client.batch_summary(batch_id=manifest["batch_id"], shard_id="shard-0")
+assert summary["schema_version"] == "agentprovenance.record_batch_summary/v1"
+assert summary["batch_count"] == 1
+assert summary["item_count"] == 2
+assert summary["passed"] == 2
+assert summary["items"][0]["batch_id"] == manifest["batch_id"]
+run_summary = client.batch_summary(run_id="run-python-helper-batch-a")
+assert run_summary["item_count"] == 1
+assert run_summary["items"][0]["job_id"] == "job-a"
 ctx = client.eval_context("run-python-helper-batch-a")
 assert ctx["run_id"] == "run-python-helper-batch-a"
 print("python helper batch acceptance ok")

@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"text/tabwriter"
 
 	"github.com/byteyellow/agentprovenance/internal/evidence"
@@ -65,7 +67,287 @@ func evidenceCmd(dataDir, daemonURL *string) *cobra.Command {
 	cmd := &cobra.Command{Use: "evidence", Short: "evidence processing and manifest commands"}
 	cmd.AddCommand(process)
 	cmd.AddCommand(manifest)
+	cmd.AddCommand(evidenceBatchSummaryCmd(dataDir))
 	return cmd
+}
+
+func evidenceBatchSummaryCmd(dataDir *string) *cobra.Command {
+	var batchID string
+	var runID string
+	var jobID string
+	var shardID string
+	var latest bool
+	var limit int
+	var jsonOut bool
+	cmd := &cobra.Command{
+		Use:   "batch-summary",
+		Short: "summarize record batch manifests by batch, job, shard, or run",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			paths, err := store.Init(*dataDir)
+			if err != nil {
+				return err
+			}
+			db, err := store.Open(paths)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			report, err := buildRecordBatchSummary(db, batchSummaryOptions{
+				BatchID: batchID,
+				RunID:   runID,
+				JobID:   jobID,
+				ShardID: shardID,
+				Latest:  latest,
+				Limit:   limit,
+			})
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				return printJSON(cmd.OutOrStdout(), report)
+			}
+			return printRecordBatchSummary(cmd.OutOrStdout(), report)
+		},
+	}
+	cmd.Flags().StringVar(&batchID, "batch", "", "record batch id")
+	cmd.Flags().StringVar(&runID, "run", "", "run id")
+	cmd.Flags().StringVar(&jobID, "job", "", "job id")
+	cmd.Flags().StringVar(&shardID, "shard", "", "shard id")
+	cmd.Flags().BoolVar(&latest, "latest", false, "summarize only the latest batch matching filters")
+	cmd.Flags().IntVar(&limit, "limit", 100, "maximum batch items to return")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON batch summary")
+	return cmd
+}
+
+type batchSummaryOptions struct {
+	BatchID string `json:"batch_id,omitempty"`
+	RunID   string `json:"run_id,omitempty"`
+	JobID   string `json:"job_id,omitempty"`
+	ShardID string `json:"shard_id,omitempty"`
+	Latest  bool   `json:"latest,omitempty"`
+	Limit   int    `json:"limit"`
+}
+
+type recordBatchSummary struct {
+	SchemaVersion string                   `json:"schema_version"`
+	Query         batchSummaryOptions      `json:"query"`
+	BatchCount    int                      `json:"batch_count"`
+	ItemCount     int                      `json:"item_count"`
+	Passed        int                      `json:"passed"`
+	Failed        int                      `json:"failed"`
+	Skipped       int                      `json:"skipped"`
+	StatusCounts  map[string]int           `json:"status_counts"`
+	Shards        map[string]int           `json:"shards,omitempty"`
+	RunIDs        []string                 `json:"run_ids"`
+	Batches       []recordBatchSummaryHead `json:"batches"`
+	Items         []recordBatchItem        `json:"items"`
+	ResultSetID   string                   `json:"result_set_id"`
+	PageHash      string                   `json:"page_hash"`
+}
+
+type recordBatchSummaryHead struct {
+	BatchID     string         `json:"batch_id"`
+	InputSHA256 string         `json:"input_sha256"`
+	StartedAt   string         `json:"started_at"`
+	EndedAt     string         `json:"ended_at"`
+	JobCount    int            `json:"job_count"`
+	Passed      int            `json:"passed"`
+	Failed      int            `json:"failed"`
+	Skipped     int            `json:"skipped"`
+	Shards      map[string]int `json:"shards,omitempty"`
+	ResultSetID string         `json:"result_set_id"`
+	PageHash    string         `json:"page_hash"`
+	CreatedAt   string         `json:"created_at"`
+}
+
+func buildRecordBatchSummary(db *sql.DB, opts batchSummaryOptions) (recordBatchSummary, error) {
+	if opts.Limit <= 0 {
+		opts.Limit = 100
+	}
+	batches, err := listRecordBatchHeads(db, opts)
+	if err != nil {
+		return recordBatchSummary{}, err
+	}
+	items := make([]recordBatchItem, 0)
+	statusCounts := map[string]int{}
+	shards := map[string]int{}
+	runSet := map[string]struct{}{}
+	for _, batch := range batches {
+		batchItems, err := listRecordBatchItems(db, batch.BatchID, opts, opts.Limit-len(items))
+		if err != nil {
+			return recordBatchSummary{}, err
+		}
+		for _, item := range batchItems {
+			items = append(items, item)
+			statusCounts[item.Status]++
+			if item.ShardID != "" {
+				shards[item.ShardID]++
+			}
+			if item.RunID != "" {
+				runSet[item.RunID] = struct{}{}
+			}
+		}
+		if len(items) >= opts.Limit {
+			break
+		}
+	}
+	runIDs := make([]string, 0, len(runSet))
+	for runID := range runSet {
+		runIDs = append(runIDs, runID)
+	}
+	sort.Strings(runIDs)
+	report := recordBatchSummary{
+		SchemaVersion: "agentprovenance.record_batch_summary/v1",
+		Query:         opts,
+		BatchCount:    len(batches),
+		ItemCount:     len(items),
+		Passed:        statusCounts["passed"],
+		Failed:        statusCounts["failed"],
+		Skipped:       statusCounts["skipped"],
+		StatusCounts:  statusCounts,
+		Shards:        shards,
+		RunIDs:        runIDs,
+		Batches:       batches,
+		Items:         items,
+	}
+	report.ResultSetID = digestMap("record_batch_summary_result_set", map[string]any{
+		"schema_version": report.SchemaVersion,
+		"query":          opts,
+		"batch_ids":      batchIDs(batches),
+	})
+	report.PageHash = digestMap("record_batch_summary_page", map[string]any{
+		"schema_version": report.SchemaVersion,
+		"query":          opts,
+		"items":          items,
+		"status_counts":  statusCounts,
+	})
+	return report, nil
+}
+
+func listRecordBatchHeads(db *sql.DB, opts batchSummaryOptions) ([]recordBatchSummaryHead, error) {
+	where := []string{"1=1"}
+	args := []any{}
+	if opts.BatchID != "" {
+		where = append(where, "id = ?")
+		args = append(args, opts.BatchID)
+	}
+	existsWhere := []string{}
+	if opts.RunID != "" {
+		existsWhere = append(existsWhere, "run_id = ?")
+		args = append(args, opts.RunID)
+	}
+	if opts.JobID != "" {
+		existsWhere = append(existsWhere, "job_id = ?")
+		args = append(args, opts.JobID)
+	}
+	if opts.ShardID != "" {
+		existsWhere = append(existsWhere, "shard_id = ?")
+		args = append(args, opts.ShardID)
+	}
+	if len(existsWhere) > 0 {
+		where = append(where, "EXISTS (SELECT 1 FROM record_batch_items i WHERE i.batch_id = record_batches.id AND "+joinAnd(existsWhere)+")")
+	}
+	limit := opts.Limit
+	if opts.Latest {
+		limit = 1
+	}
+	query := fmt.Sprintf(`SELECT id, input_sha256, started_at, ended_at, job_count, passed, failed, skipped, shards_json, result_set_id, page_hash, created_at
+		FROM record_batches WHERE %s ORDER BY created_at DESC LIMIT ?`, joinAnd(where))
+	args = append(args, limit)
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []recordBatchSummaryHead
+	for rows.Next() {
+		var item recordBatchSummaryHead
+		var shardsJSON string
+		if err := rows.Scan(&item.BatchID, &item.InputSHA256, &item.StartedAt, &item.EndedAt, &item.JobCount, &item.Passed, &item.Failed, &item.Skipped, &shardsJSON, &item.ResultSetID, &item.PageHash, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		item.Shards = decodeStringIntMap(shardsJSON)
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func listRecordBatchItems(db *sql.DB, batchID string, opts batchSummaryOptions, limit int) ([]recordBatchItem, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	where := []string{"batch_id = ?"}
+	args := []any{batchID}
+	if opts.RunID != "" {
+		where = append(where, "run_id = ?")
+		args = append(args, opts.RunID)
+	}
+	if opts.JobID != "" {
+		where = append(where, "job_id = ?")
+		args = append(args, opts.JobID)
+	}
+	if opts.ShardID != "" {
+		where = append(where, "shard_id = ?")
+		args = append(args, opts.ShardID)
+	}
+	query := fmt.Sprintf(`SELECT idx, job_id, shard_id, run_id, attempt_id, tool_call_id, process_id, workdir, command, status, exit_code, wall_ms, changed_file_count, changed_files_json, error, evidence_manifest_command, eval_context_command, explain_command
+		FROM record_batch_items WHERE %s ORDER BY idx ASC LIMIT ?`, joinAnd(where))
+	args = append(args, limit)
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []recordBatchItem
+	for rows.Next() {
+		var item recordBatchItem
+		var changedFilesJSON string
+		if err := rows.Scan(&item.Index, &item.JobID, &item.ShardID, &item.RunID, &item.AttemptID, &item.ToolCallID, &item.ProcessID, &item.Workdir, &item.Command, &item.Status, &item.ExitCode, &item.WallMS, &item.ChangedFileCount, &changedFilesJSON, &item.Error, &item.EvidenceManifestCommand, &item.EvalContextCommand, &item.ExplainCommand); err != nil {
+			return nil, err
+		}
+		item.BatchID = batchID
+		_ = json.Unmarshal([]byte(changedFilesJSON), &item.ChangedFiles)
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func printRecordBatchSummary(out io.Writer, report recordBatchSummary) error {
+	fmt.Fprintf(out, "schema=%s batches=%d items=%d passed=%d failed=%d result_set=%s page_hash=%s\n",
+		report.SchemaVersion, report.BatchCount, report.ItemCount, report.Passed, report.Failed, report.ResultSetID, report.PageHash)
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "BATCH\tJOB\tSHARD\tRUN\tSTATUS\tEXIT\tCHANGED\tWALL_MS")
+	for _, item := range report.Items {
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\n",
+			item.BatchID, item.JobID, item.ShardID, item.RunID, item.Status, item.ExitCode, item.ChangedFileCount, item.WallMS)
+	}
+	return w.Flush()
+}
+
+func batchIDs(batches []recordBatchSummaryHead) []string {
+	out := make([]string, 0, len(batches))
+	for _, batch := range batches {
+		out = append(out, batch.BatchID)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func decodeStringIntMap(raw string) map[string]int {
+	out := map[string]int{}
+	_ = json.Unmarshal([]byte(raw), &out)
+	return out
+}
+
+func joinAnd(parts []string) string {
+	if len(parts) == 0 {
+		return "1=1"
+	}
+	out := parts[0]
+	for _, part := range parts[1:] {
+		out += " AND " + part
+	}
+	return out
 }
 
 func evidenceManifest(dataDir, daemonURL, runID string, objectLimit int, materializeObject bool) (evidence.MaterializedManifest, error) {

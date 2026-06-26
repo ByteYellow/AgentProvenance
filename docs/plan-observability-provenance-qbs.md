@@ -258,6 +258,8 @@ For RL, Tier 1 is the product default:
 - call path is `agentprov record -- <agent command>` or a Python wrapper;
 - batch path is `agentprov record batch --file jobs.jsonl --json` for
   trajectory batches with job/shard metadata;
+- batch summary is queryable later through `evidence batch-summary`, so the
+  pipeline can aggregate by shard, job, or run;
 - batch jobs control scheduling and reward policy themselves;
 - AgentProvenance emits trajectory evidence, deviations, risk signals, and
   manifests;

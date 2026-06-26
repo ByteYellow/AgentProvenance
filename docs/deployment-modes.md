@@ -28,6 +28,8 @@ Expected properties:
 - every trajectory can have its own `run_id`;
 - batch jobs can use `agentprov record batch --file jobs.jsonl --json` to get
   one `agentprovenance.record_batch/v1` manifest across many trajectories;
+- `agentprov evidence batch-summary --shard/--job/--run` lets a pipeline query
+  stored batch status without parsing stdout logs;
 - outputs are JSON-friendly and batch-friendly.
 
 Boundary:

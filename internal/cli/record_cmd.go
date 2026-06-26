@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -132,6 +133,7 @@ func recordBatchCmd(dataDir *string) *cobra.Command {
 					items = append(items, item)
 					if !continueOnError {
 						manifest := buildRecordBatchManifest(inputHash, startedAt, items, statusCounts, runIDs, shards)
+						_ = storeRecordBatch(db, manifest)
 						if withJSON {
 							_ = printJSON(cmd.OutOrStdout(), manifest)
 						}
@@ -159,6 +161,9 @@ func recordBatchCmd(dataDir *string) *cobra.Command {
 				items = append(items, item)
 			}
 			manifest := buildRecordBatchManifest(inputHash, startedAt, items, statusCounts, runIDs, shards)
+			if err := storeRecordBatch(db, manifest); err != nil {
+				return err
+			}
 			if withJSON {
 				return printJSON(cmd.OutOrStdout(), manifest)
 			}
@@ -192,6 +197,7 @@ type recordBatchJob struct {
 }
 
 type recordBatchItem struct {
+	BatchID                 string   `json:"batch_id,omitempty"`
 	Index                   int      `json:"index"`
 	JobID                   string   `json:"job_id,omitempty"`
 	ShardID                 string   `json:"shard_id,omitempty"`
@@ -313,6 +319,53 @@ func buildRecordBatchManifest(inputHash, startedAt string, items []recordBatchIt
 		"status_counts":  manifest.StatusCounts,
 	})
 	return manifest
+}
+
+func storeRecordBatch(db *sql.DB, manifest recordBatchManifest) error {
+	statusCountsJSON, err := json.Marshal(manifest.StatusCounts)
+	if err != nil {
+		return err
+	}
+	runIDsJSON, err := json.Marshal(manifest.RunIDs)
+	if err != nil {
+		return err
+	}
+	shardsJSON, err := json.Marshal(manifest.Shards)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT OR REPLACE INTO record_batches
+		(id, input_sha256, started_at, ended_at, job_count, passed, failed, skipped, status_counts_json, run_ids_json, shards_json, result_set_id, page_hash, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		manifest.BatchID, manifest.InputSHA256, manifest.StartedAt, manifest.EndedAt, manifest.JobCount,
+		manifest.Passed, manifest.Failed, manifest.Skipped, string(statusCountsJSON), string(runIDsJSON), string(shardsJSON),
+		manifest.ResultSetID, manifest.PageHash, now); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM record_batch_items WHERE batch_id = ?`, manifest.BatchID); err != nil {
+		return err
+	}
+	for _, item := range manifest.Items {
+		changedFilesJSON, err := json.Marshal(item.ChangedFiles)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`INSERT INTO record_batch_items
+			(batch_id, idx, job_id, shard_id, run_id, attempt_id, tool_call_id, process_id, workdir, command, status, exit_code, wall_ms, changed_file_count, changed_files_json, error, evidence_manifest_command, eval_context_command, explain_command, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			manifest.BatchID, item.Index, item.JobID, item.ShardID, item.RunID, item.AttemptID, item.ToolCallID, item.ProcessID,
+			item.Workdir, item.Command, item.Status, item.ExitCode, item.WallMS, item.ChangedFileCount, string(changedFilesJSON), item.Error,
+			item.EvidenceManifestCommand, item.EvalContextCommand, item.ExplainCommand, now); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func copyStringIntMap(in map[string]int) map[string]int {
