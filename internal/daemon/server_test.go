@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/byteyellow/agentprovenance/internal/record"
 	"github.com/byteyellow/agentprovenance/internal/signals"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
@@ -161,5 +162,57 @@ func TestRecordEndpointRequiresCommand(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+// TestRecordCrossModeConsistency is the cross-mode gate: the same command
+// recorded via the daemon (Mode 2) and via the core record.Service the CLI wraps
+// (Mode 1) must produce structurally identical evidence (status, exit, command,
+// changed-file count), modulo per-run identifiers/timestamps. It guards against
+// the two customer tracks (RL CLI vs sidecar daemon) silently diverging.
+func TestRecordCrossModeConsistency(t *testing.T) {
+	workdir := t.TempDir()
+	cmd := []string{"true"}
+
+	// Mode 2: daemon HTTP record.
+	s := testServer(t)
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+	body, _ := json.Marshal(map[string]any{"name": "xmode", "workdir": workdir, "command": cmd})
+	resp, err := http.Post(srv.URL+"/v1/record", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var daemonResult map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&daemonResult); err != nil {
+		t.Fatal(err)
+	}
+
+	// Mode 1: the core record.Service the CLI invokes, on an independent store.
+	cliServer := testServer(t)
+	cliResult, err := record.Service{DB: cliServer.DB, Paths: cliServer.Paths}.Run(record.Request{
+		Name: "xmode", Workdir: workdir, Command: cmd,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Compare the structural fields (not run_id/timestamps).
+	if daemonResult["status"] != cliResult.Status {
+		t.Fatalf("status diverged: daemon=%v cli=%v", daemonResult["status"], cliResult.Status)
+	}
+	if int(daemonResult["exit_code"].(float64)) != cliResult.ExitCode {
+		t.Fatalf("exit_code diverged: daemon=%v cli=%d", daemonResult["exit_code"], cliResult.ExitCode)
+	}
+	if daemonResult["command"] != cliResult.Command {
+		t.Fatalf("command diverged: daemon=%v cli=%v", daemonResult["command"], cliResult.Command)
+	}
+	daemonChanged := 0
+	if v, ok := daemonResult["changed_files"].([]any); ok {
+		daemonChanged = len(v)
+	}
+	if daemonChanged != len(cliResult.ChangedFiles) {
+		t.Fatalf("changed_files count diverged: daemon=%d cli=%d", daemonChanged, len(cliResult.ChangedFiles))
 	}
 }
