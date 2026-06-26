@@ -453,6 +453,15 @@ func verifyRiskAndResponses(db *sql.DB, runID string, add issueAdder) error {
 		if !exists(db, `SELECT 1 FROM response_actions WHERE run_id = ? AND policy_decision_id = ?`, runID, id) {
 			add("error", "missing_policy_response_action", id, "non-allow policy decision %s has no response action", id)
 		}
+		// Unified signal model: a non-allow policy decision must also surface as a
+		// security-dimension signal (via its risk_signal). The policy path writes
+		// this live and a writeback failure emits an observable error event, so a
+		// missing unified signal here is a real integrity gap.
+		if !exists(db, `SELECT 1 FROM signals s JOIN risk_signals r ON s.source_id = r.id
+			WHERE s.dimension = 'security' AND s.source_table = 'risk_signals'
+			AND r.policy_decision_id = ? AND s.run_id = ?`, id, runID) {
+			add("error", "missing_policy_unified_signal", id, "non-allow policy decision %s has no unified security signal", id)
+		}
 		if eventID != "" && !edgeExists(db, runID, "runtime_event/"+eventID, "policy_decision/"+id, "runtime_event_policy_decision") {
 			add("error", "missing_policy_decision_edge", id, "runtime event %s is not linked to policy decision %s", eventID, id)
 		}

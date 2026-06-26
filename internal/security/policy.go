@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/ids"
+	"github.com/byteyellow/agentprovenance/internal/signals"
 	"gopkg.in/yaml.v3"
 )
 
@@ -549,6 +550,36 @@ func persistDecisionWithExistingEvent(db *sql.DB, eventID string, event Event, r
 			"policy_violation", severity, decision.Reason, recommendedAction, string(payload), now)
 		if err != nil {
 			return DecisionRecord{}, err
+		}
+		// Live-project into the unified signal model (the infra contract).
+		// Best-effort and idempotent on (source_table, source_id): a later
+		// signals.Backfill will not duplicate this row.
+		sigKind, sigID := "run", event.RunID
+		if event.ProcessID != "" {
+			sigKind, sigID = "process", event.ProcessID
+		} else if event.ToolCallID != "" {
+			sigKind, sigID = "tool_call", event.ToolCallID
+		}
+		if _, sigErr := signals.Record(db, signals.Signal{
+			Dimension: signals.Security, Type: "policy_violation",
+			GraphRefKind: sigKind, GraphRefID: sigID,
+			RunID: event.RunID, SessionID: event.SessionID, ToolCallID: event.ToolCallID,
+			ProcessID: event.ProcessID, EventID: eventID,
+			Severity: severity, Reference: decision.Reason, RecommendedAction: recommendedAction,
+			ProducedBy: "security.policy", Payload: string(payload), CreatedAt: now,
+			SourceTable: "risk_signals", SourceID: riskSignalID,
+		}); sigErr != nil {
+			// Unified-signal writeback must not fail silently: emit an observable
+			// error event (does not block the policy decision).
+			errPayload, _ := json.Marshal(map[string]any{
+				"error":              sigErr.Error(),
+				"risk_signal_id":     riskSignalID,
+				"policy_decision_id": record.ID,
+				"dimension":          "security",
+			})
+			_, _ = db.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
+				VALUES (?, ?, ?, ?, ?, 'signal_writeback', 'unified_signal_write_failed', ?, ?)`,
+				ids.New("evt"), event.RunID, event.SessionID, event.ToolCallID, event.ProcessID, string(errPayload), now)
 		}
 		_, _ = db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
 			VALUES (?, ?, ?, ?, 'policy_decision_risk_signal', ?, ?)`,

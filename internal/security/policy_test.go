@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/signals"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
@@ -171,5 +172,67 @@ func insertPolicySession(t *testing.T, db *sql.DB) {
 		VALUES ('sbx-test', 'lease-test', 'run-test', 'container-test', '/tmp/workspace', 'running', ?, ?)`, now, now)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestPolicyViolationEmitsUnifiedSignal verifies the security pillar is a live
+// producer on the unified signal model (not just an after-the-fact projection):
+// a non-allow decision must land a Security-dimension signal keyed to the graph,
+// carrying source provenance back to its risk_signals row.
+func TestPolicyViolationEmitsUnifiedSignal(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	insertPolicySession(t, db)
+
+	eventsPath := filepath.Join(root, "events.jsonl")
+	if err := os.WriteFile(eventsPath, []byte(`{"source":"egress_proxy","event_type":"network_connect","run_id":"run-test","session_id":"sbx-test","process_id":"proc-1","dst_ip":"169.254.169.254"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := EvaluateJSONLWithState(db, eventsPath, os.Stdout); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := signals.Query(db, signals.Filter{RunID: "run-test", Dimension: signals.Security})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("unified security signals = %d, want 1", len(got))
+	}
+	s := got[0]
+	if s.Type != "policy_violation" {
+		t.Fatalf("signal type = %q, want policy_violation", s.Type)
+	}
+	if s.GraphRefKind != "process" || s.GraphRefID != "proc-1" {
+		t.Fatalf("graph ref = %s/%s, want process/proc-1", s.GraphRefKind, s.GraphRefID)
+	}
+	if s.SourceTable != "risk_signals" || s.SourceID == "" {
+		t.Fatalf("missing source provenance: %+v", s)
+	}
+	if s.ProducedBy != "security.policy" {
+		t.Fatalf("produced_by = %q, want security.policy", s.ProducedBy)
+	}
+
+	// Backfill must not duplicate the live-written security row (idempotent on
+	// source_table+source_id). It may still project other dimensions that are
+	// projection-only (e.g. the cost_samples row this quarantine also wrote), so
+	// we assert on the security dimension specifically, not the total count.
+	if _, err := signals.Backfill(db); err != nil {
+		t.Fatal(err)
+	}
+	after, err := signals.Query(db, signals.Filter{RunID: "run-test", Dimension: signals.Security})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != 1 {
+		t.Fatalf("security signals after backfill = %d, want 1 (no duplicate of the live row)", len(after))
 	}
 }

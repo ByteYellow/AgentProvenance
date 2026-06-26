@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
+	"github.com/byteyellow/agentprovenance/internal/signals"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
@@ -27,6 +28,7 @@ type Summary struct {
 	Risk             RiskSummary       `json:"risk"`
 	Baseline         BaselineSummary   `json:"baseline"`
 	Response         ResponseSummary   `json:"response"`
+	Signals          SignalSummary     `json:"signals"`
 	EventTypes       map[string]int    `json:"event_types"`
 	Sources          map[string]int    `json:"sources"`
 	TopEvidenceRefs  []EvidenceSummary `json:"top_evidence_refs,omitempty"`
@@ -81,6 +83,14 @@ type ResponseSummary struct {
 	ByStatus map[string]int `json:"by_status,omitempty"`
 }
 
+// SignalSummary is the per-dimension rollup of the unified signal model
+// (behavior/cost/quality/security), surfacing the two-pillars-plus-cost shape
+// in the primary observability output.
+type SignalSummary struct {
+	Total       int            `json:"total"`
+	ByDimension map[string]int `json:"by_dimension,omitempty"`
+}
+
 type EvidenceSummary struct {
 	Ref     string `json:"ref"`
 	Type    string `json:"type"`
@@ -99,6 +109,16 @@ func BuildSummary(db *sql.DB, opts SummaryOptions) (Summary, error) {
 		return Summary{}, err
 	}
 	summary.Windows = windowSummary
+	signalCounts, err := signals.Counts(db, opts.RunID)
+	if err != nil {
+		return Summary{}, err
+	}
+	sigSummary := SignalSummary{ByDimension: map[string]int{}}
+	for dim, n := range signalCounts {
+		sigSummary.ByDimension[string(dim)] = n
+		sigSummary.Total += n
+	}
+	summary.Signals = sigSummary
 	summary.RecommendedViews = recommendedViews(summary)
 	resultSetID, pageHash, err := summaryIntegrity(summary, opts.TopN)
 	if err == nil {

@@ -1,6 +1,7 @@
 package forensics
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/attest"
 	"github.com/byteyellow/agentprovenance/internal/evidence"
 	"github.com/byteyellow/agentprovenance/internal/ids"
 	"github.com/byteyellow/agentprovenance/internal/security"
@@ -20,17 +22,24 @@ import (
 type Service struct {
 	DB    *sql.DB
 	Paths store.Paths
+	// SignKey, when set, makes ExportBundle emit a capture-time DSSE/in-toto
+	// attestation over the bundle's sha256 for tamper-evidence.
+	// When nil, bundles are produced unsigned and behavior is unchanged.
+	SignKey   ed25519.PrivateKey
+	SignKeyID string
 }
 
 type BundleInfo struct {
-	SchemaVersion string `json:"schema_version"`
-	ID            string `json:"id"`
-	RunID         string `json:"run_id"`
-	Path          string `json:"path"`
-	SHA256        string `json:"sha256"`
-	SizeBytes     int64  `json:"size_bytes"`
-	Status        string `json:"status"`
-	CreatedAt     string `json:"created_at"`
+	SchemaVersion   string `json:"schema_version"`
+	ID              string `json:"id"`
+	RunID           string `json:"run_id"`
+	Path            string `json:"path"`
+	SHA256          string `json:"sha256"`
+	SizeBytes       int64  `json:"size_bytes"`
+	Status          string `json:"status"`
+	CreatedAt       string `json:"created_at"`
+	Signed          bool   `json:"signed"`
+	AttestationPath string `json:"attestation_path,omitempty"`
 }
 
 func (s Service) Export(runID string) (string, error) {
@@ -140,7 +149,69 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 	if err != nil {
 		return BundleInfo{}, err
 	}
-	return BundleInfo{SchemaVersion: "agentprovenance.forensics_export/v1", ID: bundleID, RunID: runID, Path: path, SHA256: hash, SizeBytes: int64(len(raw)), Status: "ready", CreatedAt: now}, nil
+	info := BundleInfo{SchemaVersion: "agentprovenance.forensics_export/v1", ID: bundleID, RunID: runID, Path: path, SHA256: hash, SizeBytes: int64(len(raw)), Status: "ready", CreatedAt: now}
+
+	// Capture-time attestation: sign an in-toto statement over the bundle digest
+	// so a defender can detect post-compromise rewrites of the stored bundle.
+	if s.SignKey != nil {
+		stmt := attest.NewStatement("forensics/"+runID, hash, map[string]any{
+			"run_id":         runID,
+			"bundle_id":      bundleID,
+			"kind":           "forensics_bundle",
+			"schema_version": info.SchemaVersion,
+			"created_at":     now,
+		})
+		env, err := attest.Sign(stmt, s.SignKey, s.SignKeyID)
+		if err != nil {
+			return BundleInfo{}, fmt.Errorf("sign bundle: %w", err)
+		}
+		envRaw, err := json.MarshalIndent(env, "", "  ")
+		if err != nil {
+			return BundleInfo{}, err
+		}
+		attPath := filepath.Join(s.Paths.Artifacts, bundleID+".dsse.json")
+		if err := os.WriteFile(attPath, envRaw, 0o644); err != nil {
+			return BundleInfo{}, err
+		}
+		info.Signed = true
+		info.AttestationPath = attPath
+	}
+	return info, nil
+}
+
+// VerifyBundleAttestation re-reads the bundle and its DSSE attestation and
+// confirms the signature covers the current bundle bytes. It returns an error if
+// the attestation is missing, the signature is invalid for pub, or the bundle on
+// disk no longer matches the signed digest (i.e. it was tampered after signing).
+func VerifyBundleAttestation(bundlePath, attestationPath string, pub ed25519.PublicKey) error {
+	envRaw, err := os.ReadFile(attestationPath)
+	if err != nil {
+		return fmt.Errorf("read attestation: %w", err)
+	}
+	var env attest.Envelope
+	if err := json.Unmarshal(envRaw, &env); err != nil {
+		return fmt.Errorf("decode attestation: %w", err)
+	}
+	stmt, err := attest.Verify(env, pub)
+	if err != nil {
+		return err
+	}
+	bundleRaw, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return fmt.Errorf("read bundle: %w", err)
+	}
+	want := attest.DigestSHA256(bundleRaw)
+	if len(stmt.Subject) == 0 || stmt.Subject[0].Digest["sha256"] != want {
+		return fmt.Errorf("bundle digest mismatch: signed=%q actual=%q (bundle tampered after signing)", stmtDigest(stmt), want)
+	}
+	return nil
+}
+
+func stmtDigest(s attest.Statement) string {
+	if len(s.Subject) == 0 {
+		return ""
+	}
+	return s.Subject[0].Digest["sha256"]
 }
 
 func telemetryBatchSummaries(batches []telemetry.BatchRecord) []map[string]any {

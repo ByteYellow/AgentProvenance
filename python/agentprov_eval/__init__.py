@@ -15,6 +15,9 @@ import os
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import Any, Callable, Iterable, Sequence
@@ -28,6 +31,26 @@ KIND_QUALITY_SIGNAL = "quality_signal"
 SignalLike = "Signal | dict[str, Any]"
 RuleReturn = "Signal | dict[str, Any] | Iterable[Signal | dict[str, Any]] | None"
 RuleFunction = Callable[["EvalContext"], RuleReturn]
+
+VALID_KINDS = frozenset({KIND_REWARD_FEATURE, KIND_PENALTY, KIND_DATASET_LABEL, KIND_QUALITY_SIGNAL})
+
+
+def validate_signal_dict(signal: dict[str, Any]) -> dict[str, Any]:
+    """Fail fast on a malformed signal before it round-trips to the binary.
+
+    Mirrors the Go-side validation so RL pipelines get an immediate, clear error
+    instead of a subprocess failure deep in a batch. Returns the dict unchanged.
+    """
+    name = signal.get("name")
+    if not name or not str(name).strip():
+        raise ValueError(f"signal name is required: {signal!r}")
+    kind = signal.get("kind")
+    if kind not in VALID_KINDS:
+        raise ValueError(f"signal {name!r} has invalid kind {kind!r} (want one of {sorted(VALID_KINDS)})")
+    score = signal.get("score", 0.0)
+    if not isinstance(score, (int, float)):
+        raise ValueError(f"signal {name!r} score must be numeric, got {score!r}")
+    return signal
 
 
 @dataclass
@@ -59,36 +82,76 @@ class Client:
         data_dir: str | os.PathLike[str] | None = None,
         daemon_url: str | None = None,
         env: dict[str, str] | None = None,
+        timeout: float | None = 600.0,
     ):
         self.binary = str(binary)
         self.data_dir = str(data_dir) if data_dir is not None else None
         self.daemon_url = daemon_url
         self.env = dict(env or {})
+        # Default wall-clock cap per CLI call so a wedged binary cannot hang an
+        # RL training loop forever. Set timeout=None to disable.
+        self.timeout = timeout
 
-    def run_cli(self, args: Sequence[str], *, input_text: str | None = None) -> CommandResult:
+    def _cmd(self, args: Sequence[str]) -> list[str]:
         cmd = [self.binary]
         if self.data_dir:
             cmd.extend(["--data-dir", self.data_dir])
         if self.daemon_url:
             cmd.extend(["--daemon-url", self.daemon_url])
         cmd.extend(str(arg) for arg in args)
+        return cmd
+
+    def _cli_env(self) -> dict[str, str]:
         env = os.environ.copy()
         env.update(self.env)
-        proc = subprocess.run(
-            cmd,
-            input=input_text,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=env,
-            check=False,
-        )
+        return env
+
+    def run_cli(self, args: Sequence[str], *, input_text: str | None = None) -> CommandResult:
+        cmd = self._cmd(args)
+        env = self._cli_env()
+        try:
+            proc = subprocess.run(
+                cmd,
+                input=input_text,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=env,
+                check=False,
+                timeout=self.timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"agentprov command timed out after {self.timeout}s args={cmd!r}"
+            ) from exc
         result = CommandResult(args=cmd, returncode=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
         if proc.returncode != 0:
             raise RuntimeError(
                 f"agentprov command failed returncode={proc.returncode} args={cmd!r} stderr={proc.stderr.strip()}"
             )
         return result
+
+    def _daemon_post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        url = self.daemon_url.rstrip("/") + path
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+        return self._daemon_call(req, path)
+
+    def _daemon_get(self, path: str, params: dict[str, str]) -> dict[str, Any]:
+        query = urllib.parse.urlencode({k: v for k, v in params.items() if v})
+        url = self.daemon_url.rstrip("/") + path + ("?" + query if query else "")
+        return self._daemon_call(urllib.request.Request(url, method="GET"), path)
+
+    def _daemon_call(self, req: "urllib.request.Request", path: str) -> dict[str, Any]:
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                body = resp.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", "replace")
+            raise RuntimeError(f"daemon {path} failed status={exc.code} body={detail.strip()}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"daemon {path} unreachable: {exc}") from exc
+        return json.loads(body) if body.strip() else {}
 
     def record(
         self,
@@ -100,6 +163,19 @@ class Client:
         sample_interval_ms: int | None = None,
         post_root_grace_ms: int | None = None,
     ) -> dict[str, Any]:
+        if self.daemon_url:
+            # Hot path: run the record over the daemon (no per-call fork+exec of
+            # the CLI), the right shape for high-frequency RL recording.
+            payload: dict[str, Any] = {"name": name, "command": [str(part) for part in command]}
+            if run_id:
+                payload["run_id"] = run_id
+            if workdir is not None:
+                payload["workdir"] = str(workdir)
+            if sample_interval_ms is not None:
+                payload["sample_interval_ms"] = sample_interval_ms
+            if post_root_grace_ms is not None:
+                payload["post_root_grace_ms"] = post_root_grace_ms
+            return self._daemon_post("/v1/record", payload)
         args = ["record", "--json"]
         if run_id:
             args.extend(["--run", run_id])
@@ -115,25 +191,44 @@ class Client:
         args.extend(str(part) for part in command)
         return self.run_cli(args).json()
 
-    def batch_record(self, jobs: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
-        manifests = []
-        for job in jobs:
+    def batch_record(
+        self,
+        jobs: Iterable[dict[str, Any]],
+        *,
+        continue_on_error: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Record jobs sequentially. With continue_on_error, a failing job does
+        not abort the batch: it yields a {"status": "failed", "error", "index",
+        "job"} entry instead, so an RL pipeline keeps the successful rollouts.
+        (For parallelism use record_batch(concurrency=N).)
+        """
+        manifests: list[dict[str, Any]] = []
+        for index, job in enumerate(jobs):
             command = job.get("command")
             if not command:
+                if continue_on_error:
+                    manifests.append({"status": "failed", "error": "job missing command", "index": index, "job": job})
+                    continue
                 raise ValueError("batch record job must include command")
-            manifests.append(
-                self.record(
-                    command,
-                    run_id=job.get("run_id", ""),
-                    workdir=job.get("workdir"),
-                    name=job.get("name", "record"),
-                    sample_interval_ms=job.get("sample_interval_ms"),
-                    post_root_grace_ms=job.get("post_root_grace_ms"),
+            try:
+                manifests.append(
+                    self.record(
+                        command,
+                        run_id=job.get("run_id", ""),
+                        workdir=job.get("workdir"),
+                        name=job.get("name", "record"),
+                        sample_interval_ms=job.get("sample_interval_ms"),
+                        post_root_grace_ms=job.get("post_root_grace_ms"),
+                    )
                 )
-            )
+            except RuntimeError as exc:
+                if continue_on_error:
+                    manifests.append({"status": "failed", "error": str(exc), "index": index, "job": job})
+                    continue
+                raise
         return manifests
 
-    def record_batch(self, jobs: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    def record_batch(self, jobs: Iterable[dict[str, Any]], *, concurrency: int = 1) -> dict[str, Any]:
         rows = []
         for job in jobs:
             if not job.get("command"):
@@ -145,8 +240,11 @@ class Client:
             path = handle.name
             handle.write("\n".join(rows))
             handle.write("\n")
+        args = ["record", "batch", "--file", path, "--json"]
+        if concurrency and concurrency > 1:
+            args.extend(["--concurrency", str(concurrency)])
         try:
-            return self.run_cli(["record", "batch", "--file", path, "--json"]).json()
+            return self.run_cli(args).json()
         finally:
             try:
                 os.unlink(path)
@@ -183,7 +281,43 @@ class Client:
         return self.run_cli(args).json()
 
     def eval_context(self, run_id: str) -> dict[str, Any]:
+        if self.daemon_url:
+            return self._daemon_get("/v1/signal/context", {"run": run_id})
         return self.run_cli(["signal", "context", "--run", run_id]).json()
+
+    def signals(self, run_id: str, *, dimension: str | None = None) -> dict[str, Any]:
+        """Read back the unified signal model for a run (the
+        agentprovenance.signals/v1 SignalSet): behavior/cost/quality/security in
+        one place. Useful for RL reward shaping that wants ALL dimensions, not
+        just this evaluator's own output. With dimension set, returns
+        {"signals": [...]} filtered to that dimension.
+        """
+        if self.daemon_url:
+            return self._daemon_get("/v1/signals", {"run": run_id, "dimension": dimension or ""})
+        args = ["signals", "list", "--run", run_id, "--json"]
+        if dimension is not None:
+            args.extend(["--dimension", dimension])
+        return self.run_cli(args).json()
+
+    def score_trajectory(
+        self,
+        command: Sequence[str],
+        registry: "Registry",
+        *,
+        run_id: str = "",
+        workdir: str | os.PathLike[str] | None = None,
+        engine: str | None = None,
+    ) -> "TrajectoryScore":
+        """Online single-trajectory loop for in-loop RL: record one command,
+        pull its EvalContext, run the registry, and return the manifest plus the
+        EvalReport in one call. Unlike run_batch_pipeline (offline/batch), this
+        is the per-episode path a training loop calls between rollouts.
+        """
+        manifest = self.record(command, run_id=run_id, workdir=workdir)
+        resolved_run = run_id or manifest.get("run_id", "")
+        ctx = self.eval_context(resolved_run)
+        report = evaluate_context(ctx, registry=registry, engine=engine or registry.name)
+        return TrajectoryScore(run_id=resolved_run, record_manifest=manifest, context=ctx, report=report)
 
     def batch_eval_contexts(
         self,
@@ -220,6 +354,63 @@ class Client:
                 contexts.append(json.loads(line))
         return contexts
 
+    def iter_eval_contexts(
+        self,
+        *,
+        run_ids: Iterable[str] | None = None,
+        batch_id: str = "",
+        run_id: str = "",
+        job_id: str = "",
+        shard_id: str = "",
+        latest: bool = False,
+        limit: int = 1000,
+    ):
+        """Stream EvalContext objects one at a time (a generator), instead of
+        loading the whole batch into memory like batch_eval_contexts. For large
+        RL batches (10k+ trajectories) this keeps memory bounded. CLI path only.
+        """
+        args = ["signal", "batch-context", "--limit", str(limit)]
+        input_text = None
+        if run_ids is not None:
+            args.extend(["--runs", "-"])
+            input_text = "\n".join(json.dumps({"run_id": value}) for value in run_ids)
+            if input_text:
+                input_text += "\n"
+        if batch_id:
+            args.extend(["--batch", batch_id])
+        if run_id:
+            args.extend(["--run", run_id])
+        if job_id:
+            args.extend(["--job", job_id])
+        if shard_id:
+            args.extend(["--shard", shard_id])
+        if latest:
+            args.append("--latest")
+
+        proc = subprocess.Popen(
+            self._cmd(args),
+            stdin=subprocess.PIPE if input_text is not None else None,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=self._cli_env(),
+        )
+        try:
+            if input_text is not None:
+                proc.stdin.write(input_text)
+                proc.stdin.close()
+            for line in proc.stdout:
+                line = line.strip()
+                if line:
+                    yield json.loads(line)
+        finally:
+            stderr = proc.stderr.read()
+            code = proc.wait()
+            proc.stdout.close()
+            proc.stderr.close()
+            if code != 0:
+                raise RuntimeError(f"agentprov signal batch-context failed returncode={code} stderr={stderr.strip()}")
+
     def batch_forensics(
         self,
         *,
@@ -249,8 +440,18 @@ class Client:
             args.append("--include-eval-contexts")
         return self.run_cli(args).json()
 
-    def import_signals(self, run_id: str, signals: Iterable["Signal | dict[str, Any]"]) -> dict[str, Any]:
-        payload = {"signals": [signal.to_dict() if isinstance(signal, Signal) else signal for signal in signals]}
+    def import_signals(
+        self,
+        run_id: str,
+        signals: Iterable["Signal | dict[str, Any]"],
+        *,
+        validate: bool = True,
+    ) -> dict[str, Any]:
+        rows = [signal.to_dict() if isinstance(signal, Signal) else dict(signal) for signal in signals]
+        if validate:
+            for row in rows:
+                validate_signal_dict(row)
+        payload = {"signals": rows}
         return self.run_cli(
             ["signal", "import", "--run", run_id, "--file", "-", "--json"],
             input_text=json.dumps(payload, separators=(",", ":")),
@@ -306,11 +507,12 @@ class Client:
         engine: str | None = None,
         shard_id: str = "",
         limit: int = 1000,
+        concurrency: int = 1,
         import_signals: bool = True,
         include_forensics: bool = True,
         include_eval_contexts_in_forensics: bool = False,
     ) -> "BatchPipelineResult":
-        record_manifest = self.record_batch(jobs)
+        record_manifest = self.record_batch(jobs, concurrency=concurrency)
         selected_engine = engine or registry.name
         selected_shard = shard_id
         contexts = self.batch_eval_contexts(
@@ -524,6 +726,11 @@ class Signal:
             item["evidence"] = self.evidence
         return item
 
+    def validate(self) -> "Signal":
+        """Raise ValueError if this signal is malformed; returns self otherwise."""
+        validate_signal_dict(self.to_dict())
+        return self
+
     @classmethod
     def reward_feature(cls, name: str, score: float, reason: str, **kwargs: Any) -> "Signal":
         return cls(name=name, kind=KIND_REWARD_FEATURE, score=score, reason=reason, **kwargs)
@@ -584,6 +791,45 @@ class BatchPipelineResult:
             "forensics": self.forensics,
             "summary": self.summary,
         }
+
+
+@dataclass
+class TrajectoryScore:
+    """Result of scoring one trajectory online (Client.score_trajectory)."""
+
+    run_id: str
+    record_manifest: dict[str, Any]
+    context: dict[str, Any]
+    report: dict[str, Any]
+
+    @property
+    def signals(self) -> list[dict[str, Any]]:
+        return list(self.report.get("signals") or [])
+
+    def reward(
+        self,
+        *,
+        weights: dict[str, float] | None = None,
+        include_kinds: Iterable[str] = (KIND_REWARD_FEATURE, KIND_PENALTY),
+    ) -> float:
+        """Reduce signals to a scalar reward.
+
+        AgentProvenance deliberately does not own reward policy, so this is an
+        optional convenience, not a mandate: by default it sums `score` over
+        reward_feature/penalty signals, optionally weighted by signal name.
+        Provide `weights` to shape; override `include_kinds` to change which
+        signal kinds contribute.
+        """
+        kinds = set(include_kinds)
+        total = 0.0
+        for sig in self.signals:
+            if sig.get("kind") not in kinds:
+                continue
+            score = float(sig.get("score", 0.0))
+            if weights is not None:
+                score *= weights.get(sig.get("name", ""), 0.0)
+            total += score
+        return total
 
 
 @dataclass
@@ -794,6 +1040,7 @@ __all__ = [
     "Rule",
     "Signal",
     "BatchPipelineResult",
+    "TrajectoryScore",
     "batch_eval_contexts",
     "batch_forensics",
     "batch_record",
@@ -807,6 +1054,7 @@ __all__ = [
     "reports_jsonl",
     "record",
     "record_batch",
+    "validate_signal_dict",
     "rule",
     "run_batch_pipeline",
     "KIND_REWARD_FEATURE",

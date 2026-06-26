@@ -3,6 +3,7 @@ package correlation
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/ids"
@@ -189,43 +190,82 @@ func resolveByProcess(db *sql.DB, runID, processID string) (Match, bool, error) 
 		FROM execution_context_bindings WHERE process_id = ? ORDER BY created_at DESC LIMIT 1`, processID)
 }
 
-func resolveByCgroup(db *sql.DB, runID, cgroupID, at string) (Match, bool, error) {
-	if runID != "" {
-		return scanOne(db, "cgroup_time_window", "run_id+cgroup_id+time", 0.98, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
-			FROM execution_context_bindings
-			WHERE run_id = ? AND cgroup_id = ? AND started_at <= ? AND (ended_at = '' OR ended_at >= ?)
-			ORDER BY started_at DESC LIMIT 1`, runID, cgroupID, at, at)
+// MaxOpenBindingAge bounds how long a binding left open (ended_at = "") is
+// allowed to match telemetry. Without it, a binding whose CloseBinding was
+// dropped - every close call is best-effort (record/control/stressdemo) - would
+// match every future event for its container/pid forever, silently over-binding
+// later, unrelated executions to a stale context. An open binding only matches
+// events within this window after it started; older events fall through to the
+// next resolution tier or to unresolved.
+//
+// PRODUCT SEMANTICS: this assumes an open binding represents a SHORT-LIVED
+// ToolCallScope (a tool call / process lifetime), not a session-lifetime
+// identity. A long-running agent or session that stays open past this window
+// without a close/reopen will see its real events go unresolved rather than
+// risk mis-binding - which is the safe failure here. Session-lifetime identity
+// that legitimately exceeds 24h must keep its binding refreshed (re-record on
+// activity) or model itself as a series of scoped bindings, not one perpetual
+// open binding. Tune via this var if the deployment's scope lifetimes differ.
+var MaxOpenBindingAge = 24 * time.Hour
+
+// openBindingLowerBound returns the earliest started_at an open binding may have
+// to still match an event observed at `at`. On an unparseable timestamp it
+// returns "" (every RFC3339 value is lexically >= ""), preserving the legacy
+// unbounded-open behavior rather than silently dropping matches.
+func openBindingLowerBound(at string) string {
+	t, err := time.Parse(time.RFC3339Nano, at)
+	if err != nil {
+		return ""
 	}
-	return scanOne(db, "cgroup_time_window", "cgroup_id+time", 0.98, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
-		FROM execution_context_bindings
-		WHERE cgroup_id = ? AND started_at <= ? AND (ended_at = '' OR ended_at >= ?)
-		ORDER BY started_at DESC LIMIT 1`, cgroupID, at, at)
+	return t.Add(-MaxOpenBindingAge).UTC().Format(time.RFC3339Nano)
+}
+
+const bindingColumns = `id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence`
+
+// resolveWindow runs a time-windowed binding lookup with a stale-open guard,
+// shared by the cgroup/container/pid tiers (previously six near-identical
+// queries). matchExpr is the tier predicate (e.g. "cgroup_id = ?"); matchArgs
+// are its bound values.
+func resolveWindow(db *sql.DB, runID, method, source, matchExpr string, confidence float64, at string, matchArgs ...any) (Match, bool, error) {
+	minStart := openBindingLowerBound(at)
+	var sb strings.Builder
+	args := make([]any, 0, len(matchArgs)+4)
+	sb.WriteString("SELECT " + bindingColumns + " FROM execution_context_bindings WHERE ")
+	if runID != "" {
+		sb.WriteString("run_id = ? AND ")
+		args = append(args, runID)
+	}
+	sb.WriteString(matchExpr)
+	args = append(args, matchArgs...)
+	// started_at <= at, and either the interval is closed and still covers `at`,
+	// or it is open but started within MaxOpenBindingAge of `at`.
+	sb.WriteString(" AND started_at <= ? AND ((ended_at != '' AND ended_at >= ?) OR (ended_at = '' AND started_at >= ?)) ORDER BY started_at DESC LIMIT 1")
+	args = append(args, at, at, minStart)
+	return scanOne(db, method, source, confidence, sb.String(), args...)
+}
+
+func resolveByCgroup(db *sql.DB, runID, cgroupID, at string) (Match, bool, error) {
+	source := "cgroup_id+time"
+	if runID != "" {
+		source = "run_id+cgroup_id+time"
+	}
+	return resolveWindow(db, runID, "cgroup_time_window", source, "cgroup_id = ?", 0.98, at, cgroupID)
 }
 
 func resolveByContainer(db *sql.DB, runID, containerID, at string) (Match, bool, error) {
+	source := "container_id+time"
 	if runID != "" {
-		return scanOne(db, "container_time_window", "run_id+container_id+time", 0.92, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
-			FROM execution_context_bindings
-			WHERE run_id = ? AND container_id = ? AND started_at <= ? AND (ended_at = '' OR ended_at >= ?)
-			ORDER BY started_at DESC LIMIT 1`, runID, containerID, at, at)
+		source = "run_id+container_id+time"
 	}
-	return scanOne(db, "container_time_window", "container_id+time", 0.92, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
-		FROM execution_context_bindings
-		WHERE container_id = ? AND started_at <= ? AND (ended_at = '' OR ended_at >= ?)
-		ORDER BY started_at DESC LIMIT 1`, containerID, at, at)
+	return resolveWindow(db, runID, "container_time_window", source, "container_id = ?", 0.92, at, containerID)
 }
 
 func resolveByPID(db *sql.DB, runID string, pid int64, at string) (Match, bool, error) {
+	source := "pid+time"
 	if runID != "" {
-		return scanOne(db, "pid_time_window", "run_id+pid+time", 0.85, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
-			FROM execution_context_bindings
-			WHERE run_id = ? AND (pid = ? OR root_pid = ?) AND started_at <= ? AND (ended_at = '' OR ended_at >= ?)
-			ORDER BY started_at DESC LIMIT 1`, runID, pid, pid, at, at)
+		source = "run_id+pid+time"
 	}
-	return scanOne(db, "pid_time_window", "pid+time", 0.85, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
-		FROM execution_context_bindings
-		WHERE (pid = ? OR root_pid = ?) AND started_at <= ? AND (ended_at = '' OR ended_at >= ?)
-		ORDER BY started_at DESC LIMIT 1`, pid, pid, at, at)
+	return resolveWindow(db, runID, "pid_time_window", source, "(pid = ? OR root_pid = ?)", 0.85, at, pid, pid)
 }
 
 func scanOne(db *sql.DB, method, source string, confidence float64, query string, args ...any) (Match, bool, error) {

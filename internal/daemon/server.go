@@ -22,8 +22,10 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/forensics"
 	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
+	"github.com/byteyellow/agentprovenance/internal/record"
 	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/signal"
+	signalsmodel "github.com/byteyellow/agentprovenance/internal/signals"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	runtimeplane "github.com/byteyellow/agentprovenance/internal/substrate/runtime"
 	"github.com/byteyellow/agentprovenance/internal/substrate/state"
@@ -77,6 +79,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/sessions/", s.sessionByID)
 	mux.HandleFunc("POST /v1/snapshots", s.createSnapshot)
 	mux.HandleFunc("/v1/snapshots/", s.snapshotByID)
+	mux.HandleFunc("POST /v1/record", s.recordRun)
 	mux.HandleFunc("POST /v1/telemetry/bind", s.bindTelemetry)
 	mux.HandleFunc("GET /v1/telemetry/events", s.listTelemetryEvents)
 	mux.HandleFunc("GET /v1/telemetry/windows", s.listTelemetryWindows)
@@ -91,6 +94,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/forensics/export", s.forensicsExport)
 	mux.HandleFunc("POST /v1/forensics/export-batch", s.forensicsExportBatch)
 	mux.HandleFunc("GET /v1/observe/summary", s.observeSummary)
+	mux.HandleFunc("GET /v1/signals", s.listSignals)
 	mux.HandleFunc("GET /v1/timeline", s.timeline)
 	mux.HandleFunc("GET /v1/security/risks", s.securityRisks)
 	mux.HandleFunc("GET /v1/security/responses", s.securityResponses)
@@ -658,6 +662,46 @@ func (s Server) forensicsExportBatch(w http.ResponseWriter, r *http.Request) {
 	defer s.unlockWrites()
 	bundle, err := (forensics.Service{DB: s.DB, Paths: s.Paths}).ExportBatch(req)
 	writeResult(w, bundle, err)
+}
+
+// recordRun runs a zero-SDK record over the daemon, so high-frequency callers
+// (RL training loops) avoid a fork+exec+DB-open of the CLI per trajectory. The
+// request/response use the same snake_case shape as `agentprov record --json`.
+func (s Server) recordRun(w http.ResponseWriter, r *http.Request) {
+	var req record.Request
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeResult(w, nil, fmt.Errorf("invalid record request: %w", err))
+		return
+	}
+	if len(req.Command) == 0 {
+		writeResult(w, nil, errors.New("command is required"))
+		return
+	}
+	result, err := record.Service{DB: s.DB, Paths: s.Paths}.Run(req)
+	writeResult(w, result, err)
+}
+
+// listSignals exposes the unified signal model over the daemon API. With no
+// dimension it returns the versioned SignalSet envelope; with ?dimension= it
+// returns the filtered rows. This is the daemon-side mirror of `agentprov
+// signals list`.
+func (s Server) listSignals(w http.ResponseWriter, r *http.Request) {
+	runID := r.URL.Query().Get("run")
+	if runID == "" {
+		writeResult(w, nil, errors.New("run is required"))
+		return
+	}
+	if dim := r.URL.Query().Get("dimension"); dim != "" {
+		if !signalsmodel.Dimension(dim).Valid() {
+			writeResult(w, nil, fmt.Errorf("invalid dimension %q (want behavior|cost|quality|security)", dim))
+			return
+		}
+		rows, err := signalsmodel.Query(s.DB, signalsmodel.Filter{RunID: runID, Dimension: signalsmodel.Dimension(dim)})
+		writeResult(w, map[string]any{"signals": rows}, err)
+		return
+	}
+	set, err := signalsmodel.Export(s.DB, runID)
+	writeResult(w, set, err)
 }
 
 func (s Server) observeSummary(w http.ResponseWriter, r *http.Request) {

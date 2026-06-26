@@ -28,37 +28,37 @@ type Service struct {
 }
 
 type Request struct {
-	RunID            string
-	Name             string
-	Workdir          string
-	Command          []string
-	SampleIntervalMS int64
-	PostRootGraceMS  int64
+	RunID            string   `json:"run_id"`
+	Name             string   `json:"name"`
+	Workdir          string   `json:"workdir"`
+	Command          []string `json:"command"`
+	SampleIntervalMS int64    `json:"sample_interval_ms"`
+	PostRootGraceMS  int64    `json:"post_root_grace_ms"`
 }
 
 type Result struct {
-	RunID            string
-	RolloutID        string
-	BaseSnapshotID   string
-	AttemptID        string
-	SessionID        string
-	ToolCallID       string
-	ProcessID        string
-	Workdir          string
-	Command          string
-	ExitCode         int
-	Status           string
-	WallMS           int64
-	ChangedFiles     []string
-	RootPID          int64
-	Observed         []ObservedProcess
-	OrphanPolicy     string
-	SampleIntervalMS int64
-	PostRootGraceMS  int64
-	CWD              string
-	StartedAt        string
-	EndedAt          string
-	FailureReason    string
+	RunID            string            `json:"run_id"`
+	RolloutID        string            `json:"rollout_id"`
+	BaseSnapshotID   string            `json:"base_snapshot_id"`
+	AttemptID        string            `json:"attempt_id"`
+	SessionID        string            `json:"session_id"`
+	ToolCallID       string            `json:"tool_call_id"`
+	ProcessID        string            `json:"process_id"`
+	Workdir          string            `json:"workdir"`
+	Command          string            `json:"command"`
+	ExitCode         int               `json:"exit_code"`
+	Status           string            `json:"status"`
+	WallMS           int64             `json:"wall_ms"`
+	ChangedFiles     []string          `json:"changed_files"`
+	RootPID          int64             `json:"root_pid"`
+	Observed         []ObservedProcess `json:"observed"`
+	OrphanPolicy     string            `json:"orphan_policy"`
+	SampleIntervalMS int64             `json:"sample_interval_ms"`
+	PostRootGraceMS  int64             `json:"post_root_grace_ms"`
+	CWD              string            `json:"cwd"`
+	StartedAt        string            `json:"started_at"`
+	EndedAt          string            `json:"ended_at"`
+	FailureReason    string            `json:"failure_reason"`
 }
 
 type ObservedProcess struct {

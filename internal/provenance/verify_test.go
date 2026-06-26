@@ -276,6 +276,19 @@ func TestVerifyRejectsMissingPolicyRiskSignal(t *testing.T) {
 	assertVerifyIssue(t, result, "missing_response_risk_signal")
 }
 
+func TestVerifyRejectsMissingUnifiedSecuritySignal(t *testing.T) {
+	db := setupRiskVerifyRun(t)
+	defer db.Close()
+	if _, err := db.Exec(`DELETE FROM signals WHERE run_id = 'run-risk-verify' AND dimension = 'security'`); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Verify(db, "run-risk-verify")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertVerifyIssue(t, result, "missing_policy_unified_signal")
+}
+
 func TestVerifyRejectsMissingRiskResponseAction(t *testing.T) {
 	db := setupRiskVerifyRun(t)
 	defer db.Close()

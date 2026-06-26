@@ -11,7 +11,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 13
+const SchemaVersion = 14
 
 type Paths struct {
 	Root       string
@@ -66,20 +66,21 @@ func Open(paths Paths) (*sql.DB, error) {
 	if err := os.MkdirAll(paths.Root, 0o755); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", paths.DB)
+	// Pragmas are set in the DSN so they apply to EVERY pooled connection.
+	// Setting them via a single db.Exec only configures whichever connection
+	// served that statement; other connections the pool opens lazily would have
+	// no busy_timeout and hit immediate "database is locked" (SQLITE_BUSY) under
+	// concurrent writers - exactly the daemon's sampler-vs-handler case.
+	//
+	// We do NOT cap the pool to one connection (SetMaxOpenConns(1)): the
+	// codebase has read loops that issue a nested DB call inside an open rows
+	// cursor (directly in provenance/verify.go, indirectly via helpers like
+	// attemptIsTainted), which would deadlock on a single shared connection.
+	// WAL + a busy_timeout applied to all connections lets concurrent writers
+	// serialize through the busy handler instead.
+	dsn := "file:" + paths.DB + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		return nil, err
-	}
-	if _, err := db.Exec(`PRAGMA foreign_keys = ON;`); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if _, err := db.Exec(`PRAGMA journal_mode = WAL;`); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if _, err := db.Exec(`PRAGMA busy_timeout = 5000;`); err != nil {
-		db.Close()
 		return nil, err
 	}
 	return db, nil
@@ -680,6 +681,40 @@ func EnsureSchema(db *sql.DB) error {
 			secret_ref TEXT NOT NULL,
 			created_at TEXT NOT NULL
 		);`,
+		// Unified graph-attached signal model (the infra contract).
+		// Every observability dimension - behavior, quality, security, and the
+		// cross-cutting cost dimension - lands here as one row type keyed to the
+		// same causality graph, instead of the per-dimension silos
+		// (risk_signals / baseline_deviations / cost_samples / Python EvalSignal).
+		`CREATE TABLE IF NOT EXISTS signals (
+			id TEXT PRIMARY KEY,
+			dimension TEXT NOT NULL,                  -- behavior | cost | quality | security
+			signal_type TEXT NOT NULL,               -- cpu_spike | reward_feature | ssrf_attempt | policy_violation ...
+			graph_ref_kind TEXT NOT NULL DEFAULT '', -- run | session | tool_call | process | event | object | edge
+			graph_ref_id TEXT NOT NULL DEFAULT '',
+			run_id TEXT NOT NULL DEFAULT '',
+			session_id TEXT NOT NULL DEFAULT '',
+			tool_call_id TEXT NOT NULL DEFAULT '',
+			process_id TEXT NOT NULL DEFAULT '',
+			event_id TEXT NOT NULL DEFAULT '',
+			object_ref TEXT NOT NULL DEFAULT '',
+			severity TEXT NOT NULL DEFAULT '',        -- security/risk only: info|low|medium|high|critical
+			label TEXT NOT NULL DEFAULT '',           -- categorical tag (e.g. quality pass|candidate|reject)
+			value REAL NOT NULL DEFAULT 0,            -- numeric measure (cost / quality)
+			reference TEXT NOT NULL DEFAULT '',       -- norm / baseline / budget that produced it
+			confidence REAL NOT NULL DEFAULT 1,
+			recommended_action TEXT NOT NULL DEFAULT '',
+			produced_by TEXT NOT NULL DEFAULT '',     -- security.policy | baseline | economics | evaluator:<name>
+			evidence_refs TEXT NOT NULL DEFAULT '[]', -- JSON array of content-addressed object refs
+			payload TEXT NOT NULL DEFAULT '{}',
+			source_table TEXT NOT NULL DEFAULT '',    -- legacy silo this row was projected from (provenance)
+			source_id TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_signals_run ON signals(run_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_signals_dimension ON signals(dimension);`,
+		`CREATE INDEX IF NOT EXISTS idx_signals_graph_ref ON signals(graph_ref_kind, graph_ref_id);`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_source ON signals(source_table, source_id) WHERE source_table != '';`,
 	}
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {

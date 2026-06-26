@@ -11,6 +11,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/record"
@@ -77,6 +78,7 @@ func recordBatchCmd(dataDir *string) *cobra.Command {
 	var continueOnError bool
 	var sampleIntervalMS int64
 	var postRootGraceMS int64
+	var concurrency int
 	cmd := &cobra.Command{
 		Use:   "batch",
 		Short: "record many zero-SDK jobs from a JSONL batch file",
@@ -100,65 +102,44 @@ func recordBatchCmd(dataDir *string) *cobra.Command {
 			statusCounts := map[string]int{}
 			runIDs := make([]string, 0, len(jobs))
 			shards := map[string]int{}
-			for index, job := range jobs {
-				if job.Name == "" {
-					job.Name = "record-batch"
-				}
-				if job.SampleIntervalMS == 0 {
-					job.SampleIntervalMS = sampleIntervalMS
-				}
-				if job.PostRootGraceMS == 0 {
-					job.PostRootGraceMS = postRootGraceMS
-				}
-				item := recordBatchItem{
-					Index:   index,
-					JobID:   job.JobID,
-					ShardID: job.ShardID,
-					RunID:   job.RunID,
-					Workdir: job.Workdir,
-					Command: strings.Join(job.Command, " "),
-				}
-				result, runErr := service.Run(record.Request{
-					RunID:            job.RunID,
-					Name:             job.Name,
-					Workdir:          job.Workdir,
-					Command:          job.Command,
-					SampleIntervalMS: job.SampleIntervalMS,
-					PostRootGraceMS:  job.PostRootGraceMS,
-				})
-				if runErr != nil {
-					item.Status = "failed"
-					item.Error = runErr.Error()
+			if concurrency > 1 {
+				// Parallel recording for RL/benchmark throughput. Jobs run in a
+				// bounded worker pool; results are reassembled in input order.
+				// continue-on-error is implied here (one failed rollout must not
+				// abort the batch); the SQLite store serializes writes via WAL +
+				// busy_timeout (see store.Open).
+				items = runRecordBatchParallel(service, jobs, concurrency, sampleIntervalMS, postRootGraceMS)
+				for _, item := range items {
 					statusCounts[item.Status]++
-					items = append(items, item)
-					if !continueOnError {
-						manifest := buildRecordBatchManifest(inputHash, startedAt, items, statusCounts, runIDs, shards)
-						_ = storeRecordBatch(db, manifest)
-						if withJSON {
-							_ = printJSON(cmd.OutOrStdout(), manifest)
+					if item.Status != "failed" {
+						runIDs = append(runIDs, item.RunID)
+						if item.ShardID != "" {
+							shards[item.ShardID]++
 						}
-						return runErr
 					}
-					continue
 				}
-				item.RunID = result.RunID
-				item.AttemptID = result.AttemptID
-				item.ToolCallID = result.ToolCallID
-				item.ProcessID = result.ProcessID
-				item.Status = result.Status
-				item.ExitCode = result.ExitCode
-				item.WallMS = result.WallMS
-				item.ChangedFileCount = len(result.ChangedFiles)
-				item.ChangedFiles = result.ChangedFiles
-				item.EvidenceManifestCommand = "evidence manifest --run " + result.RunID + " --json"
-				item.EvalContextCommand = "signal context --run " + result.RunID
-				item.ExplainCommand = "graph explain --run " + result.RunID + " --json"
-				statusCounts[item.Status]++
-				runIDs = append(runIDs, result.RunID)
-				if job.ShardID != "" {
-					shards[job.ShardID]++
+			} else {
+				for index, job := range jobs {
+					item := runRecordBatchJob(service, job, index, sampleIntervalMS, postRootGraceMS)
+					statusCounts[item.Status]++
+					if item.Status == "failed" {
+						items = append(items, item)
+						if !continueOnError {
+							manifest := buildRecordBatchManifest(inputHash, startedAt, items, statusCounts, runIDs, shards)
+							_ = storeRecordBatch(db, manifest)
+							if withJSON {
+								_ = printJSON(cmd.OutOrStdout(), manifest)
+							}
+							return fmt.Errorf("%s", item.Error)
+						}
+						continue
+					}
+					runIDs = append(runIDs, item.RunID)
+					if item.ShardID != "" {
+						shards[item.ShardID]++
+					}
+					items = append(items, item)
 				}
-				items = append(items, item)
 			}
 			manifest := buildRecordBatchManifest(inputHash, startedAt, items, statusCounts, runIDs, shards)
 			if err := storeRecordBatch(db, manifest); err != nil {
@@ -179,10 +160,83 @@ func recordBatchCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().StringVar(&file, "file", "", "JSONL batch file; use - for stdin")
 	cmd.Flags().BoolVar(&withJSON, "json", false, "emit machine-readable batch manifest")
 	cmd.Flags().BoolVar(&continueOnError, "continue-on-error", true, "continue recording later jobs when one job fails")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 1, "number of jobs to record in parallel (>1 implies continue-on-error)")
 	cmd.Flags().Int64Var(&sampleIntervalMS, "sample-interval-ms", 25, "default zero-SDK process tree sampling interval in milliseconds")
 	cmd.Flags().Int64Var(&postRootGraceMS, "post-root-grace-ms", 250, "default time to keep sampling after root process exit")
 	_ = cmd.MarkFlagRequired("file")
 	return cmd
+}
+
+// runRecordBatchJob records one batch job and returns its result item (with
+// Status="failed" and Error set on failure). Shared by the sequential and
+// parallel batch paths.
+func runRecordBatchJob(service record.Service, job recordBatchJob, index int, defIntervalMS, defGraceMS int64) recordBatchItem {
+	if job.Name == "" {
+		job.Name = "record-batch"
+	}
+	if job.SampleIntervalMS == 0 {
+		job.SampleIntervalMS = defIntervalMS
+	}
+	if job.PostRootGraceMS == 0 {
+		job.PostRootGraceMS = defGraceMS
+	}
+	item := recordBatchItem{
+		Index:   index,
+		JobID:   job.JobID,
+		ShardID: job.ShardID,
+		RunID:   job.RunID,
+		Workdir: job.Workdir,
+		Command: strings.Join(job.Command, " "),
+	}
+	result, runErr := service.Run(record.Request{
+		RunID:            job.RunID,
+		Name:             job.Name,
+		Workdir:          job.Workdir,
+		Command:          job.Command,
+		SampleIntervalMS: job.SampleIntervalMS,
+		PostRootGraceMS:  job.PostRootGraceMS,
+	})
+	if runErr != nil {
+		item.Status = "failed"
+		item.Error = runErr.Error()
+		return item
+	}
+	item.RunID = result.RunID
+	item.AttemptID = result.AttemptID
+	item.ToolCallID = result.ToolCallID
+	item.ProcessID = result.ProcessID
+	item.Status = result.Status
+	item.ExitCode = result.ExitCode
+	item.WallMS = result.WallMS
+	item.ChangedFileCount = len(result.ChangedFiles)
+	item.ChangedFiles = result.ChangedFiles
+	item.EvidenceManifestCommand = "evidence manifest --run " + result.RunID + " --json"
+	item.EvalContextCommand = "signal context --run " + result.RunID
+	item.ExplainCommand = "graph explain --run " + result.RunID + " --json"
+	return item
+}
+
+// runRecordBatchParallel records jobs through a bounded worker pool, returning
+// results in input order. Each goroutine writes a distinct results index, and
+// record.Service is safe for concurrent use (shared *sql.DB, read-only Paths).
+func runRecordBatchParallel(service record.Service, jobs []recordBatchJob, concurrency int, defIntervalMS, defGraceMS int64) []recordBatchItem {
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	results := make([]recordBatchItem, len(jobs))
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	for index, job := range jobs {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(index int, job recordBatchJob) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			results[index] = runRecordBatchJob(service, job, index, defIntervalMS, defGraceMS)
+		}(index, job)
+	}
+	wg.Wait()
+	return results
 }
 
 type recordBatchJob struct {

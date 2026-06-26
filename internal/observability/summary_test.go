@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
+	"github.com/byteyellow/agentprovenance/internal/signals"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
@@ -157,4 +158,38 @@ func assertHasView(t *testing.T, views []string, want string) {
 		}
 	}
 	t.Fatalf("missing recommended view %q in %+v", want, views)
+}
+
+func TestBuildSummaryIncludesUnifiedSignalDimensions(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	for _, s := range []signals.Signal{
+		{Dimension: signals.Security, Type: "policy_violation", RunID: "run-sig", Severity: "high"},
+		{Dimension: signals.Quality, Type: "task_success", RunID: "run-sig", Label: "pass", Value: 0.9},
+		{Dimension: signals.Cost, Type: "resource_sample", RunID: "run-sig", Value: 3.2},
+	} {
+		if _, err := signals.Record(db, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	summary, err := BuildSummary(db, SummaryOptions{RunID: "run-sig", TopN: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.Signals.Total != 3 {
+		t.Fatalf("signal total = %d, want 3", summary.Signals.Total)
+	}
+	if summary.Signals.ByDimension["security"] != 1 || summary.Signals.ByDimension["quality"] != 1 || summary.Signals.ByDimension["cost"] != 1 {
+		t.Fatalf("unexpected by-dimension counts: %+v", summary.Signals.ByDimension)
+	}
 }
