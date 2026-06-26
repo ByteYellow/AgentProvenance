@@ -107,7 +107,24 @@ assert len(contexts) == 2
 assert {ctx["run_id"] for ctx in contexts} == {"run-python-helper-batch-a", "run-python-helper-batch-b"}
 ctx = client.eval_context("run-python-helper-batch-a")
 assert ctx["run_id"] == "run-python-helper-batch-a"
+contexts = client.batch_eval_contexts(batch_id=manifest["batch_id"], shard_id="shard-0")
+assert len(contexts) == 2
+assert {item["run_id"] for item in contexts} == {"run-python-helper-batch-a", "run-python-helper-batch-b"}
+contexts_from_runs = client.batch_eval_contexts(run_ids=["run-python-helper-batch-a", "run-python-helper-batch-b"])
+assert len(contexts_from_runs) == 2
 print("python helper batch acceptance ok")
+PY
+
+echo "== export batch EvalContext JSONL through CLI"
+BATCH_CONTEXT_JSONL="$("$BIN" --data-dir "$DATA_DIR" signal batch-context --shard shard-0 --latest --limit 10)"
+python3 - <<'PY' "$BATCH_CONTEXT_JSONL"
+import json
+import sys
+
+rows = [json.loads(line) for line in sys.argv[1].splitlines() if line.strip()]
+assert len(rows) == 2
+assert {row["run_id"] for row in rows} == {"run-python-helper-batch-a", "run-python-helper-batch-b"}
+assert all(row["schema_version"] == "agentprovenance.eval_context/v1" for row in rows)
 PY
 rm -rf "$BATCH_WORKDIR_A" "$BATCH_WORKDIR_B"
 

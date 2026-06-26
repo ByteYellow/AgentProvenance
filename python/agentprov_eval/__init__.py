@@ -183,6 +183,7 @@ class Client:
     def batch_eval_contexts(
         self,
         *,
+        run_ids: Iterable[str] | None = None,
         batch_id: str = "",
         run_id: str = "",
         job_id: str = "",
@@ -191,6 +192,12 @@ class Client:
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         args = ["signal", "batch-context", "--limit", str(limit)]
+        input_text = None
+        if run_ids is not None:
+            args.extend(["--runs", "-"])
+            input_text = "\n".join(json.dumps({"run_id": value}) for value in run_ids)
+            if input_text:
+                input_text += "\n"
         if batch_id:
             args.extend(["--batch", batch_id])
         if run_id:
@@ -201,7 +208,7 @@ class Client:
             args.extend(["--shard", shard_id])
         if latest:
             args.append("--latest")
-        result = self.run_cli(args)
+        result = self.run_cli(args, input_text=input_text)
         contexts = []
         for line in result.stdout.splitlines():
             if line.strip():
@@ -249,6 +256,31 @@ def record_batch(
     """Record many commands through `agentprov record batch` and return one manifest."""
 
     return Client(binary=binary, data_dir=data_dir).record_batch(jobs)
+
+
+def batch_eval_contexts(
+    *,
+    run_ids: Iterable[str] | None = None,
+    batch_id: str = "",
+    run_id: str = "",
+    job_id: str = "",
+    shard_id: str = "",
+    latest: bool = False,
+    limit: int = 100,
+    binary: str | os.PathLike[str] = "agentprov",
+    data_dir: str | os.PathLike[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Export many EvalContext objects through `agentprov signal batch-context`."""
+
+    return Client(binary=binary, data_dir=data_dir).batch_eval_contexts(
+        run_ids=run_ids,
+        batch_id=batch_id,
+        run_id=run_id,
+        job_id=job_id,
+        shard_id=shard_id,
+        latest=latest,
+        limit=limit,
+    )
 
 
 class EvalContext:
@@ -362,6 +394,7 @@ __all__ = [
     "CommandResult",
     "EvalContext",
     "Signal",
+    "batch_eval_contexts",
     "batch_record",
     "record",
     "record_batch",
