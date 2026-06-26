@@ -191,6 +191,9 @@ func (s ObjectStore) MaterializeRun(runID string) (MaterializeResult, error) {
 	if err := ctx.materializeRecordManifest(); err != nil {
 		return MaterializeResult{}, err
 	}
+	if err := ctx.materializeRecordBatches(); err != nil {
+		return MaterializeResult{}, err
+	}
 	sort.Strings(ctx.rootHashes)
 	return MaterializeResult{
 		RunID:       runID,
@@ -1044,6 +1047,200 @@ func (c *materializeContext) materializeRecordManifest() error {
 	}
 	c.rootHashes = append(c.rootHashes, hash)
 	return nil
+}
+
+func (c *materializeContext) materializeRecordBatches() error {
+	rows, err := c.store.DB.Query(`SELECT DISTINCT b.id, b.input_sha256, b.started_at, b.ended_at, b.job_count,
+			b.passed, b.failed, b.skipped, b.status_counts_json, b.run_ids_json, b.shards_json,
+			b.result_set_id, b.page_hash, b.created_at
+		FROM record_batches b JOIN record_batch_items i ON i.batch_id = b.id
+		WHERE i.run_id = ?
+		ORDER BY b.created_at ASC`, c.runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var batch RecordBatchManifest
+		var statusCountsJSON, runIDsJSON, shardsJSON string
+		if err := rows.Scan(&batch.BatchID, &batch.InputSHA256, &batch.StartedAt, &batch.EndedAt, &batch.JobCount,
+			&batch.Passed, &batch.Failed, &batch.Skipped, &statusCountsJSON, &runIDsJSON, &shardsJSON,
+			&batch.ResultSetID, &batch.PageHash, &batch.CreatedAt); err != nil {
+			return err
+		}
+		batch.SchemaVersion = "agentprovenance.record_batch/v1"
+		_ = json.Unmarshal([]byte(statusCountsJSON), &batch.StatusCounts)
+		_ = json.Unmarshal([]byte(runIDsJSON), &batch.RunIDs)
+		_ = json.Unmarshal([]byte(shardsJSON), &batch.Shards)
+		batch.Items, err = recordBatchItems(c.store.DB, batch.BatchID, "")
+		if err != nil {
+			return err
+		}
+		batchPayload, err := payloadMap(batch)
+		if err != nil {
+			return err
+		}
+		batchHash, err := c.put(provenanceObject{
+			Type:     "record_batch",
+			SourceID: batch.BatchID,
+			Parents:  c.parent("record_manifest/" + c.runID),
+			Refs: map[string]any{
+				"batch_id":       batch.BatchID,
+				"run_id":         c.runID,
+				"run_ids":        batch.RunIDs,
+				"schema_version": batch.SchemaVersion,
+				"result_set_id":  batch.ResultSetID,
+				"page_hash":      batch.PageHash,
+			},
+			Payload: batchPayload,
+		})
+		if err != nil {
+			return err
+		}
+		summary := RecordBatchSummaryManifest{
+			SchemaVersion: "agentprovenance.record_batch_summary/v1",
+			BatchID:       batch.BatchID,
+			RunID:         c.runID,
+			Items:         filterRecordBatchItems(batch.Items, c.runID),
+			ResultSetID:   batch.ResultSetID,
+			PageHash:      batch.PageHash,
+		}
+		summary.ItemCount = len(summary.Items)
+		summary.StatusCounts = map[string]int{}
+		summary.Shards = map[string]int{}
+		for _, item := range summary.Items {
+			summary.StatusCounts[item.Status]++
+			if item.Status == "passed" {
+				summary.Passed++
+			}
+			if item.Status == "failed" {
+				summary.Failed++
+			}
+			if item.Status == "skipped" {
+				summary.Skipped++
+			}
+			if item.ShardID != "" {
+				summary.Shards[item.ShardID]++
+			}
+		}
+		summaryPayload, err := payloadMap(summary)
+		if err != nil {
+			return err
+		}
+		summaryHash, err := c.put(provenanceObject{
+			Type:     "record_batch_summary",
+			SourceID: batch.BatchID + ":" + c.runID,
+			Parents:  append(c.parent("record_manifest/"+c.runID), batchHash),
+			Refs: map[string]any{
+				"batch_id":       batch.BatchID,
+				"run_id":         c.runID,
+				"schema_version": summary.SchemaVersion,
+				"result_set_id":  summary.ResultSetID,
+				"page_hash":      summary.PageHash,
+			},
+			Payload: summaryPayload,
+		})
+		if err != nil {
+			return err
+		}
+		c.rootHashes = append(c.rootHashes, summaryHash)
+	}
+	return rows.Err()
+}
+
+type RecordBatchManifest struct {
+	SchemaVersion string            `json:"schema_version"`
+	BatchID       string            `json:"batch_id"`
+	InputSHA256   string            `json:"input_sha256"`
+	StartedAt     string            `json:"started_at"`
+	EndedAt       string            `json:"ended_at"`
+	JobCount      int               `json:"job_count"`
+	Passed        int               `json:"passed"`
+	Failed        int               `json:"failed"`
+	Skipped       int               `json:"skipped"`
+	StatusCounts  map[string]int    `json:"status_counts"`
+	RunIDs        []string          `json:"run_ids"`
+	Shards        map[string]int    `json:"shards,omitempty"`
+	Items         []RecordBatchItem `json:"items"`
+	ResultSetID   string            `json:"result_set_id"`
+	PageHash      string            `json:"page_hash"`
+	CreatedAt     string            `json:"created_at"`
+}
+
+type RecordBatchSummaryManifest struct {
+	SchemaVersion string            `json:"schema_version"`
+	BatchID       string            `json:"batch_id"`
+	RunID         string            `json:"run_id"`
+	ItemCount     int               `json:"item_count"`
+	Passed        int               `json:"passed"`
+	Failed        int               `json:"failed"`
+	Skipped       int               `json:"skipped"`
+	StatusCounts  map[string]int    `json:"status_counts"`
+	Shards        map[string]int    `json:"shards,omitempty"`
+	Items         []RecordBatchItem `json:"items"`
+	ResultSetID   string            `json:"result_set_id"`
+	PageHash      string            `json:"page_hash"`
+}
+
+type RecordBatchItem struct {
+	Index                   int      `json:"index"`
+	JobID                   string   `json:"job_id,omitempty"`
+	ShardID                 string   `json:"shard_id,omitempty"`
+	RunID                   string   `json:"run_id,omitempty"`
+	AttemptID               string   `json:"attempt_id,omitempty"`
+	ToolCallID              string   `json:"tool_call_id,omitempty"`
+	ProcessID               string   `json:"process_id,omitempty"`
+	Workdir                 string   `json:"workdir,omitempty"`
+	Command                 string   `json:"command,omitempty"`
+	Status                  string   `json:"status"`
+	ExitCode                int      `json:"exit_code"`
+	WallMS                  int64    `json:"wall_ms"`
+	ChangedFileCount        int      `json:"changed_file_count"`
+	ChangedFiles            []string `json:"changed_files,omitempty"`
+	Error                   string   `json:"error,omitempty"`
+	EvidenceManifestCommand string   `json:"evidence_manifest_command,omitempty"`
+	EvalContextCommand      string   `json:"eval_context_command,omitempty"`
+	ExplainCommand          string   `json:"explain_command,omitempty"`
+}
+
+func recordBatchItems(db *sql.DB, batchID, runID string) ([]RecordBatchItem, error) {
+	where := "batch_id = ?"
+	args := []any{batchID}
+	if runID != "" {
+		where += " AND run_id = ?"
+		args = append(args, runID)
+	}
+	rows, err := db.Query(`SELECT idx, job_id, shard_id, run_id, attempt_id, tool_call_id, process_id, workdir, command, status,
+			exit_code, wall_ms, changed_file_count, changed_files_json, error, evidence_manifest_command, eval_context_command, explain_command
+		FROM record_batch_items WHERE `+where+` ORDER BY idx ASC`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RecordBatchItem
+	for rows.Next() {
+		var item RecordBatchItem
+		var changedFilesJSON string
+		if err := rows.Scan(&item.Index, &item.JobID, &item.ShardID, &item.RunID, &item.AttemptID, &item.ToolCallID,
+			&item.ProcessID, &item.Workdir, &item.Command, &item.Status, &item.ExitCode, &item.WallMS,
+			&item.ChangedFileCount, &changedFilesJSON, &item.Error, &item.EvidenceManifestCommand,
+			&item.EvalContextCommand, &item.ExplainCommand); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal([]byte(changedFilesJSON), &item.ChangedFiles)
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func filterRecordBatchItems(items []RecordBatchItem, runID string) []RecordBatchItem {
+	out := make([]RecordBatchItem, 0)
+	for _, item := range items {
+		if item.RunID == runID {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func filesChangedInRun(db *sql.DB, runID string) ([]string, error) {

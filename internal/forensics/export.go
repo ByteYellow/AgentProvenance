@@ -99,23 +99,29 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 	if err != nil {
 		return BundleInfo{}, err
 	}
+	provenanceObjects, err := selectRows(s.DB, `SELECT hash, object_type, source_id, run_id, rollout_id, parent_hashes, path, size_bytes, created_at
+		FROM provenance_objects WHERE run_id = ? ORDER BY object_type ASC, created_at ASC, hash ASC`, runID)
+	if err != nil {
+		return BundleInfo{}, err
+	}
 
 	bundle := map[string]any{
-		"schema_version":    "agentprovenance.forensics_bundle/v1",
-		"run_id":            runID,
-		"exported_at":       time.Now().UTC().Format(time.RFC3339Nano),
-		"evidence_manifest": evidenceManifest,
-		"sessions":          sessions,
-		"processes":         processes,
-		"snapshots":         snapshots,
-		"events":            events,
-		"telemetry_batches": telemetryBatchSummaries(batches),
-		"policy_decisions":  decisions,
-		"risk_signals":      risks,
-		"response_actions":  responses,
-		"evidence_events":   evidenceEvents,
-		"graph_edges":       graphEdges,
-		"cost_samples":      costSamples,
+		"schema_version":     "agentprovenance.forensics_bundle/v1",
+		"run_id":             runID,
+		"exported_at":        time.Now().UTC().Format(time.RFC3339Nano),
+		"evidence_manifest":  evidenceManifest,
+		"sessions":           sessions,
+		"processes":          processes,
+		"snapshots":          snapshots,
+		"events":             events,
+		"telemetry_batches":  telemetryBatchSummaries(batches),
+		"policy_decisions":   decisions,
+		"risk_signals":       risks,
+		"response_actions":   responses,
+		"evidence_events":    evidenceEvents,
+		"graph_edges":        graphEdges,
+		"provenance_objects": provenanceObjects,
+		"cost_samples":       costSamples,
 	}
 	raw, err := json.MarshalIndent(bundle, "", "  ")
 	if err != nil {

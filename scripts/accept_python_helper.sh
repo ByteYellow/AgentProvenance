@@ -112,6 +112,13 @@ assert len(contexts) == 2
 assert {item["run_id"] for item in contexts} == {"run-python-helper-batch-a", "run-python-helper-batch-b"}
 contexts_from_runs = client.batch_eval_contexts(run_ids=["run-python-helper-batch-a", "run-python-helper-batch-b"])
 assert len(contexts_from_runs) == 2
+client.run_cli(["graph", "materialize", "--run", "run-python-helper-batch-a"])
+objects = client.run_cli(["graph", "objects", "--run", "run-python-helper-batch-a", "--json"]).json()
+object_types = {item["type"] for item in objects["objects"]}
+assert "record_batch" in object_types
+assert "record_batch_summary" in object_types
+batch_objects = [item for item in objects["objects"] if item["type"] == "record_batch"]
+assert batch_objects and batch_objects[0]["source_id"] == manifest["batch_id"]
 print("python helper batch acceptance ok")
 PY
 
