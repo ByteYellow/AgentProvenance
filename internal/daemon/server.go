@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/baseline"
 	"github.com/byteyellow/agentprovenance/internal/control"
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/evidence"
@@ -78,6 +79,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/snapshots/", s.snapshotByID)
 	mux.HandleFunc("POST /v1/telemetry/bind", s.bindTelemetry)
 	mux.HandleFunc("GET /v1/telemetry/events", s.listTelemetryEvents)
+	mux.HandleFunc("GET /v1/telemetry/correlations", s.telemetryCorrelations)
 	mux.HandleFunc("GET /v1/telemetry/spool", s.listTelemetrySpool)
 	mux.HandleFunc("POST /v1/telemetry/spool/process", s.processTelemetrySpool)
 	mux.HandleFunc("POST /v1/telemetry/retention/prune", s.pruneTelemetryRetention)
@@ -88,6 +90,9 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/forensics/export", s.forensicsExport)
 	mux.HandleFunc("GET /v1/observe/summary", s.observeSummary)
 	mux.HandleFunc("GET /v1/timeline", s.timeline)
+	mux.HandleFunc("GET /v1/security/risks", s.securityRisks)
+	mux.HandleFunc("GET /v1/security/responses", s.securityResponses)
+	mux.HandleFunc("GET /v1/security/deviations", s.securityDeviations)
 	mux.HandleFunc("GET /v1/signal/context", s.signalContext)
 	mux.HandleFunc("POST /v1/signal/run", s.signalRun)
 	mux.HandleFunc("POST /v1/signal/import", s.signalImport)
@@ -523,6 +528,14 @@ func (s Server) listTelemetryEvents(w http.ResponseWriter, r *http.Request) {
 	writeResult(w, result, err)
 }
 
+func (s Server) telemetryCorrelations(w http.ResponseWriter, r *http.Request) {
+	result, err := telemetry.BuildCorrelationReport(s.DB, telemetry.CorrelationReportOptions{
+		RunID:   r.URL.Query().Get("run"),
+		EventID: r.URL.Query().Get("event"),
+	})
+	writeResult(w, result, err)
+}
+
 func (s Server) processTelemetrySpool(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Limit int `json:"limit"`
@@ -641,6 +654,21 @@ func (s Server) timeline(w http.ResponseWriter, r *http.Request) {
 		Limit:     limit,
 		View:      r.URL.Query().Get("view"),
 	})
+	writeResult(w, result, err)
+}
+
+func (s Server) securityRisks(w http.ResponseWriter, r *http.Request) {
+	result, err := securitymodel.BuildRiskSignalsReport(s.DB, r.URL.Query().Get("run"))
+	writeResult(w, result, err)
+}
+
+func (s Server) securityResponses(w http.ResponseWriter, r *http.Request) {
+	result, err := securitymodel.BuildResponseActionsReport(s.DB, r.URL.Query().Get("run"))
+	writeResult(w, result, err)
+}
+
+func (s Server) securityDeviations(w http.ResponseWriter, r *http.Request) {
+	result, err := baseline.BuildDeviationsReport(s.DB, r.URL.Query().Get("run"))
 	writeResult(w, result, err)
 }
 

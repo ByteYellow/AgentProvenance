@@ -12,31 +12,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func securityCmd(dataDir *string) *cobra.Command {
+func securityCmd(dataDir, daemonURL *string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "security",
 		Short: "security evidence, deviation, and response commands",
 	}
-	cmd.AddCommand(securityRisksCmd(dataDir))
-	cmd.AddCommand(securityDeviationsCmd(dataDir))
-	cmd.AddCommand(securityResponsesCmd(dataDir))
+	cmd.AddCommand(securityRisksCmd(dataDir, daemonURL))
+	cmd.AddCommand(securityDeviationsCmd(dataDir, daemonURL))
+	cmd.AddCommand(securityResponsesCmd(dataDir, daemonURL))
 	return cmd
 }
 
-func securityRisksCmd(dataDir *string) *cobra.Command {
+func securityRisksCmd(dataDir, daemonURL *string) *cobra.Command {
 	var runID string
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "risks",
 		Short: "list normalized risk signals",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, cleanup, err := openLocalDB(*dataDir)
-			if err != nil {
-				return err
-			}
-			defer cleanup()
+			report, err := securityRisks(*dataDir, *daemonURL, runID)
 			if asJSON {
-				report, err := securitymodel.BuildRiskSignalsReport(db, runID)
 				if err != nil {
 					return err
 				}
@@ -44,13 +39,13 @@ func securityRisksCmd(dataDir *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(report)
 			}
-			records, err := securitymodel.ListRiskSignals(db, runID)
 			if err != nil {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "ID\tRUN\tSESSION\tTOOL_CALL\tPROCESS\tTYPE\tSEVERITY\tACTION\tREASON\tCREATED_AT")
-			for _, record := range records {
+			for _, item := range report.Risks {
+				record := item.Risk
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 					record.ID, record.RunID, record.SessionID, record.ToolCallID, record.ProcessID,
 					record.SignalType, record.Severity, record.RecommendedAction, record.Reason, record.CreatedAt)
@@ -63,20 +58,15 @@ func securityRisksCmd(dataDir *string) *cobra.Command {
 	return cmd
 }
 
-func securityDeviationsCmd(dataDir *string) *cobra.Command {
+func securityDeviationsCmd(dataDir, daemonURL *string) *cobra.Command {
 	var runID string
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "deviations",
 		Short: "list baseline deviation signals",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, cleanup, err := openLocalDB(*dataDir)
-			if err != nil {
-				return err
-			}
-			defer cleanup()
+			report, err := securityDeviations(*dataDir, *daemonURL, runID)
 			if asJSON {
-				report, err := baseline.BuildDeviationsReport(db, runID)
 				if err != nil {
 					return err
 				}
@@ -84,13 +74,13 @@ func securityDeviationsCmd(dataDir *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(report)
 			}
-			records, err := baseline.ListDeviations(db, runID)
 			if err != nil {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "ID\tRUN\tTEMPLATE\tTYPE\tSTATUS\tEXPECTED\tOBSERVED\tACTION\tCREATED_AT")
-			for _, record := range records {
+			for _, item := range report.Deviations {
+				record := item.Deviation
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%.3f\t%.3f\t%s\t%s\n",
 					record.ID, record.RunID, record.TemplateName, record.DeviationType, record.Status,
 					record.ExpectedValue, record.ObservedValue, record.RecommendedAction, record.CreatedAt)
@@ -103,20 +93,15 @@ func securityDeviationsCmd(dataDir *string) *cobra.Command {
 	return cmd
 }
 
-func securityResponsesCmd(dataDir *string) *cobra.Command {
+func securityResponsesCmd(dataDir, daemonURL *string) *cobra.Command {
 	var runID string
 	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "responses",
 		Short: "list recorded response actions",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			db, cleanup, err := openLocalDB(*dataDir)
-			if err != nil {
-				return err
-			}
-			defer cleanup()
+			report, err := securityResponses(*dataDir, *daemonURL, runID)
 			if asJSON {
-				report, err := securitymodel.BuildResponseActionsReport(db, runID)
 				if err != nil {
 					return err
 				}
@@ -124,13 +109,13 @@ func securityResponsesCmd(dataDir *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(report)
 			}
-			records, err := securitymodel.ListResponseActions(db, runID)
 			if err != nil {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 			fmt.Fprintln(w, "ID\tRUN\tACTION\tTARGET_TYPE\tTARGET_ID\tSTATUS\tRISK\tDECISION\tCREATED_AT")
-			for _, record := range records {
+			for _, item := range report.Responses {
+				record := item.Response
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 					record.ID, record.RunID, record.ActionType, record.TargetType, record.TargetID,
 					record.Status, record.RiskSignalID, record.PolicyDecisionID, record.CreatedAt)
@@ -141,6 +126,42 @@ func securityResponsesCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().StringVar(&runID, "run", "", "filter by run id")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "emit structured response action JSON")
 	return cmd
+}
+
+func securityRisks(dataDir, daemonURL, runID string) (securitymodel.RiskSignalsReport, error) {
+	if client, ok := daemonClient(daemonURL); ok {
+		return client.SecurityRisks(runID)
+	}
+	db, cleanup, err := openLocalDB(dataDir)
+	if err != nil {
+		return securitymodel.RiskSignalsReport{}, err
+	}
+	defer cleanup()
+	return securitymodel.BuildRiskSignalsReport(db, runID)
+}
+
+func securityDeviations(dataDir, daemonURL, runID string) (baseline.DeviationsReport, error) {
+	if client, ok := daemonClient(daemonURL); ok {
+		return client.SecurityDeviations(runID)
+	}
+	db, cleanup, err := openLocalDB(dataDir)
+	if err != nil {
+		return baseline.DeviationsReport{}, err
+	}
+	defer cleanup()
+	return baseline.BuildDeviationsReport(db, runID)
+}
+
+func securityResponses(dataDir, daemonURL, runID string) (securitymodel.ResponseActionsReport, error) {
+	if client, ok := daemonClient(daemonURL); ok {
+		return client.SecurityResponses(runID)
+	}
+	db, cleanup, err := openLocalDB(dataDir)
+	if err != nil {
+		return securitymodel.ResponseActionsReport{}, err
+	}
+	defer cleanup()
+	return securitymodel.BuildResponseActionsReport(db, runID)
 }
 
 func openLocalDB(dataDir string) (*sql.DB, func(), error) {

@@ -15,7 +15,7 @@ import (
 	"text/tabwriter"
 )
 
-func telemetryCmd(dataDir *string) *cobra.Command {
+func telemetryCmd(dataDir, daemonURL *string) *cobra.Command {
 	var runID, sessionID, eventType, toolCallID string
 	var listJSON bool
 	var listLimit int
@@ -87,19 +87,7 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 		Use:   "correlations",
 		Short: "explain how runtime telemetry events map to ToolCallScope bindings",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			paths, err := store.Init(*dataDir)
-			if err != nil {
-				return err
-			}
-			db, err := store.Open(paths)
-			if err != nil {
-				return err
-			}
-			defer db.Close()
-			report, err := telemetry.BuildCorrelationReport(db, telemetry.CorrelationReportOptions{
-				RunID:   correlationsRunID,
-				EventID: correlationsEventID,
-			})
+			report, err := telemetryCorrelations(*dataDir, *daemonURL, correlationsRunID, correlationsEventID)
 			if err != nil {
 				return err
 			}
@@ -162,6 +150,25 @@ func telemetryCmd(dataDir *string) *cobra.Command {
 	batches.Flags().BoolVar(&batchesJSON, "json", false, "emit JSON batch manifest list")
 	cmd.AddCommand(batches)
 	return cmd
+}
+
+func telemetryCorrelations(dataDir, daemonURL, runID, eventID string) (telemetry.CorrelationReport, error) {
+	if client, ok := daemonClient(daemonURL); ok {
+		return client.TelemetryCorrelations(runID, eventID)
+	}
+	paths, err := store.Init(dataDir)
+	if err != nil {
+		return telemetry.CorrelationReport{}, err
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		return telemetry.CorrelationReport{}, err
+	}
+	defer db.Close()
+	return telemetry.BuildCorrelationReport(db, telemetry.CorrelationReportOptions{
+		RunID:   runID,
+		EventID: eventID,
+	})
 }
 
 func telemetryPruneCmd(dataDir *string) *cobra.Command {

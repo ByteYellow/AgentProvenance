@@ -121,6 +121,16 @@ print(page["events"][0]["id"])
 PY
 )"
 
+echo "== query telemetry correlations through daemon API"
+CORRELATIONS_JSON="$(get_json '/v1/telemetry/correlations?run=run-daemon-api-accept')"
+assert_contains "$CORRELATIONS_JSON" '"schema_version":"agentprovenance.telemetry_correlations/v1"'
+assert_contains "$CORRELATIONS_JSON" '"run_id":"run-daemon-api-accept"'
+assert_contains "$CORRELATIONS_JSON" '"result_set_id":"sha256:'
+
+CORRELATIONS_CLI_JSON="$("$BIN" --daemon-url "$DAEMON_URL" telemetry correlations --run run-daemon-api-accept --json)"
+assert_contains "$CORRELATIONS_CLI_JSON" '"schema_version": "agentprovenance.telemetry_correlations/v1"'
+assert_contains "$CORRELATIONS_CLI_JSON" '"run_id": "run-daemon-api-accept"'
+
 echo "== query observability summary and timeline through daemon API"
 OBSERVE_JSON="$(get_json '/v1/observe/summary?run=run-daemon-api-accept&top=3')"
 assert_contains "$OBSERVE_JSON" '"schema_version":"agentprovenance.observability_summary/v1"'
@@ -141,6 +151,27 @@ assert_contains "$OBSERVE_CLI_JSON" '"run_id": "run-daemon-api-accept"'
 TIMELINE_CLI_JSON="$("$BIN" --daemon-url "$DAEMON_URL" timeline --run run-daemon-api-accept --view causality --limit 5 --json)"
 assert_contains "$TIMELINE_CLI_JSON" '"schema_version": "agentprovenance.timeline/v1"'
 assert_contains "$TIMELINE_CLI_JSON" '"view": "causality"'
+
+echo "== query security evidence through daemon API"
+RISKS_JSON="$(get_json '/v1/security/risks?run=run-daemon-api-accept')"
+assert_contains "$RISKS_JSON" '"schema_version":"agentprovenance.security_risks/v1"'
+assert_contains "$RISKS_JSON" '"count":3'
+
+RESPONSES_JSON="$(get_json '/v1/security/responses?run=run-daemon-api-accept')"
+assert_contains "$RESPONSES_JSON" '"schema_version":"agentprovenance.security_responses/v1"'
+assert_contains "$RESPONSES_JSON" '"count":3'
+
+DEVIATIONS_JSON="$(get_json '/v1/security/deviations?run=run-daemon-api-accept')"
+assert_contains "$DEVIATIONS_JSON" '"schema_version":"agentprovenance.security_deviations/v1"'
+assert_contains "$DEVIATIONS_JSON" '"run_id":"run-daemon-api-accept"'
+
+RISKS_CLI_JSON="$("$BIN" --daemon-url "$DAEMON_URL" security risks --run run-daemon-api-accept --json)"
+assert_contains "$RISKS_CLI_JSON" '"schema_version": "agentprovenance.security_risks/v1"'
+assert_contains "$RISKS_CLI_JSON" '"count": 3'
+
+RESPONSES_CLI_JSON="$("$BIN" --daemon-url "$DAEMON_URL" security responses --run run-daemon-api-accept --json)"
+assert_contains "$RESPONSES_CLI_JSON" '"schema_version": "agentprovenance.security_responses/v1"'
+assert_contains "$RESPONSES_CLI_JSON" '"count": 3'
 
 echo "== prune old unreferenced raw telemetry through daemon API"
 sqlite3 "$DATA_DIR/agentprov.db" "INSERT INTO events (id, run_id, source, event_type, payload, created_at) VALUES ('evt-daemon-retention-old', 'run-daemon-api-accept', 'filtered_telemetry', 'execve', '{\"argv\":[\"true\"]}', '2000-01-01T00:00:00.000000000Z')"

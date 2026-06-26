@@ -9,13 +9,16 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/byteyellow/agentprovenance/internal/baseline"
 	"github.com/byteyellow/agentprovenance/internal/control"
 	"github.com/byteyellow/agentprovenance/internal/evidence"
 	"github.com/byteyellow/agentprovenance/internal/experimental/scheduler"
 	"github.com/byteyellow/agentprovenance/internal/forensics"
 	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
+	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/signal"
+	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
 type Client struct {
@@ -160,6 +163,37 @@ func (c Client) Timeline(opts provenance.TimelineOptions) (provenance.TimelineMa
 	var manifest provenance.TimelineManifest
 	err := c.getJSON("/v1/timeline?"+values.Encode(), &manifest)
 	return manifest, err
+}
+
+func (c Client) TelemetryCorrelations(runID, eventID string) (telemetry.CorrelationReport, error) {
+	values := url.Values{}
+	if runID != "" {
+		values.Set("run", runID)
+	}
+	if eventID != "" {
+		values.Set("event", eventID)
+	}
+	var report telemetry.CorrelationReport
+	err := c.getJSON("/v1/telemetry/correlations?"+values.Encode(), &report)
+	return report, err
+}
+
+func (c Client) SecurityRisks(runID string) (securitymodel.RiskSignalsReport, error) {
+	var report securitymodel.RiskSignalsReport
+	err := c.getJSON("/v1/security/risks?run="+url.QueryEscape(runID), &report)
+	return report, err
+}
+
+func (c Client) SecurityResponses(runID string) (securitymodel.ResponseActionsReport, error) {
+	var report securitymodel.ResponseActionsReport
+	err := c.getJSON("/v1/security/responses?run="+url.QueryEscape(runID), &report)
+	return report, err
+}
+
+func (c Client) SecurityDeviations(runID string) (baseline.DeviationsReport, error) {
+	var report baseline.DeviationsReport
+	err := c.getJSON("/v1/security/deviations?run="+url.QueryEscape(runID), &report)
+	return report, err
 }
 
 func (c Client) VerifyGraph(runID string) (provenance.VerifyResult, error) {
