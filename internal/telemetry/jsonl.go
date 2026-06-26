@@ -158,6 +158,9 @@ func IngestJSONL(db *sql.DB, opts JSONLIngestOptions) (JSONLIngestResult, error)
 	if err := persistJSONLBatch(db, opts, &result); err != nil {
 		return result, err
 	}
+	if _, err := RebuildEventWindows(db, resultRunID(db, opts.RunID, result.EventIDs)); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 
@@ -243,6 +246,9 @@ func IngestFalco(db *sql.DB, opts FalcoIngestOptions, input io.Reader) (JSONLIng
 	result.FileSHA256 = hex.EncodeToString(hasher.Sum(nil))
 	result.EventIDsSHA256 = hashStrings(result.EventIDs)
 	if err := persistJSONLBatch(db, jsonlOpts, &result); err != nil {
+		return result, err
+	}
+	if _, err := RebuildEventWindows(db, resultRunID(db, jsonlOpts.RunID, result.EventIDs)); err != nil {
 		return result, err
 	}
 	return result, nil
@@ -399,6 +405,18 @@ func inferSingleRunID(db *sql.DB, eventIDs []string) (string, error) {
 		return runID, nil
 	}
 	return "", nil
+}
+
+func resultRunID(db *sql.DB, configured string, eventIDs []string) string {
+	configured = strings.TrimSpace(configured)
+	if configured != "" {
+		return configured
+	}
+	runID, err := inferSingleRunID(db, eventIDs)
+	if err != nil {
+		return ""
+	}
+	return runID
 }
 
 func mapJSONLEvent(opts JSONLIngestOptions, raw map[string]any, lineNo int) (IngestEvent, bool, error) {

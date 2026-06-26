@@ -650,6 +650,7 @@ What these mean:
 | Daemon API boundary | `agentprov daemon serve` exposes core evidence-infra APIs for ToolCallScope binding, paged telemetry event query, telemetry correlation explain, observability summary, timeline query, graph explain/verify, security risk/deviation/response query, evidence manifest materialization, run/batch forensics export, and evaluator context/import APIs. CLI daemon-client mode covers `observe summary`, `timeline`, `telemetry correlations`, `graph explain`, `graph verify`, `security risks/deviations/responses`, `evidence manifest`, `forensics export`, `forensics export-batch`, and `signal` paths |
 | Telemetry spool | Daemon Falco ingest supports async enqueue into `telemetry_spool_batches`; a background worker consumes queued batches, applies policy, and `health` exposes `queued_spool` / `spool_max_queued`. `--spool-max-queued` applies hard backpressure, and `--spool-drop-policy` supports `reject` with structured HTTP 429 or `drop_oldest` for bounded data-plane loss |
 | High-volume telemetry pressure | `scripts/accept_telemetry_100k_pressure.sh` generates 100k Falco events, enqueues them through daemon spool, confirms `health` and paged telemetry query stay responsive while queued, drains the batch, and verifies bounded paged query output after ingest. Receiver row details are capped with `row_results_truncated` so summary counts remain complete without returning 100k row objects |
+| Telemetry event windows | JSONL/Falco ingest rebuilds `telemetry_event_windows` for 10s and 60s windows, grouped by run/session/tool_call/source/event_type with event, resolved, unresolved, and high-risk counts. `telemetry windows --run --window --json` exposes `agentprovenance.telemetry_event_windows/v1` with result/page hashes so higher-level query and UI paths do not need to scan raw events for every summary |
 | Telemetry retention | `telemetry prune` and daemon `POST /v1/telemetry/retention/prune` delete old unreferenced raw telemetry events while preserving events referenced by telemetry batches, policy decisions, risk signals, or graph edges |
 | Execution timeline | `timeline --run` emits a human table, `--view causality` emits a lane view, and `--json` emits `agentprovenance.timeline/v1` across tool calls, processes, zero-SDK process observations, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects; JSON includes lane, correlation status, drill-down refs, `result_set_id`, `page_hash`, `total_count`, `has_more`, and opaque `next_cursor` for query integrity and pagination |
 | Runtime causality | native `runtime_*` graph edges for tool call, process, process tree, attempt, snapshot, runtime event, and workspace file correlation |
@@ -872,6 +873,7 @@ go test ./...
 ./scripts/accept_daemon_evidence_api.sh
 ./scripts/accept_telemetry_spool_backpressure.sh
 ./scripts/accept_telemetry_100k_pressure.sh
+./scripts/accept_telemetry_event_windows.sh
 ./scripts/accept_signal_engine.sh
 ./scripts/accept_python_helper.sh
 ./scripts/accept_deploy1_batch_pipeline.sh
@@ -896,6 +898,8 @@ responsiveness while a batch is queued, graph verify, evidence manifest
 materialization, and forensics export. `accept_python_helper.sh` validates the
 thin Python helper path for CLI-backed record, batch record, evidence manifest
 export, EvalContext export, batch forensics export, and signal import.
+`accept_telemetry_event_windows.sh` validates that Falco ingest automatically
+builds 10s/60s telemetry event windows with resolved and high-risk counts.
 `accept_deploy1_batch_pipeline.sh` validates the one-call Deploy 1 Python flow:
 record a batch, export EvalContext records, run registered evaluator functions,
 import EvalSignal reports, export batch forensics, and return a summary.

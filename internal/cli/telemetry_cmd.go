@@ -22,6 +22,8 @@ func telemetryCmd(dataDir, daemonURL *string) *cobra.Command {
 	var listCursor string
 	var batchesRunID string
 	var batchesJSON bool
+	var windowsFilter telemetry.EventWindowFilter
+	var windowsJSON bool
 	var correlationsRunID string
 	var correlationsEventID string
 	var correlationsJSON bool
@@ -149,6 +151,46 @@ func telemetryCmd(dataDir, daemonURL *string) *cobra.Command {
 	batches.Flags().StringVar(&batchesRunID, "run", "", "filter by run id")
 	batches.Flags().BoolVar(&batchesJSON, "json", false, "emit JSON batch manifest list")
 	cmd.AddCommand(batches)
+	windows := &cobra.Command{
+		Use:   "windows",
+		Short: "list aggregated telemetry event windows",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			paths, err := store.Init(*dataDir)
+			if err != nil {
+				return err
+			}
+			db, err := store.Open(paths)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			result, err := telemetry.ListEventWindows(db, windowsFilter)
+			if err != nil {
+				return err
+			}
+			if windowsJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(result)
+			}
+			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "RUN\tSESSION\tTOOL_CALL\tSOURCE\tTYPE\tWINDOW_SECONDS\tWINDOW_START\tEVENTS\tRESOLVED\tUNRESOLVED\tHIGH_RISK")
+			for _, item := range result.Windows {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%d\t%d\t%d\t%d\n",
+					item.RunID, item.SessionID, item.ToolCallID, item.Source, item.EventType, item.WindowSeconds, item.WindowStart,
+					item.EventCount, item.ResolvedCount, item.UnresolvedCount, item.HighRiskCount)
+			}
+			return w.Flush()
+		},
+	}
+	windows.Flags().StringVar(&windowsFilter.RunID, "run", "", "filter by run id")
+	windows.Flags().StringVar(&windowsFilter.SessionID, "session", "", "filter by session id")
+	windows.Flags().StringVar(&windowsFilter.ToolCallID, "tool-call", "", "filter by tool call id")
+	windows.Flags().StringVar(&windowsFilter.Type, "type", "", "filter by event type")
+	windows.Flags().StringVar(&windowsFilter.Source, "source", "", "filter by telemetry source")
+	windows.Flags().IntVar(&windowsFilter.WindowSeconds, "window", 0, "filter by window size in seconds, usually 10 or 60")
+	windows.Flags().BoolVar(&windowsJSON, "json", false, "emit structured telemetry event window JSON")
+	cmd.AddCommand(windows)
 	return cmd
 }
 
@@ -374,6 +416,7 @@ func telemetryIngestCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			_, _ = telemetry.RebuildEventWindows(db, event.RunID)
 			fmt.Fprintf(cmd.OutOrStdout(), "event_id=%s type=%s source=%s\n", id, event.EventType, event.Source)
 			return nil
 		},
