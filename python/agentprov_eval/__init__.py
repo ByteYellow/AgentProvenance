@@ -1,22 +1,171 @@
-"""Thin Python helpers for external AgentProvenance evaluators.
+"""Thin Python helpers for AgentProvenance users.
 
-The SDK intentionally does not define reward logic. It only wraps the
-EvalContext JSON passed by `agentprov signal run --external` and emits
-validated EvalSignal-shaped dictionaries.
+The package intentionally does not define reward logic. It provides two small
+surfaces:
+
+- wrappers around the local `agentprov` binary for lightweight recorder usage;
+- helpers for external evaluators that consume EvalContext JSON and emit
+  EvalSignal-shaped dictionaries.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Sequence
 
 
 KIND_REWARD_FEATURE = "reward_feature"
 KIND_PENALTY = "penalty"
 KIND_DATASET_LABEL = "dataset_label"
 KIND_QUALITY_SIGNAL = "quality_signal"
+
+
+@dataclass
+class CommandResult:
+    """Result from invoking the local agentprov binary."""
+
+    args: list[str]
+    returncode: int
+    stdout: str
+    stderr: str
+
+    def json(self) -> dict[str, Any]:
+        if not self.stdout.strip():
+            return {}
+        return json.loads(self.stdout)
+
+
+class Client:
+    """Small wrapper around the local agentprov CLI.
+
+    This is deliberately a thin helper, not a Python control plane. It keeps RL
+    and benchmark harness integration lightweight: one Go binary plus this
+    optional Python package.
+    """
+
+    def __init__(
+        self,
+        binary: str | os.PathLike[str] = "agentprov",
+        data_dir: str | os.PathLike[str] | None = None,
+        daemon_url: str | None = None,
+        env: dict[str, str] | None = None,
+    ):
+        self.binary = str(binary)
+        self.data_dir = str(data_dir) if data_dir is not None else None
+        self.daemon_url = daemon_url
+        self.env = dict(env or {})
+
+    def run_cli(self, args: Sequence[str], *, input_text: str | None = None) -> CommandResult:
+        cmd = [self.binary]
+        if self.data_dir:
+            cmd.extend(["--data-dir", self.data_dir])
+        if self.daemon_url:
+            cmd.extend(["--daemon-url", self.daemon_url])
+        cmd.extend(str(arg) for arg in args)
+        env = os.environ.copy()
+        env.update(self.env)
+        proc = subprocess.run(
+            cmd,
+            input=input_text,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            check=False,
+        )
+        result = CommandResult(args=cmd, returncode=proc.returncode, stdout=proc.stdout, stderr=proc.stderr)
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"agentprov command failed returncode={proc.returncode} args={cmd!r} stderr={proc.stderr.strip()}"
+            )
+        return result
+
+    def record(
+        self,
+        command: Sequence[str],
+        *,
+        run_id: str = "",
+        workdir: str | os.PathLike[str] | None = None,
+        name: str = "record",
+        sample_interval_ms: int | None = None,
+        post_root_grace_ms: int | None = None,
+    ) -> dict[str, Any]:
+        args = ["record", "--json"]
+        if run_id:
+            args.extend(["--run", run_id])
+        if workdir is not None:
+            args.extend(["--workdir", str(workdir)])
+        if name:
+            args.extend(["--name", name])
+        if sample_interval_ms is not None:
+            args.extend(["--sample-interval-ms", str(sample_interval_ms)])
+        if post_root_grace_ms is not None:
+            args.extend(["--post-root-grace-ms", str(post_root_grace_ms)])
+        args.append("--")
+        args.extend(str(part) for part in command)
+        return self.run_cli(args).json()
+
+    def batch_record(self, jobs: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+        manifests = []
+        for job in jobs:
+            command = job.get("command")
+            if not command:
+                raise ValueError("batch record job must include command")
+            manifests.append(
+                self.record(
+                    command,
+                    run_id=job.get("run_id", ""),
+                    workdir=job.get("workdir"),
+                    name=job.get("name", "record"),
+                    sample_interval_ms=job.get("sample_interval_ms"),
+                    post_root_grace_ms=job.get("post_root_grace_ms"),
+                )
+            )
+        return manifests
+
+    def evidence_manifest(self, run_id: str, *, materialize: bool = False) -> dict[str, Any]:
+        args = ["evidence", "manifest", "--run", run_id, "--json"]
+        if materialize:
+            args.append("--materialize")
+        return self.run_cli(args).json()
+
+    def eval_context(self, run_id: str) -> dict[str, Any]:
+        return self.run_cli(["signal", "context", "--run", run_id]).json()
+
+    def import_signals(self, run_id: str, signals: Iterable["Signal | dict[str, Any]"]) -> dict[str, Any]:
+        payload = {"signals": [signal.to_dict() if isinstance(signal, Signal) else signal for signal in signals]}
+        return self.run_cli(
+            ["signal", "import", "--run", run_id, "--file", "-", "--json"],
+            input_text=json.dumps(payload, separators=(",", ":")),
+        ).json()
+
+
+def record(
+    command: Sequence[str],
+    *,
+    run_id: str = "",
+    workdir: str | os.PathLike[str] | None = None,
+    binary: str | os.PathLike[str] = "agentprov",
+    data_dir: str | os.PathLike[str] | None = None,
+) -> dict[str, Any]:
+    """Record one command through the local agentprov binary."""
+
+    return Client(binary=binary, data_dir=data_dir).record(command, run_id=run_id, workdir=workdir)
+
+
+def batch_record(
+    jobs: Iterable[dict[str, Any]],
+    *,
+    binary: str | os.PathLike[str] = "agentprov",
+    data_dir: str | os.PathLike[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Record many commands sequentially for batch/evaluator pipelines."""
+
+    return Client(binary=binary, data_dir=data_dir).batch_record(jobs)
 
 
 class EvalContext:
@@ -123,3 +272,17 @@ def main(evaluate: Callable[[EvalContext], Iterable[Signal | dict[str, Any]]]) -
             signals.append(signal)
     json.dump({"signals": signals}, sys.stdout, separators=(",", ":"))
     sys.stdout.write("\n")
+
+
+__all__ = [
+    "Client",
+    "CommandResult",
+    "EvalContext",
+    "Signal",
+    "batch_record",
+    "record",
+    "KIND_REWARD_FEATURE",
+    "KIND_PENALTY",
+    "KIND_DATASET_LABEL",
+    "KIND_QUALITY_SIGNAL",
+]

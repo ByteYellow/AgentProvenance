@@ -139,6 +139,23 @@ OpenSandbox, Kubernetes, Falco, Tetragon, system-side collectors, or future
 native sensors. The core product remains the correlation, provenance, timeline,
 risk, response, replay, and audit model above those facts.
 
+## Deployment Modes
+
+AgentProvenance should not require a central platform before it becomes useful.
+The product has three deployment shapes:
+
+| Mode | Shape | Primary users |
+|---|---|---|
+| Library / CLI-only recorder | one Go binary, optional Python helper, local SQLite/object store | RL rollout, evaluator jobs, benchmarks, CI, red-team harnesses |
+| Sidecar / local daemon | local daemon owns store, spool, correlation, graph query, risk, and forensics API | sandbox workers, CI workers, local security harnesses |
+| Central evidence service | shared ingest/query service, object storage, retention, auth, UI/API | enterprise security, audit, SRE, compliance, incident review |
+
+For RL and evaluator pipelines, the first mode is the most important adoption
+path. AgentProvenance should let a pipeline wrap an existing command, emit a
+manifest and `EvalContext`, and leave reward/ranking/dataset decisions to the
+pipeline. Heavy telemetry, daemon mode, and central services are opt-in
+hardening paths, not prerequisites.
+
 ## Relationship To System observability, HIDS, And OpenTelemetry
 
 system-side systems are valuable because they provide low-intrusion,

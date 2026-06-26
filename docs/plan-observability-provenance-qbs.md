@@ -241,3 +241,22 @@ agentprov record -- <agent command>
 
 That demo better represents the core product: execution observability plus
 Git-like provenance.
+
+## Deployment Plan
+
+Adoption should start lightweight and grow only when the workload requires it.
+
+| Tier | Deployment | Why it exists |
+| --- | --- | --- |
+| 1 | Library / CLI-only recorder | RL, evaluator, benchmark, and CI users can wrap commands without changing their agent framework. |
+| 2 | Sidecar / local daemon | A worker can keep a local evidence service, spool telemetry, and expose stable query APIs without making the CLI own lifecycle. |
+| 3 | Central evidence service | Enterprise security, SRE, audit, and compliance teams can centralize ingest, object storage, retention, auth, and UI/API. |
+
+For RL, Tier 1 is the product default:
+
+- install cost is one Go binary plus an optional thin Python helper;
+- call path is `agentprov record -- <agent command>` or a Python wrapper;
+- batch jobs control scheduling and reward policy themselves;
+- AgentProvenance emits trajectory evidence, deviations, risk signals, and
+  manifests;
+- heavier telemetry and daemon mode remain opt-in.

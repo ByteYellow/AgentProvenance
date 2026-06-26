@@ -152,7 +152,13 @@ func signalContext(dataDir, daemonURL, runID string) (signal.EvalContext, error)
 }
 
 func readExternalSignals(path string) (signal.ExternalEvalOutput, error) {
-	raw, err := os.ReadFile(path)
+	var raw []byte
+	var err error
+	if path == "-" {
+		raw, err = io.ReadAll(os.Stdin)
+	} else {
+		raw, err = os.ReadFile(path)
+	}
 	if err != nil {
 		return signal.ExternalEvalOutput{}, err
 	}

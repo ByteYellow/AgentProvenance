@@ -272,6 +272,63 @@ process, runtime telemetry, evidence, risk/policy, and external-effect lanes,
 with correlation status and drill-down commands. The JSON output is designed to
 feed a future UI.
 
+## Deployment Modes
+
+AgentProvenance is intentionally usable in three deployment shapes. RL,
+benchmark, and evaluator users should start with the first shape; enterprise
+security and audit users can move toward the later shapes when they need shared
+ingest, retention, and query services.
+
+| Mode | Shape | Best for | Tradeoff |
+|---|---|---|---|
+| Library / CLI-only recorder | one `agentprov` binary, optional Python helper, local SQLite/object store | RL rollout, evaluator jobs, benchmarks, CI, local red-team harnesses | easiest to adopt; weaker shared query and long-running ingest |
+| Sidecar / local daemon | `agentprov daemon serve` beside one worker or sandbox host; CLI/SDK acts as client | sandbox worker, CI runner, local security harness, medium-volume telemetry ingest | adds a local service boundary, spool, backpressure, and stable query API |
+| Central evidence service | shared ingest/query service with object storage, retention, auth, and UI/API | enterprise security, audit, SRE, compliance, incident review | highest operational cost; not the default RL entry point |
+
+For RL and evaluator pipelines, the default contract is lightweight:
+
+- Install: one Go binary plus an optional thin Python package.
+- Call: wrap an existing command first; SDK/framework integration is optional.
+- Batch: every trajectory gets stable `run_id` / evidence manifest / signal
+  context output, and query surfaces are paged.
+- Overhead: default capture focuses on process/file/diff/artifact/exit/resource
+  evidence; heavier Falco/eBPF-style telemetry is an opt-in substrate.
+- Ownership: AgentProvenance emits evidence, deviation, risk, and trajectory
+  signals. The RL system owns reward, ranking, dataset policy, and winner
+  selection.
+
+Python usage stays thin and CLI-backed:
+
+```python
+from agentprov_eval import Client
+
+client = Client(binary="./agentprov", data_dir=".agentprov-rl")
+
+manifest = client.record(
+    ["python", "agent_task.py"],
+    run_id="trajectory-0001",
+    workdir="/tmp/agent-task",
+)
+
+evidence = client.evidence_manifest(manifest["run_id"])
+ctx = client.eval_context(manifest["run_id"])
+```
+
+Batch pipelines can keep their own scheduler and call:
+
+```python
+from agentprov_eval import batch_record
+
+manifests = batch_record(
+    [
+        {"run_id": "traj-0001", "workdir": "/tmp/job1", "command": ["pytest", "-q"]},
+        {"run_id": "traj-0002", "workdir": "/tmp/job2", "command": ["pytest", "-q"]},
+    ],
+    binary="./agentprov",
+    data_dir=".agentprov-batch",
+)
+```
+
 ### Falco-compatible Receiver
 
 The dedicated Falco receiver is useful when Falco is already filtering kernel
@@ -687,7 +744,8 @@ These boundaries are intentional:
   it emits the behavior evidence and deviation signals those systems can score.
 
 See [docs/product.md](docs/product.md) for the product direction and
-[docs/comparisons.md](docs/comparisons.md) for adjacent-system boundaries.
+[docs/deployment-modes.md](docs/deployment-modes.md) for deployment shapes.
+[docs/comparisons.md](docs/comparisons.md) covers adjacent-system boundaries.
 
 ## Repository Layout
 
@@ -732,7 +790,7 @@ experiments do not define the project identity.
 | Phase 3 | Zero-SDK Recorder Hardening | process-tree capture, delayed child process handling, cwd/time/file-diff inference, orphan lifecycle evidence, low-intrusion record mode |
 | Phase 4 | Real Telemetry Integration | Falco/Tetragon/LoongCollector/auditd/eBPF receivers, cgroup/container/pid correlation, kernel-side filtering assumptions |
 | Phase 5 | Risk / Policy / Control | configurable risk signals, behavior baselines, compliance evidence mapping, response adapters, taint propagation, quarantine, response blocking, forensics export, Feishu/DingTalk/webhook hooks, isolation escalation hooks |
-| Phase 6 | Scale / UI / Productization | async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency ingest/query tests, evaluator SDK hardening, usable UI/API |
+| Phase 6 | Scale / UI / Productization | async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency ingest/query tests, evaluator SDK hardening, central evidence service, usable UI/API |
 
 Near-term hardening:
 
@@ -761,6 +819,7 @@ go test ./...
 ./scripts/accept_telemetry_spool_backpressure.sh
 ./scripts/accept_telemetry_100k_pressure.sh
 ./scripts/accept_signal_engine.sh
+./scripts/accept_python_helper.sh
 ```
 
 The acceptance scripts are the main machine-checkable gates for Phase 1
@@ -776,4 +835,6 @@ embedded evidence manifest, risk/response records, graph edges, and a clean
 `graph verify` result. `accept_daemon_evidence_api.sh` validates the daemon API
 path for ToolCallScope binding, async Falco spool ingest, control API
 responsiveness while a batch is queued, graph verify, evidence manifest
-materialization, and forensics export.
+materialization, and forensics export. `accept_python_helper.sh` validates the
+thin Python helper path for CLI-backed record, evidence manifest export,
+EvalContext export, and signal import.
