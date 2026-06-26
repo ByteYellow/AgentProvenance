@@ -256,6 +256,20 @@ class Client:
             input_text=json.dumps(payload, separators=(",", ":")),
         ).json()
 
+    def import_signal_reports(
+        self,
+        reports: Iterable[dict[str, Any]],
+        *,
+        engine: str = "python-sdk",
+    ) -> dict[str, Any]:
+        rows = [json.dumps(report, separators=(",", ":")) for report in reports]
+        if not rows:
+            raise ValueError("import_signal_reports requires at least one report")
+        return self.run_cli(
+            ["signal", "import-batch", "--file", "-", "--engine", engine, "--json"],
+            input_text="\n".join(rows) + "\n",
+        ).json()
+
     def evaluate_batch(
         self,
         registry: "Registry",
@@ -281,8 +295,7 @@ class Client:
         )
         reports = [evaluate_context(ctx, registry=registry, engine=engine) for ctx in contexts]
         if import_signals:
-            for report in reports:
-                self.import_signals(report["run_id"], report["signals"])
+            self.import_signal_reports(reports, engine=engine)
         return reports
 
 
@@ -613,6 +626,10 @@ def emit_jsonl(reports: Iterable[dict[str, Any]], out: Any = sys.stdout) -> None
         out.write("\n")
 
 
+def reports_jsonl(reports: Iterable[dict[str, Any]]) -> str:
+    return "".join(json.dumps(report, separators=(",", ":")) + "\n" for report in reports)
+
+
 def _normalize_rule_output(produced: RuleReturn) -> list[Signal | dict[str, Any]]:
     if produced is None:
         return []
@@ -680,6 +697,7 @@ __all__ = [
     "evaluate_context",
     "main",
     "register",
+    "reports_jsonl",
     "record",
     "record_batch",
     "rule",

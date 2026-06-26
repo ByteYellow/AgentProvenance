@@ -122,6 +122,55 @@ func TestImportSignalsValidatesExternalSignals(t *testing.T) {
 	}
 }
 
+func TestImportBatchReportsSummarizesManyRuns(t *testing.T) {
+	report, err := ImportBatchReports("python-sdk", []EvalReport{
+		{
+			RunID: "run-a",
+			Signals: []EvalSignal{{
+				Name:   "reward.a",
+				Kind:   KindRewardFeature,
+				Score:  1,
+				Reason: "accepted",
+			}},
+		},
+		{
+			RunID: "run-b",
+			Signals: []EvalSignal{{
+				Name:   "penalty.b",
+				Kind:   KindPenalty,
+				Score:  -1,
+				Reason: "rejected",
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.SchemaVersion != "agentprovenance.eval_signal_batch_import/v1" || report.Engine != "python-sdk" {
+		t.Fatalf("unexpected batch report header: %+v", report)
+	}
+	if report.ReportCount != 2 || report.RunCount != 2 || report.SignalCount != 2 || report.Failed != 0 {
+		t.Fatalf("unexpected batch counts: %+v", report)
+	}
+	if report.ResultSetID == "" || report.PageHash == "" {
+		t.Fatalf("missing batch integrity hashes: %+v", report)
+	}
+	if report.Runs[0].Signals[0].RunID != "run-a" || report.Runs[1].Signals[0].RunID != "run-b" {
+		t.Fatalf("signals were not normalized per run: %+v", report.Runs)
+	}
+
+	withError, err := ImportBatchReports("python-sdk", []EvalReport{
+		{RunID: "run-ok", Signals: []EvalSignal{{Name: "ok", Kind: KindQualitySignal, Reason: "ok"}}},
+		{RunID: "run-bad", Signals: []EvalSignal{{Name: "bad", Kind: Kind("bad"), Reason: "bad"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withError.Failed != 1 || len(withError.Errors) != 1 || withError.SignalCount != 1 {
+		t.Fatalf("expected partial batch import error: %+v", withError)
+	}
+}
+
 func execSQL(t *testing.T, db *sql.DB, query string, args ...any) {
 	t.Helper()
 	if _, err := db.Exec(query, args...); err != nil {

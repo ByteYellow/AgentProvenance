@@ -154,7 +154,7 @@ PY
 echo "== evaluate batch through Python rule registry"
 PYTHONPATH="$PY_TARGET" AGENTPROV_BIN="$BIN" AGENTPROV_DATA_DIR="$DATA_DIR" python3 - <<'PY'
 import os
-from agentprov import Client, Registry, Signal, evaluate_batch, rule
+from agentprov import Client, Registry, Signal, evaluate_batch, reports_jsonl, rule
 
 client = Client(binary=os.environ["AGENTPROV_BIN"], data_dir=os.environ["AGENTPROV_DATA_DIR"])
 contexts = client.batch_eval_contexts(shard_id="shard-0", latest=True)
@@ -182,10 +182,13 @@ assert all(report["schema_version"] == "agentprovenance.eval_signals/v1" for rep
 assert all(report["signal_count"] == 1 for report in reports)
 assert all(report["signals"][0]["kind"] == "reward_feature" for report in reports)
 assert all(report["result_set_id"].startswith("sha256:") for report in reports)
+assert reports_jsonl(reports).count("\n") == 2
 
-imported = client.import_signals(reports[0]["run_id"], reports[0]["signals"])
-assert imported["schema_version"] == "agentprovenance.eval_signals/v1"
-assert imported["signal_count"] == 1
+imported = client.import_signal_reports(reports, engine="acceptance-registry")
+assert imported["schema_version"] == "agentprovenance.eval_signal_batch_import/v1"
+assert imported["run_count"] == 2
+assert imported["signal_count"] == 2
+assert imported["failed"] == 0
 
 @rule("default_registry_quality")
 def default_registry_quality(ctx):
@@ -195,6 +198,35 @@ default_reports = evaluate_batch(contexts[:1])
 assert default_reports[0]["signal_count"] == 1
 assert default_reports[0]["signals"][0]["name"] == "default_registry_quality"
 print("python evaluator registry acceptance ok")
+PY
+
+echo "== import batch signal reports through CLI"
+PYTHONPATH="$PY_TARGET" AGENTPROV_BIN="$BIN" AGENTPROV_DATA_DIR="$DATA_DIR" python3 - <<'PY' > /tmp/agentprov-python-helper-reports.jsonl
+import os
+from agentprov import Client, Registry, Signal, evaluate_batch, emit_jsonl
+
+client = Client(binary=os.environ["AGENTPROV_BIN"], data_dir=os.environ["AGENTPROV_DATA_DIR"])
+contexts = client.batch_eval_contexts(shard_id="shard-0", latest=True)
+registry = Registry(name="cli-import-registry")
+
+@registry.rule("cli_quality")
+def cli_quality(ctx):
+    return Signal.quality_signal("cli_quality", 1.0, "cli batch import quality signal")
+
+emit_jsonl(evaluate_batch(contexts, registry=registry))
+PY
+BATCH_IMPORT_JSON="$("$BIN" --data-dir "$DATA_DIR" signal import-batch --file /tmp/agentprov-python-helper-reports.jsonl --engine cli-import-registry --json)"
+python3 - <<'PY' "$BATCH_IMPORT_JSON"
+import json
+import sys
+report = json.loads(sys.argv[1])
+assert report["schema_version"] == "agentprovenance.eval_signal_batch_import/v1"
+assert report["engine"] == "cli-import-registry"
+assert report["run_count"] == 2
+assert report["signal_count"] == 2
+assert report["failed"] == 0
+assert report["result_set_id"].startswith("sha256:")
+assert report["page_hash"].startswith("sha256:")
 PY
 rm -rf "$BATCH_WORKDIR_A" "$BATCH_WORKDIR_B"
 

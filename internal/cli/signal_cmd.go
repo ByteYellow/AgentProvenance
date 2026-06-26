@@ -136,6 +136,8 @@ func signalCmd(dataDir, daemonURL *string) *cobra.Command {
 
 	var importRunID string
 	var importFile string
+	var importBatchFile string
+	var importBatchEngine string
 	var importJSON bool
 	importCmd := &cobra.Command{
 		Use:   "import",
@@ -168,11 +170,40 @@ func signalCmd(dataDir, daemonURL *string) *cobra.Command {
 	_ = importCmd.MarkFlagRequired("run")
 	_ = importCmd.MarkFlagRequired("file")
 
+	importBatchCmd := &cobra.Command{
+		Use:   "import-batch",
+		Short: "validate many external evaluator signal reports from JSONL",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reports, err := readExternalSignalReports(importBatchFile)
+			if err != nil {
+				return err
+			}
+			if len(reports) == 0 {
+				return fmt.Errorf("no signal reports found")
+			}
+			report, err := signal.ImportBatchReports(importBatchEngine, reports)
+			if err != nil {
+				return err
+			}
+			if importJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+			return printSignalBatchImportReport(cmd.OutOrStdout(), report)
+		},
+	}
+	importBatchCmd.Flags().StringVar(&importBatchFile, "file", "", "JSONL signal report file; each line is EvalReport or {run_id,signals}")
+	importBatchCmd.Flags().StringVar(&importBatchEngine, "engine", "imported-external-evaluator", "engine name to stamp onto imported reports")
+	importBatchCmd.Flags().BoolVar(&importJSON, "json", false, "emit structured evaluator signal batch JSON")
+	_ = importBatchCmd.MarkFlagRequired("file")
+
 	cmd := &cobra.Command{Use: "signal", Short: "code-based evaluator signal commands"}
 	cmd.AddCommand(run)
 	cmd.AddCommand(contextCmd)
 	cmd.AddCommand(batchContextCmd)
 	cmd.AddCommand(importCmd)
+	cmd.AddCommand(importBatchCmd)
 	return cmd
 }
 
@@ -310,6 +341,53 @@ func readExternalSignals(path string) (signal.ExternalEvalOutput, error) {
 	return output, nil
 }
 
+func readExternalSignalReports(path string) ([]signal.EvalReport, error) {
+	var input io.Reader
+	if path == "-" {
+		input = os.Stdin
+	} else {
+		file, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+		input = file
+	}
+	scanner := bufio.NewScanner(input)
+	scanner.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	var reports []signal.EvalReport
+	for lineNo := 1; scanner.Scan(); lineNo++ {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		report, err := parseExternalSignalReportLine(line)
+		if err != nil {
+			return nil, fmt.Errorf("parse signal report line %d: %w", lineNo, err)
+		}
+		reports = append(reports, report)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return reports, nil
+}
+
+func parseExternalSignalReportLine(line string) (signal.EvalReport, error) {
+	var report signal.EvalReport
+	if err := json.Unmarshal([]byte(line), &report); err == nil && (report.RunID != "" || len(report.Signals) > 0) {
+		return report, nil
+	}
+	var wrapped struct {
+		RunID   string              `json:"run_id"`
+		Signals []signal.EvalSignal `json:"signals"`
+	}
+	if err := json.Unmarshal([]byte(line), &wrapped); err != nil {
+		return signal.EvalReport{}, err
+	}
+	return signal.EvalReport{RunID: wrapped.RunID, Signals: wrapped.Signals}, nil
+}
+
 func printSignalReport(out io.Writer, report signal.EvalReport) error {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "run=%s schema=%s engine=%s decision_owner=%s signals=%d result_set=%s page_hash=%s\n",
@@ -318,6 +396,23 @@ func printSignalReport(out io.Writer, report signal.EvalReport) error {
 	for _, item := range report.Signals {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%.3f\t%s\t%s\n",
 			item.ID, item.Kind, item.Name, item.AttemptID, item.ToolCallID, item.Score, item.Label, item.Reason)
+	}
+	return w.Flush()
+}
+
+func printSignalBatchImportReport(out io.Writer, report signal.BatchImportReport) error {
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	fmt.Fprintf(w, "schema=%s engine=%s reports=%d runs=%d signals=%d failed=%d result_set=%s page_hash=%s\n",
+		report.SchemaVersion, report.Engine, report.ReportCount, report.RunCount, report.SignalCount, report.Failed, report.ResultSetID, report.PageHash)
+	fmt.Fprintln(w, "RUN\tSIGNALS\tRESULT_SET\tPAGE_HASH")
+	for _, item := range report.Runs {
+		fmt.Fprintf(w, "%s\t%d\t%s\t%s\n", item.RunID, item.SignalCount, item.ResultSetID, item.PageHash)
+	}
+	if len(report.Errors) > 0 {
+		fmt.Fprintln(w, "ERROR\tMESSAGE")
+		for _, item := range report.Errors {
+			fmt.Fprintf(w, "error\t%s\n", item)
+		}
 	}
 	return w.Flush()
 }

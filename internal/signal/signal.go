@@ -47,6 +47,19 @@ type EvalReport struct {
 	Signals       []EvalSignal `json:"signals"`
 }
 
+type BatchImportReport struct {
+	SchemaVersion string       `json:"schema_version"`
+	Engine        string       `json:"engine"`
+	ReportCount   int          `json:"report_count"`
+	RunCount      int          `json:"run_count"`
+	SignalCount   int          `json:"signal_count"`
+	Failed        int          `json:"failed"`
+	ResultSetID   string       `json:"result_set_id"`
+	PageHash      string       `json:"page_hash"`
+	Runs          []EvalReport `json:"runs"`
+	Errors        []string     `json:"errors,omitempty"`
+}
+
 type EvalContext struct {
 	SchemaVersion string                            `json:"schema_version"`
 	RunID         string                            `json:"run_id"`
@@ -257,6 +270,45 @@ func ImportSignals(runID, engine string, signals []EvalSignal) (EvalReport, erro
 	}, nil
 }
 
+func ImportBatchReports(engine string, reports []EvalReport) (BatchImportReport, error) {
+	if strings.TrimSpace(engine) == "" {
+		engine = "imported-external-evaluator"
+	}
+	result := BatchImportReport{
+		SchemaVersion: "agentprovenance.eval_signal_batch_import/v1",
+		Engine:        engine,
+		Runs:          []EvalReport{},
+		Errors:        []string{},
+	}
+	seenRuns := map[string]struct{}{}
+	for i, report := range reports {
+		runID := strings.TrimSpace(report.RunID)
+		if runID == "" {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("report %d: run_id is required", i+1))
+			continue
+		}
+		imported, err := ImportSignals(runID, engine, report.Signals)
+		if err != nil {
+			result.Failed++
+			result.Errors = append(result.Errors, fmt.Sprintf("report %d run %s: %v", i+1, runID, err))
+			continue
+		}
+		result.Runs = append(result.Runs, imported)
+		result.SignalCount += imported.SignalCount
+		seenRuns[runID] = struct{}{}
+	}
+	result.ReportCount = len(reports)
+	result.RunCount = len(seenRuns)
+	resultSetID, pageHash, err := batchIntegrity(engine, result.Runs, result.Errors)
+	if err != nil {
+		return BatchImportReport{}, err
+	}
+	result.ResultSetID = resultSetID
+	result.PageHash = pageHash
+	return result, nil
+}
+
 func RunExternal(command string, evalCtx EvalContext) (EvalReport, error) {
 	command = strings.TrimSpace(command)
 	if command == "" {
@@ -430,6 +482,25 @@ func integrity(runID string, signals []EvalSignal) (string, string, error) {
 	}
 	resultSum := sha256.Sum256(resultRaw)
 	pageRaw, err := json.Marshal(map[string]any{"kind": "eval_signal_page", "result_set_id": fmt.Sprintf("sha256:%x", resultSum[:]), "signals": signals})
+	if err != nil {
+		return "", "", err
+	}
+	pageSum := sha256.Sum256(pageRaw)
+	return fmt.Sprintf("sha256:%x", resultSum[:]), fmt.Sprintf("sha256:%x", pageSum[:]), nil
+}
+
+func batchIntegrity(engine string, reports []EvalReport, errors []string) (string, string, error) {
+	runIDs := make([]string, 0, len(reports))
+	for _, report := range reports {
+		runIDs = append(runIDs, report.RunID)
+	}
+	sort.Strings(runIDs)
+	resultRaw, err := json.Marshal(map[string]any{"kind": "eval_signal_batch_result_set", "engine": engine, "run_ids": runIDs, "errors": len(errors)})
+	if err != nil {
+		return "", "", err
+	}
+	resultSum := sha256.Sum256(resultRaw)
+	pageRaw, err := json.Marshal(map[string]any{"kind": "eval_signal_batch_page", "result_set_id": fmt.Sprintf("sha256:%x", resultSum[:]), "reports": reports, "errors": errors})
 	if err != nil {
 		return "", "", err
 	}

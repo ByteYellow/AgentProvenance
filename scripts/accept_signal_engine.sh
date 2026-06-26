@@ -117,4 +117,47 @@ assert_contains "$IMPORT_JSON" '"schema_version": "agentprovenance.eval_signals/
 assert_contains "$IMPORT_JSON" '"engine": "imported-external-evaluator"'
 assert_contains "$IMPORT_JSON" '"name": "external.custom_quality"'
 
+echo "== import batch external evaluator output"
+BATCH_IMPORT_FILE="$DATA_DIR/external-signal-reports.jsonl"
+python3 - <<'PY' "$BATCH_IMPORT_FILE"
+import json
+import sys
+
+reports = [
+    {
+        "run_id": "run-signal-accept",
+        "signals": [
+            {
+                "name": "external.batch_quality",
+                "kind": "quality_signal",
+                "score": 0.9,
+                "reason": "batch evaluator supplied a quality signal",
+            }
+        ],
+    },
+    {
+        "run_id": "run-signal-accept-2",
+        "signals": [
+            {
+                "name": "external.batch_label",
+                "kind": "dataset_label",
+                "label": "candidate",
+                "score": 1.0,
+                "reason": "batch evaluator supplied a label",
+            }
+        ],
+    },
+]
+with open(sys.argv[1], "w") as f:
+    for report in reports:
+        f.write(json.dumps(report, separators=(",", ":")) + "\n")
+PY
+BATCH_IMPORT_JSON="$("$BIN" --data-dir "$DATA_DIR" signal import-batch --file "$BATCH_IMPORT_FILE" --engine batch-evaluator --json)"
+assert_contains "$BATCH_IMPORT_JSON" '"schema_version": "agentprovenance.eval_signal_batch_import/v1"'
+assert_contains "$BATCH_IMPORT_JSON" '"engine": "batch-evaluator"'
+assert_contains "$BATCH_IMPORT_JSON" '"run_count": 2'
+assert_contains "$BATCH_IMPORT_JSON" '"signal_count": 2'
+assert_contains "$BATCH_IMPORT_JSON" '"failed": 0'
+assert_contains "$BATCH_IMPORT_JSON" '"result_set_id": "sha256:'
+
 echo "Signal engine acceptance passed"

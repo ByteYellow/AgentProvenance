@@ -37,6 +37,9 @@ Expected properties:
 - Python users can define offline evaluator functions with `Registry` and
   `@rule`; those functions return `EvalSignal` records such as reward
   features, penalties, dataset labels, and quality signals;
+- `agentprov signal import-batch --file reports.jsonl` validates JSONL
+  `EvalReport` batches after offline scoring, so RL pipelines do not need one
+  import command per trajectory;
 - `agentprov forensics export-batch --batch/--shard/--latest` writes one
   sha256-verified batch audit bundle with batch summary, per-run forensics
   refs, optional EvalContext records, and replay/query commands;
