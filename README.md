@@ -410,6 +410,7 @@ causal graph.
 ./agentprov telemetry correlations --event <event_id> --json
 ./agentprov timeline --run <run_id>
 ./agentprov timeline --run <run_id> --view causality
+./agentprov timeline --run <run_id> --limit 100 --cursor <next_cursor> --json
 ./agentprov timeline --run <run_id> --tool-call <tool_call_id> --json
 ./agentprov timeline --run <run_id> --process <process_id> --json
 ./agentprov timeline --run <run_id> --type risk_signal --json
@@ -610,13 +611,13 @@ What these mean:
 | Observability event detail | `observe event --run --event` emits `agentprovenance.observability_event/v1` with runtime event context, correlation metadata, lane, correlation status, related risk/policy/response evidence, drill-down commands, `result_set_id`, and `page_hash` |
 | Observability process detail | `observe process --run --process` emits `agentprovenance.observability_process/v1` with process lifecycle, tool_call context, lane, correlation status, runtime events, risk/policy/response evidence, drill-down commands, `result_set_id`, and `page_hash` |
 | Observability flow | `observe flow --run` emits `agentprovenance.observability_flow/v1` with event-to-risk-to-policy-to-response rows, lane, correlation status, drill-down commands, `result_set_id`, and `page_hash` |
-| Evidence manifest | `evidence manifest --run` emits `agentprovenance.evidence_manifest/v1`, a run-level evidence index with observability summary hashes, timeline hashes, object-list hashes, risk/response report hashes, and recommended drill-down queries for UI, audit export, and incident review; `--materialize` stores it as a content-addressed `evidence_manifest` object |
+| Evidence manifest | `evidence manifest --run` emits `agentprovenance.evidence_manifest/v1`, a run-level evidence index with observability summary hashes, timeline hashes, object-list hashes, risk/response report hashes, query refs, and recommended drill-down queries for UI, audit export, and incident review; `--materialize` stores it as a content-addressed `evidence_manifest` object |
 | Forensics bundle | `forensics export <run_id> --json` emits a hashed `agentprovenance.forensics_bundle/v1` file containing evidence manifest, events, telemetry batches, policy decisions, risk signals, response actions, graph edges, cost samples, sessions, processes, and snapshots; `forensics export-batch --json` emits `agentprovenance.batch_forensics_export/v1` and writes a batch audit bundle across many recorded trajectories |
 | Daemon API boundary | `agentprov daemon serve` exposes core evidence-infra APIs for ToolCallScope binding, paged telemetry event query, telemetry correlation explain, observability summary, timeline query, graph explain/verify, security risk/deviation/response query, evidence manifest materialization, run/batch forensics export, and evaluator context/import APIs. CLI daemon-client mode covers `observe summary`, `timeline`, `telemetry correlations`, `graph explain`, `graph verify`, `security risks/deviations/responses`, `evidence manifest`, `forensics export`, `forensics export-batch`, and `signal` paths |
 | Telemetry spool | Daemon Falco ingest supports async enqueue into `telemetry_spool_batches`; a background worker consumes queued batches, applies policy, and `health` exposes `queued_spool` / `spool_max_queued`. `--spool-max-queued` applies hard backpressure, and `--spool-drop-policy` supports `reject` with structured HTTP 429 or `drop_oldest` for bounded data-plane loss |
 | High-volume telemetry pressure | `scripts/accept_telemetry_100k_pressure.sh` generates 100k Falco events, enqueues them through daemon spool, confirms `health` and paged telemetry query stay responsive while queued, drains the batch, and verifies bounded paged query output after ingest. Receiver row details are capped with `row_results_truncated` so summary counts remain complete without returning 100k row objects |
 | Telemetry retention | `telemetry prune` and daemon `POST /v1/telemetry/retention/prune` delete old unreferenced raw telemetry events while preserving events referenced by telemetry batches, policy decisions, risk signals, or graph edges |
-| Execution timeline | `timeline --run` emits a human table, `--view causality` emits a lane view, and `--json` emits `agentprovenance.timeline/v1` across tool calls, processes, zero-SDK process observations, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects; JSON includes lane, correlation status, drill-down refs, `result_set_id`, and `page_hash` for query integrity |
+| Execution timeline | `timeline --run` emits a human table, `--view causality` emits a lane view, and `--json` emits `agentprovenance.timeline/v1` across tool calls, processes, zero-SDK process observations, runtime events, evidence events, policy decisions, risk signals, baseline deviations, response actions, and external effects; JSON includes lane, correlation status, drill-down refs, `result_set_id`, `page_hash`, `total_count`, `has_more`, and opaque `next_cursor` for query integrity and pagination |
 | Runtime causality | native `runtime_*` graph edges for tool call, process, process tree, attempt, snapshot, runtime event, and workspace file correlation |
 | Provenance DAG | `trace`, `refs`, `log`, `materialize`, `objects`, `verify`, text and JSON replay |
 | Evidence query | `graph explain --json` supports file, artifact, process, event, tool call, attempt, and risk targets with bounded, depth/limit/cursor-controlled causality paths, evidence, object refs, risks, process observations, replay refs, and runtime event lane/correlation/drill-down metadata aligned with `timeline` and `observe` |
@@ -833,6 +834,7 @@ go test ./...
 ./scripts/accept_falco_risk_realistic.sh
 ./scripts/accept_forensics_bundle.sh
 ./scripts/accept_batch_forensics.sh
+./scripts/accept_evidence_query_pagination.sh
 ./scripts/accept_daemon_evidence_api.sh
 ./scripts/accept_telemetry_spool_backpressure.sh
 ./scripts/accept_telemetry_100k_pressure.sh
@@ -859,3 +861,6 @@ responsiveness while a batch is queued, graph verify, evidence manifest
 materialization, and forensics export. `accept_python_helper.sh` validates the
 thin Python helper path for CLI-backed record, batch record, evidence manifest
 export, EvalContext export, batch forensics export, and signal import.
+`accept_evidence_query_pagination.sh` validates timeline cursor pagination,
+daemon-client cursor propagation, and evidence manifest query refs with
+result/page hashes.

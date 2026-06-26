@@ -160,6 +160,9 @@ func (c Client) Timeline(opts provenance.TimelineOptions) (provenance.TimelineMa
 	if opts.Limit > 0 {
 		values.Set("limit", fmt.Sprintf("%d", opts.Limit))
 	}
+	if opts.Cursor != "" {
+		values.Set("cursor", opts.Cursor)
+	}
 	var manifest provenance.TimelineManifest
 	err := c.getJSON("/v1/timeline?"+values.Encode(), &manifest)
 	return manifest, err

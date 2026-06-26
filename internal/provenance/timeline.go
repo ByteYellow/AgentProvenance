@@ -15,6 +15,7 @@ type TimelineOptions struct {
 	ProcessID string
 	Type      string
 	Limit     int
+	Cursor    string
 	View      string
 }
 
@@ -26,6 +27,10 @@ type TimelineManifest struct {
 	Summary       TimelineSummary `json:"summary"`
 	ResultSetID   string          `json:"result_set_id"`
 	PageHash      string          `json:"page_hash"`
+	Cursor        string          `json:"cursor,omitempty"`
+	NextCursor    string          `json:"next_cursor,omitempty"`
+	HasMore       bool            `json:"has_more"`
+	TotalCount    int             `json:"total_count"`
 	EventCount    int             `json:"event_count"`
 	Events        []TimelineEvent `json:"events"`
 }
@@ -35,6 +40,7 @@ type TimelineFilter struct {
 	ProcessID string `json:"process_id,omitempty"`
 	Type      string `json:"type,omitempty"`
 	Limit     int    `json:"limit,omitempty"`
+	Cursor    string `json:"cursor,omitempty"`
 	View      string `json:"view,omitempty"`
 }
 
@@ -101,6 +107,7 @@ func BuildTimeline(db *sql.DB, opts TimelineOptions) (TimelineManifest, error) {
 	})
 	events = enrichTimelineEvents(opts.RunID, events)
 	summary := summarizeTimeline(events)
+	totalCount := len(events)
 	resultSetID, err := stableDigest(map[string]any{
 		"kind":   "timeline_result_set",
 		"run_id": opts.RunID,
@@ -115,13 +122,37 @@ func BuildTimeline(db *sql.DB, opts TimelineOptions) (TimelineManifest, error) {
 	if err != nil {
 		return TimelineManifest{}, err
 	}
+	offset, err := parseTimelineCursor(opts.Cursor)
+	if err != nil {
+		return TimelineManifest{}, err
+	}
+	if offset > len(events) {
+		offset = len(events)
+	}
+	nextCursor := ""
+	hasMore := false
 	if opts.Limit > 0 && len(events) > opts.Limit {
-		events = events[:opts.Limit]
+		end := offset + opts.Limit
+		if end < len(events) {
+			hasMore = true
+			nextCursor, err = formatTimelineCursor(end)
+			if err != nil {
+				return TimelineManifest{}, err
+			}
+		} else {
+			end = len(events)
+		}
+		events = events[offset:end]
+	} else if offset > 0 {
+		events = events[offset:]
 	}
 	pageHash, err := stableDigest(map[string]any{
 		"kind":          "timeline_page",
 		"result_set_id": resultSetID,
 		"limit":         opts.Limit,
+		"cursor":        opts.Cursor,
+		"next_cursor":   nextCursor,
+		"has_more":      hasMore,
 		"events":        timelineDigestEvents(events),
 	})
 	if err != nil {
@@ -135,15 +166,39 @@ func BuildTimeline(db *sql.DB, opts TimelineOptions) (TimelineManifest, error) {
 			ProcessID: opts.ProcessID,
 			Type:      opts.Type,
 			Limit:     opts.Limit,
+			Cursor:    opts.Cursor,
 			View:      opts.View,
 		},
 		View:        timelineView(opts.View),
 		Summary:     summary,
 		ResultSetID: resultSetID,
 		PageHash:    pageHash,
+		Cursor:      opts.Cursor,
+		NextCursor:  nextCursor,
+		HasMore:     hasMore,
+		TotalCount:  totalCount,
 		EventCount:  len(events),
 		Events:      events,
 	}, nil
+}
+
+func parseTimelineCursor(cursor string) (int, error) {
+	if cursor == "" {
+		return 0, nil
+	}
+	data, err := decodeCursor("timeline", cursor)
+	if err != nil {
+		return 0, fmt.Errorf("invalid timeline cursor")
+	}
+	offset, err := cursorInt(data, "offset")
+	if err != nil {
+		return 0, fmt.Errorf("invalid timeline cursor")
+	}
+	return offset, nil
+}
+
+func formatTimelineCursor(offset int) (string, error) {
+	return encodeCursor("timeline", map[string]any{"offset": offset})
 }
 
 func timelineDigestEvents(events []TimelineEvent) []map[string]string {
@@ -179,7 +234,7 @@ func PrintTimelineManifest(manifest TimelineManifest, out io.Writer) error {
 	if timelineView(manifest.View) == "causality" {
 		return PrintTimelineCausality(manifest, out)
 	}
-	fmt.Fprintf(out, "run=%s schema=%s events=%d\n", manifest.RunID, manifest.SchemaVersion, manifest.EventCount)
+	fmt.Fprintf(out, "run=%s schema=%s events=%d total=%d has_more=%t next_cursor=%s\n", manifest.RunID, manifest.SchemaVersion, manifest.EventCount, manifest.TotalCount, manifest.HasMore, manifest.NextCursor)
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "TIME\tTYPE\tSOURCE\tID\tSESSION\tATTEMPT\tTOOL_CALL\tPROCESS\tSUMMARY")
 	for _, event := range manifest.Events {
@@ -190,8 +245,8 @@ func PrintTimelineManifest(manifest TimelineManifest, out io.Writer) error {
 }
 
 func PrintTimelineCausality(manifest TimelineManifest, out io.Writer) error {
-	fmt.Fprintf(out, "run=%s schema=%s view=causality events=%d runtime=%d correlated=%d partial=%d gaps=%d\n",
-		manifest.RunID, manifest.SchemaVersion, manifest.EventCount, manifest.Summary.RuntimeEvents,
+	fmt.Fprintf(out, "run=%s schema=%s view=causality events=%d total=%d has_more=%t next_cursor=%s runtime=%d correlated=%d partial=%d gaps=%d\n",
+		manifest.RunID, manifest.SchemaVersion, manifest.EventCount, manifest.TotalCount, manifest.HasMore, manifest.NextCursor, manifest.Summary.RuntimeEvents,
 		manifest.Summary.FullyCorrelated, manifest.Summary.PartiallyCorrelated, manifest.Summary.CorrelationGaps)
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "TIME\tLANE\tTYPE\tTOOL_CALL\tPROCESS\tSTATUS\tSUMMARY\tDRILLDOWN")

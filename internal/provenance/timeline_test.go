@@ -92,11 +92,33 @@ func TestBuildTimelineMergesContextTelemetryRiskAndResponse(t *testing.T) {
 	if limited.EventCount != 1 {
 		t.Fatalf("limited event_count=%d, want 1", limited.EventCount)
 	}
+	if !limited.HasMore || limited.NextCursor == "" || limited.TotalCount <= limited.EventCount {
+		t.Fatalf("limited timeline missing pagination metadata: %+v", limited)
+	}
 	if limited.ResultSetID != manifest.ResultSetID {
 		t.Fatalf("limited result_set_id changed: full=%s limited=%s", manifest.ResultSetID, limited.ResultSetID)
 	}
 	if limited.PageHash == manifest.PageHash {
 		t.Fatalf("limited page_hash should differ from full page hash: %s", limited.PageHash)
+	}
+	if strings.Contains(limited.NextCursor, "|") {
+		t.Fatalf("timeline cursor should be opaque: %q", limited.NextCursor)
+	}
+	page2, err := BuildTimeline(db, TimelineOptions{RunID: "run-1", Limit: 1, Cursor: limited.NextCursor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page2.EventCount != 1 || page2.Cursor != limited.NextCursor {
+		t.Fatalf("timeline page2 did not use cursor: %+v", page2)
+	}
+	if page2.ResultSetID != limited.ResultSetID {
+		t.Fatalf("timeline result_set_id changed across pages: page1=%s page2=%s", limited.ResultSetID, page2.ResultSetID)
+	}
+	if page2.PageHash == limited.PageHash {
+		t.Fatalf("timeline page_hash should differ across pages: page1=%s page2=%s", limited.PageHash, page2.PageHash)
+	}
+	if _, err := BuildTimeline(db, TimelineOptions{RunID: "run-1", Limit: 1, Cursor: "1|old"}); err == nil {
+		t.Fatalf("old-style timeline cursor should be rejected")
 	}
 
 	causality, err := BuildTimeline(db, TimelineOptions{RunID: "run-1", View: "causality"})

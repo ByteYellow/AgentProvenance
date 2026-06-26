@@ -664,6 +664,7 @@ func (s Server) timeline(w http.ResponseWriter, r *http.Request) {
 		ProcessID: r.URL.Query().Get("process"),
 		Type:      r.URL.Query().Get("type"),
 		Limit:     limit,
+		Cursor:    r.URL.Query().Get("cursor"),
 		View:      r.URL.Query().Get("view"),
 	})
 	writeResult(w, result, err)

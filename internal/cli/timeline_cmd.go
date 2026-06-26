@@ -15,6 +15,7 @@ func timelineCmd(dataDir, daemonURL *string) *cobra.Command {
 	var eventType string
 	var view string
 	var limit int
+	var cursor string
 	var asJSON bool
 
 	cmd := &cobra.Command{
@@ -30,6 +31,7 @@ func timelineCmd(dataDir, daemonURL *string) *cobra.Command {
 				ProcessID: processID,
 				Type:      eventType,
 				Limit:     limit,
+				Cursor:    cursor,
 				View:      view,
 			}
 			manifest, err := timelineManifest(*dataDir, *daemonURL, opts)
@@ -50,6 +52,7 @@ func timelineCmd(dataDir, daemonURL *string) *cobra.Command {
 	cmd.Flags().StringVar(&eventType, "type", "", "filter by normalized timeline event type")
 	cmd.Flags().StringVar(&view, "view", "table", "timeline view: table or causality")
 	cmd.Flags().IntVar(&limit, "limit", 0, "maximum timeline events returned")
+	cmd.Flags().StringVar(&cursor, "cursor", "", "pagination cursor from previous timeline output")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "emit structured timeline JSON")
 	return cmd
 }

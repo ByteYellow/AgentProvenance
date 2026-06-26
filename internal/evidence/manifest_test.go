@@ -91,6 +91,15 @@ func TestBuildManifestAggregatesRunEvidence(t *testing.T) {
 	if !hasView(manifest.RecommendedViews, "graph verify --run "+result.RunID+" --json") {
 		t.Fatalf("manifest missing verification view: %+v", manifest.RecommendedViews)
 	}
+	for _, want := range []string{"observability_summary", "timeline", "objects", "security_risks", "security_responses"} {
+		ref, ok := queryRefByKind(manifest.QueryRefs, want)
+		if !ok {
+			t.Fatalf("manifest missing query ref %s: %+v", want, manifest.QueryRefs)
+		}
+		if ref.Command == "" || ref.ResultSetID == "" || ref.PageHash == "" {
+			t.Fatalf("query ref %s missing integrity metadata: %+v", want, ref)
+		}
+	}
 	var parents []string
 	for _, ref := range manifest.Objects.TopRefs {
 		if ref.Hash != "" {
@@ -126,6 +135,15 @@ func TestBuildManifestAggregatesRunEvidence(t *testing.T) {
 	if objectType != "evidence_manifest" {
 		t.Fatalf("object_type=%q want evidence_manifest", objectType)
 	}
+}
+
+func queryRefByKind(values []ManifestQueryRef, want string) (ManifestQueryRef, bool) {
+	for _, value := range values {
+		if value.Kind == want {
+			return value, true
+		}
+	}
+	return ManifestQueryRef{}, false
 }
 
 func hasView(values []string, want string) bool {

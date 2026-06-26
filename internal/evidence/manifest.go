@@ -31,6 +31,7 @@ type Manifest struct {
 	RunID            string                  `json:"run_id"`
 	ResultSetID      string                  `json:"result_set_id"`
 	PageHash         string                  `json:"page_hash"`
+	QueryRefs        []ManifestQueryRef      `json:"query_refs,omitempty"`
 	Summary          observability.Summary   `json:"summary"`
 	Timeline         ManifestTimelineRef     `json:"timeline"`
 	Objects          ManifestObjectSummary   `json:"objects"`
@@ -77,8 +78,13 @@ type ManifestSecuritySummary struct {
 }
 
 type ManifestQueryRef struct {
-	Kind    string `json:"kind"`
-	Command string `json:"command"`
+	Kind          string `json:"kind"`
+	SchemaVersion string `json:"schema_version,omitempty"`
+	Command       string `json:"command"`
+	ResultSetID   string `json:"result_set_id,omitempty"`
+	PageHash      string `json:"page_hash,omitempty"`
+	HasMore       bool   `json:"has_more,omitempty"`
+	NextCursor    string `json:"next_cursor,omitempty"`
 }
 
 func BuildManifest(db *sql.DB, opts ManifestOptions) (Manifest, error) {
@@ -122,13 +128,20 @@ func BuildManifest(db *sql.DB, opts ManifestOptions) (Manifest, error) {
 			PageHash:      timeline.PageHash,
 			LaneCounts:    timeline.Summary.LaneCounts,
 			QueryRefs: []ManifestQueryRef{
-				{Kind: "timeline", Command: "timeline --run " + opts.RunID + " --json"},
+				queryRef("timeline", timeline.SchemaVersion, "timeline --run "+opts.RunID+" --json", timeline.ResultSetID, timeline.PageHash, timeline.HasMore, timeline.NextCursor),
 				{Kind: "causality_timeline", Command: "timeline --run " + opts.RunID + " --view causality --json"},
 			},
 		},
 		Objects:          summarizeObjects(objects),
 		Security:         ManifestSecuritySummary{RisksResultSetID: risks.ResultSetID, RisksPageHash: risks.PageHash, RiskCount: risks.Count, ResponsesResultSetID: responses.ResultSetID, ResponsesPageHash: responses.PageHash, ResponseCount: responses.Count},
 		RecommendedViews: append([]string{}, summary.RecommendedViews...),
+	}
+	manifest.QueryRefs = []ManifestQueryRef{
+		queryRef("observability_summary", summary.SchemaVersion, "observe summary --run "+opts.RunID+" --json", summary.ResultSetID, summary.PageHash, false, ""),
+		queryRef("timeline", timeline.SchemaVersion, "timeline --run "+opts.RunID+" --json", timeline.ResultSetID, timeline.PageHash, timeline.HasMore, timeline.NextCursor),
+		queryRef("objects", objects.SchemaVersion, "graph objects --run "+opts.RunID+" --limit "+fmt.Sprint(opts.ObjectLimit)+" --json", objects.ResultSetID, objects.PageHash, objects.HasMore, objects.NextCursor),
+		queryRef("security_risks", "agentprovenance.risk_signals/v1", "security risks --run "+opts.RunID+" --json", risks.ResultSetID, risks.PageHash, false, ""),
+		queryRef("security_responses", "agentprovenance.response_actions/v1", "security responses --run "+opts.RunID+" --json", responses.ResultSetID, responses.PageHash, false, ""),
 	}
 	manifest.RecommendedViews = append(manifest.RecommendedViews,
 		"evidence manifest --run "+opts.RunID+" --json",
@@ -139,6 +152,18 @@ func BuildManifest(db *sql.DB, opts ManifestOptions) (Manifest, error) {
 		return Manifest{}, err
 	}
 	return manifest, nil
+}
+
+func queryRef(kind, schemaVersion, command, resultSetID, pageHash string, hasMore bool, nextCursor string) ManifestQueryRef {
+	return ManifestQueryRef{
+		Kind:          kind,
+		SchemaVersion: schemaVersion,
+		Command:       command,
+		ResultSetID:   resultSetID,
+		PageHash:      pageHash,
+		HasMore:       hasMore,
+		NextCursor:    nextCursor,
+	}
 }
 
 func summarizeObjects(objects provenance.ObjectListManifest) ManifestObjectSummary {
@@ -178,6 +203,7 @@ func finalizeManifestIntegrity(manifest *Manifest) error {
 		"objects_result_set_id":   manifest.Objects.ResultSetID,
 		"risks_result_set_id":     manifest.Security.RisksResultSetID,
 		"responses_result_set_id": manifest.Security.ResponsesResultSetID,
+		"query_refs":              queryRefIntegrity(manifest.QueryRefs),
 	})
 	if err != nil {
 		return err
@@ -190,6 +216,7 @@ func finalizeManifestIntegrity(manifest *Manifest) error {
 		"timeline":          manifest.Timeline,
 		"objects":           manifest.Objects,
 		"security":          manifest.Security,
+		"query_refs":        manifest.QueryRefs,
 		"views":             sortedStrings(manifest.RecommendedViews),
 	})
 	if err != nil {
@@ -198,6 +225,24 @@ func finalizeManifestIntegrity(manifest *Manifest) error {
 	manifest.ResultSetID = resultSetID
 	manifest.PageHash = pageHash
 	return nil
+}
+
+func queryRefIntegrity(refs []ManifestQueryRef) []map[string]string {
+	out := make([]map[string]string, 0, len(refs))
+	for _, ref := range refs {
+		out = append(out, map[string]string{
+			"kind":          ref.Kind,
+			"schema":        ref.SchemaVersion,
+			"result_set_id": ref.ResultSetID,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i]["kind"] == out[j]["kind"] {
+			return out[i]["result_set_id"] < out[j]["result_set_id"]
+		}
+		return out[i]["kind"] < out[j]["kind"]
+	})
+	return out
 }
 
 func digestManifest(value any) (string, error) {
