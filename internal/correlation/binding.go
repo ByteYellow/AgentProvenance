@@ -222,12 +222,17 @@ func openBindingLowerBound(at string) string {
 
 const bindingColumns = `id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence`
 
-// resolveWindow runs a time-windowed binding lookup with a stale-open guard,
-// shared by the cgroup/container/pid tiers (previously six near-identical
-// queries). matchExpr is the tier predicate (e.g. "cgroup_id = ?"); matchArgs
-// are its bound values.
-func resolveWindow(db *sql.DB, runID, method, source, matchExpr string, confidence float64, at string, matchArgs ...any) (Match, bool, error) {
-	minStart := openBindingLowerBound(at)
+// resolveWindow runs a time-windowed binding lookup, shared by the
+// cgroup/container/pid tiers (previously six near-identical queries). matchExpr
+// is the tier predicate (e.g. "cgroup_id = ?"); matchArgs are its bound values.
+//
+// boundOpen applies the stale-open guard (MaxOpenBindingAge) to bindings left
+// open (ended_at = ""). It is enabled ONLY for the pid tier: pid reuse is the
+// real over-matching threat for an accidentally-unclosed binding. container_id /
+// cgroup_id are specific keys, and a long-lived open anchor on them (e.g. an
+// external-telemetry bind with a far-past start meant to match all events for a
+// container) is a legitimate, intentional pattern that must keep resolving.
+func resolveWindow(db *sql.DB, runID, method, source, matchExpr string, confidence float64, at string, boundOpen bool, matchArgs ...any) (Match, bool, error) {
 	var sb strings.Builder
 	args := make([]any, 0, len(matchArgs)+4)
 	sb.WriteString("SELECT " + bindingColumns + " FROM execution_context_bindings WHERE ")
@@ -237,10 +242,18 @@ func resolveWindow(db *sql.DB, runID, method, source, matchExpr string, confiden
 	}
 	sb.WriteString(matchExpr)
 	args = append(args, matchArgs...)
-	// started_at <= at, and either the interval is closed and still covers `at`,
-	// or it is open but started within MaxOpenBindingAge of `at`.
-	sb.WriteString(" AND started_at <= ? AND ((ended_at != '' AND ended_at >= ?) OR (ended_at = '' AND started_at >= ?)) ORDER BY started_at DESC LIMIT 1")
-	args = append(args, at, at, minStart)
+	sb.WriteString(" AND started_at <= ?")
+	args = append(args, at)
+	if boundOpen {
+		// Closed interval still covers `at`, or open but started within
+		// MaxOpenBindingAge of `at` (guards pid-reuse over-matching).
+		sb.WriteString(" AND ((ended_at != '' AND ended_at >= ?) OR (ended_at = '' AND started_at >= ?))")
+		args = append(args, at, openBindingLowerBound(at))
+	} else {
+		sb.WriteString(" AND (ended_at = '' OR ended_at >= ?)")
+		args = append(args, at)
+	}
+	sb.WriteString(" ORDER BY started_at DESC LIMIT 1")
 	return scanOne(db, method, source, confidence, sb.String(), args...)
 }
 
@@ -249,7 +262,7 @@ func resolveByCgroup(db *sql.DB, runID, cgroupID, at string) (Match, bool, error
 	if runID != "" {
 		source = "run_id+cgroup_id+time"
 	}
-	return resolveWindow(db, runID, "cgroup_time_window", source, "cgroup_id = ?", 0.98, at, cgroupID)
+	return resolveWindow(db, runID, "cgroup_time_window", source, "cgroup_id = ?", 0.98, at, false, cgroupID)
 }
 
 func resolveByContainer(db *sql.DB, runID, containerID, at string) (Match, bool, error) {
@@ -257,7 +270,7 @@ func resolveByContainer(db *sql.DB, runID, containerID, at string) (Match, bool,
 	if runID != "" {
 		source = "run_id+container_id+time"
 	}
-	return resolveWindow(db, runID, "container_time_window", source, "container_id = ?", 0.92, at, containerID)
+	return resolveWindow(db, runID, "container_time_window", source, "container_id = ?", 0.92, at, false, containerID)
 }
 
 func resolveByPID(db *sql.DB, runID string, pid int64, at string) (Match, bool, error) {
@@ -265,7 +278,7 @@ func resolveByPID(db *sql.DB, runID string, pid int64, at string) (Match, bool, 
 	if runID != "" {
 		source = "run_id+pid+time"
 	}
-	return resolveWindow(db, runID, "pid_time_window", source, "(pid = ? OR root_pid = ?)", 0.85, at, pid, pid)
+	return resolveWindow(db, runID, "pid_time_window", source, "(pid = ? OR root_pid = ?)", 0.85, at, true, pid, pid)
 }
 
 func scanOne(db *sql.DB, method, source string, confidence float64, query string, args ...any) (Match, bool, error) {

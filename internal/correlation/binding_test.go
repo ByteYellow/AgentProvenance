@@ -113,10 +113,12 @@ func TestResolveHonorsExplicitRunID(t *testing.T) {
 }
 
 // TestStaleOpenBindingDoesNotOverMatch characterizes the dropped-CloseBinding
-// failure mode: CloseBinding is best-effort everywhere, so a binding can be left
-// open (ended_at = "") indefinitely. Without the MaxOpenBindingAge guard such a
-// binding would match every future event for its cgroup/pid forever. An event
-// observed long after the open binding started must NOT bind to it.
+// failure mode on the pid tier (where pid reuse makes over-matching dangerous):
+// CloseBinding is best-effort, so a binding can be left open (ended_at = "")
+// indefinitely. Without the MaxOpenBindingAge guard an unrelated later execution
+// reusing the pid would bind to the stale context. The guard applies to the pid
+// tier only; container/cgroup anchors are intentionally long-lived (see
+// TestLongLivedOpenContainerAnchorStillResolves).
 func TestStaleOpenBindingDoesNotOverMatch(t *testing.T) {
 	root := t.TempDir()
 	paths, err := store.Init(filepath.Join(root, ".agentprov"))
@@ -133,36 +135,67 @@ func TestStaleOpenBindingDoesNotOverMatch(t *testing.T) {
 	// simulating a binding whose close was dropped.
 	stale := time.Now().Add(-MaxOpenBindingAge - time.Hour).UTC().Format(time.RFC3339Nano)
 	if _, err := RecordBinding(db, Binding{
-		RunID: "run-stale", CgroupID: "cgroup-shared", PID: 1000,
+		RunID: "run-stale", PID: 1000,
 		StartedAt: stale, BindingSource: "test",
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	// An event observed now must fall through to unresolved, not bind to the
-	// stale open context.
+	// An event observed now (resolved by pid) must fall through to unresolved.
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, ok, err := Resolve(db, RawIdentity{CgroupID: "cgroup-shared", Timestamp: now})
+	_, ok, err := Resolve(db, RawIdentity{PID: 1000, Timestamp: now})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ok {
-		t.Fatal("stale open binding over-matched an event observed beyond MaxOpenBindingAge")
+		t.Fatal("stale open pid binding over-matched an event observed beyond MaxOpenBindingAge")
 	}
 
-	// A fresh open binding for a different cgroup must still resolve at now.
+	// A fresh open binding for a different pid must still resolve at now.
 	if _, err := RecordBinding(db, Binding{
-		RunID: "run-fresh", CgroupID: "cgroup-fresh", PID: 2000,
+		RunID: "run-fresh", PID: 2000,
 		StartedAt: now, BindingSource: "test",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	match, ok, err := Resolve(db, RawIdentity{CgroupID: "cgroup-fresh", Timestamp: now})
+	match, ok, err := Resolve(db, RawIdentity{PID: 2000, Timestamp: now})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !ok || match.RunID != "run-fresh" {
-		t.Fatalf("fresh open binding failed to resolve: ok=%v match=%+v", ok, match)
+		t.Fatalf("fresh open pid binding failed to resolve: ok=%v match=%+v", ok, match)
+	}
+}
+
+// TestLongLivedOpenContainerAnchorStillResolves locks the intentional pattern:
+// an external-telemetry bind on a container with a far-past start and no end is
+// a legitimate "match all events for this container" anchor and must keep
+// resolving even far beyond MaxOpenBindingAge (the stale-open guard is pid-only).
+func TestLongLivedOpenContainerAnchorStillResolves(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := RecordBinding(db, Binding{
+		RunID: "run-anchor", ContainerID: "container-anchor",
+		StartedAt: "2000-01-01T00:00:00.000000000Z", BindingSource: "external_telemetry",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	match, ok, err := Resolve(db, RawIdentity{ContainerID: "container-anchor", Timestamp: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || match.RunID != "run-anchor" {
+		t.Fatalf("long-lived container anchor should resolve: ok=%v match=%+v", ok, match)
 	}
 }
 

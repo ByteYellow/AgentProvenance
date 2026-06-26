@@ -236,3 +236,52 @@ func TestPolicyViolationEmitsUnifiedSignal(t *testing.T) {
 		t.Fatalf("security signals after backfill = %d, want 1 (no duplicate of the live row)", len(after))
 	}
 }
+
+// TestPolicyWritebackFailureIsObservable verifies the unified-signal writeback
+// does not fail silently: if it errors, the policy decision and risk signal
+// still persist (not blocked), and an observable signal_writeback error event is
+// emitted.
+func TestPolicyWritebackFailureIsObservable(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	insertPolicySession(t, db)
+
+	// Force the unified writeback to fail by removing the signals table.
+	if _, err := db.Exec(`DROP TABLE signals`); err != nil {
+		t.Fatal(err)
+	}
+
+	eventsPath := filepath.Join(root, "events.jsonl")
+	if err := os.WriteFile(eventsPath, []byte(`{"source":"egress_proxy","event_type":"network_connect","run_id":"run-test","session_id":"sbx-test","process_id":"proc-1","dst_ip":"169.254.169.254"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := EvaluateJSONLWithState(db, eventsPath, os.Stdout); err != nil {
+		t.Fatalf("policy evaluation must not fail when writeback fails: %v", err)
+	}
+
+	// The policy decision was NOT blocked: the risk signal still persisted.
+	risks, err := ListRiskSignals(db, "run-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(risks) != 1 {
+		t.Fatalf("risk signals = %d, want 1 (decision must not be blocked by writeback failure)", len(risks))
+	}
+
+	// The failure is observable as a signal_writeback error event.
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE source = 'signal_writeback' AND event_type = 'unified_signal_write_failed'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n < 1 {
+		t.Fatal("expected an observable signal_writeback error event, found none")
+	}
+}

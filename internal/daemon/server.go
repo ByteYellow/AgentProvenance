@@ -778,6 +778,13 @@ func (s Server) signalImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	report, err := signal.ImportSignals(req.RunID, req.Engine, req.Signals)
+	if err == nil {
+		// Land imported evaluator signals in the unified model as quality signals.
+		if _, perr := signal.PersistEvalSignals(s.DB, req.Engine, req.Signals); perr != nil {
+			writeResult(w, nil, perr)
+			return
+		}
+	}
 	writeResult(w, report, err)
 }
 

@@ -152,6 +152,18 @@ func signalCmd(dataDir, daemonURL *string) *cobra.Command {
 				report, err = client.ImportSignals(importRunID, "imported-external-evaluator", output.Signals)
 			} else {
 				report, err = signal.ImportSignals(importRunID, "imported-external-evaluator", output.Signals)
+				if err == nil {
+					// Land imported evaluator signals in the unified model as
+					// quality signals (the daemon path does the same server-side).
+					db, cleanup, derr := openLocalDB(*dataDir)
+					if derr != nil {
+						return derr
+					}
+					defer cleanup()
+					if _, perr := signal.PersistEvalSignals(db, "imported-external-evaluator", output.Signals); perr != nil {
+						return perr
+					}
+				}
 			}
 			if err != nil {
 				return err
