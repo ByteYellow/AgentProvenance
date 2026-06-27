@@ -55,26 +55,28 @@ echo "== ingest agentprov eBPF sensor JSONL (auto-detected native format)"
 
 INGEST_OUTPUT="$(cat "$INGEST_JSON")"
 assert_contains "$INGEST_OUTPUT" '"detected_format": "native"'
-assert_contains "$INGEST_OUTPUT" '"read": 3'
-assert_contains "$INGEST_OUTPUT" '"ingested": 3'
-assert_contains "$INGEST_OUTPUT" '"policy_decisions": 2'
+assert_contains "$INGEST_OUTPUT" '"read": 4'
+assert_contains "$INGEST_OUTPUT" '"ingested": 4'
+assert_contains "$INGEST_OUTPUT" '"policy_decisions": 3'
 assert_contains "$INGEST_OUTPUT" '"correlation_method": "container_time_window:container_id+time"'
 
 echo "== assert normalized telemetry carries the self-owned sensor provenance"
 TELEMETRY_JSON="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-native-sensor --json)"
-assert_contains "$TELEMETRY_JSON" '"event_count": 3'
+assert_contains "$TELEMETRY_JSON" '"event_count": 4'
 assert_contains "$TELEMETRY_JSON" '"source": "agentprov_ebpf"'
 assert_contains "$TELEMETRY_JSON" '"event_type": "execve"'
 assert_contains "$TELEMETRY_JSON" '"event_type": "metadata_ip"'
 assert_contains "$TELEMETRY_JSON" '"event_type": "private_cidr"'
+assert_contains "$TELEMETRY_JSON" '"event_type": "file_write"'
 assert_contains "$TELEMETRY_JSON" '"tool_call_id": "tool-native"'
 
 echo "== assert automatic risk signals from own kernel telemetry"
 RISKS_JSON="$("$BIN" --data-dir "$DATA_DIR" security risks --run run-native-sensor --json)"
 assert_contains "$RISKS_JSON" '"schema_version": "agentprovenance.security_risks/v1"'
-assert_contains "$RISKS_JSON" '"count": 2'
+assert_contains "$RISKS_JSON" '"count": 3'
 assert_contains "$RISKS_JSON" '"recommended_action": "quarantine"'
 assert_contains "$RISKS_JSON" '"recommended_action": "deny"'
+assert_contains "$RISKS_JSON" '"recommended_action": "kill"'
 
 echo "== assert the loop closes on the unified signal model (security dimension)"
 SIGNALS_JSON="$("$BIN" --data-dir "$DATA_DIR" signals list --run run-native-sensor --json)"

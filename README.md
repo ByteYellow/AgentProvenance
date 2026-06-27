@@ -225,10 +225,13 @@ evidence without turning AgentProvenance into a long-term log store.
 The `native` format is the receiver for AgentProvenance's own eBPF sensor
 (`cmd/agentprov-sensor`, `source="agentprov_ebpf"`), and is auto-detected. This
 closes the consume-only gap: the sensor's normalized kernel events (execve,
-network connect classified into `metadata_ip`/`private_cidr`, file writes) flow
-through the identical correlation, policy, risk, and unified-signal path as
-third-party telemetry. `scripts/accept_native_sensor_risk.sh` proves the loop
-end to end (own kernel telemetry to a unified `security` signal).
+network connect classified into `metadata_ip`/`private_cidr`, file writes with
+their real absolute host paths) flow through the identical correlation, policy,
+risk, and unified-signal path as third-party telemetry. Raw file telemetry now
+accepts absolute host paths (e.g. a write to `/home/agent/.aws/credentials`),
+which the policy path rules still catch; only the workspace file-node graph keeps
+its relative-path constraint. `scripts/accept_native_sensor_risk.sh` proves the
+loop end to end (own kernel telemetry to a unified `security` signal).
 
 `ingest-falco` is the Falco-compatible receiver path. It reads Falco JSON/stdout
 from a file or stdin stream, maps recognized `execve`, `open/openat`, and

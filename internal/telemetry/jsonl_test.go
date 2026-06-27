@@ -250,7 +250,11 @@ func TestIngestNativeSensorRiskEventsAndCorrelates(t *testing.T) {
 	raw := "" +
 		`{"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"cgroup-native","container_id":"container-native","timestamp":"2026-01-01T00:00:01Z","comm":"sh","event_type":"execve","path":"/bin/sh"}` + "\n" +
 		`{"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"cgroup-native","container_id":"container-native","timestamp":"2026-01-01T00:00:02Z","comm":"wget","event_type":"network_connect","dst_ip":"169.254.169.254","dst_port":80}` + "\n" +
-		`{"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"cgroup-native","container_id":"container-native","timestamp":"2026-01-01T00:00:03Z","comm":"curl","event_type":"network_connect","dst_ip":"10.0.0.5","dst_port":443}` + "\n"
+		`{"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"cgroup-native","container_id":"container-native","timestamp":"2026-01-01T00:00:03Z","comm":"curl","event_type":"network_connect","dst_ip":"10.0.0.5","dst_port":443}` + "\n" +
+		// The sensor write-filters openat in-kernel, so this is a write, and the
+		// path is the real absolute host path the kernel reports. A write to a
+		// credentials path is caught by the policy engine's path rule.
+		`{"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"cgroup-native","container_id":"container-native","timestamp":"2026-01-01T00:00:04Z","comm":"sh","event_type":"file_open","path":"/home/agent/.aws/credentials"}` + "\n"
 	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -259,10 +263,10 @@ func TestIngestNativeSensorRiskEventsAndCorrelates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Read != 3 || result.Ingested != 3 || result.Failed != 0 || result.Skipped != 0 {
+	if result.Read != 4 || result.Ingested != 4 || result.Failed != 0 || result.Skipped != 0 {
 		t.Fatalf("unexpected native result: %+v", result)
 	}
-	if result.ReceiverSummary.DetectedFormats["native"] != 3 || result.ReceiverSummary.Resolved != 3 {
+	if result.ReceiverSummary.DetectedFormats["native"] != 4 || result.ReceiverSummary.Resolved != 4 {
 		t.Fatalf("unexpected native receiver summary: %+v", result.ReceiverSummary)
 	}
 	for _, row := range result.Rows {
@@ -270,7 +274,7 @@ func TestIngestNativeSensorRiskEventsAndCorrelates(t *testing.T) {
 			t.Fatalf("unexpected native row result: %+v", row)
 		}
 	}
-	for _, typ := range []string{"execve", "metadata_ip", "private_cidr"} {
+	for _, typ := range []string{"execve", "metadata_ip", "private_cidr", "file_write"} {
 		events, err := ListEventsFiltered(db, Filter{RunID: "run-native", Type: typ})
 		if err != nil {
 			t.Fatal(err)
@@ -298,15 +302,15 @@ func TestIngestNativeSensorRiskEventsAndCorrelates(t *testing.T) {
 			persisted++
 		}
 	}
-	if persisted != 2 {
-		t.Fatalf("native policy decisions = %d, want 2 (metadata_ip + private_cidr)", persisted)
+	if persisted != 3 {
+		t.Fatalf("native policy decisions = %d, want 3 (metadata_ip + private_cidr + credential write)", persisted)
 	}
 	risks, err := securitymodel.ListRiskSignals(db, "run-native")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(risks) != 2 {
-		t.Fatalf("native risk signals = %d, want 2", len(risks))
+	if len(risks) != 3 {
+		t.Fatalf("native risk signals = %d, want 3", len(risks))
 	}
 }
 

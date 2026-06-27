@@ -1,3 +1,4 @@
 {"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"12345","container_id":"container-native-demo","timestamp":"2026-01-01T00:00:01Z","comm":"sh","event_type":"execve","path":"/bin/sh"}
 {"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"12345","container_id":"container-native-demo","timestamp":"2026-01-01T00:00:02Z","comm":"wget","event_type":"network_connect","dst_ip":"169.254.169.254","dst_port":80}
 {"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"12345","container_id":"container-native-demo","timestamp":"2026-01-01T00:00:03Z","comm":"curl","event_type":"network_connect","dst_ip":"10.0.0.5","dst_port":443}
+{"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"12345","container_id":"container-native-demo","timestamp":"2026-01-01T00:00:04Z","comm":"sh","event_type":"file_open","path":"/home/agent/.aws/credentials"}

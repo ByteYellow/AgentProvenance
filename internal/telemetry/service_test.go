@@ -250,8 +250,24 @@ func TestIngestFilteredRejectsInvalidEventSchema(t *testing.T) {
 		EventType: "file_write",
 		Source:    "native_runtime",
 		Payload:   `{"op":"write"}`,
-	}); err == nil || !strings.Contains(err.Error(), "requires safe relative path") {
+	}); err == nil || !strings.Contains(err.Error(), "requires a non-traversal path or file") {
 		t.Fatalf("expected file_write schema rejection, got %v", err)
+	}
+	// Path traversal is still rejected even though absolute host paths are allowed.
+	if _, err := IngestFiltered(db, IngestEvent{
+		EventType: "file_write",
+		Source:    "native_runtime",
+		Payload:   `{"path":"../escape"}`,
+	}); err == nil || !strings.Contains(err.Error(), "non-traversal") {
+		t.Fatalf("expected file_write traversal rejection, got %v", err)
+	}
+	// Absolute host paths from system telemetry are accepted.
+	if _, err := IngestFiltered(db, IngestEvent{
+		EventType: "file_write",
+		Source:    "native_runtime",
+		Payload:   `{"path":"/tmp/agentprov-demo"}`,
+	}); err != nil {
+		t.Fatalf("expected absolute host path to be accepted, got %v", err)
 	}
 }
 

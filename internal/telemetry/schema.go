@@ -210,8 +210,8 @@ func validateEventBody(eventType string, body map[string]any) error {
 			return fmt.Errorf("process_observed payload requires numeric pid")
 		}
 	case "file_open", "file_write", "secret_path":
-		if payloadPathFromBody(body) == "" {
-			return fmt.Errorf("%s payload requires safe relative path or file", eventType)
+		if !validRawPath(body) {
+			return fmt.Errorf("%s payload requires a non-traversal path or file", eventType)
 		}
 	case "network_connect", "metadata_ip", "private_cidr":
 		if firstString(body, "dst", "dst_ip", "host") == "" {
@@ -268,12 +268,19 @@ func numberField(body map[string]any, key string) (float64, bool) {
 	return value, ok
 }
 
-func payloadPathFromBody(body map[string]any) string {
+// validRawPath accepts the path/file field of a raw file telemetry event. Unlike
+// the graph file-node logic (payloadPath in service.go), it permits absolute
+// host paths, because system-side telemetry (eBPF sensor, Falco) legitimately
+// observes paths like /tmp/x or /root/.ssh/id_rsa. It still rejects empty and
+// path-traversal values, which never come from a real kernel event. The
+// workspace-relative constraint for graph file nodes is preserved separately.
+func validRawPath(body map[string]any) bool {
 	path := firstString(body, "path", "file")
-	path = strings.TrimPrefix(path, "/workspace/")
-	path = strings.TrimPrefix(path, "./")
-	if path == "" || path == "." || path == ".." || strings.HasPrefix(path, "../") || strings.HasPrefix(path, "/") {
-		return ""
+	if path == "" || path == "." || path == ".." {
+		return false
 	}
-	return path
+	if strings.HasPrefix(path, "../") || strings.Contains(path, "/../") || strings.HasSuffix(path, "/..") {
+		return false
+	}
+	return true
 }
