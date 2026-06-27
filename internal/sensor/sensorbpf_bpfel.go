@@ -12,6 +12,8 @@ import (
 	"github.com/cilium/ebpf"
 )
 
+type sensorbpfArgvVal struct{ Args [512]uint8 }
+
 type sensorbpfSensorEvent struct {
 	Kind     uint32
 	Pid      uint32
@@ -22,6 +24,7 @@ type sensorbpfSensorEvent struct {
 	Dport    uint16
 	Comm     [16]uint8
 	Path     [256]uint8
+	Args     [512]uint8
 	_        [2]byte
 }
 
@@ -68,6 +71,7 @@ type sensorbpfSpecs struct {
 type sensorbpfProgramSpecs struct {
 	HandleConnect *ebpf.ProgramSpec `ebpf:"handle_connect"`
 	HandleExec    *ebpf.ProgramSpec `ebpf:"handle_exec"`
+	HandleExecve  *ebpf.ProgramSpec `ebpf:"handle_execve"`
 	HandleOpenat  *ebpf.ProgramSpec `ebpf:"handle_openat"`
 }
 
@@ -75,7 +79,9 @@ type sensorbpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type sensorbpfMapSpecs struct {
-	Events *ebpf.MapSpec `ebpf:"events"`
+	ArgvBuild   *ebpf.MapSpec `ebpf:"argv_build"`
+	ArgvScratch *ebpf.MapSpec `ebpf:"argv_scratch"`
+	Events      *ebpf.MapSpec `ebpf:"events"`
 }
 
 // sensorbpfObjects contains all objects after they have been loaded into the kernel.
@@ -97,11 +103,15 @@ func (o *sensorbpfObjects) Close() error {
 //
 // It can be passed to loadSensorbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type sensorbpfMaps struct {
-	Events *ebpf.Map `ebpf:"events"`
+	ArgvBuild   *ebpf.Map `ebpf:"argv_build"`
+	ArgvScratch *ebpf.Map `ebpf:"argv_scratch"`
+	Events      *ebpf.Map `ebpf:"events"`
 }
 
 func (m *sensorbpfMaps) Close() error {
 	return _SensorbpfClose(
+		m.ArgvBuild,
+		m.ArgvScratch,
 		m.Events,
 	)
 }
@@ -112,6 +122,7 @@ func (m *sensorbpfMaps) Close() error {
 type sensorbpfPrograms struct {
 	HandleConnect *ebpf.Program `ebpf:"handle_connect"`
 	HandleExec    *ebpf.Program `ebpf:"handle_exec"`
+	HandleExecve  *ebpf.Program `ebpf:"handle_execve"`
 	HandleOpenat  *ebpf.Program `ebpf:"handle_openat"`
 }
 
@@ -119,6 +130,7 @@ func (p *sensorbpfPrograms) Close() error {
 	return _SensorbpfClose(
 		p.HandleConnect,
 		p.HandleExec,
+		p.HandleExecve,
 		p.HandleOpenat,
 	)
 }

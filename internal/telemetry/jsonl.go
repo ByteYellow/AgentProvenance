@@ -499,17 +499,26 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 	case "execve", "exec", "process_exec":
 		event.EventType = "execve"
 		path := stringAt(raw, "path")
-		argv := []string{}
-		if path != "" {
-			argv = append(argv, path)
-		} else if comm != "" {
-			argv = append(argv, comm)
-		} else {
-			argv = append(argv, "unknown")
+		// Prefer the real argv (sensor "command" field) so command-line args
+		// (e.g. a metadata-IP URL) reach the policy ArgsContains rule; fall back
+		// to the binary path / comm when argv was not captured.
+		command := stringAt(raw, "command")
+		argv := splitCommand(command)
+		if len(argv) == 0 {
+			if path != "" {
+				argv = []string{path}
+			} else if comm != "" {
+				argv = []string{comm}
+			} else {
+				argv = []string{"unknown"}
+			}
+		}
+		if command == "" {
+			command = strings.Join(argv, " ")
 		}
 		event.Payload = mustJSON(map[string]any{
 			"argv":    argv,
-			"command": strings.Join(argv, " "),
+			"command": command,
 			"comm":    comm,
 		})
 	case "network_connect", "connect":

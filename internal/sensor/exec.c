@@ -19,6 +19,13 @@ char LICENSE[] SEC("license") = "GPL";
 #define EVENT_OPEN 3
 #define AF_INET 2
 
+// argv is captured as fixed-size slots (constant offsets keep the BPF verifier
+// happy on the per-arg write); each slot holds one NUL-terminated, possibly
+// truncated arg. Userspace rejoins non-empty slots with spaces.
+#define ARG_SLOT 32
+#define MAX_ARGS 16
+#define ARGS_BUF (ARG_SLOT * MAX_ARGS)
+
 struct sensor_event {
 	__u32 kind;
 	__u32 pid;
@@ -28,8 +35,31 @@ struct sensor_event {
 	__u32 daddr; // connect: dst IPv4, network byte order
 	__u16 dport; // connect: dst port, network byte order
 	__u8 comm[16];
-	__u8 path[256]; // exec filename / open path
+	__u8 path[256];      // exec filename / open path
+	__u8 args[ARGS_BUF]; // exec: MAX_ARGS fixed slots of argv
 };
+
+// argv_scratch stashes a process's argv (captured at sys_enter_execve) keyed by
+// pid, so the successful sched_process_exec emit can attach the real command
+// line. exec doesn't change the pid between the two probes.
+struct argv_val {
+	__u8 args[ARGS_BUF];
+};
+
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 4096);
+	__type(key, __u32);
+	__type(value, struct argv_val);
+} argv_scratch SEC(".maps");
+
+// Per-CPU scratch to build argv off the 512-byte BPF stack.
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, struct argv_val);
+} argv_build SEC(".maps");
 
 // Force bpf2go to emit the Go struct type for sensor_event.
 struct sensor_event *unused_sensor_event __attribute__((unused));
@@ -49,6 +79,29 @@ static __always_inline void fill_common(struct sensor_event *e) {
 	bpf_get_current_comm(&e->comm, sizeof(e->comm));
 }
 
+// Capture argv at execve entry into the per-pid scratch map. The space-joined
+// command line is attached on the matching successful sched_process_exec.
+SEC("tp/syscalls/sys_enter_execve")
+int handle_execve(struct trace_event_raw_sys_enter *ctx) {
+	__u32 zero = 0;
+	struct argv_val *val = bpf_map_lookup_elem(&argv_build, &zero);
+	if (!val)
+		return 0;
+	__builtin_memset(val->args, 0, sizeof(val->args));
+	const char *const *argv = (const char *const *)ctx->args[1];
+#pragma unroll
+	for (int i = 0; i < MAX_ARGS; i++) {
+		const char *argp = NULL;
+		if (bpf_probe_read_user(&argp, sizeof(argp), &argv[i]) || !argp)
+			break;
+		// Constant offset (i unrolled) and constant size -> verifier-safe.
+		bpf_probe_read_user_str(&val->args[i * ARG_SLOT], ARG_SLOT, argp);
+	}
+	__u32 pid = (__u32)(bpf_get_current_pid_tgid() >> 32);
+	bpf_map_update_elem(&argv_scratch, &pid, val, BPF_ANY);
+	return 0;
+}
+
 SEC("tp/sched/sched_process_exec")
 int handle_exec(struct trace_event_raw_sched_process_exec *ctx) {
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
@@ -60,6 +113,13 @@ int handle_exec(struct trace_event_raw_sched_process_exec *ctx) {
 	fill_common(e);
 	unsigned int off = ctx->__data_loc_filename & 0xffff;
 	bpf_probe_read_kernel_str(&e->path, sizeof(e->path), (void *)ctx + off);
+	struct argv_val *val = bpf_map_lookup_elem(&argv_scratch, &e->pid);
+	if (val) {
+		__builtin_memcpy(e->args, val->args, sizeof(e->args));
+		bpf_map_delete_elem(&argv_scratch, &e->pid);
+	} else {
+		e->args[0] = 0;
+	}
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }
@@ -80,11 +140,12 @@ int handle_connect(struct trace_event_raw_sys_enter *ctx) {
 	e->daddr = sa.sin_addr.s_addr;
 	e->dport = sa.sin_port;
 	e->path[0] = 0;
+	e->args[0] = 0;
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }
 
-// O_WRONLY|O_RDWR|O_CREAT|O_TRUNC — only writes/creates, to avoid the firehose
+// O_WRONLY|O_RDWR|O_CREAT|O_TRUNC -- only writes/creates, to avoid the firehose
 // of read-only opens. (Sensitive-read detection is a separate, filtered probe.)
 #define OPEN_WRITE_MASK (00000001 | 00000002 | 00000100 | 00001000)
 
@@ -100,6 +161,7 @@ int handle_openat(struct trace_event_raw_sys_enter *ctx) {
 	e->daddr = 0;
 	e->dport = 0;
 	fill_common(e);
+	e->args[0] = 0;
 	bpf_probe_read_user_str(&e->path, sizeof(e->path), (void *)ctx->args[1]);
 	bpf_ringbuf_submit(e, 0);
 	return 0;
