@@ -77,6 +77,25 @@ assert by_type["secret_path"]["high_risk_count"] == 1
 print("telemetry window assertions ok")
 PY
 
+echo "== query the 10s window (built alongside 60s, previously unasserted)"
+WINDOWS10_JSON="/tmp/agentprov-telemetry-windows-10.json"
+"$BIN" --data-dir "$DATA_DIR" telemetry windows --run run-telemetry-windows --window 10 --json >"$WINDOWS10_JSON"
+python3 - "$WINDOWS10_JSON" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    data = json.load(handle)
+assert data["filter"]["window_seconds"] == 10, data["filter"]
+windows = data["windows"]
+assert len(windows) == 4, windows
+assert all(row["window_seconds"] == 10 for row in windows), windows
+by_type = {row["event_type"]: row for row in windows}
+for event_type in ("execve", "metadata_ip", "private_cidr", "secret_path"):
+    assert event_type in by_type, by_type
+print("telemetry 10s window assertions ok")
+PY
+
 echo "== assert human table"
 HUMAN_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" telemetry windows --run run-telemetry-windows --window 60)"
 assert_contains "$HUMAN_OUTPUT" 'RUN'
