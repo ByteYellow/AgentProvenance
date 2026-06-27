@@ -88,8 +88,13 @@ func Catalog() []Tool {
 			InputSchema: objSchema(map[string]any{
 				"event_type": strProp("one of: execve, network_connect, file_write, file_open"),
 				"command":    strProp("the command line for execve actions"),
-				"dst_ip":     strProp("destination IP for network_connect actions"),
-				"path":       strProp("file path for file actions"),
+				"args": map[string]any{
+					"type":        "array",
+					"description": "structured argv for execve actions; preferred when the caller already has tokenized arguments",
+					"items":       map[string]any{"type": "string"},
+				},
+				"dst_ip": strProp("destination IP for network_connect actions"),
+				"path":   strProp("file path for file actions"),
 			}, "event_type"),
 			Run: func(_ *sql.DB, in map[string]any) (any, error) {
 				return evaluateAction(in), nil

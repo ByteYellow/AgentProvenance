@@ -73,6 +73,7 @@ The goal is to answer questions ordinary traces do not answer well:
 - [Security Evidence Commands](#security-evidence-commands)
 - [External Evaluator Protocol](#external-evaluator-protocol)
 - [Compliance Evidence, Not Certification](#compliance-evidence-not-certification)
+- [AI-Callable Evidence Tools](#ai-callable-evidence-tools)
 - [Graph Commands](#graph-commands)
 - [Current Capability](#current-capability)
 - [Core Demo Acceptance](#core-demo-acceptance)
@@ -508,6 +509,9 @@ causal graph.
 ./agentprov compliance explain --framework owasp-asi --run <run_id> --item ASI05
 ./agentprov compliance gaps --framework owasp-asi --run <run_id>
 ./agentprov compliance report --framework nist-rfi-2026-00206 --run <run_id>
+./agentprov ai tools --provider openai
+./agentprov ai tools --provider anthropic
+./agentprov ai call evaluate_action --input '{"event_type":"network_connect","dst_ip":"169.254.169.254"}'
 ./agentprov policy test examples/events/metadata-egress.jsonl
 ./agentprov policy decisions --run <run_id>
 ./agentprov forensics export <run_id>
@@ -534,6 +538,7 @@ These commands are now part of the mainline security evidence surface:
 | `baseline learn/check` | Learn process/file/network/risk/runtime feature vectors and emit deviation records plus baseline-derived risk signals |
 | `signal context/batch-context/run/import/import-batch` | Export one `EvalContext` or JSONL `EvalContext` streams for a batch/shard/run list, run built-in or external evaluators, and validate imported `EvalSignal` records or JSONL `EvalReport` batches for reward shaping, dataset filtering, quality scoring, or external benchmark consumers. AgentProvenance owns the evidence protocol, not the reward policy |
 | `compliance frameworks/map/explain/gaps/report` | Map run evidence to OWASP Agentic Security and NIST AI agent security assessment profiles as item-level self-assessment evidence and gap lists |
+| `ai tools/call` | Expose the read-only evidence query surface and inline policy pre-flight gate as provider tool schemas plus a local dispatcher. This is not an LLM gateway: models can query evidence and ask for a trusted policy verdict, but they cannot fabricate runtime telemetry, signatures, or provenance objects |
 | `policy test/decisions` | Evaluate events, persist policy decisions, and feed the risk/response graph |
 | `forensics export` | Export auditable evidence for a run; `--json` emits `agentprovenance.forensics_export/v1` with bundle path, sha256, size, and status |
 | `forensics export-batch` | Export a batch-level audit bundle for record batches; `--json` emits `agentprovenance.batch_forensics_export/v1` with batch summary, per-run forensics refs, optional EvalContext records, result/page hashes, and a sha256-verified bundle path |
@@ -625,6 +630,40 @@ The YAML model separates `rules`, `frameworks`, and `mappings`; mappings can
 also select built-in items such as `ASI05`, `ASI10`, or `TRACE` and reuse them
 inside an enterprise-specific review profile. JSON keeps `control_id` for
 compatibility and also emits `item_id` for the current terminology.
+
+## AI-Callable Evidence Tools
+
+AgentProvenance can expose its evidence query surface as AI-callable tools for
+agent harnesses, evaluators, or review assistants:
+
+```sh
+./agentprov ai tools --provider generic
+./agentprov ai tools --provider openai
+./agentprov ai tools --provider anthropic
+
+./agentprov ai call verify_run --input '{"run":"run-demo-bugfix"}'
+./agentprov ai call list_events --input '{"run":"run-demo-bugfix","type":"execve","limit":10}'
+./agentprov ai call get_timeline --input '{"run":"run-demo-bugfix","view":"causality"}'
+./agentprov ai call evaluate_action --input '{"event_type":"execve","args":["python","-m","pytest","-q"]}'
+./agentprov ai call evaluate_action --input '{"event_type":"network_connect","dst_ip":"169.254.169.254"}'
+```
+
+The catalog currently includes:
+
+| Tool | Purpose |
+|---|---|
+| `verify_run` | Verify object hashes, parent links, and policy/risk/response/signal integrity for a run |
+| `get_signals` | Return the unified behavior/cost/quality/security signal set for a run |
+| `list_risks` | Return security risk signals and recommended actions |
+| `list_events` | Return paged runtime telemetry events, optionally filtered by type |
+| `get_timeline` | Return the merged application-context and runtime-telemetry timeline |
+| `evaluate_action` | Run a proposed command, file action, or network action through the trusted policy engine without executing it |
+
+This is not a model gateway, prompt router, or tool-execution sandbox. The model
+receives schemas and can request local dispatch, but AgentProvenance remains the
+trusted side of the boundary: it queries the local evidence store, computes
+policy verdicts, and never lets the model write raw telemetry, signatures, or
+provenance graph facts.
 
 ## Graph Commands
 
