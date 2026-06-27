@@ -556,10 +556,38 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 			"dropped":       intAt(raw, "dropped"),
 			"dropped_delta": intAt(raw, "dropped_delta"),
 		})
+	case "tls_write":
+		event.EventType = "tls_write"
+		event.Payload = sslPayload(raw, comm)
+	case "tls_read":
+		event.EventType = "tls_read"
+		event.Payload = sslPayload(raw, comm)
 	default:
 		return IngestEvent{}, false, nil
 	}
 	return event, true, nil
+}
+
+// sslPayload normalizes a captured TLS plaintext preview. By default it stores a
+// sha256 of the captured bytes plus a short human-triage preview (NOT the full
+// plaintext), since prompt/response text is sensitive; the full preview length
+// is recorded for context.
+func sslPayload(raw map[string]any, comm string) string {
+	data := stringAt(raw, "data")
+	sum := sha256.Sum256([]byte(data))
+	return mustJSON(map[string]any{
+		"preview_sha256": hex.EncodeToString(sum[:]),
+		"preview":        truncatePreview(data, 80),
+		"length":         intAt(raw, "length"),
+		"comm":           comm,
+	})
+}
+
+func truncatePreview(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
 }
 
 func mapTetragon(raw map[string]any) (IngestEvent, bool, error) {

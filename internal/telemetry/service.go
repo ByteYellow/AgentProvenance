@@ -426,7 +426,7 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 
 func AllowedEventType(eventType string) bool {
 	switch eventType {
-	case "execve", "process_exit", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure":
+	case "execve", "process_exit", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure", "tls_write", "tls_read":
 		return true
 	default:
 		return false
@@ -486,7 +486,51 @@ func recordRuntimeCausalityEdges(db *sql.DB, event IngestEvent, eventID, now str
 			}
 		}
 	}
+	// Intent -> action causal edge: if a TLS response (the model's decision) was
+	// observed in the same scope shortly before this action event, link it. This
+	// is the "LLM intent caused this syscall" edge over the verifiable DAG.
+	if llmActionEventType(event.EventType) {
+		if intentID := recentLLMIntent(db, event.RunID, event.ProcessID, now); intentID != "" {
+			insert("runtime_event/"+intentID, eventNode, "llm_intent_caused")
+		}
+	}
 	return nil
+}
+
+// llmActionEventType reports whether an event is an "action" that an LLM
+// response could plausibly have caused (exec/egress/file effects).
+func llmActionEventType(eventType string) bool {
+	switch eventType {
+	case "execve", "network_connect", "metadata_ip", "private_cidr", "file_write", "secret_path":
+		return true
+	default:
+		return false
+	}
+}
+
+// recentLLMIntent returns the id of the most recent tls_read (LLM response)
+// event in the same run (and process, when known) within a 2-minute window
+// before now, or "" if none. now and stored created_at are RFC3339Nano UTC, so
+// lexical string comparison is chronological.
+func recentLLMIntent(db *sql.DB, runID, processID, now string) string {
+	if runID == "" {
+		return ""
+	}
+	windowStart := now
+	if t, err := time.Parse(time.RFC3339Nano, now); err == nil {
+		windowStart = t.Add(-2 * time.Minute).UTC().Format(time.RFC3339Nano)
+	}
+	query := `SELECT id FROM events WHERE run_id = ? AND event_type = 'tls_read'
+		AND created_at <= ? AND created_at >= ?`
+	args := []any{runID, now, windowStart}
+	if processID != "" {
+		query += ` AND process_id = ?`
+		args = append(args, processID)
+	}
+	query += ` ORDER BY created_at DESC LIMIT 1`
+	var id string
+	_ = db.QueryRow(query, args...).Scan(&id)
+	return id
 }
 
 func payloadPath(payload string) string {

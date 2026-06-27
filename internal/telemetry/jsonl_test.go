@@ -385,3 +385,60 @@ func TestIngestJSONLReportsBadRows(t *testing.T) {
 		t.Fatalf("unexpected bad-row receiver evidence: rows=%+v summary=%+v", result.Rows, result.ReceiverSummary)
 	}
 }
+
+func TestNativeLLMIntentCausesSyscallEdge(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := correlation.RecordBinding(db, correlation.Binding{
+		RunID: "run-llm", SessionID: "s", AttemptID: "a", ToolCallID: "tc", ProcessID: "p",
+		ContainerID: "c-llm", StartedAt: "2000-01-01T00:00:00.000000000Z", BindingSource: "external_telemetry",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// An LLM response (tls_read) observed in the scope, then an exec it caused.
+	path := filepath.Join(root, "llm.jsonl")
+	raw := "" +
+		`{"source":"agentprov_ebpf","pid":900,"container_id":"c-llm","event_type":"tls_read","data":"HTTP/1.1 200 OK\r\n\r\n{\"tool\":\"bash\",\"cmd\":\"id\"}","length":120}` + "\n" +
+		`{"source":"agentprov_ebpf","pid":900,"container_id":"c-llm","event_type":"execve","path":"/bin/id","command":"id"}` + "\n"
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := IngestJSONL(db, JSONLIngestOptions{Format: "native", Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Ingested != 2 {
+		t.Fatalf("ingested=%d, want 2 (%+v)", result.Ingested, result.Errors)
+	}
+
+	// The tls_read preview must be hashed, not stored whole.
+	reads, err := ListEventsFiltered(db, Filter{RunID: "run-llm", Type: "tls_read"})
+	if err != nil || len(reads) != 1 {
+		t.Fatalf("tls_read events=%d err=%v", len(reads), err)
+	}
+	if !strings.Contains(reads[0].Payload, "preview_sha256") {
+		t.Fatalf("tls_read payload missing preview_sha256: %s", reads[0].Payload)
+	}
+
+	// The causal edge: llm response -> the exec it caused.
+	var from, to string
+	if err := db.QueryRow(`SELECT from_id, to_id FROM graph_edges WHERE edge_type = 'llm_intent_caused' AND run_id = 'run-llm'`).Scan(&from, &to); err != nil {
+		t.Fatalf("expected an llm_intent_caused edge: %v", err)
+	}
+	if !strings.HasPrefix(from, "runtime_event/") || !strings.HasPrefix(to, "runtime_event/") {
+		t.Fatalf("unexpected edge nodes from=%s to=%s", from, to)
+	}
+	if from == to {
+		t.Fatal("intent edge must link two distinct events")
+	}
+}
