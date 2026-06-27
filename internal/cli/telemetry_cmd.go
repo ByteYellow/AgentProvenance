@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
+	"github.com/byteyellow/agentprovenance/internal/daemon"
 	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
@@ -282,6 +283,7 @@ func telemetryIngestFalcoCmd(dataDir *string) *cobra.Command {
 				}
 				defer input.Close()
 			}
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
 			result, err := telemetry.IngestFalco(db, opts, input)
 			if err != nil {
 				return err
@@ -334,6 +336,7 @@ func telemetryBindCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
 			id, err := correlation.RecordBinding(db, binding)
 			if err != nil {
 				return err
@@ -459,6 +462,7 @@ func telemetryIngestJSONLCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
 			result, err := telemetry.IngestJSONL(db, opts)
 			if err != nil {
 				return err

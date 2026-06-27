@@ -55,6 +55,11 @@ func daemonCmd(dataDir *string) *cobra.Command {
 				authToken = os.Getenv("AGENTPROV_DAEMON_TOKEN")
 			}
 			server.AuthToken = authToken
+			releaseLock, lockErr := daemon.AcquireLock(*dataDir, listen)
+			if lockErr != nil {
+				return lockErr
+			}
+			defer releaseLock()
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 			go server.StartSampler(ctx)

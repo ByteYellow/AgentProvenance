@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/daemon"
 	"github.com/byteyellow/agentprovenance/internal/record"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/spf13/cobra"
@@ -40,6 +41,7 @@ func recordCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
 			result, err := (record.Service{DB: db, Paths: paths}).Run(record.Request{
 				RunID:            runID,
 				Name:             name,
@@ -96,6 +98,7 @@ func recordBatchCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
 			service := record.Service{DB: db, Paths: paths}
 			startedAt := time.Now().UTC().Format(time.RFC3339Nano)
 			items := make([]recordBatchItem, 0, len(jobs))
