@@ -1,0 +1,131 @@
+openapi: 3.1.0
+info:
+  title: AgentProvenance read API
+  version: "1.0"
+  description: >
+    Read-only surface of the AgentProvenance daemon, for AI agents and tools to
+    query the verifiable provenance graph, signals, and timeline. Maps 1:1 to
+    docs/ai-access.md section 1. Write/gate operations are intentionally excluded
+    here (see the trust boundary in docs/ai-access.md).
+servers:
+  - url: http://127.0.0.1:8574
+    description: local sidecar daemon (agentprov daemon serve)
+security:
+  - bearerAuth: []
+  - {}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: optional; set when the daemon runs with --auth-token
+  parameters:
+    run:
+      name: run
+      in: query
+      required: true
+      schema: { type: string }
+      description: run id to scope the query to
+  schemas:
+    VersionedEnvelope:
+      type: object
+      description: every response carries a schema_version naming its contract
+      properties:
+        schema_version: { type: string }
+      additionalProperties: true
+paths:
+  /v1/health:
+    get:
+      operationId: health
+      summary: daemon readiness + queue depths (agentprovenance.daemon_health/v1)
+      security: [ {} ]
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+  /v1/graph/verify:
+    get:
+      operationId: verify_run
+      summary: verify a run's evidence chain (object hashes, parents, policy->risk->response->signal). agentprovenance.verify/v1
+      parameters: [ { $ref: "#/components/parameters/run" } ]
+      responses:
+        "200": { description: verification result with status ok|failed, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+  /v1/graph/explain:
+    get:
+      operationId: explain
+      summary: explain one graph node (causality path, evidence). agentprovenance.explain/v1
+      parameters:
+        - { name: event, in: query, schema: { type: string } }
+        - { name: process, in: query, schema: { type: string } }
+        - { name: tool-call, in: query, schema: { type: string } }
+        - { name: file, in: query, schema: { type: string } }
+        - { name: risk, in: query, schema: { type: string } }
+        - { name: artifact, in: query, schema: { type: string } }
+        - { name: run, in: query, schema: { type: string }, description: required with file }
+      responses:
+        "200": { description: explanation, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+  /v1/signals:
+    get:
+      operationId: get_signals
+      summary: unified signals (behavior/cost/quality/security). agentprovenance.signals/v1
+      parameters: [ { $ref: "#/components/parameters/run" } ]
+      responses:
+        "200": { description: signal set, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+  /v1/timeline:
+    get:
+      operationId: get_timeline
+      summary: merged app-context + runtime-telemetry timeline. agentprovenance.timeline/v1
+      parameters: [ { $ref: "#/components/parameters/run" }, { name: view, in: query, schema: { type: string, enum: [table, causality] } } ]
+      responses:
+        "200": { description: timeline, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+  /v1/observe/summary:
+    get:
+      operationId: observe_summary
+      summary: per-run observability summary. agentprovenance.observability_summary/v1
+      parameters: [ { $ref: "#/components/parameters/run" } ]
+      responses:
+        "200": { description: summary, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+  /v1/security/risks:
+    get:
+      operationId: list_risks
+      summary: risk signals for a run. agentprovenance.security_risks/v1
+      parameters: [ { $ref: "#/components/parameters/run" } ]
+      responses:
+        "200": { description: risks, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+  /v1/security/responses:
+    get:
+      operationId: list_responses
+      summary: response actions for a run. agentprovenance.security_responses/v1
+      parameters: [ { $ref: "#/components/parameters/run" } ]
+      responses:
+        "200": { description: responses, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+  /v1/security/deviations:
+    get:
+      operationId: list_deviations
+      summary: baseline deviations for a run
+      parameters: [ { $ref: "#/components/parameters/run" } ]
+      responses:
+        "200": { description: deviations, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+  /v1/telemetry/events:
+    get:
+      operationId: list_events
+      summary: paged runtime telemetry events. agentprovenance.telemetry_events/v1
+      parameters:
+        - { $ref: "#/components/parameters/run" }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer } }
+        - { name: cursor, in: query, schema: { type: string } }
+      responses:
+        "200": { description: event page, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+  /v1/telemetry/windows:
+    get:
+      operationId: list_windows
+      summary: 10s/60s telemetry aggregation windows. agentprovenance.telemetry_event_windows/v1
+      parameters: [ { $ref: "#/components/parameters/run" } ]
+      responses:
+        "200": { description: windows, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+  /v1/telemetry/correlations:
+    get:
+      operationId: explain_correlations
+      summary: how runtime events mapped to ToolCallScope bindings. agentprovenance.telemetry_correlations/v1
+      parameters: [ { $ref: "#/components/parameters/run" }, { name: event, in: query, schema: { type: string } } ]
+      responses:
+        "200": { description: correlation evidence, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
