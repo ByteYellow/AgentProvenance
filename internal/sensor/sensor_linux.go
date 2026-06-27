@@ -32,6 +32,7 @@ const (
 	eventOpen    = 3
 	eventExit    = 4
 	eventSSL     = 5
+	eventSSLRead = 6
 )
 
 // Options configures optional sensor probes beyond the always-on syscall set.
@@ -96,6 +97,16 @@ func RunWithOptions(out io.Writer, opts Options) error {
 			return fmt.Errorf("attach SSL_write uprobe on %s: %w", opts.SSLLib, err)
 		}
 		defer upSSL.Close()
+		upReadEnter, err := ex.Uprobe("SSL_read", objs.HandleSslReadEnter, nil)
+		if err != nil {
+			return fmt.Errorf("attach SSL_read uprobe on %s: %w", opts.SSLLib, err)
+		}
+		defer upReadEnter.Close()
+		upReadExit, err := ex.Uretprobe("SSL_read", objs.HandleSslReadExit, nil)
+		if err != nil {
+			return fmt.Errorf("attach SSL_read uretprobe on %s: %w", opts.SSLLib, err)
+		}
+		defer upReadExit.Close()
 	}
 
 	rd, err := ringbuf.NewReader(objs.Events)
@@ -279,6 +290,10 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 	case eventSSL:
 		ev["event_type"] = "tls_write"
 		ev["data"] = cstr(e.Path[:]) // plaintext preview (first path[] bytes)
+		ev["length"] = e.ExitCode
+	case eventSSLRead:
+		ev["event_type"] = "tls_read"
+		ev["data"] = cstr(e.Path[:])
 		ev["length"] = e.ExitCode
 	default:
 		ev["event_type"] = "unknown"

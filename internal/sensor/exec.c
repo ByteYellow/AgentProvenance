@@ -24,7 +24,8 @@ char LICENSE[] SEC("license") = "GPL";
 #define EVENT_CONNECT 2
 #define EVENT_OPEN 3
 #define EVENT_EXIT 4
-#define EVENT_SSL 5
+#define EVENT_SSL 5      // SSL_write: plaintext the agent sent (LLM request)
+#define EVENT_SSL_READ 6 // SSL_read: plaintext the agent received (LLM response)
 #define AF_INET 2
 
 // argv is captured as fixed-size slots (constant offsets keep the BPF verifier
@@ -248,6 +249,49 @@ int BPF_UPROBE(handle_ssl_write, void *ssl, const void *buf, int num) {
 	fill_common(e);
 	e->args[0] = 0;
 	bpf_probe_read_user(&e->path, sizeof(e->path), buf);
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// SSL_read(ssl, buf, num): the plaintext lands in buf only AFTER the call, so we
+// stash buf at entry and read it on return (the return value is the byte count).
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 4096);
+	__type(key, __u32);
+	__type(value, __u64);
+} ssl_read_bufs SEC(".maps");
+
+SEC("uprobe/SSL_read")
+int BPF_UPROBE(handle_ssl_read_enter, void *ssl, void *buf, int num) {
+	__u32 pid = (__u32)(bpf_get_current_pid_tgid() >> 32);
+	__u64 bufp = (__u64)buf;
+	bpf_map_update_elem(&ssl_read_bufs, &pid, &bufp, BPF_ANY);
+	return 0;
+}
+
+SEC("uretprobe/SSL_read")
+int BPF_URETPROBE(handle_ssl_read_exit, int ret) {
+	__u32 pid = (__u32)(bpf_get_current_pid_tgid() >> 32);
+	__u64 *bufp = bpf_map_lookup_elem(&ssl_read_bufs, &pid);
+	if (!bufp)
+		return 0;
+	__u64 buf = *bufp;
+	bpf_map_delete_elem(&ssl_read_bufs, &pid);
+	if (ret <= 0 || buf == 0)
+		return 0;
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		return 0;
+	}
+	e->kind = EVENT_SSL_READ;
+	e->daddr = 0;
+	e->dport = 0;
+	e->exit_code = ret;
+	fill_common(e);
+	e->args[0] = 0;
+	bpf_probe_read_user(&e->path, sizeof(e->path), (void *)buf);
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }
