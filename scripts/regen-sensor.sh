@@ -21,12 +21,29 @@ if [[ "$(uname -s)" != "Linux" ]]; then
   echo "regen-sensor: must run on Linux (eBPF/clang); this is $(uname -s)" >&2
   exit 2
 fi
-for tool in clang bpftool go; do
+for tool in clang go; do
   command -v "$tool" >/dev/null 2>&1 || { echo "regen-sensor: missing required tool: $tool" >&2; exit 2; }
 done
+BPFTOOL="${BPFTOOL:-}"
+if [[ -z "$BPFTOOL" ]]; then
+  BPFTOOL="$(command -v bpftool 2>/dev/null || true)"
+fi
+if [[ -n "$BPFTOOL" ]] && ! "$BPFTOOL" version >/dev/null 2>&1; then
+  BPFTOOL=""
+fi
+if [[ -z "$BPFTOOL" && -d /usr/lib/linux-tools ]]; then
+  BPFTOOL="$(find /usr/lib/linux-tools -name bpftool -type f 2>/dev/null | sort -V | tail -1)"
+fi
 
-echo "== generate vmlinux.h from kernel BTF"
-bpftool btf dump file /sys/kernel/btf/vmlinux format c > "$SENSOR_DIR/vmlinux.h"
+if [[ -n "$BPFTOOL" && -x "$BPFTOOL" && -r /sys/kernel/btf/vmlinux ]]; then
+  echo "== generate vmlinux.h from kernel BTF"
+  "$BPFTOOL" btf dump file /sys/kernel/btf/vmlinux format c > "$SENSOR_DIR/vmlinux.h"
+elif [[ -s "$SENSOR_DIR/vmlinux.h" ]]; then
+  echo "== reuse committed vmlinux.h (bpftool or kernel BTF unavailable)"
+else
+  echo "regen-sensor: missing bpftool/kernel BTF and no committed vmlinux.h" >&2
+  exit 2
+fi
 
 echo "== go generate (bpf2go: clang-compile exec.c -> bindings + object)"
 GOTOOLCHAIN="${GOTOOLCHAIN:-local}" go generate ./internal/sensor
