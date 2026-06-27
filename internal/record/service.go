@@ -105,7 +105,11 @@ func (s Service) Run(req Request) (Result, error) {
 
 	baseSnapshotID := ids.New("snap")
 	baseDir := filepath.Join(s.Paths.Snapshots, baseSnapshotID)
-	if err := state.CopyDir(absWorkdir, baseDir); err != nil {
+	// Exclude .git/.agentprov from the base snapshot, matching the diff path's
+	// ignoredPath. This keeps the snapshot clean and (with the dst-subtree guard
+	// in CopyDirFiltered) prevents self-recursion when the .agentprov data dir
+	// lives inside the workdir being recorded.
+	if err := state.CopyDirFiltered(absWorkdir, baseDir, ignoredPath); err != nil {
 		return Result{}, err
 	}
 	baseManifest, err := state.BuildManifest(baseDir)
