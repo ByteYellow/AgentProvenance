@@ -209,6 +209,7 @@ agentprov telemetry ingest --raw-event raw-execve-1 --pid <pid> \
   --timestamp <event_time> --source tetragon_jsonl --type execve \
   --payload '{"argv":["./async_child.sh"]}'
 agentprov telemetry ingest-jsonl --format tetragon --file tetragon-events.jsonl
+agentprov telemetry ingest-jsonl --format native --file agentprov-sensor-events.jsonl
 agentprov telemetry ingest-falco --file falco-events.jsonl
 ```
 
@@ -220,6 +221,14 @@ metadata-IP, private-CIDR, and secret-path rows become `policy_decisions`,
 `--no-policy` when the receiver should only normalize and store telemetry. This
 gives the DAG an audit handle for external Falco/Tetragon/LoongCollector
 evidence without turning AgentProvenance into a long-term log store.
+
+The `native` format is the receiver for AgentProvenance's own eBPF sensor
+(`cmd/agentprov-sensor`, `source="agentprov_ebpf"`), and is auto-detected. This
+closes the consume-only gap: the sensor's normalized kernel events (execve,
+network connect classified into `metadata_ip`/`private_cidr`, file writes) flow
+through the identical correlation, policy, risk, and unified-signal path as
+third-party telemetry. `scripts/accept_native_sensor_risk.sh` proves the loop
+end to end (own kernel telemetry to a unified `security` signal).
 
 `ingest-falco` is the Falco-compatible receiver path. It reads Falco JSON/stdout
 from a file or stdin stream, maps recognized `execve`, `open/openat`, and

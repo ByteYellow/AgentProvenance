@@ -217,6 +217,99 @@ func TestIngestFalcoMapsRiskEventsAndCorrelates(t *testing.T) {
 	}
 }
 
+func TestIngestNativeSensorRiskEventsAndCorrelates(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := correlation.RecordBinding(db, correlation.Binding{
+		RunID:         "run-native",
+		SessionID:     "session-native",
+		AttemptID:     "attempt-native",
+		ToolCallID:    "tool-native",
+		ProcessID:     "process-native",
+		ContainerID:   "container-native",
+		CgroupID:      "cgroup-native",
+		PID:           4242,
+		StartedAt:     "2000-01-01T00:00:00.000000000Z",
+		BindingSource: "external_telemetry",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// These lines mimic exactly what cmd/agentprov-sensor writes one-per-line on
+	// Linux (internal/sensor normalize()): flat objects, source="agentprov_ebpf".
+	path := filepath.Join(root, "native.jsonl")
+	raw := "" +
+		`{"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"cgroup-native","container_id":"container-native","timestamp":"2026-01-01T00:00:01Z","comm":"sh","event_type":"execve","path":"/bin/sh"}` + "\n" +
+		`{"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"cgroup-native","container_id":"container-native","timestamp":"2026-01-01T00:00:02Z","comm":"wget","event_type":"network_connect","dst_ip":"169.254.169.254","dst_port":80}` + "\n" +
+		`{"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"cgroup-native","container_id":"container-native","timestamp":"2026-01-01T00:00:03Z","comm":"curl","event_type":"network_connect","dst_ip":"10.0.0.5","dst_port":443}` + "\n"
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := IngestJSONL(db, JSONLIngestOptions{Format: "auto", Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Read != 3 || result.Ingested != 3 || result.Failed != 0 || result.Skipped != 0 {
+		t.Fatalf("unexpected native result: %+v", result)
+	}
+	if result.ReceiverSummary.DetectedFormats["native"] != 3 || result.ReceiverSummary.Resolved != 3 {
+		t.Fatalf("unexpected native receiver summary: %+v", result.ReceiverSummary)
+	}
+	for _, row := range result.Rows {
+		if row.DetectedFormat != "native" || row.Status != "ingested" || row.CorrelationMethod == "" {
+			t.Fatalf("unexpected native row result: %+v", row)
+		}
+	}
+	for _, typ := range []string{"execve", "metadata_ip", "private_cidr"} {
+		events, err := ListEventsFiltered(db, Filter{RunID: "run-native", Type: typ})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(events) != 1 {
+			t.Fatalf("type %s events=%d, want 1", typ, len(events))
+		}
+		if events[0].ToolCallID != "tool-native" || events[0].ProcessID != "process-native" {
+			t.Fatalf("native %s event not correlated: %+v", typ, events[0])
+		}
+		if events[0].Source != "agentprov_ebpf" {
+			t.Fatalf("native source = %s, want agentprov_ebpf", events[0].Source)
+		}
+		if err := ValidateStoredPayload(events[0].EventType, events[0].Payload); err != nil {
+			t.Fatalf("stored payload for %s is invalid: %v payload=%s", typ, err, events[0].Payload)
+		}
+	}
+
+	// The whole point of the loop: own kernel events -> automatic risk signals.
+	persisted := 0
+	for _, eventID := range result.EventIDs {
+		if _, ok, err := securitymodel.EvaluateRuntimeEvent(db, eventID); err != nil {
+			t.Fatal(err)
+		} else if ok {
+			persisted++
+		}
+	}
+	if persisted != 2 {
+		t.Fatalf("native policy decisions = %d, want 2 (metadata_ip + private_cidr)", persisted)
+	}
+	risks, err := securitymodel.ListRiskSignals(db, "run-native")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(risks) != 2 {
+		t.Fatalf("native risk signals = %d, want 2", len(risks))
+	}
+}
+
 func TestIngestJSONLReportsBadRows(t *testing.T) {
 	root := t.TempDir()
 	paths, err := store.Init(filepath.Join(root, ".agentprov"))

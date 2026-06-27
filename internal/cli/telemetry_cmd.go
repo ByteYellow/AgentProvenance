@@ -448,7 +448,7 @@ func telemetryIngestJSONLCmd(dataDir *string) *cobra.Command {
 	var noPolicy bool
 	ingest := &cobra.Command{
 		Use:   "ingest-jsonl",
-		Short: "ingest filtered substrate telemetry JSONL from Tetragon, Falco, or LoongCollector",
+		Short: "ingest filtered substrate telemetry JSONL from Tetragon, Falco, LoongCollector, or the agentprov eBPF sensor",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			paths, err := store.Init(*dataDir)
 			if err != nil {
@@ -479,7 +479,7 @@ func telemetryIngestJSONLCmd(dataDir *string) *cobra.Command {
 			return nil
 		},
 	}
-	ingest.Flags().StringVar(&opts.Format, "format", "auto", "jsonl format: auto, tetragon, falco, or loongcollector")
+	ingest.Flags().StringVar(&opts.Format, "format", "auto", "jsonl format: auto, tetragon, falco, loongcollector, or native (agentprov eBPF sensor)")
 	ingest.Flags().StringVar(&opts.Path, "file", "", "JSONL file path")
 	ingest.Flags().StringVar(&opts.RunID, "run", "", "default run id")
 	ingest.Flags().StringVar(&opts.RolloutID, "rollout", "", "default rollout id")

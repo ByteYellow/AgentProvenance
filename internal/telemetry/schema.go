@@ -46,7 +46,7 @@ func TelemetrySource(source string, correlationMethod string) bool {
 		return true
 	}
 	switch source {
-	case "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "native_runtime", "record_file_diff", "record_process_sample":
+	case "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf", "native_runtime", "record_file_diff", "record_process_sample":
 		return true
 	default:
 		return false
@@ -98,6 +98,8 @@ func receiverName(source string) string {
 		return "falco"
 	case "loongcollector_jsonl":
 		return "loongcollector"
+	case "agentprov_ebpf":
+		return "agentprov_sensor"
 	case "wrapper_runtime", "native_runtime", "record_file_diff", "record_process_sample", "filtered_telemetry":
 		return source
 	default:
@@ -110,7 +112,7 @@ func receiverName(source string) string {
 
 func sourceFormat(source string) string {
 	switch source {
-	case "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl":
+	case "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf":
 		return "jsonl"
 	case "wrapper_runtime", "native_runtime", "record_file_diff", "record_process_sample", "filtered_telemetry":
 		return "normalized"

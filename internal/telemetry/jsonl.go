@@ -434,6 +434,8 @@ func mapJSONLEvent(opts JSONLIngestOptions, raw map[string]any, lineNo int) (Ing
 		event, ok, err = mapFalco(raw)
 	case "loongcollector":
 		event, ok, err = mapLoongCollector(raw)
+	case "native":
+		event, ok, err = mapNative(raw)
 	default:
 		return IngestEvent{}, false, fmt.Errorf("unsupported telemetry jsonl format %q", opts.Format)
 	}
@@ -463,10 +465,68 @@ func detectFormat(raw map[string]any) string {
 	if _, ok := raw["output_fields"]; ok {
 		return "falco"
 	}
+	if stringAt(raw, "source") == "agentprov_ebpf" {
+		return "native"
+	}
 	if stringAt(raw, "source") == "loongcollector" || stringAt(raw, "__tag__:__path__") != "" {
 		return "loongcollector"
 	}
 	return "loongcollector"
+}
+
+// mapNative maps the normalized schema emitted by the self-owned agentprov eBPF
+// sensor (internal/sensor) into an IngestEvent. The sensor already writes one
+// flat JSON object per line with source="agentprov_ebpf"; we apply the same
+// security classification as the Falco mapper so own-sensor telemetry drives the
+// identical correlation -> risk -> unified-signal path. The sensor write-filters
+// openat in-kernel, so a captured file event is a write (file_write), never a
+// secret read; secret-looking paths are still flagged downstream by the policy
+// engine's path rules.
+func mapNative(raw map[string]any) (IngestEvent, bool, error) {
+	event := baseMappedEvent(raw, "agentprov_ebpf")
+	comm := stringAt(raw, "comm")
+	switch strings.ToLower(firstNonEmpty(stringAt(raw, "event_type"), stringAt(raw, "type"))) {
+	case "execve", "exec", "process_exec":
+		event.EventType = "execve"
+		path := stringAt(raw, "path")
+		argv := []string{}
+		if path != "" {
+			argv = append(argv, path)
+		} else if comm != "" {
+			argv = append(argv, comm)
+		} else {
+			argv = append(argv, "unknown")
+		}
+		event.Payload = mustJSON(map[string]any{
+			"argv":    argv,
+			"command": strings.Join(argv, " "),
+			"comm":    comm,
+		})
+	case "network_connect", "connect":
+		host := stringAt(raw, "dst_ip")
+		port := stringAt(raw, "dst_port")
+		event.EventType = "network_connect"
+		if host == "169.254.169.254" {
+			event.EventType = "metadata_ip"
+		} else if privateIP(host) {
+			event.EventType = "private_cidr"
+		}
+		event.Payload = mustJSON(map[string]any{
+			"dst_ip": host,
+			"host":   host,
+			"port":   port,
+			"comm":   comm,
+		})
+	case "file_open", "open", "openat", "file_write":
+		event.EventType = "file_write"
+		event.Payload = mustJSON(map[string]any{
+			"path": stringAt(raw, "path"),
+			"comm": comm,
+		})
+	default:
+		return IngestEvent{}, false, nil
+	}
+	return event, true, nil
 }
 
 func mapTetragon(raw map[string]any) (IngestEvent, bool, error) {
