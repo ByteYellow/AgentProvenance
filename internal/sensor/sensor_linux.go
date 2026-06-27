@@ -30,6 +30,7 @@ const (
 	eventExec    = 1
 	eventConnect = 2
 	eventOpen    = 3
+	eventExit    = 4
 )
 
 // Run loads the eBPF probes (exec/connect/openat), reads events from the ring
@@ -67,6 +68,11 @@ func Run(out io.Writer) error {
 		return fmt.Errorf("attach sys_enter_openat: %w", err)
 	}
 	defer tpOpen.Close()
+	tpExit, err := link.Tracepoint("sched", "sched_process_exit", objs.HandleExit, nil)
+	if err != nil {
+		return fmt.Errorf("attach sched_process_exit: %w", err)
+	}
+	defer tpExit.Close()
 
 	rd, err := ringbuf.NewReader(objs.Events)
 	if err != nil {
@@ -83,6 +89,19 @@ func Run(out io.Writer) error {
 
 	resolver := newCgroupResolver()
 	enc := json.NewEncoder(out)
+	var encMu sync.Mutex
+	emit := func(v any) {
+		encMu.Lock()
+		_ = enc.Encode(v)
+		encMu.Unlock()
+	}
+
+	// Surface ring-buffer drops as a coverage-gap event so a loaded sensor is
+	// never silently blind.
+	done := make(chan struct{})
+	defer close(done)
+	go watchDrops(objs.Drops, emit, done)
+
 	for {
 		rec, err := rd.Read()
 		if err != nil {
@@ -95,8 +114,43 @@ func Run(out io.Writer) error {
 		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &e); err != nil {
 			continue
 		}
-		_ = enc.Encode(normalize(e, resolver))
+		emit(normalize(e, resolver))
 	}
+}
+
+// watchDrops polls the kernel drop counter and emits a resource_pressure event
+// whenever it grows, so downstream sees a coverage gap rather than missing data.
+func watchDrops(m dropLookuper, emit func(any), done <-chan struct{}) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	var last uint64
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			var n uint64
+			if err := m.Lookup(uint32(0), &n); err != nil || n <= last {
+				continue
+			}
+			emit(map[string]any{
+				"source":        "agentprov_ebpf",
+				"event_type":    "resource_pressure",
+				"resource":      "sensor_ringbuf",
+				"signal":        "event_drop",
+				"dropped":       n,
+				"dropped_delta": n - last,
+				"timestamp":     time.Now().UTC().Format(time.RFC3339Nano),
+			})
+			last = n
+		}
+	}
+}
+
+// dropLookuper is the subset of *ebpf.Map used to read the drop counter (kept as
+// an interface so the poller is unit-testable without a live map).
+type dropLookuper interface {
+	Lookup(key, valueOut any) error
 }
 
 // cgroupResolver maps the kernel-reported cgroup id (race-free, captured in
@@ -195,6 +249,9 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 	case eventOpen:
 		ev["event_type"] = "file_open"
 		ev["path"] = cstr(e.Path[:])
+	case eventExit:
+		ev["event_type"] = "process_exit"
+		ev["exit_code"] = e.ExitCode
 	default:
 		ev["event_type"] = "unknown"
 	}

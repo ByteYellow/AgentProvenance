@@ -22,10 +22,12 @@ type sensorbpfSensorEvent struct {
 	CgroupId uint64
 	Daddr    uint32
 	Dport    uint16
+	_        [2]byte
+	ExitCode int32
 	Comm     [16]uint8
 	Path     [256]uint8
 	Args     [512]uint8
-	_        [2]byte
+	_        [4]byte
 }
 
 // loadSensorbpf returns the embedded CollectionSpec for sensorbpf.
@@ -72,6 +74,7 @@ type sensorbpfProgramSpecs struct {
 	HandleConnect *ebpf.ProgramSpec `ebpf:"handle_connect"`
 	HandleExec    *ebpf.ProgramSpec `ebpf:"handle_exec"`
 	HandleExecve  *ebpf.ProgramSpec `ebpf:"handle_execve"`
+	HandleExit    *ebpf.ProgramSpec `ebpf:"handle_exit"`
 	HandleOpenat  *ebpf.ProgramSpec `ebpf:"handle_openat"`
 }
 
@@ -81,6 +84,7 @@ type sensorbpfProgramSpecs struct {
 type sensorbpfMapSpecs struct {
 	ArgvBuild   *ebpf.MapSpec `ebpf:"argv_build"`
 	ArgvScratch *ebpf.MapSpec `ebpf:"argv_scratch"`
+	Drops       *ebpf.MapSpec `ebpf:"drops"`
 	Events      *ebpf.MapSpec `ebpf:"events"`
 }
 
@@ -105,6 +109,7 @@ func (o *sensorbpfObjects) Close() error {
 type sensorbpfMaps struct {
 	ArgvBuild   *ebpf.Map `ebpf:"argv_build"`
 	ArgvScratch *ebpf.Map `ebpf:"argv_scratch"`
+	Drops       *ebpf.Map `ebpf:"drops"`
 	Events      *ebpf.Map `ebpf:"events"`
 }
 
@@ -112,6 +117,7 @@ func (m *sensorbpfMaps) Close() error {
 	return _SensorbpfClose(
 		m.ArgvBuild,
 		m.ArgvScratch,
+		m.Drops,
 		m.Events,
 	)
 }
@@ -123,6 +129,7 @@ type sensorbpfPrograms struct {
 	HandleConnect *ebpf.Program `ebpf:"handle_connect"`
 	HandleExec    *ebpf.Program `ebpf:"handle_exec"`
 	HandleExecve  *ebpf.Program `ebpf:"handle_execve"`
+	HandleExit    *ebpf.Program `ebpf:"handle_exit"`
 	HandleOpenat  *ebpf.Program `ebpf:"handle_openat"`
 }
 
@@ -131,6 +138,7 @@ func (p *sensorbpfPrograms) Close() error {
 		p.HandleConnect,
 		p.HandleExec,
 		p.HandleExecve,
+		p.HandleExit,
 		p.HandleOpenat,
 	)
 }

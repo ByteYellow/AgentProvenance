@@ -17,6 +17,7 @@ char LICENSE[] SEC("license") = "GPL";
 #define EVENT_EXEC 1
 #define EVENT_CONNECT 2
 #define EVENT_OPEN 3
+#define EVENT_EXIT 4
 #define AF_INET 2
 
 // argv is captured as fixed-size slots (constant offsets keep the BPF verifier
@@ -32,12 +33,29 @@ struct sensor_event {
 	__u32 tgid;
 	__u32 ppid;
 	__u64 cgroup_id;
-	__u32 daddr; // connect: dst IPv4, network byte order
-	__u16 dport; // connect: dst port, network byte order
+	__u32 daddr;     // connect: dst IPv4, network byte order
+	__u16 dport;     // connect: dst port, network byte order
+	__s32 exit_code; // exit: process exit code
 	__u8 comm[16];
 	__u8 path[256];      // exec filename / open path
 	__u8 args[ARGS_BUF]; // exec: MAX_ARGS fixed slots of argv
 };
+
+// drops counts ring-buffer reservation failures, so userspace can surface a
+// coverage gap instead of going silently blind under load.
+struct {
+	__uint(type, BPF_MAP_TYPE_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, __u64);
+} drops SEC(".maps");
+
+static __always_inline void count_drop(void) {
+	__u32 z = 0;
+	__u64 *d = bpf_map_lookup_elem(&drops, &z);
+	if (d)
+		__sync_fetch_and_add(d, 1);
+}
 
 // argv_scratch stashes a process's argv (captured at sys_enter_execve) keyed by
 // pid, so the successful sched_process_exec emit can attach the real command
@@ -105,8 +123,11 @@ int handle_execve(struct trace_event_raw_sys_enter *ctx) {
 SEC("tp/sched/sched_process_exec")
 int handle_exec(struct trace_event_raw_sched_process_exec *ctx) {
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
-	if (!e)
+	if (!e) {
+		count_drop();
 		return 0;
+	}
+	e->exit_code = 0;
 	e->kind = EVENT_EXEC;
 	e->daddr = 0;
 	e->dport = 0;
@@ -133,8 +154,11 @@ int handle_connect(struct trace_event_raw_sys_enter *ctx) {
 	if (sa.sin_family != AF_INET)
 		return 0;
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
-	if (!e)
+	if (!e) {
+		count_drop();
 		return 0;
+	}
+	e->exit_code = 0;
 	e->kind = EVENT_CONNECT;
 	fill_common(e);
 	e->daddr = sa.sin_addr.s_addr;
@@ -155,14 +179,44 @@ int handle_openat(struct trace_event_raw_sys_enter *ctx) {
 	if (!(flags & OPEN_WRITE_MASK))
 		return 0;
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
-	if (!e)
+	if (!e) {
+		count_drop();
 		return 0;
+	}
+	e->exit_code = 0;
 	e->kind = EVENT_OPEN;
 	e->daddr = 0;
 	e->dport = 0;
 	fill_common(e);
 	e->args[0] = 0;
 	bpf_probe_read_user_str(&e->path, sizeof(e->path), (void *)ctx->args[1]);
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// Process (thread-group-leader) exit: bounds the process lifetime so the
+// correlation engine can close time windows and resist pid reuse. Also frees any
+// stale argv stash for the pid.
+SEC("tp/sched/sched_process_exit")
+int handle_exit(struct trace_event_raw_sched_process_template *ctx) {
+	__u64 id = bpf_get_current_pid_tgid();
+	if ((__u32)(id >> 32) != (__u32)id)
+		return 0; // only the group leader == process exit, not per-thread
+	__u32 pid = (__u32)(id >> 32);
+	bpf_map_delete_elem(&argv_scratch, &pid);
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		return 0;
+	}
+	e->kind = EVENT_EXIT;
+	e->daddr = 0;
+	e->dport = 0;
+	fill_common(e);
+	e->path[0] = 0;
+	e->args[0] = 0;
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	e->exit_code = (BPF_CORE_READ(task, exit_code) >> 8) & 0xff;
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }

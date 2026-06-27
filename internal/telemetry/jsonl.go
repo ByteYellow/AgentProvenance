@@ -542,6 +542,20 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 			"path": stringAt(raw, "path"),
 			"comm": comm,
 		})
+	case "process_exit", "exit":
+		event.EventType = "process_exit"
+		event.Payload = mustJSON(map[string]any{
+			"exit_code": intAt(raw, "exit_code"),
+			"comm":      comm,
+		})
+	case "resource_pressure":
+		event.EventType = "resource_pressure"
+		event.Payload = mustJSON(map[string]any{
+			"resource":      firstNonEmpty(stringAt(raw, "resource"), "sensor_ringbuf"),
+			"signal":        firstNonEmpty(stringAt(raw, "signal"), "event_drop"),
+			"dropped":       intAt(raw, "dropped"),
+			"dropped_delta": intAt(raw, "dropped_delta"),
+		})
 	default:
 		return IngestEvent{}, false, nil
 	}
