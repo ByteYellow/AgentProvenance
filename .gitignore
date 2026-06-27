@@ -14,3 +14,9 @@
 03-readme-showcase-CN.MD
 04-enterprise-session-profile-CN.MD
 docs/north-star-three-pillars.md
+
+# Generated eBPF sensor artifacts. The bpf2go bindings (sensorbpf_bpf*.go/.o)
+# ARE committed so `go build ./cmd/agentprov-sensor` works on a fresh Linux
+# checkout without clang (regenerate via `go generate ./internal/sensor` after
+# editing exec.c; CI guards drift). Only the huge generated vmlinux.h stays out.
+internal/sensor/vmlinux.h

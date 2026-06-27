@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
+	"github.com/byteyellow/agentprovenance/internal/daemon"
 	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
@@ -282,6 +283,7 @@ func telemetryIngestFalcoCmd(dataDir *string) *cobra.Command {
 				}
 				defer input.Close()
 			}
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
 			result, err := telemetry.IngestFalco(db, opts, input)
 			if err != nil {
 				return err
@@ -334,6 +336,7 @@ func telemetryBindCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
 			id, err := correlation.RecordBinding(db, binding)
 			if err != nil {
 				return err
@@ -448,7 +451,7 @@ func telemetryIngestJSONLCmd(dataDir *string) *cobra.Command {
 	var noPolicy bool
 	ingest := &cobra.Command{
 		Use:   "ingest-jsonl",
-		Short: "ingest filtered substrate telemetry JSONL from Tetragon, Falco, or LoongCollector",
+		Short: "ingest filtered substrate telemetry JSONL from Tetragon, Falco, LoongCollector, or the agentprov eBPF sensor",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			paths, err := store.Init(*dataDir)
 			if err != nil {
@@ -459,6 +462,7 @@ func telemetryIngestJSONLCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
 			result, err := telemetry.IngestJSONL(db, opts)
 			if err != nil {
 				return err
@@ -479,8 +483,8 @@ func telemetryIngestJSONLCmd(dataDir *string) *cobra.Command {
 			return nil
 		},
 	}
-	ingest.Flags().StringVar(&opts.Format, "format", "auto", "jsonl format: auto, tetragon, falco, or loongcollector")
-	ingest.Flags().StringVar(&opts.Path, "file", "", "JSONL file path")
+	ingest.Flags().StringVar(&opts.Format, "format", "auto", "jsonl format: auto, tetragon, falco, loongcollector, or native (agentprov eBPF sensor)")
+	ingest.Flags().StringVar(&opts.Path, "file", "", "JSONL file path, or - to read a piped stream from stdin (e.g. the agentprov sensor)")
 	ingest.Flags().StringVar(&opts.RunID, "run", "", "default run id")
 	ingest.Flags().StringVar(&opts.RolloutID, "rollout", "", "default rollout id")
 	ingest.Flags().StringVar(&opts.AttemptID, "attempt", "", "default attempt id")

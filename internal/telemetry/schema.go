@@ -41,12 +41,38 @@ func ValidateStoredPayload(eventType, payload string) error {
 	return validateEventBody(eventType, body)
 }
 
+// CorrelationClass labels the PROVENANCE of an event's correlation so a security
+// consumer can distinguish a high-confidence self-join from independent
+// corroboration. It is a pure function of already-stored fields:
+//   - self_observed:   Mode 1 recorder joined telemetry it collected itself
+//     (record_process_sample/record_file_diff, the synthetic agentprov-record-
+//     binding, or the zero_sdk_process_tree method). Its 1.0/0.9 confidence is
+//     self-consistency, NOT independent evidence.
+//   - context_asserted: the caller provided full run/session/tool_call context;
+//     no correlation was performed.
+//   - kernel_correlated: independent system telemetry (Falco/Tetragon/own eBPF
+//     sensor) joined to app context through a binding. This is the real claim.
+//   - uncorrelated:     could not be resolved.
+func CorrelationClass(source, method, containerID string, confidence float64) string {
+	if source == "record_process_sample" || source == "record_file_diff" ||
+		method == "zero_sdk_process_tree" || strings.HasPrefix(containerID, "agentprov-record-") {
+		return "self_observed"
+	}
+	if method == "provided_context" {
+		return "context_asserted"
+	}
+	if strings.TrimSpace(method) == "" || method == "unresolved" || confidence == 0 {
+		return "uncorrelated"
+	}
+	return "kernel_correlated"
+}
+
 func TelemetrySource(source string, correlationMethod string) bool {
 	if strings.TrimSpace(correlationMethod) != "" {
 		return true
 	}
 	switch source {
-	case "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "native_runtime", "record_file_diff", "record_process_sample":
+	case "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf", "native_runtime", "record_file_diff", "record_process_sample":
 		return true
 	default:
 		return false
@@ -63,6 +89,7 @@ type EventExplanation struct {
 	IdentityKeys          []string `json:"identity_keys,omitempty"`
 	CorrelationMethod     string   `json:"correlation_method,omitempty"`
 	CorrelationConfidence float64  `json:"correlation_confidence,omitempty"`
+	CorrelationClass      string   `json:"correlation_class,omitempty"`
 	CorrelationStatus     string   `json:"correlation_status"`
 }
 
@@ -76,6 +103,7 @@ func ExplainEventRecord(event EventRecord) EventExplanation {
 		IdentityKeys:          eventIdentityKeys(event),
 		CorrelationMethod:     event.CorrelationMethod,
 		CorrelationConfidence: event.CorrelationConfidence,
+		CorrelationClass:      CorrelationClass(event.Source, event.CorrelationMethod, event.ContainerID, event.CorrelationConfidence),
 		CorrelationStatus:     "provided",
 	}
 	if strings.TrimSpace(event.CorrelationMethod) == "unresolved" || event.CorrelationConfidence == 0 {
@@ -98,6 +126,8 @@ func receiverName(source string) string {
 		return "falco"
 	case "loongcollector_jsonl":
 		return "loongcollector"
+	case "agentprov_ebpf":
+		return "agentprov_sensor"
 	case "wrapper_runtime", "native_runtime", "record_file_diff", "record_process_sample", "filtered_telemetry":
 		return source
 	default:
@@ -110,7 +140,7 @@ func receiverName(source string) string {
 
 func sourceFormat(source string) string {
 	switch source {
-	case "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl":
+	case "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf":
 		return "jsonl"
 	case "wrapper_runtime", "native_runtime", "record_file_diff", "record_process_sample", "filtered_telemetry":
 		return "normalized"
@@ -208,8 +238,8 @@ func validateEventBody(eventType string, body map[string]any) error {
 			return fmt.Errorf("process_observed payload requires numeric pid")
 		}
 	case "file_open", "file_write", "secret_path":
-		if payloadPathFromBody(body) == "" {
-			return fmt.Errorf("%s payload requires safe relative path or file", eventType)
+		if !validRawPath(body) {
+			return fmt.Errorf("%s payload requires a non-traversal path or file", eventType)
 		}
 	case "network_connect", "metadata_ip", "private_cidr":
 		if firstString(body, "dst", "dst_ip", "host") == "" {
@@ -266,12 +296,19 @@ func numberField(body map[string]any, key string) (float64, bool) {
 	return value, ok
 }
 
-func payloadPathFromBody(body map[string]any) string {
+// validRawPath accepts the path/file field of a raw file telemetry event. Unlike
+// the graph file-node logic (payloadPath in service.go), it permits absolute
+// host paths, because system-side telemetry (eBPF sensor, Falco) legitimately
+// observes paths like /tmp/x or /root/.ssh/id_rsa. It still rejects empty and
+// path-traversal values, which never come from a real kernel event. The
+// workspace-relative constraint for graph file nodes is preserved separately.
+func validRawPath(body map[string]any) bool {
 	path := firstString(body, "path", "file")
-	path = strings.TrimPrefix(path, "/workspace/")
-	path = strings.TrimPrefix(path, "./")
-	if path == "" || path == "." || path == ".." || strings.HasPrefix(path, "../") || strings.HasPrefix(path, "/") {
-		return ""
+	if path == "" || path == "." || path == ".." {
+		return false
 	}
-	return path
+	if strings.HasPrefix(path, "../") || strings.Contains(path, "/../") || strings.HasSuffix(path, "/..") {
+		return false
+	}
+	return true
 }

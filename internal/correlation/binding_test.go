@@ -2,6 +2,7 @@ package correlation
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -233,5 +234,42 @@ func TestClosedBindingWindowStillResolves(t *testing.T) {
 	after := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, ok, err := Resolve(db, RawIdentity{CgroupID: "cgroup-closed", Timestamp: after}); err != nil || ok {
 		t.Fatalf("event after closed window must not resolve: ok=%v err=%v", ok, err)
+	}
+}
+
+// TestChildEventResolvesViaContainerNotPid covers async/child attribution: a
+// child process whose pid differs from the binding's pid still attributes to the
+// original execution scope through shared container membership (not pid lineage).
+func TestChildEventResolvesViaContainerNotPid(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := RecordBinding(db, Binding{
+		RunID: "run-child", SessionID: "s", ToolCallID: "tc", ProcessID: "p",
+		ContainerID: "container-child", RootPID: 4000, PID: 4000,
+		StartedAt: "2000-01-01T00:00:00.000000000Z", BindingSource: "external_telemetry",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	// A child pid (4137) the binding never recorded, same container.
+	match, ok, err := Resolve(db, RawIdentity{ContainerID: "container-child", PID: 4137, Timestamp: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || match.RunID != "run-child" || match.ToolCallID != "tc" {
+		t.Fatalf("child event should attribute to scope via container: ok=%v match=%+v", ok, match)
+	}
+	if !strings.Contains(match.Method, "container") {
+		t.Fatalf("expected container-based method for child pid, got %q", match.Method)
 	}
 }

@@ -26,6 +26,55 @@ jobs:
       - name: Run unit tests
         run: GOTOOLCHAIN=local go test ./...
 
+  sensor-build:
+    name: eBPF sensor builds from committed bindings
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: true
+
+      # The bpf2go bindings (sensorbpf_bpf*.go/.o) are committed, so this builds
+      # the Linux sensor without clang/bpftool: the reproducible-build guarantee.
+      - name: Build agentprov-sensor from committed bindings
+        run: GOTOOLCHAIN=local go build -o /dev/null ./cmd/agentprov-sensor
+
+  sensor-bindings-drift:
+    name: eBPF sensor bindings drift check
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: true
+
+      - name: Install eBPF compile toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm linux-tools-common
+          sudo apt-get install -y "linux-tools-$(uname -r)" "linux-cloud-tools-$(uname -r)" || true
+          sudo apt-get install -y linux-tools-azure linux-cloud-tools-azure || true
+
+      - name: Regenerate and fail on drift of committed .go bindings
+        run: |
+          if bpftool version >/dev/null 2>&1 && [ -r /sys/kernel/btf/vmlinux ]; then
+            GOTOOLCHAIN=local scripts/regen-sensor.sh --check
+          else
+            echo "Skipping sensor binding drift check: bpftool or kernel BTF unavailable on this runner."
+            echo "Run scripts/regen-sensor.sh --check on the Linux eBPF lab VM for the strong drift gate."
+          fi
+
   phase1-acceptance:
     name: Phase 1 observability smoke
     runs-on: ubuntu-latest

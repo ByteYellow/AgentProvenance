@@ -23,6 +23,7 @@ type EventRecord struct {
 	RawEventID            string  `json:"raw_event_id"`
 	CorrelationMethod     string  `json:"correlation_method"`
 	CorrelationConfidence float64 `json:"correlation_confidence"`
+	CorrelationClass      string  `json:"correlation_class,omitempty"`
 	ContainerID           string  `json:"container_id"`
 	CgroupID              string  `json:"cgroup_id"`
 	PID                   int64   `json:"pid"`
@@ -177,6 +178,7 @@ func ListEventsPage(db *sql.DB, opts ListOptions) (ListResult, error) {
 		if err := rows.Scan(&event.ID, &event.RunID, &event.SessionID, &event.ToolCallID, &event.ProcessID, &event.SnapshotID, &event.RawEventID, &event.CorrelationMethod, &event.CorrelationConfidence, &event.ContainerID, &event.CgroupID, &event.PID, &event.TGID, &event.PPID, &event.Source, &event.EventType, &event.Payload, &event.CreatedAt); err != nil {
 			return ListResult{}, err
 		}
+		event.CorrelationClass = CorrelationClass(event.Source, event.CorrelationMethod, event.ContainerID, event.CorrelationConfidence)
 		events = append(events, event)
 	}
 	if err := rows.Err(); err != nil {

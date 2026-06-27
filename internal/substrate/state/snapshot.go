@@ -656,13 +656,40 @@ func envString(name, fallback string) string {
 }
 
 func CopyDir(src, dst string) error {
+	return CopyDirFiltered(src, dst, nil)
+}
+
+// CopyDirFiltered copies src into dst, skipping any relative path for which skip
+// returns true (skip may be nil). It always skips the dst subtree itself, so it
+// is safe when dst lives inside src (e.g. recording a workdir whose .agentprov
+// data dir holds the snapshot store). Without that guard the walk would recurse
+// into the snapshot it is writing and fail with "file name too long".
+func CopyDirFiltered(src, dst string, skip func(relPath string) bool) error {
+	absDst, err := filepath.Abs(dst)
+	if err != nil {
+		return err
+	}
 	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
+		if absPath, aerr := filepath.Abs(path); aerr == nil {
+			if absPath == absDst || strings.HasPrefix(absPath, absDst+string(os.PathSeparator)) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
 			return err
+		}
+		if skip != nil && rel != "." && skip(rel) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		target := filepath.Join(dst, rel)
 		info, err := d.Info()

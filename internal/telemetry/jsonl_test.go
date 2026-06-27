@@ -217,6 +217,140 @@ func TestIngestFalcoMapsRiskEventsAndCorrelates(t *testing.T) {
 	}
 }
 
+func TestIngestNativeSensorRiskEventsAndCorrelates(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := correlation.RecordBinding(db, correlation.Binding{
+		RunID:         "run-native",
+		SessionID:     "session-native",
+		AttemptID:     "attempt-native",
+		ToolCallID:    "tool-native",
+		ProcessID:     "process-native",
+		ContainerID:   "container-native",
+		CgroupID:      "cgroup-native",
+		PID:           4242,
+		StartedAt:     "2000-01-01T00:00:00.000000000Z",
+		BindingSource: "external_telemetry",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// These lines mimic exactly what cmd/agentprov-sensor writes one-per-line on
+	// Linux (internal/sensor normalize()): flat objects, source="agentprov_ebpf".
+	path := filepath.Join(root, "native.jsonl")
+	raw := "" +
+		`{"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"cgroup-native","container_id":"container-native","timestamp":"2026-01-01T00:00:01Z","comm":"sh","event_type":"execve","path":"/bin/sh"}` + "\n" +
+		`{"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"cgroup-native","container_id":"container-native","timestamp":"2026-01-01T00:00:02Z","comm":"wget","event_type":"network_connect","dst_ip":"169.254.169.254","dst_port":80}` + "\n" +
+		`{"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"cgroup-native","container_id":"container-native","timestamp":"2026-01-01T00:00:03Z","comm":"curl","event_type":"network_connect","dst_ip":"10.0.0.5","dst_port":443}` + "\n" +
+		// The sensor write-filters openat in-kernel, so this is a write, and the
+		// path is the real absolute host path the kernel reports. A write to a
+		// credentials path is caught by the policy engine's path rule.
+		`{"source":"agentprov_ebpf","pid":4242,"tgid":4242,"ppid":4000,"cgroup_id":"cgroup-native","container_id":"container-native","timestamp":"2026-01-01T00:00:04Z","comm":"sh","event_type":"file_open","path":"/home/agent/.aws/credentials"}` + "\n"
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := IngestJSONL(db, JSONLIngestOptions{Format: "auto", Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Read != 4 || result.Ingested != 4 || result.Failed != 0 || result.Skipped != 0 {
+		t.Fatalf("unexpected native result: %+v", result)
+	}
+	if result.ReceiverSummary.DetectedFormats["native"] != 4 || result.ReceiverSummary.Resolved != 4 {
+		t.Fatalf("unexpected native receiver summary: %+v", result.ReceiverSummary)
+	}
+	for _, row := range result.Rows {
+		if row.DetectedFormat != "native" || row.Status != "ingested" || row.CorrelationMethod == "" {
+			t.Fatalf("unexpected native row result: %+v", row)
+		}
+	}
+	for _, typ := range []string{"execve", "metadata_ip", "private_cidr", "file_write"} {
+		events, err := ListEventsFiltered(db, Filter{RunID: "run-native", Type: typ})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(events) != 1 {
+			t.Fatalf("type %s events=%d, want 1", typ, len(events))
+		}
+		if events[0].ToolCallID != "tool-native" || events[0].ProcessID != "process-native" {
+			t.Fatalf("native %s event not correlated: %+v", typ, events[0])
+		}
+		if events[0].Source != "agentprov_ebpf" {
+			t.Fatalf("native source = %s, want agentprov_ebpf", events[0].Source)
+		}
+		if err := ValidateStoredPayload(events[0].EventType, events[0].Payload); err != nil {
+			t.Fatalf("stored payload for %s is invalid: %v payload=%s", typ, err, events[0].Payload)
+		}
+	}
+
+	// The whole point of the loop: own kernel events -> automatic risk signals.
+	persisted := 0
+	for _, eventID := range result.EventIDs {
+		if _, ok, err := securitymodel.EvaluateRuntimeEvent(db, eventID); err != nil {
+			t.Fatal(err)
+		} else if ok {
+			persisted++
+		}
+	}
+	if persisted != 3 {
+		t.Fatalf("native policy decisions = %d, want 3 (metadata_ip + private_cidr + credential write)", persisted)
+	}
+	risks, err := securitymodel.ListRiskSignals(db, "run-native")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(risks) != 3 {
+		t.Fatalf("native risk signals = %d, want 3", len(risks))
+	}
+}
+
+func TestIngestJSONLReaderMatchesFileHash(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Same bytes a sensor would pipe; no binding, so events stay unresolved but
+	// still ingest. The reader path (stdin pipe) must hash identically to the
+	// equivalent saved file.
+	bytesIn := `{"source":"agentprov_ebpf","pid":7,"event_type":"execve","path":"/bin/true"}` + "\n"
+	path := filepath.Join(root, "piped.jsonl")
+	if err := os.WriteFile(path, []byte(bytesIn), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fromFile, err := IngestJSONL(db, JSONLIngestOptions{Format: "native", Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromReader, err := IngestJSONLReader(db, JSONLIngestOptions{Format: "native", Path: "-"}, strings.NewReader(bytesIn))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromFile.Ingested != 1 || fromReader.Ingested != 1 {
+		t.Fatalf("ingested file=%d reader=%d, want 1 each", fromFile.Ingested, fromReader.Ingested)
+	}
+	if fromFile.FileSHA256 == "" || fromFile.FileSHA256 != fromReader.FileSHA256 {
+		t.Fatalf("file hash %q != reader hash %q", fromFile.FileSHA256, fromReader.FileSHA256)
+	}
+}
+
 func TestIngestJSONLReportsBadRows(t *testing.T) {
 	root := t.TempDir()
 	paths, err := store.Init(filepath.Join(root, ".agentprov"))

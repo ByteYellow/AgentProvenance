@@ -353,3 +353,35 @@ func insertPlannerSnapshot(t *testing.T, db *sql.DB, paths store.Paths, snapshot
 		t.Fatal(err)
 	}
 }
+
+func TestCopyDirFilteredSkipsDstSubtreeAndFiltered(t *testing.T) {
+	src := t.TempDir()
+	// A normal file, plus a data dir living INSIDE the workdir whose snapshot
+	// store is the copy destination (the record self-recursion case).
+	if err := os.WriteFile(filepath.Join(src, "keep.txt"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dataDir := filepath.Join(src, ".agentprov", "snapshots")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, ".agentprov", "agentprov.db"), []byte("DB"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dataDir, "snap-base")
+
+	skip := func(rel string) bool {
+		return rel == ".git" || strings.HasPrefix(rel, ".git/") ||
+			rel == ".agentprov" || strings.HasPrefix(rel, ".agentprov")
+	}
+	// Must not crash with "file name too long" from recursing into its own dst.
+	if err := CopyDirFiltered(src, dst, skip); err != nil {
+		t.Fatalf("CopyDirFiltered failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "keep.txt")); err != nil {
+		t.Fatalf("expected keep.txt copied: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, ".agentprov")); !os.IsNotExist(err) {
+		t.Fatalf("expected .agentprov excluded from snapshot, stat err=%v", err)
+	}
+}

@@ -86,21 +86,30 @@ func IngestJSONL(db *sql.DB, opts JSONLIngestOptions) (JSONLIngestResult, error)
 	if strings.TrimSpace(opts.Path) == "" {
 		return JSONLIngestResult{}, fmt.Errorf("jsonl path is required")
 	}
-	opts.Format = strings.TrimSpace(opts.Format)
-	if opts.Format == "" {
-		opts.Format = "auto"
-	}
-	fileHash, err := hashFile(opts.Path)
-	if err != nil {
-		return JSONLIngestResult{}, err
+	if opts.Path == "-" {
+		return IngestJSONLReader(db, opts, os.Stdin)
 	}
 	file, err := os.Open(opts.Path)
 	if err != nil {
 		return JSONLIngestResult{}, err
 	}
 	defer file.Close()
-	result := JSONLIngestResult{Format: opts.Format, Path: opts.Path, FileSHA256: fileHash}
-	scanner := bufio.NewScanner(file)
+	return IngestJSONLReader(db, opts, file)
+}
+
+// IngestJSONLReader ingests JSONL telemetry from any reader, so the agentprov
+// sensor (or any substrate) can pipe its stdout straight into the receiver
+// (`--file -`) instead of staging a file first. FileSHA256 is computed over the
+// exact bytes streamed, so a pipe and the equivalent saved file hash identically.
+func IngestJSONLReader(db *sql.DB, opts JSONLIngestOptions, input io.Reader) (JSONLIngestResult, error) {
+	opts.Format = strings.TrimSpace(opts.Format)
+	if opts.Format == "" {
+		opts.Format = "auto"
+	}
+	hasher := sha256.New()
+	result := JSONLIngestResult{Format: opts.Format, Path: opts.Path}
+	scanner := bufio.NewScanner(io.TeeReader(input, hasher))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	lineNo := 0
 	for scanner.Scan() {
 		lineNo++
@@ -154,6 +163,7 @@ func IngestJSONL(db *sql.DB, opts JSONLIngestOptions) (JSONLIngestResult, error)
 	if err := scanner.Err(); err != nil {
 		return result, err
 	}
+	result.FileSHA256 = hex.EncodeToString(hasher.Sum(nil))
 	result.EventIDsSHA256 = hashStrings(result.EventIDs)
 	if err := persistJSONLBatch(db, opts, &result); err != nil {
 		return result, err
@@ -434,6 +444,8 @@ func mapJSONLEvent(opts JSONLIngestOptions, raw map[string]any, lineNo int) (Ing
 		event, ok, err = mapFalco(raw)
 	case "loongcollector":
 		event, ok, err = mapLoongCollector(raw)
+	case "native":
+		event, ok, err = mapNative(raw)
 	default:
 		return IngestEvent{}, false, fmt.Errorf("unsupported telemetry jsonl format %q", opts.Format)
 	}
@@ -463,10 +475,68 @@ func detectFormat(raw map[string]any) string {
 	if _, ok := raw["output_fields"]; ok {
 		return "falco"
 	}
+	if stringAt(raw, "source") == "agentprov_ebpf" {
+		return "native"
+	}
 	if stringAt(raw, "source") == "loongcollector" || stringAt(raw, "__tag__:__path__") != "" {
 		return "loongcollector"
 	}
 	return "loongcollector"
+}
+
+// mapNative maps the normalized schema emitted by the self-owned agentprov eBPF
+// sensor (internal/sensor) into an IngestEvent. The sensor already writes one
+// flat JSON object per line with source="agentprov_ebpf"; we apply the same
+// security classification as the Falco mapper so own-sensor telemetry drives the
+// identical correlation -> risk -> unified-signal path. The sensor write-filters
+// openat in-kernel, so a captured file event is a write (file_write), never a
+// secret read; secret-looking paths are still flagged downstream by the policy
+// engine's path rules.
+func mapNative(raw map[string]any) (IngestEvent, bool, error) {
+	event := baseMappedEvent(raw, "agentprov_ebpf")
+	comm := stringAt(raw, "comm")
+	switch strings.ToLower(firstNonEmpty(stringAt(raw, "event_type"), stringAt(raw, "type"))) {
+	case "execve", "exec", "process_exec":
+		event.EventType = "execve"
+		path := stringAt(raw, "path")
+		argv := []string{}
+		if path != "" {
+			argv = append(argv, path)
+		} else if comm != "" {
+			argv = append(argv, comm)
+		} else {
+			argv = append(argv, "unknown")
+		}
+		event.Payload = mustJSON(map[string]any{
+			"argv":    argv,
+			"command": strings.Join(argv, " "),
+			"comm":    comm,
+		})
+	case "network_connect", "connect":
+		host := stringAt(raw, "dst_ip")
+		port := stringAt(raw, "dst_port")
+		event.EventType = "network_connect"
+		if host == "169.254.169.254" {
+			event.EventType = "metadata_ip"
+		} else if privateIP(host) {
+			event.EventType = "private_cidr"
+		}
+		event.Payload = mustJSON(map[string]any{
+			"dst_ip": host,
+			"host":   host,
+			"port":   port,
+			"comm":   comm,
+		})
+	case "file_open", "open", "openat", "file_write":
+		event.EventType = "file_write"
+		event.Payload = mustJSON(map[string]any{
+			"path": stringAt(raw, "path"),
+			"comm": comm,
+		})
+	default:
+		return IngestEvent{}, false, nil
+	}
+	return event, true, nil
 }
 
 func mapTetragon(raw map[string]any) (IngestEvent, bool, error) {
@@ -734,19 +804,6 @@ func firstInt(values ...int64) int64 {
 func mustJSON(value any) string {
 	raw, _ := json.Marshal(value)
 	return string(raw)
-}
-
-func hashFile(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, file); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func hashStrings(values []string) string {
