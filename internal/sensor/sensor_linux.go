@@ -9,11 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -72,6 +75,7 @@ func Run(out io.Writer) error {
 		rd.Close()
 	}()
 
+	resolver := newCgroupResolver()
 	enc := json.NewEncoder(out)
 	for {
 		rec, err := rd.Read()
@@ -85,15 +89,82 @@ func Run(out io.Writer) error {
 		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &e); err != nil {
 			continue
 		}
-		_ = enc.Encode(normalize(e))
+		_ = enc.Encode(normalize(e, resolver))
 	}
+}
+
+// cgroupResolver maps the kernel-reported cgroup id (race-free, captured in
+// kernel via bpf_get_current_cgroup_id) to a container id by directory inode.
+// The container's cgroup directory outlives its short-lived processes, so this
+// survives a process whose /proc entry is already gone by the time userspace
+// drains the ring buffer - the failure mode of the previous /proc-only lookup.
+type cgroupResolver struct {
+	root string
+	mu   sync.RWMutex
+	byID map[uint64]string
+}
+
+func newCgroupResolver() *cgroupResolver {
+	return &cgroupResolver{root: "/sys/fs/cgroup", byID: map[uint64]string{}}
+}
+
+// resolve returns the container id for a kernel cgroup id, refreshing the cache
+// once on a miss (a newly seen container's cgroup dir appears between scans).
+func (r *cgroupResolver) resolve(cgroupID uint64) string {
+	if cgroupID == 0 {
+		return ""
+	}
+	r.mu.RLock()
+	id, ok := r.byID[cgroupID]
+	r.mu.RUnlock()
+	if ok {
+		return id
+	}
+	r.refresh()
+	r.mu.RLock()
+	id = r.byID[cgroupID]
+	r.mu.RUnlock()
+	return id
+}
+
+// refresh walks the cgroup v2 hierarchy and maps each container cgroup
+// directory's inode (== the kernel cgroup id) to the 64-hex container id parsed
+// from its name (docker-<id>.scope, cri-containerd-<id>.scope, kubepods/<id>...).
+func (r *cgroupResolver) refresh() {
+	next := map[uint64]string{}
+	_ = filepath.WalkDir(r.root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || !d.IsDir() {
+			return nil
+		}
+		m := dockerCgroupRe.FindString(d.Name())
+		if m == "" {
+			return nil
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil
+		}
+		if st, ok := info.Sys().(*syscall.Stat_t); ok {
+			next[uint64(st.Ino)] = m
+		}
+		return nil
+	})
+	r.mu.Lock()
+	r.byID = next
+	r.mu.Unlock()
 }
 
 // normalize maps a raw kernel event to the normalized telemetry schema consumed
 // by `telemetry ingest` (container_id, cgroup_id, pid/tgid/ppid, source,
 // event_type, payload). container_id is best-effort from /proc/<pid>/cgroup.
-func normalize(e sensorbpfSensorEvent) map[string]any {
-	containerID := containerIDForPID(e.Pid)
+func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any {
+	// Prefer the race-free cgroup-id -> container-id resolution; the /proc lookup
+	// is a fallback for the live process and for hosts where the cgroup dir name
+	// does not carry the id.
+	containerID := resolver.resolve(e.CgroupId)
+	if containerID == "" {
+		containerID = containerIDForPID(e.Pid)
+	}
 	ev := map[string]any{
 		"source":       "agentprov_ebpf",
 		"pid":          e.Pid,
