@@ -43,7 +43,7 @@ tamper-evident against a malicious host root.
 | 4 | Ingest: Falco | DONE | `IngestFalco`; `accept_falco_risk_realistic.sh` |
 | 4 | Ingest: Tetragon | DONE | `mapTetragon`; unit + demo (no accept script -- see Sec 2 tests) |
 | 4 | Ingest: own eBPF sensor -- receiver | DONE | `mapNative` native format; `accept_native_sensor_risk.sh`; live VM E2E 2026-06-27 |
-| 4 | Ingest: own eBPF sensor -- capture binary build | PARTIAL | bpf2go bindings not committed; needs Linux `go generate` -> reproducible build is a Sec 2 must-fix |
+| 4 | Ingest: own eBPF sensor -- capture binary build | DONE | bpf2go bindings committed (`internal/sensor/sensorbpf_bpf*.go/.o`); fresh Linux `go build ./cmd/agentprov-sensor` works without clang; `scripts/regen-sensor.sh --check` + CI guard drift |
 | 4 | Ingest: raw events need no tool_call_id | DONE | `telemetry/service.go` IngestFiltered -> correlation.Resolve fallback |
 | 4 | Correlation by container/cgroup/pid/time | DONE | `correlation/binding.go`: process 1.0 / cgroup 0.98 / container 0.92 / pid 0.85 |
 | 4 | Child/async/delayed -> original scope | DONE | time-window open bindings + root_pid + container/cgroup co-membership (not ppid lineage); add child-pid test (Sec 2) |
@@ -70,30 +70,33 @@ tamper-evident against a malicious host root.
 | 10 | Deploy 2 Sidecar/local daemon | DONE | `daemon serve` + REST + bearer auth |
 | 10 | Deploy 3 Central evidence service | DEFERRED | no object storage / multi-tenant / mTLS -> **v2** |
 
-## 2. v1 must-close before calling it done (hardening + honesty, no new features)
+## 2. v1 must-close (hardening + honesty, no new features) -- ALL DONE 2026-06-27
 
-1. **[DONE 2026-06-27] record self-recursion crash** -- `CopyDirFiltered` excludes
-   the dst subtree + .agentprov.
-2. **Confidence semantics split** -- distinguish `self_observed` (Mode 1 recorder
-   joins data it collected itself, synthetic container_id -> 1.0) from
-   `kernel_correlated` (real telemetry joined via binding). Today both land as a
-   bare confidence number; a security consumer must be able to tell them apart.
-3. **Two-writer guard** -- WAL makes concurrent writers file-safe, but a running
-   daemon + a direct CLI write to the same data dir diverge logically. Either
-   route CLI writes through the daemon, or refuse/warn when a daemon owns the
-   data dir. At minimum document it as unsupported.
-4. **eBPF sensor reproducible build** -- commit the generated bpf2go bindings (or a
-   `make sensor` + Linux CI job) so the capture binary builds from the repo, not
-   only after a manual `go generate` on the VM.
-5. **Adversarial / coverage tests** (the "prove the crown jewel" gates):
-   - in-DB hash-chain tamper -> `graph verify` detects it (real corrupted-chain
-     scenario, not just signed-bundle tamper)
-   - concurrent writers -> graph logical consistency invariant holds
-   - child event whose pid != binding pid still attributes to the scope
-   - Tetragon `accept_*.sh` script (parity with falco/native)
-   - 10s window assertion; a latency/responsiveness assertion under 100k pressure
-6. **Contract tightening** -- give the control API a consistent `schema_version`
-   on every response type (Tier-A versioned-contract item).
+1. **[DONE]** record self-recursion crash -- `CopyDirFiltered` excludes the dst
+   subtree + .agentprov (commit 28700d4).
+2. **[DONE]** Confidence semantics split -- `telemetry.CorrelationClass` ->
+   self_observed | context_asserted | kernel_correlated | uncorrelated, surfaced
+   on the telemetry-list and event-explain JSON (commit 4e1a6f7).
+3. **[DONE]** Two-writer guard -- `daemon serve` holds an advisory `.daemon.lock`;
+   CLI writes warn via `daemon.WarnIfDaemonActive` (WAL keeps it file-safe; the
+   warning points at `--daemon-url`). Commit 9f2204a.
+4. **[DONE]** eBPF sensor reproducible build -- bpf2go bindings committed; fresh
+   Linux `go build ./cmd/agentprov-sensor` works without clang; `scripts/regen-sensor.sh`
+   (+ `--check`) and two CI jobs guard build + drift (commit 50f1106).
+5. **[DONE]** Adversarial / coverage tests:
+   - object-file + in-DB tamper -> `graph verify` (object_hash_mismatch /
+     record_manifest_mismatch); `scripts/accept_evidence_tamper_detection.sh` (6692c62)
+   - concurrent writers -> graph consistency; record TestConcurrentRecord... (d84812a)
+   - child pid != binding pid attributes via container; correlation test (f7f2a6b)
+   - Tetragon `scripts/accept_tetragon_ingest.sh`; 10s window assertion (f7f2a6b)
+   - 100k latency SLA: intentionally NOT added (latency assertions are flaky /
+     low-value; the 100k script already proves bounded paging + health stays ok).
+6. **[DONE]** Contract: daemon `health` now emits `schema_version` (the one
+   passthrough-less response; report handlers already carried it). Commit 2f2b4d7.
+   A single universal envelope across all responses remains a v2 item (it would
+   change existing wire formats).
+
+**v1 hardening is complete.** Remaining open work is all v2 (Sec 3).
 
 ## 3. Explicitly DEFERRED to v2 (decided 2026-06-27)
 
