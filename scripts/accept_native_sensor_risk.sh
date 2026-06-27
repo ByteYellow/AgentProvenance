@@ -71,6 +71,8 @@ assert_contains "$TELEMETRY_JSON" '"event_type": "metadata_ip"'
 assert_contains "$TELEMETRY_JSON" '"event_type": "private_cidr"'
 assert_contains "$TELEMETRY_JSON" '"event_type": "file_write"'
 assert_contains "$TELEMETRY_JSON" '"tool_call_id": "tool-native"'
+# Own-sensor telemetry is independently kernel-correlated, not a self-join.
+assert_contains "$TELEMETRY_JSON" '"correlation_class": "kernel_correlated"'
 
 echo "== assert automatic risk signals from own kernel telemetry"
 RISKS_JSON="$("$BIN" --data-dir "$DATA_DIR" security risks --run run-native-sensor --json)"
