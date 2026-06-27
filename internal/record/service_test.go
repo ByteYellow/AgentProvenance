@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
@@ -364,5 +365,90 @@ func TestRecordStartFailureReturnsFailedManifest(t *testing.T) {
 	}
 	if verify.ErrorCount != 0 {
 		t.Fatalf("verify errors=%d issues=%+v", verify.ErrorCount, verify.Issues)
+	}
+}
+
+// TestConcurrentRecordPreservesGraphConsistency drives several record jobs
+// against ONE shared *sql.DB concurrently (the `record batch --concurrency`
+// hot path) and asserts each run produces an independently verifiable,
+// non-cross-contaminated graph. WAL + busy_timeout serialize the writers; this
+// pins the logical invariant on top of that file-level safety.
+func TestConcurrentRecordPreservesGraphConsistency(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	const n = 6
+	service := Service{DB: db, Paths: paths}
+	results := make([]Result, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			wd := filepath.Join(root, fmt.Sprintf("wd-%d", i))
+			if err := os.MkdirAll(wd, 0o755); err != nil {
+				errs[i] = err
+				return
+			}
+			if err := os.WriteFile(filepath.Join(wd, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
+				errs[i] = err
+				return
+			}
+			results[i], errs[i] = service.Run(Request{
+				RunID:            fmt.Sprintf("run-conc-%d", i),
+				Name:             fmt.Sprintf("conc-%d", i),
+				Workdir:          wd,
+				Command:          []string{"sh", "-lc", fmt.Sprintf("printf 'out %d\\n' > out.txt", i)},
+				SampleIntervalMS: 10,
+				PostRootGraceMS:  150,
+			})
+		}(i)
+	}
+	wg.Wait()
+
+	for i := 0; i < n; i++ {
+		if errs[i] != nil {
+			t.Fatalf("run %d errored: %v", i, errs[i])
+		}
+		if results[i].Status != "passed" {
+			t.Fatalf("run %d status = %s, want passed", i, results[i].Status)
+		}
+	}
+
+	// Each run's graph must verify clean and stay isolated: its events carry only
+	// that run's tool_call/process (no cross-run leakage from concurrent writes).
+	for i := 0; i < n; i++ {
+		runID := fmt.Sprintf("run-conc-%d", i)
+		report, err := provenance.Verify(db, runID)
+		if err != nil {
+			t.Fatalf("verify run %d: %v", i, err)
+		}
+		if report.Status != "ok" {
+			t.Fatalf("run %d verify status = %s (issues=%+v), want ok", i, report.Status, report.Issues)
+		}
+		events, err := telemetry.ListEventsFiltered(db, telemetry.Filter{RunID: runID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(events) == 0 {
+			t.Fatalf("run %d has no events", i)
+		}
+		for _, ev := range events {
+			if ev.RunID != runID {
+				t.Fatalf("run %d leaked event from %s", i, ev.RunID)
+			}
+			if ev.ToolCallID != "" && ev.ToolCallID != results[i].ToolCallID {
+				t.Fatalf("run %d event tool_call %s != %s (cross-contamination)", i, ev.ToolCallID, results[i].ToolCallID)
+			}
+		}
 	}
 }
