@@ -150,6 +150,7 @@ func (s Server) health(w http.ResponseWriter, r *http.Request) {
 		runtimeName = s.Driver.Name()
 	}
 	writeJSON(w, map[string]any{
+		"schema_version":       "agentprovenance.daemon_health/v1",
 		"status":               "ok",
 		"runtime":              runtimeName,
 		"sample_interval_ms":   s.SampleInterval.Milliseconds(),

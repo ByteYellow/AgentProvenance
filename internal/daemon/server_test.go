@@ -283,3 +283,25 @@ func TestDaemonAuthToken(t *testing.T) {
 		}
 	}
 }
+
+func TestHealthEndpointCarriesSchemaVersion(t *testing.T) {
+	s := testServer(t)
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/v1/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["schema_version"] != "agentprovenance.daemon_health/v1" {
+		t.Fatalf("health schema_version = %v, want agentprovenance.daemon_health/v1", body["schema_version"])
+	}
+	if body["status"] != "ok" {
+		t.Fatalf("health status = %v, want ok", body["status"])
+	}
+}
