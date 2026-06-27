@@ -86,21 +86,30 @@ func IngestJSONL(db *sql.DB, opts JSONLIngestOptions) (JSONLIngestResult, error)
 	if strings.TrimSpace(opts.Path) == "" {
 		return JSONLIngestResult{}, fmt.Errorf("jsonl path is required")
 	}
-	opts.Format = strings.TrimSpace(opts.Format)
-	if opts.Format == "" {
-		opts.Format = "auto"
-	}
-	fileHash, err := hashFile(opts.Path)
-	if err != nil {
-		return JSONLIngestResult{}, err
+	if opts.Path == "-" {
+		return IngestJSONLReader(db, opts, os.Stdin)
 	}
 	file, err := os.Open(opts.Path)
 	if err != nil {
 		return JSONLIngestResult{}, err
 	}
 	defer file.Close()
-	result := JSONLIngestResult{Format: opts.Format, Path: opts.Path, FileSHA256: fileHash}
-	scanner := bufio.NewScanner(file)
+	return IngestJSONLReader(db, opts, file)
+}
+
+// IngestJSONLReader ingests JSONL telemetry from any reader, so the agentprov
+// sensor (or any substrate) can pipe its stdout straight into the receiver
+// (`--file -`) instead of staging a file first. FileSHA256 is computed over the
+// exact bytes streamed, so a pipe and the equivalent saved file hash identically.
+func IngestJSONLReader(db *sql.DB, opts JSONLIngestOptions, input io.Reader) (JSONLIngestResult, error) {
+	opts.Format = strings.TrimSpace(opts.Format)
+	if opts.Format == "" {
+		opts.Format = "auto"
+	}
+	hasher := sha256.New()
+	result := JSONLIngestResult{Format: opts.Format, Path: opts.Path}
+	scanner := bufio.NewScanner(io.TeeReader(input, hasher))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	lineNo := 0
 	for scanner.Scan() {
 		lineNo++
@@ -154,6 +163,7 @@ func IngestJSONL(db *sql.DB, opts JSONLIngestOptions) (JSONLIngestResult, error)
 	if err := scanner.Err(); err != nil {
 		return result, err
 	}
+	result.FileSHA256 = hex.EncodeToString(hasher.Sum(nil))
 	result.EventIDsSHA256 = hashStrings(result.EventIDs)
 	if err := persistJSONLBatch(db, opts, &result); err != nil {
 		return result, err
@@ -794,19 +804,6 @@ func firstInt(values ...int64) int64 {
 func mustJSON(value any) string {
 	raw, _ := json.Marshal(value)
 	return string(raw)
-}
-
-func hashFile(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, file); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func hashStrings(values []string) string {

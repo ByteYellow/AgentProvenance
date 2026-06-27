@@ -480,7 +480,7 @@ func telemetryIngestJSONLCmd(dataDir *string) *cobra.Command {
 		},
 	}
 	ingest.Flags().StringVar(&opts.Format, "format", "auto", "jsonl format: auto, tetragon, falco, loongcollector, or native (agentprov eBPF sensor)")
-	ingest.Flags().StringVar(&opts.Path, "file", "", "JSONL file path")
+	ingest.Flags().StringVar(&opts.Path, "file", "", "JSONL file path, or - to read a piped stream from stdin (e.g. the agentprov sensor)")
 	ingest.Flags().StringVar(&opts.RunID, "run", "", "default run id")
 	ingest.Flags().StringVar(&opts.RolloutID, "rollout", "", "default rollout id")
 	ingest.Flags().StringVar(&opts.AttemptID, "attempt", "", "default attempt id")

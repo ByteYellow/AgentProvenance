@@ -48,10 +48,12 @@ echo "== bind external ToolCallScope anchor (container+time key)"
   --started-at 2000-01-01T00:00:00.000000000Z \
   --source external_telemetry >/dev/null
 
-echo "== ingest agentprov eBPF sensor JSONL (auto-detected native format)"
-"$BIN" --data-dir "$DATA_DIR" telemetry ingest-jsonl \
-  --file examples/telemetry/native-ebpf-events.jsonl \
-  --json >"$INGEST_JSON"
+echo "== pipe the sensor stream directly into ingest (--file -, the VM E2E shape)"
+# On the Linux VM this is: agentprov-sensor | agentprov telemetry ingest-jsonl --file -
+cat examples/telemetry/native-ebpf-events.jsonl \
+  | "$BIN" --data-dir "$DATA_DIR" telemetry ingest-jsonl \
+    --file - \
+    --json >"$INGEST_JSON"
 
 INGEST_OUTPUT="$(cat "$INGEST_JSON")"
 assert_contains "$INGEST_OUTPUT" '"detected_format": "native"'

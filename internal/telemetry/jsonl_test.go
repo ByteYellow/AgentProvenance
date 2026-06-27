@@ -314,6 +314,43 @@ func TestIngestNativeSensorRiskEventsAndCorrelates(t *testing.T) {
 	}
 }
 
+func TestIngestJSONLReaderMatchesFileHash(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Same bytes a sensor would pipe; no binding, so events stay unresolved but
+	// still ingest. The reader path (stdin pipe) must hash identically to the
+	// equivalent saved file.
+	bytesIn := `{"source":"agentprov_ebpf","pid":7,"event_type":"execve","path":"/bin/true"}` + "\n"
+	path := filepath.Join(root, "piped.jsonl")
+	if err := os.WriteFile(path, []byte(bytesIn), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fromFile, err := IngestJSONL(db, JSONLIngestOptions{Format: "native", Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromReader, err := IngestJSONLReader(db, JSONLIngestOptions{Format: "native", Path: "-"}, strings.NewReader(bytesIn))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromFile.Ingested != 1 || fromReader.Ingested != 1 {
+		t.Fatalf("ingested file=%d reader=%d, want 1 each", fromFile.Ingested, fromReader.Ingested)
+	}
+	if fromFile.FileSHA256 == "" || fromFile.FileSHA256 != fromReader.FileSHA256 {
+		t.Fatalf("file hash %q != reader hash %q", fromFile.FileSHA256, fromReader.FileSHA256)
+	}
+}
+
 func TestIngestJSONLReportsBadRows(t *testing.T) {
 	root := t.TempDir()
 	paths, err := store.Init(filepath.Join(root, ".agentprov"))
