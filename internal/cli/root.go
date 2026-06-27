@@ -43,6 +43,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(securityCmd(&dataDir, &daemonURL))
 	root.AddCommand(signalCmd(&dataDir, &daemonURL))
 	root.AddCommand(signalsCmd(&dataDir))
+	root.AddCommand(aiCmd(&dataDir))
 	root.AddCommand(complianceCmd(&dataDir))
 	root.AddCommand(gcCmd(&dataDir))
 	root.AddCommand(baselineCmd(&dataDir))
