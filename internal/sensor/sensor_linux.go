@@ -31,13 +31,26 @@ const (
 	eventConnect = 2
 	eventOpen    = 3
 	eventExit    = 4
+	eventSSL     = 5
 )
+
+// Options configures optional sensor probes beyond the always-on syscall set.
+type Options struct {
+	// SSLLib, when set, attaches the PoC SSL_write uprobe to this libssl path to
+	// capture TLS plaintext (the agent's LLM request body) zero-instrumentation.
+	SSLLib string
+}
 
 // Run loads the eBPF probes (exec/connect/openat), reads events from the ring
 // buffer, enriches each with a container id derived from the task's cgroup, and
 // writes one normalized telemetry event per line (JSONL) to out. It blocks until
 // SIGINT/SIGTERM. Requires root or CAP_BPF + CAP_PERFMON.
 func Run(out io.Writer) error {
+	return RunWithOptions(out, Options{})
+}
+
+// RunWithOptions is Run with optional extra probes (see Options).
+func RunWithOptions(out io.Writer, opts Options) error {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return fmt.Errorf("remove memlock: %w", err)
 	}
@@ -73,6 +86,17 @@ func Run(out io.Writer) error {
 		return fmt.Errorf("attach sched_process_exit: %w", err)
 	}
 	defer tpExit.Close()
+	if opts.SSLLib != "" {
+		ex, err := link.OpenExecutable(opts.SSLLib)
+		if err != nil {
+			return fmt.Errorf("open ssl lib %s: %w", opts.SSLLib, err)
+		}
+		upSSL, err := ex.Uprobe("SSL_write", objs.HandleSslWrite, nil)
+		if err != nil {
+			return fmt.Errorf("attach SSL_write uprobe on %s: %w", opts.SSLLib, err)
+		}
+		defer upSSL.Close()
+	}
 
 	rd, err := ringbuf.NewReader(objs.Events)
 	if err != nil {
@@ -252,6 +276,10 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 	case eventExit:
 		ev["event_type"] = "process_exit"
 		ev["exit_code"] = e.ExitCode
+	case eventSSL:
+		ev["event_type"] = "tls_write"
+		ev["data"] = cstr(e.Path[:]) // plaintext preview (first path[] bytes)
+		ev["length"] = e.ExitCode
 	default:
 		ev["event_type"] = "unknown"
 	}

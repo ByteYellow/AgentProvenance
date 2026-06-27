@@ -71,11 +71,12 @@ type sensorbpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type sensorbpfProgramSpecs struct {
-	HandleConnect *ebpf.ProgramSpec `ebpf:"handle_connect"`
-	HandleExec    *ebpf.ProgramSpec `ebpf:"handle_exec"`
-	HandleExecve  *ebpf.ProgramSpec `ebpf:"handle_execve"`
-	HandleExit    *ebpf.ProgramSpec `ebpf:"handle_exit"`
-	HandleOpenat  *ebpf.ProgramSpec `ebpf:"handle_openat"`
+	HandleConnect  *ebpf.ProgramSpec `ebpf:"handle_connect"`
+	HandleExec     *ebpf.ProgramSpec `ebpf:"handle_exec"`
+	HandleExecve   *ebpf.ProgramSpec `ebpf:"handle_execve"`
+	HandleExit     *ebpf.ProgramSpec `ebpf:"handle_exit"`
+	HandleOpenat   *ebpf.ProgramSpec `ebpf:"handle_openat"`
+	HandleSslWrite *ebpf.ProgramSpec `ebpf:"handle_ssl_write"`
 }
 
 // sensorbpfMapSpecs contains maps before they are loaded into the kernel.
@@ -126,11 +127,12 @@ func (m *sensorbpfMaps) Close() error {
 //
 // It can be passed to loadSensorbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type sensorbpfPrograms struct {
-	HandleConnect *ebpf.Program `ebpf:"handle_connect"`
-	HandleExec    *ebpf.Program `ebpf:"handle_exec"`
-	HandleExecve  *ebpf.Program `ebpf:"handle_execve"`
-	HandleExit    *ebpf.Program `ebpf:"handle_exit"`
-	HandleOpenat  *ebpf.Program `ebpf:"handle_openat"`
+	HandleConnect  *ebpf.Program `ebpf:"handle_connect"`
+	HandleExec     *ebpf.Program `ebpf:"handle_exec"`
+	HandleExecve   *ebpf.Program `ebpf:"handle_execve"`
+	HandleExit     *ebpf.Program `ebpf:"handle_exit"`
+	HandleOpenat   *ebpf.Program `ebpf:"handle_openat"`
+	HandleSslWrite *ebpf.Program `ebpf:"handle_ssl_write"`
 }
 
 func (p *sensorbpfPrograms) Close() error {
@@ -140,6 +142,7 @@ func (p *sensorbpfPrograms) Close() error {
 		p.HandleExecve,
 		p.HandleExit,
 		p.HandleOpenat,
+		p.HandleSslWrite,
 	)
 }
 

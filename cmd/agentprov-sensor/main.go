@@ -12,7 +12,10 @@ import (
 )
 
 func main() {
-	if err := sensor.Run(os.Stdout); err != nil {
+	// AGENTPROV_SSL_LIB=/path/to/libssl.so.3 enables the PoC SSL_write uprobe
+	// (zero-instrumentation TLS plaintext capture).
+	opts := sensor.Options{SSLLib: os.Getenv("AGENTPROV_SSL_LIB")}
+	if err := sensor.RunWithOptions(os.Stdout, opts); err != nil {
 		fmt.Fprintln(os.Stderr, "agentprov-sensor:", err)
 		os.Exit(1)
 	}

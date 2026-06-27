@@ -11,6 +11,12 @@
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
+// PoC SSL uprobe arg extraction needs PT_REGS; arm64 is the lab target. Register
+// layout is arch-specific, so a future multi-arch build must set this per arch.
+#ifndef __TARGET_ARCH_arm64
+#define __TARGET_ARCH_arm64
+#endif
+#include <bpf/bpf_tracing.h>
 
 char LICENSE[] SEC("license") = "GPL";
 
@@ -18,6 +24,7 @@ char LICENSE[] SEC("license") = "GPL";
 #define EVENT_CONNECT 2
 #define EVENT_OPEN 3
 #define EVENT_EXIT 4
+#define EVENT_SSL 5
 #define AF_INET 2
 
 // argv is captured as fixed-size slots (constant offsets keep the BPF verifier
@@ -217,6 +224,30 @@ int handle_exit(struct trace_event_raw_sched_process_template *ctx) {
 	e->args[0] = 0;
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 	e->exit_code = (BPF_CORE_READ(task, exit_code) >> 8) & 0xff;
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// PoC boundary tracing: a uprobe on SSL_write(ssl, buf, num) captures the
+// plaintext an agent writes to a TLS socket (the LLM request body) without
+// instrumenting the agent. Userspace attaches this to a libssl path only when
+// --ssl-lib is given. We capture the first path[] bytes as a preview.
+SEC("uprobe/SSL_write")
+int BPF_UPROBE(handle_ssl_write, void *ssl, const void *buf, int num) {
+	if (!buf || num <= 0)
+		return 0;
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		return 0;
+	}
+	e->kind = EVENT_SSL;
+	e->daddr = 0;
+	e->dport = 0;
+	e->exit_code = num; // total plaintext length (preview may be shorter)
+	fill_common(e);
+	e->args[0] = 0;
+	bpf_probe_read_user(&e->path, sizeof(e->path), buf);
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }
