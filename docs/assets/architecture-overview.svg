@@ -22,7 +22,7 @@
     </marker>
   </defs>
   <rect class="bg" x="0" y="0" width="1180" height="720"/>
-  <text class="txt title" x="50" y="58">AgentProvenance</text>
+  <text class="txt title" x="50" y="58"><tspan style="fill:#0071e3">Agent</tspan>Provenance</text>
   <text class="txt subtitle" x="50" y="86">Execution observability and Git-like provenance for sandboxed agents</text>
 
   <rect class="panel" x="50" y="130" width="210" height="390"/>

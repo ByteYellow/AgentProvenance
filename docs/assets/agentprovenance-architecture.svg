@@ -10,7 +10,7 @@
     </marker>
   </defs>
   <rect class="bg" width="1280" height="720"/>
-  <text x="48" y="54" class="title">AgentProvenance: execution observability + verifiable provenance for sandboxed agents</text>
+  <text x="48" y="54" class="title"><tspan style="fill:#0071e3">Agent</tspan>Provenance: execution observability + verifiable provenance for sandboxed agents</text>
   <text x="48" y="82" class="small">System telemetry and application context are correlated into a queryable, replayable, and auditable evidence graph.</text>
 
   <rect x="50" y="120" width="250" height="390" rx="16" class="panel"/>
@@ -60,7 +60,7 @@
   <rect x="1090" y="253" width="120" height="48" rx="10" class="panel"/>
   <text x="1111" y="283" class="t">Daemon API</text>
   <rect x="1090" y="321" width="120" height="48" rx="10" class="panel"/>
-  <text x="1110" y="351" class="t">AI tools</text>
+  <text x="1110" y="351" class="t">AI tools + MCP</text>
   <rect x="1090" y="389" width="120" height="48" rx="10" class="risk"/>
   <text x="1113" y="419" class="t">Risk gate</text>
   <rect x="1090" y="457" width="120" height="48" rx="10" class="verify"/>
