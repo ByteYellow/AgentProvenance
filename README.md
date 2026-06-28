@@ -697,8 +697,12 @@ engine, not the model.
 ## Web Dashboard
 
 <p align="center">
-  <img src="docs/assets/dashboard-preview.svg" alt="AgentProvenance local evidence inspector preview with run selection, verify status, timeline, process tree, egress, risk signals, and causality DAG." width="100%">
+  <img src="docs/assets/dashboard-causality.png" alt="AgentProvenance local evidence inspector preview with run selection, verify status, timeline, process tree, egress, risk signals, and causality DAG." width="100%">
 </p>
+<p align="center">
+  <img src="docs/assets/dashboard-timeline-process-egress.png" alt="AgentProvenance local evidence inspector preview with run selection, verify status, timeline, process tree, egress, risk signals, and causality DAG." width="100%">
+</p>
+
 
 ```sh
 ./agentprov dashboard serve            # http://127.0.0.1:7396
