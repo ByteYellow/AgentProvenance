@@ -21,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
@@ -33,6 +34,11 @@ const (
 	eventExit    = 4
 	eventSSL     = 5
 	eventSSLRead = 6
+	eventSetuid  = 7
+	eventPtrace  = 8
+	eventRename  = 9
+	eventUnlink  = 10
+	eventDNS     = 11
 )
 
 // Options configures optional sensor probes beyond the always-on syscall set.
@@ -40,6 +46,9 @@ type Options struct {
 	// SSLLib, when set, attaches the PoC SSL_write uprobe to this libssl path to
 	// capture TLS plaintext (the agent's LLM request body) zero-instrumentation.
 	SSLLib string
+	// LibcLib overrides the libc path for the getaddrinfo DNS uprobe; empty =
+	// auto-detect the common system libc paths.
+	LibcLib string
 }
 
 // Run loads the eBPF probes (exec/connect/openat), reads events from the ring
@@ -87,6 +96,26 @@ func RunWithOptions(out io.Writer, opts Options) error {
 		return fmt.Errorf("attach sched_process_exit: %w", err)
 	}
 	defer tpExit.Close()
+	// Privilege-change / tamper probes (privesc + file rename/delete). Each is a
+	// simple syscall tracepoint; attach failures are non-fatal so an older kernel
+	// missing one tracepoint still runs the rest.
+	for _, p := range []struct {
+		group, name string
+		prog        *ebpf.Program
+	}{
+		{"syscalls", "sys_enter_setuid", objs.HandleSetuid},
+		{"syscalls", "sys_enter_setgid", objs.HandleSetgid},
+		{"syscalls", "sys_enter_ptrace", objs.HandlePtrace},
+		{"syscalls", "sys_enter_renameat2", objs.HandleRename},
+		{"syscalls", "sys_enter_renameat", objs.HandleRename},
+		{"syscalls", "sys_enter_rename", objs.HandleRenamePlain},
+		{"syscalls", "sys_enter_unlinkat", objs.HandleUnlink},
+		{"syscalls", "sys_enter_sendto", objs.HandleSendto}, // universal DNS (UDP:53)
+	} {
+		if tp, err := link.Tracepoint(p.group, p.name, p.prog, nil); err == nil {
+			defer tp.Close()
+		}
+	}
 	if opts.SSLLib != "" {
 		ex, err := link.OpenExecutable(opts.SSLLib)
 		if err != nil {
@@ -107,6 +136,19 @@ func RunWithOptions(out io.Writer, opts Options) error {
 			return fmt.Errorf("attach SSL_read uretprobe on %s: %w", opts.SSLLib, err)
 		}
 		defer upReadExit.Close()
+	}
+
+	// DNS uprobe on the system libc's getaddrinfo (best-effort, non-fatal): gives
+	// egress the resolved HOSTNAME, not just the IP. Glibc apps only.
+	for _, libc := range libcCandidates(opts.LibcLib) {
+		ex, err := link.OpenExecutable(libc)
+		if err != nil {
+			continue
+		}
+		if up, err := ex.Uprobe("getaddrinfo", objs.HandleGetaddrinfo, nil); err == nil {
+			defer up.Close()
+			break
+		}
 	}
 
 	rd, err := ringbuf.NewReader(objs.Events)
@@ -149,7 +191,9 @@ func RunWithOptions(out io.Writer, opts Options) error {
 		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &e); err != nil {
 			continue
 		}
-		emit(normalize(e, resolver))
+		if m := normalize(e, resolver); m != nil {
+			emit(m)
+		}
 	}
 }
 
@@ -282,11 +326,53 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 		ev["dst_ip"] = ipv4(e.Daddr)
 		ev["dst_port"] = ntohs(e.Dport)
 	case eventOpen:
+		path := cstr(e.Path[:])
+		mode := "write"
+		if e.ExitCode == 1 {
+			mode = "read"
+		}
+		// The kernel already dropped noise-prefix reads; here we keep only
+		// sensitive reads (writes always pass). Non-sensitive reads are dropped
+		// so the store stays focused on credential/secret access.
+		if mode == "read" && !sensitiveReadPath(path) {
+			return nil
+		}
 		ev["event_type"] = "file_open"
-		ev["path"] = cstr(e.Path[:])
+		ev["path"] = path
+		ev["mode"] = mode
 	case eventExit:
 		ev["event_type"] = "process_exit"
 		ev["exit_code"] = e.ExitCode
+	case eventSetuid:
+		if e.Daddr == 1 {
+			ev["event_type"] = "setgid"
+			ev["gid"] = e.ExitCode
+		} else {
+			ev["event_type"] = "setuid"
+			ev["uid"] = e.ExitCode
+		}
+	case eventPtrace:
+		ev["event_type"] = "ptrace"
+		ev["request"] = e.ExitCode
+		ev["target_pid"] = e.Daddr
+	case eventRename:
+		ev["event_type"] = "file_rename"
+		ev["path"] = cstr(e.Path[:])
+	case eventUnlink:
+		ev["event_type"] = "file_unlink"
+		ev["path"] = cstr(e.Path[:])
+	case eventDNS:
+		ev["event_type"] = "dns_query"
+		if e.ExitCode > 0 {
+			// raw DNS query bytes (UDP path); parse the qname
+			n := int(e.ExitCode)
+			if n > len(e.Path) {
+				n = len(e.Path)
+			}
+			ev["host"] = dnsQName(e.Path[:n])
+		} else {
+			ev["host"] = cstr(e.Path[:]) // getaddrinfo hostname (string)
+		}
 	case eventSSL:
 		ev["event_type"] = "tls_write"
 		ev["data"] = cstr(e.Path[:]) // plaintext preview (first path[] bytes)
@@ -299,6 +385,73 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 		ev["event_type"] = "unknown"
 	}
 	return ev
+}
+
+// sensitiveReadPath positively matches the small set of paths whose READ is
+// security-relevant (credential/secret/key files). The kernel forwards reads
+// coarsely (noise prefixes dropped); this is the precise filter that decides
+// which reads reach the store. Mirrors the policy engine's secret patterns and
+// adds key/cred file markers.
+func sensitiveReadPath(p string) bool {
+	for _, s := range []string{
+		".ssh", ".aws", "id_rsa", "id_ed25519", "credentials", ".env",
+		"secret", "/etc/shadow", "/etc/passwd", ".pem", ".kube/config", "_token",
+	} {
+		if strings.Contains(p, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// libcCandidates returns libc paths to try for the getaddrinfo uprobe: the
+// explicit override first, then the common multiarch/system locations.
+func libcCandidates(override string) []string {
+	c := []string{}
+	if override != "" {
+		c = append(c, override)
+	}
+	return append(c,
+		"/lib/aarch64-linux-gnu/libc.so.6",
+		"/lib/x86_64-linux-gnu/libc.so.6",
+		"/usr/lib/libc.so.6",
+		"/lib/libc.so.6",
+	)
+}
+
+// dnsQName parses the question name from a raw DNS query message (12-byte header
+// then length-prefixed labels) into a dotted hostname, or "" if malformed.
+func dnsQName(b []uint8) string {
+	if len(b) < 13 {
+		return ""
+	}
+	i := 12
+	var sb strings.Builder
+	for i < len(b) {
+		l := int(b[i])
+		i++
+		if l == 0 {
+			break
+		}
+		if l > 63 || i+l > len(b) {
+			return ""
+		}
+		if sb.Len() > 0 {
+			sb.WriteByte('.')
+		}
+		for j := 0; j < l; j++ {
+			c := b[i+j]
+			if c < 0x20 || c > 0x7e {
+				return "" // not a printable hostname
+			}
+			sb.WriteByte(byte(c))
+		}
+		i += l
+	}
+	if sb.Len() == 0 {
+		return ""
+	}
+	return sb.String()
 }
 
 // dockerCgroupRe extracts a 64-hex container id from a cgroup path line.

@@ -75,10 +75,18 @@ type sensorbpfProgramSpecs struct {
 	HandleExec         *ebpf.ProgramSpec `ebpf:"handle_exec"`
 	HandleExecve       *ebpf.ProgramSpec `ebpf:"handle_execve"`
 	HandleExit         *ebpf.ProgramSpec `ebpf:"handle_exit"`
+	HandleGetaddrinfo  *ebpf.ProgramSpec `ebpf:"handle_getaddrinfo"`
 	HandleOpenat       *ebpf.ProgramSpec `ebpf:"handle_openat"`
+	HandlePtrace       *ebpf.ProgramSpec `ebpf:"handle_ptrace"`
+	HandleRename       *ebpf.ProgramSpec `ebpf:"handle_rename"`
+	HandleRenamePlain  *ebpf.ProgramSpec `ebpf:"handle_rename_plain"`
+	HandleSendto       *ebpf.ProgramSpec `ebpf:"handle_sendto"`
+	HandleSetgid       *ebpf.ProgramSpec `ebpf:"handle_setgid"`
+	HandleSetuid       *ebpf.ProgramSpec `ebpf:"handle_setuid"`
 	HandleSslReadEnter *ebpf.ProgramSpec `ebpf:"handle_ssl_read_enter"`
 	HandleSslReadExit  *ebpf.ProgramSpec `ebpf:"handle_ssl_read_exit"`
 	HandleSslWrite     *ebpf.ProgramSpec `ebpf:"handle_ssl_write"`
+	HandleUnlink       *ebpf.ProgramSpec `ebpf:"handle_unlink"`
 }
 
 // sensorbpfMapSpecs contains maps before they are loaded into the kernel.
@@ -136,10 +144,18 @@ type sensorbpfPrograms struct {
 	HandleExec         *ebpf.Program `ebpf:"handle_exec"`
 	HandleExecve       *ebpf.Program `ebpf:"handle_execve"`
 	HandleExit         *ebpf.Program `ebpf:"handle_exit"`
+	HandleGetaddrinfo  *ebpf.Program `ebpf:"handle_getaddrinfo"`
 	HandleOpenat       *ebpf.Program `ebpf:"handle_openat"`
+	HandlePtrace       *ebpf.Program `ebpf:"handle_ptrace"`
+	HandleRename       *ebpf.Program `ebpf:"handle_rename"`
+	HandleRenamePlain  *ebpf.Program `ebpf:"handle_rename_plain"`
+	HandleSendto       *ebpf.Program `ebpf:"handle_sendto"`
+	HandleSetgid       *ebpf.Program `ebpf:"handle_setgid"`
+	HandleSetuid       *ebpf.Program `ebpf:"handle_setuid"`
 	HandleSslReadEnter *ebpf.Program `ebpf:"handle_ssl_read_enter"`
 	HandleSslReadExit  *ebpf.Program `ebpf:"handle_ssl_read_exit"`
 	HandleSslWrite     *ebpf.Program `ebpf:"handle_ssl_write"`
+	HandleUnlink       *ebpf.Program `ebpf:"handle_unlink"`
 }
 
 func (p *sensorbpfPrograms) Close() error {
@@ -148,10 +164,18 @@ func (p *sensorbpfPrograms) Close() error {
 		p.HandleExec,
 		p.HandleExecve,
 		p.HandleExit,
+		p.HandleGetaddrinfo,
 		p.HandleOpenat,
+		p.HandlePtrace,
+		p.HandleRename,
+		p.HandleRenamePlain,
+		p.HandleSendto,
+		p.HandleSetgid,
+		p.HandleSetuid,
 		p.HandleSslReadEnter,
 		p.HandleSslReadExit,
 		p.HandleSslWrite,
+		p.HandleUnlink,
 	)
 }
 

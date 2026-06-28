@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"database/sql"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -335,4 +336,81 @@ func TestListEventsPageUsesOpaqueCursor(t *testing.T) {
 	if _, err := ListEventsPage(db, ListOptions{Filter: Filter{RunID: "run-page"}, Limit: 2, Cursor: "2"}); err == nil {
 		t.Fatalf("old-style cursor should be rejected")
 	}
+}
+
+func TestProcessExitClosesCorrelationWindow(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// An open binding for OS pid 4242 in run-x.
+	if _, err := correlation.RecordBinding(db, correlation.Binding{
+		RunID: "run-x", SessionID: "s", AttemptID: "a", ToolCallID: "tc", ProcessID: "p",
+		PID: 4242, StartedAt: "2026-01-01T00:00:00.000000000Z", BindingSource: "test",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// While open, a pid-tier event resolves to the run.
+	id1, err := IngestFiltered(db, IngestEvent{
+		PID: 4242, Timestamp: "2026-01-01T00:00:10.000000000Z",
+		EventType: "execve", Source: "tetragon_jsonl", Payload: `{"argv":["sh","-lc","echo a"]}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev1 := getEvent(t, db, id1)
+	if ev1.RunID != "run-x" {
+		t.Fatalf("event before exit should resolve to run-x, got %q (%s)", ev1.RunID, ev1.CorrelationMethod)
+	}
+
+	// process_exit for pid 4242 closes the binding window.
+	if _, err := IngestFiltered(db, IngestEvent{
+		PID: 4242, Timestamp: "2026-01-01T00:00:20.000000000Z",
+		EventType: "process_exit", Source: "agentprov_ebpf", Payload: `{"exit_code":0}`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	bindings, err := correlation.ListBindings(db, correlation.BindingFilter{RunID: "run-x"})
+	if err != nil || len(bindings) != 1 {
+		t.Fatalf("bindings=%d err=%v", len(bindings), err)
+	}
+	if bindings[0].EndedAt == "" {
+		t.Fatal("process_exit must close the binding (ended_at set)")
+	}
+
+	// A LATER event reusing pid 4242 must NOT over-bind to the dead scope.
+	id2, err := IngestFiltered(db, IngestEvent{
+		PID: 4242, Timestamp: "2026-01-01T00:00:30.000000000Z",
+		EventType: "execve", Source: "tetragon_jsonl", Payload: `{"argv":["sh","-lc","echo b"]}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev2 := getEvent(t, db, id2)
+	if ev2.RunID == "run-x" {
+		t.Fatalf("event after exit must NOT bind to the closed scope, got run-x (%s)", ev2.CorrelationMethod)
+	}
+}
+
+func getEvent(t *testing.T, db *sql.DB, id string) EventRecord {
+	t.Helper()
+	events, err := ListEventsFiltered(db, Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range events {
+		if e.ID == id {
+			return e
+		}
+	}
+	t.Fatalf("event %s not found", id)
+	return EventRecord{}
 }

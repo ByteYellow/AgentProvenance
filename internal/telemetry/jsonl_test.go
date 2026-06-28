@@ -442,3 +442,116 @@ func TestNativeLLMIntentCausesSyscallEdge(t *testing.T) {
 		t.Fatal("intent edge must link two distinct events")
 	}
 }
+
+func TestNativeFileReadClassification(t *testing.T) {
+	base := map[string]any{"source": "agentprov_ebpf", "event_type": "file_open"}
+	clone := func(mode, path string) map[string]any {
+		m := map[string]any{}
+		for k, v := range base {
+			m[k] = v
+		}
+		m["mode"] = mode
+		m["path"] = path
+		return m
+	}
+	cases := []struct{ mode, path, want string }{
+		{"read", "/root/.aws/credentials", "secret_path"}, // sensitive read: no longer invisible
+		{"read", "/home/agent/.ssh/id_rsa", "secret_path"},
+		{"read", "/home/agent/notes.txt", "file_open"},    // plain read
+		{"write", "/root/.aws/credentials", "file_write"}, // write mapping unchanged
+	}
+	for _, c := range cases {
+		ev, ok, err := mapNative(clone(c.mode, c.path))
+		if err != nil || !ok {
+			t.Fatalf("mapNative(%s %s): ok=%v err=%v", c.mode, c.path, ok, err)
+		}
+		if ev.EventType != c.want {
+			t.Errorf("%s %s -> %q, want %q", c.mode, c.path, ev.EventType, c.want)
+		}
+	}
+}
+
+func TestNativeLLMCallPairsRequestAndResponse(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	if _, err := correlation.RecordBinding(db, correlation.Binding{
+		RunID: "run-call", SessionID: "s", AttemptID: "a", ToolCallID: "tc", ProcessID: "p",
+		ContainerID: "c-call", StartedAt: "2000-01-01T00:00:00.000000000Z", BindingSource: "external_telemetry",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A TLS request (LLM call) followed by its response, same scope.
+	path := filepath.Join(root, "call.jsonl")
+	// One request, then TWO response segments (streaming SSE) in the same scope.
+	raw := "" +
+		`{"source":"agentprov_ebpf","pid":900,"container_id":"c-call","event_type":"tls_write","data":"POST /v1/messages HTTP/1.1\r\nHost: api.anthropic.com\r\nContent-Type: application/json\r\n\r\n{\"model\":\"claude-opus-4\"}","length":150}` + "\n" +
+		`{"source":"agentprov_ebpf","pid":900,"container_id":"c-call","event_type":"tls_read","data":"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\ndata: {}","length":90}` + "\n" +
+		`{"source":"agentprov_ebpf","pid":900,"container_id":"c-call","event_type":"tls_read","data":"data: {\"delta\":\"x\"}","length":20}` + "\n"
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := IngestJSONL(db, JSONLIngestOptions{Format: "native", Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Ingested != 3 {
+		t.Fatalf("ingested=%d, want 3 (%+v)", result.Ingested, result.Errors)
+	}
+
+	// The request payload carries privacy-safe HTTP metadata (endpoint + model),
+	// never the request body wholesale.
+	writes, err := ListEventsFiltered(db, Filter{RunID: "run-call", Type: "tls_write"})
+	if err != nil || len(writes) != 1 {
+		t.Fatalf("tls_write events=%d err=%v", len(writes), err)
+	}
+	for _, want := range []string{`"method":"POST"`, `"path":"/v1/messages"`, `"host":"api.anthropic.com"`, `"model":"claude-opus-4"`} {
+		if !strings.Contains(writes[0].Payload, want) {
+			t.Fatalf("tls_write payload missing %s: %s", want, writes[0].Payload)
+		}
+	}
+	if !strings.Contains(writes[0].Payload, "preview_sha256") {
+		t.Fatalf("tls_write must still hash the raw preview: %s", writes[0].Payload)
+	}
+
+	// The first response segment is flagged as a stream.
+	reads, _ := ListEventsFiltered(db, Filter{RunID: "run-call", Type: "tls_read"})
+	if len(reads) != 2 {
+		t.Fatalf("tls_read events=%d, want 2", len(reads))
+	}
+	streamSeen := false
+	for _, r := range reads {
+		if strings.Contains(r.Payload, `"is_stream":true`) {
+			streamSeen = true
+		}
+	}
+	if !streamSeen {
+		t.Fatalf("a tls_read should be marked is_stream: %+v", reads)
+	}
+
+	// Exactly ONE derived llm_call edge despite the streamed multi-segment
+	// response (dedup: first segment wins).
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE edge_type = 'llm_call' AND run_id = 'run-call'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("llm_call edges = %d, want exactly 1 (streaming response must not fan out)", count)
+	}
+	var from, to string
+	if err := db.QueryRow(`SELECT from_id, to_id FROM graph_edges WHERE edge_type = 'llm_call' AND run_id = 'run-call'`).Scan(&from, &to); err != nil {
+		t.Fatal(err)
+	}
+	if from == to || !strings.HasPrefix(from, "runtime_event/") || !strings.HasPrefix(to, "runtime_event/") {
+		t.Fatalf("llm_call edge should link two distinct events, got from=%s to=%s", from, to)
+	}
+}
