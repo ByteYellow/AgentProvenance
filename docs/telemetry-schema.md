@@ -51,9 +51,18 @@ The current MVP validates these minimum event-specific fields:
 | `abnormal_process_tree` | numeric `pid` or `command` |
 | `policy_verdict` | `decision` or `verdict` |
 | `resource_pressure` | `resource` or `signal` |
+| `setuid` / `setgid` | `uid` / `gid` (privilege change; setuid/setgid to `0` is the escalation case) |
+| `ptrace` | `request`, `target_pid` (process injection / inspection) |
+| `file_rename` / `file_unlink` | `path` (tamper / cleanup) |
+| `dns_query` | `host` (resolved name; egress by name, not just IP) |
+| `tls_write` / `tls_read` | privacy-safe `preview_sha256` + short `preview` + allow-listed `http` metadata (never the full body) |
 
 Absolute paths, `..` paths, and `/workspace/../...`-style escapes are rejected
-for file-oriented events.
+for file-oriented events. The privilege/tamper/DNS/TLS types carry the fields
+above but are not subject to a strict required-body check.
+
+`secret_path` now covers a sensitive-path **read**, not only a write: the native
+sensor captures filtered read opens of credential/secret paths.
 
 ## Example
 
@@ -128,12 +137,19 @@ The receiver maps recognized substrate events into the normalized schema:
 
 | Source | Input shape | Normalized event |
 | --- | --- | --- |
+| Native eBPF sensor (`agentprov_ebpf`) | own-sensor JSONL, auto-detected | `execve`, `network_connect`/`metadata_ip`/`private_cidr`, `file_write`, sensitive read → `secret_path` (else `file_open`), `process_exit`, `setuid`/`setgid`, `ptrace`, `file_rename`, `file_unlink`, `tls_write`/`tls_read`, `dns_query`, `resource_pressure` |
 | Tetragon | `process_exec` | `execve` |
 | Tetragon | `process_exit` | `process_exit` |
 | Falco | `execve`, `execveat`, `spawned_process` | `execve` |
 | Falco | `open`, `openat`, `openat2`, `creat` | `file_open`, `file_write`, or `secret_path` |
 | Falco | `connect` | `network_connect`, `metadata_ip`, or `private_cidr` |
 | LoongCollector | `execve`, `process_exit`, `file_open`, `file_write`, `network_connect` | matching normalized family |
+
+The native sensor (`internal/sensor`, `cmd/agentprov-sensor`; Linux, arm64)
+emits this normalized schema directly, so own-kernel telemetry drives the same
+correlation → policy → risk path as Falco/Tetragon. It also adds a DAG `llm_call`
+edge (TLS request ↔ response) and an `llm_intent_caused` edge (TLS response →
+the syscalls it caused).
 
 Unrecognized rows are skipped. Malformed rows or rows that fail schema
 validation are counted as failed and reported in the ingest result.

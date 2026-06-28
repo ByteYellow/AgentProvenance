@@ -1,10 +1,30 @@
 # eBPF Sensor Plan (Phase 4: self-owned system telemetry)
 
-> Status: design, pre-implementation. Captures the agreed approach so the build
-> moves fast once a Linux environment is available. Review/edit this before
-> implementation. This is the differentiated half of the thesis: today the
-> system-side telemetry is consume-only (Falco/Tetragon JSONL); this sensor makes
-> AgentProvenance capture its own kernel events.
+> Status: **IMPLEMENTED** and expanded well past the original 3-probe scope
+> (`internal/sensor`, `cmd/agentprov-sensor`; Linux, arm64), validated live on an
+> arm64 lab VM. The design rationale below is kept as the record; the **As built**
+> note captures what actually shipped.
+
+## As built
+
+Probes (all → the normalized schema, ingested as `source=agentprov_ebpf`):
+
+- `execve` (+ argv), `connect` (IPv4), `openat` — **writes and sensitive
+  reads** (read of a credential/secret path → `secret_path`), `process_exit`.
+- Privilege/tamper: `setuid`/`setgid`, `ptrace`, `rename`/`renameat`/`renameat2`,
+  `unlinkat`.
+- TLS plaintext: `SSL_write`/`SSL_read` uprobes → `tls_write`/`tls_read` with a
+  privacy-safe hash + preview + allow-listed HTTP metadata (never the full body);
+  paired into a DAG `llm_call` edge and an `llm_intent_caused` edge.
+- DNS: `getaddrinfo` uprobe (glibc).
+
+Key learnings: noise-prefix filtering runs **before** `bpf_ringbuf_reserve` (a
+discarded record still occupies the buffer), which removed a containerd-teardown
+firehose; output is the **native** normalized schema (decision (b) below);
+race-free `container_id` comes from a cgroup-id → cgroup-dir-inode resolver.
+
+Open follow-ups: universal DNS (musl / UDP:53), IPv6/UDP, HTTP/2 HPACK decode,
+multi-arch (x86 `PT_REGS`; arm64 only today), `ptrace` end-to-end test.
 
 ## Goal
 
@@ -42,12 +62,10 @@ Each event carries the identity the correlation engine needs:
   main module still builds/tests on macOS/Windows.
 - **Output contract:** the sensor does NOT touch the DB. It emits normalized
   telemetry events to stdout/JSONL (or a spool file). Ingestion reuses the
-  existing path. **Open decision (decide on Linux, not now):**
-  - (a) emit Falco/Tetragon-shaped JSONL -> reuse `telemetry ingest-falco` as-is
-    (zero new ingest code), or
-  - (b) emit a native normalized schema -> add a thin `telemetry ingest` receiver.
-  Lean (a) for the first cut (fastest, no new format); revisit if the mapping is
-  lossy.
+  existing path. **Resolved → (b):** the sensor emits a native normalized schema,
+  auto-detected on `source=agentprov_ebpf` by `mapNative` (rather than mimicking
+  Falco/Tetragon shapes), so own-kernel telemetry drives the same correlation →
+  policy → risk path.
 
 ## Container/cgroup identity
 
