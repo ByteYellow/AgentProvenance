@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/byteyellow/agentprovenance/internal/aitools"
+	"github.com/byteyellow/agentprovenance/internal/mcpserver"
 	"github.com/spf13/cobra"
 )
 
@@ -18,7 +19,31 @@ func aiCmd(dataDir *string) *cobra.Command {
 	}
 	cmd.AddCommand(aiToolsCmd())
 	cmd.AddCommand(aiCallCmd(dataDir))
+	cmd.AddCommand(aiMCPCmd(dataDir))
 	return cmd
+}
+
+// aiMCPCmd runs a stdio MCP server over the same aitools catalog/dispatcher, so
+// MCP clients get the read surface + inline gate. Only JSON-RPC goes to stdout;
+// cobra writes its own diagnostics to stderr.
+func aiMCPCmd(dataDir *string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "mcp",
+		Short: "run a stdio MCP server exposing the AI tool surface (JSON-RPC 2.0)",
+		Long: "Speaks the Model Context Protocol (spec 2025-06-18) over stdin/stdout so MCP " +
+			"clients (Claude Desktop, the mcp inspector) can query the verifiable provenance " +
+			"graph and pre-flight proposed actions through the trusted policy gate. The tool set " +
+			"is the same one served by `ai tools`/`ai call`. Only JSON-RPC is written to stdout.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, cleanup, err := openLocalDB(*dataDir)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+			return mcpserver.Serve(db, cmd.InOrStdin(), cmd.OutOrStdout())
+		},
+	}
 }
 
 func aiToolsCmd() *cobra.Command {
