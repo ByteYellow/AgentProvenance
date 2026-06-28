@@ -1011,7 +1011,12 @@ old resource experiments do not define the project identity.
 | Phase 5 | Risk / Policy / Control | configurable risk signals, behavior baselines, compliance evidence mapping, response adapters, taint propagation, quarantine, response blocking, forensics export, Feishu/DingTalk/webhook hooks, isolation escalation hooks |
 | Phase 6 | Scale / UI / Productization | async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency ingest/query tests, evaluator SDK hardening, central evidence service, usable UI/API |
 
-Recently landed (cross-cutting, ahead of full Phase 5/6):
+Phases 1–4 are built and machine-checked by acceptance scripts; Phase 5 is built
+except the notification hooks; Phase 6 is largely landed (web dashboard,
+retention, content-addressed storage, concurrency, evaluator SDK), with the
+central evidence service deferred to v2.
+
+Recently landed:
 
 - **Unified signal model** (`internal/signals`, `agentprovenance.signals/v1`) -
   one graph-attached row type for behavior/cost/quality/security, replacing the
@@ -1037,20 +1042,20 @@ Recently landed (cross-cutting, ahead of full Phase 5/6):
   view with the causality DAG as the signature panel, plus timeline, process
   tree, egress, signals, and verify/signature status.
 
-Near-term hardening:
+Next / open:
 
-- Deeper graph integrity checks for process-tree and file-event causality.
-- Realistic zero-SDK acceptance for file modification, file creation, file
-  deletion, child process observation, delayed runtime-event correlation,
-  diff/blame, timeline, evidence manifest, replay, and graph verification.
-- Realistic Falco risk acceptance for raw `execve`, metadata-IP, private-CIDR,
-  and secret-path rows becoming correlated telemetry, risk signals, response
-  actions, graph explanations, evidence manifests, and verified DAG state.
-- Forensics bundle acceptance for risky runtime streams, including bundle
-  sha256 verification and embedded evidence/risk/response/graph-edge checks.
-- Daemon evidence API acceptance for the same risk path through HTTP endpoints,
-  proving the first control/query boundary without making the CLI own every
-  lifecycle.
+- **Sensor breadth** — universal DNS (musl / raw UDP:53, or a `udp_sendmsg`
+  kprobe; `getaddrinfo` covers glibc today), IPv6/UDP connect, and multi-arch
+  (x86 `PT_REGS`; arm64-only today). `ptrace` is captured but not yet exercised
+  end to end in a test.
+- **TLS depth** — HTTP/2 HPACK header decode and SSE reassembly (HTTP/1.1 plus
+  h2 detection today).
+- **Tamper-evidence (v2)** — off-host / capture-time signing (KMS / TPM /
+  transparency log). v1 is integrity plus optional local signing, not proof
+  against a host-root attacker.
+- **Deploy 3** — central evidence service with process-level data-plane
+  isolation and authz/scopes.
+- **Notifications** — Feishu / DingTalk / webhook response hooks.
 
 ## Development
 
