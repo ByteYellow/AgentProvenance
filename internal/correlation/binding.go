@@ -149,6 +149,23 @@ func CloseBinding(db *sql.DB, processID, endedAt string) error {
 	return err
 }
 
+// CloseBindingByPID closes open bindings for an OS pid, used when a system
+// process_exit is observed (the kernel pid is known, our internal process_id is
+// not). Setting ended_at bounds the binding's match window so it no longer
+// over-binds later, unrelated events that reuse the pid -- the stale-open
+// problem MaxOpenBindingAge only partially guards. Matches pid, not root_pid: a
+// child exiting must not close the scope-root's binding.
+func CloseBindingByPID(db *sql.DB, pid int64, endedAt string) error {
+	if pid == 0 {
+		return nil
+	}
+	if endedAt == "" {
+		endedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	_, err := db.Exec(`UPDATE execution_context_bindings SET ended_at = ? WHERE pid = ? AND ended_at = ''`, endedAt, pid)
+	return err
+}
+
 func Resolve(db *sql.DB, raw RawIdentity) (Match, bool, error) {
 	at := raw.Timestamp
 	if at == "" {

@@ -169,6 +169,21 @@ func DefaultRules() []Rule {
 			Decision: "kill",
 			Reason:   "secret path access",
 		},
+		{
+			// Synthetic marker injected by runtimeEventForPolicy only for a
+			// setuid/setgid TO ROOT, so the benign privilege-drop the container
+			// runtime does (setuid to an unprivileged id) is not flagged.
+			ID:       "privilege_escalation",
+			Match:    RuleMatch{ArgsContains: []string{"setuid_root", "setgid_root"}},
+			Decision: "quarantine",
+			Reason:   "privilege escalation to root",
+		},
+		{
+			ID:       "ptrace_access",
+			Match:    RuleMatch{EventType: "ptrace"},
+			Decision: "quarantine",
+			Reason:   "process injection (ptrace)",
+		},
 	}
 }
 
@@ -650,7 +665,32 @@ func runtimeEventForPolicy(db *sql.DB, eventID string) (Event, string, error) {
 	event.DstIP = firstPolicyString(rawPayload, "dst_ip", "dst", "host")
 	event.Path = firstPolicyString(rawPayload, "path", "file")
 	event.Args = policyArgs(rawPayload)
+	// A privilege change TO ROOT is the escalation threat (the runtime's setuid to
+	// an unprivileged id is benign); mark it so the privilege_escalation rule can
+	// fire on that case only.
+	if event.EventType == "setuid" || event.EventType == "setgid" {
+		if id, ok := policyNumber(rawPayload, "uid", "gid"); ok && id == 0 {
+			event.Args = append(event.Args, event.EventType+"_root")
+		}
+	}
 	return event, rawPayload, nil
+}
+
+// policyNumber digs the (possibly wrapped) payload for the first of keys that
+// holds a JSON number, returning it as an int64.
+func policyNumber(payload string, keys ...string) (int64, bool) {
+	var decoded any
+	if err := json.Unmarshal([]byte(payload), &decoded); err != nil {
+		return 0, false
+	}
+	for _, key := range keys {
+		for _, value := range findPolicyValues(decoded, key) {
+			if n, ok := value.(float64); ok {
+				return int64(n), true
+			}
+		}
+	}
+	return 0, false
 }
 
 func policyArgs(payload string) []string {

@@ -408,6 +408,12 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 		return "", err
 	}
 	_ = recordRuntimeCausalityEdges(db, event, eventID, now)
+	// Consume process_exit to CLOSE the exiting pid's correlation window, so a
+	// later event that reuses the pid does not over-bind to this dead scope.
+	// Use the event's own timestamp when present (chronological close), else now.
+	if event.EventType == "process_exit" && event.PID != 0 {
+		_ = correlation.CloseBindingByPID(db, event.PID, firstNonEmpty(event.Timestamp, now))
+	}
 	priority := "normal"
 	if event.EventType == "metadata_ip" || event.EventType == "private_cidr" || event.EventType == "secret_path" || event.EventType == "policy_verdict" {
 		priority = "high"
@@ -426,7 +432,7 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 
 func AllowedEventType(eventType string) bool {
 	switch eventType {
-	case "execve", "process_exit", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure", "tls_write", "tls_read":
+	case "execve", "process_exit", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure", "tls_write", "tls_read", "setuid", "setgid", "ptrace", "file_rename", "file_unlink", "dns_query":
 		return true
 	default:
 		return false
@@ -494,7 +500,29 @@ func recordRuntimeCausalityEdges(db *sql.DB, event IngestEvent, eventID, now str
 			insert("runtime_event/"+intentID, eventNode, "llm_intent_caused")
 		}
 	}
+	// Request -> response pairing: when a TLS response arrives, link it to the
+	// most recent TLS request in the same scope. This forms the llm_call as a
+	// DERIVED edge over the trusted tls_write/tls_read events -- not a new,
+	// model-forgeable raw event type. A streaming (SSE) response surfaces as many
+	// tls_read events, so we dedup: the first response segment wins and a request
+	// gets exactly one llm_call edge. (Full chunk reassembly is a deferred TODO.)
+	if event.EventType == "tls_read" {
+		if reqID := recentLLMRequest(db, event.RunID, event.ProcessID, now); reqID != "" {
+			fromNode := "runtime_event/" + reqID
+			if !edgeExists(db, fromNode, "llm_call") {
+				insert(fromNode, eventNode, "llm_call")
+			}
+		}
+	}
 	return nil
+}
+
+// edgeExists reports whether a graph edge of edgeType already originates from
+// fromID, so callers can keep a relationship 1:1 (e.g. one request -> one
+// llm_call despite a streamed, multi-segment response).
+func edgeExists(db *sql.DB, fromID, edgeType string) bool {
+	var x int
+	return db.QueryRow(`SELECT 1 FROM graph_edges WHERE from_id = ? AND edge_type = ? LIMIT 1`, fromID, edgeType).Scan(&x) == nil
 }
 
 // llmActionEventType reports whether an event is an "action" that an LLM
@@ -509,10 +537,22 @@ func llmActionEventType(eventType string) bool {
 }
 
 // recentLLMIntent returns the id of the most recent tls_read (LLM response)
-// event in the same run (and process, when known) within a 2-minute window
-// before now, or "" if none. now and stored created_at are RFC3339Nano UTC, so
-// lexical string comparison is chronological.
+// event in the same scope within the pairing window before now, or "".
 func recentLLMIntent(db *sql.DB, runID, processID, now string) string {
+	return recentScopedEvent(db, "tls_read", runID, processID, now)
+}
+
+// recentLLMRequest returns the id of the most recent tls_write (LLM request)
+// event in the same scope within the pairing window before now, or "".
+func recentLLMRequest(db *sql.DB, runID, processID, now string) string {
+	return recentScopedEvent(db, "tls_write", runID, processID, now)
+}
+
+// recentScopedEvent returns the id of the most recent event of eventType in the
+// same run (and process, when known) within a 2-minute window before now, or ""
+// if none. now and stored created_at are RFC3339Nano UTC, so lexical string
+// comparison is chronological.
+func recentScopedEvent(db *sql.DB, eventType, runID, processID, now string) string {
 	if runID == "" {
 		return ""
 	}
@@ -520,9 +560,9 @@ func recentLLMIntent(db *sql.DB, runID, processID, now string) string {
 	if t, err := time.Parse(time.RFC3339Nano, now); err == nil {
 		windowStart = t.Add(-2 * time.Minute).UTC().Format(time.RFC3339Nano)
 	}
-	query := `SELECT id FROM events WHERE run_id = ? AND event_type = 'tls_read'
+	query := `SELECT id FROM events WHERE run_id = ? AND event_type = ?
 		AND created_at <= ? AND created_at >= ?`
-	args := []any{runID, now, windowStart}
+	args := []any{runID, eventType, now, windowStart}
 	if processID != "" {
 		query += ` AND process_id = ?`
 		args = append(args, processID)

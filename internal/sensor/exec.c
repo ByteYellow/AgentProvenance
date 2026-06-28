@@ -11,6 +11,7 @@
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
+#include <bpf/bpf_endian.h>
 // PoC SSL uprobe arg extraction needs PT_REGS; arm64 is the lab target. Register
 // layout is arch-specific, so a future multi-arch build must set this per arch.
 #ifndef __TARGET_ARCH_arm64
@@ -26,6 +27,11 @@ char LICENSE[] SEC("license") = "GPL";
 #define EVENT_EXIT 4
 #define EVENT_SSL 5      // SSL_write: plaintext the agent sent (LLM request)
 #define EVENT_SSL_READ 6 // SSL_read: plaintext the agent received (LLM response)
+#define EVENT_SETUID 7   // setuid/setgid: privilege change (daddr: 0=uid,1=gid)
+#define EVENT_PTRACE 8   // ptrace: process injection/inspection
+#define EVENT_RENAME 9   // renameat2: file move/tamper
+#define EVENT_UNLINK 10  // unlinkat: file delete
+#define EVENT_DNS 11     // getaddrinfo uprobe: resolved hostname (egress by name)
 #define AF_INET 2
 
 // argv is captured as fixed-size slots (constant offsets keep the BPF verifier
@@ -181,23 +187,65 @@ int handle_connect(struct trace_event_raw_sys_enter *ctx) {
 // of read-only opens. (Sensitive-read detection is a separate, filtered probe.)
 #define OPEN_WRITE_MASK (00000001 | 00000002 | 00000100 | 00001000)
 
+// noise_read_prefix drops the high-volume read paths (shared libs, procfs, sysfs,
+// device nodes, etc.) in-kernel so capturing READS does not firehose the ring
+// buffer. It is a coarse NEGATIVE filter on the first path bytes (cheap, verifier
+// friendly); userspace then POSITIVELY matches the small sensitive set. Writes
+// are never dropped here.
+static __always_inline int noise_read_prefix(const char *p) {
+	if (p[0] != '/')
+		return 0;
+	char a = p[1], b = p[2], c = p[3];
+	if (a == 'u' && b == 's' && c == 'r') return 1; // /usr
+	if (a == 'l' && b == 'i' && c == 'b') return 1; // /lib
+	if (a == 'p' && b == 'r' && c == 'o') return 1; // /proc
+	if (a == 's' && b == 'y' && c == 's') return 1; // /sys
+	if (a == 'd' && b == 'e' && c == 'v') return 1; // /dev
+	if (a == 'r' && b == 'u' && c == 'n') return 1; // /run
+	if (a == 's' && b == 'n' && c == 'a') return 1; // /snap
+	return 0;
+}
+
+// noise_file_prefix extends noise_read_prefix with /var and /tmp: the container
+// runtime (containerd/runc) does a storm of unlink/rename under /var/lib/docker,
+// /run/containerd, /tmp/containerd-mount during setup/teardown. Without this the
+// ring buffer floods and drops real events. Agent-relevant tamper is in
+// /home,/root,/workspace,/app, which are kept.
+static __always_inline int noise_file_prefix(const char *p) {
+	if (noise_read_prefix(p))
+		return 1;
+	if (p[0] != '/')
+		return 0;
+	char a = p[1], b = p[2], c = p[3];
+	if (a == 'v' && b == 'a' && c == 'r') return 1; // /var
+	if (a == 't' && b == 'm' && c == 'p') return 1; // /tmp
+	return 0;
+}
+
 SEC("tp/syscalls/sys_enter_openat")
 int handle_openat(struct trace_event_raw_sys_enter *ctx) {
 	long flags = (long)ctx->args[2];
-	if (!(flags & OPEN_WRITE_MASK))
-		return 0;
+	int is_write = (flags & OPEN_WRITE_MASK) != 0;
+	// Filter noise reads BEFORE reserving: a discarded ringbuf record still
+	// occupies space until drained, so the prefix check must precede reserve.
+	if (!is_write) {
+		char pfx[8] = {};
+		bpf_probe_read_user(pfx, sizeof(pfx), (void *)ctx->args[1]);
+		if (noise_read_prefix(pfx))
+			return 0;
+	}
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
 	if (!e) {
 		count_drop();
 		return 0;
 	}
-	e->exit_code = 0;
 	e->kind = EVENT_OPEN;
 	e->daddr = 0;
 	e->dport = 0;
 	fill_common(e);
 	e->args[0] = 0;
 	bpf_probe_read_user_str(&e->path, sizeof(e->path), (void *)ctx->args[1]);
+	e->exit_code = is_write ? 0 : 1; // 0 = write, 1 = read
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }
@@ -225,6 +273,193 @@ int handle_exit(struct trace_event_raw_sched_process_template *ctx) {
 	e->args[0] = 0;
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 	e->exit_code = (BPF_CORE_READ(task, exit_code) >> 8) & 0xff;
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// Privilege change: setuid/setgid. setuid(0) is the classic root escalation; a
+// sandboxed agent that calls it is a red flag. daddr distinguishes uid vs gid.
+SEC("tp/syscalls/sys_enter_setuid")
+int handle_setuid(struct trace_event_raw_sys_enter *ctx) {
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		return 0;
+	}
+	e->kind = EVENT_SETUID;
+	e->daddr = 0; // uid
+	e->dport = 0;
+	fill_common(e);
+	e->path[0] = 0;
+	e->args[0] = 0;
+	e->exit_code = (int)ctx->args[0]; // target uid
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+SEC("tp/syscalls/sys_enter_setgid")
+int handle_setgid(struct trace_event_raw_sys_enter *ctx) {
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		return 0;
+	}
+	e->kind = EVENT_SETUID;
+	e->daddr = 1; // gid
+	e->dport = 0;
+	fill_common(e);
+	e->path[0] = 0;
+	e->args[0] = 0;
+	e->exit_code = (int)ctx->args[0]; // target gid
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// ptrace: process injection / memory inspection -- a credential-theft and
+// sandbox-escape vector. daddr carries the target pid, exit_code the request.
+SEC("tp/syscalls/sys_enter_ptrace")
+int handle_ptrace(struct trace_event_raw_sys_enter *ctx) {
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		return 0;
+	}
+	e->kind = EVENT_PTRACE;
+	e->daddr = (__u32)ctx->args[1]; // target pid
+	e->dport = 0;
+	fill_common(e);
+	e->path[0] = 0;
+	e->args[0] = 0;
+	e->exit_code = (int)ctx->args[0]; // ptrace request
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// File rename/unlink: tampering, trace cleanup, exfil staging. We capture the
+// source path (renameat2 oldname / unlinkat pathname).
+// renameat/renameat2: oldname is args[1]. (Used by modern libc.)
+SEC("tp/syscalls/sys_enter_renameat2")
+int handle_rename(struct trace_event_raw_sys_enter *ctx) {
+	char pfx[8] = {};
+	bpf_probe_read_user(pfx, sizeof(pfx), (void *)ctx->args[1]); // oldname
+	if (noise_file_prefix(pfx))
+		return 0;
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		return 0;
+	}
+	e->kind = EVENT_RENAME;
+	e->daddr = 0;
+	e->dport = 0;
+	fill_common(e);
+	e->args[0] = 0;
+	e->exit_code = 0;
+	bpf_probe_read_user_str(&e->path, sizeof(e->path), (void *)ctx->args[1]);
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// rename(2): oldname is args[0] (busybox/coreutils mv on the same filesystem).
+SEC("tp/syscalls/sys_enter_rename")
+int handle_rename_plain(struct trace_event_raw_sys_enter *ctx) {
+	char pfx[8] = {};
+	bpf_probe_read_user(pfx, sizeof(pfx), (void *)ctx->args[0]); // oldname
+	if (noise_file_prefix(pfx))
+		return 0;
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		return 0;
+	}
+	e->kind = EVENT_RENAME;
+	e->daddr = 0;
+	e->dport = 0;
+	fill_common(e);
+	e->args[0] = 0;
+	e->exit_code = 0;
+	bpf_probe_read_user_str(&e->path, sizeof(e->path), (void *)ctx->args[0]);
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+SEC("tp/syscalls/sys_enter_unlinkat")
+int handle_unlink(struct trace_event_raw_sys_enter *ctx) {
+	char pfx[8] = {};
+	bpf_probe_read_user(pfx, sizeof(pfx), (void *)ctx->args[1]); // pathname
+	if (noise_file_prefix(pfx))
+		return 0;
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		return 0;
+	}
+	e->kind = EVENT_UNLINK;
+	e->daddr = 0;
+	e->dport = 0;
+	fill_common(e);
+	e->args[0] = 0;
+	e->exit_code = 0;
+	bpf_probe_read_user_str(&e->path, sizeof(e->path), (void *)ctx->args[1]);
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// Universal DNS: a UDP query to port 53 carries the DNS message in the sendto
+// buffer. We copy the raw bytes (exit_code = length) and parse the qname in
+// userspace. This catches musl/busybox, Go's own resolver, and any app doing
+// raw UDP:53 -- including INSIDE containers, which the libc uprobe below cannot.
+SEC("tp/syscalls/sys_enter_sendto")
+int handle_sendto(struct trace_event_raw_sys_enter *ctx) {
+	void *buf = (void *)ctx->args[1];
+	long len = (long)ctx->args[2];
+	void *dest = (void *)ctx->args[4];
+	if (!buf || !dest || len < 13)
+		return 0;
+	struct sockaddr_in sa = {};
+	if (bpf_probe_read_user(&sa, sizeof(sa), dest))
+		return 0;
+	if (sa.sin_family != AF_INET || sa.sin_port != bpf_htons(53))
+		return 0;
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		return 0;
+	}
+	e->kind = EVENT_DNS;
+	e->daddr = 0;
+	e->dport = 0;
+	fill_common(e);
+	e->args[0] = 0;
+	__u32 n = (__u32)len;
+	if (n > 250)
+		n = 250; // raw DNS bytes; exit_code carries the length for userspace
+	e->exit_code = n;
+	bpf_probe_read_user(&e->path, n, buf);
+	bpf_ringbuf_submit(e, 0);
+	return 0;
+}
+
+// DNS: a uprobe on libc getaddrinfo(node, ...) captures the HOSTNAME an app
+// resolves -- the egress destination by name, not just the IP a connect reveals.
+// Covers dynamically-linked glibc apps (Python, Node, curl); musl/static/Go
+// resolve via other paths and are not seen here.
+SEC("uprobe/getaddrinfo")
+int BPF_UPROBE(handle_getaddrinfo, const char *node) {
+	if (!node)
+		return 0;
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		return 0;
+	}
+	e->kind = EVENT_DNS;
+	e->daddr = 0;
+	e->dport = 0;
+	fill_common(e);
+	e->args[0] = 0;
+	e->exit_code = 0;
+	bpf_probe_read_user_str(&e->path, sizeof(e->path), node);
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }

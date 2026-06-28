@@ -488,10 +488,9 @@ func detectFormat(raw map[string]any) string {
 // sensor (internal/sensor) into an IngestEvent. The sensor already writes one
 // flat JSON object per line with source="agentprov_ebpf"; we apply the same
 // security classification as the Falco mapper so own-sensor telemetry drives the
-// identical correlation -> risk -> unified-signal path. The sensor write-filters
-// openat in-kernel, so a captured file event is a write (file_write), never a
-// secret read; secret-looking paths are still flagged downstream by the policy
-// engine's path rules.
+// identical correlation -> risk -> unified-signal path. The sensor captures file
+// writes and, now, sensitive READS (mode=read on the event); a secret-looking
+// path -- read or write -- maps to secret_path so the policy engine flags it.
 func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 	event := baseMappedEvent(raw, "agentprov_ebpf")
 	comm := stringAt(raw, "comm")
@@ -537,9 +536,23 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 			"comm":   comm,
 		})
 	case "file_open", "open", "openat", "file_write":
-		event.EventType = "file_write"
+		path := stringAt(raw, "path")
+		mode := firstNonEmpty(stringAt(raw, "mode"), "write")
+		// A READ of a secret-looking path is the new secret_path signal (reading a
+		// credential file used to be invisible); a plain read is file_open. Writes
+		// keep their existing mapping (file_write; the policy engine still flags a
+		// secret-path write via its path rules) so write behavior is unchanged.
+		switch {
+		case mode == "read" && secretPath(path):
+			event.EventType = "secret_path"
+		case mode == "read":
+			event.EventType = "file_open"
+		default:
+			event.EventType = "file_write"
+		}
 		event.Payload = mustJSON(map[string]any{
-			"path": stringAt(raw, "path"),
+			"path": path,
+			"mode": mode,
 			"comm": comm,
 		})
 	case "process_exit", "exit":
@@ -548,6 +561,26 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 			"exit_code": intAt(raw, "exit_code"),
 			"comm":      comm,
 		})
+	case "setuid":
+		event.EventType = "setuid"
+		event.Payload = mustJSON(map[string]any{"uid": intAt(raw, "uid"), "comm": comm})
+	case "setgid":
+		event.EventType = "setgid"
+		event.Payload = mustJSON(map[string]any{"gid": intAt(raw, "gid"), "comm": comm})
+	case "ptrace":
+		event.EventType = "ptrace"
+		event.Payload = mustJSON(map[string]any{
+			"request": intAt(raw, "request"), "target_pid": intAt(raw, "target_pid"), "comm": comm,
+		})
+	case "file_rename", "rename", "renameat", "renameat2":
+		event.EventType = "file_rename"
+		event.Payload = mustJSON(map[string]any{"path": stringAt(raw, "path"), "comm": comm})
+	case "file_unlink", "unlink", "unlinkat":
+		event.EventType = "file_unlink"
+		event.Payload = mustJSON(map[string]any{"path": stringAt(raw, "path"), "comm": comm})
+	case "dns_query", "dns", "getaddrinfo":
+		event.EventType = "dns_query"
+		event.Payload = mustJSON(map[string]any{"host": stringAt(raw, "host"), "comm": comm})
 	case "resource_pressure":
 		event.EventType = "resource_pressure"
 		event.Payload = mustJSON(map[string]any{
@@ -558,10 +591,10 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 		})
 	case "tls_write":
 		event.EventType = "tls_write"
-		event.Payload = sslPayload(raw, comm)
+		event.Payload = sslPayload(raw, comm, "request")
 	case "tls_read":
 		event.EventType = "tls_read"
-		event.Payload = sslPayload(raw, comm)
+		event.Payload = sslPayload(raw, comm, "response")
 	default:
 		return IngestEvent{}, false, nil
 	}
@@ -571,16 +604,23 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 // sslPayload normalizes a captured TLS plaintext preview. By default it stores a
 // sha256 of the captured bytes plus a short human-triage preview (NOT the full
 // plaintext), since prompt/response text is sensitive; the full preview length
-// is recorded for context.
-func sslPayload(raw map[string]any, comm string) string {
+// is recorded for context. It also derives privacy-safe HTTP provenance metadata
+// (endpoint/model/streaming) under "http" via tlsMeta, which reads only the
+// allow-listed head of the request/response, never the body. direction is
+// "request" (tls_write) or "response" (tls_read).
+func sslPayload(raw map[string]any, comm, direction string) string {
 	data := stringAt(raw, "data")
 	sum := sha256.Sum256([]byte(data))
-	return mustJSON(map[string]any{
+	payload := map[string]any{
 		"preview_sha256": hex.EncodeToString(sum[:]),
 		"preview":        truncatePreview(data, 80),
 		"length":         intAt(raw, "length"),
 		"comm":           comm,
-	})
+	}
+	if meta := tlsMeta(data, direction); meta != nil {
+		payload["http"] = meta
+	}
+	return mustJSON(payload)
 }
 
 func truncatePreview(s string, n int) string {

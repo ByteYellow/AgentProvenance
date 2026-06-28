@@ -41,6 +41,23 @@ func TestEvaluateSecretPathKills(t *testing.T) {
 	}
 }
 
+func TestEvaluatePtraceQuarantines(t *testing.T) {
+	if d := DefaultEngine().Evaluate(Event{EventType: "ptrace"}); d.Decision != "quarantine" {
+		t.Fatalf("ptrace decision = %s, want quarantine", d.Decision)
+	}
+}
+
+func TestEvaluatePrivilegeEscalation(t *testing.T) {
+	// runtimeEventForPolicy injects setuid_root only when uid==0.
+	if d := DefaultEngine().Evaluate(Event{EventType: "setuid", Args: []string{"setuid_root"}}); d.Decision != "quarantine" {
+		t.Fatalf("setuid(0) decision = %s, want quarantine", d.Decision)
+	}
+	// A benign privilege drop (no root marker) must NOT be flagged.
+	if d := DefaultEngine().Evaluate(Event{EventType: "setuid"}); d.Decision != "allow" {
+		t.Fatalf("benign setuid decision = %s, want allow", d.Decision)
+	}
+}
+
 func TestEvaluateJSONLWithStatePersistsAndQuarantines(t *testing.T) {
 	root := t.TempDir()
 	paths, err := store.Init(filepath.Join(root, ".agentprov"))
