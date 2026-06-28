@@ -2,7 +2,7 @@
 
 # AgentProvenance
 
-### Correlate application context with system telemetry into an integrity-checked evidence graph for sandboxed agents.
+### Correlate application context with system telemetry into a verifiable, signable causality graph for sandboxed agents.
 
 Correlate application-side agent context with system-side telemetry, then turn
 runtime evidence, file diffs, artifacts, risk signals, and response decisions
@@ -31,8 +31,12 @@ version-control system**: there is no merge, checkout, or mutable working tree.
   <img src="docs/assets/evidence-dag.svg" alt="AgentProvenance evidence DAG: LLM intent, tool call, process, runtime event, policy risk, response, artifact, manifest, and verification." width="100%">
 </p>
 
-AgentProvenance is a local-first security analysis and provenance control plane
-for autonomous, tool-using agents, especially sandboxed coding agents.
+AgentProvenance is a local-first security and provenance control plane for
+autonomous, tool-using agents, especially sandboxed coding agents. It captures
+system telemetry from its own eBPF sensor (or ingests Falco/Tetragon),
+correlates it with app-side agent context into a verifiable, signable causality
+graph, and serves that graph over the CLI, a daemon API, AI tools (including an
+MCP server), and a local web dashboard.
 
 It is not a generic sandbox runtime, generic telemetry collector, Kubernetes/Ray
 replacement, RL trainer, trace dashboard, or version-control system (it borrows
