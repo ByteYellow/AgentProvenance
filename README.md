@@ -2,7 +2,7 @@
 
 # AgentProvenance
 
-### Correlate application context with system telemetry into a verifiable, signed evidence graph for sandboxed agents.
+### Correlate application context with system telemetry into an integrity-checked evidence graph for sandboxed agents.
 
 Correlate application-side agent context with system-side telemetry, then turn
 runtime evidence, file diffs, artifacts, risk signals, and response decisions
@@ -22,6 +22,14 @@ version-control system**: there is no merge, checkout, or mutable working tree.
 </div>
 
 ---
+
+<p align="center">
+  <img src="docs/assets/agentprovenance-architecture.svg" alt="AgentProvenance architecture: application context and system telemetry enter an ingest boundary, then become a verifiable provenance graph." width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/assets/evidence-dag.svg" alt="AgentProvenance evidence DAG: LLM intent, tool call, process, runtime event, policy risk, response, artifact, manifest, and verification." width="100%">
+</p>
 
 AgentProvenance is a local-first security analysis and provenance control plane
 for autonomous, tool-using agents, especially sandboxed coding agents.
@@ -59,6 +67,10 @@ The goal is to answer questions ordinary traces do not answer well:
   external evaluator, RL pipeline, or human reviewer inspect?
 - Can this execution be diffed, blamed, verified, replayed, and audited later?
 
+<p align="center">
+  <img src="docs/assets/evidence-flow.svg" alt="AgentProvenance evidence flow" width="920">
+</p>
+
 ## Contents
 
 - [Why](#why)
@@ -74,6 +86,7 @@ The goal is to answer questions ordinary traces do not answer well:
 - [External Evaluator Protocol](#external-evaluator-protocol)
 - [Compliance Evidence, Not Certification](#compliance-evidence-not-certification)
 - [AI-Callable Evidence Tools](#ai-callable-evidence-tools)
+- [Web Dashboard](#web-dashboard)
 - [Graph Commands](#graph-commands)
 - [Current Capability](#current-capability)
 - [Core Demo Acceptance](#core-demo-acceptance)
@@ -320,6 +333,10 @@ AgentProvenance is intentionally usable in three deployment shapes. RL,
 benchmark, and evaluator users should start with the first shape; enterprise
 security and audit users can move toward the later shapes when they need shared
 ingest, retention, and query services.
+
+<p align="center">
+  <img src="docs/assets/deployment-modes.svg" alt="AgentProvenance deployment modes" width="920">
+</p>
 
 | Mode | Shape | Best for | Tradeoff |
 |---|---|---|---|
@@ -646,9 +663,14 @@ agent harnesses, evaluators, or review assistants:
 ./agentprov ai call get_timeline --input '{"run":"run-demo-bugfix","view":"causality"}'
 ./agentprov ai call evaluate_action --input '{"event_type":"execve","args":["python","-m","pytest","-q"]}'
 ./agentprov ai call evaluate_action --input '{"event_type":"network_connect","dst_ip":"169.254.169.254"}'
+
+./agentprov ai mcp   # serve the same catalog over stdio MCP (JSON-RPC 2.0)
 ```
 
-The catalog currently includes:
+The same catalog is rendered for the generic, OpenAI, and Anthropic providers,
+dispatched locally by `ai call`, and served over the Model Context Protocol by
+`ai mcp` (a stdio JSON-RPC 2.0 server, spec `2025-06-18`, so MCP clients see the
+identical tool set with no separate contract to drift). The catalog:
 
 | Tool | Purpose |
 |---|---|
@@ -657,13 +679,50 @@ The catalog currently includes:
 | `list_risks` | Return security risk signals and recommended actions |
 | `list_events` | Return paged runtime telemetry events, optionally filtered by type |
 | `get_timeline` | Return the merged application-context and runtime-telemetry timeline |
-| `evaluate_action` | Run a proposed command, file action, or network action through the trusted policy engine without executing it |
+| `evaluate_action` | Run a proposed command, file action, or network action through the trusted policy engine without executing it (inline gate, no side effects) |
+| `bind_scope` | Register a ToolCallScope binding (app-asserted, forced `binding_source=ai_asserted`) so independent system telemetry can correlate to this tool call |
+| `record_tool_call` | Anchor an app-asserted tool call (`status=asserted`); does **not** execute anything |
+
+The read tools and `evaluate_action` are advertised read-only; `bind_scope` and
+`record_tool_call` are the context-write surface (`readOnlyHint=false` over MCP).
 
 This is not a model gateway, prompt router, or tool-execution sandbox. The model
-receives schemas and can request local dispatch, but AgentProvenance remains the
-trusted side of the boundary: it queries the local evidence store, computes
-policy verdicts, and never lets the model write raw telemetry, signatures, or
-provenance graph facts.
+receives schemas and can query the evidence store, pre-flight an action through
+the trusted policy engine, and assert its own app-side context (`bind_scope` /
+`record_tool_call`). It can **never** write raw system telemetry, fabricate
+signatures, or forge provenance graph facts: context-write rows are recorded as
+`ai_asserted` and execute nothing, and verdicts are computed by the trusted
+engine, not the model.
+
+## Web Dashboard
+
+<p align="center">
+  <img src="docs/assets/dashboard-preview.svg" alt="AgentProvenance local evidence inspector preview with run selection, verify status, timeline, process tree, egress, risk signals, and causality DAG." width="100%">
+</p>
+
+```sh
+./agentprov dashboard serve            # http://127.0.0.1:7396
+./agentprov dashboard serve --data-dir <dir> --addr 127.0.0.1:7396
+```
+
+A local, read-only, single-page dashboard over the verifiable graph. Its JSON
+endpoints reuse the same internal functions as the CLI and AI tools, so the UI
+never drifts from the contract; the HTML/JS is embedded in the binary and loads
+no external assets (local-first). Panels:
+
+The preview image above is an intentional placeholder. Replace
+`docs/assets/dashboard-preview.svg` with a real screenshot after the dashboard
+PR lands; the README layout is already reserved for it.
+
+- **Causality DAG** (the signature view): model intent -> action -> policy ->
+  risk -> response, rendered from the same `llm_intent_caused` / `llm_call` /
+  policy->risk->response edges; click a node to highlight its causal lineage and
+  inspect its full record.
+- **Verify + signature** status, **signals / risk** with recommended actions, a
+  **paged timeline** (with correlation class per event), the **process tree**,
+  and **egress** (destination IP and -- when captured -- resolved DNS hostname).
+- Live auto-refresh; flat event streams plus the verifiable signed DAG that a
+  pure event viewer cannot show.
 
 ## Graph Commands
 
@@ -750,6 +809,9 @@ What these mean:
 | Runtime | Docker active; gVisor/Firecracker/bubblewrap are explicit capability stubs |
 | Snapshots | directory snapshot, fork, resume, lineage, taint propagation |
 | Resource evidence | run/attempt/session resource records, fanout stress-demo cost, saved-cost estimates, active CPU windows |
+| Native eBPF sensor | `agentprov-sensor` (Linux, arm64) captures execve+argv, connect (IPv4), file writes and sensitive-path **reads** (-> `secret_path`), process_exit, privilege changes (setuid/setgid/ptrace), file tamper (rename/unlink), TLS plaintext via SSL_write/read uprobes (stored as a privacy-safe hash + short preview plus allow-listed HTTP metadata, never the full body), and DNS (getaddrinfo uprobe). In-kernel noise-prefix filtering runs before ring-buffer reserve so read/unlink/rename do not flood the buffer; a drop counter surfaces any loss. cgroup-id -> container-id resolution; emits the normalized telemetry schema consumed by `telemetry ingest`. Validated live on an arm64 lab VM against genuine kernel/uprobe events. Partial/follow-up: universal (musl/UDP) DNS, IPv6/UDP, HTTP/2 HPACK decode, multi-arch (x86) |
+| AI tool adapters | the read surface, the inline `evaluate_action` gate, and the context-write tools (`bind_scope`, `record_tool_call`) are rendered for generic/OpenAI/Anthropic providers, dispatched locally by `ai call`, and served over stdio MCP (JSON-RPC 2.0) by `ai mcp` -- one `internal/aitools` catalog, no separate contract to drift; context-write is app-asserted only and never fabricates system events or signatures |
+| Web dashboard | `dashboard serve` -- a local, read-only, single-page view over the verifiable graph (causality DAG, verify/signature status, signals/risk, paged timeline, process tree, egress with resolved DNS), whose JSON endpoints reuse the same internal functions as the CLI/AI tools; embedded UI, no external assets |
 
 ## Core Demo Acceptance
 
@@ -787,6 +849,10 @@ Run:
 ```
 
 ## Architecture
+
+<p align="center">
+  <img src="docs/assets/architecture-overview.svg" alt="AgentProvenance architecture overview" width="920">
+</p>
 
 ```mermaid
 flowchart TD
@@ -886,10 +952,12 @@ See [docs/product.md](docs/product.md) for the product direction and
 
 ```text
 cmd/agentprov/        CLI entrypoint
+cmd/agentprov-sensor/ native eBPF sensor (Linux)
 internal/cli/         command parsing and output
 
 internal/record/      zero-SDK command recorder
-internal/telemetry/   normalized runtime event schema, JSONL ingest, correlation inputs
+internal/sensor/      native eBPF sensor (exec/connect/file/privesc/tamper/TLS/DNS); Linux-only, arm64
+internal/telemetry/   normalized runtime event schema, JSONL ingest, TLS HTTP metadata, correlation inputs
 internal/correlation/ ToolCallScope and runtime identity binding
 internal/provenance/  timeline, graph trace, refs, objects, diff, blame, verify, replay
 internal/evidence/    compact evidence records and external effects
@@ -898,6 +966,9 @@ internal/signals/     unified graph-attached signal model (behavior/cost/quality
 internal/baseline/    behavior baseline learning and deviation records
 internal/attest/      in-toto/DSSE ed25519 evidence signing (tamper-evidence)
 internal/forensics/   evidence bundle export (optional signed attestation)
+internal/aitools/     AI-callable tool catalog (read surface + inline gate + context-write)
+internal/mcpserver/   stdio MCP (JSON-RPC 2.0) server over the aitools catalog
+internal/dashboard/   local read-only web dashboard (embedded UI)
 
 internal/substrate/   Docker/runtime/snapshot adapters used as execution substrates
 internal/control/     local lease/session control for substrate-backed demos
@@ -941,6 +1012,19 @@ Recently landed (cross-cutting, ahead of full Phase 5/6):
 - **Concurrency correctness** - SQLite pragmas (incl. `busy_timeout`) applied via
   DSN to every pooled connection, fixing silent `SQLITE_BUSY` under concurrent
   writers; correlation bindings bound stale-open over-matching.
+- **Native eBPF sensor expansion** (`internal/sensor`, validated live on an arm64
+  VM) - sensitive file reads (-> `secret_path`), privilege changes
+  (setuid/setgid/ptrace), file tamper (rename/unlink), TLS plaintext -> privacy-
+  safe HTTP metadata + `llm_call` pairing, `process_exit` closing correlation
+  windows, and DNS (getaddrinfo). In-kernel noise filtering before ring-buffer
+  reserve removed a containerd-teardown firehose. Privilege-escalation policy
+  rules (ptrace, setuid-to-root -> quarantine).
+- **AI surface** - MCP server (`ai mcp`, stdio JSON-RPC 2.0) and context-write
+  tools (`bind_scope`, `record_tool_call`) over the same `internal/aitools`
+  catalog, app-asserted within the trust boundary.
+- **Web dashboard** (`internal/dashboard`, `dashboard serve`) - local read-only
+  view with the causality DAG as the signature panel, plus timeline, process
+  tree, egress, signals, and verify/signature status.
 
 Near-term hardening:
 

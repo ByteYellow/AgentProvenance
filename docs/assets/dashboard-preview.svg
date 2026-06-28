@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="title desc">
+  <title id="title">AgentProvenance local dashboard preview</title>
+  <desc id="desc">A placeholder preview of the local evidence inspector showing run selection, verification status, timeline, process tree, egress, risk signals, and causality DAG.</desc>
+  <defs>
+    <style>
+      .bg{fill:#0f172a}.chrome{fill:#111827}.panel{fill:#f8fafc;stroke:#cbd5e1;stroke-width:1.5}.dark{fill:#1e293b;stroke:#334155}.card{fill:#fff;stroke:#dbe3ef}.green{fill:#dcfce7;stroke:#22c55e}.orange{fill:#ffedd5;stroke:#f97316}.blue{fill:#dbeafe;stroke:#3b82f6}.purple{fill:#ede9fe;stroke:#8b5cf6}.line{stroke:#94a3b8;stroke-width:2;fill:none}.edge{stroke:#334155;stroke-width:2;fill:none;marker-end:url(#arrow)}.title{font:700 18px ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;fill:#f8fafc}.h{font:700 14px ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;fill:#0f172a}.t{font:12px ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;fill:#475569}.wt{font:12px ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;fill:#cbd5e1}.mono{font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;fill:#334155}
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#334155"/></marker>
+  </defs>
+  <rect class="bg" width="1280" height="760" rx="0"/>
+  <rect x="28" y="28" width="1224" height="704" rx="18" class="chrome"/>
+  <text x="58" y="67" class="title">AgentProvenance Local Evidence Inspector</text>
+  <text x="1010" y="67" class="wt">read-only preview / no external assets</text>
+
+  <rect x="58" y="92" width="1164" height="600" rx="14" class="panel"/>
+  <rect x="78" y="112" width="238" height="560" rx="12" class="dark"/>
+  <text x="100" y="148" class="title">Runs</text>
+  <rect x="98" y="175" width="198" height="64" rx="10" class="blue"/>
+  <text x="116" y="201" class="h">run-real-sandbox</text>
+  <text x="116" y="222" class="t">23 events / verified</text>
+  <rect x="98" y="255" width="198" height="54" rx="10" class="dark"/>
+  <text x="116" y="286" class="wt">run-dns-demo</text>
+  <rect x="98" y="325" width="198" height="54" rx="10" class="dark"/>
+  <text x="116" y="356" class="wt">run-tamper-demo</text>
+
+  <rect x="342" y="112" width="270" height="150" rx="12" class="card"/>
+  <text x="362" y="143" class="h">Verify + Signature</text>
+  <rect x="362" y="164" width="100" height="34" rx="17" class="green"/>
+  <text x="390" y="186" class="h">OK</text>
+  <text x="362" y="222" class="mono">objects: 18</text>
+  <text x="362" y="244" class="mono">bundle: sha256:...</text>
+
+  <rect x="632" y="112" width="270" height="150" rx="12" class="card"/>
+  <text x="652" y="143" class="h">Signals / Risk</text>
+  <rect x="652" y="164" width="96" height="34" rx="17" class="orange"/>
+  <text x="675" y="186" class="h">secret_path</text>
+  <rect x="762" y="164" width="86" height="34" rx="17" class="purple"/>
+  <text x="787" y="186" class="h">taint</text>
+  <text x="652" y="226" class="t">recommended action: quarantine / audit</text>
+
+  <rect x="922" y="112" width="270" height="150" rx="12" class="card"/>
+  <text x="942" y="143" class="h">Egress</text>
+  <text x="942" y="174" class="mono">dns_query openai.com</text>
+  <text x="942" y="199" class="mono">connect 169.254.169.254</text>
+  <text x="942" y="224" class="mono">risk: metadata_ip</text>
+
+  <rect x="342" y="290" width="390" height="180" rx="12" class="card"/>
+  <text x="362" y="322" class="h">Timeline</text>
+  <path class="line" d="M382 360H690"/>
+  <circle cx="410" cy="360" r="7" fill="#3b82f6"/><text x="428" y="364" class="t">tool_call asserted</text>
+  <circle cx="520" cy="360" r="7" fill="#06b6d4"/><text x="538" y="394" class="t">execve</text>
+  <circle cx="620" cy="360" r="7" fill="#f97316"/><text x="638" y="364" class="t">secret read</text>
+  <text x="362" y="438" class="mono">correlation: kernel_correlated @0.92</text>
+
+  <rect x="752" y="290" width="440" height="180" rx="12" class="card"/>
+  <text x="772" y="322" class="h">Process Tree</text>
+  <text x="782" y="360" class="mono">4242 agent</text>
+  <text x="820" y="390" class="mono">└─ 4271 sh -c cat /root/.aws/credentials</text>
+  <text x="858" y="420" class="mono">   └─ 4272 cat</text>
+
+  <rect x="342" y="500" width="850" height="150" rx="12" class="card"/>
+  <text x="362" y="532" class="h">Causality DAG</text>
+  <rect x="380" y="560" width="110" height="42" rx="10" class="blue"/><text x="405" y="586" class="t">LLM intent</text>
+  <rect x="540" y="560" width="110" height="42" rx="10" class="blue"/><text x="564" y="586" class="t">tool_call</text>
+  <rect x="700" y="560" width="110" height="42" rx="10" class="panel"/><text x="732" y="586" class="t">process</text>
+  <rect x="860" y="560" width="110" height="42" rx="10" class="orange"/><text x="891" y="586" class="t">risk</text>
+  <rect x="1020" y="560" width="110" height="42" rx="10" class="green"/><text x="1048" y="586" class="t">verify</text>
+  <path class="edge" d="M490 581H540"/>
+  <path class="edge" d="M650 581H700"/>
+  <path class="edge" d="M810 581H860"/>
+  <path class="edge" d="M970 581H1020"/>
+
+  <text x="58" y="720" class="wt">Placeholder preview. Replace this SVG with a real dashboard screenshot after the dashboard PR lands.</text>
+</svg>

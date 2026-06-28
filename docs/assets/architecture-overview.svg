@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="720" viewBox="0 0 1180 720" role="img" aria-labelledby="title desc">
+  <title id="title">AgentProvenance architecture overview</title>
+  <desc id="desc">Inputs pass through an API and ingest boundary into observability, causality, provenance, evidence query, and risk analysis layers.</desc>
+  <style>
+    .bg { fill: #f8fafc; }
+    .panel { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; rx: 14; }
+    .core { fill: #eef6ff; stroke: #60a5fa; stroke-width: 2; rx: 14; }
+    .risk { fill: #fff7ed; stroke: #fb923c; stroke-width: 2; rx: 14; }
+    .query { fill: #f0fdf4; stroke: #4ade80; stroke-width: 2; rx: 14; }
+    .txt { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; fill: #0f172a; }
+    .title { font-size: 30px; font-weight: 800; }
+    .subtitle { font-size: 16px; fill: #475569; }
+    .label { font-size: 17px; font-weight: 700; }
+    .small { font-size: 13px; fill: #475569; }
+    .tiny { font-size: 12px; fill: #64748b; }
+    .arrow { stroke: #334155; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+    .dash { stroke-dasharray: 6 6; }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#334155" />
+    </marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1180" height="720"/>
+  <text class="txt title" x="50" y="58">AgentProvenance</text>
+  <text class="txt subtitle" x="50" y="86">Execution observability and Git-like provenance for sandboxed agents</text>
+
+  <rect class="panel" x="50" y="130" width="210" height="390"/>
+  <text class="txt label" x="75" y="164">Producers</text>
+  <text class="txt small" x="75" y="202">Agent harness</text>
+  <text class="txt small" x="75" y="232">Zero-SDK recorder</text>
+  <text class="txt small" x="75" y="262">Python helper</text>
+  <text class="txt small" x="75" y="292">Falco / Tetragon</text>
+  <text class="txt small" x="75" y="322">auditd / eBPF sensor</text>
+  <text class="txt small" x="75" y="352">Docker / sandbox IDs</text>
+  <text class="txt tiny" x="75" y="407">Application context</text>
+  <text class="txt tiny" x="75" y="430">System telemetry</text>
+  <text class="txt tiny" x="75" y="453">Evaluator signals</text>
+
+  <rect class="panel" x="330" y="130" width="230" height="390"/>
+  <text class="txt label" x="360" y="164">API / Ingest Boundary</text>
+  <text class="txt small" x="360" y="205">schema validation</text>
+  <text class="txt small" x="360" y="235">identity normalization</text>
+  <text class="txt small" x="360" y="265">secret redaction</text>
+  <text class="txt small" x="360" y="295">spool / backpressure</text>
+  <text class="txt small" x="360" y="325">retention policy</text>
+  <text class="txt tiny" x="360" y="390">No producer writes directly</text>
+  <text class="txt tiny" x="360" y="413">into the core graph.</text>
+
+  <rect class="core" x="630" y="110" width="250" height="450"/>
+  <text class="txt label" x="660" y="145">Observability Core</text>
+  <text class="txt small" x="660" y="187">ToolCallScope binding</text>
+  <text class="txt small" x="660" y="217">execution timeline</text>
+  <text class="txt small" x="660" y="247">runtime causality graph</text>
+  <text class="txt small" x="660" y="277">process / file / network</text>
+  <text class="txt small" x="660" y="307">diff / blame</text>
+  <text class="txt small" x="660" y="337">artifact lineage</text>
+  <text class="txt small" x="660" y="367">replay manifest</text>
+  <text class="txt tiny" x="660" y="430">Correlates app context with</text>
+  <text class="txt tiny" x="660" y="453">runtime substrate facts.</text>
+
+  <rect class="query" x="940" y="130" width="190" height="170"/>
+  <text class="txt label" x="965" y="164">Query Surface</text>
+  <text class="txt small" x="965" y="204">observe</text>
+  <text class="txt small" x="965" y="232">timeline</text>
+  <text class="txt small" x="965" y="260">explain / verify</text>
+
+  <rect class="risk" x="940" y="350" width="190" height="170"/>
+  <text class="txt label" x="965" y="384">Risk / Audit</text>
+  <text class="txt small" x="965" y="424">baseline</text>
+  <text class="txt small" x="965" y="452">policy / taint</text>
+  <text class="txt small" x="965" y="480">forensics bundle</text>
+
+  <path class="arrow" d="M260 325 L330 325"/>
+  <path class="arrow" d="M560 325 L630 325"/>
+  <path class="arrow" d="M880 235 L940 215"/>
+  <path class="arrow" d="M880 405 L940 435"/>
+  <path class="arrow dash" d="M1035 350 L1035 305"/>
+
+  <rect class="panel" x="330" y="585" width="800" height="80"/>
+  <text class="txt label" x="360" y="620">v1 honesty boundary</text>
+  <text class="txt small" x="360" y="648">Local integrity verification and audit evidence, not root-resistant tamper evidence. Off-host anchoring is v2 hardening.</text>
+</svg>
