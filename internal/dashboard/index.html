@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentProvenance</title>
+<style>
+  :root{
+    --bg:#f5f5f7; --panel:#ffffff; --panel2:#fbfbfd; --line:rgba(0,0,0,.08); --line2:#d2d2d7;
+    --tx:#1d1d1f; --mut:#6e6e73; --acc:#0071e3;
+    --event:#0a84ff; --intent:#30b0c7; --policy:#ff9f0a; --risk:#ff3b30; --response:#bf5af2;
+    --ok:#34c759; --bad:#ff3b30;
+    --shadow:0 1px 2px rgba(0,0,0,.05),0 12px 32px -18px rgba(0,0,0,.18);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--tx);background:var(--bg);
+    font:14px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+  header{display:flex;align-items:center;gap:14px;padding:14px 26px;position:sticky;top:0;z-index:5;
+    background:rgba(255,255,255,.72);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);
+    border-bottom:1px solid var(--line)}
+  header h1{font-size:17px;margin:0;letter-spacing:-.02em;font-weight:600}
+  header h1 b{color:var(--acc);font-weight:600}
+  header .tag{font-size:11px;color:var(--mut);border:1px solid var(--line2);padding:3px 10px;border-radius:99px;background:#fff}
+  select{background:#fff;color:var(--tx);border:1px solid var(--line2);border-radius:9px;padding:6px 12px;font-size:13px;outline:none;box-shadow:0 1px 1px rgba(0,0,0,.03)}
+  select:hover{border-color:#b9b9c0}
+  .spacer{flex:1}
+  .badge{display:flex;align-items:center;gap:8px;padding:8px 15px;border-radius:11px;font-weight:600;font-size:13px}
+  .badge.ok{background:rgba(52,199,89,.12);color:#1d8c3e;border:1px solid rgba(52,199,89,.3)}
+  .badge.bad{background:rgba(255,59,48,.1);color:#d70015;border:1px solid rgba(255,59,48,.3)}
+  .badge .sig{font-size:11px;color:var(--mut);font-weight:500}
+  main{padding:22px 26px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:var(--shadow)}
+  .card h2{margin:0;padding:15px 20px;font-size:14px;font-weight:600;border-bottom:1px solid var(--line);color:var(--tx);display:flex;align-items:center;gap:10px;letter-spacing:-.01em}
+  .card h2 .sub{font-weight:400;color:var(--mut);font-size:11.5px;letter-spacing:0}
+  .hero{grid-column:1}
+  .side{grid-column:2}
+  .full{grid-column:1 / -1}
+  #dag{width:100%;overflow:auto;background-color:#fbfbfd;background-image:radial-gradient(rgba(0,0,0,.05) 1px,transparent 1px);background-size:22px 22px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;padding:12px 20px;border-top:1px solid var(--line);font-size:11.5px;color:var(--mut)}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  g[data-id]{cursor:pointer}
+  .detail{padding:16px 20px;border-top:1px solid var(--line);font-size:12.5px;min-height:46px}
+  .detail .hint{color:var(--mut)}
+  .detail h3{margin:0 0 12px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:9px}
+  .detail h3 .k{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;padding:2px 8px;border-radius:99px;background:#f0f0f3;color:#6e6e73}
+  .detail dl{margin:0;display:grid;grid-template-columns:170px 1fr;gap:7px 16px;align-items:start}
+  .detail dt{color:var(--mut)}
+  .detail dd{margin:0;font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;word-break:break-word;white-space:pre-wrap;color:#1d1d1f}
+  .siglist{padding:8px 12px;max-height:520px;overflow:auto}
+  .sig{display:flex;gap:11px;align-items:flex-start;padding:11px;border-radius:11px;transition:background .12s}
+  .sig:hover{background:#f5f5f7}
+  .sig+.sig{border-top:1px solid var(--line)}
+  .pill{font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:99px;white-space:nowrap;letter-spacing:.4px}
+  .sev-high,.sev-critical{background:rgba(255,59,48,.12);color:#d70015}
+  .sev-medium{background:rgba(255,159,10,.16);color:#b25e00}
+  .sev-low{background:rgba(10,132,255,.12);color:#0060df}
+  .sig .body{flex:1;min-width:0}
+  .sig .ref{font-weight:600}
+  .sig .meta{color:var(--mut);font-size:12px}
+  .sig .act{color:#d70015;font-size:12px;font-weight:600}
+  .empty{padding:26px 16px;color:var(--mut);text-align:center}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:10px 18px;border-bottom:1px solid var(--line);white-space:nowrap}
+  tbody tr{transition:background .12s}
+  tbody tr:hover{background:#f5f5f7}
+  th{color:var(--mut);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;background:var(--panel2);z-index:1}
+  td.payload{white-space:normal;color:var(--mut);max-width:520px;font-family:ui-monospace,monospace;font-size:11px}
+  .ptree{padding:14px 20px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;max-height:340px;overflow:auto;line-height:1.75}
+  .ptree .node{white-space:nowrap}
+  .ptree .pid{color:var(--mut)}
+  .ptree .cmd{color:#1d1d1f}
+  .eg-risk{color:#d70015;font-weight:600}
+  .eg-ok{color:#0060df}
+  .pager{display:flex;gap:12px;align-items:center;padding:10px 18px;border-top:1px solid var(--line);font-size:12px;color:var(--mut)}
+  .pager button{background:#fff;color:var(--tx);border:1px solid var(--line2);border-radius:8px;padding:5px 13px;cursor:pointer;font-size:12px;transition:border-color .12s,background .12s,color .12s}
+  .pager button:hover:not(:disabled){border-color:var(--acc);color:var(--acc);background:rgba(0,113,227,.06)}
+  .pager button:disabled{opacity:.4;cursor:default}
+  #live{cursor:pointer;user-select:none}
+  #live.on{color:#1d8c3e;border-color:rgba(52,199,89,.4);background:rgba(52,199,89,.08)}
+  #live.off{color:var(--mut)}
+  .etype{font-weight:600}
+  .cls{font-size:11px;color:var(--mut)}
+  .cls.kernel_correlated{color:#0a7d52}
+  .cls.uncorrelated{color:#d70015}
+  @media(max-width:900px){main{grid-template-columns:1fr}.hero,.side,.full{grid-column:1}}
+</style>
+</head>
+<body>
+<header>
+  <h1><b>Agent</b>Provenance</h1>
+  <span class="tag">verifiable agent observability</span>
+  <select id="runsel"></select>
+  <div id="live" class="tag on" title="auto-refresh every 5s">● live</div>
+  <div class="spacer"></div>
+  <div id="verify" class="badge ok">…</div>
+</header>
+<main>
+  <section class="card hero">
+    <h2>Causality DAG <span class="sub">model intent → action → policy → risk → response (the signature view)</span></h2>
+    <div id="dag"></div>
+    <div class="legend">
+      <span><i style="background:var(--intent)"></i>LLM intent (TLS)</span>
+      <span><i style="background:var(--event)"></i>system action</span>
+      <span><i style="background:var(--policy)"></i>policy decision</span>
+      <span><i style="background:var(--risk)"></i>risk signal</span>
+      <span><i style="background:var(--response)"></i>response</span>
+    </div>
+    <div id="detail" class="detail"><span class="hint">click any node to inspect its full record →</span></div>
+  </section>
+  <section class="card side">
+    <h2>Signals &amp; Risk <span class="sub" id="sigcount"></span></h2>
+    <div id="siglist" class="siglist"></div>
+  </section>
+  <section class="card full">
+    <h2>Timeline <span class="sub">merged app-context + system telemetry</span></h2>
+    <div style="overflow:auto;max-height:420px"><table id="tl"><thead><tr>
+      <th>time</th><th>event</th><th>correlation</th><th>conf</th><th>detail</th>
+    </tr></thead><tbody></tbody></table></div>
+    <div id="tlpager" class="pager"></div>
+  </section>
+  <section class="card full">
+    <h2>Process Tree <span class="sub">OS processes by parent pid</span></h2>
+    <div id="ptree" class="ptree"></div>
+  </section>
+  <section class="card full">
+    <h2>Egress <span class="sub">outbound network — the destination is the security-relevant fact</span></h2>
+    <div style="overflow:auto;max-height:300px"><table id="egtbl"><thead><tr>
+      <th>time</th><th>type</th><th>destination</th><th>port</th><th>proc</th>
+    </tr></thead><tbody></tbody></table></div>
+  </section>
+</main>
+<script>
+const KIND_COLOR={event:'var(--event)',intent:'var(--intent)',policy:'var(--policy)',risk:'var(--risk)',response:'var(--response)',other:'#64748b'};
+const EDGE_LABEL={llm_call:'request→response',llm_intent_caused:'intent→action',runtime_event_policy_decision:'→ policy',policy_decision_risk_signal:'→ risk',risk_signal_response_action:'→ response'};
+const $=s=>document.querySelector(s);
+
+async function j(u){const r=await fetch(u);return r.json();}
+
+function nodeKind(n){
+  if(n.kind==='event' && /^tls_/.test(n.subtype||'')) return 'intent';
+  return n.kind||'other';
+}
+
+function layout(nodes,edges){
+  const byId={}; nodes.forEach(n=>byId[n.id]=n);
+  const out={}, indeg={};
+  nodes.forEach(n=>{out[n.id]=[];indeg[n.id]=0;});
+  edges.forEach(e=>{ if(byId[e.from]&&byId[e.to]){out[e.from].push(e);indeg[e.to]++;} });
+  // longest-path layering (DAG)
+  const layer={}; nodes.forEach(n=>layer[n.id]=0);
+  for(let i=0;i<nodes.length;i++){
+    let changed=false;
+    edges.forEach(e=>{ if(byId[e.from]&&byId[e.to]&&layer[e.to]<layer[e.from]+1){layer[e.to]=layer[e.from]+1;changed=true;} });
+    if(!changed)break;
+  }
+  const cols={}; nodes.forEach(n=>{(cols[layer[n.id]]=cols[layer[n.id]]||[]).push(n);});
+  const COLW=210,ROWH=86,NW=158,NH=52,PADX=30,PADY=28;
+  const pos={};
+  Object.keys(cols).forEach(L=>{cols[L].forEach((n,i)=>{pos[n.id]={x:PADX+L*COLW,y:PADY+i*ROWH,w:NW,h:NH};});});
+  const maxRows=Math.max(1,...Object.values(cols).map(c=>c.length));
+  const maxL=Math.max(0,...Object.keys(cols).map(Number));
+  return {pos,W:PADX*2+maxL*COLW+NW,H:PADY*2+(maxRows-1)*ROWH+NH};
+}
+
+let SEL=null;
+// lineage returns the nodes + edge-indices on the causal chain through sel
+// (everything upstream via incoming edges and downstream via outgoing edges).
+function lineage(g,sel){
+  if(!sel) return null;
+  const out={},inc={};
+  g.edges.forEach((e,i)=>{(out[e.from]=out[e.from]||[]).push([e.to,i]);(inc[e.to]=inc[e.to]||[]).push([e.from,i]);});
+  const nodes=new Set([sel]), edges=new Set();
+  const walk=(id,adj)=>{(adj[id]||[]).forEach(([nx,i])=>{edges.add(i); if(!nodes.has(nx)){nodes.add(nx);walk(nx,adj);}});};
+  walk(sel,out); walk(sel,inc);
+  return {nodes,edges};
+}
+function renderDAG(g,sel){
+  const el=$('#dag');
+  if(!g.nodes.length){el.innerHTML='<div class="empty">no causal edges for this run</div>';return;}
+  const {pos,W,H}=layout(g.nodes,g.edges);
+  const lin=lineage(g,sel);
+  const eOn=i=>!lin||lin.edges.has(i), nOn=id=>!lin||lin.nodes.has(id);
+  let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="-apple-system,sans-serif">`;
+  // markerUnits=userSpaceOnUse => arrowheads are a FIXED size, not scaled by
+  // stroke width, so they stay aligned to the node edge regardless of highlight.
+  s+=`<defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#bcbcc2"/></marker>`;
+  s+=`<marker id="ahl" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#0071e3"/></marker></defs>`;
+  const hl=i=>lin&&lin.edges.has(i), dimE=i=>lin&&!lin.edges.has(i);
+  g.edges.forEach((e,i)=>{
+    const a=pos[e.from],b=pos[e.to]; if(!a||!b)return;
+    const x1=a.x+a.w,y1=a.y+a.h/2,x2=b.x-1,y2=b.y+b.h/2,mx=(x1+x2)/2;
+    const H=hl(i), D=dimE(i);
+    s+=`<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${H?'#0071e3':'#d0d0d6'}" stroke-width="${H?2:1.4}" opacity="${D?0.28:1}" marker-end="url(#${H?'ahl':'ah'})"/>`;
+  });
+  // Edge labels only on the highlighted chain (default view stays clean), drawn
+  // on a white pill so they never collide with lines or the dotted canvas.
+  if(lin){
+    g.edges.forEach((e,i)=>{
+      if(!hl(i))return;
+      const a=pos[e.from],b=pos[e.to]; if(!a||!b)return;
+      const y1=a.y+a.h/2,y2=b.y+b.h/2,lx=(a.x+a.w+b.x)/2,ly=(y1+y2)/2;
+      const lbl=EDGE_LABEL[e.type]||e.type, w=lbl.length*6.0+12;
+      s+=`<rect x="${lx-w/2}" y="${ly-17}" width="${w}" height="16" rx="8" fill="#ffffff" stroke="#0071e3" stroke-opacity="0.3"/>`;
+      s+=`<text x="${lx}" y="${ly-5.5}" fill="#0071e3" font-size="10" font-weight="600" text-anchor="middle">${lbl}</text>`;
+    });
+  }
+  g.nodes.forEach(n=>{
+    const p=pos[n.id]; const k=nodeKind(n); const c=KIND_COLOR[k]; const on=(n.id===sel); const dim=!nOn(n.id);
+    s+=`<g data-id="${esc(n.id)}" opacity="${dim?0.32:1}">`;
+    if(on)s+=`<rect x="${p.x-4}" y="${p.y-4}" width="${p.w+8}" height="${p.h+8}" rx="12" fill="none" stroke="${c}" stroke-width="1.5" opacity="0.45"/>`;
+    s+=`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="11" fill="#ffffff" stroke="${c}" stroke-width="${on?2.4:1.4}"/>`;
+    s+=`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="11" fill="${c}" opacity="0.06"/>`;
+    s+=`<circle cx="${p.x+15}" cy="${p.y+16}" r="3.5" fill="${c}"/>`;
+    s+=`<text x="${p.x+26}" y="${p.y+20}" fill="#1d1d1f" font-size="13" font-weight="600">${esc(n.label).slice(0,18)}</text>`;
+    s+=`<text x="${p.x+15}" y="${p.y+39}" fill="#86868b" font-size="10.5">${esc(n.subtype||n.detail||'').slice(0,24)}</text></g>`;
+  });
+  s+='</svg>';
+  const sl=el.scrollLeft, st=el.scrollTop; // preserve scroll across re-render
+  el.innerHTML=s;
+  el.scrollLeft=sl; el.scrollTop=st;
+  el.onclick=ev=>{const g2=ev.target.closest('[data-id]');if(g2)selectNode(g2.getAttribute('data-id'));};
+}
+
+function selectNode(id){ SEL=(SEL===id?null:id); renderDAG(window._graph,SEL); showDetail(SEL); }
+
+const DETAIL_HINT='<span class="hint">click any node to highlight its causal chain &amp; inspect its record →</span>';
+function showDetail(id){
+  const el=$('#detail');
+  const n=id&&(window._graph.nodes||[]).find(x=>x.id===id);
+  if(!n){el.innerHTML=DETAIL_HINT;return;}
+  const c=KIND_COLOR[nodeKind(n)];
+  let rows='';
+  const d=n.data||{};
+  Object.keys(d).forEach(key=>{
+    let v=d[key];
+    if(key==='payload'){ try{v=JSON.stringify(JSON.parse(v),null,2);}catch(_){v=String(v);} }
+    else if(typeof v==='number'){ v=(key.indexOf('confidence')>=0)?(+v).toFixed(2):v; }
+    if(v==='' || v==null)return;
+    rows+=`<dt>${esc(key)}</dt><dd>${esc(v)}</dd>`;
+  });
+  rows+=`<dt>node id</dt><dd>${esc(n.id)}</dd>`;
+  el.innerHTML=`<h3><span style="color:${c}">●</span> ${esc(n.label)} <span class="k">${esc(n.kind)}</span></h3><dl>${rows}</dl>`;
+}
+
+function renderVerify(v){
+  const el=$('#verify');
+  const ok = v && v.status==='ok' && !v.error;
+  el.className='badge '+(ok?'ok':'bad');
+  if(!v||v.error){el.innerHTML='✗ verify error <span class="sig">'+esc((v&&v.error)||'')+'</span>';return;}
+  el.innerHTML=(ok?'✓ VERIFIED':'✗ FAILED')+` <span class="sig">${v.error_count||0} err · ${v.warning_count||0} warn · signed graph</span>`;
+}
+
+function renderSignals(sig){
+  const list=$('#siglist'); const arr=(sig&&sig.signals)||[];
+  $('#sigcount').textContent = arr.length? arr.length+' signal'+(arr.length>1?'s':'') : '';
+  if(!arr.length){list.innerHTML='<div class="empty">no signals</div>';return;}
+  list.innerHTML=arr.map(s=>{
+    const sev=(s.severity||'low').toLowerCase();
+    return `<div class="sig"><span class="pill sev-${sev}">${esc(s.severity||s.dimension||'')}</span>
+      <div class="body"><div class="ref">${esc(s.reference||s.type||'')}</div>
+      <div class="meta">${esc(s.dimension||'')} · ${esc(s.type||'')}</div>
+      ${s.recommended_action?`<div class="act">▸ ${esc(s.recommended_action)}</div>`:''}</div></div>`;
+  }).join('');
+}
+
+function renderTimeline(events){
+  const tb=$('#tl tbody');
+  if(!events||!events.length){tb.innerHTML='<tr><td colspan="5" class="empty">no events</td></tr>';return;}
+  tb.innerHTML=events.map(e=>{
+    const cls=(e.correlation_class||'').replace(/\s/g,'_');
+    const t=(e.created_at||'').replace('T',' ').replace(/\.\d+Z?$/,'');
+    return `<tr><td>${esc(t)}</td><td class="etype">${esc(e.event_type||'')}</td>
+      <td class="cls ${cls}">${esc(e.correlation_class||e.correlation_method||'')}</td>
+      <td>${e.correlation_confidence!=null?(+e.correlation_confidence).toFixed(2):''}</td>
+      <td class="payload">${esc(payloadSummary(e.payload))}</td></tr>`;
+  }).join('');
+}
+function payloadSummary(p){ if(!p)return''; try{const o=JSON.parse(p);if(o.http)return JSON.stringify(o.http);if(o.raw)return JSON.stringify(o.raw).slice(0,160);return JSON.stringify(o).slice(0,160);}catch(_){return String(p).slice(0,160);} }
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+function renderEgress(rows){
+  const tb=$('#egtbl tbody');
+  if(!rows||!rows.length){tb.innerHTML='<tr><td colspan="5" class="empty">no outbound network</td></tr>';return;}
+  tb.innerHTML=rows.map(e=>{
+    const t=(e.time||'').replace('T',' ').replace(/\.\d+Z?$/,'');
+    const cls=e.risk?'eg-risk':'eg-ok';
+    return `<tr><td>${esc(t)}</td><td class="${cls}">${esc(e.type)}</td><td class="${cls}">${esc(e.dst)}</td><td>${esc(e.port)}</td><td>${esc(e.comm)}</td></tr>`;
+  }).join('');
+}
+
+function renderProcessTree(procs){
+  const el=$('#ptree');
+  if(!procs||!procs.length){el.innerHTML='<div class="empty">no process events</div>';return;}
+  const byPid={}, kids={};
+  procs.forEach(p=>{ if(!byPid[p.pid]) byPid[p.pid]={pid:p.pid,ppid:p.ppid,command:p.command||p.comm||'?'}; });
+  const pids=new Set(Object.keys(byPid).map(Number));
+  Object.values(byPid).forEach(p=>{(kids[p.ppid]=kids[p.ppid]||[]).push(p);});
+  const roots=Object.values(byPid).filter(p=>!pids.has(p.ppid));
+  const seen=new Set();
+  function render(p,depth){
+    if(seen.has(p.pid)||depth>40)return''; seen.add(p.pid);
+    const ind='&nbsp;'.repeat(depth*3);
+    let s=`<div class="node">${ind}${depth>0?'└ ':''}<span class="cmd">${esc(p.command).slice(0,80)}</span> <span class="pid">[pid ${p.pid}]</span></div>`;
+    (kids[p.pid]||[]).forEach(c=>{ s+=render(c,depth+1); });
+    return s;
+  }
+  el.innerHTML=roots.map(r=>render(r,0)).join('') || '<div class="empty">no roots</div>';
+}
+
+let cur=null, tlOffset=0; const TL_LIMIT=50;
+async function loadRun(run){
+  cur=run;
+  const q='run='+encodeURIComponent(run);
+  const [ov,g,eg,pr]=await Promise.all([j('/api/overview?'+q),j('/api/graph?'+q),j('/api/egress?'+q),j('/api/processes?'+q)]);
+  window._graph=g;
+  if(SEL && !g.nodes.find(n=>n.id===SEL)) SEL=null; // selection gone after refresh
+  renderVerify(ov.verify); renderSignals(ov.signals);
+  // Only re-render the DAG when its structure actually changed, so the live
+  // 5s refresh never re-lays-out / jumps the graph under the cursor.
+  const sig=JSON.stringify(g.nodes.map(n=>n.id))+'|'+JSON.stringify(g.edges.map(e=>e.from+'>'+e.to));
+  if(sig!==window._gsig){ window._gsig=sig; renderDAG(g,SEL); }
+  renderEgress(eg); renderProcessTree(pr); showDetail(SEL);
+  await loadTimeline(run, tlOffset);
+}
+
+async function loadTimeline(run, offset){
+  const d=await j('/api/timeline?run='+encodeURIComponent(run)+'&limit='+TL_LIMIT+'&offset='+offset);
+  tlOffset=d.offset;
+  renderTimeline(d.events);
+  const from=d.total?d.offset+1:0, to=Math.min(d.offset+d.limit,d.total);
+  const el=$('#tlpager');
+  el.innerHTML=`<button id="tlprev" ${d.offset<=0?'disabled':''}>‹ prev</button>
+    <span>${from}–${to} of ${d.total} events</span>
+    <button id="tlnext" ${d.offset+d.limit>=d.total?'disabled':''}>next ›</button>`;
+  const pv=$('#tlprev'), nx=$('#tlnext');
+  if(pv) pv.onclick=()=>loadTimeline(cur,Math.max(0,d.offset-d.limit));
+  if(nx) nx.onclick=()=>loadTimeline(cur,d.offset+d.limit);
+}
+
+let LIVE=true;
+function setLive(v){ LIVE=v; const el=$('#live'); el.className='tag '+(v?'on':'off'); el.textContent=v?'● live':'○ paused'; }
+
+async function refreshRuns(keep){
+  const runs=await j('/api/runs'); const sel=$('#runsel');
+  if(!runs.length){sel.innerHTML='<option>no runs</option>';$('#verify').style.display='none';return null;}
+  const want=keep||sel.value||runs[0].run;
+  sel.innerHTML=runs.map(r=>`<option value="${esc(r.run)}"${r.run===want?' selected':''}>${esc(r.run)} (${r.events})</option>`).join('');
+  return sel.value;
+}
+
+(async function(){
+  const sel=$('#runsel');
+  const first=await refreshRuns(); if(!first)return;
+  sel.onchange=()=>{ SEL=null; tlOffset=0; loadRun(sel.value); };
+  $('#live').onclick=()=>setLive(!LIVE);
+  await loadRun(first);
+  setInterval(async()=>{ if(!LIVE)return; const r=await refreshRuns(cur); if(r) loadRun(r); }, 5000);
+})();
+</script>
+</body>
+</html>
