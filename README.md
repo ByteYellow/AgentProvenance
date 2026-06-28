@@ -2,7 +2,7 @@
 
 # AgentProvenance
 
-### Correlate application context with system telemetry into a verifiable, signed evidence graph for sandboxed agents.
+### Correlate application context with system telemetry into an integrity-checked evidence graph for sandboxed agents.
 
 Correlate application-side agent context with system-side telemetry, then turn
 runtime evidence, file diffs, artifacts, risk signals, and response decisions
@@ -22,6 +22,14 @@ version-control system**: there is no merge, checkout, or mutable working tree.
 </div>
 
 ---
+
+<p align="center">
+  <img src="docs/assets/agentprovenance-architecture.svg" alt="AgentProvenance architecture: application context and system telemetry enter an ingest boundary, then become a verifiable provenance graph." width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/assets/evidence-dag.svg" alt="AgentProvenance evidence DAG: LLM intent, tool call, process, runtime event, policy risk, response, artifact, manifest, and verification." width="100%">
+</p>
 
 AgentProvenance is a local-first security analysis and provenance control plane
 for autonomous, tool-using agents, especially sandboxed coding agents.
@@ -58,6 +66,10 @@ The goal is to answer questions ordinary traces do not answer well:
 - What exact behavior evidence, deviation signal, and risk context should an
   external evaluator, RL pipeline, or human reviewer inspect?
 - Can this execution be diffed, blamed, verified, replayed, and audited later?
+
+<p align="center">
+  <img src="docs/assets/evidence-flow.svg" alt="AgentProvenance evidence flow" width="920">
+</p>
 
 ## Contents
 
@@ -321,6 +333,10 @@ AgentProvenance is intentionally usable in three deployment shapes. RL,
 benchmark, and evaluator users should start with the first shape; enterprise
 security and audit users can move toward the later shapes when they need shared
 ingest, retention, and query services.
+
+<p align="center">
+  <img src="docs/assets/deployment-modes.svg" alt="AgentProvenance deployment modes" width="920">
+</p>
 
 | Mode | Shape | Best for | Tradeoff |
 |---|---|---|---|
@@ -680,6 +696,10 @@ engine, not the model.
 
 ## Web Dashboard
 
+<p align="center">
+  <img src="docs/assets/dashboard-preview.svg" alt="AgentProvenance local evidence inspector preview with run selection, verify status, timeline, process tree, egress, risk signals, and causality DAG." width="100%">
+</p>
+
 ```sh
 ./agentprov dashboard serve            # http://127.0.0.1:7396
 ./agentprov dashboard serve --data-dir <dir> --addr 127.0.0.1:7396
@@ -689,6 +709,10 @@ A local, read-only, single-page dashboard over the verifiable graph. Its JSON
 endpoints reuse the same internal functions as the CLI and AI tools, so the UI
 never drifts from the contract; the HTML/JS is embedded in the binary and loads
 no external assets (local-first). Panels:
+
+The preview image above is an intentional placeholder. Replace
+`docs/assets/dashboard-preview.svg` with a real screenshot after the dashboard
+PR lands; the README layout is already reserved for it.
 
 - **Causality DAG** (the signature view): model intent -> action -> policy ->
   risk -> response, rendered from the same `llm_intent_caused` / `llm_call` /
@@ -825,6 +849,10 @@ Run:
 ```
 
 ## Architecture
+
+<p align="center">
+  <img src="docs/assets/architecture-overview.svg" alt="AgentProvenance architecture overview" width="920">
+</p>
 
 ```mermaid
 flowchart TD

@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="560" viewBox="0 0 1180 560" role="img" aria-labelledby="title desc">
+  <title id="title">AgentProvenance deployment modes</title>
+  <desc id="desc">Three deployment modes: CLI only, local sidecar, and central evidence service.</desc>
+  <style>
+    .bg { fill: #f8fafc; }
+    .card { fill: #fff; stroke: #cbd5e1; stroke-width: 1.5; rx: 16; }
+    .hot { fill: #eff6ff; stroke: #3b82f6; stroke-width: 2; rx: 16; }
+    .mid { fill: #f0fdf4; stroke: #22c55e; stroke-width: 2; rx: 16; }
+    .future { fill: #faf5ff; stroke: #a855f7; stroke-width: 2; rx: 16; }
+    .txt { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; fill: #0f172a; }
+    .title { font-size: 30px; font-weight: 800; }
+    .subtitle { font-size: 16px; fill: #475569; }
+    .h { font-size: 21px; font-weight: 800; }
+    .small { font-size: 14px; fill: #334155; }
+    .tag { font-size: 12px; font-weight: 700; fill: #2563eb; }
+    .arrow { stroke: #334155; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#334155" />
+    </marker>
+  </defs>
+  <rect class="bg" width="1180" height="560"/>
+  <text class="txt title" x="50" y="58">Deployment modes</text>
+  <text class="txt subtitle" x="50" y="86">Start local and lightweight. Move to sidecar or central service only when operational pressure requires it.</text>
+
+  <rect class="hot" x="55" y="135" width="320" height="310"/>
+  <text class="txt tag" x="85" y="170">MODE 1</text>
+  <text class="txt h" x="85" y="205">Library / CLI-only</text>
+  <text class="txt small" x="85" y="250">one Go binary</text>
+  <text class="txt small" x="85" y="280">optional Python helper</text>
+  <text class="txt small" x="85" y="310">local SQLite + objects</text>
+  <text class="txt small" x="85" y="340">record batch + EvalContext</text>
+  <text class="txt small" x="85" y="390">Best fit: RL, evaluator, CI,</text>
+  <text class="txt small" x="85" y="415">benchmark, red-team harness.</text>
+
+  <rect class="mid" x="430" y="135" width="320" height="310"/>
+  <text class="txt tag" x="460" y="170">MODE 2</text>
+  <text class="txt h" x="460" y="205">Sidecar / local daemon</text>
+  <text class="txt small" x="460" y="250">long-lived ingest/query API</text>
+  <text class="txt small" x="460" y="280">spool and backpressure</text>
+  <text class="txt small" x="460" y="310">correlation and graph verify</text>
+  <text class="txt small" x="460" y="340">forensics and signal APIs</text>
+  <text class="txt small" x="460" y="390">Best fit: sandbox workers,</text>
+  <text class="txt small" x="460" y="415">local security harnesses.</text>
+
+  <rect class="future" x="805" y="135" width="320" height="310"/>
+  <text class="txt tag" x="835" y="170">MODE 3 / V2</text>
+  <text class="txt h" x="835" y="205">Central evidence service</text>
+  <text class="txt small" x="835" y="250">multi-tenant ingest</text>
+  <text class="txt small" x="835" y="280">object storage and retention</text>
+  <text class="txt small" x="835" y="310">mTLS / auth / UI</text>
+  <text class="txt small" x="835" y="340">off-host anchoring</text>
+  <text class="txt small" x="835" y="390">Best fit: enterprise security,</text>
+  <text class="txt small" x="835" y="415">audit, SRE, compliance.</text>
+
+  <path class="arrow" d="M375 290 L430 290"/>
+  <path class="arrow" d="M750 290 L805 290"/>
+</svg>

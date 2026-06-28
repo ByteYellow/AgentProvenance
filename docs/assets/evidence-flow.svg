@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="520" viewBox="0 0 1180 520" role="img" aria-labelledby="title desc">
+  <title id="title">AgentProvenance evidence flow</title>
+  <desc id="desc">Execution context, telemetry, and file state become timeline, causality graph, provenance DAG, query results, and audit evidence.</desc>
+  <style>
+    .bg { fill: #f8fafc; }
+    .node { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; rx: 14; }
+    .focus { fill: #eff6ff; stroke: #3b82f6; stroke-width: 2; rx: 14; }
+    .warn { fill: #fff7ed; stroke: #fb923c; stroke-width: 2; rx: 14; }
+    .txt { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; fill: #0f172a; }
+    .title { font-size: 30px; font-weight: 800; }
+    .subtitle { font-size: 16px; fill: #475569; }
+    .h { font-size: 16px; font-weight: 800; }
+    .small { font-size: 13px; fill: #475569; }
+    .arrow { stroke: #334155; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#334155" />
+    </marker>
+  </defs>
+  <rect class="bg" width="1180" height="520"/>
+  <text class="txt title" x="50" y="58">Evidence flow</text>
+  <text class="txt subtitle" x="50" y="86">Application context plus system telemetry becomes a queryable, replayable, and auditable causality graph.</text>
+
+  <rect class="node" x="55" y="145" width="160" height="130"/>
+  <text class="txt h" x="78" y="180">Execution</text>
+  <text class="txt h" x="78" y="205">Context</text>
+  <text class="txt small" x="78" y="238">run / session</text>
+  <text class="txt small" x="78" y="260">attempt / tool_call</text>
+
+  <rect class="node" x="55" y="315" width="160" height="110"/>
+  <text class="txt h" x="78" y="350">Substrate</text>
+  <text class="txt h" x="78" y="375">Facts</text>
+  <text class="txt small" x="78" y="405">pid / cgroup / file</text>
+
+  <rect class="focus" x="285" y="220" width="170" height="130"/>
+  <text class="txt h" x="310" y="255">Correlation</text>
+  <text class="txt small" x="310" y="292">identity binding</text>
+  <text class="txt small" x="310" y="315">time windows</text>
+
+  <rect class="focus" x="525" y="220" width="170" height="130"/>
+  <text class="txt h" x="552" y="255">Timeline</text>
+  <text class="txt small" x="552" y="292">app events</text>
+  <text class="txt small" x="552" y="315">runtime events</text>
+
+  <rect class="focus" x="765" y="145" width="170" height="130"/>
+  <text class="txt h" x="792" y="180">Git-like</text>
+  <text class="txt h" x="792" y="205">Provenance</text>
+  <text class="txt small" x="792" y="238">diff / blame</text>
+  <text class="txt small" x="792" y="260">artifact lineage</text>
+
+  <rect class="warn" x="765" y="315" width="170" height="110"/>
+  <text class="txt h" x="792" y="350">Risk</text>
+  <text class="txt h" x="792" y="375">Evidence</text>
+  <text class="txt small" x="792" y="405">policy / taint</text>
+
+  <rect class="node" x="1005" y="220" width="130" height="130"/>
+  <text class="txt h" x="1028" y="255">Outputs</text>
+  <text class="txt small" x="1028" y="292">explain</text>
+  <text class="txt small" x="1028" y="315">replay / audit</text>
+
+  <path class="arrow" d="M215 210 C245 210 250 250 285 260"/>
+  <path class="arrow" d="M215 370 C245 370 250 320 285 310"/>
+  <path class="arrow" d="M455 285 L525 285"/>
+  <path class="arrow" d="M695 260 C725 245 735 215 765 205"/>
+  <path class="arrow" d="M695 315 C725 330 735 360 765 370"/>
+  <path class="arrow" d="M935 205 C965 225 975 250 1005 260"/>
+  <path class="arrow" d="M935 370 C965 350 975 320 1005 310"/>
+</svg>
