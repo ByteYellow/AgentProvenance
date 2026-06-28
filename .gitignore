@@ -2,11 +2,17 @@
 
 # Local AgentProvenance state and build outputs.
 /agentprov
-/agentprov
 /.agentprov/
 /.agentprov-*/
 /.acf/
 /.acf-*/
+# Root-level daemon logs: the dir globs above only match directories, so these
+# stray .daemon.log files slipped into git once. Match them explicitly.
+*.daemon.log
+
+# Python build / packaging outputs (setuptools). Never commit these.
+build/
+*.egg-info/
 
 # Internal planning notes. Keep these local only.
 01-atomized-design-online-CN.MD
@@ -14,6 +20,8 @@
 03-readme-showcase-CN.MD
 04-enterprise-session-profile-CN.MD
 docs/north-star-three-pillars.md
+HANDOFF.md
+TODO.md
 
 # Generated eBPF sensor artifacts. The bpf2go bindings (sensorbpf_bpf*.go/.o)
 # ARE committed so `go build ./cmd/agentprov-sensor` works on a fresh Linux

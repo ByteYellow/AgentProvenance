@@ -1,1 +1,0 @@
-agentprov daemon listening on http://127.0.0.1:18574 sample_interval=0s sample_limit=64 sample_timeout=2s spool_interval=0s evidence_interval=0s gc_interval=0s
