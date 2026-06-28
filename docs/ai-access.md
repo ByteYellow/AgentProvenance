@@ -39,8 +39,14 @@ returning a versioned JSON envelope. This is the canonical list adapters expose.
 | explain_correlations | GET /v1/telemetry/correlations?run= | telemetry correlations --run --json | agentprovenance.telemetry_correlations/v1 |
 | health | GET /v1/health | (daemon) | agentprovenance.daemon_health/v1 |
 
-Context-write surface (phase 2): bind_scope (POST /v1/telemetry/bind),
-record (POST /v1/record). Gate (phase 3): evaluate_action.
+Context-write surface (phase 2, **shipped** as AI tools): `bind_scope` (register a
+ToolCallScope binding, over `correlation.RecordBinding`) and `record_tool_call`
+(anchor an app-asserted tool call). Both write only app-side context — forced
+`binding_source=ai_asserted` / `status=asserted`, no execution, no system events —
+so they cannot fabricate independent (kernel_correlated) evidence. The daemon
+analogues remain `POST /v1/telemetry/bind` and `POST /v1/record` (the latter also
+executes; the AI tool deliberately does not). Gate (phase 3, shipped):
+`evaluate_action`.
 
 ## 2. Adapters (one contract, many surfaces)
 
@@ -49,9 +55,30 @@ record (POST /v1/record). Gate (phase 3): evaluate_action.
 | CLI-as-tool | a stable `--json` contract + a tool manual prompt | ~0 (exists) | code-execution agents (Claude Code, etc.) |
 | OpenAPI spec | one openapi.yaml over the read endpoints | low | GPT Actions, any OpenAPI tool importer |
 | Provider tool-schemas | Anthropic tool-use / OpenAI function defs + dispatcher | low-med | direct tool-calling apps |
-| MCP server | an MCP server wrapping the read surface | med | MCP clients |
+| MCP server | stdio MCP server wrapping the read surface + gate (`agentprov ai mcp`) — **shipped** | med | MCP clients |
 | SDK framework tools | LangChain/LlamaIndex/CrewAI/Agents-SDK wrappers over the Python SDK | med | agents built in those frameworks |
 | A2A agent-card | expose AgentProvenance as a delegatable agent | med (frontier) | agent-to-agent delegation |
+
+### 2.1 MCP server (`agentprov ai mcp`)
+
+A stdio MCP server (spec revision `2025-06-18`, JSON-RPC 2.0 over stdin/stdout)
+generated from the same `internal/aitools.Catalog()` / `Dispatch` as the provider
+tool-schemas and `ai call` — so MCP clients see exactly the eight tools (five read,
+the `evaluate_action` gate, and the `bind_scope` / `record_tool_call` context-write
+tools) with no separate contract to drift. The two write tools carry
+`annotations.readOnlyHint=false`; everything else is hinted read-only. Only
+JSON-RPC is written to stdout; diagnostics stay on stderr. Tool results carry the
+serialized JSON in a `text` content block, with object results also surfaced as
+`structuredContent`. Wire it into a client, e.g.:
+
+```json
+{ "mcpServers": { "agentprovenance": { "command": "agentprov", "args": ["ai", "mcp"] } } }
+```
+
+`initialize` → `tools/list` → `tools/call` is the full handshake; the trust
+boundary in §0 is inherited unchanged (no fabrication of system events/signatures;
+the gate verdict is the engine's, not the model's). Implementation:
+`internal/mcpserver`.
 
 ## 3. The differentiated one: the inline gate (push, not pull)
 
@@ -64,11 +91,11 @@ verifiable evidence, which a plain query tool cannot provide.
 
 ## 4. Roadmap
 
-1. **Read adapters** (now): CLI tool manual + OpenAPI spec, then provider
-   tool-schemas, then an MCP server -- all over section 1.
-2. **Context-write tools**: bind_scope / record_tool_call so an agent registers
-   its own ToolCallScope (zero-instrumentation correlation), within the trust
-   boundary.
+1. **Read adapters** (done): CLI tool manual + OpenAPI spec, provider
+   tool-schemas, and the stdio MCP server (§2.1) -- all over section 1.
+2. **Context-write tools** (done): bind_scope / record_tool_call so an agent
+   registers its own ToolCallScope (zero-instrumentation correlation), within the
+   trust boundary — app-asserted only, never forging system evidence.
 3. **Inline gate**: evaluate_action over the policy/correlation engine.
 4. **Analysis direction** (optional): an observer-LLM step over the SIGNED graph
    (semantic risk explanation on tamper-evident evidence).
