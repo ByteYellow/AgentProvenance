@@ -716,8 +716,8 @@ engine, not the model.
 A local, read-only, single-page dashboard over the verifiable graph. Its JSON
 endpoints reuse the same internal functions as the CLI and AI tools, so the UI
 never drifts from the contract; the HTML/JS is embedded in the binary and loads
-no external assets (local-first). The current UI still highlights the security
-signature path, but the backend now exposes a Graph Explorer contract:
+no external assets (local-first). The UI is a **Graph Explorer** over the
+canonical graph, not a single hard-coded security flow:
 
 ```text
 Canonical Provenance Graph
@@ -726,22 +726,56 @@ Canonical Provenance Graph
   -> Layout + side-panel schema
 ```
 
-The dashboard API includes `/api/lens`, backed by the same `graph lens` query
-surface used by the CLI. Lens projections keep the storage graph generic while
-allowing focused views such as process tree, file/artifact lineage, egress,
-data-flow/taint, agent intent, trust origin, and sandbox boundary.
-
 Panels:
 
-- **Graph Explorer / Causality DAG**: the current signature view renders model
-  intent -> action -> policy -> risk -> response from `llm_intent_caused`,
-  `llm_call`, and policy/risk/response edges. The lens API generalizes this so
-  future UI views do not need to hard-code a single four-column security flow.
-- **Verify + signature** status, **signals / risk** with recommended actions, a
-  **paged timeline** (with correlation class per event), the **process tree**,
-  and **egress** (destination IP and -- when captured -- resolved DNS hostname).
-- Live auto-refresh; flat event streams plus the verifiable signed DAG that a
-  pure event viewer cannot show.
+- **Graph Explorer** (`/api/lens`, same `graph lens` query surface as the CLI):
+  a **lens switcher** over 9 projections — default causality, security,
+  process tree, file/artifact lineage, network egress, **data-flow/taint**,
+  agent intent, trust origin, sandbox boundary — with **risk/trust overlays**,
+  click-to-focus on a node's causal lineage, and a Sugiyama-layered DAG.
+  **Derived edges** (e.g. `possible_sensitive_data_flow`) render dashed with
+  their confidence, so an inferred flow is never mistaken for a recorded fact.
+- **Time-scrubber**: replay a run forward over its real event clock — watch a
+  secret read, then the egress, appear in order.
+- **Side Panel**: per-node **Evidence** (ids, command/pid/path/destination,
+  risk/policy/response, derived-edge rule + confidence + evidence refs, hashes)
+  and a bounded, secret-redacted **artifact content Preview** (the code/JSON the
+  node actually produced — `/api/artifact`).
+- **Verify + signature** status, **signals / risk**, a **paged timeline**, the
+  **process tree**, and **egress**; live auto-refresh.
+
+<p align="center">
+  <!-- TODO screenshot: Graph Explorer with the data-flow/taint lens on run-snake-agent -->
+  <img src="docs/img/dashboard-graph-explorer-taint.png" alt="Graph Explorer — data-flow/taint lens showing the captured secret-read -> metadata-IP exfil flow" width="100%">
+</p>
+<p align="center">
+  <!-- TODO screenshot: Side Panel showing Evidence + Preview of the agent's snake.py -->
+  <img src="docs/img/dashboard-side-panel-preview.png" alt="Side Panel — evidence summary plus a redacted preview of the artifact the agent produced" width="100%">
+</p>
+
+### Demo: agent in a sandbox (supply-chain exfiltration, caught by provenance)
+
+A **real coding agent** (Claude Code, DeepSeek backend) builds a Snake game in a
+sandbox; its setup step installs a poisoned `pysnake-helper` whose install hook
+reads planted credentials and connects to the cloud-metadata IP. The self-owned
+eBPF sensor captures it; the **data-flow/taint lens** surfaces the
+secret-read -> egress flow as a causal edge. Captured live on the Linux/eBPF lab
+VM and shipped as a **signed, portable forensics bundle** that replays offline:
+
+```sh
+./agentprov --data-dir /tmp/snake-replay forensics import \
+  demo/snake-supply-chain/run-snake-agent.forensics.json \
+  --pub-key demo/snake-supply-chain/attestation.pub        # verifies the signature, then imports
+./agentprov --data-dir /tmp/snake-replay dashboard serve   # open run "run-snake-agent"
+```
+
+<p align="center">
+  <!-- TODO screenshot: the taint lens time-scrubber mid-replay (secret reads visible, egress about to appear) -->
+  <img src="docs/img/demo-snake-taint-replay.png" alt="Replaying the captured snake-agent run: the taint lens shows the poisoned dependency's secret reads flowing to the metadata-IP egress" width="100%">
+</p>
+
+See [`demo/snake-supply-chain/`](demo/snake-supply-chain) for the full walkthrough,
+the capture scripts, and what to click in the dashboard.
 
 ## Graph Commands
 
