@@ -300,6 +300,51 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 	trajectoriesCmd.Flags().StringVar(&trajectoriesRunID, "run", "", "run id")
 	trajectoriesCmd.Flags().BoolVar(&trajectoriesJSON, "json", false, "emit structured trajectory evidence JSON")
 
+	var lensRunID string
+	var lensName string
+	var lensFocus string
+	var lensOverlays []string
+	var lensLimit int
+	var lensJSON bool
+	lensCmd := &cobra.Command{
+		Use:   "lens",
+		Short: "project the provenance graph through a graph explorer lens",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts := provenance.GraphLensOptions{
+				RunID:    lensRunID,
+				Lens:     lensName,
+				Focus:    lensFocus,
+				Overlays: lensOverlays,
+				Limit:    lensLimit,
+			}
+			if client, ok := daemonClient(*daemonURL); ok {
+				manifest, err := client.GraphLens(opts)
+				if err != nil {
+					return err
+				}
+				if lensJSON {
+					return provenance.PrintGraphLensManifestJSON(cmd.OutOrStdout(), manifest)
+				}
+				return provenance.PrintGraphLensManifest(cmd.OutOrStdout(), manifest)
+			}
+			db, err := openDB()
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			if lensJSON {
+				return provenance.GraphLensJSON(db, opts, cmd.OutOrStdout())
+			}
+			return provenance.GraphLens(db, opts, cmd.OutOrStdout())
+		},
+	}
+	lensCmd.Flags().StringVar(&lensRunID, "run", "", "run id")
+	lensCmd.Flags().StringVar(&lensName, "lens", "default", "graph lens: default, security, process, file-artifact, network-egress, data-flow-taint, agent-intent, trust-origin, sandbox-boundary")
+	lensCmd.Flags().StringVar(&lensFocus, "focus", "", "focus node id to keep selected across lenses")
+	lensCmd.Flags().StringArrayVar(&lensOverlays, "overlay", nil, "overlay annotations to add, repeatable or comma-separated: risk, trust, security")
+	lensCmd.Flags().IntVar(&lensLimit, "limit", 500, "maximum graph edges returned")
+	lensCmd.Flags().BoolVar(&lensJSON, "json", false, "emit structured graph lens JSON")
+
 	var explainRunID string
 	var explainArtifact string
 	var explainAttempt string
@@ -372,6 +417,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 	cmd.AddCommand(verifyCmd)
 	cmd.AddCommand(replayCmd)
 	cmd.AddCommand(trajectoriesCmd)
+	cmd.AddCommand(lensCmd)
 	cmd.AddCommand(explainCmd)
 	return cmd
 }

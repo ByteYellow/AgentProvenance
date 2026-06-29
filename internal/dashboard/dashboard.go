@@ -35,6 +35,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/overview", s.overview)
 	mux.HandleFunc("GET /api/timeline", s.timeline)
 	mux.HandleFunc("GET /api/graph", s.graph)
+	mux.HandleFunc("GET /api/lens", s.lens)
 	mux.HandleFunc("GET /api/egress", s.egress)
 	mux.HandleFunc("GET /api/processes", s.processes)
 	return mux
@@ -235,6 +236,26 @@ func atoiClamp(s string, def, lo, hi int) int {
 		n = hi
 	}
 	return n
+}
+
+func (s Server) lens(w http.ResponseWriter, r *http.Request) {
+	run := r.URL.Query().Get("run")
+	if run == "" {
+		httpError(w, "run is required", 400)
+		return
+	}
+	manifest, err := provenance.BuildGraphLens(s.DB, provenance.GraphLensOptions{
+		RunID:    run,
+		Lens:     r.URL.Query().Get("lens"),
+		Focus:    r.URL.Query().Get("focus"),
+		Overlays: r.URL.Query()["overlay"],
+		Limit:    atoiClamp(r.URL.Query().Get("limit"), 500, 1, 2000),
+	})
+	if err != nil {
+		httpError(w, err.Error(), 500)
+		return
+	}
+	writeJSON(w, manifest)
 }
 
 // --- causality DAG (the signature view) ---

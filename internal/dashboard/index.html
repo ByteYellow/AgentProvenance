@@ -9,6 +9,7 @@
     --bg:#f5f5f7; --panel:#ffffff; --panel2:#fbfbfd; --line:rgba(0,0,0,.08); --line2:#d2d2d7;
     --tx:#1d1d1f; --mut:#6e6e73; --acc:#0071e3;
     --event:#0a84ff; --intent:#30b0c7; --policy:#ff9f0a; --risk:#ff3b30; --response:#bf5af2;
+    --process:#5e5ce6; --artifact:#34c759; --file:#30a46c; --toolcall:#30b0c7; --snapshot:#8e8e93; --derived:#ff375f;
     --ok:#34c759; --bad:#ff3b30;
     --shadow:0 1px 2px rgba(0,0,0,.05),0 12px 32px -18px rgba(0,0,0,.18);
   }
@@ -36,14 +37,32 @@
   .hero{grid-column:1}
   .side{grid-column:2}
   .full{grid-column:1 / -1}
+  .lensbar{display:flex;align-items:center;gap:8px}
+  .lensbar select{padding:5px 10px;font-size:12.5px}
+  .chip{font-size:11px;font-weight:600;color:var(--mut);border:1px solid var(--line2);background:#fff;border-radius:99px;padding:4px 11px;cursor:pointer;user-select:none;transition:all .12s}
+  .chip:hover{border-color:#b9b9c0}
+  .chip.on{color:#fff;border-color:transparent}
+  .chip.on.risk{background:var(--risk)}
+  .chip.on.trust{background:var(--process)}
+  .lensmeta{display:flex;flex-wrap:wrap;gap:7px 14px;padding:9px 20px;border-bottom:1px solid var(--line);font-size:11.5px;color:var(--mut);background:var(--panel2)}
+  .lensmeta b{color:var(--tx);font-weight:600}
+  .lensmeta .rule{font-family:ui-monospace,monospace;font-size:10.5px;background:#f0f0f3;border-radius:5px;padding:1px 6px}
+  .scrub{display:flex;align-items:center;gap:12px;padding:9px 20px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  .scrub button{background:#fff;border:1px solid var(--line2);border-radius:8px;width:32px;height:26px;cursor:pointer;font-size:12px;transition:border-color .12s,color .12s}
+  .scrub button:hover{border-color:var(--acc);color:var(--acc)}
+  .scrub input[type=range]{flex:1;accent-color:var(--acc);cursor:pointer}
+  .scrub .lbl{font-size:11.5px;color:var(--mut);font-family:ui-monospace,monospace;white-space:nowrap;min-width:190px;text-align:right}
   #dag{width:100%;overflow:auto;background-color:#fbfbfd;background-image:radial-gradient(rgba(0,0,0,.05) 1px,transparent 1px);background-size:22px 22px}
-  .legend{display:flex;gap:16px;flex-wrap:wrap;padding:12px 20px;border-top:1px solid var(--line);font-size:11.5px;color:var(--mut)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;padding:12px 20px;border-top:1px solid var(--line);font-size:11.5px;color:var(--mut)}
   .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .legend i.dash{width:16px;height:0;border-radius:0;border-top:2px dashed var(--derived);vertical-align:2px}
   g[data-id]{cursor:pointer}
   .detail{padding:16px 20px;border-top:1px solid var(--line);font-size:12.5px;min-height:46px}
   .detail .hint{color:var(--mut)}
-  .detail h3{margin:0 0 12px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:9px}
+  .detail h3{margin:0 0 12px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
   .detail h3 .k{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;padding:2px 8px;border-radius:99px;background:#f0f0f3;color:#6e6e73}
+  .detail h3 .k.risk{background:rgba(255,59,48,.12);color:#d70015}
+  .detail h3 .k.trust{background:rgba(94,92,230,.12);color:#3634a3}
   .detail dl{margin:0;display:grid;grid-template-columns:170px 1fr;gap:7px 16px;align-items:start}
   .detail dt{color:var(--mut)}
   .detail dd{margin:0;font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;word-break:break-word;white-space:pre-wrap;color:#1d1d1f}
@@ -52,7 +71,7 @@
   .sig:hover{background:#f5f5f7}
   .sig+.sig{border-top:1px solid var(--line)}
   .pill{font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:99px;white-space:nowrap;letter-spacing:.4px}
-  .sev-high,.sev-critical{background:rgba(255,59,48,.12);color:#d70015}
+  .sev-high,.sev-critical,.sev-tainted{background:rgba(255,59,48,.12);color:#d70015}
   .sev-medium{background:rgba(255,159,10,.16);color:#b25e00}
   .sev-low{background:rgba(10,132,255,.12);color:#0060df}
   .sig .body{flex:1;min-width:0}
@@ -97,16 +116,23 @@
 </header>
 <main>
   <section class="card hero">
-    <h2>Causality DAG <span class="sub">model intent → action → policy → risk → response (the signature view)</span></h2>
-    <div id="dag"></div>
-    <div class="legend">
-      <span><i style="background:var(--intent)"></i>LLM intent (TLS)</span>
-      <span><i style="background:var(--event)"></i>system action</span>
-      <span><i style="background:var(--policy)"></i>policy decision</span>
-      <span><i style="background:var(--risk)"></i>risk signal</span>
-      <span><i style="background:var(--response)"></i>response</span>
+    <h2>Graph Explorer <span class="sub">canonical graph → lens projection → derived edges</span>
+      <span class="spacer"></span>
+      <div class="lensbar">
+        <select id="lenssel" title="lens projection"></select>
+        <span class="chip risk" id="ov-risk" data-ov="risk">risk</span>
+        <span class="chip trust" id="ov-trust" data-ov="trust">trust</span>
+      </div>
+    </h2>
+    <div id="lensmeta" class="lensmeta"></div>
+    <div id="scrub" class="scrub">
+      <button id="playbtn" title="play the run forward">▶</button>
+      <input id="slider" type="range" min="0" max="0" value="0" step="1" title="scrub through time">
+      <span id="scrublabel" class="lbl">all events</span>
     </div>
-    <div id="detail" class="detail"><span class="hint">click any node to inspect its full record →</span></div>
+    <div id="dag"></div>
+    <div class="legend" id="legend"></div>
+    <div id="detail" class="detail"><span class="hint">click any node to highlight its causal chain &amp; inspect its record →</span></div>
   </section>
   <section class="card side">
     <h2>Signals &amp; Risk <span class="sub" id="sigcount"></span></h2>
@@ -131,29 +157,86 @@
   </section>
 </main>
 <script>
-const KIND_COLOR={event:'var(--event)',intent:'var(--intent)',policy:'var(--policy)',risk:'var(--risk)',response:'var(--response)',other:'#64748b'};
-const EDGE_LABEL={llm_call:'request→response',llm_intent_caused:'intent→action',runtime_event_policy_decision:'→ policy',policy_decision_risk_signal:'→ risk',risk_signal_response_action:'→ response'};
+// Node colors span the full canonical-graph vocabulary, not just the old
+// security-signature kinds, so every lens renders meaningfully.
+const KIND_COLOR={
+  runtime_event:'var(--event)', event:'var(--event)', intent:'var(--intent)',
+  tool_call:'var(--toolcall)', process:'var(--process)', runtime_process:'var(--process)',
+  artifact:'var(--artifact)', file:'var(--file)',
+  policy_decision:'var(--policy)', policy:'var(--policy)',
+  risk_signal:'var(--risk)', risk:'var(--risk)',
+  response_action:'var(--response)', response:'var(--response)',
+  snapshot:'var(--snapshot)', attempt:'var(--snapshot)', unknown:'#9a9aa0', other:'#64748b'};
+const EDGE_LABEL={llm_call:'request→response',llm_intent_caused:'intent→action',
+  runtime_event_policy_decision:'→ policy',policy_decision_risk_signal:'→ risk',
+  risk_signal_response_action:'→ response',runtime_tool_call_event:'tool→event',
+  runtime_process_event:'proc→event',possible_sensitive_data_flow:'data flow',
+  runtime_tool_call_process:'tool→proc',runtime_attempt_event:'attempt→event',
+  runtime_process_parent:'parent→child',runtime_process_child_of:'child→parent',
+  runtime_process_observed:'observed',runtime_process_child:'parent→child',
+  policy_decision_session:'→ session'};
+const LENS_LABEL={'default':'Default · causality','security':'Security · risk/policy/response',
+  'process':'Process · tree + runtime','file-artifact':'File / Artifact · lineage',
+  'network-egress':'Network · egress','data-flow-taint':'Data-flow · taint (secret→sink)',
+  'agent-intent':'Agent intent · prompt→action','trust-origin':'Trust · origin','sandbox-boundary':'Sandbox · boundary'};
 const $=s=>document.querySelector(s);
 
 async function j(u){const r=await fetch(u);return r.json();}
 
 function nodeKind(n){
-  if(n.kind==='event' && /^tls_/.test(n.subtype||'')) return 'intent';
+  if((n.kind==='runtime_event'||n.kind==='event') && /^tls_/.test(n.subtype||'')) return 'intent';
   return n.kind||'other';
+}
+
+// Adapt a graph_lens/v1 manifest to the {nodes, edges} shape renderDAG wants.
+// Canonical and derived edges arrive in separate arrays — merge them (tagging
+// the derived ones) so the very edge the taint lens exists to show isn't dropped.
+function adaptLens(m){
+  const nodes=(m.nodes||[]).map(n=>({
+    id:n.id, label:n.label||n.id, kind:n.kind, subtype:n.subtype||'',
+    risk:n.risk||'', trust_origin:n.trust_origin||'', data:n.data||{}}));
+  const norm=(e,derived)=>({from:e.from_id, to:e.to_id, type:e.edge_type, t:e.created_at||'',
+    derived:!!derived, confidence:e.confidence||0, rule:e.derivation_rule||'', evidence:e.evidence_refs||[]});
+  const edges=(m.edges||[]).map(e=>norm(e,false)).concat((m.derived_edges||[]).map(e=>norm(e,true)));
+  // Per-node appearance time for the time-scrubber: prefer the node's own event
+  // time (real telemetry clock), else the earliest edge that touches it. This is
+  // what lets the replay fade elements in chronologically without moving them.
+  const nodeT={};
+  nodes.forEach(n=>{ const ct=n.data&&n.data.created_at; if(ct) nodeT[n.id]=ct; });
+  edges.forEach(e=>{ if(e.t){ [e.from,e.to].forEach(id=>{ if(nodeT[id]===undefined||e.t<nodeT[id]) nodeT[id]=e.t; }); } });
+  return {nodes, edges, nodeT, meta:m};
 }
 
 function layout(nodes,edges){
   const byId={}; nodes.forEach(n=>byId[n.id]=n);
-  const out={}, indeg={};
-  nodes.forEach(n=>{out[n.id]=[];indeg[n.id]=0;});
-  edges.forEach(e=>{ if(byId[e.from]&&byId[e.to]){out[e.from].push(e);indeg[e.to]++;} });
-  // longest-path layering (DAG)
-  const layer={}; nodes.forEach(n=>layer[n.id]=0);
-  for(let i=0;i<nodes.length;i++){
-    let changed=false;
-    edges.forEach(e=>{ if(byId[e.from]&&byId[e.to]&&layer[e.to]<layer[e.from]+1){layer[e.to]=layer[e.from]+1;changed=true;} });
-    if(!changed)break;
+  const adj={}; nodes.forEach(n=>adj[n.id]=[]);
+  edges.forEach(e=>{ if(byId[e.from]&&byId[e.to]) adj[e.from].push(e.to); });
+  // The canonical graph contains inverse edges (process parent <-> child_of,
+  // observed back-edges) — i.e. cycles. Plain longest-path layering diverges on
+  // a cycle and flings nodes hundreds of columns apart (the giant connector
+  // bug). So first do Sugiyama-style cycle removal: DFS-classify back-edges and
+  // exclude them from layering. They're still DRAWN, just span ~1 layer.
+  const color={}, back=new Set(), order=[];
+  function dfs(root){
+    const st=[[root,0]];
+    while(st.length){
+      const fr=st[st.length-1], u=fr[0];
+      if(fr[1]===0) color[u]=1;
+      const kids=adj[u];
+      if(fr[1]<kids.length){
+        const v=kids[fr[1]++];
+        if(color[v]===1) back.add(u+'\u0000'+v);   // edge into the active stack = back-edge
+        else if(!color[v]) st.push([v,0]);
+      } else { color[u]=2; order.push(u); st.pop(); }
+    }
   }
+  nodes.forEach(n=>{ if(!color[n.id]) dfs(n.id); });
+  // longest-path layering over the DAG (back-edges removed), relaxing nodes in
+  // topological order = reverse DFS finish order, so each layer is final once used.
+  const layer={}; nodes.forEach(n=>layer[n.id]=0);
+  order.slice().reverse().forEach(u=>{
+    adj[u].forEach(v=>{ if(!back.has(u+'\u0000'+v) && layer[v]<layer[u]+1) layer[v]=layer[u]+1; });
+  });
   const cols={}; nodes.forEach(n=>{(cols[layer[n.id]]=cols[layer[n.id]]||[]).push(n);});
   const COLW=210,ROWH=86,NW=158,NH=52,PADX=30,PADY=28;
   const pos={};
@@ -177,43 +260,59 @@ function lineage(g,sel){
 }
 function renderDAG(g,sel){
   const el=$('#dag');
-  if(!g.nodes.length){el.innerHTML='<div class="empty">no causal edges for this run</div>';return;}
+  if(!g.nodes.length){el.innerHTML='<div class="empty">no nodes for this lens</div>';return;}
   const {pos,W,H}=layout(g.nodes,g.edges);
   const lin=lineage(g,sel);
-  const eOn=i=>!lin||lin.edges.has(i), nOn=id=>!lin||lin.nodes.has(id);
+  const nOn=id=>!lin||lin.nodes.has(id);
+  const showRisk=OV.has('risk'), showTrust=OV.has('trust');
   let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="-apple-system,sans-serif">`;
   // markerUnits=userSpaceOnUse => arrowheads are a FIXED size, not scaled by
   // stroke width, so they stay aligned to the node edge regardless of highlight.
   s+=`<defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#bcbcc2"/></marker>`;
-  s+=`<marker id="ahl" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#0071e3"/></marker></defs>`;
+  s+=`<marker id="ahl" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#0071e3"/></marker>`;
+  s+=`<marker id="ahd" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#ff375f"/></marker></defs>`;
   const hl=i=>lin&&lin.edges.has(i), dimE=i=>lin&&!lin.edges.has(i);
   g.edges.forEach((e,i)=>{
     const a=pos[e.from],b=pos[e.to]; if(!a||!b)return;
+    if(!edgeVisible(e))return;
     const x1=a.x+a.w,y1=a.y+a.h/2,x2=b.x-1,y2=b.y+b.h/2,mx=(x1+x2)/2;
     const H=hl(i), D=dimE(i);
-    s+=`<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${H?'#0071e3':'#d0d0d6'}" stroke-width="${H?2:1.4}" opacity="${D?0.28:1}" marker-end="url(#${H?'ahl':'ah'})"/>`;
+    // Derived edges (e.g. possible_sensitive_data_flow) are inferred, not
+    // observed — draw them dashed and in the derived color so a viewer never
+    // mistakes a hypothesis for a recorded fact.
+    const col=e.derived?'#ff375f':(H?'#0071e3':'#d0d0d6');
+    const mk=e.derived?'ahd':(H?'ahl':'ah');
+    const dash=e.derived?' stroke-dasharray="6 4"':'';
+    s+=`<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}" fill="none" stroke="${col}" stroke-width="${H||e.derived?2:1.4}" opacity="${D?0.28:1}"${dash} marker-end="url(#${mk})"/>`;
   });
-  // Edge labels only on the highlighted chain (default view stays clean), drawn
-  // on a white pill so they never collide with lines or the dotted canvas.
-  if(lin){
-    g.edges.forEach((e,i)=>{
-      if(!hl(i))return;
-      const a=pos[e.from],b=pos[e.to]; if(!a||!b)return;
-      const y1=a.y+a.h/2,y2=b.y+b.h/2,lx=(a.x+a.w+b.x)/2,ly=(y1+y2)/2;
-      const lbl=EDGE_LABEL[e.type]||e.type, w=lbl.length*6.0+12;
-      s+=`<rect x="${lx-w/2}" y="${ly-17}" width="${w}" height="16" rx="8" fill="#ffffff" stroke="#0071e3" stroke-opacity="0.3"/>`;
-      s+=`<text x="${lx}" y="${ly-5.5}" fill="#0071e3" font-size="10" font-weight="600" text-anchor="middle">${lbl}</text>`;
-    });
-  }
+  // Edge labels: derived edges always show (with confidence); canonical edges
+  // only on the highlighted chain, so the default view stays clean.
+  g.edges.forEach((e,i)=>{
+    const a=pos[e.from],b=pos[e.to]; if(!a||!b)return;
+    if(!edgeVisible(e))return;
+    if(!e.derived && !hl(i))return;
+    const y1=a.y+a.h/2,y2=b.y+b.h/2,lx=(a.x+a.w+b.x)/2,ly=(y1+y2)/2;
+    let lbl=EDGE_LABEL[e.type]||e.type; if(e.derived)lbl+=` · ${(+e.confidence).toFixed(2)}`;
+    // Width estimate is generous (6.8px/char + padding) so the white pill always
+    // fully contains the label — bold text and arrow glyphs run wider than 6px/char.
+    const col=e.derived?'#ff375f':'#0071e3', w=lbl.length*6.8+16;
+    s+=`<rect x="${lx-w/2}" y="${ly-17}" width="${w}" height="16" rx="8" fill="#ffffff" stroke="${col}" stroke-opacity="0.35"/>`;
+    s+=`<text x="${lx}" y="${ly-5.5}" fill="${col}" font-size="10" font-weight="600" text-anchor="middle">${esc(lbl)}</text>`;
+  });
   g.nodes.forEach(n=>{
-    const p=pos[n.id]; const k=nodeKind(n); const c=KIND_COLOR[k]; const on=(n.id===sel); const dim=!nOn(n.id);
+    if(!nodeVisible(n.id))return;
+    const p=pos[n.id]; const k=nodeKind(n); const c=KIND_COLOR[k]||KIND_COLOR.other; const on=(n.id===sel); const dim=!nOn(n.id);
+    const risky=showRisk && n.risk && (n.risk==='high'||n.risk==='critical'||n.risk==='tainted'||n.risk==='medium');
     s+=`<g data-id="${esc(n.id)}" opacity="${dim?0.32:1}">`;
-    if(on)s+=`<rect x="${p.x-4}" y="${p.y-4}" width="${p.w+8}" height="${p.h+8}" rx="12" fill="none" stroke="${c}" stroke-width="1.5" opacity="0.45"/>`;
+    if(risky)s+=`<rect x="${p.x-3}" y="${p.y-3}" width="${p.w+6}" height="${p.h+6}" rx="12" fill="none" stroke="var(--risk)" stroke-width="2" opacity="0.7"/>`;
+    else if(on)s+=`<rect x="${p.x-4}" y="${p.y-4}" width="${p.w+8}" height="${p.h+8}" rx="12" fill="none" stroke="${c}" stroke-width="1.5" opacity="0.45"/>`;
     s+=`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="11" fill="#ffffff" stroke="${c}" stroke-width="${on?2.4:1.4}"/>`;
     s+=`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="11" fill="${c}" opacity="0.06"/>`;
     s+=`<circle cx="${p.x+15}" cy="${p.y+16}" r="3.5" fill="${c}"/>`;
     s+=`<text x="${p.x+26}" y="${p.y+20}" fill="#1d1d1f" font-size="13" font-weight="600">${esc(n.label).slice(0,18)}</text>`;
-    s+=`<text x="${p.x+15}" y="${p.y+39}" fill="#86868b" font-size="10.5">${esc(n.subtype||n.detail||'').slice(0,24)}</text></g>`;
+    // With the trust overlay on, the subtitle shows provenance origin instead of subtype.
+    const sub=(showTrust && n.trust_origin)?n.trust_origin:(n.subtype||n.kind||'');
+    s+=`<text x="${p.x+15}" y="${p.y+39}" fill="#86868b" font-size="10.5">${esc(sub).slice(0,24)}</text></g>`;
   });
   s+='</svg>';
   const sl=el.scrollLeft, st=el.scrollTop; // preserve scroll across re-render
@@ -222,25 +321,84 @@ function renderDAG(g,sel){
   el.onclick=ev=>{const g2=ev.target.closest('[data-id]');if(g2)selectNode(g2.getAttribute('data-id'));};
 }
 
-function selectNode(id){ SEL=(SEL===id?null:id); renderDAG(window._graph,SEL); showDetail(SEL); }
+function renderLensMeta(m){
+  const q=m.query||{};
+  const rules=(q.lens_rules||[]).map(r=>`<span class="rule">${esc(r)}</span>`).join(' ');
+  $('#lensmeta').innerHTML=
+    `<span><b>${esc(m.lens)}</b></span>`+
+    `<span>layout <b>${esc(q.layout_hint||'')}</b></span>`+
+    `<span><b>${q.node_count||0}</b> nodes</span>`+
+    `<span><b>${(m.edges||[]).length}</b> edges</span>`+
+    `<span><b style="color:var(--derived)">${q.derived_edge_count||0}</b> derived</span>`+
+    (q.truncated?`<span style="color:#b25e00">⚠ truncated at ${q.limit}</span>`:'')+
+    (rules?`<span>rules ${rules}</span>`:'');
+  // Legend reflects the node kinds actually present in this lens.
+  const kinds=[...new Set((m.nodes||[]).map(n=>nodeKind(n)))];
+  let lg=kinds.map(k=>`<span><i style="background:${KIND_COLOR[k]||KIND_COLOR.other}"></i>${esc(k)}</span>`).join('');
+  if((m.derived_edges||[]).length)lg+=`<span><i class="dash"></i>derived (inferred)</span>`;
+  $('#legend').innerHTML=lg;
+}
+
+// --- time-scrubber: replay the run forward over its real clock ---
+function rebuildScrubber(g){
+  TIMES=[...new Set([...Object.values(g.nodeT||{}), ...g.edges.map(e=>e.t)].filter(Boolean))].sort();
+  const sl=$('#slider');
+  sl.max=TIMES.length;        // the extra top index = "all"
+  sl.value=TIMES.length;      // default to the full run
+  TCUR=null;
+  updateScrubLabel();
+}
+function setScrub(idx){
+  TCUR = (idx>=TIMES.length) ? null : TIMES[idx];
+  updateScrubLabel();
+  renderDAG(window._lg, SEL);
+}
+function updateScrubLabel(){
+  const idx=+$('#slider').value, lbl=$('#scrublabel');
+  if(TCUR===null) lbl.textContent=`all events (${TIMES.length})`;
+  else lbl.textContent=`${idx+1}/${TIMES.length}  ${TCUR.replace('T',' ').replace(/\.\d+Z?$/,'')}`;
+}
+function stopPlay(){ if(PLAYING){clearInterval(PLAYING);PLAYING=null;} $('#playbtn').textContent='▶'; }
+function togglePlay(){
+  const sl=$('#slider');
+  if(PLAYING){ stopPlay(); return; }
+  if(!TIMES.length) return;
+  if(+sl.value>=TIMES.length) sl.value=0;   // replay from the start
+  setScrub(+sl.value);
+  $('#playbtn').textContent='⏸';
+  PLAYING=setInterval(()=>{
+    const v=+sl.value+1; sl.value=v; setScrub(v);
+    if(v>=TIMES.length) stopPlay();
+  }, 750);
+}
+
+function selectNode(id){ SEL=(SEL===id?null:id); renderDAG(window._lg,SEL); showDetail(SEL); }
 
 const DETAIL_HINT='<span class="hint">click any node to highlight its causal chain &amp; inspect its record →</span>';
 function showDetail(id){
   const el=$('#detail');
-  const n=id&&(window._graph.nodes||[]).find(x=>x.id===id);
+  const n=id&&(window._lg.nodes||[]).find(x=>x.id===id);
   if(!n){el.innerHTML=DETAIL_HINT;return;}
-  const c=KIND_COLOR[nodeKind(n)];
+  const c=KIND_COLOR[nodeKind(n)]||KIND_COLOR.other;
   let rows='';
   const d=n.data||{};
   Object.keys(d).forEach(key=>{
     let v=d[key];
     if(key==='payload'){ try{v=JSON.stringify(JSON.parse(v),null,2);}catch(_){v=String(v);} }
     else if(typeof v==='number'){ v=(key.indexOf('confidence')>=0)?(+v).toFixed(2):v; }
-    if(v==='' || v==null)return;
+    if(v==='' || v==null || v===false)return;
     rows+=`<dt>${esc(key)}</dt><dd>${esc(v)}</dd>`;
   });
+  // Side-panel evidence row: a derived edge into/out of this node carries its
+  // rule + confidence + the source/sink it was inferred from (replay refs).
+  const dv=(window._lg.edges||[]).find(e=>e.derived&&(e.from===id||e.to===id));
+  if(dv){ rows+=`<dt>derived rule</dt><dd>${esc(dv.rule)} (${(+dv.confidence).toFixed(2)})</dd>`;
+    rows+=`<dt>inferred from</dt><dd>${esc((dv.evidence||[]).join('\n'))}</dd>`; }
   rows+=`<dt>node id</dt><dd>${esc(n.id)}</dd>`;
-  el.innerHTML=`<h3><span style="color:${c}">●</span> ${esc(n.label)} <span class="k">${esc(n.kind)}</span></h3><dl>${rows}</dl>`;
+  const badges=`<span class="k">${esc(n.kind)}</span>`+
+    (n.risk?` <span class="k risk">risk: ${esc(n.risk)}</span>`:'')+
+    (n.trust_origin?` <span class="k trust">${esc(n.trust_origin)}</span>`:'');
+  el.innerHTML=`<h3><span style="color:${c}">●</span> ${esc(n.label)} ${badges}</h3><dl>${rows}</dl>`;
 }
 
 function renderVerify(v){
@@ -309,17 +467,25 @@ function renderProcessTree(procs){
 }
 
 let cur=null, tlOffset=0; const TL_LIMIT=50;
+let LENS='default'; const OV=new Set();
+// Time-scrubber state: TCUR=null means "show the whole run"; otherwise only
+// elements at or before TCUR are drawn. TIMES is the sorted distinct clock.
+let TCUR=null, TIMES=[], PLAYING=null;
+function nodeVisible(id){ if(TCUR===null) return true; const t=(window._lg.nodeT||{})[id]; return t===undefined || t<=TCUR; }
+function edgeVisible(e){ return nodeVisible(e.from) && nodeVisible(e.to); }
 async function loadRun(run){
   cur=run;
   const q='run='+encodeURIComponent(run);
-  const [ov,g,eg,pr]=await Promise.all([j('/api/overview?'+q),j('/api/graph?'+q),j('/api/egress?'+q),j('/api/processes?'+q)]);
-  window._graph=g;
-  if(SEL && !g.nodes.find(n=>n.id===SEL)) SEL=null; // selection gone after refresh
+  const lq=q+'&lens='+encodeURIComponent(LENS)+[...OV].map(o=>'&overlay='+o).join('');
+  const [ov,lens,eg,pr]=await Promise.all([j('/api/overview?'+q),j('/api/lens?'+lq),j('/api/egress?'+q),j('/api/processes?'+q)]);
+  const g=adaptLens(lens);
+  window._lg=g; window._lensManifest=lens;
+  if(SEL && !g.nodes.find(n=>n.id===SEL)) SEL=null; // selection gone after refresh/lens switch
   renderVerify(ov.verify); renderSignals(ov.signals);
-  // Only re-render the DAG when its structure actually changed, so the live
-  // 5s refresh never re-lays-out / jumps the graph under the cursor.
-  const sig=JSON.stringify(g.nodes.map(n=>n.id))+'|'+JSON.stringify(g.edges.map(e=>e.from+'>'+e.to));
-  if(sig!==window._gsig){ window._gsig=sig; renderDAG(g,SEL); }
+  // Re-render the graph only when its structure (lens + overlays + topology)
+  // actually changed, so the live 5s refresh never re-lays-out under the cursor.
+  const sig=LENS+'|'+[...OV].sort().join(',')+'|'+JSON.stringify(g.nodes.map(n=>n.id))+'|'+JSON.stringify(g.edges.map(e=>e.from+'>'+e.to+(e.derived?'*':'')));
+  if(sig!==window._gsig){ window._gsig=sig; renderLensMeta(lens); rebuildScrubber(g); renderDAG(g,SEL); }
   renderEgress(eg); renderProcessTree(pr); showDetail(SEL);
   await loadTimeline(run, tlOffset);
 }
@@ -341,6 +507,12 @@ async function loadTimeline(run, offset){
 let LIVE=true;
 function setLive(v){ LIVE=v; const el=$('#live'); el.className='tag '+(v?'on':'off'); el.textContent=v?'● live':'○ paused'; }
 
+function initLensSelector(available){
+  const sel=$('#lenssel');
+  const lenses=available&&available.length?available:['default'];
+  sel.innerHTML=lenses.map(l=>`<option value="${esc(l)}"${l===LENS?' selected':''}>${esc(LENS_LABEL[l]||l)}</option>`).join('');
+}
+
 async function refreshRuns(keep){
   const runs=await j('/api/runs'); const sel=$('#runsel');
   if(!runs.length){sel.innerHTML='<option>no runs</option>';$('#verify').style.display='none';return null;}
@@ -352,7 +524,16 @@ async function refreshRuns(keep){
 (async function(){
   const sel=$('#runsel');
   const first=await refreshRuns(); if(!first)return;
-  sel.onchange=()=>{ SEL=null; tlOffset=0; loadRun(sel.value); };
+  // Bootstrap the lens list from the first manifest's available_lenses.
+  const boot=await j('/api/lens?run='+encodeURIComponent(first)+'&lens='+LENS);
+  initLensSelector(boot.available_lenses);
+  $('#lenssel').onchange=()=>{ LENS=$('#lenssel').value; SEL=null; stopPlay(); loadRun(cur); };
+  $('#slider').oninput=()=>{ stopPlay(); setScrub(+$('#slider').value); };
+  $('#playbtn').onclick=togglePlay;
+  document.querySelectorAll('.chip[data-ov]').forEach(chip=>{
+    chip.onclick=()=>{ const o=chip.getAttribute('data-ov'); if(OV.has(o)){OV.delete(o);chip.classList.remove('on');}else{OV.add(o);chip.classList.add('on');} loadRun(cur); };
+  });
+  sel.onchange=()=>{ SEL=null; tlOffset=0; stopPlay(); loadRun(sel.value); };
   $('#live').onclick=()=>setLive(!LIVE);
   await loadRun(first);
   setInterval(async()=>{ if(!LIVE)return; const r=await refreshRuns(cur); if(r) loadRun(r); }, 5000);

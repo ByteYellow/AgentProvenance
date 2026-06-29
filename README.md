@@ -716,12 +716,27 @@ engine, not the model.
 A local, read-only, single-page dashboard over the verifiable graph. Its JSON
 endpoints reuse the same internal functions as the CLI and AI tools, so the UI
 never drifts from the contract; the HTML/JS is embedded in the binary and loads
-no external assets (local-first). Panels:
+no external assets (local-first). The current UI still highlights the security
+signature path, but the backend now exposes a Graph Explorer contract:
 
-- **Causality DAG** (the signature view): model intent -> action -> policy ->
-  risk -> response, rendered from the same `llm_intent_caused` / `llm_call` /
-  policy->risk->response edges; click a node to highlight its causal lineage and
-  inspect its full record.
+```text
+Canonical Provenance Graph
+  -> Derived / Virtual Edges
+  -> Lens projection
+  -> Layout + side-panel schema
+```
+
+The dashboard API includes `/api/lens`, backed by the same `graph lens` query
+surface used by the CLI. Lens projections keep the storage graph generic while
+allowing focused views such as process tree, file/artifact lineage, egress,
+data-flow/taint, agent intent, trust origin, and sandbox boundary.
+
+Panels:
+
+- **Graph Explorer / Causality DAG**: the current signature view renders model
+  intent -> action -> policy -> risk -> response from `llm_intent_caused`,
+  `llm_call`, and policy/risk/response edges. The lens API generalizes this so
+  future UI views do not need to hard-code a single four-column security flow.
 - **Verify + signature** status, **signals / risk** with recommended actions, a
   **paged timeline** (with correlation class per event), the **process tree**,
   and **egress** (destination IP and -- when captured -- resolved DNS hostname).
@@ -743,6 +758,9 @@ no external assets (local-first). Panels:
 ./agentprov graph replay --run run-demo-bugfix
 ./agentprov graph replay --run run-demo-bugfix --json
 ./agentprov graph trajectories --run run-demo-bugfix --json
+./agentprov graph lens --run run-demo-bugfix --lens default --json
+./agentprov graph lens --run run-demo-bugfix --lens data-flow-taint --overlay risk --json
+./agentprov graph lens --run run-demo-bugfix --lens process --focus runtime_event/<event_id> --json
 ./agentprov graph diff --run run-demo-bugfix --file calculator.py
 ./agentprov graph diff --run run-demo-bugfix --file calculator.py --json
 ./agentprov graph blame --run run-demo-bugfix --file calculator.py
@@ -767,6 +785,7 @@ What these mean:
 | `verify` | Check graph integrity, risk/response evidence chains, taint/response barriers, object hashes, replay generation, drain watermarks, telemetry batch hashes, and orphan lifecycle evidence for outlived zero-SDK child processes |
 | `replay` | Emit a plan-only reconstruction of the run |
 | `trajectories --json` | Emit per-attempt behavior evidence, risk/deviation context, cost, artifacts, and runtime events for external evaluators or RL reward/penalty pipelines |
+| `lens` | Project the canonical graph through a Graph Explorer lens. Emits `agentprovenance.graph_lens/v1` with canonical nodes/edges, derived edges, focus state, overlays, and layout hints |
 | `diff` | Compare file state between base and attempts |
 | `blame` | Attribute file state to attempt, tool call, process, strategy, command, and local candidate status |
 | `explain` | Explain a target by combining trace, runtime causality, diff/blame, telemetry receiver details, telemetry batch manifests, process observations, policy, object refs, risk signals, baseline deviations, and response evidence; `--json` emits `agentprovenance.explain/v1` with `upstream`, `downstream`, bounded `causality_path`, `query`, `evidence`, `objects`, `risks`, `telemetry_batches`, `process_observations`, and `replay_refs`; runtime events include receiver/source format, normalized event type, identity keys, schema status, and correlation status; use `--depth`, `--limit`, and `--cursor` to bound and page DAG traversal |
@@ -789,6 +808,7 @@ What these mean:
 | Execution context | explicit ToolCallScope binding across run / session / attempt / tool_call / process / container / cgroup / pid |
 | Runtime causality | native `runtime_*` graph edges (tool call, process tree, snapshot, event, file) |
 | Provenance DAG | `graph trace / refs / log / materialize / objects / verify / replay` over content-addressed objects |
+| Graph Explorer lenses | `graph lens` projects the canonical graph into default, security, process, file-artifact, network-egress, data-flow-taint, agent-intent, trust-origin, and sandbox-boundary views; derived edges are marked with derivation rule, confidence, and evidence refs |
 | Graph verify | checks object hashes, parent links, and the policy → risk → response → signal chain (white-box and external-telemetry runs) |
 | Correlation explain | `telemetry correlations` — raw identity, resolved context, matched binding, confidence, and time window per event |
 
@@ -894,6 +914,8 @@ flowchart TD
         Timeline["Execution Timeline\napplication context + runtime events"]
         Causality["Runtime Causality Graph\nprocess / file / network / event"]
         Provenance["Git-like Provenance DAG\nrefs / objects / diff / blame"]
+        Derivation["Graph Derivation\nvirtual edges / taint flow / origin / drift"]
+        Lens["Graph Lens System\ndefault / security / process / file / egress / taint"]
         Evidence["Evidence Manifest\ncontent-addressed refs / hashes"]
     end
 
@@ -901,7 +923,9 @@ flowchart TD
     Correlation --> Timeline
     Timeline --> Causality
     Causality --> Provenance
-    Provenance --> Evidence
+    Provenance --> Derivation
+    Derivation --> Lens
+    Lens --> Evidence
     Evidence --> Query["Evidence Query Surface\nobserve / timeline / explain / verify / audit"]
     Evidence --> Security["Security Analysis\nbaseline / policy / risk / response / forensics"]
 ```

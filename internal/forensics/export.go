@@ -4,17 +4,19 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/attest"
 	"github.com/byteyellow/agentprovenance/internal/evidence"
 	"github.com/byteyellow/agentprovenance/internal/ids"
-	"github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
@@ -54,22 +56,6 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 	if runID == "" {
 		return BundleInfo{}, fmt.Errorf("run_id is required")
 	}
-	events, err := telemetry.ListEvents(s.DB, runID, "")
-	if err != nil {
-		return BundleInfo{}, err
-	}
-	decisions, err := security.ListDecisions(s.DB, runID)
-	if err != nil {
-		return BundleInfo{}, err
-	}
-	risks, err := security.ListRiskSignals(s.DB, runID)
-	if err != nil {
-		return BundleInfo{}, err
-	}
-	responses, err := security.ListResponseActions(s.DB, runID)
-	if err != nil {
-		return BundleInfo{}, err
-	}
 	batches, err := telemetry.ListBatches(s.DB, runID)
 	if err != nil {
 		return BundleInfo{}, err
@@ -78,60 +64,74 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 	if err != nil {
 		return BundleInfo{}, err
 	}
-	sessions, err := selectRows(s.DB, `SELECT id, lease_id, status, run_id, COALESCE(container_id, '') AS container_id, workspace_host_path, startup_cold_ms, created_at, updated_at
-		FROM sessions WHERE run_id = ? ORDER BY created_at ASC`, runID)
-	if err != nil {
-		return BundleInfo{}, err
+	// Replay-relevant tables are dumped with SELECT * (full columns), not curated
+	// subsets: a forensics bundle is also the replay artifact, and import re-inserts
+	// these rows verbatim, so dropping a column here silently breaks the replayed
+	// graph (e.g. processes.tool_call_id wires tool_call->process in the lens).
+	// Each entry pairs a table with the WHERE that scopes it to this run.
+	type tableSpec struct{ key, table, where, order string }
+	specs := []tableSpec{
+		{"leases", "leases", "run_id = ?", "created_at ASC, id ASC"},
+		{"sessions", "sessions", "run_id = ?", "created_at ASC, id ASC"},
+		{"rollouts", "rollouts", "run_id = ?", "created_at ASC, id ASC"},
+		{"tool_calls", "tool_calls", "run_id = ?", "created_at ASC, id ASC"},
+		{"processes", "processes", "session_id IN (SELECT id FROM sessions WHERE run_id = ?)", "started_at ASC, id ASC"},
+		{"fork_attempts", "fork_attempts", "rollout_id IN (SELECT id FROM rollouts WHERE run_id = ?)", "created_at ASC, id ASC"},
+		// Snapshots a run references aren't all session-scoped: a rollout's base
+		// snapshot (and an attempt's snapshot) can predate the run's sessions, so
+		// include those too or the replayed graph shows them as "unknown" nodes.
+		{"snapshots", "snapshots", "session_id IN (SELECT id FROM sessions WHERE run_id = ?)" +
+			" OR id IN (SELECT base_snapshot_id FROM rollouts WHERE run_id = ?)" +
+			" OR id IN (SELECT snapshot_id FROM fork_attempts WHERE rollout_id IN (SELECT id FROM rollouts WHERE run_id = ?))", "created_at ASC, id ASC"},
+		{"events", "events", "run_id = ?", "created_at ASC, id ASC"},
+		{"policy_decisions", "policy_decisions", "run_id = ?", "created_at ASC, id ASC"},
+		{"risk_signals", "risk_signals", "run_id = ?", "created_at ASC, id ASC"},
+		{"response_actions", "response_actions", "run_id = ?", "created_at ASC, id ASC"},
+		{"external_effects", "external_effects", "run_id = ?", "created_at ASC, id ASC"},
+		{"evidence_events", "evidence_events", "run_id = ?", "created_at ASC, id ASC"},
+		{"graph_edges", "graph_edges", "run_id = ?", "created_at ASC, id ASC"},
+		{"cost_samples", "cost_samples", "run_id = ?", "created_at ASC, id ASC"},
+		{"provenance_objects", "provenance_objects", "run_id = ?", "object_type ASC, created_at ASC, hash ASC"},
 	}
-	processes, err := selectRows(s.DB, `SELECT id, session_id, COALESCE(container_id, '') AS container_id, COALESCE(exec_id, '') AS exec_id, command, status, COALESCE(exit_code, 0) AS exit_code, started_at, COALESCE(ended_at, '') AS ended_at
-		FROM processes WHERE session_id IN (SELECT id FROM sessions WHERE run_id = ?) ORDER BY started_at ASC`, runID)
-	if err != nil {
-		return BundleInfo{}, err
-	}
-	snapshots, err := selectRows(s.DB, `SELECT id, COALESCE(name, '') AS name, COALESCE(session_id, '') AS session_id, COALESCE(parent_id, '') AS parent_id, kind, source, path, manifest_hash, file_count, bytes, snapshot_create_ms, status, created_at
-		FROM snapshots WHERE session_id IN (SELECT id FROM sessions WHERE run_id = ?) ORDER BY created_at ASC`, runID)
-	if err != nil {
-		return BundleInfo{}, err
-	}
-	evidenceEvents, err := selectRows(s.DB, `SELECT id, rollout_id, attempt_id, session_id, tool_call_id, snapshot_id, event_type, priority, status, created_at, COALESCE(processed_at, '') AS processed_at, COALESCE(payload, '') AS payload
-		FROM evidence_events WHERE run_id = ? ORDER BY created_at ASC`, runID)
-	if err != nil {
-		return BundleInfo{}, err
-	}
-	graphEdges, err := selectRows(s.DB, `SELECT id, COALESCE(rollout_id, '') AS rollout_id, from_id, to_id, edge_type, COALESCE(source_event_id, '') AS source_event_id, created_at
-		FROM graph_edges WHERE run_id = ? ORDER BY created_at ASC`, runID)
-	if err != nil {
-		return BundleInfo{}, err
-	}
-	costSamples, err := selectRows(s.DB, `SELECT id, COALESCE(session_id, '') AS session_id, active_cpu_seconds, idle_seconds, wall_seconds, snapshot_bytes, policy_block_count, quarantine_count, node_id, fanout_cost, saved_cost, created_at
-		FROM cost_samples WHERE run_id = ? ORDER BY created_at ASC`, runID)
-	if err != nil {
-		return BundleInfo{}, err
-	}
-	provenanceObjects, err := selectRows(s.DB, `SELECT hash, object_type, source_id, run_id, rollout_id, parent_hashes, path, size_bytes, created_at
-		FROM provenance_objects WHERE run_id = ? ORDER BY object_type ASC, created_at ASC, hash ASC`, runID)
-	if err != nil {
-		return BundleInfo{}, err
-	}
-
 	bundle := map[string]any{
-		"schema_version":     "agentprovenance.forensics_bundle/v1",
-		"run_id":             runID,
-		"exported_at":        time.Now().UTC().Format(time.RFC3339Nano),
-		"evidence_manifest":  evidenceManifest,
-		"sessions":           sessions,
-		"processes":          processes,
-		"snapshots":          snapshots,
-		"events":             events,
-		"telemetry_batches":  telemetryBatchSummaries(batches),
-		"policy_decisions":   decisions,
-		"risk_signals":       risks,
-		"response_actions":   responses,
-		"evidence_events":    evidenceEvents,
-		"graph_edges":        graphEdges,
-		"provenance_objects": provenanceObjects,
-		"cost_samples":       costSamples,
+		"schema_version":    "agentprovenance.forensics_bundle/v1",
+		"run_id":            runID,
+		"exported_at":       time.Now().UTC().Format(time.RFC3339Nano),
+		"evidence_manifest": evidenceManifest,
+		"telemetry_batches": telemetryBatchSummaries(batches),
 	}
+	for _, spec := range specs {
+		// The run id is bound once per "?" placeholder in the WHERE clause.
+		args := make([]any, strings.Count(spec.where, "?"))
+		for i := range args {
+			args[i] = runID
+		}
+		rows, err := selectRows(s.DB, "SELECT * FROM "+spec.table+" WHERE "+spec.where+" ORDER BY "+spec.order, args...)
+		if err != nil {
+			return BundleInfo{}, fmt.Errorf("dump %s: %w", spec.table, err)
+		}
+		bundle[spec.key] = rows
+	}
+	// Embed artifact content inline so the bundle is self-contained AND the DSSE
+	// signature covers it (tampering a captured artifact then breaks the signature).
+	// Content over maxInlineContentBytes is NOT embedded — it is recorded in
+	// "omitted_content" (hash/size/reason) so the gap is explicit, never silent,
+	// and the bundle stays small for large real captures. The provenance row + hash
+	// always travel, so the graph and integrity checks are unaffected.
+	var omitted []map[string]any
+	objectBlobs, omittedObj, err := embedObjectBlobs(bundle["provenance_objects"])
+	if err != nil {
+		return BundleInfo{}, err
+	}
+	snapshotFiles, omittedSnap, err := embedSnapshotFiles(bundle["snapshots"])
+	if err != nil {
+		return BundleInfo{}, err
+	}
+	omitted = append(omitted, omittedObj...)
+	omitted = append(omitted, omittedSnap...)
+	bundle["object_blobs"] = objectBlobs
+	bundle["snapshot_files"] = snapshotFiles
+	bundle["omitted_content"] = omitted
 	raw, err := json.MarshalIndent(bundle, "", "  ")
 	if err != nil {
 		return BundleInfo{}, err
@@ -212,6 +212,104 @@ func stmtDigest(s attest.Statement) string {
 		return ""
 	}
 	return s.Subject[0].Digest["sha256"]
+}
+
+// maxInlineContentBytes caps how large a single artifact/snapshot file may be to
+// travel inline in the bundle. Captured demo artifacts are well under this; the
+// cap only matters for very large real captures, where oversized content is
+// recorded in omitted_content rather than bloating a single in-memory JSON file.
+const maxInlineContentBytes = 4 << 20 // 4 MiB
+
+// embedObjectBlobs reads each content-addressed provenance object blob and returns
+// the inline-embeddable ones plus an explicit list of any omitted for size.
+func embedObjectBlobs(rows any) (blobs []map[string]any, omitted []map[string]any, err error) {
+	list, _ := rows.([]map[string]any)
+	blobs = []map[string]any{}
+	for _, r := range list {
+		hash, _ := r["hash"].(string)
+		path, _ := r["path"].(string)
+		if hash == "" || path == "" {
+			continue
+		}
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil, nil, fmt.Errorf("read object blob %s: %w", hash, readErr)
+		}
+		if len(content) > maxInlineContentBytes {
+			omitted = append(omitted, map[string]any{
+				"kind": "object", "ref": hash, "size_bytes": len(content),
+				"reason": fmt.Sprintf("exceeds inline cap (%d bytes)", maxInlineContentBytes),
+			})
+			continue
+		}
+		blobs = append(blobs, map[string]any{
+			"hash":        hash,
+			"content_b64": base64.StdEncoding.EncodeToString(content),
+		})
+	}
+	return blobs, omitted, nil
+}
+
+// embedSnapshotFiles walks each snapshot directory and returns its files inline,
+// recording any oversized file as omitted rather than silently dropping it.
+func embedSnapshotFiles(rows any) (files []map[string]any, omitted []map[string]any, err error) {
+	list, _ := rows.([]map[string]any)
+	files = []map[string]any{}
+	for _, r := range list {
+		id, _ := r["id"].(string)
+		dir, _ := r["path"].(string)
+		if id == "" || dir == "" {
+			continue
+		}
+		info, statErr := os.Stat(dir)
+		if statErr != nil {
+			// Snapshot artifact not present on this machine; the snapshot row still
+			// travels, so the gap is documented, not silent.
+			omitted = append(omitted, map[string]any{"kind": "snapshot", "ref": id, "reason": "snapshot path not present at export"})
+			continue
+		}
+		walkRoot := dir
+		if !info.IsDir() {
+			walkRoot = filepath.Dir(dir)
+		}
+		walkErr := filepath.WalkDir(dir, func(p string, d fs.DirEntry, e error) error {
+			if e != nil {
+				return e
+			}
+			if d.IsDir() {
+				return nil
+			}
+			fi, e := d.Info()
+			if e != nil {
+				return e
+			}
+			rel, e := filepath.Rel(walkRoot, p)
+			if e != nil {
+				return e
+			}
+			if fi.Size() > maxInlineContentBytes {
+				omitted = append(omitted, map[string]any{
+					"kind": "snapshot_file", "ref": id, "name": rel, "size_bytes": fi.Size(),
+					"reason": fmt.Sprintf("exceeds inline cap (%d bytes)", maxInlineContentBytes),
+				})
+				return nil
+			}
+			content, e := os.ReadFile(p)
+			if e != nil {
+				return e
+			}
+			files = append(files, map[string]any{
+				"snapshot_id": id,
+				"name":        rel,
+				"content_b64": base64.StdEncoding.EncodeToString(content),
+			})
+			return nil
+		})
+		if walkErr != nil {
+			return nil, nil, fmt.Errorf("walk snapshot %s: %w", id, walkErr)
+		}
+	}
+	return files, omitted, nil
 }
 
 func telemetryBatchSummaries(batches []telemetry.BatchRecord) []map[string]any {
