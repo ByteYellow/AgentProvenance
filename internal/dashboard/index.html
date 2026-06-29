@@ -66,6 +66,14 @@
   .detail dl{margin:0;display:grid;grid-template-columns:170px 1fr;gap:7px 16px;align-items:start}
   .detail dt{color:var(--mut)}
   .detail dd{margin:0;font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;word-break:break-word;white-space:pre-wrap;color:#1d1d1f}
+  .detail .sec{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);margin:16px 0 8px;border-top:1px solid var(--line);padding-top:12px}
+  .preview .meta{font-size:11px;color:var(--mut);font-family:ui-monospace,monospace;margin-bottom:7px;display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+  .preview .redacted{color:#b25e00;background:rgba(255,159,10,.16);font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px}
+  .preview pre{margin:0;max-height:300px;overflow:auto;background:#1d1d1f;color:#e8e8ed;border-radius:11px;padding:13px 15px;font:11.5px/1.55 ui-monospace,SFMono-Regular,monospace;white-space:pre;tab-size:2}
+  .preview pre.diff .add{color:#41d877}
+  .preview pre.diff .del{color:#ff6b6b}
+  .preview pre.diff .hunk{color:#5ea0ff}
+  .preview .none{color:var(--mut);font-size:12px;padding:8px 0}
   .siglist{padding:8px 12px;max-height:520px;overflow:auto}
   .sig{display:flex;gap:11px;align-items:flex-start;padding:11px;border-radius:11px;transition:background .12s}
   .sig:hover{background:#f5f5f7}
@@ -398,7 +406,45 @@ function showDetail(id){
   const badges=`<span class="k">${esc(n.kind)}</span>`+
     (n.risk?` <span class="k risk">risk: ${esc(n.risk)}</span>`:'')+
     (n.trust_origin?` <span class="k trust">${esc(n.trust_origin)}</span>`:'');
-  el.innerHTML=`<h3><span style="color:${c}">●</span> ${esc(n.label)} ${badges}</h3><dl>${rows}</dl>`;
+  el.innerHTML=`<h3><span style="color:${c}">●</span> ${esc(n.label)} ${badges}</h3>`+
+    `<div class="sec">Evidence</div><dl>${rows}</dl>`+
+    `<div class="sec">Preview</div><div id="preview" class="preview"></div>`;
+  loadPreview(cur, n.id);
+}
+
+// P1: lazily fetch the content behind the selected node (its provenance object
+// or recorded artifact), bounded + secret-redacted by the server. Answers "what
+// did this node actually produce / contain?" without turning into a file browser.
+async function loadPreview(run, id){
+  const el=$('#preview'); if(!el)return;
+  el.innerHTML='<div class="none">loading…</div>';
+  let d;
+  try{ d=await j('/api/artifact?run='+encodeURIComponent(run)+'&node='+encodeURIComponent(id)); }
+  catch(_){ el.innerHTML='<div class="none">preview error</div>'; return; }
+  if($('#preview')!==el) return; // selection changed while fetching
+  if(!d || d.kind==='unavailable'){ el.innerHTML=`<div class="none">no content preview — ${esc((d&&d.reason)||'unavailable')}</div>`; return; }
+  let meta='<div class="meta">';
+  if(d.sha256) meta+=`<span>${esc(d.sha256.slice(0,23))}…</span>`;
+  meta+=`<span>${d.size} B</span>`;
+  if(d.mime) meta+=`<span>${esc(d.mime)}</span>`;
+  if(d.source) meta+=`<span>${esc(d.source)}</span>`;
+  if(d.truncated) meta+='<span style="color:#b25e00">truncated</span>';
+  if(d.redacted) meta+='<span class="redacted">🔒 redacted</span>';
+  meta+='</div>';
+  if(d.kind==='binary'){ el.innerHTML=meta+`<div class="none">${esc(d.reason||'binary content')}</div>`; return; }
+  let body;
+  if(d.kind==='diff'){
+    body='<pre class="diff">'+(d.content||'').split('\n').map(l=>{
+      const e=esc(l);
+      if(l.startsWith('+')&&!l.startsWith('+++')) return '<span class="add">'+e+'</span>';
+      if(l.startsWith('-')&&!l.startsWith('---')) return '<span class="del">'+e+'</span>';
+      if(l.startsWith('@@')) return '<span class="hunk">'+e+'</span>';
+      return e;
+    }).join('\n')+'</pre>';
+  } else {
+    body='<pre>'+esc(d.content||'')+'</pre>';
+  }
+  el.innerHTML=meta+body;
 }
 
 function renderVerify(v){
