@@ -143,7 +143,7 @@
     <h2>Run Overview <span class="sub">query first, graph second — raw events stay paged and drillable</span></h2>
     <div id="askgrid" class="askgrid"></div>
   </section>
-  <section class="card hero">
+  <section class="card hero" id="graphcard">
     <h2>Graph Explorer <span class="sub">canonical graph → lens projection → derived edges</span>
       <span class="spacer"></span>
       <div class="lensbar">
@@ -427,6 +427,7 @@ function renderQuestionEntries(m){
       LENS=btn.getAttribute('data-lens')||'default';
       DETAIL='summary';
       SEL='';
+      GRAPH_FOCUS='';
       EXPAND_MODE='lineage';
       setEvidenceFilterFromNode(node);
       EV_OFFSET=0;
@@ -487,6 +488,7 @@ function drilldownNode(n){
   LENS=String(d.drilldown_lens||LENS);
   DETAIL=String(d.drilldown_detail||'summary');
   SEL=String(d.drilldown_focus||'');
+  GRAPH_FOCUS=SEL;
   EXPAND_MODE='lineage';
   setEvidenceFilterFromNode(n);
   EV_OFFSET=0;
@@ -601,34 +603,89 @@ function renderVerify(v){
 }
 
 function renderSignals(sig){
-  const list=$('#siglist'); const arr=(sig&&sig.signals)||[];
-  SIGS=arr;
-  if(SIG_OFFSET>=arr.length) SIG_OFFSET=Math.max(0, Math.floor((arr.length-1)/SIG_LIMIT)*SIG_LIMIT);
-  $('#sigcount').textContent = arr.length? arr.length+' signal'+(arr.length>1?'s':'') : '';
-  if(!arr.length){list.innerHTML='<div class="empty">no signals</div>';return;}
-  const page=arr.slice(SIG_OFFSET,SIG_OFFSET+SIG_LIMIT);
-  list.innerHTML=page.map(s=>{
-    const sev=(s.severity||'low').toLowerCase();
-    const focus=signalFocusID(s);
+  const list=$('#siglist'); const raw=(sig&&sig.signals)||[];
+  const risks=(raw[0]&&Array.isArray(raw[0].refs))?raw:groupRiskSignals(raw);
+  SIGS=risks;
+  if(SIG_OFFSET>=risks.length) SIG_OFFSET=Math.max(0, Math.floor((risks.length-1)/SIG_LIMIT)*SIG_LIMIT);
+  const rawCount=risks.reduce((n,g)=>n+g.count,0);
+  $('#sigcount').textContent = risks.length? risks.length+' risk group'+(risks.length>1?'s':'')+' / '+rawCount+' signal'+(rawCount>1?'s':'') : '';
+  if(!risks.length){list.innerHTML='<div class="empty">no risk signals</div>';return;}
+  const page=risks.slice(SIG_OFFSET,SIG_OFFSET+SIG_LIMIT);
+  list.innerHTML=page.map(g=>{
+    const sev=(g.severity||'low').toLowerCase();
+    const focus=g.focus||'';
     const active=focus&&focus===SEL?' on':'';
-    return `<div class="sig${active}" data-focus="${esc(focus)}"><span class="pill sev-${sev}">${esc(s.severity||s.dimension||'')}</span>
-      <div class="body"><div class="ref">${esc(s.reference||s.type||'')}</div>
-      <div class="meta">${esc(s.dimension||'')} · ${esc(s.type||'')}</div>
-      ${s.recommended_action?`<div class="act">▸ ${esc(s.recommended_action)}</div>`:''}</div></div>`;
+    const refs=g.refs.join(',');
+    return `<div class="sig${active}" data-focus="${esc(focus)}" data-refs="${esc(refs)}" data-title="${esc(g.title)}"><span class="pill sev-${sev}">${esc(g.severity||'risk')}</span>
+      <div class="body"><div class="ref">${esc(g.title)}</div>
+      <div class="meta">${esc(g.type)} · ${g.count} event${g.count>1?'s':''}${g.sample?` · ${esc(g.sample)}`:''}</div>
+      ${g.action?`<div class="act">▸ ${esc(g.action)}</div>`:''}</div></div>`;
   }).join('');
-  const from=arr.length?SIG_OFFSET+1:0, to=Math.min(SIG_OFFSET+SIG_LIMIT,arr.length);
+  const from=risks.length?SIG_OFFSET+1:0, to=Math.min(SIG_OFFSET+SIG_LIMIT,risks.length);
   list.innerHTML+=`<div class="pager"><button id="sigprev" ${SIG_OFFSET<=0?'disabled':''}>‹ prev</button>
-    <span>${from}–${to} of ${arr.length}</span>
-    <button id="signext" ${SIG_OFFSET+SIG_LIMIT>=arr.length?'disabled':''}>next ›</button></div>`;
+    <span>${from}–${to} of ${risks.length}</span>
+    <button id="signext" ${SIG_OFFSET+SIG_LIMIT>=risks.length?'disabled':''}>next ›</button></div>`;
   list.querySelectorAll('.sig[data-focus]').forEach(el=>{
-    el.onclick=()=>focusSignal(el.getAttribute('data-focus'));
+    el.onclick=()=>focusSignalGroup(el);
   });
   const pv=$('#sigprev'), nx=$('#signext');
   if(pv) pv.onclick=()=>{SIG_OFFSET=Math.max(0,SIG_OFFSET-SIG_LIMIT);renderSignals({signals:SIGS});};
   if(nx) nx.onclick=()=>{SIG_OFFSET+=SIG_LIMIT;renderSignals({signals:SIGS});};
 }
+function groupRiskSignals(arr){
+  const groups=new Map();
+  (arr||[]).filter(isRiskSignal).forEach(s=>{
+    const p=signalPayload(s);
+    const rule=p.rule_id||p.rule||s.reference||s.type||'risk';
+    const action=s.recommended_action||p.decision||p.action||'';
+    const key=[rule,s.type||'',action].join('|');
+    let g=groups.get(key);
+    if(!g){
+      g={title:s.reference||rule,type:s.type||s.dimension||'risk',action, severity:s.severity||'medium', count:0, refs:[], focus:'', sample:''};
+      groups.set(key,g);
+    }
+    g.count++;
+    g.severity=maxSeverity(g.severity,s.severity);
+    const ref=signalEventRef(s);
+    if(ref&&!g.refs.includes(ref))g.refs.push(ref);
+    if(!g.focus)g.focus=ref||signalFocusID(s);
+    if(!g.sample)g.sample=signalSample(p);
+  });
+  return Array.from(groups.values()).sort((a,b)=>severityRank(b.severity)-severityRank(a.severity)||b.count-a.count||a.title.localeCompare(b.title));
+}
+function isRiskSignal(s){
+  if(!s)return false;
+  const p=signalPayload(s);
+  if((p.rule_id==='private_cidr_access'||s.reference==='private CIDR access')&&isLoopbackHost(p.dst_ip||p.host||''))return false;
+  if((s.dimension||'').toLowerCase()==='security')return true;
+  if(s.recommended_action)return true;
+  return severityRank(s.severity)>severityRank('low');
+}
+function signalPayload(s){try{return JSON.parse(s.payload||'{}')||{};}catch(_){return {};}}
+function isLoopbackHost(host){
+  host=String(host||'').replace(/^\[/,'').replace(/\]$/,'');
+  return host==='localhost'||host==='::1'||host.startsWith('127.');
+}
+function signalSample(p){
+  if(p.rule_id==='secret_path_access'||p.event_type==='secret_path')return '';
+  if(p.path)return p.path;
+  if(p.dst_ip)return p.dst_ip;
+  if(p.host)return p.host;
+  if(p.rule_id)return p.rule_id;
+  return '';
+}
+function severityRank(s){return {critical:5,high:4,medium:3,low:2,info:1,'':0}[String(s||'').toLowerCase()]||0;}
+function maxSeverity(a,b){return severityRank(b)>severityRank(a)?b:a;}
+function signalEventRef(s){
+  if(!s)return'';
+  if(s.event_id)return 'runtime_event/'+s.event_id;
+  const kind=s.graph_ref_kind||'', id=s.graph_ref_id||'';
+  if(kind==='event'&&id)return id.startsWith('runtime_event/')?id:'runtime_event/'+id;
+  return '';
+}
 function signalFocusID(s){
   if(!s)return'';
+  if(s.event_id)return 'runtime_event/'+s.event_id;
   const kind=s.graph_ref_kind||'', id=s.graph_ref_id||'';
   if(kind==='event'&&id)return id.startsWith('runtime_event/')?id:'runtime_event/'+id;
   if(kind==='risk'&&id)return id.startsWith('risk_signal/')?id:'risk_signal/'+id;
@@ -640,12 +697,17 @@ function signalFocusID(s){
   if(s.process_id)return s.process_id;
   return '';
 }
-function focusSignal(id){
+function focusSignalGroup(el){
+  const focus=el.getAttribute('data-focus')||'';
+  const refs=(el.getAttribute('data-refs')||'').split(',').filter(Boolean);
+  focusSignal(focus, refs, el.getAttribute('data-title')||'risk signal');
+}
+function focusSignal(id, refs, title){
   if(!id)return;
-  SEL=id; LENS='security'; DETAIL='summary'; EXPAND_MODE='lineage'; EV_FILTER={title:'risk signal', lens:'security', focus:id, refs:[id]}; EV_OFFSET=0; stopPlay();
+  SEL=id; GRAPH_FOCUS=id; LENS='security'; DETAIL='summary'; EXPAND_MODE='lineage'; EV_FILTER={title:title||'risk signal', lens:'security', focus:id, refs:(refs&&refs.length)?refs:[id]}; EV_OFFSET=0; stopPlay();
   const ls=$('#lenssel'), ds=$('#detailsel');
   if(ls)ls.value=LENS; if(ds)ds.value=DETAIL;
-  loadRun(cur);
+  loadRun(cur).then(()=>$('#graphcard')&&$('#graphcard').scrollIntoView({behavior:'smooth',block:'start'}));
 }
 
 function renderTimeline(events){
@@ -730,6 +792,7 @@ let SIGS=[], SIG_OFFSET=0; const SIG_LIMIT=12;
 let EV_FILTER=null, EV_OFFSET=0; const EV_LIMIT=50;
 let LENS='default', DETAIL='summary'; const OV=new Set();
 let EXPAND_MODE='lineage';
+let GRAPH_FOCUS='';
 // Time-scrubber state: TCUR=null means "show the whole run"; otherwise only
 // elements at or before TCUR are drawn. TIMES is the sorted distinct clock.
 let TCUR=null, TIMES=[], PLAYING=null;
@@ -738,17 +801,17 @@ function edgeVisible(e){ return nodeVisible(e.from) && nodeVisible(e.to); }
 async function loadRun(run){
   cur=run;
   const q='run='+encodeURIComponent(run);
-  const lq=q+'&lens='+encodeURIComponent(LENS)+'&detail='+encodeURIComponent(DETAIL)+[...OV].map(o=>'&overlay='+o).join('');
+  const lq=q+'&lens='+encodeURIComponent(LENS)+'&detail='+encodeURIComponent(DETAIL)+(GRAPH_FOCUS?'&focus='+encodeURIComponent(GRAPH_FOCUS):'')+[...OV].map(o=>'&overlay='+o).join('');
   const overviewQ=q+'&lens=default&detail=summary';
   const [ov,lens,overviewLens,eg,pr]=await Promise.all([j('/api/overview?'+q),j('/api/lens?'+lq),j('/api/lens?'+overviewQ),j('/api/egress?'+q),j('/api/processes?'+q)]);
   const g=adaptLens(lens);
   window._lg=g; window._lensManifest=lens;
-  if(SEL && !g.nodes.find(n=>n.id===SEL)) SEL=null; // selection gone after refresh/lens switch
+  if(SEL && !g.nodes.find(n=>n.id===SEL)) { SEL=null; GRAPH_FOCUS=''; } // selection gone after refresh/lens switch
   renderVerify(ov.verify); renderSignals(ov.signals);
   renderQuestionEntries(overviewLens);
   // Re-render the graph only when its structure (lens + overlays + topology)
   // actually changed, so the live 5s refresh never re-lays-out under the cursor.
-  const sig=LENS+'|'+DETAIL+'|'+[...OV].sort().join(',')+'|'+JSON.stringify(g.nodes.map(n=>n.id))+'|'+JSON.stringify(g.edges.map(e=>e.from+'>'+e.to+(e.derived?'*':'')));
+  const sig=LENS+'|'+DETAIL+'|'+GRAPH_FOCUS+'|'+[...OV].sort().join(',')+'|'+JSON.stringify(g.nodes.map(n=>n.id))+'|'+JSON.stringify(g.edges.map(e=>e.from+'>'+e.to+(e.derived?'*':'')));
   if(sig!==window._gsig){ window._gsig=sig; renderLensMeta(lens); rebuildScrubber(g); renderDAG(g,SEL); }
   renderEgress(eg); renderProcessTree(pr); showDetail(SEL);
   await loadEvidenceDrilldown(EV_OFFSET);
@@ -792,14 +855,14 @@ async function refreshRuns(keep){
   // Bootstrap the lens list from the first manifest's available_lenses.
   const boot=await j('/api/lens?run='+encodeURIComponent(first)+'&lens='+LENS);
   initLensSelector(boot.available_lenses);
-  $('#lenssel').onchange=()=>{ LENS=$('#lenssel').value; SEL=null; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; stopPlay(); loadRun(cur); };
-  $('#detailsel').onchange=()=>{ DETAIL=$('#detailsel').value; SEL=null; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; stopPlay(); loadRun(cur); };
+  $('#lenssel').onchange=()=>{ LENS=$('#lenssel').value; SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; stopPlay(); loadRun(cur); };
+  $('#detailsel').onchange=()=>{ DETAIL=$('#detailsel').value; SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; stopPlay(); loadRun(cur); };
   $('#slider').oninput=()=>{ stopPlay(); setScrub(+$('#slider').value); };
   $('#playbtn').onclick=togglePlay;
   document.querySelectorAll('.chip[data-ov]').forEach(chip=>{
     chip.onclick=()=>{ const o=chip.getAttribute('data-ov'); if(OV.has(o)){OV.delete(o);chip.classList.remove('on');}else{OV.add(o);chip.classList.add('on');} loadRun(cur); };
   });
-  sel.onchange=()=>{ SEL=null; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; tlOffset=0; stopPlay(); loadRun(sel.value); };
+  sel.onchange=()=>{ SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; tlOffset=0; stopPlay(); loadRun(sel.value); };
   $('#live').onclick=()=>setLive(!LIVE);
   await loadRun(first);
   setInterval(async()=>{ if(!LIVE)return; const r=await refreshRuns(cur); if(r) loadRun(r); }, 5000);
