@@ -315,6 +315,9 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 	if err := addSnapshotAttemptNodes(db, runID, add); err != nil {
 		return nil, nil, err
 	}
+	if err := addProvenanceObjectNodes(db, runID, add); err != nil {
+		return nil, nil, err
+	}
 	// runtime_process/pid/<pid> nodes are referenced by edges but otherwise carry
 	// only the bare pid. Enrich them with the command from the matching execve
 	// event so the graph shows the process NAME and the pid together (label =
@@ -398,32 +401,32 @@ func addProcessNodes(db *sql.DB, runID string, add func(GraphLensNode)) error {
 }
 
 func addPolicyNodes(db *sql.DB, runID string, add func(GraphLensNode)) error {
-	policies, err := db.Query(`SELECT id, COALESCE(rule_id,''), decision, COALESCE(reason,'') FROM policy_decisions WHERE run_id = ?`, runID)
+	policies, err := db.Query(`SELECT id, COALESCE(event_id,''), COALESCE(rule_id,''), decision, COALESCE(reason,'') FROM policy_decisions WHERE run_id = ?`, runID)
 	if err != nil {
 		return err
 	}
 	defer policies.Close()
 	for policies.Next() {
-		var id, rule, decision, reason string
-		if err := policies.Scan(&id, &rule, &decision, &reason); err != nil {
+		var id, eventID, rule, decision, reason string
+		if err := policies.Scan(&id, &eventID, &rule, &decision, &reason); err != nil {
 			return err
 		}
 		add(GraphLensNode{ID: "policy_decision/" + id, Kind: "policy_decision", Subtype: decision, Label: "policy: " + decision, Risk: riskForDecision(decision), Data: map[string]any{
-			"policy_decision_id": id, "rule_id": rule, "decision": decision, "reason": reason,
+			"policy_decision_id": id, "event_id": eventID, "rule_id": rule, "decision": decision, "reason": reason,
 		}})
 	}
-	risks, err := db.Query(`SELECT id, signal_type, severity, COALESCE(reason,''), COALESCE(recommended_action,'') FROM risk_signals WHERE run_id = ?`, runID)
+	risks, err := db.Query(`SELECT id, COALESCE(event_id,''), signal_type, severity, COALESCE(reason,''), COALESCE(recommended_action,'') FROM risk_signals WHERE run_id = ?`, runID)
 	if err != nil {
 		return err
 	}
 	defer risks.Close()
 	for risks.Next() {
-		var id, stype, severity, reason, action string
-		if err := risks.Scan(&id, &stype, &severity, &reason, &action); err != nil {
+		var id, eventID, stype, severity, reason, action string
+		if err := risks.Scan(&id, &eventID, &stype, &severity, &reason, &action); err != nil {
 			return err
 		}
 		add(GraphLensNode{ID: "risk_signal/" + id, Kind: "risk_signal", Subtype: severity, Label: stype, Risk: severity, Data: map[string]any{
-			"risk_signal_id": id, "signal_type": stype, "severity": severity, "reason": reason, "recommended_action": action,
+			"risk_signal_id": id, "event_id": eventID, "signal_type": stype, "severity": severity, "reason": reason, "recommended_action": action,
 		}})
 	}
 	responses, err := db.Query(`SELECT id, action_type, COALESCE(status,''), COALESCE(target_type,''), COALESCE(target_id,'') FROM response_actions WHERE run_id = ?`, runID)
@@ -480,6 +483,33 @@ func addSnapshotAttemptNodes(db *sql.DB, runID string, add func(GraphLensNode)) 
 		add(GraphLensNode{ID: id, Kind: "snapshot", Subtype: kind, Label: fallback(name, id), Risk: risk, Data: map[string]any{"status": status, "tainted": tainted != 0}})
 	}
 	return nil
+}
+
+func addProvenanceObjectNodes(db *sql.DB, runID string, add func(GraphLensNode)) error {
+	rows, err := db.Query(`SELECT hash, object_type, COALESCE(source_id,''), COALESCE(path,''), COALESCE(size_bytes,0)
+		FROM provenance_objects WHERE run_id = ? AND object_type IN ('artifact')`, runID)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var hash, objectType, sourceID, path string
+		var sizeBytes int64
+		if err := rows.Scan(&hash, &objectType, &sourceID, &path, &sizeBytes); err != nil {
+			return err
+		}
+		add(GraphLensNode{
+			ID:          hash,
+			Kind:        "artifact",
+			Subtype:     objectType,
+			Label:       lensShortRef(sourceID),
+			TrustOrigin: "content_addressed",
+			Data: map[string]any{
+				"hash": hash, "object_type": objectType, "source_id": sourceID, "path": path, "size_bytes": sizeBytes,
+			},
+		})
+	}
+	return rows.Err()
 }
 
 func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
@@ -566,6 +596,8 @@ type overviewMetricCounts struct {
 
 func overviewCounts(nodes map[string]GraphLensNode, events map[string]lensEvent, edges []GraphLensEdge) overviewMetricCounts {
 	var counts overviewMetricCounts
+	hasRiskSignals := false
+	fileIDs := map[string]bool{}
 	for _, node := range nodes {
 		switch node.Kind {
 		case "tool_call":
@@ -575,22 +607,37 @@ func overviewCounts(nodes map[string]GraphLensNode, events map[string]lensEvent,
 		case "runtime_process":
 			counts.RuntimeProcesses++
 		case "file":
-			counts.Files++
+			fileIDs[node.ID] = true
 		case "artifact":
 			counts.Artifacts++
 		case "risk_signal":
+			if isLoopbackPrivateRiskNode(node, events) {
+				continue
+			}
+			hasRiskSignals = true
 			counts.Risks++
 			if isHighRisk(node.Risk) || isHighRisk(node.Subtype) {
 				counts.HighRisks++
 			}
 		}
 	}
+	for _, edge := range edges {
+		for _, id := range []string{edge.FromID, edge.ToID} {
+			if strings.HasPrefix(id, "workspace_file/") {
+				fileIDs[id] = true
+			}
+		}
+	}
+	counts.Files = len(fileIDs)
 	for _, ev := range events {
 		if isNetworkEvent(ev.Type) {
 			counts.Egress++
 		}
 		if isRiskyNetworkSummaryEvent(ev) {
 			counts.RiskyEgress++
+		}
+		if hasRiskSignals {
+			continue
 		}
 		if risk := riskForLensEvent(ev); risk != "" {
 			counts.Risks++
@@ -670,30 +717,33 @@ func buildProcessGroupEdges(nodes map[string]GraphLensNode, events map[string]le
 func buildFileGroupEdges(runID string, nodes map[string]GraphLensNode, edges []GraphLensEdge) []GraphLensEdge {
 	rootID := "run/" + runID
 	nodes[rootID] = GraphLensNode{ID: rootID, Kind: "run", Label: runID, Data: map[string]any{"run_id": runID}}
-	counts := map[string]int{}
+	filesByCategory := map[string]map[string]bool{}
+	addFile := func(id string) {
+		if !strings.HasPrefix(id, "workspace_file/") {
+			return
+		}
+		path := strings.TrimPrefix(id, "workspace_file/")
+		category := filePathCategory(path)
+		if filesByCategory[category] == nil {
+			filesByCategory[category] = map[string]bool{}
+		}
+		filesByCategory[category][path] = true
+	}
 	for id, node := range nodes {
 		if node.Kind != "file" {
 			continue
 		}
-		path := strings.TrimPrefix(id, "workspace_file/")
-		counts[filePathCategory(path)]++
+		addFile(id)
 	}
 	for _, edge := range edges {
 		for _, id := range []string{edge.FromID, edge.ToID} {
-			if !strings.HasPrefix(id, "workspace_file/") {
-				continue
-			}
-			if _, exists := nodes[id]; exists {
-				continue
-			}
-			path := strings.TrimPrefix(id, "workspace_file/")
-			counts[filePathCategory(path)]++
+			addFile(id)
 		}
 	}
 	keys := []string{"source", "build_artifact", "dependency_cache", "secret_or_config", "other"}
 	out := []GraphLensEdge{}
 	for _, key := range keys {
-		count := counts[key]
+		count := len(filesByCategory[key])
 		if count == 0 {
 			continue
 		}
@@ -709,8 +759,12 @@ func buildSecurityRuleEdges(runID string, nodes map[string]GraphLensNode, events
 	rootID := "run/" + runID
 	nodes[rootID] = GraphLensNode{ID: rootID, Kind: "run", Label: runID, Data: map[string]any{"run_id": runID}}
 	groups := map[string]*ruleGroup{}
+	policyEventIDs := map[string]bool{}
 	for _, node := range nodes {
 		if node.Kind != "policy_decision" {
+			continue
+		}
+		if isLoopbackPrivateRiskNode(node, events) {
 			continue
 		}
 		rule := stringFromAny(node.Data["rule_id"])
@@ -728,8 +782,14 @@ func buildSecurityRuleEdges(runID string, nodes map[string]GraphLensNode, events
 		group.count++
 		group.decision = fallback(stringFromAny(node.Data["decision"]), group.decision)
 		group.evidence = append(group.evidence, node.ID)
+		if eventID := stringFromAny(node.Data["event_id"]); eventID != "" {
+			policyEventIDs[eventID] = true
+		}
 	}
 	for _, ev := range events {
+		if policyEventIDs[ev.ID] {
+			continue
+		}
 		risk := riskForLensEvent(ev)
 		if risk == "" {
 			continue
@@ -761,6 +821,15 @@ func buildSecurityRuleEdges(runID string, nodes map[string]GraphLensNode, events
 		out = append(out, GraphLensEdge{ID: "summary-risk-" + safeGraphID(key), FromID: rootID, ToID: id, EdgeType: "run_risk_group", EvidenceRefs: capStringSlice(group.evidence, 32)})
 	}
 	return out
+}
+
+func isLoopbackPrivateRiskNode(node GraphLensNode, events map[string]lensEvent) bool {
+	eventID := stringFromAny(node.Data["event_id"])
+	if eventID == "" {
+		return false
+	}
+	ev, ok := events["runtime_event/"+eventID]
+	return ok && ev.Type == "private_cidr" && isLoopbackDestination(ev.Destination)
 }
 
 func buildNetworkGroupEdges(runID string, nodes map[string]GraphLensNode, events map[string]lensEvent) []GraphLensEdge {

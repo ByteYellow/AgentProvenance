@@ -116,6 +116,19 @@ func TestGraphLensDefaultSummaryUsesRunOverview(t *testing.T) {
 	db := newLensTestDB(t)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	insertLensFixture(t, db, now)
+	insertLensEvent(t, db, "evt-loopback-private", "private_cidr", `{"dst_ip":"127.0.0.53","comm":"systemd-resolved"}`, addSeconds(t, now, 2))
+	if _, err := db.Exec(`INSERT INTO policy_decisions (id, event_id, run_id, session_id, rule_id, decision, reason, created_at)
+		VALUES ('policy-loopback-private', 'evt-loopback-private', 'run-lens', 'session-lens', 'private_cidr_access', 'deny', 'private CIDR access', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO risk_signals (id, run_id, session_id, tool_call_id, process_id, event_id, policy_decision_id, signal_type, severity, reason, recommended_action, created_at)
+		VALUES ('risk-loopback-private', 'run-lens', 'session-lens', 'tool-lens', 'proc-lens', 'evt-loopback-private', 'policy-loopback-private', 'policy_violation', 'medium', 'private CIDR access', 'deny', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO provenance_objects (hash, object_type, source_id, run_id, path, size_bytes, created_at)
+		VALUES ('sha256:lens-artifact', 'artifact', 'workspace_file/app.py', 'run-lens', '/tmp/objects/artifact.json', 123, ?)`, now); err != nil {
+		t.Fatal(err)
+	}
 
 	manifest, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "default", Limit: 100})
 	if err != nil {
@@ -129,6 +142,15 @@ func TestGraphLensDefaultSummaryUsesRunOverview(t *testing.T) {
 	}
 	if lensHasNode(manifest, "runtime_event/evt-secret", "runtime_event") {
 		t.Fatalf("default summary should not render raw runtime events: %+v", manifest.Nodes)
+	}
+	if got := lensNodeDataInt(manifest, "overview/artifacts", "count"); got != 1 {
+		t.Fatalf("overview artifacts=%d, want 1: %+v", got, manifest.Nodes)
+	}
+	if got := lensNodeDataInt(manifest, "overview/risks", "total"); got != 1 {
+		t.Fatalf("overview risks total=%d, want 1: %+v", got, manifest.Nodes)
+	}
+	if got := lensNodeDataInt(manifest, "overview/risks", "high"); got != 1 {
+		t.Fatalf("overview high risks=%d, want 1: %+v", got, manifest.Nodes)
 	}
 }
 
@@ -158,6 +180,12 @@ func TestGraphLensSummaryGroupsWideLenses(t *testing.T) {
 	if !lensHasKind(security, "risk_group") {
 		t.Fatalf("security summary should use risk_group: %+v", security.Nodes)
 	}
+	if lensHasGroupSubtype(security, "risk_group", "private_cidr_access") {
+		t.Fatalf("security summary should exclude loopback private_cidr policy groups: %+v", security.Nodes)
+	}
+	if lensHasGroupSubtype(security, "risk_group", "metadata_ip") {
+		t.Fatalf("security summary should not duplicate policy-covered raw event groups: %+v", security.Nodes)
+	}
 
 	files, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "file-artifact", Limit: 100})
 	if err != nil {
@@ -165,6 +193,9 @@ func TestGraphLensSummaryGroupsWideLenses(t *testing.T) {
 	}
 	if !lensHasKind(files, "file_group") {
 		t.Fatalf("file summary should use file_group: %+v", files.Nodes)
+	}
+	if got := lensGroupInt(files, "file_group", "source", "count"); got != 1 {
+		t.Fatalf("source file group count=%d, want 1: %+v", got, files.Nodes)
 	}
 
 	network, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "network-egress", Limit: 100})
@@ -372,6 +403,15 @@ func lensHasKind(manifest GraphLensManifest, kind string) bool {
 	return false
 }
 
+func lensHasGroupSubtype(manifest GraphLensManifest, kind, subtype string) bool {
+	for _, node := range manifest.Nodes {
+		if node.Kind == kind && node.Subtype == subtype {
+			return true
+		}
+	}
+	return false
+}
+
 func lensHasDrilldown(manifest GraphLensManifest) bool {
 	for _, node := range manifest.Nodes {
 		if node.Data != nil && stringFromAny(node.Data["drilldown_lens"]) != "" {
@@ -392,6 +432,23 @@ func lensGroupInt(manifest GraphLensManifest, kind, subtype, key string) int {
 			case float64:
 				return int(v)
 			}
+		}
+	}
+	return 0
+}
+
+func lensNodeDataInt(manifest GraphLensManifest, id, key string) int {
+	for _, node := range manifest.Nodes {
+		if node.ID != id {
+			continue
+		}
+		switch v := node.Data[key].(type) {
+		case int:
+			return v
+		case int64:
+			return int(v)
+		case float64:
+			return int(v)
 		}
 	}
 	return 0
