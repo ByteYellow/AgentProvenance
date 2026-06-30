@@ -15,6 +15,8 @@ func TestGraphLensDataFlowDerivesSecretToNetworkEdge(t *testing.T) {
 	db := newLensTestDB(t)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	insertLensFixture(t, db, now)
+	insertLensEvent(t, db, "evt-dns", "network_connect", `{"dst_ip":"127.0.0.53","comm":"systemd-resolved"}`, addSeconds(t, now, 2))
+	insertLensEvent(t, db, "evt-public", "network_connect", `{"dst_ip":"150.138.1.1","comm":"model-client"}`, addSeconds(t, now, 3))
 
 	manifest, err := BuildGraphLens(db, GraphLensOptions{
 		RunID:    "run-lens",
@@ -49,6 +51,10 @@ func TestGraphLensDataFlowDerivesSecretToNetworkEdge(t *testing.T) {
 	}
 	if got := intFromEdgeData(edge, "sink_count"); got != 1 {
 		t.Fatalf("sink_count=%d, want 1: %+v", got, edge.Data)
+	}
+	destinations, _ := edge.Data["destinations"].([]string)
+	if len(destinations) != 1 || destinations[0] != "169.254.169.254" {
+		t.Fatalf("destinations=%v, want metadata IP only", destinations)
 	}
 }
 
@@ -228,6 +234,15 @@ func insertLensEvent(t *testing.T, db *sql.DB, id, eventType, payload, now strin
 		id, eventType, payload, now); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func addSeconds(t *testing.T, ts string, seconds int) string {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339Nano, ts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return parsed.Add(time.Duration(seconds) * time.Second).UTC().Format(time.RFC3339Nano)
 }
 
 func lensHasNode(manifest GraphLensManifest, id, kind string) bool {

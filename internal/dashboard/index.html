@@ -9,7 +9,7 @@
     --bg:#f5f5f7; --panel:#ffffff; --panel2:#fbfbfd; --line:rgba(0,0,0,.08); --line2:#d2d2d7;
     --tx:#1d1d1f; --mut:#6e6e73; --acc:#0071e3;
     --event:#0a84ff; --intent:#30b0c7; --policy:#ff9f0a; --risk:#ff3b30; --response:#bf5af2;
-    --process:#5e5ce6; --artifact:#34c759; --file:#30a46c; --toolcall:#30b0c7; --snapshot:#8e8e93; --derived:#ff375f;
+    --process:#5e5ce6; --artifact:#34c759; --file:#30a46c; --toolcall:#30b0c7; --snapshot:#8e8e93; --derived:#ff375f; --egress:#ff453a;
     --ok:#34c759; --bad:#ff3b30;
     --shadow:0 1px 2px rgba(0,0,0,.05),0 12px 32px -18px rgba(0,0,0,.18);
   }
@@ -176,6 +176,7 @@ const KIND_COLOR={
   runtime_event:'var(--event)', event:'var(--event)', intent:'var(--intent)',
   tool_call:'var(--toolcall)', process:'var(--process)', runtime_process:'var(--process)',
   artifact:'var(--artifact)', file:'var(--file)',
+  egress_group:'var(--egress)',
   policy_decision:'var(--policy)', policy:'var(--policy)',
   risk_signal:'var(--risk)', risk:'var(--risk)',
   response_action:'var(--response)', response:'var(--response)',

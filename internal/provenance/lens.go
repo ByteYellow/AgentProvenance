@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/netip"
 	"sort"
 	"strings"
 )
@@ -148,6 +149,9 @@ func BuildGraphLens(db *sql.DB, opts GraphLensOptions) (GraphLensManifest, error
 	}
 	used := map[string]bool{}
 	for _, edge := range filteredEdges {
+		if edge.EdgeType == "possible_sensitive_data_flow_summary" && edge.ToID != "" {
+			nodes[edge.ToID] = egressGroupNode(edge)
+		}
 		used[edge.FromID] = true
 		used[edge.ToID] = true
 		if edge.SourceEventID != "" {
@@ -507,7 +511,7 @@ func edgeMatchesLens(lens, detail string, edge GraphLensEdge, nodes map[string]G
 	case "network-egress":
 		return isNetworkEvent(fromEvent.Type) || isNetworkEvent(toEvent.Type) || strings.Contains(edge.EdgeType, "network") || strings.Contains(edge.EdgeType, "egress") || strings.Contains(edge.EdgeType, "llm_call")
 	case "data-flow-taint":
-		return edge.Derived || isSourceEvent(fromEvent.Type, fromEvent.Path) || isSourceEvent(toEvent.Type, toEvent.Path) || isSinkEvent(fromEvent.Type) || isSinkEvent(toEvent.Type)
+		return edge.Derived || isSourceEvent(fromEvent.Type, fromEvent.Path) || isSourceEvent(toEvent.Type, toEvent.Path) || isTaintSinkEvent(fromEvent) || isTaintSinkEvent(toEvent)
 	case "agent-intent":
 		return strings.Contains(edge.EdgeType, "llm_") || from.Kind == "tool_call" || to.Kind == "tool_call" || strings.Contains(edge.EdgeType, "tool_call")
 	case "trust-origin":
@@ -582,7 +586,7 @@ func deriveGraphLensEdges(lens string, events map[string]lensEvent, detail strin
 		if isSourceEvent(ev.Type, ev.Path) {
 			sources = append(sources, ev)
 		}
-		if isSinkEvent(ev.Type) {
+		if isTaintSinkEvent(ev) {
 			sinks = append(sinks, ev)
 		}
 	}
@@ -608,8 +612,8 @@ func deriveGraphLensEdges(lens string, events map[string]lensEvent, detail strin
 				conf = 0.82
 				rule = "dataflow.same_process.secret_to_network.v1"
 			} else if src.ToolCallID != "" && src.ToolCallID == sink.ToolCallID {
-				conf = 0.62
-				rule = "dataflow.same_tool_call.secret_to_network.v1"
+				conf = 0.52
+				rule = "dataflow.same_tool_call.risky_egress.v1"
 			}
 			if conf == 0 {
 				continue
@@ -664,11 +668,6 @@ func deriveAggregatedDataFlowEdges(sources, sinks []lensEvent) []GraphLensEdge {
 				scopeKey = "process:" + src.ProcessID
 				conf = 0.82
 				rule = "dataflow.same_process.secret_to_network.aggregate.v1"
-			} else if src.ToolCallID != "" && src.ToolCallID == sink.ToolCallID {
-				scopeID = src.ToolCallID
-				scopeKey = "tool_call:" + src.ToolCallID
-				conf = 0.62
-				rule = "dataflow.same_tool_call.secret_to_network.aggregate.v1"
 			}
 			if scopeID == "" {
 				continue
@@ -751,6 +750,34 @@ func sortedLensNodes(nodes map[string]GraphLensNode, used map[string]bool) []Gra
 		return out[i].ID < out[j].ID
 	})
 	return out
+}
+
+func egressGroupNode(edge GraphLensEdge) GraphLensNode {
+	label := "risky egress group"
+	destinations := stringsFromEdgeData(edge.Data, "destinations")
+	if len(destinations) > 0 {
+		label = "risky egress: " + destinations[0]
+		if len(destinations) > 1 {
+			label += fmt.Sprintf(" +%d", len(destinations)-1)
+		}
+	}
+	return GraphLensNode{
+		ID:          edge.ToID,
+		Kind:        "egress_group",
+		Subtype:     "risky_egress",
+		Label:       label,
+		Risk:        "high",
+		TrustOrigin: "derived_summary",
+		Data: map[string]any{
+			"source_count":     valueFromMap(edge.Data, "source_count"),
+			"sink_count":       valueFromMap(edge.Data, "sink_count"),
+			"destinations":     destinations,
+			"sensitive_paths":  stringsFromEdgeData(edge.Data, "sensitive_paths"),
+			"derivation_rule":  edge.DerivationRule,
+			"confidence":       edge.Confidence,
+			"evidence_ref_cnt": len(edge.EvidenceRefs),
+		},
+	}
 }
 
 func splitAndLimitLensEdges(edges []GraphLensEdge, limit int) ([]GraphLensEdge, []GraphLensEdge, bool) {
@@ -865,7 +892,7 @@ func inferLensNode(id string) GraphLensNode {
 	case strings.HasPrefix(id, "workspace_file/"):
 		return GraphLensNode{ID: id, Kind: "file", Label: strings.TrimPrefix(id, "workspace_file/"), TrustOrigin: "workspace_state"}
 	case strings.HasPrefix(id, "egress_group/"):
-		return GraphLensNode{ID: id, Kind: "runtime_event", Subtype: "egress_group", Label: "egress group", Risk: "high", TrustOrigin: "derived_summary"}
+		return GraphLensNode{ID: id, Kind: "egress_group", Subtype: "risky_egress", Label: "risky egress group", Risk: "high", TrustOrigin: "derived_summary"}
 	case strings.HasPrefix(id, "policy_decision/"):
 		return GraphLensNode{ID: id, Kind: "policy_decision", Label: lensShortRef(id)}
 	case strings.HasPrefix(id, "risk_signal/"):
@@ -901,8 +928,39 @@ func isSourceEvent(eventType, path string) bool {
 	return strings.Contains(path, ".ssh") || strings.Contains(path, ".aws") || strings.Contains(path, "credential") || strings.Contains(path, "secret") || strings.Contains(path, "token")
 }
 
-func isSinkEvent(eventType string) bool {
-	return eventType == "network_connect" || eventType == "metadata_ip" || eventType == "private_cidr" || eventType == "tls_write"
+func isTaintSinkEvent(ev lensEvent) bool {
+	switch ev.Type {
+	case "metadata_ip", "private_cidr", "network_deny", "egress_deny":
+		return true
+	case "network_connect", "tls_write":
+		if isMetadataOrPrivateDestination(ev.Destination) {
+			return true
+		}
+		decision := strings.ToLower(payloadString(ev.Payload, "decision", "policy_decision", "action"))
+		severity := strings.ToLower(payloadString(ev.Payload, "severity", "risk", "level"))
+		return decision == "deny" || decision == "quarantine" || decision == "kill" || severity == "high" || severity == "critical"
+	default:
+		return false
+	}
+}
+
+func isMetadataOrPrivateDestination(destination string) bool {
+	destination = strings.TrimSpace(destination)
+	if destination == "" {
+		return false
+	}
+	host := strings.Trim(destination, "[]")
+	if i := strings.LastIndex(host, ":"); i > 0 && strings.Count(host, ":") == 1 {
+		host = host[:i]
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil {
+		return strings.EqualFold(host, "169.254.169.254")
+	}
+	if addr.Is4() && addr.String() == "169.254.169.254" {
+		return true
+	}
+	return addr.IsPrivate()
 }
 
 func isBoundaryEvent(eventType string) bool {
@@ -974,6 +1032,34 @@ func capStringSlice(values []string, limit int) []string {
 		return values
 	}
 	return append([]string{}, values[:limit]...)
+}
+
+func stringsFromEdgeData(data map[string]any, key string) []string {
+	if data == nil {
+		return nil
+	}
+	value := data[key]
+	switch v := value.(type) {
+	case []string:
+		return append([]string{}, v...)
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func valueFromMap(data map[string]any, key string) any {
+	if data == nil {
+		return nil
+	}
+	return data[key]
 }
 
 func safeGraphID(value string) string {
