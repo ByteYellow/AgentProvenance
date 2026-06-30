@@ -236,6 +236,11 @@ Phase 1 is done when the project can prove:
   attempt, artifact, or risk decision by combining causality and provenance
   evidence into an `agentprovenance.explain/v1` manifest with depth/limit/cursor
   controlled `causality_path` and query metadata.
+- `graph lens` follows the "full observability, bounded graph" model: raw
+  telemetry remains queryable and exportable, while the default graph lens
+  promotes only high-value execution, file, network, policy, risk, response, and
+  structural context. `detail=expanded/raw` gives drill-down access without
+  making the dashboard render an unbounded syscall/event graph.
 - Risk marks taint and blocks unsafe reuse through a response gate.
 - Promotion records a telemetry/evidence drain watermark.
 - `graph replay`, `graph verify`, and `graph trajectories --json` produce

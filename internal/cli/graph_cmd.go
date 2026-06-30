@@ -305,6 +305,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 	var lensFocus string
 	var lensOverlays []string
 	var lensLimit int
+	var lensDetail string
 	var lensJSON bool
 	lensCmd := &cobra.Command{
 		Use:   "lens",
@@ -316,6 +317,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 				Focus:    lensFocus,
 				Overlays: lensOverlays,
 				Limit:    lensLimit,
+				Detail:   lensDetail,
 			}
 			if client, ok := daemonClient(*daemonURL); ok {
 				manifest, err := client.GraphLens(opts)
@@ -341,6 +343,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 	lensCmd.Flags().StringVar(&lensRunID, "run", "", "run id")
 	lensCmd.Flags().StringVar(&lensName, "lens", "default", "graph lens: default, security, process, file-artifact, network-egress, data-flow-taint, agent-intent, trust-origin, sandbox-boundary")
 	lensCmd.Flags().StringVar(&lensFocus, "focus", "", "focus node id to keep selected across lenses")
+	lensCmd.Flags().StringVar(&lensDetail, "detail", "summary", "graph detail level: summary, expanded, raw")
 	lensCmd.Flags().StringArrayVar(&lensOverlays, "overlay", nil, "overlay annotations to add, repeatable or comma-separated: risk, trust, security")
 	lensCmd.Flags().IntVar(&lensLimit, "limit", 500, "maximum graph edges returned")
 	lensCmd.Flags().BoolVar(&lensJSON, "json", false, "emit structured graph lens JSON")

@@ -128,6 +128,11 @@
       <span class="spacer"></span>
       <div class="lensbar">
         <select id="lenssel" title="lens projection"></select>
+        <select id="detailsel" title="graph detail">
+          <option value="summary">summary</option>
+          <option value="expanded">expanded</option>
+          <option value="raw">raw</option>
+        </select>
         <span class="chip risk" id="ov-risk" data-ov="risk">risk</span>
         <span class="chip trust" id="ov-trust" data-ov="trust">trust</span>
       </div>
@@ -179,6 +184,7 @@ const EDGE_LABEL={llm_call:'request→response',llm_intent_caused:'intent→acti
   runtime_event_policy_decision:'→ policy',policy_decision_risk_signal:'→ risk',
   risk_signal_response_action:'→ response',runtime_tool_call_event:'tool→event',
   runtime_process_event:'proc→event',possible_sensitive_data_flow:'data flow',
+  possible_sensitive_data_flow_summary:'data flow summary',
   runtime_tool_call_process:'tool→proc',runtime_attempt_event:'attempt→event',
   runtime_process_parent:'parent→child',runtime_process_child_of:'child→parent',
   runtime_process_observed:'observed',runtime_process_child:'parent→child',
@@ -340,10 +346,13 @@ function renderLensMeta(m){
   const rules=(q.lens_rules||[]).map(r=>`<span class="rule">${esc(r)}</span>`).join(' ');
   $('#lensmeta').innerHTML=
     `<span><b>${esc(m.lens)}</b></span>`+
+    `<span>detail <b>${esc(q.detail||'summary')}</b></span>`+
     `<span>layout <b>${esc(q.layout_hint||'')}</b></span>`+
     `<span><b>${q.node_count||0}</b> nodes</span>`+
     `<span><b>${(m.edges||[]).length}</b> edges</span>`+
     `<span><b style="color:var(--derived)">${q.derived_edge_count||0}</b> derived</span>`+
+    `<span><b>${q.raw_event_count||0}</b> raw events</span>`+
+    ((q.omitted_nodes||q.omitted_edges)?`<span style="color:#b25e00">+${q.omitted_nodes||0} nodes / +${q.omitted_edges||0} edges available via expanded/raw</span>`:'')+
     (q.truncated?`<span style="color:#b25e00">⚠ truncated at ${q.limit}</span>`:'')+
     (rules?`<span>rules ${rules}</span>`:'');
   // Legend reflects the node kinds actually present in this lens.
@@ -520,7 +529,7 @@ function renderProcessTree(procs){
 }
 
 let cur=null, tlOffset=0; const TL_LIMIT=50;
-let LENS='default'; const OV=new Set();
+let LENS='default', DETAIL='summary'; const OV=new Set();
 // Time-scrubber state: TCUR=null means "show the whole run"; otherwise only
 // elements at or before TCUR are drawn. TIMES is the sorted distinct clock.
 let TCUR=null, TIMES=[], PLAYING=null;
@@ -529,7 +538,7 @@ function edgeVisible(e){ return nodeVisible(e.from) && nodeVisible(e.to); }
 async function loadRun(run){
   cur=run;
   const q='run='+encodeURIComponent(run);
-  const lq=q+'&lens='+encodeURIComponent(LENS)+[...OV].map(o=>'&overlay='+o).join('');
+  const lq=q+'&lens='+encodeURIComponent(LENS)+'&detail='+encodeURIComponent(DETAIL)+[...OV].map(o=>'&overlay='+o).join('');
   const [ov,lens,eg,pr]=await Promise.all([j('/api/overview?'+q),j('/api/lens?'+lq),j('/api/egress?'+q),j('/api/processes?'+q)]);
   const g=adaptLens(lens);
   window._lg=g; window._lensManifest=lens;
@@ -537,7 +546,7 @@ async function loadRun(run){
   renderVerify(ov.verify); renderSignals(ov.signals);
   // Re-render the graph only when its structure (lens + overlays + topology)
   // actually changed, so the live 5s refresh never re-lays-out under the cursor.
-  const sig=LENS+'|'+[...OV].sort().join(',')+'|'+JSON.stringify(g.nodes.map(n=>n.id))+'|'+JSON.stringify(g.edges.map(e=>e.from+'>'+e.to+(e.derived?'*':'')));
+  const sig=LENS+'|'+DETAIL+'|'+[...OV].sort().join(',')+'|'+JSON.stringify(g.nodes.map(n=>n.id))+'|'+JSON.stringify(g.edges.map(e=>e.from+'>'+e.to+(e.derived?'*':'')));
   if(sig!==window._gsig){ window._gsig=sig; renderLensMeta(lens); rebuildScrubber(g); renderDAG(g,SEL); }
   renderEgress(eg); renderProcessTree(pr); showDetail(SEL);
   await loadTimeline(run, tlOffset);
@@ -581,6 +590,7 @@ async function refreshRuns(keep){
   const boot=await j('/api/lens?run='+encodeURIComponent(first)+'&lens='+LENS);
   initLensSelector(boot.available_lenses);
   $('#lenssel').onchange=()=>{ LENS=$('#lenssel').value; SEL=null; stopPlay(); loadRun(cur); };
+  $('#detailsel').onchange=()=>{ DETAIL=$('#detailsel').value; SEL=null; stopPlay(); loadRun(cur); };
   $('#slider').oninput=()=>{ stopPlay(); setScrub(+$('#slider').value); };
   $('#playbtn').onclick=togglePlay;
   document.querySelectorAll('.chip[data-ov]').forEach(chip=>{

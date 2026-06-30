@@ -257,6 +257,7 @@ func (s Server) lens(w http.ResponseWriter, r *http.Request) {
 		RunID:    run,
 		Lens:     r.URL.Query().Get("lens"),
 		Focus:    r.URL.Query().Get("focus"),
+		Detail:   r.URL.Query().Get("detail"),
 		Overlays: r.URL.Query()["overlay"],
 		Limit:    atoiClamp(r.URL.Query().Get("limit"), 500, 1, 2000),
 	})
@@ -270,8 +271,8 @@ func (s Server) lens(w http.ResponseWriter, r *http.Request) {
 // --- artifact content preview (Side Panel) ---
 
 const (
-	artifactPreviewBytes = 64 * 1024  // text shown to the user
-	artifactReadBytes    = 8 << 20    // cap on what we'll read at all
+	artifactPreviewBytes = 64 * 1024 // text shown to the user
+	artifactReadBytes    = 8 << 20   // cap on what we'll read at all
 )
 
 type artifactResp struct {
@@ -439,10 +440,10 @@ func mimeForPath(path string) string {
 }
 
 var (
-	diffHunkRe   = regexp.MustCompile(`(?m)^@@ .* @@`)
-	pemKeyRe     = regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`)
-	awsKeyRe     = regexp.MustCompile(`AKIA[0-9A-Z]{16}`)
-	kvSecretRe   = regexp.MustCompile(`(?i)(password|passwd|secret|token|api[_-]?key|aws_secret_access_key|authorization)(["']?\s*[:=]\s*["']?)([^\s"',}]{4,})`)
+	diffHunkRe = regexp.MustCompile(`(?m)^@@ .* @@`)
+	pemKeyRe   = regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`)
+	awsKeyRe   = regexp.MustCompile(`AKIA[0-9A-Z]{16}`)
+	kvSecretRe = regexp.MustCompile(`(?i)(password|passwd|secret|token|api[_-]?key|aws_secret_access_key|authorization)(["']?\s*[:=]\s*["']?)([^\s"',}]{4,})`)
 )
 
 // redactSecrets masks the obvious secret shapes (private keys, cloud keys,

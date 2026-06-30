@@ -259,6 +259,9 @@ func (c Client) GraphLens(opts provenance.GraphLensOptions) (provenance.GraphLen
 	if opts.Focus != "" {
 		values.Set("focus", opts.Focus)
 	}
+	if opts.Detail != "" {
+		values.Set("detail", opts.Detail)
+	}
 	if opts.Limit > 0 {
 		values.Set("limit", fmt.Sprintf("%d", opts.Limit))
 	}

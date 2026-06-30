@@ -35,20 +35,73 @@ func TestGraphLensDataFlowDerivesSecretToNetworkEdge(t *testing.T) {
 		t.Fatalf("derived edges=%d, want 1: %+v", len(manifest.DerivedEdges), manifest.DerivedEdges)
 	}
 	edge := manifest.DerivedEdges[0]
+	if edge.EdgeType != "possible_sensitive_data_flow_summary" {
+		t.Fatalf("derived edge type=%s", edge.EdgeType)
+	}
+	if edge.FromID != "proc-lens" || edge.ToID == "" {
+		t.Fatalf("derived edge path=%s -> %s", edge.FromID, edge.ToID)
+	}
+	if edge.DerivationRule != "dataflow.same_process.secret_to_network.aggregate.v1" || edge.Confidence < 0.8 {
+		t.Fatalf("derived metadata not strong enough: %+v", edge)
+	}
+	if got := intFromEdgeData(edge, "source_count"); got != 1 {
+		t.Fatalf("source_count=%d, want 1: %+v", got, edge.Data)
+	}
+	if got := intFromEdgeData(edge, "sink_count"); got != 1 {
+		t.Fatalf("sink_count=%d, want 1: %+v", got, edge.Data)
+	}
+}
+
+func TestGraphLensRawDetailKeepsIndividualDataFlowEdges(t *testing.T) {
+	db := newLensTestDB(t)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insertLensFixture(t, db, now)
+
+	manifest, err := BuildGraphLens(db, GraphLensOptions{
+		RunID:  "run-lens",
+		Lens:   "data-flow-taint",
+		Detail: "raw",
+		Limit:  100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.DerivedEdges) != 1 {
+		t.Fatalf("derived edges=%d, want 1: %+v", len(manifest.DerivedEdges), manifest.DerivedEdges)
+	}
+	edge := manifest.DerivedEdges[0]
 	if edge.EdgeType != "possible_sensitive_data_flow" {
 		t.Fatalf("derived edge type=%s", edge.EdgeType)
 	}
 	if edge.FromID != "runtime_event/evt-secret" || edge.ToID != "runtime_event/evt-egress" {
-		t.Fatalf("derived edge path=%s -> %s", edge.FromID, edge.ToID)
+		t.Fatalf("raw derived edge path=%s -> %s", edge.FromID, edge.ToID)
 	}
-	if edge.DerivationRule != "dataflow.same_process.secret_to_network.v1" || edge.Confidence < 0.8 {
-		t.Fatalf("derived metadata not strong enough: %+v", edge)
+}
+
+func TestGraphLensSummaryOmitsLowValueRuntimeNoise(t *testing.T) {
+	db := newLensTestDB(t)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insertLensFixture(t, db, now)
+	insertLensEvent(t, db, "evt-exit", "process_exit", `{"exit_code":0}`, now)
+	if _, err := db.Exec(`INSERT INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
+		VALUES ('edge-proc-exit', 'run-lens', 'proc-lens', 'runtime_event/evt-exit', 'runtime_process_event', 'evt-exit', ?)`, now); err != nil {
+		t.Fatal(err)
 	}
-	if !lensHasNode(manifest, "runtime_event/evt-secret", "runtime_event") {
-		t.Fatalf("secret event node missing: %+v", manifest.Nodes)
+
+	summary, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "process", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !lensHasNode(manifest, "runtime_event/evt-egress", "runtime_event") {
-		t.Fatalf("egress event node missing: %+v", manifest.Nodes)
+	if lensHasNode(summary, "runtime_event/evt-exit", "runtime_event") {
+		t.Fatalf("summary lens should omit low-value process_exit: %+v", summary.Nodes)
+	}
+
+	raw, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "process", Detail: "raw", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasNode(raw, "runtime_event/evt-exit", "runtime_event") {
+		t.Fatalf("raw lens should keep process_exit for full observability: %+v", raw.Nodes)
 	}
 }
 
@@ -149,6 +202,21 @@ func insertLensFixture(t *testing.T, db *sql.DB, now string) {
 		('edge-risk-response', 'run-lens', 'risk_signal/risk-lens', 'response_action/response-lens', 'risk_signal_response_action', 'evt-egress', ?)`,
 		now, now); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func intFromEdgeData(edge GraphLensEdge, key string) int {
+	value, ok := edge.Data[key]
+	if !ok {
+		return 0
+	}
+	switch v := value.(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	default:
+		return 0
 	}
 }
 
