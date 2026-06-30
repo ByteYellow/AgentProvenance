@@ -73,6 +73,9 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 	specs := []tableSpec{
 		{"leases", "leases", "run_id = ?", "created_at ASC, id ASC"},
 		{"sessions", "sessions", "run_id = ?", "created_at ASC, id ASC"},
+		// Correlation bindings must travel or the replayed run has correlated events
+		// with no binding, which verify flags as missing_execution_context_binding.
+		{"execution_context_bindings", "execution_context_bindings", "run_id = ?", "created_at ASC, id ASC"},
 		{"rollouts", "rollouts", "run_id = ?", "created_at ASC, id ASC"},
 		{"tool_calls", "tool_calls", "run_id = ?", "created_at ASC, id ASC"},
 		{"processes", "processes", "session_id IN (SELECT id FROM sessions WHERE run_id = ?)", "started_at ASC, id ASC"},
@@ -86,6 +89,9 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 		{"events", "events", "run_id = ?", "created_at ASC, id ASC"},
 		{"policy_decisions", "policy_decisions", "run_id = ?", "created_at ASC, id ASC"},
 		{"risk_signals", "risk_signals", "run_id = ?", "created_at ASC, id ASC"},
+		// Unified signal model (security/cost/quality/behavior) — without it the
+		// replay has no Signals & Risk and verify flags missing_policy_unified_signal.
+		{"signals", "signals", "run_id = ?", "created_at ASC, id ASC"},
 		{"response_actions", "response_actions", "run_id = ?", "created_at ASC, id ASC"},
 		{"external_effects", "external_effects", "run_id = ?", "created_at ASC, id ASC"},
 		{"evidence_events", "evidence_events", "run_id = ?", "created_at ASC, id ASC"},

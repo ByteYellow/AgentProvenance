@@ -38,6 +38,7 @@ type ImportInfo struct {
 var importTableOrder = []string{
 	"leases",
 	"sessions",
+	"execution_context_bindings",
 	"rollouts",
 	"snapshots",
 	"tool_calls",
@@ -46,6 +47,7 @@ var importTableOrder = []string{
 	"events",
 	"policy_decisions",
 	"risk_signals",
+	"signals",
 	"response_actions",
 	"external_effects",
 	"evidence_events",

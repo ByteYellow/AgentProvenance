@@ -33,7 +33,10 @@ grep -aE '169\.254\.169\.254|\.aws/credentials|agentprov-demo-secrets|api_token'
 echo "== ingest native sensor stream"
 "$BIN" --data-dir "$DD" telemetry ingest-jsonl --file "$CAP" --format native --json 2>&1 | grep -aE '"detected_format"|"read"|"ingested"|"policy_decisions"|"correlation_method"' | head
 
-echo "== materialize + taint lens"
+echo "== materialize + project unified signals + taint lens"
 "$BIN" --data-dir "$DD" graph materialize --run "$RUN" 2>&1 | tail -1
+# Project risk_signals/cost into the unified signal model so the dashboard's
+# Signals & Risk panel populates and verify has no missing_policy_unified_signal.
+"$BIN" --data-dir "$DD" signals backfill 2>&1 | tail -1
 "$BIN" --data-dir "$DD" graph lens --run "$RUN" --lens data-flow-taint 2>&1 | grep -aE 'graph_lens|derived_edge' | head
 echo "== run id: $RUN  data-dir: $DD"

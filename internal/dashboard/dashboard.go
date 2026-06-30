@@ -326,6 +326,16 @@ func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
 		sum := sha256.Sum256(data)
 		resp.SHA256 = "sha256:" + hex.EncodeToString(sum[:])
 	}
+	// Artifact objects wrap the file in a provenance envelope; show the file the
+	// node produced, not the metadata wrapper. (Evidence objects — events, policy,
+	// etc. — are left as-is so the panel shows the full signed record.)
+	mimePath := path
+	if content, srcPath, ok := unwrapArtifactContent(data); ok {
+		data = content
+		if srcPath != "" {
+			mimePath = srcPath
+		}
+	}
 	preview := data
 	if len(preview) > artifactPreviewBytes {
 		preview = preview[:artifactPreviewBytes]
@@ -341,7 +351,7 @@ func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
 	red, didRedact := redactSecrets(string(preview))
 	resp.Content = red
 	resp.Redacted = didRedact
-	resp.Mime = mimeForPath(path)
+	resp.Mime = mimeForPath(mimePath)
 	if looksLikeDiff(red) {
 		resp.Kind = "diff"
 	} else {
@@ -372,6 +382,27 @@ func (s Server) resolveArtifactPath(run, node string) (path, hash, source string
 		return p, "", "file"
 	}
 	return "", "", ""
+}
+
+// unwrapArtifactContent returns the file content inside an "artifact"-type
+// provenance object envelope (and its original path for mime detection). Evidence
+// envelopes (other types) return ok=false so they display as their full record.
+func unwrapArtifactContent(data []byte) (content []byte, path string, ok bool) {
+	var obj struct {
+		Schema  string `json:"schema"`
+		Type    string `json:"type"`
+		Payload struct {
+			Content string `json:"content"`
+			Path    string `json:"path"`
+		} `json:"payload"`
+	}
+	if json.Unmarshal(data, &obj) != nil {
+		return nil, "", false
+	}
+	if obj.Schema != "agentprov.provenance.object.v1" || obj.Type != "artifact" || obj.Payload.Content == "" {
+		return nil, "", false
+	}
+	return []byte(obj.Payload.Content), obj.Payload.Path, true
 }
 
 func isBinaryContent(data []byte) bool {
