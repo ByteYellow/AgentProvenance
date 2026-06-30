@@ -400,7 +400,23 @@ function togglePlay(){
   }, 750);
 }
 
-function selectNode(id){ SEL=(SEL===id?null:id); renderDAG(window._lg,SEL); showDetail(SEL); }
+function selectNode(id){
+  const n=id&&(window._lg.nodes||[]).find(x=>x.id===id);
+  if(n && drilldownNode(n)) return;
+  SEL=(SEL===id?null:id); renderDAG(window._lg,SEL); showDetail(SEL);
+}
+function drilldownNode(n){
+  const d=n.data||{};
+  if(!d.drilldown_lens)return false;
+  LENS=String(d.drilldown_lens||LENS);
+  DETAIL=String(d.drilldown_detail||'summary');
+  SEL=String(d.drilldown_focus||'');
+  stopPlay();
+  const ls=$('#lenssel'), ds=$('#detailsel');
+  if(ls)ls.value=LENS; if(ds)ds.value=DETAIL;
+  loadRun(cur);
+  return true;
+}
 
 const DETAIL_HINT='<span class="hint">click any node to highlight its causal chain &amp; inspect its record →</span>';
 function showDetail(id){

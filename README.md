@@ -739,14 +739,20 @@ Panels:
   It defaults to `detail=summary`: the default lens is a **Run Overview** rather
   than a raw DAG dump, and wide lenses use bounded summary nodes:
   `process_group`, `event_burst`, `file_group`, `risk_group`, and
-  `egress_group`. Security-relevant events, real exec/file changes, workspace
-  writes, policy/risk/response, and structural context are promoted into the
-  graph; low-value runtime noise stays in raw events for forensics and can be
-  requested with `detail=expanded` or `detail=raw`.
+  `egress_group`. These group nodes are **drill-down entries**, not lossy
+  replacements: clicking a group switches to the focused lens/detail needed to
+  inspect its local upstream/downstream evidence. Security-relevant events, real
+  exec/file changes, workspace writes, policy/risk/response, and structural
+  context are promoted into the graph; low-value runtime noise stays in raw
+  events for forensics and can be requested with `detail=expanded` or
+  `detail=raw`.
   **Derived edges** (e.g. `possible_sensitive_data_flow`) render dashed with
   their confidence, so an inferred flow is never mistaken for a recorded fact.
   In summary mode, noisy N x M data-flow evidence is aggregated into a
   process/tool-scope summary edge with counts and evidence refs.
+  Network egress is grouped by risk class (`risky_egress`, `dns`, `loopback`,
+  `tls`, `network`) so the default path is **overview -> question -> local
+  graph -> raw event table**, rather than rendering the whole run at once.
 - **Time-scrubber**: replay a run forward over its real event clock — watch a
   secret read, then the egress, appear in order.
 - **Side Panel**: per-node **Evidence** (ids, command/pid/path/destination,
@@ -856,7 +862,7 @@ What these mean:
 | Execution context | explicit ToolCallScope binding across run / session / attempt / tool_call / process / container / cgroup / pid |
 | Runtime causality | native `runtime_*` graph edges (tool call, process tree, snapshot, event, file) |
 | Provenance DAG | `graph trace / refs / log / materialize / objects / verify / replay` over content-addressed objects |
-| Graph Explorer lenses | `graph lens` projects the canonical graph into default, security, process, file-artifact, network-egress, data-flow-taint, agent-intent, trust-origin, and sandbox-boundary views; `summary` mode uses Run Overview plus `process_group`, `event_burst`, `file_group`, `risk_group`, and `egress_group` nodes while keeping raw events queryable, `expanded/raw` allow drill-down, and derived edges are marked with derivation rule, confidence, counts, and evidence refs |
+| Graph Explorer lenses | `graph lens` projects the canonical graph into default, security, process, file-artifact, network-egress, data-flow-taint, agent-intent, trust-origin, and sandbox-boundary views; `summary` mode uses Run Overview plus `process_group`, `event_burst`, `file_group`, `risk_group`, and `egress_group` nodes while keeping raw events queryable; group nodes carry drill-down metadata for local expansion, `expanded/raw` allow raw evidence inspection, and derived edges are marked with derivation rule, confidence, counts, and evidence refs |
 | Graph verify | checks object hashes, parent links, and the policy → risk → response → signal chain (white-box and external-telemetry runs) |
 | Correlation explain | `telemetry correlations` — raw identity, resolved context, matched binding, confidence, and time window per event |
 

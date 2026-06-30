@@ -292,7 +292,7 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 			Kind:    "runtime_event",
 			Subtype: ev.Type,
 			Label:   ev.Type,
-			Risk:    riskForEventType(ev.Type),
+			Risk:    riskForLensEvent(ev),
 			Data: map[string]any{
 				"event_id": ev.ID, "source": ev.Source, "pid": ev.PID, "ppid": ev.PPID,
 				"process_id": ev.ProcessID, "tool_call_id": ev.ToolCallID, "path": ev.Path, "destination": ev.Destination,
@@ -512,6 +512,8 @@ func summaryLensEdges(runID, lens, focus, detail string, nodes map[string]GraphL
 		return buildFileGroupEdges(runID, nodes, edges), true
 	case "security":
 		return buildSecurityRuleEdges(runID, nodes, events), true
+	case "network-egress":
+		return buildNetworkGroupEdges(runID, nodes, events), true
 	default:
 		return nil, false
 	}
@@ -529,11 +531,11 @@ func buildRunOverviewEdges(runID string, nodes map[string]GraphLensNode, events 
 		Data    map[string]any
 	}{
 		{"overview/tool_calls", fmt.Sprintf("Tool calls: %d", counts.ToolCalls), "tool_calls", "", map[string]any{"count": counts.ToolCalls}},
-		{"overview/processes", fmt.Sprintf("Process groups: %d pids", counts.RuntimeProcesses), "processes", "", map[string]any{"runtime_processes": counts.RuntimeProcesses, "logical_processes": counts.Processes}},
-		{"overview/files", fmt.Sprintf("File changes: %d", counts.Files), "files", "", map[string]any{"count": counts.Files}},
-		{"overview/egress", fmt.Sprintf("Egress: %d risky / %d total", counts.RiskyEgress, counts.Egress), "egress", riskIf(counts.RiskyEgress > 0), map[string]any{"total": counts.Egress, "risky": counts.RiskyEgress}},
-		{"overview/risks", fmt.Sprintf("Risks: %d high / %d total", counts.HighRisks, counts.Risks), "risks", riskIf(counts.HighRisks > 0), map[string]any{"total": counts.Risks, "high": counts.HighRisks}},
-		{"overview/artifacts", fmt.Sprintf("Artifacts: %d", counts.Artifacts), "artifacts", "", map[string]any{"count": counts.Artifacts}},
+		{"overview/processes", fmt.Sprintf("Process groups: %d pids", counts.RuntimeProcesses), "processes", "", map[string]any{"runtime_processes": counts.RuntimeProcesses, "logical_processes": counts.Processes, "drilldown_lens": "process", "drilldown_detail": "summary"}},
+		{"overview/files", fmt.Sprintf("File changes: %d", counts.Files), "files", "", map[string]any{"count": counts.Files, "drilldown_lens": "file-artifact", "drilldown_detail": "summary"}},
+		{"overview/egress", fmt.Sprintf("Egress: %d risky / %d total", counts.RiskyEgress, counts.Egress), "egress", riskIf(counts.RiskyEgress > 0), map[string]any{"total": counts.Egress, "risky": counts.RiskyEgress, "drilldown_lens": "network-egress", "drilldown_detail": "summary"}},
+		{"overview/risks", fmt.Sprintf("Risks: %d high / %d total", counts.HighRisks, counts.Risks), "risks", riskIf(counts.HighRisks > 0), map[string]any{"total": counts.Risks, "high": counts.HighRisks, "drilldown_lens": "security", "drilldown_detail": "summary"}},
+		{"overview/artifacts", fmt.Sprintf("Artifacts: %d", counts.Artifacts), "artifacts", "", map[string]any{"count": counts.Artifacts, "drilldown_lens": "file-artifact", "drilldown_detail": "summary"}},
 	}
 	out := make([]GraphLensEdge, 0, len(groups))
 	for i, group := range groups {
@@ -587,10 +589,10 @@ func overviewCounts(nodes map[string]GraphLensNode, events map[string]lensEvent,
 		if isNetworkEvent(ev.Type) {
 			counts.Egress++
 		}
-		if isTaintSinkEvent(ev) {
+		if isRiskyNetworkSummaryEvent(ev) {
 			counts.RiskyEgress++
 		}
-		if risk := riskForEventType(ev.Type); risk != "" {
+		if risk := riskForLensEvent(ev); risk != "" {
 			counts.Risks++
 			if isHighRisk(risk) {
 				counts.HighRisks++
@@ -615,7 +617,7 @@ func buildProcessGroupEdges(nodes map[string]GraphLensNode, events map[string]le
 			group.pids[ev.PID] = true
 		}
 		group.events[ev.Type]++
-		if riskForEventType(ev.Type) != "" || isTaintSinkEvent(ev) {
+		if riskForLensEvent(ev) != "" || isTaintSinkEvent(ev) {
 			group.risky++
 		}
 		if isNetworkEvent(ev.Type) {
@@ -646,6 +648,7 @@ func buildProcessGroupEdges(nodes map[string]GraphLensNode, events map[string]le
 			"tool_call_id": group.toolCall, "pid_count": len(group.pids), "event_count": sumIntMap(group.events),
 			"shells": group.shells, "python": group.python, "git": group.git, "package_managers": group.packageM,
 			"risky": group.risky, "workspace_writes": group.writes, "egress": group.egress,
+			"drilldown_lens": "process", "drilldown_detail": "raw", "drilldown_focus": group.toolCall,
 		}}
 		fromID := groupID
 		if group.toolCall != "" {
@@ -657,7 +660,7 @@ func buildProcessGroupEdges(nodes map[string]GraphLensNode, events map[string]le
 		for _, eventType := range topEventTypes(group.events, 4) {
 			burstID := groupID + "/event_burst/" + safeGraphID(eventType)
 			count := group.events[eventType]
-			nodes[burstID] = GraphLensNode{ID: burstID, Kind: "event_burst", Subtype: eventType, Label: fmt.Sprintf("%s: %d", eventType, count), Risk: riskForEventType(eventType), TrustOrigin: "summary", Data: map[string]any{"event_type": eventType, "count": count, "tool_call_id": group.toolCall}}
+			nodes[burstID] = GraphLensNode{ID: burstID, Kind: "event_burst", Subtype: eventType, Label: fmt.Sprintf("%s: %d", eventType, count), Risk: riskForEventType(eventType), TrustOrigin: "summary", Data: map[string]any{"event_type": eventType, "count": count, "tool_call_id": group.toolCall, "drilldown_lens": "process", "drilldown_detail": "raw", "drilldown_focus": group.toolCall}}
 			out = append(out, GraphLensEdge{ID: "summary-burst-" + safeGraphID(key+"-"+eventType), FromID: groupID, ToID: burstID, EdgeType: "process_event_burst", Data: map[string]any{"count": count, "event_type": eventType}})
 		}
 	}
@@ -696,7 +699,7 @@ func buildFileGroupEdges(runID string, nodes map[string]GraphLensNode, edges []G
 		}
 		id := "file_group/" + key
 		label := fmt.Sprintf("%s: %d", strings.ReplaceAll(key, "_", " "), count)
-		nodes[id] = GraphLensNode{ID: id, Kind: "file_group", Subtype: key, Label: label, Risk: riskIf(key == "secret_or_config"), TrustOrigin: "summary", Data: map[string]any{"category": key, "count": count}}
+		nodes[id] = GraphLensNode{ID: id, Kind: "file_group", Subtype: key, Label: label, Risk: riskIf(key == "secret_or_config"), TrustOrigin: "summary", Data: map[string]any{"category": key, "count": count, "drilldown_lens": "file-artifact", "drilldown_detail": "raw"}}
 		out = append(out, GraphLensEdge{ID: "summary-file-" + key, FromID: rootID, ToID: id, EdgeType: "run_file_group", Data: map[string]any{"category": key, "count": count}})
 	}
 	return out
@@ -727,7 +730,7 @@ func buildSecurityRuleEdges(runID string, nodes map[string]GraphLensNode, events
 		group.evidence = append(group.evidence, node.ID)
 	}
 	for _, ev := range events {
-		risk := riskForEventType(ev.Type)
+		risk := riskForLensEvent(ev)
 		if risk == "" {
 			continue
 		}
@@ -753,10 +756,82 @@ func buildSecurityRuleEdges(runID string, nodes map[string]GraphLensNode, events
 		}
 		nodes[id] = GraphLensNode{ID: id, Kind: "risk_group", Subtype: key, Label: label, Risk: fallback(group.severity, riskForDecision(decision)), TrustOrigin: "summary", Data: map[string]any{
 			"rule_id": key, "count": group.count, "decision": decision, "event_type": group.eventType, "evidence_refs": capStringSlice(group.evidence, 32), "omitted_evidence": maxInt(0, len(group.evidence)-32),
+			"drilldown_lens": "security", "drilldown_detail": "raw", "drilldown_focus": firstString(group.evidence),
 		}}
 		out = append(out, GraphLensEdge{ID: "summary-risk-" + safeGraphID(key), FromID: rootID, ToID: id, EdgeType: "run_risk_group", EvidenceRefs: capStringSlice(group.evidence, 32)})
 	}
 	return out
+}
+
+func buildNetworkGroupEdges(runID string, nodes map[string]GraphLensNode, events map[string]lensEvent) []GraphLensEdge {
+	rootID := "run/" + runID
+	nodes[rootID] = GraphLensNode{ID: rootID, Kind: "run", Label: runID, Data: map[string]any{"run_id": runID}}
+	type netGroup struct {
+		count        int
+		risky        int
+		destinations map[string]bool
+		evidence     []string
+	}
+	groups := map[string]*netGroup{}
+	for _, ev := range events {
+		if !isNetworkEvent(ev.Type) {
+			continue
+		}
+		key := networkGroupKey(ev)
+		group := groups[key]
+		if group == nil {
+			group = &netGroup{destinations: map[string]bool{}}
+			groups[key] = group
+		}
+		group.count++
+		if isRiskyNetworkSummaryEvent(ev) {
+			group.risky++
+		}
+		if ev.Destination != "" {
+			group.destinations[ev.Destination] = true
+		}
+		group.evidence = append(group.evidence, ev.NodeID)
+	}
+	keys := make([]string, 0, len(groups))
+	for key := range groups {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	out := []GraphLensEdge{}
+	for _, key := range keys {
+		group := groups[key]
+		id := "egress_group/" + safeGraphID(key)
+		destinations := capStringSlice(sortedBoolKeys(group.destinations), 12)
+		label := fmt.Sprintf("%s: %d", strings.ReplaceAll(key, "_", " "), group.count)
+		if len(destinations) > 0 {
+			label += " -> " + destinations[0]
+			if len(destinations) > 1 {
+				label += fmt.Sprintf(" +%d", len(destinations)-1)
+			}
+		}
+		nodes[id] = GraphLensNode{ID: id, Kind: "egress_group", Subtype: key, Label: label, Risk: riskIf(group.risky > 0), TrustOrigin: "summary", Data: map[string]any{
+			"group": key, "count": group.count, "risky": group.risky, "destinations": destinations,
+			"evidence_refs": capStringSlice(group.evidence, 32), "omitted_evidence": maxInt(0, len(group.evidence)-32),
+			"drilldown_lens": "network-egress", "drilldown_detail": "raw", "drilldown_focus": firstString(group.evidence),
+		}}
+		out = append(out, GraphLensEdge{ID: "summary-egress-" + safeGraphID(key), FromID: rootID, ToID: id, EdgeType: "run_egress_group", EvidenceRefs: capStringSlice(group.evidence, 32)})
+	}
+	return out
+}
+
+func networkGroupKey(ev lensEvent) string {
+	switch {
+	case isTaintSinkEvent(ev):
+		return "risky_egress"
+	case ev.Type == "dns_query":
+		return "dns"
+	case strings.HasPrefix(ev.Destination, "127.") || isLoopbackDestination(ev.Destination):
+		return "loopback"
+	case ev.Type == "tls_read" || ev.Type == "tls_write":
+		return "tls"
+	default:
+		return "network"
+	}
 }
 
 func filterGraphLensEdges(lens, focus, detail string, nodes map[string]GraphLensNode, events map[string]lensEvent, edges []GraphLensEdge) []GraphLensEdge {
@@ -812,7 +887,7 @@ func edgeMatchesLens(lens, detail string, edge GraphLensEdge, nodes map[string]G
 	switch lens {
 	case "security":
 		return strings.Contains(edge.EdgeType, "policy") || strings.Contains(edge.EdgeType, "risk") || strings.Contains(edge.EdgeType, "response") ||
-			isSecurityKind(from.Kind) || isSecurityKind(to.Kind) || riskForEventType(fromEvent.Type) != "" || riskForEventType(toEvent.Type) != ""
+			isSecurityKind(from.Kind) || isSecurityKind(to.Kind) || riskForLensEvent(fromEvent) != "" || riskForLensEvent(toEvent) != ""
 	case "process":
 		return strings.Contains(edge.EdgeType, "process") || from.Kind == "process" || to.Kind == "process" || strings.HasPrefix(edge.FromID, "runtime_process/") || strings.HasPrefix(edge.ToID, "runtime_process/")
 	case "file-artifact":
@@ -875,7 +950,7 @@ func eventIsGraphSignal(ev lensEvent) bool {
 	if ev.ID == "" {
 		return false
 	}
-	if riskForEventType(ev.Type) != "" || isNetworkEvent(ev.Type) || isSourceEvent(ev.Type, ev.Path) || isBoundaryEvent(ev.Type) {
+	if riskForLensEvent(ev) != "" || isNetworkEvent(ev.Type) || isSourceEvent(ev.Type, ev.Path) || isBoundaryEvent(ev.Type) {
 		return true
 	}
 	switch ev.Type {
@@ -1315,6 +1390,23 @@ func riskForEventType(eventType string) string {
 	}
 }
 
+func riskForLensEvent(ev lensEvent) string {
+	if ev.Type == "private_cidr" && isLoopbackDestination(ev.Destination) {
+		return ""
+	}
+	return riskForEventType(ev.Type)
+}
+
+func isRiskyNetworkSummaryEvent(ev lensEvent) bool {
+	if !isNetworkEvent(ev.Type) {
+		return false
+	}
+	if isLoopbackDestination(ev.Destination) {
+		return false
+	}
+	return isTaintSinkEvent(ev) || riskForLensEvent(ev) != ""
+}
+
 func riskForDecision(decision string) string {
 	switch strings.ToLower(decision) {
 	case "deny", "kill", "quarantine", "taint_snapshot":
@@ -1364,6 +1456,13 @@ func capStringSlice(values []string, limit int) []string {
 		return values
 	}
 	return append([]string{}, values[:limit]...)
+}
+
+func firstString(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
 }
 
 func stringsFromEdgeData(data map[string]any, key string) []string {

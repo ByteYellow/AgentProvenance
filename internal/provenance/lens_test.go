@@ -137,6 +137,7 @@ func TestGraphLensSummaryGroupsWideLenses(t *testing.T) {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	insertLensFixture(t, db, now)
 	insertLensEvent(t, db, "evt-write", "file_write", `{"path":"src/main.py","command":"python setup.py"}`, addSeconds(t, now, 2))
+	insertLensEvent(t, db, "evt-loopback-private", "private_cidr", `{"dst_ip":"127.0.0.53","comm":"systemd-resolved"}`, addSeconds(t, now, 3))
 	if _, err := db.Exec(`INSERT INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
 		VALUES ('edge-write-file', 'run-lens', 'runtime_event/evt-write', 'workspace_file/src/main.py', 'runtime_event_file', 'evt-write', ?)`, addSeconds(t, now, 2)); err != nil {
 		t.Fatal(err)
@@ -164,6 +165,20 @@ func TestGraphLensSummaryGroupsWideLenses(t *testing.T) {
 	}
 	if !lensHasKind(files, "file_group") {
 		t.Fatalf("file summary should use file_group: %+v", files.Nodes)
+	}
+
+	network, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "network-egress", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(network, "egress_group") {
+		t.Fatalf("network summary should use egress_group: %+v", network.Nodes)
+	}
+	if !lensHasDrilldown(network) {
+		t.Fatalf("summary group should expose drilldown metadata: %+v", network.Nodes)
+	}
+	if got := lensGroupInt(network, "egress_group", "loopback", "risky"); got != 0 {
+		t.Fatalf("loopback egress risky=%d, want 0", got)
 	}
 }
 
@@ -355,4 +370,29 @@ func lensHasKind(manifest GraphLensManifest, kind string) bool {
 		}
 	}
 	return false
+}
+
+func lensHasDrilldown(manifest GraphLensManifest) bool {
+	for _, node := range manifest.Nodes {
+		if node.Data != nil && stringFromAny(node.Data["drilldown_lens"]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func lensGroupInt(manifest GraphLensManifest, kind, subtype, key string) int {
+	for _, node := range manifest.Nodes {
+		if node.Kind == kind && node.Subtype == subtype {
+			switch v := node.Data[key].(type) {
+			case int:
+				return v
+			case int64:
+				return int(v)
+			case float64:
+				return int(v)
+			}
+		}
+	}
+	return 0
 }
