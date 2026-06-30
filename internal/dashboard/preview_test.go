@@ -119,6 +119,32 @@ func TestDashboardEventsNetworkGroup(t *testing.T) {
 	}
 }
 
+func TestDashboardEventsProcessBurstGroup(t *testing.T) {
+	db := newDashboardTestDB(t)
+	insertDashboardEvent(t, db, "evt-exec", "execve", `{"comm":"python3"}`)
+	insertDashboardEvent(t, db, "evt-exit", "process_exit", `{"exit_code":0}`)
+
+	req := httptest.NewRequest("GET", "/api/events?run=run-dash&lens=process&group=process_exit&focus=tool-dash", nil)
+	rec := httptest.NewRecorder()
+	(Server{DB: db}).events(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Total  int `json:"total"`
+		Events []struct {
+			ID        string `json:"id"`
+			EventType string `json:"event_type"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Total != 1 || out.Events[0].ID != "evt-exit" || out.Events[0].EventType != "process_exit" {
+		t.Fatalf("process burst should filter by tool_call + event_type: %+v", out)
+	}
+}
+
 func newDashboardTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	paths, err := store.Init(filepath.Join(t.TempDir(), ".agentprov"))

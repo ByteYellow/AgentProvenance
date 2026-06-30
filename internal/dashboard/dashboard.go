@@ -318,6 +318,10 @@ type eventQuery struct {
 func applyLensGroupFilter(q *eventQuery, lens, group string) {
 	group = strings.TrimSpace(group)
 	switch lens {
+	case "process":
+		if group != "" && group != "summary" && group != "processes" {
+			q.Types = []string{group}
+		}
 	case "network-egress":
 		q.Types = []string{"network_connect", "metadata_ip", "private_cidr", "dns_query", "network_deny", "egress_deny", "tls_write", "tls_read"}
 		switch group {
