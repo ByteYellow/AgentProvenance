@@ -76,7 +76,9 @@
   .preview .none{color:var(--mut);font-size:12px;padding:8px 0}
   .siglist{padding:8px 12px;max-height:520px;overflow:auto}
   .sig{display:flex;gap:11px;align-items:flex-start;padding:11px;border-radius:11px;transition:background .12s}
+  .sig{cursor:pointer}
   .sig:hover{background:#f5f5f7}
+  .sig.on{background:rgba(10,132,255,.08);outline:1px solid rgba(10,132,255,.24)}
   .sig+.sig{border-top:1px solid var(--line)}
   .pill{font-size:10px;font-weight:700;text-transform:uppercase;padding:3px 8px;border-radius:99px;white-space:nowrap;letter-spacing:.4px}
   .sev-high,.sev-critical,.sev-tainted{background:rgba(255,59,48,.12);color:#d70015}
@@ -474,15 +476,50 @@ function renderVerify(v){
 
 function renderSignals(sig){
   const list=$('#siglist'); const arr=(sig&&sig.signals)||[];
+  SIGS=arr;
+  if(SIG_OFFSET>=arr.length) SIG_OFFSET=Math.max(0, Math.floor((arr.length-1)/SIG_LIMIT)*SIG_LIMIT);
   $('#sigcount').textContent = arr.length? arr.length+' signal'+(arr.length>1?'s':'') : '';
   if(!arr.length){list.innerHTML='<div class="empty">no signals</div>';return;}
-  list.innerHTML=arr.map(s=>{
+  const page=arr.slice(SIG_OFFSET,SIG_OFFSET+SIG_LIMIT);
+  list.innerHTML=page.map(s=>{
     const sev=(s.severity||'low').toLowerCase();
-    return `<div class="sig"><span class="pill sev-${sev}">${esc(s.severity||s.dimension||'')}</span>
+    const focus=signalFocusID(s);
+    const active=focus&&focus===SEL?' on':'';
+    return `<div class="sig${active}" data-focus="${esc(focus)}"><span class="pill sev-${sev}">${esc(s.severity||s.dimension||'')}</span>
       <div class="body"><div class="ref">${esc(s.reference||s.type||'')}</div>
       <div class="meta">${esc(s.dimension||'')} · ${esc(s.type||'')}</div>
       ${s.recommended_action?`<div class="act">▸ ${esc(s.recommended_action)}</div>`:''}</div></div>`;
   }).join('');
+  const from=arr.length?SIG_OFFSET+1:0, to=Math.min(SIG_OFFSET+SIG_LIMIT,arr.length);
+  list.innerHTML+=`<div class="pager"><button id="sigprev" ${SIG_OFFSET<=0?'disabled':''}>‹ prev</button>
+    <span>${from}–${to} of ${arr.length}</span>
+    <button id="signext" ${SIG_OFFSET+SIG_LIMIT>=arr.length?'disabled':''}>next ›</button></div>`;
+  list.querySelectorAll('.sig[data-focus]').forEach(el=>{
+    el.onclick=()=>focusSignal(el.getAttribute('data-focus'));
+  });
+  const pv=$('#sigprev'), nx=$('#signext');
+  if(pv) pv.onclick=()=>{SIG_OFFSET=Math.max(0,SIG_OFFSET-SIG_LIMIT);renderSignals({signals:SIGS});};
+  if(nx) nx.onclick=()=>{SIG_OFFSET+=SIG_LIMIT;renderSignals({signals:SIGS});};
+}
+function signalFocusID(s){
+  if(!s)return'';
+  const kind=s.graph_ref_kind||'', id=s.graph_ref_id||'';
+  if(kind==='event'&&id)return id.startsWith('runtime_event/')?id:'runtime_event/'+id;
+  if(kind==='risk'&&id)return id.startsWith('risk_signal/')?id:'risk_signal/'+id;
+  if(kind==='policy'&&id)return id.startsWith('policy_decision/')?id:'policy_decision/'+id;
+  if(kind==='response'&&id)return id.startsWith('response_action/')?id:'response_action/'+id;
+  if(kind==='process'&&id)return id;
+  if(id)return id;
+  if(s.event_id)return 'runtime_event/'+s.event_id;
+  if(s.process_id)return s.process_id;
+  return '';
+}
+function focusSignal(id){
+  if(!id)return;
+  SEL=id; LENS='security'; DETAIL='summary'; stopPlay();
+  const ls=$('#lenssel'), ds=$('#detailsel');
+  if(ls)ls.value=LENS; if(ds)ds.value=DETAIL;
+  loadRun(cur);
 }
 
 function renderTimeline(events){
@@ -530,6 +567,7 @@ function renderProcessTree(procs){
 }
 
 let cur=null, tlOffset=0; const TL_LIMIT=50;
+let SIGS=[], SIG_OFFSET=0; const SIG_LIMIT=12;
 let LENS='default', DETAIL='summary'; const OV=new Set();
 // Time-scrubber state: TCUR=null means "show the whole run"; otherwise only
 // elements at or before TCUR are drawn. TIMES is the sorted distinct clock.

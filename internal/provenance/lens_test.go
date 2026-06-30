@@ -17,6 +17,9 @@ func TestGraphLensDataFlowDerivesSecretToNetworkEdge(t *testing.T) {
 	insertLensFixture(t, db, now)
 	insertLensEvent(t, db, "evt-dns", "network_connect", `{"dst_ip":"127.0.0.53","comm":"systemd-resolved"}`, addSeconds(t, now, 2))
 	insertLensEvent(t, db, "evt-public", "network_connect", `{"dst_ip":"150.138.1.1","comm":"model-client"}`, addSeconds(t, now, 3))
+	// A loopback destination tagged private_cidr by an upstream classifier must NOT
+	// count as exfiltration (the local DNS stub is not a private-network egress).
+	insertLensEvent(t, db, "evt-dns-priv", "private_cidr", `{"dst_ip":"127.0.0.53","comm":"systemd-resolved"}`, addSeconds(t, now, 4))
 
 	manifest, err := BuildGraphLens(db, GraphLensOptions{
 		RunID:    "run-lens",
@@ -40,7 +43,7 @@ func TestGraphLensDataFlowDerivesSecretToNetworkEdge(t *testing.T) {
 	if edge.EdgeType != "possible_sensitive_data_flow_summary" {
 		t.Fatalf("derived edge type=%s", edge.EdgeType)
 	}
-	if edge.FromID != "proc-lens" || edge.ToID == "" {
+	if edge.FromID != "runtime_process/pid/4242" || edge.ToID == "" {
 		t.Fatalf("derived edge path=%s -> %s", edge.FromID, edge.ToID)
 	}
 	if edge.DerivationRule != "dataflow.same_process.secret_to_network.aggregate.v1" || edge.Confidence < 0.8 {
@@ -81,6 +84,31 @@ func TestGraphLensRawDetailKeepsIndividualDataFlowEdges(t *testing.T) {
 	}
 	if edge.FromID != "runtime_event/evt-secret" || edge.ToID != "runtime_event/evt-egress" {
 		t.Fatalf("raw derived edge path=%s -> %s", edge.FromID, edge.ToID)
+	}
+}
+
+func TestGraphLensSummaryRequiresPIDScopeForTaintAggregation(t *testing.T) {
+	db := newLensTestDB(t)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insertLensFixture(t, db, now)
+	if _, err := db.Exec(`UPDATE events SET pid = 0 WHERE run_id = 'run-lens'`); err != nil {
+		t.Fatal(err)
+	}
+
+	summary, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "data-flow-taint", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summary.DerivedEdges) != 0 {
+		t.Fatalf("summary should not aggregate coarse process_id-only taint flows: %+v", summary.DerivedEdges)
+	}
+
+	raw, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "data-flow-taint", Detail: "raw", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw.DerivedEdges) != 1 {
+		t.Fatalf("raw detail should keep fallback evidence edge, got %d: %+v", len(raw.DerivedEdges), raw.DerivedEdges)
 	}
 }
 
@@ -135,8 +163,19 @@ func TestGraphLensFocusAndJSON(t *testing.T) {
 	if len(manifest.Edges) == 0 {
 		t.Fatalf("expected focused security edges")
 	}
+	if !lensHasNode(manifest, "policy_decision/policy-lens", "policy_decision") {
+		t.Fatalf("focused security lens should include policy node: %+v", manifest.Nodes)
+	}
+	if !lensHasNode(manifest, "risk_signal/risk-lens", "risk_signal") {
+		t.Fatalf("focused security lens should include risk node: %+v", manifest.Nodes)
+	}
+	if !lensHasNode(manifest, "response_action/response-lens", "response_action") {
+		t.Fatalf("focused security lens should include response node: %+v", manifest.Nodes)
+	}
 	for _, edge := range manifest.Edges {
-		if edge.FromID != "runtime_event/evt-egress" && edge.ToID != "runtime_event/evt-egress" {
+		if edge.FromID != "runtime_event/evt-egress" && edge.ToID != "runtime_event/evt-egress" &&
+			edge.FromID != "policy_decision/policy-lens" && edge.ToID != "policy_decision/policy-lens" &&
+			edge.FromID != "risk_signal/risk-lens" && edge.ToID != "risk_signal/risk-lens" {
 			t.Fatalf("edge escaped focus: %+v", edge)
 		}
 	}

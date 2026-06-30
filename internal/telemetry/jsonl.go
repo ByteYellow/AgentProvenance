@@ -745,8 +745,11 @@ func splitFalcoDestination(dst string) (string, string) {
 }
 
 func privateIP(raw string) bool {
+	// Loopback (127.0.0.0/8, e.g. the local DNS stub) is not an RFC1918 private
+	// network — classifying it as private_cidr would flag benign local traffic as
+	// risky egress, so only true private ranges count.
 	ip := net.ParseIP(strings.Trim(raw, "[]"))
-	return ip != nil && (ip.IsPrivate() || ip.IsLoopback())
+	return ip != nil && ip.IsPrivate()
 }
 
 func secretPath(path string) bool {

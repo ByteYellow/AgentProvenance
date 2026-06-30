@@ -477,18 +477,43 @@ func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
 func filterGraphLensEdges(lens, focus, detail string, nodes map[string]GraphLensNode, events map[string]lensEvent, edges []GraphLensEdge) []GraphLensEdge {
 	var out []GraphLensEdge
 	focus = strings.TrimSpace(focus)
+	focusIDs := map[string]bool{}
+	if focus != "" {
+		focusIDs[focus] = true
+	}
 	for _, edge := range edges {
 		if !edgeMatchesLens(lens, detail, edge, nodes, events) {
 			continue
 		}
-		if focus != "" && edge.FromID != focus && edge.ToID != focus {
-			if !strings.Contains(edge.FromID, focus) && !strings.Contains(edge.ToID, focus) {
-				continue
-			}
+		if focus != "" && !edgeTouchesFocus(edge, focusIDs, focus) {
+			continue
+		}
+		if focus != "" {
+			focusIDs[edge.FromID] = true
+			focusIDs[edge.ToID] = true
 		}
 		out = append(out, edge)
 	}
 	return out
+}
+
+func edgeTouchesFocus(edge GraphLensEdge, focusIDs map[string]bool, focus string) bool {
+	if edge.FromID == focus || edge.ToID == focus || strings.Contains(edge.FromID, focus) || strings.Contains(edge.ToID, focus) {
+		return true
+	}
+	if (focusIDs[edge.FromID] || focusIDs[edge.ToID]) && isSecurityChainEdge(edge.EdgeType) {
+		return true
+	}
+	return false
+}
+
+func isSecurityChainEdge(edgeType string) bool {
+	switch edgeType {
+	case "runtime_event_policy_decision", "policy_decision_risk_signal", "risk_signal_response_action":
+		return true
+	default:
+		return false
+	}
 }
 
 func edgeMatchesLens(lens, detail string, edge GraphLensEdge, nodes map[string]GraphLensNode, events map[string]lensEvent) bool {
@@ -606,15 +631,7 @@ func deriveGraphLensEdges(lens string, events map[string]lensEvent, detail strin
 			if src.CreatedAt != "" && sink.CreatedAt != "" && sink.CreatedAt <= src.CreatedAt {
 				continue
 			}
-			conf := 0.0
-			rule := ""
-			if src.ProcessID != "" && src.ProcessID == sink.ProcessID {
-				conf = 0.82
-				rule = "dataflow.same_process.secret_to_network.v1"
-			} else if src.ToolCallID != "" && src.ToolCallID == sink.ToolCallID {
-				conf = 0.52
-				rule = "dataflow.same_tool_call.risky_egress.v1"
-			}
+			_, _, rule, conf := taintFlowScope(src, sink, true)
 			if conf == 0 {
 				continue
 			}
@@ -659,19 +676,11 @@ func deriveAggregatedDataFlowEdges(sources, sinks []lensEvent) []GraphLensEdge {
 			if src.CreatedAt != "" && sink.CreatedAt != "" && sink.CreatedAt <= src.CreatedAt {
 				continue
 			}
-			scopeID := ""
-			scopeKey := ""
-			conf := 0.0
-			rule := ""
-			if src.ProcessID != "" && src.ProcessID == sink.ProcessID {
-				scopeID = src.ProcessID
-				scopeKey = "process:" + src.ProcessID
-				conf = 0.82
-				rule = "dataflow.same_process.secret_to_network.aggregate.v1"
-			}
+			scopeID, scopeKey, baseRule, conf := taintFlowScope(src, sink, false)
 			if scopeID == "" {
 				continue
 			}
+			rule := strings.Replace(baseRule, ".v1", ".aggregate.v1", 1)
 			toID := "egress_group/" + safeGraphID(scopeKey)
 			key := scopeKey + "|" + rule
 			group := groups[key]
@@ -928,7 +937,45 @@ func isSourceEvent(eventType, path string) bool {
 	return strings.Contains(path, ".ssh") || strings.Contains(path, ".aws") || strings.Contains(path, "credential") || strings.Contains(path, "secret") || strings.Contains(path, "token")
 }
 
+// taintFlowScope returns the scope a (source, sink) pair shares for a sensitive
+// data-flow edge — the from-node, a grouping key, the rule and confidence. It
+// prefers the OS pid (an exfiltration happens within ONE process, and the
+// correlated process_id can be a single coarse id for a whole captured run), then
+// falls back to process_id and tool_call for events without a pid. Returns conf=0
+// when the pair shares no scope (so they are not a flow).
+func taintFlowScope(src, sink lensEvent, allowFallback bool) (fromNode, scopeKey, rule string, conf float64) {
+	switch {
+	case src.PID > 0 && sink.PID > 0:
+		if src.PID != sink.PID {
+			return "", "", "", 0
+		}
+		return fmt.Sprintf("runtime_process/pid/%d", src.PID), fmt.Sprintf("pid:%d", src.PID),
+			"dataflow.same_process.secret_to_network.v1", 0.82
+	case allowFallback && src.ProcessID != "" && src.ProcessID == sink.ProcessID:
+		return src.ProcessID, "process:" + src.ProcessID, "dataflow.same_process.secret_to_network.v1", 0.8
+	case allowFallback && src.ToolCallID != "" && src.ToolCallID == sink.ToolCallID:
+		return src.ToolCallID, "tool_call:" + src.ToolCallID, "dataflow.same_tool_call.risky_egress.v1", 0.52
+	}
+	return "", "", "", 0
+}
+
+// isLoopbackDestination reports whether a destination is the local host (e.g. the
+// systemd-resolved DNS stub 127.0.0.53) — local traffic is not exfiltration.
+func isLoopbackDestination(destination string) bool {
+	host := strings.Trim(strings.TrimSpace(destination), "[]")
+	if i := strings.LastIndex(host, ":"); i > 0 && strings.Count(host, ":") == 1 {
+		host = host[:i]
+	}
+	addr, err := netip.ParseAddr(host)
+	return err == nil && addr.IsLoopback()
+}
+
 func isTaintSinkEvent(ev lensEvent) bool {
+	// A connection to localhost is not exfiltration, even if an upstream classifier
+	// tagged it private_cidr (127.0.0.0/8 is loopback, not an RFC1918 private net).
+	if isLoopbackDestination(ev.Destination) {
+		return false
+	}
 	switch ev.Type {
 	case "metadata_ip", "private_cidr", "network_deny", "egress_deny":
 		return true
