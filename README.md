@@ -736,10 +736,13 @@ Panels:
   process tree, file/artifact lineage, network egress, **data-flow/taint**,
   agent intent, trust origin, sandbox boundary — with **risk/trust overlays**,
   click-to-focus on a node's causal lineage, and a Sugiyama-layered DAG.
-  It defaults to `detail=summary`: security-relevant events, real exec/file
-  changes, workspace writes, policy/risk/response, and structural context are
-  promoted into the graph; low-value runtime noise stays in raw events for
-  forensics and can be requested with `detail=expanded` or `detail=raw`.
+  It defaults to `detail=summary`: the default lens is a **Run Overview** rather
+  than a raw DAG dump, and wide lenses use bounded summary nodes:
+  `process_group`, `event_burst`, `file_group`, `risk_group`, and
+  `egress_group`. Security-relevant events, real exec/file changes, workspace
+  writes, policy/risk/response, and structural context are promoted into the
+  graph; low-value runtime noise stays in raw events for forensics and can be
+  requested with `detail=expanded` or `detail=raw`.
   **Derived edges** (e.g. `possible_sensitive_data_flow`) render dashed with
   their confidence, so an inferred flow is never mistaken for a recorded fact.
   In summary mode, noisy N x M data-flow evidence is aggregated into a
@@ -853,7 +856,7 @@ What these mean:
 | Execution context | explicit ToolCallScope binding across run / session / attempt / tool_call / process / container / cgroup / pid |
 | Runtime causality | native `runtime_*` graph edges (tool call, process tree, snapshot, event, file) |
 | Provenance DAG | `graph trace / refs / log / materialize / objects / verify / replay` over content-addressed objects |
-| Graph Explorer lenses | `graph lens` projects the canonical graph into default, security, process, file-artifact, network-egress, data-flow-taint, agent-intent, trust-origin, and sandbox-boundary views; `summary` mode promotes filtered high-value telemetry into the graph while keeping raw events queryable, `expanded/raw` allow drill-down, and derived edges are marked with derivation rule, confidence, counts, and evidence refs |
+| Graph Explorer lenses | `graph lens` projects the canonical graph into default, security, process, file-artifact, network-egress, data-flow-taint, agent-intent, trust-origin, and sandbox-boundary views; `summary` mode uses Run Overview plus `process_group`, `event_burst`, `file_group`, `risk_group`, and `egress_group` nodes while keeping raw events queryable, `expanded/raw` allow drill-down, and derived edges are marked with derivation rule, confidence, counts, and evidence refs |
 | Graph verify | checks object hashes, parent links, and the policy → risk → response → signal chain (white-box and external-telemetry runs) |
 | Correlation explain | `telemetry correlations` — raw identity, resolved context, matched binding, confidence, and time window per event |
 

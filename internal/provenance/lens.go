@@ -111,6 +111,28 @@ type lensEvent struct {
 	Destination string
 }
 
+type processGroup struct {
+	toolCall string
+	pids     map[int64]bool
+	events   map[string]int
+	shells   int
+	python   int
+	git      int
+	packageM int
+	risky    int
+	writes   int
+	egress   int
+}
+
+type ruleGroup struct {
+	count     int
+	decision  string
+	severity  string
+	action    string
+	evidence  []string
+	eventType string
+}
+
 func BuildGraphLens(db *sql.DB, opts GraphLensOptions) (GraphLensManifest, error) {
 	opts.RunID = strings.TrimSpace(opts.RunID)
 	if opts.RunID == "" {
@@ -131,7 +153,10 @@ func BuildGraphLens(db *sql.DB, opts GraphLensOptions) (GraphLensManifest, error
 	}
 	derived := deriveGraphLensEdges(lens, events, detail)
 	allEdges := append(edges, derived...)
-	filteredEdges := filterGraphLensEdges(lens, opts.Focus, detail, nodes, events, allEdges)
+	filteredEdges, summarized := summaryLensEdges(opts.RunID, lens, opts.Focus, detail, nodes, events, allEdges)
+	if !summarized {
+		filteredEdges = filterGraphLensEdges(lens, opts.Focus, detail, nodes, events, allEdges)
+	}
 	manifest := GraphLensManifest{
 		SchemaVersion:   graphLensSchemaVersion,
 		RunID:           opts.RunID,
@@ -472,6 +497,266 @@ func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
 		edges = append(edges, edge)
 	}
 	return edges, rows.Err()
+}
+
+func summaryLensEdges(runID, lens, focus, detail string, nodes map[string]GraphLensNode, events map[string]lensEvent, edges []GraphLensEdge) ([]GraphLensEdge, bool) {
+	if detail != "summary" || strings.TrimSpace(focus) != "" {
+		return nil, false
+	}
+	switch lens {
+	case "default":
+		return buildRunOverviewEdges(runID, nodes, events, edges), true
+	case "process":
+		return buildProcessGroupEdges(nodes, events), true
+	case "file-artifact":
+		return buildFileGroupEdges(runID, nodes, edges), true
+	case "security":
+		return buildSecurityRuleEdges(runID, nodes, events), true
+	default:
+		return nil, false
+	}
+}
+
+func buildRunOverviewEdges(runID string, nodes map[string]GraphLensNode, events map[string]lensEvent, edges []GraphLensEdge) []GraphLensEdge {
+	runNode := GraphLensNode{ID: "run/" + runID, Kind: "run", Label: runID, Data: map[string]any{"run_id": runID}}
+	nodes[runNode.ID] = runNode
+	counts := overviewCounts(nodes, events, edges)
+	groups := []struct {
+		ID      string
+		Label   string
+		Subtype string
+		Risk    string
+		Data    map[string]any
+	}{
+		{"overview/tool_calls", fmt.Sprintf("Tool calls: %d", counts.ToolCalls), "tool_calls", "", map[string]any{"count": counts.ToolCalls}},
+		{"overview/processes", fmt.Sprintf("Process groups: %d pids", counts.RuntimeProcesses), "processes", "", map[string]any{"runtime_processes": counts.RuntimeProcesses, "logical_processes": counts.Processes}},
+		{"overview/files", fmt.Sprintf("File changes: %d", counts.Files), "files", "", map[string]any{"count": counts.Files}},
+		{"overview/egress", fmt.Sprintf("Egress: %d risky / %d total", counts.RiskyEgress, counts.Egress), "egress", riskIf(counts.RiskyEgress > 0), map[string]any{"total": counts.Egress, "risky": counts.RiskyEgress}},
+		{"overview/risks", fmt.Sprintf("Risks: %d high / %d total", counts.HighRisks, counts.Risks), "risks", riskIf(counts.HighRisks > 0), map[string]any{"total": counts.Risks, "high": counts.HighRisks}},
+		{"overview/artifacts", fmt.Sprintf("Artifacts: %d", counts.Artifacts), "artifacts", "", map[string]any{"count": counts.Artifacts}},
+	}
+	out := make([]GraphLensEdge, 0, len(groups))
+	for i, group := range groups {
+		nodes[group.ID] = GraphLensNode{ID: group.ID, Kind: "overview_group", Subtype: group.Subtype, Label: group.Label, Risk: group.Risk, TrustOrigin: "summary", Data: group.Data}
+		out = append(out, GraphLensEdge{
+			ID:        fmt.Sprintf("summary-overview-%d", i),
+			FromID:    runNode.ID,
+			ToID:      group.ID,
+			EdgeType:  "overview_contains",
+			CreatedAt: "",
+			Data:      group.Data,
+		})
+	}
+	return out
+}
+
+type overviewMetricCounts struct {
+	ToolCalls        int
+	Processes        int
+	RuntimeProcesses int
+	Files            int
+	Egress           int
+	RiskyEgress      int
+	Risks            int
+	HighRisks        int
+	Artifacts        int
+}
+
+func overviewCounts(nodes map[string]GraphLensNode, events map[string]lensEvent, edges []GraphLensEdge) overviewMetricCounts {
+	var counts overviewMetricCounts
+	for _, node := range nodes {
+		switch node.Kind {
+		case "tool_call":
+			counts.ToolCalls++
+		case "process":
+			counts.Processes++
+		case "runtime_process":
+			counts.RuntimeProcesses++
+		case "file":
+			counts.Files++
+		case "artifact":
+			counts.Artifacts++
+		case "risk_signal":
+			counts.Risks++
+			if isHighRisk(node.Risk) || isHighRisk(node.Subtype) {
+				counts.HighRisks++
+			}
+		}
+	}
+	for _, ev := range events {
+		if isNetworkEvent(ev.Type) {
+			counts.Egress++
+		}
+		if isTaintSinkEvent(ev) {
+			counts.RiskyEgress++
+		}
+		if risk := riskForEventType(ev.Type); risk != "" {
+			counts.Risks++
+			if isHighRisk(risk) {
+				counts.HighRisks++
+			}
+		}
+	}
+	return counts
+}
+
+func buildProcessGroupEdges(nodes map[string]GraphLensNode, events map[string]lensEvent) []GraphLensEdge {
+	rootID := "process_overview"
+	nodes[rootID] = GraphLensNode{ID: rootID, Kind: "overview_group", Subtype: "processes", Label: "Process overview", TrustOrigin: "summary"}
+	groups := map[string]*processGroup{}
+	for _, ev := range events {
+		key := fallback(ev.ToolCallID, "unscoped")
+		group := groups[key]
+		if group == nil {
+			group = &processGroup{toolCall: ev.ToolCallID, pids: map[int64]bool{}, events: map[string]int{}}
+			groups[key] = group
+		}
+		if ev.PID > 0 {
+			group.pids[ev.PID] = true
+		}
+		group.events[ev.Type]++
+		if riskForEventType(ev.Type) != "" || isTaintSinkEvent(ev) {
+			group.risky++
+		}
+		if isNetworkEvent(ev.Type) {
+			group.egress++
+		}
+		if ev.Type == "file_write" || ev.Type == "file_create" || ev.Type == "file_modify" {
+			group.writes++
+		}
+		cmd := strings.ToLower(payloadString(ev.Payload, "command", "cmdline", "comm", "proc"))
+		switch {
+		case strings.Contains(cmd, "python"):
+			group.python++
+		case strings.Contains(cmd, "git"):
+			group.git++
+		case strings.Contains(cmd, "npm") || strings.Contains(cmd, "pip") || strings.Contains(cmd, "setup.py"):
+			group.packageM++
+		case strings.Contains(cmd, "sh") || strings.Contains(cmd, "bash") || strings.Contains(cmd, "zsh"):
+			group.shells++
+		}
+	}
+	keys := sortedProcessGroupKeys(groups)
+	out := []GraphLensEdge{}
+	for _, key := range keys {
+		group := groups[key]
+		groupID := "process_group/" + safeGraphID(key)
+		label := fmt.Sprintf("process group: %d pids", len(group.pids))
+		nodes[groupID] = GraphLensNode{ID: groupID, Kind: "process_group", Subtype: "summary", Label: label, Risk: riskIf(group.risky > 0), TrustOrigin: "summary", Data: map[string]any{
+			"tool_call_id": group.toolCall, "pid_count": len(group.pids), "event_count": sumIntMap(group.events),
+			"shells": group.shells, "python": group.python, "git": group.git, "package_managers": group.packageM,
+			"risky": group.risky, "workspace_writes": group.writes, "egress": group.egress,
+		}}
+		fromID := groupID
+		if group.toolCall != "" {
+			fromID = group.toolCall
+		} else {
+			fromID = rootID
+		}
+		out = append(out, GraphLensEdge{ID: "summary-process-" + safeGraphID(key), FromID: fromID, ToID: groupID, EdgeType: "tool_call_process_group"})
+		for _, eventType := range topEventTypes(group.events, 4) {
+			burstID := groupID + "/event_burst/" + safeGraphID(eventType)
+			count := group.events[eventType]
+			nodes[burstID] = GraphLensNode{ID: burstID, Kind: "event_burst", Subtype: eventType, Label: fmt.Sprintf("%s: %d", eventType, count), Risk: riskForEventType(eventType), TrustOrigin: "summary", Data: map[string]any{"event_type": eventType, "count": count, "tool_call_id": group.toolCall}}
+			out = append(out, GraphLensEdge{ID: "summary-burst-" + safeGraphID(key+"-"+eventType), FromID: groupID, ToID: burstID, EdgeType: "process_event_burst", Data: map[string]any{"count": count, "event_type": eventType}})
+		}
+	}
+	return out
+}
+
+func buildFileGroupEdges(runID string, nodes map[string]GraphLensNode, edges []GraphLensEdge) []GraphLensEdge {
+	rootID := "run/" + runID
+	nodes[rootID] = GraphLensNode{ID: rootID, Kind: "run", Label: runID, Data: map[string]any{"run_id": runID}}
+	counts := map[string]int{}
+	for id, node := range nodes {
+		if node.Kind != "file" {
+			continue
+		}
+		path := strings.TrimPrefix(id, "workspace_file/")
+		counts[filePathCategory(path)]++
+	}
+	for _, edge := range edges {
+		for _, id := range []string{edge.FromID, edge.ToID} {
+			if !strings.HasPrefix(id, "workspace_file/") {
+				continue
+			}
+			if _, exists := nodes[id]; exists {
+				continue
+			}
+			path := strings.TrimPrefix(id, "workspace_file/")
+			counts[filePathCategory(path)]++
+		}
+	}
+	keys := []string{"source", "build_artifact", "dependency_cache", "secret_or_config", "other"}
+	out := []GraphLensEdge{}
+	for _, key := range keys {
+		count := counts[key]
+		if count == 0 {
+			continue
+		}
+		id := "file_group/" + key
+		label := fmt.Sprintf("%s: %d", strings.ReplaceAll(key, "_", " "), count)
+		nodes[id] = GraphLensNode{ID: id, Kind: "file_group", Subtype: key, Label: label, Risk: riskIf(key == "secret_or_config"), TrustOrigin: "summary", Data: map[string]any{"category": key, "count": count}}
+		out = append(out, GraphLensEdge{ID: "summary-file-" + key, FromID: rootID, ToID: id, EdgeType: "run_file_group", Data: map[string]any{"category": key, "count": count}})
+	}
+	return out
+}
+
+func buildSecurityRuleEdges(runID string, nodes map[string]GraphLensNode, events map[string]lensEvent) []GraphLensEdge {
+	rootID := "run/" + runID
+	nodes[rootID] = GraphLensNode{ID: rootID, Kind: "run", Label: runID, Data: map[string]any{"run_id": runID}}
+	groups := map[string]*ruleGroup{}
+	for _, node := range nodes {
+		if node.Kind != "policy_decision" {
+			continue
+		}
+		rule := stringFromAny(node.Data["rule_id"])
+		if rule == "" {
+			rule = stringFromAny(node.Data["reason"])
+		}
+		if rule == "" {
+			rule = "policy"
+		}
+		group := groups[rule]
+		if group == nil {
+			group = &ruleGroup{}
+			groups[rule] = group
+		}
+		group.count++
+		group.decision = fallback(stringFromAny(node.Data["decision"]), group.decision)
+		group.evidence = append(group.evidence, node.ID)
+	}
+	for _, ev := range events {
+		risk := riskForEventType(ev.Type)
+		if risk == "" {
+			continue
+		}
+		group := groups[ev.Type]
+		if group == nil {
+			group = &ruleGroup{}
+			groups[ev.Type] = group
+		}
+		group.count++
+		group.severity = risk
+		group.eventType = ev.Type
+		group.evidence = append(group.evidence, ev.NodeID)
+	}
+	keys := sortedRuleGroupKeys(groups)
+	out := []GraphLensEdge{}
+	for _, key := range keys {
+		group := groups[key]
+		id := "risk_group/" + safeGraphID(key)
+		label := fmt.Sprintf("%s: %d", key, group.count)
+		decision := fallback(group.decision, group.action)
+		if decision != "" {
+			label += " -> " + decision
+		}
+		nodes[id] = GraphLensNode{ID: id, Kind: "risk_group", Subtype: key, Label: label, Risk: fallback(group.severity, riskForDecision(decision)), TrustOrigin: "summary", Data: map[string]any{
+			"rule_id": key, "count": group.count, "decision": decision, "event_type": group.eventType, "evidence_refs": capStringSlice(group.evidence, 32), "omitted_evidence": maxInt(0, len(group.evidence)-32),
+		}}
+		out = append(out, GraphLensEdge{ID: "summary-risk-" + safeGraphID(key), FromID: rootID, ToID: id, EdgeType: "run_risk_group", EvidenceRefs: capStringSlice(group.evidence, 32)})
+	}
+	return out
 }
 
 func filterGraphLensEdges(lens, focus, detail string, nodes map[string]GraphLensNode, events map[string]lensEvent, edges []GraphLensEdge) []GraphLensEdge {
@@ -849,11 +1134,11 @@ func cleanOverlays(values []string) []string {
 func graphLensRules(lens string) []string {
 	switch lens {
 	case "security":
-		return []string{"policy/risk/response edges", "high-risk runtime events"}
+		return []string{"risk rule groups", "policy/risk/response path on focus", "high-risk runtime events"}
 	case "process":
-		return []string{"process tree", "tool_call->process", "process->runtime_event"}
+		return []string{"process groups by tool_call", "event bursts", "raw detail for full process tree"}
 	case "file-artifact":
-		return []string{"workspace file edges", "artifact lineage"}
+		return []string{"file path groups", "artifact lineage", "raw detail for individual files"}
 	case "network-egress":
 		return []string{"network_connect", "metadata_ip", "private_cidr", "dns_query", "tls_read/write"}
 	case "data-flow-taint":
@@ -865,18 +1150,18 @@ func graphLensRules(lens string) []string {
 	case "sandbox-boundary":
 		return []string{"boundary/tamper/privilege events", "snapshot/attempt edges"}
 	default:
-		return []string{"canonical graph edges"}
+		return []string{"run overview groups", "filtered high-value telemetry", "raw detail for full graph"}
 	}
 }
 
 func graphLensLayout(lens string) string {
 	switch lens {
 	case "security":
-		return "signature_chain"
+		return "risk_overview"
 	case "process":
-		return "process_tree"
+		return "process_groups"
 	case "file-artifact":
-		return "lineage"
+		return "file_groups"
 	case "network-egress":
 		return "egress_map"
 	case "data-flow-taint":
@@ -888,7 +1173,7 @@ func graphLensLayout(lens string) string {
 	case "sandbox-boundary":
 		return "boundary_map"
 	default:
-		return "graph_explorer"
+		return "run_overview"
 	}
 }
 
@@ -1100,6 +1385,99 @@ func stringsFromEdgeData(data map[string]any, key string) []string {
 	default:
 		return nil
 	}
+}
+
+func sortedProcessGroupKeys(groups map[string]*processGroup) []string {
+	keys := make([]string, 0, len(groups))
+	for key := range groups {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedRuleGroupKeys(groups map[string]*ruleGroup) []string {
+	keys := make([]string, 0, len(groups))
+	for key := range groups {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func topEventTypes(counts map[string]int, limit int) []string {
+	type pair struct {
+		key   string
+		count int
+	}
+	pairs := make([]pair, 0, len(counts))
+	for key, count := range counts {
+		pairs = append(pairs, pair{key: key, count: count})
+	}
+	sort.Slice(pairs, func(i, j int) bool {
+		if pairs[i].count != pairs[j].count {
+			return pairs[i].count > pairs[j].count
+		}
+		return pairs[i].key < pairs[j].key
+	})
+	if limit > 0 && len(pairs) > limit {
+		pairs = pairs[:limit]
+	}
+	out := make([]string, 0, len(pairs))
+	for _, pair := range pairs {
+		out = append(out, pair.key)
+	}
+	return out
+}
+
+func sumIntMap(values map[string]int) int {
+	total := 0
+	for _, value := range values {
+		total += value
+	}
+	return total
+}
+
+func filePathCategory(path string) string {
+	p := strings.ToLower(path)
+	switch {
+	case strings.Contains(p, "node_modules/"), strings.Contains(p, ".venv/"), strings.Contains(p, "site-packages/"), strings.Contains(p, "__pycache__/"), strings.Contains(p, ".cache/"):
+		return "dependency_cache"
+	case strings.HasPrefix(p, "dist/"), strings.HasPrefix(p, "build/"), strings.HasSuffix(p, ".pyc"), strings.HasSuffix(p, ".egg"), strings.HasSuffix(p, ".whl"), strings.HasSuffix(p, ".so"):
+		return "build_artifact"
+	case strings.Contains(p, ".ssh"), strings.Contains(p, ".aws"), strings.Contains(p, "credential"), strings.Contains(p, "secret"), strings.Contains(p, "token"), strings.HasSuffix(p, ".env"):
+		return "secret_or_config"
+	case strings.HasSuffix(p, ".py"), strings.HasSuffix(p, ".go"), strings.HasSuffix(p, ".js"), strings.HasSuffix(p, ".ts"), strings.HasSuffix(p, ".tsx"), strings.HasSuffix(p, ".java"), strings.HasSuffix(p, ".rs"), strings.HasSuffix(p, ".md"):
+		return "source"
+	default:
+		return "other"
+	}
+}
+
+func riskIf(ok bool) string {
+	if ok {
+		return "high"
+	}
+	return ""
+}
+
+func isHighRisk(risk string) bool {
+	switch strings.ToLower(risk) {
+	case "high", "critical", "tainted":
+		return true
+	default:
+		return false
+	}
+}
+
+func stringFromAny(value any) string {
+	if value == nil {
+		return ""
+	}
+	if s, ok := value.(string); ok {
+		return s
+	}
+	return fmt.Sprint(value)
 }
 
 func valueFromMap(data map[string]any, key string) any {

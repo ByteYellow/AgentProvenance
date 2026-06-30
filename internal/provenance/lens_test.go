@@ -112,6 +112,61 @@ func TestGraphLensSummaryRequiresPIDScopeForTaintAggregation(t *testing.T) {
 	}
 }
 
+func TestGraphLensDefaultSummaryUsesRunOverview(t *testing.T) {
+	db := newLensTestDB(t)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insertLensFixture(t, db, now)
+
+	manifest, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "default", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Query.LayoutHint != "run_overview" {
+		t.Fatalf("layout=%s, want run_overview", manifest.Query.LayoutHint)
+	}
+	if !lensHasNode(manifest, "overview/processes", "overview_group") {
+		t.Fatalf("overview process group missing: %+v", manifest.Nodes)
+	}
+	if lensHasNode(manifest, "runtime_event/evt-secret", "runtime_event") {
+		t.Fatalf("default summary should not render raw runtime events: %+v", manifest.Nodes)
+	}
+}
+
+func TestGraphLensSummaryGroupsWideLenses(t *testing.T) {
+	db := newLensTestDB(t)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insertLensFixture(t, db, now)
+	insertLensEvent(t, db, "evt-write", "file_write", `{"path":"src/main.py","command":"python setup.py"}`, addSeconds(t, now, 2))
+	if _, err := db.Exec(`INSERT INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
+		VALUES ('edge-write-file', 'run-lens', 'runtime_event/evt-write', 'workspace_file/src/main.py', 'runtime_event_file', 'evt-write', ?)`, addSeconds(t, now, 2)); err != nil {
+		t.Fatal(err)
+	}
+
+	process, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "process", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(process, "process_group") || !lensHasKind(process, "event_burst") {
+		t.Fatalf("process summary should use process_group + event_burst: %+v", process.Nodes)
+	}
+
+	security, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "security", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(security, "risk_group") {
+		t.Fatalf("security summary should use risk_group: %+v", security.Nodes)
+	}
+
+	files, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "file-artifact", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(files, "file_group") {
+		t.Fatalf("file summary should use file_group: %+v", files.Nodes)
+	}
+}
+
 func TestGraphLensSummaryOmitsLowValueRuntimeNoise(t *testing.T) {
 	db := newLensTestDB(t)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -287,6 +342,15 @@ func addSeconds(t *testing.T, ts string, seconds int) string {
 func lensHasNode(manifest GraphLensManifest, id, kind string) bool {
 	for _, node := range manifest.Nodes {
 		if node.ID == id && node.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func lensHasKind(manifest GraphLensManifest, kind string) bool {
+	for _, node := range manifest.Nodes {
+		if node.Kind == kind {
 			return true
 		}
 	}
