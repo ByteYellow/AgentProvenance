@@ -758,6 +758,10 @@ Panels:
   Network egress is grouped by risk class (`risky_egress`, `dns`, `loopback`,
   `tls`, `network`) so the default path is **overview -> question -> local
   graph -> raw event table**, rather than rendering the whole run at once.
+  Selecting a node exposes explicit local expansion controls:
+  `lineage`, `upstream`, `downstream`, `children`, and `raw events`.
+  These controls dim or reveal only the local explain path; raw telemetry stays
+  paged in Evidence Drilldown instead of being drawn into the DAG.
 - **Time-scrubber**: replay a run forward over its real event clock — watch a
   secret read, then the egress, appear in order.
 - **Side Panel**: per-node **Evidence** (ids, command/pid/path/destination,
@@ -871,7 +875,7 @@ What these mean:
 | Execution context | explicit ToolCallScope binding across run / session / attempt / tool_call / process / container / cgroup / pid |
 | Runtime causality | native `runtime_*` graph edges (tool call, process tree, snapshot, event, file) |
 | Provenance DAG | `graph trace / refs / log / materialize / objects / verify / replay` over content-addressed objects |
-| Graph Explorer lenses | `graph lens` projects the canonical graph into default, security, process, file-artifact, network-egress, data-flow-taint, agent-intent, trust-origin, and sandbox-boundary views; `summary` mode uses Run Overview plus `process_group`, `event_burst`, `file_group`, `risk_group`, and `egress_group` nodes while keeping raw events queryable; group nodes carry drill-down metadata for local expansion, `expanded/raw` allow raw evidence inspection, and derived edges are marked with derivation rule, confidence, counts, and evidence refs |
+| Graph Explorer lenses | `graph lens` projects the canonical graph into default, security, process, file-artifact, network-egress, data-flow-taint, agent-intent, trust-origin, and sandbox-boundary views; `summary` mode uses Run Overview plus `process_group`, `event_burst`, `file_group`, `risk_group`, and `egress_group` nodes while keeping raw events queryable; group nodes carry drill-down metadata for local expansion, node selection supports lineage/upstream/downstream/children/raw-events controls, and derived edges are marked with derivation rule, confidence, counts, and evidence refs |
 | Graph verify | checks object hashes, parent links, and the policy → risk → response → signal chain (white-box and external-telemetry runs) |
 | Correlation explain | `telemetry correlations` — raw identity, resolved context, matched binding, confidence, and time window per event |
 

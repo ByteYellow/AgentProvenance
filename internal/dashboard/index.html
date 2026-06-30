@@ -73,6 +73,10 @@
   .detail dt{color:var(--mut)}
   .detail dd{margin:0;font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;word-break:break-word;white-space:pre-wrap;color:#1d1d1f}
   .detail .sec{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);margin:16px 0 8px;border-top:1px solid var(--line);padding-top:12px}
+  .expandbar{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+  .expandbar button{border:1px solid var(--line2);background:#fff;color:var(--tx);border-radius:8px;padding:5px 10px;font-size:11.5px;cursor:pointer}
+  .expandbar button:hover{border-color:var(--acc);color:var(--acc);background:rgba(0,113,227,.06)}
+  .expandbar button.on{border-color:var(--acc);background:rgba(0,113,227,.1);color:var(--acc);font-weight:650}
   .preview .meta{font-size:11px;color:var(--mut);font-family:ui-monospace,monospace;margin-bottom:7px;display:flex;gap:9px;flex-wrap:wrap;align-items:center}
   .preview .redacted{color:#b25e00;background:rgba(255,159,10,.16);font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px}
   .preview pre{margin:0;max-height:300px;overflow:auto;background:#1d1d1f;color:#e8e8ed;border-radius:11px;padding:13px 15px;font:11.5px/1.55 ui-monospace,SFMono-Regular,monospace;white-space:pre;tab-size:2}
@@ -293,22 +297,32 @@ function layout(nodes,edges){
 }
 
 let SEL=null;
-// lineage returns the nodes + edge-indices on the causal chain through sel
-// (everything upstream via incoming edges and downstream via outgoing edges).
-function lineage(g,sel){
+// localScope returns the nodes + edge-indices for the current focused local
+// explain mode. It keeps graph rendering bounded: selecting a node does not
+// globally switch to raw; it only expands upstream/downstream/children around
+// that node, while raw telemetry stays in the Evidence Drilldown table.
+function localScope(g,sel,mode){
   if(!sel) return null;
   const out={},inc={};
   g.edges.forEach((e,i)=>{(out[e.from]=out[e.from]||[]).push([e.to,i]);(inc[e.to]=inc[e.to]||[]).push([e.from,i]);});
   const nodes=new Set([sel]), edges=new Set();
   const walk=(id,adj)=>{(adj[id]||[]).forEach(([nx,i])=>{edges.add(i); if(!nodes.has(nx)){nodes.add(nx);walk(nx,adj);}});};
-  walk(sel,out); walk(sel,inc);
+  if(mode==='children'){
+    (out[sel]||[]).forEach(([nx,i])=>{edges.add(i);nodes.add(nx);});
+  }else if(mode==='upstream'){
+    walk(sel,inc);
+  }else if(mode==='downstream'){
+    walk(sel,out);
+  }else{
+    walk(sel,out); walk(sel,inc);
+  }
   return {nodes,edges};
 }
 function renderDAG(g,sel){
   const el=$('#dag');
   if(!g.nodes.length){el.innerHTML='<div class="empty">no nodes for this lens</div>';return;}
   const {pos,W,H}=layout(g.nodes,g.edges);
-  const lin=lineage(g,sel);
+  const lin=localScope(g,sel,EXPAND_MODE);
   const nOn=id=>!lin||lin.nodes.has(id);
   const showRisk=OV.has('risk'), showTrust=OV.has('trust');
   let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="-apple-system,sans-serif">`;
@@ -413,6 +427,7 @@ function renderQuestionEntries(m){
       LENS=btn.getAttribute('data-lens')||'default';
       DETAIL='summary';
       SEL='';
+      EXPAND_MODE='lineage';
       setEvidenceFilterFromNode(node);
       EV_OFFSET=0;
       stopPlay();
@@ -460,6 +475,7 @@ function selectNode(id){
   const n=id&&(window._lg.nodes||[]).find(x=>x.id===id);
   if(n && drilldownNode(n)) return;
   SEL=(SEL===id?null:id);
+  EXPAND_MODE='lineage';
   setEvidenceFilterFromNode(n||null);
   EV_OFFSET=0;
   renderDAG(window._lg,SEL); showDetail(SEL);
@@ -471,6 +487,7 @@ function drilldownNode(n){
   LENS=String(d.drilldown_lens||LENS);
   DETAIL=String(d.drilldown_detail||'summary');
   SEL=String(d.drilldown_focus||'');
+  EXPAND_MODE='lineage';
   setEvidenceFilterFromNode(n);
   EV_OFFSET=0;
   stopPlay();
@@ -516,9 +533,27 @@ function showDetail(id){
   const badges=`<span class="k">${esc(n.kind)}</span>`+
     (n.risk?` <span class="k risk">risk: ${esc(n.risk)}</span>`:'')+
     (n.trust_origin?` <span class="k trust">${esc(n.trust_origin)}</span>`:'');
+  const expandButtons=['lineage','upstream','downstream','children'].map(mode=>
+    `<button data-expand="${mode}" class="${EXPAND_MODE===mode?'on':''}">${mode}</button>`).join('')+
+    `<button data-expand="raw">raw events</button>`;
   el.innerHTML=`<h3><span style="color:${c}">●</span> ${esc(n.label)} ${badges}</h3>`+
+    `<div class="expandbar">${expandButtons}</div>`+
     `<div class="sec">Evidence</div><dl>${rows}</dl>`+
     `<div class="sec">Preview</div><div id="preview" class="preview"></div>`;
+  el.querySelectorAll('[data-expand]').forEach(btn=>{
+    btn.onclick=()=>{
+      const mode=btn.getAttribute('data-expand');
+      if(mode==='raw'){
+        loadEvidenceDrilldown(0);
+        const box=$('#evhead');
+        if(box) box.scrollIntoView({block:'nearest'});
+        return;
+      }
+      EXPAND_MODE=mode||'lineage';
+      renderDAG(window._lg,SEL);
+      showDetail(SEL);
+    };
+  });
   loadPreview(cur, n.id);
 }
 
@@ -607,7 +642,7 @@ function signalFocusID(s){
 }
 function focusSignal(id){
   if(!id)return;
-  SEL=id; LENS='security'; DETAIL='summary'; EV_FILTER={title:'risk signal', lens:'security', focus:id, refs:[id]}; EV_OFFSET=0; stopPlay();
+  SEL=id; LENS='security'; DETAIL='summary'; EXPAND_MODE='lineage'; EV_FILTER={title:'risk signal', lens:'security', focus:id, refs:[id]}; EV_OFFSET=0; stopPlay();
   const ls=$('#lenssel'), ds=$('#detailsel');
   if(ls)ls.value=LENS; if(ds)ds.value=DETAIL;
   loadRun(cur);
@@ -694,6 +729,7 @@ let cur=null, tlOffset=0; const TL_LIMIT=50;
 let SIGS=[], SIG_OFFSET=0; const SIG_LIMIT=12;
 let EV_FILTER=null, EV_OFFSET=0; const EV_LIMIT=50;
 let LENS='default', DETAIL='summary'; const OV=new Set();
+let EXPAND_MODE='lineage';
 // Time-scrubber state: TCUR=null means "show the whole run"; otherwise only
 // elements at or before TCUR are drawn. TIMES is the sorted distinct clock.
 let TCUR=null, TIMES=[], PLAYING=null;
@@ -756,14 +792,14 @@ async function refreshRuns(keep){
   // Bootstrap the lens list from the first manifest's available_lenses.
   const boot=await j('/api/lens?run='+encodeURIComponent(first)+'&lens='+LENS);
   initLensSelector(boot.available_lenses);
-  $('#lenssel').onchange=()=>{ LENS=$('#lenssel').value; SEL=null; EV_FILTER=null; EV_OFFSET=0; stopPlay(); loadRun(cur); };
-  $('#detailsel').onchange=()=>{ DETAIL=$('#detailsel').value; SEL=null; EV_FILTER=null; EV_OFFSET=0; stopPlay(); loadRun(cur); };
+  $('#lenssel').onchange=()=>{ LENS=$('#lenssel').value; SEL=null; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; stopPlay(); loadRun(cur); };
+  $('#detailsel').onchange=()=>{ DETAIL=$('#detailsel').value; SEL=null; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; stopPlay(); loadRun(cur); };
   $('#slider').oninput=()=>{ stopPlay(); setScrub(+$('#slider').value); };
   $('#playbtn').onclick=togglePlay;
   document.querySelectorAll('.chip[data-ov]').forEach(chip=>{
     chip.onclick=()=>{ const o=chip.getAttribute('data-ov'); if(OV.has(o)){OV.delete(o);chip.classList.remove('on');}else{OV.add(o);chip.classList.add('on');} loadRun(cur); };
   });
-  sel.onchange=()=>{ SEL=null; EV_FILTER=null; EV_OFFSET=0; tlOffset=0; stopPlay(); loadRun(sel.value); };
+  sel.onchange=()=>{ SEL=null; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; tlOffset=0; stopPlay(); loadRun(sel.value); };
   $('#live').onclick=()=>setLive(!LIVE);
   await loadRun(first);
   setInterval(async()=>{ if(!LIVE)return; const r=await refreshRuns(cur); if(r) loadRun(r); }, 5000);

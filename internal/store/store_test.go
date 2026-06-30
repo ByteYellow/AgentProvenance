@@ -55,6 +55,31 @@ func TestSignalsTableExists(t *testing.T) {
 	}
 }
 
+func TestEvidenceQueryIndexesExist(t *testing.T) {
+	paths := openTestDB(t)
+	db, err := Open(*paths)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+	for _, index := range []string{
+		"idx_events_run_time_id",
+		"idx_events_run_type_time",
+		"idx_events_run_tool_time",
+		"idx_events_run_process_time",
+		"idx_events_run_pid_time",
+		"idx_graph_edges_run_from",
+		"idx_graph_edges_run_to",
+		"idx_risk_signals_run_event",
+		"idx_policy_decisions_run_event",
+	} {
+		var name string
+		if err := db.QueryRow(`SELECT name FROM sqlite_master WHERE type='index' AND name = ?`, index).Scan(&name); err != nil {
+			t.Fatalf("index %s not created: %v", index, err)
+		}
+	}
+}
+
 // TestConcurrentWritesDoNotError exercises the single-connection write
 // serialization: many goroutines inserting concurrently must all succeed
 // rather than hitting "database is locked".

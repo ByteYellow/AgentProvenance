@@ -11,7 +11,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 14
+const SchemaVersion = 15
 
 type Paths struct {
 	Root       string
@@ -715,6 +715,19 @@ func EnsureSchema(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_signals_dimension ON signals(dimension);`,
 		`CREATE INDEX IF NOT EXISTS idx_signals_graph_ref ON signals(graph_ref_kind, graph_ref_id);`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_source ON signals(source_table, source_id) WHERE source_table != '';`,
+		`CREATE INDEX IF NOT EXISTS idx_events_run_time_id ON events(run_id, created_at, id);`,
+		`CREATE INDEX IF NOT EXISTS idx_events_run_type_time ON events(run_id, event_type, created_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_events_run_tool_time ON events(run_id, tool_call_id, created_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_events_run_process_time ON events(run_id, process_id, created_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_events_run_pid_time ON events(run_id, pid, created_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_edges_run_from ON graph_edges(run_id, from_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_edges_run_to ON graph_edges(run_id, to_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_graph_edges_run_type ON graph_edges(run_id, edge_type);`,
+		`CREATE INDEX IF NOT EXISTS idx_risk_signals_run_event ON risk_signals(run_id, event_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_risk_signals_run_tool ON risk_signals(run_id, tool_call_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_risk_signals_run_process ON risk_signals(run_id, process_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_policy_decisions_run_event ON policy_decisions(run_id, event_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_response_actions_run_risk ON response_actions(run_id, risk_signal_id);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
