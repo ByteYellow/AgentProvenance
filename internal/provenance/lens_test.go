@@ -211,6 +211,41 @@ func TestGraphLensSummaryGroupsWideLenses(t *testing.T) {
 	if got := lensGroupInt(network, "egress_group", "loopback", "risky"); got != 0 {
 		t.Fatalf("loopback egress risky=%d, want 0", got)
 	}
+
+	taint, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "data-flow-taint", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lensHasKind(taint, "policy_decision") || lensHasKind(taint, "runtime_event") {
+		t.Fatalf("taint summary should render derived summary path only: %+v", taint.Nodes)
+	}
+	if !lensHasKind(taint, "egress_group") {
+		t.Fatalf("taint summary should include egress group: %+v", taint.Nodes)
+	}
+
+	intent, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "agent-intent", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(intent, "intent_group") || lensHasKind(intent, "runtime_event") {
+		t.Fatalf("agent intent summary should use intent_group without raw events: %+v", intent.Nodes)
+	}
+
+	trust, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "trust-origin", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(trust, "trust_group") || lensHasKind(trust, "runtime_event") {
+		t.Fatalf("trust summary should use trust_group without raw events: %+v", trust.Nodes)
+	}
+
+	boundary, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "sandbox-boundary", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(boundary, "boundary_group") || lensHasKind(boundary, "runtime_event") {
+		t.Fatalf("boundary summary should use boundary_group without raw events: %+v", boundary.Nodes)
+	}
 }
 
 func TestGraphLensSummaryOmitsLowValueRuntimeNoise(t *testing.T) {

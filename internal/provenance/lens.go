@@ -544,6 +544,14 @@ func summaryLensEdges(runID, lens, focus, detail string, nodes map[string]GraphL
 		return buildSecurityRuleEdges(runID, nodes, events), true
 	case "network-egress":
 		return buildNetworkGroupEdges(runID, nodes, events), true
+	case "data-flow-taint":
+		return buildDataFlowSummaryEdges(events), true
+	case "agent-intent":
+		return buildAgentIntentGroupEdges(runID, nodes, events), true
+	case "trust-origin":
+		return buildTrustOriginGroupEdges(runID, nodes), true
+	case "sandbox-boundary":
+		return buildSandboxBoundaryGroupEdges(runID, nodes, events), true
 	default:
 		return nil, false
 	}
@@ -884,6 +892,154 @@ func buildNetworkGroupEdges(runID string, nodes map[string]GraphLensNode, events
 			"drilldown_lens": "network-egress", "drilldown_detail": "raw", "drilldown_focus": firstString(group.evidence),
 		}}
 		out = append(out, GraphLensEdge{ID: "summary-egress-" + safeGraphID(key), FromID: rootID, ToID: id, EdgeType: "run_egress_group", EvidenceRefs: capStringSlice(group.evidence, 32)})
+	}
+	return out
+}
+
+func buildDataFlowSummaryEdges(events map[string]lensEvent) []GraphLensEdge {
+	sources := make([]lensEvent, 0)
+	sinks := make([]lensEvent, 0)
+	for _, ev := range events {
+		if isSourceEvent(ev.Type, ev.Path) {
+			sources = append(sources, ev)
+		}
+		if isTaintSinkEvent(ev) {
+			sinks = append(sinks, ev)
+		}
+	}
+	sort.Slice(sources, func(i, j int) bool { return sources[i].CreatedAt < sources[j].CreatedAt })
+	sort.Slice(sinks, func(i, j int) bool { return sinks[i].CreatedAt < sinks[j].CreatedAt })
+	return deriveAggregatedDataFlowEdges(sources, sinks)
+}
+
+func buildAgentIntentGroupEdges(runID string, nodes map[string]GraphLensNode, events map[string]lensEvent) []GraphLensEdge {
+	rootID := "run/" + runID
+	nodes[rootID] = GraphLensNode{ID: rootID, Kind: "run", Label: runID, Data: map[string]any{"run_id": runID}}
+	type intentGroup struct {
+		toolCallID string
+		events     map[string]int
+		evidence   []string
+	}
+	groups := map[string]*intentGroup{}
+	for _, ev := range events {
+		key := fallback(ev.ToolCallID, "unscoped")
+		group := groups[key]
+		if group == nil {
+			group = &intentGroup{toolCallID: ev.ToolCallID, events: map[string]int{}}
+			groups[key] = group
+		}
+		group.events[ev.Type]++
+		group.evidence = append(group.evidence, ev.NodeID)
+	}
+	keys := sortedStringKeys(groups)
+	out := []GraphLensEdge{}
+	for _, key := range keys {
+		group := groups[key]
+		if group.toolCallID != "" {
+			out = append(out, GraphLensEdge{ID: "summary-intent-tool-" + safeGraphID(group.toolCallID), FromID: rootID, ToID: group.toolCallID, EdgeType: "run_tool_call"})
+		}
+		id := "intent_group/" + safeGraphID(key)
+		label := fmt.Sprintf("execution scope: %d events", sumIntMap(group.events))
+		nodes[id] = GraphLensNode{ID: id, Kind: "intent_group", Subtype: "execution_scope", Label: label, TrustOrigin: "summary", Data: map[string]any{
+			"tool_call_id": group.toolCallID, "event_count": sumIntMap(group.events), "top_events": topEventTypes(group.events, 6),
+			"evidence_refs": capStringSlice(group.evidence, 32), "omitted_evidence": maxInt(0, len(group.evidence)-32),
+			"drilldown_lens": "agent-intent", "drilldown_detail": "raw", "drilldown_focus": group.toolCallID,
+		}}
+		fromID := rootID
+		if group.toolCallID != "" {
+			fromID = group.toolCallID
+		}
+		out = append(out, GraphLensEdge{ID: "summary-intent-" + safeGraphID(key), FromID: fromID, ToID: id, EdgeType: "tool_call_intent_group", EvidenceRefs: capStringSlice(group.evidence, 32)})
+	}
+	return out
+}
+
+func buildTrustOriginGroupEdges(runID string, nodes map[string]GraphLensNode) []GraphLensEdge {
+	rootID := "run/" + runID
+	nodes[rootID] = GraphLensNode{ID: rootID, Kind: "run", Label: runID, Data: map[string]any{"run_id": runID}}
+	type originGroup struct {
+		count    int
+		kinds    map[string]int
+		evidence []string
+	}
+	groups := map[string]*originGroup{}
+	for id, node := range nodes {
+		if id == rootID || node.TrustOrigin == "" || node.TrustOrigin == "summary" {
+			continue
+		}
+		key := node.TrustOrigin
+		group := groups[key]
+		if group == nil {
+			group = &originGroup{kinds: map[string]int{}}
+			groups[key] = group
+		}
+		group.count++
+		group.kinds[node.Kind]++
+		group.evidence = append(group.evidence, id)
+	}
+	keys := sortedStringKeys(groups)
+	out := []GraphLensEdge{}
+	for _, key := range keys {
+		group := groups[key]
+		id := "trust_group/" + safeGraphID(key)
+		nodes[id] = GraphLensNode{ID: id, Kind: "trust_group", Subtype: key, Label: fmt.Sprintf("%s: %d", strings.ReplaceAll(key, "_", " "), group.count), TrustOrigin: "summary", Data: map[string]any{
+			"origin": key, "count": group.count, "top_kinds": topEventTypes(group.kinds, 6),
+			"evidence_refs": capStringSlice(group.evidence, 32), "omitted_evidence": maxInt(0, len(group.evidence)-32),
+			"drilldown_lens": "trust-origin", "drilldown_detail": "raw", "drilldown_focus": firstString(group.evidence),
+		}}
+		out = append(out, GraphLensEdge{ID: "summary-trust-" + safeGraphID(key), FromID: rootID, ToID: id, EdgeType: "run_trust_group", EvidenceRefs: capStringSlice(group.evidence, 32)})
+	}
+	return out
+}
+
+func buildSandboxBoundaryGroupEdges(runID string, nodes map[string]GraphLensNode, events map[string]lensEvent) []GraphLensEdge {
+	rootID := "run/" + runID
+	nodes[rootID] = GraphLensNode{ID: rootID, Kind: "run", Label: runID, Data: map[string]any{"run_id": runID}}
+	type boundaryGroup struct {
+		count    int
+		risky    int
+		evidence []string
+	}
+	groups := map[string]*boundaryGroup{}
+	for _, ev := range events {
+		if !isBoundaryEvent(ev.Type) || (ev.Type == "private_cidr" && isLoopbackDestination(ev.Destination)) {
+			continue
+		}
+		group := groups[ev.Type]
+		if group == nil {
+			group = &boundaryGroup{}
+			groups[ev.Type] = group
+		}
+		group.count++
+		if riskForLensEvent(ev) != "" {
+			group.risky++
+		}
+		group.evidence = append(group.evidence, ev.NodeID)
+	}
+	for id, node := range nodes {
+		if node.Kind != "snapshot" && node.Kind != "attempt" {
+			continue
+		}
+		key := node.Kind
+		group := groups[key]
+		if group == nil {
+			group = &boundaryGroup{}
+			groups[key] = group
+		}
+		group.count++
+		group.evidence = append(group.evidence, id)
+	}
+	keys := sortedStringKeys(groups)
+	out := []GraphLensEdge{}
+	for _, key := range keys {
+		group := groups[key]
+		id := "boundary_group/" + safeGraphID(key)
+		nodes[id] = GraphLensNode{ID: id, Kind: "boundary_group", Subtype: key, Label: fmt.Sprintf("%s: %d", key, group.count), Risk: riskIf(group.risky > 0), TrustOrigin: "summary", Data: map[string]any{
+			"category": key, "count": group.count, "risky": group.risky,
+			"evidence_refs": capStringSlice(group.evidence, 32), "omitted_evidence": maxInt(0, len(group.evidence)-32),
+			"drilldown_lens": "sandbox-boundary", "drilldown_detail": "raw", "drilldown_focus": firstString(group.evidence),
+		}}
+		out = append(out, GraphLensEdge{ID: "summary-boundary-" + safeGraphID(key), FromID: rootID, ToID: id, EdgeType: "run_boundary_group", EvidenceRefs: capStringSlice(group.evidence, 32)})
 	}
 	return out
 }
@@ -1512,6 +1668,15 @@ func payloadString(payload string, keys ...string) string {
 }
 
 func sortedBoolKeys(values map[string]bool) []string {
+	out := make([]string, 0, len(values))
+	for value := range values {
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func sortedStringKeys[T any](values map[string]T) []string {
 	out := make([]string, 0, len(values))
 	for value := range values {
 		out = append(out, value)
