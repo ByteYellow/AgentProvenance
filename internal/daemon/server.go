@@ -673,6 +673,7 @@ func (s Server) graphLens(w http.ResponseWriter, r *http.Request) {
 		RunID:    r.URL.Query().Get("run"),
 		Lens:     r.URL.Query().Get("lens"),
 		Focus:    r.URL.Query().Get("focus"),
+		Detail:   r.URL.Query().Get("detail"),
 		Overlays: r.URL.Query()["overlay"],
 		Limit:    limit,
 	})

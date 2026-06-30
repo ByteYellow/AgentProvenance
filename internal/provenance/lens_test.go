@@ -15,6 +15,11 @@ func TestGraphLensDataFlowDerivesSecretToNetworkEdge(t *testing.T) {
 	db := newLensTestDB(t)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	insertLensFixture(t, db, now)
+	insertLensEvent(t, db, "evt-dns", "network_connect", `{"dst_ip":"127.0.0.53","comm":"systemd-resolved"}`, addSeconds(t, now, 2))
+	insertLensEvent(t, db, "evt-public", "network_connect", `{"dst_ip":"150.138.1.1","comm":"model-client"}`, addSeconds(t, now, 3))
+	// A loopback destination tagged private_cidr by an upstream classifier must NOT
+	// count as exfiltration (the local DNS stub is not a private-network egress).
+	insertLensEvent(t, db, "evt-dns-priv", "private_cidr", `{"dst_ip":"127.0.0.53","comm":"systemd-resolved"}`, addSeconds(t, now, 4))
 
 	manifest, err := BuildGraphLens(db, GraphLensOptions{
 		RunID:    "run-lens",
@@ -35,20 +40,238 @@ func TestGraphLensDataFlowDerivesSecretToNetworkEdge(t *testing.T) {
 		t.Fatalf("derived edges=%d, want 1: %+v", len(manifest.DerivedEdges), manifest.DerivedEdges)
 	}
 	edge := manifest.DerivedEdges[0]
+	if edge.EdgeType != "possible_sensitive_data_flow_summary" {
+		t.Fatalf("derived edge type=%s", edge.EdgeType)
+	}
+	if edge.FromID != "runtime_process/pid/4242" || edge.ToID == "" {
+		t.Fatalf("derived edge path=%s -> %s", edge.FromID, edge.ToID)
+	}
+	if edge.DerivationRule != "dataflow.same_process.secret_to_network.aggregate.v1" || edge.Confidence < 0.8 {
+		t.Fatalf("derived metadata not strong enough: %+v", edge)
+	}
+	if got := intFromEdgeData(edge, "source_count"); got != 1 {
+		t.Fatalf("source_count=%d, want 1: %+v", got, edge.Data)
+	}
+	if got := intFromEdgeData(edge, "sink_count"); got != 1 {
+		t.Fatalf("sink_count=%d, want 1: %+v", got, edge.Data)
+	}
+	destinations, _ := edge.Data["destinations"].([]string)
+	if len(destinations) != 1 || destinations[0] != "169.254.169.254" {
+		t.Fatalf("destinations=%v, want metadata IP only", destinations)
+	}
+}
+
+func TestGraphLensRawDetailKeepsIndividualDataFlowEdges(t *testing.T) {
+	db := newLensTestDB(t)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insertLensFixture(t, db, now)
+
+	manifest, err := BuildGraphLens(db, GraphLensOptions{
+		RunID:  "run-lens",
+		Lens:   "data-flow-taint",
+		Detail: "raw",
+		Limit:  100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.DerivedEdges) != 1 {
+		t.Fatalf("derived edges=%d, want 1: %+v", len(manifest.DerivedEdges), manifest.DerivedEdges)
+	}
+	edge := manifest.DerivedEdges[0]
 	if edge.EdgeType != "possible_sensitive_data_flow" {
 		t.Fatalf("derived edge type=%s", edge.EdgeType)
 	}
 	if edge.FromID != "runtime_event/evt-secret" || edge.ToID != "runtime_event/evt-egress" {
-		t.Fatalf("derived edge path=%s -> %s", edge.FromID, edge.ToID)
+		t.Fatalf("raw derived edge path=%s -> %s", edge.FromID, edge.ToID)
 	}
-	if edge.DerivationRule != "dataflow.same_process.secret_to_network.v1" || edge.Confidence < 0.8 {
-		t.Fatalf("derived metadata not strong enough: %+v", edge)
+}
+
+func TestGraphLensSummaryRequiresPIDScopeForTaintAggregation(t *testing.T) {
+	db := newLensTestDB(t)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insertLensFixture(t, db, now)
+	if _, err := db.Exec(`UPDATE events SET pid = 0 WHERE run_id = 'run-lens'`); err != nil {
+		t.Fatal(err)
 	}
-	if !lensHasNode(manifest, "runtime_event/evt-secret", "runtime_event") {
-		t.Fatalf("secret event node missing: %+v", manifest.Nodes)
+
+	summary, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "data-flow-taint", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !lensHasNode(manifest, "runtime_event/evt-egress", "runtime_event") {
-		t.Fatalf("egress event node missing: %+v", manifest.Nodes)
+	if len(summary.DerivedEdges) != 0 {
+		t.Fatalf("summary should not aggregate coarse process_id-only taint flows: %+v", summary.DerivedEdges)
+	}
+
+	raw, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "data-flow-taint", Detail: "raw", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw.DerivedEdges) != 1 {
+		t.Fatalf("raw detail should keep fallback evidence edge, got %d: %+v", len(raw.DerivedEdges), raw.DerivedEdges)
+	}
+}
+
+func TestGraphLensDefaultSummaryUsesRunOverview(t *testing.T) {
+	db := newLensTestDB(t)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insertLensFixture(t, db, now)
+	insertLensEvent(t, db, "evt-loopback-private", "private_cidr", `{"dst_ip":"127.0.0.53","comm":"systemd-resolved"}`, addSeconds(t, now, 2))
+	if _, err := db.Exec(`INSERT INTO policy_decisions (id, event_id, run_id, session_id, rule_id, decision, reason, created_at)
+		VALUES ('policy-loopback-private', 'evt-loopback-private', 'run-lens', 'session-lens', 'private_cidr_access', 'deny', 'private CIDR access', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO risk_signals (id, run_id, session_id, tool_call_id, process_id, event_id, policy_decision_id, signal_type, severity, reason, recommended_action, created_at)
+		VALUES ('risk-loopback-private', 'run-lens', 'session-lens', 'tool-lens', 'proc-lens', 'evt-loopback-private', 'policy-loopback-private', 'policy_violation', 'medium', 'private CIDR access', 'deny', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO provenance_objects (hash, object_type, source_id, run_id, path, size_bytes, created_at)
+		VALUES ('sha256:lens-artifact', 'artifact', 'workspace_file/app.py', 'run-lens', '/tmp/objects/artifact.json', 123, ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "default", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Query.LayoutHint != "run_overview" {
+		t.Fatalf("layout=%s, want run_overview", manifest.Query.LayoutHint)
+	}
+	if !lensHasNode(manifest, "overview/processes", "overview_group") {
+		t.Fatalf("overview process group missing: %+v", manifest.Nodes)
+	}
+	if lensHasNode(manifest, "runtime_event/evt-secret", "runtime_event") {
+		t.Fatalf("default summary should not render raw runtime events: %+v", manifest.Nodes)
+	}
+	if got := lensNodeDataInt(manifest, "overview/artifacts", "count"); got != 1 {
+		t.Fatalf("overview artifacts=%d, want 1: %+v", got, manifest.Nodes)
+	}
+	if got := lensNodeDataInt(manifest, "overview/risks", "total"); got != 1 {
+		t.Fatalf("overview risks total=%d, want 1: %+v", got, manifest.Nodes)
+	}
+	if got := lensNodeDataInt(manifest, "overview/risks", "high"); got != 1 {
+		t.Fatalf("overview high risks=%d, want 1: %+v", got, manifest.Nodes)
+	}
+}
+
+func TestGraphLensSummaryGroupsWideLenses(t *testing.T) {
+	db := newLensTestDB(t)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insertLensFixture(t, db, now)
+	insertLensEvent(t, db, "evt-write", "file_write", `{"path":"src/main.py","command":"python setup.py"}`, addSeconds(t, now, 2))
+	insertLensEvent(t, db, "evt-loopback-private", "private_cidr", `{"dst_ip":"127.0.0.53","comm":"systemd-resolved"}`, addSeconds(t, now, 3))
+	if _, err := db.Exec(`INSERT INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
+		VALUES ('edge-write-file', 'run-lens', 'runtime_event/evt-write', 'workspace_file/src/main.py', 'runtime_event_file', 'evt-write', ?)`, addSeconds(t, now, 2)); err != nil {
+		t.Fatal(err)
+	}
+
+	process, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "process", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(process, "process_group") || !lensHasKind(process, "event_burst") {
+		t.Fatalf("process summary should use process_group + event_burst: %+v", process.Nodes)
+	}
+
+	security, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "security", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(security, "risk_group") {
+		t.Fatalf("security summary should use risk_group: %+v", security.Nodes)
+	}
+	if lensHasGroupSubtype(security, "risk_group", "private_cidr_access") {
+		t.Fatalf("security summary should exclude loopback private_cidr policy groups: %+v", security.Nodes)
+	}
+	if lensHasGroupSubtype(security, "risk_group", "metadata_ip") {
+		t.Fatalf("security summary should not duplicate policy-covered raw event groups: %+v", security.Nodes)
+	}
+
+	files, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "file-artifact", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(files, "file_group") {
+		t.Fatalf("file summary should use file_group: %+v", files.Nodes)
+	}
+	if got := lensGroupInt(files, "file_group", "source", "count"); got != 1 {
+		t.Fatalf("source file group count=%d, want 1: %+v", got, files.Nodes)
+	}
+
+	network, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "network-egress", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(network, "egress_group") {
+		t.Fatalf("network summary should use egress_group: %+v", network.Nodes)
+	}
+	if !lensHasDrilldown(network) {
+		t.Fatalf("summary group should expose drilldown metadata: %+v", network.Nodes)
+	}
+	if got := lensGroupInt(network, "egress_group", "loopback", "risky"); got != 0 {
+		t.Fatalf("loopback egress risky=%d, want 0", got)
+	}
+
+	taint, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "data-flow-taint", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lensHasKind(taint, "policy_decision") || lensHasKind(taint, "runtime_event") {
+		t.Fatalf("taint summary should render derived summary path only: %+v", taint.Nodes)
+	}
+	if !lensHasKind(taint, "egress_group") {
+		t.Fatalf("taint summary should include egress group: %+v", taint.Nodes)
+	}
+
+	intent, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "agent-intent", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(intent, "intent_group") || lensHasKind(intent, "runtime_event") {
+		t.Fatalf("agent intent summary should use intent_group without raw events: %+v", intent.Nodes)
+	}
+
+	trust, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "trust-origin", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(trust, "trust_group") || lensHasKind(trust, "runtime_event") {
+		t.Fatalf("trust summary should use trust_group without raw events: %+v", trust.Nodes)
+	}
+
+	boundary, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "sandbox-boundary", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasKind(boundary, "boundary_group") || lensHasKind(boundary, "runtime_event") {
+		t.Fatalf("boundary summary should use boundary_group without raw events: %+v", boundary.Nodes)
+	}
+}
+
+func TestGraphLensSummaryOmitsLowValueRuntimeNoise(t *testing.T) {
+	db := newLensTestDB(t)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	insertLensFixture(t, db, now)
+	insertLensEvent(t, db, "evt-exit", "process_exit", `{"exit_code":0}`, now)
+	if _, err := db.Exec(`INSERT INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
+		VALUES ('edge-proc-exit', 'run-lens', 'proc-lens', 'runtime_event/evt-exit', 'runtime_process_event', 'evt-exit', ?)`, now); err != nil {
+		t.Fatal(err)
+	}
+
+	summary, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "process", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lensHasNode(summary, "runtime_event/evt-exit", "runtime_event") {
+		t.Fatalf("summary lens should omit low-value process_exit: %+v", summary.Nodes)
+	}
+
+	raw, err := BuildGraphLens(db, GraphLensOptions{RunID: "run-lens", Lens: "process", Detail: "raw", Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !lensHasNode(raw, "runtime_event/evt-exit", "runtime_event") {
+		t.Fatalf("raw lens should keep process_exit for full observability: %+v", raw.Nodes)
 	}
 }
 
@@ -76,8 +299,19 @@ func TestGraphLensFocusAndJSON(t *testing.T) {
 	if len(manifest.Edges) == 0 {
 		t.Fatalf("expected focused security edges")
 	}
+	if !lensHasNode(manifest, "policy_decision/policy-lens", "policy_decision") {
+		t.Fatalf("focused security lens should include policy node: %+v", manifest.Nodes)
+	}
+	if !lensHasNode(manifest, "risk_signal/risk-lens", "risk_signal") {
+		t.Fatalf("focused security lens should include risk node: %+v", manifest.Nodes)
+	}
+	if !lensHasNode(manifest, "response_action/response-lens", "response_action") {
+		t.Fatalf("focused security lens should include response node: %+v", manifest.Nodes)
+	}
 	for _, edge := range manifest.Edges {
-		if edge.FromID != "runtime_event/evt-egress" && edge.ToID != "runtime_event/evt-egress" {
+		if edge.FromID != "runtime_event/evt-egress" && edge.ToID != "runtime_event/evt-egress" &&
+			edge.FromID != "policy_decision/policy-lens" && edge.ToID != "policy_decision/policy-lens" &&
+			edge.FromID != "risk_signal/risk-lens" && edge.ToID != "risk_signal/risk-lens" {
 			t.Fatalf("edge escaped focus: %+v", edge)
 		}
 	}
@@ -152,6 +386,21 @@ func insertLensFixture(t *testing.T, db *sql.DB, now string) {
 	}
 }
 
+func intFromEdgeData(edge GraphLensEdge, key string) int {
+	value, ok := edge.Data[key]
+	if !ok {
+		return 0
+	}
+	switch v := value.(type) {
+	case int:
+		return v
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
+}
+
 func insertLensEvent(t *testing.T, db *sql.DB, id, eventType, payload, now string) {
 	t.Helper()
 	if _, err := db.Exec(`INSERT INTO events
@@ -162,6 +411,15 @@ func insertLensEvent(t *testing.T, db *sql.DB, id, eventType, payload, now strin
 	}
 }
 
+func addSeconds(t *testing.T, ts string, seconds int) string {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339Nano, ts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return parsed.Add(time.Duration(seconds) * time.Second).UTC().Format(time.RFC3339Nano)
+}
+
 func lensHasNode(manifest GraphLensManifest, id, kind string) bool {
 	for _, node := range manifest.Nodes {
 		if node.ID == id && node.Kind == kind {
@@ -169,4 +427,64 @@ func lensHasNode(manifest GraphLensManifest, id, kind string) bool {
 		}
 	}
 	return false
+}
+
+func lensHasKind(manifest GraphLensManifest, kind string) bool {
+	for _, node := range manifest.Nodes {
+		if node.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func lensHasGroupSubtype(manifest GraphLensManifest, kind, subtype string) bool {
+	for _, node := range manifest.Nodes {
+		if node.Kind == kind && node.Subtype == subtype {
+			return true
+		}
+	}
+	return false
+}
+
+func lensHasDrilldown(manifest GraphLensManifest) bool {
+	for _, node := range manifest.Nodes {
+		if node.Data != nil && stringFromAny(node.Data["drilldown_lens"]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func lensGroupInt(manifest GraphLensManifest, kind, subtype, key string) int {
+	for _, node := range manifest.Nodes {
+		if node.Kind == kind && node.Subtype == subtype {
+			switch v := node.Data[key].(type) {
+			case int:
+				return v
+			case int64:
+				return int(v)
+			case float64:
+				return int(v)
+			}
+		}
+	}
+	return 0
+}
+
+func lensNodeDataInt(manifest GraphLensManifest, id, key string) int {
+	for _, node := range manifest.Nodes {
+		if node.ID != id {
+			continue
+		}
+		switch v := node.Data[key].(type) {
+		case int:
+			return v
+		case int64:
+			return int(v)
+		case float64:
+			return int(v)
+		}
+	}
+	return 0
 }

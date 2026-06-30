@@ -811,5 +811,5 @@ func isPrivateIP(raw string) bool {
 	if ip == nil {
 		return false
 	}
-	return ip.IsPrivate() || ip.IsLoopback()
+	return ip.IsPrivate()
 }

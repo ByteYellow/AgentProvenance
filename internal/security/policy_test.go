@@ -31,6 +31,16 @@ func TestEvaluatePrivateCIDRDenies(t *testing.T) {
 	}
 }
 
+func TestEvaluateLoopbackDoesNotDenyAsPrivateCIDR(t *testing.T) {
+	decision := DefaultEngine().Evaluate(Event{
+		EventType: "network_connect",
+		DstIP:     "127.0.0.53",
+	})
+	if decision.Decision != "allow" {
+		t.Fatalf("decision = %s, want allow", decision.Decision)
+	}
+}
+
 func TestEvaluateSecretPathKills(t *testing.T) {
 	decision := DefaultEngine().Evaluate(Event{
 		EventType: "file_open",

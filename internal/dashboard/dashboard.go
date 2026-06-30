@@ -42,6 +42,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/runs", s.runs)
 	mux.HandleFunc("GET /api/overview", s.overview)
 	mux.HandleFunc("GET /api/timeline", s.timeline)
+	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("GET /api/graph", s.graph)
 	mux.HandleFunc("GET /api/lens", s.lens)
 	mux.HandleFunc("GET /api/artifact", s.artifact)
@@ -233,6 +234,286 @@ func (s Server) timeline(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"events": page, "total": total, "limit": limit, "offset": offset})
 }
 
+func (s Server) events(w http.ResponseWriter, r *http.Request) {
+	run := r.URL.Query().Get("run")
+	if run == "" {
+		httpError(w, "run is required", 400)
+		return
+	}
+	limit := atoiClamp(r.URL.Query().Get("limit"), 50, 1, 500)
+	offset := atoiClamp(r.URL.Query().Get("offset"), 0, 0, 1_000_000_000)
+	q, err := s.eventQueryFromRequest(run, r)
+	if err != nil {
+		httpError(w, err.Error(), 500)
+		return
+	}
+	page, total, err := s.queryEventsPage(run, q, limit, offset)
+	if err != nil {
+		httpError(w, err.Error(), 500)
+		return
+	}
+	if page == nil {
+		page = []telemetry.EventRecord{}
+	}
+	writeJSON(w, map[string]any{
+		"schema_version": "agentprovenance.dashboard_events/v1",
+		"events":         page,
+		"total":          total,
+		"limit":          limit,
+		"offset":         offset,
+		"filter": map[string]any{
+			"run": run, "lens": r.URL.Query().Get("lens"), "group": r.URL.Query().Get("group"),
+			"focus": r.URL.Query().Get("focus"), "type": r.URL.Query().Get("type"),
+			"tool_call": r.URL.Query().Get("tool_call"), "pid": r.URL.Query().Get("pid"),
+		},
+	})
+}
+
+func (s Server) eventQueryFromRequest(run string, r *http.Request) (eventQuery, error) {
+	refs := eventRefsFromQuery(r)
+	if len(refs) > 0 {
+		ids, err := s.resolveEventRefs(run, refs)
+		if err != nil {
+			return eventQuery{}, err
+		}
+		if len(ids) == 0 {
+			return eventQuery{None: true}, nil
+		}
+		return eventQuery{IDs: ids}, nil
+	}
+	q := eventQuery{
+		Type:       r.URL.Query().Get("type"),
+		ToolCallID: r.URL.Query().Get("tool_call"),
+		ProcessID:  r.URL.Query().Get("process"),
+		PID:        r.URL.Query().Get("pid"),
+	}
+	if focus := strings.TrimSpace(r.URL.Query().Get("focus")); focus != "" {
+		switch {
+		case strings.HasPrefix(focus, "runtime_event/"):
+			q.IDs = []string{strings.TrimPrefix(focus, "runtime_event/")}
+		case strings.HasPrefix(focus, "runtime_process/pid/"):
+			q.PID = strings.TrimPrefix(focus, "runtime_process/pid/")
+		case strings.HasPrefix(focus, "process/"):
+			q.ProcessID = focus
+		case !strings.Contains(focus, "/"):
+			q.ToolCallID = focus
+		}
+	}
+	applyLensGroupFilter(&q, r.URL.Query().Get("lens"), r.URL.Query().Get("group"))
+	return q, nil
+}
+
+type eventQuery struct {
+	None       bool
+	IDs        []string
+	Types      []string
+	Type       string
+	ToolCallID string
+	ProcessID  string
+	PID        string
+	PayloadAny []string
+	PayloadNot []string
+}
+
+func applyLensGroupFilter(q *eventQuery, lens, group string) {
+	group = strings.TrimSpace(group)
+	switch lens {
+	case "process":
+		if group != "" && group != "summary" && group != "processes" {
+			q.Types = []string{group}
+		}
+	case "network-egress":
+		q.Types = []string{"network_connect", "metadata_ip", "private_cidr", "dns_query", "network_deny", "egress_deny", "tls_write", "tls_read"}
+		switch group {
+		case "risky_egress":
+			q.Types = []string{"metadata_ip", "private_cidr", "network_deny", "egress_deny"}
+			q.PayloadNot = append(q.PayloadNot, "127.0.0.")
+		case "dns":
+			q.Types = []string{"dns_query"}
+		case "loopback":
+			q.PayloadAny = append(q.PayloadAny, "127.0.0.")
+		case "tls":
+			q.Types = []string{"tls_write", "tls_read"}
+		}
+	case "security":
+		if group != "" {
+			q.Types = append(q.Types, group)
+		} else {
+			q.Types = []string{"metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "setuid", "setgid", "ptrace", "file_rename", "file_unlink"}
+		}
+	case "file-artifact":
+		q.Types = []string{"file_write", "file_create", "file_modify", "file_read", "secret_path", "artifact_export"}
+		switch group {
+		case "workspace_source_files":
+			q.PayloadAny = append(q.PayloadAny, ".py", ".go", ".js", ".ts", ".md", ".yaml", ".yml", ".json")
+		case "dependency_cache":
+			q.PayloadAny = append(q.PayloadAny, "node_modules", ".venv", "__pycache__", ".cache", "site-packages")
+		case "secret_or_config":
+			q.PayloadAny = append(q.PayloadAny, "secret", "token", ".env", ".aws", "credentials")
+		}
+	}
+}
+
+func eventRefsFromQuery(r *http.Request) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	add := func(raw string) {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" && !seen[part] {
+				seen[part] = true
+				out = append(out, part)
+			}
+		}
+	}
+	for _, raw := range r.URL.Query()["ref"] {
+		add(raw)
+	}
+	add(r.URL.Query().Get("refs"))
+	return out
+}
+
+func (s Server) resolveEventRefs(run string, refs []string) ([]string, error) {
+	seen := map[string]bool{}
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			seen[id] = true
+		}
+	}
+	for _, ref := range refs {
+		switch {
+		case strings.HasPrefix(ref, "runtime_event/"):
+			add(strings.TrimPrefix(ref, "runtime_event/"))
+		case strings.HasPrefix(ref, "policy_decision/"):
+			id := strings.TrimPrefix(ref, "policy_decision/")
+			var eventID string
+			if err := s.DB.QueryRow(`SELECT COALESCE(event_id, '') FROM policy_decisions WHERE run_id = ? AND id = ?`, run, id).Scan(&eventID); err == nil {
+				add(eventID)
+			}
+		case strings.HasPrefix(ref, "risk_signal/"):
+			id := strings.TrimPrefix(ref, "risk_signal/")
+			var eventID string
+			if err := s.DB.QueryRow(`SELECT COALESCE(event_id, '') FROM risk_signals WHERE run_id = ? AND id = ?`, run, id).Scan(&eventID); err == nil {
+				add(eventID)
+			}
+		case strings.HasPrefix(ref, "response_action/"):
+			id := strings.TrimPrefix(ref, "response_action/")
+			rows, err := s.DB.Query(`SELECT COALESCE(rs.event_id, ''), COALESCE(pd.event_id, '')
+				FROM response_actions ra
+				LEFT JOIN risk_signals rs ON rs.id = ra.risk_signal_id AND rs.run_id = ra.run_id
+				LEFT JOIN policy_decisions pd ON pd.id = ra.policy_decision_id AND pd.run_id = ra.run_id
+				WHERE ra.run_id = ? AND ra.id = ?`, run, id)
+			if err != nil {
+				return nil, err
+			}
+			for rows.Next() {
+				var riskEvent, policyEvent string
+				if err := rows.Scan(&riskEvent, &policyEvent); err != nil {
+					rows.Close()
+					return nil, err
+				}
+				add(riskEvent)
+				add(policyEvent)
+			}
+			rows.Close()
+		}
+	}
+	ids := make([]string, 0, len(seen))
+	for id := range seen {
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func (s Server) queryEventsPage(run string, q eventQuery, limit, offset int) ([]telemetry.EventRecord, int, error) {
+	if q.None {
+		return []telemetry.EventRecord{}, 0, nil
+	}
+	where, args := eventWhereClause(run, q)
+	var total int
+	if err := s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM events `+where, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	if offset > total {
+		offset = total
+	}
+	query := `SELECT id, COALESCE(run_id, ''), COALESCE(session_id, ''), COALESCE(tool_call_id, ''),
+		COALESCE(process_id, ''), COALESCE(snapshot_id, ''), COALESCE(raw_event_id, ''),
+		COALESCE(correlation_method, ''), COALESCE(correlation_confidence, 0),
+		COALESCE(container_id, ''), COALESCE(cgroup_id, ''), COALESCE(pid, 0),
+		COALESCE(tgid, 0), COALESCE(ppid, 0),
+		source, event_type, payload, created_at
+		FROM events `
+	query += where + " ORDER BY created_at ASC, id ASC LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
+	rows, err := s.DB.Query(query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	out := []telemetry.EventRecord{}
+	for rows.Next() {
+		var event telemetry.EventRecord
+		if err := rows.Scan(&event.ID, &event.RunID, &event.SessionID, &event.ToolCallID, &event.ProcessID, &event.SnapshotID, &event.RawEventID, &event.CorrelationMethod, &event.CorrelationConfidence, &event.ContainerID, &event.CgroupID, &event.PID, &event.TGID, &event.PPID, &event.Source, &event.EventType, &event.Payload, &event.CreatedAt); err != nil {
+			return nil, 0, err
+		}
+		event.CorrelationClass = telemetry.CorrelationClass(event.Source, event.CorrelationMethod, event.ContainerID, event.CorrelationConfidence)
+		out = append(out, event)
+	}
+	return out, total, rows.Err()
+}
+
+func eventWhereClause(run string, q eventQuery) (string, []any) {
+	args := []any{run}
+	clauses := []string{"run_id = ?"}
+	if len(q.IDs) > 0 {
+		ph := make([]string, 0, len(q.IDs))
+		for _, id := range q.IDs {
+			ph = append(ph, "?")
+			args = append(args, id)
+		}
+		clauses = append(clauses, "id IN ("+strings.Join(ph, ",")+")")
+	}
+	if q.Type != "" {
+		clauses = append(clauses, "event_type = ?")
+		args = append(args, q.Type)
+	}
+	if len(q.Types) > 0 {
+		ph := make([]string, 0, len(q.Types))
+		for _, typ := range q.Types {
+			ph = append(ph, "?")
+			args = append(args, typ)
+		}
+		clauses = append(clauses, "event_type IN ("+strings.Join(ph, ",")+")")
+	}
+	if q.ToolCallID != "" {
+		clauses = append(clauses, "tool_call_id = ?")
+		args = append(args, q.ToolCallID)
+	}
+	if q.ProcessID != "" {
+		clauses = append(clauses, "process_id = ?")
+		args = append(args, q.ProcessID)
+	}
+	if q.PID != "" {
+		clauses = append(clauses, "pid = ?")
+		args = append(args, q.PID)
+	}
+	if len(q.PayloadAny) > 0 {
+		ors := make([]string, 0, len(q.PayloadAny))
+		for _, v := range q.PayloadAny {
+			ors = append(ors, "payload LIKE ?")
+			args = append(args, "%"+v+"%")
+		}
+		clauses = append(clauses, "("+strings.Join(ors, " OR ")+")")
+	}
+	for _, v := range q.PayloadNot {
+		clauses = append(clauses, "payload NOT LIKE ?")
+		args = append(args, "%"+v+"%")
+	}
+	return "WHERE " + strings.Join(clauses, " AND "), args
+}
+
 func atoiClamp(s string, def, lo, hi int) int {
 	n, err := strconv.Atoi(s)
 	if err != nil {
@@ -257,6 +538,7 @@ func (s Server) lens(w http.ResponseWriter, r *http.Request) {
 		RunID:    run,
 		Lens:     r.URL.Query().Get("lens"),
 		Focus:    r.URL.Query().Get("focus"),
+		Detail:   r.URL.Query().Get("detail"),
 		Overlays: r.URL.Query()["overlay"],
 		Limit:    atoiClamp(r.URL.Query().Get("limit"), 500, 1, 2000),
 	})
@@ -270,8 +552,8 @@ func (s Server) lens(w http.ResponseWriter, r *http.Request) {
 // --- artifact content preview (Side Panel) ---
 
 const (
-	artifactPreviewBytes = 64 * 1024  // text shown to the user
-	artifactReadBytes    = 8 << 20    // cap on what we'll read at all
+	artifactPreviewBytes = 64 * 1024 // text shown to the user
+	artifactReadBytes    = 8 << 20   // cap on what we'll read at all
 )
 
 type artifactResp struct {
@@ -439,10 +721,10 @@ func mimeForPath(path string) string {
 }
 
 var (
-	diffHunkRe   = regexp.MustCompile(`(?m)^@@ .* @@`)
-	pemKeyRe     = regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`)
-	awsKeyRe     = regexp.MustCompile(`AKIA[0-9A-Z]{16}`)
-	kvSecretRe   = regexp.MustCompile(`(?i)(password|passwd|secret|token|api[_-]?key|aws_secret_access_key|authorization)(["']?\s*[:=]\s*["']?)([^\s"',}]{4,})`)
+	diffHunkRe = regexp.MustCompile(`(?m)^@@ .* @@`)
+	pemKeyRe   = regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`)
+	awsKeyRe   = regexp.MustCompile(`AKIA[0-9A-Z]{16}`)
+	kvSecretRe = regexp.MustCompile(`(?i)(password|passwd|secret|token|api[_-]?key|aws_secret_access_key|authorization)(["']?\s*[:=]\s*["']?)([^\s"',}]{4,})`)
 )
 
 // redactSecrets masks the obvious secret shapes (private keys, cloud keys,

@@ -717,10 +717,13 @@ A local, read-only, single-page dashboard over the verifiable graph. Its JSON
 endpoints reuse the same internal functions as the CLI and AI tools, so the UI
 never drifts from the contract; the HTML/JS is embedded in the binary and loads
 no external assets (local-first). The UI is a **Graph Explorer** over the
-canonical graph, not a single hard-coded security flow:
+canonical graph, not a single hard-coded security flow. The key scale rule is:
+**all raw telemetry remains queryable, but the dashboard never tries to render
+all raw telemetry as one graph**.
 
 ```text
-Canonical Provenance Graph
+Raw Telemetry Events
+  -> Materialized high-value provenance graph
   -> Derived / Virtual Edges
   -> Lens projection
   -> Layout + side-panel schema
@@ -728,19 +731,54 @@ Canonical Provenance Graph
 
 Panels:
 
+- **Run Overview / Ask**: query-first entry points (`Why is this run risky?`,
+  `What happened around egress?`, `What changed files?`, `Which processes
+  mattered?`, `Where did artifacts come from?`, `Which tool calls ran?`). Each
+  entry switches to a bounded local lens instead of asking the browser to draw
+  the whole canonical graph.
 - **Graph Explorer** (`/api/lens`, same `graph lens` query surface as the CLI):
   a **lens switcher** over 9 projections — default causality, security,
   process tree, file/artifact lineage, network egress, **data-flow/taint**,
   agent intent, trust origin, sandbox boundary — with **risk/trust overlays**,
   click-to-focus on a node's causal lineage, and a Sugiyama-layered DAG.
+  It defaults to `detail=summary`: the default lens is a **Run Overview** rather
+  than a raw DAG dump, and every wide lens uses bounded summary nodes:
+  `process_group`, `event_burst`, `file_group`, `risk_group`, `egress_group`,
+  `intent_group`, `trust_group`, and `boundary_group`. These group nodes are
+  **drill-down entries**, not lossy replacements: clicking a group switches to
+  the focused lens/detail needed to inspect its local upstream/downstream
+  evidence. Security-relevant events, real exec/file changes, workspace writes,
+  policy/risk/response, and structural context are promoted into the graph;
+  low-value runtime noise stays in raw events for forensics.
+  Detail levels are intentionally separated:
+  `summary` means bounded overview groups, `expanded` means high-value graph
+  details with low-value noise filtered, and `raw` means the full evidence layer
+  for focused debugging and forensics.
   **Derived edges** (e.g. `possible_sensitive_data_flow`) render dashed with
   their confidence, so an inferred flow is never mistaken for a recorded fact.
+  In summary mode, noisy N x M data-flow evidence is aggregated into a
+  process/tool-scope summary edge with counts and evidence refs.
+  Network egress is grouped by risk class (`risky_egress`, `dns`, `loopback`,
+  `tls`, `network`) so the default path is **overview -> question -> local
+  graph -> raw event table**, rather than rendering the whole run at once.
+  Selecting a node exposes explicit local expansion controls:
+  `lineage`, `upstream`, `downstream`, `children`, and `raw events`.
+  These controls dim or reveal only the local explain path; raw telemetry stays
+  paged in Focused Evidence instead of being drawn into the DAG.
 - **Time-scrubber**: replay a run forward over its real event clock — watch a
   secret read, then the egress, appear in order.
 - **Side Panel**: per-node **Evidence** (ids, command/pid/path/destination,
   risk/policy/response, derived-edge rule + confidence + evidence refs, hashes)
   and a bounded, secret-redacted **artifact content Preview** (the code/JSON the
   node actually produced — `/api/artifact`).
+- **Focused Evidence** (`/api/events`): focused, paged raw telemetry for the
+  selected question, group, signal, or node. It is intentionally empty until a
+  selection is made, so it does not look like a second global timeline. Group
+  nodes pass evidence refs into this table, so the UI can show the exact raw
+  records behind a summary without adding them to the visible DAG.
+- **Run Timeline**: the global chronological event stream for the whole run.
+  This is the place to inspect "what happened over time"; Focused Evidence is
+  the place to inspect "why this selected thing is true".
 - **Verify + signature** status, **signals / risk**, a **paged timeline**, the
   **process tree**, and **egress**; live auto-refresh.
 
@@ -794,6 +832,8 @@ the capture scripts, and what to click in the dashboard.
 ./agentprov graph trajectories --run run-demo-bugfix --json
 ./agentprov graph lens --run run-demo-bugfix --lens default --json
 ./agentprov graph lens --run run-demo-bugfix --lens data-flow-taint --overlay risk --json
+./agentprov graph lens --run run-demo-bugfix --lens data-flow-taint --detail expanded --json
+./agentprov graph lens --run run-demo-bugfix --lens process --detail raw --focus runtime_event/<event_id> --json
 ./agentprov graph lens --run run-demo-bugfix --lens process --focus runtime_event/<event_id> --json
 ./agentprov graph diff --run run-demo-bugfix --file calculator.py
 ./agentprov graph diff --run run-demo-bugfix --file calculator.py --json
@@ -819,7 +859,7 @@ What these mean:
 | `verify` | Check graph integrity, risk/response evidence chains, taint/response barriers, object hashes, replay generation, drain watermarks, telemetry batch hashes, and orphan lifecycle evidence for outlived zero-SDK child processes |
 | `replay` | Emit a plan-only reconstruction of the run |
 | `trajectories --json` | Emit per-attempt behavior evidence, risk/deviation context, cost, artifacts, and runtime events for external evaluators or RL reward/penalty pipelines |
-| `lens` | Project the canonical graph through a Graph Explorer lens. Emits `agentprovenance.graph_lens/v1` with canonical nodes/edges, derived edges, focus state, overlays, and layout hints |
+| `lens` | Project the canonical graph through a Graph Explorer lens. Emits `agentprovenance.graph_lens/v1` with canonical nodes/edges, derived edges, focus state, overlays, layout hints, raw event count, omitted counts, and `--detail summary\|expanded\|raw` |
 | `diff` | Compare file state between base and attempts |
 | `blame` | Attribute file state to attempt, tool call, process, strategy, command, and local candidate status |
 | `explain` | Explain a target by combining trace, runtime causality, diff/blame, telemetry receiver details, telemetry batch manifests, process observations, policy, object refs, risk signals, baseline deviations, and response evidence; `--json` emits `agentprovenance.explain/v1` with `upstream`, `downstream`, bounded `causality_path`, `query`, `evidence`, `objects`, `risks`, `telemetry_batches`, `process_observations`, and `replay_refs`; runtime events include receiver/source format, normalized event type, identity keys, schema status, and correlation status; use `--depth`, `--limit`, and `--cursor` to bound and page DAG traversal |
@@ -842,7 +882,7 @@ What these mean:
 | Execution context | explicit ToolCallScope binding across run / session / attempt / tool_call / process / container / cgroup / pid |
 | Runtime causality | native `runtime_*` graph edges (tool call, process tree, snapshot, event, file) |
 | Provenance DAG | `graph trace / refs / log / materialize / objects / verify / replay` over content-addressed objects |
-| Graph Explorer lenses | `graph lens` projects the canonical graph into default, security, process, file-artifact, network-egress, data-flow-taint, agent-intent, trust-origin, and sandbox-boundary views; derived edges are marked with derivation rule, confidence, and evidence refs |
+| Graph Explorer lenses | `graph lens` projects the canonical graph into default, security, process, file-artifact, network-egress, data-flow-taint, agent-intent, trust-origin, and sandbox-boundary views; `summary` mode uses Run Overview plus `process_group`, `event_burst`, `file_group`, `risk_group`, `egress_group`, `intent_group`, `trust_group`, and `boundary_group` nodes while keeping raw events queryable; `expanded` keeps high-value details without low-value noise, and `raw` exposes full evidence for focused forensics; group nodes carry drill-down metadata for local expansion, node selection supports lineage/upstream/downstream/children/raw-events controls, and derived edges are marked with derivation rule, confidence, counts, and evidence refs |
 | Graph verify | checks object hashes, parent links, and the policy → risk → response → signal chain (white-box and external-telemetry runs) |
 | Correlation explain | `telemetry correlations` — raw identity, resolved context, matched binding, confidence, and time window per event |
 
@@ -855,7 +895,7 @@ What these mean:
 | Evidence query | `graph explain` over file / artifact / process / event / tool_call / attempt / risk with bounded, paged causality paths |
 | Diff / blame | file-level diff and blame, joined to runtime events and content-addressed objects |
 | Evidence manifest | `evidence manifest` — a run-level, hash-indexed evidence index (`--materialize` to an object) |
-| Web dashboard | `dashboard serve` — local read-only UI: causality DAG, verify status, signals, timeline, process tree, egress |
+| Web dashboard | `dashboard serve` — local read-only UI: Run Overview question entries, Graph Explorer lenses, Focused Evidence, Run Timeline, verify status, signals, process tree, egress |
 
 **Security & signals**
 
