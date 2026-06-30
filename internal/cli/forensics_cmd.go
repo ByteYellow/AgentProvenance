@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/attest"
@@ -90,12 +91,70 @@ func forensicsCmd(dataDir, daemonURL *string) *cobra.Command {
 	exportBatch.Flags().BoolVar(&includeRunBundles, "include-run-bundles", true, "export and reference per-run forensics bundles")
 	exportBatch.Flags().BoolVar(&includeEvalContexts, "include-eval-contexts", false, "embed EvalContext records in the batch bundle")
 	exportBatch.Flags().BoolVar(&jsonOut, "json", false, "emit structured batch forensics export JSON")
+	var importPubKey string
+	importCmd := &cobra.Command{
+		Use:   "import <bundle.json>",
+		Short: "import a forensics bundle into the local store (replay a captured run)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			info, err := importForensics(*dataDir, args[0], importPubKey)
+			if err != nil {
+				return err
+			}
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(info)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "imported run=%s rows=%d objects=%d snapshot_files=%d omitted=%d bundle_schema=%s\n",
+				info.RunID, info.TotalRows, info.ObjectBlobs, info.SnapshotFiles, info.Omitted, info.BundleSchema)
+			tables := make([]string, 0, len(info.Tables))
+			for t := range info.Tables {
+				tables = append(tables, t)
+			}
+			sort.Strings(tables)
+			for _, t := range tables {
+				fmt.Fprintf(cmd.OutOrStdout(), "  %s=%d\n", t, info.Tables[t])
+			}
+			return nil
+		},
+	}
+	importCmd.Flags().BoolVar(&jsonOut, "json", false, "emit structured forensics import JSON")
+	importCmd.Flags().StringVar(&importPubKey, "pub-key", "", "hex ed25519 public key file; when set, verify the bundle's .dsse.json attestation before importing")
 	cmd := &cobra.Command{Use: "forensics", Short: "forensics bundle commands"}
 	cmd.AddCommand(export)
 	cmd.AddCommand(exportBatch)
+	cmd.AddCommand(importCmd)
 	cmd.AddCommand(forensicsVerifyAttestationCmd())
 	cmd.AddCommand(forensicsKeygenCmd())
 	return cmd
+}
+
+func importForensics(dataDir, bundlePath, pubKeyPath string) (forensics.ImportInfo, error) {
+	// Verify-before-import: if a public key is supplied, the bundle's DSSE
+	// attestation must verify against the on-disk bytes (catches a tampered or
+	// substituted bundle before any of it touches the store).
+	if pubKeyPath != "" {
+		pub, err := attest.LoadPublicKeyHex(pubKeyPath)
+		if err != nil {
+			return forensics.ImportInfo{}, err
+		}
+		attPath := strings.TrimSuffix(bundlePath, ".json") + ".dsse.json"
+		if err := forensics.VerifyBundleAttestation(bundlePath, attPath, pub); err != nil {
+			return forensics.ImportInfo{}, fmt.Errorf("attestation verify failed: %w", err)
+		}
+	}
+	paths, err := store.Init(dataDir)
+	if err != nil {
+		return forensics.ImportInfo{}, err
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		return forensics.ImportInfo{}, err
+	}
+	defer db.Close()
+	svc := forensics.Service{DB: db, Paths: paths}
+	return svc.ImportBundle(bundlePath)
 }
 
 func exportForensics(dataDir, daemonURL, runID, signKeyPath string) (forensics.BundleInfo, error) {

@@ -94,6 +94,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/telemetry/ingest-falco", s.ingestFalco)
 	mux.HandleFunc("GET /v1/graph/verify", s.graphVerify)
 	mux.HandleFunc("GET /v1/graph/explain", s.graphExplain)
+	mux.HandleFunc("GET /v1/graph/lens", s.graphLens)
 	mux.HandleFunc("GET /v1/evidence/manifest", s.evidenceManifest)
 	mux.HandleFunc("POST /v1/forensics/export", s.forensicsExport)
 	mux.HandleFunc("POST /v1/forensics/export-batch", s.forensicsExportBatch)
@@ -658,6 +659,22 @@ func (s Server) graphExplain(w http.ResponseWriter, r *http.Request) {
 		Depth:    depth,
 		Limit:    limit,
 		Cursor:   r.URL.Query().Get("cursor"),
+	})
+	writeResult(w, result, err)
+}
+
+func (s Server) graphLens(w http.ResponseWriter, r *http.Request) {
+	limit, err := intQuery(r, "limit", 500)
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
+	result, err := provenance.BuildGraphLens(s.DB, provenance.GraphLensOptions{
+		RunID:    r.URL.Query().Get("run"),
+		Lens:     r.URL.Query().Get("lens"),
+		Focus:    r.URL.Query().Get("focus"),
+		Overlays: r.URL.Query()["overlay"],
+		Limit:    limit,
 	})
 	writeResult(w, result, err)
 }

@@ -716,17 +716,66 @@ engine, not the model.
 A local, read-only, single-page dashboard over the verifiable graph. Its JSON
 endpoints reuse the same internal functions as the CLI and AI tools, so the UI
 never drifts from the contract; the HTML/JS is embedded in the binary and loads
-no external assets (local-first). Panels:
+no external assets (local-first). The UI is a **Graph Explorer** over the
+canonical graph, not a single hard-coded security flow:
 
-- **Causality DAG** (the signature view): model intent -> action -> policy ->
-  risk -> response, rendered from the same `llm_intent_caused` / `llm_call` /
-  policy->risk->response edges; click a node to highlight its causal lineage and
-  inspect its full record.
-- **Verify + signature** status, **signals / risk** with recommended actions, a
-  **paged timeline** (with correlation class per event), the **process tree**,
-  and **egress** (destination IP and -- when captured -- resolved DNS hostname).
-- Live auto-refresh; flat event streams plus the verifiable signed DAG that a
-  pure event viewer cannot show.
+```text
+Canonical Provenance Graph
+  -> Derived / Virtual Edges
+  -> Lens projection
+  -> Layout + side-panel schema
+```
+
+Panels:
+
+- **Graph Explorer** (`/api/lens`, same `graph lens` query surface as the CLI):
+  a **lens switcher** over 9 projections — default causality, security,
+  process tree, file/artifact lineage, network egress, **data-flow/taint**,
+  agent intent, trust origin, sandbox boundary — with **risk/trust overlays**,
+  click-to-focus on a node's causal lineage, and a Sugiyama-layered DAG.
+  **Derived edges** (e.g. `possible_sensitive_data_flow`) render dashed with
+  their confidence, so an inferred flow is never mistaken for a recorded fact.
+- **Time-scrubber**: replay a run forward over its real event clock — watch a
+  secret read, then the egress, appear in order.
+- **Side Panel**: per-node **Evidence** (ids, command/pid/path/destination,
+  risk/policy/response, derived-edge rule + confidence + evidence refs, hashes)
+  and a bounded, secret-redacted **artifact content Preview** (the code/JSON the
+  node actually produced — `/api/artifact`).
+- **Verify + signature** status, **signals / risk**, a **paged timeline**, the
+  **process tree**, and **egress**; live auto-refresh.
+
+<p align="center">
+  <!-- TODO screenshot: Graph Explorer with the data-flow/taint lens on run-snake-agent -->
+  <img src="docs/img/dashboard-graph-explorer-taint.png" alt="Graph Explorer — data-flow/taint lens showing the captured secret-read -> metadata-IP exfil flow" width="100%">
+</p>
+<p align="center">
+  <!-- TODO screenshot: Side Panel showing Evidence + Preview of the agent's snake.py -->
+  <img src="docs/img/dashboard-side-panel-preview.png" alt="Side Panel — evidence summary plus a redacted preview of the artifact the agent produced" width="100%">
+</p>
+
+### Demo: agent in a sandbox (supply-chain exfiltration, caught by provenance)
+
+A **real coding agent** (Claude Code, DeepSeek backend) builds a Snake game in a
+sandbox; its setup step installs a poisoned `pysnake-helper` whose install hook
+reads planted credentials and connects to the cloud-metadata IP. The self-owned
+eBPF sensor captures it; the **data-flow/taint lens** surfaces the
+secret-read -> egress flow as a causal edge. Captured live on the Linux/eBPF lab
+VM and shipped as a **signed, portable forensics bundle** that replays offline:
+
+```sh
+./agentprov --data-dir /tmp/snake-replay forensics import \
+  demo/snake-supply-chain/run-snake-agent.forensics.json \
+  --pub-key demo/snake-supply-chain/attestation.pub        # verifies the signature, then imports
+./agentprov --data-dir /tmp/snake-replay dashboard serve   # open run "run-snake-agent"
+```
+
+<p align="center">
+  <!-- TODO screenshot: the taint lens time-scrubber mid-replay (secret reads visible, egress about to appear) -->
+  <img src="docs/img/demo-snake-taint-replay.png" alt="Replaying the captured snake-agent run: the taint lens shows the poisoned dependency's secret reads flowing to the metadata-IP egress" width="100%">
+</p>
+
+See [`demo/snake-supply-chain/`](demo/snake-supply-chain) for the full walkthrough,
+the capture scripts, and what to click in the dashboard.
 
 ## Graph Commands
 
@@ -743,6 +792,9 @@ no external assets (local-first). Panels:
 ./agentprov graph replay --run run-demo-bugfix
 ./agentprov graph replay --run run-demo-bugfix --json
 ./agentprov graph trajectories --run run-demo-bugfix --json
+./agentprov graph lens --run run-demo-bugfix --lens default --json
+./agentprov graph lens --run run-demo-bugfix --lens data-flow-taint --overlay risk --json
+./agentprov graph lens --run run-demo-bugfix --lens process --focus runtime_event/<event_id> --json
 ./agentprov graph diff --run run-demo-bugfix --file calculator.py
 ./agentprov graph diff --run run-demo-bugfix --file calculator.py --json
 ./agentprov graph blame --run run-demo-bugfix --file calculator.py
@@ -767,6 +819,7 @@ What these mean:
 | `verify` | Check graph integrity, risk/response evidence chains, taint/response barriers, object hashes, replay generation, drain watermarks, telemetry batch hashes, and orphan lifecycle evidence for outlived zero-SDK child processes |
 | `replay` | Emit a plan-only reconstruction of the run |
 | `trajectories --json` | Emit per-attempt behavior evidence, risk/deviation context, cost, artifacts, and runtime events for external evaluators or RL reward/penalty pipelines |
+| `lens` | Project the canonical graph through a Graph Explorer lens. Emits `agentprovenance.graph_lens/v1` with canonical nodes/edges, derived edges, focus state, overlays, and layout hints |
 | `diff` | Compare file state between base and attempts |
 | `blame` | Attribute file state to attempt, tool call, process, strategy, command, and local candidate status |
 | `explain` | Explain a target by combining trace, runtime causality, diff/blame, telemetry receiver details, telemetry batch manifests, process observations, policy, object refs, risk signals, baseline deviations, and response evidence; `--json` emits `agentprovenance.explain/v1` with `upstream`, `downstream`, bounded `causality_path`, `query`, `evidence`, `objects`, `risks`, `telemetry_batches`, `process_observations`, and `replay_refs`; runtime events include receiver/source format, normalized event type, identity keys, schema status, and correlation status; use `--depth`, `--limit`, and `--cursor` to bound and page DAG traversal |
@@ -789,6 +842,7 @@ What these mean:
 | Execution context | explicit ToolCallScope binding across run / session / attempt / tool_call / process / container / cgroup / pid |
 | Runtime causality | native `runtime_*` graph edges (tool call, process tree, snapshot, event, file) |
 | Provenance DAG | `graph trace / refs / log / materialize / objects / verify / replay` over content-addressed objects |
+| Graph Explorer lenses | `graph lens` projects the canonical graph into default, security, process, file-artifact, network-egress, data-flow-taint, agent-intent, trust-origin, and sandbox-boundary views; derived edges are marked with derivation rule, confidence, and evidence refs |
 | Graph verify | checks object hashes, parent links, and the policy → risk → response → signal chain (white-box and external-telemetry runs) |
 | Correlation explain | `telemetry correlations` — raw identity, resolved context, matched binding, confidence, and time window per event |
 
@@ -894,6 +948,8 @@ flowchart TD
         Timeline["Execution Timeline\napplication context + runtime events"]
         Causality["Runtime Causality Graph\nprocess / file / network / event"]
         Provenance["Git-like Provenance DAG\nrefs / objects / diff / blame"]
+        Derivation["Graph Derivation\nvirtual edges / taint flow / origin / drift"]
+        Lens["Graph Lens System\ndefault / security / process / file / egress / taint"]
         Evidence["Evidence Manifest\ncontent-addressed refs / hashes"]
     end
 
@@ -901,7 +957,9 @@ flowchart TD
     Correlation --> Timeline
     Timeline --> Causality
     Causality --> Provenance
-    Provenance --> Evidence
+    Provenance --> Derivation
+    Derivation --> Lens
+    Lens --> Evidence
     Evidence --> Query["Evidence Query Surface\nobserve / timeline / explain / verify / audit"]
     Evidence --> Security["Security Analysis\nbaseline / policy / risk / response / forensics"]
 ```

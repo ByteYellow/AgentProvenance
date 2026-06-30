@@ -9,11 +9,19 @@
 package dashboard
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"database/sql"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
@@ -35,6 +43,8 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/overview", s.overview)
 	mux.HandleFunc("GET /api/timeline", s.timeline)
 	mux.HandleFunc("GET /api/graph", s.graph)
+	mux.HandleFunc("GET /api/lens", s.lens)
+	mux.HandleFunc("GET /api/artifact", s.artifact)
 	mux.HandleFunc("GET /api/egress", s.egress)
 	mux.HandleFunc("GET /api/processes", s.processes)
 	return mux
@@ -235,6 +245,225 @@ func atoiClamp(s string, def, lo, hi int) int {
 		n = hi
 	}
 	return n
+}
+
+func (s Server) lens(w http.ResponseWriter, r *http.Request) {
+	run := r.URL.Query().Get("run")
+	if run == "" {
+		httpError(w, "run is required", 400)
+		return
+	}
+	manifest, err := provenance.BuildGraphLens(s.DB, provenance.GraphLensOptions{
+		RunID:    run,
+		Lens:     r.URL.Query().Get("lens"),
+		Focus:    r.URL.Query().Get("focus"),
+		Overlays: r.URL.Query()["overlay"],
+		Limit:    atoiClamp(r.URL.Query().Get("limit"), 500, 1, 2000),
+	})
+	if err != nil {
+		httpError(w, err.Error(), 500)
+		return
+	}
+	writeJSON(w, manifest)
+}
+
+// --- artifact content preview (Side Panel) ---
+
+const (
+	artifactPreviewBytes = 64 * 1024  // text shown to the user
+	artifactReadBytes    = 8 << 20    // cap on what we'll read at all
+)
+
+type artifactResp struct {
+	Kind      string `json:"kind"` // text | diff | binary | unavailable
+	Ref       string `json:"ref,omitempty"`
+	Source    string `json:"source,omitempty"` // object | file
+	SHA256    string `json:"sha256,omitempty"`
+	Size      int64  `json:"size"`
+	Mime      string `json:"mime,omitempty"`
+	Truncated bool   `json:"truncated"`
+	Redacted  bool   `json:"redacted"`
+	Content   string `json:"content,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+// artifact serves a bounded, type-aware, secret-redacted preview of the content
+// behind a graph node — the provenance object it was materialized into (by
+// source_id/hash) or a recorded artifact file. It never serves arbitrary paths:
+// only content registered for this run, capped at artifactReadBytes.
+func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
+	run := r.URL.Query().Get("run")
+	node := r.URL.Query().Get("node")
+	if run == "" || node == "" {
+		httpError(w, "run and node are required", 400)
+		return
+	}
+	path, hash, source := s.resolveArtifactPath(run, node)
+	if path == "" {
+		writeJSON(w, artifactResp{Kind: "unavailable", Reason: "no stored content for this node"})
+		return
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		writeJSON(w, artifactResp{Kind: "unavailable", Ref: hash, Source: source, Reason: "content not present on this host"})
+		return
+	}
+	resp := artifactResp{Ref: hash, Source: source, Size: info.Size()}
+	if info.Size() > artifactReadBytes {
+		resp.Kind = "unavailable"
+		resp.Reason = "artifact too large to preview"
+		writeJSON(w, resp)
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		resp.Kind = "unavailable"
+		resp.Reason = "content unreadable"
+		writeJSON(w, resp)
+		return
+	}
+	if resp.SHA256 = hash; resp.SHA256 == "" {
+		sum := sha256.Sum256(data)
+		resp.SHA256 = "sha256:" + hex.EncodeToString(sum[:])
+	}
+	// Artifact objects wrap the file in a provenance envelope; show the file the
+	// node produced, not the metadata wrapper. (Evidence objects — events, policy,
+	// etc. — are left as-is so the panel shows the full signed record.)
+	mimePath := path
+	if content, srcPath, ok := unwrapArtifactContent(data); ok {
+		data = content
+		if srcPath != "" {
+			mimePath = srcPath
+		}
+	}
+	preview := data
+	if len(preview) > artifactPreviewBytes {
+		preview = preview[:artifactPreviewBytes]
+		resp.Truncated = true
+	}
+	if isBinaryContent(preview) {
+		resp.Kind = "binary"
+		resp.Mime = "application/octet-stream"
+		resp.Reason = "binary content — hash and size only"
+		writeJSON(w, resp)
+		return
+	}
+	red, didRedact := redactSecrets(string(preview))
+	resp.Content = red
+	resp.Redacted = didRedact
+	resp.Mime = mimeForPath(mimePath)
+	if looksLikeDiff(red) {
+		resp.Kind = "diff"
+	} else {
+		resp.Kind = "text"
+	}
+	writeJSON(w, resp)
+}
+
+// resolveArtifactPath maps a graph node to a content source recorded for this run:
+// first the provenance object it was materialized into (matched by source_id or
+// hash, accepting a "prefix/<id>" node form), then a recorded artifact result file.
+func (s Server) resolveArtifactPath(run, node string) (path, hash, source string) {
+	seg := node
+	if i := strings.LastIndex(node, "/"); i >= 0 {
+		seg = node[i+1:]
+	}
+	row := s.DB.QueryRow(`SELECT path, hash FROM provenance_objects
+		WHERE run_id = ? AND (source_id = ? OR source_id = ? OR hash = ? OR hash = ?) LIMIT 1`,
+		run, node, seg, node, "sha256:"+strings.TrimPrefix(seg, "sha256:"))
+	if err := row.Scan(&path, &hash); err == nil && path != "" {
+		return path, hash, "object"
+	}
+	var p string
+	if err := s.DB.QueryRow(`SELECT result_ref FROM tool_calls WHERE run_id = ? AND result_ref = ? AND result_ref != '' LIMIT 1`, run, node).Scan(&p); err == nil && p != "" {
+		return p, "", "file"
+	}
+	if err := s.DB.QueryRow(`SELECT artifact_result FROM fork_attempts WHERE artifact_result = ? AND artifact_result != '' LIMIT 1`, node).Scan(&p); err == nil && p != "" {
+		return p, "", "file"
+	}
+	return "", "", ""
+}
+
+// unwrapArtifactContent returns the file content inside an "artifact"-type
+// provenance object envelope (and its original path for mime detection). Evidence
+// envelopes (other types) return ok=false so they display as their full record.
+func unwrapArtifactContent(data []byte) (content []byte, path string, ok bool) {
+	var obj struct {
+		Schema  string `json:"schema"`
+		Type    string `json:"type"`
+		Payload struct {
+			Content string `json:"content"`
+			Path    string `json:"path"`
+		} `json:"payload"`
+	}
+	if json.Unmarshal(data, &obj) != nil {
+		return nil, "", false
+	}
+	if obj.Schema != "agentprov.provenance.object.v1" || obj.Type != "artifact" || obj.Payload.Content == "" {
+		return nil, "", false
+	}
+	return []byte(obj.Payload.Content), obj.Payload.Path, true
+}
+
+func isBinaryContent(data []byte) bool {
+	if bytes.IndexByte(data, 0) >= 0 {
+		return true
+	}
+	return !utf8.Valid(data)
+}
+
+func looksLikeDiff(text string) bool {
+	if strings.HasPrefix(text, "diff --git ") || strings.HasPrefix(text, "--- ") || strings.HasPrefix(text, "Index: ") {
+		return true
+	}
+	return diffHunkRe.MatchString(text)
+}
+
+func mimeForPath(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".json":
+		return "application/json"
+	case ".py":
+		return "text/x-python"
+	case ".diff", ".patch":
+		return "text/x-diff"
+	case ".md":
+		return "text/markdown"
+	case ".sh":
+		return "text/x-shellscript"
+	case ".js", ".ts":
+		return "text/javascript"
+	default:
+		return "text/plain"
+	}
+}
+
+var (
+	diffHunkRe   = regexp.MustCompile(`(?m)^@@ .* @@`)
+	pemKeyRe     = regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`)
+	awsKeyRe     = regexp.MustCompile(`AKIA[0-9A-Z]{16}`)
+	kvSecretRe   = regexp.MustCompile(`(?i)(password|passwd|secret|token|api[_-]?key|aws_secret_access_key|authorization)(["']?\s*[:=]\s*["']?)([^\s"',}]{4,})`)
+)
+
+// redactSecrets masks the obvious secret shapes (private keys, cloud keys,
+// password/token assignments) so a previewed artifact can't leak credentials —
+// the demo plants fake secrets that the poisoned dependency exfiltrates, and the
+// preview must show "it touched a secret" without re-displaying it.
+func redactSecrets(text string) (string, bool) {
+	redacted := false
+	mark := func(re *regexp.Regexp, repl func(string) string) {
+		if re.MatchString(text) {
+			text = re.ReplaceAllStringFunc(text, repl)
+			redacted = true
+		}
+	}
+	mark(pemKeyRe, func(string) string { return "-----BEGIN PRIVATE KEY----- ***REDACTED*** -----END PRIVATE KEY-----" })
+	mark(awsKeyRe, func(string) string { return "AKIA****************" })
+	mark(kvSecretRe, func(m string) string {
+		g := kvSecretRe.FindStringSubmatch(m)
+		return g[1] + g[2] + "***REDACTED***"
+	})
+	return text, redacted
 }
 
 // --- causality DAG (the signature view) ---

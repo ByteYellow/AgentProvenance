@@ -248,6 +248,28 @@ func (c Client) ExplainGraph(opts provenance.ExplainOptions) (provenance.Explain
 	return manifest, err
 }
 
+func (c Client) GraphLens(opts provenance.GraphLensOptions) (provenance.GraphLensManifest, error) {
+	values := url.Values{}
+	if opts.RunID != "" {
+		values.Set("run", opts.RunID)
+	}
+	if opts.Lens != "" {
+		values.Set("lens", opts.Lens)
+	}
+	if opts.Focus != "" {
+		values.Set("focus", opts.Focus)
+	}
+	if opts.Limit > 0 {
+		values.Set("limit", fmt.Sprintf("%d", opts.Limit))
+	}
+	for _, overlay := range opts.Overlays {
+		values.Add("overlay", overlay)
+	}
+	var manifest provenance.GraphLensManifest
+	err := c.getJSON("/v1/graph/lens?"+values.Encode(), &manifest)
+	return manifest, err
+}
+
 func (c Client) EvidenceManifest(runID string, materialize bool) (evidence.MaterializedManifest, error) {
 	values := url.Values{}
 	values.Set("run", runID)

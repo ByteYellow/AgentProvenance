@@ -29,3 +29,6 @@ TODO.md
 # checkout without clang (regenerate via `go generate ./internal/sensor` after
 # editing exec.c; CI guards drift). Only the huge generated vmlinux.h stays out.
 internal/sensor/vmlinux.h
+
+# 本地面试准备文档(不上传)
+面试解读.zh-CN.md

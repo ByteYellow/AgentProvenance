@@ -109,3 +109,34 @@ func TestExportBundleIncludesRiskResponseEvidence(t *testing.T) {
 		t.Fatalf("bundle missing evidence manifest security summary: %+v", bundle.EvidenceManifest)
 	}
 }
+
+func TestImportBundleRejectsUnknownColumns(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	bundlePath := filepath.Join(root, "bundle.json")
+	raw := []byte(`{
+	  "schema_version":"agentprovenance.forensics_bundle/v1",
+	  "run_id":"run-bad-import",
+	  "leases":[{"id":"lease-bad","run_id":"run-bad-import","task_path":"task.yaml","task_yaml":"{}","status":"allocated","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","id) VALUES ('x'); DROP TABLE leases; --":"boom"}]
+	}`)
+	if err := os.WriteFile(bundlePath, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = (Service{DB: db, Paths: paths}).ImportBundle(bundlePath)
+	if err == nil {
+		t.Fatal("expected malicious/unknown import column to be rejected")
+	}
+	var count int
+	if qerr := db.QueryRow(`SELECT COUNT(*) FROM leases`).Scan(&count); qerr != nil {
+		t.Fatalf("leases table should still exist: %v", qerr)
+	}
+}
