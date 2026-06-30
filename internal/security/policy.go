@@ -35,6 +35,13 @@ type Decision struct {
 	Decision string `json:"decision"`
 	Reason   string `json:"reason"`
 	RuleID   string `json:"rule_id,omitempty"`
+	// Mode records whether the matched rule enforces ("enforce") or only
+	// observes ("detect"). Intended is the action the rule WOULD take when it
+	// runs in enforce mode, preserved even when a detect-mode match downgrades
+	// the effective Decision to "audit" -- the compliance view needs it to show
+	// "detected, would have killed" vs "detected and killed".
+	Mode     string `json:"mode,omitempty"`
+	Intended string `json:"intended_decision,omitempty"`
 }
 
 type DecisionRecord struct {
@@ -124,10 +131,33 @@ func DefaultEngine() Engine {
 }
 
 type Rule struct {
-	ID       string    `yaml:"id"`
-	Match    RuleMatch `yaml:"match"`
-	Decision string    `yaml:"decision"`
-	Reason   string    `yaml:"reason"`
+	ID       string    `yaml:"id" json:"id"`
+	Match    RuleMatch `yaml:"match" json:"match"`
+	Decision string    `yaml:"decision" json:"decision"`
+	Reason   string    `yaml:"reason" json:"reason"`
+	// Mode is "enforce" (default when empty) or "detect". A detect rule records
+	// the would-be decision as an audit signal but takes no kill/quarantine
+	// action -- the run is observed, not blocked. This is what makes the
+	// compliance view's "detected, not enforced" state real rather than cosmetic.
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+	// Controls are the compliance control IDs (e.g. ASI03, Q1) this rule maps
+	// to. The detection engine treats them as opaque tags; the compliance layer
+	// reads them to answer "which control is covered by which rule, and did it
+	// fire". Custom YAML rules set this to map themselves onto a framework.
+	Controls []string `yaml:"controls,omitempty" json:"controls,omitempty"`
+}
+
+func (r Rule) detectMode() bool { return strings.EqualFold(r.Mode, "detect") }
+
+// IsEnforcingDecision reports whether a recorded decision actually blocked the
+// action (as opposed to "allow" or a detect-mode "audit"). The compliance view
+// uses it to split fired rules into enforced vs detected-only.
+func IsEnforcingDecision(decision string) bool {
+	switch decision {
+	case "deny", "quarantine", "kill":
+		return true
+	}
+	return false
 }
 
 type RuleMatch struct {
@@ -150,24 +180,28 @@ func DefaultRules() []Rule {
 			Match:    RuleMatch{DstIP: "169.254.169.254"},
 			Decision: "quarantine",
 			Reason:   "metadata IP access",
+			Controls: []string{"ASI03", "Q1", "Q2"},
 		},
 		{
 			ID:       "metadata_ip_args",
 			Match:    RuleMatch{ArgsContains: []string{"169.254.169.254"}},
 			Decision: "quarantine",
 			Reason:   "metadata IP access",
+			Controls: []string{"ASI03", "Q1", "Q2"},
 		},
 		{
 			ID:       "private_cidr_access",
 			Match:    RuleMatch{PrivateCIDR: true},
 			Decision: "deny",
 			Reason:   "private CIDR access",
+			Controls: []string{"ASI02", "Q1", "Q2"},
 		},
 		{
 			ID:       "secret_path_access",
 			Match:    RuleMatch{PathContains: []string{".env", "id_rsa", "secret", "credentials"}},
 			Decision: "kill",
 			Reason:   "secret path access",
+			Controls: []string{"ASI03", "Q1", "Q2"},
 		},
 		{
 			// Synthetic marker injected by runtimeEventForPolicy only for a
@@ -177,12 +211,49 @@ func DefaultRules() []Rule {
 			Match:    RuleMatch{ArgsContains: []string{"setuid_root", "setgid_root"}},
 			Decision: "quarantine",
 			Reason:   "privilege escalation to root",
+			Controls: []string{"ASI03", "Q1", "Q2"},
 		},
 		{
 			ID:       "ptrace_access",
 			Match:    RuleMatch{EventType: "ptrace"},
 			Decision: "quarantine",
 			Reason:   "process injection (ptrace)",
+			Controls: []string{"ASI05", "Q1", "Q2"},
+		},
+		// --- detect-mode rules (observe, do not block) -------------------------
+		// These cover controls that have a real event source the sensor emits, so
+		// they are NOT phantom rules: when the matching activity happens they
+		// genuinely fire. They default to detect so the compliance view can show
+		// "this threat was seen but not blocked" -- the honest default posture.
+		{
+			// Package-install commands captured from execve argv. Supply-chain
+			// risk is real but blocking every install is too aggressive a default,
+			// so this observes and surfaces it for review.
+			ID:       "supply_chain_install",
+			Match:    RuleMatch{ArgsContains: []string{"pip install", "pip3 install", "npm install", "npm i ", "poetry add", "uv pip install"}},
+			Decision: "quarantine",
+			Reason:   "dependency install (supply-chain surface)",
+			Mode:     "detect",
+			Controls: []string{"ASI04", "Q1", "Q3"},
+		},
+		{
+			// Emitted by the eBPF sensor when a process tree looks anomalous.
+			ID:       "anomalous_process_tree",
+			Match:    RuleMatch{EventType: "abnormal_process_tree"},
+			Decision: "quarantine",
+			Reason:   "anomalous process tree (possible rogue behaviour)",
+			Mode:     "detect",
+			Controls: []string{"ASI10", "Q1", "Q3"},
+		},
+		{
+			// Sensor ringbuf back-pressure / event-drop -- a cascade/resource
+			// exhaustion indicator.
+			ID:       "resource_pressure",
+			Match:    RuleMatch{EventType: "resource_pressure"},
+			Decision: "deny",
+			Reason:   "resource pressure / event drop (cascade risk)",
+			Mode:     "detect",
+			Controls: []string{"ASI08", "Q3"},
 		},
 	}
 }
@@ -214,7 +285,19 @@ func (e Engine) Evaluate(event Event) Decision {
 				if reason == "" {
 					reason = rule.ID
 				}
-				return Decision{Decision: rule.Decision, Reason: reason, RuleID: rule.ID}
+				if rule.detectMode() {
+					// Observe-only: downgrade the effective action to "audit" so
+					// persistDecision records the signal but skips the kill/
+					// quarantine side effects. Keep the intended action visible.
+					return Decision{
+						Decision: "audit",
+						Reason:   reason + " (detect-only; would " + rule.Decision + ")",
+						RuleID:   rule.ID,
+						Mode:     "detect",
+						Intended: rule.Decision,
+					}
+				}
+				return Decision{Decision: rule.Decision, Reason: reason, RuleID: rule.ID, Mode: "enforce", Intended: rule.Decision}
 			}
 		}
 	}
@@ -610,7 +693,7 @@ func persistDecisionWithExistingEvent(db *sql.DB, eventID string, event Event, r
 	}
 	blockCount := int64(0)
 	quarantineCount := int64(0)
-	if decision.Decision != "allow" {
+	if IsEnforcingDecision(decision.Decision) {
 		blockCount = 1
 	}
 	switch decision.Decision {

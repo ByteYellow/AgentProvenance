@@ -145,6 +145,129 @@ func TestDashboardEventsProcessBurstGroup(t *testing.T) {
 	}
 }
 
+func TestDashboardFrameworks(t *testing.T) {
+	db := newDashboardTestDB(t)
+	req := httptest.NewRequest("GET", "/api/frameworks", nil)
+	rec := httptest.NewRecorder()
+	(Server{DB: db}).frameworks(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var out []struct {
+		ID       string `json:"id"`
+		Title    string `json:"title"`
+		Controls int    `json:"controls"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	// Both built-in frameworks must be advertised, each with controls.
+	byID := map[string]int{}
+	for _, f := range out {
+		byID[f.ID] = f.Controls
+	}
+	if byID["owasp-asi"] == 0 {
+		t.Fatalf("owasp-asi missing or has no controls: %+v", out)
+	}
+	if len(out) < 2 {
+		t.Fatalf("expected at least 2 frameworks, got %d: %+v", len(out), out)
+	}
+}
+
+func TestDashboardComplianceMapsRun(t *testing.T) {
+	db := newDashboardTestDB(t)
+	insertDashboardEvent(t, db, "evt-secret", "secret_path", `{"path":"/workspace/.aws/credentials"}`)
+
+	req := httptest.NewRequest("GET", "/api/compliance?run=run-dash&framework=owasp-asi", nil)
+	rec := httptest.NewRecorder()
+	(Server{DB: db}).compliance(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var rep struct {
+		Framework string `json:"framework"`
+		Summary   struct {
+			Total int `json:"total"`
+		} `json:"summary"`
+		Items []struct {
+			Status string `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &rep); err != nil {
+		t.Fatal(err)
+	}
+	if rep.Framework != "owasp-asi" || rep.Summary.Total == 0 || len(rep.Items) == 0 {
+		t.Fatalf("expected a populated owasp-asi report, got %+v", rep)
+	}
+}
+
+func insertPolicyDecision(t *testing.T, db *sql.DB, id, rule, decision string) {
+	t.Helper()
+	if _, err := db.Exec(`INSERT INTO policy_decisions (id, event_id, run_id, session_id, rule_id, decision, reason, created_at)
+		VALUES (?, '', 'run-dash', 'session-dash', ?, ?, 'test', '2026-06-30T00:00:00Z')`, id, rule, decision); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDashboardComplianceRuleStates(t *testing.T) {
+	db := newDashboardTestDB(t)
+	// secret_path_access -> ASI03, enforce-mode rule, killed -> enforced.
+	insertPolicyDecision(t, db, "dec-kill", "secret_path_access", "kill")
+	// supply_chain_install -> ASI04, detect-mode rule fires as "audit"
+	// (observed, not blocked) -> detected.
+	insertPolicyDecision(t, db, "dec-audit", "supply_chain_install", "audit")
+
+	req := httptest.NewRequest("GET", "/api/compliance?run=run-dash&framework=owasp-asi", nil)
+	rec := httptest.NewRecorder()
+	(Server{DB: db}).compliance(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var rep struct {
+		Summary map[string]int `json:"summary"`
+		Items   []struct {
+			ControlID string `json:"control_id"`
+			Status    string `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &rep); err != nil {
+		t.Fatal(err)
+	}
+	st := map[string]string{}
+	for _, it := range rep.Items {
+		st[it.ControlID] = it.Status
+	}
+	// ASI03: enforce rule fired and blocked -> enforced.
+	if st["ASI03"] != "enforced" {
+		t.Fatalf("ASI03 want enforced (killed secret access), got %q", st["ASI03"])
+	}
+	// ASI04: detect-mode rule fired but did not block -> detected.
+	if st["ASI04"] != "detected" {
+		t.Fatalf("ASI04 want detected (detect-mode install), got %q", st["ASI04"])
+	}
+	// ASI05: ptrace_access maps here but did not fire -> not_triggered.
+	if st["ASI05"] != "not_triggered" {
+		t.Fatalf("ASI05 want not_triggered (rule mapped, not fired), got %q", st["ASI05"])
+	}
+	// ASI01: no rule maps to it -> no_rule (honest gap, NOT a clean pass).
+	if st["ASI01"] != "no_rule" {
+		t.Fatalf("ASI01 want no_rule (no detector), got %q", st["ASI01"])
+	}
+	if rep.Summary["enforced"] < 1 || rep.Summary["detected"] < 1 || rep.Summary["no_rule"] < 1 {
+		t.Fatalf("summary should count enforced+detected+no_rule, got %+v", rep.Summary)
+	}
+}
+
+func TestDashboardComplianceUnknownFramework(t *testing.T) {
+	db := newDashboardTestDB(t)
+	req := httptest.NewRequest("GET", "/api/compliance?run=run-dash&framework=does-not-exist", nil)
+	rec := httptest.NewRecorder()
+	(Server{DB: db}).compliance(rec, req)
+	if rec.Code != 400 {
+		t.Fatalf("unknown framework should be 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func newDashboardTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 	paths, err := store.Init(filepath.Join(t.TempDir(), ".agentprov"))

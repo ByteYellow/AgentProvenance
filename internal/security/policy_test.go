@@ -312,3 +312,26 @@ func TestPolicyWritebackFailureIsObservable(t *testing.T) {
 		t.Fatal("expected an observable signal_writeback error event, found none")
 	}
 }
+
+func TestDetectModeDowngradesToAudit(t *testing.T) {
+	// supply_chain_install is a detect-mode rule: it must fire (not "allow") but
+	// downgrade to "audit" so no kill/quarantine side effect runs, while keeping
+	// the intended action visible.
+	d := DefaultEngine().Evaluate(Event{Args: []string{"pip install requests"}})
+	if d.Decision != "audit" {
+		t.Fatalf("detect-mode decision = %s, want audit", d.Decision)
+	}
+	if d.Mode != "detect" {
+		t.Fatalf("detect-mode Mode = %q, want detect", d.Mode)
+	}
+	if d.Intended != "quarantine" {
+		t.Fatalf("detect-mode Intended = %q, want quarantine", d.Intended)
+	}
+	if IsEnforcingDecision(d.Decision) {
+		t.Fatalf("audit must not count as an enforcing decision")
+	}
+	// An enforce-mode rule keeps its blocking decision.
+	if e := DefaultEngine().Evaluate(Event{EventType: "ptrace"}); e.Decision != "quarantine" || e.Mode != "enforce" {
+		t.Fatalf("enforce rule = %+v, want quarantine/enforce", e)
+	}
+}

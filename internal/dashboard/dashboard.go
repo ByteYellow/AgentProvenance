@@ -23,6 +23,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/byteyellow/agentprovenance/internal/compliance"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/signals"
@@ -48,6 +49,8 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/artifact", s.artifact)
 	mux.HandleFunc("GET /api/egress", s.egress)
 	mux.HandleFunc("GET /api/processes", s.processes)
+	mux.HandleFunc("GET /api/frameworks", s.frameworks)
+	mux.HandleFunc("GET /api/compliance", s.compliance)
 	return mux
 }
 
@@ -141,6 +144,54 @@ func (s Server) processes(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, out)
+}
+
+// frameworks lists the built-in compliance frameworks (id, title, control count)
+// so the UI can populate its framework selector. It mirrors `compliance map` --
+// the same compliance.Frameworks() the CLI uses, so the dashboard never drifts
+// from the supported set.
+func (s Server) frameworks(w http.ResponseWriter, r *http.Request) {
+	type fw struct {
+		ID         string `json:"id"`
+		Title      string `json:"title"`
+		Controls   int    `json:"controls"`
+		Disclaimer string `json:"disclaimer,omitempty"`
+	}
+	out := []fw{}
+	for _, f := range compliance.Frameworks() {
+		out = append(out, fw{ID: f.ID, Title: f.Title, Controls: len(f.Controls), Disclaimer: f.Disclaimer})
+	}
+	writeJSON(w, out)
+}
+
+// compliance maps the configured detection RULES onto a framework's controls
+// for one run, returning the four-state coverage report from
+// compliance.MapRunRules: enforced (a mapped rule fired and blocked), detected
+// (a mapped rule fired but is detect-only), not_triggered (rule exists, did not
+// fire), no_rule (no detector maps to this control -- an honest coverage gap,
+// not a clean pass). Each evidence ref is an entity (policy_decision/risk_signal)
+// the UI cross-links back to its graph node. The rule->control taxonomy lives on
+// security.Rule.Controls (single source of truth), so custom YAML rules that set
+// controls: participate automatically.
+func (s Server) compliance(w http.ResponseWriter, r *http.Request) {
+	run := r.URL.Query().Get("run")
+	if run == "" {
+		httpError(w, "run is required", 400)
+		return
+	}
+	framework := r.URL.Query().Get("framework")
+	if framework == "" {
+		// Default to the first framework so the panel is never empty.
+		if fws := compliance.Frameworks(); len(fws) > 0 {
+			framework = fws[0].ID
+		}
+	}
+	report, err := compliance.MapRunRules(s.DB, compliance.RuleMappingOptions{Framework: framework, RunID: run})
+	if err != nil {
+		httpError(w, err.Error(), 400)
+		return
+	}
+	writeJSON(w, report)
 }
 
 func (s Server) index(w http.ResponseWriter, r *http.Request) {

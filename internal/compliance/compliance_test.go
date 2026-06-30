@@ -266,3 +266,55 @@ func execSQL(t *testing.T, db *sql.DB, query string, args ...any) {
 		t.Fatal(err)
 	}
 }
+
+func TestMapRunRulesFourStates(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := "2026-06-30T00:00:00Z"
+	// Enforce-mode rule fired and blocked -> ASI03 enforced.
+	execSQL(t, db, `INSERT INTO policy_decisions (id, event_id, run_id, session_id, rule_id, decision, reason, created_at)
+		VALUES ('d1', '', 'run-rm', 's1', 'secret_path_access', 'kill', 'secret', ?)`, now)
+	// Detect-mode rule fired as audit (observed, not blocked) -> ASI04 detected.
+	execSQL(t, db, `INSERT INTO policy_decisions (id, event_id, run_id, session_id, rule_id, decision, reason, created_at)
+		VALUES ('d2', '', 'run-rm', 's1', 'supply_chain_install', 'audit', 'install', ?)`, now)
+
+	report, err := MapRunRules(db, RuleMappingOptions{Framework: "owasp-asi", RunID: "run-rm"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]RuleStatus{}
+	for _, it := range report.Items {
+		got[it.ControlID] = it.Status
+	}
+	cases := map[string]RuleStatus{
+		"ASI03": RuleStatusEnforced,     // killed secret access
+		"ASI04": RuleStatusDetected,     // detect-mode install, not blocked
+		"ASI05": RuleStatusNotTriggered, // ptrace_access maps here, did not fire
+		"ASI01": RuleStatusNoRule,       // no detector maps to goal-hijack
+	}
+	for control, want := range cases {
+		if got[control] != want {
+			t.Fatalf("%s = %q, want %q (all=%v)", control, got[control], want, got)
+		}
+	}
+	if report.Summary.Enforced < 1 || report.Summary.Detected < 1 || report.Summary.NoRule < 1 {
+		t.Fatalf("summary missing expected counts: %+v", report.Summary)
+	}
+	// A fired control must carry clickable entity refs (policy_decision/...).
+	for _, it := range report.Items {
+		if it.ControlID == "ASI03" {
+			if len(it.EvidenceRefs) == 0 || it.EvidenceRefs[0].Kind != "policy_decision" {
+				t.Fatalf("ASI03 should have a policy_decision evidence ref, got %+v", it.EvidenceRefs)
+			}
+		}
+	}
+}

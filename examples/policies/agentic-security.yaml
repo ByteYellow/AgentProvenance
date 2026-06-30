@@ -1,0 +1,93 @@
+# Agentic-security detection rule pack.
+#
+# Load with:  agentprov policy --rules examples/policies/agentic-security.yaml ...
+#
+# Each rule is a runtime detector. Two fields drive the compliance view:
+#   mode:     enforce (default) = block on match (deny/quarantine/kill).
+#             detect            = observe and record only, no blocking action.
+#             The dashboard Compliance card splits a control into "enforced"
+#             (a mapped rule fired and blocked) vs "detected" (fired, detect-only).
+#   controls: the compliance control IDs this rule evidences (OWASP ASI / NIST
+#             RFI). This is how a rule maps onto a framework -- including your own
+#             custom rules. A control with NO rule mapped shows as "no_rule" (an
+#             honest coverage gap), never a fake clean pass.
+rules:
+  # --- enforce-mode detectors (block on match) ------------------------------
+  - id: metadata_ip_dst
+    match: { dst_ip: 169.254.169.254 }
+    decision: quarantine
+    reason: metadata IP access
+    mode: enforce
+    controls: [ASI03, Q1, Q2]
+
+  - id: metadata_ip_args
+    match:
+      args_contains: [169.254.169.254]
+    decision: quarantine
+    reason: metadata IP access
+    mode: enforce
+    controls: [ASI03, Q1, Q2]
+
+  - id: private_cidr_access
+    match: { private_cidr: true }
+    decision: deny
+    reason: private CIDR access
+    mode: enforce
+    controls: [ASI02, Q1, Q2]
+
+  - id: secret_path_access
+    match:
+      path_contains: [.env, id_rsa, secret, credentials]
+    decision: kill
+    reason: secret path access
+    mode: enforce
+    controls: [ASI03, Q1, Q2]
+
+  - id: privilege_escalation
+    match:
+      args_contains: [setuid_root, setgid_root]
+    decision: quarantine
+    reason: privilege escalation to root
+    mode: enforce
+    controls: [ASI03, Q1, Q2]
+
+  - id: ptrace_access
+    match: { event_type: ptrace }
+    decision: quarantine
+    reason: process injection (ptrace)
+    mode: enforce
+    controls: [ASI05, Q1, Q2]
+
+  # --- detect-mode detectors (observe, do not block) ------------------------
+  - id: supply_chain_install
+    match:
+      args_contains: ["pip install", "pip3 install", "npm install", "npm i ", "poetry add", "uv pip install"]
+    decision: quarantine        # the action it WOULD take if switched to enforce
+    reason: dependency install (supply-chain surface)
+    mode: detect
+    controls: [ASI04, Q1, Q3]
+
+  - id: anomalous_process_tree
+    match: { event_type: abnormal_process_tree }
+    decision: quarantine
+    reason: anomalous process tree (possible rogue behaviour)
+    mode: detect
+    controls: [ASI10, Q1, Q3]
+
+  - id: resource_pressure
+    match: { event_type: resource_pressure }
+    decision: deny
+    reason: resource pressure / event drop (cascade risk)
+    mode: detect
+    controls: [ASI08, Q3]
+
+  # --- example: your own custom rule mapped onto a control ------------------
+  # Drop in a detector for something the built-ins miss and tag the control it
+  # evidences -- it then shows up in the Compliance card automatically.
+  - id: custom_outbound_pastebin
+    match:
+      args_contains: ["pastebin.com", "requestbin", "webhook.site"]
+    decision: deny
+    reason: exfiltration to a known drop site
+    mode: detect
+    controls: [ASI03, Q1]

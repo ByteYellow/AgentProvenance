@@ -47,17 +47,19 @@
   .lensmeta{display:flex;flex-wrap:wrap;gap:7px 14px;padding:9px 20px;border-bottom:1px solid var(--line);font-size:11.5px;color:var(--mut);background:var(--panel2)}
   .lensmeta b{color:var(--tx);font-weight:600}
   .lensmeta .rule{font-family:ui-monospace,monospace;font-size:10.5px;background:#f0f0f3;border-radius:5px;padding:1px 6px}
-  .askgrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;padding:14px}
+  .askgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;padding:14px}
   .qbtn{border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 12px;text-align:left;cursor:pointer;min-height:70px;transition:border-color .12s,box-shadow .12s,transform .12s}
   .qbtn:hover{border-color:rgba(0,113,227,.35);box-shadow:0 8px 24px -18px rgba(0,113,227,.5);transform:translateY(-1px)}
   .qbtn .q{font-weight:650;font-size:12.5px;margin-bottom:4px}
   .qbtn .m{font-size:11px;color:var(--mut);font-family:ui-monospace,SFMono-Regular,monospace}
-  .qbtn.risk .q{color:#d70015}.qbtn.egress .q{color:#b25e00}.qbtn.file .q{color:#0a7d52}.qbtn.proc .q{color:#3634a3}
+  .qbtn.risk .q{color:#d70015}.qbtn.egress .q{color:#b25e00}.qbtn.file .q{color:#0a7d52}.qbtn.proc .q{color:#3634a3}.qbtn.comp .q{color:#1d8c3e}
   .scrub{display:flex;align-items:center;gap:12px;padding:9px 20px;border-bottom:1px solid var(--line);background:var(--panel2)}
   .scrub button{background:#fff;border:1px solid var(--line2);border-radius:8px;width:32px;height:26px;cursor:pointer;font-size:12px;transition:border-color .12s,color .12s}
   .scrub button:hover{border-color:var(--acc);color:var(--acc)}
   .scrub input[type=range]{flex:1;accent-color:var(--acc);cursor:pointer}
   .scrub .lbl{font-size:11.5px;color:var(--mut);font-family:ui-monospace,monospace;white-space:nowrap;min-width:190px;text-align:right}
+  .zoombar{display:flex;gap:5px;margin-left:6px}
+  .zoombar button{width:auto;min-width:28px;padding:0 8px}
   #dag{width:100%;overflow:auto;background-color:#fbfbfd;background-image:radial-gradient(rgba(0,0,0,.05) 1px,transparent 1px);background-size:22px 22px}
   .legend{display:flex;gap:14px;flex-wrap:wrap;padding:12px 20px;border-top:1px solid var(--line);font-size:11.5px;color:var(--mut)}
   .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
@@ -125,6 +127,78 @@
   .cls{font-size:11px;color:var(--mut)}
   .cls.kernel_correlated{color:#0a7d52}
   .cls.uncorrelated{color:#d70015}
+  /* --- Compliance card --- */
+  .compsummary{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  .covbar{flex:1;min-width:200px;height:12px;border-radius:99px;overflow:hidden;display:flex;background:#ececf0}
+  .covbar i{height:100%;transition:width .25s}
+  .covbar i.enforced{background:var(--ok)}
+  .covbar i.detected{background:#ff9f0a}
+  .covbar i.not_triggered{background:#9ad0ff}
+  .covbar i.no_rule{background:#c7c7cc}
+  .covstats{display:flex;gap:13px;font-size:11.5px;color:var(--mut);flex-wrap:wrap}
+  .covstats b{font-size:14px;font-weight:650}
+  .covstats .enforced b{color:#1d8c3e}.covstats .detected b{color:#b25e00}.covstats .not_triggered b{color:#0060df}.covstats .no_rule b{color:#86868b}
+  .enfbadge{font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:99px;white-space:nowrap}
+  .enfbadge.enforced{background:rgba(52,199,89,.14);color:#1d8c3e}
+  .enfbadge.detected{background:rgba(255,159,10,.16);color:#b25e00}
+  .enfbadge.not_triggered{background:rgba(10,132,255,.12);color:#0060df}
+  .enfbadge.no_rule{background:#f0f0f3;color:#86868b}
+  .citemcard.st-enforced{border-left-color:var(--ok)}
+  .citemcard.st-detected{border-left-color:#ff9f0a}
+  .citemcard.st-not_triggered{border-left-color:#9ad0ff}
+  .citemcard.st-no_rule{border-left-color:#c7c7cc}
+  .grp-hdr-detected{color:#b25e00}.grp-hdr-enforced{color:#1d8c3e}
+  .crules{margin:9px 0 0;display:flex;flex-direction:column;gap:5px}
+  .crule{font-size:12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .crule .rid{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11.5px;color:#3a3a3c}
+  .rmark{font-weight:700}.rmark.fire{color:#b25e00}.rmark.block{color:#1d8c3e}.rmark.idle{color:#86868b}
+  .rmut{color:var(--mut);font-size:11.5px}
+  .rmode{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;padding:1px 6px;border-radius:5px}
+  .rmode.enforce{background:rgba(52,199,89,.12);color:#1d8c3e}
+  .rmode.detect{background:rgba(255,159,10,.16);color:#b25e00}
+  .ract{font-size:10.5px;font-weight:700;font-family:ui-monospace,monospace;padding:1px 7px;border-radius:6px}
+  .ract.ok{background:rgba(52,199,89,.12);color:#1d8c3e}
+  .ract.bad{background:rgba(255,159,10,.16);color:#b25e00}
+  .cnote{font-size:11.5px;color:var(--mut);margin:7px 0 0;font-style:italic}
+  .complist{max-height:620px;overflow:auto;padding:6px 14px 14px}
+  .compgroup{margin-top:4px}
+  .compgrouphdr{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--mut);padding:11px 6px 7px;cursor:pointer;user-select:none}
+  .compgrouphdr:hover{color:var(--tx)}
+  .compgrouphdr.attn{color:#b25e00}
+  .compgrouphdr .cnt{font-weight:500;color:var(--mut)}
+  .citemcard{border:1px solid var(--line);border-left-width:3px;border-radius:11px;padding:12px 14px;margin:8px 0;background:#fff}
+  .citemcard.covered{border-left-color:var(--ok)}
+  .citemcard.partial{border-left-color:#ff9f0a}
+  .citemcard.missing{border-left-color:var(--bad)}
+  .citemcard.not_applicable{border-left-color:#c7c7cc}
+  .cevtoggle{margin-top:9px;font-size:11.5px;color:#0060df;cursor:pointer;user-select:none}
+  .cevtoggle:hover{text-decoration:underline}
+  .cevbox{margin-top:8px}
+  .naline{font-size:12px;color:var(--mut);padding:3px 8px}
+  .chead{display:flex;align-items:center;gap:10px}
+  .cttl{font-weight:600;font-size:13px}
+  .cstat{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 9px;border-radius:99px;white-space:nowrap}
+  .cstat.covered{background:rgba(52,199,89,.14);color:#1d8c3e}
+  .cstat.partial{background:rgba(255,159,10,.16);color:#b25e00}
+  .cstat.missing{background:rgba(255,59,48,.12);color:#d70015}
+  .cstat.not_applicable{background:#f0f0f3;color:#86868b}
+  .cdesc{font-size:12px;color:#3a3a3c;margin:4px 0 0}
+  .cwhy{font-size:11px;color:var(--mut);margin:7px 0 0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .cwhy .lead{font-weight:600;color:#6e6e73}
+  .nchip{font-size:10.5px;font-family:ui-monospace,monospace;border-radius:6px;padding:2px 7px;border:1px solid var(--line2);white-space:nowrap}
+  .nchip.ok{background:rgba(52,199,89,.12);color:#1d8c3e;border-color:rgba(52,199,89,.3)}
+  .nchip.no{background:rgba(255,59,48,.08);color:#d70015;border-color:rgba(255,59,48,.25)}
+  .cwhy .arrow{color:#86868b}
+  .cgap{font-size:11.5px;color:var(--mut);margin:6px 0 0}
+  .cgap .next{color:#0060df}
+  .crefs{margin:8px 0 0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .cgroup{font-size:10.5px;color:var(--mut);font-family:ui-monospace,monospace;margin-right:2px}
+  .cref{font-size:10.5px;font-family:ui-monospace,SFMono-Regular,monospace;border:1px solid var(--line2);background:#fff;border-radius:7px;padding:2px 7px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  button.cref{cursor:pointer;color:#0060df;border-color:rgba(0,113,227,.3)}
+  button.cref:hover{background:rgba(0,113,227,.08);border-color:var(--acc)}
+  .cref.static{color:var(--mut)}
+  .cmore{font-size:10.5px;color:var(--mut)}
+  .compdisclaimer{padding:11px 20px;font-size:11px;color:var(--mut);border-top:1px solid var(--line);background:var(--panel2);font-style:italic}
   @media(max-width:1100px){.askgrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
   @media(max-width:900px){main{grid-template-columns:1fr}.hero,.side,.full{grid-column:1}.askgrid{grid-template-columns:1fr 1fr}}
 </style>
@@ -162,6 +236,7 @@
       <button id="playbtn" title="play the run forward">▶</button>
       <input id="slider" type="range" min="0" max="0" value="0" step="1" title="scrub through time">
       <span id="scrublabel" class="lbl">all events</span>
+      <span class="zoombar"><button id="zoomout" title="zoom out">−</button><button id="zoomfit" title="fit to width">fit</button><button id="zoomin" title="zoom in">+</button></span>
     </div>
     <div id="dag"></div>
     <div class="legend" id="legend"></div>
@@ -195,6 +270,15 @@
     <div style="overflow:auto;max-height:300px"><table id="egtbl"><thead><tr>
       <th>time</th><th>type</th><th>destination</th><th>port</th><th>proc</th>
     </tr></thead><tbody></tbody></table></div>
+  </section>
+  <section class="card full" id="compliancecard">
+    <h2>Compliance <span class="sub">per control: did a threat fire in this run, and did your detectors contain it? (violated / enforced / clear / not assessed)</span>
+      <span class="spacer"></span>
+      <select id="fwsel" title="compliance framework"></select>
+    </h2>
+    <div id="compsummary" class="compsummary"></div>
+    <div id="complist" class="complist"></div>
+    <div id="compdisclaimer" class="compdisclaimer"></div>
   </section>
 </main>
 <script>
@@ -289,6 +373,28 @@ function layout(nodes,edges){
     adj[u].forEach(v=>{ if(!back.has(u+'\u0000'+v) && layer[v]<layer[u]+1) layer[v]=layer[u]+1; });
   });
   const cols={}; nodes.forEach(n=>{(cols[layer[n.id]]=cols[layer[n.id]]||[]).push(n);});
+  // Within-column ordering: layering alone fixes the X (column) of each node but
+  // leaves the Y (row order) as insertion order, which crosses edges badly on
+  // busy lenses (raw detail). Run a few barycenter sweeps (the ordering step of
+  // Sugiyama, which the layout previously skipped): repeatedly reorder each layer
+  // by the mean row-index of its neighbors in the adjacent layer. Indices and
+  // barycenters share the same scale, so a node with no cross-layer neighbor just
+  // keeps its current index and stays put.
+  const idx={}; Object.keys(cols).forEach(L=>cols[L].forEach((n,i)=>{idx[n.id]=i;}));
+  const nUp={}, nDn={}; nodes.forEach(n=>{nUp[n.id]=[];nDn[n.id]=[];});
+  edges.forEach(e=>{ if(!byId[e.from]||!byId[e.to])return; const lf=layer[e.from],lt=layer[e.to];
+    if(lt===lf+1){nDn[e.from].push(e.to);nUp[e.to].push(e.from);}
+    else if(lf===lt+1){nDn[e.to].push(e.from);nUp[e.from].push(e.to);} });
+  const layerNums=Object.keys(cols).map(Number).sort((a,b)=>a-b);
+  const bary=(id,ns,i)=>{ if(!ns.length)return i; let s=0; ns.forEach(x=>s+=idx[x]); return s/ns.length; };
+  for(let sweep=0;sweep<4;sweep++){
+    const down=sweep%2===0, seq=down?layerNums:layerNums.slice().reverse();
+    seq.forEach(L=>{
+      cols[L]=cols[L].map((n,i)=>({n,i,k:bary(n.id,down?nUp[n.id]:nDn[n.id],i)}))
+        .sort((a,b)=>a.k-b.k||a.i-b.i).map(x=>x.n);
+      cols[L].forEach((n,i)=>{idx[n.id]=i;});
+    });
+  }
   const COLW=210,ROWH=86,NW=158,NH=52,PADX=30,PADY=28;
   const pos={};
   Object.keys(cols).forEach(L=>{cols[L].forEach((n,i)=>{pos[n.id]={x:PADX+L*COLW,y:PADY+i*ROWH,w:NW,h:NH};});});
@@ -326,7 +432,12 @@ function renderDAG(g,sel){
   const lin=localScope(g,sel,EXPAND_MODE);
   const nOn=id=>!lin||lin.nodes.has(id);
   const showRisk=OV.has('risk'), showTrust=OV.has('trust');
-  let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="-apple-system,sans-serif">`;
+  // Zoom: keep the coordinate system (viewBox) fixed and scale the rendered
+  // SVG box. FIT downscales a wide graph to the container width (never upscales)
+  // so raw detail (hundreds of nodes) is navigable without losing the layout.
+  window.__lastW=W;
+  const z=graphZoom(W);
+  let s=`<svg width="${Math.round(W*z)}" height="${Math.round(H*z)}" viewBox="0 0 ${W} ${H}" font-family="-apple-system,sans-serif">`;
   // markerUnits=userSpaceOnUse => arrowheads are a FIXED size, not scaled by
   // stroke width, so they stay aligned to the node edge regardless of highlight.
   s+=`<defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="8" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 z" fill="#bcbcc2"/></marker>`;
@@ -365,6 +476,10 @@ function renderDAG(g,sel){
     const p=pos[n.id]; const k=nodeKind(n); const obs=isObserverNode(n); const c=obs?'#b4b4bc':(KIND_COLOR[k]||KIND_COLOR.other); const on=(n.id===sel); const dim=!nOn(n.id);
     const risky=showRisk && n.risk && (n.risk==='high'||n.risk==='critical'||n.risk==='tainted'||n.risk==='medium');
     s+=`<g data-id="${esc(n.id)}" opacity="${dim?0.32:1}">`;
+    // Full, untruncated identity on hover -- the visible label is clipped to 18
+    // chars and file paths / hashes lose their tail otherwise.
+    const tipSub=(n.subtype||n.kind||''), tipExtra=(n.risk?` · risk:${n.risk}`:'')+(n.trust_origin?` · ${n.trust_origin}`:'');
+    s+=`<title>${esc(n.label||n.id)}${tipSub?` (${esc(tipSub)})`:''}${esc(tipExtra)}\n${esc(n.id)}</title>`;
     if(risky)s+=`<rect x="${p.x-3}" y="${p.y-3}" width="${p.w+6}" height="${p.h+6}" rx="12" fill="none" stroke="var(--risk)" stroke-width="2" opacity="0.7"/>`;
     else if(on)s+=`<rect x="${p.x-4}" y="${p.y-4}" width="${p.w+8}" height="${p.h+8}" rx="12" fill="none" stroke="${c}" stroke-width="1.5" opacity="0.45"/>`;
     s+=`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="11" fill="#ffffff" stroke="${c}" stroke-width="${on?2.4:1.4}"/>`;
@@ -413,7 +528,8 @@ function renderQuestionEntries(m){
     {id:'overview/files', cls:'file', q:'What changed files?', lens:'file-artifact', sub:'diff / file groups'},
     {id:'overview/processes', cls:'proc', q:'Which processes mattered?', lens:'process', sub:'process groups'},
     {id:'overview/artifacts', cls:'file', q:'Where did artifacts come from?', lens:'file-artifact', sub:'artifact lineage'},
-    {id:'overview/tool_calls', cls:'proc', q:'Which tool calls ran?', lens:'agent-intent', sub:'app context'}
+    {id:'overview/tool_calls', cls:'proc', q:'Which tool calls ran?', lens:'agent-intent', sub:'app context'},
+    {id:'__compliance__', cls:'comp', q:'Which controls hold up?', lens:'', sub:'framework coverage'}
   ];
   $('#askgrid').innerHTML=items.map(it=>{
     const n=byId[it.id]||{};
@@ -424,6 +540,8 @@ function renderQuestionEntries(m){
   }).join('');
   document.querySelectorAll('.qbtn').forEach(btn=>{
     btn.onclick=()=>{
+      // The compliance entry isn't a graph lens -- it scrolls to the posture card.
+      if(btn.getAttribute('data-node')==='__compliance__'){ const c=$('#compliancecard'); if(c)c.scrollIntoView({behavior:'smooth',block:'start'}); return; }
       const node=byId[btn.getAttribute('data-node')]||null;
       LENS=btn.getAttribute('data-lens')||'default';
       DETAIL='summary';
@@ -795,12 +913,221 @@ function renderProcessTree(procs){
   el.innerHTML=roots.map(r=>render(r,0)).join('') || '<div class="empty">no roots</div>';
 }
 
+// --- Compliance: detection RULES mapped onto framework controls -----------
+// The verdict per control is NOT "is there evidence of class X" but "did a rule
+// that detects this threat fire this run, and was it enforced or only observed":
+//   enforced       a mapped rule fired AND blocked it (deny/quarantine/kill)
+//   detected       a mapped rule fired but is detect-only (observed, not blocked)
+//   not_triggered  rule(s) map here but none matched any activity this run
+//   no_rule        no detector maps to this control (an honest coverage gap, not
+//                  a clean pass -- distinct from not_triggered on purpose)
+// Evidence refs (policy_decision/risk_signal) are entity-backed -> click to focus
+// the node in the graph.
+const COMP_FOCUS_KINDS={policy_decision:1,response_action:1,risk_signal:1,runtime_event:1,
+  process:1,runtime_process:1,tool_call:1,snapshot:1,session:1,taint:1};
+// Best lens to reveal a given evidence kind when we jump to it.
+function complianceLensFor(kind){
+  if(kind==='risk_signal'||kind==='policy_decision'||kind==='response_action')return 'security';
+  if(kind==='process'||kind==='runtime_process')return 'process';
+  if(kind==='tool_call')return 'agent-intent';
+  if(kind==='snapshot'||kind==='taint')return 'data-flow-taint';
+  return 'default';
+}
+let FW='', FW_READY=false; const COMP_REFS_PER_KIND=5;
+// Expand/collapse state kept OUT of the DOM so the 5s live refresh (which
+// rebuilds the card) doesn't collapse what the user opened.
+let COMP_OPEN=new Set();                          // control_ids with evidence expanded
+// Group order + default-open: surface what actually fired this run
+// (detected/enforced) at the top; tuck clean + uncovered controls away.
+const ST_ORDER=['detected','enforced','not_triggered','no_rule'];
+let COMP_GRP={detected:true, enforced:true, not_triggered:false, no_rule:false};
+const ST_META={
+  enforced:{icon:'🟢',label:'Enforced',hdr:'🟢 Enforced — a rule detected this and blocked it'},
+  detected:{icon:'🟠',label:'Detected only',hdr:'🟠 Detected only — a rule fired but did not block (detect mode)'},
+  not_triggered:{icon:'⚪',label:'Not triggered',hdr:'⚪ Not triggered — a detector watches this, nothing fired this run'},
+  no_rule:{icon:'⬚',label:'No rule',hdr:'⬚ No rule — no detector maps to this control yet'}
+};
+async function loadFrameworks(){
+  if(FW_READY)return;
+  let fws=[]; try{ fws=await j('/api/frameworks'); }catch(_){ fws=[]; }
+  const sel=$('#fwsel');
+  if(!fws.length){ if(sel)sel.innerHTML='<option>none</option>'; FW_READY=true; return; }
+  if(!FW) FW=fws[0].id;
+  if(sel){
+    sel.innerHTML=fws.map(f=>`<option value="${esc(f.id)}"${f.id===FW?' selected':''}>${esc(f.title)} (${f.controls})</option>`).join('');
+    sel.onchange=()=>{ FW=sel.value; loadCompliance(cur); };
+  }
+  FW_READY=true;
+}
+async function loadCompliance(run){
+  await loadFrameworks();
+  if(!FW){ return; }
+  let rep; try{ rep=await j('/api/compliance?run='+encodeURIComponent(run)+'&framework='+encodeURIComponent(FW)); }
+  catch(_){ rep=null; }
+  if(cur!==run) return; // run switched while fetching
+  renderCompliance(rep);
+}
+function renderCompliance(rep){
+  const sumEl=$('#compsummary'), listEl=$('#complist'), disEl=$('#compdisclaimer');
+  if(!rep || rep.error || !rep.summary){
+    sumEl.innerHTML=''; listEl.innerHTML='<div class="empty">'+esc((rep&&rep.error)||'no compliance mapping for this run')+'</div>'; disEl.textContent=''; return;
+  }
+  window._comp=rep;
+  const s=rep.summary, total=Math.max(1,s.total);
+  const pct=n=>(100*n/total).toFixed(1)+'%';
+  sumEl.innerHTML=
+    `<div class="covbar">`+
+      (s.enforced?`<i class="enforced" style="width:${pct(s.enforced)}" title="enforced"></i>`:'')+
+      (s.detected?`<i class="detected" style="width:${pct(s.detected)}" title="detected only"></i>`:'')+
+      (s.not_triggered?`<i class="not_triggered" style="width:${pct(s.not_triggered)}" title="not triggered"></i>`:'')+
+      (s.no_rule?`<i class="no_rule" style="width:${pct(s.no_rule)}" title="no rule"></i>`:'')+
+    `</div>`+
+    `<div class="covstats">`+
+      `<span class="enforced"><b>${s.enforced||0}</b> enforced</span>`+
+      `<span class="detected"><b>${s.detected||0}</b> detected only</span>`+
+      `<span class="not_triggered"><b>${s.not_triggered||0}</b> not triggered</span>`+
+      `<span class="no_rule"><b>${s.no_rule||0}</b> no rule</span>`+
+      `<span>of <b>${s.total||0}</b> controls</span>`+
+    `</div>`;
+  const items=rep.items||[];
+  let html='';
+  ST_ORDER.forEach(key=>{
+    const arr=items.filter(i=>(i.status||'no_rule')===key);
+    html+=compGroup(key, ST_META[key].hdr, arr, COMP_GRP[key]);
+  });
+  listEl.innerHTML=html || '<div class="empty">no controls</div>';
+  wireCompliance(listEl);
+  disEl.textContent=rep.disclaimer||'';
+}
+function compGroup(key,label,arr,open){
+  if(!arr.length) return '';
+  const body=open?arr.map(renderComplianceCard).join(''):'';
+  return `<div class="compgroup"><div class="compgrouphdr grp-hdr-${key}" data-grp="${key}">${open?'▾':'▸'} ${label} <span class="cnt">(${arr.length})</span></div>${body}</div>`;
+}
+function wireCompliance(root){
+  root.querySelectorAll('.compgrouphdr[data-grp]').forEach(h=>{
+    h.onclick=()=>{ const k=h.getAttribute('data-grp'); COMP_GRP[k]=!COMP_GRP[k]; renderCompliance(window._comp); };
+  });
+  root.querySelectorAll('.cevtoggle[data-ev]').forEach(t=>{
+    t.onclick=()=>{ const id=t.getAttribute('data-ev'); if(COMP_OPEN.has(id))COMP_OPEN.delete(id); else COMP_OPEN.add(id); renderCompliance(window._comp); };
+  });
+  root.querySelectorAll('button.cref[data-ref]').forEach(b=>{
+    b.onclick=()=>focusEvidenceRef(b.getAttribute('data-ref'), b.getAttribute('data-kind'));
+  });
+}
+// Plain-language gloss per control id, so a reader doesn't have to decode the
+// framework's short title. Keyed by control_id (OWASP ASI01..TRACE, NIST Q1..Q5).
+const CONTROL_DESC={
+  ASI01:"An attacker steers the agent off its intended goal via crafted prompts or instructions.",
+  ASI02:"The agent invokes its tools in harmful or unintended ways.",
+  ASI03:"The agent acquires or abuses credentials/privileges beyond its scope.",
+  ASI04:"Compromised dependencies, templates, or artifacts enter the run.",
+  ASI05:"The agent runs unexpected code or spawns unexpected processes.",
+  ASI06:"The agent's memory or working state is tampered with (poisoned).",
+  ASI07:"Untrusted agent-to-agent messages (only applies to multi-agent runs).",
+  ASI08:"One failure cascades across agents or exhausts shared resources.",
+  ASI09:"A human is misled into over-trusting the agent's output.",
+  ASI10:"An agent drifts outside its normal (baseline) behaviour.",
+  TRACE:"Every action can be independently reconstructed and verified.",
+  Q1:"What security threats/risks did this run actually exhibit?",
+  Q2:"Which technical controls were enforced during the run?",
+  Q3:"How is the run's activity detected and assessed?",
+  Q4:"Was the deployment environment constrained and monitored?",
+  Q5:"Operational artifacts for broader, cross-discipline review."
+};
+function clip(s,n){s=String(s||'');return s.length>n?s.slice(0,n-1)+'…':s;}
+// The detector line is the meat: per mapped rule show its mode (enforce/detect),
+// whether it fired, and the outcome -- blocked (enforce) vs observed-only (detect).
+function ruleActionsHTML(rules){
+  if(!rules||!rules.length) return `<div class="cnote">no detection rule maps to this control yet</div>`;
+  return `<div class="crules">`+rules.map(r=>{
+    const mode=`<span class="rmode ${esc(r.mode||'enforce')}">${esc(r.mode||'enforce')}</span>`;
+    if(!r.fired) return `<div class="crule"><span class="rmark idle">○</span> <span class="rid">${esc(r.id)}</span> ${mode} <span class="rmut">not triggered</span></div>`;
+    const outcome=r.enforced
+      ? `<span class="ract ok">blocked ×${r.fired}${r.intended_decision?' ('+esc(r.intended_decision)+')':''}</span>`
+      : `<span class="ract bad">observed ×${r.fired} (not blocked)</span>`;
+    return `<div class="crule"><span class="rmark ${r.enforced?'block':'fire'}">${r.enforced?'✓':'⚠'}</span> <span class="rid">${esc(r.id)}</span> ${mode} → ${outcome}</div>`;
+  }).join('')+`</div>`;
+}
+// Evidence chips for one control: grouped by kind, capped, entity-backed ones
+// clickable. The chip shows the human summary (e.g. "decision=deny rule=…")
+// rather than the raw id, which moves to the tooltip. Hidden by default behind
+// the card's "evidence (N)" toggle so it never floods the list.
+function complianceRefsHTML(it){
+  const byKind={};
+  (it.evidence_refs||[]).forEach(r=>{ (byKind[r.kind]=byKind[r.kind]||[]).push(r); });
+  const kinds=Object.keys(byKind).sort();
+  let html='';
+  kinds.forEach(k=>{
+    const arr=byKind[k], focusable=!!COMP_FOCUS_KINDS[k];
+    html+=`<span class="cgroup">${esc(k)}×${arr.length}</span>`;
+    arr.slice(0,COMP_REFS_PER_KIND).forEach(r=>{
+      const lbl=esc(r.summary?clip(r.summary,48):(r.id||r.ref));
+      const tip=esc((r.summary?r.summary+'\n':'')+r.ref);
+      if(focusable) html+=`<button class="cref" data-ref="${esc(r.ref)}" data-kind="${esc(k)}" title="${tip}">${lbl}</button>`;
+      else html+=`<span class="cref static" title="${tip}">${lbl}</span>`;
+    });
+    if(arr.length>COMP_REFS_PER_KIND) html+=`<span class="cmore">+${arr.length-COMP_REFS_PER_KIND} more</span>`;
+  });
+  return html;
+}
+function renderComplianceCard(it){
+  const st=it.status||'no_rule';
+  const m=ST_META[st]||ST_META.no_rule;
+  const desc=CONTROL_DESC[it.control_id]?`<div class="cdesc">${esc(CONTROL_DESC[it.control_id])}</div>`:'';
+  const rules=ruleActionsHTML(it.rules);
+  // The fix-it line: only for the actionable states (detected = not blocked,
+  // no_rule = uncovered). Enforced/not_triggered need no nudge.
+  const gap=(st==='detected'||st==='no_rule')&&it.gap
+    ? `<div class="cgap">⚠ ${esc(it.gap)}${it.recommended_next_step?` <span class="next">→ ${esc(it.recommended_next_step)}</span>`:''}</div>`
+    : '';
+  const n=(it.evidence_refs||[]).length;
+  const open=COMP_OPEN.has(it.control_id);
+  const ev=n?`<div class="cevtoggle" data-ev="${esc(it.control_id)}">${open?'▾':'▸'} underlying evidence (${n})</div>`+
+    `<div class="cevbox${open?' open':''}">${open?complianceRefsHTML(it):''}</div>`:'';
+  return `<div class="citemcard st-${esc(st)}">`+
+    `<div class="chead"><span class="enfbadge ${esc(st)}">${m.icon} ${esc(m.label)}</span><span class="cttl">${esc(it.title||it.control_id)}</span></div>`+
+    desc+
+    rules+
+    gap+
+    ev+
+  `</div>`;
+}
+function focusEvidenceRef(ref, kind){
+  // Jump the graph to the node this evidence ref denotes. Entity nodes only
+  // exist at raw detail, so force it; focus= retains the node in its routed
+  // lens. Most kinds land 100%; a minority of runtime_events are raw evidence
+  // rows that aren't graph nodes in any lens -- so we ALSO drive the Focused
+  // Evidence table off the ref, which resolves the ref to its events directly.
+  // That way the click always surfaces the evidence, never a dead no-op.
+  LENS=complianceLensFor(kind); DETAIL='raw';
+  SEL=ref; GRAPH_FOCUS=ref; EXPAND_MODE='lineage'; EV_OFFSET=0; stopPlay();
+  EV_FILTER={title:kind+' · '+ref, lens:LENS, group:'', focus:'', refs:[ref]};
+  const ls=$('#lenssel'), ds=$('#detailsel');
+  if(ls)ls.value=LENS; if(ds)ds.value=DETAIL;
+  loadRun(cur).then(()=>{ const c=$('#graphcard'); if(c)c.scrollIntoView({behavior:'smooth',block:'start'}); });
+}
+
 let cur=null, tlOffset=0; const TL_LIMIT=50;
 let SIGS=[], SIG_OFFSET=0; const SIG_LIMIT=12;
 let EV_FILTER=null, EV_OFFSET=0; const EV_LIMIT=50;
 let LENS='default', DETAIL='summary'; const OV=new Set();
 let EXPAND_MODE='lineage';
 let GRAPH_FOCUS='';
+// Graph zoom: FIT auto-scales the SVG down to the container width; otherwise
+// ZOOM is an explicit factor set by the +/- controls.
+let ZOOM=1, FIT=true;
+function graphZoom(W){
+  if(FIT){ const el=$('#dag'); const cw=(el&&el.clientWidth)||W; return Math.min(1, (cw-4)/W); }
+  return ZOOM;
+}
+function setZoom(mult){
+  // Lift the current effective zoom out of FIT mode so +/- feel continuous.
+  if(FIT && window.__lastW) ZOOM=graphZoom(window.__lastW);
+  FIT=false; ZOOM=Math.max(0.2, Math.min(3, ZOOM*mult));
+  renderDAG(window._lg, SEL);
+}
+function fitZoom(){ FIT=true; renderDAG(window._lg, SEL); }
 // Time-scrubber state: TCUR=null means "show the whole run"; otherwise only
 // elements at or before TCUR are drawn. TIMES is the sorted distinct clock.
 let TCUR=null, TIMES=[], PLAYING=null;
@@ -822,6 +1149,7 @@ async function loadRun(run){
   const sig=LENS+'|'+DETAIL+'|'+GRAPH_FOCUS+'|'+[...OV].sort().join(',')+'|'+JSON.stringify(g.nodes.map(n=>n.id))+'|'+JSON.stringify(g.edges.map(e=>e.from+'>'+e.to+(e.derived?'*':'')));
   if(sig!==window._gsig){ window._gsig=sig; renderLensMeta(lens); rebuildScrubber(g); renderDAG(g,SEL); }
   renderEgress(eg); renderProcessTree(pr); showDetail(SEL);
+  loadCompliance(run);
   await loadEvidenceDrilldown(EV_OFFSET);
   await loadTimeline(run, tlOffset);
 }
@@ -867,6 +1195,9 @@ async function refreshRuns(keep){
   $('#detailsel').onchange=()=>{ DETAIL=$('#detailsel').value; SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; stopPlay(); loadRun(cur); };
   $('#slider').oninput=()=>{ stopPlay(); setScrub(+$('#slider').value); };
   $('#playbtn').onclick=togglePlay;
+  $('#zoomin').onclick=()=>setZoom(1.25);
+  $('#zoomout').onclick=()=>setZoom(0.8);
+  $('#zoomfit').onclick=fitZoom;
   document.querySelectorAll('.chip[data-ov]').forEach(chip=>{
     chip.onclick=()=>{ const o=chip.getAttribute('data-ov'); if(OV.has(o)){OV.delete(o);chip.classList.remove('on');}else{OV.add(o);chip.classList.add('on');} loadRun(cur); };
   });
