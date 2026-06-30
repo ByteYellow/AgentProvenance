@@ -172,15 +172,15 @@
     <div id="siglist" class="siglist"></div>
   </section>
   <section class="card full">
-    <h2>Evidence Drilldown <span class="sub">focused raw telemetry, paged — not drawn into the main graph</span></h2>
-    <div id="evhead" class="evidence-head"><span class="hint">click a Run Overview group, signal, or graph node</span></div>
+    <h2>Focused Evidence <span class="sub">evidence for the selected risk, graph node, or overview group</span></h2>
+    <div id="evhead" class="evidence-head"><span class="hint">select a risk, graph node, or overview group to inspect its evidence</span></div>
     <div style="overflow:auto;max-height:340px"><table id="evtbl"><thead><tr>
       <th>time</th><th>event</th><th>pid</th><th>tool call</th><th>correlation</th><th>payload</th>
     </tr></thead><tbody></tbody></table></div>
     <div id="evpager" class="pager"></div>
   </section>
   <section class="card full">
-    <h2>Timeline <span class="sub">merged app-context + system telemetry</span></h2>
+    <h2>Run Timeline <span class="sub">all events in chronological order</span></h2>
     <div style="overflow:auto;max-height:420px"><table id="tl"><thead><tr>
       <th>time</th><th>event</th><th>correlation</th><th>conf</th><th>detail</th>
     </tr></thead><tbody></tbody></table></div>
@@ -729,7 +729,13 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','
 async function loadEvidenceDrilldown(offset){
   const tb=$('#evtbl tbody'), head=$('#evhead'), pager=$('#evpager');
   if(!cur){return;}
-  const f=EV_FILTER||{title:'run timeline', lens:LENS, focus:SEL||''};
+  if(!EV_FILTER){
+    head.innerHTML='<span class="hint">select a risk, graph node, or overview group to inspect its evidence</span>';
+    tb.innerHTML='<tr><td colspan="6" class="empty">no focused selection</td></tr>';
+    pager.innerHTML='';
+    return;
+  }
+  const f=EV_FILTER;
   const p=new URLSearchParams();
   p.set('run',cur); p.set('limit',EV_LIMIT); p.set('offset',offset||0);
   if(f.lens)p.set('lens',f.lens);
@@ -739,7 +745,8 @@ async function loadEvidenceDrilldown(offset){
   const d=await j('/api/events?'+p.toString());
   EV_OFFSET=d.offset||0;
   const rows=d.events||[];
-  head.innerHTML=`<b>${esc(f.title||'raw evidence')}</b><span class="focuspath">${esc([f.lens,f.group,f.focus].filter(Boolean).join(' / ')||'all events')}</span><span>${d.total||0} events</span>`;
+  const refCount=(f.refs&&f.refs.length)?` · ${f.refs.length} refs`:'';
+  head.innerHTML=`<b>Selected: ${esc(f.title||'evidence')}</b><span class="focuspath">${esc([f.lens,f.group,f.focus].filter(Boolean).join(' / '))}</span><span>${d.total||0} events${esc(refCount)}</span>`;
   if(!rows.length){
     tb.innerHTML='<tr><td colspan="6" class="empty">no raw events for this selection</td></tr>';
   }else{
