@@ -268,12 +268,25 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 	// event so the graph shows the process NAME and the pid together (label =
 	// command, subtitle = pid) instead of an opaque number.
 	pidCommand := map[int64]string{}
+	// execve is authoritative (the real exec). Then process_observed (the record
+	// ps-sampler) fills in pids whose execve wasn't captured — e.g. processes that
+	// were already running when the sensor attached — so the graph shows a name
+	// instead of a bare pid.
 	for _, ev := range events {
-		if ev.Type != "execve" {
-			continue
+		if ev.Type == "execve" && ev.PID > 0 {
+			if cmd := payloadString(ev.Payload, "command", "cmdline", "comm"); cmd != "" {
+				pidCommand[ev.PID] = cmd
+			}
 		}
-		if cmd := payloadString(ev.Payload, "command", "cmdline", "comm"); cmd != "" {
-			pidCommand[ev.PID] = cmd
+	}
+	for _, ev := range events {
+		if ev.Type == "process_observed" && ev.PID > 0 {
+			if _, named := pidCommand[ev.PID]; named {
+				continue
+			}
+			if cmd := payloadString(ev.Payload, "command", "cmdline", "comm"); cmd != "" {
+				pidCommand[ev.PID] = cmd
+			}
 		}
 	}
 	for pid, cmd := range pidCommand {

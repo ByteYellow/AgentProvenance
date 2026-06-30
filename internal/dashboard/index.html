@@ -196,6 +196,12 @@ function nodeKind(n){
   return n.kind||'other';
 }
 
+// Observer-origin nodes come from our own instrumentation (the record ps-sampler /
+// exec wrapper), not the kernel sensor — grey them so they read as secondary to the
+// agent's real, kernel-captured activity.
+const OBSERVER_SUBTYPES={process_observed:1,exec_start:1,exec_end:1};
+function isObserverNode(n){ return n.kind==='runtime_event' && !!OBSERVER_SUBTYPES[n.subtype]; }
+
 // Adapt a graph_lens/v1 manifest to the {nodes, edges} shape renderDAG wants.
 // Canonical and derived edges arrive in separate arrays — merge them (tagging
 // the derived ones) so the very edge the taint lens exists to show isn't dropped.
@@ -309,7 +315,7 @@ function renderDAG(g,sel){
   });
   g.nodes.forEach(n=>{
     if(!nodeVisible(n.id))return;
-    const p=pos[n.id]; const k=nodeKind(n); const c=KIND_COLOR[k]||KIND_COLOR.other; const on=(n.id===sel); const dim=!nOn(n.id);
+    const p=pos[n.id]; const k=nodeKind(n); const obs=isObserverNode(n); const c=obs?'#b4b4bc':(KIND_COLOR[k]||KIND_COLOR.other); const on=(n.id===sel); const dim=!nOn(n.id);
     const risky=showRisk && n.risk && (n.risk==='high'||n.risk==='critical'||n.risk==='tainted'||n.risk==='medium');
     s+=`<g data-id="${esc(n.id)}" opacity="${dim?0.32:1}">`;
     if(risky)s+=`<rect x="${p.x-3}" y="${p.y-3}" width="${p.w+6}" height="${p.h+6}" rx="12" fill="none" stroke="var(--risk)" stroke-width="2" opacity="0.7"/>`;
@@ -344,6 +350,7 @@ function renderLensMeta(m){
   const kinds=[...new Set((m.nodes||[]).map(n=>nodeKind(n)))];
   let lg=kinds.map(k=>`<span><i style="background:${KIND_COLOR[k]||KIND_COLOR.other}"></i>${esc(k)}</span>`).join('');
   if((m.derived_edges||[]).length)lg+=`<span><i class="dash"></i>derived (inferred)</span>`;
+  if((m.nodes||[]).some(isObserverNode))lg+=`<span><i style="background:#b4b4bc"></i>observed (instrumentation)</span>`;
   $('#legend').innerHTML=lg;
 }
 
