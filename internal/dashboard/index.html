@@ -47,6 +47,12 @@
   .lensmeta{display:flex;flex-wrap:wrap;gap:7px 14px;padding:9px 20px;border-bottom:1px solid var(--line);font-size:11.5px;color:var(--mut);background:var(--panel2)}
   .lensmeta b{color:var(--tx);font-weight:600}
   .lensmeta .rule{font-family:ui-monospace,monospace;font-size:10.5px;background:#f0f0f3;border-radius:5px;padding:1px 6px}
+  .askgrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;padding:14px}
+  .qbtn{border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 12px;text-align:left;cursor:pointer;min-height:70px;transition:border-color .12s,box-shadow .12s,transform .12s}
+  .qbtn:hover{border-color:rgba(0,113,227,.35);box-shadow:0 8px 24px -18px rgba(0,113,227,.5);transform:translateY(-1px)}
+  .qbtn .q{font-weight:650;font-size:12.5px;margin-bottom:4px}
+  .qbtn .m{font-size:11px;color:var(--mut);font-family:ui-monospace,SFMono-Regular,monospace}
+  .qbtn.risk .q{color:#d70015}.qbtn.egress .q{color:#b25e00}.qbtn.file .q{color:#0a7d52}.qbtn.proc .q{color:#3634a3}
   .scrub{display:flex;align-items:center;gap:12px;padding:9px 20px;border-bottom:1px solid var(--line);background:var(--panel2)}
   .scrub button{background:#fff;border:1px solid var(--line2);border-radius:8px;width:32px;height:26px;cursor:pointer;font-size:12px;transition:border-color .12s,color .12s}
   .scrub button:hover{border-color:var(--acc);color:var(--acc)}
@@ -105,6 +111,9 @@
   .pager button{background:#fff;color:var(--tx);border:1px solid var(--line2);border-radius:8px;padding:5px 13px;cursor:pointer;font-size:12px;transition:border-color .12s,background .12s,color .12s}
   .pager button:hover:not(:disabled){border-color:var(--acc);color:var(--acc);background:rgba(0,113,227,.06)}
   .pager button:disabled{opacity:.4;cursor:default}
+  .evidence-head{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--panel2);font-size:12px;color:var(--mut)}
+  .evidence-head b{color:var(--tx)}
+  .focuspath{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #live{cursor:pointer;user-select:none}
   #live.on{color:#1d8c3e;border-color:rgba(52,199,89,.4);background:rgba(52,199,89,.08)}
   #live.off{color:var(--mut)}
@@ -112,7 +121,8 @@
   .cls{font-size:11px;color:var(--mut)}
   .cls.kernel_correlated{color:#0a7d52}
   .cls.uncorrelated{color:#d70015}
-  @media(max-width:900px){main{grid-template-columns:1fr}.hero,.side,.full{grid-column:1}}
+  @media(max-width:1100px){.askgrid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @media(max-width:900px){main{grid-template-columns:1fr}.hero,.side,.full{grid-column:1}.askgrid{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
@@ -125,6 +135,10 @@
   <div id="verify" class="badge ok">…</div>
 </header>
 <main>
+  <section class="card full">
+    <h2>Run Overview <span class="sub">query first, graph second — raw events stay paged and drillable</span></h2>
+    <div id="askgrid" class="askgrid"></div>
+  </section>
   <section class="card hero">
     <h2>Graph Explorer <span class="sub">canonical graph → lens projection → derived edges</span>
       <span class="spacer"></span>
@@ -152,6 +166,14 @@
   <section class="card side">
     <h2>Signals &amp; Risk <span class="sub" id="sigcount"></span></h2>
     <div id="siglist" class="siglist"></div>
+  </section>
+  <section class="card full">
+    <h2>Evidence Drilldown <span class="sub">focused raw telemetry, paged — not drawn into the main graph</span></h2>
+    <div id="evhead" class="evidence-head"><span class="hint">click a Run Overview group, signal, or graph node</span></div>
+    <div style="overflow:auto;max-height:340px"><table id="evtbl"><thead><tr>
+      <th>time</th><th>event</th><th>pid</th><th>tool call</th><th>correlation</th><th>payload</th>
+    </tr></thead><tbody></tbody></table></div>
+    <div id="evpager" class="pager"></div>
   </section>
   <section class="card full">
     <h2>Timeline <span class="sub">merged app-context + system telemetry</span></h2>
@@ -367,6 +389,40 @@ function renderLensMeta(m){
   $('#legend').innerHTML=lg;
 }
 
+function renderQuestionEntries(m){
+  const byId={};
+  (m.nodes||[]).forEach(n=>byId[n.id]=n);
+  const items=[
+    {id:'overview/risks', cls:'risk', q:'Why is this run risky?', lens:'security', sub:'risk paths'},
+    {id:'overview/egress', cls:'egress', q:'What happened around egress?', lens:'network-egress', sub:'network groups'},
+    {id:'overview/files', cls:'file', q:'What changed files?', lens:'file-artifact', sub:'diff / file groups'},
+    {id:'overview/processes', cls:'proc', q:'Which processes mattered?', lens:'process', sub:'process groups'},
+    {id:'overview/artifacts', cls:'file', q:'Where did artifacts come from?', lens:'file-artifact', sub:'artifact lineage'},
+    {id:'overview/tool_calls', cls:'proc', q:'Which tool calls ran?', lens:'agent-intent', sub:'app context'}
+  ];
+  $('#askgrid').innerHTML=items.map(it=>{
+    const n=byId[it.id]||{};
+    return `<button class="qbtn ${it.cls}" data-lens="${esc(it.lens)}" data-node="${esc(it.id)}">
+      <div class="q">${esc(it.q)}</div>
+      <div class="m">${esc(n.label||it.sub)}</div>
+    </button>`;
+  }).join('');
+  document.querySelectorAll('.qbtn').forEach(btn=>{
+    btn.onclick=()=>{
+      const node=byId[btn.getAttribute('data-node')]||null;
+      LENS=btn.getAttribute('data-lens')||'default';
+      DETAIL='summary';
+      SEL='';
+      setEvidenceFilterFromNode(node);
+      EV_OFFSET=0;
+      stopPlay();
+      const ls=$('#lenssel'), ds=$('#detailsel');
+      if(ls)ls.value=LENS; if(ds)ds.value=DETAIL;
+      loadRun(cur);
+    };
+  });
+}
+
 // --- time-scrubber: replay the run forward over its real clock ---
 function rebuildScrubber(g){
   TIMES=[...new Set([...Object.values(g.nodeT||{}), ...g.edges.map(e=>e.t)].filter(Boolean))].sort();
@@ -403,7 +459,11 @@ function togglePlay(){
 function selectNode(id){
   const n=id&&(window._lg.nodes||[]).find(x=>x.id===id);
   if(n && drilldownNode(n)) return;
-  SEL=(SEL===id?null:id); renderDAG(window._lg,SEL); showDetail(SEL);
+  SEL=(SEL===id?null:id);
+  setEvidenceFilterFromNode(n||null);
+  EV_OFFSET=0;
+  renderDAG(window._lg,SEL); showDetail(SEL);
+  loadEvidenceDrilldown(0);
 }
 function drilldownNode(n){
   const d=n.data||{};
@@ -411,11 +471,25 @@ function drilldownNode(n){
   LENS=String(d.drilldown_lens||LENS);
   DETAIL=String(d.drilldown_detail||'summary');
   SEL=String(d.drilldown_focus||'');
+  setEvidenceFilterFromNode(n);
+  EV_OFFSET=0;
   stopPlay();
   const ls=$('#lenssel'), ds=$('#detailsel');
   if(ls)ls.value=LENS; if(ds)ds.value=DETAIL;
   loadRun(cur);
   return true;
+}
+
+function setEvidenceFilterFromNode(n){
+  if(!n){ EV_FILTER=null; return; }
+  const d=n.data||{};
+  EV_FILTER={
+    title:n.label||n.id,
+    lens:String(d.drilldown_lens||LENS||''),
+    group:String(d.group||d.category||d.rule_id||d.event_type||n.subtype||''),
+    focus:String(d.drilldown_focus||n.id||''),
+    refs:Array.isArray(d.evidence_refs)?d.evidence_refs:[]
+  };
 }
 
 const DETAIL_HINT='<span class="hint">click any node to highlight its causal chain &amp; inspect its record →</span>';
@@ -533,7 +607,7 @@ function signalFocusID(s){
 }
 function focusSignal(id){
   if(!id)return;
-  SEL=id; LENS='security'; DETAIL='summary'; stopPlay();
+  SEL=id; LENS='security'; DETAIL='summary'; EV_FILTER={title:'risk signal', lens:'security', focus:id, refs:[id]}; EV_OFFSET=0; stopPlay();
   const ls=$('#lenssel'), ds=$('#detailsel');
   if(ls)ls.value=LENS; if(ds)ds.value=DETAIL;
   loadRun(cur);
@@ -553,6 +627,39 @@ function renderTimeline(events){
 }
 function payloadSummary(p){ if(!p)return''; try{const o=JSON.parse(p);if(o.http)return JSON.stringify(o.http);if(o.raw)return JSON.stringify(o.raw).slice(0,160);return JSON.stringify(o).slice(0,160);}catch(_){return String(p).slice(0,160);} }
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+async function loadEvidenceDrilldown(offset){
+  const tb=$('#evtbl tbody'), head=$('#evhead'), pager=$('#evpager');
+  if(!cur){return;}
+  const f=EV_FILTER||{title:'run timeline', lens:LENS, focus:SEL||''};
+  const p=new URLSearchParams();
+  p.set('run',cur); p.set('limit',EV_LIMIT); p.set('offset',offset||0);
+  if(f.lens)p.set('lens',f.lens);
+  if(f.group)p.set('group',f.group);
+  if(f.focus)p.set('focus',f.focus);
+  if(f.refs&&f.refs.length)p.set('refs',f.refs.slice(0,80).join(','));
+  const d=await j('/api/events?'+p.toString());
+  EV_OFFSET=d.offset||0;
+  const rows=d.events||[];
+  head.innerHTML=`<b>${esc(f.title||'raw evidence')}</b><span class="focuspath">${esc([f.lens,f.group,f.focus].filter(Boolean).join(' / ')||'all events')}</span><span>${d.total||0} events</span>`;
+  if(!rows.length){
+    tb.innerHTML='<tr><td colspan="6" class="empty">no raw events for this selection</td></tr>';
+  }else{
+    tb.innerHTML=rows.map(e=>{
+      const t=(e.created_at||'').replace('T',' ').replace(/\.\d+Z?$/,'');
+      return `<tr><td>${esc(t)}</td><td class="etype">${esc(e.event_type||'')}</td><td>${esc(e.pid||'')}</td>
+        <td>${esc(e.tool_call_id||'')}</td><td class="cls ${esc((e.correlation_class||'').replace(/\s/g,'_'))}">${esc(e.correlation_class||e.correlation_method||'')}</td>
+        <td class="payload">${esc(payloadSummary(e.payload))}</td></tr>`;
+    }).join('');
+  }
+  const from=d.total?EV_OFFSET+1:0, to=Math.min(EV_OFFSET+(d.limit||EV_LIMIT),d.total||0);
+  pager.innerHTML=`<button id="evprev" ${EV_OFFSET<=0?'disabled':''}>‹ prev</button>
+    <span>${from}–${to} of ${d.total||0} events</span>
+    <button id="evnext" ${EV_OFFSET+(d.limit||EV_LIMIT)>=(d.total||0)?'disabled':''}>next ›</button>`;
+  const pv=$('#evprev'), nx=$('#evnext');
+  if(pv) pv.onclick=()=>loadEvidenceDrilldown(Math.max(0,EV_OFFSET-(d.limit||EV_LIMIT)));
+  if(nx) nx.onclick=()=>loadEvidenceDrilldown(EV_OFFSET+(d.limit||EV_LIMIT));
+}
 
 function renderEgress(rows){
   const tb=$('#egtbl tbody');
@@ -585,6 +692,7 @@ function renderProcessTree(procs){
 
 let cur=null, tlOffset=0; const TL_LIMIT=50;
 let SIGS=[], SIG_OFFSET=0; const SIG_LIMIT=12;
+let EV_FILTER=null, EV_OFFSET=0; const EV_LIMIT=50;
 let LENS='default', DETAIL='summary'; const OV=new Set();
 // Time-scrubber state: TCUR=null means "show the whole run"; otherwise only
 // elements at or before TCUR are drawn. TIMES is the sorted distinct clock.
@@ -595,16 +703,19 @@ async function loadRun(run){
   cur=run;
   const q='run='+encodeURIComponent(run);
   const lq=q+'&lens='+encodeURIComponent(LENS)+'&detail='+encodeURIComponent(DETAIL)+[...OV].map(o=>'&overlay='+o).join('');
-  const [ov,lens,eg,pr]=await Promise.all([j('/api/overview?'+q),j('/api/lens?'+lq),j('/api/egress?'+q),j('/api/processes?'+q)]);
+  const overviewQ=q+'&lens=default&detail=summary';
+  const [ov,lens,overviewLens,eg,pr]=await Promise.all([j('/api/overview?'+q),j('/api/lens?'+lq),j('/api/lens?'+overviewQ),j('/api/egress?'+q),j('/api/processes?'+q)]);
   const g=adaptLens(lens);
   window._lg=g; window._lensManifest=lens;
   if(SEL && !g.nodes.find(n=>n.id===SEL)) SEL=null; // selection gone after refresh/lens switch
   renderVerify(ov.verify); renderSignals(ov.signals);
+  renderQuestionEntries(overviewLens);
   // Re-render the graph only when its structure (lens + overlays + topology)
   // actually changed, so the live 5s refresh never re-lays-out under the cursor.
   const sig=LENS+'|'+DETAIL+'|'+[...OV].sort().join(',')+'|'+JSON.stringify(g.nodes.map(n=>n.id))+'|'+JSON.stringify(g.edges.map(e=>e.from+'>'+e.to+(e.derived?'*':'')));
   if(sig!==window._gsig){ window._gsig=sig; renderLensMeta(lens); rebuildScrubber(g); renderDAG(g,SEL); }
   renderEgress(eg); renderProcessTree(pr); showDetail(SEL);
+  await loadEvidenceDrilldown(EV_OFFSET);
   await loadTimeline(run, tlOffset);
 }
 
@@ -645,14 +756,14 @@ async function refreshRuns(keep){
   // Bootstrap the lens list from the first manifest's available_lenses.
   const boot=await j('/api/lens?run='+encodeURIComponent(first)+'&lens='+LENS);
   initLensSelector(boot.available_lenses);
-  $('#lenssel').onchange=()=>{ LENS=$('#lenssel').value; SEL=null; stopPlay(); loadRun(cur); };
-  $('#detailsel').onchange=()=>{ DETAIL=$('#detailsel').value; SEL=null; stopPlay(); loadRun(cur); };
+  $('#lenssel').onchange=()=>{ LENS=$('#lenssel').value; SEL=null; EV_FILTER=null; EV_OFFSET=0; stopPlay(); loadRun(cur); };
+  $('#detailsel').onchange=()=>{ DETAIL=$('#detailsel').value; SEL=null; EV_FILTER=null; EV_OFFSET=0; stopPlay(); loadRun(cur); };
   $('#slider').oninput=()=>{ stopPlay(); setScrub(+$('#slider').value); };
   $('#playbtn').onclick=togglePlay;
   document.querySelectorAll('.chip[data-ov]').forEach(chip=>{
     chip.onclick=()=>{ const o=chip.getAttribute('data-ov'); if(OV.has(o)){OV.delete(o);chip.classList.remove('on');}else{OV.add(o);chip.classList.add('on');} loadRun(cur); };
   });
-  sel.onchange=()=>{ SEL=null; tlOffset=0; stopPlay(); loadRun(sel.value); };
+  sel.onchange=()=>{ SEL=null; EV_FILTER=null; EV_OFFSET=0; tlOffset=0; stopPlay(); loadRun(sel.value); };
   $('#live').onclick=()=>setLive(!LIVE);
   await loadRun(first);
   setInterval(async()=>{ if(!LIVE)return; const r=await refreshRuns(cur); if(r) loadRun(r); }, 5000);

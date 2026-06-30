@@ -731,6 +731,11 @@ Raw Telemetry Events
 
 Panels:
 
+- **Run Overview / Ask**: query-first entry points (`Why is this run risky?`,
+  `What happened around egress?`, `What changed files?`, `Which processes
+  mattered?`, `Where did artifacts come from?`, `Which tool calls ran?`). Each
+  entry switches to a bounded local lens instead of asking the browser to draw
+  the whole canonical graph.
 - **Graph Explorer** (`/api/lens`, same `graph lens` query surface as the CLI):
   a **lens switcher** over 9 projections — default causality, security,
   process tree, file/artifact lineage, network egress, **data-flow/taint**,
@@ -759,6 +764,10 @@ Panels:
   risk/policy/response, derived-edge rule + confidence + evidence refs, hashes)
   and a bounded, secret-redacted **artifact content Preview** (the code/JSON the
   node actually produced — `/api/artifact`).
+- **Evidence Drilldown** (`/api/events`): focused, paged raw telemetry for the
+  selected question, group, signal, or node. Group nodes pass evidence refs into
+  this table, so the UI can show the exact raw records behind a summary without
+  adding them to the visible DAG.
 - **Verify + signature** status, **signals / risk**, a **paged timeline**, the
   **process tree**, and **egress**; live auto-refresh.
 
@@ -875,7 +884,7 @@ What these mean:
 | Evidence query | `graph explain` over file / artifact / process / event / tool_call / attempt / risk with bounded, paged causality paths |
 | Diff / blame | file-level diff and blame, joined to runtime events and content-addressed objects |
 | Evidence manifest | `evidence manifest` — a run-level, hash-indexed evidence index (`--materialize` to an object) |
-| Web dashboard | `dashboard serve` — local read-only UI: causality DAG, verify status, signals, timeline, process tree, egress |
+| Web dashboard | `dashboard serve` — local read-only UI: Run Overview question entries, Graph Explorer lenses, focused raw evidence drilldown, verify status, signals, timeline, process tree, egress |
 
 **Security & signals**
 
