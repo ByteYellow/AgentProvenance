@@ -22,9 +22,13 @@ Key learnings: noise-prefix filtering runs **before** `bpf_ringbuf_reserve` (a
 discarded record still occupies the buffer), which removed a containerd-teardown
 firehose; output is the **native** normalized schema (decision (b) below);
 race-free `container_id` comes from a cgroup-id → cgroup-dir-inode resolver.
+The product path is now `agentprov sensor stream`: a per-node supervisor that
+streams native events into the local store, correlates them to open bindings,
+and evaluates runtime policy without a manual JSONL ingest step.
 
 Open follow-ups: universal DNS (musl / UDP:53), IPv6/UDP, HTTP/2 HPACK decode,
-multi-arch (x86 `PT_REGS`; arm64 only today), `ptrace` end-to-end test.
+multi-arch (x86 `PT_REGS`; arm64 only today), `ptrace` end-to-end test, and
+rootless container cgroup-delegation validation.
 
 ## Goal
 
@@ -50,22 +54,24 @@ Each event carries the identity the correlation engine needs:
 ## Architecture
 
 ```
-[kernel probes] -> BPF ring buffer -> [agentprov-sensor (Go)] -> normalized JSONL
-                                                              -> telemetry ingest -> correlation -> signals
+[kernel probes] -> BPF ring buffer -> [agentprov-sensor / sensor stream]
+                                      -> normalized events
+                                      -> ingest -> correlation -> policy/risk -> graph
 ```
 
 - **Loader:** `cilium/ebpf` (pure-Go, CO-RE). Avoids libbpf at runtime. `bpf2go`
   compiles the `.c` -> `.o` at build time (needs clang/llvm + `vmlinux.h` from
   `bpftool btf dump`). Keeps runtime deps minimal; build deps are clang/llvm only.
-- **Binary:** new `cmd/agentprov-sensor` (or `agentprov sensor run`), Linux-only
+- **Binary:** `cmd/agentprov-sensor` and `agentprov sensor stream`, Linux-only
   via `//go:build linux`. A non-Linux stub returns "sensor requires linux" so the
   main module still builds/tests on macOS/Windows.
-- **Output contract:** the sensor does NOT touch the DB. It emits normalized
-  telemetry events to stdout/JSONL (or a spool file). Ingestion reuses the
-  existing path. **Resolved → (b):** the sensor emits a native normalized schema,
-  auto-detected on `source=agentprov_ebpf` by `mapNative` (rather than mimicking
-  Falco/Tetragon shapes), so own-kernel telemetry drives the same correlation →
-  policy → risk path.
+- **Output contract:** the standalone sensor can still emit normalized JSONL for
+  pipes/tests, but `agentprov sensor stream` is the supervised product path: it
+  ingests into the local store, applies self-noise filtering, correlates against
+  open bindings, and evaluates policy/risk by default. **Resolved → (b):** the
+  sensor emits a native normalized schema, auto-detected on `source=agentprov_ebpf`
+  by `mapNative` (rather than mimicking Falco/Tetragon shapes), so own-kernel
+  telemetry drives the same correlation → policy → risk path.
 
 ## Container/cgroup identity
 
@@ -74,6 +80,14 @@ Each event carries the identity the correlation engine needs:
 same as Falco/Tetragon do). This is exactly the key the correlation tiers use
 (`cgroup+time` 0.98 / `container+time` 0.92), so events drop straight into the
 existing join. In K8s the cgroup path encodes pod/container — no extra work.
+
+For zero-SDK supervised capture, `agentprov record` can create a real cgroup v2
+leaf for the launched command. The child and descendants inherit that cgroup, so
+host-level eBPF events join to the run by `cgroup_id` instead of by PID polling.
+Set `AGENTPROV_CGROUP_PARENT` to a delegated parent such as
+`/sys/fs/cgroup/agentprov`, or run the recorder with enough privilege to create
+the leaf. On non-Linux or record-only runs, AgentProvenance uses a synthetic
+scope id; that is correct when no kernel sensor is present.
 
 ## Build / run prerequisites (Linux)
 

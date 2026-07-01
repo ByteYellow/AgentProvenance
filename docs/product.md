@@ -76,10 +76,12 @@ The user runs:
 agentprov record -- <agent command>
 ```
 
-The Phase 1 MVP snapshots the working directory before execution, runs the
-command, computes file changes after execution, and records runtime file
-evidence into the graph. Deeper process-tree and kernel-level collection are
-future substrate work.
+The recorder snapshots the working directory before execution, runs the command,
+computes file changes after execution, objectifies changed files into
+content-addressed artifacts, and records process/file evidence into the graph.
+On Linux, when a per-node sensor is enabled, `record` can place the child process
+into a real cgroup scope so kernel events from the whole subtree correlate back
+to the run by `cgroup_id` instead of by best-effort PID polling.
 
 AgentProvenance infers execution scope from runtime evidence:
 
@@ -88,9 +90,17 @@ root process / process tree / cwd / timestamp / container_id / cgroup_id
   / file diff / artifact refs
 ```
 
-Zero-SDK mode is broader but less precise. It is still useful because raw
-system-side telemetry cannot be expected to carry application-level
-`tool_call_id`.
+Zero-SDK mode is broader than white-box tool-router integration, but it has two
+precision tiers:
+
+- **record-only:** synthetic scope id + process sampling + file diff. This is
+  correct when no kernel sensor is running.
+- **supervised capture:** per-node sensor + real cgroup-per-scope join. This
+  gives high-fidelity subtree correlation without requiring agent framework
+  changes.
+
+Both tiers are useful because raw system-side telemetry cannot be expected to
+carry application-level `tool_call_id`.
 
 The long-term direction is SDK-optional, proxy-optional, and vendor-neutral:
 white-box context where available, runtime inference where not.
@@ -208,7 +218,8 @@ manifests.
 
 > Status (as of v0.4.x): Phases 1–5 are substantially delivered — including the
 > **native eBPF sensor** (`internal/sensor`, shipped in v0.2.0 and expanded
-> since), correlation, risk/policy/response, taint, and signed forensics export.
+> since), supervised cgroup capture, correlation, risk/policy/response, taint,
+> automatic artifact objectification, and signed forensics export.
 > Phase 6 is partial (content-addressed storage and the web dashboard are in;
 > retention/GC/scale hardening is ongoing). The table below is the original plan,
 > kept for context — it is not a list of unbuilt work.
@@ -229,11 +240,12 @@ Phase 1 is done when the project can prove:
 - A coding-agent fanout stress demo creates multiple attempts from one base
   snapshot to exercise branch-heavy evidence.
 - `agentprov record -- <command>` records a command without SDK integration and
-  produces file diff, blame, sampled descendant process evidence, PID bindings,
-  post-root outlived-process markers, and runtime file evidence.
+  produces file diff, blame, process evidence, scope bindings, changed-file
+  artifact objects, post-root outlived-process markers, and runtime file
+  evidence.
 - Runtime events can be ingested without raw `tool_call_id`.
 - Events can be bound to execution context through process/container/cgroup/time
-  evidence.
+  evidence, with supervised Linux capture using a real cgroup-per-scope join.
 - The graph records `execution_context -> tool_call -> process ->
   runtime_event -> file_diff/artifact`.
 - PID/PPID/TGID runtime evidence creates process-tree causality edges.

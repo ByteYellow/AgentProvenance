@@ -26,6 +26,9 @@ Expected properties:
 - no framework integration required;
 - default capture stays lightweight: process, file diff, artifact, exit,
   resource, and summary runtime evidence;
+- on Linux, optional supervised capture can pair `record` with a per-node
+  `sensor stream`; the recorder creates a real cgroup scope and kernel events
+  from the subtree correlate back by `cgroup_id`;
 - every trajectory can have its own `run_id`;
 - batch jobs can use `agentprov record batch --file jobs.jsonl --json` to get
   one `agentprovenance.record_batch/v1` manifest across many trajectories;
@@ -57,6 +60,9 @@ Boundary:
   of scheduling, reward, ranking, and dataset policy.
 - online security actions such as deny, kill, quarantine, or taint are not
   required for RL mode; they are opt-in controls for security deployments.
+- if no sensor is enabled, synthetic scope ids plus process/file evidence are
+  expected; this is not a degraded sensor path, it is the correct lightweight
+  record-only path.
 
 ## 2. Sidecar / Local Daemon
 
@@ -76,6 +82,8 @@ Expected properties:
 
 - daemon owns SQLite, object store, correlation, policy, risk, response, graph
   verification, forensics export, and telemetry spool;
+- per-node native `sensor stream` can run beside the daemon or local store and
+  feed normalized runtime events through the same ingest/correlation path;
 - CLI and Python helpers act as clients;
 - raw telemetry can be queued and drained without blocking the control/query
   path;

@@ -976,7 +976,7 @@ flowchart TD
     CLI --> Boundary
     SDK --> Boundary
     Recorder --> Boundary
-    RuntimeTelemetry["Runtime Telemetry\nFalco / Tetragon / auditd / future eBPF"] --> Boundary
+    RuntimeTelemetry["Runtime Telemetry\nnative eBPF / Falco / Tetragon / auditd"] --> Boundary
     SandboxIdentity["Sandbox Identity\ncontainer / cgroup / pid / cwd / time"] --> Boundary
     AppContext["Application Context\nrun / session / attempt / tool_call"] --> Boundary
     ExternalSignals["External Evaluator Signals\nreward_feature / penalty / label / quality"] --> Boundary
@@ -1032,15 +1032,17 @@ Substrate integrations are downstream of the provenance model:
 - OpenSandbox, gVisor, Firecracker, and Kata are future runtime substrates.
 - Kubernetes, Ray, Batch, and cloud systems are orchestration substrates.
 - Falco, Tetragon, LoongCollector, auditd, and eBPF are telemetry substrates.
-  The current MVP consumes already-filtered Tetragon/Falco/LoongCollector JSONL
+  AgentProvenance consumes already-filtered Tetragon/Falco/LoongCollector JSONL
   through `agentprov telemetry ingest-jsonl`, adds a dedicated
   `agentprov telemetry ingest-falco` receiver for Falco JSON/stdout streams,
-  records a hashable batch manifest, and does not run kernel probes.
-- A future `agentprov-sensor` should be capability-gated: prefer modern eBPF
-  where the kernel and permissions support it, fall back to a legacy eBPF path
-  where appropriate, and only use a kmod-style collector when an operator
-  explicitly accepts that deployment model. The control plane must treat sensor
-  capability as data, not as a hidden assumption.
+  records a hashable batch manifest, and ships a native Linux eBPF sensor.
+- `agentprov sensor stream` is the supervised local path: a per-node native
+  sensor streams normalized kernel events into the same ingest/correlation/
+  policy/risk path. When paired with `record` on Linux, a real cgroup-per-scope
+  join can correlate the agent's whole process subtree without requiring raw
+  events to carry `tool_call_id`.
+- Sensor capability is data, not a hidden assumption. Modern eBPF is used when
+  kernel and permissions support it; other telemetry substrates stay pluggable.
 
 The project value is not collecting more logs. The value is correlating
 substrate signals with execution context and making them affect diff, blame,
