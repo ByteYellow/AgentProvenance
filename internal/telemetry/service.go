@@ -24,6 +24,8 @@ type EventRecord struct {
 	CorrelationMethod     string  `json:"correlation_method"`
 	CorrelationConfidence float64 `json:"correlation_confidence"`
 	CorrelationClass      string  `json:"correlation_class,omitempty"`
+	BindingSource         string  `json:"binding_source,omitempty"`
+	SelfLaunched          bool    `json:"self_launched,omitempty"`
 	ContainerID           string  `json:"container_id"`
 	CgroupID              string  `json:"cgroup_id"`
 	PID                   int64   `json:"pid"`
@@ -67,6 +69,12 @@ type IngestEvent struct {
 	Source      string
 	EventType   string
 	Payload     string
+	// BindingSource records which binding tier produced this event's
+	// correlation (e.g. ai_asserted, zero_sdk_record, control_plane). When the
+	// event is resolved against a stored binding it is overwritten from the
+	// matched binding; callers with directly-provided context may set it so the
+	// self-launched dimension is preserved on the provided_context path.
+	BindingSource string
 }
 
 type Filter struct {
@@ -150,7 +158,7 @@ func ListEventsPage(db *sql.DB, opts ListOptions) (ListResult, error) {
 		COALESCE(process_id, ''), COALESCE(snapshot_id, ''), COALESCE(raw_event_id, ''),
 		COALESCE(correlation_method, ''), COALESCE(correlation_confidence, 0),
 		COALESCE(container_id, ''), COALESCE(cgroup_id, ''), COALESCE(pid, 0),
-		COALESCE(tgid, 0), COALESCE(ppid, 0),
+		COALESCE(tgid, 0), COALESCE(ppid, 0), COALESCE(binding_source, ''),
 		source, event_type, payload, created_at
 		FROM events`
 	args := []any{}
@@ -175,10 +183,11 @@ func ListEventsPage(db *sql.DB, opts ListOptions) (ListResult, error) {
 	var events []EventRecord
 	for rows.Next() {
 		var event EventRecord
-		if err := rows.Scan(&event.ID, &event.RunID, &event.SessionID, &event.ToolCallID, &event.ProcessID, &event.SnapshotID, &event.RawEventID, &event.CorrelationMethod, &event.CorrelationConfidence, &event.ContainerID, &event.CgroupID, &event.PID, &event.TGID, &event.PPID, &event.Source, &event.EventType, &event.Payload, &event.CreatedAt); err != nil {
+		if err := rows.Scan(&event.ID, &event.RunID, &event.SessionID, &event.ToolCallID, &event.ProcessID, &event.SnapshotID, &event.RawEventID, &event.CorrelationMethod, &event.CorrelationConfidence, &event.ContainerID, &event.CgroupID, &event.PID, &event.TGID, &event.PPID, &event.BindingSource, &event.Source, &event.EventType, &event.Payload, &event.CreatedAt); err != nil {
 			return ListResult{}, err
 		}
 		event.CorrelationClass = CorrelationClass(event.Source, event.CorrelationMethod, event.ContainerID, event.CorrelationConfidence)
+		event.SelfLaunched = SelfLaunched(event.Source, event.BindingSource)
 		events = append(events, event)
 	}
 	if err := rows.Err(); err != nil {
@@ -339,12 +348,14 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 	}
 	method := "provided_context"
 	confidence := 1.0
+	bindingSource := event.BindingSource
 	if event.RunID == "" || event.SessionID == "" || event.ToolCallID == "" || event.ProcessID == "" {
 		match, ok, err := correlation.Resolve(db, raw)
 		if err != nil {
 			return "", err
 		}
 		if ok {
+			bindingSource = match.BindingSource
 			if event.RunID == "" {
 				event.RunID = match.RunID
 			}
@@ -401,9 +412,9 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 		payload = fmt.Sprintf(`{"rollout_id":%q,"attempt_id":%q,"payload":%s}`, event.RolloutID, event.AttemptID, event.Payload)
 	}
 	_, err := db.Exec(`INSERT INTO events
-		(id, run_id, session_id, tool_call_id, process_id, snapshot_id, raw_event_id, correlation_method, correlation_confidence, container_id, cgroup_id, pid, tgid, ppid, source, event_type, payload, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		eventID, event.RunID, event.SessionID, event.ToolCallID, event.ProcessID, event.SnapshotID, event.RawEventID, method, confidence, event.ContainerID, event.CgroupID, event.PID, event.TGID, event.PPID, event.Source, event.EventType, payload, now)
+		(id, run_id, session_id, tool_call_id, process_id, snapshot_id, raw_event_id, correlation_method, correlation_confidence, container_id, cgroup_id, pid, tgid, ppid, binding_source, source, event_type, payload, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		eventID, event.RunID, event.SessionID, event.ToolCallID, event.ProcessID, event.SnapshotID, event.RawEventID, method, confidence, event.ContainerID, event.CgroupID, event.PID, event.TGID, event.PPID, bindingSource, event.Source, event.EventType, payload, now)
 	if err != nil {
 		return "", err
 	}
