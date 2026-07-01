@@ -46,7 +46,7 @@ tamper-evident against a malicious host root.
 | 4 | Ingest: own eBPF sensor -- capture binary build | DONE | bpf2go bindings committed (`internal/sensor/sensorbpf_bpf*.go/.o`); fresh Linux `go build ./cmd/agentprov-sensor` works without clang; `scripts/regen-sensor.sh --check` + CI guard drift |
 | 4 | Ingest: raw events need no tool_call_id | DONE | `telemetry/service.go` IngestFiltered -> correlation.Resolve fallback |
 | 4 | Correlation by container/cgroup/pid/time | DONE | `correlation/binding.go`: process 1.0 / cgroup 0.98 / container 0.92 / pid 0.85 |
-| 4 | Child/async/delayed -> original scope | DONE | time-window open bindings + root_pid + container/cgroup co-membership (not ppid lineage); add child-pid test (Sec 2) |
+| 4 | Child/async/delayed -> original scope | DONE | time-window open bindings + root_pid + container/cgroup co-membership (not ppid lineage); supervised `record` can launch into a real cgroup-per-scope |
 | 5 | Observability: timeline app+runtime | DONE | `provenance/timeline.go` BuildTimeline, lanes + correlation_status |
 | 5 | observe summary/coverage/scopes/event/process/flow | DONE | `cli/observe_cmd.go` (6/6) |
 | 5 | graph explain event/process/tool_call/file/risk/artifact | DONE | `provenance/explain.go` (+attempt,+run) |
@@ -110,7 +110,8 @@ tamper-evident against a malicious host root.
   north-star Sec 7: earn it through Mode 1/2 adoption.
 - **Notifications** (Feishu/DingTalk/webhook response adapters).
 - Cross-host identity / clock-skew correlation (A2); auditd/extra substrates;
-  sensor capturing openat *reads* (for true `secret_path`, vs today's writes).
+  rootless container cgroup-delegation validation; broader multi-arch sensor
+  hardening.
 
 ## 4. v1 done gate
 

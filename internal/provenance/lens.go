@@ -109,6 +109,7 @@ type lensEvent struct {
 	CreatedAt   string
 	Path        string
 	Destination string
+	TGID        int64
 }
 
 type processGroup struct {
@@ -141,7 +142,11 @@ func BuildGraphLens(db *sql.DB, opts GraphLensOptions) (GraphLensManifest, error
 	lens := normalizeGraphLens(opts.Lens)
 	detail := normalizeGraphLensDetail(opts.Detail)
 	if opts.Limit <= 0 {
-		opts.Limit = 500
+		// 350 keeps the graph light enough to lay out + render fast on a lens
+		// switch while still fitting all the prioritized semantic edges (product
+		// lineage + policy/risk/response); the runtime_event/process skeleton is
+		// what gets trimmed, and it is the least informative part.
+		opts.Limit = 350
 	}
 	nodes, events, err := graphLensNodes(db, opts.RunID)
 	if err != nil {
@@ -172,22 +177,35 @@ func BuildGraphLens(db *sql.DB, opts GraphLensOptions) (GraphLensManifest, error
 			LayoutHint:    graphLensLayout(lens),
 		},
 	}
+	// Prioritize edges so that when the budget truncates the runtime_event/
+	// runtime_process BULK, edges incident to semantically important nodes
+	// (policy_decision / response_action / risk_signal / file / artifact /
+	// tool_call / snapshot / attempt / rollout / process) survive. Without this
+	// the bulk ate the whole edge budget and those nodes were returned but
+	// ORPHANED -- appearing as disconnected, mis-positioned floaters.
+	prioritizeLensEdges(filteredEdges, nodes)
+	manifest.Edges, manifest.DerivedEdges, manifest.Query.Truncated = splitAndLimitLensEdges(filteredEdges, opts.Limit)
+	// Build the visible node set from the RETURNED edges only, so no node is ever
+	// shown without a connecting edge. (Previously `used` was built from every
+	// pre-truncation edge, so a node whose only edge fell past the cut still
+	// appeared -- floating.) Genuinely edgeless nodes are dropped rather than
+	// left disconnected; drill/focus recovers detail for a specific node.
 	used := map[string]bool{}
-	for _, edge := range filteredEdges {
+	for _, edge := range append(append([]GraphLensEdge{}, manifest.Edges...), manifest.DerivedEdges...) {
 		if edge.EdgeType == "possible_sensitive_data_flow_summary" && edge.ToID != "" {
 			nodes[edge.ToID] = egressGroupNode(edge)
 		}
 		used[edge.FromID] = true
 		used[edge.ToID] = true
-		if edge.SourceEventID != "" {
-			used["runtime_event/"+edge.SourceEventID] = true
-		}
+		// NOTE: the edge's SourceEventID is intentionally NOT added as a node --
+		// it is reachable via the edge's source_event_id for drill-down, and
+		// adding it as a bare node (with no edge of its own returned) reintroduces
+		// a floating runtime_event. Only actual edge endpoints become nodes.
 	}
 	if opts.Focus != "" {
 		used[opts.Focus] = true
 	}
 	manifest.Nodes = sortedLensNodes(nodes, used)
-	manifest.Edges, manifest.DerivedEdges, manifest.Query.Truncated = splitAndLimitLensEdges(filteredEdges, opts.Limit)
 	manifest.Query.NodeCount = len(manifest.Nodes)
 	manifest.Query.EdgeCount = len(manifest.Edges) + len(manifest.DerivedEdges)
 	manifest.Query.Derived = len(manifest.DerivedEdges)
@@ -272,7 +290,7 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 			nodes[node.ID] = node
 		}
 	}
-	rows, err := db.Query(`SELECT id, COALESCE(session_id,''), COALESCE(tool_call_id,''), COALESCE(process_id,''), COALESCE(snapshot_id,''), COALESCE(pid,0), COALESCE(ppid,0), source, event_type, payload, created_at
+	rows, err := db.Query(`SELECT id, COALESCE(session_id,''), COALESCE(tool_call_id,''), COALESCE(process_id,''), COALESCE(snapshot_id,''), COALESCE(pid,0), COALESCE(ppid,0), COALESCE(tgid,0), source, event_type, payload, created_at
 		FROM events WHERE run_id = ? ORDER BY created_at ASC`, runID)
 	if err != nil {
 		return nil, nil, err
@@ -280,7 +298,7 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 	defer rows.Close()
 	for rows.Next() {
 		var ev lensEvent
-		if err := rows.Scan(&ev.ID, &ev.SessionID, &ev.ToolCallID, &ev.ProcessID, &ev.SnapshotID, &ev.PID, &ev.PPID, &ev.Source, &ev.Type, &ev.Payload, &ev.CreatedAt); err != nil {
+		if err := rows.Scan(&ev.ID, &ev.SessionID, &ev.ToolCallID, &ev.ProcessID, &ev.SnapshotID, &ev.PID, &ev.PPID, &ev.TGID, &ev.Source, &ev.Type, &ev.Payload, &ev.CreatedAt); err != nil {
 			return nil, nil, err
 		}
 		ev.NodeID = "runtime_event/" + ev.ID
@@ -344,6 +362,33 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 			}
 		}
 	}
+	// Final fallback: a pid still unnamed but seen in ANY other event (connect,
+	// file, exit, ...) carries the comm the sensor stamps on every event. A real
+	// agent spawns many short-lived children whose execve is missed (exec'd
+	// before the sensor attached, or dropped under load) yet still do I/O — use
+	// their comm so the graph shows "bash"/"claude"/"git" instead of a bare pid.
+	// tgidName maps a thread-group id to a process name, so runtime_process/tgid/N
+	// nodes (created from runtime_process_thread edges) show a name instead of a
+	// bare number. Prefer the leader thread (pid==tgid); otherwise any thread's
+	// comm/command.
+	tgidName := map[int64]string{}
+	for _, ev := range events {
+		if ev.PID <= 0 {
+			continue
+		}
+		name := payloadString(ev.Payload, "command", "cmdline", "comm")
+		if name == "" {
+			continue
+		}
+		if _, named := pidCommand[ev.PID]; !named {
+			pidCommand[ev.PID] = name
+		}
+		if ev.TGID > 0 {
+			if _, ok := tgidName[ev.TGID]; !ok || ev.PID == ev.TGID {
+				tgidName[ev.TGID] = name
+			}
+		}
+	}
 	for pid, cmd := range pidCommand {
 		id := fmt.Sprintf("runtime_process/pid/%d", pid)
 		add(GraphLensNode{
@@ -353,6 +398,17 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 			Label:       cmd,
 			TrustOrigin: "runtime_observed",
 			Data:        map[string]any{"pid": pid, "command": cmd},
+		})
+	}
+	for tgid, name := range tgidName {
+		id := fmt.Sprintf("runtime_process/tgid/%d", tgid)
+		add(GraphLensNode{
+			ID:          id,
+			Kind:        "runtime_process",
+			Subtype:     fmt.Sprintf("tgid %d (thread group)", tgid),
+			Label:       name,
+			TrustOrigin: "runtime_observed",
+			Data:        map[string]any{"tgid": tgid, "command": name},
 		})
 	}
 	return nodes, events, nil
@@ -1372,6 +1428,42 @@ func egressGroupNode(edge GraphLensEdge) GraphLensNode {
 			"evidence_ref_cnt": len(edge.EvidenceRefs),
 		},
 	}
+}
+
+// prioritizeLensEdges stably reorders edges so that edges touching semantically
+// important nodes come first and the runtime_event/runtime_process BULK comes
+// last. When splitAndLimitLensEdges truncates to the budget, the important
+// connections survive, so annotation nodes (policy/response/risk/file/artifact/
+// tool_call/...) stay wired to their lineage instead of floating.
+func prioritizeLensEdges(edges []GraphLensEdge, nodes map[string]GraphLensNode) {
+	// The graph's edge population is dominated by the STRUCTURAL SKELETON
+	// (runtime_process_event / runtime_tool_call_process / runtime_tool_call_event
+	// / runtime_attempt_event ... -- hundreds of them, connecting one tool_call /
+	// process to every event). The RARE, semantically critical edges are the
+	// lineage of the annotation nodes: file/artifact production, policy, risk,
+	// response, taint. Those must survive the edge-budget cut so the product and
+	// the security verdicts stay on the graph. Note we key on the RARE kinds and
+	// annotation edge_types only -- NOT "tool_call"/"process" substrings, which
+	// would (wrongly) promote the whole skeleton.
+	rare := map[string]bool{"file": true, "artifact": true, "policy_decision": true, "response_action": true, "risk_signal": true}
+	tier := func(e GraphLensEdge) int {
+		if e.Derived {
+			return 0
+		}
+		et := e.EdgeType
+		for _, s := range []string{"policy", "risk", "response", "artifact", "taint", "data_flow", "file", "llm_"} {
+			if strings.Contains(et, s) {
+				return 0
+			}
+		}
+		for _, id := range []string{e.FromID, e.ToID} {
+			if n, ok := nodes[id]; ok && rare[n.Kind] {
+				return 0
+			}
+		}
+		return 1
+	}
+	sort.SliceStable(edges, func(i, j int) bool { return tier(edges[i]) < tier(edges[j]) })
 }
 
 func splitAndLimitLensEdges(edges []GraphLensEdge, limit int) ([]GraphLensEdge, []GraphLensEdge, bool) {

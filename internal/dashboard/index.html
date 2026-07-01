@@ -129,7 +129,21 @@
   .etype{font-weight:600}
   .cls{font-size:11px;color:var(--mut)}
   .cls.kernel_correlated{color:#0a7d52}
+  .cls.self_observed{color:#8a6d1f}
+  .cls.context_asserted{color:#8a5cc4}
   .cls.uncorrelated{color:#d70015}
+  /* Provenance summary chip in the timeline header: states the self-launched /
+     kernel-correlated ratio ONCE for the run, instead of a badge on every row
+     (self-launched is usually the norm ~100%, so per-row badges are noise). */
+  .provchip{margin-left:10px;padding:1px 7px;border-radius:99px;font-size:10.5px;font-weight:500;color:var(--mut);background:var(--panel2);border:1px solid var(--line);vertical-align:middle}
+  /* extbadge marks the EXCEPTION: kernel-witnessed activity we did NOT start. */
+  .extbadge{display:inline-block;margin-left:4px;padding:0 4px;border-radius:4px;font-size:9.5px;font-weight:600;color:#b25000;background:rgba(178,80,0,.12);vertical-align:middle}
+  /* correlation confidence tiers: a 0.5 ai_asserted join must not read like a
+     0.98 kernel match. Colour the confidence number by band. */
+  .conf{font-variant-numeric:tabular-nums}
+  .conf.hi{color:#0a7d52}
+  .conf.mid{color:#8a6d1f}
+  .conf.lo{color:#c25a00}
   /* --- Compliance card --- */
   .compsummary{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel2)}
   .covbar{flex:1;min-width:200px;height:12px;border-radius:99px;overflow:hidden;display:flex;background:#ececf0}
@@ -264,7 +278,7 @@
     <div id="evpager" class="pager"></div>
   </section>
   <section class="card full">
-    <h2>Run Timeline <span class="sub">all events in chronological order</span></h2>
+    <h2>Run Timeline <span class="sub">all events in chronological order</span><span id="tlprov" class="provchip"></span></h2>
     <div style="overflow:auto;max-height:420px"><table id="tl"><thead><tr>
       <th>time</th><th>event</th><th>correlation</th><th>conf</th><th>detail</th>
     </tr></thead><tbody></tbody></table></div>
@@ -437,7 +451,15 @@ function localScope(g,sel,mode){
 function renderDAG(g,sel){
   const el=$('#dag');
   if(!g.nodes.length){el.innerHTML='<div class="empty">no nodes for this lens</div>';return;}
-  const {pos,W,H}=layout(g.nodes,g.edges);
+  // Layout (Sugiyama) is a pure function of topology and is the expensive step.
+  // renderDAG is called on every select/hover/zoom -- recomputing it each time
+  // was the source of the lag on large graphs. Cache it by the topology
+  // signature (_gsig, which encodes node+edge ids + lens + focus); selection and
+  // zoom only restyle, they never move nodes, so the cache stays valid.
+  let L;
+  if(window.__layoutSig===window._gsig && window.__layoutCache){ L=window.__layoutCache; }
+  else { L=layout(g.nodes,g.edges); window.__layoutCache=L; window.__layoutSig=window._gsig; }
+  const {pos,W,H}=L;
   const lin=localScope(g,sel,EXPAND_MODE);
   const nOn=id=>!lin||lin.nodes.has(id);
   const showRisk=OV.has('risk'), showTrust=OV.has('trust');
@@ -840,15 +862,25 @@ function focusSignal(id, refs, title){
 
 function renderTimeline(events){
   const tb=$('#tl tbody');
-  if(!events||!events.length){tb.innerHTML='<tr><td colspan="5" class="empty">no events</td></tr>';return;}
+  if(!events||!events.length){tb.innerHTML='<tr><td colspan="5" class="empty">no events</td></tr>';$('#tlprov').textContent='';return;}
+  renderProvChip(events);
   tb.innerHTML=events.map(e=>{
     const cls=(e.correlation_class||'').replace(/\s/g,'_');
     const t=(e.created_at||'').replace('T',' ').replace(/\.\d+Z?$/,'');
     return `<tr><td>${esc(t)}</td><td class="etype">${esc(e.event_type||'')}</td>
-      <td class="cls ${cls}">${esc(e.correlation_class||e.correlation_method||'')}</td>
-      <td>${e.correlation_confidence!=null?(+e.correlation_confidence).toFixed(2):''}</td>
+      <td class="cls ${cls}">${esc(e.correlation_class||e.correlation_method||'')}${provBadge(e)}</td>
+      <td>${confCell(e.correlation_confidence)}</td>
       <td class="payload">${plCell(e.payload)}</td></tr>`;
   }).join('');
+}
+// Provenance summary as ONE run-level chip instead of a badge on every row:
+// self-launched is the norm for a recorded run (often ~100%), so per-row badges
+// are noise. The chip states it once; provBadge() then flags only the exception.
+function renderProvChip(events){
+  const el=$('#tlprov'); if(!el)return;
+  const n=events.length, sl=events.filter(e=>e.self_launched).length, kc=events.filter(e=>(e.correlation_class||'')==='kernel_correlated').length;
+  el.textContent=`${sl}/${n} self-launched · ${kc}/${n} kernel-correlated`;
+  el.title='self-launched = process started by AgentProvenance; kernel-correlated = independently witnessed by the sensor';
 }
 // Full payload, pretty-printed when it's JSON. The table cell (td.payload .pl)
 // clamps it to a few lines by default and expands to the whole thing on click,
@@ -856,6 +888,22 @@ function renderTimeline(events){
 function payloadFull(p){ if(!p)return''; try{return JSON.stringify(JSON.parse(p),null,2);}catch(_){return String(p);} }
 function plCell(p){ const full=payloadFull(p); if(!full)return''; return `<div class="pl" onclick="this.classList.toggle('open')" title="click to expand / collapse">${esc(full)}</div>`; }
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+// Correlation confidence tier -> colour band. Keeps a 0.5 ai_asserted join from
+// reading like a 0.98 kernel match.
+function confClass(c){ c=+c; return c>=0.9?'hi':(c>=0.7?'mid':'lo'); }
+function confCell(c){ if(c==null||c==='')return''; return `<span class="conf ${confClass(c)}">${(+c).toFixed(2)}</span>`; }
+// self-launched is orthogonal to correlation class: a kernel_correlated event
+// can also carry this badge when the process was started by us.
+// Badge only the EXCEPTION, not the norm: an independently-witnessed event that
+// AgentProvenance did NOT start ("external" activity inside/near a tracked
+// scope) is the security-notable case worth a per-row mark. The self-launched
+// majority is summarized in the run-level chip (renderProvChip), not repeated
+// on every row.
+function provBadge(e){
+  if(e.self_launched) return '';
+  if((e.correlation_class||'')==='kernel_correlated') return ' <span class="extbadge" title="independently witnessed by the sensor, but NOT started by AgentProvenance">external</span>';
+  return '';
+}
 
 async function loadEvidenceDrilldown(offset){
   const tb=$('#evtbl tbody'), head=$('#evhead'), pager=$('#evpager');
@@ -884,7 +932,7 @@ async function loadEvidenceDrilldown(offset){
     tb.innerHTML=rows.map(e=>{
       const t=(e.created_at||'').replace('T',' ').replace(/\.\d+Z?$/,'');
       return `<tr><td>${esc(t)}</td><td class="etype">${esc(e.event_type||'')}</td><td>${esc(e.pid||'')}</td>
-        <td>${esc(e.tool_call_id||'')}</td><td class="cls ${esc((e.correlation_class||'').replace(/\s/g,'_'))}">${esc(e.correlation_class||e.correlation_method||'')}</td>
+        <td>${esc(e.tool_call_id||'')}</td><td class="cls ${esc((e.correlation_class||'').replace(/\s/g,'_'))}">${esc(e.correlation_class||e.correlation_method||'')}${provBadge(e)}</td>
         <td class="payload">${plCell(e.payload)}</td></tr>`;
     }).join('');
   }
@@ -916,14 +964,39 @@ function renderProcessTree(procs){
   Object.values(byPid).forEach(p=>{(kids[p.ppid]=kids[p.ppid]||[]).push(p);});
   const roots=Object.values(byPid).filter(p=>!pids.has(p.ppid));
   const seen=new Set();
-  function render(p,depth){
-    if(seen.has(p.pid)||depth>40)return''; seen.add(p.pid);
+  const sig=c=>(c.command||'').slice(0,60);            // collapse key
+  const isLeaf=c=>!(kids[c.pid]||[]).length;
+  function row(p,depth){
     const ind='&nbsp;'.repeat(depth*3);
-    let s=`<div class="node">${ind}${depth>0?'└ ':''}<span class="cmd">${esc(p.command).slice(0,80)}</span> <span class="pid">[pid ${p.pid}]</span></div>`;
-    (kids[p.pid]||[]).forEach(c=>{ s+=render(c,depth+1); });
+    return `<div class="node">${ind}${depth>0?'└ ':''}<span class="cmd">${esc(p.command).slice(0,80)}</span> <span class="pid">[pid ${p.pid}]</span></div>`;
+  }
+  // Render a sibling list, collapsing identical leaf commands. A real agent
+  // fans out the SAME helper dozens of times (78x base64 -d here), each with its
+  // own unobserved parent, so they land as a wall of near-identical rows. Group
+  // them into one "cmd  ×N" row so the tree stays readable. Applies at EVERY
+  // level, including roots (where the base64 storm actually sits).
+  function renderList(list,depth){
+    let s='';
+    const groups={};
+    list.forEach(c=>{ if(!seen.has(c.pid)){ (groups[sig(c)]=groups[sig(c)]||[]).push(c);} });
+    Object.values(groups).forEach(g=>{
+      const leaves=g.filter(isLeaf);
+      if(g.length>=4 && leaves.length===g.length){
+        g.forEach(c=>seen.add(c.pid));
+        const ind='&nbsp;'.repeat(depth*3);
+        const pidList=g.slice(0,8).map(c=>c.pid).join(', ')+(g.length>8?', …':'');
+        s+=`<div class="node">${ind}${depth>0?'└ ':''}<span class="cmd">${esc(g[0].command).slice(0,80)}</span> <span class="pid">×${g.length}</span> <span class="pid" title="pids: ${esc(pidList)}">[${g.length} processes]</span></div>`;
+      } else {
+        g.forEach(c=>{ s+=render(c,depth); });
+      }
+    });
     return s;
   }
-  el.innerHTML=roots.map(r=>render(r,0)).join('') || '<div class="empty">no roots</div>';
+  function render(p,depth){
+    if(seen.has(p.pid)||depth>40)return''; seen.add(p.pid);
+    return row(p,depth)+renderList(kids[p.pid]||[],depth+1);
+  }
+  el.innerHTML=renderList(roots,0) || '<div class="empty">no roots</div>';
 }
 
 // --- Compliance: detection RULES mapped onto framework controls -----------
@@ -1143,7 +1216,10 @@ function fitZoom(){ FIT=true; renderDAG(window._lg, SEL); }
 // elements at or before TCUR are drawn. TIMES is the sorted distinct clock.
 let TCUR=null, TIMES=[], PLAYING=null;
 function nodeVisible(id){ if(TCUR===null) return true; const t=(window._lg.nodeT||{})[id]; return t===undefined || t<=TCUR; }
-function edgeVisible(e){ return nodeVisible(e.from) && nodeVisible(e.to); }
+// An edge must not appear before its OWN time, even if both endpoints are
+// already visible (their earlier edges brought them in). Without this the
+// scrubber drew edges whose created_at was still in the future.
+function edgeVisible(e){ if(TCUR!==null && e.t && e.t>TCUR) return false; return nodeVisible(e.from) && nodeVisible(e.to); }
 async function loadRun(run){
   cur=run;
   const q='run='+encodeURIComponent(run);
@@ -1215,7 +1291,7 @@ async function refreshRuns(keep){
   sel.onchange=()=>{ SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; tlOffset=0; stopPlay(); loadRun(sel.value); };
   $('#live').onclick=()=>setLive(!LIVE);
   await loadRun(first);
-  setInterval(async()=>{ if(!LIVE)return; const r=await refreshRuns(cur); if(r) loadRun(r); }, 5000);
+  setInterval(async()=>{ if(!LIVE)return; const r=await refreshRuns(cur); if(r) loadRun(r); }, 10000);
 })();
 </script>
 </body>

@@ -351,6 +351,90 @@ func TestIngestJSONLReaderMatchesFileHash(t *testing.T) {
 	}
 }
 
+func TestIngestJSONLExcludesSelfNoise(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// Three sensor lines: a real workload file_write, AgentProvenance's own
+	// snapshot write under the data-dir (path-excluded), and an event from the
+	// supervisor's own cgroup (cgroup-excluded). Only the first should ingest.
+	lines := strings.Join([]string{
+		`{"source":"agentprov_ebpf","pid":10,"cgroup_id":"111","event_type":"file_write","path":"/work/app.py"}`,
+		`{"source":"agentprov_ebpf","pid":11,"cgroup_id":"111","event_type":"file_write","path":"/data/agentprov/snapshots/snap-1/x"}`,
+		`{"source":"agentprov_ebpf","pid":12,"cgroup_id":"999","event_type":"execve","path":"/proc/self/exe"}`,
+	}, "\n") + "\n"
+
+	res, err := IngestJSONLReader(db, JSONLIngestOptions{
+		Format:              "native",
+		Path:                "-",
+		ExcludePathPrefixes: []string{"/data/agentprov"},
+		ExcludeCgroupIDs:    []string{"999"},
+	}, strings.NewReader(lines))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Read != 3 {
+		t.Fatalf("read=%d, want 3", res.Read)
+	}
+	if res.Ingested != 1 {
+		t.Errorf("ingested=%d, want 1 (only the real workload write)", res.Ingested)
+	}
+	if res.Excluded != 2 {
+		t.Errorf("excluded=%d, want 2 (data-dir snapshot write + own-cgroup event)", res.Excluded)
+	}
+}
+
+func TestIngestJSONLDropsUncorrelated(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// A binding so one event correlates; the other event's cgroup matches nothing.
+	started := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := correlation.RecordBinding(db, correlation.Binding{
+		RunID: "run-x", ToolCallID: "tc-x", ProcessID: "p-x",
+		CgroupID: "555", StartedAt: started, BindingSource: "zero_sdk_record",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Join([]string{
+		`{"source":"agentprov_ebpf","pid":1,"cgroup_id":"555","event_type":"execve","path":"/bin/ls","timestamp":"` + started + `"}`,
+		`{"source":"agentprov_ebpf","pid":2,"cgroup_id":"888","event_type":"execve","path":"/bin/ps","timestamp":"` + started + `"}`,
+	}, "\n") + "\n"
+
+	res, err := IngestJSONLReader(db, JSONLIngestOptions{Format: "native", Path: "-", DropUncorrelated: true}, strings.NewReader(lines))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Ingested != 1 || res.Dropped != 1 {
+		t.Fatalf("ingested=%d dropped=%d, want 1 and 1", res.Ingested, res.Dropped)
+	}
+	// The dropped host-noise event must not remain in the store (else it dangles
+	// in the batch and fails verify).
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE source='agentprov_ebpf'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("stored ebpf events=%d, want 1 (uncorrelated dropped)", n)
+	}
+}
+
 func TestIngestJSONLReportsBadRows(t *testing.T) {
 	root := t.TempDir()
 	paths, err := store.Init(filepath.Join(root, ".agentprov"))

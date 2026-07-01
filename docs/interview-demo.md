@@ -52,13 +52,13 @@ Two ways in. The replay data dir is the fastest for a live demo.
 
 ```bash
 agentprov --data-dir .agentprov-snake-replay dashboard serve
-# open the printed URL; run "run-snake-agent" auto-loads (385 events)
+# open the printed URL; run "run-snake-supervised" auto-loads
 ```
 
 **B. Import the signed bundle from scratch (shows verification)**
 
 ```bash
-agentprov forensics import demo/snake-supply-chain/run-snake-agent.forensics.json \
+agentprov forensics import demo/snake-supply-chain/run-snake-supervised.forensics.json \
   --pub-key demo/snake-supply-chain/attestation.pub \
   --data-dir /tmp/snake-demo
 # --pub-key verifies the in-toto/DSSE attestation BEFORE loading; tamper => refused
@@ -72,8 +72,10 @@ agentprov --data-dir /tmp/snake-demo dashboard serve
 Drive these in order:
 
 1. **Graph Explorer — Agent intent lens.** Start at the tool call / process. Point
-   out that these are *app-side context*, correlated to kernel events by the
-   binding engine (process_id / cgroup+time / container+time / pid+time tiers).
+   out that this run is supervised capture: the agent was born into a real cgroup
+   while a per-node `sensor stream` collected kernel events. The binding engine
+   resolves those events by cgroup/time at high confidence; raw kernel events do
+   not carry `tool_call_id`.
 
 2. **Security lens.** The poisoned install hook's `secret_path` reads and the
    `metadata_ip` egress light up as risk. Follow the edges:
@@ -93,13 +95,18 @@ Drive these in order:
 6. **A node's Side Panel.** Evidence + a bounded, secret-redacted content preview
    of the artifact/object behind the node (content-addressed, hash-verified).
 
+7. **Timeline / Process Tree.** Use it for the time-ordered story and readable
+   process names. The dashboard now prefers argv/command and falls back to
+   kernel `comm`, so short-lived helpers are not shown as anonymous PID-only
+   rows unless no command evidence exists.
+
 ---
 
 ## 5. Compliance — the audit stage
 
 ```bash
 agentprov --data-dir .agentprov-snake-replay compliance map \
-  --framework owasp-asi --run run-snake-agent
+  --framework owasp-asi --run run-snake-supervised
 ```
 
 Or the dashboard's **Compliance** card. The verdict per control is **four honest
@@ -129,7 +136,7 @@ Talking points that land:
 
 ```bash
 agentprov forensics verify-attestation \
-  demo/snake-supply-chain/run-snake-agent.forensics.json \
+  demo/snake-supply-chain/run-snake-supervised.forensics.json \
   --pub-key demo/snake-supply-chain/attestation.pub
 ```
 
@@ -150,13 +157,19 @@ agentprov forensics verify-attestation \
 - The TLS-boundary intent capture (SSL uprobe) is a demonstrated PoC, not a
   hardened multi-framework interceptor — deliberately not chased.
 - The fake secrets are planted; nothing here exfiltrates real data.
+- `self_launched` means AgentProvenance directly launched the process scope.
+  `kernel_correlated` means a runtime event was joined back to that scope by
+  runtime identity such as cgroup/container/pid/time. These are separate facts:
+  an event can be kernel-correlated without being self-launched.
 
 ---
 
 ## 8. If asked "what's the hard part?"
 
 The **time-windowed tiered correlation engine** (`internal/correlation`) that
-binds app-side context to kernel telemetry across process / cgroup / container /
-pid with confidence, robust to stale-open bindings and clock skew — plus keeping
-one unified, signable evidence model across three deployment modes (CLI recorder,
-sidecar daemon, central service). Everything else rides that spine.
+binds app-side context to kernel telemetry across cgroup / container / pid /
+time with confidence, while keeping `self_launched`, `context_asserted`, and
+`kernel_correlated` semantics honest. In supervised mode the hard join is:
+`record` creates a real cgroup scope, `sensor stream` observes syscalls, and the
+correlator attaches those runtime events back to the run without requiring the
+kernel payload to know agent identifiers. Everything else rides that spine.

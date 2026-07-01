@@ -42,20 +42,27 @@ func ValidateStoredPayload(eventType, payload string) error {
 }
 
 // CorrelationClass labels the PROVENANCE of an event's correlation so a security
-// consumer can distinguish a high-confidence self-join from independent
-// corroboration. It is a pure function of already-stored fields:
-//   - self_observed:   Mode 1 recorder joined telemetry it collected itself
-//     (record_process_sample/record_file_diff, the synthetic agentprov-record-
-//     binding, or the zero_sdk_process_tree method). Its 1.0/0.9 confidence is
-//     self-consistency, NOT independent evidence.
+// consumer can distinguish a self-join from independent corroboration. It is the
+// correlation-STRENGTH axis only; whether the scope launched the process is a
+// separate, orthogonal fact (see SelfLaunched). The two combine in the UI: a
+// sensor event matched to a self-launched binding is kernel_correlated AND
+// self_launched. It is a pure function of already-stored fields:
+//   - self_observed:   we only know about this event because AgentProvenance
+//     itself produced the observation (record's own process-tree sampling / file
+//     diff / direct record events, or the zero_sdk_process_tree method). There
+//     is no independent kernel witness, so its confidence is self-consistency,
+//     NOT independent evidence. Keyed on the event SOURCE, not on any synthetic
+//     container-id string: a real kernel event that merely matched a
+//     record-launched binding is independently witnessed and stays
+//     kernel_correlated (that is what SelfLaunched is for).
 //   - context_asserted: the caller provided full run/session/tool_call context;
 //     no correlation was performed.
 //   - kernel_correlated: independent system telemetry (Falco/Tetragon/own eBPF
 //     sensor) joined to app context through a binding. This is the real claim.
 //   - uncorrelated:     could not be resolved.
 func CorrelationClass(source, method, containerID string, confidence float64) string {
-	if source == "record_process_sample" || source == "record_file_diff" ||
-		method == "zero_sdk_process_tree" || strings.HasPrefix(containerID, "agentprov-record-") {
+	if source == "record" || source == "record_process_sample" || source == "record_file_diff" ||
+		method == "zero_sdk_process_tree" {
 		return "self_observed"
 	}
 	if method == "provided_context" {
@@ -65,6 +72,29 @@ func CorrelationClass(source, method, containerID string, confidence float64) st
 		return "uncorrelated"
 	}
 	return "kernel_correlated"
+}
+
+// SelfLaunched reports whether the process behind this event was started by
+// AgentProvenance itself (zero-SDK record mode / control-plane launch). It is
+// orthogonal to CorrelationClass: an independently-witnessed kernel event can
+// be self_launched too. It is derived from the event source (record's own
+// events are self-launched by construction) and from the binding_source of the
+// binding the event resolved against, so it survives onto agentprov_ebpf
+// sensor events that matched a record/control-plane binding.
+func SelfLaunched(source, bindingSource string) bool {
+	switch source {
+	case "record", "record_process_sample", "record_file_diff":
+		return true
+	}
+	// Only bindings whose source EXPLICITLY records a launch by us count. The
+	// generic "control_plane" default and daemon-API/ai_asserted binds are
+	// ambiguous (they may anchor externally-observed telemetry), so they are
+	// deliberately excluded rather than over-claim that we started the process.
+	switch bindingSource {
+	case "zero_sdk_record", "zero_sdk_record_descendant", "rollout_local", "rollout_docker", "control_exec":
+		return true
+	}
+	return false
 }
 
 func TelemetrySource(source string, correlationMethod string) bool {

@@ -12,6 +12,7 @@ can be ingested without pretending the kernel knows agent-level identifiers.
 | Runtime identity | `raw_event_id`, `container_id`, `cgroup_id`, `pid`, `tgid`, `ppid`, `timestamp` | Runtime or telemetry substrate |
 | Raw payload | syscall arguments, path, destination address, argv, event-specific fields | Runtime or telemetry substrate |
 | Correlation result | `correlation.method`, `correlation.confidence`, `correlation.binding_id` | AgentProvenance correlator |
+| Launch/correlation provenance | `binding_source`, `self_launched`, `correlation_class` | AgentProvenance correlator / recorder |
 
 ## Raw Payload Rules
 
@@ -92,6 +93,35 @@ The correct form is to pass `--tool-call tool-123` as structured application
 context when it is known, or omit it and let the correlator resolve the event
 through cgroup/container/pid/time evidence.
 
+## Correlation Semantics
+
+Correlation is not a single boolean. AgentProvenance keeps launch provenance and
+runtime correlation separate:
+
+| Field | Meaning |
+| --- | --- |
+| `binding_source` | How the scope binding was created, e.g. `zero_sdk_record`, `ai_asserted`, or receiver-specific context |
+| `self_launched` | AgentProvenance directly launched the process scope, so descendants are expected to belong to this run |
+| `correlation_class` | `self_observed`, `context_asserted`, `kernel_correlated`, or `uncorrelated` |
+| `correlation_method` | The concrete join used, such as `process_id`, `cgroup_time_window`, `container_time_window`, or `pid_time_window` |
+| `correlation_confidence` | Numeric confidence for that join |
+
+Current confidence tiers:
+
+| Method | Confidence | Notes |
+| --- | --- | --- |
+| Direct process / self-observed wrapper evidence | `1.0` | Produced by AgentProvenance itself |
+| Real cgroup + time window | `0.98` | Supervised Linux capture; strong subtree join |
+| Container + time window | `0.92` | Common runtime/collector join |
+| PID + time window | `0.85` | Useful fallback; weaker because of PID reuse and missed short-lived descendants |
+| `ai_asserted` application context | `<=0.5` | App-supplied claim, intentionally lower trust |
+
+In record-only mode, a synthetic scope id is sufficient because there is no
+kernel telemetry to join. In supervised mode, `record` creates a real cgroup
+scope and `sensor stream` observes syscalls from the host; the correlator joins
+events back to the run by `cgroup_id` without requiring raw events to carry
+agent identifiers.
+
 ## JSONL Receivers
 
 The MVP can ingest already-filtered substrate JSONL:
@@ -150,6 +180,17 @@ emits this normalized schema directly, so own-kernel telemetry drives the same
 correlation → policy → risk path as Falco/Tetragon. It also adds a DAG `llm_call`
 edge (TLS request ↔ response) and an `llm_intent_caused` edge (TLS response →
 the syscalls it caused).
+
+For local supervised capture, the CLI also exposes:
+
+```sh
+agentprov --data-dir <dir> sensor stream
+```
+
+This runs the native sensor as a per-node supervisor, ingests its normalized
+events into the local store, applies policy/risk evaluation by default, and uses
+the same cgroup/container/pid/time correlation path as JSONL receivers. It is
+the product path used by the committed `run-snake-supervised` demo bundle.
 
 Unrecognized rows are skipped. Malformed rows or rows that fail schema
 validation are counted as failed and reported in the ingest result.

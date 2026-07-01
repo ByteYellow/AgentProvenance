@@ -27,6 +27,59 @@ type JSONLIngestOptions struct {
 	ProcessID  string
 	SnapshotID string
 	RolloutID  string
+	// ExcludePathPrefixes drops file-oriented events whose path is under any of
+	// these prefixes. Used to keep the streaming sensor from observing (and
+	// ingesting, and thereby generating more of) AgentProvenance's OWN I/O --
+	// its data-dir snapshot copies and store DB writes -- which otherwise forms
+	// a self-feedback storm that buries and drops real scope events.
+	ExcludePathPrefixes []string
+	// ExcludeCgroupIDs drops events whose cgroup id matches -- typically the
+	// supervisor's own cgroup, so the sensor never ingests its own process's
+	// activity. A second, cgroup-granular guard alongside ExcludePathPrefixes.
+	ExcludeCgroupIDs []string
+	// DropUncorrelated, when set, discards events that resolve to no tracked
+	// scope (method unresolved / confidence 0). The always-on streaming sensor
+	// sees host-wide activity; events belonging to no ToolCallScope are host
+	// noise. Persisting them pollutes the store and -- because the ingest batch
+	// references them -- fails per-run graph verify. Dropping them keeps a
+	// capture clean and verifiable. Off by default (a per-node security
+	// deployment may want unattributed activity retained).
+	DropUncorrelated bool
+}
+
+// excludeEvent reports whether a mapped event is self-noise that must not be
+// ingested: it originates from AgentProvenance's own cgroup, or it touches a
+// path under the data-dir (snapshot copies, DB files). Excluding it is honest --
+// it is counted as Excluded, not silently dropped.
+// isUncorrelatedRecord reports whether a stored event resolved to no tracked
+// scope -- host noise the always-on sensor happened to see. Mirrors the
+// "uncorrelated" CorrelationClass without importing it.
+func isUncorrelatedRecord(record EventRecord) bool {
+	m := strings.TrimSpace(record.CorrelationMethod)
+	return m == "" || m == "unresolved" || record.CorrelationConfidence == 0
+}
+
+func (o JSONLIngestOptions) excludeEvent(raw map[string]any, event IngestEvent) bool {
+	if event.CgroupID != "" {
+		for _, cg := range o.ExcludeCgroupIDs {
+			if cg != "" && event.CgroupID == cg {
+				return true
+			}
+		}
+	}
+	if len(o.ExcludePathPrefixes) == 0 {
+		return false
+	}
+	path := firstNonEmpty(stringAt(raw, "path"), stringAt(raw, "file"), stringAt(raw, "filename"))
+	if path == "" {
+		return false
+	}
+	for _, prefix := range o.ExcludePathPrefixes {
+		if prefix != "" && strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 type FalcoIngestOptions struct {
@@ -51,6 +104,8 @@ type JSONLIngestResult struct {
 	Failed            int             `json:"failed"`
 	EventIDs          []string        `json:"event_ids,omitempty"`
 	EventIDsSHA256    string          `json:"event_ids_sha256,omitempty"`
+	Excluded          int             `json:"excluded,omitempty"`
+	Dropped           int             `json:"dropped_uncorrelated,omitempty"`
 	PolicyDecisions   int             `json:"policy_decisions"`
 	PolicyDecisionIDs []string        `json:"policy_decision_ids,omitempty"`
 	ReceiverSummary   ReceiverSummary `json:"receiver_summary"`
@@ -140,6 +195,11 @@ func IngestJSONLReader(db *sql.DB, opts JSONLIngestOptions, input io.Reader) (JS
 			appendRowResult(&result, RowResult{Line: lineNo, Status: "skipped", DetectedFormat: detected})
 			continue
 		}
+		if opts.excludeEvent(raw, event) {
+			result.Excluded++
+			appendRowResult(&result, RowResult{Line: lineNo, Status: "excluded", DetectedFormat: detected})
+			continue
+		}
 		id, err := IngestFiltered(db, event)
 		if err != nil {
 			result.Failed++
@@ -154,6 +214,16 @@ func IngestJSONLReader(db *sql.DB, opts JSONLIngestOptions, input io.Reader) (JS
 			msg := fmt.Sprintf("line %d: readback failed: %v", lineNo, err)
 			result.Errors = append(result.Errors, msg)
 			appendRowResult(&result, rowResultForEvent(lineNo, "failed", detected, event, id, "", msg))
+			continue
+		}
+		if opts.DropUncorrelated && isUncorrelatedRecord(record) {
+			// Host noise belonging to no scope: remove it so it neither pollutes
+			// the store nor gets referenced by the ingest batch (which would fail
+			// per-run verify). Deleted post-insert because correlation is only
+			// known after IngestFiltered resolves it.
+			_, _ = db.Exec(`DELETE FROM events WHERE id = ?`, id)
+			result.Dropped++
+			appendRowResult(&result, RowResult{Line: lineNo, Status: "dropped_uncorrelated", DetectedFormat: detected})
 			continue
 		}
 		result.Ingested++

@@ -207,8 +207,10 @@ func bindScope(db *sql.DB, in map[string]any) (any, error) {
 		StartedAt:     strArg(in, "started_at"),
 		EndedAt:       strArg(in, "ended_at"),
 		BindingSource: aiBindingSource, // forced; overrides any caller value
-		// Confidence left zero -> RecordBinding defaults it to 1.0 (binding
-		// precision); the matching method's confidence governs correlation.
+		// Confidence left zero -> RecordBinding caps ai_asserted binds at 0.5
+		// (defaultBindingConfidence), so a scope the model merely CLAIMED reads
+		// as honestly less certain than a kernel-verified match, even if it later
+		// resolves by pid. The matching method's confidence still applies (min).
 	})
 	if err != nil {
 		return nil, err

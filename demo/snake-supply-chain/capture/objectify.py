@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Legacy helper. `agentprov record` now objectifies changed files automatically;
+# keep this only for manually repairing older captures.
+#
 # Objectify the agent's output files into the run's provenance object store so the
 # dashboard Side Panel can preview "what the agent actually produced".
 #
@@ -8,10 +11,10 @@
 # (workspace_file/<path>) so the existing preview resolver matches.
 import os, hashlib, json, sqlite3
 
-DD = os.path.expanduser("~/.agentprov-snake")
+DD = os.path.expanduser(os.environ.get("AGENTPROV_DATA_DIR", "~/.agentprov-snake"))
 DB = os.path.join(DD, "agentprov.db")
-RUN = "run-snake-agent"
-WS = os.path.expanduser("~/agentprov-snake-demo/workspace")
+RUN = os.environ.get("AGENTPROV_RUN_ID", "run-snake-supervised")
+WS = os.path.expanduser(os.environ.get("AGENTPROV_WORKDIR", "~/agentprov-snake-demo/workspace"))
 targets = ["snake.py", "SETUP.md"]
 
 con = sqlite3.connect(DB)

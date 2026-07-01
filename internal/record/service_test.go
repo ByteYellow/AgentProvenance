@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
@@ -201,6 +202,133 @@ func TestRecordRunCreatesZeroSDKProvenance(t *testing.T) {
 	}
 	if verify.ErrorCount != 0 {
 		t.Fatalf("verify errors=%d issues=%+v", verify.ErrorCount, verify.Issues)
+	}
+}
+
+func TestRecordObjectifiesChangedFilesForPreview(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	workdir := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := (Service{DB: db, Paths: paths}).Run(Request{
+		RunID: "run-obj", Name: "obj", Workdir: workdir,
+		Command:          []string{"sh", "-lc", "printf 'print(42)\\n' > game.py"},
+		SampleIntervalMS: 10, PostRootGraceMS: 50,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The changed file's CONTENT must be objectified as an artifact keyed to the
+	// lens node id, so the dashboard Side Panel can preview what the agent
+	// produced -- without any manual post-capture objectify step.
+	var srcID, objPath string
+	err = db.QueryRow(`SELECT source_id, path FROM provenance_objects
+		WHERE run_id='run-obj' AND object_type='artifact' AND source_id='workspace_file/game.py'`).Scan(&srcID, &objPath)
+	if err != nil {
+		t.Fatalf("game.py not objectified as artifact: %v", err)
+	}
+	blob, err := os.ReadFile(objPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Must be the canonical artifact envelope the preview unwraps, carrying the
+	// real file bytes under payload.content.
+	if !strings.Contains(string(blob), `"agentprov.provenance.object.v1"`) || !strings.Contains(string(blob), "print(42)") {
+		t.Fatalf("artifact object missing schema or content: %s", blob)
+	}
+	// The inline-written artifact object must be accepted by graph verify (the
+	// hash/schema/envelope must match what the object store produces), else the
+	// demo's "verify" badge would fail on a captured product.
+	if _, err := (provenance.ObjectStore{DB: db, Paths: paths}).MaterializeRun("run-obj"); err != nil {
+		t.Fatal(err)
+	}
+	verify, err := provenance.Verify(db, "run-obj")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if verify.ErrorCount != 0 {
+		t.Fatalf("verify errors=%d after inline objectify: %+v", verify.ErrorCount, verify.Issues)
+	}
+}
+
+func TestPrepareScopeCgroupContract(t *testing.T) {
+	// Portable contract: the seam always returns a non-empty scope id and a
+	// cleanup that is safe to call (idempotently). On non-Linux this is the
+	// synthetic fallback; on Linux it is the real cgroup id or, on any failure
+	// (no cgroup v2 / not delegated), the same fallback.
+	id, cleanup := prepareScopeCgroup(&exec.Cmd{}, "attempt-xyz")
+	if id == "" {
+		t.Fatal("prepareScopeCgroup returned empty scope id")
+	}
+	if cleanup == nil {
+		t.Fatal("prepareScopeCgroup returned nil cleanup")
+	}
+	cleanup()
+	cleanup() // must not panic on a second call
+}
+
+func TestRecordBindingsShareOneScopeCgroup(t *testing.T) {
+	// The whole point of the real-cgroup seam: the root process and every
+	// descendant binding for a run resolve to ONE scope cgroup id, so
+	// independent telemetry joins the entire subtree by cgroup. The id must be
+	// non-empty and identical across all bindings for the run, on every platform
+	// (real cgroup id on Linux, synthetic fallback elsewhere).
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	workdir := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	result, err := (Service{DB: db, Paths: paths}).Run(Request{
+		RunID:            "run-scope-cgroup",
+		Name:             "scope-cgroup",
+		Workdir:          workdir,
+		Command:          []string{"sh", "-lc", "(sleep 0.2) & echo hi && wait"},
+		SampleIntervalMS: 10,
+		PostRootGraceMS:  300,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "passed" {
+		t.Fatalf("record result = %+v, want passed", result)
+	}
+
+	bindings, err := correlation.ListBindings(db, correlation.BindingFilter{RunID: "run-scope-cgroup"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bindings) == 0 {
+		t.Fatal("no bindings recorded for run")
+	}
+	scope := bindings[0].CgroupID
+	if scope == "" {
+		t.Fatal("scope cgroup id is empty")
+	}
+	for _, b := range bindings {
+		if b.CgroupID != scope {
+			t.Fatalf("binding %s cgroup_id = %q, want shared scope %q", b.ID, b.CgroupID, scope)
+		}
 	}
 }
 

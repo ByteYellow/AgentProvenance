@@ -61,6 +61,52 @@ func TestListBindingsFiltersToolCallScope(t *testing.T) {
 	}
 }
 
+func TestAiAssertedBindingConfidenceCapped(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	started := time.Now().UTC().Format(time.RFC3339Nano)
+	// ai_asserted: no explicit confidence -> capped at 0.5 by RecordBinding.
+	if _, err := RecordBinding(db, Binding{
+		RunID: "run-ai", ToolCallID: "tool-ai", ProcessID: "proc-ai",
+		PID: 1111, StartedAt: started, BindingSource: "ai_asserted",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A first-party launch binding: default confidence stays authoritative.
+	if _, err := RecordBinding(db, Binding{
+		RunID: "run-cp", ToolCallID: "tool-cp", ProcessID: "proc-cp",
+		PID: 2222, StartedAt: started, BindingSource: "zero_sdk_record",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Resolve by process_id (method confidence 1.0); scanOne takes the min with
+	// the binding confidence, so the app-asserted join reads honestly lower.
+	aiMatch, ok, err := Resolve(db, RawIdentity{RunID: "run-ai", ProcessID: "proc-ai", Timestamp: started})
+	if err != nil || !ok {
+		t.Fatalf("resolve ai binding: ok=%v err=%v", ok, err)
+	}
+	if aiMatch.Confidence != 0.5 {
+		t.Errorf("ai_asserted match confidence = %v, want 0.5", aiMatch.Confidence)
+	}
+	cpMatch, ok, err := Resolve(db, RawIdentity{RunID: "run-cp", ProcessID: "proc-cp", Timestamp: started})
+	if err != nil || !ok {
+		t.Fatalf("resolve launch binding: ok=%v err=%v", ok, err)
+	}
+	if cpMatch.Confidence != 1.0 {
+		t.Errorf("zero_sdk_record match confidence = %v, want 1.0", cpMatch.Confidence)
+	}
+}
+
 func TestResolveHonorsExplicitRunID(t *testing.T) {
 	root := t.TempDir()
 	paths, err := store.Init(filepath.Join(root, ".agentprov"))

@@ -15,12 +15,14 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/byteyellow/agentprovenance/internal/compliance"
@@ -239,6 +241,44 @@ func (s Server) runs(w http.ResponseWriter, r *http.Request) {
 }
 
 // overview bundles verify + signals + risks for one run in a single call.
+// graph verify re-reads and re-hashes every provenance object (seconds for a
+// large run), and the overview endpoint is hit on first load AND on every live
+// refresh. For a read-only dashboard the result is stable until the run's data
+// changes, so cache it keyed by a cheap fingerprint (object + event counts).
+// This turns the multi-second Run Overview into an instant load after the first.
+var (
+	verifyCacheMu sync.Mutex
+	verifyCache   = map[string]verifyCacheEntry{}
+)
+
+type verifyCacheEntry struct {
+	fingerprint string
+	result      any
+}
+
+func (s Server) cachedVerify(run string) any {
+	var objs, evs int
+	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id = ?`, run).Scan(&objs)
+	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id = ?`, run).Scan(&evs)
+	fp := fmt.Sprintf("%d:%d", objs, evs)
+	verifyCacheMu.Lock()
+	if e, ok := verifyCache[run]; ok && e.fingerprint == fp {
+		verifyCacheMu.Unlock()
+		return e.result
+	}
+	verifyCacheMu.Unlock()
+	var result any
+	if v, err := provenance.Verify(s.DB, run); err == nil {
+		result = v
+	} else {
+		result = map[string]any{"error": err.Error()}
+	}
+	verifyCacheMu.Lock()
+	verifyCache[run] = verifyCacheEntry{fingerprint: fp, result: result}
+	verifyCacheMu.Unlock()
+	return result
+}
+
 func (s Server) overview(w http.ResponseWriter, r *http.Request) {
 	run := r.URL.Query().Get("run")
 	if run == "" {
@@ -246,11 +286,7 @@ func (s Server) overview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := map[string]any{}
-	if v, err := provenance.Verify(s.DB, run); err == nil {
-		out["verify"] = v
-	} else {
-		out["verify"] = map[string]any{"error": err.Error()}
-	}
+	out["verify"] = s.cachedVerify(run)
 	if sig, err := signals.Export(s.DB, run); err == nil {
 		out["signals"] = sig
 	}
@@ -493,7 +529,7 @@ func (s Server) queryEventsPage(run string, q eventQuery, limit, offset int) ([]
 		COALESCE(process_id, ''), COALESCE(snapshot_id, ''), COALESCE(raw_event_id, ''),
 		COALESCE(correlation_method, ''), COALESCE(correlation_confidence, 0),
 		COALESCE(container_id, ''), COALESCE(cgroup_id, ''), COALESCE(pid, 0),
-		COALESCE(tgid, 0), COALESCE(ppid, 0),
+		COALESCE(tgid, 0), COALESCE(ppid, 0), COALESCE(binding_source, ''),
 		source, event_type, payload, created_at
 		FROM events `
 	query += where + " ORDER BY created_at ASC, id ASC LIMIT ? OFFSET ?"
@@ -506,10 +542,11 @@ func (s Server) queryEventsPage(run string, q eventQuery, limit, offset int) ([]
 	out := []telemetry.EventRecord{}
 	for rows.Next() {
 		var event telemetry.EventRecord
-		if err := rows.Scan(&event.ID, &event.RunID, &event.SessionID, &event.ToolCallID, &event.ProcessID, &event.SnapshotID, &event.RawEventID, &event.CorrelationMethod, &event.CorrelationConfidence, &event.ContainerID, &event.CgroupID, &event.PID, &event.TGID, &event.PPID, &event.Source, &event.EventType, &event.Payload, &event.CreatedAt); err != nil {
+		if err := rows.Scan(&event.ID, &event.RunID, &event.SessionID, &event.ToolCallID, &event.ProcessID, &event.SnapshotID, &event.RawEventID, &event.CorrelationMethod, &event.CorrelationConfidence, &event.ContainerID, &event.CgroupID, &event.PID, &event.TGID, &event.PPID, &event.BindingSource, &event.Source, &event.EventType, &event.Payload, &event.CreatedAt); err != nil {
 			return nil, 0, err
 		}
 		event.CorrelationClass = telemetry.CorrelationClass(event.Source, event.CorrelationMethod, event.ContainerID, event.CorrelationConfidence)
+		event.SelfLaunched = telemetry.SelfLaunched(event.Source, event.BindingSource)
 		out = append(out, event)
 	}
 	return out, total, rows.Err()

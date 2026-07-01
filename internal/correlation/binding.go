@@ -51,6 +51,25 @@ type BindingFilter struct {
 	ProcessID  string
 }
 
+// defaultBindingConfidence caps how much a binding may vouch for a match by how
+// it was established, when the caller did not set an explicit confidence.
+// scanOne takes the MIN of this binding confidence and the resolution method's
+// own confidence, so an app-asserted (ai_asserted) join can never read as
+// certain as a kernel-verified one even if it happens to match by pid. This is
+// the honesty tier: a scope the model merely CLAIMED is worth less than one the
+// control plane launched or the kernel witnessed.
+func defaultBindingConfidence(bindingSource string) float64 {
+	switch bindingSource {
+	case "ai_asserted":
+		// App-asserted only: a join key the model provided. Real, but unverified.
+		return 0.5
+	default:
+		// Control-plane / record / rollout launches and direct API binds are
+		// first-party facts about a process we started; keep them authoritative.
+		return 1
+	}
+}
+
 func RecordBinding(db *sql.DB, binding Binding) (string, error) {
 	if binding.StartedAt == "" {
 		binding.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -59,7 +78,7 @@ func RecordBinding(db *sql.DB, binding Binding) (string, error) {
 		binding.BindingSource = "control_plane"
 	}
 	if binding.Confidence <= 0 {
-		binding.Confidence = 1
+		binding.Confidence = defaultBindingConfidence(binding.BindingSource)
 	}
 	if binding.ID == "" {
 		binding.ID = ids.New("bind")

@@ -1,5 +1,46 @@
 # Changelog
 
+## Unreleased
+
+App-context hardening: make the app↔system join *honest about how it was
+established*, and give record's own scopes a real kernel join key.
+
+### Added
+
+- **`SelfLaunched` as a dimension orthogonal to `CorrelationClass`.** An event
+  can now be both `kernel_correlated` (independently witnessed) **and**
+  `self_launched` (the process was started by us). It is derived from the event
+  source and the matched binding's `binding_source`, propagated onto sensor
+  events through a new `events.binding_source` column, and surfaced in the
+  dashboard as a badge next to the correlation class. This preserves the "did we
+  start it vs. did the kernel confirm it" distinction that the old string-hack
+  classifier collapsed.
+- **Real cgroup-per-scope for `record` (Linux).** `record` now places the child
+  (and its whole subtree, via `SysProcAttr.UseCgroupFD`) into a dedicated cgroup
+  v2 leaf, so independent telemetry auto-joins the entire subtree by `cgroup_id`
+  at 0.98 — no pid polling, no pid-reuse window. Non-Linux and any Linux failure
+  (no cgroup v2 / not delegated) degrade to the previous synthetic logical id, so
+  behavior is unchanged off-Linux. **Validated end-to-end on the lab VM (Ubuntu
+  24.04, kernel 6.8, arm64):** the child is placed in `/agentprov/<attempt>`, the
+  stored `cgroup_id` equals the cgroup dir inode (== `bpf_get_current_cgroup_id`),
+  and a zero-context sensor event carrying that id resolves to the scope via
+  `cgroup_time_window` @0.98 as `kernel_correlated` + `self_launched`. The
+  synthetic parent leaf is created lazily; per-scope leaves are removed on exit.
+
+### Changed
+
+- **`CorrelationClass` no longer keys `self_observed` off the synthetic
+  `agentprov-record-` container-id string.** It keys on the event *source*, so a
+  real kernel event that merely matched a record-launched binding stays
+  `kernel_correlated` (with the `self_launched` badge) instead of being
+  mislabeled self-observed.
+- **App-asserted joins read honestly lower.** `ai_asserted` bindings
+  (`bind_scope`) are capped at 0.5 confidence instead of defaulting to 1.0, so a
+  scope the model merely *claimed* can never resolve as certain as a
+  kernel-verified match. Method tiers (cgroup 0.98 / container 0.92 / pid 0.85 /
+  process 1.0) are unchanged; the dashboard now colours the confidence number by
+  band.
+
 ## v0.4.1 - 2026-07-01
 
 A consolidation-and-fix release on top of `v0.4.0`. No new surfaces — it makes the

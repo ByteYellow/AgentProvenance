@@ -94,6 +94,43 @@ func TestDashboardEventsDrilldownByRefs(t *testing.T) {
 	}
 }
 
+func TestDashboardEventSelfLaunchedBadge(t *testing.T) {
+	db := newDashboardTestDB(t)
+	// A kernel sensor event that matched a record-launched binding: it is
+	// independently witnessed (kernel_correlated) AND self_launched -- the two
+	// dimensions are orthogonal, which is the whole point of option 2.
+	if _, err := db.Exec(`INSERT INTO events
+		(id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, correlation_method, correlation_confidence, binding_source, pid, ppid, created_at)
+		VALUES ('evt-self', 'run-dash', 'session-dash', 'tool-dash', 'proc-dash', 'agentprov_ebpf', 'execve', '{"argv":["ls"]}', 'cgroup_time_window:cgroup_id+time', 0.98, 'zero_sdk_record', 4242, 4000, '2026-06-30T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("GET", "/api/events?run=run-dash&focus=runtime_event/evt-self", nil)
+	rec := httptest.NewRecorder()
+	(Server{DB: db}).events(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Events []struct {
+			ID               string `json:"id"`
+			CorrelationClass string `json:"correlation_class"`
+			SelfLaunched     bool   `json:"self_launched"`
+		} `json:"events"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Events) != 1 {
+		t.Fatalf("want 1 event, got %+v", out)
+	}
+	if out.Events[0].CorrelationClass != "kernel_correlated" {
+		t.Errorf("correlation_class = %q, want kernel_correlated", out.Events[0].CorrelationClass)
+	}
+	if !out.Events[0].SelfLaunched {
+		t.Errorf("self_launched = false, want true (record-launched sensor event)")
+	}
+}
+
 func TestDashboardEventsNetworkGroup(t *testing.T) {
 	db := newDashboardTestDB(t)
 	insertDashboardEvent(t, db, "evt-dns", "private_cidr", `{"dst_ip":"127.0.0.53"}`)
