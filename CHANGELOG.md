@@ -157,13 +157,13 @@ Import the signed bundle:
 go build -o /tmp/agentprov ./cmd/agentprov
 
 /tmp/agentprov --data-dir /tmp/snake-replay forensics import \
-  demo/snake-supply-chain/run-snake-agent.forensics.json \
+  demo/snake-supply-chain/run-snake-supervised.forensics.json \
   --pub-key demo/snake-supply-chain/attestation.pub
 
 /tmp/agentprov --data-dir /tmp/snake-replay dashboard serve --addr 127.0.0.1:7396
 ```
 
-Then open `http://127.0.0.1:7396` and select `run-snake-agent`.
+Then open `http://127.0.0.1:7396` and select `run-snake-supervised`.
 
 The capture scripts under `demo/snake-supply-chain/capture/` are only needed to
 reproduce the original Linux/eBPF capture on a compatible VM. They are not
