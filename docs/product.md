@@ -206,6 +206,13 @@ manifests.
 
 ## Phase Plan
 
+> Status (as of v0.4.x): Phases 1–5 are substantially delivered — including the
+> **native eBPF sensor** (`internal/sensor`, shipped in v0.2.0 and expanded
+> since), correlation, risk/policy/response, taint, and signed forensics export.
+> Phase 6 is partial (content-addressed storage and the web dashboard are in;
+> retention/GC/scale hardening is ongoing). The table below is the original plan,
+> kept for context — it is not a list of unbuilt work.
+
 | Phase | Goal | Output |
 |---|---|---|
 | Phase 1 | Provenance Correlation MVP | ToolCallScope, raw telemetry correlation, runtime causality DAG, diff/blame, risk/deviation records, response-gate evidence, replay and trajectory manifests |
