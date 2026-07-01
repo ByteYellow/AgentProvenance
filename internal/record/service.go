@@ -176,6 +176,14 @@ func (s Service) Run(req Request) (Result, error) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
+	// Place the child (and, by inheritance, its whole subtree) into a dedicated
+	// cgroup so independent kernel telemetry auto-joins to this scope by
+	// cgroup_id at 0.98 -- no pid polling, no pid-reuse window. On Linux this
+	// returns the real cgroup inode (== bpf_get_current_cgroup_id); elsewhere it
+	// falls back to the synthetic logical id, preserving prior behavior. See
+	// cgroup_linux.go / cgroup_other.go.
+	scopeCgroupID, scopeCleanup := prepareScopeCgroup(cmd, attemptID)
+	defer scopeCleanup()
 	start := time.Now()
 	startedAt := start.UTC().Format(time.RFC3339Nano)
 	if err := cmd.Start(); err != nil {
@@ -188,7 +196,7 @@ func (s Service) Run(req Request) (Result, error) {
 			ToolCallID:    toolCallID,
 			ProcessID:     processID,
 			ContainerID:   "agentprov-record-" + attemptID,
-			CgroupID:      "agentprov-record-" + attemptID,
+			CgroupID:      scopeCgroupID,
 			StartedAt:     startedAt,
 			EndedAt:       endedAt,
 			BindingSource: "zero_sdk_record",
@@ -220,7 +228,7 @@ func (s Service) Run(req Request) (Result, error) {
 		ToolCallID:    toolCallID,
 		ProcessID:     processID,
 		ContainerID:   "agentprov-record-" + attemptID,
-		CgroupID:      "agentprov-record-" + attemptID,
+		CgroupID:      scopeCgroupID,
 		RootPID:       pid,
 		PID:           pid,
 		StartedAt:     startedAt,
@@ -258,7 +266,7 @@ func (s Service) Run(req Request) (Result, error) {
 			ToolCallID:    toolCallID,
 			ProcessID:     processID,
 			ContainerID:   "agentprov-record-" + attemptID,
-			CgroupID:      "agentprov-record-" + attemptID,
+			CgroupID:      scopeCgroupID,
 			RootPID:       pid,
 			PID:           proc.PID,
 			StartedAt:     proc.FirstSeen,
@@ -277,7 +285,7 @@ func (s Service) Run(req Request) (Result, error) {
 			SnapshotID:  baseSnapshotID,
 			RawEventID:  fmt.Sprintf("record-process-%d", proc.PID),
 			ContainerID: "agentprov-record-" + attemptID,
-			CgroupID:    "agentprov-record-" + attemptID,
+			CgroupID:    scopeCgroupID,
 			PID:         proc.PID,
 			TGID:        proc.PID,
 			PPID:        proc.PPID,
@@ -308,7 +316,7 @@ func (s Service) Run(req Request) (Result, error) {
 			SnapshotID:  baseSnapshotID,
 			RawEventID:  "record-file-" + path,
 			ContainerID: "agentprov-record-" + attemptID,
-			CgroupID:    "agentprov-record-" + attemptID,
+			CgroupID:    scopeCgroupID,
 			PID:         pid,
 			TGID:        pid,
 			PPID:        int64(os.Getpid()),
@@ -317,6 +325,13 @@ func (s Service) Run(req Request) (Result, error) {
 			EventType:   "file_write",
 			Payload:     fmt.Sprintf(`{"path":%q,"op":"record_diff","mode":"zero_sdk"}`, path),
 		})
+		// Objectify the changed file's CONTENT as an artifact object so the
+		// dashboard Side Panel can preview "what the agent actually produced"
+		// (the file_write event above only records that it changed, not the
+		// bytes). Previously a manual post-capture script did this and was easy
+		// to forget -- making it built-in is the root fix for empty Artifacts /
+		// no previewable products.
+		s.objectifyArtifact(req.RunID, rolloutID, absWorkdir, path)
 	}
 	_, _ = s.DB.Exec(`UPDATE processes SET status = ?, exit_code = ?, ended_at = ? WHERE id = ?`, processStatus(status), exitCode, endedAt, processID)
 	_, _ = s.DB.Exec(`UPDATE sessions SET status = 'stopped', updated_at = ? WHERE id = ?`, endedAt, sessionID)
@@ -543,6 +558,66 @@ func (s Service) markFailed(runID, rolloutID, attemptID, sessionID, toolCallID, 
 		VALUES (?, ?, ?, ?, ?, 'record', 'exec_error', ?, ?)`,
 		ids.New("evt"), runID, sessionID, toolCallID, processID, fmt.Sprintf(`{"reason":%q}`, reason), now)
 	return nil
+}
+
+// maxObjectifyBytes bounds how large a changed file we objectify for preview.
+// The Side Panel reads up to 8MiB, but storing every large/binary blob inline
+// would bloat the object store; files above this cap keep their file_write event
+// (so the change is still recorded) but are not content-objectified.
+const maxObjectifyBytes = 1 << 20
+
+// objectifyArtifact stores a changed file's content as a content-addressed
+// "artifact" provenance object keyed to the lens node id (workspace_file/<rel>),
+// so the dashboard resolves and previews it. Best-effort: any failure (missing,
+// oversized, unreadable) is skipped silently -- the file_write event still
+// records that the file changed.
+//
+// The envelope is written inline (not via provenance.ObjectStore) to avoid an
+// import cycle: record -> provenance would cycle because provenance's tests
+// import record. It reproduces the exact schema the dashboard preview unwraps
+// (schema/type/payload.content) and that `graph verify` accepts -- the same
+// canonical, key-sorted JSON the object store and the prior manual objectify
+// script produced.
+func (s Service) objectifyArtifact(runID, rolloutID, workdir, rel string) {
+	fp := filepath.Join(workdir, rel)
+	info, err := os.Stat(fp)
+	if err != nil || info.IsDir() || info.Size() > maxObjectifyBytes {
+		return
+	}
+	data, err := os.ReadFile(fp)
+	if err != nil {
+		return
+	}
+	// json.Marshal sorts map keys, matching the canonical form the object store
+	// hashes; the hash is over these exact bytes, so verify stays consistent.
+	raw, err := json.Marshal(map[string]any{
+		"schema":    "agentprov.provenance.object.v1",
+		"type":      "artifact",
+		"source_id": "workspace_file/" + rel,
+		"run_id":    runID,
+		"payload":   map[string]any{"path": rel, "size": len(data), "content": string(data)},
+	})
+	if err != nil {
+		return
+	}
+	sum := sha256.Sum256(raw)
+	h := hex.EncodeToString(sum[:])
+	provRoot := s.Paths.Provenance
+	if provRoot == "" {
+		provRoot = filepath.Join(s.Paths.Root, "provenance")
+	}
+	objDir := filepath.Join(provRoot, "objects", "sha256", h[:2])
+	if err := os.MkdirAll(objDir, 0o755); err != nil {
+		return
+	}
+	objPath := filepath.Join(objDir, h+".json")
+	if err := os.WriteFile(objPath, raw, 0o644); err != nil {
+		return
+	}
+	_, _ = s.DB.Exec(`INSERT OR REPLACE INTO provenance_objects
+		(hash, object_type, source_id, run_id, rollout_id, parent_hashes, path, size_bytes, created_at)
+		VALUES (?, 'artifact', ?, ?, ?, '', ?, ?, ?)`,
+		"sha256:"+h, "workspace_file/"+rel, runID, rolloutID, objPath, len(raw), time.Now().UTC().Format(time.RFC3339Nano))
 }
 
 func changedFiles(baseDir, workdir string) ([]string, error) {
