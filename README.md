@@ -18,7 +18,7 @@ version-control system**: there is no merge, checkout, or mutable working tree.
 [![SQLite](https://img.shields.io/badge/state-SQLite-003B57.svg?style=flat-square)](https://www.sqlite.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square)](LICENSE)
 
-**[Quickstart](#quickstart)** | **[Core Model](#core-model)** | **[Current Capability](#current-capability)** | **[Demo walkthrough](docs/interview-demo.md)** | **[Roadmap](#roadmap)**
+**[Quickstart](#quickstart)** | **[Core Model](#core-model)** | **[Current Capability](#current-capability)** | **[Supply-chain demo](docs/supply-chain-demo.md)** | **[Roadmap](#roadmap)**
 
 </div>
 

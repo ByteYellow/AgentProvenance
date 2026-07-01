@@ -1,23 +1,24 @@
-# Interview Demo — Agent-in-Sandbox Supply-Chain Exfiltration
+# Supply-Chain Demo — Agent-in-Sandbox Exfiltration
 
-A 5–10 minute walkthrough you can drive live. It shows the one thesis behind
-AgentProvenance: **model intent → system action → a verifiable, signed causal
-chain on one graph**, and how that chain answers security and audit questions a
-flat log cannot.
+This document describes the signed supply-chain capture shipped with
+AgentProvenance. It shows the core product path:
+**agent context → system action → verifiable, signed causal graph**, and how that
+graph supports security investigation, replay, and audit.
 
 Everything here runs offline from a committed, signed capture — no Linux/eBPF VM
 required at demo time.
 
 ---
 
-## 1. The one-sentence pitch
+## 1. What This Demonstrates
 
 > When you let an AI agent run in a sandbox, AgentProvenance correlates what the
 > agent *intended* (run / tool call / process) with what the system *did*
 > (execve / file / network) into a single causality graph, stores the evidence
 > content-addressed and signed, and lets you replay, query, and audit it.
 
-The moat is **verifiable signed provenance + correlation**, not feature count.
+The differentiated capability is **verifiable signed provenance + correlation**,
+not a larger log viewer.
 
 ---
 
@@ -34,13 +35,13 @@ This replicates the ctx / torchtriton TTP as **benign behaviour against planted
 fake secrets** — not live malware. It was captured on a Linux eBPF lab VM, signed
 at export, and committed as a portable bundle.
 
-Three-stage arc to narrate:
+The capture is useful for three inspection modes:
 
-| Stage | What you show | Message |
+| Mode | Surface | Purpose |
 |-------|---------------|---------|
-| 看不见 (blind) | a raw event log / no correlation | "you can't tell intent from noise" |
-| 看得见 (visible) | the Graph Explorer causal chain | "intent → action → risk, on one graph" |
-| 管得住 (controlled) | policy decisions + compliance | "detected, blocked, and audited" |
+| Raw telemetry | event/timeline views | inspect the substrate facts |
+| Causality graph | Graph Explorer lenses | connect intent, process, file, network, risk, and response |
+| Audit evidence | signed bundle + compliance map | verify what was captured and why a policy fired |
 
 ---
 
@@ -67,9 +68,9 @@ agentprov --data-dir /tmp/snake-demo dashboard serve
 
 ---
 
-## 4. Dashboard walkthrough (the visible + controlled stages)
+## 4. Dashboard Investigation Flow
 
-Drive these in order:
+Recommended investigation order:
 
 1. **Graph Explorer — Agent intent lens.** Start at the tool call / process. Point
    out that this run is supervised capture: the agent was born into a real cgroup
@@ -89,7 +90,7 @@ Drive these in order:
    edges — a secret read *before* an egress in the *same process* — with
    confidence. These are inferred, drawn dashed, and never temporally impossible.
 
-5. **Time-scrubber.** Replay the run over its real event clock to show ordering:
+5. **Time-scrubber.** Replay the run over its real event clock and verify ordering:
    the secret read precedes the egress attempt.
 
 6. **A node's Side Panel.** Evidence + a bounded, secret-redacted content preview
@@ -102,7 +103,7 @@ Drive these in order:
 
 ---
 
-## 5. Compliance — the audit stage
+## 5. Compliance Mapping
 
 ```bash
 agentprov --data-dir .agentprov-snake-replay compliance map \
@@ -118,7 +119,7 @@ fired this run, and whether it enforced or only observed:
 - ⚪ **not_triggered** — a detector maps here but nothing fired this run
 - ⬚ **no_rule** — **no detector maps to this control** (an honest coverage gap)
 
-Talking points that land:
+Important semantics:
 
 - **`no_rule` is deliberately not a pass.** ASI01 (goal hijack), ASI06 (memory
   poisoning), ASI07 (inter-agent) show `no_rule` because the system emits no event
@@ -132,7 +133,7 @@ Talking points that land:
 
 ---
 
-## 6. Verify — why anyone should believe it
+## 6. Verify The Evidence
 
 ```bash
 agentprov forensics verify-attestation \
@@ -147,7 +148,7 @@ agentprov forensics verify-attestation \
 
 ---
 
-## 7. Honest boundaries (say these before you're asked)
+## 7. Boundaries
 
 - The security claim today is **integrity, not tamper-evidence against a host-root
   attacker.** `graph verify` recomputes from a host-editable SQLite DB; off-host
@@ -164,7 +165,7 @@ agentprov forensics verify-attestation \
 
 ---
 
-## 8. If asked "what's the hard part?"
+## 8. Implementation Note
 
 The **time-windowed tiered correlation engine** (`internal/correlation`) that
 binds app-side context to kernel telemetry across cgroup / container / pid /
