@@ -1,8 +1,6 @@
 package compliance
 
 import (
-	"database/sql"
-	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -10,17 +8,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const SchemaVersion = "agentprovenance.compliance_mapping/v1"
-const GapSchemaVersion = "agentprovenance.compliance_gaps/v1"
-
-type Status string
-
-const (
-	StatusCovered       Status = "covered"
-	StatusPartial       Status = "partial"
-	StatusMissing       Status = "missing"
-	StatusNotApplicable Status = "not_applicable"
-)
+// This file defines the framework/control CATALOG and the custom-ruleset loader.
+// The actual run-to-control mapping lives in rule_mapping.go (MapRunRules), which
+// maps concrete detection rules onto these controls. The older evidence-class
+// mapping was removed in favour of that single model.
 
 type Framework struct {
 	ID          string    `json:"id" yaml:"id"`
@@ -69,53 +60,9 @@ type Control struct {
 	NextStep    string   `json:"recommended_next_step" yaml:"recommended_next_step"`
 }
 
-type MappingOptions struct {
-	Framework string
-	RunID     string
-	RuleSet   *RuleSet
-	Only      []string
-	Exclude   []string
-}
-
-type MappingReport struct {
-	SchemaVersion string          `json:"schema_version"`
-	Framework     string          `json:"framework"`
-	FrameworkName string          `json:"framework_name"`
-	RunID         string          `json:"run_id"`
-	Disclaimer    string          `json:"disclaimer"`
-	Summary       MappingSummary  `json:"summary"`
-	Items         []MappingResult `json:"items"`
-}
-
-type MappingSummary struct {
-	Covered       int `json:"covered"`
-	Partial       int `json:"partial"`
-	Missing       int `json:"missing"`
-	NotApplicable int `json:"not_applicable"`
-	Total         int `json:"total"`
-}
-
-type MappingResult struct {
-	Framework           string        `json:"framework"`
-	ItemID              string        `json:"item_id"`
-	ControlID           string        `json:"control_id"`
-	Title               string        `json:"title"`
-	Status              Status        `json:"status"`
-	EvidenceRefs        []EvidenceRef `json:"evidence_refs"`
-	Gap                 string        `json:"gap"`
-	RecommendedNextStep string        `json:"recommended_next_step"`
-	Reason              string        `json:"reason"`
-}
-
-type GapReport struct {
-	SchemaVersion string          `json:"schema_version"`
-	Framework     string          `json:"framework"`
-	FrameworkName string          `json:"framework_name"`
-	RunID         string          `json:"run_id"`
-	Summary       MappingSummary  `json:"summary"`
-	Items         []MappingResult `json:"items"`
-}
-
+// EvidenceRef is one entity-backed piece of evidence for a control (e.g. a
+// policy_decision or risk_signal). Its "kind/id" resolves to a graph-lens node,
+// so the dashboard cross-links it back to the graph.
 type EvidenceRef struct {
 	Ref     string `json:"ref"`
 	Kind    string `json:"kind"`
@@ -139,53 +86,6 @@ func GetFramework(id string, ruleSets ...RuleSet) (Framework, bool) {
 		}
 	}
 	return Framework{}, false
-}
-
-func MapRun(db *sql.DB, opts MappingOptions) (MappingReport, error) {
-	if opts.Framework == "" {
-		return MappingReport{}, fmt.Errorf("framework is required")
-	}
-	if opts.RunID == "" {
-		return MappingReport{}, fmt.Errorf("run is required")
-	}
-	var ruleSets []RuleSet
-	if opts.RuleSet != nil {
-		ruleSets = append(ruleSets, *opts.RuleSet)
-	}
-	framework, ok := GetFramework(opts.Framework, ruleSets...)
-	if !ok {
-		return MappingReport{}, fmt.Errorf("unknown framework %q", opts.Framework)
-	}
-	index, err := ResolveEvidence(db, opts.RunID)
-	if err != nil {
-		return MappingReport{}, err
-	}
-	report := MappingReport{
-		SchemaVersion: SchemaVersion,
-		Framework:     framework.ID,
-		FrameworkName: framework.Title,
-		RunID:         opts.RunID,
-		Disclaimer:    framework.Disclaimer,
-	}
-	for _, control := range framework.Controls {
-		if !includeControl(control.ID, opts.Only, opts.Exclude) {
-			continue
-		}
-		result := mapControl(framework.ID, control, index)
-		report.Items = append(report.Items, result)
-		switch result.Status {
-		case StatusCovered:
-			report.Summary.Covered++
-		case StatusPartial:
-			report.Summary.Partial++
-		case StatusMissing:
-			report.Summary.Missing++
-		case StatusNotApplicable:
-			report.Summary.NotApplicable++
-		}
-	}
-	report.Summary.Total = len(report.Items)
-	return report, nil
 }
 
 func includeControl(controlID string, only, exclude []string) bool {
@@ -340,91 +240,4 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func mapControl(frameworkID string, control Control, index EvidenceIndex) MappingResult {
-	requiredRefs, requiredOK := index.RequiredRefs(control.Evidence...)
-	partialRefs := index.Refs(append(control.Evidence, control.Partial...)...)
-	naRefs := index.Refs(control.NotApplies...)
-	refs := requiredRefs
-	status := StatusCovered
-	reason := "all required evidence classes were found"
-	switch {
-	case requiredOK:
-	case len(partialRefs) > 0:
-		status = StatusPartial
-		refs = partialRefs
-		reason = "only partial evidence classes were found"
-	case len(naRefs) > 0:
-		status = StatusNotApplicable
-		refs = naRefs
-		reason = "run contains evidence that makes this control not applicable"
-	default:
-		status = StatusMissing
-		refs = nil
-		reason = "no matching runtime evidence was found"
-	}
-	return MappingResult{
-		Framework:           frameworkID,
-		ItemID:              control.ID,
-		ControlID:           control.ID,
-		Title:               control.Title,
-		Status:              status,
-		EvidenceRefs:        refs,
-		Gap:                 gapForStatus(status, control),
-		RecommendedNextStep: control.NextStep,
-		Reason:              reason,
-	}
-}
-
-func FindItem(report MappingReport, itemID string) (MappingResult, bool) {
-	for _, item := range report.Items {
-		if item.ItemID == itemID || item.ControlID == itemID {
-			return item, true
-		}
-	}
-	return MappingResult{}, false
-}
-
-func Gaps(report MappingReport, missingOnly bool, limit int) GapReport {
-	out := GapReport{
-		SchemaVersion: GapSchemaVersion,
-		Framework:     report.Framework,
-		FrameworkName: report.FrameworkName,
-		RunID:         report.RunID,
-	}
-	for _, item := range report.Items {
-		if item.Status != StatusMissing && (!missingOnly && item.Status != StatusPartial) {
-			continue
-		}
-		if missingOnly && item.Status != StatusMissing {
-			continue
-		}
-		out.Items = append(out.Items, item)
-		switch item.Status {
-		case StatusPartial:
-			out.Summary.Partial++
-		case StatusMissing:
-			out.Summary.Missing++
-		}
-		if limit > 0 && len(out.Items) >= limit {
-			break
-		}
-	}
-	out.Summary.Total = len(out.Items)
-	return out
-}
-
-func gapForStatus(status Status, control Control) string {
-	if status == StatusCovered || status == StatusNotApplicable {
-		return ""
-	}
-	if control.Gap != "" {
-		return control.Gap
-	}
-	return "collect more runtime evidence for this control"
-}
-
-func (r MappingReport) JSON() ([]byte, error) {
-	return json.MarshalIndent(r, "", "  ")
 }

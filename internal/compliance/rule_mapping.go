@@ -43,16 +43,31 @@ const (
 	RuleStatusNoRule       RuleStatus = "no_rule"
 )
 
+// RuleHit is one individual firing of a rule in this run -- one policy_decision
+// row. The UI lists every hit under its rule when a control is expanded, so a
+// reviewer sees each occurrence (time, decision, reason) rather than only a
+// count. Ref is clickable and focuses the decision's node in the graph.
+type RuleHit struct {
+	Ref          string `json:"ref"` // policy_decision/<id>
+	Decision     string `json:"decision"`
+	Reason       string `json:"reason"`
+	EventID      string `json:"event_id,omitempty"`
+	RiskSignalID string `json:"risk_signal_id,omitempty"`
+	CreatedAt    string `json:"created_at,omitempty"`
+	Enforced     bool   `json:"enforced"` // this firing blocked (vs detect/audit)
+}
+
 // RuleView is one detection rule mapped to a control, plus how it behaved this
-// run. Mode/Intended come from the rule definition; Fired/Enforced from the
+// run. Mode/Intended come from the rule definition; Fired/Enforced/Hits from the
 // run's policy_decisions.
 type RuleView struct {
-	ID       string `json:"id"`
-	Reason   string `json:"reason"`
-	Mode     string `json:"mode"`              // enforce | detect
-	Intended string `json:"intended_decision"` // deny | quarantine | kill
-	Fired    int    `json:"fired"`
-	Enforced bool   `json:"enforced"`
+	ID       string    `json:"id"`
+	Reason   string    `json:"reason"`
+	Mode     string    `json:"mode"`              // enforce | detect
+	Intended string    `json:"intended_decision"` // deny | quarantine | kill
+	Fired    int       `json:"fired"`
+	Enforced bool      `json:"enforced"`
+	Hits     []RuleHit `json:"hits,omitempty"`
 }
 
 type RuleControlResult struct {
@@ -93,6 +108,13 @@ type RuleMappingOptions struct {
 	// pass that engine's rules so custom rules (with their own controls: tags)
 	// participate in the mapping.
 	Rules []security.Rule
+	// RuleSets adds custom framework catalogs (extra frameworks/controls) the
+	// same way the CLI's --ruleset does, so a control set beyond the built-ins
+	// can be mapped.
+	RuleSets []RuleSet
+	// Only / Exclude filter which control ids are evaluated.
+	Only    []string
+	Exclude []string
 }
 
 func ruleMode(r security.Rule) string {
@@ -111,7 +133,7 @@ func MapRunRules(db *sql.DB, opts RuleMappingOptions) (RuleMappingReport, error)
 	if opts.RunID == "" {
 		return RuleMappingReport{}, fmt.Errorf("run is required")
 	}
-	framework, ok := GetFramework(opts.Framework)
+	framework, ok := GetFramework(opts.Framework, opts.RuleSets...)
 	if !ok {
 		return RuleMappingReport{}, fmt.Errorf("unknown framework %q", opts.Framework)
 	}
@@ -158,6 +180,9 @@ func MapRunRules(db *sql.DB, opts RuleMappingOptions) (RuleMappingReport, error)
 		Disclaimer:    framework.Disclaimer,
 	}
 	for _, control := range framework.Controls {
+		if !includeControl(control.ID, opts.Only, opts.Exclude) {
+			continue
+		}
 		res := mapControlByRules(control, rulesByControl[control.ID], firedByRule, risksByDecision)
 		report.Items = append(report.Items, res)
 		switch res.Status {
@@ -197,11 +222,17 @@ func mapControlByRules(control Control, mapped []security.Rule, firedByRule map[
 		fired := firedByRule[r.ID]
 		view := RuleView{ID: r.ID, Reason: r.Reason, Mode: ruleMode(r), Intended: r.Decision, Fired: len(fired)}
 		for _, d := range fired {
-			if security.IsEnforcingDecision(d.Decision) {
+			enforcedHit := security.IsEnforcingDecision(d.Decision)
+			if enforcedHit {
 				view.Enforced = true
 				anyEnforced = true
 			}
 			ref := "policy_decision/" + d.ID
+			hit := RuleHit{Ref: ref, Decision: d.Decision, Reason: d.Reason, EventID: d.EventID, CreatedAt: d.CreatedAt, Enforced: enforcedHit}
+			if rs := risksByDecision[d.ID]; len(rs) > 0 {
+				hit.RiskSignalID = rs[0].ID
+			}
+			view.Hits = append(view.Hits, hit)
 			if !seenRef[ref] {
 				seenRef[ref] = true
 				res.EvidenceRefs = append(res.EvidenceRefs, EvidenceRef{
@@ -244,4 +275,46 @@ func mapControlByRules(control Control, mapped []security.Rule, firedByRule map[
 		res.Reason = "rule(s) map to this control but none matched any activity in this run"
 	}
 	return res
+}
+
+// FindRuleItem returns the mapping result for one control id.
+func FindRuleItem(report RuleMappingReport, controlID string) (RuleControlResult, bool) {
+	for _, item := range report.Items {
+		if item.ControlID == controlID {
+			return item, true
+		}
+	}
+	return RuleControlResult{}, false
+}
+
+// RuleGaps narrows a report to the controls that need attention: "detected"
+// (a rule fired but did not block) and "no_rule" (no detector maps here). When
+// noRuleOnly is set, only uncovered controls are returned. Enforced and
+// not_triggered controls are not gaps and are dropped.
+func RuleGaps(report RuleMappingReport, noRuleOnly bool, limit int) RuleMappingReport {
+	out := RuleMappingReport{
+		SchemaVersion: report.SchemaVersion,
+		Framework:     report.Framework,
+		FrameworkName: report.FrameworkName,
+		RunID:         report.RunID,
+		Disclaimer:    report.Disclaimer,
+	}
+	for _, item := range report.Items {
+		isGap := item.Status == RuleStatusNoRule || (!noRuleOnly && item.Status == RuleStatusDetected)
+		if !isGap {
+			continue
+		}
+		out.Items = append(out.Items, item)
+		switch item.Status {
+		case RuleStatusDetected:
+			out.Summary.Detected++
+		case RuleStatusNoRule:
+			out.Summary.NoRule++
+		}
+		if limit > 0 && len(out.Items) >= limit {
+			break
+		}
+	}
+	out.Summary.Total = len(out.Items)
+	return out
 }

@@ -1493,6 +1493,22 @@ func inferLensNode(id string) GraphLensNode {
 		return GraphLensNode{ID: id, Kind: "risk_signal", Label: lensShortRef(id)}
 	case strings.HasPrefix(id, "response_action/"):
 		return GraphLensNode{ID: id, Kind: "response_action", Label: lensShortRef(id)}
+	// App-context entities referenced only as edge endpoints (no table-backed
+	// typed node -- e.g. telemetry-ingested runs, or rollout/record-attempt ids
+	// that aren't materialized as their own graph node). Type them by their
+	// ids.New prefix so they render with a real kind and are counted, instead of
+	// falling to a generic "unknown" gray node. This fallback only runs for
+	// endpoints not already created from a table, so it never double-counts.
+	case strings.HasPrefix(id, "tool-") || strings.HasPrefix(id, "tool_call/"):
+		return GraphLensNode{ID: id, Kind: "tool_call", Label: lensShortRef(id)}
+	case strings.HasPrefix(id, "record-attempt-") || strings.HasPrefix(id, "attempt-"):
+		return GraphLensNode{ID: id, Kind: "attempt", Label: lensShortRef(id)}
+	case strings.HasPrefix(id, "rollout-"):
+		return GraphLensNode{ID: id, Kind: "rollout", Label: lensShortRef(id)}
+	case strings.HasPrefix(id, "session-"):
+		return GraphLensNode{ID: id, Kind: "session", Label: lensShortRef(id)}
+	case strings.HasPrefix(id, "proc-") || strings.HasPrefix(id, "process-"):
+		return GraphLensNode{ID: id, Kind: "process", Label: lensShortRef(id)}
 	default:
 		return GraphLensNode{ID: id, Kind: "unknown", Label: lensShortRef(id)}
 	}

@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.4.1 - 2026-07-01
+
+A consolidation-and-fix release on top of `v0.4.0`. No new surfaces — it makes the
+compliance mapping defensible, unifies it across CLI and dashboard, and fixes two
+display bugs.
+
+### Changed
+
+- Compliance mapping is now **rule-driven with four honest states** instead of
+  "any evidence of class X exists":
+  - `enforced` (a mapped detection rule fired and blocked),
+    `detected` (fired but detect-only), `not_triggered` (rule maps here, did not
+    fire), `no_rule` (no detector maps to this control — an honest coverage gap,
+    not a fake pass).
+  - The dashboard compliance card and the `compliance map` / `gaps` / `explain`
+    CLI now share one model (`compliance.MapRunRules`) so they never drift.
+  - Expanding a control shows **every individual rule hit** (time, decision,
+    reason), each clickable back to its graph node.
+- `security.Rule` gained `mode` (enforce | detect) and `controls:` so custom YAML
+  detection rules map themselves onto framework controls; detect-mode rules are
+  recorded but do not block. See `examples/policies/agentic-security.yaml`.
+
+### Fixed
+
+- Dashboard timeline "detail" and evidence "payload" cells no longer truncate at
+  160 chars — the full record is shown, clamped by default and expandable.
+- Graph lens no longer renders `tool_call` / `session` / `attempt` / `rollout` /
+  `process` id endpoints as generic "unknown" nodes; they are typed by id prefix
+  and counted correctly (e.g. the overview "Tool calls" count).
+
+### Removed
+
+- The legacy evidence-class compliance model (`MapRun`, `ResolveEvidence`, and the
+  `internal/compliance/evidence.go` loaders) — superseded by the rule-based model.
+
 ## v0.4.0 - 2026-06-30
 
 This release turns AgentProvenance from a CLI-first evidence prototype into a

@@ -7,14 +7,15 @@ import (
 	"text/tabwriter"
 
 	"github.com/byteyellow/agentprovenance/internal/compliance"
+	"github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/spf13/cobra"
 )
 
 func complianceCmd(dataDir *string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "compliance",
-		Short: "map run evidence to security framework items",
-		Long:  "Map AgentProvenance run evidence to security framework items as evidence-backed self-assessment. This is not certification or legal advice.",
+		Short: "map a run's detection-rule coverage to security framework items",
+		Long:  "Map AgentProvenance detection rules to security framework items as an evidence-backed self-assessment: per control, whether a mapped rule fired this run and whether it enforced (blocked) or only detected. This is not certification or legal advice.",
 	}
 	cmd.AddCommand(complianceFrameworksCmd())
 	cmd.AddCommand(complianceValidateCmd())
@@ -99,14 +100,41 @@ func complianceFrameworksCmd() *cobra.Command {
 	return cmd
 }
 
+// complianceMappingOptions assembles the shared options (custom framework
+// catalogs via --ruleset, custom detection rules via --rules, control filters)
+// so every subcommand maps the same way.
+func complianceMappingOptions(frameworkID, runID, ruleSetPath, rulesPath, onlyCSV, excludeCSV string) (compliance.RuleMappingOptions, error) {
+	opts := compliance.RuleMappingOptions{
+		Framework: frameworkID,
+		RunID:     runID,
+		Only:      csvList(onlyCSV),
+		Exclude:   csvList(excludeCSV),
+	}
+	if ruleSetPath != "" {
+		ruleSet, err := compliance.LoadRuleSet(ruleSetPath)
+		if err != nil {
+			return opts, err
+		}
+		opts.RuleSets = []compliance.RuleSet{ruleSet}
+	}
+	if rulesPath != "" {
+		engine, err := security.LoadEngine(rulesPath)
+		if err != nil {
+			return opts, err
+		}
+		opts.Rules = engine.Rules
+	}
+	return opts, nil
+}
+
 func complianceMapCmd(dataDir *string, use string) *cobra.Command {
 	var frameworkID, runID string
 	var jsonOut bool
-	var ruleSetPath string
+	var ruleSetPath, rulesPath string
 	var onlyCSV, excludeCSV string
 	cmd := &cobra.Command{
 		Use:   use,
-		Short: "map run evidence to a compliance/security framework",
+		Short: "map run detection-rule coverage to a compliance/security framework",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if frameworkID == "" {
 				return fmt.Errorf("--framework is required")
@@ -119,21 +147,11 @@ func complianceMapCmd(dataDir *string, use string) *cobra.Command {
 				return err
 			}
 			defer cleanup()
-			var ruleSet *compliance.RuleSet
-			if ruleSetPath != "" {
-				loaded, err := compliance.LoadRuleSet(ruleSetPath)
-				if err != nil {
-					return err
-				}
-				ruleSet = &loaded
+			opts, err := complianceMappingOptions(frameworkID, runID, ruleSetPath, rulesPath, onlyCSV, excludeCSV)
+			if err != nil {
+				return err
 			}
-			report, err := compliance.MapRun(db, compliance.MappingOptions{
-				Framework: frameworkID,
-				RunID:     runID,
-				RuleSet:   ruleSet,
-				Only:      csvList(onlyCSV),
-				Exclude:   csvList(excludeCSV),
-			})
+			report, err := compliance.MapRunRules(db, opts)
 			if err != nil {
 				return err
 			}
@@ -142,21 +160,22 @@ func complianceMapCmd(dataDir *string, use string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(report)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "framework=%s run=%s schema=%s covered=%d partial=%d missing=%d not_applicable=%d total=%d\n",
-				report.Framework, report.RunID, report.SchemaVersion, report.Summary.Covered, report.Summary.Partial,
-				report.Summary.Missing, report.Summary.NotApplicable, report.Summary.Total)
+			s := report.Summary
+			fmt.Fprintf(cmd.OutOrStdout(), "framework=%s run=%s schema=%s enforced=%d detected=%d not_triggered=%d no_rule=%d total=%d\n",
+				report.Framework, report.RunID, report.SchemaVersion, s.Enforced, s.Detected, s.NotTriggered, s.NoRule, s.Total)
 			fmt.Fprintf(cmd.OutOrStdout(), "disclaimer=%q\n", report.Disclaimer)
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ITEM\tSTATUS\tEVIDENCE\tGAP\tNEXT_STEP")
+			fmt.Fprintln(w, "ITEM\tSTATUS\tRULES\tHITS\tGAP\tNEXT_STEP")
 			for _, item := range report.Items {
-				fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", item.ItemID, item.Status, len(item.EvidenceRefs), item.Gap, item.RecommendedNextStep)
+				fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n", item.ControlID, item.Status, len(item.Rules), ruleHitTotal(item), item.Gap, item.NextStep)
 			}
 			return w.Flush()
 		},
 	}
 	cmd.Flags().StringVar(&frameworkID, "framework", "", "framework id, such as owasp-asi or nist-rfi-2026-00206")
 	cmd.Flags().StringVar(&runID, "run", "", "run id")
-	cmd.Flags().StringVar(&ruleSetPath, "ruleset", "", "optional custom compliance ruleset YAML")
+	cmd.Flags().StringVar(&ruleSetPath, "ruleset", "", "optional custom compliance ruleset YAML (adds frameworks/controls)")
+	cmd.Flags().StringVar(&rulesPath, "rules", "", "optional custom detection rule YAML (security engine rules with controls:)")
 	cmd.Flags().StringVar(&onlyCSV, "only", "", "comma-separated item ids to evaluate")
 	cmd.Flags().StringVar(&excludeCSV, "exclude", "", "comma-separated item ids to skip")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
@@ -166,10 +185,10 @@ func complianceMapCmd(dataDir *string, use string) *cobra.Command {
 func complianceExplainCmd(dataDir *string) *cobra.Command {
 	var frameworkID, runID, itemID, legacyControlID string
 	var jsonOut bool
-	var ruleSetPath string
+	var ruleSetPath, rulesPath string
 	cmd := &cobra.Command{
 		Use:   "explain",
-		Short: "explain evidence for one compliance/security item",
+		Short: "explain the detection rules and hits behind one framework item",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if frameworkID == "" {
 				return fmt.Errorf("--framework is required")
@@ -188,24 +207,15 @@ func complianceExplainCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer cleanup()
-			var ruleSet *compliance.RuleSet
-			if ruleSetPath != "" {
-				loaded, err := compliance.LoadRuleSet(ruleSetPath)
-				if err != nil {
-					return err
-				}
-				ruleSet = &loaded
-			}
-			report, err := compliance.MapRun(db, compliance.MappingOptions{
-				Framework: frameworkID,
-				RunID:     runID,
-				RuleSet:   ruleSet,
-				Only:      []string{itemID},
-			})
+			opts, err := complianceMappingOptions(frameworkID, runID, ruleSetPath, rulesPath, itemID, "")
 			if err != nil {
 				return err
 			}
-			item, ok := compliance.FindItem(report, itemID)
+			report, err := compliance.MapRunRules(db, opts)
+			if err != nil {
+				return err
+			}
+			item, ok := compliance.FindRuleItem(report, itemID)
 			if !ok {
 				return fmt.Errorf("item %q not found in framework %q", itemID, frameworkID)
 			}
@@ -220,22 +230,40 @@ func complianceExplainCmd(dataDir *string) *cobra.Command {
 					"item":           item,
 				})
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "framework=%s run=%s item=%s status=%s evidence=%d\n",
-				report.Framework, report.RunID, item.ItemID, item.Status, len(item.EvidenceRefs))
+			fmt.Fprintf(cmd.OutOrStdout(), "framework=%s run=%s item=%s status=%s rules=%d hits=%d\n",
+				report.Framework, report.RunID, item.ControlID, item.Status, len(item.Rules), ruleHitTotal(item))
 			fmt.Fprintf(cmd.OutOrStdout(), "title=%q\n", item.Title)
 			fmt.Fprintf(cmd.OutOrStdout(), "reason=%q\n", item.Reason)
 			if item.Gap != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "gap=%q\n", item.Gap)
 			}
-			if item.RecommendedNextStep != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "next_step=%q\n", item.RecommendedNextStep)
+			if item.NextStep != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "next_step=%q\n", item.NextStep)
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "REF\tKIND\tID\tSUMMARY")
-			for _, ref := range item.EvidenceRefs {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", ref.Ref, ref.Kind, ref.ID, ref.Summary)
+			fmt.Fprintln(w, "RULE\tMODE\tINTENDED\tFIRED\tENFORCED")
+			for _, r := range item.Rules {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%t\n", r.ID, r.Mode, r.Intended, r.Fired, r.Enforced)
 			}
-			return w.Flush()
+			if err := w.Flush(); err != nil {
+				return err
+			}
+			// Individual hits (each firing) so a reviewer sees every occurrence.
+			hw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+			hasHits := false
+			for _, r := range item.Rules {
+				for _, h := range r.Hits {
+					if !hasHits {
+						fmt.Fprintln(hw, "HIT_RULE\tTIME\tDECISION\tREF")
+						hasHits = true
+					}
+					fmt.Fprintf(hw, "%s\t%s\t%s\t%s\n", r.ID, h.CreatedAt, h.Decision, h.Ref)
+				}
+			}
+			if hasHits {
+				return hw.Flush()
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&frameworkID, "framework", "", "framework id, such as owasp-asi or nist-rfi-2026-00206")
@@ -243,18 +271,19 @@ func complianceExplainCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().StringVar(&itemID, "item", "", "framework item id")
 	cmd.Flags().StringVar(&legacyControlID, "control", "", "deprecated alias for --item")
 	cmd.Flags().StringVar(&ruleSetPath, "ruleset", "", "optional custom compliance ruleset YAML")
+	cmd.Flags().StringVar(&rulesPath, "rules", "", "optional custom detection rule YAML")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	return cmd
 }
 
 func complianceGapsCmd(dataDir *string) *cobra.Command {
 	var frameworkID, runID string
-	var jsonOut, missingOnly bool
-	var ruleSetPath string
+	var jsonOut, noRuleOnly bool
+	var ruleSetPath, rulesPath string
 	var limit int
 	cmd := &cobra.Command{
 		Use:   "gaps",
-		Short: "list missing or partial evidence items for one run",
+		Short: "list controls that need attention: detected-not-blocked or no-rule",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if frameworkID == "" {
 				return fmt.Errorf("--framework is required")
@@ -267,34 +296,27 @@ func complianceGapsCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer cleanup()
-			var ruleSet *compliance.RuleSet
-			if ruleSetPath != "" {
-				loaded, err := compliance.LoadRuleSet(ruleSetPath)
-				if err != nil {
-					return err
-				}
-				ruleSet = &loaded
-			}
-			report, err := compliance.MapRun(db, compliance.MappingOptions{
-				Framework: frameworkID,
-				RunID:     runID,
-				RuleSet:   ruleSet,
-			})
+			opts, err := complianceMappingOptions(frameworkID, runID, ruleSetPath, rulesPath, "", "")
 			if err != nil {
 				return err
 			}
-			gaps := compliance.Gaps(report, missingOnly, limit)
+			report, err := compliance.MapRunRules(db, opts)
+			if err != nil {
+				return err
+			}
+			gaps := compliance.RuleGaps(report, noRuleOnly, limit)
 			if jsonOut {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
 				return enc.Encode(gaps)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "framework=%s run=%s schema=%s partial=%d missing=%d total=%d\n",
-				gaps.Framework, gaps.RunID, gaps.SchemaVersion, gaps.Summary.Partial, gaps.Summary.Missing, gaps.Summary.Total)
+			s := gaps.Summary
+			fmt.Fprintf(cmd.OutOrStdout(), "framework=%s run=%s schema=%s detected=%d no_rule=%d total=%d\n",
+				gaps.Framework, gaps.RunID, gaps.SchemaVersion, s.Detected, s.NoRule, s.Total)
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ITEM\tSTATUS\tEVIDENCE\tGAP\tNEXT_STEP")
+			fmt.Fprintln(w, "ITEM\tSTATUS\tRULES\tHITS\tGAP\tNEXT_STEP")
 			for _, item := range gaps.Items {
-				fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", item.ItemID, item.Status, len(item.EvidenceRefs), item.Gap, item.RecommendedNextStep)
+				fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n", item.ControlID, item.Status, len(item.Rules), ruleHitTotal(item), item.Gap, item.NextStep)
 			}
 			return w.Flush()
 		},
@@ -302,10 +324,19 @@ func complianceGapsCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().StringVar(&frameworkID, "framework", "", "framework id, such as owasp-asi or nist-rfi-2026-00206")
 	cmd.Flags().StringVar(&runID, "run", "", "run id")
 	cmd.Flags().StringVar(&ruleSetPath, "ruleset", "", "optional custom compliance ruleset YAML")
-	cmd.Flags().BoolVar(&missingOnly, "missing-only", false, "only list items with no matching evidence")
+	cmd.Flags().StringVar(&rulesPath, "rules", "", "optional custom detection rule YAML")
+	cmd.Flags().BoolVar(&noRuleOnly, "no-rule-only", false, "only list controls with no mapped detector")
 	cmd.Flags().IntVar(&limit, "limit", 0, "maximum number of gap items to return")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit JSON")
 	return cmd
+}
+
+func ruleHitTotal(item compliance.RuleControlResult) int {
+	total := 0
+	for _, r := range item.Rules {
+		total += r.Fired
+	}
+	return total
 }
 
 func csvList(raw string) []string {

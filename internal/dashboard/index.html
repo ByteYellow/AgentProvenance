@@ -107,6 +107,9 @@
   tbody tr:hover{background:#f5f5f7}
   th{color:var(--mut);font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;background:var(--panel2);z-index:1}
   td.payload{white-space:normal;color:var(--mut);max-width:520px;font-family:ui-monospace,monospace;font-size:11px}
+  td.payload .pl{white-space:pre-wrap;word-break:break-word;max-height:3.4em;overflow:hidden;cursor:pointer;position:relative}
+  td.payload .pl.open{max-height:none}
+  td.payload .pl:not(.open)::after{content:'… more';position:absolute;right:0;bottom:0;background:#fff;color:var(--acc);padding-left:8px;font-size:10px}
   .ptree{padding:14px 20px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;max-height:340px;overflow:auto;line-height:1.75}
   .ptree .node{white-space:nowrap}
   .ptree .pid{color:var(--mut)}
@@ -160,6 +163,12 @@
   .ract.ok{background:rgba(52,199,89,.12);color:#1d8c3e}
   .ract.bad{background:rgba(255,159,10,.16);color:#b25e00}
   .cnote{font-size:11.5px;color:var(--mut);margin:7px 0 0;font-style:italic}
+  .chitgrp{margin:9px 0 0}
+  .chitrid{font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px;color:#6e6e73;margin:0 0 4px;display:flex;gap:7px;align-items:center}
+  .chit{display:flex;gap:9px;align-items:center;width:100%;text-align:left;margin:3px 0;padding:5px 9px;border:1px solid var(--line2);border-radius:8px;background:#fff;cursor:pointer;font-size:11.5px;color:#3a3a3c}
+  .chit:hover{border-color:var(--acc);background:rgba(0,113,227,.05)}
+  .chit-t{font-family:ui-monospace,monospace;font-size:10.5px;color:var(--mut);white-space:nowrap}
+  .chit-r{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .complist{max-height:620px;overflow:auto;padding:6px 14px 14px}
   .compgroup{margin-top:4px}
   .compgrouphdr{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--mut);padding:11px 6px 7px;cursor:pointer;user-select:none}
@@ -294,7 +303,7 @@ const KIND_COLOR={
   policy_decision:'var(--policy)', policy:'var(--policy)',
   risk_signal:'var(--risk)', risk:'var(--risk)',
   response_action:'var(--response)', response:'var(--response)',
-  snapshot:'var(--snapshot)', attempt:'var(--snapshot)', unknown:'#9a9aa0', other:'#64748b'};
+  snapshot:'var(--snapshot)', attempt:'var(--snapshot)', rollout:'var(--intent)', session:'var(--toolcall)', unknown:'#9a9aa0', other:'#64748b'};
 const EDGE_LABEL={llm_call:'request→response',llm_intent_caused:'intent→action',
   runtime_event_policy_decision:'→ policy',policy_decision_risk_signal:'→ risk',
   risk_signal_response_action:'→ response',runtime_tool_call_event:'tool→event',
@@ -838,10 +847,14 @@ function renderTimeline(events){
     return `<tr><td>${esc(t)}</td><td class="etype">${esc(e.event_type||'')}</td>
       <td class="cls ${cls}">${esc(e.correlation_class||e.correlation_method||'')}</td>
       <td>${e.correlation_confidence!=null?(+e.correlation_confidence).toFixed(2):''}</td>
-      <td class="payload">${esc(payloadSummary(e.payload))}</td></tr>`;
+      <td class="payload">${plCell(e.payload)}</td></tr>`;
   }).join('');
 }
-function payloadSummary(p){ if(!p)return''; try{const o=JSON.parse(p);if(o.http)return JSON.stringify(o.http);if(o.raw)return JSON.stringify(o.raw).slice(0,160);return JSON.stringify(o).slice(0,160);}catch(_){return String(p).slice(0,160);} }
+// Full payload, pretty-printed when it's JSON. The table cell (td.payload .pl)
+// clamps it to a few lines by default and expands to the whole thing on click,
+// so nothing is truncated away -- the record is always fully inspectable.
+function payloadFull(p){ if(!p)return''; try{return JSON.stringify(JSON.parse(p),null,2);}catch(_){return String(p);} }
+function plCell(p){ const full=payloadFull(p); if(!full)return''; return `<div class="pl" onclick="this.classList.toggle('open')" title="click to expand / collapse">${esc(full)}</div>`; }
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
 async function loadEvidenceDrilldown(offset){
@@ -872,7 +885,7 @@ async function loadEvidenceDrilldown(offset){
       const t=(e.created_at||'').replace('T',' ').replace(/\.\d+Z?$/,'');
       return `<tr><td>${esc(t)}</td><td class="etype">${esc(e.event_type||'')}</td><td>${esc(e.pid||'')}</td>
         <td>${esc(e.tool_call_id||'')}</td><td class="cls ${esc((e.correlation_class||'').replace(/\s/g,'_'))}">${esc(e.correlation_class||e.correlation_method||'')}</td>
-        <td class="payload">${esc(payloadSummary(e.payload))}</td></tr>`;
+        <td class="payload">${plCell(e.payload)}</td></tr>`;
     }).join('');
   }
   const from=d.total?EV_OFFSET+1:0, to=Math.min(EV_OFFSET+(d.limit||EV_LIMIT),d.total||0);
@@ -1011,7 +1024,7 @@ function wireCompliance(root){
   root.querySelectorAll('.cevtoggle[data-ev]').forEach(t=>{
     t.onclick=()=>{ const id=t.getAttribute('data-ev'); if(COMP_OPEN.has(id))COMP_OPEN.delete(id); else COMP_OPEN.add(id); renderCompliance(window._comp); };
   });
-  root.querySelectorAll('button.cref[data-ref]').forEach(b=>{
+  root.querySelectorAll('button.cref[data-ref], button.chit[data-ref]').forEach(b=>{
     b.onclick=()=>focusEvidenceRef(b.getAttribute('data-ref'), b.getAttribute('data-kind'));
   });
 }
@@ -1049,27 +1062,25 @@ function ruleActionsHTML(rules){
     return `<div class="crule"><span class="rmark ${r.enforced?'block':'fire'}">${r.enforced?'✓':'⚠'}</span> <span class="rid">${esc(r.id)}</span> ${mode} → ${outcome}</div>`;
   }).join('')+`</div>`;
 }
-// Evidence chips for one control: grouped by kind, capped, entity-backed ones
-// clickable. The chip shows the human summary (e.g. "decision=deny rule=…")
-// rather than the raw id, which moves to the tooltip. Hidden by default behind
-// the card's "evidence (N)" toggle so it never floods the list.
-function complianceRefsHTML(it){
-  const byKind={};
-  (it.evidence_refs||[]).forEach(r=>{ (byKind[r.kind]=byKind[r.kind]||[]).push(r); });
-  const kinds=Object.keys(byKind).sort();
-  let html='';
-  kinds.forEach(k=>{
-    const arr=byKind[k], focusable=!!COMP_FOCUS_KINDS[k];
-    html+=`<span class="cgroup">${esc(k)}×${arr.length}</span>`;
-    arr.slice(0,COMP_REFS_PER_KIND).forEach(r=>{
-      const lbl=esc(r.summary?clip(r.summary,48):(r.id||r.ref));
-      const tip=esc((r.summary?r.summary+'\n':'')+r.ref);
-      if(focusable) html+=`<button class="cref" data-ref="${esc(r.ref)}" data-kind="${esc(k)}" title="${tip}">${lbl}</button>`;
-      else html+=`<span class="cref static" title="${tip}">${lbl}</span>`;
-    });
-    if(arr.length>COMP_REFS_PER_KIND) html+=`<span class="cmore">+${arr.length-COMP_REFS_PER_KIND} more</span>`;
-  });
-  return html;
+function fmtHitTime(s){ if(!s)return ''; const d=new Date(s); return isNaN(d.getTime())?String(s).slice(11,19):d.toLocaleTimeString([],{hour12:false}); }
+// Per-rule HIT detail: every individual firing (one policy_decision row) of each
+// mapped rule that fired, shown as time · outcome · reason. Each row is clickable
+// and focuses that decision's node in the graph -- this is the "every occurrence"
+// drill-down behind a control's verdict, not an aggregate count.
+function complianceHitsHTML(rules){
+  const withHits=(rules||[]).filter(r=>r.hits&&r.hits.length);
+  if(!withHits.length) return '<div class="cnote">no individual rule hits recorded for this control</div>';
+  return withHits.map(r=>{
+    const rows=r.hits.map(h=>{
+      const cls=h.enforced?'ok':'bad';
+      const act=h.enforced?esc(h.decision):esc(h.decision)+' · not blocked';
+      const t=fmtHitTime(h.created_at);
+      return `<button class="chit" data-ref="${esc(h.ref)}" data-kind="policy_decision" title="${esc(h.ref)}\nclick to focus in graph">`+
+        (t?`<span class="chit-t">${esc(t)}</span>`:'')+
+        `<span class="ract ${cls}">${act}</span><span class="chit-r">${esc(h.reason||'')}</span></button>`;
+    }).join('');
+    return `<div class="chitgrp"><div class="chitrid">${esc(r.id)} <span class="rmut">×${r.hits.length}</span> <span class="rmode ${esc(r.mode||'enforce')}">${esc(r.mode||'enforce')}</span></div>${rows}</div>`;
+  }).join('');
 }
 function renderComplianceCard(it){
   const st=it.status||'no_rule';
@@ -1081,10 +1092,10 @@ function renderComplianceCard(it){
   const gap=(st==='detected'||st==='no_rule')&&it.gap
     ? `<div class="cgap">⚠ ${esc(it.gap)}${it.recommended_next_step?` <span class="next">→ ${esc(it.recommended_next_step)}</span>`:''}</div>`
     : '';
-  const n=(it.evidence_refs||[]).length;
+  const totalHits=(it.rules||[]).reduce((n,r)=>n+((r.hits&&r.hits.length)||0),0);
   const open=COMP_OPEN.has(it.control_id);
-  const ev=n?`<div class="cevtoggle" data-ev="${esc(it.control_id)}">${open?'▾':'▸'} underlying evidence (${n})</div>`+
-    `<div class="cevbox${open?' open':''}">${open?complianceRefsHTML(it):''}</div>`:'';
+  const ev=totalHits?`<div class="cevtoggle" data-ev="${esc(it.control_id)}">${open?'▾':'▸'} rule hits (${totalHits})</div>`+
+    `<div class="cevbox${open?' open':''}">${open?complianceHitsHTML(it.rules):''}</div>`:'';
   return `<div class="citemcard st-${esc(st)}">`+
     `<div class="chead"><span class="enfbadge ${esc(st)}">${m.icon} ${esc(m.label)}</span><span class="cttl">${esc(it.title||it.control_id)}</span></div>`+
     desc+
