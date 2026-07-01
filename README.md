@@ -801,9 +801,9 @@ VM and shipped as a **signed, portable forensics bundle** that replays offline:
 
 ```sh
 ./agentprov --data-dir /tmp/snake-replay forensics import \
-  demo/snake-supply-chain/run-snake-agent.forensics.json \
+  demo/snake-supply-chain/run-snake-supervised.forensics.json \
   --pub-key demo/snake-supply-chain/attestation.pub        # verifies the signature, then imports
-./agentprov --data-dir /tmp/snake-replay dashboard serve   # open run "run-snake-agent"
+./agentprov --data-dir /tmp/snake-replay dashboard serve   # open run "run-snake-supervised"
 ```
 
 <p align="center">
@@ -812,6 +812,16 @@ VM and shipped as a **signed, portable forensics bundle** that replays offline:
 
 See [`demo/snake-supply-chain/`](demo/snake-supply-chain) for the full walkthrough,
 the capture scripts, and what to click in the dashboard.
+
+> **Honesty note.** The sensor captures *every* credential read in the scope, not
+> only the planted ones — including the agent runtime reading its own
+> `~/.claude/.credentials.json` at startup. Both show up as `secret_path` risks.
+> That is realistic (the sensor cannot tell "the agent's own infra secret" from
+> "a planted target secret" — it sees the syscall), and it is the honest picture:
+> the exfil edge to `169.254.169.254` is the attack, while the runtime's own
+> credential read is benign-but-flagged. Distinguishing agent-owned infra secrets
+> from target secrets is a policy/labeling layer on top of the raw evidence, not
+> something the substrate fakes away.
 
 ## Graph Commands
 
