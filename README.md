@@ -784,11 +784,9 @@ Panels:
   **process tree**, and **egress**; live auto-refresh.
 
 <p align="center">
-  <!-- TODO screenshot: Graph Explorer with the data-flow/taint lens on run-snake-agent -->
   <img src="docs/img/dashboard-graph-explorer-taint.png" alt="Graph Explorer — data-flow/taint lens showing the captured secret-read -> metadata-IP exfil flow" width="100%">
 </p>
 <p align="center">
-  <!-- TODO screenshot: Side Panel showing Evidence + Preview of the agent's snake.py -->
   <img src="docs/img/dashboard-side-panel-preview.png" alt="Side Panel — evidence summary plus a redacted preview of the artifact the agent produced" width="100%">
 </p>
 
@@ -809,8 +807,7 @@ VM and shipped as a **signed, portable forensics bundle** that replays offline:
 ```
 
 <p align="center">
-  <!-- TODO screenshot: the taint lens time-scrubber mid-replay (secret reads visible, egress about to appear) -->
-  <img src="docs/img/demo-snake-taint-replay.png" alt="Replaying the captured snake-agent run: the taint lens shows the poisoned dependency's secret reads flowing to the metadata-IP egress" width="100%">
+  <img src="docs/img/demo-snake-taint-replay.gif" alt="Replaying the captured snake-agent run: the taint lens shows the poisoned dependency's secret reads flowing to the metadata-IP egress" width="100%">
 </p>
 
 See [`demo/snake-supply-chain/`](demo/snake-supply-chain) for the full walkthrough,
