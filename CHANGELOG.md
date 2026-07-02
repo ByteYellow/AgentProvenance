@@ -26,6 +26,17 @@ established*, and give record's own scopes a real kernel join key.
   and a zero-context sensor event carrying that id resolves to the scope via
   `cgroup_time_window` @0.98 as `kernel_correlated` + `self_launched`. The
   synthetic parent leaf is created lazily; per-scope leaves are removed on exit.
+- **`agentprov sensor stream` — per-node supervised capture.** One long-running
+  command runs the eBPF sensor and streams its events straight into the store,
+  correlating each by cgroup — replacing the manual
+  `agentprov-sensor | telemetry ingest-jsonl` pipe. It excludes AgentProvenance's
+  own I/O (data-dir snapshot + DB writes, which otherwise form a self-feedback
+  storm) and drops uncorrelated host noise that belongs to no scope (which would
+  fail per-run `graph verify`). Needs `CAP_BPF`+`CAP_PERFMON` (setcap or root).
+- **Built-in artifact objectify in `record`.** Each changed file's content is
+  objectified as a `workspace_file/<path>` artifact object, so the dashboard
+  Side Panel previews what the agent actually produced. Previously this was a
+  manual post-capture script that was easy to forget.
 
 ### Changed
 
@@ -40,6 +51,30 @@ established*, and give record's own scopes a real kernel join key.
   kernel-verified match. Method tiers (cgroup 0.98 / container 0.92 / pid 0.85 /
   process 1.0) are unchanged; the dashboard now colours the confidence number by
   band.
+
+### Fixed
+
+- **Dashboard graph: annotation nodes no longer render disconnected.** The
+  visible node set was built from all filtered edges but only a capped subset was
+  returned, so `policy_decision` / `response_action` / `risk_signal` / `file` /
+  `artifact` nodes came back orphaned (their edges truncated by the
+  runtime-event/process bulk). Edges are now prioritized so the rare semantic
+  ones survive the cap, and the node set is built from the RETURNED edges only —
+  0 orphans across all nine lenses, annotation nodes stay wired to their lineage.
+- **Dashboard graph: processes show names, not bare pids.** `comm`/`tgid`
+  fallback labels `runtime_process` and thread-group nodes; the process tree
+  collapses repeated leaf commands (`base64 -d ×72`) so a real agent's fan-out
+  stays readable.
+- **Dashboard performance.** `graph verify` is cached by a cheap fingerprint
+  (Run Overview ~2s → instant after first load); the Sugiyama layout is cached by
+  topology so select/hover/zoom no longer re-lay-out; the edge budget and live
+  refresh interval are eased. Scrubber `edgeVisible` now respects the edge's own
+  time instead of only its endpoints'.
+- Recaptured the snake / supply-chain demo bundle under the new supervised mode,
+  signed (`demo/snake-supply-chain/run-snake-supervised.forensics.json`),
+  replacing the older pre-cgroup bundle: the agent's product (`snake.py`) is
+  objectified and previewable, the supply-chain TTP correlates @0.98 +
+  `self_launched`, and `graph verify` is clean.
 
 ## v0.4.1 - 2026-07-01
 

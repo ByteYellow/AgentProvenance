@@ -810,8 +810,9 @@ VM and shipped as a **signed, portable forensics bundle** that replays offline:
   <img src="docs/img/demo-snake-taint-replay.gif" alt="Replaying the captured snake-agent run: the taint lens shows the poisoned dependency's secret reads flowing to the metadata-IP egress" width="100%">
 </p>
 
-See [`demo/snake-supply-chain/`](demo/snake-supply-chain) for the full walkthrough,
-the capture scripts, and what to click in the dashboard.
+See the [supply-chain demo walkthrough](docs/supply-chain-demo.md) for what to
+click in the dashboard, and [`demo/snake-supply-chain/`](demo/snake-supply-chain)
+for the signed bundle and the capture scripts.
 
 > **Honesty note.** The sensor captures *every* credential read in the scope, not
 > only the planted ones — including the agent runtime reading its own
