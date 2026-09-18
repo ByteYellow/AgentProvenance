@@ -1,0 +1,21 @@
+[Unit]
+Description=AgentProvenance in-guest kernel evidence collector
+After=local-fs.target
+ConditionPathExists=/sys/kernel/btf/vmlinux
+
+[Service]
+Type=simple
+User=root
+StateDirectory=agentprov
+StateDirectoryMode=0700
+UMask=0077
+EnvironmentFile=-/etc/default/agentprov-sensor
+ExecStart=/usr/local/bin/agentprov --data-dir /var/lib/agentprov sensor stream
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGINT
+TimeoutStopSec=20
+LimitMEMLOCK=infinity
+
+[Install]
+WantedBy=multi-user.target

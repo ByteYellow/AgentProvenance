@@ -1,0 +1,40 @@
+{
+  "schema_version": "agentprovenance.kvm_guest_acceptance/v1",
+  "architecture": "x86_64",
+  "kernel": "6.8.0-139-generic",
+  "virtualization": "kvm",
+  "boot_id": "198e489f-ae83-4e64-aa1b-637147cbc863",
+  "run_id": "run-kvm-ca4bb8bba7c7",
+  "native_events": 12,
+  "event_types": [
+    "execve",
+    "file_open",
+    "file_write",
+    "network_connect",
+    "process_exit"
+  ],
+  "cgroups": [
+    "11840"
+  ],
+  "verification": {
+    "schema_version": "agentprovenance.verify/v1",
+    "run_id": "run-kvm-ca4bb8bba7c7",
+    "status": "ok",
+    "issue_count": 0,
+    "error_count": 0,
+    "warning_count": 0,
+    "issues": null
+  },
+  "replay_verification": {
+    "schema_version": "agentprovenance.verify/v1",
+    "run_id": "run-kvm-ca4bb8bba7c7",
+    "status": "ok",
+    "issue_count": 0,
+    "error_count": 0,
+    "warning_count": 0,
+    "issues": null
+  },
+  "bundle_sha256": "f1fed1446ec66d249c011ba4a9795d0c4c0d04a166b47dd346c8dcb4b2a46ec0",
+  "imported_run": "run-kvm-ca4bb8bba7c7",
+  "passed": true
+}

@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux && (amd64 || arm64)
 
 package sensor
 
@@ -41,6 +41,11 @@ const (
 	eventUnlink  = 10
 	eventDNS     = 11
 )
+
+type sensorTracepoint struct {
+	group, name string
+	prog        *ebpf.Program
+}
 
 // Options configures optional sensor probes beyond the always-on syscall set.
 type Options struct {
@@ -104,10 +109,7 @@ func RunWithOptions(out io.Writer, opts Options) error {
 	// Privilege-change / tamper probes (privesc + file rename/delete). Each is a
 	// simple syscall tracepoint; attach failures are non-fatal so an older kernel
 	// missing one tracepoint still runs the rest.
-	for _, p := range []struct {
-		group, name string
-		prog        *ebpf.Program
-	}{
+	for _, p := range append([]sensorTracepoint{
 		{"syscalls", "sys_enter_setuid", objs.HandleSetuid},
 		{"syscalls", "sys_enter_setgid", objs.HandleSetgid},
 		{"syscalls", "sys_enter_ptrace", objs.HandlePtrace},
@@ -116,7 +118,7 @@ func RunWithOptions(out io.Writer, opts Options) error {
 		{"syscalls", "sys_enter_rename", objs.HandleRenamePlain},
 		{"syscalls", "sys_enter_unlinkat", objs.HandleUnlink},
 		{"syscalls", "sys_enter_sendto", objs.HandleSendto}, // universal DNS (UDP:53)
-	} {
+	}, archTracepoints(&objs)...) {
 		if tp, err := link.Tracepoint(p.group, p.name, p.prog, nil); err == nil {
 			defer tp.Close()
 		}
@@ -182,16 +184,15 @@ func RunWithOptions(out io.Writer, opts Options) error {
 
 	// Go crypto/tls: Go agents use Go's own TLS stack (no libssl), so the SSLLib
 	// uprobes never fire for them. crypto/tls.(*Conn).Write(b []byte) holds the
-	// request/prompt plaintext in b at entry; on the arm64 ABIInternal the
-	// receiver is x0 and the slice ptr/len land in x1/x2 -- exactly the registers
-	// handle_ssl_write reads as (ssl, buf, num), so we reuse that program. Entry
+	// request/prompt plaintext in b at entry. Select the architecture's Go ABI
+	// program: arm64 can reuse the C registers, while amd64 requires AX/BX/CX. Entry
 	// uprobe only (the request path); no uretprobe, since Go's moving goroutine
 	// stacks make return probes unsafe. Best-effort and non-fatal: a stripped
 	// binary exposes no symbol to attach.
 	if opts.GoTLSBin != "" {
 		if ex, err := link.OpenExecutable(opts.GoTLSBin); err != nil {
 			fmt.Fprintf(os.Stderr, "agentprov-sensor: open go-tls bin %s: %v\n", opts.GoTLSBin, err)
-		} else if up, err := ex.Uprobe("crypto/tls.(*Conn).Write", objs.HandleSslWrite, nil); err != nil {
+		} else if up, err := ex.Uprobe("crypto/tls.(*Conn).Write", goTLSWriteProgram(&objs), nil); err != nil {
 			fmt.Fprintf(os.Stderr, "agentprov-sensor: go-tls uprobe not attached (%v; stripped binary?)\n", err)
 		} else {
 			defer up.Close()
@@ -303,7 +304,7 @@ func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgro
 		"ppid":         e.Ppid,
 		"cgroup_id":    strconv.FormatUint(e.CgroupId, 10),
 		"container_id": containerID,
-		"timestamp":    time.Now().UTC().Format(time.RFC3339Nano),
+		"timestamp":    eventTimestamp(e),
 		"comm":         cstr(e.Comm[:]),
 		"event_type":   etype,
 		"data":         string(msg.Body),
@@ -468,7 +469,7 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 		"ppid":         e.Ppid,
 		"cgroup_id":    strconv.FormatUint(e.CgroupId, 10),
 		"container_id": containerID,
-		"timestamp":    time.Now().UTC().Format(time.RFC3339Nano),
+		"timestamp":    eventTimestamp(e),
 		"comm":         cstr(e.Comm[:]),
 	}
 	switch e.Kind {

@@ -1,0 +1,21 @@
+{
+  "schema_version": "agentprovenance.k8s_node_multiworkload_acceptance/v1",
+  "generated_at": "2026-09-18T18:07:49.734807+00:00",
+  "run_id": "run-k8s-multiworkload",
+  "producer_profile": "k8s-daemonset",
+  "sensor_placement": "kubernetes_daemonset",
+  "event_transport": "kubernetes_pod_stdout_jsonl",
+  "scope_resolution": "k8s_api_container_to_kernel_cgroup",
+  "host_cgroup_fallback_count": 0,
+  "cluster": "default",
+  "node": "agentprov-kvm-amd64",
+  "sensor_count": 1,
+  "workload_count": 8,
+  "unique_cgroup_count": 8,
+  "captured_event_count": 1289,
+  "graph_verify": {
+    "status": "ok",
+    "errors": 0,
+    "warnings": 0
+  }
+}

@@ -1,4 +1,4 @@
-//go:build !linux
+//go:build !linux || (!amd64 && !arm64)
 
 // Package sensor is the self-owned system-telemetry sensor. On Linux it loads
 // eBPF probes (execve/connect/file_open) and emits normalized telemetry events;
@@ -21,5 +21,5 @@ type Options struct {
 
 // RunWithOptions is unavailable off Linux (eBPF requires a Linux kernel).
 func RunWithOptions(_ io.Writer, _ Options) error {
-	return fmt.Errorf("agentprov sensor requires linux (eBPF)")
+	return fmt.Errorf("agentprov sensor requires Linux amd64 or arm64 (eBPF)")
 }

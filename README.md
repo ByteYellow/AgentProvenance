@@ -979,7 +979,7 @@ per-command purpose: [docs/graph-commands.md](docs/graph-commands.md).
 |---|---|
 | Zero-SDK record | `record -- <cmd>` snapshots the workdir, samples the process tree, captures file diffs + runtime evidence, no SDK |
 | Batch recorder | `record batch` records many jobs in parallel for RL/benchmark pipelines |
-| Native eBPF sensor | `agentprov-sensor` (Linux/arm64): exec+argv, connect, file write + sensitive **read** → `secret_path`, process_exit, privesc (setuid/setgid/ptrace), tamper (rename/unlink), TLS plaintext (full request/response bodies via chunked `SSL_write`/`SSL_read` and modern `SSL_write_ex`/`SSL_read_ex`; Go `crypto/tls` request/write path via `AGENTPROV_GO_TLS_BIN`), DNS — in-kernel noise filtering, validated live |
+| Native eBPF sensor | `agentprov-sensor` (Linux/amd64 + arm64): exec+argv, connect, file write + sensitive **read** → `secret_path`, process_exit, privesc (setuid/setgid/ptrace), tamper (rename/unlink), TLS plaintext (full request/response bodies via chunked `SSL_write`/`SSL_read` and modern `SSL_write_ex`/`SSL_read_ex`; Go `crypto/tls` request/write path via `AGENTPROV_GO_TLS_BIN`), DNS — in-kernel noise filtering, validated live |
 | LLM intent capture | `internal/tlsintent` reassembles the sensor's TLS chunks into complete HTTP/1.1 messages (Content-Length, chunked, and SSE streaming bodies) and HTTP/2 messages (frames + HPACK + stream demux), then parses LLM semantics across Anthropic/OpenAI shapes — model, tools offered, tool calls + the shell commands the model decided to run, stop reason |
 | Evidence ingest | Falco / Tetragon / LoongCollector JSONL + native sensor → normalized events; schema-validated, app-context rejected in raw payloads, paged with integrity hashes |
 
@@ -1208,7 +1208,7 @@ internal/cli/         command parsing and output
 internal/launch/      one-command porcelain (`launch -- <agent>`): scope, dashboard, hooks overlay, sensor, honest degradation
 
 internal/record/      zero-SDK command recorder
-internal/sensor/      native eBPF sensor (exec/connect/file/privesc/tamper/TLS-body/DNS); Linux-only, arm64
+internal/sensor/      native eBPF sensor (exec/connect/file/privesc/tamper/TLS-body/DNS); Linux-only, amd64 + arm64
 internal/producer/    producer profiles (local-record / k8s-daemonset / microvm-guest-init), passive cgroup scope attribution, K8s informer
 internal/tlsintent/   TLS chunk -> full HTTP message reassembly + LLM request/response semantics
 internal/telemetry/   normalized runtime event schema, JSONL ingest, TLS HTTP metadata, correlation inputs
@@ -1326,14 +1326,14 @@ Recently landed:
 
 Next / open:
 
-- **Sensor breadth** — universal DNS (musl / raw UDP:53, or a `udp_sendmsg`
-  kprobe; `getaddrinfo` covers glibc today), IPv6/UDP connect, and multi-arch
-  (x86 `PT_REGS`; arm64-only today). `ptrace` is captured but not yet exercised
-  end to end in a test.
+- **Sensor breadth** — broader DNS transports and IPv6/UDP connect. The amd64
+  live gate now exercises glibc and UDP/sendto DNS, privilege-call attempts,
+  legacy open/unlink, C uprobes and Go ABIInternal. See the
+  [amd64/KVM/K3s runbook](docs/amd64-kvm-k3s.md) for measured coverage.
 - **TLS breadth** — Go `crypto/tls` response/read path, BoringSSL,
-  statically-linked TLS, and x86 uprobe validation. OpenSSL dynamic-link clients
+  statically-linked TLS, and stripped Go binaries. OpenSSL dynamic-link clients
   are covered by `SSL_write`/`SSL_read` and `SSL_write_ex`/`SSL_read_ex`; Go
-  `crypto/tls` request/write capture is partial on unstripped arm64 binaries;
+  `crypto/tls` request/write capture is partial on unstripped amd64/arm64 binaries;
   HTTP/1.1 and HTTP/2/HPACK reassembly are implemented.
 - **Tamper-evidence (v2)** — off-host / capture-time signing (KMS / TPM /
   transparency log). v1 is integrity plus optional local signing, not proof
@@ -1341,6 +1341,10 @@ Next / open:
 - **Deploy 3** — central evidence service with process-level data-plane
   isolation and authz/scopes.
 - **Notifications** — Feishu / DingTalk / webhook response hooks.
+
+Linux amd64 now has a separate eBPF object and a live KVM/K3s acceptance path.
+The existing ARM64 object is retained unchanged. Install and validate using the
+[amd64/KVM/K3s runbook](docs/amd64-kvm-k3s.md).
 
 ## Development
 

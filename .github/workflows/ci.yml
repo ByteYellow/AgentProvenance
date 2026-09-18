@@ -50,7 +50,7 @@ jobs:
           go-version: "1.23.x"
           cache: true
 
-      # The bpf2go bindings (sensorbpf_bpf*.go/.o) are committed, so this builds
+      # Architecture-specific bpf2go bindings (.go/.o) are committed, so this builds
       # the Linux sensor without clang/bpftool: the reproducible-build guarantee.
       - name: Build agentprov-sensor from committed bindings
         run: GOTOOLCHAIN=local go build -o /dev/null ./cmd/agentprov-sensor
@@ -72,18 +72,47 @@ jobs:
       - name: Install eBPF compile toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang llvm linux-tools-common
+          sudo apt-get install -y clang llvm libbpf-dev linux-tools-common linux-tools-generic
           sudo apt-get install -y "linux-tools-$(uname -r)" "linux-cloud-tools-$(uname -r)" || true
           sudo apt-get install -y linux-tools-azure linux-cloud-tools-azure || true
 
       - name: Regenerate and fail on drift of committed .go bindings
+        run: GOTOOLCHAIN=local scripts/regen-sensor.sh --check
+
+  sensor-live-amd64:
+    name: amd64 syscalls and TLS on a live kernel
+    runs-on: ubuntu-24.04
+    needs: sensor-build
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: true
+      - name: Install local TLS fixture dependencies
         run: |
-          if bpftool version >/dev/null 2>&1 && [ -r /sys/kernel/btf/vmlinux ]; then
-            GOTOOLCHAIN=local scripts/regen-sensor.sh --check
-          else
-            echo "Skipping sensor binding drift check: bpftool or kernel BTF unavailable on this runner."
-            echo "Run scripts/regen-sensor.sh --check on the Linux eBPF lab VM for the strong drift gate."
-          fi
+          sudo apt-get update
+          sudo apt-get install -y gcc libssl-dev openssl python3
+      - name: Build sensor and fixture clients
+        run: |
+          mkdir -p /tmp/agentprov-live
+          CGO_ENABLED=0 go build -o /tmp/agentprov-live/sensor ./cmd/agentprov-sensor
+          CGO_ENABLED=0 go build -o /tmp/agentprov-live/go-client ./internal/sensor/testdata/tls_client.go
+          gcc -O2 internal/sensor/testdata/tls_client.c -lssl -lcrypto -o /tmp/agentprov-live/c-client
+      - name: Verify amd64 syscall, C ABI, Go ABI and queued event timestamps
+        run: |
+          sudo python3 scripts/accept_sensor_live.py \
+            --sensor /tmp/agentprov-live/sensor \
+            --go-client /tmp/agentprov-live/go-client \
+            --c-client /tmp/agentprov-live/c-client \
+            --ssl-lib /usr/lib/x86_64-linux-gnu/libssl.so.3 \
+            --pause-drain 1.5 --report /tmp/agentprov-live/acceptance.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: amd64-live-evidence
+          path: /tmp/agentprov-live/acceptance.*
 
   phase1-acceptance:
     name: Phase 1 observability smoke

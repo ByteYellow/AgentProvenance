@@ -1,0 +1,83 @@
+{
+  "schema_version": "agentprovenance.profile_semantic_parity/v1",
+  "generated_at": "2026-09-18T18:10:10.060219+00:00",
+  "workload": "sh loop: id + ls /",
+  "equivalent": true,
+  "ignored_physical_fields": [
+    "pid",
+    "ppid",
+    "tgid",
+    "cgroup_id",
+    "container_id",
+    "timestamps",
+    "event_count"
+  ],
+  "local_record": {
+    "event_types": [
+      "exec_end",
+      "exec_start",
+      "execve",
+      "file_open",
+      "file_write",
+      "process_exit",
+      "process_observed"
+    ],
+    "workload_commands": [
+      "id",
+      "ls"
+    ],
+    "node_kinds": [
+      "file",
+      "process",
+      "runtime_event",
+      "runtime_process",
+      "tool_call"
+    ],
+    "edge_types": [
+      "runtime_process_child_of",
+      "runtime_process_event",
+      "runtime_process_file",
+      "runtime_process_observed",
+      "runtime_process_parent",
+      "runtime_tool_call_process",
+      "tool_call_process"
+    ],
+    "binding_sources": [
+      "zero_sdk_record",
+      "zero_sdk_record_descendant"
+    ],
+    "binding_confidence": [
+      0.9,
+      1.0
+    ]
+  },
+  "k8s_daemonset": {
+    "event_types": [
+      "execve",
+      "file_open",
+      "file_write",
+      "pod_metadata",
+      "process_exit"
+    ],
+    "workload_commands": [
+      "id",
+      "ls"
+    ],
+    "node_kinds": [
+      "runtime_event",
+      "runtime_process"
+    ],
+    "edge_types": [
+      "runtime_process_child_of",
+      "runtime_process_event",
+      "runtime_process_parent"
+    ],
+    "binding_sources": [
+      "k8s_cgroup"
+    ],
+    "binding_confidence": [
+      0.8
+    ]
+  },
+  "failures": []
+}

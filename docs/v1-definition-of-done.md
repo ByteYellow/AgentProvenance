@@ -44,7 +44,7 @@ tamper-evident against a malicious host root.
 | 4 | Ingest: Falco | DONE | `IngestFalco`; `accept_falco_risk_realistic.sh` |
 | 4 | Ingest: Tetragon | DONE | `mapTetragon`; unit + demo (no accept script -- see Sec 2 tests) |
 | 4 | Ingest: own eBPF sensor -- receiver | DONE | `mapNative` native format; `accept_native_sensor_risk.sh`; live VM E2E 2026-06-27 |
-| 4 | Ingest: own eBPF sensor -- capture binary build | DONE | bpf2go bindings committed (`internal/sensor/sensorbpf_bpf*.go/.o`); fresh Linux `go build ./cmd/agentprov-sensor` works without clang; `scripts/regen-sensor.sh --check` + CI guard drift |
+| 4 | Ingest: own eBPF sensor -- capture binary build | DONE | bpf2go bindings committed (`internal/sensor/sensorbpf_{x86,arm64}_bpfel.go/.o`); fresh Linux `go build ./cmd/agentprov-sensor` works without clang; `scripts/regen-sensor.sh --check` + CI guard drift |
 | 4 | Ingest: raw events need no tool_call_id | DONE | `telemetry/service.go` IngestFiltered -> correlation.Resolve fallback |
 | 4 | Correlation by container/cgroup/pid/time | DONE | `correlation/binding.go`: process 1.0 / cgroup 0.98 / container 0.92 / pid 0.85 |
 | 4 | Child/async/delayed -> original scope | DONE | time-window open bindings + root_pid + container/cgroup co-membership (not ppid lineage); supervised `record` can launch into a real cgroup-per-scope |

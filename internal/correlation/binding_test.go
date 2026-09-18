@@ -356,3 +356,45 @@ func TestCloseBindingByIDOnlyClosesTarget(t *testing.T) {
 		t.Fatalf("ended_at target=%q sibling=%q", firstEnded, secondEnded)
 	}
 }
+
+func TestResolveWindowComparesInstantsWithoutRewritingEvidence(t *testing.T) {
+	paths, err := store.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	// Insert newest first, with a UTC offset whose lexical order is misleading.
+	for _, binding := range []Binding{
+		{ID: "new", CgroupID: "123", StartedAt: "2026-09-19T08:00:00.100000001+08:00", EndedAt: "2026-09-19T00:00:00.2Z"},
+		{ID: "old", CgroupID: "123", StartedAt: "2026-09-19T00:00:00Z", EndedAt: "2026-09-19T00:00:00.2Z"},
+	} {
+		if _, err := RecordBinding(db, binding); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct{ at, want string }{
+		{"2026-09-18T23:59:59.999999999Z", ""},
+		{"2026-09-19T00:00:00Z", "old"},
+		{"2026-09-19T00:00:00.1Z", "old"},
+		{"2026-09-19T00:00:00.100000001Z", "new"},
+		{"2026-09-19T00:00:00.200000000Z", "new"},
+		{"2026-09-19T00:00:00.200000001Z", ""},
+		// Out-of-order arrival must still select the correct historical interval.
+		{"2026-09-19T00:00:00.05Z", "old"},
+	} {
+		t.Run(tc.at, func(t *testing.T) {
+			match, ok, err := Resolve(db, RawIdentity{CgroupID: "123", Timestamp: tc.at})
+			if err != nil || ok != (tc.want != "") || match.ID != tc.want {
+				t.Fatalf("resolve = %+v, %v, %v; want %q", match, ok, err, tc.want)
+			}
+		})
+	}
+	original, ok, err := GetBinding(db, "new")
+	if err != nil || !ok || original.StartedAt != "2026-09-19T08:00:00.100000001+08:00" {
+		t.Fatalf("raw binding timestamp changed: %+v, %v", original, err)
+	}
+}

@@ -12,10 +12,11 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_endian.h>
-// PoC SSL uprobe arg extraction needs PT_REGS; arm64 is the lab target. Register
-// layout is arch-specific, so a future multi-arch build must set this per arch.
-#ifndef __TARGET_ARCH_arm64
-#define __TARGET_ARCH_arm64
+// bpf2go selects the register layout from its explicit amd64/arm64 target.
+// Endianness alone is insufficient for uprobes: C and Go arguments are held
+// in architecture-specific registers.
+#if !defined(__TARGET_ARCH_arm64) && !defined(__TARGET_ARCH_x86)
+#error "generate the sensor with an explicit amd64 or arm64 bpf2go target"
 #endif
 #include <bpf/bpf_tracing.h>
 
@@ -49,6 +50,9 @@ struct sensor_event {
 	__u32 tgid;
 	__u32 ppid;
 	__u64 cgroup_id;
+#if defined(__TARGET_ARCH_x86)
+	__u64 ktime_ns;  // capture time, independent of userspace/ingest backlog
+#endif
 	__u64 conn;      // tls: the SSL* pointer identifying the connection (reassembly key)
 	__u32 daddr;     // connect: dst IPv4 (net order); tls: valid bytes in this chunk
 	__u16 dport;     // connect: dst port (net order); tls: 1 if the message was truncated at the chunk cap
@@ -111,6 +115,9 @@ static __always_inline void fill_common(struct sensor_event *e) {
 	e->tgid = (__u32)id;
 	e->ppid = BPF_CORE_READ(task, real_parent, tgid);
 	e->cgroup_id = bpf_get_current_cgroup_id();
+#if defined(__TARGET_ARCH_x86)
+	e->ktime_ns = bpf_ktime_get_ns();
+#endif
 	bpf_get_current_comm(&e->comm, sizeof(e->comm));
 }
 
@@ -225,15 +232,13 @@ static __always_inline int noise_file_prefix(const char *p) {
 	return 0;
 }
 
-SEC("tp/syscalls/sys_enter_openat")
-int handle_openat(struct trace_event_raw_sys_enter *ctx) {
-	long flags = (long)ctx->args[2];
+static __always_inline int emit_open(const char *path, long flags) {
 	int is_write = (flags & OPEN_WRITE_MASK) != 0;
 	// Filter noise reads BEFORE reserving: a discarded ringbuf record still
 	// occupies space until drained, so the prefix check must precede reserve.
 	if (!is_write) {
 		char pfx[8] = {};
-		bpf_probe_read_user(pfx, sizeof(pfx), (void *)ctx->args[1]);
+		bpf_probe_read_user(pfx, sizeof(pfx), path);
 		if (noise_read_prefix(pfx))
 			return 0;
 	}
@@ -247,11 +252,23 @@ int handle_openat(struct trace_event_raw_sys_enter *ctx) {
 	e->dport = 0;
 	fill_common(e);
 	e->args[0] = 0;
-	bpf_probe_read_user_str(&e->path, sizeof(e->path), (void *)ctx->args[1]);
+	bpf_probe_read_user_str(&e->path, sizeof(e->path), path);
 	e->exit_code = is_write ? 0 : 1; // 0 = write, 1 = read
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }
+
+SEC("tp/syscalls/sys_enter_openat")
+int handle_openat(struct trace_event_raw_sys_enter *ctx) {
+	return emit_open((const char *)ctx->args[1], (long)ctx->args[2]);
+}
+
+#if defined(__TARGET_ARCH_x86)
+SEC("tp/syscalls/sys_enter_open")
+int handle_open(struct trace_event_raw_sys_enter *ctx) {
+	return emit_open((const char *)ctx->args[0], (long)ctx->args[1]);
+}
+#endif
 
 // Process (thread-group-leader) exit: bounds the process lifetime so the
 // correlation engine can close time windows and resist pid reuse. Also frees any
@@ -386,10 +403,9 @@ int handle_rename_plain(struct trace_event_raw_sys_enter *ctx) {
 	return 0;
 }
 
-SEC("tp/syscalls/sys_enter_unlinkat")
-int handle_unlink(struct trace_event_raw_sys_enter *ctx) {
+static __always_inline int emit_unlink(const char *path) {
 	char pfx[8] = {};
-	bpf_probe_read_user(pfx, sizeof(pfx), (void *)ctx->args[1]); // pathname
+	bpf_probe_read_user(pfx, sizeof(pfx), path);
 	if (noise_file_prefix(pfx))
 		return 0;
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
@@ -403,10 +419,22 @@ int handle_unlink(struct trace_event_raw_sys_enter *ctx) {
 	fill_common(e);
 	e->args[0] = 0;
 	e->exit_code = 0;
-	bpf_probe_read_user_str(&e->path, sizeof(e->path), (void *)ctx->args[1]);
+	bpf_probe_read_user_str(&e->path, sizeof(e->path), path);
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }
+
+SEC("tp/syscalls/sys_enter_unlinkat")
+int handle_unlink(struct trace_event_raw_sys_enter *ctx) {
+	return emit_unlink((const char *)ctx->args[1]);
+}
+
+#if defined(__TARGET_ARCH_x86)
+SEC("tp/syscalls/sys_enter_unlink")
+int handle_unlink_plain(struct trace_event_raw_sys_enter *ctx) {
+	return emit_unlink((const char *)ctx->args[0]);
+}
+#endif
 
 // Universal DNS: a UDP query to port 53 carries the DNS message in the sendto
 // buffer. We copy the raw bytes (exit_code = length) and parse the qname in
@@ -507,6 +535,22 @@ int BPF_UPROBE(handle_ssl_write, void *ssl, const void *buf, int num) {
 	emit_ssl_chunks(EVENT_SSL, (__u64)ssl, (const char *)buf, num);
 	return 0;
 }
+
+#if defined(__TARGET_ARCH_x86)
+// Go ABIInternal on amd64 passes (*Conn, []byte) in AX, BX, CX, DI.
+// System V C uses DI, SI, DX, so the OpenSSL uprobe cannot be reused here.
+// Entry only: Go goroutine stack movement makes uretprobes unsafe.
+SEC("uprobe/go_tls_write")
+int handle_go_tls_write(struct pt_regs *ctx) {
+	__u64 conn = ctx->ax;
+	const char *buf = (const char *)ctx->bx;
+	__u64 len = ctx->cx;
+	if (!buf || len == 0 || len > (1u << 20))
+		return 0;
+	emit_ssl_chunks(EVENT_SSL, conn, buf, (int)len);
+	return 0;
+}
+#endif
 
 // SSL_write_ex(ssl, buf, num, *written): the size_t-taking variant modern
 // OpenSSL 3.x clients use (notably CPython's _ssl, which never calls SSL_write).

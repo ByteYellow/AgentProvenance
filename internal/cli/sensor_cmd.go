@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/byteyellow/agentprovenance/internal/daemon"
@@ -74,10 +75,16 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 			// this never races a fast workload past a not-yet-attached sensor. The
 			// pre-attach "capturing" banner is human-facing only.
 			stderr := cmd.ErrOrStderr()
+			resolvedSSLLib := sslLib
+			if resolvedSSLLib == "" {
+				resolvedSSLLib = os.Getenv("AGENTPROV_SSL_LIB")
+			}
 			go func() {
 				sensorErr := sensor.RunWithOptions(pw, sensor.Options{
-					SSLLib:  sslLib,
-					OnReady: func() { fmt.Fprintln(stderr, "agentprov sensor stream: ready probes-attached") },
+					SSLLib:   resolvedSSLLib,
+					GoTLSBin: os.Getenv("AGENTPROV_GO_TLS_BIN"),
+					LibcLib:  os.Getenv("AGENTPROV_LIBC_LIB"),
+					OnReady:  func() { fmt.Fprintln(stderr, "agentprov sensor stream: ready probes-attached") },
 				})
 				_ = pw.CloseWithError(sensorErr)
 				errCh <- sensorErr
@@ -86,6 +93,13 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 			fmt.Fprintln(stderr, "agentprov sensor stream: capturing kernel telemetry -> store (ctrl-c to stop)")
 			result, ingErr := telemetry.IngestJSONLReader(db, ingOpts, pr)
 			sensorErr := <-errCh
+			for i, message := range result.Errors {
+				if i == 10 {
+					fmt.Fprintf(stderr, "agentprov sensor stream: %d additional ingest errors\n", len(result.Errors)-i)
+					break
+				}
+				fmt.Fprintf(stderr, "agentprov sensor stream: %s\n", message)
+			}
 			if sensorErr != nil {
 				return sensorErr
 			}

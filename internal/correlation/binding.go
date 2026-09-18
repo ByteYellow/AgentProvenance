@@ -272,18 +272,6 @@ func resolveByProcess(db *sql.DB, runID, processID string) (Match, bool, error) 
 // open binding. Tune via this var if the deployment's scope lifetimes differ.
 var MaxOpenBindingAge = 24 * time.Hour
 
-// openBindingLowerBound returns the earliest started_at an open binding may have
-// to still match an event observed at `at`. On an unparseable timestamp it
-// returns "" (every RFC3339 value is lexically >= ""), preserving the legacy
-// unbounded-open behavior rather than silently dropping matches.
-func openBindingLowerBound(at string) string {
-	t, err := time.Parse(time.RFC3339Nano, at)
-	if err != nil {
-		return ""
-	}
-	return t.Add(-MaxOpenBindingAge).UTC().Format(time.RFC3339Nano)
-}
-
 const bindingColumns = `id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence`
 
 // resolveWindow runs a time-windowed binding lookup, shared by the
@@ -306,19 +294,53 @@ func resolveWindow(db *sql.DB, runID, method, source, matchExpr string, confiden
 	}
 	sb.WriteString(matchExpr)
 	args = append(args, matchArgs...)
-	sb.WriteString(" AND started_at <= ?")
-	args = append(args, at)
-	if boundOpen {
-		// Closed interval still covers `at`, or open but started within
-		// MaxOpenBindingAge of `at` (guards pid-reuse over-matching).
-		sb.WriteString(" AND ((ended_at != '' AND ended_at >= ?) OR (ended_at = '' AND started_at >= ?))")
-		args = append(args, at, openBindingLowerBound(at))
-	} else {
-		sb.WriteString(" AND (ended_at = '' OR ended_at >= ?)")
-		args = append(args, at)
+	// RFC3339Nano strings are not ordered chronologically (whole seconds,
+	// fractional precision and timezone offsets all differ). Keep raw binding
+	// timestamps intact for evidence export; compare only identity candidates
+	// as parsed instants, including nanosecond boundaries and latest-start wins.
+	instant, err := time.Parse(time.RFC3339Nano, at)
+	if err != nil {
+		return Match{}, false, fmt.Errorf("invalid event timestamp: %w", err)
 	}
-	sb.WriteString(" ORDER BY started_at DESC LIMIT 1")
-	return scanOne(db, method, source, confidence, sb.String(), args...)
+	rows, err := db.Query(sb.String(), args...)
+	if err != nil {
+		return Match{}, false, err
+	}
+	defer rows.Close()
+	var best Binding
+	var latest time.Time
+	found := false
+	for rows.Next() {
+		var item Binding
+		if err := rows.Scan(&item.ID, &item.RunID, &item.SessionID, &item.AttemptID, &item.ToolCallID, &item.ProcessID, &item.ContainerID, &item.CgroupID, &item.RootPID, &item.PID, &item.StartedAt, &item.EndedAt, &item.BindingSource, &item.Confidence); err != nil {
+			return Match{}, false, err
+		}
+		start, err := time.Parse(time.RFC3339Nano, item.StartedAt)
+		if err != nil || start.After(instant) {
+			continue
+		}
+		if item.EndedAt != "" {
+			end, err := time.Parse(time.RFC3339Nano, item.EndedAt)
+			if err != nil || end.Before(instant) {
+				continue
+			}
+		} else if boundOpen && start.Before(instant.Add(-MaxOpenBindingAge)) {
+			continue
+		}
+		if !found || start.After(latest) {
+			best, latest, found = item, start, true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return Match{}, false, err
+	}
+	if !found {
+		return Match{}, false, nil
+	}
+	if best.Confidence > 0 && best.Confidence < confidence {
+		confidence = best.Confidence
+	}
+	return Match{Binding: best, Method: method + ":" + source, Confidence: confidence}, true, nil
 }
 
 func resolveByCgroup(db *sql.DB, runID, cgroupID, at string) (Match, bool, error) {

@@ -906,7 +906,7 @@ pod/container 元数据和主机 cgroup 身份；它不要求对负载做任何�
 |---|---|
 | 零 SDK record | `record -- <cmd>` 对工作目录做快照、采样进程树、捕获文件差异 + 运行时证据，不需要 SDK |
 | 批量记录器 | `record batch` 为 RL/benchmark 流水线并行记录大量作业 |
-| 自研 eBPF 传感器 | `agentprov-sensor`（Linux/arm64）：exec+argv、connect、文件写入 + 敏感**读取** → `secret_path`、process_exit、提权（setuid/setgid/ptrace）、篡改（rename/unlink）、TLS 明文（通过分块的 `SSL_write`/`SSL_read` 和新式 `SSL_write_ex`/`SSL_read_ex` 拿到完整请求/响应体；Go `crypto/tls` 的请求/写入路径经由 `AGENTPROV_GO_TLS_BIN`）、DNS —— 内核侧噪声过滤，已实机验证 |
+| 自研 eBPF 传感器 | `agentprov-sensor`（Linux/amd64 + arm64）：exec+argv、connect、文件写入 + 敏感**读取** → `secret_path`、process_exit、提权（setuid/setgid/ptrace）、篡改（rename/unlink）、TLS 明文（通过分块的 `SSL_write`/`SSL_read` 和新式 `SSL_write_ex`/`SSL_read_ex` 拿到完整请求/响应体；Go `crypto/tls` 的请求/写入路径经由 `AGENTPROV_GO_TLS_BIN`）、DNS —— 内核侧噪声过滤，已实机验证 |
 | LLM 意图捕获 | `internal/tlsintent` 把传感器的 TLS 分块重组成完整的 HTTP/1.1 消息（Content-Length、chunked 和 SSE 流式体）和 HTTP/2 消息（帧 + HPACK + 流解复用），然后跨 Anthropic/OpenAI 形态解析 LLM 语义 —— 模型、提供的工具、工具调用 + 模型决定要跑的 shell 命令、停止原因 |
 | 证据摄取 | Falco / Tetragon / LoongCollector JSONL + 自研传感器 → 归一化事件；经 schema 校验，原始 payload 中的应用上下文会被拒收，分页并带完整性哈希 |
 
@@ -1120,7 +1120,7 @@ internal/cli/         命令解析与输出
 internal/launch/      一条命令的 porcelain 入口（`launch -- <agent>`）：作用域、dashboard、hooks overlay、传感器、诚实降级
 
 internal/record/      零 SDK 命令记录器
-internal/sensor/      原生 eBPF 传感器（exec/connect/文件/提权/篡改/TLS-body/DNS）；仅 Linux，arm64
+internal/sensor/      原生 eBPF 传感器（exec/connect/文件/提权/篡改/TLS-body/DNS）；仅 Linux，amd64 + arm64
 internal/producer/    生产者 profile（local-record / k8s-daemonset / microvm-guest-init）、被动 cgroup 作用域归属、K8s informer
 internal/tlsintent/   TLS 分块 -> 完整 HTTP 消息重组 + LLM 请求/响应语义
 internal/telemetry/   归一化运行时事件 schema、JSONL 摄取、TLS HTTP 元数据、关联输入
@@ -1229,18 +1229,21 @@ Phase 6 大部分已落地（Web dashboard、保留策略、内容寻址存储�
 
 接下来 / 未完成：
 
-- **传感器广度** —— 通用 DNS（musl / 裸 UDP:53，或一个 `udp_sendmsg` kprobe；
-  目前 `getaddrinfo` 覆盖 glibc）、IPv6/UDP connect，以及多架构
-  （x86 `PT_REGS`；目前仅 arm64）。`ptrace` 能被捕获，但还没有端到端测试跑过。
+- **传感器广度** —— 更多 DNS 传输方式及 IPv6/UDP connect。amd64 实机验收已覆盖
+  glibc 与 UDP/sendto DNS、权限调用尝试、传统 open/unlink、C uprobe 以及
+  Go ABIInternal，实测范围见 [amd64/KVM/K3s 部署与验收](docs/amd64-kvm-k3s.md)。
 - **TLS 广度** —— Go `crypto/tls` 的响应/读取路径、BoringSSL、静态链接 TLS，
-  以及 x86 uprobe 验证。OpenSSL 动态链接客户端已由
+  以及 strip 后的 Go 二进制。OpenSSL 动态链接客户端已由
   `SSL_write`/`SSL_read` 和 `SSL_write_ex`/`SSL_read_ex` 覆盖；Go `crypto/tls`
-  的请求/写入捕获在未 strip 的 arm64 二进制上是部分覆盖；HTTP/1.1 和
+  的请求/写入捕获在未 strip 的 amd64/arm64 二进制上是部分覆盖；HTTP/1.1 和
   HTTP/2/HPACK 重组已实现。
 - **防篡改（v2）** —— 离机 / 捕获时签名（KMS / TPM / 透明日志）。v1 是完整性
   加可选本地签名，**不是**针对 host-root 攻击者的证明。
 - **Deploy 3** —— 中心化证据服务，带进程级数据面隔离和 authz/scope。
 - **通知** —— 飞书 / 钉钉 / webhook 响应 hook。
+
+Linux amd64 已有独立 eBPF 对象，以及真实 KVM/K3s 验收路径；原有 ARM64 对象
+保持不变。安装和验证步骤见 [amd64/KVM/K3s 部署与验收](docs/amd64-kvm-k3s.md)。
 
 ## 开发
 
