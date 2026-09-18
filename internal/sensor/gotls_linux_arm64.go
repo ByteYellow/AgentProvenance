@@ -1,9 +1,11 @@
 package sensor
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/link"
 )
 
 func eventTimestamp(_ sensorbpfSensorEvent) string {
@@ -14,4 +16,11 @@ func goTLSWriteProgram(objs *sensorbpfObjects) *ebpf.Program {
 	return objs.HandleSslWrite
 }
 
+// Keep the already validated arm64 object and its map layout unchanged.
+func configureCgroupResolver(_ *cgroupResolver, _ *sensorbpfObjects) {}
+
 func archTracepoints(_ *sensorbpfObjects) []sensorTracepoint { return nil }
+
+func attachGoTLSRead(_ *link.Executable, _ string, _ *sensorbpfObjects) ([]link.Link, error) {
+	return nil, fmt.Errorf("Go TLS Read is unsupported by the preserved arm64 sensor object")
+}

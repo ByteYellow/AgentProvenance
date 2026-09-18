@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -14,6 +15,9 @@ import (
 func main() {
 	if len(os.Args) != 3 {
 		panic("usage: tls-client URL MARKER")
+	}
+	if delay, _ := strconv.Atoi(os.Getenv("AGENTPROV_TLS_START_DELAY_SECONDS")); delay > 0 {
+		time.Sleep(time.Duration(delay) * time.Second)
 	}
 	// The acceptance starts its own loopback TLS server with a temporary cert.
 	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{

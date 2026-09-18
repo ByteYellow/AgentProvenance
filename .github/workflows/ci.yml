@@ -80,15 +80,18 @@ jobs:
         run: GOTOOLCHAIN=local scripts/regen-sensor.sh --check
 
   sensor-live-amd64:
-    name: amd64 syscalls and TLS on a live kernel
+    name: amd64 syscalls and TLS (Go ${{ matrix.go }})
     runs-on: ubuntu-24.04
     needs: sensor-build
+    strategy:
+      matrix:
+        go: ["1.23.x", "1.26.x"]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23.x"
+          go-version: ${{ matrix.go }}
           cache: true
       - name: Install local TLS fixture dependencies
         run: |
@@ -108,10 +111,16 @@ jobs:
             --c-client /tmp/agentprov-live/c-client \
             --ssl-lib /usr/lib/x86_64-linux-gnu/libssl.so.3 \
             --pause-drain 1.5 --report /tmp/agentprov-live/acceptance.json
+      - name: Verify concurrent Go TLS reads across goroutine stack growth
+        run: |
+          go test -c -o /tmp/agentprov-live/sensor-test ./internal/sensor
+          cd internal/sensor
+          sudo env PATH="$PATH" AGENTPROV_LIVE_GOTLS=1 \
+            /tmp/agentprov-live/sensor-test -test.run '^TestLiveGoTLSReadConcurrentStackGrowth$' -test.v
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: amd64-live-evidence
+          name: amd64-live-evidence-go-${{ matrix.go }}
           path: /tmp/agentprov-live/acceptance.*
 
   phase1-acceptance:

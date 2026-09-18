@@ -70,9 +70,12 @@ type Message struct {
 // messages that became complete. It handles HTTP keep-alive (several messages on
 // one connection) by keeping the pipelined remainder after each complete message.
 type Reassembler struct {
-	streams  map[streamKey]*stream
-	h2Conns  map[connKey]struct{} // connections seen to speak h2 (client preface)
-	MaxBytes int                  // per-stream buffer cap; 0 -> defaultMaxBytes
+	streams    map[streamKey]*stream
+	h2Conns    map[connKey]struct{} // connections seen to speak h2 (client preface)
+	MaxBytes   int                  // per-direction retained byte cap, including HTTP/2
+	MaxStreams int                  // active connection-directions; 0 -> 128
+	tick       uint64
+	loss       CaptureLoss
 }
 
 type streamKey struct {
@@ -91,6 +94,8 @@ type stream struct {
 	truncated bool
 	isH2      bool
 	h2        *h2Parser // set once the stream is known to be h2
+	lastUsed  uint64
+	exceeded  bool
 }
 
 const defaultMaxBytes = 1 << 20 // 1 MiB per stream
@@ -120,18 +125,29 @@ func (r *Reassembler) Add(c Chunk) []Message {
 	// terminator), which otherwise sits buffered until process-exit Flush and is
 	// lost on a long-lived workload. Flush it here so the response isn't dropped.
 	var flushed []Message
-	if c.Direction == Request {
+	_, isHTTP2 := r.h2Conns[connKey{c.PID, c.Conn}]
+	if c.Direction == Request && !isHTTP2 {
 		flushed = r.flushDir(c.PID, c.Conn, Response)
 	}
 
 	k := streamKey{c.PID, c.Conn, c.Direction}
 	s := r.streams[k]
 	if s == nil {
+		for len(r.streams) >= r.streamLimit() {
+			r.evictOldest()
+		}
 		s = &stream{}
 		r.streams[k] = s
 	}
+	r.tick++
+	s.lastUsed = r.tick
+	if s.exceeded {
+		r.loss.Bytes += uint64(len(c.Data))
+		return flushed
+	}
 	if c.Truncated {
 		s.truncated = true
+		r.loss.Streams++ // The missing byte count is unknown at this boundary.
 	}
 
 	// h2 detection: the client preface on the request stream marks the whole
@@ -152,25 +168,45 @@ func (r *Reassembler) Add(c Chunk) []Message {
 	if s.isH2 {
 		if s.h2 == nil {
 			s.h2 = newH2Parser(c.Direction)
+			s.h2.maxBytes = r.byteLimit()
 		}
+		defer func() {
+			r.loss.Streams += s.h2.loss.Streams
+			r.loss.Bytes += s.h2.loss.Bytes
+			s.h2.loss = CaptureLoss{}
+		}()
 		// Hand over any bytes buffered before detection, then this chunk.
 		if s.buf.Len() > 0 {
 			pre := append([]byte(nil), s.buf.Bytes()...)
-			s.buf.Reset()
-			out := s.h2.consume(pre, c.PID, c.Conn)
-			return append(flushed, append(out, s.h2.consume(c.Data, c.PID, c.Conn)...)...)
+			s.buf = bytes.Buffer{}
+			out := append(s.h2.consume(pre, c.PID, c.Conn), s.h2.consume(c.Data, c.PID, c.Conn)...)
+			if s.truncated {
+				for i := range out {
+					out[i].Truncated = true
+				}
+			}
+			return append(flushed, out...)
 		}
-		return append(flushed, s.h2.consume(c.Data, c.PID, c.Conn)...)
+		out := s.h2.consume(c.Data, c.PID, c.Conn)
+		if s.truncated {
+			for i := range out {
+				out[i].Truncated = true
+			}
+		}
+		return append(flushed, out...)
 	}
 
-	max := r.MaxBytes
-	if max <= 0 {
-		max = defaultMaxBytes
-	}
-	if s.buf.Len() < max {
-		s.buf.Write(c.Data)
+	max := r.byteLimit()
+	remaining := max - s.buf.Len()
+	if remaining < len(c.Data) {
+		if remaining > 0 {
+			s.buf.Write(c.Data[:remaining])
+		}
+		s.truncated, s.exceeded = true, true
+		r.loss.Streams++
+		r.loss.Bytes += uint64(len(c.Data) - remaining)
 	} else {
-		s.truncated = true
+		s.buf.Write(c.Data)
 	}
 
 	var out []Message
@@ -217,6 +253,7 @@ func (r *Reassembler) flushDir(pid uint32, conn uint64, dir string) []Message {
 		return out
 	}
 	if s.buf.Len() == 0 {
+		delete(r.streams, k)
 		return nil
 	}
 	if msg, ok := parseBestEffort(pid, conn, dir, s.buf.Bytes(), s.isH2); ok {
@@ -401,7 +438,7 @@ func dechunk(raw []byte) (body []byte, consumed int, done bool) {
 			}
 			return out.Bytes(), pos + end + 2, true
 		}
-		if pos+int(size)+2 > len(raw) {
+		if len(raw)-pos < 2 || size > int64(len(raw)-pos-2) {
 			return nil, 0, false // chunk data + trailing CRLF not fully arrived
 		}
 		out.Write(raw[pos : pos+int(size)])

@@ -2,7 +2,9 @@ package k8sinformer
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -48,6 +50,10 @@ type queueItem struct {
 	Key     string
 	UID     string
 	Deleted bool
+	// The informer cache removes a deleted Pod before its queued work runs.
+	// Retain only the deletion snapshot so a short-lived container can still
+	// publish its execution interval before closing the Pod's bindings.
+	DeletedPod *corev1.Pod
 }
 
 type Controller struct {
@@ -61,6 +67,7 @@ type Controller struct {
 	deleted     atomic.Int64
 	retried     atomic.Int64
 	failed      atomic.Int64
+	podLocks    podLocks
 }
 
 func New(client kubernetes.Interface, opts Options) (*Controller, error) {
@@ -101,18 +108,16 @@ func New(client kubernetes.Interface, opts Options) (*Controller, error) {
 		opts:     opts,
 		informer: informer,
 		queue: workqueue.NewTypedRateLimitingQueueWithConfig(
-			workqueue.DefaultTypedControllerRateLimiter[queueItem](),
+			// Host cgroup discovery refreshes once per second. Millisecond
+			// retries exhaust the budget before that snapshot can change.
+			workqueue.NewTypedItemExponentialFailureRateLimiter[queueItem](time.Second, 30*time.Second),
 			workqueue.TypedRateLimitingQueueConfig[queueItem]{Name: opts.QueueName},
 		),
 	}
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) { c.enqueue(obj, false) },
-		UpdateFunc: func(oldObj, newObj any) {
-			oldPod, oldOK := oldObj.(*corev1.Pod)
-			newPod, newOK := newObj.(*corev1.Pod)
-			if oldOK && newOK && oldPod.ResourceVersion == newPod.ResourceVersion {
-				return
-			}
+		UpdateFunc: func(_, newObj any) {
+			// A same-version resync retries previously exhausted attribution.
 			c.enqueue(newObj, false)
 		},
 		DeleteFunc: func(obj any) { c.enqueue(obj, true) },
@@ -129,11 +134,17 @@ func (c *Controller) Run(ctx context.Context) error {
 		return fmt.Errorf("k8s informer: cache sync failed")
 	}
 	c.cacheSynced.Store(true)
+	var workers sync.WaitGroup
 	for i := 0; i < c.opts.Workers; i++ {
-		go c.worker(ctx)
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			c.worker(ctx)
+		}()
 	}
 	<-ctx.Done()
 	c.queue.ShutDown()
+	workers.Wait()
 	return nil
 }
 
@@ -161,7 +172,11 @@ func (c *Controller) enqueue(obj any, deleted bool) {
 		c.reportError("key", err)
 		return
 	}
-	c.queue.Add(queueItem{Key: key, UID: string(pod.UID), Deleted: deleted})
+	item := queueItem{Key: key, UID: string(pod.UID), Deleted: deleted}
+	if deleted {
+		item.DeletedPod = pod.DeepCopy()
+	}
+	c.queue.Add(item)
 	c.enqueued.Add(1)
 }
 
@@ -207,9 +222,23 @@ func (c *Controller) processNext(ctx context.Context) bool {
 }
 
 func (c *Controller) reconcile(ctx context.Context, item queueItem) error {
+	// Serialize cache lookup together with processing. Otherwise another
+	// worker could delete the Pod after a running snapshot was fetched, then
+	// the stale Upsert would reopen the deleted execution's binding.
+	unlock := c.podLocks.lock(item.UID)
+	defer unlock()
 	if item.Deleted {
+		var recoverErr error
+		if item.DeletedPod != nil {
+			recoverErr = c.opts.Reconciler.Upsert(ctx, item.DeletedPod)
+		}
 		if err := c.opts.Reconciler.Delete(ctx, item.Key, item.UID); err != nil {
-			return err
+			return errors.Join(recoverErr, err)
+		}
+		if recoverErr != nil {
+			// Known scopes are closed, but transient recovery failures must keep
+			// the final snapshot retryable. The persistent sink is idempotent.
+			return recoverErr
 		}
 		c.deleted.Add(1)
 		return nil
@@ -224,6 +253,9 @@ func (c *Controller) reconcile(ctx context.Context, item queueItem) error {
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
 		return fmt.Errorf("cache object %s is %T, want *corev1.Pod", item.Key, obj)
+	}
+	if string(pod.UID) != item.UID {
+		return nil // the name was reused by a different Pod
 	}
 	if err := c.opts.Reconciler.Upsert(ctx, pod.DeepCopy()); err != nil {
 		return err

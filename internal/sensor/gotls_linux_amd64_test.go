@@ -29,7 +29,7 @@ func TestAMD64ObjectContainsSeparateGoABIProbe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"handle_go_tls_write", "handle_ssl_write", "handle_ssl_read_exit", "handle_getaddrinfo"} {
+	for _, name := range []string{"handle_go_tls_write", "handle_go_tls_read_enter", "handle_go_tls_read_return", "handle_ssl_write", "handle_ssl_read_exit", "handle_getaddrinfo"} {
 		if spec.Programs[name] == nil {
 			t.Fatalf("amd64 object lacks %s", name)
 		}

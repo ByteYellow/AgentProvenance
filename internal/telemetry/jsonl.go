@@ -672,10 +672,11 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 	case "resource_pressure":
 		event.EventType = "resource_pressure"
 		event.Payload = mustJSON(map[string]any{
-			"resource":      firstNonEmpty(stringAt(raw, "resource"), "sensor_ringbuf"),
-			"signal":        firstNonEmpty(stringAt(raw, "signal"), "event_drop"),
-			"dropped":       intAt(raw, "dropped"),
-			"dropped_delta": intAt(raw, "dropped_delta"),
+			"resource":            firstNonEmpty(stringAt(raw, "resource"), "sensor_ringbuf"),
+			"signal":              firstNonEmpty(stringAt(raw, "signal"), "event_drop"),
+			"dropped":             intAt(raw, "dropped"),
+			"dropped_delta":       intAt(raw, "dropped_delta"),
+			"dropped_bytes_delta": intAt(raw, "dropped_bytes_delta"),
 		})
 	case "tls_write":
 		event.EventType = "tls_write"
@@ -704,6 +705,9 @@ func sslPayload(raw map[string]any, comm, direction string) string {
 		"preview":        truncatePreview(data, 80),
 		"length":         intAt(raw, "length"),
 		"comm":           comm,
+	}
+	if truncated, _ := raw["truncated"].(bool); truncated {
+		payload["truncated"] = true
 	}
 	if m := stringAt(raw, "model"); m != "" {
 		payload["model"] = m

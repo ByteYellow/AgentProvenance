@@ -14,6 +14,21 @@ import (
 
 type sensorbpfArgvVal struct{ Args [512]uint8 }
 
+type sensorbpfCgroupIdentity struct{ Names [3][96]int8 }
+
+type sensorbpfGoReadCtx struct {
+	Conn           uint64
+	Buf            uint64
+	Len            uint64
+	StackBufOffset uint64
+}
+
+type sensorbpfGoReadKey struct {
+	Process   uint64
+	Goroutine uint64
+	Frame     uint64
+}
+
 type sensorbpfSensorEvent struct {
 	Kind     uint32
 	Pid      uint32
@@ -84,40 +99,45 @@ type sensorbpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type sensorbpfProgramSpecs struct {
-	HandleConnect        *ebpf.ProgramSpec `ebpf:"handle_connect"`
-	HandleExec           *ebpf.ProgramSpec `ebpf:"handle_exec"`
-	HandleExecve         *ebpf.ProgramSpec `ebpf:"handle_execve"`
-	HandleExit           *ebpf.ProgramSpec `ebpf:"handle_exit"`
-	HandleGetaddrinfo    *ebpf.ProgramSpec `ebpf:"handle_getaddrinfo"`
-	HandleGoTlsWrite     *ebpf.ProgramSpec `ebpf:"handle_go_tls_write"`
-	HandleOpen           *ebpf.ProgramSpec `ebpf:"handle_open"`
-	HandleOpenat         *ebpf.ProgramSpec `ebpf:"handle_openat"`
-	HandlePtrace         *ebpf.ProgramSpec `ebpf:"handle_ptrace"`
-	HandleRename         *ebpf.ProgramSpec `ebpf:"handle_rename"`
-	HandleRenamePlain    *ebpf.ProgramSpec `ebpf:"handle_rename_plain"`
-	HandleSendto         *ebpf.ProgramSpec `ebpf:"handle_sendto"`
-	HandleSetgid         *ebpf.ProgramSpec `ebpf:"handle_setgid"`
-	HandleSetuid         *ebpf.ProgramSpec `ebpf:"handle_setuid"`
-	HandleSslReadEnter   *ebpf.ProgramSpec `ebpf:"handle_ssl_read_enter"`
-	HandleSslReadExEnter *ebpf.ProgramSpec `ebpf:"handle_ssl_read_ex_enter"`
-	HandleSslReadExExit  *ebpf.ProgramSpec `ebpf:"handle_ssl_read_ex_exit"`
-	HandleSslReadExit    *ebpf.ProgramSpec `ebpf:"handle_ssl_read_exit"`
-	HandleSslWrite       *ebpf.ProgramSpec `ebpf:"handle_ssl_write"`
-	HandleSslWriteEx     *ebpf.ProgramSpec `ebpf:"handle_ssl_write_ex"`
-	HandleUnlink         *ebpf.ProgramSpec `ebpf:"handle_unlink"`
-	HandleUnlinkPlain    *ebpf.ProgramSpec `ebpf:"handle_unlink_plain"`
+	HandleConnect         *ebpf.ProgramSpec `ebpf:"handle_connect"`
+	HandleExec            *ebpf.ProgramSpec `ebpf:"handle_exec"`
+	HandleExecve          *ebpf.ProgramSpec `ebpf:"handle_execve"`
+	HandleExit            *ebpf.ProgramSpec `ebpf:"handle_exit"`
+	HandleGetaddrinfo     *ebpf.ProgramSpec `ebpf:"handle_getaddrinfo"`
+	HandleGoTlsReadEnter  *ebpf.ProgramSpec `ebpf:"handle_go_tls_read_enter"`
+	HandleGoTlsReadReturn *ebpf.ProgramSpec `ebpf:"handle_go_tls_read_return"`
+	HandleGoTlsWrite      *ebpf.ProgramSpec `ebpf:"handle_go_tls_write"`
+	HandleOpen            *ebpf.ProgramSpec `ebpf:"handle_open"`
+	HandleOpenat          *ebpf.ProgramSpec `ebpf:"handle_openat"`
+	HandlePtrace          *ebpf.ProgramSpec `ebpf:"handle_ptrace"`
+	HandleRename          *ebpf.ProgramSpec `ebpf:"handle_rename"`
+	HandleRenamePlain     *ebpf.ProgramSpec `ebpf:"handle_rename_plain"`
+	HandleSendto          *ebpf.ProgramSpec `ebpf:"handle_sendto"`
+	HandleSetgid          *ebpf.ProgramSpec `ebpf:"handle_setgid"`
+	HandleSetuid          *ebpf.ProgramSpec `ebpf:"handle_setuid"`
+	HandleSslReadEnter    *ebpf.ProgramSpec `ebpf:"handle_ssl_read_enter"`
+	HandleSslReadExEnter  *ebpf.ProgramSpec `ebpf:"handle_ssl_read_ex_enter"`
+	HandleSslReadExExit   *ebpf.ProgramSpec `ebpf:"handle_ssl_read_ex_exit"`
+	HandleSslReadExit     *ebpf.ProgramSpec `ebpf:"handle_ssl_read_exit"`
+	HandleSslWrite        *ebpf.ProgramSpec `ebpf:"handle_ssl_write"`
+	HandleSslWriteEx      *ebpf.ProgramSpec `ebpf:"handle_ssl_write_ex"`
+	HandleUnlink          *ebpf.ProgramSpec `ebpf:"handle_unlink"`
+	HandleUnlinkPlain     *ebpf.ProgramSpec `ebpf:"handle_unlink_plain"`
 }
 
 // sensorbpfMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type sensorbpfMapSpecs struct {
-	ArgvBuild     *ebpf.MapSpec `ebpf:"argv_build"`
-	ArgvScratch   *ebpf.MapSpec `ebpf:"argv_scratch"`
-	Drops         *ebpf.MapSpec `ebpf:"drops"`
-	Events        *ebpf.MapSpec `ebpf:"events"`
-	SslReadBufs   *ebpf.MapSpec `ebpf:"ssl_read_bufs"`
-	SslReadExBufs *ebpf.MapSpec `ebpf:"ssl_read_ex_bufs"`
+	ArgvBuild         *ebpf.MapSpec `ebpf:"argv_build"`
+	ArgvScratch       *ebpf.MapSpec `ebpf:"argv_scratch"`
+	CgroupNameScratch *ebpf.MapSpec `ebpf:"cgroup_name_scratch"`
+	CgroupNames       *ebpf.MapSpec `ebpf:"cgroup_names"`
+	Drops             *ebpf.MapSpec `ebpf:"drops"`
+	Events            *ebpf.MapSpec `ebpf:"events"`
+	GoReadBufs        *ebpf.MapSpec `ebpf:"go_read_bufs"`
+	SslReadBufs       *ebpf.MapSpec `ebpf:"ssl_read_bufs"`
+	SslReadExBufs     *ebpf.MapSpec `ebpf:"ssl_read_ex_bufs"`
 }
 
 // sensorbpfObjects contains all objects after they have been loaded into the kernel.
@@ -139,20 +159,26 @@ func (o *sensorbpfObjects) Close() error {
 //
 // It can be passed to loadSensorbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type sensorbpfMaps struct {
-	ArgvBuild     *ebpf.Map `ebpf:"argv_build"`
-	ArgvScratch   *ebpf.Map `ebpf:"argv_scratch"`
-	Drops         *ebpf.Map `ebpf:"drops"`
-	Events        *ebpf.Map `ebpf:"events"`
-	SslReadBufs   *ebpf.Map `ebpf:"ssl_read_bufs"`
-	SslReadExBufs *ebpf.Map `ebpf:"ssl_read_ex_bufs"`
+	ArgvBuild         *ebpf.Map `ebpf:"argv_build"`
+	ArgvScratch       *ebpf.Map `ebpf:"argv_scratch"`
+	CgroupNameScratch *ebpf.Map `ebpf:"cgroup_name_scratch"`
+	CgroupNames       *ebpf.Map `ebpf:"cgroup_names"`
+	Drops             *ebpf.Map `ebpf:"drops"`
+	Events            *ebpf.Map `ebpf:"events"`
+	GoReadBufs        *ebpf.Map `ebpf:"go_read_bufs"`
+	SslReadBufs       *ebpf.Map `ebpf:"ssl_read_bufs"`
+	SslReadExBufs     *ebpf.Map `ebpf:"ssl_read_ex_bufs"`
 }
 
 func (m *sensorbpfMaps) Close() error {
 	return _SensorbpfClose(
 		m.ArgvBuild,
 		m.ArgvScratch,
+		m.CgroupNameScratch,
+		m.CgroupNames,
 		m.Drops,
 		m.Events,
+		m.GoReadBufs,
 		m.SslReadBufs,
 		m.SslReadExBufs,
 	)
@@ -162,28 +188,30 @@ func (m *sensorbpfMaps) Close() error {
 //
 // It can be passed to loadSensorbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type sensorbpfPrograms struct {
-	HandleConnect        *ebpf.Program `ebpf:"handle_connect"`
-	HandleExec           *ebpf.Program `ebpf:"handle_exec"`
-	HandleExecve         *ebpf.Program `ebpf:"handle_execve"`
-	HandleExit           *ebpf.Program `ebpf:"handle_exit"`
-	HandleGetaddrinfo    *ebpf.Program `ebpf:"handle_getaddrinfo"`
-	HandleGoTlsWrite     *ebpf.Program `ebpf:"handle_go_tls_write"`
-	HandleOpen           *ebpf.Program `ebpf:"handle_open"`
-	HandleOpenat         *ebpf.Program `ebpf:"handle_openat"`
-	HandlePtrace         *ebpf.Program `ebpf:"handle_ptrace"`
-	HandleRename         *ebpf.Program `ebpf:"handle_rename"`
-	HandleRenamePlain    *ebpf.Program `ebpf:"handle_rename_plain"`
-	HandleSendto         *ebpf.Program `ebpf:"handle_sendto"`
-	HandleSetgid         *ebpf.Program `ebpf:"handle_setgid"`
-	HandleSetuid         *ebpf.Program `ebpf:"handle_setuid"`
-	HandleSslReadEnter   *ebpf.Program `ebpf:"handle_ssl_read_enter"`
-	HandleSslReadExEnter *ebpf.Program `ebpf:"handle_ssl_read_ex_enter"`
-	HandleSslReadExExit  *ebpf.Program `ebpf:"handle_ssl_read_ex_exit"`
-	HandleSslReadExit    *ebpf.Program `ebpf:"handle_ssl_read_exit"`
-	HandleSslWrite       *ebpf.Program `ebpf:"handle_ssl_write"`
-	HandleSslWriteEx     *ebpf.Program `ebpf:"handle_ssl_write_ex"`
-	HandleUnlink         *ebpf.Program `ebpf:"handle_unlink"`
-	HandleUnlinkPlain    *ebpf.Program `ebpf:"handle_unlink_plain"`
+	HandleConnect         *ebpf.Program `ebpf:"handle_connect"`
+	HandleExec            *ebpf.Program `ebpf:"handle_exec"`
+	HandleExecve          *ebpf.Program `ebpf:"handle_execve"`
+	HandleExit            *ebpf.Program `ebpf:"handle_exit"`
+	HandleGetaddrinfo     *ebpf.Program `ebpf:"handle_getaddrinfo"`
+	HandleGoTlsReadEnter  *ebpf.Program `ebpf:"handle_go_tls_read_enter"`
+	HandleGoTlsReadReturn *ebpf.Program `ebpf:"handle_go_tls_read_return"`
+	HandleGoTlsWrite      *ebpf.Program `ebpf:"handle_go_tls_write"`
+	HandleOpen            *ebpf.Program `ebpf:"handle_open"`
+	HandleOpenat          *ebpf.Program `ebpf:"handle_openat"`
+	HandlePtrace          *ebpf.Program `ebpf:"handle_ptrace"`
+	HandleRename          *ebpf.Program `ebpf:"handle_rename"`
+	HandleRenamePlain     *ebpf.Program `ebpf:"handle_rename_plain"`
+	HandleSendto          *ebpf.Program `ebpf:"handle_sendto"`
+	HandleSetgid          *ebpf.Program `ebpf:"handle_setgid"`
+	HandleSetuid          *ebpf.Program `ebpf:"handle_setuid"`
+	HandleSslReadEnter    *ebpf.Program `ebpf:"handle_ssl_read_enter"`
+	HandleSslReadExEnter  *ebpf.Program `ebpf:"handle_ssl_read_ex_enter"`
+	HandleSslReadExExit   *ebpf.Program `ebpf:"handle_ssl_read_ex_exit"`
+	HandleSslReadExit     *ebpf.Program `ebpf:"handle_ssl_read_exit"`
+	HandleSslWrite        *ebpf.Program `ebpf:"handle_ssl_write"`
+	HandleSslWriteEx      *ebpf.Program `ebpf:"handle_ssl_write_ex"`
+	HandleUnlink          *ebpf.Program `ebpf:"handle_unlink"`
+	HandleUnlinkPlain     *ebpf.Program `ebpf:"handle_unlink_plain"`
 }
 
 func (p *sensorbpfPrograms) Close() error {
@@ -193,6 +221,8 @@ func (p *sensorbpfPrograms) Close() error {
 		p.HandleExecve,
 		p.HandleExit,
 		p.HandleGetaddrinfo,
+		p.HandleGoTlsReadEnter,
+		p.HandleGoTlsReadReturn,
 		p.HandleGoTlsWrite,
 		p.HandleOpen,
 		p.HandleOpenat,

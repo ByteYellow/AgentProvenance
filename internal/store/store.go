@@ -12,7 +12,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 15
+const SchemaVersion = 16
 
 type Paths struct {
 	Root       string
@@ -427,6 +427,17 @@ func EnsureSchema(db *sql.DB) error {
 			updated_at TEXT NOT NULL,
 			PRIMARY KEY(run_id, session_id, tool_call_id, source, event_type, window_seconds, window_start)
 		);`,
+		`CREATE TABLE IF NOT EXISTS telemetry_native_rows (
+			batch_id TEXT NOT NULL,
+			line INTEGER NOT NULL,
+			outcome TEXT NOT NULL,
+			event_id TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY(batch_id, line)
+		);`,
+		`CREATE TABLE IF NOT EXISTS telemetry_native_counters (
+			name TEXT PRIMARY KEY,
+			value INTEGER NOT NULL DEFAULT 0
+		);`,
 		`CREATE TABLE IF NOT EXISTS record_batches (
 			id TEXT PRIMARY KEY,
 			input_sha256 TEXT NOT NULL DEFAULT '',
@@ -796,6 +807,12 @@ func EnsureSchema(db *sql.DB) error {
 		`ALTER TABLE baseline_profiles ADD COLUMN payload TEXT NOT NULL DEFAULT '{}';`,
 		`ALTER TABLE telemetry_spool_batches ADD COLUMN dropped_at TEXT NOT NULL DEFAULT '';`,
 		`ALTER TABLE telemetry_spool_batches ADD COLUMN drop_reason TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN native_options TEXT NOT NULL DEFAULT '{}';`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0;`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN retry_at INTEGER NOT NULL DEFAULT 0;`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN event_count INTEGER NOT NULL DEFAULT 0;`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN dropped_count INTEGER NOT NULL DEFAULT 0;`,
+		`CREATE INDEX IF NOT EXISTS idx_native_spool_ready ON telemetry_spool_batches(format, status, retry_at, created_at);`,
 		// Multi-agent orchestration: which agent/sub-agent ran a tool call (from
 		// the harness hooks bridge). Empty for main-thread / non-agent calls.
 		`ALTER TABLE tool_calls ADD COLUMN agent_id TEXT NOT NULL DEFAULT '';`,

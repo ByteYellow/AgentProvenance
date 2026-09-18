@@ -10,15 +10,6 @@ import (
 	"io"
 )
 
-// Options mirrors the Linux build's sensor options so callers compile on any
-// platform (see sensor_linux.go for the real fields).
-type Options struct {
-	SSLLib   string
-	GoTLSBin string
-	LibcLib  string
-	OnReady  func()
-}
-
 // RunWithOptions is unavailable off Linux (eBPF requires a Linux kernel).
 func RunWithOptions(_ io.Writer, _ Options) error {
 	return fmt.Errorf("agentprov sensor requires Linux amd64 or arm64 (eBPF)")

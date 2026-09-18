@@ -107,7 +107,8 @@ def main():
         port = server.server_port
         env = os.environ.copy()
         env.update(AGENTPROV_SSL_LIB=str(Path(args.ssl_lib).resolve()),
-                   AGENTPROV_GO_TLS_BIN=str(Path(args.go_client).resolve()))
+                   AGENTPROV_GO_TLS_BIN=str(Path(args.go_client).resolve()),
+                   AGENTPROV_AUTO_TLS="false")
         events_path, error_path = root / "events.jsonl", root / "sensor.err"
         pids = {}
         with events_path.open("w") as out, error_path.open("w") as err:
@@ -178,7 +179,11 @@ def main():
         checks["dns_glibc_c_abi"] = any(row.get("pid") == pids["c-openssl-legacy"] and row.get("event_type") == "dns_query" and row.get("host") == "localhost" for row in rows)
         checks["dns_udp"] = any(row.get("host") == "agentprov.invalid" for row in worker_rows)
         for name, pid in pids.items():
-            for kind in (("tls_write",) if name == "go-abiinternal" else ("tls_write", "tls_read")):
+            directions = ("tls_write", "tls_read")
+            # Go Read return-site probes are currently supported on amd64.
+            if name == "go-abiinternal" and platform.machine() != "x86_64":
+                directions = ("tls_write",)
+            for kind in directions:
                 checks[f"{name}:{kind}"] = any(row.get("pid") == pid and row.get("event_type") == kind and name in row.get("data", "") for row in rows)
         checks["sensor_clean_exit"] = sensor.returncode == 0
         checks["no_tls_attach_warning"] = "not attached" not in error_path.read_text() and "partial TLS" not in error_path.read_text()

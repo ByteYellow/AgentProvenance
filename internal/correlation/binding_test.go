@@ -398,3 +398,37 @@ func TestResolveWindowComparesInstantsWithoutRewritingEvidence(t *testing.T) {
 		t.Fatalf("raw binding timestamp changed: %+v, %v", original, err)
 	}
 }
+
+func TestDelayedProcessExitDoesNotCloseReusedPID(t *testing.T) {
+	paths, err := store.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, binding := range []Binding{
+		{ID: "old-pid", PID: 42, StartedAt: "2026-09-19T00:00:00Z"},
+		{ID: "new-pid", PID: 42, StartedAt: "2026-09-19T08:00:00.100000001+08:00"},
+	} {
+		if _, err := RecordBinding(db, binding); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := CloseBindingByPID(db, 42, "2026-09-19T00:00:00.1Z"); err != nil {
+		t.Fatal(err)
+	}
+	old, _, err := GetBinding(db, "old-pid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, _, err := GetBinding(db, "new-pid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if old.EndedAt != "2026-09-19T00:00:00.1Z" || current.EndedAt != "" {
+		t.Fatalf("delayed exit old=%+v current=%+v", old, current)
+	}
+}

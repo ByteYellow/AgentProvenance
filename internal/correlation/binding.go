@@ -202,15 +202,51 @@ type bindingExecer interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
-func CloseBindingByPID(db bindingExecer, pid int64, endedAt string) error {
+type bindingPIDStore interface {
+	bindingExecer
+	Query(query string, args ...any) (*sql.Rows, error)
+}
+
+func CloseBindingByPID(db bindingPIDStore, pid int64, endedAt string) error {
 	if pid == 0 {
 		return nil
 	}
 	if endedAt == "" {
 		endedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
-	_, err := db.Exec(`UPDATE execution_context_bindings SET ended_at = ? WHERE pid = ? AND ended_at = ''`, endedAt, pid)
-	return err
+	ended, err := time.Parse(time.RFC3339Nano, endedAt)
+	if err != nil {
+		return fmt.Errorf("invalid process exit timestamp: %w", err)
+	}
+	rows, err := db.Query(`SELECT id, started_at FROM execution_context_bindings WHERE pid = ? AND ended_at = ''`, pid)
+	if err != nil {
+		return err
+	}
+	var candidates []string
+	for rows.Next() {
+		var id, startedAt string
+		if err := rows.Scan(&id, &startedAt); err != nil {
+			rows.Close()
+			return err
+		}
+		started, err := time.Parse(time.RFC3339Nano, startedAt)
+		// A delayed exit may be replayed after this PID has been reused. It
+		// cannot close an execution that started after the captured exit.
+		if err == nil && !started.After(ended) {
+			candidates = append(candidates, id)
+		}
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, id := range candidates {
+		if err := CloseBindingByID(db, id, endedAt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func Resolve(db *sql.DB, raw RawIdentity) (Match, bool, error) {

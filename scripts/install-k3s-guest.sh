@@ -5,7 +5,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [[ "$EUID" == 0 ]] || { echo 'run as root on the K3s node' >&2; exit 2; }
 AGENTPROV="${AGENTPROV:?set AGENTPROV to the static Linux CLI binary}"
-IMAGE="${AGENTPROV_CONTROLLER_IMAGE:-agentprov-controller:local}"
+# A changed binary must change the Pod template too: reusing :local with
+# IfNotPresent otherwise leaves the old informer running after an upgrade.
+BINARY_HASH="$(sha256sum "$AGENTPROV" | cut -c 1-12)"
+IMAGE="${AGENTPROV_CONTROLLER_IMAGE:-agentprov-controller:$BINARY_HASH}"
 systemctl is-active --quiet agentprov-sensor.service
 k3s kubectl wait --for=condition=Ready nodes --all --timeout=90s
 BUILD="$(mktemp -d)"
@@ -17,5 +20,8 @@ docker save "$IMAGE" | k3s ctr images import - >/dev/null
 sed "s#image: agentprov-controller:latest#image: $IMAGE#" \
   "$ROOT_DIR/deploy/k8s/agentprov-attribution-controller.yaml" >"$BUILD/controller.yaml"
 k3s kubectl apply -f "$BUILD/controller.yaml"
+if [[ -n "${AGENTPROV_CONTROLLER_IMAGE:-}" ]]; then
+  k3s kubectl rollout restart daemonset/agentprov-attribution-controller -n agentprov
+fi
 k3s kubectl rollout status daemonset/agentprov-attribution-controller -n agentprov --timeout=90s
 echo 'K3s attribution controller ready; annotate workloads with agentprov.io/run'

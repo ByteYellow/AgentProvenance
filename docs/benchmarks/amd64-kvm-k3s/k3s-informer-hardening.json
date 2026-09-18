@@ -1,0 +1,15 @@
+{
+  "schema_version": "agentprovenance.k8s_informer_acceptance/v1",
+  "generated_at": "2026-09-18T19:08:36.049512+00:00",
+  "run_id": "run-k8s-informer-40785",
+  "producer_profile": "k8s-daemonset",
+  "controller": "client-go-informer",
+  "client_go_version": "v0.32.0",
+  "initial_container_id": "containerd://603312cd458c799677897475c4b328388c963498d7deed9ff07e547dda4c20b2",
+  "restarted_container_id": "containerd://d7d86a72c1ab38a06000a0740854043432202cce558c4accb1c65ae3f5b7bba6",
+  "bindings_created": 2,
+  "bindings_closed": 2,
+  "restart_rebound": true,
+  "delete_closed": true,
+  "status_line": "k8s informer node=agentprov-kvm-amd64 synced=true enqueued=11 reconciled=10 retries=0 failed=0 bindings=2 active=0 closed=2 restarts=1 resolution_failures=0 attribution_p95_ms=4439.2"
+}

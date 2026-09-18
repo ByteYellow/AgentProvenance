@@ -4,6 +4,7 @@ package sensor
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -47,30 +49,11 @@ type sensorTracepoint struct {
 	prog        *ebpf.Program
 }
 
-// Options configures optional sensor probes beyond the always-on syscall set.
-type Options struct {
-	// SSLLib, when set, attaches SSL_write/read and SSL_write_ex/read_ex uprobes
-	// to this libssl path to capture TLS plaintext zero-instrumentation.
-	SSLLib string
-	// LibcLib overrides the libc path for the getaddrinfo DNS uprobe; empty =
-	// auto-detect the common system libc paths.
-	LibcLib string
-	// GoTLSBin, when set, attaches a uprobe to crypto/tls.(*Conn).Write in this Go
-	// binary to capture the request/prompt plaintext for Go agents, which use Go's
-	// own TLS (no libssl for the SSLLib uprobes to hook). Best-effort: a stripped
-	// binary (-ldflags "-s -w") has no symbol to attach.
-	GoTLSBin string
-	// OnReady, when set, is called exactly once after every probe has attached
-	// and the ring buffer reader is open -- i.e. the sensor is genuinely capturing
-	// and the caller may safely start the workload it wants observed. Supervisors
-	// (launch) gate their exec on this to avoid racing a fast agent past a
-	// not-yet-attached sensor. Callable from a goroutine; keep it non-blocking.
-	OnReady func()
-}
-
 // RunWithOptions loads the configured eBPF probes and writes normalized JSONL
 // telemetry until SIGINT/SIGTERM. It requires root or CAP_BPF + CAP_PERFMON.
-func RunWithOptions(out io.Writer, opts Options) error {
+func RunWithOptions(out io.Writer, opts Options) (runErr error) {
+	reporter := newCapabilityReporter(opts)
+	defer func() { reporter.finish(runErr) }()
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return fmt.Errorf("remove memlock: %w", err)
 	}
@@ -81,34 +64,36 @@ func RunWithOptions(out io.Writer, opts Options) error {
 	}
 	defer objs.Close()
 
-	tpExec, err := link.Tracepoint("sched", "sched_process_exec", objs.HandleExec, nil)
-	if err != nil {
-		return fmt.Errorf("attach sched_process_exec: %w", err)
+	var links []link.Link
+	defer func() {
+		for _, l := range links {
+			_ = l.Close()
+		}
+	}()
+	attach := func(p sensorTracepoint, required bool, category string) error {
+		probe := ProbeCapability{Name: p.group + "/" + p.name, Category: category, Required: required, Status: "attached"}
+		tp, err := link.Tracepoint(p.group, p.name, p.prog, nil)
+		if err != nil {
+			probe.Status = "failed"
+			probe.Reason = capabilityFailure(err)
+		} else {
+			links = append(links, tp)
+		}
+		reporter.add(probe)
+		return err
 	}
-	defer tpExec.Close()
-	tpExecve, err := link.Tracepoint("syscalls", "sys_enter_execve", objs.HandleExecve, nil)
-	if err != nil {
-		return fmt.Errorf("attach sys_enter_execve: %w", err)
+	for _, p := range []sensorTracepoint{
+		{"sched", "sched_process_exec", objs.HandleExec},
+		{"syscalls", "sys_enter_execve", objs.HandleExecve},
+		{"syscalls", "sys_enter_connect", objs.HandleConnect},
+		{"syscalls", "sys_enter_openat", objs.HandleOpenat},
+		{"sched", "sched_process_exit", objs.HandleExit},
+	} {
+		if err := attach(p, true, "syscall"); err != nil {
+			reporter.publish(false)
+			return fmt.Errorf("attach %s: %w", p.name, err)
+		}
 	}
-	defer tpExecve.Close()
-	tpConnect, err := link.Tracepoint("syscalls", "sys_enter_connect", objs.HandleConnect, nil)
-	if err != nil {
-		return fmt.Errorf("attach sys_enter_connect: %w", err)
-	}
-	defer tpConnect.Close()
-	tpOpen, err := link.Tracepoint("syscalls", "sys_enter_openat", objs.HandleOpenat, nil)
-	if err != nil {
-		return fmt.Errorf("attach sys_enter_openat: %w", err)
-	}
-	defer tpOpen.Close()
-	tpExit, err := link.Tracepoint("sched", "sched_process_exit", objs.HandleExit, nil)
-	if err != nil {
-		return fmt.Errorf("attach sched_process_exit: %w", err)
-	}
-	defer tpExit.Close()
-	// Privilege-change / tamper probes (privesc + file rename/delete). Each is a
-	// simple syscall tracepoint; attach failures are non-fatal so an older kernel
-	// missing one tracepoint still runs the rest.
 	for _, p := range append([]sensorTracepoint{
 		{"syscalls", "sys_enter_setuid", objs.HandleSetuid},
 		{"syscalls", "sys_enter_setgid", objs.HandleSetgid},
@@ -117,151 +102,147 @@ func RunWithOptions(out io.Writer, opts Options) error {
 		{"syscalls", "sys_enter_renameat", objs.HandleRename},
 		{"syscalls", "sys_enter_rename", objs.HandleRenamePlain},
 		{"syscalls", "sys_enter_unlinkat", objs.HandleUnlink},
-		{"syscalls", "sys_enter_sendto", objs.HandleSendto}, // universal DNS (UDP:53)
+		{"syscalls", "sys_enter_sendto", objs.HandleSendto},
 	}, archTracepoints(&objs)...) {
-		if tp, err := link.Tracepoint(p.group, p.name, p.prog, nil); err == nil {
-			defer tp.Close()
+		category := "syscall"
+		if p.name == "sys_enter_sendto" {
+			category = "dns"
 		}
+		_ = attach(p, false, category)
 	}
-	if opts.SSLLib != "" {
-		ex, err := link.OpenExecutable(opts.SSLLib)
-		if err != nil {
-			return fmt.Errorf("open ssl lib %s: %w", opts.SSLLib, err)
-		}
-
-		var attachErrs []string
-		attachedWrite := false
-		if up, err := ex.Uprobe("SSL_write", objs.HandleSslWrite, nil); err == nil {
-			defer up.Close()
-			attachedWrite = true
-		} else {
-			attachErrs = append(attachErrs, "SSL_write: "+err.Error())
-		}
-		if up, err := ex.Uprobe("SSL_write_ex", objs.HandleSslWriteEx, nil); err == nil {
-			defer up.Close()
-			attachedWrite = true
-		} else {
-			attachErrs = append(attachErrs, "SSL_write_ex: "+err.Error())
-		}
-
-		attachedRead := false
-		if upEnter, err := ex.Uprobe("SSL_read", objs.HandleSslReadEnter, nil); err == nil {
-			if upExit, err := ex.Uretprobe("SSL_read", objs.HandleSslReadExit, nil); err == nil {
-				defer upEnter.Close()
-				defer upExit.Close()
-				attachedRead = true
-			} else {
-				upEnter.Close()
-				attachErrs = append(attachErrs, "SSL_read return: "+err.Error())
-			}
-		} else {
-			attachErrs = append(attachErrs, "SSL_read: "+err.Error())
-		}
-
-		if upEnter, err := ex.Uprobe("SSL_read_ex", objs.HandleSslReadExEnter, nil); err == nil {
-			if upExit, err := ex.Uretprobe("SSL_read_ex", objs.HandleSslReadExExit, nil); err == nil {
-				defer upEnter.Close()
-				defer upExit.Close()
-				attachedRead = true
-			} else {
-				upEnter.Close()
-				attachErrs = append(attachErrs, "SSL_read_ex return: "+err.Error())
-			}
-		} else {
-			attachErrs = append(attachErrs, "SSL_read_ex: "+err.Error())
-		}
-
-		if !attachedWrite || !attachedRead {
-			return fmt.Errorf("attach OpenSSL TLS uprobes on %s: write=%v read=%v (%s)", opts.SSLLib, attachedWrite, attachedRead, strings.Join(attachErrs, "; "))
-		}
-		// A partial attach is non-fatal but silently loses a direction (e.g. a
-		// client that only calls SSL_read_ex would go dark if its return probe
-		// failed while SSL_read's succeeded). Surface it so it isn't a mystery.
-		if len(attachErrs) > 0 {
-			fmt.Fprintf(os.Stderr, "agentprov-sensor: partial TLS uprobe attach on %s: %s\n", opts.SSLLib, strings.Join(attachErrs, "; "))
-		}
-	}
-
-	// Go crypto/tls: Go agents use Go's own TLS stack (no libssl), so the SSLLib
-	// uprobes never fire for them. crypto/tls.(*Conn).Write(b []byte) holds the
-	// request/prompt plaintext in b at entry. Select the architecture's Go ABI
-	// program: arm64 can reuse the C registers, while amd64 requires AX/BX/CX. Entry
-	// uprobe only (the request path); no uretprobe, since Go's moving goroutine
-	// stacks make return probes unsafe. Best-effort and non-fatal: a stripped
-	// binary exposes no symbol to attach.
-	if opts.GoTLSBin != "" {
-		if ex, err := link.OpenExecutable(opts.GoTLSBin); err != nil {
-			fmt.Fprintf(os.Stderr, "agentprov-sensor: open go-tls bin %s: %v\n", opts.GoTLSBin, err)
-		} else if up, err := ex.Uprobe("crypto/tls.(*Conn).Write", goTLSWriteProgram(&objs), nil); err != nil {
-			fmt.Fprintf(os.Stderr, "agentprov-sensor: go-tls uprobe not attached (%v; stripped binary?)\n", err)
-		} else {
-			defer up.Close()
-		}
-	}
-
-	// DNS uprobe on the system libc's getaddrinfo (best-effort, non-fatal): gives
-	// egress the resolved HOSTNAME, not just the IP. Glibc apps only.
+	// DNS through libc is independent from the UDP syscall path. Record both
+	// capabilities: a working sendto probe does not prove libc coverage.
+	dns := ProbeCapability{Name: "getaddrinfo", Category: "dns", Status: "failed"}
+	var dnsErrors []string
 	for _, libc := range libcCandidates(opts.LibcLib) {
 		ex, err := link.OpenExecutable(libc)
-		if err != nil {
-			continue
+		if err == nil {
+			var up link.Link
+			up, err = ex.Uprobe("getaddrinfo", objs.HandleGetaddrinfo, nil)
+			if err == nil {
+				links = append(links, up)
+				dns.Status = "attached"
+				dns.Target = libc
+				break
+			}
 		}
-		if up, err := ex.Uprobe("getaddrinfo", objs.HandleGetaddrinfo, nil); err == nil {
-			defer up.Close()
-			break
-		}
+		dnsErrors = append(dnsErrors, libc+": "+capabilityFailure(err))
 	}
-
+	if dns.Status != "attached" {
+		dns.Reason = strings.Join(dnsErrors, "; ")
+	}
+	reporter.add(dns)
 	rd, err := ringbuf.NewReader(objs.Events)
 	if err != nil {
 		return fmt.Errorf("open ringbuf: %w", err)
 	}
 	defer rd.Close()
 
-	// All probes are attached and the ring buffer is open: the sensor is now
-	// genuinely capturing. Signal readiness so a supervisor can start its
-	// workload without racing a not-yet-attached sensor.
+	parent := opts.Context
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	stopReader := make(chan struct{})
+	defer close(stopReader)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = rd.Close()
+		case <-stopReader:
+		}
+	}()
+	// Run discovery separately from ring-buffer consumption. Its bounded first
+	// pass attaches configured targets before the workload readiness callback.
+	tlsCtx, stopTLS := context.WithCancel(ctx)
+	tlsDone := make(chan struct{})
+	initialized := make(chan struct{})
+	tlsWake := make(chan struct{}, 1)
+	go func() { defer close(tlsDone); runTLSDiscovery(tlsCtx, &objs, opts, reporter, initialized, tlsWake) }()
+	defer func() { stopTLS(); <-tlsDone }()
+	<-initialized
+	if ctx.Err() != nil {
+		return nil
+	}
+	reporter.publish(true)
 	if opts.OnReady != nil {
 		opts.OnReady()
 	}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sig
-		rd.Close()
-	}()
-
 	resolver := newCgroupResolver()
+	configureCgroupResolver(resolver, &objs)
 	enc := json.NewEncoder(out)
 	var encMu sync.Mutex
+	var writeErr error
 	emit := func(v any) {
 		encMu.Lock()
-		_ = enc.Encode(v)
-		encMu.Unlock()
+		defer encMu.Unlock()
+		if writeErr != nil {
+			return
+		}
+		if err := enc.Encode(v); err != nil {
+			writeErr = fmt.Errorf("write sensor event: %w", err)
+			_ = rd.Close()
+		}
 	}
 
 	// Surface ring-buffer drops as a coverage-gap event so a loaded sensor is
 	// never silently blind.
 	done := make(chan struct{})
-	defer close(done)
-	go watchDrops(objs.Drops, emit, done)
+	dropsDone := make(chan struct{})
+	defer func() { close(done); <-dropsDone }()
+	go func() { defer close(dropsDone); watchDrops(objs.Drops, emit, done) }()
 
 	// The SSL_write/read probes emit ordered TLS-plaintext chunks; reassemble them
 	// into complete HTTP/1.1 or HTTP/2/HPACK request/response messages before
 	// emitting.
 	reasm := tlsintent.NewReassembler()
+	var tlsLoss tlsintent.CaptureLoss
+	var lastTLSLossReport time.Time
+	reportTLSLoss := func(force bool) {
+		loss := reasm.TakeLoss()
+		tlsLoss.Streams += loss.Streams
+		tlsLoss.Bytes += loss.Bytes
+		if tlsLoss.Streams == 0 && tlsLoss.Bytes == 0 {
+			return
+		}
+		if !force && time.Since(lastTLSLossReport) < time.Second {
+			return
+		}
+		emit(map[string]any{
+			"source": "agentprov_ebpf", "event_type": "resource_pressure",
+			"resource": "sensor_tls_reassembly", "signal": "reassembly_limit",
+			"dropped_delta": tlsLoss.Streams, "dropped_bytes_delta": tlsLoss.Bytes,
+			"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+		})
+		tlsLoss = tlsintent.CaptureLoss{}
+		lastTLSLossReport = time.Now()
+	}
+	defer reportTLSLoss(true)
 	for {
 		rec, err := rd.Read()
 		if err != nil {
 			if errors.Is(err, ringbuf.ErrClosed) {
-				return nil
+				reportTLSLoss(true)
+				encMu.Lock()
+				err = writeErr
+				encMu.Unlock()
+				return err
 			}
-			continue
+			return fmt.Errorf("read sensor ring buffer: %w", err)
 		}
 		var e sensorbpfSensorEvent
 		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &e); err != nil {
 			continue
+		}
+		if opts.AutoTLS && e.Kind == eventExec {
+			// Coalesce process-start wakeups. Discovery has its own bounded rate
+			// and never blocks ring-buffer draining.
+			select {
+			case tlsWake <- struct{}{}:
+			default:
+			}
 		}
 		if e.Kind == eventSSL || e.Kind == eventSSLRead {
 			dir := tlsintent.Request
@@ -278,7 +259,14 @@ func RunWithOptions(out io.Writer, opts Options) error {
 			}) {
 				emit(tlsMessageMap(msg, e, resolver))
 			}
+			reportTLSLoss(false)
 			continue
+		}
+		if e.Kind == eventExit {
+			for _, msg := range reasm.FlushPID(e.Pid) {
+				emit(tlsMessageMap(msg, e, resolver))
+			}
+			reportTLSLoss(false)
 		}
 		if m := normalize(e, resolver); m != nil {
 			emit(m)
@@ -334,25 +322,26 @@ func watchDrops(m dropLookuper, emit func(any), done <-chan struct{}) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	var last uint64
+	poll := func() {
+		var n uint64
+		if err := m.Lookup(uint32(0), &n); err != nil || n <= last {
+			return
+		}
+		emit(map[string]any{
+			"source": "agentprov_ebpf", "event_type": "resource_pressure",
+			"resource": "sensor_ringbuf", "signal": "event_drop",
+			"dropped": n, "dropped_delta": n - last,
+			"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+		})
+		last = n
+	}
 	for {
 		select {
 		case <-done:
+			poll()
 			return
 		case <-ticker.C:
-			var n uint64
-			if err := m.Lookup(uint32(0), &n); err != nil || n <= last {
-				continue
-			}
-			emit(map[string]any{
-				"source":        "agentprov_ebpf",
-				"event_type":    "resource_pressure",
-				"resource":      "sensor_ringbuf",
-				"signal":        "event_drop",
-				"dropped":       n,
-				"dropped_delta": n - last,
-				"timestamp":     time.Now().UTC().Format(time.RFC3339Nano),
-			})
-			last = n
+			poll()
 		}
 	}
 }
@@ -370,9 +359,13 @@ type dropLookuper interface {
 // drains the ring buffer - the failure mode of the previous /proc-only lookup.
 type cgroupResolver struct {
 	root            string
+	kernelName      func(uint64) string
 	mu              sync.RWMutex
 	refreshMu       sync.Mutex
 	byID            map[uint64]string
+	seenAt          map[uint64]time.Time
+	retention       time.Duration
+	maxEntries      int
 	lastRefresh     time.Time
 	refreshInterval time.Duration
 }
@@ -390,17 +383,49 @@ func (r *cgroupResolver) resolve(cgroupID uint64) string {
 	if cgroupID == 0 {
 		return ""
 	}
+	r.refreshIfDue()
 	r.mu.RLock()
 	id, ok := r.byID[cgroupID]
 	r.mu.RUnlock()
 	if ok {
 		return id
 	}
-	r.refreshIfDue()
-	r.mu.RLock()
-	id = r.byID[cgroupID]
-	r.mu.RUnlock()
+	if r.kernelName != nil {
+		id = dockerCgroupRe.FindString(r.kernelName(cgroupID))
+		if id != "" {
+			r.remember(cgroupID, id)
+		}
+	}
 	return id
+}
+
+// remember retains a kernel-captured container name even after its cgroup and
+// process have disappeared, while preserving the same cache entry budget.
+func (r *cgroupResolver) remember(cgroupID uint64, containerID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.byID == nil {
+		r.byID = map[uint64]string{}
+	}
+	if r.seenAt == nil {
+		r.seenAt = map[uint64]time.Time{}
+	}
+	limit := r.maxEntries
+	if limit <= 0 {
+		limit = 16384
+	}
+	if len(r.byID) >= limit {
+		var oldest uint64
+		var when time.Time
+		for id, seen := range r.seenAt {
+			if when.IsZero() || seen.Before(when) {
+				oldest, when = id, seen
+			}
+		}
+		delete(r.byID, oldest)
+		delete(r.seenAt, oldest)
+	}
+	r.byID[cgroupID], r.seenAt[cgroupID] = containerID, time.Now()
 }
 
 // refreshIfDue bounds hierarchy scans. A node-wide sensor sees many host
@@ -428,9 +453,18 @@ func (r *cgroupResolver) refreshIfDue() {
 // from its name (docker-<id>.scope, cri-containerd-<id>.scope, kubepods/<id>...).
 func (r *cgroupResolver) refresh() {
 	next := map[uint64]string{}
+	limit := r.maxEntries
+	if limit <= 0 {
+		limit = 16384
+	}
+	visited := 0
 	_ = filepath.WalkDir(r.root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || !d.IsDir() {
 			return nil
+		}
+		visited++
+		if len(next) >= limit || visited > 131072 {
+			return fs.SkipAll
 		}
 		m := dockerCgroupRe.FindString(d.Name())
 		if m == "" {
@@ -446,9 +480,33 @@ func (r *cgroupResolver) refresh() {
 		return nil
 	})
 	r.mu.Lock()
-	r.byID = next
-	r.lastRefresh = time.Now()
-	r.mu.Unlock()
+	defer r.mu.Unlock()
+	now := time.Now()
+	retention := r.retention
+	if retention <= 0 {
+		retention = 10 * time.Minute
+	}
+	seen := make(map[uint64]time.Time, len(next))
+	for id := range next {
+		seen[id] = now
+	}
+	// Keep recently departed cgroup identities for ring-buffer drain and late
+	// informer correlation, with an explicit TTL and entry cap.
+	oldIDs := make([]uint64, 0, len(r.byID))
+	for id := range r.byID {
+		if _, current := next[id]; !current && now.Sub(r.seenAt[id]) < retention {
+			oldIDs = append(oldIDs, id)
+		}
+	}
+	sort.Slice(oldIDs, func(i, j int) bool { return r.seenAt[oldIDs[i]].After(r.seenAt[oldIDs[j]]) })
+	for _, id := range oldIDs {
+		if len(next) >= limit {
+			break
+		}
+		next[id], seen[id] = r.byID[id], r.seenAt[id]
+	}
+	r.byID, r.seenAt = next, seen
+	r.lastRefresh = now
 }
 
 // normalize maps a raw kernel event to the normalized telemetry schema consumed

@@ -12,7 +12,9 @@ planned.
 - Build selection uses architecture and OS, rather than endianness alone.
   `sensorbpf_x86_bpfel.*` implements amd64; `sensorbpf_arm64_bpfel.*` preserves ARM64.
 - C/OpenSSL uprobes read System V argument registers. The amd64 Go TLS entry
-  probe separately reads AX/BX/CX for Go ABIInternal. No Go return probe is used.
+  probe separately reads AX/BX/CX for Go ABIInternal. Go TLS Read uses ordinary
+  uprobes at decoded RET instructions, paired by goroutine and stack frame;
+  it does not use a Go uretprobe or modify Go return addresses.
 - x86 legacy `open` and `unlink` supplement `openat` and `unlinkat`.
 - New amd64 event records carry the kernel monotonic capture timestamp, converted
   to wall time during normalization. Queueing does not retimestamp old events
@@ -27,7 +29,14 @@ planned.
 - The parity gate uses the root record binding for the complete workload
   window instead of accidentally selecting a short descendant window.
 - Readiness is emitted after attachment. Live acceptance waits for that signal,
-  rather than relying on process or Pod liveness.
+  rather than relying on process or Pod liveness. Optional failures appear in
+  the per-probe capability report; readiness promises only required probes.
+- The native stream persists bounded batches before asynchronous ingestion,
+  retries late bindings at capture time, and recovers interrupted batches.
+  See [native capture persistence](native-capture-spool.md) for guarantees and limits.
+- An amd64 kernel map retains up to 16,384 cgroup identities at capture time,
+  including up to three ancestor names. Userspace can resolve a short-lived Pod
+  after both its process and cgroup directory have disappeared.
 
 ## Validated environments
 
@@ -45,7 +54,7 @@ been run for this local branch.
 The live sensor gate checks exec, file open/write, sensitive reads, rename,
 unlink, process exit, IPv4 connect, glibc DNS, UDP/sendto DNS, same-identity
 setuid/setgid calls, an invalid ptrace request, OpenSSL legacy and `_ex`
-request/response bodies, Go TLS request bodies, and capture time under a paused
+request/response bodies, Go TLS request/response bodies, and capture time under a paused
 drain. Privilege tests prove observation of **attempts**, not successful privilege
 escalation. The fixtures use loopback services and synthetic text without API keys.
 
@@ -102,12 +111,37 @@ AGENTPROV_LIBC_LIB=/usr/lib/x86_64-linux-gnu/libc.so.6
 AGENTPROV_GO_TLS_BIN=/absolute/path/to/unstripped-go-agent
 ```
 
-Restart the service after changing these paths. A uprobe observes the specified
-library/binary inode; a container with its own copy requires a path to that
-copy, such as `/proc/<host-pid>/root/...`, and reattachment when it changes.
-Automatic discovery of every container TLS library is not implemented. Go TLS
-capture remains request/write only; stripped Go, BoringSSL and other TLS stacks
-are not newly claimed as covered.
+Restart the service after changing explicit paths. Native collection also enables
+automatic TLS discovery by default: it scans visible process mappings and
+container roots, attaches OpenSSL and unstripped Go targets, and reconciles
+replacement or departed targets. `sensor stream --auto-tls=false` disables it.
+Discovery has bounded process/target budgets and reports attachment failures.
+Observed process starts also wake a coalesced, rate-limited discovery scan.
+For supported overlay mounts, discovery resolves the backing inode so containers
+sharing one library receive one attachment. Unresolvable or unsupported overlay
+layouts report a coverage limitation rather than installing duplicate probes.
+
+Go response capture is limited to amd64 Go ABIInternal 1.23–1.26 with symbols;
+unsupported versions and stripped binaries report degraded coverage. Automatic
+discovery does not guarantee a first request before attachment, nor coverage for
+a process that starts and exits between discovery passes. BoringSSL, arbitrary
+static/custom TLS stacks and encrypted traffic without a supported plaintext
+probe are not claimed as covered.
+
+The concurrent Read fixture has been run with Go 1.23.12 and Go 1.26 on WSL,
+including goroutine stack growth, exact returned bytes, and context cleanup.
+Go 1.24/1.25 have not been separately exercised in this lab.
+
+Inspect the actual live capabilities and queue state with:
+
+```sh
+sudo agentprov --data-dir /var/lib/agentprov sensor status --json
+```
+
+The report lists individual syscall/DNS/TLS paths and degradation reasons, along
+with collector liveness. A historical capability file does not prove the sensor
+is still running. TLS reassembly also bounds pending bytes and stream counts;
+truncation, kernel loss and reassembly eviction are recorded as coverage gaps.
 
 ## K3s inside the guest
 
@@ -130,9 +164,17 @@ sudo python3 scripts/accept_k3s_guest.py --report /tmp/k3s-continuous.json
 The controller shares `/var/lib/agentprov` with the host service, resolves host
 cgroup identity, and closes bindings on container/Pod lifecycle changes. Its
 passive attribution remains `k8s_cgroup` with confidence 0.8. Very early Pod
-activity can precede informer binding; this adaptation does not add an event
-reconciliation queue. The continuous acceptance waits for a real binding before
-stimulating its assertions.
+activity is retained in the native spool pending a binding (default two minutes).
+Terminated, previous-attempt, init and ephemeral containers can establish closed
+historical intervals. When the host cgroup is gone, the runtime container ID can
+still join kernel-captured evidence. Kubernetes timestamps are often whole
+seconds: a closed interval conservatively includes the reported finishing second.
+This is passive attribution, not a claim of nanosecond-accurate termination time.
+
+`accept_node_capture.py` specifically starts immediate-exit Pods **before** the
+informer, verifies the target events reached disk, kills the collector, and then
+requires late closed-window attribution, graph verification and a second restart
+without duplicate events. The older continuous gate still checks live bindings.
 
 Alternatively, the existing `deploy/k8s/agentprov-sensor-daemonset.yaml` emits
 raw JSONL for an external receiver. It does not itself ingest into the database.
@@ -169,3 +211,26 @@ The JSON report lists assertions; the adjacent `.events.jsonl` retains only the
 fixture processes. The gate intentionally pauses the sensor userspace while
 kernel probes continue, then resumes after clients exit. Existing ARM64 runtime
 validation was not repeated for this task.
+
+## Reproduce native recovery and container TLS gates
+
+Run these on an isolated K3s test node with Docker available for fixture image
+building. The scripts use temporary stores and unique test Pods; TLS traffic
+stays on the node and uses synthetic markers.
+
+```sh
+sudo python3 scripts/accept_node_capture.py \
+  --agentprov "$PWD/bin/agentprov" --report /tmp/node-capture.json
+sudo python3 scripts/accept_container_tls.py \
+  --sensor "$PWD/bin/agentprov-sensor" \
+  --go-client "$PWD/bin/tls-go-client" --c-client "$PWD/bin/tls-c-client" \
+  --report /tmp/container-tls.json
+sudo env PATH="$PATH" AGENTPROV_LIVE_GOTLS=1 \
+  go test ./internal/sensor -run '^TestLiveGoTLSReadConcurrentStackGrowth$' -v
+```
+
+The container TLS gate supplies no explicit sensor TLS target paths. It recreates
+Pods containing Go, legacy OpenSSL and OpenSSL `_ex` clients, checks request and
+response bodies in both generations, and rejects duplicate captured messages.
+Those clients intentionally wait six seconds for discovery; the separate instant
+Pod gate proves late syscall attribution, not zero-gap TLS attachment.

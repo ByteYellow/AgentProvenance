@@ -9,8 +9,12 @@
 
 int main(int argc, char **argv) {
     if (argc != 4) return 2;
+	const char *delay = getenv("AGENTPROV_TLS_START_DELAY_SECONDS");
+	if (delay && atoi(delay) > 0) sleep((unsigned int)atoi(delay));
+	const char *host = getenv("AGENTPROV_TLS_HOST");
+	if (!host || !*host) host = "localhost";
     struct addrinfo hints = {.ai_family = AF_INET, .ai_socktype = SOCK_STREAM}, *addr = NULL;
-    if (getaddrinfo("localhost", argv[1], &hints, &addr)) return 3;
+    if (getaddrinfo(host, argv[1], &hints, &addr)) return 3;
     int fd = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
     if (fd < 0 || connect(fd, addr->ai_addr, addr->ai_addrlen)) return 4;
     freeaddrinfo(addr);

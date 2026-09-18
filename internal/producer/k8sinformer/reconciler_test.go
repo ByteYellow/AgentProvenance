@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +21,98 @@ type fakeResolver struct {
 	}
 }
 
+func TestLastTerminationRecoveredWhileWaitingOrRunning(t *testing.T) {
+	for _, running := range []bool{false, true} {
+		t.Run(fmt.Sprintf("replacement_running_%t", running), func(t *testing.T) {
+			pod := testPod("containerd://replacement")
+			last := &corev1.ContainerStateTerminated{
+				ContainerID: "containerd://missed-short-job", StartedAt: pod.CreationTimestamp,
+				FinishedAt: metav1.NewTime(pod.CreationTimestamp.Add(100 * time.Millisecond)),
+			}
+			pod.Status.ContainerStatuses[0].LastTerminationState.Terminated = last
+			if !running {
+				pod.Status.ContainerStatuses[0].ContainerID = ""
+				pod.Status.ContainerStatuses[0].State = corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}}
+			}
+			sink := &fakeSink{}
+			r := &ScopeReconciler{Sink: sink, Resolver: &fakeResolver{results: map[string]struct {
+				cgroup string
+				pid    int64
+			}{"missed-short-job": {}, "replacement": {cgroup: "123"}}}}
+			for i := 0; i < 10; i++ {
+				if err := r.Upsert(context.Background(), pod); err != nil {
+					t.Fatal(err)
+				}
+			}
+			wantBound, wantActive := 1, 0
+			if running {
+				wantBound, wantActive = 2, 1
+			}
+			if len(sink.bound) != wantBound || len(sink.closed) != 0 || r.Report().ActiveBindings != wantActive {
+				t.Fatalf("historical replay changed live replacement: bindings=%+v closed=%v report=%+v", sink.bound, sink.closed, r.Report())
+			}
+			if old := sink.bound[0]; old.ContainerID != "missed-short-job" || old.EndedAt != last.FinishedAt.Format(time.RFC3339Nano) {
+				t.Fatalf("missed last execution: %+v", old)
+			}
+			if err := r.Delete(context.Background(), "default/demo", string(pod.UID)); err != nil {
+				t.Fatal(err)
+			}
+			if len(r.recovered) != 0 || len(r.podLocks.entries) != 0 {
+				t.Fatal("deleted Pod retained history or locks")
+			}
+		})
+	}
+}
+
+func TestLastTerminationClosesObservedAttemptExactlyOnce(t *testing.T) {
+	pod := testPod("containerd://old")
+	sink := &fakeSink{}
+	r := &ScopeReconciler{Sink: sink, Resolver: &fakeResolver{results: map[string]struct {
+		cgroup string
+		pid    int64
+	}{"old": {cgroup: "1"}, "new": {cgroup: "2"}}}}
+	if err := r.Upsert(context.Background(), pod); err != nil {
+		t.Fatal(err)
+	}
+	pod.Status.ContainerStatuses[0].ContainerID = "containerd://new"
+	pod.Status.ContainerStatuses[0].LastTerminationState.Terminated = &corev1.ContainerStateTerminated{
+		ContainerID: "containerd://old", StartedAt: pod.CreationTimestamp,
+		FinishedAt: metav1.NewTime(pod.CreationTimestamp.Add(time.Second)),
+	}
+	for i := 0; i < 3; i++ {
+		if err := r.Upsert(context.Background(), pod); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(sink.bound) != 2 || len(sink.closed) != 1 || r.Report().ActiveBindings != 1 {
+		t.Fatalf("repeated last termination created duplicate scope: bound=%v closed=%v report=%+v", sink.bound, sink.closed, r.Report())
+	}
+}
+
+func TestPodLocksSerializeWaitersAndReclaim(t *testing.T) {
+	var locks podLocks
+	var wg sync.WaitGroup
+	var active, overlaps atomic.Int64
+	for i := 0; i < 64; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				unlock := locks.lock("pod")
+				if active.Add(1) != 1 {
+					overlaps.Add(1)
+				}
+				active.Add(-1)
+				unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if overlaps.Load() != 0 || len(locks.entries) != 0 {
+		t.Fatalf("overlapping holders=%d retained locks=%d", overlaps.Load(), len(locks.entries))
+	}
+}
+
 func (r *fakeResolver) Resolve(_ context.Context, _ *corev1.Pod, status corev1.ContainerStatus) (string, int64, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -31,9 +124,10 @@ func (r *fakeResolver) Resolve(_ context.Context, _ *corev1.Pod, status corev1.C
 }
 
 type fakeSink struct {
-	mu     sync.Mutex
-	bound  []ContainerScope
-	closed []string
+	mu       sync.Mutex
+	bound    []ContainerScope
+	closed   []string
+	closedAt []string
 }
 
 func (s *fakeSink) Bind(_ context.Context, scope ContainerScope) (string, error) {
@@ -43,11 +137,80 @@ func (s *fakeSink) Bind(_ context.Context, scope ContainerScope) (string, error)
 	return fmt.Sprintf("binding-%d", len(s.bound)), nil
 }
 
-func (s *fakeSink) Close(_ context.Context, bindingID, _ string) error {
+func (s *fakeSink) Close(_ context.Context, bindingID, endedAt string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.closed = append(s.closed, bindingID)
+	s.closedAt = append(s.closedAt, endedAt)
 	return nil
+}
+
+func TestTerminatedContainerCanFirstAppearAfterExit(t *testing.T) {
+	now := time.Date(2026, 9, 19, 0, 0, 20, 0, time.UTC)
+	started := now.Add(-10 * time.Second)
+	pod := testPod("containerd://short-job")
+	pod.Status.ContainerStatuses[0].State = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+		ContainerID: "containerd://short-job", StartedAt: metav1.NewTime(started), FinishedAt: metav1.NewTime(started),
+	}}
+	resolver := &fakeResolver{results: map[string]struct {
+		cgroup string
+		pid    int64
+	}{"short-job": {}}}
+	sink := &fakeSink{}
+	r := &ScopeReconciler{Resolver: resolver, Sink: sink, Now: func() time.Time { return now }}
+	for i := 0; i < 2; i++ {
+		if err := r.Upsert(context.Background(), pod); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(sink.bound) != 1 {
+		t.Fatalf("late upserts produced %d bindings", len(sink.bound))
+	}
+	scope := sink.bound[0]
+	if scope.StartedAt != started.Format(time.RFC3339Nano) || scope.EndedAt != started.Add(time.Second-time.Nanosecond).Format(time.RFC3339Nano) {
+		t.Fatalf("lost the subsecond execution window: %+v", scope)
+	}
+	if scope.PID != 0 || scope.CgroupID != "" {
+		t.Fatalf("invented vanished process identity: %+v", scope)
+	}
+	if report := r.Report(); report.ActiveBindings != 0 || report.BindingsClosed != 1 {
+		t.Fatalf("report: %+v", report)
+	}
+	if err := r.Delete(context.Background(), "default/demo", string(pod.UID)); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.closed) != 0 {
+		t.Fatal("deletion overwrote the already closed execution window")
+	}
+}
+
+func TestTerminationClosesExistingBindingAndIncludesInitContainers(t *testing.T) {
+	finished := time.Date(2026, 9, 19, 0, 0, 5, 123, time.UTC)
+	resolver := &fakeResolver{results: map[string]struct {
+		cgroup string
+		pid    int64
+	}{
+		"worker": {cgroup: "101", pid: 12}, "init": {cgroup: "102", pid: 0},
+	}}
+	sink := &fakeSink{}
+	r := &ScopeReconciler{Resolver: resolver, Sink: sink}
+	pod := testPod("containerd://worker")
+	if err := r.Upsert(context.Background(), pod); err != nil {
+		t.Fatal(err)
+	}
+	pod.Status.ContainerStatuses[0].State = corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{
+		StartedAt: metav1.NewTime(finished.Add(-time.Second)), FinishedAt: metav1.NewTime(finished),
+	}}
+	pod.Status.InitContainerStatuses = []corev1.ContainerStatus{{Name: "init", ContainerID: "containerd://init", State: pod.Status.ContainerStatuses[0].State}}
+	if err := r.Upsert(context.Background(), pod); err != nil {
+		t.Fatal(err)
+	}
+	if len(sink.bound) != 2 || len(sink.closedAt) != 1 || sink.closedAt[0] != finished.Format(time.RFC3339Nano) {
+		t.Fatalf("bindings=%+v closes=%+v", sink.bound, sink.closedAt)
+	}
+	if report := r.Report(); report.ActiveBindings != 0 || report.BindingsClosed != 2 {
+		t.Fatalf("report: %+v", report)
+	}
 }
 
 func TestScopeReconcilerContainerLifecycle(t *testing.T) {
