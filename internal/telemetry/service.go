@@ -378,7 +378,11 @@ func ingestFilteredWithMode(db *sql.DB, store sqlStore, event IngestEvent, stric
 	confidence := 1.0
 	bindingSource := event.BindingSource
 	if event.RunID == "" || event.SessionID == "" || event.ToolCallID == "" || event.ProcessID == "" {
-		match, ok, err := correlation.Resolve(db, raw)
+		resolver := correlation.Queryer(db)
+		if strict {
+			resolver = store
+		}
+		match, ok, err := correlation.Resolve(resolver, raw)
 		if err != nil {
 			return "", err
 		}

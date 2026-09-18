@@ -85,7 +85,7 @@ jobs:
     needs: sensor-build
     strategy:
       matrix:
-        go: ["1.23.x", "1.26.x"]
+        go: ["1.23.x", "1.24.x", "1.25.x", "1.26.x"]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -140,3 +140,9 @@ jobs:
 
       - name: Run Phase 1 observability/provenance gate
         run: GOTOOLCHAIN=local ./scripts/accept_phase1.sh
+
+      - name: Verify daemon readiness under storage and schema faults
+        run: |
+          GOTOOLCHAIN=local go build -o /tmp/agentprov-readiness ./cmd/agentprov
+          python3 scripts/accept_daemon_readiness.py \
+            --agentprov /tmp/agentprov-readiness --report /tmp/daemon-readiness.json

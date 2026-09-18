@@ -74,8 +74,12 @@ func NativeStreamRunning(paths store.Paths) (bool, error) {
 }
 
 func ReadNativeStreamStatus(db *sql.DB) (NativeStreamStatus, error) {
+	return ReadNativeStreamStatusContext(context.Background(), db)
+}
+
+func ReadNativeStreamStatusContext(ctx context.Context, db *sql.DB) (NativeStreamStatus, error) {
 	out := NativeStreamStatus{Counters: map[string]int64{}}
-	rows, err := db.Query(`SELECT name, value FROM telemetry_native_counters`)
+	rows, err := db.QueryContext(ctx, `SELECT name, value FROM telemetry_native_counters`)
 	if err != nil {
 		return out, err
 	}
@@ -93,16 +97,16 @@ func ReadNativeStreamStatus(db *sql.DB) (NativeStreamStatus, error) {
 	if err != nil {
 		return out, err
 	}
-	err = db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(size_bytes),0), COALESCE(SUM(event_count-ingested_count-dropped_count-failed_count),0), COALESCE(SUM(CASE WHEN status='processed' THEN 1 ELSE 0 END),0) FROM telemetry_spool_batches WHERE format='native' AND (status IN ('capturing','queued','processing') OR (status='processed' AND spool_path!=''))`).Scan(&out.QueuedBatches, &out.QueuedBytes, &out.PendingEvents, &out.CleanupPendingBatches)
+	err = db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(size_bytes),0), COALESCE(SUM(event_count-ingested_count-dropped_count-failed_count),0), COALESCE(SUM(CASE WHEN status='processed' THEN 1 ELSE 0 END),0) FROM telemetry_spool_batches WHERE format='native' AND (status IN ('initializing','capturing','queued','processing') OR (status='processed' AND spool_path!=''))`).Scan(&out.QueuedBatches, &out.QueuedBytes, &out.PendingEvents, &out.CleanupPendingBatches)
 	if err != nil {
 		return out, err
 	}
 	var captured int64
-	if err := db.QueryRow(`SELECT COALESCE(SUM(event_count),0) FROM telemetry_spool_batches WHERE format='native'`).Scan(&captured); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COALESCE(SUM(event_count),0) FROM telemetry_spool_batches WHERE format='native'`).Scan(&captured); err != nil {
 		return out, err
 	}
 	out.Counters["captured"] = captured
-	err = db.QueryRow(`SELECT error FROM telemetry_spool_batches WHERE format='native' AND error!='' AND (status IN ('queued','processing') OR (status='processed' AND spool_path!='')) ORDER BY updated_at DESC LIMIT 1`).Scan(&out.LastError)
+	err = db.QueryRowContext(ctx, `SELECT error FROM telemetry_spool_batches WHERE format='native' AND error!='' AND (status IN ('initializing','capturing','queued','processing') OR (status='processed' AND spool_path!='')) ORDER BY updated_at DESC LIMIT 1`).Scan(&out.LastError)
 	if err != nil && err != sql.ErrNoRows {
 		return out, err
 	}
@@ -175,7 +179,7 @@ func (n *NativeStream) openBatch() error {
 	// payload has actually been removed. Count cleanup failures as backlog too.
 	var queued int
 	var queuedBytes int64
-	if err := n.service.DB.QueryRow(`SELECT COUNT(*),COALESCE(SUM(size_bytes),0) FROM telemetry_spool_batches WHERE status IN ('capturing','queued','processing') OR (format='native' AND status='processed' AND spool_path!='')`).Scan(&queued, &queuedBytes); err != nil {
+	if err := n.service.DB.QueryRow(`SELECT COUNT(*),COALESCE(SUM(size_bytes),0) FROM telemetry_spool_batches WHERE status IN ('initializing','capturing','queued','processing') OR (format='native' AND status='processed' AND spool_path!='')`).Scan(&queued, &queuedBytes); err != nil {
 		return err
 	}
 	if queued >= n.opts.MaxQueuedBatches || queuedBytes+n.opts.BatchBytes > n.opts.MaxQueuedBytes {
@@ -192,7 +196,7 @@ func (n *NativeStream) openBatch() error {
 	if n.opts.PolicyEnabled {
 		policy = 1
 	}
-	_, err = n.service.DB.Exec(`INSERT INTO telemetry_spool_batches (id,format,source_path,spool_path,status,size_bytes,native_options,expires_at,policy_enabled,created_at,updated_at) VALUES (?,'native','sensor:stream',?,'capturing',?,?,?,?,?,?)`, id, path, n.opts.BatchBytes, string(options), now.Add(n.opts.PendingTTL).UnixMilli(), policy, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	_, err = n.service.DB.Exec(`INSERT INTO telemetry_spool_batches (id,format,source_path,spool_path,status,size_bytes,native_options,expires_at,policy_enabled,created_at,updated_at) VALUES (?,'native','sensor:stream',?,'initializing',?,?,?,?,?,?)`, id, path, n.opts.BatchBytes, string(options), now.Add(n.opts.PendingTTL).UnixMilli(), policy, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 	if err != nil {
 		return err
 	}
@@ -201,6 +205,10 @@ func (n *NativeStream) openBatch() error {
 		return err
 	}
 	if err := syncNativeDirectory(n.service.Paths.Spool); err != nil {
+		f.Close()
+		return err
+	}
+	if _, err := n.service.DB.Exec(`UPDATE telemetry_spool_batches SET status='capturing' WHERE id=? AND status='initializing'`, id); err != nil {
 		f.Close()
 		return err
 	}
@@ -289,7 +297,7 @@ func (n *NativeStream) appendLine(line []byte) error {
 		return err
 	}
 	encoded = append(encoded, '\n')
-	if int64(len(encoded)) > n.opts.BatchBytes {
+	if int64(len(encoded)) > n.opts.BatchBytes || len(encoded) >= 1<<20 {
 		return incrementNative(n.service.DB, "dropped_oversize", 1)
 	}
 	if n.file != nil && (n.count >= n.opts.BatchEvents || n.size+int64(len(encoded)) > n.opts.BatchBytes) {
@@ -347,12 +355,18 @@ func (n *NativeStream) sealFile(id string) error {
 	f, err := os.OpenFile(path, os.O_RDWR, 0)
 	if err != nil {
 		if os.IsNotExist(err) {
-			_, err = n.service.DB.Exec(`DELETE FROM telemetry_spool_batches WHERE id=? AND status='capturing'`, id)
-			return err
+			return fmt.Errorf("native capture file %s is missing; captured evidence cannot be recovered", id)
 		}
 		return err
 	}
 	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if info.Size() > 16<<20 {
+		return fmt.Errorf("native capture file exceeds 16 MiB limit")
+	}
 	reader := bufio.NewReaderSize(f, 64*1024)
 	hash := sha256.New()
 	var size int64
@@ -389,10 +403,11 @@ func (n *NativeStream) sealFile(id string) error {
 
 func (n *NativeStream) recover() error {
 	// Page recovery metadata so even a store with years of processed batches
-	// has bounded startup memory. Cleared paths need no further cleanup.
+	// has bounded startup memory. Processed payload cleanup is deferred to
+	// bounded runtime sweeps so a removal failure cannot block startup.
 	cursor := ""
 	for {
-		rows, err := n.service.DB.Query(`SELECT id,status,spool_path FROM telemetry_spool_batches WHERE format='native' AND id>? AND (status IN ('capturing','processing') OR (status='processed' AND spool_path!='')) ORDER BY id LIMIT 256`, cursor)
+		rows, err := n.service.DB.Query(`SELECT id,status,spool_path FROM telemetry_spool_batches WHERE format='native' AND id>? AND status IN ('initializing','capturing','processing') ORDER BY id LIMIT 256`, cursor)
 		if err != nil {
 			return err
 		}
@@ -417,16 +432,35 @@ func (n *NativeStream) recover() error {
 		for _, v := range pending {
 			cursor = v.id
 			switch v.status {
+			case "initializing":
+				// No producer row is accepted until creation and directory sync finish.
+				info, err := os.Stat(v.path)
+				if err != nil && !os.IsNotExist(err) {
+					return err
+				}
+				if err == nil {
+					if info.Size() != 0 {
+						return fmt.Errorf("uninitialized native file unexpectedly contains data: %s", v.id)
+					}
+					if err := os.Remove(v.path); err != nil {
+						return err
+					}
+					if err := syncNativeDirectory(n.service.Paths.Spool); err != nil {
+						return err
+					}
+				}
+				if _, err := n.service.DB.Exec(`DELETE FROM telemetry_spool_batches WHERE id=? AND status='initializing'`, v.id); err != nil {
+					return err
+				}
 			case "capturing":
 				if err := n.sealFile(v.id); err != nil {
+					if _, writeErr := n.service.DB.Exec(`UPDATE telemetry_spool_batches SET error=? WHERE id=?`, err.Error(), v.id); writeErr != nil {
+						return writeErr
+					}
 					return err
 				}
 			case "processing":
 				if _, err := n.service.DB.Exec(`UPDATE telemetry_spool_batches SET status='queued',retry_at=0 WHERE id=?`, v.id); err != nil {
-					return err
-				}
-			case "processed":
-				if err := n.removeProcessedFile(v.id, v.path); err != nil {
 					return err
 				}
 			}
@@ -657,7 +691,7 @@ func (n *NativeStream) processBatch(id string) error {
 			failed++
 		} else {
 			if opts.Ingest.DropUncorrelated && event.EventType != "resource_pressure" {
-				_, ok, err := correlation.Resolve(db, correlation.RawIdentity{RunID: event.RunID, ProcessID: event.ProcessID, ContainerID: event.ContainerID, CgroupID: event.CgroupID, PID: event.PID, TGID: event.TGID, PPID: event.PPID, Timestamp: event.Timestamp})
+				_, ok, err := correlation.Resolve(tx, correlation.RawIdentity{RunID: event.RunID, ProcessID: event.ProcessID, ContainerID: event.ContainerID, CgroupID: event.CgroupID, PID: event.PID, TGID: event.TGID, PPID: event.PPID, Timestamp: event.Timestamp})
 				if err != nil {
 					return err
 				}

@@ -128,9 +128,10 @@ a process that starts and exits between discovery passes. BoringSSL, arbitrary
 static/custom TLS stacks and encrypted traffic without a supported plaintext
 probe are not claimed as covered.
 
-The concurrent Read fixture has been run with Go 1.23.12 and Go 1.26 on WSL,
+The concurrent Read fixture has been run with Go 1.23.12, 1.24.0, 1.25.0 and 1.26 on WSL,
 including goroutine stack growth, exact returned bytes, and context cleanup.
-Go 1.24/1.25 have not been separately exercised in this lab.
+The CI live Go TLS matrix also covers all four minor versions; these local
+results do not substitute for a completed hosted CI run.
 
 Inspect the actual live capabilities and queue state with:
 
@@ -234,3 +235,28 @@ Pods containing Go, legacy OpenSSL and OpenSSL `_ex` clients, checks request and
 response bodies in both generations, and rejects duplicate captured messages.
 Those clients intentionally wait six seconds for discovery; the separate instant
 Pod gate proves late syscall attribution, not zero-gap TLS attachment.
+
+## Daemon readiness and storage faults
+
+`GET /v1/live` reports that the HTTP process can respond. `GET /v1/ready` and
+`GET /v1/health` check the database and schema, with a two-second check deadline.
+Database errors, missing required tables and incompatible schemas return 503;
+unknown queue counts stay null. These three GET endpoints remain accessible
+without the optional API bearer token.
+
+Query availability is distinct from evidence coverage. Historical loss produces
+`status: degraded`, `coverage_status: gaps_recorded` and `ready: true` with HTTP
+200 when the database is usable. Pending correlation is reported separately.
+This readiness check is not proof that every background worker is progressing;
+inspect sensor liveness, capabilities and backlog as well.
+
+Run the real HTTP fault gate against its own temporary store:
+
+```sh
+python3 scripts/accept_daemon_readiness.py \
+  --agentprov "$PWD/bin/agentprov" --report /tmp/daemon-readiness.json
+```
+
+Falco import and its legacy worker remain compatibility paths. This follow-up
+does not change their recovery semantics; the native spool guarantees above
+apply to `sensor stream`. Native capture is the primary path for this deployment.

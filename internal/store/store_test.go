@@ -197,3 +197,28 @@ func TestUpgradeRealSchema15PreservesEventsAndFalcoSpool(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNewerSchemaIsRejectedBeforeMigrationWrites(t *testing.T) {
+	paths := openTestDB(t)
+	db, err := Open(*paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`INSERT INTO schema_versions VALUES (?,'future','now')`, SchemaVersion+1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`DROP TABLE telemetry_native_counters`); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureSchema(db); err == nil {
+		t.Fatal("newer schema accepted")
+	}
+	var exists int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name='telemetry_native_counters'`).Scan(&exists); err != nil {
+		t.Fatal(err)
+	}
+	if exists != 0 {
+		t.Fatal("old binary mutated newer schema")
+	}
+}

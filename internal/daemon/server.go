@@ -51,7 +51,7 @@ type Server struct {
 	SpoolDropPolicy    string
 	GCInterval         time.Duration
 	GCLimit            int
-	// AuthToken, when set, requires every request except GET /v1/health to carry
+	// AuthToken, when set, requires every request except the health endpoints to carry
 	// `Authorization: Bearer <AuthToken>`. Empty = open (backward compatible).
 	AuthToken string
 	writeMu   *sync.Mutex
@@ -77,6 +77,8 @@ func NewServer(dataDir string) (Server, func(), error) {
 func (s Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/health", s.health)
+	mux.HandleFunc("GET /v1/ready", s.health)
+	mux.HandleFunc("GET /v1/live", s.live)
 	mux.HandleFunc("POST /v1/leases", s.createLease)
 	mux.HandleFunc("POST /v1/sessions", s.createSession)
 	mux.HandleFunc("GET /v1/sessions", s.listSessions)
@@ -111,8 +113,8 @@ func (s Server) Handler() http.Handler {
 	return s.withAuth(mux)
 }
 
-// withAuth requires a bearer token on every route except GET /v1/health (kept
-// open for readiness probes). When AuthToken is empty, the mux is returned
+// withAuth requires a bearer token on every route except the health endpoints
+// (kept open for liveness/readiness probes). When AuthToken is empty, the mux is returned
 // unwrapped (open, backward compatible). Constant-time comparison avoids leaking
 // the token via timing.
 func (s Server) withAuth(next http.Handler) http.Handler {
@@ -121,7 +123,7 @@ func (s Server) withAuth(next http.Handler) http.Handler {
 	}
 	want := "Bearer " + s.AuthToken
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && r.URL.Path == "/v1/health" {
+		if r.Method == http.MethodGet && (r.URL.Path == "/v1/health" || r.URL.Path == "/v1/ready" || r.URL.Path == "/v1/live") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -138,47 +140,6 @@ func (s Server) withAuth(next http.Handler) http.Handler {
 
 func (s Server) control() control.Service {
 	return control.Service{DB: s.DB, Paths: s.Paths, Driver: s.Driver, WriteMu: s.writeMu}
-}
-
-func (s Server) health(w http.ResponseWriter, r *http.Request) {
-	var lastSample string
-	var queuedEvidence, queuedGC, queuedSpool int64
-	var queuedSpoolBytes int64
-	_ = s.DB.QueryRow(`SELECT COALESCE(MAX(created_at), '') FROM cpu_samples`).Scan(&lastSample)
-	_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM evidence_events WHERE status = 'queued'`).Scan(&queuedEvidence)
-	_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM gc_jobs WHERE status = 'queued'`).Scan(&queuedGC)
-	_ = s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0) FROM telemetry_spool_batches WHERE status = 'queued'`).Scan(&queuedSpool)
-	_ = s.DB.QueryRow(`SELECT COALESCE(SUM(size_bytes), 0) FROM telemetry_spool_batches WHERE status IN ('queued', 'processing')`).Scan(&queuedSpoolBytes)
-	runtimeName := ""
-	if s.Driver != nil {
-		runtimeName = s.Driver.Name()
-	}
-	writeJSON(w, map[string]any{
-		"schema_version":        "agentprovenance.daemon_health/v1",
-		"status":                "ok",
-		"runtime":               runtimeName,
-		"sample_interval_ms":    s.SampleInterval.Milliseconds(),
-		"sample_limit":          s.SampleLimit,
-		"sample_timeout_ms":     s.SampleTimeout.Milliseconds(),
-		"raw_retention_ms":      s.RawRetention.Milliseconds(),
-		"max_raw_samples":       s.MaxRawSamples,
-		"last_cpu_sample_at":    lastSample,
-		"background_sampler":    s.SampleInterval > 0,
-		"evidence_interval_ms":  s.EvidenceInterval.Milliseconds(),
-		"evidence_limit":        s.EvidenceLimit,
-		"spool_interval_ms":     s.SpoolInterval.Milliseconds(),
-		"spool_limit":           s.SpoolLimit,
-		"spool_max_queued":      s.SpoolMaxQueued,
-		"spool_max_bytes":       s.SpoolMaxBytes,
-		"spool_max_batch_bytes": s.SpoolMaxBatchBytes,
-		"spool_drop_policy":     s.SpoolDropPolicy,
-		"gc_interval_ms":        s.GCInterval.Milliseconds(),
-		"gc_limit":              s.GCLimit,
-		"queued_evidence":       queuedEvidence,
-		"queued_gc":             queuedGC,
-		"queued_spool":          queuedSpool,
-		"queued_spool_bytes":    queuedSpoolBytes,
-	})
 }
 
 func (s Server) StartSampler(ctx context.Context) {

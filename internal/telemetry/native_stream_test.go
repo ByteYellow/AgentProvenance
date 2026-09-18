@@ -497,3 +497,161 @@ func TestNativeCleanupFailureRetainsCapacityAndRetriesWithoutReplay(t *testing.T
 		t.Fatalf("cleanup replayed evidence: events=%d first=%d", events, firstCount)
 	}
 }
+
+func TestNativeBatchObservesItsOwnProcessExit(t *testing.T) {
+	db, paths := nativeTestStore(t)
+	_, err := correlation.RecordBinding(db, correlation.Binding{RunID: "run-exit", SessionID: "session", ToolCallID: "tool", ProcessID: "process", PID: 42, StartedAt: "2026-09-19T00:00:00Z"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := nativeTestStream(t, db, paths, NativeStreamOptions{Ingest: JSONLIngestOptions{DropUncorrelated: true}, BatchEvents: 2})
+	for _, line := range []string{
+		`{"event_type":"process_exit","pid":42,"exit_code":0,"time":"2026-09-19T00:00:00.1Z"}`,
+		`{"event_type":"file_write","pid":42,"path":"/tmp/reused-pid","time":"2026-09-19T00:00:00.2Z"}`,
+	} {
+		if _, err := n.Write([]byte(line + "\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := n.Process(32); err != nil {
+		t.Fatal(err)
+	}
+	var wrong int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE event_type='file_write' AND run_id='run-exit'`).Scan(&wrong); err != nil {
+		t.Fatal(err)
+	}
+	if wrong != 0 {
+		t.Fatalf("late PID event incorrectly attributed after exit: %d", wrong)
+	}
+	status, err := ReadNativeStreamStatus(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.PendingEvents != 1 || status.Counters["ingested"] != 1 {
+		t.Fatalf("status: %+v", status)
+	}
+}
+
+func TestNativeNormalizationCannotCreateAnUnreplayableRow(t *testing.T) {
+	db, paths := nativeTestStore(t)
+	n := nativeTestStream(t, db, paths, NativeStreamOptions{BatchBytes: 2 << 20})
+	// JSON embedded as a payload string needs another escaping layer on disk.
+	raw := `{"event_type":"file_write","path":"` + strings.Repeat(`\\`, 280000) + `"}` + "\n"
+	if _, err := n.Write([]byte(raw)); err != nil {
+		t.Fatal(err)
+	}
+	nativeWrite(t, n, "", "/tmp/normal")
+	if err := n.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Process(32); err != nil {
+		t.Fatal(err)
+	}
+	status, err := ReadNativeStreamStatus(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Counters["dropped_oversize"] != 1 || status.Counters["ingested"] != 1 {
+		t.Fatalf("status=%+v", status)
+	}
+}
+
+func TestNativeMissingCaptureFileIsNotSilentlyForgotten(t *testing.T) {
+	db, paths := nativeTestStore(t)
+	n := nativeTestStream(t, db, paths, NativeStreamOptions{})
+	nativeWrite(t, n, "", "/tmp/persisted")
+	id, path := n.id, n.file.Name()
+	// Simulate a crash without sealing, followed by storage loss.
+	if err := n.file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.lock.Close(); err != nil {
+		t.Fatal(err)
+	}
+	n.closed = true
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if recovered, err := NewNativeStream(db, paths, NativeStreamOptions{}); err == nil {
+		recovered.Close()
+		t.Fatal("missing acknowledged file was ignored")
+	}
+	var status, reason string
+	if err := db.QueryRow(`SELECT status,error FROM telemetry_spool_batches WHERE id=?`, id).Scan(&status, &reason); err != nil {
+		t.Fatal(err)
+	}
+	if status != "capturing" || !strings.Contains(reason, "missing") {
+		t.Fatalf("status=%s error=%s", status, reason)
+	}
+}
+
+func TestNativeUninitializedBatchRecoveryAcceptsNewCapture(t *testing.T) {
+	db, paths := nativeTestStore(t)
+	if _, err := db.Exec(`INSERT INTO telemetry_spool_batches(id,format,spool_path,status,size_bytes,created_at,updated_at) VALUES ('unfinished','native',?,'initializing',1048576,'now','now')`, paths.Spool+"/never-created.jsonl"); err != nil {
+		t.Fatal(err)
+	}
+	n := nativeTestStream(t, db, paths, NativeStreamOptions{MaxQueuedBatches: 1})
+	nativeWrite(t, n, "", "/tmp/recovered")
+	if err := n.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Process(1); err != nil {
+		t.Fatal(err)
+	}
+	status, err := ReadNativeStreamStatus(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Counters["ingested"] != 1 {
+		t.Fatalf("status=%+v", status)
+	}
+}
+
+func TestNativeRestartDefersCleanupFailureWithoutBlockingCapture(t *testing.T) {
+	db, paths := nativeTestStore(t)
+	n := nativeTestStream(t, db, paths, NativeStreamOptions{})
+	nativeWrite(t, n, "", "/tmp/first")
+	if err := n.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	n.removeFile = func(string) error { return fmt.Errorf("injected cleanup failure") }
+	if err := n.Process(32); err == nil {
+		t.Fatal("expected cleanup failure")
+	}
+	var spoolPath string
+	if err := db.QueryRow(`SELECT spool_path FROM telemetry_spool_batches WHERE status='processed'`).Scan(&spoolPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// A nonempty directory produces a repeatable removal failure even as root.
+	if err := os.Remove(spoolPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(spoolPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(spoolPath+"/blocked", []byte("fixture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := NewNativeStream(db, paths, NativeStreamOptions{})
+	if err != nil {
+		t.Fatalf("cleanup blocked restart: %v", err)
+	}
+	defer recovered.Close()
+	nativeWrite(t, recovered, "", "/tmp/second")
+	if err := recovered.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	// Cleanup may still be in backoff, or may report its expected removal
+	// failure on a slow machine. Either way, new evidence must be committed.
+	_ = recovered.Process(32)
+	status, err := ReadNativeStreamStatus(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Counters["ingested"] != 2 || status.CleanupPendingBatches != 1 {
+		t.Fatalf("status=%+v", status)
+	}
+}

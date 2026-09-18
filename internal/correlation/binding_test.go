@@ -432,3 +432,11 @@ func TestDelayedProcessExitDoesNotCloseReusedPID(t *testing.T) {
 		t.Fatalf("delayed exit old=%+v current=%+v", old, current)
 	}
 }
+
+func TestBindingRejectsInvalidIntervals(t *testing.T) {
+	for _, b := range []Binding{{StartedAt: "invalid"}, {StartedAt: "2026-09-19T00:00:00Z", EndedAt: "invalid"}, {StartedAt: "2026-09-19T00:00:01Z", EndedAt: "2026-09-19T00:00:00.9Z"}} {
+		if _, err := RecordBinding(nil, b); err == nil {
+			t.Fatalf("invalid interval accepted: %+v", b)
+		}
+	}
+}

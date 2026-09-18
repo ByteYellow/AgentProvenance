@@ -22,7 +22,8 @@ The queue reserves a full batch before opening its capture file. Admission is
 therefore conservative: a new batch requires `batch-bytes` of free capacity.
 When the queue is full, new events are discarded and a durable
 `dropped_queue_full` counter increases. An oversized normalized event similarly
-increases `dropped_oversize`. This bounds temporary storage; it is not a promise
+increases `dropped_oversize`. Encoded normalized rows must also be smaller than
+1 MiB, even if the configured batch is larger, to remain replayable. This bounds temporary storage; it is not a promise
 that every kernel event will be retained under arbitrary load.
 
 ## Durability and replay
@@ -30,8 +31,12 @@ that every kernel event will be retained under arbitrary load.
 Each accepted normalized row is appended to a mode-0600 file and fsynced.
 The file's directory is synced when created. A batch is sealed at its size or
 event limit, or on the next flush tick, and then becomes eligible for processing.
-Database metadata distinguishes `capturing`, `queued`, `processing`, and
-`processed` batches. Only one native collector may own a store at a time.
+Schema 17 metadata distinguishes `initializing`, `capturing`, `queued`,
+`processing`, and `processed` batches. No producer row can enter an initializing
+batch: the file must first be created, its directory synced, and the metadata
+transition committed. SQLite connections explicitly use `synchronous=FULL`.
+Only one native collector may own a store at a time. Newer database schemas are
+rejected before migration writes; keep older binaries away from an upgraded store.
 
 On restart, complete rows in a previously capturing file are sealed and replayed.
 A partial final row is truncated and counted as `dropped_partial_recovery`.
@@ -41,6 +46,12 @@ windows, and evidence batch manifest. Retrying the same spool row does not
 duplicate the accepted event. Two separate captures with identical bytes remain
 two events. Hashes verify spool contents before replay.
 
+Restart may discard an empty or missing initializing file, since it could not
+have accepted a row. A missing capturing file instead fails startup and records
+the error; accepted evidence must never silently disappear. Correlation reads
+share the event transaction, so an exit earlier in a batch closes its process
+binding before a later reused-PID event is resolved.
+
 Successfully processed payload files are removed and their directory is synced;
 row receipts are also removed once the batch completes. Evidence events, bounded
 batch manifests, spool outcome metadata, and cumulative loss counters remain in
@@ -48,7 +59,7 @@ the database. The database still grows with retained evidence; the queue limit
 does not impose an evidence retention policy.
 
 Failed file cleanup is retried in bounded sweeps while collection continues.
-Processed files awaiting cleanup still consume queue capacity and appear as
+Cleanup failures do not block collector restart. Processed files awaiting cleanup still consume queue capacity and appear as
 `cleanup_pending_batches`; their already committed events are not replayed.
 
 The disk spool contains normalized events, not an unfiltered copy of sensor
@@ -114,3 +125,5 @@ crash recovery before sealing, interrupted processing without duplicate IDs,
 transaction rollback/retry, TTL expiry, queue bounds, bounded live manifests,
 identical distinct events, privacy before persistence, and collector exclusion.
 `internal/correlation/binding_test.go` covers delayed exits after PID reuse.
+Additional regressions cover same-batch exits, normalized row growth, lost
+capture files, pre-capture initialization recovery and cleanup errors at restart.

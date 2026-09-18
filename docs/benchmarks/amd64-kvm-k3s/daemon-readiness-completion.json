@@ -1,0 +1,20 @@
+{
+  "schema_version": "agentprovenance.daemon_readiness_acceptance/v1",
+  "kernel": "6.8.0-139-generic",
+  "architecture": "x86_64",
+  "database_schema": 17,
+  "checks": {
+    "ready_without_auth": true,
+    "live_without_auth": true,
+    "api_still_requires_auth": true,
+    "future_schema_unavailable": true,
+    "live_during_schema_fault": true,
+    "missing_table_unavailable": true,
+    "unknown_queue_is_null": true,
+    "live_during_storage_fault": true,
+    "recovers_after_storage_restored": true,
+    "historical_loss_keeps_query_available": true,
+    "historical_loss_explicit": true
+  },
+  "passed": true
+}

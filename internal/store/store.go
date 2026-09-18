@@ -12,7 +12,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 16
+const SchemaVersion = 17
 
 type Paths struct {
 	Root       string
@@ -79,7 +79,7 @@ func Open(paths Paths) (*sql.DB, error) {
 	// attemptIsTainted), which would deadlock on a single shared connection.
 	// WAL + a busy_timeout applied to all connections lets concurrent writers
 	// serialize through the busy handler instead.
-	dsn := "file:" + paths.DB + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+	dsn := "file:" + paths.DB + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(FULL)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
@@ -96,6 +96,21 @@ func Open(paths Paths) (*sql.DB, error) {
 }
 
 func EnsureSchema(db *sql.DB) error {
+	// Refuse an unknown newer store before executing any migration DDL.
+	var exists int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_versions'`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists != 0 {
+		var version int
+		if err := db.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_versions`).Scan(&version); err != nil {
+			return err
+		}
+		if version > SchemaVersion {
+			return fmt.Errorf("database schema %d is newer than supported %d; downgrade is not supported", version, SchemaVersion)
+		}
+	}
+
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS schema_versions (
 			version INTEGER PRIMARY KEY,

@@ -101,7 +101,7 @@ func daemonCmd(dataDir *string) *cobra.Command {
 	serve.Flags().StringVar(&spoolDropPolicy, "spool-drop-policy", "reject", "telemetry spool queue-full behavior: reject or drop_oldest")
 	serve.Flags().DurationVar(&gcInterval, "gc-interval", 5*time.Second, "background async GC interval; set 0 to disable")
 	serve.Flags().IntVar(&gcLimit, "gc-limit", 100, "maximum queued GC jobs processed per interval")
-	serve.Flags().StringVar(&authToken, "auth-token", "", "require this bearer token on all API routes except GET /v1/health (also AGENTPROV_DAEMON_TOKEN); empty = open")
+	serve.Flags().StringVar(&authToken, "auth-token", "", "require this bearer token on API routes except GET /v1/health, /v1/ready and /v1/live (also AGENTPROV_DAEMON_TOKEN); empty = open")
 	cmd := &cobra.Command{Use: "daemon", Short: "local daemon/API server commands"}
 	cmd.AddCommand(serve)
 	return cmd

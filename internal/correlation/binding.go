@@ -3,6 +3,7 @@ package correlation
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -84,6 +85,19 @@ func RecordBinding(db *sql.DB, binding Binding) (string, error) {
 	if binding.StartedAt == "" {
 		binding.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
+	start, err := time.Parse(time.RFC3339Nano, binding.StartedAt)
+	if err != nil {
+		return "", fmt.Errorf("invalid binding start: %w", err)
+	}
+	if binding.EndedAt != "" {
+		end, err := time.Parse(time.RFC3339Nano, binding.EndedAt)
+		if err != nil {
+			return "", fmt.Errorf("invalid binding end: %w", err)
+		}
+		if end.Before(start) {
+			return "", fmt.Errorf("binding end precedes start")
+		}
+	}
 	if binding.BindingSource == "" {
 		binding.BindingSource = "control_plane"
 	}
@@ -93,7 +107,7 @@ func RecordBinding(db *sql.DB, binding Binding) (string, error) {
 	if binding.ID == "" {
 		binding.ID = ids.New("bind")
 	}
-	_, err := db.Exec(`INSERT INTO execution_context_bindings
+	_, err = db.Exec(`INSERT INTO execution_context_bindings
 		(id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		binding.ID, binding.RunID, binding.SessionID, binding.AttemptID, binding.ToolCallID, binding.ProcessID, binding.ContainerID, binding.CgroupID, binding.RootPID, binding.PID, binding.StartedAt, binding.EndedAt, binding.BindingSource, binding.Confidence, time.Now().UTC().Format(time.RFC3339Nano))
@@ -145,7 +159,18 @@ func ListBindings(db *sql.DB, filter BindingFilter) ([]Binding, error) {
 		}
 		bindings = append(bindings, binding)
 	}
-	return bindings, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	sort.SliceStable(bindings, func(i, j int) bool {
+		left, le := time.Parse(time.RFC3339Nano, bindings[i].StartedAt)
+		right, re := time.Parse(time.RFC3339Nano, bindings[j].StartedAt)
+		if le != nil || re != nil {
+			return le == nil && re != nil
+		}
+		return left.Before(right)
+	})
+	return bindings, nil
 }
 
 func GetBinding(db *sql.DB, id string) (Binding, bool, error) {
@@ -174,6 +199,9 @@ func CloseBinding(db *sql.DB, processID, endedAt string) error {
 	if endedAt == "" {
 		endedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
+	if _, err := time.Parse(time.RFC3339Nano, endedAt); err != nil {
+		return fmt.Errorf("invalid binding end: %w", err)
+	}
 	_, err := db.Exec(`UPDATE execution_context_bindings SET ended_at = ? WHERE process_id = ? AND ended_at = ''`, endedAt, processID)
 	return err
 }
@@ -187,6 +215,9 @@ func CloseBindingByID(db bindingExecer, bindingID, endedAt string) error {
 	}
 	if endedAt == "" {
 		endedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	if _, err := time.Parse(time.RFC3339Nano, endedAt); err != nil {
+		return fmt.Errorf("invalid binding end: %w", err)
 	}
 	_, err := db.Exec(`UPDATE execution_context_bindings SET ended_at = ? WHERE id = ? AND ended_at = ''`, endedAt, bindingID)
 	return err
@@ -249,7 +280,14 @@ func CloseBindingByPID(db bindingPIDStore, pid int64, endedAt string) error {
 	return nil
 }
 
-func Resolve(db *sql.DB, raw RawIdentity) (Match, bool, error) {
+// Queryer allows correlation to share the evidence transaction and observe
+// binding changes made earlier in the same batch.
+type Queryer interface {
+	Query(string, ...any) (*sql.Rows, error)
+	QueryRow(string, ...any) *sql.Row
+}
+
+func Resolve(db Queryer, raw RawIdentity) (Match, bool, error) {
 	at := raw.Timestamp
 	if at == "" {
 		at = time.Now().UTC().Format(time.RFC3339Nano)
@@ -281,7 +319,7 @@ func Resolve(db *sql.DB, raw RawIdentity) (Match, bool, error) {
 	return Match{}, false, nil
 }
 
-func resolveByProcess(db *sql.DB, runID, processID string) (Match, bool, error) {
+func resolveByProcess(db Queryer, runID, processID string) (Match, bool, error) {
 	if runID != "" {
 		return scanOne(db, "process_id", "run_id+process_id", 1, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
 			FROM execution_context_bindings WHERE run_id = ? AND process_id = ? ORDER BY created_at DESC LIMIT 1`, runID, processID)
@@ -320,7 +358,7 @@ const bindingColumns = `id, run_id, session_id, attempt_id, tool_call_id, proces
 // cgroup_id are specific keys, and a long-lived open anchor on them (e.g. an
 // external-telemetry bind with a far-past start meant to match all events for a
 // container) is a legitimate, intentional pattern that must keep resolving.
-func resolveWindow(db *sql.DB, runID, method, source, matchExpr string, confidence float64, at string, boundOpen bool, matchArgs ...any) (Match, bool, error) {
+func resolveWindow(db Queryer, runID, method, source, matchExpr string, confidence float64, at string, boundOpen bool, matchArgs ...any) (Match, bool, error) {
 	var sb strings.Builder
 	args := make([]any, 0, len(matchArgs)+4)
 	sb.WriteString("SELECT " + bindingColumns + " FROM execution_context_bindings WHERE ")
@@ -379,7 +417,7 @@ func resolveWindow(db *sql.DB, runID, method, source, matchExpr string, confiden
 	return Match{Binding: best, Method: method + ":" + source, Confidence: confidence}, true, nil
 }
 
-func resolveByCgroup(db *sql.DB, runID, cgroupID, at string) (Match, bool, error) {
+func resolveByCgroup(db Queryer, runID, cgroupID, at string) (Match, bool, error) {
 	source := "cgroup_id+time"
 	if runID != "" {
 		source = "run_id+cgroup_id+time"
@@ -387,7 +425,7 @@ func resolveByCgroup(db *sql.DB, runID, cgroupID, at string) (Match, bool, error
 	return resolveWindow(db, runID, "cgroup_time_window", source, "cgroup_id = ?", 0.98, at, false, cgroupID)
 }
 
-func resolveByContainer(db *sql.DB, runID, containerID, at string) (Match, bool, error) {
+func resolveByContainer(db Queryer, runID, containerID, at string) (Match, bool, error) {
 	source := "container_id+time"
 	if runID != "" {
 		source = "run_id+container_id+time"
@@ -395,7 +433,7 @@ func resolveByContainer(db *sql.DB, runID, containerID, at string) (Match, bool,
 	return resolveWindow(db, runID, "container_time_window", source, "container_id = ?", 0.92, at, false, containerID)
 }
 
-func resolveByPID(db *sql.DB, runID string, pid int64, at string) (Match, bool, error) {
+func resolveByPID(db Queryer, runID string, pid int64, at string) (Match, bool, error) {
 	source := "pid+time"
 	if runID != "" {
 		source = "run_id+pid+time"
@@ -403,7 +441,7 @@ func resolveByPID(db *sql.DB, runID string, pid int64, at string) (Match, bool, 
 	return resolveWindow(db, runID, "pid_time_window", source, "(pid = ? OR root_pid = ?)", 0.85, at, true, pid, pid)
 }
 
-func scanOne(db *sql.DB, method, source string, confidence float64, query string, args ...any) (Match, bool, error) {
+func scanOne(db Queryer, method, source string, confidence float64, query string, args ...any) (Match, bool, error) {
 	var item Binding
 	err := db.QueryRow(query, args...).Scan(&item.ID, &item.RunID, &item.SessionID, &item.AttemptID, &item.ToolCallID, &item.ProcessID, &item.ContainerID, &item.CgroupID, &item.RootPID, &item.PID, &item.StartedAt, &item.EndedAt, &item.BindingSource, &item.Confidence)
 	if err == sql.ErrNoRows {
