@@ -1,11 +1,12 @@
 # Linux amd64, KVM guest and K3s
 
-This adaptation adds **x86-64 / Go amd64**, with a separate native eBPF object.
-It preserves the previously validated ARM64 object byte-for-byte. 32-bit x86,
-Firecracker guest-init and transparent observation across a VM boundary are not
-part of this deployment. The sensor runs **inside the guest kernel**. Ordinary
-KVM guests use the existing `local-record` profile; `microvm-guest-init` remains
-planned.
+AgentProvenance supports **Linux x86-64 / Go amd64 and ARM64**, with separate
+native eBPF objects. Validated deployment paths include local Linux, a KVM
+guest, and K3s Pods inside that guest. The sensor runs **inside the guest
+kernel**; KVM capture uses the existing `local-record` profile and the same
+evidence model as local capture. This is not host-side inspection across a VM
+boundary or a VM lifecycle manager. The amd64 addition preserves the existing
+ARM64 object byte-for-byte.
 
 ## What changed
 
@@ -41,9 +42,10 @@ planned.
 ## Validated environments
 
 The checked reports in [benchmarks/amd64-kvm-k3s](benchmarks/amd64-kvm-k3s)
-record the actual kernel, architecture and individual assertions. The new
-GitHub Actions job repeats the amd64 live sensor gate; hosted CI has not yet
-been run for this local branch.
+record the actual kernel, architecture and individual assertions. The
+[CI workflow](../.github/workflows/ci.yml) repeats the amd64 live sensor gate
+with Go 1.23 through 1.26 and uploads its own reports. Lab reports and hosted CI
+are separate evidence: consult the report for its environment and revision.
 
 | Environment | Validation |
 | --- | --- |
@@ -130,8 +132,8 @@ probe are not claimed as covered.
 
 The concurrent Read fixture has been run with Go 1.23.12, 1.24.0, 1.25.0 and 1.26 on WSL,
 including goroutine stack growth, exact returned bytes, and context cleanup.
-The CI live Go TLS matrix also covers all four minor versions; these local
-results do not substitute for a completed hosted CI run.
+The CI live Go TLS matrix covers the same four minor versions; its result and
+artifacts are attached to each pull request's checks.
 
 Inspect the actual live capabilities and queue state with:
 
@@ -257,6 +259,7 @@ python3 scripts/accept_daemon_readiness.py \
   --agentprov "$PWD/bin/agentprov" --report /tmp/daemon-readiness.json
 ```
 
-Falco import and its legacy worker remain compatibility paths. This follow-up
-does not change their recovery semantics; the native spool guarantees above
-apply to `sensor stream`. Native capture is the primary path for this deployment.
+Falco import and its legacy worker remain compatibility paths. Shared ingestion
+now commits each event and its evidence atomically, but Falco-specific worker
+restart recovery is unchanged. The native spool guarantees above apply to
+`sensor stream`. Native capture is the primary path for this deployment.

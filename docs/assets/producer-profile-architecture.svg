@@ -26,7 +26,7 @@
 
   <rect class="bg" width="1280" height="520"/>
   <text x="52" y="58" class="title"><tspan fill="#0071e3">Agent</tspan>Provenance: Portable Producer Profiles</text>
-  <text x="52" y="86" class="subtitle">Keep the core substrate-neutral: local and Kubernetes are validated; future profiles stay capability-gated.</text>
+  <text x="52" y="86" class="subtitle">Local Linux, KVM guests, and Kubernetes feed one substrate-neutral evidence model.</text>
 
   <g transform="translate(48 142)">
     <rect width="252" height="238" rx="22" class="card work"/>
@@ -38,8 +38,7 @@
     <rect x="28" y="148" width="196" height="34" rx="17" class="pill"/>
     <text x="50" y="170" class="t">k8s pods</text>
     <rect x="28" y="194" width="196" height="34" rx="17" class="pill"/>
-    <text x="50" y="216" class="t">microVM guest</text>
-    <text x="152" y="216" class="small">(planned)</text>
+    <text x="50" y="216" class="t">KVM guest</text>
   </g>
 
   <g transform="translate(374 118)">
@@ -86,5 +85,6 @@
   <path d="M626 260H700" class="edge"/>
   <path d="M952 260H1026" class="edge"/>
 
-  <text x="354" y="446" class="note">Profiles adapt evidence production; the core graph, verify, diff, risk, and replay model do not become substrate-specific.</text>
+  <text x="640" y="450" text-anchor="middle" class="note">Profiles adapt collection and attribution.</text>
+  <text x="640" y="476" text-anchor="middle" class="note">Graph, verify, diff, and replay stay substrate-neutral.</text>
 </svg>

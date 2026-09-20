@@ -1,5 +1,11 @@
 # AgentProvenance v0.7: Portable Producer Profiles
 
+> Historical v0.7 design and validation notes. For the current release, see
+> [v0.8.0](releases/v0.8.0.md) and the [Linux/KVM/K3s runbook](amd64-kvm-k3s.md).
+> KVM guest capture now uses `local-record`; amd64 Go TLS response/read capture
+> is implemented for Go ABIInternal 1.23-1.26 with symbols. The matrices and
+> follow-on tracks below describe the earlier plan, not today's open items.
+
 ## Goal
 
 Extend the collection capability that already works on local Linux to
@@ -125,7 +131,7 @@ them block shipping the environment profiles.
   command-match seam. Unadapted harnesses still get kernel-layer provenance —
   they never go dark.
 
-### v0.8.0 — model-intent multi-TLS-stack hardening (intent axis)
+### Original follow-on plan: multi-TLS-stack hardening (intent axis)
 
 - Harden LLM intent beyond the current dynamic OpenSSL + partial Go request
   path: Go `crypto/tls` response/read capture, BoringSSL, statically-linked TLS,
