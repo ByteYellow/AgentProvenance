@@ -706,7 +706,7 @@ func (n *NativeStream) processBatch(id string) error {
 			}
 			if outcome == "" {
 				var err error
-				eventID, err = ingestNativeWithStore(db, tx, event)
+				eventID, err = ingestFilteredWithStore(tx, event)
 				if err != nil {
 					return err
 				}

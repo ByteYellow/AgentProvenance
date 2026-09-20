@@ -42,8 +42,8 @@ components:
         ready: { type: boolean, description: Database queries and schema checks succeeded; independent of historical evidence loss. }
         coverage_status: { type: string, enum: [unknown, not_observed, no_recorded_gaps, pending, gaps_recorded] }
         checks: { type: object, additionalProperties: { type: object } }
-        queued_spool: { type: integer, nullable: true }
-        queued_spool_bytes: { type: integer, nullable: true }
+        queued_spool: { type: [integer, "null"] }
+        queued_spool_bytes: { type: [integer, "null"] }
         native_capture: { type: object, additionalProperties: true }
       additionalProperties: true
 paths:

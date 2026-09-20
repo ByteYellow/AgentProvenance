@@ -37,9 +37,12 @@ jobs:
         run: GOTOOLCHAIN=local go test -race ./...
 
   sensor-build:
-    name: eBPF sensor builds from committed bindings
+    name: Linux ${{ matrix.arch }} builds from committed bindings
     runs-on: ubuntu-latest
     needs: test
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -51,9 +54,17 @@ jobs:
           cache: true
 
       # Architecture-specific bpf2go bindings (.go/.o) are committed, so this builds
-      # the Linux sensor without clang/bpftool: the reproducible-build guarantee.
-      - name: Build agentprov-sensor from committed bindings
-        run: GOTOOLCHAIN=local go build -o /dev/null ./cmd/agentprov-sensor
+      # the Linux sensor without clang/bpftool. This is not a bit-for-bit
+      # reproducibility check across compiler or kernel versions.
+      - name: Build CLI and sensor from committed bindings
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: "0"
+          GOTOOLCHAIN: local
+        run: |
+          go build -o /dev/null ./cmd/agentprov
+          go build -o /dev/null ./cmd/agentprov-sensor
 
   sensor-bindings-drift:
     name: eBPF sensor bindings drift check

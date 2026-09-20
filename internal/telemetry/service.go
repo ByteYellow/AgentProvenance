@@ -328,23 +328,32 @@ type sqlStore interface {
 }
 
 func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
-	return ingestFilteredWithStore(db, db, event)
+	tx, err := db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	id, err := ingestFilteredWithStore(tx, event)
+	if err != nil {
+		return "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return id, nil
 }
 
-func ingestFilteredWithStore(db *sql.DB, store sqlStore, event IngestEvent) (string, error) {
-	return ingestFilteredWithMode(db, store, event, false)
-}
-
-// Native replay commits the event and all its writes in one transaction. An
+// Callers commit the event and all its writes in one transaction. An
 // optional derived edge may be absent, but a failed database write must abort
-// the batch instead of acknowledging partially persisted evidence.
-func ingestNativeWithStore(db *sql.DB, store sqlStore, event IngestEvent) (string, error) {
-	return ingestFilteredWithMode(db, store, event, true)
-}
-
-func ingestFilteredWithMode(db *sql.DB, store sqlStore, event IngestEvent, strict bool) (string, error) {
+// the transaction or row savepoint instead of acknowledging partial evidence.
+func ingestFilteredWithStore(store sqlStore, event IngestEvent) (string, error) {
 	if event.EventType == "" {
 		return "", fmt.Errorf("event_type is required")
+	}
+	if event.Timestamp != "" {
+		if _, err := time.Parse(time.RFC3339Nano, event.Timestamp); err != nil {
+			return "", fmt.Errorf("capture timestamp: %w", err)
+		}
 	}
 	if !AllowedEventType(event.EventType) {
 		return "", fmt.Errorf("telemetry event %q rejected by filtered driver", event.EventType)
@@ -378,11 +387,7 @@ func ingestFilteredWithMode(db *sql.DB, store sqlStore, event IngestEvent, stric
 	confidence := 1.0
 	bindingSource := event.BindingSource
 	if event.RunID == "" || event.SessionID == "" || event.ToolCallID == "" || event.ProcessID == "" {
-		resolver := correlation.Queryer(db)
-		if strict {
-			resolver = store
-		}
-		match, ok, err := correlation.Resolve(resolver, raw)
+		match, ok, err := correlation.Resolve(store, raw)
 		if err != nil {
 			return "", err
 		}
@@ -439,10 +444,7 @@ func ingestFilteredWithMode(db *sql.DB, store sqlStore, event IngestEvent, stric
 	}
 	eventID := ids.New("evt")
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if strict && event.Timestamp != "" {
-		if _, err := time.Parse(time.RFC3339Nano, event.Timestamp); err != nil {
-			return "", fmt.Errorf("capture timestamp: %w", err)
-		}
+	if event.Timestamp != "" {
 		now = event.Timestamp
 	}
 	payload := event.Payload
@@ -456,14 +458,14 @@ func ingestFilteredWithMode(db *sql.DB, store sqlStore, event IngestEvent, stric
 	if err != nil {
 		return "", err
 	}
-	if err := recordRuntimeCausalityEdges(store, event, eventID, now); strict && err != nil {
+	if err := recordRuntimeCausalityEdges(store, event, eventID, now); err != nil {
 		return "", err
 	}
 	// Consume process_exit to CLOSE the exiting pid's correlation window, so a
 	// later event that reuses the pid does not over-bind to this dead scope.
 	// Use the event's own timestamp when present (chronological close), else now.
 	if event.EventType == "process_exit" && event.PID != 0 {
-		if err := correlation.CloseBindingByPID(store, event.PID, firstNonEmpty(event.Timestamp, now)); strict && err != nil {
+		if err := correlation.CloseBindingByPID(store, event.PID, firstNonEmpty(event.Timestamp, now)); err != nil {
 			return "", err
 		}
 	}
@@ -476,12 +478,12 @@ func ingestFilteredWithMode(db *sql.DB, store sqlStore, event IngestEvent, stric
 			(id, run_id, rollout_id, attempt_id, session_id, tool_call_id, snapshot_id, event_type, priority, payload, status, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`,
 			ids.New("evidence"), event.RunID, event.RolloutID, event.AttemptID, event.SessionID, event.ToolCallID, event.SnapshotID, event.EventType, priority, payload, now)
-		if strict && err != nil {
+		if err != nil {
 			return "", err
 		}
 	}
 	if event.SnapshotID != "" && highRiskEvent(event.EventType) {
-		if err := taintSnapshotAndDescendants(store, event.SnapshotID, event.RunID, event.EventType, now); strict && err != nil {
+		if err := taintSnapshotAndDescendants(store, event.SnapshotID, event.RunID, event.EventType, now); err != nil {
 			return "", err
 		}
 	}

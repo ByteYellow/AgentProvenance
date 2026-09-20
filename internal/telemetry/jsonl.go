@@ -310,8 +310,18 @@ func IngestFalco(db *sql.DB, opts FalcoIngestOptions, input io.Reader) (JSONLIng
 			appendRowResult(&result, RowResult{Line: lineNo, Status: "skipped", DetectedFormat: detected})
 			continue
 		}
-		id, err := ingestFilteredWithStore(db, tx, event)
+		// Keep valid rows, but never commit a failed row's partial graph writes.
+		if _, err := tx.Exec(`SAVEPOINT ingest_row`); err != nil {
+			return result, err
+		}
+		id, err := ingestFilteredWithStore(tx, event)
 		if err != nil {
+			if _, rollbackErr := tx.Exec(`ROLLBACK TO ingest_row`); rollbackErr != nil {
+				return result, fmt.Errorf("ingest failed: %v; rollback: %w", err, rollbackErr)
+			}
+			if _, releaseErr := tx.Exec(`RELEASE ingest_row`); releaseErr != nil {
+				return result, releaseErr
+			}
 			result.Failed++
 			msg := fmt.Sprintf("line %d: ingest failed: %v", lineNo, err)
 			result.Errors = append(result.Errors, msg)
@@ -320,11 +330,10 @@ func IngestFalco(db *sql.DB, opts FalcoIngestOptions, input io.Reader) (JSONLIng
 		}
 		record, err := eventRecordByID(tx, id)
 		if err != nil {
-			result.Failed++
-			msg := fmt.Sprintf("line %d: readback failed: %v", lineNo, err)
-			result.Errors = append(result.Errors, msg)
-			appendRowResult(&result, rowResultForEvent(lineNo, "failed", detected, event, id, "", msg))
-			continue
+			return result, fmt.Errorf("line %d: readback failed: %w", lineNo, err)
+		}
+		if _, err := tx.Exec(`RELEASE ingest_row`); err != nil {
+			return result, err
 		}
 		result.Ingested++
 		result.EventIDs = append(result.EventIDs, id)

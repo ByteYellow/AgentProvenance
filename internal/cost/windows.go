@@ -3,6 +3,7 @@ package cost
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 	"time"
 )
 
@@ -169,45 +170,108 @@ func AggregateResourceWindows(db *sql.DB, opts WindowOptions) error {
 }
 
 func RetainRawCPUSamples(db *sql.DB, opts WindowOptions) error {
+	return retainRawCPUSamples(db, opts, time.Now().UTC())
+}
+
+func retainRawCPUSamples(db *sql.DB, opts WindowOptions, now time.Time) error {
 	if opts.RawRetention <= 0 {
 		opts.RawRetention = 10 * time.Minute
 	}
 	if opts.MaxRawPerSession <= 0 {
 		opts.MaxRawPerSession = 512
 	}
-	cutoff := time.Now().UTC().Add(-opts.RawRetention).Format(time.RFC3339Nano)
-	if _, err := db.Exec(`DELETE FROM cpu_samples WHERE created_at < ?`, cutoff); err != nil {
-		return err
-	}
-	rows, err := db.Query(`SELECT DISTINCT session_id FROM cpu_samples`)
+	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer tx.Rollback()
+	cutoff := now.Add(-opts.RawRetention)
+	rows, err := tx.Query(`SELECT DISTINCT session_id FROM cpu_samples`)
+	if err != nil {
+		return err
+	}
 	var sessions []string
 	for rows.Next() {
 		var sessionID string
 		if err := rows.Scan(&sessionID); err != nil {
+			rows.Close()
 			return err
 		}
 		sessions = append(sessions, sessionID)
 	}
 	if err := rows.Err(); err != nil {
+		rows.Close()
 		return err
 	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	remove, err := tx.Prepare(`DELETE FROM cpu_samples WHERE id = ?`)
+	if err != nil {
+		return err
+	}
+	defer remove.Close()
 	for _, sessionID := range sessions {
-		if _, err := db.Exec(`DELETE FROM cpu_samples
-			WHERE session_id = ?
-			  AND id NOT IN (
-				SELECT id FROM cpu_samples
-				WHERE session_id = ?
-				ORDER BY created_at DESC
-				LIMIT ?
-			  )`, sessionID, sessionID, opts.MaxRawPerSession); err != nil {
-			return err
+		type sampleTime struct {
+			id string
+			at time.Time
+		}
+		var samples []sampleTime
+		lastID := ""
+		for {
+			// Keep at most the retained candidates plus one page, even for a stale store.
+			rows, err := tx.Query(`SELECT id, created_at FROM cpu_samples
+				WHERE session_id = ? AND (? = '' OR id > ?) ORDER BY id LIMIT 256`, sessionID, lastID, lastID)
+			if err != nil {
+				return err
+			}
+			count := 0
+			for rows.Next() {
+				var id, timestamp string
+				if err := rows.Scan(&id, &timestamp); err != nil {
+					rows.Close()
+					return err
+				}
+				at, err := time.Parse(time.RFC3339Nano, timestamp)
+				if err != nil {
+					rows.Close()
+					return fmt.Errorf("CPU sample %s timestamp: %w", id, err)
+				}
+				samples = append(samples, sampleTime{id: id, at: at})
+				lastID = id
+				count++
+			}
+			if err := rows.Err(); err != nil {
+				rows.Close()
+				return err
+			}
+			if err := rows.Close(); err != nil {
+				return err
+			}
+			if count == 0 {
+				break
+			}
+			// RFC3339Nano text ordering loses chronology across precision and offsets.
+			sort.Slice(samples, func(i, j int) bool {
+				if samples[i].at.Equal(samples[j].at) {
+					return samples[i].id > samples[j].id
+				}
+				return samples[i].at.After(samples[j].at)
+			})
+			kept := 0
+			for i, sample := range samples {
+				if i >= opts.MaxRawPerSession || sample.at.Before(cutoff) {
+					if _, err := remove.Exec(sample.id); err != nil {
+						return err
+					}
+				} else {
+					kept++
+				}
+			}
+			samples = samples[:kept]
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 func addSampleToSessionAgg(agg *sessionWindowAgg, sample cpuSampleRow) {
