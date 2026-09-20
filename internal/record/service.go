@@ -209,21 +209,23 @@ func (s Service) Run(req Request) (Result, error) {
 	defer scopeCleanup()
 	start := time.Now()
 	startedAt := start.UTC().Format(time.RFC3339Nano)
+	// Publish the scope before the child can emit its first syscall. A live
+	// collector may otherwise drain exec/open/connect before cmd.Start returns
+	// and permanently drop them as uncorrelated (especially on a quiet node).
+	bindingID, err := correlation.RecordBinding(s.DB, correlation.Binding{
+		RunID: req.RunID, SessionID: sessionID, AttemptID: attemptID,
+		ToolCallID: toolCallID, ProcessID: processID,
+		ContainerID: "agentprov-record-" + attemptID, CgroupID: scopeCgroupID,
+		StartedAt: startedAt, BindingSource: "zero_sdk_record",
+	})
+	if err != nil {
+		_ = s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, err.Error())
+		return Result{}, fmt.Errorf("publish execution scope before launch: %w", err)
+	}
 	if err := cmd.Start(); err != nil {
 		endedAt := time.Now().UTC().Format(time.RFC3339Nano)
 		_ = s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, err.Error())
-		_, _ = correlation.RecordBinding(s.DB, correlation.Binding{
-			RunID:         req.RunID,
-			SessionID:     sessionID,
-			AttemptID:     attemptID,
-			ToolCallID:    toolCallID,
-			ProcessID:     processID,
-			ContainerID:   "agentprov-record-" + attemptID,
-			CgroupID:      scopeCgroupID,
-			StartedAt:     startedAt,
-			EndedAt:       endedAt,
-			BindingSource: "zero_sdk_record",
-		})
+		_ = correlation.CloseBindingByID(s.DB, bindingID, endedAt)
 		return Result{
 			RunID:          req.RunID,
 			RolloutID:      rolloutID,
@@ -244,19 +246,7 @@ func (s Service) Run(req Request) (Result, error) {
 		}, nil
 	}
 	pid := int64(cmd.Process.Pid)
-	_, _ = correlation.RecordBinding(s.DB, correlation.Binding{
-		RunID:         req.RunID,
-		SessionID:     sessionID,
-		AttemptID:     attemptID,
-		ToolCallID:    toolCallID,
-		ProcessID:     processID,
-		ContainerID:   "agentprov-record-" + attemptID,
-		CgroupID:      scopeCgroupID,
-		RootPID:       pid,
-		PID:           pid,
-		StartedAt:     startedAt,
-		BindingSource: "zero_sdk_record",
-	})
+	_, _ = s.DB.Exec(`UPDATE execution_context_bindings SET root_pid = ?, pid = ? WHERE id = ?`, pid, pid, bindingID)
 	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, pid, ppid, payload, created_at)
 		VALUES (?, ?, ?, ?, ?, 'record', 'exec_start', ?, ?, ?, ?)`,
 		ids.New("evt"), req.RunID, sessionID, toolCallID, processID, pid, int64(os.Getpid()), fmt.Sprintf(`{"attempt_id":%q,"command":%q,"mode":"zero_sdk"}`, attemptID, commandText), startedAt)

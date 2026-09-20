@@ -12,10 +12,11 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_endian.h>
-// PoC SSL uprobe arg extraction needs PT_REGS; arm64 is the lab target. Register
-// layout is arch-specific, so a future multi-arch build must set this per arch.
-#ifndef __TARGET_ARCH_arm64
-#define __TARGET_ARCH_arm64
+// bpf2go selects the register layout from its explicit amd64/arm64 target.
+// Endianness alone is insufficient for uprobes: C and Go arguments are held
+// in architecture-specific registers.
+#if !defined(__TARGET_ARCH_arm64) && !defined(__TARGET_ARCH_x86)
+#error "generate the sensor with an explicit amd64 or arm64 bpf2go target"
 #endif
 #include <bpf/bpf_tracing.h>
 
@@ -49,6 +50,9 @@ struct sensor_event {
 	__u32 tgid;
 	__u32 ppid;
 	__u64 cgroup_id;
+#if defined(__TARGET_ARCH_x86)
+	__u64 ktime_ns;  // capture time, independent of userspace/ingest backlog
+#endif
 	__u64 conn;      // tls: the SSL* pointer identifying the connection (reassembly key)
 	__u32 daddr;     // connect: dst IPv4 (net order); tls: valid bytes in this chunk
 	__u16 dport;     // connect: dst port (net order); tls: 1 if the message was truncated at the chunk cap
@@ -104,6 +108,55 @@ struct {
 	__uint(max_entries, 1 << 24);
 } events SEC(".maps");
 
+#if defined(__TARGET_ARCH_x86)
+// Cache the cgroup's kernel name while the task still exists. A short-lived Pod
+// can lose BOTH /proc/PID and its cgroup directory before userspace drains the
+// ring buffer. Retaining a bounded identity map makes late informer attribution
+// possible without delaying the workload or guessing from timestamps.
+struct cgroup_identity {
+	char names[3][96];
+};
+struct {
+	__uint(type, BPF_MAP_TYPE_LRU_HASH);
+	__uint(max_entries, 16384);
+	__type(key, __u64);
+	__type(value, struct cgroup_identity);
+} cgroup_names SEC(".maps");
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, struct cgroup_identity);
+} cgroup_name_scratch SEC(".maps");
+
+static __always_inline void capture_cgroup_identity(struct task_struct *task, __u64 id) {
+	if (bpf_map_lookup_elem(&cgroup_names, &id))
+		return;
+	__u32 zero = 0;
+	struct cgroup_identity *value = bpf_map_lookup_elem(&cgroup_name_scratch, &zero);
+	if (!value)
+		return;
+	__builtin_memset(value, 0, sizeof(*value));
+	struct cgroup *group = BPF_CORE_READ(task, cgroups, dfl_cgrp);
+	// A different task can migrate this task between cgroups while we read
+	// it. Never publish the new group's name under an earlier captured ID.
+	if (!group || BPF_CORE_READ(group, kn, id) != id)
+		return;
+#pragma unroll
+	for (int i = 0; i < 3; i++) {
+		if (!group)
+			break;
+		const char *name = BPF_CORE_READ(group, kn, name);
+		// Do not retain a failed/incomplete read as a permanent negative cache
+		// entry. A valid empty root name returns 1 and can safely be cached.
+		if (bpf_probe_read_kernel_str(value->names[i], sizeof(value->names[i]), name) <= 0)
+			return;
+		group = BPF_CORE_READ(group, self.parent, cgroup);
+	}
+	bpf_map_update_elem(&cgroup_names, &id, value, BPF_NOEXIST);
+}
+#endif
+
 static __always_inline void fill_common(struct sensor_event *e) {
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 	__u64 id = bpf_get_current_pid_tgid();
@@ -111,6 +164,10 @@ static __always_inline void fill_common(struct sensor_event *e) {
 	e->tgid = (__u32)id;
 	e->ppid = BPF_CORE_READ(task, real_parent, tgid);
 	e->cgroup_id = bpf_get_current_cgroup_id();
+#if defined(__TARGET_ARCH_x86)
+	e->ktime_ns = bpf_ktime_get_ns();
+	capture_cgroup_identity(task, e->cgroup_id);
+#endif
 	bpf_get_current_comm(&e->comm, sizeof(e->comm));
 }
 
@@ -225,15 +282,13 @@ static __always_inline int noise_file_prefix(const char *p) {
 	return 0;
 }
 
-SEC("tp/syscalls/sys_enter_openat")
-int handle_openat(struct trace_event_raw_sys_enter *ctx) {
-	long flags = (long)ctx->args[2];
+static __always_inline int emit_open(const char *path, long flags) {
 	int is_write = (flags & OPEN_WRITE_MASK) != 0;
 	// Filter noise reads BEFORE reserving: a discarded ringbuf record still
 	// occupies space until drained, so the prefix check must precede reserve.
 	if (!is_write) {
 		char pfx[8] = {};
-		bpf_probe_read_user(pfx, sizeof(pfx), (void *)ctx->args[1]);
+		bpf_probe_read_user(pfx, sizeof(pfx), path);
 		if (noise_read_prefix(pfx))
 			return 0;
 	}
@@ -247,11 +302,23 @@ int handle_openat(struct trace_event_raw_sys_enter *ctx) {
 	e->dport = 0;
 	fill_common(e);
 	e->args[0] = 0;
-	bpf_probe_read_user_str(&e->path, sizeof(e->path), (void *)ctx->args[1]);
+	bpf_probe_read_user_str(&e->path, sizeof(e->path), path);
 	e->exit_code = is_write ? 0 : 1; // 0 = write, 1 = read
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }
+
+SEC("tp/syscalls/sys_enter_openat")
+int handle_openat(struct trace_event_raw_sys_enter *ctx) {
+	return emit_open((const char *)ctx->args[1], (long)ctx->args[2]);
+}
+
+#if defined(__TARGET_ARCH_x86)
+SEC("tp/syscalls/sys_enter_open")
+int handle_open(struct trace_event_raw_sys_enter *ctx) {
+	return emit_open((const char *)ctx->args[0], (long)ctx->args[1]);
+}
+#endif
 
 // Process (thread-group-leader) exit: bounds the process lifetime so the
 // correlation engine can close time windows and resist pid reuse. Also frees any
@@ -386,10 +453,9 @@ int handle_rename_plain(struct trace_event_raw_sys_enter *ctx) {
 	return 0;
 }
 
-SEC("tp/syscalls/sys_enter_unlinkat")
-int handle_unlink(struct trace_event_raw_sys_enter *ctx) {
+static __always_inline int emit_unlink(const char *path) {
 	char pfx[8] = {};
-	bpf_probe_read_user(pfx, sizeof(pfx), (void *)ctx->args[1]); // pathname
+	bpf_probe_read_user(pfx, sizeof(pfx), path);
 	if (noise_file_prefix(pfx))
 		return 0;
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
@@ -403,10 +469,22 @@ int handle_unlink(struct trace_event_raw_sys_enter *ctx) {
 	fill_common(e);
 	e->args[0] = 0;
 	e->exit_code = 0;
-	bpf_probe_read_user_str(&e->path, sizeof(e->path), (void *)ctx->args[1]);
+	bpf_probe_read_user_str(&e->path, sizeof(e->path), path);
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }
+
+SEC("tp/syscalls/sys_enter_unlinkat")
+int handle_unlink(struct trace_event_raw_sys_enter *ctx) {
+	return emit_unlink((const char *)ctx->args[1]);
+}
+
+#if defined(__TARGET_ARCH_x86)
+SEC("tp/syscalls/sys_enter_unlink")
+int handle_unlink_plain(struct trace_event_raw_sys_enter *ctx) {
+	return emit_unlink((const char *)ctx->args[0]);
+}
+#endif
 
 // Universal DNS: a UDP query to port 53 carries the DNS message in the sendto
 // buffer. We copy the raw bytes (exit_code = length) and parse the qname in
@@ -495,7 +573,11 @@ static __always_inline void emit_ssl_chunks(__u32 kind, __u64 conn, const char *
 		e->exit_code = total;
 		fill_common(e);
 		e->args[0] = 0;
-		bpf_probe_read_user(&e->path, len, buf + off);
+		if (bpf_probe_read_user(&e->path, len, buf + off)) {
+			bpf_ringbuf_discard(e, 0);
+			count_drop();
+			return;
+		}
 		bpf_ringbuf_submit(e, 0);
 	}
 }
@@ -507,6 +589,115 @@ int BPF_UPROBE(handle_ssl_write, void *ssl, const void *buf, int num) {
 	emit_ssl_chunks(EVENT_SSL, (__u64)ssl, (const char *)buf, num);
 	return 0;
 }
+
+#if defined(__TARGET_ARCH_x86)
+// Go ABIInternal on amd64 passes (*Conn, []byte) in AX, BX, CX, DI.
+// System V C uses DI, SI, DX, so the OpenSSL uprobe cannot be reused here.
+// Go goroutine stack movement makes uretprobes unsafe. Read uses ordinary
+// uprobes at decoded RET instructions instead; these never change a return PC.
+SEC("uprobe/go_tls_write")
+int handle_go_tls_write(struct pt_regs *ctx) {
+	__u64 conn = ctx->ax;
+	const char *buf = (const char *)ctx->bx;
+	__u64 len = ctx->cx;
+	if (!buf || len == 0 || len > (1u << 20))
+		return 0;
+	emit_ssl_chunks(EVENT_SSL, conn, buf, (int)len);
+	return 0;
+}
+
+// R14 holds runtime.g in the supported amd64 Go ABIInternal. Its first two
+// words are stack.lo and stack.hi. A goroutine may resume on a different OS
+// thread, so a thread ID cannot pair Read entry and completion. Distance from
+// stack.hi to the entry SP also stays stable when Go grows/copies the stack,
+// distinguishes nested calls, and lets a repeated entry after morestack replace
+// the same invocation instead of creating an unmatched extra frame.
+struct go_read_key {
+	__u64 process;
+	__u64 goroutine;
+	__u64 frame;
+};
+
+struct go_read_ctx {
+	__u64 conn;
+	__u64 buf;
+	__u64 len;
+	__u64 stack_buf_offset; // zero for a heap-backed slice
+};
+
+struct {
+	__uint(type, BPF_MAP_TYPE_LRU_HASH);
+	__uint(max_entries, 16384);
+	__type(key, struct go_read_key);
+	__type(value, struct go_read_ctx);
+} go_read_bufs SEC(".maps");
+
+static __always_inline int go_read_frame(struct pt_regs *ctx,
+		struct go_read_key *key, __u64 *lo, __u64 *hi) {
+	__u64 g = ctx->r14;
+	if (!g || bpf_probe_read_user(lo, sizeof(*lo), (void *)g) ||
+		bpf_probe_read_user(hi, sizeof(*hi), (void *)(g + 8)) ||
+		ctx->sp < *lo || ctx->sp >= *hi)
+		return -1;
+	key->process = bpf_get_current_pid_tgid() >> 32;
+	key->goroutine = g;
+	key->frame = *hi - ctx->sp;
+	return 0;
+}
+
+SEC("uprobe/go_tls_read_enter")
+int handle_go_tls_read_enter(struct pt_regs *ctx) {
+	struct go_read_key key = {};
+	__u64 lo = 0, hi = 0;
+	if (go_read_frame(ctx, &key, &lo, &hi)) {
+		count_drop();
+		return 0;
+	}
+	struct go_read_ctx state = {
+		.conn = ctx->ax, .buf = ctx->bx, .len = ctx->cx,
+	};
+	if (state.buf >= lo && state.buf < hi)
+		state.stack_buf_offset = hi - state.buf;
+	if (bpf_map_update_elem(&go_read_bufs, &key, &state, BPF_ANY))
+		count_drop();
+	return 0;
+}
+
+SEC("uprobe/go_tls_read_return")
+int handle_go_tls_read_return(struct pt_regs *ctx) {
+	struct go_read_key key = {};
+	__u64 lo = 0, hi = 0;
+	if (go_read_frame(ctx, &key, &lo, &hi)) {
+		count_drop();
+		return 0;
+	}
+	struct go_read_ctx *saved = bpf_map_lookup_elem(&go_read_bufs, &key);
+	if (!saved) {
+		// Includes bounded-map eviction or attaching during an in-flight Read.
+		count_drop();
+		return 0;
+	}
+	struct go_read_ctx state = *saved;
+	bpf_map_delete_elem(&go_read_bufs, &key);
+	// AX is n, BX/CX are error. n bytes are valid even when error is non-nil.
+	__s64 n = (__s64)ctx->ax;
+	if (n <= 0)
+		return 0;
+	if ((__u64)n > state.len || n > 0x7fffffff) {
+		count_drop();
+		return 0;
+	}
+	if (state.stack_buf_offset) {
+		if (state.stack_buf_offset > hi - lo) {
+			count_drop();
+			return 0;
+		}
+		state.buf = hi - state.stack_buf_offset;
+	}
+	emit_ssl_chunks(EVENT_SSL_READ, state.conn, (const char *)state.buf, (int)n);
+	return 0;
+}
+#endif
 
 // SSL_write_ex(ssl, buf, num, *written): the size_t-taking variant modern
 // OpenSSL 3.x clients use (notably CPython's _ssl, which never calls SSL_write).

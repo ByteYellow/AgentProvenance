@@ -2,21 +2,17 @@
 
 # AgentProvenance
 
-### Three-axis execution observability for sandboxed agents: model intent, application context, and runtime telemetry in one verifiable evidence graph.
+### Three-axis execution observability for sandboxed AI agents.
 
-AgentProvenance correlates three evidence axes for sandboxed, tool-using agents:
-model intent, application-side agent context, and system-side runtime telemetry.
-It turns LLM decisions, tool calls, process/file/network events, artifacts, risk
-signals, and response decisions into a queryable, replayable, and auditable
-causality graph. Evidence is stored content-addressed and hash-verified (a model
-borrowed from Git) and can be signed for tamper-evidence -- but this is an
-audit/provenance layer, **not a version-control system**: there is no merge,
-checkout, or mutable working tree.
+Correlate **model intent, application context, and runtime telemetry** in one
+verifiable evidence graph. Trace a tool call to the process, file, or network
+effect it produced; investigate risk, compare executions, and replay signed
+evidence locally.
 
 [![Release](https://img.shields.io/github/v/release/ByteYellow/AgentProvenance?style=flat-square&color=orange&sort=semver)](https://github.com/ByteYellow/AgentProvenance/releases/latest)
 [![Go](https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square)](https://go.dev/)
 [![CI](https://img.shields.io/github/actions/workflow/status/ByteYellow/AgentProvenance/ci.yml?branch=main&style=flat-square)](https://github.com/ByteYellow/AgentProvenance/actions/workflows/ci.yml)
-[![Runtime](https://img.shields.io/badge/runtime-Docker-2496ED.svg?style=flat-square)](https://www.docker.com/)
+[![Sensor](https://img.shields.io/badge/sensor-Linux_amd64_%7C_arm64-2496ED.svg?style=flat-square)](docs/amd64-kvm-k3s.md)
 [![SQLite](https://img.shields.io/badge/state-SQLite-003B57.svg?style=flat-square)](https://www.sqlite.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square)](LICENSE)
 
@@ -32,64 +28,33 @@ English | [简体中文](README.zh-CN.md)
   <img src="docs/assets/three-axis-observability.svg" alt="AgentProvenance three-axis observability: system telemetry, application context, and model intent flow into one verifiable evidence graph." width="100%">
 </p>
 
-<p align="center">
-  <img src="docs/assets/evidence-dag.svg" alt="AgentProvenance evidence DAG: LLM intent, tool call, process, runtime event, policy risk, response, artifact, manifest, and verification." width="100%">
-</p>
+**Investigate the execution, not just the conversation:**
 
-AgentProvenance is a local-first security and provenance control plane for
-autonomous, tool-using agents, especially sandboxed coding agents. It captures
-model intent from transcripts/TLS evidence, app-side context from agent hooks and
-tool scopes, and runtime telemetry from its own eBPF sensor or external sources
-such as Falco/Tetragon. The result is a verifiable, signable causality graph
-served over the CLI, a daemon API, AI tools (including an MCP server), and a
-local web dashboard.
+- Which agent or peer message led to this tool call?
+- Which process read a secret, changed a file, or contacted an endpoint?
+- What evidence supports the finding, and can it be verified offline?
 
-It is not a generic sandbox runtime, generic telemetry collector, Kubernetes/Ray
-replacement, RL trainer, trace dashboard, or version-control system (it borrows
-Git's content-addressing and verification model, not its branch/merge workflow).
-It owns a narrower primitive:
-
-```text
-Model Intent
-  -> Application Context
-  -> Runtime Telemetry
-  -> Evidence Ingest
-  -> Runtime Causality Graph
-  -> Git-like Provenance DAG
-  -> Intent Diff / Risk / Response
-  -> Replay / Forensics / Audit Manifest
-```
-
-The goal is to answer questions ordinary traces do not answer well:
-
-- Which base state did this execution start from?
-- Which execution scope produced this artifact?
-- Which tool call started this process?
-- Which child process caused this runtime event?
-- Which process changed this file?
-- Which behavior is anomalous for this agent or task profile?
-- Which trajectory or execution scope was tainted, quarantined, interrupted, or blocked by
-  a response gate?
-- Which evidence supports a risk decision?
-- What response action should be triggered: audit, deny, kill, quarantine,
-  taint, export forensics, or notify a human through Feishu/DingTalk?
-- What exact behavior evidence, deviation signal, and risk context should an
-  external evaluator, RL pipeline, or human reviewer inspect?
-- Can this execution be diffed, blamed, verified, replayed, and audited later?
+**Real capture: a poisoned install crosses an agent team.** Hooks expose
+delegation and peer messages; runtime evidence records file reads and the
+network connection. The dashboard replays their attributed execution path:
 
 <p align="center">
-  <img src="docs/assets/evidence-flow.svg" alt="AgentProvenance evidence flow" width="920">
+  <img src="docs/img/demo-multiagent-agent-network.gif" alt="Real agent-team replay: delegation, peer message, tool call, and attributed runtime evidence." width="100%">
 </p>
+
+[Explore the capture](demo/multiagent-provenance/README.md) ·
+[Try the replay](#quickstart) · [v0.8.0 release notes](docs/releases/v0.8.0.md)
 
 ## Contents
 
+- [Quickstart](#quickstart)
 - [Why](#why)
 - [Security Loop](#security-loop)
 - [Core Model](#core-model)
   - [Evidence layers](#evidence-layers)
   - [Runtime facts and correlation](#runtime-facts-and-correlation)
 - [Relationship To Existing Systems](#relationship-to-existing-systems)
-- [Quickstart](#quickstart)
+- [Intent conformance](#intent-conformance)
 - [Deployment Modes](#deployment-modes)
 - [Security Evidence Commands](#security-evidence-commands)
 - [External Evaluator Protocol](#external-evaluator-protocol)
@@ -106,6 +71,75 @@ The goal is to answer questions ordinary traces do not answer well:
 - [Roadmap](#roadmap)
 - [Development](#development)
 - [Author and License](#author-and-license)
+
+## Quickstart
+
+### Replay signed evidence first
+
+Requires Go 1.23+ on macOS or Linux. No Linux VM, Docker, agent account, or API
+key is needed to inspect the bundled captures.
+
+```sh
+git clone https://github.com/ByteYellow/AgentProvenance
+cd AgentProvenance
+go build -o agentprov ./cmd/agentprov
+
+./agentprov --data-dir /tmp/agentprov-demo init
+./agentprov --data-dir /tmp/agentprov-demo forensics import \
+  demo/multiagent-provenance/run-double-attempt.forensics.json.gz \
+  --pub-key demo/multiagent-provenance/attestation.pub
+./agentprov --data-dir /tmp/agentprov-demo graph verify --run run-double-attempt
+./agentprov --data-dir /tmp/agentprov-demo dashboard serve --addr 127.0.0.1:7396
+```
+
+Open the printed URL, select **run-double-attempt**, choose the **Agent Network /
+orchestration** lens, and press play. Follow the peer message to the tool call
+and its runtime evidence. See the [demo index](demo/README.md) for the progressive
+single-agent, multi-agent, Kubernetes, and outbound-data scenarios.
+
+### Capture your own agent
+
+From the same checkout, with your agent already installed and authenticated:
+
+```sh
+./agentprov doctor -- claude
+./agentprov launch -- claude
+```
+
+`doctor` checks the command, hook integration, cgroup access, sensor privileges,
+and dashboard port without running the agent. `launch` creates the execution
+scope, starts the dashboard, and applies Claude's per-run hooks overlay without
+editing `~/.claude`.
+
+Linux kernel capture requires a supported kernel, cgroup access, and root or
+suitable BPF/perf permissions. On macOS, record/hooks/transcript evidence remains
+available but **there is no kernel sensor**. Preflight and the final report state
+the evidence level. Application context for other agents depends on a supported
+hook/transcript adapter, not just on the command being executable.
+
+The graph is sealed on exit. **Signing is opt-in with
+`--sign-key <private-key-file>`**, not enabled by default. Use `--file-diff`
+when you also want a before/after workspace diff.
+
+For node-wide capture, see the [KVM guest and K3s runbook](docs/amd64-kvm-k3s.md)
+and [Kubernetes attribution guide](docs/design-k8s-auto-attribution.md).
+The sensor runs inside a KVM guest or on a Kubernetes node; the evidence model
+stays the same.
+
+### Record a command without an agent
+
+```sh
+mkdir -p /tmp/agentprov-record-demo
+./agentprov record --run run-record-demo --workdir /tmp/agentprov-record-demo -- \
+  sh -c 'echo artifact > artifact.txt'
+./agentprov observe summary --run run-record-demo
+./agentprov graph explain --run run-record-demo --file artifact.txt
+```
+
+Docker is needed only for optional Docker-backed execution commands, not for
+replay, local `record`, or the dashboard. Advanced paths:
+[graph commands](docs/graph-commands.md), [deployment modes](docs/deployment-modes.md),
+[telemetry schema](docs/telemetry-schema.md), and [development gates](#development).
 
 ## Why
 
@@ -180,6 +214,15 @@ extended.
 
 ## Core Model
 
+<p align="center">
+  <img src="docs/assets/evidence-dag.svg" alt="AgentProvenance evidence DAG: LLM intent, tool call, process, runtime event, policy risk, response, artifact, manifest, and verification." width="100%">
+</p>
+
+Evidence is content-addressed, hash-verified, and optionally signed. This is
+**Git-like provenance**, not a version-control system: diff/blame/replay operate
+on execution evidence, not branch merging, checkout, or rollback of external effects.
+
+
 AgentProvenance is not "pick an integration mode." It is layered evidence with
 one entry point: wrap the command you already run.
 
@@ -189,15 +232,17 @@ agentprov record -- <agent command>
 
 `record` snapshots the pre-execution file state, runs the command, samples the
 process tree, computes post-execution file changes, and emits runtime evidence
-into the DAG — no integration code required. Everything else stacks on top of
-that base automatically.
+into the DAG without an application SDK. Additional context requires a supported
+hook/transcript adapter or explicit context producer; kernel capture requires a
+running sensor. These sources enrich the same run when available.
 
 ### Evidence layers
 
 | Layer | Source | Trust semantics |
 |---|---|---|
-| Kernel / runtime facts (foundation) | `record` process tree + file diffs, native eBPF sensor, Falco/Tetragon/LoongCollector receivers | hard facts keyed by pid / cgroup / container / time; the agent cannot fabricate them |
+| Runtime facts (foundation) | `record` process samples + file diffs; native eBPF; compatible JSONL receivers | observed process/file/network effects, keyed by identity and capture time; trust depends on the collector and host boundary |
 | Application context (enrichment) | harness hooks (`hooks bridge`), MCP context-write (`bind_scope` / `record_tool_call`), explicit `run_id / trajectory_id / execution_scope_id / tool_call_id / tool_name / args_hash` | semantics the kernel can never infer — agent identity, delegation and peer messages, refused intents; app-asserted claims carry `binding_source=ai_asserted` and a `<=0.5` confidence cap, and never override kernel facts |
+| Model intent (enrichment) | supported transcript adapters and TLS plaintext probes; HTTP/1.1 + HTTP/2/HPACK parsing | captured requests/responses and declared tool decisions, not access to the model's internal reasoning; incomplete capture remains a coverage gap |
 
 The kernel layer answers "what actually happened on this host." The
 application-context layer answers "which agent, which tool call, which intent"
@@ -287,110 +332,6 @@ system-side telemetry + application-side agent context
   -> security analysis and risk judgment
   -> automated response and audit trail
 ```
-
-## Quickstart
-
-### One command
-
-The fastest path: wrap any agent in a full provenance run with a single command.
-
-```sh
-# Build from source. A direct `go install ...@latest` does not work: the module
-# pins two transitive Docker deps (distribution/reference, go-connections) via
-# replace directives, which `go install` from a version tag does not honor.
-git clone https://github.com/byteyellow/agentprovenance
-cd agentprovenance
-go install ./cmd/agentprov
-
-agentprov doctor -- claude          # preflight: hooks, cgroup, sensor, dashboard port
-agentprov launch -- claude          # or codex, or any agent command
-```
-
-`launch` does everything in one shot: create a run scope, serve the live
-dashboard, inject a per-run hooks overlay into the agent (Claude Code today; your
-`~/.claude` is never modified), start the kernel sensor when the host can (Linux
-+ CAP_BPF), exec the agent in a dedicated cgroup, then on exit fold every source
-into one signed, verifiable evidence graph and print a one-line verdict:
-
-```text
-agentprov preflight
-  ✓ agent command:    /usr/local/bin/claude
-  ✓ Claude hooks:     per-run --settings overlay; ~/.claude untouched
-  ✓ dashboard port:   127.0.0.1:7396 is available
-  - cgroup v2:        not available on darwin; record uses a logical scope id
-  - kernel sensor:    requires Linux; this host is darwin
-```
-
-```text
-✓  CLEAN   run=run-… exit=0  events=28 signals=0 high_risk=0 intent_mismatch=0
-   dashboard=http://127.0.0.1:7396/
-```
-
-The evidence level degrades honestly and is printed up front on two independent
-axes -- application side (hooks / transcript vs record-only) and system side
-(kernel telemetry vs none) -- so a macOS run (app-side only) never pretends to
-kernel evidence a Linux run has. See the [conformance layer](#intent-conformance).
-`doctor` runs the same checks without starting the agent and supports `--json`
-for install scripts and CI smoke tests.
-
-Prefer to explore signed evidence without capturing anything? Replay a demo:
-
-```sh
-agentprov forensics import demo/multiagent-provenance/*.forensics.json.gz \
-  --pub-key demo/multiagent-provenance/attestation.pub
-agentprov dashboard serve            # then open the printed URL
-```
-
-### From source
-
-Prerequisites:
-
-- Go 1.23+
-- Docker Desktop or a compatible Docker daemon
-
-```sh
-git clone https://github.com/ByteYellow/AgentProvenance
-cd AgentProvenance
-
-go build ./cmd/agentprov
-
-mkdir -p /tmp/agentprov-record-demo
-printf 'value = 1\n' > /tmp/agentprov-record-demo/app.py
-./agentprov record --run run-record-demo --workdir /tmp/agentprov-record-demo -- \
-  sh -lc 'printf "value = 2\n" > app.py && echo artifact > artifact.txt'
-./agentprov observe summary --run run-record-demo
-./agentprov graph explain --run run-record-demo --file app.py
-
-./agentprov adapter list
-./agentprov adapter inspect filtered-jsonl --json
-./scripts/demo_telemetry_jsonl.sh
-./agentprov telemetry batches --run run-telemetry-jsonl-demo
-./agentprov timeline --run run-telemetry-jsonl-demo
-./agentprov timeline --run run-telemetry-jsonl-demo --view causality
-./agentprov timeline --run run-telemetry-jsonl-demo --json
-./scripts/accept_phase1.sh
-```
-
-The quick path builds `agentprov`, records a command, explains the changed file,
-ingests filtered substrate telemetry, and runs the Phase 1 acceptance gate.
-`observe summary` is the run-level observability entry point: it summarizes
-application context, runtime telemetry coverage, risk, baseline, response, and
-top evidence refs before you drill into timeline or graph queries.
-
-`demo_telemetry_jsonl.sh` is the minimal substrate telemetry path. It binds a
-ToolCallScope, ingests Tetragon/Falco/LoongCollector fixture JSONL from
-`examples/telemetry/`, lists normalized events, and explains how one substrate
-event entered the DAG.
-
-`accept_phase1.sh` is the machine-checkable gate for the current MVP.
-
-`timeline` is the execution timeline surface. It merges
-application context, runtime telemetry, evidence, policy decisions, risk
-signals, baseline deviations, response actions, and external effects into one
-time-ordered view. `--view causality` groups rows into agent context, runtime
-process, runtime telemetry, evidence, risk/policy, and external-effect lanes,
-with correlation status and drill-down commands. The JSON output feeds the web
-dashboard (and external UIs).
 
 ## Intent conformance
 
@@ -501,9 +442,8 @@ For RL and evaluator pipelines, the default contract is lightweight and
 offline-first:
 
 - Install: one Go binary plus an optional thin Python package.
-- Call: wrap an existing command; application-context enrichment (hooks
-  bridge, MCP context-write) stacks on automatically when the harness provides
-  it — no integration code required.
+- Call: wrap an existing command; supported launch recipes and hook/transcript
+  adapters add application context. Custom producers can use MCP context-write.
 - Batch: every trajectory gets stable `run_id` / evidence manifest / signal
   context output, and query surfaces are paged.
 - Overhead: default capture focuses on process/file/diff/artifact/exit/resource
@@ -578,6 +518,9 @@ job decide how evidence becomes score, rejection, or review.
 
 ### Custom rules in Python
 
+<details>
+<summary>Expand the complete Python rule example</summary>
+
 `python/agentprov_eval` (import alias `agentprov`) is the thin, CLI-backed
 helper over this protocol — it does not encode a reward function. Custom
 "rules" are ordinary Python functions over `EvalContext`; Go keeps ownership of
@@ -647,6 +590,8 @@ Later, the same local store can be queried by batch, shard, job, or run:
 ./agentprov signal batch-context --shard shard-0 --latest > eval-contexts.jsonl
 ./agentprov forensics export-batch --latest --json
 ```
+
+</details>
 
 ### Daemon mode
 
@@ -904,9 +849,6 @@ attached to the branch**.
 ```
 
 <p align="center">
-  <img src="docs/img/demo-multiagent-agent-network.gif" alt="Multi-agent agent-network replay captured from the dashboard's orchestration lens play button." width="100%">
-</p>
-<p align="center">
   <img src="docs/img/demo-multiagent-orchestration.png" alt="Multi-agent orchestration lens showing lead agent, sub-agents, peer message, tool calls, and syscall attribution." width="100%">
 </p>
 <p align="center">
@@ -979,9 +921,14 @@ per-command purpose: [docs/graph-commands.md](docs/graph-commands.md).
 |---|---|
 | Zero-SDK record | `record -- <cmd>` snapshots the workdir, samples the process tree, captures file diffs + runtime evidence, no SDK |
 | Batch recorder | `record batch` records many jobs in parallel for RL/benchmark pipelines |
-| Native eBPF sensor | `agentprov-sensor` (Linux/arm64): exec+argv, connect, file write + sensitive **read** → `secret_path`, process_exit, privesc (setuid/setgid/ptrace), tamper (rename/unlink), TLS plaintext (full request/response bodies via chunked `SSL_write`/`SSL_read` and modern `SSL_write_ex`/`SSL_read_ex`; Go `crypto/tls` request/write path via `AGENTPROV_GO_TLS_BIN`), DNS — in-kernel noise filtering, validated live |
+| Native eBPF sensor | `agentprov-sensor` (Linux/amd64 + arm64): exec+argv, connect, file write + sensitive **read** → `secret_path`, process_exit, privesc (setuid/setgid/ptrace), tamper (rename/unlink), TLS plaintext (full request/response bodies via chunked `SSL_write`/`SSL_read` and modern `SSL_write_ex`/`SSL_read_ex`; unstripped Go `crypto/tls` writes on amd64/arm64 and reads on amd64 Go 1.23–1.26), DNS — in-kernel noise filtering, validated live |
 | LLM intent capture | `internal/tlsintent` reassembles the sensor's TLS chunks into complete HTTP/1.1 messages (Content-Length, chunked, and SSE streaming bodies) and HTTP/2 messages (frames + HPACK + stream demux), then parses LLM semantics across Anthropic/OpenAI shapes — model, tools offered, tool calls + the shell commands the model decided to run, stop reason |
 | Evidence ingest | Falco / Tetragon / LoongCollector JSONL + native sensor → normalized events; schema-validated, app-context rejected in raw payloads, paged with integrity hashes |
+
+Native node capture adds durable bounded batches, restart recovery, late-binding
+retries, transaction-level deduplication, and per-probe coverage reports. See
+[the deployment and acceptance runbook](docs/amd64-kvm-k3s.md) for the exact
+syscall/TLS coverage and [spool guarantees](docs/native-capture-spool.md).
 
 **Correlate & verify**
 
@@ -1068,7 +1015,11 @@ Run:
 ## Architecture
 
 <p align="center">
-  <img src="docs/assets/producer-profile-architecture.svg" alt="AgentProvenance producer profile architecture: validated local-record and Kubernetes producers feed substrate-neutral evidence into the core; future profiles stay capability-gated until live validation." width="100%">
+  <img src="docs/assets/evidence-flow.svg" alt="AgentProvenance evidence flow" width="920">
+</p>
+
+<p align="center">
+  <img src="docs/assets/producer-profile-architecture.svg" alt="AgentProvenance producer profiles: local Linux, KVM guests and Kubernetes feed one substrate-neutral evidence core and investigation surface." width="100%">
 </p>
 
 <p align="center">
@@ -1153,8 +1104,9 @@ means teaching a collector to emit the schema, not extending the core.
 
 Substrates fall on three axes:
 
-- **Runtime** — where agent processes execute. Docker is the active local
-  runtime; gVisor, Firecracker, Kata, and OpenSandbox are future targets.
+- **Runtime** — where agent processes execute: local Linux, KVM guests, and
+  container workloads are validated capture locations. AgentProvenance observes
+  execution; it does not provision or replace the runtime.
 - **Orchestration** — where runtimes are scheduled: Kubernetes, Ray, Batch, and
   cloud systems.
 - **Telemetry** — where kernel and behavior evidence comes from. The featured
@@ -1208,7 +1160,7 @@ internal/cli/         command parsing and output
 internal/launch/      one-command porcelain (`launch -- <agent>`): scope, dashboard, hooks overlay, sensor, honest degradation
 
 internal/record/      zero-SDK command recorder
-internal/sensor/      native eBPF sensor (exec/connect/file/privesc/tamper/TLS-body/DNS); Linux-only, arm64
+internal/sensor/      native eBPF sensor (exec/connect/file/privesc/tamper/TLS-body/DNS); Linux-only, amd64 + arm64
 internal/producer/    producer profiles (local-record / k8s-daemonset / microvm-guest-init), passive cgroup scope attribution, K8s informer
 internal/tlsintent/   TLS chunk -> full HTTP message reassembly + LLM request/response semantics
 internal/telemetry/   normalized runtime event schema, JSONL ingest, TLS HTTP metadata, correlation inputs
@@ -1253,116 +1205,53 @@ and `forensics`. `substrate` contains runtime facts AgentProvenance can consume.
 
 ## Roadmap
 
-| Phase | Goal | Main deliverables |
-|---|---|---|
-| Phase 1 | Provenance Correlation MVP | ToolCallScope, raw telemetry correlation, runtime causality DAG, diff/blame, risk/deviation records, response-gate evidence, replay and trajectory manifests |
-| Phase 2 | Evidence / Causality Hardening | execution timeline JSON, stable explain JSON, content-addressed objects, object parent hashes, graph verification, bounded traversal, pagination, integrity metadata |
-| Phase 3 | Zero-SDK Recorder Hardening | process-tree capture, delayed child process handling, cwd/time/file-diff inference, orphan lifecycle evidence, low-intrusion record mode |
-| Phase 4 | Real Telemetry Integration | Falco/Tetragon/LoongCollector/auditd/eBPF receivers, cgroup/container/pid correlation, kernel-side filtering assumptions |
-| Phase 5 | Risk / Policy / Control | configurable risk signals, behavior baselines, compliance evidence mapping, response adapters, taint propagation, quarantine, response blocking, forensics export, Feishu/DingTalk/webhook hooks, isolation escalation hooks |
-| Phase 6 | Scale / UI / Productization | async evidence writer, retention, content-addressed storage, snapshot GC, resource windows, high-concurrency ingest/query tests, evaluator SDK hardening, central evidence service, usable UI/API |
-
-Phases 1–4 are built and machine-checked by acceptance scripts; Phase 5 is built
-except the notification hooks; Phase 6 is largely landed (web dashboard,
-retention, content-addressed storage, concurrency, evaluator SDK), with the
-central evidence service deferred to v2.
-
-Recently landed:
-
-- **LLM-intent provenance** (`internal/tlsintent`, `graph materialize-llm`) -
-  the sensor captures the agent's actual LLM traffic as full TLS bodies
-  (chunked `SSL_write`/`SSL_read` and `SSL_write_ex`/`SSL_read_ex` for dynamic
-  OpenSSL clients; Go `crypto/tls.(*Conn).Write` request plaintext when
-  `AGENTPROV_GO_TLS_BIN` points at an unstripped Go binary), userspace
-  reassembles them into complete HTTP/1.1 messages (Content-Length / chunked /
-  SSE) and HTTP/2 messages (frames + HPACK + stream demux), then parses
-  model/tools/decided-commands semantics; each body is
-  objectified as a content-addressed `llm_message`, each request/response pair
-  becomes an `llm_call` node, and `llm_caused` edges are drawn only to the
-  command the model's response actually decided. The agent-intent lens renders
-  this as a causal DAG (with blocked/refused intents grouped by proposing
-  agent), and `demo/llm-judge` closes the loop: an external LLM judges the
-  full trajectory while its own calls are captured into the graph.
-- **Multi-agent orchestration provenance** (`internal/hooksbridge`,
-  `agentprov hooks bridge`) - a harness-hooks bridge turns a Claude Code (or
-  compatible) agent team's hooks into graph structure: agent nodes (`agents`
-  table + `tool_calls.agent_id`), delegation (`agent_spawn`) and peer
-  (`agent_message`, the SendMessage body objectified as evidence) edges, and a
-  policy-scored tool_call per action bound to the acting `agent_id`. In-process
-  sub-agents share one cgroup, so the exfil syscall is attributed to the right
-  sub-agent by **command-match** (`agent_syscall`); a new `orchestration` lens
-  draws the topology. Proven end-to-end on a signed VM capture
-  (`demo/multiagent-provenance`).
-- **Policy replay + self-credential default** - `agentprov security reevaluate`
-  re-runs the policy over a captured run's stored events (idempotent, raw events
-  untouched, verify stays green), so an edited policy (`agentprov policy rules`
-  dumps an editable copy) applies to history without re-capturing. A default
-  `self_credential_access` rule keeps the agent's OWN credential reads observable
-  but un-alerted, so only planted-target secrets raise risks.
-- **Unified signal model** (`internal/signals`, `agentprovenance.signals/v1`) -
-  one graph-attached row type for behavior/cost/quality/security, replacing the
-  per-dimension silos; security and quality are live producers, with idempotent
-  backfill from legacy tables.
-- **Signed evidence attestation** (`internal/attest`) - in-toto/DSSE ed25519
-  signing of evidence digests, wired into `forensics export`, giving
-  post-compromise tamper-evidence rather than integrity-only hash recompute.
-- **Concurrency correctness** - SQLite pragmas (incl. `busy_timeout`) applied via
-  DSN to every pooled connection, fixing silent `SQLITE_BUSY` under concurrent
-  writers; correlation bindings bound stale-open over-matching.
-- **Native eBPF sensor expansion** (`internal/sensor`, validated live on an arm64
-  VM) - sensitive file reads (-> `secret_path`), privilege changes
-  (setuid/setgid/ptrace), file tamper (rename/unlink), TLS plaintext capture
-  (since upgraded to full request/response bodies -> `llm_call` pairing, see
-  LLM-intent provenance above), `process_exit` closing correlation
-  windows, and DNS (getaddrinfo). In-kernel noise filtering before ring-buffer
-  reserve removed a containerd-teardown firehose. Privilege-escalation policy
-  rules (ptrace, setuid-to-root -> quarantine).
-- **AI surface** - MCP server (`ai mcp`, stdio JSON-RPC 2.0) and context-write
-  tools (`bind_scope`, `record_tool_call`) over the same `internal/aitools`
-  catalog, app-asserted within the trust boundary.
-- **Web dashboard** (`internal/dashboard`, `dashboard serve`) - local read-only
-  view with the causality DAG as the signature panel, plus timeline, process
-  tree, egress, signals, and verify/signature status.
+**v0.8.0 focuses on portable, reliable evidence capture.** It adds native
+amd64 support, KVM guest deployment, K3s acceptance, automatic container TLS
+discovery, and Go TLS responses on supported amd64 binaries. It also hardens
+late attribution, persistent capture recovery, migration tests, database
+readiness, and event/evidence atomicity.
+See [release notes](docs/releases/v0.8.0.md) and the
+[deployment runbook](docs/amd64-kvm-k3s.md) for evidence and limits.
 
 Next / open:
 
-- **Sensor breadth** — universal DNS (musl / raw UDP:53, or a `udp_sendmsg`
-  kprobe; `getaddrinfo` covers glibc today), IPv6/UDP connect, and multi-arch
-  (x86 `PT_REGS`; arm64-only today). `ptrace` is captured but not yet exercised
-  end to end in a test.
-- **TLS breadth** — Go `crypto/tls` response/read path, BoringSSL,
-  statically-linked TLS, and x86 uprobe validation. OpenSSL dynamic-link clients
-  are covered by `SSL_write`/`SSL_read` and `SSL_write_ex`/`SSL_read_ex`; Go
-  `crypto/tls` request/write capture is partial on unstripped arm64 binaries;
-  HTTP/1.1 and HTTP/2/HPACK reassembly are implemented.
-- **Tamper-evidence (v2)** — off-host / capture-time signing (KMS / TPM /
-  transparency log). v1 is integrity plus optional local signing, not proof
-  against a host-root attacker.
-- **Deploy 3** — central evidence service with process-level data-plane
-  isolation and authz/scopes.
-- **Notifications** — Feishu / DingTalk / webhook response hooks.
+- **Capture breadth**: ARM64 Go TLS response capture, BoringSSL, stripped or
+  unsupported TLS binaries, and broader network coverage. OpenSSL `SSL_*`
+  and `SSL_*_ex`, HTTP/1.1 and HTTP/2/HPACK are already implemented.
+- **Operational validation**: longer-running workloads, real disk-failure
+  scenarios, and run-scoped coverage reporting. The existing 100k-event report
+  is a single-node baseline, not a production SLA.
+- **Evidence trust**: optional off-host / capture-time signing. Current
+  hashes and local signatures detect changes against a trusted checkpoint;
+  they do not prove that a compromised host recorded all events truthfully.
+- **Central evidence service**: [design only](docs/central-evidence-service-design.md).
+  Multi-tenancy, billing, cluster scheduling, and operator HA are not part of
+  this release.
+
+The [v0.7 design](docs/roadmap-v0.7.md) is retained as historical context, not a
+current feature checklist. [Closeout criteria](docs/project-closeout.md) define
+the current single-node delivery boundary.
 
 ## Development
 
 ```sh
-go test ./...            # per-package unit tests
+go test -race ./...
 go vet ./...
 gofmt -l internal cmd
 
-# end-to-end acceptance suite (each drives one path and asserts correlated
-# evidence + risk/response records + graph edges + a clean `graph verify`)
-for s in ./scripts/accept_*.sh; do "$s" || break; done
+# Portable end-to-end evidence and verification smoke.
+./scripts/accept_phase1.sh
 ```
 
-`go test ./...`, `go vet ./...`, and `gofmt -l` are the per-package gates.
-`scripts/accept_*.sh` are the end-to-end ones — zero-SDK record,
-Falco/Tetragon/native-sensor risk, forensics bundle (+ evidence tamper
-detection), daemon evidence API, telemetry spool/pressure/windows, the signal
-engine (+ unified-signals attestation), LLM-intent causality, the Python helper,
-and the Deploy 1 batch pipeline. CI runs `accept_phase1.sh` plus the
-sensor-bindings drift check (`regen-sensor.sh --check`). The eBPF sensor is
-validated on a Linux host (`go generate ./internal/sensor`, then run
-`agentprov-sensor`).
+[CI](.github/workflows/ci.yml) runs these gates, static Linux amd64/arm64 builds,
+the native bindings drift check, daemon readiness faults, and live amd64
+syscall/OpenSSL/Go TLS tests across Go 1.23–1.26. Live ARM64 and KVM/K3s lab
+reports are distinct from hosted CI.
+
+Acceptance scripts are environment-specific. Do not run every
+`scripts/accept_*.sh` indiscriminately: some require root, create Pods, or install
+services. Use the [KVM/K3s runbook](docs/amd64-kvm-k3s.md) for those gates and the
+[closeout guide](docs/project-closeout.md) for the single-node pressure tests.
 
 ## Author and License
 

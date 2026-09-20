@@ -45,6 +45,25 @@ prefer the new terms.
 AgentProvenance correlation metadata. This catches malformed data loaded
 directly into SQLite or produced by future receivers.
 
+## Capture time and atomic ingestion
+
+An explicit event `timestamp` must be RFC3339/RFC3339Nano. Ingestion preserves
+that capture-time string in `events.created_at`; it does not replace it with
+the later time at which a queued event reaches SQLite. If no timestamp is
+provided, ingestion supplies the current time. Correlation compares parsed
+instants, not the lexical ordering of differently formatted timestamps.
+
+The shared ingest operation commits the event, runtime graph edges, evidence
+row, binding closure and taint updates in one transaction. A write error rolls
+back that event and is returned to the caller. JSONL imports use a savepoint
+per row: a failed row leaves no partial evidence, while other valid rows in the
+batch can commit. Policy evaluation is a subsequent operation, not part of
+this event transaction. Existing stored evidence is not rewritten.
+
+Native stream persistence and restart recovery have a separate
+[documented contract](native-capture-spool.md). Event atomicity does not add
+crash recovery to the legacy Falco spool worker.
+
 ## Event Body Shapes
 
 The current MVP validates these minimum event-specific fields:
@@ -53,7 +72,7 @@ The current MVP validates these minimum event-specific fields:
 | --- | --- |
 | `execve` | `argv` as a non-empty string array, or `command` |
 | `process_exit` | numeric `exit_code` |
-| `file_open` / `file_write` / `secret_path` | safe relative `path` or `file` |
+| `file_open` / `file_write` / `secret_path` | non-traversal `path` or `file`; absolute host paths are accepted |
 | `network_connect` / `metadata_ip` / `private_cidr` | `dst`, `dst_ip`, or `host` |
 | `abnormal_process_tree` | numeric `pid` or `command` |
 | `policy_verdict` | `decision` or `verdict` |
@@ -62,14 +81,21 @@ The current MVP validates these minimum event-specific fields:
 | `ptrace` | `request`, `target_pid` (process injection / inspection) |
 | `file_rename` / `file_unlink` | `path` (tamper / cleanup) |
 | `dns_query` | `host` (resolved name; egress by name, not just IP) |
-| `tls_write` / `tls_read` | privacy-safe `preview_sha256` + short `preview` + allow-listed `http` metadata (never the full body) |
+| `tls_write` / `tls_read` | `preview_sha256` + short `preview` + allow-listed `http` metadata by default; optional body content as described below |
 
-Absolute paths, `..` paths, and `/workspace/../...`-style escapes are rejected
-for file-oriented events. The privilege/tamper/DNS/TLS types carry the fields
+Empty paths and `..` traversal segments are rejected for file-oriented events.
+Raw telemetry accepts absolute host paths; workspace file nodes retain their
+relative-path constraint. The privilege/tamper/DNS/TLS types carry the fields
 above but are not subject to a strict required-body check.
 
 `secret_path` now covers a sensitive-path **read**, not only a write: the native
 sensor captures filtered read opens of credential/secret paths.
+
+`AGENTPROV_TLS_CAPTURE_BODY=1` explicitly retains captured plaintext in the
+normalized event's `content` field for model-call materialization. Without that
+opt-in, normalization stores a hash and short preview rather than the full body.
+Captured prompts, responses and raw spool payloads may contain sensitive data;
+restrict access to the data directory and review bundles before sharing them.
 
 ## Example
 
@@ -181,7 +207,7 @@ The receiver maps recognized substrate events into the normalized schema:
 | Falco | `connect` | `network_connect`, `metadata_ip`, or `private_cidr` |
 | LoongCollector | `execve`, `process_exit`, `file_open`, `file_write`, `network_connect` | matching normalized family |
 
-The native sensor (`internal/sensor`, `cmd/agentprov-sensor`; Linux, arm64)
+The native sensor (`internal/sensor`, `cmd/agentprov-sensor`; Linux amd64/arm64)
 emits this normalized schema directly, so own-kernel telemetry drives the same
 correlation → policy → risk path as Falco/Tetragon. It also adds a DAG `llm_call`
 edge (TLS request ↔ response) and an `llm_intent_caused` edge (TLS response →

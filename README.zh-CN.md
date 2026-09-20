@@ -2,19 +2,16 @@
 
 # AgentProvenance
 
-### 面向沙箱化 agent 的三轴执行可观测性：模型意图、应用上下文、运行时遥测，汇入同一张可验证的证据图。
+### 面向沙箱化 AI agent 的三轴执行可观测性。
 
-AgentProvenance 为沙箱化的、会调用工具的 agent 关联三条证据轴线：模型意图、
-应用侧的 agent 上下文、系统侧的运行时遥测。它把 LLM 决策、工具调用、
-进程/文件/网络事件、产物、风险信号和响应决策，变成一张可查询、可重放、
-可审计的因果图。证据以内容寻址方式存储并做哈希校验（这个模型借鉴自 Git），
-还可以签名以获得防篡改证据 —— 但它是一个审计/溯源层，**不是版本控制系统**：
-没有 merge、checkout，也没有可变的工作区。
+将**模型意图、应用上下文和运行时遥测**关联到同一张可验证的证据图。
+从工具调用追到实际的进程、文件和网络行为，调查风险、比较执行差异，
+并在本地回放签名证据。
 
 [![Release](https://img.shields.io/github/v/release/ByteYellow/AgentProvenance?style=flat-square&color=orange&sort=semver)](https://github.com/ByteYellow/AgentProvenance/releases/latest)
 [![Go](https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square)](https://go.dev/)
 [![CI](https://img.shields.io/github/actions/workflow/status/ByteYellow/AgentProvenance/ci.yml?branch=main&style=flat-square)](https://github.com/ByteYellow/AgentProvenance/actions/workflows/ci.yml)
-[![Runtime](https://img.shields.io/badge/runtime-Docker-2496ED.svg?style=flat-square)](https://www.docker.com/)
+[![Sensor](https://img.shields.io/badge/sensor-Linux_amd64_%7C_arm64-2496ED.svg?style=flat-square)](docs/amd64-kvm-k3s.md)
 [![SQLite](https://img.shields.io/badge/state-SQLite-003B57.svg?style=flat-square)](https://www.sqlite.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square)](LICENSE)
 
@@ -30,61 +27,32 @@ AgentProvenance 为沙箱化的、会调用工具的 agent 关联三条证据轴
   <img src="docs/assets/three-axis-observability.svg" alt="AgentProvenance three-axis observability: system telemetry, application context, and model intent flow into one verifiable evidence graph." width="100%">
 </p>
 
-<p align="center">
-  <img src="docs/assets/evidence-dag.svg" alt="AgentProvenance evidence DAG: LLM intent, tool call, process, runtime event, policy risk, response, artifact, manifest, and verification." width="100%">
-</p>
+**调查真实执行，而不只是对话记录：**
 
-AgentProvenance 是一个 local-first 的安全与溯源控制平面，服务于自主的、
-会调用工具的 agent，尤其是沙箱化的编码 agent。它从会话记录 / TLS 证据中捕获
-**模型意图**，从 agent hooks 和工具作用域中捕获**应用侧上下文**，从自研的
-eBPF 传感器或 Falco/Tetragon 等外部来源捕获**运行时遥测**。产出是一张可验证、
-可签名的因果图，通过 CLI、daemon API、AI 工具（含 MCP server）和本地 Web
-dashboard 对外提供。
+- 哪个 agent、哪条对等消息引出了这次工具调用？
+- 哪个进程读取了敏感文件、修改了产物，或连接了外部地址？
+- 判定依据是什么，能否离线验证？
 
-它不是通用沙箱运行时、不是通用遥测采集器、不是 Kubernetes/Ray 的替代品、
-不是 RL 训练器、不是 trace dashboard，也不是版本控制系统（它借鉴了 Git 的
-内容寻址与校验模型，而不是它的分支/合并工作流）。它掌握的是一个更窄的原语：
-
-```text
-Model Intent            模型意图
-  -> Application Context      应用上下文
-  -> Runtime Telemetry        运行时遥测
-  -> Evidence Ingest          证据摄取
-  -> Runtime Causality Graph  运行时因果图
-  -> Git-like Provenance DAG  类 Git 的溯源 DAG
-  -> Intent Diff / Risk / Response   意图差异 / 风险 / 响应
-  -> Replay / Forensics / Audit Manifest  重放 / 取证 / 审计清单
-```
-
-目标是回答那些普通 trace 回答不好的问题：
-
-- 这次执行是从哪个基线状态开始的？
-- 哪个执行作用域产出了这个产物？
-- 哪次工具调用启动了这个进程？
-- 哪个子进程导致了这条运行时事件？
-- 哪个进程改了这个文件？
-- 对这个 agent 或任务画像而言，哪些行为是异常的？
-- 哪条轨迹或执行作用域被响应门禁污染（taint）、隔离、中断或阻断了？
-- 哪些证据支撑了某个风险判定？
-- 应该触发什么响应动作：审计、拒绝、kill、隔离、污染标记、导出取证，
-  还是通过飞书/钉钉通知人？
-- 外部评估器、RL 流水线或人工复核者，应该去看哪些确切的行为证据、
-  偏差信号和风险上下文？
-- 这次执行以后能不能被 diff、blame、验证、重放和审计？
+**真实采集：一次恶意依赖安装穿过 agent 团队。** Hooks 呈现委派和对等消息，
+运行时证据记录文件读取与网络连接，dashboard 回放关联后的执行路径：
 
 <p align="center">
-  <img src="docs/assets/evidence-flow.svg" alt="AgentProvenance evidence flow" width="920">
+  <img src="docs/img/demo-multiagent-agent-network.gif" alt="真实 agent 团队回放：委派、对等消息、工具调用及关联的运行时证据。" width="100%">
 </p>
+
+[查看真实场景](demo/multiagent-provenance/README.md) ·
+[立即回放](#快速开始) · [v0.8.0 版本说明](docs/releases/v0.8.0.md)
 
 ## 目录
 
+- [快速开始](#快速开始)
 - [为什么需要它](#为什么需要它)
 - [安全闭环](#安全闭环)
 - [核心模型](#核心模型)
   - [证据分层](#证据分层)
   - [运行时事实与关联](#运行时事实与关联)
 - [与现有系统的关系](#与现有系统的关系)
-- [快速开始](#快速开始)
+- [意图一致性](#意图一致性)
 - [部署模式](#部署模式)
 - [安全证据命令](#安全证据命令)
 - [外部评估器协议](#外部评估器协议)
@@ -101,6 +69,71 @@ Model Intent            模型意图
 - [Roadmap](#roadmap)
 - [开发](#开发)
 - [作者与许可](#作者与许可)
+
+## 快速开始
+
+### 先回放一份签名证据
+
+需要 macOS 或 Linux，以及 Go 1.23+。查看仓库自带的采集结果，**不需要 Linux
+虚拟机、Docker、agent 账号或 API key**。
+
+```sh
+git clone https://github.com/ByteYellow/AgentProvenance
+cd AgentProvenance
+go build -o agentprov ./cmd/agentprov
+
+./agentprov --data-dir /tmp/agentprov-demo init
+./agentprov --data-dir /tmp/agentprov-demo forensics import \
+  demo/multiagent-provenance/run-double-attempt.forensics.json.gz \
+  --pub-key demo/multiagent-provenance/attestation.pub
+./agentprov --data-dir /tmp/agentprov-demo graph verify --run run-double-attempt
+./agentprov --data-dir /tmp/agentprov-demo dashboard serve --addr 127.0.0.1:7396
+```
+
+打开输出中的地址，选择 **run-double-attempt**，切到 **Agent Network /
+orchestration** 视图并播放。沿对等消息查看工具调用和对应的运行时证据。
+[Demo 目录](demo/README.md)按单 agent、多 agent、Kubernetes 顺序展开，
+并提供出站数据调查场景。
+
+### 采集你自己的 agent
+
+在同一个仓库目录中，使用已经安装并完成认证的 agent：
+
+```sh
+./agentprov doctor -- claude
+./agentprov launch -- claude
+```
+
+`doctor` 在不运行 agent 的前提下，检查命令、hook 接入、cgroup 权限、传感器权限
+和 dashboard 端口。`launch` 创建执行作用域、启动 dashboard，并为 Claude 注入
+本次运行专用的 hooks 配置，不修改 `~/.claude`。
+
+Linux 内核采集需要受支持的内核、可用的 cgroup，以及 root 或适当的 BPF/perf
+权限。macOS 仍可使用 record/hooks/transcript 证据，**但没有内核传感器**。
+预检和最终报告显示实际证据等级。其他 agent 的应用上下文取决于对应的
+hook/transcript 适配器，不是命令能运行就能完整采集。
+
+退出时封存证据图。**签名需要显式传入 `--sign-key <private-key-file>`，
+并非默认开启。**需要工作区执行前后 diff 时，添加 `--file-diff`。
+
+节点级采集请参阅 [KVM guest 与 K3s 部署指南](docs/amd64-kvm-k3s.md)及
+[Kubernetes 归属指南](docs/design-k8s-auto-attribution.md)。传感器运行在 KVM
+guest 内或 Kubernetes 节点上，核心证据模型不变。
+
+### 不依赖 agent，记录一条命令
+
+```sh
+mkdir -p /tmp/agentprov-record-demo
+./agentprov record --run run-record-demo --workdir /tmp/agentprov-record-demo -- \
+  sh -c 'echo artifact > artifact.txt'
+./agentprov observe summary --run run-record-demo
+./agentprov graph explain --run run-record-demo --file artifact.txt
+```
+
+只有可选的 Docker 执行命令需要 Docker；回放、本地 `record` 和 dashboard
+都不需要。进阶入口：[Graph 命令](docs/graph-commands.md)、
+[部署模式](docs/deployment-modes.md)、[遥测 schema](docs/telemetry-schema.md)、
+[开发门禁](#开发)。
 
 ## 为什么需要它
 
@@ -166,6 +199,15 @@ trace dashboard。传统主机监控问的是"这个进程做了什么？"，Age
 
 ## 核心模型
 
+<p align="center">
+  <img src="docs/assets/evidence-dag.svg" alt="AgentProvenance evidence DAG: LLM intent, tool call, process, runtime event, policy risk, response, artifact, manifest, and verification." width="100%">
+</p>
+
+证据通过内容寻址存储、哈希校验，并可选签名。这是 **Git-like 执行溯源**，
+不是版本控制系统：diff/blame/replay 面向执行证据，不提供分支合并、checkout
+或真实外部操作的回滚。
+
+
 AgentProvenance 不需要你"挑一种接入模式"。它是分层的证据，只有一个入口：
 把你本来就在跑的命令包一层。
 
@@ -174,15 +216,17 @@ agentprov record -- <agent command>
 ```
 
 `record` 会在执行前对文件状态做快照、运行命令、采样进程树、计算执行后的文件
-变更，并把运行时证据写入 DAG —— **不需要写任何接入代码**。其余一切都会自动
-叠加在这个基座之上。
+变更，并把运行时证据写入 DAG，不需要应用 SDK。额外上下文需要受支持的
+hook/transcript 适配器或显式上下文生产者；内核采集需要运行中的传感器。
+这些来源在可用时增强同一份 run。
 
 ### 证据分层
 
 | 层 | 来源 | 信任语义 |
 |---|---|---|
-| 内核 / 运行时事实（基座） | `record` 的进程树 + 文件差异、自研 eBPF 传感器、Falco/Tetragon/LoongCollector 接收器 | 以 pid / cgroup / container / 时间为键的硬事实；agent 无法伪造 |
+| 运行时事实（基座） | `record` 进程采样 + 文件差异、自研 eBPF、兼容 JSONL 接收器 | 观测到的进程、文件和网络行为，以身份和采集时间关联；可信度取决于采集器和宿主机信任边界 |
 | 应用上下文（增强） | harness hooks（`hooks bridge`）、MCP 上下文写入（`bind_scope` / `record_tool_call`）、显式的 `run_id / trajectory_id / execution_scope_id / tool_call_id / tool_name / args_hash` | 内核永远推不出来的语义 —— agent 身份、委派与对等消息、被拒绝的意图；应用侧断言带 `binding_source=ai_asserted` 和 `<=0.5` 的置信度上限，且永远不能覆盖内核事实 |
+| 模型意图（增强） | 支持的 transcript 适配器和 TLS 明文探针；HTTP/1.1 + HTTP/2/HPACK 解析 | 捕获的请求、响应和声明的工具决策，不是模型内部推理的读取；采集不完整时保留 coverage gap |
 
 内核层回答"这台主机上实际发生了什么"。应用上下文层回答"是哪个 agent、
 哪次工具调用、什么意图" —— 包括任何 syscall 流都无法表达的东西，比如编排器的
@@ -265,105 +309,6 @@ system-side telemetry + application-side agent context
   -> security analysis and risk judgment
   -> automated response and audit trail
 ```
-
-## 快速开始
-
-### 一条命令
-
-最快的路径：用一条命令把任意 agent 包成一次完整的溯源 run。
-
-```sh
-# 从源码构建。直接 `go install ...@latest` 不可用：本模块通过 replace 指令
-# 钉住了两个传递性 Docker 依赖（distribution/reference、go-connections），
-# 而 `go install` 从版本 tag 安装时不遵循 replace 指令。
-git clone https://github.com/byteyellow/agentprovenance
-cd agentprovenance
-go install ./cmd/agentprov
-
-agentprov doctor -- claude          # 预检：hooks、cgroup、传感器、dashboard 端口
-agentprov launch -- claude          # 也可以是 codex，或任意 agent 命令
-```
-
-`launch` 一次性做完所有事：创建 run 作用域、启动实时 dashboard、向 agent
-注入一份**按 run 隔离**的 hooks overlay（目前是 Claude Code；你的 `~/.claude`
-永远不会被改动）、在主机支持时启动内核传感器（Linux + CAP_BPF）、在专属
-cgroup 里 exec 该 agent，然后在退出时把每一路来源折成一张已签名、可验证的
-证据图，并打印一行结论：
-
-```text
-agentprov preflight
-  ✓ agent command:    /usr/local/bin/claude
-  ✓ Claude hooks:     per-run --settings overlay; ~/.claude untouched
-  ✓ dashboard port:   127.0.0.1:7396 is available
-  - cgroup v2:        not available on darwin; record uses a logical scope id
-  - kernel sensor:    requires Linux; this host is darwin
-```
-
-```text
-✓  CLEAN   run=run-… exit=0  events=28 signals=0 high_risk=0 intent_mismatch=0
-   dashboard=http://127.0.0.1:7396/
-```
-
-证据等级会**诚实降级**，并在一开始就沿两条独立轴线打印出来 —— 应用侧
-（hooks / 会话记录 vs 仅 record）和系统侧（内核遥测 vs 无）—— 这样一次
-macOS 上的 run（只有应用侧）绝不会假装拥有 Linux run 才有的内核证据。
-参见[意图一致性层](#意图一致性)。`doctor` 跑的是同一套检查但不启动 agent，
-并支持 `--json`，方便安装脚本和 CI 冒烟测试使用。
-
-想在不捕获任何东西的前提下先看看已签名的证据？重放一个 demo：
-
-```sh
-agentprov forensics import demo/multiagent-provenance/*.forensics.json.gz \
-  --pub-key demo/multiagent-provenance/attestation.pub
-agentprov dashboard serve            # 然后打开打印出来的 URL
-```
-
-### 从源码构建
-
-前置条件：
-
-- Go 1.23+
-- Docker Desktop 或兼容的 Docker daemon
-
-```sh
-git clone https://github.com/ByteYellow/AgentProvenance
-cd AgentProvenance
-
-go build ./cmd/agentprov
-
-mkdir -p /tmp/agentprov-record-demo
-printf 'value = 1\n' > /tmp/agentprov-record-demo/app.py
-./agentprov record --run run-record-demo --workdir /tmp/agentprov-record-demo -- \
-  sh -lc 'printf "value = 2\n" > app.py && echo artifact > artifact.txt'
-./agentprov observe summary --run run-record-demo
-./agentprov graph explain --run run-record-demo --file app.py
-
-./agentprov adapter list
-./agentprov adapter inspect filtered-jsonl --json
-./scripts/demo_telemetry_jsonl.sh
-./agentprov telemetry batches --run run-telemetry-jsonl-demo
-./agentprov timeline --run run-telemetry-jsonl-demo
-./agentprov timeline --run run-telemetry-jsonl-demo --view causality
-./agentprov timeline --run run-telemetry-jsonl-demo --json
-./scripts/accept_phase1.sh
-```
-
-这条快速路径会构建 `agentprov`、记录一条命令、解释被改动的文件、摄取过滤后的
-基质遥测，并跑一遍 Phase 1 验收门禁。`observe summary` 是 run 级可观测性的
-入口：在你深入 timeline 或 graph 查询之前，它先汇总应用上下文、运行时遥测
-覆盖率、风险、基线、响应和 top 证据引用。
-
-`demo_telemetry_jsonl.sh` 是最小的基质遥测路径。它绑定一个 ToolCallScope，
-从 `examples/telemetry/` 摄取 Tetragon/Falco/LoongCollector 的 fixture JSONL，
-列出归一化事件，并解释某条基质事件是如何进入 DAG 的。
-
-`accept_phase1.sh` 是当前 MVP 的机器可校验门禁。
-
-`timeline` 是执行时间线界面。它把应用上下文、运行时遥测、证据、策略决策、
-风险信号、基线偏差、响应动作和外部效果合并成一个按时间排序的视图。
-`--view causality` 会把行分组到 agent 上下文、运行时进程、运行时遥测、证据、
-风险/策略和外部效果这几条泳道里，并带上关联状态和下钻命令。它的 JSON 输出
-供 Web dashboard（以及外部 UI）使用。
 
 ## 意图一致性
 
@@ -464,8 +409,8 @@ AGENTPROV_K8S_INFORMER_REPORT=/tmp/agentprov-k8s-informer.json \
 对 RL 和评估器流水线，默认契约是轻量且 offline-first 的：
 
 - **安装**：一个 Go 二进制，外加一个可选的轻薄 Python 包。
-- **调用**：包住一条已有命令；当 harness 提供时，应用上下文增强
-  （hooks bridge、MCP 上下文写入）会自动叠加 —— 不需要接入代码。
+- **调用**：包住一条已有命令；受支持的 launch 配方及 hook/transcript
+  适配器补充应用上下文，自定义生产者可以使用 MCP 上下文写入。
 - **批量**：每条轨迹都得到稳定的 `run_id` / 证据清单 / 信号上下文输出，
   且查询界面都是分页的。
 - **开销**：默认捕获聚焦于进程/文件/差异/产物/退出/资源证据；更重的
@@ -534,6 +479,9 @@ AgentProvenance 把证据暴露给外部打分系统，但不接管它们的 rew
 
 ### 用 Python 写自定义规则
 
+<details>
+<summary>展开完整的 Python 规则示例</summary>
+
 `python/agentprov_eval`（import 别名 `agentprov`）是这个协议之上一层轻薄的、
 由 CLI 支撑的 helper —— **它不编码任何 reward 函数**。自定义"规则"就是普通的
 Python 函数，作用于 `EvalContext`；捕获、关联、清单和查询完整性依然由 Go 掌握。
@@ -600,6 +548,8 @@ client.import_signal_reports(reports, engine=registry.name)
 ./agentprov signal batch-context --shard shard-0 --latest > eval-contexts.jsonl
 ./agentprov forensics export-batch --latest --json
 ```
+
+</details>
 
 ### Daemon 模式
 
@@ -835,9 +785,6 @@ install。agent 侧的 hooks 提供编排图；运行时遥测为 `openat` 和 `
 ```
 
 <p align="center">
-  <img src="docs/img/demo-multiagent-agent-network.gif" alt="Multi-agent agent-network replay captured from the dashboard's orchestration lens play button." width="100%">
-</p>
-<p align="center">
   <img src="docs/img/demo-multiagent-orchestration.png" alt="Multi-agent orchestration lens showing lead agent, sub-agents, peer message, tool calls, and syscall attribution." width="100%">
 </p>
 <p align="center">
@@ -906,9 +853,13 @@ pod/container 元数据和主机 cgroup 身份；它不要求对负载做任何�
 |---|---|
 | 零 SDK record | `record -- <cmd>` 对工作目录做快照、采样进程树、捕获文件差异 + 运行时证据，不需要 SDK |
 | 批量记录器 | `record batch` 为 RL/benchmark 流水线并行记录大量作业 |
-| 自研 eBPF 传感器 | `agentprov-sensor`（Linux/arm64）：exec+argv、connect、文件写入 + 敏感**读取** → `secret_path`、process_exit、提权（setuid/setgid/ptrace）、篡改（rename/unlink）、TLS 明文（通过分块的 `SSL_write`/`SSL_read` 和新式 `SSL_write_ex`/`SSL_read_ex` 拿到完整请求/响应体；Go `crypto/tls` 的请求/写入路径经由 `AGENTPROV_GO_TLS_BIN`）、DNS —— 内核侧噪声过滤，已实机验证 |
+| 自研 eBPF 传感器 | `agentprov-sensor`（Linux/amd64 + arm64）：exec+argv、connect、文件写入 + 敏感**读取** → `secret_path`、process_exit、提权（setuid/setgid/ptrace）、篡改（rename/unlink）、TLS 明文（通过分块的 `SSL_write`/`SSL_read` 和新式 `SSL_write_ex`/`SSL_read_ex` 拿到完整请求/响应体；未 strip 的 Go `crypto/tls` 在 amd64/arm64 上支持写入捕获，在 amd64 Go 1.23–1.26 上支持读取捕获）、DNS —— 内核侧噪声过滤，已实机验证 |
 | LLM 意图捕获 | `internal/tlsintent` 把传感器的 TLS 分块重组成完整的 HTTP/1.1 消息（Content-Length、chunked 和 SSE 流式体）和 HTTP/2 消息（帧 + HPACK + 流解复用），然后跨 Anthropic/OpenAI 形态解析 LLM 语义 —— 模型、提供的工具、工具调用 + 模型决定要跑的 shell 命令、停止原因 |
 | 证据摄取 | Falco / Tetragon / LoongCollector JSONL + 自研传感器 → 归一化事件；经 schema 校验，原始 payload 中的应用上下文会被拒收，分页并带完整性哈希 |
+
+原生节点采集还提供持久化有界批次、重启恢复、迟到绑定重试、事务级去重和
+逐探针覆盖报告。具体 syscall/TLS 范围见[部署与验收指南](docs/amd64-kvm-k3s.md)，
+恢复语义见[原生采集 spool](docs/native-capture-spool.md)。
 
 **关联与验证**
 
@@ -990,7 +941,11 @@ pod/container 元数据和主机 cgroup 身份；它不要求对负载做任何�
 ## 架构
 
 <p align="center">
-  <img src="docs/assets/producer-profile-architecture.svg" alt="AgentProvenance producer profile architecture: validated local-record and Kubernetes producers feed substrate-neutral evidence into the core; future profiles stay capability-gated until live validation." width="100%">
+  <img src="docs/assets/evidence-flow.svg" alt="AgentProvenance evidence flow" width="920">
+</p>
+
+<p align="center">
+  <img src="docs/assets/producer-profile-architecture.svg" alt="AgentProvenance 生产者配置：本地 Linux、KVM guest 与 Kubernetes 共用基质无关的证据核心和调查界面。" width="100%">
 </p>
 
 <p align="center">
@@ -1070,8 +1025,8 @@ flowchart TD
 
 基质落在三条轴上：
 
-- **运行时** —— agent 进程在哪里执行。Docker 是当前活跃的本地运行时；
-  gVisor、Firecracker、Kata 和 OpenSandbox 是未来目标。
+- **运行时** —— agent 进程在哪里执行，包括本地 Linux、KVM guest 和容器；
+  这些是已验证的采集位置。AgentProvenance 观察执行，不负责创建或替代运行时。
 - **编排** —— 运行时在哪里被调度：Kubernetes、Ray、Batch 和云系统。
 - **遥测** —— 内核与行为证据从哪里来。主打来源是原生 Linux eBPF 传感器
   （`agentprov sensor stream`），它把归一化的内核事件直接推进
@@ -1120,7 +1075,7 @@ internal/cli/         命令解析与输出
 internal/launch/      一条命令的 porcelain 入口（`launch -- <agent>`）：作用域、dashboard、hooks overlay、传感器、诚实降级
 
 internal/record/      零 SDK 命令记录器
-internal/sensor/      原生 eBPF 传感器（exec/connect/文件/提权/篡改/TLS-body/DNS）；仅 Linux，arm64
+internal/sensor/      原生 eBPF 传感器（exec/connect/文件/提权/篡改/TLS-body/DNS）；仅 Linux，amd64 + arm64
 internal/producer/    生产者 profile（local-record / k8s-daemonset / microvm-guest-init）、被动 cgroup 作用域归属、K8s informer
 internal/tlsintent/   TLS 分块 -> 完整 HTTP 消息重组 + LLM 请求/响应语义
 internal/telemetry/   归一化运行时事件 schema、JSONL 摄取、TLS HTTP 元数据、关联输入
@@ -1165,102 +1120,46 @@ docs/                 产品方向、MVP 细节、对比
 
 ## Roadmap
 
-| 阶段 | 目标 | 主要交付物 |
-|---|---|---|
-| Phase 1 | 溯源关联 MVP | ToolCallScope、原始遥测关联、运行时因果 DAG、diff/blame、风险/偏差记录、响应门禁证据、重放与轨迹清单 |
-| Phase 2 | 证据 / 因果硬化 | 执行时间线 JSON、稳定的 explain JSON、内容寻址对象、对象父哈希、图校验、有界遍历、分页、完整性元数据 |
-| Phase 3 | 零 SDK 记录器硬化 | 进程树捕获、延迟子进程处理、cwd/时间/文件差异推断、孤儿生命周期证据、低侵入 record 模式 |
-| Phase 4 | 真实遥测集成 | Falco/Tetragon/LoongCollector/auditd/eBPF 接收器、cgroup/容器/pid 关联、内核侧过滤假设 |
-| Phase 5 | 风险 / 策略 / 控制 | 可配置风险信号、行为基线、合规证据映射、响应适配器、污染传播、隔离、响应阻断、取证导出、飞书/钉钉/webhook hook、隔离升级 hook |
-| Phase 6 | 规模 / UI / 产品化 | 异步证据写入器、保留策略、内容寻址存储、快照 GC、资源时间窗、高并发摄取/查询测试、评估器 SDK 硬化、中心化证据服务、可用的 UI/API |
-
-Phase 1–4 已建成，并由验收脚本做机器校验；Phase 5 除通知 hook 外已建成；
-Phase 6 大部分已落地（Web dashboard、保留策略、内容寻址存储、并发、
-评估器 SDK），中心化证据服务推迟到 v2。
-
-近期已落地：
-
-- **LLM 意图溯源**（`internal/tlsintent`、`graph materialize-llm`）——
-  传感器把 agent 真实的 LLM 流量捕获为完整 TLS 消息体（对动态 OpenSSL 客户端
-  用分块的 `SSL_write`/`SSL_read` 和 `SSL_write_ex`/`SSL_read_ex`；当
-  `AGENTPROV_GO_TLS_BIN` 指向一个未 strip 的 Go 二进制时，抓
-  `crypto/tls.(*Conn).Write` 的请求明文），用户态把它们重组成完整的
-  HTTP/1.1 消息（Content-Length / chunked / SSE）和 HTTP/2 消息
-  （帧 + HPACK + 流解复用），再解析 模型/工具/决定的命令 语义；每个消息体被
-  物化成内容寻址的 `llm_message`，每个请求/响应对成为一个 `llm_call` 节点，
-  而 `llm_caused` 边**只**画向模型响应中实际决定的那条命令。agent-intent
-  透镜把这些渲染成一张因果 DAG（被阻断/拒绝的意图按提出者 agent 分组），
-  `demo/llm-judge` 闭合了这个环：一个外部 LLM 裁决完整轨迹，而它自己的调用
-  也被捕获进图中。
-- **多 agent 编排溯源**（`internal/hooksbridge`、`agentprov hooks bridge`）——
-  一座 harness-hooks 桥把 Claude Code（或兼容）agent 团队的 hooks 变成图结构：
-  agent 节点（`agents` 表 + `tool_calls.agent_id`）、委派（`agent_spawn`）和
-  对等（`agent_message`，SendMessage 消息体被物化为证据）边，以及每个动作一条
-  经策略打分、绑定到执行方 `agent_id` 的 tool_call。进程内的子 agent 共享同一个
-  cgroup，因此外泄的 syscall 通过**命令匹配**（`agent_syscall`）归因到正确的
-  子 agent；新的 `orchestration` 透镜画出这套拓扑。已在一份已签名的 VM 捕获上
-  端到端验证（`demo/multiagent-provenance`）。
-- **策略重放 + self-credential 默认规则** —— `agentprov security reevaluate`
-  在一次已捕获 run 的存量事件上重跑策略（幂等、原始事件不动、verify 保持绿），
-  因此编辑过的策略（`agentprov policy rules` 导出一份可编辑副本）无需重新捕获
-  就能应用到历史。默认的 `self_credential_access` 规则让 agent **自己的**
-  凭证读取保持可观测但不告警，因此只有植入的目标密钥才引发风险。
-- **统一信号模型**（`internal/signals`、`agentprovenance.signals/v1`）——
-  一种挂在图上的行记录类型，覆盖 行为/成本/质量/安全，取代了按维度分裂的孤岛；
-  安全和质量是活跃生产者，并支持从遗留表做幂等回填。
-- **签名证据证明**（`internal/attest`）—— 对证据摘要做 in-toto/DSSE ed25519
-  签名，已接入 `forensics export`，提供的是"事后被攻陷仍可发现篡改"的证据，
-  而不只是重算哈希的完整性。
-- **并发正确性** —— SQLite pragma（含 `busy_timeout`）通过 DSN 应用到每一条
-  池化连接，修复了并发写入者下静默的 `SQLITE_BUSY`；关联绑定也限制了
-  陈旧开放绑定的过度匹配。
-- **原生 eBPF 传感器扩展**（`internal/sensor`，已在 arm64 VM 上实机验证）——
-  敏感文件读取（-> `secret_path`）、权限变更（setuid/setgid/ptrace）、
-  文件篡改（rename/unlink）、TLS 明文捕获（此后升级为完整请求/响应体 ->
-  `llm_call` 配对，见上文 LLM 意图溯源）、`process_exit` 关闭关联窗口，
-  以及 DNS（getaddrinfo）。在 ring-buffer reserve **之前**做内核侧噪声过滤，
-  消除了一场 containerd 拆卸风暴。提权策略规则（ptrace、setuid 到 root ->
-  隔离）。
-- **AI 界面** —— MCP server（`ai mcp`，stdio JSON-RPC 2.0）和上下文写入工具
-  （`bind_scope`、`record_tool_call`），建立在同一份 `internal/aitools` 目录
-  之上，在信任边界内由应用侧断言。
-- **Web dashboard**（`internal/dashboard`、`dashboard serve`）—— 本地只读视图，
-  以因果 DAG 作为招牌面板，另有时间线、进程树、外发、信号和 verify/签名状态。
+**v0.8.0 聚焦可移植、可靠的证据采集。** 本版增加原生 amd64 支持、KVM guest
+部署、K3s 验收、容器 TLS 自动发现，以及受支持 amd64 二进制的 Go TLS 响应捕获；
+同时加固迟到归属、持久采集恢复、升级测试、数据库就绪检查和事件/证据原子写入。
+验证依据与边界见[发布说明](docs/releases/v0.8.0.md)及
+[部署指南](docs/amd64-kvm-k3s.md)。
 
 接下来 / 未完成：
 
-- **传感器广度** —— 通用 DNS（musl / 裸 UDP:53，或一个 `udp_sendmsg` kprobe；
-  目前 `getaddrinfo` 覆盖 glibc）、IPv6/UDP connect，以及多架构
-  （x86 `PT_REGS`；目前仅 arm64）。`ptrace` 能被捕获，但还没有端到端测试跑过。
-- **TLS 广度** —— Go `crypto/tls` 的响应/读取路径、BoringSSL、静态链接 TLS，
-  以及 x86 uprobe 验证。OpenSSL 动态链接客户端已由
-  `SSL_write`/`SSL_read` 和 `SSL_write_ex`/`SSL_read_ex` 覆盖；Go `crypto/tls`
-  的请求/写入捕获在未 strip 的 arm64 二进制上是部分覆盖；HTTP/1.1 和
-  HTTP/2/HPACK 重组已实现。
-- **防篡改（v2）** —— 离机 / 捕获时签名（KMS / TPM / 透明日志）。v1 是完整性
-  加可选本地签名，**不是**针对 host-root 攻击者的证明。
-- **Deploy 3** —— 中心化证据服务，带进程级数据面隔离和 authz/scope。
-- **通知** —— 飞书 / 钉钉 / webhook 响应 hook。
+- **采集广度**：ARM64 Go TLS 响应捕获、BoringSSL、strip 后或不支持的 TLS
+  二进制，以及更广的网络覆盖。OpenSSL `SSL_*` 与 `SSL_*_ex`、HTTP/1.1 和
+  HTTP/2/HPACK 已实现。
+- **运行验证**：更长周期的负载、真实磁盘故障及 run 级覆盖报告。已有的
+  10 万事件报告是单节点基准，不是生产 SLA。
+- **证据信任**：可选离机 / 捕获时签名。当前哈希与本地签名可以相对可信检查点
+  检测改动，但不能证明被攻陷的宿主机完整、如实地记录了所有事件。
+- **中心化证据服务**：[仅设计](docs/central-evidence-service-design.md)。
+  多租户、计费、集群调度及 operator 高可用不在本版范围内。
+
+[v0.7 设计](docs/roadmap-v0.7.md)作为历史背景保留，不是当前功能待办表。
+[收尾标准](docs/project-closeout.md)定义本版单节点交付边界。
 
 ## 开发
 
 ```sh
-go test ./...            # 按包的单元测试
+go test -race ./...
 go vet ./...
 gofmt -l internal cmd
 
-# 端到端验收套件（每个脚本驱动一条路径，并断言已关联的证据
-# + 风险/响应记录 + 图的边 + 一次干净的 `graph verify`）
-for s in ./scripts/accept_*.sh; do "$s" || break; done
+# 可在本地运行的端到端证据与验证冒烟测试。
+./scripts/accept_phase1.sh
 ```
 
-`go test ./...`、`go vet ./...` 和 `gofmt -l` 是按包的门禁。
-`scripts/accept_*.sh` 是端到端的那些 —— 零 SDK record、
-Falco/Tetragon/原生传感器风险、取证包（+ 证据篡改检测）、daemon 证据 API、
-遥测 spool/压力/时间窗、信号引擎（+ 统一信号证明）、LLM 意图因果、
-Python helper，以及 Deploy 1 批处理流水线。CI 跑 `accept_phase1.sh` 加上
-传感器绑定漂移检查（`regen-sensor.sh --check`）。eBPF 传感器在 Linux 主机上
-验证（`go generate ./internal/sensor`，然后运行 `agentprov-sensor`）。
+[CI](.github/workflows/ci.yml)执行这些门禁、Linux amd64/arm64 静态构建、
+原生绑定漂移检查、daemon 就绪故障测试，以及 Go 1.23–1.26 下的真实 amd64
+syscall/OpenSSL/Go TLS 测试。ARM64 和 KVM/K3s 实验环境报告与托管 CI 分开列示。
+
+验收脚本各有环境要求，不要直接遍历全部 `scripts/accept_*.sh`：
+部分需要 root、会创建 Pod 或安装服务。环境测试请按
+[KVM/K3s 部署指南](docs/amd64-kvm-k3s.md)执行，单节点压力测试见
+[收尾指南](docs/project-closeout.md)。
 
 ## 作者与许可
 

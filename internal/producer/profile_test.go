@@ -1,6 +1,9 @@
 package producer
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestProfileCapabilitiesAreDeclaredHonestly(t *testing.T) {
 	// Every profile must declare all three layers so the capability report never
@@ -27,7 +30,7 @@ func TestK8sDaemonsetIsHonestAboutModelIntentAndScope(t *testing.T) {
 		t.Fatalf("k8s-daemonset scope mode = %q, want %q", p.ScopeMode, ScopeModeCgroup)
 	}
 	if got := p.Layers[LayerModelIntent].Coverage; got != CoveragePartial {
-		t.Errorf("k8s-daemonset model_intent = %q, want %q (pending libssl resolution)", got, CoveragePartial)
+		t.Errorf("k8s-daemonset model_intent = %q, want %q (TLS-stack dependent)", got, CoveragePartial)
 	}
 	if got := p.Layers[LayerSystemTelemetry].Coverage; got != CoverageFull {
 		t.Errorf("k8s-daemonset system_telemetry = %q, want full (shared node kernel)", got)
@@ -35,6 +38,23 @@ func TestK8sDaemonsetIsHonestAboutModelIntentAndScope(t *testing.T) {
 	// Passive cgroup scope must read as less certain than a record-launched one.
 	if p.ScopeConfidence() != 0.8 {
 		t.Errorf("k8s-daemonset scope confidence = %v, want 0.8", p.ScopeConfidence())
+	}
+}
+
+func TestValidatedProfilesDescribeArchitectureSpecificTLSAndKVM(t *testing.T) {
+	if !strings.Contains(LocalRecord().SensorPlacement, "KVM guest") {
+		t.Fatal("local-record must include validated KVM guests")
+	}
+	for _, p := range []Profile{LocalRecord(), K8sDaemonset()} {
+		note := p.Layers[LayerModelIntent].Note
+		for _, required := range []string{"OpenSSL", "_ex", "amd64/arm64", "reads on amd64 Go 1.23-1.26", "HTTP/2/HPACK"} {
+			if !strings.Contains(note, required) {
+				t.Errorf("%s TLS note omits %q: %s", p.Name, required, note)
+			}
+		}
+	}
+	if strings.Contains(MicrovmGuestInit().Layers[LayerSystemTelemetry].Note, "no guest-init runner or live KVM acceptance") {
+		t.Fatal("reserved guest-init profile must not misreport KVM support")
 	}
 }
 

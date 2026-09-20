@@ -33,6 +33,19 @@ components:
       properties:
         schema_version: { type: string }
       additionalProperties: true
+    DaemonHealth:
+      type: object
+      required: [schema_version, status, ready, checks, coverage_status]
+      properties:
+        schema_version: { type: string, enum: [agentprovenance.daemon_health/v1] }
+        status: { type: string, enum: [ok, degraded, unavailable] }
+        ready: { type: boolean, description: Database queries and schema checks succeeded; independent of historical evidence loss. }
+        coverage_status: { type: string, enum: [unknown, not_observed, no_recorded_gaps, pending, gaps_recorded] }
+        checks: { type: object, additionalProperties: { type: object } }
+        queued_spool: { type: [integer, "null"] }
+        queued_spool_bytes: { type: [integer, "null"] }
+        native_capture: { type: object, additionalProperties: true }
+      additionalProperties: true
 paths:
   /v1/health:
     get:
@@ -40,7 +53,32 @@ paths:
       summary: daemon readiness + queue depths (agentprovenance.daemon_health/v1)
       security: [ {} ]
       responses:
-        "200": { description: ok, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+        "200": { description: Ready; historical gaps are reported separately, content: { application/json: { schema: { $ref: "#/components/schemas/DaemonHealth" } } } }
+        "503": { description: Storage unavailable, schema mismatch, or the bounded check timed out, content: { application/json: { schema: { $ref: "#/components/schemas/DaemonHealth" } } } }
+  /v1/ready:
+    get:
+      operationId: readiness
+      summary: Same readiness contract as /v1/health; checks have a two-second timeout
+      security: [ {} ]
+      responses:
+        "200": { description: Ready or ready with recorded degradation, content: { application/json: { schema: { $ref: "#/components/schemas/DaemonHealth" } } } }
+        "503": { description: Not ready, content: { application/json: { schema: { $ref: "#/components/schemas/DaemonHealth" } } } }
+  /v1/live:
+    get:
+      operationId: liveness
+      summary: Process responsiveness only; no database or queue checks
+      security: [ {} ]
+      responses:
+        "200":
+          description: Process is responding
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [schema_version, status]
+                properties:
+                  schema_version: { type: string, enum: [agentprovenance.daemon_liveness/v1] }
+                  status: { type: string, enum: [ok] }
   /v1/graph/verify:
     get:
       operationId: verify_run

@@ -60,10 +60,15 @@ $KUBECTL rollout status daemonset/agentprov-sensor -n "$SENSOR_NAMESPACE" --time
 sensor_pod="$($KUBECTL get pod -n "$SENSOR_NAMESPACE" -l app=agentprov-sensor -o jsonpath='{.items[0].metadata.name}')"
 [[ -n "$sensor_pod" ]] || { echo "FAIL: DaemonSet sensor pod was not scheduled"; exit 1; }
 echo "  daemonset=agentprov-sensor pod=$SENSOR_NAMESPACE/$sensor_pod transport=stdout-jsonl"
-# Pod readiness only proves the sensor process is alive. Leave a short attach
-# window before scheduling workloads so their first exec is not in the probe
-# setup boundary.
-sleep 2
+# Pod readiness only proves the process is alive; wait for actual probe attach.
+for _ in $(seq 1 100); do
+  if $KUBECTL logs -n "$SENSOR_NAMESPACE" "$sensor_pod" -c sensor 2>/dev/null | grep -q 'agentprov-sensor: ready'; then
+    sensor_ready=1
+    break
+  fi
+  sleep 0.1
+done
+[[ "${sensor_ready:-0}" == 1 ]] || { echo 'FAIL: sensor probes never became ready'; exit 1; }
 
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 CLUSTER="$($KUBECTL config current-context 2>/dev/null || echo k8s)"
@@ -89,7 +94,8 @@ done
 echo "== collect ${CAPTURE_SECONDS}s from the DaemonSet stdout transport"
 sleep "$CAPTURE_SECONDS"
 J="$OUT/sensor.jsonl"
-$KUBECTL logs -n "$SENSOR_NAMESPACE" "$sensor_pod" -c sensor >"$J"
+# Kubernetes merges stdout and stderr; omit only the known readiness banner.
+$KUBECTL logs -n "$SENSOR_NAMESPACE" "$sensor_pod" -c sensor | sed '/^agentprov-sensor: ready$/d' >"$J"
 [[ -s "$J" ]] || { echo "FAIL: sensor produced no telemetry"; exit 1; }
 : >"$OUT/cgroups.txt"
 : >"$OUT/nodes.txt"

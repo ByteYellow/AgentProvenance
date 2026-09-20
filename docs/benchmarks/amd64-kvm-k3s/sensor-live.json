@@ -1,0 +1,63 @@
+{
+  "schema_version": "agentprovenance.sensor_live_acceptance/v1",
+  "architecture": "x86_64",
+  "kernel": "6.8.0-139-generic",
+  "pause_drain_seconds": 1.5,
+  "checks": {
+    "execve": true,
+    "file_open": true,
+    "file_rename": true,
+    "file_unlink": true,
+    "network_connect": true,
+    "dns_query": true,
+    "process_exit": true,
+    "sensitive_read": true,
+    "file_write": true,
+    "setuid": true,
+    "setgid": true,
+    "ptrace": true,
+    "legacy_open_x86": true,
+    "cgroup_identity": true,
+    "dns_glibc_c_abi": true,
+    "dns_udp": true,
+    "python-openssl-ex:tls_write": true,
+    "python-openssl-ex:tls_read": true,
+    "c-openssl-legacy:tls_write": true,
+    "c-openssl-legacy:tls_read": true,
+    "c-openssl-ex:tls_write": true,
+    "c-openssl-ex:tls_read": true,
+    "go-abiinternal:tls_write": true,
+    "sensor_clean_exit": true,
+    "no_tls_attach_warning": true,
+    "capture_time_before_drain": true
+  },
+  "passed": true,
+  "kernel_pids": {
+    "python-openssl-ex": 3079,
+    "c-openssl-legacy": 3081,
+    "c-openssl-ex": 3083,
+    "go-abiinternal": 3085
+  },
+  "caller_pids": {
+    "python-openssl-ex": 3079,
+    "c-openssl-legacy": 3081,
+    "c-openssl-ex": 3083,
+    "go-abiinternal": 3085
+  },
+  "event_types": {
+    "execve": 10,
+    "network_connect": 12,
+    "file_open": 9,
+    "file_rename": 1,
+    "file_unlink": 2,
+    "setgid": 1,
+    "setuid": 1,
+    "ptrace": 1,
+    "dns_query": 4,
+    "tls_write": 8,
+    "tls_read": 7,
+    "process_exit": 10
+  },
+  "event_count": 66,
+  "sensor_stderr": "agentprov-sensor: ready\n"
+}

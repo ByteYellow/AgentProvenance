@@ -750,12 +750,12 @@ func TestVerifyRejectsMissingOrphanLifecycleEvidence(t *testing.T) {
 		RunID:   "run-orphan-verify",
 		Name:    "orphan-verify",
 		Workdir: workdir,
-		Command: []string{"python3", "-c", `import subprocess, time; subprocess.Popen(["sleep", "0.8"]); time.sleep(0.08); open("app.py", "w").write("value = 2\n")`},
+		Command: []string{"sh", "-c", "printf 'value = 2\\n' > app.py"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanupVerifyObservedProcesses(result.Observed)
+	seedOrphanObservation(t, db, result)
 
 	clean, err := Verify(db, result.RunID)
 	if err != nil {
@@ -921,15 +921,4 @@ func assertVerifyIssue(t *testing.T, result VerifyResult, kind string) {
 		}
 	}
 	t.Fatalf("expected issue kind %s, got %+v", kind, result.Issues)
-}
-
-func cleanupVerifyObservedProcesses(procs []record.ObservedProcess) {
-	for _, proc := range procs {
-		if proc.PID <= 0 {
-			continue
-		}
-		if p, err := os.FindProcess(int(proc.PID)); err == nil {
-			_ = p.Kill()
-		}
-	}
 }

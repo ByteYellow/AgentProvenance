@@ -1,0 +1,302 @@
+{
+  "schema_version": "agentprovenance.upgrade_acceptance/v1",
+  "from_schema": 16,
+  "to_schema": 17,
+  "before_boot_id": "b606a76f-f2dd-48c0-8c08-a0d13877b8c5",
+  "after_boot_id": "c6c2992b-e7b7-49e2-a115-c70d32ebb5b1",
+  "historical_events": 9500,
+  "current_events": 9626,
+  "missing": [],
+  "changed": [],
+  "quiesced_before_snapshot": true,
+  "agentprov_sha256": "a2b1905ef861772296786a3d6071e177f1c16891e489030e2769354d30af6641",
+  "passed": true,
+  "post_reboot_historical_events_preserved": 9500,
+  "post_reboot_missing": [],
+  "post_reboot_changed": [],
+  "collector_status": {
+    "capabilities": {
+      "probes": [
+        {
+          "category": "dns",
+          "name": "syscalls/sys_enter_sendto",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "dns",
+          "name": "getaddrinfo",
+          "required": false,
+          "status": "attached",
+          "target": "/lib/x86_64-linux-gnu/libc.so.6"
+        },
+        {
+          "category": "syscall",
+          "name": "sched/sched_process_exec",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "sched/sched_process_exit",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_connect",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_execve",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_open",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_openat",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_ptrace",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_rename",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_renameat",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_renameat2",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_setgid",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_setuid",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_unlink",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_unlinkat",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/185/fs/usr/local/bin/agentprov"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/185/fs/usr/local/bin/agentprov"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section",
+          "required": false,
+          "status": "unsupported",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/19/fs/coredns"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found",
+          "required": false,
+          "status": "failed",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/19/fs/coredns"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section",
+          "required": false,
+          "status": "unsupported",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/4/fs/usr/bin/local-path-provisioner"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found",
+          "required": false,
+          "status": "failed",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/4/fs/usr/bin/local-path-provisioner"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section",
+          "required": false,
+          "status": "unsupported",
+          "target": "/proc/3643/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found",
+          "required": false,
+          "status": "failed",
+          "target": "/proc/3643/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section",
+          "required": false,
+          "status": "unsupported",
+          "target": "/proc/4027/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found",
+          "required": false,
+          "status": "failed",
+          "target": "/proc/4027/exe"
+        },
+        {
+          "category": "tls",
+          "name": "SSL_read",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/4091/root/usr/lib/x86_64-linux-gnu/libssl.so.3"
+        },
+        {
+          "category": "tls",
+          "name": "SSL_read_ex",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/4091/root/usr/lib/x86_64-linux-gnu/libssl.so.3"
+        },
+        {
+          "category": "tls",
+          "name": "SSL_write",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/4091/root/usr/lib/x86_64-linux-gnu/libssl.so.3"
+        },
+        {
+          "category": "tls",
+          "name": "SSL_write_ex",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/4091/root/usr/lib/x86_64-linux-gnu/libssl.so.3"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section",
+          "required": false,
+          "status": "unsupported",
+          "target": "/proc/772/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found",
+          "required": false,
+          "status": "failed",
+          "target": "/proc/772/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section",
+          "required": false,
+          "status": "unsupported",
+          "target": "/proc/907/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found",
+          "required": false,
+          "status": "failed",
+          "target": "/proc/907/exe"
+        }
+      ],
+      "ready": true,
+      "schema_version": "agentprovenance.sensor_capabilities/v1",
+      "status": "degraded",
+      "tls_discovery": {
+        "active_targets": 8,
+        "enabled": true,
+        "limitations": [
+          "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+          "polling can miss TLS activity before attachment and processes shorter than the scan interval",
+          "stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered"
+        ],
+        "max_processes_per_scan": 4096,
+        "max_targets": 128,
+        "processes_scanned": 164,
+        "scan_complete": true,
+        "scan_interval_ms": 2000,
+        "skipped_targets": 0,
+        "truncated_maps": 0,
+        "unreadable_processes": 0,
+        "unresolved_mounts": 0,
+        "unsupported_executables": 12
+      },
+      "updated_at": "2026-09-18T19:42:32.571920831Z"
+    },
+    "capabilities_historical": false,
+    "capture": {
+      "counters": {
+        "captured": 37934,
+        "excluded": 6836,
+        "expired_uncorrelated": 25904,
+        "ingested": 2865,
+        "invalid": 106,
+        "invalid_payload_file_write": 106,
+        "kernel_dropped_events": 3,
+        "policy_decisions": 282,
+        "read": 44876,
+        "tls_reassembly_dropped_bytes": 93274,
+        "tls_reassembly_dropped_streams": 2
+      },
+      "queued_batches": 103,
+      "queued_bytes": 5441951,
+      "pending_events": 9165,
+      "cleanup_pending_batches": 0
+    },
+    "collector_running": true
+  }
+}

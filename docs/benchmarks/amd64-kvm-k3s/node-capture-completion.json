@@ -1,0 +1,249 @@
+{
+  "schema_version": "agentprovenance.node_capture_acceptance/v1",
+  "kernel": "6.8.0-139-generic",
+  "architecture": "x86_64",
+  "checks": {
+    "agentprov-late-5f88b65f69-0:no_early_binding": true,
+    "agentprov-late-5f88b65f69-1:no_early_binding": true,
+    "both_markers_durable_before_crash": true,
+    "agentprov-late-5f88b65f69-0:late_attribution": true,
+    "agentprov-late-5f88b65f69-0:closed_interval": true,
+    "agentprov-late-5f88b65f69-0:no_cross_run": true,
+    "agentprov-late-5f88b65f69-0:verified": true,
+    "agentprov-late-5f88b65f69-1:late_attribution": true,
+    "agentprov-late-5f88b65f69-1:closed_interval": true,
+    "agentprov-late-5f88b65f69-1:no_cross_run": true,
+    "agentprov-late-5f88b65f69-1:verified": true,
+    "no_duplicate_events_after_second_restart": true,
+    "collector_still_running": true
+  },
+  "runs": [
+    {
+      "run_id": "run-agentprov-late-5f88b65f69-0",
+      "native_events": 33,
+      "bindings": [
+        {
+          "id": "bind_k8s_393c306adf3d2987bd898f534d6539cbf9094232259ba4dba7bf39303c1fa00d",
+          "run_id": "run-agentprov-late-5f88b65f69-0",
+          "session_id": "cb29d082-2c3e-43c0-bcb7-69a0f7885e78",
+          "attempt_id": "",
+          "tool_call_id": "",
+          "process_id": "",
+          "container_id": "1de6b6a35ee15057e77293e4f14e1307045324e84bdbfa2eb5926bdf75bd8dfb",
+          "cgroup_id": "",
+          "root_pid": 0,
+          "pid": 0,
+          "started_at": "2026-09-18T19:33:51Z",
+          "ended_at": "2026-09-18T19:33:51.999999999Z",
+          "binding_source": "k8s_cgroup",
+          "confidence": 0.8
+        }
+      ],
+      "verification": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "run-agentprov-late-5f88b65f69-0",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      }
+    },
+    {
+      "run_id": "run-agentprov-late-5f88b65f69-1",
+      "native_events": 33,
+      "bindings": [
+        {
+          "id": "bind_k8s_ad89575c3ff2ac033766cff0adcf4862e7468f338c852f0c0e371abe21f671ef",
+          "run_id": "run-agentprov-late-5f88b65f69-1",
+          "session_id": "3c1d0267-c813-49b3-a198-fabc4cadcb2c",
+          "attempt_id": "",
+          "tool_call_id": "",
+          "process_id": "",
+          "container_id": "bd606e85850d8bb167c2ec936cbde01d98303ec1898ca8827d613b3b76accd81",
+          "cgroup_id": "",
+          "root_pid": 0,
+          "pid": 0,
+          "started_at": "2026-09-18T19:33:51Z",
+          "ended_at": "2026-09-18T19:33:51.999999999Z",
+          "binding_source": "k8s_cgroup",
+          "confidence": 0.8
+        }
+      ],
+      "verification": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "run-agentprov-late-5f88b65f69-1",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      }
+    }
+  ],
+  "before_crash": {
+    "counters": {
+      "captured": 952,
+      "excluded": 53,
+      "read": 1005
+    },
+    "queued_batches": 27,
+    "queued_bytes": 1519124,
+    "pending_events": 952,
+    "cleanup_pending_batches": 0
+  },
+  "after_recovery": {
+    "capabilities": {
+      "probes": [
+        {
+          "category": "dns",
+          "name": "syscalls/sys_enter_sendto",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "dns",
+          "name": "getaddrinfo",
+          "required": false,
+          "status": "attached",
+          "target": "/lib/x86_64-linux-gnu/libc.so.6"
+        },
+        {
+          "category": "syscall",
+          "name": "sched/sched_process_exec",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "sched/sched_process_exit",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_connect",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_execve",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_open",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_openat",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_ptrace",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_rename",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_renameat",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_renameat2",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_setgid",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_setuid",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_unlink",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_unlinkat",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "tls",
+          "name": "container_tls_discovery",
+          "reason": "automatic discovery disabled",
+          "required": false,
+          "status": "disabled"
+        }
+      ],
+      "ready": true,
+      "schema_version": "agentprovenance.sensor_capabilities/v1",
+      "status": "ready",
+      "tls_discovery": {
+        "active_targets": 0,
+        "enabled": false,
+        "limitations": [
+          "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+          "polling can miss TLS activity before attachment and processes shorter than the scan interval",
+          "stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered"
+        ],
+        "max_processes_per_scan": 4096,
+        "max_targets": 128,
+        "processes_scanned": 0,
+        "scan_complete": true,
+        "scan_interval_ms": 2000,
+        "skipped_targets": 0,
+        "truncated_maps": 0,
+        "unreadable_processes": 0,
+        "unresolved_mounts": 0,
+        "unsupported_executables": 0
+      },
+      "updated_at": "2026-09-18T19:34:00.99013286Z"
+    },
+    "capabilities_historical": false,
+    "capture": {
+      "counters": {
+        "captured": 1196,
+        "excluded": 314,
+        "ingested": 66,
+        "read": 1476
+      },
+      "queued_batches": 56,
+      "queued_bytes": 1629373,
+      "pending_events": 1130,
+      "cleanup_pending_batches": 0
+    },
+    "collector_running": true
+  },
+  "passed": true,
+  "diagnostics": {
+    "watch.err": "",
+    "sensor-2.err": "agentprov sensor stream: capturing kernel telemetry -> durable spool -> store (ctrl-c to stop)\nagentprov-sensor: capabilities {\"schema_version\":\"agentprovenance.sensor_capabilities/v1\",\"updated_at\":\"2026-09-18T19:33:56.398496353Z\",\"ready\":false,\"status\":\"starting\",\"probes\":[{\"name\":\"syscalls/sys_enter_sendto\",\"category\":\"dns\",\"required\":false,\"status\":\"attached\"},{\"name\":\"getaddrinfo\",\"category\":\"dns\",\"target\":\"/lib/x86_64-linux-gnu/libc.so.6\",\"required\":false,\"status\":\"attached\"},{\"name\":\"sched/sched_process_exec\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"sched/sched_process_exit\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_connect\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_execve\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_open\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_openat\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_ptrace\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_rename\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_renameat\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_renameat2\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_setgid\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_setuid\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_unlink\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_unlinkat\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"container_tls_discovery\",\"category\":\"tls\",\"required\":false,\"status\":\"disabled\",\"reason\":\"automatic discovery disabled\"}],\"tls_discovery\":{\"enabled\":false,\"scan_interval_ms\":2000,\"max_targets\":128,\"max_processes_per_scan\":4096,\"active_targets\":0,\"scan_complete\":true,\"processes_scanned\":0,\"unreadable_processes\":0,\"unresolved_mounts\":0,\"truncated_maps\":0,\"skipped_targets\":0,\"unsupported_executables\":0,\"limitations\":[\"processes must be visible in the sensor PID namespace; container roots/maps must be readable\",\"polling can miss TLS activity before attachment and processes shorter than the scan interval\",\"stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered\"]}}\nagentprov-sensor: capabilities {\"schema_version\":\"agentprovenance.sensor_capabilities/v1\",\"updated_at\":\"2026-09-18T19:33:56.402145672Z\",\"ready\":true,\"status\":\"ready\",\"probes\":[{\"name\":\"syscalls/sys_enter_sendto\",\"category\":\"dns\",\"required\":false,\"status\":\"attached\"},{\"name\":\"getaddrinfo\",\"category\":\"dns\",\"target\":\"/lib/x86_64-linux-gnu/libc.so.6\",\"required\":false,\"status\":\"attached\"},{\"name\":\"sched/sched_process_exec\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"sched/sched_process_exit\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_connect\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_execve\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_open\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_openat\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_ptrace\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_rename\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_renameat\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_renameat2\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_setgid\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_setuid\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_unlink\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_unlinkat\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"container_tls_discovery\",\"category\":\"tls\",\"required\":false,\"status\":\"disabled\",\"reason\":\"automatic discovery disabled\"}],\"tls_discovery\":{\"enabled\":false,\"scan_interval_ms\":2000,\"max_targets\":128,\"max_processes_per_scan\":4096,\"active_targets\":0,\"scan_complete\":true,\"processes_scanned\":0,\"unreadable_processes\":0,\"unresolved_mounts\":0,\"truncated_maps\":0,\"skipped_targets\":0,\"unsupported_executables\":0,\"limitations\":[\"processes must be visible in the sensor PID namespace; container roots/maps must be readable\",\"polling can miss TLS activity before attachment and processes shorter than the scan interval\",\"stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered\"]}}\nagentprov sensor stream: ready probes-attached\n",
+    "sensor-1.err": "agentprov sensor stream: capturing kernel telemetry -> durable spool -> store (ctrl-c to stop)\nagentprov-sensor: capabilities {\"schema_version\":\"agentprovenance.sensor_capabilities/v1\",\"updated_at\":\"2026-09-18T19:33:49.937325237Z\",\"ready\":false,\"status\":\"starting\",\"probes\":[{\"name\":\"syscalls/sys_enter_sendto\",\"category\":\"dns\",\"required\":false,\"status\":\"attached\"},{\"name\":\"getaddrinfo\",\"category\":\"dns\",\"target\":\"/lib/x86_64-linux-gnu/libc.so.6\",\"required\":false,\"status\":\"attached\"},{\"name\":\"sched/sched_process_exec\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"sched/sched_process_exit\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_connect\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_execve\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_open\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_openat\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_ptrace\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_rename\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_renameat\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_renameat2\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_setgid\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_setuid\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_unlink\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_unlinkat\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"container_tls_discovery\",\"category\":\"tls\",\"required\":false,\"status\":\"disabled\",\"reason\":\"automatic discovery disabled\"}],\"tls_discovery\":{\"enabled\":false,\"scan_interval_ms\":2000,\"max_targets\":128,\"max_processes_per_scan\":4096,\"active_targets\":0,\"scan_complete\":true,\"processes_scanned\":0,\"unreadable_processes\":0,\"unresolved_mounts\":0,\"truncated_maps\":0,\"skipped_targets\":0,\"unsupported_executables\":0,\"limitations\":[\"processes must be visible in the sensor PID namespace; container roots/maps must be readable\",\"polling can miss TLS activity before attachment and processes shorter than the scan interval\",\"stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered\"]}}\nagentprov-sensor: capabilities {\"schema_version\":\"agentprovenance.sensor_capabilities/v1\",\"updated_at\":\"2026-09-18T19:33:49.939964053Z\",\"ready\":true,\"status\":\"ready\",\"probes\":[{\"name\":\"syscalls/sys_enter_sendto\",\"category\":\"dns\",\"required\":false,\"status\":\"attached\"},{\"name\":\"getaddrinfo\",\"category\":\"dns\",\"target\":\"/lib/x86_64-linux-gnu/libc.so.6\",\"required\":false,\"status\":\"attached\"},{\"name\":\"sched/sched_process_exec\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"sched/sched_process_exit\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_connect\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_execve\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_open\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_openat\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_ptrace\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_rename\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_renameat\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_renameat2\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_setgid\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_setuid\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_unlink\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_unlinkat\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"container_tls_discovery\",\"category\":\"tls\",\"required\":false,\"status\":\"disabled\",\"reason\":\"automatic discovery disabled\"}],\"tls_discovery\":{\"enabled\":false,\"scan_interval_ms\":2000,\"max_targets\":128,\"max_processes_per_scan\":4096,\"active_targets\":0,\"scan_complete\":true,\"processes_scanned\":0,\"unreadable_processes\":0,\"unresolved_mounts\":0,\"truncated_maps\":0,\"skipped_targets\":0,\"unsupported_executables\":0,\"limitations\":[\"processes must be visible in the sensor PID namespace; container roots/maps must be readable\",\"polling can miss TLS activity before attachment and processes shorter than the scan interval\",\"stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered\"]}}\nagentprov sensor stream: ready probes-attached\n",
+    "sensor-3.err": "agentprov sensor stream: capturing kernel telemetry -> durable spool -> store (ctrl-c to stop)\nagentprov-sensor: capabilities {\"schema_version\":\"agentprovenance.sensor_capabilities/v1\",\"updated_at\":\"2026-09-18T19:34:00.987611532Z\",\"ready\":false,\"status\":\"starting\",\"probes\":[{\"name\":\"syscalls/sys_enter_sendto\",\"category\":\"dns\",\"required\":false,\"status\":\"attached\"},{\"name\":\"getaddrinfo\",\"category\":\"dns\",\"target\":\"/lib/x86_64-linux-gnu/libc.so.6\",\"required\":false,\"status\":\"attached\"},{\"name\":\"sched/sched_process_exec\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"sched/sched_process_exit\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_connect\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_execve\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_open\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_openat\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_ptrace\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_rename\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_renameat\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_renameat2\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_setgid\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_setuid\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_unlink\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_unlinkat\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"container_tls_discovery\",\"category\":\"tls\",\"required\":false,\"status\":\"disabled\",\"reason\":\"automatic discovery disabled\"}],\"tls_discovery\":{\"enabled\":false,\"scan_interval_ms\":2000,\"max_targets\":128,\"max_processes_per_scan\":4096,\"active_targets\":0,\"scan_complete\":true,\"processes_scanned\":0,\"unreadable_processes\":0,\"unresolved_mounts\":0,\"truncated_maps\":0,\"skipped_targets\":0,\"unsupported_executables\":0,\"limitations\":[\"processes must be visible in the sensor PID namespace; container roots/maps must be readable\",\"polling can miss TLS activity before attachment and processes shorter than the scan interval\",\"stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered\"]}}\nagentprov-sensor: capabilities {\"schema_version\":\"agentprovenance.sensor_capabilities/v1\",\"updated_at\":\"2026-09-18T19:34:00.99013286Z\",\"ready\":true,\"status\":\"ready\",\"probes\":[{\"name\":\"syscalls/sys_enter_sendto\",\"category\":\"dns\",\"required\":false,\"status\":\"attached\"},{\"name\":\"getaddrinfo\",\"category\":\"dns\",\"target\":\"/lib/x86_64-linux-gnu/libc.so.6\",\"required\":false,\"status\":\"attached\"},{\"name\":\"sched/sched_process_exec\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"sched/sched_process_exit\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_connect\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_execve\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_open\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_openat\",\"category\":\"syscall\",\"required\":true,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_ptrace\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_rename\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_renameat\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_renameat2\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_setgid\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_setuid\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_unlink\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"syscalls/sys_enter_unlinkat\",\"category\":\"syscall\",\"required\":false,\"status\":\"attached\"},{\"name\":\"container_tls_discovery\",\"category\":\"tls\",\"required\":false,\"status\":\"disabled\",\"reason\":\"automatic discovery disabled\"}],\"tls_discovery\":{\"enabled\":false,\"scan_interval_ms\":2000,\"max_targets\":128,\"max_processes_per_scan\":4096,\"active_targets\":0,\"scan_complete\":true,\"processes_scanned\":0,\"unreadable_processes\":0,\"unresolved_mounts\":0,\"truncated_maps\":0,\"skipped_targets\":0,\"unsupported_executables\":0,\"limitations\":[\"processes must be visible in the sensor PID namespace; container roots/maps must be readable\",\"polling can miss TLS activity before attachment and processes shorter than the scan interval\",\"stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered\"]}}\nagentprov sensor stream: ready probes-attached\nagentprov-sensor: capabilities {\"schema_version\":\"agentprovenance.sensor_capabilities/v1\",\"updated_at\":\"2026-09-18T19:34:04.588134644Z\",\"ready\":false,\"status\":\"stopped\",\"probes\":[{\"name\":\"syscalls/sys_enter_sendto\",\"category\":\"dns\",\"required\":false,\"status\":\"detached\"},{\"name\":\"getaddrinfo\",\"category\":\"dns\",\"target\":\"/lib/x86_64-linux-gnu/libc.so.6\",\"required\":false,\"status\":\"detached\"},{\"name\":\"sched/sched_process_exec\",\"category\":\"syscall\",\"required\":true,\"status\":\"detached\"},{\"name\":\"sched/sched_process_exit\",\"category\":\"syscall\",\"required\":true,\"status\":\"detached\"},{\"name\":\"syscalls/sys_enter_connect\",\"category\":\"syscall\",\"required\":true,\"status\":\"detached\"},{\"name\":\"syscalls/sys_enter_execve\",\"category\":\"syscall\",\"required\":true,\"status\":\"detached\"},{\"name\":\"syscalls/sys_enter_open\",\"category\":\"syscall\",\"required\":false,\"status\":\"detached\"},{\"name\":\"syscalls/sys_enter_openat\",\"category\":\"syscall\",\"required\":true,\"status\":\"detached\"},{\"name\":\"syscalls/sys_enter_ptrace\",\"category\":\"syscall\",\"required\":false,\"status\":\"detached\"},{\"name\":\"syscalls/sys_enter_rename\",\"category\":\"syscall\",\"required\":false,\"status\":\"detached\"},{\"name\":\"syscalls/sys_enter_renameat\",\"category\":\"syscall\",\"required\":false,\"status\":\"detached\"},{\"name\":\"syscalls/sys_enter_renameat2\",\"category\":\"syscall\",\"required\":false,\"status\":\"detached\"},{\"name\":\"syscalls/sys_enter_setgid\",\"category\":\"syscall\",\"required\":false,\"status\":\"detached\"},{\"name\":\"syscalls/sys_enter_setuid\",\"category\":\"syscall\",\"required\":false,\"status\":\"detached\"},{\"name\":\"syscalls/sys_enter_unlink\",\"category\":\"syscall\",\"required\":false,\"status\":\"detached\"},{\"name\":\"syscalls/sys_enter_unlinkat\",\"category\":\"syscall\",\"required\":false,\"status\":\"detached\"},{\"name\":\"container_tls_discovery\",\"category\":\"tls\",\"required\":false,\"status\":\"disabled\",\"reason\":\"automatic discovery disabled\"}],\"tls_discovery\":{\"enabled\":false,\"scan_interval_ms\":2000,\"max_targets\":128,\"max_processes_per_scan\":4096,\"active_targets\":0,\"scan_complete\":true,\"processes_scanned\":0,\"unreadable_processes\":0,\"unresolved_mounts\":0,\"truncated_maps\":0,\"skipped_targets\":0,\"unsupported_executables\":0,\"limitations\":[\"processes must be visible in the sensor PID namespace; container roots/maps must be readable\",\"polling can miss TLS activity before attachment and processes shorter than the scan interval\",\"stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered\"]}}\n"
+  }
+}

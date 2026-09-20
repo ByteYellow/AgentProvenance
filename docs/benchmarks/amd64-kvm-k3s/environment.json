@@ -1,0 +1,19 @@
+{
+  "base_commit": "fc2e62647dc64b6d23144b88e0e0ac101b4f2793",
+  "branch": "feat/amd64-kvm-k3s",
+  "kvm": {
+    "enabled": true,
+    "present": true,
+    "cpus": 4,
+    "memory_mib": 6144
+  },
+  "arm64_object_unchanged": true,
+  "arm64_object_sha256": "9ff02ee4066de5ca52638d54a570300ae6bb8992334f26fbf5f6d6748bcfce18",
+  "binaries_sha256": {
+    "agentprov": "6e0a10d545ba2d8cea03beb4109368a7d4d4e36818f8f702489bcb2e9c9fe6f7",
+    "agentprov-sensor": "86824ff46039314de6f14ef2b74b823f35cf5a9014d9b7608510b76420b256fe"
+  },
+  "unit_test_packages": 32,
+  "reboot_before": "198e489f-ae83-4e64-aa1b-637147cbc863",
+  "reboot_after": "b606a76f-f2dd-48c0-8c08-a0d13877b8c5"
+}

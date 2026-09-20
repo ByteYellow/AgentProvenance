@@ -1,9 +1,9 @@
 # eBPF Sensor Plan (Phase 4: self-owned system telemetry)
 
 > Status: **IMPLEMENTED** and expanded well past the original 3-probe scope
-> (`internal/sensor`, `cmd/agentprov-sensor`; Linux, arm64), validated live on an
-> arm64 lab VM. The design rationale below is kept as the record; the **As built**
-> note captures what actually shipped.
+> (`internal/sensor`, `cmd/agentprov-sensor`; Linux amd64/arm64). The **As built**
+> section describes current coverage. The original design below it is historical;
+> current setup and measured environments are in the [KVM/K3s runbook](amd64-kvm-k3s.md).
 
 ## As built
 
@@ -12,25 +12,38 @@ Probes (all → the normalized schema, ingested as `source=agentprov_ebpf`):
 - `execve` (+ argv), `connect` (IPv4), `openat` — **writes and sensitive
   reads** (read of a credential/secret path → `secret_path`), `process_exit`.
 - Privilege/tamper: `setuid`/`setgid`, `ptrace`, `rename`/`renameat`/`renameat2`,
-  `unlinkat`.
+  `unlinkat`; amd64 also handles legacy `open`/`unlink`.
 - TLS plaintext: `SSL_write`/`SSL_read` plus modern `SSL_write_ex`/`SSL_read_ex`
   uprobes → `tls_write`/`tls_read` chunks with privacy-safe hash + preview +
   allow-listed HTTP metadata; paired into a DAG `llm_call` edge and an
   `llm_intent_caused` edge.
-- DNS: `getaddrinfo` uprobe (glibc).
+- Go TLS: unstripped `crypto/tls` write capture on amd64/arm64; amd64 Go
+  ABIInternal 1.23-1.26 read capture at decoded return sites, paired by
+  goroutine/frame. HTTP/1.1 and HTTP/2/HPACK reassembly are implemented.
+- DNS: `getaddrinfo` uprobe (glibc), plus amd64 UDP/sendto DNS capture.
+- Automatic TLS target discovery through visible process mappings and container
+  roots, with shared-library deduplication and explicit coverage limitations.
 
 Key learnings: noise-prefix filtering runs **before** `bpf_ringbuf_reserve` (a
 discarded record still occupies the buffer), which removed a containerd-teardown
 firehose; output is the **native** normalized schema (decision (b) below);
 race-free `container_id` comes from a cgroup-id → cgroup-dir-inode resolver.
 The product path is now `agentprov sensor stream`: a per-node supervisor that
-streams native events into the local store, correlates them to open bindings,
-and evaluates runtime policy without a manual JSONL ingest step.
+persists bounded native batches, correlates at capture time (including late
+bindings), and evaluates runtime policy without a manual JSONL ingest step.
+[Native persistence](native-capture-spool.md) defines its restart, retry and
+drop-accounting guarantees. Ordinary KVM guests run the collector in-guest.
 
-Open follow-ups: universal DNS (musl / UDP:53), IPv6/UDP, Go `crypto/tls`
-response/read capture, BoringSSL, statically-linked TLS, multi-arch x86
-validation, `ptrace` end-to-end test, and rootless container
-cgroup-delegation validation.
+Open follow-ups include ARM64 Go TLS reads, broader DNS/network coverage,
+BoringSSL and unsupported stripped/static TLS targets. amd64 live syscall/TLS,
+KVM and K3s gates already have [checked reports](benchmarks/amd64-kvm-k3s/README.md).
+Observed privilege-call attempts are not proof of successful escalation, and
+automatic discovery cannot guarantee capture before attachment.
+
+## Original design
+
+The following sections retain the initial three-probe plan. Use the linked
+runbook, not this historical prerequisite list, to install the current sensor.
 
 ## Goal
 
@@ -81,7 +94,9 @@ Each event carries the identity the correlation engine needs:
 `/sys/fs/cgroup/...`; the container runtime encodes the container id in the path,
 same as Falco/Tetragon do). This is exactly the key the correlation tiers use
 (`cgroup+time` 0.98 / `container+time` 0.92), so events drop straight into the
-existing join. In K8s the cgroup path encodes pod/container — no extra work.
+existing join. In K8s, the node resolver and informer enrich that identity with
+Pod/container metadata and lifecycle intervals; a path alone is not the full
+application context.
 
 For zero-SDK supervised capture, `agentprov record` can create a real cgroup v2
 leaf for the launched command. The child and descendants inherit that cgroup, so
@@ -112,9 +127,3 @@ scope id; that is correct when no kernel sensor is present.
 - No kernel-side filtering policy language (consume-time policy stays in Go).
 - No Windows eBPF. No cross-host aggregation (see north-star scoping decisions).
 - Off-host signing/anchoring of sensor output is a later deployment concern.
-
-## Connection mode for implementation
-
-- **A — SSH direct:** Linux reachable from the dev host; build/test driven over
-  `ssh`. Provide host/port/user/key.
-- **B — copilot:** commands/code authored here, run on Linux, output pasted back.

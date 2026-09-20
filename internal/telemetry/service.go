@@ -328,12 +328,32 @@ type sqlStore interface {
 }
 
 func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
-	return ingestFilteredWithStore(db, db, event)
+	tx, err := db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	id, err := ingestFilteredWithStore(tx, event)
+	if err != nil {
+		return "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return id, nil
 }
 
-func ingestFilteredWithStore(db *sql.DB, store sqlStore, event IngestEvent) (string, error) {
+// Callers commit the event and all its writes in one transaction. An
+// optional derived edge may be absent, but a failed database write must abort
+// the transaction or row savepoint instead of acknowledging partial evidence.
+func ingestFilteredWithStore(store sqlStore, event IngestEvent) (string, error) {
 	if event.EventType == "" {
 		return "", fmt.Errorf("event_type is required")
+	}
+	if event.Timestamp != "" {
+		if _, err := time.Parse(time.RFC3339Nano, event.Timestamp); err != nil {
+			return "", fmt.Errorf("capture timestamp: %w", err)
+		}
 	}
 	if !AllowedEventType(event.EventType) {
 		return "", fmt.Errorf("telemetry event %q rejected by filtered driver", event.EventType)
@@ -367,7 +387,7 @@ func ingestFilteredWithStore(db *sql.DB, store sqlStore, event IngestEvent) (str
 	confidence := 1.0
 	bindingSource := event.BindingSource
 	if event.RunID == "" || event.SessionID == "" || event.ToolCallID == "" || event.ProcessID == "" {
-		match, ok, err := correlation.Resolve(db, raw)
+		match, ok, err := correlation.Resolve(store, raw)
 		if err != nil {
 			return "", err
 		}
@@ -424,6 +444,9 @@ func ingestFilteredWithStore(db *sql.DB, store sqlStore, event IngestEvent) (str
 	}
 	eventID := ids.New("evt")
 	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if event.Timestamp != "" {
+		now = event.Timestamp
+	}
 	payload := event.Payload
 	if event.RolloutID != "" || event.AttemptID != "" {
 		payload = fmt.Sprintf(`{"rollout_id":%q,"attempt_id":%q,"payload":%s}`, event.RolloutID, event.AttemptID, event.Payload)
@@ -435,25 +458,34 @@ func ingestFilteredWithStore(db *sql.DB, store sqlStore, event IngestEvent) (str
 	if err != nil {
 		return "", err
 	}
-	_ = recordRuntimeCausalityEdges(store, event, eventID, now)
+	if err := recordRuntimeCausalityEdges(store, event, eventID, now); err != nil {
+		return "", err
+	}
 	// Consume process_exit to CLOSE the exiting pid's correlation window, so a
 	// later event that reuses the pid does not over-bind to this dead scope.
 	// Use the event's own timestamp when present (chronological close), else now.
 	if event.EventType == "process_exit" && event.PID != 0 {
-		_ = correlation.CloseBindingByPID(store, event.PID, firstNonEmpty(event.Timestamp, now))
+		if err := correlation.CloseBindingByPID(store, event.PID, firstNonEmpty(event.Timestamp, now)); err != nil {
+			return "", err
+		}
 	}
 	priority := "normal"
 	if event.EventType == "metadata_ip" || event.EventType == "private_cidr" || event.EventType == "secret_path" || event.EventType == "policy_verdict" {
 		priority = "high"
 	}
 	if event.RolloutID != "" || event.AttemptID != "" || event.SnapshotID != "" {
-		_, _ = store.Exec(`INSERT INTO evidence_events
+		_, err := store.Exec(`INSERT INTO evidence_events
 			(id, run_id, rollout_id, attempt_id, session_id, tool_call_id, snapshot_id, event_type, priority, payload, status, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)`,
 			ids.New("evidence"), event.RunID, event.RolloutID, event.AttemptID, event.SessionID, event.ToolCallID, event.SnapshotID, event.EventType, priority, payload, now)
+		if err != nil {
+			return "", err
+		}
 	}
 	if event.SnapshotID != "" && highRiskEvent(event.EventType) {
-		_ = taintSnapshotAndDescendants(store, event.SnapshotID, event.RunID, event.EventType, now)
+		if err := taintSnapshotAndDescendants(store, event.SnapshotID, event.RunID, event.EventType, now); err != nil {
+			return "", err
+		}
 	}
 	return eventID, nil
 }
@@ -476,11 +508,12 @@ func recordRuntimeCausalityEdges(db sqlStore, event IngestEvent, eventID, now st
 		_ = db.QueryRow(`SELECT COALESCE(rollout_id, '') FROM fork_attempts WHERE id = ?`, event.AttemptID).Scan(&rolloutID)
 	}
 	eventNode := "runtime_event/" + eventID
+	var writeErr error
 	insert := func(fromID, toID, edgeType string) {
-		if fromID == "" || toID == "" {
+		if fromID == "" || toID == "" || writeErr != nil {
 			return
 		}
-		_, _ = db.Exec(`INSERT INTO graph_edges (id, run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at)
+		_, writeErr = db.Exec(`INSERT INTO graph_edges (id, run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 			ids.New("edge"), event.RunID, rolloutID, fromID, toID, edgeType, eventID, now)
 	}
@@ -551,7 +584,7 @@ func recordRuntimeCausalityEdges(db sqlStore, event IngestEvent, eventID, now st
 			}
 		}
 	}
-	return nil
+	return writeErr
 }
 
 // edgeExists reports whether a graph edge of edgeType already originates from
@@ -587,27 +620,47 @@ func recentLLMRequest(db sqlStore, runID, processID, now string) string {
 
 // recentScopedEvent returns the id of the most recent event of eventType in the
 // same run (and process, when known) within a 2-minute window before now, or ""
-// if none. now and stored created_at are RFC3339Nano UTC, so lexical string
-// comparison is chronological.
+// if none. Parse instants: RFC3339Nano strings with different fractional
+// precision or offsets cannot be compared chronologically as text.
 func recentScopedEvent(db sqlStore, eventType, runID, processID, now string) string {
 	if runID == "" {
 		return ""
 	}
-	windowStart := now
-	if t, err := time.Parse(time.RFC3339Nano, now); err == nil {
-		windowStart = t.Add(-2 * time.Minute).UTC().Format(time.RFC3339Nano)
+	instant, err := time.Parse(time.RFC3339Nano, now)
+	if err != nil {
+		return ""
 	}
-	query := `SELECT id FROM events WHERE run_id = ? AND event_type = ?
-		AND created_at <= ? AND created_at >= ?`
-	args := []any{runID, eventType, now, windowStart}
+	windowStart := instant.Add(-2 * time.Minute)
+	query := `SELECT id, created_at FROM events WHERE run_id = ? AND event_type = ?`
+	args := []any{runID, eventType}
 	if processID != "" {
 		query += ` AND process_id = ?`
 		args = append(args, processID)
 	}
-	query += ` ORDER BY created_at DESC, id DESC LIMIT 1`
-	var id string
-	_ = db.QueryRow(query, args...).Scan(&id)
-	return id
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+	var selected string
+	var latest time.Time
+	for rows.Next() {
+		var id, timestamp string
+		if rows.Scan(&id, &timestamp) != nil {
+			return ""
+		}
+		at, err := time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil || at.Before(windowStart) || at.After(instant) {
+			continue
+		}
+		if selected == "" || at.After(latest) || (at.Equal(latest) && id > selected) {
+			selected, latest = id, at
+		}
+	}
+	if rows.Err() != nil {
+		return ""
+	}
+	return selected
 }
 
 // substantiveAbsFilePath returns the absolute file path from a raw file event's
@@ -712,9 +765,12 @@ func taintSnapshotAndDescendants(db sqlStore, snapshotID, runID, reason, now str
 		rows.Close()
 	}
 	for id := range seen {
-		_, _ = db.Exec(`INSERT INTO events (id, run_id, snapshot_id, source, event_type, payload, created_at)
+		_, err := db.Exec(`INSERT INTO events (id, run_id, snapshot_id, source, event_type, payload, created_at)
 			VALUES (?, ?, ?, 'filtered_telemetry', 'snapshot_tainted', ?, ?)`,
 			ids.New("evt"), runID, id, fmt.Sprintf(`{"reason":%q,"root_snapshot_id":%q}`, reason, snapshotID), now)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

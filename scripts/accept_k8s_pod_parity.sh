@@ -24,6 +24,10 @@ DATA="$(mktemp -d)"
 OUT="$(mktemp -d)"
 
 cleanup() {
+  if [[ -n "${SENSOR_JOB:-}" ]]; then
+    kill -INT "$SENSOR_JOB" 2>/dev/null || true
+    wait "$SENSOR_JOB" 2>/dev/null || true
+  fi
   $KUBECTL delete pod "$POD" --force --grace-period=0 >/dev/null 2>&1 || true
   if [[ "${AGENTPROV_KEEP_PARITY_ARTIFACTS:-0}" != "1" ]]; then
     rm -rf "$DATA" "$OUT"
@@ -47,14 +51,20 @@ CONTAINER_ID="${CONTAINER_ID##*://}"
 
 echo "== start one node sensor for both profile executions"
 CAPTURE_START="$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)"
-docker run --rm --privileged --pid=host \
-  -v /sys/kernel/btf:/sys/kernel/btf:ro -v /sys/kernel/tracing:/sys/kernel/tracing \
-  -v /sys/kernel/debug:/sys/kernel/debug -v /sys/fs/cgroup:/sys/fs/cgroup:ro \
-  -v "$SENSOR":/agentprov-sensor:ro -v "$OUT":/out \
-  ubuntu:24.04 bash -c "/agentprov-sensor >/out/sensor.jsonl 2>/out/sensor.err & SP=\$!; sleep '$CAPTURE_SECONDS'; kill \$SP 2>/dev/null || true" \
-  >/dev/null 2>&1 &
+# The node sensor runs directly on this root-owned acceptance host. The
+# DaemonSet placement is independently exercised by accept_k8s_node_multiworkload.
+"$SENSOR" >"$OUT/sensor.jsonl" 2>"$OUT/sensor.err" &
 SENSOR_JOB=$!
-sleep 3
+for _ in $(seq 1 100); do
+  if grep -q 'agentprov-sensor: ready' "$OUT/sensor.err"; then
+    sensor_ready=1
+    break
+  fi
+  kill -0 "$SENSOR_JOB" 2>/dev/null || { cat "$OUT/sensor.err" >&2; exit 1; }
+  sleep 0.1
+done
+[[ "${sensor_ready:-0}" == 1 ]] || { echo 'FAIL: sensor did not attach'; exit 1; }
+CAPTURE_DEADLINE=$((SECONDS + CAPTURE_SECONDS))
 
 echo "== run the local-record copy of the same workload"
 mkdir -p /sys/fs/cgroup/agentprov
@@ -64,7 +74,11 @@ AGENTPROV_CGROUP_PARENT=/sys/fs/cgroup/agentprov \
   sh -c 'i=0; while [ "$i" -lt 4 ]; do id >/dev/null; ls / >/dev/null; i=$((i+1)); sleep 1; done' \
   >/dev/null
 
+remaining=$((CAPTURE_DEADLINE - SECONDS))
+if (( remaining > 0 )); then sleep "$remaining"; fi
+kill -INT "$SENSOR_JOB"
 wait "$SENSOR_JOB"
+SENSOR_JOB=""
 JSONL="$OUT/sensor.jsonl"
 [[ -s "$JSONL" ]] || { echo "FAIL: node sensor produced no telemetry"; exit 1; }
 
@@ -76,7 +90,13 @@ rows = json.load(open(sys.argv[1]))["bindings"]
 real = [r for r in rows if str(r.get("cgroup_id", "")).isdigit()]
 if not real:
     raise SystemExit("local record did not create a real cgroup binding")
-row = real[-1]
+# A descendant binding spans only that child. Selecting the final row can
+# truncate the canonical workload to its last ls/sleep and discard earlier id
+# execs. Use the complete root record window, regardless of binding sort order.
+roots = [r for r in real if r.get("binding_source") == "zero_sdk_record"]
+if len(roots) != 1:
+    raise SystemExit(f"expected one root record binding, got {len(roots)}")
+row = roots[0]
 print(row["cgroup_id"], row["started_at"], row["ended_at"])
 PY
 )"

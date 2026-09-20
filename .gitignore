@@ -14,6 +14,7 @@
 # Python build / packaging outputs (setuptools). Never commit these.
 build/
 *.egg-info/
+__pycache__/
 
 # Internal planning notes. Keep these local only.
 01-atomized-design-online-CN.MD

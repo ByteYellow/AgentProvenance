@@ -2,6 +2,7 @@ package provenance
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/effects"
 	"github.com/byteyellow/agentprovenance/internal/record"
+	"github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
@@ -38,11 +40,12 @@ func TestExplainFileJSONManifest(t *testing.T) {
 		RunID:   "run-explain-json",
 		Name:    "explain-json",
 		Workdir: workdir,
-		Command: []string{"python3", "-c", `import subprocess, time; subprocess.Popen(["sleep", "0.8"]); time.sleep(0.08); open("app.py", "w").write("value = 2\n")`},
+		Command: []string{"sh", "-c", "printf 'value = 2\\n' > app.py"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	seedOrphanObservation(t, db, result)
 
 	var out bytes.Buffer
 	if err := Explain(db, ExplainOptions{RunID: "run-explain-json", File: "app.py", WithJSON: true}, &out); err != nil {
@@ -102,6 +105,49 @@ func TestExplainFileJSONManifest(t *testing.T) {
 		if !edgeTypes[want] {
 			t.Fatalf("missing runtime edge %s in %+v", want, manifest.RuntimeEdges)
 		}
+	}
+}
+
+// Query/verification tests need stable evidence, not a race against ps polling.
+// Live descendant sampling is covered by the record package's lifecycle tests.
+func seedOrphanObservation(t *testing.T, db *sql.DB, result record.Result) {
+	t.Helper()
+	const pid = 700000001
+	payload, err := json.Marshal(RecordObservedProcess{
+		PID: pid, PPID: result.RootPID, Command: "fixture-background-task",
+		FirstSeen: result.StartedAt, LastSeen: result.EndedAt, OutlivedRoot: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := telemetry.IngestFiltered(db, telemetry.IngestEvent{
+		RunID: result.RunID, RolloutID: result.RolloutID, AttemptID: result.AttemptID,
+		SessionID: result.SessionID, ToolCallID: result.ToolCallID, ProcessID: result.ProcessID,
+		SnapshotID: result.BaseSnapshotID, PID: pid, TGID: pid, PPID: result.RootPID,
+		Timestamp: result.StartedAt, Source: "record_process_sample", EventType: "process_observed",
+		Payload: string(payload),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	decision, err := security.PersistDecision(db, security.Event{
+		Source: "zero_sdk_record", EventType: "abnormal_process_tree", RunID: result.RunID,
+		SessionID: result.SessionID, ToolCallID: result.ToolCallID, ProcessID: result.ProcessID,
+	}, string(payload), security.Decision{
+		RuleID: "zero_sdk_orphan_observe_only", Decision: "audit", Reason: "fixture orphan observation",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := json.Marshal(map[string]any{"pid": pid, "policy_decision_id": decision.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO evidence_events
+		(id, run_id, rollout_id, attempt_id, session_id, tool_call_id, event_type, priority, payload, status, created_at, processed_at)
+		VALUES ('fixture-orphan-evidence', ?, ?, ?, ?, ?, 'orphan_lifecycle_decision', 'normal', ?, 'processed', ?, ?)`,
+		result.RunID, result.RolloutID, result.AttemptID, result.SessionID, result.ToolCallID,
+		string(evidence), result.EndedAt, result.EndedAt); err != nil {
+		t.Fatal(err)
 	}
 }
 

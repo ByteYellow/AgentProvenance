@@ -1,84 +1,73 @@
-# AgentProvenance demos — a progressive story
+# AgentProvenance demos
 
-Three stages, read simplest → hardest. Each is a **real capture on genuine
-kernel events**, exported as a signed, verifiable bundle you can replay locally
-(no VM needed). Start with Stage 1.
+Start with a single agent, then follow a team and a cross-pod execution. The
+committed compressed bundles can be imported, verified and explored on macOS or
+Linux without rerunning the agents. Live capture has separate environment and
+credential requirements in each demo's README.
 
-Each agent's session transcript is harvested into `llm_call` nodes — the model's
-real prompt, reasoning, and decided commands — and the **model call that decided
-the poisoned install** links to the very command that ran via an `llm_caused`
-edge. Both stages carry it: Stage 1 for the single agent, and the multi-agent
-stage (Stage 2) including the call made by a **sub-agent** (bob), whose decision
-lives in its own transcript, not the orchestrator's. The join is robust to eBPF
-argv truncation — it matches the decided command against the record process
-sample (`/proc/cmdline`), so the edge survives even when the execve argv is
-clipped — rendered by the agent-intent DAG lens.
+## 1. One agent: supply-chain execution
 
-## Stage 1 — [`snake-supply-chain/`](snake-supply-chain/) · one agent
+[Snake supply-chain demo](snake-supply-chain/) follows a real coding agent that
+installs a poisoned local package while building a game. Its install hook reads
+planted fake secrets and attempts a metadata-IP connection. The graph joins the
+tool call, process, file activity, network activity and artifact.
 
-The foundation. A single agent installs a poisoned `setup.py`; the install hook
-reads a secret and connects the cloud-metadata IP. The kernel sensor catches the
-`secret_path` + `metadata_ip` syscalls, and the **signed causal graph** ties them
-to the run — buried supply-chain exfil turned into verifiable, tamper-evident
-evidence. Bundle: `run-snake-supervised`.
+Bundle: `run-snake-supervised`. Start with **Agent Intent**, then **Data Flow**
+and the artifact evidence. Captured transcript content supplies model messages
+and declared tool actions; it is not access to the model's internal reasoning.
 
-## Stage 2 — [`multiagent-provenance/`](multiagent-provenance/) · an agent team
+## 2. An agent team: delegation and peer influence
 
-Everything in Stage 1, now across a **team of agents**, and with the attacker's
-full arc:
+[Multi-agent demo](multiagent-provenance/) adds delegation, peer messages and
+two attempts. One proposed action is refused; the later install path produces
+real sensitive-file and network events. The **Agent Network / Orchestration**
+view shows the team, while command-match correlation links execution evidence
+to the acting agent. Shared-process attribution is an inference with evidence,
+not a separate kernel identity for each sub-agent.
 
-- **Delegation + peer edges.** The same buried install is relayed **alice → bob**
-  over `SendMessage`; the graph records who *spawned* whom (delegation) and who
-  *influenced* whom (peer, with the poisoned message body captured as evidence).
-- **Per-agent attribution.** The in-process sub-agents share one cgroup, so the
-  kernel can't tell them apart — provenance joins the exfil syscall back to bob's
-  install by **command-match**.
-- **The failed path.** Prepended **Attempt A**: a `recon` teammate proposes the
-  theft openly and is refused at the intent layer (a `refused` node, no egress);
-  the attacker then **pivots** to the buried Stage-1-style path (Attempt B) that
-  slips past the model and is caught only by the kernel. One signed graph shows
-  *try-the-obvious-way → get-flagged → pivot-to-stealth*.
+Bundle: `run-double-attempt`. This is the replay used in the
+[main Quickstart](../README.md#quickstart).
 
-Bundle: `run-double-attempt`.
+## 3. Across Pods: one sensor, separate workload identities
 
-## Stage 3 — [`llm-judge/`](llm-judge/) · an external LLM as security judge
+[Kubernetes cross-pod A2A demo](k8s-cross-pod-a2a/) moves the execution into two
+Pods. One node sensor records the real network call and the worker's syscalls,
+preserving each Pod's cgroup and Kubernetes metadata in one graph.
 
-The evidence graph is not only for humans: **any external LLM can be wired in
-as a security judge** over a captured run. `python3 llm-judge/judge.py run`
-exports the run's *full* trajectory (every telemetry event, no type filter,
-chunk/map-reduced past the context budget), has the model deliver a
-structured verdict, and imports the verdict back as graph-referenced
-signals. The judge itself runs under `agentprov record`, and its own LLM
-requests/responses become `llm_call` nodes in the judge's provenance run —
-**the judge is itself audited**. Works with any Anthropic- or
-OpenAI-protocol endpoint (Claude, DeepSeek, Qwen, local Ollama/vLLM, ...),
-and degrades to a keyless offline fixture so the pipeline always completes.
+Use **Substrate** to inspect placement and **Orchestration** to follow the peer
+relationship. The app delegation hook log is replayed from the multi-agent
+capture; the cross-pod network and runtime events were collected live. These
+are distinct evidence sources, not a claim that the entire team was recaptured.
 
-## Why this order
+## Additional investigations
 
-Stage 1 proves the moat on the simplest case — intent/action → real syscall →
-**signed** evidence. Stage 2 adds what the kernel alone can't do (attribute an
-action to one of many in-process agents) *and* the security thesis: alignment
-catches the obvious attack, but a hidden-intent supply-chain attack needs the
-kernel-level provenance backstop. Same primitive, harder problem.
+- [Grok outbound-data investigation](grok-codebase-exfil/): dated captures
+  distinguish sensitive content in model requests, vendor telemetry and
+  third-party product analytics. The README separately documents the historical
+  codebase-upload report, missing wire evidence and reproduction limits. Do not
+  treat this fixture as proof of the vendor's current behavior.
+- [LLM as security analyst](llm-judge/): an external evaluator reads graph
+  evidence and returns referenced signals. Its own request can also be audited.
+  Live mode needs a compatible model endpoint; the keyless fixture validates
+  the integration flow, not a real model verdict.
 
-## View either stage
+## Replay and compare
 
-Each folder's `README.md` has the exact commands + the diagrams. The shape is:
+Each demo README names the exact bundle and matching public key. The common
+workflow is:
 
 ```sh
 agentprov --data-dir /tmp/view init
 agentprov --data-dir /tmp/view forensics import <folder>/<run>.forensics.json.gz \
-  --pub-key <folder>/attestation.pub          # verifies the signature BEFORE loading
-agentprov --data-dir /tmp/view graph verify --run <run>        # → status=ok
+  --pub-key <folder>/attestation.pub
+agentprov --data-dir /tmp/view graph verify --run <run>
 agentprov --data-dir /tmp/view dashboard serve --addr 127.0.0.1:7396
 ```
 
-Both bundles can be imported into one `--data-dir` and switched via the run
-selector. The **Orchestration** lens (Stage 2) draws the agent topology. Capture
-harnesses live under each `capture/`; full design notes: memory
-`agentprov-multiagent-demo-todo.md`.
+Import multiple bundles into the same data directory and switch runs in the
+dashboard. Verification checks preserved evidence and its signature against the
+supplied key; it does not certify complete capture or every derived causal claim.
 
-Demo replay fixtures are committed as compressed `*.forensics.json.gz` bundles.
-Do not commit regenerated raw `*.forensics.json` captures; keep raw exports local
-or publish large captures as release assets.
+Capture scripts and prerequisites are documented under each demo directory.
+Keep regenerated raw `*.forensics.json` exports local; publish large captures
+as release assets rather than growing Git history.

@@ -63,6 +63,9 @@ type h2Parser struct {
 	// stream; track which stream is mid-block to route CONTINUATION frames.
 	openHeaderStream uint32
 	inHeaderBlock    bool
+	maxBytes         int
+	failed           bool
+	loss             CaptureLoss
 }
 
 func newH2Parser(direction string) *h2Parser {
@@ -76,6 +79,10 @@ func newH2Parser(direction string) *h2Parser {
 func (p *h2Parser) stream(id uint32) *h2Stream {
 	s := p.streams[id]
 	if s == nil {
+		if len(p.streams) >= 128 {
+			p.fail(0)
+			return nil
+		}
 		s = &h2Stream{headers: map[string]string{}}
 		p.streams[id] = s
 	}
@@ -84,6 +91,14 @@ func (p *h2Parser) stream(id uint32) *h2Stream {
 
 // consume appends data and returns every stream that completed (END_STREAM).
 func (p *h2Parser) consume(data []byte, pid uint32, conn uint64) []Message {
+	if p.failed {
+		p.loss.Bytes += uint64(len(data))
+		return nil
+	}
+	if len(data) > p.byteLimit()-p.retainedBytes() {
+		p.fail(len(data))
+		return nil
+	}
 	p.buf.Write(data)
 	if !p.prefaceDone && p.direction == Request {
 		b := p.buf.Bytes()
@@ -106,6 +121,10 @@ func (p *h2Parser) consume(data []byte, pid uint32, conn uint64) []Message {
 			break
 		}
 		length := int(b[0])<<16 | int(b[1])<<8 | int(b[2])
+		if length > p.byteLimit()-9 {
+			p.fail(0)
+			break
+		}
 		ftype := b[3]
 		flags := b[4]
 		streamID := binary.BigEndian.Uint32(b[5:9]) & 0x7fffffff
@@ -119,6 +138,9 @@ func (p *h2Parser) consume(data []byte, pid uint32, conn uint64) []Message {
 
 		if msg, ok := p.handleFrame(ftype, flags, streamID, payload, pid, conn); ok {
 			out = append(out, msg)
+		}
+		if p.failed {
+			break
 		}
 	}
 	return out
@@ -146,6 +168,9 @@ func (p *h2Parser) handleFrame(ftype, flags byte, streamID uint32, payload []byt
 			frag = frag[5:]
 		}
 		st := p.stream(streamID)
+		if st == nil {
+			return Message{}, false
+		}
 		st.headerBlock.Write(frag)
 		if flags&h2FlagEndStream != 0 {
 			st.endStream = true
@@ -163,12 +188,19 @@ func (p *h2Parser) handleFrame(ftype, flags byte, streamID uint32, payload []byt
 			return Message{}, false
 		}
 		st := p.stream(streamID)
+		if st == nil {
+			return Message{}, false
+		}
 		st.headerBlock.Write(payload)
 		if flags&h2FlagEndHeaders != 0 {
 			p.inHeaderBlock = false
 			p.decodeHeaders(st)
 			return p.maybeEmit(streamID, pid, conn)
 		}
+		return Message{}, false
+
+	case 0x3: // RST_STREAM releases abandoned multiplexed stream state.
+		delete(p.streams, streamID)
 		return Message{}, false
 
 	case h2FrameData:
@@ -185,6 +217,9 @@ func (p *h2Parser) handleFrame(ftype, flags byte, streamID uint32, payload []byt
 			body = body[:len(body)-pad]
 		}
 		st := p.stream(streamID)
+		if st == nil {
+			return Message{}, false
+		}
 		st.body.Write(body)
 		if flags&h2FlagEndStream != 0 {
 			st.endStream = true
@@ -197,14 +232,32 @@ func (p *h2Parser) handleFrame(ftype, flags byte, streamID uint32, payload []byt
 }
 
 func (p *h2Parser) decodeHeaders(st *h2Stream) {
-	hf, err := p.dec.DecodeFull(st.headerBlock.Bytes())
-	st.headerBlock.Reset()
-	if err != nil {
+	// Decode incrementally: a small HPACK block can expand into many repeated
+	// headers. Do not allocate an unbounded DecodeFull result before checking.
+	remaining := p.byteLimit() - p.retainedBytes()
+	fields := 0
+	overflow := false
+	p.dec.SetMaxStringLength(p.byteLimit())
+	p.dec.SetEmitFunc(func(f hpack.HeaderField) {
+		fields++
+		if fields > 256 || len(f.Name)+len(f.Value) > remaining {
+			overflow = true
+			return
+		}
+		remaining -= len(f.Name) + len(f.Value)
+		st.headers[f.Name] = f.Value
+	})
+	_, err := p.dec.Write(st.headerBlock.Bytes())
+	if err == nil {
+		err = p.dec.Close()
+	}
+	st.headerBlock = bytes.Buffer{}
+	p.dec.SetEmitFunc(func(hpack.HeaderField) {})
+	if err != nil || overflow {
+		p.fail(0)
 		return
 	}
-	for _, f := range hf {
-		st.headers[f.Name] = f.Value
-	}
+
 	st.haveHeaders = true
 }
 

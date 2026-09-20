@@ -2,11 +2,13 @@ package daemon
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/record"
 	"github.com/byteyellow/agentprovenance/internal/signals"
@@ -303,5 +305,90 @@ func TestHealthEndpointCarriesSchemaVersion(t *testing.T) {
 	}
 	if body["status"] != "ok" {
 		t.Fatalf("health status = %v, want ok", body["status"])
+	}
+}
+
+func TestHealthFailsWhenDatabaseUnavailable(t *testing.T) {
+	s := testServer(t)
+	if err := s.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/health", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("database closed: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestHealthFailsWhenRequiredTableMissing(t *testing.T) {
+	s := testServer(t)
+	if _, err := s.DB.Exec(`DROP TABLE cpu_samples`); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/health", nil))
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("missing table: status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestLivenessDoesNotDependOnDatabaseAndReadinessDoes(t *testing.T) {
+	s := testServer(t)
+	s.AuthToken = "test-token"
+	if err := s.DB.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for path, want := range map[string]int{"/v1/live": 200, "/v1/ready": 503, "/v1/health": 503} {
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		if w.Code != want {
+			t.Fatalf("%s status=%d body=%s", path, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestReadinessDeadlineIncludesConnectionPoolWait(t *testing.T) {
+	s := testServer(t)
+	s.DB.SetMaxOpenConns(1)
+	conn, err := s.DB.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	w := httptest.NewRecorder()
+	start := time.Now()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/ready", nil).WithContext(ctx))
+	if w.Code != 503 || time.Since(start) > time.Second {
+		t.Fatalf("unbounded or false-ready health: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestReadinessRejectsUnknownSchema(t *testing.T) {
+	s := testServer(t)
+	if _, err := s.DB.Exec(`INSERT INTO schema_versions VALUES (?,'future','now')`, store.SchemaVersion+1); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/ready", nil))
+	if w.Code != 503 {
+		t.Fatalf("future schema accepted: %s", w.Body.String())
+	}
+}
+
+func TestReadinessSeparatesHistoricalLossFromQueryAvailability(t *testing.T) {
+	s := testServer(t)
+	if _, err := s.DB.Exec(`INSERT INTO telemetry_native_counters(name,value) VALUES ('kernel_dropped_events',5)`); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/health", nil))
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != 200 || body["ready"] != true || body["status"] != "degraded" || body["coverage_status"] != "gaps_recorded" {
+		t.Fatalf("health hides loss or treats it as dead process: %s", w.Body.String())
 	}
 }

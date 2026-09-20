@@ -6,6 +6,7 @@ require (
 	github.com/cilium/ebpf v0.16.0
 	github.com/docker/docker v24.0.9+incompatible
 	github.com/spf13/cobra v1.8.1
+	golang.org/x/arch v0.12.0
 	golang.org/x/net v0.30.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.32.0

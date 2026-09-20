@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -34,7 +35,7 @@ func sandboxWatchCmd(dataDir *string) *cobra.Command {
 		Use:   "watch",
 		Short: "watch this node's pods and maintain passive cgroup scope bindings",
 		Long: "A lightweight client-go informer controller. It List/Watches pods scheduled on one node, " +
-			"creates one passive cgroup binding per running container, closes replaced bindings after " +
+			"creates passive bindings for running and recently terminated containers, closes replaced bindings after " +
 			"container restart, and closes all pod bindings on deletion. It owns scope attribution only; " +
 			"agentprov-sensor and telemetry ingest remain the independent data plane.",
 		RunE: func(c *cobra.Command, _ []string) error {
@@ -145,11 +146,19 @@ func newProcScopeResolver() *procScopeResolver {
 func (r *procScopeResolver) Resolve(_ context.Context, pod *corev1.Pod, status corev1.ContainerStatus) (string, int64, error) {
 	cgroupID, err := r.resolveContainer(status.ContainerID)
 	if err != nil {
+		// An exited container's directory and /proc entry may already be gone.
+		// Its runtime container ID remains a usable, explicit join key for events
+		// already captured by the sensor. Never invent a cgroup or reuse a PID.
+		if status.State.Terminated != nil && normalizeRuntimeContainerID(status.ContainerID) != "" {
+			return "", 0, nil
+		}
 		return "", 0, err
 	}
 	pid, err := findPodPID(string(pod.UID), status.ContainerID)
 	if err != nil {
-		return "", 0, err
+		// The kernel cgroup identity is sufficient even if the process exited
+		// between the cgroup scan and the /proc scan.
+		return cgroupID, 0, nil
 	}
 	return cgroupID, int64(pid), nil
 }
@@ -209,25 +218,52 @@ func (s localK8sScopeSink) Bind(ctx context.Context, scope k8sinformer.Container
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	id, err := correlation.RecordBinding(s.db, correlation.Binding{
-		RunID: scope.RunID, SessionID: scope.SessionID, ContainerID: scope.ContainerID,
-		CgroupID: scope.CgroupID, PID: scope.PID, StartedAt: scope.StartedAt,
-		BindingSource: correlation.BindingSourceK8sCgroup,
+	// The same final snapshot may be replayed after a database outage or an
+	// informer restart. One runtime container attempt has one durable identity;
+	// binding and metadata commit together, without half-written retry records.
+	digest := sha256.Sum256([]byte(scope.PodUID + "\x00" + scope.ContainerName + "\x00" + scope.ContainerID))
+	id := fmt.Sprintf("bind_k8s_%x", digest)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+	// Older informers assigned random binding IDs. Adopt the existing runtime
+	// attempt during upgrade so deletion still closes that original binding,
+	// and historical evidence keeps its original binding reference. Adoption
+	// must be inside the first write statement: a separate SELECT establishes
+	// a WAL snapshot which cannot upgrade while the sensor commits a batch,
+	// producing SQLITE_BUSY despite busy_timeout. INSERT reserves the writer
+	// before evaluating its subquery and waits for concurrent capture writers.
+	err = tx.QueryRowContext(ctx, `INSERT INTO execution_context_bindings
+		(id, run_id, session_id, container_id, cgroup_id, pid, started_at, ended_at, binding_source, confidence, created_at)
+		VALUES (COALESCE((SELECT id FROM execution_context_bindings
+			WHERE run_id = ? AND session_id = ? AND container_id = ? AND binding_source = ?
+			ORDER BY (ended_at = '') DESC, created_at ASC, id ASC LIMIT 1), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET ended_at = CASE WHEN excluded.ended_at <> '' THEN excluded.ended_at ELSE execution_context_bindings.ended_at END
+		RETURNING id`,
+		scope.RunID, scope.SessionID, scope.ContainerID, correlation.BindingSourceK8sCgroup,
+		id, scope.RunID, scope.SessionID, scope.ContainerID, scope.CgroupID, scope.PID,
+		scope.StartedAt, scope.EndedAt, correlation.BindingSourceK8sCgroup,
+		correlation.DefaultBindingConfidence(correlation.BindingSourceK8sCgroup), scope.ObservedAt).Scan(&id)
+	if err != nil {
+		return "", err
+	}
+	payload, err := json.Marshal(map[string]any{
+		"pod_name": scope.PodName, "namespace": scope.Namespace, "pod_uid": scope.PodUID, "cgroup_id": scope.CgroupID,
+		"cluster": "", "node": scope.NodeName, "container": scope.ContainerName, "image": scope.Image,
+		"service_account": scope.ServiceAccount, "labels": labelsText(scope.Labels), "pod_ip": scope.PodIP,
 	})
 	if err != nil {
 		return "", err
 	}
-	meta := podMeta{
-		Name: scope.PodName, Namespace: scope.Namespace, UID: scope.PodUID,
-		Node: scope.NodeName, Container: scope.ContainerName, Image: scope.Image,
-		ServiceAccount: scope.ServiceAccount, Labels: labelsText(scope.Labels),
-		PodIP: scope.PodIP, CgroupID: scope.CgroupID,
-	}
-	if err := writePodMetadataEvent(s.db, scope.RunID, meta); err != nil {
-		_ = correlation.CloseBindingByID(s.db, id, scope.ObservedAt)
+	_, err = tx.ExecContext(ctx, `INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
+		VALUES (?, ?, ?, '', '', 'k8s', 'pod_metadata', ?, ?) ON CONFLICT(id) DO NOTHING`,
+		fmt.Sprintf("evt_k8s_%x", digest), scope.RunID, scope.PodUID, string(payload), scope.ObservedAt)
+	if err != nil {
 		return "", err
 	}
-	return id, nil
+	return id, tx.Commit()
 }
 
 func (s localK8sScopeSink) Close(ctx context.Context, bindingID, endedAt string) error {

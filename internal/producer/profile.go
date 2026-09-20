@@ -86,11 +86,11 @@ func LocalRecord() Profile {
 	return Profile{
 		Name:            "local-record",
 		Status:          ProfileValidated,
-		SensorPlacement: "local host",
+		SensorPlacement: "local Linux host or KVM guest",
 		ScopeMode:       ScopeModeRecord,
 		Layers: map[Layer]LayerCapability{
 			LayerSystemTelemetry: {Coverage: CoverageFull},
-			LayerModelIntent:     {Coverage: CoveragePartial, Note: "dynamic OpenSSL plus partial unstripped Go crypto/tls request/write capture; HTTP/1.1 + HTTP/2/HPACK parsed"},
+			LayerModelIntent:     {Coverage: CoveragePartial, Note: "dynamic OpenSSL SSL_write/read and _ex; unstripped Go crypto/tls writes on amd64/arm64, reads on amd64 Go 1.23-1.26 ABIInternal; HTTP/1.1 + HTTP/2/HPACK parsed; actual coverage depends on attached probes"},
 			LayerAppContext:      {Coverage: CoverageFull, Note: "adapted harness (hooks) required for tool-call intent"},
 		},
 	}
@@ -98,8 +98,8 @@ func LocalRecord() Profile {
 
 // K8sDaemonset runs one sensor per node (DaemonSet). It shares the node kernel,
 // so system telemetry is full; scope is passive pod/container metadata -> host
-// cgroup inode attribution unless the pod entrypoint opts into record. Model intent is limited by whether the node
-// sensor can resolve the workload's dynamic libssl in the container rootfs.
+// cgroup inode attribution unless the pod entrypoint opts into record. Model
+// intent depends on resolving supported OpenSSL or Go targets in the rootfs.
 func K8sDaemonset() Profile {
 	return Profile{
 		Name:            "k8s-daemonset",
@@ -108,15 +108,14 @@ func K8sDaemonset() Profile {
 		ScopeMode:       ScopeModeCgroup,
 		Layers: map[Layer]LayerCapability{
 			LayerSystemTelemetry: {Coverage: CoverageFull},
-			LayerModelIntent:     {Coverage: CoveragePartial, Note: "dynamic OpenSSL or partial unstripped Go crypto/tls request/write when symbols are resolvable from the node/rootfs; HTTP/1.1 + HTTP/2/HPACK parsed"},
+			LayerModelIntent:     {Coverage: CoveragePartial, Note: "node/rootfs discovery of dynamic OpenSSL SSL_write/read and _ex; unstripped Go writes on amd64/arm64, reads on amd64 Go 1.23-1.26 ABIInternal; HTTP/1.1 + HTTP/2/HPACK parsed; discovery may miss activity before attachment"},
 			LayerAppContext:      {Coverage: CoverageFull, Note: "via command-match; adapted harness required for tool-call intent"},
 		},
 	}
 }
 
 // MicrovmGuestInit describes the intended in-guest shape. It stays visible as a
-// planned profile, but reports no available coverage or scope confidence until
-// a guest-init runner and live KVM acceptance exist.
+// planned profile for compatibility. Validated KVM guests use LocalRecord.
 func MicrovmGuestInit() Profile {
 	return Profile{
 		Name:            "microvm-guest-init",
@@ -124,7 +123,7 @@ func MicrovmGuestInit() Profile {
 		SensorPlacement: "future in-guest init service",
 		ScopeMode:       ScopeModeRecord,
 		Layers: map[Layer]LayerCapability{
-			LayerSystemTelemetry: {Coverage: CoverageNone, Note: "planned; no guest-init runner or live KVM acceptance"},
+			LayerSystemTelemetry: {Coverage: CoverageNone, Note: "reserved guest-init profile; use local-record for validated KVM guest capture"},
 			LayerModelIntent:     {Coverage: CoverageNone, Note: "planned; depends on the guest TLS stack after the profile is implemented"},
 			LayerAppContext:      {Coverage: CoverageNone, Note: "planned; no validated in-guest adapter lifecycle"},
 		},

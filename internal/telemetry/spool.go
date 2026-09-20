@@ -195,7 +195,7 @@ func (s SpoolService) CountQueued() (int, error) {
 func (s SpoolService) QueueStats() (SpoolQueueStats, error) {
 	var stats SpoolQueueStats
 	err := s.DB.QueryRow(`SELECT COALESCE(COUNT(*), 0), COALESCE(SUM(size_bytes), 0)
-		FROM telemetry_spool_batches WHERE status IN ('queued', 'processing')`).Scan(&stats.QueuedBatches, &stats.QueuedBytes)
+		FROM telemetry_spool_batches WHERE status IN ('capturing', 'queued', 'processing')`).Scan(&stats.QueuedBatches, &stats.QueuedBytes)
 	return stats, err
 }
 
@@ -250,7 +250,7 @@ func (s SpoolService) applyBackpressure(maxQueued int, maxQueuedBytes, maxBatchB
 func (s SpoolService) dropOldestQueued(reason string) (bool, error) {
 	var id, spoolPath string
 	err := s.DB.QueryRow(`SELECT id, spool_path FROM telemetry_spool_batches
-		WHERE status = 'queued' ORDER BY priority ASC, created_at ASC LIMIT 1`).Scan(&id, &spoolPath)
+		WHERE status = 'queued' AND format != 'native' ORDER BY priority ASC, created_at ASC LIMIT 1`).Scan(&id, &spoolPath)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
@@ -274,7 +274,7 @@ func (s SpoolService) Process(limit int) (SpoolProcessResult, error) {
 		limit = 100
 	}
 	rows, err := s.DB.Query(`SELECT id, run_id, format, spool_path, policy_enabled FROM telemetry_spool_batches
-		WHERE status = 'queued' ORDER BY priority DESC, created_at ASC LIMIT ?`, limit)
+		WHERE status = 'queued' AND format != 'native' ORDER BY priority DESC, created_at ASC LIMIT ?`, limit)
 	if err != nil {
 		return SpoolProcessResult{}, err
 	}

@@ -25,6 +25,9 @@ type ProducerHealthReport struct {
 	Spool         ProducerSpoolHealth    `json:"spool"`
 	Events        ProducerEventHealth    `json:"events"`
 	Coverage      ProducerCoverageHealth `json:"coverage"`
+	// NativeCapture is node-wide even when RunID filters the event view: an
+	// unresolved or dropped row cannot honestly be assigned to a particular run.
+	NativeCapture NativeStreamStatus `json:"native_node_capture"`
 }
 
 type ProducerLimits struct {
@@ -85,11 +88,24 @@ func BuildProducerHealth(db *sql.DB, opts ProducerHealthOptions) (ProducerHealth
 	if err := populateEventHealth(db, opts.RunID, &report.Events); err != nil {
 		return report, err
 	}
+	native, err := ReadNativeStreamStatus(db)
+	if err != nil {
+		return report, err
+	}
+	report.NativeCapture = native
 	if report.Events.RuntimeEvents > 0 {
 		report.Coverage.CorrelationRatio = float64(report.Events.CorrelatedEvents) / float64(report.Events.RuntimeEvents)
 	}
 	report.Coverage.HasSensorDrops = report.Events.SensorDroppedEvents > 0
+	for _, name := range []string{"dropped_queue_full", "dropped_oversize", "dropped_partial_recovery", "dropped_partial_shutdown", "expired_uncorrelated", "invalid", "kernel_dropped_events", "tls_reassembly_dropped_streams", "tls_reassembly_dropped_bytes", "tls_truncated_messages"} {
+		if native.Counters[name] > 0 {
+			report.Coverage.HasSensorDrops = true
+		}
+	}
 	report.Coverage.Complete = report.Events.RuntimeEvents > 0 && report.Events.UncorrelatedEvents == 0 && !report.Coverage.HasSensorDrops
+	if native.QueuedBatches > 0 {
+		report.Coverage.Complete = false
+	}
 	return report, nil
 }
 
@@ -120,6 +136,9 @@ func populateSpoolHealth(db *sql.DB, runID string, out *ProducerSpoolHealth) err
 		out.FailedEvents += failed
 		out.ByStatus[status] = count
 		switch status {
+		case "capturing":
+			out.QueuedBatches += count
+			out.QueuedBytes += bytes
 		case "queued":
 			out.QueuedBatches += count
 			out.QueuedBytes += bytes
@@ -149,7 +168,7 @@ func populateEventHealth(db *sql.DB, runID string, out *ProducerEventHealth) err
 		placeholders += "?"
 		args = append(args, source)
 	}
-	query := `SELECT source, COUNT(*), COALESCE(SUM(CASE WHEN correlation_method != '' THEN 1 ELSE 0 END), 0)
+	query := `SELECT source, COUNT(*), COALESCE(SUM(CASE WHEN correlation_method NOT IN ('','unresolved') THEN 1 ELSE 0 END), 0)
 		FROM events WHERE source IN (` + placeholders + `)`
 	if runID != "" {
 		query += ` AND run_id = ?`
@@ -189,19 +208,28 @@ func populateEventHealth(db *sql.DB, runID string, out *ProducerEventHealth) err
 		return err
 	}
 	defer dropRows.Close()
+	var legacyMaximum, deltas int64
 	for dropRows.Next() {
 		var payload string
 		if err := dropRows.Scan(&payload); err != nil {
 			return err
 		}
-		var body struct {
-			Signal  string `json:"signal"`
-			Dropped int64  `json:"dropped"`
+		var raw map[string]any
+		if json.Unmarshal([]byte(payload), &raw) != nil {
+			continue
 		}
-		if json.Unmarshal([]byte(payload), &body) == nil && body.Signal == "event_drop" && body.Dropped > out.SensorDroppedEvents {
-			out.SensorDroppedEvents = body.Dropped
+		body := unwrapStoredPayload(raw)
+		if stringAt(body, "signal") == "event_drop" {
+			if delta := intAt(body, "dropped_delta"); delta > 0 {
+				deltas += delta
+			} else if dropped := intAt(body, "dropped"); dropped > legacyMaximum {
+				legacyMaximum = dropped
+			}
 		}
 	}
+	// Native counters restart with the sensor's BPF maps. Per-event deltas
+	// remain additive across those lifetimes; legacy records retain max logic.
+	out.SensorDroppedEvents = deltas + legacyMaximum
 	return dropRows.Err()
 }
 

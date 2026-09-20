@@ -1,5 +1,58 @@
 # Changelog
 
+## v0.8.0 - 2026-09-20
+
+Portable, reliable native evidence capture across Linux, KVM guests and
+Kubernetes, with a replay-first introduction. Detailed validation and limits:
+[v0.8.0 release notes](docs/releases/v0.8.0.md).
+
+### Added
+
+- **Native Linux amd64 sensor.** Separate architecture-selected eBPF objects,
+  amd64 C and Go ABI handling, legacy open/unlink probes, kernel capture time,
+  and live syscall/OpenSSL/Go TLS acceptance. Existing ARM64 bindings are retained.
+- **KVM guest and K3s deployment.** In-guest systemd collection and node-local
+  attribution, with recorded multi-workload, semantic parity, restart, normal
+  reboot, export/import and schema-upgrade gates. KVM uses `local-record`.
+- **Automatic container TLS discovery.** Visible process/rootfs discovery,
+  shared-library deduplication and target lifecycle reconciliation. Supported
+  amd64 Go 1.23-1.26 binaries add response/read capture using decoded return
+  sites and goroutine/frame pairing; stripped and unsupported targets report gaps.
+- **Persistent native stream.** Bounded durable batches, late-binding retries,
+  interrupted-batch recovery, transactional deduplication and loss/backlog
+  reporting for `sensor stream`.
+- **Readiness contract.** `/v1/live` is separate from database/schema readiness.
+  Storage failures return 503 and unknown queue counts are null; historical
+  capture loss is reported without falsely declaring a usable store unavailable.
+- **Regression gates.** Frozen-schema upgrade tests, real HTTP readiness faults,
+  amd64 live Go 1.23-1.26 tests, and static Linux amd64/arm64 builds.
+
+### Fixed
+
+- Correlation compares actual instants across fractional precision and timezone
+  offsets, sees binding changes inside the current transaction, and preserves
+  capture time for queued events. Record publishes its binding before launch.
+- Shared ingest atomically writes events, edges, evidence and related state;
+  errors propagate instead of leaving partial records. JSONL row savepoints
+  isolate failed events while allowing valid rows in the batch to commit.
+- CPU sample retention compares parsed instants, orders sub-second samples
+  correctly and rolls back the retention pass on invalid timestamps.
+- Health OpenAPI 3.1 definitions use explicit integer/null unions, checked
+  against healthy and unavailable-store HTTP responses.
+- Native recovery retains missing-file diagnostics, rejects unreplayable
+  oversized rows, and defers failed payload cleanup without blocking restart.
+
+### Changed
+
+- English and Chinese READMEs now start with a signed-bundle replay, followed by
+  live capture. Docker is not a prerequisite for replay or local record, and
+  launch signing is explicitly opt-in. Existing real demos and images remain.
+- Capability descriptions, architecture SVG, demo index, runbooks and closeout
+  criteria reflect KVM and current TLS coverage. Older roadmap notes are marked
+  historical rather than presented as the current implementation checklist.
+- Falco-specific spool restart recovery is unchanged. Shared ingestion fixes
+  apply to it; native stream recovery guarantees must not be inferred for it.
+
 ## v0.7.2 - 2026-08-05
 
 Evidence collection and investigation hardening. This release turns the

@@ -356,3 +356,87 @@ func TestCloseBindingByIDOnlyClosesTarget(t *testing.T) {
 		t.Fatalf("ended_at target=%q sibling=%q", firstEnded, secondEnded)
 	}
 }
+
+func TestResolveWindowComparesInstantsWithoutRewritingEvidence(t *testing.T) {
+	paths, err := store.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	// Insert newest first, with a UTC offset whose lexical order is misleading.
+	for _, binding := range []Binding{
+		{ID: "new", CgroupID: "123", StartedAt: "2026-09-19T08:00:00.100000001+08:00", EndedAt: "2026-09-19T00:00:00.2Z"},
+		{ID: "old", CgroupID: "123", StartedAt: "2026-09-19T00:00:00Z", EndedAt: "2026-09-19T00:00:00.2Z"},
+	} {
+		if _, err := RecordBinding(db, binding); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct{ at, want string }{
+		{"2026-09-18T23:59:59.999999999Z", ""},
+		{"2026-09-19T00:00:00Z", "old"},
+		{"2026-09-19T00:00:00.1Z", "old"},
+		{"2026-09-19T00:00:00.100000001Z", "new"},
+		{"2026-09-19T00:00:00.200000000Z", "new"},
+		{"2026-09-19T00:00:00.200000001Z", ""},
+		// Out-of-order arrival must still select the correct historical interval.
+		{"2026-09-19T00:00:00.05Z", "old"},
+	} {
+		t.Run(tc.at, func(t *testing.T) {
+			match, ok, err := Resolve(db, RawIdentity{CgroupID: "123", Timestamp: tc.at})
+			if err != nil || ok != (tc.want != "") || match.ID != tc.want {
+				t.Fatalf("resolve = %+v, %v, %v; want %q", match, ok, err, tc.want)
+			}
+		})
+	}
+	original, ok, err := GetBinding(db, "new")
+	if err != nil || !ok || original.StartedAt != "2026-09-19T08:00:00.100000001+08:00" {
+		t.Fatalf("raw binding timestamp changed: %+v, %v", original, err)
+	}
+}
+
+func TestDelayedProcessExitDoesNotCloseReusedPID(t *testing.T) {
+	paths, err := store.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, binding := range []Binding{
+		{ID: "old-pid", PID: 42, StartedAt: "2026-09-19T00:00:00Z"},
+		{ID: "new-pid", PID: 42, StartedAt: "2026-09-19T08:00:00.100000001+08:00"},
+	} {
+		if _, err := RecordBinding(db, binding); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := CloseBindingByPID(db, 42, "2026-09-19T00:00:00.1Z"); err != nil {
+		t.Fatal(err)
+	}
+	old, _, err := GetBinding(db, "old-pid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, _, err := GetBinding(db, "new-pid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if old.EndedAt != "2026-09-19T00:00:00.1Z" || current.EndedAt != "" {
+		t.Fatalf("delayed exit old=%+v current=%+v", old, current)
+	}
+}
+
+func TestBindingRejectsInvalidIntervals(t *testing.T) {
+	for _, b := range []Binding{{StartedAt: "invalid"}, {StartedAt: "2026-09-19T00:00:00Z", EndedAt: "invalid"}, {StartedAt: "2026-09-19T00:00:01Z", EndedAt: "2026-09-19T00:00:00.9Z"}} {
+		if _, err := RecordBinding(nil, b); err == nil {
+			t.Fatalf("invalid interval accepted: %+v", b)
+		}
+	}
+}

@@ -12,7 +12,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 15
+const SchemaVersion = 17
 
 type Paths struct {
 	Root       string
@@ -79,7 +79,7 @@ func Open(paths Paths) (*sql.DB, error) {
 	// attemptIsTainted), which would deadlock on a single shared connection.
 	// WAL + a busy_timeout applied to all connections lets concurrent writers
 	// serialize through the busy handler instead.
-	dsn := "file:" + paths.DB + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+	dsn := "file:" + paths.DB + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(FULL)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
@@ -96,6 +96,21 @@ func Open(paths Paths) (*sql.DB, error) {
 }
 
 func EnsureSchema(db *sql.DB) error {
+	// Refuse an unknown newer store before executing any migration DDL.
+	var exists int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_versions'`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists != 0 {
+		var version int
+		if err := db.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_versions`).Scan(&version); err != nil {
+			return err
+		}
+		if version > SchemaVersion {
+			return fmt.Errorf("database schema %d is newer than supported %d; downgrade is not supported", version, SchemaVersion)
+		}
+	}
+
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS schema_versions (
 			version INTEGER PRIMARY KEY,
@@ -427,6 +442,17 @@ func EnsureSchema(db *sql.DB) error {
 			updated_at TEXT NOT NULL,
 			PRIMARY KEY(run_id, session_id, tool_call_id, source, event_type, window_seconds, window_start)
 		);`,
+		`CREATE TABLE IF NOT EXISTS telemetry_native_rows (
+			batch_id TEXT NOT NULL,
+			line INTEGER NOT NULL,
+			outcome TEXT NOT NULL,
+			event_id TEXT NOT NULL DEFAULT '',
+			PRIMARY KEY(batch_id, line)
+		);`,
+		`CREATE TABLE IF NOT EXISTS telemetry_native_counters (
+			name TEXT PRIMARY KEY,
+			value INTEGER NOT NULL DEFAULT 0
+		);`,
 		`CREATE TABLE IF NOT EXISTS record_batches (
 			id TEXT PRIMARY KEY,
 			input_sha256 TEXT NOT NULL DEFAULT '',
@@ -703,6 +729,10 @@ func EnsureSchema(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_events_run_tool_time ON events(run_id, tool_call_id, created_at);`,
 		`CREATE INDEX IF NOT EXISTS idx_events_run_process_time ON events(run_id, process_id, created_at);`,
 		`CREATE INDEX IF NOT EXISTS idx_events_run_pid_time ON events(run_id, pid, created_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_bindings_cgroup ON execution_context_bindings(cgroup_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_bindings_container ON execution_context_bindings(container_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_bindings_pid ON execution_context_bindings(pid);`,
+		`CREATE INDEX IF NOT EXISTS idx_bindings_root_pid ON execution_context_bindings(root_pid);`,
 		`CREATE INDEX IF NOT EXISTS idx_graph_edges_run_from ON graph_edges(run_id, from_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_graph_edges_run_to ON graph_edges(run_id, to_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_graph_edges_run_type ON graph_edges(run_id, edge_type);`,
@@ -792,6 +822,12 @@ func EnsureSchema(db *sql.DB) error {
 		`ALTER TABLE baseline_profiles ADD COLUMN payload TEXT NOT NULL DEFAULT '{}';`,
 		`ALTER TABLE telemetry_spool_batches ADD COLUMN dropped_at TEXT NOT NULL DEFAULT '';`,
 		`ALTER TABLE telemetry_spool_batches ADD COLUMN drop_reason TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN native_options TEXT NOT NULL DEFAULT '{}';`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0;`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN retry_at INTEGER NOT NULL DEFAULT 0;`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN event_count INTEGER NOT NULL DEFAULT 0;`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN dropped_count INTEGER NOT NULL DEFAULT 0;`,
+		`CREATE INDEX IF NOT EXISTS idx_native_spool_ready ON telemetry_spool_batches(format, status, retry_at, created_at);`,
 		// Multi-agent orchestration: which agent/sub-agent ran a tool call (from
 		// the harness hooks bridge). Empty for main-thread / non-agent calls.
 		`ALTER TABLE tool_calls ADD COLUMN agent_id TEXT NOT NULL DEFAULT '';`,

@@ -1,0 +1,326 @@
+{
+  "schema_version": "agentprovenance.native_upgrade_acceptance/v1",
+  "previous_schema": 15,
+  "current_schema": 16,
+  "current_evidence_rows": 7259,
+  "sensor_status": {
+    "capabilities": {
+      "probes": [
+        {
+          "category": "dns",
+          "name": "syscalls/sys_enter_sendto",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "dns",
+          "name": "getaddrinfo",
+          "required": false,
+          "status": "attached",
+          "target": "/lib/x86_64-linux-gnu/libc.so.6"
+        },
+        {
+          "category": "syscall",
+          "name": "sched/sched_process_exec",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "sched/sched_process_exit",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_connect",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_execve",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_open",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_openat",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_ptrace",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_rename",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_renameat",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_renameat2",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_setgid",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_setuid",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_unlink",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_unlinkat",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/171/fs/usr/local/bin/agentprov"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/171/fs/usr/local/bin/agentprov"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section",
+          "required": false,
+          "status": "unsupported",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/19/fs/coredns"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found",
+          "required": false,
+          "status": "failed",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/19/fs/coredns"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section",
+          "required": false,
+          "status": "unsupported",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/4/fs/usr/bin/local-path-provisioner"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found",
+          "required": false,
+          "status": "failed",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/4/fs/usr/bin/local-path-provisioner"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section",
+          "required": false,
+          "status": "unsupported",
+          "target": "/proc/1129/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found",
+          "required": false,
+          "status": "failed",
+          "target": "/proc/1129/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section",
+          "required": false,
+          "status": "unsupported",
+          "target": "/proc/39987/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found",
+          "required": false,
+          "status": "failed",
+          "target": "/proc/39987/exe"
+        },
+        {
+          "category": "tls",
+          "name": "SSL_read",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/42723/root/usr/lib/x86_64-linux-gnu/libssl.so.3"
+        },
+        {
+          "category": "tls",
+          "name": "SSL_read_ex",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/42723/root/usr/lib/x86_64-linux-gnu/libssl.so.3"
+        },
+        {
+          "category": "tls",
+          "name": "SSL_write",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/42723/root/usr/lib/x86_64-linux-gnu/libssl.so.3"
+        },
+        {
+          "category": "tls",
+          "name": "SSL_write_ex",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/42723/root/usr/lib/x86_64-linux-gnu/libssl.so.3"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/42725/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "required": false,
+          "status": "attached",
+          "target": "/proc/42725/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section",
+          "required": false,
+          "status": "unsupported",
+          "target": "/proc/765/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found",
+          "required": false,
+          "status": "failed",
+          "target": "/proc/765/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Read",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section",
+          "required": false,
+          "status": "unsupported",
+          "target": "/proc/896/exe"
+        },
+        {
+          "category": "tls",
+          "name": "crypto/tls.(*Conn).Write",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found",
+          "required": false,
+          "status": "failed",
+          "target": "/proc/896/exe"
+        }
+      ],
+      "ready": true,
+      "schema_version": "agentprovenance.sensor_capabilities/v1",
+      "status": "degraded",
+      "tls_discovery": {
+        "active_targets": 9,
+        "enabled": true,
+        "limitations": [
+          "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+          "polling can miss TLS activity before attachment and processes shorter than the scan interval",
+          "stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered"
+        ],
+        "max_processes_per_scan": 4096,
+        "max_targets": 128,
+        "processes_scanned": 151,
+        "scan_complete": true,
+        "scan_interval_ms": 2000,
+        "skipped_targets": 0,
+        "truncated_maps": 0,
+        "unreadable_processes": 0,
+        "unresolved_mounts": 0,
+        "unsupported_executables": 9
+      },
+      "updated_at": "2026-09-18T19:09:46.909113308Z"
+    },
+    "capabilities_historical": false,
+    "capture": {
+      "counters": {
+        "captured": 8015,
+        "excluded": 901,
+        "expired_uncorrelated": 2307,
+        "ingested": 523,
+        "invalid": 18,
+        "invalid_payload_file_write": 18,
+        "kernel_dropped_events": 2,
+        "policy_decisions": 79,
+        "read": 8934
+      },
+      "queued_batches": 105,
+      "queued_bytes": 3577405,
+      "pending_events": 5185,
+      "cleanup_pending_batches": 0
+    },
+    "collector_running": true
+  },
+  "binary_sha256": {
+    "agentprov": "d64b1904f91820d5c7e99b6e74770c9a26b175f74e585e0a1a2f8ac342cbf801",
+    "agentprov-sensor": "1380f3444e07360dd2aebdb5f55413cef9f487d47137ec0226bd76b2f86bf38a"
+  },
+  "passed": true,
+  "live_snapshot_comparison": {
+    "previous_evidence_rows": 6814,
+    "unchanged_evidence_rows": 6813,
+    "missing_or_changed_evidence_rows": 1,
+    "missing_ids": [
+      "evt-1e2fbe0baf55"
+    ],
+    "inconclusive": true,
+    "reason": "Snapshot was taken while the old collector was still running. Its legacy ingest path inserts then deletes uncorrelated rows; one snapshot row was absent later, so this comparison does not prove preservation of every row."
+  },
+  "frozen_schema15_upgrade": {
+    "reference_commit": "3093335b15193fb8577681ec9e9de23907295f4f",
+    "previous_schema": 15,
+    "current_schema": 16,
+    "evidence_rows": 17,
+    "all_rows_unchanged": true,
+    "passed": true
+  }
+}

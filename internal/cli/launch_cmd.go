@@ -14,7 +14,7 @@ import (
 //
 // It wraps an agent in a full provenance run -- run scope, live dashboard,
 // per-run hooks overlay (no changes to the agent's own settings), kernel sensor
-// when the host allows it, cgroup-isolated exec, and a signed evidence bundle
+// when the host allows it, cgroup-isolated exec, and an optionally signed bundle
 // with a one-line verdict on exit. Evidence degrades honestly on hosts that
 // cannot run the sensor (e.g. macOS) or agents with no hooks recipe.
 func launchCmd(dataDir *string) *cobra.Command {
@@ -34,7 +34,8 @@ func launchCmd(dataDir *string) *cobra.Command {
 			"scope, serve the read-only dashboard, inject a per-run hooks overlay " +
 			"(Claude Code today; the user's settings are never modified), start the " +
 			"kernel sensor when the host can, exec the agent in a dedicated cgroup, " +
-			"and on exit seal + sign the evidence graph and print a one-line verdict.\n\n" +
+			"and on exit seal the evidence graph and print a one-line verdict.\n" +
+			"Signing is enabled only when --sign-key is supplied.\n\n" +
 			"Evidence level is two honest axes printed up front: application side " +
 			"(hooks vs record-only) and system side (kernel telemetry vs none).",
 		Args:               cobra.MinimumNArgs(1),

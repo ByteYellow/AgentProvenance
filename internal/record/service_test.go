@@ -332,6 +332,39 @@ func TestRecordBindingsShareOneScopeCgroup(t *testing.T) {
 	}
 }
 
+func TestRecordDoesNotLaunchWithoutPublishedScope(t *testing.T) {
+	root := t.TempDir()
+	paths, err := store.Init(filepath.Join(root, ".agentprov"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	// Simulate failure to publish a scope, before an otherwise valid workload.
+	_, err = db.Exec(`CREATE TRIGGER reject_scope BEFORE INSERT ON execution_context_bindings
+		BEGIN SELECT RAISE(FAIL, 'scope unavailable'); END`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workdir := filepath.Join(root, "workspace")
+	if err := os.MkdirAll(workdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err = (Service{DB: db, Paths: paths}).Run(Request{
+		RunID: "run-scope-failure", Workdir: workdir,
+		Command: []string{"sh", "-c", "touch launched"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "publish execution scope before launch") {
+		t.Fatalf("expected pre-launch scope failure, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(workdir, "launched")); !os.IsNotExist(err) {
+		t.Fatalf("workload launched without a published scope: %v", err)
+	}
+}
+
 func TestRecordMarksOrphanDescendantDuringGraceWindow(t *testing.T) {
 	root := t.TempDir()
 	paths, err := store.Init(filepath.Join(root, ".agentprov"))
