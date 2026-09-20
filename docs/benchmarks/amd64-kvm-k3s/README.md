@@ -73,7 +73,8 @@ about that compatibility path.
   both, with zero retries or failed reconciliations in the recorded status.
 
 Full `go test -race -p 4 ./...`, `go vet ./...`, formatting and Phase 1 passed.
-The standalone readiness gate is now included in CI. Hosted CI has not been run.
+The standalone readiness gate is included in CI. These are local acceptance
+results; hosted CI status and artifacts are reported separately by GitHub Actions.
 Go TLS Read was also tested locally with Go 1.24.0 and 1.25.0: each matched exact
 returned bytes for 32 concurrent connections (71 chunks), with zero drops or
 retained contexts. Together with the earlier 1.23.12/1.26 runs this exercises all

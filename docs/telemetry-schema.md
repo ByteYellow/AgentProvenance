@@ -81,7 +81,7 @@ The current MVP validates these minimum event-specific fields:
 | `ptrace` | `request`, `target_pid` (process injection / inspection) |
 | `file_rename` / `file_unlink` | `path` (tamper / cleanup) |
 | `dns_query` | `host` (resolved name; egress by name, not just IP) |
-| `tls_write` / `tls_read` | privacy-safe `preview_sha256` + short `preview` + allow-listed `http` metadata (never the full body) |
+| `tls_write` / `tls_read` | `preview_sha256` + short `preview` + allow-listed `http` metadata by default; optional body content as described below |
 
 Empty paths and `..` traversal segments are rejected for file-oriented events.
 Raw telemetry accepts absolute host paths; workspace file nodes retain their
@@ -90,6 +90,12 @@ above but are not subject to a strict required-body check.
 
 `secret_path` now covers a sensitive-path **read**, not only a write: the native
 sensor captures filtered read opens of credential/secret paths.
+
+`AGENTPROV_TLS_CAPTURE_BODY=1` explicitly retains captured plaintext in the
+normalized event's `content` field for model-call materialization. Without that
+opt-in, normalization stores a hash and short preview rather than the full body.
+Captured prompts, responses and raw spool payloads may contain sensitive data;
+restrict access to the data directory and review bundles before sharing them.
 
 ## Example
 

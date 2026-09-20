@@ -114,6 +114,18 @@ Boundary:
   upgrade control) and cluster-wide evidence service remain outside this
   mode's implemented boundary.
 
+For **KVM guests and K3s**, the [deployment runbook](amd64-kvm-k3s.md) provides
+the validated systemd collector and node-local attribution setup. A KVM guest
+uses `local-record`, with the sensor observing the guest kernel. Native capture
+has its own [persistent-spool contract](native-capture-spool.md); the older
+JSONL/Falco worker does not inherit those restart guarantees. Do not run two
+ingesting collectors over the same observations into one store.
+
+The daemon's `/v1/live` endpoint checks HTTP liveness, while `/v1/ready` and
+`/v1/health` check database/schema availability. Unknown counts remain null on
+storage failure. Readiness and historical evidence coverage are different
+properties; neither endpoint proves every background worker is progressing.
+
 ## 3. Central Evidence Service (design only)
 
 This is the later enterprise shape for security, audit, SRE, compliance, and
