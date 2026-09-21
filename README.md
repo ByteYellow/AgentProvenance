@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/img/agentprovenance-cover-en.png" alt="AgentProvenance: What are your AI agents actually doing?" width="100%">
+</p>
+
 <div align="center">
 
 # AgentProvenance

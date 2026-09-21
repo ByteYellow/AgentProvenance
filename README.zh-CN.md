@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/img/agentprovenance-cover-zh-CN.png" alt="AgentProvenance：AI Agent 到底执行了什么？" width="100%">
+</p>
+
 <div align="center">
 
 # AgentProvenance
