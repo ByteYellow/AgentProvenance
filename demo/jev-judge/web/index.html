@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Jev Demo | AgentProvenance</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23006cde'/%3E%3Ctext x='16' y='23' text-anchor='middle' fill='white' font-family='sans-serif' font-size='23'%3EP%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="/style.css" />
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">Agent<span>Provenance</span></a>
+      <span class="tagline">verifiable agent observability</span>
+      <span id="run-meta" class="run-name" hidden></span>
+      <span id="model-meta" class="model-tag" hidden></span>
+      <div id="source-status" class="source-status" hidden></div>
+    </header>
+    <main>
+      <div id="error" class="notice error" role="alert" hidden></div>
+      <div id="loading" class="empty" role="status">
+        Opening verified study...
+      </div>
+      <div id="content" hidden>
+        <div class="workspace-bar">
+          <div class="workspace-title">
+            <h1>Jev Demo</h1>
+            <span class="muted">External evaluator example</span>
+          </div>
+          <nav class="tabs" aria-label="Review views">
+            <button data-view="evidence" aria-current="page">
+              Evidence &amp; review
+            </button>
+            <button data-view="rules">Rules &amp; comparison</button>
+            <button data-view="approval">Approval &amp; audit</button>
+          </nav>
+          <div id="approval-status" aria-live="polite"></div>
+        </div>
+        <section id="evidence-view" class="review-layout">
+          <section class="panel evidence-panel">
+            <div class="panel-heading">
+              <h2>Evidence Explorer</h2>
+              <span class="sub">captured context / runtime observations</span>
+              <span id="case-count" class="count"></span>
+            </div>
+            <div
+              id="case-list"
+              class="case-strip"
+              aria-label="Evidence cases"
+            ></div>
+            <div id="case-content"></div>
+          </section>
+          <aside class="review-sidebar" aria-label="Judgment and review">
+            <section
+              id="judgment-content"
+              class="panel judgment-panel"
+            ></section>
+            <form id="review-form" class="panel review-form"></form>
+          </aside>
+        </section>
+        <section id="rules-view" hidden></section>
+        <section id="approval-view" hidden></section>
+        <footer>
+          Standalone demo. Model assessments are inferences. Source signatures
+          do not prove complete capture. Local review is not enforcement.
+        </footer>
+      </div>
+    </main>
+    <div id="toast" role="status" hidden></div>
+  </body>
+</html>
