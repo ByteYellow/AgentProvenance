@@ -47,7 +47,7 @@ network connection. The dashboard replays their attributed execution path:
 </p>
 
 [Explore the capture](demo/multiagent-provenance/README.md) ·
-[Try the replay](#quickstart) · [v0.8.0 release notes](docs/releases/v0.8.0.md)
+[Try the replay](#quickstart) · [v0.8.1 release notes](docs/releases/v0.8.1.md)
 
 ## Contents
 
@@ -519,6 +519,12 @@ The protocol is intentionally small:
 
 This lets a benchmark harness, RL pipeline, red-team harness, or data filtering
 job decide how evidence becomes score, rejection, or review.
+
+Optional reference integrations: [LLM security judge](demo/llm-judge/) and
+[Jev typed evaluator](demo/jev-judge/). Provider calls, rule comparison and any
+review UI belong to the external examples, not the core product. Neither is
+required for capture, replay or the main dashboard; results return through the
+existing signal contract.
 
 ### Custom rules in Python
 
@@ -1209,7 +1215,12 @@ and `forensics`. `substrate` contains runtime facts AgentProvenance can consume.
 
 ## Roadmap
 
-**v0.8.0 focuses on portable, reliable evidence capture.** It adds native
+**v0.8.1 adds an optional external-evaluator example.** The [Jev demo](demo/jev-judge/)
+shows typed judgments, rule comparison and human review using the existing
+evidence/signal contract. It does not add a built-in analyst or change capture.
+See the [v0.8.1 release notes](docs/releases/v0.8.1.md).
+
+**v0.8.0 established portable, reliable evidence capture.** It added native
 amd64 support, KVM guest deployment, K3s acceptance, automatic container TLS
 discovery, and Go TLS responses on supported amd64 binaries. It also hardens
 late attribution, persistent capture recovery, migration tests, database

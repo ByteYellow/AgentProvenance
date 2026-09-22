@@ -10,6 +10,20 @@ permissions:
   contents: read
 
 jobs:
+  jev-demo:
+    name: Jev demo (keyless, Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Verify external evaluator and local review boundaries
+        run: python -m unittest discover -s demo/jev-judge -p 'test_*.py' -v
+
   test:
     name: Go tests
     runs-on: ubuntu-latest

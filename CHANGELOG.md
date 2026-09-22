@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.8.1 - 2026-09-22
+
+Optional external-evaluator reference integration in `demo/jev-judge/`.
+Release notes: [v0.8.1](docs/releases/v0.8.1.md). Existing evidence and
+signal interfaces are unchanged; no new core module or runtime dependency.
+
+### Added
+
+- **Jev reference adapter.** A bounded TypeSafe/Jev client evaluates selected
+  declarations, runtime conformance and secret-transfer evidence, preserving
+  raw request/response bodies, probabilities, model identity and hashes.
+- **Standalone demo UI.** A separately launched workbench compares manually
+  authored v1/v2 rubrics, records separate reference labels and approval or
+  rejection, and exports reviewed signals for explicit import through the
+  existing contract. It is not embedded in the main evidence dashboard.
+- **Demo review boundaries.** A fixed missing-runtime coverage guard,
+  per-question regression checks, append-only local review revisions and stale
+  approval invalidation. No optimizer, automatic promotion or enforcement.
+- **Keyless regression tests** for the optional demo, plus dated live API and
+  local browser validation documented separately from CI.
+
 ## v0.8.0 - 2026-09-20
 
 Portable, reliable native evidence capture across Linux, KVM guests and

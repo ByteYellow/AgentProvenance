@@ -46,10 +46,22 @@ are distinct evidence sources, not a claim that the entire team was recaptured.
   third-party product analytics. The README separately documents the historical
   codebase-upload report, missing wire evidence and reproduction limits. Do not
   treat this fixture as proof of the vendor's current behavior.
+
+## Optional external evaluator examples
+
+These examples consume execution evidence and return analysis through the
+existing signal contract. Provider integration and review workflows stay outside
+the core product; neither example is required to capture or inspect a run.
+
 - [LLM as security analyst](llm-judge/): an external evaluator reads graph
   evidence and returns referenced signals. Its own request can also be audited.
   Live mode needs a compatible model endpoint; the keyless fixture validates
   the integration flow, not a real model verdict.
+- [Jev reference integration](jev-judge/): typed decisions over selected capture
+  evidence, with a standalone demo UI for rule comparison and human review.
+  Reviewed results can be exported for explicit `signal import`. Live evaluation
+  needs a key and raw-evidence consent; reopening a completed study is offline.
+  The UI is not part of `agentprov dashboard` or a policy-deployment service.
 
 ## Replay and compare
 
