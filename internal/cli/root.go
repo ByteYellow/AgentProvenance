@@ -64,6 +64,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(forkCmd(&dataDir))
 	root.AddCommand(policyCmd(&dataDir))
 	root.AddCommand(costCmd(&dataDir))
+	configureLanguage(root)
 	return root
 }
 
