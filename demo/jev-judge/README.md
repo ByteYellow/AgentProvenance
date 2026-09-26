@@ -1,5 +1,7 @@
 # Jev: external evaluator reference integration
 
+English | [简体中文](README.zh-CN.md)
+
 An optional, runnable example of building an external analyst on AgentProvenance
 evidence. Jev makes three typed decisions from selected execution evidence;
 a standalone demo UI compares two rubrics, collects human reference labels and

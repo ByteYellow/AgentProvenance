@@ -1,5 +1,7 @@
 # Snake / supply-chain demo — bundle & capture
 
+English | [简体中文](README.zh-CN.md)
+
 This directory holds the **signed, portable forensics bundle** for the
 agent-in-a-sandbox supply-chain demo, plus the scripts used to capture it.
 

@@ -1,14 +1,18 @@
 # Grok exfil demos — two signed captures of a real AI coding CLI
 
+English | [简体中文](README.zh-CN.md)
+
 This folder holds **two real, signed, replayable AgentProvenance captures** of
 `@xai-official/grok` 0.2.93 (the exact version the public repro
 [`cereblab/grok-build-exfil-repro`](https://github.com/cereblab/grok-build-exfil-repro)
 pins). Each is a content-addressed graph you can import and verify offline.
+All reproduction statements below refer to the July 2026 experiments, not current
+vendor behavior.
 
 | Bundle | What it caught | Reproducible today? |
 |---|---|---|
-| **`run-grok-exfil`** | Route ②: the CLI bundles the **whole repo + git history** and POSTs it to the vendor session-trace store (`grok-code-session-traces`) — every upload **BLOCKED**. | **No — not reproducible on 07-15** (appears disabled server-side; see Status). Historical capture. |
-| **`run-grok-3routes`** | Route ①: grok reads `.env` / `SECRET_DO_NOT_READ.md` / `.claude/` and the **secrets land in the model request** (`/responses`) — 3 canaries proven in-context. Plus telemetry (`/traces`) + product analytics (Mixpanel). | **Yes** — reproducible. |
+| **`run-grok-exfil`** | Route ②: historical investigation of repository uploads. The original log reported blocked uploads, but is no longer available; the committed graph preserves only `/traces` egress. | **No — not reproducible on 07-15** (appears disabled server-side; see Status). Historical capture. |
+| **`run-grok-3routes`** | Route ①: grok reads `.env` / `SECRET_DO_NOT_READ.md` / `.claude/` and the **secrets land in the model request** (`/responses`) — 3 canaries proven in-context. Plus telemetry (`/traces`) + product analytics (Mixpanel). | **Yes in the recorded July 2026 experiment**; current behavior is unverified. |
 
 ## Open from the portable CLI
 
@@ -26,7 +30,7 @@ and their formatted guides; manual import and live capture remain available belo
 
 ## Status — codebase upload not reproducible on 2026-07-15 (appears disabled server-side)
 
-The codebase-upload finding (route ②) is **no longer reproducible**, and grok's own
+The codebase-upload finding (route ②) was **not reproducible on 2026-07-15**, and grok's own
 telemetry corroborates that nothing is being uploaded:
 
 - **2026-07-15:** ~10 re-capture attempts with the version the public repro pins
@@ -48,7 +52,7 @@ Honest reading: on 07-15 the codebase does not leave the box, and grok's own que
 counters say so. That it *did* on 07-14 rests on the (now-gone) capture log. **"xAI
 disabled it server-side" is the most consistent explanation — a reasonable inference,
 not a proven, xAI-confirmed fact.** Treat `run-grok-exfil` as a dated capture of a
-behavior that is not currently reproducible.
+behavior that is not reproducible in the 2026-07-15 checks.
 
 > Note: `/sessions/<id>/signals` and `/sessions/<id>/turn-deltas` are xAI first-party
 > **usage analytics** (turn/latency/lines-of-code counters + the GCS-queue health
@@ -58,6 +62,9 @@ behavior that is not currently reproducible.
 ---
 
 ## Bundle 1 — `run-grok-exfil` (route ②, historical)
+
+The following summarizes the original experiment report. The missing wire log
+means the committed graph alone cannot substantiate every upload step shown.
 
 ```
 user:  grok -p "Reply with the single word: ok."     (never asked it to read/send anything)
@@ -77,7 +84,7 @@ response — logging the original server values every time. A *mechanism* demons
 of a real in-binary code path, trigger simulated and disclosed. Third-party finding;
 not xAI-confirmed.
 
-## Bundle 2 — `run-grok-3routes` (route ①, reproducible)
+## Bundle 2 — `run-grok-3routes` (route ①, reproduced in July 2026)
 
 grok was asked to **read** the planted secret files, and the tool captured the
 result: all three canaries appear inside the `/responses` **model request body** —
@@ -86,7 +93,7 @@ Surfaces* renders this as `model_inference / secret / critical`.
 
 **Honesty note:** grok read those files **because the prompt told it to** — this is
 the tool correctly *observing secrets-in-context*, **not** covert exfiltration. The
-covert "one word → codebase out" story is route ② (bundle 1), which xAI has disabled.
+covert "one word → codebase out" story is route ② (bundle 1), which was not reproduced on 2026-07-15; a server-side change remains an inference.
 
 ## How it's captured (Grok is rustls → no libssl uprobe)
 
@@ -126,8 +133,9 @@ per-file canaries), `grok-proxy.py` (forward to `cli-chat-proxy.grok.com`, forwa
 grok's own OAuth bearer, flip the disclosed flags, record the upstream host, BLOCK +
 dump `/storage`+`/traces`), `capture-grok-full.sh` (record+sensor + proxy + seal).
 Requires a Grok CLI login (`grok login --device-auth`) and CAP_BPF. All secrets are
-synthetic; nothing real leaves the box. **Note:** route ② (codebase upload) no longer
-fires — xAI disabled it server-side (see Status); route ① reproduces.
+synthetic; nothing real leaves the box. **Note:** route ② (codebase upload) did not
+fire in the 2026-07-15 checks; a server-side change is an inference (see Status).
+Route ① was reproduced then. Recheck both paths before making current claims.
 
 ## Rigor
 

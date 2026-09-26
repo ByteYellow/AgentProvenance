@@ -1,5 +1,7 @@
 # LLM Judge — the judge is itself audited
 
+English | [简体中文](README.zh-CN.md)
+
 An external LLM reads a captured run's **full trajectory** and delivers a
 structured security verdict; the verdict is written back into the store as
 graph-attached signals. The twist: the judge itself runs under

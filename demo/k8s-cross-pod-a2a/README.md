@@ -1,5 +1,7 @@
 # Cross-pod A2A provenance demo — two pods, one node, one signed graph
 
+English | [简体中文](README.zh-CN.md)
+
 **Multi-agent observability that survives the substrate boundary: two agents in
 two Kubernetes pods, one influences the other over a real A2A network call, and a
 single node sensor pins the resulting attack to exactly the right pod — as one
@@ -31,7 +33,7 @@ and their formatted guides; manual import and live capture remain available belo
 > When two agents run in separate pods on the same node, AgentProvenance's node
 > sensor attributes each pod's kernel activity to its own cgroup, correlates the
 > app-layer delegation/peer graph on top, and pins a stealth supply-chain exfil to
-> the *exact* pod that ran it — while the other pod stays provably clean. One
+> the *exact* pod that ran it — while the other pod has no matching recorded events. One
 > signed graph, two substrates.
 
 The differentiated capability is **per-pod attribution + cross-pod correlation** by
@@ -150,7 +152,8 @@ One node sensor, two concurrent pods. The demo script asserts:
 - `agent_syscall` attribution edges join bob's install to pod B's syscalls
 - `graph verify` → **errors=0**
 
-The attack is pinned to exactly pod B; pod A is provably clean. That separation is
+The attack is pinned to exactly pod B; no matching secret-path or metadata-IP events were recorded for pod A.
+This does not prove that pod A had no other activity or that capture was complete. That separation is
 the thing only correct substrate attribution can deliver.
 
 ---

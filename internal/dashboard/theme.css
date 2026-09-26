@@ -16,3 +16,8 @@
   header h1{font-size:17px;margin:0;letter-spacing:-.02em;font-weight:600}
   header h1 b{color:var(--acc);font-weight:600}
   header .tag{font-size:11px;color:var(--mut);border:1px solid var(--line2);padding:3px 10px;border-radius:99px;background:#fff}
+
+  .language-switch{display:flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--line2);border-radius:8px;flex-shrink:0;font-size:11px;line-height:1.5}
+  .language-switch a{color:var(--mut);text-decoration:none;padding:3px 7px;border-radius:5px;white-space:nowrap}
+  .language-switch a[aria-current=true]{background:var(--acc);color:#fff}
+  .language-switch a:focus-visible{outline:2px solid var(--acc);outline-offset:2px}

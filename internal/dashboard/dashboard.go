@@ -29,6 +29,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/byteyellow/agentprovenance/internal/compliance"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/redact"
 	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
@@ -49,6 +50,7 @@ type Server struct{ DB *sql.DB }
 func (s Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.index)
+	mux.HandleFunc("GET /assets/i18n.js", i18n.Script)
 	mux.HandleFunc("GET /assets/theme.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		_, _ = w.Write(themeCSS)
