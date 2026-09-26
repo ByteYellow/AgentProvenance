@@ -13,6 +13,19 @@ record`.
 
 ---
 
+## Open from the portable CLI
+
+From an extracted [precompiled release](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2):
+
+```sh
+./agentprov demo k8s-substrate
+```
+
+The CLI verifies the signed evidence, opens the appropriate Run and view, and
+uses a temporary store cleaned up on Ctrl-C. No Go, VM, Kubernetes cluster or
+agent credentials are needed for replay. Use `./agentprov demo` for all examples
+and their formatted guides; manual import and live capture remain available below.
+
 ## 1. What this demonstrates
 
 > An agent scheduled by Kubernetes — not launched by us — still produces a

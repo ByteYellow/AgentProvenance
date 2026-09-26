@@ -47,7 +47,7 @@ network connection. The dashboard replays their attributed execution path:
 </p>
 
 [Explore the capture](demo/multiagent-provenance/README.md) ·
-[Try the replay](#quickstart) · [v0.8.1 release notes](docs/releases/v0.8.1.md)
+[Try the replay](#quickstart) · [v0.8.2-rc.2 release notes](docs/releases/v0.8.2-rc.2.md)
 
 ## Contents
 
@@ -80,8 +80,10 @@ network connection. The dashboard replays their attributed execution path:
 
 ### Download and replay — no Go required
 
+![Local demo gallery with six signed captures and two evaluator guides](docs/img/demo-gallery.png)
+
 Download a precompiled archive and its `.sha256` file from
-[**v0.8.2-rc.1 (prerelease)**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.1).
+[**v0.8.2-rc.2 (prerelease)**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2).
 
 | Platform | Archive suffix |
 |---|---|
@@ -93,9 +95,9 @@ Download a precompiled archive and its `.sha256` file from
 For example, on Linux x86-64, in the download directory:
 
 ```sh
-sha256sum -c agentprov_v0.8.2-rc.1_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.8.2-rc.2_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.8.2-rc.1_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.8.2-rc.2_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -106,7 +108,9 @@ checksum step. Binaries are not Apple Developer ID signed or notarized.
 checksums are not publisher signatures.
 
 The browser opens a **Demo gallery** with all six signed captures and both
-optional evaluator guides. Choose a replay: its Run and lens are selected and
+optional evaluator guides, styled to match the dashboard. **Read guide** opens
+a formatted local reader with a table of contents, images, tables and copyable
+code blocks; **Open replay** opens the recorded evidence. Choose a replay: its Run and lens are selected and
 playback starts automatically when the view has timed events; placement views
 open their topology directly. The CLI verifies the original signatures before
 importing into an isolated temporary store, then checks the graph. Ctrl-C closes
@@ -1248,10 +1252,15 @@ and `forensics`. `substrate` contains runtime facts AgentProvenance can consume.
 
 ## Roadmap
 
+**v0.8.2-rc.2 is the portable replay prerelease.** Download Linux/macOS archives
+for amd64/arm64 and run `agentprov demo` to browse all eight examples in a
+dashboard-styled gallery and guide reader. See the
+[v0.8.2-rc.2 notes](docs/releases/v0.8.2-rc.2.md).
+
 **v0.8.1 adds an optional external-evaluator example.** The [Jev demo](demo/jev-judge/)
 shows typed judgments, rule comparison and human review using the existing
 evidence/signal contract. It does not add a built-in analyst or change capture.
-See the [v0.8.1 release notes](docs/releases/v0.8.1.md).
+See the [v0.8.2-rc.2 release notes](docs/releases/v0.8.2-rc.2.md).
 
 **v0.8.0 established portable, reliable evidence capture.** It added native
 amd64 support, KVM guest deployment, K3s acceptance, automatic container TLS

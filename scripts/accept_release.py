@@ -73,8 +73,14 @@ def main():
                 assert overview['verify']['error_count'] == 0, overview['verify']
                 lens = json.loads(get('/api/lens?' + query))
                 assert lens['nodes'], entry
-            for name in ('llm-judge', 'jev-judge'):
-                assert 'Offline copy' in get('/demos/docs/' + name)
+            for entry in catalog:
+                guide = get('/demos/docs/' + entry['id'])
+                assert '<article class="document">' in guide and '<h1' in guide
+            assert '--bg:#f5f5f7' in get('/assets/theme.css')
+            assert 'code-toolbar' in get('/demos/guide.js')
+            assert '.document' in get('/demos/demo.css')
+            with http.open(base + '/demos/assets/jev-judge/review.png', timeout=30) as response:
+                assert response.read(8) == b'\x89PNG\r\n\x1a\n', 'embedded guide image missing'
             process.send_signal(signal.SIGTERM)
             assert process.wait(timeout=15) == 0
             assert not list(scratch.iterdir()), 'temporary demo state not removed'

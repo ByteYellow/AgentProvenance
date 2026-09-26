@@ -3,6 +3,20 @@
 AgentProvenance should be adoptable without forcing every user into a platform
 deployment. The product has three deployment shapes.
 
+## First experience: portable replay
+
+The [v0.8.2-rc.2 prerelease](releases/v0.8.2-rc.2.md) provides CLI archives for
+Linux and macOS on amd64/arm64. `agentprov demo` opens a local gallery containing
+six verified signed captures and two optional evaluator guides, with the same
+visual theme as the dashboard. Guides render locally with a section outline,
+images, tables and code-copy controls. See the [Quickstart](../README.md#quickstart)
+and [complete demo index](../demo/README.md).
+
+Replay uses an isolated temporary store and does not execute the captured actions.
+Evaluator execution and live Linux capture retain their separate requirements.
+The four-platform archive gate validates replay and cleanup, not extra live
+sensor coverage or long-running capture.
+
 ## 1. Library / CLI-only Recorder
 
 This is the default entry point for RL, benchmark, evaluator, CI, and local

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Entry.Title}} · AgentProvenance</title>
+  <link rel="stylesheet" href="/assets/theme.css">
+  <link rel="stylesheet" href="/demos/demo.css">
+  <script src="/demos/guide.js" defer></script>
+</head>
+<body>
+<header class="demo-header">
+  <a class="brand" href="/demos/" aria-label="AgentProvenance demo home"><h1><b>Agent</b>Provenance</h1></a>
+  <span class="tag header-description">verifiable agent observability</span><span class="header-divider" aria-hidden="true"></span><a class="header-location" href="/demos/">Demos</a><span class="spacer"></span><span class="local-status"><i></i> Local guide</span>
+</header>
+<div class="docs-layout">
+  <aside class="docs-sidebar" aria-label="Guide navigation">
+    <a class="back-link" href="/demos/">← Demo library</a>
+    <details class="guide-nav" open><summary>DEMO GUIDES</summary><nav aria-label="Demo guides">{{range .Entries}}<a href="/demos/docs/{{.ID}}"{{if eq .ID $.Entry.ID}} aria-current="page"{{end}}>{{.Title}}</a>{{end}}</nav></details>
+    {{if .Headings}}<details class="page-nav" open><summary>ON THIS PAGE</summary><nav aria-label="On this page">{{range .Headings}}<a href="#{{.ID}}">{{.Title}}</a>{{end}}</nav></details>{{end}}
+  </aside>
+  <main class="doc-main">
+    <div class="doc-toolbar"><span class="breadcrumb"><a href="/demos/">Demos</a><span>/</span>{{category .Entry}}</span>{{if .Entry.Run}}<a class="button primary" href="{{runURL .Entry}}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5 3 7 5-7 5Z"/></svg>Open replay</a>{{else}}<span class="setup-tag">Optional integration</span>{{end}}</div>
+    <article class="document">{{.Content}}</article>
+    <div class="doc-note">{{.Entry.Requirements}}</div>
+    <footer class="doc-footer"><a href="/demos/">← All demos</a><span>AgentProvenance · Demo guide</span><a href="#">Back to top ↑</a></footer>
+  </main>
+</div>
+</body>
+</html>

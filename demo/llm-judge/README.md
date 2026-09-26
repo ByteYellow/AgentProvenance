@@ -18,7 +18,27 @@ target run (e.g. snake-supply-chain)          judge run (recorded)
     evidence: coverage + judge attestation           judge run's own DAG
 ```
 
+## Open from the portable CLI
+
+From an extracted [precompiled release](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2):
+
+```sh
+./agentprov demo llm-judge
+```
+
+This opens the formatted offline guide. It does not run the evaluator or call
+a provider. The commands below are separate, explicit setup and evaluation steps.
+
 ## Run it
+
+With an extracted release, run the keyless example from the archive root:
+
+```sh
+AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
+```
+
+This uses a fixture verdict to exercise the integration; it is not a live model
+evaluation. For a source checkout, run the following from `demo/llm-judge/`.
 
 One file, stdlib only — `judge.py run` orchestrates everything (builds the
 binary if `AGENTPROV_BIN` is unset, imports the bundle, re-executes itself

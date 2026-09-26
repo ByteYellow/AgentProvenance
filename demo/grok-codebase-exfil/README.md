@@ -10,6 +10,20 @@ pins). Each is a content-addressed graph you can import and verify offline.
 | **`run-grok-exfil`** | Route ②: the CLI bundles the **whole repo + git history** and POSTs it to the vendor session-trace store (`grok-code-session-traces`) — every upload **BLOCKED**. | **No — not reproducible on 07-15** (appears disabled server-side; see Status). Historical capture. |
 | **`run-grok-3routes`** | Route ①: grok reads `.env` / `SECRET_DO_NOT_READ.md` / `.claude/` and the **secrets land in the model request** (`/responses`) — 3 canaries proven in-context. Plus telemetry (`/traces`) + product analytics (Mixpanel). | **Yes** — reproducible. |
 
+## Open from the portable CLI
+
+From an extracted [precompiled release](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2):
+
+```sh
+./agentprov demo grok-codebase-exfil
+./agentprov demo grok-3routes
+```
+
+The CLI verifies the signed evidence, opens the appropriate Run and view, and
+uses a temporary store cleaned up on Ctrl-C. No Go, VM, Kubernetes cluster or
+agent credentials are needed for replay. Use `./agentprov demo` for all examples
+and their formatted guides; manual import and live capture remain available below.
+
 ## Status — codebase upload not reproducible on 2026-07-15 (appears disabled server-side)
 
 The codebase-upload finding (route ②) is **no longer reproducible**, and grok's own

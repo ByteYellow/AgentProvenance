@@ -61,6 +61,11 @@ The CLI embeds all six signed captures and all demo guides. Replay is offline,
 read-only, and uses a temporary store removed on Ctrl-C. The browser opens
 on a loopback address. Use `--no-browser` on a headless machine.
 
+Choose Open replay to view evidence, or Read guide for a formatted guide with
+a section outline, images, tables and code-copy buttons. Both use the dashboard
+theme. Guide content is embedded; additional repository/external links require
+a network connection when followed.
+
 The `demo/` directory contains every existing example, its original signatures,
 public keys, scripts and documentation. Replaying never executes captured commands.
 LLM Judge and Jev are optional Python examples, not prerecorded verdicts:
@@ -70,8 +75,8 @@ AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
 ```
 
 Jev needs Python 3.9+ and separate live credentials/raw-evidence consent; see
-`demo/jev-judge/README.md`. In its commands use this archive's absolute
-`agentprov` path instead of the source-build step. Reopening a completed Jev
+`demo/jev-judge/README.md`. Its commands use this archive's absolute
+`agentprov` path; Go is needed only for an optional source build. Reopening a completed Jev
 study is offline. Live capture scripts have additional requirements in their guides.
 
 Linux archives include the optional sensor; its kernel and privilege requirements
