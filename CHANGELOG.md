@@ -1,5 +1,7 @@
 # Changelog
 
+English | [中文](CHANGELOG.zh-CN.md)
+
 ## v0.8.2-rc.2 - 2026-09-26
 
 Prerelease: dashboard-styled demo gallery and formatted local guides.

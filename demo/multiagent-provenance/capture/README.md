@@ -1,75 +1,80 @@
 # Multi-agent provenance demo — capture assets
 
-Durable copies of the VM capture harness (saved here because the VM's `/tmp/*`
-clears on reboot). The demo narrative + how to view the signed bundle is in the
-parent `../README.md`; full design + resume plan is in the memory doc
-`agentprov-multiagent-demo-todo.md`.
+English | [中文](README.zh-CN.md)
 
-## What the capture proves
+This directory preserves the lab VM capture scripts and hook records because
+`/tmp/*` is cleared on reboot. The scenario and signed replay instructions are
+in the [parent guide](../README.md). See the environment setup below to run a new capture.
 
-A poisoned agent team runs an attacker's arc in ONE signed causal graph:
-**Attempt A** — a `recon` teammate is asked to read the cloud credentials and POST
-them to the metadata IP; the model refuses at the intent layer (→ a refused node,
-no egress). **Attempt B** — the *same* exfil is buried in `setup.py install` and
-relayed alice→bob; bob runs it unknowingly, and only the kernel sensor catches the
-secret read + metadata egress, attributed back to bob by command-match.
+## Two attempts
 
-The two attempts are captured as **separate** claude invocations (for reliability
-— a single two-phase prompt starved bob) whose hooks both append to one
-`/tmp/hooklog2.jsonl`, then bridged into one run. Only B runs under the sensor; A
-is hook-only, so it contributes the intent-layer refusal without a kernel egress.
+Two attempts are bridged into one signed evidence graph:
 
-## Double-attempt capture (current)
+- **Attempt A:** `recon` is asked to read cloud credentials and POST them to the
+  metadata IP. The saved application record shows a refusal. This branch records model responses through hooks.
+- **Attempt B:** the same theft is buried in `setup.py install` and relayed from
+  `alice` to `bob`. The kernel sensor records secret reads and the metadata-IP
+  connection during installation. Command-match attribution links them to bob.
 
-- `double-attempt-capture.sh` — the orchestrator: build + setcap + delegate cgroup,
-  plant the fake secrets + poisoned helper, run Attempt A (recon, hook-only) then
-  Attempt B (alice/bob under sensor + record), then `hooks bridge` folds BOTH into
-  one run and attributes the syscalls, exports a signed bundle. Run ON the VM;
-  needs `AGENTPROV_SUDO_PW=<vm sudo password>` in the environment.
-- `recon-run.sh` — Attempt A: the `recon` teammate asked to exfil the credentials.
-- `team-run.sh` — Attempt B: the alice/bob team; alice relays the poisoned
-  `setup.py install` to bob, who runs it unknowingly.
-- `hookstamp.sh` — the hook logger; stamps each payload with a wall-clock `ts`
-  (hook stdin carries none) so the bridge can time-order events.
-- `hooks-settings.json` — reference `~/.claude/settings.json` hook config (the
-  live capture writes a stamped variant that points the hooks at `hookstamp.sh`).
-- `SETUP.md` — the injected instruction alice reads and relays (the benign-looking
-  "install the helper" whose helper is poisoned).
-- `double-attempt-hooklog.jsonl` — the REAL combined hook payloads from the proven
-  run; build/verify the bridge against these exact shapes.
+The attempts use separate Claude invocations whose hooks append to one
+`/tmp/hooklog2.jsonl`, then merge into a single run. An earlier combined prompt
+did not reliably involve bob. B also runs under the sensor, with command matching linking sub-agents to kernel events.
 
-## Single-attempt origin (B only — kept for reference)
+## Double-attempt capture files
 
-The buried-supply-chain half was proven first as a single run. `bestfx-capture.sh`
-+ `hooklog-sample.jsonl` are that earlier B-only capture, kept as a minimal
-reference (no Attempt A, no timestamp stamping).
+- `double-attempt-capture.sh`: builds, sets capabilities, delegates the cgroup,
+  prepares fake secrets and the poisoned helper, runs A with hooks and B under
+  sensor/record, then uses `hooks bridge` to combine their evidence and export a
+  signed bundle. Run it on the lab VM with `AGENTPROV_SUDO_PW` in the environment.
+- `recon-run.sh`: Attempt A, the direct credential-theft request to `recon`.
+- `team-run.sh`: Attempt B, where alice relays `setup.py install` to bob.
+- `hookstamp.sh`: stamps hook payloads with wall-clock `ts` for bridge ordering;
+  the original stdin payload does not supply that timestamp.
+- `hooks-settings.json`: reference `~/.claude/settings.json` hook configuration;
+  the capture writes a stamped variant pointing at `hookstamp.sh`.
+- `SETUP.md`: the original injected instruction, presented as a helper-package
+  installation. A [Chinese reading guide](SETUP.zh-CN.md) is separate; the
+  original fixture is unchanged.
+- `double-attempt-hooklog.jsonl`: the saved combined payloads from the actual
+  run, useful for checking the bridge against the real field shapes.
 
-## Key facts baked in
+## Earlier single-attempt capture
 
-- The malicious action is **buried** in code the sub-agent runs unknowingly (the
-  poisoned `setup.py install`), so the model executes it without recognizing the
-  exfil — that is Attempt B. Attempt A is the *contrast*: the same theft proposed
-  openly is refused at the intent layer. Both belong in the graph.
-- The poisoned `pysnake-helper` is reused from `demo/snake-supply-chain/`; its
-  install hook reads the fake secrets (`~/.aws/credentials`,
-  `~/.config/agentprov-demo-secrets/api_token`) and connects the metadata IP —
-  all in-process, so the syscalls share the `python3 setup.py` pid.
-- Attribution is by **command-match** (agent tool_call command == sensor execve
-  command), because the in-process sub-agents share one cgroup; time-window is
-  secondary.
-- The sensor also sees the agent's OWN credential reads (`.claude/.credentials.json`
-  etc.); the default policy's `self_credential_access` rule keeps them as events
-  but not alerts, so only the two planted targets raise risks.
+`bestfx-capture.sh` and `hooklog-sample.jsonl` preserve the earlier B-only
+supply-chain capture as a minimal reference. They contain neither Attempt A
+nor the added timestamp-stamping step.
+
+## Scenario details
+
+- B hides the behavior inside installed code; A proposes the theft directly and
+  has a saved refusal. The two attempts can be compared in one graph.
+- The poisoned `pysnake-helper` comes from `demo/snake-supply-chain/`. Its install
+  hook reads fake `~/.aws/credentials` and
+  `~/.config/agentprov-demo-secrets/api_token`, then connects to the metadata IP.
+  These actions run in-process and share the `python3 setup.py` PID.
+- In-process sub-agents share a cgroup. Attribution primarily matches the agent
+  tool-call command to sensor `execve` commands (`agent_syscall`); time windows
+  provide a secondary condition.
+- The sensor also sees the agent read its own `.claude/.credentials.json` and
+  similar authentication files. The default `self_credential_access` rule
+  retains those events without the target-secret alert, distinguishing them
+  from the two planted targets.
 
 ## Reproduce
 
-On the lab VM (`ssh agentprov@<lab-vm>`): sync the repo, then
+Connect to the lab VM (`ssh agentprov@<lab-vm>`) and sync the repository. The
+script assumes `~/agentprovenance`, `~/agentprov-snake-demo`, `~/team-ws` and
+specific cgroup paths. It rebuilds the working directory and replaces the lab
+user's hook configuration; inspect these assumptions before running it.
+For ordinary new recordings, see the main documentation's `launch` workflow.
+
+In the prepared lab, set the environment variable to the VM sudo password:
 
 ```sh
-AGENTPROV_SUDO_PW=<vm sudo password> \
+AGENTPROV_SUDO_PW='your-vm-sudo-password' \
   bash demo/multiagent-provenance/capture/double-attempt-capture.sh
 ```
 
-Prereqs (setcap, delegated cgroup, planted secrets, poisoned helper) are handled by
-the script. Because the agent is non-deterministic, re-run if a take is messy
-(recon must refuse; bob must actually run the install).
+The script handles setcap, cgroup delegation, fake secrets and helper setup.
+Agent behavior can vary between runs. Compare a new capture with the existing
+signed recording.

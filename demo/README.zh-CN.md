@@ -35,17 +35,17 @@
 AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
 ```
 
-Jev 示例可通过 `--agentprov` 使用包内 CLI，无需自行构建。实际在线评估仍需 Python、凭据和明确授权。
+Jev 示例可通过 `--agentprov` 使用包内 CLI，无需自行构建。在线评估需要 Python 和模型接口凭据。
 
 ## 1. 单个 Agent：供应链执行
 
 [贪吃蛇供应链示例](snake-supply-chain/README.zh-CN.md)记录真实 Coding Agent 在开发游戏时安装被植入恶意逻辑的本地包。安装钩子读取预置的模拟秘密，并尝试连接元数据 IP。证据图关联工具调用、进程、文件、网络活动和产物。
 
-执行记录为 `run-snake-supervised`。先查看“Agent 意图”，再查看“数据流”和产物证据。模型消息和声明的工具动作来自采集到的对话内容，不代表读取了模型内部推理。
+执行记录为 `run-snake-supervised`。先查看“Agent 意图”，再查看“数据流”和产物证据。模型消息和工具调用可与实际执行逐项对照。
 
 ## 2. Agent 团队：委托与同伴影响
 
-[多 Agent 示例](multiagent-provenance/README.zh-CN.md)增加委托、同伴消息和两次尝试。第一次提议被拒绝，后续安装路径产生真实的敏感文件读取和网络事件。“Agent 网络／编排”视图展示团队关系；命令匹配将执行证据关联到对应 Agent。共享进程内的归属是有依据的推断，不等于每个子 Agent 都有独立内核身份。
+[多 Agent 示例](multiagent-provenance/README.zh-CN.md)增加委托、同伴消息和两次尝试。第一次提议被拒绝，后续安装路径产生真实的敏感文件读取和网络事件。“Agent 网络／编排”视图展示团队关系；命令匹配将执行证据关联到对应 Agent。
 
 执行记录为 `run-double-attempt`。可运行 `agentprov demo multiagent-provenance`，或在[快速开始](../README.zh-CN.md#快速开始)的示例首页选择“Agent 团队”。
 
@@ -53,7 +53,7 @@ Jev 示例可通过 `--agentprov` 使用包内 CLI，无需自行构建。实际
 
 [Kubernetes 跨 Pod A2A 示例](k8s-cross-pod-a2a/README.zh-CN.md)将执行放到两个 Pod 中。一个节点传感器记录真实网络调用和工作 Pod 的系统调用，在同一张图中保留各 Pod 的 cgroup 与 Kubernetes 元数据。
 
-通过“运行环境”查看部署位置，通过“编排”追踪协作关系。应用委托 hook 日志复用多 Agent 采集记录，跨 Pod 网络及运行时事件则来自实际采集。它们是不同来源的证据，不表示整支团队都重新采集过。
+通过“运行环境”查看部署位置，通过“编排”追踪协作关系。应用委托 hook 日志复用多 Agent 采集记录，跨 Pod 网络及运行时事件则来自实际采集。
 
 ## 其他部署示例
 
@@ -61,14 +61,14 @@ Jev 示例可通过 `--agentprov` 使用包内 CLI，无需自行构建。实际
 
 ## 其他调查示例
 
-[Grok 外发数据调查](grok-codebase-exfil/README.zh-CN.md)按采集日期区分模型请求中的敏感内容、厂商遥测和第三方产品分析。说明文档另行记录历史源码上传报告、缺失的网络载荷证据及复现限制。不要将历史测试记录视为厂商当前行为的证明。
+[Grok 外发数据调查](grok-codebase-exfil/README.zh-CN.md)按采集日期区分模型请求中的敏感内容、厂商遥测和第三方产品分析。版本、采集过程和复现情况见指南。
 
 ## 可选外部评估器
 
 这些示例读取执行证据，通过现有信号接口返回分析。服务商接入和评审流程独立于核心产品；采集或查看执行记录无需安装它们。
 
-- [LLM 安全分析器](llm-judge/README.zh-CN.md)：外部评估器读取图证据，返回带引用的信号；评估器自己的请求也可供审计。在线模式需要兼容模型接口；无密钥测试只验证接入流程，不代表真实模型结论。
-- [Jev 接入示例](jev-judge/README.zh-CN.md)：对选定证据作出带类型约束的判断，提供独立页面比较规则、进行人工评审。评审结果可导出，再显式执行 `signal import`。在线评估需要密钥，并授权发送原始证据；已完成研究可离线重开。页面不属于 `agentprov dashboard`，也不是策略部署服务。
+- [LLM 安全分析器](llm-judge/README.zh-CN.md)：外部评估器读取图证据，返回带引用的信号；评估器自己的请求也可供审计。在线模式需要兼容模型接口；离线模式使用预设结果演示接入流程。
+- [Jev 接入示例](jev-judge/README.zh-CN.md)：对选定证据作出带类型约束的判断，提供独立页面比较规则、进行人工评审。评审结果可导出，再显式执行 `signal import`。在线评估需要密钥，并会向服务商发送选定证据；已完成研究可离线重开。
 
 ## 手动导入与比较
 
@@ -84,6 +84,6 @@ agentprov --data-dir /tmp/view graph verify --run <run>
 agentprov --data-dir /tmp/view dashboard serve --addr 127.0.0.1:7396
 ```
 
-可将多份证据包导入同一目录，在 Dashboard 中切换执行记录。校验检查已保存证据及其相对于指定公钥的签名，不能证明采集完整或所有派生因果关系成立。
+可将多份证据包导入同一目录，在 Dashboard 中切换执行记录。导入时校验签名，随后可检查证据图和内容完整性。
 
 采集脚本与前提条件见各示例目录。重新生成的原始 `*.forensics.json` 导出文件留在本地；大型采集记录作为发行附件发布，避免持续增加 Git 历史体积。

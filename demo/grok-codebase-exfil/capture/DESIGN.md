@@ -1,5 +1,9 @@
 # Grok codebase-exfil demo — design (base, no key)
 
+English | [中文](DESIGN.zh-CN.md)
+
+> Early capture design. See the [demo guide](../README.md) for results and reproduction details.
+
 ## The finding (third-party, to be re-captured by AgentProvenance)
 `@xai-official/grok@0.2.93` (official xAI CLI, Rust) is reported to package the whole
 repo + git history into `before_/after_codebase` git bundles and upload them to

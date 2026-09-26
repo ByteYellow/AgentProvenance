@@ -43,7 +43,7 @@ AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline --l
 AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
 ```
 
-该流程使用预设结论验证集成链路，不代表调用模型完成了评估。
+离线流程使用预设结论，演示从读取证据到导入评估结果的完整过程。
 
 在源码目录中，可进入 `demo/llm-judge/` 执行：
 

@@ -1356,10 +1356,10 @@ let COMP_OPEN=new Set();                          // control_ids with evidence e
 const ST_ORDER=['detected','enforced','not_triggered','no_rule'];
 let COMP_GRP={detected:true, enforced:true, not_triggered:false, no_rule:false};
 const ST_META={
-  enforced:{icon:'🟢',label:tr("Enforcing decision recorded"),hdr:tr("🟢 Enforcing decision recorded — check response evidence for the actual outcome")},
-  detected:{icon:'🟠',label:tr("Detected only"),hdr:tr("🟠 Detected only — no deny, quarantine or kill decision recorded")},
-  not_triggered:{icon:'⚪',label:tr("Not triggered"),hdr:tr("⚪ Not triggered — a detector watches this, nothing fired this run")},
-  no_rule:{icon:'⬚',label:tr("No rule"),hdr:tr("⬚ No rule — no detector maps to this control yet")}
+  enforced:{icon:'🟢',label:tr("Enforcement"),hdr:'🟢 '+tr("Enforcement")},
+  detected:{icon:'🟠',label:tr("Detected only"),hdr:'🟠 '+tr("Detected only")},
+  not_triggered:{icon:'⚪',label:tr("Not triggered"),hdr:'⚪ '+tr("Not triggered")},
+  no_rule:{icon:'⬚',label:tr("No rule"),hdr:'⬚ '+tr("No rule")}
 };
 async function loadFrameworks(){
   if(FW_READY)return;
@@ -1396,13 +1396,13 @@ function renderCompliance(rep){
   const pct=n=>(100*n/total).toFixed(1)+'%';
   sumEl.innerHTML=
     `<div class="covbar">`+
-      (s.enforced?`<i class="enforced" style="width:${pct(s.enforced)}" title="${esc(tr("with enforcing decisions"))}"></i>`:'')+
+      (s.enforced?`<i class="enforced" style="width:${pct(s.enforced)}" title="${esc(tr("Enforcement"))}"></i>`:'')+
       (s.detected?`<i class="detected" style="width:${pct(s.detected)}" title="${esc(tr("detected only"))}"></i>`:'')+
       (s.not_triggered?`<i class="not_triggered" style="width:${pct(s.not_triggered)}" title="${esc(tr("not triggered"))}"></i>`:'')+
       (s.no_rule?`<i class="no_rule" style="width:${pct(s.no_rule)}" title="${esc(tr("no rule"))}"></i>`:'')+
     `</div>`+
     `<div class="covstats">`+
-      `<span class="enforced"><b>${s.enforced||0}</b> ${esc(tr("with enforcing decisions"))}</span>`+
+      `<span class="enforced"><b>${s.enforced||0}</b> ${esc(tr("Enforcement"))}</span>`+
       `<span class="detected"><b>${s.detected||0}</b> ${esc(tr("detected only"))}</span>`+
       `<span class="not_triggered"><b>${s.not_triggered||0}</b> ${esc(tr("not triggered"))}</span>`+
       `<span class="no_rule"><b>${s.no_rule||0}</b> ${esc(tr("no rule"))}</span>`+
@@ -1416,7 +1416,7 @@ function renderCompliance(rep){
   });
   listEl.innerHTML=html || ("<div class=\"empty\">"+esc(tr("no controls"))+"</div>");
   wireCompliance(listEl);
-  disEl.textContent=[tr(rep.disclaimer||''),tr("Decision records do not by themselves prove that the operating system blocked an action.")].filter(Boolean).join(' ');
+  disEl.textContent=tr(rep.disclaimer||'');
 }
 function compGroup(key,label,arr,open){
   if(!arr.length) return '';
@@ -1462,9 +1462,7 @@ function ruleActionsHTML(rules){
   return `<div class="crules">`+rules.map(r=>{
     const mode=`<span class="rmode ${esc(r.mode||'enforce')}">${esc(tr(r.mode||'enforce'))}</span>`;
     if(!r.fired) return `<div class="crule"><span class="rmark idle">○</span> <span class="rid">${esc(r.id)}</span> ${mode} <span class="rmut">${esc(tr("not triggered"))}</span></div>`;
-    const outcome=r.enforced
-      ? `<span class="ract ok">${esc(tx("rule hits ×{count} (includes enforcing decisions)", {count: r.fired}))}</span>`
-      : `<span class="ract bad">${esc(tx("rule hits ×{count} (no enforcing decision)", {count: r.fired}))}</span>`;
+    const outcome=`<span class="ract ${r.enforced?'ok':'bad'}">${esc(tx("hits ×{count}", {count: r.fired}))}</span>`;
     const intended=r.intended_decision?' · '+esc(tx("intended: {decision}", {decision:tr(r.intended_decision)})):'';
     return `<div class="crule"><span class="rmark ${r.enforced?'block':'fire'}">${r.enforced?'✓':'⚠'}</span> <span class="rid">${esc(r.id)}</span> ${mode} → ${outcome}${intended}</div>`;
   }).join('')+`</div>`;
@@ -1480,7 +1478,7 @@ function complianceHitsHTML(rules){
   return withHits.map(r=>{
     const rows=r.hits.map(h=>{
       const cls=h.enforced?'ok':'bad';
-      const act=esc(tx("Recorded: {decision}", {decision: tr(h.decision)}));
+      const act=esc(tx("Decision: {decision}", {decision: tr(h.decision)}));
       const t=fmtHitTime(h.created_at);
       return `<button class="chit" data-ref="${esc(h.ref)}" data-kind="policy_decision" title="${esc(h.ref)}\n${esc(tr("click to focus in graph"))}">`+
         (t?`<span class="chit-t">${esc(t)}</span>`:'')+
@@ -1491,8 +1489,8 @@ function complianceHitsHTML(rules){
 }
 // Clarify legacy generated guidance only in the display; API evidence stays intact.
 function complianceGuidance(source){
-  if(source==='threat detected but not enforced (rule runs in detect mode)')return tr("Rule hits were recorded without a deny, quarantine or kill decision.");
-  if(source==='set the mapped rule(s) to enforce mode to block, not just record, this activity')return tr("Review the rule mode, intended decision and execution path before enabling enforcement.");
+  if(source==='threat detected but not enforced (rule runs in detect mode)')return tr("No enforcing decision.");
+  if(source==='set the mapped rule(s) to enforce mode to block, not just record, this activity')return tr("Review rule settings and response records.");
   return tr(source);
 }
 function renderComplianceCard(it){

@@ -144,3 +144,5 @@ Route ① was reproduced then. Recheck both paths before making current claims.
 - The `trace_upload` force is logged with the server's original values, every time.
 - Pin: grok 0.2.93 (`f00f96316d`), capture timestamps; third-party finding re-captured.
 - Both bundles DSSE-signed; `graph verify` = `status=ok errors=0`.
+
+Historical capture design and adapter plans are in [DESIGN](capture/DESIGN.md) and [ADAPTER](capture/ADAPTER.md). Read them alongside the actual evidence and limits above.

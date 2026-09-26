@@ -155,3 +155,5 @@ hash-addressed evidence node), each agent's `agent_tool_call`s including recon's
 Build/consumer side: schema (`agents` table + `tool_calls.agent_id`), the
 `agentprov hooks bridge` command, the `orchestration` lens, and the
 syscall-attribution join all ship in the main tree with unit tests. The capture harness and hook logs are available in this directory’s `capture/` folder.
+
+See [capture assets](capture/README.md) for script assumptions and file descriptions. The [Chinese SETUP reading guide](capture/SETUP.zh-CN.md) is separate from the original fixture.

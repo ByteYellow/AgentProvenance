@@ -1,12 +1,16 @@
 # Phase-2: Grok endpoint adapter (draft, informed by the real discovery run)
 
+English | [中文](ADAPTER.zh-CN.md)
+
+> Early adapter design. The implementation is `internal/provenance/endpoint.go` (`IngestEndpointDump`), exposed as `graph ingest-endpoint`. See the [demo guide](../README.md) for capture results.
+
 ## Job
 Take the endpoint-captured traffic (fake-xai dump dir, or a mitmproxy flow) + the local
 session store, and emit into the SAME graph model the other axes use — so no lens/intent
 change is needed. This is the per-agent glue; the capture mechanism ("ingest model traffic
 from a controlled endpoint") is general (reusable for any rustls/Rust agent).
 
-## Classify captured requests by path (all confirmed from the real run)
+## Planned request classification
 | Path | Meaning | Emit |
 |---|---|---|
 | `/v1/chat/completions` | the turn — grok's system prompt + `<user_query>`; response streamed SSE | `llm_call` (request+response objects). Response = text, **no tool_calls** → the "declared" intent is *nothing but text* |

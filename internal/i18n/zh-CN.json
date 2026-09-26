@@ -2211,15 +2211,10 @@
   "failed to set memlock rlimit: %w": "设置锁定内存限制失败：%w",
   "operation not permitted": "权限不足（operation not permitted）",
   "permission denied": "访问被拒绝（permission denied）",
-  "Enforcing decision recorded": "已记录阻断决策",
-  "🟢 Enforcing decision recorded — check response evidence for the actual outcome": "🟢 已记录阻断决策：实际结果需结合响应证据核对",
-  "🟠 Detected only — no deny, quarantine or kill decision recorded": "🟠 仅检测：未记录拒绝、隔离或终止决策",
-  "with enforcing decisions": "含阻断决策",
-  "Decision records do not by themselves prove that the operating system blocked an action.": "仅凭决策记录，不能证明操作系统实际阻止了行为。",
-  "rule hits ×{count} (includes enforcing decisions)": "规则命中 ×{count}（含阻断决策）",
-  "rule hits ×{count} (no enforcing decision)": "规则命中 ×{count}（未记录阻断决策）",
-  "Recorded: {decision}": "记录的决策：{decision}",
-  "Rule hits were recorded without a deny, quarantine or kill decision.": "已记录规则命中，但没有拒绝、隔离或终止决策。",
-  "Review the rule mode, intended decision and execution path before enabling enforcement.": "启用处置前，请核对规则模式、预期决策和实际执行路径。",
-  "intended: {decision}": "预期决策：{decision}"
+  "intended: {decision}": "预期决策：{decision}",
+  "Enforcement": "阻断",
+  "hits ×{count}": "命中 ×{count}",
+  "Decision: {decision}": "决策：{decision}",
+  "No enforcing decision.": "暂无阻断决策。",
+  "Review rule settings and response records.": "查看规则配置和响应记录。"
 }

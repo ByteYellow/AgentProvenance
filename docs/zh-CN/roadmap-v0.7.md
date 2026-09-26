@@ -2,7 +2,7 @@
 
 [English](../roadmap-v0.7.md) | 中文
 
-> 本文保留 v0.7 的设计与验收记录。后续实现见 [v0.8.0 发行说明](releases/v0.8.0.md)和 [Linux/KVM/K3s 部署指南](amd64-kvm-k3s.md)。KVM 客体内采集已使用 `local-record`；带符号的 amd64 Go ABIInternal 1.23–1.26 程序已支持 TLS 响应读取。下文的能力矩阵和后续计划描述当时的状态，不是当前待办清单。
+> 本文记录 v0.7 的设计与验收。后续实现见 [v0.8.0 发行说明](releases/v0.8.0.md)和 [Linux/KVM/K3s 部署指南](amd64-kvm-k3s.md)。
 
 ## 目标
 

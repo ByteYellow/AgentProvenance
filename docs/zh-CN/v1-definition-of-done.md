@@ -2,7 +2,7 @@
 
 [English](../v1-definition-of-done.md) | 中文
 
-> 本文保留历史发布范围和验收结论。范围于 2026-06-27 确定，状态表于 2026-08-05 结合仓库检查和已完成验收更新。它将当时 `north-star-three-pillars.md` 的设想转为可检查清单，不代表当前正式版的发布验收。当前交付边界见[项目收尾标准](project-closeout.md)，中文适配进度见[中文适配与正式版验收](localization.md)。
+> 本文根据 `north-star-three-pillars.md` 整理 v1 的发布范围，确定于 2026-06-27，验收状态更新于 2026-08-05。当前进度见[项目收尾标准](project-closeout.md)和[中文适配与正式版验收](localization.md)。
 >
 > 状态分为已完成（`DONE`）、部分完成（`PARTIAL`）和延后（`DEFERRED`）。延后项目明确移出 v1，列入 v2。
 
