@@ -1,5 +1,7 @@
 # Supply-Chain Demo — Agent-in-Sandbox Exfiltration
 
+English · [简体中文](zh-CN/supply-chain-demo.md)
+
 This document describes the signed supply-chain capture shipped with
 AgentProvenance. It shows the core product path:
 **agent context → system action → verifiable, signed causal graph**, and how that
@@ -98,7 +100,8 @@ Recommended investigation order:
 
 4. **Data-flow / taint lens.** Show the derived `possible_sensitive_data_flow`
    edges — a secret read *before* an egress in the *same process* — with
-   confidence. These are inferred, drawn dashed, and never temporally impossible.
+   confidence. These are inferred and drawn dashed. Check the recorded event order; the
+   relationship does not prove which bytes were transferred.
 
 5. **Time-scrubber.** Replay the run over its real event clock and verify ordering:
    the secret read precedes the egress attempt.
@@ -122,14 +125,18 @@ agentprov --data-dir /tmp/snake-demo compliance map \
 
 Or the dashboard's **Compliance** card. The verdict per control is **four honest
 states**, driven by whether a real detection rule mapped to that control actually
-fired this run, and whether it enforced or only observed:
+fired this run, and whether it recorded an enforcing or detection-only decision:
 
-- 🟢 **enforced** — a mapped rule fired **and blocked** (deny / quarantine / kill)
-- 🟠 **detected** — a mapped rule fired but is **detect-only** (observed, not blocked)
+- 🟢 **enforced** — a mapped rule fired and recorded deny / quarantine / kill
+- 🟠 **detected** — a mapped rule fired without one of those enforcing decisions
 - ⚪ **not_triggered** — a detector maps here but nothing fired this run
 - ⬚ **no_rule** — **no detector maps to this control** (an honest coverage gap)
 
 Important semantics:
+
+- `enforced` is classified from the stored decision; it does not alone prove
+  that an operating-system action was blocked. Check the execution path and
+  response evidence for actual enforcement.
 
 - **`no_rule` is deliberately not a pass.** ASI01 (goal hijack), ASI06 (memory
   poisoning), ASI07 (inter-agent) show `no_rule` because the system emits no event
@@ -165,8 +172,9 @@ agentprov forensics verify-attestation \
   capture-time anchoring (KMS / TPM / transparency log) is a deferred v2 item.
 - The capture came from a single-arch (ARM64) lab VM; production LLM traffic
   (x86, HTTP/2) is not what this recording exercises.
-- The TLS-boundary intent capture (SSL uprobe) is a demonstrated PoC, not a
-  hardened multi-framework interceptor — deliberately not chased.
+- This historical recording does not validate every framework or complete TLS
+  capture. Current capabilities and gaps are documented in the
+  [sensor overview](ebpf-sensor-plan.md) and [amd64 reports](benchmarks/amd64-kvm-k3s/README.md).
 - The fake secrets are planted; nothing here exfiltrates real data.
 - `self_launched` means AgentProvenance directly launched the process scope.
   `kernel_correlated` means a runtime event was joined back to that scope by

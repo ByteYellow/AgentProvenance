@@ -161,7 +161,7 @@ BPF/perf 权限。macOS 可以记录进程、文件变化，并接入应用 Hook
 默认不会自动签名。**如需比较工作区在执行前后的文件变化，添加 `--file-diff`。
 
 节点级采集请参阅 [KVM 虚拟机与 K3s 部署指南](docs/zh-CN/amd64-kvm-k3s.md)和
-[Kubernetes 事件归属指南](docs/design-k8s-auto-attribution.md)。
+[Kubernetes 事件归属指南](docs/zh-CN/design-k8s-auto-attribution.md)。
 传感器运行在 KVM 虚拟机内部或 Kubernetes 节点上，两种环境共用同一套证据模型。
 
 ### 记录普通命令
@@ -604,7 +604,7 @@ POST /v1/signal/import
 ```
 
 每个检查项映射到具体检测规则及其在本次执行中的命中记录，报告
-`enforced`（已阻止）、`detected`（已检测但未阻止）、`not_triggered`（未触发）或
+`enforced`（已记录阻止类决策）、`detected`（已检测）、`not_triggered`（未触发）或
 `no_rule`（尚无规则），同时给出 `evidence_refs` 和处理建议。尚无检测器表示覆盖缺口；
 规则未触发不等于普遍满足要求。自定义 YAML 目录可增加框架，`--rules` 可加载实际检测规则。
 
@@ -775,7 +775,7 @@ Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图�
   <img src="docs/img/demo-snake-taint-replay.gif" alt="贪吃蛇示例回放：恶意依赖读取模拟凭证，并尝试连接云元数据地址。" width="100%">
 </p>
 
-界面操作见[供应链示例指南](docs/supply-chain-demo.md)，
+界面操作见[供应链示例指南](docs/zh-CN/supply-chain-demo.md)，
 签名包和采集脚本见 [`demo/snake-supply-chain/`](demo/snake-supply-chain)。
 
 > **凭证访问的判定。** 捕获到的凭证访问会记录为 `secret_path` 事件，

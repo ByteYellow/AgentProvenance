@@ -1,5 +1,7 @@
 # Design: zero-touch K8s pod attribution (auto pod-scope binding)
 
+English · [简体中文](zh-CN/design-k8s-auto-attribution.md)
+
 Status: one-shot capture, the real sensor DaemonSet, and a lightweight
 `client-go` Pod informer controller are implemented. The controller's
 create/restart/delete binding lifecycle is validated on single-node K3s. A
@@ -35,8 +37,9 @@ state are intentionally outside this local-first controller.
 
 A single node-side command that collapses the manual flow for one running pod:
 
-```
+```sh
 agentprov sandbox capture --pod <name> --namespace <ns> \
+  --sensor /path/to/agentprov-sensor \
   [--run <id>] [--seconds 45] [--kubectl "k3s kubectl"]
 ```
 
@@ -44,8 +47,9 @@ It does, in-process, exactly what the demo script does by hand:
 1. Resolve the pod's `pid` (scan `/proc/*/cgroup` for the pod's cgroup, or take
    `--pid`), its cgroup id (`stat -c %i`), and pull pod metadata from the K8s API
    (namespace/uid/node/container/image/service-account/labels/pod-ip) via kubectl.
-2. Run the sensor for `--seconds` (or attach to an already-running DaemonSet
-   sensor's spool), filtered to the pod's cgroup.
+2. Start a separate sensor for `--seconds`, write node events to a file, then
+   filter that file to the pod's cgroup. This command does not attach to an
+   already-running DaemonSet sensor's spool.
 3. `bind-cgroup` (all metadata auto-filled) + ingest the pod-scoped events into
    the run.
 4. Print the one-line attribution result (run id, cgroup, confidence).
@@ -66,8 +70,10 @@ A control loop runs as a small node-local DaemonSet companion to the sensor:
 3. The DaemonSet sensor already streams events tagged with `cgroup_id`; the
    binding makes them attribute to the pod's run with no per-pod action.
 
-Result: `kubectl apply -f agentprov-sensor-daemonset.yaml` and every pod on the
-node is attributed automatically. A pod annotation (e.g.
+Automatic attribution requires the sensor, controller, and an ingest path
+using the same evidence store. Applying only the sensor DaemonSet does not
+start all three. See the [node deployment runbook](amd64-kvm-k3s.md).
+A pod annotation (e.g.
 `agentprov.io/run: <id>`) lets a workload opt its telemetry into a named run;
 absent that, each pod gets an auto-run keyed by its UID.
 
@@ -103,3 +109,6 @@ is covered.
   restart under the same Pod UID, and deletes the Pod. The reference K3s run
   created two bindings, closed both, observed one restart, retained zero active
   bindings, and reported zero retries/failures/resolution failures.
+
+Late Pod binding retries belong to the native ingest path; its bounds and
+recovery behavior are described in [native-capture-spool.md](native-capture-spool.md).

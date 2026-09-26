@@ -1,5 +1,7 @@
 # eBPF Sensor Plan (Phase 4: self-owned system telemetry)
 
+English · [简体中文](zh-CN/ebpf-sensor-plan.md)
+
 > Status: **IMPLEMENTED** and expanded well past the original 3-probe scope
 > (`internal/sensor`, `cmd/agentprov-sensor`; Linux amd64/arm64). The **As built**
 > section describes current coverage. The original design below it is historical;
@@ -14,9 +16,11 @@ Probes (all → the normalized schema, ingested as `source=agentprov_ebpf`):
 - Privilege/tamper: `setuid`/`setgid`, `ptrace`, `rename`/`renameat`/`renameat2`,
   `unlinkat`; amd64 also handles legacy `open`/`unlink`.
 - TLS plaintext: `SSL_write`/`SSL_read` plus modern `SSL_write_ex`/`SSL_read_ex`
-  uprobes → `tls_write`/`tls_read` chunks with privacy-safe hash + preview +
-  allow-listed HTTP metadata; paired into a DAG `llm_call` edge and an
-  `llm_intent_caused` edge.
+  uprobes → `tls_write`/`tls_read` chunks, normalized into captured-byte hash,
+  short preview and allow-listed HTTP metadata. Previews can still contain
+  sensitive text. Ingest derives `llm_call` and `llm_intent_caused` relationships;
+  these are heuristics, not direct kernel proof of causation. See the
+  [telemetry schema](telemetry-schema.md).
 - Go TLS: unstripped `crypto/tls` write capture on amd64/arm64; amd64 Go
   ABIInternal 1.23-1.26 read capture at decoded return sites, paired by
   goroutine/frame. HTTP/1.1 and HTTP/2/HPACK reassembly are implemented.

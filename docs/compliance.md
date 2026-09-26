@@ -27,8 +27,8 @@ Each control reports a status based on the detection rules mapped to it:
 
 | Status | Meaning |
 |---|---|
-| `enforced` | A mapped rule fired and blocked an action with deny, quarantine, or kill. |
-| `detected` | A mapped rule fired in detect mode; the action was observed, not blocked. |
+| `enforced` | A mapped rule fired and recorded a deny, quarantine, or kill decision. |
+| `detected` | A mapped rule fired without one of those enforcing decisions. |
 | `not_triggered` | Mapped rules exist, but none fired in this run. |
 | `no_rule` | No detection rule maps to this control. This is a coverage gap. |
 
@@ -39,7 +39,7 @@ particular threat was detected or prevented.
 The `agentprovenance.compliance_rule_mapping/v1` report contains per-control
 `rules`, their `hits`, concrete `evidence_refs`, a `gap`, a
 `recommended_next_step`, and a `reason`. Hit records include the decision, time,
-source event, and whether that hit enforced a block. JSON identifies each
+source event, and whether that hit recorded an enforcing decision. JSON identifies each
 control with `control_id`; this report does not add an `item_id` alias.
 
 `compliance gaps` lists `detected` and `no_rule` controls requiring attention.
@@ -58,3 +58,7 @@ purposes. Pass `--rules` with the deployment's detection-rule YAML when mapping
 custom detectors to controls. Adding a framework item alone does not make a
 sensor emit the events needed to detect that threat. See
 [the sample ruleset](../examples/compliance/custom-ruleset.yaml).
+
+`enforced` is classified from stored policy decisions. It does not by itself
+prove operating-system enforcement; inspect the execution path and response
+evidence to determine what actually happened.
