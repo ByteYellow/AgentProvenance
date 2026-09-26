@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 )
@@ -52,7 +53,7 @@ func attachTLSTarget(target tlsTarget, objs *sensorbpfObjects, skip map[string]b
 		if err != nil {
 			openErr = err
 		} else if target.Key != target.Kind+":"+identity {
-			openErr = fmt.Errorf("TLS target changed since discovery; retrying on the next scan")
+			openErr = i18n.Errorf("TLS target changed since discovery; retrying on the next scan")
 		}
 	}
 	var ex *link.Executable

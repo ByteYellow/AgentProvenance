@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 const maxProcessMapsBytes = 1 << 20
@@ -193,7 +195,7 @@ func tlsFileIdentity(path string) (string, error) {
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || !info.Mode().IsRegular() {
-		return "", fmt.Errorf("not a regular Linux file")
+		return "", i18n.Errorf("not a regular Linux file")
 	}
 	return fmt.Sprintf("%x:%x:%d:%d", st.Dev, st.Ino, info.Size(), info.ModTime().UnixNano()), nil
 }

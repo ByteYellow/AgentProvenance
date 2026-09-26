@@ -129,3 +129,24 @@ identical distinct events, privacy before persistence, and collector exclusion.
 `internal/correlation/binding_test.go` covers delayed exits after PID reuse.
 Additional regressions cover same-batch exits, normalized row growth, lost
 capture files, pre-capture initialization recovery and cleanup errors at restart.
+
+## Interface language
+
+The CLI and standalone sensor default to English. Select Chinese explicitly:
+
+```sh
+agentprov --lang zh-CN --data-dir /var/lib/agentprov sensor stream
+agentprov --lang zh-CN --data-dir /var/lib/agentprov sensor status
+agentprov-sensor --lang zh-CN --help
+```
+
+Chinese status output includes queue counters, historical-snapshot status, probe
+results and TLS discovery limits. Stored capability reasons remain in their
+original form; known AgentProvenance diagnostics are translated when displayed.
+Paths, probe names and unknown external-library diagnostics retain their text.
+
+The standalone sensor and supervisor keep their readiness markers and prefixed
+capability JSON unchanged. Chinese human diagnostics are additional stderr
+output. Event JSONL on stdout, `sensor status --json`, callback reports and saved
+capability files are independent of interface language. No new capture coverage
+or recovery guarantee is implied by translated diagnostics.

@@ -34,7 +34,7 @@ func ErrorText(lang Locale, err error) string {
 		}
 		return fmt.Errorf(T(lang, message.source), args...).Error()
 	}
-	return err.Error()
+	return RuntimeDiagnostics.Text(lang, err.Error())
 }
 
 type displayError struct{ text string }

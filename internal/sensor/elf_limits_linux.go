@@ -5,8 +5,9 @@ package sensor
 import (
 	"debug/elf"
 	"encoding/binary"
-	"fmt"
 	"os"
+
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 // Validate metadata before debug/elf opens it: elf.Open itself reads shstrtab,
@@ -27,7 +28,7 @@ func validateELFMetadata(path string) error {
 		return err
 	}
 	if string(header[:4]) != "\x7fELF" {
-		return fmt.Errorf("not an ELF file")
+		return i18n.Errorf("not an ELF file")
 	}
 	var order binary.ByteOrder
 	switch elf.Data(header[5]) {
@@ -36,7 +37,7 @@ func validateELFMetadata(path string) error {
 	case elf.ELFDATA2MSB:
 		order = binary.BigEndian
 	default:
-		return fmt.Errorf("unsupported ELF byte order")
+		return i18n.Errorf("unsupported ELF byte order")
 	}
 	var offset uint64
 	var entrySize, count uint16
@@ -47,22 +48,22 @@ func validateELFMetadata(path string) error {
 		entrySize = order.Uint16(header[58:60])
 		count = order.Uint16(header[60:62])
 		if entrySize != 64 {
-			return fmt.Errorf("unsupported ELF64 section layout")
+			return i18n.Errorf("unsupported ELF64 section layout")
 		}
 	case elf.ELFCLASS32:
 		offset = uint64(order.Uint32(header[32:36]))
 		entrySize = order.Uint16(header[46:48])
 		count = order.Uint16(header[48:50])
 		if entrySize != 40 {
-			return fmt.Errorf("unsupported ELF32 section layout")
+			return i18n.Errorf("unsupported ELF32 section layout")
 		}
 	default:
-		return fmt.Errorf("unsupported ELF class")
+		return i18n.Errorf("unsupported ELF class")
 	}
 	// Extended numbering and section-less ELF cannot supply the symbols needed
 	// for these uprobes. Do not allocate based on attacker-controlled counts.
 	if count == 0 || offset > uint64(info.Size()) || uint64(count)*uint64(entrySize) > uint64(info.Size())-offset {
-		return fmt.Errorf("ELF section table missing or outside file")
+		return i18n.Errorf("ELF section table missing or outside file")
 	}
 	var section [64]byte
 	var total uint64
@@ -83,14 +84,14 @@ func validateELFMetadata(path string) error {
 			flags = uint64(order.Uint32(section[8:12]))
 		}
 		if flags&uint64(elf.SHF_COMPRESSED) != 0 {
-			return fmt.Errorf("compressed ELF symbol metadata unsupported")
+			return i18n.Errorf("compressed ELF symbol metadata unsupported")
 		}
 		if size > maxELFSymbolBytes {
-			return fmt.Errorf("ELF symbol/string section exceeds 16 MiB")
+			return i18n.Errorf("ELF symbol/string section exceeds 16 MiB")
 		}
 		total += size
 		if total > 2*maxELFSymbolBytes {
-			return fmt.Errorf("ELF symbol/string metadata exceeds 32 MiB")
+			return i18n.Errorf("ELF symbol/string metadata exceeds 32 MiB")
 		}
 	}
 	return nil

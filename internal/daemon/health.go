@@ -2,10 +2,10 @@ package daemon
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
@@ -41,7 +41,7 @@ func (s Server) health(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, body)
 	}
 	if s.DB == nil {
-		fail("storage", fmt.Errorf("database is not configured"))
+		fail("storage", i18n.Errorf("database is not configured"))
 		return
 	}
 	var schema int
@@ -60,7 +60,7 @@ func (s Server) health(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if schema != store.SchemaVersion {
-		fail("schema", fmt.Errorf("database schema %d, binary requires %d", schema, store.SchemaVersion))
+		fail("schema", i18n.Errorf("database schema %d, binary requires %d", schema, store.SchemaVersion))
 		return
 	}
 	capture, err := telemetry.ReadNativeStreamStatusContext(ctx, s.DB)

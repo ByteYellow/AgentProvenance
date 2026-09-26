@@ -98,3 +98,17 @@ agentprov --data-dir /var/lib/agentprov sensor status --json
 `internal/correlation/binding_test.go` 覆盖 PID 复用后的迟到退出事件。
 
 补充回归还覆盖同批退出事件、规范化后单行大小增长、采集文件丢失、接收事件前的初始化恢复，以及重启时的清理错误。测试覆盖不等于长期运行验收；长期负载和不同存储设备的验证应单独记录。
+
+## 界面语言
+
+CLI 和独立传感器默认使用英文。显式选择中文：
+
+```sh
+agentprov --lang zh-CN --data-dir /var/lib/agentprov sensor stream
+agentprov --lang zh-CN --data-dir /var/lib/agentprov sensor status
+agentprov-sensor --lang zh-CN --help
+```
+
+中文状态输出包含队列计数、历史快照提示、各探针挂载结果及 TLS 发现限制。保存的能力报告仍保留原始错误；展示时翻译 AgentProvenance 已知的诊断模板。路径、探针名称和未知的外部库诊断保留原文。
+
+独立传感器和监督采集器的就绪标记、带前缀的能力 JSON 不变，中文可读说明额外写入标准错误。标准输出中的事件 JSONL、`sensor status --json`、回调报告及能力文件不受界面语言影响。提示文字完成翻译，不代表增加了采集覆盖或恢复保证。

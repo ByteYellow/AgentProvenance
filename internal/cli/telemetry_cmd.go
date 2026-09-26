@@ -323,7 +323,7 @@ func telemetryIngestFalcoCmd(dataDir *string) *cobra.Command {
 				}
 				defer input.Close()
 			}
-			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), commandLanguage(cmd))
 			result, err := telemetry.IngestFalco(db, opts, input)
 			if err != nil {
 				return err
@@ -381,7 +381,7 @@ func telemetryBindCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), commandLanguage(cmd))
 			id, err := correlation.RecordBinding(db, binding)
 			if err != nil {
 				return err
@@ -528,7 +528,7 @@ func telemetryIngestJSONLCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), commandLanguage(cmd))
 			result, err := telemetry.IngestJSONL(db, opts)
 			if err != nil {
 				return err

@@ -18,7 +18,7 @@ func TestTerminalSourcesHaveCopyAndMatchingArguments(t *testing.T) {
 	directive := regexp.MustCompile(`%(?:\[[0-9]+\])?[+#0 .\-0-9]*[a-zA-Z%]`)
 	letters := regexp.MustCompile(`[a-zA-Z]`)
 	fset := token.NewFileSet()
-	for _, dir := range []string{"../cli", "../launch", "../provenance", "../effects"} {
+	for _, dir := range []string{"../cli", "../launch", "../provenance", "../effects", "../sensor", "../daemon", "../store", "../telemetry", "../../cmd/agentprov-sensor"} {
 		files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil {
 			t.Fatal(err)
@@ -72,6 +72,21 @@ func TestTerminalSourcesHaveCopyAndMatchingArguments(t *testing.T) {
 				if !HasChinese(source) {
 					t.Errorf("%s missing Chinese: %q", fset.Position(literal.Pos()), source)
 					return true
+				}
+				// Native capability/spool diagnostics lose their typed wrappers
+				// when saved. New formats need both live and historical display.
+				if fn, ok := call.Fun.(*ast.SelectorExpr); ok && fn.Sel.Name == "Errorf" &&
+					(dir == "../sensor" || dir == "../store" || dir == "../daemon" || (dir == "../telemetry" && strings.HasPrefix(filepath.Base(path), "native"))) {
+					found := false
+					for _, format := range RuntimeDiagnostics.formats {
+						if format.source == source {
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Errorf("%s missing persisted diagnostic format: %q", fset.Position(literal.Pos()), source)
+					}
 				}
 				if !reflect.DeepEqual(directive.FindAllString(source, -1), directive.FindAllString(T(Chinese, source), -1)) {
 					t.Errorf("%s changed format arguments: %q", fset.Position(literal.Pos()), source)

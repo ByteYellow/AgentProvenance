@@ -41,7 +41,7 @@ func recordCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), commandLanguage(cmd))
 			result, err := (record.Service{DB: db, Paths: paths}).Run(record.Request{
 				RunID:            runID,
 				Name:             name,
@@ -98,7 +98,7 @@ func recordBatchCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), commandLanguage(cmd))
 			service := record.Service{DB: db, Paths: paths}
 			startedAt := time.Now().UTC().Format(time.RFC3339Nano)
 			items := make([]recordBatchItem, 0, len(jobs))

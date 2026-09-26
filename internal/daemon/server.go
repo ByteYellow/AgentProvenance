@@ -20,6 +20,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/cost"
 	"github.com/byteyellow/agentprovenance/internal/evidence"
 	"github.com/byteyellow/agentprovenance/internal/forensics"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/record"
@@ -400,7 +401,7 @@ func (s Server) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		req.Path = "/workspace"
 	}
 	if req.Type != "directory" {
-		writeResult(w, nil, fmt.Errorf("only directory snapshots are supported"))
+		writeResult(w, nil, i18n.Errorf("only directory snapshots are supported"))
 		return
 	}
 	s.lockWrites()
@@ -697,7 +698,7 @@ func (s Server) forensicsExportBatch(w http.ResponseWriter, r *http.Request) {
 func (s Server) recordRun(w http.ResponseWriter, r *http.Request) {
 	var req record.Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeResult(w, nil, fmt.Errorf("invalid record request: %w", err))
+		writeResult(w, nil, i18n.Errorf("invalid record request: %w", err))
 		return
 	}
 	if len(req.Command) == 0 {
@@ -720,7 +721,7 @@ func (s Server) listSignals(w http.ResponseWriter, r *http.Request) {
 	}
 	if dim := r.URL.Query().Get("dimension"); dim != "" {
 		if !signalsmodel.Dimension(dim).Valid() {
-			writeResult(w, nil, fmt.Errorf("invalid dimension %q (want behavior|cost|quality|security)", dim))
+			writeResult(w, nil, i18n.Errorf("invalid dimension %q (want behavior|cost|quality|security)", dim))
 			return
 		}
 		rows, err := signalsmodel.Query(s.DB, signalsmodel.Filter{RunID: runID, Dimension: signalsmodel.Dimension(dim)})
@@ -912,7 +913,7 @@ func intQuery(r *http.Request, key string, fallback int) (int, error) {
 	}
 	value, err := strconv.Atoi(raw)
 	if err != nil {
-		return 0, fmt.Errorf("invalid %s query parameter", key)
+		return 0, i18n.Errorf("invalid %s query parameter", key)
 	}
 	return value, nil
 }

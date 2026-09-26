@@ -1,6 +1,7 @@
 package launch
 
 import (
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -74,7 +75,7 @@ func startSensor(selfExe, dataDir string, stderr io.Writer, tlsEnv []string) (*s
 		if reason == "" {
 			return nil, "none", messagef("no kernel telemetry: sensor exited before attaching (needs root or CAP_BPF+CAP_PERFMON)")
 		}
-		return nil, "none", messagef("no kernel telemetry: %s", reason)
+		return nil, "none", messagef("no kernel telemetry: %s", errors.New(reason))
 	case <-time.After(3 * time.Second):
 		// Still alive but no banner: probes likely attached; proceed. A truly
 		// stuck sensor is stopped at seal time regardless.

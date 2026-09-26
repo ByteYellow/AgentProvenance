@@ -2,12 +2,12 @@ package store
 
 import (
 	"database/sql"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	_ "modernc.org/sqlite"
 )
 
@@ -107,7 +107,7 @@ func EnsureSchema(db *sql.DB) error {
 			return err
 		}
 		if version > SchemaVersion {
-			return fmt.Errorf("database schema %d is newer than supported %d; downgrade is not supported", version, SchemaVersion)
+			return i18n.Errorf("database schema %d is newer than supported %d; downgrade is not supported", version, SchemaVersion)
 		}
 	}
 
@@ -747,7 +747,7 @@ func EnsureSchema(db *sql.DB) error {
 	}
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
-			return fmt.Errorf("ensure schema: %w", err)
+			return i18n.Errorf("ensure schema: %w", err)
 		}
 	}
 	alterStmts := []string{
@@ -838,16 +838,16 @@ func EnsureSchema(db *sql.DB) error {
 	}
 	for _, stmt := range alterStmts {
 		if _, err := db.Exec(stmt); err != nil && !isDuplicateColumn(err) {
-			return fmt.Errorf("migrate schema: %w", err)
+			return i18n.Errorf("migrate schema: %w", err)
 		}
 	}
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_versions (version, description, applied_at)
 		VALUES (1, 'initial local control plane schema', datetime('now'))`); err != nil {
-		return fmt.Errorf("record schema version: %w", err)
+		return i18n.Errorf("record schema version: %w", err)
 	}
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_versions (version, description, applied_at)
 		VALUES (?, 'agent provenance, telemetry correlation, security evidence, and resource window schema', datetime('now'))`, SchemaVersion); err != nil {
-		return fmt.Errorf("record schema version: %w", err)
+		return i18n.Errorf("record schema version: %w", err)
 	}
 	return nil
 }

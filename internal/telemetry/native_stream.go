@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/ids"
 	"github.com/byteyellow/agentprovenance/internal/redact"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -137,7 +138,7 @@ type NativeStream struct {
 func NewNativeStream(db *sql.DB, paths store.Paths, options NativeStreamOptions) (*NativeStream, error) {
 	opts := options.defaults()
 	if opts.BatchEvents < 1 || opts.BatchEvents > 4096 || opts.BatchBytes < 1024 || opts.BatchBytes > 16<<20 || opts.PendingTTL < time.Millisecond || opts.FlushInterval < time.Millisecond || opts.MaxQueuedBytes < opts.BatchBytes || opts.MaxQueuedBatches < 1 {
-		return nil, fmt.Errorf("invalid native spool limits: batch events 1..4096, batch bytes 1 KiB..16 MiB, positive intervals, queue >= batch")
+		return nil, i18n.Errorf("invalid native spool limits: batch events 1..4096, batch bytes 1 KiB..16 MiB, positive intervals, queue >= batch")
 	}
 	if err := os.MkdirAll(paths.Spool, 0o700); err != nil {
 		return nil, err
@@ -230,7 +231,7 @@ func (n *NativeStream) Write(p []byte) (int, error) {
 			if err := incrementNative(n.service.DB, "dropped_oversize", 1); err != nil {
 				return 0, err
 			}
-			return 0, fmt.Errorf("native sensor JSON line exceeds 1 MiB")
+			return 0, i18n.Errorf("native sensor JSON line exceeds 1 MiB")
 		}
 		if b != '\n' {
 			n.partial = append(n.partial, b)
@@ -355,7 +356,7 @@ func (n *NativeStream) sealFile(id string) error {
 	f, err := os.OpenFile(path, os.O_RDWR, 0)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("native capture file %s is missing; captured evidence cannot be recovered", id)
+			return i18n.Errorf("native capture file %s is missing; captured evidence cannot be recovered", id)
 		}
 		return err
 	}
@@ -365,7 +366,7 @@ func (n *NativeStream) sealFile(id string) error {
 		return err
 	}
 	if info.Size() > 16<<20 {
-		return fmt.Errorf("native capture file exceeds 16 MiB limit")
+		return i18n.Errorf("native capture file exceeds 16 MiB limit")
 	}
 	reader := bufio.NewReaderSize(f, 64*1024)
 	hash := sha256.New()
@@ -374,7 +375,7 @@ func (n *NativeStream) sealFile(id string) error {
 	for {
 		line, readErr := reader.ReadBytes('\n')
 		if len(line) > 1<<20 {
-			return fmt.Errorf("native spool row exceeds 1 MiB")
+			return i18n.Errorf("native spool row exceeds 1 MiB")
 		}
 		if readErr != nil {
 			if readErr != io.EOF {
@@ -440,7 +441,7 @@ func (n *NativeStream) recover() error {
 				}
 				if err == nil {
 					if info.Size() != 0 {
-						return fmt.Errorf("uninitialized native file unexpectedly contains data: %s", v.id)
+						return i18n.Errorf("uninitialized native file unexpectedly contains data: %s", v.id)
 					}
 					if err := os.Remove(v.path); err != nil {
 						return err
@@ -642,7 +643,7 @@ func (n *NativeStream) processBatch(id string) error {
 		return err
 	}
 	if eventCount > 4096 {
-		return fmt.Errorf("native spool batch exceeds event limit")
+		return i18n.Errorf("native spool batch exceeds event limit")
 	}
 	f, err := os.Open(path)
 	if err != nil {
@@ -654,7 +655,7 @@ func (n *NativeStream) processBatch(id string) error {
 		return err
 	}
 	if hex.EncodeToString(hash.Sum(nil)) != expectedHash {
-		return fmt.Errorf("native spool content hash mismatch: %s", id)
+		return i18n.Errorf("native spool content hash mismatch: %s", id)
 	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return err
@@ -740,7 +741,7 @@ func (n *NativeStream) processBatch(id string) error {
 		return err
 	}
 	if line != eventCount {
-		return fmt.Errorf("native spool row count mismatch")
+		return i18n.Errorf("native spool row count mismatch")
 	}
 	for runID, result := range groups {
 		result.EventIDsSHA256 = hashStrings(result.EventIDs)
