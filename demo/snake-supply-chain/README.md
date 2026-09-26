@@ -13,6 +13,19 @@ hook reads planted **fake** secrets and connects to the cloud-metadata IP
 (`169.254.169.254`). The self-owned eBPF sensor captures it and the data-flow /
 taint lens surfaces the secret-read → egress as a causal edge.
 
+## Open from the portable CLI
+
+From an extracted [precompiled release](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2):
+
+```sh
+./agentprov demo snake-supply-chain
+```
+
+The CLI verifies the signed evidence, opens the appropriate Run and view, and
+uses a temporary store cleaned up on Ctrl-C. No Go, VM, Kubernetes cluster or
+agent credentials are needed for replay. Use `./agentprov demo` for all examples
+and their formatted guides; manual import and live capture remain available below.
+
 ## Files
 
 - `run-snake-supervised.forensics.json.gz` — the signed bundle (import to replay).
@@ -20,7 +33,7 @@ taint lens surfaces the secret-read → egress as a causal edge.
 - `attestation.pub` — the public key to verify it.
 - `capture/` — scripts to reproduce the capture on a Linux/eBPF host.
 
-## Replay it (no VM needed)
+## Manual import into a persistent store (optional)
 
 ```sh
 go build -o /tmp/agentprov ./cmd/agentprov

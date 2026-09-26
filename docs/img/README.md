@@ -1,10 +1,13 @@
 # Dashboard / demo screenshots
 
 Screenshots and short replay media referenced from the top-level `README.md`.
-They are generated from the portable `demo/snake-supply-chain` forensics bundle.
+The gallery and reader screenshots use `agentprov demo`; evidence screenshots
+come from the signed snake, multi-agent and Kubernetes demo bundles.
 
 | File | What to capture |
 |------|-----------------|
+| `demo-gallery.png` | All eight demos at `/demos/`, desktop width, dashboard theme. |
+| `demo-guide.png` | Formatted LLM Judge guide at `/demos/docs/llm-judge`, including section navigation and code-copy controls. |
 | `dashboard-graph-explorer-taint.png` | Graph Explorer with the **Data-flow · taint** lens selected on `run-snake-supervised`; the red dashed `possible_sensitive_data_flow` edges visible. |
 | `dashboard-side-panel-preview.png` | A node selected so the **Side Panel** shows Evidence + the artifact Preview (e.g. `workspace_file/snake.py`). |
 | `demo-snake-taint-replay.png` | The taint lens mid **time-scrub** (▶): secret-read nodes shown, the metadata-IP egress about to appear. |
@@ -23,7 +26,11 @@ They are generated from the portable `demo/snake-supply-chain` forensics bundle.
 | `demo-multiagent-network-egress.png` | Network / egress lens for the multi-agent run, focused on outbound evidence. |
 | `demo-k8s-a2a-substrate-dashboard.png` | K8s cross-pod A2A substrate lens: one node sensor, two pod cgroups, Alice -> Bob influence edge, and pod-level risk attribution. |
 
-To regenerate them: replay the captured run and open the dashboard —
+To regenerate the gallery/reader, run `./agentprov demo`, open the printed URL,
+and capture the gallery and LLM Judge guide at a 1440-pixel desktop viewport.
+These are real UI screenshots, not generated illustrations.
+
+To regenerate evidence screenshots: replay the captured run and open the dashboard —
 
 ```sh
 ./agentprov --data-dir /tmp/snake-replay forensics import \

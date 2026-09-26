@@ -39,6 +39,9 @@ import (
 //go:embed index.html
 var indexHTML []byte
 
+//go:embed theme.css
+var themeCSS []byte
+
 // Server serves the dashboard over a single read-only *sql.DB.
 type Server struct{ DB *sql.DB }
 
@@ -46,6 +49,10 @@ type Server struct{ DB *sql.DB }
 func (s Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.index)
+	mux.HandleFunc("GET /assets/theme.css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		_, _ = w.Write(themeCSS)
+	})
 	mux.HandleFunc("GET /api/runs", s.runs)
 	mux.HandleFunc("GET /api/overview", s.overview)
 	mux.HandleFunc("GET /api/timeline", s.timeline)

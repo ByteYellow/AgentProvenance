@@ -7,6 +7,10 @@ credential requirements in each demo's README.
 
 ## One-command entry
 
+Download the matching Linux/macOS amd64/arm64 archive from
+[v0.8.2-rc.2](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2),
+verify its checksum and extract it as shown in the [Quickstart](../README.md#quickstart).
+Go is needed only if you choose to build from source.
 The precompiled CLI embeds every signed capture and all demo guides:
 
 ```sh
@@ -22,6 +26,14 @@ The precompiled CLI embeds every signed capture and all demo guides:
 ./agentprov demo jev-judge                # offline setup guide; no provider call
 ```
 
+**Open replay** opens a signed run in the dashboard. **Read guide** opens a
+formatted local guide with section navigation, images, tables and code-copy
+buttons. The gallery and reader share the dashboard theme and fit narrow screens.
+![Formatted local guide with section navigation and code-copy controls](../docs/img/demo-guide.png)
+
+Guide text and embedded images work offline; links to additional repository files
+or external services need a network connection when followed.
+
 Signatures are checked before import and the graph is verified before serving.
 The browser selects the Run/lens and starts playback when the lens has timed events; placement lenses show their topology. Each invocation uses a
 fresh temporary store, removed on Ctrl-C; it ignores ambient daemon settings.
@@ -35,9 +47,8 @@ keyless LLM Judge flow with the precompiled CLI, from the extracted directory:
 AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
 ```
 
-Jev's guide uses a source build as preparation; with a downloaded archive,
-skip that step and pass the absolute path to the supplied CLI with `--agentprov`.
-Its live capture still requires Python, credentials and explicit consent.
+Jev's guide supports the supplied CLI through `--agentprov`; a source build is
+optional. Its live capture still requires Python, credentials and explicit consent.
 
 ## 1. One agent: supply-chain execution
 
@@ -59,8 +70,8 @@ view shows the team, while command-match correlation links execution evidence
 to the acting agent. Shared-process attribution is an inference with evidence,
 not a separate kernel identity for each sub-agent.
 
-Bundle: `run-double-attempt`. This is the replay used in the
-[main Quickstart](../README.md#quickstart).
+Bundle: `run-double-attempt`. Open it with `agentprov demo multiagent-provenance`
+or choose **Agent team** in the [Quickstart gallery](../README.md#quickstart).
 
 ## 3. Across Pods: one sensor, separate workload identities
 
@@ -102,7 +113,10 @@ the core product; neither example is required to capture or inspect a run.
   needs a key and raw-evidence consent; reopening a completed study is offline.
   The UI is not part of `agentprov dashboard` or a policy-deployment service.
 
-## Replay and compare
+## Manual import and comparison
+
+Use this advanced path when you want a persistent data directory or want to compare
+your own runs. For a first look, use `agentprov demo` above.
 
 Each demo README names the exact bundle and matching public key. The common
 workflow is:

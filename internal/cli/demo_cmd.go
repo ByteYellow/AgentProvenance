@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"io/fs"
 	"net"
 	"net/http"
@@ -203,30 +202,6 @@ func demoRunURL(entry demo.Entry) string {
 	return "/?" + url.Values{"run": {entry.Run}, "lens": {entry.Lens}, "replay": {"1"}}.Encode()
 }
 
-func demoGallery(entries []demo.Entry) http.HandlerFunc {
-	page := template.Must(template.New("gallery").Funcs(template.FuncMap{"runURL": demoRunURL}).Parse(demoGalleryHTML))
-	guide := template.Must(template.New("guide").Parse(demoGuideHTML))
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if r.URL.Path == "/demos/" {
-			_ = page.Execute(w, entries)
-			return
-		}
-		for _, entry := range entries {
-			if r.URL.Path == "/demos/docs/"+entry.ID {
-				b, err := demo.Files.ReadFile(path.Join(entry.Directory, "README.md"))
-				if err != nil {
-					http.Error(w, "guide unavailable", http.StatusInternalServerError)
-					return
-				}
-				_ = guide.Execute(w, struct{ Title, Text string }{entry.Title, string(b)})
-				return
-			}
-		}
-		http.NotFound(w, r)
-	}
-}
-
 func openDemoBrowser(parent context.Context, link string) error {
 	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
@@ -243,8 +218,3 @@ func openDemoBrowser(parent context.Context, link string) error {
 	}
 	return fmt.Errorf("no browser launcher found")
 }
-
-const demoGalleryHTML = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AgentProvenance demos</title><style>
-body{margin:0;background:#10141d;color:#e7edf6;font:16px/1.6 system-ui}main{max-width:1040px;margin:60px auto;padding:0 24px}h1{font-size:36px;line-height:1.2}h2{font-size:21px}p{color:#b3bfd0}a{color:#80bfff}section{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}article{background:#1b2331;border:1px solid #344054;border-radius:12px;padding:24px}.tag{color:#83dbc1;font-size:13px}.action{display:inline-block;margin:8px 18px 0 0}small{display:block;color:#9eacc0}</style><main><div class="tag">AGENTPROVENANCE · DEMOS</div><h1>What did the agent actually do?</h1><p>Choose a recorded execution. Its signed evidence is already loaded and verified locally. Replay needs no account, API key, VM or network connection.</p><p>Verification checks evidence integrity against the bundled demo key, not capture completeness or every inferred relationship. Optional evaluators have separate setup requirements.</p><section>{{range .}}<article><div class="tag">{{if .Run}}VERIFIED SIGNED REPLAY{{else}}OPTIONAL EVALUATOR{{end}}</div><h2>{{.Title}}</h2><p>{{.Description}}</p><small>{{.Requirements}}</small>{{if .Run}}<a class="action" href="{{runURL .}}">Open replay →</a>{{end}}<a class="action" href="/demos/docs/{{.ID}}">Read guide</a></article>{{end}}</section></main></html>`
-
-const demoGuideHTML = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}}</title><style>body{background:#10141d;color:#e7edf6;font:16px/1.6 system-ui;max-width:1000px;margin:40px auto;padding:0 24px}a{color:#80bfff}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><a href="/demos/">← Demo gallery</a><h1>{{.Title}}</h1><p>Offline copy of the demo's source guide. Paths below refer to the demo directory included in the release archive or source checkout. Replay does not execute these instructions.</p><pre>{{.Text}}</pre></html>`

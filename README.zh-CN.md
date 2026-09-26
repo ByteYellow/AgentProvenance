@@ -45,7 +45,7 @@
 </p>
 
 [查看真实场景](demo/multiagent-provenance/README.md) ·
-[立即回放](#快速开始) · [v0.8.1 版本说明](docs/releases/v0.8.1.md)
+[立即回放](#快速开始) · [v0.8.2-rc.2 版本说明](docs/releases/v0.8.2-rc.2.md)
 
 ## 目录
 
@@ -78,7 +78,9 @@
 
 ### 下载并回放，无需安装 Go
 
-在 [**v0.8.2-rc.1 预发布版**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.1)
+![本地 Demo 首页：六份签名回放与两个可选评估器指南](docs/img/demo-gallery.png)
+
+在 [**v0.8.2-rc.2 预发布版**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2)
 下载对应平台的压缩包及同名 `.sha256` 校验文件：
 
 | 平台 | 压缩包后缀 |
@@ -91,9 +93,9 @@
 以 Linux x86-64 为例，在下载目录执行：
 
 ```sh
-sha256sum -c agentprov_v0.8.2-rc.1_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.8.2-rc.2_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.8.2-rc.1_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.8.2-rc.2_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -103,6 +105,8 @@ macOS 换成对应的 `darwin` 文件名，使用 `shasum -a 256 -c` 校验。
 `build-info.json` 提供下载完整性校验和构建信息；校验和不等于发布者签名。
 
 浏览器会打开 **Demo 首页**，包含全部 6 份签名回放和 2 个可选评估器的指南。
+首页与 Dashboard 使用同一套浅色样式。**Read guide** 打开排版后的本地指南，
+提供目录、图片、表格和代码复制；**Open replay** 打开已记录的证据。
 选中回放后，自动选择对应 Run 和视图；有时间事件的视图自动播放，部署视图直接展示拓扑。
 CLI 先校验原始签名，再导入
 独立的临时数据目录并验证证据图。Ctrl-C 退出时清理临时数据，不影响日常数据目录，
@@ -1157,6 +1161,10 @@ docs/                 产品方向、MVP 细节、对比
 `forensics`。`substrate` 包含 AgentProvenance 可以消费的运行时事实。
 
 ## Roadmap
+
+**v0.8.2-rc.2 是便携回放预发布版。** Linux/macOS 的 amd64/arm64 下载包
+可直接运行 `agentprov demo`，通过与 Dashboard 风格一致的首页和阅读页浏览全部
+八个示例。详见 [v0.8.2-rc.2 发布说明](docs/releases/v0.8.2-rc.2.md)。
 
 **v0.8.1 增加可选外部评估器示例。** [Jev demo](demo/jev-judge/) 通过已有
 证据/信号契约展示结构化研判、规则对比和人工复核；没有新增内置分析器，也不改变

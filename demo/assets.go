@@ -6,7 +6,7 @@ import "embed"
 // Files preserves the original bundles, attestations and public keys unchanged.
 // Evaluator source and capture scripts ship in the release archive, not the CLI.
 //
-//go:embed */*.json.gz */*.dsse.json */*.pub */README.md
+//go:embed */*.json.gz */*.dsse.json */*.pub */README.md */*.png jev-judge/validation-*.json
 var Files embed.FS
 
 type Entry struct {

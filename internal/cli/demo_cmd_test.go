@@ -125,3 +125,65 @@ func TestDemoRejectsUnknownNamesAndSharedStores(t *testing.T) {
 		}
 	}
 }
+
+func TestDemoGuideRendersMarkdownAndLocalAssets(t *testing.T) {
+	entries := demo.Catalog()
+	entry := entries[len(entries)-1]
+	source, err := demo.Files.ReadFile(entry.Directory + "/README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	html, headings, err := renderDemoGuide(entry, entries, source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"<h1", "<h2", "<pre><code", "/demos/assets/jev-judge/review.png"} {
+		if !strings.Contains(string(html), want) {
+			t.Errorf("missing rendered content: %s", want)
+		}
+	}
+	tableSource, err := demo.Files.ReadFile("llm-judge/README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tableHTML, _, err := renderDemoGuide(entries[6], entries, tableSource)
+	if err != nil || !strings.Contains(string(tableHTML), "<table>") {
+		t.Fatalf("GFM table missing: %v", err)
+	}
+	if len(headings) == 0 {
+		t.Fatal("missing document outline")
+	}
+	for _, h := range headings {
+		if !strings.Contains(string(html), `id="`+h.ID+`"`) {
+			t.Errorf("broken heading anchor: %s", h.ID)
+		}
+	}
+	h := demoGallery(entries)
+	for _, asset := range []string{"review.png", "review-rules.png", "validation-2026-09-22.json"} {
+		w := httptest.NewRecorder()
+		h(w, httptest.NewRequest(http.MethodGet, "/demos/assets/jev-judge/"+asset, nil))
+		if w.Code != 200 {
+			t.Errorf("asset %s: %d", asset, w.Code)
+		}
+	}
+	if got := demoGuideLink(entries[3], entries, "../k8s-cross-pod-a2a#replay"); got != "/demos/docs/k8s-cross-pod-a2a#replay" {
+		t.Fatalf("bad local guide link: %s", got)
+	}
+}
+
+func TestDemoGuideDoesNotRenderActiveHTML(t *testing.T) {
+	entry := demo.Catalog()[0]
+	source := []byte("# Guide\n\n<script>alert(1)</script>\n\n[bad](javascript:alert%281%29)\n\n![bad](javascript:alert%281%29)\n\n```sh\necho '<script>'\n```\n")
+	html, _, err := renderDemoGuide(entry, demo.Catalog(), source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, unsafe := range []string{"<script>", "javascript:"} {
+		if strings.Contains(string(html), unsafe) {
+			t.Errorf("active content in rendered guide: %s", html)
+		}
+	}
+	if !strings.Contains(string(html), "&lt;script&gt;") {
+		t.Fatal("code example should remain escaped and readable")
+	}
+}

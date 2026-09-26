@@ -6,6 +6,17 @@ a standalone demo UI compares two rubrics, collects human reference labels and
 records candidate approval or rejection. This is not a built-in product module.
 No capture-engine, database-schema or security-policy changes are needed.
 
+## Open from the portable CLI
+
+From an extracted [precompiled release](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2):
+
+```sh
+./agentprov demo jev-judge
+```
+
+This opens the formatted offline guide. It does not run the evaluator or call
+a provider. The commands below are separate, explicit setup and evaluation steps.
+
 ## Integration boundary
 
 - **AgentProvenance owns evidence and the signal contract:** capture, correlation,
@@ -66,17 +77,18 @@ do not establish precision/recall, general safety or injection robustness.
 
 ## Start the demo
 
-Requirements: Python 3.9+ on macOS/Linux and an AgentProvenance binary built
-from this checkout. No VM, GPU, proxy or new agent capture is required.
-Run these commands from the repository root:
+Requirements: Python 3.9+ on macOS/Linux and the precompiled AgentProvenance
+CLI, or a binary built from source. No VM, GPU, proxy or new agent capture is
+required. From the extracted archive root (or a source checkout after
+`go build -o agentprov ./cmd/agentprov`):
 
 ```sh
-go build -o /tmp/agentprov-jev ./cmd/agentprov
+AGENTPROV_BIN="$PWD/agentprov"
 STUDY="$HOME/Downloads/jev-review-$(date +%Y%m%d-%H%M%S)"
 KEY_FILE=/absolute/path/to/private/jev-key
 
 python3 demo/jev-judge/workbench.py capture \
-  --agentprov /tmp/agentprov-jev --provider typesafe \
+  --agentprov "$AGENTPROV_BIN" --provider typesafe \
   --key-file "$KEY_FILE" --data-dir "$STUDY" --send-raw
 
 python3 demo/jev-judge/workbench.py serve --data-dir "$STUDY"
@@ -177,11 +189,11 @@ The original study keeps all versions and approvals independently.
 python3 demo/jev-judge/workbench.py export \
   --data-dir "$STUDY" --output "$STUDY/reviewed-signals.json"
 
-/tmp/agentprov-jev --data-dir "$STUDY/store" signal import \
+"$AGENTPROV_BIN" --data-dir "$STUDY/store" signal import \
   --run run-double-attempt --file "$STUDY/reviewed-signals.json" --json
-/tmp/agentprov-jev --data-dir "$STUDY/store" ai call get_signals \
+"$AGENTPROV_BIN" --data-dir "$STUDY/store" ai call get_signals \
   --input '{"run":"run-double-attempt"}'
-/tmp/agentprov-jev --data-dir "$STUDY/store" graph verify \
+"$AGENTPROV_BIN" --data-dir "$STUDY/store" graph verify \
   --run run-double-attempt --json
 ```
 

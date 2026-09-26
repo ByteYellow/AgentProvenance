@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.8.2-rc.2 - 2026-09-26
+
+Prerelease: dashboard-styled demo gallery and formatted local guides.
+Release notes: [v0.8.2-rc.2](docs/releases/v0.8.2-rc.2.md).
+
+### Changed
+
+- Gallery and guide reader share the dashboard theme, with responsive layouts,
+  section navigation, tables, embedded images and copyable code blocks.
+- English/Chinese introductions, all demo entry points, product/deployment
+  guides, screenshots and packaged instructions describe the portable workflow.
+- Native archive acceptance checks all eight guide entries and reader assets.
+
+## v0.8.2-rc.1 - 2026-09-26
+
+Prerelease: portable CLI and all-demo replay.
+Release notes: [v0.8.2-rc.1](docs/releases/v0.8.2-rc.1.md).
+
+### Added
+
+- Precompiled Linux/macOS amd64/arm64 archives, individual and aggregate SHA-256
+  checksums, source/build metadata and `agentprov --version`.
+- `agentprov demo` embeds six signed captures and two optional evaluator guides,
+  verifies evidence before replay and uses an isolated temporary store.
+- Four-platform native archive gates exercise the downloaded experience without
+  Go on PATH. All original example sources accompany the CLI.
+
 ## v0.8.1 - 2026-09-22
 
 Optional external-evaluator reference integration in `demo/jev-judge/`.
