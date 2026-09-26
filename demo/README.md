@@ -5,6 +5,40 @@ committed compressed bundles can be imported, verified and explored on macOS or
 Linux without rerunning the agents. Live capture has separate environment and
 credential requirements in each demo's README.
 
+## One-command entry
+
+The precompiled CLI embeds every signed capture and all demo guides:
+
+```sh
+./agentprov demo                         # gallery: all demos
+./agentprov demo --list                  # list replay names and setup guides
+./agentprov demo snake-supply-chain      # one signed capture
+./agentprov demo multiagent-provenance
+./agentprov demo k8s-cross-pod-a2a
+./agentprov demo k8s-substrate
+./agentprov demo grok-codebase-exfil
+./agentprov demo grok-3routes
+./agentprov demo llm-judge                # offline setup guide; no provider call
+./agentprov demo jev-judge                # offline setup guide; no provider call
+```
+
+Signatures are checked before import and the graph is verified before serving.
+The browser selects the Run/lens and starts playback when the lens has timed events; placement lenses show their topology. Each invocation uses a
+fresh temporary store, removed on Ctrl-C; it ignores ambient daemon settings.
+Explicit `--data-dir` or `--daemon-url` is rejected to prevent confusion with
+normal data. `--no-browser` prints a URL; `--json` also reports verification.
+
+All original example sources ship in the archive's `demo/` directory. For the
+keyless LLM Judge flow with the precompiled CLI, from the extracted directory:
+
+```sh
+AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
+```
+
+Jev's guide uses a source build as preparation; with a downloaded archive,
+skip that step and pass the absolute path to the supplied CLI with `--agentprov`.
+Its live capture still requires Python, credentials and explicit consent.
+
 ## 1. One agent: supply-chain execution
 
 [Snake supply-chain demo](snake-supply-chain/) follows a real coding agent that
@@ -38,6 +72,11 @@ Use **Substrate** to inspect placement and **Orchestration** to follow the peer
 relationship. The app delegation hook log is replayed from the multi-agent
 capture; the cross-pod network and runtime events were collected live. These
 are distinct evidence sources, not a claim that the entire team was recaptured.
+
+## Additional placement example
+
+[Kubernetes substrate](k8s-substrate/) focuses on container identity and placement.
+Use `agentprov demo k8s-substrate` to open the Substrate lens without Kubernetes.
 
 ## Additional investigations
 

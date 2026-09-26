@@ -41,3 +41,6 @@ demo/llm-judge/.build/
 # Forensics captures can be tens of MB as raw JSON. Commit compressed replay
 # fixtures (*.forensics.json.gz) or publish large raw captures as release assets.
 *.forensics.json
+
+# Portable release archives.
+/dist/

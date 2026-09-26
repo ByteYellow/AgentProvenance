@@ -76,32 +76,61 @@
 
 ## 快速开始
 
-### 先回放一份签名证据
+### 下载并回放，无需安装 Go
 
-需要 macOS 或 Linux，以及 Go 1.23+。查看仓库自带的采集结果，**不需要 Linux
-虚拟机、Docker、agent 账号或 API key**。
+在 [**v0.8.2-rc.1 预发布版**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.1)
+下载对应平台的压缩包及同名 `.sha256` 校验文件：
+
+| 平台 | 压缩包后缀 |
+|---|---|
+| Linux / WSL，x86-64 | `linux_amd64.tar.gz` |
+| Linux / WSL，ARM64 | `linux_arm64.tar.gz` |
+| macOS，Intel | `darwin_amd64.tar.gz` |
+| macOS，Apple Silicon | `darwin_arm64.tar.gz` |
+
+以 Linux x86-64 为例，在下载目录执行：
+
+```sh
+sha256sum -c agentprov_v0.8.2-rc.1_linux_amd64.tar.gz.sha256
+mkdir agentprov-demo
+tar -xzf agentprov_v0.8.2-rc.1_linux_amd64.tar.gz -C agentprov-demo
+cd agentprov-demo
+./agentprov demo
+```
+
+macOS 换成对应的 `darwin` 文件名，使用 `shasum -a 256 -c` 校验。
+当前二进制尚未做 Apple Developer ID 签名或公证。`SHA256SUMS` 与
+`build-info.json` 提供下载完整性校验和构建信息；校验和不等于发布者签名。
+
+浏览器会打开 **Demo 首页**，包含全部 6 份签名回放和 2 个可选评估器的指南。
+选中回放后，自动选择对应 Run 和视图；有时间事件的视图自动播放，部署视图直接展示拓扑。
+CLI 先校验原始签名，再导入
+独立的临时数据目录并验证证据图。Ctrl-C 退出时清理临时数据，不影响日常数据目录，
+也不会重新执行记录中的命令。
+
+```sh
+./agentprov demo --list
+./agentprov demo multiagent-provenance
+./agentprov demo k8s-cross-pod-a2a --no-browser
+```
+
+签名回放可以离线运行，不需要 Go、仓库源码、VM、Docker、agent 账号或 API Key。
+全部 Demo 的原始脚本和说明也随包放在 `demo/` 目录。LLM Judge 和 Jev 仍是可选的
+Python 示例，实时评估需要各自的外部环境；Demo 首页不会自动调用模型，也不会
+把模拟结论当成真实评估记录。详见 [Demo 目录](demo/README.md)。
+
+如希望从源码构建，才需要 Go 1.23+：
 
 ```sh
 git clone https://github.com/ByteYellow/AgentProvenance
 cd AgentProvenance
 go build -o agentprov ./cmd/agentprov
-
-./agentprov --data-dir /tmp/agentprov-demo init
-./agentprov --data-dir /tmp/agentprov-demo forensics import \
-  demo/multiagent-provenance/run-double-attempt.forensics.json.gz \
-  --pub-key demo/multiagent-provenance/attestation.pub
-./agentprov --data-dir /tmp/agentprov-demo graph verify --run run-double-attempt
-./agentprov --data-dir /tmp/agentprov-demo dashboard serve --addr 127.0.0.1:7396
+./agentprov demo
 ```
-
-打开输出中的地址，选择 **run-double-attempt**，切到 **Agent Network /
-orchestration** 视图并播放。沿对等消息查看工具调用和对应的运行时证据。
-[Demo 目录](demo/README.md)按单 agent、多 agent、Kubernetes 顺序展开，
-并提供出站数据调查场景。
 
 ### 采集你自己的 agent
 
-在同一个仓库目录中，使用已经安装并完成认证的 agent：
+在解压目录或源码目录中，使用已经安装并完成认证的 agent：
 
 ```sh
 ./agentprov doctor -- claude
