@@ -4,7 +4,7 @@
 
 本目录保存项目首页和指南使用的截图与回放动画。示例库和阅读页通过 `agentprov demo` 打开；证据图来自贪吃蛇、多 Agent 及 Kubernetes 示例中的签名证据包。
 
-文件名带 `-zh-CN` 的图片来自中文界面。截图中的命令、路径、ID 和原始证据仍保留原文。现有英文截图和历史回放动画继续保留，中文动画尚未补齐。
+文件名带 `-zh-CN` 的图片来自中文界面。截图中的命令、路径、ID 和原始证据仍保留原文。中文回放动画通过 Dashboard 播放按钮录制；英文素材继续保留。
 
 ## 示例页面
 
@@ -37,8 +37,9 @@
 | 文件 | 内容 |
 |---|---|
 | `demo-snake-taint-replay.png` | 贪吃蛇示例的时间回放帧，展示敏感文件读取与后续网络行为 |
-| `demo-snake-taint-replay.gif` | 数据流视图的短回放动画 |
-| `demo-multiagent-agent-network.gif` | 使用 Dashboard 播放按钮录制的协作视图动画 |
+| `demo-snake-taint-replay.gif`、`demo-snake-taint-replay-zh-CN.gif` | 数据流视图的中英文回放片段 |
+| `demo-multiagent-agent-network.gif`、`demo-multiagent-agent-network-zh-CN.gif` | 使用 Dashboard 播放按钮录制的中英文协作视图片段 |
+| `demo-snake-taint-replay-zh-CN.png`、`demo-multiagent-agent-network-zh-CN.png` | 两段中文动画的结束帧 |
 | `demo-multiagent-agent-network-01-start.png` | 播放开始前的原始帧 |
 | `demo-multiagent-agent-network-02-play.png` 至 `demo-multiagent-agent-network-07-play.png` | 播放过程中的原始帧 |
 

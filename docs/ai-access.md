@@ -8,6 +8,8 @@ English | [中文](zh-CN/ai-access.md)
 > wrappers, and the CLI are all thin ADAPTERS over the same contract. Define the
 > contract once (this doc), generate the adapters.
 
+Reference: [OpenAPI](openapi.yaml) · [AI/MCP tools](ai-tools.md) · [Python integration](python-sdk.md).
+
 ## 0. The trust boundary (load-bearing, applies to every adapter)
 
 - An agent MAY **query everything** (read tools) and MAY **assert its own

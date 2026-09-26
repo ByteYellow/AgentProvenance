@@ -44,3 +44,7 @@ To regenerate evidence screenshots: replay the captured run and open the dashboa
 Chinese UI screenshots use the `-zh-CN.png` suffix. The Chinese index lists their
 subjects and capture settings. Original commands, paths and evidence retain their
 recorded text; translated screenshots do not modify the signed demo bundles.
+
+## Chinese replay clips
+
+`demo-multiagent-agent-network-zh-CN.gif` and `demo-snake-taint-replay-zh-CN.gif` are captured from the Chinese Dashboard using its playback control. Matching PNG files contain their final frames. See the [Chinese asset index](README.zh-CN.md) for the full list.

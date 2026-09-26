@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="620" viewBox="0 0 1280 620" role="img" aria-labelledby="title desc" lang="zh-CN">
+  <title id="title">AgentProvenance 架构</title>
+  <desc id="desc">AgentProvenance 关联 Agent 上下文与运行时事件，构建带签名的因果图，提供查询和调查入口。</desc>
+  <defs>
+    <style>
+      .bg{fill:#f8fafc}.panel{fill:#fff;stroke:#cbd5e1;stroke-width:2}.core{fill:#eef2ff;stroke:#6366f1;stroke-width:2}.edge{stroke:#334155;stroke-width:2;fill:none;marker-end:url(#arrow)}.muted{fill:#64748b}.title{font:700 24px ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;fill:#0f172a}.h{font:700 17px ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;fill:#0f172a}.t{font:14px ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;fill:#334155}.small{font:12px ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;fill:#475569}.tag{fill:#ecfeff;stroke:#06b6d4;stroke-width:2}.risk{fill:#fff7ed;stroke:#f97316;stroke-width:2}.verify{fill:#f0fdf4;stroke:#22c55e;stroke-width:2}
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#334155" />
+    </marker>
+  </defs>
+  <rect class="bg" width="1280" height="760" />
+  <text x="48" y="54" class="title"><tspan style="fill:#0071e3">Agent</tspan>Provenance：Agent 执行观测与 Git 式溯源</text>
+  <text x="48" y="82" class="small">将应用上下文与系统遥测关联，形成可查询、带签名的因果图。</text>
+
+  <rect x="50" y="120" width="250" height="430" rx="16" class="panel" />
+  <text x="78" y="158" class="h">应用上下文</text>
+  <rect x="78" y="185" width="194" height="58" rx="10" class="tag" />
+  <text x="96" y="210" class="t">Agent 钩子</text>
+  <text x="96" y="231" class="small">主 Agent / 子 Agent / 协作消息</text>
+  <rect x="78" y="265" width="194" height="58" rx="10" class="tag" />
+  <text x="96" y="290" class="t">工具调用</text>
+  <text x="96" y="311" class="small">命令 / 读取 / 写入 / 拒绝</text>
+  <rect x="78" y="345" width="194" height="58" rx="10" class="tag" />
+  <text x="96" y="370" class="t">执行范围</text>
+  <text x="96" y="391" class="small">run / attempt / agent_id</text>
+  <rect x="78" y="425" width="194" height="58" rx="10" class="tag" />
+  <text x="96" y="450" class="t">评估信号</text>
+  <text x="96" y="471" class="small">质量 / 奖励特征</text>
+
+  <rect x="350" y="120" width="250" height="430" rx="16" class="panel" />
+  <text x="378" y="158" class="h">运行时遥测</text>
+  <rect x="378" y="185" width="194" height="58" rx="10" class="tag" />
+  <text x="396" y="210" class="t">原生 eBPF 传感器</text>
+  <text x="396" y="231" class="small">exec / open / connect</text>
+  <rect x="378" y="265" width="194" height="58" rx="10" class="tag" />
+  <text x="396" y="290" class="t">Falco / Tetragon</text>
+  <text x="396" y="311" class="small">接入已有遥测</text>
+  <rect x="378" y="345" width="194" height="58" rx="10" class="tag" />
+  <text x="396" y="370" class="t">归属标识</text>
+  <text x="396" y="391" class="small">cgroup / PID / 命令 / 时间</text>
+  <rect x="378" y="425" width="194" height="58" rx="10" class="tag" />
+  <text x="396" y="450" class="t">原始事件存储</text>
+  <text x="396" y="471" class="small">分页 / 保留 / 详情查询</text>
+
+  <rect x="650" y="112" width="292" height="448" rx="18" class="core" />
+  <text x="682" y="152" class="h">接收与关联核心</text>
+  <rect x="682" y="184" width="228" height="50" rx="10" class="panel" />
+  <text x="702" y="215" class="t">API / 接收入口</text>
+  <rect x="682" y="252" width="228" height="50" rx="10" class="panel" />
+  <text x="702" y="283" class="t">格式校验与脱敏</text>
+  <rect x="682" y="320" width="228" height="50" rx="10" class="panel" />
+  <text x="702" y="351" class="t">跨层关联</text>
+  <rect x="682" y="388" width="228" height="50" rx="10" class="panel" />
+  <text x="702" y="419" class="t">构建因果图</text>
+  <rect x="682" y="456" width="228" height="50" rx="10" class="verify" />
+  <text x="702" y="487" class="t">哈希清单与签名</text>
+
+  <rect x="1000" y="120" width="220" height="430" rx="16" class="panel" />
+  <text x="1028" y="158" class="h">调查入口</text>
+  <rect x="1028" y="185" width="164" height="48" rx="10" class="panel" />
+  <text x="1060" y="215" class="t">CLI / JSON</text>
+  <rect x="1028" y="253" width="164" height="48" rx="10" class="panel" />
+  <text x="1054" y="283" class="t">可视化界面</text>
+  <rect x="1028" y="321" width="164" height="48" rx="10" class="panel" />
+  <text x="1052" y="351" class="t">AI 工具 / MCP</text>
+  <rect x="1028" y="389" width="164" height="48" rx="10" class="risk" />
+  <text x="1051" y="419" class="t">风险 / 响应</text>
+  <rect x="1028" y="457" width="164" height="48" rx="10" class="verify" />
+  <text x="1050" y="487" class="t">取证校验</text>
+
+  <path class="edge" d="M300 330H650" />
+  <path class="edge" d="M600 330H650" />
+  <path class="edge" d="M942 330H1000" />
+
+</svg>

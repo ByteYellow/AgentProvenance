@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="660" viewBox="0 0 1280 660" role="img" aria-labelledby="title desc" lang="zh-CN">
+  <title id="title">AgentProvenance 多 Agent 证据图</title>
+  <desc id="desc">关联主 Agent、子 Agent、协作消息、工具调用、内核事件、风险、响应、产物与校验清单。</desc>
+  <defs>
+    <style>
+      .bg{fill:#f8fafc}.node{fill:#fff;stroke:#cbd5e1;stroke-width:2}.agent{fill:#eef2ff;stroke:#6366f1;stroke-width:2}.msg{fill:#ecfeff;stroke:#0891b2;stroke-width:2}.sys{fill:#f8fafc;stroke:#64748b;stroke-width:2}.risk{fill:#fff7ed;stroke:#f97316;stroke-width:2}.bad{fill:#fef2f2;stroke:#ef4444;stroke-width:2}.ok{fill:#f0fdf4;stroke:#22c55e;stroke-width:2}.edge{stroke:#334155;stroke-width:2;fill:none;marker-end:url(#arrow)}.dash{stroke-dasharray:6 6}.title{font:700 24px ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;fill:#0f172a}.h{font:700 14px ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;fill:#0f172a}.t{font:12px ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;fill:#475569}.label{font:700 11px ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;fill:#2563eb}
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#334155" /></marker>
+  </defs>
+  <rect class="bg" width="1280" height="660" />
+  <text x="48" y="54" class="title">签名证据图：关联 Agent 协作与实际执行</text>
+  <text x="48" y="82" class="t">追踪任务委派、协作消息和工具调用，并查看对应的内核事件。</text>
+
+  <g transform="translate(0,34)">
+  <rect x="60" y="140" width="145" height="66" rx="14" class="agent" />
+  <text x="96" y="167" class="h">主 Agent</text>
+  <text x="82" y="188" class="t">执行范围 / cgroup</text>
+  <rect x="270" y="80" width="145" height="66" rx="14" class="agent" />
+  <text x="307" y="107" class="h">Alice</text>
+  <text x="298" y="128" class="t">调研子 Agent</text>
+  <rect x="270" y="205" width="145" height="66" rx="14" class="agent" />
+  <text x="313" y="232" class="h">Bob</text>
+  <text x="304" y="253" class="t">开发子 Agent</text>
+  <rect x="270" y="330" width="145" height="66" rx="14" class="bad" />
+  <text x="306" y="357" class="h">recon</text>
+  <text x="284" y="378" class="t">拒绝执行</text>
+
+  <path class="edge" d="M205 170C230 145 245 116 270 113" />
+  <text x="220" y="128" class="label">agent_spawn</text>
+  <path class="edge" d="M205 176C232 200 244 232 270 238" />
+  <text x="219" y="222" class="label">agent_spawn</text>
+  <path class="edge" d="M205 190C238 250 248 312 270 345" />
+  <text x="196" y="300" class="label">agent_spawn</text>
+
+  <rect x="530" y="80" width="210" height="66" rx="14" class="msg" />
+  <text x="560" y="107" class="h">被植入指令的协作消息</text>
+  <text x="554" y="128" class="t">消息正文哈希与预览</text>
+  <path class="edge" d="M415 113H530" />
+  <text x="430" y="101" class="label">agent_message</text>
+  <path class="edge" d="M635 146C592 185 452 226 415 238" />
+
+  <rect x="730" y="205" width="150" height="66" rx="14" class="node" />
+  <text x="772" y="232" class="h">工具调用</text>
+  <text x="750" y="253" class="t">python setup.py install</text>
+  <path class="edge" d="M415 238H730" />
+  <text x="520" y="228" class="label">agent_tool_call</text>
+
+  <rect x="930" y="120" width="145" height="66" rx="14" class="bad" />
+  <text x="973" y="147" class="h">openat</text>
+  <text x="951" y="168" class="t">~/.aws/credentials</text>
+  <rect x="930" y="290" width="145" height="66" rx="14" class="bad" />
+  <text x="973" y="317" class="h">connect</text>
+  <text x="949" y="338" class="t">169.254.169.254</text>
+  <path class="edge" d="M880 235C908 210 915 165 930 153" />
+  <path class="edge" d="M880 242C910 260 910 315 930 323" />
+  <text x="888" y="220" class="label">agent_syscall</text>
+
+  <rect x="1120" y="205" width="110" height="66" rx="14" class="risk" />
+  <text x="1151" y="232" class="h">风险</text>
+  <text x="1139" y="253" class="t">敏感访问</text>
+  <path class="edge" d="M1075 153C1102 166 1110 202 1120 219" />
+  <path class="edge" d="M1075 323C1104 308 1110 270 1120 255" />
+
+  <rect x="270" y="420" width="145" height="66" rx="14" class="ok" />
+  <text x="305" y="447" class="h">产物</text>
+  <text x="292" y="468" class="t">哈希 / 来源引用</text>
+  <rect x="520" y="420" width="145" height="66" rx="14" class="ok" />
+  <text x="555" y="447" class="h">证据清单</text>
+  <text x="542" y="468" class="t">内容寻址</text>
+  <rect x="770" y="420" width="145" height="66" rx="14" class="ok" />
+  <text x="806" y="447" class="h">校验</text>
+  <text x="792" y="468" class="t">哈希 / 签名</text>
+  <path class="edge dash" d="M805 271C760 350 470 375 415 420" />
+  <path class="edge" d="M415 453H520" />
+  <path class="edge" d="M665 453H770" />
+
+  </g>
+  <text x="48" y="600" class="t">钩子记录协作上下文，内核事件记录实际操作；数据流与污点关系附带推断依据和置信度。</text>
+</svg>

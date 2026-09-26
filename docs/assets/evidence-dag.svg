@@ -23,7 +23,7 @@
   <text x="304" y="253" class="t">builder sub-agent</text>
   <rect x="270" y="330" width="145" height="66" rx="14" class="bad"/>
   <text x="306" y="357" class="h">recon</text>
-  <text x="284" y="378" class="t">refused · no egress</text>
+  <text x="284" y="378" class="t">refused</text>
 
   <path class="edge" d="M205 170C230 145 245 116 270 113"/>
   <text x="220" y="128" class="label">agent_spawn</text>

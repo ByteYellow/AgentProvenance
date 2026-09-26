@@ -4,6 +4,8 @@
 
 本文说明已有工具接口及后续接入方向。AgentProvenance 除了供人查询，也可以被 Agent 调用。后台服务的 `/v1` REST 接口和 CLI 的 `--json` 输出构成基础契约；MCP、OpenAPI、模型工具描述和 SDK 封装应复用这些能力，避免各自维护不同的数据语义。
 
+接口参考：[中文 OpenAPI](openapi.yaml) · [八个 AI/MCP 工具](ai-tools.md) · [Python 接入](python-sdk.md)。
+
 ## 信任边界
 
 这条边界适用于所有适配器：

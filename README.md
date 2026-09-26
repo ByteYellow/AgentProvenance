@@ -565,6 +565,8 @@ existing signal contract.
 
 ### Custom rules in Python
 
+See the [Python integration guide](docs/python-sdk.md) for installation, method references and runnable examples.
+
 <details>
 <summary>Expand the complete Python rule example</summary>
 
@@ -650,9 +652,8 @@ POST /v1/signal/run
 POST /v1/signal/import
 ```
 
-The daemon does not expose an HTTP endpoint that runs arbitrary external shell
-commands. A client can fetch `EvalContext`, execute its evaluator in its own
-process boundary, and import the resulting signals back into the daemon for
+External evaluators run in the client process. A client fetches `EvalContext`,
+executes its evaluator, and imports the resulting signals into the daemon for
 validation. The CLI follows that shape when `--daemon-url` is set.
 
 ## Compliance Evidence, Not Certification

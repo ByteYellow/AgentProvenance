@@ -28,7 +28,7 @@
 ---
 
 <p align="center">
-  <img src="docs/assets/three-axis-observability.svg" alt="模型意图、应用上下文和系统运行记录汇入同一张可验证证据图。" width="100%">
+  <img src="docs/assets/three-axis-observability-zh-CN.svg" alt="模型意图、应用上下文和系统运行记录汇入同一张可验证证据图。" width="100%">
 </p>
 
 **Agent 实际做了什么？证据在哪里？**
@@ -42,10 +42,10 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 可视化界面将它们关联起来，回放整个执行过程：
 
 <p align="center">
-  <img src="docs/img/demo-multiagent-agent-network.gif" alt="多 Agent 执行回放：任务委派、协作消息、工具调用及对应的运行时证据。" width="100%">
+  <img src="docs/img/demo-multiagent-agent-network-zh-CN.gif" alt="多 Agent 执行回放：任务委派、协作消息、工具调用及对应的运行时证据。" width="100%">
 </p>
 
-[查看真实场景](demo/multiagent-provenance/README.md) ·
+[查看真实场景](demo/multiagent-provenance/README.zh-CN.md) ·
 [立即回放](#快速开始) · [v0.8.2-rc.2 版本说明](docs/zh-CN/releases/v0.8.2-rc.2.md)
 
 ## 目录
@@ -240,7 +240,7 @@ Agent、任务和工具调用的上下文，进一步回答：“这次行为属
 ## 核心模型
 
 <p align="center">
-  <img src="docs/assets/evidence-dag.svg" alt="执行证据图：模型意图、工具调用、进程、事件、风险、响应、产物及其校验关系。" width="100%">
+  <img src="docs/assets/evidence-dag-zh-CN.svg" alt="执行证据图：模型意图、工具调用、进程、事件、风险、响应、产物及其校验关系。" width="100%">
 </p>
 
 证据采用内容寻址存储，通过哈希校验完整性，并支持可选的数字签名。
@@ -370,7 +370,7 @@ Agent 正常读取自身凭证的情况，则由同一套策略引擎中的相�
 
 结果写入统一信号模型的 `intent_conformance` 维度，可影响 `launch` 的最终判断，
 并在 **Conformance · declared vs actual** 视图中展示“声明 → 判定 → 观测行为”。
-[多 Agent 示例](demo/multiagent-provenance/README.md)中，`alice` 诱导 `bob`
+[多 Agent 示例](demo/multiagent-provenance/README.zh-CN.md)中，`alice` 诱导 `bob`
 安装恶意依赖，相关偏差被标记为 `peer_message_intent_mismatch`。
 
 ## 部署模式
@@ -380,7 +380,7 @@ Agent 正常读取自身凭证的情况，则由同一套策略引擎中的相�
 需要持续接收事件、共享本机查询接口时，再使用本地服务。
 
 <p align="center">
-  <img src="docs/assets/deployment-modes.svg" alt="AgentProvenance 的 CLI、本地服务与中心化服务部署方式。" width="920">
+  <img src="docs/assets/deployment-modes-zh-CN.svg" alt="AgentProvenance 的 CLI、本地服务与中心化服务部署方式。" width="920">
 </p>
 
 | 模式 | 形态 | 适用场景 | 使用成本与限制 |
@@ -499,12 +499,14 @@ AgentProvenance 为外部评分系统提供证据，奖励函数、排序和数�
 基准测试、RL、红队测试和数据筛选流程可以自行决定，如何根据这些证据评分、
 拒绝结果或发起人工复核。
 
-可选参考实现：[LLM 安全评估示例](demo/llm-judge/)和
-[Jev 结构化评估器](demo/jev-judge/)。模型服务调用、规则对比和复核页面由这些
+可选参考实现：[LLM 安全评估示例](demo/llm-judge/README.zh-CN.md)和
+[Jev 结构化评估器](demo/jev-judge/README.zh-CN.md)。模型服务调用、规则对比和复核页面由这些
 外部示例提供，采集、回放和主可视化界面都不依赖它们。
 分析结果通过已有的信号接口写回。
 
 ### 用 Python 写自定义规则
+
+安装、完整方法说明和可运行示例见 [Python 接入指南](docs/zh-CN/python-sdk.md)。
 
 <details>
 <summary>展开完整的 Python 规则示例</summary>
@@ -588,8 +590,7 @@ POST /v1/signal/run
 POST /v1/signal/import
 ```
 
-本地服务不提供执行任意 Shell 命令的 HTTP 接口。
-客户端应先获取 `EvalContext`，在自己的进程中运行评估器，
+自定义评估器在客户端进程中运行。客户端先获取 `EvalContext`，执行评估器，
 再将结果提交给服务校验。CLI 设置 `--daemon-url` 后也采用这一流程。
 
 <a id="合规证据而非合规认证"></a>
@@ -679,9 +680,6 @@ Qwen，以及本地 vLLM/Ollama 服务。未配置 API Key 时会使用离线测
 
 <p align="center">
   <img src="docs/img/dashboard-overview-zh-CN.png" alt="本地证据界面：执行记录选择、验证状态、时间线、进程树、网络外发、风险信号与关联图。" width="100%">
-</p>
-<p align="center">
-  <img src="docs/assets/dashboard-timeline-process-egress.png" alt="本地证据界面：执行记录选择、验证状态、时间线、进程树、网络外发、风险信号与关联图。" width="100%">
 </p>
 
 
@@ -773,11 +771,11 @@ Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图�
 ```
 
 <p align="center">
-  <img src="docs/img/demo-snake-taint-replay.gif" alt="贪吃蛇示例回放：恶意依赖读取模拟凭证，并尝试连接云元数据地址。" width="100%">
+  <img src="docs/img/demo-snake-taint-replay-zh-CN.gif" alt="贪吃蛇示例回放：恶意依赖读取模拟凭证，并尝试连接云元数据地址。" width="100%">
 </p>
 
 界面操作见[供应链示例指南](docs/zh-CN/supply-chain-demo.md)，
-签名包和采集脚本见 [`demo/snake-supply-chain/`](demo/snake-supply-chain)。
+签名包和采集脚本见 [`demo/snake-supply-chain/`](demo/snake-supply-chain/README.zh-CN.md)。
 
 > **凭证访问的判定。** 捕获到的凭证访问会记录为 `secret_path` 事件，
 > 其中也可能包含 Agent 启动时对自身凭证的正常读取，如 `~/.claude/.credentials.json`。
@@ -813,7 +811,7 @@ Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图�
   <img src="docs/img/demo-multiagent-network-egress-zh-CN.png" alt="网络外发视图：多 Agent 执行中的网络行为证据。" width="100%">
 </p>
 
-签名包、回放命令和采集过程见 [`demo/multiagent-provenance/`](demo/multiagent-provenance)。
+签名包、回放命令和采集过程见 [`demo/multiagent-provenance/`](demo/multiagent-provenance/README.zh-CN.md)。
 其中包含两次尝试：显式的恶意请求被模型拒绝；随后通过依赖安装触发的行为，
 则被内核遥测记录，并关联回 Agent 协作过程。
 
@@ -830,7 +828,7 @@ Pod/容器元数据和宿主机 cgroup，无需在工作负载中接入采集代
 应用侧委派日志复用了多 Agent 示例；跨 Pod 网络与运行时事件则是在本场景中实测采集的。
 
 <p align="center">
-  <img src="docs/assets/k8s-cross-pod-a2a-architecture.png" alt="跨 Pod 调用架构：一个节点传感器观测 Alice 和 Bob，将两个 cgroup 的记录关联到同一张证据图。" width="100%">
+  <img src="docs/assets/k8s-cross-pod-a2a-architecture-zh-CN.svg" alt="跨 Pod 调用架构：一个节点传感器观测 Alice 和 Bob，将两个 cgroup 的记录关联到同一张证据图。" width="100%">
 </p>
 
 <p align="center">
@@ -838,7 +836,7 @@ Pod/容器元数据和宿主机 cgroup，无需在工作负载中接入采集代
 </p>
 
 回放包、采集脚本和证据范围说明见
-[`demo/k8s-cross-pod-a2a/`](demo/k8s-cross-pod-a2a)。
+[`demo/k8s-cross-pod-a2a/`](demo/k8s-cross-pod-a2a/README.zh-CN.md)。
 本次记录中的 `secret_path` 和 `metadata_ip` 事件归属于 Bob 的 Pod/cgroup，
 Alice 的 Pod 未出现对应事件；图中也保留了跨 Pod 的 `alice → bob` 调用关系。
 
@@ -964,19 +962,19 @@ Alice 的 Pod 未出现对应事件；图中也保留了跨 Pod 的 `alice → b
 ## 架构
 
 <p align="center">
-  <img src="docs/assets/evidence-flow.svg" alt="AgentProvenance 证据处理流程。" width="920">
+  <img src="docs/assets/evidence-flow-zh-CN.svg" alt="AgentProvenance 证据处理流程。" width="920">
 </p>
 
 <p align="center">
-  <img src="docs/assets/producer-profile-architecture.svg" alt="本地 Linux、KVM 虚拟机与 Kubernetes 共用同一套证据核心和调查界面。" width="100%">
+  <img src="docs/assets/producer-profile-architecture-zh-CN.svg" alt="本地 Linux、KVM 虚拟机与 Kubernetes 共用同一套证据核心和调查界面。" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/agentprovenance-architecture.svg" alt="模型意图、应用上下文与系统遥测经过校验和接收处理，形成可验证的溯源图。" width="100%">
+  <img src="docs/assets/agentprovenance-architecture-zh-CN.svg" alt="模型意图、应用上下文与系统遥测经过校验和接收处理，形成可验证的溯源图。" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/architecture-overview.svg" alt="AgentProvenance 架构总览。" width="920">
+  <img src="docs/assets/architecture-overview-zh-CN.svg" alt="AgentProvenance 架构总览。" width="920">
 </p>
 
 ```mermaid
@@ -1146,7 +1144,7 @@ amd64/arm64 包后，直接运行 `agentprov demo`，即可浏览六个回放示
 评估器指南。Demo 首页与阅读页采用与 Dashboard 一致的样式。
 详见 [v0.8.2-rc.2 发布说明](docs/zh-CN/releases/v0.8.2-rc.2.md)。
 
-**v0.8.1 增加了可选的外部评估器示例。** [Jev 示例](demo/jev-judge/)通过已有
+**v0.8.1 增加了可选的外部评估器示例。** [Jev 示例](demo/jev-judge/README.zh-CN.md)通过已有
 证据和信号接口展示结构化分析、规则对比与人工复核，不改变核心采集流程。
 详见 [v0.8.1 发布说明](docs/zh-CN/releases/v0.8.1.md)。
 

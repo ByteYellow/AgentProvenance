@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc" lang="zh-CN">
+  <title id="title">Kubernetes 跨 Pod 协作与证据关联</title>
+  <desc id="desc">一个节点传感器观测 Alice 和 Bob 两个 Pod，通过 cgroup 绑定和命令匹配，将网络调用与工具执行关联到同一次运行。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8" fill="context-stroke"/></marker>
+    <style>
+      text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;fill:#0f172a}
+      .title{font-size:28px;font-weight:750}.h{font-size:20px;font-weight:700}.t{font-size:16px}.small{font-size:14px;fill:#475569}.mono{font:14px ui-monospace,Consolas,monospace;fill:#334155}
+      .box{fill:#fff;stroke:#cbd5e1;stroke-width:1.5;rx:14}.arrow{fill:none;stroke-width:2;marker-end:url(#arrow)}.dash{stroke-dasharray:7 6}
+    </style>
+  </defs>
+  <rect width="1280" height="800" fill="#f8fafc"/>
+  <text class="title" x="42" y="50">跨 Pod 协作：一个节点，一张证据图</text>
+  <text class="small" x="42" y="79">节点 eBPF 传感器同时观测两个 Pod，按各自的 cgroup 保留归属。</text>
+  <rect x="24" y="104" width="1232" height="450" rx="20" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+  <text class="small" x="550" y="132">Kubernetes 节点</text>
+  <rect x="44" y="148" width="346" height="380" rx="16" fill="#f0fdf4" stroke="#22c55e" stroke-width="1.5"/>
+  <text class="h" x="68" y="184">Pod A · Alice</text><text class="small" x="68" y="212">编排 Agent</text>
+  <rect class="box" x="66" y="236" width="302" height="92"/>
+  <text class="t" x="84" y="266">Python 编排应用</text><text class="mono" x="84" y="296">urllib → bob:8080</text>
+  <rect class="box" x="66" y="404" width="302" height="94"/>
+  <text class="t" x="84" y="436">cgroup 364197</text><text class="mono" x="84" y="466">/kubepods.slice/…/podA-…/</text>
+  <rect x="890" y="148" width="346" height="380" rx="16" fill="#eff6ff" stroke="#3b82f6" stroke-width="1.5"/>
+  <text class="h" x="914" y="184">Pod B · Bob</text><text class="small" x="914" y="212">执行 Agent · http.server :8080</text>
+  <rect class="box" x="912" y="236" width="302" height="142"/>
+  <text class="mono" x="930" y="266">python3 setup.py install --user</text>
+  <text class="small" x="930" y="297">读取 ~/.aws/credentials</text><text class="small" x="930" y="325">读取 api_token</text><text class="small" x="930" y="353">连接 169.254.169.254</text>
+  <rect class="box" x="912" y="404" width="302" height="94"/>
+  <text class="t" x="930" y="436">cgroup 363918</text><text class="mono" x="930" y="466">/kubepods.slice/…/podB-…/</text>
+  <path class="arrow" d="M390 215 H882" stroke="#16a34a"/>
+  <text class="t" x="525" y="186">A2A 网络调用</text><text class="mono" x="515" y="244">alice → 10.42.0.x (bob)</text>
+  <text class="small" x="536" y="270">事件类型：private_cidr</text>
+  <rect x="450" y="315" width="380" height="192" rx="16" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.8"/>
+  <text class="h" x="482" y="351">agentprov-sensor</text><text class="small" x="482" y="382">节点 DaemonSet · eBPF</text>
+  <text class="t" x="482" y="420">同时观测两个 cgroup</text>
+  <text class="small" x="482" y="458">进程事件　/　文件访问　/　网络连接</text>
+  <path class="arrow dash" d="M390 451 H444" stroke="#16a34a"/>
+  <path class="arrow dash" d="M890 451 H836" stroke="#2563eb"/>
+  <path class="arrow" d="M640 507 V606" stroke="#7c3aed"/>
+  <text class="t" x="672" y="581">bind-cgroup：绑定到同一次执行</text>
+  <rect x="184" y="613" width="912" height="126" rx="16" fill="#fff7ed" stroke="#fb923c" stroke-width="1.7"/>
+  <text class="h" x="216" y="650">run: a2a-demo</text><text class="t" x="216" y="681">hooks bridge --correlate：关联应用委派与内核事件</text>
+  <text class="small" x="216" y="712">按命令匹配工具调用，保留 Pod 与 cgroup 归属，生成签名证据图。</text>
+  <text class="small" x="961" y="650">可查询</text><text class="small" x="961" y="679">可回放</text><text class="small" x="961" y="708">可校验</text>
+  <text class="small" x="42" y="780">关联结果可用于追踪跨 Pod 调用、敏感文件访问、网络外发与风险处置。</text>
+</svg>
