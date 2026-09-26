@@ -4,7 +4,7 @@ package telemetry
 
 import (
 	"errors"
-	"fmt"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"golang.org/x/sys/unix"
 	"os"
 )
@@ -27,7 +27,7 @@ func lockNativeStream(path string) (*os.File, error) {
 	}
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
 		f.Close()
-		return nil, fmt.Errorf("native collector already owns this store: %w", err)
+		return nil, i18n.Errorf("native collector already owns this store: %w", err)
 	}
 	return f, nil
 }

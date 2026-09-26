@@ -6,7 +6,6 @@ dashboard or daemon. It does not modify core storage, execute evidence, install
 policies or run a general optimization workflow.
 """
 
-import argparse
 from datetime import datetime, timezone
 import difflib
 import fcntl
@@ -25,6 +24,11 @@ from urllib.parse import urlsplit
 
 import judge
 import rules
+
+
+# Shared display helpers ship beside both optional evaluators in the archive.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from localization import CATALOG, Parser, cli_language, diagnostic, page, request_language, tr
 
 
 HERE = Path(__file__).resolve().parent
@@ -78,7 +82,7 @@ def capture(args):
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     key = judge.load_key(args.key_file, args.provider)
     # Import verifies the signed bundle against the explicitly supplied trust key.
-    print("Verifying the signed source bundle and graph before provider calls...", flush=True)
+    print(tr(getattr(args, "lang", "en"), "Verifying the signed source bundle and graph before provider calls..."), flush=True)
     run_cli(args.agentprov, root, "forensics", "import", str(args.bundle), "--pub-key", str(args.pub_key))
     manifest = judge.make_cases(args.bundle)
     verification = run_cli(args.agentprov, root, "graph", "verify", "--run", manifest["run_id"])
@@ -320,7 +324,7 @@ def make_server(study, port):
         def log_message(self, format, *args):
             pass
 
-        def send(self, status, value, mime="application/json; charset=utf-8"):
+        def send(self, status, value, mime="application/json; charset=utf-8", language=None, remember=False):
             body = value if isinstance(value, bytes) else judge.encode(value)
             self.send_response(status)
             self.send_header("Content-Type", mime)
@@ -329,6 +333,10 @@ def make_server(study, port):
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("X-Frame-Options", "DENY")
             self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+            if language:
+                self.send_header("Content-Language", language)
+            if remember:
+                self.send_header("Set-Cookie", "agentprov_language=%s; Path=/; Max-Age=31536000; HttpOnly; SameSite=Lax" % language)
             self.end_headers()
             self.wfile.write(body)
 
@@ -353,9 +361,15 @@ def make_server(study, port):
                     if version in VERSIONS and case_id in {c["id"] for c in current["cases"]} and name in {"request.json", "response.json"}:
                         return self.send(200, (study.root / "evaluations" / version / case_id / name).read_bytes())
                     return self.send(404, {"error": "Unknown study artifact"})
+                if path == "/i18n.json":
+                    return self.send(200, CATALOG)
                 assets = {"/": ("index.html", "text/html"), "/app.js": ("app.js", "text/javascript"), "/style.css": ("style.css", "text/css")}
                 if path in assets:
                     name, mime = assets[path]
+                    if path == "/":
+                        language, remember = request_language(self.path, self.headers)
+                        body = page((HERE / "web" / name).read_text(encoding="utf-8"), language).encode("utf-8")
+                        return self.send(200, body, mime + "; charset=utf-8", language, remember)
                     return self.send(200, (HERE / "web" / name).read_bytes(), mime + "; charset=utf-8")
                 return self.send(404, {"error": "Not found"})
             except (ValueError, OSError, KeyError, TypeError):
@@ -391,31 +405,31 @@ def make_server(study, port):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = Parser(description='Jev workbench: capture, inspect, compare, review and export. Local review makes no provider calls.', language=cli_language())
     sub = parser.add_subparsers(dest="command", required=True)
-    prepare = sub.add_parser("capture", help="Verify a demo bundle and call Jev 12 times (6 cases x 2 rubrics)")
+    prepare = sub.add_parser("capture", help=tr(cli_language(), "Verify a demo bundle and call Jev 12 times (6 cases x 2 rubrics)"))
     prepare.add_argument("--data-dir", type=Path, required=True, help="New private output directory, outside Git")
-    prepare.add_argument("--bundle", type=Path, default=HERE.parent / "multiagent-provenance/run-double-attempt.forensics.json.gz")
-    prepare.add_argument("--pub-key", type=Path, default=HERE.parent / "multiagent-provenance/attestation.pub")
-    prepare.add_argument("--agentprov", type=Path, required=True)
-    prepare.add_argument("--key-file", type=Path, required=True)
-    prepare.add_argument("--provider", choices=judge.ENDPOINTS, required=True)
-    prepare.add_argument("--send-raw", action="store_true")
-    serve = sub.add_parser("serve", help="Open an existing study; no key or provider calls")
-    serve.add_argument("--data-dir", type=Path, required=True)
-    serve.add_argument("--port", type=int, default=8641)
-    export = sub.add_parser("export", help="Export reviewed candidate signals; never installs a policy")
-    export.add_argument("--data-dir", type=Path, required=True)
-    export.add_argument("--output", type=Path, required=True)
+    prepare.add_argument("--bundle", type=Path, default=HERE.parent / "multiagent-provenance/run-double-attempt.forensics.json.gz", help='Signed source bundle')
+    prepare.add_argument("--pub-key", type=Path, default=HERE.parent / "multiagent-provenance/attestation.pub", help='Trusted public key')
+    prepare.add_argument("--agentprov", type=Path, required=True, help='AgentProvenance executable')
+    prepare.add_argument("--key-file", type=Path, required=True, help='Private key file')
+    prepare.add_argument("--provider", choices=judge.ENDPOINTS, required=True, help='Evaluation provider')
+    prepare.add_argument("--send-raw", action="store_true", help='Authorize sending selected case contents without redaction')
+    serve = sub.add_parser("serve", help=tr(cli_language(), "Open an existing study; no key or provider calls"))
+    serve.add_argument("--data-dir", type=Path, required=True, help='Evidence store directory')
+    serve.add_argument("--port", type=int, default=8641, help='Local server port')
+    export = sub.add_parser("export", help=tr(cli_language(), "Export reviewed candidate signals; never installs a policy"))
+    export.add_argument("--data-dir", type=Path, required=True, help='Evidence store directory')
+    export.add_argument("--output", type=Path, required=True, help='Export destination')
     args = parser.parse_args()
     if args.command == "capture":
         capture(args)
     elif args.command == "export":
         judge.save(args.output, Study(args.data_dir).signals())
-        print("Exported candidate signals; use a fresh store for signal import")
+        print(tr(cli_language(), "Exported candidate signals; use a fresh store for signal import"))
     else:
         server = make_server(Study(args.data_dir), args.port)
-        print("Jev review: http://127.0.0.1:%d (local only; no provider calls)" % server.server_port, flush=True)
+        print(tr(cli_language(), "Jev review: http://127.0.0.1:%s%s (local only; no provider calls)", server.server_port, "/?lang=" + args.lang if hasattr(args, "lang") else ""), flush=True)
         try:
             server.serve_forever()
         except KeyboardInterrupt:
@@ -429,5 +443,5 @@ if __name__ == "__main__":
         main()
     except (ValueError, RuntimeError, OSError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
         detail = str(error) if type(error) in (ValueError, RuntimeError) else type(error).__name__
-        print("Jev workbench stopped: " + detail + ". Existing evidence was not overwritten.", file=sys.stderr)
+        print(tr(cli_language(), "Jev workbench stopped: %s. Existing evidence was not overwritten.", diagnostic(cli_language(), detail)), file=sys.stderr)
         sys.exit(1)

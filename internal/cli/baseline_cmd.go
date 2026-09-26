@@ -28,7 +28,7 @@ func baselineCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "baseline_id=%s template=%s exec_count=%d process_observed_count=%d outlived_root_count=%d file_write_count=%d secret_path_count=%d network_event_count=%d metadata_ip_count=%d private_cidr_count=%d policy_block_count=%d suspicious_runtime_count=%d active_cpu_seconds=%.3f status=%s\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "baseline_id=%s template=%s exec_count=%d process_observed_count=%d outlived_root_count=%d file_write_count=%d secret_path_count=%d network_event_count=%d metadata_ip_count=%d private_cidr_count=%d policy_block_count=%d suspicious_runtime_count=%d active_cpu_seconds=%.3f status=%s\n"),
 				profile.ID, profile.TemplateName, profile.Features.ExecCount, profile.Features.ProcessObservedCount, profile.Features.OutlivedRootCount,
 				profile.Features.FileWriteCount, profile.Features.SecretPathCount, profile.Features.NetworkEventCount, profile.Features.MetadataIPCount,
 				profile.Features.PrivateCIDRCount, profile.Features.PolicyBlockCount, profile.Features.SuspiciousRuntimeCount, profile.Features.ActiveCPUSeconds, profile.Status)
@@ -70,7 +70,7 @@ func baselineCmd(dataDir *string) *cobra.Command {
 					}
 				}
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "status=%s deviations=%s recommendation=%s\n", status, strings.Join(deviations, ","), recommendation)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "status=%s deviations=%s recommendation=%s\n"), status, strings.Join(deviations, ","), recommendation)
 			return nil
 		},
 	}

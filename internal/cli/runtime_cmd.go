@@ -17,7 +17,7 @@ func runtimeCmd(dataDir *string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			paths := store.ResolvePaths(*dataDir)
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tSTATUS\tSELECTED\tEXEC\tSTOP\tSNAPSHOT\tFORK\tRESUME\tFS_SNAPSHOT\tMEM_SNAPSHOT\tRESUME_LATENCY\tQUOTA\tNETWORK\tISOLATION")
+			fmt.Fprintln(w, commandText(cmd, "NAME\tSTATUS\tSELECTED\tEXEC\tSTOP\tSNAPSHOT\tFORK\tRESUME\tFS_SNAPSHOT\tMEM_SNAPSHOT\tRESUME_LATENCY\tQUOTA\tNETWORK\tISOLATION"))
 			for _, backend := range runtimeplane.List(paths) {
 				selected := ""
 				if backend.Selected {
@@ -40,8 +40,8 @@ func runtimeCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			c := backend.Capabilities
-			fmt.Fprintf(cmd.OutOrStdout(), "name=%s\nstatus=%s\navailable=%t\nselected=%t\ncap_exec=%t\ncap_stop=%t\ncap_pause=%t\ncap_snapshot=%t\ncap_fork=%t\ncap_resume=%t\ncap_memory_snapshot=%t\ncap_cpu_weight=%t\nfilesystem_snapshot=%s\nmemory_snapshot_type=%s\nresume_latency_class=%s\nisolation_level=%s\nquota_support=%s\nnetwork_policy=%s\ntelemetry_binding=%s\nexec=%s\nsnapshot=%s\nnetwork=%s\nisolation=%s\ntelemetry=%s\nnotes=%s\n",
-				backend.Name, backend.Status, backend.Available, backend.Selected, c.Exec, c.Stop, c.Pause, c.Snapshot, c.Fork, c.Resume, c.MemorySnapshot, c.CPUWeight, c.FilesystemSnapshot, c.MemorySnapshotType, c.ResumeLatencyClass, c.IsolationLevel, c.QuotaSupport, c.NetworkPolicy, strings.Join(c.TelemetryBinding, ","), backend.Exec, backend.Snapshot, backend.Network, backend.Isolation, backend.Telemetry, backend.Notes)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "name=%s\nstatus=%s\navailable=%t\nselected=%t\ncap_exec=%t\ncap_stop=%t\ncap_pause=%t\ncap_snapshot=%t\ncap_fork=%t\ncap_resume=%t\ncap_memory_snapshot=%t\ncap_cpu_weight=%t\nfilesystem_snapshot=%s\nmemory_snapshot_type=%s\nresume_latency_class=%s\nisolation_level=%s\nquota_support=%s\nnetwork_policy=%s\ntelemetry_binding=%s\nexec=%s\nsnapshot=%s\nnetwork=%s\nisolation=%s\ntelemetry=%s\nnotes=%s\n"),
+				backend.Name, backend.Status, backend.Available, backend.Selected, c.Exec, c.Stop, c.Pause, c.Snapshot, c.Fork, c.Resume, c.MemorySnapshot, c.CPUWeight, c.FilesystemSnapshot, c.MemorySnapshotType, c.ResumeLatencyClass, c.IsolationLevel, c.QuotaSupport, c.NetworkPolicy, strings.Join(c.TelemetryBinding, ","), backend.Exec, commandText(cmd, backend.Snapshot), commandText(cmd, backend.Network), commandText(cmd, backend.Isolation), commandText(cmd, backend.Telemetry), commandText(cmd, backend.Notes))
 			return nil
 		},
 	}

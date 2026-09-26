@@ -1138,3 +1138,10 @@ footer {
     scroll-behavior: auto !important;
   }
 }
+
+.language-picker { display: flex; align-items: center; gap: 8px; margin-left: auto; white-space: nowrap; font-size: 12px; }
+.language-picker select { padding: 5px 8px; border: 1px solid var(--line2); border-radius: 7px; background: var(--panel); color: var(--tx); }
+.rule-guide h3, .rule-guide h4 { margin-top: 16px; }
+.rule-guide p, .rule-guide li { overflow-wrap: anywhere; }
+.reading-guide details { margin-top: 8px; }
+@media (max-width: 600px) { .language-picker > span { display: none; } .topbar { flex-wrap: wrap; } }

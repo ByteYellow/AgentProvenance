@@ -1,5 +1,7 @@
 # Dashboard / demo screenshots
 
+English | [简体中文](README.zh-CN.md)
+
 Screenshots and short replay media referenced from the top-level `README.md`.
 The gallery and reader screenshots use `agentprov demo`; evidence screenshots
 come from the signed snake, multi-agent and Kubernetes demo bundles.
@@ -38,3 +40,11 @@ To regenerate evidence screenshots: replay the captured run and open the dashboa
   --pub-key demo/snake-supply-chain/attestation.pub
 ./agentprov --data-dir /tmp/snake-replay dashboard serve   # http://127.0.0.1:7396
 ```
+
+Chinese UI screenshots use the `-zh-CN.png` suffix. The Chinese index lists their
+subjects and capture settings. Original commands, paths and evidence retain their
+recorded text; translated screenshots do not modify the signed demo bundles.
+
+## Chinese replay clips
+
+`demo-multiagent-agent-network-zh-CN.gif` and `demo-snake-taint-replay-zh-CN.gif` are captured from the Chinese Dashboard using its playback control. Matching PNG files contain their final frames. See the [Chinese asset index](README.zh-CN.md) for the full list.

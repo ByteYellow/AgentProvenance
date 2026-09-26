@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="560" viewBox="0 0 1180 560" role="img" aria-labelledby="title desc" lang="zh-CN">
+  <title id="title">AgentProvenance 部署方式</title>
+  <desc id="desc">三种部署方式：命令行、本地后台服务，以及规划中的中心证据服务。</desc>
+  <style>
+    .bg { fill: #f8fafc; }
+    .card { fill: #fff; stroke: #cbd5e1; stroke-width: 1.5; rx: 16; }
+    .hot { fill: #eff6ff; stroke: #3b82f6; stroke-width: 2; rx: 16; }
+    .mid { fill: #f0fdf4; stroke: #22c55e; stroke-width: 2; rx: 16; }
+    .future { fill: #faf5ff; stroke: #a855f7; stroke-width: 2; rx: 16; }
+    .txt { font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; fill: #0f172a; }
+    .title { font-size: 30px; font-weight: 800; }
+    .subtitle { font-size: 16px; fill: #475569; }
+    .h { font-size: 21px; font-weight: 800; }
+    .small { font-size: 14px; fill: #334155; }
+    .tag { font-size: 12px; font-weight: 700; fill: #2563eb; }
+    .arrow { stroke: #334155; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+  </style>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#334155" />
+    </marker>
+  </defs>
+  <rect class="bg" width="1180" height="560" />
+  <text class="txt title" x="50" y="58">部署方式</text>
+  <text class="txt subtitle" x="50" y="86">从本地命令行开始，按规模和运行需求选择后台服务。</text>
+
+  <rect class="hot" x="55" y="135" width="320" height="310" />
+  <text class="txt tag" x="85" y="170">方式一</text>
+  <text class="txt h" x="85" y="205">库 / 命令行</text>
+  <text class="txt small" x="85" y="250">单个 Go 可执行文件</text>
+  <text class="txt small" x="85" y="280">可选 Python 辅助库</text>
+  <text class="txt small" x="85" y="310">本地 SQLite 与对象存储</text>
+  <text class="txt small" x="85" y="340">批量记录与评估上下文</text>
+  <text class="txt small" x="85" y="390">适用于 RL、评估器、CI、</text>
+  <text class="txt small" x="85" y="415">基准测试与红队测试。</text>
+
+  <rect class="mid" x="430" y="135" width="320" height="310" />
+  <text class="txt tag" x="460" y="170">方式二</text>
+  <text class="txt h" x="460" y="205">边车 / 本地后台服务</text>
+  <text class="txt small" x="460" y="250">常驻接收与查询接口</text>
+  <text class="txt small" x="460" y="280">磁盘缓冲与背压</text>
+  <text class="txt small" x="460" y="310">事件关联与图校验</text>
+  <text class="txt small" x="460" y="340">取证与信号接口</text>
+  <text class="txt small" x="460" y="390">适用于沙箱工作节点、</text>
+  <text class="txt small" x="460" y="415">本地安全测试环境。</text>
+
+  <rect class="future" x="805" y="135" width="320" height="310" />
+  <text class="txt tag" x="835" y="170">方式三 / 规划中</text>
+  <text class="txt h" x="835" y="205">中心证据服务</text>
+  <text class="txt small" x="835" y="250">多租户数据接收</text>
+  <text class="txt small" x="835" y="280">对象存储与保留策略</text>
+  <text class="txt small" x="835" y="310">mTLS / 认证 / 界面</text>
+  <text class="txt small" x="835" y="340">主机外存证</text>
+  <text class="txt small" x="835" y="390">面向企业安全、审计、</text>
+  <text class="txt small" x="835" y="415">运维与合规。</text>
+
+  <path class="arrow" d="M375 290 L430 290" />
+  <path class="arrow" d="M750 290 L805 290" />
+</svg>

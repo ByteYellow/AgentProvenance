@@ -42,7 +42,7 @@ func sandboxCmd(dataDir *string) *cobra.Command {
 				return enc.Encode(reports)
 			}
 			for _, report := range reports {
-				fmt.Fprintf(c.OutOrStdout(), "name=%s status=%s sensor=%s scope=%s confidence=%.2f system=%s model_intent=%s app_context=%s\n",
+				fmt.Fprintf(c.OutOrStdout(), commandText(c, "name=%s status=%s sensor=%s scope=%s confidence=%.2f system=%s model_intent=%s app_context=%s\n"),
 					report.Name, report.Status, report.SensorPlacement, report.ScopeMode, report.ScopeConfidence,
 					report.Layers[producer.LayerSystemTelemetry].Coverage,
 					report.Layers[producer.LayerModelIntent].Coverage,
@@ -61,7 +61,7 @@ func sandboxCmd(dataDir *string) *cobra.Command {
 		Short: "run a workload with full provenance capture, then export a forensics bundle",
 		RunE: func(c *cobra.Command, args []string) error {
 			if len(args) == 0 {
-				return fmt.Errorf("a command is required after --")
+				return commandErrorf("a command is required after --")
 			}
 			// Bind window opens here (before the sensor starts) so every sandbox
 			// event falls inside it.
@@ -129,9 +129,9 @@ func sandboxCmd(dataDir *string) *cobra.Command {
 				if goTLSBin != "" {
 					sensorProc.Env = append(sensorProc.Env, "AGENTPROV_GO_TLS_BIN="+goTLSBin)
 				}
-				fmt.Fprintf(stderr, "sandbox: model-intent tls stack=%s ssl_lib=%q go_tls_bin=%q\n", tlsStack, sslLib, goTLSBin)
+				fmt.Fprintf(stderr, commandText(c, "sandbox: model-intent tls stack=%s ssl_lib=%q go_tls_bin=%q\n"), tlsStack, sslLib, goTLSBin)
 				if serr := sensorProc.Start(); serr != nil {
-					fmt.Fprintf(stderr, "sandbox: sensor unavailable (%v); degrading to record-only\n", serr)
+					fmt.Fprintf(stderr, commandText(c, "sandbox: sensor unavailable (%v); degrading to record-only\n"), serr)
 					f.Close()
 					sensorProc, sensorFile, sysTier = nil, nil, "unavailable"
 				} else {
@@ -145,7 +145,7 @@ func sandboxCmd(dataDir *string) *cobra.Command {
 			})
 			stopSensorProc(sensorProc, sensorFile)
 			if rerr != nil {
-				return fmt.Errorf("run workload: %w", rerr)
+				return commandErrorf("run workload: %w", rerr)
 			}
 
 			// 3) passive scope binding: tie the sandbox's own cgroup to this run's
@@ -157,7 +157,7 @@ func sandboxCmd(dataDir *string) *cobra.Command {
 					RunID: runID, SessionID: result.SessionID, AttemptID: result.AttemptID,
 					ToolCallID: result.ToolCallID, ProcessID: result.ProcessID, StartedAt: agentStart,
 				}); berr != nil {
-					fmt.Fprintf(stderr, "sandbox: cgroup scope bind: %v\n", berr)
+					fmt.Fprintf(stderr, commandText(c, "sandbox: cgroup scope bind: %v\n"), berr)
 				} else if bound {
 					telemetryScope = "k8s_cgroup"
 				}
@@ -176,7 +176,7 @@ func sandboxCmd(dataDir *string) *cobra.Command {
 					res, ierr := telemetry.IngestJSONLReader(db, opts, f)
 					f.Close()
 					if ierr != nil {
-						fmt.Fprintf(stderr, "sandbox: telemetry ingest: %v\n", ierr)
+						fmt.Fprintf(stderr, commandText(c, "sandbox: telemetry ingest: %v\n"), ierr)
 					} else {
 						scopedEvents = res.Ingested
 					}
@@ -187,7 +187,7 @@ func sandboxCmd(dataDir *string) *cobra.Command {
 			// mounted --out dir).
 			info, xerr := (forensics.Service{DB: db, Paths: paths}).ExportBundle(runID)
 			if xerr != nil {
-				return fmt.Errorf("export bundle: %w", xerr)
+				return commandErrorf("export bundle: %w", xerr)
 			}
 			bundleDest := info.Path
 			if out != "" {
@@ -200,7 +200,7 @@ func sandboxCmd(dataDir *string) *cobra.Command {
 			}
 
 			fmt.Fprintf(c.OutOrStdout(),
-				"sandbox: run=%s workload_exit=%d system_telemetry=%s telemetry_scope=%s scoped_events=%d bundle=%s bytes=%d signed=%t\n",
+				commandText(c, "sandbox: run=%s workload_exit=%d system_telemetry=%s telemetry_scope=%s scoped_events=%d bundle=%s bytes=%d signed=%t\n"),
 				runID, result.ExitCode, sysTier, telemetryScope, scopedEvents, bundleDest, info.SizeBytes, info.Signed)
 			return nil
 		},
@@ -216,7 +216,7 @@ func sandboxCmd(dataDir *string) *cobra.Command {
 		Short: "bind a pod's cgroup to a run scope for node-observed telemetry (k8s-daemonset)",
 		RunE: func(c *cobra.Command, _ []string) error {
 			if bcRun == "" || bcCgroup == "" {
-				return fmt.Errorf("--run and --cgroup-id are required")
+				return commandErrorf("--run and --cgroup-id are required")
 			}
 			paths, err := store.Init(*dataDir)
 			if err != nil {
@@ -246,10 +246,10 @@ func sandboxCmd(dataDir *string) *cobra.Command {
 				if _, eerr := db.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
 					VALUES (?, ?, ?, '', '', 'k8s', 'pod_metadata', ?, ?)`,
 					ids.New("evt"), bcRun, bcSession, string(payload), now); eerr != nil {
-					fmt.Fprintf(c.ErrOrStderr(), "sandbox: pod metadata event: %v\n", eerr)
+					fmt.Fprintf(c.ErrOrStderr(), commandText(c, "sandbox: pod metadata event: %v\n"), eerr)
 				}
 			}
-			fmt.Fprintf(c.OutOrStdout(), "bound cgroup=%s run=%s session=%s binding=%s source=k8s_cgroup confidence=0.8\n", bcCgroup, bcRun, bcSession, id)
+			fmt.Fprintf(c.OutOrStdout(), commandText(c, "bound cgroup=%s run=%s session=%s binding=%s source=k8s_cgroup confidence=0.8\n"), bcCgroup, bcRun, bcSession, id)
 			return nil
 		},
 	}

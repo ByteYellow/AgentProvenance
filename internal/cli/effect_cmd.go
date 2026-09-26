@@ -2,7 +2,6 @@ package cli
 
 import (
 	"database/sql"
-	"fmt"
 
 	"github.com/byteyellow/agentprovenance/internal/effects"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -24,7 +23,7 @@ func effectCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			effects.Print([]effects.Record{record}, cmd.OutOrStdout())
+			effects.Print([]effects.Record{record}, cmd.OutOrStdout(), commandLanguage(cmd))
 			return nil
 		},
 	}
@@ -58,13 +57,13 @@ func effectCmd(dataDir *string) *cobra.Command {
 			}
 			defer cleanup()
 			if filter.RunID == "" && filter.AttemptID == "" && filter.ToolCallID == "" {
-				return fmt.Errorf("one of --run, --execution-scope/--attempt, or --tool-call is required")
+				return commandErrorf("one of --run, --execution-scope/--attempt, or --tool-call is required")
 			}
 			records, err := effects.List(db, filter)
 			if err != nil {
 				return err
 			}
-			effects.Print(records, cmd.OutOrStdout())
+			effects.Print(records, cmd.OutOrStdout(), commandLanguage(cmd))
 			return nil
 		},
 	}

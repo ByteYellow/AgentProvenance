@@ -1,0 +1,356 @@
+# English: ../openapi.yaml
+# 中文接入说明：ai-access.md
+openapi: 3.1.0
+info:
+  title: AgentProvenance 查询接口
+  version: '1.0'
+  description: 供 Agent 和工具查询溯源图、信号和时间线。接入方法见 docs/zh-CN/ai-access.md；上下文写入和策略预检见工具说明。
+servers:
+- url: http://127.0.0.1:8574
+  description: 本地后台服务（agentprov daemon serve）
+security:
+- bearerAuth: []
+- {}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: 可选；服务使用 --auth-token 启动时需要提供
+  parameters:
+    run:
+      name: run
+      in: query
+      required: true
+      schema:
+        type: string
+      description: 要查询的执行 ID
+  schemas:
+    VersionedEnvelope:
+      type: object
+      description: 响应通过 schema_version 标识数据格式版本
+      properties:
+        schema_version:
+          type: string
+      additionalProperties: true
+    DaemonHealth:
+      type: object
+      required:
+      - schema_version
+      - status
+      - ready
+      - checks
+      - coverage_status
+      properties:
+        schema_version:
+          type: string
+          enum:
+          - agentprovenance.daemon_health/v1
+        status:
+          type: string
+          enum:
+          - ok
+          - degraded
+          - unavailable
+        ready:
+          type: boolean
+          description: 数据库查询和格式检查是否通过；历史采集丢失单独报告。
+        coverage_status:
+          type: string
+          enum:
+          - unknown
+          - not_observed
+          - no_recorded_gaps
+          - pending
+          - gaps_recorded
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+        queued_spool:
+          type:
+          - integer
+          - 'null'
+        queued_spool_bytes:
+          type:
+          - integer
+          - 'null'
+        native_capture:
+          type: object
+          additionalProperties: true
+      additionalProperties: true
+paths:
+  /v1/health:
+    get:
+      operationId: health
+      summary: 服务就绪状态与队列积压（agentprovenance.daemon_health/v1）
+      security:
+      - {}
+      responses:
+        '200':
+          description: 服务已就绪，历史采集缺口单独报告
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaemonHealth'
+        '503':
+          description: 存储不可用、格式版本不匹配或检查超时
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaemonHealth'
+  /v1/ready:
+    get:
+      operationId: readiness
+      summary: 与 /v1/health 使用相同的就绪检查，超时时间为 2 秒
+      security:
+      - {}
+      responses:
+        '200':
+          description: 服务已就绪，可能同时存在已记录的降级
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaemonHealth'
+        '503':
+          description: 服务尚未就绪
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaemonHealth'
+  /v1/live:
+    get:
+      operationId: liveness
+      summary: 检查进程是否响应
+      security:
+      - {}
+      responses:
+        '200':
+          description: 进程正常响应
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - schema_version
+                - status
+                properties:
+                  schema_version:
+                    type: string
+                    enum:
+                    - agentprovenance.daemon_liveness/v1
+                  status:
+                    type: string
+                    enum:
+                    - ok
+  /v1/graph/verify:
+    get:
+      operationId: verify_run
+      summary: 校验证据链的对象哈希、父关系及策略到信号的关联（agentprovenance.verify/v1）
+      parameters:
+      - $ref: '#/components/parameters/run'
+      responses:
+        '200':
+          description: 校验结果，状态为 ok 或 failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedEnvelope'
+  /v1/graph/explain:
+    get:
+      operationId: explain
+      summary: 查询节点的因果路径与依据（agentprovenance.explain/v1）
+      parameters:
+      - name: event
+        in: query
+        schema:
+          type: string
+      - name: process
+        in: query
+        schema:
+          type: string
+      - name: tool-call
+        in: query
+        schema:
+          type: string
+      - name: file
+        in: query
+        schema:
+          type: string
+      - name: risk
+        in: query
+        schema:
+          type: string
+      - name: artifact
+        in: query
+        schema:
+          type: string
+      - name: run
+        in: query
+        schema:
+          type: string
+        description: 查询 file 时必填
+      responses:
+        '200':
+          description: 节点说明
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedEnvelope'
+  /v1/signals:
+    get:
+      operationId: get_signals
+      summary: 行为、成本、质量和安全信号（agentprovenance.signals/v1）
+      parameters:
+      - $ref: '#/components/parameters/run'
+      responses:
+        '200':
+          description: 信号集合
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedEnvelope'
+  /v1/timeline:
+    get:
+      operationId: get_timeline
+      summary: 合并应用上下文与运行时遥测的时间线（agentprovenance.timeline/v1）
+      parameters:
+      - $ref: '#/components/parameters/run'
+      - name: view
+        in: query
+        schema:
+          type: string
+          enum:
+          - table
+          - causality
+      responses:
+        '200':
+          description: 执行时间线
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedEnvelope'
+  /v1/observe/summary:
+    get:
+      operationId: observe_summary
+      summary: 一次执行的观测摘要（agentprovenance.observability_summary/v1）
+      parameters:
+      - $ref: '#/components/parameters/run'
+      responses:
+        '200':
+          description: 观测摘要
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedEnvelope'
+  /v1/security/risks:
+    get:
+      operationId: list_risks
+      summary: 一次执行的风险信号（agentprovenance.security_risks/v1）
+      parameters:
+      - $ref: '#/components/parameters/run'
+      responses:
+        '200':
+          description: 风险列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedEnvelope'
+  /v1/security/responses:
+    get:
+      operationId: list_responses
+      summary: 一次执行的响应动作（agentprovenance.security_responses/v1）
+      parameters:
+      - $ref: '#/components/parameters/run'
+      responses:
+        '200':
+          description: 响应动作列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedEnvelope'
+  /v1/security/deviations:
+    get:
+      operationId: list_deviations
+      summary: 一次执行相对行为基线的偏差
+      parameters:
+      - $ref: '#/components/parameters/run'
+      responses:
+        '200':
+          description: 偏差列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedEnvelope'
+  /v1/telemetry/events:
+    get:
+      operationId: list_events
+      summary: 分页查询运行时事件（agentprovenance.telemetry_events/v1）
+      parameters:
+      - $ref: '#/components/parameters/run'
+      - name: type
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+      - name: cursor
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 一页事件记录
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedEnvelope'
+  /v1/telemetry/windows:
+    get:
+      operationId: list_windows
+      summary: 按 10 秒或 60 秒窗口聚合的遥测数据（agentprovenance.telemetry_event_windows/v1）
+      parameters:
+      - $ref: '#/components/parameters/run'
+      responses:
+        '200':
+          description: 聚合窗口列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedEnvelope'
+  /v1/telemetry/correlations:
+    get:
+      operationId: explain_correlations
+      summary: 运行时事件与 ToolCallScope 的关联依据（agentprovenance.telemetry_correlations/v1）
+      parameters:
+      - $ref: '#/components/parameters/run'
+      - name: event
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 关联依据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedEnvelope'
+  /v1/telemetry/producer-health:
+    get:
+      operationId: telemetry_producer_health
+      summary: 磁盘缓冲、丢弃、来源和关联覆盖情况（agentprovenance.producer_health/v1）
+      parameters:
+      - name: run
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 生产者健康报告
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionedEnvelope'

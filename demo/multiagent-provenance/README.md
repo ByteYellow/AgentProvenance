@@ -1,5 +1,7 @@
 # Multi-agent provenance demo — one signed graph, an attacker's arc
 
+English | [简体中文](README.zh-CN.md)
+
 **Agent-network observability across both delegation and peer relationships —
 covering the sub-agent (delegation) and multi-agent (peer) scenarios.**
 
@@ -128,8 +130,8 @@ hash-addressed evidence node), each agent's `agent_tool_call`s including recon's
   need a blocking pre-tool gate hook (not built here).
 - **Attempt A is deliberately not sensored** (recon runs under plain claude, no
   eBPF), so A contributes only the intent-layer signal — the refused node, never a
-  syscall. In this captured bundle recon genuinely refused, so nothing was
-  exfiltrated. But note: on a re-run where the model *complies*, the graph would
+  syscall. In this captured bundle recon reported a refusal; its runtime outcome has no
+  kernel coverage. Note: on a re-run where the model *complies*, the graph would
   still show A as "flagged, no egress" while the read/curl actually happened
   off-camera. A's story is the intent-layer catch; the kernel-exfil half of the
   demo is Attempt B by design.
@@ -152,5 +154,6 @@ hash-addressed evidence node), each agent's `agent_tool_call`s including recon's
 
 Build/consumer side: schema (`agents` table + `tool_calls.agent_id`), the
 `agentprov hooks bridge` command, the `orchestration` lens, and the
-syscall-attribution join all ship in the main tree with unit tests. Full capture
-+ resume notes live in the memory doc `agentprov-multiagent-demo-todo.md`.
+syscall-attribution join all ship in the main tree with unit tests. The capture harness and hook logs are available in this directory’s `capture/` folder.
+
+See [capture assets](capture/README.md) for script assumptions and file descriptions. The [Chinese SETUP reading guide](capture/SETUP.zh-CN.md) is separate from the original fixture.

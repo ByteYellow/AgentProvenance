@@ -33,7 +33,7 @@ func intentDiffCmd(dataDir *string) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if runID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			paths, err := store.Init(*dataDir)
 			if err != nil {
@@ -54,7 +54,7 @@ func intentDiffCmd(dataDir *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(res)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "run=%s effects=%d contracts=%d diffs=%d mismatches=%d coverage_gaps=%d\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "run=%s effects=%d contracts=%d diffs=%d mismatches=%d coverage_gaps=%d\n"),
 				res.RunID, res.Effects, res.Contracts, res.Diffs, res.Mismatches, res.CoverageGaps)
 			return printIntentDiffs(cmd, db, runID)
 		},
@@ -74,7 +74,7 @@ func printIntentDiffs(cmd *cobra.Command, db *sql.DB, runID string) error {
 	}
 	defer rows.Close()
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "STATUS\tFINDING\tKIND\tOP\tAGENT\tCONF\tREASON")
+	fmt.Fprintln(w, commandText(cmd, "STATUS\tFINDING\tKIND\tOP\tAGENT\tCONF\tREASON"))
 	any := false
 	for rows.Next() {
 		var status, finding, kind, op, agent, reason string
@@ -89,7 +89,7 @@ func printIntentDiffs(cmd *cobra.Command, db *sql.DB, runID string) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%.2f\t%s\n", status, finding, kind, op, short(agent), conf, reason)
 	}
 	if !any {
-		fmt.Fprintln(w, "(no diffs)")
+		fmt.Fprintln(w, commandText(cmd, "(no diffs)"))
 	}
 	return w.Flush()
 }

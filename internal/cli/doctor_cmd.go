@@ -39,7 +39,7 @@ func doctorCmd(dataDir *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(report)
 			}
-			launch.PrintPreflight(cmd.OutOrStdout(), report)
+			launch.PrintPreflightLocale(cmd.OutOrStdout(), report, commandLanguage(cmd))
 			return nil
 		},
 	}

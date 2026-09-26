@@ -16,6 +16,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"net"
 	"net/http"
 	"os"
@@ -29,6 +30,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/byteyellow/agentprovenance/internal/compliance"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/redact"
 	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
@@ -38,6 +40,8 @@ import (
 
 //go:embed index.html
 var indexHTML []byte
+
+var indexTemplate = template.Must(template.New("dashboard").Funcs(template.FuncMap{"tr": i18n.T}).Parse(string(indexHTML)))
 
 //go:embed theme.css
 var themeCSS []byte
@@ -49,6 +53,7 @@ type Server struct{ DB *sql.DB }
 func (s Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.index)
+	mux.HandleFunc("GET /assets/i18n.js", i18n.Script)
 	mux.HandleFunc("GET /assets/theme.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		_, _ = w.Write(themeCSS)
@@ -490,9 +495,21 @@ func (s Server) compliance(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s Server) index(w http.ResponseWriter, r *http.Request) {
+	lang := i18n.FromRequest(r)
+	i18n.Remember(w, r)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Language", string(lang))
 	w.Header().Set("Cache-Control", "no-store") // always serve the latest embedded UI
-	_, _ = w.Write(indexHTML)
+	var page bytes.Buffer
+	err := indexTemplate.Execute(&page, struct {
+		Lang                   i18n.Locale
+		EnglishURL, ChineseURL string
+	}{lang, i18n.URL(r.URL.RequestURI(), i18n.English), i18n.URL(r.URL.RequestURI(), i18n.Chinese)})
+	if err != nil {
+		http.Error(w, i18n.T(lang, "dashboard unavailable"), http.StatusInternalServerError)
+		return
+	}
+	_, _ = w.Write(page.Bytes())
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -1002,12 +1019,16 @@ func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "run and node are required", 400)
 		return
 	}
+	// Preview text is a presentation endpoint. Only this explicit parameter
+	// localizes its generated headings; cookies and Accept-Language never alter
+	// API content or the recorded request/response body.
+	previewLocale, _ := i18n.Parse(r.URL.Query().Get("view_lang"))
 	path, hash, source := s.resolveArtifactPath(run, node)
 	if path == "" {
 		// No stored object file, but many graph nodes still carry inspectable
 		// content in the DB: a tool_call's command/verdict, a runtime event's
 		// payload. Serve that so the node isn't a dead click.
-		if content, ok := s.nodeDBContent(run, node); ok {
+		if content, ok := s.nodeDBContentLocale(run, node, previewLocale); ok {
 			writeJSON(w, artifactResp{Kind: "text", Source: "db", Mime: "text/plain", Content: content})
 			return
 		}
@@ -1041,7 +1062,7 @@ func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
 	// node produced, not the metadata wrapper. (Evidence objects — events, policy,
 	// etc. — are left as-is so the panel shows the full signed record.)
 	mimePath := path
-	if rendered, ok := renderLLMMessage(data); ok {
+	if rendered, ok := renderLLMMessageLocale(data, previewLocale); ok {
 		// A captured LLM request/response: show a readable summary + the pretty
 		// body, not the raw provenance envelope with a double-escaped content field.
 		data = rendered
@@ -1079,6 +1100,10 @@ func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
 // nodeDBContent builds an inspectable text preview for graph nodes that have no
 // stored object file: tool_calls (command + verdict) and runtime events (payload).
 func (s Server) nodeDBContent(run, node string) (string, bool) {
+	return s.nodeDBContentLocale(run, node, i18n.English)
+}
+
+func (s Server) nodeDBContentLocale(run, node string, lang i18n.Locale) (string, bool) {
 	seg := node
 	if i := strings.LastIndex(node, "/"); i >= 0 {
 		seg = node[i+1:]
@@ -1087,7 +1112,7 @@ func (s Server) nodeDBContent(run, node string) (string, bool) {
 		var etype, payload string
 		if err := s.DB.QueryRow(`SELECT event_type, COALESCE(payload,'') FROM events WHERE run_id = ? AND id = ?`, run, seg).Scan(&etype, &payload); err == nil {
 			var b strings.Builder
-			fmt.Fprintf(&b, "event: %s\n\n", etype)
+			fmt.Fprintf(&b, i18n.T(lang, "event: %s\n\n"), etype)
 			var pretty bytes.Buffer
 			if json.Indent(&pretty, []byte(payload), "", "  ") == nil {
 				b.Write(pretty.Bytes())
@@ -1102,7 +1127,7 @@ func (s Server) nodeDBContent(run, node string) (string, bool) {
 		FROM tool_calls WHERE run_id = ? AND id = ?`, run, seg).Scan(&cmd, &status, &policy); err == nil && (cmd != "" || status != "") {
 		var b strings.Builder
 		if status != "" {
-			fmt.Fprintf(&b, "status: %s", status)
+			fmt.Fprintf(&b, i18n.T(lang, "status: %s"), status)
 			if policy != "" && policy != "allow" {
 				fmt.Fprintf(&b, "   (%s)", policy)
 			}
@@ -1163,6 +1188,10 @@ func unwrapArtifactContent(data []byte) (content []byte, path string, ok bool) {
 // preview: a short intent summary followed by the pretty-printed request/response
 // body (instead of the raw envelope whose `content` is a double-escaped JSON blob).
 func renderLLMMessage(data []byte) ([]byte, bool) {
+	return renderLLMMessageLocale(data, i18n.English)
+}
+
+func renderLLMMessageLocale(data []byte, lang i18n.Locale) ([]byte, bool) {
 	var obj struct {
 		Type    string `json:"type"`
 		Payload struct {
@@ -1183,25 +1212,25 @@ func renderLLMMessage(data []byte) ([]byte, bool) {
 	}
 	p := obj.Payload
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s   model: %s\n", strings.ToUpper(p.Direction), p.Model)
+	fmt.Fprintf(&b, i18n.T(lang, "%s   model: %s\n"), i18n.T(lang, strings.ToUpper(p.Direction)), p.Model)
 	s := p.Semantics
 	if p.Direction == "request" {
-		fmt.Fprintf(&b, "messages: %d\n", s.MessageCount)
+		fmt.Fprintf(&b, i18n.T(lang, "messages: %d\n"), s.MessageCount)
 		if len(s.ToolsOffered) > 0 {
-			fmt.Fprintf(&b, "tools offered: %s\n", strings.Join(s.ToolsOffered, ", "))
+			fmt.Fprintf(&b, i18n.T(lang, "tools offered: %s\n"), strings.Join(s.ToolsOffered, ", "))
 		}
 	} else {
 		if len(s.ToolCalls) > 0 {
-			fmt.Fprintf(&b, "decided tool: %s\n", strings.Join(s.ToolCalls, ", "))
+			fmt.Fprintf(&b, i18n.T(lang, "decided tool: %s\n"), strings.Join(s.ToolCalls, ", "))
 		}
 		if len(s.ToolCommands) > 0 {
-			fmt.Fprintf(&b, "decided command: %s\n", strings.Join(s.ToolCommands, " ; "))
+			fmt.Fprintf(&b, i18n.T(lang, "decided command: %s\n"), strings.Join(s.ToolCommands, " ; "))
 		}
 		if s.StopReason != "" {
-			fmt.Fprintf(&b, "stop reason: %s\n", s.StopReason)
+			fmt.Fprintf(&b, i18n.T(lang, "stop reason: %s\n"), s.StopReason)
 		}
 	}
-	b.WriteString("\n─────────── body ───────────\n")
+	b.WriteString(i18n.T(lang, "\n─────────── body ───────────\n"))
 	var pretty bytes.Buffer
 	if json.Indent(&pretty, []byte(p.Content), "", "  ") == nil {
 		b.Write(pretty.Bytes())

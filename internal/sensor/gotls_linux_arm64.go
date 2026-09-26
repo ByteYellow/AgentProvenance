@@ -1,9 +1,9 @@
 package sensor
 
 import (
-	"fmt"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 )
@@ -22,5 +22,5 @@ func configureCgroupResolver(_ *cgroupResolver, _ *sensorbpfObjects) {}
 func archTracepoints(_ *sensorbpfObjects) []sensorTracepoint { return nil }
 
 func attachGoTLSRead(_ *link.Executable, _ string, _ *sensorbpfObjects) ([]link.Link, error) {
-	return nil, fmt.Errorf("Go TLS Read is unsupported by the preserved arm64 sensor object")
+	return nil, i18n.Errorf("Go TLS Read is unsupported by the preserved arm64 sensor object")
 }

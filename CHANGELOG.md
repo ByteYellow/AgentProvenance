@@ -1,5 +1,37 @@
 # Changelog
 
+English | [中文](CHANGELOG.zh-CN.md)
+
+## v0.8.2 - 2026-09-26
+
+Portable replay and Chinese documentation and web interfaces.
+Release notes: [v0.8.2](docs/releases/v0.8.2.md).
+
+### Added
+
+- Linux/macOS amd64/arm64 archives with checksums, build metadata, all demo
+  sources and bilingual getting-started guides. No Go installation is needed
+  for replay.
+- One-command gallery and guide reader for six signed captures and two optional
+  evaluator examples, using the dashboard theme.
+- Chinese dashboard, demo pages, evaluator workbench, documentation, API and
+  SDK guides, diagrams and recorded replay clips.
+- CI checks for Chinese document coverage, links, UI resources and OpenAPI
+  contract parity; four-platform archive acceptance covers bilingual guides.
+
+### Changed
+
+- Web pages follow the browser on first visit and remember a manual choice.
+  English remains the fallback and the default for CLI and tool output;
+  existing `--lang zh-CN` support is optional.
+- Language changes preserve navigation and workbench drafts. Original evidence
+  and protocol values remain unchanged.
+
+### Fixed
+
+- Quoted the health response description so YAML parsers preserve its commas
+  as text instead of treating them as extra response fields.
+
 ## v0.8.2-rc.2 - 2026-09-26
 
 Prerelease: dashboard-styled demo gallery and formatted local guides.

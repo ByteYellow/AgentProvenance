@@ -31,10 +31,10 @@ func dashboardCmd(dataDir *string) *cobra.Command {
 			defer cleanup()
 			ln, err := net.Listen("tcp", addr)
 			if err != nil {
-				return fmt.Errorf("listen %s: %w", addr, err)
+				return commandErrorf("listen %s: %w", addr, err)
 			}
-			url := fmt.Sprintf("http://%s/", ln.Addr().String())
-			fmt.Fprintf(cmd.OutOrStdout(), "AgentProvenance dashboard: %s\n(read-only; Ctrl-C to stop)\n", url)
+			url := commandURL(cmd, fmt.Sprintf("http://%s/", ln.Addr().String()))
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "AgentProvenance dashboard: %s\n(read-only; Ctrl-C to stop)\n"), url)
 			return http.Serve(ln, dashboard.Server{DB: db}.Handler())
 		},
 	}

@@ -36,7 +36,7 @@ func processCmd(dataDir *string) *cobra.Command {
 			}
 			defer rows.Close()
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tSESSION\tEXEC_ID\tSTATUS\tEXIT\tWALL_SECONDS\tCOMMAND")
+			fmt.Fprintln(w, commandText(cmd, "ID\tSESSION\tEXEC_ID\tSTATUS\tEXIT\tWALL_SECONDS\tCOMMAND"))
 			for rows.Next() {
 				var id, sid, execID, command, status, startedAt, endedAt string
 				var exitCode int
@@ -73,7 +73,7 @@ func processCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "id=%s\nsession_id=%s\ncontainer_id=%s\nexec_id=%s\ncommand=%s\nstatus=%s\nexit_code=%d\nstarted_at=%s\nended_at=%s\nwall_seconds=%s\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "id=%s\nsession_id=%s\ncontainer_id=%s\nexec_id=%s\ncommand=%s\nstatus=%s\nexit_code=%d\nstarted_at=%s\nended_at=%s\nwall_seconds=%s\n"),
 				id, sid, containerID, execID, command, status, exitCode, startedAt, endedAt, wallSecondsText(startedAt, endedAt))
 			return nil
 		},
@@ -91,7 +91,7 @@ func processCmd(dataDir *string) *cobra.Command {
 			if err := svc.Interrupt(args[0]); err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "interrupted")
+			fmt.Fprintln(cmd.OutOrStdout(), commandText(cmd, "interrupted"))
 			return nil
 		},
 	}

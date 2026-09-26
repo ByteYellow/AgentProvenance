@@ -1,5 +1,7 @@
 # Linux amd64, KVM guest and K3s
 
+English | [中文](zh-CN/amd64-kvm-k3s.md)
+
 AgentProvenance supports **Linux x86-64 / Go amd64 and ARM64**, with separate
 native eBPF objects. Validated deployment paths include local Linux, a KVM
 guest, and K3s Pods inside that guest. The sensor runs **inside the guest

@@ -14,46 +14,45 @@
   <body>
     <header class="topbar">
       <a class="brand" href="/">Agent<span>Provenance</span></a>
-      <span class="tagline">verifiable agent observability</span>
+      <span class="tagline" data-i18n="verifiable agent observability">verifiable agent observability</span>
       <span id="run-meta" class="run-name" hidden></span>
       <span id="model-meta" class="model-tag" hidden></span>
       <div id="source-status" class="source-status" hidden></div>
+      <label class="language-picker"><span data-i18n="Display language">Display language</span>
+        <select id="language" aria-label="Display language" data-i18n-aria-label="Display language"><option value="en">English</option><option value="zh-CN">中文</option></select>
+      </label>
     </header>
     <main>
       <div id="error" class="notice error" role="alert" hidden></div>
-      <div id="loading" class="empty" role="status">
-        Opening verified study...
-      </div>
+      <div id="loading" class="empty" role="status" data-i18n="Opening verified study...">Opening verified study...</div>
       <div id="content" hidden>
         <div class="workspace-bar">
           <div class="workspace-title">
-            <h1>Jev Demo</h1>
-            <span class="muted">External evaluator example</span>
+            <h1 data-i18n="Jev Demo">Jev Demo</h1>
+            <span class="muted" data-i18n="External evaluator example">External evaluator example</span>
           </div>
-          <nav class="tabs" aria-label="Review views">
-            <button data-view="evidence" aria-current="page">
-              Evidence &amp; review
-            </button>
-            <button data-view="rules">Rules &amp; comparison</button>
-            <button data-view="approval">Approval &amp; audit</button>
+          <nav class="tabs" aria-label="Review views" data-i18n-aria-label="Review views">
+            <button data-view="evidence" aria-current="page" data-i18n="Evidence &amp; review">Evidence &amp; review</button>
+            <button data-view="rules" data-i18n="Rules &amp; comparison">Rules &amp; comparison</button>
+            <button data-view="approval" data-i18n="Approval &amp; audit">Approval &amp; audit</button>
           </nav>
           <div id="approval-status" aria-live="polite"></div>
         </div>
         <section id="evidence-view" class="review-layout">
           <section class="panel evidence-panel">
             <div class="panel-heading">
-              <h2>Evidence Explorer</h2>
-              <span class="sub">captured context / runtime observations</span>
+              <h2 data-i18n="Evidence Explorer">Evidence Explorer</h2>
+              <span class="sub" data-i18n="captured context / runtime observations">captured context / runtime observations</span>
               <span id="case-count" class="count"></span>
             </div>
             <div
               id="case-list"
               class="case-strip"
-              aria-label="Evidence cases"
+              aria-label="Evidence cases" data-i18n-aria-label="Evidence cases"
             ></div>
             <div id="case-content"></div>
           </section>
-          <aside class="review-sidebar" aria-label="Judgment and review">
+          <aside class="review-sidebar" aria-label="Judgment and review" data-i18n-aria-label="Judgment and review">
             <section
               id="judgment-content"
               class="panel judgment-panel"
@@ -63,9 +62,8 @@
         </section>
         <section id="rules-view" hidden></section>
         <section id="approval-view" hidden></section>
-        <footer>
-          Standalone demo. Model assessments are inferences. Source signatures
-          do not prove complete capture. Local review is not enforcement.
+        <footer data-i18n="Standalone demo. Model assessments are inferences. Source signatures do not prove complete capture. Local review is not enforcement.">
+          Standalone demo. Model assessments are inferences. Source signatures do not prove complete capture. Local review is not enforcement.
         </footer>
       </div>
     </main>

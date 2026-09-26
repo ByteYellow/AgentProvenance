@@ -6,11 +6,12 @@
 package sensor
 
 import (
-	"fmt"
 	"io"
+
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 // RunWithOptions is unavailable off Linux (eBPF requires a Linux kernel).
 func RunWithOptions(_ io.Writer, _ Options) error {
-	return fmt.Errorf("agentprov sensor requires Linux amd64 or arm64 (eBPF)")
+	return i18n.Errorf("agentprov sensor requires Linux amd64 or arm64 (eBPF)")
 }

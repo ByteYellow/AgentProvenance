@@ -1,5 +1,7 @@
 # Telemetry Event Schema
 
+English · [简体中文](zh-CN/telemetry-schema.md)
+
 AgentProvenance correlates application context with runtime telemetry. These
 fields must stay separated so eBPF/Falco/Tetragon/LoongCollector-style events
 can be ingested without pretending the kernel knows agent-level identifiers.
@@ -19,16 +21,16 @@ can be ingested without pretending the kernel knows agent-level identifiers.
 The `payload` passed to `agentprov telemetry ingest` or `telemetry.IngestFiltered`
 must be a JSON object. This is enforced at ingest time.
 
-The raw payload must not contain application context or correlation result
-fields:
+Application context and correlation results belong outside the raw payload.
+The current validator recursively rejects these fields:
 
 - `run_id`
-- `trajectory_id`
-- `execution_scope_id`
-- `substrate_scope_id`
+- `rollout_id`
+- `attempt_id`
+- `session_id`
 - `tool_call_id`
 - `process_id`
-- `artifact_state_id`
+- `snapshot_id`
 - `correlation`
 
 Those fields belong to structured ingest parameters or to the correlator output.
@@ -39,7 +41,9 @@ Storage compatibility note: older bundle schemas and SQLite tables still use
 `rollout_id`, `attempt_id`, `session_id`, and `snapshot_id`. They map to
 `trajectory_id`, `execution_scope_id`, `substrate_scope_id`, and
 `artifact_state_id` at API and documentation boundaries; raw telemetry should
-prefer the new terms.
+prefer the new terms for structured context. Those newer aliases are not yet
+in the raw-payload rejection list, so this validator is not a complete
+application-field isolation guarantee.
 
 `graph verify` also validates stored telemetry-source events after unwrapping
 AgentProvenance correlation metadata. This catches malformed data loaded
@@ -72,11 +76,18 @@ The current MVP validates these minimum event-specific fields:
 | --- | --- |
 | `execve` | `argv` as a non-empty string array, or `command` |
 | `process_exit` | numeric `exit_code` |
+| `process_observed` | numeric `pid` |
 | `file_open` / `file_write` / `secret_path` | non-traversal `path` or `file`; absolute host paths are accepted |
 | `network_connect` / `metadata_ip` / `private_cidr` | `dst`, `dst_ip`, or `host` |
 | `abnormal_process_tree` | numeric `pid` or `command` |
 | `policy_verdict` | `decision` or `verdict` |
 | `resource_pressure` | `resource` or `signal` |
+
+The following types carry these fields but currently have no strict
+required-body validation:
+
+| Event type | Captured fields |
+| --- | --- |
 | `setuid` / `setgid` | `uid` / `gid` (privilege change; setuid/setgid to `0` is the escalation case) |
 | `ptrace` | `request`, `target_pid` (process injection / inspection) |
 | `file_rename` / `file_unlink` | `path` (tamper / cleanup) |
@@ -92,7 +103,8 @@ above but are not subject to a strict required-body check.
 sensor captures filtered read opens of credential/secret paths.
 
 `AGENTPROV_TLS_CAPTURE_BODY=1` explicitly retains captured plaintext in the
-normalized event's `content` field for model-call materialization. Without that
+normalized event's `content` field for model-call materialization. This does
+not guarantee a complete request or response. Without that
 opt-in, normalization stores a hash and short preview rather than the full body.
 Captured prompts, responses and raw spool payloads may contain sensitive data;
 restrict access to the data directory and review bundles before sharing them.
@@ -142,11 +154,17 @@ Current confidence tiers:
 
 | Method | Confidence | Notes |
 | --- | --- | --- |
-| Direct process / self-observed wrapper evidence | `1.0` | Produced by AgentProvenance itself |
+| Direct process / self-observed wrapper evidence | `1.0` | Self-consistency is not independent kernel corroboration |
 | Real cgroup + time window | `0.98` | Supervised Linux capture; strong subtree join |
 | Container + time window | `0.92` | Common runtime/collector join |
 | PID + time window | `0.85` | Useful fallback; weaker because of PID reuse and missed short-lived descendants |
-| `ai_asserted` application context | `<=0.5` | App-supplied claim, intentionally lower trust |
+| `k8s_cgroup` binding source | default `0.8` | Passive Pod attribution without a recorder launch |
+| `ai_asserted` binding source | default `0.5` | App-supplied claim, intentionally lower trust |
+
+The final match uses the lower of the method confidence and a stored positive
+binding confidence. These source values are defaults, not enforced limits on
+every custom binding. Confidence is not a statistically calibrated probability.
+Reported methods may also include a suffix describing the matched keys.
 
 In record-only mode, a synthetic scope id is sufficient because there is no
 kernel telemetry to join. In supervised mode, `record` creates a real cgroup
@@ -186,8 +204,8 @@ By default, `telemetry ingest-jsonl` also runs runtime-policy evaluation for
 ingested events. Risky substrate rows such as metadata IP access, private CIDR
 access, and secret-path reads create `policy_decisions`, `risk_signals`,
 `response_actions`, graph edges, and timeline rows. The ingest result includes
-`policy_decisions` and `policy_decision_ids`; pass `--no-policy` to run a pure
-normalization-only receiver path.
+`policy_decisions` and `policy_decision_ids`; pass `--no-policy` to disable
+policy evaluation while retaining normalization, correlation, and storage.
 
 `telemetry correlations --json` explains the second half of the path: why a
 normalized runtime event was attached to a ToolCallScope. The report includes
@@ -208,10 +226,14 @@ The receiver maps recognized substrate events into the normalized schema:
 | LoongCollector | `execve`, `process_exit`, `file_open`, `file_write`, `network_connect` | matching normalized family |
 
 The native sensor (`internal/sensor`, `cmd/agentprov-sensor`; Linux amd64/arm64)
-emits this normalized schema directly, so own-kernel telemetry drives the same
-correlation → policy → risk path as Falco/Tetragon. It also adds a DAG `llm_call`
-edge (TLS request ↔ response) and an `llm_intent_caused` edge (TLS response →
-the syscalls it caused).
+emits JSONL that the native mapper converts into the shared ingest schema,
+so native telemetry drives the same correlation → policy → risk path as other
+receivers. Ingestion also derives `llm_call` (TLS request → response) and
+`llm_intent_caused` (TLS response → later action) edges from nearby events.
+The current heuristic chooses the latest event within a two-minute window in
+the same run and, when known, process; `llm_call` uses the first response
+segment. These are inferred relationships, not proof that a response caused
+a syscall, correctly paired concurrent requests, or complete stream reassembly.
 
 For local supervised capture, the CLI also exposes:
 

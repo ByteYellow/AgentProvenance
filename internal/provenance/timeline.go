@@ -7,6 +7,8 @@ import (
 	"io"
 	"sort"
 	"text/tabwriter"
+
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 type TimelineOptions struct {
@@ -222,13 +224,14 @@ func timelineDigestEvents(events []TimelineEvent) []map[string]string {
 	return out
 }
 
-func PrintTimelineManifest(manifest TimelineManifest, out io.Writer) error {
+func PrintTimelineManifest(manifest TimelineManifest, out io.Writer, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
 	if timelineView(manifest.View) == "causality" {
-		return PrintTimelineCausality(manifest, out)
+		return PrintTimelineCausality(manifest, out, languages...)
 	}
-	fmt.Fprintf(out, "run=%s schema=%s events=%d total=%d has_more=%t next_cursor=%s\n", manifest.RunID, manifest.SchemaVersion, manifest.EventCount, manifest.TotalCount, manifest.HasMore, manifest.NextCursor)
+	fmt.Fprintf(out, i18n.T(lang, "run=%s schema=%s events=%d total=%d has_more=%t next_cursor=%s\n"), manifest.RunID, manifest.SchemaVersion, manifest.EventCount, manifest.TotalCount, manifest.HasMore, manifest.NextCursor)
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "TIME\tTYPE\tSOURCE\tID\tSESSION\tATTEMPT\tTOOL_CALL\tPROCESS\tSUMMARY")
+	fmt.Fprintln(w, i18n.T(lang, "TIME\tTYPE\tSOURCE\tID\tSESSION\tATTEMPT\tTOOL_CALL\tPROCESS\tSUMMARY"))
 	for _, event := range manifest.Events {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			event.Time, event.Type, event.Source, event.ID, event.SessionID, event.AttemptID, event.ToolCallID, event.ProcessID, event.Summary)
@@ -236,12 +239,13 @@ func PrintTimelineManifest(manifest TimelineManifest, out io.Writer) error {
 	return w.Flush()
 }
 
-func PrintTimelineCausality(manifest TimelineManifest, out io.Writer) error {
-	fmt.Fprintf(out, "run=%s schema=%s view=causality events=%d total=%d has_more=%t next_cursor=%s runtime=%d correlated=%d partial=%d gaps=%d\n",
+func PrintTimelineCausality(manifest TimelineManifest, out io.Writer, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
+	fmt.Fprintf(out, i18n.T(lang, "run=%s schema=%s view=causality events=%d total=%d has_more=%t next_cursor=%s runtime=%d correlated=%d partial=%d gaps=%d\n"),
 		manifest.RunID, manifest.SchemaVersion, manifest.EventCount, manifest.TotalCount, manifest.HasMore, manifest.NextCursor, manifest.Summary.RuntimeEvents,
 		manifest.Summary.FullyCorrelated, manifest.Summary.PartiallyCorrelated, manifest.Summary.CorrelationGaps)
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "TIME\tLANE\tTYPE\tTOOL_CALL\tPROCESS\tSTATUS\tSUMMARY\tDRILLDOWN")
+	fmt.Fprintln(w, i18n.T(lang, "TIME\tLANE\tTYPE\tTOOL_CALL\tPROCESS\tSTATUS\tSUMMARY\tDRILLDOWN"))
 	for _, event := range manifest.Events {
 		drilldown := ""
 		if len(event.Drilldowns) > 0 {

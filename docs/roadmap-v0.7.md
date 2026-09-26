@@ -1,5 +1,7 @@
 # AgentProvenance v0.7: Portable Producer Profiles
 
+English | [中文](zh-CN/roadmap-v0.7.md)
+
 > Historical v0.7 design and validation notes. For the current release, see
 > [v0.8.0](releases/v0.8.0.md) and the [Linux/KVM/K3s runbook](amd64-kvm-k3s.md).
 > KVM guest capture now uses `local-record`; amd64 Go TLS response/read capture
@@ -60,8 +62,8 @@ Producer Profile = {
 
 - **passive cgroup-attribution** — sensor derives container/pod from the cgroup
   it observes; tool calls join by command-match. Zero-touch, mid confidence.
-- **active record-wrap** — the workload entrypoint is wrapped by `agentprov
-  record`, which creates a dedicated cgroup leaf (`internal/record/cgroup_linux.go`)
+- **active record-wrap** — the workload entrypoint is wrapped by `agentprov record`,
+  which creates a dedicated cgroup leaf (`internal/record/cgroup_linux.go`)
   → kernel-verified scope, confidence `1.0`. Same as the VM path today.
 
 ## Profiles

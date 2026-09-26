@@ -47,7 +47,7 @@ network connection. The dashboard replays their attributed execution path:
 </p>
 
 [Explore the capture](demo/multiagent-provenance/README.md) ·
-[Try the replay](#quickstart) · [v0.8.2-rc.2 release notes](docs/releases/v0.8.2-rc.2.md)
+[Try the replay](#quickstart) · [v0.8.2 release notes](docs/releases/v0.8.2.md)
 
 ## Contents
 
@@ -83,7 +83,7 @@ network connection. The dashboard replays their attributed execution path:
 ![Local demo gallery with six signed captures and two evaluator guides](docs/img/demo-gallery.png)
 
 Download a precompiled archive and its `.sha256` file from
-[**v0.8.2-rc.2 (prerelease)**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2).
+[**v0.8.2**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2).
 
 | Platform | Archive suffix |
 |---|---|
@@ -95,9 +95,9 @@ Download a precompiled archive and its `.sha256` file from
 For example, on Linux x86-64, in the download directory:
 
 ```sh
-sha256sum -c agentprov_v0.8.2-rc.2_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.8.2_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.8.2-rc.2_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.8.2_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -565,6 +565,8 @@ existing signal contract.
 
 ### Custom rules in Python
 
+See the [Python integration guide](docs/python-sdk.md) for installation, method references and runnable examples.
+
 <details>
 <summary>Expand the complete Python rule example</summary>
 
@@ -650,9 +652,8 @@ POST /v1/signal/run
 POST /v1/signal/import
 ```
 
-The daemon does not expose an HTTP endpoint that runs arbitrary external shell
-commands. A client can fetch `EvalContext`, execute its evaluator in its own
-process boundary, and import the resulting signals back into the daemon for
+External evaluators run in the client process. A client fetches `EvalContext`,
+executes its evaluator, and imports the resulting signals into the daemon for
 validation. The CLI follows that shape when `--daemon-url` is set.
 
 ## Compliance Evidence, Not Certification
@@ -664,14 +665,14 @@ replacement:
 
 ```sh
 ./agentprov compliance map --framework owasp-asi --run <run_id>
-./agentprov compliance gaps --framework owasp-asi --run <run_id>   # missing/partial backlog
+./agentprov compliance gaps --framework owasp-asi --run <run_id>   # detected/no-rule items requiring attention
 ```
 
-Every check item is derived from evidence already in the run and reports
-`covered | partial | missing | not_applicable` with concrete `evidence_refs`
-and a recommended next step — honest coverage gaps instead of fake passes, and
-no ambition to become a GRC platform. Custom YAML rulesets can add
-enterprise-specific frameworks on top of the built-ins.
+Each item maps concrete detection rules and their hits in this run. It reports
+`enforced | detected | not_triggered | no_rule`, with `evidence_refs` and a
+recommended next step. No mapped detector is a coverage gap; a rule that did
+not fire is not a general pass. Custom YAML catalogs can add local frameworks;
+`--rules` supplies custom detection rules.
 
 Full command set, item semantics, and the custom-ruleset YAML model:
 [docs/compliance.md](docs/compliance.md).
@@ -749,7 +750,21 @@ judges with. Any Anthropic- or OpenAI-protocol endpoint works (Claude,
 DeepSeek, Qwen, local vLLM/Ollama); without a key it degrades to an offline
 fixture so the pipeline still completes.
 
+## Interface language
+
+The CLI uses English by default. Add `--lang zh-CN` for Chinese help and terminal
+output, for example `agentprov --lang zh-CN --help` or
+`agentprov --lang zh-CN demo`. An explicit CLI choice also applies to the page it
+opens; otherwise, the browser selects the web language. JSON, command names,
+flags, IDs, paths, and original evidence keep their original values.
+
 ## Web Dashboard
+
+The interface follows the browser language on first visit, with English as the
+fallback. Use the English / 中文 switch to save a preference. Switching keeps the
+selected run, lens, detail level, node and overlays. Commands, paths, IDs and
+original evidence retain their recorded text.
+
 
 <p align="center">
   <img src="docs/assets/dashboard-causality.png" alt="AgentProvenance local evidence inspector preview with run selection, verify status, timeline, process tree, egress, risk signals, and causality DAG." width="100%">
@@ -1252,15 +1267,15 @@ and `forensics`. `substrate` contains runtime facts AgentProvenance can consume.
 
 ## Roadmap
 
-**v0.8.2-rc.2 is the portable replay prerelease.** Download Linux/macOS archives
+**v0.8.2 adds portable replay and Chinese documentation and web interfaces.** Download Linux/macOS archives
 for amd64/arm64 and run `agentprov demo` to browse all eight examples in a
 dashboard-styled gallery and guide reader. See the
-[v0.8.2-rc.2 notes](docs/releases/v0.8.2-rc.2.md).
+[v0.8.2 notes](docs/releases/v0.8.2.md).
 
 **v0.8.1 adds an optional external-evaluator example.** The [Jev demo](demo/jev-judge/)
 shows typed judgments, rule comparison and human review using the existing
 evidence/signal contract. It does not add a built-in analyst or change capture.
-See the [v0.8.2-rc.2 release notes](docs/releases/v0.8.2-rc.2.md).
+See the [v0.8.1 release notes](docs/releases/v0.8.1.md).
 
 **v0.8.0 established portable, reliable evidence capture.** It added native
 amd64 support, KVM guest deployment, K3s acceptance, automatic container TLS

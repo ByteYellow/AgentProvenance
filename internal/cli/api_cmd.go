@@ -28,7 +28,7 @@ func apiCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "decision=%s reason=%s\n%s\n", decision.Decision, decision.Reason, body)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "decision=%s reason=%s\n%s\n"), decision.Decision, decision.Reason, body)
 			return nil
 		},
 	}
@@ -56,7 +56,7 @@ func apiCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "decision=%s reason=%s\n", decision.Decision, decision.Reason)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "decision=%s reason=%s\n"), decision.Decision, decision.Reason)
 			return nil
 		},
 	}
@@ -85,7 +85,7 @@ func apiCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "decision=%s reason=%s\n", decision.Decision, decision.Reason)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "decision=%s reason=%s\n"), decision.Decision, decision.Reason)
 			for _, match := range matches {
 				fmt.Fprintf(cmd.OutOrStdout(), "%s:%d:%s\n", match.Path, match.Line, match.Text)
 			}
@@ -116,7 +116,7 @@ func apiCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "decision=%s reason=%s artifact=%s\n", decision.Decision, decision.Reason, artifactRef)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "decision=%s reason=%s artifact=%s\n"), decision.Decision, decision.Reason, artifactRef)
 			return nil
 		},
 	}
@@ -147,7 +147,7 @@ func apiCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "decision=%s reason=%s process_id=%s\n", decision.Decision, decision.Reason, processID)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "decision=%s reason=%s process_id=%s\n"), decision.Decision, decision.Reason, processID)
 			return nil
 		},
 	}

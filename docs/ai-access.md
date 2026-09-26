@@ -1,10 +1,14 @@
-# AI Access: making AgentProvenance AI-native
+# AI Access and Tool Contracts
+
+English | [中文](zh-CN/ai-access.md)
 
 > Status: direction + contract doc. AgentProvenance should be callable BY agents,
 > not just observed by humans. The asset is the capability surface (already
 > `daemon /v1` REST + CLI `--json`); MCP, OpenAPI, provider tool-schemas, SDK
 > wrappers, and the CLI are all thin ADAPTERS over the same contract. Define the
 > contract once (this doc), generate the adapters.
+
+Reference: [OpenAPI](openapi.yaml) · [AI/MCP tools](ai-tools.md) · [Python integration](python-sdk.md).
 
 ## 0. The trust boundary (load-bearing, applies to every adapter)
 
@@ -16,13 +20,14 @@
 - Verdicts (the inline gate) are computed by the trusted policy/correlation
   engine, never by the calling model.
 
-So: ship read-only tools first (zero trust risk), then context-write tools, then
-the gate.
+The integration order is read tools, app-context writes, then policy preflight.
+Read-only tools still require appropriate access to the underlying evidence.
 
 ## 1. The capability contract (read surface)
 
 Every operation already exists as a daemon endpoint and a CLI command, each
-returning a versioned JSON envelope. This is the canonical list adapters expose.
+returning a versioned JSON envelope. This is the underlying read surface; the
+current MCP and provider catalogs expose a subset, listed in section 2.1.
 
 | Operation | Daemon endpoint | CLI | Schema |
 |---|---|---|---|
@@ -33,7 +38,7 @@ returning a versioned JSON envelope. This is the canonical list adapters expose.
 | observe_summary | GET /v1/observe/summary?run= | observe summary --json | agentprovenance.observability_summary/v1 |
 | list_risks | GET /v1/security/risks?run= | security risks --run --json | agentprovenance.security_risks/v1 |
 | list_responses | GET /v1/security/responses?run= | security responses --run --json | agentprovenance.security_responses/v1 |
-| list_deviations | GET /v1/security/deviations?run= | security deviations --run --json | (deviations) |
+| list_deviations | GET /v1/security/deviations?run= | security deviations --run --json | agentprovenance.security_deviations/v1 |
 | list_events | GET /v1/telemetry/events?run= (paged) | telemetry list --run --json | agentprovenance.telemetry_events/v1 |
 | list_windows | GET /v1/telemetry/windows?run= | telemetry windows --run --json | agentprovenance.telemetry_event_windows/v1 |
 | explain_correlations | GET /v1/telemetry/correlations?run= | telemetry correlations --run --json | agentprovenance.telemetry_correlations/v1 |
@@ -80,14 +85,19 @@ boundary in §0 is inherited unchanged (no fabrication of system events/signatur
 the gate verdict is the engine's, not the model's). Implementation:
 `internal/mcpserver`.
 
-## 3. The differentiated one: the inline gate (push, not pull)
+## 3. Policy preflight
 
-Beyond "agent queries provenance," the unique capability is an **in-loop
-guardrail**: the agent harness calls `evaluate_action(proposed_action, scope)`
-before/after a tool call; the trusted engine returns allow / deny / quarantine
-with the correlated evidence behind it. This turns AgentProvenance from an
-observer into a step in the agent's decision loop -- backed by correlation +
-verifiable evidence, which a plain query tool cannot provide.
+A harness can call `evaluate_action` before attempting a command, connection, or
+file operation. The current implementation evaluates caller-supplied
+`event_type`, `command`/`args`, `dst_ip`, and `path` with the local default policy
+engine. It returns `allow`, `deny`, `quarantine`, or `kill`, a rule identifier,
+and a reason.
+
+This call does not execute or block the action, persist a policy decision, or
+query runtime evidence to establish what happened. The caller must honor the
+result. The inputs describe a proposed action, so a successful preflight is not
+proof that the later action matched it or was observed by the sensor. Correlated
+post-execution evidence remains a separate query path.
 
 ## 4. Roadmap
 
@@ -96,6 +106,7 @@ verifiable evidence, which a plain query tool cannot provide.
 2. **Context-write tools** (done): bind_scope / record_tool_call so an agent
    registers its own ToolCallScope (zero-instrumentation correlation), within the
    trust boundary — app-asserted only, never forging system evidence.
-3. **Inline gate**: evaluate_action over the policy/correlation engine.
+3. **Policy preflight** (done): evaluate_action over the default policy engine;
+   enforcement remains the caller's responsibility.
 4. **Analysis direction** (optional): an observer-LLM step over the SIGNED graph
    (semantic risk explanation on tamper-evident evidence).

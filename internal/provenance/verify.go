@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
@@ -31,14 +32,14 @@ type VerifyResult struct {
 	Issues        []VerifyIssue `json:"issues"`
 }
 
-func VerifyRun(db *sql.DB, runID string, out io.Writer) error {
+func VerifyRun(db *sql.DB, runID string, out io.Writer, languages ...i18n.Locale) error {
 	result, err := Verify(db, runID)
 	if err != nil {
 		return err
 	}
-	PrintVerifyResult(out, result)
+	PrintVerifyResult(out, result, languages...)
 	if result.ErrorCount > 0 {
-		return fmt.Errorf("graph verify failed: errors=%d warnings=%d", result.ErrorCount, result.WarningCount)
+		return i18n.Errorf("graph verify failed: errors=%d warnings=%d", result.ErrorCount, result.WarningCount)
 	}
 	return nil
 }
@@ -52,14 +53,14 @@ func VerifyRunJSON(db *sql.DB, runID string, out io.Writer) error {
 		return err
 	}
 	if result.ErrorCount > 0 {
-		return fmt.Errorf("graph verify failed: errors=%d warnings=%d", result.ErrorCount, result.WarningCount)
+		return i18n.Errorf("graph verify failed: errors=%d warnings=%d", result.ErrorCount, result.WarningCount)
 	}
 	return nil
 }
 
 func Verify(db *sql.DB, runID string) (VerifyResult, error) {
 	if runID == "" {
-		return VerifyResult{}, fmt.Errorf("run_id is required")
+		return VerifyResult{}, i18n.Errorf("run_id is required")
 	}
 	result := VerifyResult{SchemaVersion: "agentprovenance.verify/v1", RunID: runID, Status: "ok"}
 	add := func(severity, kind, id, format string, args ...any) {
@@ -135,14 +136,15 @@ func Verify(db *sql.DB, runID string) (VerifyResult, error) {
 	return result, nil
 }
 
-func PrintVerifyResult(out io.Writer, result VerifyResult) {
+func PrintVerifyResult(out io.Writer, result VerifyResult, languages ...i18n.Locale) {
+	lang := presentationLocale(languages)
 	status := "ok"
 	if result.ErrorCount > 0 {
 		status = "failed"
 	}
-	fmt.Fprintf(out, "run=%s status=%s errors=%d warnings=%d issues=%d\n", result.RunID, status, result.ErrorCount, result.WarningCount, result.IssueCount)
+	fmt.Fprintf(out, i18n.T(lang, "run=%s status=%s errors=%d warnings=%d issues=%d\n"), result.RunID, status, result.ErrorCount, result.WarningCount, result.IssueCount)
 	for _, issue := range result.Issues {
-		fmt.Fprintf(out, "issue severity=%s kind=%s id=%s message=%q\n", issue.Severity, issue.Kind, issue.ID, issue.Message)
+		fmt.Fprintf(out, i18n.T(lang, "issue severity=%s kind=%s id=%s message=%q\n"), issue.Severity, issue.Kind, issue.ID, issue.Message)
 	}
 }
 

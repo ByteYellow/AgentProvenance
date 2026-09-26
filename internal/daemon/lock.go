@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
@@ -70,9 +71,13 @@ func ActiveLock(dataDir string) (LockInfo, bool) {
 // WarnIfDaemonActive prints a stderr warning when a live daemon owns dataDir, so
 // a direct CLI write knows it may diverge from the daemon's in-memory state.
 // It never blocks the command (WAL keeps the file safe; the risk is logical).
-func WarnIfDaemonActive(dataDir string, w io.Writer) {
+func WarnIfDaemonActive(dataDir string, w io.Writer, languages ...i18n.Locale) {
+	lang := i18n.English
+	if len(languages) > 0 {
+		lang = languages[0]
+	}
 	if info, ok := ActiveLock(dataDir); ok {
-		fmt.Fprintf(w, "warning: a daemon (pid %d, %s) owns this data dir; a direct CLI write can diverge from daemon state. Route writes through --daemon-url http://%s instead.\n", info.PID, info.Addr, info.Addr)
+		fmt.Fprintf(w, i18n.T(lang, "warning: a daemon (pid %d, %s) owns this data dir; a direct CLI write can diverge from daemon state. Route writes through --daemon-url http://%s instead.\n"), info.PID, info.Addr, info.Addr)
 	}
 }
 

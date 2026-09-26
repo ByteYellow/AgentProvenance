@@ -1,6 +1,10 @@
 # AgentProvenance Infra v1 -- Definition of Done
 
-> Status: release-scope doc. Turns the `north-star-three-pillars.md` vision into a
+English | [中文](zh-CN/v1-definition-of-done.md)
+
+> Historical scope and acceptance record, not the current release gate. See
+> [closeout criteria](project-closeout.md) and the [localization checklist](zh-CN/localization.md)
+> for ongoing work. This document turns the `north-star-three-pillars.md` vision into a
 > checkable v1 acceptance list. Decisions below were taken 2026-06-27 and the
 > status table was reconciled with completed gates on 2026-08-05 after a
 > file-grounded audit of the whole repo. Each item is DONE / PARTIAL / DEFERRED

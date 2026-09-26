@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/ids"
 )
 
@@ -137,9 +138,13 @@ func List(db *sql.DB, filter Filter) ([]Record, error) {
 	return records, rows.Err()
 }
 
-func Print(records []Record, out io.Writer) {
+func Print(records []Record, out io.Writer, languages ...i18n.Locale) {
+	lang := i18n.English
+	if len(languages) > 0 {
+		lang = languages[0]
+	}
 	for _, record := range records {
-		fmt.Fprintf(out, "effect=%s run=%s attempt=%s tool_call=%s process=%s type=%s target=%s mode=%s decision=%s compensation_ref=%s status=%s created_at=%s payload=%s\n",
+		fmt.Fprintf(out, i18n.T(lang, "effect=%s run=%s attempt=%s tool_call=%s process=%s type=%s target=%s mode=%s decision=%s compensation_ref=%s status=%s created_at=%s payload=%s\n"),
 			record.ID, record.RunID, record.AttemptID, record.ToolCallID, record.ProcessID, record.EffectType, record.Target, record.Mode, record.Decision, record.CompensationRef, record.Status, record.CreatedAt, record.Payload)
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 func BuildGraphLens(db *sql.DB, opts GraphLensOptions) (GraphLensManifest, error) {
@@ -109,27 +111,28 @@ func PrintGraphLensManifestJSON(out io.Writer, manifest GraphLensManifest) error
 	return enc.Encode(manifest)
 }
 
-func GraphLens(db *sql.DB, opts GraphLensOptions, out io.Writer) error {
+func GraphLens(db *sql.DB, opts GraphLensOptions, out io.Writer, languages ...i18n.Locale) error {
 	manifest, err := BuildGraphLens(db, opts)
 	if err != nil {
 		return err
 	}
-	return PrintGraphLensManifest(out, manifest)
+	return PrintGraphLensManifest(out, manifest, languages...)
 }
 
-func PrintGraphLensManifest(out io.Writer, manifest GraphLensManifest) error {
-	fmt.Fprintf(out, "graph_lens run=%s lens=%s schema=%s nodes=%d edges=%d derived=%d layout=%s truncated=%t\n",
+func PrintGraphLensManifest(out io.Writer, manifest GraphLensManifest, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
+	fmt.Fprintf(out, i18n.T(lang, "graph_lens run=%s lens=%s schema=%s nodes=%d edges=%d derived=%d layout=%s truncated=%t\n"),
 		manifest.RunID, manifest.Lens, manifest.SchemaVersion, manifest.Query.NodeCount,
 		len(manifest.Edges), len(manifest.DerivedEdges), manifest.Query.LayoutHint, manifest.Query.Truncated)
-	for _, line := range manifest.Summary {
-		fmt.Fprintf(out, "  summary=%s\n", line)
+	for _, line := range graphLensDisplaySummary(manifest, lang) {
+		fmt.Fprintf(out, i18n.T(lang, "  summary=%s\n"), line)
 	}
 	for _, edge := range manifest.DerivedEdges {
-		fmt.Fprintf(out, "  derived_edge=%s %s -> %s confidence=%.2f rule=%s evidence=%s\n",
+		fmt.Fprintf(out, i18n.T(lang, "  derived_edge=%s %s -> %s confidence=%.2f rule=%s evidence=%s\n"),
 			edge.EdgeType, edge.FromID, edge.ToID, edge.Confidence, edge.DerivationRule, strings.Join(edge.EvidenceRefs, ","))
 	}
 	for _, edge := range manifest.Edges {
-		fmt.Fprintf(out, "  edge=%s %s -> %s source_event=%s\n", edge.EdgeType, edge.FromID, edge.ToID, edge.SourceEventID)
+		fmt.Fprintf(out, i18n.T(lang, "  edge=%s %s -> %s source_event=%s\n"), edge.EdgeType, edge.FromID, edge.ToID, edge.SourceEventID)
 	}
 	return nil
 }

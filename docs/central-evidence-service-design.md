@@ -1,5 +1,7 @@
 # Central Evidence Service: design boundary
 
+English · [简体中文](zh-CN/central-evidence-service-design.md)
+
 Status: architecture only. AgentProvenance does not implement this service in
 the current project scope.
 

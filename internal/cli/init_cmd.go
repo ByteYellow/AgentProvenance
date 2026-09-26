@@ -15,7 +15,7 @@ func initCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "initialized %s\n", paths.Root)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "initialized %s\n"), paths.Root)
 			return nil
 		},
 	}

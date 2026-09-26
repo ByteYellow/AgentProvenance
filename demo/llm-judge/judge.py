@@ -24,15 +24,22 @@ Stdlib only; Python 3.9+.
 """
 
 import argparse
+from functools import partial
 import hashlib
 import json
 import math
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
 import urllib.error
 import urllib.request
+
+# Shared display helpers ship beside both optional evaluators in the archive.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from localization import Parser, cli_language, diagnostic, tr
+
 
 SCHEMA_VERSION = "agentprovenance.llm_judge/v1"
 LENSES = [
@@ -481,9 +488,11 @@ def tls_jsonl(exchanges, host, path):
 
 
 def cmd_judge(args):
+    language = getattr(args, "lang", "en")
+    text = partial(tr, language)
     provider = resolve_provider(args.offline)
     if provider is None and not args.offline:
-        print("llm-judge: no LLM token found -> offline fixture mode",
+        print(text("llm-judge: no LLM token found -> offline fixture mode"),
               file=sys.stderr)
 
     cli = Cli(args.agentprov, args.data_dir)
@@ -519,11 +528,11 @@ def cmd_judge(args):
         f.write("" if llm.offline else
                 tls_jsonl(llm.exchanges, llm.host, llm.path))
 
-    print("llm-judge: run=%s verdict=%s confidence=%s findings=%d "
-          "events=%d chunks=%d mode=%s llm_calls=%d" % (
-              args.run, verdict["verdict"], verdict.get("confidence"),
-              len(verdict.get("findings") or []), coverage["events_total"],
-              coverage["chunks"], coverage["mode"], len(llm.exchanges)))
+    print(text("llm-judge: run=%s verdict=%s confidence=%s findings=%d events=%d chunks=%d mode=%s llm_calls=%d",
+               args.run, text(verdict["verdict"]), verdict.get("confidence"),
+               len(verdict.get("findings") or []), coverage["events_total"],
+               coverage["chunks"], text(coverage["mode"]), len(llm.exchanges)))
+
 
 
 def load_env_file():
@@ -546,10 +555,10 @@ def load_env_file():
                                   value.strip().strip('"').strip("'"))
 
 
-def sh(cmd, **kw):
+def sh(cmd, language="en", **kw):
     proc = subprocess.run(cmd, capture_output=True, text=True, **kw)
     if proc.returncode != 0:
-        sys.exit("command failed rc=%d: %s\n%s" % (
+        sys.exit(tr(language, "command failed rc=%d: %s\n%s",
             proc.returncode, " ".join(str(c) for c in cmd[:6]),
             proc.stderr.strip()[:500]))
     return proc.stdout
@@ -559,6 +568,9 @@ def cmd_run(args):
     """Orchestrate the whole demo: import bundle -> judge under `agentprov
     record` (re-executing this file) -> attach the judge's LLM calls to its
     own run -> import the verdict as signals -> print the result."""
+    language = getattr(args, "lang", "en")
+    text = partial(tr, language)
+    shell = partial(sh, language=language)
     demo_dir = os.path.dirname(os.path.abspath(__file__))
     repo_dir = os.path.dirname(os.path.dirname(demo_dir))
     load_env_file()
@@ -567,8 +579,8 @@ def cmd_run(args):
     if not binary:
         binary = os.path.join(demo_dir, ".build", "agentprov")
         os.makedirs(os.path.dirname(binary), exist_ok=True)
-        print("==> building agentprov")
-        sh(["go", "build", "-o", binary, "./cmd/agentprov"], cwd=repo_dir)
+        print(text("==> building agentprov"))
+        shell(["go", "build", "-o", binary, "./cmd/agentprov"], cwd=repo_dir)
 
     work = os.path.join(demo_dir, ".judge-work")
     shutil.rmtree(work, ignore_errors=True)
@@ -578,13 +590,13 @@ def cmd_run(args):
     data_dir, target = args.data_dir, args.run
     if not data_dir:
         data_dir = os.path.join(work, "state")
-        print("==> importing snake-supply-chain bundle into fresh store")
-        sh([binary, "--data-dir", data_dir, "forensics", "import", "--json",
+        print(text("==> importing snake-supply-chain bundle into fresh store"))
+        shell([binary, "--data-dir", data_dir, "forensics", "import", "--json",
             os.path.join(demo_dir, "..", "snake-supply-chain",
                          "run-snake-supervised.forensics.json.gz")])
         target = target or "run-snake-supervised"
     if not target:
-        sys.exit("--run is required when --data-dir is given")
+        sys.exit(text("--run is required when --data-dir is given"))
     data_dir = os.path.abspath(data_dir)
 
     paths = {n: os.path.join(work, n) for n in
@@ -594,101 +606,103 @@ def cmd_run(args):
              "--run", target, "--data-dir", data_dir, "--agentprov", binary,
              "--verdict-out", paths["verdict.json"],
              "--signals-out", paths["signals.json"],
-             "--tls-out", paths["judge-tls.jsonl"]]
+             "--tls-out", paths["judge-tls.jsonl"], "--lang", language]
     if args.offline or os.environ.get("AGENTPROV_JUDGE_OFFLINE"):
         inner.append("--offline")
-    print("==> judging %s (the judge itself runs under 'agentprov record')"
-          % target)
-    out = sh(inner, cwd=judge_cwd)
+    print(text("==> judging %s (the judge itself runs under 'agentprov record')", target))
+    out = shell(inner, cwd=judge_cwd)
     # record's --json manifest follows the wrapped command's own stdout.
     manifest = json.loads(out[out.index("{"):])
     judge_run = manifest.get("run_id") or manifest.get("RunID")
     judge_proc = manifest.get("process_id") or manifest.get("ProcessID") or ""
-    print("    judge run: %s" % judge_run)
+    print(text("    judge run: %s", judge_run))
 
     if os.path.getsize(paths["judge-tls.jsonl"]) > 0:
-        print("==> attaching the judge's own LLM calls to its provenance run")
+        print(text("==> attaching the judge's own LLM calls to its provenance run"))
         env = dict(os.environ, AGENTPROV_TLS_CAPTURE_BODY="1")
-        sh([binary, "--data-dir", data_dir, "telemetry", "ingest-jsonl",
+        shell([binary, "--data-dir", data_dir, "telemetry", "ingest-jsonl",
             "--format", "native", "--run", judge_run,
             "--process", judge_proc, "--file", paths["judge-tls.jsonl"],
             "--json"], env=env)
-        sh([binary, "--data-dir", data_dir, "graph", "materialize-llm",
+        shell([binary, "--data-dir", data_dir, "graph", "materialize-llm",
             "--run", judge_run])
     else:
-        print("    (offline mode: no LLM exchange to attach)")
+        print(text("    (offline mode: no LLM exchange to attach)"))
 
-    print("==> importing verdict as signals on %s" % target)
-    sh([binary, "--data-dir", data_dir, "signal", "import", "--run", target,
+    print(text("==> importing verdict as signals on %s", target))
+    shell([binary, "--data-dir", data_dir, "signal", "import", "--run", target,
         "--file", paths["signals.json"], "--json"])
 
     with open(paths["verdict.json"], encoding="utf-8") as f:
         full = json.load(f)
     verdict = full["verdict"]
-    print("\n================ verdict ================")
-    print("run     : %s" % full["run_id"])
-    print("verdict : %s  confidence: %s" % (verdict.get("verdict"),
-                                            verdict.get("confidence")))
-    print("coverage: %s" % json.dumps(full["coverage"]))
-    print("judge   : %s %s" % (full["judge"]["mode"],
-                               full["judge"].get("model") or ""))
-    print("summary : %s" % verdict.get("summary"))
+    print("\n================ " + text("Verdict") + " ================")
+    print(text("run     : %s", full["run_id"]))
+    print(text("verdict : %s  confidence: %s", text(verdict.get("verdict")), verdict.get("confidence")))
+    coverage = full["coverage"]
+    print(text("coverage: %s", json.dumps(coverage)) if language == "en" else
+          text("Coverage: %s events, %s exported, %s chunks", coverage["events_total"], coverage["events_exported"], coverage["chunks"]))
+    print(text("judge   : %s %s", text(full["judge"]["mode"]), full["judge"].get("model") or ""))
+    if language == "zh-CN" and coverage["mode"] == "offline":
+        print(text("Offline fixture: no model call. Verdict uses stored risk signals; exported events were not read by a model."))
+    print(text("summary : %s", verdict.get("summary")))
     for f_ in verdict.get("findings") or []:
-        print("  - [%s] %s  evidence=%s" % (
-            f_.get("severity"), f_.get("claim"),
-            ",".join(f_.get("evidence_ids") or [])))
+        print(text("  - [%s] %s  evidence=%s", text(f_.get("severity")), f_.get("claim"), ",".join(f_.get("evidence_ids") or [])))
     print("=========================================\n")
-    print("==> verdict signals now attached to the target run:")
-    print(sh([binary, "--data-dir", data_dir, "signals", "list",
-              "--run", target, "--dimension", "quality"]))
-    print("==> the judge's own audited run:")
-    print("\n".join(sh([binary, "--data-dir", data_dir, "graph", "lens",
-                        "--run", judge_run, "--lens", "agent-intent"]
+    print(text("==> verdict signals now attached to the target run:"))
+    print(shell([binary, "--data-dir", data_dir, "signals", "list",
+              "--run", target, "--dimension", "quality", "--lang", language]))
+    print(text("==> the judge's own audited run:"))
+    print("\n".join(shell([binary, "--data-dir", data_dir, "graph", "lens",
+                        "--run", judge_run, "--lens", "agent-intent", "--lang", language]
                        ).splitlines()[:20]))
-    print("\ninspect further:")
+    print("\n" + text("inspect further:"))
     for hint in (
             "ai call get_signals --input '{\"run\":\"%s\"}'" % target,
             "graph lens --json --run %s --lens agent-intent" % judge_run,
-            "dashboard serve   # signals panel + judge run DAG"):
+            text("dashboard serve   # signals panel + judge run DAG")):
         print("  %s --data-dir %s %s" % (binary, data_dir, hint))
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = Parser(description='LLM evidence evaluator. Records its own calls and exports verdicts, signals and request/response evidence.', language=cli_language())
     sub = ap.add_subparsers(dest="cmd")
 
-    run_p = sub.add_parser("run", help="run the whole demo end to end")
+    run_p = sub.add_parser("run", help=tr(cli_language(), "run the whole demo end to end"))
     run_p.add_argument("--run", help="existing run id (default: import the "
                                      "snake-supply-chain bundle)")
     run_p.add_argument("--data-dir", help="existing store (default: fresh)")
     run_p.add_argument("--offline", action="store_true",
                        help="no LLM call; verdict derived from stored risks")
 
-    judge_p = sub.add_parser("judge", help="inner judging phase (invoked "
-                                           "under `agentprov record` by run)")
-    judge_p.add_argument("--run", required=True)
+    judge_p = sub.add_parser("judge", help=tr(cli_language(), "inner judging phase (invoked under `agentprov record` by run)"))
+    judge_p.add_argument("--run", required=True, help='Run identifier')
     judge_p.add_argument("--data-dir",
-                         default=os.environ.get("AGENTPROV_DATA_DIR"))
+                         default=os.environ.get("AGENTPROV_DATA_DIR"), help='Evidence store directory')
     judge_p.add_argument("--agentprov",
-                         default=os.environ.get("AGENTPROV_BIN", "agentprov"))
-    judge_p.add_argument("--verdict-out", required=True)
-    judge_p.add_argument("--signals-out", required=True)
-    judge_p.add_argument("--tls-out", required=True)
-    judge_p.add_argument("--offline", action="store_true")
+                         default=os.environ.get("AGENTPROV_BIN", "agentprov"), help='AgentProvenance executable')
+    judge_p.add_argument("--verdict-out", required=True, help='Verdict JSON destination')
+    judge_p.add_argument("--signals-out", required=True, help='Signals JSON destination')
+    judge_p.add_argument("--tls-out", required=True, help='Request/response JSONL destination')
+    judge_p.add_argument("--offline", action="store_true", help='No provider calls; use stored risks as a fixture')
     judge_p.add_argument("--budget-chars", type=int, default=int(
-        os.environ.get("AGENTPROV_JUDGE_BUDGET_CHARS", "150000")))
+        os.environ.get("AGENTPROV_JUDGE_BUDGET_CHARS", "150000")), help='Character budget per call')
     judge_p.add_argument("--max-calls", type=int, default=int(
-        os.environ.get("AGENTPROV_JUDGE_MAX_CALLS", "16")))
+        os.environ.get("AGENTPROV_JUDGE_MAX_CALLS", "16")), help='Maximum model calls')
     judge_p.add_argument("--payload-chars", type=int, default=int(
-        os.environ.get("AGENTPROV_JUDGE_PAYLOAD_CHARS", "400")))
+        os.environ.get("AGENTPROV_JUDGE_PAYLOAD_CHARS", "400")), help='Maximum characters per payload field')
 
     args = ap.parse_args()
     if args.cmd == "judge":
         cmd_judge(args)
     else:
         cmd_run(args if args.cmd == "run" else
-                argparse.Namespace(run=None, data_dir=None, offline=False))
+                argparse.Namespace(run=None, data_dir=None, offline=False, lang=cli_language()))
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (RuntimeError, ValueError, OSError, KeyError) as error:
+        print(tr(cli_language(), "LLM judge stopped: %s", diagnostic(cli_language(), str(error))), file=sys.stderr)
+        sys.exit(1)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"time"
+
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 // Options configures the native sensor. Optional probe failures are reported as
@@ -25,6 +27,9 @@ type Options struct {
 	// Diagnostics receives capability changes as JSON prefixed with
 	// "agentprov-sensor: capabilities ". Nil defaults to stderr.
 	Diagnostics io.Writer
+	// Language controls additional human diagnostics. Protocol lines and the
+	// capability callback remain unchanged, including their original reasons.
+	Language i18n.Locale
 	// OnCapabilities receives bounded snapshots on state changes. Callbacks must
 	// return promptly; callers may persist the latest snapshot for health APIs.
 	OnCapabilities func(CapabilityReport)

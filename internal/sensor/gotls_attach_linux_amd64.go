@@ -3,10 +3,10 @@ package sensor
 import (
 	"debug/buildinfo"
 	"debug/elf"
-	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/cilium/ebpf/link"
 	"golang.org/x/arch/x86/x86asm"
 )
@@ -33,32 +33,32 @@ func attachGoTLSRead(ex *link.Executable, path string, objs *sensorbpfObjects) (
 		l, err := ex.Uprobe(goTLSReadSymbol, objs.HandleGoTlsReadReturn, &link.UprobeOptions{Offset: offset})
 		if err != nil {
 			cleanup()
-			return nil, fmt.Errorf("attach Go TLS Read return +%#x: %w", offset, err)
+			return nil, i18n.Errorf("attach Go TLS Read return +%#x: %w", offset, err)
 		}
 		links = append(links, l)
 	}
 	l, err := ex.Uprobe(goTLSReadSymbol, objs.HandleGoTlsReadEnter, nil)
 	if err != nil {
 		cleanup()
-		return nil, fmt.Errorf("attach Go TLS Read entry: %w", err)
+		return nil, i18n.Errorf("attach Go TLS Read entry: %w", err)
 	}
 	return append(links, l), nil
 }
 
 func goTLSReadReturnOffsets(path string) ([]uint64, error) {
 	if err := validateELFMetadata(path); err != nil {
-		return nil, fmt.Errorf("inspect Go TLS ELF: %w", err)
+		return nil, i18n.Errorf("inspect Go TLS ELF: %w", err)
 	}
 	info, err := buildinfo.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read Go ABI build information: %w", err)
+		return nil, i18n.Errorf("read Go ABI build information: %w", err)
 	}
 	if err := supportedGoTLSABI(info.GoVersion); err != nil {
 		return nil, err
 	}
 	for _, setting := range info.Settings {
 		if setting.Key == "GOEXPERIMENT" && (strings.Contains(setting.Value, "noregabi") || strings.Contains(setting.Value, "none")) {
-			return nil, fmt.Errorf("unsupported Go TLS ABI: GOEXPERIMENT=%s", setting.Value)
+			return nil, i18n.Errorf("unsupported Go TLS ABI: GOEXPERIMENT=%s", setting.Value)
 		}
 	}
 	f, err := elf.Open(path)
@@ -67,21 +67,21 @@ func goTLSReadReturnOffsets(path string) ([]uint64, error) {
 	}
 	defer f.Close()
 	if f.Machine != elf.EM_X86_64 || f.Class != elf.ELFCLASS64 {
-		return nil, fmt.Errorf("Go TLS Read requires an amd64 ELF")
+		return nil, i18n.Errorf("Go TLS Read requires an amd64 ELF")
 	}
 	if err := validateGoTLSSymbolTables(f); err != nil {
 		return nil, err
 	}
 	symbols, err := f.Symbols()
 	if err != nil {
-		return nil, fmt.Errorf("Go TLS Read requires an unstripped symbol table: %w", err)
+		return nil, i18n.Errorf("Go TLS Read requires an unstripped symbol table: %w", err)
 	}
 	for _, symbol := range symbols {
 		if symbol.Name != goTLSReadSymbol || elf.ST_TYPE(symbol.Info) != elf.STT_FUNC {
 			continue
 		}
 		if symbol.Size == 0 || symbol.Size > 1<<20 {
-			return nil, fmt.Errorf("invalid Go TLS Read symbol size: %d", symbol.Size)
+			return nil, i18n.Errorf("invalid Go TLS Read symbol size: %d", symbol.Size)
 		}
 		for _, p := range f.Progs {
 			if p.Type != elf.PT_LOAD || p.Flags&elf.PF_X == 0 || symbol.Value < p.Vaddr {
@@ -93,13 +93,13 @@ func goTLSReadReturnOffsets(path string) ([]uint64, error) {
 			}
 			code := make([]byte, int(symbol.Size))
 			if _, err := p.ReadAt(code, int64(rel)); err != nil {
-				return nil, fmt.Errorf("read Go TLS Read instructions: %w", err)
+				return nil, i18n.Errorf("read Go TLS Read instructions: %w", err)
 			}
 			return decodeGoTLSReturns(code)
 		}
-		return nil, fmt.Errorf("Go TLS Read symbol is outside executable file segments")
+		return nil, i18n.Errorf("Go TLS Read symbol is outside executable file segments")
 	}
-	return nil, fmt.Errorf("Go TLS Read symbol is missing (stripped or not linked)")
+	return nil, i18n.Errorf("Go TLS Read symbol is missing (stripped or not linked)")
 }
 
 func validateGoTLSSymbolTables(f *elf.File) error {
@@ -108,14 +108,14 @@ func validateGoTLSSymbolTables(f *elf.File) error {
 			continue
 		}
 		if section.Size > maxELFSymbolBytes {
-			return fmt.Errorf("Go TLS Read symbol table exceeds %d-byte inspection limit", maxELFSymbolBytes)
+			return i18n.Errorf("Go TLS Read symbol table exceeds %d-byte inspection limit", maxELFSymbolBytes)
 		}
 		if uint64(section.Link) >= uint64(len(f.Sections)) {
-			return fmt.Errorf("Go TLS Read symbol table has an invalid string-table link")
+			return i18n.Errorf("Go TLS Read symbol table has an invalid string-table link")
 		}
 		strings := f.Sections[section.Link]
 		if strings.Type != elf.SHT_STRTAB || strings.Size > maxELFSymbolBytes {
-			return fmt.Errorf("Go TLS Read linked string table is invalid or exceeds %d-byte inspection limit", maxELFSymbolBytes)
+			return i18n.Errorf("Go TLS Read linked string table is invalid or exceeds %d-byte inspection limit", maxELFSymbolBytes)
 		}
 	}
 	return nil
@@ -131,7 +131,7 @@ func supportedGoTLSABI(version string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("unsupported Go TLS Read ABI %q (supported: Go 1.23–1.26 amd64 ABIInternal)", version)
+	return i18n.Errorf("unsupported Go TLS Read ABI %q (supported: Go 1.23–1.26 amd64 ABIInternal)", version)
 }
 
 func decodeGoTLSReturns(code []byte) ([]uint64, error) {
@@ -139,21 +139,21 @@ func decodeGoTLSReturns(code []byte) ([]uint64, error) {
 	for offset := 0; offset < len(code); {
 		inst, err := x86asm.Decode(code[offset:], 64)
 		if err != nil || inst.Len == 0 || inst.Op == 0 {
-			return nil, fmt.Errorf("cannot decode Go TLS Read instruction at +%#x", offset)
+			return nil, i18n.Errorf("cannot decode Go TLS Read instruction at +%#x", offset)
 		}
 		if inst.Op == x86asm.RET {
 			if inst.Args[0] != nil {
-				return nil, fmt.Errorf("unsupported Go TLS Read RET operand at +%#x", offset)
+				return nil, i18n.Errorf("unsupported Go TLS Read RET operand at +%#x", offset)
 			}
 			offsets = append(offsets, uint64(offset))
 			if len(offsets) > 128 {
-				return nil, fmt.Errorf("Go TLS Read exceeds the 128 return-probe attachment limit")
+				return nil, i18n.Errorf("Go TLS Read exceeds the 128 return-probe attachment limit")
 			}
 		}
 		offset += inst.Len
 	}
 	if len(offsets) == 0 {
-		return nil, fmt.Errorf("Go TLS Read has no decoded RET instructions")
+		return nil, i18n.Errorf("Go TLS Read has no decoded RET instructions")
 	}
 	return offsets, nil
 }

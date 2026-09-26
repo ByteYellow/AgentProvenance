@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 func TestDaemonLockLifecycle(t *testing.T) {
@@ -45,6 +47,11 @@ func TestDaemonLockLifecycle(t *testing.T) {
 	WarnIfDaemonActive(dir, &buf)
 	if !strings.Contains(buf.String(), "owns this data dir") {
 		t.Fatalf("expected two-writer warning, got %q", buf.String())
+	}
+	buf.Reset()
+	WarnIfDaemonActive(dir, &buf, i18n.Chinese)
+	if !strings.Contains(buf.String(), "CLI 直接写入可能与服务内存状态不一致") || !strings.Contains(buf.String(), "--daemon-url http://127.0.0.1:8574") {
+		t.Fatalf("missing localized warning or changed command: %s", buf.String())
 	}
 
 	// Stale lock (dead pid) -> not active.

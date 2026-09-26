@@ -10,6 +10,16 @@ permissions:
   contents: read
 
 jobs:
+  localized-docs:
+    name: Chinese documentation coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python scripts/check_localized_docs.py
+
   jev-demo:
     name: Jev demo (keyless, Python ${{ matrix.python }})
     runs-on: ubuntu-latest

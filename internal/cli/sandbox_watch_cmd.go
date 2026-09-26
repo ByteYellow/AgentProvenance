@@ -29,7 +29,7 @@ func sandboxPollingWatchCmd(dataDir *string) *cobra.Command {
 			"coverage are weaker here; use `sandbox capture` for full per-pod model intent.",
 		RunE: func(c *cobra.Command, _ []string) error {
 			if sensorBin == "" {
-				return fmt.Errorf("--sensor (path to agentprov-sensor) is required")
+				return commandErrorf("--sensor (path to agentprov-sensor) is required")
 			}
 			paths, err := store.Init(*dataDir)
 			if err != nil {
@@ -47,7 +47,7 @@ func sandboxPollingWatchCmd(dataDir *string) *cobra.Command {
 			for round := 0; rounds == 0 || round < rounds; round++ {
 				pods, err := listPods(kc, namespace)
 				if err != nil {
-					fmt.Fprintf(stderr, "watch: list pods: %v\n", err)
+					fmt.Fprintf(stderr, commandText(c, "watch: list pods: %v\n"), err)
 					time.Sleep(time.Duration(window) * time.Second)
 					continue
 				}
@@ -73,12 +73,12 @@ func sandboxPollingWatchCmd(dataDir *string) *cobra.Command {
 						run = podRunID(kc, p.name, p.namespace, meta.UID)
 						started := time.Now().UTC().Format(time.RFC3339Nano)
 						if _, err := producer.BindCgroupScope(db, cg, producer.RunScope{RunID: run, SessionID: meta.UID, StartedAt: started}); err != nil {
-							fmt.Fprintf(stderr, "watch: bind %s/%s: %v\n", p.namespace, p.name, err)
+							fmt.Fprintf(stderr, commandText(c, "watch: bind %s/%s: %v\n"), p.namespace, p.name, err)
 							continue
 						}
 						_ = writePodMetadataEvent(db, run, meta)
 						boundCgroup[cg] = run
-						fmt.Fprintf(out, "bound %s/%s cgroup=%s -> run=%s\n", p.namespace, p.name, cg, run)
+						fmt.Fprintf(out, commandText(c, "bound %s/%s cgroup=%s -> run=%s\n"), p.namespace, p.name, cg, run)
 					}
 					roundPods[cg] = meta
 				}
@@ -92,7 +92,7 @@ func sandboxPollingWatchCmd(dataDir *string) *cobra.Command {
 				// `sandbox capture` — system telemetry + cgroup scope are the focus here.
 				raw := filepath.Join(paths.Logs, fmt.Sprintf("watch-r%d-sensor.jsonl", round))
 				if err := runSensorWindow(sensorBin, raw, "", 0, window, stderr); err != nil {
-					fmt.Fprintf(stderr, "watch: sensor: %v\n", err)
+					fmt.Fprintf(stderr, commandText(c, "watch: sensor: %v\n"), err)
 					continue
 				}
 				for cg, meta := range roundPods {
@@ -102,11 +102,11 @@ func sandboxPollingWatchCmd(dataDir *string) *cobra.Command {
 					}
 					res, err := telemetry.IngestJSONL(db, telemetry.JSONLIngestOptions{Format: "native", Path: scoped, RunID: boundCgroup[cg]})
 					if err != nil {
-						fmt.Fprintf(stderr, "watch: ingest %s: %v\n", meta.Name, err)
+						fmt.Fprintf(stderr, commandText(c, "watch: ingest %s: %v\n"), meta.Name, err)
 						continue
 					}
 					if res.Ingested > 0 {
-						fmt.Fprintf(out, "attributed %s/%s: %d events -> run=%s\n", meta.Namespace, meta.Name, res.Ingested, boundCgroup[cg])
+						fmt.Fprintf(out, commandText(c, "attributed %s/%s: %d events -> run=%s\n"), meta.Namespace, meta.Name, res.Ingested, boundCgroup[cg])
 					}
 				}
 				_ = os.Remove(raw)

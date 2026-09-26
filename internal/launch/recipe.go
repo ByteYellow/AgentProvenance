@@ -2,7 +2,7 @@ package launch
 
 import (
 	"encoding/json"
-	"fmt"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +17,7 @@ import (
 // for "don't pick a specific harness" -- each supported agent is a recipe, and
 // the always-present record-only fallback means launch runs any command.
 type recipe struct {
+	detailText  message
 	tier        string // app-side tier label: "hooks(<harness>)" or "record"
 	detail      string // short human note for the banner
 	injectHooks bool
@@ -36,15 +37,15 @@ func detectRecipe(command []string) recipe {
 	switch base {
 	case "claude", "claude-code":
 		return recipe{
-			tier:        "hooks(claude-code)",
-			detail:      "per-run --settings overlay; ~/.claude untouched",
+			tier:   "hooks(claude-code)",
+			detail: "per-run --settings overlay; ~/.claude untouched", detailText: messagef("per-run --settings overlay; ~/.claude untouched"),
 			injectHooks: true,
 			inject:      injectClaudeCode,
 		}
 	case "codex":
 		return recipe{
-			tier:    "transcript(codex)",
-			detail:  "post-run bridge of ~/.codex/sessions rollout",
+			tier:   "transcript(codex)",
+			detail: "post-run bridge of ~/.codex/sessions rollout", detailText: messagef("post-run bridge of ~/.codex/sessions rollout"),
 			harness: "codex",
 			findTranscript: func(startedAt time.Time) string {
 				return newestPathAfter(filepath.Join(home(), ".codex", "sessions", "*", "*", "*", "rollout-*.jsonl"), startedAt)
@@ -52,8 +53,8 @@ func detectRecipe(command []string) recipe {
 		}
 	case "kimi":
 		return recipe{
-			tier:    "transcript(kimi)",
-			detail:  "post-run bridge of ~/.kimi-code session (incl. sub-agents)",
+			tier:   "transcript(kimi)",
+			detail: "post-run bridge of ~/.kimi-code session (incl. sub-agents)", detailText: messagef("post-run bridge of ~/.kimi-code session (incl. sub-agents)"),
 			harness: "kimi",
 			findTranscript: func(startedAt time.Time) string {
 				// The Kimi session is a directory (per-agent wire.jsonl); locate it
@@ -67,8 +68,9 @@ func detectRecipe(command []string) recipe {
 		}
 	default:
 		return recipe{
-			tier:   "record",
-			detail: fmt.Sprintf("no hooks recipe for %q; execution scope only", base),
+			tier:       "record",
+			detail:     messagef("no hooks recipe for %q; execution scope only", base).original(),
+			detailText: messagef("no hooks recipe for %q; execution scope only", base),
 		}
 	}
 }
@@ -121,7 +123,7 @@ var claudeHookEvents = []string{
 func injectClaudeCode(command []string, selfExe, hookLogPath string, paths store.Paths) ([]string, func(), error) {
 	for _, a := range command[1:] {
 		if a == "--settings" || strings.HasPrefix(a, "--settings=") {
-			return command, nil, fmt.Errorf("agent command already passes --settings; refusing to override")
+			return command, nil, i18n.Errorf("agent command already passes --settings; refusing to override")
 		}
 	}
 

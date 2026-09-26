@@ -8,6 +8,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 type capabilityReporter struct {
@@ -115,6 +117,9 @@ func (r *capabilityReporter) publishLocked() {
 	}
 	if out != io.Discard {
 		_, _ = fmt.Fprintf(out, "agentprov-sensor: capabilities %s\n", encoded)
+		if r.opts.Language == i18n.Chinese {
+			PrintCapabilities(out, report, r.opts.Language)
+		}
 	}
 	if r.opts.OnCapabilities != nil {
 		r.opts.OnCapabilities(report)

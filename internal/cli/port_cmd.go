@@ -31,7 +31,7 @@ func portCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "port_id=%s preview_url=%s host_port=%d container_port=%d pid=%d status=%s\n", info.ID, info.PreviewURL, info.HostPort, info.ContainerPort, info.PID, info.Status)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "port_id=%s preview_url=%s host_port=%d container_port=%d pid=%d status=%s\n"), info.ID, info.PreviewURL, info.HostPort, info.ContainerPort, info.PID, info.Status)
 			return nil
 		},
 	}
@@ -53,7 +53,7 @@ func portCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tSESSION\tRUN\tCONTAINER_PORT\tHOST_PORT\tSTATUS\tPID\tURL")
+			fmt.Fprintln(w, commandText(cmd, "ID\tSESSION\tRUN\tCONTAINER_PORT\tHOST_PORT\tSTATUS\tPID\tURL"))
 			for _, item := range items {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%s\t%d\t%s\n", item.ID, item.SessionID, item.RunID, item.ContainerPort, item.HostPort, item.Status, item.PID, item.PreviewURL)
 			}
@@ -77,7 +77,7 @@ func portCmd(dataDir *string) *cobra.Command {
 			if err := (ports.Service{DB: db, Paths: paths}).Close(args[0]); err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "closed")
+			fmt.Fprintln(cmd.OutOrStdout(), commandText(cmd, "closed"))
 			return nil
 		},
 	}

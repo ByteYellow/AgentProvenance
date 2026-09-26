@@ -5,7 +5,6 @@ package sensor
 import (
 	"bufio"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"golang.org/x/sys/unix"
 )
 
@@ -23,7 +23,7 @@ import (
 func tlsBackingPath(procBase, visiblePath, namespacePath string) (string, error) {
 	f, err := os.Open(filepath.Join(procBase, "mountinfo"))
 	if err != nil {
-		return "", fmt.Errorf("read TLS target mount identity: %w", err)
+		return "", i18n.Errorf("read TLS target mount identity: %w", err)
 	}
 	defer f.Close()
 	reader := &io.LimitedReader{R: f, N: 1 << 20}
@@ -50,10 +50,10 @@ func tlsBackingPath(procBase, visiblePath, namespacePath string) (string, error)
 		bestMount, bestRoot, bestType, bestOptions = mount, mountUnescape(left[3]), right[0], right[2]
 	}
 	if scanner.Err() != nil || reader.N == 0 {
-		return "", fmt.Errorf("TLS mountinfo exceeded bounded scan")
+		return "", i18n.Errorf("TLS mountinfo exceeded bounded scan")
 	}
 	if bestMount == "" {
-		return "", fmt.Errorf("TLS file mount identity was not found")
+		return "", i18n.Errorf("TLS file mount identity was not found")
 	}
 	if bestType != "overlay" {
 		return visiblePath, nil
@@ -64,7 +64,7 @@ func tlsBackingPath(procBase, visiblePath, namespacePath string) (string, error)
 	}
 	mapped, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
-		return "", fmt.Errorf("TLS file has no Linux inode identity")
+		return "", i18n.Errorf("TLS file has no Linux inode identity")
 	}
 	var upper string
 	var lower []string
@@ -80,11 +80,11 @@ func tlsBackingPath(procBase, visiblePath, namespacePath string) (string, error)
 		// With metacopy the upper metadata inode can refer to lower data; do
 		// not guess which object the kernel's uprobe implementation will use.
 		if option == "metacopy=on" {
-			return "", fmt.Errorf("overlay metacopy TLS backing identity unsupported")
+			return "", i18n.Errorf("overlay metacopy TLS backing identity unsupported")
 		}
 	}
 	if len(lower) > 128 {
-		return "", fmt.Errorf("overlay TLS lower-layer count exceeds 128")
+		return "", i18n.Errorf("overlay TLS lower-layer count exceeds 128")
 	}
 	relative := strings.TrimPrefix(strings.TrimPrefix(namespacePath, bestMount), "/")
 	relative = filepath.Join(strings.TrimPrefix(bestRoot, "/"), relative)
@@ -110,7 +110,7 @@ func tlsBackingPath(procBase, visiblePath, namespacePath string) (string, error)
 				continue
 			}
 			if !layerInfo.IsDir() {
-				return "", fmt.Errorf("overlay TLS layer is not a directory")
+				return "", i18n.Errorf("overlay TLS layer is not a directory")
 			}
 			readableLayer = true
 			candidateInfo, statErr := os.Stat(candidate)
@@ -120,7 +120,7 @@ func tlsBackingPath(procBase, visiblePath, namespacePath string) (string, error)
 				continue
 			}
 			if statErr != nil && !os.IsNotExist(statErr) {
-				return "", fmt.Errorf("read overlay TLS backing layer: %w", statErr)
+				return "", i18n.Errorf("read overlay TLS backing layer: %w", statErr)
 			}
 			if err := checkOverlayMetadata(candidate, layerRoot); err != nil {
 				return "", err
@@ -130,21 +130,21 @@ func tlsBackingPath(procBase, visiblePath, namespacePath string) (string, error)
 			}
 			st, ok := candidateInfo.Sys().(*syscall.Stat_t)
 			if !ok || !candidateInfo.Mode().IsRegular() {
-				return "", fmt.Errorf("overlay TLS backing object is not a regular file")
+				return "", i18n.Errorf("overlay TLS backing object is not a regular file")
 			}
 			// Exact inode equality is conservative: unfamiliar xino/metacopy
 			// layouts degrade explicitly instead of guessing by content hash
 			// and conflating independently copied executable files.
 			if st.Ino != mapped.Ino || candidateInfo.Size() != info.Size() || !candidateInfo.ModTime().Equal(info.ModTime()) {
-				return "", fmt.Errorf("overlay TLS backing inode mismatch in visible layer; refusing shadowed lower attachment")
+				return "", i18n.Errorf("overlay TLS backing inode mismatch in visible layer; refusing shadowed lower attachment")
 			}
 			return candidate, nil
 		}
 		if !readableLayer {
-			return "", fmt.Errorf("overlay TLS backing layer inaccessible; refusing to guess a lower inode")
+			return "", i18n.Errorf("overlay TLS backing layer inaccessible; refusing to guess a lower inode")
 		}
 	}
-	return "", fmt.Errorf("cannot resolve overlay TLS backing inode; refusing duplicate global attachments")
+	return "", i18n.Errorf("cannot resolve overlay TLS backing inode; refusing duplicate global attachments")
 }
 
 func mountUnescape(s string) string {
@@ -170,10 +170,10 @@ func checkOverlayMetadata(path, root string) error {
 		for _, name := range []string{"trusted.overlay.opaque", "user.overlay.opaque", "trusted.overlay.redirect", "user.overlay.redirect", "trusted.overlay.metacopy", "user.overlay.metacopy"} {
 			n, err := unix.Getxattr(path, name, value[:])
 			if err == nil && n > 0 && string(value[:n]) != "n" {
-				return fmt.Errorf("overlay TLS %s metadata unsupported", name)
+				return i18n.Errorf("overlay TLS %s metadata unsupported", name)
 			}
 			if err != nil && !errors.Is(err, unix.ENODATA) && !errors.Is(err, unix.ENOENT) && !errors.Is(err, unix.ENOTSUP) {
-				return fmt.Errorf("inspect overlay TLS metadata: %w", err)
+				return i18n.Errorf("inspect overlay TLS metadata: %w", err)
 			}
 		}
 		if path == root {
@@ -185,5 +185,5 @@ func checkOverlayMetadata(path, root string) error {
 		}
 		path = next
 	}
-	return fmt.Errorf("overlay TLS path exceeds 64 metadata levels")
+	return i18n.Errorf("overlay TLS path exceeds 64 metadata levels")
 }

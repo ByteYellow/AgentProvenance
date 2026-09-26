@@ -1,7 +1,10 @@
 # AgentProvenance Product Direction
 
-AgentProvenance is a security-oriented execution observability and Git-like
-provenance control plane for sandboxed agent execution.
+English · [简体中文](zh-CN/product.md)
+
+AgentProvenance records what an AI agent actually did, correlating application
+context with system telemetry into execution evidence that can be queried,
+compared, replayed and verified. Security analysis is one use of that evidence.
 
 It correlates application-side agent context with system-side telemetry, then
 records how an agent execution context produces state changes, runtime events,
@@ -25,7 +28,7 @@ Execution Context
 
 ## First experience: portable replay
 
-The [v0.8.2-rc.2 prerelease](releases/v0.8.2-rc.2.md) provides CLI archives for
+The [v0.8.2 release](releases/v0.8.2.md) provides CLI archives for
 Linux and macOS on amd64/arm64. `agentprov demo` opens a local gallery containing
 six verified signed captures and two optional evaluator guides, with the same
 visual theme as the dashboard. Guides render locally with a section outline,
@@ -52,7 +55,8 @@ Primary scenarios:
 - Risk discovery and risk judgment for agent behaviors that cross process,
   file, network, and sandbox boundaries.
 - Automated response prototypes: audit, deny, kill, quarantine, taint snapshot,
-  export forensics, and notify operators through Feishu/DingTalk-style apps.
+  export forensics. Feishu/DingTalk notifications remain a planned integration,
+  not an implemented feature.
 - Behavior baseline and deviation analysis for repeated agent/task profiles.
 
 Stress scenarios:
@@ -123,8 +127,9 @@ no syscall stream can express:
 Enrichment is not a separate integration mode and requires no SDK: when the
 context is available it attaches to the same run, and when it is not, the
 kernel layer stands alone. Trust is asymmetric by design — app-asserted
-context carries `binding_source=ai_asserted` with a `<=0.5` confidence cap and
-never overrides kernel facts.
+context carries `binding_source=ai_asserted` with a lower default confidence
+and never overrides kernel facts. See the [telemetry schema](telemetry-schema.md#correlation-semantics)
+for method and binding-source confidence rules.
 
 The direction is proxy-optional and vendor-neutral: application context where
 available, runtime inference where not — layered, not either/or.
@@ -141,7 +146,11 @@ It may consume:
 - Falco, Tetragon, LoongCollector, eBPF, auditd, wrapper telemetry, or runtime
   event streams.
 - LangSmith-style traces or internal agent harness events.
-- system-side low-intrusion system-side observability output.
+- low-intrusion system-level observability output.
+
+This list describes integration boundaries, not dedicated adapters or verified
+support for every named system. Current validated environments are listed in
+the [closeout criteria](project-closeout.md) and [deployment runbook](amd64-kvm-k3s.md).
 
 Its job is to convert those signals into a causality and provenance model:
 
@@ -166,8 +175,8 @@ substrate path:
 ```
 
 This separation is intentional. Substrate code can be replaced by Docker,
-OpenSandbox, Kubernetes, Falco, Tetragon, system-side collectors, or future
-native sensors. The core product remains the correlation, provenance, timeline,
+OpenSandbox, Kubernetes, Falco, Tetragon, or other system-side collectors.
+The native sensor is already implemented. The core product remains the correlation, provenance, timeline,
 risk, response, replay, and audit model above those facts.
 
 ## Deployment Modes
@@ -179,7 +188,7 @@ The product has three deployment shapes:
 |---|---|---|
 | Library / CLI-only recorder | one Go binary, optional Python helper, local SQLite/object store | evaluator jobs, benchmarks, CI, RL pipelines, red-team harnesses |
 | Sidecar / local daemon | local daemon owns store, spool, correlation, graph query, risk, and forensics API | sandbox workers, CI workers, local security harnesses |
-| Central evidence service | shared ingest/query service, object storage, retention, auth, UI/API | enterprise security, audit, SRE, compliance, incident review |
+| Central evidence service (design only) | proposed shared ingest/query service, object storage, retention, auth, UI/API | enterprise security, audit, SRE, compliance, incident review |
 
 For RL and evaluator pipelines, the first mode is the most important adoption
 path. AgentProvenance should let a pipeline wrap an existing command, emit a
@@ -237,7 +246,7 @@ manifests.
 
 ## Phase Plan
 
-> Status (as of v0.4.x): Phases 1–5 are substantially delivered — including the
+> Historical status (as of v0.4.x, not the current outstanding-work list): Phases 1–5 are substantially delivered — including the
 > **native eBPF sensor** (`internal/sensor`, shipped in v0.2.0 and expanded
 > since), supervised cgroup capture, correlation, risk/policy/response, taint,
 > automatic artifact objectification, and signed forensics export.
@@ -246,8 +255,10 @@ manifests.
 > unbuilt plans.
 
 The canonical phase table lives in the **[README Roadmap](../README.md#roadmap)**,
-and the current, machine-checked acceptance list (Phase 1 / v1 Definition of Done)
-is **[docs/v1-definition-of-done.md](v1-definition-of-done.md)**. To avoid drift,
+and the historical Phase 1 / v1 acceptance scope is
+**[docs/v1-definition-of-done.md](v1-definition-of-done.md)**. Current single-node
+boundaries and remaining operational validation are in
+[project-closeout.md](project-closeout.md). To avoid drift,
 this doc no longer restates them — it keeps only the product framing above; see
 those two for the canonical roadmap and DoD.
 

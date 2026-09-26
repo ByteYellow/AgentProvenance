@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 type ReplayManifest struct {
@@ -127,12 +129,12 @@ type ReplayEvent struct {
 	Payload               string  `json:"payload"`
 }
 
-func ReplayRun(db *sql.DB, runID string, out io.Writer) error {
+func ReplayRun(db *sql.DB, runID string, out io.Writer, languages ...i18n.Locale) error {
 	manifest, err := BuildReplayRun(db, runID)
 	if err != nil {
 		return err
 	}
-	PrintReplayManifest(out, manifest)
+	PrintReplayManifest(out, manifest, languages...)
 	return nil
 }
 
@@ -144,12 +146,12 @@ func ReplayRunJSON(db *sql.DB, runID string, out io.Writer) error {
 	return PrintReplayManifestJSON(out, manifest)
 }
 
-func ReplayAttempt(db *sql.DB, attemptID string, out io.Writer) error {
+func ReplayAttempt(db *sql.DB, attemptID string, out io.Writer, languages ...i18n.Locale) error {
 	manifest, err := BuildReplayAttempt(db, attemptID)
 	if err != nil {
 		return err
 	}
-	PrintReplayManifest(out, manifest)
+	PrintReplayManifest(out, manifest, languages...)
 	return nil
 }
 
@@ -404,57 +406,61 @@ func PrintReplayManifestJSON(out io.Writer, manifest ReplayManifest) error {
 	return enc.Encode(manifest)
 }
 
-func PrintReplayManifest(out io.Writer, manifest ReplayManifest) {
+func PrintReplayManifest(out io.Writer, manifest ReplayManifest, languages ...i18n.Locale) {
+	lang := presentationLocale(languages)
 	if manifest.Scope == "attempt" {
-		fmt.Fprintf(out, "replay_attempt=%s mode=%s schema=%s\n", manifest.AttemptID, manifest.Mode, manifest.SchemaVersion)
+		fmt.Fprintf(out, i18n.T(lang, "replay_attempt=%s mode=%s schema=%s\n"), manifest.AttemptID, manifest.Mode, manifest.SchemaVersion)
 	} else {
-		fmt.Fprintf(out, "replay_run=%s mode=%s schema=%s\n", manifest.RunID, manifest.Mode, manifest.SchemaVersion)
+		fmt.Fprintf(out, i18n.T(lang, "replay_run=%s mode=%s schema=%s\n"), manifest.RunID, manifest.Mode, manifest.SchemaVersion)
 	}
 	for _, rollout := range manifest.Rollouts {
-		fmt.Fprintf(out, "trajectory=%s run=%s base_state=%s status=%s selected_execution=%s promotion=%s risk=%s\n",
+		fmt.Fprintf(out, i18n.T(lang, "trajectory=%s run=%s base_state=%s status=%s selected_execution=%s promotion=%s risk=%s\n"),
 			rollout.ID, rollout.RunID, rollout.BaseSnapshotID, rollout.Status, rollout.WinnerAttemptID, rollout.PromotionID, rollout.RiskStatus)
 		if rollout.BaseSnapshot != nil {
-			printReplaySnapshot(out, *rollout.BaseSnapshot)
+			printReplaySnapshot(out, *rollout.BaseSnapshot, languages...)
 		}
 		for _, attempt := range rollout.Attempts {
-			printReplayAttempt(out, attempt)
+			printReplayAttempt(out, attempt, languages...)
 		}
 	}
 }
 
-func printReplaySnapshot(out io.Writer, snapshot ReplaySnapshot) {
-	fmt.Fprintf(out, "  base_state name=%s kind=%s physical=%s status=%s tainted=%t files=%d bytes=%d manifest=%s path=%s\n",
+func printReplaySnapshot(out io.Writer, snapshot ReplaySnapshot, languages ...i18n.Locale) {
+	lang := presentationLocale(languages)
+	fmt.Fprintf(out, i18n.T(lang, "  base_state name=%s kind=%s physical=%s status=%s tainted=%t files=%d bytes=%d manifest=%s path=%s\n"),
 		snapshot.Name, snapshot.Kind, snapshot.PhysicalType, snapshot.Status, snapshot.Tainted, snapshot.FileCount, snapshot.Bytes, snapshot.ManifestHash, snapshot.Path)
 }
 
-func printReplayAttempt(out io.Writer, attempt ReplayAttemptPlan) {
-	fmt.Fprintf(out, "  execution_scope=%s base_state=%s strategy=%s status=%s risk=%s selected=%t replay_blocked=%t score=%.3f cost=%.6f workspace=%s\n",
+func printReplayAttempt(out io.Writer, attempt ReplayAttemptPlan, languages ...i18n.Locale) {
+	lang := presentationLocale(languages)
+	fmt.Fprintf(out, i18n.T(lang, "  execution_scope=%s base_state=%s strategy=%s status=%s risk=%s selected=%t replay_blocked=%t score=%.3f cost=%.6f workspace=%s\n"),
 		attempt.ID, attempt.SnapshotID, attempt.Strategy, attempt.Status, attempt.RiskStatus, attempt.IsWinner, attempt.ReplayBlocked, attempt.Score, attempt.CostEstimate, attempt.Workspace)
 	if len(attempt.BlockReasons) > 0 {
-		fmt.Fprintf(out, "    block_reasons=%v\n", attempt.BlockReasons)
+		fmt.Fprintf(out, i18n.T(lang, "    block_reasons=%v\n"), attempt.BlockReasons)
 	}
-	fmt.Fprintf(out, "    command=%q\n", attempt.Command)
+	fmt.Fprintf(out, i18n.T(lang, "    command=%q\n"), attempt.Command)
 	if attempt.ArtifactDigest != nil {
-		fmt.Fprintf(out, "    artifact=%s exists=%t sha256=%s bytes=%d\n", attempt.ArtifactDigest.Path, attempt.ArtifactDigest.Exists, attempt.ArtifactDigest.SHA256, attempt.ArtifactDigest.Bytes)
+		fmt.Fprintf(out, i18n.T(lang, "    artifact=%s exists=%t sha256=%s bytes=%d\n"), attempt.ArtifactDigest.Path, attempt.ArtifactDigest.Exists, attempt.ArtifactDigest.SHA256, attempt.ArtifactDigest.Bytes)
 	}
 	if attempt.ToolCall != nil {
-		printReplayToolCall(out, *attempt.ToolCall)
+		printReplayToolCall(out, *attempt.ToolCall, languages...)
 	}
 	for _, process := range attempt.Processes {
-		fmt.Fprintf(out, "    process=%s session=%s status=%s exit=%d started_at=%s ended_at=%s command=%q\n",
+		fmt.Fprintf(out, i18n.T(lang, "    process=%s session=%s status=%s exit=%d started_at=%s ended_at=%s command=%q\n"),
 			process.ID, process.SessionID, process.Status, process.ExitCode, process.StartedAt, process.EndedAt, process.Command)
 	}
 	for _, effect := range attempt.ExternalEffects {
-		fmt.Fprintf(out, "    external_effect=%s type=%s target=%s mode=%s decision=%s compensation_ref=%s status=%s payload=%s\n",
+		fmt.Fprintf(out, i18n.T(lang, "    external_effect=%s type=%s target=%s mode=%s decision=%s compensation_ref=%s status=%s payload=%s\n"),
 			effect.ID, effect.EffectType, effect.Target, effect.Mode, effect.Decision, effect.CompensationRef, effect.Status, effect.Payload)
 	}
 	for _, event := range attempt.Events {
-		fmt.Fprintf(out, "    event=%s type=%s source=%s process=%s snapshot=%s correlation=%s confidence=%.2f payload=%s\n",
+		fmt.Fprintf(out, i18n.T(lang, "    event=%s type=%s source=%s process=%s snapshot=%s correlation=%s confidence=%.2f payload=%s\n"),
 			event.ID, event.EventType, event.Source, event.ProcessID, event.SnapshotID, event.CorrelationMethod, event.CorrelationConfidence, event.Payload)
 	}
 }
 
-func printReplayToolCall(out io.Writer, toolCall ReplayToolCall) {
-	fmt.Fprintf(out, "    tool_call=%s session=%s status=%s exit=%d wall_ms=%d cost=%.6f policy=%s result=%s started_at=%s ended_at=%s command=%q\n",
+func printReplayToolCall(out io.Writer, toolCall ReplayToolCall, languages ...i18n.Locale) {
+	lang := presentationLocale(languages)
+	fmt.Fprintf(out, i18n.T(lang, "    tool_call=%s session=%s status=%s exit=%d wall_ms=%d cost=%.6f policy=%s result=%s started_at=%s ended_at=%s command=%q\n"),
 		toolCall.ID, toolCall.SessionID, toolCall.Status, toolCall.ExitCode, toolCall.WallMS, toolCall.CostEstimate, toolCall.PolicyDecision, toolCall.ResultRef, toolCall.StartedAt, toolCall.EndedAt, toolCall.Command)
 }

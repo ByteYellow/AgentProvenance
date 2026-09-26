@@ -3,12 +3,13 @@
 package telemetry
 
 import (
-	"fmt"
 	"os"
+
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 func lockNativeStream(path string) (*os.File, error) {
-	return nil, fmt.Errorf("native sensor streaming requires Linux")
+	return nil, i18n.Errorf("native sensor streaming requires Linux")
 }
 func syncNativeDirectory(path string) error { return nil }
 

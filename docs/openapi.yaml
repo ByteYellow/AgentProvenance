@@ -54,7 +54,7 @@ paths:
       security: [ {} ]
       responses:
         "200": { description: Ready; historical gaps are reported separately, content: { application/json: { schema: { $ref: "#/components/schemas/DaemonHealth" } } } }
-        "503": { description: Storage unavailable, schema mismatch, or the bounded check timed out, content: { application/json: { schema: { $ref: "#/components/schemas/DaemonHealth" } } } }
+        "503": { description: "Storage unavailable, schema mismatch, or the bounded check timed out", content: { application/json: { schema: { $ref: "#/components/schemas/DaemonHealth" } } } }
   /v1/ready:
     get:
       operationId: readiness

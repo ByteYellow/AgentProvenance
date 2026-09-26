@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/daemon"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/producer"
 	"github.com/byteyellow/agentprovenance/internal/sensor"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -53,7 +56,7 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr())
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), commandLanguage(cmd))
 
 			// Keep the sensor from observing (and re-ingesting, and thereby
 			// amplifying) AgentProvenance's OWN I/O: its data-dir snapshot copies
@@ -82,7 +85,9 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 			defer cancel()
 			workerErrors := make(chan error, 1)
 			go func() {
-				err := capture.Run(ctx, func(err error) { fmt.Fprintf(stderr, "agentprov sensor stream: spool retry: %v\n", err) })
+				err := capture.Run(ctx, func(err error) {
+					fmt.Fprintf(stderr, commandText(cmd, "agentprov sensor stream: spool retry: %v\n"), ErrorText(cmd, err))
+				})
 				if err != nil {
 					cancel()
 				}
@@ -92,7 +97,7 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 			if resolvedSSLLib == "" {
 				resolvedSSLLib = os.Getenv("AGENTPROV_SSL_LIB")
 			}
-			fmt.Fprintln(stderr, "agentprov sensor stream: capturing kernel telemetry -> durable spool -> store (ctrl-c to stop)")
+			fmt.Fprintln(stderr, commandText(cmd, "agentprov sensor stream: capturing kernel telemetry -> durable spool -> store (ctrl-c to stop)"))
 			sensorErr := sensor.RunWithOptions(capture, sensor.Options{
 				SSLLib:          resolvedSSLLib,
 				GoTLSBin:        os.Getenv("AGENTPROV_GO_TLS_BIN"),
@@ -103,10 +108,11 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 				TLSMaxTargets:   tlsTargets,
 				TLSMaxProcesses: tlsProcesses,
 				Diagnostics:     stderr,
+				Language:        commandLanguage(cmd),
 				OnReady:         func() { fmt.Fprintln(stderr, "agentprov sensor stream: ready probes-attached") },
 				OnCapabilities: func(report sensor.CapabilityReport) {
 					if err := saveSensorCapabilities(paths, report); err != nil {
-						fmt.Fprintf(stderr, "agentprov sensor stream: persist capabilities: %v\n", err)
+						fmt.Fprintf(stderr, commandText(cmd, "agentprov sensor stream: persist capabilities: %v\n"), ErrorText(cmd, err))
 					}
 				},
 			})
@@ -116,7 +122,7 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			if err := capture.Process(128); err != nil {
-				fmt.Fprintf(stderr, "agentprov sensor stream: pending spool retained for retry: %v\n", err)
+				fmt.Fprintf(stderr, commandText(cmd, "agentprov sensor stream: pending spool retained for retry: %v\n"), ErrorText(cmd, err))
 			}
 			if err := capture.Close(); err != nil {
 				return err
@@ -129,7 +135,11 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "stopped %s\n", encoded)
+			if commandLanguage(cmd) == i18n.Chinese {
+				printNativeCaptureStatus(cmd, status)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "stopped %s\n", encoded)
+			}
 			if workerErr != nil {
 				return workerErr
 			}
@@ -211,9 +221,54 @@ func sensorStatusCmd(dataDir *string) *cobra.Command {
 		if asJSON {
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]any{"collector_running": running, "capabilities_historical": !running, "capture": status, "capabilities": capabilities})
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "collector_running=%t capabilities_historical=%t queued_batches=%d queued_bytes=%d pending_events=%d\n", running, !running, status.QueuedBatches, status.QueuedBytes, status.PendingEvents)
-		return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]any{"counters": status.Counters, "capabilities": capabilities})
+		if commandLanguage(cmd) != i18n.Chinese {
+			fmt.Fprintf(cmd.OutOrStdout(), "collector_running=%t capabilities_historical=%t queued_batches=%d queued_bytes=%d pending_events=%d\n", running, !running, status.QueuedBatches, status.QueuedBytes, status.PendingEvents)
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]any{"counters": status.Counters, "capabilities": capabilities})
+		}
+		state := "no"
+		if running {
+			state = "yes"
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "Collector running: %s\n"), commandText(cmd, state))
+		printNativeCaptureStatus(cmd, status)
+		if capabilities == nil {
+			fmt.Fprint(cmd.OutOrStdout(), commandText(cmd, "No saved sensor capability report.\n"))
+			return nil
+		}
+		var report sensor.CapabilityReport
+		if err := json.Unmarshal(raw, &report); err != nil {
+			return err
+		}
+		if !running {
+			fmt.Fprint(cmd.OutOrStdout(), commandText(cmd, "Historical capability snapshot; the collector is not currently running.\n"))
+		}
+		sensor.PrintCapabilities(cmd.OutOrStdout(), report, commandLanguage(cmd))
+		return nil
 	}}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "emit machine-readable capture and capability status")
 	return cmd
+}
+
+// Display counter names without changing their persisted machine identifiers.
+func printNativeCaptureStatus(cmd *cobra.Command, status telemetry.NativeStreamStatus) {
+	out, lang := cmd.OutOrStdout(), commandLanguage(cmd)
+	fmt.Fprintf(out, commandText(cmd, "Queued batches: %d; queued bytes: %d; pending events: %d\n"), status.QueuedBatches, status.QueuedBytes, status.PendingEvents)
+	fmt.Fprintf(out, commandText(cmd, "Pending cleanup batches: %d\n"), status.CleanupPendingBatches)
+	keys := make([]string, 0, len(status.Counters))
+	for key := range status.Counters {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		label := commandText(cmd, "capture.counter."+key)
+		if strings.HasPrefix(key, "invalid_payload_") {
+			label = commandText(cmd, "Invalid event payload") + " (" + strings.TrimPrefix(key, "invalid_payload_") + ")"
+		} else if label == "capture.counter."+key {
+			label = key
+		}
+		fmt.Fprintf(out, commandText(cmd, "Capture counter %s: %d\n"), label, status.Counters[key])
+	}
+	if status.LastError != "" {
+		fmt.Fprintf(out, commandText(cmd, "Last capture error: %s\n"), i18n.RuntimeDiagnostics.Text(lang, status.LastError))
+	}
 }

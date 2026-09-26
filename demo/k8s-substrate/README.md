@@ -1,5 +1,7 @@
 # k8s substrate demo — one pod, node-side capture, model intent included
 
+English | [简体中文](README.zh-CN.md)
+
 **The k8s-daemonset producer profile end to end: a real LLM agent runs in an
 ordinary Kubernetes pod, and a node DaemonSet sensor captures its kernel activity
 *and its model intent* — the actual prompt/response bodies — from outside the pod,
@@ -44,7 +46,7 @@ scheduled pod, including model intent**, not just system telemetry.
 A Python agent pod (`claude-agent`) makes real LLM calls in a loop —
 `POST api.anthropic.com/v1/messages` and `POST api.deepseek.com/chat/completions`.
 It is a plain pod: no sidecar, no SDK, no `record` wrapper. A node-side sensor run
-captures everything and `sandbox bind-cgroup` ties the pod's cgroup to a run.
+captures kernel activity and supported TLS paths; `sandbox bind-cgroup` ties the pod's cgroup to a run.
 
 ---
 
@@ -126,7 +128,10 @@ DEEPSEEK_API_KEY=... \
 
 ---
 
-## 7. Honesty notes
+## 7. Capture limits
+
+These notes describe this historical bundle, not a complete capability assessment
+of the current sensor. Newer capture paths do not add evidence to an old bundle.
 
 - **Model intent is a partial layer node-side.** `SSL_write` (requests/prompts) is
   captured reliably; `SSL_read` (responses) only intermittently — the HTTP

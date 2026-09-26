@@ -1,5 +1,7 @@
 # Comparisons
 
+English · [简体中文](zh-CN/comparisons.md)
+
 AgentProvenance is easiest to understand by separating three adjacent layers:
 
 ```text
@@ -14,6 +16,9 @@ AgentProvenance
      risk signals, baseline deviations, and response evidence into a Git-like
      provenance DAG
 ```
+
+This comparison describes roles and integration points, not an exhaustive
+feature matrix for other products.
 
 ## LangSmith
 

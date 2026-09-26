@@ -70,7 +70,7 @@ func daemonCmd(dataDir *string) *cobra.Command {
 			go server.StartSpoolWorker(ctx)
 			go server.StartEvidenceWorker(ctx)
 			go server.StartGCWorker(ctx)
-			fmt.Fprintf(cmd.ErrOrStderr(), "agentprov daemon listening on http://%s sample_interval=%s sample_limit=%d sample_timeout=%s spool_interval=%s evidence_interval=%s gc_interval=%s\n", listen, sampleInterval, sampleLimit, sampleTimeout, spoolInterval, evidenceInterval, gcInterval)
+			fmt.Fprintf(cmd.ErrOrStderr(), commandText(cmd, "agentprov daemon listening on http://%s sample_interval=%s sample_limit=%d sample_timeout=%s spool_interval=%s evidence_interval=%s gc_interval=%s\n"), listen, sampleInterval, sampleLimit, sampleTimeout, spoolInterval, evidenceInterval, gcInterval)
 			httpServer := &http.Server{Addr: listen, Handler: server.Handler()}
 			go func() {
 				<-ctx.Done()

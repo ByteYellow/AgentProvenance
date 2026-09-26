@@ -34,7 +34,7 @@ func complianceValidateCmd() *cobra.Command {
 		Short: "validate a custom compliance ruleset YAML",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if ruleSetPath == "" {
-				return fmt.Errorf("--ruleset is required")
+				return commandErrorf("--ruleset is required")
 			}
 			ruleSet, err := compliance.LoadRuleSet(ruleSetPath)
 			if err != nil {
@@ -53,7 +53,7 @@ func complianceValidateCmd() *cobra.Command {
 					"merged_profiles": frameworks,
 				})
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "status=valid ruleset=%s rules=%d mappings=%d frameworks=%d\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "status=valid ruleset=%s rules=%d mappings=%d frameworks=%d\n"),
 				ruleSet.ID, len(ruleSet.Rules), len(ruleSet.Mappings), len(frameworks))
 			return nil
 		},
@@ -88,9 +88,9 @@ func complianceFrameworksCmd() *cobra.Command {
 				})
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tTITLE\tITEMS\tDISCLAIMER")
+			fmt.Fprintln(w, commandText(cmd, "ID\tTITLE\tITEMS\tDISCLAIMER"))
 			for _, framework := range frameworks {
-				fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", framework.ID, framework.Title, len(framework.Controls), framework.Disclaimer)
+				fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", framework.ID, complianceText(cmd, framework.Title), len(framework.Controls), complianceText(cmd, framework.Disclaimer))
 			}
 			return w.Flush()
 		},
@@ -137,10 +137,10 @@ func complianceMapCmd(dataDir *string, use string) *cobra.Command {
 		Short: "map run detection-rule coverage to a compliance/security framework",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if frameworkID == "" {
-				return fmt.Errorf("--framework is required")
+				return commandErrorf("--framework is required")
 			}
 			if runID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			db, cleanup, err := openLocalDB(*dataDir)
 			if err != nil {
@@ -161,13 +161,13 @@ func complianceMapCmd(dataDir *string, use string) *cobra.Command {
 				return enc.Encode(report)
 			}
 			s := report.Summary
-			fmt.Fprintf(cmd.OutOrStdout(), "framework=%s run=%s schema=%s enforced=%d detected=%d not_triggered=%d no_rule=%d total=%d\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "framework=%s run=%s schema=%s enforced=%d detected=%d not_triggered=%d no_rule=%d total=%d\n"),
 				report.Framework, report.RunID, report.SchemaVersion, s.Enforced, s.Detected, s.NotTriggered, s.NoRule, s.Total)
-			fmt.Fprintf(cmd.OutOrStdout(), "disclaimer=%q\n", report.Disclaimer)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "disclaimer=%q\n"), complianceText(cmd, report.Disclaimer))
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ITEM\tSTATUS\tRULES\tHITS\tGAP\tNEXT_STEP")
+			fmt.Fprintln(w, commandText(cmd, "ITEM\tSTATUS\tRULES\tHITS\tGAP\tNEXT_STEP"))
 			for _, item := range report.Items {
-				fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n", item.ControlID, item.Status, len(item.Rules), ruleHitTotal(item), item.Gap, item.NextStep)
+				fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n", item.ControlID, item.Status, len(item.Rules), ruleHitTotal(item), complianceText(cmd, item.Gap), complianceText(cmd, item.NextStep))
 			}
 			return w.Flush()
 		},
@@ -191,16 +191,16 @@ func complianceExplainCmd(dataDir *string) *cobra.Command {
 		Short: "explain the detection rules and hits behind one framework item",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if frameworkID == "" {
-				return fmt.Errorf("--framework is required")
+				return commandErrorf("--framework is required")
 			}
 			if runID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			if itemID == "" {
 				itemID = legacyControlID
 			}
 			if itemID == "" {
-				return fmt.Errorf("--item is required")
+				return commandErrorf("--item is required")
 			}
 			db, cleanup, err := openLocalDB(*dataDir)
 			if err != nil {
@@ -217,7 +217,7 @@ func complianceExplainCmd(dataDir *string) *cobra.Command {
 			}
 			item, ok := compliance.FindRuleItem(report, itemID)
 			if !ok {
-				return fmt.Errorf("item %q not found in framework %q", itemID, frameworkID)
+				return commandErrorf("item %q not found in framework %q", itemID, frameworkID)
 			}
 			if jsonOut {
 				enc := json.NewEncoder(cmd.OutOrStdout())
@@ -230,18 +230,18 @@ func complianceExplainCmd(dataDir *string) *cobra.Command {
 					"item":           item,
 				})
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "framework=%s run=%s item=%s status=%s rules=%d hits=%d\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "framework=%s run=%s item=%s status=%s rules=%d hits=%d\n"),
 				report.Framework, report.RunID, item.ControlID, item.Status, len(item.Rules), ruleHitTotal(item))
-			fmt.Fprintf(cmd.OutOrStdout(), "title=%q\n", item.Title)
-			fmt.Fprintf(cmd.OutOrStdout(), "reason=%q\n", item.Reason)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "title=%q\n"), complianceText(cmd, item.Title))
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "reason=%q\n"), complianceText(cmd, item.Reason))
 			if item.Gap != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "gap=%q\n", item.Gap)
+				fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "gap=%q\n"), complianceText(cmd, item.Gap))
 			}
 			if item.NextStep != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "next_step=%q\n", item.NextStep)
+				fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "next_step=%q\n"), complianceText(cmd, item.NextStep))
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "RULE\tMODE\tINTENDED\tFIRED\tENFORCED")
+			fmt.Fprintln(w, commandText(cmd, "RULE\tMODE\tINTENDED\tFIRED\tENFORCED"))
 			for _, r := range item.Rules {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%t\n", r.ID, r.Mode, r.Intended, r.Fired, r.Enforced)
 			}
@@ -254,7 +254,7 @@ func complianceExplainCmd(dataDir *string) *cobra.Command {
 			for _, r := range item.Rules {
 				for _, h := range r.Hits {
 					if !hasHits {
-						fmt.Fprintln(hw, "HIT_RULE\tTIME\tDECISION\tREF")
+						fmt.Fprintln(hw, commandText(cmd, "HIT_RULE\tTIME\tDECISION\tREF"))
 						hasHits = true
 					}
 					fmt.Fprintf(hw, "%s\t%s\t%s\t%s\n", r.ID, h.CreatedAt, h.Decision, h.Ref)
@@ -286,10 +286,10 @@ func complianceGapsCmd(dataDir *string) *cobra.Command {
 		Short: "list controls that need attention: detected-not-blocked or no-rule",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if frameworkID == "" {
-				return fmt.Errorf("--framework is required")
+				return commandErrorf("--framework is required")
 			}
 			if runID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			db, cleanup, err := openLocalDB(*dataDir)
 			if err != nil {
@@ -311,12 +311,12 @@ func complianceGapsCmd(dataDir *string) *cobra.Command {
 				return enc.Encode(gaps)
 			}
 			s := gaps.Summary
-			fmt.Fprintf(cmd.OutOrStdout(), "framework=%s run=%s schema=%s detected=%d no_rule=%d total=%d\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "framework=%s run=%s schema=%s detected=%d no_rule=%d total=%d\n"),
 				gaps.Framework, gaps.RunID, gaps.SchemaVersion, s.Detected, s.NoRule, s.Total)
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ITEM\tSTATUS\tRULES\tHITS\tGAP\tNEXT_STEP")
+			fmt.Fprintln(w, commandText(cmd, "ITEM\tSTATUS\tRULES\tHITS\tGAP\tNEXT_STEP"))
 			for _, item := range gaps.Items {
-				fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n", item.ControlID, item.Status, len(item.Rules), ruleHitTotal(item), item.Gap, item.NextStep)
+				fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%s\t%s\n", item.ControlID, item.Status, len(item.Rules), ruleHitTotal(item), complianceText(cmd, item.Gap), complianceText(cmd, item.NextStep))
 			}
 			return w.Flush()
 		},

@@ -44,7 +44,7 @@ func costCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "session_id=%s run_id=%s cpu_percent=%.3f ewma_active_cpu=%.3f active_cpu_seconds=%.3f idle_seconds=%.3f memory_usage_bytes=%d memory_limit_bytes=%d throttling=%s memory_pressure=%s\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "session_id=%s run_id=%s cpu_percent=%.3f ewma_active_cpu=%.3f active_cpu_seconds=%.3f idle_seconds=%.3f memory_usage_bytes=%d memory_limit_bytes=%d throttling=%s memory_pressure=%s\n"),
 				sample.SessionID, sample.RunID, sample.CPUPerc, sample.EWMAActiveCPU, sample.ActiveCPUSeconds, sample.IdleSeconds, sample.MemoryUsageBytes, sample.MemoryLimitBytes, sample.Throttling, sample.MemoryPressure)
 			return nil
 		},

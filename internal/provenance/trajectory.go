@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 type TrajectoryManifest struct {
@@ -79,12 +81,12 @@ type fileSnapshotState struct {
 	Content []byte
 }
 
-func TrajectoriesRun(db *sql.DB, runID string, out io.Writer) error {
+func TrajectoriesRun(db *sql.DB, runID string, out io.Writer, languages ...i18n.Locale) error {
 	manifest, err := BuildTrajectoriesRun(db, runID)
 	if err != nil {
 		return err
 	}
-	PrintTrajectoryManifest(out, manifest)
+	PrintTrajectoryManifest(out, manifest, languages...)
 	return nil
 }
 
@@ -159,13 +161,14 @@ func BuildTrajectoriesRun(db *sql.DB, runID string) (TrajectoryManifest, error) 
 	return manifest, nil
 }
 
-func PrintTrajectoryManifest(out io.Writer, manifest TrajectoryManifest) {
-	fmt.Fprintf(out, "trajectories_run=%s schema=%s decision_owner=%s trajectories=%d\n", manifest.RunID, manifest.SchemaVersion, manifest.DecisionOwner, len(manifest.Trajectories))
+func PrintTrajectoryManifest(out io.Writer, manifest TrajectoryManifest, languages ...i18n.Locale) {
+	lang := presentationLocale(languages)
+	fmt.Fprintf(out, i18n.T(lang, "trajectories_run=%s schema=%s decision_owner=%s trajectories=%d\n"), manifest.RunID, manifest.SchemaVersion, manifest.DecisionOwner, len(manifest.Trajectories))
 	for _, trajectory := range manifest.Trajectories {
-		fmt.Fprintf(out, "trajectory attempt=%s rollout=%s tool_call=%s status=%s risk=%s local_candidate_eligible=%t replay_blocked=%t score=%.3f cost=%.6f files_created=%d files_modified=%d files_deleted=%d files_unchanged=%d artifact=%s\n",
+		fmt.Fprintf(out, i18n.T(lang, "trajectory attempt=%s rollout=%s tool_call=%s status=%s risk=%s local_candidate_eligible=%t replay_blocked=%t score=%.3f cost=%.6f files_created=%d files_modified=%d files_deleted=%d files_unchanged=%d artifact=%s\n"),
 			trajectory.AttemptID, trajectory.RolloutID, trajectory.ToolCallID, trajectory.Status, trajectory.RiskStatus, trajectory.LocalCandidateEligible, trajectory.ReplayBlocked, trajectory.Score, trajectory.CostEstimate, trajectory.FileChangeSummary.Created, trajectory.FileChangeSummary.Modified, trajectory.FileChangeSummary.Deleted, trajectory.FileChangeSummary.Unchanged, trajectory.ArtifactResult)
 		for _, change := range trajectory.FileChanges {
-			fmt.Fprintf(out, "  file=%s change=%s base_sha256=%s next_sha256=%s base_bytes=%d next_bytes=%d\n",
+			fmt.Fprintf(out, i18n.T(lang, "  file=%s change=%s base_sha256=%s next_sha256=%s base_bytes=%d next_bytes=%d\n"),
 				change.Path, change.ChangeType, change.BaseSHA256, change.NextSHA256, change.BaseBytes, change.NextBytes)
 		}
 	}

@@ -15,11 +15,11 @@
 [![Release](https://img.shields.io/github/v/release/ByteYellow/AgentProvenance?style=flat-square&color=orange&sort=semver)](https://github.com/ByteYellow/AgentProvenance/releases/latest)
 [![Go](https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square)](https://go.dev/)
 [![CI](https://img.shields.io/github/actions/workflow/status/ByteYellow/AgentProvenance/ci.yml?branch=main&style=flat-square)](https://github.com/ByteYellow/AgentProvenance/actions/workflows/ci.yml)
-[![Sensor](https://img.shields.io/badge/sensor-Linux_amd64_%7C_arm64-2496ED.svg?style=flat-square)](docs/amd64-kvm-k3s.md)
+[![Sensor](https://img.shields.io/badge/sensor-Linux_amd64_%7C_arm64-2496ED.svg?style=flat-square)](docs/zh-CN/amd64-kvm-k3s.md)
 [![SQLite](https://img.shields.io/badge/state-SQLite-003B57.svg?style=flat-square)](https://www.sqlite.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square)](LICENSE)
 
-**[快速开始](#快速开始)** | **[核心模型](#核心模型)** | **[当前能力](#当前能力)** | **[示例](demo/README.md)** | **[版本与计划](#版本进展与后续计划)**
+**[快速开始](#快速开始)** | **[核心模型](#核心模型)** | **[当前能力](#当前能力)** | **[示例](demo/README.zh-CN.md)** | **[版本与计划](#版本进展与后续计划)**
 
 [English](README.md) | 简体中文
 
@@ -28,7 +28,7 @@
 ---
 
 <p align="center">
-  <img src="docs/assets/three-axis-observability.svg" alt="模型意图、应用上下文和系统运行记录汇入同一张可验证证据图。" width="100%">
+  <img src="docs/assets/three-axis-observability-zh-CN.svg" alt="模型意图、应用上下文和系统运行记录汇入同一张可验证证据图。" width="100%">
 </p>
 
 **Agent 实际做了什么？证据在哪里？**
@@ -42,11 +42,11 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 可视化界面将它们关联起来，回放整个执行过程：
 
 <p align="center">
-  <img src="docs/img/demo-multiagent-agent-network.gif" alt="多 Agent 执行回放：任务委派、协作消息、工具调用及对应的运行时证据。" width="100%">
+  <img src="docs/img/demo-multiagent-agent-network-zh-CN.gif" alt="多 Agent 执行回放：任务委派、协作消息、工具调用及对应的运行时证据。" width="100%">
 </p>
 
-[查看真实场景](demo/multiagent-provenance/README.md) ·
-[立即回放](#快速开始) · [v0.8.2-rc.2 版本说明](docs/releases/v0.8.2-rc.2.md)
+[查看真实场景](demo/multiagent-provenance/README.zh-CN.md) ·
+[立即回放](#快速开始) · [v0.8.2 版本说明](docs/zh-CN/releases/v0.8.2.md)
 
 ## 目录
 
@@ -61,7 +61,7 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 - [部署模式](#部署模式)
 - [安全证据命令](#安全证据命令)
 - [外部评估器协议](#外部评估器协议)
-- [合规证据，而非合规认证](#合规证据而非合规认证)
+- [合规映射](#合规映射)
 - [AI 可调用的证据工具](#ai-可调用的证据工具)
 - [可视化界面](#可视化界面)
 - [证据图命令](#证据图命令)
@@ -79,9 +79,9 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 
 ### 下载并回放，无需安装 Go
 
-![本地 Demo 首页：六份签名回放与两个可选评估器指南](docs/img/demo-gallery.png)
+![本地 Demo 首页：六份签名回放与两个可选评估器指南](docs/img/demo-gallery-zh-CN.png)
 
-在 [**v0.8.2-rc.2 预发布版**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2)
+在 [**v0.8.2 正式版**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2)
 下载对应平台的压缩包及同名 `.sha256` 校验文件：
 
 | 平台 | 压缩包后缀 |
@@ -94,9 +94,9 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 以 Linux x86-64 为例，在下载目录执行：
 
 ```sh
-sha256sum -c agentprov_v0.8.2-rc.2_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.8.2_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.8.2-rc.2_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.8.2_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -109,8 +109,8 @@ Windows 用户请在 WSL 中运行对应的 Linux 包。
 
 运行后，浏览器会打开 **Demo 首页**，其中包含 6 份已签名的执行记录和
 2 个可选评估器的使用指南。首页与可视化界面（Dashboard）采用相同的浅色样式：
-点击 **Read guide** 阅读带目录、图片、表格和代码复制按钮的本地指南；
-点击 **Open replay** 查看执行记录。
+点击**阅读指南（Read guide）**查看带目录、图片、表格和代码复制按钮的本地指南；
+点击**打开回放（Open replay）**查看执行记录。
 
 选择示例后，程序会自动定位到对应的执行记录（Run）和视图。
 带时间信息的视图会自动播放，部署视图则直接展示拓扑。
@@ -126,8 +126,8 @@ CLI 会先校验原始签名，再将记录导入独立的临时目录并验证�
 回放这些记录不需要 Go、仓库源码、虚拟机、Docker、Agent 账号或 API Key，
 也不需要联网。各示例的原始脚本和说明一并放在压缩包的 `demo/` 目录中。
 LLM Judge 和 Jev 是可选的 Python 示例，实际调用评估器仍需按各自指南配置环境。
-打开 Demo 首页或阅读指南不会调用模型；离线示例结果也不代表真实模型的评估结论。
-详见 [Demo 目录](demo/README.md)。
+离线评估示例使用预设结果；在线评估按指南配置模型接口。
+详见 [Demo 目录](demo/README.zh-CN.md)。
 
 如果选择从源码构建，则需要 Go 1.23+：
 
@@ -160,8 +160,8 @@ BPF/perf 权限。macOS 可以记录进程、文件变化，并接入应用 Hook
 程序退出时会封存证据图。**如需签名，必须显式传入 `--sign-key <private-key-file>`，
 默认不会自动签名。**如需比较工作区在执行前后的文件变化，添加 `--file-diff`。
 
-节点级采集请参阅 [KVM 虚拟机与 K3s 部署指南](docs/amd64-kvm-k3s.md)和
-[Kubernetes 事件归属指南](docs/design-k8s-auto-attribution.md)。
+节点级采集请参阅 [KVM 虚拟机与 K3s 部署指南](docs/zh-CN/amd64-kvm-k3s.md)和
+[Kubernetes 事件归属指南](docs/zh-CN/design-k8s-auto-attribution.md)。
 传感器运行在 KVM 虚拟机内部或 Kubernetes 节点上，两种环境共用同一套证据模型。
 
 ### 记录普通命令
@@ -175,8 +175,8 @@ mkdir -p /tmp/agentprov-record-demo
 ```
 
 回放、本地 `record` 和可视化界面都不需要 Docker；只有基于 Docker 的执行功能
-需要它。进阶用法见：[证据图命令](docs/graph-commands.md)、
-[部署模式](docs/deployment-modes.md)、[遥测数据格式](docs/telemetry-schema.md)和
+需要它。进阶用法见：[证据图命令](docs/zh-CN/graph-commands.md)、
+[部署模式](docs/zh-CN/deployment-modes.md)、[遥测数据格式](docs/zh-CN/telemetry-schema.md)和
 [开发与测试](#开发)。
 
 ## 为什么需要它
@@ -240,7 +240,7 @@ Agent、任务和工具调用的上下文，进一步回答：“这次行为属
 ## 核心模型
 
 <p align="center">
-  <img src="docs/assets/evidence-dag.svg" alt="执行证据图：模型意图、工具调用、进程、事件、风险、响应、产物及其校验关系。" width="100%">
+  <img src="docs/assets/evidence-dag-zh-CN.svg" alt="执行证据图：模型意图、工具调用、进程、事件、风险、响应、产物及其校验关系。" width="100%">
 </p>
 
 证据采用内容寻址存储，通过哈希校验完整性，并支持可选的数字签名。
@@ -260,11 +260,11 @@ agentprov record -- <agent command>
 
 ### 证据分层
 
-| 证据层 | 来源 | 能说明什么及其限制 |
+| 证据层 | 来源 | 记录内容 |
 |---|---|---|
-| 运行时事实 | `record` 的进程采样与文件差异、原生 eBPF 传感器、兼容的 JSONL 接收器 | 记录观测到的进程、文件和网络行为，按运行身份与采集时间关联。可信程度取决于采集器和宿主机的可信程度。 |
+| 运行时事实 | `record` 的进程采样与文件差异、原生 eBPF 传感器、兼容的 JSONL 接收器 | 记录进程、文件和网络行为，按运行身份与采集时间关联。 |
 | 应用上下文 | Agent 运行框架的 Hooks（`hooks bridge`）、MCP 上下文写入（`bind_scope` / `record_tool_call`），以及显式提交的任务和工具调用标识 | 补充 Agent 身份、任务委派、协作消息和拒绝执行等信息。模型通过上下文写入接口提交的信息标记为 `binding_source=ai_asserted`，置信度上限为 `0.5`，不能覆盖内核事实。 |
-| 模型意图 | 受支持的会话记录适配器、TLS 明文探针，以及 HTTP/1.1、HTTP/2/HPACK 解析 | 记录请求、响应和模型声明的工具操作，不代表读取模型内部推理。无法采集的部分会作为覆盖缺口保留。 |
+| 模型意图 | 受支持的会话记录适配器、TLS 明文探针，以及 HTTP/1.1、HTTP/2/HPACK 解析 | 记录请求、响应和工具调用，并标出采集缺口。 |
 
 运行时证据说明“实际发生了什么”，应用上下文帮助回答“属于哪个 Agent、
 哪次工具调用、什么任务”。例如，编排器的 `agent_spawn`、`agent_message`
@@ -319,7 +319,7 @@ agentprov telemetry ingest-falco --file falco-events.jsonl
 `scripts/accept_native_sensor_risk.sh` 验证了从原生采集到 `security` 信号的完整链路。
 
 已有 Falco 的主机也可使用 `ingest-falco`，将 Falco 的 JSON/stdout 输出接入
-同一流程。用法见 [Falco 接收器说明](docs/falco-receiver.md)。
+同一流程。用法见 [Falco 接收器说明](docs/zh-CN/falco-receiver.md)。
 
 ## 与现有系统的关系
 
@@ -370,7 +370,7 @@ Agent 正常读取自身凭证的情况，则由同一套策略引擎中的相�
 
 结果写入统一信号模型的 `intent_conformance` 维度，可影响 `launch` 的最终判断，
 并在 **Conformance · declared vs actual** 视图中展示“声明 → 判定 → 观测行为”。
-[多 Agent 示例](demo/multiagent-provenance/README.md)中，`alice` 诱导 `bob`
+[多 Agent 示例](demo/multiagent-provenance/README.zh-CN.md)中，`alice` 诱导 `bob`
 安装恶意依赖，相关偏差被标记为 `peer_message_intent_mismatch`。
 
 ## 部署模式
@@ -380,7 +380,7 @@ Agent 正常读取自身凭证的情况，则由同一套策略引擎中的相�
 需要持续接收事件、共享本机查询接口时，再使用本地服务。
 
 <p align="center">
-  <img src="docs/assets/deployment-modes.svg" alt="AgentProvenance 的 CLI、本地服务与中心化服务部署方式。" width="920">
+  <img src="docs/assets/deployment-modes-zh-CN.svg" alt="AgentProvenance 的 CLI、本地服务与中心化服务部署方式。" width="920">
 </p>
 
 | 模式 | 形态 | 适用场景 | 使用成本与限制 |
@@ -395,7 +395,7 @@ Agent 正常读取自身凭证的情况，则由同一套策略引擎中的相�
 队列状态和覆盖率的机器可读报告。参考测试接收了全部 10 万条事件，没有失败或
 丢弃的批次，健康检查和分页事件查询也能正常响应。
 这是单节点 SQLite 基准，不代表生产环境 SLA。具体范围见
-[收尾标准](docs/project-closeout.md)和[中心化服务设计](docs/central-evidence-service-design.md)。
+[收尾标准](docs/zh-CN/project-closeout.md)和[中心化服务设计](docs/zh-CN/central-evidence-service-design.md)。
 
 Kubernetes 验收会部署特权传感器 DaemonSet，启动多个独立 Pod，
 将 Pod、容器身份与内核 cgroup 对应起来，再导入并验证采集结果。
@@ -471,7 +471,7 @@ RL 和评估流水线可以采用轻量的离线工作流：
 - `forensics export[-batch]`：导出可审计的证据包。
 
 完整命令列表及每条命令的用途：
-[docs/security-commands.md](docs/security-commands.md)。
+[docs/security-commands.md](docs/zh-CN/security-commands.md)。
 
 ## 外部评估器协议
 
@@ -499,12 +499,14 @@ AgentProvenance 为外部评分系统提供证据，奖励函数、排序和数�
 基准测试、RL、红队测试和数据筛选流程可以自行决定，如何根据这些证据评分、
 拒绝结果或发起人工复核。
 
-可选参考实现：[LLM 安全评估示例](demo/llm-judge/)和
-[Jev 结构化评估器](demo/jev-judge/)。模型服务调用、规则对比和复核页面由这些
+可选参考实现：[LLM 安全评估示例](demo/llm-judge/README.zh-CN.md)和
+[Jev 结构化评估器](demo/jev-judge/README.zh-CN.md)。模型服务调用、规则对比和复核页面由这些
 外部示例提供，采集、回放和主可视化界面都不依赖它们。
 分析结果通过已有的信号接口写回。
 
 ### 用 Python 写自定义规则
+
+安装、完整方法说明和可运行示例见 [Python 接入指南](docs/zh-CN/python-sdk.md)。
 
 <details>
 <summary>展开完整的 Python 规则示例</summary>
@@ -588,27 +590,27 @@ POST /v1/signal/run
 POST /v1/signal/import
 ```
 
-本地服务不提供执行任意 Shell 命令的 HTTP 接口。
-客户端应先获取 `EvalContext`，在自己的进程中运行评估器，
+自定义评估器在客户端进程中运行。客户端先获取 `EvalContext`，执行评估器，
 再将结果提交给服务校验。CLI 设置 `--daemon-url` 后也采用这一流程。
 
-## 合规证据，而非合规认证
+<a id="合规证据而非合规认证"></a>
 
-一次执行的证据可以映射到安全框架中的检查项，例如 OWASP Agentic Security
-和 NIST AI Agent 安全评估要求，用于开展**有证据支撑的自评**。
-这些报告不构成认证或法律意见，也不能替代第三方审计：
+## 合规映射
+
+将执行记录中的检测结果映射到 OWASP Agentic Security、NIST AI Agent
+等安全框架的检查项，查看规则命中、阻断决策和待处理问题，用于自评和审计准备：
 
 ```sh
 ./agentprov compliance map --framework owasp-asi --run <run_id>
-./agentprov compliance gaps --framework owasp-asi --run <run_id>   # 缺失/部分覆盖的待办
+./agentprov compliance gaps --framework owasp-asi --run <run_id>   # 已检测未阻止或尚无规则的待办
 ```
 
-每个检查项都根据本次执行中已有的证据，报告 `covered`（已覆盖）、
-`partial`（部分覆盖）、`missing`（缺失）或 `not_applicable`（不适用），
-同时给出 `evidence_refs` 和建议的下一步。缺少证据的项目会明确列出缺口。
-企业也可以通过自定义 YAML 规则集增加检查项。
+每个检查项映射到具体检测规则及其在本次执行中的命中记录，报告
+`enforced`（阻断）、`detected`（仅检测）、`not_triggered`（未触发）或
+`no_rule`（尚无规则），同时给出 `evidence_refs` 和处理建议。
+自定义 YAML 目录可增加框架，`--rules` 可加载实际检测规则。
 
-完整命令、检查项含义和 YAML 规则格式，见[合规证据说明](docs/compliance.md)。
+完整命令、检查项含义和 YAML 规则格式，见[合规证据说明](docs/zh-CN/compliance.md)。
 
 ## AI 可调用的证据工具
 
@@ -677,10 +679,7 @@ Qwen，以及本地 vLLM/Ollama 服务。未配置 API Key 时会使用离线测
 ## 可视化界面
 
 <p align="center">
-  <img src="docs/assets/dashboard-causality.png" alt="本地证据界面：执行记录选择、验证状态、时间线、进程树、网络外发、风险信号与关联图。" width="100%">
-</p>
-<p align="center">
-  <img src="docs/assets/dashboard-timeline-process-egress.png" alt="本地证据界面：执行记录选择、验证状态、时间线、进程树、网络外发、风险信号与关联图。" width="100%">
+  <img src="docs/img/dashboard-overview-zh-CN.png" alt="本地证据界面：执行记录选择、验证状态、时间线、进程树、网络外发、风险信号与关联图。" width="100%">
 </p>
 
 
@@ -692,6 +691,17 @@ Qwen，以及本地 vLLM/Ollama 服务。未配置 API Key 时会使用离线测
 Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图。
 它与 CLI、AI 工具复用内部查询逻辑，HTML 和 JavaScript 内嵌在可执行文件中，
 不依赖外部前端资源。
+
+命令行默认使用英文。添加 `--lang zh-CN` 可查看中文帮助和终端输出，例如：
+
+```sh
+./agentprov --lang zh-CN --help
+./agentprov --lang zh-CN demo
+```
+
+显式指定语言时，打开的网页会采用同一语言；未指定时，由浏览器语言决定。JSON 输出、参数名和原始证据保持原样。
+
+首次访问按浏览器语言显示中文或英文，其他语言回退到英文。页面右上角可以切换语言，手动选择会保留。切换后会保留当前执行记录、图视图、展开层级、选中节点和叠加标记。界面说明随语言切换，命令、路径、ID 和原始证据保留原文。
 
 面对大量事件，界面先展示摘要，再按问题逐步展开。
 原始遥测仍可查询，但不会一次性全部绘制成图。
@@ -736,10 +746,10 @@ Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图�
   并支持实时刷新。
 
 <p align="center">
-  <img src="docs/img/dashboard-graph-explorer-taint.png" alt="数据流与污点传播视图：根据敏感文件读取和云元数据地址连接推导关联关系。" width="100%">
+  <img src="docs/img/dashboard-graph-explorer-taint-zh-CN.png" alt="数据流与污点传播视图：根据敏感文件读取和云元数据地址连接推导关联关系。" width="100%">
 </p>
 <p align="center">
-  <img src="docs/img/dashboard-side-panel-preview.png" alt="节点侧栏：证据摘要与经过脱敏的产物内容预览。" width="100%">
+  <img src="docs/img/dashboard-side-panel-preview-zh-CN.png" alt="节点详情：原始证据字段与命令内容预览。" width="100%">
 </p>
 
 ### Demo：追溯恶意依赖引发的文件读取与网络连接
@@ -761,11 +771,11 @@ Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图�
 ```
 
 <p align="center">
-  <img src="docs/img/demo-snake-taint-replay.gif" alt="贪吃蛇示例回放：恶意依赖读取模拟凭证，并尝试连接云元数据地址。" width="100%">
+  <img src="docs/img/demo-snake-taint-replay-zh-CN.gif" alt="贪吃蛇示例回放：恶意依赖读取模拟凭证，并尝试连接云元数据地址。" width="100%">
 </p>
 
-界面操作见[供应链示例指南](docs/supply-chain-demo.md)，
-签名包和采集脚本见 [`demo/snake-supply-chain/`](demo/snake-supply-chain)。
+界面操作见[供应链示例指南](docs/zh-CN/supply-chain-demo.md)，
+签名包和采集脚本见 [`demo/snake-supply-chain/`](demo/snake-supply-chain/README.zh-CN.md)。
 
 > **凭证访问的判定。** 捕获到的凭证访问会记录为 `secret_path` 事件，
 > 其中也可能包含 Agent 启动时对自身凭证的正常读取，如 `~/.claude/.credentials.json`。
@@ -792,16 +802,16 @@ Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图�
 ```
 
 <p align="center">
-  <img src="docs/img/demo-multiagent-orchestration.png" alt="多 Agent 编排视图：主 Agent、子 Agent、协作消息、工具调用与系统调用归属。" width="100%">
+  <img src="docs/img/demo-multiagent-orchestration-zh-CN.png" alt="多 Agent 编排视图：主 Agent、子 Agent、协作消息、工具调用与系统调用归属。" width="100%">
 </p>
 <p align="center">
-  <img src="docs/img/demo-multiagent-risk-path.png" alt="云元数据访问的风险路径：运行时事件、策略判定与响应链路。" width="100%">
+  <img src="docs/img/demo-multiagent-risk-path-zh-CN.png" alt="云元数据访问的风险路径：运行时事件、策略判定与响应链路。" width="100%">
 </p>
 <p align="center">
-  <img src="docs/img/demo-multiagent-network-egress.png" alt="网络外发视图：多 Agent 执行中的网络行为证据。" width="100%">
+  <img src="docs/img/demo-multiagent-network-egress-zh-CN.png" alt="网络外发视图：多 Agent 执行中的网络行为证据。" width="100%">
 </p>
 
-签名包、回放命令和采集过程见 [`demo/multiagent-provenance/`](demo/multiagent-provenance)。
+签名包、回放命令和采集过程见 [`demo/multiagent-provenance/`](demo/multiagent-provenance/README.zh-CN.md)。
 其中包含两次尝试：显式的恶意请求被模型拒绝；随后通过依赖安装触发的行为，
 则被内核遥测记录，并关联回 Agent 协作过程。
 
@@ -818,15 +828,15 @@ Pod/容器元数据和宿主机 cgroup，无需在工作负载中接入采集代
 应用侧委派日志复用了多 Agent 示例；跨 Pod 网络与运行时事件则是在本场景中实测采集的。
 
 <p align="center">
-  <img src="docs/assets/k8s-cross-pod-a2a-architecture.png" alt="跨 Pod 调用架构：一个节点传感器观测 Alice 和 Bob，将两个 cgroup 的记录关联到同一张证据图。" width="100%">
+  <img src="docs/assets/k8s-cross-pod-a2a-architecture-zh-CN.svg" alt="跨 Pod 调用架构：一个节点传感器观测 Alice 和 Bob，将两个 cgroup 的记录关联到同一张证据图。" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/img/demo-k8s-a2a-substrate-dashboard.png" alt="Kubernetes 运行环境视图：Alice 到 Bob 的调用关系、各 Pod 的 cgroup 及相关风险。" width="100%">
+  <img src="docs/img/demo-k8s-a2a-substrate-dashboard-zh-CN.png" alt="Kubernetes 运行环境视图：Alice 到 Bob 的调用关系、各 Pod 的 cgroup 及相关风险。" width="100%">
 </p>
 
 回放包、采集脚本和证据范围说明见
-[`demo/k8s-cross-pod-a2a/`](demo/k8s-cross-pod-a2a)。
+[`demo/k8s-cross-pod-a2a/`](demo/k8s-cross-pod-a2a/README.zh-CN.md)。
 本次记录中的 `secret_path` 和 `metadata_ip` 事件归属于 Bob 的 Pod/cgroup，
 Alice 的 Pod 未出现对应事件；图中也保留了跨 Pod 的 `alice → bob` 调用关系。
 
@@ -849,7 +859,7 @@ Alice 的 Pod 未出现对应事件；图中也保留了跨 Pod 的 `alice → b
 其他命令包括：`refs` / `log` / `objects` 用于查看引用、历史和内容寻址对象；
 `materialize` / `materialize-llm` 将已有证据整理成图对象；
 `replay` 生成重建计划，不直接重做外部操作。
-完整用法见[证据图命令说明](docs/graph-commands.md)。
+完整用法见[证据图命令说明](docs/zh-CN/graph-commands.md)。
 
 ## 当前能力
 
@@ -866,8 +876,8 @@ Alice 的 Pod 未出现对应事件；图中也保留了跨 Pod 的 `alice → b
 
 原生节点采集支持有容量上限的持久化批次、重启恢复、等待迟到绑定后重试关联、
 事务级去重，以及逐项探针能力报告。
-具体系统调用和 TLS 范围见[部署与验收指南](docs/amd64-kvm-k3s.md)，
-恢复机制见[原生采集缓冲队列说明](docs/native-capture-spool.md)。
+具体系统调用和 TLS 范围见[部署与验收指南](docs/zh-CN/amd64-kvm-k3s.md)，
+恢复机制见[原生采集缓冲队列说明](docs/zh-CN/native-capture-spool.md)。
 
 **关联与验证**
 
@@ -952,19 +962,19 @@ Alice 的 Pod 未出现对应事件；图中也保留了跨 Pod 的 `alice → b
 ## 架构
 
 <p align="center">
-  <img src="docs/assets/evidence-flow.svg" alt="AgentProvenance 证据处理流程。" width="920">
+  <img src="docs/assets/evidence-flow-zh-CN.svg" alt="AgentProvenance 证据处理流程。" width="920">
 </p>
 
 <p align="center">
-  <img src="docs/assets/producer-profile-architecture.svg" alt="本地 Linux、KVM 虚拟机与 Kubernetes 共用同一套证据核心和调查界面。" width="100%">
+  <img src="docs/assets/producer-profile-architecture-zh-CN.svg" alt="本地 Linux、KVM 虚拟机与 Kubernetes 共用同一套证据核心和调查界面。" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/agentprovenance-architecture.svg" alt="模型意图、应用上下文与系统遥测经过校验和接收处理，形成可验证的溯源图。" width="100%">
+  <img src="docs/assets/agentprovenance-architecture-zh-CN.svg" alt="模型意图、应用上下文与系统遥测经过校验和接收处理，形成可验证的溯源图。" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/architecture-overview.svg" alt="AgentProvenance 架构总览。" width="920">
+  <img src="docs/assets/architecture-overview-zh-CN.svg" alt="AgentProvenance 架构总览。" width="920">
 </p>
 
 ```mermaid
@@ -1031,7 +1041,7 @@ flowchart TD
 ## 运行环境与遥测
 
 证据模型与具体运行环境分离。不同来源的数据先转换为
-[统一遥测格式](docs/telemetry-schema.md)，再参与关联与图构建。
+[统一遥测格式](docs/zh-CN/telemetry-schema.md)，再参与关联与图构建。
 适配新环境时，应优先让采集器输出已有格式和关联信息，复用核心处理流程。
 
 需要区分三个方面：
@@ -1043,7 +1053,7 @@ flowchart TD
 - **事件来源**：内核与行为数据从哪里获取。主要来源是原生 Linux eBPF 传感器
   （`agentprov sensor stream`）；已有 Falco、Tetragon、LoongCollector 或 auditd
   的主机，也可通过 `telemetry ingest-jsonl` / `ingest-falco` 接收受支持格式的数据，
-  并保留包含哈希的批次清单。详见[Falco 接收器说明](docs/falco-receiver.md)。
+  并保留包含哈希的批次清单。详见[Falco 接收器说明](docs/zh-CN/falco-receiver.md)。
 
 适配时遵循两项原则：
 
@@ -1069,9 +1079,9 @@ flowchart TD
 - 不撤销已发生的外部操作。这类动作可以被记录、接受策略检查，或按需关联补偿 Hook。
 - 不替 RL 流水线决定奖励、惩罚和轨迹筛选规则，只提供可供评估的行为证据与偏差信号。
 
-产品方向见[产品说明](docs/product.md)，部署方式见
-[部署模式](docs/deployment-modes.md)，与其他系统的职责划分见
-[项目对比](docs/comparisons.md)。
+产品方向见[产品说明](docs/zh-CN/product.md)，部署方式见
+[部署模式](docs/zh-CN/deployment-modes.md)，与其他系统的职责划分见
+[项目对比](docs/zh-CN/comparisons.md)。
 
 ## 仓库结构
 
@@ -1129,20 +1139,20 @@ docs/                   产品、部署、接口、验收与设计文档
 
 ## 版本进展与后续计划
 
-**v0.8.2-rc.2 提供开箱即用的回放体验（预发布）。** 下载 Linux/macOS 的
+**v0.8.2 提供开箱即用的回放体验和完整的中文文档、网页界面。** 下载 Linux/macOS 的
 amd64/arm64 包后，直接运行 `agentprov demo`，即可浏览六个回放示例和两个
 评估器指南。Demo 首页与阅读页采用与 Dashboard 一致的样式。
-详见 [v0.8.2-rc.2 发布说明](docs/releases/v0.8.2-rc.2.md)。
+详见 [v0.8.2 发布说明](docs/zh-CN/releases/v0.8.2.md)。
 
-**v0.8.1 增加了可选的外部评估器示例。** [Jev 示例](demo/jev-judge/)通过已有
+**v0.8.1 增加了可选的外部评估器示例。** [Jev 示例](demo/jev-judge/README.zh-CN.md)通过已有
 证据和信号接口展示结构化分析、规则对比与人工复核，不改变核心采集流程。
-详见 [v0.8.1 发布说明](docs/releases/v0.8.1.md)。
+详见 [v0.8.1 发布说明](docs/zh-CN/releases/v0.8.1.md)。
 
 **v0.8.0 完善了跨环境采集与可靠性。** 增加原生 amd64 支持、KVM 虚拟机部署、
 K3s 验收、容器 TLS 自动发现，以及受支持 amd64 Go 二进制的 TLS 响应采集；
 改进迟到事件关联、持久化采集恢复、升级测试、数据库就绪检查和事件/证据原子写入。
-验证结果及适用范围见[发布说明](docs/releases/v0.8.0.md)和
-[部署指南](docs/amd64-kvm-k3s.md)。
+验证结果及适用范围见[发布说明](docs/zh-CN/releases/v0.8.0.md)和
+[部署指南](docs/zh-CN/amd64-kvm-k3s.md)。
 
 后续方向与尚未完成的工作：
 
@@ -1150,14 +1160,14 @@ K3s 验收、容器 TLS 自动发现，以及受支持 amd64 Go 二进制的 TLS
   TLS 二进制，以及更广的网络协议覆盖。OpenSSL `SSL_*` / `SSL_*_ex`、
   HTTP/1.1 和 HTTP/2/HPACK 已实现。
 - **持续运行验证**：更长时间的负载测试、真实磁盘故障测试，以及单次执行的覆盖报告。
-  现有 10 万事件报告属于单节点基准，不代表生产 SLA。
+  在现有 10 万事件单节点基准上扩大验证范围。
 - **加强证据可信性**：考虑由独立主机签名或在采集时签名。当前哈希和本地签名可相对
   可信检查点检测后续改动，但无法证明已被攻陷的宿主机完整、如实地记录了所有事件。
-- **中心化证据服务**：目前[只有设计](docs/central-evidence-service-design.md)。
+- **中心化证据服务**：目前[只有设计](docs/zh-CN/central-evidence-service-design.md)。
   多租户、计费、集群调度及 Operator 高可用不在本版范围内。
 
-[v0.7 设计](docs/roadmap-v0.7.md)保留为历史背景，不是当前待办清单。
-[收尾标准](docs/project-closeout.md)说明本版单节点功能的交付范围。
+[v0.7 设计](docs/zh-CN/roadmap-v0.7.md)记录早期设计与验收过程。
+[收尾标准](docs/zh-CN/project-closeout.md)说明本版单节点功能的交付范围。
 
 ## 开发
 
@@ -1177,8 +1187,8 @@ ARM64 实机与 KVM/K3s 实验环境的验收结果另有报告，不等同于�
 
 各验收脚本的环境要求不同。部分脚本需要 root、会创建 Pod 或安装服务，
 请勿直接批量执行全部 `scripts/accept_*.sh`。
-环境测试请按 [KVM/K3s 部署指南](docs/amd64-kvm-k3s.md)操作，
-单节点压力测试见[收尾指南](docs/project-closeout.md)。
+环境测试请按 [KVM/K3s 部署指南](docs/zh-CN/amd64-kvm-k3s.md)操作，
+单节点压力测试见[收尾指南](docs/zh-CN/project-closeout.md)。
 
 ## 作者与许可
 

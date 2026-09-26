@@ -8,6 +8,7 @@ from pathlib import Path
 import queue
 import signal
 import subprocess
+import sys
 import tarfile
 import tempfile
 import threading
@@ -43,6 +44,20 @@ def main():
         assert len(replay) == 6 and len(catalog) == 8, catalog
         assert (root / 'demo/jev-judge/workbench.py').is_file()
         assert (root / 'demo/llm-judge/judge.py').is_file()
+        # Optional Python evaluators must resolve their shared language assets
+        # from the extracted archive, without the repository or Go on PATH.
+        for script in ('demo/llm-judge/judge.py', 'demo/jev-judge/judge.py', 'demo/jev-judge/workbench.py'):
+            help_text = subprocess.check_output([sys.executable, str(root / script), '--help', '--lang', 'zh-CN'],
+                                                cwd=root, env=env, text=True, timeout=15)
+            assert '显示帮助并退出' in help_text, script
+        assert (root / 'demo/jev-judge/review.zh-CN.png').is_file()
+
+        assert '(START_HERE.zh-CN.md)' in (root / 'START_HERE.md').read_text()
+        chinese_start = (root / 'START_HERE.zh-CN.md').read_text(encoding='utf-8')
+        assert '(START_HERE.md)' in chinese_start and '使用入门' in chinese_start
+        assert '(demo/jev-judge/README.zh-CN.md)' in chinese_start
+        for entry in catalog:
+            assert (root / 'demo' / entry['directory'] / 'README.zh-CN.md').is_file()
         process = subprocess.Popen([str(cli), 'demo', '--json'], cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         ready = queue.Queue()
         threading.Thread(target=lambda: ready.put(process.stdout.readline()), daemon=True).start()
@@ -60,10 +75,15 @@ def main():
             base = report['url'].removesuffix('/demos/')
             # Do not use host proxy configuration for loopback acceptance requests.
             http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            def get(path):
-                with http.open(base + path, timeout=30) as response:
+            def get(path, headers=None):
+                request = urllib.request.Request(base + path, headers=headers or {})
+                with http.open(request, timeout=30) as response:
                     return response.read().decode()
             gallery = get('/demos/')
+            assert '<html lang="en">' in gallery
+            assert '示例库' in get('/demos/', {'Accept-Language': 'zh-CN,en;q=0.8'})
+            assert '<html lang="en">' in get('/demos/', {'Accept-Language': 'fr-FR'})
+            assert '<html lang="en">' in get('/demos/', {'Accept-Language': 'zh-CN', 'Cookie': 'agentprov_language=en'})
             runs = json.loads(get('/api/runs'))
             assert {r['run'] for r in runs} == {d['run'] for d in replay}
             for entry in replay:
@@ -74,8 +94,13 @@ def main():
                 lens = json.loads(get('/api/lens?' + query))
                 assert lens['nodes'], entry
             for entry in catalog:
-                guide = get('/demos/docs/' + entry['id'])
-                assert '<article class="document">' in guide and '<h1' in guide
+                for language in ['en', 'zh-CN']:
+                    guide = get('/demos/docs/' + entry['id'] + '?lang=' + language)
+                    assert '<article class="document">' in guide and '<h1' in guide
+                    assert '<html lang="' + language + '">' in guide
+                    if language == 'zh-CN':
+                        assert '本页目录' in guide and '证据' in guide
+            assert '"locale":"zh-CN"' in get('/assets/i18n.js?lang=zh-CN')
             assert '--bg:#f5f5f7' in get('/assets/theme.css')
             assert 'code-toolbar' in get('/demos/guide.js')
             assert '.document' in get('/demos/demo.css')
@@ -90,7 +115,7 @@ def main():
             if process.poll() is None:
                 process.kill()
                 process.wait()
-        print(json.dumps({'archive': archive.name, 'platform': meta['os'] + '/' + meta['arch'], 'signed_replays': len(replay), 'guides': len(catalog), 'no_go_required': True, 'cleanup': 'passed'}))
+        print(json.dumps({'archive': archive.name, 'platform': meta['os'] + '/' + meta['arch'], 'signed_replays': len(replay), 'guides': len(catalog), 'guide_languages': ['en', 'zh-CN'], 'no_go_required': True, 'cleanup': 'passed'}))
 
 
 if __name__ == '__main__':

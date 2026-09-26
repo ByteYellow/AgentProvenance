@@ -23,6 +23,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/tlsintent"
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
@@ -55,12 +56,12 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	reporter := newCapabilityReporter(opts)
 	defer func() { reporter.finish(runErr) }()
 	if err := rlimit.RemoveMemlock(); err != nil {
-		return fmt.Errorf("remove memlock: %w", err)
+		return i18n.Errorf("remove memlock: %w", err)
 	}
 
 	var objs sensorbpfObjects
 	if err := loadSensorbpfObjects(&objs, nil); err != nil {
-		return fmt.Errorf("load eBPF objects: %w", err)
+		return i18n.Errorf("load eBPF objects: %w", err)
 	}
 	defer objs.Close()
 
@@ -91,7 +92,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	} {
 		if err := attach(p, true, "syscall"); err != nil {
 			reporter.publish(false)
-			return fmt.Errorf("attach %s: %w", p.name, err)
+			return i18n.Errorf("attach %s: %w", p.name, err)
 		}
 	}
 	for _, p := range append([]sensorTracepoint{
@@ -134,7 +135,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	reporter.add(dns)
 	rd, err := ringbuf.NewReader(objs.Events)
 	if err != nil {
-		return fmt.Errorf("open ringbuf: %w", err)
+		return i18n.Errorf("open ringbuf: %w", err)
 	}
 	defer rd.Close()
 
@@ -182,7 +183,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 			return
 		}
 		if err := enc.Encode(v); err != nil {
-			writeErr = fmt.Errorf("write sensor event: %w", err)
+			writeErr = i18n.Errorf("write sensor event: %w", err)
 			_ = rd.Close()
 		}
 	}
@@ -230,7 +231,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 				encMu.Unlock()
 				return err
 			}
-			return fmt.Errorf("read sensor ring buffer: %w", err)
+			return i18n.Errorf("read sensor ring buffer: %w", err)
 		}
 		var e sensorbpfSensorEvent
 		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &e); err != nil {

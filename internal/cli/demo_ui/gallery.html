@@ -1,47 +1,48 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{.Lang}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Demos · AgentProvenance</title>
+  <title>{{tr .Lang "Demos"}} · AgentProvenance</title>
   <link rel="stylesheet" href="/assets/theme.css">
   <link rel="stylesheet" href="/demos/demo.css">
 </head>
 <body>
 <header class="demo-header">
-  <a class="brand" href="/demos/" aria-label="AgentProvenance demo home"><h1><b>Agent</b>Provenance</h1></a>
-  <span class="tag header-description">verifiable agent observability</span>
-  <span class="header-divider" aria-hidden="true"></span><span class="header-location">Demos</span>
-  <span class="spacer"></span><span class="local-status"><i></i> Local replay</span>
+  <a class="brand" href="{{localURL "/demos/" .Lang}}" aria-label="{{tr $.Lang "AgentProvenance demo home"}}"><h1><b>Agent</b>Provenance</h1></a>
+  <span class="tag header-description">{{tr $.Lang "verifiable agent observability"}}</span>
+  <span class="header-divider" aria-hidden="true"></span><span class="header-location">{{tr $.Lang "Demos"}}</span>
+  <span class="spacer"></span><span class="local-status"><i></i> {{tr $.Lang "Local replay"}}</span>
+  <nav class="language-switch" aria-label="{{tr .Lang "Language"}}"><a href="{{.EnglishURL}}" lang="en" hreflang="en"{{if eq .Lang "en"}} aria-current="true"{{end}}>English</a><a href="{{.ChineseURL}}" lang="zh-CN" hreflang="zh-CN"{{if eq .Lang "zh-CN"}} aria-current="true"{{end}}>中文</a></nav>
 </header>
 <main class="library">
   <div class="library-heading">
-    <div><div class="eyebrow">EXPLORE THE EVIDENCE</div><h2>Demo library</h2><p>Follow what an agent did, from a single tool call to a team across Pods.</p></div>
-    {{if .ReplayCount}}<div class="library-status"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6Z"/><path d="m8 12 3 3 5-6"/></svg><div><strong>Ready to explore</strong><span>Signed captures · verified locally</span></div></div>{{end}}
+    <div><div class="eyebrow">{{tr $.Lang "EXPLORE THE EVIDENCE"}}</div><h2>{{tr $.Lang "Demo library"}}</h2><p>{{tr $.Lang "Follow what an agent did, from a single tool call to a team across Pods."}}</p></div>
+    {{if .ReplayCount}}<div class="library-status"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6Z"/><path d="m8 12 3 3 5-6"/></svg><div><strong>{{tr $.Lang "Ready to explore"}}</strong><span>{{tr $.Lang "Signed captures · verified locally"}}</span></div></div>{{end}}
   </div>
   {{if .ReplayCount}}
   <section aria-labelledby="replays-heading">
-    <div class="section-heading"><h2 id="replays-heading">Recorded executions <span class="count">{{.ReplayCount}}</span></h2><span>Open a capture. Follow its evidence.</span></div>
+    <div class="section-heading"><h2 id="replays-heading">{{tr $.Lang "Recorded executions"}} <span class="count">{{.ReplayCount}}</span></h2><span>{{tr $.Lang "Open a capture. Follow its evidence."}}</span></div>
     <div class="demo-grid">
     {{range .Entries}}{{if .Run}}
       <article class="demo-card">
-        <div class="card-top"><span class="demo-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="15" width="6" height="6" rx="1.5"/><path d="M6 9v6a3 3 0 0 0 3 3h6M9 6h6a3 3 0 0 1 3 3v6"/></svg></span><span class="category">{{category .}}</span><span class="verified" title="Signature and graph checks passed"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>Verified</span></div>
-        <h3>{{.Title}}</h3><p>{{.Description}}</p>
-        <div class="card-actions"><a class="button primary" href="{{runURL .}}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5 3 7 5-7 5Z"/></svg>Open replay</a><a class="text-link" href="/demos/docs/{{.ID}}">Read guide <span aria-hidden="true">↗</span></a></div>
+        <div class="card-top"><span class="demo-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6" rx="1.5"/><rect x="15" y="15" width="6" height="6" rx="1.5"/><path d="M6 9v6a3 3 0 0 0 3 3h6M9 6h6a3 3 0 0 1 3 3v6"/></svg></span><span class="category">{{tr $.Lang (category .)}}</span><span class="verified" title="{{tr $.Lang "Signature and graph checks passed"}}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg>{{tr $.Lang "Verified"}}</span></div>
+        <h3>{{tr $.Lang .Title}}</h3><p>{{tr $.Lang .Description}}</p>
+        <div class="card-actions"><a class="button primary" href="{{localURL (runURL .) $.Lang}}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5 3 7 5-7 5Z"/></svg>{{tr $.Lang "Open replay"}}</a><a class="text-link" href="{{localURL (printf "/demos/docs/%s" .ID) $.Lang}}">{{tr $.Lang "Read guide"}} <span aria-hidden="true">↗</span></a></div>
       </article>
     {{end}}{{end}}
     </div>
   </section>{{end}}
   {{if .EvaluatorCount}}
   <section class="evaluators" aria-labelledby="evaluators-heading">
-    <div class="section-heading"><h2 id="evaluators-heading">External evaluators <span class="count">{{.EvaluatorCount}}</span></h2><span>Build on the same execution evidence.</span></div>
+    <div class="section-heading"><h2 id="evaluators-heading">{{tr $.Lang "External evaluators"}} <span class="count">{{.EvaluatorCount}}</span></h2><span>{{tr $.Lang "Build on the same execution evidence."}}</span></div>
     <div class="evaluator-grid">
     {{range .Entries}}{{if not .Run}}
-      <article class="demo-card evaluator-card"><div class="evaluator-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h5m-5 4 2 2 5-5"/></svg></div><div class="evaluator-content"><div class="evaluator-heading"><h3>{{.Title}}</h3><span class="setup-tag">Setup required</span></div><p>{{.Description}}</p><a class="text-link" href="/demos/docs/{{.ID}}">Read setup guide <span aria-hidden="true">→</span></a></div></article>
+      <article class="demo-card evaluator-card"><div class="evaluator-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h5m-5 4 2 2 5-5"/></svg></div><div class="evaluator-content"><div class="evaluator-heading"><h3>{{tr $.Lang .Title}}</h3><span class="setup-tag">{{tr $.Lang "Setup required"}}</span></div><p>{{tr $.Lang .Description}}</p><a class="text-link" href="{{localURL (printf "/demos/docs/%s" .ID) $.Lang}}">{{tr $.Lang "Read setup guide"}} <span aria-hidden="true">→</span></a></div></article>
     {{end}}{{end}}
     </div>
   </section>{{end}}
-  <footer class="library-footer"><span>Replay works offline. No API key or virtual machine required.</span><details><summary>About verification</summary><p>Signatures verify evidence integrity against the bundled demo keys. They do not establish complete capture or prove every inferred relationship. Evaluator examples have separate environment requirements.</p></details></footer>
+  <footer class="library-footer"><span>{{tr $.Lang "Replay works offline. No API key or virtual machine required."}}</span><details><summary>{{tr $.Lang "About verification"}}</summary><p>{{tr $.Lang "Signatures verify evidence integrity against the bundled demo keys. They do not establish complete capture or prove every inferred relationship. Evaluator examples have separate environment requirements."}}</p></details></footer>
 </main>
 </body>
 </html>

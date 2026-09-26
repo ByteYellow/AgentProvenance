@@ -1,10 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{.Lang}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AgentProvenance</title>
 <link rel="stylesheet" href="/assets/theme.css">
+<script src="/assets/i18n.js?lang={{.Lang}}"></script>
 <style>
   select{background:#fff;color:var(--tx);border:1px solid var(--line2);border-radius:9px;padding:6px 12px;font-size:13px;outline:none;box-shadow:0 1px 1px rgba(0,0,0,.03)}
   select:hover{border-color:#b9b9c0}
@@ -119,7 +120,7 @@
   td.payload{white-space:normal;color:var(--mut);max-width:520px;font-family:ui-monospace,monospace;font-size:11px}
   td.payload .pl{white-space:pre-wrap;word-break:break-word;max-height:3.4em;overflow:hidden;cursor:pointer;position:relative}
   td.payload .pl.open{max-height:none}
-  td.payload .pl:not(.open)::after{content:'… more';position:absolute;right:0;bottom:0;background:#fff;color:var(--acc);padding-left:8px;font-size:10px}
+  td.payload .pl:not(.open)::after{content:attr(data-expand-label);position:absolute;right:0;bottom:0;background:#fff;color:var(--acc);padding-left:8px;font-size:10px}
   .ptree{padding:14px 20px;font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;max-height:340px;overflow:auto;line-height:1.75}
   .ptree .node{white-space:nowrap}
   .ptree .pid{color:var(--mut)}
@@ -270,85 +271,123 @@
   .badge.dec.dec-redacted{background:rgba(191,90,242,.12);color:#8944ab;border-color:rgba(191,90,242,.3)}
   .badge.dec.dec-allowed{background:rgba(52,199,89,.12);color:#1d8c3e;border-color:rgba(52,199,89,.3)}
   .badge.dec.dec-observed{background:rgba(0,0,0,.05);color:var(--mut);border-color:var(--line2)}
+  header{flex-wrap:wrap}
+  header select{min-width:0;max-width:100%}
+  header .badge{flex-wrap:wrap;max-width:100%}
+  .card h2{flex-wrap:wrap}
+  .lensbar{flex-wrap:wrap;max-width:100%}
+  .lensbar select{min-width:0;max-width:100%}
+  .scrub{flex-wrap:wrap}
+  .scrub input[type=range]{min-width:80px}
+  .scrub .lbl{min-width:0}
+  .detail h3{overflow-wrap:anywhere}
+  @media(max-width:720px){
+    header{position:static;padding:14px;gap:10px}
+    header .spacer{display:none}
+    #runsel{flex-basis:100%;order:2}
+    header .badge{order:3;width:100%}
+    main{padding:16px 12px}
+    .card h2{padding:14px}
+    .card h2 .sub{flex-basis:100%}
+    .lensbar{width:100%}
+    #lenssel{flex-basis:100%}
+    .scrub{padding:9px 14px}
+    .scrub input[type=range]{flex-basis:calc(100% - 48px)}
+    .scrub .lbl{flex:1;text-align:left}
+    .detail dl{grid-template-columns:110px minmax(0,1fr)}
+    .surfaces{grid-template-columns:minmax(0,1fr)}
+    #fwsel{max-width:100%}
+  }
+  .load-error{margin:18px 28px 0;padding:14px 18px;border:1px solid #e9bda5;background:#fff7ed;border-radius:12px;color:#843c17}
+  .load-error[hidden]{display:none}
+  .load-error button{margin-left:12px}
+  .load-error details{margin-top:8px;font-size:12px}
+  .load-error pre{white-space:pre-wrap;overflow-wrap:anywhere}
 </style>
 </head>
 <body>
 <header>
   <h1><b>Agent</b>Provenance</h1>
-  <span class="tag">verifiable agent observability</span>
+  <span class="tag">{{tr .Lang "verifiable agent observability"}}</span>
   <select id="runsel"></select>
-  <div id="live" class="tag on" title="auto-refresh every 5s">● live</div>
+  <div id="live" class="tag on" title="{{tr .Lang "auto-refresh every 10s"}}">{{tr .Lang "● live"}}</div>
   <div class="spacer"></div>
   <div id="verify" class="badge ok">…</div>
+  <nav class="language-switch" aria-label="{{tr .Lang "Language"}}"><a href="{{.EnglishURL}}" lang="en" hreflang="en"{{if eq .Lang "en"}} aria-current="true"{{end}}>English</a><a href="{{.ChineseURL}}" lang="zh-CN" hreflang="zh-CN"{{if eq .Lang "zh-CN"}} aria-current="true"{{end}}>中文</a></nav>
 </header>
+<div id="loaderror" class="load-error" role="alert" hidden>
+  <span id="loaderror-text"></span>
+  <button id="reload-page">{{tr .Lang "Reload page"}}</button>
+  <details><summary>{{tr .Lang "Technical details"}}</summary><pre id="loaderror-detail"></pre></details>
+</div>
 <main>
   <section class="card full">
-    <h2>Run Overview <span class="sub">query first, graph second — raw events stay paged and drillable</span></h2>
+    <h2>{{tr .Lang "Run Overview"}} <span class="sub">{{tr .Lang "query first, graph second — raw events stay paged and drillable"}}</span></h2>
     <div id="profilebar" class="profilebar"></div>
     <div id="askgrid" class="askgrid"></div>
   </section>
   <section class="card full" id="outboundcard">
-    <h2>Outbound Data Surfaces <span class="sub">where data left (or was blocked from leaving) the box — grouped by channel · owner · data class · decision, generated from evidence</span></h2>
+    <h2>{{tr .Lang "Outbound Data Surfaces"}} <span class="sub">{{tr .Lang "where data left (or was blocked from leaving) the box — grouped by channel · owner · data class · decision, generated from evidence"}}</span></h2>
     <div id="outbound" class="surfaces"></div>
   </section>
   <section class="card hero" id="graphcard">
-    <h2>Graph Explorer <span class="sub">canonical graph → lens projection → derived edges</span>
+    <h2>{{tr .Lang "Graph Explorer"}} <span class="sub">{{tr .Lang "canonical graph → lens projection → derived edges"}}</span>
       <span class="spacer"></span>
       <div class="lensbar">
-        <select id="lenssel" title="lens projection"></select>
-        <select id="detailsel" title="graph detail">
-          <option value="summary">summary</option>
-          <option value="expanded">expanded</option>
-          <option value="raw">raw</option>
+        <select id="lenssel" title="{{tr .Lang "lens projection"}}"></select>
+        <select id="detailsel" title="{{tr .Lang "graph detail"}}">
+          <option value="summary">{{tr .Lang "summary"}}</option>
+          <option value="expanded">{{tr .Lang "expanded"}}</option>
+          <option value="raw">{{tr .Lang "raw"}}</option>
         </select>
-        <span class="chip risk" id="ov-risk" data-ov="risk">risk</span>
-        <span class="chip trust" id="ov-trust" data-ov="trust">trust</span>
+        <span class="chip risk" id="ov-risk" data-ov="risk">{{tr .Lang "risk"}}</span>
+        <span class="chip trust" id="ov-trust" data-ov="trust">{{tr .Lang "trust"}}</span>
       </div>
     </h2>
     <div id="lensmeta" class="lensmeta"></div>
     <div id="scrub" class="scrub">
-      <button id="playbtn" title="play the run forward">▶</button>
-      <input id="slider" type="range" min="0" max="0" value="0" step="1" title="scrub through time">
-      <span id="scrublabel" class="lbl">all events</span>
-      <span class="zoombar"><button id="zoomout" title="zoom out">−</button><button id="zoomfit" title="fit to width">fit</button><button id="zoomin" title="zoom in">+</button></span>
+      <button id="playbtn" title="{{tr .Lang "play the run forward"}}">▶</button>
+      <input id="slider" type="range" min="0" max="0" value="0" step="1" title="{{tr .Lang "scrub through time"}}">
+      <span id="scrublabel" class="lbl">{{tr .Lang "all events"}}</span>
+      <span class="zoombar"><button id="zoomout" title="{{tr .Lang "zoom out"}}">−</button><button id="zoomfit" title="{{tr .Lang "fit to width"}}">{{tr .Lang "fit"}}</button><button id="zoomin" title="{{tr .Lang "zoom in"}}">+</button></span>
     </div>
     <div id="dag"></div>
     <div class="legend" id="legend"></div>
-    <div id="detail" class="detail"><span class="hint">click any node to highlight its causal chain &amp; inspect its record →</span></div>
+    <div id="detail" class="detail"><span class="hint">{{tr .Lang "click any node to highlight its causal chain & inspect its record →"}}</span></div>
   </section>
   <section class="card side">
-    <h2>Signals &amp; Risk <span class="sub" id="sigcount"></span></h2>
+    <h2>{{tr .Lang "Signals & Risk"}} <span class="sub" id="sigcount"></span></h2>
     <div id="siglist" class="siglist"></div>
   </section>
   <section class="card full">
-    <h2>Focused Evidence <span class="sub">evidence for the selected risk, graph node, or overview group</span></h2>
-    <div id="evhead" class="evidence-head"><span class="hint">select a risk, graph node, or overview group to inspect its evidence</span></div>
+    <h2>{{tr .Lang "Focused Evidence"}} <span class="sub">{{tr .Lang "evidence for the selected risk, graph node, or overview group"}}</span></h2>
+    <div id="evhead" class="evidence-head"><span class="hint">{{tr .Lang "select a risk, graph node, or overview group to inspect its evidence"}}</span></div>
     <div style="overflow:auto;max-height:340px"><table id="evtbl"><thead><tr>
-      <th>time</th><th>event</th><th>pid</th><th>tool call</th><th>correlation</th><th>payload</th>
+      <th>{{tr .Lang "time"}}</th><th>{{tr .Lang "event"}}</th><th>{{tr .Lang "pid"}}</th><th>{{tr .Lang "tool call"}}</th><th>{{tr .Lang "correlation"}}</th><th>{{tr .Lang "payload"}}</th>
     </tr></thead><tbody></tbody></table></div>
     <div id="evpager" class="pager"></div>
   </section>
   <section class="card full">
-    <h2>Run Timeline <span class="sub">all events in chronological order</span><span id="tlprov" class="provchip"></span></h2>
+    <h2>{{tr .Lang "Run Timeline"}} <span class="sub">{{tr .Lang "all events in chronological order"}}</span><span id="tlprov" class="provchip"></span></h2>
     <div style="overflow:auto;max-height:420px"><table id="tl"><thead><tr>
-      <th>time</th><th>event</th><th title="evidence source (which producer) · scope source (how it tied to a run)">source</th><th>correlation</th><th>conf</th><th>detail</th>
+      <th>{{tr .Lang "time"}}</th><th>{{tr .Lang "event"}}</th><th title="{{tr .Lang "evidence source (which producer) · scope source (how it tied to a run)"}}">{{tr .Lang "source"}}</th><th>{{tr .Lang "correlation"}}</th><th>{{tr .Lang "conf"}}</th><th>{{tr .Lang "detail"}}</th>
     </tr></thead><tbody></tbody></table></div>
     <div id="tlpager" class="pager"></div>
   </section>
   <section class="card full">
-    <h2>Process Tree <span class="sub">OS processes by parent pid</span></h2>
+    <h2>{{tr .Lang "Process Tree"}} <span class="sub">{{tr .Lang "OS processes by parent pid"}}</span></h2>
     <div id="ptree" class="ptree"></div>
   </section>
   <section class="card full">
-    <h2>Egress <span class="sub">outbound network — the destination is the security-relevant fact</span></h2>
+    <h2>{{tr .Lang "Egress"}} <span class="sub">{{tr .Lang "outbound network — the destination is the security-relevant fact"}}</span></h2>
     <div style="overflow:auto;max-height:300px"><table id="egtbl"><thead><tr>
-      <th>time</th><th>type</th><th>destination</th><th>path</th><th>port</th><th>evidence</th><th>count</th><th>proc</th>
+      <th>{{tr .Lang "time"}}</th><th>{{tr .Lang "type"}}</th><th>{{tr .Lang "destination"}}</th><th>{{tr .Lang "path"}}</th><th>{{tr .Lang "port"}}</th><th>{{tr .Lang "evidence"}}</th><th>{{tr .Lang "count"}}</th><th>{{tr .Lang "process"}}</th>
     </tr></thead><tbody></tbody></table></div>
   </section>
   <section class="card full" id="compliancecard">
-    <h2>Compliance <span class="sub">per control: did a threat fire in this run, and did your detectors contain it? (violated / enforced / clear / not assessed)</span>
+    <h2>{{tr .Lang "Compliance"}} <span class="sub">{{tr .Lang "per control: did a threat fire in this run, and did your detectors contain it? (violated / enforced / clear / not assessed)"}}</span>
       <span class="spacer"></span>
-      <select id="fwsel" title="compliance framework"></select>
+      <select id="fwsel" title="{{tr .Lang "compliance framework"}}"></select>
     </h2>
     <div id="compsummary" class="compsummary"></div>
     <div id="complist" class="complist"></div>
@@ -356,6 +395,11 @@
   </section>
 </main>
 <script>
+const {t: tr, locale: LANG} = window.AgentProvI18n;
+function tx(source, values) {
+  return tr(source).replace(/\{(\w+)\}/g, (match, key) => Object.hasOwn(values, key) ? String(values[key]) : match);
+}
+
 // Node colors span the full canonical-graph vocabulary, not just the old
 // security-signature kinds, so every lens renders meaningfully.
 const KIND_COLOR={
@@ -373,29 +417,41 @@ const KIND_COLOR={
   agent:'var(--acc)', message:'#c026d3', relay:'#0891b2', refused:'var(--risk)',
   llm_call:'#6366f1', llm_prompt:'#818cf8', llm_completion:'#a78bfa',
   intent_diff:'#ff9500', unknown:'#9a9aa0', other:'#64748b'};
-const EDGE_LABEL={llm_call:'request→response',llm_intent_caused:'intent→action',
-  llm_request:'request',llm_response:'response',llm_caused:'caused syscall',llm_body:'captured body',
-  prompt_check:'prompt check',before_tool_call:'before tool call',after_tool_call:'after tool call',after_tool_call_summary:'summary',send_msg:'send msg',intent_stage:'stage',
-  lc_prompt:'① prompt check',lc_before_tool:'② before tool call',lc_after_tool:'③ after tool call',lc_send_msg:'④ send msg',
-  prompt_check:'① prompt',sends:'sends',responds:'responds',caused:'caused',send_msg:'④ send msg',refused_intent:'⊘ blocked',attempted:'attempted',
-  agent_spawn:'spawns (delegation)',agent_message:'sends (peer)',agent_tool_call:'runs',agent_syscall:'→ syscall',
-  pod_influences_pod:'A2A call →',pod_bound_cgroup:'runs in',cgroup_binds_scope:'attributed to',workload_has_pod:'contains',
-  intent_contract:'declares',intent_diff_effect:'observed effect',
-  runtime_event_policy_decision:'→ policy',policy_decision_risk_signal:'→ risk',
-  risk_signal_response_action:'→ response',runtime_tool_call_event:'tool→event',
-  runtime_process_event:'proc→event',possible_sensitive_data_flow:'data flow',
-  possible_sensitive_data_flow_summary:'data flow summary',
-  runtime_tool_call_process:'tool→proc',runtime_attempt_event:'attempt→event',
-  runtime_process_parent:'parent→child',runtime_process_child_of:'child→parent',
-  runtime_process_observed:'observed',runtime_process_child:'parent→child',
-  policy_decision_session:'→ session'};
-const LENS_LABEL={'default':'Default · causality','security':'Security · risk/policy/response',
-  'process':'Process · tree + runtime','file-artifact':'File / Artifact · lineage',
-  'network-egress':'Network · egress','data-flow-taint':'Data-flow · taint (secret→sink)',
-  'agent-intent':'Agent intent · causal DAG (prompt→action)','orchestration':'Orchestration · agents (delegation/peer)','intent':'Conformance · declared vs actual (violations)','substrate':'Substrate · producer / cgroup / workload','trust-origin':'Trust · origin','sandbox-boundary':'Sandbox · boundary'};
+const EDGE_LABEL={llm_call:tr("request→response"),llm_intent_caused:tr("intent→action"),
+  llm_request:tr("request"),llm_response:tr("response"),llm_caused:tr("caused syscall"),llm_body:tr("captured body"),
+  prompt_check:tr("prompt check"),before_tool_call:tr("before tool call"),after_tool_call:tr("after tool call"),after_tool_call_summary:tr("summary"),send_msg:tr("send msg"),intent_stage:tr("stage"),
+  lc_prompt:tr("① prompt check"),lc_before_tool:tr("② before tool call"),lc_after_tool:tr("③ after tool call"),lc_send_msg:tr("④ send msg"),
+  prompt_check:tr("① prompt"),sends:tr("sends"),responds:tr("responds"),caused:tr("caused"),send_msg:tr("④ send msg"),refused_intent:tr("⊘ blocked"),attempted:tr("attempted"),
+  agent_spawn:tr("spawns (delegation)"),agent_message:tr("sends (peer)"),agent_tool_call:tr("runs"),agent_syscall:tr("→ syscall"),
+  pod_influences_pod:tr("A2A call →"),pod_bound_cgroup:tr("runs in"),cgroup_binds_scope:tr("attributed to"),workload_has_pod:tr("contains"),
+  intent_contract:tr("declares"),intent_diff_effect:tr("observed effect"),
+  runtime_event_policy_decision:tr("→ policy"),policy_decision_risk_signal:tr("→ risk"),
+  risk_signal_response_action:tr("→ response"),runtime_tool_call_event:tr("tool→event"),
+  runtime_process_event:tr("proc→event"),possible_sensitive_data_flow:tr("data flow"),
+  possible_sensitive_data_flow_summary:tr("data flow summary"),
+  runtime_tool_call_process:tr("tool→proc"),runtime_attempt_event:tr("attempt→event"),
+  runtime_process_parent:tr("parent→child"),runtime_process_child_of:tr("child→parent"),
+  runtime_process_observed:tr("observed"),runtime_process_child:tr("parent→child"),
+  policy_decision_session:tr("→ session")};
+const LENS_LABEL={'default':tr("Default · causality"),'security':tr("Security · risk/policy/response"),
+  'process':tr("Process · tree + runtime"),'file-artifact':tr("File / Artifact · lineage"),
+  'network-egress':tr("Network · egress"),'data-flow-taint':tr("Data-flow · taint (secret→sink)"),
+  'agent-intent':tr("Agent intent · causal DAG (prompt→action)"),'orchestration':tr("Orchestration · agents (delegation/peer)"),'intent':tr("Conformance · declared vs actual (violations)"),'substrate':tr("Substrate · producer / cgroup / workload"),'trust-origin':tr("Trust · origin"),'sandbox-boundary':tr("Sandbox · boundary")};
 const $=s=>document.querySelector(s);
 
-async function j(u){const r=await fetch(u);return r.json();}
+async function j(u){
+  let response;
+  try{response=await fetch(u);}catch(error){throw new Error(tr('Cannot connect to the local service')+': '+error.message);}
+  if(!response.ok){throw new Error('HTTP '+response.status+' '+u+'\n'+(await response.text()).slice(0,2000));}
+  try{return await response.json();}catch(_){throw new Error(tr('The service returned an unreadable response')+': '+u);}
+}
+function showLoadError(error){
+  $('#loaderror').hidden=false;
+  $('#loaderror-text').textContent=tr('Some data could not be loaded. The previous view may still be shown.');
+  $('#loaderror-detail').textContent=String(error&&error.message||error);
+}
+function safeUI(promise){return promise.catch(showLoadError);}
+$('#reload-page').onclick=()=>location.reload();
 
 function nodeKind(n){
   if((n.kind==='runtime_event'||n.kind==='event') && /^tls_/.test(n.subtype||'')) return 'intent';
@@ -404,11 +460,106 @@ function nodeKind(n){
 function wideNodeKind(k){
   return k==='intent_stage'||k==='llm_prompt'||k==='llm_completion'||k==='event_burst';
 }
-function clipNodeLabel(n){
-  // Keep the visible label inside the node box (wide 230px / normal 158px). The
-  // full label is always on hover via the node's <title>.
-  return clip(n.label||n.id, wideNodeKind(nodeKind(n))?27:15);
+// Translate generated graph summaries only. Commands, paths, agent names, Run
+// IDs and original payloads are returned verbatim and never written back.
+function nodeLabel(n) {
+  const original=String(n.label||n.id||'');
+  if(LANG!=='zh-CN')return original;
+  const d=n.data||{}, kind=n.kind;
+  if(kind==='overview_group') {
+    const labels={
+      tool_calls:()=>tx('Tool calls: {count}',{count:d.count||0}),
+      processes:()=>tx('Process groups: {count} pids',{count:d.runtime_processes||0}),
+      files:()=>tx('File changes: {count}',{count:d.count||0}),
+      egress:()=>tx('Egress: {risky} risky / {total} total',{risky:d.risky||0,total:d.total||0}),
+      risks:()=>tx('Risks: {high} high / {total} total',{high:d.high||0,total:d.total||0}),
+      agent_network:()=>tx('Agent network: {agents} agents / {messages} peer msgs',{agents:d.agents||0,messages:d.messages||0}),
+      llm_intent:()=>tx('LLM intent: {count} evidence nodes',{count:d.count||0}),
+      artifacts:()=>tx('Artifacts: {count}',{count:d.count||0})
+    };
+    if(original==='Process overview')return tr(original);
+    return labels[n.subtype]?labels[n.subtype]():original;
+  }
+  if(kind==='risk_signal')return tr(original);
+  if(kind==='artifact'&&n.subtype==='egress_payload'){
+    const count=original.match(/^egress payload \(canary×(\d+)\)$/);
+    return count?tx('egress payload (canary×{count})',{count:count[1]}):tr(original);
+  }
+  if(kind==='policy_decision'&&original.startsWith('policy: '))return tx('policy: {decision}',{decision:tr(d.decision||original.slice(8))});
+  if(kind==='response_action'&&original.startsWith('response: '))return tx('response: {action}',{action:tr(d.action||original.slice(10))});
+  if(kind==='intent_diff') {
+    switch(n.subtype){
+      case 'declared_vs_effect_mismatch':return tx('⚠ {operation}: declared≠actual',{operation:d.operation||''});
+      case 'refused_but_runtime_happened':return tr('⊘ refusal bypassed');
+      case 'decided_and_executed':return tx('✓ {operation} as declared',{operation:d.operation||''});
+      case 'intent_coverage_gap':return tr('? uncaptured intent');
+    }
+  }
+  if(kind==='message'||kind==='relay'){
+    return original.replace(/^(peer|delegate) (.*?) -> (.*)$/,(_,action,from,to)=>tx(action==='peer'?'peer {from} -> {to}':'delegate {from} -> {to}',{from,to}));
+  }
+  if(['file_group','egress_group','risk_group','trust_group','boundary_group'].includes(kind)){
+    const label=original.replace(/^(.+?): (\d+)/,(_,category,count)=>tr(kind==='file_group'&&n.subtype==='source'?'source files':n.subtype||category)+': '+count);
+    return kind==='risk_group'?label.replace(/ -> (.*)$/,(_,decision)=>' → '+tr(decision)):label;
+  }
+  if(['substrate_profile','substrate_node_group','substrate_workload_group','substrate_scope'].includes(kind)){
+    const label=tr(original);if(label!==original)return label;
+  }
+  if(['process_group','intent_group','substrate_cgroup_group','substrate_event_group','substrate_workload_group','intent_stage'].includes(kind)){
+    const patterns=[
+      [/^process group: (\d+) pids$/, 'process group: {count} pids'],
+      [/^execution scope: (\d+) events$/, 'execution scope: {count} events'],
+      [/^cgroups: (\d+)$/, 'cgroups: {count}'],
+      [/^runtime events: (\d+)$/, 'runtime events: {count}'],
+      [/^pod group: (\d+) pods$/, 'pod group: {count} pods'],
+      [/^pod\/container group: (\d+) containers$/, 'pod/container group: {count} containers'],
+      [/^③ caused (\d+) syscalls$/, '③ caused {count} syscalls'],
+      [/^④ send msg: (\d+) peer edges$/, '④ send msg: {count} peer edges']
+    ];
+    for(const [pattern,source] of patterns){const match=original.match(pattern);if(match)return tx(source,{count:match[1]})}
+    if(kind==='intent_stage'){
+      if(original.startsWith('① prompt: '))return tr('① prompt')+': '+original.slice(10);
+      if(original.startsWith('② decide: '))return tr('② decide')+': '+original.slice(10);
+      return tr(original);
+    }
+  }
+  if(kind==='event_burst'){
+    const match=original.match(/^(\d+) exec \/ (\d+) proc \/ (\d+) risk$/);
+    if(match)return tx('{exec} exec / {proc} proc / {risk} risk',{exec:match[1],proc:match[2],risk:match[3]});
+    if(d.count!==undefined)return tr(n.subtype||d.event_type)+': '+d.count;
+  }
+  if(kind==='llm_call'&&original==='LLM call')return tr(original);
+  if(kind==='llm_prompt'||kind==='llm_completion')return original.replace(/^(① |② )?(LLM request|LLM response|request|response)(?=[: \[]|$)/,(_,step,copy)=>(step||'')+tr(copy));
+  if(kind==='runtime_event'||kind==='event'){
+    const types=new Set(['secret_path','file_open','file_write','metadata_ip','private_cidr','network_connect','dns_query','tls_read','tls_write','process_observed','exec_start','exec_end']);
+    if(types.has(n.subtype)){
+      const step=original.match(/^[①②③④] /)?.[0]||'', label=original.slice(step.length);
+      if(label===n.subtype)return step+tr(label);
+      if(label.startsWith(n.subtype+' '))return step+tr(n.subtype)+label.slice(n.subtype.length);
+    }
+  }
+  return original;
 }
+
+function nodeSubtype(n){
+  const subtype=n.subtype||n.kind;
+  if(LANG!=='zh-CN')return subtype;
+  const pid=subtype.match(/^pid (\d+)$/);if(pid)return tx('pid {id}',{id:pid[1]});
+  const tgid=subtype.match(/^tgid (\d+) \(thread group\)$/);if(tgid)return tx('tgid {id} (thread group)',{id:tgid[1]});
+  return tr(subtype);
+}
+
+function graphTextWidth(text, size=13) {
+  let width=0;for(const char of String(text))width+=char.codePointAt(0)>255?size:size*0.54;
+  return width;
+}
+
+function clipGraphText(label, limit, size=13){
+  if(graphTextWidth(label,size)<=limit)return label;
+  let clipped='';for(const char of label){if(graphTextWidth(clipped+char+'…',size)>limit)break;clipped+=char}
+  return clipped+'…';
+}
+function clipNodeLabel(n){return clipGraphText(nodeLabel(n),wideNodeKind(nodeKind(n))?194:122);}
 
 // Observer-origin nodes come from our own instrumentation (the record ps-sampler /
 // exec wrapper), not the kernel sensor — grey them so they read as secondary to the
@@ -521,7 +672,7 @@ function localScope(g,sel,mode){
 }
 function renderDAG(g,sel){
   const el=$('#dag');
-  if(!g.nodes.length){el.innerHTML='<div class="empty">no nodes for this lens</div>';return;}
+  if(!g.nodes.length){el.innerHTML=("<div class=\"empty\">"+esc(tr("no nodes for this lens"))+"</div>");return;}
   // Layout (Sugiyama) is a pure function of topology and is the expensive step.
   // renderDAG is called on every select/hover/zoom -- recomputing it each time
   // was the source of the lag on large graphs. Cache it by the topology
@@ -566,10 +717,10 @@ function renderDAG(g,sel){
     if(!edgeVisible(e))return;
     if(!e.derived && !hl(i))return;
     const y1=a.y+a.h/2,y2=b.y+b.h/2,lx=(a.x+a.w+b.x)/2,ly=(y1+y2)/2;
-    let lbl=EDGE_LABEL[e.type]||e.type; if(e.derived)lbl+=` · ${(+e.confidence).toFixed(2)}`;
+    let lbl=EDGE_LABEL[e.type]||tr(e.type); if(e.derived)lbl+=` · ${(+e.confidence).toFixed(2)}`;
     // Width estimate is generous (6.8px/char + padding) so the white pill always
     // fully contains the label — bold text and arrow glyphs run wider than 6px/char.
-    const col=e.derived?'#ff375f':'#0071e3', w=lbl.length*6.8+16;
+    const col=e.derived?'#ff375f':'#0071e3', w=graphTextWidth(lbl,10)+16;
     s+=`<rect x="${lx-w/2}" y="${ly-17}" width="${w}" height="16" rx="8" fill="#ffffff" stroke="${col}" stroke-opacity="0.35"/>`;
     s+=`<text x="${lx}" y="${ly-5.5}" fill="${col}" font-size="10" font-weight="600" text-anchor="middle">${esc(lbl)}</text>`;
   });
@@ -580,8 +731,8 @@ function renderDAG(g,sel){
     s+=`<g data-id="${esc(n.id)}" opacity="${dim?0.32:1}">`;
     // Full, untruncated identity on hover -- the visible label is clipped to 18
     // chars and file paths / hashes lose their tail otherwise.
-    const tipSub=(n.subtype||n.kind||''), tipExtra=(n.risk?` · risk:${n.risk}`:'')+(n.trust_origin?` · ${n.trust_origin}`:'');
-    s+=`<title>${esc(n.label||n.id)}${tipSub?` (${esc(tipSub)})`:''}${esc(tipExtra)}\n${esc(n.id)}</title>`;
+    const tipSub=nodeSubtype(n), tipExtra=(n.risk?' · '+tr('risk:')+' '+tr(n.risk):'')+(n.trust_origin?' · '+tr(n.trust_origin):'');
+    s+=`<title>${esc(nodeLabel(n))}${tipSub?` (${esc(tipSub)})`:''}${esc(tipExtra)}\n${esc(n.id)}</title>`;
     if(risky)s+=`<rect x="${p.x-3}" y="${p.y-3}" width="${p.w+6}" height="${p.h+6}" rx="12" fill="none" stroke="var(--risk)" stroke-width="2" opacity="0.7"/>`;
     else if(on)s+=`<rect x="${p.x-4}" y="${p.y-4}" width="${p.w+8}" height="${p.h+8}" rx="12" fill="none" stroke="${c}" stroke-width="1.5" opacity="0.45"/>`;
     s+=`<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="11" fill="#ffffff" stroke="${c}" stroke-width="${on?2.4:1.4}"/>`;
@@ -589,8 +740,8 @@ function renderDAG(g,sel){
     s+=`<circle cx="${p.x+15}" cy="${p.y+16}" r="3.5" fill="${c}"/>`;
     s+=`<text x="${p.x+26}" y="${p.y+20}" fill="#1d1d1f" font-size="13" font-weight="600">${esc(clipNodeLabel(n))}</text>`;
     // With the trust overlay on, the subtitle shows provenance origin instead of subtype.
-    const sub=(showTrust && n.trust_origin)?n.trust_origin:(n.subtype||n.kind||'');
-    s+=`<text x="${p.x+15}" y="${p.y+39}" fill="#86868b" font-size="10.5">${esc(sub).slice(0,24)}</text></g>`;
+    const sub=(showTrust && n.trust_origin)?tr(n.trust_origin):nodeSubtype(n);
+    s+=`<text x="${p.x+15}" y="${p.y+39}" fill="#86868b" font-size="10.5">${esc(clipGraphText(sub,p.w-25,10.5))}</text></g>`;
   });
   s+='</svg>';
   const sl=el.scrollLeft, st=el.scrollTop; // preserve scroll across re-render
@@ -601,23 +752,23 @@ function renderDAG(g,sel){
 
 function renderLensMeta(m){
   const q=m.query||{};
-  const rules=(q.lens_rules||[]).map(r=>`<span class="rule">${esc(r)}</span>`).join(' ');
+  const rules=(q.lens_rules||[]).map(r=>`<span class="rule">${esc(tr(r))}</span>`).join(' ');
   $('#lensmeta').innerHTML=
-    `<span><b>${esc(m.lens)}</b></span>`+
-    `<span>detail <b>${esc(q.detail||'summary')}</b></span>`+
-    `<span>layout <b>${esc(q.layout_hint||'')}</b></span>`+
-    `<span><b>${q.node_count||0}</b> nodes</span>`+
-    `<span><b>${(m.edges||[]).length}</b> edges</span>`+
-    `<span><b style="color:var(--derived)">${q.derived_edge_count||0}</b> derived</span>`+
-    `<span><b>${q.raw_event_count||0}</b> raw events</span>`+
-    ((q.omitted_nodes||q.omitted_edges)?`<span style="color:#b25e00">+${q.omitted_nodes||0} nodes / +${q.omitted_edges||0} edges available via expanded/raw</span>`:'')+
-    (q.truncated?`<span style="color:#b25e00">⚠ truncated at ${q.limit}</span>`:'')+
-    (rules?`<span>rules ${rules}</span>`:'');
+    `<span><b>${esc(LENS_LABEL[m.lens]||m.lens)}</b></span>`+
+    `<span>${esc(tr("detail"))} <b>${esc(tr(q.detail||'summary'))}</b></span>`+
+    `<span>${esc(tr("layout"))} <b>${esc(tr(q.layout_hint||''))}</b></span>`+
+    `<span><b>${q.node_count||0}</b> ${esc(tr("nodes"))}</span>`+
+    `<span><b>${(m.edges||[]).length}</b> ${esc(tr("edges"))}</span>`+
+    `<span><b style="color:var(--derived)">${q.derived_edge_count||0}</b> ${esc(tr("derived"))}</span>`+
+    `<span><b>${q.raw_event_count||0}</b> ${esc(tr("raw events"))}</span>`+
+    ((q.omitted_nodes||q.omitted_edges)?`<span style="color:#b25e00">${esc(tx("{nodes} more nodes / {edges} more edges available via expanded/raw", {nodes: q.omitted_nodes||0, edges: q.omitted_edges||0}))}</span>`:'')+
+    (q.truncated?`<span style="color:#b25e00">${esc(tx("⚠ truncated at {limit}", {limit: q.limit}))}</span>`:'')+
+    (rules?`<span>${esc(tr("rules"))} ${rules}</span>`:'');
   // Legend reflects the node kinds actually present in this lens.
   const kinds=[...new Set((m.nodes||[]).map(n=>nodeKind(n)))];
-  let lg=kinds.map(k=>`<span><i style="background:${KIND_COLOR[k]||KIND_COLOR.other}"></i>${esc(k)}</span>`).join('');
-  if((m.derived_edges||[]).length)lg+=`<span><i class="dash"></i>derived (inferred)</span>`;
-  if((m.nodes||[]).some(isObserverNode))lg+=`<span><i style="background:#b4b4bc"></i>observed (instrumentation)</span>`;
+  let lg=kinds.map(k=>`<span><i style="background:${KIND_COLOR[k]||KIND_COLOR.other}"></i>${esc(tr(k))}</span>`).join('');
+  if((m.derived_edges||[]).length)lg+=`<span><i class="dash"></i>${esc(tr("derived (inferred)"))}</span>`;
+  if((m.nodes||[]).some(isObserverNode))lg+=`<span><i style="background:#b4b4bc"></i>${esc(tr("observed (instrumentation)"))}</span>`;
   $('#legend').innerHTML=lg;
 }
 
@@ -625,25 +776,25 @@ function renderQuestionEntries(m){
   const byId={};
   (m.nodes||[]).forEach(n=>byId[n.id]=n);
   const items=[
-    {id:'overview/risks', cls:'risk', q:'Why is this run risky?', lens:'security', sub:'risk paths'},
-    {id:'overview/agent_network', cls:'proc', q:'Which agents coordinated?', lens:'orchestration', sub:'agent delegation / peer messages'},
-    {id:'overview/llm_intent', cls:'proc', q:'What did the model decide?', lens:'agent-intent', sub:'causal DAG (prompt→action)'},
-    {id:'overview/tool_calls', cls:'proc', q:'Did actions match intent?', lens:'intent', sub:'declared vs actual effects'},
-    {id:'overview/egress', cls:'egress', q:'What happened around egress?', lens:'network-egress', sub:'network groups'},
-    {id:'__taint__', cls:'egress', q:'Did secrets reach a sink?', lens:'data-flow-taint', sub:'secret → network flow'},
-    {id:'overview/files', cls:'file', q:'What changed files?', lens:'file-artifact', sub:'diff / file groups'},
-    {id:'overview/artifacts', cls:'file', q:'Where did artifacts come from?', lens:'file-artifact', sub:'artifact lineage'},
-    {id:'overview/processes', cls:'proc', q:'Which processes mattered?', lens:'process', sub:'process groups'},
-    {id:'__substrate__', cls:'proc', q:'How was this run observed?', lens:'substrate', sub:'producer / cgroup / workload'},
-    {id:'__trust__', cls:'proc', q:'What is trusted vs asserted?', lens:'trust-origin', sub:'trust origins'},
-    {id:'__boundary__', cls:'proc', q:'Was the sandbox boundary crossed?', lens:'sandbox-boundary', sub:'boundary / tamper'},
-    {id:'__compliance__', cls:'comp', q:'Which controls hold up?', lens:'', sub:'framework coverage'}
+    {id:'overview/risks', cls:'risk', q:tr("Why is this run risky?"), lens:'security', sub:tr("risk paths")},
+    {id:'overview/agent_network', cls:'proc', q:tr("Which agents coordinated?"), lens:'orchestration', sub:tr("agent delegation / peer messages")},
+    {id:'overview/llm_intent', cls:'proc', q:tr("What did the model decide?"), lens:'agent-intent', sub:tr("causal DAG (prompt→action)")},
+    {id:'overview/tool_calls', cls:'proc', q:tr("Did actions match intent?"), lens:'intent', sub:tr("declared vs actual effects")},
+    {id:'overview/egress', cls:'egress', q:tr("What happened around egress?"), lens:'network-egress', sub:tr("network groups")},
+    {id:'__taint__', cls:'egress', q:tr("Did secrets reach a sink?"), lens:'data-flow-taint', sub:tr("secret → network flow")},
+    {id:'overview/files', cls:'file', q:tr("What changed files?"), lens:'file-artifact', sub:tr("diff / file groups")},
+    {id:'overview/artifacts', cls:'file', q:tr("Where did artifacts come from?"), lens:'file-artifact', sub:tr("artifact lineage")},
+    {id:'overview/processes', cls:'proc', q:tr("Which processes mattered?"), lens:'process', sub:tr("process groups")},
+    {id:'__substrate__', cls:'proc', q:tr("How was this run observed?"), lens:'substrate', sub:tr("producer / cgroup / workload")},
+    {id:'__trust__', cls:'proc', q:tr("What is trusted vs asserted?"), lens:'trust-origin', sub:tr("trust origins")},
+    {id:'__boundary__', cls:'proc', q:tr("Was the sandbox boundary crossed?"), lens:'sandbox-boundary', sub:tr("boundary / tamper")},
+    {id:'__compliance__', cls:'comp', q:tr("Which controls hold up?"), lens:'', sub:tr("framework coverage")}
   ];
   $('#askgrid').innerHTML=items.map(it=>{
     const n=byId[it.id]||{};
     return `<button class="qbtn ${it.cls}" data-lens="${esc(it.lens)}" data-node="${esc(it.id)}">
       <div class="q">${esc(it.q)}</div>
-      <div class="m">${esc(n.label||it.sub)}</div>
+      <div class="m">${esc(n.id?nodeLabel(n):it.sub)}</div>
     </button>`;
   }).join('');
   document.querySelectorAll('.qbtn').forEach(btn=>{
@@ -661,7 +812,7 @@ function renderQuestionEntries(m){
       stopPlay();
       const ls=$('#lenssel'), ds=$('#detailsel');
       if(ls)ls.value=LENS; if(ds)ds.value=DETAIL;
-      loadRun(cur);
+      safeUI(loadRun(cur));
     };
   });
 }
@@ -678,16 +829,16 @@ function renderProducerProfile(events){
   const tls=evs.filter(e=>/^tls_/.test(e.event_type||'') || String(e.source||'').includes('tls')).length;
   const cgroups=[...new Set(evs.map(e=>e.cgroup_id).filter(Boolean))];
   const pids=[...new Set(evs.map(e=>e.pid).filter(Boolean))];
-  const profile=k8s?'k8s-daemonset':(kernel?'local/VM sensor':(record?'local-record':'evidence import'));
-  const scope=k8s?'passive cgroup attribution':(scopes.has('record')?'record cgroup leaf':(record?'record logical scope':'imported evidence'));
-  const telemetry=kernel?`${kernel}/${evs.length} kernel-correlated`:(record?`${record}/${evs.length} self-observed`:'no runtime events in page');
-  const intent=tls?`TLS intent observed (${tls})`:'no model-intent TLS in page';
+  const profile=k8s?'k8s-daemonset':(kernel?tr("local/VM sensor"):(record?'local-record':tr("evidence import")));
+  const scope=k8s?tr("passive cgroup attribution"):(scopes.has('record')?tr("record cgroup leaf"):(record?tr("record logical scope"):tr("imported evidence")));
+  const telemetry=kernel?tx("{count}/{total} kernel-correlated", {count: kernel, total: evs.length}):(record?tx("{count}/{total} self-observed", {count: record, total: evs.length}):tr("no runtime events in page"));
+  const intent=tls?tx("TLS intent observed ({count})", {count: tls}):tr("no model-intent TLS in page");
   const cls=k8s?'k8s':(kernel?'kernel':'');
   el.innerHTML=[
-    `<div class="pcard ${cls}"><div class="k">Producer profile</div><div class="v">${esc(profile)}</div><div class="d">${esc([...sources].slice(0,3).join(' · ')||'unknown source')}</div></div>`,
-    `<div class="pcard ${k8s?'k8s':''}"><div class="k">Scope source</div><div class="v">${esc(pods.length?`${pods[0].namespace||'?'}/${pods[0].pod_name||pods[0].pod_uid}${pods.length>1?' +'+(pods.length-1):''}`:scope)}</div><div class="d">${esc((pods.length?scope+' · ':'')+(cgroups.length?`cgroup ${cgroups[0]}${cgroups.length>1?' +'+(cgroups.length-1):''}`:'no cgroup id'))}</div></div>`,
-    `<div class="pcard ${kernel?'kernel':'partial'}"><div class="k">Runtime telemetry</div><div class="v">${esc(telemetry)}</div><div class="d">${esc(pids.length?`${pids.length} pids observed`:'no pid evidence')}</div></div>`,
-    `<div class="pcard ${tls?'kernel':'partial'}"><div class="k">Model intent</div><div class="v">${esc(intent)}</div><div class="d">${esc(tls?'TLS body parsed when observable':'app hooks / explicit events may still apply')}</div></div>`
+    `<div class="pcard ${cls}"><div class="k">${esc(tr("Producer profile"))}</div><div class="v">${esc(tr(profile))}</div><div class="d">${esc([...sources].slice(0,3).map(tr).join(' · ')||tr("unknown source"))}</div></div>`,
+    `<div class="pcard ${k8s?'k8s':''}"><div class="k">${esc(tr("Scope source"))}</div><div class="v">${esc(pods.length?`${pods[0].namespace||'?'}/${pods[0].pod_name||pods[0].pod_uid}${pods.length>1?' +'+(pods.length-1):''}`:scope)}</div><div class="d">${esc((pods.length?scope+' · ':'')+(cgroups.length?`cgroup ${cgroups[0]}${cgroups.length>1?' +'+(cgroups.length-1):''}`:tr("no cgroup id")))}</div></div>`,
+    `<div class="pcard ${kernel?'kernel':'partial'}"><div class="k">${esc(tr("Runtime telemetry"))}</div><div class="v">${esc(telemetry)}</div><div class="d">${esc(pids.length?tx("{count} pids observed", {count: pids.length}):tr("no pid evidence"))}</div></div>`,
+    `<div class="pcard ${tls?'kernel':'partial'}"><div class="k">${esc(tr("Model intent"))}</div><div class="v">${esc(intent)}</div><div class="d">${esc(tls?tr("TLS body parsed when observable"):tr("app hooks / explicit events may still apply"))}</div></div>`
   ].join('');
 }
 
@@ -707,7 +858,7 @@ function setScrub(idx){
 }
 function updateScrubLabel(){
   const idx=+$('#slider').value, lbl=$('#scrublabel');
-  if(TCUR===null) lbl.textContent=`all events (${TIMES.length})`;
+  if(TCUR===null) lbl.textContent=tx("all events ({count})", {count: TIMES.length});
   else lbl.textContent=`${idx+1}/${TIMES.length}  ${TCUR.replace('T',' ').replace(/\.\d+Z?$/,'')}`;
 }
 function stopPlay(){ if(PLAYING){clearInterval(PLAYING);PLAYING=null;} $('#playbtn').textContent='▶'; }
@@ -732,7 +883,7 @@ function selectNode(id){
   setEvidenceFilterFromNode(n||null);
   EV_OFFSET=0;
   renderDAG(window._lg,SEL); showDetail(SEL);
-  loadEvidenceDrilldown(0);
+  safeUI(loadEvidenceDrilldown(0));
 }
 function drilldownNode(n){
   const d=n.data||{};
@@ -747,7 +898,7 @@ function drilldownNode(n){
   stopPlay();
   const ls=$('#lenssel'), ds=$('#detailsel');
   if(ls)ls.value=LENS; if(ds)ds.value=DETAIL;
-  loadRun(cur);
+  safeUI(loadRun(cur));
   return true;
 }
 
@@ -755,7 +906,7 @@ function setEvidenceFilterFromNode(n){
   if(!n){ EV_FILTER=null; return; }
   const d=n.data||{};
   EV_FILTER={
-    title:n.label||n.id,
+    title:nodeLabel(n),
     lens:String(d.drilldown_lens||LENS||''),
     group:String(d.group||d.category||d.rule_id||d.event_type||n.subtype||''),
     focus:String(d.drilldown_focus||n.id||''),
@@ -763,7 +914,7 @@ function setEvidenceFilterFromNode(n){
   };
 }
 
-const DETAIL_HINT='<span class="hint">click any node to highlight its causal chain &amp; inspect its record →</span>';
+const DETAIL_HINT=("<span class=\"hint\">"+esc(tr("click any node to highlight its causal chain & inspect its record →"))+"</span>");
 function showDetail(id){
   const el=$('#detail');
   const n=id&&(window._lg.nodes||[]).find(x=>x.id===id);
@@ -776,29 +927,29 @@ function showDetail(id){
     if(key==='payload'){ try{v=JSON.stringify(JSON.parse(v),null,2);}catch(_){v=String(v);} }
     else if(typeof v==='number'){ v=(key.indexOf('confidence')>=0)?(+v).toFixed(2):v; }
     if(v==='' || v==null || v===false)return;
-    rows+=`<dt>${esc(key)}</dt><dd>${esc(v)}</dd>`;
+    rows+=`<dt title="${esc(key)}">${esc(tr(key))}</dt><dd>${esc(v)}</dd>`;
   });
   // Side-panel evidence row: a derived edge into/out of this node carries its
   // rule + confidence + the source/sink it was inferred from (replay refs).
   const dv=(window._lg.edges||[]).find(e=>e.derived&&(e.from===id||e.to===id));
-  if(dv){ rows+=`<dt>derived rule</dt><dd>${esc(dv.rule)} (${(+dv.confidence).toFixed(2)})</dd>`;
-    rows+=`<dt>inferred from</dt><dd>${esc((dv.evidence||[]).join('\n'))}</dd>`; }
-  rows+=`<dt>node id</dt><dd>${esc(n.id)}</dd>`;
-  const badges=`<span class="k">${esc(n.kind)}</span>`+
-    (n.risk?` <span class="k risk">risk: ${esc(n.risk)}</span>`:'')+
-    (n.trust_origin?` <span class="k trust">${esc(n.trust_origin)}</span>`:'');
+  if(dv){ rows+=`<dt>${esc(tr("derived rule"))}</dt><dd>${esc(dv.rule)} (${(+dv.confidence).toFixed(2)})</dd>`;
+    rows+=`<dt>${esc(tr("inferred from"))}</dt><dd>${esc((dv.evidence||[]).join('\n'))}</dd>`; }
+  rows+=`<dt>${esc(tr("node id"))}</dt><dd>${esc(n.id)}</dd>`;
+  const badges=`<span class="k">${esc(tr(n.kind))}</span>`+
+    (n.risk?` <span class="k risk">${esc(tr("risk:"))} ${esc(tr(n.risk))}</span>`:'')+
+    (n.trust_origin?` <span class="k trust">${esc(tr(n.trust_origin))}</span>`:'');
   const expandButtons=['lineage','upstream','downstream','children'].map(mode=>
-    `<button data-expand="${mode}" class="${EXPAND_MODE===mode?'on':''}">${mode}</button>`).join('')+
-    `<button data-expand="raw">raw events</button>`;
-  el.innerHTML=`<h3><span style="color:${c}">●</span> ${esc(n.label)} ${badges}</h3>`+
+    `<button data-expand="${mode}" class="${EXPAND_MODE===mode?'on':''}">${esc(tr(mode))}</button>`).join('')+
+    `<button data-expand="raw">${esc(tr("raw events"))}</button>`;
+  el.innerHTML=`<h3><span style="color:${c}">●</span> ${esc(nodeLabel(n))} ${badges}</h3>`+
     `<div class="expandbar">${expandButtons}</div>`+
-    `<div class="sec">Evidence</div><dl>${rows}</dl>`+
-    `<div class="sec">Preview</div><div id="preview" class="preview"></div>`;
+    `<div class="sec">${esc(tr("Original evidence fields"))}</div><dl>${rows}</dl>`+
+    `<div class="sec">${esc(tr("Preview"))}</div><div id="preview" class="preview"></div>`;
   el.querySelectorAll('[data-expand]').forEach(btn=>{
     btn.onclick=()=>{
       const mode=btn.getAttribute('data-expand');
       if(mode==='raw'){
-        loadEvidenceDrilldown(0);
+        safeUI(loadEvidenceDrilldown(0));
         const box=$('#evhead');
         if(box) box.scrollIntoView({block:'nearest'});
         return;
@@ -816,21 +967,21 @@ function showDetail(id){
 // did this node actually produce / contain?" without turning into a file browser.
 async function loadPreview(run, id){
   const el=$('#preview'); if(!el)return;
-  el.innerHTML='<div class="none">loading…</div>';
+  el.innerHTML=("<div class=\"none\">"+esc(tr("loading…"))+"</div>");
   let d;
-  try{ d=await j('/api/artifact?run='+encodeURIComponent(run)+'&node='+encodeURIComponent(id)); }
-  catch(_){ el.innerHTML='<div class="none">preview error</div>'; return; }
+  try{ d=await j('/api/artifact?run='+encodeURIComponent(run)+'&node='+encodeURIComponent(id)+'&view_lang='+encodeURIComponent(LANG)); }
+  catch(_){ el.innerHTML=("<div class=\"none\">"+esc(tr("preview error"))+"</div>"); return; }
   if($('#preview')!==el) return; // selection changed while fetching
-  if(!d || d.kind==='unavailable'){ el.innerHTML=`<div class="none">no content preview — ${esc((d&&d.reason)||'unavailable')}</div>`; return; }
+  if(!d || d.kind==='unavailable'){ el.innerHTML=`<div class="none">${esc(tx("no content preview — {reason}", {reason: tr((d&&d.reason)||'unavailable')}))}</div>`; return; }
   let meta='<div class="meta">';
   if(d.sha256) meta+=`<span>${esc(d.sha256.slice(0,23))}…</span>`;
   meta+=`<span>${d.size} B</span>`;
   if(d.mime) meta+=`<span>${esc(d.mime)}</span>`;
-  if(d.source) meta+=`<span>${esc(d.source)}</span>`;
-  if(d.truncated) meta+='<span style="color:#b25e00">truncated</span>';
-  if(d.redacted) meta+='<span class="redacted">🔒 redacted</span>';
+  if(d.source) meta+=`<span>${esc(tr(d.source))}</span>`;
+  if(d.truncated) meta+=("<span style=\"color:#b25e00\">"+esc(tr("truncated"))+"</span>");
+  if(d.redacted) meta+=("<span class=\"redacted\">"+esc(tr("🔒 redacted"))+"</span>");
   meta+='</div>';
-  if(d.kind==='binary'){ el.innerHTML=meta+`<div class="none">${esc(d.reason||'binary content')}</div>`; return; }
+  if(d.kind==='binary'){ el.innerHTML=meta+`<div class="none">${esc(tr(d.reason||'binary content'))}</div>`; return; }
   let body;
   if(d.kind==='diff'){
     body='<pre class="diff">'+(d.content||'').split('\n').map(l=>{
@@ -848,15 +999,15 @@ async function loadPreview(run, id){
 
 function renderVerify(v){
   const el=$('#verify');
-  if(!v||v.error){el.innerHTML='✗ verify error <span class="sig">'+esc((v&&v.error)||'')+'</span>';return;}
+  if(!v||v.error){el.className='badge bad';el.innerHTML=esc(tr('✗ verify error'))+' <span class="sig">'+esc((v&&v.error)||'')+'</span>';return;}
+  const counts=tx('{errors} errors · {warnings} warnings', {errors:v.error_count||0, warnings:v.warning_count||0});
   if(v.status==='deferred'){
     el.className='badge ok';
-    el.innerHTML='✓ INDEXED <span class="sig">'+`${v.error_count||0} err · ${v.warning_count||0} warn · full verify on demand`+'</span>';
+    el.innerHTML=esc(tr('✓ INDEXED'))+' <span class="sig">'+esc(counts+' · '+tr('full verification on request'))+'</span>';
     return;
   }
-  const ok = v.status==='ok';
-  el.className='badge '+(ok?'ok':'bad');
-  el.innerHTML=(ok?'✓ VERIFIED':'✗ FAILED')+` <span class="sig">${v.error_count||0} err · ${v.warning_count||0} warn · signed graph</span>`;
+  const ok=v.status==='ok';el.className='badge '+(ok?'ok':'bad');
+  el.innerHTML=esc(tr(ok?'✓ VERIFIED':'✗ FAILED'))+' <span class="sig">'+esc(counts+' · '+tr('signed graph'))+'</span>';
 }
 
 function renderSignals(sig){
@@ -865,23 +1016,23 @@ function renderSignals(sig){
   SIGS=risks;
   if(SIG_OFFSET>=risks.length) SIG_OFFSET=Math.max(0, Math.floor((risks.length-1)/SIG_LIMIT)*SIG_LIMIT);
   const rawCount=risks.reduce((n,g)=>n+g.count,0);
-  $('#sigcount').textContent = risks.length? risks.length+' risk group'+(risks.length>1?'s':'')+' / '+rawCount+' signal'+(rawCount>1?'s':'') : '';
-  if(!risks.length){list.innerHTML='<div class="empty">no risk signals</div>';return;}
+  $('#sigcount').textContent = risks.length? tx("{groups} risk groups / {signals} signals", {groups: risks.length, signals: rawCount}) : '';
+  if(!risks.length){list.innerHTML=("<div class=\"empty\">"+esc(tr("no risk signals"))+"</div>");return;}
   const page=risks.slice(SIG_OFFSET,SIG_OFFSET+SIG_LIMIT);
   list.innerHTML=page.map(g=>{
     const sev=(g.severity||'low').toLowerCase();
     const focus=g.focus||'';
     const active=focus&&focus===SEL?' on':'';
     const refs=g.refs.join(',');
-    return `<div class="sig${active}" data-focus="${esc(focus)}" data-refs="${esc(refs)}" data-title="${esc(g.title)}"><span class="pill sev-${sev}">${esc(g.severity||'risk')}</span>
-      <div class="body"><div class="ref">${esc(g.title)}</div>
-      <div class="meta">${esc(g.type)} · ${g.count} event${g.count>1?'s':''}${g.sample?` · ${esc(g.sample)}`:''}</div>
-      ${g.action?`<div class="act">▸ ${esc(g.action)}</div>`:''}</div></div>`;
+    return `<div class="sig${active}" data-focus="${esc(focus)}" data-refs="${esc(refs)}" data-title="${esc(tr(g.title))}"><span class="pill sev-${sev}">${esc(tr(g.severity||'risk'))}</span>
+      <div class="body"><div class="ref">${esc(tr(g.title))}</div>
+      <div class="meta">${esc(tr(g.type))} · ${esc(tx("{count} events", {count: g.count}))}${g.sample?` · ${esc(g.sample)}`:''}</div>
+      ${g.action?`<div class="act">▸ ${esc(tr(g.action))}</div>`:''}</div></div>`;
   }).join('');
   const from=risks.length?SIG_OFFSET+1:0, to=Math.min(SIG_OFFSET+SIG_LIMIT,risks.length);
-  list.innerHTML+=`<div class="pager"><button id="sigprev" ${SIG_OFFSET<=0?'disabled':''}>‹ prev</button>
-    <span>${from}–${to} of ${risks.length}</span>
-    <button id="signext" ${SIG_OFFSET+SIG_LIMIT>=risks.length?'disabled':''}>next ›</button></div>`;
+  list.innerHTML+=`<div class="pager"><button id="sigprev" ${SIG_OFFSET<=0?'disabled':''}>${esc(tr("‹ prev"))}</button>
+    <span>${esc(tx("{from}–{to} of {total}", {from, to, total: risks.length}))}</span>
+    <button id="signext" ${SIG_OFFSET+SIG_LIMIT>=risks.length?'disabled':''}>${esc(tr("next ›"))}</button></div>`;
   list.querySelectorAll('.sig[data-focus]').forEach(el=>{
     el.onclick=()=>focusSignalGroup(el);
   });
@@ -957,26 +1108,26 @@ function signalFocusID(s){
 function focusSignalGroup(el){
   const focus=el.getAttribute('data-focus')||'';
   const refs=(el.getAttribute('data-refs')||'').split(',').filter(Boolean);
-  focusSignal(focus, refs, el.getAttribute('data-title')||'risk signal');
+  focusSignal(focus, refs, el.getAttribute('data-title')||tr("risk signal"));
 }
 function focusSignal(id, refs, title){
   if(!id)return;
-  SEL=id; GRAPH_FOCUS=id; LENS='security'; DETAIL='summary'; EXPAND_MODE='lineage'; EV_FILTER={title:title||'risk signal', lens:'security', focus:id, refs:(refs&&refs.length)?refs:[id]}; EV_OFFSET=0; stopPlay();
+  SEL=id; GRAPH_FOCUS=id; LENS='security'; DETAIL='summary'; EXPAND_MODE='lineage'; EV_FILTER={title:title||tr("risk signal"), lens:'security', focus:id, refs:(refs&&refs.length)?refs:[id]}; EV_OFFSET=0; stopPlay();
   const ls=$('#lenssel'), ds=$('#detailsel');
   if(ls)ls.value=LENS; if(ds)ds.value=DETAIL;
-  loadRun(cur).then(()=>$('#graphcard')&&$('#graphcard').scrollIntoView({behavior:'smooth',block:'start'}));
+  loadRun(cur).then(()=>$('#graphcard')&&$('#graphcard').scrollIntoView({behavior:'smooth',block:'start'})).catch(showLoadError);
 }
 
 function renderTimeline(events){
   const tb=$('#tl tbody');
-  if(!events||!events.length){tb.innerHTML='<tr><td colspan="6" class="empty">no events</td></tr>';$('#tlprov').textContent='';return;}
+  if(!events||!events.length){tb.innerHTML=("<tr><td colspan=\"6\" class=\"empty\">"+esc(tr("no events"))+"</td></tr>");$('#tlprov').textContent='';return;}
   renderProvChip(events);
   tb.innerHTML=events.map(e=>{
     const cls=(e.correlation_class||'').replace(/\s/g,'_');
     const t=(e.created_at||'').replace('T',' ').replace(/\.\d+Z?$/,'');
-    return `<tr><td>${esc(t)}</td><td class="etype">${esc(e.event_type||'')}</td>
+    return `<tr><td>${esc(t)}</td><td class="etype">${esc(tr(e.event_type||''))}</td>
       <td>${srcCell(e)}</td>
-      <td class="cls ${cls}">${esc(e.correlation_class||e.correlation_method||'')}${provBadge(e)}</td>
+      <td class="cls ${cls}">${esc(tr(e.correlation_class||e.correlation_method||''))}${provBadge(e)}</td>
       <td>${confCell(e.correlation_confidence)}</td>
       <td class="payload">${plCell(e.payload, e.id)}</td></tr>`;
   }).join('');
@@ -987,8 +1138,8 @@ function renderTimeline(events){
 function renderProvChip(events){
   const el=$('#tlprov'); if(!el)return;
   const n=events.length, sl=events.filter(e=>e.self_launched).length, kc=events.filter(e=>(e.correlation_class||'')==='kernel_correlated').length;
-  el.textContent=`${sl}/${n} self-launched · ${kc}/${n} kernel-correlated`;
-  el.title='self-launched = process started by AgentProvenance; kernel-correlated = independently witnessed by the sensor';
+  el.textContent=tx("{started}/{total} self-launched · {kernel}/{total} kernel-correlated", {started: sl, total: n, kernel: kc});
+  el.title=tr("self-launched = process started by AgentProvenance; kernel-correlated = independently witnessed by the sensor");
 }
 // Full payload, pretty-printed when it's JSON. The table cell (td.payload .pl)
 // clamps it to a few lines by default and expands to the whole thing on click,
@@ -997,7 +1148,7 @@ function payloadFull(p){ if(!p)return''; try{return JSON.stringify(JSON.parse(p)
 // Payload expand state lives OUT of the DOM (keyed by event id) so the 5s live
 // refresh, which rebuilds the table, doesn't collapse what the user opened.
 let EV_OPEN=new Set();
-function plCell(p,key){ const full=payloadFull(p); if(!full)return''; const op=key&&EV_OPEN.has(key)?' open':''; return `<div class="pl${op}" data-plk="${esc(key||'')}" onclick="togglePl(this)" title="click to expand / collapse">${esc(full)}</div>`; }
+function plCell(p,key){ const full=payloadFull(p); if(!full)return''; const op=key&&EV_OPEN.has(key)?' open':''; return `<div class="pl${op}" data-expand-label="${esc(tr("… more"))}" data-plk="${esc(key||'')}" onclick="togglePl(this)" title="${esc(tr("click to expand / collapse"))}">${esc(full)}</div>`; }
 function togglePl(el){ const k=el.getAttribute('data-plk'); if(!k){el.classList.toggle('open');return;} if(EV_OPEN.has(k)){EV_OPEN.delete(k);el.classList.remove('open');}else{EV_OPEN.add(k);el.classList.add('open');} }
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 // Correlation confidence tier -> colour band. Keeps a 0.5 ai_asserted join from
@@ -1011,8 +1162,8 @@ function confCell(c){ if(c==null||c==='')return''; return `<span class="conf ${c
 function scopeConf(s){ return s==='ai_asserted'?0.5:(s==='k8s_cgroup'?0.8:1); }
 function srcCell(e){
   const ev=e.source||'', sc=e.binding_source||'';
-  let h=ev?`<span class="src" title="evidence source">${esc(ev)}</span>`:'';
-  if(sc)h+=`<span class="scope ${confClass(scopeConf(sc))}" title="scope source — how this event tied to a run">${esc(sc)}</span>`;
+  let h=ev?`<span class="src" title="${esc(tr("evidence source"))}">${esc(tr(ev))}</span>`:'';
+  if(sc)h+=`<span class="scope ${confClass(scopeConf(sc))}" title="${esc(tr("scope source — how this event tied to a run"))}">${esc(tr(sc))}</span>`;
   return h;
 }
 // self-launched is orthogonal to correlation class: a kernel_correlated event
@@ -1024,7 +1175,7 @@ function srcCell(e){
 // on every row.
 function provBadge(e){
   if(e.self_launched) return '';
-  if((e.correlation_class||'')==='kernel_correlated') return ' <span class="extbadge" title="independently witnessed by the sensor, but NOT started by AgentProvenance">external</span>';
+  if((e.correlation_class||'')==='kernel_correlated') return (" <span class=\"extbadge\" title=\""+esc(tr("independently witnessed by the sensor, but NOT started by AgentProvenance"))+"\">"+esc(tr("external"))+"</span>");
   return '';
 }
 
@@ -1032,8 +1183,8 @@ async function loadEvidenceDrilldown(offset){
   const tb=$('#evtbl tbody'), head=$('#evhead'), pager=$('#evpager');
   if(!cur){return;}
   if(!EV_FILTER){
-    head.innerHTML='<span class="hint">select a risk, graph node, or overview group to inspect its evidence</span>';
-    tb.innerHTML='<tr><td colspan="6" class="empty">no focused selection</td></tr>';
+    head.innerHTML=("<span class=\"hint\">"+esc(tr("select a risk, graph node, or overview group to inspect its evidence"))+"</span>");
+    tb.innerHTML=("<tr><td colspan=\"6\" class=\"empty\">"+esc(tr("no focused selection"))+"</td></tr>");
     pager.innerHTML='';
     return;
   }
@@ -1047,43 +1198,43 @@ async function loadEvidenceDrilldown(offset){
   const d=await j('/api/events?'+p.toString());
   EV_OFFSET=d.offset||0;
   const rows=d.events||[];
-  const refCount=(f.refs&&f.refs.length)?` · ${f.refs.length} refs`:'';
-  head.innerHTML=`<b>Selected: ${esc(f.title||'evidence')}</b><span class="focuspath">${esc([f.lens,f.group,f.focus].filter(Boolean).join(' / '))}</span><span>${d.total||0} events${esc(refCount)}</span>`;
+  const refCount=(f.refs&&f.refs.length)?' · '+tx("{count} refs", {count: f.refs.length}):'';
+  head.innerHTML=`<b>${esc(tx("Selected: {title}", {title: f.title||tr('evidence')}))}</b><span class="focuspath">${esc([f.lens,f.group,f.focus].filter(Boolean).join(' / '))}</span><span>${esc(tx("{count} events", {count: d.total||0}))}${esc(refCount)}</span>`;
   if(!rows.length){
-    tb.innerHTML='<tr><td colspan="6" class="empty">no raw events for this selection</td></tr>';
+    tb.innerHTML=("<tr><td colspan=\"6\" class=\"empty\">"+esc(tr("no raw events for this selection"))+"</td></tr>");
   }else{
     tb.innerHTML=rows.map(e=>{
       const t=(e.created_at||'').replace('T',' ').replace(/\.\d+Z?$/,'');
-      return `<tr><td>${esc(t)}</td><td class="etype">${esc(e.event_type||'')}</td><td>${esc(e.pid||'')}</td>
-        <td>${esc(e.tool_call_id||'')}</td><td class="cls ${esc((e.correlation_class||'').replace(/\s/g,'_'))}">${esc(e.correlation_class||e.correlation_method||'')}${provBadge(e)}</td>
+      return `<tr><td>${esc(t)}</td><td class="etype">${esc(tr(e.event_type||''))}</td><td>${esc(e.pid||'')}</td>
+        <td>${esc(e.tool_call_id||'')}</td><td class="cls ${esc((e.correlation_class||'').replace(/\s/g,'_'))}">${esc(tr(e.correlation_class||e.correlation_method||''))}${provBadge(e)}</td>
         <td class="payload">${plCell(e.payload, e.id)}</td></tr>`;
     }).join('');
   }
   const from=d.total?EV_OFFSET+1:0, to=Math.min(EV_OFFSET+(d.limit||EV_LIMIT),d.total||0);
-  pager.innerHTML=`<button id="evprev" ${EV_OFFSET<=0?'disabled':''}>‹ prev</button>
-    <span>${from}–${to} of ${d.total||0} events</span>
-    <button id="evnext" ${EV_OFFSET+(d.limit||EV_LIMIT)>=(d.total||0)?'disabled':''}>next ›</button>`;
+  pager.innerHTML=`<button id="evprev" ${EV_OFFSET<=0?'disabled':''}>${esc(tr("‹ prev"))}</button>
+    <span>${esc(tx("{from}–{to} of {total}", {from, to, total: d.total||0}))}</span>
+    <button id="evnext" ${EV_OFFSET+(d.limit||EV_LIMIT)>=(d.total||0)?'disabled':''}>${esc(tr("next ›"))}</button>`;
   const pv=$('#evprev'), nx=$('#evnext');
-  if(pv) pv.onclick=()=>loadEvidenceDrilldown(Math.max(0,EV_OFFSET-(d.limit||EV_LIMIT)));
-  if(nx) nx.onclick=()=>loadEvidenceDrilldown(EV_OFFSET+(d.limit||EV_LIMIT));
+  if(pv) pv.onclick=()=>safeUI(loadEvidenceDrilldown(Math.max(0,EV_OFFSET-(d.limit||EV_LIMIT))));
+  if(nx) nx.onclick=()=>safeUI(loadEvidenceDrilldown(EV_OFFSET+(d.limit||EV_LIMIT)));
 }
 
 function renderEgress(rows){
   const tb=$('#egtbl tbody');
-  if(!rows||!rows.length){tb.innerHTML='<tr><td colspan="8" class="empty">no outbound network</td></tr>';return;}
+  if(!rows||!rows.length){tb.innerHTML=("<tr><td colspan=\"8\" class=\"empty\">"+esc(tr("no outbound network"))+"</td></tr>");return;}
   tb.innerHTML=rows.map(e=>{
     const t=(e.time||'').replace('T',' ').replace(/\.\d+Z?$/,'');
     const cls=e.risk?'eg-risk':'eg-ok';
     const dst=e.domain?`${esc(e.domain)} <span style="color:var(--mut);font-size:11px">${esc(e.dst)}</span>`:esc(e.dst);
-    const decision=e.decision&&e.decision!=='observed'?` · ${esc(e.decision)}`:'';
-    return `<tr><td>${esc(t)}</td><td class="${cls}">${esc(e.type)}</td><td class="${cls}">${dst}</td><td>${esc(e.path||'')}</td><td>${esc(e.port||'')}</td><td>${esc(e.evidence||'')}${decision}</td><td>${esc(e.count||1)}</td><td>${esc(e.comm||'')}</td></tr>`;
+    const decision=e.decision&&e.decision!=='observed'?` · ${esc(tr(e.decision))}`:'';
+    return `<tr><td>${esc(t)}</td><td class="${cls}">${esc(tr(e.type))}</td><td class="${cls}">${dst}</td><td>${esc(e.path||'')}</td><td>${esc(e.port||'')}</td><td>${esc(tr(e.evidence||''))}${decision}</td><td>${esc(e.count||1)}</td><td>${esc(e.comm||'')}</td></tr>`;
   }).join('');
 }
 
-const CHANNEL_LABEL={model_inference:'Model inference',artifact_storage:'Artifact storage',telemetry_service:'Telemetry service',product_analytics:'Product analytics',external_api:'External API',database:'Database',tool_service:'Tool service',unknown_egress:'Unknown egress'};
-const CHANNEL_DESC={model_inference:'model request body',artifact_storage:'uploaded artifact / code payload',telemetry_service:'session trace / product telemetry',product_analytics:'analytics endpoint',external_api:'external service call',database:'database connection',tool_service:'tool or MCP service',unknown_egress:'unclassified outbound channel'};
-const DATA_LABEL={secret:'secret',source_code:'source code',conversation:'conversation',behavioral_metadata:'behavioral metadata',unknown:'unknown data'};
-const EVIDENCE_LABEL={payload_observed:'payload observed',connection_observed:'connection observed',dns_only:'DNS only',documented:'documented'};
+const CHANNEL_LABEL={model_inference:tr("Model inference"),artifact_storage:tr("Artifact storage"),telemetry_service:tr("Telemetry service"),product_analytics:tr("Product analytics"),external_api:tr("External API"),database:tr("Database"),tool_service:tr("Tool service"),unknown_egress:tr("Unknown egress")};
+const CHANNEL_DESC={model_inference:tr("model request body"),artifact_storage:tr("uploaded artifact / code payload"),telemetry_service:tr("session trace / product telemetry"),product_analytics:tr("analytics endpoint"),external_api:tr("external service call"),database:tr("database connection"),tool_service:tr("tool or MCP service"),unknown_egress:tr("unclassified outbound channel")};
+const DATA_LABEL={secret:tr("secret"),source_code:tr("source code"),conversation:tr("conversation"),behavioral_metadata:tr("behavioral metadata"),unknown:tr("unknown data")};
+const EVIDENCE_LABEL={payload_observed:tr("payload observed"),connection_observed:tr("connection observed"),dns_only:tr("DNS only"),documented:tr("documented")};
 function fmtBytes(n){ if(!n)return''; const u=['B','KB','MB','GB']; let i=0,v=n; while(v>=1024&&i<u.length-1){v/=1024;i++;} return (i?v.toFixed(1):v)+' '+u[i]; }
 function fmtRange(a,b){ const f=s=>(s||'').replace('T',' ').replace(/\.\d+Z?$/,'').replace(/^.* /,''); if(!a&&!b)return''; return f(a)===f(b)?f(a):f(a)+'–'+f(b); }
 // renderOutbound draws the evidence-driven Outbound Data Surfaces cards. Nothing
@@ -1091,21 +1242,21 @@ function fmtRange(a,b){ const f=s=>(s||'').replace('T',' ').replace(/\.\d+Z?$/,'
 // explicit empty state when a run had no outbound surfaces.
 function renderOutbound(surfaces){
   const el=$('#outbound');
-  if(!surfaces||!surfaces.length){ el.innerHTML='<div class="empty">No outbound surfaces observed</div>'; return; }
+  if(!surfaces||!surfaces.length){ el.innerHTML=("<div class=\"empty\">"+esc(tr("No outbound surfaces observed"))+"</div>"); return; }
   el.innerHTML=surfaces.map((s,i)=>{
-    const dest=s.destination||'(destination not recorded)';
+    const dest=s.destination||tr("(destination not recorded)");
     const more=(s.destinations&&s.destinations.length>1)?` <span class="mut">+${s.destinations.length-1}</span>`:'';
     const rng=fmtRange(s.first_seen,s.last_seen);
     const classes=(s.data_classes&&s.data_classes.length?s.data_classes:[s.data_class]).map(x=>DATA_LABEL[x]||x).join(' + ');
-    return `<div class="surface" data-i="${i}" tabindex="0" role="button" title="click to inspect this outbound evidence in the graph">
+    return `<div class="surface" data-i="${i}" tabindex="0" role="button" title="${esc(tr("click to inspect this outbound evidence in the graph"))}">
       <div class="surface-top">
         <span class="chan">${esc(CHANNEL_LABEL[s.channel_class]||s.channel_class)}</span>
         <span class="badge dec dec-observed">${esc(EVIDENCE_LABEL[s.evidence_level]||s.evidence_level)}</span>
       </div>
-      <div class="surface-note mut">${esc(CHANNEL_DESC[s.channel_class]||'outbound channel')}</div>
-      <div class="surface-flow"><span class="dc">${esc(classes)}</span> <span class="arr">→</span> <b>${esc(s.destination_owner)}</b></div>
+      <div class="surface-note mut">${esc(CHANNEL_DESC[s.channel_class]||tr("outbound channel"))}</div>
+      <div class="surface-flow"><span class="dc">${esc(classes)}</span> <span class="arr">→</span> <b>${esc(tr(s.destination_owner))}</b></div>
       <div class="surface-dest">${esc(dest)}${more}</div>
-      <div class="surface-meta"><span class="badge dec dec-${esc(s.decision)}">${esc(s.decision)}</span> <span class="mut">${esc([s.request_count+' req'+(s.request_count===1?'':'s'),fmtBytes(s.bytes)].filter(Boolean).join(' · '))}</span></div>
+      <div class="surface-meta"><span class="badge dec dec-${esc(s.decision)}">${esc(tr(s.decision))}</span> <span class="mut">${esc([tx("{count} requests", {count: s.request_count}),fmtBytes(s.bytes)].filter(Boolean).join(' · '))}</span></div>
       ${rng?`<div class="surface-time mut">${esc(rng)}</div>`:''}
       ${s.note?`<div class="surface-note mut">${esc(s.note)}</div>`:''}
     </div>`;
@@ -1125,16 +1276,16 @@ function focusSurface(s){
   const avail=(window._lensManifest&&window._lensManifest.available_lenses)||[];
   if(avail.includes(lens))LENS=lens;
   DETAIL='raw'; SEL=null; GRAPH_FOCUS=ref; EXPAND_MODE='lineage'; EV_OFFSET=0;
-  EV_FILTER={title:(CHANNEL_LABEL[s.channel_class]||s.channel_class)+' · '+(s.destination_owner||'unknown'),lens:lens,group:'',focus:'',refs:(s.evidence_refs||[])};
+  EV_FILTER={title:(CHANNEL_LABEL[s.channel_class]||s.channel_class)+' · '+tr(s.destination_owner||'unknown'),lens:lens,group:'',focus:'',refs:(s.evidence_refs||[])};
   const ls=$('#lenssel'); if(ls)ls.value=LENS;
   const ds=$('#detailsel'); if(ds)ds.value=DETAIL;
-  stopPlay(); loadRun(cur);
+  stopPlay(); safeUI(loadRun(cur));
   const gc=$('#graphcard'); if(gc)gc.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 function renderProcessTree(procs){
   const el=$('#ptree');
-  if(!procs||!procs.length){el.innerHTML='<div class="empty">no process events</div>';return;}
+  if(!procs||!procs.length){el.innerHTML=("<div class=\"empty\">"+esc(tr("no process events"))+"</div>");return;}
   const byPid={}, kids={};
   procs.forEach(p=>{ if(!byPid[p.pid]) byPid[p.pid]={pid:p.pid,ppid:p.ppid,command:p.command||p.comm||'?'}; });
   const pids=new Set(Object.keys(byPid).map(Number));
@@ -1162,7 +1313,7 @@ function renderProcessTree(procs){
         g.forEach(c=>seen.add(c.pid));
         const ind='&nbsp;'.repeat(depth*3);
         const pidList=g.slice(0,8).map(c=>c.pid).join(', ')+(g.length>8?', …':'');
-        s+=`<div class="node">${ind}${depth>0?'└ ':''}<span class="cmd">${esc(g[0].command).slice(0,80)}</span> <span class="pid">×${g.length}</span> <span class="pid" title="pids: ${esc(pidList)}">[${g.length} processes]</span></div>`;
+        s+=`<div class="node">${ind}${depth>0?'└ ':''}<span class="cmd">${esc(g[0].command).slice(0,80)}</span> <span class="pid">×${g.length}</span> <span class="pid" title="${esc(tx("pids: {list}", {list: pidList}))}">[${esc(tx("{count} processes", {count: g.length}))}]</span></div>`;
       } else {
         g.forEach(c=>{ s+=render(c,depth); });
       }
@@ -1173,14 +1324,14 @@ function renderProcessTree(procs){
     if(seen.has(p.pid)||depth>40)return''; seen.add(p.pid);
     return row(p,depth)+renderList(kids[p.pid]||[],depth+1);
   }
-  el.innerHTML=renderList(roots,0) || '<div class="empty">no roots</div>';
+  el.innerHTML=renderList(roots,0) || ("<div class=\"empty\">"+esc(tr("no roots"))+"</div>");
 }
 
 // --- Compliance: detection RULES mapped onto framework controls -----------
 // The verdict per control is NOT "is there evidence of class X" but "did a rule
-// that detects this threat fire this run, and was it enforced or only observed":
-//   enforced       a mapped rule fired AND blocked it (deny/quarantine/kill)
-//   detected       a mapped rule fired but is detect-only (observed, not blocked)
+// that detects this threat fire this run, and what decision was recorded":
+//   enforced       a mapped rule recorded deny/quarantine/kill (not proof of blocking)
+//   detected       a mapped rule fired without one of those decisions
 //   not_triggered  rule(s) map here but none matched any activity this run
 //   no_rule        no detector maps to this control (an honest coverage gap, not
 //                  a clean pass -- distinct from not_triggered on purpose)
@@ -1205,52 +1356,57 @@ let COMP_OPEN=new Set();                          // control_ids with evidence e
 const ST_ORDER=['detected','enforced','not_triggered','no_rule'];
 let COMP_GRP={detected:true, enforced:true, not_triggered:false, no_rule:false};
 const ST_META={
-  enforced:{icon:'🟢',label:'Enforced',hdr:'🟢 Enforced — a rule detected this and blocked it'},
-  detected:{icon:'🟠',label:'Detected only',hdr:'🟠 Detected only — a rule fired but did not block (detect mode)'},
-  not_triggered:{icon:'⚪',label:'Not triggered',hdr:'⚪ Not triggered — a detector watches this, nothing fired this run'},
-  no_rule:{icon:'⬚',label:'No rule',hdr:'⬚ No rule — no detector maps to this control yet'}
+  enforced:{icon:'🟢',label:tr("Enforcement"),hdr:'🟢 '+tr("Enforcement")},
+  detected:{icon:'🟠',label:tr("Detected only"),hdr:'🟠 '+tr("Detected only")},
+  not_triggered:{icon:'⚪',label:tr("Not triggered"),hdr:'⚪ '+tr("Not triggered")},
+  no_rule:{icon:'⬚',label:tr("No rule"),hdr:'⬚ '+tr("No rule")}
 };
 async function loadFrameworks(){
   if(FW_READY)return;
-  let fws=[]; try{ fws=await j('/api/frameworks'); }catch(_){ fws=[]; }
+  const fws=await j('/api/frameworks');
   const sel=$('#fwsel');
-  if(!fws.length){ if(sel)sel.innerHTML='<option>none</option>'; FW_READY=true; return; }
+  if(!fws.length){ if(sel)sel.innerHTML=("<option>"+esc(tr("none"))+"</option>"); FW_READY=true; return; }
   if(!FW) FW=fws[0].id;
   if(sel){
-    sel.innerHTML=fws.map(f=>`<option value="${esc(f.id)}"${f.id===FW?' selected':''}>${esc(f.title)} (${f.controls})</option>`).join('');
+    sel.innerHTML=fws.map(f=>`<option value="${esc(f.id)}"${f.id===FW?' selected':''}>${esc(tr(f.title))} (${f.controls})</option>`).join('');
     sel.onchange=()=>{ FW=sel.value; loadCompliance(cur); };
   }
   FW_READY=true;
 }
 async function loadCompliance(run){
-  await loadFrameworks();
-  if(!FW){ return; }
-  let rep; try{ rep=await j('/api/compliance?run='+encodeURIComponent(run)+'&framework='+encodeURIComponent(FW)); }
-  catch(_){ rep=null; }
-  if(cur!==run) return; // run switched while fetching
-  renderCompliance(rep);
+  try{
+    await loadFrameworks();
+    if(!FW){renderCompliance(null);return;}
+    const rep=await j('/api/compliance?run='+encodeURIComponent(run)+'&framework='+encodeURIComponent(FW));
+    if(cur!==run)return;
+    renderCompliance(rep);
+  }catch(error){
+    if(cur!==run)return;
+    $('#compsummary').innerHTML='';$('#compdisclaimer').textContent='';
+    $('#complist').innerHTML='<div class="empty">'+esc(tr('Compliance mapping could not be loaded'))+'</div><details><summary>'+esc(tr('Technical details'))+'</summary><pre>'+esc(error.message)+'</pre></details>';
+  }
 }
 function renderCompliance(rep){
   const sumEl=$('#compsummary'), listEl=$('#complist'), disEl=$('#compdisclaimer');
   if(!rep || rep.error || !rep.summary){
-    sumEl.innerHTML=''; listEl.innerHTML='<div class="empty">'+esc((rep&&rep.error)||'no compliance mapping for this run')+'</div>'; disEl.textContent=''; return;
+    sumEl.innerHTML=''; listEl.innerHTML='<div class="empty">'+esc((rep&&rep.error)||tr("no compliance mapping for this run"))+'</div>'; disEl.textContent=''; return;
   }
   window._comp=rep;
   const s=rep.summary, total=Math.max(1,s.total);
   const pct=n=>(100*n/total).toFixed(1)+'%';
   sumEl.innerHTML=
     `<div class="covbar">`+
-      (s.enforced?`<i class="enforced" style="width:${pct(s.enforced)}" title="enforced"></i>`:'')+
-      (s.detected?`<i class="detected" style="width:${pct(s.detected)}" title="detected only"></i>`:'')+
-      (s.not_triggered?`<i class="not_triggered" style="width:${pct(s.not_triggered)}" title="not triggered"></i>`:'')+
-      (s.no_rule?`<i class="no_rule" style="width:${pct(s.no_rule)}" title="no rule"></i>`:'')+
+      (s.enforced?`<i class="enforced" style="width:${pct(s.enforced)}" title="${esc(tr("Enforcement"))}"></i>`:'')+
+      (s.detected?`<i class="detected" style="width:${pct(s.detected)}" title="${esc(tr("detected only"))}"></i>`:'')+
+      (s.not_triggered?`<i class="not_triggered" style="width:${pct(s.not_triggered)}" title="${esc(tr("not triggered"))}"></i>`:'')+
+      (s.no_rule?`<i class="no_rule" style="width:${pct(s.no_rule)}" title="${esc(tr("no rule"))}"></i>`:'')+
     `</div>`+
     `<div class="covstats">`+
-      `<span class="enforced"><b>${s.enforced||0}</b> enforced</span>`+
-      `<span class="detected"><b>${s.detected||0}</b> detected only</span>`+
-      `<span class="not_triggered"><b>${s.not_triggered||0}</b> not triggered</span>`+
-      `<span class="no_rule"><b>${s.no_rule||0}</b> no rule</span>`+
-      `<span>of <b>${s.total||0}</b> controls</span>`+
+      `<span class="enforced"><b>${s.enforced||0}</b> ${esc(tr("Enforcement"))}</span>`+
+      `<span class="detected"><b>${s.detected||0}</b> ${esc(tr("detected only"))}</span>`+
+      `<span class="not_triggered"><b>${s.not_triggered||0}</b> ${esc(tr("not triggered"))}</span>`+
+      `<span class="no_rule"><b>${s.no_rule||0}</b> ${esc(tr("no rule"))}</span>`+
+      `<span>${esc(tx("{count} controls in total", {count: s.total||0}))}</span>`+
     `</div>`;
   const items=rep.items||[];
   let html='';
@@ -1258,9 +1414,9 @@ function renderCompliance(rep){
     const arr=items.filter(i=>(i.status||'no_rule')===key);
     html+=compGroup(key, ST_META[key].hdr, arr, COMP_GRP[key]);
   });
-  listEl.innerHTML=html || '<div class="empty">no controls</div>';
+  listEl.innerHTML=html || ("<div class=\"empty\">"+esc(tr("no controls"))+"</div>");
   wireCompliance(listEl);
-  disEl.textContent=rep.disclaimer||'';
+  disEl.textContent=tr(rep.disclaimer||'');
 }
 function compGroup(key,label,arr,open){
   if(!arr.length) return '';
@@ -1281,35 +1437,34 @@ function wireCompliance(root){
 // Plain-language gloss per control id, so a reader doesn't have to decode the
 // framework's short title. Keyed by control_id (OWASP ASI01..TRACE, NIST Q1..Q5).
 const CONTROL_DESC={
-  ASI01:"An attacker steers the agent off its intended goal via crafted prompts or instructions.",
-  ASI02:"The agent invokes its tools in harmful or unintended ways.",
-  ASI03:"The agent acquires or abuses credentials/privileges beyond its scope.",
-  ASI04:"Compromised dependencies, templates, or artifacts enter the run.",
-  ASI05:"The agent runs unexpected code or spawns unexpected processes.",
-  ASI06:"The agent's memory or working state is tampered with (poisoned).",
-  ASI07:"Untrusted agent-to-agent messages (only applies to multi-agent runs).",
-  ASI08:"One failure cascades across agents or exhausts shared resources.",
-  ASI09:"A human is misled into over-trusting the agent's output.",
-  ASI10:"An agent drifts outside its normal (baseline) behaviour.",
-  TRACE:"Every action can be independently reconstructed and verified.",
-  Q1:"What security threats/risks did this run actually exhibit?",
-  Q2:"Which technical controls were enforced during the run?",
-  Q3:"How is the run's activity detected and assessed?",
-  Q4:"Was the deployment environment constrained and monitored?",
-  Q5:"Operational artifacts for broader, cross-discipline review."
+  ASI01:tr("An attacker steers the agent off its intended goal via crafted prompts or instructions."),
+  ASI02:tr("The agent invokes its tools in harmful or unintended ways."),
+  ASI03:tr("The agent acquires or abuses credentials/privileges beyond its scope."),
+  ASI04:tr("Compromised dependencies, templates, or artifacts enter the run."),
+  ASI05:tr("The agent runs unexpected code or spawns unexpected processes."),
+  ASI06:tr("The agent's memory or working state is tampered with (poisoned)."),
+  ASI07:tr("Untrusted agent-to-agent messages (only applies to multi-agent runs)."),
+  ASI08:tr("One failure cascades across agents or exhausts shared resources."),
+  ASI09:tr("A human is misled into over-trusting the agent's output."),
+  ASI10:tr("An agent drifts outside its normal (baseline) behaviour."),
+  TRACE:tr("Every action can be independently reconstructed and verified."),
+  Q1:tr("What security threats/risks did this run actually exhibit?"),
+  Q2:tr("Which technical controls were enforced during the run?"),
+  Q3:tr("How is the run's activity detected and assessed?"),
+  Q4:tr("Was the deployment environment constrained and monitored?"),
+  Q5:tr("Operational artifacts for broader, cross-discipline review.")
 };
 function clip(s,n){s=String(s||'');return s.length>n?s.slice(0,n-1)+'…':s;}
 // The detector line is the meat: per mapped rule show its mode (enforce/detect),
-// whether it fired, and the outcome -- blocked (enforce) vs observed-only (detect).
+// whether it fired, and the recorded decision class. Mixed hits remain visible.
 function ruleActionsHTML(rules){
-  if(!rules||!rules.length) return `<div class="cnote">no detection rule maps to this control yet</div>`;
+  if(!rules||!rules.length) return `<div class="cnote">${esc(tr("no detection rule maps to this control yet"))}</div>`;
   return `<div class="crules">`+rules.map(r=>{
-    const mode=`<span class="rmode ${esc(r.mode||'enforce')}">${esc(r.mode||'enforce')}</span>`;
-    if(!r.fired) return `<div class="crule"><span class="rmark idle">○</span> <span class="rid">${esc(r.id)}</span> ${mode} <span class="rmut">not triggered</span></div>`;
-    const outcome=r.enforced
-      ? `<span class="ract ok">blocked ×${r.fired}${r.intended_decision?' ('+esc(r.intended_decision)+')':''}</span>`
-      : `<span class="ract bad">observed ×${r.fired} (not blocked)</span>`;
-    return `<div class="crule"><span class="rmark ${r.enforced?'block':'fire'}">${r.enforced?'✓':'⚠'}</span> <span class="rid">${esc(r.id)}</span> ${mode} → ${outcome}</div>`;
+    const mode=`<span class="rmode ${esc(r.mode||'enforce')}">${esc(tr(r.mode||'enforce'))}</span>`;
+    if(!r.fired) return `<div class="crule"><span class="rmark idle">○</span> <span class="rid">${esc(r.id)}</span> ${mode} <span class="rmut">${esc(tr("not triggered"))}</span></div>`;
+    const outcome=`<span class="ract ${r.enforced?'ok':'bad'}">${esc(tx("hits ×{count}", {count: r.fired}))}</span>`;
+    const intended=r.intended_decision?' · '+esc(tx("intended: {decision}", {decision:tr(r.intended_decision)})):'';
+    return `<div class="crule"><span class="rmark ${r.enforced?'block':'fire'}">${r.enforced?'✓':'⚠'}</span> <span class="rid">${esc(r.id)}</span> ${mode} → ${outcome}${intended}</div>`;
   }).join('')+`</div>`;
 }
 function fmtHitTime(s){ if(!s)return ''; const d=new Date(s); return isNaN(d.getTime())?String(s).slice(11,19):d.toLocaleTimeString([],{hour12:false}); }
@@ -1319,35 +1474,41 @@ function fmtHitTime(s){ if(!s)return ''; const d=new Date(s); return isNaN(d.get
 // drill-down behind a control's verdict, not an aggregate count.
 function complianceHitsHTML(rules){
   const withHits=(rules||[]).filter(r=>r.hits&&r.hits.length);
-  if(!withHits.length) return '<div class="cnote">no individual rule hits recorded for this control</div>';
+  if(!withHits.length) return ("<div class=\"cnote\">"+esc(tr("no individual rule hits recorded for this control"))+"</div>");
   return withHits.map(r=>{
     const rows=r.hits.map(h=>{
       const cls=h.enforced?'ok':'bad';
-      const act=h.enforced?esc(h.decision):esc(h.decision)+' · not blocked';
+      const act=esc(tx("Decision: {decision}", {decision: tr(h.decision)}));
       const t=fmtHitTime(h.created_at);
-      return `<button class="chit" data-ref="${esc(h.ref)}" data-kind="policy_decision" title="${esc(h.ref)}\nclick to focus in graph">`+
+      return `<button class="chit" data-ref="${esc(h.ref)}" data-kind="policy_decision" title="${esc(h.ref)}\n${esc(tr("click to focus in graph"))}">`+
         (t?`<span class="chit-t">${esc(t)}</span>`:'')+
         `<span class="ract ${cls}">${act}</span><span class="chit-r">${esc(h.reason||'')}</span></button>`;
     }).join('');
-    return `<div class="chitgrp"><div class="chitrid">${esc(r.id)} <span class="rmut">×${r.hits.length}</span> <span class="rmode ${esc(r.mode||'enforce')}">${esc(r.mode||'enforce')}</span></div>${rows}</div>`;
+    return `<div class="chitgrp"><div class="chitrid">${esc(r.id)} <span class="rmut">×${r.hits.length}</span> <span class="rmode ${esc(r.mode||'enforce')}">${esc(tr(r.mode||'enforce'))}</span></div>${rows}</div>`;
   }).join('');
+}
+// Clarify legacy generated guidance only in the display; API evidence stays intact.
+function complianceGuidance(source){
+  if(source==='threat detected but not enforced (rule runs in detect mode)')return tr("No enforcing decision.");
+  if(source==='set the mapped rule(s) to enforce mode to block, not just record, this activity')return tr("Review rule settings and response records.");
+  return tr(source);
 }
 function renderComplianceCard(it){
   const st=it.status||'no_rule';
   const m=ST_META[st]||ST_META.no_rule;
   const desc=CONTROL_DESC[it.control_id]?`<div class="cdesc">${esc(CONTROL_DESC[it.control_id])}</div>`:'';
   const rules=ruleActionsHTML(it.rules);
-  // The fix-it line: only for the actionable states (detected = not blocked,
-  // no_rule = uncovered). Enforced/not_triggered need no nudge.
+  // The next-step line: for detected decisions and unmapped controls.
+  // Recorded enforcing decisions still require checking the execution outcome.
   const gap=(st==='detected'||st==='no_rule')&&it.gap
-    ? `<div class="cgap">⚠ ${esc(it.gap)}${it.recommended_next_step?` <span class="next">→ ${esc(it.recommended_next_step)}</span>`:''}</div>`
+    ? `<div class="cgap">⚠ ${esc(complianceGuidance(it.gap))}${it.recommended_next_step?` <span class="next">→ ${esc(complianceGuidance(it.recommended_next_step))}</span>`:''}</div>`
     : '';
   const totalHits=(it.rules||[]).reduce((n,r)=>n+((r.hits&&r.hits.length)||0),0);
   const open=COMP_OPEN.has(it.control_id);
-  const ev=totalHits?`<div class="cevtoggle" data-ev="${esc(it.control_id)}">${open?'▾':'▸'} rule hits (${totalHits})</div>`+
+  const ev=totalHits?`<div class="cevtoggle" data-ev="${esc(it.control_id)}">${open?'▾':'▸'} ${esc(tx("rule hits ({count})", {count: totalHits}))}</div>`+
     `<div class="cevbox${open?' open':''}">${open?complianceHitsHTML(it.rules):''}</div>`:'';
   return `<div class="citemcard st-${esc(st)}">`+
-    `<div class="chead"><span class="enfbadge ${esc(st)}">${m.icon} ${esc(m.label)}</span><span class="cttl">${esc(it.title||it.control_id)}</span></div>`+
+    `<div class="chead"><span class="enfbadge ${esc(st)}">${m.icon} ${esc(m.label)}</span><span class="cttl">${esc(tr(it.title||it.control_id))}</span></div>`+
     desc+
     rules+
     gap+
@@ -1366,7 +1527,7 @@ function focusEvidenceRef(ref, kind){
   EV_FILTER={title:kind+' · '+ref, lens:LENS, group:'', focus:'', refs:[ref]};
   const ls=$('#lenssel'), ds=$('#detailsel');
   if(ls)ls.value=LENS; if(ds)ds.value=DETAIL;
-  loadRun(cur).then(()=>{ const c=$('#graphcard'); if(c)c.scrollIntoView({behavior:'smooth',block:'start'}); });
+  loadRun(cur).then(()=>{ const c=$('#graphcard'); if(c)c.scrollIntoView({behavior:'smooth',block:'start'}); }).catch(showLoadError);
 }
 
 let cur=null, tlOffset=0; const TL_LIMIT=50;
@@ -1374,9 +1535,12 @@ let SIGS=[], SIG_OFFSET=0; const SIG_LIMIT=12;
 let EV_FILTER=null, EV_OFFSET=0; const EV_LIMIT=50;
 const INITIAL=new URLSearchParams(location.search);
 const requestedLens=INITIAL.get('lens');
-let LENS=Object.hasOwn(LENS_LABEL,requestedLens)?requestedLens:'default', DETAIL='summary'; const OV=new Set();
+const requestedDetail=INITIAL.get('detail');
+let LENS=Object.hasOwn(LENS_LABEL,requestedLens)?requestedLens:'default', DETAIL=['summary','expanded','raw'].includes(requestedDetail)?requestedDetail:'summary';
+const OV=new Set(INITIAL.getAll('overlay').filter(value=>value==='risk'||value==='trust'));
+SEL=INITIAL.get('selected')||null;
 let EXPAND_MODE='lineage';
-let GRAPH_FOCUS='';
+let GRAPH_FOCUS=INITIAL.get('focus')||'';
 // Graph zoom: FIT auto-scales the SVG down to the container width; otherwise
 // ZOOM is an explicit factor set by the +/- controls.
 let ZOOM=1, FIT=true;
@@ -1407,7 +1571,7 @@ function intentStageCard(n,num,title,desc,meta){
   return `<div class="intentcard${on}" data-id="${esc(n?n.id:'')}">`+
     `<div class="num">${num}</div>`+
     `<div class="ttl">${esc(title)}</div>`+
-    `<div class="desc">${esc(desc||'No captured detail for this stage yet.')}</div>`+
+    `<div class="desc">${esc(desc||tr("No captured detail for this stage yet."))}</div>`+
     `<div class="intentmeta">${meta.filter(Boolean).map(x=>`<span title="${esc(x)}">${esc(x)}</span>`).join('')}</div>`+
   `</div>`;
 }
@@ -1429,16 +1593,16 @@ function renderIntentFlow(g){
   const toolText=Array.isArray(tools)?tools.join(', '):String(tools||'');
   const respModel=dataVal(before,'model')||dataVal(response,'model');
   const cards=[
-    intentStageCard(prompt,'1','Prompt check',promptText,[modelReq&&`model ${modelReq}`, command&&clip(command,44)]),
-    intentStageCard(before,'2','Before tool call',command||response?.label,[respModel&&`model ${respModel}`, toolText&&`tool ${toolText}`]),
-    intentStageCard(after,'3','After tool call',burst?burst.label:(command||'runtime observations'),[burst&&`${dataVal(burst,'execve')||0} exec`, burst&&`${dataVal(burst,'process')||0} proc`, burst&&`${dataVal(burst,'risk')||0} risk`]),
-    intentStageCard(send,'4','Send message',`${dataVal(send,'message_edges')||messages.length||0} peer/delegation messages`,[messages.length&&`${messages.length} evidence nodes`])
+    intentStageCard(prompt,'1',tr("Prompt check"),promptText,[modelReq&&tx("model {name}", {name: modelReq}), command&&clip(command,44)]),
+    intentStageCard(before,'2',tr("Before tool call"),command||response?.label,[respModel&&tx("model {name}", {name: respModel}), toolText&&tx("tool {name}", {name: toolText})]),
+    intentStageCard(after,'3',tr("After tool call"),burst?nodeLabel(burst):(command||tr("runtime observations")),[burst&&tx("{count} executions", {count: dataVal(burst,'execve')||0}), burst&&tx("{count} processes", {count: dataVal(burst,'process')||0}), burst&&tx("{count} risks", {count: dataVal(burst,'risk')||0})]),
+    intentStageCard(send,'4',tr("Send message"),tx("{count} peer/delegation messages", {count: dataVal(send,'message_edges')||messages.length||0}),[messages.length&&tx("{count} evidence nodes", {count: messages.length})])
   ].join('');
   const chips=[];
-  [request,response].filter(Boolean).forEach(n=>chips.push(`<button class="evchip" data-id="${esc(n.id)}">${esc(clip(n.label,42))}</button>`));
-  runtime.forEach(n=>chips.push(`<button class="evchip ${n.risk?'risk':''}" data-id="${esc(n.id)}">${esc(clip(n.label||n.subtype,42))}</button>`));
-  messages.forEach(n=>chips.push(`<button class="evchip msg" data-id="${esc(n.id)}">${esc(clip(n.label,42))}</button>`));
-  if(burst) chips.unshift(`<button class="evchip ${burst.risk?'risk':''}" data-id="${esc(burst.id)}">${esc(clip(burst.label,42))}</button>`);
+  [request,response].filter(Boolean).forEach(n=>chips.push(`<button class="evchip" data-id="${esc(n.id)}">${esc(clip(nodeLabel(n),42))}</button>`));
+  runtime.forEach(n=>chips.push(`<button class="evchip ${n.risk?'risk':''}" data-id="${esc(n.id)}">${esc(clip(nodeLabel(n)||tr(n.subtype),42))}</button>`));
+  messages.forEach(n=>chips.push(`<button class="evchip msg" data-id="${esc(n.id)}">${esc(clip(nodeLabel(n),42))}</button>`));
+  if(burst) chips.unshift(`<button class="evchip ${burst.risk?'risk':''}" data-id="${esc(burst.id)}">${esc(clip(nodeLabel(burst),42))}</button>`);
   el.innerHTML=`<div class="intentflow"><div class="intentsteps">${cards}</div><div class="evidencechips">${chips.join('')}</div></div>`;
   el.onclick=ev=>{const hit=ev.target.closest('[data-id]'); if(hit&&hit.getAttribute('data-id')) selectNode(hit.getAttribute('data-id'));};
 }
@@ -1449,6 +1613,7 @@ async function loadRun(run){
   const overviewQ=q+'&lens=default&detail=summary';
   const [ov,lens,overviewLens,eg,pr,ob]=await Promise.all([j('/api/overview?'+q),j('/api/lens?'+lq),j('/api/lens?'+overviewQ),j('/api/egress?'+q),j('/api/processes?'+q),j('/api/outbound?'+q)]);
   const g=adaptLens(lens);
+  if(SEL&&!EV_FILTER){const selected=g.nodes.find(n=>n.id===SEL);if(selected)setEvidenceFilterFromNode(selected);}
   window._lg=g; window._lensManifest=lens;
   if(SEL && !g.nodes.find(n=>n.id===SEL)) { SEL=null; GRAPH_FOCUS=''; } // selection gone after refresh/lens switch
   renderVerify(ov.verify); renderSignals(ov.signals);
@@ -1461,6 +1626,7 @@ async function loadRun(run){
   loadCompliance(run);
   await loadEvidenceDrilldown(EV_OFFSET);
   await loadTimeline(run, tlOffset);
+  $('#loaderror').hidden=true;
 }
 
 async function loadTimeline(run, offset){
@@ -1470,16 +1636,16 @@ async function loadTimeline(run, offset){
   if(offset===0)renderProducerProfile(d.events);
   const from=d.total?d.offset+1:0, to=Math.min(d.offset+d.limit,d.total);
   const el=$('#tlpager');
-  el.innerHTML=`<button id="tlprev" ${d.offset<=0?'disabled':''}>‹ prev</button>
-    <span>${from}–${to} of ${d.total} events</span>
-    <button id="tlnext" ${d.offset+d.limit>=d.total?'disabled':''}>next ›</button>`;
+  el.innerHTML=`<button id="tlprev" ${d.offset<=0?'disabled':''}>${esc(tr("‹ prev"))}</button>
+    <span>${esc(tx("{from}–{to} of {total}", {from, to, total: d.total}))}</span>
+    <button id="tlnext" ${d.offset+d.limit>=d.total?'disabled':''}>${esc(tr("next ›"))}</button>`;
   const pv=$('#tlprev'), nx=$('#tlnext');
-  if(pv) pv.onclick=()=>loadTimeline(cur,Math.max(0,d.offset-d.limit));
-  if(nx) nx.onclick=()=>loadTimeline(cur,d.offset+d.limit);
+  if(pv) pv.onclick=()=>safeUI(loadTimeline(cur,Math.max(0,d.offset-d.limit)));
+  if(nx) nx.onclick=()=>safeUI(loadTimeline(cur,d.offset+d.limit));
 }
 
 let LIVE=true;
-function setLive(v){ LIVE=v; const el=$('#live'); el.className='tag '+(v?'on':'off'); el.textContent=v?'● live':'○ paused'; }
+function setLive(v){ LIVE=v; const el=$('#live'); el.className='tag '+(v?'on':'off'); el.textContent=v?tr("● live"):tr("○ paused"); }
 
 function initLensSelector(available){
   const sel=$('#lenssel');
@@ -1489,34 +1655,58 @@ function initLensSelector(available){
 
 async function refreshRuns(keep){
   const runs=await j('/api/runs'); const sel=$('#runsel');
-  if(!runs.length){sel.innerHTML='<option>no runs</option>';$('#verify').style.display='none';return null;}
+  if(!runs.length){sel.innerHTML=("<option>"+esc(tr("no runs"))+"</option>");$('#verify').style.display='none';$('#profilebar').innerHTML='<div class="empty">'+esc(tr('No execution records yet. Record a run or open a signed demo.'))+'</div>';return null;}
+  $('#verify').style.display='';
   const want=keep||sel.value||runs[0].run;
   sel.innerHTML=runs.map(r=>`<option value="${esc(r.run)}"${r.run===want?' selected':''}>${esc(r.run)} (${r.events})</option>`).join('');
   return sel.value;
 }
 
+// Keep the current presentation state when changing language; identifiers and
+// API values remain unchanged. The next page request saves the explicit choice.
+document.querySelectorAll('.language-switch a').forEach(link=>{
+  link.addEventListener('click',event=>{
+    event.preventDefault();
+    const target=new URL(link.href);
+    if(cur)target.searchParams.set('run',cur);
+    target.searchParams.set('lens',LENS);
+    target.searchParams.set('detail',DETAIL);
+    for(const [key,value] of [['focus',GRAPH_FOCUS],['selected',SEL]]){
+      if(value)target.searchParams.set(key,value);else target.searchParams.delete(key);
+    }
+    target.searchParams.delete('overlay');
+    OV.forEach(value=>target.searchParams.append('overlay',value));
+    target.searchParams.set('live',LIVE?'1':'0');
+    target.searchParams.set('replay',PLAYING?'1':'0');
+    location.assign(target.href);
+  });
+});
+
 (async function(){
   const sel=$('#runsel');
+  $('#detailsel').value=DETAIL;
+  document.querySelectorAll('.chip[data-ov]').forEach(chip=>chip.classList.toggle('on',OV.has(chip.dataset.ov)));
+  if(INITIAL.get('live')==='0')setLive(false);
   const first=await refreshRuns(INITIAL.get('run')); if(!first)return;
   // Bootstrap the lens list from the first manifest's available_lenses.
   const boot=await j('/api/lens?run='+encodeURIComponent(first)+'&lens='+LENS);
   initLensSelector(boot.available_lenses);
-  $('#lenssel').onchange=()=>{ LENS=$('#lenssel').value; SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; stopPlay(); loadRun(cur); };
-  $('#detailsel').onchange=()=>{ DETAIL=$('#detailsel').value; SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; stopPlay(); loadRun(cur); };
+  $('#lenssel').onchange=()=>{ LENS=$('#lenssel').value; SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; stopPlay(); safeUI(loadRun(cur)); };
+  $('#detailsel').onchange=()=>{ DETAIL=$('#detailsel').value; SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; stopPlay(); safeUI(loadRun(cur)); };
   $('#slider').oninput=()=>{ stopPlay(); setScrub(+$('#slider').value); };
   $('#playbtn').onclick=togglePlay;
   $('#zoomin').onclick=()=>setZoom(1.25);
   $('#zoomout').onclick=()=>setZoom(0.8);
   $('#zoomfit').onclick=fitZoom;
   document.querySelectorAll('.chip[data-ov]').forEach(chip=>{
-    chip.onclick=()=>{ const o=chip.getAttribute('data-ov'); if(OV.has(o)){OV.delete(o);chip.classList.remove('on');}else{OV.add(o);chip.classList.add('on');} loadRun(cur); };
+    chip.onclick=()=>{ const o=chip.getAttribute('data-ov'); if(OV.has(o)){OV.delete(o);chip.classList.remove('on');}else{OV.add(o);chip.classList.add('on');} safeUI(loadRun(cur)); };
   });
-  sel.onchange=()=>{ SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; tlOffset=0; stopPlay(); loadRun(sel.value); };
+  sel.onchange=()=>{ SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; tlOffset=0; stopPlay(); safeUI(loadRun(sel.value)); };
   $('#live').onclick=()=>setLive(!LIVE);
   await loadRun(first);
   if(INITIAL.get('replay')==='1'){ setLive(false); togglePlay(); }
-  setInterval(async()=>{ if(!LIVE)return; const r=await refreshRuns(cur); if(r) loadRun(r); }, 10000);
-})();
+  setInterval(()=>{ if(!LIVE)return; safeUI(refreshRuns(cur).then(r=>r&&loadRun(r))); }, 10000);
+})().catch(showLoadError);
 </script>
 </body>
 </html>

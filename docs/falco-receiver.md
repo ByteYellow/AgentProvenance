@@ -1,10 +1,11 @@
 # Falco-compatible Receiver
 
+English · [简体中文](zh-CN/falco-receiver.md)
+
 Status: **maintained for compatibility, not a featured path.** The primary
 kernel-evidence source is AgentProvenance's own eBPF sensor
 (`agentprov sensor stream`). This receiver exists for environments where the
-native sensor cannot run (non-arm64 hosts today, managed clusters where you
-cannot load your own eBPF) or where Falco is already deployed and filtering
+native sensor cannot run (for example, managed clusters where you cannot load your own eBPF) or where Falco is already deployed and filtering
 kernel/runtime events — its output can be folded into the same DAG,
 correlation, policy, and risk path.
 

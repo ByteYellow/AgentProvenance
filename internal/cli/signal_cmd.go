@@ -10,6 +10,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/signal"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/spf13/cobra"
@@ -63,7 +64,7 @@ func signalCmd(dataDir, daemonURL *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(report)
 			}
-			return printSignalReport(cmd.OutOrStdout(), report)
+			return printSignalReport(cmd.OutOrStdout(), report, commandLanguage(cmd))
 		},
 	}
 	run.Flags().StringVar(&runID, "run", "", "run id")
@@ -111,13 +112,13 @@ func signalCmd(dataDir, daemonURL *string) *cobra.Command {
 				return err
 			}
 			if len(runIDs) == 0 {
-				return fmt.Errorf("no run ids matched")
+				return commandErrorf("no run ids matched")
 			}
 			enc := json.NewEncoder(cmd.OutOrStdout())
 			for _, runID := range runIDs {
 				ctx, err := signalContext(*dataDir, *daemonURL, runID)
 				if err != nil {
-					return fmt.Errorf("run %s: %w", runID, err)
+					return commandErrorf("run %s: %w", runID, err)
 				}
 				if err := enc.Encode(ctx); err != nil {
 					return err
@@ -173,7 +174,7 @@ func signalCmd(dataDir, daemonURL *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(report)
 			}
-			return printSignalReport(cmd.OutOrStdout(), report)
+			return printSignalReport(cmd.OutOrStdout(), report, commandLanguage(cmd))
 		},
 	}
 	importCmd.Flags().StringVar(&importRunID, "run", "", "run id")
@@ -191,7 +192,7 @@ func signalCmd(dataDir, daemonURL *string) *cobra.Command {
 				return err
 			}
 			if len(reports) == 0 {
-				return fmt.Errorf("no signal reports found")
+				return commandErrorf("no signal reports found")
 			}
 			report, err := signal.ImportBatchReports(importBatchEngine, reports)
 			if err != nil {
@@ -202,7 +203,7 @@ func signalCmd(dataDir, daemonURL *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(report)
 			}
-			return printSignalBatchImportReport(cmd.OutOrStdout(), report)
+			return printSignalBatchImportReport(cmd.OutOrStdout(), report, commandLanguage(cmd))
 		},
 	}
 	importBatchCmd.Flags().StringVar(&importBatchFile, "file", "", "JSONL signal report file; each line is EvalReport or {run_id,signals}")
@@ -297,10 +298,10 @@ func readRunIDList(path string) ([]string, error) {
 		}
 		runID, err := parseRunIDLine(line)
 		if err != nil {
-			return nil, fmt.Errorf("parse run list line %d: %w", lineNo, err)
+			return nil, commandErrorf("parse run list line %d: %w", lineNo, err)
 		}
 		if runID == "" {
-			return nil, fmt.Errorf("parse run list line %d: run_id is required", lineNo)
+			return nil, commandErrorf("parse run list line %d: run_id is required", lineNo)
 		}
 		if _, ok := seen[runID]; ok {
 			continue
@@ -326,7 +327,7 @@ func parseRunIDLine(line string) (string, error) {
 		return strings.TrimSpace(asObject.RunID), nil
 	}
 	if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "[") {
-		return "", fmt.Errorf("JSON line must be a string or object with run_id")
+		return "", commandErrorf("JSON line must be a string or object with run_id")
 	}
 	return line, nil
 }
@@ -346,7 +347,7 @@ func readExternalSignals(path string) (signal.ExternalEvalOutput, error) {
 	if err := json.Unmarshal(raw, &output); err != nil {
 		var signals []signal.EvalSignal
 		if err2 := json.Unmarshal(raw, &signals); err2 != nil {
-			return signal.ExternalEvalOutput{}, fmt.Errorf("signal import file must be {signals:[...]} or raw EvalSignal array: %w", err)
+			return signal.ExternalEvalOutput{}, commandErrorf("signal import file must be {signals:[...]} or raw EvalSignal array: %w", err)
 		}
 		output.Signals = signals
 	}
@@ -375,7 +376,7 @@ func readExternalSignalReports(path string) ([]signal.EvalReport, error) {
 		}
 		report, err := parseExternalSignalReportLine(line)
 		if err != nil {
-			return nil, fmt.Errorf("parse signal report line %d: %w", lineNo, err)
+			return nil, commandErrorf("parse signal report line %d: %w", lineNo, err)
 		}
 		reports = append(reports, report)
 	}
@@ -400,11 +401,11 @@ func parseExternalSignalReportLine(line string) (signal.EvalReport, error) {
 	return signal.EvalReport{RunID: wrapped.RunID, Signals: wrapped.Signals}, nil
 }
 
-func printSignalReport(out io.Writer, report signal.EvalReport) error {
+func printSignalReport(out io.Writer, report signal.EvalReport, lang i18n.Locale) error {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "run=%s schema=%s engine=%s decision_owner=%s signals=%d result_set=%s page_hash=%s\n",
+	fmt.Fprintf(w, i18n.T(lang, "run=%s schema=%s engine=%s decision_owner=%s signals=%d result_set=%s page_hash=%s\n"),
 		report.RunID, report.SchemaVersion, report.Engine, report.DecisionOwner, report.SignalCount, report.ResultSetID, report.PageHash)
-	fmt.Fprintln(w, "ID\tKIND\tNAME\tATTEMPT\tTOOL_CALL\tSCORE\tLABEL\tREASON")
+	fmt.Fprintln(w, i18n.T(lang, "ID\tKIND\tNAME\tATTEMPT\tTOOL_CALL\tSCORE\tLABEL\tREASON"))
 	for _, item := range report.Signals {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%.3f\t%s\t%s\n",
 			item.ID, item.Kind, item.Name, item.AttemptID, item.ToolCallID, item.Score, item.Label, item.Reason)
@@ -412,18 +413,18 @@ func printSignalReport(out io.Writer, report signal.EvalReport) error {
 	return w.Flush()
 }
 
-func printSignalBatchImportReport(out io.Writer, report signal.BatchImportReport) error {
+func printSignalBatchImportReport(out io.Writer, report signal.BatchImportReport, lang i18n.Locale) error {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "schema=%s engine=%s reports=%d runs=%d signals=%d failed=%d result_set=%s page_hash=%s\n",
+	fmt.Fprintf(w, i18n.T(lang, "schema=%s engine=%s reports=%d runs=%d signals=%d failed=%d result_set=%s page_hash=%s\n"),
 		report.SchemaVersion, report.Engine, report.ReportCount, report.RunCount, report.SignalCount, report.Failed, report.ResultSetID, report.PageHash)
-	fmt.Fprintln(w, "RUN\tSIGNALS\tRESULT_SET\tPAGE_HASH")
+	fmt.Fprintln(w, i18n.T(lang, "RUN\tSIGNALS\tRESULT_SET\tPAGE_HASH"))
 	for _, item := range report.Runs {
 		fmt.Fprintf(w, "%s\t%d\t%s\t%s\n", item.RunID, item.SignalCount, item.ResultSetID, item.PageHash)
 	}
 	if len(report.Errors) > 0 {
-		fmt.Fprintln(w, "ERROR\tMESSAGE")
+		fmt.Fprintln(w, i18n.T(lang, "ERROR\tMESSAGE"))
 		for _, item := range report.Errors {
-			fmt.Fprintf(w, "error\t%s\n", item)
+			fmt.Fprintf(w, i18n.T(lang, "error\t%s\n"), item)
 		}
 	}
 	return w.Flush()

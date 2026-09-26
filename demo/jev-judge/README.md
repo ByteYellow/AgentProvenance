@@ -1,10 +1,28 @@
 # Jev: external evaluator reference integration
 
+English | [简体中文](README.zh-CN.md)
+
 An optional, runnable example of building an external analyst on AgentProvenance
 evidence. Jev makes three typed decisions from selected execution evidence;
 a standalone demo UI compares two rubrics, collects human reference labels and
 records candidate approval or rejection. This is not a built-in product module.
 No capture-engine, database-schema or security-policy changes are needed.
+
+## Interface and command language
+
+The review workbench follows the browser's supported language preference on first visit and falls back to English. The language selector remembers an explicit choice and preserves the selected case, comparison options and unsaved review drafts.
+
+Python commands default to English. Use `--lang zh-CN` for Chinese help and terminal messages:
+
+```sh
+python3 demo/jev-judge/workbench.py --lang zh-CN --help
+python3 demo/jev-judge/workbench.py serve --data-dir "$STUDY" --lang zh-CN
+python3 demo/jev-judge/judge.py --lang zh-CN --help
+```
+
+An explicit CLI language is included in the printed browser URL. Without it, the page negotiates the browser language. JSON progress, export fields and label values remain unchanged. Evaluation prompts, model responses, reviewer names and rationale retain their original text. Chinese rubric guides are presentation only and are never submitted to the model or written back into a study.
+
+The [Chinese review screenshot](review.zh-CN.png) uses synthetic offline answers and a mock verification result to check the interface. It is not evidence of a live Jev call or human approval; historical screenshots below remain unchanged.
 
 ## Open from the portable CLI
 

@@ -1,5 +1,7 @@
 # AgentProvenance demos
 
+English | [中文](README.zh-CN.md)
+
 Start with a single agent, then follow a team and a cross-pod execution. The
 committed compressed bundles can be imported, verified and explored on macOS or
 Linux without rerunning the agents. Live capture has separate environment and
