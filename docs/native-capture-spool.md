@@ -1,5 +1,7 @@
 # Native capture persistence and late attribution
 
+English | [简体中文](zh-CN/native-capture-spool.md)
+
 `agentprov sensor stream` uses the local telemetry spool for native eBPF capture.
 It records normalized, privacy-filtered events on disk before asynchronously
 correlating them into the evidence store. It no longer accumulates every event

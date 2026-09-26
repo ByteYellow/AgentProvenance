@@ -79,7 +79,7 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 
 ### 下载并回放，无需安装 Go
 
-![本地 Demo 首页：六份签名回放与两个可选评估器指南](docs/img/demo-gallery.png)
+![本地 Demo 首页：六份签名回放与两个可选评估器指南](docs/img/demo-gallery-zh-CN.png)
 
 在 [**v0.8.2-rc.2 预发布版**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2)
 下载对应平台的压缩包及同名 `.sha256` 校验文件：
@@ -175,7 +175,7 @@ mkdir -p /tmp/agentprov-record-demo
 ```
 
 回放、本地 `record` 和可视化界面都不需要 Docker；只有基于 Docker 的执行功能
-需要它。进阶用法见：[证据图命令](docs/graph-commands.md)、
+需要它。进阶用法见：[证据图命令](docs/zh-CN/graph-commands.md)、
 [部署模式](docs/deployment-modes.md)、[遥测数据格式](docs/telemetry-schema.md)和
 [开发与测试](#开发)。
 
@@ -677,7 +677,7 @@ Qwen，以及本地 vLLM/Ollama 服务。未配置 API Key 时会使用离线测
 ## 可视化界面
 
 <p align="center">
-  <img src="docs/assets/dashboard-causality.png" alt="本地证据界面：执行记录选择、验证状态、时间线、进程树、网络外发、风险信号与关联图。" width="100%">
+  <img src="docs/img/dashboard-overview-zh-CN.png" alt="本地证据界面：执行记录选择、验证状态、时间线、进程树、网络外发、风险信号与关联图。" width="100%">
 </p>
 <p align="center">
   <img src="docs/assets/dashboard-timeline-process-egress.png" alt="本地证据界面：执行记录选择、验证状态、时间线、进程树、网络外发、风险信号与关联图。" width="100%">
@@ -692,6 +692,8 @@ Qwen，以及本地 vLLM/Ollama 服务。未配置 API Key 时会使用离线测
 Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图。
 它与 CLI、AI 工具复用内部查询逻辑，HTML 和 JavaScript 内嵌在可执行文件中，
 不依赖外部前端资源。
+
+首次访问按浏览器语言显示中文或英文，其他语言回退到英文。页面右上角可以切换语言，手动选择会保留。切换后会保留当前执行记录、图视图、展开层级、选中节点和叠加标记。界面说明随语言切换，命令、路径、ID 和原始证据保留原文。
 
 面对大量事件，界面先展示摘要，再按问题逐步展开。
 原始遥测仍可查询，但不会一次性全部绘制成图。
@@ -736,10 +738,10 @@ Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图�
   并支持实时刷新。
 
 <p align="center">
-  <img src="docs/img/dashboard-graph-explorer-taint.png" alt="数据流与污点传播视图：根据敏感文件读取和云元数据地址连接推导关联关系。" width="100%">
+  <img src="docs/img/dashboard-graph-explorer-taint-zh-CN.png" alt="数据流与污点传播视图：根据敏感文件读取和云元数据地址连接推导关联关系。" width="100%">
 </p>
 <p align="center">
-  <img src="docs/img/dashboard-side-panel-preview.png" alt="节点侧栏：证据摘要与经过脱敏的产物内容预览。" width="100%">
+  <img src="docs/img/dashboard-side-panel-preview-zh-CN.png" alt="节点详情：原始证据字段与命令内容预览。" width="100%">
 </p>
 
 ### Demo：追溯恶意依赖引发的文件读取与网络连接
@@ -792,13 +794,13 @@ Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图�
 ```
 
 <p align="center">
-  <img src="docs/img/demo-multiagent-orchestration.png" alt="多 Agent 编排视图：主 Agent、子 Agent、协作消息、工具调用与系统调用归属。" width="100%">
+  <img src="docs/img/demo-multiagent-orchestration-zh-CN.png" alt="多 Agent 编排视图：主 Agent、子 Agent、协作消息、工具调用与系统调用归属。" width="100%">
 </p>
 <p align="center">
-  <img src="docs/img/demo-multiagent-risk-path.png" alt="云元数据访问的风险路径：运行时事件、策略判定与响应链路。" width="100%">
+  <img src="docs/img/demo-multiagent-risk-path-zh-CN.png" alt="云元数据访问的风险路径：运行时事件、策略判定与响应链路。" width="100%">
 </p>
 <p align="center">
-  <img src="docs/img/demo-multiagent-network-egress.png" alt="网络外发视图：多 Agent 执行中的网络行为证据。" width="100%">
+  <img src="docs/img/demo-multiagent-network-egress-zh-CN.png" alt="网络外发视图：多 Agent 执行中的网络行为证据。" width="100%">
 </p>
 
 签名包、回放命令和采集过程见 [`demo/multiagent-provenance/`](demo/multiagent-provenance)。
@@ -822,7 +824,7 @@ Pod/容器元数据和宿主机 cgroup，无需在工作负载中接入采集代
 </p>
 
 <p align="center">
-  <img src="docs/img/demo-k8s-a2a-substrate-dashboard.png" alt="Kubernetes 运行环境视图：Alice 到 Bob 的调用关系、各 Pod 的 cgroup 及相关风险。" width="100%">
+  <img src="docs/img/demo-k8s-a2a-substrate-dashboard-zh-CN.png" alt="Kubernetes 运行环境视图：Alice 到 Bob 的调用关系、各 Pod 的 cgroup 及相关风险。" width="100%">
 </p>
 
 回放包、采集脚本和证据范围说明见
@@ -849,7 +851,7 @@ Alice 的 Pod 未出现对应事件；图中也保留了跨 Pod 的 `alice → b
 其他命令包括：`refs` / `log` / `objects` 用于查看引用、历史和内容寻址对象；
 `materialize` / `materialize-llm` 将已有证据整理成图对象；
 `replay` 生成重建计划，不直接重做外部操作。
-完整用法见[证据图命令说明](docs/graph-commands.md)。
+完整用法见[证据图命令说明](docs/zh-CN/graph-commands.md)。
 
 ## 当前能力
 
@@ -867,7 +869,7 @@ Alice 的 Pod 未出现对应事件；图中也保留了跨 Pod 的 `alice → b
 原生节点采集支持有容量上限的持久化批次、重启恢复、等待迟到绑定后重试关联、
 事务级去重，以及逐项探针能力报告。
 具体系统调用和 TLS 范围见[部署与验收指南](docs/amd64-kvm-k3s.md)，
-恢复机制见[原生采集缓冲队列说明](docs/native-capture-spool.md)。
+恢复机制见[原生采集缓冲队列说明](docs/zh-CN/native-capture-spool.md)。
 
 **关联与验证**
 

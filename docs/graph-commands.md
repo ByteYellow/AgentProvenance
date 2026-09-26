@@ -1,5 +1,7 @@
 # Graph Commands
 
+English | [简体中文](zh-CN/graph-commands.md)
+
 The Git-like provenance surface over content-addressed evidence objects. The
 README carries a short summary; this is the complete reference.
 

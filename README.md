@@ -751,6 +751,12 @@ fixture so the pipeline still completes.
 
 ## Web Dashboard
 
+The interface follows the browser language on first visit, with English as the
+fallback. Use the English / 中文 switch to save a preference. Switching keeps the
+selected run, lens, detail level, node and overlays. Commands, paths, IDs and
+original evidence retain their recorded text.
+
+
 <p align="center">
   <img src="docs/assets/dashboard-causality.png" alt="AgentProvenance local evidence inspector preview with run selection, verify status, timeline, process tree, egress, risk signals, and causality DAG." width="100%">
 </p>
