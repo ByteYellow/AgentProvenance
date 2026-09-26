@@ -471,7 +471,7 @@ RL 和评估流水线可以采用轻量的离线工作流：
 - `forensics export[-batch]`：导出可审计的证据包。
 
 完整命令列表及每条命令的用途：
-[docs/security-commands.md](docs/security-commands.md)。
+[docs/security-commands.md](docs/zh-CN/security-commands.md)。
 
 ## 外部评估器协议
 
@@ -600,15 +600,15 @@ POST /v1/signal/import
 
 ```sh
 ./agentprov compliance map --framework owasp-asi --run <run_id>
-./agentprov compliance gaps --framework owasp-asi --run <run_id>   # 缺失/部分覆盖的待办
+./agentprov compliance gaps --framework owasp-asi --run <run_id>   # 已检测未阻止或尚无规则的待办
 ```
 
-每个检查项都根据本次执行中已有的证据，报告 `covered`（已覆盖）、
-`partial`（部分覆盖）、`missing`（缺失）或 `not_applicable`（不适用），
-同时给出 `evidence_refs` 和建议的下一步。缺少证据的项目会明确列出缺口。
-企业也可以通过自定义 YAML 规则集增加检查项。
+每个检查项映射到具体检测规则及其在本次执行中的命中记录，报告
+`enforced`（已阻止）、`detected`（已检测但未阻止）、`not_triggered`（未触发）或
+`no_rule`（尚无规则），同时给出 `evidence_refs` 和处理建议。尚无检测器表示覆盖缺口；
+规则未触发不等于普遍满足要求。自定义 YAML 目录可增加框架，`--rules` 可加载实际检测规则。
 
-完整命令、检查项含义和 YAML 规则格式，见[合规证据说明](docs/compliance.md)。
+完整命令、检查项含义和 YAML 规则格式，见[合规证据说明](docs/zh-CN/compliance.md)。
 
 ## AI 可调用的证据工具
 

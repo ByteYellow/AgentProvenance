@@ -1,8 +1,12 @@
-# Compliance Evidence, Not Certification
+# Compliance Evidence Mapping
 
-AgentProvenance can map run evidence to security framework profiles such as
-OWASP Agentic Security and NIST AI agent security assessment questions. The
-README carries a short summary; this is the complete reference.
+English | [中文](zh-CN/compliance.md)
+
+AgentProvenance maps detection rules and their results in a run to security
+framework profiles, including OWASP Agentic Security and the NIST AI agent
+security assessment questions. The result is an evidence-backed self-assessment,
+not certification, legal advice, or a replacement for a qualified third-party
+audit.
 
 ```sh
 ./agentprov compliance frameworks
@@ -12,34 +16,45 @@ README carries a short summary; this is the complete reference.
 ./agentprov compliance map --framework owasp-asi --run <run_id> --only ASI05,ASI10,TRACE
 ./agentprov compliance explain --framework owasp-asi --run <run_id> --item ASI05
 ./agentprov compliance gaps --framework owasp-asi --run <run_id>
-./agentprov compliance gaps --framework owasp-asi --run <run_id> --missing-only --json
+./agentprov compliance gaps --framework owasp-asi --run <run_id> --no-rule-only --json
 ./agentprov compliance map --framework enterprise-agent-review --ruleset examples/compliance/custom-ruleset.yaml --run <run_id>
 ./agentprov compliance report --framework nist-rfi-2026-00206 --run <run_id> --json
 ```
 
-The output is an evidence-backed self-assessment. It does not certify
-compliance, provide legal advice, or replace qualified third-party audit. Each
-check item is derived from evidence already present in the run: timeline events,
-runtime telemetry, ToolCallScope bindings, policy decisions, risk signals,
-baseline deviations, response actions, forensics bundles, content-addressed
-provenance objects, and graph edges.
+## Interpreting the result
 
-Each item reports:
+Each control reports a status based on the detection rules mapped to it:
 
-```text
-covered | partial | missing | not_applicable
-```
+| Status | Meaning |
+|---|---|
+| `enforced` | A mapped rule fired and blocked an action with deny, quarantine, or kill. |
+| `detected` | A mapped rule fired in detect mode; the action was observed, not blocked. |
+| `not_triggered` | Mapped rules exist, but none fired in this run. |
+| `no_rule` | No detection rule maps to this control. This is a coverage gap. |
 
-with concrete `evidence_refs`, a gap when evidence is incomplete, and a
-recommended next step. This makes agent execution evidence usable for security
-reviews without turning AgentProvenance into a GRC platform.
-`compliance gaps` turns that same mapping into an actionable backlog of missing
-or partial evidence items for a run.
+`not_triggered` is not a general claim that the control is satisfied. Merely
+having a timeline, a risk record, or a graph object does not establish that a
+particular threat was detected or prevented.
 
-## Custom rulesets
+The `agentprovenance.compliance_rule_mapping/v1` report contains per-control
+`rules`, their `hits`, concrete `evidence_refs`, a `gap`, a
+`recommended_next_step`, and a `reason`. Hit records include the decision, time,
+source event, and whether that hit enforced a block. JSON identifies each
+control with `control_id`; this report does not add an `item_id` alias.
 
-Custom rulesets can add local frameworks and rules without replacing built-ins.
-The YAML model separates `rules`, `frameworks`, and `mappings`; mappings can
-also select built-in items such as `ASI05`, `ASI10`, or `TRACE` and reuse them
-inside an enterprise-specific review profile. JSON keeps `control_id` for
-compatibility and also emits `item_id` for the current terminology.
+`compliance gaps` lists `detected` and `no_rule` controls requiring attention.
+Use `--no-rule-only` to select only controls without a mapped detector. The old
+`--missing-only` option and `covered/partial/missing/not_applicable` statuses do
+not describe the current rule-mapping commands.
+
+## Custom frameworks and detection rules
+
+`--ruleset` loads a YAML catalog with `rules`, `frameworks`, and `mappings`.
+It extends the built-in catalog; mappings can reuse built-in controls such as
+`ASI05`, `ASI10`, or `TRACE` in a local review profile.
+
+A framework catalog and an executable detection rule set serve different
+purposes. Pass `--rules` with the deployment's detection-rule YAML when mapping
+custom detectors to controls. Adding a framework item alone does not make a
+sensor emit the events needed to detect that threat. See
+[the sample ruleset](../examples/compliance/custom-ruleset.yaml).

@@ -1,8 +1,11 @@
 # Security Evidence Commands
 
-The full run-level security evidence surface. Every command has a stable
-`--json` contract with result/page integrity hashes. The README carries a
-short summary; this is the complete reference.
+English | [中文](zh-CN/security-commands.md)
+
+Run-level security evidence commands, organized by purpose. Queries that support
+`--json` can be consumed by external tools; consult each command's result model
+for its fields, schema version and integrity hashes. Configuration and mutation
+commands do not all share that JSON structure.
 
 ```sh
 ./agentprov observe summary --run <run_id>

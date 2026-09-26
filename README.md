@@ -664,14 +664,14 @@ replacement:
 
 ```sh
 ./agentprov compliance map --framework owasp-asi --run <run_id>
-./agentprov compliance gaps --framework owasp-asi --run <run_id>   # missing/partial backlog
+./agentprov compliance gaps --framework owasp-asi --run <run_id>   # detected/no-rule items requiring attention
 ```
 
-Every check item is derived from evidence already in the run and reports
-`covered | partial | missing | not_applicable` with concrete `evidence_refs`
-and a recommended next step — honest coverage gaps instead of fake passes, and
-no ambition to become a GRC platform. Custom YAML rulesets can add
-enterprise-specific frameworks on top of the built-ins.
+Each item maps concrete detection rules and their hits in this run. It reports
+`enforced | detected | not_triggered | no_rule`, with `evidence_refs` and a
+recommended next step. No mapped detector is a coverage gap; a rule that did
+not fire is not a general pass. Custom YAML catalogs can add local frameworks;
+`--rules` supplies custom detection rules.
 
 Full command set, item semantics, and the custom-ruleset YAML model:
 [docs/compliance.md](docs/compliance.md).
