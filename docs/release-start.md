@@ -44,3 +44,10 @@ publisher signatures. The CLI verifies example evidence using the bundled public
 keys. This proves evidence integrity, not capture completeness or causal certainty.
 
 These CLI binaries are not Apple Developer ID signed or notarized.
+
+## Language
+
+The CLI defaults to English. Use `./agentprov --lang zh-CN --help` for Chinese
+help or `./agentprov --lang zh-CN demo` to open the gallery in Chinese. Without
+an explicit choice, web pages follow the browser language. JSON, commands,
+paths, IDs, and original evidence are unchanged.

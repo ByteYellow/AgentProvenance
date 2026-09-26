@@ -56,10 +56,10 @@ func recordCmd(dataDir *string) *cobra.Command {
 			if withJSON {
 				return printRecordJSON(cmd, result)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "run_id=%s trajectory_id=%s base_state=%s execution_scope=%s substrate_scope=%s tool_call=%s process=%s status=%s exit=%d wall_ms=%d changed_files=%d workdir=%s\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "run_id=%s trajectory_id=%s base_state=%s execution_scope=%s substrate_scope=%s tool_call=%s process=%s status=%s exit=%d wall_ms=%d changed_files=%d workdir=%s\n"),
 				result.RunID, result.RolloutID, result.BaseSnapshotID, result.AttemptID, result.SessionID, result.ToolCallID, result.ProcessID, result.Status, result.ExitCode, result.WallMS, len(result.ChangedFiles), result.Workdir)
 			for _, file := range result.ChangedFiles {
-				fmt.Fprintf(cmd.OutOrStdout(), "changed_file=%s\n", file)
+				fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "changed_file=%s\n"), file)
 			}
 			return nil
 		},
@@ -133,7 +133,7 @@ func recordBatchCmd(dataDir *string) *cobra.Command {
 							if withJSON {
 								_ = printJSON(cmd.OutOrStdout(), manifest)
 							}
-							return fmt.Errorf("%s", item.Error)
+							return commandErrorf("%s", item.Error)
 						}
 						continue
 					}
@@ -151,10 +151,10 @@ func recordBatchCmd(dataDir *string) *cobra.Command {
 			if withJSON {
 				return printJSON(cmd.OutOrStdout(), manifest)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "schema=%s batch_id=%s jobs=%d passed=%d failed=%d result_set=%s page_hash=%s\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "schema=%s batch_id=%s jobs=%d passed=%d failed=%d result_set=%s page_hash=%s\n"),
 				manifest.SchemaVersion, manifest.BatchID, manifest.JobCount, manifest.Passed, manifest.Failed, manifest.ResultSetID, manifest.PageHash)
 			for _, item := range manifest.Items {
-				fmt.Fprintf(cmd.OutOrStdout(), "job=%s shard=%s run=%s status=%s exit=%d changed_files=%d wall_ms=%d\n",
+				fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "job=%s shard=%s run=%s status=%s exit=%d changed_files=%d wall_ms=%d\n"),
 					item.JobID, item.ShardID, item.RunID, item.Status, item.ExitCode, item.ChangedFileCount, item.WallMS)
 			}
 			return nil
@@ -318,10 +318,10 @@ func readRecordBatchJobs(path string) ([]recordBatchJob, string, error) {
 		}
 		var job recordBatchJob
 		if err := json.Unmarshal([]byte(line), &job); err != nil {
-			return nil, "", fmt.Errorf("parse batch JSONL line %d: %w", lineNo, err)
+			return nil, "", commandErrorf("parse batch JSONL line %d: %w", lineNo, err)
 		}
 		if len(job.Command) == 0 {
-			return nil, "", fmt.Errorf("batch JSONL line %d missing command", lineNo)
+			return nil, "", commandErrorf("batch JSONL line %d missing command", lineNo)
 		}
 		if job.JobID == "" {
 			job.JobID = fmt.Sprintf("job-%06d", len(jobs)+1)
@@ -332,7 +332,7 @@ func readRecordBatchJobs(path string) ([]recordBatchJob, string, error) {
 		return nil, "", err
 	}
 	if len(jobs) == 0 {
-		return nil, "", fmt.Errorf("batch file has no jobs")
+		return nil, "", commandErrorf("batch file has no jobs")
 	}
 	return jobs, inputHash, nil
 }

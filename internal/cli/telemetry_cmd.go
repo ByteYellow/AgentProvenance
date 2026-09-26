@@ -63,12 +63,12 @@ func telemetryCmd(dataDir, daemonURL *string) *cobra.Command {
 				return enc.Encode(result)
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tRUN\tSESSION\tTOOL_CALL\tPROCESS\tSNAPSHOT\tCORRELATION\tCONFIDENCE\tSOURCE\tTYPE\tCREATED_AT")
+			fmt.Fprintln(w, commandText(cmd, "ID\tRUN\tSESSION\tTOOL_CALL\tPROCESS\tSNAPSHOT\tCORRELATION\tCONFIDENCE\tSOURCE\tTYPE\tCREATED_AT"))
 			for _, event := range result.Events {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%.2f\t%s\t%s\t%s\n", event.ID, event.RunID, event.SessionID, event.ToolCallID, event.ProcessID, event.SnapshotID, event.CorrelationMethod, event.CorrelationConfidence, event.Source, event.EventType, event.CreatedAt)
 			}
 			if result.NextCursor != "" {
-				fmt.Fprintf(w, "next_cursor=%s\n", result.NextCursor)
+				fmt.Fprintf(w, commandText(cmd, "next_cursor=%s\n"), result.NextCursor)
 			}
 			return w.Flush()
 		},
@@ -102,7 +102,7 @@ func telemetryCmd(dataDir, daemonURL *string) *cobra.Command {
 				return enc.Encode(report)
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "EVENT\tTYPE\tSOURCE\tSTATUS\tMETHOD\tCONFIDENCE\tBINDING\tTOOL_CALL\tPROCESS\tMATCHED_KEYS\tREASON")
+			fmt.Fprintln(w, commandText(cmd, "EVENT\tTYPE\tSOURCE\tSTATUS\tMETHOD\tCONFIDENCE\tBINDING\tTOOL_CALL\tPROCESS\tMATCHED_KEYS\tREASON"))
 			for _, item := range report.Items {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%.2f\t%s\t%s\t%s\t%s\t%s\n",
 					item.Event.ID, item.Event.Type, item.Event.Source, item.Match.Status, item.Match.Method, item.Match.Confidence,
@@ -144,7 +144,7 @@ func telemetryCmd(dataDir, daemonURL *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(report)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "runtime_events=%d correlated=%d uncorrelated=%d coverage=%.4f sensor_dropped=%d queued_batches=%d queued_bytes=%d dropped_batches=%d failed_batches=%d\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "runtime_events=%d correlated=%d uncorrelated=%d coverage=%.4f sensor_dropped=%d queued_batches=%d queued_bytes=%d dropped_batches=%d failed_batches=%d\n"),
 				report.Events.RuntimeEvents, report.Events.CorrelatedEvents, report.Events.UncorrelatedEvents,
 				report.Coverage.CorrelationRatio, report.Events.SensorDroppedEvents, report.Spool.QueuedBatches,
 				report.Spool.QueuedBytes, report.Spool.DroppedBatches, report.Spool.FailedBatches)
@@ -181,7 +181,7 @@ func telemetryCmd(dataDir, daemonURL *string) *cobra.Command {
 				})
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tRUN\tFORMAT\tREAD\tINGESTED\tSKIPPED\tFAILED\tFILE_SHA256\tEVENT_IDS_SHA256\tPATH\tCREATED_AT")
+			fmt.Fprintln(w, commandText(cmd, "ID\tRUN\tFORMAT\tREAD\tINGESTED\tSKIPPED\tFAILED\tFILE_SHA256\tEVENT_IDS_SHA256\tPATH\tCREATED_AT"))
 			for _, item := range items {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%d\t%d\t%d\t%d\t%s\t%s\t%s\t%s\n",
 					item.ID, item.RunID, item.Format, item.Read, item.Ingested, item.Skipped, item.Failed, item.FileSHA256, item.EventIDsSHA256, item.Path, item.CreatedAt)
@@ -215,7 +215,7 @@ func telemetryCmd(dataDir, daemonURL *string) *cobra.Command {
 				return enc.Encode(result)
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "RUN\tSESSION\tTOOL_CALL\tSOURCE\tTYPE\tWINDOW_SECONDS\tWINDOW_START\tEVENTS\tRESOLVED\tUNRESOLVED\tHIGH_RISK")
+			fmt.Fprintln(w, commandText(cmd, "RUN\tSESSION\tTOOL_CALL\tSOURCE\tTYPE\tWINDOW_SECONDS\tWINDOW_START\tEVENTS\tRESOLVED\tUNRESOLVED\tHIGH_RISK"))
 			for _, item := range result.Windows {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%d\t%d\t%d\t%d\n",
 					item.RunID, item.SessionID, item.ToolCallID, item.Source, item.EventType, item.WindowSeconds, item.WindowStart,
@@ -281,7 +281,7 @@ func telemetryPruneCmd(dataDir *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(result)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "schema=%s run=%s cutoff=%s scanned=%d deleted=%d protected=%d max_delete=%d\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "schema=%s run=%s cutoff=%s scanned=%d deleted=%d protected=%d max_delete=%d\n"),
 				result.SchemaVersion, result.RunID, result.Cutoff, result.Scanned, result.Deleted, result.Protected, result.MaxDelete)
 			return nil
 		},
@@ -340,10 +340,10 @@ func telemetryIngestFalcoCmd(dataDir *string) *cobra.Command {
 					"policy_decisions": result.PolicyDecisions,
 				})
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "batch=%s format=falco path=%s file_sha256=%s event_ids_sha256=%s read=%d ingested=%d skipped=%d failed=%d policy_decisions=%d\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "batch=%s format=falco path=%s file_sha256=%s event_ids_sha256=%s read=%d ingested=%d skipped=%d failed=%d policy_decisions=%d\n"),
 				result.BatchID, result.Path, result.FileSHA256, result.EventIDsSHA256, result.Read, result.Ingested, result.Skipped, result.Failed, result.PolicyDecisions)
 			for _, msg := range result.Errors {
-				fmt.Fprintf(cmd.OutOrStdout(), "error=%q\n", msg)
+				fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "error=%q\n"), msg)
 			}
 			return nil
 		},
@@ -386,7 +386,7 @@ func telemetryBindCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "binding_id=%s run=%s substrate_scope=%s execution_scope=%s tool_call=%s process=%s container=%s cgroup=%s pid=%d source=%s confidence=%.2f\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "binding_id=%s run=%s substrate_scope=%s execution_scope=%s tool_call=%s process=%s container=%s cgroup=%s pid=%d source=%s confidence=%.2f\n"),
 				id, binding.RunID, binding.SessionID, binding.AttemptID, binding.ToolCallID, binding.ProcessID, binding.ContainerID, binding.CgroupID, binding.PID, binding.BindingSource, binding.Confidence)
 			return nil
 		},
@@ -440,7 +440,7 @@ func telemetryBindingsCmd(dataDir *string) *cobra.Command {
 				})
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tRUN\tSUBSTRATE_SCOPE\tEXECUTION_SCOPE\tTOOL_CALL\tPROCESS\tCONTAINER\tCGROUP\tROOT_PID\tPID\tSOURCE\tCONFIDENCE\tSTARTED_AT\tENDED_AT")
+			fmt.Fprintln(w, commandText(cmd, "ID\tRUN\tSUBSTRATE_SCOPE\tEXECUTION_SCOPE\tTOOL_CALL\tPROCESS\tCONTAINER\tCGROUP\tROOT_PID\tPID\tSOURCE\tCONFIDENCE\tSTARTED_AT\tENDED_AT"))
 			for _, item := range items {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\t%.2f\t%s\t%s\n",
 					item.ID, item.RunID, item.SessionID, item.AttemptID, item.ToolCallID, item.ProcessID, item.ContainerID, item.CgroupID, item.RootPID, item.PID, item.BindingSource, item.Confidence, item.StartedAt, item.EndedAt)
@@ -481,7 +481,7 @@ func telemetryIngestCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			_, _ = telemetry.RebuildEventWindows(db, event.RunID)
-			fmt.Fprintf(cmd.OutOrStdout(), "event_id=%s type=%s source=%s\n", id, event.EventType, event.Source)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "event_id=%s type=%s source=%s\n"), id, event.EventType, event.Source)
 			return nil
 		},
 	}
@@ -541,10 +541,10 @@ func telemetryIngestJSONLCmd(dataDir *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(result)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "batch=%s format=%s path=%s file_sha256=%s event_ids_sha256=%s read=%d ingested=%d skipped=%d failed=%d policy_decisions=%d\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "batch=%s format=%s path=%s file_sha256=%s event_ids_sha256=%s read=%d ingested=%d skipped=%d failed=%d policy_decisions=%d\n"),
 				result.BatchID, result.Format, result.Path, result.FileSHA256, result.EventIDsSHA256, result.Read, result.Ingested, result.Skipped, result.Failed, result.PolicyDecisions)
 			for _, msg := range result.Errors {
-				fmt.Fprintf(cmd.OutOrStdout(), "error=%q\n", msg)
+				fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "error=%q\n"), msg)
 			}
 			return nil
 		},

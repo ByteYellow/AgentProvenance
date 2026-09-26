@@ -40,7 +40,7 @@ func forensicsCmd(dataDir, daemonURL *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(bundle)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "bundle_id=%s path=%s sha256=%s size_bytes=%d signed=%t attestation=%s\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "bundle_id=%s path=%s sha256=%s size_bytes=%d signed=%t attestation=%s\n"),
 				bundle.ID, bundle.Path, bundle.SHA256, bundle.SizeBytes, bundle.Signed, bundle.AttestationPath)
 			return nil
 		},
@@ -70,14 +70,14 @@ func forensicsCmd(dataDir, daemonURL *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(bundle)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "bundle_id=%s batch=%s runs=%d items=%d path=%s sha256=%s size_bytes=%d\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "bundle_id=%s batch=%s runs=%d items=%d path=%s sha256=%s size_bytes=%d\n"),
 				bundle.ID, bundle.BatchID, bundle.RunCount, bundle.ItemCount, bundle.Path, bundle.SHA256, bundle.SizeBytes)
 			if len(bundle.RunBundles) > 0 {
 				refs := make([]string, 0, len(bundle.RunBundles))
 				for _, runBundle := range bundle.RunBundles {
 					refs = append(refs, runBundle.RunID+"="+runBundle.SHA256)
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "run_bundles=%s\n", strings.Join(refs, ","))
+				fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "run_bundles=%s\n"), strings.Join(refs, ","))
 			}
 			return nil
 		},
@@ -106,7 +106,7 @@ func forensicsCmd(dataDir, daemonURL *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(info)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "imported run=%s rows=%d objects=%d snapshot_files=%d omitted=%d bundle_schema=%s\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "imported run=%s rows=%d objects=%d snapshot_files=%d omitted=%d bundle_schema=%s\n"),
 				info.RunID, info.TotalRows, info.ObjectBlobs, info.SnapshotFiles, info.Omitted, info.BundleSchema)
 			tables := make([]string, 0, len(info.Tables))
 			for t := range info.Tables {
@@ -141,7 +141,7 @@ func importForensics(dataDir, bundlePath, pubKeyPath string) (forensics.ImportIn
 		}
 		attPath := forensicsAttestationPath(bundlePath)
 		if err := forensics.VerifyBundleAttestation(bundlePath, attPath, pub); err != nil {
-			return forensics.ImportInfo{}, fmt.Errorf("attestation verify failed: %w", err)
+			return forensics.ImportInfo{}, commandErrorf("attestation verify failed: %w", err)
 		}
 	}
 	paths, err := store.Init(dataDir)
@@ -200,7 +200,7 @@ func forensicsVerifyAttestationCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if pubKey == "" {
-				return fmt.Errorf("--pub-key is required")
+				return commandErrorf("--pub-key is required")
 			}
 			pub, err := attest.LoadPublicKeyHex(pubKey)
 			if err != nil {
@@ -209,7 +209,7 @@ func forensicsVerifyAttestationCmd() *cobra.Command {
 			if err := forensics.VerifyBundleAttestation(args[0], args[1], pub); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "ok attestation verifies bundle=%s\n", args[0])
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "ok attestation verifies bundle=%s\n"), args[0])
 			return nil
 		},
 	}
@@ -224,7 +224,7 @@ func forensicsKeygenCmd() *cobra.Command {
 		Short: "generate an ed25519 keypair (hex) for forensics attestation signing",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if privPath == "" || pubPath == "" {
-				return fmt.Errorf("--priv and --pub are required")
+				return commandErrorf("--priv and --pub are required")
 			}
 			pub, priv, keyID, err := attest.GenerateKey()
 			if err != nil {
@@ -236,7 +236,7 @@ func forensicsKeygenCmd() *cobra.Command {
 			if err := os.WriteFile(pubPath, []byte(hex.EncodeToString(pub)+"\n"), 0o644); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "key_id=%s priv=%s pub=%s\n", keyID, privPath, pubPath)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "key_id=%s priv=%s pub=%s\n"), keyID, privPath, pubPath)
 			return nil
 		},
 	}

@@ -46,15 +46,15 @@ func sandboxWatchCmd(dataDir *string) *cobra.Command {
 				nodeName, _ = os.Hostname()
 			}
 			if nodeName == "" {
-				return fmt.Errorf("--node or NODE_NAME is required")
+				return commandErrorf("--node or NODE_NAME is required")
 			}
 			cfg, err := kubeConfig(master, kubeconfig)
 			if err != nil {
-				return fmt.Errorf("k8s client config: %w", err)
+				return commandErrorf("k8s client config: %w", err)
 			}
 			client, err := kubernetes.NewForConfig(cfg)
 			if err != nil {
-				return fmt.Errorf("k8s client: %w", err)
+				return commandErrorf("k8s client: %w", err)
 			}
 			paths, err := store.Init(*dataDir)
 			if err != nil {
@@ -74,7 +74,7 @@ func sandboxWatchCmd(dataDir *string) *cobra.Command {
 				Namespace: namespace, NodeName: nodeName, LabelSelector: selector, Resync: resync,
 				Workers: workers, MaxRetries: maxRetries, Reconciler: reconciler,
 				OnError: func(key string, err error) {
-					fmt.Fprintf(c.ErrOrStderr(), "informer: key=%s error=%v\n", key, err)
+					fmt.Fprintf(c.ErrOrStderr(), commandText(c, "informer: key=%s error=%v\n"), key, err)
 				},
 			})
 			if err != nil {
@@ -89,7 +89,7 @@ func sandboxWatchCmd(dataDir *string) *cobra.Command {
 				defer cancel()
 			}
 			if !jsonOut {
-				fmt.Fprintf(c.OutOrStdout(), "k8s informer starting node=%s namespace=%s scope_source=k8s_cgroup\n", nodeName, displayNamespace(namespace))
+				fmt.Fprintf(c.OutOrStdout(), commandText(c, "k8s informer starting node=%s namespace=%s scope_source=k8s_cgroup\n"), nodeName, displayNamespace(namespace))
 			}
 			done := make(chan error, 1)
 			go func() { done <- controller.Run(ctx) }()
@@ -166,7 +166,7 @@ func (r *procScopeResolver) Resolve(_ context.Context, pod *corev1.Pod, status c
 func (r *procScopeResolver) resolveContainer(containerID string) (string, error) {
 	containerID = normalizeRuntimeContainerID(containerID)
 	if containerID == "" {
-		return "", fmt.Errorf("empty container id")
+		return "", commandErrorf("empty container id")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -179,7 +179,7 @@ func (r *procScopeResolver) resolveContainer(containerID string) (string, error)
 	if cgroupID := r.byContainer[containerID]; cgroupID != "" {
 		return cgroupID, nil
 	}
-	return "", fmt.Errorf("container %s has no host cgroup", containerID)
+	return "", commandErrorf("container %s has no host cgroup", containerID)
 }
 
 func (r *procScopeResolver) refreshLocked() {
@@ -282,7 +282,7 @@ type informerReport struct {
 func printInformerReport(c *cobra.Command, report informerReport) {
 	r := report.Controller
 	a := report.Attribution
-	fmt.Fprintf(c.OutOrStdout(), "k8s informer node=%s synced=%t enqueued=%d reconciled=%d retries=%d failed=%d bindings=%d active=%d closed=%d restarts=%d resolution_failures=%d attribution_p95_ms=%.1f\n",
+	fmt.Fprintf(c.OutOrStdout(), commandText(c, "k8s informer node=%s synced=%t enqueued=%d reconciled=%d retries=%d failed=%d bindings=%d active=%d closed=%d restarts=%d resolution_failures=%d attribution_p95_ms=%.1f\n"),
 		r.NodeName, r.CacheSynced, r.Enqueued, r.Reconciled, r.Retried, r.Failed,
 		a.BindingsCreated, a.ActiveBindings, a.BindingsClosed, a.ContainerRestarts, a.ResolutionFailures, a.AttributionLatencyP95MS)
 }

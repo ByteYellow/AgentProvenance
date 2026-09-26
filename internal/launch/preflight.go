@@ -1,7 +1,6 @@
 package launch
 
 import (
-	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -23,6 +22,8 @@ const (
 
 // Check is one launch prerequisite or degradation check.
 type Check struct {
+	detail message
+	fix    message
 	Name   string      `json:"name"`
 	Status CheckStatus `json:"status"`
 	Detail string      `json:"detail"`
@@ -79,50 +80,45 @@ func (r PreflightReport) HasFailures() bool {
 
 func checkCommand(command []string) Check {
 	if len(command) == 0 {
-		return Check{Name: "agent command", Status: CheckSkip, Detail: "no command supplied; pass one after -- to check the agent binary"}
+		return makeCheck("agent command", CheckSkip, messagef("no command supplied; pass one after -- to check the agent binary"))
 	}
 	prog := command[0]
 	if strings.ContainsRune(prog, os.PathSeparator) {
 		info, err := os.Stat(prog)
 		if err != nil {
-			return Check{Name: "agent command", Status: CheckFail, Detail: prog + " is not accessible", Fix: err.Error()}
+			return makeCheck("agent command", CheckFail, messagef("%s is not accessible", prog), messagef("%s", err))
 		}
 		if info.IsDir() || info.Mode()&0o111 == 0 {
-			return Check{Name: "agent command", Status: CheckFail, Detail: prog + " is not executable"}
+			return makeCheck("agent command", CheckFail, messagef("%s is not executable", prog))
 		}
-		return Check{Name: "agent command", Status: CheckPass, Detail: prog + " is executable"}
+		return makeCheck("agent command", CheckPass, messagef("%s is executable", prog))
 	}
 	path, err := exec.LookPath(prog)
 	if err != nil {
-		return Check{Name: "agent command", Status: CheckFail, Detail: prog + " not found on PATH", Fix: "install it or pass an absolute path"}
+		return makeCheck("agent command", CheckFail, messagef("%s not found on PATH", prog), messagef("install it or pass an absolute path"))
 	}
-	return Check{Name: "agent command", Status: CheckPass, Detail: path}
+	return makeCheck("agent command", CheckPass, messagef("%s", path))
 }
 
 func checkClaudeHooks(command []string) Check {
 	if len(command) == 0 {
-		return Check{Name: "Claude hooks", Status: CheckSkip, Detail: "no agent command supplied"}
+		return makeCheck("Claude hooks", CheckSkip, messagef("no agent command supplied"))
 	}
 	recipe := detectRecipe(command)
 	if !recipe.injectHooks {
-		return Check{Name: "Claude hooks", Status: CheckSkip, Detail: recipe.detail}
+		return makeCheck("Claude hooks", CheckSkip, recipe.detailText)
 	}
 	for _, a := range command[1:] {
 		if a == "--settings" || strings.HasPrefix(a, "--settings=") {
-			return Check{
-				Name:   "Claude hooks",
-				Status: CheckWarn,
-				Detail: "command already passes --settings, so launch will not override it",
-				Fix:    "remove --settings for per-run hook capture, or run record-only intentionally",
-			}
+			return makeCheck("Claude hooks", CheckWarn, messagef("command already passes --settings, so launch will not override it"), messagef("remove --settings for per-run hook capture, or run record-only intentionally"))
 		}
 	}
-	return Check{Name: "Claude hooks", Status: CheckPass, Detail: recipe.detail}
+	return makeCheck("Claude hooks", CheckPass, recipe.detailText)
 }
 
 func checkDashboardAddr(enabled bool, addr string) Check {
 	if !enabled {
-		return Check{Name: "dashboard port", Status: CheckSkip, Detail: "dashboard disabled"}
+		return makeCheck("dashboard port", CheckSkip, messagef("dashboard disabled"))
 	}
 	if addr == "" {
 		addr = "127.0.0.1:7396"
@@ -130,59 +126,44 @@ func checkDashboardAddr(enabled bool, addr string) Check {
 	ln, err := net.Listen("tcp", addr)
 	if err == nil {
 		_ = ln.Close()
-		return Check{Name: "dashboard port", Status: CheckPass, Detail: addr + " is available"}
+		return makeCheck("dashboard port", CheckPass, messagef("%s is available", addr))
 	}
-	return Check{
-		Name:   "dashboard port",
-		Status: CheckWarn,
-		Detail: addr + " is not available; launch will fall back to an ephemeral port",
-		Fix:    err.Error(),
-	}
+	return makeCheck("dashboard port", CheckWarn, messagef("%s is not available; launch will fall back to an ephemeral port", addr), messagef("%s", err))
 }
 
 func checkCgroup() Check {
 	if runtime.GOOS != "linux" {
-		return Check{Name: "cgroup v2", Status: CheckSkip, Detail: fmt.Sprintf("not available on %s; record uses a logical scope id", runtime.GOOS)}
+		return makeCheck("cgroup v2", CheckSkip, messagef("not available on %s; record uses a logical scope id", runtime.GOOS))
 	}
 	if _, err := os.Stat("/sys/fs/cgroup/cgroup.controllers"); err != nil {
-		return Check{Name: "cgroup v2", Status: CheckWarn, Detail: "unified cgroup v2 not detected; kernel correlation falls back to pid/time", Fix: err.Error()}
+		return makeCheck("cgroup v2", CheckWarn, messagef("unified cgroup v2 not detected; kernel correlation falls back to pid/time"), messagef("%s", err))
 	}
 	parent := firstNonEmpty(os.Getenv("AGENTPROV_CGROUP_PARENT"), "/sys/fs/cgroup/agentprov")
 	dir := filepath.Join(parent, ".agentprov-preflight-"+strconv.Itoa(os.Getpid()))
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return Check{
-			Name:   "cgroup v2",
-			Status: CheckWarn,
-			Detail: parent + " is not writable/delegated; record will use synthetic cgroup ids",
-			Fix:    "create and delegate AGENTPROV_CGROUP_PARENT, or run with sufficient cgroup privileges: " + err.Error(),
-		}
+		return makeCheck("cgroup v2", CheckWarn, messagef("%s is not writable/delegated; record will use synthetic cgroup ids", parent), messagef("create and delegate AGENTPROV_CGROUP_PARENT, or run with sufficient cgroup privileges: %s", err))
 	}
 	_ = os.Remove(dir)
-	return Check{Name: "cgroup v2", Status: CheckPass, Detail: parent + " can host per-run scopes"}
+	return makeCheck("cgroup v2", CheckPass, messagef("%s can host per-run scopes", parent))
 }
 
 func checkSensor(mode, selfExe string) Check {
 	if mode == "off" {
-		return Check{Name: "kernel sensor", Status: CheckSkip, Detail: "disabled via --sensor=off"}
+		return makeCheck("kernel sensor", CheckSkip, messagef("disabled via --sensor=off"))
 	}
 	if runtime.GOOS != "linux" {
-		return Check{Name: "kernel sensor", Status: CheckSkip, Detail: fmt.Sprintf("requires Linux; this host is %s", runtime.GOOS)}
+		return makeCheck("kernel sensor", CheckSkip, messagef("requires Linux; this host is %s", runtime.GOOS))
 	}
 	if selfExe == "" {
-		return Check{Name: "kernel sensor", Status: CheckWarn, Detail: "cannot locate agentprov binary for sensor subprocess"}
+		return makeCheck("kernel sensor", CheckWarn, messagef("cannot locate agentprov binary for sensor subprocess"))
 	}
 	if _, err := os.Stat(selfExe); err != nil {
-		return Check{Name: "kernel sensor", Status: CheckWarn, Detail: "agentprov binary is not accessible", Fix: err.Error()}
+		return makeCheck("kernel sensor", CheckWarn, messagef("agentprov binary is not accessible"), messagef("%s", err))
 	}
 	if os.Geteuid() == 0 || hasEffectiveCap(38) && hasEffectiveCap(39) {
-		return Check{Name: "kernel sensor", Status: CheckPass, Detail: "Linux host has root or CAP_PERFMON+CAP_BPF"}
+		return makeCheck("kernel sensor", CheckPass, messagef("Linux host has root or CAP_PERFMON+CAP_BPF"))
 	}
-	return Check{
-		Name:   "kernel sensor",
-		Status: CheckWarn,
-		Detail: "Linux host lacks root/CAP_PERFMON+CAP_BPF; launch will degrade to app/record evidence",
-		Fix:    "run as root or grant capabilities to the agentprov binary (for example: sudo setcap cap_bpf,cap_perfmon,cap_sys_resource+ep " + selfExe + ")",
-	}
+	return makeCheck("kernel sensor", CheckWarn, messagef("Linux host lacks root/CAP_PERFMON+CAP_BPF; launch will degrade to app/record evidence"), messagef("run as root or grant capabilities to the agentprov binary (for example: sudo setcap cap_bpf,cap_perfmon,cap_sys_resource+ep %s)", selfExe))
 }
 
 func hasEffectiveCap(bit uint) bool {

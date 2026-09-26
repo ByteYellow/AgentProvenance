@@ -33,10 +33,10 @@ func sandboxCaptureCmd(dataDir *string) *cobra.Command {
 		Short: "one-shot: attribute a running k8s pod's node-observed telemetry to a run",
 		RunE: func(c *cobra.Command, _ []string) error {
 			if pod == "" || namespace == "" {
-				return fmt.Errorf("--pod and --namespace are required")
+				return commandErrorf("--pod and --namespace are required")
 			}
 			if sensorBin == "" {
-				return fmt.Errorf("--sensor (path to agentprov-sensor) is required")
+				return commandErrorf("--sensor (path to agentprov-sensor) is required")
 			}
 			if runID == "" {
 				runID = ids.New("run")
@@ -46,7 +46,7 @@ func sandboxCaptureCmd(dataDir *string) *cobra.Command {
 
 			meta, err := resolvePodMetadata(kc, pod, namespace)
 			if err != nil {
-				return fmt.Errorf("resolve pod metadata: %w", err)
+				return commandErrorf("resolve pod metadata: %w", err)
 			}
 			if pid == 0 {
 				cid := ""
@@ -58,15 +58,15 @@ func sandboxCaptureCmd(dataDir *string) *cobra.Command {
 				}
 				pid, err = findPodPID(meta.UID, cid)
 				if err != nil {
-					return fmt.Errorf("resolve pod pid (pass --pid): %w", err)
+					return commandErrorf("resolve pod pid (pass --pid): %w", err)
 				}
 			}
 			cgroupID, err := cgroupInodeForPID(pid)
 			if err != nil {
-				return fmt.Errorf("resolve pod cgroup: %w", err)
+				return commandErrorf("resolve pod cgroup: %w", err)
 			}
 			meta.CgroupID = cgroupID
-			fmt.Fprintf(c.OutOrStdout(), "pod=%s/%s uid=%s pid=%d cgroup=%s node=%s\n", namespace, pod, meta.UID, pid, cgroupID, meta.Node)
+			fmt.Fprintf(c.OutOrStdout(), commandText(c, "pod=%s/%s uid=%s pid=%d cgroup=%s node=%s\n"), namespace, pod, meta.UID, pid, cgroupID, meta.Node)
 
 			paths, err := store.Init(*dataDir)
 			if err != nil {
@@ -81,25 +81,25 @@ func sandboxCaptureCmd(dataDir *string) *cobra.Command {
 			started := time.Now().UTC().Format(time.RFC3339Nano)
 			raw := filepath.Join(paths.Logs, "capture-"+runID+"-sensor.jsonl")
 			if err := runSensorWindow(sensorBin, raw, sslLib, pid, seconds, stderr); err != nil {
-				return fmt.Errorf("run sensor: %w", err)
+				return commandErrorf("run sensor: %w", err)
 			}
 			scoped := raw + ".pod"
 			kept, err := filterByCgroup(raw, scoped, cgroupID)
 			if err != nil {
-				return fmt.Errorf("filter pod events: %w", err)
+				return commandErrorf("filter pod events: %w", err)
 			}
 
 			if _, err := producer.BindCgroupScope(db, cgroupID, producer.RunScope{RunID: runID, SessionID: meta.UID, StartedAt: started}); err != nil {
-				return fmt.Errorf("bind cgroup: %w", err)
+				return commandErrorf("bind cgroup: %w", err)
 			}
 			if err := writePodMetadataEvent(db, runID, meta); err != nil {
-				fmt.Fprintf(stderr, "capture: pod metadata event: %v\n", err)
+				fmt.Fprintf(stderr, commandText(c, "capture: pod metadata event: %v\n"), err)
 			}
 			res, err := telemetry.IngestJSONL(db, telemetry.JSONLIngestOptions{Format: "native", Path: scoped, RunID: runID})
 			if err != nil {
-				return fmt.Errorf("ingest: %w", err)
+				return commandErrorf("ingest: %w", err)
 			}
-			fmt.Fprintf(c.OutOrStdout(), "captured=%d ingested=%d run=%s scope=k8s_cgroup confidence=0.8\n", kept, res.Ingested, runID)
+			fmt.Fprintf(c.OutOrStdout(), commandText(c, "captured=%d ingested=%d run=%s scope=k8s_cgroup confidence=0.8\n"), kept, res.Ingested, runID)
 			return nil
 		},
 	}
@@ -154,7 +154,7 @@ func runKubectl(kc []string, args ...string) (string, error) {
 // app container's and carries none of the workload's syscalls.
 func findPodPID(uid, containerID string) (int, error) {
 	if uid == "" {
-		return 0, fmt.Errorf("empty pod uid")
+		return 0, commandErrorf("empty pod uid")
 	}
 	needles := []string{"pod" + strings.ReplaceAll(uid, "-", "_"), "pod" + uid}
 	// A multi-container pod has one cgroup leaf per container; when a specific
@@ -200,9 +200,9 @@ func findPodPID(uid, containerID string) (int, error) {
 		return p, nil
 	}
 	if containerID != "" {
-		return 0, fmt.Errorf("no process found in container %s of pod uid %s on this node", containerID, uid)
+		return 0, commandErrorf("no process found in container %s of pod uid %s on this node", containerID, uid)
 	}
-	return 0, fmt.Errorf("no app process found in cgroup for pod uid %s (is the pod running on this node?)", uid)
+	return 0, commandErrorf("no app process found in cgroup for pod uid %s (is the pod running on this node?)", uid)
 }
 
 // cgroupInodeForPID resolves the kernel cgroup id (the inode the sensor stamps)
@@ -220,7 +220,7 @@ func cgroupInodeForPID(pid int) (string, error) {
 		}
 	}
 	if rel == "" {
-		return "", fmt.Errorf("no cgroup2 path in /proc/%d/cgroup", pid)
+		return "", commandErrorf("no cgroup2 path in /proc/%d/cgroup", pid)
 	}
 	info, err := os.Stat(hostCgroupPath(rel))
 	if err != nil {
@@ -229,7 +229,7 @@ func cgroupInodeForPID(pid int) (string, error) {
 	if st, ok := info.Sys().(*syscall.Stat_t); ok {
 		return fmt.Sprintf("%d", st.Ino), nil
 	}
-	return "", fmt.Errorf("cannot read cgroup inode")
+	return "", commandErrorf("cannot read cgroup inode")
 }
 
 // hostCgroupPath anchors a /proc/<pid>/cgroup path at the host cgroup mount.

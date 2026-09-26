@@ -33,6 +33,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/dashboard"
 	"github.com/byteyellow/agentprovenance/internal/forensics"
 	"github.com/byteyellow/agentprovenance/internal/hooksbridge"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/ids"
 	"github.com/byteyellow/agentprovenance/internal/intent"
 	"github.com/byteyellow/agentprovenance/internal/observability"
@@ -48,16 +49,18 @@ import (
 
 // Options configures a launch run.
 type Options struct {
-	DataDir       string   // AgentProvenance data dir (root --data-dir)
-	Command       []string // the agent argv, e.g. ["claude", "-p", "..."]
-	Workdir       string   // agent working directory; "" = current dir
-	Dashboard     bool     // serve the read-only dashboard and keep it live after exit
-	DashboardAddr string   // dashboard listen address (host:port); falls back to ephemeral if busy
-	Sensor        string   // "auto" (Linux + capable) or "off"
-	SignKeyPath   string   // optional hex ed25519 private key; when set, the sealed bundle is signed
-	FileDiff      bool     // capture the working-tree file diff (off by default; expensive in big repos)
-	SelfExe       string   // absolute path to this agentprov binary (for the sensor subprocess + hook commands)
-	JSON          bool     // caller will emit the machine report on Stdout: keep Stdout pure JSON and don't block on the dashboard
+	Language         i18n.Locale // terminal presentation; empty uses English
+	ExplicitLanguage bool        // preserve browser negotiation unless the caller selected a language
+	DataDir          string      // AgentProvenance data dir (root --data-dir)
+	Command          []string    // the agent argv, e.g. ["claude", "-p", "..."]
+	Workdir          string      // agent working directory; "" = current dir
+	Dashboard        bool        // serve the read-only dashboard and keep it live after exit
+	DashboardAddr    string      // dashboard listen address (host:port); falls back to ephemeral if busy
+	Sensor           string      // "auto" (Linux + capable) or "off"
+	SignKeyPath      string      // optional hex ed25519 private key; when set, the sealed bundle is signed
+	FileDiff         bool        // capture the working-tree file diff (off by default; expensive in big repos)
+	SelfExe          string      // absolute path to this agentprov binary (for the sensor subprocess + hook commands)
+	JSON             bool        // caller will emit the machine report on Stdout: keep Stdout pure JSON and don't block on the dashboard
 
 	Stdout io.Writer
 	Stderr io.Writer
@@ -65,6 +68,8 @@ type Options struct {
 
 // Report is the machine-readable outcome of a launch run.
 type Report struct {
+	appDetail          message
+	sysReason          message
 	RunID              string `json:"run_id"`
 	ExitCode           int    `json:"exit_code"`
 	Status             string `json:"status"`
@@ -151,8 +156,9 @@ func subAgentTranscriptsFromHookLog(hookLogPath, mainPath string) []provenance.A
 // error is a launch-infrastructure error only; a nonzero agent exit is reported
 // via Report.ExitCode, not as an error, so the caller can propagate it.
 func Run(opts Options) (Report, error) {
+	lang := opts.Language
 	if len(opts.Command) == 0 {
-		return Report{}, fmt.Errorf("launch: a command is required after --")
+		return Report{}, i18n.Errorf("launch: a command is required after --")
 	}
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
@@ -168,7 +174,7 @@ func Run(opts Options) (Report, error) {
 		}
 	}
 	preflight := Preflight(opts)
-	PrintPreflight(opts.Stderr, preflight)
+	PrintPreflightLocale(opts.Stderr, preflight, lang)
 
 	paths, err := store.Init(opts.DataDir)
 	if err != nil {
@@ -189,6 +195,7 @@ func Run(opts Options) (Report, error) {
 	recipe := detectRecipe(opts.Command)
 	report.AppTier = recipe.tier
 	report.AppDetail = recipe.detail
+	report.appDetail = recipe.detailText
 	hookLogPath := ""
 	var cleanupInjection func()
 	command := opts.Command
@@ -196,9 +203,10 @@ func Run(opts Options) (Report, error) {
 		hookLogPath = paths.Logs + string(os.PathSeparator) + "launch-" + runID + "-hooks.jsonl"
 		injected, cleanup, ierr := recipe.inject(command, opts.SelfExe, hookLogPath, paths)
 		if ierr != nil {
-			fmt.Fprintf(opts.Stderr, "launch: hooks injection skipped: %v (app-side degrades to record-only)\n", ierr)
+			fmt.Fprintf(opts.Stderr, i18n.T(lang, "launch: hooks injection skipped: %v (app-side degrades to record-only)\n"), i18n.ErrorText(lang, ierr))
 			report.AppTier = "record"
-			report.AppDetail = "hooks injection failed: " + ierr.Error()
+			report.appDetail = messagef("hooks injection failed: %s", ierr)
+			report.AppDetail = report.appDetail.original()
 			hookLogPath = ""
 		} else {
 			command = injected
@@ -225,16 +233,18 @@ func Run(opts Options) (Report, error) {
 				if t.GoTLSBin != "" {
 					tlsEnv = append(tlsEnv, "AGENTPROV_GO_TLS_BIN="+t.GoTLSBin)
 				}
-				fmt.Fprintf(opts.Stderr, "launch: model-intent tls stack=%s ssl_lib=%q go_tls_bin=%q\n", t.Stack, t.SSLLib, t.GoTLSBin)
+				fmt.Fprintf(opts.Stderr, i18n.T(lang, "launch: model-intent tls stack=%s ssl_lib=%q go_tls_bin=%q\n"), t.Stack, t.SSLLib, t.GoTLSBin)
 			}
 		}
 		sp, tier, reason := startSensor(opts.SelfExe, opts.DataDir, opts.Stderr, tlsEnv)
 		report.SysTier = tier
-		report.SysDegradeReason = reason
+		report.sysReason = reason
+		report.SysDegradeReason = reason.original()
 		sensorProc = sp
 	} else {
 		report.SysTier = "none"
-		report.SysDegradeReason = "disabled via --sensor=off"
+		report.sysReason = messagef("disabled via --sensor=off")
+		report.SysDegradeReason = report.sysReason.original()
 	}
 	if sensorProc != nil {
 		defer sensorProc.stop()
@@ -244,15 +254,18 @@ func Run(opts Options) (Report, error) {
 	// printed URL is real.
 	var dashListener net.Listener
 	if opts.Dashboard {
-		ln, url := startDashboard(db, opts.DashboardAddr, opts.Stderr)
+		ln, url := startDashboard(db, opts.DashboardAddr, opts.Stderr, lang)
 		if ln != nil {
 			dashListener = ln
 			report.DashboardURL = url
+			if opts.ExplicitLanguage {
+				report.DashboardURL = url + "?lang=" + string(lang)
+			}
 			defer dashListener.Close()
 		}
 	}
 
-	printBanner(opts.Stderr, report, command)
+	printBanner(opts.Stderr, report, command, lang)
 
 	// Keep launch alive across the interactive agent's Ctrl-C: the agent shares
 	// our process group and receives SIGINT directly, so we only need to stop
@@ -274,7 +287,7 @@ func Run(opts Options) (Report, error) {
 		DisableSnapshot: !opts.FileDiff,
 	})
 	if rerr != nil {
-		return report, fmt.Errorf("launch: exec agent: %w", rerr)
+		return report, i18n.Errorf("launch: exec agent: %w", rerr)
 	}
 	report.ExitCode = result.ExitCode
 	report.Status = result.Status
@@ -286,7 +299,7 @@ func Run(opts Options) (Report, error) {
 		if p := recipe.findTranscript(agentStart); p != "" {
 			transcriptHarness, transcriptPath = recipe.harness, p
 		} else {
-			fmt.Fprintf(opts.Stderr, "launch: no %s session record found for this run (app-side degrades to record-only)\n", recipe.harness)
+			fmt.Fprintf(opts.Stderr, i18n.T(lang, "launch: no %s session record found for this run (app-side degrades to record-only)\n"), recipe.harness)
 		}
 	}
 
@@ -297,7 +310,7 @@ func Run(opts Options) (Report, error) {
 	}
 
 	// --- Seal: fold every source into the graph, apply policy, summarize, sign.
-	seal(db, paths, runID, hookLogPath, transcriptHarness, transcriptPath, opts.SignKeyPath, &report, opts.Stderr)
+	seal(db, paths, runID, hookLogPath, transcriptHarness, transcriptPath, opts.SignKeyPath, &report, opts.Stderr, lang)
 
 	// Under --json the caller writes the machine report to Stdout, so every
 	// human-facing line here must go to Stderr or Stdout would not parse.
@@ -305,14 +318,14 @@ func Run(opts Options) (Report, error) {
 	if opts.JSON {
 		verdictOut = opts.Stderr
 	}
-	printVerdict(verdictOut, report)
+	printVerdict(verdictOut, report, lang)
 
 	// --- Keep the dashboard live for inspection until the operator quits.
 	// Skipped under --json: a machine caller wants the report now, not a block
 	// on an interactive Ctrl-C.
 	if dashListener != nil && !opts.JSON {
 		drain(sigCh)
-		fmt.Fprintf(verdictOut, "\ndashboard live at %s  (Ctrl-C to exit)\n", report.DashboardURL)
+		fmt.Fprintf(verdictOut, i18n.T(lang, "\ndashboard live at %s  (Ctrl-C to exit)\n"), report.DashboardURL)
 		<-sigCh
 	}
 	return report, nil
@@ -322,7 +335,7 @@ func Run(opts Options) (Report, error) {
 // evidence graph and fills the risk/bundle fields of report. Best-effort: a
 // failure in any stage is reported to stderr but does not abort the others, so
 // the operator always gets whatever evidence was capturable.
-func seal(db *sql.DB, paths store.Paths, runID, hookLogPath, transcriptHarness, transcriptPath, signKeyPath string, report *Report, stderr io.Writer) {
+func seal(db *sql.DB, paths store.Paths, runID, hookLogPath, transcriptHarness, transcriptPath, signKeyPath string, report *Report, stderr io.Writer, lang i18n.Locale) {
 	// App-side intent comes from EITHER an injected hook log (Claude Code) or a
 	// harness's own session transcript (codex/kimi), normalized to the same hook
 	// events. Both then command-match to the kernel via CorrelateSyscalls.
@@ -334,7 +347,7 @@ func seal(db *sql.DB, paths store.Paths, runID, hookLogPath, transcriptHarness, 
 		}
 	} else if transcriptHarness != "" && transcriptPath != "" {
 		if r, err := hooksbridge.BridgeTranscript(transcriptHarness, transcriptPath); err != nil {
-			fmt.Fprintf(stderr, "launch: bridge %s transcript: %v\n", transcriptHarness, err)
+			fmt.Fprintf(stderr, i18n.T(lang, "launch: bridge %s transcript: %v\n"), transcriptHarness, i18n.ErrorText(lang, err))
 		} else {
 			appReader = r
 		}
@@ -345,11 +358,11 @@ func seal(db *sql.DB, paths store.Paths, runID, hookLogPath, transcriptHarness, 
 			Objects: provenance.ObjectStore{DB: db, Paths: paths},
 		})
 		if ierr != nil {
-			fmt.Fprintf(stderr, "launch: app-context ingest: %v\n", ierr)
+			fmt.Fprintf(stderr, i18n.T(lang, "launch: app-context ingest: %v\n"), i18n.ErrorText(lang, ierr))
 		} else {
 			report.HooksIngested = sum.ToolCalls
 			if _, cerr := hooksbridge.CorrelateSyscalls(db, runID); cerr != nil {
-				fmt.Fprintf(stderr, "launch: syscall correlation: %v\n", cerr)
+				fmt.Fprintf(stderr, i18n.T(lang, "launch: syscall correlation: %v\n"), i18n.ErrorText(lang, cerr))
 			}
 		}
 	}
@@ -359,7 +372,7 @@ func seal(db *sql.DB, paths store.Paths, runID, hookLogPath, transcriptHarness, 
 	// llm_call model -- the model's real prompt, reasoning, and tool decisions
 	// (the cognitive-intent axis), zero-instrumentation and platform-independent.
 	if _, err := provenance.MaterializeLLMCalls(provenance.ObjectStore{DB: db, Paths: paths}, db, runID); err != nil {
-		fmt.Fprintf(stderr, "launch: materialize llm: %v\n", err)
+		fmt.Fprintf(stderr, i18n.T(lang, "launch: materialize llm: %v\n"), i18n.ErrorText(lang, err))
 	}
 	if tp := transcriptPathFromHookLog(hookLogPath); tp != "" {
 		// Also harvest each sub-agent's own transcript: a command a delegate
@@ -368,7 +381,7 @@ func seal(db *sql.DB, paths store.Paths, runID, hookLogPath, transcriptHarness, 
 		// carry an llm_caused edge to the syscall it ran.
 		subs := subAgentTranscriptsFromHookLog(hookLogPath, tp)
 		if turns, err := provenance.HarvestTranscriptSet(provenance.ObjectStore{DB: db, Paths: paths}, db, runID, tp, subs); err != nil {
-			fmt.Fprintf(stderr, "launch: harvest transcript: %v\n", err)
+			fmt.Fprintf(stderr, i18n.T(lang, "launch: harvest transcript: %v\n"), i18n.ErrorText(lang, err))
 		} else {
 			report.TranscriptTurns = turns
 		}
@@ -379,7 +392,7 @@ func seal(db *sql.DB, paths store.Paths, runID, hookLogPath, transcriptHarness, 
 	// a refusal bypass is the intent-layer finding the raw risk count alone
 	// cannot express.
 	if idr, err := intent.Materialize(db, runID); err != nil {
-		fmt.Fprintf(stderr, "launch: intent diff: %v\n", err)
+		fmt.Fprintf(stderr, i18n.T(lang, "launch: intent diff: %v\n"), i18n.ErrorText(lang, err))
 	} else {
 		report.IntentMismatches = idr.Mismatches
 		report.IntentCoverageGaps = idr.CoverageGaps
@@ -389,11 +402,11 @@ func seal(db *sql.DB, paths store.Paths, runID, hookLogPath, transcriptHarness, 
 	// risk (the self_credential_access allow rule keeps the agent's own creds
 	// reads from flooding every run as FLAGGED), then summarize.
 	if _, _, err := security.ReevaluateRun(db, runID, security.DefaultEngine()); err != nil {
-		fmt.Fprintf(stderr, "launch: policy reevaluate: %v\n", err)
+		fmt.Fprintf(stderr, i18n.T(lang, "launch: policy reevaluate: %v\n"), i18n.ErrorText(lang, err))
 	}
 	summary, err := observability.BuildSummary(db, observability.SummaryOptions{RunID: runID})
 	if err != nil {
-		fmt.Fprintf(stderr, "launch: summary: %v\n", err)
+		fmt.Fprintf(stderr, i18n.T(lang, "launch: summary: %v\n"), i18n.ErrorText(lang, err))
 	} else {
 		report.Events = summary.Runtime.Events
 		report.Signals = summary.Risk.Signals
@@ -406,7 +419,7 @@ func seal(db *sql.DB, paths store.Paths, runID, hookLogPath, transcriptHarness, 
 	svc := forensics.Service{DB: db, Paths: paths}
 	if signKeyPath != "" {
 		if key, kerr := attest.LoadPrivateKeyHex(signKeyPath); kerr != nil {
-			fmt.Fprintf(stderr, "launch: load sign key: %v\n", kerr)
+			fmt.Fprintf(stderr, i18n.T(lang, "launch: load sign key: %v\n"), i18n.ErrorText(lang, kerr))
 		} else {
 			svc.SignKey = key
 			svc.SignKeyID = attest.KeyID(key.Public().(ed25519.PublicKey))
@@ -414,7 +427,7 @@ func seal(db *sql.DB, paths store.Paths, runID, hookLogPath, transcriptHarness, 
 	}
 	bundle, berr := svc.ExportBundle(runID)
 	if berr != nil {
-		fmt.Fprintf(stderr, "launch: export bundle: %v\n", berr)
+		fmt.Fprintf(stderr, i18n.T(lang, "launch: export bundle: %v\n"), i18n.ErrorText(lang, berr))
 	} else {
 		report.BundlePath = bundle.Path
 		report.Signed = bundle.Signed
@@ -422,7 +435,7 @@ func seal(db *sql.DB, paths store.Paths, runID, hookLogPath, transcriptHarness, 
 	}
 }
 
-func startDashboard(db *sql.DB, addr string, stderr io.Writer) (net.Listener, string) {
+func startDashboard(db *sql.DB, addr string, stderr io.Writer, lang i18n.Locale) (net.Listener, string) {
 	if addr == "" {
 		addr = "127.0.0.1:7396"
 	}
@@ -432,7 +445,7 @@ func startDashboard(db *sql.DB, addr string, stderr io.Writer) (net.Listener, st
 		// fails just because a prior dashboard is up.
 		ln, err = net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
-			fmt.Fprintf(stderr, "launch: dashboard listen failed: %v (continuing without dashboard)\n", err)
+			fmt.Fprintf(stderr, i18n.T(lang, "launch: dashboard listen failed: %v (continuing without dashboard)\n"), i18n.ErrorText(lang, err))
 			return nil, ""
 		}
 	}
@@ -442,22 +455,22 @@ func startDashboard(db *sql.DB, addr string, stderr io.Writer) (net.Listener, st
 	return ln, url
 }
 
-func printBanner(w io.Writer, r Report, command []string) {
-	fmt.Fprintf(w, "\nagentprov launch  run=%s\n", r.RunID)
-	fmt.Fprintf(w, "  agent      : %s\n", strings.Join(command, " "))
-	app := r.AppTier
+func printBanner(w io.Writer, r Report, command []string, lang i18n.Locale) {
+	fmt.Fprintf(w, i18n.T(lang, "\nagentprov launch  run=%s\n"), r.RunID)
+	fmt.Fprintf(w, i18n.T(lang, "  agent      : %s\n"), strings.Join(command, " "))
+	app := i18n.T(lang, r.AppTier)
 	if r.AppDetail != "" {
-		app += "  (" + r.AppDetail + ")"
+		app += "  (" + r.appDetail.orOriginal(lang, r.AppDetail) + ")"
 	}
-	fmt.Fprintf(w, "  app  side  : %s\n", app)
-	sys := r.SysTier
+	fmt.Fprintf(w, i18n.T(lang, "  app  side  : %s\n"), app)
+	sys := i18n.T(lang, r.SysTier)
 	if r.SysDegradeReason != "" {
-		sys += "  (" + r.SysDegradeReason + ")"
+		sys += "  (" + r.sysReason.orOriginal(lang, r.SysDegradeReason) + ")"
 	}
-	fmt.Fprintf(w, "  sys  side  : %s\n", sys)
-	fmt.Fprintf(w, "  evidence   : %s\n", evidenceLevel(r))
+	fmt.Fprintf(w, i18n.T(lang, "  sys  side  : %s\n"), sys)
+	fmt.Fprintf(w, i18n.T(lang, "  evidence   : %s\n"), i18n.T(lang, evidenceLevel(r)))
 	if r.DashboardURL != "" {
-		fmt.Fprintf(w, "  dashboard  : %s\n", r.DashboardURL)
+		fmt.Fprintf(w, i18n.T(lang, "  dashboard  : %s\n"), r.DashboardURL)
 	}
 	fmt.Fprintln(w, "  ────────────────────────────────────────")
 }
@@ -465,10 +478,15 @@ func printBanner(w io.Writer, r Report, command []string) {
 // PrintPreflight renders the same readiness checks used by `agentprov doctor`.
 // Warn/skip states are not fatal: launch is intentionally degradation-friendly.
 func PrintPreflight(w io.Writer, r PreflightReport) {
+	PrintPreflightLocale(w, r, i18n.English)
+}
+
+// PrintPreflightLocale translates presentation without changing the report.
+func PrintPreflightLocale(w io.Writer, r PreflightReport, lang i18n.Locale) {
 	if w == nil {
 		return
 	}
-	fmt.Fprintln(w, "\nagentprov preflight")
+	fmt.Fprintln(w, i18n.T(lang, "\nagentprov preflight"))
 	for _, c := range r.Checks {
 		mark := "✓"
 		switch c.Status {
@@ -479,9 +497,9 @@ func PrintPreflight(w io.Writer, r PreflightReport) {
 		case CheckSkip:
 			mark = "-"
 		}
-		fmt.Fprintf(w, "  %s %-16s %s\n", mark, c.Name+":", c.Detail)
+		fmt.Fprintf(w, "  %s %-16s %s\n", mark, i18n.T(lang, c.Name)+":", c.detail.orOriginal(lang, c.Detail))
 		if c.Fix != "" {
-			fmt.Fprintf(w, "    fix: %s\n", c.Fix)
+			fmt.Fprintf(w, i18n.T(lang, "    fix: %s\n"), c.fix.orOriginal(lang, c.Fix))
 		}
 	}
 }
@@ -524,7 +542,7 @@ func verdictFor(r Report) string {
 	}
 }
 
-func printVerdict(w io.Writer, r Report) {
+func printVerdict(w io.Writer, r Report, lang i18n.Locale) {
 	mark := "⚠"
 	switch r.Verdict {
 	case "CLEAN":
@@ -536,13 +554,13 @@ func printVerdict(w io.Writer, r Report) {
 	if r.Signed {
 		signed = "signed"
 	}
-	fmt.Fprintf(w, "\n%s  %s  run=%s exit=%d  events=%d signals=%d high_risk=%d intent_mismatch=%d\n",
-		mark, r.Verdict, r.RunID, r.ExitCode, r.Events, r.Signals, r.HighRisk, r.IntentMismatches)
+	fmt.Fprintf(w, i18n.T(lang, "\n%s  %s  run=%s exit=%d  events=%d signals=%d high_risk=%d intent_mismatch=%d\n"),
+		mark, i18n.T(lang, r.Verdict), r.RunID, r.ExitCode, r.Events, r.Signals, r.HighRisk, r.IntentMismatches)
 	if r.BundlePath != "" {
-		fmt.Fprintf(w, "   bundle=%s (%s)\n", r.BundlePath, signed)
+		fmt.Fprintf(w, i18n.T(lang, "   bundle=%s (%s)\n"), r.BundlePath, i18n.T(lang, signed))
 	}
 	if r.DashboardURL != "" {
-		fmt.Fprintf(w, "   dashboard=%s\n", r.DashboardURL)
+		fmt.Fprintf(w, i18n.T(lang, "   dashboard=%s\n"), r.DashboardURL)
 	}
 }
 

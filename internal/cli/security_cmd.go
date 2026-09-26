@@ -36,7 +36,7 @@ func securityReevaluateCmd(dataDir *string) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if runID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			engine, err := securitymodel.LoadEngine(rulesPath)
 			if err != nil {
@@ -86,7 +86,7 @@ func securityRisksCmd(dataDir, daemonURL *string) *cobra.Command {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tRUN\tSESSION\tTOOL_CALL\tPROCESS\tTYPE\tSEVERITY\tACTION\tREASON\tCREATED_AT")
+			fmt.Fprintln(w, commandText(cmd, "ID\tRUN\tSESSION\tTOOL_CALL\tPROCESS\tTYPE\tSEVERITY\tACTION\tREASON\tCREATED_AT"))
 			for _, item := range report.Risks {
 				record := item.Risk
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
@@ -121,7 +121,7 @@ func securityDeviationsCmd(dataDir, daemonURL *string) *cobra.Command {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tRUN\tTEMPLATE\tTYPE\tSTATUS\tEXPECTED\tOBSERVED\tACTION\tCREATED_AT")
+			fmt.Fprintln(w, commandText(cmd, "ID\tRUN\tTEMPLATE\tTYPE\tSTATUS\tEXPECTED\tOBSERVED\tACTION\tCREATED_AT"))
 			for _, item := range report.Deviations {
 				record := item.Deviation
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%.3f\t%.3f\t%s\t%s\n",
@@ -156,7 +156,7 @@ func securityResponsesCmd(dataDir, daemonURL *string) *cobra.Command {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tRUN\tACTION\tTARGET_TYPE\tTARGET_ID\tSTATUS\tRISK\tDECISION\tCREATED_AT")
+			fmt.Fprintln(w, commandText(cmd, "ID\tRUN\tACTION\tTARGET_TYPE\tTARGET_ID\tSTATUS\tRISK\tDECISION\tCREATED_AT"))
 			for _, item := range report.Responses {
 				record := item.Response
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",

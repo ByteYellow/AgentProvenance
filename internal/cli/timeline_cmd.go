@@ -2,7 +2,6 @@ package cli
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/spf13/cobra"
@@ -23,7 +22,7 @@ func timelineCmd(dataDir, daemonURL *string) *cobra.Command {
 		Short: "show an execution timeline across agent context, telemetry, risk, and response evidence",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if runID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			opts := provenance.TimelineOptions{
 				RunID:     runID,
@@ -43,7 +42,7 @@ func timelineCmd(dataDir, daemonURL *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(manifest)
 			}
-			return provenance.PrintTimelineManifest(manifest, cmd.OutOrStdout())
+			return provenance.PrintTimelineManifest(manifest, cmd.OutOrStdout(), commandLanguage(cmd))
 		},
 	}
 	cmd.Flags().StringVar(&runID, "run", "", "run id")

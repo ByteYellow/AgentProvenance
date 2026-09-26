@@ -9,6 +9,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/byteyellow/agentprovenance/internal/evidence"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/spf13/cobra"
@@ -33,7 +34,7 @@ func evidenceCmd(dataDir, daemonURL *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "processed=%d\n", result.Processed)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "processed=%d\n"), result.Processed)
 			return nil
 		},
 	}
@@ -43,7 +44,7 @@ func evidenceCmd(dataDir, daemonURL *string) *cobra.Command {
 		Short: "build a run-level evidence manifest across observability, objects, risk, and response data",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if runID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			output, err := evidenceManifest(*dataDir, *daemonURL, runID, objectLimit, materializeObject)
 			if err != nil {
@@ -57,7 +58,7 @@ func evidenceCmd(dataDir, daemonURL *string) *cobra.Command {
 				}
 				return enc.Encode(output.Manifest)
 			}
-			return printEvidenceManifest(cmd.OutOrStdout(), output)
+			return printEvidenceManifest(cmd.OutOrStdout(), output, commandLanguage(cmd))
 		},
 	}
 	manifest.Flags().StringVar(&runID, "run", "", "run id")
@@ -106,7 +107,7 @@ func evidenceBatchSummaryCmd(dataDir *string) *cobra.Command {
 			if jsonOut {
 				return printJSON(cmd.OutOrStdout(), report)
 			}
-			return printRecordBatchSummary(cmd.OutOrStdout(), report)
+			return printRecordBatchSummary(cmd.OutOrStdout(), report, commandLanguage(cmd))
 		},
 	}
 	cmd.Flags().StringVar(&batchID, "batch", "", "record batch id")
@@ -312,11 +313,11 @@ func listRecordBatchItems(db *sql.DB, batchID string, opts batchSummaryOptions, 
 	return out, rows.Err()
 }
 
-func printRecordBatchSummary(out io.Writer, report recordBatchSummary) error {
-	fmt.Fprintf(out, "schema=%s batches=%d items=%d passed=%d failed=%d result_set=%s page_hash=%s\n",
+func printRecordBatchSummary(out io.Writer, report recordBatchSummary, lang i18n.Locale) error {
+	fmt.Fprintf(out, i18n.T(lang, "schema=%s batches=%d items=%d passed=%d failed=%d result_set=%s page_hash=%s\n"),
 		report.SchemaVersion, report.BatchCount, report.ItemCount, report.Passed, report.Failed, report.ResultSetID, report.PageHash)
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "BATCH\tJOB\tSHARD\tRUN\tSTATUS\tEXIT\tCHANGED\tWALL_MS")
+	fmt.Fprintln(w, i18n.T(lang, "BATCH\tJOB\tSHARD\tRUN\tSTATUS\tEXIT\tCHANGED\tWALL_MS"))
 	for _, item := range report.Items {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\n",
 			item.BatchID, item.JobID, item.ShardID, item.RunID, item.Status, item.ExitCode, item.ChangedFileCount, item.WallMS)
@@ -401,20 +402,20 @@ func evidenceManifest(dataDir, daemonURL, runID string, objectLimit int, materia
 	return output, nil
 }
 
-func printEvidenceManifest(out io.Writer, output evidence.MaterializedManifest) error {
+func printEvidenceManifest(out io.Writer, output evidence.MaterializedManifest, lang i18n.Locale) error {
 	report := output.Manifest
-	fmt.Fprintf(out, "run=%s schema=%s result_set=%s page_hash=%s\n", report.RunID, report.SchemaVersion, report.ResultSetID, report.PageHash)
+	fmt.Fprintf(out, i18n.T(lang, "run=%s schema=%s result_set=%s page_hash=%s\n"), report.RunID, report.SchemaVersion, report.ResultSetID, report.PageHash)
 	if output.ObjectHash != "" {
-		fmt.Fprintf(out, "object_hash=%s object_path=%s\n", output.ObjectHash, output.ObjectPath)
+		fmt.Fprintf(out, i18n.T(lang, "object_hash=%s object_path=%s\n"), output.ObjectHash, output.ObjectPath)
 	}
-	fmt.Fprintf(out, "summary events=%d runtime_events=%d risks=%d responses=%d tool_call_coverage=%.2f process_coverage=%.2f\n",
+	fmt.Fprintf(out, i18n.T(lang, "summary events=%d runtime_events=%d risks=%d responses=%d tool_call_coverage=%.2f process_coverage=%.2f\n"),
 		report.Summary.EventCount, report.Summary.Runtime.Events, report.Security.RiskCount, report.Security.ResponseCount,
 		report.Summary.Runtime.ToolCallCoverageRatio, report.Summary.Runtime.ProcessCoverageRatio)
-	fmt.Fprintf(out, "timeline events=%d result_set=%s page_hash=%s\n", report.Timeline.EventCount, report.Timeline.ResultSetID, report.Timeline.PageHash)
-	fmt.Fprintf(out, "objects count=%d bytes=%d result_set=%s page_hash=%s has_more=%t\n",
+	fmt.Fprintf(out, i18n.T(lang, "timeline events=%d result_set=%s page_hash=%s\n"), report.Timeline.EventCount, report.Timeline.ResultSetID, report.Timeline.PageHash)
+	fmt.Fprintf(out, i18n.T(lang, "objects count=%d bytes=%d result_set=%s page_hash=%s has_more=%t\n"),
 		report.Objects.ObjectCount, report.Objects.TotalBytes, report.Objects.ResultSetID, report.Objects.PageHash, report.Objects.HasMore)
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "OBJECT_TYPE\tCOUNT")
+	fmt.Fprintln(w, i18n.T(lang, "OBJECT_TYPE\tCOUNT"))
 	for typ, count := range report.Objects.ByType {
 		fmt.Fprintf(w, "%s\t%d\n", typ, count)
 	}
@@ -422,7 +423,7 @@ func printEvidenceManifest(out io.Writer, output evidence.MaterializedManifest) 
 		return err
 	}
 	if len(report.RecommendedViews) > 0 {
-		fmt.Fprintln(out, "next_views:")
+		fmt.Fprintln(out, i18n.T(lang, "next_views:"))
 		for _, view := range report.RecommendedViews {
 			fmt.Fprintf(out, "  agentprov %s\n", view)
 		}
@@ -445,7 +446,7 @@ func gcCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "processed=%d failed=%d reclaimed_bytes=%d reclaimed_inodes=%d\n", result.Processed, result.Failed, result.ReclaimedBytes, result.ReclaimedInodes)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "processed=%d failed=%d reclaimed_bytes=%d reclaimed_inodes=%d\n"), result.Processed, result.Failed, result.ReclaimedBytes, result.ReclaimedInodes)
 			return nil
 		},
 	}
@@ -475,7 +476,7 @@ func gcCmd(dataDir *string) *cobra.Command {
 				if err := rows.Scan(&status, &count, &bytes, &inodes, &latency); err != nil {
 					return err
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "status=%s count=%d reclaimed_bytes=%d reclaimed_inodes=%d gc_latency_ms=%d\n", status, count, bytes, inodes, latency)
+				fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "status=%s count=%d reclaimed_bytes=%d reclaimed_inodes=%d gc_latency_ms=%d\n"), status, count, bytes, inodes, latency)
 			}
 			return rows.Err()
 		},

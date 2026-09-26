@@ -2,7 +2,6 @@ package cli
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/byteyellow/agentprovenance/internal/aitools"
 	"github.com/byteyellow/agentprovenance/internal/mcpserver"
@@ -61,7 +60,7 @@ func aiToolsCmd() *cobra.Command {
 			case "openai":
 				tools = aitools.OpenAITools()
 			default:
-				return fmt.Errorf("unknown provider %q (want generic|anthropic|openai)", provider)
+				return commandErrorf("unknown provider %q (want generic|anthropic|openai)", provider)
 			}
 			enc := json.NewEncoder(cmd.OutOrStdout())
 			enc.SetIndent("", "  ")
@@ -86,7 +85,7 @@ func aiCallCmd(dataDir *string) *cobra.Command {
 			parsed := map[string]any{}
 			if input != "" {
 				if err := json.Unmarshal([]byte(input), &parsed); err != nil {
-					return fmt.Errorf("invalid --input JSON: %w", err)
+					return commandErrorf("invalid --input JSON: %w", err)
 				}
 			}
 			db, cleanup, err := openLocalDB(*dataDir)

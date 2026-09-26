@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
@@ -195,7 +196,9 @@ type ExplainEvent struct {
 	Drilldowns            []string                    `json:"drilldowns,omitempty"`
 }
 
-func Explain(db *sql.DB, opts ExplainOptions, out io.Writer) error {
+func Explain(db *sql.DB, opts ExplainOptions, out io.Writer, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
+
 	if opts.WithJSON {
 		manifest, err := BuildExplain(db, opts)
 		if err != nil {
@@ -217,29 +220,29 @@ func Explain(db *sql.DB, opts ExplainOptions, out io.Writer) error {
 	if opts.File != "" && opts.RunID == "" {
 		return fmt.Errorf("--run is required with --file")
 	}
-	fmt.Fprintln(out, "explain:")
+	fmt.Fprintln(out, i18n.T(lang, "explain:"))
 	switch {
 	case opts.Artifact != "":
-		fmt.Fprintf(out, "  target=artifact id=%s\n", opts.Artifact)
-		return explainArtifact(db, opts.Artifact, out)
+		fmt.Fprintf(out, i18n.T(lang, "  target=artifact id=%s\n"), opts.Artifact)
+		return explainArtifact(db, opts.Artifact, out, languages...)
 	case opts.Attempt != "":
-		fmt.Fprintf(out, "  target=attempt id=%s\n", opts.Attempt)
-		return explainAttempt(db, opts.Attempt, out)
+		fmt.Fprintf(out, i18n.T(lang, "  target=attempt id=%s\n"), opts.Attempt)
+		return explainAttempt(db, opts.Attempt, out, languages...)
 	case opts.ToolCall != "":
-		fmt.Fprintf(out, "  target=tool_call id=%s\n", opts.ToolCall)
-		return explainToolCall(db, opts.ToolCall, out)
+		fmt.Fprintf(out, i18n.T(lang, "  target=tool_call id=%s\n"), opts.ToolCall)
+		return explainToolCall(db, opts.ToolCall, out, languages...)
 	case opts.Process != "":
-		fmt.Fprintf(out, "  target=process id=%s\n", opts.Process)
-		return explainProcess(db, opts.Process, out)
+		fmt.Fprintf(out, i18n.T(lang, "  target=process id=%s\n"), opts.Process)
+		return explainProcess(db, opts.Process, out, languages...)
 	case opts.Event != "":
-		fmt.Fprintf(out, "  target=event id=%s\n", opts.Event)
-		return explainEvent(db, opts.Event, out)
+		fmt.Fprintf(out, i18n.T(lang, "  target=event id=%s\n"), opts.Event)
+		return explainEvent(db, opts.Event, out, languages...)
 	case opts.Risk != "":
-		fmt.Fprintf(out, "  target=risk id=%s\n", opts.Risk)
-		return explainRisk(db, opts.Risk, out)
+		fmt.Fprintf(out, i18n.T(lang, "  target=risk id=%s\n"), opts.Risk)
+		return explainRisk(db, opts.Risk, out, languages...)
 	case opts.File != "":
-		fmt.Fprintf(out, "  target=file run=%s path=%s\n", opts.RunID, opts.File)
-		return explainFile(db, opts.RunID, opts.File, out)
+		fmt.Fprintf(out, i18n.T(lang, "  target=file run=%s path=%s\n"), opts.RunID, opts.File)
+		return explainFile(db, opts.RunID, opts.File, out, languages...)
 	default:
 		return nil
 	}
@@ -251,23 +254,24 @@ func PrintExplainManifestJSON(out io.Writer, manifest ExplainManifest) error {
 	return enc.Encode(manifest)
 }
 
-func PrintExplainManifest(out io.Writer, manifest ExplainManifest) error {
+func PrintExplainManifest(out io.Writer, manifest ExplainManifest, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
 	target := manifest.Target
-	fmt.Fprintf(out, "explain:\n")
-	fmt.Fprintf(out, "  target=%s id=%s run=%s file=%s\n", target.Type, target.ID, target.Run, target.File)
-	fmt.Fprintf(out, "  schema=%s result_set=%s page_hash=%s edges=%d truncated=%t\n",
+	fmt.Fprintf(out, i18n.T(lang, "explain:\n"))
+	fmt.Fprintf(out, i18n.T(lang, "  target=%s id=%s run=%s file=%s\n"), target.Type, target.ID, target.Run, target.File)
+	fmt.Fprintf(out, i18n.T(lang, "  schema=%s result_set=%s page_hash=%s edges=%d truncated=%t\n"),
 		manifest.SchemaVersion, manifest.Query.ResultSetID, manifest.Query.PageHash, manifest.Query.EdgeCount, manifest.Query.Truncated)
-	for _, line := range manifest.Summary {
-		fmt.Fprintf(out, "  summary=%s\n", line)
+	for _, line := range explainDisplaySummary(manifest, lang) {
+		fmt.Fprintf(out, i18n.T(lang, "  summary=%s\n"), line)
 	}
 	for _, risk := range manifest.Risks {
-		fmt.Fprintf(out, "  risk=%s rule=%s decision=%s event=%s reason=%q\n", risk.ID, risk.RuleID, risk.Decision, risk.EventID, risk.Reason)
+		fmt.Fprintf(out, i18n.T(lang, "  risk=%s rule=%s decision=%s event=%s reason=%q\n"), risk.ID, risk.RuleID, risk.Decision, risk.EventID, risk.Reason)
 	}
 	for _, response := range manifest.Responses {
-		fmt.Fprintf(out, "  response=%s action=%s target=%s/%s status=%s\n", response.ID, response.ActionType, response.TargetType, response.TargetID, response.Status)
+		fmt.Fprintf(out, i18n.T(lang, "  response=%s action=%s target=%s/%s status=%s\n"), response.ID, response.ActionType, response.TargetType, response.TargetID, response.Status)
 	}
 	for _, edge := range manifest.CausalityPath {
-		fmt.Fprintf(out, "  edge=%s %s -> %s source_event=%s\n", edge.EdgeType, edge.FromID, edge.ToID, edge.SourceEventID)
+		fmt.Fprintf(out, i18n.T(lang, "  edge=%s %s -> %s source_event=%s\n"), edge.EdgeType, edge.FromID, edge.ToID, edge.SourceEventID)
 	}
 	return nil
 }
@@ -666,20 +670,24 @@ func explainTarget(opts ExplainOptions) (ExplainTarget, error) {
 	return ExplainTarget{Type: "event", ID: opts.Event}, nil
 }
 
-func explainArtifact(db *sql.DB, artifactRef string, out io.Writer) error {
-	if err := TraceArtifact(db, artifactRef, out); err != nil {
+func explainArtifact(db *sql.DB, artifactRef string, out io.Writer, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
+
+	if err := TraceArtifact(db, artifactRef, out, languages...); err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "decision:")
-	fmt.Fprintln(out, "  artifact lineage is derived from graph edges and matching attempt result_ref")
+	fmt.Fprintln(out, i18n.T(lang, "decision:"))
+	fmt.Fprintln(out, i18n.T(lang, "  artifact lineage is derived from graph edges and matching attempt result_ref"))
 	return nil
 }
 
-func explainAttempt(db *sql.DB, attemptID string, out io.Writer) error {
-	if err := TraceAttempt(db, attemptID, out); err != nil {
+func explainAttempt(db *sql.DB, attemptID string, out io.Writer, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
+
+	if err := TraceAttempt(db, attemptID, out, languages...); err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "promotion_barrier:")
+	fmt.Fprintln(out, i18n.T(lang, "promotion_barrier:"))
 	rows, err := db.Query(`SELECT p.id, p.status, p.risk_status, p.telemetry_watermark, p.drain_pending_after, p.reason
 		FROM promotions p WHERE p.attempt_id = ? ORDER BY p.created_at ASC`, attemptID)
 	if err != nil {
@@ -692,29 +700,31 @@ func explainAttempt(db *sql.DB, attemptID string, out io.Writer) error {
 		if err := rows.Scan(&id, &status, &risk, &watermark, &pending, &reason); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "  promotion=%s status=%s risk=%s watermark=%s drain_pending_after=%d reason=%q\n", id, status, risk, watermark, pending, reason)
+		fmt.Fprintf(out, i18n.T(lang, "  promotion=%s status=%s risk=%s watermark=%s drain_pending_after=%d reason=%q\n"), id, status, risk, watermark, pending, reason)
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	return printRuntimeEdgesForID(db, out, attemptID)
+	return printRuntimeEdgesForID(db, out, attemptID, languages...)
 }
 
-func explainToolCall(db *sql.DB, toolCallID string, out io.Writer) error {
-	if err := TraceToolCall(db, toolCallID, out); err != nil {
+func explainToolCall(db *sql.DB, toolCallID string, out io.Writer, languages ...i18n.Locale) error {
+	if err := TraceToolCall(db, toolCallID, out, languages...); err != nil {
 		return err
 	}
-	return printRuntimeEdgesForID(db, out, toolCallID)
+	return printRuntimeEdgesForID(db, out, toolCallID, languages...)
 }
 
-func explainProcess(db *sql.DB, processID string, out io.Writer) error {
-	if err := TraceProcess(db, processID, out); err != nil {
+func explainProcess(db *sql.DB, processID string, out io.Writer, languages ...i18n.Locale) error {
+	if err := TraceProcess(db, processID, out, languages...); err != nil {
 		return err
 	}
-	return printRuntimeEdgesForID(db, out, processID)
+	return printRuntimeEdgesForID(db, out, processID, languages...)
 }
 
-func explainEvent(db *sql.DB, eventID string, out io.Writer) error {
+func explainEvent(db *sql.DB, eventID string, out io.Writer, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
+
 	var runID, sessionID, toolCallID, processID, snapshotID, source, eventType, payload, createdAt string
 	var pid, tgid, ppid int64
 	err := db.QueryRow(`SELECT COALESCE(run_id, ''), COALESCE(session_id, ''), COALESCE(tool_call_id, ''),
@@ -724,20 +734,22 @@ func explainEvent(db *sql.DB, eventID string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "event:")
-	fmt.Fprintf(out, "  event=%s run=%s session=%s tool_call=%s process=%s snapshot=%s source=%s type=%s pid=%d tgid=%d ppid=%d created_at=%s payload=%s\n",
+	fmt.Fprintln(out, i18n.T(lang, "event:"))
+	fmt.Fprintf(out, i18n.T(lang, "  event=%s run=%s session=%s tool_call=%s process=%s snapshot=%s source=%s type=%s pid=%d tgid=%d ppid=%d created_at=%s payload=%s\n"),
 		eventID, runID, sessionID, toolCallID, processID, snapshotID, source, eventType, pid, tgid, ppid, createdAt, payload)
-	fmt.Fprintln(out, "runtime_causality:")
-	if err := printEdgesForIDs(db, out, []string{"runtime_event/" + eventID}); err != nil {
+	fmt.Fprintln(out, i18n.T(lang, "runtime_causality:"))
+	if err := printEdgesForIDs(db, out, []string{"runtime_event/" + eventID}, languages...); err != nil {
 		return err
 	}
 	if processID != "" {
-		return printRuntimeEdgesForID(db, out, processID)
+		return printRuntimeEdgesForID(db, out, processID, languages...)
 	}
 	return nil
 }
 
-func explainRisk(db *sql.DB, riskID string, out io.Writer) error {
+func explainRisk(db *sql.DB, riskID string, out io.Writer, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
+
 	var eventID, runID, sessionID, ruleID, decision, reason, createdAt string
 	err := db.QueryRow(`SELECT COALESCE(event_id, ''), COALESCE(run_id, ''), COALESCE(session_id, ''),
 			rule_id, decision, reason, created_at
@@ -745,32 +757,34 @@ func explainRisk(db *sql.DB, riskID string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "risk:")
-	fmt.Fprintf(out, "  risk=%s event=%s run=%s session=%s rule=%s decision=%s reason=%q created_at=%s\n",
+	fmt.Fprintln(out, i18n.T(lang, "risk:"))
+	fmt.Fprintf(out, i18n.T(lang, "  risk=%s event=%s run=%s session=%s rule=%s decision=%s reason=%q created_at=%s\n"),
 		riskID, eventID, runID, sessionID, ruleID, decision, reason, createdAt)
 	if eventID != "" {
-		fmt.Fprintln(out, "event:")
-		return explainEvent(db, eventID, out)
+		fmt.Fprintln(out, i18n.T(lang, "event:"))
+		return explainEvent(db, eventID, out, languages...)
 	}
 	return nil
 }
 
-func explainFile(db *sql.DB, runID, filePath string, out io.Writer) error {
-	fmt.Fprintln(out, "state_diff:")
-	if err := DiffFile(db, runID, filePath, out); err != nil {
+func explainFile(db *sql.DB, runID, filePath string, out io.Writer, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
+
+	fmt.Fprintln(out, i18n.T(lang, "state_diff:"))
+	if err := DiffFile(db, runID, filePath, out, languages...); err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "state_blame:")
-	if err := BlameFile(db, runID, filePath, out); err != nil {
+	fmt.Fprintln(out, i18n.T(lang, "state_blame:"))
+	if err := BlameFile(db, runID, filePath, out, languages...); err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "runtime_file_events:")
+	fmt.Fprintln(out, i18n.T(lang, "runtime_file_events:"))
 	events, err := runtimeFileEvents(db, runID, filePath)
 	if err != nil {
 		return err
 	}
 	for _, event := range events {
-		fmt.Fprintf(out, "  event=%s type=%s tool_call=%s process=%s snapshot=%s correlation=%s pid=%d tgid=%d ppid=%d payload=%s\n",
+		fmt.Fprintf(out, i18n.T(lang, "  event=%s type=%s tool_call=%s process=%s snapshot=%s correlation=%s pid=%d tgid=%d ppid=%d payload=%s\n"),
 			event.ID, event.EventType, event.ToolCallID, event.ProcessID, event.SnapshotID, event.CorrelationMethod, event.PID, event.TGID, event.PPID, event.Payload)
 	}
 	return nil
@@ -1592,11 +1606,13 @@ func eventByID(db *sql.DB, eventID string) (ExplainEvent, error) {
 	return event, err
 }
 
-func printRuntimeEdgesForID(db *sql.DB, out io.Writer, id string) error {
+func printRuntimeEdgesForID(db *sql.DB, out io.Writer, id string, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
+
 	if id == "" {
 		return nil
 	}
-	fmt.Fprintln(out, "runtime_causality_explain:")
+	fmt.Fprintln(out, i18n.T(lang, "runtime_causality_explain:"))
 	rows, err := db.Query(`SELECT run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at
 		FROM graph_edges
 		WHERE edge_type LIKE 'runtime_%' AND (from_id = ? OR to_id = ?)
@@ -1610,7 +1626,7 @@ func printRuntimeEdgesForID(db *sql.DB, out io.Writer, id string) error {
 		if err := rows.Scan(&runID, &rolloutID, &fromID, &toID, &edgeType, &sourceEventID, &createdAt); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "  run=%s rollout=%s from=%s to=%s type=%s source_event=%s created_at=%s\n",
+		fmt.Fprintf(out, i18n.T(lang, "  run=%s rollout=%s from=%s to=%s type=%s source_event=%s created_at=%s\n"),
 			runID, rolloutID, fromID, toID, edgeType, sourceEventID, createdAt)
 	}
 	return rows.Err()

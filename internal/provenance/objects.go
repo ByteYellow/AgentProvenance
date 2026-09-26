@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/redact"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
@@ -204,10 +205,11 @@ func (s ObjectStore) MaterializeRun(runID string) (MaterializeResult, error) {
 	}, nil
 }
 
-func PrintMaterializeResult(out io.Writer, result MaterializeResult) {
-	fmt.Fprintf(out, "run=%s objects=%d object_root=%s\n", result.RunID, result.ObjectCount, result.ObjectRoot)
+func PrintMaterializeResult(out io.Writer, result MaterializeResult, languages ...i18n.Locale) {
+	lang := presentationLocale(languages)
+	fmt.Fprintf(out, i18n.T(lang, "run=%s objects=%d object_root=%s\n"), result.RunID, result.ObjectCount, result.ObjectRoot)
 	for _, hash := range result.RootHashes {
-		fmt.Fprintf(out, "root=%s\n", hash)
+		fmt.Fprintf(out, i18n.T(lang, "root=%s\n"), hash)
 	}
 }
 
@@ -266,19 +268,21 @@ func ListObjectsPage(db *sql.DB, opts ObjectListOptions) (ObjectListManifest, er
 	return manifest, nil
 }
 
-func Objects(db *sql.DB, runID string, out io.Writer) error {
-	return ObjectsPage(db, ObjectListOptions{RunID: runID}, out)
+func Objects(db *sql.DB, runID string, out io.Writer, languages ...i18n.Locale) error {
+	return ObjectsPage(db, ObjectListOptions{RunID: runID}, out, languages...)
 }
 
-func ObjectsPage(db *sql.DB, opts ObjectListOptions, out io.Writer) error {
+func ObjectsPage(db *sql.DB, opts ObjectListOptions, out io.Writer, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
+
 	manifest, err := ListObjectsPage(db, opts)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "run=%s schema=%s objects=%d limit=%d has_more=%t result_set=%s page_hash=%s next_cursor=%s\n",
+	fmt.Fprintf(out, i18n.T(lang, "run=%s schema=%s objects=%d limit=%d has_more=%t result_set=%s page_hash=%s next_cursor=%s\n"),
 		manifest.RunID, manifest.SchemaVersion, manifest.ObjectCount, manifest.Limit, manifest.HasMore, manifest.ResultSetID, manifest.PageHash, manifest.NextCursor)
 	for _, object := range manifest.Objects {
-		fmt.Fprintf(out, "object type=%s source=%s hash=%s parents=%s bytes=%d path=%s\n",
+		fmt.Fprintf(out, i18n.T(lang, "object type=%s source=%s hash=%s parents=%s bytes=%d path=%s\n"),
 			object.Type, object.SourceID, object.Hash, object.ParentHashes, object.SizeBytes, object.Path)
 	}
 	return nil

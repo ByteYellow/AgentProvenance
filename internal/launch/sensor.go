@@ -1,7 +1,6 @@
 package launch
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -28,9 +27,9 @@ type sensorProcess struct {
 // honest reason when it degrades. The reason is what the operator sees, so it
 // names the actual blocker (wrong OS, missing CAP_BPF) rather than a generic
 // failure.
-func startSensor(selfExe, dataDir string, stderr io.Writer, tlsEnv []string) (*sensorProcess, string, string) {
+func startSensor(selfExe, dataDir string, stderr io.Writer, tlsEnv []string) (*sensorProcess, string, message) {
 	if runtime.GOOS != "linux" {
-		return nil, "none", fmt.Sprintf("kernel telemetry requires Linux (this host is %s)", runtime.GOOS)
+		return nil, "none", messagef("kernel telemetry requires Linux (this host is %s)", runtime.GOOS)
 	}
 
 	args := []string{"sensor", "stream"}
@@ -49,10 +48,10 @@ func startSensor(selfExe, dataDir string, stderr io.Writer, tlsEnv []string) (*s
 
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
-		return nil, "none", "cannot capture sensor stderr: " + err.Error()
+		return nil, "none", messagef("cannot capture sensor stderr: %s", err)
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, "none", "sensor failed to start: " + err.Error()
+		return nil, "none", messagef("sensor failed to start: %s", err)
 	}
 
 	var sink strings.Builder
@@ -68,18 +67,18 @@ func startSensor(selfExe, dataDir string, stderr io.Writer, tlsEnv []string) (*s
 	sp := &sensorProcess{cmd: cmd, done: done}
 	select {
 	case <-ready:
-		return sp, "kernel", ""
+		return sp, "kernel", message{}
 	case <-done:
 		reason := strings.TrimSpace(sink.String())
 		reason = lastLine(reason)
 		if reason == "" {
-			reason = "sensor exited before attaching (needs root or CAP_BPF+CAP_PERFMON)"
+			return nil, "none", messagef("no kernel telemetry: sensor exited before attaching (needs root or CAP_BPF+CAP_PERFMON)")
 		}
-		return nil, "none", "no kernel telemetry: " + reason
+		return nil, "none", messagef("no kernel telemetry: %s", reason)
 	case <-time.After(3 * time.Second):
 		// Still alive but no banner: probes likely attached; proceed. A truly
 		// stuck sensor is stopped at seal time regardless.
-		return sp, "kernel", ""
+		return sp, "kernel", message{}
 	}
 }
 

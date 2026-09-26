@@ -41,7 +41,7 @@ func demoCmd() *cobra.Command {
 			catalog := demo.Catalog()
 			if list {
 				if len(args) != 0 {
-					return fmt.Errorf("--list does not take a demo name")
+					return commandErrorf("--list does not take a demo name")
 				}
 				if jsonOutput {
 					return json.NewEncoder(cmd.OutOrStdout()).Encode(catalog)
@@ -51,12 +51,12 @@ func demoCmd() *cobra.Command {
 					if entry.Run == "" {
 						kind = "setup guide"
 					}
-					fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", entry.ID, kind, entry.Title)
+					fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", entry.ID, commandText(cmd, kind), commandText(cmd, entry.Title))
 				}
 				return nil
 			}
 			if cmd.Flags().Changed("data-dir") || cmd.Flags().Changed("daemon-url") {
-				return fmt.Errorf("demo uses its own temporary store; omit --data-dir and --daemon-url")
+				return commandErrorf("demo uses its own temporary store; omit --data-dir and --daemon-url")
 			}
 			selected := catalog
 			var chosen *demo.Entry
@@ -69,7 +69,7 @@ func demoCmd() *cobra.Command {
 					}
 				}
 				if chosen == nil {
-					return fmt.Errorf("unknown demo %q; use agentprov demo --list", args[0])
+					return commandErrorf("unknown demo %q; use agentprov demo --list", args[0])
 				}
 				selected = []demo.Entry{*chosen}
 			}
@@ -90,11 +90,11 @@ func demoCmd() *cobra.Command {
 					continue
 				}
 				if !jsonOutput {
-					fmt.Fprintf(cmd.ErrOrStderr(), "Verifying and loading %s...\n", entry.ID)
+					fmt.Fprintf(cmd.ErrOrStderr(), commandText(cmd, "Verifying and loading %s...\n"), entry.ID)
 				}
 				result, err := prepareDemo(dir, dataDir, entry, demo.Files)
 				if err != nil {
-					return fmt.Errorf("demo %s: %w", entry.ID, err)
+					return commandErrorf("demo %s: %w", entry.ID, err)
 				}
 				verified = append(verified, result)
 			}
@@ -123,20 +123,21 @@ func demoCmd() *cobra.Command {
 					link += "docs/" + chosen.ID
 				}
 			}
+			link = commandURL(cmd, link)
 			if jsonOutput {
 				err = json.NewEncoder(cmd.OutOrStdout()).Encode(struct {
 					URL           string             `json:"url"`
 					Verifications []demoVerification `json:"verifications"`
 				}{link, verified})
 			} else {
-				_, err = fmt.Fprintf(cmd.OutOrStdout(), "AgentProvenance demos: %s\nRead-only replay; Ctrl-C to stop and remove temporary data.\n", link)
+				_, err = fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "AgentProvenance demos: %s\nRead-only replay; Ctrl-C to stop and remove temporary data.\n"), link)
 			}
 			if err != nil {
 				return err
 			}
 			if !noBrowser && !jsonOutput {
 				if err := openDemoBrowser(ctx, link); err != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "Open the printed URL in your browser (%v).\n", err)
+					fmt.Fprintf(cmd.ErrOrStderr(), commandText(cmd, "Open the printed URL in your browser (%v).\n"), err)
 				}
 			}
 			select {
@@ -180,7 +181,7 @@ func prepareDemo(dir, dataDir string, entry demo.Entry, files fs.FS) (demoVerifi
 		return result, err
 	}
 	if info.RunID != entry.Run {
-		return result, fmt.Errorf("unexpected bundle run %q, want %q", info.RunID, entry.Run)
+		return result, commandErrorf("unexpected bundle run %q, want %q", info.RunID, entry.Run)
 	}
 	result.SignatureVerified = true
 	db, err := store.Open(store.ResolvePaths(dataDir))
@@ -193,7 +194,7 @@ func prepareDemo(dir, dataDir string, entry demo.Entry, files fs.FS) (demoVerifi
 		return result, err
 	}
 	if result.Graph.ErrorCount > 0 {
-		return result, fmt.Errorf("graph verification failed: %+v", result.Graph)
+		return result, commandErrorf("graph verification failed: %+v", result.Graph)
 	}
 	return result, nil
 }
@@ -216,5 +217,5 @@ func openDemoBrowser(parent context.Context, link string) error {
 			return exec.CommandContext(ctx, args[0], args[1:]...).Run()
 		}
 	}
-	return fmt.Errorf("no browser launcher found")
+	return commandErrorf("no browser launcher found")
 }

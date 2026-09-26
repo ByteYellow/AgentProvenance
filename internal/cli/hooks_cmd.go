@@ -2,7 +2,6 @@ package cli
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/byteyellow/agentprovenance/internal/hooksbridge"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
@@ -31,7 +30,7 @@ func hooksBridgeCmd(dataDir *string) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if runID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			paths, err := store.Init(*dataDir)
 			if err != nil {

@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 type attemptFileView struct {
@@ -79,12 +81,12 @@ type FileBlameEntry struct {
 	WorkspacePath string `json:"workspace_path"`
 }
 
-func DiffFile(db *sql.DB, runID, filePath string, out io.Writer) error {
+func DiffFile(db *sql.DB, runID, filePath string, out io.Writer, languages ...i18n.Locale) error {
 	manifest, err := BuildDiffFile(db, runID, filePath)
 	if err != nil {
 		return err
 	}
-	PrintDiffFile(out, manifest)
+	PrintDiffFile(out, manifest, languages...)
 	return nil
 }
 
@@ -165,12 +167,13 @@ func fileChanged(baseContent []byte, baseOK bool, attemptContent []byte, attempt
 	return sha256Hex(baseContent) != sha256Hex(attemptContent)
 }
 
-func PrintDiffFile(out io.Writer, manifest FileDiffManifest) {
-	fmt.Fprintf(out, "run=%s file=%s base_snapshot=%s\n", manifest.RunID, manifest.File, manifest.BaseSnapshotID)
-	fmt.Fprintf(out, "base_sha256=%s base_path=%s\n", manifest.BaseSHA256, manifest.BasePath)
-	fmt.Fprintln(out, "diffs:")
+func PrintDiffFile(out io.Writer, manifest FileDiffManifest, languages ...i18n.Locale) {
+	lang := presentationLocale(languages)
+	fmt.Fprintf(out, i18n.T(lang, "run=%s file=%s base_snapshot=%s\n"), manifest.RunID, manifest.File, manifest.BaseSnapshotID)
+	fmt.Fprintf(out, i18n.T(lang, "base_sha256=%s base_path=%s\n"), manifest.BaseSHA256, manifest.BasePath)
+	fmt.Fprintln(out, i18n.T(lang, "diffs:"))
 	for _, attempt := range manifest.Attempts {
-		fmt.Fprintf(out, "  attempt=%s rollout=%s tool_call=%s winner=%t status=%s strategy=%s changed=%t base_sha256=%s attempt_sha256=%s workspace=%s\n",
+		fmt.Fprintf(out, i18n.T(lang, "  attempt=%s rollout=%s tool_call=%s winner=%t status=%s strategy=%s changed=%t base_sha256=%s attempt_sha256=%s workspace=%s\n"),
 			attempt.AttemptID, attempt.RolloutID, attempt.ToolCallID, attempt.IsWinner, attempt.Status, attempt.Strategy, attempt.Changed, manifest.BaseSHA256, attempt.FileSHA256, attempt.WorkspacePath)
 		if !attempt.Changed {
 			continue
@@ -248,11 +251,12 @@ func BuildBlameFile(db *sql.DB, runID, filePath string) (FileBlameManifest, erro
 	return manifest, nil
 }
 
-func PrintBlameFile(out io.Writer, manifest FileBlameManifest) {
-	fmt.Fprintf(out, "run=%s file=%s base_snapshot=%s base_sha256=%s\n", manifest.RunID, manifest.File, manifest.BaseSnapshotID, manifest.BaseSHA256)
-	fmt.Fprintln(out, "blame:")
+func PrintBlameFile(out io.Writer, manifest FileBlameManifest, languages ...i18n.Locale) {
+	lang := presentationLocale(languages)
+	fmt.Fprintf(out, i18n.T(lang, "run=%s file=%s base_snapshot=%s base_sha256=%s\n"), manifest.RunID, manifest.File, manifest.BaseSnapshotID, manifest.BaseSHA256)
+	fmt.Fprintln(out, i18n.T(lang, "blame:"))
 	for _, entry := range manifest.Entries {
-		fmt.Fprintf(out, "  file=%s attempt=%s rollout=%s tool_call=%s winner=%t changed=%t reason=%s sha256=%s status=%s strategy=%s artifact=%s command=%q workspace=%s\n",
+		fmt.Fprintf(out, i18n.T(lang, "  file=%s attempt=%s rollout=%s tool_call=%s winner=%t changed=%t reason=%s sha256=%s status=%s strategy=%s artifact=%s command=%q workspace=%s\n"),
 			entry.File, entry.AttemptID, entry.RolloutID, entry.ToolCallID, entry.IsWinner, entry.Changed, entry.Reason, entry.SHA256, entry.Status, entry.Strategy, entry.ArtifactRef, entry.Command, entry.WorkspacePath)
 	}
 }
@@ -263,12 +267,12 @@ func printJSON(out io.Writer, value any) error {
 	return enc.Encode(value)
 }
 
-func BlameFile(db *sql.DB, runID, filePath string, out io.Writer) error {
+func BlameFile(db *sql.DB, runID, filePath string, out io.Writer, languages ...i18n.Locale) error {
 	manifest, err := BuildBlameFile(db, runID, filePath)
 	if err != nil {
 		return err
 	}
-	PrintBlameFile(out, manifest)
+	PrintBlameFile(out, manifest, languages...)
 	return nil
 }
 

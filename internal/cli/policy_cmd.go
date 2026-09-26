@@ -53,7 +53,7 @@ func policyCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tRUN\tSESSION\tRULE\tDECISION\tREASON\tCREATED_AT")
+			fmt.Fprintln(w, commandText(cmd, "ID\tRUN\tSESSION\tRULE\tDECISION\tREASON\tCREATED_AT"))
 			for _, record := range records {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", record.ID, record.RunID, record.SessionID, record.RuleID, record.Decision, record.Reason, record.CreatedAt)
 			}

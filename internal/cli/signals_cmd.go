@@ -33,7 +33,7 @@ func signalsValidateCmd() *cobra.Command {
 		Short: "validate a SignalSet JSON file against the agentprovenance.signals/v1 contract",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if file == "" {
-				return fmt.Errorf("--file is required (use - for stdin)")
+				return commandErrorf("--file is required (use - for stdin)")
 			}
 			var data []byte
 			var err error
@@ -49,7 +49,7 @@ func signalsValidateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "ok schema=%s run=%s count=%d\n", set.SchemaVersion, set.RunID, set.Count)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "ok schema=%s run=%s count=%d\n"), set.SchemaVersion, set.RunID, set.Count)
 			return nil
 		},
 	}
@@ -65,10 +65,10 @@ func signalsListCmd(dataDir *string) *cobra.Command {
 		Short: "list unified signals for a run (optionally filtered by dimension)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if runID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			if dimension != "" && !signals.Dimension(dimension).Valid() {
-				return fmt.Errorf("invalid --dimension %q (want behavior|cost|quality|security)", dimension)
+				return commandErrorf("invalid --dimension %q (want behavior|cost|quality|security)", dimension)
 			}
 			db, cleanup, err := openLocalDB(*dataDir)
 			if err != nil {
@@ -93,7 +93,7 @@ func signalsListCmd(dataDir *string) *cobra.Command {
 			if jsonOut {
 				return encodeJSON(cmd, set)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "run=%s schema=%s count=%d\n", set.RunID, set.SchemaVersion, set.Count)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "run=%s schema=%s count=%d\n"), set.RunID, set.SchemaVersion, set.Count)
 			printCounts(cmd, "DIMENSION", set.Counts)
 			return printSignalRows(cmd, set.Signals)
 		},
@@ -118,7 +118,7 @@ func signalsBackfillCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "projected %d new signal(s)\n", n)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "projected %d new signal(s)\n"), n)
 			return nil
 		},
 	}
@@ -127,11 +127,11 @@ func signalsBackfillCmd(dataDir *string) *cobra.Command {
 
 func printSignalRows(cmd *cobra.Command, rows []signals.Signal) error {
 	if len(rows) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "(no signals)")
+		fmt.Fprintln(cmd.OutOrStdout(), commandText(cmd, "(no signals)"))
 		return nil
 	}
 	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "DIMENSION\tTYPE\tGRAPH_REF\tSEVERITY\tLABEL\tVALUE\tPRODUCED_BY")
+	fmt.Fprintln(w, commandText(cmd, "DIMENSION\tTYPE\tGRAPH_REF\tSEVERITY\tLABEL\tVALUE\tPRODUCED_BY"))
 	for _, s := range rows {
 		fmt.Fprintf(w, "%s\t%s\t%s/%s\t%s\t%s\t%g\t%s\n",
 			s.Dimension, s.Type, s.GraphRefKind, s.GraphRefID, s.Severity, s.Label, s.Value, s.ProducedBy)

@@ -3,9 +3,11 @@ package cli
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/byteyellow/agentprovenance/internal/compliance"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -168,4 +170,71 @@ func chineseFlags(cmd *cobra.Command, out io.Writer, flags *pflag.FlagSet) error
 		fmt.Fprintf(table, "%s\t%s\n", left, usage)
 	})
 	return table.Flush()
+}
+
+func commandErrorf(source string, args ...any) error { return i18n.Errorf(source, args...) }
+
+// ErrorText is for terminal diagnostics only. Execute still returns the original
+// error, and JSON/data-store paths continue to use its unchanged Error string.
+func ErrorText(cmd *cobra.Command, err error) string {
+	return i18n.ErrorText(commandLanguage(cmd), err)
+}
+
+// An explicit CLI language choice also applies to the page it opens. With no
+// choice, leave the URL alone so the browser can negotiate its own language.
+func commandURL(cmd *cobra.Command, link string) string {
+	if cmd.Flags().Changed("lang") || cmd.Root().PersistentFlags().Changed("lang") {
+		u, err := url.Parse(link)
+		if err != nil {
+			return link
+		}
+		q := u.Query()
+		q.Set("lang", string(commandLanguage(cmd)))
+		u.RawQuery = q.Encode()
+		return u.String()
+	}
+	return link
+}
+
+func commandTexts(cmd *cobra.Command, sources []string) []string {
+	result := make([]string, len(sources))
+	for i, source := range sources {
+		result[i] = commandText(cmd, source)
+	}
+	return result
+}
+
+// A custom ruleset may use any title or explanation, including words that also
+// appear in UI copy. Only the built-in catalog and generated mapping messages
+// are eligible for translation here.
+var complianceCopy = func() map[string]struct{} {
+	copy := map[string]struct{}{}
+	add := func(values ...string) {
+		for _, v := range values {
+			if v != "" {
+				copy[v] = struct{}{}
+			}
+		}
+	}
+	for _, f := range compliance.Frameworks() {
+		add(f.Title, f.Description, f.Disclaimer)
+		for _, c := range f.Controls {
+			add(c.Title, c.Description, c.Gap, c.NextStep)
+		}
+	}
+	add("no detection rule maps to this control yet",
+		"no rule maps to this control, so this run can neither confirm nor deny it",
+		"a mapped rule fired and blocked the action in this run",
+		"a mapped rule fired but is detect-only, so the action was observed, not blocked",
+		"threat detected but not enforced (rule runs in detect mode)",
+		"set the mapped rule(s) to enforce mode to block, not just record, this activity",
+		"rule(s) map to this control but none matched any activity in this run")
+	return copy
+}()
+
+func complianceText(cmd *cobra.Command, source string) string {
+	if _, ok := complianceCopy[source]; ok {
+		return commandText(cmd, source)
+	}
+	return source
 }

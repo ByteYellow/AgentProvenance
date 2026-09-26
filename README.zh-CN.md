@@ -15,7 +15,7 @@
 [![Release](https://img.shields.io/github/v/release/ByteYellow/AgentProvenance?style=flat-square&color=orange&sort=semver)](https://github.com/ByteYellow/AgentProvenance/releases/latest)
 [![Go](https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square)](https://go.dev/)
 [![CI](https://img.shields.io/github/actions/workflow/status/ByteYellow/AgentProvenance/ci.yml?branch=main&style=flat-square)](https://github.com/ByteYellow/AgentProvenance/actions/workflows/ci.yml)
-[![Sensor](https://img.shields.io/badge/sensor-Linux_amd64_%7C_arm64-2496ED.svg?style=flat-square)](docs/amd64-kvm-k3s.md)
+[![Sensor](https://img.shields.io/badge/sensor-Linux_amd64_%7C_arm64-2496ED.svg?style=flat-square)](docs/zh-CN/amd64-kvm-k3s.md)
 [![SQLite](https://img.shields.io/badge/state-SQLite-003B57.svg?style=flat-square)](https://www.sqlite.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square)](LICENSE)
 
@@ -160,7 +160,7 @@ BPF/perf 权限。macOS 可以记录进程、文件变化，并接入应用 Hook
 程序退出时会封存证据图。**如需签名，必须显式传入 `--sign-key <private-key-file>`，
 默认不会自动签名。**如需比较工作区在执行前后的文件变化，添加 `--file-diff`。
 
-节点级采集请参阅 [KVM 虚拟机与 K3s 部署指南](docs/amd64-kvm-k3s.md)和
+节点级采集请参阅 [KVM 虚拟机与 K3s 部署指南](docs/zh-CN/amd64-kvm-k3s.md)和
 [Kubernetes 事件归属指南](docs/design-k8s-auto-attribution.md)。
 传感器运行在 KVM 虚拟机内部或 Kubernetes 节点上，两种环境共用同一套证据模型。
 
@@ -693,6 +693,15 @@ Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图�
 它与 CLI、AI 工具复用内部查询逻辑，HTML 和 JavaScript 内嵌在可执行文件中，
 不依赖外部前端资源。
 
+命令行默认使用英文。添加 `--lang zh-CN` 可查看中文帮助和终端输出，例如：
+
+```sh
+./agentprov --lang zh-CN --help
+./agentprov --lang zh-CN demo
+```
+
+显式指定语言时，打开的网页会采用同一语言；未指定时，由浏览器语言决定。JSON 输出、参数名和原始证据保持原样。
+
 首次访问按浏览器语言显示中文或英文，其他语言回退到英文。页面右上角可以切换语言，手动选择会保留。切换后会保留当前执行记录、图视图、展开层级、选中节点和叠加标记。界面说明随语言切换，命令、路径、ID 和原始证据保留原文。
 
 面对大量事件，界面先展示摘要，再按问题逐步展开。
@@ -868,7 +877,7 @@ Alice 的 Pod 未出现对应事件；图中也保留了跨 Pod 的 `alice → b
 
 原生节点采集支持有容量上限的持久化批次、重启恢复、等待迟到绑定后重试关联、
 事务级去重，以及逐项探针能力报告。
-具体系统调用和 TLS 范围见[部署与验收指南](docs/amd64-kvm-k3s.md)，
+具体系统调用和 TLS 范围见[部署与验收指南](docs/zh-CN/amd64-kvm-k3s.md)，
 恢复机制见[原生采集缓冲队列说明](docs/zh-CN/native-capture-spool.md)。
 
 **关联与验证**
@@ -1144,7 +1153,7 @@ amd64/arm64 包后，直接运行 `agentprov demo`，即可浏览六个回放示
 K3s 验收、容器 TLS 自动发现，以及受支持 amd64 Go 二进制的 TLS 响应采集；
 改进迟到事件关联、持久化采集恢复、升级测试、数据库就绪检查和事件/证据原子写入。
 验证结果及适用范围见[发布说明](docs/releases/v0.8.0.md)和
-[部署指南](docs/amd64-kvm-k3s.md)。
+[部署指南](docs/zh-CN/amd64-kvm-k3s.md)。
 
 后续方向与尚未完成的工作：
 
@@ -1179,7 +1188,7 @@ ARM64 实机与 KVM/K3s 实验环境的验收结果另有报告，不等同于�
 
 各验收脚本的环境要求不同。部分脚本需要 root、会创建 Pod 或安装服务，
 请勿直接批量执行全部 `scripts/accept_*.sh`。
-环境测试请按 [KVM/K3s 部署指南](docs/amd64-kvm-k3s.md)操作，
+环境测试请按 [KVM/K3s 部署指南](docs/zh-CN/amd64-kvm-k3s.md)操作，
 单节点压力测试见[收尾指南](docs/project-closeout.md)。
 
 ## 作者与许可

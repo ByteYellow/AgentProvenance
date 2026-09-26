@@ -82,7 +82,9 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 			defer cancel()
 			workerErrors := make(chan error, 1)
 			go func() {
-				err := capture.Run(ctx, func(err error) { fmt.Fprintf(stderr, "agentprov sensor stream: spool retry: %v\n", err) })
+				err := capture.Run(ctx, func(err error) {
+					fmt.Fprintf(stderr, commandText(cmd, "agentprov sensor stream: spool retry: %v\n"), err)
+				})
 				if err != nil {
 					cancel()
 				}
@@ -92,7 +94,7 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 			if resolvedSSLLib == "" {
 				resolvedSSLLib = os.Getenv("AGENTPROV_SSL_LIB")
 			}
-			fmt.Fprintln(stderr, "agentprov sensor stream: capturing kernel telemetry -> durable spool -> store (ctrl-c to stop)")
+			fmt.Fprintln(stderr, commandText(cmd, "agentprov sensor stream: capturing kernel telemetry -> durable spool -> store (ctrl-c to stop)"))
 			sensorErr := sensor.RunWithOptions(capture, sensor.Options{
 				SSLLib:          resolvedSSLLib,
 				GoTLSBin:        os.Getenv("AGENTPROV_GO_TLS_BIN"),
@@ -103,10 +105,10 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 				TLSMaxTargets:   tlsTargets,
 				TLSMaxProcesses: tlsProcesses,
 				Diagnostics:     stderr,
-				OnReady:         func() { fmt.Fprintln(stderr, "agentprov sensor stream: ready probes-attached") },
+				OnReady:         func() { fmt.Fprintln(stderr, commandText(cmd, "agentprov sensor stream: ready probes-attached")) },
 				OnCapabilities: func(report sensor.CapabilityReport) {
 					if err := saveSensorCapabilities(paths, report); err != nil {
-						fmt.Fprintf(stderr, "agentprov sensor stream: persist capabilities: %v\n", err)
+						fmt.Fprintf(stderr, commandText(cmd, "agentprov sensor stream: persist capabilities: %v\n"), err)
 					}
 				},
 			})
@@ -116,7 +118,7 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			if err := capture.Process(128); err != nil {
-				fmt.Fprintf(stderr, "agentprov sensor stream: pending spool retained for retry: %v\n", err)
+				fmt.Fprintf(stderr, commandText(cmd, "agentprov sensor stream: pending spool retained for retry: %v\n"), err)
 			}
 			if err := capture.Close(); err != nil {
 				return err
@@ -129,7 +131,7 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "stopped %s\n", encoded)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "stopped %s\n"), encoded)
 			if workerErr != nil {
 				return workerErr
 			}
@@ -211,7 +213,7 @@ func sensorStatusCmd(dataDir *string) *cobra.Command {
 		if asJSON {
 			return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]any{"collector_running": running, "capabilities_historical": !running, "capture": status, "capabilities": capabilities})
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "collector_running=%t capabilities_historical=%t queued_batches=%d queued_bytes=%d pending_events=%d\n", running, !running, status.QueuedBatches, status.QueuedBytes, status.PendingEvents)
+		fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "collector_running=%t capabilities_historical=%t queued_batches=%d queued_bytes=%d pending_events=%d\n"), running, !running, status.QueuedBatches, status.QueuedBytes, status.PendingEvents)
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(map[string]any{"counters": status.Counters, "capabilities": capabilities})
 	}}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "emit machine-readable capture and capability status")

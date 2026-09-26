@@ -16,14 +16,14 @@ func snapshotCmd(dataDir, daemonURL *string) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if typ != "directory" {
-				return fmt.Errorf("only --type directory is supported")
+				return commandErrorf("only --type directory is supported")
 			}
 			if client, ok := daemonClient(*daemonURL); ok {
 				result, err := client.CreateSnapshot(args[0], typ, path, name)
 				if err != nil {
 					return err
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%s files=%d bytes=%d snapshot_create_ms=%d hash=%s\n", result.SnapshotID, result.Files, result.Bytes, result.SnapshotCreateMS, result.Hash)
+				fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "%s files=%d bytes=%d snapshot_create_ms=%d hash=%s\n"), result.SnapshotID, result.Files, result.Bytes, result.SnapshotCreateMS, result.Hash)
 				return nil
 			}
 			paths, err := store.Init(*dataDir)
@@ -39,7 +39,7 @@ func snapshotCmd(dataDir, daemonURL *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s files=%d bytes=%d snapshot_create_ms=%d hash=%s\n", id, manifest.Files, manifest.Bytes, snapshotCreateMS, manifest.Hash)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "%s files=%d bytes=%d snapshot_create_ms=%d hash=%s\n"), id, manifest.Files, manifest.Bytes, snapshotCreateMS, manifest.Hash)
 			return nil
 		},
 	}
@@ -66,12 +66,12 @@ func snapshotCmd(dataDir, daemonURL *string) *cobra.Command {
 			} else if taskPath != "" {
 				result, err = (state.Service{DB: db, Paths: paths}).CreateStack(taskPath)
 			} else {
-				return fmt.Errorf("one of --task or --template is required")
+				return commandErrorf("one of --task or --template is required")
 			}
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "template_snapshot=%s\nready_snapshot=%s\nattempt_id=%s workspace=%s fork_ms=%d\n", result.TemplateSnapshotID, result.ReadySnapshotID, result.Attempt.AttemptID, result.Attempt.WorkspacePath, result.Attempt.ForkMS)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "template_snapshot=%s\nready_snapshot=%s\nattempt_id=%s workspace=%s fork_ms=%d\n"), result.TemplateSnapshotID, result.ReadySnapshotID, result.Attempt.AttemptID, result.Attempt.WorkspacePath, result.Attempt.ForkMS)
 			return nil
 		},
 	}
@@ -95,7 +95,7 @@ func snapshotCmd(dataDir, daemonURL *string) *cobra.Command {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tNAME\tKIND\tPARENT\tSTATUS\tTAINTED\tFILES\tBYTES\tCOPY_UP_RISK\tMETA_OPS\tHASH")
+			fmt.Fprintln(w, commandText(cmd, "ID\tNAME\tKIND\tPARENT\tSTATUS\tTAINTED\tFILES\tBYTES\tCOPY_UP_RISK\tMETA_OPS\tHASH"))
 			for _, snapshot := range snapshots {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%t\t%d\t%d\t%s\t%d\t%s\n", snapshot.ID, snapshot.Name, snapshot.Kind, short(snapshot.ParentID), snapshot.Status, snapshot.Status == "tainted", snapshot.FileCount, snapshot.Bytes, snapshot.CopyUpRisk, snapshot.MetadataOpsEstimate, short(snapshot.ManifestHash))
 			}
@@ -121,7 +121,7 @@ func snapshotCmd(dataDir, daemonURL *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "snapshot_id=%s plan=%s selected_policy=%s candidate_count=%d score=%.3f semantic_type=%s physical_type=%s delta_added=%d delta_modified=%d delta_deleted=%d copy_up_risk=%s metadata_ops_estimate=%d shared_lower_fanout=%d io_fanout_budget=%d upperdir_shard=%s upperdir_device=%s overlay_skip_reason=%q hot_metadata_paths=%s reason=%s\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "snapshot_id=%s plan=%s selected_policy=%s candidate_count=%d score=%.3f semantic_type=%s physical_type=%s delta_added=%d delta_modified=%d delta_deleted=%d copy_up_risk=%s metadata_ops_estimate=%d shared_lower_fanout=%d io_fanout_budget=%d upperdir_shard=%s upperdir_device=%s overlay_skip_reason=%q hot_metadata_paths=%s reason=%s\n"),
 				plan.SnapshotID, plan.Plan, plan.SelectedPolicy, plan.CandidateCount, plan.Score, plan.SemanticType, plan.PhysicalType, plan.DeltaFilesAdded, plan.DeltaFilesModified, plan.DeltaFilesDeleted, plan.CopyUpRisk, plan.MetadataOpsEstimate, plan.SharedLowerFanout, plan.IOFanoutBudget, plan.UpperdirShard, plan.UpperdirDevice, plan.OverlaySkipReason, plan.HotMetadataPaths, plan.Reason)
 			return nil
 		},
@@ -145,11 +145,11 @@ func snapshotCmd(dataDir, daemonURL *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "id=%s\nname=%s\nkind=%s\nsource=%s\nparent_id=%s\nsession_id=%s\nstatus=%s\ntainted=%t\nfiles=%d\nbytes=%d\nmanifest_hash=%s\nsnapshot_create_ms=%d\nsemantic_type=%s\nphysical_type=%s\nlogical_bytes=%d\nphysical_bytes=%d\ndirty_bytes_estimate=%d\ninode_estimate=%d\nstorage_amplification_ratio=%.3f\ncopy_up_risk=%s\nmetadata_ops_estimate=%d\nhot_metadata_paths=%s\nupperdir_device=%s\npath=%s\ncreated_at=%s\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "id=%s\nname=%s\nkind=%s\nsource=%s\nparent_id=%s\nsession_id=%s\nstatus=%s\ntainted=%t\nfiles=%d\nbytes=%d\nmanifest_hash=%s\nsnapshot_create_ms=%d\nsemantic_type=%s\nphysical_type=%s\nlogical_bytes=%d\nphysical_bytes=%d\ndirty_bytes_estimate=%d\ninode_estimate=%d\nstorage_amplification_ratio=%.3f\ncopy_up_risk=%s\nmetadata_ops_estimate=%d\nhot_metadata_paths=%s\nupperdir_device=%s\npath=%s\ncreated_at=%s\n"),
 				snapshot.ID, snapshot.Name, snapshot.Kind, snapshot.Source, snapshot.ParentID, snapshot.SessionID, snapshot.Status, snapshot.Status == "tainted", snapshot.FileCount, snapshot.Bytes, snapshot.ManifestHash, snapshot.SnapshotCreateMS, snapshot.SemanticType, snapshot.PhysicalType, snapshot.LogicalBytes, snapshot.PhysicalBytes, snapshot.DirtyBytesEstimate, snapshot.InodeEstimate, snapshot.StorageAmpRatio, snapshot.CopyUpRisk, snapshot.MetadataOpsEstimate, snapshot.HotMetadataPaths, snapshot.UpperdirDevice, snapshot.Path, snapshot.CreatedAt)
-			fmt.Fprintln(cmd.OutOrStdout(), "lineage:")
+			fmt.Fprintln(cmd.OutOrStdout(), commandText(cmd, "lineage:"))
 			for i, item := range lineage {
-				fmt.Fprintf(cmd.OutOrStdout(), "  %d. id=%s kind=%s name=%s status=%s physical_type=%s bytes=%d\n", i+1, item.ID, item.Kind, item.Name, item.Status, item.PhysicalType, item.Bytes)
+				fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "  %d. id=%s kind=%s name=%s status=%s physical_type=%s bytes=%d\n"), i+1, item.ID, item.Kind, item.Name, item.Status, item.PhysicalType, item.Bytes)
 			}
 			return nil
 		},
@@ -215,7 +215,7 @@ func forkCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			for _, result := range results {
-				fmt.Fprintf(cmd.OutOrStdout(), "attempt_id=%s workspace=%s fork_ms=%d plan=%s\n", result.AttemptID, result.WorkspacePath, result.ForkMS, result.Plan)
+				fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "attempt_id=%s workspace=%s fork_ms=%d plan=%s\n"), result.AttemptID, result.WorkspacePath, result.ForkMS, result.Plan)
 			}
 			return nil
 		},

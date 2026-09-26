@@ -749,6 +749,14 @@ judges with. Any Anthropic- or OpenAI-protocol endpoint works (Claude,
 DeepSeek, Qwen, local vLLM/Ollama); without a key it degrades to an offline
 fixture so the pipeline still completes.
 
+## Interface language
+
+The CLI uses English by default. Add `--lang zh-CN` for Chinese help and terminal
+output, for example `agentprov --lang zh-CN --help` or
+`agentprov --lang zh-CN demo`. An explicit CLI choice also applies to the page it
+opens; otherwise, the browser selects the web language. JSON, command names,
+flags, IDs, paths, and original evidence keep their original values.
+
 ## Web Dashboard
 
 The interface follows the browser language on first visit, with English as the

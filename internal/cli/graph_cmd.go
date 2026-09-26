@@ -3,7 +3,6 @@ package cli
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -43,24 +42,24 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 				}
 			}
 			if selected > 1 {
-				return fmt.Errorf("use only one of --run, --artifact, --execution-scope/--attempt, --tool-call, or --process")
+				return commandErrorf("use only one of --run, --artifact, --execution-scope/--attempt, --tool-call, or --process")
 			}
 			if processID != "" {
-				return provenance.TraceProcess(db, processID, cmd.OutOrStdout())
+				return provenance.TraceProcess(db, processID, cmd.OutOrStdout(), commandLanguage(cmd))
 			}
 			if toolCallID != "" {
-				return provenance.TraceToolCall(db, toolCallID, cmd.OutOrStdout())
+				return provenance.TraceToolCall(db, toolCallID, cmd.OutOrStdout(), commandLanguage(cmd))
 			}
 			if attemptID != "" {
-				return provenance.TraceAttempt(db, attemptID, cmd.OutOrStdout())
+				return provenance.TraceAttempt(db, attemptID, cmd.OutOrStdout(), commandLanguage(cmd))
 			}
 			if artifactRef != "" {
-				return provenance.TraceArtifact(db, artifactRef, cmd.OutOrStdout())
+				return provenance.TraceArtifact(db, artifactRef, cmd.OutOrStdout(), commandLanguage(cmd))
 			}
 			if runID != "" {
-				return provenance.TraceRun(db, runID, cmd.OutOrStdout())
+				return provenance.TraceRun(db, runID, cmd.OutOrStdout(), commandLanguage(cmd))
 			}
-			return fmt.Errorf("one of --run, --artifact, --execution-scope/--attempt, --tool-call, or --process is required")
+			return commandErrorf("one of --run, --artifact, --execution-scope/--attempt, --tool-call, or --process is required")
 		},
 	}
 	trace.Flags().StringVar(&runID, "run", "", "run id")
@@ -82,9 +81,9 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 			}
 			defer db.Close()
 			if refsRunID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
-			return provenance.Refs(db, refsRunID, cmd.OutOrStdout())
+			return provenance.Refs(db, refsRunID, cmd.OutOrStdout(), commandLanguage(cmd))
 		},
 	}
 	refs.Flags().StringVar(&refsRunID, "run", "", "run id")
@@ -100,9 +99,9 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 			}
 			defer db.Close()
 			if logRunID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
-			return provenance.Log(db, logRunID, cmd.OutOrStdout())
+			return provenance.Log(db, logRunID, cmd.OutOrStdout(), commandLanguage(cmd))
 		},
 	}
 	logCmd.Flags().StringVar(&logRunID, "run", "", "run id")
@@ -122,13 +121,13 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 			}
 			defer db.Close()
 			if materializeRunID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			result, err := (provenance.ObjectStore{DB: db, Paths: paths}).MaterializeRun(materializeRunID)
 			if err != nil {
 				return err
 			}
-			provenance.PrintMaterializeResult(cmd.OutOrStdout(), result)
+			provenance.PrintMaterializeResult(cmd.OutOrStdout(), result, commandLanguage(cmd))
 			return nil
 		},
 	}
@@ -140,7 +139,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 		Short: "objectify captured LLM request/response bodies + build llm_call nodes for a run",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if llmRunID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			paths, err := store.Init(*dataDir)
 			if err != nil {
@@ -177,10 +176,10 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 			"are not in the bundle).",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if harvestRunID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			if harvestHookLog == "" {
-				return fmt.Errorf("--hooklog is required")
+				return commandErrorf("--hooklog is required")
 			}
 			paths, err := store.Init(*dataDir)
 			if err != nil {
@@ -217,10 +216,10 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 			"blocked the upload.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if epRunID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			if epDump == "" {
-				return fmt.Errorf("--dump is required")
+				return commandErrorf("--dump is required")
 			}
 			paths, err := store.Init(*dataDir)
 			if err != nil {
@@ -261,13 +260,13 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 			}
 			defer db.Close()
 			if objectsRunID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			opts := provenance.ObjectListOptions{RunID: objectsRunID, Limit: objectsLimit, Cursor: objectsCursor}
 			if objectsJSON {
 				return provenance.ObjectsPageJSON(db, opts, cmd.OutOrStdout())
 			}
-			return provenance.ObjectsPage(db, opts, cmd.OutOrStdout())
+			return provenance.ObjectsPage(db, opts, cmd.OutOrStdout(), commandLanguage(cmd))
 		},
 	}
 	objectsCmd.Flags().StringVar(&objectsRunID, "run", "", "run id")
@@ -290,7 +289,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 			if diffJSON {
 				return provenance.DiffFileJSON(db, diffRunID, diffFile, cmd.OutOrStdout())
 			}
-			return provenance.DiffFile(db, diffRunID, diffFile, cmd.OutOrStdout())
+			return provenance.DiffFile(db, diffRunID, diffFile, cmd.OutOrStdout(), commandLanguage(cmd))
 		},
 	}
 	diffCmd.Flags().StringVar(&diffRunID, "run", "", "run id")
@@ -312,7 +311,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 			if blameJSON {
 				return provenance.BlameFileJSON(db, blameRunID, blameFile, cmd.OutOrStdout())
 			}
-			return provenance.BlameFile(db, blameRunID, blameFile, cmd.OutOrStdout())
+			return provenance.BlameFile(db, blameRunID, blameFile, cmd.OutOrStdout(), commandLanguage(cmd))
 		},
 	}
 	blameCmd.Flags().StringVar(&blameRunID, "run", "", "run id")
@@ -326,7 +325,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 		Short: "verify provenance graph references, taint barriers, and object hashes",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if verifyRunID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			if client, ok := daemonClient(*daemonURL); ok {
 				result, err := client.VerifyGraph(verifyRunID)
@@ -338,10 +337,10 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 						return err
 					}
 				} else {
-					provenance.PrintVerifyResult(cmd.OutOrStdout(), result)
+					provenance.PrintVerifyResult(cmd.OutOrStdout(), result, commandLanguage(cmd))
 				}
 				if result.ErrorCount > 0 {
-					return fmt.Errorf("graph verify failed: errors=%d warnings=%d", result.ErrorCount, result.WarningCount)
+					return commandErrorf("graph verify failed: errors=%d warnings=%d", result.ErrorCount, result.WarningCount)
 				}
 				return nil
 			}
@@ -353,7 +352,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 			if verifyJSON {
 				return provenance.VerifyRunJSON(db, verifyRunID, cmd.OutOrStdout())
 			}
-			return provenance.VerifyRun(db, verifyRunID, cmd.OutOrStdout())
+			return provenance.VerifyRun(db, verifyRunID, cmd.OutOrStdout(), commandLanguage(cmd))
 		},
 	}
 	verifyCmd.Flags().StringVar(&verifyRunID, "run", "", "run id")
@@ -372,21 +371,21 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 			}
 			defer db.Close()
 			if replayRunID != "" && replayAttemptID != "" {
-				return fmt.Errorf("use only one of --run or --execution-scope/--attempt")
+				return commandErrorf("use only one of --run or --execution-scope/--attempt")
 			}
 			if replayAttemptID != "" {
 				if replayJSON {
 					return provenance.ReplayAttemptJSON(db, replayAttemptID, cmd.OutOrStdout())
 				}
-				return provenance.ReplayAttempt(db, replayAttemptID, cmd.OutOrStdout())
+				return provenance.ReplayAttempt(db, replayAttemptID, cmd.OutOrStdout(), commandLanguage(cmd))
 			}
 			if replayRunID != "" {
 				if replayJSON {
 					return provenance.ReplayRunJSON(db, replayRunID, cmd.OutOrStdout())
 				}
-				return provenance.ReplayRun(db, replayRunID, cmd.OutOrStdout())
+				return provenance.ReplayRun(db, replayRunID, cmd.OutOrStdout(), commandLanguage(cmd))
 			}
-			return fmt.Errorf("one of --run or --execution-scope/--attempt is required")
+			return commandErrorf("one of --run or --execution-scope/--attempt is required")
 		},
 	}
 	replayCmd.Flags().StringVar(&replayRunID, "run", "", "run id")
@@ -407,12 +406,12 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 			}
 			defer db.Close()
 			if trajectoriesRunID == "" {
-				return fmt.Errorf("--run is required")
+				return commandErrorf("--run is required")
 			}
 			if trajectoriesJSON {
 				return provenance.TrajectoriesRunJSON(db, trajectoriesRunID, cmd.OutOrStdout())
 			}
-			return provenance.TrajectoriesRun(db, trajectoriesRunID, cmd.OutOrStdout())
+			return provenance.TrajectoriesRun(db, trajectoriesRunID, cmd.OutOrStdout(), commandLanguage(cmd))
 		},
 	}
 	trajectoriesCmd.Flags().StringVar(&trajectoriesRunID, "run", "", "run id")
@@ -445,7 +444,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 				if lensJSON {
 					return provenance.PrintGraphLensManifestJSON(cmd.OutOrStdout(), manifest)
 				}
-				return provenance.PrintGraphLensManifest(cmd.OutOrStdout(), manifest)
+				return provenance.PrintGraphLensManifest(cmd.OutOrStdout(), manifest, commandLanguage(cmd))
 			}
 			db, err := openDB()
 			if err != nil {
@@ -455,7 +454,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 			if lensJSON {
 				return provenance.GraphLensJSON(db, opts, cmd.OutOrStdout())
 			}
-			return provenance.GraphLens(db, opts, cmd.OutOrStdout())
+			return provenance.GraphLens(db, opts, cmd.OutOrStdout(), commandLanguage(cmd))
 		},
 	}
 	lensCmd.Flags().StringVar(&lensRunID, "run", "", "run id")
@@ -504,14 +503,14 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 				if explainJSON {
 					return provenance.PrintExplainManifestJSON(cmd.OutOrStdout(), manifest)
 				}
-				return provenance.PrintExplainManifest(cmd.OutOrStdout(), manifest)
+				return provenance.PrintExplainManifest(cmd.OutOrStdout(), manifest, commandLanguage(cmd))
 			}
 			db, err := openDB()
 			if err != nil {
 				return err
 			}
 			defer db.Close()
-			return provenance.Explain(db, opts, cmd.OutOrStdout())
+			return provenance.Explain(db, opts, cmd.OutOrStdout(), commandLanguage(cmd))
 		},
 	}
 	explainCmd.Flags().StringVar(&explainRunID, "run", "", "run id")

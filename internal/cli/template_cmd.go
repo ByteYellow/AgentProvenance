@@ -27,7 +27,7 @@ func templateCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "template_id=%s name=%s image=%s risk_tier=%s network_mode=%s bytes=%d manifest_hash=%s\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "template_id=%s name=%s image=%s risk_tier=%s network_mode=%s bytes=%d manifest_hash=%s\n"),
 				info.ID, info.Name, info.Image, info.RiskTier, info.NetworkMode, info.Bytes, info.ManifestHash)
 			return nil
 		},
@@ -54,7 +54,7 @@ func templateCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tNAME\tIMAGE\tRISK\tNETWORK\tSTATUS\tBYTES\tHASH")
+			fmt.Fprintln(w, commandText(cmd, "ID\tNAME\tIMAGE\tRISK\tNETWORK\tSTATUS\tBYTES\tHASH"))
 			for _, item := range templates {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n", item.ID, item.Name, item.Image, item.RiskTier, item.NetworkMode, item.Status, item.Bytes, short(item.ManifestHash))
 			}
@@ -80,7 +80,7 @@ func templateCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "id=%s\nname=%s\ntask_path=%s\nimage=%s\nrisk_tier=%s\nnetwork_mode=%s\ncpu_request=%.2f\nmemory_mb=%d\ncommand=%v\nstatus=%s\nbytes=%d\nmanifest_hash=%s\ncreated_at=%s\n",
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "id=%s\nname=%s\ntask_path=%s\nimage=%s\nrisk_tier=%s\nnetwork_mode=%s\ncpu_request=%.2f\nmemory_mb=%d\ncommand=%v\nstatus=%s\nbytes=%d\nmanifest_hash=%s\ncreated_at=%s\n"),
 				info.ID, info.Name, info.TaskPath, info.Image, info.RiskTier, info.NetworkMode, task.CPURequest, task.MemoryMB, task.Command, info.Status, info.Bytes, info.ManifestHash, info.CreatedAt)
 			return nil
 		},

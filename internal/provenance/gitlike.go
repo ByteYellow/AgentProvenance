@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"sort"
+
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 type logEntry struct {
@@ -14,11 +16,13 @@ type logEntry struct {
 	Summary string
 }
 
-func Refs(db *sql.DB, runID string, out io.Writer) error {
+func Refs(db *sql.DB, runID string, out io.Writer, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
+
 	if runID == "" {
 		return fmt.Errorf("run_id is required")
 	}
-	fmt.Fprintf(out, "run=%s\n", runID)
+	fmt.Fprintf(out, i18n.T(lang, "run=%s\n"), runID)
 
 	rolloutRows, err := db.Query(`SELECT id, base_snapshot_id, winner_attempt_id, promotion_id, status, risk_status, created_at
 		FROM rollouts WHERE run_id = ? ORDER BY created_at ASC`, runID)
@@ -26,21 +30,21 @@ func Refs(db *sql.DB, runID string, out io.Writer) error {
 		return err
 	}
 	defer rolloutRows.Close()
-	fmt.Fprintln(out, "refs:")
+	fmt.Fprintln(out, i18n.T(lang, "refs:"))
 	for rolloutRows.Next() {
 		var rolloutID, baseSnapshotID, winnerAttemptID, promotionID, status, riskStatus, createdAt string
 		if err := rolloutRows.Scan(&rolloutID, &baseSnapshotID, &winnerAttemptID, &promotionID, &status, &riskStatus, &createdAt); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "  ref=rollouts/%s target=%s status=%s risk=%s created_at=%s\n", rolloutID, rolloutID, status, riskStatus, createdAt)
+		fmt.Fprintf(out, i18n.T(lang, "  ref=rollouts/%s target=%s status=%s risk=%s created_at=%s\n"), rolloutID, rolloutID, status, riskStatus, createdAt)
 		if baseSnapshotID != "" {
-			fmt.Fprintf(out, "  ref=snapshots/base/%s target=%s rollout=%s\n", rolloutID, baseSnapshotID, rolloutID)
+			fmt.Fprintf(out, i18n.T(lang, "  ref=snapshots/base/%s target=%s rollout=%s\n"), rolloutID, baseSnapshotID, rolloutID)
 		}
 		if winnerAttemptID != "" {
-			fmt.Fprintf(out, "  ref=attempts/winner/%s target=%s rollout=%s\n", rolloutID, winnerAttemptID, rolloutID)
+			fmt.Fprintf(out, i18n.T(lang, "  ref=attempts/winner/%s target=%s rollout=%s\n"), rolloutID, winnerAttemptID, rolloutID)
 		}
 		if promotionID != "" {
-			fmt.Fprintf(out, "  ref=promotions/%s target=%s rollout=%s\n", promotionID, promotionID, rolloutID)
+			fmt.Fprintf(out, i18n.T(lang, "  ref=promotions/%s target=%s rollout=%s\n"), promotionID, promotionID, rolloutID)
 		}
 	}
 	if err := rolloutRows.Err(); err != nil {
@@ -60,10 +64,10 @@ func Refs(db *sql.DB, runID string, out io.Writer) error {
 		if err := attemptRows.Scan(&attemptID, &rolloutID, &toolCallID, &snapshotID, &status, &isWinner, &artifactRef); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "  ref=attempts/%s target=%s rollout=%s snapshot=%s tool_call=%s status=%s winner=%t\n",
+		fmt.Fprintf(out, i18n.T(lang, "  ref=attempts/%s target=%s rollout=%s snapshot=%s tool_call=%s status=%s winner=%t\n"),
 			attemptID, attemptID, rolloutID, snapshotID, toolCallID, status, isWinner != 0)
 		if artifactRef != "" {
-			fmt.Fprintf(out, "  ref=artifacts/%s target=%s attempt=%s tool_call=%s\n", attemptID, artifactRef, attemptID, toolCallID)
+			fmt.Fprintf(out, i18n.T(lang, "  ref=artifacts/%s target=%s attempt=%s tool_call=%s\n"), attemptID, artifactRef, attemptID, toolCallID)
 		}
 	}
 	if err := attemptRows.Err(); err != nil {
@@ -81,7 +85,7 @@ func Refs(db *sql.DB, runID string, out io.Writer) error {
 		if err := toolRows.Scan(&toolCallID, &rolloutID, &attemptID, &sessionID, &status, &resultRef); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "  ref=tool_calls/%s target=%s rollout=%s attempt=%s session=%s status=%s result=%s\n",
+		fmt.Fprintf(out, i18n.T(lang, "  ref=tool_calls/%s target=%s rollout=%s attempt=%s session=%s status=%s result=%s\n"),
 			toolCallID, toolCallID, rolloutID, attemptID, sessionID, status, resultRef)
 	}
 	if err := toolRows.Err(); err != nil {
@@ -101,36 +105,38 @@ func Refs(db *sql.DB, runID string, out io.Writer) error {
 		if err := processRows.Scan(&processID, &sessionID, &toolCallID, &status, &exitCode); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "  ref=processes/%s target=%s session=%s tool_call=%s status=%s exit=%d\n",
+		fmt.Fprintf(out, i18n.T(lang, "  ref=processes/%s target=%s session=%s tool_call=%s status=%s exit=%d\n"),
 			processID, processID, sessionID, toolCallID, status, exitCode)
 	}
 	return processRows.Err()
 }
 
-func Log(db *sql.DB, runID string, out io.Writer) error {
+func Log(db *sql.DB, runID string, out io.Writer, languages ...i18n.Locale) error {
+	lang := presentationLocale(languages)
+
 	if runID == "" {
 		return fmt.Errorf("run_id is required")
 	}
 	entries := []logEntry{}
-	if err := appendRolloutEntries(db, runID, &entries); err != nil {
+	if err := appendRolloutEntries(db, runID, &entries, lang); err != nil {
 		return err
 	}
-	if err := appendAttemptEntries(db, runID, &entries); err != nil {
+	if err := appendAttemptEntries(db, runID, &entries, lang); err != nil {
 		return err
 	}
-	if err := appendToolCallEntries(db, runID, &entries); err != nil {
+	if err := appendToolCallEntries(db, runID, &entries, lang); err != nil {
 		return err
 	}
-	if err := appendProcessEntries(db, runID, &entries); err != nil {
+	if err := appendProcessEntries(db, runID, &entries, lang); err != nil {
 		return err
 	}
-	if err := appendPromotionEntries(db, runID, &entries); err != nil {
+	if err := appendPromotionEntries(db, runID, &entries, lang); err != nil {
 		return err
 	}
-	if err := appendEvidenceEntries(db, runID, &entries); err != nil {
+	if err := appendEvidenceEntries(db, runID, &entries, lang); err != nil {
 		return err
 	}
-	if err := appendEventEntries(db, runID, &entries); err != nil {
+	if err := appendEventEntries(db, runID, &entries, lang); err != nil {
 		return err
 	}
 	sort.SliceStable(entries, func(i, j int) bool {
@@ -139,15 +145,15 @@ func Log(db *sql.DB, runID string, out io.Writer) error {
 		}
 		return entries[i].At < entries[j].At
 	})
-	fmt.Fprintf(out, "run=%s\n", runID)
-	fmt.Fprintln(out, "log:")
+	fmt.Fprintf(out, i18n.T(lang, "run=%s\n"), runID)
+	fmt.Fprintln(out, i18n.T(lang, "log:"))
 	for _, entry := range entries {
 		fmt.Fprintf(out, "  %s %-12s %s %s\n", entry.At, entry.Kind, entry.ID, entry.Summary)
 	}
 	return nil
 }
 
-func appendRolloutEntries(db *sql.DB, runID string, entries *[]logEntry) error {
+func appendRolloutEntries(db *sql.DB, runID string, entries *[]logEntry, lang i18n.Locale) error {
 	rows, err := db.Query(`SELECT id, status, base_snapshot_id, fanout, winner_attempt_id, promotion_id, risk_status, cost_estimate, created_at, updated_at
 		FROM rollouts WHERE run_id = ?`, runID)
 	if err != nil {
@@ -161,13 +167,13 @@ func appendRolloutEntries(db *sql.DB, runID string, entries *[]logEntry) error {
 		if err := rows.Scan(&id, &status, &baseSnapshotID, &fanout, &winnerAttemptID, &promotionID, &riskStatus, &cost, &createdAt, &updatedAt); err != nil {
 			return err
 		}
-		*entries = append(*entries, logEntry{At: createdAt, Kind: "rollout", ID: id, Summary: fmt.Sprintf("start base=%s fanout=%d", baseSnapshotID, fanout)})
-		*entries = append(*entries, logEntry{At: updatedAt, Kind: "rollout", ID: id, Summary: fmt.Sprintf("status=%s winner=%s promotion=%s risk=%s cost=%.6f", status, winnerAttemptID, promotionID, riskStatus, cost)})
+		*entries = append(*entries, logEntry{At: createdAt, Kind: "rollout", ID: id, Summary: fmt.Sprintf(i18n.T(lang, "start base=%s fanout=%d"), baseSnapshotID, fanout)})
+		*entries = append(*entries, logEntry{At: updatedAt, Kind: "rollout", ID: id, Summary: fmt.Sprintf(i18n.T(lang, "status=%s winner=%s promotion=%s risk=%s cost=%.6f"), status, winnerAttemptID, promotionID, riskStatus, cost)})
 	}
 	return rows.Err()
 }
 
-func appendAttemptEntries(db *sql.DB, runID string, entries *[]logEntry) error {
+func appendAttemptEntries(db *sql.DB, runID string, entries *[]logEntry, lang i18n.Locale) error {
 	rows, err := db.Query(`SELECT a.id, a.rollout_id, a.tool_call_id, a.snapshot_id, a.status, a.score, a.cost_estimate, a.is_winner, a.created_at
 		FROM fork_attempts a JOIN rollouts r ON a.rollout_id = r.id WHERE r.run_id = ?`, runID)
 	if err != nil {
@@ -181,12 +187,12 @@ func appendAttemptEntries(db *sql.DB, runID string, entries *[]logEntry) error {
 		if err := rows.Scan(&id, &rolloutID, &toolCallID, &snapshotID, &status, &score, &cost, &isWinner, &createdAt); err != nil {
 			return err
 		}
-		*entries = append(*entries, logEntry{At: createdAt, Kind: "attempt", ID: id, Summary: fmt.Sprintf("rollout=%s snapshot=%s tool_call=%s status=%s score=%.3f cost=%.6f winner=%t", rolloutID, snapshotID, toolCallID, status, score, cost, isWinner != 0)})
+		*entries = append(*entries, logEntry{At: createdAt, Kind: "attempt", ID: id, Summary: fmt.Sprintf(i18n.T(lang, "rollout=%s snapshot=%s tool_call=%s status=%s score=%.3f cost=%.6f winner=%t"), rolloutID, snapshotID, toolCallID, status, score, cost, isWinner != 0)})
 	}
 	return rows.Err()
 }
 
-func appendToolCallEntries(db *sql.DB, runID string, entries *[]logEntry) error {
+func appendToolCallEntries(db *sql.DB, runID string, entries *[]logEntry, lang i18n.Locale) error {
 	rows, err := db.Query(`SELECT id, rollout_id, attempt_id, session_id, status, COALESCE(exit_code, 0), wall_ms, COALESCE(result_ref, ''), created_at, COALESCE(ended_at, '')
 		FROM tool_calls WHERE run_id = ?`, runID)
 	if err != nil {
@@ -200,15 +206,15 @@ func appendToolCallEntries(db *sql.DB, runID string, entries *[]logEntry) error 
 		if err := rows.Scan(&id, &rolloutID, &attemptID, &sessionID, &status, &exitCode, &wallMS, &resultRef, &createdAt, &endedAt); err != nil {
 			return err
 		}
-		*entries = append(*entries, logEntry{At: createdAt, Kind: "tool_call", ID: id, Summary: fmt.Sprintf("rollout=%s attempt=%s session=%s status=%s", rolloutID, attemptID, sessionID, status)})
+		*entries = append(*entries, logEntry{At: createdAt, Kind: "tool_call", ID: id, Summary: fmt.Sprintf(i18n.T(lang, "rollout=%s attempt=%s session=%s status=%s"), rolloutID, attemptID, sessionID, status)})
 		if endedAt != "" {
-			*entries = append(*entries, logEntry{At: endedAt, Kind: "tool_call", ID: id, Summary: fmt.Sprintf("exit=%d wall_ms=%d result=%s", exitCode, wallMS, resultRef)})
+			*entries = append(*entries, logEntry{At: endedAt, Kind: "tool_call", ID: id, Summary: fmt.Sprintf(i18n.T(lang, "exit=%d wall_ms=%d result=%s"), exitCode, wallMS, resultRef)})
 		}
 	}
 	return rows.Err()
 }
 
-func appendProcessEntries(db *sql.DB, runID string, entries *[]logEntry) error {
+func appendProcessEntries(db *sql.DB, runID string, entries *[]logEntry, lang i18n.Locale) error {
 	rows, err := db.Query(`SELECT p.id, p.session_id, COALESCE(p.tool_call_id, ''), p.status, COALESCE(p.exit_code, 0), p.started_at, COALESCE(p.ended_at, '')
 		FROM processes p JOIN sessions s ON p.session_id = s.id WHERE s.run_id = ?`, runID)
 	if err != nil {
@@ -221,15 +227,15 @@ func appendProcessEntries(db *sql.DB, runID string, entries *[]logEntry) error {
 		if err := rows.Scan(&id, &sessionID, &toolCallID, &status, &exitCode, &startedAt, &endedAt); err != nil {
 			return err
 		}
-		*entries = append(*entries, logEntry{At: startedAt, Kind: "process", ID: id, Summary: fmt.Sprintf("session=%s tool_call=%s status=started", sessionID, toolCallID)})
+		*entries = append(*entries, logEntry{At: startedAt, Kind: "process", ID: id, Summary: fmt.Sprintf(i18n.T(lang, "session=%s tool_call=%s status=started"), sessionID, toolCallID)})
 		if endedAt != "" {
-			*entries = append(*entries, logEntry{At: endedAt, Kind: "process", ID: id, Summary: fmt.Sprintf("session=%s tool_call=%s status=%s exit=%d", sessionID, toolCallID, status, exitCode)})
+			*entries = append(*entries, logEntry{At: endedAt, Kind: "process", ID: id, Summary: fmt.Sprintf(i18n.T(lang, "session=%s tool_call=%s status=%s exit=%d"), sessionID, toolCallID, status, exitCode)})
 		}
 	}
 	return rows.Err()
 }
 
-func appendPromotionEntries(db *sql.DB, runID string, entries *[]logEntry) error {
+func appendPromotionEntries(db *sql.DB, runID string, entries *[]logEntry, lang i18n.Locale) error {
 	rows, err := db.Query(`SELECT p.id, p.rollout_id, p.attempt_id, p.status, p.risk_status, p.reason,
 		COALESCE(p.telemetry_watermark, ''), COALESCE(p.drain_processed, 0), COALESCE(p.drain_pending_after, 0),
 		p.created_at, p.updated_at
@@ -244,13 +250,13 @@ func appendPromotionEntries(db *sql.DB, runID string, entries *[]logEntry) error
 		if err := rows.Scan(&id, &rolloutID, &attemptID, &status, &riskStatus, &reason, &watermark, &drainProcessed, &drainPendingAfter, &createdAt, &updatedAt); err != nil {
 			return err
 		}
-		*entries = append(*entries, logEntry{At: createdAt, Kind: "promotion", ID: id, Summary: fmt.Sprintf("rollout=%s attempt=%s candidate", rolloutID, attemptID)})
-		*entries = append(*entries, logEntry{At: updatedAt, Kind: "promotion", ID: id, Summary: fmt.Sprintf("status=%s risk=%s watermark=%s drain_processed=%d drain_pending_after=%d reason=%q", status, riskStatus, watermark, drainProcessed, drainPendingAfter, reason)})
+		*entries = append(*entries, logEntry{At: createdAt, Kind: "promotion", ID: id, Summary: fmt.Sprintf(i18n.T(lang, "rollout=%s attempt=%s candidate"), rolloutID, attemptID)})
+		*entries = append(*entries, logEntry{At: updatedAt, Kind: "promotion", ID: id, Summary: fmt.Sprintf(i18n.T(lang, "status=%s risk=%s watermark=%s drain_processed=%d drain_pending_after=%d reason=%q"), status, riskStatus, watermark, drainProcessed, drainPendingAfter, reason)})
 	}
 	return rows.Err()
 }
 
-func appendEvidenceEntries(db *sql.DB, runID string, entries *[]logEntry) error {
+func appendEvidenceEntries(db *sql.DB, runID string, entries *[]logEntry, lang i18n.Locale) error {
 	rows, err := db.Query(`SELECT id, rollout_id, attempt_id, tool_call_id, snapshot_id, event_type, priority, status, created_at
 		FROM evidence_events WHERE run_id = ?`, runID)
 	if err != nil {
@@ -262,12 +268,12 @@ func appendEvidenceEntries(db *sql.DB, runID string, entries *[]logEntry) error 
 		if err := rows.Scan(&id, &rolloutID, &attemptID, &toolCallID, &snapshotID, &eventType, &priority, &status, &createdAt); err != nil {
 			return err
 		}
-		*entries = append(*entries, logEntry{At: createdAt, Kind: "evidence", ID: id, Summary: fmt.Sprintf("type=%s priority=%s status=%s rollout=%s attempt=%s tool_call=%s snapshot=%s", eventType, priority, status, rolloutID, attemptID, toolCallID, snapshotID)})
+		*entries = append(*entries, logEntry{At: createdAt, Kind: "evidence", ID: id, Summary: fmt.Sprintf(i18n.T(lang, "type=%s priority=%s status=%s rollout=%s attempt=%s tool_call=%s snapshot=%s"), eventType, priority, status, rolloutID, attemptID, toolCallID, snapshotID)})
 	}
 	return rows.Err()
 }
 
-func appendEventEntries(db *sql.DB, runID string, entries *[]logEntry) error {
+func appendEventEntries(db *sql.DB, runID string, entries *[]logEntry, lang i18n.Locale) error {
 	rows, err := db.Query(`SELECT id, event_type, source, COALESCE(session_id, ''), COALESCE(tool_call_id, ''), COALESCE(process_id, ''), COALESCE(snapshot_id, ''), created_at
 		FROM events WHERE run_id = ?`, runID)
 	if err != nil {
@@ -279,7 +285,7 @@ func appendEventEntries(db *sql.DB, runID string, entries *[]logEntry) error {
 		if err := rows.Scan(&id, &eventType, &source, &sessionID, &toolCallID, &processID, &snapshotID, &createdAt); err != nil {
 			return err
 		}
-		*entries = append(*entries, logEntry{At: createdAt, Kind: "event", ID: id, Summary: fmt.Sprintf("type=%s source=%s session=%s tool_call=%s process=%s snapshot=%s", eventType, source, sessionID, toolCallID, processID, snapshotID)})
+		*entries = append(*entries, logEntry{At: createdAt, Kind: "event", ID: id, Summary: fmt.Sprintf(i18n.T(lang, "type=%s source=%s session=%s tool_call=%s process=%s snapshot=%s"), eventType, source, sessionID, toolCallID, processID, snapshotID)})
 	}
 	return rows.Err()
 }

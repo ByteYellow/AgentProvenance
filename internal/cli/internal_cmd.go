@@ -43,7 +43,7 @@ func internalHookLogCmd() *cobra.Command {
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if file == "" {
-				return fmt.Errorf("--file is required")
+				return commandErrorf("--file is required")
 			}
 			data, err := io.ReadAll(cmd.InOrStdin())
 			if err != nil {
@@ -61,7 +61,7 @@ func internalHookLogCmd() *cobra.Command {
 			// agent run is not.
 			f, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "hook-log: open: %v\n", err)
+				fmt.Fprintf(cmd.ErrOrStderr(), commandText(cmd, "hook-log: open: %v\n"), err)
 				return nil
 			}
 			defer f.Close()
@@ -69,7 +69,7 @@ func internalHookLogCmd() *cobra.Command {
 				data = append(data, '\n')
 			}
 			if _, err := f.Write(data); err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "hook-log: write: %v\n", err)
+				fmt.Fprintf(cmd.ErrOrStderr(), commandText(cmd, "hook-log: write: %v\n"), err)
 			}
 			return nil
 		},
