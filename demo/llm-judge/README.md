@@ -20,6 +20,15 @@ target run (e.g. snake-supply-chain)          judge run (recorded)
     evidence: coverage + judge attestation           judge run's own DAG
 ```
 
+## Command language
+
+Commands default to English. Add `--lang zh-CN` for Chinese help, progress, verdict labels and diagnostics. Evaluation prompts, original model prose, retained request/response bytes and exported JSON stay unchanged. The Chinese display marks original summaries and findings as such and explicitly identifies the keyless offline fixture.
+
+```sh
+python3 demo/llm-judge/judge.py --lang zh-CN --help
+AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline --lang zh-CN
+```
+
 ## Open from the portable CLI
 
 From an extracted [precompiled release](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2):

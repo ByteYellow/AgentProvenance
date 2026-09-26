@@ -8,6 +8,7 @@ from pathlib import Path
 import queue
 import signal
 import subprocess
+import sys
 import tarfile
 import tempfile
 import threading
@@ -43,6 +44,13 @@ def main():
         assert len(replay) == 6 and len(catalog) == 8, catalog
         assert (root / 'demo/jev-judge/workbench.py').is_file()
         assert (root / 'demo/llm-judge/judge.py').is_file()
+        # Optional Python evaluators must resolve their shared language assets
+        # from the extracted archive, without the repository or Go on PATH.
+        for script in ('demo/llm-judge/judge.py', 'demo/jev-judge/judge.py', 'demo/jev-judge/workbench.py'):
+            help_text = subprocess.check_output([sys.executable, str(root / script), '--help', '--lang', 'zh-CN'],
+                                                cwd=root, env=env, text=True, timeout=15)
+            assert '显示帮助并退出' in help_text, script
+        assert (root / 'demo/jev-judge/review.zh-CN.png').is_file()
 
         assert '(START_HERE.zh-CN.md)' in (root / 'START_HERE.md').read_text()
         chinese_start = (root / 'START_HERE.zh-CN.md').read_text(encoding='utf-8')

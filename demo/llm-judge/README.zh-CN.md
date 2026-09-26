@@ -26,6 +26,15 @@
 
 此命令只打开离线阅读页，不会运行评估器或请求模型服务。页面首次打开时跟随浏览器语言，未匹配时使用英文；右上角可手动切换，后续访问会保留选择。实际评估需要另行执行下述步骤。
 
+## 界面与命令语言
+
+命令默认使用英文；加上 `--lang zh-CN` 可查看中文帮助、进度、结论标签和错误提示。评估提示词、模型原始回答、请求响应和导出 JSON 保持原样。摘要和发现中的原文会明确标注；离线结果会说明未调用模型。
+
+```sh
+python3 demo/llm-judge/judge.py --lang zh-CN --help
+AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline --lang zh-CN
+```
+
 ## 运行示例
 
 在发行包根目录运行不需要密钥的离线流程：

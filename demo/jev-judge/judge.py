@@ -5,7 +5,6 @@ This is an external evaluator, not an enforcement hook or a benchmark. It
 never executes evidence, automatically retries requests, or follows redirects.
 """
 
-import argparse
 import base64
 import copy
 import gzip
@@ -19,6 +18,11 @@ import sys
 import time
 import urllib.error
 import urllib.request
+
+
+# Shared display helpers ship beside both optional evaluators in the archive.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from localization import Parser, cli_language, diagnostic, tr
 
 
 ENDPOINTS = {
@@ -228,15 +232,15 @@ def make_cases(bundle_path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = Parser(description='Jev smoke evaluation of selected raw evidence. Provider calls require an explicit provider and key file.', language=cli_language())
     parser.add_argument("command", choices=["prepare", "probe", "run"])
-    parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--bundle", type=Path)
-    parser.add_argument("--cases", type=Path)
-    parser.add_argument("--provider", choices=ENDPOINTS)
-    parser.add_argument("--key-file", type=Path)
+    parser.add_argument("--output-dir", type=Path, required=True, help='Output directory')
+    parser.add_argument("--bundle", type=Path, help='Signed source bundle')
+    parser.add_argument("--cases", type=Path, help='Prepared cases JSON')
+    parser.add_argument("--provider", choices=ENDPOINTS, help='Evaluation provider')
+    parser.add_argument("--key-file", type=Path, help='Private key file')
     parser.add_argument("--send-raw", action="store_true", help="Authorize sending selected case contents without redaction")
-    parser.add_argument("--max-calls", type=int, default=6)
+    parser.add_argument("--max-calls", type=int, default=6, help='Maximum model calls')
     args = parser.parse_args()
     if args.command == "prepare":
         if not args.bundle:
@@ -281,5 +285,5 @@ if __name__ == "__main__":
         main()
     except (ValueError, RuntimeError, OSError, KeyError, StopIteration) as error:
         # Do not include input values or key-file contents in diagnostics.
-        print("Jev smoke test stopped: " + (str(error) if isinstance(error, (ValueError, RuntimeError)) else type(error).__name__), file=sys.stderr)
+        print(tr(cli_language(), "Jev smoke test stopped: %s", diagnostic(cli_language(), str(error)) if isinstance(error, (ValueError, RuntimeError)) else type(error).__name__), file=sys.stderr)
         sys.exit(1)
