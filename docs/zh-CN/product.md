@@ -22,7 +22,7 @@ AgentProvenance 记录 AI Agent 实际执行的操作，将应用上下文与系
 
 ## 首次体验：下载后回放
 
-[v0.8.2-rc.2 预发布版](releases/v0.8.2-rc.2.md)提供 Linux 和 macOS 的 amd64、arm64 命令行包。`agentprov demo` 打开本地示例首页，包含六份经过验证的签名记录和两个可选评估器指南。阅读页支持目录、图片、表格和代码复制，与 Dashboard 使用相同的视觉风格。
+[v0.8.2 正式版](releases/v0.8.2.md)提供 Linux 和 macOS 的 amd64、arm64 命令行包。`agentprov demo` 打开本地示例首页，包含六份经过验证的签名记录和两个可选评估器指南。阅读页支持目录、图片、表格和代码复制，与 Dashboard 使用相同的视觉风格。
 
 步骤见[快速开始](../../README.zh-CN.md#快速开始)和[示例目录](../../demo/README.zh-CN.md)。回放使用独立临时存储，不会重新执行记录中的操作。实时采集与评估器配置见各自指南。
 

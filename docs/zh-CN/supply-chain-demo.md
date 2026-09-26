@@ -6,7 +6,7 @@
 
 ## 一条命令回放
 
-解压[发行包](releases/v0.8.2-rc.2.md)后运行 `./agentprov demo snake-supply-chain`。命令自动校验签名、导入数据、选择执行记录与图视图，并管理临时存储。`./agentprov demo` 打开全部示例及格式化指南。
+解压[发行包](releases/v0.8.2.md)后运行 `./agentprov demo snake-supply-chain`。命令自动校验签名、导入数据、选择执行记录与图视图，并管理临时存储。`./agentprov demo` 打开全部示例及格式化指南。
 
 下文保留手动导入方式，供需要持久保存调查数据时使用。
 

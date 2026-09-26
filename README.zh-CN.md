@@ -46,7 +46,7 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 </p>
 
 [查看真实场景](demo/multiagent-provenance/README.zh-CN.md) ·
-[立即回放](#快速开始) · [v0.8.2-rc.2 版本说明](docs/zh-CN/releases/v0.8.2-rc.2.md)
+[立即回放](#快速开始) · [v0.8.2 版本说明](docs/zh-CN/releases/v0.8.2.md)
 
 ## 目录
 
@@ -81,7 +81,7 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 
 ![本地 Demo 首页：六份签名回放与两个可选评估器指南](docs/img/demo-gallery-zh-CN.png)
 
-在 [**v0.8.2-rc.2 预发布版**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2)
+在 [**v0.8.2 正式版**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2)
 下载对应平台的压缩包及同名 `.sha256` 校验文件：
 
 | 平台 | 压缩包后缀 |
@@ -94,9 +94,9 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 以 Linux x86-64 为例，在下载目录执行：
 
 ```sh
-sha256sum -c agentprov_v0.8.2-rc.2_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.8.2_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.8.2-rc.2_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.8.2_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -109,8 +109,8 @@ Windows 用户请在 WSL 中运行对应的 Linux 包。
 
 运行后，浏览器会打开 **Demo 首页**，其中包含 6 份已签名的执行记录和
 2 个可选评估器的使用指南。首页与可视化界面（Dashboard）采用相同的浅色样式：
-点击 **Read guide** 阅读带目录、图片、表格和代码复制按钮的本地指南；
-点击 **Open replay** 查看执行记录。
+点击**阅读指南（Read guide）**查看带目录、图片、表格和代码复制按钮的本地指南；
+点击**打开回放（Open replay）**查看执行记录。
 
 选择示例后，程序会自动定位到对应的执行记录（Run）和视图。
 带时间信息的视图会自动播放，部署视图则直接展示拓扑。
@@ -1139,10 +1139,10 @@ docs/                   产品、部署、接口、验收与设计文档
 
 ## 版本进展与后续计划
 
-**v0.8.2-rc.2 提供开箱即用的回放体验（预发布）。** 下载 Linux/macOS 的
+**v0.8.2 提供开箱即用的回放体验和完整的中文文档、网页界面。** 下载 Linux/macOS 的
 amd64/arm64 包后，直接运行 `agentprov demo`，即可浏览六个回放示例和两个
 评估器指南。Demo 首页与阅读页采用与 Dashboard 一致的样式。
-详见 [v0.8.2-rc.2 发布说明](docs/zh-CN/releases/v0.8.2-rc.2.md)。
+详见 [v0.8.2 发布说明](docs/zh-CN/releases/v0.8.2.md)。
 
 **v0.8.1 增加了可选的外部评估器示例。** [Jev 示例](demo/jev-judge/README.zh-CN.md)通过已有
 证据和信号接口展示结构化分析、规则对比与人工复核，不改变核心采集流程。

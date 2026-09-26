@@ -47,7 +47,7 @@ network connection. The dashboard replays their attributed execution path:
 </p>
 
 [Explore the capture](demo/multiagent-provenance/README.md) ·
-[Try the replay](#quickstart) · [v0.8.2-rc.2 release notes](docs/releases/v0.8.2-rc.2.md)
+[Try the replay](#quickstart) · [v0.8.2 release notes](docs/releases/v0.8.2.md)
 
 ## Contents
 
@@ -83,7 +83,7 @@ network connection. The dashboard replays their attributed execution path:
 ![Local demo gallery with six signed captures and two evaluator guides](docs/img/demo-gallery.png)
 
 Download a precompiled archive and its `.sha256` file from
-[**v0.8.2-rc.2 (prerelease)**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2).
+[**v0.8.2**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2).
 
 | Platform | Archive suffix |
 |---|---|
@@ -95,9 +95,9 @@ Download a precompiled archive and its `.sha256` file from
 For example, on Linux x86-64, in the download directory:
 
 ```sh
-sha256sum -c agentprov_v0.8.2-rc.2_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.8.2_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.8.2-rc.2_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.8.2_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -1267,15 +1267,15 @@ and `forensics`. `substrate` contains runtime facts AgentProvenance can consume.
 
 ## Roadmap
 
-**v0.8.2-rc.2 is the portable replay prerelease.** Download Linux/macOS archives
+**v0.8.2 adds portable replay and Chinese documentation and web interfaces.** Download Linux/macOS archives
 for amd64/arm64 and run `agentprov demo` to browse all eight examples in a
 dashboard-styled gallery and guide reader. See the
-[v0.8.2-rc.2 notes](docs/releases/v0.8.2-rc.2.md).
+[v0.8.2 notes](docs/releases/v0.8.2.md).
 
 **v0.8.1 adds an optional external-evaluator example.** The [Jev demo](demo/jev-judge/)
 shows typed judgments, rule comparison and human review using the existing
 evidence/signal contract. It does not add a built-in analyst or change capture.
-See the [v0.8.2-rc.2 release notes](docs/releases/v0.8.2-rc.2.md).
+See the [v0.8.1 release notes](docs/releases/v0.8.1.md).
 
 **v0.8.0 established portable, reliable evidence capture.** It added native
 amd64 support, KVM guest deployment, K3s acceptance, automatic container TLS

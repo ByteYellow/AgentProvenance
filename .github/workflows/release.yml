@@ -9,6 +9,9 @@ on:
       - '.github/workflows/release.yml'
       - 'scripts/build-release.py'
       - 'scripts/accept_release.py'
+      - 'scripts/check_localized_docs.py'
+      - 'docs/release-start.md'
+      - 'docs/zh-CN/release-start.md'
       - 'internal/**'
       - 'cmd/**'
       - 'demo/**'
@@ -32,6 +35,11 @@ jobs:
         with:
           go-version: '1.26.x'
           cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check Chinese documentation and links
+        run: python3 scripts/check_localized_docs.py
       - name: Validate source and all signed fixtures
         run: |
           test -z "$(gofmt -l internal cmd demo/assets.go)"
