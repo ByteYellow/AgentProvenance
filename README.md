@@ -78,32 +78,65 @@ network connection. The dashboard replays their attributed execution path:
 
 ## Quickstart
 
-### Replay signed evidence first
+### Download and replay — no Go required
 
-Requires Go 1.23+ on macOS or Linux. No Linux VM, Docker, agent account, or API
-key is needed to inspect the bundled captures.
+Download a precompiled archive and its `.sha256` file from
+[**v0.8.2-rc.1 (prerelease)**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.1).
+
+| Platform | Archive suffix |
+|---|---|
+| Linux / WSL, x86-64 | `linux_amd64.tar.gz` |
+| Linux / WSL, ARM64 | `linux_arm64.tar.gz` |
+| macOS, Intel | `darwin_amd64.tar.gz` |
+| macOS, Apple Silicon | `darwin_arm64.tar.gz` |
+
+For example, on Linux x86-64, in the download directory:
+
+```sh
+sha256sum -c agentprov_v0.8.2-rc.1_linux_amd64.tar.gz.sha256
+mkdir agentprov-demo
+tar -xzf agentprov_v0.8.2-rc.1_linux_amd64.tar.gz -C agentprov-demo
+cd agentprov-demo
+./agentprov demo
+```
+
+On macOS, use the matching `darwin` filename and `shasum -a 256 -c` for the
+checksum step. Binaries are not Apple Developer ID signed or notarized.
+`SHA256SUMS` and `build-info.json` provide archive integrity and build metadata;
+checksums are not publisher signatures.
+
+The browser opens a **Demo gallery** with all six signed captures and both
+optional evaluator guides. Choose a replay: its Run and lens are selected and
+playback starts automatically when the view has timed events; placement views
+open their topology directly. The CLI verifies the original signatures before
+importing into an isolated temporary store, then checks the graph. Ctrl-C closes
+the server and removes temporary data. Nothing from the recorded execution is
+rerun, and your regular data directory is untouched.
+
+```sh
+./agentprov demo --list
+./agentprov demo multiagent-provenance
+./agentprov demo k8s-cross-pod-a2a --no-browser
+```
+
+Signed replays work offline without Go, a repository checkout, a VM, Docker,
+an agent account or an API key. All original demo scripts and guides also ship
+in the archive's `demo/` directory. LLM Judge and Jev remain optional Python
+examples with separate live-provider requirements; the gallery does not call
+providers or manufacture a recorded verdict. See the [demo index](demo/README.md).
+
+Prefer building from source? Go 1.23+ is required only for this path:
 
 ```sh
 git clone https://github.com/ByteYellow/AgentProvenance
 cd AgentProvenance
 go build -o agentprov ./cmd/agentprov
-
-./agentprov --data-dir /tmp/agentprov-demo init
-./agentprov --data-dir /tmp/agentprov-demo forensics import \
-  demo/multiagent-provenance/run-double-attempt.forensics.json.gz \
-  --pub-key demo/multiagent-provenance/attestation.pub
-./agentprov --data-dir /tmp/agentprov-demo graph verify --run run-double-attempt
-./agentprov --data-dir /tmp/agentprov-demo dashboard serve --addr 127.0.0.1:7396
+./agentprov demo
 ```
-
-Open the printed URL, select **run-double-attempt**, choose the **Agent Network /
-orchestration** lens, and press play. Follow the peer message to the tool call
-and its runtime evidence. See the [demo index](demo/README.md) for the progressive
-single-agent, multi-agent, Kubernetes, and outbound-data scenarios.
 
 ### Capture your own agent
 
-From the same checkout, with your agent already installed and authenticated:
+From the extracted archive or source checkout, with your agent already installed and authenticated:
 
 ```sh
 ./agentprov doctor -- claude

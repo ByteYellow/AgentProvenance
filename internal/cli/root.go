@@ -2,25 +2,30 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"runtime"
+	"time"
+
+	"github.com/byteyellow/agentprovenance/internal/buildinfo"
 	"github.com/byteyellow/agentprovenance/internal/control"
 	"github.com/byteyellow/agentprovenance/internal/daemon"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	runtimeplane "github.com/byteyellow/agentprovenance/internal/substrate/runtime"
 	"github.com/spf13/cobra"
-	"os"
-	"time"
 )
 
 func NewRootCommand() *cobra.Command {
 	var dataDir string
 	var daemonURL string
 	root := &cobra.Command{
-		Use:   "agentprov",
-		Short: "AgentProvenance control CLI",
+		Use:     "agentprov",
+		Short:   "AgentProvenance control CLI",
+		Version: fmt.Sprintf("%s (%s; %s; %s/%s)", buildinfo.Version, buildinfo.Commit, buildinfo.Date, runtime.GOOS, runtime.GOARCH),
 	}
 	root.PersistentFlags().StringVar(&dataDir, "data-dir", store.DefaultDataDir, "local AgentProvenance data directory")
 	root.PersistentFlags().StringVar(&daemonURL, "daemon-url", firstEnv("AGENTPROV_DAEMON_URL"), "local daemon URL; also read from AGENTPROV_DAEMON_URL")
 
+	root.AddCommand(demoCmd())
 	root.AddCommand(launchCmd(&dataDir))
 	root.AddCommand(doctorCmd(&dataDir))
 	root.AddCommand(internalCmd())
