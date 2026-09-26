@@ -176,7 +176,7 @@ mkdir -p /tmp/agentprov-record-demo
 
 回放、本地 `record` 和可视化界面都不需要 Docker；只有基于 Docker 的执行功能
 需要它。进阶用法见：[证据图命令](docs/zh-CN/graph-commands.md)、
-[部署模式](docs/deployment-modes.md)、[遥测数据格式](docs/telemetry-schema.md)和
+[部署模式](docs/zh-CN/deployment-modes.md)、[遥测数据格式](docs/zh-CN/telemetry-schema.md)和
 [开发与测试](#开发)。
 
 ## 为什么需要它
@@ -319,7 +319,7 @@ agentprov telemetry ingest-falco --file falco-events.jsonl
 `scripts/accept_native_sensor_risk.sh` 验证了从原生采集到 `security` 信号的完整链路。
 
 已有 Falco 的主机也可使用 `ingest-falco`，将 Falco 的 JSON/stdout 输出接入
-同一流程。用法见 [Falco 接收器说明](docs/falco-receiver.md)。
+同一流程。用法见 [Falco 接收器说明](docs/zh-CN/falco-receiver.md)。
 
 ## 与现有系统的关系
 
@@ -395,7 +395,7 @@ Agent 正常读取自身凭证的情况，则由同一套策略引擎中的相�
 队列状态和覆盖率的机器可读报告。参考测试接收了全部 10 万条事件，没有失败或
 丢弃的批次，健康检查和分页事件查询也能正常响应。
 这是单节点 SQLite 基准，不代表生产环境 SLA。具体范围见
-[收尾标准](docs/project-closeout.md)和[中心化服务设计](docs/central-evidence-service-design.md)。
+[收尾标准](docs/zh-CN/project-closeout.md)和[中心化服务设计](docs/zh-CN/central-evidence-service-design.md)。
 
 Kubernetes 验收会部署特权传感器 DaemonSet，启动多个独立 Pod，
 将 Pod、容器身份与内核 cgroup 对应起来，再导入并验证采集结果。
@@ -1042,7 +1042,7 @@ flowchart TD
 ## 运行环境与遥测
 
 证据模型与具体运行环境分离。不同来源的数据先转换为
-[统一遥测格式](docs/telemetry-schema.md)，再参与关联与图构建。
+[统一遥测格式](docs/zh-CN/telemetry-schema.md)，再参与关联与图构建。
 适配新环境时，应优先让采集器输出已有格式和关联信息，复用核心处理流程。
 
 需要区分三个方面：
@@ -1054,7 +1054,7 @@ flowchart TD
 - **事件来源**：内核与行为数据从哪里获取。主要来源是原生 Linux eBPF 传感器
   （`agentprov sensor stream`）；已有 Falco、Tetragon、LoongCollector 或 auditd
   的主机，也可通过 `telemetry ingest-jsonl` / `ingest-falco` 接收受支持格式的数据，
-  并保留包含哈希的批次清单。详见[Falco 接收器说明](docs/falco-receiver.md)。
+  并保留包含哈希的批次清单。详见[Falco 接收器说明](docs/zh-CN/falco-receiver.md)。
 
 适配时遵循两项原则：
 
@@ -1080,9 +1080,9 @@ flowchart TD
 - 不撤销已发生的外部操作。这类动作可以被记录、接受策略检查，或按需关联补偿 Hook。
 - 不替 RL 流水线决定奖励、惩罚和轨迹筛选规则，只提供可供评估的行为证据与偏差信号。
 
-产品方向见[产品说明](docs/product.md)，部署方式见
-[部署模式](docs/deployment-modes.md)，与其他系统的职责划分见
-[项目对比](docs/comparisons.md)。
+产品方向见[产品说明](docs/zh-CN/product.md)，部署方式见
+[部署模式](docs/zh-CN/deployment-modes.md)，与其他系统的职责划分见
+[项目对比](docs/zh-CN/comparisons.md)。
 
 ## 仓库结构
 
@@ -1164,11 +1164,11 @@ K3s 验收、容器 TLS 自动发现，以及受支持 amd64 Go 二进制的 TLS
   现有 10 万事件报告属于单节点基准，不代表生产 SLA。
 - **加强证据可信性**：考虑由独立主机签名或在采集时签名。当前哈希和本地签名可相对
   可信检查点检测后续改动，但无法证明已被攻陷的宿主机完整、如实地记录了所有事件。
-- **中心化证据服务**：目前[只有设计](docs/central-evidence-service-design.md)。
+- **中心化证据服务**：目前[只有设计](docs/zh-CN/central-evidence-service-design.md)。
   多租户、计费、集群调度及 Operator 高可用不在本版范围内。
 
 [v0.7 设计](docs/roadmap-v0.7.md)保留为历史背景，不是当前待办清单。
-[收尾标准](docs/project-closeout.md)说明本版单节点功能的交付范围。
+[收尾标准](docs/zh-CN/project-closeout.md)说明本版单节点功能的交付范围。
 
 ## 开发
 
@@ -1189,7 +1189,7 @@ ARM64 实机与 KVM/K3s 实验环境的验收结果另有报告，不等同于�
 各验收脚本的环境要求不同。部分脚本需要 root、会创建 Pod 或安装服务，
 请勿直接批量执行全部 `scripts/accept_*.sh`。
 环境测试请按 [KVM/K3s 部署指南](docs/zh-CN/amd64-kvm-k3s.md)操作，
-单节点压力测试见[收尾指南](docs/project-closeout.md)。
+单节点压力测试见[收尾指南](docs/zh-CN/project-closeout.md)。
 
 ## 作者与许可
 

@@ -1,5 +1,7 @@
 # Deployment Modes
 
+English · [简体中文](zh-CN/deployment-modes.md)
+
 AgentProvenance should be adoptable without forcing every user into a platform
 deployment. The product has three deployment shapes.
 

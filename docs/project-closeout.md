@@ -1,5 +1,7 @@
 # AgentProvenance closeout criteria
 
+English · [简体中文](zh-CN/project-closeout.md)
+
 This document defines the project's current engineering finish line. It deliberately
 stops before AgentProvenance becomes a virtualization platform or a centralized
 SaaS product.
