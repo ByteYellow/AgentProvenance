@@ -6,11 +6,11 @@
 
 # AgentProvenance
 
-### 面向沙箱化 AI agent 的三轴执行可观测性。
+### 看清 AI Agent 的执行过程，追溯每一步的来龙去脉。
 
-将**模型意图、应用上下文和运行时遥测**关联到同一张可验证的证据图。
-从工具调用追到实际的进程、文件和网络行为，调查风险、比较执行差异，
-并在本地回放签名证据。
+将**模型意图、应用上下文和运行时行为**关联起来，形成可查询、可验证的执行证据图。
+从一次工具调用，追踪到它启动的进程、读写的文件和访问的网络地址，
+用于排查风险、比较执行差异，以及在本地回放已签名的记录。
 
 [![Release](https://img.shields.io/github/v/release/ByteYellow/AgentProvenance?style=flat-square&color=orange&sort=semver)](https://github.com/ByteYellow/AgentProvenance/releases/latest)
 [![Go](https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square)](https://go.dev/)
@@ -19,7 +19,7 @@
 [![SQLite](https://img.shields.io/badge/state-SQLite-003B57.svg?style=flat-square)](https://www.sqlite.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square)](LICENSE)
 
-**[快速开始](#快速开始)** | **[核心模型](#核心模型)** | **[当前能力](#当前能力)** | **[Demo](demo/README.md)** | **[Roadmap](#roadmap)**
+**[快速开始](#快速开始)** | **[核心模型](#核心模型)** | **[当前能力](#当前能力)** | **[示例](demo/README.md)** | **[版本与计划](#版本进展与后续计划)**
 
 [English](README.md) | 简体中文
 
@@ -28,20 +28,21 @@
 ---
 
 <p align="center">
-  <img src="docs/assets/three-axis-observability.svg" alt="AgentProvenance three-axis observability: system telemetry, application context, and model intent flow into one verifiable evidence graph." width="100%">
+  <img src="docs/assets/three-axis-observability.svg" alt="模型意图、应用上下文和系统运行记录汇入同一张可验证证据图。" width="100%">
 </p>
 
-**调查真实执行，而不只是对话记录：**
+**Agent 实际做了什么？证据在哪里？**
 
-- 哪个 agent、哪条对等消息引出了这次工具调用？
+- 哪个 Agent 的任务委派或协作消息，引发了这次工具调用？
 - 哪个进程读取了敏感文件、修改了产物，或连接了外部地址？
-- 判定依据是什么，能否离线验证？
+- 这些判断依据哪些记录？记录能否离线验证？
 
-**真实采集：一次恶意依赖安装穿过 agent 团队。** Hooks 呈现委派和对等消息，
-运行时证据记录文件读取与网络连接，dashboard 回放关联后的执行路径：
+**真实案例：恶意依赖如何通过 Agent 之间的协作被安装。**
+Hooks 记录任务委派和协作消息，运行时采集记录文件读取与网络连接，
+可视化界面将它们关联起来，回放整个执行过程：
 
 <p align="center">
-  <img src="docs/img/demo-multiagent-agent-network.gif" alt="真实 agent 团队回放：委派、对等消息、工具调用及关联的运行时证据。" width="100%">
+  <img src="docs/img/demo-multiagent-agent-network.gif" alt="多 Agent 执行回放：任务委派、协作消息、工具调用及对应的运行时证据。" width="100%">
 </p>
 
 [查看真实场景](demo/multiagent-provenance/README.md) ·
@@ -62,15 +63,15 @@
 - [外部评估器协议](#外部评估器协议)
 - [合规证据，而非合规认证](#合规证据而非合规认证)
 - [AI 可调用的证据工具](#ai-可调用的证据工具)
-- [Web Dashboard](#web-dashboard)
-- [Graph 命令](#graph-命令)
+- [可视化界面](#可视化界面)
+- [证据图命令](#证据图命令)
 - [当前能力](#当前能力)
 - [核心 Demo 验收](#核心-demo-验收)
 - [架构](#架构)
-- [基质与遥测](#基质与遥测)
+- [运行环境与遥测](#运行环境与遥测)
 - [边界](#边界)
 - [仓库结构](#仓库结构)
-- [Roadmap](#roadmap)
+- [版本进展与后续计划](#版本进展与后续计划)
 - [开发](#开发)
 - [作者与许可](#作者与许可)
 
@@ -100,17 +101,21 @@ cd agentprov-demo
 ./agentprov demo
 ```
 
-macOS 换成对应的 `darwin` 文件名，使用 `shasum -a 256 -c` 校验。
-当前二进制尚未做 Apple Developer ID 签名或公证。`SHA256SUMS` 与
-`build-info.json` 提供下载完整性校验和构建信息；校验和不等于发布者签名。
+macOS 请使用对应的 `darwin` 文件名，并用 `shasum -a 256 -c` 校验。
+Windows 用户请在 WSL 中运行对应的 Linux 包。
+当前 macOS 二进制尚未经过 Apple Developer ID 签名或公证。
+校验和用于检查下载文件的完整性，`build-info.json` 记录构建信息；
+这些信息不等同于发布者的数字签名。
 
-浏览器会打开 **Demo 首页**，包含全部 6 份签名回放和 2 个可选评估器的指南。
-首页与 Dashboard 使用同一套浅色样式。**Read guide** 打开排版后的本地指南，
-提供目录、图片、表格和代码复制；**Open replay** 打开已记录的证据。
-选中回放后，自动选择对应 Run 和视图；有时间事件的视图自动播放，部署视图直接展示拓扑。
-CLI 先校验原始签名，再导入
-独立的临时数据目录并验证证据图。Ctrl-C 退出时清理临时数据，不影响日常数据目录，
-也不会重新执行记录中的命令。
+运行后，浏览器会打开 **Demo 首页**，其中包含 6 份已签名的执行记录和
+2 个可选评估器的使用指南。首页与可视化界面（Dashboard）采用相同的浅色样式：
+点击 **Read guide** 阅读带目录、图片、表格和代码复制按钮的本地指南；
+点击 **Open replay** 查看执行记录。
+
+选择示例后，程序会自动定位到对应的执行记录（Run）和视图。
+带时间信息的视图会自动播放，部署视图则直接展示拓扑。
+CLI 会先校验原始签名，再将记录导入独立的临时目录并验证证据图。
+按 Ctrl-C 退出时清理临时数据，不影响日常数据目录，也不会重新执行记录中的命令。
 
 ```sh
 ./agentprov demo --list
@@ -118,12 +123,13 @@ CLI 先校验原始签名，再导入
 ./agentprov demo k8s-cross-pod-a2a --no-browser
 ```
 
-签名回放可以离线运行，不需要 Go、仓库源码、VM、Docker、agent 账号或 API Key。
-全部 Demo 的原始脚本和说明也随包放在 `demo/` 目录。LLM Judge 和 Jev 仍是可选的
-Python 示例，实时评估需要各自的外部环境；Demo 首页不会自动调用模型，也不会
-把模拟结论当成真实评估记录。详见 [Demo 目录](demo/README.md)。
+回放这些记录不需要 Go、仓库源码、虚拟机、Docker、Agent 账号或 API Key，
+也不需要联网。各示例的原始脚本和说明一并放在压缩包的 `demo/` 目录中。
+LLM Judge 和 Jev 是可选的 Python 示例，实际调用评估器仍需按各自指南配置环境。
+打开 Demo 首页或阅读指南不会调用模型；离线示例结果也不代表真实模型的评估结论。
+详见 [Demo 目录](demo/README.md)。
 
-如希望从源码构建，才需要 Go 1.23+：
+如果选择从源码构建，则需要 Go 1.23+：
 
 ```sh
 git clone https://github.com/ByteYellow/AgentProvenance
@@ -132,32 +138,33 @@ go build -o agentprov ./cmd/agentprov
 ./agentprov demo
 ```
 
-### 采集你自己的 agent
+### 记录你自己的 Agent 执行
 
-在解压目录或源码目录中，使用已经安装并完成认证的 agent：
+在解压目录或源码目录中，启动已经安装并完成登录或认证的 Agent：
 
 ```sh
 ./agentprov doctor -- claude
 ./agentprov launch -- claude
 ```
 
-`doctor` 在不运行 agent 的前提下，检查命令、hook 接入、cgroup 权限、传感器权限
-和 dashboard 端口。`launch` 创建执行作用域、启动 dashboard，并为 Claude 注入
-本次运行专用的 hooks 配置，不修改 `~/.claude`。
+`doctor` 会在不启动 Agent 的情况下，检查命令是否可用、Hook 接入情况、
+cgroup 和传感器权限，以及可视化界面的端口。`launch` 随后为本次命令及其子进程
+创建执行范围（作用域）、启动可视化界面，并为 Claude 注入仅对本次运行生效的
+Hooks 配置，不修改 `~/.claude`。
 
-Linux 内核采集需要受支持的内核、可用的 cgroup，以及 root 或适当的 BPF/perf
-权限。macOS 仍可使用 record/hooks/transcript 证据，**但没有内核传感器**。
-预检和最终报告显示实际证据等级。其他 agent 的应用上下文取决于对应的
-hook/transcript 适配器，不是命令能运行就能完整采集。
+Linux 内核事件采集需要受支持的内核、可用的 cgroup，以及 root 或相应的
+BPF/perf 权限。macOS 可以记录进程、文件变化，并接入应用 Hooks 和会话记录，
+**但不提供 Linux 内核传感器**。预检和最终报告会说明本次实际采集了哪些层次的证据。
+其他 Agent 能否提供应用上下文，取决于是否有对应的 Hook 或会话记录适配器。
 
-退出时封存证据图。**签名需要显式传入 `--sign-key <private-key-file>`，
-并非默认开启。**需要工作区执行前后 diff 时，添加 `--file-diff`。
+程序退出时会封存证据图。**如需签名，必须显式传入 `--sign-key <private-key-file>`，
+默认不会自动签名。**如需比较工作区在执行前后的文件变化，添加 `--file-diff`。
 
-节点级采集请参阅 [KVM guest 与 K3s 部署指南](docs/amd64-kvm-k3s.md)及
-[Kubernetes 归属指南](docs/design-k8s-auto-attribution.md)。传感器运行在 KVM
-guest 内或 Kubernetes 节点上，核心证据模型不变。
+节点级采集请参阅 [KVM 虚拟机与 K3s 部署指南](docs/amd64-kvm-k3s.md)和
+[Kubernetes 事件归属指南](docs/design-k8s-auto-attribution.md)。
+传感器运行在 KVM 虚拟机内部或 Kubernetes 节点上，两种环境共用同一套证据模型。
 
-### 不依赖 agent，记录一条命令
+### 记录普通命令
 
 ```sh
 mkdir -p /tmp/agentprov-record-demo
@@ -167,19 +174,19 @@ mkdir -p /tmp/agentprov-record-demo
 ./agentprov graph explain --run run-record-demo --file artifact.txt
 ```
 
-只有可选的 Docker 执行命令需要 Docker；回放、本地 `record` 和 dashboard
-都不需要。进阶入口：[Graph 命令](docs/graph-commands.md)、
-[部署模式](docs/deployment-modes.md)、[遥测 schema](docs/telemetry-schema.md)、
-[开发门禁](#开发)。
+回放、本地 `record` 和可视化界面都不需要 Docker；只有基于 Docker 的执行功能
+需要它。进阶用法见：[证据图命令](docs/graph-commands.md)、
+[部署模式](docs/deployment-modes.md)、[遥测数据格式](docs/telemetry-schema.md)和
+[开发与测试](#开发)。
 
 ## 为什么需要它
 
-现代 agent 执行不是"一个 prompt 加一次工具调用"。编码 agent 和自主工作流会
-创建执行作用域、改文件、跑测试、产出产物、派生子进程、接触外部系统，并触发
-运行时遥测。日志、trace、指标和沙箱事件各自捕获了这个故事的一部分，
-但它们很少能产出一份类 Git 的、关于执行状态的因果记录。
+一次 Agent 任务往往涉及多步操作：修改文件、运行测试、生成产物、启动子进程，
+以及访问外部系统。日志、调用链、指标和沙箱事件分别记录了其中一部分，
+但要回答“哪次工具调用造成了这个变化”，还需要将这些记录关联起来。
 
-AgentProvenance 把沙箱化执行变成一张面向安全的证据图：
+AgentProvenance 将执行上下文与运行时记录组织成证据图，
+用类似 Git 的查询方式追溯变化的来源：
 
 ```text
 base state                    基线状态
@@ -190,22 +197,20 @@ base state                    基线状态
   -> runtime_event                运行时事件
   -> file_diff / artifact         文件差异 / 产物
   -> baseline feature / risk signal   基线特征 / 风险信号
-  -> taint / response action      污染标记 / 响应动作
-  -> replay / forensics / audit manifest   重放 / 取证 / 审计清单
+  -> taint / response action      污点标记 / 响应动作
+  -> replay / forensics / audit manifest   回放 / 取证 / 审计清单
 ```
 
-主路径是**记录并解释**沙箱化 agent 的执行。AgentProvenance 不负责挑选
-reward 的赢家。它输出结构化的轨迹证据和"预期偏差"信号，好让外部评估器或
-训练流水线把它们转化成 reward、惩罚、过滤或人工复核的决策。
+项目的核心是**记录并解释 Agent 的执行过程**。它输出结构化的执行轨迹和
+偏差信号，供调试、安全分析、外部评估器或训练流水线使用。
 
-对 RL 流水线来说，有用的原语不是 "best-of-one" 或自动选优，而是**对每条轨迹
-的可观测性**：agent 做了什么、碰了哪些子进程和文件、出现了哪些网络/运行时
-事件、哪些行为违反了安全或任务预期、哪些风险/基线信号应该参与 reward 塑形
-或拒绝判定。
+在强化学习（RL）场景中，这些证据可以帮助判断：Agent 做了什么、访问了哪些
+文件和进程、产生了哪些网络行为，以及是否偏离任务要求或安全约束。
+奖励、惩罚、轨迹筛选和人工复核的规则由外部系统决定。
 
 ## 安全闭环
 
-安全模型刻意保持简单而具体：
+安全分析围绕以下链路展开：
 
 ```text
 application context   应用上下文
@@ -224,68 +229,64 @@ response              响应
   audit / deny / kill / quarantine / taint / forensics / 飞书或钉钉通知
 ```
 
-这让 AgentProvenance 更接近 AI 时代的 HIDS / 控制平面层，而不是纯粹的 LLM
-trace dashboard。传统主机监控问的是"这个进程做了什么？"，AgentProvenance
-补上了 agent 执行上下文，从而能问："是哪个 agent / 工具 / 任务导致的、
-它改变了什么状态、有什么证据能证明、应该做出什么响应？"
+传统主机监控关注“这个进程做了什么”。AgentProvenance 在此基础上补充
+Agent、任务和工具调用的上下文，进一步回答：“这次行为属于哪个任务？
+改变了什么？判断依据是什么？是否需要响应？”
 
-项目当前已实现：证据图、运行时关联、diff/blame、遥测批次清单、策略决策、
-归一化风险信号、基线偏差记录、响应动作记录、污染标记、隔离、取证/导出基础
-设施，以及一个自研的 eBPF 传感器。飞书/钉钉响应适配器属于下一阶段的安全控制
-工作；第三方接收器（Falco/Tetragon）按兼容性维护，不再扩展。
+当前已实现证据图、运行时关联、diff/blame、遥测批次清单、策略判定、
+风险与基线偏差信号、响应记录、污点标记、隔离、取证导出和原生 eBPF 传感器。
+飞书、钉钉等通知适配器仍属于后续计划；Falco、Tetragon 接收器保留兼容性维护。
 
 ## 核心模型
 
 <p align="center">
-  <img src="docs/assets/evidence-dag.svg" alt="AgentProvenance evidence DAG: LLM intent, tool call, process, runtime event, policy risk, response, artifact, manifest, and verification." width="100%">
+  <img src="docs/assets/evidence-dag.svg" alt="执行证据图：模型意图、工具调用、进程、事件、风险、响应、产物及其校验关系。" width="100%">
 </p>
 
-证据通过内容寻址存储、哈希校验，并可选签名。这是 **Git-like 执行溯源**，
-不是版本控制系统：diff/blame/replay 面向执行证据，不提供分支合并、checkout
-或真实外部操作的回滚。
+证据采用内容寻址存储，通过哈希校验完整性，并支持可选的数字签名。
+这里的 **Git-like 执行溯源**，指的是对执行记录进行比较、追溯和回放；
+不包含 Git 分支合并、检出，也不支持撤销已经发生的外部操作。
 
-
-AgentProvenance 不需要你"挑一种接入模式"。它是分层的证据，只有一个入口：
-把你本来就在跑的命令包一层。
+最基本的用法，是用 `record` 启动你原本就要运行的命令：
 
 ```sh
 agentprov record -- <agent command>
 ```
 
-`record` 会在执行前对文件状态做快照、运行命令、采样进程树、计算执行后的文件
-变更，并把运行时证据写入 DAG，不需要应用 SDK。额外上下文需要受支持的
-hook/transcript 适配器或显式上下文生产者；内核采集需要运行中的传感器。
-这些来源在可用时增强同一份 run。
+`record` 记录执行前后的文件状态，运行命令并采样进程树，将这些证据写入
+有向无环图（DAG），无需在应用中接入 SDK。
+在此基础上，可以通过受支持的 Hook、会话记录适配器或自定义上下文来源补充
+应用信息；内核事件则由运行中的传感器采集。可用的证据会汇入同一份执行记录。
 
 ### 证据分层
 
-| 层 | 来源 | 信任语义 |
+| 证据层 | 来源 | 能说明什么及其限制 |
 |---|---|---|
-| 运行时事实（基座） | `record` 进程采样 + 文件差异、自研 eBPF、兼容 JSONL 接收器 | 观测到的进程、文件和网络行为，以身份和采集时间关联；可信度取决于采集器和宿主机信任边界 |
-| 应用上下文（增强） | harness hooks（`hooks bridge`）、MCP 上下文写入（`bind_scope` / `record_tool_call`）、显式的 `run_id / trajectory_id / execution_scope_id / tool_call_id / tool_name / args_hash` | 内核永远推不出来的语义 —— agent 身份、委派与对等消息、被拒绝的意图；应用侧断言带 `binding_source=ai_asserted` 和 `<=0.5` 的置信度上限，且永远不能覆盖内核事实 |
-| 模型意图（增强） | 支持的 transcript 适配器和 TLS 明文探针；HTTP/1.1 + HTTP/2/HPACK 解析 | 捕获的请求、响应和声明的工具决策，不是模型内部推理的读取；采集不完整时保留 coverage gap |
+| 运行时事实 | `record` 的进程采样与文件差异、原生 eBPF 传感器、兼容的 JSONL 接收器 | 记录观测到的进程、文件和网络行为，按运行身份与采集时间关联。可信程度取决于采集器和宿主机的可信程度。 |
+| 应用上下文 | Agent 运行框架的 Hooks（`hooks bridge`）、MCP 上下文写入（`bind_scope` / `record_tool_call`），以及显式提交的任务和工具调用标识 | 补充 Agent 身份、任务委派、协作消息和拒绝执行等信息。模型通过上下文写入接口提交的信息标记为 `binding_source=ai_asserted`，置信度上限为 `0.5`，不能覆盖内核事实。 |
+| 模型意图 | 受支持的会话记录适配器、TLS 明文探针，以及 HTTP/1.1、HTTP/2/HPACK 解析 | 记录请求、响应和模型声明的工具操作，不代表读取模型内部推理。无法采集的部分会作为覆盖缺口保留。 |
 
-内核层回答"这台主机上实际发生了什么"。应用上下文层回答"是哪个 agent、
-哪次工具调用、什么意图" —— 包括任何 syscall 流都无法表达的东西，比如编排器的
-`agent_spawn`/`agent_message` 边，或者 LLM **拒绝**执行的某个动作。
-应用上下文不是一种独立部署，也不是必需的 SDK：当某个 harness 发出 hooks
-或调用 MCP 上下文写入工具时，增强层会附着到同一次 run 上；当它不发时，
-内核层依然独立成立。
+运行时证据说明“实际发生了什么”，应用上下文帮助回答“属于哪个 Agent、
+哪次工具调用、什么任务”。例如，编排器的 `agent_spawn`、`agent_message`
+关系，以及模型拒绝执行某个动作，都无法仅靠系统调用推断出来。
+
+应用上下文是可选的补充。运行框架可以通过 Hooks 或 MCP 接口提供这些信息，
+并关联到同一次执行；缺少这类信息时，已有的运行时记录仍可独立查询。
 
 ### 运行时事实与关联
 
-回溯到执行上下文的关联，使用的是运行时事实：
+关联引擎根据以下运行信息，将事件归属到相应的执行上下文：
 
 ```text
 root process / process tree / cwd / timestamp / container_id / cgroup_id
   / file diff / artifact refs
 ```
 
-原始的系统侧遥测**不应该**被要求携带 `tool_call_id`。内核和运行时信号通常
-知道 PID、cgroup、namespace、容器 ID、时间戳和进程树。AgentProvenance
-把这些基质事实关联回执行上下文。
+内核事件通常只包含 PID、cgroup、命名空间、容器 ID、时间戳和进程树信息，
+无需携带应用侧的 `tool_call_id`。AgentProvenance 使用这些关联信息，
+将系统事件与任务、执行作用域和工具调用连接起来。
 
-目前，CLI 暴露了底层的绑定原语：
+也可以通过 CLI 显式建立绑定：
 
 ```sh
 agentprov telemetry bind --run <run_id> --substrate-scope <substrate_scope_id> \
@@ -293,7 +294,7 @@ agentprov telemetry bind --run <run_id> --substrate-scope <substrate_scope_id> \
   --container-id <container_id> --cgroup-id <cgroup_id> --pid <pid>
 ```
 
-之后原始事件就可以在没有 `tool_call_id` 的情况下被摄取：
+建立绑定后，即可导入不含 `tool_call_id` 的原始事件：
 
 ```sh
 agentprov telemetry ingest --raw-event raw-execve-1 --pid <pid> \
@@ -304,133 +305,119 @@ agentprov telemetry ingest-jsonl --format native --file agentprov-sensor-events.
 agentprov telemetry ingest-falco --file falco-events.jsonl
 ```
 
-`ingest-jsonl` 会记录一份遥测批次清单，含输入文件哈希、映射后的事件 ID、
-事件 ID 哈希、接收器摘要和逐行映射结果。默认它还会对摄取的事件评估运行时
-策略，因此 metadata-IP、私有 CIDR 和敏感路径这些行会变成 `policy_decisions`、
-`risk_signals`、`response_actions`、图的边以及时间线行。如果接收器只需要
-归一化并存储遥测，用 `--no-policy`。这让 DAG 对外部
-Falco/Tetragon/LoongCollector 证据有了一个审计抓手，同时又不至于把
-AgentProvenance 变成一个长期日志库。
+`ingest-jsonl` 会生成遥测批次清单，记录输入文件哈希、映射后的事件 ID 及其哈希、
+接收摘要和逐行处理结果，便于追溯一批数据的来源与处理过程。
+默认还会对导入的事件执行策略评估：访问云元数据地址、内网地址或敏感路径等事件，
+可产生 `policy_decisions`、`risk_signals`、`response_actions` 及相应的图关系和时间线记录。
+如果只需规范化和存储事件，可使用 `--no-policy`。
 
-`native` 格式是 AgentProvenance 自研 eBPF 传感器
-（`cmd/agentprov-sensor`，`source="agentprov_ebpf"`）的接收器，会被自动识别。
-这补上了"只消费不生产"的缺口：传感器归一化后的内核事件（execve、被分类为
-`metadata_ip`/`private_cidr` 的网络连接、带真实绝对主机路径的文件写入）
-走的是与第三方遥测**完全相同**的关联、策略、风险和统一信号路径。原始文件
-遥测现在接受绝对主机路径（例如对 `/home/agent/.aws/credentials` 的写入），
-策略路径规则依然能抓到；只有工作区文件节点图保留相对路径约束。
-`scripts/accept_native_sensor_risk.sh` 端到端证明了这条闭环
-（从自己的内核遥测一路到统一的 `security` 信号）。
+原生 eBPF 传感器（`cmd/agentprov-sensor`，`source="agentprov_ebpf"`）输出的
+`native` 格式会被自动识别。它采集的进程执行、网络连接和文件访问事件，
+与第三方遥测共用关联、策略、风险和统一信号处理流程。
+文件事件可以保留宿主机上的绝对路径，例如 `/home/agent/.aws/credentials`，
+并接受路径规则检查；工作区文件节点则使用相对路径。
+`scripts/accept_native_sensor_risk.sh` 验证了从原生采集到 `security` 信号的完整链路。
 
-`ingest-falco` 是给已经在跑 Falco 的主机（或自研传感器跑不起来的场景）
-准备的兼容接收器；它把 Falco 的 JSON/stdout 流折进同一条关联/策略路径。
-细节见 [docs/falco-receiver.md](docs/falco-receiver.md)。
+已有 Falco 的主机也可使用 `ingest-falco`，将 Falco 的 JSON/stdout 输出接入
+同一流程。用法见 [Falco 接收器说明](docs/falco-receiver.md)。
 
 ## 与现有系统的关系
 
-AgentProvenance 的设计目标是与系统级可观测性项目、LLM tracing 系统和沙箱
-运行时**共存**。
+AgentProvenance 可以接收系统可观测性工具和沙箱提供的数据，也可以与
+LLM 调用追踪平台配合使用。各自关注的重点如下：
 
-| 系统类别 | 它负责什么 | AgentProvenance 有何不同 |
+| 系统类别 | 主要职责 | AgentProvenance 补充的能力 |
 |---|---|---|
-| 系统可观测性 | 低侵入的系统侧捕获、eBPF/运行时事件采集、跨进程可见性 | AgentProvenance 把这些事件当作证据**输入**，然后构建类 Git 的因果/溯源 DAG、diff/blame、污染血缘、风险判定、取证和响应控制面 |
-| OpenTelemetry / LLM trace 平台 | span、日志、指标、LLM/工具 trace、dashboard、延迟/成本视图 | AgentProvenance 聚焦于状态溯源、产物血缘、沙箱运行时效果、安全决策、重放和审计清单 |
-| HIDS / EDR / 运行时安全 | 主机/进程/文件/网络的检测与强制 | AgentProvenance 补上 agent 上下文：run/trajectory/execution_scope/tool_call、状态血缘、文件差异、产物溯源、风险信号、基线偏差和响应门禁 |
-| 沙箱运行时 | 隔离，进程/容器/VM 执行，文件系统与网络边界 | AgentProvenance 消费沙箱身份与遥测；它不试图取代 Docker、OpenSandbox、gVisor、Firecracker、Kata 或 Kubernetes |
+| 系统可观测性工具 | 采集系统事件，观察进程及其运行行为 | 将事件关联到 Agent 任务与工具调用，支持变化追溯、污点传播分析、风险判定和取证 |
+| OpenTelemetry / LLM 调用追踪平台 | 记录调用链、日志、指标、模型与工具调用，以及延迟和成本 | 追溯文件和产物的来源，关联沙箱内的实际行为，并提供可验证的执行记录 |
+| HIDS / EDR / 运行时安全系统 | 检测主机、进程、文件和网络行为，并执行防护策略 | 补充 Agent 身份、任务上下文、文件变化和执行归属，说明风险与哪次任务相关 |
+| 沙箱运行时 | 执行进程、容器或虚拟机，提供文件系统和网络隔离 | 使用沙箱身份与遥测构建证据；不替代 Docker、OpenSandbox、gVisor、Firecracker、Kata 或 Kubernetes |
 
-所以差异化并不是"又一个零 SDK 的 eBPF 观察者"。那个窄原语是：
+核心链路是：
 
 ```text
-system-side telemetry + application-side agent context
-  -> evidence DAG
-  -> security analysis and risk judgment
-  -> automated response and audit trail
+系统运行记录 + Agent 应用上下文
+  -> 可验证的执行证据图
+  -> 安全分析与风险判定
+  -> 响应记录与审计追溯
 ```
 
 ## 意图一致性
 
-模型意图层回答的不只是"模型跑了哪条命令"。它把**每个动作声明自己要做什么，
-与运行时实际做了什么**对账 —— 这种"背离"，是一条正向的"模型导致了这件事"
-的边所无法表达的。
+意图一致性分析比较**声明要执行的操作**与**实际观测到的行为**。
+除了关联“哪个模型调用引发了这次操作”，它还检查行为是否超出声明范围，
+以及被拒绝的动作是否仍然发生。
 
 ```sh
 agentprov intent diff --run <run_id>
 ```
 
-每一份被捕获的 **IntentContract**（一次工具调用、一条对等的 `SendMessage`，
-或一次拒绝）都声明了它**应该**产生和**绝不能**产生的效果；每一份都会与归属到
-其作用域的、归一化后的 **RuntimeEffects** 做差异对比。判定结果：
+每份 **IntentContract（意图契约）**记录一次工具调用、Agent 间消息或拒绝决策
+所允许和禁止的行为。系统将它与归属到同一作用域的 **RuntimeEffects（运行时行为）**
+进行比较，输出以下结果：
 
 | 判定 | 含义 |
-| --- | --- |
-| `declared_vs_effect_mismatch` | 运行时超出了声明的契约（例如一次 *install* 读了别人的密钥并向 metadata IP 外发） |
-| `peer_message_intent_mismatch` | 意图来自另一个 agent 的消息所导致的不匹配（多 agent 横向影响的发现） |
-| `refused_but_runtime_happened` | 一个被拒绝的动作，其效果却还是发生了 |
-| `decided_and_executed` | 声明的效果出现了，无违规 |
-| `intent_coverage_gap` | 敏感效果**没有**对应的被捕获意图 —— 这是一个诚实的缺口，绝不是编造的发现 |
+|---|---|
+| `declared_vs_effect_mismatch` | 实际行为超出声明范围，例如安装依赖时读取无关凭证并连接云元数据地址 |
+| `peer_message_intent_mismatch` | 超出声明范围的行为源于另一个 Agent 发来的消息 |
+| `refused_but_runtime_happened` | 模型已拒绝该动作，但仍观测到对应行为 |
+| `decided_and_executed` | 观测到声明中的行为，且未发现违反该契约的情况 |
+| `intent_coverage_gap` | 观测到敏感行为，但缺少对应的意图记录，无法完成比较 |
 
-这个发现是**以每个动作自己声明的契约为条件的**，这正是它区别于全局策略规则
-之处：一次网络连接对一个只读文件工具而言是漂移，但对 `bash` 是允许的；
-读取 `~/.aws/credentials` 对**任何**没有声明它的操作而言都是漂移。
-"读别人的密钥"与"agent 读自己的凭证"由传感器所用的同一个策略引擎区分开。
+判定以**具体操作的声明范围**为依据。例如，网络连接可能超出只读文件工具的职责，
+却属于 `bash` 的可用能力；读取未声明的敏感凭证也可能构成偏差。
+Agent 正常读取自身凭证的情况，则由同一套策略引擎中的相应规则识别。
 
-判定结果会汇入统一信号模型中的 `intent_conformance` 维度，能翻转 `launch`
-的结论，并在 **Conformance · declared vs actual** 图透镜中渲染
-（契约作用域 → 判定 → 观测到的效果，与委派和对等 agent 结构并列）。
-[multi-agent](demo/multiagent-provenance/README.md) demo 展示了 `alice`
-指使 `bob` 运行一次投毒 install，最终以 `peer_message_intent_mismatch`
-浮现出来。
+结果写入统一信号模型的 `intent_conformance` 维度，可影响 `launch` 的最终判断，
+并在 **Conformance · declared vs actual** 视图中展示“声明 → 判定 → 观测行为”。
+[多 Agent 示例](demo/multiagent-provenance/README.md)中，`alice` 诱导 `bob`
+安装恶意依赖，相关偏差被标记为 `peer_message_intent_mismatch`。
 
 ## 部署模式
 
-AgentProvenance 刻意做成可以用三种部署形态使用。RL、benchmark 和评估器用户
-应该从第一种形态开始；企业安全和审计用户在需要共享摄取、保留和查询服务时，
-可以向后面的形态迁移。
+目前可以使用单机 CLI 或本地服务两种部署方式；中心化证据服务还处于设计阶段。
+本地开发、基准测试、评估器和 RL 流水线通常可以从 CLI 开始。
+需要持续接收事件、共享本机查询接口时，再使用本地服务。
 
 <p align="center">
-  <img src="docs/assets/deployment-modes.svg" alt="AgentProvenance deployment modes" width="920">
+  <img src="docs/assets/deployment-modes.svg" alt="AgentProvenance 的 CLI、本地服务与中心化服务部署方式。" width="920">
 </p>
 
-| 模式 | 形态 | 最适合 | 取舍 |
+| 模式 | 形态 | 适用场景 | 使用成本与限制 |
 |---|---|---|---|
-| 库 / 纯 CLI 记录器 | 一个 `agentprov` 二进制，可选的 Python helper，本地 SQLite/对象存储 | 评估器作业、benchmark、CI、RL 流水线、本地红队工具链 | 最易采用；共享查询和长时摄取较弱 |
-| Sidecar / 本地 daemon | `agentprov daemon serve` 跑在某个 worker 或沙箱主机旁；CLI 和评估器客户端与它通信 | 沙箱 worker、CI runner、本地安全工具链、中等量级遥测摄取 | 引入一个本地服务边界、spool、背压和稳定的查询 API |
-| 中心化证据服务（仅设计） | 提议中的共享摄取/查询服务，带对象存储、保留策略、认证和 UI/API | 未来的企业安全、审计、SRE、合规、事件复盘 | 架构已成文；多租户、计费和集群控制平面的实现不在范围内 |
+| 库 / 单机 CLI | 一个 `agentprov` 可执行文件，可选 Python 辅助库，本地 SQLite 与对象存储 | 评估任务、基准测试、CI、RL 流水线、本地红队测试 | 上手简单，不提供集中查询或跨主机汇聚 |
+| Sidecar / 本地服务 | 在任务执行节点或沙箱主机上运行 `agentprov daemon serve`，CLI 和评估器通过它读写数据 | 持续采集、CI 执行节点、本地安全分析 | 需维护一个本地服务，提供磁盘缓冲、背压和查询 API |
+| 中心化证据服务（仅设计） | 规划中的共享接收与查询服务，包含对象存储、保留策略、认证和 UI/API | 跨节点调查、审计、SRE 和事件复盘 | 尚未实现；多租户、计费和集群控制平面不在本版范围内 |
 
-单节点的规模边界是具体的：本地 daemon 有一个文件支撑的 spool，受批次数、
-总字节数和单批字节数三重约束；它通过 `telemetry producer-health` 暴露
-背压/丢弃/关联覆盖率。`scripts/accept_telemetry_100k_pressure.sh` 会写出一份
-机器可读的吞吐、延迟、资源、队列和覆盖率报告。终点线以及明确**未**实现的
-中心化服务边界，记录在 [project-closeout.md](docs/project-closeout.md) 和
-[central-evidence-service-design.md](docs/central-evidence-service-design.md)。
-经核对的参考运行摄取了全部 10 万条事件，零失败/零丢弃批次，同时 health 和
-有界事件查询保持响应；其实测吞吐被明确记录为**本地 SQLite 基准，而非生产
-SLA**。
+本地服务的磁盘缓冲队列（spool）同时限制批次数、总字节数和单批大小，
+并通过 `telemetry producer-health` 报告背压、丢弃和关联覆盖情况。
+`scripts/accept_telemetry_100k_pressure.sh` 生成包含吞吐量、延迟、资源占用、
+队列状态和覆盖率的机器可读报告。参考测试接收了全部 10 万条事件，没有失败或
+丢弃的批次，健康检查和分页事件查询也能正常响应。
+这是单节点 SQLite 基准，不代表生产环境 SLA。具体范围见
+[收尾标准](docs/project-closeout.md)和[中心化服务设计](docs/central-evidence-service-design.md)。
 
-Kubernetes 生产者门禁会部署真实的特权传感器 DaemonSet、启动多个独立 pod、
-把每个 pod/容器身份解析到传感器观测到的内核 cgroup、摄取 DaemonSet 的
-stdout JSONL，并验证产出的 run。经核对的 2026-08-05 实验室运行使用了一个
-arm64 K3s 节点和 8 个 BusyBox pod：8 个不同的 cgroup、1,140 条捕获事件，
-`graph verify` 零错误零告警。这证明了一个传感器能在一个节点上观测 N 个负载；
-它**不是**一个集群吞吐量声明。
+Kubernetes 验收会部署特权传感器 DaemonSet，启动多个独立 Pod，
+将 Pod、容器身份与内核 cgroup 对应起来，再导入并验证采集结果。
+2026-08-05 的 ARM64 K3s 实验使用了 8 个 BusyBox Pod，识别到 8 个独立 cgroup，
+记录 1,140 条事件，`graph verify` 无错误、无告警。
+该结果验证了单个节点传感器同时观测多个工作负载的能力，不是集群吞吐量测试。
 
-同一个负载还通过了一道实跑的**跨 profile 平价门禁**：主动的 `local-record`
-和被动的 `k8s-daemonset` 两种捕获都能干净地验证通过，并共享同样的规范化负载
-命令、`execve` 证据、运行时事件节点和"进程→事件"因果边。主机相关的
-PID/cgroup/容器身份以及事件数量被刻意排除在等价性之外；它们各自不同的关联
-置信度档位保持可见。
+同一负载还通过了**不同采集模式的语义一致性验收**：主动启动的 `local-record`
+与被动采集的 `k8s-daemonset` 均通过证据校验，且记录了相同的负载命令、`execve`
+证据、运行时事件节点和“进程 → 事件”关系。比较不要求 PID、cgroup、容器标识
+或事件数量相同，各模式的关联置信度也分别保留。
 
-用 `agentprov sandbox profiles`（或 `--json`）可以直接查看这条验证边界。
-处于 planned 状态的 profile 在通过实环境门禁之前，一律报告零作用域置信度和
-零采集覆盖。
+可通过 `agentprov sandbox profiles`（支持 `--json`）查看采集模式及其验证状态。
+标记为 `planned` 的模式在通过真实环境验收前，作用域置信度和采集覆盖率均为零。
 
-另有一个独立的轻量归属控制器 DaemonSet 运行 `agentprov sandbox watch`：
-一个过滤过的 `client-go` informer 在本节点 List/Watch Pod，把每个运行中的
-容器映射到内核遥测所用的主机 cgroup inode，并在容器重启和 Pod 删除期间维持
-精确绑定。它的 RBAC 仅限于 Pod 的 `get/list/watch`；遥测采集仍留在独立的
-传感器数据面。K3s 生命周期门禁完成时的结果是：创建 2 个绑定、关闭 2 个、
-1 次重启，无残留活跃绑定、无解析失败。这**不**被宣称为一个完整的 Kubernetes
-operator 或集群控制平面。
+另一个轻量 DaemonSet 运行 `agentprov sandbox watch`，负责维护事件归属：
+它使用 `client-go` informer 监听本节点 Pod，将运行中的容器映射到内核遥测使用的
+cgroup inode，并在容器重启、Pod 删除后更新绑定。所需 RBAC 权限仅为 Pod 的
+`get/list/watch`，事件采集仍由独立传感器负责。
+K3s 生命周期验收记录了 1 次重启、2 次绑定创建和 2 次绑定关闭，
+结束时无活跃绑定残留或解析失败。这验证了节点内的绑定维护，不代表完整的
+Kubernetes Operator 或集群控制能力。
 
 ```sh
 AGENTPROV=/path/to/linux/agentprov \
@@ -443,28 +430,26 @@ AGENTPROV_K8S_INFORMER_REPORT=/tmp/agentprov-k8s-informer.json \
   ./scripts/accept_k8s_informer_controller.sh
 ```
 
-对 RL 和评估器流水线，默认契约是轻量且 offline-first 的：
+RL 和评估流水线可以采用轻量的离线工作流：
 
-- **安装**：一个 Go 二进制，外加一个可选的轻薄 Python 包。
-- **调用**：包住一条已有命令；受支持的 launch 配方及 hook/transcript
-  适配器补充应用上下文，自定义生产者可以使用 MCP 上下文写入。
-- **批量**：每条轨迹都得到稳定的 `run_id` / 证据清单 / 信号上下文输出，
-  且查询界面都是分页的。
-- **开销**：默认捕获聚焦于进程/文件/差异/产物/退出/资源证据；更重的
-  Falco/eBPF 式遥测是一个可选启用的基质。
-- **归属**：AgentProvenance 输出证据、偏差、风险和轨迹信号。RL 系统拥有
-  reward、排序、数据集策略和选优。
-- **策略**：RL 模式不要求在线 deny/kill/quarantine。那些动作是可选启用的
-  安全控制；离线打分可以事后基于捕获的 EvalContext JSONL 来跑。
+- **安装**：下载一个可执行文件；需要 Python 接口时再安装辅助库。
+- **接入**：用 `record` 启动已有命令。受支持的 `launch` 配置、Hook 和会话记录
+  适配器可补充应用上下文；自定义集成也可通过 MCP 写入上下文。
+- **批量处理**：每条轨迹都有 `run_id`、证据清单和评估上下文，查询接口支持分页。
+- **采集范围**：默认记录进程、文件变化、产物、退出状态和资源信息；
+  更详细的 eBPF 或第三方遥测按需启用。
+- **职责划分**：AgentProvenance 提供证据、偏差、风险和轨迹信号；
+  奖励、排序、数据集管理和轨迹筛选由 RL 系统决定。
+- **安全策略**：拒绝、终止和隔离属于可选控制。离线评估可以在执行结束后，
+  直接读取 `EvalContext` JSONL，不要求启用这些控制。
 
-一个评估器或 RL 流水线到底怎么消费这份契约 —— `EvalContext`/`EvalSignal`
-协议，以及带自定义规则的轻薄 Python helper —— 是一个独立话题，
-统一记录在[外部评估器协议](#外部评估器协议)。
+`EvalContext`、`EvalSignal` 协议及 Python 自定义规则的用法，见
+[外部评估器协议](#外部评估器协议)。
 
 ## 安全证据命令
 
-run 级的安全界面是若干查询族，每一个都有稳定的 `--json` 契约
-（含结果/分页完整性哈希）：
+以下命令用于查看一次执行中的证据、风险和响应。
+查询结果支持 `--json`，并提供相应的结果集或分页完整性信息：
 
 ```sh
 ./agentprov observe summary --run <run_id>       # 覆盖率：应用上下文、遥测、风险、响应
@@ -476,22 +461,22 @@ run 级的安全界面是若干查询族，每一个都有稳定的 `--json` 契
 ./agentprov forensics export <run_id>            # 带哈希、可选签名的审计包
 ```
 
-- `observe summary/coverage/scopes/event/process/flow` —— run 级可观测性与
-  按作用域下钻。
-- `evidence manifest` / `telemetry correlations` —— 该 run 的哈希索引证据目录，
-  以及每条遥测事件为何被挂到它的作用域上。
-- `security risks/deviations/responses` + `baseline learn/check` —— 建立在
-  已关联证据之上的风险层。
-- `policy test/decisions` —— 受信策略引擎。
-- `forensics export[-batch]` —— 可审计的证据包。
+- `observe summary/coverage/scopes/event/process/flow`：查看执行概况，或按作用域、
+  事件、进程进一步排查。
+- `evidence manifest` / `telemetry correlations`：查看带哈希索引的证据目录，
+  以及每条事件的归属依据。
+- `security risks/deviations/responses` + `baseline learn/check`：基于关联后的证据
+  查看风险、基线偏差和响应记录。
+- `policy test/decisions`：测试策略规则、查看策略判定。
+- `forensics export[-batch]`：导出可审计的证据包。
 
 完整命令列表及每条命令的用途：
 [docs/security-commands.md](docs/security-commands.md)。
 
 ## 外部评估器协议
 
-AgentProvenance 把证据暴露给外部打分系统，但不接管它们的 reward、排序或
-数据集策略。
+AgentProvenance 为外部评分系统提供证据，奖励函数、排序和数据集策略仍由
+外部系统管理。
 
 ```sh
 ./agentprov signal context --run <run_id> > eval-context.json
@@ -503,31 +488,31 @@ AgentProvenance 把证据暴露给外部打分系统，但不接管它们的 rew
 ./agentprov signal import --run <run_id> --file external-signals.json --json
 ```
 
-协议刻意做得很小：
+协议包含以下内容：
 
 - `EvalContext` 包含轨迹、文件变更、运行时事件、风险信号和响应动作。
 - 外部评估器从 stdin 读取 `EvalContext`，返回 `{ "signals": [...] }`。
-- `EvalSignal` 可以表示 reward 特征、惩罚、数据集标签或质量信号。
+- `EvalSignal` 可以表示奖励特征、惩罚、数据集标签或质量信号。
 - `signal import-batch` 接受 JSONL 格式的 EvalReport 记录，这样 RL 流水线
-  可以批量导入大量离线信号报告，而不必每个 run 敲一次命令。
+  可以一次导入多条轨迹的离线评估结果。
 
-这让 benchmark 工具链、RL 流水线、红队工具链或数据过滤作业，自己决定证据
-如何变成分数、拒绝或复核。
+基准测试、RL、红队测试和数据筛选流程可以自行决定，如何根据这些证据评分、
+拒绝结果或发起人工复核。
 
-可选参考集成：[LLM 安全裁判](demo/llm-judge/) 和
-[Jev 结构化评估器](demo/jev-judge/)。供应商调用、规则对比及复核页面都属于
-外部示例，不是核心产品模块。采集、回放和主 dashboard 均不依赖它们；
-分析结果通过已有信号契约返回。
+可选参考实现：[LLM 安全评估示例](demo/llm-judge/)和
+[Jev 结构化评估器](demo/jev-judge/)。模型服务调用、规则对比和复核页面由这些
+外部示例提供，采集、回放和主可视化界面都不依赖它们。
+分析结果通过已有的信号接口写回。
 
 ### 用 Python 写自定义规则
 
 <details>
 <summary>展开完整的 Python 规则示例</summary>
 
-`python/agentprov_eval`（import 别名 `agentprov`）是这个协议之上一层轻薄的、
-由 CLI 支撑的 helper —— **它不编码任何 reward 函数**。自定义"规则"就是普通的
-Python 函数，作用于 `EvalContext`；捕获、关联、清单和查询完整性依然由 Go 掌握。
-这个单函数入口会跑完整条本地离线闭环（record batch → 评估规则 → 导入信号）：
+`python/agentprov_eval`（可通过 `import agentprov` 使用）是基于 CLI 的轻量辅助库，
+不内置奖励函数。自定义规则就是读取 `EvalContext` 并返回信号的普通 Python 函数；
+采集、关联、证据清单和完整性校验仍由 Go 程序负责。
+下面的例子通过一个函数完成“批量记录 → 执行评估规则 → 导入信号”的本地离线流程：
 
 ```python
 from agentprov import Registry, Signal, run_batch_pipeline
@@ -564,7 +549,7 @@ result = run_batch_pipeline(
 print(result.batch_id, result.signal_count)
 ```
 
-当流水线自己已经掌管调度或分片时，同样的工作流可以拆成更底层的调用：
+如果已有流水线负责调度或分片，也可以分别调用各个步骤：
 
 ```python
 from agentprov import Client, evaluate_batch
@@ -581,7 +566,7 @@ reports = evaluate_batch(contexts, registry=registry)
 client.import_signal_reports(reports, engine=registry.name)
 ```
 
-之后，同一个本地存储可以按 batch、shard、job 或 run 来查询：
+结果写入本地存储后，可按批次、分片、任务或单次执行查询：
 
 ```sh
 ./agentprov evidence batch-summary --latest --json
@@ -593,9 +578,9 @@ client.import_signal_reports(reports, engine=registry.name)
 
 </details>
 
-### Daemon 模式
+### 本地服务（Daemon）模式
 
-在 daemon 模式下，同一套协议通过本地 API 提供：
+运行本地服务时，也可以通过 HTTP API 使用同一套协议：
 
 ```text
 GET  /v1/signal/context?run=<run_id>
@@ -603,34 +588,32 @@ POST /v1/signal/run
 POST /v1/signal/import
 ```
 
-daemon **不**暴露任何可以执行任意外部 shell 命令的 HTTP 端点。客户端可以
-拉取 `EvalContext`、在自己的进程边界里执行评估器，再把产出的信号导回 daemon
-做校验。设置了 `--daemon-url` 时，CLI 也遵循这个形态。
+本地服务不提供执行任意 Shell 命令的 HTTP 接口。
+客户端应先获取 `EvalContext`，在自己的进程中运行评估器，
+再将结果提交给服务校验。CLI 设置 `--daemon-url` 后也采用这一流程。
 
 ## 合规证据，而非合规认证
 
-Run 证据可以映射到安全框架画像（OWASP Agentic Security、NIST AI agent
-安全评估），作为一份**有证据支撑的自评** —— 而不是认证、法律意见，
-也不能替代第三方审计：
+一次执行的证据可以映射到安全框架中的检查项，例如 OWASP Agentic Security
+和 NIST AI Agent 安全评估要求，用于开展**有证据支撑的自评**。
+这些报告不构成认证或法律意见，也不能替代第三方审计：
 
 ```sh
 ./agentprov compliance map --framework owasp-asi --run <run_id>
 ./agentprov compliance gaps --framework owasp-asi --run <run_id>   # 缺失/部分覆盖的待办
 ```
 
-每一个检查项都从该 run 中**已有的**证据推导而来，报告
-`covered | partial | missing | not_applicable`，并带上具体的 `evidence_refs`
-和一条建议的下一步 —— 是**诚实的覆盖缺口，而不是伪造的通过**，
-也没有成为 GRC 平台的野心。自定义 YAML 规则集可以在内置框架之上叠加
-企业专属框架。
+每个检查项都根据本次执行中已有的证据，报告 `covered`（已覆盖）、
+`partial`（部分覆盖）、`missing`（缺失）或 `not_applicable`（不适用），
+同时给出 `evidence_refs` 和建议的下一步。缺少证据的项目会明确列出缺口。
+企业也可以通过自定义 YAML 规则集增加检查项。
 
-完整命令集、检查项语义和自定义规则集的 YAML 模型：
-[docs/compliance.md](docs/compliance.md)。
+完整命令、检查项含义和 YAML 规则格式，见[合规证据说明](docs/compliance.md)。
 
 ## AI 可调用的证据工具
 
-AgentProvenance 可以把它的证据查询界面暴露成 AI 可调用的工具，供 agent
-harness、评估器或复核助手使用：
+AgentProvenance 将证据查询和部分上下文写入接口封装成 AI 可调用的工具，
+供 Agent 运行框架、评估器或辅助复核工具使用：
 
 ```sh
 ./agentprov ai tools --provider generic
@@ -646,62 +629,58 @@ harness、评估器或复核助手使用：
 ./agentprov ai mcp   # 通过 stdio MCP（JSON-RPC 2.0）提供同一份目录
 ```
 
-同一份目录会为 generic、OpenAI 和 Anthropic 三种 provider 渲染，由 `ai call`
-在本地分发，并由 `ai mcp` 通过 Model Context Protocol 提供
-（stdio JSON-RPC 2.0 server，规范版本 `2025-06-18`，因此 MCP 客户端看到的是
-完全相同的工具集，不存在两份会各自漂移的契约）。目录如下：
+工具定义可导出为 generic、OpenAI 或 Anthropic 格式，通过 `ai call` 在本地调用，
+也可以由 `ai mcp` 提供给 MCP 客户端。后者使用 stdio JSON-RPC 2.0，
+协议版本为 `2025-06-18`。这些入口共用同一份工具定义：
 
 | 工具 | 用途 |
 |---|---|
-| `verify_run` | 校验一次 run 的对象哈希、父链接以及策略/风险/响应/信号完整性 |
-| `get_signals` | 返回一次 run 的统一 行为/成本/质量/安全 信号集 |
-| `list_risks` | 返回安全风险信号和建议动作 |
-| `list_events` | 返回分页的运行时遥测事件，可按类型过滤 |
-| `get_timeline` | 返回合并后的应用上下文 + 运行时遥测时间线 |
-| `evaluate_action` | 把一条拟执行的命令、文件动作或网络动作送进受信策略引擎判定，但**不执行**（内联门禁，无副作用） |
-| `bind_scope` | 注册一条 ToolCallScope 绑定（应用侧断言，强制 `binding_source=ai_asserted`），让独立的系统遥测能关联到这次工具调用 |
-| `record_tool_call` | 锚定一次应用侧断言的工具调用（`status=asserted`）；**不执行**任何东西 |
+| `verify_run` | 校验一次执行的对象哈希、父子链接，以及策略、风险、响应和信号的完整性 |
+| `get_signals` | 查询行为、成本、质量和安全信号 |
+| `list_risks` | 查询安全风险与建议动作 |
+| `list_events` | 分页查询运行时事件，可按事件类型筛选 |
+| `get_timeline` | 查询合并后的应用上下文与运行时事件时间线 |
+| `evaluate_action` | 将拟执行的命令、文件操作或网络操作交给策略引擎预检，不执行该操作 |
+| `bind_scope` | 注册 `ToolCallScope` 绑定，使系统遥测可关联到对应工具调用；提交信息标记为 `ai_asserted` |
+| `record_tool_call` | 记录应用侧声明的工具调用，标记为 `status=asserted`，不执行工具 |
 
-只读工具和 `evaluate_action` 被声明为只读；`bind_scope` 和
-`record_tool_call` 是上下文写入界面（在 MCP 上 `readOnlyHint=false`）。
+查询工具和 `evaluate_action` 标记为只读；`bind_scope` 与 `record_tool_call`
+会写入应用上下文，因此在 MCP 中标记为 `readOnlyHint=false`。
+这些写入接口不用于提交原始内核事件或修改签名。模型提供的上下文以应用侧声明
+保存，不能当作传感器观测到的事实；动作预检则由策略引擎完成。
 
-这不是模型网关、prompt 路由器或工具执行沙箱。模型拿到的是 schema，它可以
-查询证据库、通过受信策略引擎对一个动作做预检、断言自己的应用侧上下文
-（`bind_scope` / `record_tool_call`）。它**永远不能**写入原始系统遥测、
-伪造签名或捏造溯源图事实：上下文写入的行被记为 `ai_asserted` 且不执行任何
-东西，判定由受信引擎计算，而不是由模型计算。
+### 实例：让 LLM 分析安全证据
 
-### 实例：把 LLM 当作安全裁判
-
-这个界面的意义在于，一个外部模型能够**推理**证据，却**碰不到**证据。
-`demo/llm-judge` 把这条链路端到端接了起来：
+外部模型可以读取证据并给出分析，再将结论作为信号写回，而不修改原始记录。
+`demo/llm-judge` 提供了一个完整示例：
 
 ```sh
-python3 demo/llm-judge/judge.py run            # 导入 demo 包并裁决
-python3 demo/llm-judge/judge.py run --run <id> --data-dir <dir>   # 裁决你自己的 run
+python3 demo/llm-judge/judge.py run            # 导入示例证据包并评估
+python3 demo/llm-judge/judge.py run --run <id> --data-dir <dir>   # 评估已有的执行记录
 ```
 
-这个单文件裁判通过上述同一批契约界面（EvalContext、`ai call`、图透镜 ——
-**不做事件类型过滤**，因此新的捕获维度无需改代码就能抵达裁判）读取一次已捕获
-run 的**完整**轨迹，让模型返回一份结构化判定
-（`agentprovenance.llm_judge/v1`：benign / suspicious / malicious，
-其发现会引用证据 id），再通过 `signal import` 把它作为挂在图上的信号导回。
-超出上下文预算的轨迹会按时间顺序切块并做 map-reduce；不会有东西被悄悄丢掉，
-判定本身会记录自己的覆盖率数字。
+该示例通过 `EvalContext`、`ai call` 和图查询接口读取已记录的执行轨迹，
+不按事件类型预先筛掉证据。模型返回结构化结果 `agentprovenance.llm_judge/v1`，
+包括 `benign`、`suspicious` 或 `malicious` 判定，以及引用具体证据 ID 的发现。
+结果通过 `signal import` 写回，成为关联在图上的分析信号。
 
-裁判自身也跑在 `agentprov record` 之下，它自己的 LLM 请求/响应流量会被
-物化成裁判那次溯源 run 里的 `llm_call` 节点 —— **裁判本身也被它用来裁决的
-同一套机制审计着**。任何 Anthropic 或 OpenAI 协议的端点都能用
-（Claude、DeepSeek、Qwen、本地 vLLM/Ollama）；没有 key 时会降级到离线
-fixture，流水线依然能跑完。
+轨迹超过上下文预算时，示例会按时间分块评估，再汇总结果，并记录实际处理的
+覆盖情况。评估器本身也运行在 `agentprov record` 下：它的模型请求和响应会被
+整理为独立执行记录中的 `llm_call` 节点，便于追溯评估结论的来源。
 
-## Web Dashboard
+示例支持兼容 Anthropic 或 OpenAI 协议的模型服务，例如 Claude、DeepSeek、
+Qwen，以及本地 vLLM/Ollama 服务。未配置 API Key 时会使用离线测试数据完成
+流程验证；这不代表真实模型作出的判断。
+
+<a id="web-dashboard"></a>
+
+## 可视化界面
 
 <p align="center">
-  <img src="docs/assets/dashboard-causality.png" alt="AgentProvenance local evidence inspector preview with run selection, verify status, timeline, process tree, egress, risk signals, and causality DAG." width="100%">
+  <img src="docs/assets/dashboard-causality.png" alt="本地证据界面：执行记录选择、验证状态、时间线、进程树、网络外发、风险信号与关联图。" width="100%">
 </p>
 <p align="center">
-  <img src="docs/assets/dashboard-timeline-process-egress.png" alt="AgentProvenance local evidence inspector preview with run selection, verify status, timeline, process tree, egress, risk signals, and causality DAG." width="100%">
+  <img src="docs/assets/dashboard-timeline-process-egress.png" alt="本地证据界面：执行记录选择、验证状态、时间线、进程树、网络外发、风险信号与关联图。" width="100%">
 </p>
 
 
@@ -710,112 +689,98 @@ fixture，流水线依然能跑完。
 ./agentprov dashboard serve --data-dir <dir> --addr 127.0.0.1:7396
 ```
 
-一个建立在可验证图之上的、本地的、只读的单页 dashboard。它的 JSON 端点复用
-与 CLI 和 AI 工具**完全相同的内部函数**，因此 UI 永远不会与契约漂移；
-HTML/JS 内嵌在二进制里，不加载任何外部资源（local-first）。这个 UI 是一个
-建立在规范图之上的 **Graph Explorer**，而不是一条写死的安全流程。关键的
-规模规则是：**所有原始遥测都保持可查询，但 dashboard 绝不试图把所有原始遥测
-渲染成一张图**。
+Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图。
+它与 CLI、AI 工具复用内部查询逻辑，HTML 和 JavaScript 内嵌在可执行文件中，
+不依赖外部前端资源。
+
+面对大量事件，界面先展示摘要，再按问题逐步展开。
+原始遥测仍可查询，但不会一次性全部绘制成图。
 
 ```text
-Raw Telemetry Events                     原始遥测事件
-  -> Materialized high-value provenance graph   物化的高价值溯源图
-  -> Derived / Virtual Edges                    派生 / 虚拟边
-  -> Lens projection                            透镜投影
-  -> Layout + side-panel schema                 布局 + 侧栏 schema
+原始遥测事件
+  -> 提取关键执行证据，构建溯源图
+  -> 补充带依据的派生关系
+  -> 按分析主题生成视图
+  -> 展示图布局、侧栏和原始证据
 ```
 
-面板：
+主要功能：
 
-- **Run Overview / Ask**：以问题为先的入口（`这次 run 为什么有风险？`、
-  `外发前后发生了什么？`、`哪些文件被改了？`、`哪些进程重要？`、
-  `产物从哪来的？`、`跑了哪些工具调用？`）。每个入口都会切换到一个有界的
-  局部透镜，而不是要求浏览器画出整张规范图。
-- **Graph Explorer**（`/api/lens`，与 CLI 的 `graph lens` 是同一个查询界面）：
-  一个覆盖 12 种投影的**透镜切换器** —— 默认因果、安全、进程树、
-  文件/产物血缘、网络外发、**数据流/污染**、agent 意图、编排、
-  **一致性（声明 vs 实际）**、基质（生产者/cgroup/负载）、信任来源、
-  沙箱边界 —— 带**风险/信任叠加层**、点击聚焦某节点的因果血缘，
-  以及 Sugiyama 分层 DAG。
-  它默认 `detail=summary`：默认透镜是一份 **Run Overview** 而不是原始 DAG
-  倾倒，且每个宽透镜都使用有界的摘要节点：`process_group`、`event_burst`、
-  `file_group`、`risk_group`、`egress_group`、`intent_group`、`trust_group`
-  和 `boundary_group`。这些分组节点是**下钻入口**，不是有损替代：
-  点击一个分组会切换到检视其局部上下游证据所需的聚焦透镜/细节层级。
-  安全相关事件、真实的 exec/文件变更、工作区写入、策略/风险/响应，以及结构性
-  上下文会被提升进图中；低价值的运行时噪声留在原始事件里供取证使用。
-  细节层级被刻意分开：`summary` 表示有界的概览分组，`expanded` 表示过滤掉
-  低价值噪声后的高价值图细节，`raw` 表示用于聚焦调试和取证的完整证据层。
-  **派生边**（例如 `possible_sensitive_data_flow`）以虚线渲染并标注置信度，
-  这样一条推断出来的流向绝不会被误认为已记录的事实。
-  在 summary 模式下，嘈杂的 N x M 数据流证据会被聚合成一条带计数和证据引用的
-  进程/工具作用域摘要边。
-  网络外发按风险类别分组（`risky_egress`、`dns`、`loopback`、`tls`、
-  `network`），因此默认路径是**概览 -> 问题 -> 局部图 -> 原始事件表**，
-  而不是一次性渲染整个 run。
-  选中一个节点会暴露明确的局部展开控件：`lineage`、`upstream`、
-  `downstream`、`children` 和 `raw events`。这些控件只会暗化或揭示局部的
-  解释路径；原始遥测仍分页留在 Focused Evidence 里，而不会被画进 DAG。
-- **时间轴拖动器（Time-scrubber）**：按真实事件时钟向前重放一次 run ——
-  眼看着一次密钥读取、然后是外发，依次出现。
-- **侧栏（Side Panel）**：每个节点的**证据**（ids、命令/pid/路径/目的地、
-  风险/策略/响应、派生边的规则 + 置信度 + 证据引用、哈希），以及一份有界的、
-  已脱敏的**产物内容预览**（该节点实际产出的代码/JSON —— `/api/artifact`）。
-- **Focused Evidence**（`/api/events`）：针对所选问题、分组、信号或节点的
-  聚焦分页原始遥测。在做出选择之前它刻意是空的，这样它就不会看起来像
-  第二条全局时间线。分组节点会把证据引用传进这张表，因此 UI 能展示一条摘要
-  背后确切的原始记录，而不必把它们加进可见的 DAG。
-- **Run Timeline**：整个 run 的全局按时间排序事件流。这是检视"随时间发生了
-  什么"的地方；Focused Evidence 则是检视"为什么选中的这件事成立"的地方。
-- **Verify + 签名**状态、**信号 / 风险**、一条**分页时间线**、**进程树**
-  和**外发**；实时自动刷新。
+- **执行概览（Run Overview / Ask）**：从“为什么有风险”“哪些文件被修改”
+  “外发前后发生了什么”“产物从哪里来”等问题进入对应的局部视图。
+- **图浏览器（Graph Explorer）**：`/api/lens` 与 CLI 的 `graph lens` 共用查询接口，
+  提供 12 种视图：默认因果、安全、进程树、文件与产物、网络外发、数据流与污点传播、
+  Agent 意图、编排、意图一致性、运行环境、信任来源、沙箱边界。
+  支持叠加风险和信任信息，并通过分层 DAG 展示节点关系。
+- **细节层级**：`summary` 按进程、事件、文件、风险等分组展示概览；
+  `expanded` 展开关键证据并过滤低价值噪声；`raw` 用于查看更完整的局部证据。
+  `process_group`、`event_burst`、`file_group`、`risk_group`、`egress_group`、
+  `intent_group`、`trust_group` 和 `boundary_group` 等分组均可点击展开，原始记录仍然保留。
+- **关系与依据**：派生关系（如 `possible_sensitive_data_flow`）使用虚线，
+  并附带规则、置信度和证据引用，以区别于直接记录的关系。
+  摘要模式会按进程或工具作用域聚合复杂的数据流关系，保留数量和原始证据引用。
+  网络外发按 `risky_egress`、`dns`、`loopback`、`tls`、`network` 分类。
+- **局部展开**：选中节点后，可通过 `lineage`、`upstream`、`downstream`、
+  `children` 和 `raw events` 查看来源、上下游、子节点和原始事件。
+  默认调查路径为“概览 → 问题 → 局部图 → 原始事件”，避免整张图过于拥挤。
+- **时间回放（Time-scrubber）**：按记录中的时间顺序回放，例如观察凭证读取
+  和后续网络连接依次出现。
+- **节点侧栏（Side Panel）**：显示节点 ID、命令、PID、路径、目标地址、
+  策略与风险、派生规则、置信度、证据引用及哈希。
+  产物预览通过 `/api/artifact` 提供，限制内容长度并进行脱敏。
+- **相关证据（Focused Evidence）**：通过 `/api/events` 分页展示当前所选问题、
+  分组、信号或节点对应的原始事件。选中对象后才加载，便于核对摘要背后的具体记录。
+- **执行时间线（Run Timeline）**：按时间顺序查看整次执行的事件；
+  与只展示当前选择依据的 Focused Evidence 配合使用。
+- **验证与状态**：展示完整性校验、签名、信号、风险、进程树和网络外发信息，
+  并支持实时刷新。
 
 <p align="center">
-  <img src="docs/img/dashboard-graph-explorer-taint.png" alt="Graph Explorer — data-flow/taint lens showing the captured secret-read -> metadata-IP exfil flow" width="100%">
+  <img src="docs/img/dashboard-graph-explorer-taint.png" alt="数据流与污点传播视图：根据敏感文件读取和云元数据地址连接推导关联关系。" width="100%">
 </p>
 <p align="center">
-  <img src="docs/img/dashboard-side-panel-preview.png" alt="Side Panel — evidence summary plus a redacted preview of the artifact the agent produced" width="100%">
+  <img src="docs/img/dashboard-side-panel-preview.png" alt="节点侧栏：证据摘要与经过脱敏的产物内容预览。" width="100%">
 </p>
 
-### Demo：沙箱中的 agent（供应链数据外泄，被溯源抓住）
+### Demo：追溯恶意依赖引发的文件读取与网络连接
 
-一个**真实的编码 agent**（Claude Code，DeepSeek 后端）在沙箱里做一个贪吃蛇
-游戏；它的 setup 步骤安装了一个被投毒的 `pysnake-helper`，其 install hook
-读取了预先植入的凭证并连接到云 metadata IP。自研的 eBPF 传感器捕获了它；
-**数据流/污染透镜**把"密钥读取 -> 外发"这条流向呈现为一条因果边。
-在 Linux/eBPF 实验室 VM 上实时捕获，并以一份**已签名、可移植的取证包**发布，
-可离线重放：
+一个真实的编程 Agent（Claude Code，使用 DeepSeek 后端）在沙箱中开发贪吃蛇
+游戏。安装依赖时，它引入了被投毒的 `pysnake-helper`；包的安装脚本随后读取
+预先放置的**模拟凭证**，并尝试连接云元数据地址。
+
+原生 eBPF 传感器记录文件访问和网络连接，**数据流与污点传播视图**根据这些证据
+展示可能的“敏感文件读取 → 网络外发”关系。
+示例在 Linux/eBPF 实验虚拟机中采集，提供已签名的取证包，可在本地离线回放。
+以下命令适用于需要保留调查数据的手动导入流程：
 
 ```sh
 ./agentprov --data-dir /tmp/snake-replay forensics import \
   demo/snake-supply-chain/run-snake-supervised.forensics.json.gz \
   --pub-key demo/snake-supply-chain/attestation.pub        # 先验签，再导入
-./agentprov --data-dir /tmp/snake-replay dashboard serve   # 打开 run "run-snake-supervised"
+./agentprov --data-dir /tmp/snake-replay dashboard serve   # 选择执行记录 "run-snake-supervised"
 ```
 
 <p align="center">
-  <img src="docs/img/demo-snake-taint-replay.gif" alt="Replaying the captured snake-agent run: the taint lens shows the poisoned dependency's secret reads flowing to the metadata-IP egress" width="100%">
+  <img src="docs/img/demo-snake-taint-replay.gif" alt="贪吃蛇示例回放：恶意依赖读取模拟凭证，并尝试连接云元数据地址。" width="100%">
 </p>
 
-在 dashboard 里该点什么，见[供应链 demo 走查](docs/supply-chain-demo.md)；
-已签名的包和捕获脚本见 [`demo/snake-supply-chain/`](demo/snake-supply-chain)。
+界面操作见[供应链示例指南](docs/supply-chain-demo.md)，
+签名包和采集脚本见 [`demo/snake-supply-chain/`](demo/snake-supply-chain)。
 
-> **诚实说明。** 传感器捕获的是作用域内**每一次**凭证读取，不只是植入的那些
-> —— 包括 agent 运行时在启动时读取自己的 `~/.claude/.credentials.json`。
-> 它们全部被记录为 `secret_path` **事件**（传感器看到的是 syscall，
-> 它分不清"agent 自己的基础设施密钥"和"一个植入的目标"）。这个区分是原始证据
-> 之上的一个策略/标注层：默认的 `self_credential_access` 规则让 agent 自己的
-> 基础设施读取保持**可观测但不告警**，因此只有植入的目标密钥才会引发风险 ——
-> 而且这份名单是可配置的，绝不会在基质层面被假装抹掉。
+> **凭证访问的判定。** 捕获到的凭证访问会记录为 `secret_path` 事件，
+> 其中也可能包含 Agent 启动时对自身凭证的正常读取，如 `~/.claude/.credentials.json`。
+> 传感器记录系统调用；是否需要告警由上层策略判断。
+> 默认的 `self_credential_access` 规则允许已识别的自身凭证访问，同时保留事件记录。
+> 对应路径名单可以配置，原始访问记录不会因此被删除。
 
-### Demo：多 agent 因果（委派、对等消息、syscall 证据）
+### Demo：关联多 Agent 的任务委派、协作消息与系统调用
 
-多 agent demo 捕获了一个 agent 团队：主 agent 委派给子 agent，一个子 agent
-传递了一条被投毒的对等消息，另一个子 agent 在不知情的情况下执行了投毒
-install。agent 侧的 hooks 提供编排图；运行时遥测为 `openat` 和 `connect`
-提供独立的 ground truth。结果是一张已签名的图，能回答：**谁指使了谁、
-哪次工具调用执行了、哪条 syscall 证明了这个效果、哪个风险/响应挂在了
-这个分支上**。
+这个示例记录了一个 Agent 团队：主 Agent 将任务分配给子 Agent，
+其中一个子 Agent 发出带有恶意指令的协作消息，另一个执行了恶意依赖的安装操作。
+应用侧 Hooks 记录任务分工与消息传递，内核遥测独立记录 `openat` 和 `connect` 等行为。
+
+关联后的签名证据图可以用于追查：**消息由谁发出、哪次工具调用执行了操作、
+哪些系统调用记录了实际行为，以及对应的风险和响应是什么。**
 
 ```sh
 ./agentprov --data-dir /tmp/multiagent-replay forensics import \
@@ -827,50 +792,49 @@ install。agent 侧的 hooks 提供编排图；运行时遥测为 `openat` 和 `
 ```
 
 <p align="center">
-  <img src="docs/img/demo-multiagent-orchestration.png" alt="Multi-agent orchestration lens showing lead agent, sub-agents, peer message, tool calls, and syscall attribution." width="100%">
+  <img src="docs/img/demo-multiagent-orchestration.png" alt="多 Agent 编排视图：主 Agent、子 Agent、协作消息、工具调用与系统调用归属。" width="100%">
 </p>
 <p align="center">
-  <img src="docs/img/demo-multiagent-risk-path.png" alt="Focused metadata-IP risk path showing the runtime event, policy decision, and response chain." width="100%">
+  <img src="docs/img/demo-multiagent-risk-path.png" alt="云元数据访问的风险路径：运行时事件、策略判定与响应链路。" width="100%">
 </p>
 <p align="center">
-  <img src="docs/img/demo-multiagent-network-egress.png" alt="Network egress lens showing outbound runtime evidence for the multi-agent run." width="100%">
+  <img src="docs/img/demo-multiagent-network-egress.png" alt="网络外发视图：多 Agent 执行中的网络行为证据。" width="100%">
 </p>
 
-已签名的包、重放命令、捕获素材，以及确切的双次尝试拆分（一个显式的恶意请求
-在意图层被拒绝，而隐蔽的供应链路径被内核遥测抓到并链回 agent 编排图），
-见 [`demo/multiagent-provenance/`](demo/multiagent-provenance)。
+签名包、回放命令和采集过程见 [`demo/multiagent-provenance/`](demo/multiagent-provenance)。
+其中包含两次尝试：显式的恶意请求被模型拒绝；随后通过依赖安装触发的行为，
+则被内核遥测记录，并关联回 Agent 协作过程。
 
-### Demo：Kubernetes 跨 Pod A2A（一个节点传感器，两个 pod，一张图）
+### Demo：Kubernetes 跨 Pod 调用与事件归属
 
-K8s A2A demo 把同一个溯源问题搬过了基质边界：`alice` 和 `bob` 跑在同一个
-Kubernetes 节点上的不同 pod 里。`alice` 通过真实的 pod 网络调用 `bob`，
-而 `bob` 执行了一条投毒的 setup 命令，读取了植入的密钥并连接到云 metadata
-IP。一个节点级的 `agentprov-sensor` 观测两个 pod 的 cgroup，K8s 元数据用
-namespace/pod/container 身份丰富了这张图，两个 cgroup 被绑进同一次已签名的
-run。
+这个示例将 `alice` 和 `bob` 放到同一 Kubernetes 节点的两个 Pod 中。
+`alice` 通过 Pod 网络调用 `bob`，后者执行恶意安装命令，读取模拟凭证并连接
+云元数据地址。节点上的一个 `agentprov-sensor` 观测两个 Pod 的 cgroup，
+并结合命名空间、Pod 和容器身份，将事件关联到同一份执行记录。
 
-这是 **k8s-daemonset 生产者 profile** 当前的形态：核心图**不会**变得
-Kubernetes 专属；Kubernetes 只提供生产者落位和被动的作用域归属。可重复的
-环境门禁使用真实的 DaemonSet、它的 stdout JSONL 传输、Kubernetes
-pod/container 元数据和主机 cgroup 身份；它不要求对负载做任何插桩。
+该示例对应 **`k8s-daemonset` 采集模式**。Kubernetes 提供运行位置和容器身份，
+核心证据图仍使用通用模型。验收脚本使用真实 DaemonSet、stdout JSONL、
+Pod/容器元数据和宿主机 cgroup，无需在工作负载中接入采集代码。
+应用侧委派日志复用了多 Agent 示例；跨 Pod 网络与运行时事件则是在本场景中实测采集的。
 
 <p align="center">
-  <img src="docs/assets/k8s-cross-pod-a2a-architecture.png" alt="Kubernetes cross-pod A2A architecture: one node-level eBPF sensor observes alice and bob pods, binds both cgroups into one AgentProvenance evidence graph, and shows cross-pod causality." width="100%">
+  <img src="docs/assets/k8s-cross-pod-a2a-architecture.png" alt="跨 Pod 调用架构：一个节点传感器观测 Alice 和 Bob，将两个 cgroup 的记录关联到同一张证据图。" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/img/demo-k8s-a2a-substrate-dashboard.png" alt="Dashboard substrate lens for the Kubernetes A2A demo showing pod default/alice influencing pod default/bob, per-pod cgroups, and risk groups for secret path, metadata IP, and private CIDR access." width="100%">
+  <img src="docs/img/demo-k8s-a2a-substrate-dashboard.png" alt="Kubernetes 运行环境视图：Alice 到 Bob 的调用关系、各 Pod 的 cgroup 及相关风险。" width="100%">
 </p>
 
-重放包、捕获脚本和诚实说明见
-[`demo/k8s-cross-pod-a2a/`](demo/k8s-cross-pod-a2a)。关键的验收结果不是
-"更多事件"，而是：`secret_path` 和 `metadata_ip` 运行时证据被牢牢钉在 Bob
-的 pod/cgroup 上，而 Alice 的 pod 保持干净，并且跨 pod 的 `alice -> bob`
-调用作为一条基质影响边可见。
+回放包、采集脚本和证据范围说明见
+[`demo/k8s-cross-pod-a2a/`](demo/k8s-cross-pod-a2a)。
+本次记录中的 `secret_path` 和 `metadata_ip` 事件归属于 Bob 的 Pod/cgroup，
+Alice 的 Pod 未出现对应事件；图中也保留了跨 Pod 的 `alice → bob` 调用关系。
 
-## Graph 命令
+<a id="graph-命令"></a>
 
-建立在内容寻址证据对象之上的类 Git 界面：
+## 证据图命令
+
+以下命令提供类似 Git 的查询方式，用于追溯、比较和验证执行证据：
 
 ```sh
 ./agentprov graph trace --run <run_id>           # 上下文 + 因果 + 风险，一个视图
@@ -882,94 +846,99 @@ pod/container 元数据和主机 cgroup 身份；它不要求对负载做任何�
 ./agentprov graph trajectories --run <run_id> --json     # 给评估器/RL 的证据包
 ```
 
-另有：`refs` / `log` / `objects`（类 Git 的 refs 和内容寻址对象列表）、
-`materialize` / `materialize-llm`（把证据物化成对象，含捕获到的 LLM 调用）、
-`replay`（仅生成计划的重建）。完整命令列表及每条命令用途：
-[docs/graph-commands.md](docs/graph-commands.md)。
+其他命令包括：`refs` / `log` / `objects` 用于查看引用、历史和内容寻址对象；
+`materialize` / `materialize-llm` 将已有证据整理成图对象；
+`replay` 生成重建计划，不直接重做外部操作。
+完整用法见[证据图命令说明](docs/graph-commands.md)。
 
 ## 当前能力
 
-**捕获与摄取**
+**采集与接收**
 
-| 能力 | 做什么 |
+| 能力 | 说明 |
 |---|---|
-| 零 SDK record | `record -- <cmd>` 对工作目录做快照、采样进程树、捕获文件差异 + 运行时证据，不需要 SDK |
-| 批量记录器 | `record batch` 为 RL/benchmark 流水线并行记录大量作业 |
-| 自研 eBPF 传感器 | `agentprov-sensor`（Linux/amd64 + arm64）：exec+argv、connect、文件写入 + 敏感**读取** → `secret_path`、process_exit、提权（setuid/setgid/ptrace）、篡改（rename/unlink）、TLS 明文（通过分块的 `SSL_write`/`SSL_read` 和新式 `SSL_write_ex`/`SSL_read_ex` 拿到完整请求/响应体；未 strip 的 Go `crypto/tls` 在 amd64/arm64 上支持写入捕获，在 amd64 Go 1.23–1.26 上支持读取捕获）、DNS —— 内核侧噪声过滤，已实机验证 |
-| LLM 意图捕获 | `internal/tlsintent` 把传感器的 TLS 分块重组成完整的 HTTP/1.1 消息（Content-Length、chunked 和 SSE 流式体）和 HTTP/2 消息（帧 + HPACK + 流解复用），然后跨 Anthropic/OpenAI 形态解析 LLM 语义 —— 模型、提供的工具、工具调用 + 模型决定要跑的 shell 命令、停止原因 |
-| 证据摄取 | Falco / Tetragon / LoongCollector JSONL + 自研传感器 → 归一化事件；经 schema 校验，原始 payload 中的应用上下文会被拒收，分页并带完整性哈希 |
+| 无需 SDK 的命令记录 | `record -- <cmd>` 对工作目录做快照、采样进程树，记录文件变化和运行时信息 |
+| 批量记录 | `record batch` 并行记录多个作业，供评估、基准测试和 RL 流水线使用 |
+| 原生 eBPF 传感器 | 支持 Linux amd64/arm64 的进程执行与参数、网络连接、文件读写、进程退出、权限变更、文件改名/删除和 DNS；包含内核侧噪声过滤 |
+| TLS 明文采集 | 支持 OpenSSL `SSL_write` / `SSL_read` 及 `SSL_write_ex` / `SSL_read_ex`；受支持且保留符号的 Go `crypto/tls` 二进制在 amd64/arm64 上支持写入采集，amd64 Go 1.23–1.26 支持读取采集 |
+| 模型请求解析 | 将 TLS 分块重组为 HTTP/1.1 消息（含 Content-Length、chunked 和 SSE）或 HTTP/2 消息（含 HPACK 与多流处理），再解析兼容 Anthropic/OpenAI 格式的模型、工具、调用参数和停止原因 |
+| 外部事件接收 | 接收 Falco、Tetragon、LoongCollector JSONL 和原生传感器输出，转换为统一事件；执行格式校验，不接受原始事件载荷中夹带的应用上下文 |
 
-原生节点采集还提供持久化有界批次、重启恢复、迟到绑定重试、事务级去重和
-逐探针覆盖报告。具体 syscall/TLS 范围见[部署与验收指南](docs/amd64-kvm-k3s.md)，
-恢复语义见[原生采集 spool](docs/native-capture-spool.md)。
+原生节点采集支持有容量上限的持久化批次、重启恢复、等待迟到绑定后重试关联、
+事务级去重，以及逐项探针能力报告。
+具体系统调用和 TLS 范围见[部署与验收指南](docs/amd64-kvm-k3s.md)，
+恢复机制见[原生采集缓冲队列说明](docs/native-capture-spool.md)。
 
 **关联与验证**
 
-| 能力 | 做什么 |
+| 能力 | 说明 |
 |---|---|
-| 执行上下文 | 跨 run / trajectory / execution_scope / tool_call / process / container / cgroup / pid 的显式执行作用域绑定 |
-| 运行时因果 | 原生 `runtime_*` 图边（工具调用、进程树、基线状态、事件、文件） |
-| 溯源 DAG | 建立在内容寻址对象之上的 `graph trace / refs / log / materialize / objects / verify / replay` |
-| 多 agent 编排 | `hooks bridge` 把 Claude Code（或兼容）agent 团队的 harness hooks 折进图中 —— agent 节点、委派（`agent_spawn`）+ 对等（`agent_message`，消息体被物化为证据）边、按 agent 归属的 tool_calls，以及基于命令匹配的 syscall 归属（`agent_syscall`），因为进程内的子 agent 共享同一个 cgroup |
-| LLM 意图因果 | 捕获到的 LLM 流量被物化进已签名的图（`graph materialize-llm`）：每个消息体成为一个内容寻址的 `llm_message` 对象，每个请求/响应对成为一等公民 `llm_call` 节点，而 `llm_caused` 边**仅当被执行的命令与模型响应中实际决定的命令相匹配时**才把某条 syscall 归因到那次模型调用 —— 这样"是模型让它做的"这句话就保持窄且可验证 |
-| Graph Explorer 透镜 | `graph lens` 把规范图投影成 default、security、process、file-artifact、network-egress、data-flow-taint、agent-intent（一张建立在真实证据节点上的因果意图 DAG：`llm_call` → 决定的命令 → 进程 → 运行时事件 → 风险，被阻断/拒绝的意图按提出它的 agent 分组）、orchestration、intent（声明 vs 实际：每个动作的契约作用域 → 差异判定 → 支撑它的观测效果，形式为 `declared_vs_effect_mismatch` / `refused_bypass` / `coverage_gap`）、substrate（生产者 profile → 节点传感器 → 负载分组 → cgroup 绑定 → run）、trust-origin 和 sandbox-boundary 视图；`summary` 模式使用 Run Overview 加上 `process_group`、`event_burst`、`file_group`、`risk_group`、`egress_group`、`intent_group`、`trust_group` 和 `boundary_group` 节点，同时保持原始事件可查询；`expanded` 保留高价值细节而滤掉低价值噪声，`raw` 暴露完整证据供聚焦取证；分组节点携带下钻元数据以支持局部展开，节点选择支持 lineage/upstream/downstream/children/raw-events 控件，派生边则标注推导规则、置信度、计数和证据引用 |
-| Graph verify | 校验对象哈希、父链接，以及 策略 → 风险 → 响应 → 信号 链（应用上下文 run 与外部遥测 run 均可） |
-| 关联解释 | `telemetry correlations` —— 每条事件的原始身份、解析出的上下文、匹配到的绑定、置信度和时间窗 |
+| 执行上下文绑定 | 关联执行记录、轨迹、作用域、工具调用，以及 process、container、cgroup、PID 等运行身份 |
+| 运行时关系 | 使用 `runtime_*` 图关系连接工具调用、进程树、基线状态、事件和文件 |
+| 溯源图 | 基于内容寻址对象，提供 `graph trace / refs / log / materialize / objects / verify / replay` |
+| 多 Agent 编排 | `hooks bridge` 记录 Agent 节点、任务委派（`agent_spawn`）、协作消息（`agent_message`）和工具调用；同一进程中的子 Agent 共享 cgroup 时，通过命令匹配推断系统调用归属（`agent_syscall`） |
+| 模型调用关联 | `graph materialize-llm` 将消息和请求/响应整理为 `llm_message` 对象与 `llm_call` 节点；仅当执行命令与模型响应中的命令匹配时，建立 `llm_caused` 关系 |
+| 图视图 | `graph lens` 提供按分析主题组织的视图与 `summary` / `expanded` / `raw` 细节层级；派生关系附带规则、置信度、数量和证据引用，分组可继续展开 |
+| 完整性验证 | `graph verify` 校验对象哈希、父子链接，以及“策略 → 风险 → 响应 → 信号”链路 |
+| 归属解释 | `telemetry correlations` 显示事件的原始身份、解析出的上下文、匹配绑定、置信度和时间范围 |
+
+图视图的交互与各主题说明见[可视化界面](#可视化界面)。
+命令匹配属于有依据的关联推断，不等于为每个子 Agent 分配独立的内核身份。
 
 **查询与观测**
 
-| 能力 | 做什么 |
+| 能力 | 说明 |
 |---|---|
-| 时间线 | `timeline [--view causality] [--json]` —— 合并的应用上下文 + 系统遥测，分页并带完整性元数据 |
-| 可观测性 | `observe summary / coverage / scopes / event / process / flow` —— 关联覆盖率、缺口、按作用域以及"事件→响应"视图 |
-| 证据查询 | `graph explain` 覆盖 文件 / 产物 / 进程 / 事件 / tool_call / 执行作用域 / 风险，给出有界、分页的因果路径 |
-| Diff / blame | 文件级的 diff 和 blame，并与运行时事件、内容寻址对象相连 |
-| 证据清单 | `evidence manifest` —— run 级的、哈希索引的证据目录（`--materialize` 可物化成对象） |
-| Web dashboard | `dashboard serve` —— 本地只读 UI：Run Overview 问题入口、Graph Explorer 透镜（当存在捕获到的模型调用时，summary 会沿 LLM 生命周期主干展开）、Focused Evidence、Run Timeline、verify 状态、信号、进程树、外发；可读的 execve 标签和 tool_call/事件内容预览 |
+| 时间线 | `timeline [--view causality] [--json]` 合并应用上下文与系统事件，支持分页和完整性校验信息 |
+| 覆盖与排查 | `observe summary / coverage / scopes / event / process / flow` 查看关联覆盖、缺口、作用域及事件到响应的链路 |
+| 证据解释 | `graph explain` 按文件、产物、进程、事件、工具调用、作用域或风险查询关联路径，并限制结果规模、支持分页 |
+| 差异与归属 | `graph diff / blame` 查看文件变化及其执行来源，关联运行时事件和内容对象 |
+| 证据清单 | `evidence manifest` 列出一次执行的证据与哈希索引；`--materialize` 可将清单保存为证据对象 |
+| 本地可视化界面 | `dashboard serve` 提供执行概览、图视图、相关证据、时间线、验证状态、信号、进程树和网络外发信息 |
 
 **安全与信号**
 
-| 能力 | 做什么 |
+| 能力 | 说明 |
 |---|---|
-| 策略 / 风险 / 污染 | 策略决策、风险信号、隔离、污染 + 后代检查、响应门禁资格；`self_credential_access` 让 agent 自己的凭证读取保持可观测但不告警 |
-| 策略重放 + 配置 | `policy rules` 把内置策略导出成可编辑的 YAML；`security reevaluate --run [--rules]` 在一次已捕获 run 的存量事件上重跑策略（幂等，原始事件不动）—— 无需重新捕获即可把更新后的规则应用到历史 |
-| 行为基线 | `baseline learn / check` —— 进程/文件/网络/资源特征；偏差成为风险信号 |
-| 统一信号 | 一张挂在图上的 `signals` 表（行为 / 成本 / 质量 / 安全）；安全与质量是活跃的生产者 |
-| 合规 | `compliance` 把证据映射到 OWASP Agentic + NIST AI 画像，并给出覆盖与缺口报告 |
-| 签名证明 | 对证据做 in-toto/DSSE ed25519 签名（`forensics export --sign-key`），可检测签名后的篡改 |
-| 取证包 | `forensics export[-batch]` —— 完整证据集的带哈希审计包 |
+| 策略、风险与污点传播 | 记录策略判定、风险、隔离与污点传播，检查后续派生对象并判断是否允许响应；`self_credential_access` 规则保留自身凭证访问记录，但不为匹配该规则的行为告警 |
+| 历史策略重评估 | `policy rules` 导出可编辑的 YAML 规则；`security reevaluate --run [--rules]` 对已有事件重新评估，支持幂等执行，不修改原始事件 |
+| 行为基线 | `baseline learn / check` 比较进程、文件、网络和资源特征，将偏差记录为风险信号 |
+| 统一信号 | `signals` 表将行为、成本、质量和安全分析结果关联到图；目前安全与质量分析已有相应的信号来源 |
+| 合规映射 | `compliance` 根据 OWASP Agentic 和 NIST AI 相关检查项，报告证据覆盖与缺口 |
+| 证据签名 | `forensics export --sign-key` 使用 in-toto/DSSE 和 Ed25519 签名，供后续检测证据是否被篡改 |
+| 取证包 | `forensics export[-batch]` 导出包含完整证据集和哈希的审计包 |
 
-**界面与集成**
+**接口与集成**
 
-| 能力 | 做什么 |
+| 能力 | 说明 |
 |---|---|
-| CLI / JSON | 每条命令都有稳定的 `--json` 契约，含结果/分页完整性哈希 |
-| Daemon API | `daemon serve` —— 通过 HTTP 提供绑定、摄取、查询、验证、记录、取证、信号；可选 bearer token 认证 |
-| AI 工具 + MCP | 只读界面、`evaluate_action` 门禁，以及上下文写入（`bind_scope` / `record_tool_call`），经由 `ai call` 和 stdio MCP（`ai mcp`） |
-| 评估器 / RL | `signal context / import`、轨迹清单，以及一个 Python SDK（离线批量 + 在环打分）—— 输出的是证据，不是 reward 策略 |
-| 基质证据 | Docker/本地进程元数据、cgroup/pid 身份、文件系统基线/差异/重放、遥测 spool、时间窗、保留策略，已做 10 万级压力测试 |
+| CLI / JSON | 面向查询与集成的命令提供 `--json` 输出，并包含相应的结果集或分页完整性信息 |
+| 本地服务 API | `daemon serve` 通过 HTTP 提供绑定、事件接收、查询、验证、记录、取证和信号接口，可启用 Bearer Token 认证 |
+| AI 工具与 MCP | 通过 `ai call` 和 stdio MCP（`ai mcp`）提供查询、`evaluate_action` 预检和上下文写入 |
+| 评估器与 RL | `signal context / import`、轨迹清单与 Python SDK 支持离线批量评估或在执行流程中评分；奖励策略由外部系统定义 |
+| 运行环境信息 | 记录 Docker/本地进程元数据、cgroup/PID、文件系统状态、时间范围和保留策略；事件缓冲与查询已有 10 万事件规模的单节点测试 |
 
 ## 核心 Demo 验收
 
-主 demo 必须证明：
+核心验收覆盖以下行为：
 
-- 多个执行作用域可以针对同一个干净的基线状态做比较。
+- 多个执行作用域可以基于同一个初始状态进行比较。
 - 原始遥测不需要 `tool_call_id`。
-- 分页的 `graph objects` 和 `graph explain` 响应暴露稳定的 `result_set_id`
+- 分页的 `graph objects` 和 `graph explain` 响应提供稳定的 `result_set_id`
   和每页的 `page_hash` 完整性元数据。
 - PID、cgroup、容器和时间窗绑定能够解析出执行上下文。
-- 原生运行时因果记录 `tool_call -> process -> runtime_event`。
+- 证据图保留 `tool_call -> process -> runtime_event` 的运行时关联链路。
 - PID/PPID/TGID 遥测能创建进程树因果边。
 - 运行时观测到的 `file_write` 能出现在产生了某个文件差异的同一条轨迹里。
 - 运行时观测到的文件事件会创建 `workspace_file/<path>` 图节点，
-  并能与 diff/blame 一起被解释。
-- 零 SDK 的进程观测能暴露"活得比根进程久"的子进程，并验证孤儿生命周期证据
-  和策略决策确实存在。
-- Timeline JSON 展示零 SDK 的 `process_observed` 事件，含 pid、ppid、命令、
+  并能结合 diff/blame 追溯文件变化。
+- 无需 SDK 的进程采样能够识别根进程退出后仍在运行的子进程，
+  并保留相应的生命周期记录和策略判定。
+- Timeline JSON 展示进程采样产生的 `process_observed` 事件，含 PID、PPID、命令、
   首次/末次出现时间戳、`outlived_root` 和作用域边界元数据。
-- 风险事件能创建污染和响应记录，但 Phase 1 不做最终的 reward 或选优决策。
-- `graph diff` 输出 unified diff 和 JSON。
-- `graph blame` 输出 创建/修改/删除/未变 的状态归属。
+- 风险事件能生成污点和响应记录；第一阶段不负责最终奖励或轨迹筛选决策。
+- `graph diff` 支持统一差异格式（unified diff）和 JSON 输出。
+- `graph blame` 说明文件的创建、修改、删除或未变状态及其归属。
 - `graph trajectories --json` 为外部评估器输出结构化证据包。
 
 运行：
@@ -983,57 +952,57 @@ pod/container 元数据和主机 cgroup 身份；它不要求对负载做任何�
 ## 架构
 
 <p align="center">
-  <img src="docs/assets/evidence-flow.svg" alt="AgentProvenance evidence flow" width="920">
+  <img src="docs/assets/evidence-flow.svg" alt="AgentProvenance 证据处理流程。" width="920">
 </p>
 
 <p align="center">
-  <img src="docs/assets/producer-profile-architecture.svg" alt="AgentProvenance 生产者配置：本地 Linux、KVM guest 与 Kubernetes 共用基质无关的证据核心和调查界面。" width="100%">
+  <img src="docs/assets/producer-profile-architecture.svg" alt="本地 Linux、KVM 虚拟机与 Kubernetes 共用同一套证据核心和调查界面。" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/agentprovenance-architecture.svg" alt="AgentProvenance architecture: model intent, application context, and system telemetry enter an ingest boundary, then become a verifiable provenance graph." width="100%">
+  <img src="docs/assets/agentprovenance-architecture.svg" alt="模型意图、应用上下文与系统遥测经过校验和接收处理，形成可验证的溯源图。" width="100%">
 </p>
 
 <p align="center">
-  <img src="docs/assets/architecture-overview.svg" alt="AgentProvenance architecture overview" width="920">
+  <img src="docs/assets/architecture-overview.svg" alt="AgentProvenance 架构总览。" width="920">
 </p>
 
 ```mermaid
 flowchart TD
-    Agent["Agent / Harness / Benchmark / Red-team / RL Pipeline"] --> CLI["agentprov CLI"]
-    Agent --> ModelIntent["Model Intent\ntranscript / TLS LLM calls / refusal / judge"]
-    Agent --> Enrich["Context Enrichment\nhooks bridge / MCP context-write"]
-    Agent --> Recorder["Zero-SDK Recorder\nagentprov record -- <cmd>"]
+    Agent["Agent / 运行框架 / 基准测试 / 红队 / RL 流水线"] --> CLI["agentprov CLI"]
+    Agent --> ModelIntent["模型意图\n会话记录 / TLS 模型调用 / 拒绝 / 评估"]
+    Agent --> Enrich["应用上下文补充\nhooks bridge / MCP 上下文写入"]
+    Agent --> Recorder["无需 SDK 的记录器\nagentprov record -- <cmd>"]
 
     CLI --> Boundary
     ModelIntent --> Boundary
     Enrich --> Boundary
     Recorder --> Boundary
-    RuntimeTelemetry["Runtime Telemetry\nnative eBPF / Falco / Tetragon / auditd"] --> Boundary
-    SandboxIdentity["Sandbox Identity\ncontainer / cgroup / pid / cwd / time"] --> Boundary
-    AppContext["Application Context\nrun / trajectory / execution_scope / tool_call"] --> Boundary
-    ExternalSignals["External Evaluator Signals\nreward_feature / penalty / label / quality"] --> Boundary
+    RuntimeTelemetry["运行时遥测\n原生 eBPF / Falco / Tetragon / auditd"] --> Boundary
+    SandboxIdentity["沙箱身份与运行信息\ncontainer / cgroup / PID / cwd / 时间"] --> Boundary
+    AppContext["应用上下文\nrun / trajectory / execution_scope / tool_call"] --> Boundary
+    ExternalSignals["外部评估信号\n奖励特征 / 惩罚 / 标签 / 质量"] --> Boundary
 
-    subgraph Boundary["API / Ingest Boundary"]
-        Daemon["Daemon API\ncontrol + query"]
-        Validation["Validation / Normalization\nschema / identity / redaction"]
-        Spool["Spool / Backpressure / Retention"]
+    subgraph Boundary["API 与事件接收"]
+        Daemon["本地服务 API\n控制与查询"]
+        Validation["校验与格式统一\n数据结构 / 身份 / 脱敏"]
+        Spool["磁盘缓冲 / 背压 / 保留策略"]
     end
 
     Daemon --> Validation
     Validation --> Spool
     Spool --> Core
 
-    subgraph Core["Observability + Provenance Core"]
-        Intent["Intent Model\ncontracts / refusals / peer messages / LLM calls"]
-        Correlation["ToolCallScope Correlation\npid / cgroup / container / time window"]
-        Timeline["Execution Timeline\napplication context + runtime events"]
-        IntentDiff["Intent-Runtime Diff\ndeclared vs actual / mismatch / gap"]
-        Causality["Runtime Causality Graph\nprocess / file / network / event"]
-        Provenance["Git-like Provenance DAG\nrefs / objects / diff / blame"]
-        Derivation["Graph Derivation\nvirtual edges / taint flow / origin / drift"]
-        Lens["Graph Lens System\nintent / security / process / file / egress / taint"]
-        Evidence["Evidence Manifest\ncontent-addressed refs / hashes"]
+    subgraph Core["执行观测与溯源核心"]
+        Intent["意图模型\n契约 / 拒绝 / 协作消息 / 模型调用"]
+        Correlation["工具调用作用域关联\nPID / cgroup / 容器 / 时间范围"]
+        Timeline["执行时间线\n应用上下文与运行时事件"]
+        IntentDiff["意图与实际行为比较\n声明 / 偏差 / 覆盖缺口"]
+        Causality["运行时关联图\n进程 / 文件 / 网络 / 事件"]
+        Provenance["类 Git 溯源图\nrefs / objects / diff / blame"]
+        Derivation["关系推导\n派生关系 / 污点传播 / 来源 / 偏差"]
+        Lens["图视图\n意图 / 安全 / 进程 / 文件 / 外发 / 污点"]
+        Evidence["证据清单\n内容寻址引用 / 哈希"]
     end
 
     Core --> Intent
@@ -1045,151 +1014,150 @@ flowchart TD
     Provenance --> Derivation
     Derivation --> Lens
     Lens --> Evidence
-    Evidence --> Query["Evidence Query Surface\nobserve / timeline / explain / verify / audit"]
-    Evidence --> Security["Security Analysis\nbaseline / policy / risk / response / forensics"]
+    Evidence --> Query["证据查询接口\nobserve / timeline / explain / verify / audit"]
+    Evidence --> Security["安全分析\n基线 / 策略 / 风险 / 响应 / 取证"]
 ```
 
-**能力门控（capability gating）是一条硬性设计规则。** 上层在假定身份、
-文件系统、重放或强制语义之前，必须先查询运行时、状态、遥测和隔离能力。
-仅有 Docker 的执行会降级为目录/文件系统级溯源，而不是假装提供 VM 级恢复。
+**使用功能前，先检查运行环境实际提供的能力。** 上层功能应根据身份识别、
+文件系统、遥测、隔离和恢复能力决定可用范围。例如，只有 Docker 文件系统证据时，
+就只提供相应的目录和文件溯源，不能据此声称支持虚拟机内存恢复。
 
-所有生产者都从 API/摄取边界进入。零 SDK 记录器、上下文增强生产者
-（hooks bridge、MCP 上下文写入）、遥测接收器、沙箱适配器和外部评估器信号
-都是生产者输入；它们不应绕过校验、归一化、身份绑定、脱敏、spool/背压或
-保留控制，直接写入核心证据图。
+命令记录器、应用上下文、遥测接收器、沙箱适配器和外部评估器结果，均从 API
+或事件接收入口进入系统，经过校验、格式统一、身份绑定、脱敏，以及适用的
+缓冲、背压和保留处理后，再写入核心证据图。
 
-## 基质与遥测
+<a id="基质与遥测"></a>
 
-**溯源模型才是产品**；基质集成处在它的下游。每一路来源都汇入同一份归一化
-摄取 schema（[docs/telemetry-schema.md](docs/telemetry-schema.md)），证据图
-是从这份 schema 构建的 —— 而不是从任何特定运行时。新增一种基质意味着教一个
-采集器输出这份 schema，而不是扩展核心。
+## 运行环境与遥测
 
-基质落在三条轴上：
+证据模型与具体运行环境分离。不同来源的数据先转换为
+[统一遥测格式](docs/telemetry-schema.md)，再参与关联与图构建。
+适配新环境时，应优先让采集器输出已有格式和关联信息，复用核心处理流程。
 
-- **运行时** —— agent 进程在哪里执行，包括本地 Linux、KVM guest 和容器；
-  这些是已验证的采集位置。AgentProvenance 观察执行，不负责创建或替代运行时。
-- **编排** —— 运行时在哪里被调度：Kubernetes、Ray、Batch 和云系统。
-- **遥测** —— 内核与行为证据从哪里来。主打来源是原生 Linux eBPF 传感器
-  （`agentprov sensor stream`），它把归一化的内核事件直接推进
-  摄取/关联/策略/风险路径。已经在跑 Falco、Tetragon、LoongCollector 或
-  auditd 的主机 —— 或者加载不了原生传感器的主机 —— 可以通过
-  `telemetry ingest-jsonl` / `ingest-falco` 把过滤后的 JSONL 折进同一张 DAG，
-  并附带可哈希的批次清单（[docs/falco-receiver.md](docs/falco-receiver.md)）。
+需要区分三个方面：
 
-有两条性质让这件事保持诚实：
+- **执行环境**：Agent 进程实际运行在哪里。已验证的位置包括本地 Linux、
+  KVM 虚拟机内部和容器；AgentProvenance 负责观测，不负责创建这些运行环境。
+- **任务编排**：工作负载由谁调度，例如 Kubernetes、Ray、批处理或云平台。
+  具体平台能否接入，仍取决于其可提供的身份信息与事件来源。
+- **事件来源**：内核与行为数据从哪里获取。主要来源是原生 Linux eBPF 传感器
+  （`agentprov sensor stream`）；已有 Falco、Tetragon、LoongCollector 或 auditd
+  的主机，也可通过 `telemetry ingest-jsonl` / `ingest-falco` 接收受支持格式的数据，
+  并保留包含哈希的批次清单。详见[Falco 接收器说明](docs/falco-receiver.md)。
 
-- **能力是数据，不是假设。** 当内核和权限允许时才使用现代 eBPF；
-  其他每一种遥测基质都保持可插拔，能力降级会被**记录**而不是被隐藏。
-  仅有 Docker 的执行会降级为目录/文件系统溯源，而不是伪造 VM 级恢复。
-- **关联需要的是键，不是适配。** 一种基质必须满足的唯一要求，是输出可用的
-  关联键（cgroup id、pid、run/scope id）。在 Linux 上，`record` 加上
-  "每作用域一个 cgroup"的 join，就能在原始事件不携带 `tool_call_id` 的前提下
-  关联出一个 agent 的整棵进程子树；当这些键不可用时，关联会优雅降级。
+适配时遵循两项原则：
 
-价值不在于采集更多日志，而在于**把基质信号与执行上下文关联起来**，
-让它们能影响 diff、blame、污染、重放和可审计性。
+- **按实际能力报告覆盖范围。** 内核和权限满足要求时才启用对应探针；
+  无法采集的路径和降级原因应明确记录。
+- **通过关联标识确定事件归属。** cgroup ID、PID、执行记录或作用域 ID 是重要依据。
+  在 Linux 上，为每个执行作用域分配独立 cgroup 后，`record` 可将进程子树的
+  事件归属到同一次执行，无需原始事件携带 `tool_call_id`。
+  缺少精确标识时，只能使用现有证据进行有限关联，并反映相应的置信度或缺口。
+
+这些集成的价值，是把进程、文件和网络行为关联到任务上下文，
+为差异比较、来源追溯、污点分析和审计提供依据。
 
 ## 边界
 
-以下边界是刻意为之：
+项目范围如下：
 
-- AgentProvenance 不实现通用沙箱运行时。
-- 它不取代 Kubernetes、Ray、OpenSandbox、Firecracker、gVisor、Kata、Falco、
-  Tetragon、LoongCollector 或 eBPF。
-- 它不是 LangSmith 克隆、LLM 网关或通用可观测性 dashboard。
-- 它在 Phase 1 不承诺内存快照或 VM 级瞬时克隆。
-- 它不做任意分支的自动合并。
-- 它不回滚真实的外部副作用。外部动作会被记录、门控，并可选地关联到补偿 hook。
-- 它不为 RL 流水线做最终的 reward、惩罚或选优决策；它输出的是那些系统可以
-  拿去打分的行为证据和偏差信号。
+- 不实现通用沙箱，也不替代 Kubernetes、Ray、OpenSandbox、Firecracker、
+  gVisor、Kata 等运行或编排系统。
+- 可使用现有事件来源，不要求用原生传感器替换 Falco、Tetragon 或 LoongCollector。
+- 不提供模型网关、通用 LLM 调用管理或完整的可观测性平台。
+- 第一阶段不提供内存快照、虚拟机瞬时克隆或任意分支的自动合并。
+- 不撤销已发生的外部操作。这类动作可以被记录、接受策略检查，或按需关联补偿 Hook。
+- 不替 RL 流水线决定奖励、惩罚和轨迹筛选规则，只提供可供评估的行为证据与偏差信号。
 
-产品方向见 [docs/product.md](docs/product.md)，部署形态见
-[docs/deployment-modes.md](docs/deployment-modes.md)。
-相邻系统的边界见 [docs/comparisons.md](docs/comparisons.md)。
+产品方向见[产品说明](docs/product.md)，部署方式见
+[部署模式](docs/deployment-modes.md)，与其他系统的职责划分见
+[项目对比](docs/comparisons.md)。
 
 ## 仓库结构
 
 ```text
-cmd/agentprov/        CLI 入口
-cmd/agentprov-sensor/ 原生 eBPF 传感器（Linux）
-internal/cli/         命令解析与输出
-internal/launch/      一条命令的 porcelain 入口（`launch -- <agent>`）：作用域、dashboard、hooks overlay、传感器、诚实降级
+cmd/agentprov/          CLI 入口
+cmd/agentprov-sensor/   原生 eBPF 传感器（Linux）
+internal/cli/           命令解析与输出
+internal/launch/        一键启动入口：执行作用域、可视化界面、临时 Hooks 配置、传感器与降级报告
 
-internal/record/      零 SDK 命令记录器
-internal/sensor/      原生 eBPF 传感器（exec/connect/文件/提权/篡改/TLS-body/DNS）；仅 Linux，amd64 + arm64
-internal/producer/    生产者 profile（local-record / k8s-daemonset / microvm-guest-init）、被动 cgroup 作用域归属、K8s informer
-internal/tlsintent/   TLS 分块 -> 完整 HTTP 消息重组 + LLM 请求/响应语义
-internal/telemetry/   归一化运行时事件 schema、JSONL 摄取、TLS HTTP 元数据、关联输入
-internal/correlation/ ToolCallScope 与运行时身份绑定
-internal/provenance/  时间线、graph trace、refs、objects、diff、blame、verify、replay、透镜、域别名
-internal/evidence/    紧凑证据记录与外部效果
-internal/effects/     外部效果记录（什么离开了这台机器）
-internal/redact/      在存储、物化和打包导出之前对密钥做脱敏
-internal/security/    策略决策、风险信号、基线偏差、响应动作
-internal/signals/     挂在图上的统一信号模型（行为/成本/质量/安全）
-internal/signal/      评估器/RL 的信号上下文、批量导入、外部评估输出
-internal/intent/      声明的意图契约与"声明 vs 实际"差异判定
-internal/observability/ observe 查询界面（summary/coverage/scopes/event/process/flow），带完整性元数据
-internal/compliance/  OWASP Agentic + NIST AI 控制项映射、覆盖率与缺口报告
-internal/cost/        资源遥测、Docker stats 采样和资源时间窗证据
-internal/baseline/    行为基线学习与偏差记录
-internal/attest/      in-toto/DSSE ed25519 证据签名（防篡改证据）
-internal/forensics/   证据包导出（可选签名证明）
-internal/aitools/     AI 可调用工具目录（只读界面 + 内联门禁 + 上下文写入）
-internal/hooksbridge/ harness hooks -> agent 编排图（委派/对等边、命令匹配归属）；claude|kimi|codex|grok
-internal/mcpserver/   基于 aitools 目录的 stdio MCP（JSON-RPC 2.0）server
-internal/daemon/      HTTP /v1 server、client 和双写者咨询锁
-internal/dashboard/   本地只读 Web dashboard（内嵌 UI）
+internal/record/        无需 SDK 的命令执行记录
+internal/sensor/        Linux amd64/arm64 eBPF 传感器：进程、网络、文件、权限、TLS 与 DNS
+internal/producer/      采集模式定义、cgroup 事件归属与 Kubernetes informer
+internal/tlsintent/     TLS 分块与 HTTP 消息重组，模型请求和响应解析
+internal/telemetry/     统一事件格式、JSONL 接收、TLS/HTTP 元数据与关联输入
+internal/correlation/   ToolCallScope 与运行身份的绑定
+internal/provenance/    时间线、溯源图、引用与对象、差异比较、来源追溯、校验、回放与视图
+internal/evidence/      精简证据记录与外部操作信息
+internal/effects/       外部操作与数据外发记录
+internal/redact/        写入存储、生成证据对象和导出前的敏感信息脱敏
+internal/security/      策略判定、风险信号、基线偏差与响应动作
+internal/signals/       关联到图的统一信号模型：行为、成本、质量与安全
+internal/signal/        评估上下文、批量导入与外部评估结果
+internal/intent/        意图契约与声明、实际行为之间的差异判定
+internal/observability/ observe 查询及其完整性信息
+internal/compliance/    OWASP Agentic 与 NIST AI 检查项映射、覆盖率与缺口报告
+internal/cost/          资源遥测、Docker stats 采样与指定时间范围内的资源记录
+internal/baseline/      行为基线学习与偏差记录
+internal/attest/        in-toto/DSSE Ed25519 证据签名与验证
+internal/forensics/     证据包导出与可选签名
+internal/aitools/       AI 工具定义：证据查询、动作预检与上下文写入
+internal/hooksbridge/   Hooks 到 Agent 编排图的映射与命令匹配归属；支持 claude/kimi/codex/grok
+internal/mcpserver/     基于统一工具定义的 stdio MCP（JSON-RPC 2.0）服务
+internal/daemon/        HTTP /v1 服务与客户端，以及用于提示多进程同时写入的锁文件
+internal/dashboard/     本地只读可视化界面，前端资源内嵌于程序
 
-internal/substrate/   执行基质事实与兼容适配器
-internal/adapter/     基质适配器能力注册表（每个适配器声称能做什么）
-internal/control/     隐藏的基质作用域兼容管道
-internal/computerapi/ 隐藏的兼容文件/工具 API，供基质支撑的 demo 使用
-internal/envtemplate/ 基质任务/环境模板的构建与检视
-internal/ports/       本地预览代理支持
+internal/substrate/     运行环境信息与兼容适配器
+internal/adapter/       运行环境适配器及其能力注册
+internal/control/       供兼容功能使用的运行环境作用域处理
+internal/computerapi/   供兼容示例使用的文件与工具 API
+internal/envtemplate/   任务与运行环境模板的构建和检查
+internal/ports/         本地预览代理
 
-internal/store/       SQLite schema 与仓储层
-internal/ids/         带前缀的标识符生成
-examples/             事件、遥测、策略
-scripts/              可运行的 demo
-docs/                 产品方向、MVP 细节、对比
+internal/store/         SQLite 表结构与数据访问层
+internal/ids/           带前缀的标识符生成
+examples/               事件、遥测、策略与集成示例
+scripts/                示例脚本与验收工具
+docs/                   产品、部署、接口、验收与设计文档
 ```
 
-主产品路径位于 `record`、`telemetry`、`correlation`、`provenance`、
-`evidence`、`security`、`signals`、`cost`、`baseline`、`attest` 和
-`forensics`。`substrate` 包含 AgentProvenance 可以消费的运行时事实。
+核心功能集中在 `record`、`telemetry`、`correlation`、`provenance`、
+`evidence`、`security`、`signals`、`cost`、`baseline`、`attest` 和 `forensics`。
+`substrate` 包负责表示可供核心使用的运行环境信息。
 
-## Roadmap
+<a id="roadmap"></a>
 
-**v0.8.2-rc.2 是便携回放预发布版。** Linux/macOS 的 amd64/arm64 下载包
-可直接运行 `agentprov demo`，通过与 Dashboard 风格一致的首页和阅读页浏览全部
-八个示例。详见 [v0.8.2-rc.2 发布说明](docs/releases/v0.8.2-rc.2.md)。
+## 版本进展与后续计划
 
-**v0.8.1 增加可选外部评估器示例。** [Jev demo](demo/jev-judge/) 通过已有
-证据/信号契约展示结构化研判、规则对比和人工复核；没有新增内置分析器，也不改变
-采集流程。详见 [v0.8.1 发布说明](docs/releases/v0.8.1.md)。
+**v0.8.2-rc.2 提供开箱即用的回放体验（预发布）。** 下载 Linux/macOS 的
+amd64/arm64 包后，直接运行 `agentprov demo`，即可浏览六个回放示例和两个
+评估器指南。Demo 首页与阅读页采用与 Dashboard 一致的样式。
+详见 [v0.8.2-rc.2 发布说明](docs/releases/v0.8.2-rc.2.md)。
 
-**v0.8.0 完善了可移植、可靠的证据采集。** 该版增加原生 amd64 支持、KVM guest
-部署、K3s 验收、容器 TLS 自动发现，以及受支持 amd64 二进制的 Go TLS 响应捕获；
-同时加固迟到归属、持久采集恢复、升级测试、数据库就绪检查和事件/证据原子写入。
-验证依据与边界见[发布说明](docs/releases/v0.8.0.md)及
+**v0.8.1 增加了可选的外部评估器示例。** [Jev 示例](demo/jev-judge/)通过已有
+证据和信号接口展示结构化分析、规则对比与人工复核，不改变核心采集流程。
+详见 [v0.8.1 发布说明](docs/releases/v0.8.1.md)。
+
+**v0.8.0 完善了跨环境采集与可靠性。** 增加原生 amd64 支持、KVM 虚拟机部署、
+K3s 验收、容器 TLS 自动发现，以及受支持 amd64 Go 二进制的 TLS 响应采集；
+改进迟到事件关联、持久化采集恢复、升级测试、数据库就绪检查和事件/证据原子写入。
+验证结果及适用范围见[发布说明](docs/releases/v0.8.0.md)和
 [部署指南](docs/amd64-kvm-k3s.md)。
 
-接下来 / 未完成：
+后续方向与尚未完成的工作：
 
-- **采集广度**：ARM64 Go TLS 响应捕获、BoringSSL、strip 后或不支持的 TLS
-  二进制，以及更广的网络覆盖。OpenSSL `SSL_*` 与 `SSL_*_ex`、HTTP/1.1 和
-  HTTP/2/HPACK 已实现。
-- **运行验证**：更长周期的负载、真实磁盘故障及 run 级覆盖报告。已有的
-  10 万事件报告是单节点基准，不是生产 SLA。
-- **证据信任**：可选离机 / 捕获时签名。当前哈希与本地签名可以相对可信检查点
-  检测改动，但不能证明被攻陷的宿主机完整、如实地记录了所有事件。
-- **中心化证据服务**：[仅设计](docs/central-evidence-service-design.md)。
-  多租户、计费、集群调度及 operator 高可用不在本版范围内。
+- **扩大采集范围**：ARM64 Go TLS 响应、BoringSSL、已移除符号信息或其他尚不支持的
+  TLS 二进制，以及更广的网络协议覆盖。OpenSSL `SSL_*` / `SSL_*_ex`、
+  HTTP/1.1 和 HTTP/2/HPACK 已实现。
+- **持续运行验证**：更长时间的负载测试、真实磁盘故障测试，以及单次执行的覆盖报告。
+  现有 10 万事件报告属于单节点基准，不代表生产 SLA。
+- **加强证据可信性**：考虑由独立主机签名或在采集时签名。当前哈希和本地签名可相对
+  可信检查点检测后续改动，但无法证明已被攻陷的宿主机完整、如实地记录了所有事件。
+- **中心化证据服务**：目前[只有设计](docs/central-evidence-service-design.md)。
+  多租户、计费、集群调度及 Operator 高可用不在本版范围内。
 
-[v0.7 设计](docs/roadmap-v0.7.md)作为历史背景保留，不是当前功能待办表。
-[收尾标准](docs/project-closeout.md)定义本版单节点交付边界。
+[v0.7 设计](docs/roadmap-v0.7.md)保留为历史背景，不是当前待办清单。
+[收尾标准](docs/project-closeout.md)说明本版单节点功能的交付范围。
 
 ## 开发
 
@@ -1202,23 +1170,23 @@ gofmt -l internal cmd
 ./scripts/accept_phase1.sh
 ```
 
-[CI](.github/workflows/ci.yml)执行这些门禁、Linux amd64/arm64 静态构建、
-原生绑定漂移检查、daemon 就绪故障测试，以及 Go 1.23–1.26 下的真实 amd64
-syscall/OpenSSL/Go TLS 测试。ARM64 和 KVM/K3s 实验环境报告与托管 CI 分开列示。
+[CI](.github/workflows/ci.yml)运行上述检查，并验证 Linux amd64/arm64 静态构建、
+原生 eBPF 绑定文件是否与源代码一致、本地服务在故障时的就绪状态，以及
+Go 1.23–1.26 下的 amd64 系统调用、OpenSSL 和 Go TLS 采集。
+ARM64 实机与 KVM/K3s 实验环境的验收结果另有报告，不等同于托管 CI 的覆盖范围。
 
-验收脚本各有环境要求，不要直接遍历全部 `scripts/accept_*.sh`：
-部分需要 root、会创建 Pod 或安装服务。环境测试请按
-[KVM/K3s 部署指南](docs/amd64-kvm-k3s.md)执行，单节点压力测试见
-[收尾指南](docs/project-closeout.md)。
+各验收脚本的环境要求不同。部分脚本需要 root、会创建 Pod 或安装服务，
+请勿直接批量执行全部 `scripts/accept_*.sh`。
+环境测试请按 [KVM/K3s 部署指南](docs/amd64-kvm-k3s.md)操作，
+单节点压力测试见[收尾指南](docs/project-closeout.md)。
 
 ## 作者与许可
 
 由 [ByteYellow](https://github.com/ByteYellow) 开发和维护。
 
-基于 Apache License 2.0 授权 —— 见 [LICENSE](LICENSE)。
+采用 Apache License 2.0 许可证，详见 [LICENSE](LICENSE)。
 Copyright 2026 ByteYellow。
 
 ---
 
-> 本文档是 [README.md](README.md) 的中文翻译。英文版为权威版本；
-> 若两者出现分歧，以英文版为准。
+> 本文为 [README.md](README.md) 的中文说明；如有内容差异，以英文版为准。
