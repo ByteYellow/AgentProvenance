@@ -19,7 +19,7 @@
 [![SQLite](https://img.shields.io/badge/state-SQLite-003B57.svg?style=flat-square)](https://www.sqlite.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square)](LICENSE)
 
-**[快速开始](#快速开始)** | **[核心模型](#核心模型)** | **[当前能力](#当前能力)** | **[示例](demo/README.md)** | **[版本与计划](#版本进展与后续计划)**
+**[快速开始](#快速开始)** | **[核心模型](#核心模型)** | **[当前能力](#当前能力)** | **[示例](demo/README.zh-CN.md)** | **[版本与计划](#版本进展与后续计划)**
 
 [English](README.md) | 简体中文
 
@@ -46,7 +46,7 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 </p>
 
 [查看真实场景](demo/multiagent-provenance/README.md) ·
-[立即回放](#快速开始) · [v0.8.2-rc.2 版本说明](docs/releases/v0.8.2-rc.2.md)
+[立即回放](#快速开始) · [v0.8.2-rc.2 版本说明](docs/zh-CN/releases/v0.8.2-rc.2.md)
 
 ## 目录
 
@@ -127,7 +127,7 @@ CLI 会先校验原始签名，再将记录导入独立的临时目录并验证�
 也不需要联网。各示例的原始脚本和说明一并放在压缩包的 `demo/` 目录中。
 LLM Judge 和 Jev 是可选的 Python 示例，实际调用评估器仍需按各自指南配置环境。
 打开 Demo 首页或阅读指南不会调用模型；离线示例结果也不代表真实模型的评估结论。
-详见 [Demo 目录](demo/README.md)。
+详见 [Demo 目录](demo/README.zh-CN.md)。
 
 如果选择从源码构建，则需要 Go 1.23+：
 
@@ -1143,16 +1143,16 @@ docs/                   产品、部署、接口、验收与设计文档
 **v0.8.2-rc.2 提供开箱即用的回放体验（预发布）。** 下载 Linux/macOS 的
 amd64/arm64 包后，直接运行 `agentprov demo`，即可浏览六个回放示例和两个
 评估器指南。Demo 首页与阅读页采用与 Dashboard 一致的样式。
-详见 [v0.8.2-rc.2 发布说明](docs/releases/v0.8.2-rc.2.md)。
+详见 [v0.8.2-rc.2 发布说明](docs/zh-CN/releases/v0.8.2-rc.2.md)。
 
 **v0.8.1 增加了可选的外部评估器示例。** [Jev 示例](demo/jev-judge/)通过已有
 证据和信号接口展示结构化分析、规则对比与人工复核，不改变核心采集流程。
-详见 [v0.8.1 发布说明](docs/releases/v0.8.1.md)。
+详见 [v0.8.1 发布说明](docs/zh-CN/releases/v0.8.1.md)。
 
 **v0.8.0 完善了跨环境采集与可靠性。** 增加原生 amd64 支持、KVM 虚拟机部署、
 K3s 验收、容器 TLS 自动发现，以及受支持 amd64 Go 二进制的 TLS 响应采集；
 改进迟到事件关联、持久化采集恢复、升级测试、数据库就绪检查和事件/证据原子写入。
-验证结果及适用范围见[发布说明](docs/releases/v0.8.0.md)和
+验证结果及适用范围见[发布说明](docs/zh-CN/releases/v0.8.0.md)和
 [部署指南](docs/zh-CN/amd64-kvm-k3s.md)。
 
 后续方向与尚未完成的工作：
@@ -1167,7 +1167,7 @@ K3s 验收、容器 TLS 自动发现，以及受支持 amd64 Go 二进制的 TLS
 - **中心化证据服务**：目前[只有设计](docs/zh-CN/central-evidence-service-design.md)。
   多租户、计费、集群调度及 Operator 高可用不在本版范围内。
 
-[v0.7 设计](docs/roadmap-v0.7.md)保留为历史背景，不是当前待办清单。
+[v0.7 设计](docs/zh-CN/roadmap-v0.7.md)保留为历史背景，不是当前待办清单。
 [收尾标准](docs/zh-CN/project-closeout.md)说明本版单节点功能的交付范围。
 
 ## 开发

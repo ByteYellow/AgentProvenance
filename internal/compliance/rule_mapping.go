@@ -11,11 +11,11 @@ package compliance
 // This file answers the question the owner actually wants: map each concrete
 // detection RULE (security.Rule, with its Controls tags) onto the framework's
 // controls, then report -- per control -- whether a mapped rule actually fired
-// in this run, and if so whether it ENFORCED (blocked) or only DETECTED
-// (observed, detect-mode default). Four honest states result:
+// in this run, and which decision category was recorded. These states do not
+// establish whether an operating-system action succeeded:
 //
-//	enforced       a mapped rule fired AND blocked (deny/quarantine/kill)
-//	detected       a mapped rule fired but was detect-only (not blocked)
+//	enforced       a mapped rule recorded deny/quarantine/kill
+//	detected       a mapped rule fired without one of those decisions
 //	not_triggered  mapped rule(s) exist but none fired this run
 //	no_rule        no detection rule maps to this control (no event source yet)
 //
@@ -54,7 +54,7 @@ type RuleHit struct {
 	EventID      string `json:"event_id,omitempty"`
 	RiskSignalID string `json:"risk_signal_id,omitempty"`
 	CreatedAt    string `json:"created_at,omitempty"`
-	Enforced     bool   `json:"enforced"` // this firing blocked (vs detect/audit)
+	Enforced     bool   `json:"enforced"` // recorded deny/quarantine/kill, not proof of execution
 }
 
 // RuleView is one detection rule mapped to a control, plus how it behaved this

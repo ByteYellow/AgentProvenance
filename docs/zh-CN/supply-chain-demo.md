@@ -6,7 +6,7 @@
 
 ## 一条命令回放
 
-解压[发行包](../releases/v0.8.2-rc.2.md)后运行 `./agentprov demo snake-supply-chain`。命令自动校验签名、导入数据、选择执行记录与图视图，并管理临时存储。`./agentprov demo` 打开全部示例及格式化指南。
+解压[发行包](releases/v0.8.2-rc.2.md)后运行 `./agentprov demo snake-supply-chain`。命令自动校验签名、导入数据、选择执行记录与图视图，并管理临时存储。`./agentprov demo` 打开全部示例及格式化指南。
 
 下文保留手动导入方式，供需要持久保存调查数据时使用。
 
@@ -92,7 +92,7 @@ agentprov forensics verify-attestation \
 ## 7. 能力边界
 
 - 当前强调完整性校验。拥有宿主 root 权限的攻击者可以改写本地 SQLite 并重建哈希链；主机外采集时锚定，例如 KMS、TPM 或透明日志，属于后续方向。
-- 这份历史记录来自 ARM64 实验机，不验证生产 x86 或 HTTP/2 流量。后续 amd64 能力应查阅独立的[实测报告](../benchmarks/amd64-kvm-k3s/README.md)。
+- 这份历史记录来自 ARM64 实验机，不验证生产 x86 或 HTTP/2 流量。后续 amd64 能力应查阅独立的[实测报告](../benchmarks/amd64-kvm-k3s/README.zh-CN.md)。
 - 此记录不能证明所有模型框架的 TLS 明文采集都完整。当前 TLS 范围和缺口见[传感器说明](ebpf-sensor-plan.md)。
 - 凭据为预先放置的假数据，回放不会再次执行读取或网络连接。
 - `self_launched` 表示作用域由 AgentProvenance 直接启动；`kernel_correlated` 表示系统事件通过 cgroup、容器、PID、时间等身份关联到作用域。这是两个独立事实，内核关联不要求由记录器启动。

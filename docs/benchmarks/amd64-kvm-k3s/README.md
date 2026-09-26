@@ -1,5 +1,7 @@
 # amd64 / KVM / K3s acceptance evidence
 
+English | [中文](README.zh-CN.md)
+
 Recorded locally on 2026-09-19 (Asia/Shanghai), on the working branch based on
 `fc2e626`. This is live validation on the two listed kernels, not a claim that
 hosted CI or every Linux/kernel/TLS combination has passed.

@@ -21,7 +21,7 @@
 
 常驻采集入口是 `agentprov sensor stream`。它将原生事件分成有界批次并持久化，按采集时间关联，重试迟到绑定，默认运行策略评估，无需另行手工导入 JSONL。重启、重试和丢失计数规则见[持久缓冲说明](native-capture-spool.md)。普通 KVM 虚拟机在来宾内部运行采集器。
 
-尚未覆盖的方向包括 ARM64 Go TLS 读取、更广的 DNS 与网络路径、BoringSSL，以及当前不支持的去符号或静态 TLS 目标。amd64 系统调用、TLS、KVM 和 K3s 已有[实测报告](../benchmarks/amd64-kvm-k3s/README.md)。权限调用尝试不证明提权成功；自动发现也不能保证挂载前的事件可被捕获。
+尚未覆盖的方向包括 ARM64 Go TLS 读取、更广的 DNS 与网络路径、BoringSSL，以及当前不支持的去符号或静态 TLS 目标。amd64 系统调用、TLS、KVM 和 K3s 已有[实测报告](../benchmarks/amd64-kvm-k3s/README.zh-CN.md)。权限调用尝试不证明提权成功；自动发现也不能保证挂载前的事件可被捕获。
 
 ## 最初设计：历史记录
 

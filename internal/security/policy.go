@@ -149,9 +149,9 @@ type Rule struct {
 
 func (r Rule) detectMode() bool { return strings.EqualFold(r.Mode, "detect") }
 
-// IsEnforcingDecision reports whether a recorded decision actually blocked the
-// action (as opposed to "allow" or a detect-mode "audit"). The compliance view
-// uses it to split fired rules into enforced vs detected-only.
+// IsEnforcingDecision classifies recorded deny, quarantine and kill decisions.
+// It does not execute an action or check an operating-system outcome. The
+// compliance view uses this category independently of execution receipts.
 func IsEnforcingDecision(decision string) bool {
 	switch decision {
 	case "deny", "quarantine", "kill":

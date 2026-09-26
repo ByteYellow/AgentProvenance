@@ -51,6 +51,27 @@ if(!base)throw new Error('Pass the demo URL, including its port');
         return nodes.every(n=>nodeLabel(n)===n.label)&&before===JSON.stringify(nodes);
       }),true);
       report.interactions.push(expected+': original labels unchanged');
+      // A policy decision is not an execution receipt. Exercise mixed decisions
+      // in the rendered card, without writing synthetic evidence to the store.
+      const complianceFixture={summary:{total:1,enforced:1,detected:0,not_triggered:0,no_rule:0},items:[{
+        control_id:'test-control',title:'test control',status:'enforced',rules:[{
+          id:'test-rule',mode:'enforce',fired:2,enforced:true,intended_decision:'kill',hits:[
+            {ref:'policy_decision/test-kill',decision:'kill',reason:'Copy',enforced:true},
+            {ref:'policy_decision/test-audit',decision:'audit',reason:'original reason',enforced:false},
+          ],
+        }],
+      }]};
+      await page.evaluate(rep=>{COMP_OPEN.add('test-control');renderCompliance(rep);},complianceFixture);
+      const complianceText=await page.locator('#complist').innerText();
+      assert.match(complianceText,expected==='zh-CN'?/已记录阻断决策/:/Enforcing decision recorded/);
+      assert.match(complianceText,expected==='zh-CN'?/规则命中 ×2（含阻断决策）/:/rule hits ×2 \(includes enforcing decisions\)/);
+      assert.match(complianceText,expected==='zh-CN'?/预期决策：终止/:/intended: kill/);
+      assert.doesNotMatch(complianceText,/已阻断|已执行阻断|blocked ×|not blocked/);
+      assert.equal(await page.locator('#complist .chit').count(),2);
+      assert.equal(await page.locator('#complist .chit-r').first().innerText(),'Copy','Original reason was translated');
+      assert.match(await page.locator('#compdisclaimer').innerText(),expected==='zh-CN'?/不能证明操作系统实际阻止了行为/:/do not by themselves prove/);
+      assert.deepEqual(await page.evaluate(()=>window._comp),complianceFixture,'Compliance presentation changed evidence');
+      report.interactions.push(expected+': recorded decisions distinguished from blocking; mixed hits and raw reasons preserved');
       await page.goto(root+'?live=0&run=run-snake-supervised&lens=security&detail=raw');
       await page.waitForFunction(()=>window._lensManifest?.query.detail==='raw');
       const id=await page.locator('#dag g[data-id]').first().getAttribute('data-id');
@@ -98,7 +119,7 @@ if(!base)throw new Error('Pass the demo URL, including its port');
     await page.route('**/api/frameworks',route=>route.fulfill({status:500,body:'unavailable'}));
     await page.goto(root+'?live=0');await page.getByText('合规映射加载失败').waitFor();
     report.failureStates.push('compliance unavailable');await page.unroute('**/api/frameworks');
-    for(const path of ['/api/runs','/api/lens?run=run-snake-supervised&lens=security','/api/timeline?run=run-snake-supervised','/api/artifact?run=run-snake-supervised&node=runtime_event/missing']){
+    for(const path of ['/api/runs','/api/lens?run=run-snake-supervised&lens=security','/api/timeline?run=run-snake-supervised','/api/compliance?run=run-snake-supervised&framework=owasp-asi','/api/artifact?run=run-snake-supervised&node=runtime_event/missing']){
       const separator=path.includes('?')?'&':'?';
       const en=await(await context.request.get(new URL(path+separator+'lang=en',base).href)).text();
       const zh=await(await context.request.get(new URL(path+separator+'lang=zh-CN',base).href)).text();

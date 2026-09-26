@@ -21,7 +21,7 @@ AgentProvenance 支持 Linux x86-64（Go 中称为 `amd64`）和 ARM64，两种�
 
 ## 已验收环境
 
-[amd64/KVM/K3s 报告目录](../benchmarks/amd64-kvm-k3s)记录了实际内核、架构和各项断言。[CI 工作流](../../.github/workflows/ci.yml)使用 Go 1.23 至 1.26 重复运行 amd64 传感器实机验收，并上传报告。实验环境报告与托管 CI 是两组独立证据，具体环境和代码版本以各自报告为准。
+[amd64/KVM/K3s 报告目录](../benchmarks/amd64-kvm-k3s/README.zh-CN.md)记录了实际内核、架构和各项断言。[CI 工作流](../../.github/workflows/ci.yml)使用 Go 1.23 至 1.26 重复运行 amd64 传感器实机验收，并上传报告。实验环境报告与托管 CI 是两组独立证据，具体环境和代码版本以各自报告为准。
 
 | 环境 | 验收内容 |
 |---|---|

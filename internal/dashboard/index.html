@@ -1329,9 +1329,9 @@ function renderProcessTree(procs){
 
 // --- Compliance: detection RULES mapped onto framework controls -----------
 // The verdict per control is NOT "is there evidence of class X" but "did a rule
-// that detects this threat fire this run, and was it enforced or only observed":
-//   enforced       a mapped rule fired AND blocked it (deny/quarantine/kill)
-//   detected       a mapped rule fired but is detect-only (observed, not blocked)
+// that detects this threat fire this run, and what decision was recorded":
+//   enforced       a mapped rule recorded deny/quarantine/kill (not proof of blocking)
+//   detected       a mapped rule fired without one of those decisions
 //   not_triggered  rule(s) map here but none matched any activity this run
 //   no_rule        no detector maps to this control (an honest coverage gap, not
 //                  a clean pass -- distinct from not_triggered on purpose)
@@ -1356,8 +1356,8 @@ let COMP_OPEN=new Set();                          // control_ids with evidence e
 const ST_ORDER=['detected','enforced','not_triggered','no_rule'];
 let COMP_GRP={detected:true, enforced:true, not_triggered:false, no_rule:false};
 const ST_META={
-  enforced:{icon:'🟢',label:tr("Enforced"),hdr:tr("🟢 Enforced — a rule detected this and blocked it")},
-  detected:{icon:'🟠',label:tr("Detected only"),hdr:tr("🟠 Detected only — a rule fired but did not block (detect mode)")},
+  enforced:{icon:'🟢',label:tr("Enforcing decision recorded"),hdr:tr("🟢 Enforcing decision recorded — check response evidence for the actual outcome")},
+  detected:{icon:'🟠',label:tr("Detected only"),hdr:tr("🟠 Detected only — no deny, quarantine or kill decision recorded")},
   not_triggered:{icon:'⚪',label:tr("Not triggered"),hdr:tr("⚪ Not triggered — a detector watches this, nothing fired this run")},
   no_rule:{icon:'⬚',label:tr("No rule"),hdr:tr("⬚ No rule — no detector maps to this control yet")}
 };
@@ -1396,13 +1396,13 @@ function renderCompliance(rep){
   const pct=n=>(100*n/total).toFixed(1)+'%';
   sumEl.innerHTML=
     `<div class="covbar">`+
-      (s.enforced?`<i class="enforced" style="width:${pct(s.enforced)}" title="${esc(tr("enforced"))}"></i>`:'')+
+      (s.enforced?`<i class="enforced" style="width:${pct(s.enforced)}" title="${esc(tr("with enforcing decisions"))}"></i>`:'')+
       (s.detected?`<i class="detected" style="width:${pct(s.detected)}" title="${esc(tr("detected only"))}"></i>`:'')+
       (s.not_triggered?`<i class="not_triggered" style="width:${pct(s.not_triggered)}" title="${esc(tr("not triggered"))}"></i>`:'')+
       (s.no_rule?`<i class="no_rule" style="width:${pct(s.no_rule)}" title="${esc(tr("no rule"))}"></i>`:'')+
     `</div>`+
     `<div class="covstats">`+
-      `<span class="enforced"><b>${s.enforced||0}</b> ${esc(tr("enforced"))}</span>`+
+      `<span class="enforced"><b>${s.enforced||0}</b> ${esc(tr("with enforcing decisions"))}</span>`+
       `<span class="detected"><b>${s.detected||0}</b> ${esc(tr("detected only"))}</span>`+
       `<span class="not_triggered"><b>${s.not_triggered||0}</b> ${esc(tr("not triggered"))}</span>`+
       `<span class="no_rule"><b>${s.no_rule||0}</b> ${esc(tr("no rule"))}</span>`+
@@ -1416,7 +1416,7 @@ function renderCompliance(rep){
   });
   listEl.innerHTML=html || ("<div class=\"empty\">"+esc(tr("no controls"))+"</div>");
   wireCompliance(listEl);
-  disEl.textContent=tr(rep.disclaimer||'');
+  disEl.textContent=[tr(rep.disclaimer||''),tr("Decision records do not by themselves prove that the operating system blocked an action.")].filter(Boolean).join(' ');
 }
 function compGroup(key,label,arr,open){
   if(!arr.length) return '';
@@ -1456,16 +1456,17 @@ const CONTROL_DESC={
 };
 function clip(s,n){s=String(s||'');return s.length>n?s.slice(0,n-1)+'…':s;}
 // The detector line is the meat: per mapped rule show its mode (enforce/detect),
-// whether it fired, and the outcome -- blocked (enforce) vs observed-only (detect).
+// whether it fired, and the recorded decision class. Mixed hits remain visible.
 function ruleActionsHTML(rules){
   if(!rules||!rules.length) return `<div class="cnote">${esc(tr("no detection rule maps to this control yet"))}</div>`;
   return `<div class="crules">`+rules.map(r=>{
     const mode=`<span class="rmode ${esc(r.mode||'enforce')}">${esc(tr(r.mode||'enforce'))}</span>`;
     if(!r.fired) return `<div class="crule"><span class="rmark idle">○</span> <span class="rid">${esc(r.id)}</span> ${mode} <span class="rmut">${esc(tr("not triggered"))}</span></div>`;
     const outcome=r.enforced
-      ? `<span class="ract ok">${esc(tx("blocked ×{count}", {count: r.fired}))}${r.intended_decision?' ('+esc(tr(r.intended_decision))+')':''}</span>`
-      : `<span class="ract bad">${esc(tx("observed ×{count} (not blocked)", {count: r.fired}))}</span>`;
-    return `<div class="crule"><span class="rmark ${r.enforced?'block':'fire'}">${r.enforced?'✓':'⚠'}</span> <span class="rid">${esc(r.id)}</span> ${mode} → ${outcome}</div>`;
+      ? `<span class="ract ok">${esc(tx("rule hits ×{count} (includes enforcing decisions)", {count: r.fired}))}</span>`
+      : `<span class="ract bad">${esc(tx("rule hits ×{count} (no enforcing decision)", {count: r.fired}))}</span>`;
+    const intended=r.intended_decision?' · '+esc(tx("intended: {decision}", {decision:tr(r.intended_decision)})):'';
+    return `<div class="crule"><span class="rmark ${r.enforced?'block':'fire'}">${r.enforced?'✓':'⚠'}</span> <span class="rid">${esc(r.id)}</span> ${mode} → ${outcome}${intended}</div>`;
   }).join('')+`</div>`;
 }
 function fmtHitTime(s){ if(!s)return ''; const d=new Date(s); return isNaN(d.getTime())?String(s).slice(11,19):d.toLocaleTimeString([],{hour12:false}); }
@@ -1479,24 +1480,30 @@ function complianceHitsHTML(rules){
   return withHits.map(r=>{
     const rows=r.hits.map(h=>{
       const cls=h.enforced?'ok':'bad';
-      const act=h.enforced?esc(tr(h.decision)):esc(tr(h.decision))+' · '+esc(tr("not blocked"));
+      const act=esc(tx("Recorded: {decision}", {decision: tr(h.decision)}));
       const t=fmtHitTime(h.created_at);
       return `<button class="chit" data-ref="${esc(h.ref)}" data-kind="policy_decision" title="${esc(h.ref)}\n${esc(tr("click to focus in graph"))}">`+
         (t?`<span class="chit-t">${esc(t)}</span>`:'')+
-        `<span class="ract ${cls}">${act}</span><span class="chit-r">${esc(tr(h.reason||''))}</span></button>`;
+        `<span class="ract ${cls}">${act}</span><span class="chit-r">${esc(h.reason||'')}</span></button>`;
     }).join('');
     return `<div class="chitgrp"><div class="chitrid">${esc(r.id)} <span class="rmut">×${r.hits.length}</span> <span class="rmode ${esc(r.mode||'enforce')}">${esc(tr(r.mode||'enforce'))}</span></div>${rows}</div>`;
   }).join('');
+}
+// Clarify legacy generated guidance only in the display; API evidence stays intact.
+function complianceGuidance(source){
+  if(source==='threat detected but not enforced (rule runs in detect mode)')return tr("Rule hits were recorded without a deny, quarantine or kill decision.");
+  if(source==='set the mapped rule(s) to enforce mode to block, not just record, this activity')return tr("Review the rule mode, intended decision and execution path before enabling enforcement.");
+  return tr(source);
 }
 function renderComplianceCard(it){
   const st=it.status||'no_rule';
   const m=ST_META[st]||ST_META.no_rule;
   const desc=CONTROL_DESC[it.control_id]?`<div class="cdesc">${esc(CONTROL_DESC[it.control_id])}</div>`:'';
   const rules=ruleActionsHTML(it.rules);
-  // The fix-it line: only for the actionable states (detected = not blocked,
-  // no_rule = uncovered). Enforced/not_triggered need no nudge.
+  // The next-step line: for detected decisions and unmapped controls.
+  // Recorded enforcing decisions still require checking the execution outcome.
   const gap=(st==='detected'||st==='no_rule')&&it.gap
-    ? `<div class="cgap">⚠ ${esc(tr(it.gap))}${it.recommended_next_step?` <span class="next">→ ${esc(tr(it.recommended_next_step))}</span>`:''}</div>`
+    ? `<div class="cgap">⚠ ${esc(complianceGuidance(it.gap))}${it.recommended_next_step?` <span class="next">→ ${esc(complianceGuidance(it.recommended_next_step))}</span>`:''}</div>`
     : '';
   const totalHits=(it.rules||[]).reduce((n,r)=>n+((r.hits&&r.hits.length)||0),0);
   const open=COMP_OPEN.has(it.control_id);
