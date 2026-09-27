@@ -99,7 +99,7 @@ func (p *parser) claudeHook(top row, event, ts string) bool {
 	case "PermissionRequest":
 		// A permission request is not evidence that the action was authorized.
 		p.add("approval", key, "", id, name, "requested", ts, whole(top))
-	case "SessionStart", "SessionEnd", "SubagentStart", "SubagentStop", "Stop":
+	case "SessionStart", "SessionEnd", "SubagentStart", "SubagentStop", "Stop", "StopFailure":
 		p.add("session", key, "", id, name, event, ts, whole(top))
 	default:
 		return false

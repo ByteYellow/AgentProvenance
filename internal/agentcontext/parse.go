@@ -377,7 +377,7 @@ func content(o row, keys ...string) json.RawMessage {
 	return nil
 }
 func eventTime(o row) string {
-	if s := text(o, "timestamp", "created_at"); s != "" {
+	if s := text(o, "timestamp", "created_at", "_ts", "ts"); s != "" {
 		return normalizedTime(s)
 	}
 	for _, key := range []string{"time", "ts", "createdAt"} {
