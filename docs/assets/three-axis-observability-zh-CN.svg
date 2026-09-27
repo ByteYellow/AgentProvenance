@@ -58,7 +58,7 @@
   <g id="system-telemetry">
     <rect x="58" y="132" width="326" height="132" rx="22" class="card sys" />
     <circle cx="92" cy="172" r="10" class="sysDot" />
-    <text x="116" y="177" class="h">系统遥测</text>
+    <text x="116" y="177" class="h">系统侧遥测</text>
     <text x="86" y="207" class="small">主机侧运行时事实</text>
     <rect x="86" y="226" width="82" height="28" rx="14" class="pill" />
     <text x="108" y="245" class="pillText">eBPF</text>
@@ -71,7 +71,7 @@
   <g id="application-context">
     <rect x="58" y="292" width="326" height="132" rx="22" class="card app" />
     <circle cx="92" cy="332" r="10" class="appDot" />
-    <text x="116" y="337" class="h">应用上下文</text>
+    <text x="116" y="337" class="h">应用侧上下文</text>
     <text x="86" y="367" class="small">Agent 与工具调用上下文</text>
     <rect x="86" y="386" width="90" height="28" rx="14" class="pill" />
     <text x="105" y="405" class="pillText">run</text>
@@ -84,7 +84,7 @@
   <g id="model-intent">
     <rect x="58" y="452" width="326" height="132" rx="22" class="card model" />
     <circle cx="92" cy="492" r="10" class="modelDot" />
-    <text x="116" y="497" class="h">模型意图</text>
+    <text x="116" y="497" class="h">模型侧意图</text>
     <text x="86" y="527" class="small">模型声明的操作与拒绝</text>
     <rect x="86" y="546" width="92" height="28" rx="14" class="pill" />
     <text x="104" y="565" class="pillText">请求</text>
