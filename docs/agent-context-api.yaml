@@ -34,7 +34,7 @@ components:
         parser_version: {type: string}
         application_version: {type: string}
         format_version: {type: string}
-        binding: {type: string, examples: [explicit, exact, ambiguous, unknown]}
+        binding: {type: string, examples: [explicit, exact, matched, ambiguous, unknown], description: Matched is unique source metadata and time-window attribution, not kernel-proven identity.}
         binding_evidence: {type: array, items: {type: string}}
         workdir: {type: string}
     Counts:

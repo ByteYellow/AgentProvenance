@@ -41,8 +41,8 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 	if s.DB == nil || runID == "" || src.Harness == "" || src.ParserVersion == "" {
 		return SaveResult{}, fmt.Errorf("context import requires database, run, harness and parser version")
 	}
-	if len(records) > 0 && (src.SessionID == "" || (src.Binding != "explicit" && src.Binding != "exact")) {
-		return SaveResult{}, fmt.Errorf("context records require an explicit or exact session binding")
+	if len(records) > 0 && (src.SessionID == "" || (src.Binding != "explicit" && src.Binding != "exact" && src.Binding != "matched")) {
+		return SaveResult{}, fmt.Errorf("context records require an explicit, exact, or uniquely matched session binding")
 	}
 	if !validStatus(report.Status) {
 		return SaveResult{}, fmt.Errorf("invalid context coverage status %q", report.Status)

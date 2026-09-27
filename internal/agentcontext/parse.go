@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +34,7 @@ type ParseOptions struct {
 	// AfterLine is a physical source cursor captured before a resumed execution.
 	// Metadata is still read, but earlier activity is not assigned to this run.
 	AfterLine int64
+	Cursor    *SourceCursor
 }
 
 type Parsed struct {
@@ -64,6 +66,14 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 	}
 	if opts.AfterLine < 0 {
 		return Parsed{}, fmt.Errorf("invalid source cursor")
+	}
+	var prefix *prefixReader
+	if opts.Cursor != nil {
+		if !opts.Cursor.Valid || opts.Cursor.Bytes < 0 || opts.Cursor.Bytes > MaxInputBytes || opts.Cursor.Lines != opts.AfterLine {
+			return Parsed{}, fmt.Errorf("invalid source checkpoint")
+		}
+		prefix = &prefixReader{r: r, hash: sha256.New(), remaining: opts.Cursor.Bytes}
+		r = prefix
 	}
 	p := parser{opts: opts, callNames: map[string]string{}}
 	p.Source = Source{Harness: opts.Harness, Path: opts.Path, SessionID: opts.SessionID,
@@ -168,6 +178,11 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 			break
 		}
 	}
+	if (opts.ParentSessionID != "" && p.Source.ParentSessionID != opts.ParentSessionID) ||
+		(opts.AgentID != "" && p.Source.AgentID != opts.AgentID) {
+		p.identityConflict = true
+		p.issue("source_lineage_changed", "parent_session_id")
+	}
 	if p.identityConflict {
 		p.Records = nil
 		p.Source.Binding = "ambiguous"
@@ -196,6 +211,13 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		p.Records = nil
 		p.Coverage.Status = Failed
 		p.issue("source_cursor_out_of_range", "after_line")
+	}
+	if prefix != nil && !prefix.matches(*opts.Cursor) {
+		p.Records = nil
+		p.Source.Binding = "ambiguous"
+		p.Coverage.Status = Ambiguous
+		p.Coverage.Counts.Matched = Number(0)
+		p.issue("source_changed_before_resume", "cursor")
 	}
 	if p.Coverage.Status == OK || p.Coverage.Status == Empty {
 		p.Coverage.LastSuccessAt = time.Now().UTC().Format(time.RFC3339Nano)
