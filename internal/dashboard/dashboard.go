@@ -29,6 +29,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/compliance"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
@@ -70,6 +71,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/processes", s.processes)
 	mux.HandleFunc("GET /api/frameworks", s.frameworks)
 	mux.HandleFunc("GET /api/compliance", s.compliance)
+	mux.Handle("GET /api/context/", http.StripPrefix("/api", (agentcontext.Service{DB: s.DB}).ReadHandler()))
 	return mux
 }
 

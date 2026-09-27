@@ -130,6 +130,9 @@ func Verify(db *sql.DB, runID string) (VerifyResult, error) {
 	if err := verifyObjects(db, runID, add); err != nil {
 		return result, err
 	}
+	if err := verifyAgentContext(db, runID, add); err != nil {
+		return result, err
+	}
 	if result.ErrorCount > 0 {
 		result.Status = "failed"
 	}

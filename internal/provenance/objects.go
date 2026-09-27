@@ -21,6 +21,9 @@ import (
 type ObjectStore struct {
 	DB    *sql.DB
 	Paths store.Paths
+	// Tx lets a context import commit its objects and indexes atomically.
+	// Files are content-addressed; a rollback can only leave unreferenced blobs.
+	Tx *sql.Tx
 }
 
 type MaterializeResult struct {
@@ -407,7 +410,13 @@ func (c *materializeContext) put(obj provenanceObject) (string, error) {
 		return "", err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = c.store.DB.Exec(`INSERT OR REPLACE INTO provenance_objects
+	var writer interface {
+		Exec(string, ...any) (sql.Result, error)
+	} = c.store.DB
+	if c.store.Tx != nil {
+		writer = c.store.Tx
+	}
+	_, err = writer.Exec(`INSERT OR REPLACE INTO provenance_objects
 		(hash, object_type, source_id, run_id, rollout_id, parent_hashes, path, size_bytes, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		hash, obj.Type, obj.SourceID, obj.RunID, obj.RolloutID, strings.Join(obj.Parents, ","), path, len(raw), now)

@@ -1,0 +1,224 @@
+openapi: 3.1.0
+info:
+  title: AgentProvenance recorded context API
+  version: "1.0"
+  description: >
+    Read-only recorded evidence. Source assertions are not kernel observations
+    or inferred authorizations. The dashboard exposes the same routes under
+    /api/context instead of /v1/context. Native identifiers and status codes are
+    language-independent. Existing records may lack newer source fields.
+servers:
+  - url: http://127.0.0.1:8574
+security: [{bearerAuth: []}, {}]
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    run: {name: run, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 512}}
+  schemas:
+    NullableCount:
+      type: [integer, "null"]
+      minimum: 0
+      description: Null means not known; zero means observed zero within the stated processing range.
+    Source:
+      type: object
+      required: [id, harness, session_id, parser_version, binding]
+      properties:
+        id: {type: string}
+        harness: {type: string}
+        channel: {type: string, examples: [transcript, hooks]}
+        session_id: {type: string}
+        parent_session_id: {type: string}
+        agent_id: {type: string}
+        path: {type: string, description: Source location at capture; never required for offline content reads.}
+        parser_version: {type: string}
+        application_version: {type: string}
+        format_version: {type: string}
+        binding: {type: string, examples: [explicit, exact, ambiguous, unknown]}
+        binding_evidence: {type: array, items: {type: string}}
+        workdir: {type: string}
+    Counts:
+      type: object
+      required: [discovered, matched, read, parsed, stored, duplicates, truncated, failed, unrecognized, deferred]
+      properties:
+        discovered: {$ref: '#/components/schemas/NullableCount'}
+        matched: {$ref: '#/components/schemas/NullableCount'}
+        read: {$ref: '#/components/schemas/NullableCount'}
+        parsed: {$ref: '#/components/schemas/NullableCount'}
+        stored: {$ref: '#/components/schemas/NullableCount'}
+        duplicates: {$ref: '#/components/schemas/NullableCount'}
+        truncated: {$ref: '#/components/schemas/NullableCount'}
+        failed: {$ref: '#/components/schemas/NullableCount'}
+        unrecognized: {$ref: '#/components/schemas/NullableCount'}
+        deferred: {$ref: '#/components/schemas/NullableCount'}
+    Issue:
+      type: object
+      required: [code]
+      properties:
+        code: {type: string}
+        line: {type: integer, minimum: 1}
+        field: {type: string}
+      description: Bounded diagnostics contain no source message bodies or secrets.
+    Coverage:
+      type: object
+      required: [schema_version, id, run_id, source, status, observed_at, counts, issues, missing_fields]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        id: {type: string}
+        run_id: {type: string}
+        source: {$ref: '#/components/schemas/Source'}
+        status:
+          type: string
+          enum: [disabled, no_input, empty, ok, partial, failed, ambiguous, legacy_not_recorded]
+        observed_at: {type: string, description: Processing observation timestamp, empty for legacy unknowns.}
+        last_success_at: {type: string}
+        started_at: {type: string, description: Earliest available source timestamp in the processing range.}
+        ended_at: {type: string, description: Latest available source timestamp in the processing range.}
+        first_line: {type: integer, minimum: 1}
+        last_line: {type: integer, minimum: 1}
+        counts: {$ref: '#/components/schemas/Counts'}
+        issues: {type: array, items: {$ref: '#/components/schemas/Issue'}}
+        missing_fields: {type: array, items: {type: string}}
+        object_hash: {type: string}
+    ContentRef:
+      type: object
+      required: [bytes, redacted, state]
+      properties:
+        ref: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        bytes: {$ref: '#/components/schemas/NullableCount'}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        media_type: {type: string}
+        redacted: {type: boolean}
+        state: {type: string, enum: [stored, unavailable, omitted]}
+        reason: {type: string, examples: [source_not_recorded, capture_limit]}
+    Entry:
+      type: object
+      required: [schema_version, id, run_id, source, source_key, sequence, kind, content, raw_content]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        id: {type: string}
+        run_id: {type: string}
+        source: {$ref: '#/components/schemas/Source'}
+        source_key: {type: string}
+        sequence: {type: integer, minimum: 0, description: Physical source line order, not a cross-source clock.}
+        kind: {type: string, enum: [message, tool_call, tool_result, task, configuration, approval, session]}
+        role: {type: string}
+        agent_id: {type: string}
+        tool_call_id: {type: string}
+        tool_name: {type: string}
+        status: {type: string, description: Source outcome; requested is not approved and returned does not assert success.}
+        recorded_at: {type: string}
+        content: {$ref: '#/components/schemas/ContentRef'}
+        raw_content: {$ref: '#/components/schemas/ContentRef'}
+        missing_fields: {type: array, items: {type: string}}
+        evidence_refs: {type: array, items: {type: string}}
+        object_hash: {type: string}
+        created_at: {type: string}
+    EntryPage:
+      type: object
+      required: [schema_version, run_id, entries, has_more, limit]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        run_id: {type: string}
+        entries: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/Entry'}}
+        next_cursor: {type: string, description: Opaque continuation tied to this run and filters.}
+        has_more: {type: boolean}
+        limit: {type: integer, minimum: 1, maximum: 200}
+    Overview:
+      type: object
+      required: [schema_version, run_id, coverage, messages, tool_calls, tool_results, snapshots, has_more_sources]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        run_id: {type: string}
+        coverage: {type: array, maxItems: 256, items: {$ref: '#/components/schemas/Coverage'}}
+        messages: {$ref: '#/components/schemas/NullableCount'}
+        tool_calls: {$ref: '#/components/schemas/NullableCount'}
+        tool_results: {$ref: '#/components/schemas/NullableCount'}
+        snapshots: {$ref: '#/components/schemas/NullableCount'}
+        has_more_sources: {type: boolean}
+      description: Latest report per source plus current stored record counts, not estimates of uncaptured activity.
+    ContentPage:
+      type: object
+      required: [schema_version, run_id, ref, content, media_type, offset, next_offset, total_bytes, has_more, sha256, redacted]
+      properties:
+        schema_version: {const: agentprovenance.content_page/v1}
+        run_id: {type: string}
+        ref: {type: string}
+        content: {type: string, description: Redacted stored bytes decoded as UTF-8; never current disk content.}
+        media_type: {type: string}
+        offset: {type: integer, minimum: 0}
+        next_offset: {type: integer, minimum: 0}
+        total_bytes: {type: integer, minimum: 0, maximum: 33554432}
+        has_more: {type: boolean}
+        sha256: {type: string}
+        redacted: {type: boolean}
+    Error:
+      type: object
+      required: [schema_version, error]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string, enum: [invalid_argument, run_not_found, content_not_found, store_unavailable, evidence_read_failed]}
+            message: {type: string}
+  responses:
+    InvalidArgument:
+      description: Invalid run, cursor, page limit, or UTF-8 byte offset.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    NotFound:
+      description: Run or run-scoped content reference does not exist.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    EvidenceFailure:
+      description: Stored object could not be read or its hash did not verify.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    StoreUnavailable:
+      description: Database unavailable; never reported as empty or missing evidence.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+paths:
+  /v1/context/overview:
+    get:
+      operationId: agent_context_overview
+      summary: Source coverage and stored context counts
+      parameters: [{$ref: '#/components/parameters/run'}]
+      responses:
+        '200': {description: Recorded coverage, content: {application/json: {schema: {$ref: '#/components/schemas/Overview'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+        '503': {$ref: '#/components/responses/StoreUnavailable'}
+  /v1/context/entries:
+    get:
+      operationId: agent_context_entries
+      summary: Cursor-paged recorded context
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: session, in: query, schema: {type: string}}
+        - {name: source, in: query, schema: {type: string}}
+        - {name: kind, in: query, schema: {type: string}}
+        - {name: tool_call, in: query, schema: {type: string}}
+        - {name: revisions, in: query, schema: {type: boolean, default: false}}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 8192}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200': {description: Page with immutable evidence references, content: {application/json: {schema: {$ref: '#/components/schemas/EntryPage'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+        '503': {$ref: '#/components/responses/StoreUnavailable'}
+  /v1/context/content:
+    get:
+      operationId: agent_context_content
+      summary: Read verified stored text without the source machine
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: ref, in: query, required: true, schema: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}, description: Redacted UTF-8 byte offset; use returned next_offset.}
+        - {name: limit, in: query, schema: {type: integer, minimum: 4, maximum: 262144, default: 65536}}
+      responses:
+        '200': {description: Hash-checked content page, content: {application/json: {schema: {$ref: '#/components/schemas/ContentPage'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+        '503': {$ref: '#/components/responses/StoreUnavailable'}

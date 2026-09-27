@@ -58,6 +58,8 @@ var importTableOrder = []string{
 	"graph_edges",
 	"cost_samples",
 	"provenance_objects",
+	"agent_context_entries",
+	"agent_context_reports",
 }
 
 // ImportBundle re-hydrates a forensics bundle into the local store so the run can
