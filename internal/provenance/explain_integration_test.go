@@ -1,4 +1,4 @@
-package provenance
+package provenance_test
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/effects"
+	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/record"
 	"github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -48,10 +49,10 @@ func TestExplainFileJSONManifest(t *testing.T) {
 	seedOrphanObservation(t, db, result)
 
 	var out bytes.Buffer
-	if err := Explain(db, ExplainOptions{RunID: "run-explain-json", File: "app.py", WithJSON: true}, &out); err != nil {
+	if err := provenance.Explain(db, provenance.ExplainOptions{RunID: "run-explain-json", File: "app.py", WithJSON: true}, &out); err != nil {
 		t.Fatal(err)
 	}
-	var manifest ExplainManifest
+	var manifest provenance.ExplainManifest
 	if err := json.Unmarshal(out.Bytes(), &manifest); err != nil {
 		t.Fatalf("invalid explain json: %v\n%s", err, out.String())
 	}
@@ -113,7 +114,7 @@ func TestExplainFileJSONManifest(t *testing.T) {
 func seedOrphanObservation(t *testing.T, db *sql.DB, result record.Result) {
 	t.Helper()
 	const pid = 700000001
-	payload, err := json.Marshal(RecordObservedProcess{
+	payload, err := json.Marshal(provenance.RecordObservedProcess{
 		PID: pid, PPID: result.RootPID, Command: "fixture-background-task",
 		FirstSeen: result.StartedAt, LastSeen: result.EndedAt, OutlivedRoot: true,
 	})
@@ -210,11 +211,11 @@ func TestExplainJSONV02EvidenceObjectsRisks(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := (ObjectStore{DB: db, Paths: paths}).MaterializeRun(result.RunID); err != nil {
+	if _, err := (provenance.ObjectStore{DB: db, Paths: paths}).MaterializeRun(result.RunID); err != nil {
 		t.Fatal(err)
 	}
 
-	manifest, err := BuildExplain(db, ExplainOptions{RunID: result.RunID, File: "app.py"})
+	manifest, err := provenance.BuildExplain(db, provenance.ExplainOptions{RunID: result.RunID, File: "app.py"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -321,11 +322,11 @@ func TestExplainJSONV02AllTargets(t *testing.T) {
 		eventID, result.RunID, result.SessionID, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := (ObjectStore{DB: db, Paths: paths}).MaterializeRun(result.RunID); err != nil {
+	if _, err := (provenance.ObjectStore{DB: db, Paths: paths}).MaterializeRun(result.RunID); err != nil {
 		t.Fatal(err)
 	}
 
-	targets := []ExplainOptions{
+	targets := []provenance.ExplainOptions{
 		{Attempt: result.AttemptID},
 		{ToolCall: result.ToolCallID},
 		{Process: result.ProcessID},
@@ -334,7 +335,7 @@ func TestExplainJSONV02AllTargets(t *testing.T) {
 		{Artifact: artifactRef},
 	}
 	for _, opts := range targets {
-		manifest, err := BuildExplain(db, opts)
+		manifest, err := provenance.BuildExplain(db, opts)
 		if err != nil {
 			t.Fatalf("BuildExplain(%+v): %v", opts, err)
 		}
@@ -412,11 +413,11 @@ func TestExplainEventIncludesTelemetryAdapterDetails(t *testing.T) {
 	if result.Ingested != 1 || len(result.EventIDs) != 1 {
 		t.Fatalf("unexpected ingest result: %+v", result)
 	}
-	if _, err := (ObjectStore{DB: db, Paths: paths}).MaterializeRun("run-explain-jsonl"); err != nil {
+	if _, err := (provenance.ObjectStore{DB: db, Paths: paths}).MaterializeRun("run-explain-jsonl"); err != nil {
 		t.Fatal(err)
 	}
 
-	manifest, err := BuildExplain(db, ExplainOptions{Event: result.EventIDs[0]})
+	manifest, err := provenance.BuildExplain(db, provenance.ExplainOptions{Event: result.EventIDs[0]})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -513,7 +514,7 @@ func TestExplainCausalityPathDepthAndLimit(t *testing.T) {
 		}
 	}
 
-	shallow, err := BuildExplain(db, ExplainOptions{RunID: result.RunID, File: "app.py", Depth: 1, Limit: 100})
+	shallow, err := provenance.BuildExplain(db, provenance.ExplainOptions{RunID: result.RunID, File: "app.py", Depth: 1, Limit: 100})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -524,7 +525,7 @@ func TestExplainCausalityPathDepthAndLimit(t *testing.T) {
 		t.Fatalf("depth=1 reached remote node: %+v", shallow.CausalityPath)
 	}
 
-	deep, err := BuildExplain(db, ExplainOptions{RunID: result.RunID, File: "app.py", Depth: 4, Limit: 100})
+	deep, err := provenance.BuildExplain(db, provenance.ExplainOptions{RunID: result.RunID, File: "app.py", Depth: 4, Limit: 100})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -538,7 +539,7 @@ func TestExplainCausalityPathDepthAndLimit(t *testing.T) {
 		t.Fatalf("unexpected deep query metadata: %+v path=%+v", deep.Query, deep.CausalityPath)
 	}
 
-	limited, err := BuildExplain(db, ExplainOptions{RunID: result.RunID, File: "app.py", Depth: 4, Limit: 2})
+	limited, err := provenance.BuildExplain(db, provenance.ExplainOptions{RunID: result.RunID, File: "app.py", Depth: 4, Limit: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -557,7 +558,7 @@ func TestExplainCausalityPathDepthAndLimit(t *testing.T) {
 	if len(limited.CausalityPath) != 2 || limited.Query.EdgeCount != 2 {
 		t.Fatalf("limit=2 returned unexpected path: query=%+v path=%+v", limited.Query, limited.CausalityPath)
 	}
-	page2, err := BuildExplain(db, ExplainOptions{RunID: result.RunID, File: "app.py", Depth: 4, Limit: 2, Cursor: limited.Query.NextCursor})
+	page2, err := provenance.BuildExplain(db, provenance.ExplainOptions{RunID: result.RunID, File: "app.py", Depth: 4, Limit: 2, Cursor: limited.Query.NextCursor})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -576,12 +577,12 @@ func TestExplainCausalityPathDepthAndLimit(t *testing.T) {
 	if page2.CausalityPath[0] == limited.CausalityPath[0] || page2.CausalityPath[0] == limited.CausalityPath[1] {
 		t.Fatalf("page2 repeated page1 edge: page1=%+v page2=%+v", limited.CausalityPath, page2.CausalityPath)
 	}
-	if _, err := BuildExplain(db, ExplainOptions{RunID: result.RunID, File: "app.py", Depth: 4, Limit: 2, Cursor: "2"}); err == nil {
+	if _, err := provenance.BuildExplain(db, provenance.ExplainOptions{RunID: result.RunID, File: "app.py", Depth: 4, Limit: 2, Cursor: "2"}); err == nil {
 		t.Fatalf("old-style explain cursor should be rejected")
 	}
 }
 
-func containsExplainEdge(edges []ExplainGraphEdge, node string) bool {
+func containsExplainEdge(edges []provenance.ExplainGraphEdge, node string) bool {
 	for _, edge := range edges {
 		if edge.FromID == node || edge.ToID == node {
 			return true
@@ -618,27 +619,27 @@ func TestPhase1JSONSchemaVersions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	replay, err := BuildReplayRun(db, "run-schema")
+	replay, err := provenance.BuildReplayRun(db, "run-schema")
 	if err != nil {
 		t.Fatal(err)
 	}
-	verify, err := Verify(db, "run-schema")
+	verify, err := provenance.Verify(db, "run-schema")
 	if err != nil {
 		t.Fatal(err)
 	}
-	trajectories, err := BuildTrajectoriesRun(db, "run-schema")
+	trajectories, err := provenance.BuildTrajectoriesRun(db, "run-schema")
 	if err != nil {
 		t.Fatal(err)
 	}
-	diff, err := BuildDiffFile(db, "run-schema", "app.py")
+	diff, err := provenance.BuildDiffFile(db, "run-schema", "app.py")
 	if err != nil {
 		t.Fatal(err)
 	}
-	blame, err := BuildBlameFile(db, "run-schema", "app.py")
+	blame, err := provenance.BuildBlameFile(db, "run-schema", "app.py")
 	if err != nil {
 		t.Fatal(err)
 	}
-	explain, err := BuildExplain(db, ExplainOptions{RunID: "run-schema", File: "app.py"})
+	explain, err := provenance.BuildExplain(db, provenance.ExplainOptions{RunID: "run-schema", File: "app.py"})
 	if err != nil {
 		t.Fatal(err)
 	}

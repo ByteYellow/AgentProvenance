@@ -42,6 +42,10 @@ func recordCmd(dataDir *string) *cobra.Command {
 			}
 			defer db.Close()
 			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), commandLanguage(cmd))
+			childOutput := cmd.OutOrStdout()
+			if withJSON {
+				childOutput = cmd.ErrOrStderr()
+			}
 			result, err := (record.Service{DB: db, Paths: paths}).Run(record.Request{
 				RunID:            runID,
 				Name:             name,
@@ -49,6 +53,8 @@ func recordCmd(dataDir *string) *cobra.Command {
 				Command:          args,
 				SampleIntervalMS: sampleIntervalMS,
 				PostRootGraceMS:  postRootGraceMS,
+				Stdout:           childOutput,
+				Stderr:           cmd.ErrOrStderr(),
 			})
 			if err != nil {
 				return err
@@ -473,6 +479,7 @@ func printRecordJSON(cmd *cobra.Command, result record.Result) error {
 		"wall_ms":            result.WallMS,
 		"changed_files":      result.ChangedFiles,
 		"changed_file_count": len(result.ChangedFiles),
+		"artifact_capture":   result.ArtifactCapture,
 		"context_mode":       "zero_sdk",
 		"root_pid":           result.RootPID,
 		"observed_processes": result.Observed,

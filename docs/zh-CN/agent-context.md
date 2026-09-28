@@ -74,6 +74,31 @@ agentprov context content --run RUN_ID --ref sha256:HASH --offset 0 --limit 6553
 不依赖原 harness 或原始文件。签名覆盖导出的证据，采集覆盖与图完整性分别校验。
 没有上下文采集报告的旧包保留 `legacy_not_recorded`。
 
+## 变更文件正文
+
+`record` 保存工作目录比较所发现的变更文件在执行结束后的文本。
+`launch` 需显式开启 `--file-diff`；默认仍关闭，因为复制和比较大型工作目录可能耗时较长。
+
+```sh
+agentprov launch --file-diff -- dsh headless --json 'Inspect the project and run its tests.'
+```
+
+一次最多选择 512 个文件，单份文本最多 32 MiB，累计正文读取与脱敏正文保存各有 128 MiB 预算。
+文本限制在脱敏前后均检查；为检测读取期间文件增长，最多额外读取一个探测字节。
+这些是正文采集预算，不限制现有工作目录快照与比较的 I/O。
+只支持普通 UTF-8 文件，不跟随符号链接或特殊文件，也不接受越出工作目录的路径。
+
+record/launch JSON 中的 `artifact_capture` 以及保存的同名证据对象报告
+`disabled`、`empty`、`ok`、`partial`、`failed`。`candidates: null` 表示选择未启用
+或未能完成；零则表示比较成功且没有变更文件。已知省略包括 `source_missing`、
+`binary_omitted`、`collection_limit`；不可读文件和存储失败另有具体原因。
+超过 512 个文件选择限制的条目仍在变更事件中标明省略，不声称保存了正文。
+
+每份文件描述与分段正文共用数据库事务，保留采集时间、源文件长度、脱敏正文长度、哈希和引用。
+查询及离线导入读取这些保存对象，不读取工作文件的新版本。
+这是执行结束后的最终状态，不是每次中间写入的历史，也不是原子文件系统快照；
+最终已不存在的文件不会被补造正文。
+
 ## Dashboard
 
 执行图谱与所选证据位于默认收起的 **Agent 会话** 之前。会话分为 **对话与工具**、
@@ -103,7 +128,10 @@ agentprov context content --run RUN_ID --ref sha256:HASH --offset 0 --limit 6553
 旧内嵌对象继续保留 8 MiB 读取预算；新分段正文支持最多 32 MiB，不增加证据包每个对象
 4 MiB 的内嵌上限，内部存储分段也不会被统计成文件制品。
 签名、跨目录离线导入后的 HTTP 分页测试已覆盖上述三个旧容量边界。
-现有文件变更采集端接入全文存储仍是独立验收项；读取能力不会补造旧采集漏掉的正文。
+文件变化采集端已使用相同的分段存储。真实 record 子进程测试验证了超过 8 MiB 的采集、
+脱敏、签名与离线正文；launch 测试覆盖显式开启和默认关闭。
+这些是确定性测试负载，不代表仍待完成的传感器配合 DeepSeek 开发任务实测。
+读取能力不会补造旧采集漏掉的正文。
 
 Dashboard 和 daemon 共用只读 `/api/context/*` 与 `/v1/context/*` 接口。
 具体字段见 [API 契约](../agent-context-api.yaml)，实现与实机验证状态见

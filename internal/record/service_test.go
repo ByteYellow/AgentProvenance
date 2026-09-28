@@ -242,14 +242,21 @@ func TestRecordObjectifiesChangedFilesForPreview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Must be the canonical artifact envelope the preview unwraps, carrying the
-	// real file bytes under payload.content.
-	if !strings.Contains(string(blob), `"agentprov.provenance.object.v1"`) || !strings.Contains(string(blob), "print(42)") {
-		t.Fatalf("artifact object missing schema or content: %s", blob)
+	var saved struct {
+		Schema  string           `json:"schema"`
+		Payload CapturedArtifact `json:"payload"`
 	}
-	// The inline-written artifact object must be accepted by graph verify (the
-	// hash/schema/envelope must match what the object store produces), else the
-	// demo's "verify" badge would fail on a captured product.
+	if err := json.Unmarshal(blob, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.Schema != "agentprov.provenance.object.v1" || saved.Payload.ContentState != "stored" || saved.Payload.ContentRef == "" {
+		t.Fatalf("artifact object missing schema or content reference: %s", blob)
+	}
+	page, err := provenance.ReadTextContentPage(db, "run-obj", saved.Payload.ContentRef, 0, 1024)
+	if err != nil || page.Content != "print(42)\n" {
+		t.Fatalf("saved content: %+v %v", page, err)
+	}
+	// The descriptor and its chunk references must pass the existing verifier.
 	if _, err := (provenance.ObjectStore{DB: db, Paths: paths}).MaterializeRun("run-obj"); err != nil {
 		t.Fatal(err)
 	}

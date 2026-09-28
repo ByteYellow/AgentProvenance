@@ -549,6 +549,7 @@ func verifyRiskAndResponses(db *sql.DB, runID string, add issueAdder) error {
 }
 
 func verifyObjects(db *sql.DB, runID string, add issueAdder) error {
+	checkedText := map[string]bool{}
 	rows, err := db.Query(`SELECT hash, object_type, source_id, parent_hashes, path FROM provenance_objects WHERE run_id = ?`, runID)
 	if err != nil {
 		return err
@@ -580,6 +581,28 @@ func verifyObjects(db *sql.DB, runID string, add issueAdder) error {
 				add("error", "record_manifest_rebuild_failed", sourceID, "record manifest cannot be rebuilt: %v", err)
 			} else if !jsonEqual(obj.Payload["manifest"], expected) {
 				add("error", "record_manifest_mismatch", sourceID, "record manifest object does not match rebuilt manifest")
+			}
+		}
+		contentRef, _ := obj.Payload["content_ref"].(string)
+		if objectType == "text_content" || obj.Payload["kind"] == "stored_text" {
+			contentRef = hash
+		}
+		if contentRef != "" && (objectType == "artifact" || objectType == "text_content") {
+			if !checkedText[contentRef] {
+				if err := VerifyTextContent(db, runID, contentRef); err != nil {
+					add("error", "text_content_invalid", sourceID, "saved text cannot be verified: %v", err)
+				}
+				checkedText[contentRef] = true
+			}
+			if contentRef != hash {
+				page, err := ReadTextContentPage(db, runID, contentRef, 0, 4)
+				if err == nil {
+					for field, want := range map[string]any{"content_bytes": page.TotalBytes, "sha256": page.SHA256, "redacted": page.Redacted} {
+						if got, exists := obj.Payload[field]; exists && !jsonEqual(got, want) {
+							add("error", "artifact_content_metadata_mismatch", sourceID, "saved artifact %s differs from its text manifest", field)
+						}
+					}
+				}
 			}
 		}
 		for _, parent := range strings.Split(parentHashes, ",") {

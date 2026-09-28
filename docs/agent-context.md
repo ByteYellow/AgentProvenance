@@ -85,6 +85,38 @@ directory does not require the original harness or source files. Signing covers
 the exported evidence; coverage and graph verification are separate checks.
 Old bundles without context reports remain `legacy_not_recorded`.
 
+## Changed File Content
+
+`record` saves post-execution text for files found by its working-tree comparison.
+For `launch`, opt in with `--file-diff`; this remains off by default because
+copying and comparing a large workspace can be expensive.
+
+```sh
+agentprov launch --file-diff -- dsh headless --json 'Inspect the project and run its tests.'
+```
+
+The writer saves at most 512 selected files, with 32 MiB per text body and
+128 MiB of cumulative body reads and saved redacted text per run. The text limits
+apply before and after redaction. A read may consume one extra probe byte to
+detect a file growing beyond its limit. These are text-capture budgets, not
+limits on the existing workspace snapshot/comparison I/O. Only regular UTF-8
+files are supported; path traversal, symlinks, and special files are not followed.
+
+The `artifact_capture` field in record/launch JSON and the saved
+`artifact_capture` evidence object report `disabled`, `empty`, `ok`, `partial`,
+or `failed`. `candidates: null` means selection was disabled or could not finish;
+zero means comparison succeeded and found no changed files. Known omissions
+include `source_missing`, `binary_omitted`, and `collection_limit`; unreadable
+files and storage failures have separate reasons. For files beyond the 512-file
+selection limit, the changed-file event records the omission without a body.
+
+Each saved file descriptor and its text chunks share a database transaction.
+The descriptor retains the capture time, source length, redacted body length,
+body hash, and content reference. Query and offline import use those objects,
+not a later version of the working file. This records the final post-execution
+state, not every intermediate write; it is not an atomic filesystem snapshot.
+An absent final file does not acquire a reconstructed body.
+
 ## Dashboard
 
 The execution graph and focused evidence remain above the initially collapsed
@@ -127,9 +159,11 @@ still exposes their recorded metadata. Legacy inline objects retain an 8 MiB
 read budget. New chunked text supports up to 32 MiB without raising the existing
 4 MiB per-object bundle limit, and storage chunks are not counted as file
 artifacts. Signed offline HTTP-paging tests cover all three former size boundaries.
-Connecting the existing changed-file capture writer to this full-text storage
-remains a separate delivery gate; this reader does not retroactively create bodies
-that an older capture omitted.
+The changed-file writer uses the same chunked storage. Real record subprocess
+tests verify capture, redaction, signing, and offline content beyond 8 MiB;
+launch tests cover its opt-in and disabled paths. These are deterministic test
+workloads, not the pending sensor-backed DeepSeek development-task demo.
+The reader does not retroactively create bodies that an older capture omitted.
 
 The dashboard and daemon share read-only `/api/context/*` and `/v1/context/*`
 routes. See the [API contract](agent-context-api.yaml) and the

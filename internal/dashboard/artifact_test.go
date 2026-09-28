@@ -208,6 +208,30 @@ func TestArtifactBoundedMissingAndFailedLookup(t *testing.T) {
 	}
 }
 
+func TestArtifactFileOmissionIsNotLegacyOrEmpty(t *testing.T) {
+	_, db, _ := artifactStore(t)
+	if _, err := db.Exec(`INSERT INTO events (id,run_id,source,event_type,payload,created_at)
+		VALUES ('omitted','run','record_file_diff','file_write','{"payload":{"path":"omitted.txt","content_state":"collection_limit"}}','2026-09-28T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	got := artifactPage(t, db, "run", "workspace_file/omitted.txt", 0, "")
+	if got.ContentState != "collection_limit" || got.TotalBytes != nil || got.Source != "db" || got.Content != "" {
+		t.Fatalf("limit became missing/empty: %+v", got)
+	}
+	other := artifactPage(t, db, "other", "workspace_file/omitted.txt", 0, "")
+	if other.ContentState != "legacy_not_recorded" {
+		t.Fatalf("cross-run capture state: %+v", other)
+	}
+	if _, err := db.Exec(`INSERT INTO events (id,run_id,source,event_type,payload,created_at)
+		VALUES ('missing','run','record_file_diff','file_write','{"path":"omitted.txt","content_state":"source_missing"}','2026-09-28T00:00:01Z')`); err != nil {
+		t.Fatal(err)
+	}
+	got = artifactPage(t, db, "run", "workspace_file/omitted.txt", 0, "")
+	if got.ContentState != "ambiguous" {
+		t.Fatalf("conflicting state guessed: %+v", got)
+	}
+}
+
 func TestArtifactSignedOfflinePagingAcrossAllLimits(t *testing.T) {
 	for _, size := range []int{(64 << 10) + 33, (4 << 20) + 33, (8 << 20) + 33} {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {

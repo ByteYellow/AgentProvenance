@@ -96,6 +96,18 @@ func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
 	var data []byte
 	mimePath := "evidence.txt"
 	if len(versions) == 0 {
+		if strings.HasPrefix(node, "workspace_file/") {
+			state, reason, found, err := s.artifactFileState(run, strings.TrimPrefix(node, "workspace_file/"))
+			if err != nil {
+				httpError(w, "recorded file capture lookup failed", http.StatusInternalServerError)
+				return
+			}
+			if found {
+				resp.Source, resp.Integrity, resp.ContentState, resp.Reason = "db", "database_record", state, reason
+				writeJSON(w, resp)
+				return
+			}
+		}
 		content, found, err := s.nodeDBContentLocale(run, node, lang, mode)
 		if err != nil {
 			httpError(w, "recorded content lookup failed", http.StatusInternalServerError)
@@ -232,6 +244,54 @@ func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
 	resp.Offset, resp.NextOffset, resp.HasMore = offset, end, end < int64(len(text))
 	resp.Truncated = resp.HasMore
 	writeJSON(w, resp)
+}
+
+// A bounded file selection may omit a descriptor but still record a file event.
+// Preserve its explicit capture state instead of labelling a new limit as legacy.
+func (s Server) artifactFileState(run, path string) (string, string, bool, error) {
+	rows, err := s.DB.Query(`SELECT DISTINCT substr(COALESCE(json_extract(p,'$.payload.content_state'),json_extract(p,'$.content_state'),'legacy_not_recorded'),1,128)
+		FROM (SELECT CASE WHEN json_valid(payload) THEN payload ELSE '{}' END AS p FROM events
+		WHERE run_id=? AND source='record_file_diff' AND event_type='file_write')
+		WHERE COALESCE(json_extract(p,'$.payload.path'),json_extract(p,'$.path'))=? LIMIT 2`, run, path)
+	if err != nil {
+		return "", "", false, err
+	}
+	defer rows.Close()
+	var states []string
+	for rows.Next() {
+		var state string
+		if err := rows.Scan(&state); err != nil {
+			return "", "", false, err
+		}
+		states = append(states, state)
+	}
+	if err := rows.Err(); err != nil {
+		return "", "", false, err
+	}
+	if len(states) == 0 {
+		return "", "", false, nil
+	}
+	if len(states) > 1 {
+		return "ambiguous", "Saved file records disagree about capture state; inspect their exact events.", true, nil
+	}
+	state := states[0]
+	reason := "No saved body for this node; current files are not historical evidence."
+	switch state {
+	case "collection_limit":
+		reason = "File content was omitted by the capture budget."
+	case "failed":
+		reason = "Artifact evidence could not be stored."
+	case "source_missing":
+		reason = "The file was absent at post-execution capture."
+	case "binary_omitted":
+		reason = "Binary file content is not saved by the text capture path."
+	case "stored":
+		state, reason = "unavailable", "Saved content is unavailable in this store."
+	case "legacy_not_recorded", "unavailable":
+	default:
+		state = "unavailable"
+	}
+	return state, reason, true, nil
 }
 
 func artifactRange(value string, fallback int64) (int64, error) {

@@ -313,6 +313,9 @@ func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
 			if r.AgentContext == nil || r.AgentContext.ToolCalls == nil || *r.AgentContext.ToolCalls != 1 || *r.AgentContext.ToolResults != 1 {
 				t.Fatalf("missing common context: %+v", r.AgentContext)
 			}
+			if r.ArtifactCapture == nil || r.ArtifactCapture.Status != "disabled" || r.ArtifactCapture.Candidates != nil || r.ArtifactCapture.Ref == "" {
+				t.Fatalf("default launch unexpectedly enabled file capture: %+v", r.ArtifactCapture)
+			}
 			if c := sourceReport(t, *r.AgentContext, "discovery"); c.Status != agentcontext.OK {
 				t.Fatalf("discovery failed: %+v", c)
 			}
@@ -329,5 +332,35 @@ func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
 				t.Fatalf("verify imported: %+v %v", v, err)
 			}
 		})
+	}
+}
+
+func TestLaunchFileDiffSavesPortableBody(t *testing.T) {
+	workdir := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	r, err := Run(Options{DataDir: t.TempDir(), Workdir: workdir, Command: []string{"sh", "-c", "printf 'saved from launch\n' > report.txt"},
+		FileDiff: true, NoContext: true, Sensor: "off", JSON: true, Stdout: &stdout, Stderr: &stderr})
+	if err != nil || r.ExitCode != 0 || r.ArtifactCapture == nil {
+		t.Fatalf("launch file capture: %+v %v\n%s", r, err, stderr.String())
+	}
+	report := r.ArtifactCapture
+	if report.Status != "ok" || report.Candidates == nil || *report.Candidates != 1 || report.Stored != 1 || len(report.Files) != 1 || report.Ref == "" {
+		t.Fatalf("file capture report: %+v", report)
+	}
+	fresh := contextService(t)
+	info, err := (forensics.Service{DB: fresh.DB, Paths: fresh.Paths}).ImportBundle(r.BundlePath)
+	if err != nil || info.Omitted != 0 {
+		t.Fatalf("offline import: %+v %v", info, err)
+	}
+	if err := os.WriteFile(filepath.Join(workdir, "report.txt"), []byte("changed after capture"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	body, err := provenance.ReadTextContentPage(fresh.DB, r.RunID, report.Files[0].ContentRef, 0, 65536)
+	if err != nil || body.Content != "saved from launch\n" {
+		t.Fatalf("launch did not preserve saved body: %+v %v", body, err)
+	}
+	v, err := provenance.Verify(fresh.DB, r.RunID)
+	if err != nil || v.ErrorCount != 0 {
+		t.Fatalf("verify imported: %+v %v", v, err)
 	}
 }

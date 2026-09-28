@@ -76,27 +76,28 @@ type Options struct {
 type Report struct {
 	appDetail          message
 	sysReason          message
-	RunID              string                 `json:"run_id"`
-	ExitCode           int                    `json:"exit_code"`
-	Status             string                 `json:"status"`
-	AppTier            string                 `json:"app_tier"`
-	AppDetail          string                 `json:"app_detail,omitempty"`
-	SysTier            string                 `json:"sys_tier"`
-	SysDegradeReason   string                 `json:"sys_degrade_reason,omitempty"`
-	Events             int                    `json:"events"`
-	HighRisk           int                    `json:"high_risk"`
-	Signals            int                    `json:"signals"`
-	Verdict            string                 `json:"verdict"`
-	BundlePath         string                 `json:"bundle_path,omitempty"`
-	Signed             bool                   `json:"signed"`
-	AttestationPath    string                 `json:"attestation_path,omitempty"`
-	DashboardURL       string                 `json:"dashboard_url,omitempty"`
-	HooksIngested      int                    `json:"hooks_ingested"`
-	IntentMismatches   int                    `json:"intent_mismatches"`
-	IntentCoverageGaps int                    `json:"intent_coverage_gaps"`
-	TranscriptTurns    int                    `json:"transcript_turns"`
-	AgentContext       *agentcontext.Overview `json:"agent_context,omitempty"`
-	ContextIssues      []string               `json:"context_issues,omitempty"`
+	RunID              string                        `json:"run_id"`
+	ExitCode           int                           `json:"exit_code"`
+	Status             string                        `json:"status"`
+	AppTier            string                        `json:"app_tier"`
+	AppDetail          string                        `json:"app_detail,omitempty"`
+	SysTier            string                        `json:"sys_tier"`
+	SysDegradeReason   string                        `json:"sys_degrade_reason,omitempty"`
+	Events             int                           `json:"events"`
+	HighRisk           int                           `json:"high_risk"`
+	Signals            int                           `json:"signals"`
+	Verdict            string                        `json:"verdict"`
+	BundlePath         string                        `json:"bundle_path,omitempty"`
+	Signed             bool                          `json:"signed"`
+	AttestationPath    string                        `json:"attestation_path,omitempty"`
+	DashboardURL       string                        `json:"dashboard_url,omitempty"`
+	HooksIngested      int                           `json:"hooks_ingested"`
+	IntentMismatches   int                           `json:"intent_mismatches"`
+	IntentCoverageGaps int                           `json:"intent_coverage_gaps"`
+	TranscriptTurns    int                           `json:"transcript_turns"`
+	AgentContext       *agentcontext.Overview        `json:"agent_context,omitempty"`
+	ContextIssues      []string                      `json:"context_issues,omitempty"`
+	ArtifactCapture    *record.ArtifactCaptureReport `json:"artifact_capture,omitempty"`
 }
 
 // Run executes the full launch lifecycle and returns its Report. The returned
@@ -258,6 +259,7 @@ func Run(opts Options) (Report, error) {
 	}
 	report.ExitCode = result.ExitCode
 	report.Status = result.Status
+	report.ArtifactCapture = &result.ArtifactCapture
 
 	// Select source-owned identities and verified ranges after the agent exits.
 	ctxOverview, ctxErr := capture.finish(context.Background(), agentcontext.Service{DB: db, Paths: paths}, runID, hookLogPath, agentStart, time.Now())

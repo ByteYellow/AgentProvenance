@@ -2373,5 +2373,17 @@
   "Saved artifact has an invalid content descriptor.": "已保存制品的正文描述无效。",
   "Saved text or its referenced chunks are missing or invalid.": "已保存正文或其引用的分段缺失或无效。",
   "Only artifact metadata was saved; select the raw record to inspect it.": "仅保存了制品元数据，可切换到原始记录查看。",
-  "Binary content is not rendered as text.": "二进制内容不作为文本展示。"
+  "Binary content is not rendered as text.": "二进制内容不作为文本展示。",
+  "Artifact evidence could not be stored.": "制品证据保存失败。",
+  "Redacted content exceeds the remaining capture budget.": "脱敏后正文超过剩余采集容量。",
+  "The run's saved-text budget is exhausted.": "本次执行的正文采集容量已用完。",
+  "The file could not be safely opened at capture time.": "采集时无法安全打开此文件。",
+  "The file was absent at post-execution capture.": "执行结束后采集时，此文件已经不存在。",
+  "Only regular files are captured; links and special files are not followed.": "仅采集普通文件，不跟随链接或读取特殊文件。",
+  "The file exceeds the remaining per-file or run capture budget.": "此文件超过单文件或本次执行的剩余采集容量。",
+  "The file could not be fully read at capture time.": "采集时未能完整读取此文件。",
+  "The file changed while its post-execution content was being read.": "执行后的正文采集过程中，文件仍在变化。",
+  "Binary file content is not saved by the text capture path.": "文本采集链路不保存二进制文件正文。",
+  "Saved file records disagree about capture state; inspect their exact events.": "已保存文件记录的采集状态不一致，请查看具体事件。",
+  "File content was omitted by the capture budget.": "文件正文因采集容量限制而省略。"
 }

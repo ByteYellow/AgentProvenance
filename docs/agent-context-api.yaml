@@ -161,7 +161,7 @@ components:
         ref: {type: string, description: 'Exact saved object hash, distinct from the displayed body hash.'}
         source: {type: string, enum: [object, db]}
         content_ref: {type: string, description: Chunked text manifest when present.}
-        content_state: {type: string, examples: [stored, legacy_not_recorded, ambiguous, unavailable, integrity_failure, read_limit, binary, omitted]}
+        content_state: {type: string, examples: [stored, legacy_not_recorded, ambiguous, unavailable, integrity_failure, read_limit, binary, omitted, source_missing, binary_omitted, collection_limit, failed]}
         integrity: {type: string, enum: [object_hash_verified, database_record], description: Not a signature claim or a claim about capture completeness.}
         sha256: {type: string, pattern: '^[a-f0-9]{64}$', description: 'Hash of the whole redacted display body, including localized presentation headings in body mode.'}
         size: {type: integer, minimum: 0, description: Legacy size field; use nullable total_bytes to distinguish unknown from zero.}
@@ -191,6 +191,51 @@ components:
         Multiple revisions require exact hash selection; current workspace files
         are never used to replace missing historical content. Raw mode shows the
         saved envelope, or the explicitly identified database record fields.
+    CapturedArtifact:
+      type: object
+      required: [path, source_bytes, read_bytes, content_state, content_bytes, redacted, captured_at, capture_method]
+      properties:
+        path: {type: string, description: Workspace-relative selected path.}
+        source_bytes: {$ref: '#/components/schemas/NullableCount'}
+        read_bytes: {type: integer, minimum: 0}
+        content_state: {type: string, enum: [stored, source_missing, binary_omitted, collection_limit, unavailable, failed]}
+        content_ref: {type: string, description: Saved text manifest; absent when the body was omitted or its transaction failed.}
+        content_bytes: {$ref: '#/components/schemas/NullableCount'}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$', description: Full redacted body hash.}
+        redacted: {type: boolean}
+        captured_at: {type: string, format: date-time}
+        capture_method: {const: post_execution_snapshot}
+        reason: {type: string}
+        reason_code: {type: string}
+        ref: {type: string, description: Descriptor hash in the report; not stored recursively inside its own payload.}
+      description: Final changed-file state, not an intermediate-write history or atomic filesystem snapshot.
+    ArtifactCaptureReport:
+      type: object
+      required: [schema_version, status, method, candidates, stored, omitted, failed, stored_bytes, read_bytes, file_limit, per_file_byte_limit, total_byte_limit]
+      properties:
+        schema_version: {const: agentprovenance.artifact_capture/v1}
+        status: {type: string, enum: [disabled, empty, ok, partial, failed]}
+        method: {const: post_execution_snapshot}
+        candidates: {$ref: '#/components/schemas/NullableCount'}
+        stored: {type: integer, minimum: 0}
+        omitted: {type: integer, minimum: 0}
+        failed: {type: integer, minimum: 0}
+        stored_bytes: {type: integer, minimum: 0}
+        read_bytes: {type: integer, minimum: 0, description: Includes at most one extra limit-detection byte beyond the total text-read budget.}
+        file_limit: {type: integer, const: 512}
+        per_file_byte_limit: {type: integer, const: 33554432}
+        total_byte_limit: {type: integer, const: 134217728}
+        reason: {type: string}
+        issues: {type: array, items: {type: string}}
+        ref: {type: string, description: Report object hash in CLI JSON; not stored recursively in its own payload.}
+        files: {type: array, maxItems: 512, items: {$ref: '#/components/schemas/CapturedArtifact'}}
+      description: >
+        Embedded as artifact_capture in record/launch JSON and persisted as an
+        artifact_capture object in the bundle. Null candidates mean disabled or
+        unknown selection, not zero changed files. Budgets apply to changed-file
+        text capture, not baseline workspace snapshot/comparison I/O. Counts refer
+        to saved/omitted/failed bodies; issues can separately report event/report
+        storage failures. No additional HTTP route is implied by this schema.
     EntryLinks:
       type: object
       required: [schema_version, run_id, entry_id, basis, links, has_more]

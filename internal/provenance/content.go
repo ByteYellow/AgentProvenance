@@ -17,6 +17,7 @@ import (
 )
 
 var ErrContentRange = errors.New("invalid content page range")
+var ErrTextContentLimit = errors.New("text content exceeds capture limit")
 
 const (
 	MaxTextContentBytes = 32 << 20
@@ -44,6 +45,8 @@ type TextContentInput struct {
 	SourceID  string
 	MediaType string
 	Text      string
+	// MaxBytes optionally narrows the source and redacted-byte budget.
+	MaxBytes int64
 }
 
 type TextContent struct {
@@ -69,13 +72,23 @@ type ContentPage struct {
 // spanning a chunk boundary cannot evade redaction. Chunks use existing signed
 // provenance objects and remain below the historical bundle inline limit.
 func (s ObjectStore) PutTextContent(input TextContentInput) (TextContent, error) {
-	if len(input.Text) > MaxTextContentBytes {
-		return TextContent{}, fmt.Errorf("text content exceeds capture limit (%d bytes)", MaxTextContentBytes)
+	limit := int64(MaxTextContentBytes)
+	if input.MaxBytes < 0 {
+		return TextContent{}, fmt.Errorf("invalid text content budget")
+	}
+	if input.MaxBytes > 0 && input.MaxBytes < limit {
+		limit = input.MaxBytes
+	}
+	if int64(len(input.Text)) > limit {
+		return TextContent{}, fmt.Errorf("%w (%d bytes)", ErrTextContentLimit, limit)
 	}
 	if !utf8.ValidString(input.Text) {
 		return TextContent{}, fmt.Errorf("text content is not UTF-8")
 	}
 	text, changed := redactText(input.Text, 0)
+	if int64(len(text)) > limit {
+		return TextContent{}, fmt.Errorf("%w after redaction (%d bytes)", ErrTextContentLimit, limit)
+	}
 	if input.MediaType == "" {
 		input.MediaType = "text/plain; charset=utf-8"
 	}
@@ -284,11 +297,19 @@ func readContentObject(db *sql.DB, runID, ref string, target any) error {
 	if err := db.QueryRow(`SELECT path FROM provenance_objects WHERE run_id = ? AND hash = ?`, runID, ref).Scan(&path); err != nil {
 		return fmt.Errorf("stored content lookup: %w", err)
 	}
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return fmt.Errorf("stored content is not a readable regular object")
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("stored content is unavailable: %w", err)
 	}
 	defer f.Close()
+	info, err = f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return fmt.Errorf("stored content is not a regular object")
+	}
 	raw, err := io.ReadAll(io.LimitReader(f, (2<<20)+1))
 	if err != nil {
 		return err
@@ -299,6 +320,13 @@ func readContentObject(db *sql.DB, runID, ref string, target any) error {
 	sum := sha256.Sum256(raw)
 	if "sha256:"+hex.EncodeToString(sum[:]) != ref {
 		return fmt.Errorf("stored content hash mismatch")
+	}
+	var envelope struct {
+		Schema string `json:"schema"`
+		RunID  string `json:"run_id"`
+	}
+	if json.Unmarshal(raw, &envelope) != nil || envelope.Schema != "agentprov.provenance.object.v1" || envelope.RunID != runID {
+		return fmt.Errorf("stored content schema or run mismatch")
 	}
 	return json.Unmarshal(raw, target)
 }
