@@ -19,6 +19,8 @@ async (page) => {
   for (const id of ['graphcard','siglist','focusedevidence','outboundcard','tl','ptree','egtbl','compliancecard']) check(await page.locator('#'+id).count()===1,'retains '+id);
   await page.getByRole('button',{name:'Agent session 38',exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll('#context-body [data-entry]').length===30);
+  await page.waitForFunction(()=>document.querySelector('#agentcontext').getBoundingClientRect().top >= document.querySelector('body > header').getBoundingClientRect().bottom);
+  check(true,'session navigation clears the sticky header');
   check(await page.locator('#context-body img').count()===0,'recorded markup is not executed');
   await page.locator('#context-next').click();
   await page.waitForFunction(()=>document.querySelectorAll('#context-body [data-entry]').length===10);
@@ -64,6 +66,7 @@ async (page) => {
   await page.evaluate(()=>window.scrollTo(0,0));
   await page.screenshot({path:'output/playwright/context-desktop-en.png',fullPage:true});
   await page.getByRole('tab',{name:'Collection status',exact:true}).click();
+  check(await page.locator('[data-runtime-coverage]').innerText().then(text=>text.includes('Not recorded in this historical run') && text.includes('Stored runtime events') && text.includes('Run-specific dropped events')),'runtime coverage is shown beside context without inventing historical capture');
   check(await page.locator('#context-body').innerText().then(text=>text.includes('Not recorded') && text.includes('synthetic-ui-fixture/v1')),'source coverage retains unknown counters and parser');
   await page.getByRole('tab',{name:'Conversation & tools',exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll('#context-body [data-entry]').length===30);

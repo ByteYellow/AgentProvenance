@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance recorded context API
-  version: "1.0"
+  version: "1.1"
   description: >
     Read-only recorded evidence. Source assertions are not kernel observations
     or inferred authorizations. The dashboard exposes the same routes under
@@ -126,7 +126,7 @@ components:
         limit: {type: integer, minimum: 1, maximum: 200}
     Overview:
       type: object
-      required: [schema_version, run_id, coverage, messages, tool_calls, tool_results, snapshots, has_more_sources]
+      required: [schema_version, run_id, coverage, messages, tool_calls, tool_results, snapshots, has_more_sources, runtime_coverage]
       properties:
         schema_version: {const: agentprovenance.agent_context/v1}
         run_id: {type: string}
@@ -136,7 +136,129 @@ components:
         tool_results: {$ref: '#/components/schemas/NullableCount'}
         snapshots: {$ref: '#/components/schemas/NullableCount'}
         has_more_sources: {type: boolean}
+        runtime_coverage: {$ref: '#/components/schemas/RuntimeCoverage'}
       description: Latest report per source plus current stored record counts, not estimates of uncaptured activity.
+    RuntimeCoverage:
+      type: object
+      required: [schema_version, run_id, capture, correlation]
+      properties:
+        schema_version: {const: agentprovenance.runtime_coverage/v1}
+        run_id: {type: string}
+        capture: {$ref: '#/components/schemas/RuntimeCapture'}
+        correlation: {$ref: '#/components/schemas/RuntimeCorrelationCoverage'}
+      description: Saved capture diagnostics and current stored-event scope fields, neither a signature result nor proof of complete activity capture.
+    RuntimeCapture:
+      type: object
+      required: [schema_version, run_id, status, scope, kernel_state, node_counter_delta, node_pending_events, node_queued_bytes, run_dropped_events, run_impact, issues]
+      properties:
+        schema_version: {const: agentprovenance.runtime_capture/v1}
+        run_id: {type: string}
+        status: {type: string, enum: [disabled, no_input, ok, partial, failed, legacy_not_recorded]}
+        scope: {type: string, enum: [node_capture_during_run, unknown]}
+        kernel_state: {type: string, enum: [disabled, unavailable, observed, unknown]}
+        started_at: {type: string, format: date-time}
+        ended_at: {type: string, format: date-time}
+        node_counter_delta:
+          type: [object, "null"]
+          additionalProperties: {type: integer, minimum: 0}
+          description: Node-wide increments between capture snapshots, not per-run losses. Missing/reset counters are unknown; null means no usable interval measurement.
+        node_pending_events: {$ref: '#/components/schemas/NullableCount'}
+        node_queued_bytes: {$ref: '#/components/schemas/NullableCount'}
+        run_dropped_events: {type: "null", description: No run-specific loss measurement is available; never apportion node losses to a run.}
+        run_impact: {type: string, enum: [unknown, no_node_loss_reported]}
+        capabilities_start: {$ref: '#/components/schemas/ProbeSnapshot'}
+        capabilities_end: {$ref: '#/components/schemas/ProbeSnapshot'}
+        issues: {type: array, items: {type: string}}
+        ref: {type: string, description: Saved capture report hash, verified on read and portable in the bundle.}
+      description: >
+        Written by launch before sealing. Endpoint snapshots do not prove continuous
+        collector health or complete TLS coverage. Disabled kernel capture does not
+        disable recorder events. Missing historical reports remain legacy_not_recorded;
+        querying or importing a run never consults the current host's sensor status.
+    ProbeSnapshot:
+      type: object
+      required: [schema_version, updated_at, ready, status, probes, tls_discovery]
+      properties:
+        schema_version: {const: agentprovenance.sensor_capabilities/v1}
+        updated_at: {type: string, format: date-time}
+        ready: {type: boolean}
+        status: {type: string, enum: [starting, ready, degraded, stopped, failed]}
+        reason: {type: string}
+        probes:
+          type: array
+          items:
+            type: object
+            required: [name, category, required, status]
+            properties:
+              name: {type: string}
+              category: {type: string}
+              target: {type: string}
+              required: {type: boolean}
+              status: {type: string, enum: [attached, detached, failed, disabled, unsupported]}
+              reason: {type: string}
+        tls_discovery:
+          type: object
+          properties:
+            enabled: {type: boolean}
+            scan_interval_ms: {type: integer}
+            max_targets: {type: integer}
+            max_processes_per_scan: {type: integer}
+            active_targets: {type: integer}
+            scan_complete: {type: boolean}
+            processes_scanned: {type: integer}
+            unreadable_processes: {type: integer}
+            unresolved_mounts: {type: integer}
+            truncated_maps: {type: integer}
+            skipped_targets: {type: integer}
+            unsupported_executables: {type: integer}
+            reason: {type: string}
+            limitations: {type: [array, "null"], items: {type: string}}
+    RuntimeCorrelationCoverage:
+      type: object
+      required: [schema_version, run_id, result_set_id, page_hash, summary, missing_fields, by_source, by_type, next_steps]
+      properties:
+        schema_version: {const: agentprovenance.observability_coverage/v1}
+        run_id: {type: string}
+        result_set_id: {type: string}
+        page_hash: {type: string}
+        summary:
+          type: object
+          required: [runtime_events, fully_correlated, missing_session, missing_tool_call, missing_process, fully_correlated_ratio, tool_call_coverage_ratio, process_coverage_ratio, correlation_gap_count]
+          properties:
+            runtime_events: {type: integer, minimum: 0}
+            fully_correlated: {type: integer, minimum: 0, description: All three scope IDs are present; not proof of correct agent attribution.}
+            missing_session: {type: integer, minimum: 0}
+            missing_tool_call: {type: integer, minimum: 0}
+            missing_process: {type: integer, minimum: 0}
+            fully_correlated_ratio: {type: number, minimum: 0, maximum: 1}
+            tool_call_coverage_ratio: {type: number, minimum: 0, maximum: 1}
+            process_coverage_ratio: {type: number, minimum: 0, maximum: 1}
+            correlation_gap_count: {type: integer, minimum: 0}
+        missing_fields: {type: object, additionalProperties: {type: integer, minimum: 0}}
+        by_source: {type: object, additionalProperties: {type: integer, minimum: 0}}
+        by_type: {type: object, additionalProperties: {type: integer, minimum: 0}}
+        next_steps: {type: array, items: {type: string}}
+        gaps:
+          type: array
+          maxItems: 25
+          items:
+            type: object
+            required: [event_id, source, type, missing, correlation_confidence, created_at, suggested_binding]
+            properties:
+              event_id: {type: string}
+              raw_event_id: {type: string}
+              source: {type: string}
+              type: {type: string}
+              missing: {type: array, items: {type: string}}
+              correlation_method: {type: string}
+              correlation_confidence: {type: number}
+              container_id: {type: string}
+              cgroup_id: {type: string}
+              pid: {type: integer}
+              ppid: {type: integer}
+              created_at: {type: string}
+              suggested_binding: {type: string}
+      description: All stored runtime event rows in this run, with at most 25 gap examples in the context overview. Ratios are zero when the stored event count is zero, not an assessment of unobserved activity.
     ContentPage:
       type: object
       required: [schema_version, run_id, ref, content, media_type, offset, next_offset, total_bytes, has_more, sha256, redacted]

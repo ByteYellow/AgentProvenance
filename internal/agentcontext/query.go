@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 )
 
@@ -144,6 +145,11 @@ func (s Service) Overview(ctx context.Context, runID string) (Overview, error) {
 		return Overview{}, fmt.Errorf("run id is required")
 	}
 	result := Overview{SchemaVersion: SchemaVersion, RunID: runID, Coverage: []Coverage{}}
+	runtimeCoverage, err := observability.ReadRuntimeCoverage(ctx, s.DB, runID)
+	if err != nil {
+		return result, err
+	}
+	result.RuntimeCoverage = runtimeCoverage
 	rows, err := s.DB.QueryContext(ctx, `SELECT r.object_hash FROM agent_context_reports r
 		WHERE r.run_id = ? AND NOT EXISTS (SELECT 1 FROM agent_context_reports n
 		WHERE n.run_id = r.run_id AND n.source_id = r.source_id

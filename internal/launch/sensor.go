@@ -18,9 +18,11 @@ import (
 // stopped with SIGTERM at seal time -- and reuses the exact supervised-capture
 // path the sensor already ships.
 type sensorProcess struct {
-	cmd     *exec.Cmd
-	done    chan struct{}
-	stopped bool
+	cmd       *exec.Cmd
+	done      chan struct{}
+	stopped   bool
+	exitErr   error
+	cleanStop bool
 }
 
 // startSensor launches the kernel sensor when the host can run it and returns
@@ -57,19 +59,21 @@ func startSensor(selfExe, dataDir string, stderr io.Writer, tlsEnv []string) (*s
 
 	var sink strings.Builder
 	ready := make(chan struct{}, 1)
-	go scanReady(stderrPipe, ready, &sink)
+	scanned := make(chan struct{})
+	go func() { scanReady(stderrPipe, ready, &sink); close(scanned) }()
 
 	done := make(chan struct{})
-	go func() { _ = cmd.Wait(); close(done) }()
+	sp := &sensorProcess{cmd: cmd, done: done}
+	go func() { sp.exitErr = cmd.Wait(); close(done) }()
 
 	// Readiness: the probes attach synchronously in the child; either the ready
 	// banner appears, or the child exits early (no CAP_BPF/root) -- in which
 	// case we degrade with its captured stderr. The timeout is a backstop.
-	sp := &sensorProcess{cmd: cmd, done: done}
 	select {
 	case <-ready:
 		return sp, "kernel", message{}
 	case <-done:
+		<-scanned
 		reason := strings.TrimSpace(sink.String())
 		reason = lastLine(reason)
 		if reason == "" {
@@ -77,28 +81,39 @@ func startSensor(selfExe, dataDir string, stderr io.Writer, tlsEnv []string) (*s
 		}
 		return nil, "none", messagef("no kernel telemetry: %s", errors.New(reason))
 	case <-time.After(3 * time.Second):
-		// Still alive but no banner: probes likely attached; proceed. A truly
-		// stuck sensor is stopped at seal time regardless.
-		return sp, "kernel", message{}
+		sp.stop()
+		return nil, "none", messagef("kernel probe readiness was not confirmed before the startup timeout")
 	}
 }
 
-func (s *sensorProcess) stop() {
-	if s == nil || s.stopped {
-		return
+func (s *sensorProcess) stop() bool {
+	if s == nil {
+		return false
+	}
+	if s.stopped {
+		return s.cleanStop
 	}
 	s.stopped = true
+	select {
+	case <-s.done:
+		// Even a successful early exit cannot cover the whole agent run.
+		return false
+	default:
+	}
 	if s.cmd.Process != nil {
 		// SIGTERM: the sensor traps it, closes its ringbuf, flushes, and exits.
 		_ = s.cmd.Process.Signal(syscall.SIGTERM)
 	}
 	select {
 	case <-s.done:
+		s.cleanStop = s.exitErr == nil
 	case <-time.After(5 * time.Second):
 		if s.cmd.Process != nil {
 			_ = s.cmd.Process.Kill()
 		}
+		<-s.done
 	}
+	return s.cleanStop
 }
 
 func lastLine(s string) string {

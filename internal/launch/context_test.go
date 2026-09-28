@@ -322,6 +322,9 @@ func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
 			if r.RuntimeCorrelation == nil || r.RuntimeCorrelation.Ref == "" || r.RuntimeCorrelation.Method != "agentprov.command_time_process/v2" {
 				t.Fatalf("missing runtime correlation diagnostic: %+v", r.RuntimeCorrelation)
 			}
+			if r.RuntimeCapture == nil || r.RuntimeCapture.Ref == "" || r.RuntimeCapture.Status != "disabled" || r.RuntimeCapture.RunDroppedEvents != nil {
+				t.Fatalf("missing explicit capture state: %+v", r.RuntimeCapture)
+			}
 			fresh := contextService(t)
 			if _, err := (forensics.Service{DB: fresh.DB, Paths: fresh.Paths}).ImportBundle(r.BundlePath); err != nil {
 				t.Fatalf("offline bundle: %v", err)
@@ -329,6 +332,9 @@ func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
 			o, err := fresh.Overview(context.Background(), r.RunID)
 			if err != nil || o.ToolCalls == nil || *o.ToolCalls != 1 {
 				t.Fatalf("lost portable context: %+v %v", o, err)
+			}
+			if o.RuntimeCoverage.Capture.Status != "disabled" || o.RuntimeCoverage.Capture.Ref != r.RuntimeCapture.Ref || o.RuntimeCoverage.Correlation.Summary.RuntimeEvents == 0 {
+				t.Fatalf("lost capture state or wrapper events: %+v", o.RuntimeCoverage)
 			}
 			c := sourceReport(t, o, "runtime_correlation")
 			if string(c.Status) != r.RuntimeCorrelation.Status || len(c.Source.BindingEvidence) != 1 || c.Source.BindingEvidence[0] != r.RuntimeCorrelation.Ref {

@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"context"
 	"database/sql"
 	"sort"
 
@@ -56,63 +57,114 @@ type CorrelationGap struct {
 }
 
 func BuildCoverage(db *sql.DB, opts CoverageOptions) (CoverageReport, error) {
-	events, err := telemetry.ListEventsFiltered(db, telemetry.Filter{RunID: opts.RunID})
+	return BuildCoverageContext(context.Background(), db, opts)
+}
+
+// Count the full selection without retaining event payloads. Only the gap
+// examples are bounded; the summary must not describe just the first page.
+func BuildCoverageContext(ctx context.Context, db *sql.DB, opts CoverageOptions) (CoverageReport, error) {
+	query := `SELECT id, COALESCE(session_id,''), COALESCE(tool_call_id,''), COALESCE(process_id,''),
+		COALESCE(raw_event_id,''), COALESCE(correlation_method,''), COALESCE(correlation_confidence,0),
+		COALESCE(container_id,''), COALESCE(cgroup_id,''), COALESCE(pid,0), COALESCE(ppid,0), source, event_type, created_at FROM events`
+	args := []any{}
+	if opts.RunID != "" {
+		query += ` WHERE run_id=?`
+		args = append(args, opts.RunID)
+	}
+	query += ` ORDER BY created_at, id`
+	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return CoverageReport{}, err
 	}
-	return BuildCoverageFromEvents(opts.RunID, events, opts), nil
+	defer rows.Close()
+	report := newCoverage(opts.RunID)
+	for rows.Next() {
+		var event telemetry.EventRecord
+		if err := rows.Scan(&event.ID, &event.SessionID, &event.ToolCallID, &event.ProcessID,
+			&event.RawEventID, &event.CorrelationMethod, &event.CorrelationConfidence, &event.ContainerID,
+			&event.CgroupID, &event.PID, &event.PPID, &event.Source, &event.EventType, &event.CreatedAt); err != nil {
+			return CoverageReport{}, err
+		}
+		report.addEvent(event, coverageGapLimit(opts.Limit))
+	}
+	if err := rows.Err(); err != nil {
+		return CoverageReport{}, err
+	}
+	return finishCoverage(report, opts), nil
 }
 
 func BuildCoverageFromEvents(runID string, events []telemetry.EventRecord, opts CoverageOptions) CoverageReport {
-	report := CoverageReport{
+	report := newCoverage(runID)
+	for _, event := range events {
+		report.addEvent(event, coverageGapLimit(opts.Limit))
+	}
+	return finishCoverage(report, opts)
+}
+
+func coverageGapLimit(limit int) int {
+	if limit <= 0 {
+		return 100
+	}
+	if limit > 1000 {
+		return 1000
+	}
+	return limit
+}
+
+func newCoverage(runID string) CoverageReport {
+	return CoverageReport{
 		SchemaVersion: CoverageSchemaVersion,
 		RunID:         runID,
 		MissingFields: map[string]int{},
 		BySource:      map[string]int{},
 		ByType:        map[string]int{},
 	}
-	for _, event := range events {
-		if !isTelemetrySource(event.Source) {
-			continue
-		}
-		report.Summary.RuntimeEvents++
-		report.BySource[event.Source]++
-		report.ByType[event.EventType]++
-		missing := missingCorrelationFields(event)
-		if event.SessionID == "" {
-			report.Summary.MissingSession++
-		}
-		if event.ToolCallID == "" {
-			report.Summary.MissingToolCall++
-		}
-		if event.ProcessID == "" {
-			report.Summary.MissingProcess++
-		}
-		for _, field := range missing {
-			report.MissingFields[field]++
-		}
-		if len(missing) == 0 {
-			report.Summary.FullyCorrelated++
-			continue
-		}
-		if opts.Limit <= 0 || len(report.Gaps) < opts.Limit {
-			report.Gaps = append(report.Gaps, CorrelationGap{
-				EventID:               event.ID,
-				RawEventID:            event.RawEventID,
-				Source:                event.Source,
-				Type:                  event.EventType,
-				Missing:               missing,
-				CorrelationMethod:     event.CorrelationMethod,
-				CorrelationConfidence: event.CorrelationConfidence,
-				ContainerID:           event.ContainerID,
-				CgroupID:              event.CgroupID,
-				PID:                   event.PID,
-				PPID:                  event.PPID,
-				CreatedAt:             event.CreatedAt,
-				SuggestedBinding:      suggestedBinding(event),
-			})
-		}
+}
+
+func (report *CoverageReport) addEvent(event telemetry.EventRecord, limit int) {
+	if !isTelemetrySource(event.Source) {
+		return
 	}
+	report.Summary.RuntimeEvents++
+	report.BySource[event.Source]++
+	report.ByType[event.EventType]++
+	missing := missingCorrelationFields(event)
+	if event.SessionID == "" {
+		report.Summary.MissingSession++
+	}
+	if event.ToolCallID == "" {
+		report.Summary.MissingToolCall++
+	}
+	if event.ProcessID == "" {
+		report.Summary.MissingProcess++
+	}
+	for _, field := range missing {
+		report.MissingFields[field]++
+	}
+	if len(missing) == 0 {
+		report.Summary.FullyCorrelated++
+		return
+	}
+	if len(report.Gaps) < limit {
+		report.Gaps = append(report.Gaps, CorrelationGap{
+			EventID:               event.ID,
+			RawEventID:            event.RawEventID,
+			Source:                event.Source,
+			Type:                  event.EventType,
+			Missing:               missing,
+			CorrelationMethod:     event.CorrelationMethod,
+			CorrelationConfidence: event.CorrelationConfidence,
+			ContainerID:           event.ContainerID,
+			CgroupID:              event.CgroupID,
+			PID:                   event.PID,
+			PPID:                  event.PPID,
+			CreatedAt:             event.CreatedAt,
+			SuggestedBinding:      suggestedBinding(event),
+		})
+	}
+}
+
+func finishCoverage(report CoverageReport, opts CoverageOptions) CoverageReport {
 	report.Summary.CorrelationGapCount = report.Summary.RuntimeEvents - report.Summary.FullyCorrelated
 	if report.Summary.RuntimeEvents > 0 {
 		total := float64(report.Summary.RuntimeEvents)
@@ -122,7 +174,7 @@ func BuildCoverageFromEvents(runID string, events []telemetry.EventRecord, opts 
 	}
 	report.NextSteps = coverageNextSteps(report)
 	sort.Strings(report.NextSteps)
-	resultSetID, pageHash, err := coverageIntegrity(report, opts.Limit)
+	resultSetID, pageHash, err := coverageIntegrity(report, coverageGapLimit(opts.Limit))
 	if err == nil {
 		report.ResultSetID = resultSetID
 		report.PageHash = pageHash
@@ -170,7 +222,15 @@ func missingCorrelationFields(event telemetry.EventRecord) []string {
 }
 
 func isTelemetrySource(source string) bool {
-	return isRuntimeEventSource(source)
+	// Raw event sources also include recorder/kernel producer identifiers.
+	// Timeline uses "runtime" for synthesized process lifecycle entries, so
+	// its separate classifier must not mistake those entries for raw events.
+	switch source {
+	case "agentprov_ebpf", "external_telemetry", "kernel", "loongcollector", "runtime", "zero_sdk_record", "zero_sdk_record_descendant":
+		return true
+	default:
+		return isRuntimeEventSource(source)
+	}
 }
 
 func isRuntimeEventSource(source string) bool {

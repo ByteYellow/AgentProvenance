@@ -201,3 +201,42 @@ The reader does not retroactively create bodies that an older capture omitted.
 The dashboard and daemon share read-only `/api/context/*` and `/v1/context/*`
 routes. See the [API contract](agent-context-api.yaml) and the
 [delivery checklist](v0.9.0-delivery.md) for implementation and live-test status.
+
+## External Queries and Runtime Coverage
+
+External clients use the same stored-evidence queries as the Dashboard:
+
+- `GET /v1/context/overview?run=RUN`: context counts and reports, plus
+  `runtime_coverage.capture` and `runtime_coverage.correlation`.
+- `GET /v1/context/entries?run=RUN&group=conversation&limit=50`: paged messages
+  and tool inputs/results. Use `group=configuration` for authorization/configuration
+  records; `revisions=true` includes retained revisions.
+- `GET /v1/context/content?run=RUN&ref=HASH&offset=0&limit=65536`: saved-only,
+  bounded content pages. Follow `next_offset` while `has_more` is true.
+- `GET /v1/context/compare?run=RUN&left=ID&right=ID`: compare recorded snapshots.
+- `GET /v1/context/links?run=RUN&entry=ID`: recorded graph links, not guesses.
+
+`launch` saves a `runtime_capture` object before bundle export. It includes the
+capture interval, kernel enablement, fresh probe snapshots and node counter
+increments. Old cumulative losses are not charged to the new run. New node losses
+may involve other workloads, so `run_dropped_events` stays null and impact remains
+unknown. Counter resets, stale capabilities, pending backlog and unconfirmed
+collector exit are explicit gaps. Endpoint snapshots do not establish continuous
+collector health, full TLS visibility or lossless capture.
+
+The correlation summary counts **all stored runtime events** in the selected run,
+including native eBPF and recorder sources, without loading event bodies into
+memory. It reports scope-field presence, not proof that an agent association is
+correct. Gap examples are bounded at 25 in this API. Capture, correlation and
+signature verification are independent results.
+
+These fields also appear in the JSON output of `agentprov context coverage --run RUN` and the
+Dashboard's Collection status tab. Offline import reads the saved capture report;
+it never substitutes the new host's sensor status. Runs without this report,
+including older bundles and independently recorded/imported sources, show
+`legacy_not_recorded` for capture history while still exposing their stored events.
+
+Read interfaces do not execute tools or accept arbitrary filesystem paths. Keep
+the default local listener; remotely exposing the daemon requires its bearer
+authentication and a controlled transport. The read-only Dashboard is not a
+public unauthenticated evidence-sharing service.

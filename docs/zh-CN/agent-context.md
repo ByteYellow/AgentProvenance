@@ -158,5 +158,35 @@ record/launch JSON 中的 `artifact_capture` 以及保存的同名证据对象�
 读取能力不会补造旧采集漏掉的正文。
 
 Dashboard 和 daemon 共用只读 `/api/context/*` 与 `/v1/context/*` 接口。
+
+## 外部查询与运行时覆盖
+
+外部程序与 Dashboard 使用同一套证据查询：
+
+- `GET /v1/context/overview?run=RUN`：上下文数量与报告，以及
+  `runtime_coverage.capture` 和 `runtime_coverage.correlation`。
+- `GET /v1/context/entries?run=RUN&group=conversation&limit=50`：分页消息与工具输入、结果。
+  `group=configuration` 查询授权、配置；`revisions=true` 包含保留的历史版本。
+- `GET /v1/context/content?run=RUN&ref=HASH&offset=0&limit=65536`：只读已保存的正文。
+  `has_more` 为真时，使用 `next_offset` 继续读取。
+- `GET /v1/context/compare?run=RUN&left=ID&right=ID`：比较已记录快照。
+- `GET /v1/context/links?run=RUN&entry=ID`：查询已有图谱关联，不猜测归属。
+
+`launch` 在导出前保存 `runtime_capture` 对象，包含采集区间、内核采集启用状态、
+本次探针快照及节点计数增量。旧的节点累计丢失不算到新运行；新发生的节点丢失也可能
+属于其他工作负载，因此 `run_dropped_events` 保持 null，对本次运行的影响无法确定。
+计数重置、过期探针快照、未处理积压和未确认正常退出都会明确报告。
+区间端点快照不能证明采集器全程健康、TLS 全覆盖或零丢失。
+
+关联摘要统计所选运行**已保存的全部运行时事件**，包含原生 eBPF 和 recorder 来源，
+不把事件正文整体载入内存。它衡量作用域字段是否齐全，不证明 Agent 归因正确；
+此 API 最多返回 25 个缺口示例。采集、关联和签名验证是相互独立的结果。
+
+相同字段也通过 `agentprov context coverage --run RUN` 的 JSON 输出及 Dashboard“采集情况”
+展示。离线导入读取已保存报告，不使用导入机器当前的传感器状态。
+旧包及未保存此报告的独立录制、导入来源显示 `legacy_not_recorded`，但仍可查询已有事件。
+
+这些只读接口不能执行工具，也不接受任意磁盘路径。默认保留本地监听；远程暴露 daemon
+时需配置现有 bearer 认证及受控传输。只读 Dashboard 不是可直接公开的匿名证据分享服务。
 具体字段见 [API 契约](../agent-context-api.yaml)，实现与实机验证状态见
 [交付检查表](v0.9.0-delivery.md)。

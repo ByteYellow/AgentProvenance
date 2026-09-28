@@ -129,12 +129,18 @@ window.AgentContextUI = (() => {
     state.tab = tab; state.node = ''; state.returnView = null;
     resetPage(); syncControls(); loadList();
   }
+  function scrollRegion(id) {
+    const header = document.querySelector('body > header'), region = $(id);
+    const inset = header && getComputedStyle(header).position === 'sticky' ? header.getBoundingClientRect().height : 0;
+    region.style.scrollMarginTop = Math.ceil(inset + 12) + 'px';
+    region.scrollIntoView({block:'start',behavior:'smooth'});
+  }
   function open(tab) {
     if (!state) return;
     state.open = true; $('context-fold').open = true;
     if (tab && tab !== state.tab) changeTab(tab);
     else if (!state.page) loadList();
-    $('agentcontext').scrollIntoView({block:'start',behavior:'smooth'});
+    scrollRegion('agentcontext');
   }
   function setRun(nextRun) {
     if (!nextRun) return;
@@ -164,7 +170,7 @@ window.AgentContextUI = (() => {
     try {
       const value = await api.j('/api/context/overview?' + q({run}));
       if (request !== summaryRequest || run !== currentRun) return;
-      const coverageChanged = JSON.stringify(overview?.coverage) !== JSON.stringify(value.coverage);
+      const coverageChanged = JSON.stringify([overview?.coverage,overview?.runtime_coverage]) !== JSON.stringify([value.coverage,value.runtime_coverage]);
       overview = value;
       const reports = value.coverage || [];
       const sources = [...new Set(reports.map(c => c.source?.harness).filter(Boolean))];
@@ -174,7 +180,7 @@ window.AgentContextUI = (() => {
       syncControls();
       $('context-nav-count').textContent = unknown(value.messages);
       $('context-nav-config').textContent = unknown(value.snapshots);
-      $('context-nav-coverage').textContent = hints.join(' / ');
+      $('context-nav-coverage').textContent = [hints.join(' / '),value.runtime_coverage ? t('Runtime capture')+': '+t(statusNames[value.runtime_coverage.capture.status] || value.runtime_coverage.capture.status) : ''].filter(Boolean).join(' · ');
       if (state.tab === 'coverage' && state.open && coverageChanged) {
         const scroll = $('context-body').scrollTop;
         renderCoverage(); $('context-body').scrollTop = scroll;
@@ -280,11 +286,32 @@ window.AgentContextUI = (() => {
   function renderCoverage() {
     listRequest++; listLoading = false; $('context-pager').hidden = true; $('context-compare').hidden = true;
     if (!overview) { $('context-body').innerHTML = notice('loading…'); return; }
-    $('context-body').innerHTML = notice('Context coverage, runtime coverage, and signature verification are separate checks.') + (overview.coverage || []).map(report => {
+    $('context-body').innerHTML = notice('Context coverage, runtime coverage, and signature verification are separate checks.') + renderRuntimeCoverage() + (overview.coverage || []).map(report => {
       const src = report.source || {};
       const fields = [['Session',src.session_id],['Source path',src.path],['Binding',src.binding],['Parser',src.parser_version],['Source version',src.application_version || src.format_version],['Observed at',report.observed_at],['Last successful capture',report.last_success_at],['Source range',[report.first_line,report.last_line].filter(x=>x!=null && x!==0).join(' – ')],['Missing fields',(report.missing_fields || []).join(', ')],['Binding evidence',(src.binding_evidence || []).join('\n')]];
       return `<article class="context-coverage"><h3>${e(src.harness || t('Source'))} ${status(report.status)}</h3><div class="context-counts">${Object.entries(report.counts || {}).map(([key,value]) => `<span>${e(t(key))}<b>${e(unknown(value))}</b></span>`).join('')}</div><p class="context-notice">${e(t('Counts describe this processing range, not the whole run. Unknown counts are not zero.'))}</p><dl>${fields.map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl>${(report.issues || []).map(issue => `<p class="context-notice">${e(t(issue.code))}${issue.line ? ' · '+e(t('line'))+' '+e(issue.line) : ''}${issue.field ? ' · '+e(issue.field) : ''}</p>`).join('')}</article>`;
     }).join('') + (overview.has_more_sources ? notice('Source report limit reached. Additional sources are not shown here.') : '');
+  }
+  function renderRuntimeCoverage() {
+    const runtime = overview?.runtime_coverage;
+    if (!runtime) return notice('Runtime capture history was not recorded.');
+    const capture = runtime.capture || {}, summary = runtime.correlation?.summary || {};
+    const states = {disabled:'Not enabled',unavailable:'Kernel sensor unavailable',observed:'Kernel readiness confirmed',unknown:'Not recorded'};
+    const counts = [['Stored runtime events',summary.runtime_events],['Scope-field gaps',summary.correlation_gap_count],['Run-specific dropped events',capture.run_dropped_events],['Node pending events at seal',capture.node_pending_events]];
+    const fields = [['Kernel capture',t(states[capture.kernel_state] || 'Not recorded')],['Capture interval',[capture.started_at,capture.ended_at].filter(Boolean).join(' → ')],['Run loss assessment',t(capture.run_impact === 'no_node_loss_reported' ? 'No node loss reported; completeness is not established.' : 'Impact on this run is unknown.')],['Probe snapshots',[capture.capabilities_start?.status,capture.capabilities_end?.status].filter(Boolean).join(' → ')],['Saved capture report',capture.ref]];
+    const deltas = capture.node_counter_delta;
+    const heading = `<h3>${e(t('Runtime capture'))} ${status(capture.status || 'legacy_not_recorded')}</h3>
+      <div class="context-counts">${counts.map(([key,value])=>`<span>${e(t(key))}<b>${e(unknown(value))}</b></span>`).join('')}</div>
+      ${notice('Event totals cover all stored runtime events in this run. Scope-field coverage does not prove agent attribution or complete capture.')}`;
+    if (capture.status === 'legacy_not_recorded') return `<article class="context-coverage" data-runtime-coverage>${heading}${notice('Runtime capture history was not recorded.')}</article>`;
+    return `<article class="context-coverage" data-runtime-coverage>${heading}
+      ${(capture.issues || []).map(issue=>notice(issue)).join('')}
+      <details><summary>${e(t('Capture diagnostics'))}</summary>
+      <dl>${fields.map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl>
+      <h4>${e(t('Node counters during capture'))}</h4>
+      ${notice('Node counters may include other workloads. They are not this run\'s dropped-event count. Snapshots do not prove continuous collector health.')}
+      ${deltas ? `<dl>${Object.entries(deltas).sort(([a],[b])=>a.localeCompare(b)).map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value)}</dd>`).join('')}</dl>` : notice('Not recorded')}
+      </details></article>`;
   }
   function renderCompare() {
     const entries = state.compare;
@@ -335,7 +362,7 @@ window.AgentContextUI = (() => {
     if (!state.node) state.returnView = {tab:state.tab,source:state.source,cursor:state.cursor,history:[...state.history],pageNumber:state.pageNumber,page:state.page,scroll:state.scroll,node:''};
     state.tab = 'conversation'; state.source = ''; state.node = node; state.open = true;
     resetPage(); syncControls(); loadList();
-    $('agentcontext').scrollIntoView({block:'start',behavior:'smooth'});
+    scrollRegion('agentcontext');
   }
   function entryChoices(entry) {
     return [{label:t('Saved content')+' · '+recordLabel(entry),ref:entry.content,entry}, {label:t('Raw source record')+' · '+recordLabel(entry),ref:entry.raw_content,entry}];
@@ -344,7 +371,7 @@ window.AgentContextUI = (() => {
     state.selected = entry.id;
     document.querySelectorAll('[data-entry]').forEach(row=>row.dataset.selected=String(row.dataset.entry === entry.id));
     setPreview(entryChoices(entry),'entry:'+entry.id,kind === 'raw' ? 1 : 0);
-    $('savedcontent').scrollIntoView({block:'start',behavior:'smooth'});
+    scrollRegion('savedcontent');
   }
   async function selectGraph(node,reading = null,explicit = false) {
     if (!state || !node || node === state.graph && (!explicit || previewKey === 'node:'+node)) return;

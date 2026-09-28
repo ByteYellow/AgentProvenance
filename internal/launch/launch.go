@@ -76,29 +76,30 @@ type Options struct {
 type Report struct {
 	appDetail          message
 	sysReason          message
-	RunID              string                         `json:"run_id"`
-	ExitCode           int                            `json:"exit_code"`
-	Status             string                         `json:"status"`
-	AppTier            string                         `json:"app_tier"`
-	AppDetail          string                         `json:"app_detail,omitempty"`
-	SysTier            string                         `json:"sys_tier"`
-	SysDegradeReason   string                         `json:"sys_degrade_reason,omitempty"`
-	Events             int                            `json:"events"`
-	HighRisk           int                            `json:"high_risk"`
-	Signals            int                            `json:"signals"`
-	Verdict            string                         `json:"verdict"`
-	BundlePath         string                         `json:"bundle_path,omitempty"`
-	Signed             bool                           `json:"signed"`
-	AttestationPath    string                         `json:"attestation_path,omitempty"`
-	DashboardURL       string                         `json:"dashboard_url,omitempty"`
-	HooksIngested      int                            `json:"hooks_ingested"`
-	IntentMismatches   int                            `json:"intent_mismatches"`
-	IntentCoverageGaps int                            `json:"intent_coverage_gaps"`
-	TranscriptTurns    int                            `json:"transcript_turns"`
-	AgentContext       *agentcontext.Overview         `json:"agent_context,omitempty"`
-	ContextIssues      []string                       `json:"context_issues,omitempty"`
-	ArtifactCapture    *record.ArtifactCaptureReport  `json:"artifact_capture,omitempty"`
-	RuntimeCorrelation *hooksbridge.CorrelationReport `json:"runtime_correlation,omitempty"`
+	RunID              string                              `json:"run_id"`
+	ExitCode           int                                 `json:"exit_code"`
+	Status             string                              `json:"status"`
+	AppTier            string                              `json:"app_tier"`
+	AppDetail          string                              `json:"app_detail,omitempty"`
+	SysTier            string                              `json:"sys_tier"`
+	SysDegradeReason   string                              `json:"sys_degrade_reason,omitempty"`
+	Events             int                                 `json:"events"`
+	HighRisk           int                                 `json:"high_risk"`
+	Signals            int                                 `json:"signals"`
+	Verdict            string                              `json:"verdict"`
+	BundlePath         string                              `json:"bundle_path,omitempty"`
+	Signed             bool                                `json:"signed"`
+	AttestationPath    string                              `json:"attestation_path,omitempty"`
+	DashboardURL       string                              `json:"dashboard_url,omitempty"`
+	HooksIngested      int                                 `json:"hooks_ingested"`
+	IntentMismatches   int                                 `json:"intent_mismatches"`
+	IntentCoverageGaps int                                 `json:"intent_coverage_gaps"`
+	TranscriptTurns    int                                 `json:"transcript_turns"`
+	AgentContext       *agentcontext.Overview              `json:"agent_context,omitempty"`
+	ContextIssues      []string                            `json:"context_issues,omitempty"`
+	ArtifactCapture    *record.ArtifactCaptureReport       `json:"artifact_capture,omitempty"`
+	RuntimeCorrelation *hooksbridge.CorrelationReport      `json:"runtime_correlation,omitempty"`
+	RuntimeCapture     *observability.RuntimeCaptureReport `json:"runtime_capture,omitempty"`
 }
 
 // Run executes the full launch lifecycle and returns its Report. The returned
@@ -181,6 +182,7 @@ func Run(opts Options) (Report, error) {
 	}
 
 	// --- System-side sensor: kernel telemetry when the host can provide it.
+	sensorStarted := time.Now().UTC()
 	sensorProc := (*sensorProcess)(nil)
 	if opts.Sensor != "off" {
 		// Model-intent auto-discovery: point the sensor's TLS uprobes at the
@@ -211,6 +213,14 @@ func Run(opts Options) (Report, error) {
 	}
 	if sensorProc != nil {
 		defer sensorProc.stop()
+	}
+	kernelState := "unavailable"
+	beforeCapture := observability.CaptureSnapshot{ObservedAt: time.Now().UTC()}
+	if opts.Sensor == "off" {
+		kernelState = "disabled"
+	} else if sensorProc != nil {
+		kernelState = "observed"
+		beforeCapture = observability.ObserveCapture(context.Background(), db, paths, sensorStarted)
 	}
 
 	// --- Dashboard: live throughout the run and kept alive after exit so the
@@ -272,9 +282,25 @@ func Run(opts Options) (Report, error) {
 	}
 
 	// Stop the sensor before sealing so its final correlated events are flushed.
+	cleanStop := false
 	if sensorProc != nil {
-		sensorProc.stop()
+		cleanStop = sensorProc.stop()
 		sensorProc = nil
+	}
+	afterCapture := observability.CaptureSnapshot{ObservedAt: time.Now().UTC()}
+	if kernelState == "observed" {
+		afterCapture = observability.ObserveCapture(context.Background(), db, paths, sensorStarted)
+	}
+	runtimeCapture := observability.BuildRuntimeCapture(runID, kernelState, beforeCapture, afterCapture, cleanStop)
+	report.RuntimeCapture = &runtimeCapture
+	if err := observability.SaveRuntimeCapture(db, paths, report.RuntimeCapture); err != nil {
+		report.RuntimeCapture.Status = "failed"
+		report.RuntimeCapture.Issues = append(report.RuntimeCapture.Issues, "runtime_capture_save_failed")
+		contextProblem(db, paths, runID, "runtime_capture_save_failed", &report, opts.Stderr)
+	} else if overview, err := (agentcontext.Service{DB: db, Paths: paths}).Overview(context.Background(), runID); err == nil {
+		report.AgentContext = &overview
+	} else {
+		contextProblem(db, paths, runID, "runtime_capture_query_failed", &report, opts.Stderr)
 	}
 
 	// --- Seal: fold every source into the graph, apply policy, summarize, sign.
@@ -535,10 +561,18 @@ func drain(ch chan os.Signal) {
 // buf so a failure's stderr is available for the degrade reason.
 func scanReady(r io.Reader, ready chan<- struct{}, buf *strings.Builder) {
 	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 4096), 2<<20)
 	seen := false
 	for sc.Scan() {
 		line := sc.Text()
-		buf.WriteString(line)
+		tail := line
+		if len(tail) > 8192 {
+			tail = tail[len(tail)-8192:]
+		}
+		if buf.Len() > 65536 {
+			buf.Reset()
+		}
+		buf.WriteString(tail)
 		buf.WriteByte('\n')
 		if !seen && strings.Contains(line, "ready probes-attached") {
 			seen = true

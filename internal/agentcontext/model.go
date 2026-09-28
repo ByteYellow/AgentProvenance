@@ -2,7 +2,10 @@
 // kernel observations and analysis. Missing source information remains unknown.
 package agentcontext
 
-import "github.com/byteyellow/agentprovenance/internal/provenance"
+import (
+	"github.com/byteyellow/agentprovenance/internal/observability"
+	"github.com/byteyellow/agentprovenance/internal/provenance"
+)
 
 const SchemaVersion = "agentprovenance.agent_context/v1"
 
@@ -155,14 +158,15 @@ type Page struct {
 }
 
 type Overview struct {
-	SchemaVersion  string     `json:"schema_version"`
-	RunID          string     `json:"run_id"`
-	Coverage       []Coverage `json:"coverage"`
-	Messages       *int64     `json:"messages"`
-	ToolCalls      *int64     `json:"tool_calls"`
-	ToolResults    *int64     `json:"tool_results"`
-	Snapshots      *int64     `json:"snapshots"`
-	HasMoreSources bool       `json:"has_more_sources"`
+	SchemaVersion   string                        `json:"schema_version"`
+	RunID           string                        `json:"run_id"`
+	Coverage        []Coverage                    `json:"coverage"`
+	Messages        *int64                        `json:"messages"`
+	ToolCalls       *int64                        `json:"tool_calls"`
+	ToolResults     *int64                        `json:"tool_results"`
+	Snapshots       *int64                        `json:"snapshots"`
+	HasMoreSources  bool                          `json:"has_more_sources"`
+	RuntimeCoverage observability.RuntimeCoverage `json:"runtime_coverage"`
 }
 
 func Number(n int64) *int64 { return &n }

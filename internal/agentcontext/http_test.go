@@ -6,6 +6,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/byteyellow/agentprovenance/internal/observability"
 )
 
 func TestReadAPIIsolationPaginationAndErrors(t *testing.T) {
@@ -58,5 +61,35 @@ func TestReadAPIIsolationPaginationAndErrors(t *testing.T) {
 	code, raw = get("/context/overview?run=run")
 	if code != 503 || !strings.Contains(string(raw), "store_unavailable") {
 		t.Fatalf("closed db: %d %s", code, raw)
+	}
+}
+
+func TestPublicOverviewIncludesSavedRuntimeCoverage(t *testing.T) {
+	s := testService(t)
+	_, err := s.Save(context.Background(), "run", testSource(), nil, Coverage{Status: Empty})
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func() map[string]any {
+		t.Helper()
+		w := httptest.NewRecorder()
+		s.ReadHandler().ServeHTTP(w, httptest.NewRequest("GET", "/context/overview?run=run", nil))
+		var value map[string]any
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &value) != nil {
+			t.Fatalf("public response: %d %s", w.Code, w.Body.Bytes())
+		}
+		return value["runtime_coverage"].(map[string]any)
+	}
+	legacy := read()["capture"].(map[string]any)
+	if legacy["status"] != "legacy_not_recorded" || legacy["node_counter_delta"] != nil || legacy["run_dropped_events"] != nil {
+		t.Fatalf("legacy contract: %+v", legacy)
+	}
+	r := observability.BuildRuntimeCapture("run", "disabled", observability.CaptureSnapshot{ObservedAt: time.Now().UTC()}, observability.CaptureSnapshot{ObservedAt: time.Now().UTC()}, false)
+	if err := observability.SaveRuntimeCapture(s.DB, s.Paths, &r); err != nil {
+		t.Fatal(err)
+	}
+	capture := read()["capture"].(map[string]any)
+	if capture["status"] != "disabled" || capture["kernel_state"] != "disabled" || capture["ref"] != r.Ref || capture["run_dropped_events"] != nil {
+		t.Fatalf("disabled contract: %+v", capture)
 	}
 }

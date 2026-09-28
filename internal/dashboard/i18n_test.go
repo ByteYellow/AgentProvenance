@@ -85,6 +85,8 @@ func TestDashboardContextVocabularyHasChinese(t *testing.T) {
 		"Selected for comparison", "Compare snapshot", "Check session linkage",
 		"No session record is linked to this node. No session was guessed.",
 		"No records in this selection. See collection status for missing or unsupported sources.",
+		"Runtime capture", "Run-specific dropped events", "Kernel readiness confirmed",
+		"runtime_capture_not_recorded", "node_loss_during_capture", "probe_snapshot_stale",
 	} {
 		if !i18n.HasChinese(source) {
 			t.Errorf("missing Chinese context vocabulary: %q", source)
