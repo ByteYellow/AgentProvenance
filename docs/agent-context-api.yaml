@@ -152,6 +152,26 @@ components:
         has_more: {type: boolean}
         sha256: {type: string}
         redacted: {type: boolean}
+    EntryLinks:
+      type: object
+      required: [schema_version, run_id, entry_id, basis, links, has_more]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        run_id: {type: string}
+        entry_id: {type: string}
+        basis: {const: recorded_graph_edge}
+        links:
+          type: array
+          maxItems: 200
+          items:
+            type: object
+            required: [node_id, relation]
+            properties:
+              node_id: {type: string}
+              relation: {type: string, enum: [context_tool_call, context_tool_result]}
+        has_more: {type: boolean}
+        reason: {type: string, enum: [no_recorded_graph_link]}
+      description: Existing graph destinations for this record, not a new execution or identity inference.
     SnapshotValue:
       type: object
       required: [present, truncated]
@@ -231,6 +251,9 @@ paths:
         - {name: source, in: query, schema: {type: string}}
         - {name: kind, in: query, schema: {type: string}}
         - {name: tool_call, in: query, schema: {type: string}}
+        - {name: entry, in: query, schema: {type: string, maxLength: 512}, description: Exact record identity; use revisions=true for earlier versions.}
+        - {name: node, in: query, schema: {type: string, maxLength: 512}, description: Exact stored context/tool/runtime graph relationships only; never command or PID guessing.}
+        - {name: group, in: query, schema: {type: string, enum: [conversation, configuration]}}
         - {name: revisions, in: query, schema: {type: boolean, default: false}}
         - {name: cursor, in: query, schema: {type: string, maxLength: 8192}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
@@ -251,6 +274,19 @@ paths:
         - {name: limit, in: query, schema: {type: integer, minimum: 4, maximum: 262144, default: 65536}}
       responses:
         '200': {description: Hash-checked content page, content: {application/json: {schema: {$ref: '#/components/schemas/ContentPage'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+        '503': {$ref: '#/components/responses/StoreUnavailable'}
+  /v1/context/links:
+    get:
+      operationId: agent_context_links
+      summary: Existing graph destinations for one recorded context entry
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: entry, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 512}}
+      responses:
+        '200': {description: Recorded links or an explicit missing-link reason, content: {application/json: {schema: {$ref: '#/components/schemas/EntryLinks'}}}}
         '400': {$ref: '#/components/responses/InvalidArgument'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/EvidenceFailure'}

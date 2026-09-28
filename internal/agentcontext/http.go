@@ -18,6 +18,7 @@ func (s Service) ReadHandler() http.Handler {
 	mux.HandleFunc("GET /context/entries", s.httpEntries)
 	mux.HandleFunc("GET /context/content", s.httpContent)
 	mux.HandleFunc("GET /context/compare", s.httpCompare)
+	mux.HandleFunc("GET /context/links", s.httpLinks)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
@@ -41,6 +42,12 @@ func (s Service) ReadHandler() http.Handler {
 		}
 		mux.ServeHTTP(w, r)
 	})
+}
+
+func (s Service) httpLinks(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	value, err := s.Links(r.Context(), q.Get("run"), q.Get("entry"))
+	contextResult(w, value, err)
 }
 
 func (s Service) httpCompare(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +102,8 @@ func (s Service) httpEntries(w http.ResponseWriter, r *http.Request) {
 		revisions = v
 	}
 	value, err := s.Entries(r.Context(), PageOptions{RunID: q.Get("run"), SourceID: q.Get("source"), SessionID: q.Get("session"),
-		Kind: q.Get("kind"), ToolCallID: q.Get("tool_call"), Cursor: q.Get("cursor"), Limit: limit, IncludeRevisions: revisions})
+		Kind: q.Get("kind"), ToolCallID: q.Get("tool_call"), EntryID: q.Get("entry"), NodeID: q.Get("node"), Group: q.Get("group"),
+		Cursor: q.Get("cursor"), Limit: limit, IncludeRevisions: revisions})
 	contextResult(w, value, err)
 }
 

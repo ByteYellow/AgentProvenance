@@ -533,8 +533,11 @@ type runSummary struct {
 }
 
 func (s Server) runs(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.DB.Query(`SELECT run_id, COUNT(*) FROM events WHERE run_id != ''
-		GROUP BY run_id ORDER BY MAX(created_at) DESC`)
+	rows, err := s.DB.QueryContext(r.Context(), `SELECT run_id, SUM(events) FROM (
+		SELECT run_id, COUNT(*) AS events, MAX(created_at) AS last_seen FROM events WHERE run_id!='' GROUP BY run_id
+		UNION ALL SELECT run_id, 0, MAX(created_at) FROM agent_context_reports WHERE run_id!='' GROUP BY run_id
+		UNION ALL SELECT run_id, 0, MAX(created_at) FROM agent_context_entries WHERE run_id!='' GROUP BY run_id
+	) GROUP BY run_id ORDER BY MAX(last_seen) DESC, run_id`)
 	if err != nil {
 		httpError(w, err.Error(), 500)
 		return
@@ -548,6 +551,10 @@ func (s Server) runs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out = append(out, rs)
+	}
+	if err := rows.Err(); err != nil {
+		httpError(w, err.Error(), 500)
+		return
 	}
 	writeJSON(w, out)
 }

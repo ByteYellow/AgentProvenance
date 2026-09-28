@@ -137,6 +137,9 @@ type PageOptions struct {
 	SourceID         string
 	Kind             string
 	ToolCallID       string
+	EntryID          string
+	NodeID           string
+	Group            string
 	Cursor           string
 	Limit            int
 	IncludeRevisions bool

@@ -42,11 +42,35 @@ func (s Service) Entries(ctx context.Context, opts PageOptions) (Page, error) {
 	for _, filter := range []struct{ column, value string }{
 		{"session_id", opts.SessionID}, {"source_id", opts.SourceID},
 		{"kind", opts.Kind}, {"tool_call_id", opts.ToolCallID},
+		{"id", opts.EntryID},
 	} {
 		if filter.value != "" {
 			where = append(where, "e."+filter.column+" = ?")
 			args = append(args, filter.value)
 		}
+	}
+	switch opts.Group {
+	case "":
+	case "conversation":
+		where = append(where, "e.kind IN ('message','tool_call','tool_result','task','session')")
+	case "configuration":
+		where = append(where, "e.kind IN ('configuration','approval')")
+	default:
+		return Page{}, fmt.Errorf("%w: unknown record group", ErrInvalidArgument)
+	}
+	if len(opts.NodeID) > 512 || len(opts.EntryID) > 512 {
+		return Page{}, fmt.Errorf("%w: identifier is too long", ErrInvalidArgument)
+	}
+	if opts.NodeID != "" {
+		// Follow only stored context/tool/runtime relationships. A similar
+		// command, path, PID or timestamp is not a navigation identity.
+		where = append(where, `(e.object_hash = ? OR EXISTS (
+			SELECT 1 FROM graph_edges c WHERE c.run_id=e.run_id AND c.from_id=e.object_hash
+			AND c.edge_type IN ('context_tool_call','context_tool_result')
+			AND (c.to_id = ? OR EXISTS (
+				SELECT 1 FROM graph_edges g WHERE g.run_id=c.run_id AND g.from_id=c.to_id AND g.to_id=?
+				AND g.edge_type IN ('agent_syscall','runtime_tool_call_event','runtime_tool_call_process')))))`)
+		args = append(args, opts.NodeID, opts.NodeID, opts.NodeID)
 	}
 	if !opts.IncludeRevisions {
 		where = append(where, latestEntry)

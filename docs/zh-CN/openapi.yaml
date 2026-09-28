@@ -88,6 +88,8 @@ paths:
     $ref: '../agent-context-api.yaml#/paths/~1v1~1context~1content'
   /v1/context/compare:
     $ref: '../agent-context-api.yaml#/paths/~1v1~1context~1compare'
+  /v1/context/links:
+    $ref: '../agent-context-api.yaml#/paths/~1v1~1context~1links'
   /v1/health:
     get:
       operationId: health
