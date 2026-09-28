@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 )
 
 func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
@@ -18,6 +20,14 @@ func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
 		var edge GraphLensEdge
 		if err := rows.Scan(&edge.ID, &edge.FromID, &edge.ToID, &edge.EdgeType, &edge.SourceEventID, &edge.CreatedAt); err != nil {
 			return nil, err
+		}
+		if edge.EdgeType == "agent_syscall" && strings.HasPrefix(edge.ID, correlation.AppProcessEdgePrefix) {
+			edge.Derived, edge.DerivationRule = true, correlation.AppProcessMethod
+			edge.Confidence = correlation.AppProcessConfidence
+			edge.EvidenceRefs = []string{edge.FromID, edge.ToID}
+			if edge.SourceEventID != "" && edge.ToID != "runtime_event/"+edge.SourceEventID {
+				edge.EvidenceRefs = append(edge.EvidenceRefs, "runtime_event/"+edge.SourceEventID)
+			}
 		}
 		edges = append(edges, edge)
 	}

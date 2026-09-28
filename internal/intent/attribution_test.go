@@ -1,8 +1,14 @@
 package intent
 
 import (
+	"database/sql"
 	"testing"
 	"time"
+
+	"github.com/byteyellow/agentprovenance/internal/correlation"
+	"github.com/byteyellow/agentprovenance/internal/hooksbridge"
+	"github.com/byteyellow/agentprovenance/internal/security"
+	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
 func win(agent, tc, program, start, end string) toolCallWindow {
@@ -10,6 +16,97 @@ func win(agent, tc, program, start, end string) toolCallWindow {
 	e, _ := time.Parse(time.RFC3339Nano, end)
 	return toolCallWindow{agent: agent, toolCall: tc, program: program,
 		start: s.Add(-30 * time.Second), end: e.Add(30 * time.Second)}
+}
+
+func TestContainingRejectsOverlappingLegacyWindows(t *testing.T) {
+	windows := toolCallWindows{
+		win("alice", "a", "python", "2026-09-28T00:00:00Z", "2026-09-28T00:00:05Z"),
+		win("bob", "b", "python", "2026-09-28T00:00:01Z", "2026-09-28T00:00:06Z"),
+	}
+	if _, ok := windows.containing("2026-09-28T00:00:02Z", "python"); ok {
+		t.Fatal("ambiguous windows picked the most recent one")
+	}
+}
+
+func attributionStore(t *testing.T, competing bool) *sql.DB {
+	t.Helper()
+	paths, err := store.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	calls := []string{"a"}
+	if competing {
+		calls = append(calls, "b")
+	}
+	for _, id := range calls {
+		_, err := db.Exec(`INSERT INTO tool_calls (id,run_id,agent_id,command,status,created_at,started_at,ended_at)
+			VALUES (?,'run',?,'python task.py','completed','2026-09-28T00:00:00Z','2026-09-28T00:00:00Z','2026-09-28T00:00:10Z')`, id, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`INSERT INTO events (id,run_id,source,event_type,cgroup_id,pid,payload,created_at) VALUES
+		('exec','run','agentprov_ebpf','execve','cg',100,'{"command":"python task.py","comm":"python"}','2026-09-28T00:00:01Z'),
+		('secret','run','agentprov_ebpf','secret_path','cg',100,'{"path":"/home/example/.aws/credentials","comm":"python"}','2026-09-28T00:00:02Z')`); err != nil {
+		t.Fatal(err)
+	}
+	return db
+}
+
+func TestNewCorrelationDoesNotFallBackAfterAmbiguity(t *testing.T) {
+	db := attributionStore(t, true)
+	r, err := Materialize(db, "run")
+	if err != nil || r.CoverageGaps == 0 || r.Mismatches != 0 {
+		t.Fatalf("ambiguous evidence turned into a finding: %+v %v", r, err)
+	}
+	effects, err := normalizeEffects(db, "run", security.DefaultEngine(), false)
+	if err != nil || len(effects) != 2 {
+		t.Fatalf("effects: %+v %v", effects, err)
+	}
+	for _, e := range effects {
+		if e.AgentID != "" {
+			t.Fatalf("weaker fallback guessed an agent: %+v", e)
+		}
+	}
+}
+
+func TestDerivedEffectConfidenceIsNotKernelIdentity(t *testing.T) {
+	db := attributionStore(t, false)
+	if _, err := hooksbridge.CorrelateSyscalls(db, "run"); err != nil {
+		t.Fatal(err)
+	}
+	effects, err := normalizeEffects(db, "run", security.DefaultEngine(), false)
+	if err != nil || len(effects) != 2 {
+		t.Fatalf("effects: %+v %v", effects, err)
+	}
+	for _, e := range effects {
+		if e.AgentID != "a" || e.ToolCallID != "a" || e.Confidence != correlation.AppProcessConfidence {
+			t.Fatalf("inferred identity overstated: %+v", e)
+		}
+	}
+}
+
+func TestConflictingStoredEdgesRemainUnattributed(t *testing.T) {
+	db := attributionStore(t, true)
+	if _, err := db.Exec(`INSERT INTO graph_edges (id,run_id,from_id,to_id,edge_type,created_at) VALUES
+		('old-a','run','a','runtime_event/secret','agent_syscall','2026-09-28T00:00:00Z'),
+		('old-b','run','b','runtime_event/secret','agent_syscall','2026-09-28T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	effects, err := normalizeEffects(db, "run", security.DefaultEngine(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range effects {
+		if e.EventID == "secret" && (e.AgentID != "" || e.ToolCallID != "") {
+			t.Fatalf("last stored edge won: %+v", e)
+		}
+	}
 }
 
 // TestContainingCommGate is the regression guard for the false-FLAGGED class:

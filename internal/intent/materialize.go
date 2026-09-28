@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/hooksbridge"
 	"github.com/byteyellow/agentprovenance/internal/security"
 )
@@ -46,15 +47,21 @@ func Materialize(db *sql.DB, runID string) (Result, error) {
 	// edges); skipping it when edges already exist protects an imported signed
 	// bundle that shipped with good attribution from being degraded by a
 	// re-derivation that may fail on truncated argv.
-	var existing int
-	_ = db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE run_id = ? AND edge_type = 'agent_syscall'`, runID).Scan(&existing)
+	var existing, current int
+	if err := db.QueryRow(`SELECT COUNT(*),COALESCE(SUM(CASE WHEN id LIKE ? THEN 1 ELSE 0 END),0)
+		FROM graph_edges WHERE run_id = ? AND edge_type = 'agent_syscall'`, correlation.AppProcessEdgePrefix+"%", runID).Scan(&existing, &current); err != nil {
+		return res, fmt.Errorf("intent materialize: read attribution: %w", err)
+	}
 	if existing == 0 {
 		if _, err := hooksbridge.CorrelateSyscalls(db, runID); err != nil {
 			return res, fmt.Errorf("intent materialize: correlate syscalls: %w", err)
 		}
 	}
 
-	effects, err := normalizeEffects(db, runID, eng)
+	// New correlation deliberately leaves ambiguous/unclocked effects unbound.
+	// Do not undo that decision with a weaker comm/time fallback. Existing legacy
+	// graphs retain that compatibility path when explicitly re-analyzed.
+	effects, err := normalizeEffects(db, runID, eng, existing > 0 && current == 0)
 	if err != nil {
 		return res, fmt.Errorf("intent materialize: normalize effects: %w", err)
 	}
@@ -162,7 +169,7 @@ var effectEventTypes = []string{"execve", "secret_path", "metadata_ip", "private
 // intent_coverage_gap rather than inventing a mismatch. This is the crux of the
 // honesty contract: an effect we cannot tie to captured intent is a gap, not a
 // rogue action.
-func normalizeEffects(db *sql.DB, runID string, eng security.Engine) ([]RuntimeEffect, error) {
+func normalizeEffects(db *sql.DB, runID string, eng security.Engine, allowLegacyWindows bool) ([]RuntimeEffect, error) {
 	// tool_call -> agent
 	agentOf := map[string]string{}
 	arows, err := db.Query(`SELECT id, agent_id FROM tool_calls WHERE run_id = ? AND agent_id != ''`, runID)
@@ -177,12 +184,17 @@ func normalizeEffects(db *sql.DB, runID string, eng security.Engine) ([]RuntimeE
 		}
 		agentOf[id] = agent
 	}
+	err = arows.Err()
 	arows.Close()
+	if err != nil {
+		return nil, err
+	}
 
 	// Refinement: command-match attribution (agent_syscall edge: tool_call ->
 	// runtime_event/<eventID>) overrides the coarse tool_call join when present.
 	refinedAgent := map[string]string{}
 	refinedToolCall := map[string]string{}
+	conflicted := map[string]bool{}
 	erows, err := db.Query(`SELECT from_id, to_id FROM graph_edges
 		WHERE run_id = ? AND edge_type = 'agent_syscall'`, runID)
 	if err != nil {
@@ -195,14 +207,29 @@ func normalizeEffects(db *sql.DB, runID string, eng security.Engine) ([]RuntimeE
 			return nil, err
 		}
 		eid := strings.TrimPrefix(to, "runtime_event/")
+		if !strings.HasPrefix(to, "runtime_event/") {
+			continue
+		}
 		if a := agentOf[from]; a != "" {
+			if prior := refinedToolCall[eid]; prior != "" && prior != from {
+				conflicted[eid] = true
+			}
 			refinedAgent[eid] = a
 			refinedToolCall[eid] = from
 		}
 	}
+	err = erows.Err()
 	erows.Close()
-
-	windows := loadToolCallWindows(db, runID)
+	if err != nil {
+		return nil, err
+	}
+	var windows toolCallWindows
+	if allowLegacyWindows {
+		windows, err = loadToolCallWindows(db, runID)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(effectEventTypes)), ",")
 	args := []any{runID}
@@ -237,6 +264,7 @@ func normalizeEffects(db *sql.DB, runID string, eng security.Engine) ([]RuntimeE
 		tc := toolCall
 		if r := refinedToolCall[id]; r != "" {
 			tc = r
+			conf = min(conf, correlation.AppProcessConfidence)
 		}
 		if agent == "" {
 			agent = agentOf[toolCall]
@@ -254,12 +282,15 @@ func normalizeEffects(db *sql.DB, runID string, eng security.Engine) ([]RuntimeE
 				}
 			}
 		}
+		if conflicted[id] {
+			agent, tc = "", ""
+		}
 		out = append(out, RuntimeEffect{
 			Kind: kind, Target: target, AgentID: agent,
 			ToolCallID: tc, EventID: id, Confidence: conf,
 		})
 	}
-	return out, nil
+	return out, rows.Err()
 }
 
 // timeWindowConfidence caps attribution made purely by time bracketing (weaker
@@ -284,26 +315,26 @@ type toolCallWindows []toolCallWindow
 // Windows are only usable once hook events carry real timestamps (launch's
 // hook-log stamps them); tool_calls left at the synthetic epoch are ignored so a
 // bogus 2026-01-01 window can never bracket a real effect.
-func loadToolCallWindows(db *sql.DB, runID string) toolCallWindows {
+func loadToolCallWindows(db *sql.DB, runID string) (toolCallWindows, error) {
 	rows, err := db.Query(`SELECT id, agent_id, command, started_at, ended_at FROM tool_calls
 		WHERE run_id = ? AND agent_id != '' AND started_at != ''`, runID)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer rows.Close()
 	var out toolCallWindows
 	for rows.Next() {
 		var id, agent, command, startedAt, endedAt string
 		if err := rows.Scan(&id, &agent, &command, &startedAt, &endedAt); err != nil {
-			return out
+			return nil, err
 		}
 		start, err := time.Parse(time.RFC3339Nano, startedAt)
 		if err != nil || start.Year() < 2020 {
 			continue // synthetic-epoch or unparseable -> not a real window
 		}
 		end, err := time.Parse(time.RFC3339Nano, endedAt)
-		if err != nil {
-			end = start
+		if err != nil || end.Before(start) {
+			continue
 		}
 		// Grace: PostToolUse can fire a few seconds before the tool's subprocess
 		// actually performs its syscalls (observed ~3s on the lab VM), so a tight
@@ -317,10 +348,10 @@ func loadToolCallWindows(db *sql.DB, runID string) toolCallWindows {
 			start: start.Add(-grace), end: end.Add(grace),
 		})
 	}
-	return out
+	return out, rows.Err()
 }
 
-// containing returns the most specific (latest-starting) window that both
+// containing returns the unique legacy window that both
 // brackets ts AND whose program matches the effect's process comm. The comm gate
 // is what stops a harness background thread (comm=claude/"Bun Pool") from being
 // attributed to an unrelated tool call whose subprocess (comm=cat, python3, ...)
@@ -331,16 +362,16 @@ func (w toolCallWindows) containing(createdAt, comm string) (toolCallWindow, boo
 	if err != nil || comm == "" {
 		return toolCallWindow{}, false
 	}
-	comm = strings.ToLower(comm)
 	best := -1
 	for i, win := range w {
 		if win.program == "" || win.program != comm {
 			continue
 		}
 		if !ts.Before(win.start) && !ts.After(win.end) {
-			if best == -1 || win.start.After(w[best].start) {
-				best = i
+			if best != -1 {
+				return toolCallWindow{}, false
 			}
+			best = i
 		}
 	}
 	if best == -1 {
@@ -349,7 +380,7 @@ func (w toolCallWindows) containing(createdAt, comm string) (toolCallWindow, boo
 	return w[best], true
 }
 
-// programName returns the lowercased basename of a command's leading token
+// programName returns the case-preserving basename of a command's leading token
 // ("cat /a/b" -> "cat", "/usr/bin/python3 x" -> "python3"), for matching against
 // a runtime event's process comm.
 func programName(command string) string {
@@ -361,7 +392,7 @@ func programName(command string) string {
 	if i := strings.LastIndex(prog, "/"); i >= 0 {
 		prog = prog[i+1:]
 	}
-	return strings.ToLower(prog)
+	return prog
 }
 
 func persistDiffs(db *sql.DB, runID string, diffs []IntentRuntimeDiff) error {

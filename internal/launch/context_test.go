@@ -319,6 +319,9 @@ func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
 			if c := sourceReport(t, *r.AgentContext, "discovery"); c.Status != agentcontext.OK {
 				t.Fatalf("discovery failed: %+v", c)
 			}
+			if r.RuntimeCorrelation == nil || r.RuntimeCorrelation.Ref == "" || r.RuntimeCorrelation.Method != "agentprov.command_time_process/v2" {
+				t.Fatalf("missing runtime correlation diagnostic: %+v", r.RuntimeCorrelation)
+			}
 			fresh := contextService(t)
 			if _, err := (forensics.Service{DB: fresh.DB, Paths: fresh.Paths}).ImportBundle(r.BundlePath); err != nil {
 				t.Fatalf("offline bundle: %v", err)
@@ -326,6 +329,14 @@ func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
 			o, err := fresh.Overview(context.Background(), r.RunID)
 			if err != nil || o.ToolCalls == nil || *o.ToolCalls != 1 {
 				t.Fatalf("lost portable context: %+v %v", o, err)
+			}
+			c := sourceReport(t, o, "runtime_correlation")
+			if string(c.Status) != r.RuntimeCorrelation.Status || len(c.Source.BindingEvidence) != 1 || c.Source.BindingEvidence[0] != r.RuntimeCorrelation.Ref {
+				t.Fatalf("correlation coverage not portable: %+v", c)
+			}
+			var reports int
+			if err := fresh.DB.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id=? AND object_type='runtime_correlation' AND hash=?`, r.RunID, r.RuntimeCorrelation.Ref).Scan(&reports); err != nil || reports != 1 {
+				t.Fatalf("report object omitted: count=%d %v", reports, err)
 			}
 			v, err := provenance.Verify(fresh.DB, r.RunID)
 			if err != nil || v.ErrorCount != 0 {

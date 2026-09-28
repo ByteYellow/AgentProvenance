@@ -12,11 +12,54 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
+	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
 // Leave room for discovery/hooks/processing reports in the bounded overview.
 const maxContextSources = 128
+
+func saveRuntimeCorrelation(db *sql.DB, paths store.Paths, runID string, report *Report) error {
+	r := report.RuntimeCorrelation
+	if r == nil {
+		return nil
+	}
+	raw, err := json.Marshal(r)
+	if err != nil {
+		return err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return err
+	}
+	obj, err := (provenance.ObjectStore{DB: db, Paths: paths}).PutExternalObject(provenance.ExternalObjectInput{
+		Type: "runtime_correlation", SourceID: "runtime_correlation/" + runID, RunID: runID, Payload: payload,
+	})
+	if err != nil {
+		return err
+	}
+	r.Ref = obj.Hash
+	coverage := agentcontext.Coverage{Status: agentcontext.Status(r.Status), ObservedAt: r.ObservedAt}
+	for _, issue := range r.Issues {
+		coverage.Issues = append(coverage.Issues, agentcontext.Issue{Code: issue})
+	}
+	if r.Status == "failed" {
+		coverage.Issues = append(coverage.Issues, agentcontext.Issue{Code: "context_runtime_correlation_failed"})
+	}
+	svc := agentcontext.Service{DB: db, Paths: paths}
+	// These are processing diagnostics, not transcript record counts. Keep the
+	// differently-scoped exec/event counters in the referenced report object.
+	if _, err := svc.Save(context.Background(), runID, agentcontext.Source{Harness: "launch",
+		Channel: "runtime_correlation", SessionID: runID, ParserVersion: r.Method,
+		Binding: "inferred", BindingEvidence: []string{obj.Hash}}, nil, coverage); err != nil {
+		return err
+	}
+	overview, err := svc.Overview(context.Background(), runID)
+	if err == nil {
+		report.AgentContext = &overview
+	}
+	return err
+}
 
 type contextCapture struct {
 	harness, root, workdir, session, file string

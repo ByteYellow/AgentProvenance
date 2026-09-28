@@ -236,6 +236,35 @@ components:
         text capture, not baseline workspace snapshot/comparison I/O. Counts refer
         to saved/omitted/failed bodies; issues can separately report event/report
         storage failures. No additional HTTP route is implied by this schema.
+    RuntimeCorrelationReport:
+      type: object
+      required: [schema_version, run_id, method, confidence, status, input_complete, observed_at, tool_calls, unclocked_calls, runtime_events, exec_events, matched_execs, inherited_execs, ambiguous_execs, unknown_scope_events, invalid_events, edges]
+      properties:
+        schema_version: {const: agentprovenance.runtime_correlation/v1}
+        run_id: {type: string}
+        method: {const: agentprov.command_time_process/v2}
+        confidence: {type: number, const: 0.8, description: Attribution tier, not a calibrated probability.}
+        status: {type: string, enum: [no_input, empty, ok, partial, ambiguous, failed]}
+        input_complete: {type: boolean, description: Both bounded input scans completed; not a sensor completeness assertion.}
+        observed_at: {type: string, format: date-time}
+        tool_calls: {type: integer, minimum: 0}
+        unclocked_calls: {type: integer, minimum: 0}
+        runtime_events: {type: integer, minimum: 0}
+        exec_events: {type: integer, minimum: 0}
+        matched_execs: {type: integer, minimum: 0}
+        inherited_execs: {type: integer, minimum: 0, description: Included in matched_execs.}
+        ambiguous_execs: {type: integer, minimum: 0}
+        unknown_scope_events: {type: integer, minimum: 0}
+        invalid_events: {type: integer, minimum: 0}
+        edges: {type: integer, minimum: 0, description: Published edges from this pass; zero if replacement rolled back.}
+        issues: {type: array, items: {type: string}}
+        ref: {type: string, description: Report object hash in launch JSON; absent from its own stored payload.}
+      description: >
+        Embedded in launch JSON and saved as a runtime_correlation object. Counts
+        cover only eligible inputs read by this pass; they are partial observations
+        when input_complete is false, not totals or estimated lost events. Derived
+        command/time/process associations are distinct from kernel identity proof.
+        No new HTTP route is implied. Transcript counters remain separate.
     EntryLinks:
       type: object
       required: [schema_version, run_id, entry_id, basis, links, has_more]

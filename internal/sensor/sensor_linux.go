@@ -535,8 +535,10 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 	case eventExec:
 		ev["event_type"] = "execve"
 		ev["path"] = cstr(e.Path[:])
-		if command := joinArgs(e.Args[:]); command != "" {
-			ev["command"] = command
+		if argv, limited := capturedArgs(e.Args[:]); len(argv) > 0 {
+			ev["command"] = strings.Join(argv, " ")
+			ev["argv"] = argv
+			ev["argv_truncated"] = limited
 		}
 	case eventConnect:
 		ev["event_type"] = "network_connect"
@@ -694,32 +696,6 @@ func ipv4(addr uint32) string {
 
 func ntohs(p uint16) uint16 {
 	return (p<<8)&0xff00 | p>>8
-}
-
-// joinArgs rejoins the fixed-size argv slots emitted by the eBPF side (MAX_ARGS
-// slots of ARG_SLOT bytes, each a NUL-terminated, possibly truncated arg) into a
-// single space-separated command line, stopping at the first empty slot. These
-// constants must match exec.c (ARG_SLOT, MAX_ARGS).
-func joinArgs(b []uint8) string {
-	const slot = 32
-	const maxArgs = 16
-	parts := make([]string, 0, maxArgs)
-	for i := 0; i < maxArgs; i++ {
-		start := i * slot
-		if start >= len(b) {
-			break
-		}
-		end := start + slot
-		if end > len(b) {
-			end = len(b)
-		}
-		s := cstr(b[start:end])
-		if s == "" {
-			break
-		}
-		parts = append(parts, s)
-	}
-	return strings.Join(parts, " ")
 }
 
 func cstr(b []uint8) string {

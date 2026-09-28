@@ -76,28 +76,29 @@ type Options struct {
 type Report struct {
 	appDetail          message
 	sysReason          message
-	RunID              string                        `json:"run_id"`
-	ExitCode           int                           `json:"exit_code"`
-	Status             string                        `json:"status"`
-	AppTier            string                        `json:"app_tier"`
-	AppDetail          string                        `json:"app_detail,omitempty"`
-	SysTier            string                        `json:"sys_tier"`
-	SysDegradeReason   string                        `json:"sys_degrade_reason,omitempty"`
-	Events             int                           `json:"events"`
-	HighRisk           int                           `json:"high_risk"`
-	Signals            int                           `json:"signals"`
-	Verdict            string                        `json:"verdict"`
-	BundlePath         string                        `json:"bundle_path,omitempty"`
-	Signed             bool                          `json:"signed"`
-	AttestationPath    string                        `json:"attestation_path,omitempty"`
-	DashboardURL       string                        `json:"dashboard_url,omitempty"`
-	HooksIngested      int                           `json:"hooks_ingested"`
-	IntentMismatches   int                           `json:"intent_mismatches"`
-	IntentCoverageGaps int                           `json:"intent_coverage_gaps"`
-	TranscriptTurns    int                           `json:"transcript_turns"`
-	AgentContext       *agentcontext.Overview        `json:"agent_context,omitempty"`
-	ContextIssues      []string                      `json:"context_issues,omitempty"`
-	ArtifactCapture    *record.ArtifactCaptureReport `json:"artifact_capture,omitempty"`
+	RunID              string                         `json:"run_id"`
+	ExitCode           int                            `json:"exit_code"`
+	Status             string                         `json:"status"`
+	AppTier            string                         `json:"app_tier"`
+	AppDetail          string                         `json:"app_detail,omitempty"`
+	SysTier            string                         `json:"sys_tier"`
+	SysDegradeReason   string                         `json:"sys_degrade_reason,omitempty"`
+	Events             int                            `json:"events"`
+	HighRisk           int                            `json:"high_risk"`
+	Signals            int                            `json:"signals"`
+	Verdict            string                         `json:"verdict"`
+	BundlePath         string                         `json:"bundle_path,omitempty"`
+	Signed             bool                           `json:"signed"`
+	AttestationPath    string                         `json:"attestation_path,omitempty"`
+	DashboardURL       string                         `json:"dashboard_url,omitempty"`
+	HooksIngested      int                            `json:"hooks_ingested"`
+	IntentMismatches   int                            `json:"intent_mismatches"`
+	IntentCoverageGaps int                            `json:"intent_coverage_gaps"`
+	TranscriptTurns    int                            `json:"transcript_turns"`
+	AgentContext       *agentcontext.Overview         `json:"agent_context,omitempty"`
+	ContextIssues      []string                       `json:"context_issues,omitempty"`
+	ArtifactCapture    *record.ArtifactCaptureReport  `json:"artifact_capture,omitempty"`
+	RuntimeCorrelation *hooksbridge.CorrelationReport `json:"runtime_correlation,omitempty"`
 }
 
 // Run executes the full launch lifecycle and returns its Report. The returned
@@ -311,9 +312,15 @@ func seal(db *sql.DB, paths store.Paths, runID, signKeyPath string, report *Repo
 			contextProblem(db, paths, runID, "context_graph_projection_failed", report, stderr)
 		} else {
 			report.HooksIngested = sum.ToolCalls
-			if _, err := hooksbridge.CorrelateSyscalls(db, runID); err != nil {
+			correlationReport, err := hooksbridge.CorrelateSyscallsWithReport(db, runID)
+			report.RuntimeCorrelation = &correlationReport
+			if err != nil {
 				fmt.Fprintf(stderr, i18n.T(lang, "launch: syscall correlation: %v\n"), i18n.ErrorText(lang, err))
 				contextProblem(db, paths, runID, "context_runtime_correlation_failed", report, stderr)
+			}
+			if err := saveRuntimeCorrelation(db, paths, runID, report); err != nil {
+				fmt.Fprintln(stderr, "launch: unable to persist runtime correlation report")
+				contextProblem(db, paths, runID, "correlation_report_save_failed", report, stderr)
 			}
 		}
 	}

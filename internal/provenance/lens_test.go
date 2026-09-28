@@ -8,8 +8,32 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
+
+func TestStoredAppProcessEdgesExposeInferenceWithoutRewritingLegacy(t *testing.T) {
+	db := newLensTestDB(t)
+	for _, id := range []string{"legacy-edge", correlation.AppProcessEdgePrefix + "fixture"} {
+		if _, err := db.Exec(`INSERT INTO graph_edges (id,run_id,from_id,to_id,edge_type,source_event_id,created_at)
+			VALUES (?,'run-lens','tool','runtime_event/read','agent_syscall','exec','2026-09-28T00:00:00Z')`, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	edges, err := graphLensEdges(db, "run-lens")
+	if err != nil || len(edges) != 2 {
+		t.Fatalf("edges: %+v %v", edges, err)
+	}
+	for _, edge := range edges {
+		if edge.ID == "legacy-edge" {
+			if edge.Derived || edge.DerivationRule != "" {
+				t.Fatal("legacy signed relation was reinterpreted")
+			}
+		} else if !edge.Derived || edge.DerivationRule != correlation.AppProcessMethod || edge.Confidence != correlation.AppProcessConfidence || len(edge.EvidenceRefs) != 3 {
+			t.Fatalf("inference metadata missing: %+v", edge)
+		}
+	}
+}
 
 func TestGraphLensDataFlowDerivesSecretToNetworkEdge(t *testing.T) {
 	db := newLensTestDB(t)

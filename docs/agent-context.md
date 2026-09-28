@@ -85,6 +85,39 @@ directory does not require the original harness or source files. Signing covers
 the exported evidence; coverage and graph verification are separate checks.
 Old bundles without context reports remain `legacy_not_recorded`.
 
+## Runtime Association
+
+Launch records `runtime_correlation` in its JSON result and saves the report as
+an evidence object. Collection status links that object without mixing exec
+counts with transcript-record counts. Its counters describe the eligible records
+read by this pass; `input_complete: false` means those are only partial counts.
+`ok` means the correlation pass completed for its inputs, not lossless collection.
+
+The versioned `agentprov.command_time_process/v2` method requires a unique
+literal-command candidate inside the recorded tool-call interval and a runtime
+PID with a cgroup or container scope. Case and quoted whitespace are preserved;
+arbitrary substrings do not match. Native sensor argv uses 16 slots of 32 bytes;
+`argv_truncated` marks a reached capacity boundary (possible truncation, not the
+original length). Only source-marked truncation permits a multi-token prefix
+match. Events remain scoped by producer source, available origin metadata,
+cgroup, container and PID. Recorded child execs may inherit a known parent.
+
+Exec/exit boundaries invalidate prior PID ownership; same-instant ordering,
+concurrent matching calls, conflicting parent evidence, missing scope and bad
+timestamps remain gaps or ambiguities. Background activity beyond the recorded
+tool interval is not attributed by widening a time window. Missing lifecycle
+events or host/boot identity can still weaken the inference: this is not proof
+of unique agent ownership from the kernel. New graph edges expose the method,
+evidence references and confidence tier `0.8`, not a calibrated probability.
+Intent diff does not undo a new correlation gap with a weaker time fallback.
+
+Reads and edge replacement share one transaction; failures preserve the prior
+edges. Budgets are 10,000 calls, 200,000 eligible runtime events, 64 KiB per input,
+64 MiB each for commands and runtime payload, and two million candidate comparisons. Limits fail
+explicitly rather than publishing a partial replacement. Historical stored
+edges are not reclassified or automatically rebuilt when analyzing imported
+graphs; new derivations do not change an original bundle's signature.
+
 ## Changed File Content
 
 `record` saves post-execution text for files found by its working-tree comparison.
