@@ -16,7 +16,9 @@ var ErrInvalidArgument = errors.New("invalid context argument")
 const latestEntry = `NOT EXISTS (SELECT 1 FROM agent_context_entries newer
 	WHERE newer.run_id = e.run_id AND newer.source_id = e.source_id
 	AND newer.source_key = e.source_key AND newer.kind = e.kind
-	AND (newer.created_at > e.created_at OR (newer.created_at = e.created_at AND newer.id > e.id)))`
+	AND (newer.source_sequence > e.source_sequence OR
+	(newer.source_sequence = e.source_sequence AND (newer.created_at > e.created_at OR
+	(newer.created_at = e.created_at AND newer.id > e.id)))))`
 
 type pageCursor struct {
 	Query    string `json:"query"`

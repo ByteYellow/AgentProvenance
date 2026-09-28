@@ -47,6 +47,9 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 	if !validStatus(report.Status) {
 		return SaveResult{}, fmt.Errorf("invalid context coverage status %q", report.Status)
 	}
+	if len(records) > MaxRecords {
+		return SaveResult{}, fmt.Errorf("context record count exceeds limit")
+	}
 	// Apply the same redaction boundary to source metadata, not only bodies.
 	raw, err := json.Marshal(src)
 	if err != nil {
@@ -56,7 +59,6 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 		return SaveResult{}, err
 	}
 	src.ID = sourceID(src)
-	now := time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z")
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return SaveResult{}, err
@@ -64,6 +66,8 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 	defer tx.Rollback()
 	objects := provenance.ObjectStore{DB: s.DB, Paths: s.Paths, Tx: tx}
 	result := SaveResult{}
+	lastCreated := time.Time{}
+	truncated := map[int64]bool{}
 	for _, r := range records {
 		if r.Key == "" || r.Sequence < 0 || !validKind(r.Kind) {
 			return SaveResult{}, fmt.Errorf("invalid context record identity or kind")
@@ -111,6 +115,15 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 				entry.RawContent = contentReference(raw)
 			}
 		}
+		if (entry.Content.Reason == "capture_limit" || entry.RawContent.Reason == "capture_limit") && !truncated[r.Sequence] {
+			if report.Counts.Truncated == nil {
+				report.Counts.Truncated = Number(0)
+			}
+			if r.Status != "source_truncated" {
+				*report.Counts.Truncated++
+			}
+			truncated[r.Sequence] = true
+		}
 		payload, err := entryPayload(entry)
 		if err != nil {
 			return SaveResult{}, err
@@ -146,6 +159,13 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 		if err != nil {
 			return SaveResult{}, err
 		}
+		// Import order breaks ties between revisions of the same physical row.
+		// This is storage time, never a substitute for the source event time.
+		created := time.Now().UTC()
+		if !created.After(lastCreated) {
+			created = lastCreated.Add(time.Nanosecond)
+		}
+		lastCreated = created
 		_, err = tx.ExecContext(ctx, `INSERT INTO agent_context_entries
 			(id, run_id, source_id, session_id, parent_session_id, agent_id, source_key,
 			source_sequence, kind, role, tool_call_id, tool_name, status, recorded_at,
@@ -153,12 +173,13 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			entry.ID, runID, src.ID, src.SessionID, src.ParentSessionID, entry.AgentID, entry.SourceKey,
 			entry.Sequence, entry.Kind, entry.Role, entry.ToolCallID, entry.ToolName, entry.Status, entry.RecordedAt,
-			obj.Hash, entry.Content.Ref, src.ParserVersion, now)
+			obj.Hash, entry.Content.Ref, src.ParserVersion, created.Format("2006-01-02T15:04:05.000000000Z"))
 		if err != nil {
 			return SaveResult{}, err
 		}
 		result.Stored++
 	}
+	now := time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z")
 	report.SchemaVersion, report.RunID, report.Source = SchemaVersion, runID, src
 	if report.ObservedAt == "" {
 		report.ObservedAt = now
@@ -171,6 +192,9 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 	report.Counts.Duplicates = Number(int64(result.Duplicates))
 	if report.Issues == nil {
 		report.Issues = []Issue{}
+	}
+	if len(report.Issues) > 100 {
+		report.Issues = append(report.Issues[:99], Issue{Code: "diagnostic_limit"})
 	}
 	if report.MissingFields == nil {
 		report.MissingFields = []string{}

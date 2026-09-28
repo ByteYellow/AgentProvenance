@@ -163,3 +163,83 @@ func TestContextRedactsBeforeIndexingAndHashing(t *testing.T) {
 		t.Fatal("secret in context index")
 	}
 }
+
+func TestSameBatchRevisionsFollowSourceAndImportOrder(t *testing.T) {
+	s, ctx := testService(t), context.Background()
+	bodies := []string{"first", "second", "third"}
+	var records []Record
+	for i := range bodies {
+		records = append(records, Record{Key: "config", Sequence: 5, Kind: "configuration", Body: &bodies[i]})
+	}
+	if _, err := s.Save(ctx, "run", testSource(), records, Coverage{Status: OK}); err != nil {
+		t.Fatal(err)
+	}
+	// A stale, previously unseen version at an earlier physical position must
+	// not become current just because it arrived in a later import.
+	old := "late old version"
+	if _, err := s.Save(ctx, "run", testSource(), []Record{{Key: "config", Sequence: 4, Kind: "configuration", Body: &old}}, Coverage{Status: OK}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := s.Entries(ctx, PageOptions{RunID: "run"})
+	if err != nil || len(p.Entries) != 1 {
+		t.Fatalf("latest: %+v %v", p, err)
+	}
+	page, err := provenance.ReadTextContentPage(s.DB, "run", p.Entries[0].Content.Ref, 0, 100)
+	if err != nil || page.Content != "third" {
+		t.Fatalf("latest revision lost: %+v %v", page, err)
+	}
+	all, err := s.Entries(ctx, PageOptions{RunID: "run", IncludeRevisions: true})
+	if err != nil || len(all.Entries) != 4 {
+		t.Fatalf("history lost: %+v %v", all, err)
+	}
+}
+
+func TestCaptureLimitCountsUniquePhysicalRecords(t *testing.T) {
+	s := testService(t)
+	big := strings.Repeat("x", provenance.MaxTextContentBytes+1)
+	report, err := s.Save(context.Background(), "run", testSource(), []Record{
+		{Key: "message", Sequence: 7, Kind: "message", Body: &big, RawBody: &big},
+		{Key: "configuration", Sequence: 7, Kind: "configuration", RawBody: &big},
+	}, Coverage{Status: OK})
+	if err != nil || report.Coverage.Status != Partial || report.Coverage.Counts.Truncated == nil || *report.Coverage.Counts.Truncated != 1 {
+		t.Fatalf("capture limit hidden or double-counted: %+v %v", report, err)
+	}
+}
+
+func TestVerificationDetectsChangedContextQueryIndexes(t *testing.T) {
+	for _, assignment := range []string{
+		`source_key='changed'`, `source_sequence=999`, `parent_session_id='other'`, `agent_id='other'`,
+		`kind='approval'`, `role='system'`, `tool_call_id='other'`, `tool_name='other'`, `status='allowed'`,
+		`recorded_at='2000-01-01T00:00:00Z'`, `parser_version='other'`, `content_ref='other'`,
+	} {
+		t.Run(assignment, func(t *testing.T) {
+			s := testService(t)
+			body := "retained source"
+			if _, err := s.Save(context.Background(), "run", testSource(), []Record{{Key: "one", Sequence: 1, Kind: "message", Body: &body}}, Coverage{Status: OK}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.DB.Exec(`UPDATE agent_context_entries SET ` + assignment); err != nil {
+				t.Fatal(err)
+			}
+			v, err := provenance.Verify(s.DB, "run")
+			if err != nil || v.ErrorCount == 0 {
+				t.Fatalf("index change passed verification: %+v %v", v, err)
+			}
+		})
+	}
+	for _, assignment := range []string{`status='disabled'`, `harness='unknown'`, `created_at='2000-01-01T00:00:00Z'`} {
+		t.Run(assignment, func(t *testing.T) {
+			s := testService(t)
+			if _, err := s.Save(context.Background(), "run", testSource(), nil, Coverage{Status: Empty}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.DB.Exec(`UPDATE agent_context_reports SET ` + assignment); err != nil {
+				t.Fatal(err)
+			}
+			v, err := provenance.Verify(s.DB, "run")
+			if err != nil || v.ErrorCount == 0 {
+				t.Fatalf("coverage change passed verification: %+v %v", v, err)
+			}
+		})
+	}
+}
