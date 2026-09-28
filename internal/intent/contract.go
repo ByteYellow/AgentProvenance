@@ -1,11 +1,15 @@
 package intent
 
 import (
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
+
+	"github.com/byteyellow/agentprovenance/internal/provenance"
 )
 
 // Contract kinds.
@@ -175,7 +179,10 @@ func extractMessageContracts(db *sql.DB, runID string, profiles map[string]Profi
 	var out []IntentContract
 	i := 0
 	for hash, recipient := range recipientOf {
-		body := readMessageBody(db, hash)
+		body, err := readMessageBody(db, runID, hash)
+		if err != nil {
+			return nil, fmt.Errorf("read peer message %s: %w", hash, err)
+		}
 		if body == "" {
 			continue
 		}
@@ -198,26 +205,66 @@ func extractMessageContracts(db *sql.DB, runID string, profiles map[string]Profi
 
 // readMessageBody fetches an objectified agent-message body (content-addressed on
 // disk) and returns its text.
-func readMessageBody(db *sql.DB, hash string) string {
+func readMessageBody(db *sql.DB, runID, hash string) (string, error) {
 	var path string
-	if err := db.QueryRow(`SELECT path FROM provenance_objects WHERE hash = ?`, hash).Scan(&path); err != nil {
-		return ""
+	if err := db.QueryRow(`SELECT path FROM provenance_objects WHERE run_id = ? AND hash = ?`, runID, hash).Scan(&path); err != nil {
+		return "", err
 	}
-	raw, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
-		return ""
+		return "", err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return "", fmt.Errorf("message object is not a readable regular file")
+	}
+	raw, err := io.ReadAll(io.LimitReader(f, (8<<20)+1))
+	if err != nil {
+		return "", err
+	}
+	if len(raw) > 8<<20 {
+		return "", fmt.Errorf("legacy message object exceeds read limit")
+	}
+	if fmt.Sprintf("sha256:%x", sha256.Sum256(raw)) != hash {
+		return "", fmt.Errorf("message object hash mismatch")
 	}
 	var obj struct {
+		RunID   string `json:"run_id"`
 		Payload struct {
-			Body    string `json:"body"`
-			Content string `json:"content"`
+			Body       string `json:"body"`
+			Content    string `json:"content"`
+			ContentRef string `json:"content_ref"`
 		} `json:"payload"`
 	}
 	if err := json.Unmarshal(raw, &obj); err != nil {
-		return ""
+		return "", err
+	}
+	if obj.RunID != runID {
+		return "", fmt.Errorf("message object run mismatch")
+	}
+	if obj.Payload.ContentRef != "" {
+		var body strings.Builder
+		for offset := int64(0); ; {
+			page, err := provenance.ReadTextContentPage(db, runID, obj.Payload.ContentRef, offset, provenance.MaxContentPageBytes)
+			if err != nil {
+				return "", err
+			}
+			body.WriteString(page.Content)
+			if !page.HasMore {
+				if fmt.Sprintf("%x", sha256.Sum256([]byte(body.String()))) != page.SHA256 {
+					return "", fmt.Errorf("message content digest mismatch")
+				}
+				return body.String(), nil
+			}
+			if page.NextOffset <= offset {
+				return "", fmt.Errorf("message page did not advance")
+			}
+			offset = page.NextOffset
+		}
 	}
 	if obj.Payload.Body != "" {
-		return obj.Payload.Body
+		return obj.Payload.Body, nil
 	}
-	return obj.Payload.Content
+	return obj.Payload.Content, nil
 }

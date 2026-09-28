@@ -353,17 +353,29 @@ func writeMessageEdge(db graphWriter, opts Options, ev hookEvent, agents map[str
 	recipient = normalizeRecipient(recipient, agents)
 	body := strArg(ev.ToolInput, "message", "content")
 	*seq++
+	sourceID := fmt.Sprintf("agent_message/%s->%s/%d", sender, recipient, *seq)
+	payload := map[string]any{"kind": "agent_message", "from": sender, "to": recipient}
+	var parents []string
+	if len(body) <= 64<<10 {
+		payload["body"], payload["content"] = body, body
+	} else {
+		// Keep graph identity on the message descriptor, not on its chunks.
+		content, err := opts.Objects.PutTextContent(provenance.TextContentInput{
+			RunID: opts.RunID, SourceID: "agent_message_body/" + strings.TrimPrefix(sourceID, "agent_message/"), Text: body,
+		})
+		if err != nil {
+			return fmt.Errorf("hooksbridge: save message body: %w", err)
+		}
+		parents = []string{content.Ref}
+		payload["content_state"], payload["content_ref"] = "stored", content.Ref
+		payload["content_bytes"], payload["sha256"], payload["redacted"] = content.Bytes, content.SHA256, content.Redacted
+	}
 	res, err := opts.Objects.PutExternalObject(provenance.ExternalObjectInput{
 		Type:     "artifact",
-		SourceID: fmt.Sprintf("agent_message/%s->%s/%d", sender, recipient, *seq),
+		SourceID: sourceID,
 		RunID:    opts.RunID,
-		Payload: map[string]any{
-			"kind":    "agent_message",
-			"from":    sender,
-			"to":      recipient,
-			"body":    body,
-			"content": body, // dashboard preview key
-		},
+		Parents:  parents,
+		Payload:  payload,
 	})
 	if err != nil {
 		return fmt.Errorf("hooksbridge: objectify message: %w", err)

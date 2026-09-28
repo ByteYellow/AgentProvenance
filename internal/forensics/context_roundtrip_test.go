@@ -4,6 +4,10 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
+	"fmt"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,10 +15,122 @@ import (
 	"testing"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
+	"github.com/byteyellow/agentprovenance/internal/dashboard"
 	"github.com/byteyellow/agentprovenance/internal/forensics"
 	"github.com/byteyellow/agentprovenance/internal/hooksbridge"
+	"github.com/byteyellow/agentprovenance/internal/intent"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 )
+
+func TestSignedPeerMessageRetainsOfflineBodyAndContract(t *testing.T) {
+	ctx := context.Background()
+	paths := mustInit(t, filepath.Join(t.TempDir(), "source"))
+	db := mustOpen(t, paths)
+	defer db.Close()
+	body := strings.Repeat("peer message evidence\n", 420000) + "END-OF-PEER-MESSAGE"
+	raw, err := json.Marshal(map[string]any{
+		"recipient": "bob", "message": body,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := string(raw)
+	svc := agentcontext.Service{DB: db, Paths: paths}
+	if _, err := svc.Save(ctx, "run", agentcontext.Source{Harness: "claude", SessionID: "s", AgentID: "alice", ParserVersion: "test/v1", Binding: "explicit"}, []agentcontext.Record{
+		{Key: "send", Sequence: 1, Kind: "tool_call", AgentID: "alice", ToolCallID: "send", ToolName: "SendMessage", Body: &input},
+	}, agentcontext.Coverage{Status: agentcontext.OK}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hooksbridge.IngestContext(ctx, db, paths, "run"); err != nil {
+		t.Fatal(err)
+	}
+	var message string
+	if err := db.QueryRow(`SELECT hash FROM provenance_objects WHERE run_id='run' AND object_type='artifact' AND source_id LIKE 'agent_message/%'`).Scan(&message); err != nil {
+		t.Fatal(err)
+	}
+	pub, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := (forensics.Service{DB: db, Paths: paths, SignKey: key}).ExportBundle("run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := forensics.VerifyBundleAttestation(bundle.Path, bundle.AttestationPath, pub); err != nil {
+		t.Fatal(err)
+	}
+	fresh := mustInit(t, filepath.Join(t.TempDir(), "replay"))
+	dbFresh := mustOpen(t, fresh)
+	defer dbFresh.Close()
+	info, err := (forensics.Service{DB: dbFresh, Paths: fresh}).ImportBundle(bundle.Path)
+	if err != nil || info.Omitted != 0 {
+		t.Fatalf("import: %+v %v", info, err)
+	}
+	if err := os.Rename(paths.Provenance, paths.Provenance+"-offline"); err != nil {
+		t.Fatal(err)
+	}
+	handler := (dashboard.Server{DB: dbFresh}).Handler()
+	var output strings.Builder
+	for offset := int64(0); ; {
+		query := url.Values{"run": {"run"}, "node": {message}, "mode": {"body"}, "offset": {fmt.Sprint(offset)}, "limit": {"262144"}}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest("GET", "/api/artifact?"+query.Encode(), nil))
+		var page struct {
+			Content      string `json:"content"`
+			ContentState string `json:"content_state"`
+			NextOffset   int64  `json:"next_offset"`
+			HasMore      bool   `json:"has_more"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil || w.Code != 200 || page.ContentState != "stored" {
+			t.Fatalf("offline body: %s %v", w.Body.String(), err)
+		}
+		output.WriteString(page.Content)
+		if !page.HasMore {
+			break
+		}
+		if page.NextOffset <= offset {
+			t.Fatal("body page did not advance")
+		}
+		offset = page.NextOffset
+	}
+	if output.String() != body {
+		t.Fatal("offline peer message or its tail changed")
+	}
+	contracts, err := intent.ExtractContracts(dbFresh, "run", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, contract := range contracts {
+		if contract.Kind == intent.ContractPeerMessage {
+			found = true
+			if contract.Target != body || contract.ScopeAgent != "bob" {
+				t.Fatal("peer contract no longer reads its saved message")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("peer contract disappeared after portable replay")
+	}
+	v, err := provenance.Verify(dbFresh, "run")
+	if err != nil || v.ErrorCount != 0 {
+		t.Fatalf("verify peer message: %+v %v", v, err)
+	}
+	var messages int
+	if err := dbFresh.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id='run' AND source_id LIKE 'agent_message/%'`).Scan(&messages); err != nil || messages != 1 {
+		t.Fatalf("content chunks were exposed as additional messages: %d %v", messages, err)
+	}
+	var chunkPath string
+	if err := dbFresh.QueryRow(`SELECT path FROM provenance_objects WHERE run_id='run' AND object_type='text_chunk' AND source_id LIKE 'agent_message_body/%' LIMIT 1`).Scan(&chunkPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(chunkPath, chunkPath+"-missing"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := intent.ExtractContracts(dbFresh, "run", nil); err == nil {
+		t.Fatal("missing peer message content was silently omitted from analysis")
+	}
+}
 
 func TestSignedContextRoundTripBeyondLegacyLimits(t *testing.T) {
 	for _, size := range []int{(64 << 10) + 19, (4 << 20) + 19, (8 << 20) + 19} {
