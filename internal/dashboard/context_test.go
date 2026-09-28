@@ -102,8 +102,18 @@ func TestContextDashboardFixture(t *testing.T) {
 	for i := 0; i < 37; i++ {
 		records = append(records, agentcontext.Record{Key: fmt.Sprintf("message-%d", i), Sequence: int64(i + 6), Kind: "message", Role: "assistant", Body: body(fmt.Sprintf("Synthetic follow-up %d. <img src=x onerror=alert(1)> is recorded text, not HTML.", i))})
 	}
+	for i := range records {
+		records[i].ExecutionScope = agentcontext.CurrentExecution
+		if records[i].Sequence <= 2 {
+			records[i].ExecutionScope = agentcontext.PriorContext
+		}
+	}
 	source := agentcontext.Source{ID: "ui-fixture-source", Harness: "codex", Channel: "transcript", SessionID: "ui-fixture-session", Binding: "explicit", ParserVersion: "synthetic-ui-fixture/v1", Workdir: "/fixture"}
-	_, err = s.Save(ctx, "ui-fixture", source, records, agentcontext.Coverage{Status: agentcontext.OK, Counts: agentcontext.Counts{Read: agentcontext.Number(42), Parsed: agentcontext.Number(42), Matched: agentcontext.Number(1)}})
+	_, err = s.Save(ctx, "ui-fixture", source, records, agentcontext.Coverage{Status: agentcontext.OK,
+		FirstLine: 3, LastLine: 42,
+		Counts: agentcontext.Counts{Read: agentcontext.Number(40), Parsed: agentcontext.Number(40), Matched: agentcontext.Number(1)},
+		PriorContext: &agentcontext.PriorRange{FirstLine: 1, LastLine: 2, MissingFields: []string{"approval"},
+			Counts: agentcontext.Counts{Read: agentcontext.Number(2), Parsed: agentcontext.Number(2)}}})
 	if err != nil {
 		t.Fatal(err)
 	}

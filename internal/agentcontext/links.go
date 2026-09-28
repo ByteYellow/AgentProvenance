@@ -33,6 +33,10 @@ func (s Service) Links(ctx context.Context, runID, entryID string) (EntryLinks, 
 	if err != nil {
 		return result, err
 	}
+	if e.ExecutionScope == PriorContext {
+		result.Reason = "prior_context_not_current_execution"
+		return result, nil
+	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT DISTINCT to_id, edge_type FROM graph_edges
 		WHERE run_id=? AND from_id=? AND edge_type IN ('context_tool_call','context_tool_result')
 		ORDER BY to_id, edge_type LIMIT 201`, runID, e.ObjectHash)

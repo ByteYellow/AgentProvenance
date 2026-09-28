@@ -77,7 +77,7 @@ func (p *parser) claude(top row) bool {
 			default:
 				ordinary = append(ordinary, block)
 				p.issue("unrecognized_content_block", fmt.Sprintf("content.%d", i))
-				*p.Coverage.Counts.Unrecognized++
+				*p.counts().Unrecognized++
 			}
 		}
 		if len(ordinary) > 0 {

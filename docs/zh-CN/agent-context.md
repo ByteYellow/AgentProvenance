@@ -23,7 +23,8 @@ agentprov launch --context-session SESSION_ID -- codex resume SESSION_ID
 目录发现遵循 `CLAUDE_CONFIG_DIR`、`CODEX_HOME` 和 `DSH_HOME`。
 如果包装脚本只在子进程内部设置目录，需要显式传入该目录。
 采集在执行退出后进行，不按文件修改时间选择“最新会话”；多个候选不能唯一匹配时保留歧义。
-恢复会话会验证执行前的日志前缀，不把先前活动重新归到本次执行。
+恢复会话会验证执行前的日志前缀，将先前记录保存为 `prior_context`，
+与新记录的 `current_execution` 范围区分。历史工具调用和模型调用不会投影为本次执行。
 子会话必须有真实身份依据，单独一条委派请求不会生成虚构的子 Agent ID。
 
 也可以显式导入已有日志：
@@ -66,6 +67,12 @@ agentprov context content --run RUN_ID --ref sha256:HASH --offset 0 --limit 6553
 最多 256 KiB。翻页应使用返回的 `next_offset`，而不是按字符数计算偏移。
 
 ## 覆盖与移植
+
+恢复会话中的每条记录带有 `execution_scope`。概览的记录总数包含历史上下文；
+来源报告在 `prior_context` 中单独记录历史部分的计数、时间范围和缺失字段，
+不混入本次处理范围。导入总数包含两段记录。本次范围没有新记录时仍为 `empty`，
+不会因为保留了历史而变成有新活动。历史审批不授权新操作，旧配置也不能证明恢复后
+仍然生效。旧记录没有保存范围时，继续显示范围未知。
 
 覆盖情况按来源区分：`disabled`、`no_input`、`empty`、`ok`、`partial`、
 `failed`、`ambiguous`、`legacy_not_recorded`。空值表示未知，不等于零。

@@ -52,7 +52,7 @@ func (p *parser) deepseek(top row) bool {
 		status := "observed"
 		if flag(v, "interrupted") {
 			status = "source_truncated"
-			*p.Coverage.Counts.Truncated++
+			*p.counts().Truncated++
 		}
 		p.add("message", key, text(msg, "role"), "", "", status, ts, msg["content"])
 	case "tool/call":

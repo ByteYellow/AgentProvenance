@@ -96,16 +96,20 @@ func TestCaptureResumeUsesVerifiedPrefix(t *testing.T) {
 	}
 	writeFixture(t, path, old+`{"type":"response_item","payload":{"type":"message","role":"user","content":"new task"}}`+"\n")
 	o, err := c.finish(ctx, svc, "run", "", time.Now().Add(-time.Second), time.Now())
-	if err != nil || o.Messages == nil || *o.Messages != 1 {
+	if err != nil || o.Messages == nil || *o.Messages != 2 {
 		t.Fatalf("resume: %+v %v", o, err)
 	}
 	p, err := svc.Entries(ctx, agentcontext.PageOptions{RunID: "run", Kind: "message"})
-	if err != nil || len(p.Entries) != 1 || p.Entries[0].Sequence != 3 {
+	if err != nil || len(p.Entries) != 2 || p.Entries[0].ExecutionScope != agentcontext.PriorContext || p.Entries[1].Sequence != 3 || p.Entries[1].ExecutionScope != agentcontext.CurrentExecution {
 		t.Fatalf("resume entries: %+v %v", p, err)
 	}
-	body, err := provenance.ReadTextContentPage(svc.DB, "run", p.Entries[0].Content.Ref, 0, 100)
+	body, err := provenance.ReadTextContentPage(svc.DB, "run", p.Entries[1].Content.Ref, 0, 100)
 	if err != nil || body.Content != "new task" {
 		t.Fatalf("old activity imported: %+v %v", body, err)
+	}
+	prior, err := provenance.ReadTextContentPage(svc.DB, "run", p.Entries[0].Content.Ref, 0, 100)
+	if err != nil || prior.Content != "old task" {
+		t.Fatalf("historical context lost: %+v %v", prior, err)
 	}
 	writeFixture(t, path, strings.ReplaceAll(old, "old task", "changed task"))
 	bad, err := c.finish(ctx, svc, "other-run", "", time.Now().Add(-time.Second), time.Now())

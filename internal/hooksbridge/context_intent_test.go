@@ -25,7 +25,7 @@ func TestContextIntentUsesPreservedSelectedRange(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc := agentcontext.Service{DB: db, Paths: paths}
-	if result, err := svc.ImportFile(ctx, "run", agentcontext.ParseOptions{Harness: "claude", Path: path, AfterLine: 2, Binding: "explicit"}); err != nil || result.Stored != 4 {
+	if result, err := svc.ImportFile(ctx, "run", agentcontext.ParseOptions{Harness: "claude", Path: path, AfterLine: 2, Binding: "explicit"}); err != nil || result.Stored != 7 || *result.Coverage.Counts.Stored != 4 || *result.Coverage.PriorContext.Counts.Stored != 3 {
 		t.Fatalf("import: %+v %v", result, err)
 	}
 	if err := os.Remove(path); err != nil {

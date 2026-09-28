@@ -26,7 +26,9 @@ Discovery honors `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `DSH_HOME`. When a wrapp
 sets its home only in the child process, pass that directory explicitly. Capture
 runs after execution exits. Selection does not use newest modification time:
 concurrent candidates remain ambiguous. Resume verifies the pre-run source
-prefix and excludes earlier activity from the new run. Actual child-session
+prefix and retains earlier records as `prior_context`, separate from the new
+`current_execution` source range. Historical tools and model calls are not
+projected as activity of the new run. Actual child-session
 identities can link children; a dispatch alone does not invent a child identity.
 
 An existing transcript can also be imported explicitly:
@@ -82,6 +84,14 @@ zero. Reports distinguish parser failures, unrecognized records, deferred tails,
 limits and duplicate imports. Launch processes at most 128 selected sources,
 with a partial report when the limit is reached. Graph projections have separate
 bounded budgets and persist processing failures.
+
+For resumed sessions, each entry carries `execution_scope`. The overview's
+record totals include retained history; source reports put historical counts,
+timestamps and missing fields in `prior_context`, separate from the current
+processing range. Import totals count both ranges. An empty new range remains
+`empty` even when history was saved. Historical approvals do not authorize new
+actions, and an old configuration does not prove it remained effective after
+resume. Older entries without a recorded boundary keep that distinction unknown.
 
 Imported content is redacted before hashing and storage. Querying a saved body
 never reopens the source path. Self-contained forensic bundles carry context,

@@ -2429,5 +2429,11 @@
   "The file changed while its post-execution content was being read.": "执行后的正文采集过程中，文件仍在变化。",
   "Binary file content is not saved by the text capture path.": "文本采集链路不保存二进制文件正文。",
   "Saved file records disagree about capture state; inspect their exact events.": "已保存文件记录的采集状态不一致，请查看具体事件。",
-  "File content was omitted by the capture budget.": "文件正文因采集容量限制而省略。"
+  "File content was omitted by the capture budget.": "文件正文因采集容量限制而省略。",
+  "Prior context": "历史上下文",
+  "Current execution range": "本次执行范围",
+  "Execution range not recorded": "未记录执行范围",
+  "Includes prior context": "包含历史上下文",
+  "Retained history is not execution in this run. Historical approvals do not authorize new actions.": "保留的历史上下文不代表本次执行，历史审批不构成对新操作的授权。",
+  "This is prior context, not activity in the current execution.": "这是历史上下文，不属于本次执行。"
 }

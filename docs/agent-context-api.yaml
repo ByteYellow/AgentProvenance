@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance recorded context API
-  version: "1.1"
+  version: "1.2"
   description: >
     Read-only recorded evidence. Source assertions are not kernel observations
     or inferred authorizations. The dashboard exposes the same routes under
@@ -58,6 +58,7 @@ components:
         code: {type: string}
         line: {type: integer, minimum: 1}
         field: {type: string}
+        scope: {type: string, enum: [prior_context, current_execution], description: Identifies retained history or the selected execution range when present.}
       description: Bounded diagnostics contain no source message bodies or secrets.
     Coverage:
       type: object
@@ -80,6 +81,19 @@ components:
         issues: {type: array, items: {$ref: '#/components/schemas/Issue'}}
         missing_fields: {type: array, items: {type: string}}
         object_hash: {type: string}
+        prior_context: {$ref: '#/components/schemas/PriorContextRange'}
+      description: Counts and timestamps describe the current selected range. An optional prior_context reports the retained prefix separately; status accounts for issues in either range.
+    PriorContextRange:
+      type: object
+      required: [first_line, last_line, counts, missing_fields]
+      properties:
+        first_line: {type: integer, minimum: 1}
+        last_line: {type: integer, minimum: 0}
+        started_at: {type: string}
+        ended_at: {type: string}
+        counts: {$ref: '#/components/schemas/Counts'}
+        missing_fields: {type: array, items: {type: string}}
+      description: History read before the resume cursor. An empty current range remains empty even when history is retained. An absent range does not establish that the harness had no prior history.
     ContentRef:
       type: object
       required: [bytes, redacted, state]
@@ -101,6 +115,10 @@ components:
         source: {$ref: '#/components/schemas/Source'}
         source_key: {type: string}
         sequence: {type: integer, minimum: 0, description: Physical source line order, not a cross-source clock.}
+        execution_scope:
+          type: string
+          enum: [current_execution, prior_context]
+          description: Optional source-position scope. Prior context cannot project current tool/model calls or imply current authorization. Current execution means within the selected source range, not independently verified runtime execution. Absent on older entries and explicit records without a recorded boundary.
         kind: {type: string, enum: [message, tool_call, tool_result, task, configuration, approval, session]}
         role: {type: string}
         agent_id: {type: string}
@@ -137,7 +155,7 @@ components:
         snapshots: {$ref: '#/components/schemas/NullableCount'}
         has_more_sources: {type: boolean}
         runtime_coverage: {$ref: '#/components/schemas/RuntimeCoverage'}
-      description: Latest report per source plus current stored record counts, not estimates of uncaptured activity.
+      description: Latest report per source plus stored record counts including retained prior context, not estimates of current execution or uncaptured activity. Entry execution_scope and separate prior_context coverage distinguish the ranges.
     RuntimeCoverage:
       type: object
       required: [schema_version, run_id, capture, correlation]

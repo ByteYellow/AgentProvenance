@@ -71,6 +71,9 @@ func IngestContext(ctx context.Context, db *sql.DB, paths store.Paths, runID str
 		if err := ctx.Err(); err != nil {
 			return Summary{}, err
 		}
+		if e.ExecutionScope == agentcontext.PriorContext {
+			continue
+		}
 		actor := agent(e)
 		if actor != mainAgentID && e.Source.ParentSessionID != "" {
 			parent := e.Source.ParentSessionID
@@ -244,6 +247,9 @@ func IngestContext(ctx context.Context, db *sql.DB, paths store.Paths, runID str
 		return sum, err
 	}
 	for _, e := range entries {
+		if e.ExecutionScope == agentcontext.PriorContext {
+			continue
+		}
 		if (e.Kind != "tool_call" && e.Kind != "tool_result") || e.ToolCallID == "" {
 			continue
 		}

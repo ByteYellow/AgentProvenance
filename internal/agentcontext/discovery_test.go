@@ -120,15 +120,18 @@ func TestDiscoveryResumePreservesPrefixAndRejectsReplacement(t *testing.T) {
 	}
 	s := testService(t)
 	first, err := s.ImportFile(context.Background(), "run", r.Sources[0].ParseOptions("codex"))
-	if err != nil || first.Stored != 1 || first.Coverage.FirstLine != 3 {
+	if err != nil || first.Stored != 3 || first.Coverage.FirstLine != 3 || first.Coverage.PriorContext == nil {
 		t.Fatalf("resumed import: %+v %v", first, err)
 	}
 	page, _ := s.Entries(context.Background(), PageOptions{RunID: "run"})
-	if page.Entries[0].Kind != "tool_result" || page.Entries[0].ToolName != "exec_command" {
+	if len(page.Entries) != 3 || page.Entries[1].ExecutionScope != PriorContext || page.Entries[2].Kind != "tool_result" || page.Entries[2].ToolName != "exec_command" || page.Entries[2].ExecutionScope != CurrentExecution {
 		t.Fatal("prior call metadata lost or prior events reassigned")
 	}
+	if *first.Coverage.Counts.Stored != 1 || *first.Coverage.PriorContext.Counts.Stored != 2 {
+		t.Fatalf("mixed stored counts: %+v", first.Coverage)
+	}
 	repeat, err := s.ImportFile(context.Background(), "run", r.Sources[0].ParseOptions("codex"))
-	if err != nil || repeat.Stored != 0 || repeat.Duplicates != 1 {
+	if err != nil || repeat.Stored != 0 || repeat.Duplicates != 3 || *repeat.Coverage.Counts.Duplicates != 1 || *repeat.Coverage.PriorContext.Counts.Duplicates != 2 {
 		t.Fatalf("repeat: %+v %v", repeat, err)
 	}
 	writeSource(t, path, strings.Replace(initial, "exec_command", "other_action", 1)+resultLine)

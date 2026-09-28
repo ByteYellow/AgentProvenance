@@ -15,6 +15,7 @@ async (page) => {
   await settle();
   await page.waitForFunction(()=>document.querySelector('#verify')?.textContent.includes('graph integrity'));
   check(!await page.locator('#context-fold').evaluate(el=>el.open),'session initially collapsed');
+  check(await page.locator('#context-summary').innerText().then(text=>text.includes('Includes prior context')),'summary distinguishes retained historical records');
   check(await page.locator('#verify').innerText().then(text=>text.includes('graph integrity') && !text.includes('signed graph')),'graph verification not claimed as signature verification');
   for (const id of ['graphcard','siglist','focusedevidence','outboundcard','tl','ptree','egtbl','compliancecard']) check(await page.locator('#'+id).count()===1,'retains '+id);
   await page.getByRole('button',{name:'Agent session 38',exact:true}).click();
@@ -22,6 +23,8 @@ async (page) => {
   await page.waitForFunction(()=>document.querySelector('#agentcontext').getBoundingClientRect().top >= document.querySelector('body > header').getBoundingClientRect().bottom);
   check(true,'session navigation clears the sticky header');
   check(await page.locator('#context-body img').count()===0,'recorded markup is not executed');
+  check(await records().first().locator('.context-meta').innerText().then(text=>text.includes('Prior context')),'history is visibly scoped');
+  check(await toolResult().locator('.context-meta').innerText().then(text=>text.includes('Current execution range')),'new result is visibly scoped');
   await page.locator('#context-next').click();
   await page.waitForFunction(()=>document.querySelectorAll('#context-body [data-entry]').length===10);
   check(await page.locator('#context-next').isDisabled(),'bounded entry pagination ends honestly');
@@ -54,8 +57,8 @@ async (page) => {
   await page.locator('#context-return').click();
   await page.waitForFunction(()=>document.querySelectorAll('#context-body [data-entry]').length===30);
   await records().first().getByRole('button',{name:'Locate in graph',exact:true}).click();
-  await page.getByText('No recorded graph link.',{exact:false}).waitFor();
-  check(true,'unlinked message is not guessed');
+  await page.getByText('This is prior context, not activity in the current execution.',{exact:false}).waitFor();
+  check(true,'historical message cannot navigate to current execution');
   await page.getByRole('tab',{name:'Permissions & configuration',exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll('#context-body [data-entry]').length===2);
   await records().nth(0).getByRole('button',{name:'Compare snapshot',exact:true}).click();
@@ -68,6 +71,8 @@ async (page) => {
   await page.getByRole('tab',{name:'Collection status',exact:true}).click();
   check(await page.locator('[data-runtime-coverage]').innerText().then(text=>text.includes('Not recorded in this historical run') && text.includes('Stored runtime events') && text.includes('Run-specific dropped events')),'runtime coverage is shown beside context without inventing historical capture');
   check(await page.locator('#context-body').innerText().then(text=>text.includes('Not recorded') && text.includes('synthetic-ui-fixture/v1')),'source coverage retains unknown counters and parser');
+  await page.locator('#context-body summary').filter({hasText:'Prior context'}).click();
+  check(await page.locator('#context-body').innerText().then(text=>text.includes('Historical approvals do not authorize new actions.')),'historical coverage and authorization boundaries are explicit');
   await page.getByRole('tab',{name:'Conversation & tools',exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll('#context-body [data-entry]').length===30);
   await toolResult().getByRole('button',{name:'Open saved content',exact:true}).click();
@@ -94,6 +99,7 @@ async (page) => {
   check(await page.getByRole('tab',{name:'对话与工具',exact:true}).getAttribute('aria-selected')==='true','language switch preserves selected session tab');
   check(await page.locator('#context-body').evaluate(el=>Math.abs(el.scrollTop-450)<5),'language switch restores session reading position');
   check(await page.locator('#content-body').innerText()===tail,'language switch preserves original output and page');
+  check(await records().first().locator('.context-meta').innerText().then(text=>text.includes('历史上下文')),'historical boundary is localized');
   await page.locator('#savedcontent').scrollIntoViewIfNeeded();
   await page.screenshot({path:'output/playwright/context-desktop-zh.png'});
   await page.setViewportSize({width:390,height:844});

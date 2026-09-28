@@ -34,7 +34,7 @@ func HarvestContextIntent(ctx context.Context, db *sql.DB, paths store.Paths, ru
 			if count > agentcontext.MaxRecords {
 				return 0, fmt.Errorf("context intent projection record limit exceeded")
 			}
-			if e.Source.Harness != "claude" || e.Source.Channel == "hooks" {
+			if e.ExecutionScope == agentcontext.PriorContext || e.Source.Harness != "claude" || e.Source.Channel == "hooks" {
 				continue
 			}
 			g := groups[e.Source.ID]

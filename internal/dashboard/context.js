@@ -177,7 +177,7 @@ window.AgentContextUI = (() => {
       const reports = value.coverage || [];
       const sources = [...new Set(reports.map(c => c.source?.harness).filter(Boolean))];
       const hints = [...new Set(reports.map(c => t(statusNames[c.status] || c.status)))];
-      $('context-summary').textContent = [sources.join(' / '), api.tx('{messages} messages · {calls} tool calls · {results} results', {messages:unknown(value.messages),calls:unknown(value.tool_calls),results:unknown(value.tool_results)}),hints.join(' / ')].filter(Boolean).join(' · ');
+      $('context-summary').textContent = [sources.join(' / '), api.tx('{messages} messages · {calls} tool calls · {results} results', {messages:unknown(value.messages),calls:unknown(value.tool_calls),results:unknown(value.tool_results)}),reports.some(c=>c.prior_context) ? t('Includes prior context') : '',hints.join(' / ')].filter(Boolean).join(' · ');
       if (coverageChanged) $('context-source').innerHTML = `<option value="">${e(t('All recorded sessions'))}</option>` + reports.filter(c => c.source?.id).map(c => `<option value="${e(c.source.id)}">${e(c.source.harness)} · ${e(c.source.session_id || c.source.id)}</option>`).join('');
       syncControls();
       $('context-nav-count').textContent = unknown(value.messages);
@@ -227,7 +227,7 @@ window.AgentContextUI = (() => {
     const checked = state.compare.some(x => x.id === entry.id);
     return `<article class="context-record" data-entry="${e(entry.id)}" data-selected="${state.selected === entry.id}">
       <header><strong class="${entry.role === 'user' ? 'context-role' : ''}">${e(recordLabel(entry))}</strong><time>${e(entry.recorded_at || t('Source time not recorded'))}</time>${entry.status ? `<span class="context-status">${e(t(entry.status))}</span>` : ''}</header>
-      <div class="context-meta">${e(entry.source.harness)} · ${e(entry.source.session_id)} · #${e(entry.sequence)}${entry.agent_id ? ' · ' + e(entry.agent_id) : ''}</div>
+      <div class="context-meta">${e(entry.source.harness)} · ${e(entry.source.session_id)} · #${e(entry.sequence)}${entry.agent_id ? ' · ' + e(entry.agent_id) : ''} · ${e(t(entry.execution_scope === 'prior_context' ? 'Prior context' : entry.execution_scope === 'current_execution' ? 'Current execution range' : 'Execution range not recorded'))}</div>
       ${tool ? `<details data-tool-body${expanded ? ' open' : ''}><summary>${e(t('Arguments / result'))}</summary>${body}</details>` : body}
       <div class="context-actions"><button data-preview="body">${e(t('Open saved content'))}</button><button data-preview="raw">${e(t('Raw source record'))}</button><button data-graph>${e(t('Locate in graph'))}</button>${snapshot ? `<button data-compare aria-pressed="${checked}">${e(t(checked ? 'Selected for comparison' : 'Compare snapshot'))}</button>` : ''}</div>
       <div class="context-link-result" aria-live="polite"></div>
@@ -292,7 +292,10 @@ window.AgentContextUI = (() => {
     $('context-body').innerHTML = notice('Context coverage, runtime coverage, and signature verification are separate checks.') + renderRuntimeCoverage() + (overview.coverage || []).map(report => {
       const src = report.source || {};
       const fields = [['Session',src.session_id],['Source path',src.path],['Binding',src.binding],['Parser',src.parser_version],['Source version',src.application_version || src.format_version],['Observed at',report.observed_at],['Last successful capture',report.last_success_at],['Source range',[report.first_line,report.last_line].filter(x=>x!=null && x!==0).join(' – ')],['Missing fields',(report.missing_fields || []).join(', ')],['Binding evidence',(src.binding_evidence || []).join('\n')]];
-      return `<article class="context-coverage"><h3>${e(src.harness || t('Source'))} ${status(report.status)}</h3><div class="context-counts">${Object.entries(report.counts || {}).map(([key,value]) => `<span>${e(t(key))}<b>${e(unknown(value))}</b></span>`).join('')}</div><p class="context-notice">${e(t('Counts describe this processing range, not the whole run. Unknown counts are not zero.'))}</p><dl>${fields.map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl>${(report.issues || []).map(issue => `<p class="context-notice">${e(t(issue.code))}${issue.line ? ' · '+e(t('line'))+' '+e(issue.line) : ''}${issue.field ? ' · '+e(issue.field) : ''}</p>`).join('')}</article>`;
+      const counts = value => `<div class="context-counts">${Object.entries(value || {}).map(([key,n]) => `<span>${e(t(key))}<b>${e(unknown(n))}</b></span>`).join('')}</div>`;
+      const prior = report.prior_context;
+      const history = prior ? `<details><summary>${e(t('Prior context'))} · ${e(t('Source range'))} ${e(prior.first_line)}–${e(prior.last_line)}</summary>${notice('Retained history is not execution in this run. Historical approvals do not authorize new actions.')}${counts(prior.counts)}<dl><dt>${e(t('Source range'))}</dt><dd>${e([prior.started_at,prior.ended_at].filter(Boolean).join(' → ') || t('Source time not recorded'))}</dd><dt>${e(t('Missing fields'))}</dt><dd>${e((prior.missing_fields || []).join(', ') || t('None reported'))}</dd></dl></details>` : '';
+      return `<article class="context-coverage"><h3>${e(src.harness || t('Source'))} ${status(report.status)}</h3>${prior ? '<h4>'+e(t('Current execution range'))+'</h4>' : ''}${counts(report.counts)}<p class="context-notice">${e(t('Counts describe this processing range, not the whole run. Unknown counts are not zero.'))}</p><dl>${fields.map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl>${history}${(report.issues || []).map(issue => `<p class="context-notice">${e(t(issue.code))}${issue.line ? ' · '+e(t('line'))+' '+e(issue.line) : ''}${issue.field ? ' · '+e(issue.field) : ''}${issue.scope === 'prior_context' ? ' · '+e(t('Prior context')) : ''}</p>`).join('')}</article>`;
     }).join('') + (overview.has_more_sources ? notice('Source report limit reached. Additional sources are not shown here.') : '');
   }
   function renderRuntimeCoverage() {
@@ -348,7 +351,7 @@ window.AgentContextUI = (() => {
     try {
       const result = await api.j('/api/context/links?' + q({run,entry:entry.id}));
       if (state !== current || !element.isConnected) return;
-      if (!result.links.length) { element.innerHTML = notice('No recorded graph link. The session record is preserved without guessing a runtime match.'); return; }
+      if (!result.links.length) { element.innerHTML = notice(result.reason === 'prior_context_not_current_execution' ? 'This is prior context, not activity in the current execution.' : 'No recorded graph link. The session record is preserved without guessing a runtime match.'); return; }
       element.innerHTML = `<div class="context-actions">${result.links.map((link,index)=>`<button data-link="${index}" title="${e(link.node_id)}">${e(t('Graph node'))} · ${e(link.relation)}</button>`).join('')}</div>${result.has_more ? notice('Additional graph links are not shown') : ''}`;
       const jump = async link => {
         state.selected = entry.id; state.graph = link.node_id;

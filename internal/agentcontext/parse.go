@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ParserVersion = "context-parser/v2"
+	ParserVersion = "context-parser/v3"
 	MaxInputBytes = 128 << 20
 	MaxLineBytes  = 40 << 20
 	MaxRecords    = 25000
@@ -32,7 +32,7 @@ type ParseOptions struct {
 	Binding         string
 	BindingEvidence []string
 	// AfterLine is a physical source cursor captured before a resumed execution.
-	// Metadata is still read, but earlier activity is not assigned to this run.
+	// Earlier records are retained as prior context, never current execution.
 	AfterLine int64
 	Cursor    *SourceCursor
 }
@@ -81,8 +81,11 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		ParentSessionID: opts.ParentSessionID, AgentID: opts.AgentID, ParserVersion: ParserVersion,
 		Binding: opts.Binding, BindingEvidence: opts.BindingEvidence}
 	p.Coverage = Coverage{Status: Empty, FirstLine: opts.AfterLine + 1,
-		Counts: Counts{Discovered: Number(1), Read: Number(0), Parsed: Number(0),
-			Failed: Number(0), Unrecognized: Number(0), Truncated: Number(0), Deferred: Number(0)}}
+		Counts: processingCounts()}
+	p.Coverage.Counts.Discovered = Number(1)
+	if opts.AfterLine > 0 {
+		p.Coverage.PriorContext = &PriorRange{FirstLine: 1, Counts: processingCounts()}
+	}
 	limited := &io.LimitedReader{R: r, N: MaxInputBytes + 1}
 	reader := bufio.NewReaderSize(limited, 64<<10)
 	for {
@@ -92,7 +95,7 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		line, ended, err := readLine(reader)
 		if limited.N == 0 {
 			p.issue("input_size_limit", "input")
-			*p.Coverage.Counts.Truncated++
+			*p.counts().Truncated++
 			break
 		}
 		if len(line) == 0 && errors.Is(err, io.EOF) {
@@ -100,23 +103,24 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		}
 		p.line++
 		p.Coverage.LastLine = p.line
-		if p.line > opts.AfterLine {
-			*p.Coverage.Counts.Read++
+		if p.line <= opts.AfterLine {
+			p.Coverage.PriorContext.LastLine = p.line
 		}
+		*p.counts().Read++
 		if errors.Is(err, errLineLimit) {
 			p.issue("line_size_limit", "input")
-			*p.Coverage.Counts.Truncated++
+			*p.counts().Truncated++
 			break
 		}
 		if err != nil && !errors.Is(err, io.EOF) {
 			p.issue("read_failed", "input")
-			*p.Coverage.Counts.Failed++
+			*p.counts().Failed++
 			break
 		}
 		line = bytes.TrimSpace(line)
 		if !utf8.Valid(line) {
 			p.issue("invalid_utf8", "input")
-			*p.Coverage.Counts.Failed++
+			*p.counts().Failed++
 			if err != nil {
 				break
 			}
@@ -130,17 +134,17 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		}
 		if opts.Harness == "deepseek" && !ended {
 			p.issue("incomplete_tail", "input")
-			*p.Coverage.Counts.Deferred++
+			*p.counts().Deferred++
 			break
 		}
 		var top row
 		if json.Unmarshal(line, &top) != nil || top == nil {
 			if !ended && errors.Is(err, io.EOF) {
 				p.issue("incomplete_tail", "input")
-				*p.Coverage.Counts.Deferred++
+				*p.counts().Deferred++
 			} else {
 				p.issue("malformed_json", "input")
-				*p.Coverage.Counts.Failed++
+				*p.counts().Failed++
 			}
 		} else {
 			start := len(p.Records)
@@ -151,19 +155,15 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 			if known {
 				p.known++
 			}
-			if p.line <= opts.AfterLine {
-				p.Records = p.Records[:start]
+			if known {
+				*p.counts().Parsed++
 			} else {
-				if known {
-					*p.Coverage.Counts.Parsed++
-				} else {
-					*p.Coverage.Counts.Unrecognized++
-					p.issue("unrecognized_record", "type")
-				}
-				raw := string(line)
-				for i := start; i < len(p.Records); i++ {
-					p.Records[i].RawBody = &raw
-				}
+				*p.counts().Unrecognized++
+				p.issue("unrecognized_record", "type")
+			}
+			raw := string(line)
+			for i := start; i < len(p.Records); i++ {
+				p.Records[i].RawBody = &raw
 			}
 		}
 		if p.unsupported {
@@ -171,7 +171,7 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		}
 		if len(p.Records) >= MaxRecords {
 			p.issue("record_count_limit", "input")
-			*p.Coverage.Counts.Truncated++
+			*p.counts().Truncated++
 			break
 		}
 		if err != nil {
@@ -201,7 +201,7 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		if p.known == 0 {
 			p.Coverage.Status = Failed
 		}
-	} else if len(p.Records) > 0 {
+	} else if len(p.Records) > 0 && p.Records[len(p.Records)-1].ExecutionScope != PriorContext {
 		p.Coverage.Status = OK
 	}
 	if p.Coverage.Counts.Matched == nil && p.Source.SessionID != "" {
@@ -223,21 +223,32 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		p.Coverage.LastSuccessAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	p.Coverage.Source = p.Source
+	var current, prior []Record
 	for _, record := range p.Records {
+		started, ended := &p.Coverage.StartedAt, &p.Coverage.EndedAt
+		if record.ExecutionScope == PriorContext {
+			prior = append(prior, record)
+			started, ended = &p.Coverage.PriorContext.StartedAt, &p.Coverage.PriorContext.EndedAt
+		} else {
+			current = append(current, record)
+		}
 		t, err := time.Parse(time.RFC3339Nano, record.RecordedAt)
 		if err != nil {
 			continue
 		}
-		start, _ := time.Parse(time.RFC3339Nano, p.Coverage.StartedAt)
-		end, _ := time.Parse(time.RFC3339Nano, p.Coverage.EndedAt)
+		start, _ := time.Parse(time.RFC3339Nano, *started)
+		end, _ := time.Parse(time.RFC3339Nano, *ended)
 		if start.IsZero() || t.Before(start) {
-			p.Coverage.StartedAt = record.RecordedAt
+			*started = record.RecordedAt
 		}
 		if end.IsZero() || t.After(end) {
-			p.Coverage.EndedAt = record.RecordedAt
+			*ended = record.RecordedAt
 		}
 	}
-	p.Coverage.MissingFields = missingSnapshots(p.Records)
+	p.Coverage.MissingFields = missingSnapshots(current)
+	if p.Coverage.PriorContext != nil {
+		p.Coverage.PriorContext.MissingFields = missingSnapshots(prior)
+	}
 	return p.Parsed, nil
 }
 
@@ -313,15 +324,31 @@ func (p *parser) identify(id string) {
 
 func (p *parser) issue(code, field string) {
 	if len(p.Coverage.Issues) < 100 {
-		p.Coverage.Issues = append(p.Coverage.Issues, Issue{Code: code, Line: p.line, Field: field})
+		issue := Issue{Code: code, Line: p.line, Field: field}
+		if p.line > 0 && p.line <= p.opts.AfterLine {
+			issue.Scope = PriorContext
+		}
+		p.Coverage.Issues = append(p.Coverage.Issues, issue)
 	}
+}
+
+func processingCounts() Counts {
+	return Counts{Read: Number(0), Parsed: Number(0), Failed: Number(0),
+		Unrecognized: Number(0), Truncated: Number(0), Deferred: Number(0)}
+}
+
+func (p *parser) counts() *Counts {
+	if p.Coverage.PriorContext != nil && p.line <= p.opts.AfterLine {
+		return &p.Coverage.PriorContext.Counts
+	}
+	return &p.Coverage.Counts
 }
 
 func (p *parser) add(kind, key, role, callID, name, status, timestamp string, body json.RawMessage) {
 	if len(p.Records) >= MaxRecords {
-		if len(p.Records) == MaxRecords && *p.Coverage.Counts.Truncated == 0 {
+		if len(p.Records) == MaxRecords && *p.counts().Truncated == 0 {
 			p.issue("record_count_limit", "input")
-			*p.Coverage.Counts.Truncated++
+			*p.counts().Truncated++
 		}
 		return
 	}
@@ -331,7 +358,10 @@ func (p *parser) add(kind, key, role, callID, name, status, timestamp string, bo
 	workdir, version := p.Source.Workdir, p.Source.ApplicationVersion
 	r := Record{Key: key, Sequence: p.line, Kind: kind, Role: role,
 		ToolCallID: callID, ToolName: name, Status: status, RecordedAt: timestamp,
-		Workdir: &workdir, ApplicationVersion: &version}
+		Workdir: &workdir, ApplicationVersion: &version, ExecutionScope: CurrentExecution}
+	if p.line <= p.opts.AfterLine {
+		r.ExecutionScope = PriorContext
+	}
 	if name != "" && callID != "" {
 		p.callNames[callID] = name
 	}

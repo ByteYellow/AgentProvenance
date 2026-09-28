@@ -126,8 +126,21 @@ func TestParseDiagnosticsAndResume(t *testing.T) {
 		})
 	}
 	resumed, err := Parse(context.Background(), strings.NewReader(codexFixture), ParseOptions{Harness: "codex", Binding: "explicit", SessionID: "thread-a", AfterLine: 7})
-	if err != nil || resumed.Source.SessionID != "thread-a" || len(resumed.Records) != 3 || resumed.Records[0].Sequence != 8 {
+	if err != nil || resumed.Source.SessionID != "thread-a" || len(resumed.Records) != 10 || resumed.Coverage.PriorContext == nil {
 		t.Fatalf("resume: %+v %v", resumed, err)
+	}
+	current := 0
+	for _, r := range resumed.Records {
+		if r.Sequence <= 7 {
+			if r.ExecutionScope != PriorContext || r.RawBody == nil {
+				t.Fatalf("historical context lost: %+v", r)
+			}
+		} else if r.ExecutionScope == CurrentExecution {
+			current++
+		}
+	}
+	if current != 3 || *resumed.Coverage.Counts.Read != 2 || *resumed.Coverage.PriorContext.Counts.Read != 7 {
+		t.Fatalf("mixed execution ranges: %+v", resumed.Coverage)
 	}
 	wrong, err := Parse(context.Background(), strings.NewReader(codexFixture), ParseOptions{Harness: "codex", Binding: "explicit", SessionID: "not-this-session"})
 	if err != nil || wrong.Coverage.Status != Ambiguous || len(wrong.Records) != 0 {

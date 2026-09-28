@@ -66,19 +66,40 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 	defer tx.Rollback()
 	objects := provenance.ObjectStore{DB: s.DB, Paths: s.Paths, Tx: tx}
 	result := SaveResult{}
+	report.Counts.Stored, report.Counts.Duplicates = Number(0), Number(0)
+	if report.PriorContext != nil {
+		prior := *report.PriorContext
+		report.PriorContext = &prior
+		prior.Counts.Stored, prior.Counts.Duplicates = Number(0), Number(0)
+		if prior.MissingFields == nil {
+			prior.MissingFields = []string{}
+		}
+	}
 	lastCreated := time.Time{}
 	truncated := map[int64]bool{}
 	for _, r := range records {
 		if r.Key == "" || r.Sequence < 0 || !validKind(r.Kind) {
 			return SaveResult{}, fmt.Errorf("invalid context record identity or kind")
 		}
+		counts := &report.Counts
+		switch r.ExecutionScope {
+		case "", CurrentExecution:
+		case PriorContext:
+			if report.PriorContext == nil || r.Sequence < report.PriorContext.FirstLine || r.Sequence > report.PriorContext.LastLine {
+				return SaveResult{}, fmt.Errorf("prior context record is outside the retained range")
+			}
+			counts = &report.PriorContext.Counts
+		default:
+			return SaveResult{}, fmt.Errorf("invalid context execution scope")
+		}
 		entry := Entry{
 			SchemaVersion: SchemaVersion, RunID: runID, Source: src,
 			SourceKey: r.Key, Sequence: r.Sequence, Kind: r.Kind,
 			Role: r.Role, AgentID: r.AgentID, ToolCallID: r.ToolCallID, ToolName: r.ToolName, Status: r.Status,
 			RecordedAt: r.RecordedAt, MissingFields: r.MissingFields,
-			Content:    ContentRef{State: "unavailable", Reason: r.MissingReason},
-			RawContent: ContentRef{State: "unavailable", Reason: "source_not_recorded"},
+			Content:        ContentRef{State: "unavailable", Reason: r.MissingReason},
+			RawContent:     ContentRef{State: "unavailable", Reason: "source_not_recorded"},
+			ExecutionScope: r.ExecutionScope,
 		}
 		if entry.AgentID == "" {
 			entry.AgentID = src.AgentID
@@ -93,7 +114,7 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 			if len(*r.Body) > provenance.MaxTextContentBytes {
 				entry.Content = ContentRef{State: "omitted", Reason: "capture_limit"}
 				report.Status = Partial
-				report.Issues = append(report.Issues, Issue{Code: "capture_limit", Line: r.Sequence, Field: "content"})
+				report.Issues = append(report.Issues, Issue{Code: "capture_limit", Line: r.Sequence, Field: "content", Scope: r.ExecutionScope})
 			} else {
 				body, err := objects.PutTextContent(provenance.TextContentInput{
 					RunID: runID, SourceID: "context/" + src.ID + "/" + digest([]string{r.Key, r.Kind}),
@@ -111,7 +132,7 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 			if len(*r.RawBody) > provenance.MaxTextContentBytes {
 				entry.RawContent = ContentRef{State: "omitted", Reason: "capture_limit"}
 				report.Status = Partial
-				report.Issues = append(report.Issues, Issue{Code: "capture_limit", Line: r.Sequence, Field: "raw_content"})
+				report.Issues = append(report.Issues, Issue{Code: "capture_limit", Line: r.Sequence, Field: "raw_content", Scope: r.ExecutionScope})
 			} else {
 				raw, err := objects.PutTextContent(provenance.TextContentInput{RunID: runID,
 					SourceID: fmt.Sprintf("context/%s/raw/%d", src.ID, r.Sequence), Text: *r.RawBody, MediaType: "application/json"})
@@ -122,11 +143,11 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 			}
 		}
 		if (entry.Content.Reason == "capture_limit" || entry.RawContent.Reason == "capture_limit") && !truncated[r.Sequence] {
-			if report.Counts.Truncated == nil {
-				report.Counts.Truncated = Number(0)
+			if counts.Truncated == nil {
+				counts.Truncated = Number(0)
 			}
 			if r.Status != "source_truncated" {
-				*report.Counts.Truncated++
+				*counts.Truncated++
 			}
 			truncated[r.Sequence] = true
 		}
@@ -150,6 +171,7 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 		}
 		if existing != 0 {
 			result.Duplicates++
+			*counts.Duplicates++
 			continue
 		}
 		parents := []string{}
@@ -184,6 +206,7 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 			return SaveResult{}, err
 		}
 		result.Stored++
+		*counts.Stored++
 	}
 	now := time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z")
 	report.SchemaVersion, report.RunID, report.Source = SchemaVersion, runID, src
@@ -194,8 +217,6 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 	} else {
 		report.ObservedAt = t.UTC().Format("2006-01-02T15:04:05.000000000Z")
 	}
-	report.Counts.Stored = Number(int64(result.Stored))
-	report.Counts.Duplicates = Number(int64(result.Duplicates))
 	if report.Issues == nil {
 		report.Issues = []Issue{}
 	}

@@ -9,6 +9,11 @@ import (
 
 const SchemaVersion = "agentprovenance.agent_context/v1"
 
+const (
+	CurrentExecution = "current_execution"
+	PriorContext     = "prior_context"
+)
+
 type Status string
 
 const (
@@ -57,24 +62,37 @@ type Issue struct {
 	Code  string `json:"code"`
 	Line  int64  `json:"line,omitempty"`
 	Field string `json:"field,omitempty"`
+	Scope string `json:"scope,omitempty"`
+}
+
+// PriorRange describes the retained prefix separately from the current range.
+// These records supply historical context, not evidence of execution in this run.
+type PriorRange struct {
+	FirstLine     int64    `json:"first_line"`
+	LastLine      int64    `json:"last_line"`
+	StartedAt     string   `json:"started_at,omitempty"`
+	EndedAt       string   `json:"ended_at,omitempty"`
+	Counts        Counts   `json:"counts"`
+	MissingFields []string `json:"missing_fields"`
 }
 
 type Coverage struct {
-	SchemaVersion string   `json:"schema_version"`
-	ID            string   `json:"id"`
-	RunID         string   `json:"run_id"`
-	Source        Source   `json:"source"`
-	Status        Status   `json:"status"`
-	ObservedAt    string   `json:"observed_at"`
-	LastSuccessAt string   `json:"last_success_at,omitempty"`
-	StartedAt     string   `json:"started_at,omitempty"`
-	EndedAt       string   `json:"ended_at,omitempty"`
-	FirstLine     int64    `json:"first_line,omitempty"`
-	LastLine      int64    `json:"last_line,omitempty"`
-	Counts        Counts   `json:"counts"`
-	Issues        []Issue  `json:"issues"`
-	MissingFields []string `json:"missing_fields"`
-	ObjectHash    string   `json:"object_hash,omitempty"`
+	SchemaVersion string      `json:"schema_version"`
+	ID            string      `json:"id"`
+	RunID         string      `json:"run_id"`
+	Source        Source      `json:"source"`
+	Status        Status      `json:"status"`
+	ObservedAt    string      `json:"observed_at"`
+	LastSuccessAt string      `json:"last_success_at,omitempty"`
+	StartedAt     string      `json:"started_at,omitempty"`
+	EndedAt       string      `json:"ended_at,omitempty"`
+	FirstLine     int64       `json:"first_line,omitempty"`
+	LastLine      int64       `json:"last_line,omitempty"`
+	Counts        Counts      `json:"counts"`
+	Issues        []Issue     `json:"issues"`
+	MissingFields []string    `json:"missing_fields"`
+	ObjectHash    string      `json:"object_hash,omitempty"`
+	PriorContext  *PriorRange `json:"prior_context,omitempty"`
 }
 
 type ContentRef struct {
@@ -88,44 +106,46 @@ type ContentRef struct {
 }
 
 type Entry struct {
-	SchemaVersion string     `json:"schema_version"`
-	ID            string     `json:"id"`
-	RunID         string     `json:"run_id"`
-	Source        Source     `json:"source"`
-	SourceKey     string     `json:"source_key"`
-	Sequence      int64      `json:"sequence"`
-	Kind          string     `json:"kind"`
-	Role          string     `json:"role,omitempty"`
-	AgentID       string     `json:"agent_id,omitempty"`
-	ToolCallID    string     `json:"tool_call_id,omitempty"`
-	ToolName      string     `json:"tool_name,omitempty"`
-	Status        string     `json:"status,omitempty"`
-	RecordedAt    string     `json:"recorded_at,omitempty"`
-	Content       ContentRef `json:"content"`
-	RawContent    ContentRef `json:"raw_content"`
-	MissingFields []string   `json:"missing_fields,omitempty"`
-	EvidenceRefs  []string   `json:"evidence_refs,omitempty"`
-	ObjectHash    string     `json:"object_hash,omitempty"`
-	CreatedAt     string     `json:"created_at,omitempty"`
+	SchemaVersion  string     `json:"schema_version"`
+	ID             string     `json:"id"`
+	RunID          string     `json:"run_id"`
+	Source         Source     `json:"source"`
+	SourceKey      string     `json:"source_key"`
+	Sequence       int64      `json:"sequence"`
+	Kind           string     `json:"kind"`
+	Role           string     `json:"role,omitempty"`
+	AgentID        string     `json:"agent_id,omitempty"`
+	ToolCallID     string     `json:"tool_call_id,omitempty"`
+	ToolName       string     `json:"tool_name,omitempty"`
+	Status         string     `json:"status,omitempty"`
+	RecordedAt     string     `json:"recorded_at,omitempty"`
+	Content        ContentRef `json:"content"`
+	RawContent     ContentRef `json:"raw_content"`
+	MissingFields  []string   `json:"missing_fields,omitempty"`
+	EvidenceRefs   []string   `json:"evidence_refs,omitempty"`
+	ObjectHash     string     `json:"object_hash,omitempty"`
+	CreatedAt      string     `json:"created_at,omitempty"`
+	ExecutionScope string     `json:"execution_scope,omitempty"`
 }
 
 // Record is a parser's transient output. Body never appears in the entry index
 // or diagnostics: it is redacted and stored as bounded content-addressed chunks.
 type Record struct {
-	Key           string
-	Sequence      int64
-	Kind          string
-	Role          string
-	AgentID       string
-	ToolCallID    string
-	ToolName      string
-	Status        string
-	RecordedAt    string
-	Body          *string
-	RawBody       *string
-	MediaType     string
-	MissingReason string
-	MissingFields []string
+	Key            string
+	Sequence       int64
+	Kind           string
+	Role           string
+	AgentID        string
+	ToolCallID     string
+	ToolName       string
+	Status         string
+	RecordedAt     string
+	Body           *string
+	RawBody        *string
+	MediaType      string
+	MissingReason  string
+	MissingFields  []string
+	ExecutionScope string
 	// Parsed values are position-specific, including unknown values. Nil lets
 	// explicit Record callers use the source defaults.
 	Workdir            *string
