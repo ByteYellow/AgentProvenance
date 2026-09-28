@@ -72,6 +72,10 @@ agentprov context content --run RUN_ID --ref sha256:HASH --offset 0 --limit 6553
 正文先脱敏，再计算哈希和保存。查询已保存的正文不会重新打开来源路径。
 自包含证据包保存上下文、覆盖报告、配置历史和分段正文；导入新的数据目录后，
 不依赖原 harness 或原始文件。签名覆盖导出的证据，采集覆盖与图完整性分别校验。
+
+新导出还包含完整的 `telemetry_batch_records`，保留有序事件 ID 清单及其哈希，
+使既有批次校验在导入后仍能执行。原有 `telemetry_batches` 摘要字段不变。
+历史摘要缺少事件 ID 清单时，不补造完整批次；原包无法提供的批次成员校验仍然缺失。
 没有上下文采集报告的旧包保留 `legacy_not_recorded`。
 
 ## 运行时关联

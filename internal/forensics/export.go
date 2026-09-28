@@ -93,6 +93,9 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 			" OR id IN (SELECT base_snapshot_id FROM rollouts WHERE run_id = ?)" +
 			" OR id IN (SELECT snapshot_id FROM fork_attempts WHERE rollout_id IN (SELECT id FROM rollouts WHERE run_id = ?))", "created_at ASC, id ASC"},
 		{"events", "events", "run_id = ?", "created_at ASC, id ASC"},
+		// Keep the older summary field for consumers, but export the exact
+		// ordered event IDs as well so replay can still verify batch membership.
+		{"telemetry_batch_records", "telemetry_batches", "run_id = ?", "created_at ASC, id ASC"},
 		{"policy_decisions", "policy_decisions", "run_id = ?", "created_at ASC, id ASC"},
 		{"risk_signals", "risk_signals", "run_id = ?", "created_at ASC, id ASC"},
 		// Unified signal model (security/cost/quality/behavior) — without it the

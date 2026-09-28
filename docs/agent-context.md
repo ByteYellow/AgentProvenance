@@ -85,6 +85,12 @@ directory does not require the original harness or source files. Signing covers
 the exported evidence; coverage and graph verification are separate checks.
 Old bundles without context reports remain `legacy_not_recorded`.
 
+New exports also include full `telemetry_batch_records`, preserving ordered
+event IDs and their hashes so the existing batch verifier still runs after
+import. The older `telemetry_batches` summary field remains unchanged. A
+historical summary without its event-ID list is not expanded into a fabricated
+batch; that original bundle cannot provide batch-membership verification.
+
 ## Runtime Association
 
 Launch records `runtime_correlation` in its JSON result and saves the report as

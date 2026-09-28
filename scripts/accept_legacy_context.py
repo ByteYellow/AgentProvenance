@@ -90,7 +90,7 @@ def check_rows(store, bundle, tables):
             original = bundle[table]
             assert len(original) == count, f"{table}: baseline count mismatch"
             columns = sorted({key for row in original for key in row})
-            assert all(re.fullmatch(r"[a-z_]+", col) for col in columns), "invalid column"
+            assert all(re.fullmatch(r"[a-z_][a-z0-9_]*", col) for col in columns), "invalid column"
             if table in ("provenance_objects", "snapshots"):
                 columns.remove("path")
             quoted = ",".join('"' + col + '"' for col in columns)

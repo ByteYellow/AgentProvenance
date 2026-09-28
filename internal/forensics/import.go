@@ -138,6 +138,16 @@ func (s Service) ImportBundle(path string) (ImportInfo, error) {
 		info.Tables[table] = n
 		info.TotalRows += n
 	}
+	// The historical telemetry_batches key contains display summaries, not
+	// database rows. Only the newer full records can restore membership checks.
+	if rows := tableRows(bundle, "telemetry_batch_records"); len(rows) > 0 {
+		n, err := insertRows(tx, "telemetry_batches", rows)
+		if err != nil {
+			return ImportInfo{}, err
+		}
+		info.Tables["telemetry_batches"] = n
+		info.TotalRows += n
+	}
 
 	if err := tx.Commit(); err != nil {
 		return ImportInfo{}, err
