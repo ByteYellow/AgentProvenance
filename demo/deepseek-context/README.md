@@ -10,12 +10,15 @@ prompt-injection or enforcement demonstration.
 
 ## Replay
 
-With the v0.9.0 candidate built from this checkout:
+With a matching v0.9.0 candidate binary, from its extracted directory:
 
 ```sh
-go build -o /tmp/agentprov ./cmd/agentprov
-/tmp/agentprov demo deepseek-context
+./agentprov demo deepseek-context
 ```
+
+From a source checkout, build the binary first with
+`go build -o agentprov ./cmd/agentprov`. The published v0.8.2 archive does not
+include this example. Only the source-build path requires Go.
 
 Replay is read-only and offline. It needs neither DeepSeek credentials nor a
 Linux VM, and does not execute commands found in the evidence. The CLI verifies

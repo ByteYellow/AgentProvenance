@@ -6,7 +6,7 @@
 
 ## 一条命令打开
 
-从 [v0.8.2-rc.2 发行页](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。只有自行从源码构建时才需要 Go。预编译 CLI 内嵌全部签名采集记录和示例指南：
+从 [v0.8.2 发行页](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。只有自行从源码构建时才需要 Go。该正式版内嵌六份签名采集记录和全部示例指南：
 
 ```sh
 ./agentprov demo                         # 打开全部示例
@@ -63,7 +63,7 @@ Jev 示例可通过 `--agentprov` 使用包内 CLI，无需自行构建。在线
 
 [DeepSeek 会话示例](deepseek-context/README.zh-CN.md)记录为 Python 报表增加按日汇总的真实任务。可查看原始任务、12 组工具输入与结果、五条配置记录、保存的文件正文，以及两条工具与运行时之间的推断关联。七项测试通过是已保存的真实结果，回放时不会重新调用模型。指南区分正常的会话采集与部分成功的内核采集，也不虚构审批交互。
 
-构建当前源码后运行 `agentprov demo deepseek-context`。上面链接的旧发行版尚不包含此示例。签名回放可离线运行，无需 DeepSeek 账号或 VM；六份历史采集包保持原样。
+构建当前源码，或使用对应的 v0.9.0 候选压缩包，再运行 `agentprov demo deepseek-context`。上面链接的正式版尚不包含此示例。签名回放可离线运行，无需 DeepSeek 账号或 VM；六份历史采集包保持原样。
 
 ## 其他调查示例
 

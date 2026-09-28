@@ -10,10 +10,10 @@ credential requirements in each demo's README.
 ## One-command entry
 
 Download the matching Linux/macOS amd64/arm64 archive from
-[v0.8.2-rc.2](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2),
+[v0.8.2](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2),
 verify its checksum and extract it as shown in the [Quickstart](../README.md#quickstart).
 Go is needed only if you choose to build from source.
-The precompiled CLI embeds every signed capture and all demo guides:
+That published CLI embeds its six signed captures and all demo guides:
 
 ```sh
 ./agentprov demo                         # gallery: all demos
@@ -100,7 +100,8 @@ The seven-test result is recorded evidence, not a replay-time model call.
 The guide distinguishes successful transcript capture from partial kernel
 coverage and does not invent an approval interaction.
 
-Build this checkout, then run `agentprov demo deepseek-context`. This example is
+Build this checkout or use a matching v0.9.0 candidate archive, then run
+`agentprov demo deepseek-context`. This example is
 not in the older release linked above. Replay is signed, offline and needs no
 DeepSeek account or VM; the six historical capture bundles remain unchanged.
 

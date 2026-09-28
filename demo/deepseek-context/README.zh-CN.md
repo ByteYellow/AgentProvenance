@@ -8,12 +8,14 @@
 
 ## 离线回放
 
-使用当前检出的 v0.9.0 候选版本：
+使用对应的 v0.9.0 候选二进制，在解压目录执行：
 
 ```sh
-go build -o /tmp/agentprov ./cmd/agentprov
-/tmp/agentprov demo deepseek-context
+./agentprov demo deepseek-context
 ```
+
+从源码使用时，先执行 `go build -o agentprov ./cmd/agentprov` 构建二进制。
+已发布的 v0.8.2 压缩包不包含此示例；只有源码构建需要 Go。
 
 回放只读、离线，不需要 DeepSeek 密钥或 Linux VM，也不会执行证据中的命令。
 CLI 先验证原始签名，再导入独立临时目录，完成图完整性检查后打开 Dashboard。
