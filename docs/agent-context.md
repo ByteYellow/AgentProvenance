@@ -85,6 +85,38 @@ directory does not require the original harness or source files. Signing covers
 the exported evidence; coverage and graph verification are separate checks.
 Old bundles without context reports remain `legacy_not_recorded`.
 
+## Dashboard
+
+The execution graph and focused evidence remain above the initially collapsed
+**Agent session** section. The session has three views: **Conversation & tools**,
+**Permissions & configuration**, and **Collection status**. Overview shortcuts
+open the corresponding view. Existing graph controls, signals, outbound data,
+timeline, process tree, network, and compliance sections remain available.
+
+Use **Open saved content** or **Raw source record** to inspect a context entry in
+the independent **Saved content** panel. Body and raw-record selection, 64 KiB
+page reads, and an enlarged view do not require keeping the session expanded.
+The record list loads 30 entries per page; inline bodies preview at most 4 KiB
+with four concurrent reads. Back navigation retains up to 200 page cursors;
+**First page** resets the list without accumulating previous page bodies.
+
+**Locate in graph** follows saved `context_tool_call`/`context_tool_result`
+edges. Graph-to-session lookup also follows saved tool/runtime edges. These
+are navigation relationships, not a new command or time-window inference.
+Missing links explain the gap instead of choosing a similar command in another
+session. Live refresh preserves opened records and content pages. Language
+switches retain the selected view and reading position; browser session storage
+holds navigation IDs/offsets only, not message or tool-output bodies.
+
+Select two task, configuration, or approval records of the same kind to compare
+their recorded values. A missing approval remains **Not recorded**, not denied
+or allowed. The verification badge reports graph integrity; it does not claim
+that collection is complete or that a bundle signature was checked.
+
+Context text uses the chunked content reader. Legacy artifact/file preview and
+export limits have their own integration gate in the delivery checklist; a
+successful context-content test does not establish full artifact portability.
+
 The dashboard and daemon share read-only `/api/context/*` and `/v1/context/*`
 routes. See the [API contract](agent-context-api.yaml) and the
 [delivery checklist](v0.9.0-delivery.md) for implementation and live-test status.

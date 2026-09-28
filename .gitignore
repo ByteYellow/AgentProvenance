@@ -44,3 +44,7 @@ demo/llm-judge/.build/
 
 # Portable release archives.
 /dist/
+
+# Local browser acceptance artifacts.
+/.playwright-cli/
+/output/playwright/

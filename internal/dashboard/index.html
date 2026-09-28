@@ -89,14 +89,6 @@
   .expandbar button{border:1px solid var(--line2);background:#fff;color:var(--tx);border-radius:8px;padding:5px 10px;font-size:11.5px;cursor:pointer}
   .expandbar button:hover{border-color:var(--acc);color:var(--acc);background:rgba(0,113,227,.06)}
   .expandbar button.on{border-color:var(--acc);background:rgba(0,113,227,.1);color:var(--acc);font-weight:650}
-  .preview .meta{font-size:11px;color:var(--mut);font-family:ui-monospace,monospace;margin-bottom:7px;display:flex;gap:9px;flex-wrap:wrap;align-items:center}
-  .preview .redacted{color:#b25e00;background:rgba(255,159,10,.16);font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px}
-  .preview pre{margin:0;max-height:60vh;overflow:auto;background:#1d1d1f;color:#e8e8ed;border-radius:11px;padding:13px 15px;font:11.5px/1.55 ui-monospace,SFMono-Regular,monospace;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:2}
-  .preview pre.diff{white-space:pre}
-  .preview pre.diff .add{color:#41d877}
-  .preview pre.diff .del{color:#ff6b6b}
-  .preview pre.diff .hunk{color:#5ea0ff}
-  .preview .none{color:var(--mut);font-size:12px;padding:8px 0}
   .siglist{padding:8px 12px;max-height:520px;overflow:auto}
   .sig{display:flex;gap:11px;align-items:flex-start;padding:11px;border-radius:11px;transition:background .12s}
   .sig{cursor:pointer}
@@ -304,6 +296,7 @@
   .load-error details{margin-top:8px;font-size:12px}
   .load-error pre{white-space:pre-wrap;overflow-wrap:anywhere}
 </style>
+<link rel="stylesheet" href="/assets/context.css">
 </head>
 <body>
 <header>
@@ -321,14 +314,15 @@
   <details><summary>{{tr .Lang "Technical details"}}</summary><pre id="loaderror-detail"></pre></details>
 </div>
 <main>
-  <section class="card full">
+  <section class="card full" id="runoverview">
     <h2>{{tr .Lang "Run Overview"}} <span class="sub">{{tr .Lang "query first, graph second — raw events stay paged and drillable"}}</span></h2>
     <div id="profilebar" class="profilebar"></div>
     <div id="askgrid" class="askgrid"></div>
-  </section>
-  <section class="card full" id="outboundcard">
-    <h2>{{tr .Lang "Outbound Data Surfaces"}} <span class="sub">{{tr .Lang "where data left (or was blocked from leaving) the box — grouped by channel · owner · data class · decision, generated from evidence"}}</span></h2>
-    <div id="outbound" class="surfaces"></div>
+    <nav class="context-nav" aria-label="{{tr .Lang "Recorded context shortcuts"}}">
+      <button data-context-open="conversation">{{tr .Lang "Agent session"}} <span id="context-nav-count">…</span></button>
+      <button data-context-open="configuration">{{tr .Lang "Permissions & configuration"}} <span id="context-nav-config">…</span></button>
+      <button data-context-open="coverage">{{tr .Lang "Collection status"}} <span id="context-nav-coverage">…</span></button>
+    </nav>
   </section>
   <section class="card hero" id="graphcard">
     <h2>{{tr .Lang "Graph Explorer"}} <span class="sub">{{tr .Lang "canonical graph → lens projection → derived edges"}}</span>
@@ -359,13 +353,56 @@
     <h2>{{tr .Lang "Signals & Risk"}} <span class="sub" id="sigcount"></span></h2>
     <div id="siglist" class="siglist"></div>
   </section>
-  <section class="card full">
+  <section class="card full" id="focusedevidence">
     <h2>{{tr .Lang "Focused Evidence"}} <span class="sub">{{tr .Lang "evidence for the selected risk, graph node, or overview group"}}</span></h2>
     <div id="evhead" class="evidence-head"><span class="hint">{{tr .Lang "select a risk, graph node, or overview group to inspect its evidence"}}</span></div>
     <div style="overflow:auto;max-height:340px"><table id="evtbl"><thead><tr>
       <th>{{tr .Lang "time"}}</th><th>{{tr .Lang "event"}}</th><th>{{tr .Lang "pid"}}</th><th>{{tr .Lang "tool call"}}</th><th>{{tr .Lang "correlation"}}</th><th>{{tr .Lang "payload"}}</th>
     </tr></thead><tbody></tbody></table></div>
     <div id="evpager" class="pager"></div>
+  </section>
+  <section class="card full context-ui" id="savedcontent">
+    <h2>{{tr .Lang "Saved content"}} <span class="sub">{{tr .Lang "recorded files, tool output, and source records"}}</span></h2>
+    <div id="content-empty" class="content-empty">{{tr .Lang "Select a graph node or a session record to inspect saved evidence."}}</div>
+    <div id="content-home">
+      <div id="content-pane" hidden>
+        <div class="content-toolbar">
+          <select id="content-choice" aria-label="{{tr .Lang "Recorded content selection"}}"></select>
+          <button id="content-related" hidden>{{tr .Lang "Locate session records"}}</button>
+          <button id="content-expand" class="content-expand" title="{{tr .Lang "Expand saved content"}}" aria-label="{{tr .Lang "Expand saved content"}}">⤢</button>
+        </div>
+        <div id="content-meta" class="content-meta"></div>
+        <pre id="content-body" class="content-body" tabindex="0"></pre>
+        <div class="context-pager"><button id="content-prev">{{tr .Lang "‹ prev"}}</button><span id="content-page-label"></span><button id="content-next">{{tr .Lang "next ›"}}</button><span id="content-limits"></span></div>
+      </div>
+    </div>
+  </section>
+  <section class="card full context-ui" id="agentcontext">
+    <details id="context-fold">
+      <summary><span>{{tr .Lang "Agent session"}}</span><span id="context-summary" class="context-summary">{{tr .Lang "loading…"}}</span></summary>
+      <div class="context-toolbar">
+        <div class="context-tabs" role="tablist" aria-label="{{tr .Lang "Agent session views"}}">
+          <button id="context-tab-conversation" role="tab" data-context-tab="conversation" aria-selected="true" aria-controls="context-body">{{tr .Lang "Conversation & tools"}}</button>
+          <button id="context-tab-configuration" role="tab" data-context-tab="configuration" aria-selected="false" aria-controls="context-body" tabindex="-1">{{tr .Lang "Permissions & configuration"}}</button>
+          <button id="context-tab-coverage" role="tab" data-context-tab="coverage" aria-selected="false" aria-controls="context-body" tabindex="-1">{{tr .Lang "Collection status"}}</button>
+        </div>
+        <select id="context-source" aria-label="{{tr .Lang "Session source"}}"><option value="">{{tr .Lang "All recorded sessions"}}</option></select>
+        <button id="context-refresh" title="{{tr .Lang "Refresh saved records"}}" aria-label="{{tr .Lang "Refresh saved records"}}">↻</button>
+      </div>
+      <div id="context-linked" class="context-linked" hidden><span id="context-linked-label"></span><button id="context-return">{{tr .Lang "Return to session view"}}</button></div>
+      <div id="context-compare" class="context-compare" hidden>
+        <p id="context-compare-label"></p>
+        <div class="context-actions"><button id="context-compare-run">{{tr .Lang "Compare recorded values"}}</button><button id="context-compare-clear">{{tr .Lang "Clear selection"}}</button></div>
+        <p>{{tr .Lang "Source assertions only. Missing authorization is neither allowed nor denied."}}</p>
+        <div id="context-compare-result" aria-live="polite"></div>
+      </div>
+      <div id="context-body" class="context-body" role="tabpanel" aria-labelledby="context-tab-conversation"></div>
+      <div id="context-pager" class="context-pager"><button id="context-first">{{tr .Lang "First page"}}</button><button id="context-prev">{{tr .Lang "‹ prev"}}</button><span id="context-page-label"></span><button id="context-next">{{tr .Lang "next ›"}}</button></div>
+    </details>
+  </section>
+  <section class="card full" id="outboundcard">
+    <h2>{{tr .Lang "Outbound Data Surfaces"}} <span class="sub">{{tr .Lang "where data left (or was blocked from leaving) the box — grouped by channel · owner · data class · decision, generated from evidence"}}</span></h2>
+    <div id="outbound" class="surfaces"></div>
   </section>
   <section class="card full">
     <h2>{{tr .Lang "Run Timeline"}} <span class="sub">{{tr .Lang "all events in chronological order"}}</span><span id="tlprov" class="provchip"></span></h2>
@@ -394,6 +431,11 @@
     <div id="compdisclaimer" class="compdisclaimer"></div>
   </section>
 </main>
+<dialog id="content-dialog" class="content-dialog context-ui" aria-labelledby="content-dialog-title">
+  <div class="content-dialog-head"><h2 id="content-dialog-title">{{tr .Lang "Saved content"}}</h2><button id="content-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></div>
+  <div id="content-dialog-body"></div>
+</dialog>
+<script src="/assets/context.js"></script>
 <script>
 const {t: tr, locale: LANG} = window.AgentProvI18n;
 function tx(source, values) {
@@ -942,9 +984,10 @@ function showDetail(id){
     `<button data-expand="${mode}" class="${EXPAND_MODE===mode?'on':''}">${esc(tr(mode))}</button>`).join('')+
     `<button data-expand="raw">${esc(tr("raw events"))}</button>`;
   el.innerHTML=`<h3><span style="color:${c}">●</span> ${esc(nodeLabel(n))} ${badges}</h3>`+
-    `<div class="expandbar">${expandButtons}</div>`+
-    `<div class="sec">${esc(tr("Original evidence fields"))}</div><dl>${rows}</dl>`+
-    `<div class="sec">${esc(tr("Preview"))}</div><div id="preview" class="preview"></div>`;
+    `<div class="expandbar">${expandButtons}<button id="detail-session">${esc(tr('Locate session records'))}</button><button id="detail-content">${esc(tr('Saved content'))}</button></div>`+
+    `<div class="sec">${esc(tr("Original evidence fields"))}</div><dl>${rows}</dl>`;
+  $('#detail-session').onclick=()=>window.AgentContextUI.linkedSession(n.id);
+  $('#detail-content').onclick=()=>$('#savedcontent').scrollIntoView({block:'start',behavior:'smooth'});
   el.querySelectorAll('[data-expand]').forEach(btn=>{
     btn.onclick=()=>{
       const mode=btn.getAttribute('data-expand');
@@ -966,35 +1009,7 @@ function showDetail(id){
 // or recorded artifact), bounded + secret-redacted by the server. Answers "what
 // did this node actually produce / contain?" without turning into a file browser.
 async function loadPreview(run, id){
-  const el=$('#preview'); if(!el)return;
-  el.innerHTML=("<div class=\"none\">"+esc(tr("loading…"))+"</div>");
-  let d;
-  try{ d=await j('/api/artifact?run='+encodeURIComponent(run)+'&node='+encodeURIComponent(id)+'&view_lang='+encodeURIComponent(LANG)); }
-  catch(_){ el.innerHTML=("<div class=\"none\">"+esc(tr("preview error"))+"</div>"); return; }
-  if($('#preview')!==el) return; // selection changed while fetching
-  if(!d || d.kind==='unavailable'){ el.innerHTML=`<div class="none">${esc(tx("no content preview — {reason}", {reason: tr((d&&d.reason)||'unavailable')}))}</div>`; return; }
-  let meta='<div class="meta">';
-  if(d.sha256) meta+=`<span>${esc(d.sha256.slice(0,23))}…</span>`;
-  meta+=`<span>${d.size} B</span>`;
-  if(d.mime) meta+=`<span>${esc(d.mime)}</span>`;
-  if(d.source) meta+=`<span>${esc(tr(d.source))}</span>`;
-  if(d.truncated) meta+=("<span style=\"color:#b25e00\">"+esc(tr("truncated"))+"</span>");
-  if(d.redacted) meta+=("<span class=\"redacted\">"+esc(tr("🔒 redacted"))+"</span>");
-  meta+='</div>';
-  if(d.kind==='binary'){ el.innerHTML=meta+`<div class="none">${esc(tr(d.reason||'binary content'))}</div>`; return; }
-  let body;
-  if(d.kind==='diff'){
-    body='<pre class="diff">'+(d.content||'').split('\n').map(l=>{
-      const e=esc(l);
-      if(l.startsWith('+')&&!l.startsWith('+++')) return '<span class="add">'+e+'</span>';
-      if(l.startsWith('-')&&!l.startsWith('---')) return '<span class="del">'+e+'</span>';
-      if(l.startsWith('@@')) return '<span class="hunk">'+e+'</span>';
-      return e;
-    }).join('\n')+'</pre>';
-  } else {
-    body='<pre>'+esc(d.content||'')+'</pre>';
-  }
-  el.innerHTML=meta+body;
+  if(run===cur) await window.AgentContextUI.selectGraph(id);
 }
 
 function renderVerify(v){
@@ -1007,7 +1022,8 @@ function renderVerify(v){
     return;
   }
   const ok=v.status==='ok';el.className='badge '+(ok?'ok':'bad');
-  el.innerHTML=esc(tr(ok?'✓ VERIFIED':'✗ FAILED'))+' <span class="sig">'+esc(counts+' · '+tr('signed graph'))+'</span>';
+  el.innerHTML=esc(tr(ok?'✓ VERIFIED':'✗ FAILED'))+' <span class="sig">'+esc(counts+' · '+tr('graph integrity'))+'</span>';
+  el.title=tr('Graph verification does not imply capture completeness or a bundle signature.');
 }
 
 function renderSignals(sig){
@@ -1606,12 +1622,16 @@ function renderIntentFlow(g){
   el.innerHTML=`<div class="intentflow"><div class="intentsteps">${cards}</div><div class="evidencechips">${chips.join('')}</div></div>`;
   el.onclick=ev=>{const hit=ev.target.closest('[data-id]'); if(hit&&hit.getAttribute('data-id')) selectNode(hit.getAttribute('data-id'));};
 }
+let runRequest=0;
 async function loadRun(run){
+  const request=++runRequest;
   cur=run;
+  window.AgentContextUI.setRun(run);
   const q='run='+encodeURIComponent(run);
   const lq=q+'&lens='+encodeURIComponent(LENS)+'&detail='+encodeURIComponent(DETAIL)+(GRAPH_FOCUS?'&focus='+encodeURIComponent(GRAPH_FOCUS):'')+[...OV].map(o=>'&overlay='+o).join('');
   const overviewQ=q+'&lens=default&detail=summary';
   const [ov,lens,overviewLens,eg,pr,ob]=await Promise.all([j('/api/overview?'+q),j('/api/lens?'+lq),j('/api/lens?'+overviewQ),j('/api/egress?'+q),j('/api/processes?'+q),j('/api/outbound?'+q)]);
+  if(request!==runRequest || cur!==run)return;
   const g=adaptLens(lens);
   if(SEL&&!EV_FILTER){const selected=g.nodes.find(n=>n.id===SEL);if(selected)setEvidenceFilterFromNode(selected);}
   window._lg=g; window._lensManifest=lens;
@@ -1667,6 +1687,7 @@ async function refreshRuns(keep){
 document.querySelectorAll('.language-switch a').forEach(link=>{
   link.addEventListener('click',event=>{
     event.preventDefault();
+    window.AgentContextUI.persist();
     const target=new URL(link.href);
     if(cur)target.searchParams.set('run',cur);
     target.searchParams.set('lens',LENS);
@@ -1681,6 +1702,15 @@ document.querySelectorAll('.language-switch a').forEach(link=>{
     location.assign(target.href);
   });
 });
+
+window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,navigateGraph:async(run,id)=>{
+  if(run!==cur)throw new Error(tr('The selected run changed.'));
+  LENS='default';DETAIL='raw';GRAPH_FOCUS=id;SEL=id;EXPAND_MODE='lineage';EV_FILTER=null;EV_OFFSET=0;
+  $('#lenssel').value=LENS;$('#detailsel').value=DETAIL;stopPlay();
+  await loadRun(run);
+  if(SEL!==id)throw new Error(tr('The recorded node is not available in this graph view.'));
+  $('#graphcard').scrollIntoView({block:'start',behavior:'smooth'});
+}});
 
 (async function(){
   const sel=$('#runsel');

@@ -47,6 +47,12 @@ var indexTemplate = template.Must(template.New("dashboard").Funcs(template.FuncM
 //go:embed theme.css
 var themeCSS []byte
 
+//go:embed context.css
+var contextCSS []byte
+
+//go:embed context.js
+var contextJS []byte
+
 // Server serves the dashboard over a single read-only *sql.DB.
 type Server struct{ DB *sql.DB }
 
@@ -58,6 +64,14 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /assets/theme.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		_, _ = w.Write(themeCSS)
+	})
+	mux.HandleFunc("GET /assets/context.css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		_, _ = w.Write(contextCSS)
+	})
+	mux.HandleFunc("GET /assets/context.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		_, _ = w.Write(contextJS)
 	})
 	mux.HandleFunc("GET /api/runs", s.runs)
 	mux.HandleFunc("GET /api/overview", s.overview)
