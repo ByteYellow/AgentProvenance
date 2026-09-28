@@ -71,6 +71,7 @@ window.AgentContextUI = (() => {
     $('context-compare-clear').onclick = () => { state.compare = []; renderCompare(); renderList(); };
     $('context-compare-run').onclick = compare;
     document.querySelectorAll('[data-context-open]').forEach(button => button.onclick = () => open(button.dataset.contextOpen));
+    $('context-nav-files').onclick = () => scrollRegion('savedcontent');
   }
   function readingState() {
     if (!state) return null;
@@ -186,6 +187,7 @@ window.AgentContextUI = (() => {
       if (coverageChanged) $('context-source').innerHTML = `<option value="">${e(t('All recorded sessions'))}</option>` + reports.filter(c => c.source?.id).map(c => `<option value="${e(c.source.id)}">${e(c.source.harness)} · ${e(c.source.session_id || c.source.id)}</option>`).join('');
       syncControls();
       $('context-nav-count').textContent = unknown(value.messages);
+      $('context-nav-tools').textContent = unknown(value.tool_calls);
       $('context-nav-config').textContent = unknown(value.snapshots);
       $('context-nav-coverage').textContent = [hints.join(' / '),value.runtime_coverage ? t('Runtime capture')+': '+t(statusNames[value.runtime_coverage.capture.status] || value.runtime_coverage.capture.status) : ''].filter(Boolean).join(' · ');
       if (state.tab === 'coverage' && state.open && coverageChanged) {

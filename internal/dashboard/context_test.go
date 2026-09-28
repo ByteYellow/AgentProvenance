@@ -56,7 +56,7 @@ func TestContextDashboardLayoutAndAssets(t *testing.T) {
 		if !strings.Contains(body, `<details id="context-fold">`) {
 			t.Fatal("agent session must start collapsed")
 		}
-		for _, id := range []string{"playbtn", "lenssel", "detailsel", "evtbl", "siglist", "tl", "ptree", "egtbl", "content-dialog"} {
+		for _, id := range []string{"playbtn", "lenssel", "detailsel", "evtbl", "siglist", "tl", "ptree", "egtbl", "content-dialog", "context-nav-count", "context-nav-tools", "context-nav-files", "context-nav-config", "context-nav-coverage"} {
 			if !strings.Contains(body, `id="`+id+`"`) {
 				t.Fatalf("existing component missing: %s", id)
 			}

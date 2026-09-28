@@ -319,7 +319,9 @@
     <div id="profilebar" class="profilebar"></div>
     <div id="askgrid" class="askgrid"></div>
     <nav class="context-nav" aria-label="{{tr .Lang "Recorded context shortcuts"}}">
-      <button data-context-open="conversation">{{tr .Lang "Agent session"}} <span id="context-nav-count">…</span></button>
+      <button data-context-open="conversation">{{tr .Lang "Task & conversation"}} <span id="context-nav-count">…</span></button>
+      <button data-context-open="conversation">{{tr .Lang "Tool calls"}} <span id="context-nav-tools">…</span></button>
+      <button id="context-nav-files">{{tr .Lang "File evidence"}}</button>
       <button data-context-open="configuration">{{tr .Lang "Permissions & configuration"}} <span id="context-nav-config">…</span></button>
       <button data-context-open="coverage">{{tr .Lang "Collection status"}} <span id="context-nav-coverage">…</span></button>
     </nav>

@@ -53,7 +53,7 @@ async (page) => {
     if (value.content.includes('Ran 7 tests') && value.content.includes('OK')) { result = entry; break; }
   }
   check(Boolean(result), 'real unit-test result found in saved evidence');
-  await page.getByRole('button',{name:'Agent session 13',exact:true}).click();
+  await page.getByRole('button',{name:'Task & conversation 13',exact:true}).click();
   await page.waitForSelector('#context-body [data-entry]');
   const selected = () => page.locator('#context-body [data-entry="'+result.id+'"]');
   for (let i=0; i<4 && !await selected().count(); i++) {

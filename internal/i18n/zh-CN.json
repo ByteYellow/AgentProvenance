@@ -2474,6 +2474,9 @@
   "Plan mode": "计划模式",
   "Request configuration": "请求配置",
   "Request context": "请求上下文",
+  "Task & conversation": "任务与对话",
+  "Tool calls": "工具调用",
+  "File evidence": "文件证据",
   "Completeness of configuration change history": "配置变更历史的完整性",
   "Configuration snapshots show recorded changes only; completeness of the change history is unknown.": "配置快照仅展示来源已记录的变化，无法确认变更历史是否完整。"
 }
