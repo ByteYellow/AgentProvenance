@@ -35,6 +35,7 @@ type ParseOptions struct {
 	// Earlier records are retained as prior context, never current execution.
 	AfterLine int64
 	Cursor    *SourceCursor
+	Budget    *ParseBudget
 }
 
 type Parsed struct {
@@ -56,6 +57,8 @@ type parser struct {
 	identityConflict bool
 	unsupported      bool
 	known            int64
+	recordsCreated   int
+	budgetLimited    bool
 }
 
 // Parse reads a bounded physical transcript without consulting current agent
@@ -70,6 +73,12 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 	if opts.AfterLine < 0 {
 		return Parsed{}, fmt.Errorf("invalid source cursor")
 	}
+	if opts.Budget != nil {
+		if opts.Budget.InputBytes < 0 || opts.Budget.Records < 0 {
+			return Parsed{}, fmt.Errorf("invalid capture budget")
+		}
+		r = captureBudgetReader{r: r, budget: opts.Budget}
+	}
 	var prefix *prefixReader
 	if opts.Cursor != nil {
 		if !opts.Cursor.Valid || opts.Cursor.Bytes < 0 || opts.Cursor.Bytes > MaxInputBytes || opts.Cursor.Lines != opts.AfterLine {
@@ -79,6 +88,9 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		r = prefix
 	}
 	p := parser{opts: opts, callNames: map[string]string{}, startedCalls: map[string]bool{}}
+	if opts.Budget != nil {
+		defer func() { opts.Budget.Records -= p.recordsCreated }()
+	}
 	p.Source = Source{Harness: opts.Harness, Path: opts.Path, SessionID: opts.SessionID,
 		Channel:         "transcript",
 		ParentSessionID: opts.ParentSessionID, AgentID: opts.AgentID, ParserVersion: ParserVersion,
@@ -95,7 +107,15 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		if err := ctx.Err(); err != nil {
 			return Parsed{}, err
 		}
+		if p.recordLimit() == 0 {
+			p.truncateInput(p.recordLimitCode())
+			break
+		}
 		line, ended, err := readLine(reader)
+		if errors.Is(err, errCaptureInputBudget) {
+			p.truncateInput("capture_input_budget")
+			break
+		}
 		if limited.N == 0 {
 			p.issue("input_size_limit", "input")
 			*p.counts().Truncated++
@@ -159,7 +179,7 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 			for i := start; i < len(p.Records); i++ {
 				p.Records[i].RawBody = &rawBody
 			}
-			return !p.unsupported && len(p.Records) < MaxRecords
+			return !p.unsupported && len(p.Records) < p.recordLimit()
 		})
 		if p.known > knownBefore {
 			*p.counts().Parsed++
@@ -176,9 +196,8 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		if p.unsupported {
 			break
 		}
-		if len(p.Records) >= MaxRecords {
-			p.issue("record_count_limit", "input")
-			*p.counts().Truncated++
+		if len(p.Records) >= p.recordLimit() {
+			p.truncateInput(p.recordLimitCode())
 			break
 		}
 		if err != nil {
@@ -198,6 +217,12 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 	} else if p.unsupported {
 		p.Records = nil
 		p.Coverage.Status = Failed
+	} else if p.budgetLimited {
+		p.Coverage.Status = Partial
+		if p.Source.SessionID == "" {
+			p.Records = nil
+			p.Coverage.Counts.Matched = Number(0)
+		}
 	} else if p.Source.SessionID == "" {
 		p.Records = nil
 		p.Coverage.Status = Ambiguous
@@ -216,15 +241,21 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 	}
 	if p.line < opts.AfterLine {
 		p.Records = nil
-		p.Coverage.Status = Failed
-		p.issue("source_cursor_out_of_range", "after_line")
+		if !p.budgetLimited {
+			p.Coverage.Status = Failed
+			p.issue("source_cursor_out_of_range", "after_line")
+		}
 	}
 	if prefix != nil && !prefix.matches(*opts.Cursor) {
 		p.Records = nil
 		p.Source.Binding = "ambiguous"
 		p.Coverage.Status = Ambiguous
 		p.Coverage.Counts.Matched = Number(0)
-		p.issue("source_changed_before_resume", "cursor")
+		if p.budgetLimited && prefix.remaining > 0 {
+			p.issue("resume_checkpoint_unverified", "cursor")
+		} else {
+			p.issue("source_changed_before_resume", "cursor")
+		}
 	}
 	if p.Coverage.Status == OK || p.Coverage.Status == Empty {
 		p.Coverage.LastSuccessAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -352,11 +383,8 @@ func (p *parser) counts() *Counts {
 }
 
 func (p *parser) add(kind, key, role, callID, name, status, timestamp string, body json.RawMessage) {
-	if len(p.Records) >= MaxRecords {
-		if len(p.Records) == MaxRecords && *p.counts().Truncated == 0 {
-			p.issue("record_count_limit", "input")
-			*p.counts().Truncated++
-		}
+	if len(p.Records) >= p.recordLimit() {
+		p.truncateInput(p.recordLimitCode())
 		return
 	}
 	if key == "" {
@@ -394,6 +422,7 @@ func (p *parser) add(kind, key, role, callID, name, status, timestamp string, bo
 		p.issue("tool_identity_missing", "tool_call_id")
 	}
 	p.Records = append(p.Records, r)
+	p.recordsCreated++
 }
 
 func obj(raw json.RawMessage) row { var o row; _ = json.Unmarshal(raw, &o); return o }

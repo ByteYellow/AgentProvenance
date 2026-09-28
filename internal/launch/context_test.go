@@ -193,6 +193,57 @@ func TestCaptureClaudeHookAnchorAndChild(t *testing.T) {
 	}
 }
 
+func TestCaptureSharesHookAndTranscriptBudget(t *testing.T) {
+	for _, code := range []string{"capture_input_budget", "capture_record_budget"} {
+		t.Run(code, func(t *testing.T) {
+			ctx, svc := context.Background(), contextService(t)
+			dir, workdir := t.TempDir(), t.TempDir()
+			c, err := prepareContext(ctx, Options{ContextDir: dir, Workdir: workdir}, detectRecipe([]string{"claude"}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			mainPath := filepath.Join(dir, "session.jsonl")
+			entry, err := json.Marshal(map[string]any{"type": "user", "sessionId": "s", "cwd": workdir,
+				"timestamp": time.Now().Format(time.RFC3339Nano), "message": map[string]any{"role": "user", "content": "task"}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeFixture(t, mainPath, string(entry)+"\n")
+			hook, err := json.Marshal(map[string]any{"session_id": "s", "hook_event_name": "SessionStart", "transcript_path": mainPath})
+			if err != nil {
+				t.Fatal(err)
+			}
+			hookPath := filepath.Join(t.TempDir(), "hook.jsonl")
+			writeFixture(t, hookPath, string(hook)+"\n")
+			budget := &agentcontext.ParseBudget{InputBytes: 1 << 20, Records: 100}
+			if code == "capture_input_budget" {
+				budget.InputBytes = int64(len(hook) + 1)
+			} else {
+				budget.Records = 1
+			}
+			o, err := c.finishWithBudget(ctx, svc, "run", hookPath, time.Now().Add(-time.Second), time.Now(), budget)
+			if err != nil {
+				t.Fatal(err)
+			}
+			report := sourceReport(t, o, "discovery")
+			if report.Status != agentcontext.Partial || *report.Counts.Discovered != 1 || *report.Counts.Matched != 0 {
+				t.Fatalf("transcript reused exhausted hook budget: %+v", report)
+			}
+			found := false
+			for _, issue := range report.Issues {
+				found = found || issue.Code == code
+			}
+			if !found {
+				t.Fatalf("skipped transcript has no budget reason: %+v", report)
+			}
+			page, err := svc.Entries(ctx, agentcontext.PageOptions{RunID: "run"})
+			if err != nil || len(page.Entries) != 1 || page.Entries[0].Source.Channel != "hooks" {
+				t.Fatalf("unexpected capture after budget exhaustion: %+v %v", page, err)
+			}
+		})
+	}
+}
+
 func TestContextOptionsAndDefaultLocations(t *testing.T) {
 	for env, harness := range map[string]string{"CODEX_HOME": "codex", "CLAUDE_CONFIG_DIR": "claude", "DSH_HOME": "deepseek"} {
 		dir := t.TempDir()

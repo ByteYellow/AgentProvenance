@@ -159,9 +159,15 @@ follow `next_offset` rather than computing a character offset.
 Coverage is source-scoped: `disabled`, `no_input`, `empty`, `ok`, `partial`,
 `failed`, `ambiguous`, or `legacy_not_recorded`. Null counts are unknown, not
 zero. Reports distinguish parser failures, unrecognized records, deferred tails,
-limits and duplicate imports. Launch processes at most 128 selected sources,
-with a partial report when the limit is reached. Graph projections have separate
-bounded budgets and persist processing failures.
+limits and duplicate imports. Launch processes at most 128 selected transcript
+sources. Its hook log and selected transcripts share a 256 MiB decompressed-input
+budget and a 25,000 normalized-record budget; rejected and duplicate input still
+consume those budgets. Per-source limits remain 128 MiB and 25,000 records.
+Exhaustion is reported as partial coverage, never as a complete empty capture;
+an incomplete resume checkpoint is not reported as a changed source. A source
+ending exactly at the input budget can conservatively report exhaustion because
+the parser cannot read beyond the budget to confirm EOF. Discovery and graph
+projection have separate bounded budgets and persist their own diagnostics.
 
 For resumed sessions, each entry carries `execution_scope`. The overview's
 record totals include retained history; source reports put historical counts,
@@ -177,6 +183,11 @@ coverage, configuration history, and chunked content. Import into another data
 directory does not require the original harness or source files. Signing covers
 the exported evidence; coverage and graph verification are separate checks.
 Old bundles without context reports remain `legacy_not_recorded`.
+
+New peer-message bodies larger than 64 KiB use the same chunked storage. The
+graph retains one message node; its full saved body remains available to the
+Dashboard and intent analysis after offline import. Existing inline messages
+and the six historical signed demo bundles are not rewritten.
 
 New exports also include full `telemetry_batch_records`, preserving ordered
 event IDs and their hashes so the existing batch verifier still runs after

@@ -17,7 +17,10 @@ import (
 )
 
 // Leave room for discovery/hooks/processing reports in the bounded overview.
-const maxContextSources = 128
+const (
+	maxContextSources    = 128
+	maxContextInputBytes = 256 << 20
+)
 
 func saveRuntimeCorrelation(db *sql.DB, paths store.Paths, runID string, report *Report) error {
 	r := report.RuntimeCorrelation
@@ -164,6 +167,12 @@ func contextRoot(harness string) string {
 // Hook paths can refine an inventory; they cannot retroactively supply the
 // pre-execution prefix of a transcript outside that inventory.
 func (c contextCapture) finish(ctx context.Context, svc agentcontext.Service, runID, hookPath string, start, end time.Time) (agentcontext.Overview, error) {
+	return c.finishWithBudget(ctx, svc, runID, hookPath, start, end, &agentcontext.ParseBudget{
+		InputBytes: maxContextInputBytes, Records: agentcontext.MaxRecords,
+	})
+}
+
+func (c contextCapture) finishWithBudget(ctx context.Context, svc agentcontext.Service, runID, hookPath string, start, end time.Time, budget *agentcontext.ParseBudget) (agentcontext.Overview, error) {
 	discovery := agentcontext.Coverage{Status: agentcontext.Disabled,
 		StartedAt: start.UTC().Format(time.RFC3339Nano), EndedAt: end.UTC().Format(time.RFC3339Nano)}
 	src := agentcontext.Source{Harness: c.harness, Channel: "discovery", Path: c.root,
@@ -189,7 +198,7 @@ func (c contextCapture) finish(ctx context.Context, svc agentcontext.Service, ru
 		file, openErr := os.Open(hookPath)
 		if openErr == nil {
 			parsed, parseErr := agentcontext.Parse(ctx, file, agentcontext.ParseOptions{Harness: "claude", Path: hookPath,
-				SessionID: c.session, Binding: "exact", BindingEvidence: []string{"run_owned_hook_log"}})
+				SessionID: c.session, Binding: "exact", BindingEvidence: []string{"run_owned_hook_log"}, Budget: budget})
 			file.Close()
 			if parseErr != nil {
 				return agentcontext.Overview{}, parseErr
@@ -298,8 +307,19 @@ func (c contextCapture) finish(ctx context.Context, svc agentcontext.Service, ru
 			selection.Issues = append(selection.Issues, agentcontext.Issue{Code: "selected_source_limit"})
 			break
 		}
+		if budget.InputBytes == 0 || budget.Records == 0 {
+			code := "capture_input_budget"
+			if budget.Records == 0 {
+				code = "capture_record_budget"
+			}
+			selection.Status = agentcontext.Partial
+			selection.Issues = append(selection.Issues, agentcontext.Issue{Code: code})
+			break
+		}
 		seen[selected.Path] = true
-		if _, err := svc.ImportFile(ctx, runID, selected.ParseOptions(c.harness)); err != nil {
+		opts := selected.ParseOptions(c.harness)
+		opts.Budget = budget
+		if _, err := svc.ImportFile(ctx, runID, opts); err != nil {
 			return agentcontext.Overview{}, err
 		}
 	}
