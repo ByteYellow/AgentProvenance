@@ -2239,5 +2239,16 @@
   "source filter": "来源过滤条件",
   "native tool call id filter": "原生工具调用 ID 过滤条件",
   "--file and --harness are required": "必须指定 --file 和 --harness",
-  "--ref is required": "必须指定 --ref"
+  "--ref is required": "必须指定 --ref",
+  "native session directory; overrides the harness default": "原生会话目录，覆盖该 Agent 的默认位置",
+  "exact native transcript file, including a resumed session": "指定原生会话日志文件，可用于恢复会话",
+  "native session identity to capture; required for unambiguous resume": "要采集的原生会话 ID，用于明确绑定恢复会话",
+  "context format for a wrapper command: claude, codex, deepseek, kimi, or grok": "包装命令的上下文格式：claude、codex、deepseek、kimi 或 grok",
+  "disable agent context capture and hook injection": "关闭 Agent 上下文采集和 hook 注入",
+  "post-run capture of DeepSeek Harness session records": "执行结束后采集 DeepSeek Harness 会话记录",
+  "launch: agent context: %v\n": "launch：采集 Agent 上下文失败：%v\n",
+  "native %s session records; selection and coverage reported after exit": "读取原生 %s 会话记录，退出后报告绑定和采集情况",
+  "agent context disabled via --no-context": "已通过 --no-context 关闭 Agent 上下文采集",
+  "launch: hooks injection skipped: %v (native transcript capture remains enabled)\n": "launch：未能注入钩子：%v；仍将尝试采集原生会话日志\n",
+  "hooks unavailable; native %s session records will be checked after exit": "钩子不可用，退出后仍将检查原生 %s 会话记录"
 }

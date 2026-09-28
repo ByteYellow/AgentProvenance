@@ -17,11 +17,12 @@ func TestDetectRecipe(t *testing.T) {
 		inject  bool
 		harness string
 	}{
-		{"claude", "hooks(claude-code)", true, ""},
-		{"/usr/local/bin/claude", "hooks(claude-code)", true, ""},
-		{"claude-code", "hooks(claude-code)", true, ""},
+		{"claude", "hooks(claude-code)", true, "claude"},
+		{"/usr/local/bin/claude", "hooks(claude-code)", true, "claude"},
+		{"claude-code", "hooks(claude-code)", true, "claude"},
 		{"codex", "transcript(codex)", false, "codex"},
 		{"/opt/homebrew/bin/kimi", "transcript(kimi)", false, "kimi"},
+		{"dsh", "transcript(deepseek)", false, "deepseek"},
 		{"python3", "record", false, ""},
 	}
 	for _, c := range cases {
@@ -34,9 +35,6 @@ func TestDetectRecipe(t *testing.T) {
 		}
 		if r.harness != c.harness {
 			t.Errorf("%s: harness=%q want %q", c.argv0, r.harness, c.harness)
-		}
-		if c.harness != "" && r.findTranscript == nil {
-			t.Errorf("%s: findTranscript should be set", c.argv0)
 		}
 	}
 }

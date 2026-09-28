@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,7 +42,9 @@ type Request struct {
 	// otherwise copy the entire working tree (node_modules, build output, ...) on
 	// every run, dominating startup and disk. On Linux the kernel sensor's
 	// file_write events already capture what changed at higher fidelity.
-	DisableSnapshot bool `json:"disable_snapshot"`
+	DisableSnapshot bool      `json:"disable_snapshot"`
+	Stdout          io.Writer `json:"-"`
+	Stderr          io.Writer `json:"-"`
 }
 
 type Result struct {
@@ -198,6 +201,12 @@ func (s Service) Run(req Request) (Result, error) {
 	cmd.Dir = absWorkdir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if req.Stdout != nil {
+		cmd.Stdout = req.Stdout
+	}
+	if req.Stderr != nil {
+		cmd.Stderr = req.Stderr
+	}
 	cmd.Stdin = os.Stdin
 	// Place the child (and, by inheritance, its whole subtree) into a dedicated
 	// cgroup so independent kernel telemetry auto-joins to this scope by

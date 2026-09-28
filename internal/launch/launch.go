@@ -17,8 +17,8 @@ package launch
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -30,6 +30,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/dashboard"
 	"github.com/byteyellow/agentprovenance/internal/forensics"
 	"github.com/byteyellow/agentprovenance/internal/hooksbridge"
@@ -61,6 +62,11 @@ type Options struct {
 	FileDiff         bool        // capture the working-tree file diff (off by default; expensive in big repos)
 	SelfExe          string      // absolute path to this agentprov binary (for the sensor subprocess + hook commands)
 	JSON             bool        // caller will emit the machine report on Stdout: keep Stdout pure JSON and don't block on the dashboard
+	ContextDir       string
+	ContextFile      string
+	ContextSession   string
+	ContextHarness   string
+	NoContext        bool
 
 	Stdout io.Writer
 	Stderr io.Writer
@@ -70,86 +76,27 @@ type Options struct {
 type Report struct {
 	appDetail          message
 	sysReason          message
-	RunID              string `json:"run_id"`
-	ExitCode           int    `json:"exit_code"`
-	Status             string `json:"status"`
-	AppTier            string `json:"app_tier"`
-	AppDetail          string `json:"app_detail,omitempty"`
-	SysTier            string `json:"sys_tier"`
-	SysDegradeReason   string `json:"sys_degrade_reason,omitempty"`
-	Events             int    `json:"events"`
-	HighRisk           int    `json:"high_risk"`
-	Signals            int    `json:"signals"`
-	Verdict            string `json:"verdict"`
-	BundlePath         string `json:"bundle_path,omitempty"`
-	Signed             bool   `json:"signed"`
-	AttestationPath    string `json:"attestation_path,omitempty"`
-	DashboardURL       string `json:"dashboard_url,omitempty"`
-	HooksIngested      int    `json:"hooks_ingested"`
-	IntentMismatches   int    `json:"intent_mismatches"`
-	IntentCoverageGaps int    `json:"intent_coverage_gaps"`
-	TranscriptTurns    int    `json:"transcript_turns"`
-}
-
-// transcriptPathFromHookLog returns the first transcript_path found in a run's
-// hook log. Every Claude Code hook event carries it; it is stable across a
-// session, so the first non-empty value is the session transcript.
-func transcriptPathFromHookLog(hookLogPath string) string {
-	if hookLogPath == "" {
-		return ""
-	}
-	f, err := os.Open(hookLogPath)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
-	for sc.Scan() {
-		var ev struct {
-			TranscriptPath string `json:"transcript_path"`
-		}
-		if json.Unmarshal(sc.Bytes(), &ev) == nil && ev.TranscriptPath != "" {
-			return ev.TranscriptPath
-		}
-	}
-	return ""
-}
-
-// subAgentTranscriptsFromHookLog collects each sub-agent's own transcript from a
-// run's hook log. Claude Code's SubagentStart/Stop events carry agent_id +
-// agent_transcript_path pointing at the delegate's session file (where its real
-// Bash decisions live). Deduplicated by path and with the main transcript
-// excluded, so the orchestrator is never re-harvested as a delegate.
-func subAgentTranscriptsFromHookLog(hookLogPath, mainPath string) []provenance.AgentTranscript {
-	if hookLogPath == "" {
-		return nil
-	}
-	f, err := os.Open(hookLogPath)
-	if err != nil {
-		return nil
-	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
-	seen := map[string]bool{}
-	var out []provenance.AgentTranscript
-	for sc.Scan() {
-		var ev struct {
-			AgentID             string `json:"agent_id"`
-			AgentTranscriptPath string `json:"agent_transcript_path"`
-		}
-		if json.Unmarshal(sc.Bytes(), &ev) != nil {
-			continue
-		}
-		p := ev.AgentTranscriptPath
-		if p == "" || p == mainPath || seen[p] {
-			continue
-		}
-		seen[p] = true
-		out = append(out, provenance.AgentTranscript{AgentID: ev.AgentID, Path: p})
-	}
-	return out
+	RunID              string                 `json:"run_id"`
+	ExitCode           int                    `json:"exit_code"`
+	Status             string                 `json:"status"`
+	AppTier            string                 `json:"app_tier"`
+	AppDetail          string                 `json:"app_detail,omitempty"`
+	SysTier            string                 `json:"sys_tier"`
+	SysDegradeReason   string                 `json:"sys_degrade_reason,omitempty"`
+	Events             int                    `json:"events"`
+	HighRisk           int                    `json:"high_risk"`
+	Signals            int                    `json:"signals"`
+	Verdict            string                 `json:"verdict"`
+	BundlePath         string                 `json:"bundle_path,omitempty"`
+	Signed             bool                   `json:"signed"`
+	AttestationPath    string                 `json:"attestation_path,omitempty"`
+	DashboardURL       string                 `json:"dashboard_url,omitempty"`
+	HooksIngested      int                    `json:"hooks_ingested"`
+	IntentMismatches   int                    `json:"intent_mismatches"`
+	IntentCoverageGaps int                    `json:"intent_coverage_gaps"`
+	TranscriptTurns    int                    `json:"transcript_turns"`
+	AgentContext       *agentcontext.Overview `json:"agent_context,omitempty"`
+	ContextIssues      []string               `json:"context_issues,omitempty"`
 }
 
 // Run executes the full launch lifecycle and returns its Report. The returned
@@ -189,23 +136,37 @@ func Run(opts Options) (Report, error) {
 	runID := ids.New("run")
 	report := Report{RunID: runID, Verdict: "UNKNOWN"}
 
-	// --- Application-side recipe: how (if at all) we can observe this agent's
-	// intent without instrumenting it. Recognized harnesses get a per-run hooks
-	// overlay; anything else runs record-only (execution scope + process tree).
+	// Recognized harnesses use their native logs; Claude also gets run-owned
+	// hooks. Explicit source options support wrappers without guessing a format.
 	recipe := detectRecipe(opts.Command)
+	capture, err := prepareContext(context.Background(), opts, recipe)
+	if err != nil {
+		return report, err
+	}
 	report.AppTier = recipe.tier
 	report.AppDetail = recipe.detail
 	report.appDetail = recipe.detailText
+	if opts.ContextHarness != "" && opts.ContextHarness != recipe.harness {
+		report.AppTier = "transcript(" + capture.harness + ")"
+		report.appDetail = messagef("native %s session records; selection and coverage reported after exit", capture.harness)
+	}
+	if capture.disabled {
+		report.AppTier = "record"
+		if opts.NoContext {
+			report.appDetail = messagef("agent context disabled via --no-context")
+		}
+	}
+	report.AppDetail = report.appDetail.original()
 	hookLogPath := ""
 	var cleanupInjection func()
 	command := opts.Command
-	if recipe.injectHooks {
+	if recipe.injectHooks && !opts.NoContext && recipe.harness == capture.harness {
 		hookLogPath = paths.Logs + string(os.PathSeparator) + "launch-" + runID + "-hooks.jsonl"
 		injected, cleanup, ierr := recipe.inject(command, opts.SelfExe, hookLogPath, paths)
 		if ierr != nil {
-			fmt.Fprintf(opts.Stderr, i18n.T(lang, "launch: hooks injection skipped: %v (app-side degrades to record-only)\n"), i18n.ErrorText(lang, ierr))
-			report.AppTier = "record"
-			report.appDetail = messagef("hooks injection failed: %s", ierr)
+			fmt.Fprintf(opts.Stderr, i18n.T(lang, "launch: hooks injection skipped: %v (native transcript capture remains enabled)\n"), i18n.ErrorText(lang, ierr))
+			report.AppTier = "transcript(" + capture.harness + ")"
+			report.appDetail = messagef("hooks unavailable; native %s session records will be checked after exit", capture.harness)
 			report.AppDetail = report.appDetail.original()
 			hookLogPath = ""
 		} else {
@@ -279,12 +240,18 @@ func Run(opts Options) (Report, error) {
 	// --- Exec the agent in a dedicated cgroup (kernel telemetry auto-joins by
 	// cgroup_id). record.Run blocks until the agent exits.
 	agentStart := time.Now()
+	agentOutput := opts.Stdout
+	if opts.JSON {
+		agentOutput = opts.Stderr
+	}
 	result, rerr := (record.Service{DB: db, Paths: paths}).Run(record.Request{
 		RunID:           runID,
 		Name:            "launch",
 		Workdir:         opts.Workdir,
 		Command:         command,
 		DisableSnapshot: !opts.FileDiff,
+		Stdout:          agentOutput,
+		Stderr:          opts.Stderr,
 	})
 	if rerr != nil {
 		return report, i18n.Errorf("launch: exec agent: %w", rerr)
@@ -292,15 +259,13 @@ func Run(opts Options) (Report, error) {
 	report.ExitCode = result.ExitCode
 	report.Status = result.Status
 
-	// A transcript-recipe harness (codex/kimi) wrote its own session record during
-	// the run; locate it now (after exit) to bridge in seal.
-	transcriptHarness, transcriptPath := "", ""
-	if recipe.harness != "" && recipe.findTranscript != nil {
-		if p := recipe.findTranscript(agentStart); p != "" {
-			transcriptHarness, transcriptPath = recipe.harness, p
-		} else {
-			fmt.Fprintf(opts.Stderr, i18n.T(lang, "launch: no %s session record found for this run (app-side degrades to record-only)\n"), recipe.harness)
-		}
+	// Select source-owned identities and verified ranges after the agent exits.
+	ctxOverview, ctxErr := capture.finish(context.Background(), agentcontext.Service{DB: db, Paths: paths}, runID, hookLogPath, agentStart, time.Now())
+	if ctxErr != nil {
+		fmt.Fprintf(opts.Stderr, i18n.T(lang, "launch: agent context: %v\n"), i18n.ErrorText(lang, ctxErr))
+		contextProblem(db, paths, runID, "context_capture_failed", &report, opts.Stderr)
+	} else {
+		report.AgentContext = &ctxOverview
 	}
 
 	// Stop the sensor before sealing so its final correlated events are flushed.
@@ -310,7 +275,7 @@ func Run(opts Options) (Report, error) {
 	}
 
 	// --- Seal: fold every source into the graph, apply policy, summarize, sign.
-	seal(db, paths, runID, hookLogPath, transcriptHarness, transcriptPath, opts.SignKeyPath, &report, opts.Stderr, lang)
+	seal(db, paths, runID, opts.SignKeyPath, &report, opts.Stderr, lang)
 
 	// Under --json the caller writes the machine report to Stdout, so every
 	// human-facing line here must go to Stderr or Stdout would not parse.
@@ -335,34 +300,18 @@ func Run(opts Options) (Report, error) {
 // evidence graph and fills the risk/bundle fields of report. Best-effort: a
 // failure in any stage is reported to stderr but does not abort the others, so
 // the operator always gets whatever evidence was capturable.
-func seal(db *sql.DB, paths store.Paths, runID, hookLogPath, transcriptHarness, transcriptPath, signKeyPath string, report *Report, stderr io.Writer, lang i18n.Locale) {
-	// App-side intent comes from EITHER an injected hook log (Claude Code) or a
-	// harness's own session transcript (codex/kimi), normalized to the same hook
-	// events. Both then command-match to the kernel via CorrelateSyscalls.
-	var appReader io.Reader
-	if hookLogPath != "" {
-		if f, err := os.Open(hookLogPath); err == nil {
-			defer f.Close()
-			appReader = f
-		}
-	} else if transcriptHarness != "" && transcriptPath != "" {
-		if r, err := hooksbridge.BridgeTranscript(transcriptHarness, transcriptPath); err != nil {
-			fmt.Fprintf(stderr, i18n.T(lang, "launch: bridge %s transcript: %v\n"), transcriptHarness, i18n.ErrorText(lang, err))
-		} else {
-			appReader = r
-		}
-	}
-	if appReader != nil {
-		sum, ierr := hooksbridge.Ingest(db, appReader, hooksbridge.Options{
-			RunID:   runID,
-			Objects: provenance.ObjectStore{DB: db, Paths: paths},
-		})
-		if ierr != nil {
-			fmt.Fprintf(stderr, i18n.T(lang, "launch: app-context ingest: %v\n"), i18n.ErrorText(lang, ierr))
+func seal(db *sql.DB, paths store.Paths, runID, signKeyPath string, report *Report, stderr io.Writer, lang i18n.Locale) {
+	// Graph projections consume only the immutable, run-selected source range.
+	if report.AgentContext != nil {
+		sum, err := hooksbridge.IngestContext(context.Background(), db, paths, runID)
+		if err != nil {
+			fmt.Fprintf(stderr, i18n.T(lang, "launch: app-context ingest: %v\n"), i18n.ErrorText(lang, err))
+			contextProblem(db, paths, runID, "context_graph_projection_failed", report, stderr)
 		} else {
 			report.HooksIngested = sum.ToolCalls
-			if _, cerr := hooksbridge.CorrelateSyscalls(db, runID); cerr != nil {
-				fmt.Fprintf(stderr, i18n.T(lang, "launch: syscall correlation: %v\n"), i18n.ErrorText(lang, cerr))
+			if _, err := hooksbridge.CorrelateSyscalls(db, runID); err != nil {
+				fmt.Fprintf(stderr, i18n.T(lang, "launch: syscall correlation: %v\n"), i18n.ErrorText(lang, err))
+				contextProblem(db, paths, runID, "context_runtime_correlation_failed", report, stderr)
 			}
 		}
 	}
@@ -374,14 +323,10 @@ func seal(db *sql.DB, paths store.Paths, runID, hookLogPath, transcriptHarness, 
 	if _, err := provenance.MaterializeLLMCalls(provenance.ObjectStore{DB: db, Paths: paths}, db, runID); err != nil {
 		fmt.Fprintf(stderr, i18n.T(lang, "launch: materialize llm: %v\n"), i18n.ErrorText(lang, err))
 	}
-	if tp := transcriptPathFromHookLog(hookLogPath); tp != "" {
-		// Also harvest each sub-agent's own transcript: a command a delegate
-		// decided lives there, not in the main session transcript, so without
-		// this the delegate's decision never becomes an llm_call and can never
-		// carry an llm_caused edge to the syscall it ran.
-		subs := subAgentTranscriptsFromHookLog(hookLogPath, tp)
-		if turns, err := provenance.HarvestTranscriptSet(provenance.ObjectStore{DB: db, Paths: paths}, db, runID, tp, subs); err != nil {
+	if report.AgentContext != nil {
+		if turns, err := hooksbridge.HarvestContextIntent(context.Background(), db, paths, runID); err != nil {
 			fmt.Fprintf(stderr, i18n.T(lang, "launch: harvest transcript: %v\n"), i18n.ErrorText(lang, err))
+			contextProblem(db, paths, runID, "context_intent_projection_failed", report, stderr)
 		} else {
 			report.TranscriptTurns = turns
 		}

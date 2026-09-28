@@ -19,13 +19,15 @@ import (
 // cannot run the sensor (e.g. macOS) or agents with no hooks recipe.
 func launchCmd(dataDir *string) *cobra.Command {
 	var (
-		workdir  string
-		noDash   bool
-		dashAddr string
-		sensor   string
-		signKey  string
-		fileDiff bool
-		jsonOut  bool
+		workdir                                                 string
+		noDash                                                  bool
+		dashAddr                                                string
+		sensor                                                  string
+		signKey                                                 string
+		fileDiff                                                bool
+		jsonOut                                                 bool
+		contextDir, contextFile, contextSession, contextHarness string
+		noContext                                               bool
 	)
 	cmd := &cobra.Command{
 		Use:   "launch [flags] -- <agent command...>",
@@ -53,6 +55,11 @@ func launchCmd(dataDir *string) *cobra.Command {
 				SignKeyPath:      signKey,
 				FileDiff:         fileDiff,
 				JSON:             jsonOut,
+				ContextDir:       contextDir,
+				ContextFile:      contextFile,
+				ContextSession:   contextSession,
+				ContextHarness:   contextHarness,
+				NoContext:        noContext,
 				Stdout:           cmd.OutOrStdout(),
 				Stderr:           cmd.ErrOrStderr(),
 			})
@@ -78,5 +85,10 @@ func launchCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().StringVar(&signKey, "sign-key", "", "hex ed25519 private key file; when set, the sealed bundle is signed")
 	cmd.Flags().BoolVar(&fileDiff, "file-diff", false, "capture the working-tree file diff (off by default: copies the whole tree; kernel file_write covers changes on Linux)")
 	cmd.Flags().BoolVar(&jsonOut, "json", false, "also emit the machine-readable launch report")
+	cmd.Flags().StringVar(&contextDir, "context-dir", "", "native session directory; overrides the harness default")
+	cmd.Flags().StringVar(&contextFile, "context-file", "", "exact native transcript file, including a resumed session")
+	cmd.Flags().StringVar(&contextSession, "context-session", "", "native session identity to capture; required for unambiguous resume")
+	cmd.Flags().StringVar(&contextHarness, "context-harness", "", "context format for a wrapper command: claude, codex, deepseek, kimi, or grok")
+	cmd.Flags().BoolVar(&noContext, "no-context", false, "disable agent context capture and hook injection")
 	return cmd
 }

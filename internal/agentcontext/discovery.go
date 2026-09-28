@@ -113,6 +113,11 @@ func Discover(ctx context.Context, opts DiscoverOptions) (Inventory, error) {
 			return nil
 		}
 		c := inspectCandidate(ctx, path, inv.Harness, &budget)
+		// Some older wire formats carry no session header. Only an explicitly
+		// named file and caller-supplied identity can bind such a source.
+		if path == root && opts.SessionID != "" && c.Issue == "session_identity_missing" {
+			c.SessionID, c.Issue = opts.SessionID, ""
+		}
 		c.Size, c.ModifiedAt = info.Size(), info.ModTime()
 		if c.Issue != "" {
 			inv.Complete = false

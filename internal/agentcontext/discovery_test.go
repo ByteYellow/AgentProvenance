@@ -209,3 +209,26 @@ func TestDiscoveryCancellationAndMissingRoot(t *testing.T) {
 		t.Fatalf("cancel lost: %v", err)
 	}
 }
+
+func TestDiscoveryHeaderlessSourceRequiresExplicitFileAndIdentity(t *testing.T) {
+	for _, harness := range []string{"kimi", "grok"} {
+		t.Run(harness, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "native.jsonl")
+			writeSource(t, path, "{\"role\":\"user\",\"content\":\"task\"}\n")
+			opts := DiscoverOptions{Harness: harness, Root: path, Snapshot: true}
+			unknown := discoverTest(t, opts)
+			if unknown.Complete || unknown.Candidates[0].Issue != "session_identity_missing" {
+				t.Fatalf("missing identity invented: %+v", unknown)
+			}
+			opts.SessionID = "operator-selected-session"
+			before := discoverTest(t, opts)
+			if !before.Complete || !before.Candidates[0].Cursor.Valid {
+				t.Fatalf("explicit source not checkpointed: %+v", before)
+			}
+			r := SelectSources(context.Background(), before, discoverTest(t, opts), SelectOptions{Path: path, SessionID: opts.SessionID})
+			if r.Status != OK || len(r.Sources) != 1 || r.Sources[0].Binding != "explicit" || r.Sources[0].AfterLine != 1 {
+				t.Fatalf("explicit source: %+v", r)
+			}
+		})
+	}
+}

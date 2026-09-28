@@ -261,7 +261,11 @@ func normCmd(s string) string { return strings.ToLower(strings.Join(strings.Fiel
 // (e.g. a request with no captured response body) and returns nil; a real write
 // failure is returned so MaterializeLLMCalls fails loudly rather than reporting
 // success over a graph that is silently missing edges.
-func insertLLMEdge(db *sql.DB, runID, from, to, edgeType, sourceEvent, now string) error {
+type llmEdgeWriter interface {
+	Exec(string, ...any) (sql.Result, error)
+}
+
+func insertLLMEdge(db llmEdgeWriter, runID, from, to, edgeType, sourceEvent, now string) error {
 	if from == "" || to == "" {
 		return nil
 	}
