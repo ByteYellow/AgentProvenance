@@ -595,11 +595,23 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 	case "execve", "exec", "process_exec":
 		event.EventType = "execve"
 		path := stringAt(raw, "path")
-		// Prefer the real argv (sensor "command" field) so command-line args
-		// (e.g. a metadata-IP URL) reach the policy ArgsContains rule; fall back
-		// to the binary path / comm when argv was not captured.
+		// Keep the sensor's argument boundaries and explicit capacity marker.
+		// Splitting its joined command loses shell arguments and cannot tell a
+		// complete command from a captured prefix used by runtime correlation.
 		command := stringAt(raw, "command")
-		argv := splitCommand(command)
+		var argv []string
+		if values, ok := raw["argv"].([]any); ok {
+			for _, value := range values {
+				arg, ok := value.(string)
+				if !ok {
+					return event, false, fmt.Errorf("native exec argv contains a non-string argument")
+				}
+				argv = append(argv, arg)
+			}
+		}
+		if len(argv) == 0 {
+			argv = splitCommand(command)
+		}
 		if len(argv) == 0 {
 			if path != "" {
 				argv = []string{path}
@@ -612,11 +624,15 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 		if command == "" {
 			command = strings.Join(argv, " ")
 		}
-		event.Payload = mustJSON(map[string]any{
+		payload := map[string]any{
 			"argv":    argv,
 			"command": command,
 			"comm":    comm,
-		})
+		}
+		if limited, known := raw["argv_truncated"].(bool); known {
+			payload["argv_truncated"] = limited
+		}
+		event.Payload = mustJSON(payload)
 	case "network_connect", "connect":
 		host := stringAt(raw, "dst_ip")
 		port := stringAt(raw, "dst_port")

@@ -8,7 +8,41 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
+
+func TestCorrelationNativeIngestRetainsCaptureLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		marker any
+		want   int
+	}{{"truncated", true, 1}, {"complete", false, 0}, {"unknown", nil, 0}, {"invalid", "true", 0}} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, _ := openTestStore(t)
+			correlationTool(t, db, "call", "python3 -m unittest -v test_report 2>&1", 0, 10)
+			raw := map[string]any{"source": "agentprov_ebpf", "event_type": "execve",
+				"pid": 100, "ppid": 1, "cgroup_id": "cg-a", "timestamp": correlationTime(2),
+				"argv":    []string{"bash", "-c", "python3 -m unittest -v test_rep"},
+				"command": "bash -c python3 -m unittest -v test_rep"}
+			if tc.marker != nil {
+				raw["argv_truncated"] = tc.marker
+			}
+			line, err := json.Marshal(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := telemetry.IngestJSONLReader(db, telemetry.JSONLIngestOptions{Format: "native", RunID: "run"}, strings.NewReader(string(line)+"\n"))
+			if err != nil || result.Ingested != 1 {
+				t.Fatalf("native ingest: %+v, %v", result, err)
+			}
+			r, err := CorrelateSyscallsWithReport(db, "run")
+			if err != nil || r.MatchedExecs != tc.want || r.Edges != tc.want {
+				t.Fatalf("capture marker not respected across ingestion: %+v, %v", r, err)
+			}
+		})
+	}
+}
 
 func correlationTime(sec int) string {
 	return time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC).Add(time.Duration(sec) * time.Second).Format(time.RFC3339Nano)
