@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance recorded context API
-  version: "1.4"
+  version: "1.5"
   description: >
     Read-only recorded evidence. Source assertions are not kernel observations
     or inferred authorizations. The dashboard exposes the same routes under
@@ -127,6 +127,7 @@ components:
         source: {$ref: '#/components/schemas/Source'}
         source_key: {type: string}
         sequence: {type: integer, minimum: 0, description: Physical source line order, not a cross-source clock.}
+        source_ordinal: {type: integer, minimum: 0, description: Normalized record position within its physical line. Positive when recorded; zero or absent means an older producer did not record it.}
         execution_scope:
           type: string
           enum: [current_execution, prior_context]
@@ -143,6 +144,10 @@ components:
             returned does not assert success. source_message_event and
             source_reasoning_event preserve Codex event forms separately from
             response_item records. Equal text does not merge source identities.
+            model_proposal is a source model decision, not execution proof.
+            completion_only has no recorded start and cannot seed runtime
+            attribution. context_replacement preserves a compacted tool result
+            without overwriting the original outcome or creating a new execution.
         recorded_at: {type: string}
         content: {$ref: '#/components/schemas/ContentRef'}
         raw_content: {$ref: '#/components/schemas/ContentRef'}

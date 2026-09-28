@@ -63,6 +63,7 @@ func saveRuntimeCorrelation(db *sql.DB, paths store.Paths, runID string, report 
 
 type contextCapture struct {
 	harness, root, workdir, session, file string
+	catalogRoot                           string
 	disabled                              bool
 	before                                agentcontext.Inventory
 }
@@ -123,12 +124,15 @@ func prepareContext(ctx context.Context, opts Options, recipe recipe) (contextCa
 	if c.root == "" {
 		return c, fmt.Errorf("unsupported context harness %q", c.harness)
 	}
+	if c.harness == "codex" && c.file == "" && opts.ContextDir == "" {
+		c.catalogRoot = filepath.Dir(c.root)
+	}
 	if c.disabled {
 		return c, nil
 	}
 	var err error
 	c.before, err = agentcontext.Discover(ctx, agentcontext.DiscoverOptions{
-		Harness: c.harness, Root: c.root, Workdir: c.workdir, SessionID: c.session, Snapshot: true,
+		Harness: c.harness, Root: c.root, CatalogRoot: c.catalogRoot, Workdir: c.workdir, SessionID: c.session, Snapshot: true,
 	})
 	return c, err
 }
@@ -174,7 +178,7 @@ func (c contextCapture) finish(ctx context.Context, svc agentcontext.Service, ru
 		}
 		return svc.Overview(ctx, runID)
 	}
-	after, err := agentcontext.Discover(ctx, agentcontext.DiscoverOptions{Harness: c.harness, Root: c.root, SessionID: c.session})
+	after, err := agentcontext.Discover(ctx, agentcontext.DiscoverOptions{Harness: c.harness, Root: c.root, CatalogRoot: c.catalogRoot, SessionID: c.session})
 	if err != nil {
 		return agentcontext.Overview{}, err
 	}

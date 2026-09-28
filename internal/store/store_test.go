@@ -56,6 +56,45 @@ func TestSignalsTableExists(t *testing.T) {
 	}
 }
 
+func TestContextPositionUpgradePreservesLegacyRows(t *testing.T) {
+	paths := openTestDB(t)
+	db, err := Open(*paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, stmt := range []string{
+		`DROP INDEX idx_agent_context_position`,
+		`ALTER TABLE agent_context_entries DROP COLUMN source_ordinal`,
+		`CREATE INDEX idx_agent_context_page ON agent_context_entries(run_id, source_id, source_sequence, id)`,
+		`DELETE FROM schema_versions WHERE version > 18`,
+		`INSERT OR IGNORE INTO schema_versions VALUES (18,'prior context schema','2026-09-28')`,
+		`INSERT INTO agent_context_entries (id,run_id,source_id,session_id,source_key,source_sequence,kind,object_hash,parser_version,created_at)
+		 VALUES ('old','run','source','session','message',7,'message','original-hash','original-parser','original-time')`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if err := EnsureSchema(db); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var sequence, ordinal int
+	var hash, parser, created string
+	if err := db.QueryRow(`SELECT source_sequence,source_ordinal,object_hash,parser_version,created_at FROM agent_context_entries WHERE id='old'`).Scan(&sequence, &ordinal, &hash, &parser, &created); err != nil {
+		t.Fatal(err)
+	}
+	if sequence != 7 || ordinal != 0 || hash != "original-hash" || parser != "original-parser" || created != "original-time" {
+		t.Fatalf("legacy evidence changed: %d %d %s %s %s", sequence, ordinal, hash, parser, created)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_agent_context_position'`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("position index missing: %d %v", count, err)
+	}
+}
+
 func TestEvidenceQueryIndexesExist(t *testing.T) {
 	paths := openTestDB(t)
 	db, err := Open(*paths)

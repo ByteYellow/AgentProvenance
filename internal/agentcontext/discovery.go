@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"hash"
 	"io"
@@ -28,11 +27,12 @@ const (
 // Inventory contains identities and resume boundaries, never conversation text.
 // An incomplete inventory cannot establish a unique automatic binding.
 type Inventory struct {
-	Harness    string      `json:"harness"`
-	Root       string      `json:"root"`
-	Candidates []Candidate `json:"candidates"`
-	Complete   bool        `json:"complete"`
-	Issues     []Issue     `json:"issues"`
+	Harness     string      `json:"harness"`
+	Root        string      `json:"root"`
+	CatalogRoot string      `json:"catalog_root,omitempty"`
+	Candidates  []Candidate `json:"candidates"`
+	Complete    bool        `json:"complete"`
+	Issues      []Issue     `json:"issues"`
 }
 
 type Candidate struct {
@@ -58,10 +58,13 @@ type SourceCursor struct {
 }
 
 type DiscoverOptions struct {
-	Harness   string
-	Root      string
-	Workdir   string
-	SessionID string
+	Harness string
+	Root    string
+	// CatalogRoot optionally locates Codex state catalogs outside the scan root.
+	// No ambient home directory is consulted for explicitly acquired sources.
+	CatalogRoot string
+	Workdir     string
+	SessionID   string
 	// Snapshot captures a pre-execution cursor for candidates in this workdir.
 	Snapshot bool
 }
@@ -78,6 +81,47 @@ func Discover(ctx context.Context, opts DiscoverOptions) (Inventory, error) {
 	}
 	inv.Root = root
 	visits, budget := 0, int64(MaxDiscoveryBytes)
+	type sourceFile struct {
+		path string
+		info fs.FileInfo
+	}
+	files := []sourceFile{}
+	generations := map[string]string{}
+	seen := map[string]int{}
+	add := func(path, catalogID string, info fs.FileInfo) {
+		if index, exists := seen[path]; exists {
+			if catalogID != "" && inv.Candidates[index].SessionID != catalogID {
+				inv.Candidates[index].Issue = "catalog_session_identity_conflict"
+				inv.problem("catalog_session_identity_conflict")
+			}
+			return
+		}
+		if len(inv.Candidates) >= MaxDiscoveryFiles {
+			inv.problem("discovery_count_limit")
+			return
+		}
+		c := inspectCandidate(ctx, path, inv.Harness, &budget)
+		if path == root && opts.SessionID != "" && c.Issue == "session_identity_missing" {
+			c.SessionID, c.Issue = opts.SessionID, ""
+		}
+		if catalogID != "" && c.SessionID != catalogID {
+			c.Issue = "catalog_session_identity_conflict"
+			inv.problem(c.Issue)
+		}
+		c.Size, c.ModifiedAt = info.Size(), info.ModTime()
+		if c.Issue != "" {
+			inv.Complete = false
+		}
+		if opts.Snapshot && c.Issue == "" && (sameWorkdir(c.Workdir, opts.Workdir) || path == root || (opts.SessionID != "" && c.SessionID == opts.SessionID)) {
+			cursor, code := snapshotCursor(ctx, path, &budget)
+			c.Cursor = cursor
+			if code != "" {
+				c.Issue, inv.Complete = code, false
+			}
+		}
+		seen[path] = len(inv.Candidates)
+		inv.Candidates = append(inv.Candidates, c)
+	}
 	err = filepath.WalkDir(root, func(path string, ent fs.DirEntry, walkErr error) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -98,10 +142,16 @@ func Discover(ctx context.Context, opts DiscoverOptions) (Inventory, error) {
 			inv.Issues = append(inv.Issues, Issue{Code: "discovery_count_limit"})
 			return fs.SkipAll
 		}
-		if ent.IsDir() || ent.Type()&os.ModeSymlink != 0 || (path != root && !transcriptName(inv.Harness, ent.Name())) {
+		if ent.IsDir() || (path != root && !transcriptName(inv.Harness, ent.Name())) {
 			return nil
 		}
-		if len(inv.Candidates) >= MaxDiscoveryFiles {
+		if ent.Type()&os.ModeSymlink != 0 {
+			if inv.Harness == "deepseek" {
+				inv.problem("source_not_regular")
+			}
+			return nil
+		}
+		if len(files) >= MaxDiscoveryFiles {
 			inv.Complete = false
 			inv.Issues = append(inv.Issues, Issue{Code: "discovery_count_limit"})
 			return fs.SkipAll
@@ -112,35 +162,54 @@ func Discover(ctx context.Context, opts DiscoverOptions) (Inventory, error) {
 			inv.Issues = append(inv.Issues, Issue{Code: "discovery_unreadable"})
 			return nil
 		}
-		c := inspectCandidate(ctx, path, inv.Harness, &budget)
-		// Some older wire formats carry no session header. Only an explicitly
-		// named file and caller-supplied identity can bind such a source.
-		if path == root && opts.SessionID != "" && c.Issue == "session_identity_missing" {
-			c.SessionID, c.Issue = opts.SessionID, ""
-		}
-		c.Size, c.ModifiedAt = info.Size(), info.ModTime()
-		if c.Issue != "" {
-			inv.Complete = false
-		}
-		if opts.Snapshot && c.Issue == "" && (sameWorkdir(c.Workdir, opts.Workdir) || path == root || (opts.SessionID != "" && c.SessionID == opts.SessionID)) {
-			cursor, code := snapshotCursor(ctx, path, &budget)
-			c.Cursor = cursor
-			if code != "" {
-				c.Issue, inv.Complete = code, false
+		files = append(files, sourceFile{path, info})
+		if inv.Harness == "deepseek" && path != root {
+			generation, ok := deepseekGeneration(ent.Name())
+			if !ok {
+				inv.problem("source_generation_invalid")
+			} else if directory := filepath.Dir(path); newerGeneration(generation, generations[directory]) {
+				generations[directory] = generation
 			}
-		}
-		inv.Candidates = append(inv.Candidates, c)
-		if budget <= 0 {
-			inv.Complete = false
-			inv.Issues = append(inv.Issues, Issue{Code: "discovery_size_limit"})
-			return fs.SkipAll
 		}
 		return nil
 	})
 	if err == nil {
+		for _, file := range files {
+			if inv.Harness == "deepseek" && file.path != root {
+				generation, ok := deepseekGeneration(filepath.Base(file.path))
+				if ok && generation != generations[filepath.Dir(file.path)] {
+					continue
+				}
+			}
+			add(file.path, "", file.info)
+			if budget <= 0 {
+				inv.problem("discovery_size_limit")
+				break
+			}
+		}
+	}
+	if err == nil && inv.Harness == "codex" {
+		catalogRoot := opts.CatalogRoot
+		if catalogRoot == "" {
+			catalogRoot = root
+		}
+		catalogRoot, err = filepath.Abs(catalogRoot)
+		if err == nil {
+			inv.CatalogRoot = catalogRoot
+			err = discoverCodexCatalogs(ctx, catalogRoot, &inv, &budget, add)
+		}
+	}
+	if err == nil {
 		err = ctx.Err()
 	}
 	return inv, err
+}
+
+func (inv *Inventory) problem(code string) {
+	inv.Complete = false
+	if len(inv.Issues) < 100 {
+		inv.Issues = append(inv.Issues, Issue{Code: code})
+	}
 }
 
 func supportedHarness(harness string) bool {
@@ -199,41 +268,40 @@ func inspectCandidate(ctx context.Context, path, harness string, budget *int64) 
 		}
 		b, ended, err := readLine(reader)
 		*budget -= int64(len(b))
-		if !ended && err != nil {
+		if !ended && err != nil && (len(b) == 0 || harness == "deepseek") {
 			break
 		}
-		var top row
-		if json.Unmarshal(b, &top) != nil {
-			continue
-		}
-		switch harness {
-		case "codex":
-			if text(top, "type") != "session_meta" {
-				continue
+		_ = visitSourceObjects(b, harness, func(top row, _ []byte, _ int) bool {
+			switch harness {
+			case "codex":
+				if text(top, "type") != "session_meta" {
+					return true
+				}
+				v := obj(top["payload"])
+				c.SessionID, c.Workdir = text(v, "id", "session_id"), text(v, "cwd")
+				c.CreatedAt = eventTime(top)
+				c.ParentSessionID = text(obj(obj(obj(v["source"])["subagent"])["thread_spawn"]), "parent_thread_id")
+				if c.ParentSessionID != "" {
+					c.AgentID = c.SessionID
+				}
+			case "deepseek":
+				if text(top, "type") != "session" {
+					return true
+				}
+				c.SessionID, c.ParentSessionID = text(top, "id"), text(top, "parentSession")
+				c.Workdir, c.CreatedAt = text(top, "cwd"), eventTime(top)
+				if text(top, "origin") == "subagent" {
+					c.AgentID = c.SessionID
+				}
+			case "claude":
+				c.SessionID, c.AgentID = text(top, "sessionId", "session_id"), text(top, "agentId", "agent_id")
+				c.Workdir, c.CreatedAt = text(top, "cwd"), eventTime(top)
+			case "kimi", "grok":
+				c.SessionID, c.Workdir = text(top, "sessionId", "session_id"), text(top, "cwd", "workdir")
+				c.CreatedAt = eventTime(top)
 			}
-			v := obj(top["payload"])
-			c.SessionID, c.Workdir = text(v, "id", "session_id"), text(v, "cwd")
-			c.CreatedAt = eventTime(top)
-			c.ParentSessionID = text(obj(obj(obj(v["source"])["subagent"])["thread_spawn"]), "parent_thread_id")
-			if c.ParentSessionID != "" {
-				c.AgentID = c.SessionID
-			}
-		case "deepseek":
-			if text(top, "type") != "session" {
-				continue
-			}
-			c.SessionID, c.ParentSessionID = text(top, "id"), text(top, "parentSession")
-			c.Workdir, c.CreatedAt = text(top, "cwd"), eventTime(top)
-			if text(top, "origin") == "subagent" {
-				c.AgentID = c.SessionID
-			}
-		case "claude":
-			c.SessionID, c.AgentID = text(top, "sessionId", "session_id"), text(top, "agentId", "agent_id")
-			c.Workdir, c.CreatedAt = text(top, "cwd"), eventTime(top)
-		case "kimi", "grok":
-			c.SessionID, c.Workdir = text(top, "sessionId", "session_id"), text(top, "cwd", "workdir")
-			c.CreatedAt = eventTime(top)
-		}
+			return c.SessionID == ""
+		})
 		if c.SessionID != "" {
 			return c
 		}
@@ -307,7 +375,7 @@ type SelectedSource struct {
 // match. A resumed session requires an explicit identity and a verified prefix.
 func SelectSources(ctx context.Context, before, after Inventory, opts SelectOptions) Selection {
 	result := Selection{Status: NoInput, Sources: []SelectedSource{}, Issues: []Issue{}}
-	if before.Harness != after.Harness || before.Root != after.Root {
+	if before.Harness != after.Harness || before.Root != after.Root || before.CatalogRoot != after.CatalogRoot {
 		result.Status = Failed
 		result.Issues = append(result.Issues, Issue{Code: "discovery_scope_changed"})
 		return result
@@ -321,8 +389,11 @@ func SelectSources(ctx context.Context, before, after Inventory, opts SelectOpti
 		result.Issues = append(result.Issues, Issue{Code: "discovery_incomplete"})
 	}
 	prior := map[string]Candidate{}
+	type sessionIdentity struct{ session, agent string }
+	priorIdentity := map[sessionIdentity]bool{}
 	for _, c := range before.Candidates {
 		prior[c.Path] = c
+		priorIdentity[sessionIdentity{c.SessionID, c.AgentID}] = true
 	}
 	explicit := opts.Path != "" || opts.SessionID != ""
 	var roots []Candidate
@@ -391,6 +462,13 @@ func SelectSources(ctx context.Context, before, after Inventory, opts SelectOpti
 			cursor := old.Cursor
 			selected.ResumeCursor = &cursor
 			selected.BindingEvidence = append(selected.BindingEvidence, "verified_source_prefix:"+old.Cursor.SHA256)
+		} else if priorIdentity[sessionIdentity{c.SessionID, c.AgentID}] {
+			// A moved or migrated log has no verified boundary in this capture.
+			// Its old history must not become current execution by changing paths.
+			result.Status = Ambiguous
+			result.Issues = append(result.Issues, Issue{Code: "source_moved_before_resume"})
+			result.Sources = nil
+			return result
 		}
 		result.Sources = append(result.Sources, selected)
 		children := map[string][]Candidate{}

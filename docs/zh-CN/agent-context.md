@@ -27,6 +27,12 @@ agentprov launch --context-session SESSION_ID -- codex resume SESSION_ID
 与新记录的 `current_execution` 范围区分。历史工具调用和模型调用不会投影为本次执行。
 子会话必须有真实身份依据，单独一条委派请求不会生成虚构的子 Agent ID。
 
+Codex 还会只读查询 `CODEX_HOME` 下 `state_*.sqlite` 中的 `threads.id` 与
+`threads.rollout_path`，发现目录树之外的日志。目录数据库仅提供文件位置，身份与时间仍由
+日志头验证。显式 `--context-dir` 只查询该目录中的数据库，不扫描其他默认目录。
+身份冲突或目录数据库不可读时，不猜测唯一会话。目录查询最多读取 32 个数据库、
+合计 4,096 行，每个数据库限时两秒。
+
 也可以显式导入已有日志：
 
 ```sh
@@ -37,6 +43,10 @@ agentprov context list --run RUN_ID --kind configuration --revisions
 
 DeepSeek 解析支持 v3 JSONL，以及含多个连续 Zstandard 帧的 v4 JSONL。
 未知格式会明确报告，不会当成成功采集到空记录。
+目录发现按每个会话目录中编号最高的 `session.vN` 选择格式代际，包括未知版本；
+新文件失败时不偷偷回退到旧格式。同代际的重复文件保留歧义。
+`--context-file` 仍可显式选择旧文件。启动期间已知会话更换了文件时，恢复边界无法验证，
+会明确报告歧义，不把历史记录重算成本次工作。
 
 显式导入会将保存后的覆盖报告以 JSON 输出到标准输出。只有 `ok` 和 `empty` 返回退出码 0；
 部分成功、失败、未找到来源或关联不确定，会先保存诊断，再返回非零退出码。
@@ -50,6 +60,12 @@ DeepSeek 解析支持 v3 JSONL，以及含多个连续 Zstandard 帧的 v4 JSONL
 `--revisions` 包含同一记录的历史版本；默认按来源位置、再按导入时间选择最新版本。
 来源时间与存储时间分别保留。
 
+Claude 同一物理行内相邻的完整 JSON 对象可以分别读取，允许对象之间存在空白或 NUL 填充。
+对象顺序保留；不会修复损坏内容，也不会跨行拼接。`sequence` 仍表示用于恢复的物理行，
+可选的 `source_ordinal` 表示该行内的规范化记录次序，分页与离线回放沿用此顺序。
+旧证据没有保存该字段时保持缺失或零。读取/解析计数按物理行，保存/去重计数按规范化条目，
+未识别计数按来源对象；同一行中可同时存在已保留的有效前缀和解析失败的后缀。
+
 Codex `event_msg` 中的用户、助手消息及来源提供的推理记录，即使没有对应的
 `response_item` 也会保存。事件形式标记为 `source_message_event` 或
 `source_reasoning_event`，完整响应项保留自己的记录。文字相似不代表身份相同，
@@ -59,6 +75,13 @@ Codex `event_msg` 中的用户、助手消息及来源提供的推理记录，�
 Codex 工具错误依据来源的显式标记、状态、数值退出码，以及支持的 MCP/命令执行结果封装。
 不会根据输出中的“error”字样或任意嵌套 JSON 判定失败。`returned` 仅表示记录了返回结果，
 不代表工具成功或获得授权；来源报告的错误也不等于策略拒绝。
+
+DeepSeek 助手消息中的 `tool-call` 保存为模型提议；后续原生工具调用记录具有相同调用 ID 时，
+补充同一次调用，而非新增一次调用。PTC 开始与完成记录提供子调用输入、结果，原始记录保留
+parent/root ID。只有完成记录、没有开始记录时，标记 `completion_only` 和缺失的
+`tool_start_time`，不生成用于运行时匹配的执行区间。显式来源错误保持为错误。
+`surfaceOp: replace` 的结果标记 `context_replacement`，保留压缩引用，
+但不覆盖原始结果，也不表示又执行了一次。
 
 ```sh
 agentprov context compare --run RUN_ID --left ENTRY_A --right ENTRY_B

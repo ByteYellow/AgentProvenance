@@ -11,6 +11,7 @@ type contextIndexFields struct {
 	Agent         string `json:"agent_id"`
 	Key           string `json:"source_key"`
 	Sequence      int64  `json:"sequence"`
+	Ordinal       int64  `json:"source_ordinal"`
 	Kind          string `json:"kind"`
 	Role          string `json:"role"`
 	Call          string `json:"tool_call_id"`
@@ -28,7 +29,7 @@ type contextIndexFields struct {
 func verifyAgentContext(db *sql.DB, runID string, add issueAdder) error {
 	for _, table := range []string{"agent_context_entries", "agent_context_reports"} {
 		extra := `json_object('parent_session_id',parent_session_id,'agent_id',agent_id,
-			'source_key',source_key,'sequence',source_sequence,'kind',kind,'role',role,
+			'source_key',source_key,'sequence',source_sequence,'source_ordinal',source_ordinal,'kind',kind,'role',role,
 			'tool_call_id',tool_call_id,'tool_name',tool_name,'status',status,
 			'recorded_at',recorded_at,'content_ref',content_ref,'parser_version',parser_version)`
 		if table == "agent_context_reports" {

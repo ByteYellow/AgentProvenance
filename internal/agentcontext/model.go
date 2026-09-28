@@ -106,12 +106,15 @@ type ContentRef struct {
 }
 
 type Entry struct {
-	SchemaVersion  string     `json:"schema_version"`
-	ID             string     `json:"id"`
-	RunID          string     `json:"run_id"`
-	Source         Source     `json:"source"`
-	SourceKey      string     `json:"source_key"`
-	Sequence       int64      `json:"sequence"`
+	SchemaVersion string `json:"schema_version"`
+	ID            string `json:"id"`
+	RunID         string `json:"run_id"`
+	Source        Source `json:"source"`
+	SourceKey     string `json:"source_key"`
+	Sequence      int64  `json:"sequence"`
+	// SourceOrdinal is the normalized record's position within its physical
+	// source line. Zero means older evidence did not record that position.
+	SourceOrdinal  int64      `json:"source_ordinal,omitempty"`
 	Kind           string     `json:"kind"`
 	Role           string     `json:"role,omitempty"`
 	AgentID        string     `json:"agent_id,omitempty"`
@@ -133,6 +136,7 @@ type Entry struct {
 type Record struct {
 	Key            string
 	Sequence       int64
+	SourceOrdinal  int64
 	Kind           string
 	Role           string
 	AgentID        string

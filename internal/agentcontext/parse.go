@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ParserVersion = "context-parser/v5"
+	ParserVersion = "context-parser/v6"
 	MaxInputBytes = 128 << 20
 	MaxLineBytes  = 40 << 20
 	MaxRecords    = 25000
@@ -49,7 +49,10 @@ type parser struct {
 	Parsed
 	opts             ParseOptions
 	line             int64
+	objectOrdinal    int
+	sourceOrdinal    int64
 	callNames        map[string]string
+	startedCalls     map[string]bool
 	identityConflict bool
 	unsupported      bool
 	known            int64
@@ -75,7 +78,7 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		prefix = &prefixReader{r: r, hash: sha256.New(), remaining: opts.Cursor.Bytes}
 		r = prefix
 	}
-	p := parser{opts: opts, callNames: map[string]string{}}
+	p := parser{opts: opts, callNames: map[string]string{}, startedCalls: map[string]bool{}}
 	p.Source = Source{Harness: opts.Harness, Path: opts.Path, SessionID: opts.SessionID,
 		Channel:         "transcript",
 		ParentSessionID: opts.ParentSessionID, AgentID: opts.AgentID, ParserVersion: ParserVersion,
@@ -102,6 +105,7 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 			break
 		}
 		p.line++
+		p.sourceOrdinal = 0
 		p.Coverage.LastLine = p.line
 		if p.line <= opts.AfterLine {
 			p.Coverage.PriorContext.LastLine = p.line
@@ -137,33 +141,36 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 			*p.counts().Deferred++
 			break
 		}
-		var top row
-		if json.Unmarshal(line, &top) != nil || top == nil {
+		knownBefore := p.known
+		decodeErr := visitSourceObjects(line, opts.Harness, func(top row, raw []byte, ordinal int) bool {
+			p.objectOrdinal = ordinal
+			start := len(p.Records)
+			known := p.consume(top)
+			if !known && len(p.Records) == start && !p.unsupported {
+				p.add("session", p.positionKey("unrecognized"), "", "", "", "unrecognized", eventTime(top), whole(top))
+			}
+			if known {
+				p.known++
+			} else {
+				*p.counts().Unrecognized++
+				p.issue("unrecognized_record", "type")
+			}
+			rawBody := string(raw)
+			for i := start; i < len(p.Records); i++ {
+				p.Records[i].RawBody = &rawBody
+			}
+			return !p.unsupported && len(p.Records) < MaxRecords
+		})
+		if p.known > knownBefore {
+			*p.counts().Parsed++
+		}
+		if decodeErr != nil {
 			if !ended && errors.Is(err, io.EOF) {
 				p.issue("incomplete_tail", "input")
 				*p.counts().Deferred++
 			} else {
 				p.issue("malformed_json", "input")
 				*p.counts().Failed++
-			}
-		} else {
-			start := len(p.Records)
-			known := p.consume(top)
-			if !known && len(p.Records) == start && !p.unsupported {
-				p.add("session", fmt.Sprintf("unrecognized:%d", p.line), "", "", "", "unrecognized", eventTime(top), whole(top))
-			}
-			if known {
-				p.known++
-			}
-			if known {
-				*p.counts().Parsed++
-			} else {
-				*p.counts().Unrecognized++
-				p.issue("unrecognized_record", "type")
-			}
-			raw := string(line)
-			for i := start; i < len(p.Records); i++ {
-				p.Records[i].RawBody = &raw
 			}
 		}
 		if p.unsupported {
@@ -353,10 +360,11 @@ func (p *parser) add(kind, key, role, callID, name, status, timestamp string, bo
 		return
 	}
 	if key == "" {
-		key = fmt.Sprintf("line:%d", p.line)
+		key = p.positionKey("line")
 	}
 	workdir, version := p.Source.Workdir, p.Source.ApplicationVersion
-	r := Record{Key: key, Sequence: p.line, Kind: kind, Role: role,
+	p.sourceOrdinal++
+	r := Record{Key: key, Sequence: p.line, SourceOrdinal: p.sourceOrdinal, Kind: kind, Role: role,
 		ToolCallID: callID, ToolName: name, Status: status, RecordedAt: timestamp,
 		Workdir: &workdir, ApplicationVersion: &version, ExecutionScope: CurrentExecution}
 	if p.line <= p.opts.AfterLine {

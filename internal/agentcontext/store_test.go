@@ -208,7 +208,7 @@ func TestCaptureLimitCountsUniquePhysicalRecords(t *testing.T) {
 
 func TestVerificationDetectsChangedContextQueryIndexes(t *testing.T) {
 	for _, assignment := range []string{
-		`source_key='changed'`, `source_sequence=999`, `parent_session_id='other'`, `agent_id='other'`,
+		`source_key='changed'`, `source_sequence=999`, `source_ordinal=999`, `parent_session_id='other'`, `agent_id='other'`,
 		`kind='approval'`, `role='system'`, `tool_call_id='other'`, `tool_name='other'`, `status='allowed'`,
 		`recorded_at='2000-01-01T00:00:00Z'`, `parser_version='other'`, `content_ref='other'`,
 	} {

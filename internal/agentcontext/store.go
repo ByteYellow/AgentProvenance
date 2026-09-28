@@ -78,7 +78,7 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 	lastCreated := time.Time{}
 	truncated := map[int64]bool{}
 	for _, r := range records {
-		if r.Key == "" || r.Sequence < 0 || !validKind(r.Kind) {
+		if r.Key == "" || r.Sequence < 0 || r.SourceOrdinal < 0 || r.SourceOrdinal > MaxRecords || !validKind(r.Kind) {
 			return SaveResult{}, fmt.Errorf("invalid context record identity or kind")
 		}
 		counts := &report.Counts
@@ -94,7 +94,7 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 		}
 		entry := Entry{
 			SchemaVersion: SchemaVersion, RunID: runID, Source: src,
-			SourceKey: r.Key, Sequence: r.Sequence, Kind: r.Kind,
+			SourceKey: r.Key, Sequence: r.Sequence, SourceOrdinal: r.SourceOrdinal, Kind: r.Kind,
 			Role: r.Role, AgentID: r.AgentID, ToolCallID: r.ToolCallID, ToolName: r.ToolName, Status: r.Status,
 			RecordedAt: r.RecordedAt, MissingFields: r.MissingFields,
 			Content:        ContentRef{State: "unavailable", Reason: r.MissingReason},
@@ -196,11 +196,11 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 		lastCreated = created
 		_, err = tx.ExecContext(ctx, `INSERT INTO agent_context_entries
 			(id, run_id, source_id, session_id, parent_session_id, agent_id, source_key,
-			source_sequence, kind, role, tool_call_id, tool_name, status, recorded_at,
+			source_sequence, source_ordinal, kind, role, tool_call_id, tool_name, status, recorded_at,
 			object_hash, content_ref, parser_version, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			entry.ID, runID, src.ID, src.SessionID, src.ParentSessionID, entry.AgentID, entry.SourceKey,
-			entry.Sequence, entry.Kind, entry.Role, entry.ToolCallID, entry.ToolName, entry.Status, entry.RecordedAt,
+			entry.Sequence, entry.SourceOrdinal, entry.Kind, entry.Role, entry.ToolCallID, entry.ToolName, entry.Status, entry.RecordedAt,
 			obj.Hash, entry.Content.Ref, src.ParserVersion, created.Format("2006-01-02T15:04:05.000000000Z"))
 		if err != nil {
 			return SaveResult{}, err

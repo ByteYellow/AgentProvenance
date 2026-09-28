@@ -86,7 +86,7 @@ func IngestContext(ctx context.Context, db *sql.DB, paths store.Paths, runID str
 		}
 		switch e.Kind {
 		case "tool_call":
-			if e.ToolCallID == "" {
+			if e.ToolCallID == "" || e.Status == "completion_only" {
 				continue
 			}
 			body, err := contextBody(db, runID, e.Content, &budget)
@@ -117,7 +117,7 @@ func IngestContext(ctx context.Context, db *sql.DB, paths store.Paths, runID str
 			}
 			calls[id], inputs[id] = ev, string(canonical)
 		case "tool_result":
-			if e.ToolCallID == "" {
+			if e.ToolCallID == "" || e.Status == "context_replacement" {
 				continue
 			}
 			id, event := agentcontext.ToolNodeID(e), "PostToolUse"

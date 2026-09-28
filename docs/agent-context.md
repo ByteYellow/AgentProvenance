@@ -31,6 +31,14 @@ prefix and retains earlier records as `prior_context`, separate from the new
 projected as activity of the new run. Actual child-session
 identities can link children; a dispatch alone does not invent a child identity.
 
+Codex discovery also reads `threads.id` and `threads.rollout_path` from
+`state_*.sqlite` catalogs under `CODEX_HOME`. Catalogs are opened read-only and
+only locate source files; the transcript header still supplies identity and time.
+An explicit `--context-dir` uses catalogs in that directory only, never another
+ambient home. Conflicting identities or unreadable catalogs make automatic
+selection incomplete instead of guessing. Catalog scans are bounded to 32 files,
+4,096 rows and two seconds per catalog.
+
 An existing transcript can also be imported explicitly:
 
 ```sh
@@ -41,6 +49,12 @@ agentprov context list --run RUN_ID --kind configuration --revisions
 
 DeepSeek parsing supports v3 JSONL and v4 JSONL with concatenated Zstandard
 frames. Unknown formats are reported, not interpreted as empty successful runs.
+Directory discovery selects the highest numbered `session.vN` generation within
+each session directory, including unknown versions; it never falls back to an
+older supported file when the newer one fails. Duplicate files of the same
+generation remain ambiguous. `--context-file` can select an older file explicitly.
+If a known session moves to a different file during launch, the resume boundary
+is unverified and capture reports ambiguity instead of counting history as new work.
 
 An explicit import writes its saved coverage report as JSON to stdout. Only
 `ok` and `empty` return exit status 0; partial, failed, missing or ambiguous
@@ -57,6 +71,15 @@ to continue a page; `--revisions` includes earlier versions of the same record.
 Without it, source position and then import time select the latest revision.
 Source timestamps are retained separately from storage time.
 
+Claude sources may contain adjacent complete JSON objects on a physical line,
+with whitespace or NUL padding between objects. These objects retain their order;
+malformed content is not repaired or joined across lines. `sequence` remains the
+physical line used for resume; optional `source_ordinal` orders normalized records
+within that line, including pagination and offline replay. An absent/zero ordinal
+means older evidence did not record it. Read/parsed counters count physical lines,
+stored/duplicate counters count normalized entries, and unrecognized counts refer
+to source objects. A valid prefix and an invalid suffix can share a partial line.
+
 Codex `event_msg` user/assistant messages and source-provided reasoning are
 retained even without a `response_item` copy. Event forms carry
 `source_message_event` or `source_reasoning_event`; canonical response items keep
@@ -69,6 +92,15 @@ Codex tool errors use explicit source flags/status, typed exit codes and support
 MCP/shell result envelopes. Words such as "error" in stdout or arbitrary nested
 JSON do not determine outcome. `returned` means a result was recorded, not that
 the tool succeeded or was authorized; a source error is not a policy refusal.
+
+DeepSeek assistant `tool-call` blocks preserve model proposals. Native tool-call
+records refine the same invocation when they share a recorded call ID. PTC
+dispatch starts and completions expose sub-call inputs and results, with native
+parent/root IDs retained in raw records. A completion without a start is labeled
+`completion_only`, with `tool_start_time` missing; it cannot seed a runtime matching
+interval. Typed source errors remain errors. A `surfaceOp: replace` result is
+`context_replacement`: it preserves compaction references without replacing the
+original outcome or claiming another execution.
 
 ```sh
 agentprov context compare --run RUN_ID --left ENTRY_A --right ENTRY_B

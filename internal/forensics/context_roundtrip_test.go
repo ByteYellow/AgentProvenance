@@ -212,3 +212,76 @@ func TestSignedCodexSourceFormsAndOutcomesReplayOffline(t *testing.T) {
 		t.Fatalf("verify replay: %+v %v", v, err)
 	}
 }
+
+func TestSignedCompoundAndDispatchedContextReplayOffline(t *testing.T) {
+	for _, tc := range []struct{ harness, input string }{
+		{"claude", `{"type":"user","sessionId":"s","message":{"content":"one"}}` + "\x00" + `{"type":"user","sessionId":"s","message":{"content":"two"}}` + "\n"},
+		{"deepseek", `{"type":"session","version":4,"id":"s"}
+{"type":"tool/ptc-dispatch-start","seq":0,"time":1790548591000,"data":{"subCallId":"sub","parentCallId":"parent","name":"read_file","arguments":{"path":"report.py"}}}
+{"type":"tool/ptc-dispatch","seq":1,"time":1790548592000,"data":{"subCallId":"sub","parentCallId":"parent","name":"read_file","arguments":{"path":"report.py"},"isError":true,"content":[{"type":"text","text":"not found"}]}}
+{"type":"tool/result","seq":2,"time":1790548593000,"surfaceOp":{"op":"replace","startSeq":1,"endSeq":1},"sourceEventSeqs":[1],"data":{"message":{"toolCallId":"sub","content":[{"type":"text","text":"summary"}]}}}
+`},
+	} {
+		t.Run(tc.harness, func(t *testing.T) {
+			ctx := context.Background()
+			paths := mustInit(t, filepath.Join(t.TempDir(), "source"))
+			db := mustOpen(t, paths)
+			defer db.Close()
+			parsed, err := agentcontext.Parse(ctx, strings.NewReader(tc.input), agentcontext.ParseOptions{Harness: tc.harness, Binding: "explicit"})
+			if err != nil || parsed.Coverage.Status != agentcontext.OK {
+				t.Fatalf("parse: %+v %v", parsed, err)
+			}
+			svc := agentcontext.Service{DB: db, Paths: paths}
+			if _, err := svc.Save(ctx, "run", parsed.Source, parsed.Records, parsed.Coverage); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := hooksbridge.IngestContext(ctx, db, paths, "run"); err != nil {
+				t.Fatal(err)
+			}
+			before, err := svc.Entries(ctx, agentcontext.PageOptions{RunID: "run", IncludeRevisions: true})
+			if err != nil || len(before.Entries) != len(parsed.Records) {
+				t.Fatalf("source records: %+v %v", before, err)
+			}
+			pub, key, err := ed25519.GenerateKey(rand.Reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			bundle, err := (forensics.Service{DB: db, Paths: paths, SignKey: key}).ExportBundle("run")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := forensics.VerifyBundleAttestation(bundle.Path, bundle.AttestationPath, pub); err != nil {
+				t.Fatal(err)
+			}
+			fresh := mustInit(t, filepath.Join(t.TempDir(), "replay"))
+			dbFresh := mustOpen(t, fresh)
+			defer dbFresh.Close()
+			info, err := (forensics.Service{DB: dbFresh, Paths: fresh}).ImportBundle(bundle.Path)
+			if err != nil || info.Omitted != 0 {
+				t.Fatalf("import: %+v %v", info, err)
+			}
+			if err := os.Rename(paths.Provenance, paths.Provenance+"-offline"); err != nil {
+				t.Fatal(err)
+			}
+			replayed := agentcontext.Service{DB: dbFresh, Paths: fresh}
+			after, err := replayed.Entries(ctx, agentcontext.PageOptions{RunID: "run", IncludeRevisions: true})
+			if err != nil || !reflect.DeepEqual(before, after) {
+				t.Fatalf("replay changed source records: %v", err)
+			}
+			for i, entry := range after.Entries {
+				for _, item := range []struct{ ref, want string }{
+					{entry.Content.Ref, *parsed.Records[i].Body}, {entry.RawContent.Ref, *parsed.Records[i].RawBody},
+				} {
+					page, err := provenance.ReadTextContentPage(dbFresh, "run", item.ref, 0, 65536)
+					if err != nil || page.Content != item.want {
+						t.Fatalf("saved content changed: %+v %v", page, err)
+					}
+				}
+			}
+			v, err := provenance.Verify(dbFresh, "run")
+			if err != nil || v.ErrorCount != 0 {
+				t.Fatalf("graph verify: %+v %v", v, err)
+			}
+		})
+	}
+}

@@ -3,6 +3,7 @@ package launch
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -81,6 +82,43 @@ func TestCaptureConcurrentSessionsRemainUnbound(t *testing.T) {
 	p, err := svc.Entries(ctx, agentcontext.PageOptions{RunID: "run"})
 	if err != nil || len(p.Entries) != 0 {
 		t.Fatalf("ambiguous activity bound: %+v %v", p, err)
+	}
+}
+
+func TestCaptureCodexCatalogOutsideDefaultSessionsDirectory(t *testing.T) {
+	home, workdir := t.TempDir(), t.TempDir()
+	t.Setenv("CODEX_HOME", home)
+	ctx, svc := context.Background(), contextService(t)
+	c, err := prepareContext(ctx, Options{Workdir: workdir}, detectRecipe([]string{"codex"}))
+	if err != nil || c.catalogRoot != home {
+		t.Fatalf("default catalog root: %+v %v", c, err)
+	}
+	start := time.Now().Add(-time.Second)
+	path := filepath.Join(t.TempDir(), "saved-rollout.jsonl")
+	writeFixture(t, path, codexSession("catalog-session", workdir, time.Now().Format(time.RFC3339Nano))+
+		`{"type":"event_msg","payload":{"type":"user_message","message":"catalog-discovered task"}}`+"\n")
+	catalog, err := sql.Open("sqlite", filepath.Join(home, "state_9.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer catalog.Close()
+	if _, err := catalog.Exec(`CREATE TABLE threads(id TEXT, rollout_path TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := catalog.Exec(`INSERT INTO threads VALUES (?, ?)`, "catalog-session", path); err != nil {
+		t.Fatal(err)
+	}
+	o, err := c.finish(ctx, svc, "run", "", start, time.Now())
+	if err != nil || o.Messages == nil || *o.Messages != 1 {
+		t.Fatalf("catalog not connected to launch: %+v %v", o, err)
+	}
+	report := sourceReport(t, o, "discovery")
+	if report.Status != agentcontext.OK || *report.Counts.Discovered != 1 || *report.Counts.Matched != 1 {
+		t.Fatalf("capture report: %+v", report)
+	}
+	page, err := svc.Entries(ctx, agentcontext.PageOptions{RunID: "run", Kind: "message"})
+	if err != nil || len(page.Entries) != 1 || page.Entries[0].Source.Path != path {
+		t.Fatalf("source identity: %+v %v", page, err)
 	}
 }
 

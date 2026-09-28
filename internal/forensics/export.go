@@ -82,7 +82,7 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 		// Multi-agent orchestration actors (names/types/parent) so a replayed
 		// orchestration lens shows alice/bob/recon, not bare agent ids.
 		{"agents", "agents", "run_id = ?", "id ASC"},
-		{"agent_context_entries", "agent_context_entries", "run_id = ?", "source_id ASC, source_sequence ASC, id ASC"},
+		{"agent_context_entries", "agent_context_entries", "run_id = ?", "source_id ASC, source_sequence ASC, source_ordinal ASC, id ASC"},
 		{"agent_context_reports", "agent_context_reports", "run_id = ?", "created_at ASC, id ASC"},
 		{"processes", "processes", "session_id IN (SELECT id FROM sessions WHERE run_id = ?)", "started_at ASC, id ASC"},
 		{"fork_attempts", "fork_attempts", "rollout_id IN (SELECT id FROM rollouts WHERE run_id = ?)", "created_at ASC, id ASC"},

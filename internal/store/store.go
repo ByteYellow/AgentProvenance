@@ -12,7 +12,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 18
+const SchemaVersion = 19
 
 type Paths struct {
 	Root       string
@@ -126,6 +126,7 @@ func EnsureSchema(db *sql.DB) error {
 			agent_id TEXT NOT NULL DEFAULT '',
 			source_key TEXT NOT NULL,
 			source_sequence INTEGER NOT NULL,
+			source_ordinal INTEGER NOT NULL DEFAULT 0,
 			kind TEXT NOT NULL,
 			role TEXT NOT NULL DEFAULT '',
 			tool_call_id TEXT NOT NULL DEFAULT '',
@@ -138,7 +139,6 @@ func EnsureSchema(db *sql.DB) error {
 			created_at TEXT NOT NULL,
 			PRIMARY KEY (run_id, id)
 		);`,
-		`CREATE INDEX IF NOT EXISTS idx_agent_context_page ON agent_context_entries(run_id, source_id, source_sequence, id);`,
 		`CREATE INDEX IF NOT EXISTS idx_agent_context_tool ON agent_context_entries(run_id, tool_call_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_agent_context_session ON agent_context_entries(run_id, session_id, kind);`,
 		`CREATE INDEX IF NOT EXISTS idx_agent_context_revision ON agent_context_entries(run_id, source_id, source_key, kind, created_at, id);`,
@@ -788,6 +788,9 @@ func EnsureSchema(db *sql.DB) error {
 		}
 	}
 	alterStmts := []string{
+		`ALTER TABLE agent_context_entries ADD COLUMN source_ordinal INTEGER NOT NULL DEFAULT 0;`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_context_position ON agent_context_entries(run_id, source_id, source_sequence, source_ordinal, id);`,
+		`DROP INDEX IF EXISTS idx_agent_context_page;`,
 		`ALTER TABLE sessions ADD COLUMN startup_cold_ms INTEGER NOT NULL DEFAULT 0;`,
 		`ALTER TABLE processes ADD COLUMN exit_code INTEGER;`,
 		`ALTER TABLE processes ADD COLUMN tool_call_id TEXT NOT NULL DEFAULT '';`,

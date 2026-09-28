@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
@@ -127,6 +128,41 @@ func TestContextCodexStructuredFailureIsSourceError(t *testing.T) {
 	}
 	if n := queryCount(t, db, `SELECT COUNT(*) FROM graph_edges WHERE run_id='run' AND edge_type='context_tool_result'`); n != 1 {
 		t.Fatal("source result reference is missing")
+	}
+}
+
+func TestContextDeepSeekSubcallsKeepErrorsAndExcludeSyntheticStarts(t *testing.T) {
+	db, paths := openTestStore(t)
+	saveContext(t, db, paths, "run", "deepseek", `{"type":"session","version":4,"id":"s"}
+{"type":"tool/ptc-dispatch-start","seq":0,"time":1790548591000,"data":{"subCallId":"c","parentCallId":"parent","name":"read_file","arguments":{"path":"report.py"}}}
+{"type":"tool/ptc-dispatch","seq":1,"time":1790548592000,"data":{"subCallId":"c","parentCallId":"parent","name":"read_file","arguments":{"path":"report.py"},"isError":true,"content":[{"type":"text","text":"not found"}]}}
+{"type":"tool/result","seq":2,"time":1790548593000,"surfaceOp":{"op":"replace","startSeq":1,"endSeq":1},"sourceEventSeqs":[1],"data":{"message":{"toolCallId":"c","content":[{"type":"text","text":"summary"}]}}}
+{"type":"tool/ptc-dispatch","seq":3,"time":1790548594000,"data":{"subCallId":"orphan","parentCallId":"parent","name":"read_file","arguments":{"path":"notes.md"},"content":[{"type":"text","text":"notes"}]}}
+`)
+	ctx := context.Background()
+	for i := 0; i < 2; i++ {
+		summary, err := IngestContext(ctx, db, paths, "run")
+		if err != nil || summary.ToolCalls != 1 || summary.Refused != 0 {
+			t.Fatalf("sub-call projection: %+v %v", summary, err)
+		}
+	}
+	var status, decision, ended string
+	if err := db.QueryRow(`SELECT status, policy_decision, ended_at FROM tool_calls WHERE run_id='run'`).Scan(&status, &decision, &ended); err != nil {
+		t.Fatal(err)
+	}
+	if status != "source_error" || decision != "not_evaluated" || ended != time.UnixMilli(1790548592000).UTC().Format(time.RFC3339Nano) {
+		t.Fatalf("replacement altered source outcome/time: %q %q %q", status, decision, ended)
+	}
+	svc := agentcontext.Service{DB: db, Paths: paths}
+	page, err := svc.Entries(ctx, agentcontext.PageOptions{RunID: "run", ToolCallID: "orphan"})
+	if err != nil || len(page.Entries) != 2 {
+		t.Fatalf("completion-only evidence lost: %+v %v", page, err)
+	}
+	for _, entry := range page.Entries {
+		links, err := svc.Links(ctx, "run", entry.ID)
+		if err != nil || len(links.Links) != 0 {
+			t.Fatalf("fabricated current tool identity: %+v %v", links, err)
+		}
 	}
 }
 

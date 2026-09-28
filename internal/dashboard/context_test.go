@@ -134,4 +134,35 @@ func TestContextDashboardFixture(t *testing.T) {
 	if err != nil || v.ErrorCount != 0 {
 		t.Fatalf("fixture evidence invalid: %+v %v", v, err)
 	}
+	addContextProtocolFixtures(t, s)
+}
+
+func addContextProtocolFixtures(t *testing.T, s agentcontext.Service) {
+	t.Helper()
+	ctx := context.Background()
+	for _, fixture := range []struct{ run, harness, input string }{
+		{"ui-deepseek-protocol", "deepseek", `{"type":"session","version":4,"id":"synthetic-dsh"}
+{"type":"assistant/message","seq":0,"time":1790548590000,"data":{"message":{"role":"assistant","content":[{"type":"tool-call","id":"proposal","name":"run_shell","arguments":"{\"command\":\"true\"}"}]}}}
+{"type":"tool/ptc-dispatch-start","seq":1,"time":1790548591000,"data":{"subCallId":"sub","rootCallId":"root","parentCallId":"parent","name":"read_file","arguments":{"path":"report.py"}}}
+{"type":"tool/ptc-dispatch","seq":2,"time":1790548592000,"data":{"subCallId":"sub","rootCallId":"root","parentCallId":"parent","name":"read_file","arguments":{"path":"report.py"},"isError":true,"content":[{"type":"text","text":"not found"}]}}
+{"type":"tool/result","seq":3,"time":1790548593000,"surfaceOp":{"op":"replace","startSeq":2,"endSeq":2},"sourceEventSeqs":[2],"data":{"message":{"toolCallId":"sub","content":[{"type":"text","text":"compacted result"}]}}}
+{"type":"tool/ptc-dispatch","seq":4,"time":1790548594000,"data":{"subCallId":"orphan","rootCallId":"root","parentCallId":"parent","name":"read_file","arguments":{"path":"notes.md"},"content":[{"type":"text","text":"notes"}]}}
+`},
+		{"ui-claude-compound", "claude", `{"type":"user","sessionId":"synthetic-claude","message":{"content":"COMPOUND-FIRST"}}` + "\x00" + `{"type":"assistant","sessionId":"synthetic-claude","message":{"content":"COMPOUND-SECOND"}}` + "\n"},
+	} {
+		parsed, err := agentcontext.Parse(ctx, strings.NewReader(fixture.input), agentcontext.ParseOptions{Harness: fixture.harness, Binding: "explicit"})
+		if err != nil || parsed.Coverage.Status != agentcontext.OK {
+			t.Fatalf("protocol fixture parse: %+v %v", parsed, err)
+		}
+		if _, err := s.Save(ctx, fixture.run, parsed.Source, parsed.Records, parsed.Coverage); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := hooksbridge.IngestContext(ctx, s.DB, s.Paths, fixture.run); err != nil {
+			t.Fatal(err)
+		}
+		verified, err := provenance.Verify(s.DB, fixture.run)
+		if err != nil || verified.ErrorCount != 0 {
+			t.Fatalf("protocol fixture graph: %+v %v", verified, err)
+		}
+	}
 }

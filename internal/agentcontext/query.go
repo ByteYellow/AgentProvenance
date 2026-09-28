@@ -17,14 +17,14 @@ var ErrInvalidArgument = errors.New("invalid context argument")
 const latestEntry = `NOT EXISTS (SELECT 1 FROM agent_context_entries newer
 	WHERE newer.run_id = e.run_id AND newer.source_id = e.source_id
 	AND newer.source_key = e.source_key AND newer.kind = e.kind
-	AND (newer.source_sequence > e.source_sequence OR
-	(newer.source_sequence = e.source_sequence AND (newer.created_at > e.created_at OR
-	(newer.created_at = e.created_at AND newer.id > e.id)))))`
+	AND (newer.source_sequence, newer.source_ordinal, newer.created_at, newer.id)
+	  > (e.source_sequence, e.source_ordinal, e.created_at, e.id))`
 
 type pageCursor struct {
 	Query    string `json:"query"`
 	Source   string `json:"source"`
 	Sequence int64  `json:"sequence"`
+	Ordinal  int64  `json:"ordinal,omitempty"`
 	ID       string `json:"id"`
 }
 
@@ -88,13 +88,12 @@ func (s Service) Entries(ctx context.Context, opts PageOptions) (Page, error) {
 		if err != nil || len(raw) > 4096 || json.Unmarshal(raw, &cursor) != nil || cursor.Query != fingerprint {
 			return Page{}, fmt.Errorf("%w: cursor does not match this query", ErrInvalidArgument)
 		}
-		where = append(where, `(e.source_id > ? OR (e.source_id = ? AND e.source_sequence > ?)
-			OR (e.source_id = ? AND e.source_sequence = ? AND e.id > ?))`)
-		args = append(args, cursor.Source, cursor.Source, cursor.Sequence, cursor.Source, cursor.Sequence, cursor.ID)
+		where = append(where, `(e.source_id, e.source_sequence, e.source_ordinal, e.id) > (?, ?, ?, ?)`)
+		args = append(args, cursor.Source, cursor.Sequence, cursor.Ordinal, cursor.ID)
 	}
 	args = append(args, opts.Limit+1)
 	rows, err := s.DB.QueryContext(ctx, `SELECT e.id, e.object_hash, e.created_at FROM agent_context_entries e
-		WHERE `+strings.Join(where, " AND ")+` ORDER BY e.source_id, e.source_sequence, e.id LIMIT ?`, args...)
+		WHERE `+strings.Join(where, " AND ")+` ORDER BY e.source_id, e.source_sequence, e.source_ordinal, e.id LIMIT ?`, args...)
 	if err != nil {
 		return Page{}, err
 	}
@@ -131,7 +130,7 @@ func (s Service) Entries(ctx context.Context, opts PageOptions) (Page, error) {
 	}
 	if page.HasMore {
 		last := page.Entries[len(page.Entries)-1]
-		raw, err := json.Marshal(pageCursor{Query: fingerprint, Source: last.Source.ID, Sequence: last.Sequence, ID: last.ID})
+		raw, err := json.Marshal(pageCursor{Query: fingerprint, Source: last.Source.ID, Sequence: last.Sequence, Ordinal: last.SourceOrdinal, ID: last.ID})
 		if err != nil {
 			return Page{}, err
 		}

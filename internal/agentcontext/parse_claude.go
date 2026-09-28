@@ -29,7 +29,7 @@ func (p *parser) claude(top row) bool {
 		}
 	}
 	if len(changes) > 0 {
-		p.add("configuration", fmt.Sprintf("source-config:%d", p.line), "", "", "", "source_metadata", ts, whole(changes))
+		p.add("configuration", p.positionKey("source-config"), "", "", "", "source_metadata", ts, whole(changes))
 	}
 	if event := text(top, "hook_event_name"); event != "" {
 		p.Source.Channel = "hooks"
@@ -56,7 +56,7 @@ func (p *parser) claude(top row) bool {
 			role = text(top, "type")
 		}
 		id := text(top, "uuid")
-		key := stableKey("message", id, p.line)
+		key := p.sourceKey("message", id)
 		if model := text(message, "model"); model != "" {
 			p.add("configuration", key+":model", "", "", "", "observed", ts, whole(row{"model": quoted(model)}))
 		}
@@ -70,13 +70,13 @@ func (p *parser) claude(top row) bool {
 			switch text(block, "type") {
 			case "tool_use":
 				call := text(block, "id")
-				p.add("tool_call", stableKey("call", call, p.line), "assistant", call, text(block, "name"), "proposed", ts, block["input"])
+				p.add("tool_call", p.sourceKey("call", call), "assistant", call, text(block, "name"), "proposed", ts, block["input"])
 			case "tool_result":
 				call, status := text(block, "tool_use_id"), "returned"
 				if flag(block, "is_error") {
 					status = "error"
 				}
-				p.add("tool_result", stableKey("result", call, p.line), "tool", call, "", status, ts, block["content"])
+				p.add("tool_result", p.sourceKey("result", call), "tool", call, "", status, ts, block["content"])
 			case "text", "thinking", "redacted_thinking", "image", "document":
 				ordinary = append(ordinary, block)
 			default:
@@ -95,13 +95,13 @@ func (p *parser) claude(top row) bool {
 		if status == "init" {
 			kind, status = "configuration", "initialization"
 		}
-		p.add(kind, fmt.Sprintf("system:%d", p.line), "system", "", "", status, ts, whole(top))
+		p.add(kind, p.positionKey("system"), "system", "", "", status, ts, whole(top))
 		return true
 	case "permission-mode":
-		p.add("configuration", fmt.Sprintf("permission-mode:%d", p.line), "", "", "", "permission_mode", ts, whole(top))
+		p.add("configuration", p.positionKey("permission-mode"), "", "", "", "permission_mode", ts, whole(top))
 		return true
 	case "summary":
-		p.add("message", fmt.Sprintf("summary:%d", p.line), "assistant", "", "", "summary", ts, top["summary"])
+		p.add("message", p.positionKey("summary"), "assistant", "", "", "summary", ts, top["summary"])
 		return true
 	case "queue-operation", "file-history-snapshot", "progress":
 		return true
@@ -111,16 +111,16 @@ func (p *parser) claude(top row) bool {
 
 func (p *parser) claudeHook(top row, event, ts string) bool {
 	id, name := text(top, "tool_use_id"), text(top, "tool_name")
-	key := fmt.Sprintf("hook:%d", p.line)
+	key := p.positionKey("hook")
 	switch event {
 	case "PreToolUse":
-		p.add("tool_call", stableKey("call", id, p.line), "assistant", id, name, "proposed", ts, top["tool_input"])
+		p.add("tool_call", p.sourceKey("call", id), "assistant", id, name, "proposed", ts, top["tool_input"])
 	case "PostToolUse", "PostToolUseFailure":
 		status := "returned"
 		if event == "PostToolUseFailure" {
 			status = "error"
 		}
-		p.add("tool_result", stableKey("result", id, p.line), "tool", id, name, status, ts, content(top, "tool_response", "error"))
+		p.add("tool_result", p.sourceKey("result", id), "tool", id, name, status, ts, content(top, "tool_response", "error"))
 	case "UserPromptSubmit":
 		p.add("message", key, "user", "", "", "observed", ts, top["prompt"])
 	case "PermissionRequest":
