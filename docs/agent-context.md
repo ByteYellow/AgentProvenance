@@ -142,6 +142,10 @@ their presence does not prove effective authorization. Tool names alone are not
 complete definitions. `ok` means no processing errors were observed in this range,
 not that all fields or configuration changes were captured. Older reports retain
 their original, potentially coarser missing-field checks.
+Current reports also include `configuration.change_history_completeness`:
+source snapshots cannot establish that every intervening change was logged,
+even when all checked configuration fields are present. This is a coverage
+limitation, not a processing error or a reason to discard the recorded snapshots.
 
 Recorded working directories and application versions are scoped to their
 source positions. Later Claude metadata or a Codex turn's changed directory

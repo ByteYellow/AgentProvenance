@@ -112,7 +112,7 @@ func TestContextDashboardFixture(t *testing.T) {
 	source := agentcontext.Source{ID: "ui-fixture-source", Harness: "codex", Channel: "transcript", SessionID: "ui-fixture-session", Binding: "explicit", ParserVersion: "synthetic-ui-fixture/v1", Workdir: "/fixture"}
 	_, err = s.Save(ctx, "ui-fixture", source, records, agentcontext.Coverage{Status: agentcontext.OK,
 		FirstLine: 3, LastLine: 42,
-		MissingFields: []string{"approval", "approval_decision", "configuration.mcp_servers", "configuration.network_restrictions"},
+		MissingFields: []string{"approval", "approval_decision", "configuration.mcp_servers", "configuration.network_restrictions", "configuration.change_history_completeness"},
 		Counts:        agentcontext.Counts{Read: agentcontext.Number(40), Parsed: agentcontext.Number(40), Matched: agentcontext.Number(1)},
 		PriorContext: &agentcontext.PriorRange{FirstLine: 1, LastLine: 2, MissingFields: []string{"approval"},
 			Counts: agentcontext.Counts{Read: agentcontext.Number(2), Parsed: agentcontext.Number(2)}}})

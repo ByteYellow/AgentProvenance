@@ -203,10 +203,11 @@ func TestSignedConfigurationHistoryRetainsOfflineComparison(t *testing.T) {
 	defer db.Close()
 	svc := agentcontext.Service{DB: db, Paths: paths}
 	a, b := `{"model":"first","sandbox":"read-only"}`, `{"model":"second"}`
+	const historyGap = "configuration.change_history_completeness"
 	if _, err := svc.Save(ctx, "run", agentcontext.Source{Harness: "codex", SessionID: "s", ParserVersion: "test/v1", Binding: "explicit"}, []agentcontext.Record{
 		{Key: "before", Sequence: 1, Kind: "configuration", Body: &a},
 		{Key: "after", Sequence: 2, Kind: "configuration", Body: &b},
-	}, agentcontext.Coverage{Status: agentcontext.OK}); err != nil {
+	}, agentcontext.Coverage{Status: agentcontext.OK, MissingFields: []string{historyGap}}); err != nil {
 		t.Fatal(err)
 	}
 	p, err := svc.Entries(ctx, agentcontext.PageOptions{RunID: "run"})
@@ -240,6 +241,10 @@ func TestSignedConfigurationHistoryRetainsOfflineComparison(t *testing.T) {
 	after, err := (agentcontext.Service{DB: dbFresh, Paths: fresh}).CompareSnapshots(ctx, "run", p.Entries[0].ID, "", p.Entries[1].ID)
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatalf("portable configuration changed: before=%+v after=%+v err=%v", before, after, err)
+	}
+	report, err := (agentcontext.Service{DB: dbFresh, Paths: fresh}).Overview(ctx, "run")
+	if err != nil || len(report.Coverage) != 1 || !reflect.DeepEqual(report.Coverage[0].MissingFields, []string{historyGap}) {
+		t.Fatalf("portable configuration coverage changed: %+v %v", report, err)
 	}
 	v, err := provenance.Verify(dbFresh, "run")
 	if err != nil || v.ErrorCount != 0 {

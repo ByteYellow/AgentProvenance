@@ -11,6 +11,7 @@ window.AgentContextUI = (() => {
   const missingNames = {approval_decision:'Approval decision','configuration.model':'Model selection','configuration.provider':'Model provider','configuration.application_version':'Application version','configuration.workdir':'Working directory','configuration.permission_mode':'Permission mode','configuration.approval_policy':'Approval policy','configuration.sandbox_policy':'Sandbox policy','configuration.directory_restrictions':'Directory restrictions','configuration.network_restrictions':'Network restrictions','configuration.mcp_servers':'MCP servers','configuration.tools':'Tool catalog','configuration.skills':'Skills','configuration.plugins':'Plugins'};
   const snapshotNames = {session_metadata:'Session metadata',source_metadata:'Source metadata',initialization:'Initialization',permission_mode:'Permission mode',source_message_event:'Source message event',source_reasoning_event:'Source reasoning event',model_proposal:'Model-proposed tool',completion_only:'Completion recorded; start not recorded',context_replacement:'Replaced context; not a new execution','permission/preset':'Permission preset','sandbox/mode':'Sandbox mode','approval/policy':'Approval policy','plan/mode':'Plan mode','request/header':'Request configuration','request/context':'Request context','model/selection':'Model selection'};
   missingNames.tool_start_time = 'Tool start time';
+  missingNames['configuration.change_history_completeness'] = 'Completeness of configuration change history';
   const e = value => api.esc(value == null ? '' : String(value));
   const t = value => api.tr(value);
   const q = values => new URLSearchParams(Object.entries(values).filter(([,v]) => v !== '' && v != null)).toString();
@@ -293,7 +294,7 @@ window.AgentContextUI = (() => {
   function renderCoverage() {
     listRequest++; listLoading = false; $('context-pager').hidden = true; $('context-compare').hidden = true;
     if (!overview) { $('context-body').innerHTML = notice('loading…'); return; }
-    $('context-body').innerHTML = notice('Context coverage, runtime coverage, and signature verification are separate checks.') + renderRuntimeCoverage() + (overview.coverage || []).map(report => {
+    $('context-body').innerHTML = notice('Context coverage, runtime coverage, and signature verification are separate checks.') + notice('Configuration snapshots show recorded changes only; completeness of the change history is unknown.') + renderRuntimeCoverage() + (overview.coverage || []).map(report => {
       const src = report.source || {};
       const fields = [['Session',src.session_id],['Source path',src.path],['Binding',src.binding],['Parser',src.parser_version],['Source version',src.application_version || src.format_version],['Observed at',report.observed_at],['Last successful capture',report.last_success_at],['Source range',[report.first_line,report.last_line].filter(x=>x!=null && x!==0).join(' – ')],['Missing fields',missingFields(report.missing_fields)],['Binding evidence',(src.binding_evidence || []).join('\n')]];
       const counts = value => `<div class="context-counts">${Object.entries(value || {}).map(([key,n]) => `<span>${e(t(key))}<b>${e(unknown(n))}</b></span>`).join('')}</div>`;

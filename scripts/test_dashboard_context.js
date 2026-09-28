@@ -77,6 +77,7 @@ async (page) => {
   check(await page.locator('[data-runtime-coverage]').innerText().then(text=>text.includes('Not recorded in this historical run') && text.includes('Stored runtime events') && text.includes('Run-specific dropped events')),'runtime coverage is shown beside context without inventing historical capture');
   check(await page.locator('#context-body').innerText().then(text=>text.includes('Not recorded') && text.includes('synthetic-ui-fixture/v1')),'source coverage retains unknown counters and parser');
   check(await page.locator('#context-body').innerText().then(text=>text.includes('Approval decision') && text.includes('MCP servers') && text.includes('Network restrictions')),'configuration field gaps use readable names');
+  check(await page.locator('#context-body').innerText().then(text=>text.includes('Completeness of configuration change history') && text.includes('completeness of the change history is unknown.')),'recorded configuration changes do not imply complete history');
   await page.locator('#context-body summary').filter({hasText:'Prior context'}).click();
   check(await page.locator('#context-body').innerText().then(text=>text.includes('Historical approvals do not authorize new actions.')),'historical coverage and authorization boundaries are explicit');
   await page.getByRole('tab',{name:'Conversation & tools',exact:true}).click();

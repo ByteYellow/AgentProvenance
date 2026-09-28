@@ -70,7 +70,10 @@ components:
         approval_policy/sandbox_policy/directory_restrictions/network_restrictions/
         mcp_servers/tools/skills/plugins (each configuration field uses its own
         configuration. prefix). Explicit null/false/empty collections remain
-        recorded values. Older reports retain their original checks; absence of a
+        recorded values. configuration.change_history_completeness indicates
+        that source snapshots do not establish exhaustive change history; it is
+        retained even when all checked configuration values are present.
+        Older reports retain their original checks; absence of a
         missing-field code is not proof of exhaustive coverage or valid permission.
     Coverage:
       type: object

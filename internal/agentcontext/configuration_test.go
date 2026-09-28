@@ -72,6 +72,29 @@ func TestConfigurationCoverageDoesNotTreatMessagesAsPolicy(t *testing.T) {
 	}
 }
 
+func TestRecordedConfigurationChangesDoNotProveCompleteHistory(t *testing.T) {
+	input := `{"type":"session_meta","payload":{"id":"config"}}
+{"type":"turn_context","payload":{"approval_policy":"on-request"}}
+{"type":"turn_context","payload":{"approval_policy":"never"}}
+`
+	p, err := Parse(context.Background(), strings.NewReader(input), ParseOptions{Harness: "codex", Binding: "explicit", AfterLine: 2})
+	if err != nil || p.Coverage.Status != OK || p.Coverage.PriorContext == nil {
+		t.Fatalf("parse configuration history: %+v %v", p.Coverage, err)
+	}
+	const gap = "configuration.change_history_completeness"
+	if !hasMissing(p.Coverage.MissingFields, gap) || !hasMissing(p.Coverage.PriorContext.MissingFields, gap) {
+		t.Fatal("recorded changes were treated as complete configuration history")
+	}
+	s := testService(t)
+	if _, err := s.Save(context.Background(), "run", p.Source, p.Records, p.Coverage); err != nil {
+		t.Fatal(err)
+	}
+	query, err := s.Overview(context.Background(), "run")
+	if err != nil || len(query.Coverage) != 1 || !hasMissing(query.Coverage[0].MissingFields, gap) {
+		t.Fatalf("coverage query lost configuration history limitation: %+v %v", query, err)
+	}
+}
+
 func TestClaudeSourceConfigurationHistoryIsComparable(t *testing.T) {
 	input := `{"type":"system","subtype":"init","session_id":"s","timestamp":"2026-09-28T01:00:00Z","cwd":"/task","claude_code_version":"1.0","permissionMode":"default","model":"first","mcp_servers":[{"name":"docs","version":"1","tools":[{"name":"search","inputSchema":{"type":"object","properties":{"q":{"type":"string"}}}}]}],"skills":[],"plugins":null}
 {"type":"permission-mode","sessionId":"s","timestamp":"2026-09-28T01:01:00Z","mode":"plan"}

@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ParserVersion = "context-parser/v6"
+	ParserVersion = "context-parser/v7"
 	MaxInputBytes = 128 << 20
 	MaxLineBytes  = 40 << 20
 	MaxRecords    = 25000

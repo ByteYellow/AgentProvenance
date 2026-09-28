@@ -70,7 +70,9 @@ func missingSnapshots(harness string, records []Record) []string {
 			}
 		}
 	}
-	missing := []string{}
+	// Source snapshots can show changes but cannot establish that every change
+	// was logged. Keep this coverage gap even when all configuration values exist.
+	missing := []string{"configuration.change_history_completeness"}
 	for _, kind := range []string{"task", "configuration", "approval", "approval_decision"} {
 		if !seen[kind] {
 			missing = append(missing, kind)
