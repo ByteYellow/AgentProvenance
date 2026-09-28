@@ -94,7 +94,7 @@ func (s ObjectStore) PutTextContent(input TextContentInput) (TextContent, error)
 			end--
 		}
 		part, err := s.PutExternalObject(ExternalObjectInput{
-			Type: "artifact", RunID: input.RunID,
+			Type: "text_chunk", RunID: input.RunID,
 			SourceID: fmt.Sprintf("%s/chunk/%d", input.SourceID, len(manifest.Chunks)),
 			Payload:  map[string]any{"kind": "text_chunk", "content": text[pos:end]},
 		})
@@ -109,7 +109,7 @@ func (s ObjectStore) PutTextContent(input TextContentInput) (TextContent, error)
 		parents[i] = part.Ref
 	}
 	obj, err := s.PutExternalObject(ExternalObjectInput{
-		Type: "artifact", RunID: input.RunID, SourceID: input.SourceID + "/content",
+		Type: "text_content", RunID: input.RunID, SourceID: input.SourceID + "/content",
 		Parents: parents, Payload: map[string]any{"kind": "stored_text", "text_manifest": manifest},
 	})
 	if err != nil {

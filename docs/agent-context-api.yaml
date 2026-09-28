@@ -152,6 +152,45 @@ components:
         has_more: {type: boolean}
         sha256: {type: string}
         redacted: {type: boolean}
+    ArtifactPage:
+      type: object
+      required: [schema_version, kind, content_state, mode, size, truncated, redacted, offset, next_offset, total_bytes, has_more]
+      properties:
+        schema_version: {const: agentprovenance.artifact_page/v1}
+        kind: {type: string, enum: [text, diff, binary, unavailable]}
+        ref: {type: string, description: 'Exact saved object hash, distinct from the displayed body hash.'}
+        source: {type: string, enum: [object, db]}
+        content_ref: {type: string, description: Chunked text manifest when present.}
+        content_state: {type: string, examples: [stored, legacy_not_recorded, ambiguous, unavailable, integrity_failure, read_limit, binary, omitted]}
+        integrity: {type: string, enum: [object_hash_verified, database_record], description: Not a signature claim or a claim about capture completeness.}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$', description: 'Hash of the whole redacted display body, including localized presentation headings in body mode.'}
+        size: {type: integer, minimum: 0, description: Legacy size field; use nullable total_bytes to distinguish unknown from zero.}
+        mime: {type: string}
+        mode: {type: string, enum: [body, raw]}
+        truncated: {type: boolean, description: Compatibility flag for a partial preview; has_more and next_offset permit reading the remaining saved text.}
+        redacted: {type: boolean}
+        content: {type: string, description: 'One UTF-8 page, at most 262144 bytes. Missing for unavailable content or an empty page.'}
+        reason: {type: string}
+        offset: {type: integer, minimum: 0}
+        next_offset: {type: integer, minimum: 0}
+        total_bytes: {$ref: '#/components/schemas/NullableCount'}
+        has_more: {type: boolean}
+        versions:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [ref, source_id]
+            properties:
+              ref: {type: string}
+              source_id: {type: string}
+        versions_has_more: {type: boolean}
+      description: >
+        Saved-only artifact or database-record preview. Legacy objects retain an
+        8 MiB read budget; new stored text can span 32 MiB using bounded chunks.
+        Multiple revisions require exact hash selection; current workspace files
+        are never used to replace missing historical content. Raw mode shows the
+        saved envelope, or the explicitly identified database record fields.
     EntryLinks:
       type: object
       required: [schema_version, run_id, entry_id, basis, links, has_more]
@@ -230,6 +269,23 @@ components:
       description: Database unavailable; never reported as empty or missing evidence.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
 paths:
+  /api/artifact:
+    servers: [{url: 'http://127.0.0.1:7396'}]
+    get:
+      operationId: readSavedArtifactPage
+      summary: Read a page of saved graph content from the local Dashboard
+      security: []
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: node, in: query, required: true, schema: {type: string, minLength: 1}}
+        - {name: mode, in: query, schema: {type: string, enum: [body, raw], default: body}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 4, maximum: 262144, default: 65536}}
+        - {name: view_lang, in: query, schema: {type: string, examples: [en, zh-CN]}, description: Localizes generated headings only; keep fixed while paging.}
+      responses:
+        '200': {description: Saved text page or an explicit unavailable/ambiguous state, content: {application/json: {schema: {$ref: '#/components/schemas/ArtifactPage'}}}}
+        '400': {description: 'Invalid required parameters, mode or UTF-8 page boundary'}
+        '500': {description: Evidence index unavailable; not treated as missing content}
   /v1/context/overview:
     get:
       operationId: agent_context_overview

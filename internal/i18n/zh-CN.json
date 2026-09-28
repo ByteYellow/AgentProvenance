@@ -2359,5 +2359,19 @@
   "task": "任务",
   "source_error": "来源记录的错误",
   "source_returned": "来源已返回结果",
-  "First page": "首页"
+  "First page": "首页",
+  "Raw saved object": "已保存对象原文",
+  "Saved version": "已保存版本",
+  "Body SHA-256": "正文 SHA-256",
+  "More saved versions exist; use an exact object hash to query them.": "还有更多已保存版本，可使用确切的对象哈希查询。",
+  "Multiple saved versions exist; select an exact object.": "存在多个已保存版本，请选择具体对象。",
+  "No saved body for this node; current files are not historical evidence.": "此节点未保存正文，当前磁盘文件不能代替历史证据。",
+  "Legacy record exceeds the bounded read limit.": "旧记录超过读取容量限制。",
+  "Legacy object exceeds the bounded read limit.": "旧对象超过读取容量限制。",
+  "Saved content failed its object hash or envelope check.": "已保存内容的对象哈希或封装校验失败。",
+  "Saved content is unavailable in this store.": "当前存储中缺少已保存的正文。",
+  "Saved artifact has an invalid content descriptor.": "已保存制品的正文描述无效。",
+  "Saved text or its referenced chunks are missing or invalid.": "已保存正文或其引用的分段缺失或无效。",
+  "Only artifact metadata was saved; select the raw record to inspect it.": "仅保存了制品元数据，可切换到原始记录查看。",
+  "Binary content is not rendered as text.": "二进制内容不作为文本展示。"
 }

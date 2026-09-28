@@ -69,7 +69,7 @@ window.AgentContextUI = (() => {
     if (!state) return null;
     const choice = previewChoices[Number($('content-choice').value)];
     return {run,view:{tab:state.tab,source:state.source,cursor:state.cursor,history:state.history.slice(-200),pageNumber:state.pageNumber,selected:state.selected,node:state.node,graph:state.graph,scroll:$('context-body').scrollTop,open:state.open,expanded:[...state.expanded].slice(-200)},
-      preview:choice ? {entry:choice.entry?.id || '',raw:choice.entry?.raw_content.ref === choice.ref?.ref,node:choice.node || '',offsets:previewOffsets.slice(-512),scroll:$('content-body').scrollTop} : null};
+      preview:choice ? {entry:choice.entry?.id || '',raw:choice.node ? choice.mode === 'raw' : choice.entry?.raw_content.ref === choice.ref?.ref,node:choice.node || '',offsets:previewOffsets.slice(-512),scroll:$('content-body').scrollTop} : null};
   }
   function persist() {
     const saved = readingState();
@@ -346,17 +346,18 @@ window.AgentContextUI = (() => {
     setPreview(entryChoices(entry),'entry:'+entry.id,kind === 'raw' ? 1 : 0);
     $('savedcontent').scrollIntoView({block:'start',behavior:'smooth'});
   }
-  async function selectGraph(node,reading = null) {
-    if (!state || !node || node === state.graph) return;
+  async function selectGraph(node,reading = null,explicit = false) {
+    if (!state || !node || node === state.graph && (!explicit || previewKey === 'node:'+node)) return;
     state.graph = node;
     const current = state, currentRun = run;
-    const choices = [{label:t('Recorded graph content'),node}];
-    setPreview(choices,'node:'+node,0,reading);
+    const choices = [{label:t('Recorded graph content'),node,mode:'body'}, {label:t('Raw saved object'),node,mode:'raw'}];
+    setPreview(choices,'node:'+node,reading?.raw ? 1 : 0,reading);
     try {
       const page = await api.j('/api/context/entries?' + q({run,node,limit:50}));
       if (state !== current || run !== currentRun || state.graph !== node || previewKey !== 'node:'+node) return;
-      previewChoices = choices.concat((page.entries || []).flatMap(entryChoices));
-      renderChoices(0);
+      const selected = previewChoices[Number($('content-choice').value)];
+      previewChoices = previewChoices.filter(choice=>!choice.entry).concat((page.entries || []).flatMap(entryChoices));
+      renderChoices(Math.max(0,previewChoices.indexOf(selected)));
       $('content-related').hidden = false;
       $('content-related').textContent = t(page.entries?.length ? 'Locate session records' : 'Check session linkage');
       $('content-related').onclick = () => linkedSession(node);
@@ -382,16 +383,27 @@ window.AgentContextUI = (() => {
     $('content-meta').textContent = ''; $('content-page-label').textContent = '';
     try {
       if (choice.node) {
-        const value = await api.j('/api/artifact?' + q({run,node:choice.node,view_lang:api.lang}));
+        const value = await api.j('/api/artifact?' + q({run,node:choice.node,mode:choice.mode || 'body',offset,limit:65536,view_lang:api.lang}));
         if (request !== previewRequest || state !== current) return;
-        previewPage = null;
-        $('content-meta').textContent = [value.sha256,value.size == null ? '' : value.size+' B',value.source && t(value.source),value.redacted ? t('Redacted') : '',value.truncated ? t('Legacy preview truncated') : ''].filter(Boolean).join(' · ');
+        previewPage = value;
+        if (value.versions?.length) {
+          const selected = Number($('content-choice').value);
+          for (const version of value.versions) {
+            if (previewChoices.some(c=>c.node === version.ref)) continue;
+            previewChoices.push({label:t('Saved version')+' · '+version.ref.slice(7,19),node:version.ref,mode:'body'}, {label:t('Raw saved object')+' · '+version.ref.slice(7,19),node:version.ref,mode:'raw'});
+          }
+          renderChoices(selected);
+          if (value.versions_has_more) $('content-limits').textContent = t('More saved versions exist; use an exact object hash to query them.');
+        }
+        $('content-meta').textContent = [value.ref,value.sha256 ? t('Body SHA-256')+': '+value.sha256 : '',value.source && t(value.source),value.redacted ? t('Redacted') : ''].filter(Boolean).join(' · ');
         if (value.kind === 'unavailable' || value.kind === 'binary') $('content-body').textContent = t(value.reason || 'Content was not recorded');
         else if (value.kind === 'diff') {
           $('content-body').classList.add('diff');
           $('content-body').innerHTML = (value.content || '').split('\n').map(line => `<span class="${line.startsWith('+')?'add':line.startsWith('-')?'del':line.startsWith('@@')?'hunk':''}">${e(line)}</span>`).join('\n');
         } else $('content-body').textContent = value.content || '';
-        $('content-page-label').textContent = t('Recorded artifact preview');
+        $('content-page-label').textContent = value.total_bytes == null ? t('Recorded artifact preview') : api.tx('Bytes {start}–{end} / {total}', {start:value.offset,end:value.next_offset,total:value.total_bytes});
+        $('content-prev').disabled = previewOffsets.length < 2;
+        $('content-next').disabled = !value.has_more;
       } else if (choice.ref?.state !== 'stored' || !choice.ref.ref) {
         previewPage = null;
         $('content-body').textContent = t(choice.ref?.reason || 'Content was not recorded');

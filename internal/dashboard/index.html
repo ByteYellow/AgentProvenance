@@ -924,7 +924,7 @@ function selectNode(id){
   EXPAND_MODE='lineage';
   setEvidenceFilterFromNode(n||null);
   EV_OFFSET=0;
-  renderDAG(window._lg,SEL); showDetail(SEL);
+  renderDAG(window._lg,SEL); showDetail(SEL,true);
   safeUI(loadEvidenceDrilldown(0));
 }
 function drilldownNode(n){
@@ -957,7 +957,7 @@ function setEvidenceFilterFromNode(n){
 }
 
 const DETAIL_HINT=("<span class=\"hint\">"+esc(tr("click any node to highlight its causal chain & inspect its record →"))+"</span>");
-function showDetail(id){
+function showDetail(id,explicit=false){
   const el=$('#detail');
   const n=id&&(window._lg.nodes||[]).find(x=>x.id===id);
   if(!n){el.innerHTML=DETAIL_HINT;return;}
@@ -987,7 +987,10 @@ function showDetail(id){
     `<div class="expandbar">${expandButtons}<button id="detail-session">${esc(tr('Locate session records'))}</button><button id="detail-content">${esc(tr('Saved content'))}</button></div>`+
     `<div class="sec">${esc(tr("Original evidence fields"))}</div><dl>${rows}</dl>`;
   $('#detail-session').onclick=()=>window.AgentContextUI.linkedSession(n.id);
-  $('#detail-content').onclick=()=>$('#savedcontent').scrollIntoView({block:'start',behavior:'smooth'});
+  $('#detail-content').onclick=()=>{
+    safeUI(loadPreview(cur,n.id,true));
+    $('#savedcontent').scrollIntoView({block:'start',behavior:'smooth'});
+  };
   el.querySelectorAll('[data-expand]').forEach(btn=>{
     btn.onclick=()=>{
       const mode=btn.getAttribute('data-expand');
@@ -1002,14 +1005,14 @@ function showDetail(id){
       showDetail(SEL);
     };
   });
-  loadPreview(cur, n.id);
+  loadPreview(cur, n.id,explicit);
 }
 
 // P1: lazily fetch the content behind the selected node (its provenance object
 // or recorded artifact), bounded + secret-redacted by the server. Answers "what
 // did this node actually produce / contain?" without turning into a file browser.
-async function loadPreview(run, id){
-  if(run===cur) await window.AgentContextUI.selectGraph(id);
+async function loadPreview(run, id,explicit=false){
+  if(run===cur) await window.AgentContextUI.selectGraph(id,null,explicit);
 }
 
 function renderVerify(v){
@@ -1709,6 +1712,7 @@ window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,navigateGraph:async(run,id)=>{
   $('#lenssel').value=LENS;$('#detailsel').value=DETAIL;stopPlay();
   await loadRun(run);
   if(SEL!==id)throw new Error(tr('The recorded node is not available in this graph view.'));
+  await loadPreview(run,id,true);
   $('#graphcard').scrollIntoView({block:'start',behavior:'smooth'});
 }});
 

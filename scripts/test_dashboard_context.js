@@ -71,6 +71,13 @@ async (page) => {
   await readyBody('SAVED-OUTPUT-START');
   await page.locator('#content-next').click();
   await readyBody('SAVED-OUTPUT-TAIL');
+  await page.locator('#detail-content').click();
+  await page.waitForFunction(()=>document.querySelector('#content-choice')?.selectedOptions[0]?.textContent==='Recorded graph content');
+  check(true,'explicit graph content selection replaces the session preview');
+  await toolResult().getByRole('button',{name:'Open saved content',exact:true}).click();
+  await readyBody('SAVED-OUTPUT-START');
+  await page.locator('#content-next').click();
+  await readyBody('SAVED-OUTPUT-TAIL');
   await page.locator('#context-body').evaluate(el=>el.scrollTop=450);
   const scroll = await page.locator('#context-body').evaluate(el=>el.scrollTop);
   await page.locator('#live').click();

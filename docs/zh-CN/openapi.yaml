@@ -80,6 +80,8 @@ components:
           additionalProperties: true
       additionalProperties: true
 paths:
+  /api/artifact:
+    $ref: '../agent-context-api.yaml#/paths/~1api~1artifact'
   /v1/context/overview:
     $ref: '../agent-context-api.yaml#/paths/~1v1~1context~1overview'
   /v1/context/entries:

@@ -113,9 +113,23 @@ their recorded values. A missing approval remains **Not recorded**, not denied
 or allowed. The verification badge reports graph integrity; it does not claim
 that collection is complete or that a bundle signature was checked.
 
-Context text uses the chunked content reader. Legacy artifact/file preview and
-export limits have their own integration gate in the delivery checklist; a
-successful context-content test does not establish full artifact portability.
+Graph content also supports byte paging through `/api/artifact`, independently
+of the session section. Choose **Recorded graph content** or **Raw saved object**;
+if a source has several saved versions, select an exact object hash. The body hash
+describes the complete redacted display text, while `ref` identifies its saved
+object envelope. Unavailable content has `total_bytes: null`, not a zero-byte
+body. Object hashes and envelope run IDs are checked before rendering.
+
+This endpoint reads only saved objects and identified database records. It never
+opens a tool result path or a workspace file as a replacement historical body.
+Metadata-only artifacts remain explicitly unavailable in body mode; raw mode
+still exposes their recorded metadata. Legacy inline objects retain an 8 MiB
+read budget. New chunked text supports up to 32 MiB without raising the existing
+4 MiB per-object bundle limit, and storage chunks are not counted as file
+artifacts. Signed offline HTTP-paging tests cover all three former size boundaries.
+Connecting the existing changed-file capture writer to this full-text storage
+remains a separate delivery gate; this reader does not retroactively create bodies
+that an older capture omitted.
 
 The dashboard and daemon share read-only `/api/context/*` and `/v1/context/*`
 routes. See the [API contract](agent-context-api.yaml) and the

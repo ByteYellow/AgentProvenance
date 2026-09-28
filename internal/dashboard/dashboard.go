@@ -10,10 +10,8 @@ package dashboard
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"database/sql"
 	_ "embed"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -1011,202 +1009,6 @@ func (s Server) lens(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, manifest)
 }
 
-// --- artifact content preview (Side Panel) ---
-
-const (
-	artifactPreviewBytes = 64 * 1024 // text shown to the user
-	artifactReadBytes    = 8 << 20   // cap on what we'll read at all
-)
-
-type artifactResp struct {
-	Kind      string `json:"kind"` // text | diff | binary | unavailable
-	Ref       string `json:"ref,omitempty"`
-	Source    string `json:"source,omitempty"` // object | file
-	SHA256    string `json:"sha256,omitempty"`
-	Size      int64  `json:"size"`
-	Mime      string `json:"mime,omitempty"`
-	Truncated bool   `json:"truncated"`
-	Redacted  bool   `json:"redacted"`
-	Content   string `json:"content,omitempty"`
-	Reason    string `json:"reason,omitempty"`
-}
-
-// artifact serves a bounded, type-aware, secret-redacted preview of the content
-// behind a graph node — the provenance object it was materialized into (by
-// source_id/hash) or a recorded artifact file. It never serves arbitrary paths:
-// only content registered for this run, capped at artifactReadBytes.
-func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
-	run := r.URL.Query().Get("run")
-	node := r.URL.Query().Get("node")
-	if run == "" || node == "" {
-		httpError(w, "run and node are required", 400)
-		return
-	}
-	// Preview text is a presentation endpoint. Only this explicit parameter
-	// localizes its generated headings; cookies and Accept-Language never alter
-	// API content or the recorded request/response body.
-	previewLocale, _ := i18n.Parse(r.URL.Query().Get("view_lang"))
-	path, hash, source := s.resolveArtifactPath(run, node)
-	if path == "" {
-		// No stored object file, but many graph nodes still carry inspectable
-		// content in the DB: a tool_call's command/verdict, a runtime event's
-		// payload. Serve that so the node isn't a dead click.
-		if content, ok := s.nodeDBContentLocale(run, node, previewLocale); ok {
-			writeJSON(w, artifactResp{Kind: "text", Source: "db", Mime: "text/plain", Content: content})
-			return
-		}
-		writeJSON(w, artifactResp{Kind: "unavailable", Reason: "no stored content for this node"})
-		return
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		writeJSON(w, artifactResp{Kind: "unavailable", Ref: hash, Source: source, Reason: "content not present on this host"})
-		return
-	}
-	resp := artifactResp{Ref: hash, Source: source, Size: info.Size()}
-	if info.Size() > artifactReadBytes {
-		resp.Kind = "unavailable"
-		resp.Reason = "artifact too large to preview"
-		writeJSON(w, resp)
-		return
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		resp.Kind = "unavailable"
-		resp.Reason = "content unreadable"
-		writeJSON(w, resp)
-		return
-	}
-	if resp.SHA256 = hash; resp.SHA256 == "" {
-		sum := sha256.Sum256(data)
-		resp.SHA256 = "sha256:" + hex.EncodeToString(sum[:])
-	}
-	// Artifact objects wrap the file in a provenance envelope; show the file the
-	// node produced, not the metadata wrapper. (Evidence objects — events, policy,
-	// etc. — are left as-is so the panel shows the full signed record.)
-	mimePath := path
-	if rendered, ok := renderLLMMessageLocale(data, previewLocale); ok {
-		// A captured LLM request/response: show a readable summary + the pretty
-		// body, not the raw provenance envelope with a double-escaped content field.
-		data = rendered
-		mimePath = "llm-message.txt"
-	} else if content, srcPath, ok := unwrapArtifactContent(data); ok {
-		data = content
-		if srcPath != "" {
-			mimePath = srcPath
-		}
-	}
-	preview := data
-	if len(preview) > artifactPreviewBytes {
-		preview = preview[:artifactPreviewBytes]
-		resp.Truncated = true
-	}
-	if isBinaryContent(preview) {
-		resp.Kind = "binary"
-		resp.Mime = "application/octet-stream"
-		resp.Reason = "binary content — hash and size only"
-		writeJSON(w, resp)
-		return
-	}
-	red, didRedact := redactSecrets(string(preview))
-	resp.Content = red
-	resp.Redacted = didRedact
-	resp.Mime = mimeForPath(mimePath)
-	if looksLikeDiff(red) {
-		resp.Kind = "diff"
-	} else {
-		resp.Kind = "text"
-	}
-	writeJSON(w, resp)
-}
-
-// nodeDBContent builds an inspectable text preview for graph nodes that have no
-// stored object file: tool_calls (command + verdict) and runtime events (payload).
-func (s Server) nodeDBContent(run, node string) (string, bool) {
-	return s.nodeDBContentLocale(run, node, i18n.English)
-}
-
-func (s Server) nodeDBContentLocale(run, node string, lang i18n.Locale) (string, bool) {
-	seg := node
-	if i := strings.LastIndex(node, "/"); i >= 0 {
-		seg = node[i+1:]
-	}
-	if strings.HasPrefix(node, "runtime_event/") {
-		var etype, payload string
-		if err := s.DB.QueryRow(`SELECT event_type, COALESCE(payload,'') FROM events WHERE run_id = ? AND id = ?`, run, seg).Scan(&etype, &payload); err == nil {
-			var b strings.Builder
-			fmt.Fprintf(&b, i18n.T(lang, "event: %s\n\n"), etype)
-			var pretty bytes.Buffer
-			if json.Indent(&pretty, []byte(payload), "", "  ") == nil {
-				b.Write(pretty.Bytes())
-			} else {
-				b.WriteString(payload)
-			}
-			return b.String(), true
-		}
-	}
-	var cmd, status, policy string
-	if err := s.DB.QueryRow(`SELECT COALESCE(command,''), COALESCE(status,''), COALESCE(policy_decision,'')
-		FROM tool_calls WHERE run_id = ? AND id = ?`, run, seg).Scan(&cmd, &status, &policy); err == nil && (cmd != "" || status != "") {
-		var b strings.Builder
-		if status != "" {
-			fmt.Fprintf(&b, i18n.T(lang, "status: %s"), status)
-			if policy != "" && policy != "allow" {
-				fmt.Fprintf(&b, "   (%s)", policy)
-			}
-			b.WriteString("\n\n")
-		}
-		b.WriteString(cmd)
-		return b.String(), true
-	}
-	return "", false
-}
-
-// resolveArtifactPath maps a graph node to a content source recorded for this run:
-// first the provenance object it was materialized into (matched by source_id or
-// hash, accepting a "prefix/<id>" node form), then a recorded artifact result file.
-func (s Server) resolveArtifactPath(run, node string) (path, hash, source string) {
-	seg := node
-	if i := strings.LastIndex(node, "/"); i >= 0 {
-		seg = node[i+1:]
-	}
-	row := s.DB.QueryRow(`SELECT path, hash FROM provenance_objects
-		WHERE run_id = ? AND (source_id = ? OR source_id = ? OR hash = ? OR hash = ?) LIMIT 1`,
-		run, node, seg, node, "sha256:"+strings.TrimPrefix(seg, "sha256:"))
-	if err := row.Scan(&path, &hash); err == nil && path != "" {
-		return path, hash, "object"
-	}
-	var p string
-	if err := s.DB.QueryRow(`SELECT result_ref FROM tool_calls WHERE run_id = ? AND result_ref = ? AND result_ref != '' LIMIT 1`, run, node).Scan(&p); err == nil && p != "" {
-		return p, "", "file"
-	}
-	if err := s.DB.QueryRow(`SELECT artifact_result FROM fork_attempts WHERE artifact_result = ? AND artifact_result != '' LIMIT 1`, node).Scan(&p); err == nil && p != "" {
-		return p, "", "file"
-	}
-	return "", "", ""
-}
-
-// unwrapArtifactContent returns the file content inside an "artifact"-type
-// provenance object envelope (and its original path for mime detection). Evidence
-// envelopes (other types) return ok=false so they display as their full record.
-func unwrapArtifactContent(data []byte) (content []byte, path string, ok bool) {
-	var obj struct {
-		Schema  string `json:"schema"`
-		Type    string `json:"type"`
-		Payload struct {
-			Content string `json:"content"`
-			Path    string `json:"path"`
-		} `json:"payload"`
-	}
-	if json.Unmarshal(data, &obj) != nil {
-		return nil, "", false
-	}
-	if obj.Schema != "agentprov.provenance.object.v1" || obj.Type != "artifact" || obj.Payload.Content == "" {
-		return nil, "", false
-	}
-	return []byte(obj.Payload.Content), obj.Payload.Path, true
-}
-
 // renderLLMMessage turns a captured llm_message provenance object into a readable
 // preview: a short intent summary followed by the pretty-printed request/response
 // body (instead of the raw envelope whose `content` is a double-escaped JSON blob).
@@ -1254,12 +1056,7 @@ func renderLLMMessageLocale(data []byte, lang i18n.Locale) ([]byte, bool) {
 		}
 	}
 	b.WriteString(i18n.T(lang, "\n─────────── body ───────────\n"))
-	var pretty bytes.Buffer
-	if json.Indent(&pretty, []byte(p.Content), "", "  ") == nil {
-		b.Write(pretty.Bytes())
-	} else {
-		b.WriteString(p.Content)
-	}
+	b.WriteString(p.Content)
 	return []byte(b.String()), true
 }
 

@@ -105,3 +105,27 @@ func TestTextContentEnforcesCaptureLimit(t *testing.T) {
 		t.Fatalf("limit wrote objects: %d %v", count, err)
 	}
 }
+
+func TestTextStorageDoesNotInflateFileArtifactCounts(t *testing.T) {
+	s := contentTestStore(t)
+	content, err := s.PutTextContent(TextContentInput{RunID: "run", SourceID: "long-output", Text: strings.Repeat("x", TextChunkBytes+1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var artifacts, chunks, manifests int
+	if err := s.DB.QueryRow(`SELECT SUM(object_type='artifact'), SUM(object_type='text_chunk'), SUM(object_type='text_content') FROM provenance_objects WHERE run_id='run'`).Scan(&artifacts, &chunks, &manifests); err != nil {
+		t.Fatal(err)
+	}
+	if artifacts != 0 || chunks != 2 || manifests != 1 {
+		t.Fatalf("internal storage appeared as file artifacts: %d/%d/%d", artifacts, chunks, manifests)
+	}
+	// Early v0.9.0 manifests used artifact envelopes. Keep them readable without
+	// rewriting their original object bytes or hashes.
+	legacy, err := s.PutExternalObject(ExternalObjectInput{Type: "artifact", RunID: "run", SourceID: "legacy", Payload: map[string]any{"kind": "stored_text", "text_manifest": content.TextManifest}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyTextContent(s.DB, "run", legacy.Hash); err != nil {
+		t.Fatal(err)
+	}
+}
