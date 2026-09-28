@@ -61,3 +61,33 @@ func TestLocalizedLaunchSummaryRetainsCommandsAndReport(t *testing.T) {
 		t.Fatal("report mutated")
 	}
 }
+
+func TestLaunchBannerDescribesConfigurationNotCapturedEvidence(t *testing.T) {
+	for _, app := range []string{"hooks(claude-code)", "transcript(claude)", "transcript(codex)", "transcript(kimi)", "transcript(grok)", "transcript(deepseek)", "record", ""} {
+		for _, system := range []string{"kernel", "none"} {
+			t.Run(app+"/"+system, func(t *testing.T) {
+				r := Report{AppTier: app, SysTier: system}
+				before, _ := json.Marshal(r)
+				var en, zh bytes.Buffer
+				printBanner(&en, r, []string{"agent-command"}, i18n.English)
+				printBanner(&zh, r, []string{"agent-command"}, i18n.Chinese)
+				if !strings.Contains(en.String(), "configured") || !strings.Contains(en.String(), "checked after exit") ||
+					!strings.Contains(zh.String(), "采集配置") || !strings.Contains(zh.String(), "执行结束后检查") {
+					t.Fatalf("configuration/coverage distinction missing: %s / %s", en.String(), zh.String())
+				}
+				if strings.Contains(en.String(), "full:") || strings.Contains(en.String(), "agent intent (hooks)") || strings.Contains(zh.String(), "configured") {
+					t.Fatalf("unsupported completeness claim or untranslated setup: %s / %s", en.String(), zh.String())
+				}
+				wantAdapter := app != "record" && app != ""
+				if strings.Contains(captureSetup(r), "no agent context adapter") == wantAdapter ||
+					strings.Contains(captureSetup(r), "kernel sensor +") != (system == "kernel") {
+					t.Fatalf("wrong configured sources: %s", captureSetup(r))
+				}
+				after, _ := json.Marshal(r)
+				if !bytes.Equal(before, after) {
+					t.Fatal("presentation modified the machine report")
+				}
+			})
+		}
+	}
+}

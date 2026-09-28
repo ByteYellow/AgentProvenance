@@ -9,10 +9,9 @@
 // a dedicated cgroup, and on exit fold every source into one verifiable evidence
 // graph (signed when --sign-key is set) and print a one-line verdict.
 //
-// The design principle is honest degradation: the evidence level is two
-// independent axes -- application side (transcript/hooks vs record-only) and
-// system side (kernel telemetry vs none) -- printed up front so the operator
-// always knows what this particular run can and cannot prove.
+// Startup names configured capture paths, not proven coverage. The application
+// (transcript/hooks) and runtime capture reports describe actual evidence after
+// execution, including missing sources, failed probes and unknown loss.
 package launch
 
 import (
@@ -448,7 +447,8 @@ func printBanner(w io.Writer, r Report, command []string, lang i18n.Locale) {
 		sys += "  (" + r.sysReason.orOriginal(lang, r.SysDegradeReason) + ")"
 	}
 	fmt.Fprintf(w, i18n.T(lang, "  sys  side  : %s\n"), sys)
-	fmt.Fprintf(w, i18n.T(lang, "  evidence   : %s\n"), i18n.T(lang, evidenceLevel(r)))
+	fmt.Fprintf(w, i18n.T(lang, "  capture    : %s\n"), i18n.T(lang, captureSetup(r)))
+	fmt.Fprintln(w, i18n.T(lang, "  coverage   : checked after exit; configured capture is not proof of completeness"))
 	if r.DashboardURL != "" {
 		fmt.Fprintf(w, i18n.T(lang, "  dashboard  : %s\n"), r.DashboardURL)
 	}
@@ -484,20 +484,18 @@ func PrintPreflightLocale(w io.Writer, r PreflightReport, lang i18n.Locale) {
 	}
 }
 
-// evidenceLevel names the combined tier in plain terms so the operator is never
-// misled about what a run can prove.
-func evidenceLevel(r Report) string {
+func captureSetup(r Report) string {
 	kernel := r.SysTier == "kernel"
-	hooks := r.AppTier != "record" && r.AppTier != ""
+	app := strings.HasPrefix(r.AppTier, "hooks(") || strings.HasPrefix(r.AppTier, "transcript(")
 	switch {
-	case kernel && hooks:
-		return "full: kernel telemetry + agent intent (hooks)"
+	case kernel && app:
+		return "kernel sensor + agent context configured"
 	case kernel:
-		return "kernel telemetry only (no agent-intent hooks)"
-	case hooks:
-		return "app-side only: agent intent (hooks) + execution scope, no kernel telemetry"
+		return "kernel sensor + execution scope configured; no agent context adapter"
+	case app:
+		return "agent context + execution scope configured; no kernel sensor"
 	default:
-		return "record-only: execution scope + process tree"
+		return "execution scope configured; no agent context adapter or kernel sensor"
 	}
 }
 

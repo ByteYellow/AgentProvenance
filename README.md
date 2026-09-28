@@ -154,8 +154,9 @@ editing `~/.claude`.
 
 Linux kernel capture requires a supported kernel, cgroup access, and root or
 suitable BPF/perf permissions. On macOS, record/hooks/transcript evidence remains
-available but **there is no kernel sensor**. Preflight and the final report state
-the evidence level. Application context for other agents depends on a supported
+available but **there is no kernel sensor**. Preflight describes configured capture;
+the final reports describe actual context and runtime coverage. Application context
+for other agents depends on a supported
 hook/transcript adapter, not just on the command being executable.
 
 The graph is sealed on exit. **Signing is opt-in with
