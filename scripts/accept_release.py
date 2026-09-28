@@ -41,7 +41,14 @@ def main():
         assert meta['version'] in version and meta['commit'] in version, version
         catalog = json.loads(run('demo', '--list', '--json'))
         replay = [d for d in catalog if d.get('run')]
-        assert len(replay) == 6 and len(catalog) == 8, catalog
+        expected_replays = {
+            'snake-supply-chain', 'multiagent-provenance', 'k8s-cross-pod-a2a',
+            'k8s-substrate', 'grok-codebase-exfil', 'grok-3routes', 'deepseek-context',
+        }
+        expected_catalog = expected_replays | {'llm-judge', 'jev-judge'}
+        assert {entry['id'] for entry in replay} == expected_replays, catalog
+        assert {entry['id'] for entry in catalog} == expected_catalog, catalog
+        assert len(catalog) == len(expected_catalog), 'duplicate demo entries'
         assert (root / 'demo/jev-judge/workbench.py').is_file()
         assert (root / 'demo/llm-judge/judge.py').is_file()
         # Optional Python evaluators must resolve their shared language assets
@@ -56,6 +63,7 @@ def main():
         chinese_start = (root / 'START_HERE.zh-CN.md').read_text(encoding='utf-8')
         assert '(START_HERE.md)' in chinese_start and '使用入门' in chinese_start
         assert '(demo/jev-judge/README.zh-CN.md)' in chinese_start
+        assert 'demo deepseek-context' in chinese_start
         for entry in catalog:
             assert (root / 'demo' / entry['directory'] / 'README.zh-CN.md').is_file()
         process = subprocess.Popen([str(cli), 'demo', '--json'], cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -100,6 +108,19 @@ def main():
                     assert '<html lang="' + language + '">' in guide
                     if language == 'zh-CN':
                         assert '本页目录' in guide and '证据' in guide
+            context_run = next(entry['run'] for entry in replay if entry['id'] == 'deepseek-context')
+            query = urllib.parse.urlencode({'run': context_run})
+            context_report = json.loads(get('/api/context/overview?' + query))
+            assert context_report['messages'] > 0 and context_report['tool_results'] > 0
+            assert context_report['runtime_coverage']['capture']['status'] == 'partial'
+            assert context_report['runtime_coverage']['capture']['run_dropped_events'] is None
+            results = json.loads(get('/api/context/entries?' + query + '&kind=tool_result&limit=1'))
+            result = results['entries'][0]
+            assert result['content']['state'] == 'stored' and result['raw_content']['state'] == 'stored'
+            body_query = urllib.parse.urlencode({'run': context_run, 'ref': result['content']['ref'], 'limit': 1024})
+            body = json.loads(get('/api/context/content?' + body_query))
+            assert body['content'] and body['total_bytes'] > 0
+            assert len(body['content'].encode('utf-8')) <= 1024
             assert '"locale":"zh-CN"' in get('/assets/i18n.js?lang=zh-CN')
             assert '--bg:#f5f5f7' in get('/assets/theme.css')
             assert 'code-toolbar' in get('/demos/guide.js')
@@ -115,7 +136,7 @@ def main():
             if process.poll() is None:
                 process.kill()
                 process.wait()
-        print(json.dumps({'archive': archive.name, 'platform': meta['os'] + '/' + meta['arch'], 'signed_replays': len(replay), 'guides': len(catalog), 'guide_languages': ['en', 'zh-CN'], 'no_go_required': True, 'cleanup': 'passed'}))
+        print(json.dumps({'archive': archive.name, 'platform': meta['os'] + '/' + meta['arch'], 'signed_replays': len(replay), 'guides': len(catalog), 'guide_languages': ['en', 'zh-CN'], 'recorded_context': 'passed', 'no_go_required': True, 'cleanup': 'passed'}))
 
 
 if __name__ == '__main__':

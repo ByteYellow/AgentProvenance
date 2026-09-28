@@ -9,11 +9,18 @@ From this extracted directory:
 ./agentprov demo
 ./agentprov demo --list
 ./agentprov demo multiagent-provenance
+./agentprov demo deepseek-context
 ```
 
-The CLI embeds all six signed captures and all demo guides. Replay is offline,
+The CLI embeds seven signed captures and all demo guides. Replay is offline,
 read-only, and uses a temporary store removed on Ctrl-C. The browser opens
 on a loopback address. Use `--no-browser` on a headless machine.
+
+The DeepSeek development-task capture includes conversation, tool results,
+configuration history and saved changed-file text. Open **Agent session** for
+context or select a file in the graph for its saved body. Collection status
+distinguishes recorded context from partial runtime coverage. The six older
+captures retain their original evidence; missing historical context is not filled in.
 
 Choose Open replay to view evidence, or Read guide for a formatted guide with
 a section outline, images, tables and code-copy buttons. Both use the dashboard
