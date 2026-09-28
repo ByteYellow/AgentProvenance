@@ -9,7 +9,7 @@ window.AgentContextUI = (() => {
   let formattedContent = null;
   const statusNames = {disabled:'Not enabled',no_input:'No source found',empty:'Valid empty source',ok:'Captured',partial:'Partially captured',failed:'Capture failed',ambiguous:'Ambiguous binding',legacy_not_recorded:'Not recorded in this historical run'};
   const missingNames = {approval_decision:'Approval decision','configuration.model':'Model selection','configuration.provider':'Model provider','configuration.application_version':'Application version','configuration.workdir':'Working directory','configuration.permission_mode':'Permission mode','configuration.approval_policy':'Approval policy','configuration.sandbox_policy':'Sandbox policy','configuration.directory_restrictions':'Directory restrictions','configuration.network_restrictions':'Network restrictions','configuration.mcp_servers':'MCP servers','configuration.tools':'Tool catalog','configuration.skills':'Skills','configuration.plugins':'Plugins'};
-  const snapshotNames = {session_metadata:'Session metadata',source_metadata:'Source metadata',initialization:'Initialization',permission_mode:'Permission mode','permission/preset':'Permission preset','sandbox/mode':'Sandbox mode','approval/policy':'Approval policy','plan/mode':'Plan mode','request/header':'Request configuration','request/context':'Request context','model/selection':'Model selection'};
+  const snapshotNames = {session_metadata:'Session metadata',source_metadata:'Source metadata',initialization:'Initialization',permission_mode:'Permission mode',source_message_event:'Source message event',source_reasoning_event:'Source reasoning event','permission/preset':'Permission preset','sandbox/mode':'Sandbox mode','approval/policy':'Approval policy','plan/mode':'Plan mode','request/header':'Request configuration','request/context':'Request context','model/selection':'Model selection'};
   const e = value => api.esc(value == null ? '' : String(value));
   const t = value => api.tr(value);
   const q = values => new URLSearchParams(Object.entries(values).filter(([,v]) => v !== '' && v != null)).toString();
@@ -180,7 +180,7 @@ window.AgentContextUI = (() => {
       const reports = value.coverage || [];
       const sources = [...new Set(reports.map(c => c.source?.harness).filter(Boolean))];
       const hints = [...new Set(reports.map(c => t(statusNames[c.status] || c.status)))];
-      $('context-summary').textContent = [sources.join(' / '), api.tx('{messages} messages · {calls} tool calls · {results} results', {messages:unknown(value.messages),calls:unknown(value.tool_calls),results:unknown(value.tool_results)}),reports.some(c=>c.prior_context) ? t('Includes prior context') : '',hints.join(' / ')].filter(Boolean).join(' · ');
+      $('context-summary').textContent = [sources.join(' / '), api.tx('{messages} message records · {calls} tool calls · {results} results', {messages:unknown(value.messages),calls:unknown(value.tool_calls),results:unknown(value.tool_results)}),reports.some(c=>c.prior_context) ? t('Includes prior context') : '',hints.join(' / ')].filter(Boolean).join(' · ');
       if (coverageChanged) $('context-source').innerHTML = `<option value="">${e(t('All recorded sessions'))}</option>` + reports.filter(c => c.source?.id).map(c => `<option value="${e(c.source.id)}">${e(c.source.harness)} · ${e(c.source.session_id || c.source.id)}</option>`).join('');
       syncControls();
       $('context-nav-count').textContent = unknown(value.messages);
@@ -426,7 +426,7 @@ window.AgentContextUI = (() => {
       for (const child of Object.values(node)) pending.push([child,depth+1]);
     }
     const blocks = content => typeof content === 'string' ? content : Array.isArray(content)
-      ? content.map(block => block?.type === 'text' && typeof block.text === 'string' && Object.keys(block).every(k=>k==='type'||k==='text')
+      ? content.map(block => ['text','input_text','output_text'].includes(block?.type) && typeof block.text === 'string' && Object.keys(block).every(k=>k==='type'||k==='text')
         ? block.text : JSON.stringify(block,null,2)).join('\n\n') : null;
     let result;
     if (entry?.source?.harness === 'deepseek' && entry.kind === 'tool_result' && value?.message?.role === 'tool') {

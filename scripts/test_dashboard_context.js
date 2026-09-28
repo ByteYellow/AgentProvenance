@@ -16,6 +16,7 @@ async (page) => {
   await page.waitForFunction(()=>document.querySelector('#verify')?.textContent.includes('graph integrity'));
   check(!await page.locator('#context-fold').evaluate(el=>el.open),'session initially collapsed');
   check(await page.locator('#context-summary').innerText().then(text=>text.includes('Includes prior context')),'summary distinguishes retained historical records');
+  check(await page.locator('#context-summary').innerText().then(text=>text.includes('38 message records')),'summary counts source records, not inferred unique messages');
   check(await page.locator('#verify').innerText().then(text=>text.includes('graph integrity') && !text.includes('signed graph')),'graph verification not claimed as signature verification');
   for (const id of ['graphcard','siglist','focusedevidence','outboundcard','tl','ptree','egtbl','compliancecard']) check(await page.locator('#'+id).count()===1,'retains '+id);
   await page.getByRole('button',{name:'Agent session 38',exact:true}).click();
@@ -23,6 +24,7 @@ async (page) => {
   await page.waitForFunction(()=>document.querySelector('#agentcontext').getBoundingClientRect().top >= document.querySelector('body > header').getBoundingClientRect().bottom);
   check(true,'session navigation clears the sticky header');
   check(await page.locator('#context-body img').count()===0,'recorded markup is not executed');
+  check(await page.locator('#context-body .context-status').allTextContents().then(values=>values.includes('Source message event')),'event-only message representation is labeled');
   check(await records().first().locator('.context-meta').innerText().then(text=>text.includes('Prior context')),'history is visibly scoped');
   check(await toolResult().locator('.context-meta').innerText().then(text=>text.includes('Current execution range')),'new result is visibly scoped');
   await page.locator('#context-next').click();
@@ -104,6 +106,7 @@ async (page) => {
   check(await page.locator('#context-body').evaluate(el=>Math.abs(el.scrollTop-450)<5),'language switch restores session reading position');
   check(await page.locator('#content-body').innerText()===tail,'language switch preserves original output and page');
   check(await records().first().locator('.context-meta').innerText().then(text=>text.includes('历史上下文')),'historical boundary is localized');
+  check(await page.locator('#context-body .context-status').allTextContents().then(values=>values.includes('来源消息事件')),'source message event label is localized');
   await page.locator('#savedcontent').scrollIntoViewIfNeeded();
   await page.screenshot({path:'output/playwright/context-desktop-zh.png'});
   await page.setViewportSize({width:390,height:844});

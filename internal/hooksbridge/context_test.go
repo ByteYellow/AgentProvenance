@@ -111,6 +111,25 @@ func TestContextGraphLateResultAndCrossRunIsolation(t *testing.T) {
 	}
 }
 
+func TestContextCodexStructuredFailureIsSourceError(t *testing.T) {
+	db, paths := openTestStore(t)
+	saveContext(t, db, paths, "run", "codex", `{"type":"session_meta","payload":{"id":"s"}}
+{"type":"event_msg","payload":{"type":"user_message","message":"run tests"}}
+{"type":"response_item","payload":{"type":"function_call","call_id":"shell","name":"exec_command","arguments":"{\"cmd\":\"false\"}"}}
+{"type":"response_item","payload":{"type":"function_call_output","call_id":"shell","output":{"output":"recorded failure","metadata":{"exit_code":2}}}}
+`)
+	result, err := IngestContext(context.Background(), db, paths, "run")
+	if err != nil || result.ToolCalls != 1 || result.Refused != 0 {
+		t.Fatalf("source outcome projection: %+v %v", result, err)
+	}
+	if n := queryCount(t, db, `SELECT COUNT(*) FROM tool_calls WHERE run_id='run' AND status='source_error' AND policy_decision='not_evaluated'`); n != 1 {
+		t.Fatal("structured failure was lost or misrepresented as enforcement")
+	}
+	if n := queryCount(t, db, `SELECT COUNT(*) FROM graph_edges WHERE run_id='run' AND edge_type='context_tool_result'`); n != 1 {
+		t.Fatal("source result reference is missing")
+	}
+}
+
 func TestContextGraphMissingParentIsNotAssumed(t *testing.T) {
 	db, paths := openTestStore(t)
 	saveContext(t, db, paths, "run", "claude", `{"session_id":"s","hook_event_name":"SubagentStart","agent_id":"child"}`+"\n")

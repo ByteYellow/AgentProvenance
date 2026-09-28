@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance recorded context API
-  version: "1.3"
+  version: "1.4"
   description: >
     Read-only recorded evidence. Source assertions are not kernel observations
     or inferred authorizations. The dashboard exposes the same routes under
@@ -136,7 +136,13 @@ components:
         agent_id: {type: string}
         tool_call_id: {type: string}
         tool_name: {type: string}
-        status: {type: string, description: Source outcome; requested is not approved and returned does not assert success.}
+        status:
+          type: string
+          description: >
+            Source outcome or representation; requested is not approved and
+            returned does not assert success. source_message_event and
+            source_reasoning_event preserve Codex event forms separately from
+            response_item records. Equal text does not merge source identities.
         recorded_at: {type: string}
         content: {$ref: '#/components/schemas/ContentRef'}
         raw_content: {$ref: '#/components/schemas/ContentRef'}
@@ -161,7 +167,9 @@ components:
         schema_version: {const: agentprovenance.agent_context/v1}
         run_id: {type: string}
         coverage: {type: array, maxItems: 256, items: {$ref: '#/components/schemas/Coverage'}}
-        messages: {$ref: '#/components/schemas/NullableCount'}
+        messages:
+          allOf: [{$ref: '#/components/schemas/NullableCount'}]
+          description: Saved message records including source-event representations and source-provided reasoning, not inferred unique messages or conversation turns.
         tool_calls: {$ref: '#/components/schemas/NullableCount'}
         tool_results: {$ref: '#/components/schemas/NullableCount'}
         snapshots: {$ref: '#/components/schemas/NullableCount'}

@@ -102,6 +102,7 @@ func TestContextDashboardFixture(t *testing.T) {
 	for i := 0; i < 37; i++ {
 		records = append(records, agentcontext.Record{Key: fmt.Sprintf("message-%d", i), Sequence: int64(i + 6), Kind: "message", Role: "assistant", Body: body(fmt.Sprintf("Synthetic follow-up %d. <img src=x onerror=alert(1)> is recorded text, not HTML.", i))})
 	}
+	records[5].Status = "source_message_event"
 	for i := range records {
 		records[i].ExecutionScope = agentcontext.CurrentExecution
 		if records[i].Sequence <= 2 {

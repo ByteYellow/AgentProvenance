@@ -50,6 +50,16 @@ DeepSeek 解析支持 v3 JSONL，以及含多个连续 Zstandard 帧的 v4 JSONL
 `--revisions` 包含同一记录的历史版本；默认按来源位置、再按导入时间选择最新版本。
 来源时间与存储时间分别保留。
 
+Codex `event_msg` 中的用户、助手消息及来源提供的推理记录，即使没有对应的
+`response_item` 也会保存。事件形式标记为 `source_message_event` 或
+`source_reasoning_event`，完整响应项保留自己的记录。文字相似不代表身份相同，
+因此不做启发式合并。消息数量统计已保存的来源记录，不推算唯一对话轮次；
+重复导入相同证据仍会去重。原始记录与物理位置均可查看。
+
+Codex 工具错误依据来源的显式标记、状态、数值退出码，以及支持的 MCP/命令执行结果封装。
+不会根据输出中的“error”字样或任意嵌套 JSON 判定失败。`returned` 仅表示记录了返回结果，
+不代表工具成功或获得授权；来源报告的错误也不等于策略拒绝。
+
 ```sh
 agentprov context compare --run RUN_ID --left ENTRY_A --right ENTRY_B
 agentprov context compare --run RUN_A --left ENTRY_A --right-run RUN_B --right ENTRY_B

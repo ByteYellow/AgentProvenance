@@ -15,7 +15,7 @@ async (page) => {
   const records = () => page.locator('#context-body [data-entry]');
   await page.setViewportSize({width:1440,height:1050});
   await page.goto(base+'/?run='+run+'&live=0&lang=en');
-  await page.waitForFunction(() => document.querySelector('#context-summary')?.textContent.includes('13 messages'));
+  await page.waitForFunction(() => document.querySelector('#context-summary')?.textContent.includes('13 message records'));
   await page.waitForFunction(() => document.querySelector('#verify')?.textContent.includes('graph integrity'));
   check(!await page.locator('#context-fold').evaluate(el=>el.open), 'session initially collapsed');
   for (const id of ['graphcard','siglist','focusedevidence','outboundcard','tl','ptree','egtbl','compliancecard']) {

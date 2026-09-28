@@ -57,6 +57,19 @@ to continue a page; `--revisions` includes earlier versions of the same record.
 Without it, source position and then import time select the latest revision.
 Source timestamps are retained separately from storage time.
 
+Codex `event_msg` user/assistant messages and source-provided reasoning are
+retained even without a `response_item` copy. Event forms carry
+`source_message_event` or `source_reasoning_event`; canonical response items keep
+their own records. Similar text is not a shared identity, so these forms are not
+heuristically collapsed. Message totals count saved source records, not unique
+conversation turns; repeat imports still deduplicate the same recorded evidence.
+Original source bodies and physical positions remain available for inspection.
+
+Codex tool errors use explicit source flags/status, typed exit codes and supported
+MCP/shell result envelopes. Words such as "error" in stdout or arbitrary nested
+JSON do not determine outcome. `returned` means a result was recorded, not that
+the tool succeeded or was authorized; a source error is not a policy refusal.
+
 ```sh
 agentprov context compare --run RUN_ID --left ENTRY_A --right ENTRY_B
 agentprov context compare --run RUN_A --left ENTRY_A --right-run RUN_B --right ENTRY_B

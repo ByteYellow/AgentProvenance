@@ -36,10 +36,7 @@ func (p *parser) codex(top row) bool {
 			}
 			p.add("tool_call", stableKey("call", id, p.line), "assistant", id, name, "proposed", ts, content(v, "arguments", "input", "action"))
 		case "function_call_output", "custom_tool_call_output", "local_shell_call_output":
-			status := "returned"
-			if flag(v, "is_error") {
-				status = "error"
-			}
+			status := codexResultStatus(v)
 			p.add("tool_result", stableKey("result", id, p.line), "tool", id, "", status, ts, v["output"])
 			// Spawn returns a child identity, not the end of its execution. The
 			// child transcript remains a separate source with parent metadata.
@@ -62,12 +59,21 @@ func (p *parser) codex(top row) bool {
 	case "event_msg":
 		switch text(v, "type") {
 		case "user_message", "agent_message":
-			// Rollouts duplicate these in response_item; use the canonical item.
+			// A truncated or event-only source may never contain response_item.
+			// Preserve both source forms; equal text does not prove shared identity.
+			role := "assistant"
+			if text(v, "type") == "user_message" {
+				role = "user"
+			}
+			p.add("message", fmt.Sprintf("message-event:%d", p.line), role, "", "", "source_message_event", ts, v["message"])
 			return true
 		case "task_started", "task_complete", "turn_aborted", "context_compacted":
 			p.add("session", fmt.Sprintf("lifecycle:%d", p.line), "", "", "", text(v, "type"), ts, whole(v))
 			return true
-		case "token_count", "agent_reasoning", "agent_reasoning_raw_content":
+		case "agent_reasoning", "agent_reasoning_raw_content":
+			p.add("message", fmt.Sprintf("reasoning-event:%d", p.line), "assistant", "", "", "source_reasoning_event", ts, v["text"])
+			return true
+		case "token_count":
 			return true
 		default:
 			return false
@@ -77,6 +83,34 @@ func (p *parser) codex(top row) bool {
 		return true
 	}
 	return false
+}
+
+// Interpret typed result envelopes, not words in stdout or arbitrary nested
+// JSON from a file/API response. "returned" deliberately does not claim success.
+func codexResultStatus(v row) string {
+	if flag(v, "is_error") || flag(v, "isError") || nonzeroExit(v) {
+		return "error"
+	}
+	switch text(v, "status") {
+	case "error", "failed", "cancelled":
+		return "error"
+	}
+	output := obj(v["output"])
+	if output == nil {
+		output = obj(json.RawMessage(text(v, "output")))
+	}
+	if _, present := output["content"]; present && (flag(output, "isError") || flag(output, "is_error")) {
+		return "error"
+	}
+	if _, present := output["output"]; present && nonzeroExit(obj(output["metadata"])) {
+		return "error"
+	}
+	return "returned"
+}
+
+func nonzeroExit(v row) bool {
+	var code int64
+	return json.Unmarshal(v["exit_code"], &code) == nil && code != 0
 }
 
 func isSpawn(name string) bool {
