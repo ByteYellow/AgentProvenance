@@ -91,6 +91,19 @@ are distinct evidence sources, not a claim that the entire team was recaptured.
 [Kubernetes substrate](k8s-substrate/) focuses on container identity and placement.
 Use `agentprov demo k8s-substrate` to open the Substrate lens without Kubernetes.
 
+## New in the v0.9.0 candidate: an ordinary development task
+
+[DeepSeek context](deepseek-context/) records a real task that adds daily totals
+to a Python report. Inspect the original task, 12 tool inputs/results, five
+configuration records, saved file text and two inferred tool/runtime links.
+The seven-test result is recorded evidence, not a replay-time model call.
+The guide distinguishes successful transcript capture from partial kernel
+coverage and does not invent an approval interaction.
+
+Build this checkout, then run `agentprov demo deepseek-context`. This example is
+not in the older release linked above. Replay is signed, offline and needs no
+DeepSeek account or VM; the six historical capture bundles remain unchanged.
+
 ## Additional investigations
 
 - [Grok outbound-data investigation](grok-codebase-exfil/): dated captures

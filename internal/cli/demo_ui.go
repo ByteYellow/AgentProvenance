@@ -46,7 +46,7 @@ type demoPage struct {
 
 func demoCategory(entry demo.Entry) string {
 	switch entry.Directory {
-	case "snake-supply-chain":
+	case "snake-supply-chain", "deepseek-context":
 		return "Single agent"
 	case "multiagent-provenance":
 		return "Agent team"

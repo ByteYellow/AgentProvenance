@@ -49,8 +49,10 @@
 .context-change .before{color:#a52828}.context-change .after{color:#087749}
 .content-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--line)}
 .content-toolbar select{flex:1;min-width:100px;max-width:100%}
+.content-toolbar #content-format{flex:0 1 150px}
 .content-toolbar .content-expand{font-size:18px;line-height:1;padding:7px 10px}
 .content-meta{padding:10px 20px;color:var(--mut);font:11px/1.6 ui-monospace,SFMono-Regular,monospace;overflow-wrap:anywhere}
+.content-format-note{padding:0 20px 10px;color:var(--mut);font-size:12px}
 .content-body{margin:0 20px 14px;max-height:440px;min-height:65px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.65 ui-monospace,SFMono-Regular,monospace;tab-size:2}
 .content-body.diff{white-space:pre}
 .content-body .add{color:#087749}.content-body .del{color:#b42318}.content-body .hunk{color:var(--acc)}

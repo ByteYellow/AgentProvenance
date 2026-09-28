@@ -63,6 +63,11 @@ Model selections, working directories, MCP/skills/plugins and sandbox settings
 are only available when the source recorded them; current machine settings are
 not substituted for historical evidence.
 
+Recorded working directories and application versions are scoped to their
+source positions. Later Claude metadata or a Codex turn's changed directory
+does not overwrite earlier entries or fill an earlier unknown value. Claude
+directory/version changes also produce comparable source-metadata records.
+
 Limits are explicit: 200 changes, 512-byte value previews, nesting depth 32,
 and 1 MiB per comparison body. Longer stored evidence remains accessible through
 the content reader. Text storage is limited to 32 MiB per body, chunked at
@@ -171,6 +176,13 @@ The record list loads 30 entries per page; inline bodies preview at most 4 KiB
 with four concurrent reads. Back navigation retains up to 200 page cursors;
 **First page** resets the list without accumulating previous page bodies.
 
+Complete structured pages can switch between **Readable view** and **Saved
+bytes**. Readable tool results expose source text with real line breaks and
+retain other recorded fields, including errors. This is a bounded display
+projection, not a new evidence object. Hashes and offsets describe the saved
+bytes; raw source records, partial pages and unsupported structures stay in
+byte mode. No output is executed as HTML.
+
 **Locate in graph** follows saved `context_tool_call`/`context_tool_result`
 edges. Graph-to-session lookup also follows saved tool/runtime edges. These
 are navigation relationships, not a new command or time-window inference.
@@ -201,12 +213,14 @@ artifacts. Signed offline HTTP-paging tests cover all three former size boundari
 The changed-file writer uses the same chunked storage. Real record subprocess
 tests verify capture, redaction, signing, and offline content beyond 8 MiB;
 launch tests cover its opt-in and disabled paths. These are deterministic test
-workloads, not the pending sensor-backed DeepSeek development-task demo.
+workloads, separate from the [real sensor-backed DeepSeek task](../demo/deepseek-context/).
+That signed offline example includes final file text, tool results and partial
+runtime association, with its limitations and reproducible checks documented.
 The reader does not retroactively create bodies that an older capture omitted.
 
 The dashboard and daemon share read-only `/api/context/*` and `/v1/context/*`
-routes. See the [API contract](agent-context-api.yaml) and the
-[delivery checklist](v0.9.0-delivery.md) for implementation and live-test status.
+routes. See the [API contract](agent-context-api.yaml) for fields, pagination,
+errors and compatibility semantics.
 
 ## External Queries and Runtime Coverage
 

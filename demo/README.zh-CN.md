@@ -59,6 +59,12 @@ Jev 示例可通过 `--agentprov` 使用包内 CLI，无需自行构建。在线
 
 [Kubernetes 运行环境示例](k8s-substrate/README.zh-CN.md)侧重容器身份和部署位置。运行 `agentprov demo k8s-substrate` 即可打开对应视图，无需 Kubernetes。
 
+## v0.9.0 候选版新增：一次普通开发任务
+
+[DeepSeek 会话示例](deepseek-context/README.zh-CN.md)记录为 Python 报表增加按日汇总的真实任务。可查看原始任务、12 组工具输入与结果、五条配置记录、保存的文件正文，以及两条工具与运行时之间的推断关联。七项测试通过是已保存的真实结果，回放时不会重新调用模型。指南区分正常的会话采集与部分成功的内核采集，也不虚构审批交互。
+
+构建当前源码后运行 `agentprov demo deepseek-context`。上面链接的旧发行版尚不包含此示例。签名回放可离线运行，无需 DeepSeek 账号或 VM；六份历史采集包保持原样。
+
 ## 其他调查示例
 
 [Grok 外发数据调查](grok-codebase-exfil/README.zh-CN.md)按采集日期区分模型请求中的敏感内容、厂商遥测和第三方产品分析。版本、采集过程和复现情况见指南。

@@ -368,10 +368,15 @@
       <div id="content-pane" hidden>
         <div class="content-toolbar">
           <select id="content-choice" aria-label="{{tr .Lang "Recorded content selection"}}"></select>
+          <select id="content-format" aria-label="{{tr .Lang "Content display format"}}" hidden>
+            <option value="readable">{{tr .Lang "Readable view"}}</option>
+            <option value="bytes">{{tr .Lang "Saved bytes"}}</option>
+          </select>
           <button id="content-related" hidden>{{tr .Lang "Locate session records"}}</button>
           <button id="content-expand" class="content-expand" title="{{tr .Lang "Expand saved content"}}" aria-label="{{tr .Lang "Expand saved content"}}">⤢</button>
         </div>
         <div id="content-meta" class="content-meta"></div>
+        <div id="content-format-note" class="content-format-note" hidden>{{tr .Lang "Readable view only; hashes and byte positions refer to the saved content."}}</div>
         <pre id="content-body" class="content-body" tabindex="0"></pre>
         <div class="context-pager"><button id="content-prev">{{tr .Lang "‹ prev"}}</button><span id="content-page-label"></span><button id="content-next">{{tr .Lang "next ›"}}</button><span id="content-limits"></span></div>
       </div>

@@ -6,6 +6,7 @@ window.AgentContextUI = (() => {
   const states = new Map();
   let api, run = '', state, listRequest = 0, previewRequest = 0, summaryRequest = 0, listLoading = false;
   let overview = null, previewChoices = [], previewKey = '', previewOffsets = [0], previewPage = null;
+  let formattedContent = null;
   const statusNames = {disabled:'Not enabled',no_input:'No source found',empty:'Valid empty source',ok:'Captured',partial:'Partially captured',failed:'Capture failed',ambiguous:'Ambiguous binding',legacy_not_recorded:'Not recorded in this historical run'};
   const e = value => api.esc(value == null ? '' : String(value));
   const t = value => api.tr(value);
@@ -52,6 +53,7 @@ window.AgentContextUI = (() => {
       state.returnView = null; syncControls(); loadList(true);
     };
     $('content-choice').onchange = () => { previewOffsets = [0]; loadContent(); };
+    $('content-format').onchange = renderContentFormat;
     $('content-prev').onclick = () => { if (previewOffsets.length > 1) { previewOffsets.pop(); loadContent(); } };
     $('content-next').onclick = () => { if (previewPage?.has_more) { previewOffsets.push(previewPage.next_offset); loadContent(); } };
     $('content-expand').onclick = () => {
@@ -69,7 +71,7 @@ window.AgentContextUI = (() => {
     if (!state) return null;
     const choice = previewChoices[Number($('content-choice').value)];
     return {run,view:{tab:state.tab,source:state.source,cursor:state.cursor,history:state.history.slice(-200),pageNumber:state.pageNumber,selected:state.selected,node:state.node,graph:state.graph,scroll:$('context-body').scrollTop,open:state.open,expanded:[...state.expanded].slice(-200)},
-      preview:choice ? {entry:choice.entry?.id || '',raw:choice.node ? choice.mode === 'raw' : choice.entry?.raw_content.ref === choice.ref?.ref,node:choice.node || '',offsets:previewOffsets.slice(-512),scroll:$('content-body').scrollTop} : null};
+      preview:choice ? {entry:choice.entry?.id || '',raw:choice.node ? choice.mode === 'raw' : choice.mode === 'raw',node:choice.node || '',offsets:previewOffsets.slice(-512),scroll:$('content-body').scrollTop,format:$('content-format').value} : null};
   }
   function persist() {
     const saved = readingState();
@@ -280,7 +282,8 @@ window.AgentContextUI = (() => {
     try {
       const page = await api.j('/api/context/content?' + q({run:entry.run_id,ref:entry.content.ref,limit:4096}));
       if (state !== current || !element.isConnected) return;
-      element.innerHTML = `<pre>${e(page.content)}</pre>${page.has_more ? notice('Preview only. Open saved content to read every recorded page.') : ''}${page.redacted ? notice('Redacted before storage') : ''}`;
+      const readable = page.has_more ? null : readableContent(page.content,entry,t('Other recorded fields'));
+      element.innerHTML = `<pre>${e(readable ?? page.content)}</pre>${page.has_more ? notice('Preview only. Open saved content to read every recorded page.') : ''}${page.redacted ? notice('Redacted before storage') : ''}`;
     } catch (error) { if (element.isConnected && state === current) element.innerHTML = errorHTML(error); }
   }
   function renderCoverage() {
@@ -365,7 +368,7 @@ window.AgentContextUI = (() => {
     scrollRegion('agentcontext');
   }
   function entryChoices(entry) {
-    return [{label:t('Saved content')+' · '+recordLabel(entry),ref:entry.content,entry}, {label:t('Raw source record')+' · '+recordLabel(entry),ref:entry.raw_content,entry}];
+    return [{label:t('Saved content')+' · '+recordLabel(entry),ref:entry.content,entry,mode:'body'}, {label:t('Raw source record')+' · '+recordLabel(entry),ref:entry.raw_content,entry,mode:'raw'}];
   }
   function showEntry(entry, kind) {
     state.selected = entry.id;
@@ -395,11 +398,46 @@ window.AgentContextUI = (() => {
     previewRequest++; previewKey = key; previewChoices = choices; previewOffsets = reading?.offsets || [0]; previewPage = null;
     $('content-empty').hidden = true; $('content-pane').hidden = false;
     $('content-related').hidden = true; $('content-limits').textContent = '';
+    $('content-format').value = reading?.format === 'bytes' ? 'bytes' : 'readable';
     renderChoices(selected); loadContent(reading?.scroll || 0);
   }
   function renderChoices(selected) {
     $('content-choice').innerHTML = previewChoices.map((choice,index)=>`<option value="${index}">${e(choice.label)}</option>`).join('');
     $('content-choice').value = String(selected);
+  }
+  // A display projection only: never rewrite the saved body, its digest or byte
+  // offsets. Partial pages and deeply nested records stay byte-for-byte views.
+  function readableContent(text, entry, metadataLabel = 'Other recorded fields') {
+    if (typeof text !== 'string' || text.length > 65536) return null;
+    let value;
+    try { value = JSON.parse(text); } catch (_) { return null; }
+    const pending = [[value,0]];
+    while (pending.length) {
+      const [node,depth] = pending.pop();
+      if (typeof node === 'number' && (!Number.isFinite(node) || Number.isInteger(node) && !Number.isSafeInteger(node))) return null;
+      if (!node || typeof node !== 'object') continue;
+      if (depth > 12) return null;
+      for (const child of Object.values(node)) pending.push([child,depth+1]);
+    }
+    const blocks = content => typeof content === 'string' ? content : Array.isArray(content)
+      ? content.map(block => block?.type === 'text' && typeof block.text === 'string' && Object.keys(block).every(k=>k==='type'||k==='text')
+        ? block.text : JSON.stringify(block,null,2)).join('\n\n') : null;
+    let result;
+    if (entry?.source?.harness === 'deepseek' && entry.kind === 'tool_result' && value?.message?.role === 'tool') {
+      const output = blocks(value.message.content);
+      if (output != null) {
+        const {content,...message} = value.message;
+        result = output+'\n\n'+metadataLabel+'\n'+JSON.stringify({...value,message},null,2);
+      }
+    } else if (['message','tool_result'].includes(entry?.kind)) result = blocks(value);
+    result ??= JSON.stringify(value,null,2);
+    return result.length <= 262144 ? result : null;
+  }
+  function renderContentFormat() {
+    if (!previewPage || formattedContent == null) return;
+    const readable = $('content-format').value === 'readable';
+    $('content-body').textContent = readable ? formattedContent : previewPage.content;
+    $('content-format-note').hidden = !readable;
   }
   async function loadContent(restoreScroll = 0) {
     const choice = previewChoices[Number($('content-choice').value)];
@@ -408,6 +446,7 @@ window.AgentContextUI = (() => {
     $('content-body').textContent = t('loading…'); $('content-body').className = 'content-body';
     $('content-prev').disabled = true; $('content-next').disabled = true;
     $('content-meta').textContent = ''; $('content-page-label').textContent = '';
+    formattedContent = null; $('content-format').hidden = true; $('content-format-note').hidden = true;
     try {
       if (choice.node) {
         const value = await api.j('/api/artifact?' + q({run,node:choice.node,mode:choice.mode || 'body',offset,limit:65536,view_lang:api.lang}));
@@ -439,6 +478,11 @@ window.AgentContextUI = (() => {
         if (request !== previewRequest || state !== current) return;
         previewPage = page;
         $('content-body').textContent = page.content;
+        if (choice.mode !== 'raw' && page.offset === 0 && !page.has_more) {
+          formattedContent = readableContent(page.content,choice.entry,t('Other recorded fields'));
+          $('content-format').hidden = formattedContent == null;
+          renderContentFormat();
+        }
         $('content-meta').textContent = [page.sha256,page.media_type,page.redacted ? t('Redacted before storage') : '',choice.entry?.source.parser_version].filter(Boolean).join(' · ');
         $('content-page-label').textContent = api.tx('Bytes {start}–{end} / {total}', {start:page.offset,end:page.next_offset,total:page.total_bytes});
         $('content-prev').disabled = previewOffsets.length < 2;
@@ -451,5 +495,5 @@ window.AgentContextUI = (() => {
       $('content-prev').disabled = previewOffsets.length < 2;
     }
   }
-  return {init,setRun,selectGraph,linkedSession,open,persist};
+  return {init,setRun,selectGraph,linkedSession,open,persist,readableContent};
 })();

@@ -1,0 +1,33 @@
+{
+  "schema_version": "agentprovenance.demo_capture/v1",
+  "run_id": "run-dbc2adf273d4",
+  "captured_at": "2026-09-28T06:45:49.673077882Z",
+  "exported_at": "2026-09-28T07:39:24.679579442Z",
+  "initial_bundle_json_sha256": "d603c78b0ef7242127aa7f279a2c816f39a82e4d4ae884100e93992fe312d470",
+  "harness": "DeepSeek Harness 0.1.7-rc.2",
+  "source_format": "session.v4.jsonl.zstd",
+  "kernel": "Linux 6.8.0-137-generic aarch64",
+  "bundle": "run-deepseek-context.forensics.json.gz",
+  "attestation": "run-deepseek-context.forensics.dsse.json",
+  "public_key": "attestation.pub",
+  "bundle_json_sha256": "396c103db5ec12c5183dba29baa10d3128ee30f7280d23d1ad1351e1ded76bef",
+  "files": [
+    {"path": "run-deepseek-context.forensics.json.gz", "bytes": 292141, "sha256": "2a243f3b0e4319370e362e19fb9f1e51aea8a4a8aa373f866d97acec64624994"},
+    {"path": "run-deepseek-context.forensics.dsse.json", "bytes": 834, "sha256": "dd37587f9598b5461fe9b1f7c49f2788cf7f678bce9aa871452aa015d81d3fec"},
+    {"path": "attestation.pub", "bytes": 65, "sha256": "28b5a2801f69e7e123163c8febbb2d9f22f2dad5f4d5fecf8305f81301900a5f"}
+  ],
+  "expected": {
+    "physical_records": 73,
+    "messages": 13,
+    "tool_calls": 12,
+    "tool_results": 12,
+    "snapshots": 5,
+    "runtime_events": 157,
+    "native_runtime_events": 128,
+    "telemetry_batches": 18,
+    "matched_execs": 2,
+    "stored_files": ["report.py", "test_report.py"],
+    "omitted_binary_files": 2,
+    "tests": 7
+  }
+}

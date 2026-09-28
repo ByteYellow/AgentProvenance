@@ -1,0 +1,6 @@
+date,order_id,amount,status
+2026-09-25,DEMO-001,19.90,paid
+2026-09-25,DEMO-002,10.10,paid
+2026-09-26,DEMO-003,50.00,cancelled
+2026-09-26,DEMO-004,7.25,paid
+2026-09-27,DEMO-005,4.75,paid

@@ -34,6 +34,16 @@ jobs:
       - name: Verify external evaluator and local review boundaries
         run: python -m unittest discover -s demo/jev-judge -p 'test_*.py' -v
 
+  dashboard-display:
+    name: Recorded context display
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node scripts/test_context_readable.mjs
+
   test:
     name: Go tests
     runs-on: ubuntu-latest
@@ -59,6 +69,11 @@ jobs:
 
       - name: Run unit tests (race detector)
         run: GOTOOLCHAIN=local go test -race ./...
+
+      - name: Verify real DeepSeek evidence offline
+        run: |
+          GOTOOLCHAIN=local go build -o "$RUNNER_TEMP/agentprov-context-check" ./cmd/agentprov
+          python3 scripts/accept_deepseek_context.py --binary "$RUNNER_TEMP/agentprov-context-check" --output "$RUNNER_TEMP/deepseek-context-check"
 
   sensor-build:
     name: Linux ${{ matrix.arch }} builds from committed bindings
