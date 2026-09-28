@@ -2250,5 +2250,9 @@
   "native %s session records; selection and coverage reported after exit": "读取原生 %s 会话记录，退出后报告绑定和采集情况",
   "agent context disabled via --no-context": "已通过 --no-context 关闭 Agent 上下文采集",
   "launch: hooks injection skipped: %v (native transcript capture remains enabled)\n": "launch：未能注入钩子：%v；仍将尝试采集原生会话日志\n",
-  "hooks unavailable; native %s session records will be checked after exit": "钩子不可用，退出后仍将检查原生 %s 会话记录"
+  "hooks unavailable; native %s session records will be checked after exit": "钩子不可用，退出后仍将检查原生 %s 会话记录",
+  "Compare two recorded task, configuration, or approval snapshots": "比较两份已记录的任务、配置或审批快照",
+  "earlier recorded context entry id": "较早的上下文记录 ID",
+  "later recorded context entry id": "较晚的上下文记录 ID",
+  "run containing the later entry; defaults to --run": "较晚记录所属的执行 ID，默认使用 --run"
 }

@@ -81,6 +81,16 @@ func contextCmd(dataDir *string) *cobra.Command {
 			return provenance.ReadTextContentPage(s.DB, run, ref, offset, int64(limit))
 		})
 	}
-	root.AddCommand(importCmd, list, overview, content)
+	var left, right, rightRun string
+	compare := &cobra.Command{Use: "compare", Short: "Compare two recorded task, configuration, or approval snapshots", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return withService(cmd, func(s agentcontext.Service) (any, error) {
+				return s.CompareSnapshots(cmd.Context(), run, left, rightRun, right)
+			})
+		}}
+	compare.Flags().StringVar(&left, "left", "", "earlier recorded context entry id")
+	compare.Flags().StringVar(&right, "right", "", "later recorded context entry id")
+	compare.Flags().StringVar(&rightRun, "right-run", "", "run containing the later entry; defaults to --run")
+	root.AddCommand(importCmd, list, overview, content, compare)
 	return root
 }

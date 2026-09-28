@@ -152,6 +152,39 @@ components:
         has_more: {type: boolean}
         sha256: {type: string}
         redacted: {type: boolean}
+    SnapshotValue:
+      type: object
+      required: [present, truncated]
+      properties:
+        present: {type: boolean, description: False means absent in this record, not denied or revoked.}
+        preview: {type: string, maxLength: 512, description: Bounded UTF-8 preview of the recorded redacted JSON value.}
+        truncated: {type: boolean}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$', description: Hash of the full JSON value before preview truncation.}
+    SnapshotChange:
+      type: object
+      required: [path, before, after]
+      properties:
+        path: {type: string, description: JSON Pointer under content or status.}
+        before: {$ref: '#/components/schemas/SnapshotValue'}
+        after: {$ref: '#/components/schemas/SnapshotValue'}
+    SnapshotComparison:
+      type: object
+      required: [schema_version, scope, status, left, right, changes, has_more]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        scope: {const: recorded_values}
+        status: {type: string, enum: [same, different, unknown]}
+        left: {$ref: '#/components/schemas/Entry'}
+        right: {$ref: '#/components/schemas/Entry'}
+        changes: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/SnapshotChange'}}
+        has_more: {type: boolean, description: Additional differences omitted by the bounded comparison.}
+        reason: {type: string, enum: [content_not_recorded, comparison_content_limit]}
+      description: >
+        Derived comparison of recorded values and source outcome status, never
+        an effective-permissions decision. Source timestamps and content hashes
+        remain available on both entries. Bodies over 1 MiB or not recorded
+        yield unknown. Nested differences stop at depth 32; previews at 512
+        bytes and changes at 200. Full evidence remains separately readable.
     Error:
       type: object
       required: [schema_version, error]
@@ -218,6 +251,21 @@ paths:
         - {name: limit, in: query, schema: {type: integer, minimum: 4, maximum: 262144, default: 65536}}
       responses:
         '200': {description: Hash-checked content page, content: {application/json: {schema: {$ref: '#/components/schemas/ContentPage'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+        '503': {$ref: '#/components/responses/StoreUnavailable'}
+  /v1/context/compare:
+    get:
+      operationId: agent_context_compare
+      summary: Compare two recorded task, configuration, or approval snapshots
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: left, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 512}}
+        - {name: right, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 512}}
+        - {name: right_run, in: query, schema: {type: string, minLength: 1, maxLength: 512}, description: Defaults to run; cross-run comparison must be explicit.}
+      responses:
+        '200': {description: Bounded comparison with immutable source references, content: {application/json: {schema: {$ref: '#/components/schemas/SnapshotComparison'}}}}
         '400': {$ref: '#/components/responses/InvalidArgument'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/EvidenceFailure'}

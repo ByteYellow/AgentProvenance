@@ -17,6 +17,7 @@ func (s Service) ReadHandler() http.Handler {
 	mux.HandleFunc("GET /context/overview", s.httpOverview)
 	mux.HandleFunc("GET /context/entries", s.httpEntries)
 	mux.HandleFunc("GET /context/content", s.httpContent)
+	mux.HandleFunc("GET /context/compare", s.httpCompare)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
@@ -40,6 +41,12 @@ func (s Service) ReadHandler() http.Handler {
 		}
 		mux.ServeHTTP(w, r)
 	})
+}
+
+func (s Service) httpCompare(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	value, err := s.CompareSnapshots(r.Context(), q.Get("run"), q.Get("left"), q.Get("right_run"), q.Get("right"))
+	contextResult(w, value, err)
 }
 
 func contextError(w http.ResponseWriter, code int, kind, message string) {

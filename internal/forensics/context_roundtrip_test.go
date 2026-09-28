@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -75,6 +76,57 @@ func TestSignedContextRoundTripBeyondLegacyLimits(t *testing.T) {
 				t.Fatalf("coverage: %+v %v", o, err)
 			}
 		})
+	}
+}
+
+func TestSignedConfigurationHistoryRetainsOfflineComparison(t *testing.T) {
+	ctx := context.Background()
+	paths := mustInit(t, filepath.Join(t.TempDir(), "source"))
+	db := mustOpen(t, paths)
+	defer db.Close()
+	svc := agentcontext.Service{DB: db, Paths: paths}
+	a, b := `{"model":"first","sandbox":"read-only"}`, `{"model":"second"}`
+	if _, err := svc.Save(ctx, "run", agentcontext.Source{Harness: "codex", SessionID: "s", ParserVersion: "test/v1", Binding: "explicit"}, []agentcontext.Record{
+		{Key: "before", Sequence: 1, Kind: "configuration", Body: &a},
+		{Key: "after", Sequence: 2, Kind: "configuration", Body: &b},
+	}, agentcontext.Coverage{Status: agentcontext.OK}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := svc.Entries(ctx, agentcontext.PageOptions{RunID: "run"})
+	if err != nil || len(p.Entries) != 2 {
+		t.Fatalf("history: %+v %v", p, err)
+	}
+	before, err := svc.CompareSnapshots(ctx, "run", p.Entries[0].ID, "", p.Entries[1].ID)
+	if err != nil || before.Status != "different" {
+		t.Fatalf("comparison: %+v %v", before, err)
+	}
+	pub, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := (forensics.Service{DB: db, Paths: paths, SignKey: key}).ExportBundle("run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := forensics.VerifyBundleAttestation(bundle.Path, bundle.AttestationPath, pub); err != nil {
+		t.Fatal(err)
+	}
+	fresh := mustInit(t, filepath.Join(t.TempDir(), "replay"))
+	dbFresh := mustOpen(t, fresh)
+	defer dbFresh.Close()
+	if _, err := (forensics.Service{DB: dbFresh, Paths: fresh}).ImportBundle(bundle.Path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(paths.Provenance, paths.Provenance+"-offline"); err != nil {
+		t.Fatal(err)
+	}
+	after, err := (agentcontext.Service{DB: dbFresh, Paths: fresh}).CompareSnapshots(ctx, "run", p.Entries[0].ID, "", p.Entries[1].ID)
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatalf("portable configuration changed: before=%+v after=%+v err=%v", before, after, err)
+	}
+	v, err := provenance.Verify(dbFresh, "run")
+	if err != nil || v.ErrorCount != 0 {
+		t.Fatalf("verify history: %+v %v", v, err)
 	}
 }
 
