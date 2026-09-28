@@ -140,6 +140,11 @@ go build -o agentprov ./cmd/agentprov
 
 ### 记录你自己的 Agent 执行
 
+**v0.9.0 源码预览：** 开发中的源码版本还可保存受支持的 Agent 会话、工具结果、配置历史
+和覆盖情况。运行 `./agentprov demo deepseek-context` 查看真实开发任务的签名回放；
+已发布的 v0.8.2 压缩包尚不包含该示例。
+[上下文指南](docs/zh-CN/agent-context.md) · [版本说明](docs/zh-CN/releases/v0.9.0.md)。
+
 在解压目录或源码目录中，启动已经安装并完成登录或认证的 Agent：
 
 ```sh
@@ -717,6 +722,9 @@ Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图�
 
 主要功能：
 
+- **Agent 会话（v0.9.0 源码预览）**：默认折叠，展开后查看对话与工具、权限与配置、
+  采集情况。已有证据链接支持与图谱双向定位；完整正文在独立查看器中分页读取。
+  旧记录没有会话内容时，覆盖情况仍显示未知。参见 [DeepSeek 回放](demo/deepseek-context/README.zh-CN.md)。
 - **执行概览（Run Overview / Ask）**：从“为什么有风险”“哪些文件被修改”
   “外发前后发生了什么”“产物从哪里来”等问题进入对应的局部视图。
 - **图浏览器（Graph Explorer）**：`/api/lens` 与 CLI 的 `graph lens` 共用查询接口，

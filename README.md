@@ -140,6 +140,12 @@ go build -o agentprov ./cmd/agentprov
 
 ### Capture your own agent
 
+**v0.9.0 source preview:** the development checkout also records supported
+Agent sessions, tool results, configuration history and coverage. Try
+`./agentprov demo deepseek-context` for a real signed development-task replay;
+the published v0.8.2 archive does not include it.
+[Context guide](docs/agent-context.md) · [Version notes](docs/releases/v0.9.0.md).
+
 From the extracted archive or source checkout, with your agent already installed and authenticated:
 
 ```sh
@@ -798,6 +804,11 @@ Raw Telemetry Events
 
 Panels:
 
+- **Agent session (v0.9.0 source preview)**: a collapsed summary opens into
+  conversation/tools, permissions/configuration and collection status. Saved
+  graph links navigate in both directions; full saved bodies are paged in the
+  independent content viewer. Old captures without session records explicitly
+  retain unknown coverage. See the [DeepSeek replay](demo/deepseek-context/README.md).
 - **Run Overview / Ask**: query-first entry points (`Why is this run risky?`,
   `What happened around egress?`, `What changed files?`, `Which processes
   mattered?`, `Where did artifacts come from?`, `Which tool calls ran?`). Each

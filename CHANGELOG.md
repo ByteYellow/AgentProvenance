@@ -2,6 +2,56 @@
 
 English | [中文](CHANGELOG.zh-CN.md)
 
+## v0.9.0 - Unreleased
+
+Recorded agent sessions, configuration history, and portable full-text evidence.
+Release notes: [v0.9.0](docs/releases/v0.9.0.md).
+
+### Added
+
+- Common context capture for Claude Code and Codex, with messages, tool inputs
+  and outcomes, source-provided task, approval and configuration records.
+  Native DeepSeek Harness 0.1.7-rc.2 v4 Zstandard transcripts use the same path;
+  explicitly supported v3 transcripts and existing Kimi/Grok formats remain readable.
+- Session discovery, explicit source selection, verified resume boundaries,
+  recorded child identities, revisions, and source-scoped coverage reports.
+  Ambiguous selection does not attach a guessed conversation to a run.
+- `context` CLI commands and versioned HTTP queries for entries, saved content,
+  configuration comparison, coverage, and recorded graph links.
+- A collapsible bilingual Agent session section, graph/session navigation,
+  configuration history, and an independent paged saved-content viewer.
+- A signed real DeepSeek development-task replay, available through
+  `agentprov demo deepseek-context` without a provider account or network access.
+- Opt-in final changed-file text with `launch --file-diff`, and per-run context,
+  native-capture, artifact and correlation diagnostics.
+
+### Changed
+
+- Large context, file and peer-message bodies use bounded content chunks that
+  survive offline export/import without increasing the existing per-object
+  bundle limit. Original source records remain separately inspectable.
+- Launch reports configured capture at startup and observed coverage at exit.
+  Hook and transcript parsing share input/record budgets across selected sources.
+- Schema 19 preserves within-line source order. Historical context is retained
+  separately from current execution and cannot authorize or seed new activity.
+
+### Fixed
+
+- Prevent configuration changes, source-message variants, typed tool failures,
+  completion-only dispatches and late results from losing their source semantics.
+- Preserve native argument boundaries and process-lifetime attribution limits;
+  ambiguous runtime associations remain unresolved.
+- Export telemetry batch membership with its stored hashes so offline replay
+  can retain the batch verification available in the source store.
+
+### Compatibility
+
+- The six historical signed demo bundles, attestations and public keys are
+  unchanged. Missing historical context remains `legacy_not_recorded`.
+- Signature validity, graph integrity and capture completeness remain separate
+  results. Transcript capture is not a guarantee of TLS or kernel coverage.
+- External LLM/Jev evaluators remain optional and outside the capture path.
+
 ## v0.8.2 - 2026-09-26
 
 Portable replay and Chinese documentation and web interfaces.
