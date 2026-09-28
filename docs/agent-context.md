@@ -42,6 +42,14 @@ agentprov context list --run RUN_ID --kind configuration --revisions
 DeepSeek parsing supports v3 JSONL and v4 JSONL with concatenated Zstandard
 frames. Unknown formats are reported, not interpreted as empty successful runs.
 
+An explicit import writes its saved coverage report as JSON to stdout. Only
+`ok` and `empty` return exit status 0; partial, failed, missing or ambiguous
+sources return a nonzero status after saving the diagnostic. Partial evidence
+remains available, and repeating an unchanged successful import is successful
+deduplication. This is the import status, not proof of complete runtime coverage.
+`--after-line N` retains the first N physical records as prior context, not
+current execution; it does not discard them or authorize the new execution.
+
 ## Inspect and Compare
 
 `context list` returns immutable entry IDs and content references. Use `--cursor`
@@ -53,7 +61,15 @@ Source timestamps are retained separately from storage time.
 agentprov context compare --run RUN_ID --left ENTRY_A --right ENTRY_B
 agentprov context compare --run RUN_A --left ENTRY_A --right-run RUN_B --right ENTRY_B
 agentprov context content --run RUN_ID --ref sha256:HASH --offset 0 --limit 65536
+agentprov context list --run RUN_ID --group conversation --node GRAPH_NODE_ID
+agentprov context list --run RUN_ID --entry ENTRY_ID
+agentprov context links --run RUN_ID --entry ENTRY_ID
 ```
+
+Graph navigation uses existing recorded links only. An empty link result includes
+a reason; a similar command or timestamp does not create a link. `--group` accepts
+`conversation` or `configuration`, including tool results or approvals respectively.
+List pages contain 1-200 records; content pages contain 4-262144 UTF-8 bytes.
 
 Comparison accepts two configuration records, approval records, or task records
 (including user messages). It compares recorded content and source status.

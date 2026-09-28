@@ -38,6 +38,12 @@ agentprov context list --run RUN_ID --kind configuration --revisions
 DeepSeek 解析支持 v3 JSONL，以及含多个连续 Zstandard 帧的 v4 JSONL。
 未知格式会明确报告，不会当成成功采集到空记录。
 
+显式导入会将保存后的覆盖报告以 JSON 输出到标准输出。只有 `ok` 和 `empty` 返回退出码 0；
+部分成功、失败、未找到来源或关联不确定，会先保存诊断，再返回非零退出码。
+已经保存的部分证据仍可查询；重复导入未改变的有效来源属于成功去重。
+这是导入状态，不代表运行时证据完整。`--after-line N` 将前 N 条物理记录保留为历史上下文，
+不丢弃它们，也不将它们视为本次执行或本次授权。
+
 ## 查看与比较
 
 `context list` 返回不可变记录 ID 和正文引用，用 `--cursor` 翻页。
@@ -48,7 +54,14 @@ DeepSeek 解析支持 v3 JSONL，以及含多个连续 Zstandard 帧的 v4 JSONL
 agentprov context compare --run RUN_ID --left ENTRY_A --right ENTRY_B
 agentprov context compare --run RUN_A --left ENTRY_A --right-run RUN_B --right ENTRY_B
 agentprov context content --run RUN_ID --ref sha256:HASH --offset 0 --limit 65536
+agentprov context list --run RUN_ID --group conversation --node GRAPH_NODE_ID
+agentprov context list --run RUN_ID --entry ENTRY_ID
+agentprov context links --run RUN_ID --entry ENTRY_ID
 ```
+
+图谱导航仅使用已记录关联。无关联时返回原因，不因命令或时间相似而猜测。
+`--group` 支持 `conversation` 和 `configuration`，分别包括工具结果与审批记录。
+列表每页 1-200 条；正文每页 4-262144 个 UTF-8 字节。
 
 比较支持两份同类配置、审批或任务记录，任务记录包括用户消息。
 比较对象是来源记录的正文和状态：`same` 表示这些值相同，`different` 表示存在字段变化，
