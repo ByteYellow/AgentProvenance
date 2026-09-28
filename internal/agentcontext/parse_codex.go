@@ -19,6 +19,9 @@ func (p *parser) codex(top row) bool {
 		p.add("session", stableKey("session", p.Source.SessionID, p.line), "", "", "", "observed", ts, whole(v))
 		return true
 	case "turn_context":
+		if _, exists := v["cwd"]; exists {
+			p.Source.Workdir = text(v, "cwd")
+		}
 		p.add("configuration", fmt.Sprintf("configuration:%d", p.line), "", "", "", "observed", ts, whole(v))
 		return true
 	case "response_item":

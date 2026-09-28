@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ParserVersion = "context-parser/v1"
+	ParserVersion = "context-parser/v2"
 	MaxInputBytes = 128 << 20
 	MaxLineBytes  = 40 << 20
 	MaxRecords    = 25000
@@ -328,8 +328,10 @@ func (p *parser) add(kind, key, role, callID, name, status, timestamp string, bo
 	if key == "" {
 		key = fmt.Sprintf("line:%d", p.line)
 	}
+	workdir, version := p.Source.Workdir, p.Source.ApplicationVersion
 	r := Record{Key: key, Sequence: p.line, Kind: kind, Role: role,
-		ToolCallID: callID, ToolName: name, Status: status, RecordedAt: timestamp}
+		ToolCallID: callID, ToolName: name, Status: status, RecordedAt: timestamp,
+		Workdir: &workdir, ApplicationVersion: &version}
 	if name != "" && callID != "" {
 		p.callNames[callID] = name
 	}

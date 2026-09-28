@@ -83,6 +83,12 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 		if entry.AgentID == "" {
 			entry.AgentID = src.AgentID
 		}
+		if r.Workdir != nil {
+			entry.Source.Workdir = *r.Workdir
+		}
+		if r.ApplicationVersion != nil {
+			entry.Source.ApplicationVersion = *r.ApplicationVersion
+		}
 		if r.Body != nil {
 			if len(*r.Body) > provenance.MaxTextContentBytes {
 				entry.Content = ContentRef{State: "omitted", Reason: "capture_limit"}

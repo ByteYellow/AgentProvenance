@@ -126,6 +126,10 @@ type Record struct {
 	MediaType     string
 	MissingReason string
 	MissingFields []string
+	// Parsed values are position-specific, including unknown values. Nil lets
+	// explicit Record callers use the source defaults.
+	Workdir            *string
+	ApplicationVersion *string
 }
 
 type SaveResult struct {

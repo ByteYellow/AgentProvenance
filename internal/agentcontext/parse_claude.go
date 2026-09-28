@@ -7,10 +7,25 @@ import (
 
 func (p *parser) claude(top row) bool {
 	p.identify(text(top, "sessionId", "session_id"))
-	if cwd := text(top, "cwd"); cwd != "" {
+	ts := eventTime(top)
+	changes := row{}
+	if raw, exists := top["cwd"]; exists {
+		cwd := text(top, "cwd")
+		if cwd != p.Source.Workdir {
+			changes["cwd"] = raw
+		}
 		p.Source.Workdir = cwd
 	}
-	ts := eventTime(top)
+	if raw, exists := top["version"]; exists {
+		version := text(top, "version")
+		if version != p.Source.ApplicationVersion {
+			changes["application_version"] = raw
+		}
+		p.Source.ApplicationVersion = version
+	}
+	if len(changes) > 0 {
+		p.add("configuration", fmt.Sprintf("source-config:%d", p.line), "", "", "", "source_metadata", ts, whole(changes))
+	}
 	if event := text(top, "hook_event_name"); event != "" {
 		p.Source.Channel = "hooks"
 		start := len(p.Records)
@@ -37,6 +52,9 @@ func (p *parser) claude(top row) bool {
 		}
 		id := text(top, "uuid")
 		key := stableKey("message", id, p.line)
+		if model := text(message, "model"); model != "" {
+			p.add("configuration", key+":model", "", "", "", "observed", ts, whole(row{"model": quoted(model)}))
+		}
 		var blocks []row
 		if json.Unmarshal(message["content"], &blocks) != nil {
 			p.add("message", key, role, "", "", "observed", ts, message["content"])
@@ -65,9 +83,6 @@ func (p *parser) claude(top row) bool {
 		if len(ordinary) > 0 {
 			body, _ := json.Marshal(ordinary)
 			p.add("message", key, role, "", "", "observed", ts, body)
-		}
-		if model := text(message, "model"); model != "" {
-			p.add("configuration", key+":model", "", "", "", "observed", ts, whole(row{"model": quoted(model)}))
 		}
 		return true
 	case "system":
