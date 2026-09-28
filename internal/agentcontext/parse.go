@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ParserVersion = "context-parser/v3"
+	ParserVersion = "context-parser/v4"
 	MaxInputBytes = 128 << 20
 	MaxLineBytes  = 40 << 20
 	MaxRecords    = 25000
@@ -245,9 +245,9 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 			*ended = record.RecordedAt
 		}
 	}
-	p.Coverage.MissingFields = missingSnapshots(current)
+	p.Coverage.MissingFields = missingSnapshots(p.Source.Harness, current)
 	if p.Coverage.PriorContext != nil {
-		p.Coverage.PriorContext.MissingFields = missingSnapshots(prior)
+		p.Coverage.PriorContext.MissingFields = missingSnapshots(p.Source.Harness, prior)
 	}
 	return p.Parsed, nil
 }
@@ -425,20 +425,6 @@ func stableKey(prefix, id string, line int64) string {
 	}
 	return prefix + ":" + id
 }
-func missingSnapshots(records []Record) []string {
-	seen := map[string]bool{}
-	for _, r := range records {
-		seen[r.Kind] = true
-	}
-	missing := []string{}
-	for _, kind := range []string{"configuration", "approval"} {
-		if !seen[kind] {
-			missing = append(missing, kind)
-		}
-	}
-	return missing
-}
-
 func canonicalHarness(h string) string {
 	switch strings.ToLower(h) {
 	case "dsh", "deepseek-harness":

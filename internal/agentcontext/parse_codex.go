@@ -16,7 +16,7 @@ func (p *parser) codex(top row) bool {
 		if p.Source.ParentSessionID != "" {
 			p.Source.AgentID = p.Source.SessionID
 		}
-		p.add("session", stableKey("session", p.Source.SessionID, p.line), "", "", "", "observed", ts, whole(v))
+		p.add("configuration", stableKey("session", p.Source.SessionID, p.line), "", "", "", "session_metadata", ts, whole(v))
 		return true
 	case "turn_context":
 		if _, exists := v["cwd"]; exists {

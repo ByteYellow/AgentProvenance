@@ -21,7 +21,7 @@ func (p *parser) deepseek(top row) bool {
 			p.Source.AgentID = p.Source.SessionID
 		}
 		p.Source.Workdir = text(top, "cwd")
-		p.add("session", stableKey("session", p.Source.SessionID, p.line), "", "", "", "observed", ts, whole(top))
+		p.add("configuration", stableKey("session", p.Source.SessionID, p.line), "", "", "", "session_metadata", ts, whole(top))
 		return true
 	}
 	if p.Source.FormatVersion == "" {
@@ -69,7 +69,7 @@ func (p *parser) deepseek(top row) bool {
 		// Preserve internal error reasons and result-time file diffs alongside
 		// the model-facing result instead of discarding them during adaptation.
 		p.add("tool_result", key, "tool", text(msg, "toolCallId"), "", status, ts, whole(v))
-	case "request/header", "request/context", "model/selection", "sandbox/mode", "permission/preset", "approval/policy", "agent-preset/selected", "subagent/model-selection-policy":
+	case "request/header", "request/context", "model/selection", "sandbox/mode", "permission/preset", "approval/policy", "plan/mode", "agent-preset/selected", "subagent/model-selection-policy":
 		p.add("configuration", key, "", "", "", typ, ts, whole(v))
 	case "approval/asked":
 		p.add("approval", key, "", text(v, "callId", "toolCallId"), "", "requested", ts, whole(v))
@@ -81,7 +81,7 @@ func (p *parser) deepseek(top row) bool {
 		p.add("message", key, "assistant", "", "", "uncommitted_attempt", ts, whole(v))
 	case "turn/start", "turn/end", "step/start", "step/end", "session/end-seed", "session/title",
 		"compaction/start", "compaction/end", "compaction/prune", "compaction/summary", "image/offload",
-		"llm/retry", "llm/retry-started", "hook/invoked", "hook/result", "plan/mode",
+		"llm/retry", "llm/retry-started", "hook/invoked", "hook/result",
 		"subagent/descriptor", "subagent/catalog", "agent/inbox/spliced", "team/member",
 		"team/message/delivered", "team/message/queued", "team/task", "workspace/changes",
 		"todo/write", "deliverables/presented", "schedule/change", "command/run", "command/done",

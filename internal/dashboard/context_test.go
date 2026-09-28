@@ -94,10 +94,10 @@ func TestContextDashboardFixture(t *testing.T) {
 	body := func(text string) *string { return &text }
 	records := []agentcontext.Record{
 		{Key: "task", Sequence: 1, Kind: "message", Role: "user", RecordedAt: "2026-09-28T09:00:00Z", Body: body("Synthetic UI fixture: inspect a report, do not access credentials. No real agent was executed."), RawBody: body(`{"fixture":true,"type":"user"}`)},
-		{Key: "config-a", Sequence: 2, Kind: "configuration", RecordedAt: "2026-09-28T09:00:01Z", Body: body(`{"model":"fixture-model","sandbox":"read-only","approval":"on-request","cwd":"/fixture"}`)},
+		{Key: "config-a", Sequence: 2, Kind: "configuration", Status: "session_metadata", RecordedAt: "2026-09-28T09:00:01Z", Body: body(`{"model":"fixture-model","sandbox":"read-only","approval":"on-request","cwd":"/fixture","skills":[],"plugins":null}`)},
 		{Key: "tool", Sequence: 3, Kind: "tool_call", ToolCallID: "native-call", ToolName: "exec_command", RecordedAt: "2026-09-28T09:00:02Z", Body: body(`{"cmd":"python3 report.py"}`), RawBody: body(`{"fixture":true,"type":"tool_call","arguments":{"cmd":"python3 report.py"}}`)},
 		{Key: "result", Sequence: 4, Kind: "tool_result", ToolCallID: "native-call", ToolName: "exec_command", Status: "error", RecordedAt: "2026-09-28T09:00:03Z", Body: body("SAVED-OUTPUT-START\n" + strings.Repeat("bounded fixture output\n", 3300) + "SAVED-OUTPUT-TAIL"), RawBody: body(`{"fixture":true,"type":"tool_result","error":true}`)},
-		{Key: "config-b", Sequence: 5, Kind: "configuration", RecordedAt: "2026-09-28T09:00:04Z", Body: body(`{"model":"fixture-model","sandbox":"workspace-write","cwd":"/fixture"}`)},
+		{Key: "config-b", Sequence: 5, Kind: "configuration", RecordedAt: "2026-09-28T09:00:04Z", Body: body(`{"model":"fixture-model","sandbox":"workspace-write","cwd":"/fixture","skills":[]}`)},
 	}
 	for i := 0; i < 37; i++ {
 		records = append(records, agentcontext.Record{Key: fmt.Sprintf("message-%d", i), Sequence: int64(i + 6), Kind: "message", Role: "assistant", Body: body(fmt.Sprintf("Synthetic follow-up %d. <img src=x onerror=alert(1)> is recorded text, not HTML.", i))})
@@ -111,7 +111,8 @@ func TestContextDashboardFixture(t *testing.T) {
 	source := agentcontext.Source{ID: "ui-fixture-source", Harness: "codex", Channel: "transcript", SessionID: "ui-fixture-session", Binding: "explicit", ParserVersion: "synthetic-ui-fixture/v1", Workdir: "/fixture"}
 	_, err = s.Save(ctx, "ui-fixture", source, records, agentcontext.Coverage{Status: agentcontext.OK,
 		FirstLine: 3, LastLine: 42,
-		Counts: agentcontext.Counts{Read: agentcontext.Number(40), Parsed: agentcontext.Number(40), Matched: agentcontext.Number(1)},
+		MissingFields: []string{"approval", "approval_decision", "configuration.mcp_servers", "configuration.network_restrictions"},
+		Counts:        agentcontext.Counts{Read: agentcontext.Number(40), Parsed: agentcontext.Number(40), Matched: agentcontext.Number(1)},
 		PriorContext: &agentcontext.PriorRange{FirstLine: 1, LastLine: 2, MissingFields: []string{"approval"},
 			Counts: agentcontext.Counts{Read: agentcontext.Number(2), Parsed: agentcontext.Number(2)}}})
 	if err != nil {

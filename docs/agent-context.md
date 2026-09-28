@@ -65,6 +65,23 @@ Model selections, working directories, MCP/skills/plugins and sandbox settings
 are only available when the source recorded them; current machine settings are
 not substituted for historical evidence.
 
+Configuration includes Codex/DeepSeek session metadata and turn/request records,
+DeepSeek plan and permission changes, and Claude initialization/permission-mode
+records when present in the selected source. These events remain separate
+snapshots, not a reconstructed effective policy. Session logs do not necessarily
+contain MCP, skills or plugin inventories; this does not add a Desktop adapter or
+scan current machine configuration during historical imports.
+
+Coverage reports list absent `configuration.*` fields for model/provider, application
+version, working directory, permission/approval policy, sandbox, directory/network
+restrictions, MCP servers, tools, skills and plugins. `task` and `approval_decision`
+are checked separately. A permission request can exist while its decision is
+missing. Explicit `null`, `false`, `{}` and `[]` are preserved as source values;
+their presence does not prove effective authorization. Tool names alone are not
+complete definitions. `ok` means no processing errors were observed in this range,
+not that all fields or configuration changes were captured. Older reports retain
+their original, potentially coarser missing-field checks.
+
 Recorded working directories and application versions are scoped to their
 source positions. Later Claude metadata or a Codex turn's changed directory
 does not overwrite earlier entries or fill an earlier unknown value. Claude

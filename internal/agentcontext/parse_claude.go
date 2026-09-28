@@ -23,6 +23,11 @@ func (p *parser) claude(top row) bool {
 		}
 		p.Source.ApplicationVersion = version
 	}
+	if text(top, "type") == "system" && text(top, "subtype") == "init" {
+		if _, exists := top["claude_code_version"]; exists {
+			p.Source.ApplicationVersion = text(top, "claude_code_version")
+		}
+	}
 	if len(changes) > 0 {
 		p.add("configuration", fmt.Sprintf("source-config:%d", p.line), "", "", "", "source_metadata", ts, whole(changes))
 	}
@@ -86,7 +91,14 @@ func (p *parser) claude(top row) bool {
 		}
 		return true
 	case "system":
-		p.add("session", fmt.Sprintf("system:%d", p.line), "system", "", "", text(top, "subtype"), ts, whole(top))
+		kind, status := "session", text(top, "subtype")
+		if status == "init" {
+			kind, status = "configuration", "initialization"
+		}
+		p.add(kind, fmt.Sprintf("system:%d", p.line), "system", "", "", status, ts, whole(top))
+		return true
+	case "permission-mode":
+		p.add("configuration", fmt.Sprintf("permission-mode:%d", p.line), "", "", "", "permission_mode", ts, whole(top))
 		return true
 	case "summary":
 		p.add("message", fmt.Sprintf("summary:%d", p.line), "assistant", "", "", "summary", ts, top["summary"])

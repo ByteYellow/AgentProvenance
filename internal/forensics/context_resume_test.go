@@ -21,9 +21,9 @@ func TestSignedResumedContextRetainsBothRangesOffline(t *testing.T) {
 	db := mustOpen(t, paths)
 	defer db.Close()
 	input := `{"type":"session_meta","payload":{"id":"s"}}
-{"type":"turn_context","payload":{"model":"first","mcp_servers":{"docs":{"version":"1","tools":[]}}}}
+{"type":"turn_context","payload":{"model":"first","mcp_servers":{"docs":{"version":"1","tools":[]}},"skills":[],"plugins":null}}
 {"type":"response_item","payload":{"type":"message","role":"user","content":"previous task"}}
-{"type":"turn_context","payload":{"model":"second","mcp_servers":{"docs":{"version":"2","tools":["read"]}}}}
+{"type":"turn_context","payload":{"model":"second","mcp_servers":{"docs":{"version":"2","tools":[{"name":"read","inputSchema":{"type":"object","properties":{"path":{"type":"string"}}}}]}}}}
 {"type":"response_item","payload":{"type":"message","role":"user","content":"resumed task"}}
 `
 	p, err := agentcontext.Parse(ctx, strings.NewReader(input), agentcontext.ParseOptions{Harness: "codex", Binding: "explicit", AfterLine: 3})
@@ -37,6 +37,14 @@ func TestSignedResumedContextRetainsBothRangesOffline(t *testing.T) {
 	before, err := svc.Entries(ctx, agentcontext.PageOptions{RunID: "run"})
 	if err != nil || len(before.Entries) != 5 {
 		t.Fatalf("entries: %+v %v", before, err)
+	}
+	originalComparison, err := svc.CompareSnapshots(ctx, "run", before.Entries[1].ID, "", before.Entries[3].ID)
+	if err != nil || len(originalComparison.Changes) != 5 {
+		t.Fatalf("configuration comparison: %+v %v", originalComparison, err)
+	}
+	originalCoverage, err := svc.Overview(ctx, "run")
+	if err != nil {
+		t.Fatal(err)
 	}
 	pub, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -79,8 +87,11 @@ func TestSignedResumedContextRetainsBothRangesOffline(t *testing.T) {
 	if err != nil || o.Coverage[0].PriorContext == nil || *o.Coverage[0].Counts.Stored != 2 || *o.Coverage[0].PriorContext.Counts.Stored != 3 {
 		t.Fatalf("portable ranges: %+v %v", o, err)
 	}
+	if !reflect.DeepEqual(originalCoverage.Coverage, o.Coverage) {
+		t.Fatal("source field coverage changed during replay")
+	}
 	comparison, err := replayed.CompareSnapshots(ctx, "run", after.Entries[1].ID, "", after.Entries[3].ID)
-	if err != nil || comparison.Status != "different" || len(comparison.Changes) != 3 {
+	if err != nil || !reflect.DeepEqual(originalComparison, comparison) {
 		t.Fatalf("historical configuration comparison lost: %+v %v", comparison, err)
 	}
 	v, err := provenance.Verify(dbFresh, "run")

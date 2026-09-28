@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance recorded context API
-  version: "1.2"
+  version: "1.3"
   description: >
     Read-only recorded evidence. Source assertions are not kernel observations
     or inferred authorizations. The dashboard exposes the same routes under
@@ -60,6 +60,18 @@ components:
         field: {type: string}
         scope: {type: string, enum: [prior_context, current_execution], description: Identifies retained history or the selected execution range when present.}
       description: Bounded diagnostics contain no source message bodies or secrets.
+    MissingSnapshotFields:
+      type: array
+      items: {type: string}
+      description: >
+        Absent source fields in this processing range, not effective permissions.
+        Current parsers check task, configuration, approval, approval_decision and
+        configuration.model/provider/application_version/workdir/permission_mode/
+        approval_policy/sandbox_policy/directory_restrictions/network_restrictions/
+        mcp_servers/tools/skills/plugins (each configuration field uses its own
+        configuration. prefix). Explicit null/false/empty collections remain
+        recorded values. Older reports retain their original checks; absence of a
+        missing-field code is not proof of exhaustive coverage or valid permission.
     Coverage:
       type: object
       required: [schema_version, id, run_id, source, status, observed_at, counts, issues, missing_fields]
@@ -79,7 +91,7 @@ components:
         last_line: {type: integer, minimum: 1}
         counts: {$ref: '#/components/schemas/Counts'}
         issues: {type: array, items: {$ref: '#/components/schemas/Issue'}}
-        missing_fields: {type: array, items: {type: string}}
+        missing_fields: {$ref: '#/components/schemas/MissingSnapshotFields'}
         object_hash: {type: string}
         prior_context: {$ref: '#/components/schemas/PriorContextRange'}
       description: Counts and timestamps describe the current selected range. An optional prior_context reports the retained prefix separately; status accounts for issues in either range.
@@ -92,7 +104,7 @@ components:
         started_at: {type: string}
         ended_at: {type: string}
         counts: {$ref: '#/components/schemas/Counts'}
-        missing_fields: {type: array, items: {type: string}}
+        missing_fields: {$ref: '#/components/schemas/MissingSnapshotFields'}
       description: History read before the resume cursor. An empty current range remains empty even when history is retained. An absent range does not establish that the harness had no prior history.
     ContentRef:
       type: object

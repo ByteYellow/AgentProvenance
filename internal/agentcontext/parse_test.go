@@ -56,7 +56,7 @@ func TestCodexCompleteContextAndRealChildIdentity(t *testing.T) {
 			child = true
 		}
 	}
-	if counts["tool_call"] != 3 || counts["tool_result"] != 3 || counts["configuration"] != 1 || !child || !failed || !output {
+	if counts["tool_call"] != 3 || counts["tool_result"] != 3 || counts["configuration"] != 2 || !child || !failed || !output {
 		t.Fatalf("context=%v child=%v error=%v output=%v", counts, child, failed, output)
 	}
 	childLog := `{"type":"session_meta","payload":{"id":"child-real","source":{"subagent":{"thread_spawn":{"parent_thread_id":"thread-a"}}}}}`
