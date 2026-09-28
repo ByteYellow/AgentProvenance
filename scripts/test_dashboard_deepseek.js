@@ -96,7 +96,9 @@ async (page) => {
   await page.getByRole('tab',{name:'Permissions & configuration',exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll('#context-body [data-entry]').length===5);
   await page.waitForFunction(()=>document.querySelector('#context-body')?.textContent.includes('workspace-write'));
-  check((await page.locator('#context-body').innerText()).includes('ask'), 'actual permission configuration is visible');
+  const approval = records().filter({hasText:'Approval policy'}).locator('[data-entry-body] pre');
+  await approval.waitFor();
+  check(JSON.parse(await approval.innerText()).policy === 'ask', 'actual permission configuration is visible');
   await records().nth(0).getByRole('button',{name:'Compare snapshot',exact:true}).click();
   await records().nth(1).getByRole('button',{name:'Compare snapshot',exact:true}).click();
   await page.locator('#context-compare-run').click();
