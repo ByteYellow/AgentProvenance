@@ -215,6 +215,21 @@ components:
         capabilities_start: {$ref: '#/components/schemas/ProbeSnapshot'}
         capabilities_end: {$ref: '#/components/schemas/ProbeSnapshot'}
         issues: {type: array, items: {type: string}}
+        limitations: {type: array, items: {type: string}, description: Optional probe or TLS visibility limits, separate from measured loss or processing errors. Absent in older reports.}
+        rejection_examples:
+          type: array
+          maxItems: 64
+          description: Bounded node-level validation diagnostics observed during capture, not per-run loss counts. No rejected bodies, paths or command arguments.
+          items:
+            type: object
+            required: [timestamp, event_type, pid, cgroup_id, reason]
+            properties:
+              timestamp: {type: string, maxLength: 40}
+              event_type: {type: string, maxLength: 64}
+              pid: {type: integer}
+              cgroup_id: {type: string, maxLength: 32}
+              process_instance_id: {type: string, maxLength: 80}
+              reason: {type: string, maxLength: 256}
         ref: {type: string, description: Saved capture report hash, verified on read and portable in the bundle.}
       description: >
         Written by launch before sealing. Endpoint snapshots do not prove continuous
@@ -240,7 +255,7 @@ components:
               category: {type: string}
               target: {type: string}
               required: {type: boolean}
-              status: {type: string, enum: [attached, detached, failed, disabled, unsupported]}
+              status: {type: string, enum: [attached, detached, failed, disabled, unsupported, not_applicable]}
               reason: {type: string}
         tls_discovery:
           type: object

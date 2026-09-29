@@ -355,6 +355,15 @@ unknown. Counter resets, stale capabilities, pending backlog and unconfirmed
 collector exit are explicit gaps. Endpoint snapshots do not establish continuous
 collector health, full TLS visibility or lossless capture.
 
+New reports separate capture `issues` (loss, processing errors, required probe
+failures) from `limitations` (optional probes and TLS visibility). The Dashboard
+shows capability limits separately when they are the only reason for a partial
+report. A backlog at seal remains **Capture completeness unconfirmed**, not an
+ongoing background check. It never means all pending node events belong to this
+run. Diagnostic details include individual probe outcomes and up to 64 bounded
+node-level rejection examples, without rejected bodies, paths or command
+arguments. Old signed reports are displayed as recorded, not rewritten.
+
 The correlation summary counts **all stored runtime events** in the selected run,
 including native eBPF and recorder sources, without loading event bodies into
 memory. It reports scope-field presence, not proof that an agent association is

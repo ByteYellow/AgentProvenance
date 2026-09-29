@@ -27,7 +27,8 @@ window.AgentContextUI = (() => {
     // Presentation never upgrades unknown run impact from node-wide counters.
     if (capture.run_dropped_events > 0) return {state:'failed',label:'Run event loss confirmed',message:'Some events from this run were lost. The runtime record is incomplete.'};
     const state = capture.status || 'legacy_not_recorded';
-    if (state === 'partial') return {state,label:'Capture completeness unconfirmed',message:'Saved events remain available. These diagnostics do not establish how much of this run is missing.'};
+    if (state === 'partial' && capture.issues?.length === 0 && capture.limitations?.length > 0) return {state:'limited',label:'Limited capture capabilities',message:'Some capture capabilities were unavailable. This is separate from event loss and tool association.'};
+    if (state === 'partial') return {state,label:'Capture completeness unconfirmed',message:capture.issues?.includes('node_backlog_at_seal') ? 'This record was sealed with node events still pending. Their impact on this run is unknown; this is not an ongoing confirmation task.' : 'Saved events remain available. These diagnostics do not establish how much of this run is missing.'};
     if (state === 'ok') return {state,label:'No reported capture issues',message:'No node loss reported; completeness is not established.'};
     return {state,label:statusNames[state] || state,message:state === 'legacy_not_recorded' ? 'Runtime capture history was not recorded.' : state === 'disabled' ? 'Kernel capture was not enabled for this run.' : state === 'no_input' ? 'Kernel sensor unavailable' : 'Capture diagnostics require attention.'};
   }
@@ -352,6 +353,9 @@ window.AgentContextUI = (() => {
     if (capture.run_dropped_events > 0) counts.push(['Run-specific dropped events',capture.run_dropped_events]);
     const fields = [['Scope-field gaps',unknown(summary.correlation_gap_count)],['Run-specific dropped events',unknown(capture.run_dropped_events)],['Node pending events at seal',unknown(capture.node_pending_events)],['Kernel capture',t(states[capture.kernel_state] || 'Not recorded')],['Capture interval',[capture.started_at,capture.ended_at].filter(Boolean).join(' → ')],['Run loss assessment',t(capture.run_impact === 'no_node_loss_reported' ? 'No node loss reported; completeness is not established.' : 'Impact on this run is unknown.')],['Probe snapshots',[capture.capabilities_start?.status,capture.capabilities_end?.status].filter(Boolean).join(' → ')],['Saved capture report',capture.ref]];
     const deltas = capture.node_counter_delta;
+    const limitations = capture.limitations || [];
+    const probes = [...(capture.capabilities_start?.probes || []),...(capture.capabilities_end?.probes || [])];
+    const unavailable = [...new Map(probes.filter(p=>['failed','unsupported','not_applicable'].includes(p.status)).map(p=>[JSON.stringify([p.name,p.target,p.status,p.reason]),p])).values()];
     const heading = `<h3>${e(t('Runtime capture'))} ${status(presentation.state,presentation.label)}</h3>
       <div class="context-counts">${counts.map(([key,value])=>`<span>${e(t(key))}<b>${e(unknown(value))}</b></span>`).join('')}</div>
       ${notice(presentation.message)}`;
@@ -359,6 +363,9 @@ window.AgentContextUI = (() => {
     return `<article class="context-coverage" data-runtime-coverage>${heading}
       <details><summary>${e(t('Capture diagnostics'))}</summary>
       ${(capture.issues || []).map(issue=>notice(issue)).join('')}
+      ${limitations.length ? `<h4>${e(t('Capture capability limits'))}</h4>${limitations.map(notice).join('')}` : ''}
+      ${unavailable.length ? `<dl>${unavailable.map(p=>`<dt>${e(p.name)}</dt><dd>${e(t(p.status))}${p.reason ? `: ${e(p.reason)}` : ''}</dd>`).join('')}</dl>` : ''}
+      ${capture.rejection_examples?.length ? `<h4>${e(t('Rejected event samples'))}</h4>${notice('Bounded node-level samples, not a complete list or a run-specific loss count.')}<dl>${capture.rejection_examples.map(r=>`<dt>${e(r.event_type)} · PID ${e(r.pid)}</dt><dd>${e(r.timestamp)} · cgroup ${e(r.cgroup_id)} · ${e(r.reason)}</dd>`).join('')}</dl>` : ''}
       ${notice('Event totals cover all stored runtime events in this run. Scope-field coverage does not prove agent attribution or complete capture.')}
       <dl>${fields.map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl>
       <h4>${e(t('Node counters during capture'))}</h4>

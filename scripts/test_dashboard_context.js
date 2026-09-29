@@ -179,7 +179,7 @@ async (page) => {
   await page.route('**/api/context/overview?*', route=>route.fulfill({json:mocked}));
   for (const lang of ['en','zh-CN']) {
     for (const variant of [
-      {status:'partial',lost:null,label:['Capture completeness unconfirmed','采集完整性待确认'],badge:'partial'},
+      {status:'partial',lost:null,label:['Capture completeness unconfirmed','完整性无法确认'],badge:'partial'},
       {status:'ok',lost:2,label:['Run event loss confirmed','已确认本次事件丢失'],badge:'failed'},
       {status:'disabled',lost:null,label:['Not enabled','未启用'],badge:'disabled'},
     ]) {

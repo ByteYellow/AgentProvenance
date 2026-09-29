@@ -126,7 +126,7 @@ async (page) => {
   await page.getByRole('link',{name:'中文',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#context-tab-coverage')?.getAttribute('aria-selected')==='true');
   await page.waitForSelector('[data-runtime-coverage]');
-  check((await page.locator('[data-runtime-coverage]').innerText()).includes('采集完整性待确认'), 'coverage remains honest in Chinese');
+  check((await page.locator('[data-runtime-coverage]').innerText()).includes('完整性无法确认'), 'coverage remains honest in Chinese');
   check((await page.locator('[data-association-coverage]').innerText()).includes('部分行为未关联工具'), 'Chinese association is distinct from capture');
   await page.locator('#agentcontext').scrollIntoViewIfNeeded();
   await page.screenshot({path:'output/playwright/deepseek-coverage-zh.png'});

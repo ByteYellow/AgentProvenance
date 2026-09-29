@@ -87,6 +87,33 @@ If neither a stable container/cgroup identity nor a usable historical binding
 survives, attribution remains unknown rather than guessed. Delayed process-exit
 events cannot close a reused-PID binding that started after the captured exit.
 
+New native captures identify each process lifetime by boot ID, PID and the
+kernel process start time. Fork events anchor children before a short-lived
+process disappears; the exact lifetime binding survives cgroup migration.
+Only an observed scope or an already anchored kernel parent can establish that
+binding. Bare PID/PPID proximity is insufficient, and a child does not claim its
+new cgroup for the whole run. Both architectures retain kernel capture time
+rather than the time userspace drains the event. Older events without these
+fields retain their existing correlation behavior.
+
+On normal shutdown, the collector makes a bounded three-second drain (up to
+eight passes) before launch seals its report. This retries pending rows against
+new bindings without waiting for their retry timer. Unresolved rows retain
+their TTL and durable spool; they are not discarded to make the pending count
+zero. A timeout or processing error is reported, not treated as a clean drain.
+
+Raw syscall paths such as `.` and `../file` remain valid evidence. Without
+cwd/dirfd resolution, dot segments do not create a resolved artifact node.
+Invalid rows increase the rejection counter; up to 64 bounded identity/reason
+samples are retained in `logs/native-rejections.json` for diagnosis. No rejected
+body, path or command is saved there, and samples are not a loss total.
+
+If an open pathname cannot be read at syscall entry, a bounded per-thread map
+allows one retry at syscall exit. Such events preserve entry time and explicitly
+record `path_observation=syscall_exit_retry` plus `syscall_result`. The later
+pathname observation is not proof of the exact entry bytes, and a failed open
+is not a successful write. Missing paths after retry remain diagnostic failures.
+
 ## Status and limits
 
 ```sh

@@ -31,6 +31,9 @@ assert.equal(presentation({status:'partial',run_dropped_events:0}).state,'partia
 assert.equal(presentation({status:'ok',run_impact:'no_node_loss_reported'}).label,'No reported capture issues');
 assert.ok(presentation({status:'ok'}).message.includes('completeness is not established'));
 assert.equal(presentation({status:'failed'}).state,'failed');
+assert.equal(presentation({status:'partial',issues:[],limitations:['tls_discovery_partial']}).state,'limited');
+assert.equal(presentation({status:'partial',issues:['node_backlog_at_seal'],limitations:['tls_discovery_partial']}).state,'partial');
+assert.ok(presentation({status:'partial',issues:['node_backlog_at_seal']}).message.includes('not an ongoing confirmation task'));
 assert.equal(presentation({status:'disabled'}).label,'Not enabled');
 assert.equal(presentation({status:'no_input'}).message,'Kernel sensor unavailable');
 assert.equal(sections({}).runtime.state,'legacy_not_recorded');
