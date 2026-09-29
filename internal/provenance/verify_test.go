@@ -16,6 +16,18 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
+func TestVerifyDoesNotRequireArtifactEdgesForUnresolvedPaths(t *testing.T) {
+	for _, path := range []string{".", "../file", "dir/../file", "dir/..", "/workspace/dir/../file"} {
+		payload, _ := json.Marshal(map[string]string{"path": path})
+		if got := verifyPayloadPath(string(payload)); got != "" {
+			t.Fatalf("unresolved path %q requires artifact %q", path, got)
+		}
+	}
+	if got := verifyPayloadPath(`{"path":"/workspace/report.py"}`); got != "report.py" {
+		t.Fatalf("ordinary workspace path changed: %q", got)
+	}
+}
+
 func TestVerifyUnknownRunFails(t *testing.T) {
 	paths, err := store.Init(filepath.Join(t.TempDir(), ".agentprov"))
 	if err != nil {

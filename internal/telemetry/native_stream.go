@@ -132,6 +132,7 @@ type NativeStream struct {
 	closed     bool
 	producerID string
 	sequence   uint64
+	rejections []NativeRejection
 	removeFile func(string) error
 }
 
@@ -290,7 +291,7 @@ func (n *NativeStream) appendLine(line []byte) error {
 		// Native event types are a fixed allow-list, so diagnostic cardinality
 		// stays bounded even during a long-running malformed input stream.
 		n.counters["invalid_payload_"+event.EventType]++
-		return nil
+		return n.reject(event, err.Error())
 	}
 	event.Payload = redact.RedactString(event.Payload)
 	encoded, err := json.Marshal(event)
@@ -619,9 +620,67 @@ func (n *NativeStream) Process(limit int) error {
 	return firstErr
 }
 
+// Drain retries sealed batches immediately after capture stops, including
+// batches waiting for a late binding. Unrelated rows retain their original
+// TTL; neither a full-node empty queue nor TTL expiry is required to seal a run.
+func (n *NativeStream) Drain(ctx context.Context) error {
+	for pass := 0; pass < 8; pass++ {
+		before, err := ReadNativeStreamStatusContext(ctx, n.service.DB)
+		if err != nil {
+			return err
+		}
+		cursor := ""
+		for {
+			rows, err := n.service.DB.QueryContext(ctx, `SELECT id FROM telemetry_spool_batches WHERE format='native' AND status='queued' AND id>? ORDER BY id LIMIT 32`, cursor)
+			if err != nil {
+				return err
+			}
+			var ids []string
+			for rows.Next() {
+				var id string
+				if err := rows.Scan(&id); err != nil {
+					rows.Close()
+					return err
+				}
+				ids = append(ids, id)
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return err
+			}
+			if len(ids) == 0 {
+				break
+			}
+			for _, id := range ids {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				if err := n.processBatchContext(ctx, id); err != nil {
+					_, resetErr := n.service.DB.Exec(`UPDATE telemetry_spool_batches SET status='queued',error=?,retry_at=? WHERE id=? AND status='processing'`, err.Error(), time.Now().Add(time.Second).UnixMilli(), id)
+					return errors.Join(err, resetErr)
+				}
+			}
+			cursor = ids[len(ids)-1]
+		}
+		after, err := ReadNativeStreamStatusContext(ctx, n.service.DB)
+		if err != nil {
+			return err
+		}
+		if after.PendingEvents == 0 || after.Counters["ingested"] == before.Counters["ingested"] {
+			return nil
+		}
+	}
+	return fmt.Errorf("native drain pass limit reached; unresolved batches retained")
+}
+
 func (n *NativeStream) processBatch(id string) error {
+	return n.processBatchContext(context.Background(), id)
+}
+
+func (n *NativeStream) processBatchContext(ctx context.Context, id string) error {
 	db := n.service.DB
-	claim, err := db.Exec(`UPDATE telemetry_spool_batches SET status='processing',attempts=attempts+1 WHERE id=? AND status='queued'`, id)
+	claim, err := db.ExecContext(ctx, `UPDATE telemetry_spool_batches SET status='processing',attempts=attempts+1 WHERE id=? AND status='queued'`, id)
 	if err != nil {
 		return err
 	}
@@ -660,7 +719,7 @@ func (n *NativeStream) processBatch(id string) error {
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return err
 	}
-	tx, err := db.Begin()
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -676,6 +735,9 @@ func (n *NativeStream) processBatch(id string) error {
 	ingested, dropped, failed, pending := 0, 0, 0, 0
 	groups := map[string]*JSONLIngestResult{}
 	for scanner.Scan() {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		line++
 		var existing string
 		err := tx.QueryRow(`SELECT outcome FROM telemetry_native_rows WHERE batch_id=? AND line=?`, id, line).Scan(&existing)
@@ -691,8 +753,12 @@ func (n *NativeStream) processBatch(id string) error {
 			outcome = "invalid"
 			failed++
 		} else {
+			identity := eventIdentity(event)
+			if err := correlation.ObserveProcessInstance(tx, identity); err != nil {
+				return err
+			}
 			if opts.Ingest.DropUncorrelated && event.EventType != "resource_pressure" {
-				_, ok, err := correlation.Resolve(tx, correlation.RawIdentity{RunID: event.RunID, ProcessID: event.ProcessID, ContainerID: event.ContainerID, CgroupID: event.CgroupID, PID: event.PID, TGID: event.TGID, PPID: event.PPID, Timestamp: event.Timestamp})
+				_, ok, err := correlation.Resolve(tx, identity)
 				if err != nil {
 					return err
 				}

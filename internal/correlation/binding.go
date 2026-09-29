@@ -28,14 +28,16 @@ type Binding struct {
 }
 
 type RawIdentity struct {
-	RunID       string
-	ProcessID   string
-	ContainerID string
-	CgroupID    string
-	PID         int64
-	TGID        int64
-	PPID        int64
-	Timestamp   string
+	ProcessInstanceID       string
+	ParentProcessInstanceID string
+	RunID                   string
+	ProcessID               string
+	ContainerID             string
+	CgroupID                string
+	PID                     int64
+	TGID                    int64
+	PPID                    int64
+	Timestamp               string
 }
 
 type Match struct {
@@ -81,7 +83,7 @@ func DefaultBindingConfidence(bindingSource string) float64 {
 	}
 }
 
-func RecordBinding(db *sql.DB, binding Binding) (string, error) {
+func RecordBinding(db bindingExecer, binding Binding) (string, error) {
 	if binding.StartedAt == "" {
 		binding.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
@@ -298,6 +300,12 @@ func Resolve(db Queryer, raw RawIdentity) (Match, bool, error) {
 			return match, ok, err
 		}
 	}
+	if raw.ProcessInstanceID != "" {
+		match, ok, err := resolveProcessInstance(db, raw.RunID, raw.ProcessInstanceID, raw.PID, at)
+		if err != nil || ok {
+			return match, ok, err
+		}
+	}
 	if raw.CgroupID != "" {
 		match, ok, err := resolveByCgroup(db, raw.RunID, raw.CgroupID, at)
 		if err != nil || ok {
@@ -310,7 +318,7 @@ func Resolve(db Queryer, raw RawIdentity) (Match, bool, error) {
 			return match, ok, err
 		}
 	}
-	if raw.PID != 0 {
+	if raw.PID != 0 && raw.ProcessInstanceID == "" {
 		match, ok, err := resolveByPID(db, raw.RunID, raw.PID, at)
 		if err != nil || ok {
 			return match, ok, err
@@ -438,7 +446,7 @@ func resolveByPID(db Queryer, runID string, pid int64, at string) (Match, bool, 
 	if runID != "" {
 		source = "run_id+pid+time"
 	}
-	return resolveWindow(db, runID, "pid_time_window", source, "(pid = ? OR root_pid = ?)", 0.85, at, true, pid, pid)
+	return resolveWindow(db, runID, "pid_time_window", source, "id NOT LIKE 'bind-native-%' AND (pid = ? OR (root_pid = ? AND binding_source != 'zero_sdk_record_descendant'))", 0.85, at, true, pid, pid)
 }
 
 func scanOne(db Queryer, method, source string, confidence float64, query string, args ...any) (Match, bool, error) {

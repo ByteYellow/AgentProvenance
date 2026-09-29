@@ -285,7 +285,7 @@ func TestPrepareScopeCgroupContract(t *testing.T) {
 	cleanup() // must not panic on a second call
 }
 
-func TestRecordBindingsShareOneScopeCgroup(t *testing.T) {
+func TestRecordDescendantBindingsDoNotClaimWholeCgroup(t *testing.T) {
 	// The whole point of the real-cgroup seam: the root process and every
 	// descendant binding for a run resolve to ONE scope cgroup id, so
 	// independent telemetry joins the entire subtree by cgroup. The id must be
@@ -333,7 +333,11 @@ func TestRecordBindingsShareOneScopeCgroup(t *testing.T) {
 		t.Fatal("scope cgroup id is empty")
 	}
 	for _, b := range bindings {
-		if b.CgroupID != scope {
+		if b.BindingSource == "zero_sdk_record_descendant" {
+			if b.CgroupID != "" || b.ContainerID != "" {
+				t.Fatalf("sampled PID must not own an entire cgroup/container: %+v", b)
+			}
+		} else if b.CgroupID != scope {
 			t.Fatalf("binding %s cgroup_id = %q, want shared scope %q", b.ID, b.CgroupID, scope)
 		}
 	}

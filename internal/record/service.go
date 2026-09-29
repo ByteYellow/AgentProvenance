@@ -292,13 +292,13 @@ func (s Service) Run(req Request) (Result, error) {
 	endedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, proc := range observed {
 		_, _ = correlation.RecordBinding(s.DB, correlation.Binding{
-			RunID:         req.RunID,
-			SessionID:     sessionID,
-			AttemptID:     attemptID,
-			ToolCallID:    toolCallID,
-			ProcessID:     processID,
-			ContainerID:   "agentprov-record-" + attemptID,
-			CgroupID:      scopeCgroupID,
+			RunID:      req.RunID,
+			SessionID:  sessionID,
+			AttemptID:  attemptID,
+			ToolCallID: toolCallID,
+			ProcessID:  processID,
+			// Polling establishes a PID window, not ownership of every process
+			// in its cgroup. Native lifetime bindings survive actual migration.
 			RootPID:       pid,
 			PID:           proc.PID,
 			StartedAt:     proc.FirstSeen,

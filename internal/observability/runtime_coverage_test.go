@@ -88,6 +88,29 @@ func TestRuntimeCaptureMissingDisabledAndFailedCollector(t *testing.T) {
 	}
 }
 
+func TestRuntimeCaptureSeparatesCapabilityLimitsAndCleanup(t *testing.T) {
+	before, after := capturePair()
+	before.Capabilities.Status = "degraded"
+	before.Capabilities.TLSDiscovery.Enabled = true
+	before.Capabilities.TLSDiscovery.UnreadableProcesses = 38
+	before.Capabilities.Probes = []sensor.ProbeCapability{
+		{Name: "exec", Required: true, Status: "attached"},
+		{Name: "rename", Status: "not_applicable"},
+		{Name: "dns", Status: "failed"},
+	}
+	after.Native.QueuedBytes = 100
+	after.Native.CleanupPendingBatches = 1
+	r := BuildRuntimeCapture("run", "observed", before, after, true)
+	if len(r.Issues) != 0 || len(r.Limitations) != 2 || r.RunImpact != "no_node_loss_reported" || r.RunDroppedEvents != nil {
+		t.Fatalf("limits/cleanup falsely became run loss: %+v", r)
+	}
+	before.Capabilities.Probes[0].Status = "failed"
+	r = BuildRuntimeCapture("run", "observed", before, after, true)
+	if len(r.Issues) == 0 || r.RunImpact != "unknown" {
+		t.Fatalf("required probe failure hidden: %+v", r)
+	}
+}
+
 func TestRuntimeCaptureReadIsSavedNotLive(t *testing.T) {
 	db, paths := coverageDB(t)
 	ctx := context.Background()

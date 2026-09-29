@@ -592,6 +592,9 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 	event := baseMappedEvent(raw, "agentprov_ebpf")
 	comm := stringAt(raw, "comm")
 	switch strings.ToLower(firstNonEmpty(stringAt(raw, "event_type"), stringAt(raw, "type"))) {
+	case "process_observed":
+		event.EventType = "process_observed"
+		event.Payload = mustJSON(map[string]any{"pid": event.PID, "ppid": event.PPID, "comm": comm, "observation": stringAt(raw, "observation")})
 	case "execve", "exec", "process_exec":
 		event.EventType = "execve"
 		path := stringAt(raw, "path")
@@ -663,11 +666,16 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 		default:
 			event.EventType = "file_write"
 		}
-		event.Payload = mustJSON(map[string]any{
+		payload := map[string]any{
 			"path": path,
 			"mode": mode,
 			"comm": comm,
-		})
+		}
+		if stringAt(raw, "path_observation") == "syscall_exit_retry" {
+			payload["path_observation"] = "syscall_exit_retry"
+			payload["syscall_result"] = intAt(raw, "syscall_result")
+		}
+		event.Payload = mustJSON(payload)
 	case "process_exit", "exit":
 		event.EventType = "process_exit"
 		event.Payload = mustJSON(map[string]any{
@@ -711,6 +719,15 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 		event.Payload = sslPayload(raw, comm, "response")
 	default:
 		return IngestEvent{}, false, nil
+	}
+	if instance := stringAt(raw, "process_instance_id"); instance != "" {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+			return event, false, err
+		}
+		payload["process_instance_id"] = instance
+		payload["parent_process_instance_id"] = stringAt(raw, "parent_process_instance_id")
+		event.Payload = mustJSON(payload)
 	}
 	return event, true, nil
 }

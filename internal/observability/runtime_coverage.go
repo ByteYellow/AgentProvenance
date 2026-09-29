@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"time"
 
@@ -30,22 +31,24 @@ type RuntimeCoverage struct {
 }
 
 type RuntimeCaptureReport struct {
-	SchemaVersion     string                   `json:"schema_version"`
-	RunID             string                   `json:"run_id"`
-	Status            string                   `json:"status"`
-	Scope             string                   `json:"scope"`
-	KernelState       string                   `json:"kernel_state"`
-	StartedAt         string                   `json:"started_at,omitempty"`
-	EndedAt           string                   `json:"ended_at,omitempty"`
-	NodeCounterDelta  map[string]int64         `json:"node_counter_delta"`
-	NodePendingEvents *int64                   `json:"node_pending_events"`
-	NodeQueuedBytes   *int64                   `json:"node_queued_bytes"`
-	RunDroppedEvents  *int64                   `json:"run_dropped_events"`
-	RunImpact         string                   `json:"run_impact"`
-	CapabilitiesStart *sensor.CapabilityReport `json:"capabilities_start,omitempty"`
-	CapabilitiesEnd   *sensor.CapabilityReport `json:"capabilities_end,omitempty"`
-	Issues            []string                 `json:"issues"`
-	Ref               string                   `json:"ref,omitempty"`
+	SchemaVersion     string                      `json:"schema_version"`
+	RunID             string                      `json:"run_id"`
+	Status            string                      `json:"status"`
+	Scope             string                      `json:"scope"`
+	KernelState       string                      `json:"kernel_state"`
+	StartedAt         string                      `json:"started_at,omitempty"`
+	EndedAt           string                      `json:"ended_at,omitempty"`
+	NodeCounterDelta  map[string]int64            `json:"node_counter_delta"`
+	NodePendingEvents *int64                      `json:"node_pending_events"`
+	NodeQueuedBytes   *int64                      `json:"node_queued_bytes"`
+	RunDroppedEvents  *int64                      `json:"run_dropped_events"`
+	RunImpact         string                      `json:"run_impact"`
+	CapabilitiesStart *sensor.CapabilityReport    `json:"capabilities_start,omitempty"`
+	CapabilitiesEnd   *sensor.CapabilityReport    `json:"capabilities_end,omitempty"`
+	Issues            []string                    `json:"issues"`
+	Limitations       []string                    `json:"limitations,omitempty"`
+	RejectionExamples []telemetry.NativeRejection `json:"rejection_examples,omitempty"`
+	Ref               string                      `json:"ref,omitempty"`
 }
 
 // CaptureSnapshot is sampled only by the capture lifecycle, never when a
@@ -55,10 +58,21 @@ type CaptureSnapshot struct {
 	Native       *telemetry.NativeStreamStatus
 	Capabilities *sensor.CapabilityReport
 	Issues       []string
+	Rejections   []telemetry.NativeRejection
 }
 
 func ObserveCapture(ctx context.Context, db *sql.DB, paths store.Paths, startedAfter time.Time) CaptureSnapshot {
 	s := CaptureSnapshot{ObservedAt: time.Now().UTC()}
+	if rejections, err := telemetry.ReadNativeRejections(paths.Logs); err == nil {
+		for _, item := range rejections {
+			at, err := time.Parse(time.RFC3339Nano, item.Timestamp)
+			if err == nil && !at.Before(startedAfter) && !at.After(s.ObservedAt) {
+				s.Rejections = append(s.Rejections, item)
+			}
+		}
+	} else {
+		s.Issues = append(s.Issues, "rejection_diagnostics_unavailable")
+	}
 	native, err := telemetry.ReadNativeStreamStatusContext(ctx, db)
 	if err != nil {
 		s.Issues = append(s.Issues, "native_status_unavailable")
@@ -115,6 +129,7 @@ func BuildRuntimeCapture(runID, kernelState string, before, after CaptureSnapsho
 	r.Issues = append(r.Issues, before.Issues...)
 	r.Issues = append(r.Issues, after.Issues...)
 	r.CapabilitiesStart, r.CapabilitiesEnd = before.Capabilities, after.Capabilities
+	r.RejectionExamples = after.Rejections
 	if !cleanStop {
 		r.Issues = append(r.Issues, "collector_exit_unconfirmed")
 	}
@@ -124,16 +139,20 @@ func BuildRuntimeCapture(runID, kernelState string, before, after CaptureSnapsho
 	if before.Capabilities == nil || after.Capabilities == nil {
 		r.Issues = append(r.Issues, "probe_coverage_unknown")
 	} else {
-		if !before.Capabilities.Ready || before.Capabilities.Status != "ready" || after.Capabilities.Status == "failed" || after.Capabilities.Status == "degraded" {
+		if !before.Capabilities.Ready || after.Capabilities.Status == "failed" {
 			r.Issues = append(r.Issues, "probe_coverage_degraded")
 		}
 		for _, c := range []*sensor.CapabilityReport{before.Capabilities, after.Capabilities} {
 			if c.TLSDiscovery.Enabled && (c.TLSDiscovery.Reason != "" || c.TLSDiscovery.SkippedTargets > 0 || c.TLSDiscovery.UnreadableProcesses > 0 || c.TLSDiscovery.TruncatedMaps > 0 || c.TLSDiscovery.UnsupportedExecutables > 0) {
-				r.Issues = append(r.Issues, "tls_discovery_partial")
+				r.Limitations = append(r.Limitations, "tls_discovery_partial")
 			}
 			for _, p := range c.Probes {
 				if p.Status == "failed" || p.Status == "unsupported" {
-					r.Issues = append(r.Issues, "probe_coverage_degraded")
+					if p.Required {
+						r.Issues = append(r.Issues, "required_probe_unavailable")
+					} else {
+						r.Limitations = append(r.Limitations, "optional_probe_unavailable")
+					}
 				}
 			}
 		}
@@ -163,8 +182,11 @@ func BuildRuntimeCapture(runID, kernelState string, before, after CaptureSnapsho
 				r.Issues = append(r.Issues, "node_loss_during_capture")
 			}
 		}
-		if after.Native.PendingEvents > 0 || after.Native.QueuedBytes > 0 || after.Native.LastError != "" {
+		if after.Native.PendingEvents > 0 {
 			r.Issues = append(r.Issues, "node_backlog_at_seal")
+		}
+		if after.Native.LastError != "" {
+			r.Issues = append(r.Issues, "node_processing_error")
 		}
 	}
 	sort.Strings(r.Issues)
@@ -175,10 +197,15 @@ func BuildRuntimeCapture(runID, kernelState string, before, after CaptureSnapsho
 		}
 	}
 	r.Issues = unique
+	sort.Strings(r.Limitations)
+	r.Limitations = slices.Compact(r.Limitations)
 	if len(r.Issues) > 0 {
 		r.Status = "partial"
 	} else {
 		r.RunImpact = "no_node_loss_reported"
+		if len(r.Limitations) > 0 {
+			r.Status = "partial"
+		}
 	}
 	return r
 }

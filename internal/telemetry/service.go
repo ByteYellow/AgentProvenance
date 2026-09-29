@@ -373,15 +373,11 @@ func ingestFilteredWithStore(store sqlStore, event IngestEvent) (string, error) 
 	// keeps the store itself clean; policy targets (IPs, file paths) and LLM
 	// semantics live in different fields and are preserved.
 	event.Payload = redact.RedactString(event.Payload)
-	raw := correlation.RawIdentity{
-		RunID:       event.RunID,
-		ProcessID:   event.ProcessID,
-		ContainerID: event.ContainerID,
-		CgroupID:    event.CgroupID,
-		PID:         event.PID,
-		TGID:        event.TGID,
-		PPID:        event.PPID,
-		Timestamp:   event.Timestamp,
+	raw := eventIdentity(event)
+	if event.Source == "agentprov_ebpf" {
+		if err := correlation.ObserveProcessInstance(store, raw); err != nil {
+			return "", err
+		}
 	}
 	method := "provided_context"
 	confidence := 1.0
@@ -465,7 +461,13 @@ func ingestFilteredWithStore(store sqlStore, event IngestEvent) (string, error) 
 	// later event that reuses the pid does not over-bind to this dead scope.
 	// Use the event's own timestamp when present (chronological close), else now.
 	if event.EventType == "process_exit" && event.PID != 0 {
-		if err := correlation.CloseBindingByPID(store, event.PID, firstNonEmpty(event.Timestamp, now)); err != nil {
+		var err error
+		if raw.ProcessInstanceID != "" {
+			err = correlation.CloseProcessInstance(store, raw)
+		} else {
+			err = correlation.CloseBindingByPID(store, event.PID, firstNonEmpty(event.Timestamp, now))
+		}
+		if err != nil {
 			return "", err
 		}
 	}
@@ -488,6 +490,21 @@ func ingestFilteredWithStore(store sqlStore, event IngestEvent) (string, error) 
 		}
 	}
 	return eventID, nil
+}
+
+func eventIdentity(event IngestEvent) correlation.RawIdentity {
+	raw := correlation.RawIdentity{RunID: event.RunID, ProcessID: event.ProcessID, ContainerID: event.ContainerID,
+		CgroupID: event.CgroupID, PID: event.PID, TGID: event.TGID, PPID: event.PPID, Timestamp: event.Timestamp}
+	if event.Source == "agentprov_ebpf" {
+		var payload struct {
+			Process string `json:"process_instance_id"`
+			Parent  string `json:"parent_process_instance_id"`
+		}
+		if json.Unmarshal([]byte(event.Payload), &payload) == nil {
+			raw.ProcessInstanceID, raw.ParentProcessInstanceID = payload.Process, payload.Parent
+		}
+	}
+	return raw
 }
 
 func AllowedEventType(eventType string) bool {
@@ -673,7 +690,7 @@ func substantiveAbsFilePath(payload string) string {
 		return ""
 	}
 	p := strings.TrimSpace(findPayloadPath(decoded))
-	if !strings.HasPrefix(p, "/") || p == "/dev/null" {
+	if !strings.HasPrefix(p, "/") || p == "/dev/null" || hasDotPathSegment(p) {
 		return ""
 	}
 	for _, pre := range []string{"/dev/", "/proc/", "/sys/", "/run/", "pipe:", "socket:", "anon_inode:"} {
@@ -693,10 +710,21 @@ func payloadPath(payload string) string {
 	path = strings.TrimSpace(path)
 	path = strings.TrimPrefix(path, "/workspace/")
 	path = strings.TrimPrefix(path, "./")
-	if path == "." || path == ".." || strings.HasPrefix(path, "../") || strings.HasPrefix(path, "/") {
+	if hasDotPathSegment(path) || strings.HasPrefix(path, "/") {
 		return ""
 	}
 	return path
+}
+
+// Without cwd/dirfd resolution, dot segments are evidence but not a resolved
+// artifact identity. Never clean them into a potentially different file node.
+func hasDotPathSegment(path string) bool {
+	for _, part := range strings.Split(path, "/") {
+		if part == "." || part == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 func findPayloadPath(value any) string {

@@ -1139,8 +1139,15 @@ func verifyPayloadPath(payload string) string {
 	path := strings.TrimSpace(findVerifyPayloadPath(decoded))
 	path = strings.TrimPrefix(path, "/workspace/")
 	path = strings.TrimPrefix(path, "./")
-	if path == "." || path == ".." || strings.HasPrefix(path, "../") || strings.HasPrefix(path, "/") {
+	if strings.HasPrefix(path, "/") {
 		return ""
+	}
+	// Match ingestion: unresolved dot segments are raw path observations,
+	// not workspace artifact identities requiring file edges.
+	for _, part := range strings.Split(path, "/") {
+		if part == "." || part == ".." {
+			return ""
+		}
 	}
 	return path
 }
