@@ -32,6 +32,8 @@
 .context-record dd,.context-coverage dd{margin:0;overflow-wrap:anywhere}
 .context-coverage{padding:15px 0;border-bottom:1px solid var(--line)}
 .context-coverage h3{font-size:13px;margin:0 0 8px;overflow-wrap:anywhere}
+.context-coverage>details{margin-top:10px}
+.context-coverage>details>summary{cursor:pointer;padding:5px 0;color:var(--mut)}
 .context-counts{display:flex;gap:8px 18px;flex-wrap:wrap;margin:12px 0}
 .context-counts span{color:var(--mut);font-size:12px}
 .context-counts b{color:var(--tx);margin-left:5px}

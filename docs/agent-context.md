@@ -207,6 +207,14 @@ counts with transcript-record counts. Its counters describe the eligible records
 read by this pass; `input_complete: false` means those are only partial counts.
 `ok` means the correlation pass completed for its inputs, not lossless collection.
 
+The Dashboard separates **session capture**, **runtime capture**, and
+**tool-to-runtime association**. A partial association report is not a transcript
+failure and has no transcript read/stored counters. Node backlog, probe coverage,
+and unknown run-loss counts remain available under capture diagnostics; they are
+not presented as events lost from this run. Uncertain completeness stays visible
+in the summary, and a positive run-specific loss count is shown prominently.
+Collapsing diagnostics does not change the saved report or its signature.
+
 The versioned `agentprov.command_time_process/v2` method requires a unique
 literal-command candidate inside the recorded tool-call interval and a runtime
 PID with a cgroup or container scope. Case and quoted whitespace are preserved;

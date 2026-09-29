@@ -8,6 +8,8 @@ window.AgentContextUI = (() => {
   let overview = null, previewChoices = [], previewKey = '', previewOffsets = [0], previewPage = null;
   let formattedContent = null;
   const statusNames = {disabled:'Not enabled',no_input:'No source found',empty:'Valid empty source',ok:'Captured',partial:'Partially captured',failed:'Capture failed',ambiguous:'Ambiguous binding',legacy_not_recorded:'Not recorded in this historical run'};
+  const associationNames = {no_input:'No runtime input',empty:'No eligible tool input',ok:'Association pass completed',partial:'Partial tool association',ambiguous:'Association ambiguous',failed:'Association failed'};
+  const associationIssues = {runtime_exec_unassociated:'Some saved process executions have no tool-call link.',multiple_runtime_candidates:'Multiple association candidates remain unresolved.',tool_time_not_recorded:'Some tool calls lack usable start or end times.',runtime_scope_not_recorded:'Some runtime events lack scope information.',runtime_time_or_payload_invalid:'Some runtime timestamps or payloads could not be used.',context_runtime_correlation_failed:'Tool-to-runtime association failed.'};
   const missingNames = {approval_decision:'Approval decision','configuration.model':'Model selection','configuration.provider':'Model provider','configuration.application_version':'Application version','configuration.workdir':'Working directory','configuration.permission_mode':'Permission mode','configuration.approval_policy':'Approval policy','configuration.sandbox_policy':'Sandbox policy','configuration.directory_restrictions':'Directory restrictions','configuration.network_restrictions':'Network restrictions','configuration.mcp_servers':'MCP servers','configuration.tools':'Tool catalog','configuration.skills':'Skills','configuration.plugins':'Plugins'};
   const snapshotNames = {session_metadata:'Session metadata',source_metadata:'Source metadata',initialization:'Initialization',permission_mode:'Permission mode',source_message_event:'Source message event',source_reasoning_event:'Source reasoning event',model_proposal:'Model-proposed tool',completion_only:'Completion recorded; start not recorded',context_replacement:'Replaced context; not a new execution','permission/preset':'Permission preset','sandbox/mode':'Sandbox mode','approval/policy':'Approval policy','plan/mode':'Plan mode','request/header':'Request configuration','request/context':'Request context','model/selection':'Model selection'};
   missingNames.tool_start_time = 'Tool start time';
@@ -16,10 +18,28 @@ window.AgentContextUI = (() => {
   const t = value => api.tr(value);
   const q = values => new URLSearchParams(Object.entries(values).filter(([,v]) => v !== '' && v != null)).toString();
   const unknown = value => value == null ? t('Not recorded') : String(value);
-  const status = value => `<span class="context-status" data-status="${e(value)}">${e(t(statusNames[value] || value))}</span>`;
+  const status = (value, label = statusNames[value] || value) => `<span class="context-status" data-status="${e(value)}">${e(t(label))}</span>`;
   const errorHTML = error => `<p class="context-error" role="alert">${e(t('Recorded evidence could not be loaded.'))} ${e(error.message)}</p>`;
   const notice = message => `<p class="context-notice">${e(t(message))}</p>`;
   const missingFields = fields => (fields || []).map(field => t(missingNames[field] || field)).join(', ') || t('None reported');
+
+  function runtimePresentation(capture = {}) {
+    // Presentation never upgrades unknown run impact from node-wide counters.
+    if (capture.run_dropped_events > 0) return {state:'failed',label:'Run event loss confirmed',message:'Some events from this run were lost. The runtime record is incomplete.'};
+    const state = capture.status || 'legacy_not_recorded';
+    if (state === 'partial') return {state,label:'Capture completeness unconfirmed',message:'Saved events remain available. These diagnostics do not establish how much of this run is missing.'};
+    if (state === 'ok') return {state,label:'No reported capture issues',message:'No node loss reported; completeness is not established.'};
+    return {state,label:statusNames[state] || state,message:state === 'legacy_not_recorded' ? 'Runtime capture history was not recorded.' : state === 'disabled' ? 'Kernel capture was not enabled for this run.' : state === 'no_input' ? 'Kernel sensor unavailable' : 'Capture diagnostics require attention.'};
+  }
+  function coverageSections(value) {
+    const reports = value?.coverage || [];
+    return {
+      sessions:reports.filter(c => !['runtime_correlation','discovery'].includes(c.source?.channel)),
+      discoveries:reports.filter(c => c.source?.channel === 'discovery'),
+      associations:reports.filter(c => c.source?.channel === 'runtime_correlation'),
+      runtime:runtimePresentation(value?.runtime_coverage?.capture),
+    };
+  }
 
   function freshState() {
     return {tab:'conversation',source:'',cursor:'',history:[],pageNumber:1,page:null,selected:'',node:'',graph:'',scroll:0,open:false,expanded:new Set(),compare:[],returnView:null};
@@ -180,16 +200,16 @@ window.AgentContextUI = (() => {
       if (request !== summaryRequest || run !== currentRun) return;
       const coverageChanged = JSON.stringify([overview?.coverage,overview?.runtime_coverage]) !== JSON.stringify([value.coverage,value.runtime_coverage]);
       overview = value;
-      const reports = value.coverage || [];
+      const sections = coverageSections(value), reports = sections.sessions.length ? sections.sessions : sections.discoveries;
       const sources = [...new Set(reports.map(c => c.source?.harness).filter(Boolean))];
       const hints = [...new Set(reports.map(c => t(statusNames[c.status] || c.status)))];
-      $('context-summary').textContent = [sources.join(' / '), api.tx('{messages} message records · {calls} tool calls · {results} results', {messages:unknown(value.messages),calls:unknown(value.tool_calls),results:unknown(value.tool_results)}),reports.some(c=>c.prior_context) ? t('Includes prior context') : '',hints.join(' / ')].filter(Boolean).join(' · ');
-      if (coverageChanged) $('context-source').innerHTML = `<option value="">${e(t('All recorded sessions'))}</option>` + reports.filter(c => c.source?.id).map(c => `<option value="${e(c.source.id)}">${e(c.source.harness)} · ${e(c.source.session_id || c.source.id)}</option>`).join('');
+      $('context-summary').textContent = [sources.join(' / '), api.tx('{messages} message records · {calls} tool calls · {results} results', {messages:unknown(value.messages),calls:unknown(value.tool_calls),results:unknown(value.tool_results)}),reports.some(c=>c.prior_context) ? t('Includes prior context') : '',hints.length ? t('Session capture')+': '+hints.join(' / ') : ''].filter(Boolean).join(' · ');
+      if (coverageChanged) $('context-source').innerHTML = `<option value="">${e(t('All recorded sessions'))}</option>` + sections.sessions.filter(c => c.source?.id).map(c => `<option value="${e(c.source.id)}">${e(c.source.harness)} · ${e(c.source.session_id || c.source.id)}</option>`).join('');
       syncControls();
       $('context-nav-count').textContent = unknown(value.messages);
       $('context-nav-tools').textContent = unknown(value.tool_calls);
       $('context-nav-config').textContent = unknown(value.snapshots);
-      $('context-nav-coverage').textContent = [hints.join(' / '),value.runtime_coverage ? t('Runtime capture')+': '+t(statusNames[value.runtime_coverage.capture.status] || value.runtime_coverage.capture.status) : ''].filter(Boolean).join(' · ');
+      $('context-nav-coverage').textContent = [hints.length ? t('Session capture')+': '+hints.join(' / ') : '',t('Runtime capture')+': '+t(sections.runtime.label)].filter(Boolean).join(' · ');
       if (state.tab === 'coverage' && state.open && coverageChanged) {
         const scroll = $('context-body').scrollTop;
         renderCoverage(); $('context-body').scrollTop = scroll;
@@ -296,30 +316,50 @@ window.AgentContextUI = (() => {
   function renderCoverage() {
     listRequest++; listLoading = false; $('context-pager').hidden = true; $('context-compare').hidden = true;
     if (!overview) { $('context-body').innerHTML = notice('loading…'); return; }
-    $('context-body').innerHTML = notice('Context coverage, runtime coverage, and signature verification are separate checks.') + notice('Configuration snapshots show recorded changes only; completeness of the change history is unknown.') + renderRuntimeCoverage() + (overview.coverage || []).map(report => {
+    const sections = coverageSections(overview);
+    $('context-body').innerHTML = renderRuntimeCoverage() + sections.associations.map(renderAssociationCoverage).join('') + sections.sessions.map(report => {
       const src = report.source || {};
       const fields = [['Session',src.session_id],['Source path',src.path],['Binding',src.binding],['Parser',src.parser_version],['Source version',src.application_version || src.format_version],['Observed at',report.observed_at],['Last successful capture',report.last_success_at],['Source range',[report.first_line,report.last_line].filter(x=>x!=null && x!==0).join(' – ')],['Missing fields',missingFields(report.missing_fields)],['Binding evidence',(src.binding_evidence || []).join('\n')]];
       const counts = value => `<div class="context-counts">${Object.entries(value || {}).map(([key,n]) => `<span>${e(t(key))}<b>${e(unknown(n))}</b></span>`).join('')}</div>`;
       const prior = report.prior_context;
       const history = prior ? `<details><summary>${e(t('Prior context'))} · ${e(t('Source range'))} ${e(prior.first_line)}–${e(prior.last_line)}</summary>${notice('Retained history is not execution in this run. Historical approvals do not authorize new actions.')}${counts(prior.counts)}<dl><dt>${e(t('Source range'))}</dt><dd>${e([prior.started_at,prior.ended_at].filter(Boolean).join(' → ') || t('Source time not recorded'))}</dd><dt>${e(t('Missing fields'))}</dt><dd>${e(missingFields(prior.missing_fields))}</dd></dl></details>` : '';
-      return `<article class="context-coverage"><h3>${e(src.harness || t('Source'))} ${status(report.status)}</h3>${prior ? '<h4>'+e(t('Current execution range'))+'</h4>' : ''}${counts(report.counts)}<p class="context-notice">${e(t('Counts describe this processing range, not the whole run. Unknown counts are not zero.'))}</p><dl>${fields.map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl>${history}${(report.issues || []).map(issue => `<p class="context-notice">${e(t(issue.code))}${issue.line ? ' · '+e(t('line'))+' '+e(issue.line) : ''}${issue.field ? ' · '+e(issue.field) : ''}${issue.scope === 'prior_context' ? ' · '+e(t('Prior context')) : ''}</p>`).join('')}</article>`;
-    }).join('') + (overview.has_more_sources ? notice('Source report limit reached. Additional sources are not shown here.') : '');
+      return `<article class="context-coverage" data-session-coverage><h3>${e(src.harness || t('Source'))} · ${e(t('Session capture'))} ${status(report.status)}</h3>${prior ? '<h4>'+e(t('Current execution range'))+'</h4>' : ''}${counts(report.counts)}${report.missing_fields?.length ? notice(t('Missing fields')+': '+missingFields(report.missing_fields)) : ''}${(report.issues || []).map(issue => `<p class="context-notice">${e(t(issue.code))}${issue.line ? ' · '+e(t('line'))+' '+e(issue.line) : ''}${issue.field ? ' · '+e(issue.field) : ''}${issue.scope === 'prior_context' ? ' · '+e(t('Prior context')) : ''}</p>`).join('')}<details data-source-diagnostics><summary>${e(t('Source and evidence'))}</summary>${notice('Counts describe this processing range, not the whole run. Unknown counts are not zero.')}<dl>${fields.map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl></details>${history}</article>`;
+    }).join('') + sections.discoveries.map(renderDiscoveryCoverage).join('') + notice('Context coverage, runtime coverage, and signature verification are separate checks.') + notice('Configuration snapshots show recorded changes only; completeness of the change history is unknown.') + (overview.has_more_sources ? notice('Source report limit reached. Additional sources are not shown here.') : '');
+  }
+  function renderDiscoveryCoverage(report) {
+    const src = report.source || {};
+    const fields = [['Source path',src.path],['Observed at',report.observed_at],['Parser',src.parser_version],['Binding',src.binding]];
+    return `<article class="context-coverage" data-source-discovery><details${report.status === 'ok' ? '' : ' open'}><summary>${e(src.harness || t('Source'))} · ${e(t('Source discovery'))} ${status(report.status,report.status === 'ok' ? 'Session source found' : statusNames[report.status] || report.status)}</summary>
+      <div class="context-counts">${['discovered','matched'].map(key=>`<span>${e(t(key))}<b>${e(unknown(report.counts?.[key]))}</b></span>`).join('')}</div>
+      ${(report.issues || []).map(issue=>notice(issue.code)).join('')}
+      <dl>${fields.map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl></details></article>`;
+  }
+  function renderAssociationCoverage(report) {
+    const src = report.source || {};
+    const fields = [['Parser',src.parser_version],['Binding',src.binding],['Observed at',report.observed_at],['Binding evidence',(src.binding_evidence || []).join('\n')]];
+    return `<article class="context-coverage" data-association-coverage><h3>${e(t('Tool-to-runtime association'))} ${status(report.status,associationNames[report.status] || report.status)}</h3>
+      ${notice('This reports tool-to-process links, not transcript capture. An unlinked event may still be saved.')}
+      ${(report.issues || []).map(issue=>notice(associationIssues[issue.code] || issue.code)).join('')}
+      <details><summary>${e(t('Association diagnostics'))}</summary><dl>${fields.map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl></details></article>`;
   }
   function renderRuntimeCoverage() {
     const runtime = overview?.runtime_coverage;
     if (!runtime) return notice('Runtime capture history was not recorded.');
     const capture = runtime.capture || {}, summary = runtime.correlation?.summary || {};
     const states = {disabled:'Not enabled',unavailable:'Kernel sensor unavailable',observed:'Kernel readiness confirmed',unknown:'Not recorded'};
-    const counts = [['Stored runtime events',summary.runtime_events],['Scope-field gaps',summary.correlation_gap_count],['Run-specific dropped events',capture.run_dropped_events],['Node pending events at seal',capture.node_pending_events]];
-    const fields = [['Kernel capture',t(states[capture.kernel_state] || 'Not recorded')],['Capture interval',[capture.started_at,capture.ended_at].filter(Boolean).join(' → ')],['Run loss assessment',t(capture.run_impact === 'no_node_loss_reported' ? 'No node loss reported; completeness is not established.' : 'Impact on this run is unknown.')],['Probe snapshots',[capture.capabilities_start?.status,capture.capabilities_end?.status].filter(Boolean).join(' → ')],['Saved capture report',capture.ref]];
+    const presentation = runtimePresentation(capture);
+    const counts = [['Stored runtime events',summary.runtime_events]];
+    if (capture.run_dropped_events > 0) counts.push(['Run-specific dropped events',capture.run_dropped_events]);
+    const fields = [['Scope-field gaps',unknown(summary.correlation_gap_count)],['Run-specific dropped events',unknown(capture.run_dropped_events)],['Node pending events at seal',unknown(capture.node_pending_events)],['Kernel capture',t(states[capture.kernel_state] || 'Not recorded')],['Capture interval',[capture.started_at,capture.ended_at].filter(Boolean).join(' → ')],['Run loss assessment',t(capture.run_impact === 'no_node_loss_reported' ? 'No node loss reported; completeness is not established.' : 'Impact on this run is unknown.')],['Probe snapshots',[capture.capabilities_start?.status,capture.capabilities_end?.status].filter(Boolean).join(' → ')],['Saved capture report',capture.ref]];
     const deltas = capture.node_counter_delta;
-    const heading = `<h3>${e(t('Runtime capture'))} ${status(capture.status || 'legacy_not_recorded')}</h3>
+    const heading = `<h3>${e(t('Runtime capture'))} ${status(presentation.state,presentation.label)}</h3>
       <div class="context-counts">${counts.map(([key,value])=>`<span>${e(t(key))}<b>${e(unknown(value))}</b></span>`).join('')}</div>
-      ${notice('Event totals cover all stored runtime events in this run. Scope-field coverage does not prove agent attribution or complete capture.')}`;
-    if (capture.status === 'legacy_not_recorded') return `<article class="context-coverage" data-runtime-coverage>${heading}${notice('Runtime capture history was not recorded.')}</article>`;
+      ${notice(presentation.message)}`;
+    if (presentation.state === 'legacy_not_recorded') return `<article class="context-coverage" data-runtime-coverage>${heading}</article>`;
     return `<article class="context-coverage" data-runtime-coverage>${heading}
-      ${(capture.issues || []).map(issue=>notice(issue)).join('')}
       <details><summary>${e(t('Capture diagnostics'))}</summary>
+      ${(capture.issues || []).map(issue=>notice(issue)).join('')}
+      ${notice('Event totals cover all stored runtime events in this run. Scope-field coverage does not prove agent attribution or complete capture.')}
       <dl>${fields.map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl>
       <h4>${e(t('Node counters during capture'))}</h4>
       ${notice('Node counters may include other workloads. They are not this run\'s dropped-event count. Snapshots do not prove continuous collector health.')}
@@ -505,5 +545,5 @@ window.AgentContextUI = (() => {
       $('content-prev').disabled = previewOffsets.length < 2;
     }
   }
-  return {init,setRun,selectGraph,linkedSession,open,persist,readableContent};
+  return {init,setRun,selectGraph,linkedSession,open,persist,readableContent,coverageSections};
 })();

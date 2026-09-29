@@ -87,7 +87,8 @@ async (page) => {
   await page.evaluate(()=>window.scrollTo(0,0));
   await page.screenshot({path:'output/playwright/context-desktop-en.png',fullPage:true});
   await page.getByRole('tab',{name:'Collection status',exact:true}).click();
-  check(await page.locator('[data-runtime-coverage]').innerText().then(text=>text.includes('Not recorded in this historical run') && text.includes('Stored runtime events') && text.includes('Run-specific dropped events')),'runtime coverage is shown beside context without inventing historical capture');
+  check(await page.locator('[data-runtime-coverage]').innerText().then(text=>text.includes('Not recorded in this historical run') && text.includes('Stored runtime events') && !text.includes('Run-specific dropped events')),'historical capture is unknown without a fictitious run-loss count');
+  await page.locator('[data-source-diagnostics] > summary').first().click();
   check(await page.locator('#context-body').innerText().then(text=>text.includes('Not recorded') && text.includes('synthetic-ui-fixture/v1')),'source coverage retains unknown counters and parser');
   check(await page.locator('#context-body').innerText().then(text=>text.includes('Approval decision') && text.includes('MCP servers') && text.includes('Network restrictions')),'configuration field gaps use readable names');
   check(await page.locator('#context-body').innerText().then(text=>text.includes('Completeness of configuration change history') && text.includes('completeness of the change history is unknown.')),'recorded configuration changes do not imply complete history');
@@ -170,6 +171,31 @@ async (page) => {
   await page.waitForFunction(()=>document.querySelectorAll('#context-body [data-entry]').length===2 && document.querySelector('#context-body')?.textContent.includes('COMPOUND-SECOND'));
   check(await records().first().innerText().then(text=>text.includes('COMPOUND-FIRST') && text.includes('#1.1')),'same-line first message keeps its physical position');
   check(await records().nth(1).innerText().then(text=>text.includes('COMPOUND-SECOND') && text.includes('#1.2')),'same-line second message is displayed after the first');
+
+  // Explicitly synthetic response variants exercise rare coverage states;
+  // live-demo checks use the separate unmodified signed-capture script.
+  const baseline = await (await page.request.get(base+'/api/context/overview?run=ui-fixture')).json();
+  let mocked;
+  await page.route('**/api/context/overview?*', route=>route.fulfill({json:mocked}));
+  for (const lang of ['en','zh-CN']) {
+    for (const variant of [
+      {status:'partial',lost:null,label:['Capture completeness unconfirmed','采集完整性待确认'],badge:'partial'},
+      {status:'ok',lost:2,label:['Run event loss confirmed','已确认本次事件丢失'],badge:'failed'},
+      {status:'disabled',lost:null,label:['Not enabled','未启用'],badge:'disabled'},
+    ]) {
+      mocked = JSON.parse(JSON.stringify(baseline));
+      Object.assign(mocked.runtime_coverage.capture,{status:variant.status,run_dropped_events:variant.lost,node_pending_events:235});
+      await page.goto(base+'/?run=ui-fixture&live=0&lang='+lang);
+      await settle();
+      await page.locator('[data-context-open="coverage"]').click();
+      const coverage = page.locator('[data-runtime-coverage]');
+      check((await coverage.innerText()).includes(variant.label[lang==='en'?0:1]),lang+': synthetic '+variant.status+' label');
+      check(await coverage.locator('.context-status').getAttribute('data-status')===variant.badge,lang+': synthetic '+variant.status+' severity');
+      check(!(await coverage.innerText()).includes('235'),lang+': node backlog stays diagnostic');
+      if (variant.lost) check((await coverage.locator('.context-counts').innerText()).includes('2'),lang+': confirmed run loss stays prominent');
+    }
+  }
+  await page.unroute('**/api/context/overview?*');
   check(errors.length===0,'no unhandled browser errors: '+errors.join('; '));
   return {fixture:'synthetic, not a live capture',checks:checks.length,passed:checks,screenshots:'output/playwright/context-*.png'};
 }

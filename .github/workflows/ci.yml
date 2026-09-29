@@ -43,6 +43,7 @@ jobs:
         with:
           node-version: "22"
       - run: node scripts/test_context_readable.mjs
+      - run: node scripts/test_context_coverage.mjs
 
   test:
     name: Go tests

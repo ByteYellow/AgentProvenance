@@ -16,6 +16,8 @@ async (page) => {
   await page.setViewportSize({width:1440,height:1050});
   await page.goto(base+'/?run='+run+'&live=0&lang=en');
   await page.waitForFunction(() => document.querySelector('#context-summary')?.textContent.includes('13 message records'));
+  check(!(await page.locator('#context-summary').innerText()).includes('launch'), 'processing channel is not a transcript source');
+  check((await page.locator('#context-summary').innerText()).includes('Session capture: Captured'), 'successful transcript capture has its own status');
   await page.waitForFunction(() => document.querySelector('#verify')?.textContent.includes('graph integrity'));
   check(!await page.locator('#context-fold').evaluate(el=>el.open), 'session initially collapsed');
   for (const id of ['graphcard','siglist','focusedevidence','outboundcard','tl','ptree','egtbl','compliancecard']) {
@@ -105,12 +107,27 @@ async (page) => {
   await page.waitForFunction(()=>document.querySelector('#context-compare-result')?.textContent.includes('different'));
   check(true, 'real configuration records can be compared without inventing approval');
   await page.getByRole('tab',{name:'Collection status',exact:true}).click();
-  check((await page.locator('[data-runtime-coverage]').innerText()).includes('Partially captured'), 'real capture gaps remain visible');
+  check((await page.locator('[data-runtime-coverage]').innerText()).includes('Capture completeness unconfirmed'), 'real capture uncertainty remains visible');
+  check(!await page.locator('[data-runtime-coverage] details').evaluate(el=>el.open), 'node diagnostics are initially collapsed');
+  check(!(await page.locator('[data-runtime-coverage]').innerText()).includes('235'), 'node backlog is not presented as run event loss');
+  await page.locator('[data-runtime-coverage] details > summary').click();
+  check((await page.locator('[data-runtime-coverage]').innerText()).includes('235'), 'original backlog remains inspectable');
+  check((await page.locator('[data-runtime-coverage]').innerText()).includes('Not recorded'), 'unknown run-specific losses remain unknown');
+  await page.locator('[data-runtime-coverage] details > summary').click();
+  const association = page.locator('[data-association-coverage]');
+  check((await association.innerText()).includes('Partial tool association'), 'association has a distinct status');
+  check(await association.locator('.context-counts').count()===0, 'association does not show fictitious transcript counters');
+  check(await page.locator('[data-session-coverage]').count()===1, 'discovery is not shown as another empty transcript');
+  check(!await page.locator('[data-source-discovery] details').evaluate(el=>el.open), 'successful discovery is a collapsed diagnostic');
+  await association.locator('details > summary').click();
+  check((await association.innerText()).includes('agentprov.command_time_process/v2'), 'original association method remains inspectable');
+  await association.locator('details > summary').click();
   check((await page.locator('#context-body').innerText()).includes('approval'), 'missing approval is explicitly retained');
   await page.getByRole('link',{name:'中文',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#context-tab-coverage')?.getAttribute('aria-selected')==='true');
   await page.waitForSelector('[data-runtime-coverage]');
-  check((await page.locator('[data-runtime-coverage]').innerText()).includes('部分采集成功'), 'coverage remains honest in Chinese');
+  check((await page.locator('[data-runtime-coverage]').innerText()).includes('采集完整性待确认'), 'coverage remains honest in Chinese');
+  check((await page.locator('[data-association-coverage]').innerText()).includes('部分行为未关联工具'), 'Chinese association is distinct from capture');
   await page.locator('#agentcontext').scrollIntoViewIfNeeded();
   await page.screenshot({path:'output/playwright/deepseek-coverage-zh.png'});
   await page.setViewportSize({width:390,height:844});
