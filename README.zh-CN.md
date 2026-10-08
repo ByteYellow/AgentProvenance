@@ -1,8 +1,11 @@
-<p align="center">
-  <img src="docs/img/agentprovenance-cover-zh-CN.png" alt="AgentProvenance：AI Agent 到底执行了什么？" width="100%">
-</p>
+![AgentProvenance 三轴观测：运行时事实、Agent 上下文与模型意图汇入同一张可验证的执行图](docs/assets/three-axis-observability-zh-CN.svg)
 
 <div align="center">
+
+[![体验在线 Demo](docs/assets/online-demo-button-zh-CN.svg)](https://ByteYellow.github.io/AgentProvenance/)
+
+**直接体验 7 份签名回放，查看执行图谱、Agent 会话和文件正文。**
+无需安装、注册或 API Key。
 
 # AgentProvenance
 
@@ -93,7 +96,7 @@ macOS 使用对应的 `darwin` 包，并将校验命令换为 `shasum -a 256 -c`
 Windows 用户在 WSL 中运行 Linux 包。回放可以离线使用，
 无需 Go、Docker、Agent 账号或 API Key。
 
-![Demo 示例首页](docs/img/demo-gallery-zh-CN.png)
+[![Demo 示例首页，点击在线体验](docs/img/demo-gallery-zh-CN.png)](https://ByteYellow.github.io/AgentProvenance/)
 
 点击**打开回放**查看签名执行记录，点击**阅读指南**查看图文说明。
 示例库共有 **7 份签名回放、9 篇指南**。建议先看新版的 DeepSeek 开发任务：
@@ -193,8 +196,6 @@ AgentProvenance 再把这些信息与文件变化、最终产物关联起来：
       → 文件访问 / 网络连接 / 运行时事件
         → 文件变化 / 产物 / 证据对象
 ```
-
-![三类证据汇入同一张可验证的执行图](docs/assets/three-axis-observability-zh-CN.svg)
 
 | 证据层 | 来源 | 说明什么 |
 | --- | --- | --- |

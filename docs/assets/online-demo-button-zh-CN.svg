@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="244" height="52" viewBox="0 0 244 52" role="img" aria-labelledby="title">
+  <title id="title">立即体验在线 Demo</title>
+  <rect width="244" height="52" rx="10" fill="#0071e3"/>
+  <path d="M24 18L36 26L24 34Z" fill="#fff"/>
+  <text x="50" y="32" font-family="system-ui,-apple-system,Segoe UI,Microsoft YaHei,sans-serif" font-size="17" font-weight="600" fill="#fff">体验在线 Demo</text>
+  <path d="M209 26H222M217 21L222 26L217 31" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

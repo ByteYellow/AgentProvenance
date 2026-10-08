@@ -1,8 +1,11 @@
-<p align="center">
-  <img src="docs/img/agentprovenance-cover-en.png" alt="AgentProvenance: What are your AI agents actually doing?" width="100%">
-</p>
+![AgentProvenance: runtime facts, agent context and model intent in one verifiable execution graph](docs/assets/three-axis-observability.svg)
 
 <div align="center">
+
+[![Try the online demo](docs/assets/online-demo-button.svg)](https://ByteYellow.github.io/AgentProvenance/)
+
+**Explore 7 signed replays: graphs, Agent sessions and saved files.**
+No installation, account or API key required.
 
 # AgentProvenance
 
@@ -98,7 +101,7 @@ On macOS, use the matching `darwin` archive and `shasum -a 256 -c` to check it.
 Windows users run the Linux archive inside WSL. Replay needs no Go, Docker,
 agent account or API key and works offline.
 
-![Demo library](docs/img/demo-gallery.png)
+[![Demo library — open the online demo](docs/img/demo-gallery.png)](https://ByteYellow.github.io/AgentProvenance/)
 
 Choose **Open replay** to explore a signed execution, or **Read guide** to open
 its illustrated guide. The library includes **seven signed replays and nine
@@ -207,8 +210,6 @@ Task / conversation / agent delegation
       → file access / network connection / runtime event
         → changed file / artifact / evidence object
 ```
-
-![Three evidence sources feeding one verifiable execution graph](docs/assets/three-axis-observability.svg)
 
 | Evidence layer | Sources | What it explains |
 | --- | --- | --- |
