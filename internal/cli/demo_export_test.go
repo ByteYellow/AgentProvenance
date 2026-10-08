@@ -52,7 +52,7 @@ func TestCompleteDocumentationKeepsOverviewAndReference(t *testing.T) {
 		route string
 		need  []string
 	}{
-		{"/demos/guide/start?lang=en", []string{"Agent session", "Runtime capture", "Features and docs", "three-axis-observability.svg", "online-demo-button.svg", "/demos/guide/capabilities?lang=en"}},
+		{"/demos/guide/start?lang=en", []string{"Agent session", "Runtime capture", "Features and docs", "agentprovenance-cover-en.png", "three-axis-observability.svg", "online-demo-button.svg", "/demos/guide/capabilities?lang=en"}},
 		{"/demos/guide/capabilities?lang=zh-CN", []string{"核心模型", "部署模式", "外部评估器协议", "架构", "evidence-dag-zh-CN.svg"}},
 	} {
 		w := httptest.NewRecorder()

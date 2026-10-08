@@ -1,4 +1,4 @@
-![AgentProvenance 三轴观测：运行时事实、Agent 上下文与模型意图汇入同一张可验证的执行图](docs/assets/three-axis-observability-zh-CN.svg)
+![AgentProvenance：AI Agent 到底执行了什么？](docs/img/agentprovenance-cover-zh-CN.png)
 
 <div align="center">
 
@@ -34,6 +34,8 @@
 AgentProvenance 把任务要求、工具返回结果和操作系统中的实际行为放到一起。
 任务为什么失败、文件被谁改了、某次网络连接从何而来，都可以沿证据追查；
 同一份记录也可以交给安全分析器或外部评估器使用。
+
+![AgentProvenance 三轴观测：运行时事实、Agent 上下文与模型意图汇入同一张可验证的执行图](docs/assets/three-axis-observability-zh-CN.svg)
 
 <a id="当前能力"></a>
 <a id="目录"></a>

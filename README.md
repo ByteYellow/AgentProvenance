@@ -1,4 +1,4 @@
-![AgentProvenance: runtime facts, agent context and model intent in one verifiable execution graph](docs/assets/three-axis-observability.svg)
+![AgentProvenance: What are your AI agents actually doing?](docs/img/agentprovenance-cover-en.png)
 
 <div align="center">
 
@@ -36,6 +36,8 @@ AgentProvenance connects three parts of an execution: what the agent was asked
 to do, what its tools reported, and what happened in the operating system.
 Use the same evidence to debug a failed task, inspect an unexpected file change,
 investigate a network connection, or feed an external evaluator.
+
+![AgentProvenance: runtime facts, agent context and model intent in one verifiable execution graph](docs/assets/three-axis-observability.svg)
 
 <a id="current-capability"></a>
 <a id="contents"></a>
