@@ -1,0 +1,93 @@
+name: Publish website
+
+on:
+  workflow_run:
+    workflows: ['Portable release']
+    types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pages.yml'
+      - 'scripts/prepare_pages_deployment.py'
+      - 'scripts/test_pages_deployment.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: published-website
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      run_id: ${{ steps.source.outputs.run_id }}
+      version: ${{ steps.source.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Select the tested artifact for the published release
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -m unittest discover -s scripts -p test_pages_deployment.py -v
+          python3 scripts/prepare_pages_deployment.py
+      - name: Download the tested Pages archive
+        if: steps.source.outputs.run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: github-pages
+          run-id: ${{ steps.source.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/published-site
+      - name: Verify the archive belongs to the release
+        if: steps.source.outputs.run_id != ''
+        env:
+          RELEASE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, tarfile
+          archive = pathlib.Path(os.environ['RUNNER_TEMP']) / 'published-site/artifact.tar'
+          with tarfile.open(archive) as package:
+              member = next(m for m in package.getmembers() if m.name.removeprefix('./') == 'replay-manifest.json')
+              manifest = json.load(package.extractfile(member))
+          assert manifest['commit'] == os.environ['RELEASE_COMMIT']
+          assert manifest['verifications']
+          assert all(v['signature_verified'] and v['graph']['status'] == 'ok' for v in manifest['verifications'])
+          print('Verified release commit and original evidence signatures in the tested site.')
+          PY
+      - name: Forward the unchanged Pages archive
+        if: steps.source.outputs.run_id != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-pages
+          path: ${{ runner.temp }}/published-site/artifact.tar
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    needs: prepare
+    if: needs.prepare.outputs.run_id != ''
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
