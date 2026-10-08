@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
@@ -24,11 +23,9 @@ type recipe struct {
 	// inject rewrites the agent argv to load a per-run hooks overlay and returns
 	// a cleanup that removes the overlay (the hook log is kept for sealing).
 	inject func(command []string, selfExe, hookLogPath string, paths store.Paths) (newCommand []string, cleanup func(), err error)
-	// harness names the hooksbridge adapter for agents that write their OWN
-	// session transcript (no hook injection); findTranscript locates the record
-	// this run wrote, bridged after the agent exits. "" = no transcript path.
-	harness        string
-	findTranscript func(startedAt time.Time) string
+	// Native session selection is shared; recipes only declare the format and
+	// default location. No harness chooses a transcript by modification time.
+	harness string
 }
 
 // detectRecipe picks the recipe for an agent command by its program basename.
@@ -41,31 +38,24 @@ func detectRecipe(command []string) recipe {
 			detail: "per-run --settings overlay; ~/.claude untouched", detailText: messagef("per-run --settings overlay; ~/.claude untouched"),
 			injectHooks: true,
 			inject:      injectClaudeCode,
+			harness:     "claude",
 		}
 	case "codex":
 		return recipe{
 			tier:   "transcript(codex)",
 			detail: "post-run bridge of ~/.codex/sessions rollout", detailText: messagef("post-run bridge of ~/.codex/sessions rollout"),
 			harness: "codex",
-			findTranscript: func(startedAt time.Time) string {
-				return newestPathAfter(filepath.Join(home(), ".codex", "sessions", "*", "*", "*", "rollout-*.jsonl"), startedAt)
-			},
 		}
 	case "kimi":
 		return recipe{
 			tier:   "transcript(kimi)",
 			detail: "post-run bridge of ~/.kimi-code session (incl. sub-agents)", detailText: messagef("post-run bridge of ~/.kimi-code session (incl. sub-agents)"),
 			harness: "kimi",
-			findTranscript: func(startedAt time.Time) string {
-				// The Kimi session is a directory (per-agent wire.jsonl); locate it
-				// via the main agent's wire.jsonl and return the session dir.
-				w := newestPathAfter(filepath.Join(home(), ".kimi-code", "sessions", "*", "session_*", "agents", "main", "wire.jsonl"), startedAt)
-				if w == "" {
-					return ""
-				}
-				return filepath.Dir(filepath.Dir(filepath.Dir(w))) // .../session_<id>/
-			},
 		}
+	case "dsh", "deepseek-harness":
+		return recipe{tier: "transcript(deepseek)", harness: "deepseek",
+			detail:     "post-run capture of DeepSeek Harness session records",
+			detailText: messagef("post-run capture of DeepSeek Harness session records")}
 	default:
 		return recipe{
 			tier:       "record",
@@ -82,24 +72,6 @@ func home() string {
 	return os.Getenv("HOME")
 }
 
-// newestPathAfter returns the most recently modified path matching glob written
-// at/after startedAt (a small grace window absorbs clock skew), or "".
-func newestPathAfter(glob string, startedAt time.Time) string {
-	matches, _ := filepath.Glob(glob)
-	best, bestT := "", time.Time{}
-	cutoff := startedAt.Add(-3 * time.Second)
-	for _, m := range matches {
-		fi, err := os.Stat(m)
-		if err != nil || fi.ModTime().Before(cutoff) {
-			continue
-		}
-		if fi.ModTime().After(bestT) {
-			best, bestT = m, fi.ModTime()
-		}
-	}
-	return best
-}
-
 // claudeHookEvents are the Claude Code hook events launch captures. PreToolUse /
 // PostToolUse carry each action's tool_input + agent_id; SubagentStart/Stop give
 // delegation edges; SessionStart/UserPromptSubmit/Stop bracket the turn and
@@ -109,9 +81,12 @@ var claudeHookEvents = []string{
 	"UserPromptSubmit",
 	"PreToolUse",
 	"PostToolUse",
+	"PostToolUseFailure",
+	"PermissionRequest",
 	"SubagentStart",
 	"SubagentStop",
 	"Stop",
+	"StopFailure",
 	"SessionEnd",
 }
 

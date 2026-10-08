@@ -7,6 +7,7 @@ or API credentials are used. --report writes the machine-readable result.
 import argparse
 import collections
 import ctypes
+import errno
 from datetime import datetime
 import http.server
 import json
@@ -21,6 +22,79 @@ import sys
 import tempfile
 import threading
 import time
+
+
+def lifecycle_worker(directory):
+    fixtures = {}
+
+    def finish_child(pid, name):
+        _, status = os.waitpid(pid, 0)
+        if os.waitstatus_to_exitcode(status) != 0:
+            raise RuntimeError(f"{name} child failed: {status}")
+        fixtures[name] = {"caller_pid": pid}
+
+    def write_child(name):
+        Path(name + ".env").write_text("FAKE_TOKEN=lifecycle-only\n")
+
+    pid = os.fork()
+    if pid == 0:
+        try:
+            write_child("fork-child")
+        except BaseException:
+            os._exit(1)
+        os._exit(0)
+    finish_child(pid, "fork-child")
+
+    group = Path("/sys/fs/cgroup") / ("agentprov-" + Path(directory).name)
+    try:
+        group.mkdir()
+    except OSError as error:
+        if error.errno not in {errno.EPERM, errno.EACCES, errno.EROFS, errno.ENOENT}:
+            raise
+        return fixtures, {"cgroup_lifecycle": str(error)}
+    gaps = {}
+    try:
+        fixtures["target_cgroup_id"] = str(group.stat().st_ino)
+        pid = os.fork()
+        if pid == 0:
+            try:
+                write_child("migration-before")
+                (group / "cgroup.procs").write_text("0")
+                write_child("migration-after")
+            except BaseException:
+                os._exit(1)
+            os._exit(0)
+        finish_child(pid, "migration-child")
+
+        class CloneArgs(ctypes.Structure):
+            _fields_ = [(name, ctypes.c_uint64) for name in (
+                "flags", "pidfd", "child_tid", "parent_tid", "exit_signal",
+                "stack", "stack_size", "tls", "set_tid", "set_tid_size", "cgroup")]
+
+        fd = os.open(group, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            args = CloneArgs(flags=0x200000000, exit_signal=signal.SIGCHLD, cgroup=fd)
+            libc = ctypes.CDLL(None, use_errno=True)
+            libc.syscall.restype = ctypes.c_long
+            pid = libc.syscall(435, ctypes.byref(args), ctypes.sizeof(args))
+            if pid < 0:
+                error = ctypes.get_errno()
+                if error not in {errno.ENOSYS, errno.EPERM, errno.EACCES, errno.EOPNOTSUPP}:
+                    raise OSError(error, "clone3(CLONE_INTO_CGROUP)")
+                gaps["clone_into_cgroup"] = os.strerror(error)
+            elif pid == 0:
+                try:
+                    write_child("clone-child")
+                except BaseException:
+                    os._exit(1)
+                os._exit(0)
+            else:
+                finish_child(pid, "clone-child")
+        finally:
+            os.close(fd)
+    finally:
+        group.rmdir()
+    return fixtures, gaps
 
 
 def worker(directory, port):
@@ -60,6 +134,8 @@ def worker(directory, port):
     while conn.recv(4096):
         pass
     conn.close()
+    fixtures, gaps = lifecycle_worker(directory)
+    Path("lifecycle.json").write_text(json.dumps({"fixtures": fixtures, "gaps": gaps}))
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -86,7 +162,9 @@ def main():
     parser.add_argument("--ssl-lib", required=True)
     parser.add_argument("--report", required=True)
     parser.add_argument("--pause-drain", type=float, default=0,
-                        help="hold userspace draining until this many seconds after the clients exit (amd64 capture-time gate)")
+                        help="hold userspace draining until this many seconds after the clients exit (kernel capture-time gate)")
+    parser.add_argument("--require-cgroup-lifecycle", action="store_true",
+                        help="fail unless migration and clone3 into a distinct cgroup were exercised")
     args = parser.parse_args()
     if os.geteuid() != 0 or platform.system() != "Linux":
         parser.error("run explicitly as root on Linux")
@@ -187,20 +265,56 @@ def main():
                 checks[f"{name}:{kind}"] = any(row.get("pid") == pid and row.get("event_type") == kind and name in row.get("data", "") for row in rows)
         checks["sensor_clean_exit"] = sensor.returncode == 0
         checks["no_tls_attach_warning"] = "not attached" not in error_path.read_text() and "partial TLS" not in error_path.read_text()
+        lifecycle = json.loads((root / "lifecycle.json").read_text())
+        child_pids = {}
+        parent_instance = next((row.get("process_instance_id") for row in worker_rows
+                                if row.get("event_type") == "execve"), None)
+        checks["parent_process_instance"] = bool(parent_instance) and all(
+            row.get("process_instance_id") == parent_instance for row in worker_rows)
+        for name, marker in (("fork-child", "fork-child.env"),
+                             ("migration-child", "migration-before.env"),
+                             ("clone-child", "clone-child.env")):
+            if name not in lifecycle["fixtures"]:
+                continue
+            matches = {row["pid"] for row in rows if row.get("path") == marker}
+            if len(matches) != 1:
+                raise RuntimeError(f"expected one child identity for {name}, got {matches}")
+            child_pid = matches.pop()
+            child_pids[name] = child_pid
+            child_rows = [row for row in rows if row.get("pid") == child_pid]
+            birth = next((row for row in child_rows if row.get("observation") == "kernel_fork"), None)
+            exit_event = next((row for row in child_rows if row.get("event_type") == "process_exit"), None)
+            file_event = next(row for row in child_rows if row.get("path") == marker)
+            identity = file_event.get("process_instance_id")
+            checks[f"{name}:lifetime"] = bool(identity) and bool(birth) and bool(exit_event) and all(
+                row.get("process_instance_id") == identity for row in child_rows)
+            checks[f"{name}:parent"] = bool(birth) and birth.get("ppid") == pids["python-openssl-ex"] and birth.get("parent_process_instance_id") == parent_instance
+            checks[f"{name}:ordering"] = bool(birth) and bool(exit_event) and (
+                datetime.fromisoformat(birth["timestamp"]) <= datetime.fromisoformat(file_event["timestamp"]) <= datetime.fromisoformat(exit_event["timestamp"]))
+            checks[f"{name}:birth_cgroup"] = bool(birth) and birth.get("cgroup_id") == file_event.get("cgroup_id")
+            if name == "migration-child":
+                after = next((row for row in child_rows if row.get("path") == "migration-after.env"), {})
+                checks["cgroup_migration"] = after.get("cgroup_id") == lifecycle["fixtures"]["target_cgroup_id"] and after.get("cgroup_id") != file_event.get("cgroup_id") and after.get("process_instance_id") == identity
+            if name == "clone-child":
+                checks["clone_into_cgroup"] = file_event.get("cgroup_id") == lifecycle["fixtures"]["target_cgroup_id"] and file_event.get("cgroup_id") != worker_rows[0].get("cgroup_id")
+        if args.require_cgroup_lifecycle:
+            checks["required_cgroup_lifecycle"] = "migration-child" in child_pids and "clone-child" in child_pids and not lifecycle["gaps"]
+        fixture_pids = set(pids.values()) | set(child_pids.values())
         if args.pause_drain > 0:
             checks["capture_time_before_drain"] = all(
                 datetime.fromisoformat(row["timestamp"].replace("Z", "+00:00")).timestamp() < resumed_at - args.pause_drain / 2
-                for row in rows if row.get("pid") in pids.values())
+                for row in rows if row.get("pid") in fixture_pids)
         report = {
             "schema_version": "agentprovenance.sensor_live_acceptance/v1",
             "architecture": platform.machine(), "kernel": platform.release(), "pause_drain_seconds": args.pause_drain,
             "checks": checks, "passed": all(checks.values()), "kernel_pids": pids, "caller_pids": caller_pids,
+            "lifecycle": lifecycle, "child_kernel_pids": child_pids,
             "event_types": dict(collections.Counter(row["event_type"] for row in rows)),
             "event_count": len(rows), "sensor_stderr": error_path.read_text(),
         }
         report_path.write_text(json.dumps(report, indent=2) + "\n")
         # Retain only fixture process evidence, not unrelated host activity.
-        report_path.with_suffix(".events.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows if row.get("pid") in pids.values()))
+        report_path.with_suffix(".events.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows if row.get("pid") in fixture_pids))
         print(json.dumps(report, indent=2))
         if not report["passed"]:
             raise SystemExit("FAIL: " + ", ".join(name for name, passed in checks.items() if not passed))

@@ -12,7 +12,7 @@
   <a class="brand" href="{{localURL "/demos/" .Lang}}" aria-label="{{tr $.Lang "AgentProvenance demo home"}}"><h1><b>Agent</b>Provenance</h1></a>
   <span class="tag header-description">{{tr $.Lang "verifiable agent observability"}}</span>
   <span class="header-divider" aria-hidden="true"></span><span class="header-location">{{tr $.Lang "Demos"}}</span>
-  <span class="spacer"></span><span class="local-status"><i></i> {{tr $.Lang "Local replay"}}</span>
+  <a class="header-location" href="{{localURL "/demos/guide/start" .Lang}}">{{tr $.Lang "Documentation"}}</a><a class="header-location" href="https://github.com/ByteYellow/AgentProvenance">GitHub</a><span class="spacer"></span><span class="local-status"><i></i> {{tr $.Lang "Local replay"}}</span>
   <nav class="language-switch" aria-label="{{tr .Lang "Language"}}"><a href="{{.EnglishURL}}" lang="en" hreflang="en"{{if eq .Lang "en"}} aria-current="true"{{end}}>English</a><a href="{{.ChineseURL}}" lang="zh-CN" hreflang="zh-CN"{{if eq .Lang "zh-CN"}} aria-current="true"{{end}}>中文</a></nav>
 </header>
 <main class="library">
@@ -42,6 +42,7 @@
     {{end}}{{end}}
     </div>
   </section>{{end}}
+  <section class="evaluators" aria-labelledby="guides-heading"><div class="section-heading"><h2 id="guides-heading">{{tr $.Lang "Documentation"}}</h2><a class="text-link" href="{{localURL "/demos/guide/start" .Lang}}">{{tr $.Lang "Project overview"}} →</a></div><div class="user-guides">{{range .DocGroups}}<section class="user-guide-group"><h3>{{tr $.Lang .Title}}</h3><nav>{{range .Entries}}<a href="{{localURL (printf "/demos/guide/%s" .ID) $.Lang}}">{{tr $.Lang .Title}} <span aria-hidden="true">→</span></a>{{end}}</nav></section>{{end}}</div></section>
   <footer class="library-footer"><span>{{tr $.Lang "Replay works offline. No API key or virtual machine required."}}</span><details><summary>{{tr $.Lang "About verification"}}</summary><p>{{tr $.Lang "Signatures verify evidence integrity against the bundled demo keys. They do not establish complete capture or prove every inferred relationship. Evaluator examples have separate environment requirements."}}</p></details></footer>
 </main>
 </body>

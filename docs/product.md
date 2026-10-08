@@ -15,22 +15,18 @@ observability dashboard, Kubernetes/Ray replacement, or RL trainer.
 The core product line is:
 
 ```text
-Execution Context
-  -> Evidence Ingest
-  -> Execution Timeline
-  -> Runtime Causality Graph
-  -> Provenance DAG
-  -> State Diff / Blame / Artifact Lineage
-  -> Security Analysis / Risk Decision
-  -> Taint / Response Action
-  -> Replay / Forensics / Audit Manifest
+Record task and execution
+  → Inspect conversation, tools and runtime activity
+  → Trace file and artifact origins
+  → Compare executions and configuration
+  → Export, replay and verify
 ```
 
 ## First experience: portable replay
 
-The [v0.8.2 release](releases/v0.8.2.md) provides CLI archives for
+The [v0.9.0 release](releases/v0.9.0.md) provides CLI archives for
 Linux and macOS on amd64/arm64. `agentprov demo` opens a local gallery containing
-six verified signed captures and two optional evaluator guides, with the same
+seven verified signed captures and two optional evaluator guides, with the same
 visual theme as the dashboard. Guides render locally with a section outline,
 images, tables and code-copy controls. See the [Quickstart](../README.md#quickstart)
 and [complete demo index](../demo/README.md).
@@ -112,6 +108,12 @@ Both tiers are useful because raw system-side telemetry cannot be expected to
 carry application-level `tool_call_id`.
 
 ### Application context (enrichment)
+
+v0.9.0 `launch` collects native sessions after execution, preserving tasks, messages,
+tool results, permissions and configuration. Source selection, resume and deduplication,
+coverage reports and a separate saved-content reader share this path. See the
+[Agent session guide](agent-context.md) for Claude Code, Codex, DeepSeek Harness
+and existing Kimi/Grok formats.
 
 On top of the kernel foundation, application-side producers add the semantics
 no syscall stream can express:

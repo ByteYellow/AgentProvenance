@@ -5,6 +5,7 @@ go 1.23.0
 require (
 	github.com/cilium/ebpf v0.16.0
 	github.com/docker/docker v24.0.9+incompatible
+	github.com/klauspost/compress v1.18.0
 	github.com/spf13/cobra v1.8.1
 	github.com/yuin/goldmark v1.7.13
 	golang.org/x/arch v0.12.0

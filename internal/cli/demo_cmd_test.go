@@ -146,7 +146,13 @@ func TestDemoGuideRendersMarkdownAndLocalAssets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tableHTML, _, err := renderDemoGuide(entries[6], entries, tableSource)
+	var analyst demo.Entry
+	for _, candidate := range entries {
+		if candidate.ID == "llm-judge" {
+			analyst = candidate
+		}
+	}
+	tableHTML, _, err := renderDemoGuide(analyst, entries, tableSource)
 	if err != nil || !strings.Contains(string(tableHTML), "<table>") {
 		t.Fatalf("GFM table missing: %v", err)
 	}

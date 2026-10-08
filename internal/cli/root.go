@@ -57,6 +57,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(signalsCmd(&dataDir))
 	root.AddCommand(aiCmd(&dataDir))
 	root.AddCommand(hooksCmd(&dataDir))
+	root.AddCommand(contextCmd(&dataDir))
 	root.AddCommand(dashboardCmd(&dataDir))
 	root.AddCommand(complianceCmd(&dataDir))
 	root.AddCommand(gcCmd(&dataDir))

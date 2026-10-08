@@ -80,6 +80,18 @@ components:
           additionalProperties: true
       additionalProperties: true
 paths:
+  /api/artifact:
+    $ref: '../agent-context-api.yaml#/paths/~1api~1artifact'
+  /v1/context/overview:
+    $ref: '../agent-context-api.yaml#/paths/~1v1~1context~1overview'
+  /v1/context/entries:
+    $ref: '../agent-context-api.yaml#/paths/~1v1~1context~1entries'
+  /v1/context/content:
+    $ref: '../agent-context-api.yaml#/paths/~1v1~1context~1content'
+  /v1/context/compare:
+    $ref: '../agent-context-api.yaml#/paths/~1v1~1context~1compare'
+  /v1/context/links:
+    $ref: '../agent-context-api.yaml#/paths/~1v1~1context~1links'
   /v1/health:
     get:
       operationId: health

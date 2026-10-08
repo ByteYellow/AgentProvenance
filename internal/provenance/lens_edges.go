@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 )
 
 func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
@@ -18,6 +20,14 @@ func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
 		var edge GraphLensEdge
 		if err := rows.Scan(&edge.ID, &edge.FromID, &edge.ToID, &edge.EdgeType, &edge.SourceEventID, &edge.CreatedAt); err != nil {
 			return nil, err
+		}
+		if edge.EdgeType == "agent_syscall" && strings.HasPrefix(edge.ID, correlation.AppProcessEdgePrefix) {
+			edge.Derived, edge.DerivationRule = true, correlation.AppProcessMethod
+			edge.Confidence = correlation.AppProcessConfidence
+			edge.EvidenceRefs = []string{edge.FromID, edge.ToID}
+			if edge.SourceEventID != "" && edge.ToID != "runtime_event/"+edge.SourceEventID {
+				edge.EvidenceRefs = append(edge.EvidenceRefs, "runtime_event/"+edge.SourceEventID)
+			}
 		}
 		edges = append(edges, edge)
 	}
@@ -259,25 +269,27 @@ func prioritizeLensEdges(edges []GraphLensEdge, nodes map[string]GraphLensNode) 
 	// the security verdicts stay on the graph. Note we key on the RARE kinds and
 	// annotation edge_types only -- NOT "tool_call"/"process" substrings, which
 	// would (wrongly) promote the whole skeleton.
+	sort.SliceStable(edges, func(i, j int) bool { return lensEdgePriority(edges[i], nodes) < lensEdgePriority(edges[j], nodes) })
+}
+
+func lensEdgePriority(e GraphLensEdge, nodes map[string]GraphLensNode) int {
 	rare := map[string]bool{"file": true, "artifact": true, "policy_decision": true, "response_action": true, "risk_signal": true}
-	tier := func(e GraphLensEdge) int {
-		if e.Derived {
+
+	if e.Derived {
+		return 0
+	}
+	et := e.EdgeType
+	for _, s := range []string{"policy", "risk", "response", "artifact", "taint", "data_flow", "file", "llm_"} {
+		if strings.Contains(et, s) {
 			return 0
 		}
-		et := e.EdgeType
-		for _, s := range []string{"policy", "risk", "response", "artifact", "taint", "data_flow", "file", "llm_"} {
-			if strings.Contains(et, s) {
-				return 0
-			}
-		}
-		for _, id := range []string{e.FromID, e.ToID} {
-			if n, ok := nodes[id]; ok && rare[n.Kind] {
-				return 0
-			}
-		}
-		return 1
 	}
-	sort.SliceStable(edges, func(i, j int) bool { return tier(edges[i]) < tier(edges[j]) })
+	for _, id := range []string{e.FromID, e.ToID} {
+		if n, ok := nodes[id]; ok && rare[n.Kind] {
+			return 0
+		}
+	}
+	return 1
 }
 
 func splitAndLimitLensEdges(edges []GraphLensEdge, limit int) ([]GraphLensEdge, []GraphLensEdge, bool) {

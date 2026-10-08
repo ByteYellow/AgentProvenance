@@ -36,12 +36,19 @@ func TestRecordRunCreatesZeroSDKProvenance(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workdir, "app.py"), []byte("value = 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	pidFile, observedFile, _ := sampledChildGate(t)
+	command := fmt.Sprintf(`(i=0; while [ ! -e %s ]; do
+  i=$((i+1)); [ "$i" -lt 1000 ] || exit 1; sleep 0.01
+done) &
+printf '%%s\n' "$!" > %s
+printf 'value = 2\n' > app.py && echo note > note.txt && wait`,
+		fixtureShellQuote(observedFile), fixtureShellQuote(pidFile))
 
 	result, err := (Service{DB: db, Paths: paths}).Run(Request{
 		RunID:            "run-record-test",
 		Name:             "record-test",
 		Workdir:          workdir,
-		Command:          []string{"sh", "-lc", "(sleep 0.2) & printf 'value = 2\\n' > app.py && echo note > note.txt && wait"},
+		Command:          []string{"sh", "-lc", command},
 		SampleIntervalMS: 10,
 		PostRootGraceMS:  300,
 	})
@@ -242,14 +249,21 @@ func TestRecordObjectifiesChangedFilesForPreview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Must be the canonical artifact envelope the preview unwraps, carrying the
-	// real file bytes under payload.content.
-	if !strings.Contains(string(blob), `"agentprov.provenance.object.v1"`) || !strings.Contains(string(blob), "print(42)") {
-		t.Fatalf("artifact object missing schema or content: %s", blob)
+	var saved struct {
+		Schema  string           `json:"schema"`
+		Payload CapturedArtifact `json:"payload"`
 	}
-	// The inline-written artifact object must be accepted by graph verify (the
-	// hash/schema/envelope must match what the object store produces), else the
-	// demo's "verify" badge would fail on a captured product.
+	if err := json.Unmarshal(blob, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.Schema != "agentprov.provenance.object.v1" || saved.Payload.ContentState != "stored" || saved.Payload.ContentRef == "" {
+		t.Fatalf("artifact object missing schema or content reference: %s", blob)
+	}
+	page, err := provenance.ReadTextContentPage(db, "run-obj", saved.Payload.ContentRef, 0, 1024)
+	if err != nil || page.Content != "print(42)\n" {
+		t.Fatalf("saved content: %+v %v", page, err)
+	}
+	// The descriptor and its chunk references must pass the existing verifier.
 	if _, err := (provenance.ObjectStore{DB: db, Paths: paths}).MaterializeRun("run-obj"); err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +292,7 @@ func TestPrepareScopeCgroupContract(t *testing.T) {
 	cleanup() // must not panic on a second call
 }
 
-func TestRecordBindingsShareOneScopeCgroup(t *testing.T) {
+func TestRecordDescendantBindingsDoNotClaimWholeCgroup(t *testing.T) {
 	// The whole point of the real-cgroup seam: the root process and every
 	// descendant binding for a run resolve to ONE scope cgroup id, so
 	// independent telemetry joins the entire subtree by cgroup. The id must be
@@ -326,7 +340,11 @@ func TestRecordBindingsShareOneScopeCgroup(t *testing.T) {
 		t.Fatal("scope cgroup id is empty")
 	}
 	for _, b := range bindings {
-		if b.CgroupID != scope {
+		if b.BindingSource == "zero_sdk_record_descendant" {
+			if b.CgroupID != "" || b.ContainerID != "" {
+				t.Fatalf("sampled PID must not own an entire cgroup/container: %+v", b)
+			}
+		} else if b.CgroupID != scope {
 			t.Fatalf("binding %s cgroup_id = %q, want shared scope %q", b.ID, b.CgroupID, scope)
 		}
 	}
@@ -382,11 +400,24 @@ func TestRecordMarksOrphanDescendantDuringGraceWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	marker := filepath.Join(workdir, "orphan-marker")
+	pidFile, observedFile, stopFile := sampledChildGate(t)
+	command := `import pathlib, subprocess, sys, time
+pid_path, observed_path, stop_path = map(pathlib.Path, sys.argv[1:])
+child = subprocess.Popen([sys.executable, "-c", "import pathlib, sys, time; stop = pathlib.Path(sys.argv[1]); deadline = time.monotonic() + 30; exec('while not stop.exists() and time.monotonic() < deadline:\\n time.sleep(0.01)')", str(stop_path)])
+pid_path.write_text(str(child.pid))
+deadline = time.monotonic() + 10
+while not observed_path.exists():
+    if time.monotonic() >= deadline:
+        child.terminate()
+        child.wait()
+        raise RuntimeError("child was never sampled")
+    time.sleep(0.01)
+pathlib.Path("orphan-marker").write_text("started\n")`
 	result, err := (Service{DB: db, Paths: paths}).Run(Request{
 		RunID:   "run-record-orphan-test",
 		Name:    "record-orphan-test",
 		Workdir: workdir,
-		Command: []string{"python3", "-c", `import subprocess, time; subprocess.Popen(["sleep", "0.8"]); time.sleep(0.08); open("orphan-marker", "w").write("started\n")`},
+		Command: []string{"python3", "-c", command, pidFile, observedFile, stopFile},
 	})
 	if err != nil {
 		t.Fatal(err)

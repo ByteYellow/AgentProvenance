@@ -29,22 +29,30 @@ type sensorbpfGoReadKey struct {
 	Frame     uint64
 }
 
+type sensorbpfOpenRetryCtx struct {
+	Path    uint64
+	Flags   uint64
+	KtimeNs uint64
+}
+
 type sensorbpfSensorEvent struct {
-	Kind     uint32
-	Pid      uint32
-	Tgid     uint32
-	Ppid     uint32
-	CgroupId uint64
-	KtimeNs  uint64
-	Conn     uint64
-	Daddr    uint32
-	Dport    uint16
-	_        [2]byte
-	ExitCode int32
-	Comm     [16]uint8
-	Path     [256]uint8
-	Args     [512]uint8
-	_        [4]byte
+	Kind           uint32
+	Pid            uint32
+	Tgid           uint32
+	Ppid           uint32
+	CgroupId       uint64
+	KtimeNs        uint64
+	ProcessStartNs uint64
+	ParentStartNs  uint64
+	Conn           uint64
+	Daddr          uint32
+	Dport          uint16
+	_              [2]byte
+	ExitCode       int32
+	Comm           [16]uint8
+	Path           [256]uint8
+	Args           [512]uint8
+	_              [4]byte
 }
 
 type sensorbpfSslReadCtx struct {
@@ -103,11 +111,13 @@ type sensorbpfProgramSpecs struct {
 	HandleExec            *ebpf.ProgramSpec `ebpf:"handle_exec"`
 	HandleExecve          *ebpf.ProgramSpec `ebpf:"handle_execve"`
 	HandleExit            *ebpf.ProgramSpec `ebpf:"handle_exit"`
+	HandleFork            *ebpf.ProgramSpec `ebpf:"handle_fork"`
 	HandleGetaddrinfo     *ebpf.ProgramSpec `ebpf:"handle_getaddrinfo"`
 	HandleGoTlsReadEnter  *ebpf.ProgramSpec `ebpf:"handle_go_tls_read_enter"`
 	HandleGoTlsReadReturn *ebpf.ProgramSpec `ebpf:"handle_go_tls_read_return"`
 	HandleGoTlsWrite      *ebpf.ProgramSpec `ebpf:"handle_go_tls_write"`
 	HandleOpen            *ebpf.ProgramSpec `ebpf:"handle_open"`
+	HandleOpenReturn      *ebpf.ProgramSpec `ebpf:"handle_open_return"`
 	HandleOpenat          *ebpf.ProgramSpec `ebpf:"handle_openat"`
 	HandlePtrace          *ebpf.ProgramSpec `ebpf:"handle_ptrace"`
 	HandleRename          *ebpf.ProgramSpec `ebpf:"handle_rename"`
@@ -136,6 +146,7 @@ type sensorbpfMapSpecs struct {
 	Drops             *ebpf.MapSpec `ebpf:"drops"`
 	Events            *ebpf.MapSpec `ebpf:"events"`
 	GoReadBufs        *ebpf.MapSpec `ebpf:"go_read_bufs"`
+	OpenRetries       *ebpf.MapSpec `ebpf:"open_retries"`
 	SslReadBufs       *ebpf.MapSpec `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.MapSpec `ebpf:"ssl_read_ex_bufs"`
 }
@@ -166,6 +177,7 @@ type sensorbpfMaps struct {
 	Drops             *ebpf.Map `ebpf:"drops"`
 	Events            *ebpf.Map `ebpf:"events"`
 	GoReadBufs        *ebpf.Map `ebpf:"go_read_bufs"`
+	OpenRetries       *ebpf.Map `ebpf:"open_retries"`
 	SslReadBufs       *ebpf.Map `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.Map `ebpf:"ssl_read_ex_bufs"`
 }
@@ -179,6 +191,7 @@ func (m *sensorbpfMaps) Close() error {
 		m.Drops,
 		m.Events,
 		m.GoReadBufs,
+		m.OpenRetries,
 		m.SslReadBufs,
 		m.SslReadExBufs,
 	)
@@ -192,11 +205,13 @@ type sensorbpfPrograms struct {
 	HandleExec            *ebpf.Program `ebpf:"handle_exec"`
 	HandleExecve          *ebpf.Program `ebpf:"handle_execve"`
 	HandleExit            *ebpf.Program `ebpf:"handle_exit"`
+	HandleFork            *ebpf.Program `ebpf:"handle_fork"`
 	HandleGetaddrinfo     *ebpf.Program `ebpf:"handle_getaddrinfo"`
 	HandleGoTlsReadEnter  *ebpf.Program `ebpf:"handle_go_tls_read_enter"`
 	HandleGoTlsReadReturn *ebpf.Program `ebpf:"handle_go_tls_read_return"`
 	HandleGoTlsWrite      *ebpf.Program `ebpf:"handle_go_tls_write"`
 	HandleOpen            *ebpf.Program `ebpf:"handle_open"`
+	HandleOpenReturn      *ebpf.Program `ebpf:"handle_open_return"`
 	HandleOpenat          *ebpf.Program `ebpf:"handle_openat"`
 	HandlePtrace          *ebpf.Program `ebpf:"handle_ptrace"`
 	HandleRename          *ebpf.Program `ebpf:"handle_rename"`
@@ -220,11 +235,13 @@ func (p *sensorbpfPrograms) Close() error {
 		p.HandleExec,
 		p.HandleExecve,
 		p.HandleExit,
+		p.HandleFork,
 		p.HandleGetaddrinfo,
 		p.HandleGoTlsReadEnter,
 		p.HandleGoTlsReadReturn,
 		p.HandleGoTlsWrite,
 		p.HandleOpen,
+		p.HandleOpenReturn,
 		p.HandleOpenat,
 		p.HandlePtrace,
 		p.HandleRename,

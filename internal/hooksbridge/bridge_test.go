@@ -158,11 +158,14 @@ func TestCorrelateSyscallsCommandMatch(t *testing.T) {
 	if _, err := Ingest(db, strings.NewReader(doubleAttemptLog), Options{RunID: runID, Objects: provenance.ObjectStore{DB: db, Paths: paths}}); err != nil {
 		t.Fatalf("Ingest: %v", err)
 	}
+	if _, err := db.Exec(`UPDATE tool_calls SET started_at='2026-01-01T00:00:00Z', ended_at='2026-01-01T00:00:05Z' WHERE id='tu_install'`); err != nil {
+		t.Fatal(err)
+	}
 	// bob's install ran in pid 4242: an execve (truncated argv) + secret read +
 	// metadata egress. pid 9999 is unrelated noise.
 	// Real sensor envelope shape: {payload:{raw:{command,argv,comm}}}, with the
 	// install argv truncated to a 2-token prefix (still matches bob's full cmd).
-	insEvent(t, db, runID, "ev-exec", "execve", 4242, `{"rollout_id":"r","payload":{"raw":{"argv":["python3","../pysnake-helper/setup.py"],"comm":"python3","command":"python3 ../pysnake-helper/setup.py"}}}`)
+	insEvent(t, db, runID, "ev-exec", "execve", 4242, `{"rollout_id":"r","payload":{"raw":{"argv":["python3","../pysnake-helper/setup.py"],"argv_truncated":true,"comm":"python3","command":"python3 ../pysnake-helper/setup.py"}}}`)
 	insEvent(t, db, runID, "ev-secret", "secret_path", 4242, `{"payload":{"raw":{"path":"/home/agentprov/.aws/credentials"}}}`)
 	insEvent(t, db, runID, "ev-meta", "metadata_ip", 4242, `{"payload":{"raw":{"dst_ip":"169.254.169.254"}}}`)
 	insEvent(t, db, runID, "ev-noise", "execve", 9999, `{"payload":{"raw":{"command":"/usr/bin/ls -la"}}}`)
@@ -195,8 +198,12 @@ func TestCorrelateSyscallsCommandMatch(t *testing.T) {
 
 func insEvent(t *testing.T, db *sql.DB, runID, id, typ string, pid int64, payload string) {
 	t.Helper()
-	if _, err := db.Exec(`INSERT INTO events (id, run_id, source, event_type, pid, payload, created_at)
-		VALUES (?, ?, 'agentprov_ebpf', ?, ?, ?, '2026-01-01T00:00:01Z')`, id, runID, typ, pid, payload); err != nil {
+	ts := "2026-01-01T00:00:02Z"
+	if typ == "execve" {
+		ts = "2026-01-01T00:00:01Z"
+	}
+	if _, err := db.Exec(`INSERT INTO events (id, run_id, source, event_type, pid, cgroup_id, payload, created_at)
+		VALUES (?, ?, 'agentprov_ebpf', ?, ?, 'test-cgroup', ?, ?)`, id, runID, typ, pid, payload, ts); err != nil {
 		t.Fatalf("insert event %s: %v", id, err)
 	}
 }

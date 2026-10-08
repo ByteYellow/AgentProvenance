@@ -41,12 +41,25 @@ func TestDashboardLanguageKeepsMachineIdentifiers(t *testing.T) {
 	}
 }
 
+func TestDashboardUnknownRoutesDoNotRenderTheRunPage(t *testing.T) {
+	h := Server{}.Handler()
+	for _, path := range []string{"/demos/docs/deepseek-context", "/README.md", "/assets/missing.css", "/api/missing"} {
+		for _, method := range []string{http.MethodGet, http.MethodHead} {
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequest(method, path, nil))
+			if w.Code != http.StatusNotFound || strings.Contains(w.Body.String(), "id=\"runsel\"") {
+				t.Errorf("%s %s returned dashboard instead of 404: %d", method, path, w.Code)
+			}
+		}
+	}
+}
+
 func TestDashboardCopyHasChineseCatalogEntries(t *testing.T) {
 	// New copy must have a translation. Browser checks separately verify that
 	// these lookups are actually used in rendered controls and error states.
-	patterns := []string{`\{\{tr \.Lang "([^"]+)"`, `\b(?:tr|tx)\(\s*"([^"\\]*(?:\\.[^"\\]*)*)"`, `\b(?:tr|tx)\(\s*'([^'\\]*(?:\\.[^'\\]*)*)'`}
+	patterns := []string{`\{\{tr \.Lang "([^"]+)"`, `\b(?:tr|tx|t|notice)\(\s*"([^"\\]*(?:\\.[^"\\]*)*)"`, `\b(?:tr|tx|t|notice)\(\s*'([^'\\]*(?:\\.[^'\\]*)*)'`}
 	for _, pattern := range patterns {
-		for _, m := range regexp.MustCompile(pattern).FindAllStringSubmatch(string(indexHTML), -1) {
+		for _, m := range regexp.MustCompile(pattern).FindAllStringSubmatch(string(indexHTML)+string(contextJS), -1) {
 			source := strings.ReplaceAll(m[1], `\'`, `'`)
 			if !i18n.HasChinese(source) {
 				t.Errorf("missing Chinese copy: %q", source)
@@ -73,6 +86,23 @@ func TestDashboardLensDescriptionsHaveChinese(t *testing.T) {
 			if !i18n.HasChinese(source) {
 				t.Errorf("%s lacks translation: %s", lens, source)
 			}
+		}
+	}
+}
+
+func TestDashboardContextVocabularyHasChinese(t *testing.T) {
+	for _, source := range []string{
+		"user", "assistant", "configuration", "approval", "task", "session",
+		"Not enabled", "No source found", "Valid empty source", "Captured",
+		"Partially captured", "Capture failed", "Ambiguous binding", "Not recorded in this historical run",
+		"Selected for comparison", "Compare snapshot", "Check session linkage",
+		"No session record is linked to this node. No session was guessed.",
+		"No records in this selection. See collection status for missing or unsupported sources.",
+		"Runtime capture", "Run-specific dropped events", "Kernel readiness confirmed",
+		"runtime_capture_not_recorded", "node_loss_during_capture", "probe_snapshot_stale",
+	} {
+		if !i18n.HasChinese(source) {
+			t.Errorf("missing Chinese context vocabulary: %q", source)
 		}
 	}
 }

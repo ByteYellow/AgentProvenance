@@ -22,6 +22,60 @@ type AgentTranscript struct {
 	Path    string
 }
 
+// TranscriptStream is an already selected, immutable source range. SourceRef
+// binds this derived model-call view to the preserved records it was built from.
+type TranscriptStream struct {
+	AgentID   string
+	Reader    io.Reader
+	SourceRef string
+}
+
+func HarvestTranscriptStreams(objects ObjectStore, db *sql.DB, runID string, inputs []TranscriptStream) (int, error) {
+	if runID == "" || len(inputs) > 256 {
+		return 0, fmt.Errorf("invalid transcript stream scope")
+	}
+	parsed := make([][]transcriptTurn, len(inputs))
+	budget := int64(64 << 20)
+	seen := map[string]bool{}
+	for i, input := range inputs {
+		if input.Reader == nil || seen[input.AgentID] {
+			return 0, fmt.Errorf("invalid or duplicate transcript stream")
+		}
+		seen[input.AgentID] = true
+		r := &io.LimitedReader{R: input.Reader, N: budget + 1}
+		turns, err := parseTranscript(r)
+		budget = r.N - 1
+		if err != nil || budget < 0 {
+			return 0, fmt.Errorf("transcript stream exceeds limits or cannot be parsed")
+		}
+		parsed[i] = turns
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	objects.Tx = tx
+	if _, err := tx.Exec(`DELETE FROM provenance_objects WHERE run_id=? AND source_id LIKE 'transcript/%'`, runID); err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(`DELETE FROM graph_edges WHERE run_id=? AND from_id LIKE 'llm_call/tr-%'`, runID); err != nil {
+		return 0, err
+	}
+	total, now := 0, time.Now().UTC().Format(time.RFC3339Nano)
+	for i, input := range inputs {
+		n, err := harvestTranscriptTurns(objects, db, tx, runID, input.AgentID, now, input.SourceRef, parsed[i])
+		if err != nil {
+			return 0, err
+		}
+		total += n
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
 // HarvestTranscriptsFromHookLog harvests every transcript a run's hook log points
 // at -- each distinct main session transcript_path AND each sub-agent
 // agent_transcript_path -- into the llm_call graph. Unlike the launch path (one
@@ -159,13 +213,21 @@ func harvestTranscriptFile(store ObjectStore, db *sql.DB, runID, path, agentID, 
 	if len(turns) == 0 {
 		return 0, nil
 	}
+	return harvestTranscriptTurns(store, db, db, runID, agentID, now, "", turns)
+}
 
+func harvestTranscriptTurns(store ObjectStore, db *sql.DB, writer llmEdgeWriter, runID, agentID, now, sourceRef string, turns []transcriptTurn) (int, error) {
 	nodePrefix, srcPrefix := transcriptNamespace(agentID)
+	var parents []string
+	if sourceRef != "" {
+		parents = []string{sourceRef}
+	}
 	n := 0
 	for i, t := range turns {
 		reqContent, _ := json.Marshal(map[string]any{"messages": []any{map[string]any{"content": t.Prompt}}})
 		reqObj, err := store.PutExternalObject(ExternalObjectInput{
 			Type: "llm_message", SourceID: fmt.Sprintf("%s/req-%d", srcPrefix, i), RunID: runID,
+			Parents: parents,
 			Payload: map[string]any{
 				"direction": "request", "model": t.Model, "content": string(reqContent),
 				"semantics": map[string]any{"model": t.Model, "message_count": 1, "agent_id": agentID},
@@ -177,6 +239,7 @@ func harvestTranscriptFile(store ObjectStore, db *sql.DB, runID, path, agentID, 
 		respContent, _ := json.Marshal(map[string]any{"content": t.ContentBlocks, "thinking": t.Thinking, "text": t.Text})
 		respObj, err := store.PutExternalObject(ExternalObjectInput{
 			Type: "llm_message", SourceID: fmt.Sprintf("%s/resp-%d", srcPrefix, i), RunID: runID,
+			Parents: parents,
 			Payload: map[string]any{
 				"direction": "response", "model": t.Model, "content": string(respContent),
 				"semantics": map[string]any{
@@ -189,10 +252,10 @@ func harvestTranscriptFile(store ObjectStore, db *sql.DB, runID, path, agentID, 
 		}
 
 		llmNode := fmt.Sprintf("llm_call/%s-%d", nodePrefix, i)
-		if err := insertLLMEdge(db, runID, llmNode, reqObj.Hash, edgeLLMRequest, "", now); err != nil {
+		if err := insertLLMEdge(writer, runID, llmNode, reqObj.Hash, edgeLLMRequest, "", now); err != nil {
 			return n, err
 		}
-		if err := insertLLMEdge(db, runID, llmNode, respObj.Hash, edgeLLMResponse, "", now); err != nil {
+		if err := insertLLMEdge(writer, runID, llmNode, respObj.Hash, edgeLLMResponse, "", now); err != nil {
 			return n, err
 		}
 		// Link the decided shell commands to the syscalls that actually ran them.
@@ -201,7 +264,7 @@ func harvestTranscriptFile(store ObjectStore, db *sql.DB, runID, path, agentID, 
 			return n, err
 		}
 		for _, action := range actions {
-			if err := insertLLMEdge(db, runID, llmNode, action, edgeLLMCaused, "", now); err != nil {
+			if err := insertLLMEdge(writer, runID, llmNode, action, edgeLLMCaused, "", now); err != nil {
 				return n, err
 			}
 		}

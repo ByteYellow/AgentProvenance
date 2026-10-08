@@ -2,6 +2,87 @@
 
 English | [中文](CHANGELOG.zh-CN.md)
 
+## v0.9.0 - 2026-10-09
+
+Recorded agent sessions, configuration history, and portable full-text evidence.
+Release notes: [v0.9.0](docs/releases/v0.9.0.md).
+
+### Added
+
+- A complete read-only online demo, bilingual user guides and `demo export`.
+  Static replay uses the existing Dashboard and preserves graph, session,
+  file-content and evidence navigation. Releases validate and deploy the same
+  website artifact alongside the portable CLI archives.
+
+- Common context capture for Claude Code and Codex, with messages, tool inputs
+  and outcomes, source-provided task, approval and configuration records.
+  Native DeepSeek Harness 0.1.7-rc.2 v4 Zstandard transcripts use the same path;
+  explicitly supported v3 transcripts and existing Kimi/Grok formats remain readable.
+- Session discovery, explicit source selection, verified resume boundaries,
+  recorded child identities, revisions, and source-scoped coverage reports.
+  Ambiguous selection does not attach a guessed conversation to a run.
+- `context` CLI commands and versioned HTTP queries for entries, saved content,
+  configuration comparison, coverage, and recorded graph links.
+- A collapsible bilingual Agent session section, graph/session navigation,
+  configuration history, and an independent paged saved-content viewer.
+- A signed real DeepSeek development-task replay, available through
+  `agentprov demo deepseek-context` without a provider account or network access.
+- Opt-in final changed-file text with `launch --file-diff`, and per-run context,
+  native-capture, artifact and correlation diagnostics.
+
+### Changed
+
+- Large context, file and peer-message bodies use bounded content chunks that
+  survive offline export/import without increasing the existing per-object
+  bundle limit. Original source records remain separately inspectable.
+- Launch reports configured capture at startup and observed coverage at exit.
+  Hook and transcript parsing share input/record budgets across selected sources.
+- Runtime presentation separates probe/TLS coverage from capture-integrity
+  diagnostics; node-level drops and pending batches retain their own scope.
+- Schema 19 preserves within-line source order. Historical context is retained
+  separately from current execution and cannot authorize or seed new activity.
+
+### Fixed
+
+- Regenerate the committed amd64 probe after the child birth-cgroup fix;
+  require real clone3/cgroup migration and durable attribution in amd64 CI.
+- Keep review branches in validation/build mode, and check release notes before
+  building. Historical compatibility CI uses pinned v0.8.2 native binaries.
+- Consume complete readiness logs so a successful match cannot fail deployment
+  through SIGPIPE on a busy KVM/K3s node.
+
+- Recognize native Codex provider and permission-profile fields in configuration
+  coverage without inferring missing restrictions or rewriting historical reports.
+- Return 404 for unknown Dashboard paths instead of silently displaying a run;
+  demo guides remain served by `agentprov demo`.
+- Compare TLS overlay backing files by device/inode identity in Linux tests,
+  accepting `/proc/1/root` aliases while rejecting unrelated and shadowed files.
+- Retain newer Claude native attachments/session state and Codex completed
+  messages, command/file-change reports and resumed thread settings, preserving
+  source identity without treating execution reports as model proposals.
+- Prevent configuration changes, source-message variants, typed tool failures,
+  completion-only dispatches and late results from losing their source semantics.
+- Preserve native argument boundaries and process-lifetime attribution limits;
+  ambiguous runtime associations remain unresolved.
+- Anchor native process lifetimes with boot ID, PID and kernel birth time;
+  preserve kernel capture timestamps and process-scoped attribution across
+  cgroup migration. Fork events report the child's actual birth cgroup,
+  including `clone3(CLONE_INTO_CGROUP)`.
+- Reduce short-lived child sampling gaps by starting record process sampling
+  before post-launch store writes.
+- Bound native shutdown draining and retain unresolved spool rows for their
+  original TTL; shutdown does not discard pending evidence to report a clean queue.
+- Export telemetry batch membership with its stored hashes so offline replay
+  can retain the batch verification available in the source store.
+
+### Compatibility
+
+- The six historical signed demo bundles, attestations and public keys are
+  unchanged. Missing historical context remains `legacy_not_recorded`.
+- Signature validity, graph integrity and capture completeness remain separate
+  results. Transcript capture is not a guarantee of TLS or kernel coverage.
+- External LLM/Jev evaluators remain optional and outside the capture path.
+
 ## v0.8.2 - 2026-09-26
 
 Portable replay and Chinese documentation and web interfaces.

@@ -58,6 +58,8 @@ var importTableOrder = []string{
 	"graph_edges",
 	"cost_samples",
 	"provenance_objects",
+	"agent_context_entries",
+	"agent_context_reports",
 }
 
 // ImportBundle re-hydrates a forensics bundle into the local store so the run can
@@ -134,6 +136,16 @@ func (s Service) ImportBundle(path string) (ImportInfo, error) {
 			return ImportInfo{}, err
 		}
 		info.Tables[table] = n
+		info.TotalRows += n
+	}
+	// The historical telemetry_batches key contains display summaries, not
+	// database rows. Only the newer full records can restore membership checks.
+	if rows := tableRows(bundle, "telemetry_batch_records"); len(rows) > 0 {
+		n, err := insertRows(tx, "telemetry_batches", rows)
+		if err != nil {
+			return ImportInfo{}, err
+		}
+		info.Tables["telemetry_batches"] = n
 		info.TotalRows += n
 	}
 

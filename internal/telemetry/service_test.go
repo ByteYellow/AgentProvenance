@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"database/sql"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -342,16 +343,16 @@ func TestIngestFilteredRejectsInvalidEventSchema(t *testing.T) {
 		EventType: "file_write",
 		Source:    "native_runtime",
 		Payload:   `{"op":"write"}`,
-	}); err == nil || !strings.Contains(err.Error(), "requires a non-traversal path or file") {
+	}); err == nil || !strings.Contains(err.Error(), "requires a nonempty path or file") {
 		t.Fatalf("expected file_write schema rejection, got %v", err)
 	}
-	// Path traversal is still rejected even though absolute host paths are allowed.
+	// NUL cannot occur inside a syscall pathname.
 	if _, err := IngestFiltered(db, IngestEvent{
 		EventType: "file_write",
 		Source:    "native_runtime",
-		Payload:   `{"path":"../escape"}`,
-	}); err == nil || !strings.Contains(err.Error(), "non-traversal") {
-		t.Fatalf("expected file_write traversal rejection, got %v", err)
+		Payload:   `{"path":"bad\u0000path"}`,
+	}); err == nil || !strings.Contains(err.Error(), "without NUL") {
+		t.Fatalf("expected file_write NUL rejection, got %v", err)
 	}
 	// Absolute host paths from system telemetry are accepted.
 	if _, err := IngestFiltered(db, IngestEvent{
@@ -360,6 +361,23 @@ func TestIngestFilteredRejectsInvalidEventSchema(t *testing.T) {
 		Payload:   `{"path":"/tmp/agentprov-demo"}`,
 	}); err != nil {
 		t.Fatalf("expected absolute host path to be accepted, got %v", err)
+	}
+}
+
+func TestRawFilePathsPreserveDotSegmentsWithoutInventingArtifacts(t *testing.T) {
+	for _, path := range []string{".", "..", "../escape", "dir/../file", "dir/..", "/tmp/../etc/passwd"} {
+		t.Run(path, func(t *testing.T) {
+			payload, _ := json.Marshal(map[string]string{"path": path})
+			if err := ValidateRawPayload("file_write", string(payload)); err != nil {
+				t.Fatalf("legitimate syscall path rejected: %v", err)
+			}
+			if p := payloadPath(string(payload)); p != "" {
+				t.Fatalf("unresolved path became workspace artifact: %q", p)
+			}
+			if p := substantiveAbsFilePath(string(payload)); p != "" {
+				t.Fatalf("unresolved path became absolute artifact: %q", p)
+			}
+		})
 	}
 }
 

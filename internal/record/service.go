@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/ids"
-	"github.com/byteyellow/agentprovenance/internal/redact"
 	"github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/substrate/state"
@@ -41,32 +41,35 @@ type Request struct {
 	// otherwise copy the entire working tree (node_modules, build output, ...) on
 	// every run, dominating startup and disk. On Linux the kernel sensor's
 	// file_write events already capture what changed at higher fidelity.
-	DisableSnapshot bool `json:"disable_snapshot"`
+	DisableSnapshot bool      `json:"disable_snapshot"`
+	Stdout          io.Writer `json:"-"`
+	Stderr          io.Writer `json:"-"`
 }
 
 type Result struct {
-	RunID            string            `json:"run_id"`
-	RolloutID        string            `json:"rollout_id"`
-	BaseSnapshotID   string            `json:"base_snapshot_id"`
-	AttemptID        string            `json:"attempt_id"`
-	SessionID        string            `json:"session_id"`
-	ToolCallID       string            `json:"tool_call_id"`
-	ProcessID        string            `json:"process_id"`
-	Workdir          string            `json:"workdir"`
-	Command          string            `json:"command"`
-	ExitCode         int               `json:"exit_code"`
-	Status           string            `json:"status"`
-	WallMS           int64             `json:"wall_ms"`
-	ChangedFiles     []string          `json:"changed_files"`
-	RootPID          int64             `json:"root_pid"`
-	Observed         []ObservedProcess `json:"observed"`
-	OrphanPolicy     string            `json:"orphan_policy"`
-	SampleIntervalMS int64             `json:"sample_interval_ms"`
-	PostRootGraceMS  int64             `json:"post_root_grace_ms"`
-	CWD              string            `json:"cwd"`
-	StartedAt        string            `json:"started_at"`
-	EndedAt          string            `json:"ended_at"`
-	FailureReason    string            `json:"failure_reason"`
+	RunID            string                `json:"run_id"`
+	RolloutID        string                `json:"rollout_id"`
+	BaseSnapshotID   string                `json:"base_snapshot_id"`
+	AttemptID        string                `json:"attempt_id"`
+	SessionID        string                `json:"session_id"`
+	ToolCallID       string                `json:"tool_call_id"`
+	ProcessID        string                `json:"process_id"`
+	Workdir          string                `json:"workdir"`
+	Command          string                `json:"command"`
+	ExitCode         int                   `json:"exit_code"`
+	Status           string                `json:"status"`
+	WallMS           int64                 `json:"wall_ms"`
+	ChangedFiles     []string              `json:"changed_files"`
+	RootPID          int64                 `json:"root_pid"`
+	Observed         []ObservedProcess     `json:"observed"`
+	OrphanPolicy     string                `json:"orphan_policy"`
+	SampleIntervalMS int64                 `json:"sample_interval_ms"`
+	PostRootGraceMS  int64                 `json:"post_root_grace_ms"`
+	CWD              string                `json:"cwd"`
+	StartedAt        string                `json:"started_at"`
+	EndedAt          string                `json:"ended_at"`
+	FailureReason    string                `json:"failure_reason"`
+	ArtifactCapture  ArtifactCaptureReport `json:"artifact_capture"`
 }
 
 type ObservedProcess struct {
@@ -198,6 +201,12 @@ func (s Service) Run(req Request) (Result, error) {
 	cmd.Dir = absWorkdir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if req.Stdout != nil {
+		cmd.Stdout = req.Stdout
+	}
+	if req.Stderr != nil {
+		cmd.Stderr = req.Stderr
+	}
 	cmd.Stdin = os.Stdin
 	// Place the child (and, by inheritance, its whole subtree) into a dedicated
 	// cgroup so independent kernel telemetry auto-joins to this scope by
@@ -226,34 +235,45 @@ func (s Service) Run(req Request) (Result, error) {
 		endedAt := time.Now().UTC().Format(time.RFC3339Nano)
 		_ = s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, err.Error())
 		_ = correlation.CloseBindingByID(s.DB, bindingID, endedAt)
+		artifactCapture := newArtifactCaptureReport()
+		if !req.DisableSnapshot {
+			artifactCapture.Status, artifactCapture.Reason = "failed", "File snapshot capture was not performed because the command could not start."
+			artifactCapture.Issues = append(artifactCapture.Issues, "command_start_failed")
+		}
+		if saveErr := s.persistArtifactReport(req.RunID, rolloutID, &artifactCapture); saveErr != nil {
+			artifactCapture.Status = "failed"
+			artifactCapture.Issues = append(artifactCapture.Issues, "report_storage_failed")
+		}
 		return Result{
-			RunID:          req.RunID,
-			RolloutID:      rolloutID,
-			BaseSnapshotID: baseSnapshotID,
-			AttemptID:      attemptID,
-			SessionID:      sessionID,
-			ToolCallID:     toolCallID,
-			ProcessID:      processID,
-			Workdir:        absWorkdir,
-			Command:        commandText,
-			ExitCode:       125,
-			Status:         "failed",
-			WallMS:         time.Since(start).Milliseconds(),
-			CWD:            absWorkdir,
-			StartedAt:      startedAt,
-			EndedAt:        endedAt,
-			FailureReason:  err.Error(),
+			RunID:           req.RunID,
+			RolloutID:       rolloutID,
+			BaseSnapshotID:  baseSnapshotID,
+			AttemptID:       attemptID,
+			SessionID:       sessionID,
+			ToolCallID:      toolCallID,
+			ProcessID:       processID,
+			Workdir:         absWorkdir,
+			Command:         commandText,
+			ExitCode:        125,
+			Status:          "failed",
+			WallMS:          time.Since(start).Milliseconds(),
+			CWD:             absWorkdir,
+			StartedAt:       startedAt,
+			EndedAt:         endedAt,
+			FailureReason:   err.Error(),
+			ArtifactCapture: artifactCapture,
 		}, nil
 	}
 	pid := int64(cmd.Process.Pid)
+	// Start observing immediately; post-spawn database writes can outlast a
+	// short-lived child, especially while another collector holds the writer.
+	stopSampler := make(chan struct{})
+	samplerDone := make(chan []ObservedProcess, 1)
+	go sampleProcessTree(pid, sampleInterval, stopSampler, samplerDone)
 	_, _ = s.DB.Exec(`UPDATE execution_context_bindings SET root_pid = ?, pid = ? WHERE id = ?`, pid, pid, bindingID)
 	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, pid, ppid, payload, created_at)
 		VALUES (?, ?, ?, ?, ?, 'record', 'exec_start', ?, ?, ?, ?)`,
 		ids.New("evt"), req.RunID, sessionID, toolCallID, processID, pid, int64(os.Getpid()), fmt.Sprintf(`{"attempt_id":%q,"command":%q,"mode":"zero_sdk"}`, attemptID, commandText), startedAt)
-
-	stopSampler := make(chan struct{})
-	samplerDone := make(chan []ObservedProcess, 1)
-	go sampleProcessTree(pid, sampleInterval, stopSampler, samplerDone)
 
 	err = cmd.Wait()
 	postRootGraceStarted := time.Now()
@@ -273,13 +293,13 @@ func (s Service) Run(req Request) (Result, error) {
 	endedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, proc := range observed {
 		_, _ = correlation.RecordBinding(s.DB, correlation.Binding{
-			RunID:         req.RunID,
-			SessionID:     sessionID,
-			AttemptID:     attemptID,
-			ToolCallID:    toolCallID,
-			ProcessID:     processID,
-			ContainerID:   "agentprov-record-" + attemptID,
-			CgroupID:      scopeCgroupID,
+			RunID:      req.RunID,
+			SessionID:  sessionID,
+			AttemptID:  attemptID,
+			ToolCallID: toolCallID,
+			ProcessID:  processID,
+			// Polling establishes a PID window, not ownership of every process
+			// in its cgroup. Native lifetime bindings survive actual migration.
 			RootPID:       pid,
 			PID:           proc.PID,
 			StartedAt:     proc.FirstSeen,
@@ -312,18 +332,33 @@ func (s Service) Run(req Request) (Result, error) {
 		}
 	}
 	var changed []string
+	artifactCapture := newArtifactCaptureReport()
 	if !req.DisableSnapshot {
 		var diffErr error
 		changed, diffErr = changedFiles(baseDir, absWorkdir)
 		if diffErr != nil {
 			changed = append(changed, "diff_error:"+diffErr.Error())
+			artifactCapture.Status, artifactCapture.Reason = "failed", "Changed files could not be enumerated."
+		} else {
+			artifactCapture = s.captureArtifacts(req.RunID, rolloutID, absWorkdir, changed)
 		}
+	}
+	artifactByPath := make(map[string]CapturedArtifact, len(artifactCapture.Files))
+	for _, item := range artifactCapture.Files {
+		artifactByPath[item.Path] = item
 	}
 	for _, path := range changed {
 		if strings.HasPrefix(path, "diff_error:") {
 			continue
 		}
-		_, _ = telemetry.IngestFiltered(s.DB, telemetry.IngestEvent{
+		payload := map[string]any{"path": path, "op": "record_diff", "mode": "zero_sdk"}
+		if item, ok := artifactByPath[path]; ok {
+			payload["artifact_ref"], payload["content_state"] = item.Ref, item.ContentState
+		} else {
+			payload["content_state"] = "collection_limit"
+		}
+		raw, _ := json.Marshal(payload)
+		_, ingestErr := telemetry.IngestFiltered(s.DB, telemetry.IngestEvent{
 			RunID:       req.RunID,
 			RolloutID:   rolloutID,
 			AttemptID:   attemptID,
@@ -340,15 +375,19 @@ func (s Service) Run(req Request) (Result, error) {
 			Timestamp:   endedAt,
 			Source:      "record_file_diff",
 			EventType:   "file_write",
-			Payload:     fmt.Sprintf(`{"path":%q,"op":"record_diff","mode":"zero_sdk"}`, path),
+			Payload:     string(raw),
 		})
-		// Objectify the changed file's CONTENT as an artifact object so the
-		// dashboard Side Panel can preview "what the agent actually produced"
-		// (the file_write event above only records that it changed, not the
-		// bytes). Previously a manual post-capture script did this and was easy
-		// to forget -- making it built-in is the root fix for empty Artifacts /
-		// no previewable products.
-		s.objectifyArtifact(req.RunID, rolloutID, absWorkdir, path)
+		if ingestErr != nil && len(artifactCapture.Issues) == 0 {
+			artifactCapture.Issues = append(artifactCapture.Issues, "file_event_write_failed")
+			artifactCapture.Status = "partial"
+		}
+	}
+	if err := s.persistArtifactReport(req.RunID, rolloutID, &artifactCapture); err != nil {
+		artifactCapture.Status = "failed"
+		artifactCapture.Issues = append(artifactCapture.Issues, "report_storage_failed")
+	}
+	if (artifactCapture.Status == "partial" || artifactCapture.Status == "failed") && req.Stderr != nil {
+		fmt.Fprintf(req.Stderr, "record: artifact capture %s (stored=%d, omitted=%d, failed=%d)\n", artifactCapture.Status, artifactCapture.Stored, artifactCapture.Omitted, artifactCapture.Failed)
 	}
 	_, _ = s.DB.Exec(`UPDATE processes SET status = ?, exit_code = ?, ended_at = ? WHERE id = ?`, processStatus(status), exitCode, endedAt, processID)
 	_, _ = s.DB.Exec(`UPDATE sessions SET status = 'stopped', updated_at = ? WHERE id = ?`, endedAt, sessionID)
@@ -384,6 +423,7 @@ func (s Service) Run(req Request) (Result, error) {
 		CWD:              absWorkdir,
 		StartedAt:        startedAt,
 		EndedAt:          endedAt,
+		ArtifactCapture:  artifactCapture,
 	}, nil
 }
 
@@ -575,73 +615,6 @@ func (s Service) markFailed(runID, rolloutID, attemptID, sessionID, toolCallID, 
 		VALUES (?, ?, ?, ?, ?, 'record', 'exec_error', ?, ?)`,
 		ids.New("evt"), runID, sessionID, toolCallID, processID, fmt.Sprintf(`{"reason":%q}`, reason), now)
 	return nil
-}
-
-// maxObjectifyBytes bounds how large a changed file we objectify for preview.
-// The Side Panel reads up to 8MiB, but storing every large/binary blob inline
-// would bloat the object store; files above this cap keep their file_write event
-// (so the change is still recorded) but are not content-objectified.
-const maxObjectifyBytes = 1 << 20
-
-// objectifyArtifact stores a changed file's content as a content-addressed
-// "artifact" provenance object keyed to the lens node id (workspace_file/<rel>),
-// so the dashboard resolves and previews it. Best-effort: any failure (missing,
-// oversized, unreadable) is skipped silently -- the file_write event still
-// records that the file changed.
-//
-// The envelope is written inline (not via provenance.ObjectStore) to avoid an
-// import cycle: record -> provenance would cycle because provenance's tests
-// import record. It reproduces the exact schema the dashboard preview unwraps
-// (schema/type/payload.content) and that `graph verify` accepts -- the same
-// canonical, key-sorted JSON the object store and the prior manual objectify
-// script produced.
-func (s Service) objectifyArtifact(runID, rolloutID, workdir, rel string) {
-	fp := filepath.Join(workdir, rel)
-	info, err := os.Stat(fp)
-	if err != nil || info.IsDir() || info.Size() > maxObjectifyBytes {
-		return
-	}
-	data, err := os.ReadFile(fp)
-	if err != nil {
-		return
-	}
-	// json.Marshal sorts map keys, matching the canonical form the object store
-	// hashes; the hash is over these exact bytes, so verify stays consistent.
-	raw, err := json.Marshal(map[string]any{
-		"schema":    "agentprov.provenance.object.v1",
-		"type":      "artifact",
-		"source_id": "workspace_file/" + rel,
-		"run_id":    runID,
-		"payload":   map[string]any{"path": rel, "size": len(data), "content": string(data)},
-	})
-	if err != nil {
-		return
-	}
-	// Mask secrets before the file content is hashed and stored: an agent can
-	// write a key into a file, and this content becomes a previewable, exportable,
-	// content-addressed object. Redact before the hash so the object stays
-	// self-consistent (stored hash matches the stored, masked bytes on import).
-	if red, changed := redact.Redact(string(raw)); changed {
-		raw = []byte(red)
-	}
-	sum := sha256.Sum256(raw)
-	h := hex.EncodeToString(sum[:])
-	provRoot := s.Paths.Provenance
-	if provRoot == "" {
-		provRoot = filepath.Join(s.Paths.Root, "provenance")
-	}
-	objDir := filepath.Join(provRoot, "objects", "sha256", h[:2])
-	if err := os.MkdirAll(objDir, 0o755); err != nil {
-		return
-	}
-	objPath := filepath.Join(objDir, h+".json")
-	if err := os.WriteFile(objPath, raw, 0o644); err != nil {
-		return
-	}
-	_, _ = s.DB.Exec(`INSERT OR REPLACE INTO provenance_objects
-		(hash, object_type, source_id, run_id, rollout_id, parent_hashes, path, size_bytes, created_at)
-		VALUES (?, 'artifact', ?, ?, ?, '', ?, ?, ?)`,
-		"sha256:"+h, "workspace_file/"+rel, runID, rolloutID, objPath, len(raw), time.Now().UTC().Format(time.RFC3339Nano))
 }
 
 func changedFiles(baseDir, workdir string) ([]string, error) {

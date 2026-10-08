@@ -1,0 +1,621 @@
+openapi: 3.1.0
+info:
+  title: AgentProvenance recorded context API
+  version: "1.5"
+  description: >
+    Read-only recorded evidence. Source assertions are not kernel observations
+    or inferred authorizations. The dashboard exposes the same routes under
+    /api/context instead of /v1/context. Native identifiers and status codes are
+    language-independent. Existing records may lack newer source fields.
+servers:
+  - url: http://127.0.0.1:8574
+security: [{bearerAuth: []}, {}]
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    run: {name: run, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 512}}
+  schemas:
+    NullableCount:
+      type: [integer, "null"]
+      minimum: 0
+      description: Null means not known; zero means observed zero within the stated processing range.
+    Source:
+      type: object
+      required: [id, harness, session_id, parser_version, binding]
+      properties:
+        id: {type: string}
+        harness: {type: string}
+        channel: {type: string, examples: [transcript, hooks]}
+        session_id: {type: string}
+        parent_session_id: {type: string}
+        agent_id: {type: string}
+        path: {type: string, description: Source location at capture; never required for offline content reads.}
+        parser_version: {type: string}
+        application_version: {type: string}
+        format_version: {type: string}
+        binding: {type: string, examples: [explicit, exact, matched, ambiguous, unknown], description: Matched is unique source metadata and time-window attribution, not kernel-proven identity.}
+        binding_evidence: {type: array, items: {type: string}}
+        workdir: {type: string}
+    Counts:
+      type: object
+      required: [discovered, matched, read, parsed, stored, duplicates, truncated, failed, unrecognized, deferred]
+      properties:
+        discovered: {$ref: '#/components/schemas/NullableCount'}
+        matched: {$ref: '#/components/schemas/NullableCount'}
+        read: {$ref: '#/components/schemas/NullableCount'}
+        parsed: {$ref: '#/components/schemas/NullableCount'}
+        stored: {$ref: '#/components/schemas/NullableCount'}
+        duplicates: {$ref: '#/components/schemas/NullableCount'}
+        truncated: {$ref: '#/components/schemas/NullableCount'}
+        failed: {$ref: '#/components/schemas/NullableCount'}
+        unrecognized: {$ref: '#/components/schemas/NullableCount'}
+        deferred: {$ref: '#/components/schemas/NullableCount'}
+    Issue:
+      type: object
+      required: [code]
+      properties:
+        code: {type: string}
+        line: {type: integer, minimum: 1}
+        field: {type: string}
+        scope: {type: string, enum: [prior_context, current_execution], description: Identifies retained history or the selected execution range when present.}
+      description: Bounded diagnostics contain no source message bodies or secrets.
+    MissingSnapshotFields:
+      type: array
+      items: {type: string}
+      description: >
+        Absent source fields in this processing range, not effective permissions.
+        Current parsers check task, configuration, approval, approval_decision and
+        configuration.model/provider/application_version/workdir/permission_mode/
+        approval_policy/sandbox_policy/directory_restrictions/network_restrictions/
+        mcp_servers/tools/skills/plugins (each configuration field uses its own
+        configuration. prefix). Explicit null/false/empty collections remain
+        recorded values. configuration.change_history_completeness indicates
+        that source snapshots do not establish exhaustive change history; it is
+        retained even when all checked configuration values are present.
+        Older reports retain their original checks; absence of a
+        missing-field code is not proof of exhaustive coverage or valid permission.
+    Coverage:
+      type: object
+      required: [schema_version, id, run_id, source, status, observed_at, counts, issues, missing_fields]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        id: {type: string}
+        run_id: {type: string}
+        source: {$ref: '#/components/schemas/Source'}
+        status:
+          type: string
+          enum: [disabled, no_input, empty, ok, partial, failed, ambiguous, legacy_not_recorded]
+        observed_at: {type: string, description: Processing observation timestamp, empty for legacy unknowns.}
+        last_success_at: {type: string}
+        started_at: {type: string, description: Earliest available source timestamp in the processing range.}
+        ended_at: {type: string, description: Latest available source timestamp in the processing range.}
+        first_line: {type: integer, minimum: 1}
+        last_line: {type: integer, minimum: 1}
+        counts: {$ref: '#/components/schemas/Counts'}
+        issues: {type: array, items: {$ref: '#/components/schemas/Issue'}}
+        missing_fields: {$ref: '#/components/schemas/MissingSnapshotFields'}
+        object_hash: {type: string}
+        prior_context: {$ref: '#/components/schemas/PriorContextRange'}
+      description: Counts and timestamps describe the current selected range. An optional prior_context reports the retained prefix separately; status accounts for issues in either range.
+    PriorContextRange:
+      type: object
+      required: [first_line, last_line, counts, missing_fields]
+      properties:
+        first_line: {type: integer, minimum: 1}
+        last_line: {type: integer, minimum: 0}
+        started_at: {type: string}
+        ended_at: {type: string}
+        counts: {$ref: '#/components/schemas/Counts'}
+        missing_fields: {$ref: '#/components/schemas/MissingSnapshotFields'}
+      description: History read before the resume cursor. An empty current range remains empty even when history is retained. An absent range does not establish that the harness had no prior history.
+    ContentRef:
+      type: object
+      required: [bytes, redacted, state]
+      properties:
+        ref: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        bytes: {$ref: '#/components/schemas/NullableCount'}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        media_type: {type: string}
+        redacted: {type: boolean}
+        state: {type: string, enum: [stored, unavailable, omitted]}
+        reason: {type: string, examples: [source_not_recorded, capture_limit]}
+    Entry:
+      type: object
+      required: [schema_version, id, run_id, source, source_key, sequence, kind, content, raw_content]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        id: {type: string}
+        run_id: {type: string}
+        source: {$ref: '#/components/schemas/Source'}
+        source_key: {type: string}
+        sequence: {type: integer, minimum: 0, description: Physical source line order, not a cross-source clock.}
+        source_ordinal: {type: integer, minimum: 0, description: Normalized record position within its physical line. Positive when recorded; zero or absent means an older producer did not record it.}
+        execution_scope:
+          type: string
+          enum: [current_execution, prior_context]
+          description: Optional source-position scope. Prior context cannot project current tool/model calls or imply current authorization. Current execution means within the selected source range, not independently verified runtime execution. Absent on older entries and explicit records without a recorded boundary.
+        kind: {type: string, enum: [message, tool_call, tool_result, task, configuration, approval, session]}
+        role: {type: string}
+        agent_id: {type: string}
+        tool_call_id: {type: string}
+        tool_name: {type: string}
+        status:
+          type: string
+          description: >
+            Source outcome or representation; requested is not approved and
+            returned does not assert success. source_message_event and
+            source_reasoning_event preserve Codex event forms separately from
+            response_item records. Equal text does not merge source identities.
+            model_proposal is a source model decision, not execution proof.
+            completion_only has no recorded start and cannot seed runtime
+            attribution. context_replacement preserves a compacted tool result
+            without overwriting the original outcome or creating a new execution.
+        recorded_at: {type: string}
+        content: {$ref: '#/components/schemas/ContentRef'}
+        raw_content: {$ref: '#/components/schemas/ContentRef'}
+        missing_fields: {type: array, items: {type: string}}
+        evidence_refs: {type: array, items: {type: string}}
+        object_hash: {type: string}
+        created_at: {type: string}
+    EntryPage:
+      type: object
+      required: [schema_version, run_id, entries, has_more, limit]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        run_id: {type: string}
+        entries: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/Entry'}}
+        next_cursor: {type: string, description: Opaque continuation tied to this run and filters.}
+        has_more: {type: boolean}
+        limit: {type: integer, minimum: 1, maximum: 200}
+    Overview:
+      type: object
+      required: [schema_version, run_id, coverage, messages, tool_calls, tool_results, snapshots, has_more_sources, runtime_coverage]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        run_id: {type: string}
+        coverage: {type: array, maxItems: 256, items: {$ref: '#/components/schemas/Coverage'}}
+        messages:
+          allOf: [{$ref: '#/components/schemas/NullableCount'}]
+          description: Saved message records including source-event representations and source-provided reasoning, not inferred unique messages or conversation turns.
+        tool_calls: {$ref: '#/components/schemas/NullableCount'}
+        tool_results: {$ref: '#/components/schemas/NullableCount'}
+        snapshots: {$ref: '#/components/schemas/NullableCount'}
+        has_more_sources: {type: boolean}
+        runtime_coverage: {$ref: '#/components/schemas/RuntimeCoverage'}
+      description: Latest report per source plus stored record counts including retained prior context, not estimates of current execution or uncaptured activity. Entry execution_scope and separate prior_context coverage distinguish the ranges.
+    RuntimeCoverage:
+      type: object
+      required: [schema_version, run_id, capture, correlation]
+      properties:
+        schema_version: {const: agentprovenance.runtime_coverage/v1}
+        run_id: {type: string}
+        capture: {$ref: '#/components/schemas/RuntimeCapture'}
+        correlation: {$ref: '#/components/schemas/RuntimeCorrelationCoverage'}
+      description: Saved capture diagnostics and current stored-event scope fields, neither a signature result nor proof of complete activity capture.
+    RuntimeCapture:
+      type: object
+      required: [schema_version, run_id, status, scope, kernel_state, node_counter_delta, node_pending_events, node_queued_bytes, run_dropped_events, run_impact, issues]
+      properties:
+        schema_version: {const: agentprovenance.runtime_capture/v1}
+        run_id: {type: string}
+        status: {type: string, enum: [disabled, no_input, ok, partial, failed, legacy_not_recorded]}
+        scope: {type: string, enum: [node_capture_during_run, unknown]}
+        kernel_state: {type: string, enum: [disabled, unavailable, observed, unknown]}
+        started_at: {type: string, format: date-time}
+        ended_at: {type: string, format: date-time}
+        node_counter_delta:
+          type: [object, "null"]
+          additionalProperties: {type: integer, minimum: 0}
+          description: Node-wide increments between capture snapshots, not per-run losses. Missing/reset counters are unknown; null means no usable interval measurement.
+        node_pending_events: {$ref: '#/components/schemas/NullableCount'}
+        node_queued_bytes: {$ref: '#/components/schemas/NullableCount'}
+        run_dropped_events: {type: "null", description: No run-specific loss measurement is available; never apportion node losses to a run.}
+        run_impact: {type: string, enum: [unknown, no_node_loss_reported]}
+        capabilities_start: {$ref: '#/components/schemas/ProbeSnapshot'}
+        capabilities_end: {$ref: '#/components/schemas/ProbeSnapshot'}
+        issues: {type: array, items: {type: string}}
+        limitations: {type: array, items: {type: string}, description: Optional probe or TLS visibility limits, separate from measured loss or processing errors. Absent in older reports.}
+        rejection_examples:
+          type: array
+          maxItems: 64
+          description: Bounded node-level validation diagnostics observed during capture, not per-run loss counts. No rejected bodies, paths or command arguments.
+          items:
+            type: object
+            required: [timestamp, event_type, pid, cgroup_id, reason]
+            properties:
+              timestamp: {type: string, maxLength: 40}
+              event_type: {type: string, maxLength: 64}
+              pid: {type: integer}
+              cgroup_id: {type: string, maxLength: 32}
+              process_instance_id: {type: string, maxLength: 80}
+              reason: {type: string, maxLength: 256}
+        ref: {type: string, description: Saved capture report hash, verified on read and portable in the bundle.}
+      description: >
+        Written by launch before sealing. Endpoint snapshots do not prove continuous
+        collector health or complete TLS coverage. Disabled kernel capture does not
+        disable recorder events. Missing historical reports remain legacy_not_recorded;
+        querying or importing a run never consults the current host's sensor status.
+    ProbeSnapshot:
+      type: object
+      required: [schema_version, updated_at, ready, status, probes, tls_discovery]
+      properties:
+        schema_version: {const: agentprovenance.sensor_capabilities/v1}
+        updated_at: {type: string, format: date-time}
+        ready: {type: boolean}
+        status: {type: string, enum: [starting, ready, degraded, stopped, failed]}
+        reason: {type: string}
+        probes:
+          type: array
+          items:
+            type: object
+            required: [name, category, required, status]
+            properties:
+              name: {type: string}
+              category: {type: string}
+              target: {type: string}
+              required: {type: boolean}
+              status: {type: string, enum: [attached, detached, failed, disabled, unsupported, not_applicable]}
+              reason: {type: string}
+        tls_discovery:
+          type: object
+          properties:
+            enabled: {type: boolean}
+            scan_interval_ms: {type: integer}
+            max_targets: {type: integer}
+            max_processes_per_scan: {type: integer}
+            active_targets: {type: integer}
+            scan_complete: {type: boolean}
+            processes_scanned: {type: integer}
+            unreadable_processes: {type: integer}
+            unresolved_mounts: {type: integer}
+            truncated_maps: {type: integer}
+            skipped_targets: {type: integer}
+            unsupported_executables: {type: integer}
+            reason: {type: string}
+            limitations: {type: [array, "null"], items: {type: string}}
+    RuntimeCorrelationCoverage:
+      type: object
+      required: [schema_version, run_id, result_set_id, page_hash, summary, missing_fields, by_source, by_type, next_steps]
+      properties:
+        schema_version: {const: agentprovenance.observability_coverage/v1}
+        run_id: {type: string}
+        result_set_id: {type: string}
+        page_hash: {type: string}
+        summary:
+          type: object
+          required: [runtime_events, fully_correlated, missing_session, missing_tool_call, missing_process, fully_correlated_ratio, tool_call_coverage_ratio, process_coverage_ratio, correlation_gap_count]
+          properties:
+            runtime_events: {type: integer, minimum: 0}
+            fully_correlated: {type: integer, minimum: 0, description: All three scope IDs are present; not proof of correct agent attribution.}
+            missing_session: {type: integer, minimum: 0}
+            missing_tool_call: {type: integer, minimum: 0}
+            missing_process: {type: integer, minimum: 0}
+            fully_correlated_ratio: {type: number, minimum: 0, maximum: 1}
+            tool_call_coverage_ratio: {type: number, minimum: 0, maximum: 1}
+            process_coverage_ratio: {type: number, minimum: 0, maximum: 1}
+            correlation_gap_count: {type: integer, minimum: 0}
+        missing_fields: {type: object, additionalProperties: {type: integer, minimum: 0}}
+        by_source: {type: object, additionalProperties: {type: integer, minimum: 0}}
+        by_type: {type: object, additionalProperties: {type: integer, minimum: 0}}
+        next_steps: {type: array, items: {type: string}}
+        gaps:
+          type: array
+          maxItems: 25
+          items:
+            type: object
+            required: [event_id, source, type, missing, correlation_confidence, created_at, suggested_binding]
+            properties:
+              event_id: {type: string}
+              raw_event_id: {type: string}
+              source: {type: string}
+              type: {type: string}
+              missing: {type: array, items: {type: string}}
+              correlation_method: {type: string}
+              correlation_confidence: {type: number}
+              container_id: {type: string}
+              cgroup_id: {type: string}
+              pid: {type: integer}
+              ppid: {type: integer}
+              created_at: {type: string}
+              suggested_binding: {type: string}
+      description: All stored runtime event rows in this run, with at most 25 gap examples in the context overview. Ratios are zero when the stored event count is zero, not an assessment of unobserved activity.
+    ContentPage:
+      type: object
+      required: [schema_version, run_id, ref, content, media_type, offset, next_offset, total_bytes, has_more, sha256, redacted]
+      properties:
+        schema_version: {const: agentprovenance.content_page/v1}
+        run_id: {type: string}
+        ref: {type: string}
+        content: {type: string, description: Redacted stored bytes decoded as UTF-8; never current disk content.}
+        media_type: {type: string}
+        offset: {type: integer, minimum: 0}
+        next_offset: {type: integer, minimum: 0}
+        total_bytes: {type: integer, minimum: 0, maximum: 33554432}
+        has_more: {type: boolean}
+        sha256: {type: string}
+        redacted: {type: boolean}
+    ArtifactPage:
+      type: object
+      required: [schema_version, kind, content_state, mode, size, truncated, redacted, offset, next_offset, total_bytes, has_more]
+      properties:
+        schema_version: {const: agentprovenance.artifact_page/v1}
+        kind: {type: string, enum: [text, diff, binary, unavailable]}
+        ref: {type: string, description: 'Exact saved object hash, distinct from the displayed body hash.'}
+        source: {type: string, enum: [object, db]}
+        content_ref: {type: string, description: Chunked text manifest when present.}
+        content_state: {type: string, examples: [stored, legacy_not_recorded, ambiguous, unavailable, integrity_failure, read_limit, binary, omitted, source_missing, binary_omitted, collection_limit, failed]}
+        integrity: {type: string, enum: [object_hash_verified, database_record], description: Not a signature claim or a claim about capture completeness.}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$', description: 'Hash of the whole redacted display body, including localized presentation headings in body mode.'}
+        size: {type: integer, minimum: 0, description: Legacy size field; use nullable total_bytes to distinguish unknown from zero.}
+        mime: {type: string}
+        mode: {type: string, enum: [body, raw]}
+        truncated: {type: boolean, description: Compatibility flag for a partial preview; has_more and next_offset permit reading the remaining saved text.}
+        redacted: {type: boolean}
+        content: {type: string, description: 'One UTF-8 page, at most 262144 bytes. Missing for unavailable content or an empty page.'}
+        reason: {type: string}
+        offset: {type: integer, minimum: 0}
+        next_offset: {type: integer, minimum: 0}
+        total_bytes: {$ref: '#/components/schemas/NullableCount'}
+        has_more: {type: boolean}
+        versions:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [ref, source_id]
+            properties:
+              ref: {type: string}
+              source_id: {type: string}
+        versions_has_more: {type: boolean}
+      description: >
+        Saved-only artifact or database-record preview. Legacy objects retain an
+        8 MiB read budget; new stored text can span 32 MiB using bounded chunks.
+        Multiple revisions require exact hash selection; current workspace files
+        are never used to replace missing historical content. Raw mode shows the
+        saved envelope, or the explicitly identified database record fields.
+    CapturedArtifact:
+      type: object
+      required: [path, source_bytes, read_bytes, content_state, content_bytes, redacted, captured_at, capture_method]
+      properties:
+        path: {type: string, description: Workspace-relative selected path.}
+        source_bytes: {$ref: '#/components/schemas/NullableCount'}
+        read_bytes: {type: integer, minimum: 0}
+        content_state: {type: string, enum: [stored, source_missing, binary_omitted, collection_limit, unavailable, failed]}
+        content_ref: {type: string, description: Saved text manifest; absent when the body was omitted or its transaction failed.}
+        content_bytes: {$ref: '#/components/schemas/NullableCount'}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$', description: Full redacted body hash.}
+        redacted: {type: boolean}
+        captured_at: {type: string, format: date-time}
+        capture_method: {const: post_execution_snapshot}
+        reason: {type: string}
+        reason_code: {type: string}
+        ref: {type: string, description: Descriptor hash in the report; not stored recursively inside its own payload.}
+      description: Final changed-file state, not an intermediate-write history or atomic filesystem snapshot.
+    ArtifactCaptureReport:
+      type: object
+      required: [schema_version, status, method, candidates, stored, omitted, failed, stored_bytes, read_bytes, file_limit, per_file_byte_limit, total_byte_limit]
+      properties:
+        schema_version: {const: agentprovenance.artifact_capture/v1}
+        status: {type: string, enum: [disabled, empty, ok, partial, failed]}
+        method: {const: post_execution_snapshot}
+        candidates: {$ref: '#/components/schemas/NullableCount'}
+        stored: {type: integer, minimum: 0}
+        omitted: {type: integer, minimum: 0}
+        failed: {type: integer, minimum: 0}
+        stored_bytes: {type: integer, minimum: 0}
+        read_bytes: {type: integer, minimum: 0, description: Includes at most one extra limit-detection byte beyond the total text-read budget.}
+        file_limit: {type: integer, const: 512}
+        per_file_byte_limit: {type: integer, const: 33554432}
+        total_byte_limit: {type: integer, const: 134217728}
+        reason: {type: string}
+        issues: {type: array, items: {type: string}}
+        ref: {type: string, description: Report object hash in CLI JSON; not stored recursively in its own payload.}
+        files: {type: array, maxItems: 512, items: {$ref: '#/components/schemas/CapturedArtifact'}}
+      description: >
+        Embedded as artifact_capture in record/launch JSON and persisted as an
+        artifact_capture object in the bundle. Null candidates mean disabled or
+        unknown selection, not zero changed files. Budgets apply to changed-file
+        text capture, not baseline workspace snapshot/comparison I/O. Counts refer
+        to saved/omitted/failed bodies; issues can separately report event/report
+        storage failures. No additional HTTP route is implied by this schema.
+    RuntimeCorrelationReport:
+      type: object
+      required: [schema_version, run_id, method, confidence, status, input_complete, observed_at, tool_calls, unclocked_calls, runtime_events, exec_events, matched_execs, inherited_execs, ambiguous_execs, unknown_scope_events, invalid_events, edges]
+      properties:
+        schema_version: {const: agentprovenance.runtime_correlation/v1}
+        run_id: {type: string}
+        method: {const: agentprov.command_time_process/v2}
+        confidence: {type: number, const: 0.8, description: Attribution tier, not a calibrated probability.}
+        status: {type: string, enum: [no_input, empty, ok, partial, ambiguous, failed]}
+        input_complete: {type: boolean, description: Both bounded input scans completed; not a sensor completeness assertion.}
+        observed_at: {type: string, format: date-time}
+        tool_calls: {type: integer, minimum: 0}
+        unclocked_calls: {type: integer, minimum: 0}
+        runtime_events: {type: integer, minimum: 0}
+        exec_events: {type: integer, minimum: 0}
+        matched_execs: {type: integer, minimum: 0}
+        inherited_execs: {type: integer, minimum: 0, description: Included in matched_execs.}
+        ambiguous_execs: {type: integer, minimum: 0}
+        unknown_scope_events: {type: integer, minimum: 0}
+        invalid_events: {type: integer, minimum: 0}
+        edges: {type: integer, minimum: 0, description: Published edges from this pass; zero if replacement rolled back.}
+        issues: {type: array, items: {type: string}}
+        ref: {type: string, description: Report object hash in launch JSON; absent from its own stored payload.}
+      description: >
+        Embedded in launch JSON and saved as a runtime_correlation object. Counts
+        cover only eligible inputs read by this pass; they are partial observations
+        when input_complete is false, not totals or estimated lost events. Derived
+        command/time/process associations are distinct from kernel identity proof.
+        No new HTTP route is implied. Transcript counters remain separate.
+    EntryLinks:
+      type: object
+      required: [schema_version, run_id, entry_id, basis, links, has_more]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        run_id: {type: string}
+        entry_id: {type: string}
+        basis: {const: recorded_graph_edge}
+        links:
+          type: array
+          maxItems: 200
+          items:
+            type: object
+            required: [node_id, relation]
+            properties:
+              node_id: {type: string}
+              relation: {type: string, enum: [context_tool_call, context_tool_result]}
+        has_more: {type: boolean}
+        reason: {type: string, enum: [no_recorded_graph_link]}
+      description: Existing graph destinations for this record, not a new execution or identity inference.
+    SnapshotValue:
+      type: object
+      required: [present, truncated]
+      properties:
+        present: {type: boolean, description: False means absent in this record, not denied or revoked.}
+        preview: {type: string, maxLength: 512, description: Bounded UTF-8 preview of the recorded redacted JSON value.}
+        truncated: {type: boolean}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$', description: Hash of the full JSON value before preview truncation.}
+    SnapshotChange:
+      type: object
+      required: [path, before, after]
+      properties:
+        path: {type: string, description: JSON Pointer under content or status.}
+        before: {$ref: '#/components/schemas/SnapshotValue'}
+        after: {$ref: '#/components/schemas/SnapshotValue'}
+    SnapshotComparison:
+      type: object
+      required: [schema_version, scope, status, left, right, changes, has_more]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        scope: {const: recorded_values}
+        status: {type: string, enum: [same, different, unknown]}
+        left: {$ref: '#/components/schemas/Entry'}
+        right: {$ref: '#/components/schemas/Entry'}
+        changes: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/SnapshotChange'}}
+        has_more: {type: boolean, description: Additional differences omitted by the bounded comparison.}
+        reason: {type: string, enum: [content_not_recorded, comparison_content_limit]}
+      description: >
+        Derived comparison of recorded values and source outcome status, never
+        an effective-permissions decision. Source timestamps and content hashes
+        remain available on both entries. Bodies over 1 MiB or not recorded
+        yield unknown. Nested differences stop at depth 32; previews at 512
+        bytes and changes at 200. Full evidence remains separately readable.
+    Error:
+      type: object
+      required: [schema_version, error]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string, enum: [invalid_argument, run_not_found, content_not_found, store_unavailable, evidence_read_failed]}
+            message: {type: string}
+  responses:
+    InvalidArgument:
+      description: Invalid run, cursor, page limit, or UTF-8 byte offset.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    NotFound:
+      description: Run or run-scoped content reference does not exist.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    EvidenceFailure:
+      description: Stored object could not be read or its hash did not verify.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    StoreUnavailable:
+      description: Database unavailable; never reported as empty or missing evidence.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+paths:
+  /api/artifact:
+    servers: [{url: 'http://127.0.0.1:7396'}]
+    get:
+      operationId: readSavedArtifactPage
+      summary: Read a page of saved graph content from the local Dashboard
+      security: []
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: node, in: query, required: true, schema: {type: string, minLength: 1}}
+        - {name: mode, in: query, schema: {type: string, enum: [body, raw], default: body}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 4, maximum: 262144, default: 65536}}
+        - {name: view_lang, in: query, schema: {type: string, examples: [en, zh-CN]}, description: Localizes generated headings only; keep fixed while paging.}
+      responses:
+        '200': {description: Saved text page or an explicit unavailable/ambiguous state, content: {application/json: {schema: {$ref: '#/components/schemas/ArtifactPage'}}}}
+        '400': {description: 'Invalid required parameters, mode or UTF-8 page boundary'}
+        '500': {description: Evidence index unavailable; not treated as missing content}
+  /v1/context/overview:
+    get:
+      operationId: agent_context_overview
+      summary: Source coverage and stored context counts
+      parameters: [{$ref: '#/components/parameters/run'}]
+      responses:
+        '200': {description: Recorded coverage, content: {application/json: {schema: {$ref: '#/components/schemas/Overview'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+        '503': {$ref: '#/components/responses/StoreUnavailable'}
+  /v1/context/entries:
+    get:
+      operationId: agent_context_entries
+      summary: Cursor-paged recorded context
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: session, in: query, schema: {type: string}}
+        - {name: source, in: query, schema: {type: string}}
+        - {name: kind, in: query, schema: {type: string}}
+        - {name: tool_call, in: query, schema: {type: string}}
+        - {name: entry, in: query, schema: {type: string, maxLength: 512}, description: Exact record identity; use revisions=true for earlier versions.}
+        - {name: node, in: query, schema: {type: string, maxLength: 512}, description: Exact stored context/tool/runtime graph relationships only; never command or PID guessing.}
+        - {name: group, in: query, schema: {type: string, enum: [conversation, configuration]}}
+        - {name: revisions, in: query, schema: {type: boolean, default: false}}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 8192}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200': {description: Page with immutable evidence references, content: {application/json: {schema: {$ref: '#/components/schemas/EntryPage'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+        '503': {$ref: '#/components/responses/StoreUnavailable'}
+  /v1/context/content:
+    get:
+      operationId: agent_context_content
+      summary: Read verified stored text without the source machine
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: ref, in: query, required: true, schema: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}, description: Redacted UTF-8 byte offset; use returned next_offset.}
+        - {name: limit, in: query, schema: {type: integer, minimum: 4, maximum: 262144, default: 65536}}
+      responses:
+        '200': {description: Hash-checked content page, content: {application/json: {schema: {$ref: '#/components/schemas/ContentPage'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+        '503': {$ref: '#/components/responses/StoreUnavailable'}
+  /v1/context/links:
+    get:
+      operationId: agent_context_links
+      summary: Existing graph destinations for one recorded context entry
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: entry, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 512}}
+      responses:
+        '200': {description: Recorded links or an explicit missing-link reason, content: {application/json: {schema: {$ref: '#/components/schemas/EntryLinks'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+        '503': {$ref: '#/components/responses/StoreUnavailable'}
+  /v1/context/compare:
+    get:
+      operationId: agent_context_compare
+      summary: Compare two recorded task, configuration, or approval snapshots
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: left, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 512}}
+        - {name: right, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 512}}
+        - {name: right_run, in: query, schema: {type: string, minLength: 1, maxLength: 512}, description: Defaults to run; cross-run comparison must be explicit.}
+      responses:
+        '200': {description: Bounded comparison with immutable source references, content: {application/json: {schema: {$ref: '#/components/schemas/SnapshotComparison'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+        '503': {$ref: '#/components/responses/StoreUnavailable'}

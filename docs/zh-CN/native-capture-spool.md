@@ -63,6 +63,28 @@
 
 迟到的进程退出事件不会关闭在该退出时间之后才开始、复用了同一 PID 的新绑定。
 
+新原生采集使用启动 ID、PID 和内核进程启动时间标识一次进程生命周期。fork 事件让短命
+子进程在消失前获得锚点；进程迁移 cgroup 后，精确生命周期绑定仍然有效。只有已观测的
+作用域或已绑定的内核父进程能建立该绑定，不凭 PID/PPID 接近程度猜测，也不把子进程的新
+cgroup 整体归入当前运行。两个架构都保留内核采集时间，不用用户态排空队列的时间替代。
+缺少这些字段的旧事件继续沿用原关联行为。
+
+fork 记录读取子进程自己的 cgroup，而不是父进程当前的 cgroup。
+`clone3(CLONE_INTO_CGROUP)` 可让子进程出生时就位于另一个 cgroup。
+后续迁移改变观测到的 cgroup ID，不改变进程的启动 ID/PID/出生时间身份或既有 run 绑定。
+
+正常关闭时，采集器在 launch 封存报告前执行有界排空：最多三秒、八轮，跳过重试计时器，
+用新到达的绑定补关联。仍未知的事件保留原 TTL 和持久队列，不通过删除数据把积压清零；
+超时或处理失败会明确报告。
+
+`.`、`../file` 等原始 syscall 路径是合法证据；缺少 cwd/dirfd 解析时，不据此建立已解析
+制品节点。非法行增加拒收计数，并在 `logs/native-rejections.json` 中保留最多 64 条有界
+身份及原因样本供诊断，不保存被拒正文、路径或命令。样本数量不等于全部丢失数量。
+
+open 路径在 syscall 入口不可读时，使用有界线程表在 syscall 返回时重读一次，保留入口
+时间，并明确记录 `path_observation=syscall_exit_retry` 和 `syscall_result`。返回时看到的
+路径不证明入口字节完全相同，失败的 open 也不代表成功写入。重读仍缺路径时保留失败诊断。
+
 ## 状态与保证范围
 
 ```sh
@@ -86,6 +108,23 @@ agentprov --data-dir /var/lib/agentprov sensor status --json
 原生批次由 `sensor stream` 负责恢复。通用 Falco 缓冲队列的工作进程不会处理原生批次；要恢复这些批次，需要重启原生采集器。
 
 ## 回归验证
+
+需显式以 root 运行的 `scripts/accept_sensor_live.py` 在 syscall/TLS 负载之外，检查真实
+进程出生、文件事件、退出、cgroup 迁移与 `clone3` 出生位置。加上
+`--require-cgroup-lifecycle` 后，cgroup 权限或 `clone3` 不可用会失败，不能静默省略。
+`--pause-drain 1.5` 验证排队事件仍保留内核采集时间。导出的 `.events.jsonl` 只保留
+测试负载进程的事件，不包含无关宿主机活动。
+
+用该文件验证持久摄取后的归属：
+
+```sh
+AGENTPROV_LIVE_LIFECYCLE_EVENTS=/path/to/acceptance.events.jsonl \
+  go test ./internal/telemetry -run '^TestNativeLiveLifecycleAttribution$' -count=1 -v
+```
+
+该检查确认真实迁移/clone 事件保留 run 归属，同时不把目标 cgroup 内无关进程整体归入该 run。
+未提供真实事件文件时，测试会跳过；跳过不等于实机验收。Go TLS 响应采集仍是 amd64
+专属路径，ARM64 的 Go fixture 验证请求侧。
 
 `internal/telemetry/native_stream_test.go` 覆盖以下情况：
 

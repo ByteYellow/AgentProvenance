@@ -592,14 +592,29 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 	event := baseMappedEvent(raw, "agentprov_ebpf")
 	comm := stringAt(raw, "comm")
 	switch strings.ToLower(firstNonEmpty(stringAt(raw, "event_type"), stringAt(raw, "type"))) {
+	case "process_observed":
+		event.EventType = "process_observed"
+		event.Payload = mustJSON(map[string]any{"pid": event.PID, "ppid": event.PPID, "comm": comm, "observation": stringAt(raw, "observation")})
 	case "execve", "exec", "process_exec":
 		event.EventType = "execve"
 		path := stringAt(raw, "path")
-		// Prefer the real argv (sensor "command" field) so command-line args
-		// (e.g. a metadata-IP URL) reach the policy ArgsContains rule; fall back
-		// to the binary path / comm when argv was not captured.
+		// Keep the sensor's argument boundaries and explicit capacity marker.
+		// Splitting its joined command loses shell arguments and cannot tell a
+		// complete command from a captured prefix used by runtime correlation.
 		command := stringAt(raw, "command")
-		argv := splitCommand(command)
+		var argv []string
+		if values, ok := raw["argv"].([]any); ok {
+			for _, value := range values {
+				arg, ok := value.(string)
+				if !ok {
+					return event, false, fmt.Errorf("native exec argv contains a non-string argument")
+				}
+				argv = append(argv, arg)
+			}
+		}
+		if len(argv) == 0 {
+			argv = splitCommand(command)
+		}
 		if len(argv) == 0 {
 			if path != "" {
 				argv = []string{path}
@@ -612,11 +627,15 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 		if command == "" {
 			command = strings.Join(argv, " ")
 		}
-		event.Payload = mustJSON(map[string]any{
+		payload := map[string]any{
 			"argv":    argv,
 			"command": command,
 			"comm":    comm,
-		})
+		}
+		if limited, known := raw["argv_truncated"].(bool); known {
+			payload["argv_truncated"] = limited
+		}
+		event.Payload = mustJSON(payload)
 	case "network_connect", "connect":
 		host := stringAt(raw, "dst_ip")
 		port := stringAt(raw, "dst_port")
@@ -647,11 +666,16 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 		default:
 			event.EventType = "file_write"
 		}
-		event.Payload = mustJSON(map[string]any{
+		payload := map[string]any{
 			"path": path,
 			"mode": mode,
 			"comm": comm,
-		})
+		}
+		if stringAt(raw, "path_observation") == "syscall_exit_retry" {
+			payload["path_observation"] = "syscall_exit_retry"
+			payload["syscall_result"] = intAt(raw, "syscall_result")
+		}
+		event.Payload = mustJSON(payload)
 	case "process_exit", "exit":
 		event.EventType = "process_exit"
 		event.Payload = mustJSON(map[string]any{
@@ -695,6 +719,15 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 		event.Payload = sslPayload(raw, comm, "response")
 	default:
 		return IngestEvent{}, false, nil
+	}
+	if instance := stringAt(raw, "process_instance_id"); instance != "" {
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+			return event, false, err
+		}
+		payload["process_instance_id"] = instance
+		payload["parent_process_instance_id"] = stringAt(raw, "parent_process_instance_id")
+		event.Payload = mustJSON(payload)
 	}
 	return event, true, nil
 }

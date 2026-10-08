@@ -1,10 +1,7 @@
 //go:build ignore
 
 // eBPF programs for the self-owned system-telemetry sensor (CO-RE, compiled by
-// bpf2go with clang). Three probes -> one ring buffer:
-//   - sched_process_exec   -> execve
-//   - sys_enter_connect     -> network_connect (AF_INET)
-//   - sys_enter_openat      -> file_open
+// bpf2go with clang). Process, file, network and TLS probes share a ring buffer.
 // Each event carries pid/tgid/ppid/comm + the kernel cgroup id; the userspace
 // loader (sensor_linux.go) enriches container_id from /proc/<pid>/cgroup and
 // maps to the normalized telemetry schema. Linux-only.
@@ -33,6 +30,7 @@ char LICENSE[] SEC("license") = "GPL";
 #define EVENT_RENAME 9   // renameat2: file move/tamper
 #define EVENT_UNLINK 10  // unlinkat: file delete
 #define EVENT_DNS 11     // getaddrinfo uprobe: resolved hostname (egress by name)
+#define EVENT_FORK 12
 #define AF_INET 2
 
 // argv is captured as fixed-size slots (constant offsets keep the BPF verifier
@@ -50,9 +48,9 @@ struct sensor_event {
 	__u32 tgid;
 	__u32 ppid;
 	__u64 cgroup_id;
-#if defined(__TARGET_ARCH_x86)
 	__u64 ktime_ns;  // capture time, independent of userspace/ingest backlog
-#endif
+	__u64 process_start_ns;
+	__u64 parent_start_ns;
 	__u64 conn;      // tls: the SSL* pointer identifying the connection (reassembly key)
 	__u32 daddr;     // connect: dst IPv4 (net order); tls: valid bytes in this chunk
 	__u16 dport;     // connect: dst port (net order); tls: 1 if the message was truncated at the chunk cap
@@ -164,11 +162,42 @@ static __always_inline void fill_common(struct sensor_event *e) {
 	e->tgid = (__u32)id;
 	e->ppid = BPF_CORE_READ(task, real_parent, tgid);
 	e->cgroup_id = bpf_get_current_cgroup_id();
-#if defined(__TARGET_ARCH_x86)
 	e->ktime_ns = bpf_ktime_get_ns();
+	e->process_start_ns = BPF_CORE_READ(task, group_leader, start_time);
+	e->parent_start_ns = BPF_CORE_READ(task, real_parent, group_leader, start_time);
+#if defined(__TARGET_ARCH_x86)
 	capture_cgroup_identity(task, e->cgroup_id);
 #endif
 	bpf_get_current_comm(&e->comm, sizeof(e->comm));
+}
+
+// Capture process birth before a child can migrate or exit between polls.
+// Thread clones share the leader identity and need no separate scope binding.
+SEC("raw_tp/sched_process_fork")
+int handle_fork(struct bpf_raw_tracepoint_args *ctx) {
+	struct task_struct *child = (struct task_struct *)ctx->args[1];
+	__u32 pid = BPF_CORE_READ(child, tgid);
+	if (pid != BPF_CORE_READ(child, pid))
+		return 0;
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) { count_drop(); return 0; }
+	__builtin_memset(e, 0, sizeof(*e));
+	fill_common(e);
+	e->kind = EVENT_FORK;
+	e->pid = pid;
+	e->tgid = pid;
+	e->ppid = BPF_CORE_READ(child, real_parent, tgid);
+	e->process_start_ns = BPF_CORE_READ(child, group_leader, start_time);
+	e->parent_start_ns = BPF_CORE_READ(child, real_parent, group_leader, start_time);
+	// clone3(CLONE_INTO_CGROUP) can place the child in a different cgroup
+	// before this tracepoint. The current task is still the parent here.
+	struct cgroup *group = BPF_CORE_READ(child, cgroups, dfl_cgrp);
+	e->cgroup_id = BPF_CORE_READ(group, kn, id);
+#if defined(__TARGET_ARCH_x86)
+	capture_cgroup_identity(child, e->cgroup_id);
+#endif
+	bpf_ringbuf_submit(e, 0);
+	return 0;
 }
 
 // Capture argv at execve entry into the per-pid scratch map. The space-joined
@@ -282,7 +311,19 @@ static __always_inline int noise_file_prefix(const char *p) {
 	return 0;
 }
 
-static __always_inline int emit_open(const char *path, long flags) {
+struct open_retry_ctx {
+	__u64 path;
+	__u64 flags;
+	__u64 ktime_ns;
+};
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 4096);
+	__type(key, __u64);
+	__type(value, struct open_retry_ctx);
+} open_retries SEC(".maps");
+
+static __always_inline int emit_open(const char *path, long flags, __u64 captured_at, long result) {
 	int is_write = (flags & OPEN_WRITE_MASK) != 0;
 	// Filter noise reads BEFORE reserving: a discarded ringbuf record still
 	// occupies space until drained, so the prefix check must precede reserve.
@@ -299,10 +340,24 @@ static __always_inline int emit_open(const char *path, long flags) {
 	}
 	e->kind = EVENT_OPEN;
 	e->daddr = 0;
-	e->dport = 0;
+	e->dport = captured_at ? 1 : 0;
 	fill_common(e);
 	e->args[0] = 0;
-	bpf_probe_read_user_str(&e->path, sizeof(e->path), path);
+	e->path[0] = 0;
+	long path_read = bpf_probe_read_user_str(&e->path, sizeof(e->path), path);
+	// Probe reads cannot fault in userspace pages. Retry only failed reads
+	// after the syscall has touched the pathname, retaining entry capture time.
+	if (path_read < 0 && !captured_at) {
+		__u64 tid = bpf_get_current_pid_tgid();
+		struct open_retry_ctx retry = {.path = (__u64)path, .flags = flags, .ktime_ns = e->ktime_ns};
+		if (bpf_map_update_elem(&open_retries, &tid, &retry, BPF_ANY))
+			count_drop();
+		bpf_ringbuf_discard(e, 0);
+		return 0;
+	}
+	if (captured_at)
+		e->ktime_ns = captured_at;
+	e->conn = (__u64)result; // open retry only: syscall return value, not a TLS connection
 	e->exit_code = is_write ? 0 : 1; // 0 = write, 1 = read
 	bpf_ringbuf_submit(e, 0);
 	return 0;
@@ -310,13 +365,24 @@ static __always_inline int emit_open(const char *path, long flags) {
 
 SEC("tp/syscalls/sys_enter_openat")
 int handle_openat(struct trace_event_raw_sys_enter *ctx) {
-	return emit_open((const char *)ctx->args[1], (long)ctx->args[2]);
+	return emit_open((const char *)ctx->args[1], (long)ctx->args[2], 0, 0);
+}
+
+SEC("tp/syscalls/sys_exit_openat")
+int handle_open_return(struct trace_event_raw_sys_exit *ctx) {
+	__u64 tid = bpf_get_current_pid_tgid();
+	struct open_retry_ctx *p = bpf_map_lookup_elem(&open_retries, &tid);
+	if (!p)
+		return 0;
+	struct open_retry_ctx retry = *p;
+	bpf_map_delete_elem(&open_retries, &tid);
+	return emit_open((const char *)retry.path, (long)retry.flags, retry.ktime_ns, ctx->ret);
 }
 
 #if defined(__TARGET_ARCH_x86)
 SEC("tp/syscalls/sys_enter_open")
 int handle_open(struct trace_event_raw_sys_enter *ctx) {
-	return emit_open((const char *)ctx->args[0], (long)ctx->args[1]);
+	return emit_open((const char *)ctx->args[0], (long)ctx->args[1], 0, 0);
 }
 #endif
 
@@ -326,6 +392,7 @@ int handle_open(struct trace_event_raw_sys_enter *ctx) {
 SEC("tp/sched/sched_process_exit")
 int handle_exit(struct trace_event_raw_sched_process_template *ctx) {
 	__u64 id = bpf_get_current_pid_tgid();
+	bpf_map_delete_elem(&open_retries, &id);
 	if ((__u32)(id >> 32) != (__u32)id)
 		return 0; // only the group leader == process exit, not per-thread
 	__u32 pid = (__u32)(id >> 32);

@@ -25,6 +25,9 @@ docs/north-star-three-pillars.md
 README.zh-CN.local.md
 HANDOFF.md
 TODO.md
+/docs/*-delivery.md
+/docs/zh-CN/*-delivery.md
+/docs/reports/
 
 # Generated eBPF sensor artifacts. The bpf2go bindings (sensorbpf_bpf*.go/.o)
 # ARE committed so `go build ./cmd/agentprov-sensor` works on a fresh Linux
@@ -44,3 +47,11 @@ demo/llm-judge/.build/
 
 # Portable release archives.
 /dist/
+
+# Local browser acceptance artifacts.
+/.playwright-cli/
+/output/playwright/
+
+# Static demo output and browser test dependencies.
+/_site/
+/node_modules/

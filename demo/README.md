@@ -2,22 +2,25 @@
 
 English | [中文](README.zh-CN.md)
 
-Start with a single agent, then follow a team and a cross-pod execution. The
-committed compressed bundles can be imported, verified and explored on macOS or
-Linux without rerunning the agents. Live capture has separate environment and
-credential requirements in each demo's README.
+Start with a real DeepSeek development task, then explore a single-agent risk
+investigation, team collaboration and cross-Pod execution. Seven signed captures
+replay offline on macOS or Linux; two optional evaluator examples provide setup
+guides. Live capture requirements are listed in each guide.
 
 ## One-command entry
 
 Download the matching Linux/macOS amd64/arm64 archive from
-[v0.8.2-rc.2](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2),
+[Releases](https://github.com/ByteYellow/AgentProvenance/releases),
 verify its checksum and extract it as shown in the [Quickstart](../README.md#quickstart).
-Go is needed only if you choose to build from source.
-The precompiled CLI embeds every signed capture and all demo guides:
+Go is needed only if you choose to build from source. These instructions describe
+v0.9.0; before its archive is published, follow the source-build path in the Quickstart.
+The CLI embeds seven signed captures and nine guide entries, including two
+optional evaluator examples:
 
 ```sh
 ./agentprov demo                         # gallery: all demos
 ./agentprov demo --list                  # list replay names and setup guides
+./agentprov demo deepseek-context        # task, tools, configuration and saved files
 ./agentprov demo snake-supply-chain      # one signed capture
 ./agentprov demo multiagent-provenance
 ./agentprov demo k8s-cross-pod-a2a
@@ -51,6 +54,18 @@ AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
 
 Jev's guide supports the supplied CLI through `--agentprov`; a source build is
 optional. Its live capture still requires Python, credentials and explicit consent.
+
+## New in v0.9.0: an ordinary development task
+
+[DeepSeek context](deepseek-context/) records a real task that adds daily totals
+to a Python report. Inspect the original task, 12 tool inputs/results, five
+configuration records, saved file text and two inferred tool/runtime links.
+The seven-test result is recorded evidence, not a replay-time model call.
+Context coverage, runtime coverage and permission records are shown separately.
+
+Run `agentprov demo deepseek-context` with the v0.9.0 CLI. Replay is signed,
+offline and needs no DeepSeek account or VM. Source builds use the same command;
+the six historical capture bundles remain unchanged.
 
 ## 1. One agent: supply-chain execution
 

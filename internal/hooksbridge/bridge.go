@@ -37,7 +37,7 @@ const (
 	EdgeAgentSpawn    = "agent_spawn"     // delegation: parent/main -> sub-agent (delegation)
 	EdgeAgentMessage  = "agent_message"   // peer: sender -> body-object -> recipient (peer influence)
 	EdgeAgentToolCall = "agent_tool_call" // agent -> the tool_call it invoked
-	EdgeAgentSyscall  = "agent_syscall"   // tool_call -> the kernel event it caused (command-match join)
+	EdgeAgentSyscall  = "agent_syscall"   // tool_call -> runtime event (inferred command/time/process association)
 )
 
 // bindingSource marks every row the bridge writes, so a consumer can tell
@@ -51,6 +51,9 @@ const mainAgentID = "main"
 // Options configures an ingest.
 type Options struct {
 	RunID string
+	// PostHoc records observed source outcomes without claiming that a policy
+	// evaluated after execution actually blocked the tool.
+	PostHoc bool
 	// Engine pre-flights each proposed tool call. Zero value -> DefaultEngine.
 	Engine security.Engine
 	// Objects stores message bodies as content-addressed evidence objects.
@@ -73,15 +76,17 @@ type Summary struct {
 
 // hookEvent is the tolerant projection of one hook JSON line.
 type hookEvent struct {
-	TS        string
-	Event     string
-	AgentID   string
-	AgentType string
-	ToolName  string
-	ToolUseID string
-	SessionID string
-	LastMsg   string
-	ToolInput map[string]any
+	TS            string
+	Event         string
+	AgentID       string
+	ParentAgentID string
+	AgentType     string
+	ToolName      string
+	ToolUseID     string
+	SessionID     string
+	LastMsg       string
+	RefusalID     string
+	ToolInput     map[string]any
 }
 
 type agentState struct {
@@ -113,9 +118,38 @@ func isSecurityRefusal(msg string) bool {
 }
 
 // Ingest reads a hook JSONL stream and writes the orchestration graph for RunID.
-// Prior bridge-written rows for the run are cleared first so re-ingest is clean;
-// it never touches record/sensor rows (only rows with agent_id / agent_* edges).
+// Prior bridge-written rows are replaced atomically after the source has been
+// read. It never touches record/sensor rows.
 func Ingest(db *sql.DB, r io.Reader, opts Options) (Summary, error) {
+	evs, err := readEvents(r)
+	if err != nil {
+		return Summary{}, fmt.Errorf("hooksbridge: read: %w", err)
+	}
+	return ingestEvents(db, evs, opts)
+}
+
+func ingestEvents(db *sql.DB, evs []hookEvent, opts Options) (Summary, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return Summary{}, err
+	}
+	defer tx.Rollback()
+	opts.Objects.Tx = tx
+	sum, err := ingestEventRows(tx, evs, opts)
+	if err != nil {
+		return Summary{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Summary{}, err
+	}
+	return sum, nil
+}
+
+type graphWriter interface {
+	Exec(string, ...any) (sql.Result, error)
+}
+
+func ingestEventRows(db graphWriter, evs []hookEvent, opts Options) (Summary, error) {
 	if opts.RunID == "" {
 		return Summary{}, fmt.Errorf("hooksbridge: RunID is required")
 	}
@@ -148,28 +182,39 @@ func Ingest(db *sql.DB, r io.Reader, opts Options) (Summary, error) {
 	root.spawned = true
 
 	toolCallByUse := map[string]string{}
+	toolResults := map[string]hookEvent{}
 	var sum Summary
 	msgSeq := 0
 
-	evs, err := readEvents(r)
-	if err != nil {
-		return sum, fmt.Errorf("hooksbridge: read: %w", err)
-	}
 	sum.Lines = len(evs)
 	// Pre-pass: build the agent roster (names + types + parent) so a SendMessage
 	// that names a teammate BEFORE its SubagentStart still resolves to the right
 	// agent id (the peer message precedes the recipient's spawn in the log).
-	prefillRoster(evs, ensure)
+	prefillRoster(evs, ensure, !opts.PostHoc)
 
 	for idx, ev := range evs {
 		ts := eventTime(ev.TS, opts.Base, idx)
+		if opts.PostHoc && ev.TS == "" {
+			ts = "" // A missing source timestamp is not a synthetic execution time.
+		}
 		switch ev.Event {
 		case "PreToolUse":
 			switch ev.ToolName {
 			case "Agent":
 				// A dispatch (delegation); the teammate name is resolved in the
 				// prefill pass. The dispatch itself carries no agent_id.
+				if opts.PostHoc {
+					if err := writeToolCall(db, opts, ev, ensure, toolCallByUse, ts, &sum); err != nil {
+						return sum, err
+					}
+				}
 			case "SendMessage":
+				ensure(ev.AgentID)
+				if opts.PostHoc {
+					if err := writeToolCall(db, opts, ev, ensure, toolCallByUse, ts, &sum); err != nil {
+						return sum, err
+					}
+				}
 				if err := writeMessageEdge(db, opts, ev, agents, &msgSeq, ts, &sum); err != nil {
 					return sum, err
 				}
@@ -181,17 +226,16 @@ func Ingest(db *sql.DB, r io.Reader, opts Options) (Summary, error) {
 					return sum, err
 				}
 			}
-		case "PostToolUse":
-			if id := toolCallByUse[ev.ToolUseID]; id != "" {
-				_, _ = db.Exec(`UPDATE tool_calls SET ended_at = ? WHERE id = ?`, ts, id)
-			}
-		case "SubagentStart":
+		case "PostToolUse", "PostToolUseFailure":
+			ev.TS = ts
+			toolResults[ev.ToolUseID] = ev
+		case "SubagentStart", "AgentObserved":
 			a := ensure(ev.AgentID)
-			if a.startedAt == "" {
+			if a.startedAt == "" && ev.Event == "SubagentStart" {
 				a.startedAt = ts
 			}
 			a.endedAt = "" // reopen
-			if !a.spawned {
+			if !a.spawned && a.parent != "" {
 				if err := writeEdge(db, opts.RunID, "agent/"+a.parent, "agent/"+a.id, EdgeAgentSpawn, ts); err != nil {
 					return sum, err
 				}
@@ -202,7 +246,7 @@ func Ingest(db *sql.DB, r io.Reader, opts Options) (Summary, error) {
 			a := ensure(ev.AgentID)
 			a.endedAt = ts
 			if ev.LastMsg != "" && isSecurityRefusal(ev.LastMsg) {
-				if err := writeRefusal(db, opts.RunID, ev.AgentID, ev.LastMsg, ts, &sum); err != nil {
+				if err := writeRefusal(db, opts.RunID, ev.AgentID, ev.LastMsg, ts, ev.RefusalID, &sum); err != nil {
 					return sum, err
 				}
 			}
@@ -217,20 +261,44 @@ func Ingest(db *sql.DB, r io.Reader, opts Options) (Summary, error) {
 			}
 			ensure(agentID)
 			if ev.LastMsg != "" && isSecurityRefusal(ev.LastMsg) {
-				if err := writeRefusal(db, opts.RunID, agentID, ev.LastMsg, ts, &sum); err != nil {
+				if err := writeRefusal(db, opts.RunID, agentID, ev.LastMsg, ts, ev.RefusalID, &sum); err != nil {
 					return sum, err
 				}
 			}
 		}
 	}
+	// A result can arrive before its call in a merged stream. Associate by the
+	// native identity after all calls exist, not by ingestion order.
+	for use, ev := range toolResults {
+		id := toolCallByUse[use]
+		if id == "" {
+			continue
+		}
+		if _, err := db.Exec(`UPDATE tool_calls SET ended_at = ? WHERE id = ?`, ev.TS, id); err != nil {
+			return sum, err
+		}
+		if opts.PostHoc {
+			status := "source_returned"
+			if ev.Event == "PostToolUseFailure" {
+				status = "source_error"
+			}
+			if _, err := db.Exec(`UPDATE tool_calls SET status=? WHERE id=?`, status, id); err != nil {
+				return sum, err
+			}
+		}
+	}
 
 	// Persist agent rows (node labels + lifecycle).
+	source, created := bindingSource, eventTime("", opts.Base, 0)
+	if opts.PostHoc {
+		source, created = "agent_context", time.Now().UTC().Format(time.RFC3339Nano)
+	}
 	for _, a := range agents {
 		if _, err := db.Exec(`INSERT OR REPLACE INTO agents
 			(id, run_id, name, agent_type, parent_agent_id, binding_source, created_at, started_at, ended_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			a.id, opts.RunID, a.name, a.agentType, a.parent, bindingSource,
-			eventTime("", opts.Base, 0), a.startedAt, a.endedAt); err != nil {
+			a.id, opts.RunID, a.name, a.agentType, a.parent, source,
+			created, a.startedAt, a.endedAt); err != nil {
 			return sum, fmt.Errorf("hooksbridge: write agent %s: %w", a.id, err)
 		}
 		sum.Agents++
@@ -240,7 +308,7 @@ func Ingest(db *sql.DB, r io.Reader, opts Options) (Summary, error) {
 
 // writeToolCall records an agent's proposed tool call, pre-flighted through the
 // gate: a deny-class verdict makes it a status=denied refused node.
-func writeToolCall(db *sql.DB, opts Options, ev hookEvent, ensure func(string) *agentState, byUse map[string]string, ts string, sum *Summary) error {
+func writeToolCall(db graphWriter, opts Options, ev hookEvent, ensure func(string) *agentState, byUse map[string]string, ts string, sum *Summary) error {
 	agentID := ev.AgentID
 	if agentID == "" {
 		agentID = mainAgentID
@@ -250,7 +318,10 @@ func writeToolCall(db *sql.DB, opts Options, ev hookEvent, ensure func(string) *
 	d := opts.Engine.Evaluate(sev)
 	status := "asserted"
 	policy := d.Decision
-	denied := d.Mode == "enforce" && (d.Decision == "deny" || d.Decision == "kill" || d.Decision == "quarantine")
+	if opts.PostHoc {
+		policy = "not_evaluated"
+	}
+	denied := !opts.PostHoc && d.Mode == "enforce" && (d.Decision == "deny" || d.Decision == "kill" || d.Decision == "quarantine")
 	if denied {
 		status = "denied"
 		sum.Refused++
@@ -273,7 +344,7 @@ func writeToolCall(db *sql.DB, opts Options, ev hookEvent, ensure func(string) *
 // writeMessageEdge records a peer SendMessage: the body is objectified as
 // content-addressed evidence, and the directed edge routes sender -> body ->
 // recipient so the lateral-injection payload is inspectable and verifiable.
-func writeMessageEdge(db *sql.DB, opts Options, ev hookEvent, agents map[string]*agentState, seq *int, ts string, sum *Summary) error {
+func writeMessageEdge(db graphWriter, opts Options, ev hookEvent, agents map[string]*agentState, seq *int, ts string, sum *Summary) error {
 	sender := ev.AgentID
 	if sender == "" {
 		sender = mainAgentID
@@ -282,17 +353,29 @@ func writeMessageEdge(db *sql.DB, opts Options, ev hookEvent, agents map[string]
 	recipient = normalizeRecipient(recipient, agents)
 	body := strArg(ev.ToolInput, "message", "content")
 	*seq++
+	sourceID := fmt.Sprintf("agent_message/%s->%s/%d", sender, recipient, *seq)
+	payload := map[string]any{"kind": "agent_message", "from": sender, "to": recipient}
+	var parents []string
+	if len(body) <= 64<<10 {
+		payload["body"], payload["content"] = body, body
+	} else {
+		// Keep graph identity on the message descriptor, not on its chunks.
+		content, err := opts.Objects.PutTextContent(provenance.TextContentInput{
+			RunID: opts.RunID, SourceID: "agent_message_body/" + strings.TrimPrefix(sourceID, "agent_message/"), Text: body,
+		})
+		if err != nil {
+			return fmt.Errorf("hooksbridge: save message body: %w", err)
+		}
+		parents = []string{content.Ref}
+		payload["content_state"], payload["content_ref"] = "stored", content.Ref
+		payload["content_bytes"], payload["sha256"], payload["redacted"] = content.Bytes, content.SHA256, content.Redacted
+	}
 	res, err := opts.Objects.PutExternalObject(provenance.ExternalObjectInput{
 		Type:     "artifact",
-		SourceID: fmt.Sprintf("agent_message/%s->%s/%d", sender, recipient, *seq),
+		SourceID: sourceID,
 		RunID:    opts.RunID,
-		Payload: map[string]any{
-			"kind":    "agent_message",
-			"from":    sender,
-			"to":      recipient,
-			"body":    body,
-			"content": body, // dashboard preview key
-		},
+		Parents:  parents,
+		Payload:  payload,
 	})
 	if err != nil {
 		return fmt.Errorf("hooksbridge: objectify message: %w", err)
@@ -309,11 +392,13 @@ func writeMessageEdge(db *sql.DB, opts Options, ev hookEvent, agents map[string]
 
 // writeRefusal records an LLM-asserted refusal (the model declined in text, no
 // tool call). Weaker than a gate deny -- labeled refused_by_model, app-asserted.
-func writeRefusal(db *sql.DB, runID, agentID, msg, ts string, sum *Summary) error {
+func writeRefusal(db graphWriter, runID, agentID, msg, ts, id string, sum *Summary) error {
 	if agentID == "" {
 		agentID = mainAgentID
 	}
-	id := ids.New("refusal")
+	if id == "" {
+		id = ids.New("refusal")
+	}
 	cmd := "[llm refusal] " + truncate(oneLine(msg), 200)
 	if _, err := db.Exec(`INSERT INTO tool_calls
 		(id, run_id, agent_id, command, status, policy_decision, created_at, started_at)
@@ -326,149 +411,6 @@ func writeRefusal(db *sql.DB, runID, agentID, msg, ts string, sum *Summary) erro
 	return writeEdge(db, runID, "agent/"+agentID, id, EdgeAgentToolCall, ts)
 }
 
-// CorrelateSyscalls attributes kernel syscall events to the acting sub-agent.
-// In-process agents share ONE cgroup, so the sensor cannot split them; the join
-// is COMMAND-MATCH -- the sensor's execve command against an agent tool_call's
-// command -- then propagation to the high-risk events (secret_path, metadata_ip,
-// ...) that ran in the SAME pid. This turns "some process in the run read the
-// secret" into "bob's install tool_call read the secret", completing the blame
-// chain agent -> tool_call -> syscall. Returns the number of links written.
-func CorrelateSyscalls(db *sql.DB, runID string) (int, error) {
-	if _, err := db.Exec(`DELETE FROM graph_edges WHERE run_id = ? AND edge_type = ?`, runID, EdgeAgentSyscall); err != nil {
-		return 0, err
-	}
-	type toolCall struct{ id, cmd string }
-	var calls []toolCall
-	rows, err := db.Query(`SELECT id, command FROM tool_calls WHERE run_id = ? AND agent_id != '' AND command != ''`, runID)
-	if err != nil {
-		return 0, err
-	}
-	for rows.Next() {
-		var t toolCall
-		if err := rows.Scan(&t.id, &t.cmd); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		calls = append(calls, t)
-	}
-	rows.Close()
-	if len(calls) == 0 {
-		return 0, nil
-	}
-
-	// First pass: match each execve to a tool_call by command, recording which
-	// pid the tool_call owns.
-	pidToCall := map[int64]string{}
-	evRows, err := db.Query(`SELECT id, event_type, COALESCE(pid,0), payload FROM events WHERE run_id = ?`, runID)
-	if err != nil {
-		return 0, err
-	}
-	type evt struct {
-		id  string
-		typ string
-		pid int64
-	}
-	var events []evt
-	for evRows.Next() {
-		var id, typ, payload string
-		var pid int64
-		if err := evRows.Scan(&id, &typ, &pid, &payload); err != nil {
-			evRows.Close()
-			return 0, err
-		}
-		events = append(events, evt{id, typ, pid})
-		if typ == "execve" && pid > 0 {
-			cmd := payloadCommand(payload)
-			if cmd == "" {
-				continue
-			}
-			for _, c := range calls {
-				if commandsMatch(cmd, c.cmd) {
-					pidToCall[pid] = c.id
-					break
-				}
-			}
-		}
-	}
-	evRows.Close()
-	if len(pidToCall) == 0 {
-		return 0, nil
-	}
-
-	// Second pass: link every attributable event (the execve and the high-risk
-	// syscalls sharing its pid) to the owning tool_call.
-	ts := time.Now().UTC().Format(time.RFC3339Nano)
-	n := 0
-	for _, e := range events {
-		callID, ok := pidToCall[e.pid]
-		if !ok || !attributableEvent(e.typ) {
-			continue
-		}
-		if err := writeEdge(db, runID, callID, "runtime_event/"+e.id, EdgeAgentSyscall, ts); err != nil {
-			return n, err
-		}
-		n++
-	}
-	return n, nil
-}
-
-// attributableEvent is the set of kernel events worth pinning to an agent: the
-// matched execve (the join anchor) plus the security-relevant syscalls that carry
-// the blame. Benign file_open/file_write (a process loads hundreds of library
-// files) are deliberately excluded so the attribution edges stay the exfil story,
-// not noise.
-func attributableEvent(t string) bool {
-	switch t {
-	case "execve", "secret_path", "metadata_ip", "private_cidr", "network_connect":
-		return true
-	default:
-		return false
-	}
-}
-
-// commandsMatch reports whether a sensor execve command and a tool_call command
-// refer to the same invocation. The sensor truncates argv (31 chars/arg), so the
-// match is substring-either-way on whitespace-normalized commands, requiring at
-// least two shared leading tokens to avoid trivial collisions.
-func commandsMatch(a, b string) bool {
-	na, nb := normCmd(a), normCmd(b)
-	if na == "" || nb == "" {
-		return false
-	}
-	short, long := na, nb
-	if len(short) > len(long) {
-		short, long = long, short
-	}
-	if len(strings.Fields(short)) < 2 {
-		return false
-	}
-	return strings.Contains(long, short)
-}
-
-func normCmd(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }
-
-func payloadCommand(payload string) string {
-	var m map[string]any
-	if json.Unmarshal([]byte(payload), &m) != nil {
-		return ""
-	}
-	// The stored event payload is an envelope: {rollout_id, attempt_id,
-	// payload:{raw:{command,argv,comm}, correlation:{...}}}. Descend through each
-	// layer, preferring the full command over the bare comm.
-	inner := mapAt(m, "payload")
-	for _, layer := range []map[string]any{mapAt(inner, "raw"), inner, mapAt(m, "raw"), m} {
-		if c := strArg(layer, "command", "cmdline"); c != "" {
-			return c
-		}
-	}
-	for _, layer := range []map[string]any{mapAt(inner, "raw"), mapAt(m, "raw")} {
-		if c := strArg(layer, "comm"); c != "" {
-			return c
-		}
-	}
-	return ""
-}
-
 func mapAt(m map[string]any, key string) map[string]any {
 	if m == nil {
 		return nil
@@ -477,7 +419,7 @@ func mapAt(m map[string]any, key string) map[string]any {
 	return sub
 }
 
-func writeEdge(db *sql.DB, runID, from, to, edgeType, ts string) error {
+func writeEdge(db graphWriter, runID, from, to, edgeType, ts string) error {
 	if from == "" || to == "" {
 		return nil
 	}
@@ -494,14 +436,14 @@ func writeEdge(db *sql.DB, runID, from, to, edgeType, ts string) error {
 // clearPrior removes only bridge-written rows for the run (agent_* edges, agents,
 // and tool_calls that carry an agent_id) so re-ingest is idempotent and never
 // disturbs recorder/sensor evidence.
-func clearPrior(db *sql.DB, runID string) error {
+func clearPrior(db graphWriter, runID string) error {
 	stmts := []struct {
 		q string
 		a []any
 	}{
 		// Includes agent_syscall so a re-ingest with --correlate=false cannot leave
 		// stale attribution edges (CorrelateSyscalls also clears them when it runs).
-		{`DELETE FROM graph_edges WHERE run_id = ? AND edge_type IN (?, ?, ?, ?)`, []any{runID, EdgeAgentSpawn, EdgeAgentMessage, EdgeAgentToolCall, EdgeAgentSyscall}},
+		{`DELETE FROM graph_edges WHERE run_id = ? AND edge_type IN (?, ?, ?, ?, 'context_tool_call', 'context_tool_result')`, []any{runID, EdgeAgentSpawn, EdgeAgentMessage, EdgeAgentToolCall, EdgeAgentSyscall}},
 		{`DELETE FROM tool_calls WHERE run_id = ? AND agent_id != ''`, []any{runID}},
 		{`DELETE FROM agents WHERE run_id = ?`, []any{runID}},
 	}
@@ -590,7 +532,7 @@ func readEvents(r io.Reader) ([]hookEvent, error) {
 // prompt, matched by FIFO proximity) and parent before any edges are written, so
 // name-based SendMessage recipients resolve even when the message precedes the
 // recipient's spawn.
-func prefillRoster(evs []hookEvent, ensure func(string) *agentState) {
+func prefillRoster(evs []hookEvent, ensure func(string) *agentState, infer bool) {
 	var pending []string
 	for _, ev := range evs {
 		switch ev.Event {
@@ -600,15 +542,18 @@ func prefillRoster(evs []hookEvent, ensure func(string) *agentState) {
 					pending = append(pending, n)
 				}
 			}
-		case "SubagentStart":
+		case "SubagentStart", "AgentObserved":
 			a := ensure(ev.AgentID)
 			if ev.AgentType != "" {
 				a.agentType = ev.AgentType
 			}
-			if a.parent == "" {
+			if ev.ParentAgentID != "" {
+				a.parent = ev.ParentAgentID
+				ensure(a.parent)
+			} else if a.parent == "" && infer {
 				a.parent = mainAgentID
 			}
-			if a.name == "" && len(pending) > 0 {
+			if infer && a.name == "" && len(pending) > 0 {
 				a.name = pending[0]
 				pending = pending[1:]
 			}
@@ -619,15 +564,16 @@ func prefillRoster(evs []hookEvent, ensure func(string) *agentState) {
 func parseEvent(raw map[string]any) hookEvent {
 	ti, _ := raw["tool_input"].(map[string]any)
 	return hookEvent{
-		TS:        firstStr(raw, "ts", "_ts", "timestamp"),
-		Event:     firstStr(raw, "hook_event_name", "hookEventName", "event"),
-		AgentID:   firstStr(raw, "agent_id", "agentId"),
-		AgentType: firstStr(raw, "agent_type", "agentType"),
-		ToolName:  firstStr(raw, "tool_name", "toolName"),
-		ToolUseID: firstStr(raw, "tool_use_id", "toolUseId"),
-		SessionID: firstStr(raw, "session_id"),
-		LastMsg:   firstStr(raw, "last_assistant_message"),
-		ToolInput: ti,
+		TS:            firstStr(raw, "ts", "_ts", "timestamp"),
+		Event:         firstStr(raw, "hook_event_name", "hookEventName", "event"),
+		AgentID:       firstStr(raw, "agent_id", "agentId"),
+		ParentAgentID: firstStr(raw, "parent_agent_id", "parentAgentId"),
+		AgentType:     firstStr(raw, "agent_type", "agentType"),
+		ToolName:      firstStr(raw, "tool_name", "toolName"),
+		ToolUseID:     firstStr(raw, "tool_use_id", "toolUseId"),
+		SessionID:     firstStr(raw, "session_id"),
+		LastMsg:       firstStr(raw, "last_assistant_message"),
+		ToolInput:     ti,
 	}
 }
 

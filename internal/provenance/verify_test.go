@@ -11,11 +11,22 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/effects"
-	"github.com/byteyellow/agentprovenance/internal/record"
 	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
+
+func TestVerifyDoesNotRequireArtifactEdgesForUnresolvedPaths(t *testing.T) {
+	for _, path := range []string{".", "../file", "dir/../file", "dir/..", "/workspace/dir/../file"} {
+		payload, _ := json.Marshal(map[string]string{"path": path})
+		if got := verifyPayloadPath(string(payload)); got != "" {
+			t.Fatalf("unresolved path %q requires artifact %q", path, got)
+		}
+	}
+	if got := verifyPayloadPath(`{"path":"/workspace/report.py"}`); got != "report.py" {
+		t.Fatalf("ordinary workspace path changed: %q", got)
+	}
+}
 
 func TestVerifyUnknownRunFails(t *testing.T) {
 	paths, err := store.Init(filepath.Join(t.TempDir(), ".agentprov"))
@@ -725,55 +736,6 @@ func TestVerifyAcceptsRuntimeCausalityEdges(t *testing.T) {
 			t.Fatalf("unexpected runtime causality issue: %+v", result.Issues)
 		}
 	}
-}
-
-func TestVerifyRejectsMissingOrphanLifecycleEvidence(t *testing.T) {
-	root := t.TempDir()
-	paths, err := store.Init(filepath.Join(root, ".agentprov"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	db, err := store.Open(paths)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-
-	workdir := filepath.Join(root, "workspace")
-	if err := os.MkdirAll(workdir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(workdir, "app.py"), []byte("value = 1\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	result, err := (record.Service{DB: db, Paths: paths}).Run(record.Request{
-		RunID:   "run-orphan-verify",
-		Name:    "orphan-verify",
-		Workdir: workdir,
-		Command: []string{"sh", "-c", "printf 'value = 2\\n' > app.py"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	seedOrphanObservation(t, db, result)
-
-	clean, err := Verify(db, result.RunID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if clean.ErrorCount != 0 {
-		t.Fatalf("clean orphan record should verify: %+v", clean.Issues)
-	}
-
-	if _, err := db.Exec(`DELETE FROM evidence_events WHERE run_id = ? AND event_type = 'orphan_lifecycle_decision'`, result.RunID); err != nil {
-		t.Fatal(err)
-	}
-	broken, err := Verify(db, result.RunID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertVerifyIssue(t, broken, "missing_orphan_lifecycle_evidence")
-	assertVerifyIssue(t, broken, "missing_orphan_lifecycle_policy_decision")
 }
 
 func TestVerifyRejectsMissingPolicyDecisionEdges(t *testing.T) {

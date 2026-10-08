@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/baseline"
 	"github.com/byteyellow/agentprovenance/internal/control"
 	"github.com/byteyellow/agentprovenance/internal/correlation"
@@ -99,6 +100,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/graph/verify", s.graphVerify)
 	mux.HandleFunc("GET /v1/graph/explain", s.graphExplain)
 	mux.HandleFunc("GET /v1/graph/lens", s.graphLens)
+	mux.Handle("GET /v1/context/", http.StripPrefix("/v1", (agentcontext.Service{DB: s.DB}).ReadHandler()))
 	mux.HandleFunc("GET /v1/evidence/manifest", s.evidenceManifest)
 	mux.HandleFunc("POST /v1/forensics/export", s.forensicsExport)
 	mux.HandleFunc("POST /v1/forensics/export-batch", s.forensicsExportBatch)

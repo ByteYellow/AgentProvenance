@@ -484,7 +484,7 @@ func TestIngestJSONLReportsBadRows(t *testing.T) {
 	path := filepath.Join(root, "bad.jsonl")
 	raw := "" +
 		`not-json` + "\n" +
-		`{"event_type":"file_write","path":"../escape"}` + "\n" +
+		`{"event_type":"file_write","path":"bad\u0000path"}` + "\n" +
 		`{"event_type":"unknown"}` + "\n"
 	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
 		t.Fatal(err)

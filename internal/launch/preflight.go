@@ -62,7 +62,13 @@ func Preflight(opts Options) PreflightReport {
 		SensorMode:    opts.Sensor,
 	}
 	r.Checks = append(r.Checks, checkCommand(opts.Command))
-	r.Checks = append(r.Checks, checkClaudeHooks(opts.Command))
+	if opts.NoContext {
+		r.Checks = append(r.Checks, makeCheck("Claude hooks", CheckSkip, messagef("agent context disabled via --no-context")))
+	} else if opts.ContextHarness != "" && opts.ContextHarness != detectRecipe(opts.Command).harness {
+		r.Checks = append(r.Checks, makeCheck("Claude hooks", CheckSkip, messagef("native %s session records; selection and coverage reported after exit", opts.ContextHarness)))
+	} else {
+		r.Checks = append(r.Checks, checkClaudeHooks(opts.Command))
+	}
 	r.Checks = append(r.Checks, checkDashboardAddr(opts.Dashboard, opts.DashboardAddr))
 	r.Checks = append(r.Checks, checkCgroup())
 	r.Checks = append(r.Checks, checkSensor(opts.Sensor, opts.SelfExe))

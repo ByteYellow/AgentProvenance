@@ -2,62 +2,66 @@
 
 [English](../release-start.md) | 中文
 
-解压后，在当前目录执行：
+[打开在线 Demo](https://ByteYellow.github.io/AgentProvenance/)，无需安装即可查看图谱、
+Agent 会话和文件正文。站点也收录了完整的项目介绍、采集部署、分析命令、集成参考和版本记录。
+
+离线使用时，解压后在当前目录打开示例库：
 
 ```sh
-./agentprov --version
 ./agentprov demo
+```
+
+点击**打开回放**查看签名执行记录，点击**阅读指南**查看图文说明。
+包内共有七份回放和九篇指南。回放无需 Go、Docker、Agent 账号或 API Key。
+
+## 先看 DeepSeek 开发任务
+
+```sh
+./agentprov demo deepseek-context
+```
+
+真实 Agent 给 Python 报表增加按日汇总，并通过七项测试。
+执行图谱在上，**Agent 会话在下，默认收起**。展开会话可以查看任务和工具结果，
+在**权限与配置**中了解当时的设置，在**采集情况**中查看记录范围。
+选择图中的文件即可打开已保存的正文，收起会话后仍能继续阅读。
+
+CLI 先校验签名，再导入独立的临时目录。回放可以离线使用，不会重新运行记录中的命令。
+按 Ctrl-C 退出时，程序关闭本地服务并清理临时数据。
+
+## 查看其他示例
+
+```sh
 ./agentprov demo --list
 ./agentprov demo multiagent-provenance
+./agentprov demo k8s-cross-pod-a2a
+./agentprov demo --no-browser
 ```
 
-CLI 内置六份签名采集记录和全部示例指南，无需安装 Go。回放支持离线使用，只读取证据，不会执行记录中的命令。数据保存在临时目录，按 Ctrl-C 退出时清理。
+`--no-browser` 只输出本地地址。运行在远程机器上时，可通过端口转发访问。
+`demo/` 目录包含原始证据包、公钥、脚本和指南；重新采集所需的环境见各指南。
 
-程序会在本机回环地址打开浏览器。没有图形界面时，可添加 `--no-browser`，再使用输出的地址。
-
-## 选择语言
-
-命令行默认使用英文，添加 `--lang zh-CN` 可切换中文帮助和输出：
-
-```sh
-./agentprov --lang zh-CN --help
-./agentprov --lang zh-CN demo
-```
-
-显式选择会同时应用到打开的网页。未指定时，网页跟随浏览器语言。JSON、命令、路径、ID 和证据正文保留原样。
-
-## 查看示例
-
-示例库中的“打开回放”用于查看证据，“阅读指南”用于打开带目录、图片、表格和代码复制按钮的说明页。两者沿用 Dashboard 的视觉样式。
-
-示例库和指南首次打开时跟随浏览器语言，无法匹配时使用英文。右上角可切换 English 或中文；手动选择后，后续页面会保留选择。
-
-指南正文已内置，查看它们无需网络。点击指向仓库或外部网站的链接时，需要联网。
-
-## 运行可选评估器
-
-压缩包的 `demo/` 目录包含全部示例、原始签名、公钥、脚本和文档。LLM Judge 与 Jev 是独立的 Python 示例，需要另行运行；打开阅读页不会调用模型服务。
-
-LLM Judge 提供不需要密钥的离线流程：
+LLM Judge 和 Jev 是可选的 Python 接入示例，打开指南不会调用模型。
+以下命令用预设结果体验 LLM Judge 的离线接入流程：
 
 ```sh
 AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
 ```
 
-该流程使用预设结论检查集成，不代表实际模型评估。
+Jev 需要 Python 3.9+；实际评估还需要模型凭据，并允许发送选定的证据。
+步骤见 [Jev 指南](../../demo/jev-judge/README.zh-CN.md)。已完成的评估可离线重新打开。
 
-Jev 需要 Python 3.9+。实际评估还需要密钥，并明确允许发送选定的原始证据，详见 [Jev 中文指南](../../demo/jev-judge/README.zh-CN.md)。命令使用压缩包中 `agentprov` 的绝对路径；只有选择从源码构建时才需要 Go。已完成的 Jev 评估可以离线重新打开。
+## 语言
 
-重新采集的环境要求见各示例指南。
+网页首次打开时跟随浏览器语言，无法匹配时使用英文；手动切换 English / 中文后保留选择。
+命令行默认输出英文，命令、路径、ID、JSON 和原始证据保留原文。
+已有的 `--lang zh-CN` 可以选择中文帮助及已支持的中文输出，并用中文打开网页。
 
-## 平台支持
+## 平台与校验
 
-- Linux 压缩包附带可选传感器。使用 eBPF 时，仍需满足内核和权限要求。
-- macOS 支持回放和应用侧记录，不提供 Linux eBPF 采集。
-- Windows 用户应在 WSL 中使用对应架构的 Linux 压缩包。
+- Linux 包附带可选的原生传感器；内核采集需要相应内核、cgroup 和 BPF/perf 权限。
+- macOS 支持应用侧记录与回放。CLI 尚未经过 Apple Developer ID 签名或公证。
+- Windows 用户在 WSL 中使用 Linux 包。
+- `SHA256SUMS` 和 `.sha256` 用于检查下载完整性；示例公钥用于验证证据签名。
+  原始采集记录了哪些内容，在“采集情况”中单独说明。
 
-## 验证下载与证据
-
-`SHA256SUMS` 和各压缩包的 `.sha256` 文件用于检查下载完整性，不是发布者签名。CLI 使用随包公钥校验示例证据；校验通过表示证据内容与签名时一致，不代表采集完整，也不证明全部因果推断正确。
-
-macOS CLI 二进制尚未使用 Apple Developer ID 签名，也未经过公证。
+内置指南和图片支持离线阅读，访问外部链接时才需要联网。

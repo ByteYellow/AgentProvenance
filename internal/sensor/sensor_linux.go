@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -43,6 +44,7 @@ const (
 	eventRename  = 9
 	eventUnlink  = 10
 	eventDNS     = 11
+	eventFork    = 12
 )
 
 type sensorTracepoint struct {
@@ -88,6 +90,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		{"syscalls", "sys_enter_execve", objs.HandleExecve},
 		{"syscalls", "sys_enter_connect", objs.HandleConnect},
 		{"syscalls", "sys_enter_openat", objs.HandleOpenat},
+		{"syscalls", "sys_exit_openat", objs.HandleOpenReturn},
 		{"sched", "sched_process_exit", objs.HandleExit},
 	} {
 		if err := attach(p, true, "syscall"); err != nil {
@@ -95,6 +98,15 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 			return i18n.Errorf("attach %s: %w", p.name, err)
 		}
 	}
+	forkProbe := ProbeCapability{Name: "sched/sched_process_fork", Category: "process_lifecycle", Required: true, Status: "attached"}
+	forkLink, err := link.AttachRawTracepoint(link.RawTracepointOptions{Name: "sched_process_fork", Program: objs.HandleFork})
+	if err != nil {
+		forkProbe.Status, forkProbe.Reason = "failed", capabilityFailure(err)
+		reporter.add(forkProbe)
+		return fmt.Errorf("attach process lifecycle: %w", err)
+	}
+	links = append(links, forkLink)
+	reporter.add(forkProbe)
 	for _, p := range append([]sensorTracepoint{
 		{"syscalls", "sys_enter_setuid", objs.HandleSetuid},
 		{"syscalls", "sys_enter_setgid", objs.HandleSetgid},
@@ -108,6 +120,10 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		category := "syscall"
 		if p.name == "sys_enter_sendto" {
 			category = "dns"
+		}
+		if p.name == "sys_enter_rename" && runtime.GOARCH == "arm64" {
+			reporter.add(ProbeCapability{Name: p.group + "/" + p.name, Category: category, Status: "not_applicable", Reason: "arm64 uses renameat/renameat2"})
+			continue
 		}
 		_ = attach(p, false, category)
 	}
@@ -314,6 +330,7 @@ func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgro
 	} else {
 		ev["status"] = msg.Status
 	}
+	addProcessIdentity(ev, e)
 	return ev
 }
 
@@ -531,12 +548,18 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 		"timestamp":    eventTimestamp(e),
 		"comm":         cstr(e.Comm[:]),
 	}
+	addProcessIdentity(ev, e)
 	switch e.Kind {
+	case eventFork:
+		ev["event_type"] = "process_observed"
+		ev["observation"] = "kernel_fork"
 	case eventExec:
 		ev["event_type"] = "execve"
 		ev["path"] = cstr(e.Path[:])
-		if command := joinArgs(e.Args[:]); command != "" {
-			ev["command"] = command
+		if argv, limited := capturedArgs(e.Args[:]); len(argv) > 0 {
+			ev["command"] = strings.Join(argv, " ")
+			ev["argv"] = argv
+			ev["argv_truncated"] = limited
 		}
 	case eventConnect:
 		ev["event_type"] = "network_connect"
@@ -557,6 +580,10 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 		ev["event_type"] = "file_open"
 		ev["path"] = path
 		ev["mode"] = mode
+		if e.Dport == 1 {
+			ev["path_observation"] = "syscall_exit_retry"
+			ev["syscall_result"] = int64(e.Conn)
+		}
 	case eventExit:
 		ev["event_type"] = "process_exit"
 		ev["exit_code"] = e.ExitCode
@@ -694,32 +721,6 @@ func ipv4(addr uint32) string {
 
 func ntohs(p uint16) uint16 {
 	return (p<<8)&0xff00 | p>>8
-}
-
-// joinArgs rejoins the fixed-size argv slots emitted by the eBPF side (MAX_ARGS
-// slots of ARG_SLOT bytes, each a NUL-terminated, possibly truncated arg) into a
-// single space-separated command line, stopping at the first empty slot. These
-// constants must match exec.c (ARG_SLOT, MAX_ARGS).
-func joinArgs(b []uint8) string {
-	const slot = 32
-	const maxArgs = 16
-	parts := make([]string, 0, maxArgs)
-	for i := 0; i < maxArgs; i++ {
-		start := i * slot
-		if start >= len(b) {
-			break
-		}
-		end := start + slot
-		if end > len(b) {
-			end = len(b)
-		}
-		s := cstr(b[start:end])
-		if s == "" {
-			break
-		}
-		parts = append(parts, s)
-	}
-	return strings.Join(parts, " ")
 }
 
 func cstr(b []uint8) string {

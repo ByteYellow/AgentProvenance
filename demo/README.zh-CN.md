@@ -2,26 +2,27 @@
 
 [English](README.md) | 中文
 
-从单个 Agent 开始，再查看团队协作和跨 Pod 执行。仓库中的压缩证据包可在 macOS 或 Linux 上导入、校验和浏览，无需重新运行 Agent。重新采集所需的环境与凭据，见各示例说明。
+先看 DeepSeek 完成一次开发任务，再体验单 Agent 风险调查、团队协作和跨 Pod 执行。七份签名记录都可以在 macOS 或 Linux 上离线回放；两个评估器示例提供独立的接入指南。重新采集所需的环境与凭据见各示例说明。
 
 ## 一条命令打开
 
-从 [v0.8.2-rc.2 发行页](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。只有自行从源码构建时才需要 Go。预编译 CLI 内嵌全部签名采集记录和示例指南：
+从[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。只有自行从源码构建时才需要 Go。本文对应 v0.9.0；该版本压缩包发布前，请使用快速开始中的源码构建路径。CLI 内嵌七份签名采集记录和九个指南入口，包括两个可选评估器示例：
 
 ```sh
-./agentprov demo                         # 打开全部示例
-./agentprov demo --list                  # 列出回放名称和接入指南
-./agentprov demo snake-supply-chain      # 打开一份签名采集记录
+./agentprov demo                         # gallery: all demos
+./agentprov demo --list                  # list replay names and setup guides
+./agentprov demo deepseek-context        # task, tools, configuration and saved files
+./agentprov demo snake-supply-chain      # one signed capture
 ./agentprov demo multiagent-provenance
 ./agentprov demo k8s-cross-pod-a2a
 ./agentprov demo k8s-substrate
 ./agentprov demo grok-codebase-exfil
 ./agentprov demo grok-3routes
-./agentprov demo llm-judge                # 离线接入指南，不调用服务商
-./agentprov demo jev-judge                # 离线接入指南，不调用服务商
+./agentprov demo llm-judge                # offline setup guide; no provider call
+./agentprov demo jev-judge                # offline setup guide; no provider call
 ```
 
-“打开回放”（Open replay）在 Dashboard 中打开签名执行记录。“阅读指南”（Read guide）打开排版后的本地说明，包含章节目录、图片、表格和代码复制按钮。示例首页与阅读页沿用 Dashboard 风格，支持窄屏。rc.2 使用英文按钮；后续中文版的入口和布局相同。
+“打开回放”（Open replay）在 Dashboard 中打开签名执行记录。“阅读指南”（Read guide）打开排版后的本地说明，包含章节目录、图片、表格和代码复制按钮。示例首页与阅读页沿用 Dashboard 风格，支持窄屏与中英文切换。
 
 ![带章节目录和代码复制控件的中文指南阅读页](../docs/img/demo-guide-zh-CN.png)
 
@@ -36,6 +37,12 @@ AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
 ```
 
 Jev 示例可通过 `--agentprov` 使用包内 CLI，无需自行构建。在线评估需要 Python 和模型接口凭据。
+
+## v0.9.0 新增：一次普通开发任务
+
+[DeepSeek 会话示例](deepseek-context/README.zh-CN.md)记录为 Python 报表增加按日汇总的真实任务。可查看原始任务、12 组工具输入与结果、五条配置记录、保存的文件正文，以及两条工具与运行时之间的推断关联。七项测试通过是已保存的真实结果，回放时不会重新调用模型。上下文覆盖、运行时覆盖和权限记录分别展示。
+
+使用 v0.9.0 CLI 运行 `agentprov demo deepseek-context`，源码构建后的用法相同。签名回放可离线运行，无需 DeepSeek 账号或 VM；六份历史采集包保持原样。
 
 ## 1. 单个 Agent：供应链执行
 

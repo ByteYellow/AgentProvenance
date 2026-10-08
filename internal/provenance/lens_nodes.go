@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[string]lensEvent, error) {
@@ -80,18 +82,35 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 	// event so the graph shows the process NAME and the pid together (label =
 	// command, subtitle = pid) instead of an opaque number.
 	pidCommand := map[int64]string{}
+	// A PID can have several execs. Pick the latest observed label within each
+	// evidence tier, not whichever event happens to be last in map iteration.
+	ordered := make([]lensEvent, 0, len(events))
+	for _, ev := range events {
+		ordered = append(ordered, ev)
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		a, _ := time.Parse(time.RFC3339Nano, ordered[i].CreatedAt)
+		b, _ := time.Parse(time.RFC3339Nano, ordered[j].CreatedAt)
+		if a.Equal(b) {
+			return ordered[i].ID < ordered[j].ID
+		}
+		return a.After(b)
+	})
 	// execve is authoritative (the real exec). Then process_observed (the record
 	// ps-sampler) fills in pids whose execve wasn't captured — e.g. processes that
 	// were already running when the sensor attached — so the graph shows a name
 	// instead of a bare pid.
-	for _, ev := range events {
+	for _, ev := range ordered {
 		if ev.Type == "execve" && ev.PID > 0 {
+			if _, named := pidCommand[ev.PID]; named {
+				continue
+			}
 			if cmd := payloadString(ev.Payload, "command", "cmdline", "comm"); cmd != "" {
 				pidCommand[ev.PID] = cmd
 			}
 		}
 	}
-	for _, ev := range events {
+	for _, ev := range ordered {
 		if ev.Type == "process_observed" && ev.PID > 0 {
 			if _, named := pidCommand[ev.PID]; named {
 				continue
@@ -111,7 +130,8 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 	// bare number. Prefer the leader thread (pid==tgid); otherwise any thread's
 	// comm/command.
 	tgidName := map[int64]string{}
-	for _, ev := range events {
+	tgidLeader := map[int64]bool{}
+	for _, ev := range ordered {
 		if ev.PID <= 0 {
 			continue
 		}
@@ -123,8 +143,9 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 			pidCommand[ev.PID] = name
 		}
 		if ev.TGID > 0 {
-			if _, ok := tgidName[ev.TGID]; !ok || ev.PID == ev.TGID {
+			if _, ok := tgidName[ev.TGID]; !ok || (ev.PID == ev.TGID && !tgidLeader[ev.TGID]) {
 				tgidName[ev.TGID] = name
+				tgidLeader[ev.TGID] = ev.PID == ev.TGID
 			}
 		}
 	}

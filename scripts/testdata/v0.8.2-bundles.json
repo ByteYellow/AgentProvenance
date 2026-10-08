@@ -1,0 +1,306 @@
+{
+  "binary_sha256": "7886cd824ef8584b619ad064ec9ed5a5f71498fac951ecf61bb55298ba1cfbb2",
+  "verifier": "agentprov version v0.8.2 (74316c3758535ade210375a0c41cfba9f8d6f469; 2026-09-26T13:17:59+00:00; darwin/arm64)",
+  "release_commit": "74316c3758535ade210375a0c41cfba9f8d6f469",
+  "demos": [
+    {
+      "run": "run-snake-supervised",
+      "files": [
+        {
+          "source": "demo/snake-supply-chain/run-snake-supervised.forensics.json.gz",
+          "frozen": "demo/snake-supply-chain/run-snake-supervised.forensics.json.gz",
+          "bytes": 288146,
+          "sha256": "b14397f45750315ef427fc84472c1f7bdd2ae3c0d0d6d09501a9db4d36280ee2"
+        },
+        {
+          "source": "demo/snake-supply-chain/run-snake-supervised.forensics.dsse.json",
+          "frozen": "demo/snake-supply-chain/run-snake-supervised.forensics.dsse.json",
+          "bytes": 846,
+          "sha256": "7a7c160b2c2970f995f077e6e826f3c6319ebdf802f04a36589131a97bb0821a"
+        },
+        {
+          "source": "demo/snake-supply-chain/attestation.pub",
+          "frozen": "demo/snake-supply-chain/attestation.pub",
+          "bytes": 65,
+          "sha256": "5f2fcacc79cbf1c949a2268402ed1a245de98a530c264a0d994ed9ddae7e6dcc"
+        }
+      ],
+      "imported": {
+        "tables": {
+          "agents": 1,
+          "cost_samples": 3,
+          "events": 895,
+          "evidence_events": 863,
+          "execution_context_bindings": 24,
+          "fork_attempts": 1,
+          "graph_edges": 9264,
+          "leases": 1,
+          "policy_decisions": 3,
+          "processes": 1,
+          "provenance_objects": 57,
+          "response_actions": 3,
+          "risk_signals": 3,
+          "rollouts": 1,
+          "sessions": 1,
+          "signals": 3,
+          "snapshots": 1,
+          "tool_calls": 12
+        },
+        "total_rows": 11137,
+        "object_blobs": 57,
+        "snapshot_files": 1,
+        "omitted_content": 0
+      }
+    },
+    {
+      "run": "run-double-attempt",
+      "files": [
+        {
+          "source": "demo/multiagent-provenance/run-double-attempt.forensics.json.gz",
+          "frozen": "demo/multiagent-provenance/run-double-attempt.forensics.json.gz",
+          "bytes": 697267,
+          "sha256": "e1a545c57a61256af01dc06db306f02f9dd6552424f76cb829dc1cf38aea3410"
+        },
+        {
+          "source": "demo/multiagent-provenance/run-double-attempt.forensics.dsse.json",
+          "frozen": "demo/multiagent-provenance/run-double-attempt.forensics.dsse.json",
+          "bytes": 842,
+          "sha256": "01658fe0de00f00f8c1ba34d74f20803064a3568a5950c006400fd8ffbc75a6b"
+        },
+        {
+          "source": "demo/multiagent-provenance/attestation.pub",
+          "frozen": "demo/multiagent-provenance/attestation.pub",
+          "bytes": 65,
+          "sha256": "ffd195b677ab33e6a57706e45e16231f5a5ccdebd4f03d4e2c40b6b29315c032"
+        }
+      ],
+      "imported": {
+        "tables": {
+          "agents": 5,
+          "cost_samples": 4,
+          "events": 2308,
+          "evidence_events": 2234,
+          "execution_context_bindings": 44,
+          "fork_attempts": 1,
+          "graph_edges": 22714,
+          "leases": 1,
+          "policy_decisions": 4,
+          "processes": 1,
+          "provenance_objects": 202,
+          "response_actions": 4,
+          "risk_signals": 4,
+          "rollouts": 1,
+          "sessions": 1,
+          "signals": 4,
+          "snapshots": 1,
+          "tool_calls": 30
+        },
+        "total_rows": 27563,
+        "object_blobs": 202,
+        "snapshot_files": 1,
+        "omitted_content": 0
+      }
+    },
+    {
+      "run": "a2a-demo",
+      "files": [
+        {
+          "source": "demo/k8s-cross-pod-a2a/run-a2a-demo.forensics.json.gz",
+          "frozen": "demo/k8s-cross-pod-a2a/run-a2a-demo.forensics.json.gz",
+          "bytes": 27601,
+          "sha256": "676d0551c2021d67d687a959203ed637bcdbf71b095e2197209b0838516d6969"
+        },
+        {
+          "source": "demo/k8s-cross-pod-a2a/run-a2a-demo.forensics.dsse.json",
+          "frozen": "demo/k8s-cross-pod-a2a/run-a2a-demo.forensics.dsse.json",
+          "bytes": 814,
+          "sha256": "789c3d5f2b2ed99b3d4263e0ea1c04f9d25c7534e8dae8ed6baf38dbec84bd35"
+        },
+        {
+          "source": "demo/k8s-cross-pod-a2a/attestation.pub",
+          "frozen": "demo/k8s-cross-pod-a2a/attestation.pub",
+          "bytes": 65,
+          "sha256": "7fccd3725413e11def5d93bfe2eab0c00f113868997038cc84ac8c35c2483092"
+        }
+      ],
+      "imported": {
+        "tables": {
+          "agents": 4,
+          "cost_samples": 33,
+          "events": 128,
+          "execution_context_bindings": 2,
+          "graph_edges": 436,
+          "policy_decisions": 33,
+          "provenance_objects": 2,
+          "response_actions": 33,
+          "risk_signals": 33,
+          "signals": 33,
+          "tool_calls": 5
+        },
+        "total_rows": 742,
+        "object_blobs": 2,
+        "snapshot_files": 0,
+        "omitted_content": 0
+      }
+    },
+    {
+      "run": "claude-demo",
+      "files": [
+        {
+          "source": "demo/k8s-substrate/run-claude-demo.forensics.json.gz",
+          "frozen": "demo/k8s-substrate/run-claude-demo.forensics.json.gz",
+          "bytes": 26034,
+          "sha256": "cb76a49b3c250135258ccf90193ca6a475d8d3f944c31e08c794034ae94cbf10"
+        },
+        {
+          "source": "demo/k8s-substrate/run-claude-demo.forensics.dsse.json",
+          "frozen": "demo/k8s-substrate/run-claude-demo.forensics.dsse.json",
+          "bytes": 822,
+          "sha256": "f002d0d427780f9db74cad5c80b59d0d0bb186d75a5bc9c79e97caf501dfdf4e"
+        },
+        {
+          "source": "demo/k8s-substrate/attestation.pub",
+          "frozen": "demo/k8s-substrate/attestation.pub",
+          "bytes": 65,
+          "sha256": "c547748ccbd2d88cdd6cbb91f9a179c95dca790f5f7d9e5821a2d723f79fb522"
+        }
+      ],
+      "imported": {
+        "tables": {
+          "cost_samples": 31,
+          "events": 98,
+          "execution_context_bindings": 1,
+          "graph_edges": 374,
+          "policy_decisions": 31,
+          "provenance_objects": 16,
+          "response_actions": 31,
+          "risk_signals": 31,
+          "signals": 31
+        },
+        "total_rows": 644,
+        "object_blobs": 16,
+        "snapshot_files": 0,
+        "omitted_content": 0
+      }
+    },
+    {
+      "run": "run-grok-exfil",
+      "files": [
+        {
+          "source": "demo/grok-codebase-exfil/run-grok-exfil.forensics.json.gz",
+          "frozen": "demo/grok-codebase-exfil/run-grok-exfil.forensics.json.gz",
+          "bytes": 433979,
+          "sha256": "b7e98bcfc29458cd59fafdbdabc22bc9d33eae7468c5d2f239d9f65fd764e140"
+        },
+        {
+          "source": "demo/grok-codebase-exfil/run-grok-exfil.forensics.dsse.json",
+          "frozen": "demo/grok-codebase-exfil/run-grok-exfil.forensics.dsse.json",
+          "bytes": 830,
+          "sha256": "9594e7716df339ece6f95efa21b3fd3f7d52b06c5f0e153080bbf96fb7d8a056"
+        },
+        {
+          "source": "demo/grok-codebase-exfil/attestation.pub",
+          "frozen": "demo/grok-codebase-exfil/attestation.pub",
+          "bytes": 65,
+          "sha256": "1703434c3c80e7be9d738adbe82674b764c5842bb90cb099c628267cacd8caaa"
+        }
+      ],
+      "imported": {
+        "tables": {
+          "agents": 1,
+          "cost_samples": 6,
+          "events": 331,
+          "evidence_events": 319,
+          "execution_context_bindings": 2,
+          "fork_attempts": 1,
+          "graph_edges": 3659,
+          "leases": 1,
+          "policy_decisions": 6,
+          "processes": 1,
+          "provenance_objects": 762,
+          "response_actions": 6,
+          "risk_signals": 6,
+          "rollouts": 1,
+          "sessions": 1,
+          "signals": 6,
+          "snapshots": 1,
+          "tool_calls": 1
+        },
+        "total_rows": 5111,
+        "object_blobs": 762,
+        "snapshot_files": 9,
+        "omitted_content": 0
+      }
+    },
+    {
+      "run": "run-grok-3routes",
+      "files": [
+        {
+          "source": "demo/grok-codebase-exfil/run-grok-3routes.forensics.json.gz",
+          "frozen": "demo/grok-codebase-exfil/run-grok-3routes.forensics.json.gz",
+          "bytes": 570576,
+          "sha256": "91a2686e40f90493382ac732676bd0fcd30456d8476cf43fb45ab6be5291d54e"
+        },
+        {
+          "source": "demo/grok-codebase-exfil/run-grok-3routes.forensics.dsse.json",
+          "frozen": "demo/grok-codebase-exfil/run-grok-3routes.forensics.dsse.json",
+          "bytes": 834,
+          "sha256": "3acb0d65dbffc99ffdc8a725b377f81949dfdbf8b0085f8a1c14c1a19202779a"
+        },
+        {
+          "source": "demo/grok-codebase-exfil/run-grok-3routes.attestation.pub",
+          "frozen": "demo/grok-codebase-exfil/run-grok-3routes.attestation.pub",
+          "bytes": 65,
+          "sha256": "2048e5e7ef4a7fb3a18477fa238bf0a736e775427fabf3aa2207dfe9486297e2"
+        }
+      ],
+      "imported": {
+        "tables": {
+          "agents": 1,
+          "events": 159,
+          "evidence_events": 155,
+          "execution_context_bindings": 1,
+          "fork_attempts": 1,
+          "graph_edges": 1919,
+          "leases": 1,
+          "processes": 1,
+          "provenance_objects": 555,
+          "rollouts": 1,
+          "sessions": 1,
+          "snapshots": 1,
+          "tool_calls": 4
+        },
+        "total_rows": 2800,
+        "object_blobs": 555,
+        "snapshot_files": 9,
+        "omitted_content": 0
+      }
+    }
+  ],
+  "baseline_binaries": [
+    {
+      "platform": "darwin_amd64",
+      "archive": "agentprov_v0.8.2_darwin_amd64.tar.gz",
+      "archive_sha256": "eee37f8f76b732c70bc95415b24258336bc0bb232a7698d13cf111fd3a6dac54",
+      "binary_sha256": "9a8bdda2359a3b5f1e8ce521f55c3cd4e1f017752c49426c64d78fa9b888b71c"
+    },
+    {
+      "platform": "darwin_arm64",
+      "archive": "agentprov_v0.8.2_darwin_arm64.tar.gz",
+      "archive_sha256": "ea13a2c0eaeb5471d4a2f76b81de42ec6eb7f884720b0468b9fe69bb0ac43787",
+      "binary_sha256": "7886cd824ef8584b619ad064ec9ed5a5f71498fac951ecf61bb55298ba1cfbb2"
+    },
+    {
+      "platform": "linux_amd64",
+      "archive": "agentprov_v0.8.2_linux_amd64.tar.gz",
+      "archive_sha256": "8434a23c37f654f4260d9e268d4e79435920817e57ff05f23fee80a1481540c6",
+      "binary_sha256": "063d8392c6f0f5d93486c02509dea80148ebc6884286a59cfe3e6a6da043f4e7"
+    },
+    {
+      "platform": "linux_arm64",
+      "archive": "agentprov_v0.8.2_linux_arm64.tar.gz",
+      "archive_sha256": "dabb11d5a232ac0c1d4d1a3b67b8207f0b9d51397d03751fab963f93c3cd4c0e",
+      "binary_sha256": "8bf45e4aacfba8630f0de49962d1dfe2228ad23b4f6981cf3a6128e34eb90026"
+    }
+  ]
+}

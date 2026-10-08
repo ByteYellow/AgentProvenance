@@ -121,8 +121,11 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 			if err := capture.Flush(); err != nil {
 				return err
 			}
-			if err := capture.Process(128); err != nil {
-				fmt.Fprintf(stderr, commandText(cmd, "agentprov sensor stream: pending spool retained for retry: %v\n"), ErrorText(cmd, err))
+			drainCtx, cancelDrain := context.WithTimeout(context.Background(), 3*time.Second)
+			drainErr := capture.Drain(drainCtx)
+			cancelDrain()
+			if drainErr != nil {
+				fmt.Fprintf(stderr, commandText(cmd, "agentprov sensor stream: pending spool retained for retry: %v\n"), ErrorText(cmd, drainErr))
 			}
 			if err := capture.Close(); err != nil {
 				return err
@@ -142,6 +145,9 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 			}
 			if workerErr != nil {
 				return workerErr
+			}
+			if drainErr != nil {
+				return drainErr
 			}
 			if sensorErr != nil {
 				return sensorErr

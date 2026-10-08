@@ -82,6 +82,8 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 		// Multi-agent orchestration actors (names/types/parent) so a replayed
 		// orchestration lens shows alice/bob/recon, not bare agent ids.
 		{"agents", "agents", "run_id = ?", "id ASC"},
+		{"agent_context_entries", "agent_context_entries", "run_id = ?", "source_id ASC, source_sequence ASC, source_ordinal ASC, id ASC"},
+		{"agent_context_reports", "agent_context_reports", "run_id = ?", "created_at ASC, id ASC"},
 		{"processes", "processes", "session_id IN (SELECT id FROM sessions WHERE run_id = ?)", "started_at ASC, id ASC"},
 		{"fork_attempts", "fork_attempts", "rollout_id IN (SELECT id FROM rollouts WHERE run_id = ?)", "created_at ASC, id ASC"},
 		// Snapshots a run references aren't all session-scoped: a rollout's base
@@ -91,6 +93,9 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 			" OR id IN (SELECT base_snapshot_id FROM rollouts WHERE run_id = ?)" +
 			" OR id IN (SELECT snapshot_id FROM fork_attempts WHERE rollout_id IN (SELECT id FROM rollouts WHERE run_id = ?))", "created_at ASC, id ASC"},
 		{"events", "events", "run_id = ?", "created_at ASC, id ASC"},
+		// Keep the older summary field for consumers, but export the exact
+		// ordered event IDs as well so replay can still verify batch membership.
+		{"telemetry_batch_records", "telemetry_batches", "run_id = ?", "created_at ASC, id ASC"},
 		{"policy_decisions", "policy_decisions", "run_id = ?", "created_at ASC, id ASC"},
 		{"risk_signals", "risk_signals", "run_id = ?", "created_at ASC, id ASC"},
 		// Unified signal model (security/cost/quality/behavior) — without it the

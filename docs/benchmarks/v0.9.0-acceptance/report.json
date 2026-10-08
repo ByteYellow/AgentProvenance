@@ -1,0 +1,2630 @@
+{
+  "schema_version": "agentprovenance.v090_acceptance/v1",
+  "checked_at": "2026-10-08",
+  "base_commit": "186e6c7ce889df0c414fd01c65bf504b44273c58",
+  "scope": "v0.9.0 A1-A4 and B1; x86 KVM/K3s regression; no ARM live rerun or 24-hour soak",
+  "binaries": {
+    "agentprov": "ff10e1e9ed95dbb97dddca6033b74fba43d6767c790260bfb5dcd09d64104c08",
+    "agentprov-sensor": "0e1331b77173527c8c4937e6e5324b16f1809174b1e8f7fa31fa40df3a5724ee",
+    "go-client": "187a9a129b51ec1341cc15160ea1e884929b190fe322f42b78ce9bec0ccd8a5d"
+  },
+  "probe_objects": {
+    "sensorbpf_arm64_bpfel.o": "0dd640dba81c057eebde7bb1ac9accdace6918dbe9918cba9fb31efc2070d24e",
+    "sensorbpf_x86_bpfel.o": "ccbd01bf89526c6a0fa11b0c130867f27aa02aed2b6ade2595642261d111704d"
+  },
+  "go_126_vet_and_race": "passed",
+  "go_123_all_packages": "passed",
+  "release_routing_tests": 4,
+  "legacy": {
+    "schema_version": "agentprovenance.legacy_context_acceptance/v1",
+    "checked_at": "2026-10-08T14:28:09.080151+00:00",
+    "candidate_sha256": "eb65ebfea9468f4ff8c3191029e1c9ec06a661b6e548a5d11cdff202d0ba1190",
+    "baseline_sha256": "063d8392c6f0f5d93486c02509dea80148ebc6884286a59cfe3e6a6da043f4e7",
+    "manifest_sha256": "22c0ae809f910bdb99dee6351ccc97a0d82818aaeef444752f4dc039677eab3b",
+    "frozen_files": 18,
+    "scope": "offline signed imports, semantic query parity, and legacy DB migration; not rendered UI or new live capture",
+    "display_exclusions": [
+      "runtime_process label (baseline map-order nondeterminism)",
+      "layout",
+      "relocated local content paths"
+    ],
+    "demos": [
+      {
+        "run": "run-snake-supervised",
+        "signature_verified": true,
+        "preserved_rows": 11137,
+        "object_blobs": 57,
+        "snapshot_files": 1,
+        "graph_errors": 0,
+        "graph_warnings": 0,
+        "context_coverage": "legacy_not_recorded",
+        "database_upgrade": {
+          "from": 17,
+          "to": 19,
+          "preserved": true
+        },
+        "duplicate_import": "passed",
+        "views": [
+          {
+            "lens": "default",
+            "detail": "summary",
+            "nodes": 9,
+            "edges": 8
+          },
+          {
+            "lens": "default",
+            "detail": "raw",
+            "nodes": 1456,
+            "edges": 9266
+          },
+          {
+            "lens": "security",
+            "detail": "summary",
+            "nodes": 6,
+            "edges": 5
+          },
+          {
+            "lens": "security",
+            "detail": "raw",
+            "nodes": 108,
+            "edges": 247
+          },
+          {
+            "lens": "process",
+            "detail": "summary",
+            "nodes": 9,
+            "edges": 7
+          },
+          {
+            "lens": "process",
+            "detail": "raw",
+            "nodes": 1356,
+            "edges": 5562
+          },
+          {
+            "lens": "file-artifact",
+            "detail": "summary",
+            "nodes": 6,
+            "edges": 5
+          },
+          {
+            "lens": "file-artifact",
+            "detail": "raw",
+            "nodes": 603,
+            "edges": 1372
+          },
+          {
+            "lens": "network-egress",
+            "detail": "summary",
+            "nodes": 5,
+            "edges": 4
+          },
+          {
+            "lens": "network-egress",
+            "detail": "raw",
+            "nodes": 17,
+            "edges": 47
+          },
+          {
+            "lens": "data-flow-taint",
+            "detail": "summary",
+            "nodes": 2,
+            "edges": 1
+          },
+          {
+            "lens": "data-flow-taint",
+            "detail": "raw",
+            "nodes": 42,
+            "edges": 164
+          },
+          {
+            "lens": "agent-intent",
+            "detail": "summary",
+            "nodes": 5,
+            "edges": 4
+          },
+          {
+            "lens": "agent-intent",
+            "detail": "raw",
+            "nodes": 96,
+            "edges": 70
+          },
+          {
+            "lens": "orchestration",
+            "detail": "summary",
+            "nodes": 17,
+            "edges": 16
+          },
+          {
+            "lens": "orchestration",
+            "detail": "raw",
+            "nodes": 17,
+            "edges": 16
+          },
+          {
+            "lens": "intent",
+            "detail": "summary",
+            "nodes": 12,
+            "edges": 11
+          },
+          {
+            "lens": "intent",
+            "detail": "raw",
+            "nodes": 12,
+            "edges": 11
+          },
+          {
+            "lens": "substrate",
+            "detail": "summary",
+            "nodes": 7,
+            "edges": 7
+          },
+          {
+            "lens": "substrate",
+            "detail": "raw",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "trust-origin",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "trust-origin",
+            "detail": "raw",
+            "nodes": 1445,
+            "edges": 6836
+          },
+          {
+            "lens": "sandbox-boundary",
+            "detail": "summary",
+            "nodes": 6,
+            "edges": 5
+          },
+          {
+            "lens": "sandbox-boundary",
+            "detail": "raw",
+            "nodes": 1130,
+            "edges": 2111
+          }
+        ]
+      },
+      {
+        "run": "run-double-attempt",
+        "signature_verified": true,
+        "preserved_rows": 27563,
+        "object_blobs": 202,
+        "snapshot_files": 1,
+        "graph_errors": 0,
+        "graph_warnings": 0,
+        "context_coverage": "legacy_not_recorded",
+        "database_upgrade": {
+          "from": 17,
+          "to": 19,
+          "preserved": true
+        },
+        "duplicate_import": "passed",
+        "views": [
+          {
+            "lens": "default",
+            "detail": "summary",
+            "nodes": 9,
+            "edges": 8
+          },
+          {
+            "lens": "default",
+            "detail": "raw",
+            "nodes": 3652,
+            "edges": 22716
+          },
+          {
+            "lens": "security",
+            "detail": "summary",
+            "nodes": 7,
+            "edges": 6
+          },
+          {
+            "lens": "security",
+            "detail": "raw",
+            "nodes": 294,
+            "edges": 524
+          },
+          {
+            "lens": "process",
+            "detail": "summary",
+            "nodes": 9,
+            "edges": 7
+          },
+          {
+            "lens": "process",
+            "detail": "raw",
+            "nodes": 3311,
+            "edges": 14109
+          },
+          {
+            "lens": "file-artifact",
+            "detail": "summary",
+            "nodes": 6,
+            "edges": 5
+          },
+          {
+            "lens": "file-artifact",
+            "detail": "raw",
+            "nodes": 837,
+            "edges": 2168
+          },
+          {
+            "lens": "network-egress",
+            "detail": "summary",
+            "nodes": 5,
+            "edges": 4
+          },
+          {
+            "lens": "network-egress",
+            "detail": "raw",
+            "nodes": 27,
+            "edges": 96
+          },
+          {
+            "lens": "data-flow-taint",
+            "detail": "summary",
+            "nodes": 2,
+            "edges": 1
+          },
+          {
+            "lens": "data-flow-taint",
+            "detail": "raw",
+            "nodes": 83,
+            "edges": 371
+          },
+          {
+            "lens": "agent-intent",
+            "detail": "summary",
+            "nodes": 10,
+            "edges": 9
+          },
+          {
+            "lens": "agent-intent",
+            "detail": "raw",
+            "nodes": 348,
+            "edges": 259
+          },
+          {
+            "lens": "orchestration",
+            "detail": "summary",
+            "nodes": 54,
+            "edges": 56
+          },
+          {
+            "lens": "orchestration",
+            "detail": "raw",
+            "nodes": 54,
+            "edges": 56
+          },
+          {
+            "lens": "intent",
+            "detail": "summary",
+            "nodes": 37,
+            "edges": 39
+          },
+          {
+            "lens": "intent",
+            "detail": "raw",
+            "nodes": 37,
+            "edges": 39
+          },
+          {
+            "lens": "substrate",
+            "detail": "summary",
+            "nodes": 7,
+            "edges": 7
+          },
+          {
+            "lens": "substrate",
+            "detail": "raw",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "trust-origin",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "trust-origin",
+            "detail": "raw",
+            "nodes": 3638,
+            "edges": 17135
+          },
+          {
+            "lens": "sandbox-boundary",
+            "detail": "summary",
+            "nodes": 6,
+            "edges": 5
+          },
+          {
+            "lens": "sandbox-boundary",
+            "detail": "raw",
+            "nodes": 2535,
+            "edges": 5048
+          }
+        ]
+      },
+      {
+        "run": "a2a-demo",
+        "signature_verified": true,
+        "preserved_rows": 742,
+        "object_blobs": 2,
+        "snapshot_files": 0,
+        "graph_errors": 0,
+        "graph_warnings": 0,
+        "context_coverage": "legacy_not_recorded",
+        "database_upgrade": {
+          "from": 17,
+          "to": 19,
+          "preserved": true
+        },
+        "duplicate_import": "passed",
+        "views": [
+          {
+            "lens": "default",
+            "detail": "summary",
+            "nodes": 9,
+            "edges": 8
+          },
+          {
+            "lens": "default",
+            "detail": "raw",
+            "nodes": 202,
+            "edges": 452
+          },
+          {
+            "lens": "security",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "security",
+            "detail": "raw",
+            "nodes": 135,
+            "edges": 172
+          },
+          {
+            "lens": "process",
+            "detail": "summary",
+            "nodes": 6,
+            "edges": 5
+          },
+          {
+            "lens": "process",
+            "detail": "raw",
+            "nodes": 40,
+            "edges": 252
+          },
+          {
+            "lens": "file-artifact",
+            "detail": "summary",
+            "nodes": 2,
+            "edges": 1
+          },
+          {
+            "lens": "file-artifact",
+            "detail": "raw",
+            "nodes": 9,
+            "edges": 8
+          },
+          {
+            "lens": "network-egress",
+            "detail": "summary",
+            "nodes": 2,
+            "edges": 1
+          },
+          {
+            "lens": "network-egress",
+            "detail": "raw",
+            "nodes": 35,
+            "edges": 25
+          },
+          {
+            "lens": "data-flow-taint",
+            "detail": "summary",
+            "nodes": 16,
+            "edges": 8
+          },
+          {
+            "lens": "data-flow-taint",
+            "detail": "raw",
+            "nodes": 67,
+            "edges": 73
+          },
+          {
+            "lens": "agent-intent",
+            "detail": "summary",
+            "nodes": 2,
+            "edges": 1
+          },
+          {
+            "lens": "agent-intent",
+            "detail": "raw",
+            "nodes": 43,
+            "edges": 44
+          },
+          {
+            "lens": "orchestration",
+            "detail": "summary",
+            "nodes": 43,
+            "edges": 44
+          },
+          {
+            "lens": "orchestration",
+            "detail": "raw",
+            "nodes": 43,
+            "edges": 44
+          },
+          {
+            "lens": "intent",
+            "detail": "summary",
+            "nodes": 11,
+            "edges": 12
+          },
+          {
+            "lens": "intent",
+            "detail": "raw",
+            "nodes": 11,
+            "edges": 12
+          },
+          {
+            "lens": "substrate",
+            "detail": "summary",
+            "nodes": 11,
+            "edges": 14
+          },
+          {
+            "lens": "substrate",
+            "detail": "raw",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "trust-origin",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "trust-origin",
+            "detail": "raw",
+            "nodes": 83,
+            "edges": 296
+          },
+          {
+            "lens": "sandbox-boundary",
+            "detail": "summary",
+            "nodes": 3,
+            "edges": 2
+          },
+          {
+            "lens": "sandbox-boundary",
+            "detail": "raw",
+            "nodes": 35,
+            "edges": 25
+          }
+        ]
+      },
+      {
+        "run": "claude-demo",
+        "signature_verified": true,
+        "preserved_rows": 644,
+        "object_blobs": 16,
+        "snapshot_files": 0,
+        "graph_errors": 0,
+        "graph_warnings": 0,
+        "context_coverage": "legacy_not_recorded",
+        "database_upgrade": {
+          "from": 17,
+          "to": 19,
+          "preserved": true
+        },
+        "duplicate_import": "passed",
+        "views": [
+          {
+            "lens": "default",
+            "detail": "summary",
+            "nodes": 9,
+            "edges": 8
+          },
+          {
+            "lens": "default",
+            "detail": "raw",
+            "nodes": 182,
+            "edges": 374
+          },
+          {
+            "lens": "security",
+            "detail": "summary",
+            "nodes": 2,
+            "edges": 1
+          },
+          {
+            "lens": "security",
+            "detail": "raw",
+            "nodes": 128,
+            "edges": 140
+          },
+          {
+            "lens": "process",
+            "detail": "summary",
+            "nodes": 6,
+            "edges": 5
+          },
+          {
+            "lens": "process",
+            "detail": "raw",
+            "nodes": 2,
+            "edges": 194
+          },
+          {
+            "lens": "file-artifact",
+            "detail": "summary",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "file-artifact",
+            "detail": "raw",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "network-egress",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "network-egress",
+            "detail": "raw",
+            "nodes": 116,
+            "edges": 85
+          },
+          {
+            "lens": "data-flow-taint",
+            "detail": "summary",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "data-flow-taint",
+            "detail": "raw",
+            "nodes": 63,
+            "edges": 46
+          },
+          {
+            "lens": "agent-intent",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "agent-intent",
+            "detail": "raw",
+            "nodes": 33,
+            "edges": 19
+          },
+          {
+            "lens": "orchestration",
+            "detail": "summary",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "orchestration",
+            "detail": "raw",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "intent",
+            "detail": "summary",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "intent",
+            "detail": "raw",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "substrate",
+            "detail": "summary",
+            "nodes": 9,
+            "edges": 10
+          },
+          {
+            "lens": "substrate",
+            "detail": "raw",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "trust-origin",
+            "detail": "summary",
+            "nodes": 3,
+            "edges": 2
+          },
+          {
+            "lens": "trust-origin",
+            "detail": "raw",
+            "nodes": 35,
+            "edges": 212
+          },
+          {
+            "lens": "sandbox-boundary",
+            "detail": "summary",
+            "nodes": 2,
+            "edges": 1
+          },
+          {
+            "lens": "sandbox-boundary",
+            "detail": "raw",
+            "nodes": 63,
+            "edges": 46
+          }
+        ]
+      },
+      {
+        "run": "run-grok-exfil",
+        "signature_verified": true,
+        "preserved_rows": 5111,
+        "object_blobs": 762,
+        "snapshot_files": 9,
+        "graph_errors": 0,
+        "graph_warnings": 0,
+        "context_coverage": "legacy_not_recorded",
+        "database_upgrade": {
+          "from": 17,
+          "to": 19,
+          "preserved": true
+        },
+        "duplicate_import": "passed",
+        "views": [
+          {
+            "lens": "default",
+            "detail": "summary",
+            "nodes": 9,
+            "edges": 8
+          },
+          {
+            "lens": "default",
+            "detail": "raw",
+            "nodes": 447,
+            "edges": 3659
+          },
+          {
+            "lens": "security",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "security",
+            "detail": "raw",
+            "nodes": 78,
+            "edges": 266
+          },
+          {
+            "lens": "process",
+            "detail": "summary",
+            "nodes": 10,
+            "edges": 8
+          },
+          {
+            "lens": "process",
+            "detail": "raw",
+            "nodes": 411,
+            "edges": 2296
+          },
+          {
+            "lens": "file-artifact",
+            "detail": "summary",
+            "nodes": 3,
+            "edges": 2
+          },
+          {
+            "lens": "file-artifact",
+            "detail": "raw",
+            "nodes": 190,
+            "edges": 496
+          },
+          {
+            "lens": "network-egress",
+            "detail": "summary",
+            "nodes": 5,
+            "edges": 4
+          },
+          {
+            "lens": "network-egress",
+            "detail": "raw",
+            "nodes": 136,
+            "edges": 619
+          },
+          {
+            "lens": "data-flow-taint",
+            "detail": "summary",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "data-flow-taint",
+            "detail": "raw",
+            "nodes": 26,
+            "edges": 40
+          },
+          {
+            "lens": "agent-intent",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "agent-intent",
+            "detail": "raw",
+            "nodes": 10,
+            "edges": 7
+          },
+          {
+            "lens": "orchestration",
+            "detail": "summary",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "orchestration",
+            "detail": "raw",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "intent",
+            "detail": "summary",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "intent",
+            "detail": "raw",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "substrate",
+            "detail": "summary",
+            "nodes": 7,
+            "edges": 7
+          },
+          {
+            "lens": "substrate",
+            "detail": "raw",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "trust-origin",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "trust-origin",
+            "detail": "raw",
+            "nodes": 427,
+            "edges": 2748
+          },
+          {
+            "lens": "sandbox-boundary",
+            "detail": "summary",
+            "nodes": 5,
+            "edges": 4
+          },
+          {
+            "lens": "sandbox-boundary",
+            "detail": "raw",
+            "nodes": 382,
+            "edges": 891
+          }
+        ]
+      },
+      {
+        "run": "run-grok-3routes",
+        "signature_verified": true,
+        "preserved_rows": 2800,
+        "object_blobs": 555,
+        "snapshot_files": 9,
+        "graph_errors": 0,
+        "graph_warnings": 0,
+        "context_coverage": "legacy_not_recorded",
+        "database_upgrade": {
+          "from": 17,
+          "to": 19,
+          "preserved": true
+        },
+        "duplicate_import": "passed",
+        "views": [
+          {
+            "lens": "default",
+            "detail": "summary",
+            "nodes": 9,
+            "edges": 8
+          },
+          {
+            "lens": "default",
+            "detail": "raw",
+            "nodes": 236,
+            "edges": 1919
+          },
+          {
+            "lens": "security",
+            "detail": "summary",
+            "nodes": 3,
+            "edges": 2
+          },
+          {
+            "lens": "security",
+            "detail": "raw",
+            "nodes": 40,
+            "edges": 148
+          },
+          {
+            "lens": "process",
+            "detail": "summary",
+            "nodes": 6,
+            "edges": 5
+          },
+          {
+            "lens": "process",
+            "detail": "raw",
+            "nodes": 215,
+            "edges": 1150
+          },
+          {
+            "lens": "file-artifact",
+            "detail": "summary",
+            "nodes": 3,
+            "edges": 2
+          },
+          {
+            "lens": "file-artifact",
+            "detail": "raw",
+            "nodes": 143,
+            "edges": 386
+          },
+          {
+            "lens": "network-egress",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "network-egress",
+            "detail": "raw",
+            "nodes": 37,
+            "edges": 142
+          },
+          {
+            "lens": "data-flow-taint",
+            "detail": "summary",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "data-flow-taint",
+            "detail": "raw",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "agent-intent",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "agent-intent",
+            "detail": "raw",
+            "nodes": 17,
+            "edges": 12
+          },
+          {
+            "lens": "orchestration",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "orchestration",
+            "detail": "raw",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "intent",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "intent",
+            "detail": "raw",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "substrate",
+            "detail": "summary",
+            "nodes": 7,
+            "edges": 7
+          },
+          {
+            "lens": "substrate",
+            "detail": "raw",
+            "nodes": 0,
+            "edges": 0
+          },
+          {
+            "lens": "trust-origin",
+            "detail": "summary",
+            "nodes": 4,
+            "edges": 3
+          },
+          {
+            "lens": "trust-origin",
+            "detail": "raw",
+            "nodes": 234,
+            "edges": 1414
+          },
+          {
+            "lens": "sandbox-boundary",
+            "detail": "summary",
+            "nodes": 5,
+            "edges": 4
+          },
+          {
+            "lens": "sandbox-boundary",
+            "detail": "raw",
+            "nodes": 202,
+            "edges": 497
+          }
+        ]
+      }
+    ],
+    "status": "passed"
+  },
+  "deepseek": {
+    "schema_version": "agentprovenance.deepseek_acceptance/v1",
+    "checked_at": "2026-10-08T14:13:21.869896+00:00",
+    "binary_sha256": "eb65ebfea9468f4ff8c3191029e1c9ec06a661b6e548a5d11cdff202d0ba1190",
+    "run_id": "run-dbc2adf273d4",
+    "bundle_sha256": "2a243f3b0e4319370e362e19fb9f1e51aea8a4a8aa373f866d97acec64624994",
+    "signature_verified_before_import": true,
+    "rows_preserved": 2532,
+    "object_blobs": 379,
+    "snapshot_files": 5,
+    "telemetry_batches": 18,
+    "graph_errors": 0,
+    "graph_warnings": 0,
+    "duplicate_import_preserved": true,
+    "http_checks": {
+      "entries": 73,
+      "context_content_refs": 146,
+      "context_content_bytes": 212480,
+      "saved_files": 2,
+      "tool_link_queries": 24,
+      "matched_execs": 2,
+      "negative_api_cases": 4,
+      "capture_status": "partial",
+      "run_dropped_events": null
+    }
+  },
+  "readiness": {
+    "schema_version": "agentprovenance.daemon_readiness_acceptance/v1",
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "architecture": "x86_64",
+    "database_schema": 19,
+    "checks": {
+      "ready_without_auth": true,
+      "live_without_auth": true,
+      "api_still_requires_auth": true,
+      "future_schema_unavailable": true,
+      "live_during_schema_fault": true,
+      "missing_table_unavailable": true,
+      "unknown_queue_is_null": true,
+      "live_during_storage_fault": true,
+      "recovers_after_storage_restored": true,
+      "historical_loss_keeps_query_available": true,
+      "historical_loss_explicit": true
+    },
+    "passed": true
+  },
+  "portable_release": {
+    "archive": "agentprov_v0.9.0-review_linux_amd64.tar.gz",
+    "platform": "linux/amd64",
+    "signed_replays": 7,
+    "guides": 9,
+    "guide_languages": [
+      "en",
+      "zh-CN"
+    ],
+    "recorded_context": "passed",
+    "no_go_required": true,
+    "cleanup": "passed"
+  },
+  "browser": {
+    "deepseek": {
+      "capture": "real DeepSeek Harness 0.1.7-rc.2, not a synthetic fixture",
+      "run": "run-dbc2adf273d4",
+      "checks": 71,
+      "passed": [
+        "processing channel is not a transcript source",
+        "successful transcript capture has its own status",
+        "session initially collapsed",
+        "retains graphcard",
+        "retains siglist",
+        "retains focusedevidence",
+        "retains outboundcard",
+        "retains tl",
+        "retains ptree",
+        "retains egtbl",
+        "retains compliancecard",
+        "all twelve existing lenses remain selectable",
+        "rendered lens default",
+        "rendered lens security",
+        "rendered lens process",
+        "rendered lens file-artifact",
+        "rendered lens network-egress",
+        "rendered lens data-flow-taint",
+        "rendered lens agent-intent",
+        "rendered lens orchestration",
+        "rendered lens intent",
+        "rendered lens substrate",
+        "rendered lens trust-origin",
+        "rendered lens sandbox-boundary",
+        "real saved file works while session is collapsed",
+        "recorded implementation body available offline",
+        "file raw descriptor is distinct from its saved text",
+        "switching files selects the recorded test source",
+        "HTTP /api/context/entries",
+        "HTTP /api/context/content",
+        "HTTP /api/context/content",
+        "HTTP /api/context/content",
+        "HTTP /api/context/content",
+        "HTTP /api/context/content",
+        "HTTP /api/context/content",
+        "HTTP /api/context/content",
+        "HTTP /api/context/content",
+        "HTTP /api/context/content",
+        "HTTP /api/context/content",
+        "real unit-test result found in saved evidence",
+        "next recorded page available",
+        "paged session reaches the recorded unit-test result",
+        "structured tool output preserves readable line breaks",
+        "display projection is labeled separately from saved bytes",
+        "HTTP /api/context/content",
+        "saved-byte mode exactly matches the recorded response",
+        "real tool output expands",
+        "raw source remains an unformatted byte view",
+        "raw tool record retains native call identity",
+        "session locates the exact unit-test tool node",
+        "graph returns only the matching input and result",
+        "return restores the original session page",
+        "actual permission configuration is visible",
+        "real configuration records can be compared without inventing approval",
+        "real capture uncertainty remains visible",
+        "node diagnostics are initially collapsed",
+        "node backlog is not presented as run event loss",
+        "original backlog remains inspectable",
+        "unknown run-specific losses remain unknown",
+        "association has a distinct status",
+        "association does not show fictitious transcript counters",
+        "discovery is not shown as another empty transcript",
+        "successful discovery is a collapsed diagnostic",
+        "original association method remains inspectable",
+        "missing approval is explicitly retained",
+        "coverage remains honest in Chinese",
+        "Chinese association is distinct from capture",
+        "mobile has no page-wide overflow",
+        "mobile saved-content dialog fits",
+        "mobile close control stays visible",
+        "no unhandled browser errors: "
+      ],
+      "screenshots": "output/playwright/deepseek-*.png"
+    },
+    "legacy": {
+      "source": "six original historical bundles",
+      "renderedLensChecks": 144,
+      "checks": 313,
+      "passed": [
+        "run-snake-supervised/en: requested historical run",
+        "run-snake-supervised/en: context initially collapsed",
+        "run-snake-supervised/en: retains graphcard",
+        "run-snake-supervised/en: retains siglist",
+        "run-snake-supervised/en: retains focusedevidence",
+        "run-snake-supervised/en: retains outboundcard",
+        "run-snake-supervised/en: retains tl",
+        "run-snake-supervised/en: retains ptree",
+        "run-snake-supervised/en: retains egtbl",
+        "run-snake-supervised/en: retains compliancecard",
+        "run-snake-supervised/en: twelve existing lenses selectable",
+        "run-snake-supervised/en: rendered default",
+        "run-snake-supervised/en: rendered security",
+        "run-snake-supervised/en: rendered process",
+        "run-snake-supervised/en: rendered file-artifact",
+        "run-snake-supervised/en: rendered network-egress",
+        "run-snake-supervised/en: rendered data-flow-taint",
+        "run-snake-supervised/en: rendered agent-intent",
+        "run-snake-supervised/en: rendered orchestration",
+        "run-snake-supervised/en: rendered intent",
+        "run-snake-supervised/en: rendered substrate",
+        "run-snake-supervised/en: rendered trust-origin",
+        "run-snake-supervised/en: rendered sandbox-boundary",
+        "run-snake-supervised/en: historical context coverage remains unknown",
+        "run-snake-supervised/en: no fabricated session entries",
+        "run-snake-supervised/en: no mobile page overflow",
+        "run-snake-supervised/zh-CN: requested historical run",
+        "run-snake-supervised/zh-CN: context initially collapsed",
+        "run-snake-supervised/zh-CN: retains graphcard",
+        "run-snake-supervised/zh-CN: retains siglist",
+        "run-snake-supervised/zh-CN: retains focusedevidence",
+        "run-snake-supervised/zh-CN: retains outboundcard",
+        "run-snake-supervised/zh-CN: retains tl",
+        "run-snake-supervised/zh-CN: retains ptree",
+        "run-snake-supervised/zh-CN: retains egtbl",
+        "run-snake-supervised/zh-CN: retains compliancecard",
+        "run-snake-supervised/zh-CN: twelve existing lenses selectable",
+        "run-snake-supervised/zh-CN: rendered default",
+        "run-snake-supervised/zh-CN: rendered security",
+        "run-snake-supervised/zh-CN: rendered process",
+        "run-snake-supervised/zh-CN: rendered file-artifact",
+        "run-snake-supervised/zh-CN: rendered network-egress",
+        "run-snake-supervised/zh-CN: rendered data-flow-taint",
+        "run-snake-supervised/zh-CN: rendered agent-intent",
+        "run-snake-supervised/zh-CN: rendered orchestration",
+        "run-snake-supervised/zh-CN: rendered intent",
+        "run-snake-supervised/zh-CN: rendered substrate",
+        "run-snake-supervised/zh-CN: rendered trust-origin",
+        "run-snake-supervised/zh-CN: rendered sandbox-boundary",
+        "run-snake-supervised/zh-CN: historical context coverage remains unknown",
+        "run-snake-supervised/zh-CN: no fabricated session entries",
+        "run-snake-supervised/zh-CN: no mobile page overflow",
+        "run-double-attempt/en: requested historical run",
+        "run-double-attempt/en: context initially collapsed",
+        "run-double-attempt/en: retains graphcard",
+        "run-double-attempt/en: retains siglist",
+        "run-double-attempt/en: retains focusedevidence",
+        "run-double-attempt/en: retains outboundcard",
+        "run-double-attempt/en: retains tl",
+        "run-double-attempt/en: retains ptree",
+        "run-double-attempt/en: retains egtbl",
+        "run-double-attempt/en: retains compliancecard",
+        "run-double-attempt/en: twelve existing lenses selectable",
+        "run-double-attempt/en: rendered default",
+        "run-double-attempt/en: rendered security",
+        "run-double-attempt/en: rendered process",
+        "run-double-attempt/en: rendered file-artifact",
+        "run-double-attempt/en: rendered network-egress",
+        "run-double-attempt/en: rendered data-flow-taint",
+        "run-double-attempt/en: rendered agent-intent",
+        "run-double-attempt/en: rendered orchestration",
+        "run-double-attempt/en: rendered intent",
+        "run-double-attempt/en: rendered substrate",
+        "run-double-attempt/en: rendered trust-origin",
+        "run-double-attempt/en: rendered sandbox-boundary",
+        "run-double-attempt/en: historical context coverage remains unknown",
+        "run-double-attempt/en: no fabricated session entries",
+        "run-double-attempt/en: no mobile page overflow",
+        "run-double-attempt/zh-CN: requested historical run",
+        "run-double-attempt/zh-CN: context initially collapsed",
+        "run-double-attempt/zh-CN: retains graphcard",
+        "run-double-attempt/zh-CN: retains siglist",
+        "run-double-attempt/zh-CN: retains focusedevidence",
+        "run-double-attempt/zh-CN: retains outboundcard",
+        "run-double-attempt/zh-CN: retains tl",
+        "run-double-attempt/zh-CN: retains ptree",
+        "run-double-attempt/zh-CN: retains egtbl",
+        "run-double-attempt/zh-CN: retains compliancecard",
+        "run-double-attempt/zh-CN: twelve existing lenses selectable",
+        "run-double-attempt/zh-CN: rendered default",
+        "run-double-attempt/zh-CN: rendered security",
+        "run-double-attempt/zh-CN: rendered process",
+        "run-double-attempt/zh-CN: rendered file-artifact",
+        "run-double-attempt/zh-CN: rendered network-egress",
+        "run-double-attempt/zh-CN: rendered data-flow-taint",
+        "run-double-attempt/zh-CN: rendered agent-intent",
+        "run-double-attempt/zh-CN: rendered orchestration",
+        "run-double-attempt/zh-CN: rendered intent",
+        "run-double-attempt/zh-CN: rendered substrate",
+        "run-double-attempt/zh-CN: rendered trust-origin",
+        "run-double-attempt/zh-CN: rendered sandbox-boundary",
+        "run-double-attempt/zh-CN: historical context coverage remains unknown",
+        "run-double-attempt/zh-CN: no fabricated session entries",
+        "run-double-attempt/zh-CN: no mobile page overflow",
+        "a2a-demo/en: requested historical run",
+        "a2a-demo/en: context initially collapsed",
+        "a2a-demo/en: retains graphcard",
+        "a2a-demo/en: retains siglist",
+        "a2a-demo/en: retains focusedevidence",
+        "a2a-demo/en: retains outboundcard",
+        "a2a-demo/en: retains tl",
+        "a2a-demo/en: retains ptree",
+        "a2a-demo/en: retains egtbl",
+        "a2a-demo/en: retains compliancecard",
+        "a2a-demo/en: twelve existing lenses selectable",
+        "a2a-demo/en: rendered default",
+        "a2a-demo/en: rendered security",
+        "a2a-demo/en: rendered process",
+        "a2a-demo/en: rendered file-artifact",
+        "a2a-demo/en: rendered network-egress",
+        "a2a-demo/en: rendered data-flow-taint",
+        "a2a-demo/en: rendered agent-intent",
+        "a2a-demo/en: rendered orchestration",
+        "a2a-demo/en: rendered intent",
+        "a2a-demo/en: rendered substrate",
+        "a2a-demo/en: rendered trust-origin",
+        "a2a-demo/en: rendered sandbox-boundary",
+        "a2a-demo/en: historical context coverage remains unknown",
+        "a2a-demo/en: no fabricated session entries",
+        "a2a-demo/en: no mobile page overflow",
+        "a2a-demo/zh-CN: requested historical run",
+        "a2a-demo/zh-CN: context initially collapsed",
+        "a2a-demo/zh-CN: retains graphcard",
+        "a2a-demo/zh-CN: retains siglist",
+        "a2a-demo/zh-CN: retains focusedevidence",
+        "a2a-demo/zh-CN: retains outboundcard",
+        "a2a-demo/zh-CN: retains tl",
+        "a2a-demo/zh-CN: retains ptree",
+        "a2a-demo/zh-CN: retains egtbl",
+        "a2a-demo/zh-CN: retains compliancecard",
+        "a2a-demo/zh-CN: twelve existing lenses selectable",
+        "a2a-demo/zh-CN: rendered default",
+        "a2a-demo/zh-CN: rendered security",
+        "a2a-demo/zh-CN: rendered process",
+        "a2a-demo/zh-CN: rendered file-artifact",
+        "a2a-demo/zh-CN: rendered network-egress",
+        "a2a-demo/zh-CN: rendered data-flow-taint",
+        "a2a-demo/zh-CN: rendered agent-intent",
+        "a2a-demo/zh-CN: rendered orchestration",
+        "a2a-demo/zh-CN: rendered intent",
+        "a2a-demo/zh-CN: rendered substrate",
+        "a2a-demo/zh-CN: rendered trust-origin",
+        "a2a-demo/zh-CN: rendered sandbox-boundary",
+        "a2a-demo/zh-CN: historical context coverage remains unknown",
+        "a2a-demo/zh-CN: no fabricated session entries",
+        "a2a-demo/zh-CN: no mobile page overflow",
+        "claude-demo/en: requested historical run",
+        "claude-demo/en: context initially collapsed",
+        "claude-demo/en: retains graphcard",
+        "claude-demo/en: retains siglist",
+        "claude-demo/en: retains focusedevidence",
+        "claude-demo/en: retains outboundcard",
+        "claude-demo/en: retains tl",
+        "claude-demo/en: retains ptree",
+        "claude-demo/en: retains egtbl",
+        "claude-demo/en: retains compliancecard",
+        "claude-demo/en: twelve existing lenses selectable",
+        "claude-demo/en: rendered default",
+        "claude-demo/en: rendered security",
+        "claude-demo/en: rendered process",
+        "claude-demo/en: rendered file-artifact",
+        "claude-demo/en: rendered network-egress",
+        "claude-demo/en: rendered data-flow-taint",
+        "claude-demo/en: rendered agent-intent",
+        "claude-demo/en: rendered orchestration",
+        "claude-demo/en: rendered intent",
+        "claude-demo/en: rendered substrate",
+        "claude-demo/en: rendered trust-origin",
+        "claude-demo/en: rendered sandbox-boundary",
+        "claude-demo/en: historical context coverage remains unknown",
+        "claude-demo/en: no fabricated session entries",
+        "claude-demo/en: no mobile page overflow",
+        "claude-demo/zh-CN: requested historical run",
+        "claude-demo/zh-CN: context initially collapsed",
+        "claude-demo/zh-CN: retains graphcard",
+        "claude-demo/zh-CN: retains siglist",
+        "claude-demo/zh-CN: retains focusedevidence",
+        "claude-demo/zh-CN: retains outboundcard",
+        "claude-demo/zh-CN: retains tl",
+        "claude-demo/zh-CN: retains ptree",
+        "claude-demo/zh-CN: retains egtbl",
+        "claude-demo/zh-CN: retains compliancecard",
+        "claude-demo/zh-CN: twelve existing lenses selectable",
+        "claude-demo/zh-CN: rendered default",
+        "claude-demo/zh-CN: rendered security",
+        "claude-demo/zh-CN: rendered process",
+        "claude-demo/zh-CN: rendered file-artifact",
+        "claude-demo/zh-CN: rendered network-egress",
+        "claude-demo/zh-CN: rendered data-flow-taint",
+        "claude-demo/zh-CN: rendered agent-intent",
+        "claude-demo/zh-CN: rendered orchestration",
+        "claude-demo/zh-CN: rendered intent",
+        "claude-demo/zh-CN: rendered substrate",
+        "claude-demo/zh-CN: rendered trust-origin",
+        "claude-demo/zh-CN: rendered sandbox-boundary",
+        "claude-demo/zh-CN: historical context coverage remains unknown",
+        "claude-demo/zh-CN: no fabricated session entries",
+        "claude-demo/zh-CN: no mobile page overflow",
+        "run-grok-exfil/en: requested historical run",
+        "run-grok-exfil/en: context initially collapsed",
+        "run-grok-exfil/en: retains graphcard",
+        "run-grok-exfil/en: retains siglist",
+        "run-grok-exfil/en: retains focusedevidence",
+        "run-grok-exfil/en: retains outboundcard",
+        "run-grok-exfil/en: retains tl",
+        "run-grok-exfil/en: retains ptree",
+        "run-grok-exfil/en: retains egtbl",
+        "run-grok-exfil/en: retains compliancecard",
+        "run-grok-exfil/en: twelve existing lenses selectable",
+        "run-grok-exfil/en: rendered default",
+        "run-grok-exfil/en: rendered security",
+        "run-grok-exfil/en: rendered process",
+        "run-grok-exfil/en: rendered file-artifact",
+        "run-grok-exfil/en: rendered network-egress",
+        "run-grok-exfil/en: rendered data-flow-taint",
+        "run-grok-exfil/en: rendered agent-intent",
+        "run-grok-exfil/en: rendered orchestration",
+        "run-grok-exfil/en: rendered intent",
+        "run-grok-exfil/en: rendered substrate",
+        "run-grok-exfil/en: rendered trust-origin",
+        "run-grok-exfil/en: rendered sandbox-boundary",
+        "run-grok-exfil/en: historical context coverage remains unknown",
+        "run-grok-exfil/en: no fabricated session entries",
+        "run-grok-exfil/en: no mobile page overflow",
+        "run-grok-exfil/zh-CN: requested historical run",
+        "run-grok-exfil/zh-CN: context initially collapsed",
+        "run-grok-exfil/zh-CN: retains graphcard",
+        "run-grok-exfil/zh-CN: retains siglist",
+        "run-grok-exfil/zh-CN: retains focusedevidence",
+        "run-grok-exfil/zh-CN: retains outboundcard",
+        "run-grok-exfil/zh-CN: retains tl",
+        "run-grok-exfil/zh-CN: retains ptree",
+        "run-grok-exfil/zh-CN: retains egtbl",
+        "run-grok-exfil/zh-CN: retains compliancecard",
+        "run-grok-exfil/zh-CN: twelve existing lenses selectable",
+        "run-grok-exfil/zh-CN: rendered default",
+        "run-grok-exfil/zh-CN: rendered security",
+        "run-grok-exfil/zh-CN: rendered process",
+        "run-grok-exfil/zh-CN: rendered file-artifact",
+        "run-grok-exfil/zh-CN: rendered network-egress",
+        "run-grok-exfil/zh-CN: rendered data-flow-taint",
+        "run-grok-exfil/zh-CN: rendered agent-intent",
+        "run-grok-exfil/zh-CN: rendered orchestration",
+        "run-grok-exfil/zh-CN: rendered intent",
+        "run-grok-exfil/zh-CN: rendered substrate",
+        "run-grok-exfil/zh-CN: rendered trust-origin",
+        "run-grok-exfil/zh-CN: rendered sandbox-boundary",
+        "run-grok-exfil/zh-CN: historical context coverage remains unknown",
+        "run-grok-exfil/zh-CN: no fabricated session entries",
+        "run-grok-exfil/zh-CN: no mobile page overflow",
+        "run-grok-3routes/en: requested historical run",
+        "run-grok-3routes/en: context initially collapsed",
+        "run-grok-3routes/en: retains graphcard",
+        "run-grok-3routes/en: retains siglist",
+        "run-grok-3routes/en: retains focusedevidence",
+        "run-grok-3routes/en: retains outboundcard",
+        "run-grok-3routes/en: retains tl",
+        "run-grok-3routes/en: retains ptree",
+        "run-grok-3routes/en: retains egtbl",
+        "run-grok-3routes/en: retains compliancecard",
+        "run-grok-3routes/en: twelve existing lenses selectable",
+        "run-grok-3routes/en: rendered default",
+        "run-grok-3routes/en: rendered security",
+        "run-grok-3routes/en: rendered process",
+        "run-grok-3routes/en: rendered file-artifact",
+        "run-grok-3routes/en: rendered network-egress",
+        "run-grok-3routes/en: rendered data-flow-taint",
+        "run-grok-3routes/en: rendered agent-intent",
+        "run-grok-3routes/en: rendered orchestration",
+        "run-grok-3routes/en: rendered intent",
+        "run-grok-3routes/en: rendered substrate",
+        "run-grok-3routes/en: rendered trust-origin",
+        "run-grok-3routes/en: rendered sandbox-boundary",
+        "run-grok-3routes/en: historical context coverage remains unknown",
+        "run-grok-3routes/en: no fabricated session entries",
+        "run-grok-3routes/en: no mobile page overflow",
+        "run-grok-3routes/zh-CN: requested historical run",
+        "run-grok-3routes/zh-CN: context initially collapsed",
+        "run-grok-3routes/zh-CN: retains graphcard",
+        "run-grok-3routes/zh-CN: retains siglist",
+        "run-grok-3routes/zh-CN: retains focusedevidence",
+        "run-grok-3routes/zh-CN: retains outboundcard",
+        "run-grok-3routes/zh-CN: retains tl",
+        "run-grok-3routes/zh-CN: retains ptree",
+        "run-grok-3routes/zh-CN: retains egtbl",
+        "run-grok-3routes/zh-CN: retains compliancecard",
+        "run-grok-3routes/zh-CN: twelve existing lenses selectable",
+        "run-grok-3routes/zh-CN: rendered default",
+        "run-grok-3routes/zh-CN: rendered security",
+        "run-grok-3routes/zh-CN: rendered process",
+        "run-grok-3routes/zh-CN: rendered file-artifact",
+        "run-grok-3routes/zh-CN: rendered network-egress",
+        "run-grok-3routes/zh-CN: rendered data-flow-taint",
+        "run-grok-3routes/zh-CN: rendered agent-intent",
+        "run-grok-3routes/zh-CN: rendered orchestration",
+        "run-grok-3routes/zh-CN: rendered intent",
+        "run-grok-3routes/zh-CN: rendered substrate",
+        "run-grok-3routes/zh-CN: rendered trust-origin",
+        "run-grok-3routes/zh-CN: rendered sandbox-boundary",
+        "run-grok-3routes/zh-CN: historical context coverage remains unknown",
+        "run-grok-3routes/zh-CN: no fabricated session entries",
+        "run-grok-3routes/zh-CN: no mobile page overflow",
+        "no unhandled browser errors: "
+      ]
+    },
+    "fixtures": [
+      {
+        "name": "context",
+        "result": {
+          "fixture": "synthetic, not a live capture",
+          "checks": 83,
+          "passed": [
+            "session initially collapsed",
+            "summary distinguishes retained historical records",
+            "summary counts source records, not inferred unique messages",
+            "graph verification not claimed as signature verification",
+            "retains graphcard",
+            "retains siglist",
+            "retains focusedevidence",
+            "retains outboundcard",
+            "retains tl",
+            "retains ptree",
+            "retains egtbl",
+            "retains compliancecard",
+            "overview retains task, tool, file, configuration and coverage shortcuts",
+            "file shortcut opens independent preview without expanding session",
+            "configuration shortcut expands its matching tab",
+            "coverage shortcut opens the report",
+            "tool shortcut opens conversation and tool records",
+            "session navigation clears the sticky header",
+            "recorded markup is not executed",
+            "event-only message representation is labeled",
+            "history is visibly scoped",
+            "new result is visibly scoped",
+            "bounded entry pagination ends honestly",
+            "first page is bounded at 64 KiB",
+            "last saved output page is accessible",
+            "content expands independently",
+            "close preserves content page",
+            "raw source record switch",
+            "session follows exact recorded tool link",
+            "graph filters to the two linked input/result records",
+            "historical message cannot navigate to current execution",
+            "configuration event has a readable label",
+            "missing approval remains unknown in comparison",
+            "explicit null differs from absent configuration",
+            "historical capture is unknown without a fictitious run-loss count",
+            "source coverage retains unknown counters and parser",
+            "configuration field gaps use readable names",
+            "recorded configuration changes do not imply complete history",
+            "historical coverage and authorization boundaries are explicit",
+            "explicit graph content selection replaces the session preview",
+            "live refresh preserves long-content page",
+            "live refresh preserves session reading position",
+            "language switch preserves selected session tab",
+            "language switch restores session reading position",
+            "language switch preserves original output and page",
+            "historical boundary is localized",
+            "source message event label is localized",
+            "mobile has no page-wide overflow",
+            "mobile dialog fits viewport",
+            "mobile dialog pagination stays visible",
+            "entry API failure is visible, not rendered as empty success",
+            "DeepSeek representation: Model-proposed tool",
+            "DeepSeek representation: Completion recorded; start not recorded",
+            "DeepSeek representation: Replaced context; not a new execution",
+            "completion-only sub-call has no invented runtime association",
+            "PTC raw parent identity and structured error preserved",
+            "replacement retains compaction source references",
+            "DeepSeek localized representation: 模型提出的工具调用",
+            "DeepSeek localized representation: 已记录完成结果；未记录开始时间",
+            "DeepSeek localized representation: 上下文替换；不是新执行",
+            "same-line first message keeps its physical position",
+            "same-line second message is displayed after the first",
+            "en: synthetic partial label",
+            "en: synthetic partial severity",
+            "en: node backlog stays diagnostic",
+            "en: synthetic ok label",
+            "en: synthetic ok severity",
+            "en: node backlog stays diagnostic",
+            "en: confirmed run loss stays prominent",
+            "en: synthetic disabled label",
+            "en: synthetic disabled severity",
+            "en: node backlog stays diagnostic",
+            "zh-CN: synthetic partial label",
+            "zh-CN: synthetic partial severity",
+            "zh-CN: node backlog stays diagnostic",
+            "zh-CN: synthetic ok label",
+            "zh-CN: synthetic ok severity",
+            "zh-CN: node backlog stays diagnostic",
+            "zh-CN: confirmed run loss stays prominent",
+            "zh-CN: synthetic disabled label",
+            "zh-CN: synthetic disabled severity",
+            "zh-CN: node backlog stays diagnostic",
+            "no unhandled browser errors: "
+          ],
+          "screenshots": "output/playwright/context-*.png"
+        }
+      },
+      {
+        "name": "artifacts",
+        "result": {
+          "fixture": "synthetic saved artifacts, not a live capture",
+          "pages": 135,
+          "checks": 18,
+          "passed": [
+            "artifact reading does not expand the session",
+            "first artifact page is bounded",
+            "text chunks are not counted as file artifacts",
+            "UI reaches stored tail beyond 8 MiB",
+            "UI traversed both 4 MiB and 8 MiB boundaries",
+            "all artifact responses stayed within the page budget",
+            "long artifact expands",
+            "closing keeps the last artifact page",
+            "raw shows saved descriptor, not the live file",
+            "language change preserves original artifact page",
+            "mobile artifact pager stays visible",
+            "mobile artifact view has no overflow",
+            "diff additions retain their styling",
+            "missing body is not an empty successful page",
+            "ambiguous source offers exact saved versions",
+            "version selection does not guess latest",
+            "all artifact controls remain independent of session expansion",
+            "no unhandled browser errors: "
+          ],
+          "screenshots": "output/playwright/artifact-*.png"
+        }
+      }
+    ]
+  },
+  "kvm": {
+    "schema_version": "agentprovenance.kvm_guest_acceptance/v1",
+    "architecture": "x86_64",
+    "kernel": "6.8.0-139-generic",
+    "virtualization": "kvm",
+    "boot_id": "bded1596-ddcd-49cf-8f0c-c74c43ea890f",
+    "run_id": "run-kvm-2fcbe8f13495",
+    "native_events": 16,
+    "event_types": [
+      "execve",
+      "file_open",
+      "file_write",
+      "network_connect",
+      "process_exit",
+      "process_observed"
+    ],
+    "cgroups": [
+      "11061"
+    ],
+    "verification": {
+      "schema_version": "agentprovenance.verify/v1",
+      "run_id": "run-kvm-2fcbe8f13495",
+      "status": "ok",
+      "issue_count": 0,
+      "error_count": 0,
+      "warning_count": 0,
+      "issues": null
+    },
+    "replay_verification": {
+      "schema_version": "agentprovenance.verify/v1",
+      "run_id": "run-kvm-2fcbe8f13495",
+      "status": "ok",
+      "issue_count": 0,
+      "error_count": 0,
+      "warning_count": 0,
+      "issues": null
+    },
+    "bundle_sha256": "15b23fac8eb392dfaacca058073669d6fa0004910a91be8725957aa6b6256b3b",
+    "imported_run": "run-kvm-2fcbe8f13495",
+    "passed": true
+  },
+  "k3s": {
+    "schema_version": "agentprovenance.k3s_guest_acceptance/v1",
+    "architecture": "x86_64",
+    "kernel": "6.8.0-139-generic",
+    "boot_id": "bded1596-ddcd-49cf-8f0c-c74c43ea890f",
+    "run_id": "run-agentprov-guest-8d0ac7d384",
+    "native_events": 79,
+    "event_types": [
+      "execve",
+      "file_open",
+      "file_rename",
+      "file_unlink",
+      "file_write",
+      "network_connect",
+      "process_exit",
+      "process_observed",
+      "secret_path",
+      "setgid",
+      "setuid"
+    ],
+    "binding_source": "k8s_cgroup",
+    "bindings_closed": 12,
+    "verification": {
+      "schema_version": "agentprovenance.verify/v1",
+      "run_id": "run-agentprov-guest-8d0ac7d384",
+      "status": "ok",
+      "issue_count": 0,
+      "error_count": 0,
+      "warning_count": 0,
+      "issues": null
+    },
+    "passed": true
+  },
+  "native_sensor": {
+    "schema_version": "agentprovenance.sensor_live_acceptance/v1",
+    "architecture": "x86_64",
+    "kernel": "6.8.0-139-generic",
+    "pause_drain_seconds": 1.5,
+    "checks": {
+      "execve": true,
+      "file_open": true,
+      "file_rename": true,
+      "file_unlink": true,
+      "network_connect": true,
+      "dns_query": true,
+      "process_exit": true,
+      "sensitive_read": true,
+      "file_write": true,
+      "setuid": true,
+      "setgid": true,
+      "ptrace": true,
+      "legacy_open_x86": true,
+      "cgroup_identity": true,
+      "dns_glibc_c_abi": true,
+      "dns_udp": true,
+      "python-openssl-ex:tls_write": true,
+      "python-openssl-ex:tls_read": true,
+      "c-openssl-legacy:tls_write": true,
+      "c-openssl-legacy:tls_read": true,
+      "c-openssl-ex:tls_write": true,
+      "c-openssl-ex:tls_read": true,
+      "go-abiinternal:tls_write": true,
+      "go-abiinternal:tls_read": true,
+      "sensor_clean_exit": true,
+      "no_tls_attach_warning": true,
+      "parent_process_instance": true,
+      "fork-child:lifetime": true,
+      "fork-child:parent": true,
+      "fork-child:ordering": true,
+      "fork-child:birth_cgroup": true,
+      "migration-child:lifetime": true,
+      "migration-child:parent": true,
+      "migration-child:ordering": true,
+      "migration-child:birth_cgroup": true,
+      "cgroup_migration": true,
+      "clone-child:lifetime": true,
+      "clone-child:parent": true,
+      "clone-child:ordering": true,
+      "clone-child:birth_cgroup": true,
+      "clone_into_cgroup": true,
+      "required_cgroup_lifecycle": true,
+      "capture_time_before_drain": true
+    },
+    "passed": true,
+    "kernel_pids": {
+      "python-openssl-ex": 3564,
+      "c-openssl-legacy": 3569,
+      "c-openssl-ex": 3571,
+      "go-abiinternal": 3573
+    },
+    "caller_pids": {
+      "python-openssl-ex": 3564,
+      "c-openssl-legacy": 3569,
+      "c-openssl-ex": 3571,
+      "go-abiinternal": 3573
+    },
+    "lifecycle": {
+      "fixtures": {
+        "fork-child": {
+          "caller_pid": 3566
+        },
+        "target_cgroup_id": "10137",
+        "migration-child": {
+          "caller_pid": 3567
+        },
+        "clone-child": {
+          "caller_pid": 3568
+        }
+      },
+      "gaps": {}
+    },
+    "child_kernel_pids": {
+      "fork-child": 3566,
+      "migration-child": 3567,
+      "clone-child": 3568
+    },
+    "event_types": {
+      "process_observed": 7,
+      "execve": 4,
+      "file_open": 34,
+      "file_rename": 1,
+      "file_unlink": 2,
+      "setgid": 1,
+      "setuid": 1,
+      "ptrace": 1,
+      "dns_query": 4,
+      "network_connect": 15,
+      "tls_write": 8,
+      "tls_read": 8,
+      "process_exit": 7
+    },
+    "event_count": 93
+  },
+  "durable_lifecycle_attribution": {
+    "passed": true,
+    "test": "TestNativeLiveLifecycleAttribution",
+    "duration_seconds": 3.7
+  },
+  "node_recovery": {
+    "schema_version": "agentprovenance.node_capture_acceptance/v1",
+    "kernel": "6.8.0-139-generic",
+    "architecture": "x86_64",
+    "checks": {
+      "agentprov-late-398952005c-0:no_early_binding": true,
+      "agentprov-late-398952005c-1:no_early_binding": true,
+      "both_markers_durable_before_crash": true,
+      "agentprov-late-398952005c-0:late_attribution": true,
+      "agentprov-late-398952005c-0:closed_interval": true,
+      "agentprov-late-398952005c-0:no_cross_run": true,
+      "agentprov-late-398952005c-0:verified": true,
+      "agentprov-late-398952005c-1:late_attribution": true,
+      "agentprov-late-398952005c-1:closed_interval": true,
+      "agentprov-late-398952005c-1:no_cross_run": true,
+      "agentprov-late-398952005c-1:verified": true,
+      "no_duplicate_events_after_second_restart": true,
+      "collector_still_running": true
+    },
+    "runs": [
+      {
+        "run_id": "run-agentprov-late-398952005c-0",
+        "native_events": 38,
+        "bindings": [
+          {
+            "id": "bind_k8s_d1a44562e6d00ade6f3d5c200b97b35f80b7f44fdc8dfe3a5337c42014bb77bb",
+            "run_id": "run-agentprov-late-398952005c-0",
+            "session_id": "3417a1f8-2884-478d-80da-f767a5df0ee1",
+            "attempt_id": "",
+            "tool_call_id": "",
+            "process_id": "",
+            "container_id": "79dc0f4137d558f172b6339eac7413a4e3ddbfa6fe4b4efffbade29d73b568e2",
+            "cgroup_id": "",
+            "root_pid": 0,
+            "pid": 0,
+            "started_at": "2026-10-08T14:44:19Z",
+            "ended_at": "2026-10-08T14:44:19.999999999Z",
+            "binding_source": "k8s_cgroup",
+            "confidence": 0.8
+          }
+        ],
+        "verification": {
+          "schema_version": "agentprovenance.verify/v1",
+          "run_id": "run-agentprov-late-398952005c-0",
+          "status": "ok",
+          "issue_count": 0,
+          "error_count": 0,
+          "warning_count": 0,
+          "issues": null
+        }
+      },
+      {
+        "run_id": "run-agentprov-late-398952005c-1",
+        "native_events": 40,
+        "bindings": [
+          {
+            "id": "bind_k8s_167baf7a6e20e8c28236b5d8013cb9665d5e0dbcb33996d3a87f6622118c5327",
+            "run_id": "run-agentprov-late-398952005c-1",
+            "session_id": "64229b99-f262-4b46-85f6-c19a8f45c63b",
+            "attempt_id": "",
+            "tool_call_id": "",
+            "process_id": "",
+            "container_id": "307fdcef8bddee833041f892d6d5ec4990830d667e3a769818be0dac21d703b0",
+            "cgroup_id": "",
+            "root_pid": 0,
+            "pid": 0,
+            "started_at": "2026-10-08T14:44:19Z",
+            "ended_at": "2026-10-08T14:44:19.999999999Z",
+            "binding_source": "k8s_cgroup",
+            "confidence": 0.8
+          },
+          {
+            "id": "bind-native-92af96dea87757021cadc73766fe2e9bc96e135cf6a70a498eb39b673f3ed14a",
+            "run_id": "run-agentprov-late-398952005c-1",
+            "session_id": "64229b99-f262-4b46-85f6-c19a8f45c63b",
+            "attempt_id": "",
+            "tool_call_id": "",
+            "process_id": "",
+            "container_id": "",
+            "cgroup_id": "",
+            "root_pid": 0,
+            "pid": 6506,
+            "started_at": "2026-10-08T14:44:19Z",
+            "ended_at": "2026-10-08T14:44:19.999999999Z",
+            "binding_source": "k8s_cgroup",
+            "confidence": 0.8
+          },
+          {
+            "id": "bind-native-c94e28ad072eb3827fe480c878c97319133929985ead6c274c039d0c8095b415",
+            "run_id": "run-agentprov-late-398952005c-1",
+            "session_id": "64229b99-f262-4b46-85f6-c19a8f45c63b",
+            "attempt_id": "",
+            "tool_call_id": "",
+            "process_id": "",
+            "container_id": "",
+            "cgroup_id": "",
+            "root_pid": 0,
+            "pid": 6515,
+            "started_at": "2026-10-08T14:44:19Z",
+            "ended_at": "2026-10-08T14:44:19.999999999Z",
+            "binding_source": "k8s_cgroup",
+            "confidence": 0.8
+          },
+          {
+            "id": "bind-native-1f8494eff37f177e181a02057dd696b9db670592f51aa8bd52d0e675aeca06e6",
+            "run_id": "run-agentprov-late-398952005c-1",
+            "session_id": "64229b99-f262-4b46-85f6-c19a8f45c63b",
+            "attempt_id": "",
+            "tool_call_id": "",
+            "process_id": "",
+            "container_id": "",
+            "cgroup_id": "",
+            "root_pid": 0,
+            "pid": 6516,
+            "started_at": "2026-10-08T14:44:19Z",
+            "ended_at": "2026-10-08T14:44:19.999999999Z",
+            "binding_source": "k8s_cgroup",
+            "confidence": 0.8
+          },
+          {
+            "id": "bind-native-b372e62e70a125de674436be8f7068930431dd95c90c005ffe9c9b40e2f4e934",
+            "run_id": "run-agentprov-late-398952005c-1",
+            "session_id": "64229b99-f262-4b46-85f6-c19a8f45c63b",
+            "attempt_id": "",
+            "tool_call_id": "",
+            "process_id": "",
+            "container_id": "",
+            "cgroup_id": "",
+            "root_pid": 0,
+            "pid": 6535,
+            "started_at": "2026-10-08T14:44:19Z",
+            "ended_at": "2026-10-08T14:44:19.999999999Z",
+            "binding_source": "k8s_cgroup",
+            "confidence": 0.8
+          }
+        ],
+        "verification": {
+          "schema_version": "agentprovenance.verify/v1",
+          "run_id": "run-agentprov-late-398952005c-1",
+          "status": "ok",
+          "issue_count": 0,
+          "error_count": 0,
+          "warning_count": 0,
+          "issues": null
+        }
+      }
+    ],
+    "before_crash": {
+      "counters": {
+        "captured": 1039,
+        "excluded": 67,
+        "read": 1106
+      },
+      "queued_batches": 45,
+      "queued_bytes": 1717871,
+      "pending_events": 1039,
+      "cleanup_pending_batches": 0
+    },
+    "after_recovery": {
+      "capabilities": {
+        "probes": [
+          {
+            "category": "dns",
+            "name": "syscalls/sys_enter_sendto",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "dns",
+            "name": "getaddrinfo",
+            "required": false,
+            "status": "attached",
+            "target": "/lib/x86_64-linux-gnu/libc.so.6"
+          },
+          {
+            "category": "process_lifecycle",
+            "name": "sched/sched_process_fork",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "sched/sched_process_exec",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "sched/sched_process_exit",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_connect",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_execve",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_open",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_openat",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_ptrace",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_rename",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_renameat",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_renameat2",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_setgid",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_setuid",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_unlink",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_unlinkat",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_exit_open",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_exit_openat",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "tls",
+            "name": "container_tls_discovery",
+            "reason": "automatic discovery disabled",
+            "required": false,
+            "status": "disabled"
+          }
+        ],
+        "ready": true,
+        "schema_version": "agentprovenance.sensor_capabilities/v1",
+        "status": "ready",
+        "tls_discovery": {
+          "active_targets": 0,
+          "enabled": false,
+          "limitations": [
+            "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+            "polling can miss TLS activity before attachment and processes shorter than the scan interval",
+            "stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered"
+          ],
+          "max_processes_per_scan": 4096,
+          "max_targets": 128,
+          "processes_scanned": 0,
+          "scan_complete": true,
+          "scan_interval_ms": 2000,
+          "skipped_targets": 0,
+          "truncated_maps": 0,
+          "unreadable_processes": 0,
+          "unresolved_mounts": 0,
+          "unsupported_executables": 0
+        },
+        "updated_at": "2026-10-08T14:44:38.889607391Z"
+      },
+      "capabilities_historical": false,
+      "capture": {
+        "counters": {
+          "captured": 1292,
+          "excluded": 342,
+          "ingested": 78,
+          "read": 1631
+        },
+        "queued_batches": 72,
+        "queued_bytes": 821944,
+        "pending_events": 1214,
+        "cleanup_pending_batches": 0
+      },
+      "collector_running": true
+    },
+    "passed": true
+  },
+  "container_tls": {
+    "schema_version": "agentprovenance.container_tls_acceptance/v1",
+    "architecture": "x86_64",
+    "kernel": "6.8.0-139-generic",
+    "checks": {
+      "generation_0:clients_succeeded": true,
+      "generation_1:clients_succeeded": true,
+      "container-6a47c09a83-0-ex:tls_write": true,
+      "container-6a47c09a83-0-ex:tls_write:single_chunk": true,
+      "container-6a47c09a83-0-ex:tls_read": true,
+      "container-6a47c09a83-0-ex:tls_read:single_chunk": true,
+      "container-6a47c09a83-0-go:tls_write": true,
+      "container-6a47c09a83-0-go:tls_write:single_chunk": true,
+      "container-6a47c09a83-0-go:tls_read": true,
+      "container-6a47c09a83-0-go:tls_read:single_chunk": true,
+      "container-6a47c09a83-0-legacy:tls_write": true,
+      "container-6a47c09a83-0-legacy:tls_write:single_chunk": true,
+      "container-6a47c09a83-0-legacy:tls_read": true,
+      "container-6a47c09a83-0-legacy:tls_read:single_chunk": true,
+      "container-6a47c09a83-1-ex:tls_write": true,
+      "container-6a47c09a83-1-ex:tls_write:single_chunk": true,
+      "container-6a47c09a83-1-ex:tls_read": true,
+      "container-6a47c09a83-1-ex:tls_read:single_chunk": true,
+      "container-6a47c09a83-1-go:tls_write": true,
+      "container-6a47c09a83-1-go:tls_write:single_chunk": true,
+      "container-6a47c09a83-1-go:tls_read": true,
+      "container-6a47c09a83-1-go:tls_read:single_chunk": true,
+      "container-6a47c09a83-1-legacy:tls_write": true,
+      "container-6a47c09a83-1-legacy:tls_write:single_chunk": true,
+      "container-6a47c09a83-1-legacy:tls_read": true,
+      "container-6a47c09a83-1-legacy:tls_read:single_chunk": true,
+      "two_container_generations": true,
+      "automatic_discovery_enabled": true,
+      "go_read_reported_attached": true,
+      "sensor_clean_exit": true
+    },
+    "container_ids": [
+      {
+        "ex": "469ad1cc7073a763b3ac7bcf59e6253edc16ef15b136f0827e43cb1e22a60184",
+        "go": "80659438a12db6cf41ce3ba8b80119d2a1580e5041434a56469a7301a8b8e5bb",
+        "legacy": "e3d3e5d0eeec77ff395d04b06b1177e1bd1461220742c5446fc32a1ec1febdf6"
+      },
+      {
+        "ex": "9986a7e62d4c73ffc6b5c1441cc40823775814704f59a744dc0fa7dc513b4feb",
+        "go": "1777e90f80f80a5375970bfec945cda259e5d7c87f6a3317e2d2322408d4088f",
+        "legacy": "5fd4a998bb45ab40660df74fbfef0c136c43d12a6b38fa71773f43d704efd109"
+      }
+    ],
+    "capability_reports": 69,
+    "final_capabilities": {
+      "schema_version": "agentprovenance.sensor_capabilities/v1",
+      "updated_at": "2026-10-08T14:45:24.513336913Z",
+      "ready": false,
+      "status": "stopped",
+      "probes": [
+        {
+          "name": "syscalls/sys_enter_sendto",
+          "category": "dns",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "getaddrinfo",
+          "category": "dns",
+          "target": "/lib/x86_64-linux-gnu/libc.so.6",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "sched/sched_process_fork",
+          "category": "process_lifecycle",
+          "required": true,
+          "status": "detached"
+        },
+        {
+          "name": "sched/sched_process_exec",
+          "category": "syscall",
+          "required": true,
+          "status": "detached"
+        },
+        {
+          "name": "sched/sched_process_exit",
+          "category": "syscall",
+          "required": true,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_enter_connect",
+          "category": "syscall",
+          "required": true,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_enter_execve",
+          "category": "syscall",
+          "required": true,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_enter_open",
+          "category": "syscall",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_enter_openat",
+          "category": "syscall",
+          "required": true,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_enter_ptrace",
+          "category": "syscall",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_enter_rename",
+          "category": "syscall",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_enter_renameat",
+          "category": "syscall",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_enter_renameat2",
+          "category": "syscall",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_enter_setgid",
+          "category": "syscall",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_enter_setuid",
+          "category": "syscall",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_enter_unlink",
+          "category": "syscall",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_enter_unlinkat",
+          "category": "syscall",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_exit_open",
+          "category": "syscall",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "syscalls/sys_exit_openat",
+          "category": "syscall",
+          "required": true,
+          "status": "detached"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Read",
+          "category": "tls",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/19/fs/coredns",
+          "required": false,
+          "status": "unsupported",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Write",
+          "category": "tls",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/19/fs/coredns",
+          "required": false,
+          "status": "failed",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Read",
+          "category": "tls",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/209/fs/usr/local/bin/agentprov",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Write",
+          "category": "tls",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/209/fs/usr/local/bin/agentprov",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Read",
+          "category": "tls",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/4/fs/usr/bin/local-path-provisioner",
+          "required": false,
+          "status": "unsupported",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Write",
+          "category": "tls",
+          "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/4/fs/usr/bin/local-path-provisioner",
+          "required": false,
+          "status": "failed",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Read",
+          "category": "tls",
+          "target": "/proc/1195/exe",
+          "required": false,
+          "status": "unsupported",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Write",
+          "category": "tls",
+          "target": "/proc/1195/exe",
+          "required": false,
+          "status": "failed",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Read",
+          "category": "tls",
+          "target": "/proc/3867/exe",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Write",
+          "category": "tls",
+          "target": "/proc/3867/exe",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Read",
+          "category": "tls",
+          "target": "/proc/4292/exe",
+          "required": false,
+          "status": "unsupported",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Write",
+          "category": "tls",
+          "target": "/proc/4292/exe",
+          "required": false,
+          "status": "failed",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found"
+        },
+        {
+          "name": "SSL_read",
+          "category": "tls",
+          "target": "/proc/7242/root/usr/lib/x86_64-linux-gnu/libssl.so.3",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "SSL_read_ex",
+          "category": "tls",
+          "target": "/proc/7242/root/usr/lib/x86_64-linux-gnu/libssl.so.3",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "SSL_write",
+          "category": "tls",
+          "target": "/proc/7242/root/usr/lib/x86_64-linux-gnu/libssl.so.3",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "SSL_write_ex",
+          "category": "tls",
+          "target": "/proc/7242/root/usr/lib/x86_64-linux-gnu/libssl.so.3",
+          "required": false,
+          "status": "detached"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Read",
+          "category": "tls",
+          "target": "/proc/771/exe",
+          "required": false,
+          "status": "unsupported",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Write",
+          "category": "tls",
+          "target": "/proc/771/exe",
+          "required": false,
+          "status": "failed",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Read",
+          "category": "tls",
+          "target": "/proc/938/exe",
+          "required": false,
+          "status": "unsupported",
+          "reason": "Go TLS Read requires an unstripped symbol table: no symbol section"
+        },
+        {
+          "name": "crypto/tls.(*Conn).Write",
+          "category": "tls",
+          "target": "/proc/938/exe",
+          "required": false,
+          "status": "failed",
+          "reason": "symbol crypto/tls.(*Conn).Write: not found"
+        }
+      ],
+      "tls_discovery": {
+        "enabled": true,
+        "scan_interval_ms": 2000,
+        "max_targets": 128,
+        "max_processes_per_scan": 4096,
+        "active_targets": 0,
+        "scan_complete": true,
+        "processes_scanned": 154,
+        "unreadable_processes": 0,
+        "unresolved_mounts": 0,
+        "truncated_maps": 0,
+        "skipped_targets": 0,
+        "unsupported_executables": 9,
+        "limitations": [
+          "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+          "polling can miss TLS activity before attachment and processes shorter than the scan interval",
+          "stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered"
+        ]
+      }
+    },
+    "fixture_event_types": {
+      "file_open": 54,
+      "process_observed": 12,
+      "process_exit": 18,
+      "setuid": 42,
+      "setgid": 42,
+      "execve": 6,
+      "network_connect": 6,
+      "tls_write": 6,
+      "tls_read": 6
+    },
+    "passed": true
+  },
+  "profile_parity": {
+    "schema_version": "agentprovenance.profile_semantic_parity/v1",
+    "generated_at": "2026-10-08T14:46:35.758052+00:00",
+    "workload": "sh loop: id + ls /",
+    "equivalent": true,
+    "ignored_physical_fields": [
+      "pid",
+      "ppid",
+      "tgid",
+      "cgroup_id",
+      "container_id",
+      "timestamps",
+      "event_count"
+    ],
+    "local_record": {
+      "event_types": [
+        "exec_end",
+        "exec_start",
+        "execve",
+        "file_open",
+        "file_write",
+        "process_exit",
+        "process_observed"
+      ],
+      "workload_commands": [
+        "id",
+        "ls"
+      ],
+      "node_kinds": [
+        "file",
+        "process",
+        "runtime_event",
+        "runtime_process",
+        "tool_call"
+      ],
+      "edge_types": [
+        "runtime_process_child_of",
+        "runtime_process_event",
+        "runtime_process_file",
+        "runtime_process_observed",
+        "runtime_process_parent",
+        "runtime_tool_call_process",
+        "tool_call_process"
+      ],
+      "binding_sources": [
+        "zero_sdk_record",
+        "zero_sdk_record_descendant"
+      ],
+      "binding_confidence": [
+        0.9,
+        0.98,
+        1.0
+      ]
+    },
+    "k8s_daemonset": {
+      "event_types": [
+        "execve",
+        "file_open",
+        "file_write",
+        "pod_metadata",
+        "process_exit",
+        "process_observed"
+      ],
+      "workload_commands": [
+        "id",
+        "ls"
+      ],
+      "node_kinds": [
+        "runtime_event",
+        "runtime_process"
+      ],
+      "edge_types": [
+        "runtime_process_child_of",
+        "runtime_process_event",
+        "runtime_process_parent"
+      ],
+      "binding_sources": [
+        "k8s_cgroup"
+      ],
+      "binding_confidence": [
+        0.8
+      ]
+    },
+    "failures": []
+  },
+  "informer": {
+    "schema_version": "agentprovenance.k8s_informer_acceptance/v1",
+    "generated_at": "2026-10-08T14:48:50.352159+00:00",
+    "run_id": "run-k8s-informer-12996",
+    "producer_profile": "k8s-daemonset",
+    "controller": "client-go-informer",
+    "client_go_version": "v0.32.0",
+    "initial_container_id": "containerd://7769dded4d8fba827c3aa35fa0fbe13369c27850d25ba41c1a46fb69b5544f90",
+    "restarted_container_id": "containerd://2bf486c3a2cec6634f3d08a341b9ef5cfa0b372112f8ed5d8a7eb8074943cdf7",
+    "bindings_created": 2,
+    "bindings_closed": 2,
+    "restart_rebound": true,
+    "delete_closed": true,
+    "status_line": "k8s informer node=agentprov-kvm-amd64 synced=true enqueued=10 reconciled=9 retries=0 failed=0 bindings=2 active=0 closed=2 restarts=1 resolution_failures=0 attribution_p95_ms=7268.6"
+  },
+  "multiworkload": {
+    "schema_version": "agentprovenance.k8s_node_multiworkload_acceptance/v1",
+    "generated_at": "2026-10-08T14:51:09.674288+00:00",
+    "run_id": "run-k8s-multiworkload",
+    "producer_profile": "k8s-daemonset",
+    "sensor_placement": "kubernetes_daemonset",
+    "event_transport": "kubernetes_pod_stdout_jsonl",
+    "scope_resolution": "k8s_api_container_to_kernel_cgroup",
+    "host_cgroup_fallback_count": 0,
+    "cluster": "default",
+    "node": "agentprov-kvm-amd64",
+    "sensor_count": 1,
+    "workload_count": 8,
+    "unique_cgroup_count": 8,
+    "captured_event_count": 1722,
+    "graph_verify": {
+      "status": "ok",
+      "errors": 0,
+      "warnings": 0
+    }
+  },
+  "concurrent_go_tls": {
+    "passed": true,
+    "connections": 32,
+    "matched_chunks": 71,
+    "dropped_events": 0,
+    "retained_contexts": 0,
+    "kernel": "6.18.33.2-microsoft-standard-WSL2"
+  },
+  "initial_failures": [
+    {
+      "gate": "KVM native sensor",
+      "reason": "committed amd64 object predates the birth-cgroup source change",
+      "failed_checks": [
+        "clone-child:birth_cgroup"
+      ],
+      "resolution": "regenerated amd64 object from Linux 6.8 guest BTF; all 43 checks passed"
+    },
+    {
+      "gate": "race timestamp test",
+      "reason": "test sampled its expected wall time only after the monotonic sample; scheduling could skew the expectation",
+      "resolution": "bracket the sample; full race suite passed"
+    },
+    {
+      "gate": "K3s Pod start",
+      "reason": "Docker Hub pull timeout",
+      "resolution": "use cached mirrored BusyBox 1.37.0 through existing --image option"
+    },
+    {
+      "gate": "DaemonSet readiness",
+      "reason": "grep -q exited successfully but kubectl exited 141 under pipefail",
+      "resolution": "consume the complete stream and match the exact ready line; eight workloads passed"
+    }
+  ],
+  "limitations": [
+    "ARM live acceptance and 24-hour soak remain excluded by agreed scope.",
+    "Claude/Codex live harness evidence remains the recorded Mac validation in the base branch; this run repeats source-format fixtures and automated regressions, not new paid model sessions.",
+    "Container TLS discovery is bounded polling; stripped Go binaries and unsupported TLS implementations remain explicit gaps.",
+    "Four-platform release builds previously passed at the base commit; this change rebuilds and executes Linux amd64 locally. Hosted checks for the new commit are separate."
+  ],
+  "status": "passed",
+  "raw_report_sha256": {
+    "container-tls.json": "03ca8c0d96472b55f141e7f87f1339a7aa1a095e6b64a0177953b2777d157b6c",
+    "deepseek.json": "38c9f6c32ad7fc1ca44c41cbf9a12c80fa240198a1452cb543083ceb0d2bcf7d",
+    "informer.json": "4962ef249d49a755d499f525dc2da5453c018d3fa5e7eef60d61567ba10a54b4",
+    "k3s-guest.json": "1984fe88d5795a07a86d2022f88f22aa1d188f12bcda92d0c0b3ee786ed9460f",
+    "kvm-guest.json": "08bea4ab2eaca99b1bdb00392b7eba5a41ebe9b08e1db1e661fae672ea92fe60",
+    "legacy.json": "88e991e66a2ebd0c79d1b56071a691f613f7188fe8ae44451cdc72c8fe63441f",
+    "multiworkload.json": "166b433f2e1d94a42c70b0d6c03131db5a646914648aab162a884ae6abbcf0ce",
+    "node-capture.json": "1d19e869730c458452e7d4c4d43d9084abd9e641b0718dc2b3c2e78d5636457a",
+    "pod-parity.json": "b9c18eeab404535f13abf4e69f673c1d1d11fbab8431955c2f143102a2cdca29",
+    "portable-release.json": "0197f1b92bb17ab6bbbb7cadb575370802e0e98cc132db63bcd4ce8a2ddac8bc",
+    "readiness.json": "3471b84554bd37ef877905996779487674dac2a8312097562a9271d3f2f8109a",
+    "sensor-live-fixed.json": "2815830e5d58ff3cf462bd4efe16c46a8736bb8327fd247fe671378ce80719fa",
+    "sensor-live.json": "bbba971b77ec2dc2461d0b2f8ce53de8a7d53de751ffc5fc00bb3acd1bd10875",
+    "v090-browser-check.json": "c2478711ff8002e7cf4b0f9bc6def8a1d8c128112b036384637ba9ebc0f942cf",
+    "v090-legacy-browser.json": "a882268cd1c4b733d3590eca8298d7f0023669af9f2fc6a2aed9b800198c9787",
+    "v090-ui-browser.json": "b6780bfa3b25fa82d3c717e03e22f4920f9e0f8434bdc19cf1ccd5bdb334cebc"
+  }
+}

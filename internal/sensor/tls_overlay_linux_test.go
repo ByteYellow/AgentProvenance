@@ -32,9 +32,10 @@ func TestTLSOverlayResolvesSharedLowerAndDistinctCopyUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := tlsBackingPath(proc, visible, "/lib/libssl.so.3")
-	if err != nil || got != base {
+	if err != nil {
 		t.Fatalf("lower identity: %s %v", got, err)
 	}
+	assertTLSBackingFile(t, got, base)
 	copyUp := filepath.Join(upper, "lib/libssl.so.3")
 	if err := os.WriteFile(copyUp, []byte("copied"), 0644); err != nil {
 		t.Fatal(err)
@@ -46,9 +47,10 @@ func TestTLSOverlayResolvesSharedLowerAndDistinctCopyUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err = tlsBackingPath(proc, visible, "/lib/libssl.so.3")
-	if err != nil || got != copyUp {
+	if err != nil {
 		t.Fatalf("copy-up incorrectly shares lower probe: %s %v", got, err)
 	}
+	assertTLSBackingFile(t, got, copyUp)
 }
 
 func TestTLSOverlayHonorsMountRootAndRejectsUnknownIdentity(t *testing.T) {
@@ -73,9 +75,10 @@ func TestTLSOverlayHonorsMountRootAndRejectsUnknownIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, err := tlsBackingPath(proc, visible, "/opt/libssl.so.3")
-	if err != nil || got != base {
+	if err != nil {
 		t.Fatalf("mount root ignored: %s %v", got, err)
 	}
+	assertTLSBackingFile(t, got, base)
 	if err := os.Remove(visible); err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +87,22 @@ func TestTLSOverlayHonorsMountRootAndRejectsUnknownIdentity(t *testing.T) {
 	}
 	if _, err := tlsBackingPath(proc, visible, "/opt/libssl.so.3"); err == nil || !strings.Contains(err.Error(), "backing inode") {
 		t.Fatalf("unrelated copied file deduplicated by content: %v", err)
+	}
+}
+
+func assertTLSBackingFile(t *testing.T, got, want string) {
+	t.Helper()
+	actual, err := os.Stat(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := os.Stat(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Host paths and /proc/1/root aliases can name the same backing inode.
+	if !os.SameFile(actual, expected) {
+		t.Fatalf("different TLS backing files: got %s, want %s", got, want)
 	}
 }
 

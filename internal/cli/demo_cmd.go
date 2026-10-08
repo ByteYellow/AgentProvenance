@@ -156,6 +156,7 @@ func demoCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&list, "list", false, "list all bundled demos and evaluator guides")
 	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "print the local URL without opening a browser")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "print JSON (also disables browser launch)")
+	cmd.AddCommand(demoExportCmd())
 	return cmd
 }
 

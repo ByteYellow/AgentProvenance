@@ -15,8 +15,6 @@ func BuildGraphLens(db *sql.DB, opts GraphLensOptions) (GraphLensManifest, error
 	if opts.RunID == "" {
 		return GraphLensManifest{}, fmt.Errorf("--run is required")
 	}
-	lens := normalizeGraphLens(opts.Lens)
-	detail := normalizeGraphLensDetail(opts.Detail)
 	if opts.Limit <= 0 {
 		// 350 keeps the graph light enough to lay out + render fast on a lens
 		// switch while still fitting all the prioritized semantic edges (product
@@ -32,6 +30,12 @@ func BuildGraphLens(db *sql.DB, opts GraphLensOptions) (GraphLensManifest, error
 	if err != nil {
 		return GraphLensManifest{}, err
 	}
+	return buildGraphLensFromData(opts, nodes, events, edges), nil
+}
+
+// buildGraphLensFromData also renders immutable demo snapshots at export time.
+func buildGraphLensFromData(opts GraphLensOptions, nodes map[string]GraphLensNode, events map[string]lensEvent, edges []GraphLensEdge) GraphLensManifest {
+	lens, detail := normalizeGraphLens(opts.Lens), normalizeGraphLensDetail(opts.Detail)
 	derived := deriveGraphLensEdges(lens, events, detail)
 	allEdges := append(edges, derived...)
 	filteredEdges, summarized := summaryLensEdges(opts.RunID, lens, opts.Focus, detail, nodes, events, allEdges)
@@ -94,7 +98,7 @@ func BuildGraphLens(db *sql.DB, opts GraphLensOptions) (GraphLensManifest, error
 			manifest.Query.Detail, manifest.Query.RawEventCount, manifest.Query.NodeCount, len(manifest.Edges), len(manifest.DerivedEdges),
 			manifest.Query.OmittedNodes, manifest.Query.OmittedEdges),
 	}
-	return manifest, nil
+	return manifest
 }
 
 func GraphLensJSON(db *sql.DB, opts GraphLensOptions, out io.Writer) error {

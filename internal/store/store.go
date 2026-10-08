@@ -12,7 +12,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 17
+const SchemaVersion = 19
 
 type Paths struct {
 	Root       string
@@ -117,6 +117,43 @@ func EnsureSchema(db *sql.DB) error {
 			description TEXT NOT NULL,
 			applied_at TEXT NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS agent_context_entries (
+			id TEXT NOT NULL,
+			run_id TEXT NOT NULL,
+			source_id TEXT NOT NULL,
+			session_id TEXT NOT NULL,
+			parent_session_id TEXT NOT NULL DEFAULT '',
+			agent_id TEXT NOT NULL DEFAULT '',
+			source_key TEXT NOT NULL,
+			source_sequence INTEGER NOT NULL,
+			source_ordinal INTEGER NOT NULL DEFAULT 0,
+			kind TEXT NOT NULL,
+			role TEXT NOT NULL DEFAULT '',
+			tool_call_id TEXT NOT NULL DEFAULT '',
+			tool_name TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL DEFAULT '',
+			recorded_at TEXT NOT NULL DEFAULT '',
+			object_hash TEXT NOT NULL,
+			content_ref TEXT NOT NULL DEFAULT '',
+			parser_version TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY (run_id, id)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_context_tool ON agent_context_entries(run_id, tool_call_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_context_session ON agent_context_entries(run_id, session_id, kind);`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_context_revision ON agent_context_entries(run_id, source_id, source_key, kind, created_at, id);`,
+		`CREATE TABLE IF NOT EXISTS agent_context_reports (
+			id TEXT NOT NULL,
+			run_id TEXT NOT NULL,
+			source_id TEXT NOT NULL,
+			harness TEXT NOT NULL,
+			session_id TEXT NOT NULL DEFAULT '',
+			status TEXT NOT NULL,
+			object_hash TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			PRIMARY KEY (run_id, id)
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_context_report_source ON agent_context_reports(run_id, source_id, created_at, id);`,
 		`CREATE TABLE IF NOT EXISTS leases (
 			id TEXT PRIMARY KEY,
 			run_id TEXT NOT NULL,
@@ -751,6 +788,9 @@ func EnsureSchema(db *sql.DB) error {
 		}
 	}
 	alterStmts := []string{
+		`ALTER TABLE agent_context_entries ADD COLUMN source_ordinal INTEGER NOT NULL DEFAULT 0;`,
+		`CREATE INDEX IF NOT EXISTS idx_agent_context_position ON agent_context_entries(run_id, source_id, source_sequence, source_ordinal, id);`,
+		`DROP INDEX IF EXISTS idx_agent_context_page;`,
 		`ALTER TABLE sessions ADD COLUMN startup_cold_ms INTEGER NOT NULL DEFAULT 0;`,
 		`ALTER TABLE processes ADD COLUMN exit_code INTEGER;`,
 		`ALTER TABLE processes ADD COLUMN tool_call_id TEXT NOT NULL DEFAULT '';`,

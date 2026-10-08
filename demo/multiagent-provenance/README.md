@@ -37,7 +37,7 @@ The story is a single attacker arc, not two disconnected scenes:
 
 ## Open from the portable CLI
 
-From an extracted [precompiled release](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2):
+From an extracted [precompiled release](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.9.0):
 
 ```sh
 ./agentprov demo multiagent-provenance
