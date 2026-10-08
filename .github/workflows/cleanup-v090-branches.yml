@@ -1,0 +1,62 @@
+name: Clean merged v0.9.0 branches
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cleanup-v090-branches.yml']
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Delete only the reviewed, merged branch heads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess, urllib.request
+          repository = os.environ['GITHUB_REPOSITORY']
+          expected = {
+              'feat/chinese-localization': '45d7ab88590da47f2d740905cefc7bd1d43a35a0',
+              'fix/pages-main-deployment': 'f7694251017447b7ec483c6e10bf71c463922a39',
+              'fix/v0.9.0-acceptance': '0ec9656de74b7e4da496437d9c5f3726a6921cbe',
+              'release/v0.8.2': '74316c3758535ade210375a0c41cfba9f8d6f469',
+              'release/v0.9.0-review': '186e6c7ce889df0c414fd01c65bf504b44273c58',
+              'release/v0.9.0': 'fb83e6413178db3bde9803c8b4201811d5b0dde8',
+          }
+          def get(path):
+              req = urllib.request.Request(f'https://api.github.com/repos/{repository}/{path}',
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  return json.load(response)
+          release = get('releases/tags/v0.9.0')
+          assert not release['draft'] and not release['prerelease']
+          assert get('commits/v0.9.0')['sha'] == expected['release/v0.9.0']
+          with urllib.request.urlopen('https://byteyellow.github.io/AgentProvenance/replay-manifest.json', timeout=30) as response:
+              assert json.load(response)['commit'] == expected['release/v0.9.0']
+          branches = {b['name']: b for b in get('branches?per_page=100')}
+          open_heads = {p['head']['ref'] for p in get('pulls?state=open&per_page=100') if p['head']['repo']['full_name'] == repository}
+          remove = {}
+          for branch, sha in expected.items():
+              if branch not in branches:
+                  continue
+              assert not branches[branch]['protected'], branch
+              assert branches[branch]['commit']['sha'] == sha, branch
+              assert branch not in open_heads, branch
+              subprocess.run(['git', 'merge-base', '--is-ancestor', sha, 'origin/main'], check=True)
+              remove[branch] = sha
+          if remove:
+              command = ['git', 'push', '--atomic']
+              command += [f'--force-with-lease=refs/heads/{branch}:{sha}' for branch, sha in remove.items()]
+              command += ['origin'] + [f':refs/heads/{branch}' for branch in remove]
+              subprocess.run(command, check=True)
+          print(json.dumps({'deleted': sorted(remove), 'release_tag_preserved': 'v0.9.0'}))
+          PY
