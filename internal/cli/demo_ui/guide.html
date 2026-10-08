@@ -18,11 +18,12 @@
 <div class="docs-layout">
   <aside class="docs-sidebar" aria-label="{{tr $.Lang "Guide navigation"}}">
     <a class="back-link" href="{{localURL "/demos/" .Lang}}">{{tr $.Lang "← Demo library"}}</a>
-    <details class="guide-nav" open><summary>{{tr $.Lang "DEMO GUIDES"}}</summary><nav aria-label="{{tr $.Lang "Demo guides"}}">{{range .Entries}}<a href="{{localURL (printf "/demos/docs/%s" .ID) $.Lang}}"{{if eq .ID $.Entry.ID}} aria-current="page"{{end}}>{{tr $.Lang .Title}}</a>{{end}}</nav></details>
+    {{range .DocGroups}}<details class="guide-nav project-nav"{{if or (eq .Title $.DocGroup) (and (not $.DocGroup) (eq .Title "Start here"))}} open{{end}}><summary>{{tr $.Lang .Title}}</summary><nav>{{range .Entries}}<a href="{{localURL (printf "/demos/guide/%s" .ID) $.Lang}}"{{if eq .ID $.DocID}} aria-current="page"{{end}}>{{tr $.Lang .Title}}</a>{{end}}</nav></details>{{end}}
+    <details class="guide-nav"{{if not .DocID}} open{{end}}><summary>{{tr $.Lang "DEMO GUIDES"}}</summary><nav aria-label="{{tr $.Lang "Demo guides"}}">{{range .Entries}}<a href="{{localURL (printf "/demos/docs/%s" .ID) $.Lang}}"{{if eq .ID $.Entry.ID}} aria-current="page"{{end}}>{{tr $.Lang .Title}}</a>{{end}}</nav></details>
     {{if .Headings}}<details class="page-nav" open><summary>{{tr $.Lang "ON THIS PAGE"}}</summary><nav aria-label="{{tr $.Lang "On this page"}}">{{range .Headings}}<a href="#{{.ID}}">{{tr $.Lang .Title}}</a>{{end}}</nav></details>{{end}}
   </aside>
   <main class="doc-main">
-    <div class="doc-toolbar"><span class="breadcrumb"><a href="{{localURL "/demos/" .Lang}}">{{tr $.Lang "Demos"}}</a><span>/</span>{{tr $.Lang (category .Entry)}}</span>{{if .Entry.Run}}<a class="button primary" href="{{localURL (runURL .Entry) .Lang}}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5 3 7 5-7 5Z"/></svg>{{tr $.Lang "Open replay"}}</a>{{else}}<span class="setup-tag">{{tr $.Lang "Optional integration"}}</span>{{end}}</div>
+    <div class="doc-toolbar"><span class="breadcrumb"><a href="{{localURL "/demos/" .Lang}}">{{tr $.Lang "Demos"}}</a><span>/</span>{{if .DocID}}{{tr $.Lang "Documentation"}}{{else}}{{tr $.Lang (category .Entry)}}{{end}}</span>{{if .Entry.Run}}<a class="button primary" href="{{localURL (runURL .Entry) .Lang}}"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5 3 7 5-7 5Z"/></svg>{{tr $.Lang "Open replay"}}</a>{{else if not .DocID}}<span class="setup-tag">{{tr $.Lang "Optional integration"}}</span>{{end}}</div>
     <article class="document">{{.Content}}</article>
     <div class="doc-note">{{tr $.Lang .Entry.Requirements}}</div>
     <footer class="doc-footer"><a href="{{localURL "/demos/" .Lang}}">{{tr $.Lang "← All demos"}}</a><span>{{tr $.Lang "AgentProvenance · Demo guide"}}</span><a href="#">{{tr $.Lang "Back to top ↑"}}</a></footer>

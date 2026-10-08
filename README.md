@@ -19,7 +19,7 @@ export evidence you can replay and verify offline.
 [![SQLite](https://img.shields.io/badge/state-SQLite-003B57.svg?style=flat-square)](https://www.sqlite.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square)](LICENSE)
 
-**[Quickstart](#quickstart)** | **[Agent session](#agent-session)** | **[Features and docs](#features-and-docs)** | **[All demos](demo/README.md)** | **[v0.9.0](docs/releases/v0.9.0.md)**
+**[Online demo](https://ByteYellow.github.io/AgentProvenance/)** | **[Quickstart](#quickstart)** | **[Agent session](#agent-session)** | **[Features and docs](#features-and-docs)** | **[All demos](demo/README.md)** | **[v0.9.0](docs/releases/v0.9.0.md)**
 
 English | [简体中文](README.zh-CN.md)
 
@@ -38,10 +38,15 @@ investigate a network connection, or feed an external evaluator.
 
 ### Try a recorded execution
 
+[Open the online demo](https://ByteYellow.github.io/AgentProvenance/) to explore
+the graph, Agent session and saved files in your browser. The same site includes
+the illustrated demo guides and user documentation. No installation is needed.
+
+To replay offline, download the CLI:
+
 Download the archive for your platform and its `.sha256` file from
 [Releases](https://github.com/ByteYellow/AgentProvenance/releases).
-The examples below target v0.9.0. While it awaits publication, use the source
-build below to try the new session features.
+The examples below use v0.9.0.
 
 | Platform | Archive suffix |
 | --- | --- |
@@ -81,10 +86,10 @@ store. Ctrl-C closes it and removes that store. Recorded commands are never reru
 For remote or headless machines, add `--no-browser` and access the local address
 through your usual port forwarding.
 
-To build this review branch instead, install Go 1.23+:
+To build v0.9.0 from source, install Go 1.23+:
 
 ```sh
-git clone --branch fix/v0.9.0-acceptance https://github.com/ByteYellow/AgentProvenance
+git clone --branch v0.9.0 https://github.com/ByteYellow/AgentProvenance
 cd AgentProvenance
 go build -o agentprov ./cmd/agentprov
 ./agentprov demo
@@ -238,7 +243,7 @@ evidence is kept as recorded.
 
 ## Release status
 
-**v0.9.0 has completed acceptance and is awaiting release review.** Tests cover
+**v0.9.0 acceptance covers**
 existing session adapters, DeepSeek, resume and deduplication, configuration
 history, coverage reports, saved content and dashboard navigation.
 

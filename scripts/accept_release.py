@@ -123,6 +123,12 @@ def main():
             assert len(body['content'].encode('utf-8')) <= 1024
             assert '"locale":"zh-CN"' in get('/assets/i18n.js?lang=zh-CN')
             assert '--bg:#f5f5f7' in get('/assets/theme.css')
+            for guide_id in ('start', 'quickstart', 'capabilities', 'agent-session', 'capture', 'deployment', 'durable-capture', 'graph', 'security', 'compliance', 'supply-chain', 'ai-tools', 'ai-access', 'python', 'telemetry', 'comparisons', 'falco', 'release-notes', 'changelog'):
+                for language in ('en', 'zh-CN'):
+                    guide = get('/demos/guide/' + guide_id + '?lang=' + language)
+                    assert '<article class="document">' in guide and '<h1' in guide
+                    assert '<html lang="' + language + '">' in guide
+                    assert '/demos/guide/start' in guide
             assert 'code-toolbar' in get('/demos/guide.js')
             assert '.document' in get('/demos/demo.css')
             with http.open(base + '/demos/assets/jev-judge/review.png', timeout=30) as response:
@@ -136,7 +142,7 @@ def main():
             if process.poll() is None:
                 process.kill()
                 process.wait()
-        print(json.dumps({'archive': archive.name, 'platform': meta['os'] + '/' + meta['arch'], 'signed_replays': len(replay), 'guides': len(catalog), 'guide_languages': ['en', 'zh-CN'], 'recorded_context': 'passed', 'no_go_required': True, 'cleanup': 'passed'}))
+        print(json.dumps({'archive': archive.name, 'platform': meta['os'] + '/' + meta['arch'], 'signed_replays': len(replay), 'guides': len(catalog), 'user_guides': 19, 'guide_languages': ['en', 'zh-CN'], 'recorded_context': 'passed', 'no_go_required': True, 'cleanup': 'passed'}))
 
 
 if __name__ == '__main__':

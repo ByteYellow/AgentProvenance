@@ -18,7 +18,7 @@
 [![SQLite](https://img.shields.io/badge/state-SQLite-003B57.svg?style=flat-square)](https://www.sqlite.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square)](LICENSE)
 
-**[快速开始](#快速开始)** | **[Agent 会话](#agent-会话)** | **[功能与文档](#功能与文档)** | **[全部示例](demo/README.zh-CN.md)** | **[v0.9.0](docs/zh-CN/releases/v0.9.0.md)**
+**[在线 Demo](https://ByteYellow.github.io/AgentProvenance/)** | **[快速开始](#快速开始)** | **[Agent 会话](#agent-会话)** | **[功能与文档](#功能与文档)** | **[全部示例](demo/README.zh-CN.md)** | **[v0.9.0](docs/zh-CN/releases/v0.9.0.md)**
 
 [English](README.md) | 简体中文
 
@@ -36,9 +36,13 @@ AgentProvenance 把任务要求、工具返回结果和操作系统中的实际�
 
 ### 先回放一次真实执行
 
+[打开在线 Demo](https://ByteYellow.github.io/AgentProvenance/)，直接在浏览器里查看
+图谱、Agent 会话和文件正文，无需安装。同一站点也收录了示例图文说明和使用指南。
+
+需要离线回放时，下载 CLI：
+
 在[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应平台的
-压缩包和同名 `.sha256` 校验文件。以下示例对应 v0.9.0；正式发布前，
-可使用下面的源码构建步骤体验新版功能。
+压缩包和同名 `.sha256` 校验文件。以下示例使用 v0.9.0。
 
 | 平台 | 压缩包后缀 |
 | --- | --- |
@@ -76,10 +80,10 @@ CLI 校验签名后，用独立的临时目录打开可视化界面。按 Ctrl-C
 不会重新运行记录中的命令。无图形界面或远程机器可添加 `--no-browser`，
 通过端口转发访问输出的本地地址。
 
-如需构建当前待发布分支，先安装 Go 1.23+：
+如需从源码构建 v0.9.0，先安装 Go 1.23+：
 
 ```sh
-git clone --branch fix/v0.9.0-acceptance https://github.com/ByteYellow/AgentProvenance
+git clone --branch v0.9.0 https://github.com/ByteYellow/AgentProvenance
 cd AgentProvenance
 go build -o agentprov ./cmd/agentprov
 ./agentprov demo
@@ -228,7 +232,7 @@ CLI 和工具输出默认英文，原始证据不翻译。
 
 ## 版本进展
 
-**v0.9.0 已完成验收，等待发布前审阅。** 本次验收覆盖已有会话适配器、DeepSeek、
+**v0.9.0 验收覆盖**已有会话适配器、DeepSeek、
 续跑与去重、配置历史、采集报告、完整正文和可视化交互。
 
 [验收报告](docs/benchmarks/v0.9.0-acceptance/README.zh-CN.md)记录了 485 项浏览器检查、

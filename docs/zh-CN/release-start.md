@@ -2,7 +2,10 @@
 
 [English](../release-start.md) | 中文
 
-解压后，在当前目录打开示例库：
+[打开在线 Demo](https://ByteYellow.github.io/AgentProvenance/)，无需安装即可查看图谱、
+Agent 会话和文件正文。站点也收录了完整的项目介绍、采集部署、分析命令、集成参考和版本记录。
+
+离线使用时，解压后在当前目录打开示例库：
 
 ```sh
 ./agentprov demo

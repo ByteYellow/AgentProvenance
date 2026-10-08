@@ -489,6 +489,7 @@ const LENS_LABEL={'default':tr("Default Â· causality"),'security':tr("Security Â
 const $=s=>document.querySelector(s);
 
 async function j(u){
+  if(window.AgentProvReplay)return window.AgentProvReplay.query(u);
   let response;
   try{response=await fetch(u);}catch(error){throw new Error(tr('Cannot connect to the local service')+': '+error.message);}
   if(!response.ok){throw new Error('HTTP '+response.status+' '+u+'\n'+(await response.text()).slice(0,2000));}

@@ -51,3 +51,7 @@ demo/llm-judge/.build/
 # Local browser acceptance artifacts.
 /.playwright-cli/
 /output/playwright/
+
+# Static demo output and browser test dependencies.
+/_site/
+/node_modules/

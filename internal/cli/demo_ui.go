@@ -11,7 +11,9 @@ import (
 	"strings"
 	"unicode"
 
+	project "github.com/byteyellow/agentprovenance"
 	"github.com/byteyellow/agentprovenance/demo"
+	projectdocs "github.com/byteyellow/agentprovenance/docs"
 	"github.com/byteyellow/agentprovenance/internal/buildinfo"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/yuin/goldmark"
@@ -38,6 +40,10 @@ type demoPage struct {
 	Lang                        i18n.Locale
 	EnglishURL, ChineseURL      string
 	Entries                     []demo.Entry
+	Docs                        []projectdocs.Entry
+	DocGroups                   []projectdocs.Group
+	DocGroup                    string
+	DocID                       string
 	Entry                       demo.Entry
 	ReplayCount, EvaluatorCount int
 	Content                     template.HTML
@@ -63,7 +69,7 @@ func demoGallery(entries []demo.Entry) http.HandlerFunc {
 	functions := template.FuncMap{"runURL": demoRunURL, "category": demoCategory, "tr": i18n.T, "localURL": i18n.URL}
 	gallery := template.Must(template.New("gallery").Funcs(functions).Parse(demoGalleryHTML))
 	guide := template.Must(template.New("guide").Funcs(functions).Parse(demoGuideHTML))
-	data := demoPage{Entries: entries}
+	data := demoPage{Entries: entries, Docs: projectdocs.Catalog(), DocGroups: projectdocs.Groups()}
 	for _, entry := range entries {
 		if entry.Run != "" {
 			data.ReplayCount++
@@ -91,11 +97,19 @@ func demoGallery(entries []demo.Entry) http.HandlerFunc {
 		}
 		if name, ok := strings.CutPrefix(r.URL.Path, "/demos/assets/"); ok {
 			// Serve only the images and supplemental JSON embedded for these guides.
-			if path.Ext(name) != ".png" && path.Ext(name) != ".json" {
+			if path.Ext(name) != ".png" && path.Ext(name) != ".json" && path.Ext(name) != ".svg" && path.Ext(name) != ".gif" && path.Ext(name) != ".yaml" && name != "project/LICENSE" {
 				http.Error(w, i18n.T(lang, "page or resource not found"), http.StatusNotFound)
 				return
 			}
-			b, err := demo.Files.ReadFile(name)
+			var b []byte
+			var err error
+			if file, ok := strings.CutPrefix(name, "project/"); ok {
+				b, err = project.Documentation.ReadFile(file)
+			} else if doc, ok := strings.CutPrefix(name, "docs/"); ok {
+				b, err = projectdocs.Files.ReadFile(doc)
+			} else {
+				b, err = demo.Files.ReadFile(name)
+			}
 			if err != nil {
 				http.Error(w, i18n.T(lang, "page or resource not found"), http.StatusNotFound)
 				return
@@ -103,6 +117,12 @@ func demoGallery(entries []demo.Entry) http.HandlerFunc {
 			w.Header().Set("X-Content-Type-Options", "nosniff")
 			if path.Ext(name) == ".png" {
 				w.Header().Set("Content-Type", "image/png")
+			} else if path.Ext(name) == ".svg" {
+				w.Header().Set("Content-Type", "image/svg+xml")
+			} else if path.Ext(name) == ".gif" {
+				w.Header().Set("Content-Type", "image/gif")
+			} else if path.Ext(name) == ".yaml" || name == "project/LICENSE" {
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			} else {
 				w.Header().Set("Content-Type", "application/json")
 			}
@@ -118,6 +138,34 @@ func demoGallery(entries []demo.Entry) http.HandlerFunc {
 		page.ChineseURL = i18n.URL(r.URL.RequestURI(), i18n.Chinese)
 		if r.URL.Path == "/demos/" {
 			_ = gallery.Execute(w, page)
+			return
+		}
+
+		for _, doc := range projectdocs.Pages() {
+			if r.URL.Path != "/demos/guide/"+doc.ID {
+				continue
+			}
+			source := doc.Source(lang == i18n.Chinese)
+			var b []byte
+			var err error
+			if file, ok := strings.CutPrefix(source, "docs/"); ok {
+				b, err = projectdocs.Files.ReadFile(file)
+			} else {
+				b, err = project.Documentation.ReadFile(source)
+			}
+			if err != nil {
+				http.Error(w, "guide unavailable", 500)
+				return
+			}
+			page.DocID = doc.ID
+			page.DocGroup = doc.Group
+			page.Entry = demo.Entry{Title: doc.Title}
+			page.Content, page.Headings, err = renderLocalizedDemoGuide(page.Entry, entries, b, lang, source)
+			if err != nil {
+				http.Error(w, "guide rendering failed", 500)
+				return
+			}
+			_ = guide.Execute(w, page)
 			return
 		}
 		for _, entry := range entries {
@@ -146,7 +194,10 @@ func renderDemoGuide(entry demo.Entry, entries []demo.Entry, source []byte) (tem
 	return renderLocalizedDemoGuide(entry, entries, source, i18n.English)
 }
 
-func renderLocalizedDemoGuide(entry demo.Entry, entries []demo.Entry, source []byte, lang i18n.Locale) (template.HTML, []demoHeading, error) {
+func renderLocalizedDemoGuide(entry demo.Entry, entries []demo.Entry, source []byte, lang i18n.Locale, documentPath ...string) (template.HTML, []demoHeading, error) {
+	if len(documentPath) > 0 {
+		source = projectMarkdown(source)
+	}
 	// Leave unsafe HTML disabled: guide source cannot introduce scripts or raw
 	// HTML. Goldmark also rejects dangerous link/image URL schemes.
 	md := goldmark.New(goldmark.WithExtensions(extension.GFM), goldmark.WithParserOptions(parser.WithAutoHeadingID()))
@@ -176,12 +227,24 @@ func renderLocalizedDemoGuide(entry demo.Entry, entries []demo.Entry, source []b
 					linkLang = i18n.Chinese
 				}
 			}
-			node.Destination = []byte(demoGuideLink(entry, entries, string(node.Destination)))
+			if len(documentPath) > 0 {
+				node.Destination = []byte(projectDocLink(documentPath[0], string(node.Destination)))
+			} else {
+				node.Destination = []byte(demoGuideLink(entry, entries, string(node.Destination)))
+			}
 			if strings.HasPrefix(string(node.Destination), "/demos/docs/") {
 				node.Destination = []byte(i18n.URL(string(node.Destination), linkLang))
 			}
 		case *ast.Image:
-			node.Destination = []byte(demoGuideLink(entry, entries, string(node.Destination)))
+			if len(documentPath) > 0 && (strings.HasPrefix(string(node.Destination), "https://") || strings.HasPrefix(string(node.Destination), "http://")) {
+				n.Parent().ReplaceChild(n.Parent(), node, ast.NewString(node.Text(source)))
+				return ast.WalkSkipChildren, nil
+			}
+			if len(documentPath) > 0 {
+				node.Destination = []byte(projectDocLink(documentPath[0], string(node.Destination)))
+			} else {
+				node.Destination = []byte(demoGuideLink(entry, entries, string(node.Destination)))
+			}
 		}
 		return ast.WalkContinue, nil
 	}); err != nil {
@@ -243,6 +306,13 @@ func demoGuideLink(entry demo.Entry, entries []demo.Entry, href string) string {
 			return u.String()
 		}
 	}
+	if local, ok := localProjectDocURL(resolved, u); ok {
+		return local
+	}
+	return repositoryGuideURL(resolved, u)
+}
+
+func repositoryGuideURL(resolved string, u *url.URL) string {
 	// Other repository references remain usable without pretending their files
 	// are in the embedded reader. They open only when the reader follows them.
 	u.Scheme, u.Host = "https", "github.com"

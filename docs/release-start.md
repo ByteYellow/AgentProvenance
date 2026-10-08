@@ -2,7 +2,11 @@
 
 English | [简体中文](zh-CN/release-start.md)
 
-From the extracted archive, open the demo library:
+[Open the online demo](https://ByteYellow.github.io/AgentProvenance/) to try the
+graph, Agent session and saved files without installing anything. The same site includes the full project overview, capture and deployment guides,
+analysis commands, integration references and release history.
+
+For offline replay, open the demo library from the extracted archive:
 
 ```sh
 ./agentprov demo

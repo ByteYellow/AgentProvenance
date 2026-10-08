@@ -2,12 +2,17 @@
 
 English | [中文](CHANGELOG.zh-CN.md)
 
-## v0.9.0 - Unreleased
+## v0.9.0 - 2026-10-09
 
 Recorded agent sessions, configuration history, and portable full-text evidence.
 Release notes: [v0.9.0](docs/releases/v0.9.0.md).
 
 ### Added
+
+- A complete read-only online demo, bilingual user guides and `demo export`.
+  Static replay uses the existing Dashboard and preserves graph, session,
+  file-content and evidence navigation. Releases validate and deploy the same
+  website artifact alongside the portable CLI archives.
 
 - Common context capture for Claude Code and Codex, with messages, tool inputs
   and outcomes, source-provided task, approval and configuration records.

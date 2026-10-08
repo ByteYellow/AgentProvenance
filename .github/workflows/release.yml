@@ -12,8 +12,12 @@ on:
       - 'scripts/release_plan.py'
       - 'scripts/test_release_plan.py'
       - 'scripts/check_localized_docs.py'
-      - 'docs/release-start.md'
-      - 'docs/zh-CN/release-start.md'
+      - 'docs/**'
+      - 'assets.go'
+      - 'README*'
+      - 'CHANGELOG*'
+      - 'scripts/accept_static_demo.*'
+      - 'scripts/test_static_reader.cjs'
       - 'internal/**'
       - 'cmd/**'
       - 'demo/**'
@@ -52,7 +56,7 @@ jobs:
         run: python3 scripts/check_localized_docs.py
       - name: Validate source and all signed fixtures
         run: |
-          test -z "$(gofmt -l internal cmd demo/assets.go)"
+          test -z "$(gofmt -l internal cmd assets.go demo/assets.go docs/assets.go)"
           go vet ./...
           go test -race ./...
 
@@ -88,12 +92,40 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  site:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser acceptance dependencies
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Build the public replay reader
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: go build -ldflags "-X github.com/byteyellow/agentprovenance/internal/buildinfo.Version=$RELEASE_VERSION -X github.com/byteyellow/agentprovenance/internal/buildinfo.Commit=$GITHUB_SHA" -o /tmp/agentprov-site ./cmd/agentprov
+      - name: Compare static replay with the local dashboard
+        run: python3 scripts/accept_static_demo.py --binary /tmp/agentprov-site --site _site/AgentProvenance
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site/AgentProvenance
+
   publish:
-    needs: [validate, build]
+    needs: [validate, build, site]
     if: needs.validate.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      pages: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -101,6 +133,9 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: dist
+      - name: Check Pages is ready for the paired release
+        if: ${{ !contains(needs.validate.outputs.version, '-') }}
+        uses: actions/configure-pages@v5
       - name: Validate checksums and publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -122,3 +157,20 @@ jobs:
           if [[ "$version" == *-* ]]; then prerelease=(--prerelease --latest=false); fi
           gh release create "$version" dist/* --target "$GITHUB_SHA" \
             --title "$version" --notes-file "$notes" "${prerelease[@]}"
+
+  deploy-site:
+    needs: [validate, site, publish]
+    if: needs.validate.outputs.publish == 'true' && !contains(needs.validate.outputs.version, '-')
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

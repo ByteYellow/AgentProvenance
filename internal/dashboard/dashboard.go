@@ -51,6 +51,12 @@ var contextCSS []byte
 //go:embed context.js
 var contextJS []byte
 
+//go:embed replay.js
+var replayJS []byte
+
+// ReplayScript returns the browser reader used by exported public demos.
+func ReplayScript() []byte { return replayJS }
+
 // Server serves the dashboard over a single read-only *sql.DB.
 type Server struct{ DB *sql.DB }
 
