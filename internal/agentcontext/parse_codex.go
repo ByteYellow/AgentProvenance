@@ -8,6 +8,12 @@ import (
 func (p *parser) codex(top row) bool {
 	v, ts := obj(top["payload"]), eventTime(top)
 	switch text(top, "type") {
+	case "world_state":
+		p.add("configuration", p.positionKey("world-state"), "", "", "", "source_world_state", ts, whole(v))
+		return true
+	case "token_usage_record":
+		p.add("session", p.positionKey("usage"), "", "", "", "source_token_usage", ts, whole(v))
+		return true
 	case "session_meta":
 		p.identify(text(v, "id", "session_id"))
 		p.Source.Workdir, p.Source.ApplicationVersion = text(v, "cwd"), text(v, "cli_version")
@@ -58,6 +64,37 @@ func (p *parser) codex(top row) bool {
 		return true
 	case "event_msg":
 		switch text(v, "type") {
+		case "thread_settings_applied":
+			settings := obj(v["thread_settings"])
+			if settings == nil {
+				return false
+			}
+			if _, exists := settings["cwd"]; exists {
+				p.Source.Workdir = text(settings, "cwd")
+			}
+			p.add("configuration", p.positionKey("thread-settings"), "", "", "", "observed", ts, whole(settings))
+			return true
+		case "item_completed":
+			item := obj(v["item"])
+			switch text(item, "type") {
+			case "UserMessage", "AgentMessage":
+				role := "assistant"
+				if text(item, "type") == "UserMessage" {
+					role = "user"
+				}
+				p.add("message", p.positionKey("completed-message"), role, "", "", "source_message_event", ts, item["content"])
+			case "CommandExecution":
+				// Execution item IDs are not model tool-call IDs. Preserve the
+				// report without inventing a proposed action or a call join.
+				p.add("session", p.positionKey("command-execution"), "", "", "", "source_command_execution", ts, whole(v))
+			case "FileChange":
+				p.add("session", p.positionKey("file-change"), "", "", "", "source_file_change", ts, whole(v))
+			case "Reasoning":
+				p.add("message", p.positionKey("completed-reasoning"), "assistant", "", "", "source_reasoning_event", ts, whole(v))
+			default:
+				return false
+			}
+			return true
 		case "user_message", "agent_message":
 			// A truncated or event-only source may never contain response_item.
 			// Preserve both source forms; equal text does not prove shared identity.

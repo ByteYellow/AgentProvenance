@@ -97,8 +97,16 @@ func (p *parser) claude(top row) bool {
 		}
 		p.add(kind, p.positionKey("system"), "system", "", "", status, ts, whole(top))
 		return true
-	case "permission-mode":
+	case "permission-mode", "mode":
 		p.add("configuration", p.positionKey("permission-mode"), "", "", "", "permission_mode", ts, whole(top))
+		return true
+	case "attachment":
+		// Native context attachments are source state, not new conversation
+		// turns or proof that a tool action was authorized.
+		p.add("session", p.positionKey("attachment"), "system", "", "", "source_attachment", ts, whole(top))
+		return true
+	case "atis-latch", "last-prompt", "cost-state":
+		p.add("session", p.positionKey("native-state"), "", "", "", "source_"+text(top, "type"), ts, whole(top))
 		return true
 	case "summary":
 		p.add("message", p.positionKey("summary"), "assistant", "", "", "summary", ts, top["summary"])

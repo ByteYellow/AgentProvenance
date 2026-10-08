@@ -39,6 +39,9 @@ Release notes: [v0.9.0](docs/releases/v0.9.0.md).
 
 ### Fixed
 
+- Retain newer Claude native attachments/session state and Codex completed
+  messages, command/file-change reports and resumed thread settings, preserving
+  source identity without treating execution reports as model proposals.
 - Prevent configuration changes, source-message variants, typed tool failures,
   completion-only dispatches and late results from losing their source semantics.
 - Preserve native argument boundaries and process-lifetime attribution limits;

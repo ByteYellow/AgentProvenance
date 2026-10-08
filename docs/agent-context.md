@@ -88,6 +88,14 @@ heuristically collapsed. Message totals count saved source records, not unique
 conversation turns; repeat imports still deduplicate the same recorded evidence.
 Original source bodies and physical positions remain available for inspection.
 
+Native Codex completed-message events, world-state snapshots and applied thread
+settings are also retained. Completed command/file-change reports and token usage
+remain source state; their execution-item IDs do not create model tool-call
+identities. Claude attachments, session bookkeeping and cost estimates remain
+source state, while native `mode` records enter configuration history. These
+records preserve their raw bodies and resume ranges without adding synthetic
+conversation turns or permission approvals.
+
 Codex tool errors use explicit source flags/status, typed exit codes and supported
 MCP/shell result envelopes. Words such as "error" in stdout or arbitrary nested
 JSON do not determine outcome. `returned` means a result was recorded, not that
