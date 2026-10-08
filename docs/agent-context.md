@@ -1,11 +1,16 @@
-# Recorded Agent Context
+# Agent Session Guide
 
-[Chinese](zh-CN/agent-context.md)
+English | [中文](zh-CN/agent-context.md)
 
-Agent context preserves what a harness recorded: conversation messages, tool
-inputs/results, task changes, configuration, and approval records. It is source
-evidence, not a reconstruction of hidden model reasoning or an assertion that
-a proposed action actually executed. Runtime evidence remains a separate layer.
+Preserve the task, conversation, tool inputs and results, plus the permissions
+and configuration recorded during an execution. Follow a session entry into its
+runtime evidence, open saved content, compare snapshots, and export for offline use.
+
+Try `agentprov demo deepseek-context` first, or follow the capture steps below
+to record your own agent. Sessions are collected after the agent exits;
+`--file-diff` opts into saving final changed-file text.
+
+**Jump to:** [Capture](#capture) · [Inspect and compare](#inspect-and-compare) · [Dashboard](#dashboard) · [Coverage](#coverage-and-portability) · [File content](#changed-file-content) · [API](#external-queries-and-runtime-coverage)
 
 ## Capture
 

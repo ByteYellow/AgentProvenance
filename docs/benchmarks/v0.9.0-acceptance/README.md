@@ -29,6 +29,14 @@ scroll retention. They are not represented as real model executions. Existing
 Claude/Codex live-session evidence remains the Mac validation documented in the
 [context guide](../../agent-context.md#native-format-compatibility).
 
+## Remote acceptance
+
+At commit `1b279ba`, [CI](https://github.com/ByteYellow/AgentProvenance/actions/runs/37796934431)
+and the [portable archive workflow](https://github.com/ByteYellow/AgentProvenance/actions/runs/37796934625)
+passed, including live amd64 capture on Go 1.23–1.26, historical compatibility,
+and Linux/macOS amd64/arm64 builds and extracted-archive checks. Publishing was
+skipped as intended for the review branch; v0.9.0 has not been published.
+
 ## Fixes found by acceptance
 
 - The committed amd64 BPF object lacked the child birth-cgroup change already in

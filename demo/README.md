@@ -2,10 +2,10 @@
 
 English | [中文](README.zh-CN.md)
 
-Start with a single agent, then follow a team and a cross-pod execution. The
-committed compressed bundles can be imported, verified and explored on macOS or
-Linux without rerunning the agents. Live capture has separate environment and
-credential requirements in each demo's README.
+Start with a real DeepSeek development task, then explore a single-agent risk
+investigation, team collaboration and cross-Pod execution. Seven signed captures
+replay offline on macOS or Linux; two optional evaluator examples provide setup
+guides. Live capture requirements are listed in each guide.
 
 ## One-command entry
 
@@ -55,6 +55,18 @@ AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
 Jev's guide supports the supplied CLI through `--agentprov`; a source build is
 optional. Its live capture still requires Python, credentials and explicit consent.
 
+## New in v0.9.0: an ordinary development task
+
+[DeepSeek context](deepseek-context/) records a real task that adds daily totals
+to a Python report. Inspect the original task, 12 tool inputs/results, five
+configuration records, saved file text and two inferred tool/runtime links.
+The seven-test result is recorded evidence, not a replay-time model call.
+Context coverage, runtime coverage and permission records are shown separately.
+
+Run `agentprov demo deepseek-context` with the v0.9.0 CLI. Replay is signed,
+offline and needs no DeepSeek account or VM. Source builds use the same command;
+the six historical capture bundles remain unchanged.
+
 ## 1. One agent: supply-chain execution
 
 [Snake supply-chain demo](snake-supply-chain/) follows a real coding agent that
@@ -93,18 +105,6 @@ are distinct evidence sources, not a claim that the entire team was recaptured.
 
 [Kubernetes substrate](k8s-substrate/) focuses on container identity and placement.
 Use `agentprov demo k8s-substrate` to open the Substrate lens without Kubernetes.
-
-## New in v0.9.0: an ordinary development task
-
-[DeepSeek context](deepseek-context/) records a real task that adds daily totals
-to a Python report. Inspect the original task, 12 tool inputs/results, five
-configuration records, saved file text and two inferred tool/runtime links.
-The seven-test result is recorded evidence, not a replay-time model call.
-Context coverage, runtime coverage and permission records are shown separately.
-
-Run `agentprov demo deepseek-context` with the v0.9.0 CLI. Replay is signed,
-offline and needs no DeepSeek account or VM. Source builds use the same command;
-the six historical capture bundles remain unchanged.
 
 ## Additional investigations
 

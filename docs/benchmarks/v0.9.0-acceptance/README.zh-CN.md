@@ -27,6 +27,13 @@
 API 失败及阅读位置保持，不把它们当作真实模型执行。Claude/Codex 的真实会话依据仍为
 [上下文指南](../../zh-CN/agent-context.md#原生格式兼容性)记录的 Mac 验证；本轮复跑格式样本和自动化回归。
 
+## 远端验收
+
+提交 `1b279ba` 的 [CI](https://github.com/ByteYellow/AgentProvenance/actions/runs/37796934431)
+与[便携包工作流](https://github.com/ByteYellow/AgentProvenance/actions/runs/37796934625)均已通过。
+包括 Go 1.23–1.26 的 amd64 实时采集、旧数据兼容，以及 Linux/macOS 的 amd64、arm64
+构建与解压后验收。review 分支的发布步骤按设计跳过，尚未创建 v0.9.0 发行版。
+
 ## 本轮修复
 
 - C 源码与 ARM64 探针已有子进程出生 cgroup 修复，amd64 预编译探针却仍是旧版本。

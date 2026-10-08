@@ -5,8 +5,8 @@ English | [中文](README.zh-CN.md)
 A real DeepSeek Harness session adds `--daily` to a small Python revenue report,
 keeps the existing total unchanged, and runs seven tests. AgentProvenance records
 the task, conversation, tool inputs/results, configuration and changed files,
-alongside native kernel events. This is a development-task capture, not a
-prompt-injection or enforcement demonstration.
+alongside native kernel events. Follow the original task through implementation,
+tests and saved final files.
 
 ## Replay
 
@@ -27,6 +27,9 @@ integrity before opening the Dashboard.
 Run ID: `run-dbc2adf273d4`. The short demo name does not rewrite this identity.
 
 ## What to Inspect
+
+The graph stays at the top and **Agent session starts collapsed**. Read the task
+and tool results, select a file in the graph, then check collection status.
 
 1. **Agent session / Conversation & tools**: the user asks for daily totals,
    the agent reads the three seed files, edits the implementation and tests,
