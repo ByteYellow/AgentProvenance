@@ -276,7 +276,8 @@ func staticDemoHTML(raw []byte, filename string, locale i18n.Locale, replay bool
 		return nil, err
 	}
 	prefix, _ := filepath.Rel(filepath.FromSlash(path.Dir(filename)), ".")
-	prefix = filepath.ToSlash(prefix) + "/"
+	// Go 1.23 can return "../." here; keep generated URLs stable across versions.
+	prefix = path.Clean(filepath.ToSlash(prefix)) + "/"
 	var walk func(*html.Node)
 	walk = func(node *html.Node) {
 		for i, a := range node.Attr {
