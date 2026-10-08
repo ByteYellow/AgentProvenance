@@ -10,6 +10,7 @@ on:
       - 'scripts/build-release.py'
       - 'scripts/accept_release.py'
       - 'scripts/release_plan.py'
+      - 'scripts/render_release_notes.py'
       - 'scripts/test_release_plan.py'
       - 'scripts/check_localized_docs.py'
       - 'docs/**'
@@ -149,6 +150,8 @@ jobs:
           test "$(find dist -name '*.tar.gz' | wc -l)" -eq 4
           notes="$RELEASE_NOTES"
           test -f "$notes"
+          python3 scripts/render_release_notes.py "$notes" \
+            --repository "$GITHUB_REPOSITORY" --version "$version" > "$RUNNER_TEMP/release-notes.md"
           if gh release view "$version" >/dev/null 2>&1; then
             echo 'Release already exists; refusing to overwrite published assets.' >&2
             exit 1
@@ -156,7 +159,7 @@ jobs:
           prerelease=()
           if [[ "$version" == *-* ]]; then prerelease=(--prerelease --latest=false); fi
           gh release create "$version" dist/* --target "$GITHUB_SHA" \
-            --title "$version" --notes-file "$notes" "${prerelease[@]}"
+            --title "$version" --notes-file "$RUNNER_TEMP/release-notes.md" "${prerelease[@]}"
 
   deploy-site:
     needs: [validate, site, publish]
