@@ -773,12 +773,11 @@ original evidence retain their recorded text.
 
 
 <p align="center">
-  <img src="docs/assets/dashboard-causality.png" alt="AgentProvenance local evidence inspector preview with run selection, verify status, timeline, process tree, egress, risk signals, and causality DAG." width="100%">
-</p>
-<p align="center">
-  <img src="docs/assets/dashboard-timeline-process-egress.png" alt="AgentProvenance local evidence inspector preview with run selection, verify status, timeline, process tree, egress, risk signals, and causality DAG." width="100%">
+  <img src="demo/deepseek-context/dashboard-session.png" alt="Recorded DeepSeek session: the test command, its real output, and navigation to saved content and graph evidence." width="100%">
 </p>
 
+The [DeepSeek walkthrough](demo/deepseek-context/README.md) also shows recorded
+permissions, saved file contents and collection status.
 
 ```sh
 ./agentprov dashboard serve            # http://127.0.0.1:7396
@@ -786,8 +785,8 @@ original evidence retain their recorded text.
 ```
 
 A local, read-only, single-page dashboard over the verifiable graph. Its JSON
-endpoints reuse the same internal functions as the CLI and AI tools, so the UI
-never drifts from the contract; the HTML/JS is embedded in the binary and loads
+endpoints reuse the same internal query functions as the CLI and AI tools;
+the HTML/JS is embedded in the binary and loads
 no external assets (local-first). The UI is a **Graph Explorer** over the
 canonical graph, not a single hard-coded security flow. The key scale rule is:
 **all raw telemetry remains queryable, but the dashboard never tries to render

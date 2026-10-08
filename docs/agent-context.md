@@ -302,6 +302,9 @@ session. Live refresh preserves opened records and content pages. Language
 switches retain the selected view and reading position; browser session storage
 holds navigation IDs/offsets only, not message or tool-output bodies.
 
+For real interface examples, see the [DeepSeek walkthrough](../demo/deepseek-context/README.md):
+conversation and tools, permissions/configuration, saved content and collection status.
+
 Select two task, configuration, or approval records of the same kind to compare
 their recorded values. A missing approval remains **Not recorded**, not denied
 or allowed. The verification badge reports graph integrity; it does not claim

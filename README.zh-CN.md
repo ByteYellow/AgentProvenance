@@ -684,9 +684,11 @@ Qwen，以及本地 vLLM/Ollama 服务。未配置 API Key 时会使用离线测
 ## 可视化界面
 
 <p align="center">
-  <img src="docs/img/dashboard-overview-zh-CN.png" alt="本地证据界面：执行记录选择、验证状态、时间线、进程树、网络外发、风险信号与关联图。" width="100%">
+  <img src="demo/deepseek-context/dashboard-session-zh-CN.png" alt="DeepSeek 会话记录：测试命令、真实输出，以及已保存正文和图谱证据入口。" width="100%">
 </p>
 
+[DeepSeek 示例指南](demo/deepseek-context/README.zh-CN.md)还展示权限配置、
+最终文件正文和采集情况。
 
 ```sh
 ./agentprov dashboard serve            # http://127.0.0.1:7396

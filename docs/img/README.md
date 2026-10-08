@@ -4,7 +4,34 @@ English | [简体中文](README.zh-CN.md)
 
 Screenshots and short replay media referenced from the top-level `README.md`.
 The gallery and reader screenshots use `agentprov demo`; evidence screenshots
-come from the signed snake, multi-agent and Kubernetes demo bundles.
+come from the signed DeepSeek, snake, multi-agent and Kubernetes demo bundles.
+
+## Recorded Agent Context
+
+The v0.9.0 interface screenshots were captured on 2026-10-08 from the signed
+DeepSeek run `run-dbc2adf273d4`. They show the current viewer over the original
+2026-09-28 evidence, not a new model run. Each has an English and a `-zh-CN` version.
+The images live with the [DeepSeek guide](../../demo/deepseek-context/README.md)
+so the CLI can embed and display them offline.
+
+| File in `demo/deepseek-context/` | Subject |
+|---|---|
+| `dashboard-session.png` / `dashboard-session-zh-CN.png` | Test command and returned output in Conversation & tools |
+| `dashboard-configuration.png` / `dashboard-configuration-zh-CN.png` | Permission preset, sandbox mode and approval policy |
+| `dashboard-tests.png` / `dashboard-tests-zh-CN.png` | Seven-test output in the expanded saved-content viewer |
+| `dashboard-file.png` / `dashboard-file-zh-CN.png` | Saved final `test_report.py` text with Agent session collapsed |
+| `dashboard-coverage.png` / `dashboard-coverage-zh-CN.png` | Separate session capture, tool association and runtime completeness |
+
+Capture at a 1440 x 1060 viewport. Use the Agent session panel's own scroll area
+and tabs; the test command is source record #56 and its result is #57 on page 2.
+For the file view, choose File / Artifact, expand the source group and select
+`test_report.py`. Do not modify evidence or hide coverage warnings for a screenshot.
+
+## Gallery and Evidence Graphs
+
+`demo-gallery.png` and `demo-gallery-zh-CN.png` were refreshed from the same
+build: seven signed replays and two evaluator guides. Earlier graph screenshots
+and playback clips below retain their original demo subjects.
 
 | File | What to capture |
 |------|-----------------|

@@ -46,6 +46,22 @@ Run ID: `run-dbc2adf273d4`. The short demo name does not rewrite this identity.
    kernel capture and partial tool/runtime association. Graph verification,
    signature verification and collection completeness are separate results.
 
+### Conversation and Tool Results
+
+The test command and its returned output remain separate records. Expand
+**Arguments / result** to read them together, or follow their saved evidence links.
+
+![Recorded test command and its returned output in Agent session](dashboard-session.png)
+
+### Permissions and Configuration
+
+The session records its permission preset, sandbox mode and approval policy.
+These are source-provided settings, not an independent proof of enforcement.
+
+![Recorded permission preset, sandbox mode and approval policy](dashboard-configuration.png)
+
+### Saved Content
+
 ![Recorded seven-test output in the saved-content viewer](dashboard-tests.png)
 
 Structured results have a **Readable view** and a **Saved bytes** view. The
@@ -53,6 +69,13 @@ former changes presentation only; hashes and byte positions describe the saved
 original. Raw source records and partial pages remain byte views.
 
 ![Final file text remains accessible with Agent session collapsed](dashboard-file.png)
+
+### Collection Status
+
+Session capture, tool-to-runtime association and runtime completeness have
+separate outcomes. Expand their diagnostics for the supporting counts and sources.
+
+![Separate session, association and runtime coverage outcomes](dashboard-coverage.png)
 
 ## Capture Facts and Limits
 

@@ -28,9 +28,9 @@ Execution Context
 
 ## First experience: portable replay
 
-The [v0.8.2 release](releases/v0.8.2.md) provides CLI archives for
+The [v0.9.0 release](releases/v0.9.0.md) provides CLI archives for
 Linux and macOS on amd64/arm64. `agentprov demo` opens a local gallery containing
-six verified signed captures and two optional evaluator guides, with the same
+seven verified signed captures and two optional evaluator guides, with the same
 visual theme as the dashboard. Guides render locally with a section outline,
 images, tables and code-copy controls. See the [Quickstart](../README.md#quickstart)
 and [complete demo index](../demo/README.md).

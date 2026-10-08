@@ -10,7 +10,7 @@ eBPF 传感器记录文件访问和网络连接，数据流与污点视图据此
 
 ## 打开回放
 
-下载并解压[预编译版本](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2-rc.2)，在解压目录执行：
+下载并解压[预编译版本](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.9.0)，在解压目录执行：
 
 ```sh
 ./agentprov demo snake-supply-chain
