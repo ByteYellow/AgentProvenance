@@ -8,7 +8,7 @@ come from the signed snake, multi-agent and Kubernetes demo bundles.
 
 | File | What to capture |
 |------|-----------------|
-| `demo-gallery.png` | All eight demos at `/demos/`, desktop width, dashboard theme. |
+| `demo-gallery.png` | Signed replays and optional evaluator guides at `/demos/`, desktop width, dashboard theme. |
 | `demo-guide.png` | Formatted LLM Judge guide at `/demos/docs/llm-judge`, including section navigation and code-copy controls. |
 | `dashboard-graph-explorer-taint.png` | Graph Explorer with the **Data-flow · taint** lens selected on `run-snake-supervised`; the red dashed `possible_sensitive_data_flow` edges visible. |
 | `dashboard-side-panel-preview.png` | A node selected so the **Side Panel** shows Evidence + the artifact Preview (e.g. `workspace_file/snake.py`). |

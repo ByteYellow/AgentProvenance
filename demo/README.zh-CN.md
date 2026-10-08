@@ -6,11 +6,12 @@
 
 ## 一条命令打开
 
-从 [v0.8.2 发行页](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。只有自行从源码构建时才需要 Go。该正式版内嵌六份签名采集记录和全部示例指南：
+从 [v0.9.0 发行页](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.9.0)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。只有自行从源码构建时才需要 Go。CLI 内嵌七份签名采集记录和九个指南入口，包括两个可选评估器示例：
 
 ```sh
 ./agentprov demo                         # 打开全部示例
 ./agentprov demo --list                  # 列出回放名称和接入指南
+./agentprov demo deepseek-context        # 任务、工具、配置和保存的文件
 ./agentprov demo snake-supply-chain      # 打开一份签名采集记录
 ./agentprov demo multiagent-provenance
 ./agentprov demo k8s-cross-pod-a2a
@@ -21,7 +22,7 @@
 ./agentprov demo jev-judge                # 离线接入指南，不调用服务商
 ```
 
-“打开回放”（Open replay）在 Dashboard 中打开签名执行记录。“阅读指南”（Read guide）打开排版后的本地说明，包含章节目录、图片、表格和代码复制按钮。示例首页与阅读页沿用 Dashboard 风格，支持窄屏。rc.2 使用英文按钮；后续中文版的入口和布局相同。
+“打开回放”（Open replay）在 Dashboard 中打开签名执行记录。“阅读指南”（Read guide）打开排版后的本地说明，包含章节目录、图片、表格和代码复制按钮。示例首页与阅读页沿用 Dashboard 风格，支持窄屏与中英文切换。
 
 ![带章节目录和代码复制控件的中文指南阅读页](../docs/img/demo-guide-zh-CN.png)
 
@@ -59,11 +60,11 @@ Jev 示例可通过 `--agentprov` 使用包内 CLI，无需自行构建。在线
 
 [Kubernetes 运行环境示例](k8s-substrate/README.zh-CN.md)侧重容器身份和部署位置。运行 `agentprov demo k8s-substrate` 即可打开对应视图，无需 Kubernetes。
 
-## v0.9.0 候选版新增：一次普通开发任务
+## v0.9.0 新增：一次普通开发任务
 
-[DeepSeek 会话示例](deepseek-context/README.zh-CN.md)记录为 Python 报表增加按日汇总的真实任务。可查看原始任务、12 组工具输入与结果、五条配置记录、保存的文件正文，以及两条工具与运行时之间的推断关联。七项测试通过是已保存的真实结果，回放时不会重新调用模型。指南区分正常的会话采集与部分成功的内核采集，也不虚构审批交互。
+[DeepSeek 会话示例](deepseek-context/README.zh-CN.md)记录为 Python 报表增加按日汇总的真实任务。可查看原始任务、12 组工具输入与结果、五条配置记录、保存的文件正文，以及两条工具与运行时之间的推断关联。七项测试通过是已保存的真实结果，回放时不会重新调用模型。上下文覆盖、运行时覆盖和权限记录分别展示。
 
-构建当前源码，或使用对应的 v0.9.0 候选压缩包，再运行 `agentprov demo deepseek-context`。上面链接的正式版尚不包含此示例。签名回放可离线运行，无需 DeepSeek 账号或 VM；六份历史采集包保持原样。
+使用 v0.9.0 CLI 运行 `agentprov demo deepseek-context`，源码构建后的用法相同。签名回放可离线运行，无需 DeepSeek 账号或 VM；六份历史采集包保持原样。
 
 ## 其他调查示例
 

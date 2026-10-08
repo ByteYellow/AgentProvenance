@@ -10,7 +10,7 @@
 
 | 文件 | 内容 |
 |---|---|
-| `demo-gallery.png`、`demo-gallery-zh-CN.png` | `/demos/` 中的全部八个入口 |
+| `demo-gallery.png`、`demo-gallery-zh-CN.png` | `/demos/` 中的签名回放与可选评估器指南 |
 | `demo-guide.png`、`demo-guide-zh-CN.png` | LLM Judge 阅读页，包含目录和代码复制按钮 |
 
 启动 `./agentprov demo`，打开输出地址，在 1440 像素宽的浏览器窗口中截图。中文页面可以通过右上角语言按钮打开，也可以在 URL 中指定 `lang=zh-CN`。

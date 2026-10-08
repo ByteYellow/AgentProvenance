@@ -46,11 +46,25 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 </p>
 
 [查看真实场景](demo/multiagent-provenance/README.zh-CN.md) ·
-[立即回放](#快速开始) · [v0.8.2 版本说明](docs/zh-CN/releases/v0.8.2.md)
+[立即回放](#快速开始) · [v0.9.0 版本说明](docs/zh-CN/releases/v0.9.0.md)
+
+## v0.9.0 新增：保存 Agent 执行上下文
+
+把一次执行背后的上下文与运行时证据一起保存：
+
+- **对话与工具结果**：查看受支持会话的原始任务、工具输入、执行结果和来源记录。
+- **配置历史**：比较当时的模型、工作区、审批和沙箱设置；来源提供时，一并保存 MCP、skills 和 plugins 信息。
+- **可移植正文**：原工作区不在后，仍可阅读较长工具输出，以及选择保存的变化文件最终文本。
+- **会话与图谱双向定位**：沿已记录的关联，在工具记录与对应运行时证据之间切换。
+- **CLI 与 HTTP 查询**：分页读取上下文和正文，比较配置，查看来源级采集覆盖。
+
+运行 `./agentprov demo deepseek-context`，离线查看一份真实开发任务的签名回放。
+[上下文指南](docs/zh-CN/agent-context.md) · [上下文 API](docs/agent-context-api.yaml)。
 
 ## 目录
 
 - [快速开始](#快速开始)
+- [保存 Agent 执行上下文](#v090-新增保存-agent-执行上下文)
 - [为什么需要它](#为什么需要它)
 - [安全闭环](#安全闭环)
 - [核心模型](#核心模型)
@@ -79,9 +93,9 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 
 ### 下载并回放，无需安装 Go
 
-![本地 Demo 首页：六份签名回放与两个可选评估器指南](docs/img/demo-gallery-zh-CN.png)
+![本地 Demo 首页：签名回放与可选评估器指南](docs/img/demo-gallery-zh-CN.png)
 
-在 [**v0.8.2 正式版**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2)
+在 [**v0.9.0 发行页**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.9.0)
 下载对应平台的压缩包及同名 `.sha256` 校验文件：
 
 | 平台 | 压缩包后缀 |
@@ -94,9 +108,9 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 以 Linux x86-64 为例，在下载目录执行：
 
 ```sh
-sha256sum -c agentprov_v0.8.2_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.9.0_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.8.2_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.9.0_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -107,8 +121,8 @@ Windows 用户请在 WSL 中运行对应的 Linux 包。
 校验和用于检查下载文件的完整性，`build-info.json` 记录构建信息；
 这些信息不等同于发布者的数字签名。
 
-运行后，浏览器会打开 **Demo 首页**，其中包含 6 份已签名的执行记录和
-2 个可选评估器的使用指南。首页与可视化界面（Dashboard）采用相同的浅色样式：
+运行后，浏览器会打开 **Demo 首页**，其中包含 7 份已签名的执行记录和
+9 个指南入口（包括两个可选评估器示例）。首页与可视化界面（Dashboard）采用相同的浅色样式：
 点击**阅读指南（Read guide）**查看带目录、图片、表格和代码复制按钮的本地指南；
 点击**打开回放（Open replay）**查看执行记录。
 
@@ -119,6 +133,7 @@ CLI 会先校验原始签名，再将记录导入独立的临时目录并验证�
 
 ```sh
 ./agentprov demo --list
+./agentprov demo deepseek-context
 ./agentprov demo multiagent-provenance
 ./agentprov demo k8s-cross-pod-a2a --no-browser
 ```
@@ -140,10 +155,8 @@ go build -o agentprov ./cmd/agentprov
 
 ### 记录你自己的 Agent 执行
 
-**v0.9.0 源码预览：** 开发中的源码版本还可保存受支持的 Agent 会话、工具结果、配置历史
-和覆盖情况。运行 `./agentprov demo deepseek-context` 查看真实开发任务的签名回放；
-已发布的 v0.8.2 压缩包尚不包含该示例。
-[上下文指南](docs/zh-CN/agent-context.md) · [版本说明](docs/zh-CN/releases/v0.9.0.md)。
+在运行时证据之外，保存受支持的 Agent 会话、工具结果、配置历史和来源级覆盖情况。
+会话发现与解析在 Agent 退出后进行。详见[上下文指南](docs/zh-CN/agent-context.md)。
 
 在解压目录或源码目录中，启动已经安装并完成登录或认证的 Agent：
 
@@ -722,7 +735,7 @@ Dashboard 是本地运行的只读单页界面，用于浏览和查询证据图�
 
 主要功能：
 
-- **Agent 会话（v0.9.0 源码预览）**：默认折叠，展开后查看对话与工具、权限与配置、
+- **Agent 会话**：默认折叠，展开后查看对话与工具、权限与配置、
   采集情况。已有证据链接支持与图谱双向定位；完整正文在独立查看器中分页读取。
   旧记录没有会话内容时，覆盖情况仍显示未知。参见 [DeepSeek 回放](demo/deepseek-context/README.zh-CN.md)。
 - **执行概览（Run Overview / Ask）**：从“为什么有风险”“哪些文件被修改”
@@ -877,6 +890,7 @@ Alice 的 Pod 未出现对应事件；图中也保留了跨 Pod 的 `alice → b
 | 能力 | 说明 |
 |---|---|
 | 无需 SDK 的命令记录 | `record -- <cmd>` 对工作目录做快照、采样进程树，记录文件变化和运行时信息 |
+| Agent 上下文记录 | 通过有界的 Hook 与会话适配器读取受支持的 Claude Code、Codex、DeepSeek、Kimi 和 Grok 来源，保存消息、工具输入结果及来源提供的配置 |
 | 批量记录 | `record batch` 并行记录多个作业，供评估、基准测试和 RL 流水线使用 |
 | 原生 eBPF 传感器 | 支持 Linux amd64/arm64 的进程执行与参数、网络连接、文件读写、进程退出、权限变更、文件改名/删除和 DNS；包含内核侧噪声过滤 |
 | TLS 明文采集 | 支持 OpenSSL `SSL_write` / `SSL_read` 及 `SSL_write_ex` / `SSL_read_ex`；受支持且保留符号的 Go `crypto/tls` 二进制在 amd64/arm64 上支持写入采集，amd64 Go 1.23–1.26 支持读取采集 |
@@ -909,6 +923,7 @@ Alice 的 Pod 未出现对应事件；图中也保留了跨 Pod 的 `alice → b
 | 能力 | 说明 |
 |---|---|
 | 时间线 | `timeline [--view causality] [--json]` 合并应用上下文与系统事件，支持分页和完整性校验信息 |
+| 上下文查询 | `context list / content / compare / coverage / links` 查看已保存会话、分页正文、配置差异、来源覆盖及图谱关联 |
 | 覆盖与排查 | `observe summary / coverage / scopes / event / process / flow` 查看关联覆盖、缺口、作用域及事件到响应的链路 |
 | 证据解释 | `graph explain` 按文件、产物、进程、事件、工具调用、作用域或风险查询关联路径，并限制结果规模、支持分页 |
 | 差异与归属 | `graph diff / blame` 查看文件变化及其执行来源，关联运行时事件和内容对象 |
@@ -1147,6 +1162,11 @@ docs/                   产品、部署、接口、验收与设计文档
 <a id="roadmap"></a>
 
 ## 版本进展与后续计划
+
+**v0.9.0 增加了 Agent 执行上下文记录。** 保存对话、工具结果、配置历史和可移植正文，
+支持会话与运行时证据之间的双向定位，并通过 CLI 和 HTTP API 查询同一份记录。
+示例库新增真实 DeepSeek 开发任务的签名回放。
+详见 [v0.9.0 发布说明](docs/zh-CN/releases/v0.9.0.md)。
 
 **v0.8.2 提供开箱即用的回放体验和完整的中文文档、网页界面。** 下载 Linux/macOS 的
 amd64/arm64 包后，直接运行 `agentprov demo`，即可浏览六个回放示例和两个

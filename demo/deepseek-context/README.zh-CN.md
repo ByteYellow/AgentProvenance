@@ -8,14 +8,14 @@
 
 ## 离线回放
 
-使用对应的 v0.9.0 候选二进制，在解压目录执行：
+使用 v0.9.0 CLI，在解压目录执行：
 
 ```sh
 ./agentprov demo deepseek-context
 ```
 
 从源码使用时，先执行 `go build -o agentprov ./cmd/agentprov` 构建二进制。
-已发布的 v0.8.2 压缩包不包含此示例；只有源码构建需要 Go。
+只有源码构建需要 Go。
 
 回放只读、离线，不需要 DeepSeek 密钥或 Linux VM，也不会执行证据中的命令。
 CLI 先验证原始签名，再导入独立临时目录，完成图完整性检查后打开 Dashboard。
@@ -48,7 +48,6 @@ Run ID 为 `run-dbc2adf273d4`。可读的 demo 名称不会改写证据中的身
 
 采集日期为 **2026-09-28**，使用 **DeepSeek Harness 0.1.7-rc.2**、原生
 `session.v4.jsonl.zstd`，运行在准备好的 Linux **6.8.0-137-generic aarch64** VM。
-这不是新的 x86 或 microVM 验收。
 
 - 73 条物理来源记录全部读取并保存：13 条消息、12 次工具调用、12 条工具结果、
   五条配置记录，以及来源生命周期记录。会话采集的失败、截断、未识别、延后

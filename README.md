@@ -47,11 +47,30 @@ network connection. The dashboard replays their attributed execution path:
 </p>
 
 [Explore the capture](demo/multiagent-provenance/README.md) ·
-[Try the replay](#quickstart) · [v0.8.2 release notes](docs/releases/v0.8.2.md)
+[Try the replay](#quickstart) · [v0.9.0 release notes](docs/releases/v0.9.0.md)
+
+## New in v0.9.0: Recorded Agent Context
+
+Keep the context behind an execution alongside its runtime evidence:
+
+- **Conversation and tool results**: inspect the original task, tool inputs,
+  outcomes and source records from supported agent sessions.
+- **Configuration history**: compare recorded model, workspace, approval and
+  sandbox settings, including MCP, skills and plugins when the source provides them.
+- **Portable saved content**: read long tool outputs and opt-in final changed-file
+  text after the original workspace is gone.
+- **Session-to-graph navigation**: follow recorded links between a tool entry and
+  its attributed runtime evidence in either direction.
+- **CLI and HTTP queries**: page through context, read saved bodies, compare
+  configuration and inspect source-scoped coverage.
+
+Run `./agentprov demo deepseek-context` for a signed, offline development-task
+replay. [Context guide](docs/agent-context.md) · [Context API](docs/agent-context-api.yaml).
 
 ## Contents
 
 - [Quickstart](#quickstart)
+- [Recorded Agent Context](#new-in-v090-recorded-agent-context)
 - [Why](#why)
 - [Security Loop](#security-loop)
 - [Core Model](#core-model)
@@ -80,10 +99,10 @@ network connection. The dashboard replays their attributed execution path:
 
 ### Download and replay — no Go required
 
-![Local demo gallery with six signed captures and two evaluator guides](docs/img/demo-gallery.png)
+![Local demo gallery with signed captures and optional evaluator guides](docs/img/demo-gallery.png)
 
 Download a precompiled archive and its `.sha256` file from
-[**v0.8.2**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.8.2).
+[**v0.9.0**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.9.0).
 
 | Platform | Archive suffix |
 |---|---|
@@ -95,9 +114,9 @@ Download a precompiled archive and its `.sha256` file from
 For example, on Linux x86-64, in the download directory:
 
 ```sh
-sha256sum -c agentprov_v0.8.2_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.9.0_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.8.2_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.9.0_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -107,8 +126,8 @@ checksum step. Binaries are not Apple Developer ID signed or notarized.
 `SHA256SUMS` and `build-info.json` provide archive integrity and build metadata;
 checksums are not publisher signatures.
 
-The browser opens a **Demo gallery** with all six signed captures and both
-optional evaluator guides, styled to match the dashboard. **Read guide** opens
+The browser opens a **Demo gallery** with seven signed captures and nine guide
+entries, including two optional evaluator examples, styled to match the dashboard. **Read guide** opens
 a formatted local reader with a table of contents, images, tables and copyable
 code blocks; **Open replay** opens the recorded evidence. Choose a replay: its Run and lens are selected and
 playback starts automatically when the view has timed events; placement views
@@ -119,6 +138,7 @@ rerun, and your regular data directory is untouched.
 
 ```sh
 ./agentprov demo --list
+./agentprov demo deepseek-context
 ./agentprov demo multiagent-provenance
 ./agentprov demo k8s-cross-pod-a2a --no-browser
 ```
@@ -140,11 +160,9 @@ go build -o agentprov ./cmd/agentprov
 
 ### Capture your own agent
 
-**v0.9.0 source preview:** the development checkout also records supported
-Agent sessions, tool results, configuration history and coverage. Try
-`./agentprov demo deepseek-context` for a real signed development-task replay;
-the published v0.8.2 archive does not include it.
-[Context guide](docs/agent-context.md) · [Version notes](docs/releases/v0.9.0.md).
+Record supported agent sessions, tool results, configuration history and
+source-scoped coverage alongside runtime evidence. Context discovery and parsing
+run when the agent exits. [Context guide](docs/agent-context.md).
 
 From the extracted archive or source checkout, with your agent already installed and authenticated:
 
@@ -804,7 +822,7 @@ Raw Telemetry Events
 
 Panels:
 
-- **Agent session (v0.9.0 source preview)**: a collapsed summary opens into
+- **Agent session**: a collapsed summary opens into
   conversation/tools, permissions/configuration and collection status. Saved
   graph links navigate in both directions; full saved bodies are paged in the
   independent content viewer. Old captures without session records explicitly
@@ -994,8 +1012,9 @@ per-command purpose: [docs/graph-commands.md](docs/graph-commands.md).
 | Capability | What it does |
 |---|---|
 | Zero-SDK record | `record -- <cmd>` snapshots the workdir, samples the process tree, captures file diffs + runtime evidence, no SDK |
+| Recorded agent context | Supported Claude Code, Codex, DeepSeek, Kimi and Grok sources provide messages, tool inputs/results and source-provided configuration through bounded hook/transcript adapters |
 | Batch recorder | `record batch` records many jobs in parallel for RL/benchmark pipelines |
-| Native eBPF sensor | `agentprov-sensor` (Linux/amd64 + arm64): exec+argv, connect, file write + sensitive **read** → `secret_path`, process_exit, privesc (setuid/setgid/ptrace), tamper (rename/unlink), TLS plaintext (full request/response bodies via chunked `SSL_write`/`SSL_read` and modern `SSL_write_ex`/`SSL_read_ex`; unstripped Go `crypto/tls` writes on amd64/arm64 and reads on amd64 Go 1.23–1.26), DNS — in-kernel noise filtering, validated live |
+| Native eBPF sensor | `agentprov-sensor` (Linux/amd64 + arm64): exec+argv, connect, file write + sensitive **read** → `secret_path`, process_exit, privesc (setuid/setgid/ptrace), tamper (rename/unlink), TLS plaintext (chunked `SSL_write`/`SSL_read` and modern `SSL_write_ex`/`SSL_read_ex`; supported unstripped Go `crypto/tls` writes on amd64/arm64 and reads on amd64 Go 1.23–1.26), DNS — in-kernel noise filtering and per-probe capability reporting |
 | LLM intent capture | `internal/tlsintent` reassembles the sensor's TLS chunks into complete HTTP/1.1 messages (Content-Length, chunked, and SSE streaming bodies) and HTTP/2 messages (frames + HPACK + stream demux), then parses LLM semantics across Anthropic/OpenAI shapes — model, tools offered, tool calls + the shell commands the model decided to run, stop reason |
 | Evidence ingest | Falco / Tetragon / LoongCollector JSONL + native sensor → normalized events; schema-validated, app-context rejected in raw payloads, paged with integrity hashes |
 
@@ -1022,6 +1041,7 @@ syscall/TLS coverage and [spool guarantees](docs/native-capture-spool.md).
 | Capability | What it does |
 |---|---|
 | Timeline | `timeline [--view causality] [--json]` — merged app-context + system telemetry, paged with integrity metadata |
+| Context queries | `context list / content / compare / coverage / links` — saved session entries, paged bodies, configuration comparison, source coverage and recorded graph links |
 | Observability | `observe summary / coverage / scopes / event / process / flow` — correlation coverage, gaps, per-scope and event→response views |
 | Evidence query | `graph explain` over file / artifact / process / event / tool_call / execution scope / risk with bounded, paged causality paths |
 | Diff / blame | file-level diff and blame, joined to runtime events and content-addressed objects |
@@ -1278,6 +1298,12 @@ The main product path lives in `record`, `telemetry`, `correlation`,
 and `forensics`. `substrate` contains runtime facts AgentProvenance can consume.
 
 ## Roadmap
+
+**v0.9.0 adds recorded agent context.** Save conversations, tool outcomes,
+configuration history and portable content; navigate between sessions and runtime
+evidence, or query the same records through the CLI and HTTP API. The gallery
+includes a new signed DeepSeek development-task replay.
+See the [v0.9.0 notes](docs/releases/v0.9.0.md).
 
 **v0.8.2 adds portable replay and Chinese documentation and web interfaces.** Download Linux/macOS archives
 for amd64/arm64 and run `agentprov demo` to browse all eight examples in a

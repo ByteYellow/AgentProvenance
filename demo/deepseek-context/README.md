@@ -10,15 +10,14 @@ prompt-injection or enforcement demonstration.
 
 ## Replay
 
-With a matching v0.9.0 candidate binary, from its extracted directory:
+With the v0.9.0 CLI, from its extracted directory:
 
 ```sh
 ./agentprov demo deepseek-context
 ```
 
 From a source checkout, build the binary first with
-`go build -o agentprov ./cmd/agentprov`. The published v0.8.2 archive does not
-include this example. Only the source-build path requires Go.
+`go build -o agentprov ./cmd/agentprov`. Only the source-build path requires Go.
 
 Replay is read-only and offline. It needs neither DeepSeek credentials nor a
 Linux VM, and does not execute commands found in the evidence. The CLI verifies
@@ -59,7 +58,6 @@ original. Raw source records and partial pages remain byte views.
 
 Captured on **2026-09-28**, using **DeepSeek Harness 0.1.7-rc.2**, native
 `session.v4.jsonl.zstd`, and Linux **6.8.0-137-generic aarch64** in the prepared VM.
-This does not establish new x86 or microVM coverage.
 
 - All 73 physical source records were read and stored: 13 messages, 12 tool
   calls, 12 results, five configuration records, and source lifecycle records.

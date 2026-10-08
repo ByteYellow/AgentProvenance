@@ -32,8 +32,8 @@ Release notes: [v0.9.0](docs/releases/v0.9.0.md).
   bundle limit. Original source records remain separately inspectable.
 - Launch reports configured capture at startup and observed coverage at exit.
   Hook and transcript parsing share input/record budgets across selected sources.
-- Runtime presentation separates known probe/TLS limits from unresolved capture
-  integrity. Node-wide drops and pending batches are not invented as run-level loss.
+- Runtime presentation separates probe/TLS coverage from capture-integrity
+  diagnostics; node-level drops and pending batches retain their own scope.
 - Schema 19 preserves within-line source order. Historical context is retained
   separately from current execution and cannot authorize or seed new activity.
 
@@ -47,8 +47,8 @@ Release notes: [v0.9.0](docs/releases/v0.9.0.md).
   preserve kernel capture timestamps and process-scoped attribution across
   cgroup migration. Fork events report the child's actual birth cgroup,
   including `clone3(CLONE_INTO_CGROUP)`.
-- Start record process sampling before post-launch store writes and synchronize
-  lifecycle test fixtures with observed process snapshots instead of short sleeps.
+- Reduce short-lived child sampling gaps by starting record process sampling
+  before post-launch store writes.
 - Bound native shutdown draining and retain unresolved spool rows for their
   original TTL; shutdown does not discard pending evidence to report a clean queue.
 - Export telemetry batch membership with its stored hashes so offline replay
