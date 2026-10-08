@@ -72,6 +72,43 @@ func TestConfigurationCoverageDoesNotTreatMessagesAsPolicy(t *testing.T) {
 	}
 }
 
+func TestCodexNativePermissionProfileCoverageIsSourceScoped(t *testing.T) {
+	for _, profile := range []string{
+		`{"type":"managed","file_system":{"entries":[]},"network":false}`,
+		`{"type":"managed","file_system":{"entries":null},"network":null}`,
+	} {
+		input := `{"type":"session_meta","payload":{"id":"config","model_provider_id":"example"}}
+{"type":"event_msg","payload":{"type":"thread_settings_applied","thread_settings":{"model_provider_id":"example","permission_profile":` + profile + `}}}
+`
+		p, err := Parse(context.Background(), strings.NewReader(input), ParseOptions{Harness: "codex", Binding: "explicit", AfterLine: 1})
+		if err != nil || p.Coverage.Status != OK || p.Coverage.PriorContext == nil {
+			t.Fatalf("profile coverage: %+v %v", p.Coverage, err)
+		}
+		for _, field := range []string{"provider", "sandbox_policy", "directory_restrictions", "network_restrictions"} {
+			if hasMissing(p.Coverage.MissingFields, "configuration."+field) {
+				t.Errorf("recorded profile field reported absent: %s", field)
+			}
+			if field != "provider" && !hasMissing(p.Coverage.PriorContext.MissingFields, "configuration."+field) {
+				t.Errorf("new profile filled historical field: %s", field)
+			}
+		}
+		for _, field := range []string{"configuration.permission_mode", "configuration.change_history_completeness", "approval_decision"} {
+			if !hasMissing(p.Coverage.MissingFields, field) {
+				t.Errorf("profile inferred unrelated evidence: %s", field)
+			}
+		}
+		if !strings.Contains(*p.Records[1].Body, profile) {
+			t.Fatal("native profile was rewritten")
+		}
+	}
+	partial := parseFixture(t, "codex", `{"type":"session_meta","payload":{"id":"config","permission_profile":{"type":"managed"}}}`+"\n")
+	for _, field := range []string{"directory_restrictions", "network_restrictions"} {
+		if !hasMissing(partial.Coverage.MissingFields, "configuration."+field) {
+			t.Errorf("profile type inferred missing restrictions: %s", field)
+		}
+	}
+}
+
 func TestRecordedConfigurationChangesDoNotProveCompleteHistory(t *testing.T) {
 	input := `{"type":"session_meta","payload":{"id":"config"}}
 {"type":"turn_context","payload":{"approval_policy":"on-request"}}

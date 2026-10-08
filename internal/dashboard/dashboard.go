@@ -57,7 +57,7 @@ type Server struct{ DB *sql.DB }
 // Handler returns the dashboard's HTTP routes (static UI + JSON API).
 func (s Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /", s.index)
+	mux.HandleFunc("GET /{$}", s.index)
 	mux.HandleFunc("GET /assets/i18n.js", i18n.Script)
 	mux.HandleFunc("GET /assets/theme.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")

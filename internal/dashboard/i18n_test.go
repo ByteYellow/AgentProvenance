@@ -41,6 +41,19 @@ func TestDashboardLanguageKeepsMachineIdentifiers(t *testing.T) {
 	}
 }
 
+func TestDashboardUnknownRoutesDoNotRenderTheRunPage(t *testing.T) {
+	h := Server{}.Handler()
+	for _, path := range []string{"/demos/docs/deepseek-context", "/README.md", "/assets/missing.css", "/api/missing"} {
+		for _, method := range []string{http.MethodGet, http.MethodHead} {
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, httptest.NewRequest(method, path, nil))
+			if w.Code != http.StatusNotFound || strings.Contains(w.Body.String(), "id=\"runsel\"") {
+				t.Errorf("%s %s returned dashboard instead of 404: %d", method, path, w.Code)
+			}
+		}
+	}
+}
+
 func TestDashboardCopyHasChineseCatalogEntries(t *testing.T) {
 	// New copy must have a translation. Browser checks separately verify that
 	// these lookups are actually used in rendered controls and error states.

@@ -39,6 +39,12 @@ Release notes: [v0.9.0](docs/releases/v0.9.0.md).
 
 ### Fixed
 
+- Recognize native Codex provider and permission-profile fields in configuration
+  coverage without inferring missing restrictions or rewriting historical reports.
+- Return 404 for unknown Dashboard paths instead of silently displaying a run;
+  demo guides remain served by `agentprov demo`.
+- Compare TLS overlay backing files by device/inode identity in Linux tests,
+  accepting `/proc/1/root` aliases while rejecting unrelated and shadowed files.
 - Retain newer Claude native attachments/session state and Codex completed
   messages, command/file-change reports and resumed thread settings, preserving
   source identity without treating execution reports as model proposals.

@@ -12,14 +12,14 @@ var configurationPaths = []struct {
 	paths []string
 }{
 	{"model", []string{"model"}},
-	{"provider", []string{"provider", "model_provider"}},
+	{"provider", []string{"provider", "model_provider", "model_provider_id"}},
 	{"application_version", []string{"application_version", "cli_version", "claude_code_version"}},
 	{"workdir", []string{"cwd", "workdir"}},
 	{"permission_mode", []string{"permission_mode", "permissionMode"}},
 	{"approval_policy", []string{"approval_policy"}},
-	{"sandbox_policy", []string{"sandbox_policy", "sandbox"}},
-	{"directory_restrictions", []string{"sandbox_policy.writable_roots", "sandbox_policy.readable_roots"}},
-	{"network_restrictions", []string{"sandbox_policy.network_access", "network_access"}},
+	{"sandbox_policy", []string{"sandbox_policy", "sandbox", "permission_profile"}},
+	{"directory_restrictions", []string{"sandbox_policy.writable_roots", "sandbox_policy.readable_roots", "permission_profile.file_system.entries"}},
+	{"network_restrictions", []string{"sandbox_policy.network_access", "network_access", "permission_profile.network"}},
 	{"mcp_servers", []string{"mcp_servers", "mcpServers"}},
 	{"tools", []string{"tools"}},
 	{"skills", []string{"skills"}},
