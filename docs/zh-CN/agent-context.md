@@ -9,6 +9,8 @@ Agent 上下文保存的是 harness 实际记录的对话、工具输入与结�
 ## 采集
 
 ```sh
+agentprov launch -- claude
+agentprov launch -- codex
 agentprov launch -- dsh headless --json 'Inspect the project and run its tests.'
 agentprov launch --context-dir /path/to/native/sessions -- codex
 agentprov launch --context-session SESSION_ID -- codex resume SESSION_ID
@@ -19,6 +21,20 @@ agentprov launch --context-session SESSION_ID -- codex resume SESSION_ID
 `--context-harness claude|codex|deepseek|kimi|grok`，并提供 `--context-dir DIR`
 或 `--context-file FILE`。没有原生会话 ID 的旧日志须同时指定文件和
 `--context-session`，身份会标为用户显式指定。`--no-context` 关闭上下文采集和 hook 注入。
+
+### 原生格式兼容性
+
+| Harness | 保存的上下文 |
+| --- | --- |
+| Claude Code | hooks 与原生会话、消息、工具、权限模式变化及辅助会话状态；使用 2.1.293 完成真实任务和同会话续跑验证 |
+| Codex | 原生 rollout、完成消息、线程设置、world state 及来源提供的子会话身份；使用 0.159.2 完成真实任务和同会话续跑验证 |
+| DeepSeek Harness | 0.1.7-rc.2 原生 v4 Zstandard 会话及受支持的 v3 记录，包括 PTC 工具和配置 |
+| Kimi / Grok | 已有的受支持会话格式；历史回放不要求重新在线采集 |
+
+这些版本标明已检查的格式，不是最低版本保证。遇到较新且未知的记录类型，会报告覆盖缺口。
+会话解析与签名离线回放单独验证，不等同于 Linux 内核或 TLS 采集验收。
+
+### 来源选择与恢复
 
 目录发现遵循 `CLAUDE_CONFIG_DIR`、`CODEX_HOME` 和 `DSH_HOME`。
 如果包装脚本只在子进程内部设置目录，需要显式传入该目录。
@@ -119,6 +135,8 @@ agentprov context links --run RUN_ID --entry ENTRY_ID
 显式 `null`、`false`、`{}`、`[]` 保留原样，不当作字段缺失，也不代表权限实际生效。
 仅有工具名称不等于保存了完整工具定义。`ok` 表示本次范围没有发现处理错误，
 不是所有字段或配置变化均已采集的保证。旧报告保留其原有、可能较粗的缺失检查。
+Codex 原生 `model_provider_id` 和 `permission_profile` 分别作为已记录的模型服务商
+及权限配置识别。目录与网络覆盖仍需相应的具体字段，不能仅凭配置名称推断。
 新报告还会列出 `configuration.change_history_completeness`：即使所检查的配置字段
 均存在，来源快照也不能证明期间的每一次变化均被记录。这是覆盖范围限制，不代表
 解析失败，也不会丢弃已记录的快照。

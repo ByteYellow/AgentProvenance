@@ -10,9 +10,10 @@ credential requirements in each demo's README.
 ## One-command entry
 
 Download the matching Linux/macOS amd64/arm64 archive from
-[v0.9.0](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.9.0),
+[Releases](https://github.com/ByteYellow/AgentProvenance/releases),
 verify its checksum and extract it as shown in the [Quickstart](../README.md#quickstart).
-Go is needed only if you choose to build from source.
+Go is needed only if you choose to build from source. These instructions describe
+v0.9.0; before its archive is published, follow the source-build path in the Quickstart.
 The CLI embeds seven signed captures and nine guide entries, including two
 optional evaluator examples:
 

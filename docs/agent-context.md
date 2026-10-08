@@ -10,6 +10,8 @@ a proposed action actually executed. Runtime evidence remains a separate layer.
 ## Capture
 
 ```sh
+agentprov launch -- claude
+agentprov launch -- codex
 agentprov launch -- dsh headless --json 'Inspect the project and run its tests.'
 agentprov launch --context-dir /path/to/native/sessions -- codex
 agentprov launch --context-session SESSION_ID -- codex resume SESSION_ID
@@ -21,6 +23,21 @@ commands can declare `--context-harness claude|codex|deepseek|kimi|grok` and
 `--context-dir DIR` or `--context-file FILE`. Old logs without native session
 identity need both `--context-file` and `--context-session`; their identity is
 explicitly operator-supplied. `--no-context` disables this capture and hooks.
+
+### Native Format Compatibility
+
+| Harness | Recorded context |
+| --- | --- |
+| Claude Code | Hooks and native transcripts, messages, tools, permission-mode changes and auxiliary session state; live task and resume checked with 2.1.293 |
+| Codex | Native rollout records, completed messages, thread settings, world state and source-provided child identities; live task and resume checked with 0.159.2 |
+| DeepSeek Harness | Native v4 Zstandard transcripts from 0.1.7-rc.2 and supported v3 records, including PTC tools and configuration |
+| Kimi / Grok | Existing supported transcript formats; historical replay does not require a new live capture |
+
+These versions identify checked formats, not a minimum-version guarantee. A
+newer unknown record type is reported as a coverage gap. Session parsing and
+signed offline replay are checked separately from Linux kernel/TLS collection.
+
+### Source Selection and Resume
 
 Discovery honors `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `DSH_HOME`. When a wrapper
 sets its home only in the child process, pass that directory explicitly. Capture
@@ -150,6 +167,9 @@ their presence does not prove effective authorization. Tool names alone are not
 complete definitions. `ok` means no processing errors were observed in this range,
 not that all fields or configuration changes were captured. Older reports retain
 their original, potentially coarser missing-field checks.
+Codex's native `model_provider_id` and `permission_profile` are recognized as
+recorded provider and permission configuration. Directory and network coverage
+require their own recorded profile fields; a profile name alone does not fill them.
 Current reports also include `configuration.change_history_completeness`:
 source snapshots cannot establish that every intervening change was logged,
 even when all checked configuration fields are present. This is a coverage

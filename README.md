@@ -83,7 +83,9 @@ network connection. The dashboard replays their attributed execution path:
 ![Local demo gallery with signed captures and optional evaluator guides](docs/img/demo-gallery.png)
 
 Download a precompiled archive and its `.sha256` file from
-[**v0.9.0**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.9.0).
+[**Releases**](https://github.com/ByteYellow/AgentProvenance/releases).
+This branch documents v0.9.0. Until its archive is published, use the source-build
+instructions below to try the new context capture and DeepSeek replay.
 
 | Platform | Archive suffix |
 |---|---|
@@ -133,7 +135,7 @@ providers or manufacture a recorded verdict. See the [demo index](demo/README.md
 Prefer building from source? Go 1.23+ is required only for this path:
 
 ```sh
-git clone https://github.com/ByteYellow/AgentProvenance
+git clone --branch release/v0.9.0-review https://github.com/ByteYellow/AgentProvenance
 cd AgentProvenance
 go build -o agentprov ./cmd/agentprov
 ./agentprov demo
@@ -151,6 +153,10 @@ From the extracted archive or source checkout, with your agent already installed
 ./agentprov doctor -- claude
 ./agentprov launch -- claude
 ```
+
+Codex and DeepSeek Harness use the same entry point: `./agentprov launch -- codex`
+or `./agentprov launch -- dsh`. See the [context guide](docs/agent-context.md)
+for native formats, resumed sessions and custom configuration directories.
 
 `doctor` checks the command, hook integration, cgroup access, sensor privileges,
 and dashboard port without running the agent. `launch` creates the execution

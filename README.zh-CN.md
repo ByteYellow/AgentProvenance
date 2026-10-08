@@ -81,8 +81,10 @@ Hooks 记录任务委派和协作消息，运行时采集记录文件读取与�
 
 ![本地 Demo 首页：签名回放与可选评估器指南](docs/img/demo-gallery-zh-CN.png)
 
-在 [**v0.9.0 发行页**](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.9.0)
-下载对应平台的压缩包及同名 `.sha256` 校验文件：
+在 [**发行页**](https://github.com/ByteYellow/AgentProvenance/releases)
+下载对应平台的压缩包及同名 `.sha256` 校验文件。
+本分支文档对应 v0.9.0；该版本压缩包发布前，请按下方源码构建步骤体验
+新的上下文采集和 DeepSeek 回放。
 
 | 平台 | 压缩包后缀 |
 |---|---|
@@ -133,7 +135,7 @@ LLM Judge 和 Jev 是可选的 Python 示例，实际调用评估器仍需按各
 如果选择从源码构建，则需要 Go 1.23+：
 
 ```sh
-git clone https://github.com/ByteYellow/AgentProvenance
+git clone --branch release/v0.9.0-review https://github.com/ByteYellow/AgentProvenance
 cd AgentProvenance
 go build -o agentprov ./cmd/agentprov
 ./agentprov demo
@@ -150,6 +152,10 @@ go build -o agentprov ./cmd/agentprov
 ./agentprov doctor -- claude
 ./agentprov launch -- claude
 ```
+
+Codex 和 DeepSeek Harness 沿用同一入口：`./agentprov launch -- codex`
+或 `./agentprov launch -- dsh`。原生格式、恢复会话和自定义配置目录见
+[上下文指南](docs/zh-CN/agent-context.md)。
 
 `doctor` 会在不启动 Agent 的情况下，检查命令是否可用、Hook 接入情况、
 cgroup 和传感器权限，以及可视化界面的端口。`launch` 随后为本次命令及其子进程

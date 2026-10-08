@@ -6,7 +6,7 @@
 
 ## 一条命令打开
 
-从 [v0.9.0 发行页](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.9.0)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。只有自行从源码构建时才需要 Go。CLI 内嵌七份签名采集记录和九个指南入口，包括两个可选评估器示例：
+从[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。只有自行从源码构建时才需要 Go。本文对应 v0.9.0；该版本压缩包发布前，请使用快速开始中的源码构建路径。CLI 内嵌七份签名采集记录和九个指南入口，包括两个可选评估器示例：
 
 ```sh
 ./agentprov demo                         # 打开全部示例
