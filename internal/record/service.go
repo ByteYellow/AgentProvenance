@@ -265,14 +265,15 @@ func (s Service) Run(req Request) (Result, error) {
 		}, nil
 	}
 	pid := int64(cmd.Process.Pid)
+	// Start observing immediately; post-spawn database writes can outlast a
+	// short-lived child, especially while another collector holds the writer.
+	stopSampler := make(chan struct{})
+	samplerDone := make(chan []ObservedProcess, 1)
+	go sampleProcessTree(pid, sampleInterval, stopSampler, samplerDone)
 	_, _ = s.DB.Exec(`UPDATE execution_context_bindings SET root_pid = ?, pid = ? WHERE id = ?`, pid, pid, bindingID)
 	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, pid, ppid, payload, created_at)
 		VALUES (?, ?, ?, ?, ?, 'record', 'exec_start', ?, ?, ?, ?)`,
 		ids.New("evt"), req.RunID, sessionID, toolCallID, processID, pid, int64(os.Getpid()), fmt.Sprintf(`{"attempt_id":%q,"command":%q,"mode":"zero_sdk"}`, attemptID, commandText), startedAt)
-
-	stopSampler := make(chan struct{})
-	samplerDone := make(chan []ObservedProcess, 1)
-	go sampleProcessTree(pid, sampleInterval, stopSampler, samplerDone)
 
 	err = cmd.Wait()
 	postRootGraceStarted := time.Now()

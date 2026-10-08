@@ -36,12 +36,19 @@ func TestRecordRunCreatesZeroSDKProvenance(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workdir, "app.py"), []byte("value = 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	pidFile, observedFile, _ := sampledChildGate(t)
+	command := fmt.Sprintf(`(i=0; while [ ! -e %s ]; do
+  i=$((i+1)); [ "$i" -lt 1000 ] || exit 1; sleep 0.01
+done) &
+printf '%%s\n' "$!" > %s
+printf 'value = 2\n' > app.py && echo note > note.txt && wait`,
+		fixtureShellQuote(observedFile), fixtureShellQuote(pidFile))
 
 	result, err := (Service{DB: db, Paths: paths}).Run(Request{
 		RunID:            "run-record-test",
 		Name:             "record-test",
 		Workdir:          workdir,
-		Command:          []string{"sh", "-lc", "(sleep 0.2) & printf 'value = 2\\n' > app.py && echo note > note.txt && wait"},
+		Command:          []string{"sh", "-lc", command},
 		SampleIntervalMS: 10,
 		PostRootGraceMS:  300,
 	})
@@ -393,11 +400,24 @@ func TestRecordMarksOrphanDescendantDuringGraceWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	marker := filepath.Join(workdir, "orphan-marker")
+	pidFile, observedFile, stopFile := sampledChildGate(t)
+	command := `import pathlib, subprocess, sys, time
+pid_path, observed_path, stop_path = map(pathlib.Path, sys.argv[1:])
+child = subprocess.Popen([sys.executable, "-c", "import pathlib, sys, time; stop = pathlib.Path(sys.argv[1]); deadline = time.monotonic() + 30; exec('while not stop.exists() and time.monotonic() < deadline:\\n time.sleep(0.01)')", str(stop_path)])
+pid_path.write_text(str(child.pid))
+deadline = time.monotonic() + 10
+while not observed_path.exists():
+    if time.monotonic() >= deadline:
+        child.terminate()
+        child.wait()
+        raise RuntimeError("child was never sampled")
+    time.sleep(0.01)
+pathlib.Path("orphan-marker").write_text("started\n")`
 	result, err := (Service{DB: db, Paths: paths}).Run(Request{
 		RunID:   "run-record-orphan-test",
 		Name:    "record-orphan-test",
 		Workdir: workdir,
-		Command: []string{"python3", "-c", `import subprocess, time; subprocess.Popen(["sleep", "0.8"]); time.sleep(0.08); open("orphan-marker", "w").write("started\n")`},
+		Command: []string{"python3", "-c", command, pidFile, observedFile, stopFile},
 	})
 	if err != nil {
 		t.Fatal(err)
