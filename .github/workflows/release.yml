@@ -9,6 +9,8 @@ on:
       - '.github/workflows/release.yml'
       - 'scripts/build-release.py'
       - 'scripts/accept_release.py'
+      - 'scripts/release_plan.py'
+      - 'scripts/test_release_plan.py'
       - 'scripts/check_localized_docs.py'
       - 'docs/release-start.md'
       - 'docs/zh-CN/release-start.md'
@@ -27,8 +29,11 @@ concurrency:
 
 jobs:
   validate:
-    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'release/v')
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      publish: ${{ steps.plan.outputs.publish }}
+      notes: ${{ steps.plan.outputs.notes }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -38,6 +43,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - name: Check release routing
+        run: python3 -m unittest discover -s scripts -p test_release_plan.py -v
+      - name: Resolve release intent and notes
+        id: plan
+        run: python3 scripts/release_plan.py
       - name: Check Chinese documentation and links
         run: python3 scripts/check_localized_docs.py
       - name: Validate source and all signed fixtures
@@ -48,6 +58,8 @@ jobs:
 
   build:
     needs: validate
+    env:
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -66,16 +78,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Resolve version
-        shell: bash
-        run: |
-          version="${GITHUB_REF_NAME#release/}"
-          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then version=v0.0.0-test; fi
-          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo 'Run a release from a vX.Y.Z tag or release/vX.Y.Z branch.' >&2
-            exit 1
-          fi
-          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
       - name: Build portable archive
         run: python3 scripts/build-release.py --version "$RELEASE_VERSION" --os '${{ matrix.os }}' --arch '${{ matrix.arch }}'
       - name: Test downloaded experience without Go on PATH
@@ -87,8 +89,8 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: build
-    if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/v'))
+    needs: [validate, build]
+    if: needs.validate.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -102,13 +104,15 @@ jobs:
       - name: Validate checksums and publish
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_NOTES: ${{ needs.validate.outputs.notes }}
         shell: bash
         run: |
-          version="${GITHUB_REF_NAME#release/}"
+          version="$RELEASE_VERSION"
           cat dist/*.sha256 > dist/SHA256SUMS
           (cd dist && sha256sum -c SHA256SUMS)
           test "$(find dist -name '*.tar.gz' | wc -l)" -eq 4
-          notes="docs/releases/$version.md"
+          notes="$RELEASE_NOTES"
           test -f "$notes"
           if gh release view "$version" >/dev/null 2>&1; then
             echo 'Release already exists; refusing to overwrite published assets.' >&2

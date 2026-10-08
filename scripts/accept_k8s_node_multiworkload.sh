@@ -62,7 +62,9 @@ sensor_pod="$($KUBECTL get pod -n "$SENSOR_NAMESPACE" -l app=agentprov-sensor -o
 echo "  daemonset=agentprov-sensor pod=$SENSOR_NAMESPACE/$sensor_pod transport=stdout-jsonl"
 # Pod readiness only proves the process is alive; wait for actual probe attach.
 for _ in $(seq 1 100); do
-  if $KUBECTL logs -n "$SENSOR_NAMESPACE" "$sensor_pod" -c sensor 2>/dev/null | grep -q 'agentprov-sensor: ready'; then
+  # Consume the full log stream. grep -q can close the pipe at readiness,
+  # making kubectl exit with SIGPIPE under pipefail on a busy node.
+  if $KUBECTL logs -n "$SENSOR_NAMESPACE" "$sensor_pod" -c sensor 2>/dev/null | grep -Fx 'agentprov-sensor: ready' >/dev/null; then
     sensor_ready=1
     break
   fi

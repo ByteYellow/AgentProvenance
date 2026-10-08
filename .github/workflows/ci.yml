@@ -75,6 +75,37 @@ jobs:
         run: |
           GOTOOLCHAIN=local go build -o "$RUNNER_TEMP/agentprov-context-check" ./cmd/agentprov
           python3 scripts/accept_deepseek_context.py --binary "$RUNNER_TEMP/agentprov-context-check" --output "$RUNNER_TEMP/deepseek-context-check"
+      - name: Fetch pinned v0.8.2 verifier
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, tarfile, urllib.request
+          manifest = json.loads(pathlib.Path('scripts/testdata/v0.8.2-bundles.json').read_text())
+          item = next(row for row in manifest['baseline_binaries'] if row['platform'] == 'linux_amd64')
+          root = pathlib.Path(os.environ['RUNNER_TEMP'])
+          archive = root / item['archive']
+          urllib.request.urlretrieve('https://github.com/ByteYellow/AgentProvenance/releases/download/v0.8.2/' + item['archive'], archive)
+          assert hashlib.sha256(archive.read_bytes()).hexdigest() == item['archive_sha256']
+          with tarfile.open(archive) as package:
+              binary = package.extractfile('agentprov').read()
+          assert hashlib.sha256(binary).hexdigest() == item['binary_sha256']
+          target = root / 'agentprov-v082'
+          target.write_bytes(binary)
+          target.chmod(0o755)
+          PY
+      - name: Verify six historical bundles and real database upgrades
+        run: |
+          python3 scripts/accept_legacy_context.py \
+            --binary "$RUNNER_TEMP/agentprov-context-check" \
+            --baseline-binary "$RUNNER_TEMP/agentprov-v082" \
+            --manifest scripts/testdata/v0.8.2-bundles.json \
+            --evidence-root . --output "$RUNNER_TEMP/legacy-context-check"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: context-compatibility
+          path: |
+            ${{ runner.temp }}/legacy-context-check/report.json
+            ${{ runner.temp }}/deepseek-context-check/report.json
 
   sensor-build:
     name: Linux ${{ matrix.arch }} builds from committed bindings
@@ -161,7 +192,11 @@ jobs:
             --go-client /tmp/agentprov-live/go-client \
             --c-client /tmp/agentprov-live/c-client \
             --ssl-lib /usr/lib/x86_64-linux-gnu/libssl.so.3 \
-            --pause-drain 1.5 --report /tmp/agentprov-live/acceptance.json
+            --pause-drain 1.5 --require-cgroup-lifecycle --report /tmp/agentprov-live/acceptance.json
+      - name: Verify captured process lifetimes through durable ingestion
+        run: |
+          AGENTPROV_LIVE_LIFECYCLE_EVENTS=/tmp/agentprov-live/acceptance.events.jsonl \
+            go test ./internal/telemetry -run '^TestNativeLiveLifecycleAttribution$' -v
       - name: Verify concurrent Go TLS reads across goroutine stack growth
         run: |
           go test -c -o /tmp/agentprov-live/sensor-test ./internal/sensor

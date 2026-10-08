@@ -19,7 +19,7 @@ systemctl enable --now agentprov-sensor.service
 # emitted by this service invocation before reporting a successful installation.
 INVOCATION="$(systemctl show agentprov-sensor.service --property=InvocationID --value)"
 for _ in $(seq 1 100); do
-  if journalctl "_SYSTEMD_INVOCATION_ID=$INVOCATION" --no-pager -o cat | grep -q 'ready probes-attached'; then
+  if journalctl "_SYSTEMD_INVOCATION_ID=$INVOCATION" --no-pager -o cat | grep -Fx 'agentprov sensor stream: ready probes-attached' >/dev/null; then
     echo 'AgentProvenance guest collector ready; store=/var/lib/agentprov'
     exit 0
   fi

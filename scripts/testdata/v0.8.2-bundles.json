@@ -276,5 +276,31 @@
         "omitted_content": 0
       }
     }
+  ],
+  "baseline_binaries": [
+    {
+      "platform": "darwin_amd64",
+      "archive": "agentprov_v0.8.2_darwin_amd64.tar.gz",
+      "archive_sha256": "eee37f8f76b732c70bc95415b24258336bc0bb232a7698d13cf111fd3a6dac54",
+      "binary_sha256": "9a8bdda2359a3b5f1e8ce521f55c3cd4e1f017752c49426c64d78fa9b888b71c"
+    },
+    {
+      "platform": "darwin_arm64",
+      "archive": "agentprov_v0.8.2_darwin_arm64.tar.gz",
+      "archive_sha256": "ea13a2c0eaeb5471d4a2f76b81de42ec6eb7f884720b0468b9fe69bb0ac43787",
+      "binary_sha256": "7886cd824ef8584b619ad064ec9ed5a5f71498fac951ecf61bb55298ba1cfbb2"
+    },
+    {
+      "platform": "linux_amd64",
+      "archive": "agentprov_v0.8.2_linux_amd64.tar.gz",
+      "archive_sha256": "8434a23c37f654f4260d9e268d4e79435920817e57ff05f23fee80a1481540c6",
+      "binary_sha256": "063d8392c6f0f5d93486c02509dea80148ebc6884286a59cfe3e6a6da043f4e7"
+    },
+    {
+      "platform": "linux_arm64",
+      "archive": "agentprov_v0.8.2_linux_arm64.tar.gz",
+      "archive_sha256": "dabb11d5a232ac0c1d4d1a3b67b8207f0b9d51397d03751fab963f93c3cd4c0e",
+      "binary_sha256": "8bf45e4aacfba8630f0de49962d1dfe2228ad23b4f6981cf3a6128e34eb90026"
+    }
   ]
 }

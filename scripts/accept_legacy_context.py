@@ -167,7 +167,10 @@ def main():
     manifest = read_json(args.manifest)
     demos = manifest["demos"]
     assert len(demos) == 6 and len({d["run"] for d in demos}) == 6, "six distinct historical demos required"
-    assert sha256(baseline) == manifest["binary_sha256"], "baseline binary differs from the frozen verifier"
+    baseline_hash = sha256(baseline)
+    allowed_hashes = {manifest["binary_sha256"]}
+    allowed_hashes.update(item["binary_sha256"] for item in manifest.get("baseline_binaries", []))
+    assert baseline_hash in allowed_hashes, "baseline binary differs from the frozen release verifiers"
     frozen_files = check_files(root, demos)
     assert frozen_files == 18, "expected bundle, attestation and public key for each demo"
     output.mkdir(parents=True, exist_ok=False)

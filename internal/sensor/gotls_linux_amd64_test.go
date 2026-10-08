@@ -8,19 +8,22 @@ import (
 )
 
 func TestAMD64QueuedEventRetainsCaptureTime(t *testing.T) {
+	// Bracket the monotonic sample: the test goroutine can be descheduled
+	// between ClockGettime and time.Now on a busy CI host.
+	earliest := time.Now().Add(-2 * time.Second)
 	var monotonic unix.Timespec
 	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &monotonic); err != nil {
 		t.Fatal(err)
 	}
-	want := time.Now().Add(-2 * time.Second)
+	latest := time.Now().Add(-2 * time.Second)
 	event := sensorbpfSensorEvent{Kind: eventExec, KtimeNs: uint64(monotonic.Nano() - int64(2*time.Second))}
 	row := normalize(event, newCgroupResolver())
 	got, err := time.Parse(time.RFC3339Nano, row["timestamp"].(string))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if delta := got.Sub(want); delta < -100*time.Millisecond || delta > 100*time.Millisecond {
-		t.Fatalf("queued event timestamp = %v, want capture time near %v", got, want)
+	if got.Before(earliest.Add(-100*time.Millisecond)) || got.After(latest.Add(100*time.Millisecond)) {
+		t.Fatalf("queued event timestamp = %v, want capture time between %v and %v", got, earliest, latest)
 	}
 }
 

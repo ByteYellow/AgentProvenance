@@ -39,6 +39,13 @@ Release notes: [v0.9.0](docs/releases/v0.9.0.md).
 
 ### Fixed
 
+- Regenerate the committed amd64 probe after the child birth-cgroup fix;
+  require real clone3/cgroup migration and durable attribution in amd64 CI.
+- Keep review branches in validation/build mode, and check release notes before
+  building. Historical compatibility CI uses pinned v0.8.2 native binaries.
+- Consume complete readiness logs so a successful match cannot fail deployment
+  through SIGPIPE on a busy KVM/K3s node.
+
 - Recognize native Codex provider and permission-profile fields in configuration
   coverage without inferring missing restrictions or rewriting historical reports.
 - Return 404 for unknown Dashboard paths instead of silently displaying a run;
