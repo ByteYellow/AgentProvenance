@@ -189,6 +189,13 @@ int handle_fork(struct bpf_raw_tracepoint_args *ctx) {
 	e->ppid = BPF_CORE_READ(child, real_parent, tgid);
 	e->process_start_ns = BPF_CORE_READ(child, group_leader, start_time);
 	e->parent_start_ns = BPF_CORE_READ(child, real_parent, group_leader, start_time);
+	// clone3(CLONE_INTO_CGROUP) can place the child in a different cgroup
+	// before this tracepoint. The current task is still the parent here.
+	struct cgroup *group = BPF_CORE_READ(child, cgroups, dfl_cgrp);
+	e->cgroup_id = BPF_CORE_READ(group, kn, id);
+#if defined(__TARGET_ARCH_x86)
+	capture_cgroup_identity(child, e->cgroup_id);
+#endif
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }

@@ -96,6 +96,11 @@ new cgroup for the whole run. Both architectures retain kernel capture time
 rather than the time userspace drains the event. Older events without these
 fields retain their existing correlation behavior.
 
+Fork records read the child's cgroup rather than the parent's current cgroup.
+This matters when `clone3(CLONE_INTO_CGROUP)` places a child in another cgroup
+at birth. A later migration changes the observed cgroup ID, not the process's
+boot/PID/birth identity or its already established run binding.
+
 On normal shutdown, the collector makes a bounded three-second drain (up to
 eight passes) before launch seals its report. This retries pending rows against
 new bindings without waiting for their retry timer. Unresolved rows retain
@@ -148,6 +153,25 @@ Native replay is owned by `sensor stream`; the generic Falco spool worker leaves
 native batches alone. Restart the native collector to resume their processing.
 
 ## Verification
+
+The opt-in root script `scripts/accept_sensor_live.py` checks real process birth,
+file events, exits, cgroup migration and `clone3` birth placement alongside its
+syscall/TLS fixtures. Use `--require-cgroup-lifecycle` to fail when cgroup access
+or `clone3` is unavailable, rather than silently omitting those checks.
+`--pause-drain 1.5` verifies that queued events retain kernel capture time.
+Only fixture process events are retained in the exported `.events.jsonl` file.
+
+Pass that file through the durable ingestion regression:
+
+```sh
+AGENTPROV_LIVE_LIFECYCLE_EVENTS=/path/to/acceptance.events.jsonl \
+  go test ./internal/telemetry -run '^TestNativeLiveLifecycleAttribution$' -count=1 -v
+```
+
+This checks that captured migration/clone events keep their run attribution
+without claiming the destination cgroup for unrelated processes. Without a live
+events file the test is skipped; a skip is not live acceptance. Go TLS response
+capture remains an amd64-specific path; the ARM64 fixture checks Go requests.
 
 `internal/telemetry/native_stream_test.go` covers closed-window late attribution,
 crash recovery before sealing, interrupted processing without duplicate IDs,
