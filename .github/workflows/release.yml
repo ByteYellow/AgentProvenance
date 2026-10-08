@@ -161,19 +161,5 @@ jobs:
           gh release create "$version" dist/* --target "$GITHUB_SHA" \
             --title "$version" --notes-file "$RUNNER_TEMP/release-notes.md" "${prerelease[@]}"
 
-  deploy-site:
-    needs: [validate, site, publish]
-    if: needs.validate.outputs.publish == 'true' && !contains(needs.validate.outputs.version, '-')
-    runs-on: ubuntu-24.04
-    permissions:
-      pages: write
-      id-token: write
-    concurrency:
-      group: github-pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/deploy-pages@v4
-        id: deployment
+  # The default-branch Publish website workflow deploys the tested artifact
+  # after publication, honoring github-pages environment branch protection.
