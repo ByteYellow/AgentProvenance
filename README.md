@@ -49,28 +49,9 @@ network connection. The dashboard replays their attributed execution path:
 [Explore the capture](demo/multiagent-provenance/README.md) ·
 [Try the replay](#quickstart) · [v0.9.0 release notes](docs/releases/v0.9.0.md)
 
-## New in v0.9.0: Recorded Agent Context
-
-Keep the context behind an execution alongside its runtime evidence:
-
-- **Conversation and tool results**: inspect the original task, tool inputs,
-  outcomes and source records from supported agent sessions.
-- **Configuration history**: compare recorded model, workspace, approval and
-  sandbox settings, including MCP, skills and plugins when the source provides them.
-- **Portable saved content**: read long tool outputs and opt-in final changed-file
-  text after the original workspace is gone.
-- **Session-to-graph navigation**: follow recorded links between a tool entry and
-  its attributed runtime evidence in either direction.
-- **CLI and HTTP queries**: page through context, read saved bodies, compare
-  configuration and inspect source-scoped coverage.
-
-Run `./agentprov demo deepseek-context` for a signed, offline development-task
-replay. [Context guide](docs/agent-context.md) · [Context API](docs/agent-context-api.yaml).
-
 ## Contents
 
 - [Quickstart](#quickstart)
-- [Recorded Agent Context](#new-in-v090-recorded-agent-context)
 - [Why](#why)
 - [Security Loop](#security-loop)
 - [Core Model](#core-model)
@@ -1299,29 +1280,8 @@ and `forensics`. `substrate` contains runtime facts AgentProvenance can consume.
 
 ## Roadmap
 
-**v0.9.0 adds recorded agent context.** Save conversations, tool outcomes,
-configuration history and portable content; navigate between sessions and runtime
-evidence, or query the same records through the CLI and HTTP API. The gallery
-includes a new signed DeepSeek development-task replay.
-See the [v0.9.0 notes](docs/releases/v0.9.0.md).
-
-**v0.8.2 adds portable replay and Chinese documentation and web interfaces.** Download Linux/macOS archives
-for amd64/arm64 and run `agentprov demo` to browse all eight examples in a
-dashboard-styled gallery and guide reader. See the
-[v0.8.2 notes](docs/releases/v0.8.2.md).
-
-**v0.8.1 adds an optional external-evaluator example.** The [Jev demo](demo/jev-judge/)
-shows typed judgments, rule comparison and human review using the existing
-evidence/signal contract. It does not add a built-in analyst or change capture.
-See the [v0.8.1 release notes](docs/releases/v0.8.1.md).
-
-**v0.8.0 established portable, reliable evidence capture.** It added native
-amd64 support, KVM guest deployment, K3s acceptance, automatic container TLS
-discovery, and Go TLS responses on supported amd64 binaries. It also hardens
-late attribution, persistent capture recovery, migration tests, database
-readiness, and event/evidence atomicity.
-See [release notes](docs/releases/v0.8.0.md) and the
-[deployment runbook](docs/amd64-kvm-k3s.md) for evidence and limits.
+Version history is in the [Changelog](CHANGELOG.md); see the
+[v0.9.0 release notes](docs/releases/v0.9.0.md) for the latest changes and upgrade guidance.
 
 Next / open:
 
