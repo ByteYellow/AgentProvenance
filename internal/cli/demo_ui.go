@@ -236,6 +236,15 @@ func renderLocalizedDemoGuide(entry demo.Entry, entries []demo.Entry, source []b
 				node.Destination = []byte(i18n.URL(string(node.Destination), linkLang))
 			}
 		case *ast.Image:
+			// Keep the README's promotional button on GitHub; readers already in
+			// the demo get a small link back to their local, translated gallery.
+			if len(documentPath) > 0 && (string(node.Destination) == "docs/assets/online-demo-button.svg" || string(node.Destination) == "docs/assets/online-demo-button-zh-CN.svg") {
+				if link, ok := node.Parent().(*ast.Link); ok {
+					link.Destination = []byte(i18n.URL("/demos/", lang))
+					link.ReplaceChild(link, node, ast.NewString([]byte(i18n.T(lang, "Browse demos")+" →")))
+					return ast.WalkSkipChildren, nil
+				}
+			}
 			if len(documentPath) > 0 && (strings.HasPrefix(string(node.Destination), "https://") || strings.HasPrefix(string(node.Destination), "http://")) {
 				n.Parent().ReplaceChild(n.Parent(), node, ast.NewString(node.Text(source)))
 				return ast.WalkSkipChildren, nil

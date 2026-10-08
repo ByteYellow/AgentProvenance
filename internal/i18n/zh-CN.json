@@ -5,6 +5,7 @@
   "Local replay": "本地回放",
   "EXPLORE THE EVIDENCE": "查看执行证据",
   "Demo library": "示例库",
+  "Browse demos": "浏览示例",
   "Follow what an agent did, from a single tool call to a team across Pods.": "从一次工具调用到跨 Pod 协作，查看 Agent 的实际行为。",
   "Ready to explore": "可以开始回放",
   "Signed captures · verified locally": "已完成签名和证据图校验",
