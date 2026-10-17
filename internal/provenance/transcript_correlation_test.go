@@ -137,6 +137,51 @@ func TestTranscriptReanalysisFailureKeepsLastGraph(t *testing.T) {
 	}
 }
 
+func TestModelReanalysisCommitFailureKeepsLastGraph(t *testing.T) {
+	for _, kind := range []string{"tls", "transcript"} {
+		t.Run(kind, func(t *testing.T) {
+			st, db := intentTestStore(t)
+			db.SetMaxOpenConns(1)
+			var reanalyze func() (int, error)
+			if kind == "tls" {
+				intentTestDecision(t, db, "d", "2026-01-01T00:00:01Z", "cg-a", "cat /work/config")
+				intentTestEvent(t, db, "action", "execve", "2026-01-01T00:00:02Z", "cg-a", "cat /work/config")
+				reanalyze = func() (int, error) { return MaterializeLLMCalls(st, db, "intent-test") }
+			} else {
+				source := transcriptIntentSource("2026-01-01T00:00:00Z", "tool-a", "alice", "session-a")
+				reanalyze = func() (int, error) {
+					return HarvestTranscriptStreams(st, db, "intent-test", []TranscriptStream{{Reader: strings.NewReader(source)}})
+				}
+			}
+			if n, err := reanalyze(); err != nil || n != 1 {
+				t.Fatalf("setup: %d %v", n, err)
+			}
+			before := endpointSnapshot(t, db)
+			for _, stmt := range []string{
+				`CREATE TABLE commit_parent (id INTEGER PRIMARY KEY)`,
+				`CREATE TABLE commit_child (id INTEGER REFERENCES commit_parent(id) DEFERRABLE INITIALLY DEFERRED)`,
+				`CREATE TRIGGER fail_commit AFTER INSERT ON graph_edges BEGIN INSERT INTO commit_child VALUES(1); END`,
+			} {
+				if _, err := db.Exec(stmt); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if n, err := reanalyze(); err == nil || n != 0 {
+				t.Fatalf("expected commit error: %d %v", n, err)
+			}
+			if after := endpointSnapshot(t, db); !reflect.DeepEqual(before, after) {
+				t.Fatal("failed commit replaced previous model analysis")
+			}
+			if _, err := db.Exec(`DROP TRIGGER fail_commit`); err != nil {
+				t.Fatal(err)
+			}
+			if n, err := reanalyze(); err != nil || n != 1 {
+				t.Fatalf("retry: %d %v", n, err)
+			}
+		})
+	}
+}
+
 func TestMalformedTranscriptReanalysisKeepsLastGraph(t *testing.T) {
 	for _, bad := range []string{`{"type":"assistant","message":`, "null", `{"type":"assistant","message":{"content":null}}`, `{"type":"assistant","message":{"content":{}}}`} {
 		t.Run(bad, func(t *testing.T) {

@@ -1,6 +1,7 @@
 package hooksbridge
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
+	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
 const (
@@ -85,14 +87,26 @@ func CorrelateSyscalls(db *sql.DB, runID string) (int, error) {
 func CorrelateSyscallsWithReport(db *sql.DB, runID string) (CorrelationReport, error) {
 	r := CorrelationReport{SchemaVersion: "agentprovenance.runtime_correlation/v1", RunID: runID,
 		Method: CorrelationMethod, Confidence: CorrelationConfidence, Status: "failed", ObservedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	err := store.WithTx(context.Background(), db, func(tx *sql.Tx) error {
+		var err error
+		r, err = CorrelateSyscallsTx(tx, runID)
+		return err
+	})
+	if err != nil {
+		r.Status, r.Edges = "failed", 0
+		return r, err
+	}
+	return r, nil
+}
+
+// CorrelateSyscallsTx rebuilds attribution inside a caller-owned transaction.
+// The caller must commit the complete analysis or roll back on any error.
+func CorrelateSyscallsTx(tx *sql.Tx, runID string) (CorrelationReport, error) {
+	r := CorrelationReport{SchemaVersion: "agentprovenance.runtime_correlation/v1", RunID: runID,
+		Method: CorrelationMethod, Confidence: CorrelationConfidence, Status: "failed", ObservedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	if strings.TrimSpace(runID) == "" {
 		return r, fmt.Errorf("runtime correlation requires run_id")
 	}
-	tx, err := db.Begin()
-	if err != nil {
-		return r, err
-	}
-	defer tx.Rollback()
 	calls, err := readCorrelationCalls(tx, runID, &r)
 	if err != nil {
 		return r, err
@@ -121,9 +135,6 @@ func CorrelateSyscallsWithReport(db *sql.DB, runID string) (CorrelationReport, e
 		if _, err := stmt.Exec(id, runID, link.call, "runtime_event/"+link.event, EdgeAgentSyscall, link.anchor, now); err != nil {
 			return r, err
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return r, err
 	}
 	r.Edges, r.Status = len(links), "ok"
 	if r.ExecEvents == 0 {

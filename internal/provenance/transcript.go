@@ -2,6 +2,7 @@ package provenance
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
 // AgentTranscript is a sub-agent's own session transcript, located via the hook
@@ -56,11 +59,19 @@ func HarvestTranscriptStreams(objects ObjectStore, db *sql.DB, runID string, inp
 		}
 		parsed[i] = turns
 	}
-	tx, err := db.Begin()
+	var total int
+	err := store.WithTx(context.Background(), db, func(tx *sql.Tx) error {
+		var err error
+		total, err = replaceTranscriptStreams(objects, tx, runID, inputs, parsed)
+		return err
+	})
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	return total, nil
+}
+
+func replaceTranscriptStreams(objects ObjectStore, tx *sql.Tx, runID string, inputs []TranscriptStream, parsed [][]transcriptTurn) (int, error) {
 	objects.Tx = tx
 	var decisions []llmDecision
 	for i, input := range inputs {
@@ -108,9 +119,6 @@ func HarvestTranscriptStreams(objects ObjectStore, db *sql.DB, runID string, inp
 				return 0, err
 			}
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
 	}
 	return total, nil
 }

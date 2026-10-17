@@ -1,12 +1,14 @@
 package provenance
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/ids"
+	storepkg "github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/tlsintent"
 )
 
@@ -27,11 +29,19 @@ func MaterializeLLMCalls(store ObjectStore, db *sql.DB, runID string) (int, erro
 	if runID == "" {
 		return 0, fmt.Errorf("materialize llm calls: run id is required")
 	}
-	tx, err := db.Begin()
+	var n int
+	err := storepkg.WithTx(context.Background(), db, func(tx *sql.Tx) error {
+		var err error
+		n, err = materializeLLMCallsTx(store, tx, runID)
+		return err
+	})
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	return n, nil
+}
+
+func materializeLLMCallsTx(store ObjectStore, tx *sql.Tx, runID string) (int, error) {
 	store.Tx = tx
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
@@ -156,9 +166,6 @@ func MaterializeLLMCalls(store ObjectStore, db *sql.DB, runID string) (int, erro
 				return 0, err
 			}
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
 	}
 	return n, nil
 }

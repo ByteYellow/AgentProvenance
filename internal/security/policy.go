@@ -2,6 +2,7 @@ package security
 
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/ids"
 	"github.com/byteyellow/agentprovenance/internal/signals"
+	"github.com/byteyellow/agentprovenance/internal/store"
 	"gopkg.in/yaml.v3"
 )
 
@@ -379,6 +381,10 @@ func EvaluateRuntimeEvent(db *sql.DB, eventID string) (DecisionRecord, bool, err
 }
 
 func EvaluateRuntimeEventWithEngine(db *sql.DB, eventID string, engine Engine) (DecisionRecord, bool, error) {
+	return evaluateRuntimeEvent(db, eventID, engine, false)
+}
+
+func evaluateRuntimeEvent(db policyStore, eventID string, engine Engine, atomicProjection bool) (DecisionRecord, bool, error) {
 	event, rawPayload, err := runtimeEventForPolicy(db, eventID)
 	if err != nil {
 		return DecisionRecord{}, false, err
@@ -387,7 +393,7 @@ func EvaluateRuntimeEventWithEngine(db *sql.DB, eventID string, engine Engine) (
 	if decision.Decision == "allow" {
 		return DecisionRecord{}, false, nil
 	}
-	record, err := persistDecisionForEventID(db, eventID, event, rawPayload, decision)
+	record, err := persistDecisionWithExistingEvent(db, eventID, event, rawPayload, decision, time.Now().UTC().Format(time.RFC3339Nano), atomicProjection)
 	return record, true, err
 }
 
@@ -403,12 +409,27 @@ func PersistDecision(db *sql.DB, event Event, rawPayload string, decision Decisi
 // becomes a first-class risk -> response node attributed to the event's
 // session/process, so it renders as one chain with the rest of the run.
 func PersistDenyForEvent(db *sql.DB, eventID, ruleID, reason string) (DecisionRecord, error) {
-	event, rawPayload, err := runtimeEventForPolicy(db, eventID)
+	var record DecisionRecord
+	err := store.WithTx(context.Background(), db, func(tx *sql.Tx) error {
+		var err error
+		record, err = PersistDenyForEventTx(tx, eventID, ruleID, reason)
+		return err
+	})
 	if err != nil {
 		return DecisionRecord{}, err
 	}
-	return persistDecisionForEventID(db, eventID, event, rawPayload,
-		Decision{Decision: "deny", RuleID: ruleID, Reason: reason})
+	return record, nil
+}
+
+// PersistDenyForEventTx participates in a caller-owned reanalysis transaction.
+// Every projection is required; the caller must roll back on any error.
+func PersistDenyForEventTx(tx *sql.Tx, eventID, ruleID, reason string) (DecisionRecord, error) {
+	event, rawPayload, err := runtimeEventForPolicy(tx, eventID)
+	if err != nil {
+		return DecisionRecord{}, err
+	}
+	return persistDecisionWithExistingEvent(tx, eventID, event, rawPayload,
+		Decision{Decision: "deny", RuleID: ruleID, Reason: reason}, time.Now().UTC().Format(time.RFC3339Nano), true)
 }
 
 // ReevaluateRun re-runs the policy engine over a run's already-captured runtime
@@ -419,8 +440,8 @@ func PersistDenyForEvent(db *sql.DB, eventID, ruleID, reason string) (DecisionRe
 // model, no sensor): same events + same rules = same result. Pairs with
 // `policy rules` for an edit-rules -> replay-history workflow.
 //
-// It is idempotent (the clear step below fully removes the prior layer), so a
-// re-run or a mid-way failure is safe to retry. It does NOT retroactively reset
+// Replacement is transactional, including signals and policy counters; any
+// failure keeps the previous analysis. It does NOT retroactively reset
 // session/process status a prior enforce set -- those record what the earlier
 // policy actually did.
 func ReevaluateRun(db *sql.DB, runID string, engine Engine) (evaluated int, alerts int, err error) {
@@ -430,6 +451,21 @@ func ReevaluateRun(db *sql.DB, runID string, engine Engine) (evaluated int, aler
 	if len(engine.Rules) == 0 {
 		engine = DefaultEngine()
 	}
+	err = store.WithTx(context.Background(), db, func(tx *sql.Tx) error {
+		var err error
+		evaluated, alerts, err = reevaluateRunTx(tx, runID, engine)
+		return err
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	return evaluated, alerts, nil
+}
+
+func reevaluateRunTx(db *sql.Tx, runID string, engine Engine) (evaluated int, alerts int, err error) {
+	const policyCosts = `(SELECT id FROM cost_samples WHERE run_id = ? AND
+		(policy_block_count > 0 OR quarantine_count > 0 OR id IN
+		(SELECT 'cost-policy-' || id FROM policy_decisions WHERE run_id = ?)))`
 	clears := []struct {
 		q string
 		a []any
@@ -438,10 +474,11 @@ func ReevaluateRun(db *sql.DB, runID string, engine Engine) (evaluated int, aler
 		{`DELETE FROM signals WHERE run_id = ? AND source_table = 'risk_signals'`, []any{runID}},
 		{`DELETE FROM response_actions WHERE run_id = ?`, []any{runID}},
 		{`DELETE FROM risk_signals WHERE run_id = ?`, []any{runID}},
+		// Include owned detect-only counters even when both values are zero.
+		// Unowned zero-valued legacy/token-cost samples stay unchanged.
+		{`DELETE FROM signals WHERE run_id = ? AND source_table = 'cost_samples' AND source_id IN ` + policyCosts, []any{runID, runID, runID}},
+		{`DELETE FROM cost_samples WHERE run_id = ? AND id IN ` + policyCosts, []any{runID, runID, runID}},
 		{`DELETE FROM policy_decisions WHERE run_id = ?`, []any{runID}},
-		// Only the policy-derived cost rows (block/quarantine counters); token-cost
-		// samples have both counters zero and are left alone.
-		{`DELETE FROM cost_samples WHERE run_id = ? AND (policy_block_count > 0 OR quarantine_count > 0)`, []any{runID}},
 	}
 	for _, c := range clears {
 		if _, e := db.Exec(c.q, c.a...); e != nil {
@@ -463,9 +500,13 @@ func ReevaluateRun(db *sql.DB, runID string, engine Engine) (evaluated int, aler
 		}
 		eventIDs = append(eventIDs, id)
 	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, 0, err
+	}
 	rows.Close()
 	for _, id := range eventIDs {
-		_, persisted, e := EvaluateRuntimeEventWithEngine(db, id, engine)
+		_, persisted, e := evaluateRuntimeEvent(db, id, engine, true)
 		if e != nil {
 			return evaluated, alerts, fmt.Errorf("reevaluate event %s: %w", id, e)
 		}
@@ -703,15 +744,15 @@ func persistDecision(db *sql.DB, event Event, rawPayload string, decision Decisi
 	if err != nil {
 		return DecisionRecord{}, err
 	}
-	return persistDecisionWithExistingEvent(db, eventID, event, rawPayload, decision, now)
+	return persistDecisionWithExistingEvent(db, eventID, event, rawPayload, decision, now, false)
 }
 
-func persistDecisionForEventID(db *sql.DB, eventID string, event Event, rawPayload string, decision Decision) (DecisionRecord, error) {
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	return persistDecisionWithExistingEvent(db, eventID, event, rawPayload, decision, now)
+type policyStore interface {
+	Exec(string, ...any) (sql.Result, error)
+	QueryRow(string, ...any) *sql.Row
 }
 
-func persistDecisionWithExistingEvent(db *sql.DB, eventID string, event Event, rawPayload string, decision Decision, now string) (DecisionRecord, error) {
+func persistDecisionWithExistingEvent(db policyStore, eventID string, event Event, rawPayload string, decision Decision, now string, atomicProjection bool) (DecisionRecord, error) {
 	record := DecisionRecord{
 		ID:        ids.New("dec"),
 		EventID:   eventID,
@@ -752,8 +793,8 @@ func persistDecisionWithExistingEvent(db *sql.DB, eventID string, event Event, r
 			return DecisionRecord{}, err
 		}
 		// Live-project into the unified signal model (the infra contract).
-		// Best-effort and idempotent on (source_table, source_id): a later
-		// signals.Backfill will not duplicate this row.
+		// Live enforcement tolerates a failed projection; transactional reanalysis
+		// requires it. Both remain idempotent on (source_table, source_id).
 		sigKind, sigID := "run", event.RunID
 		if event.ProcessID != "" {
 			sigKind, sigID = "process", event.ProcessID
@@ -769,6 +810,9 @@ func persistDecisionWithExistingEvent(db *sql.DB, eventID string, event Event, r
 			ProducedBy: "security.policy", Payload: string(payload), CreatedAt: now,
 			SourceTable: "risk_signals", SourceID: riskSignalID,
 		}); sigErr != nil {
+			if atomicProjection {
+				return DecisionRecord{}, sigErr
+			}
 			// Unified-signal writeback must not fail silently: emit an observable
 			// error event (does not block the policy decision).
 			errPayload, _ := json.Marshal(map[string]any{
@@ -777,21 +821,29 @@ func persistDecisionWithExistingEvent(db *sql.DB, eventID string, event Event, r
 				"policy_decision_id": record.ID,
 				"dimension":          "security",
 			})
-			_, _ = db.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
+			if _, err := db.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
 				VALUES (?, ?, ?, ?, ?, 'signal_writeback', 'unified_signal_write_failed', ?, ?)`,
-				ids.New("evt"), event.RunID, event.SessionID, event.ToolCallID, event.ProcessID, string(errPayload), now)
+				ids.New("evt"), event.RunID, event.SessionID, event.ToolCallID, event.ProcessID, string(errPayload), now); err != nil {
+				return DecisionRecord{}, err
+			}
 		}
-		_, _ = db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
+		if _, err := db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
 			VALUES (?, ?, ?, ?, 'policy_decision_risk_signal', ?, ?)`,
-			ids.New("edge"), event.RunID, policyNodeID, "risk_signal/"+riskSignalID, eventID, now)
+			ids.New("edge"), event.RunID, policyNodeID, "risk_signal/"+riskSignalID, eventID, now); err != nil {
+			return DecisionRecord{}, err
+		}
 	}
-	_, _ = db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
+	if _, err := db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
 		VALUES (?, ?, ?, ?, 'runtime_event_policy_decision', ?, ?)`,
-		ids.New("edge"), event.RunID, "runtime_event/"+eventID, policyNodeID, eventID, now)
+		ids.New("edge"), event.RunID, "runtime_event/"+eventID, policyNodeID, eventID, now); err != nil {
+		return DecisionRecord{}, err
+	}
 	if event.SessionID != "" {
-		_, _ = db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
+		if _, err := db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
 			VALUES (?, ?, ?, ?, 'policy_decision_session', ?, ?)`,
-			ids.New("edge"), event.RunID, policyNodeID, event.SessionID, eventID, now)
+			ids.New("edge"), event.RunID, policyNodeID, event.SessionID, eventID, now); err != nil {
+			return DecisionRecord{}, err
+		}
 	}
 	blockCount := int64(0)
 	quarantineCount := int64(0)
@@ -802,16 +854,26 @@ func persistDecisionWithExistingEvent(db *sql.DB, eventID string, event Event, r
 	case "quarantine":
 		quarantineCount = 1
 		if event.SessionID != "" {
-			_, _ = db.Exec(`UPDATE sessions SET status = 'quarantined', updated_at = ? WHERE id = ?`, now, event.SessionID)
-			_, _ = db.Exec(`UPDATE snapshots SET status = 'tainted' WHERE session_id = ?`, event.SessionID)
+			if _, err := db.Exec(`UPDATE sessions SET status = 'quarantined', updated_at = ? WHERE id = ?`, now, event.SessionID); err != nil {
+				return DecisionRecord{}, err
+			}
+			if _, err := db.Exec(`UPDATE snapshots SET status = 'tainted' WHERE session_id = ?`, event.SessionID); err != nil {
+				return DecisionRecord{}, err
+			}
 		}
 	case "kill":
 		if event.SessionID != "" {
-			_, _ = db.Exec(`UPDATE sessions SET status = 'stopped', updated_at = ? WHERE id = ?`, now, event.SessionID)
-			_, _ = db.Exec(`UPDATE snapshots SET status = 'tainted' WHERE session_id = ?`, event.SessionID)
+			if _, err := db.Exec(`UPDATE sessions SET status = 'stopped', updated_at = ? WHERE id = ?`, now, event.SessionID); err != nil {
+				return DecisionRecord{}, err
+			}
+			if _, err := db.Exec(`UPDATE snapshots SET status = 'tainted' WHERE session_id = ?`, event.SessionID); err != nil {
+				return DecisionRecord{}, err
+			}
 		}
 		if event.ProcessID != "" {
-			_, _ = db.Exec(`UPDATE processes SET status = 'killed', ended_at = ? WHERE id = ?`, now, event.ProcessID)
+			if _, err := db.Exec(`UPDATE processes SET status = 'killed', ended_at = ? WHERE id = ?`, now, event.ProcessID); err != nil {
+				return DecisionRecord{}, err
+			}
 		}
 	}
 	if decision.Decision != "allow" {
@@ -823,22 +885,34 @@ func persistDecisionWithExistingEvent(db *sql.DB, eventID string, event Event, r
 			"rule_id":  decision.RuleID,
 			"reason":   decision.Reason,
 		})
-		_, _ = db.Exec(`INSERT INTO response_actions
+		if _, err := db.Exec(`INSERT INTO response_actions
 			(id, run_id, session_id, process_id, snapshot_id, risk_signal_id, policy_decision_id, action_type, target_type, target_id, status, payload, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'recorded', ?, ?)`,
-			actionID, event.RunID, event.SessionID, event.ProcessID, event.SnapshotID, riskSignalID, record.ID, actionType, targetType, targetID, string(payload), now)
-		_, _ = db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
+			actionID, event.RunID, event.SessionID, event.ProcessID, event.SnapshotID, riskSignalID, record.ID, actionType, targetType, targetID, string(payload), now); err != nil {
+			return DecisionRecord{}, err
+		}
+		if _, err := db.Exec(`INSERT OR REPLACE INTO graph_edges (id, run_id, from_id, to_id, edge_type, source_event_id, created_at)
 			VALUES (?, ?, ?, ?, 'risk_signal_response_action', ?, ?)`,
-			ids.New("edge"), event.RunID, "risk_signal/"+riskSignalID, "response_action/"+actionID, eventID, now)
+			ids.New("edge"), event.RunID, "risk_signal/"+riskSignalID, "response_action/"+actionID, eventID, now); err != nil {
+			return DecisionRecord{}, err
+		}
 	}
 	if event.RunID != "" {
-		_, _ = db.Exec(`INSERT INTO cost_samples (id, run_id, session_id, policy_block_count, quarantine_count, created_at)
-			VALUES (?, ?, ?, ?, ?, ?)`, ids.New("cost"), event.RunID, event.SessionID, blockCount, quarantineCount, now)
+		costID := ids.New("cost")
+		if atomicProjection {
+			// Reanalysis can remove this projection by its owning decision,
+			// without touching unrelated or legacy cost samples.
+			costID = "cost-policy-" + record.ID
+		}
+		if _, err := db.Exec(`INSERT INTO cost_samples (id, run_id, session_id, policy_block_count, quarantine_count, created_at)
+			VALUES (?, ?, ?, ?, ?, ?)`, costID, event.RunID, event.SessionID, blockCount, quarantineCount, now); err != nil {
+			return DecisionRecord{}, err
+		}
 	}
 	return record, nil
 }
 
-func runtimeEventForPolicy(db *sql.DB, eventID string) (Event, string, error) {
+func runtimeEventForPolicy(db policyStore, eventID string) (Event, string, error) {
 	var event Event
 	var rawPayload string
 	if err := db.QueryRow(`SELECT source, event_type, COALESCE(run_id, ''), COALESCE(session_id, ''),

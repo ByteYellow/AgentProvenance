@@ -116,7 +116,7 @@ func Export(db *sql.DB, runID string) (SignalSet, error) {
 // created_at, and JSON defaults when unset. Records projected from a legacy
 // silo (SourceTable+SourceID set) are idempotent: re-projecting the same source
 // row is a no-op rather than a duplicate.
-func Record(db *sql.DB, s Signal) (string, error) {
+func Record(db signalWriter, s Signal) (string, error) {
 	id, _, err := record(db, s)
 	return id, err
 }
@@ -128,7 +128,12 @@ func RecordCounting(db *sql.DB, s Signal) (bool, error) {
 	return inserted, err
 }
 
-func record(db *sql.DB, s Signal) (string, bool, error) {
+// Both a database and its owning transaction can persist a projection.
+type signalWriter interface {
+	Exec(string, ...any) (sql.Result, error)
+}
+
+func record(db signalWriter, s Signal) (string, bool, error) {
 	if !s.Dimension.Valid() {
 		return "", false, fmt.Errorf("signals: invalid dimension %q", s.Dimension)
 	}

@@ -2,6 +2,7 @@ package provenance
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/ids"
 	"github.com/byteyellow/agentprovenance/internal/security"
+	storepkg "github.com/byteyellow/agentprovenance/internal/store"
 )
 
 // EndpointResult summarizes an endpoint-dump ingestion.
@@ -59,6 +61,8 @@ type endpointPayloadClass struct {
 // IngestEndpointDump folds a capture proxy's dump into the run graph for agents
 // whose TLS the libssl uprobe can't read (e.g. rustls CLIs like Grok): the model
 // traffic and the data egress are captured at the controlled endpoint instead.
+// Objects, events and policy projections are replaced in one transaction;
+// malformed inputs or failed writes leave the previous graph in place.
 //
 //   - /chat/completions + /responses  -> an llm_call node (the model turn); the
 //     response is inspected for tool_calls so the graph can assert the model
@@ -72,9 +76,19 @@ func IngestEndpointDump(store ObjectStore, db *sql.DB, runID, dumpDir string) (E
 	if runID == "" {
 		return res, fmt.Errorf("ingest endpoint: run id is required")
 	}
+	info, err := os.Stat(dumpDir)
+	if err != nil {
+		return res, fmt.Errorf("ingest endpoint: read dump directory: %w", err)
+	}
+	if !info.IsDir() {
+		return res, fmt.Errorf("ingest endpoint: dump path is not a directory")
+	}
 	metaPaths, err := filepath.Glob(filepath.Join(dumpDir, "*.meta.json"))
 	if err != nil {
 		return res, err
+	}
+	if len(metaPaths) == 0 {
+		return res, fmt.Errorf("ingest endpoint: no capture metadata found in %s", dumpDir)
 	}
 	var metas []endpointMeta
 	for _, mp := range metaPaths {
@@ -83,14 +97,30 @@ func IngestEndpointDump(store ObjectStore, db *sql.DB, runID, dumpDir string) (E
 			return res, err
 		}
 		var m endpointMeta
-		if json.Unmarshal(raw, &m) != nil {
-			continue
+		if err := json.Unmarshal(raw, &m); err != nil {
+			return res, fmt.Errorf("ingest endpoint: metadata %s: %w", mp, err)
+		}
+		if m.Kind == "" || m.Path == "" {
+			return res, fmt.Errorf("ingest endpoint: metadata %s requires kind and path", mp)
 		}
 		m.base = strings.TrimSuffix(mp, ".meta.json")
 		metas = append(metas, m)
 	}
 	sort.Slice(metas, func(i, j int) bool { return metas[i].Seq < metas[j].Seq })
+	err = storepkg.WithTx(context.Background(), db, func(tx *sql.Tx) error {
+		store.Tx = tx
+		var err error
+		res, err = replaceEndpointDump(store, tx, runID, metas)
+		return err
+	})
+	if err != nil {
+		return EndpointResult{}, err
+	}
+	return res, nil
+}
 
+func replaceEndpointDump(store ObjectStore, db *sql.Tx, runID string, metas []endpointMeta) (EndpointResult, error) {
+	var res EndpointResult
 	// Idempotent: clear prior endpoint-sourced objects/edges/events for the run.
 	if _, err := db.Exec(`DELETE FROM provenance_objects WHERE run_id = ? AND source_id LIKE 'endpoint/%'`, runID); err != nil {
 		return res, err
@@ -103,10 +133,13 @@ func IngestEndpointDump(store ObjectStore, db *sql.DB, runID, dumpDir string) (E
 	// events, keyed on those events so only THIS layer is removed (not the gate's).
 	// Runs before the events are deleted so the subqueries can still see them.
 	const epEvents = `(SELECT id FROM events WHERE run_id = ? AND source = 'endpoint_capture')`
+	const epCosts = `(SELECT 'cost-policy-' || id FROM policy_decisions WHERE run_id = ? AND event_id IN ` + epEvents + `)`
 	for _, stmt := range []struct {
 		sql  string
 		args []any
 	}{
+		{`DELETE FROM signals WHERE run_id = ? AND source_table = 'cost_samples' AND source_id IN ` + epCosts, []any{runID, runID, runID}},
+		{`DELETE FROM cost_samples WHERE run_id = ? AND id IN ` + epCosts, []any{runID, runID, runID}},
 		{`DELETE FROM graph_edges WHERE run_id = ? AND edge_type IN ('runtime_event_policy_decision','policy_decision_risk_signal','risk_signal_response_action','policy_decision_session') AND source_event_id IN ` + epEvents, []any{runID, runID}},
 		{`DELETE FROM signals WHERE run_id = ? AND source_table = 'risk_signals' AND event_id IN ` + epEvents, []any{runID, runID}},
 		{`DELETE FROM response_actions WHERE run_id = ? AND policy_decision_id IN (SELECT id FROM policy_decisions WHERE run_id = ? AND event_id IN ` + epEvents + `)`, []any{runID, runID, runID}},
@@ -128,19 +161,35 @@ func IngestEndpointDump(store ObjectStore, db *sql.DB, runID, dumpDir string) (E
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	// Attribute the egress to the SAME session/process the kernel saw reading the
 	// files, so the exfil renders as one chain with the rest of the run's activity.
-	sessionID, processID := runSessionProcess(db, runID)
-	toolCallID := runToolCall(db, runID, processID)
+	sessionID, processID, err := runSessionProcess(db, runID)
+	if err != nil {
+		return res, err
+	}
+	toolCallID, err := runToolCall(db, runID, processID)
+	if err != nil {
+		return res, err
+	}
 
 	for _, m := range metas {
-		body := readBody(m.base)
 		switch {
 		case m.Kind == "req" && isEndpointChat(m.Path):
-			respBody := readBody(chatResponses[m.Seq].base)
+			body, err := readBody(m.base)
+			if err != nil {
+				return res, err
+			}
+			respBody, err := readBody(chatResponses[m.Seq].base)
+			if err != nil {
+				return res, err
+			}
 			if err := ingestChatCall(store, db, runID, m, body, respBody, !isAuxiliaryChat(body), now); err != nil {
 				return res, err
 			}
 			res.LLMCalls++
 		case isEndpointEgress(m.Path) && m.Kind != "resp":
+			body, err := readBody(m.base)
+			if err != nil {
+				return res, err
+			}
 			transportBlocked := m.Kind == "EXFIL-REQ" || m.Kind == "exfil-req"
 			class := classifyEndpointPayload(m.Path, body, m.CanaryHits, m.IsGitBundle)
 			blocked := transportBlocked && class.Sensitive
@@ -186,12 +235,15 @@ func isAuxiliaryChat(body []byte) bool {
 	return strings.Contains(s, "generating the session title") || strings.Contains(s, `"name":"session_title"`)
 }
 
-func readBody(base string) []byte {
+func readBody(base string) ([]byte, error) {
+	if base == "" {
+		return nil, nil // A request may have no captured response.
+	}
 	b, err := os.ReadFile(base + ".body.bin")
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("ingest endpoint: body %s: %w", base, err)
 	}
-	return b
+	return b, nil
 }
 
 func isEndpointChat(path string) bool {
@@ -292,7 +344,7 @@ func pathsContainingCanaries(files any, canaries []string) []string {
 
 // ingestChatCall objectifies the request + response bodies and builds an llm_call
 // node, recording whether the model declared any tool call.
-func ingestChatCall(store ObjectStore, db *sql.DB, runID string, m endpointMeta, reqBody, respBody []byte, primary bool, now string) error {
+func ingestChatCall(store ObjectStore, db *sql.Tx, runID string, m endpointMeta, reqBody, respBody []byte, primary bool, now string) error {
 	declaredTools := responseDeclaresToolCall(respBody)
 	host := strings.TrimSpace(m.Host)
 	// Sensitive markers the capture layer matched in the request body (the demo's
@@ -323,7 +375,7 @@ func ingestChatCall(store ObjectStore, db *sql.DB, runID string, m endpointMeta,
 
 // ingestEgress records a data-egress upload as a network_connect event (so the
 // intent diff sees an effect) plus a content-addressed descriptor of the payload.
-func ingestEgress(store ObjectStore, db *sql.DB, runID string, m endpointMeta, body []byte, blocked bool, sessionID, processID, toolCallID, now string) error {
+func ingestEgress(store ObjectStore, db *sql.Tx, runID string, m endpointMeta, body []byte, blocked bool, sessionID, processID, toolCallID, now string) error {
 	sum := sha256.Sum256(body)
 	digest := "sha256:" + hex.EncodeToString(sum[:])
 	// Prefer the proxy's own detection (it saw the whole body); fall back to
@@ -383,14 +435,14 @@ func ingestEgress(store ObjectStore, db *sql.DB, runID string, m endpointMeta, b
 			ruleID, what = "codebase_egress_block", "codebase payload"
 		}
 		reason := fmt.Sprintf("BLOCKED: agent attempted to upload %d bytes of %s to %s (%s)", len(body), what, endpointDstHost(m), m.Path)
-		if _, err := security.PersistDenyForEvent(db, eventID, ruleID, reason); err != nil {
+		if _, err := security.PersistDenyForEventTx(db, eventID, ruleID, reason); err != nil {
 			return fmt.Errorf("ingest endpoint: egress deny chain: %w", err)
 		}
 	}
 	return nil
 }
 
-func linkCanarySources(db *sql.DB, runID, sinkEventID, objectHash string, paths []string, now string) error {
+func linkCanarySources(db *sql.Tx, runID, sinkEventID, objectHash string, paths []string, now string) error {
 	for _, path := range paths {
 		fileNode := "workspace_file/" + path
 		for _, edge := range []struct{ from, to, kind string }{
@@ -403,8 +455,11 @@ func linkCanarySources(db *sql.DB, runID, sinkEventID, objectHash string, paths 
 		}
 		var sourceEventID string
 		like := "%" + path + "%"
-		_ = db.QueryRow(`SELECT id FROM events WHERE run_id = ? AND event_type IN ('secret_path','file_open','openat')
+		err := db.QueryRow(`SELECT id FROM events WHERE run_id = ? AND event_type IN ('secret_path','file_open','openat')
 			AND payload LIKE ? ORDER BY created_at DESC LIMIT 1`, runID, like).Scan(&sourceEventID)
+		if err != nil && err != sql.ErrNoRows {
+			return err
+		}
 		if sourceEventID != "" {
 			for _, edge := range []struct{ from, to, kind string }{
 				{"runtime_event/" + sourceEventID, objectHash, "sensitive_source_payload"},
@@ -422,28 +477,43 @@ func linkCanarySources(db *sql.DB, runID, sinkEventID, objectHash string, paths 
 // runSessionProcess returns the session and process the run's activity is under,
 // preferring the process the kernel saw reading a secret path (so the egress
 // attaches to the same node as the reads), falling back to any of the run's.
-func runSessionProcess(db *sql.DB, runID string) (sessionID, processID string) {
-	_ = db.QueryRow(`SELECT COALESCE(process_id,''), COALESCE(session_id,'') FROM events
+func runSessionProcess(db *sql.Tx, runID string) (sessionID, processID string, err error) {
+	err = db.QueryRow(`SELECT COALESCE(process_id,''), COALESCE(session_id,'') FROM events
 		WHERE run_id = ? AND event_type = 'secret_path' AND COALESCE(process_id,'') != '' LIMIT 1`, runID).Scan(&processID, &sessionID)
+	if err != nil && err != sql.ErrNoRows {
+		return "", "", err
+	}
 	if sessionID == "" {
-		_ = db.QueryRow(`SELECT p.id, p.session_id FROM processes p JOIN sessions s ON p.session_id = s.id
+		err = db.QueryRow(`SELECT p.id, p.session_id FROM processes p JOIN sessions s ON p.session_id = s.id
 			WHERE s.run_id = ? ORDER BY p.started_at LIMIT 1`, runID).Scan(&processID, &sessionID)
+		if err != nil && err != sql.ErrNoRows {
+			return "", "", err
+		}
 	}
 	if sessionID == "" {
-		_ = db.QueryRow(`SELECT id FROM sessions WHERE run_id = ? LIMIT 1`, runID).Scan(&sessionID)
+		err = db.QueryRow(`SELECT id FROM sessions WHERE run_id = ? LIMIT 1`, runID).Scan(&sessionID)
+		if err != nil && err != sql.ErrNoRows {
+			return "", "", err
+		}
 	}
-	return sessionID, processID
+	return sessionID, processID, nil
 }
 
-func runToolCall(db *sql.DB, runID, processID string) string {
+func runToolCall(db *sql.Tx, runID, processID string) (string, error) {
 	var toolCallID string
 	if processID != "" {
-		_ = db.QueryRow(`SELECT tool_call_id FROM processes WHERE id = ?`, processID).Scan(&toolCallID)
+		err := db.QueryRow(`SELECT COALESCE(tool_call_id,'') FROM processes WHERE id = ?`, processID).Scan(&toolCallID)
+		if err != nil && err != sql.ErrNoRows {
+			return "", err
+		}
 	}
 	if toolCallID == "" {
-		_ = db.QueryRow(`SELECT id FROM tool_calls WHERE run_id = ? ORDER BY started_at LIMIT 1`, runID).Scan(&toolCallID)
+		err := db.QueryRow(`SELECT id FROM tool_calls WHERE run_id = ? ORDER BY started_at LIMIT 1`, runID).Scan(&toolCallID)
+		if err != nil && err != sql.ErrNoRows {
+			return "", err
+		}
 	}
-	return toolCallID
+	return toolCallID, nil
 }
 
 // responseDeclaresToolCall reports whether the model's response (JSON or SSE)

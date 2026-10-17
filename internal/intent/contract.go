@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
@@ -47,10 +48,19 @@ type IntentContract struct {
 // intent surfaces: each agent tool call (via its profile), each peer message
 // (governing the recipient), and each refusal (a negative contract).
 func ExtractContracts(db *sql.DB, runID string, profiles map[string]Profile) ([]IntentContract, error) {
+	return extractContracts(db, runID, profiles)
+}
+
+type intentQueryer interface {
+	Query(string, ...any) (*sql.Rows, error)
+	QueryRow(string, ...any) *sql.Row
+}
+
+func extractContracts(db intentQueryer, runID string, profiles map[string]Profile) ([]IntentContract, error) {
 	var out []IntentContract
 
 	rows, err := db.Query(`SELECT id, agent_id, command, status FROM tool_calls
-		WHERE run_id = ? AND agent_id != '' AND command != ''`, runID)
+		WHERE run_id = ? AND agent_id != '' AND command != '' ORDER BY id`, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +100,11 @@ func ExtractContracts(db *sql.DB, runID string, profiles map[string]Profile) ([]
 			Confidence: assertedConfidence,
 		})
 	}
+	err = rows.Err()
 	rows.Close()
+	if err != nil {
+		return nil, err
+	}
 
 	msgs, err := extractMessageContracts(db, runID, profiles)
 	if err != nil {
@@ -105,36 +119,51 @@ func ExtractContracts(db *sql.DB, runID string, profiles map[string]Profile) ([]
 	return out, nil
 }
 
-func extractModelResponseContracts(db *sql.DB, runID string) ([]IntentContract, error) {
+func extractModelResponseContracts(db intentQueryer, runID string) ([]IntentContract, error) {
 	var rootAgent string
-	_ = db.QueryRow(`SELECT id FROM agents WHERE run_id = ? AND parent_agent_id = '' ORDER BY created_at LIMIT 1`, runID).Scan(&rootAgent)
+	if err := db.QueryRow(`SELECT id FROM agents WHERE run_id = ? AND parent_agent_id = '' ORDER BY created_at,id LIMIT 1`, runID).Scan(&rootAgent); err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
 	var rootToolCall string
-	_ = db.QueryRow(`SELECT id FROM tool_calls WHERE run_id = ? ORDER BY started_at LIMIT 1`, runID).Scan(&rootToolCall)
-	rows, err := db.Query(`SELECT source_id, path FROM provenance_objects
-		WHERE run_id = ? AND object_type = 'llm_message' AND source_id LIKE 'endpoint/resp-%'`, runID)
+	if err := db.QueryRow(`SELECT id FROM tool_calls WHERE run_id = ? ORDER BY started_at,id LIMIT 1`, runID).Scan(&rootToolCall); err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	rows, err := db.Query(`SELECT source_id, path, hash FROM provenance_objects
+		WHERE run_id = ? AND object_type = 'llm_message' AND source_id LIKE 'endpoint/resp-%' ORDER BY source_id`, runID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []IntentContract
 	for rows.Next() {
-		var sourceID, path string
-		if err := rows.Scan(&sourceID, &path); err != nil {
+		var sourceID, path, hash string
+		if err := rows.Scan(&sourceID, &path, &hash); err != nil {
 			return nil, err
 		}
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("read model response %s: %w", sourceID, err)
+		}
+		if fmt.Sprintf("sha256:%x", sha256.Sum256(raw)) != hash {
+			return nil, fmt.Errorf("model response %s: object hash mismatch", sourceID)
 		}
 		var obj struct {
-			Payload struct {
+			Schema  string `json:"schema"`
+			RunID   string `json:"run_id"`
+			Payload *struct {
 				Semantics struct {
 					DeclaredToolCall bool   `json:"declared_tool_call"`
 					IntentRole       string `json:"intent_role"`
 				} `json:"semantics"`
 			} `json:"payload"`
 		}
-		if json.Unmarshal(raw, &obj) != nil || obj.Payload.Semantics.DeclaredToolCall || obj.Payload.Semantics.IntentRole != "primary" {
+		if err := json.Unmarshal(raw, &obj); err != nil {
+			return nil, fmt.Errorf("decode model response %s: %w", sourceID, err)
+		}
+		if obj.Payload == nil || obj.RunID != runID || obj.Schema != "agentprov.provenance.object.v1" {
+			return nil, fmt.Errorf("model response %s: invalid object envelope", sourceID)
+		}
+		if obj.Payload.Semantics.DeclaredToolCall || obj.Payload.Semantics.IntentRole != "primary" {
 			continue
 		}
 		seq := strings.TrimPrefix(sourceID, "endpoint/resp-")
@@ -153,7 +182,7 @@ func extractModelResponseContracts(db *sql.DB, runID string) ([]IntentContract, 
 // what bob's ensuing runtime should be about, so bob reading a foreign secret
 // while acting on it is a peer_message_intent_mismatch. The agent_message edges
 // route sender -> body-object -> recipient; we pair them via the shared object.
-func extractMessageContracts(db *sql.DB, runID string, profiles map[string]Profile) ([]IntentContract, error) {
+func extractMessageContracts(db intentQueryer, runID string, profiles map[string]Profile) ([]IntentContract, error) {
 	rows, err := db.Query(`SELECT from_id, to_id FROM graph_edges
 		WHERE run_id = ? AND edge_type = 'agent_message'`, runID)
 	if err != nil {
@@ -174,11 +203,21 @@ func extractMessageContracts(db *sql.DB, runID string, profiles map[string]Profi
 			recipientOf[from] = to
 		}
 	}
+	err = rows.Err()
 	rows.Close()
+	if err != nil {
+		return nil, err
+	}
 
 	var out []IntentContract
+	hashes := make([]string, 0, len(recipientOf))
+	for hash := range recipientOf {
+		hashes = append(hashes, hash)
+	}
+	sort.Strings(hashes)
 	i := 0
-	for hash, recipient := range recipientOf {
+	for _, hash := range hashes {
+		recipient := recipientOf[hash]
 		body, err := readMessageBody(db, runID, hash)
 		if err != nil {
 			return nil, fmt.Errorf("read peer message %s: %w", hash, err)
@@ -205,7 +244,7 @@ func extractMessageContracts(db *sql.DB, runID string, profiles map[string]Profi
 
 // readMessageBody fetches an objectified agent-message body (content-addressed on
 // disk) and returns its text.
-func readMessageBody(db *sql.DB, runID, hash string) (string, error) {
+func readMessageBody(db intentQueryer, runID, hash string) (string, error) {
 	var path string
 	if err := db.QueryRow(`SELECT path FROM provenance_objects WHERE run_id = ? AND hash = ?`, runID, hash).Scan(&path); err != nil {
 		return "", err

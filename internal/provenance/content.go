@@ -199,7 +199,7 @@ func VerifyTextContent(db *sql.DB, runID, ref string) error {
 
 // ReadTextContentPage uses run-scoped, hash-checked stored bytes, never a source
 // transcript or a current workspace file. Offsets count redacted UTF-8 bytes.
-func ReadTextContentPage(db *sql.DB, runID, ref string, offset, limit int64) (ContentPage, error) {
+func ReadTextContentPage(db contentObjectReader, runID, ref string, offset, limit int64) (ContentPage, error) {
 	var manifestObject struct {
 		Payload struct {
 			Kind     string       `json:"kind"`

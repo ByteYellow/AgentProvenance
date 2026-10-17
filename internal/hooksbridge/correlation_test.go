@@ -259,7 +259,7 @@ func TestCorrelationComparesInstantsNotTimestampStrings(t *testing.T) {
 }
 
 func TestCorrelationRollbackKeepsPublishedEdges(t *testing.T) {
-	for _, failure := range []string{"insert", "delete", "read"} {
+	for _, failure := range []string{"insert", "delete", "read", "commit"} {
 		t.Run(failure, func(t *testing.T) {
 			db, _ := openTestStore(t)
 			correlationTool(t, db, "a", "python task.py", 0, 10)
@@ -269,7 +269,17 @@ func TestCorrelationRollbackKeepsPublishedEdges(t *testing.T) {
 			}
 			before := correlationLinks(t, db)
 			var query string
-			if failure == "read" {
+			if failure == "commit" {
+				for _, stmt := range []string{
+					`CREATE TABLE commit_parent (id INTEGER PRIMARY KEY)`,
+					`CREATE TABLE commit_child (id INTEGER REFERENCES commit_parent(id) DEFERRABLE INITIALLY DEFERRED)`,
+				} {
+					if _, err := db.Exec(stmt); err != nil {
+						t.Fatal(err)
+					}
+				}
+				query = `CREATE TRIGGER fail_correlation AFTER INSERT ON graph_edges BEGIN INSERT INTO commit_child VALUES(1); END`
+			} else if failure == "read" {
 				query = `ALTER TABLE tool_calls RENAME TO unavailable_calls`
 			} else {
 				query = fmt.Sprintf(`CREATE TRIGGER fail_correlation BEFORE %s ON graph_edges BEGIN SELECT RAISE(ABORT,'simulated write failure'); END`, failure)

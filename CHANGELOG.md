@@ -6,6 +6,17 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Fixed
 
+- Replace endpoint capture projections atomically, including payload objects,
+  events, policy decisions and signals. Missing bodies, malformed metadata and
+  failed writes retain the previous graph; retries replace owned policy counters.
+- Commit intent diffs, their graph edges, signals and any new tool attribution
+  together. Unreadable model evidence aborts reanalysis; repeated analysis keeps
+  peer-message contract identities stable.
+- Replace policy replay results in one transaction, preserving the previous
+  decisions and session state on failure and removing stale counter projections.
+- Discard database connections after failed reanalysis commits so an unfinished
+  SQLite transaction cannot leak into subsequent requests. Reuse unchanged
+  content-addressed objects and stage replacements before renaming them.
 - Avoid schema writes when opening an up-to-date store. Process native spool
   files in short transactions, retry transient SQLite contention, and preserve
   committed row receipts across interruptions so capture and investigation can

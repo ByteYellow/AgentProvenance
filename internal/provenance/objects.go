@@ -1,6 +1,7 @@
 package provenance
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -407,7 +408,7 @@ func (c *materializeContext) put(obj provenanceObject) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(path, raw, 0o644); err != nil {
+	if err := writeObjectFile(path, raw); err != nil {
 		return "", err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -426,6 +427,36 @@ func (c *materializeContext) put(obj provenanceObject) (string, error) {
 	c.refHash[obj.Type+"/"+obj.SourceID] = hash
 	c.objectCount++
 	return hash, nil
+}
+
+// Never truncate a blob referenced by the previous successful analysis. A
+// failed replacement may leave an unreferenced blob, but not half of an old one.
+func writeObjectFile(path string, raw []byte) error {
+	if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Size() == int64(len(raw)) {
+		if f, err := os.Open(path); err == nil {
+			existing, readErr := io.ReadAll(io.LimitReader(f, int64(len(raw))+1))
+			f.Close()
+			if readErr == nil && bytes.Equal(existing, raw) {
+				return nil
+			}
+		}
+	}
+	f, err := os.CreateTemp(filepath.Dir(path), ".object-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+	if err := f.Chmod(0o644); err != nil {
+		return err
+	}
+	if _, err := f.Write(raw); err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }
 
 func (c *materializeContext) objectPath(hash string) string {

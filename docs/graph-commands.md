@@ -55,10 +55,33 @@ same. Imported bundle metadata does not replace this check. Runs with more than
 5,000 objects show deferred verification; use `agentprov graph verify --run ...`
 for their full check.
 
+## Reanalysis and recovery
+
 Transcript reanalysis validates all selected input streams before replacing
 stored analysis. A malformed JSON row or assistant content record reports its
 source line and retains the last graph. Complete final rows do not require a
 trailing newline.
+
+Each TLS, transcript or endpoint reanalysis replaces its own evidence layer in
+one transaction. Endpoint replacement includes captured events and their policy
+projections. An empty or missing dump directory, malformed metadata, or a missing
+body file returns an error and preserves the previous graph. A request without
+a recorded response remains a supported partial capture. Endpoint retries replace
+counters owned by its policy decisions; unowned legacy counters stay unchanged.
+
+Intent reanalysis commits diffs, graph edges, signals and any newly inferred
+tool attribution together. Missing or corrupt model evidence aborts the pass.
+Read, write and commit failures preserve the last successful analysis; after
+resolving the reported error, rerun the same command. Retrying replaces the
+relevant results without changing evidence from unrelated sources.
+
+Policy replay also replaces decisions, risks, responses, signals and policy
+counters in one transaction. A failed pass preserves both the prior results and
+session state; it does not leave a partially rebuilt risk chain.
+
+Content-addressed files are reused when unchanged and replaced through a
+temporary file. A rolled-back pass can leave unreferenced objects on disk; they
+are not part of the saved graph or its exports.
 
 ## Per-command purpose
 
