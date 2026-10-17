@@ -7,7 +7,7 @@ import (
 )
 
 func goTLSWriteProgram(objs *sensorbpfObjects) *ebpf.Program {
-	return objs.HandleSslWrite
+	return objs.HandleGoTlsWrite
 }
 
 // Kernel cgroup-name caching is currently available on amd64 only.

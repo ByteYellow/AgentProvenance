@@ -23,11 +23,27 @@ func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
 		}
 		if edge.EdgeType == "agent_syscall" && strings.HasPrefix(edge.ID, correlation.AppProcessEdgePrefix) {
 			edge.Derived, edge.DerivationRule = true, correlation.AppProcessMethod
-			edge.Confidence = correlation.AppProcessConfidence
+			edge.Confidence = graphConfidence(correlation.AppProcessConfidence)
 			edge.EvidenceRefs = []string{edge.FromID, edge.ToID}
 			if edge.SourceEventID != "" && edge.ToID != "runtime_event/"+edge.SourceEventID {
 				edge.EvidenceRefs = append(edge.EvidenceRefs, "runtime_event/"+edge.SourceEventID)
 			}
+		}
+		if edge.EdgeType == edgeLLMCaused && strings.HasPrefix(edge.ID, llmCommandEdgePrefix) {
+			edge.Derived, edge.DerivationRule = true, llmCommandRule
+			edge.Confidence = graphConfidence(llmCommandConfidence)
+			edge.EvidenceRefs = []string{edge.FromID, edge.ToID}
+			if edge.SourceEventID != "" {
+				edge.EvidenceRefs = append(edge.EvidenceRefs, "runtime_event/"+edge.SourceEventID)
+			}
+		}
+		if edge.EdgeType == "llm_call" && strings.HasPrefix(edge.ID, tlsPairEdgePrefix) {
+			edge.Derived, edge.DerivationRule = true, tlsPairRule
+			edge.Confidence = graphConfidence(1)
+			if strings.HasPrefix(edge.ID, tlsPairEdgePrefix+"http1_serial-") {
+				edge.Confidence = graphConfidence(0.8)
+			}
+			edge.EvidenceRefs = []string{edge.FromID, edge.ToID}
 		}
 		edges = append(edges, edge)
 	}
@@ -169,10 +185,9 @@ func isStructuralEdge(edgeType string) bool {
 	case "runtime_tool_call_process", "runtime_tool_call_file",
 		"runtime_process_file", "runtime_attempt_file",
 		"runtime_event_policy_decision", "policy_decision_risk_signal", "risk_signal_response_action",
-		// llm_intent_caused (tls_read event -> syscall) is deliberately NOT rendered:
-		// once materialized, MaterializeLLMCalls lifts the same link onto the
-		// llm_call node as llm_caused, so rendering both would double every
-		// intent->action edge.
+		// Legacy llm_intent_caused (nearby response -> syscall) is not rendered.
+		// New llm_caused associations require an identified exchange and a unique
+		// scoped command match; the old temporal edge supplies no causal anchor.
 		"llm_call", "llm_request", "llm_response", "llm_caused",
 		"attempt_snapshot", "snapshot_parent", "promotion_winner",
 		"agent_spawn", "agent_message", "agent_tool_call", "agent_syscall",

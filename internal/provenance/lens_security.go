@@ -32,13 +32,20 @@ func isSourceEvent(eventType, path string) bool {
 
 // taintFlowScope returns the scope a (source, sink) pair shares for a sensitive
 // data-flow edge — the from-node, a grouping key, the rule and confidence. It
-// prefers the OS pid (an exfiltration happens within ONE process, and the
-// correlated process_id can be a single coarse id for a whole captured run), then
-// falls back to process_id and tool_call for events without a pid. Returns conf=0
-// when the pair shares no scope (so they are not a flow).
+// prefers a captured process lifetime. Unversioned evidence keeps its legacy
+// numeric-PID grouping; new observation-local PIDs do not establish a flow.
+// Explicit application/endpoint joins remain available for PID-less evidence.
 func taintFlowScope(src, sink lensEvent, allowFallback bool) (fromNode, scopeKey, rule string, conf float64) {
 	switch {
 	case src.PID > 0 && sink.PID > 0:
+		a, b := lensProcessIdentity(src), lensProcessIdentity(sink)
+		if a.Version != "" || b.Version != "" {
+			if a.Process.InstanceID == "" || a.Process.InstanceID != b.Process.InstanceID || a.Process.ID != b.Process.ID {
+				return "", "", "", 0
+			}
+			return a.Process.ID, "instance:" + a.Process.InstanceID,
+				"dataflow.same_lifetime.secret_to_network.v2", 0.82
+		}
 		if src.PID != sink.PID {
 			return "", "", "", 0
 		}

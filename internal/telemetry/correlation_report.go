@@ -83,13 +83,17 @@ type CorrelationBinding struct {
 }
 
 type CorrelationMatch struct {
-	Status      string   `json:"status"`
-	Method      string   `json:"method"`
-	Confidence  float64  `json:"confidence"`
-	BindingID   string   `json:"binding_id,omitempty"`
-	MatchedKeys []string `json:"matched_keys,omitempty"`
-	Reason      string   `json:"reason"`
-	TimeWindow  string   `json:"time_window,omitempty"`
+	Status              string   `json:"status"`
+	Method              string   `json:"method"`
+	Confidence          float64  `json:"confidence"`
+	BindingID           string   `json:"binding_id,omitempty"`
+	MatchedKeys         []string `json:"matched_keys,omitempty"`
+	Reason              string   `json:"reason"`
+	TimeWindow          string   `json:"time_window,omitempty"`
+	ScopeOnly           bool     `json:"scope_only,omitempty"`
+	Ambiguous           bool     `json:"ambiguous,omitempty"`
+	CandidateBindingIDs []string `json:"candidate_binding_ids,omitempty"`
+	CandidateCount      int      `json:"candidate_count,omitempty"`
 }
 
 func BuildCorrelationReport(db *sql.DB, opts CorrelationReportOptions) (CorrelationReport, error) {
@@ -146,8 +150,9 @@ func correlationReportEvents(db *sql.DB, opts CorrelationReportOptions) ([]Event
 }
 
 func buildCorrelationEvidence(db *sql.DB, event EventRecord) (CorrelationEvidence, error) {
-	bindingID := correlationBindingID(event.Payload)
-	if bindingID == "" && correlationStatus(event) == "resolved" {
+	recorded, hasRecorded := recordedCorrelation(event.Payload)
+	bindingID := recorded.BindingID
+	if !hasRecorded && correlationStatus(event) == "resolved" {
 		match, ok, err := correlation.Resolve(db, correlation.RawIdentity{
 			RunID:       event.RunID,
 			ProcessID:   event.ProcessID,
@@ -177,12 +182,16 @@ func buildCorrelationEvidence(db *sql.DB, event EventRecord) (CorrelationEvidenc
 		}
 	}
 	match := CorrelationMatch{
-		Status:      correlationStatus(event),
-		Method:      event.CorrelationMethod,
-		Confidence:  event.CorrelationConfidence,
-		BindingID:   bindingID,
-		MatchedKeys: matchedCorrelationKeys(event.CorrelationMethod),
-		Reason:      correlationReason(event, bindingID),
+		Status:              correlationStatus(event),
+		Method:              event.CorrelationMethod,
+		Confidence:          event.CorrelationConfidence,
+		BindingID:           bindingID,
+		MatchedKeys:         matchedCorrelationKeys(event.CorrelationMethod),
+		Reason:              correlationReason(event),
+		ScopeOnly:           recorded.ScopeOnly,
+		Ambiguous:           recorded.Ambiguous,
+		CandidateBindingIDs: recorded.CandidateBindingIDs,
+		CandidateCount:      recorded.CandidateCount,
 	}
 	if binding != nil {
 		match.TimeWindow = binding.StartedAt + ".." + binding.EndedAt
@@ -215,19 +224,36 @@ func bindingView(binding correlation.Binding) CorrelationBinding {
 	}
 }
 
-func correlationBindingID(payload string) string {
-	var decoded struct {
-		Correlation struct {
-			BindingID string `json:"binding_id"`
-		} `json:"correlation"`
+func recordedCorrelation(payload string) (CorrelationMatch, bool) {
+	// Attempt/rollout metadata wraps the original correlation envelope.
+	for depth := 0; depth < 8; depth++ {
+		var decoded struct {
+			Correlation *CorrelationMatch `json:"correlation"`
+			Payload     json.RawMessage   `json:"payload"`
+		}
+		if err := json.Unmarshal([]byte(payload), &decoded); err != nil {
+			break
+		}
+		if decoded.Correlation != nil {
+			return *decoded.Correlation, true
+		}
+		if len(decoded.Payload) == 0 {
+			break
+		}
+		payload = string(decoded.Payload)
 	}
-	if err := json.Unmarshal([]byte(payload), &decoded); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(decoded.Correlation.BindingID)
+	return CorrelationMatch{}, false
 }
 
 func correlationStatus(event EventRecord) string {
+	if match, ok := recordedCorrelation(event.Payload); ok {
+		if match.Ambiguous {
+			return "ambiguous"
+		}
+		if match.ScopeOnly {
+			return "scope_only"
+		}
+	}
 	if event.CorrelationMethod == "" || event.CorrelationMethod == "unresolved" || event.CorrelationConfidence == 0 {
 		return "unresolved"
 	}
@@ -250,8 +276,12 @@ func matchedCorrelationKeys(method string) []string {
 	return keys
 }
 
-func correlationReason(event EventRecord, bindingID string) string {
+func correlationReason(event EventRecord) string {
 	switch correlationStatus(event) {
+	case "ambiguous":
+		return "overlapping bindings disagree; only their common execution scope is retained"
+	case "scope_only":
+		return "runtime identity matched an execution scope; no tool-call or application-process attribution was selected"
 	case "resolved":
 		return "runtime identity matched ToolCallScope binding"
 	case "provided":

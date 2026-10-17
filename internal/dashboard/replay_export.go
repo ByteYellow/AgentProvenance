@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
@@ -164,6 +165,10 @@ func (s Server) ExportReplay(ctx context.Context, run string, w *staticdata.Writ
 		}
 	}
 	for id := range nodes {
+		if strings.HasPrefix(id, "runtime_process/") {
+			result.EventRefs[id] = []string{}
+			continue
+		}
 		ids, err := s.resolveEventRefs(run, []string{id})
 		if err != nil {
 			return result, err
@@ -172,6 +177,29 @@ func (s Server) ExportReplay(ctx context.Context, run string, w *staticdata.Writ
 			sort.Strings(ids)
 			result.EventRefs[id] = ids
 		}
+	}
+	// Load process references in one pass; observation-local identities can be
+	// numerous, so resolving them one node at a time would add an N+1 query loop.
+	processRefs, err := s.DB.Query(`SELECT DISTINCT from_id, source_event_id FROM graph_edges
+		WHERE run_id=? AND edge_type='runtime_process_event' AND from_id LIKE 'runtime_process/%'
+		ORDER BY from_id, source_event_id`, run)
+	if err != nil {
+		return result, err
+	}
+	for processRefs.Next() {
+		var node, id string
+		if err := processRefs.Scan(&node, &id); err != nil {
+			processRefs.Close()
+			return result, err
+		}
+		if nodes[node] && id != "" {
+			result.EventRefs[node] = append(result.EventRefs[node], id)
+		}
+	}
+	err = processRefs.Err()
+	processRefs.Close()
+	if err != nil {
+		return result, err
 	}
 	service := agentcontext.Service{DB: s.DB}
 	contextData := replayContext{Entries: []agentcontext.Entry{}, Latest: []string{}, Nodes: map[string][]string{}, Links: map[string]agentcontext.EntryLinks{}, Content: map[string]ReplayPages{}, Comparisons: map[string]staticdata.Ref{}}

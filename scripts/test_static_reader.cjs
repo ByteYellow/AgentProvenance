@@ -14,10 +14,20 @@ async function main(){
  const unavailable={offsets:[0],pages:[save({content_state:'legacy_not_recorded',total_bytes:null,has_more:false,offset:0,next_offset:0})]};
  const context=save({entries:[],latest:[],nodes:{},links:{},content:{saved:parts},comparisons:{}});
  const artifacts=save({'en/body/file':parts,'en/body/unavailable':unavailable});
- const catalog={schema_version:'agentprovenance.static_replay/v1',runs:{run:{context,artifacts}},summaries:[]};
+ const oldNode='runtime_process/pid/42',firstNode='runtime_process/instance/boot:42:100',secondNode='runtime_process/instance/boot:42:200';
+ const events=save([{id:'first',pid:42},{id:'second',pid:42},{id:'last',pid:42},{id:'old',pid:42},{id:'new-parent-number',pid:99}]);
+ const catalog={schema_version:'agentprovenance.static_replay/v1',runs:{run:{context,artifacts,events,filters:{},event_refs:{[firstNode]:['first','last'],[secondNode]:['second'],[oldNode]:['old'],'runtime_process/pid/99':[]}},legacy:{events,filters:{},event_refs:{}}},summaries:[]};
  files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
  const setup=()=>{const box={window:{},document:{querySelector:()=>({content:'/site/'})},location:new URL('https://example.test/site/en/replay.html'),URL,URLSearchParams,Map,Set,TextEncoder,TextDecoder,structuredClone,Response,DecompressionStream,crypto:webcrypto,btoa,atob,fetch:async url=>{const body=files.get(new URL(url).pathname);return new Response(body||'missing',{status:body?200:404});}};vm.runInNewContext(source,box);return box.window.AgentProvReplay;};
  const reader=setup();
+ for(const [node,ids] of [[firstNode,['first','last']],[secondNode,['second']],[oldNode,['old']],['runtime_process/pid/99',[]],['runtime_process/instance/unknown',[]]]){
+  const result=await reader.query('/api/events?run=run&focus='+encodeURIComponent(node));
+  assert.deepEqual(Array.from(result.events,e=>e.id),ids);assert.equal(result.total,ids.length);
+ }
+ assert.equal((await reader.query('/api/events?run=run&focus='+encodeURIComponent(firstNode)+'&offset=1&limit=1')).events[0].id,'last');
+ const firstRefs=await reader.query('/api/events?run=run&ref='+encodeURIComponent(firstNode));
+ assert.deepEqual(Array.from(firstRefs.events,e=>e.id),['first','last']);
+ assert.equal((await reader.query('/api/events?run=legacy&focus='+encodeURIComponent(oldNode))).total,4);
  for(const offset of [0,17,65529,65533,65536,65539,65543,120000,bytes.length])for(const limit of [4,17,65536,262144]){
   const result=await reader.query('/api/context/content?run=run&ref=saved&offset='+offset+'&limit='+limit);
   let end=Math.min(offset+limit,bytes.length);while(end<bytes.length&&(bytes[end]&0xc0)===0x80)end--;
@@ -34,6 +44,6 @@ async function main(){
  files.set(path,gunzipSync(good));
  assert.equal((await setup().query('/api/context/content?run=run&ref=saved&limit=4')).content,'xxxx');
  files.set(path,good);
- console.log('Static reader: UTF-8 paging, unavailable content, invalid ranges, run scope and integrity checks passed.');
+ console.log('Static reader: UTF-8 paging, process lifetime focus, legacy replay, run scope and integrity checks passed.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

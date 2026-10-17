@@ -316,8 +316,10 @@ func TestIngestNativeSensorRiskEventsAndCorrelates(t *testing.T) {
 		if len(events) != 1 {
 			t.Fatalf("type %s events=%d, want 1", typ, len(events))
 		}
-		if events[0].ToolCallID != "tool-native" || events[0].ProcessID != "process-native" {
-			t.Fatalf("native %s event not correlated: %+v", typ, events[0])
+		// The container anchor is long-lived; its 26-year-old PID is not
+		// enough to identify this execution's tool call or application process.
+		if events[0].SessionID != "session-native" || events[0].ToolCallID != "" || events[0].ProcessID != "" {
+			t.Fatalf("native %s event should retain only scope attribution: %+v", typ, events[0])
 		}
 		if events[0].Source != "agentprov_ebpf" {
 			t.Fatalf("native source = %s, want agentprov_ebpf", events[0].Source)
@@ -504,7 +506,7 @@ func TestIngestJSONLReportsBadRows(t *testing.T) {
 	}
 }
 
-func TestNativeLLMIntentCausesSyscallEdge(t *testing.T) {
+func TestNativeRecentResponseDoesNotImplySyscallCausality(t *testing.T) {
 	root := t.TempDir()
 	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
@@ -523,7 +525,7 @@ func TestNativeLLMIntentCausesSyscallEdge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// An LLM response (tls_read) observed in the scope, then an exec it caused.
+	// A response and a later exec share a scope, with no evidence of causation.
 	path := filepath.Join(root, "llm.jsonl")
 	raw := "" +
 		`{"source":"agentprov_ebpf","pid":900,"container_id":"c-llm","event_type":"tls_read","data":"HTTP/1.1 200 OK\r\n\r\n{\"tool\":\"bash\",\"cmd\":\"id\"}","length":120}` + "\n" +
@@ -548,16 +550,12 @@ func TestNativeLLMIntentCausesSyscallEdge(t *testing.T) {
 		t.Fatalf("tls_read payload missing preview_sha256: %s", reads[0].Payload)
 	}
 
-	// The causal edge: llm response -> the exec it caused.
-	var from, to string
-	if err := db.QueryRow(`SELECT from_id, to_id FROM graph_edges WHERE edge_type = 'llm_intent_caused' AND run_id = 'run-llm'`).Scan(&from, &to); err != nil {
-		t.Fatalf("expected an llm_intent_caused edge: %v", err)
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM graph_edges WHERE edge_type='llm_intent_caused' AND run_id='run-llm'`).Scan(&count); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.HasPrefix(from, "runtime_event/") || !strings.HasPrefix(to, "runtime_event/") {
-		t.Fatalf("unexpected edge nodes from=%s to=%s", from, to)
-	}
-	if from == to {
-		t.Fatal("intent edge must link two distinct events")
+	if count != 0 {
+		t.Fatalf("unsupported causal edges=%d", count)
 	}
 }
 
@@ -589,7 +587,7 @@ func TestNativeFileReadClassification(t *testing.T) {
 	}
 }
 
-func TestNativeLLMCallPairsRequestAndResponse(t *testing.T) {
+func TestNativeLegacyTLSRetainsEvidenceWithoutGuessingPairs(t *testing.T) {
 	root := t.TempDir()
 	paths, err := store.Init(filepath.Join(root, ".agentprov"))
 	if err != nil {
@@ -656,20 +654,13 @@ func TestNativeLLMCallPairsRequestAndResponse(t *testing.T) {
 		t.Fatalf("a tls_read should be marked is_stream: %+v", reads)
 	}
 
-	// Exactly ONE derived llm_call edge despite the streamed multi-segment
-	// response (dedup: first segment wins).
+	// Raw SSE segments lack connection/stream identities. Preserve all segments;
+	// do not pick the first segment or most recent request as a complete exchange.
 	var count int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE edge_type = 'llm_call' AND run_id = 'run-call'`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
-	if count != 1 {
-		t.Fatalf("llm_call edges = %d, want exactly 1 (streaming response must not fan out)", count)
-	}
-	var from, to string
-	if err := db.QueryRow(`SELECT from_id, to_id FROM graph_edges WHERE edge_type = 'llm_call' AND run_id = 'run-call'`).Scan(&from, &to); err != nil {
-		t.Fatal(err)
-	}
-	if from == to || !strings.HasPrefix(from, "runtime_event/") || !strings.HasPrefix(to, "runtime_event/") {
-		t.Fatalf("llm_call edge should link two distinct events, got from=%s to=%s", from, to)
+	if count != 0 {
+		t.Fatalf("legacy TLS produced %d guessed pairs", count)
 	}
 }

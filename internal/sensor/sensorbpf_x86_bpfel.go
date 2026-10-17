@@ -45,6 +45,7 @@ type sensorbpfSensorEvent struct {
 	ProcessStartNs uint64
 	ParentStartNs  uint64
 	Conn           uint64
+	ConnEpoch      uint64
 	Daddr          uint32
 	Dport          uint16
 	_              [2]byte
@@ -55,15 +56,24 @@ type sensorbpfSensorEvent struct {
 	_              [4]byte
 }
 
-type sensorbpfSslReadCtx struct {
-	Buf uint64
-	Ssl uint64
+type sensorbpfSslConnKey struct {
+	Start    uint64
+	Conn     uint64
+	Pid      uint32
+	Reserved uint32
 }
 
-type sensorbpfSslReadExCtx struct {
-	Buf       uint64
-	Ssl       uint64
-	Readbytes uint64
+type sensorbpfSslReadStack struct {
+	TaskStart uint64
+	Depth     uint32
+	Reserved  uint32
+	Frames    [4]struct {
+		Buf       uint64
+		Ssl       uint64
+		Capacity  uint64
+		Readbytes uint64
+		Epoch     uint64
+	}
 }
 
 // loadSensorbpf returns the embedded CollectionSpec for sensorbpf.
@@ -125,10 +135,13 @@ type sensorbpfProgramSpecs struct {
 	HandleSendto          *ebpf.ProgramSpec `ebpf:"handle_sendto"`
 	HandleSetgid          *ebpf.ProgramSpec `ebpf:"handle_setgid"`
 	HandleSetuid          *ebpf.ProgramSpec `ebpf:"handle_setuid"`
+	HandleSslNew          *ebpf.ProgramSpec `ebpf:"handle_ssl_new"`
 	HandleSslReadEnter    *ebpf.ProgramSpec `ebpf:"handle_ssl_read_enter"`
 	HandleSslReadExEnter  *ebpf.ProgramSpec `ebpf:"handle_ssl_read_ex_enter"`
 	HandleSslReadExExit   *ebpf.ProgramSpec `ebpf:"handle_ssl_read_ex_exit"`
 	HandleSslReadExit     *ebpf.ProgramSpec `ebpf:"handle_ssl_read_exit"`
+	HandleSslRelease      *ebpf.ProgramSpec `ebpf:"handle_ssl_release"`
+	HandleSslReset        *ebpf.ProgramSpec `ebpf:"handle_ssl_reset"`
 	HandleSslWrite        *ebpf.ProgramSpec `ebpf:"handle_ssl_write"`
 	HandleSslWriteEx      *ebpf.ProgramSpec `ebpf:"handle_ssl_write_ex"`
 	HandleUnlink          *ebpf.ProgramSpec `ebpf:"handle_unlink"`
@@ -147,6 +160,7 @@ type sensorbpfMapSpecs struct {
 	Events            *ebpf.MapSpec `ebpf:"events"`
 	GoReadBufs        *ebpf.MapSpec `ebpf:"go_read_bufs"`
 	OpenRetries       *ebpf.MapSpec `ebpf:"open_retries"`
+	SslEpochs         *ebpf.MapSpec `ebpf:"ssl_epochs"`
 	SslReadBufs       *ebpf.MapSpec `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.MapSpec `ebpf:"ssl_read_ex_bufs"`
 }
@@ -178,6 +192,7 @@ type sensorbpfMaps struct {
 	Events            *ebpf.Map `ebpf:"events"`
 	GoReadBufs        *ebpf.Map `ebpf:"go_read_bufs"`
 	OpenRetries       *ebpf.Map `ebpf:"open_retries"`
+	SslEpochs         *ebpf.Map `ebpf:"ssl_epochs"`
 	SslReadBufs       *ebpf.Map `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.Map `ebpf:"ssl_read_ex_bufs"`
 }
@@ -192,6 +207,7 @@ func (m *sensorbpfMaps) Close() error {
 		m.Events,
 		m.GoReadBufs,
 		m.OpenRetries,
+		m.SslEpochs,
 		m.SslReadBufs,
 		m.SslReadExBufs,
 	)
@@ -219,10 +235,13 @@ type sensorbpfPrograms struct {
 	HandleSendto          *ebpf.Program `ebpf:"handle_sendto"`
 	HandleSetgid          *ebpf.Program `ebpf:"handle_setgid"`
 	HandleSetuid          *ebpf.Program `ebpf:"handle_setuid"`
+	HandleSslNew          *ebpf.Program `ebpf:"handle_ssl_new"`
 	HandleSslReadEnter    *ebpf.Program `ebpf:"handle_ssl_read_enter"`
 	HandleSslReadExEnter  *ebpf.Program `ebpf:"handle_ssl_read_ex_enter"`
 	HandleSslReadExExit   *ebpf.Program `ebpf:"handle_ssl_read_ex_exit"`
 	HandleSslReadExit     *ebpf.Program `ebpf:"handle_ssl_read_exit"`
+	HandleSslRelease      *ebpf.Program `ebpf:"handle_ssl_release"`
+	HandleSslReset        *ebpf.Program `ebpf:"handle_ssl_reset"`
 	HandleSslWrite        *ebpf.Program `ebpf:"handle_ssl_write"`
 	HandleSslWriteEx      *ebpf.Program `ebpf:"handle_ssl_write_ex"`
 	HandleUnlink          *ebpf.Program `ebpf:"handle_unlink"`
@@ -249,10 +268,13 @@ func (p *sensorbpfPrograms) Close() error {
 		p.HandleSendto,
 		p.HandleSetgid,
 		p.HandleSetuid,
+		p.HandleSslNew,
 		p.HandleSslReadEnter,
 		p.HandleSslReadExEnter,
 		p.HandleSslReadExExit,
 		p.HandleSslReadExit,
+		p.HandleSslRelease,
+		p.HandleSslReset,
 		p.HandleSslWrite,
 		p.HandleSslWriteEx,
 		p.HandleUnlink,

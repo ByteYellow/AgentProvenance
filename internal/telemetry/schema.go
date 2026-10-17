@@ -118,7 +118,7 @@ type EventExplanation struct {
 	SchemaError           string   `json:"schema_error,omitempty"`
 	IdentityKeys          []string `json:"identity_keys,omitempty"`
 	CorrelationMethod     string   `json:"correlation_method,omitempty"`
-	CorrelationConfidence float64  `json:"correlation_confidence,omitempty"`
+	CorrelationConfidence float64  `json:"correlation_confidence"`
 	CorrelationClass      string   `json:"correlation_class,omitempty"`
 	CorrelationStatus     string   `json:"correlation_status"`
 }

@@ -29,7 +29,7 @@ func TestStoredAppProcessEdgesExposeInferenceWithoutRewritingLegacy(t *testing.T
 			if edge.Derived || edge.DerivationRule != "" {
 				t.Fatal("legacy signed relation was reinterpreted")
 			}
-		} else if !edge.Derived || edge.DerivationRule != correlation.AppProcessMethod || edge.Confidence != correlation.AppProcessConfidence || len(edge.EvidenceRefs) != 3 {
+		} else if !edge.Derived || edge.DerivationRule != correlation.AppProcessMethod || edge.Confidence == nil || *edge.Confidence != correlation.AppProcessConfidence || len(edge.EvidenceRefs) != 3 {
 			t.Fatalf("inference metadata missing: %+v", edge)
 		}
 	}
@@ -70,7 +70,7 @@ func TestGraphLensDataFlowDerivesSecretToNetworkEdge(t *testing.T) {
 	if edge.FromID != "runtime_process/pid/4242" || edge.ToID == "" {
 		t.Fatalf("derived edge path=%s -> %s", edge.FromID, edge.ToID)
 	}
-	if edge.DerivationRule != "dataflow.same_process.secret_to_network.aggregate.v1" || edge.Confidence < 0.8 {
+	if edge.DerivationRule != "dataflow.same_process.secret_to_network.aggregate.v1" || edge.Confidence == nil || *edge.Confidence < 0.8 {
 		t.Fatalf("derived metadata not strong enough: %+v", edge)
 	}
 	if got := intFromEdgeData(edge, "source_count"); got != 1 {

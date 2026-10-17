@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"net"
@@ -594,12 +595,20 @@ type verifyCacheEntry struct {
 }
 
 func (s Server) cachedVerify(run string) any {
+	unavailable := func(err error) any {
+		return provenance.VerifyResult{SchemaVersion: "agentprovenance.verify/v1", RunID: run, Status: "unavailable", Error: err.Error()}
+	}
 	var objs, evs int
-	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id = ?`, run).Scan(&objs)
-	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id = ?`, run).Scan(&evs)
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id = ?`, run).Scan(&objs); err != nil {
+		return unavailable(err)
+	}
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id = ?`, run).Scan(&evs); err != nil {
+		return unavailable(err)
+	}
+	key := fmt.Sprintf("%p:%s", s.DB, run)
 	fp := fmt.Sprintf("%d:%d", objs, evs)
 	verifyCacheMu.Lock()
-	if e, ok := verifyCache[run]; ok && e.fingerprint == fp {
+	if e, ok := verifyCache[key]; ok && e.fingerprint == fp {
 		verifyCacheMu.Unlock()
 		return e.result
 	}
@@ -610,30 +619,33 @@ func (s Server) cachedVerify(run string) any {
 	// action for large imported bundles. When a ready forensics bundle exists,
 	// import already verified its embedded object content before committing rows;
 	// surface that fast provenance posture here and keep the page responsive.
-	if bundle := s.cachedBundleVerify(run, objs); bundle != nil {
+	if bundle, err := s.cachedBundleVerify(run, objs); err != nil {
+		return unavailable(err)
+	} else if bundle != nil {
 		verifyCacheMu.Lock()
-		verifyCache[run] = verifyCacheEntry{fingerprint: fp, result: bundle}
+		verifyCache[key] = verifyCacheEntry{fingerprint: fp, result: bundle}
 		verifyCacheMu.Unlock()
 		return bundle
 	}
 
-	var result any
-	if v, err := provenance.Verify(s.DB, run); err == nil {
-		result = v
-	} else {
-		result = map[string]any{"error": err.Error()}
+	result, err := provenance.Verify(s.DB, run)
+	if err != nil {
+		return result
 	}
 	verifyCacheMu.Lock()
-	verifyCache[run] = verifyCacheEntry{fingerprint: fp, result: result}
+	verifyCache[key] = verifyCacheEntry{fingerprint: fp, result: result}
 	verifyCacheMu.Unlock()
 	return result
 }
 
-func (s Server) cachedBundleVerify(run string, objectCount int) any {
+func (s Server) cachedBundleVerify(run string, objectCount int) (any, error) {
 	var bundleID, sha, status string
 	var size int64
 	err := s.DB.QueryRow(`SELECT id, sha256, size_bytes, status FROM forensics_bundles
 		WHERE run_id = ? ORDER BY created_at DESC LIMIT 1`, run).Scan(&bundleID, &sha, &size, &status)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
 	if err == nil && status == "ready" && sha != "" {
 		return map[string]any{
 			"status":        "ok",
@@ -643,7 +655,7 @@ func (s Server) cachedBundleVerify(run string, objectCount int) any {
 			"bundle_id":     bundleID,
 			"bundle_sha256": sha,
 			"bundle_bytes":  size,
-		}
+		}, nil
 	}
 	if objectCount > 5000 {
 		return map[string]any{
@@ -652,9 +664,9 @@ func (s Server) cachedBundleVerify(run string, objectCount int) any {
 			"warning_count": 1,
 			"mode":          "deferred_full_verify",
 			"message":       "full graph verification is available through `agentprov graph verify`",
-		}
+		}, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func (s Server) overview(w http.ResponseWriter, r *http.Request) {
@@ -756,8 +768,8 @@ func (s Server) eventQueryFromRequest(run string, r *http.Request) (eventQuery, 
 		switch {
 		case strings.HasPrefix(focus, "runtime_event/"):
 			q.IDs = []string{strings.TrimPrefix(focus, "runtime_event/")}
-		case strings.HasPrefix(focus, "runtime_process/pid/"):
-			q.PID = strings.TrimPrefix(focus, "runtime_process/pid/")
+		case strings.HasPrefix(focus, "runtime_process/"):
+			q.RuntimeProcessNode = focus
 		case strings.HasPrefix(focus, "process/"):
 			q.ProcessID = focus
 		case !strings.Contains(focus, "/"):
@@ -769,15 +781,16 @@ func (s Server) eventQueryFromRequest(run string, r *http.Request) (eventQuery, 
 }
 
 type eventQuery struct {
-	None       bool
-	IDs        []string
-	Types      []string
-	Type       string
-	ToolCallID string
-	ProcessID  string
-	PID        string
-	PayloadAny []string
-	PayloadNot []string
+	None               bool
+	IDs                []string
+	Types              []string
+	Type               string
+	ToolCallID         string
+	ProcessID          string
+	RuntimeProcessNode string
+	PID                string
+	PayloadAny         []string
+	PayloadNot         []string
 }
 
 func applyLensGroupFilter(q *eventQuery, lens, group string) {
@@ -850,6 +863,25 @@ func (s Server) resolveEventRefs(run string, refs []string) ([]string, error) {
 		switch {
 		case strings.HasPrefix(ref, "runtime_event/"):
 			add(strings.TrimPrefix(ref, "runtime_event/"))
+		case strings.HasPrefix(ref, "runtime_process/"):
+			rows, err := s.DB.Query(`SELECT DISTINCT source_event_id FROM graph_edges
+				WHERE run_id=? AND from_id=? AND edge_type='runtime_process_event'`, run, ref)
+			if err != nil {
+				return nil, err
+			}
+			for rows.Next() {
+				var id string
+				if err := rows.Scan(&id); err != nil {
+					rows.Close()
+					return nil, err
+				}
+				add(id)
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return nil, err
+			}
 		case strings.HasPrefix(ref, "policy_decision/"):
 			id := strings.TrimPrefix(ref, "policy_decision/")
 			var eventID string
@@ -964,6 +996,10 @@ func eventWhereClause(run string, q eventQuery) (string, []any) {
 	if q.PID != "" {
 		clauses = append(clauses, "pid = ?")
 		args = append(args, q.PID)
+	}
+	if q.RuntimeProcessNode != "" {
+		clauses = append(clauses, `id IN (SELECT source_event_id FROM graph_edges WHERE run_id=? AND from_id=? AND edge_type='runtime_process_event')`)
+		args = append(args, run, q.RuntimeProcessNode)
 	}
 	if len(q.PayloadAny) > 0 {
 		ors := make([]string, 0, len(q.PayloadAny))

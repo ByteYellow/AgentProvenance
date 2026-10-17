@@ -44,6 +44,7 @@ jobs:
           node-version: "22"
       - run: node scripts/test_context_readable.mjs
       - run: node scripts/test_context_coverage.mjs
+      - run: node scripts/test_evidence_status.cjs
 
   test:
     name: Go tests
@@ -203,11 +204,19 @@ jobs:
           cd internal/sensor
           sudo env PATH="$PATH" AGENTPROV_LIVE_GOTLS=1 \
             /tmp/agentprov-live/sensor-test -test.run '^TestLiveGoTLSReadConcurrentStackGrowth$' -test.v
+      - name: Verify OpenSSL read pairing and connection lifecycle isolation
+        run: |
+          cd internal/sensor
+          sudo env PATH="$PATH" AGENTPROV_LIVE_OPENSSL=1 \
+            /tmp/agentprov-live/sensor-test -test.run '^Test(OpenSSLReadObject|TLSMessageMap|LiveOpenSSL)' -test.v -test.timeout=120s \
+            | tee /tmp/agentprov-live/openssl-read.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: amd64-live-evidence-go-${{ matrix.go }}
-          path: /tmp/agentprov-live/acceptance.*
+          path: |
+            /tmp/agentprov-live/acceptance.*
+            /tmp/agentprov-live/openssl-read.log
 
   phase1-acceptance:
     name: Phase 1 observability smoke

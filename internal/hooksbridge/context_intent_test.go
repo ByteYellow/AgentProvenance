@@ -87,3 +87,29 @@ func TestContextIntentFailedReplacementPreservesPriorProjection(t *testing.T) {
 		t.Fatal("projection removed source records")
 	}
 }
+
+func TestContextIntentLinksNamespacedToolIdentity(t *testing.T) {
+	db, paths := openTestStore(t)
+	ctx := context.Background()
+	saveContext(t, db, paths, "run", "claude", `{"type":"assistant","uuid":"answer","sessionId":"s","timestamp":"2026-10-17T00:00:01Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"native-call","name":"Bash","input":{"command":"cat /work/config"}}]}}
+{"type":"user","uuid":"result","sessionId":"s","timestamp":"2026-10-17T00:00:03Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"native-call","content":"configured"}]}}
+`)
+	if _, err := IngestContext(ctx, db, paths, "run"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO events (id,run_id,source,event_type,pid,cgroup_id,payload,created_at)
+		VALUES ('exec','run','agentprov_ebpf','execve',100,'cg-a',
+		'{"argv":["cat","/work/config"],"command":"cat /work/config"}','2026-10-17T00:00:02Z')`); err != nil {
+		t.Fatal(err)
+	}
+	r, err := CorrelateSyscallsWithReport(db, "run")
+	if err != nil || r.MatchedExecs != 1 {
+		t.Fatalf("app-to-runtime=%+v, %v", r, err)
+	}
+	if n, err := HarvestContextIntent(ctx, db, paths, "run"); err != nil || n != 1 {
+		t.Fatalf("harvest=%d, %v", n, err)
+	}
+	if count := queryCount(t, db, `SELECT count(*) FROM graph_edges WHERE run_id='run' AND edge_type='llm_caused' AND to_id='runtime_event/exec'`); count != 1 {
+		t.Fatalf("namespaced intent association=%d, want 1", count)
+	}
+}

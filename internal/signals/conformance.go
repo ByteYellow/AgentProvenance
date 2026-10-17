@@ -20,8 +20,8 @@ func ValidateSignal(s Signal) error {
 	if strings.TrimSpace(s.Type) == "" {
 		return fmt.Errorf("signals: empty signal type")
 	}
-	if s.Confidence < 0 || s.Confidence > 1 {
-		return fmt.Errorf("signals: confidence %g out of range [0,1] (type %q)", s.Confidence, s.Type)
+	if err := validateConfidence(s.Confidence); err != nil {
+		return fmt.Errorf("%w (type %q)", err, s.Type)
 	}
 	if s.GraphRefKind == "" || s.GraphRefID == "" {
 		return fmt.Errorf("signals: signal %q missing graph_ref (kind=%q id=%q)", s.Type, s.GraphRefKind, s.GraphRefID)
@@ -76,10 +76,22 @@ func ValidateSet(set SignalSet) error {
 // conforms to agentprovenance.signals/v1 before trusting it.
 func ValidateWireBytes(data []byte) (SignalSet, error) {
 	var set SignalSet
+	input := struct {
+		*SignalSet
+		Signals []json.RawMessage `json:"signals"`
+	}{SignalSet: &set}
 	dec := json.NewDecoder(strings.NewReader(string(data)))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&set); err != nil {
+	if err := dec.Decode(&input); err != nil {
 		return SignalSet{}, fmt.Errorf("signals: decode wire bytes: %w", err)
+	}
+	if input.Signals != nil {
+		set.Signals = make([]Signal, len(input.Signals))
+	}
+	for i, raw := range input.Signals {
+		if err := set.Signals[i].decodeJSON(raw, true); err != nil {
+			return SignalSet{}, fmt.Errorf("signals: decode signal[%d]: %w", i, err)
+		}
 	}
 	if err := ValidateSet(set); err != nil {
 		return SignalSet{}, err

@@ -13,6 +13,7 @@
   .badge{display:flex;align-items:center;gap:8px;padding:8px 15px;border-radius:11px;font-weight:600;font-size:13px}
   .badge.ok{background:rgba(52,199,89,.12);color:#1d8c3e;border:1px solid rgba(52,199,89,.3)}
   .badge.bad{background:rgba(255,59,48,.1);color:#d70015;border:1px solid rgba(255,59,48,.3)}
+  .badge.warn{background:rgba(255,159,10,.12);color:#a65a00;border:1px solid rgba(255,159,10,.3)}
   .badge .sig{font-size:11px;color:var(--mut);font-weight:500}
   main{padding:22px 26px;display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:18px;overflow:hidden;box-shadow:var(--shadow)}
@@ -625,7 +626,7 @@ function adaptLens(m){
     id:n.id, label:n.label||n.id, kind:n.kind, subtype:n.subtype||'',
     risk:n.risk||'', trust_origin:n.trust_origin||'', data:n.data||{}}));
   const norm=(e,derived)=>({from:e.from_id, to:e.to_id, type:e.edge_type, t:e.created_at||'',
-    derived:!!derived, confidence:e.confidence||0, rule:e.derivation_rule||'', evidence:e.evidence_refs||[]});
+    derived:!!derived, confidence:e.confidence??null, rule:e.derivation_rule||'', evidence:e.evidence_refs||[]});
   const edges=(m.edges||[]).map(e=>norm(e,false)).concat((m.derived_edges||[]).map(e=>norm(e,true)));
   // Per-node appearance time for the time-scrubber: prefer the node's own event
   // time (real telemetry clock), else the earliest edge that touches it. This is
@@ -767,7 +768,7 @@ function renderDAG(g,sel){
     if(!edgeVisible(e))return;
     if(!e.derived && !hl(i))return;
     const y1=a.y+a.h/2,y2=b.y+b.h/2,lx=(a.x+a.w+b.x)/2,ly=(y1+y2)/2;
-    let lbl=EDGE_LABEL[e.type]||tr(e.type); if(e.derived)lbl+=` · ${(+e.confidence).toFixed(2)}`;
+    let lbl=EDGE_LABEL[e.type]||tr(e.type); if(e.derived)lbl+=` · ${confidenceText(e.confidence)}`;
     // Width estimate is generous (6.8px/char + padding) so the white pill always
     // fully contains the label — bold text and arrow glyphs run wider than 6px/char.
     const col=e.derived?'#ff375f':'#0071e3', w=graphTextWidth(lbl,10)+16;
@@ -982,7 +983,7 @@ function showDetail(id,explicit=false){
   // Side-panel evidence row: a derived edge into/out of this node carries its
   // rule + confidence + the source/sink it was inferred from (replay refs).
   const dv=(window._lg.edges||[]).find(e=>e.derived&&(e.from===id||e.to===id));
-  if(dv){ rows+=`<dt>${esc(tr("derived rule"))}</dt><dd>${esc(dv.rule)} (${(+dv.confidence).toFixed(2)})</dd>`;
+  if(dv){ rows+=`<dt>${esc(tr("derived rule"))}</dt><dd>${esc(dv.rule)} (${esc(confidenceText(dv.confidence))})</dd>`;
     rows+=`<dt>${esc(tr("inferred from"))}</dt><dd>${esc((dv.evidence||[]).join('\n'))}</dd>`; }
   rows+=`<dt>${esc(tr("node id"))}</dt><dd>${esc(n.id)}</dd>`;
   const badges=`<span class="k">${esc(tr(n.kind))}</span>`+
@@ -1025,7 +1026,8 @@ async function loadPreview(run, id,explicit=false){
 
 function renderVerify(v){
   const el=$('#verify');
-  if(!v||v.error){el.className='badge bad';el.innerHTML=esc(tr('✗ verify error'))+' <span class="sig">'+esc((v&&v.error)||'')+'</span>';return;}
+  el.title='';
+  if(!v||v.error||v.status==='unavailable'){el.className='badge warn';el.innerHTML=esc(tr('Verification unavailable'))+' <span class="sig">'+esc((v&&v.error)||'')+'</span>';return;}
   const counts=tx('{errors} errors · {warnings} warnings', {errors:v.error_count||0, warnings:v.warning_count||0});
   if(v.status==='deferred'){
     el.className='badge ok';
@@ -1181,16 +1183,16 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','
 // Correlation confidence tier -> colour band. Keeps a 0.5 ai_asserted join from
 // reading like a 0.98 kernel match.
 function confClass(c){ c=+c; return c>=0.9?'hi':(c>=0.7?'mid':'lo'); }
-function confCell(c){ if(c==null||c==='')return''; return `<span class="conf ${confClass(c)}">${(+c).toFixed(2)}</span>`; }
+function confidenceText(c){ return typeof c==='number'&&Number.isFinite(c)?c.toFixed(2):tr('unknown'); }
+function confCell(c){ return `<span class="conf ${confClass(c)}">${esc(confidenceText(c))}</span>`; }
 // Evidence source (which producer emitted the event) + scope source (how it was
 // tied to a run: record = kernel-verified, k8s_cgroup = passive pod attribution,
 // ai_asserted = app-claimed). The scope tag is coloured by its tier so a weak
 // join never reads like a strong one.
-function scopeConf(s){ return s==='ai_asserted'?0.5:(s==='k8s_cgroup'?0.8:1); }
 function srcCell(e){
   const ev=e.source||'', sc=e.binding_source||'';
   let h=ev?`<span class="src" title="${esc(tr("evidence source"))}">${esc(tr(ev))}</span>`:'';
-  if(sc)h+=`<span class="scope ${confClass(scopeConf(sc))}" title="${esc(tr("scope source — how this event tied to a run"))}">${esc(tr(sc))}</span>`;
+  if(sc)h+=`<span class="scope ${confClass(e.correlation_confidence)}" title="${esc(tr("scope source — how this event tied to a run"))}">${esc(tr(sc))}</span>`;
   return h;
 }
 // self-launched is orthogonal to correlation class: a kernel_correlated event

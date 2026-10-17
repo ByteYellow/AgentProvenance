@@ -1,5 +1,7 @@
 package provenance
 
+import "github.com/byteyellow/agentprovenance/internal/telemetry"
+
 const graphLensSchemaVersion = "agentprovenance.graph_lens/v1"
 
 var availableGraphLenses = []string{
@@ -74,10 +76,12 @@ type GraphLensEdge struct {
 	CreatedAt      string         `json:"created_at,omitempty"`
 	Derived        bool           `json:"derived"`
 	DerivationRule string         `json:"derivation_rule,omitempty"`
-	Confidence     float64        `json:"confidence,omitempty"`
+	Confidence     *float64       `json:"confidence,omitempty"`
 	EvidenceRefs   []string       `json:"evidence_refs,omitempty"`
 	Data           map[string]any `json:"data,omitempty"`
 }
+
+func graphConfidence(value float64) *float64 { return &value }
 
 type GraphLensOverlay struct {
 	TargetID string         `json:"target_id"`
@@ -88,6 +92,7 @@ type GraphLensOverlay struct {
 }
 
 type lensEvent struct {
+	processIdentity       *telemetry.RuntimeProcessIdentity
 	ID                    string
 	NodeID                string
 	Type                  string

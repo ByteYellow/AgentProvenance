@@ -1,0 +1,32 @@
+// Exercise the shipped Dashboard helpers without a server or browser dependency.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const html = fs.readFileSync('internal/dashboard/index.html', 'utf8');
+const section = (start, end) => {
+  const first = html.indexOf(start), last = html.indexOf(end, first);
+  assert(first >= 0 && last > first, `missing Dashboard helpers: ${start}`);
+  return html.slice(first, last);
+};
+const badge = {className: '', innerHTML: '', title: 'old'};
+const box = {$: () => badge, tr: s => s, tx: (s, v) => s.replace(/\{(\w+)\}/g, (_, k) => v[k])};
+vm.createContext(box);
+vm.runInContext(section('function esc(s)', 'function srcCell(e)'), box);
+vm.runInContext(section('function renderVerify(v)', 'function renderSignals(sig)'), box);
+assert.equal(box.confidenceText(0), '0.00');
+assert.equal(box.confidenceText(0.8), '0.80');
+for (const value of [undefined, null, '', '0', NaN]) assert.equal(box.confidenceText(value), 'unknown');
+assert.match(box.confCell(0), /lo.*0\.00/);
+assert.match(box.confCell(null), /unknown/);
+box.renderVerify({status: 'unavailable', error: '<db failure>'});
+assert.equal(badge.className, 'badge warn');
+assert.match(badge.innerHTML, /Verification unavailable/);
+assert.match(badge.innerHTML, /&lt;db failure&gt;/);
+assert.equal(badge.title, '');
+box.renderVerify({status: 'failed', error_count: 1});
+assert.equal(badge.className, 'badge bad');
+assert.match(badge.innerHTML, /FAILED/);
+box.renderVerify({status: 'ok', error_count: 0});
+assert.equal(badge.className, 'badge ok');
+assert.match(badge.innerHTML, /VERIFIED/);
+console.log('Evidence status: explicit zero, unknown confidence and unavailable verification passed.');

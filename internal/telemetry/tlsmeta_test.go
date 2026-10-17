@@ -53,15 +53,12 @@ func TestTLSMetaHTTP2PrefaceLabeledNotDecoded(t *testing.T) {
 	}
 }
 
-func TestTLSMetaBinaryFramesAreH2NotMisparsed(t *testing.T) {
+func TestTLSMetaOpaqueBinaryDoesNotIdentifyProtocol(t *testing.T) {
 	// h2 HEADERS frame-ish bytes: length(3) type(1) flags(1) streamid(4) + HPACK.
 	data := "\x00\x00\x1f\x01\x05\x00\x00\x00\x01\x82\x86\x84\x41\x8a\xaa\xbb\xcc\xdd\xee\xff\x00\x11\x22\x33"
 	m := tlsMeta(data, "request")
-	if m["protocol"] != "h2" || m["headers_decoded"] != false {
-		t.Fatalf("binary frames should be labeled h2/undecoded, got %+v", m)
-	}
-	if _, ok := m["method"]; ok {
-		t.Fatal("must not invent a method from undecoded h2 bytes")
+	if m != nil {
+		t.Fatalf("isolated binary content should stay unclassified, got %+v", m)
 	}
 }
 

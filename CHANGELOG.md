@@ -2,6 +2,66 @@
 
 English | [中文](CHANGELOG.zh-CN.md)
 
+## Unreleased
+
+### Fixed
+
+- Preserve explicit zero confidence in scope bindings, process-lifetime
+  inheritance and unified signals. Omitted inputs retain source defaults;
+  invalid numeric values are rejected. Graph views distinguish unknown
+  confidence from zero, including read-only replay and signed bundle roundtrips.
+- Propagate verification database failures instead of reporting missing evidence.
+  CLI JSON and the daemon API expose `status: unavailable` with the failure
+  reason; the API returns HTTP 503. Dashboard verification errors are shown
+  separately and are not cached, and cached results are isolated by database.
+- Separate cgroup/container scope attribution from tool-call and application-
+  process attribution. Process matches use captured time and compatible scope
+  keys; parent PIDs no longer borrow a child binding's tool identity.
+- Preserve common context and bounded candidate diagnostics for overlapping
+  bindings instead of choosing the most recently started call. Correlation
+  reports retain the recorded ambiguity after subsequent binding changes.
+- Prevent ambiguous scope matches from seeding native process-lifetime anchors.
+  Historical events and signed bundles retain their recorded metadata.
+- Match model decisions to subsequent exec records using complete argument
+  boundaries, a two-minute window and compatible capture scope. Conflicting
+  decisions or executions stay unlinked; truncated commands and process samples
+  no longer supply command-execution anchors.
+- Link transcript decisions through recorded tool-use IDs and current direct
+  tool-to-exec associations. Preserve source timestamps and identities, and
+  expose new model-execution links as versioned inferences with evidence refs.
+- Replace TLS/transcript analysis atomically so read or write failures preserve
+  the last stored graph. Endpoint imports retain upload and policy evidence
+  without attributing uploads to the nearest chat call.
+- Preserve native process lifetimes in new runtime graph nodes, parent/thread
+  references, labels and inferred data flows. Reused PIDs and different kernel
+  boots remain separate; records without a usable lifetime use event-local
+  process observations. Existing signed graphs keep their original identifiers.
+- Keep process-focused event queries, pagination and static replay tied to graph
+  identities. Verification checks new process edges against their source events;
+  signed export/import preserves the same identities and relationships.
+- Preserve parsed HTTP/1.x and HTTP/2 metadata from TLS capture through ingestion
+  and signed export/import, including HTTP/2 stream IDs. Reassembled bodies are
+  no longer reinterpreted as HTTP headers. Endpoint metadata omits URL credentials,
+  query strings and fragments; arbitrary headers remain outside the allow-list.
+- Pair OpenSSL read entry/return probes by thread and task lifetime instead of
+  process ID. Bounded per-thread stacks preserve nested calls, validate returned
+  lengths and clear abandoned contexts on thread exit or successful exec. Stack overflow and invalid
+  output pointers contribute to capture-loss diagnostics. Regenerate both sensor
+  architectures and add live nesting, cleanup and 32-thread byte-for-byte tests.
+- Isolate OpenSSL HTTP/HPACK state by process lifetime and kernel-stamped capture
+  generation. Object reuse, clear/rebind and delayed reads cannot inherit a prior
+  generation's buffers or dynamic header table. Retain optional connection IDs
+  through ingestion and signed bundles, and report discarded partial state.
+  Remove implicit response completion on the next request; preserve same-
+  generation HTTP/2 multiplexing and keepalive. Add real OpenSSL lifecycle tests.
+- Replace nearest-request TLS associations with versioned connection/stream
+  pairing. HTTP/1 serial inference rejects overlapping, truncated or ambiguous
+  sequences and recorded capture gaps; HTTP/2 multiplexing uses stream identity.
+  Preserve unknown/ambiguous assessments alongside optional message bodies.
+- Stop generating temporal response-to-syscall causal edges during ingestion.
+  TLS reanalysis withdraws invalidated pairs atomically, preserves transcript
+  and endpoint objects, and carries pairing diagnostics through signed replay.
+
 ## v0.9.0 - 2026-10-09
 
 Recorded agent sessions, configuration history, and portable full-text evidence.

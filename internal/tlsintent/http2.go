@@ -272,6 +272,7 @@ func (p *h2Parser) maybeEmit(streamID uint32, pid uint32, conn uint64) (Message,
 		Conn:      conn,
 		Direction: p.direction,
 		Protocol:  ProtoH2,
+		StreamID:  streamID,
 		Headers:   map[string]string{},
 		Body:      append([]byte(nil), st.body.Bytes()...),
 	}

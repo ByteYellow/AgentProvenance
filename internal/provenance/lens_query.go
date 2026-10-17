@@ -132,8 +132,12 @@ func PrintGraphLensManifest(out io.Writer, manifest GraphLensManifest, languages
 		fmt.Fprintf(out, i18n.T(lang, "  summary=%s\n"), line)
 	}
 	for _, edge := range manifest.DerivedEdges {
-		fmt.Fprintf(out, i18n.T(lang, "  derived_edge=%s %s -> %s confidence=%.2f rule=%s evidence=%s\n"),
-			edge.EdgeType, edge.FromID, edge.ToID, edge.Confidence, edge.DerivationRule, strings.Join(edge.EvidenceRefs, ","))
+		confidence := i18n.T(lang, "unknown")
+		if edge.Confidence != nil {
+			confidence = fmt.Sprintf("%.2f", *edge.Confidence)
+		}
+		fmt.Fprintf(out, i18n.T(lang, "  derived_edge=%s %s -> %s confidence=%s rule=%s evidence=%s\n"),
+			edge.EdgeType, edge.FromID, edge.ToID, confidence, edge.DerivationRule, strings.Join(edge.EvidenceRefs, ","))
 	}
 	for _, edge := range manifest.Edges {
 		fmt.Fprintf(out, i18n.T(lang, "  edge=%s %s -> %s source_event=%s\n"), edge.EdgeType, edge.FromID, edge.ToID, edge.SourceEventID)

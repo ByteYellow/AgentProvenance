@@ -382,6 +382,10 @@ func telemetryBindCmd(dataDir *string) *cobra.Command {
 			}
 			defer db.Close()
 			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), commandLanguage(cmd))
+			binding.ConfidenceSet = cmd.Flags().Changed("confidence")
+			if !binding.ConfidenceSet {
+				binding.Confidence = correlation.DefaultBindingConfidence(binding.BindingSource)
+			}
 			id, err := correlation.RecordBinding(db, binding)
 			if err != nil {
 				return err

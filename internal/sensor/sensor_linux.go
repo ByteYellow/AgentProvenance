@@ -5,6 +5,7 @@ package sensor
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -33,18 +34,20 @@ import (
 )
 
 const (
-	eventExec    = 1
-	eventConnect = 2
-	eventOpen    = 3
-	eventExit    = 4
-	eventSSL     = 5
-	eventSSLRead = 6
-	eventSetuid  = 7
-	eventPtrace  = 8
-	eventRename  = 9
-	eventUnlink  = 10
-	eventDNS     = 11
-	eventFork    = 12
+	eventExec       = 1
+	eventConnect    = 2
+	eventOpen       = 3
+	eventExit       = 4
+	eventSSL        = 5
+	eventSSLRead    = 6
+	eventSetuid     = 7
+	eventPtrace     = 8
+	eventRename     = 9
+	eventUnlink     = 10
+	eventDNS        = 11
+	eventFork       = 12
+	eventSSLReset   = 13
+	eventSSLRelease = 14
 )
 
 type sensorTracepoint struct {
@@ -229,7 +232,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		}
 		emit(map[string]any{
 			"source": "agentprov_ebpf", "event_type": "resource_pressure",
-			"resource": "sensor_tls_reassembly", "signal": "reassembly_limit",
+			"resource": "sensor_tls_reassembly", "signal": "reassembly_gap",
 			"dropped_delta": tlsLoss.Streams, "dropped_bytes_delta": tlsLoss.Bytes,
 			"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
 		})
@@ -271,7 +274,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 				n = len(e.Path)
 			}
 			for _, msg := range reasm.Add(tlsintent.Chunk{
-				PID: e.Pid, Conn: e.Conn, Direction: dir,
+				PID: e.Pid, Conn: e.Conn, ProcessStartNS: e.ProcessStartNs, Epoch: e.ConnEpoch, Direction: dir,
 				Data: append([]byte(nil), e.Path[:n]...), Truncated: e.Dport == 1,
 			}) {
 				emit(tlsMessageMap(msg, e, resolver))
@@ -279,8 +282,24 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 			reportTLSLoss(false)
 			continue
 		}
+		if e.Kind == eventSSLReset || e.Kind == eventSSLRelease {
+			c := tlsintent.Chunk{PID: e.Pid, Conn: e.Conn, ProcessStartNS: e.ProcessStartNs, Epoch: e.ConnEpoch}
+			if e.Kind == eventSSLReset {
+				reasm.Reset(c)
+			} else {
+				for _, msg := range reasm.Release(c) {
+					emit(tlsMessageMap(msg, e, resolver))
+				}
+			}
+			reportTLSLoss(false)
+			continue
+		}
+		if e.Kind == eventExec {
+			reasm.EndProcess(e.Pid, e.ProcessStartNs, true)
+			reportTLSLoss(false)
+		}
 		if e.Kind == eventExit {
-			for _, msg := range reasm.FlushPID(e.Pid) {
+			for _, msg := range reasm.EndProcess(e.Pid, e.ProcessStartNs, false) {
 				emit(tlsMessageMap(msg, e, resolver))
 			}
 			reportTLSLoss(false)
@@ -303,18 +322,29 @@ func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgro
 		etype = "tls_read"
 	}
 	ev := map[string]any{
-		"source":       "agentprov_ebpf",
-		"pid":          e.Pid,
-		"tgid":         e.Tgid,
-		"ppid":         e.Ppid,
-		"cgroup_id":    strconv.FormatUint(e.CgroupId, 10),
-		"container_id": containerID,
-		"timestamp":    eventTimestamp(e),
-		"comm":         cstr(e.Comm[:]),
-		"event_type":   etype,
-		"data":         string(msg.Body),
-		"length":       len(msg.Body),
-		"protocol":     msg.Protocol,
+		"source":          "agentprov_ebpf",
+		"pid":             e.Pid,
+		"tgid":            e.Tgid,
+		"ppid":            e.Ppid,
+		"cgroup_id":       strconv.FormatUint(e.CgroupId, 10),
+		"container_id":    containerID,
+		"timestamp":       eventTimestamp(e),
+		"comm":            cstr(e.Comm[:]),
+		"event_type":      etype,
+		"data":            string(msg.Body),
+		"length":          len(msg.Body),
+		"protocol":        msg.Protocol,
+		"headers_decoded": true,
+	}
+	if msg.StreamID != 0 {
+		ev["stream_id"] = msg.StreamID
+	}
+	if process := processInstance(msg.PID, msg.ProcessStartNS); process != "" && msg.Conn != 0 && msg.Epoch != 0 {
+		id := sha256.Sum256([]byte(fmt.Sprintf("openssl:%s:%x:%d", process, msg.Conn, msg.Epoch)))
+		ev["connection_id"] = fmt.Sprintf("tls-v1:%x", id)
+	}
+	if contentType := msg.Headers["content-type"]; contentType != "" {
+		ev["content_type"] = contentType
 	}
 	if msg.Truncated {
 		ev["truncated"] = true

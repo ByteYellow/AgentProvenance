@@ -69,6 +69,7 @@ type Signal struct {
 	Value             float64   `json:"value"`
 	Reference         string    `json:"reference,omitempty"`
 	Confidence        float64   `json:"confidence"`
+	ConfidenceSet     bool      `json:"-"` // True for an explicit zero; unset Go literals retain the legacy default.
 	RecommendedAction string    `json:"recommended_action,omitempty"`
 	ProducedBy        string    `json:"produced_by"`
 	EvidenceRefs      string    `json:"evidence_refs"` // JSON array; defaults to "[]"
@@ -143,8 +144,11 @@ func record(db *sql.DB, s Signal) (string, bool, error) {
 	if s.ID == "" {
 		s.ID = ids.New("sig")
 	}
-	if s.Confidence <= 0 {
+	if !s.ConfidenceSet && s.Confidence == 0 {
 		s.Confidence = 1
+	}
+	if err := validateConfidence(s.Confidence); err != nil {
+		return "", false, err
 	}
 	if s.EvidenceRefs == "" {
 		s.EvidenceRefs = "[]"
@@ -228,6 +232,7 @@ func Query(db *sql.DB, f Filter) ([]Signal, error) {
 			return nil, fmt.Errorf("signals: scan: %w", err)
 		}
 		s.Dimension = Dimension(dim)
+		s.ConfidenceSet = true
 		out = append(out, s)
 	}
 	return out, rows.Err()

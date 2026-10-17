@@ -2,7 +2,9 @@ package correlation
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -25,6 +27,8 @@ type Binding struct {
 	EndedAt       string  `json:"ended_at"`
 	BindingSource string  `json:"binding_source"`
 	Confidence    float64 `json:"confidence"`
+	// ConfidenceSet distinguishes an explicit zero from the legacy Go default.
+	ConfidenceSet bool `json:"-"`
 }
 
 type RawIdentity struct {
@@ -42,9 +46,16 @@ type RawIdentity struct {
 
 type Match struct {
 	Binding
-	Method     string
-	Confidence float64
+	Method              string
+	Confidence          float64
+	ScopeOnly           bool
+	Ambiguous           bool
+	CandidateBindingIDs []string
+	CandidateCount      int
 }
+
+// Bound per-event diagnostic payloads while evaluating every active binding.
+const maxCandidateBindingIDs = 32
 
 type BindingFilter struct {
 	RunID      string
@@ -61,7 +72,7 @@ const BindingSourceK8sCgroup = "k8s_cgroup"
 
 // DefaultBindingConfidence caps how much a binding may vouch for a match by how
 // it was established, when the caller did not set an explicit confidence.
-// scanOne takes the MIN of this binding confidence and the resolution method's
+// Resolution takes the MIN of this binding confidence and the method's
 // own confidence, so an app-asserted (ai_asserted) join can never read as
 // certain as a kernel-verified one even if it happens to match by pid. This is
 // the honesty tier: a scope the model merely CLAIMED is worth less than one the
@@ -103,8 +114,11 @@ func RecordBinding(db bindingExecer, binding Binding) (string, error) {
 	if binding.BindingSource == "" {
 		binding.BindingSource = "control_plane"
 	}
-	if binding.Confidence <= 0 {
+	if !binding.ConfidenceSet && binding.Confidence == 0 {
 		binding.Confidence = DefaultBindingConfidence(binding.BindingSource)
+	}
+	if math.IsNaN(binding.Confidence) || math.IsInf(binding.Confidence, 0) || binding.Confidence < 0 || binding.Confidence > 1 {
+		return "", fmt.Errorf("binding confidence must be a finite number in [0,1]")
 	}
 	if binding.ID == "" {
 		binding.ID = ids.New("bind")
@@ -159,6 +173,7 @@ func ListBindings(db *sql.DB, filter BindingFilter) ([]Binding, error) {
 		if err := rows.Scan(&binding.ID, &binding.RunID, &binding.SessionID, &binding.AttemptID, &binding.ToolCallID, &binding.ProcessID, &binding.ContainerID, &binding.CgroupID, &binding.RootPID, &binding.PID, &binding.StartedAt, &binding.EndedAt, &binding.BindingSource, &binding.Confidence); err != nil {
 			return nil, err
 		}
+		binding.ConfidenceSet = true
 		bindings = append(bindings, binding)
 	}
 	if err := rows.Err(); err != nil {
@@ -191,6 +206,7 @@ func GetBinding(db *sql.DB, id string) (Binding, bool, error) {
 	if err != nil {
 		return Binding{}, false, err
 	}
+	binding.ConfidenceSet = true
 	return binding, true, nil
 }
 
@@ -295,45 +311,45 @@ func Resolve(db Queryer, raw RawIdentity) (Match, bool, error) {
 		at = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	if raw.ProcessID != "" {
-		match, ok, err := resolveByProcess(db, raw.RunID, raw.ProcessID)
-		if err != nil || ok {
+		match, ok, err := resolveByProcess(db, raw, at)
+		if err != nil || ok || match.Ambiguous {
 			return match, ok, err
 		}
 	}
 	if raw.ProcessInstanceID != "" {
 		match, ok, err := resolveProcessInstance(db, raw.RunID, raw.ProcessInstanceID, raw.PID, at)
-		if err != nil || ok {
+		if err != nil || ok || match.Ambiguous {
+			return match, ok, err
+		}
+	}
+	if raw.PID != 0 && raw.ProcessInstanceID == "" && raw.ProcessID == "" {
+		match, ok, err := resolveByPID(db, raw, at)
+		if err != nil || ok || match.Ambiguous {
 			return match, ok, err
 		}
 	}
 	if raw.CgroupID != "" {
-		match, ok, err := resolveByCgroup(db, raw.RunID, raw.CgroupID, at)
-		if err != nil || ok {
+		match, ok, err := resolveByCgroup(db, raw, at)
+		if err != nil || ok || match.Ambiguous {
 			return match, ok, err
 		}
 	}
 	if raw.ContainerID != "" {
-		match, ok, err := resolveByContainer(db, raw.RunID, raw.ContainerID, at)
-		if err != nil || ok {
-			return match, ok, err
-		}
-	}
-	if raw.PID != 0 && raw.ProcessInstanceID == "" {
-		match, ok, err := resolveByPID(db, raw.RunID, raw.PID, at)
-		if err != nil || ok {
+		match, ok, err := resolveByContainer(db, raw, at)
+		if err != nil || ok || match.Ambiguous {
 			return match, ok, err
 		}
 	}
 	return Match{}, false, nil
 }
 
-func resolveByProcess(db Queryer, runID, processID string) (Match, bool, error) {
-	if runID != "" {
-		return scanOne(db, "process_id", "run_id+process_id", 1, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
-			FROM execution_context_bindings WHERE run_id = ? AND process_id = ? ORDER BY created_at DESC LIMIT 1`, runID, processID)
+func resolveByProcess(db Queryer, raw RawIdentity, at string) (Match, bool, error) {
+	source := "process_id+time"
+	if raw.RunID != "" {
+		source = "run_id+" + source
 	}
-	return scanOne(db, "process_id", "process_id", 1, `SELECT id, run_id, session_id, attempt_id, tool_call_id, process_id, container_id, cgroup_id, root_pid, pid, started_at, ended_at, binding_source, confidence
-		FROM execution_context_bindings WHERE process_id = ? ORDER BY created_at DESC LIMIT 1`, processID)
+	expr, args := bindingScopePredicate(raw, false)
+	return resolveWindow(db, raw.RunID, "process_id", source, "process_id = ?"+expr, 1, at, false, append([]any{raw.ProcessID}, args...)...)
 }
 
 // MaxOpenBindingAge bounds how long a binding left open (ended_at = "") is
@@ -379,7 +395,7 @@ func resolveWindow(db Queryer, runID, method, source, matchExpr string, confiden
 	// RFC3339Nano strings are not ordered chronologically (whole seconds,
 	// fractional precision and timezone offsets all differ). Keep raw binding
 	// timestamps intact for evidence export; compare only identity candidates
-	// as parsed instants, including nanosecond boundaries and latest-start wins.
+	// as parsed instants, including nanosecond boundaries.
 	instant, err := time.Parse(time.RFC3339Nano, at)
 	if err != nil {
 		return Match{}, false, fmt.Errorf("invalid event timestamp: %w", err)
@@ -391,12 +407,13 @@ func resolveWindow(db Queryer, runID, method, source, matchExpr string, confiden
 	defer rows.Close()
 	var best Binding
 	var latest time.Time
-	found := false
+	var candidates []Binding
 	for rows.Next() {
 		var item Binding
 		if err := rows.Scan(&item.ID, &item.RunID, &item.SessionID, &item.AttemptID, &item.ToolCallID, &item.ProcessID, &item.ContainerID, &item.CgroupID, &item.RootPID, &item.PID, &item.StartedAt, &item.EndedAt, &item.BindingSource, &item.Confidence); err != nil {
 			return Match{}, false, err
 		}
+		item.ConfidenceSet = true
 		start, err := time.Parse(time.RFC3339Nano, item.StartedAt)
 		if err != nil || start.After(instant) {
 			continue
@@ -409,67 +426,158 @@ func resolveWindow(db Queryer, runID, method, source, matchExpr string, confiden
 		} else if boundOpen && start.Before(instant.Add(-MaxOpenBindingAge)) {
 			continue
 		}
-		if !found || start.After(latest) {
-			best, latest, found = item, start, true
+		if len(candidates) == 0 || start.After(latest) || (start.Equal(latest) && item.ID < best.ID) {
+			best, latest = item, start
 		}
+		candidates = append(candidates, item)
 	}
 	if err := rows.Err(); err != nil {
 		return Match{}, false, err
 	}
-	if !found {
+	if len(candidates) == 0 {
 		return Match{}, false, nil
 	}
-	if best.Confidence > 0 && best.Confidence < confidence {
-		confidence = best.Confidence
+	match := Match{Binding: best, Method: method + ":" + source, Confidence: confidence}
+	for _, item := range candidates {
+		if math.IsNaN(item.Confidence) || math.IsInf(item.Confidence, 0) || item.Confidence < 0 || item.Confidence > 1 {
+			return Match{}, false, fmt.Errorf("binding %s has invalid confidence", item.ID)
+		}
+		if item.Confidence < match.Confidence {
+			match.Confidence = item.Confidence
+		}
+		if item.RunID != best.RunID || item.SessionID != best.SessionID || item.AttemptID != best.AttemptID || item.ToolCallID != best.ToolCallID || item.ProcessID != best.ProcessID {
+			match.Ambiguous = true
+		}
+		if len(candidates) > 1 {
+			match.CandidateBindingIDs = append(match.CandidateBindingIDs, item.ID)
+		}
 	}
-	return Match{Binding: best, Method: method + ":" + source, Confidence: confidence}, true, nil
+	sort.Strings(match.CandidateBindingIDs)
+	if len(match.CandidateBindingIDs) > 0 {
+		match.CandidateCount = len(match.CandidateBindingIDs)
+		if len(match.CandidateBindingIDs) > maxCandidateBindingIDs {
+			match.CandidateBindingIDs = match.CandidateBindingIDs[:maxCandidateBindingIDs]
+		}
+	}
+	if match.Ambiguous {
+		// Keep only the context every active candidate agrees on. A newer
+		// binding is not evidence that an older concurrent call has finished.
+		match.Binding = commonBindingScope(candidates)
+	}
+	match.ScopeOnly = match.Ambiguous || method == "cgroup_time_window" || method == "container_time_window" || (match.ToolCallID == "" && match.ProcessID == "")
+	if match.ScopeOnly {
+		match.ToolCallID, match.ProcessID = "", ""
+		match.PID, match.RootPID = 0, 0
+	}
+	if match.Ambiguous && match.RunID == "" {
+		match.Binding = Binding{}
+		match.Confidence = 0
+		return match, false, nil
+	}
+	return match, true, nil
 }
 
-func resolveByCgroup(db Queryer, runID, cgroupID, at string) (Match, bool, error) {
+func commonBindingScope(candidates []Binding) Binding {
+	b := candidates[0]
+	b.ID, b.StartedAt, b.EndedAt = "", "", ""
+	b.ToolCallID, b.ProcessID, b.PID, b.RootPID = "", "", 0, 0
+	for _, other := range candidates[1:] {
+		if b.RunID != other.RunID {
+			b.RunID = ""
+		}
+		if b.SessionID != other.SessionID {
+			b.SessionID = ""
+		}
+		if b.AttemptID != other.AttemptID {
+			b.AttemptID = ""
+		}
+		if b.ContainerID != other.ContainerID {
+			b.ContainerID = ""
+		}
+		if b.CgroupID != other.CgroupID {
+			b.CgroupID = ""
+		}
+		if b.BindingSource != other.BindingSource {
+			b.BindingSource = ""
+		}
+	}
+	return b
+}
+
+// Known scope keys must not contradict a binding. Numeric PID matches also
+// require a shared scope key when the producer supplied one, so an unscoped
+// binding cannot capture a scoped event through numeric PID alone.
+func bindingScopePredicate(raw RawIdentity, requireOverlap bool) (string, []any) {
+	var expr string
+	var args []any
+	var overlap []string
+	var overlapArgs []any
+	for _, scope := range []struct{ key, value string }{{"cgroup_id", raw.CgroupID}, {"container_id", raw.ContainerID}} {
+		if scope.value == "" {
+			continue
+		}
+		expr += " AND (" + scope.key + " = '' OR " + scope.key + " = ?)"
+		args = append(args, scope.value)
+		overlap = append(overlap, scope.key+" = ?")
+		overlapArgs = append(overlapArgs, scope.value)
+	}
+	if requireOverlap && len(overlap) > 0 {
+		expr += " AND (" + strings.Join(overlap, " OR ") + ")"
+		args = append(args, overlapArgs...)
+	}
+	return expr, args
+}
+
+func resolveByCgroup(db Queryer, raw RawIdentity, at string) (Match, bool, error) {
 	source := "cgroup_id+time"
-	if runID != "" {
+	if raw.RunID != "" {
 		source = "run_id+cgroup_id+time"
 	}
-	return resolveWindow(db, runID, "cgroup_time_window", source, "cgroup_id = ?", 0.98, at, false, cgroupID)
+	expr, args := bindingScopePredicate(raw, false)
+	return resolveWindow(db, raw.RunID, "cgroup_time_window", source, "cgroup_id = ?"+expr, 0.98, at, false, append([]any{raw.CgroupID}, args...)...)
 }
 
-func resolveByContainer(db Queryer, runID, containerID, at string) (Match, bool, error) {
+func resolveByContainer(db Queryer, raw RawIdentity, at string) (Match, bool, error) {
 	source := "container_id+time"
-	if runID != "" {
+	if raw.RunID != "" {
 		source = "run_id+container_id+time"
 	}
-	return resolveWindow(db, runID, "container_time_window", source, "container_id = ?", 0.92, at, false, containerID)
+	expr, args := bindingScopePredicate(raw, false)
+	return resolveWindow(db, raw.RunID, "container_time_window", source, "container_id = ?"+expr, 0.92, at, false, append([]any{raw.ContainerID}, args...)...)
 }
 
-func resolveByPID(db Queryer, runID string, pid int64, at string) (Match, bool, error) {
+func resolveByPID(db Queryer, raw RawIdentity, at string) (Match, bool, error) {
 	source := "pid+time"
-	if runID != "" {
+	if raw.RunID != "" {
 		source = "run_id+pid+time"
 	}
-	return resolveWindow(db, runID, "pid_time_window", source, "id NOT LIKE 'bind-native-%' AND (pid = ? OR (root_pid = ? AND binding_source != 'zero_sdk_record_descendant'))", 0.85, at, true, pid, pid)
-}
-
-func scanOne(db Queryer, method, source string, confidence float64, query string, args ...any) (Match, bool, error) {
-	var item Binding
-	err := db.QueryRow(query, args...).Scan(&item.ID, &item.RunID, &item.SessionID, &item.AttemptID, &item.ToolCallID, &item.ProcessID, &item.ContainerID, &item.CgroupID, &item.RootPID, &item.PID, &item.StartedAt, &item.EndedAt, &item.BindingSource, &item.Confidence)
-	if err == sql.ErrNoRows {
-		return Match{}, false, nil
+	expr, args := bindingScopePredicate(raw, true)
+	match, ok, err := resolveWindow(db, raw.RunID, "pid_time_window", source, "id NOT LIKE 'bind-native-%' AND (pid = ? OR (pid = 0 AND root_pid = ? AND binding_source != 'zero_sdk_record_descendant'))"+expr, 0.85, at, true, append([]any{raw.PID, raw.PID}, args...)...)
+	if raw.CgroupID != "" && match.CgroupID == raw.CgroupID {
+		match.Method += "+cgroup_id"
 	}
-	if err != nil {
-		return Match{}, false, err
+	if raw.ContainerID != "" && match.ContainerID == raw.ContainerID {
+		match.Method += "+container_id"
 	}
-	if item.Confidence > 0 && item.Confidence < confidence {
-		confidence = item.Confidence
-	}
-	return Match{Binding: item, Method: method + ":" + source, Confidence: confidence}, true, nil
+	return match, ok, err
 }
 
 func EventPayloadWithCorrelation(payload string, match Match, resolved bool) string {
 	if payload == "" {
 		payload = "{}"
 	}
-	if !resolved {
-		return fmt.Sprintf(`{"raw":%s,"correlation":{"method":"unresolved","confidence":0}}`, payload)
+	method, confidence := match.Method, match.Confidence
+	if !resolved && !match.Ambiguous {
+		method, confidence = "unresolved", 0
 	}
-	return fmt.Sprintf(`{"raw":%s,"correlation":{"binding_id":%q,"method":%q,"confidence":%.2f}}`, payload, match.ID, match.Method, match.Confidence)
+	details, _ := json.Marshal(struct {
+		BindingID           string   `json:"binding_id,omitempty"`
+		Method              string   `json:"method"`
+		Confidence          float64  `json:"confidence"`
+		ScopeOnly           bool     `json:"scope_only,omitempty"`
+		Ambiguous           bool     `json:"ambiguous,omitempty"`
+		CandidateBindingIDs []string `json:"candidate_binding_ids,omitempty"`
+		CandidateCount      int      `json:"candidate_count,omitempty"`
+	}{match.ID, method, confidence, match.ScopeOnly, match.Ambiguous, match.CandidateBindingIDs, match.CandidateCount})
+	return fmt.Sprintf(`{"raw":%s,"correlation":%s}`, payload, details)
 }

@@ -4,14 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/ids"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
-// TestMaterializeLLMCallsDirectLink proves the llm_call node connects directly to
-// the syscall its response caused (lifting the ingest-time llm_intent_caused edge
-// from the tls_read event up to the llm_call).
+// A scoped, chronological, complete command match creates one inferred link.
 func TestMaterializeLLMCallsDirectLink(t *testing.T) {
 	paths, err := store.Init(filepath.Join(t.TempDir(), ".agentprov"))
 	if err != nil {
@@ -25,8 +24,19 @@ func TestMaterializeLLMCallsDirectLink(t *testing.T) {
 	st := ObjectStore{DB: db, Paths: paths}
 	const run = "run-dl"
 	ins := func(id, etype, payload string) {
-		if _, err := db.Exec(`INSERT INTO events (id, run_id, source, event_type, payload, created_at)
-			VALUES (?, ?, 'agentprov_ebpf', ?, ?, '2026-01-01T00:00:01Z')`, id, run, etype, payload); err != nil {
+		at := "2026-01-01T00:00:01Z"
+		if etype == "tls_write" {
+			at = "2026-01-01T00:00:00Z"
+		}
+		if etype == "execve" {
+			at = "2026-01-01T00:00:02Z"
+		}
+		payload = `{"node_name":"node-a",` + payload[1:]
+		if etype == "tls_write" || etype == "tls_read" {
+			payload = tlsTestIdentity(t, payload, "connection-a", etype)
+		}
+		if _, err := db.Exec(`INSERT INTO events (id, run_id, source, event_type, payload, created_at, cgroup_id, pid)
+			VALUES (?, ?, 'agentprov_ebpf', ?, ?, ?, 'cg-a', 100)`, id, run, etype, payload, at); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -34,8 +44,8 @@ func TestMaterializeLLMCallsDirectLink(t *testing.T) {
 	// The model decides to run a specific command via tool_use.
 	ins("ev-resp", "tls_read", `{"content":"{\"model\":\"m\",\"stop_reason\":\"tool_use\",\"content\":[{\"type\":\"tool_use\",\"name\":\"bash\",\"input\":{\"command\":\"cat /home/u/.aws/credentials\"}}]}"}`)
 	// The syscall that ran exactly that command -- and an unrelated one that must NOT link.
-	ins("ev-exec", "execve", `{"payload":{"raw":{"command":"cat /home/u/.aws/credentials"}}}`)
-	ins("ev-other", "execve", `{"payload":{"raw":{"command":"ls -la /tmp"}}}`)
+	ins("ev-exec", "execve", `{"payload":{"raw":{"argv":["cat","/home/u/.aws/credentials"],"command":"cat /home/u/.aws/credentials"}}}`)
+	ins("ev-other", "execve", `{"payload":{"raw":{"argv":["ls","-la","/tmp"],"command":"ls -la /tmp"}}}`)
 	if _, err := db.Exec(`INSERT INTO graph_edges (id, run_id, from_id, to_id, edge_type, created_at)
 		VALUES (?, ?, 'runtime_event/ev-req', 'runtime_event/ev-resp', 'llm_call', '2026-01-01T00:00:02Z')`, ids.New("edge"), run); err != nil {
 		t.Fatal(err)
@@ -56,10 +66,9 @@ func TestMaterializeLLMCallsDirectLink(t *testing.T) {
 	}
 }
 
-// When the eBPF execve truncates its argv (losing the script path), the record
-// process sample still carries the full /proc/cmdline command -- so command-match
-// stays robust and the llm_caused edge survives argv truncation.
-func TestCommandMatchedActionsRobustToExecveTruncation(t *testing.T) {
+// A later process sample does not establish when that command was executed.
+// Keep the observation, but do not use it to fill a truncated exec's intent edge.
+func TestLLMCommandMatchDoesNotUpgradeProcessSamples(t *testing.T) {
 	paths, err := store.Init(filepath.Join(t.TempDir(), ".agentprov"))
 	if err != nil {
 		t.Fatal(err)
@@ -71,47 +80,34 @@ func TestCommandMatchedActionsRobustToExecveTruncation(t *testing.T) {
 	defer db.Close()
 	const run = "run-trunc"
 	ins := func(id, etype, payload string) {
-		if _, err := db.Exec(`INSERT INTO events (id, run_id, source, event_type, payload, created_at)
-			VALUES (?, ?, 'x', ?, ?, '2026-01-01T00:00:01Z')`, id, run, etype, payload); err != nil {
+		payload = `{"node_name":"node-a",` + payload[1:]
+		if _, err := db.Exec(`INSERT INTO events (id, run_id, source, event_type, payload, created_at, cgroup_id, pid)
+			VALUES (?, ?, 'agentprov_ebpf', ?, ?, '2026-01-01T00:00:01Z', 'cg-a', 100)`, id, run, etype, payload); err != nil {
 			t.Fatal(err)
 		}
 	}
-	decided := "python3 ../pysnake-helper/setup.py install"
+	decided := "python3 ../pysnake-helper/setup.py install --user"
 	// The execve for that command came through truncated to just the program.
-	ins("ev-exec", "execve", `{"payload":{"raw":{"command":"/usr/bin/python3"}}}`)
-	// The record sample of the same process kept the full /proc/cmdline command
-	// (with an extra trailing arg -- a prefix match, not exact).
-	ins("ev-proc", "process_observed", `{"payload":{"command":"python3 ../pysnake-helper/setup.py install --user","pid":913280}}`)
+	ins("ev-exec", "execve", `{"payload":{"raw":{"argv":["/usr/bin/python3"],"argv_truncated":true,"command":"/usr/bin/python3"}}}`)
+	// The record sample has a complete command but no execution-time anchor.
+	ins("ev-proc", "process_observed", `{"payload":{"argv":["python3","../pysnake-helper/setup.py","install","--user"],"command":"python3 ../pysnake-helper/setup.py install --user","pid":913280}}`)
 	// The shell wrapper Claude runs the command through CONTAINS the decided
-	// command but does not start with it -- it must NOT be attributed (prefix, not
-	// substring), else llm_caused points at plumbing instead of the command.
+	// command among additional setup steps; it is not an exact execution anchor.
 	ins("ev-wrap", "process_observed", `{"payload":{"command":"/bin/bash -c source /home/u/.claude/shell-snapshots/snap.sh && python3 ../pysnake-helper/setup.py install","pid":913279}}`)
 	// A different command that merely shares the workspace path must not match.
 	ins("ev-other", "process_observed", `{"payload":{"command":"ls -la ../pysnake-helper","pid":42}}`)
 
-	got, err := commandMatchedActions(db, run, []string{decided})
+	actions, err := readLLMActions(db, run, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	has := func(node string) bool {
-		for _, g := range got {
-			if g == node {
-				return true
-			}
-		}
-		return false
+	got, err := matchLLMDecisions([]llmDecision{{command: decided, at: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		scope: llmScope{source: "agentprov_ebpf", origin: "origin:node-a", cgroup: "cg-a"}}}, actions)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !has("runtime_event/ev-proc") {
-		t.Errorf("truncated execve: expected match via process_observed sample, got %v", got)
-	}
-	if has("runtime_event/ev-wrap") {
-		t.Errorf("shell wrapper was attributed (should be excluded by prefix match): %v", got)
-	}
-	if has("runtime_event/ev-other") {
-		t.Errorf("different command sharing the workspace path matched: %v", got)
-	}
-	if len(got) != 1 {
-		t.Errorf("expected exactly one matched action (the setup.py process), got %v", got)
+	if len(got) != 0 {
+		t.Errorf("sample-only attribution: %v", got)
 	}
 }
 
@@ -129,14 +125,19 @@ func TestMaterializeLLMCalls(t *testing.T) {
 	const run = "run-llm"
 
 	ins := func(id, etype, payload string) {
-		if _, err := db.Exec(`INSERT INTO events (id, run_id, source, event_type, payload, created_at)
-			VALUES (?, ?, 'agentprov_ebpf', ?, ?, '2026-01-01T00:00:01Z')`, id, run, etype, payload); err != nil {
+		payload = tlsTestIdentity(t, `{"node_name":"node-a",`+payload[1:], "connection-a", etype)
+		at := "2026-01-01T00:00:01Z"
+		if etype == "tls_read" {
+			at = "2026-01-01T00:00:02Z"
+		}
+		if _, err := db.Exec(`INSERT INTO events (id, run_id, source, event_type, payload, created_at, cgroup_id, pid)
+			VALUES (?, ?, 'agentprov_ebpf', ?, ?, ?, 'cg-a', 100)`, id, run, etype, payload, at); err != nil {
 			t.Fatal(err)
 		}
 	}
 	ins("ev-req", "tls_write", `{"model":"claude-opus-4-8","content":"{\"model\":\"claude-opus-4-8\",\"messages\":[{\"role\":\"user\",\"content\":\"read creds\"}]}"}`)
 	ins("ev-resp", "tls_read", `{"model":"claude-opus-4-8","content":"{\"model\":\"claude-opus-4-8\",\"content\":[{\"type\":\"tool_use\",\"name\":\"bash\"}]}"}`)
-	// The ingest-time request->response pairing.
+	// A legacy ingest-time edge is ignored and replaced by identity-based analysis.
 	if _, err := db.Exec(`INSERT INTO graph_edges (id, run_id, from_id, to_id, edge_type, created_at)
 		VALUES ('e1', ?, 'runtime_event/ev-req', 'runtime_event/ev-resp', 'llm_call', '2026-01-01T00:00:02Z')`, run); err != nil {
 		t.Fatal(err)

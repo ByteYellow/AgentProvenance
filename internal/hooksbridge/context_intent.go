@@ -16,10 +16,11 @@ import (
 // reopening live transcripts or importing activity before a resume boundary.
 func HarvestContextIntent(ctx context.Context, db *sql.DB, paths store.Paths, runID string) (int, error) {
 	type transcript struct {
-		agent string
-		body  strings.Builder
-		refs  []string
-		seen  map[string]bool
+		agent     string
+		body      strings.Builder
+		refs      []string
+		seen      map[string]bool
+		toolNodes map[string]string
 	}
 	groups := map[string]*transcript{}
 	svc, objects := agentcontext.Service{DB: db, Paths: paths}, provenance.ObjectStore{DB: db, Paths: paths}
@@ -46,8 +47,15 @@ func HarvestContextIntent(ctx context.Context, db *sql.DB, paths store.Paths, ru
 				if agent == "" {
 					agent = mainAgentID
 				}
-				g = &transcript{agent: agent, seen: map[string]bool{}}
+				g = &transcript{agent: agent, seen: map[string]bool{}, toolNodes: map[string]string{}}
 				groups[e.Source.ID] = g
+			}
+			if e.Kind == "tool_call" && e.ToolCallID != "" && e.Status != "completion_only" {
+				node := agentcontext.ToolNodeID(e)
+				if previous := g.toolNodes[e.ToolCallID]; previous != "" && previous != node {
+					return 0, fmt.Errorf("context intent projection has conflicting tool identities")
+				}
+				g.toolNodes[e.ToolCallID] = node
 			}
 			g.refs = append(g.refs, e.ObjectHash)
 			if g.seen[e.RawContent.Ref] {
@@ -88,7 +96,7 @@ func HarvestContextIntent(ctx context.Context, db *sql.DB, paths store.Paths, ru
 		if err != nil {
 			return 0, err
 		}
-		inputs = append(inputs, provenance.TranscriptStream{AgentID: g.agent, Reader: strings.NewReader(g.body.String()), SourceRef: ref.Hash})
+		inputs = append(inputs, provenance.TranscriptStream{AgentID: g.agent, Reader: strings.NewReader(g.body.String()), SourceRef: ref.Hash, ToolNodes: g.toolNodes})
 	}
 	return provenance.HarvestTranscriptStreams(objects, db, runID, inputs)
 }

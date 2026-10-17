@@ -72,6 +72,38 @@ AgentProvenance 将应用上下文与运行时遥测关联。两类信息必须�
 
 显式设置 `AGENTPROV_TLS_CAPTURE_BODY=1` 后，标准化事件的 `content` 字段保留已捕获的明文，供模型调用物化使用；这不保证获得完整的请求或响应。默认只保留捕获字节的哈希和短预览。提示词、响应和原始队列载荷可能包含敏感数据，应限制数据目录访问，并在分享前检查取证包。
 
+重组后的 TLS 消息在 `http` 中保留传感器已解析的字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `protocol`、`kind`、`headers_decoded` | HTTP 版本、请求／响应方向、已报告的头部解码状态 |
+| `method`、`host`、`path`、`endpoint` | 请求方法、主机与端口、编码后的路径；endpoint 为主机与路径组合 |
+| `status`、`content_type`、`is_stream` | 响应状态码、不含参数的媒体类型、SSE 标记 |
+| `model`、`stream_id` | 已识别的模型 ID；HTTP/2 连接内部的流编号 |
+| `connection_id` | OpenSSL 生命周期探针与进程身份可用时生成的 `tls-v1:` 不透明采集代次标识 |
+
+端点元数据移除 URL 用户信息、查询参数和片段；Authorization、Cookie 等请求头不复制进 `http`。
+正文、短预览和原始采集数据沿用各自的保留设置。Stream ID 仅在连接内部有效，配对时需要同时使用连接生命周期。
+重组后的 `data` 已是正文，不再扫描其中的 HTTP 请求示例来推定端点。旧原始窗口继续解析请求／响应头；识别出的 HTTP/2 前言标为 `headers_decoded: false`，不明二进制内容保留为未分类。
+这些可选字段无需修改数据库或 Bundle 格式。
+
+OpenSSL 的 `SSL_read`、`SSL_read_ex` 入口／返回探针使用完整的内核 `pid_tgid` 和任务启动时间配对。
+每个接口为每条线程保留最多 4 层嵌套调用，映射容量为 4,096 条线程。超过深度的返回会跳过并计入采集丢失诊断，外层调用仍按原顺序恢复。
+返回字节数须在原始缓冲区容量内；无法读取 `SSL_read_ex` 输出指针也计入采集丢失。每条线程退出或成功 exec 时清理两个读取栈；工作线程 exec 导致 TID 改变时，同时清理旧身份。
+每次调用的明文上限仍为 4 KiB。这里完成函数调用配对，HTTP 请求／响应关联由后续步骤处理。
+
+OpenSSL 采集代次结合内核启动实例、进程启动时间、SSL 对象地址和内核生成的 epoch。
+`SSL_new`、`SSL_clear`、`SSL_free` 及 BIO／FD 替换探针限定 HTTP／HPACK 状态的保留范围。
+每个数据块携带代次，读取在入口保存代次并沿用到返回；边界事件缺失或旧读取晚返回时，旧数据也不会接入更新连接的缓冲。
+内核代次映射最多保留 16,384 个对象，用户态对活动连接与已关闭代次的元数据同样设有容量上限。
+被丢弃的未完成状态通过 `sensor_tls_reassembly`／`reassembly_gap` 资源压力事件报告。
+
+清理／重新绑定入口和 `SSL_free` 按保守解析边界处理：前者可能执行失败，后者可能只减少引用计数。
+因此连接标识表示观测到的采集代次；释放／退出时尚未完成的正文保留为截断记录，新请求不再隐式结束旧响应。
+同一代次内 HTTP/2 多流继续共用各自方向的 HPACK 字典。任一必需生命周期探针挂载失败时，该目标的明文采集等待重试成功，能力报告列明缺失探针；其他运行时探针继续工作。
+Go TLS 与缺少 epoch 的历史来源省略 `connection_id`，其对象生命周期覆盖范围保持原状。
+接口语义见 [OpenSSL SSL_clear](https://docs.openssl.org/3.0/man3/SSL_clear/) 和 [SSL_free](https://docs.openssl.org/3.0/man3/SSL_free/)。
+
 ## 示例
 
 有效的原始运行时事件：
@@ -115,13 +147,35 @@ agentprov telemetry ingest \
 | 方法或来源 | 数值 | 说明 |
 |---|---|---|
 | 直接进程匹配或记录器自身观测 | `1.0` | 自身记录的一致性不等于独立内核佐证 |
-| 真实 cgroup 与时间窗口 | `0.98` | 用于子树归属 |
-| 容器与时间窗口 | `0.92` | 常见的运行环境匹配方式 |
-| PID 与时间窗口 | `0.85` | 回退方式，受 PID 重用和短命进程遗漏影响 |
+| 真实 cgroup 与时间窗口 | `0.98` | 执行作用域归属 |
+| 容器与时间窗口 | `0.92` | 执行作用域归属 |
+| PID 与时间窗口 | `0.85` | 结合已提供的作用域键匹配进程，受 PID 重用影响 |
 | `k8s_cgroup` 绑定来源 | 默认 `0.8` | 被动归属到 Pod，未由记录器直接启动 |
 | `ai_asserted` 绑定来源 | 默认 `0.5` | 应用提供的归属声明 |
 
-最终置信值还受绑定保存的正数置信值限制，取较低值。上表列出默认来源值，不是所有自定义绑定的强制上限。
+最终置信值取匹配方法与绑定保存值中的较低值。上表列出默认来源值，不是所有自定义绑定的强制上限。
+
+置信值接受 `[0,1]` 内的有限数。绑定未提供该字段时采用来源默认值；显式 `0` 在匹配、进程生命周期继承、查询和导出中始终保留。`telemetry bind --confidence 0` 与 `POST /v1/telemetry/bind` 遵循同一规则；负数、超范围值与 `null` 会被拒绝。以前用 `0` 请求默认值的客户端应改为省略字段。已有数据库记录和签名 Bundle 保持原值。
+
+统一信号采用同一数值范围并保留显式 `0`，省略字段仍默认 `1`。内部 Go 调用通过 `ConfidenceSet: true` 表达显式零值。没有记录置信值的图边继续省略该字段，Dashboard 显示“未知”；未关联或有歧义的匹配还会保留对应状态和方法。
+
+关联器依次检查应用进程 ID、内核进程生命周期 ID、作用域相容的 PID，最后回退到 cgroup／容器作用域。各层均使用事件的采集时间校验绑定窗口；提供了应用进程 ID 或生命周期 ID 时，跳过裸 PID 回退。cgroup／容器匹配保留共同的 Run、Session 和 Attempt，工具调用及应用进程身份通过更精确的证据关联。
+
+时间重叠的绑定一起参与判断。有冲突时只保留共同的执行作用域；Run 也冲突时保持未归属。事件保存的关联信息和 `telemetry correlations` 报告按需包含 `scope_only`、`ambiguous`、`candidate_count`，以及最多 32 个按 ID 排序的 `candidate_binding_ids`。即使诊断列表被缩短，全部有效候选仍参与判断。报告状态区分 `scope_only`（仅作用域）、`ambiguous`（有歧义）、`resolved`（已关联）、`provided`（直接提供）和 `unresolved`（未关联）。
+
+关联结果随事件保存，后续修改绑定不会在打开报告时替换当时的结果。已有事件和签名 Bundle 保留原来的关联信息。
+
+### 运行时进程图身份
+
+带 PID 的新摄取事件在最外层 payload 保存 `runtime_process_identity=agentprov.runtime_process/v2`，区分图节点身份、应用 `process_id` 与作用域绑定。
+
+- 原生 `agentprov_ebpf` 记录的有效 `process_instance_id` 格式为 `boot UUID:PID:启动纳秒数`，对应 `runtime_process/instance/<identity>` 节点。同一生命周期的名称和数据流按此身份聚合，迁移 cgroup 后仍保持身份；PID 复用或内核重启后分开。
+- 父进程与可选线程组生命周期须匹配对应 PID、处于同一次内核启动，且启动时间不晚于子进程。缺少有效生命周期的 PPID／TGID 保存为事件级观察。目前原生 Sensor 提供进程及父进程生命周期；未提供的线程组生命周期保留为空。
+- 缺少有效原生生命周期的记录，包括当前外部接收器与进程采样记录，使用 `runtime_process/observation/<事件 ID>/<pid|ppid|tgid>`，节点标记 `identity_basis=event_observation`。仅 PID 相同的观察分别保存，不派生同进程数据流。
+- 节点元数据区分 `kernel_process_instance`、`event_observation` 和 `legacy_pid`。进程详情及回放根据已保存的进程／事件边定位，保留分页和证据引用。
+- 校验 v2 进程边时同时检查来源事件。导出／导入保留版本标记、节点和关系。没有版本标记的历史记录继续使用原有 PID 图，标记为 `legacy_pid`，读取时保留签名证据原样。
+
+这项调整不改数据库表和 Bundle 容器格式。客户端应将运行时节点 ID 作为完整标识使用，不按固定路径位置截取 PID。
 
 基础记录模式没有需要匹配的内核遥测，因此可以使用合成作用域标识。监督采集模式由 `record` 创建真实 cgroup，`sensor stream` 在宿主内核观测系统调用，关联器据 `cgroup_id` 将事件归入执行记录。原始事件仍无需携带 Agent 标识。
 
@@ -149,7 +203,7 @@ agentprov telemetry correlations --event <event_id> --json
 
 默认还会对写入事件运行策略评估。访问云元数据地址、私有网段和敏感路径等事件，可生成 `policy_decisions`、`risk_signals`、`response_actions`、图边和时间线记录。返回结果包含 `policy_decisions` 和 `policy_decision_ids`。使用 `--no-policy` 可关闭策略评估，保留标准化、关联和存储。
 
-`telemetry correlations --json` 解释标准化事件为何归属于某个工具调用作用域，包括原始运行时身份、已解析的应用上下文、匹配绑定、使用的 `pid`、`container_id`、`cgroup_id`、`time` 等键、置信值、时间窗口及进一步查询的引用。
+`telemetry correlations --json` 解释标准化事件为何归属于某个执行作用域或工具调用，包括原始运行时身份、已解析的应用上下文、匹配绑定、使用的 `pid`、`container_id`、`cgroup_id`、`time` 等键、置信值、时间窗口及进一步查询的引用。
 
 接收器识别并转换以下事件：
 
@@ -165,7 +219,24 @@ agentprov telemetry correlations --event <event_id> --json
 
 原生传感器位于 `internal/sensor` 和 `cmd/agentprov-sensor`，支持 Linux amd64、arm64。其 JSONL 经原生事件映射后，进入与其他来源共用的关联、策略和风险流程。
 
-接收流程还会根据 TLS 事件派生 `llm_call`（请求与响应）和 `llm_intent_caused`（响应与后续操作）关系。当前依据同一执行记录中、已知时同一进程内的两分钟时间窗口选择最近事件；`llm_call` 只关联第一个响应片段。它们是推断关系，不能据此证明模型响应造成了某个系统调用，也不能保证并发请求正确配对或流式正文完整重组。
+接收流程保留 TLS 观察记录。`launch` 封存时，或执行 `graph materialize-llm --run <id>` 时，按 `agentprov.tls_connection_exchange/v1` 分析已保存消息：
+
+- HTTP/2 按 `connection_id` 与 `stream_id` 配对唯一的请求和最终响应，支持并发流和乱序入库。
+- HTTP/1.x 按采集时间检查同一采集代次内完整、严格交替的请求／响应序列。流水线重叠、相同时间、重复响应和序列缺口保留为歧义；消息截断，或已保存的 Run 采集报告记录丢失／积压时，停用串行推断。
+- 两条路径都检查采集来源、进程和作用域相容性、头部解码状态及请求响应时间。连接或流身份缺失时保持未知，不用最近 PID 事件或旧配对边填补身份。临时响应与最终响应分开保留。
+
+每份物化的 `llm_message` 携带 `correlation`：状态 `matched`／`unknown`／`ambiguous`、原因、规则、方法、置信值和配对事件 ID。正文保留仍由采集设置控制；仅保存元数据也能配对。图查询将配对边标为派生关系，并附来源事件引用。HTTP/2 身份匹配使用置信值 `1`，HTTP/1 串行推断使用 `0.8`；这表示关联依据等级，而非实测准确率。
+
+重分析以事务替换 TLS 派生结果；迟到的重复记录引入歧义时，会撤回此前配对。原始事件、transcript 和 endpoint 证据继续保留。直接打开已有签名 Bundle 保持原图；明确对导入的 Run 重新分析时，在本地存储更新派生结果，原 Bundle 文件不变。新摄取不再生成旧的时间邻近关系 `llm_intent_caused`。
+
+物化后的 `llm_caused` 命令关联使用更严格的 `agentprov.intent_command_scope/v2` 规则：
+
+- 执行时间严格晚于决策，间隔不超过两分钟。TLS 匹配要求相同采集来源、已知的内核启动或节点身份，以及共同的 cgroup 或容器；已知作用域字段冲突或请求／响应配对有歧义时跳过。
+- 按完整 `argv` 比较，保留大小写、路径和参数边界。普通命令逐参数匹配；复杂 Shell 语法要求完整的 `sh`／`bash`／`zsh` 的 `-c` 或 `-lc` 脚本参数。拼接命令文本、截断参数和 `process_observed` 采样仍作为证据保存，不作为执行锚点。
+- Transcript 需要决策原始时间、`tool_use.id`、相容的 Agent／Session 身份，以及当前版本 `agent_syscall` 中位于调用时间区间内的直接 exec 锚点。关联不再按命令文本扫描整个 Run，也不把继承的子进程边当成直接执行锚点。
+- 一个决策对应多个执行候选，或一个执行被同批多个决策匹配时，保持未关联，请求／响应正文继续保留。Endpoint 上传序号不作为模型执行锚点。
+
+新连线使用带版本的 ID，图查询返回 `derived: true`、规则名称、启发式置信值 `0.8` 和证据引用；签名 Bundle 导出、导入后仍保留这些信息。历史导入连线维持原有记录。TLS 和 transcript 分析采用有界输入与事务替换，遇到输入上限或数据库错误时保留上次结果。
 
 本地监督采集入口：
 

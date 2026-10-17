@@ -36,6 +36,16 @@ func validProcessInstance(instance string, pid int64) bool {
 	return err == nil && nerr == nil && p == pid && ns > 0
 }
 
+// ProcessInstanceBootID returns the kernel boot identity only for a validated
+// native process instance. It is shared by scope attribution and graph analysis.
+func ProcessInstanceBootID(instance string, pid int64) string {
+	if !validProcessInstance(instance, pid) {
+		return ""
+	}
+	boot, _, _ := strings.Cut(instance, ":")
+	return boot
+}
+
 func resolveProcessInstance(db Queryer, runID, instance string, pid int64, at string) (Match, bool, error) {
 	if !validProcessInstance(instance, pid) {
 		return Match{}, false, nil
@@ -63,6 +73,9 @@ func ObserveProcessInstance(db ProcessStore, raw RawIdentity) error {
 	if err != nil {
 		return err
 	}
+	if seed.Ambiguous {
+		return nil
+	}
 	if !ok && validProcessInstance(raw.ParentProcessInstanceID, raw.PPID) {
 		child := strings.Split(raw.ProcessInstanceID, ":")
 		parent := strings.Split(raw.ParentProcessInstanceID, ":")
@@ -72,7 +85,7 @@ func ObserveProcessInstance(db ProcessStore, raw RawIdentity) error {
 			seed, ok, err = resolveProcessInstance(db, raw.RunID, raw.ParentProcessInstanceID, raw.PPID, raw.Timestamp)
 		}
 	}
-	if err != nil || !ok {
+	if err != nil || !ok || seed.Ambiguous {
 		return err
 	}
 	b := seed.Binding
@@ -81,6 +94,7 @@ func ObserveProcessInstance(db ProcessStore, raw RawIdentity) error {
 	// Preserve the root scope's source/confidence, but the method and exact
 	// binding ID distinguish lifecycle evidence from polling-based matches.
 	b.Confidence = seed.Confidence
+	b.ConfidenceSet = true
 	_, err = RecordBinding(db, b)
 	return err
 }

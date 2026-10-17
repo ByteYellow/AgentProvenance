@@ -109,6 +109,58 @@ opt-in, normalization stores a hash and short preview rather than the full body.
 Captured prompts, responses and raw spool payloads may contain sensitive data;
 restrict access to the data directory and review bundles before sharing them.
 
+For reassembled TLS messages, `http` preserves the sensor's parsed fields:
+
+| Field | Meaning |
+| --- | --- |
+| `protocol`, `kind`, `headers_decoded` | HTTP version, request/response direction and reported header decoding state |
+| `method`, `host`, `path`, `endpoint` | Request method, authority and encoded path; endpoint is authority + path |
+| `status`, `content_type`, `is_stream` | Response status, media type without parameters and SSE indicator |
+| `model`, `stream_id` | Model ID when available; HTTP/2 stream number within its connection |
+| `connection_id` | Opaque `tls-v1:` capture-generation ID when OpenSSL lifecycle tracking and process identity are available |
+
+Endpoint metadata excludes URL userinfo, query strings and fragments. Headers
+such as Authorization and Cookie are not copied into `http`. Body/preview and
+raw capture retention follow their existing settings independently. A stream ID
+is connection-local and must be combined with a connection lifetime for pairing.
+Reassembled `data` is the body, so it is not scanned for HTTP headers. Older raw
+windows still use request/response-head parsing; a recognized HTTP/2 preface is
+marked `headers_decoded: false`, while opaque binary bytes stay unclassified.
+These optional fields require no database or bundle-format migration.
+
+OpenSSL `SSL_read` and `SSL_read_ex` entry/return probes use the full kernel
+`pid_tgid` and task start time. Each API retains up to four nested calls per
+thread, with a bounded map of 4,096 threads. Returns beyond that depth are skipped
+without consuming an outer frame and contribute to capture-loss diagnostics.
+Returned byte counts are checked against the original buffer capacity; unreadable
+`SSL_read_ex` output pointers also count as capture loss. Thread exit and successful
+exec clear both read stacks, including the previous TID when a worker becomes the
+process leader during exec. The existing
+per-call plaintext cap remains 4 KiB. This pairing covers function invocations;
+HTTP request/response association is a separate step.
+
+OpenSSL capture generations combine the kernel boot, process start, SSL object
+address and a kernel-stamped epoch. `SSL_new`, `SSL_clear`, `SSL_free` and BIO/FD
+replacement probes bound the lifetime of retained HTTP/HPACK state. Each chunk
+carries its epoch, and reads retain the entry epoch through return, so a lost
+boundary record or delayed old read cannot join a newer buffered connection.
+The epoch map holds at most 16,384 objects; userspace also bounds active and
+closed-generation metadata. Discarded partial state is reported as a
+`sensor_tls_reassembly` / `reassembly_gap` resource-pressure event.
+
+Clear/rebind entries and `SSL_free` are conservative parsing boundaries:
+the former may fail and the latter may only decrement a reference count.
+The connection ID therefore identifies an observed capture generation, not a
+TCP socket or proof of a completed handshake. Pending release/exit data remains
+best-effort and truncated; new requests no longer implicitly end old responses.
+Within one generation, HTTP/2 streams share their direction's HPACK dictionary.
+If any required lifecycle probe fails, plaintext attachment for that target
+waits for a successful retry; the capability report identifies the missing probe.
+Other runtime probes continue independently. Go TLS and
+legacy captures without an epoch omit `connection_id`; their lifecycle coverage
+is unchanged. See [OpenSSL SSL_clear](https://docs.openssl.org/3.0/man3/SSL_clear/)
+and [SSL_free](https://docs.openssl.org/3.0/man3/SSL_free/) for the API semantics.
+
 ## Example
 
 Valid raw runtime event:
@@ -155,16 +207,81 @@ Current confidence tiers:
 | Method | Confidence | Notes |
 | --- | --- | --- |
 | Direct process / self-observed wrapper evidence | `1.0` | Self-consistency is not independent kernel corroboration |
-| Real cgroup + time window | `0.98` | Supervised Linux capture; strong subtree join |
-| Container + time window | `0.92` | Common runtime/collector join |
-| PID + time window | `0.85` | Useful fallback; weaker because of PID reuse and missed short-lived descendants |
+| Real cgroup + time window | `0.98` | Execution-scope attribution |
+| Container + time window | `0.92` | Execution-scope attribution |
+| PID + time window | `0.85` | Process attribution, constrained by supplied scope keys; subject to PID reuse |
 | `k8s_cgroup` binding source | default `0.8` | Passive Pod attribution without a recorder launch |
 | `ai_asserted` binding source | default `0.5` | App-supplied claim, intentionally lower trust |
 
-The final match uses the lower of the method confidence and a stored positive
+The final match uses the lower of the method confidence and the stored
 binding confidence. These source values are defaults, not enforced limits on
 every custom binding. Confidence is not a statistically calibrated probability.
 Reported methods may also include a suffix describing the matched keys.
+
+Confidence values are finite numbers in `[0,1]`. An omitted binding confidence
+uses the source default; an explicit `0` stays zero during resolution, process-
+lifetime inheritance, query and export. `telemetry bind --confidence 0` and
+`POST /v1/telemetry/bind` follow the same rule. Negative, out-of-range and `null`
+inputs are rejected. Clients that previously sent zero to request a default
+should omit the field instead. Existing stored rows and signed bundles are not
+rewritten.
+
+Unified signals use the same numeric range and preserve explicit zero; omission
+retains their default of `1`. Internal Go producers use `ConfidenceSet: true`
+to supply an explicit zero. Graph edges with no recorded confidence leave the
+field absent; the Dashboard shows `unknown` rather than `0.00`. Unresolved or
+ambiguous joins retain their status/method alongside the numeric confidence.
+
+Resolution checks the application process ID, kernel process-lifetime ID, then
+PID with compatible scope keys before falling back to cgroup/container scope.
+Every lookup uses the event's captured timestamp. A supplied process-lifetime
+or application process ID disables bare-PID fallback. Container/cgroup matches
+retain the common run, session and attempt; tool-call and application-process
+IDs require more specific evidence.
+
+Overlapping bindings are evaluated together. Conflicting candidates retain only
+their common execution scope; conflicting runs remain unresolved. The saved
+correlation envelope and `telemetry correlations` report include `scope_only`,
+`ambiguous`, `candidate_count` and up to 32 sorted `candidate_binding_ids` when
+applicable. All active candidates participate in resolution, even when the
+diagnostic list is shortened. Report status distinguishes `scope_only` and
+`ambiguous` from `resolved`, `provided` and `unresolved`.
+
+These results are recorded with the event. Later binding changes do not replace
+the recorded choice when opening its report. Existing events and signed bundles
+keep their original correlation metadata.
+
+### Runtime Process Graph Identity
+
+New ingests with a PID store `runtime_process_identity` at the outer payload
+envelope, with value `agentprov.runtime_process/v2`. This records the graph
+identity contract separately from application `process_id` and scope binding.
+
+- Native `agentprov_ebpf` records with a valid `process_instance_id`
+  (`boot UUID:PID:start ns`) use `runtime_process/instance/<identity>` nodes.
+  Labels and data-flow grouping use this identity across events, including
+  cgroup moves; another birth time or kernel boot produces a separate node.
+- Parent and optional thread-group lifetime references must match their numeric
+  identifiers, share the child's boot and start no later than the child.
+  Numeric PPID/TGID observations without a valid lifetime remain event-local.
+  The native sensor currently supplies process and parent lifetimes; a missing
+  thread-group lifetime is not synthesized from its TGID.
+- Records without a usable native lifetime, including current external
+  receiver and process-sampler records, use
+  `runtime_process/observation/<event ID>/<pid|ppid|tgid>`. Their node metadata
+  reports `identity_basis=event_observation`. Matching numeric PIDs alone does
+  not join these observations or generate a same-process data-flow inference.
+- Graph metadata distinguishes `kernel_process_instance`, `event_observation`
+  and `legacy_pid`. New process-focused event queries and replay use recorded
+  process-to-event edges, with the same pagination and evidence references.
+- Verification checks v2 process edges against the event that produced them.
+  Export/import preserves the identity marker, nodes and edges. Unversioned
+  historical records keep their numeric-PID graph and `legacy_pid` metadata;
+  opening them does not rewrite signed evidence.
+
+This changes no database tables or bundle container format. Clients should treat
+runtime graph node IDs as opaque strings rather than extracting a PID from a
+fixed path segment.
 
 In record-only mode, a synthetic scope id is sufficient because there is no
 kernel telemetry to join. In supervised mode, `record` creates a real cgroup
@@ -208,7 +325,7 @@ access, and secret-path reads create `policy_decisions`, `risk_signals`,
 policy evaluation while retaining normalization, correlation, and storage.
 
 `telemetry correlations --json` explains the second half of the path: why a
-normalized runtime event was attached to a ToolCallScope. The report includes
+normalized runtime event was attached to an execution scope or tool call. The report includes
 the raw runtime identity, resolved application context, matched binding,
 matched identity keys such as `pid`, `container_id`, `cgroup_id`, and `time`,
 confidence, time window, and drill-down refs.
@@ -228,12 +345,62 @@ The receiver maps recognized substrate events into the normalized schema:
 The native sensor (`internal/sensor`, `cmd/agentprov-sensor`; Linux amd64/arm64)
 emits JSONL that the native mapper converts into the shared ingest schema,
 so native telemetry drives the same correlation → policy → risk path as other
-receivers. Ingestion also derives `llm_call` (TLS request → response) and
-`llm_intent_caused` (TLS response → later action) edges from nearby events.
-The current heuristic chooses the latest event within a two-minute window in
-the same run and, when known, process; `llm_call` uses the first response
-segment. These are inferred relationships, not proof that a response caused
-a syscall, correctly paired concurrent requests, or complete stream reassembly.
+receivers. Ingestion preserves TLS observations. `launch` at sealing time, or
+`graph materialize-llm --run <id>`, derives exchanges over the saved messages
+using `agentprov.tls_connection_exchange/v1`:
+
+- HTTP/2 pairs a unique request and final response by `connection_id` and
+  `stream_id`. Concurrent streams and reversed ingestion order stay separate.
+- HTTP/1.x accepts only complete, strictly alternating request/response records
+  on one capture generation, ordered by capture time. Pipelining, equal times,
+  duplicate responses or a broken sequence remain ambiguous. Truncation or a
+  saved run report indicating capture loss/backlog prevents serial inference.
+- Both paths require compatible capture origin, process and scope, decoded
+  headers, and a response timestamp at or after its request. Missing connection
+  or stream identity remains unknown; neither PID proximity nor an old pairing
+  edge supplies the missing identity. Informational responses are retained
+  separately from the final response.
+
+Each materialized `llm_message` includes a `correlation` assessment with
+`status` (`matched`, `unknown`, `ambiguous`), `reason`, rule, method, confidence
+and matched peer event ID. Body retention remains opt-in; metadata-only messages
+can still be paired. Graph queries expose pairing edges as derived, with source
+event references. HTTP/2 identity matches use confidence `1`; HTTP/1 serial
+inference uses `0.8`. These are association grades, not measured accuracy rates.
+
+Reanalysis atomically replaces TLS-derived exchanges, including withdrawing a
+pair when a late duplicate makes it ambiguous. It keeps raw events, transcript
+and endpoint evidence intact. Opening an existing signed bundle preserves its
+recorded graph; explicitly reanalysing an imported run creates updated derived
+results in the local store. Original bundle files remain unchanged.
+New ingestion no longer creates the legacy temporal `llm_intent_caused` edge.
+
+The materialized `llm_caused` command association uses the stricter
+`agentprov.intent_command_scope/v2` rule:
+
+- An exec must occur strictly after the decision and within two minutes. TLS
+  matching requires the same capture source and known kernel boot or node
+  identity, plus a shared cgroup or container; conflicting known scope keys
+  exclude a candidate. Ambiguous request/response pairings are excluded.
+- Complete `argv` is compared without case folding, path aliases or extra
+  arguments. Plain literal commands are compared argument by argument; complex
+  shell syntax requires an intact `sh`/`bash`/`zsh -c` or `-lc` script argument.
+  Joined command text, truncated argv and `process_observed` samples remain
+  evidence, but do not supply an execution anchor.
+- Transcript matching requires a recorded decision timestamp, `tool_use.id`,
+  compatible agent/session identity, and the current direct `agent_syscall`
+  exec anchor within the tool's recorded interval. It does not search the whole
+  run by command text. Inherited child edges are not reused as direct anchors.
+- A decision with multiple execution candidates, or an exec claimed by multiple
+  decisions in the analysis input, remains unlinked. Request/response objects
+  are retained for inspection. Endpoint upload ordering supplies no such anchor.
+
+New command edges carry a versioned ID. Graph queries expose `derived: true`,
+the rule name, heuristic confidence `0.8`, and evidence references, including
+after signed bundle export/import. Existing imported edges retain their original
+metadata. TLS and transcript passes use bounded inputs and transactional
+replacement; an input-limit or database error preserves the previous stored
+result instead of publishing a partial rebuild.
 
 For local supervised capture, the CLI also exposes:
 

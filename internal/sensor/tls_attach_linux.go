@@ -74,12 +74,18 @@ func attachTLSTarget(target tlsTarget, objs *sensorbpfObjects, skip map[string]b
 			a.probes = append(a.probes, probe)
 			return
 		}
-		up, err := ex.Uprobe(name, enter, nil)
+		var up link.Link
+		var err error
+		if enter != nil {
+			up, err = ex.Uprobe(name, enter, nil)
+		}
 		if err == nil && ret != nil {
 			var out link.Link
 			out, err = ex.Uretprobe(name, ret, nil)
 			if err != nil {
-				_ = up.Close()
+				if up != nil {
+					_ = up.Close()
+				}
 			} else {
 				a.links = append(a.links, out)
 			}
@@ -87,12 +93,30 @@ func attachTLSTarget(target tlsTarget, objs *sensorbpfObjects, skip map[string]b
 		if err != nil {
 			probe.Status = "failed"
 			probe.Reason = capabilityFailure(err)
-		} else {
+		} else if up != nil {
 			a.links = append(a.links, up)
 		}
 		a.probes = append(a.probes, probe)
 	}
 	if target.Kind == "openssl" {
+		attach("SSL_new", nil, objs.HandleSslNew)
+		attach("SSL_free", objs.HandleSslRelease, nil)
+		for _, name := range []string{"SSL_clear", "SSL_set_bio", "SSL_set0_rbio", "SSL_set0_wbio", "SSL_set_fd", "SSL_set_rfd", "SSL_set_wfd"} {
+			attach(name, objs.HandleSslReset, nil)
+		}
+		for _, probe := range a.probes {
+			if probe.Status != "attached" {
+				// A partial boundary set can let a recycled address retain its
+				// generation. Retry the missing probes before accepting plaintext.
+				for _, name := range []string{"SSL_write", "SSL_write_ex", "SSL_read", "SSL_read_ex"} {
+					if !skip[name] {
+						a.probes = append(a.probes, ProbeCapability{Name: name, Category: "tls", Target: target.Path,
+							Status: "failed", Reason: "OpenSSL plaintext capture requires all connection-lifecycle probes"})
+					}
+				}
+				return a
+			}
+		}
 		attach("SSL_write", objs.HandleSslWrite, nil)
 		attach("SSL_write_ex", objs.HandleSslWriteEx, nil)
 		attach("SSL_read", objs.HandleSslReadEnter, objs.HandleSslReadExit)

@@ -164,8 +164,8 @@ func buildSubstrateEdges(runID string, nodes map[string]GraphLensNode, events ma
 		{ID: "substrate-profile-node", FromID: profileID, ToID: nodeID, EdgeType: "producer_runs_on"},
 		{ID: "substrate-node-workload", FromID: nodeID, ToID: workloadID, EdgeType: "sensor_observes_workload"},
 		{ID: "substrate-workload-cgroup", FromID: workloadID, ToID: cgroupID, EdgeType: "workload_has_cgroup", Data: map[string]any{"cgroup_count": len(stats.cgroups)}},
-		{ID: "substrate-cgroup-scope", FromID: cgroupID, ToID: scopeID, EdgeType: "cgroup_binds_scope", Confidence: substrateScopeConfidence(scope)},
-		{ID: "substrate-scope-run", FromID: scopeID, ToID: rootID, EdgeType: "scope_binds_run", Confidence: substrateScopeConfidence(scope)},
+		{ID: "substrate-cgroup-scope", FromID: cgroupID, ToID: scopeID, EdgeType: "cgroup_binds_scope", Confidence: graphConfidence(substrateScopeConfidence(scope))},
+		{ID: "substrate-scope-run", FromID: scopeID, ToID: rootID, EdgeType: "scope_binds_run", Confidence: graphConfidence(substrateScopeConfidence(scope))},
 		{ID: "substrate-cgroup-events", FromID: cgroupID, ToID: eventID, EdgeType: "cgroup_observed_events", Data: map[string]any{"event_count": sumIntMap(stats.events), "pid_count": len(stats.pids)}},
 		{ID: "substrate-events-run", FromID: eventID, ToID: rootID, EdgeType: "events_materialize_run"},
 	}
@@ -190,7 +190,7 @@ func buildSubstrateEdges(runID string, nodes map[string]GraphLensNode, events ma
 			nodes[pcg] = GraphLensNode{ID: pcg, Kind: "substrate_cgroup_group", Subtype: "cgroup", Label: "cgroup " + pod.CgroupID, TrustOrigin: "kernel_observed", Data: map[string]any{"cgroup_id": pod.CgroupID, "pod": podDisplayName(pod)}}
 			out = append(out,
 				GraphLensEdge{ID: fmt.Sprintf("substrate-pod-cgroup-%d", i), FromID: podID, ToID: pcg, EdgeType: "pod_bound_cgroup", Data: map[string]any{"cgroup_id": pod.CgroupID}},
-				GraphLensEdge{ID: fmt.Sprintf("substrate-podcgroup-scope-%d", i), FromID: pcg, ToID: scopeID, EdgeType: "cgroup_binds_scope", Confidence: substrateScopeConfidence(scope)},
+				GraphLensEdge{ID: fmt.Sprintf("substrate-podcgroup-scope-%d", i), FromID: pcg, ToID: scopeID, EdgeType: "cgroup_binds_scope", Confidence: graphConfidence(substrateScopeConfidence(scope))},
 			)
 		}
 	}

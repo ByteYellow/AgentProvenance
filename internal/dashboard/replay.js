@@ -79,7 +79,12 @@ window.AgentProvReplay = (() => {
     const lens=p.get('lens')||'',group=(p.get('group')||'').trim(),focus=(p.get('focus')||'').trim();
     const q=copy(run.filters[lens+'/'+group]||run.filters[lens+'/']||{});
     q.Type=p.get('type')||'';q.ToolCallID=p.get('tool_call')||'';q.ProcessID=p.get('process')||'';q.PID=p.get('pid')||'';
-    if(focus.startsWith('runtime_event/'))q.IDs=[focus.slice(14)];else if(focus.startsWith('runtime_process/pid/'))q.PID=focus.slice(20);else if(focus.startsWith('process/'))q.ProcessID=focus;else if(focus&&!focus.includes('/'))q.ToolCallID=focus;
+    if(focus.startsWith('runtime_event/'))q.IDs=[focus.slice(14)];
+    else if(focus.startsWith('runtime_process/')){
+      if(Object.hasOwn(run.event_refs||{},focus)){q.IDs=run.event_refs[focus];q.None=!q.IDs.length;}
+      else if(focus.startsWith('runtime_process/pid/'))q.PID=focus.slice(20);
+      else q.None=true;
+    }else if(focus.startsWith('process/'))q.ProcessID=focus;else if(focus&&!focus.includes('/'))q.ToolCallID=focus;
     return events.filter(e=>{
       if(q.None||(q.IDs?.length&&!q.IDs.includes(e.id))||(q.Types?.length&&!q.Types.includes(e.event_type)))return false;
       for(const [a,b] of [['Type','event_type'],['ToolCallID','tool_call_id'],['ProcessID','process_id'],['PID','pid']])if(q[a]&&String(e[b])!==String(q[a]))return false;

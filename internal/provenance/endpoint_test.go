@@ -75,6 +75,13 @@ func TestIngestEndpointDump(t *testing.T) {
 	if reqE != 1 || respE != 1 {
 		t.Errorf("llm_call edges: request=%d response=%d, want 1/1", reqE, respE)
 	}
+	var caused int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE run_id=? AND edge_type='llm_caused'`, run).Scan(&caused); err != nil {
+		t.Fatal(err)
+	}
+	if caused != 0 {
+		t.Fatalf("nearby chat call attributed to an undeclared upload: %d", caused)
+	}
 
 	// The blocked egress is a network_connect event (a real effect) marked blocked/deny.
 	var egN int

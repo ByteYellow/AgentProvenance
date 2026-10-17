@@ -727,6 +727,9 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 		}
 		payload["process_instance_id"] = instance
 		payload["parent_process_instance_id"] = stringAt(raw, "parent_process_instance_id")
+		if group := stringAt(raw, "thread_group_instance_id"); group != "" {
+			payload["thread_group_instance_id"] = group
+		}
 		event.Payload = mustJSON(payload)
 	}
 	return event, true, nil
@@ -735,9 +738,8 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 // sslPayload normalizes a captured TLS plaintext preview. By default it stores a
 // sha256 of the captured bytes plus a short human-triage preview (NOT the full
 // plaintext), since prompt/response text is sensitive; the full preview length
-// is recorded for context. It also derives privacy-safe HTTP provenance metadata
-// (endpoint/model/streaming) under "http" via tlsMeta, which reads only the
-// allow-listed head of the request/response, never the body. direction is
+// is recorded for context. Parsed HTTP metadata is allow-listed under "http";
+// older raw captures fall back to parsing the request/response head. direction is
 // "request" (tls_write) or "response" (tls_read).
 func sslPayload(raw map[string]any, comm, direction string) string {
 	data := stringAt(raw, "data")
@@ -751,7 +753,7 @@ func sslPayload(raw map[string]any, comm, direction string) string {
 	if truncated, _ := raw["truncated"].(bool); truncated {
 		payload["truncated"] = true
 	}
-	if m := stringAt(raw, "model"); m != "" {
+	if m := boundedHTTPText(stringAt(raw, "model"), 256); m != "" {
 		payload["model"] = m
 	}
 	// Privacy: the full reassembled body (the model's actual prompt/completion) is
@@ -760,7 +762,7 @@ func sslPayload(raw map[string]any, comm, direction string) string {
 	if data != "" && os.Getenv("AGENTPROV_TLS_CAPTURE_BODY") == "1" {
 		payload["content"] = data
 	}
-	if meta := tlsMeta(data, direction); meta != nil {
+	if meta := capturedTLSMeta(raw, direction); meta != nil {
 		payload["http"] = meta
 	}
 	return mustJSON(payload)

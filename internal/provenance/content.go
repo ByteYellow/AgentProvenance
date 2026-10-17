@@ -289,13 +289,22 @@ func ReadTextContentPage(db *sql.DB, runID, ref string, offset, limit int64) (Co
 	return page, nil
 }
 
-func readContentObject(db *sql.DB, runID, ref string, target any) error {
+type contentObjectReader interface {
+	QueryRow(string, ...any) *sql.Row
+}
+
+type contentLookupError struct{ err error }
+
+func (e *contentLookupError) Error() string { return "stored content lookup: " + e.err.Error() }
+func (e *contentLookupError) Unwrap() error { return e.err }
+
+func readContentObject(db contentObjectReader, runID, ref string, target any) error {
 	if runID == "" || !strings.HasPrefix(ref, "sha256:") {
 		return fmt.Errorf("run id and content hash are required")
 	}
 	var path string
 	if err := db.QueryRow(`SELECT path FROM provenance_objects WHERE run_id = ? AND hash = ?`, runID, ref).Scan(&path); err != nil {
-		return fmt.Errorf("stored content lookup: %w", err)
+		return &contentLookupError{err: err}
 	}
 	info, err := os.Stat(path)
 	if err != nil || !info.Mode().IsRegular() {

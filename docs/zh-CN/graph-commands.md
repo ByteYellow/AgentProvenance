@@ -36,6 +36,16 @@
 ./agentprov graph explain --risk <policy_decision_id> --json
 ```
 
+## 验证结果
+
+`graph verify --json` 输出 `agentprovenance.verify/v1`，状态分为三种：
+
+- `ok`：检查完成，没有完整性错误。
+- `failed`：检查完成，发现完整性错误；不存在的 Run 也属于此状态。
+- `unavailable`：数据库等运行错误使检查无法完成。`error` 字段保留原因，问题计数只覆盖已经完成的检查。
+
+后两种状态均返回非零 CLI 退出码。`GET /v1/graph/verify?run=...` 在检查完成时返回 HTTP 200，无法完成时返回 HTTP 503 和同一结果结构。排除故障后可重试；确实缺失的记录作为证据问题报告，查询失败则单独报告。
+
 ## 命令用途
 
 | 命令 | 用途 |

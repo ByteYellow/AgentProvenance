@@ -27,6 +27,27 @@ components:
       schema: { type: string }
       description: run id to scope the query to
   schemas:
+    VerifyResult:
+      type: object
+      required: [schema_version, run_id, status, issue_count, error_count, warning_count, issues]
+      properties:
+        schema_version: { type: string, enum: [agentprovenance.verify/v1] }
+        run_id: { type: string }
+        status: { type: string, enum: [ok, failed, unavailable] }
+        issue_count: { type: integer, minimum: 0 }
+        error_count: { type: integer, minimum: 0 }
+        warning_count: { type: integer, minimum: 0 }
+        error: { type: string, description: Operational error when verification could not finish. Issue counts cover completed checks only. }
+        issues:
+          type: [array, "null"]
+          items:
+            type: object
+            required: [severity, kind, id, message]
+            properties:
+              severity: { type: string, enum: [error, warning] }
+              kind: { type: string }
+              id: { type: string }
+              message: { type: string }
     VersionedEnvelope:
       type: object
       description: every response carries a schema_version naming its contract
@@ -97,7 +118,8 @@ paths:
       summary: verify a run's evidence chain (object hashes, parents, policy->risk->response->signal). agentprovenance.verify/v1
       parameters: [ { $ref: "#/components/parameters/run" } ]
       responses:
-        "200": { description: verification result with status ok|failed, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+        "200": { description: Completed verification with status ok or failed, content: { application/json: { schema: { $ref: "#/components/schemas/VerifyResult" } } } }
+        "503": { description: Verification could not finish; status unavailable preserves the operational error, content: { application/json: { schema: { $ref: "#/components/schemas/VerifyResult" } } } }
   /v1/graph/explain:
     get:
       operationId: explain

@@ -263,6 +263,27 @@ def main():
                 directions = ("tls_write",)
             for kind in directions:
                 checks[f"{name}:{kind}"] = any(row.get("pid") == pid and row.get("event_type") == kind and name in row.get("data", "") for row in rows)
+                captured = [row for row in rows if row.get("pid") == pid and row.get("event_type") == kind and name in row.get("data", "")]
+                checks[f"{name}:{kind}:http_metadata"] = bool(captured) and all(
+                    row.get("protocol") == "http/1.1" and row.get("headers_decoded") is True and (
+                        row.get("method") == "POST" and row.get("path") == "/v1/chat/completions" and bool(row.get("host"))
+                        if kind == "tls_write" else
+                        row.get("status") == 200 and row.get("content_type") == "application/json"
+                    ) for row in captured)
+                if name == "go-abiinternal":
+                    checks[f"{name}:{kind}:untracked_lifetime"] = bool(captured) and all(
+                        "connection_id" not in row for row in captured)
+                else:
+                    checks[f"{name}:{kind}:connection_id"] = bool(captured) and all(
+                        isinstance(row.get("connection_id"), str) and
+                        row["connection_id"].startswith("tls-v1:") and len(row["connection_id"]) == 71 and
+                        all(char in "0123456789abcdef" for char in row["connection_id"][7:])
+                        for row in captured)
+            if name != "go-abiinternal":
+                connection_ids = {row.get("connection_id") for row in rows
+                                  if row.get("pid") == pid and row.get("event_type") in directions
+                                  and name in row.get("data", "")}
+                checks[f"{name}:same_connection_lifetime"] = len(connection_ids) == 1 and None not in connection_ids
         checks["sensor_clean_exit"] = sensor.returncode == 0
         checks["no_tls_attach_warning"] = "not attached" not in error_path.read_text() and "partial TLS" not in error_path.read_text()
         lifecycle = json.loads((root / "lifecycle.json").read_text())

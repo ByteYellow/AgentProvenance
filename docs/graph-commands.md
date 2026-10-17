@@ -35,6 +35,20 @@ README carries a short summary; this is the complete reference.
 ./agentprov graph explain --risk <policy_decision_id> --json
 ```
 
+## Verification results
+
+`graph verify --json` returns `agentprovenance.verify/v1` with three statuses:
+
+- `ok`: verification completed without integrity errors.
+- `failed`: verification completed and found integrity errors, including an unknown Run.
+- `unavailable`: a database or other operational error prevented completion. The
+  `error` field preserves its cause; issue counts cover only completed checks.
+
+Both `failed` and `unavailable` return a nonzero CLI exit status. The read API
+`GET /v1/graph/verify?run=...` returns HTTP 200 for completed checks and HTTP 503
+with the same envelope for `unavailable`. Retry after the underlying failure is
+resolved. Missing rows are reported as evidence issues; failed queries are not.
+
 ## Per-command purpose
 
 | Command | Purpose |

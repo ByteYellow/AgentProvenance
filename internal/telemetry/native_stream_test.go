@@ -404,7 +404,7 @@ func TestNativeGraphFailureDoesNotAcknowledgePartialEvidence(t *testing.T) {
 	}
 }
 
-func TestNativeLateTLSUsesCaptureTimeForCausalEdges(t *testing.T) {
+func TestNativeLateTLSKeepsCaptureTimeWithoutGuessingPairs(t *testing.T) {
 	db, paths := nativeTestStore(t)
 	n := nativeTestStream(t, db, paths, NativeStreamOptions{BatchEvents: 1})
 	nativeBind(t, db, "known", "run-late-tls")
@@ -424,8 +424,11 @@ func TestNativeLateTLSUsesCaptureTimeForCausalEdges(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*),COALESCE(MAX(created_at),'') FROM graph_edges WHERE edge_type='llm_call'`).Scan(&count, &capturedAt); err != nil {
 		t.Fatal(err)
 	}
-	if count != 1 || capturedAt != "2026-09-19T00:00:00.1Z" {
+	if count != 0 || capturedAt != "" {
 		t.Fatalf("late TLS call count=%d captured_at=%s", count, capturedAt)
+	}
+	if err := db.QueryRow(`SELECT created_at FROM events WHERE event_type='tls_read'`).Scan(&capturedAt); err != nil || capturedAt != "2026-09-19T00:00:00.1Z" {
+		t.Fatalf("late TLS capture time=%s err=%v", capturedAt, err)
 	}
 }
 

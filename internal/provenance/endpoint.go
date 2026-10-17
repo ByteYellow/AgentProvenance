@@ -130,7 +130,6 @@ func IngestEndpointDump(store ObjectStore, db *sql.DB, runID, dumpDir string) (E
 	// files, so the exfil renders as one chain with the rest of the run's activity.
 	sessionID, processID := runSessionProcess(db, runID)
 	toolCallID := runToolCall(db, runID, processID)
-	chatCalls := endpointChatCalls(metas)
 
 	for _, m := range metas {
 		body := readBody(m.base)
@@ -145,7 +144,7 @@ func IngestEndpointDump(store ObjectStore, db *sql.DB, runID, dumpDir string) (E
 			transportBlocked := m.Kind == "EXFIL-REQ" || m.Kind == "exfil-req"
 			class := classifyEndpointPayload(m.Path, body, m.CanaryHits, m.IsGitBundle)
 			blocked := transportBlocked && class.Sensitive
-			if err := ingestEgress(store, db, runID, m, body, blocked, sessionID, processID, toolCallID, nearestChatCall(m.Seq, chatCalls), now); err != nil {
+			if err := ingestEgress(store, db, runID, m, body, blocked, sessionID, processID, toolCallID, now); err != nil {
 				return res, err
 			}
 			res.Egress++
@@ -185,30 +184,6 @@ func pairEndpointChatResponses(metas []endpointMeta) map[int]endpointMeta {
 func isAuxiliaryChat(body []byte) bool {
 	s := strings.ToLower(string(body))
 	return strings.Contains(s, "generating the session title") || strings.Contains(s, `"name":"session_title"`)
-}
-
-func endpointChatCalls(metas []endpointMeta) map[int]string {
-	out := map[int]string{}
-	for _, m := range metas {
-		if m.Kind == "req" && isEndpointChat(m.Path) {
-			out[m.Seq] = fmt.Sprintf("llm_call/ep-%d", m.Seq)
-		}
-	}
-	return out
-}
-
-func nearestChatCall(seq int, calls map[int]string) string {
-	bestSeq, bestDist := 0, int(^uint(0)>>1)
-	for candidate := range calls {
-		d := candidate - seq
-		if d < 0 {
-			d = -d
-		}
-		if d < bestDist || (d == bestDist && candidate < bestSeq) {
-			bestSeq, bestDist = candidate, d
-		}
-	}
-	return calls[bestSeq]
 }
 
 func readBody(base string) []byte {
@@ -348,7 +323,7 @@ func ingestChatCall(store ObjectStore, db *sql.DB, runID string, m endpointMeta,
 
 // ingestEgress records a data-egress upload as a network_connect event (so the
 // intent diff sees an effect) plus a content-addressed descriptor of the payload.
-func ingestEgress(store ObjectStore, db *sql.DB, runID string, m endpointMeta, body []byte, blocked bool, sessionID, processID, toolCallID, llmCallID, now string) error {
+func ingestEgress(store ObjectStore, db *sql.DB, runID string, m endpointMeta, body []byte, blocked bool, sessionID, processID, toolCallID, now string) error {
 	sum := sha256.Sum256(body)
 	digest := "sha256:" + hex.EncodeToString(sum[:])
 	// Prefer the proxy's own detection (it saw the whole body); fall back to
@@ -393,11 +368,8 @@ func ingestEgress(store ObjectStore, db *sql.DB, runID string, m endpointMeta, b
 	if err := insertLLMEdge(db, runID, "runtime_event/"+eventID, obj.Hash, "endpoint_egress_payload", eventID, now); err != nil {
 		return err
 	}
-	if blocked && llmCallID != "" {
-		if err := insertLLMEdge(db, runID, llmCallID, "runtime_event/"+eventID, "llm_caused", eventID, now); err != nil {
-			return err
-		}
-	}
+	// Endpoint ordering alone supplies no model-to-execution anchor. Keep the
+	// upload and its policy evidence without attaching it to a nearby chat call.
 	if err := linkCanarySources(db, runID, eventID, obj.Hash, class.CanaryPaths, now); err != nil {
 		return err
 	}
