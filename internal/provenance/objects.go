@@ -1,6 +1,7 @@
 package provenance
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -410,16 +411,15 @@ func (c *materializeContext) put(obj provenanceObject) (string, error) {
 		return "", err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	var writer interface {
-		Exec(string, ...any) (sql.Result, error)
-	} = c.store.DB
-	if c.store.Tx != nil {
-		writer = c.store.Tx
-	}
-	_, err = writer.Exec(`INSERT OR REPLACE INTO provenance_objects
+	const query = `INSERT OR REPLACE INTO provenance_objects
 		(hash, object_type, source_id, run_id, rollout_id, parent_hashes, path, size_bytes, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		hash, obj.Type, obj.SourceID, obj.RunID, obj.RolloutID, strings.Join(obj.Parents, ","), path, len(raw), now)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	args := []any{hash, obj.Type, obj.SourceID, obj.RunID, obj.RolloutID, strings.Join(obj.Parents, ","), path, len(raw), now}
+	if c.store.Tx != nil {
+		_, err = c.store.Tx.Exec(query, args...)
+	} else {
+		_, err = store.ExecRetry(context.Background(), c.store.DB, query, args...)
+	}
 	if err != nil {
 		return "", err
 	}

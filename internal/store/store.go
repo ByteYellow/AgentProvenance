@@ -109,6 +109,11 @@ func EnsureSchema(db *sql.DB) error {
 		if version > SchemaVersion {
 			return i18n.Errorf("database schema %d is newer than supported %d; downgrade is not supported", version, SchemaVersion)
 		}
+		// Current stores need no DDL or version-row writes. In particular, a
+		// read-only CLI query must not compete with the collector's writer.
+		if version == SchemaVersion {
+			return nil
+		}
 	}
 
 	stmts := []string{

@@ -136,3 +136,26 @@ func TestTranscriptReanalysisFailureKeepsLastGraph(t *testing.T) {
 		t.Fatalf("retry=%d edges", got)
 	}
 }
+
+func TestMalformedTranscriptReanalysisKeepsLastGraph(t *testing.T) {
+	for _, bad := range []string{`{"type":"assistant","message":`, "null", `{"type":"assistant","message":{"content":null}}`, `{"type":"assistant","message":{"content":{}}}`} {
+		t.Run(bad, func(t *testing.T) {
+			st, db := intentTestStore(t)
+			source := transcriptIntentSource("2026-01-01T00:00:00Z", "tool-a", "alice", "session-a")
+			if n, err := HarvestTranscriptStreams(st, db, "intent-test", []TranscriptStream{{Reader: strings.NewReader(source)}}); err != nil || n != 1 {
+				t.Fatalf("setup: %d %v", n, err)
+			}
+			before := intentDerivedSnapshot(t, db)
+			if _, err := HarvestTranscriptStreams(st, db, "intent-test", []TranscriptStream{{Reader: strings.NewReader(source + "\n" + bad)}}); err == nil {
+				t.Fatal("expected malformed source error")
+			}
+			if after := intentDerivedSnapshot(t, db); !reflect.DeepEqual(before, after) {
+				t.Fatal("malformed input replaced last graph")
+			}
+			var objects int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id='intent-test' AND source_id LIKE 'transcript/%'`).Scan(&objects); err != nil || objects != 2 {
+				t.Fatalf("objects=%d err=%v", objects, err)
+			}
+		})
+	}
+}

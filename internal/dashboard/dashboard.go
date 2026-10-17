@@ -13,7 +13,6 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html/template"
 	"net"
@@ -24,7 +23,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -578,95 +576,25 @@ func (s Server) runs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
-// overview bundles verify + signals + risks for one run in a single call.
-// graph verify re-reads and re-hashes every provenance object (seconds for a
-// large run), and the overview endpoint is hit on first load AND on every live
-// refresh. For a read-only dashboard the result is stable until the run's data
-// changes, so cache it keyed by a cheap fingerprint (object + event counts).
-// This turns the multi-second Run Overview into an instant load after the first.
-var (
-	verifyCacheMu sync.Mutex
-	verifyCache   = map[string]verifyCacheEntry{}
-)
-
-type verifyCacheEntry struct {
-	fingerprint string
-	result      any
-}
-
-func (s Server) cachedVerify(run string) any {
-	unavailable := func(err error) any {
+// Verify current evidence on each overview request. Counts cannot invalidate a
+// cached result when relationships or object bytes change. Large stores keep
+// their explicit full-verification path, without treating an old bundle record
+// as verification of the current database.
+func (s Server) verifyOverview(run string) any {
+	var objects int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id = ?`, run).Scan(&objects); err != nil {
 		return provenance.VerifyResult{SchemaVersion: "agentprovenance.verify/v1", RunID: run, Status: "unavailable", Error: err.Error()}
 	}
-	var objs, evs int
-	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id = ?`, run).Scan(&objs); err != nil {
-		return unavailable(err)
+	if objects > 5000 {
+		return map[string]any{
+			"schema_version": "agentprovenance.verify/v1", "run_id": run,
+			"status": "deferred", "error_count": 0, "warning_count": 1,
+			"mode":    "deferred_full_verify",
+			"message": "full graph verification is available through `agentprov graph verify`",
+		}
 	}
-	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id = ?`, run).Scan(&evs); err != nil {
-		return unavailable(err)
-	}
-	key := fmt.Sprintf("%p:%s", s.DB, run)
-	fp := fmt.Sprintf("%d:%d", objs, evs)
-	verifyCacheMu.Lock()
-	if e, ok := verifyCache[key]; ok && e.fingerprint == fp {
-		verifyCacheMu.Unlock()
-		return e.result
-	}
-	verifyCacheMu.Unlock()
-
-	// The local dashboard is an investigation UI. Full graph verification can
-	// re-hash tens of thousands of objects and should stay an explicit CLI/API
-	// action for large imported bundles. When a ready forensics bundle exists,
-	// import already verified its embedded object content before committing rows;
-	// surface that fast provenance posture here and keep the page responsive.
-	if bundle, err := s.cachedBundleVerify(run, objs); err != nil {
-		return unavailable(err)
-	} else if bundle != nil {
-		verifyCacheMu.Lock()
-		verifyCache[key] = verifyCacheEntry{fingerprint: fp, result: bundle}
-		verifyCacheMu.Unlock()
-		return bundle
-	}
-
-	result, err := provenance.Verify(s.DB, run)
-	if err != nil {
-		return result
-	}
-	verifyCacheMu.Lock()
-	verifyCache[key] = verifyCacheEntry{fingerprint: fp, result: result}
-	verifyCacheMu.Unlock()
+	result, _ := provenance.Verify(s.DB, run)
 	return result
-}
-
-func (s Server) cachedBundleVerify(run string, objectCount int) (any, error) {
-	var bundleID, sha, status string
-	var size int64
-	err := s.DB.QueryRow(`SELECT id, sha256, size_bytes, status FROM forensics_bundles
-		WHERE run_id = ? ORDER BY created_at DESC LIMIT 1`, run).Scan(&bundleID, &sha, &size, &status)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
-	if err == nil && status == "ready" && sha != "" {
-		return map[string]any{
-			"status":        "ok",
-			"error_count":   0,
-			"warning_count": 0,
-			"mode":          "forensics_bundle",
-			"bundle_id":     bundleID,
-			"bundle_sha256": sha,
-			"bundle_bytes":  size,
-		}, nil
-	}
-	if objectCount > 5000 {
-		return map[string]any{
-			"status":        "deferred",
-			"error_count":   0,
-			"warning_count": 1,
-			"mode":          "deferred_full_verify",
-			"message":       "full graph verification is available through `agentprov graph verify`",
-		}, nil
-	}
-	return nil, nil
 }
 
 func (s Server) overview(w http.ResponseWriter, r *http.Request) {
@@ -676,7 +604,7 @@ func (s Server) overview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := map[string]any{}
-	out["verify"] = s.cachedVerify(run)
+	out["verify"] = s.verifyOverview(run)
 	if sig, err := signals.Export(s.DB, run); err == nil {
 		out["signals"] = sig
 	}

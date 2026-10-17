@@ -49,6 +49,17 @@ Both `failed` and `unavailable` return a nonzero CLI exit status. The read API
 with the same envelope for `unavailable`. Retry after the underlying failure is
 resolved. Missing rows are reported as evidence issues; failed queries are not.
 
+Dashboard overviews recheck current evidence on each request. Changing a
+relationship or object file is detected even when event/object counts stay the
+same. Imported bundle metadata does not replace this check. Runs with more than
+5,000 objects show deferred verification; use `agentprov graph verify --run ...`
+for their full check.
+
+Transcript reanalysis validates all selected input streams before replacing
+stored analysis. A malformed JSON row or assistant content record reports its
+source line and retains the last graph. Complete final rows do not require a
+trailing newline.
+
 ## Per-command purpose
 
 | Command | Purpose |

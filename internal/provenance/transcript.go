@@ -48,8 +48,11 @@ func HarvestTranscriptStreams(objects ObjectStore, db *sql.DB, runID string, inp
 		r := &io.LimitedReader{R: input.Reader, N: budget + 1}
 		turns, err := parseTranscript(r)
 		budget = r.N - 1
-		if err != nil || budget < 0 {
-			return 0, fmt.Errorf("transcript stream exceeds limits or cannot be parsed")
+		if err != nil {
+			return 0, fmt.Errorf("transcript stream %d: %w", i+1, err)
+		}
+		if budget < 0 {
+			return 0, fmt.Errorf("transcript stream exceeds limits")
 		}
 		parsed[i] = turns
 	}
@@ -314,14 +317,19 @@ func parseTranscript(r io.Reader) ([]transcriptTurn, error) {
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	var turns []transcriptTurn
 	lastPrompt := ""
+	lineNumber := 0
 	for sc.Scan() {
+		lineNumber++
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
 			continue
 		}
+		if !strings.HasPrefix(line, "{") {
+			return nil, fmt.Errorf("transcript line %d must be a JSON object", lineNumber)
+		}
 		var tl transcriptLine
-		if json.Unmarshal([]byte(line), &tl) != nil {
-			continue
+		if err := json.Unmarshal([]byte(line), &tl); err != nil {
+			return nil, fmt.Errorf("invalid transcript JSON at line %d: %w", lineNumber, err)
 		}
 		switch tl.Type {
 		case "user":
@@ -333,8 +341,11 @@ func parseTranscript(r io.Reader) ([]transcriptTurn, error) {
 			}
 		case "assistant":
 			var blocks []any
-			if json.Unmarshal(tl.Message.Content, &blocks) != nil {
-				continue
+			if err := json.Unmarshal(tl.Message.Content, &blocks); err != nil {
+				return nil, fmt.Errorf("invalid assistant content at line %d: %w", lineNumber, err)
+			}
+			if blocks == nil {
+				return nil, fmt.Errorf("assistant content at line %d must be an array", lineNumber)
 			}
 			turn := transcriptTurn{
 				Prompt: lastPrompt, Model: tl.Message.Model, StopReason: tl.Message.StopReason,

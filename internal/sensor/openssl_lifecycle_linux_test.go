@@ -240,6 +240,7 @@ func captureLifecycleEvents(t *testing.T, objs *sensorbpfObjects, bin string, ar
 		t.Fatal(err)
 	}
 	var events []sensorbpfSensorEvent
+	var kernelPID uint32
 	for {
 		record, err := reader.Read()
 		if errors.Is(err, ringbuf.ErrFlushed) {
@@ -252,11 +253,26 @@ func captureLifecycleEvents(t *testing.T, objs *sensorbpfObjects, bin string, ar
 		if err := binary.Read(bytes.NewReader(record.RawSample), binary.LittleEndian, &e); err != nil {
 			t.Fatal(err)
 		}
-		if e.Pid == uint32(cmd.Process.Pid) {
-			events = append(events, e)
+		// The sched exec event identifies this unique fixture path in the
+		// kernel PID namespace. cmd.Process.Pid can be namespace-local (WSL).
+		if e.Kind == eventExec && string(bytes.TrimRight(e.Path[:], "\x00")) == bin {
+			if kernelPID != 0 && kernelPID != e.Pid {
+				t.Fatal("multiple kernel PIDs for fixture exec")
+			}
+			kernelPID = e.Pid
+		}
+		events = append(events, e)
+	}
+	if kernelPID == 0 {
+		t.Fatal("missing fixture exec event")
+	}
+	filtered := events[:0]
+	for _, event := range events {
+		if event.Pid == kernelPID {
+			filtered = append(filtered, event)
 		}
 	}
-	return events, stdout.Bytes()
+	return filtered, stdout.Bytes()
 }
 
 func reassembleLifecycle(events []sensorbpfSensorEvent, skipBoundary bool) ([]tlsintent.Message, tlsintent.CaptureLoss) {

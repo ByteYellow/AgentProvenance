@@ -47,10 +47,23 @@ func addRuntimeProcessNodes(events map[string]lensEvent, add func(GraphLensNode)
 		if role == "tgid" {
 			data["tgid"] = ref.PID
 		}
-		nodes[ref.ID] = GraphLensNode{ID: ref.ID, Kind: "runtime_process", Subtype: fmt.Sprintf("%s %d", role, ref.PID), Label: fmt.Sprintf("%s %d", role, ref.PID), TrustOrigin: "runtime_observed", Data: data}
+		subtype := fmt.Sprintf("%s %d", role, ref.PID)
+		if role == "tgid" && ref.Basis == "legacy_pid" {
+			subtype += " (thread group)"
+		}
+		nodes[ref.ID] = GraphLensNode{ID: ref.ID, Kind: "runtime_process", Subtype: subtype, Label: fmt.Sprintf("%s %d", role, ref.PID), TrustOrigin: "runtime_observed", Data: data}
 	}
 	for _, ev := range ordered {
 		refs := identities[ev.ID]
+		if refs.Version == "" {
+			// Preserve the historical projection of signed imports: unnamed
+			// parents are edge placeholders, not additional observed processes.
+			if ev.PID > 0 && payloadString(ev.Payload, "command", "cmdline", "comm") != "" {
+				ensure(refs.Process, "pid")
+				ensure(refs.ThreadGroup, "tgid")
+			}
+			continue
+		}
 		ensure(refs.Process, "pid")
 		ensure(refs.Parent, "pid")
 		ensure(refs.ThreadGroup, "tgid")

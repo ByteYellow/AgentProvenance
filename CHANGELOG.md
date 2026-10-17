@@ -6,6 +6,19 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Fixed
 
+- Avoid schema writes when opening an up-to-date store. Process native spool
+  files in short transactions, retry transient SQLite contention, and preserve
+  committed row receipts across interruptions so capture and investigation can
+  share the store. Seal batches independently of replay and refresh queue
+  priorities after each batch to avoid delaying new evidence behind retries.
+- Reject malformed transcript rows before replacing derived evidence, retaining
+  the previous graph and reporting the source line.
+- Recheck current evidence in Dashboard overviews, including imported runs,
+  instead of reusing results based on event/object counts or bundle metadata.
+- Keep unknown substrate confidence absent and preserve historical process-view
+  projections in the six pinned v0.8.2 demo bundles.
+- Match live OpenSSL test fixtures by their captured kernel PID so lifecycle
+  checks also work across WSL PID namespaces.
 - Preserve explicit zero confidence in scope bindings, process-lifetime
   inheritance and unified signals. Omitted inputs retain source defaults;
   invalid numeric values are rejected. Graph views distinguish unknown
@@ -13,7 +26,7 @@ English | [中文](CHANGELOG.zh-CN.md)
 - Propagate verification database failures instead of reporting missing evidence.
   CLI JSON and the daemon API expose `status: unavailable` with the failure
   reason; the API returns HTTP 503. Dashboard verification errors are shown
-  separately and are not cached, and cached results are isolated by database.
+  separately. Overview checks use the current database and object contents.
 - Separate cgroup/container scope attribution from tool-call and application-
   process attribution. Process matches use captured time and compatible scope
   keys; parent PIDs no longer borrow a child binding's tool identity.

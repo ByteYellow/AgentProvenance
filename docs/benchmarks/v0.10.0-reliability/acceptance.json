@@ -1,0 +1,407 @@
+{
+  "schema_version": "agentprovenance.v010_reliability_acceptance/v1",
+  "checked_at": "2026-10-17T09:33:06.776847+00:00",
+  "reviewed_base": "cd66fa91b0a4ac4f5f7a1313b5fc1c7aa482902c",
+  "cli_sha256": "20de2f9771d7230754926e51e7cc40a8c8e7dfbd2a7964aada05d9d1fe417d48",
+  "guest_accelerator": "Windows Hypervisor Platform (WHPX)",
+  "hardware_kvm": "unavailable in current WSL session; guest tests use WHPX",
+  "go_race_packages_passed": 35,
+  "go_vet": "passed",
+  "localized_docs": {
+    "documents": 50,
+    "local_links_and_images": 311,
+    "status": "passed"
+  },
+  "legacy": {
+    "status": "passed",
+    "signed_demos": 6,
+    "semantic_views": 144
+  },
+  "deepseek": {
+    "schema_version": "agentprovenance.deepseek_acceptance/v1",
+    "checked_at": "2026-10-17T09:23:53.947389+00:00",
+    "binary_sha256": "20de2f9771d7230754926e51e7cc40a8c8e7dfbd2a7964aada05d9d1fe417d48",
+    "run_id": "run-dbc2adf273d4",
+    "bundle_sha256": "2a243f3b0e4319370e362e19fb9f1e51aea8a4a8aa373f866d97acec64624994",
+    "signature_verified_before_import": true,
+    "rows_preserved": 2532,
+    "object_blobs": 379,
+    "snapshot_files": 5,
+    "telemetry_batches": 18,
+    "graph_errors": 0,
+    "graph_warnings": 0,
+    "duplicate_import_preserved": true,
+    "http_checks": {
+      "entries": 73,
+      "context_content_refs": 146,
+      "context_content_bytes": 212480,
+      "saved_files": 2,
+      "tool_link_queries": 24,
+      "matched_execs": 2,
+      "negative_api_cases": 4,
+      "capture_status": "partial",
+      "run_dropped_events": null
+    }
+  },
+  "wsl_live": {
+    "schema_version": "agentprovenance.sensor_live_acceptance/v1",
+    "architecture": "x86_64",
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "pause_drain_seconds": 1.5,
+    "checks": {
+      "execve": true,
+      "file_open": true,
+      "file_rename": true,
+      "file_unlink": true,
+      "network_connect": true,
+      "dns_query": true,
+      "process_exit": true,
+      "sensitive_read": true,
+      "file_write": true,
+      "setuid": true,
+      "setgid": true,
+      "ptrace": true,
+      "legacy_open_x86": true,
+      "cgroup_identity": true,
+      "dns_glibc_c_abi": true,
+      "dns_udp": true,
+      "python-openssl-ex:tls_write": true,
+      "python-openssl-ex:tls_write:http_metadata": true,
+      "python-openssl-ex:tls_write:connection_id": true,
+      "python-openssl-ex:tls_read": true,
+      "python-openssl-ex:tls_read:http_metadata": true,
+      "python-openssl-ex:tls_read:connection_id": true,
+      "python-openssl-ex:same_connection_lifetime": true,
+      "c-openssl-legacy:tls_write": true,
+      "c-openssl-legacy:tls_write:http_metadata": true,
+      "c-openssl-legacy:tls_write:connection_id": true,
+      "c-openssl-legacy:tls_read": true,
+      "c-openssl-legacy:tls_read:http_metadata": true,
+      "c-openssl-legacy:tls_read:connection_id": true,
+      "c-openssl-legacy:same_connection_lifetime": true,
+      "c-openssl-ex:tls_write": true,
+      "c-openssl-ex:tls_write:http_metadata": true,
+      "c-openssl-ex:tls_write:connection_id": true,
+      "c-openssl-ex:tls_read": true,
+      "c-openssl-ex:tls_read:http_metadata": true,
+      "c-openssl-ex:tls_read:connection_id": true,
+      "c-openssl-ex:same_connection_lifetime": true,
+      "go-abiinternal:tls_write": true,
+      "go-abiinternal:tls_write:http_metadata": true,
+      "go-abiinternal:tls_write:untracked_lifetime": true,
+      "go-abiinternal:tls_read": true,
+      "go-abiinternal:tls_read:http_metadata": true,
+      "go-abiinternal:tls_read:untracked_lifetime": true,
+      "sensor_clean_exit": true,
+      "no_tls_attach_warning": true,
+      "parent_process_instance": true,
+      "fork-child:lifetime": true,
+      "fork-child:parent": true,
+      "fork-child:ordering": true,
+      "fork-child:birth_cgroup": true,
+      "migration-child:lifetime": true,
+      "migration-child:parent": true,
+      "migration-child:ordering": true,
+      "migration-child:birth_cgroup": true,
+      "cgroup_migration": true,
+      "clone-child:lifetime": true,
+      "clone-child:parent": true,
+      "clone-child:ordering": true,
+      "clone-child:birth_cgroup": true,
+      "clone_into_cgroup": true,
+      "required_cgroup_lifecycle": true,
+      "capture_time_before_drain": true
+    },
+    "passed": true,
+    "kernel_pids": {
+      "python-openssl-ex": 2471,
+      "c-openssl-legacy": 2477,
+      "c-openssl-ex": 2479,
+      "go-abiinternal": 2482
+    },
+    "caller_pids": {
+      "python-openssl-ex": 34450,
+      "c-openssl-legacy": 34456,
+      "c-openssl-ex": 34458,
+      "go-abiinternal": 34461
+    },
+    "lifecycle": {
+      "fixtures": {
+        "fork-child": {
+          "caller_pid": 34452
+        },
+        "target_cgroup_id": "3918",
+        "migration-child": {
+          "caller_pid": 34454
+        },
+        "clone-child": {
+          "caller_pid": 34455
+        }
+      },
+      "gaps": {}
+    },
+    "child_kernel_pids": {
+      "fork-child": 2473,
+      "migration-child": 2475,
+      "clone-child": 2476
+    },
+    "event_types": {
+      "file_open": 51,
+      "process_observed": 9,
+      "execve": 6,
+      "file_rename": 1,
+      "file_unlink": 81,
+      "setgid": 1,
+      "setuid": 1,
+      "ptrace": 1,
+      "dns_query": 4,
+      "network_connect": 4,
+      "tls_write": 8,
+      "tls_read": 8,
+      "process_exit": 13
+    },
+    "event_count": 188
+  },
+  "guest_live": {
+    "schema_version": "agentprovenance.sensor_live_acceptance/v1",
+    "architecture": "x86_64",
+    "kernel": "6.8.0-139-generic",
+    "pause_drain_seconds": 1.5,
+    "checks": {
+      "execve": true,
+      "file_open": true,
+      "file_rename": true,
+      "file_unlink": true,
+      "network_connect": true,
+      "dns_query": true,
+      "process_exit": true,
+      "sensitive_read": true,
+      "file_write": true,
+      "setuid": true,
+      "setgid": true,
+      "ptrace": true,
+      "legacy_open_x86": true,
+      "cgroup_identity": true,
+      "dns_glibc_c_abi": true,
+      "dns_udp": true,
+      "python-openssl-ex:tls_write": true,
+      "python-openssl-ex:tls_write:http_metadata": true,
+      "python-openssl-ex:tls_write:connection_id": true,
+      "python-openssl-ex:tls_read": true,
+      "python-openssl-ex:tls_read:http_metadata": true,
+      "python-openssl-ex:tls_read:connection_id": true,
+      "python-openssl-ex:same_connection_lifetime": true,
+      "c-openssl-legacy:tls_write": true,
+      "c-openssl-legacy:tls_write:http_metadata": true,
+      "c-openssl-legacy:tls_write:connection_id": true,
+      "c-openssl-legacy:tls_read": true,
+      "c-openssl-legacy:tls_read:http_metadata": true,
+      "c-openssl-legacy:tls_read:connection_id": true,
+      "c-openssl-legacy:same_connection_lifetime": true,
+      "c-openssl-ex:tls_write": true,
+      "c-openssl-ex:tls_write:http_metadata": true,
+      "c-openssl-ex:tls_write:connection_id": true,
+      "c-openssl-ex:tls_read": true,
+      "c-openssl-ex:tls_read:http_metadata": true,
+      "c-openssl-ex:tls_read:connection_id": true,
+      "c-openssl-ex:same_connection_lifetime": true,
+      "go-abiinternal:tls_write": true,
+      "go-abiinternal:tls_write:http_metadata": true,
+      "go-abiinternal:tls_write:untracked_lifetime": true,
+      "go-abiinternal:tls_read": true,
+      "go-abiinternal:tls_read:http_metadata": true,
+      "go-abiinternal:tls_read:untracked_lifetime": true,
+      "sensor_clean_exit": true,
+      "no_tls_attach_warning": true,
+      "parent_process_instance": true,
+      "fork-child:lifetime": true,
+      "fork-child:parent": true,
+      "fork-child:ordering": true,
+      "fork-child:birth_cgroup": true,
+      "migration-child:lifetime": true,
+      "migration-child:parent": true,
+      "migration-child:ordering": true,
+      "migration-child:birth_cgroup": true,
+      "cgroup_migration": true,
+      "clone-child:lifetime": true,
+      "clone-child:parent": true,
+      "clone-child:ordering": true,
+      "clone-child:birth_cgroup": true,
+      "clone_into_cgroup": true,
+      "required_cgroup_lifecycle": true,
+      "capture_time_before_drain": true
+    },
+    "passed": true,
+    "kernel_pids": {
+      "python-openssl-ex": 4161,
+      "c-openssl-legacy": 4166,
+      "c-openssl-ex": 4168,
+      "go-abiinternal": 4170
+    },
+    "caller_pids": {
+      "python-openssl-ex": 4161,
+      "c-openssl-legacy": 4166,
+      "c-openssl-ex": 4168,
+      "go-abiinternal": 4170
+    },
+    "lifecycle": {
+      "fixtures": {
+        "fork-child": {
+          "caller_pid": 4163
+        },
+        "target_cgroup_id": "8419",
+        "migration-child": {
+          "caller_pid": 4164
+        },
+        "clone-child": {
+          "caller_pid": 4165
+        }
+      },
+      "gaps": {}
+    },
+    "child_kernel_pids": {
+      "fork-child": 4163,
+      "migration-child": 4164,
+      "clone-child": 4165
+    },
+    "event_types": {
+      "process_observed": 7,
+      "execve": 4,
+      "file_open": 9,
+      "file_rename": 1,
+      "file_unlink": 2,
+      "setgid": 1,
+      "setuid": 1,
+      "ptrace": 1,
+      "dns_query": 4,
+      "network_connect": 12,
+      "tls_write": 8,
+      "tls_read": 8,
+      "process_exit": 7
+    },
+    "event_count": 65
+  },
+  "guest_service": {
+    "schema_version": "agentprovenance.kvm_guest_acceptance/v1",
+    "architecture": "x86_64",
+    "kernel": "6.8.0-139-generic",
+    "virtualization": "qemu",
+    "boot_id": "b2de1e13-7fa4-4180-b856-41e7c2b86c79",
+    "run_id": "run-kvm-69530c4b7d4b",
+    "native_events": 16,
+    "event_types": [
+      "execve",
+      "file_open",
+      "file_write",
+      "network_connect",
+      "process_exit",
+      "process_observed"
+    ],
+    "cgroups": [
+      "7871"
+    ],
+    "verification": {
+      "schema_version": "agentprovenance.verify/v1",
+      "run_id": "run-kvm-69530c4b7d4b",
+      "status": "ok",
+      "issue_count": 0,
+      "error_count": 0,
+      "warning_count": 0,
+      "issues": null
+    },
+    "replay_verification": {
+      "schema_version": "agentprovenance.verify/v1",
+      "run_id": "run-kvm-69530c4b7d4b",
+      "status": "ok",
+      "issue_count": 0,
+      "error_count": 0,
+      "warning_count": 0,
+      "issues": null
+    },
+    "bundle_sha256": "8f6016c8eb0e7fa0c0a35eb6faa793de35f6f442b08839b2998d757cf15f8916",
+    "imported_run": "run-kvm-69530c4b7d4b",
+    "passed": true
+  },
+  "k3s": {
+    "schema_version": "agentprovenance.k3s_guest_acceptance/v1",
+    "architecture": "x86_64",
+    "kernel": "6.8.0-139-generic",
+    "boot_id": "b2de1e13-7fa4-4180-b856-41e7c2b86c79",
+    "run_id": "run-agentprov-guest-e8e1f5daa2",
+    "native_events": 66,
+    "event_types": [
+      "execve",
+      "file_open",
+      "file_rename",
+      "file_unlink",
+      "file_write",
+      "network_connect",
+      "process_exit",
+      "process_observed",
+      "secret_path",
+      "setgid",
+      "setuid"
+    ],
+    "binding_source": "k8s_cgroup",
+    "bindings_closed": 12,
+    "verification": {
+      "schema_version": "agentprovenance.verify/v1",
+      "run_id": "run-agentprov-guest-e8e1f5daa2",
+      "status": "ok",
+      "issue_count": 0,
+      "error_count": 0,
+      "warning_count": 0,
+      "issues": null
+    },
+    "passed": true
+  },
+  "restart": {
+    "schema_version": "agentprovenance.native_restart_acceptance/v1",
+    "passed": true,
+    "run_ids": [
+      "run-kvm-69530c4b7d4b",
+      "run-agentprov-guest-e8e1f5daa2"
+    ],
+    "preserved_event_ids": 102,
+    "after_event_ids": 102,
+    "duplicate_raw_event_groups": 0,
+    "collector_running": true,
+    "capabilities_historical": false,
+    "capture": {
+      "counters": {
+        "captured": 4227,
+        "excluded": 586,
+        "expired_uncorrelated": 3327,
+        "ingested": 158,
+        "kernel_dropped_events": 2,
+        "policy_decisions": 34,
+        "read": 4813
+      },
+      "queued_batches": 20,
+      "queued_bytes": 1515254,
+      "pending_events": 742,
+      "cleanup_pending_batches": 0
+    }
+  },
+  "node_capture_snapshot": {
+    "counters": {
+      "captured": 4220,
+      "excluded": 575,
+      "ingested": 157,
+      "kernel_dropped_events": 2,
+      "policy_decisions": 34,
+      "read": 4795
+    },
+    "queued_batches": 52,
+    "queued_bytes": 2614034,
+    "pending_events": 4063,
+    "cleanup_pending_batches": 0
+  },
+  "service_restarts_during_acceptance": 0,
+  "service_database_lock_errors": 0,
+  "openssl_live": "passed on both kernels: lifecycle, nesting, exit/exec cleanup and 32 concurrent reads",
+  "go_tls_live": "32 concurrent connections, exact bytes, zero drops and retained contexts",
+  "fixture_lifecycle_ingestion": "passed for WSL and guest captures",
+  "frontend_evidence_status": "passed",
+  "phase1_llm_causality_native_risk": "passed"
+}
