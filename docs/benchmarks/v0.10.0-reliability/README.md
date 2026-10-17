@@ -38,6 +38,8 @@ During service and K3s acceptance the collector had zero automatic restarts and 
 
 The guest used Windows QEMU with **WHPX hardware acceleration**, Ubuntu 24.04.5 and K3s v1.36.4+k3s1. The guest reports virtualization as `qemu`. Current WSL does not expose the extensions required for hardware KVM; that acceleration layer awaits environment restoration. TCG runs on this machine experienced timeouts and kernel drops, so final guest acceptance used WHPX. Testing used a disposable snapshot and preserved the original image.
 
+Host inspection found Windows `10.0.26200.9711` with `KB5127648` installed on 2026-10-16. Firmware virtualization is enabled, but WSL lacks `svm`, logs `SVM not supported by CPU`, and returns `ENODEV` when opening `/dev/kvm`. These observations match the [AMD / WSL nested-virtualization regression confirmed by Microsoft](https://github.com/microsoft/WSL/issues/41917). Direct HCS queries returned access denied (`0x8037011B`), so the processor-capability query result was unavailable; recovery must be checked on the host before KVM acceptance is completed. Upstream [PR #41942](https://github.com/microsoft/WSL/pull/41942) adds a detection-failure warning; the underlying Windows regression still requires a fix.
+
 The existing [guest service](../../../scripts/accept_kvm_guest.py), [K3s](../../../scripts/accept_k3s_guest.py), [native capture](../../../scripts/accept_sensor_live.py), [legacy demo](../../../scripts/accept_legacy_context.py) and [DeepSeek](../../../scripts/accept_deepseek_context.py) gates retain their assertions and default waits. Native capture used `--require-cgroup-lifecycle --pause-drain 1.5`.
 
 This run covers amd64. ARM64 retains its earlier acceptance; the previously deferred 24-hour soak remains outside this run.

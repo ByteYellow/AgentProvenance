@@ -403,5 +403,27 @@
   "go_tls_live": "32 concurrent connections, exact bytes, zero drops and retained contexts",
   "fixture_lifecycle_ingestion": "passed for WSL and guest captures",
   "frontend_evidence_status": "passed",
-  "phase1_llm_causality_native_risk": "passed"
+  "phase1_llm_causality_native_risk": "passed",
+  "kvm_host_diagnosis": {
+    "checked_on": "2026-10-17",
+    "windows_build": "10.0.26200.9711",
+    "wsl_version": "2.7.12.0",
+    "installed_update": {
+      "id": "KB5127648",
+      "installed_on": "2026-10-16"
+    },
+    "firmware_virtualization_enabled": true,
+    "wsl_svm_present": false,
+    "kvm_open_errno": "ENODEV",
+    "kernel_message": "kvm_amd: SVM not supported by CPU 2",
+    "hcs_queries": {
+      "Basic": "0x8037011B",
+      "ProcessorCapabilities": "0x8037011B"
+    },
+    "hcs_query_status": "access_denied",
+    "upstream_issue": "https://github.com/microsoft/WSL/issues/41917",
+    "upstream_warning_fix": "https://github.com/microsoft/WSL/pull/41942",
+    "assessment": "Host version and symptoms match the reported Windows regression; HCS capability query requires administrator access.",
+    "kvm_acceptance": "pending_host_recovery"
+  }
 }

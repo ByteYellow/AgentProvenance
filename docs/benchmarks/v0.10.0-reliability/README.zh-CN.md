@@ -40,6 +40,8 @@
 
 Windows 侧 QEMU 使用 **WHPX 硬件加速**，运行 Ubuntu 24.04.5 / K3s v1.36.4+k3s1 的临时快照。来宾识别结果为 `qemu`。本机 WSL 当前没有暴露 KVM 所需的虚拟化扩展，硬件 KVM 加速这一层待环境恢复后补跑。TCG 软件模拟在这台机器上出现超时和内核丢事件，因此最终虚拟机结果采用 WHPX。原来的镜像未改动。
 
+环境复核发现，Windows 为 `10.0.26200.9711`，于 2026-10-16 安装了 `KB5127648`；BIOS 虚拟化已开启，WSL 内缺少 `svm`，内核报告 `SVM not supported by CPU`，打开 `/dev/kvm` 返回 `ENODEV`。这些情况与微软确认的 [AMD / WSL 嵌套虚拟化回归](https://github.com/microsoft/WSL/issues/41917)一致。本次直接查询 HCS 时收到权限拒绝 `0x8037011B`，未取得处理器能力查询结果；具体修复仍由宿主机环境恢复后验证。上游 [PR #41942](https://github.com/microsoft/WSL/pull/41942)补充了检测失败提示，底层 Windows 回归仍需修复。
+
 使用原有脚本和默认等待时间：
 
 - [常驻服务验收](../../../scripts/accept_kvm_guest.py)
