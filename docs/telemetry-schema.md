@@ -75,9 +75,10 @@ The current MVP validates these minimum event-specific fields:
 | Event type | Required body |
 | --- | --- |
 | `execve` | `argv` as a non-empty string array, or `command` |
-| `process_exit` | numeric `exit_code` |
+| `process_exit` / `thread_exit` | numeric `exit_code`, or an integer `exit_signal` from 1 to 64 |
+| `syscall_result` | `operation` and numeric `syscall_result` |
 | `process_observed` | numeric `pid` |
-| `file_open` / `file_write` / `secret_path` | non-traversal `path` or `file`; absolute host paths are accepted |
+| `file_open` / `file_write` / `secret_path` | nonempty `path` or `file` without NUL; absolute host paths are accepted |
 | `network_connect` / `metadata_ip` / `private_cidr` | `dst`, `dst_ip`, or `host` |
 | `abnormal_process_tree` | numeric `pid` or `command` |
 | `policy_verdict` | `decision` or `verdict` |
@@ -94,13 +95,44 @@ required-body validation:
 | `dns_query` | `host` (resolved name; egress by name, not just IP) |
 | `tls_write` / `tls_read` | `preview_sha256` + short `preview` + allow-listed `http` metadata by default; optional body content as described below |
 
-Empty paths and `..` traversal segments are rejected for file-oriented events.
-Raw telemetry accepts absolute host paths; workspace file nodes retain their
-relative-path constraint. The privilege/tamper/DNS/TLS types carry the fields
+Empty paths and NUL bytes are rejected for file-oriented events. Raw telemetry
+retains absolute paths and dot segments as observed syscall arguments; workspace
+file nodes retain their separate relative-path constraint. The privilege/tamper/DNS/TLS types carry the fields
 above but are not subject to a strict required-body check.
 
 `secret_path` now covers a sensitive-path **read**, not only a write: the native
 sensor captures filtered read opens of credential/secret paths.
+
+### Native syscall attempts and outcomes
+
+New native `openat`/amd64 `open` and IPv4 `connect` observations distinguish
+`observation_stage: attempt` from a separate `syscall_result` event. The latter
+retains the actual kernel return value, target and operation name. The existing
+sensitive-read filters apply to both records. If the pathname becomes readable
+only on return, one `attempt_and_result` record retains `path_observation:
+syscall_exit_retry` instead of inventing an earlier path observation.
+
+`operation_id` combines the boot, process and thread lifetimes with syscall
+entry time. Entry and return also retain the raw syscall number, `sensor_arch`,
+and decimal-string monotonic timestamps. `sensor_arch` names the sensor build,
+not a decoded audit ABI. In-flight state is limited to 4,096 threads, checked
+against task lifetime and syscall number, and removed on return, exec or exit.
+Capacity and ring-buffer failures contribute to capture-loss diagnostics.
+
+`syscall_outcome` distinguishes `success`, `failure`, asynchronous connect
+`pending`, and internal `kernel_restart`. An open result describes opening the
+file, not reading its contents; a connect result describes connection setup,
+not bytes sent. Outcome records do not repeat the original attempt's policy
+decisions. Seccomp can reject a call before these entry probes, leaving no
+paired return observation; a return code alone does not identify its cause.
+
+For new native events, `pid` and `tgid` identify the host thread group, while
+`tid`, `thread_instance_id` and `thread_start_ns` retain the executing thread.
+`thread_exit` leaves the process association open. `process_exit` is emitted
+when no live thread remains, with `raw_exit_status` and either `exit_code` or
+`exit_signal`. A signal termination has no fabricated successful exit code.
+Historical records keep their original fields and identities. These additions
+use the existing event payload and need no database or Bundle migration.
 
 `AGENTPROV_TLS_CAPTURE_BODY=1` explicitly retains captured plaintext in the
 normalized event's `content` field for model-call materialization. This does

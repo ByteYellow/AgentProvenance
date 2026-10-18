@@ -6,6 +6,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
+- Native open/connect return observations retain actual results and a shared
+  operation ID with the entry record. Bounded per-thread state guards against
+  reuse; asynchronous connect and restart results keep their distinct meanings.
+  Outcome observations do not repeat attempt-level risk decisions.
 - Launch records its kernel sensor, workspace snapshot, full TLS body and agent
   context options before capture starts. The Dashboard shows these independently
   from context retention, and signed bundles and selected replay copies preserve
@@ -73,6 +77,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Fixed
 
+- Separate native thread identity from the process TGID, retain exit signals,
+  and keep a process association open when its leader exits before its workers.
+  Close the process lifetime when no live thread remains. Preserve these fields
+  through ingestion and signed bundles; add controlled Linux outcome tests.
 - Capture OpenSSL exports from a bounded dynamic symbol table when a large
   unused ordinary string table prevents full symbol inspection, including
   current Node.js binaries. Attach with validated executable-file offsets and

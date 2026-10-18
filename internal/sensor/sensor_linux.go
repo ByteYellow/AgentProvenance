@@ -34,20 +34,22 @@ import (
 )
 
 const (
-	eventExec       = 1
-	eventConnect    = 2
-	eventOpen       = 3
-	eventExit       = 4
-	eventSSL        = 5
-	eventSSLRead    = 6
-	eventSetuid     = 7
-	eventPtrace     = 8
-	eventRename     = 9
-	eventUnlink     = 10
-	eventDNS        = 11
-	eventFork       = 12
-	eventSSLReset   = 13
-	eventSSLRelease = 14
+	eventExec          = 1
+	eventConnect       = 2
+	eventOpen          = 3
+	eventExit          = 4
+	eventSSL           = 5
+	eventSSLRead       = 6
+	eventSetuid        = 7
+	eventPtrace        = 8
+	eventRename        = 9
+	eventUnlink        = 10
+	eventDNS           = 11
+	eventFork          = 12
+	eventSSLReset      = 13
+	eventSSLRelease    = 14
+	eventSyscallResult = 15
+	eventThreadExit    = 16
 )
 
 type sensorTracepoint struct {
@@ -92,6 +94,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		{"sched", "sched_process_exec", objs.HandleExec},
 		{"syscalls", "sys_enter_execve", objs.HandleExecve},
 		{"syscalls", "sys_enter_connect", objs.HandleConnect},
+		{"syscalls", "sys_exit_connect", objs.HandleConnectReturn},
 		{"syscalls", "sys_enter_openat", objs.HandleOpenat},
 		{"syscalls", "sys_exit_openat", objs.HandleOpenReturn},
 		{"sched", "sched_process_exit", objs.HandleExit},
@@ -324,7 +327,8 @@ func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgro
 	ev := map[string]any{
 		"source":          "agentprov_ebpf",
 		"pid":             e.Pid,
-		"tgid":            e.Tgid,
+		"tgid":            e.Pid,
+		"tid":             e.Tid,
 		"ppid":            e.Ppid,
 		"cgroup_id":       strconv.FormatUint(e.CgroupId, 10),
 		"container_id":    containerID,
@@ -571,7 +575,8 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 	ev := map[string]any{
 		"source":       "agentprov_ebpf",
 		"pid":          e.Pid,
-		"tgid":         e.Tgid,
+		"tgid":         e.Pid,
+		"tid":          e.Tid,
 		"ppid":         e.Ppid,
 		"cgroup_id":    strconv.FormatUint(e.CgroupId, 10),
 		"container_id": containerID,
@@ -579,6 +584,7 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 		"comm":         cstr(e.Comm[:]),
 	}
 	addProcessIdentity(ev, e)
+	addSyscallIdentity(ev, e)
 	switch e.Kind {
 	case eventFork:
 		ev["event_type"] = "process_observed"
@@ -593,9 +599,17 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 		}
 	case eventConnect:
 		ev["event_type"] = "network_connect"
+		ev["observation_stage"] = "attempt"
 		ev["dst_ip"] = ipv4(e.Daddr)
 		ev["dst_port"] = ntohs(e.Dport)
-	case eventOpen:
+	case eventOpen, eventSyscallResult:
+		if e.Kind == eventSyscallResult && e.SyscallKind == eventConnect {
+			ev["event_type"] = "syscall_result"
+			ev["dst_ip"] = ipv4(e.Daddr)
+			ev["dst_port"] = ntohs(e.Dport)
+			addSyscallResult(ev, e)
+			break
+		}
 		path := cstr(e.Path[:])
 		mode := "write"
 		if e.ExitCode == 1 {
@@ -608,15 +622,23 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 			return nil
 		}
 		ev["event_type"] = "file_open"
+		ev["observation_stage"] = "attempt"
 		ev["path"] = path
 		ev["mode"] = mode
 		if e.Dport == 1 {
 			ev["path_observation"] = "syscall_exit_retry"
 			ev["syscall_result"] = int64(e.Conn)
+			if e.SyscallStartNs != 0 {
+				addSyscallResult(ev, e)
+				ev["observation_stage"] = "attempt_and_result"
+			}
 		}
-	case eventExit:
-		ev["event_type"] = "process_exit"
-		ev["exit_code"] = e.ExitCode
+		if e.Kind == eventSyscallResult {
+			ev["event_type"] = "syscall_result"
+			addSyscallResult(ev, e)
+		}
+	case eventExit, eventThreadExit:
+		addExitResult(ev, e)
 	case eventSetuid:
 		if e.Daddr == 1 {
 			ev["event_type"] = "setgid"

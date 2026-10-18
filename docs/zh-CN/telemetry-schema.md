@@ -48,9 +48,10 @@ AgentProvenance 将应用上下文与运行时遥测关联。两类信息必须�
 | 事件类型 | 正文要求 |
 |---|---|
 | `execve` | 非空字符串数组 `argv`，或 `command` |
-| `process_exit` | 数值型 `exit_code` |
+| `process_exit` / `thread_exit` | 数值型 `exit_code`，或 1 到 64 之间的整数 `exit_signal` |
+| `syscall_result` | `operation` 和数值型 `syscall_result` |
 | `process_observed` | 数值型 `pid` |
-| `file_open` / `file_write` / `secret_path` | 不含目录穿越的 `path` 或 `file`，允许主机绝对路径 |
+| `file_open` / `file_write` / `secret_path` | 非空且不含 NUL 的 `path` 或 `file`，允许主机绝对路径 |
 | `network_connect` / `metadata_ip` / `private_cidr` | `dst`、`dst_ip` 或 `host` |
 | `abnormal_process_tree` | 数值型 `pid`，或 `command` |
 | `policy_verdict` | `decision` 或 `verdict` |
@@ -66,9 +67,32 @@ AgentProvenance 将应用上下文与运行时遥测关联。两类信息必须�
 | `dns_query` | `host`，表示解析的域名 |
 | `tls_write` / `tls_read` | 默认包含 `preview_sha256`、短 `preview` 和允许保留的 `http` 元数据；正文保留方式见下文 |
 
-文件类事件拒绝空路径和包含 `..` 穿越段的路径。原始遥测允许主机绝对路径；工作区文件节点另有相对路径约束。
+文件类事件拒绝空路径和 NUL。原始遥测按实际系统调用参数保留绝对路径和点路径段；工作区文件节点另有相对路径约束。
 
 `secret_path` 也覆盖敏感路径读取：原生传感器会采集经过过滤的凭据或密钥路径打开事件，不限于写操作。
+
+### 原生调用尝试与实际结果
+
+新采集的 `openat`、amd64 `open` 和 IPv4 `connect` 区分两类记录：入口标为
+`observation_stage: attempt`，返回另外保存为 `syscall_result`，携带内核实际返回值、目标和操作名称。
+现有敏感读取过滤同时用于两类记录。若路径到返回时才可读取，则保存一条 `attempt_and_result`，
+保留 `path_observation: syscall_exit_retry`，说明路径的实际观测阶段。
+
+`operation_id` 结合内核启动实例、进程与线程生命周期、调用入口时间，标识同一次调用。
+记录同时保留原始 syscall 编号、`sensor_arch` 和十进制字符串形式的单调时钟时间。
+`sensor_arch` 表示 Sensor 的构建架构，不用于代替 audit ABI。
+正在执行的调用最多保留 4,096 条线程状态，返回时核对任务生命周期与调用编号，返回、exec 或退出时清理。
+容量不足和环形缓冲写入失败计入采集丢失诊断。
+
+`syscall_outcome` 区分成功 `success`、失败 `failure`、异步连接待完成 `pending`、内核重启调用
+`kernel_restart`。打开文件成功与读取文件内容分别判断，连接成功与数据发送分别判断。
+结果记录不重复产生原尝试的策略决策。seccomp 可以在入口探针之前拒绝调用，此时保留缺失阶段；
+返回码本身不标明拒绝机制。
+
+新原生事件的 `pid` 和 `tgid` 表示主机线程组；`tid`、`thread_instance_id`、`thread_start_ns`
+保存实际执行线程。单条线程退出记为 `thread_exit`，保持进程关联；没有存活线程时才记为 `process_exit`。
+退出记录保留 `raw_exit_status`，并分别使用 `exit_code` 或 `exit_signal`；信号终止不填正常退出码。
+历史记录保留原字段与身份，新增信息使用现有事件载荷，无需迁移数据库或 Bundle。
 
 显式设置 `AGENTPROV_TLS_CAPTURE_BODY=1` 后，标准化事件的 `content` 字段保留已捕获的明文，供模型调用物化使用；这不保证获得完整的请求或响应。默认只保留捕获字节的哈希和短预览。提示词、响应和原始队列载荷可能包含敏感数据，应限制数据目录访问，并在分享前检查取证包。
 

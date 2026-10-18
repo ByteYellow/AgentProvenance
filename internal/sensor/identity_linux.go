@@ -5,6 +5,8 @@ package sensor
 import (
 	"fmt"
 	"os"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,10 +39,83 @@ func processInstance(pid uint32, start uint64) string {
 }
 
 func addProcessIdentity(ev map[string]any, e sensorbpfSensorEvent) {
+	if boot := sensorBootID(); boot != "" {
+		ev["boot_id"] = boot
+	}
+	if e.KtimeNs != 0 {
+		ev["monotonic_ns"] = strconv.FormatUint(e.KtimeNs, 10)
+	}
+	if e.ProcessStartNs != 0 {
+		ev["process_start_ns"] = strconv.FormatUint(e.ProcessStartNs, 10)
+	}
+	if id := processInstance(e.Tid, e.ThreadStartNs); id != "" {
+		ev["thread_instance_id"] = id
+		ev["thread_start_ns"] = strconv.FormatUint(e.ThreadStartNs, 10)
+	}
 	if id := processInstance(e.Pid, e.ProcessStartNs); id != "" {
 		ev["process_instance_id"] = id
 	}
 	if id := processInstance(e.Ppid, e.ParentStartNs); id != "" {
 		ev["parent_process_instance_id"] = id
+	}
+}
+
+func addSyscallIdentity(ev map[string]any, e sensorbpfSensorEvent) {
+	if e.SyscallStartNs == 0 {
+		return
+	}
+	ev["syscall_number"] = e.SyscallNr
+	ev["sensor_arch"] = runtime.GOARCH
+	ev["syscall_start_ns"] = strconv.FormatUint(e.SyscallStartNs, 10)
+	switch e.SyscallKind {
+	case eventOpen:
+		ev["operation"] = "file_open"
+	case eventConnect:
+		ev["operation"] = "network_connect"
+	}
+	// Include the boot and both lifetimes. TID or entry time alone is not an
+	// operation identity across reused threads, processes or host boots.
+	if thread := processInstance(e.Tid, e.ThreadStartNs); thread != "" && e.ProcessStartNs != 0 {
+		ev["operation_id"] = fmt.Sprintf("syscall-v1:%s:%d:%d:%d", thread, e.Pid, e.ProcessStartNs, e.SyscallStartNs)
+	}
+}
+
+func addSyscallResult(ev map[string]any, e sensorbpfSensorEvent) {
+	ev["observation_stage"] = "result"
+	ev["syscall_result"] = e.SyscallResult
+	if e.KtimeNs >= e.SyscallStartNs {
+		ev["syscall_duration_ns"] = strconv.FormatUint(e.KtimeNs-e.SyscallStartNs, 10)
+	}
+	switch {
+	case e.SyscallResult == -512 || e.SyscallResult == -513 || e.SyscallResult == -514 || e.SyscallResult == -516:
+		ev["syscall_outcome"] = "kernel_restart"
+	case e.SyscallKind == eventConnect && (e.SyscallResult == -115 || e.SyscallResult == -114):
+		ev["syscall_outcome"] = "pending"
+		ev["errno"] = -e.SyscallResult
+	case e.SyscallResult < 0:
+		ev["syscall_outcome"] = "failure"
+		ev["errno"] = -e.SyscallResult
+	default:
+		ev["syscall_outcome"] = "success"
+	}
+}
+
+func addExitResult(ev map[string]any, e sensorbpfSensorEvent) {
+	ev["event_type"], ev["exit_scope"] = "process_exit", "thread_group"
+	if e.Kind == eventThreadExit {
+		ev["event_type"], ev["exit_scope"] = "thread_exit", "thread"
+	}
+	if e.ThreadStartNs == 0 {
+		ev["exit_code"] = e.ExitCode
+		return
+	}
+	ev["raw_exit_status"] = e.RawExitStatus
+	if signal := e.RawExitStatus & 0x7f; signal != 0 {
+		ev["exit_signal"] = signal
+		ev["termination"] = "signal"
+		ev["core_dump_flag"] = e.RawExitStatus&0x80 != 0
+	} else {
+		ev["exit_code"] = (e.RawExitStatus >> 8) & 0xff
+		ev["termination"] = "exit"
 	}
 }

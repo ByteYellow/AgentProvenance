@@ -676,12 +676,27 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 			payload["syscall_result"] = intAt(raw, "syscall_result")
 		}
 		event.Payload = mustJSON(payload)
-	case "process_exit", "exit":
+	case "syscall_result":
+		event.EventType = "syscall_result"
+		payload := map[string]any{"comm": comm}
+		for _, key := range []string{"path", "mode", "dst_ip", "dst_port"} {
+			if value, ok := raw[key]; ok {
+				payload[key] = value
+			}
+		}
+		event.Payload = mustJSON(payload)
+	case "process_exit", "exit", "thread_exit":
 		event.EventType = "process_exit"
-		event.Payload = mustJSON(map[string]any{
-			"exit_code": intAt(raw, "exit_code"),
-			"comm":      comm,
-		})
+		if stringAt(raw, "event_type") == "thread_exit" || stringAt(raw, "type") == "thread_exit" {
+			event.EventType = "thread_exit"
+		}
+		payload := map[string]any{"comm": comm}
+		for _, key := range []string{"exit_code", "exit_signal", "raw_exit_status", "termination", "exit_scope", "core_dump_flag"} {
+			if value, ok := raw[key]; ok {
+				payload[key] = value
+			}
+		}
+		event.Payload = mustJSON(payload)
 	case "setuid":
 		event.EventType = "setuid"
 		event.Payload = mustJSON(map[string]any{"uid": intAt(raw, "uid"), "comm": comm})
@@ -720,18 +735,21 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 	default:
 		return IngestEvent{}, false, nil
 	}
-	if instance := stringAt(raw, "process_instance_id"); instance != "" {
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
-			return event, false, err
-		}
-		payload["process_instance_id"] = instance
-		payload["parent_process_instance_id"] = stringAt(raw, "parent_process_instance_id")
-		if group := stringAt(raw, "thread_group_instance_id"); group != "" {
-			payload["thread_group_instance_id"] = group
-		}
-		event.Payload = mustJSON(payload)
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+		return event, false, err
 	}
+	for _, key := range []string{
+		"process_instance_id", "parent_process_instance_id", "thread_group_instance_id",
+		"boot_id", "tid", "thread_instance_id", "thread_start_ns", "process_start_ns", "monotonic_ns",
+		"operation_id", "operation", "syscall_number", "sensor_arch", "syscall_start_ns", "syscall_duration_ns",
+		"observation_stage", "syscall_result", "syscall_outcome", "errno",
+	} {
+		if value, ok := raw[key]; ok {
+			payload[key] = value
+		}
+	}
+	event.Payload = mustJSON(payload)
 	return event, true, nil
 }
 

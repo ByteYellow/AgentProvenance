@@ -302,6 +302,11 @@ func LoadEngine(path string) (Engine, error) {
 }
 
 func (e Engine) Evaluate(event Event) Decision {
+	// Outcome observations supplement an existing attempt. Reapplying the
+	// attempt's path/IP rules here would double-count it and repeat responses.
+	if event.EventType == "syscall_result" || event.EventType == "thread_exit" {
+		return Decision{Decision: "allow", Reason: "runtime outcome observation"}
+	}
 	if len(e.Rules) > 0 {
 		for _, rule := range e.Rules {
 			if rule.Matches(event) {

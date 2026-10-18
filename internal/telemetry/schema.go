@@ -259,9 +259,15 @@ func validateEventBody(eventType string, body map[string]any) error {
 		if stringSlice(body["argv"]) == nil && stringField(body, "command") == "" {
 			return fmt.Errorf("execve payload requires argv[] or command")
 		}
-	case "process_exit":
-		if _, ok := numberField(body, "exit_code"); !ok {
-			return fmt.Errorf("process_exit payload requires numeric exit_code")
+	case "process_exit", "thread_exit":
+		_, code := numberField(body, "exit_code")
+		signal, signaled := numberField(body, "exit_signal")
+		if !code && (!signaled || signal <= 0 || signal > 64 || signal != float64(int(signal))) {
+			return fmt.Errorf("%s payload requires numeric exit_code or valid exit_signal", eventType)
+		}
+	case "syscall_result":
+		if _, ok := numberField(body, "syscall_result"); !ok || firstString(body, "operation") == "" {
+			return fmt.Errorf("syscall_result payload requires operation and numeric syscall_result")
 		}
 	case "process_observed":
 		if _, ok := numberField(body, "pid"); !ok {
