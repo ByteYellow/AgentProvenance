@@ -22,6 +22,7 @@ type ReplayPages struct {
 	Pages   []staticdata.Ref `json:"pages"`
 }
 type ReplayRun struct {
+	Sessions  map[string]replaySession  `json:"sessions,omitempty"`
 	API       map[string]staticdata.Ref `json:"api"`
 	Lenses    staticdata.Ref            `json:"lenses"`
 	Events    staticdata.Ref            `json:"events"`
@@ -31,6 +32,33 @@ type ReplayRun struct {
 	EventRefs map[string][]string       `json:"event_refs"`
 	Filters   map[string]eventQuery     `json:"filters"`
 }
+type replaySession struct {
+	Lenses   staticdata.Ref `json:"lenses"`
+	EventIDs []string       `json:"event_ids"`
+}
+
+func writeReplayLenses(w *staticdata.Writer, lenses provenance.ReplayLenses) (staticdata.Ref, error) {
+	index := struct {
+		Nodes      staticdata.Ref            `json:"nodes"`
+		Present    []string                  `json:"present"`
+		FocusNodes staticdata.Ref            `json:"focus_nodes"`
+		Views      map[string]staticdata.Ref `json:"views"`
+	}{Present: lenses.Present, Views: map[string]staticdata.Ref{}}
+	var err error
+	if index.Nodes, err = w.JSON(lenses.Nodes); err != nil {
+		return staticdata.Ref{}, err
+	}
+	if index.FocusNodes, err = w.JSON(lenses.FocusNodes); err != nil {
+		return staticdata.Ref{}, err
+	}
+	for key, view := range lenses.Views {
+		if index.Views[key], err = w.JSON(view); err != nil {
+			return staticdata.Ref{}, err
+		}
+	}
+	return w.JSON(index)
+}
+
 type replayContext struct {
 	Entries     []agentcontext.Entry               `json:"entries"`
 	Latest      []string                           `json:"latest"`
@@ -96,31 +124,42 @@ func (s Server) ExportReplay(ctx context.Context, run string, w *staticdata.Writ
 		return result, err
 	}
 	// Load one lens at a time in the browser instead of retaining all 36 views.
-	lensIndex := struct {
-		Nodes      staticdata.Ref            `json:"nodes"`
-		Present    []string                  `json:"present"`
-		FocusNodes staticdata.Ref            `json:"focus_nodes"`
-		Views      map[string]staticdata.Ref `json:"views"`
-	}{Views: map[string]staticdata.Ref{}}
-	lensIndex.Present = lenses.Present
-	lensIndex.Nodes, err = w.JSON(lenses.Nodes)
+	result.Lenses, err = writeReplayLenses(w, lenses)
 	if err != nil {
 		return result, err
 	}
-	lensIndex.FocusNodes, err = w.JSON(lenses.FocusNodes)
+	contextService := agentcontext.Service{DB: s.DB}
+	overview, err := contextService.Overview(ctx, run)
 	if err != nil {
 		return result, err
 	}
-	for key, view := range lenses.Views {
-		ref, err := w.JSON(view)
+	result.Sessions = map[string]replaySession{}
+	for _, c := range overview.Coverage {
+		src := c.Source
+		if src.SessionID == "" || src.Harness == "unknown" || src.Harness == "launch" || src.Channel == "processing" || src.Channel == "discovery" || src.Channel == "runtime_correlation" {
+			continue
+		}
+		keyBytes, _ := json.Marshal([]string{src.Harness, src.SessionID})
+		key := string(keyBytes)
+		if _, exists := result.Sessions[key]; exists {
+			continue
+		}
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+		scope, err := contextService.SessionGraphScope(ctx, run, src.Harness, src.SessionID)
 		if err != nil {
 			return result, err
 		}
-		lensIndex.Views[key] = ref
-	}
-	result.Lenses, err = w.JSON(lensIndex)
-	if err != nil {
-		return result, err
+		views, err := provenance.BuildSessionReplayLenses(s.DB, run, scope)
+		if err != nil {
+			return result, err
+		}
+		ref, err := writeReplayLenses(w, views)
+		if err != nil {
+			return result, err
+		}
+		result.Sessions[key] = replaySession{Lenses: ref, EventIDs: scope.EventIDs}
 	}
 	timeline, err := telemetry.ListEventsFiltered(s.DB, telemetry.Filter{RunID: run})
 	if err != nil {

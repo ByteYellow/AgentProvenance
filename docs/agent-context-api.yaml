@@ -561,6 +561,7 @@ paths:
       parameters:
         - {$ref: '#/components/parameters/run'}
         - {name: session, in: query, schema: {type: string}}
+        - {name: harness, in: query, schema: {type: string}, description: Combine with session to keep native identities from different harnesses separate. Also intersects source and node filters.}
         - {name: source, in: query, schema: {type: string}}
         - {name: kind, in: query, schema: {type: string}}
         - {name: tool_call, in: query, schema: {type: string}}

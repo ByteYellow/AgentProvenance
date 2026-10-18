@@ -25,7 +25,7 @@ async (page) => {
   const worker = page.locator('.session-item').filter({has:page.locator('h3').filter({hasText:/^worker/})});
   check(await worker.locator('[data-session-source]').count()===2,'session preserves transcript and hooks sources');
   await worker.locator('[data-parent-session]').click();
-  check(await page.evaluate(()=>document.activeElement?.querySelector('h3')?.textContent==='root codex'),'parent link resolves within the harness namespace');
+  check(await page.evaluate(()=>document.activeElement?.querySelector('h3')?.textContent.startsWith('root codex')),'parent link resolves within the harness namespace');
   check(await page.locator('#session-directory-body').innerText().then(s=>s.includes('Parent session is not in this run')),'missing parent is labeled');
   check(await page.locator('#session-directory-body').innerText().then(s=>s.includes('Sources without session identity')),'unassigned source stays inspectable');
   check(!await page.locator('#session-directory-body').innerText().then(s=>s.includes('ui-sessions launch')),'processing diagnostics are not native sessions');
@@ -68,6 +68,7 @@ async (page) => {
   check(await page.locator('#detail').isHidden(),'content reading hides the summary');
   await page.locator('#content-expand').click();
   await page.keyboard.press('Escape');
+  await page.waitForSelector('#content-home #content-pane',{state:'attached'});
   check(await page.locator('#content-home #content-pane').count()===1,'Escape returns the same content element');
   await page.locator('#inspection-close').click();
   check(await page.locator('#inspection').isHidden(),'reader can be dismissed');

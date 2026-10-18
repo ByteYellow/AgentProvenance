@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"net"
@@ -666,6 +667,16 @@ func (s Server) events(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err.Error(), 500)
 		return
 	}
+	scope, ok := s.sessionScope(w, r)
+	if !ok {
+		return
+	}
+	if scope != nil {
+		q.SessionEventIDs = scope.EventIDs
+		if len(q.SessionEventIDs) == 0 {
+			q.None = true
+		}
+	}
 	page, total, err := s.queryEventsPage(run, q, limit, offset)
 	if err != nil {
 		httpError(w, err.Error(), 500)
@@ -684,6 +695,7 @@ func (s Server) events(w http.ResponseWriter, r *http.Request) {
 			"run": run, "lens": r.URL.Query().Get("lens"), "group": r.URL.Query().Get("group"),
 			"focus": r.URL.Query().Get("focus"), "type": r.URL.Query().Get("type"),
 			"tool_call": r.URL.Query().Get("tool_call"), "pid": r.URL.Query().Get("pid"),
+			"harness": r.URL.Query().Get("harness"), "session": r.URL.Query().Get("session"),
 		},
 	})
 }
@@ -723,6 +735,7 @@ func (s Server) eventQueryFromRequest(run string, r *http.Request) (eventQuery, 
 }
 
 type eventQuery struct {
+	SessionEventIDs    []string
 	None               bool
 	IDs                []string
 	Types              []string
@@ -907,6 +920,11 @@ func (s Server) queryEventsPage(run string, q eventQuery, limit, offset int) ([]
 func eventWhereClause(run string, q eventQuery) (string, []any) {
 	args := []any{run}
 	clauses := []string{"run_id = ?"}
+	if q.SessionEventIDs != nil {
+		encoded, _ := json.Marshal(q.SessionEventIDs)
+		clauses = append(clauses, "id IN (SELECT value FROM json_each(?))")
+		args = append(args, string(encoded))
+	}
 	if len(q.IDs) > 0 {
 		ph := make([]string, 0, len(q.IDs))
 		for _, id := range q.IDs {
@@ -978,19 +996,48 @@ func (s Server) lens(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "run is required", 400)
 		return
 	}
+	scope, ok := s.sessionScope(w, r)
+	if !ok {
+		return
+	}
 	manifest, err := provenance.BuildGraphLens(s.DB, provenance.GraphLensOptions{
-		RunID:    run,
-		Lens:     r.URL.Query().Get("lens"),
-		Focus:    r.URL.Query().Get("focus"),
-		Detail:   r.URL.Query().Get("detail"),
-		Overlays: r.URL.Query()["overlay"],
-		Limit:    atoiClamp(r.URL.Query().Get("limit"), 500, 1, 2000),
+		SessionScope: scope,
+		RunID:        run,
+		Lens:         r.URL.Query().Get("lens"),
+		Focus:        r.URL.Query().Get("focus"),
+		Detail:       r.URL.Query().Get("detail"),
+		Overlays:     r.URL.Query()["overlay"],
+		Limit:        atoiClamp(r.URL.Query().Get("limit"), 500, 1, 2000),
 	})
 	if err != nil {
-		httpError(w, err.Error(), 500)
+		status := http.StatusInternalServerError
+		if errors.Is(err, provenance.ErrSessionFocus) {
+			status = http.StatusBadRequest
+		}
+		httpError(w, err.Error(), status)
 		return
 	}
 	writeJSON(w, manifest)
+}
+
+func (s Server) sessionScope(w http.ResponseWriter, r *http.Request) (*provenance.GraphSessionScope, bool) {
+	q := r.URL.Query()
+	if q.Get("harness") == "" && q.Get("session") == "" {
+		return nil, true
+	}
+	scope, err := (agentcontext.Service{DB: s.DB}).SessionGraphScope(r.Context(), q.Get("run"), q.Get("harness"), q.Get("session"))
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, agentcontext.ErrInvalidArgument) {
+			status = http.StatusBadRequest
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		httpError(w, "Recorded session scope could not be loaded.", status)
+		return nil, false
+	}
+	return scope, true
 }
 
 // renderLLMMessage turns a captured llm_message provenance object into a readable

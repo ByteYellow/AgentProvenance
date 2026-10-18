@@ -164,6 +164,7 @@ type SaveResult struct {
 
 type PageOptions struct {
 	RunID            string
+	Harness          string
 	SessionID        string
 	SourceID         string
 	Kind             string

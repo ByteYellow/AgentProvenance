@@ -6,6 +6,7 @@ window.AgentWorkspaceUI = (() => {
   let available = {summary:false,events:false,content:false};
   let labels = {summary:'',events:'',content:''};
   let model = null, reportsKey = '';
+  let sessionScope = null;
   const t = text => api.tr(text), e = value => api.esc(String(value ?? ''));
 
   // Session identity comes from source metadata. Processing diagnostics and
@@ -60,10 +61,11 @@ window.AgentWorkspaceUI = (() => {
     $('inspection-close').onclick = () => { dismissed = true; renderReader(); };
     $('session-directory-open').onclick = () => openDirectory();
     $('session-directory-close').onclick = () => $('session-directory').close();
+    $('session-scope-clear').onclick = () => api.selectSession(null);
     const actions = {search:'Search saved evidence',compare:'Compare runs',export:'Export replay'};
     document.querySelectorAll('[data-investigation]').forEach(button=>button.onclick=()=>{
       $('investigation-title').textContent = t(actions[button.dataset.investigation]);
-      $('investigation-scope').textContent = t('Run')+': '+run;
+      $('investigation-scope').textContent = t('Run')+': '+run+(sessionScope ? ' · '+sessionScope.harness+' · '+sessionScope.session_id : '');
       $('investigation-dialog').showModal();
     });
     $('investigation-close').onclick = () => $('investigation-dialog').close();
@@ -123,9 +125,17 @@ window.AgentWorkspaceUI = (() => {
     selectedSource = source || '';
     document.querySelectorAll('[data-session-index]').forEach(button => {
       const group = model?.sessions[Number(button.dataset.sessionIndex)];
-      button.setAttribute('aria-pressed',String(Boolean(group?.reports.some(r=>r.source.id === selectedSource))));
+      button.setAttribute('aria-pressed',String(Boolean(sessionScope ? group?.harness === sessionScope.harness && group?.id === sessionScope.session_id : group?.reports.some(r=>r.source.id === selectedSource))));
     });
     document.querySelectorAll('[data-session-source]').forEach(button=>button.setAttribute('aria-current',String(button.dataset.sessionSource === selectedSource)));
+  }
+  function setSession(scope, query = null) {
+    sessionScope = scope;
+    $('session-scope').hidden = !scope;
+    $('session-scope-label').textContent = scope ? scope.harness+' · '+scope.session_id : '';
+    $('session-scope-count').textContent = query ? api.tx('{tools} linked tools · {events} linked events',{tools:query.tool_count,events:query.event_count}) : '';
+    document.querySelectorAll('[data-whole-run]').forEach(el=>el.hidden=!scope);
+    setSource(selectedSource);
   }
   function setOverview(value) {
     const key = JSON.stringify([value?.coverage,value?.has_more_sources]);
@@ -135,22 +145,35 @@ window.AgentWorkspaceUI = (() => {
     $('session-count').textContent = sessions.length + (limited ? '+' : '');
     const shortID = id => id.length>26 ? id.slice(0,14)+'…'+id.slice(-8) : id;
     $('session-members').innerHTML = sessions.slice(0,6).map((group,index)=>`<button data-session-index="${index}" title="${e(group.harness+' · '+group.id+(group.parent ? '\n'+t('Recorded parent session')+': '+group.parent : ''))}">${e(group.harness)} · ${e(shortID(group.id))}${group.relation === 'linked' ? `<small>${e(t('Recorded parent session'))}: ${e(shortID(group.parent))}</small>` : ''}</button>`).join('') + (sessions.length>6 ? `<button data-more-sessions>+${sessions.length-6}</button>` : '') + (!sessions.length ? `<span>${e(t('No native session identity recorded'))}</span>` : '') + (unassigned.length ? `<span>${e(api.tx('{count} sources without session identity',{count:unassigned.length}))}</span>` : '') + (limited ? `<span>${e(t('Source list is incomplete'))}</span>` : '');
-    $('session-members').querySelectorAll('[data-session-index]').forEach(button=>button.onclick=()=>openDirectory(Number(button.dataset.sessionIndex)));
+    $('session-members').querySelectorAll('[data-session-index]').forEach(button=>button.onclick=()=>selectSession(Number(button.dataset.sessionIndex)));
     $('session-members').querySelector('[data-more-sessions]')?.addEventListener('click',()=>openDirectory());
     const relations = {missing:'Parent session is not in this run',conflicting:'Conflicting parent session records',self:'Invalid self-parent record',cycle:'Cyclic parent session records'};
     $('session-directory-body').innerHTML = (limited ? `<p class="context-notice">${e(t('Source report limit reached. Additional sources are not shown here.'))}</p>` : '') + sessions.map((group,index)=>{
       const parent = group.relation === 'linked' ? `<button data-parent-session="${group.target}">${e(group.parent)}</button>` : `<span>${e([...group.parents].join(', '))} · ${e(t(relations[group.relation]))}</span>`;
-      return `<section class="session-item" id="session-item-${index}" tabindex="-1"><h3>${e(group.id)} <span>${e(group.harness)}</span></h3>${group.relation ? `<div class="session-parent">${e(t('Recorded parent session'))}: ${parent}</div>` : ''}${group.reports.map(sourceHTML).join('')}</section>`;
+      return `<section class="session-item" id="session-item-${index}" tabindex="-1"><h3>${e(group.id)} <span>${e(group.harness)}</span><button data-view-session="${index}">${e(t('View session graph'))}</button></h3>${group.relation ? `<div class="session-parent">${e(t('Recorded parent session'))}: ${parent}</div>` : ''}${group.reports.map(sourceHTML).join('')}</section>`;
     }).join('') + (unassigned.length ? `<section class="session-item"><h3>${e(t('Sources without session identity'))}</h3>${unassigned.map(sourceHTML).join('')}</section>` : '') + (!sessions.length && !unassigned.length ? `<p class="context-notice">${e(t('No native session identity recorded'))}</p>` : '');
-    $('session-directory-body').querySelectorAll('[data-session-source]').forEach(button=>button.onclick=()=>{
-      $('session-directory').close(); api.selectSource(button.dataset.sessionSource);
+    $('session-directory-body').querySelectorAll('[data-session-source]').forEach(button=>button.onclick=async()=>{
+      const source = button.dataset.sessionSource;
+      const group = sessions.find(g=>g.reports.some(r=>r.source.id===source));
+      $('session-directory').close();
+      if (sessionScope && (group?.id!==sessionScope.session_id || group?.harness!==sessionScope.harness)) {
+        await api.selectSession(group ? {harness:group.harness,session_id:group.id} : null);
+      }
+      api.selectSource(source);
     });
     $('session-directory-body').querySelectorAll('[data-parent-session]').forEach(button=>button.onclick=()=>focusSession(Number(button.dataset.parentSession)));
+    $('session-directory-body').querySelectorAll('[data-view-session]').forEach(button=>button.onclick=()=>selectSession(Number(button.dataset.viewSession)));
     setSource(selectedSource);
+  }
+  function selectSession(index) {
+    const group = model?.sessions[index];
+    if (!group) return;
+    $('session-directory').close();
+    return api.selectSession({harness:group.harness,session_id:group.id});
   }
   function sourceHTML(report) {
     const source = report.source;
-    const fields = [['Source',source.id],['Source path',source.path],['Parser',source.parser_version],['Binding',source.binding],['Binding evidence',(source.binding_evidence || []).join('\n')]];
+    const fields = [['Source',source.id],['Source path',source.path],['Parser',source.parser_version],['Binding',source.binding],['Binding evidence',(source.binding_evidence || []).join('\n')],['Evidence references',report.object_hash || report.id]];
     return `<div class="session-source"><div><strong>${e(source.channel || t('Source'))}${source.agent_id ? ' · '+e(source.agent_id) : ''}</strong><p>${e(t(report.status))} · ${e(source.binding || t('Not recorded'))}</p><details><summary>${e(t('Source and evidence'))}</summary><dl>${fields.map(([name,value])=>`<dt>${e(t(name))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl></details></div><button data-session-source="${e(source.id)}">${e(t('Read source records'))}</button></div>`;
   }
   function overviewError() {
@@ -166,5 +189,5 @@ window.AgentWorkspaceUI = (() => {
     if (!$('session-directory').open) $('session-directory').showModal();
     if (index != null) focusSession(index);
   }
-  return {init,setRun,setNode,setEvents,setContent,show,setOverview,overviewError,setSource,sessionDirectory};
+  return {init,setRun,setNode,setEvents,setContent,show,setOverview,overviewError,setSource,setSession,sessionDirectory};
 })();

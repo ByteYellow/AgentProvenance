@@ -9,7 +9,7 @@ const { tmpdir } = require('node:os');
 async function main() {
   const site = new URL(process.argv[2]), native = new URL(process.argv[3]);
   const browser = await chromium.launch({headless:true, ...(process.env.PLAYWRIGHT_CHANNEL ? {channel:process.env.PLAYWRIGHT_CHANNEL} : {})});
-  const report = {parity:0, pages:0, runs:0, focusedGraphs:0, contentPages:0};
+  const report = {parity:0, pages:0, runs:0, sessions:0, focusedGraphs:0, contentPages:0};
   const errors = [];
   const responseJSON = async (request,url) => {const r=await request.get(url);assert.equal(r.status(),200,url);return r.json();};
   try {
@@ -27,7 +27,7 @@ async function main() {
     await page.goto(new URL('en/replay.html?run=run-dbc2adf273d4',site).href);
     await page.waitForFunction(()=>window._lensManifest && document.querySelector('#dag svg'));
     const compare=async query=>{
-      const [expected,actual]=await Promise.all([responseJSON(context.request,new URL(query,native).href),page.evaluate(q=>AgentProvReplay.query(q),query)]);
+      const [expected,actual]=await Promise.all([responseJSON(context.request,new URL(query,native).href),page.evaluate(q=>AgentProvReplay.query(q),query)]).catch(error=>{console.error('Query failed: '+query);throw error;});
       // Import locations differ; compare the same content-addressed object path.
       const root=tmpdir().replace(/\/$/,'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
       const importedPath=new RegExp(root+'/agentprov-(?:public-demo|demo)-[0-9]+/state/provenance/objects/','g');
@@ -59,6 +59,25 @@ async function main() {
       }
       for(const id of Object.keys(snapshot.event_refs).filter(id=>!id.startsWith('runtime_event/')).slice(0,12)){
         await compare('/api/events'+q+'&ref='+encodeURIComponent(id)+'&ref=runtime_event/missing');
+      }
+      for(const [identity,scope] of Object.entries(snapshot.sessions || {})){
+        const [harness,sessionID]=JSON.parse(identity),params=q+'&harness='+encodeURIComponent(harness)+'&session='+encodeURIComponent(sessionID);
+        const scopedIndex=await data(scope.lenses);
+        for(const key of Object.keys(scopedIndex.views)){
+          const [lens,detail]=key.split('/'),query='/api/lens'+params+'&lens='+lens+'&detail='+detail;
+          await compare(query);await compare(query+'&overlay=risk&overlay=trust');
+          const view=await data(scopedIndex.views[key]);
+          const byKind=new Map();for(const node of view.manifest.nodes)if(!byKind.has(node.kind))byKind.set(node.kind,node.id);
+          for(const id of byKind.values())await compare(query+'&focus='+encodeURIComponent(id));
+        }
+        for(const offset of [0,7,100000])await compare('/api/events'+params+'&limit=7&offset='+offset);
+        for(const id of Object.keys(snapshot.event_refs).filter(id=>!id.startsWith('runtime_event/')).slice(0,12))await compare('/api/events'+params+'&ref='+encodeURIComponent(id));
+        for(const group of ['conversation','configuration']){
+          const path='/api/context/entries'+params+'&group='+group+'&limit=7';
+          const collect=async fetchPage=>{let cursor='',entries=[];do{const result=await fetchPage(path+(cursor?'&cursor='+encodeURIComponent(cursor):''));entries.push(...result.entries);cursor=result.next_cursor||'';}while(cursor);return entries;};
+          assert.deepEqual(await collect(q=>page.evaluate(q=>AgentProvReplay.query(q),q)),await collect(q=>responseJSON(context.request,new URL(q,native).href)));report.parity++;
+        }
+        report.sessions++;
       }
       const session=await data(snapshot.context);
       // Cursor representations are intentionally opaque; compare the traversed records.
@@ -111,6 +130,16 @@ async function main() {
     await page.locator('#context-source').selectOption('');
     await page.locator('#context-fold > summary').click();
     assert.equal(await page.locator('#context-fold').evaluate(e=>e.open),false);
+    await page.locator('#session-members [data-session-index]').first().click();
+    await page.waitForFunction(()=>window._lensManifest?.query.session_scope);
+    const scope=await page.evaluate(()=>window._lensManifest.query.session_scope);
+    const scopeQuery='?run=run-dbc2adf273d4&harness='+encodeURIComponent(scope.harness)+'&session='+encodeURIComponent(scope.session_id);
+    await compare('/api/lens'+scopeQuery+'&lens=default&detail=summary');
+    assert.ok(await page.locator('#session-scope').isVisible());
+    assert.equal(await page.locator('#context-source option').count(),scope.source_count+1);
+    await page.locator('#session-scope-clear').click();
+    await page.waitForFunction(()=>!window._lensManifest?.query.session_scope);
+    assert.equal(await page.locator('#session-scope').isHidden(),true);
     for(const id of ['graphcard','siglist','focusedevidence','outboundcard','tl','ptree','egtbl','compliancecard'])assert.equal(await page.locator('#'+id).count(),1);
     for(const lens of await page.locator('#lenssel option').evaluateAll(options=>options.map(o=>o.value))){
       await page.locator('#lenssel').selectOption(lens);

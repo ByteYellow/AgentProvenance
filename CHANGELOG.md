@@ -13,6 +13,11 @@ English | [中文](CHANGELOG.zh-CN.md)
   identities, with parent references, conflict labels and exact-source context
   navigation. Processing diagnostics remain separate from native sessions.
 - Include the reader and session directory in public-demo static exports.
+- Filter graphs, linked events and conversation by recorded native session.
+  Calculate summaries within that scope, preserve inferred-edge confidence,
+  and restore the previous view when returning to the whole run. Risk and
+  auxiliary sections state their whole-run scope. Static replay uses the same
+  projections; context queries support namespaced harness/session filters.
 
 ### Fixed
 

@@ -98,7 +98,7 @@ window.AgentProvReplay = (() => {
     const revisions=p.get('revisions')==='true';
     const entries=data.entries.filter(e=>{
       if(!revisions&&!latest.has(e.id))return false;if(node&&!linked.has(e.id))return false;
-      for(const [key,value] of [['source',e.source.id],['session',e.source.session_id],['kind',e.kind],['entry',e.id],['tool_call',e.tool_call_id]])if(p.get(key)&&p.get(key)!==value)return false;
+      for(const [key,value] of [['source',e.source.id],['session',e.source.session_id],['harness',e.source.harness],['kind',e.kind],['entry',e.id],['tool_call',e.tool_call_id]])if(p.get(key)&&p.get(key)!==value)return false;
       return !group||(group==='configuration'?['configuration','approval'].includes(e.kind):['message','tool_call','tool_result','task','session'].includes(e.kind));
     });
     const limit=clamp(p.get('limit'),50,1,200),query=new URLSearchParams(p);query.delete('cursor');query.delete('limit');query.sort();const fingerprint=query.toString();
@@ -132,14 +132,24 @@ window.AgentProvReplay = (() => {
     const id=p.get('run');let run=catalog.runs[id];
     if(path==='frameworks'&&!run)run=catalog.runs[catalog.summaries[0].run];
     if(!run)fail('The run was not found in this public demo');
+    let session=null;
+    if(['lens','events'].includes(path)&&(p.get('harness')||p.get('session'))){
+      session=run.sessions?.[JSON.stringify([p.get('harness'),p.get('session')])];
+      if(!session)fail('Recorded session scope is unavailable in this replay');
+    }
     if(path==='lens'){
-      const index=await asset(run.lenses),key=(p.get('lens')||'default')+'/'+(p.get('detail')||'summary');
+      const index=await asset(session?session.lenses:run.lenses),key=(p.get('lens')||'default')+'/'+(p.get('detail')||'summary');
       if(!index.views[key])fail('Unknown graph view');
       const [view,nodes]=await Promise.all([asset(index.views[key]),asset(p.get('focus')?index.focus_nodes:index.nodes)]);
+      if(session&&p.get('focus')&&!index.present.includes(p.get('focus'))&&!view.manifest.nodes.some(n=>n.id===p.get('focus')))fail('Focus is outside the recorded session graph');
       return lensView({views:{[key]:view},nodes,present:index.present},p);
     }
     if(path==='timeline')return pageEvents(await asset(run.timeline)||[],p);
-    if(path==='events')return pageEvents(filterEvents(await asset(run.events),p,run),p,{schema_version:'agentprovenance.dashboard_events/v1',filter:{run:id,lens:p.get('lens')||'',group:p.get('group')||'',focus:p.get('focus')||'',type:p.get('type')||'',tool_call:p.get('tool_call')||'',pid:p.get('pid')||''}});
+    if(path==='events'){
+      let events=filterEvents(await asset(run.events),p,run);
+      if(session){const ids=new Set(session.event_ids);events=events.filter(e=>ids.has(e.id));}
+      return pageEvents(events,p,{schema_version:'agentprovenance.dashboard_events/v1',filter:{run:id,lens:p.get('lens')||'',group:p.get('group')||'',focus:p.get('focus')||'',type:p.get('type')||'',tool_call:p.get('tool_call')||'',pid:p.get('pid')||'',harness:p.get('harness')||'',session:p.get('session')||''}});
+    }
     if(path==='artifact'){const data=await asset(run.artifacts),key=(p.get('view_lang')||'en')+'/'+(p.get('mode')||'body')+'/'+p.get('node');return contentPage(data[key],p,true);}
     if(path.startsWith('context/')&&path!=='context/overview'){
       const data=await asset(run.context);

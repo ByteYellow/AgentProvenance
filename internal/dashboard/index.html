@@ -317,7 +317,7 @@
 </div>
 <main>
   <section class="card full" id="runoverview">
-    <h2>{{tr .Lang "Run Overview"}}<span class="spacer"></span>
+    <h2>{{tr .Lang "Run Overview"}}<span class="sub" data-whole-run hidden>{{tr .Lang "Whole run"}}</span><span class="spacer"></span>
       <nav class="investigation-actions" aria-label="{{tr .Lang "Investigation actions"}}">
         <button data-investigation="search" aria-label="{{tr .Lang "Search saved evidence"}}" title="{{tr .Lang "Search saved evidence"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></button>
         <button data-investigation="compare" aria-label="{{tr .Lang "Compare runs"}}" title="{{tr .Lang "Compare runs"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 4 4-4 4M4 7h16M8 21l-4-4 4-4m12 4H4"/></svg></button>
@@ -336,7 +336,7 @@
       <button data-context-open="configuration">{{tr .Lang "Permissions & configuration"}} <span id="context-nav-config">…</span></button>
       <button data-context-open="coverage">{{tr .Lang "Collection status"}} <span id="context-nav-coverage">…</span></button>
     </nav>
-    <details id="profile-fold" class="auxiliary-fold"><summary>{{tr .Lang "Execution scope & sources"}}</summary><div id="profilebar" class="profilebar"></div></details>
+    <details id="profile-fold" class="auxiliary-fold"><summary>{{tr .Lang "Execution scope & sources"}} <span class="sub" data-whole-run hidden>{{tr .Lang "Whole run"}}</span></summary><div id="profilebar" class="profilebar"></div></details>
   </section>
   <section class="card hero" id="graphcard">
     <h2>{{tr .Lang "Graph Explorer"}} <span class="sub">{{tr .Lang "canonical graph → lens projection → derived edges"}}</span>
@@ -352,6 +352,10 @@
         <span class="chip trust" id="ov-trust" data-ov="trust">{{tr .Lang "trust"}}</span>
       </div>
     </h2>
+    <div id="session-scope" class="session-scope" hidden>
+      <strong id="session-scope-label"></strong><span id="session-scope-count"></span><button id="session-scope-clear">{{tr .Lang "Back to whole run"}}</button>
+      <small>{{tr .Lang "Session scope: graph, related events and conversation. Risk, collection status and auxiliary sections cover the whole run."}} {{tr .Lang "Risk and auxiliary evidence links return to the whole run."}}</small>
+    </div>
     <div id="lensmeta" class="lensmeta"></div>
     <div id="scrub" class="scrub">
       <button id="playbtn" title="{{tr .Lang "play the run forward"}}">▶</button>
@@ -363,7 +367,7 @@
     <div class="legend" id="legend"></div>
   </section>
   <section class="card side">
-    <h2>{{tr .Lang "Signals & Risk"}} <span class="sub" id="sigcount"></span></h2>
+    <h2>{{tr .Lang "Signals & Risk"}} <span class="sub" id="sigcount"></span><span class="sub" data-whole-run hidden>{{tr .Lang "Whole run"}}</span></h2>
     <div id="siglist" class="siglist"></div>
   </section>
   <section class="card full" id="inspection" hidden>
@@ -426,12 +430,12 @@
     </details>
   </section>
   <section class="card full" id="outboundcard">
-    <details id="outbound-fold" class="auxiliary-fold"><summary>{{tr .Lang "Outbound Data Surfaces"}} <span id="outbound-count" class="sub"></span></summary>
+    <details id="outbound-fold" class="auxiliary-fold"><summary>{{tr .Lang "Outbound Data Surfaces"}} <span id="outbound-count" class="sub"></span><span class="sub" data-whole-run hidden>{{tr .Lang "Whole run"}}</span></summary>
     <div id="outbound" class="surfaces"></div>
     </details>
   </section>
   <section class="card full">
-    <details id="timeline-fold" class="auxiliary-fold"><summary>{{tr .Lang "Run Timeline"}} <span id="timeline-count" class="sub"></span><span id="tlprov" class="provchip"></span></summary>
+    <details id="timeline-fold" class="auxiliary-fold"><summary>{{tr .Lang "Run Timeline"}} <span id="timeline-count" class="sub"></span><span class="sub" data-whole-run hidden>{{tr .Lang "Whole run"}}</span><span id="tlprov" class="provchip"></span></summary>
     <div style="overflow:auto;max-height:420px"><table id="tl"><thead><tr>
       <th>{{tr .Lang "time"}}</th><th>{{tr .Lang "event"}}</th><th title="{{tr .Lang "evidence source (which producer) · scope source (how it tied to a run)"}}">{{tr .Lang "source"}}</th><th>{{tr .Lang "correlation"}}</th><th>{{tr .Lang "conf"}}</th><th>{{tr .Lang "detail"}}</th>
     </tr></thead><tbody></tbody></table></div>
@@ -439,19 +443,19 @@
     </details>
   </section>
   <section class="card full">
-    <details id="process-fold" class="auxiliary-fold"><summary>{{tr .Lang "Process Tree"}} <span id="process-count" class="sub"></span></summary>
+    <details id="process-fold" class="auxiliary-fold"><summary>{{tr .Lang "Process Tree"}} <span id="process-count" class="sub"></span><span class="sub" data-whole-run hidden>{{tr .Lang "Whole run"}}</span></summary>
     <div id="ptree" class="ptree"></div>
     </details>
   </section>
   <section class="card full">
-    <details id="egress-fold" class="auxiliary-fold"><summary>{{tr .Lang "Egress"}} <span id="egress-count" class="sub"></span></summary>
+    <details id="egress-fold" class="auxiliary-fold"><summary>{{tr .Lang "Egress"}} <span id="egress-count" class="sub"></span><span class="sub" data-whole-run hidden>{{tr .Lang "Whole run"}}</span></summary>
     <div style="overflow:auto;max-height:300px"><table id="egtbl"><thead><tr>
       <th>{{tr .Lang "time"}}</th><th>{{tr .Lang "type"}}</th><th>{{tr .Lang "destination"}}</th><th>{{tr .Lang "path"}}</th><th>{{tr .Lang "port"}}</th><th>{{tr .Lang "evidence"}}</th><th>{{tr .Lang "count"}}</th><th>{{tr .Lang "process"}}</th>
     </tr></thead><tbody></tbody></table></div>
     </details>
   </section>
   <section class="card full" id="compliancecard">
-    <details id="compliance-fold" class="auxiliary-fold"><summary>{{tr .Lang "Compliance"}} <span id="compliance-count" class="sub"></span></summary>
+    <details id="compliance-fold" class="auxiliary-fold"><summary>{{tr .Lang "Compliance"}} <span id="compliance-count" class="sub"></span><span class="sub" data-whole-run hidden>{{tr .Lang "Whole run"}}</span></summary>
     <h2>{{tr .Lang "Compliance"}} <span class="sub">{{tr .Lang "per control: did a threat fire in this run, and did your detectors contain it? (violated / enforced / clear / not assessed)"}}</span>
       <span class="spacer"></span>
       <select id="fwsel" title="{{tr .Lang "compliance framework"}}"></select>
@@ -468,7 +472,7 @@
 </dialog>
 <dialog id="session-directory" class="content-dialog context-ui session-directory" aria-labelledby="session-directory-title">
   <div class="content-dialog-head"><h2 id="session-directory-title">{{tr .Lang "Sessions & sources"}}</h2><button id="session-directory-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></div>
-  <p class="session-scope-note">{{tr .Lang "Session selection filters recorded context. The graph, risks, and timeline cover the whole run."}}</p>
+  <p class="session-scope-note">{{tr .Lang "Choose a session to filter its graph and conversation, or read one exact source. Parent links use recorded source metadata."}}</p>
   <div id="session-directory-body"></div>
 </dialog>
 <dialog id="investigation-dialog" class="content-dialog context-ui investigation-dialog" aria-labelledby="investigation-title">
@@ -1179,6 +1183,7 @@ function focusSignalGroup(el){
 }
 function focusSignal(id, refs, title){
   if(!id)return;
+  if(SESSION_SCOPE)activateSessionScope(null);
   SEL=id; GRAPH_FOCUS=id; LENS='security'; DETAIL='summary'; EXPAND_MODE='lineage'; EV_FILTER={title:title||tr("risk signal"), lens:'security', focus:id, refs:(refs&&refs.length)?refs:[id]}; EV_OFFSET=0; stopPlay();
   const ls=$('#lenssel'), ds=$('#detailsel');
   if(ls)ls.value=LENS; if(ds)ds.value=DETAIL;
@@ -1248,7 +1253,7 @@ function provBadge(e){
 
 let evidenceRequest=0, evidenceViewKey='';
 async function loadEvidenceDrilldown(offset){
-  const request=++evidenceRequest, run=cur;
+  const request=++evidenceRequest, run=cur, scope=SESSION_SCOPE;
   const tb=$('#evtbl tbody'), head=$('#evhead'), pager=$('#evpager');
   if(!cur){return;}
   if(!EV_FILTER){
@@ -1260,7 +1265,7 @@ async function loadEvidenceDrilldown(offset){
     return;
   }
   const f=EV_FILTER;
-  const key=JSON.stringify([run,f,offset||0]);
+  const key=JSON.stringify([run,scope,f,offset||0]);
   if(key!==evidenceViewKey){
     evidenceViewKey=key;
     window.AgentWorkspaceUI.setEvents({title:f.title});
@@ -1270,6 +1275,7 @@ async function loadEvidenceDrilldown(offset){
   }
   const p=new URLSearchParams();
   p.set('run',cur); p.set('limit',EV_LIMIT); p.set('offset',offset||0);
+  if(scope){p.set('harness',scope.harness);p.set('session',scope.session_id);}
   if(f.lens)p.set('lens',f.lens);
   if(f.group)p.set('group',f.group);
   if(f.focus)p.set('focus',f.focus);
@@ -1277,14 +1283,14 @@ async function loadEvidenceDrilldown(offset){
   let d;
   try{d=await j('/api/events?'+p.toString());}
   catch(error){
-    if(request!==evidenceRequest || run!==cur || f!==EV_FILTER)return;
+    if(request!==evidenceRequest || run!==cur || f!==EV_FILTER || scope!==SESSION_SCOPE)return;
     evidenceViewKey='';
     window.AgentWorkspaceUI.setEvents({title:f.title,count:tr('unknown')});
     tb.innerHTML='<tr><td colspan="6" class="empty">'+esc(tr('Evidence could not be loaded.'))+'</td></tr>';
     pager.innerHTML='';
     throw error;
   }
-  if(request!==evidenceRequest || run!==cur || f!==EV_FILTER)return;
+  if(request!==evidenceRequest || run!==cur || f!==EV_FILTER || scope!==SESSION_SCOPE)return;
   window.AgentWorkspaceUI.setEvents({title:f.title,count:d.total||0});
   EV_OFFSET=d.offset||0;
   const rows=d.events||[];
@@ -1363,6 +1369,7 @@ function renderOutbound(surfaces){
 // surface's evidence nodes and focuses the first one — the "local DAG" for that card.
 function focusSurface(s){
   if(!s)return;
+  if(SESSION_SCOPE)activateSessionScope(null);
   const ref=(s.evidence_refs&&s.evidence_refs[0])||'';
   const lens=s.channel_class==='model_inference'?'agent-intent':'network-egress';
   const avail=(window._lensManifest&&window._lensManifest.available_lenses)||[];
@@ -1610,6 +1617,7 @@ function renderComplianceCard(it){
   `</div>`;
 }
 function focusEvidenceRef(ref, kind){
+  if(SESSION_SCOPE)activateSessionScope(null);
   // Jump the graph to the node this evidence ref denotes. Entity nodes only
   // exist at raw detail, so force it; focus= retains the node in its routed
   // lens. Most kinds land 100%; a minority of runtime_events are raw evidence
@@ -1628,6 +1636,34 @@ let cur=null, tlOffset=0; const TL_LIMIT=50;
 let SIGS=[], SIG_OFFSET=0; const SIG_LIMIT=12;
 let EV_FILTER=null, EV_OFFSET=0; const EV_LIMIT=50;
 const INITIAL=new URLSearchParams(location.search);
+let SESSION_SCOPE=INITIAL.get('session')&&INITIAL.get('harness')?{harness:INITIAL.get('harness'),session_id:INITIAL.get('session')}:null;
+const sessionGraphViews=new Map();
+let restoreSessionView=null;
+const sessionViewKey=scope=>JSON.stringify([cur,scope?.harness || '',scope?.session_id || '']);
+function activateSessionScope(next){
+  if(sessionViewKey(next)===sessionViewKey(SESSION_SCOPE))return;
+  sessionGraphViews.set(sessionViewKey(SESSION_SCOPE),{LENS,DETAIL,SEL,GRAPH_FOCUS,EXPAND_MODE,EV_FILTER,EV_OFFSET,ZOOM,FIT,TCUR,scroll:$('#dag').scrollLeft});
+  if(sessionGraphViews.size>24)sessionGraphViews.delete(sessionGraphViews.keys().next().value);
+  SESSION_SCOPE=next;
+  const saved=sessionGraphViews.get(sessionViewKey(next));
+  LENS=saved?.LENS || LENS;DETAIL=saved?.DETAIL || DETAIL;SEL=saved?.SEL || null;GRAPH_FOCUS=saved?.GRAPH_FOCUS || '';EXPAND_MODE=saved?.EXPAND_MODE || 'lineage';
+  EV_FILTER=saved?.EV_FILTER || null;EV_OFFSET=saved?.EV_OFFSET || 0;ZOOM=saved?.ZOOM || 1;FIT=saved?.FIT ?? true;
+  restoreSessionView=saved || null;
+  $('#lenssel').value=LENS;$('#detailsel').value=DETAIL;stopPlay();
+  window._gsig='';window._lg={nodes:[],edges:[],nodeT:{}};
+  $('#dag').innerHTML='<div class="empty">'+esc(tr('loading…'))+'</div>';
+  $('#lensmeta').textContent='';$('#legend').textContent='';
+  window.AgentWorkspaceUI.setNode(null);window.AgentWorkspaceUI.setEvents(null);window.AgentWorkspaceUI.setContent('');
+  window.AgentWorkspaceUI.setSession(next);
+  window.AgentContextUI.setRun(cur,next);
+  const url=new URL(location.href);
+  for(const [key,value] of [['session',next?.session_id],['harness',next?.harness]]){if(value)url.searchParams.set(key,value);else url.searchParams.delete(key);}
+  history.replaceState(null,'',url);
+}
+async function selectSessionScope(next){
+  activateSessionScope(next);
+  await loadRun(cur);
+}
 const requestedLens=INITIAL.get('lens');
 const requestedDetail=INITIAL.get('detail');
 let LENS=Object.hasOwn(LENS_LABEL,requestedLens)?requestedLens:'default', DETAIL=['summary','expanded','raw'].includes(requestedDetail)?requestedDetail:'summary';
@@ -1703,24 +1739,32 @@ function renderIntentFlow(g){
 let runRequest=0;
 async function loadRun(run){
   const request=++runRequest;
+  if(cur && cur!==run){SESSION_SCOPE=null;restoreSessionView=null;const url=new URL(location.href);url.searchParams.delete('session');url.searchParams.delete('harness');history.replaceState(null,'',url);}
   cur=run;
   window.AgentWorkspaceUI.setRun(run);
-  window.AgentContextUI.setRun(run);
+  window.AgentWorkspaceUI.setSession(SESSION_SCOPE);
+  window.AgentContextUI.setRun(run,SESSION_SCOPE);
   const q='run='+encodeURIComponent(run);
-  const lq=q+'&lens='+encodeURIComponent(LENS)+'&detail='+encodeURIComponent(DETAIL)+(GRAPH_FOCUS?'&focus='+encodeURIComponent(GRAPH_FOCUS):'')+[...OV].map(o=>'&overlay='+o).join('');
+  const scopeQuery=SESSION_SCOPE?'&harness='+encodeURIComponent(SESSION_SCOPE.harness)+'&session='+encodeURIComponent(SESSION_SCOPE.session_id):'';
+  const lq=q+scopeQuery+'&lens='+encodeURIComponent(LENS)+'&detail='+encodeURIComponent(DETAIL)+(GRAPH_FOCUS?'&focus='+encodeURIComponent(GRAPH_FOCUS):'')+[...OV].map(o=>'&overlay='+o).join('');
   const overviewQ=q+'&lens=default&detail=summary';
-  const [ov,lens,overviewLens,eg,pr,ob]=await Promise.all([j('/api/overview?'+q),j('/api/lens?'+lq),j('/api/lens?'+overviewQ),j('/api/egress?'+q),j('/api/processes?'+q),j('/api/outbound?'+q)]);
+  let results;
+  try{results=await Promise.all([j('/api/overview?'+q),j('/api/lens?'+lq),j('/api/lens?'+overviewQ),j('/api/egress?'+q),j('/api/processes?'+q),j('/api/outbound?'+q)]);}
+  catch(error){if(request!==runRequest || cur!==run)return;throw error;}
+  const [ov,lens,overviewLens,eg,pr,ob]=results;
   if(request!==runRequest || cur!==run)return;
   const g=adaptLens(lens);
   if(SEL&&!EV_FILTER){const selected=g.nodes.find(n=>n.id===SEL);if(selected)setEvidenceFilterFromNode(selected);}
   window._lg=g; window._lensManifest=lens;
+  window.AgentWorkspaceUI.setSession(SESSION_SCOPE,lens.query.session_scope);
   if(SEL && !g.nodes.find(n=>n.id===SEL)) { SEL=null; GRAPH_FOCUS=''; } // selection gone after refresh/lens switch
   renderVerify(ov.verify); renderSignals(ov.signals);
   renderQuestionEntries(overviewLens);
   // Re-render the graph only when its structure (lens + overlays + topology)
   // actually changed, so the live 5s refresh never re-lays-out under the cursor.
-  const sig=LENS+'|'+DETAIL+'|'+GRAPH_FOCUS+'|'+[...OV].sort().join(',')+'|'+JSON.stringify(g.nodes.map(n=>n.id))+'|'+JSON.stringify(g.edges.map(e=>e.from+'>'+e.to+(e.derived?'*':'')));
+  const sig=LENS+'|'+DETAIL+'|'+GRAPH_FOCUS+'|'+scopeQuery+'|'+[...OV].sort().join(',')+'|'+JSON.stringify(g.nodes.map(n=>n.id))+'|'+JSON.stringify(g.edges.map(e=>e.from+'>'+e.to+(e.derived?'*':'')))+'|'+JSON.stringify(lens.query.session_scope);
   if(sig!==window._gsig){ window._gsig=sig; renderLensMeta(lens); rebuildScrubber(g); renderDAG(g,SEL); }
+  if(restoreSessionView){const saved=restoreSessionView;restoreSessionView=null;const idx=saved.TCUR?TIMES.indexOf(saved.TCUR):TIMES.length;$('#slider').value=idx<0?TIMES.length:idx;setScrub(+$('#slider').value);$('#dag').scrollLeft=saved.scroll;}
   renderOutbound(ob); renderEgress(eg); renderProcessTree(pr); showDetail(SEL);
   loadCompliance(run);
   await loadEvidenceDrilldown(EV_OFFSET);
@@ -1780,6 +1824,7 @@ document.querySelectorAll('.language-switch a').forEach(link=>{
     if(cur)target.searchParams.set('run',cur);
     target.searchParams.set('lens',LENS);
     target.searchParams.set('detail',DETAIL);
+    for(const [key,value] of [['session',SESSION_SCOPE?.session_id],['harness',SESSION_SCOPE?.harness]]){if(value)target.searchParams.set(key,value);else target.searchParams.delete(key);}
     for(const [key,value] of [['focus',GRAPH_FOCUS],['selected',SEL]]){
       if(value)target.searchParams.set(key,value);else target.searchParams.delete(key);
     }
@@ -1791,7 +1836,7 @@ document.querySelectorAll('.language-switch a').forEach(link=>{
   });
 });
 
-window.AgentWorkspaceUI.init({tr,tx,esc,selectSource:source=>window.AgentContextUI.selectSource(source)});
+window.AgentWorkspaceUI.init({tr,tx,esc,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope))});
 window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,
   overviewChanged:value=>window.AgentWorkspaceUI.setOverview(value),
   overviewFailed:()=>window.AgentWorkspaceUI.overviewError(),

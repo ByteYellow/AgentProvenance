@@ -27,6 +27,10 @@ type ReplayLenses struct {
 // BuildReplayLenses prepares immutable, run-scoped views for a static demo.
 // Browsers only select stored edges and apply the same display limits as the UI.
 func BuildReplayLenses(db *sql.DB, run string) (ReplayLenses, error) {
+	return BuildSessionReplayLenses(db, run, nil)
+}
+
+func BuildSessionReplayLenses(db *sql.DB, run string, scope *GraphSessionScope) (ReplayLenses, error) {
 	nodes, events, err := graphLensNodes(db, run)
 	if err != nil {
 		return ReplayLenses{}, err
@@ -35,6 +39,7 @@ func BuildReplayLenses(db *sql.DB, run string) (ReplayLenses, error) {
 	if err != nil {
 		return ReplayLenses{}, err
 	}
+	nodes, events, edges = sessionLensData(scope, nodes, events, edges)
 	result := ReplayLenses{Nodes: maps.Clone(nodes), FocusNodes: maps.Clone(nodes), Views: map[string]ReplayLensView{}}
 	for id := range nodes {
 		result.Present = append(result.Present, id)
@@ -58,7 +63,7 @@ func BuildReplayLenses(db *sql.DB, run string) (ReplayLenses, error) {
 					result.Nodes[e.ToID] = extra[e.ToID]
 				}
 			}
-			opts := GraphLensOptions{RunID: run, Lens: lens, Detail: detail, Limit: 500, Overlays: []string{"risk", "trust"}}
+			opts := GraphLensOptions{RunID: run, Lens: lens, Detail: detail, Limit: 500, Overlays: []string{"risk", "trust"}, SessionScope: scope}
 			manifest := buildGraphLensFromData(opts, working, events, edges)
 			for _, n := range manifest.Nodes {
 				result.Nodes[n.ID] = n

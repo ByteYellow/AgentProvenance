@@ -7,6 +7,8 @@ window.AgentContextUI = (() => {
   let api, run = '', state, listRequest = 0, previewRequest = 0, summaryRequest = 0, listLoading = false;
   let overview = null, previewChoices = [], previewKey = '', previewOffsets = [0], previewPage = null;
   let formattedContent = null;
+  let sessionScope = null;
+  const sameScope = (a,b) => (a?.harness || '') === (b?.harness || '') && (a?.session_id || '') === (b?.session_id || '');
   const statusNames = {disabled:'Not enabled',no_input:'No source found',empty:'Valid empty source',ok:'Captured',partial:'Partially captured',failed:'Capture failed',ambiguous:'Ambiguous binding',legacy_not_recorded:'Not recorded in this historical run'};
   const associationNames = {no_input:'No runtime input',empty:'No eligible tool input',ok:'Association pass completed',partial:'Partial tool association',ambiguous:'Association ambiguous',failed:'Association failed'};
   const associationIssues = {runtime_exec_unassociated:'Some saved process executions have no tool-call link.',multiple_runtime_candidates:'Multiple association candidates remain unresolved.',tool_time_not_recorded:'Some tool calls lack usable start or end times.',runtime_scope_not_recorded:'Some runtime events lack scope information.',runtime_time_or_payload_invalid:'Some runtime timestamps or payloads could not be used.',context_runtime_correlation_failed:'Tool-to-runtime association failed.'};
@@ -52,7 +54,10 @@ window.AgentContextUI = (() => {
     $('context-fold').addEventListener('toggle', () => {
       if (!state) return;
       state.open = $('context-fold').open;
-      if (state.open && !state.page && !listLoading) loadList();
+      if (state.open && !listLoading) {
+        if (!state.page) loadList();
+        else if (!$('context-body').childElementCount) renderList(true);
+      }
     });
     $('context-source').onchange = () => {
       state.source = $('context-source').value;
@@ -99,7 +104,7 @@ window.AgentContextUI = (() => {
   function readingState() {
     if (!state) return null;
     const choice = previewChoices[Number($('content-choice').value)];
-    return {run,view:{tab:state.tab,source:state.source,cursor:state.cursor,history:state.history.slice(-200),pageNumber:state.pageNumber,selected:state.selected,node:state.node,graph:state.graph,scroll:$('context-body').scrollTop,open:state.open,expanded:[...state.expanded].slice(-200)},
+    return {run,sessionScope,view:{tab:state.tab,source:state.source,cursor:state.cursor,history:state.history.slice(-200),pageNumber:state.pageNumber,selected:state.selected,node:state.node,graph:state.graph,scroll:$('context-body').scrollTop,open:state.open,expanded:[...state.expanded].slice(-200)},
       preview:choice ? {entry:choice.entry?.id || '',raw:choice.node ? choice.mode === 'raw' : choice.mode === 'raw',node:choice.node || '',offsets:previewOffsets.slice(-512),scroll:$('content-body').scrollTop,format:$('content-format').value} : null};
   }
   function persist() {
@@ -113,6 +118,7 @@ window.AgentContextUI = (() => {
       if (!text || text.length > 65536) return null;
       const saved = JSON.parse(text), view = saved.view;
       if (saved.run !== nextRun || !view || !['conversation','configuration','coverage'].includes(view.tab)) return null;
+      if (!sameScope(saved.sessionScope,sessionScope)) return null;
       for (const key of ['source','cursor','selected','node','graph']) if (typeof view[key] !== 'string' || view[key].length > 8192) return null;
       if (!Array.isArray(view.history) || view.history.length > 200 || !view.history.every(v=>typeof v==='string' && v.length<8192)) return null;
       if (!Array.isArray(view.expanded) || view.expanded.length>200 || !view.expanded.every(v=>typeof v==='string' && v.length<512)) return null;
@@ -180,13 +186,15 @@ window.AgentContextUI = (() => {
     state.source = source; state.node = ''; state.returnView = null; state.tab = 'conversation';
     resetPage(); syncControls(); open('conversation');
   }
-  function setRun(nextRun) {
+  function setRun(nextRun,nextScope = null) {
     if (!nextRun) return;
-    if (nextRun !== run) {
+    if (nextRun !== run || !sameScope(sessionScope,nextScope)) {
       if (state) { state.scroll = $('context-body').scrollTop; state.reading = readingState(); }
       run = nextRun;
-      if (!states.has(run)) states.set(run, freshState());
-      state = states.get(run);
+      sessionScope = nextScope;
+      const key = JSON.stringify([run,sessionScope?.harness || '',sessionScope?.session_id || '']);
+      if (!states.has(key)) states.set(key, freshState());
+      state = states.get(key);
       const saved = state.reading || previousReading(run);
       if (saved) Object.assign(state,saved.view,{expanded:new Set(saved.view.expanded)});
       else state.graph = '';
@@ -215,8 +223,8 @@ window.AgentContextUI = (() => {
       const sources = [...new Set(reports.map(c => c.source?.harness).filter(Boolean))];
       const hints = [...new Set(reports.map(c => t(statusNames[c.status] || c.status)))];
       const processingHint = sections.processing.some(c=>!['ok','empty'].includes(c.status)) ? t('Processing diagnostics require attention') : '';
-      $('context-summary').textContent = [sources.join(' / '), api.tx('{messages} message records · {calls} tool calls · {results} results', {messages:unknown(value.messages),calls:unknown(value.tool_calls),results:unknown(value.tool_results)}),reports.some(c=>c.prior_context) ? t('Includes prior context') : '',hints.length ? t('Session capture')+': '+hints.join(' / ') : ''].filter(Boolean).join(' · ');
-      if (coverageChanged) $('context-source').innerHTML = `<option value="">${e(t('All recorded sessions'))}</option>` + sections.sessions.filter(c => c.source?.id).map(c => `<option value="${e(c.source.id)}">${e(c.source.harness)} · ${e(c.source.session_id || c.source.id)}</option>`).join('');
+      $('context-summary').textContent = [sessionScope ? t('Whole run counts') : '',sources.join(' / '), api.tx('{messages} message records · {calls} tool calls · {results} results', {messages:unknown(value.messages),calls:unknown(value.tool_calls),results:unknown(value.tool_results)}),reports.some(c=>c.prior_context) ? t('Includes prior context') : '',hints.length ? t('Session capture')+': '+hints.join(' / ') : ''].filter(Boolean).join(' · ');
+      if (coverageChanged) $('context-source').innerHTML = `<option value="">${e(t(sessionScope ? 'All sources in this session' : 'All recorded sessions'))}</option>` + sections.sessions.filter(c => c.source?.id && (!sessionScope || c.source.harness === sessionScope.harness && c.source.session_id === sessionScope.session_id)).map(c => `<option value="${e(c.source.id)}">${e(c.source.harness)} · ${e(c.source.session_id || c.source.id)}</option>`).join('');
       syncControls();
       $('context-nav-count').textContent = unknown(value.messages);
       $('context-nav-tools').textContent = unknown(value.tool_calls);
@@ -243,7 +251,7 @@ window.AgentContextUI = (() => {
     $('context-body').innerHTML = notice('loading…');
     $('context-prev').disabled = true; $('context-next').disabled = true;
     try {
-      const page = await api.j('/api/context/entries?' + q({run,source:current.source,group:current.node ? '' : current.tab,node:current.node,cursor:current.cursor,limit:30}));
+      const page = await api.j('/api/context/entries?' + q({run,harness:sessionScope?.harness,session:sessionScope?.session_id,source:current.source,group:current.node ? '' : current.tab,node:current.node,cursor:current.cursor,limit:30}));
       if (request !== listRequest || state !== current) return;
       current.page = page;
       if (restore) current.scroll = scroll;
@@ -456,7 +464,7 @@ window.AgentContextUI = (() => {
     const choices = [{label:t('Recorded graph content'),node,mode:'body'}, {label:t('Raw saved object'),node,mode:'raw'}];
     setPreview(choices,'node:'+node,reading?.raw ? 1 : 0,reading);
     try {
-      const page = await api.j('/api/context/entries?' + q({run,node,limit:50}));
+      const page = await api.j('/api/context/entries?' + q({run,node,harness:sessionScope?.harness,session:sessionScope?.session_id,limit:50}));
       if (state !== current || run !== currentRun || state.graph !== node || previewKey !== 'node:'+node) return;
       const selected = previewChoices[Number($('content-choice').value)];
       previewChoices = previewChoices.filter(choice=>!choice.entry).concat((page.entries || []).flatMap(entryChoices));

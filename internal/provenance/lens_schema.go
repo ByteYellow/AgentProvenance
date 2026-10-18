@@ -20,12 +20,13 @@ var availableGraphLenses = []string{
 }
 
 type GraphLensOptions struct {
-	RunID    string
-	Lens     string
-	Focus    string
-	Overlays []string
-	Limit    int
-	Detail   string
+	SessionScope *GraphSessionScope
+	RunID        string
+	Lens         string
+	Focus        string
+	Overlays     []string
+	Limit        int
+	Detail       string
 }
 
 type GraphLensManifest struct {
@@ -42,19 +43,20 @@ type GraphLensManifest struct {
 }
 
 type GraphLensQuery struct {
-	Focus         string   `json:"focus,omitempty"`
-	Overlays      []string `json:"overlays,omitempty"`
-	Limit         int      `json:"limit"`
-	Detail        string   `json:"detail"`
-	Truncated     bool     `json:"truncated"`
-	NodeCount     int      `json:"node_count"`
-	EdgeCount     int      `json:"edge_count"`
-	Derived       int      `json:"derived_edge_count"`
-	RawEventCount int      `json:"raw_event_count"`
-	OmittedNodes  int      `json:"omitted_nodes,omitempty"`
-	OmittedEdges  int      `json:"omitted_edges,omitempty"`
-	LensRules     []string `json:"lens_rules"`
-	LayoutHint    string   `json:"layout_hint"`
+	SessionScope  *GraphSessionQuery `json:"session_scope,omitempty"`
+	Focus         string             `json:"focus,omitempty"`
+	Overlays      []string           `json:"overlays,omitempty"`
+	Limit         int                `json:"limit"`
+	Detail        string             `json:"detail"`
+	Truncated     bool               `json:"truncated"`
+	NodeCount     int                `json:"node_count"`
+	EdgeCount     int                `json:"edge_count"`
+	Derived       int                `json:"derived_edge_count"`
+	RawEventCount int                `json:"raw_event_count"`
+	OmittedNodes  int                `json:"omitted_nodes,omitempty"`
+	OmittedEdges  int                `json:"omitted_edges,omitempty"`
+	LensRules     []string           `json:"lens_rules"`
+	LayoutHint    string             `json:"layout_hint"`
 }
 
 type GraphLensNode struct {

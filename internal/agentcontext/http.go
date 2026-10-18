@@ -101,7 +101,7 @@ func (s Service) httpEntries(w http.ResponseWriter, r *http.Request) {
 		}
 		revisions = v
 	}
-	value, err := s.Entries(r.Context(), PageOptions{RunID: q.Get("run"), SourceID: q.Get("source"), SessionID: q.Get("session"),
+	value, err := s.Entries(r.Context(), PageOptions{RunID: q.Get("run"), Harness: q.Get("harness"), SourceID: q.Get("source"), SessionID: q.Get("session"),
 		Kind: q.Get("kind"), ToolCallID: q.Get("tool_call"), EntryID: q.Get("entry"), NodeID: q.Get("node"), Group: q.Get("group"),
 		Cursor: q.Get("cursor"), Limit: limit, IncludeRevisions: revisions})
 	contextResult(w, value, err)

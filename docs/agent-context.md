@@ -324,8 +324,26 @@ A transcript and hooks source for the same session remain separately inspectable
 Recorded parent IDs link to sessions present in this run; missing parents and
 conflicting or cyclic records are labeled. Sources without a session identity
 have their own section, while processing diagnostics stay in collection status.
-Choose **Read source records** to filter the conversation by that exact source.
-The graph, risk list and timeline keep their whole-run scope.
+Click a session in the overview, or choose **View session graph** in the directory,
+to filter the graph, related events and conversation. The scope label shows the
+harness, native session ID, linked tool count and linked event count. **Back to
+whole run** restores the previous lens, selected node, zoom and reading position.
+Language switches and refreshes retain the session. **Read source records** opens
+one source within the selected session; without a session filter it changes only
+the conversation reader.
+
+Session membership follows saved context-to-tool and tool-to-runtime edges.
+Shared processes, files, directories and cgroups do not pull in another session's
+events. Summary counts are calculated after filtering. Existing inferred edges
+retain their rule and confidence; prior transcript history is excluded from the
+current execution graph. A session with no linked execution evidence has an empty
+graph and can still be read in the conversation view.
+
+Risk, collection status and auxiliary sections keep their **Whole run** scope.
+Following a risk or auxiliary evidence link returns to that scope. Recorded
+parent links stay within the current run, with the source report hash available
+under **Source and evidence**. Public-demo static exports use the same session
+selection and graph projections.
 
 Use **Open saved content** or **Raw source record** to open the reader's **Saved
 content** tab. Body and raw-record selection, 64 KiB page reads, and an enlarged
@@ -382,6 +400,16 @@ The reader does not retroactively create bodies that an older capture omitted.
 The dashboard and daemon share read-only `/api/context/*` and `/v1/context/*`
 routes. See the [API contract](agent-context-api.yaml) for fields, pagination,
 errors and compatibility semantics.
+
+The Dashboard's `/api/lens` and `/api/events` accept `harness` and `session`
+together to select a recorded native session. The filter intersects other graph
+or event filters; a missing session returns 404, and an incomplete pair returns
+400. Scoped lens responses include `query.session_scope` with the identity,
+link basis and counts. Resolution is limited to 256 sources and 10,000 current
+tool records per session; exceeding a limit returns an error rather than a
+partial graph. `/api/context/entries` and `/v1/context/entries` also accept
+`harness` alongside `session` to distinguish matching native IDs from different
+harnesses. This adds query filters without changing the evidence Bundle format.
 
 ## External Queries and Runtime Coverage
 
