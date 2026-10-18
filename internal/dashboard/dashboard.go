@@ -50,6 +50,12 @@ var contextCSS []byte
 //go:embed context.js
 var contextJS []byte
 
+//go:embed workspace.css
+var workspaceCSS []byte
+
+//go:embed workspace.js
+var workspaceJS []byte
+
 //go:embed replay.js
 var replayJS []byte
 
@@ -75,6 +81,14 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /assets/context.js", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		_, _ = w.Write(contextJS)
+	})
+	mux.HandleFunc("GET /assets/workspace.css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		_, _ = w.Write(workspaceCSS)
+	})
+	mux.HandleFunc("GET /assets/workspace.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		_, _ = w.Write(workspaceJS)
 	})
 	mux.HandleFunc("GET /api/runs", s.runs)
 	mux.HandleFunc("GET /api/overview", s.overview)

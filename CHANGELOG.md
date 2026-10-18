@@ -4,8 +4,21 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+### Changed
+
+- Keep the graph and risk list in place while combining node summaries, related
+  events and saved content in one below-graph reader. Auxiliary sections start
+  collapsed with counts; existing content paging and enlarged reading remain.
+- Add a session/source directory based on recorded harness and native session
+  identities, with parent references, conflict labels and exact-source context
+  navigation. Processing diagnostics remain separate from native sessions.
+- Include the reader and session directory in public-demo static exports.
+
 ### Fixed
 
+- Ignore obsolete focused-event and timeline responses after selection changes.
+  New evidence selections clear previous rows while loading; failed requests
+  show an unavailable result and an unknown count.
 - Replace endpoint capture projections atomically, including payload objects,
   events, policy decisions and signals. Missing bodies, malformed metadata and
   failed writes retain the previous graph; retries replace owned policy counters.

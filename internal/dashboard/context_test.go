@@ -46,7 +46,7 @@ func TestContextDashboardLayoutAndAssets(t *testing.T) {
 		h.ServeHTTP(w, httptest.NewRequest("GET", "/?lang="+lang, nil))
 		body := w.Body.String()
 		last := -1
-		for _, id := range []string{"runoverview", "graphcard", "focusedevidence", "savedcontent", "agentcontext", "outboundcard", "compliancecard"} {
+		for _, id := range []string{"runoverview", "graphcard", "inspection", "focusedevidence", "savedcontent", "agentcontext", "outboundcard", "compliancecard"} {
 			index := strings.Index(body, `id="`+id+`"`)
 			if index <= last {
 				t.Errorf("%s: layout order or component missing: %s", lang, id)
@@ -56,13 +56,26 @@ func TestContextDashboardLayoutAndAssets(t *testing.T) {
 		if !strings.Contains(body, `<details id="context-fold">`) {
 			t.Fatal("agent session must start collapsed")
 		}
+		if !strings.Contains(body, `id="inspection" hidden`) {
+			t.Fatal("empty evidence reader must start hidden")
+		}
+		for _, id := range []string{"profile-fold", "outbound-fold", "timeline-fold", "process-fold", "egress-fold", "compliance-fold"} {
+			if !strings.Contains(body, `<details id="`+id+`" class="auxiliary-fold">`) {
+				t.Fatalf("auxiliary section must start collapsed: %s", id)
+			}
+		}
+		for _, action := range []string{"search", "compare", "export"} {
+			if !strings.Contains(body, `data-investigation="`+action+`"`) {
+				t.Fatalf("investigation entry missing: %s", action)
+			}
+		}
 		for _, id := range []string{"playbtn", "lenssel", "detailsel", "evtbl", "siglist", "tl", "ptree", "egtbl", "content-dialog", "context-nav-count", "context-nav-tools", "context-nav-files", "context-nav-config", "context-nav-coverage"} {
 			if !strings.Contains(body, `id="`+id+`"`) {
 				t.Fatalf("existing component missing: %s", id)
 			}
 		}
 	}
-	for path, mime := range map[string]string{"/assets/context.js": "application/javascript", "/assets/context.css": "text/css"} {
+	for path, mime := range map[string]string{"/assets/context.js": "application/javascript", "/assets/context.css": "text/css", "/assets/workspace.js": "application/javascript", "/assets/workspace.css": "text/css"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 		if w.Code != 200 || w.Body.Len() < 100 || !strings.Contains(w.Header().Get("Content-Type"), mime) {
@@ -135,6 +148,31 @@ func TestContextDashboardFixture(t *testing.T) {
 		t.Fatalf("fixture evidence invalid: %+v %v", v, err)
 	}
 	addContextProtocolFixtures(t, s)
+	addSessionDirectoryFixture(t, s)
+}
+
+func addSessionDirectoryFixture(t *testing.T, s agentcontext.Service) {
+	t.Helper()
+	for _, source := range []agentcontext.Source{
+		{ID: "team-root", Harness: "codex", Channel: "transcript", SessionID: "root"},
+		{ID: "team-child", Harness: "codex", Channel: "transcript", SessionID: "worker", ParentSessionID: "root", AgentID: "worker-agent"},
+		{ID: "team-child-hooks", Harness: "codex", Channel: "hooks", SessionID: "worker", ParentSessionID: "root"},
+		{ID: "team-other-harness", Harness: "claude", Channel: "transcript", SessionID: "root", ParentSessionID: "outside-run"},
+		{ID: "team-unassigned", Harness: "custom", Channel: "transcript"},
+		{ID: "team-processing", Harness: "launch", Channel: "processing", SessionID: "ui-sessions"},
+	} {
+		source.Binding = "explicit"
+		source.ParserVersion = "synthetic-session-fixture/v1"
+		body := "Synthetic session directory fixture: " + source.ID
+		records := []agentcontext.Record{{Key: "message", Kind: "message", Role: "user", Body: &body}}
+		if source.SessionID == "" || source.Channel == "processing" {
+			records = nil
+		}
+		_, err := s.Save(context.Background(), "ui-sessions", source, records, agentcontext.Coverage{Status: agentcontext.OK})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func addContextProtocolFixtures(t *testing.T, s agentcontext.Service) {

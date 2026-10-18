@@ -12,6 +12,7 @@ const value = {
     {source:{harness:'launch',channel:'runtime_correlation'},status:'partial',counts:{stored:0}},
     {source:{harness:'deepseek',channel:'transcript'},status:'ok',counts:{stored:73}},
     {source:{harness:'deepseek',channel:'discovery'},status:'ok'},
+    {source:{harness:'launch',channel:'processing'},status:'failed'},
   ],
   runtime_coverage:{capture:{status:'partial',run_dropped_events:null,node_pending_events:235,node_counter_delta:{invalid:3},run_impact:'unknown'}},
 };
@@ -19,6 +20,7 @@ const original = JSON.stringify(value), result = sections(value);
 assert.equal(result.sessions.length,1);
 assert.equal(result.discoveries.length,1);
 assert.equal(result.associations.length,1);
+assert.equal(result.processing.length,1);
 assert.ok(result.sessions.every(r => r.source.harness === 'deepseek'));
 assert.equal(result.runtime.label,'Capture completeness unconfirmed');
 assert.equal(result.runtime.state,'partial');

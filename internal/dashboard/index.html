@@ -298,6 +298,7 @@
   .load-error pre{white-space:pre-wrap;overflow-wrap:anywhere}
 </style>
 <link rel="stylesheet" href="/assets/context.css">
+<link rel="stylesheet" href="/assets/workspace.css">
 </head>
 <body>
 <header>
@@ -316,8 +317,17 @@
 </div>
 <main>
   <section class="card full" id="runoverview">
-    <h2>{{tr .Lang "Run Overview"}} <span class="sub">{{tr .Lang "query first, graph second — raw events stay paged and drillable"}}</span></h2>
-    <div id="profilebar" class="profilebar"></div>
+    <h2>{{tr .Lang "Run Overview"}}<span class="spacer"></span>
+      <nav class="investigation-actions" aria-label="{{tr .Lang "Investigation actions"}}">
+        <button data-investigation="search" aria-label="{{tr .Lang "Search saved evidence"}}" title="{{tr .Lang "Search saved evidence"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></button>
+        <button data-investigation="compare" aria-label="{{tr .Lang "Compare runs"}}" title="{{tr .Lang "Compare runs"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 4 4-4 4M4 7h16M8 21l-4-4 4-4m12 4H4"/></svg></button>
+        <button data-investigation="export" aria-label="{{tr .Lang "Export replay"}}" title="{{tr .Lang "Export replay"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></button>
+      </nav>
+    </h2>
+    <div id="session-composition" class="session-composition">
+      <button id="session-directory-open" aria-haspopup="dialog">{{tr .Lang "Sessions & sources"}} <span id="session-count">…</span></button>
+      <div id="session-members" class="session-members" aria-live="polite"></div>
+    </div>
     <div id="askgrid" class="askgrid"></div>
     <nav class="context-nav" aria-label="{{tr .Lang "Recorded context shortcuts"}}">
       <button data-context-open="conversation">{{tr .Lang "Task & conversation"}} <span id="context-nav-count">…</span></button>
@@ -326,6 +336,7 @@
       <button data-context-open="configuration">{{tr .Lang "Permissions & configuration"}} <span id="context-nav-config">…</span></button>
       <button data-context-open="coverage">{{tr .Lang "Collection status"}} <span id="context-nav-coverage">…</span></button>
     </nav>
+    <details id="profile-fold" class="auxiliary-fold"><summary>{{tr .Lang "Execution scope & sources"}}</summary><div id="profilebar" class="profilebar"></div></details>
   </section>
   <section class="card hero" id="graphcard">
     <h2>{{tr .Lang "Graph Explorer"}} <span class="sub">{{tr .Lang "canonical graph → lens projection → derived edges"}}</span>
@@ -350,22 +361,27 @@
     </div>
     <div id="dag"></div>
     <div class="legend" id="legend"></div>
-    <div id="detail" class="detail"><span class="hint">{{tr .Lang "click any node to highlight its causal chain & inspect its record →"}}</span></div>
   </section>
   <section class="card side">
     <h2>{{tr .Lang "Signals & Risk"}} <span class="sub" id="sigcount"></span></h2>
     <div id="siglist" class="siglist"></div>
   </section>
-  <section class="card full" id="focusedevidence">
-    <h2>{{tr .Lang "Focused Evidence"}} <span class="sub">{{tr .Lang "evidence for the selected risk, graph node, or overview group"}}</span></h2>
+  <section class="card full" id="inspection" hidden>
+    <h2>{{tr .Lang "Evidence reader"}} <span id="inspection-selection" class="sub"></span><span class="spacer"></span><button id="inspection-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></h2>
+    <div class="inspection-tabs" role="tablist" aria-label="{{tr .Lang "Evidence reader"}}">
+      <button id="inspection-tab-summary" role="tab" data-inspection-tab="summary" aria-controls="detail" aria-selected="true">{{tr .Lang "Summary"}}</button>
+      <button id="inspection-tab-events" role="tab" data-inspection-tab="events" aria-controls="focusedevidence" aria-selected="false" tabindex="-1">{{tr .Lang "Related events"}} <span id="inspection-event-count"></span></button>
+      <button id="inspection-tab-content" role="tab" data-inspection-tab="content" aria-controls="savedcontent" aria-selected="false" tabindex="-1">{{tr .Lang "Saved content"}}</button>
+    </div>
+    <div id="detail" class="detail" role="tabpanel" aria-labelledby="inspection-tab-summary"></div>
+    <section id="focusedevidence" role="tabpanel" aria-labelledby="inspection-tab-events" hidden>
     <div id="evhead" class="evidence-head"><span class="hint">{{tr .Lang "select a risk, graph node, or overview group to inspect its evidence"}}</span></div>
     <div style="overflow:auto;max-height:340px"><table id="evtbl"><thead><tr>
       <th>{{tr .Lang "time"}}</th><th>{{tr .Lang "event"}}</th><th>{{tr .Lang "pid"}}</th><th>{{tr .Lang "tool call"}}</th><th>{{tr .Lang "correlation"}}</th><th>{{tr .Lang "payload"}}</th>
     </tr></thead><tbody></tbody></table></div>
     <div id="evpager" class="pager"></div>
-  </section>
-  <section class="card full context-ui" id="savedcontent">
-    <h2>{{tr .Lang "Saved content"}} <span class="sub">{{tr .Lang "recorded files, tool output, and source records"}}</span></h2>
+    </section>
+    <section class="context-ui" id="savedcontent" role="tabpanel" aria-labelledby="inspection-tab-content" hidden>
     <div id="content-empty" class="content-empty">{{tr .Lang "Select a graph node or a session record to inspect saved evidence."}}</div>
     <div id="content-home">
       <div id="content-pane" hidden>
@@ -384,6 +400,7 @@
         <div class="context-pager"><button id="content-prev">{{tr .Lang "‹ prev"}}</button><span id="content-page-label"></span><button id="content-next">{{tr .Lang "next ›"}}</button><span id="content-limits"></span></div>
       </div>
     </div>
+    </section>
   </section>
   <section class="card full context-ui" id="agentcontext">
     <details id="context-fold">
@@ -409,27 +426,32 @@
     </details>
   </section>
   <section class="card full" id="outboundcard">
-    <h2>{{tr .Lang "Outbound Data Surfaces"}} <span class="sub">{{tr .Lang "where data left (or was blocked from leaving) the box — grouped by channel · owner · data class · decision, generated from evidence"}}</span></h2>
+    <details id="outbound-fold" class="auxiliary-fold"><summary>{{tr .Lang "Outbound Data Surfaces"}} <span id="outbound-count" class="sub"></span></summary>
     <div id="outbound" class="surfaces"></div>
+    </details>
   </section>
   <section class="card full">
-    <h2>{{tr .Lang "Run Timeline"}} <span class="sub">{{tr .Lang "all events in chronological order"}}</span><span id="tlprov" class="provchip"></span></h2>
+    <details id="timeline-fold" class="auxiliary-fold"><summary>{{tr .Lang "Run Timeline"}} <span id="timeline-count" class="sub"></span><span id="tlprov" class="provchip"></span></summary>
     <div style="overflow:auto;max-height:420px"><table id="tl"><thead><tr>
       <th>{{tr .Lang "time"}}</th><th>{{tr .Lang "event"}}</th><th title="{{tr .Lang "evidence source (which producer) · scope source (how it tied to a run)"}}">{{tr .Lang "source"}}</th><th>{{tr .Lang "correlation"}}</th><th>{{tr .Lang "conf"}}</th><th>{{tr .Lang "detail"}}</th>
     </tr></thead><tbody></tbody></table></div>
     <div id="tlpager" class="pager"></div>
+    </details>
   </section>
   <section class="card full">
-    <h2>{{tr .Lang "Process Tree"}} <span class="sub">{{tr .Lang "OS processes by parent pid"}}</span></h2>
+    <details id="process-fold" class="auxiliary-fold"><summary>{{tr .Lang "Process Tree"}} <span id="process-count" class="sub"></span></summary>
     <div id="ptree" class="ptree"></div>
+    </details>
   </section>
   <section class="card full">
-    <h2>{{tr .Lang "Egress"}} <span class="sub">{{tr .Lang "outbound network — the destination is the security-relevant fact"}}</span></h2>
+    <details id="egress-fold" class="auxiliary-fold"><summary>{{tr .Lang "Egress"}} <span id="egress-count" class="sub"></span></summary>
     <div style="overflow:auto;max-height:300px"><table id="egtbl"><thead><tr>
       <th>{{tr .Lang "time"}}</th><th>{{tr .Lang "type"}}</th><th>{{tr .Lang "destination"}}</th><th>{{tr .Lang "path"}}</th><th>{{tr .Lang "port"}}</th><th>{{tr .Lang "evidence"}}</th><th>{{tr .Lang "count"}}</th><th>{{tr .Lang "process"}}</th>
     </tr></thead><tbody></tbody></table></div>
+    </details>
   </section>
   <section class="card full" id="compliancecard">
+    <details id="compliance-fold" class="auxiliary-fold"><summary>{{tr .Lang "Compliance"}} <span id="compliance-count" class="sub"></span></summary>
     <h2>{{tr .Lang "Compliance"}} <span class="sub">{{tr .Lang "per control: did a threat fire in this run, and did your detectors contain it? (violated / enforced / clear / not assessed)"}}</span>
       <span class="spacer"></span>
       <select id="fwsel" title="{{tr .Lang "compliance framework"}}"></select>
@@ -437,12 +459,23 @@
     <div id="compsummary" class="compsummary"></div>
     <div id="complist" class="complist"></div>
     <div id="compdisclaimer" class="compdisclaimer"></div>
+    </details>
   </section>
 </main>
 <dialog id="content-dialog" class="content-dialog context-ui" aria-labelledby="content-dialog-title">
   <div class="content-dialog-head"><h2 id="content-dialog-title">{{tr .Lang "Saved content"}}</h2><button id="content-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></div>
   <div id="content-dialog-body"></div>
 </dialog>
+<dialog id="session-directory" class="content-dialog context-ui session-directory" aria-labelledby="session-directory-title">
+  <div class="content-dialog-head"><h2 id="session-directory-title">{{tr .Lang "Sessions & sources"}}</h2><button id="session-directory-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></div>
+  <p class="session-scope-note">{{tr .Lang "Session selection filters recorded context. The graph, risks, and timeline cover the whole run."}}</p>
+  <div id="session-directory-body"></div>
+</dialog>
+<dialog id="investigation-dialog" class="content-dialog context-ui investigation-dialog" aria-labelledby="investigation-title">
+  <div class="content-dialog-head"><h2 id="investigation-title"></h2><button id="investigation-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></div>
+  <div class="investigation-notice"><p>{{tr .Lang "This action is not available in this build."}}</p><p id="investigation-scope"></p></div>
+</dialog>
+<script src="/assets/workspace.js"></script>
 <script src="/assets/context.js"></script>
 <script>
 const {t: tr, locale: LANG} = window.AgentProvI18n;
@@ -851,7 +884,7 @@ function renderQuestionEntries(m){
   document.querySelectorAll('.qbtn').forEach(btn=>{
     btn.onclick=()=>{
       // The compliance entry isn't a graph lens -- it scrolls to the posture card.
-      if(btn.getAttribute('data-node')==='__compliance__'){ const c=$('#compliancecard'); if(c)c.scrollIntoView({behavior:'smooth',block:'start'}); return; }
+      if(btn.getAttribute('data-node')==='__compliance__'){ $('#compliance-fold').open=true; const c=$('#compliancecard'); if(c)c.scrollIntoView({behavior:'smooth',block:'start'}); return; }
       const node=byId[btn.getAttribute('data-node')]||null;
       LENS=btn.getAttribute('data-lens')||'default';
       DETAIL='summary';
@@ -969,6 +1002,9 @@ const DETAIL_HINT=("<span class=\"hint\">"+esc(tr("click any node to highlight i
 function showDetail(id,explicit=false){
   const el=$('#detail');
   const n=id&&(window._lg.nodes||[]).find(x=>x.id===id);
+  const fieldsOpen=el.dataset.node===id && Boolean(el.querySelector('details')?.open);
+  el.dataset.node=id||'';
+  window.AgentWorkspaceUI.setNode(n,explicit);
   if(!n){el.innerHTML=DETAIL_HINT;return;}
   const c=KIND_COLOR[nodeKind(n)]||KIND_COLOR.other;
   let rows='';
@@ -994,10 +1030,11 @@ function showDetail(id,explicit=false){
     `<button data-expand="raw">${esc(tr("raw events"))}</button>`;
   el.innerHTML=`<h3><span style="color:${c}">●</span> ${esc(nodeLabel(n))} ${badges}</h3>`+
     `<div class="expandbar">${expandButtons}<button id="detail-session">${esc(tr('Locate session records'))}</button><button id="detail-content">${esc(tr('Saved content'))}</button></div>`+
-    `<div class="sec">${esc(tr("Original evidence fields"))}</div><dl>${rows}</dl>`;
+    `<details${fieldsOpen?' open':''}><summary>${esc(tr("Original evidence fields"))}</summary><dl>${rows}</dl></details>`;
   $('#detail-session').onclick=()=>window.AgentContextUI.linkedSession(n.id);
   $('#detail-content').onclick=()=>{
     safeUI(loadPreview(cur,n.id,true));
+    window.AgentWorkspaceUI.show('content');
     $('#savedcontent').scrollIntoView({block:'start',behavior:'smooth'});
   };
   el.querySelectorAll('[data-expand]').forEach(btn=>{
@@ -1005,6 +1042,7 @@ function showDetail(id,explicit=false){
       const mode=btn.getAttribute('data-expand');
       if(mode==='raw'){
         safeUI(loadEvidenceDrilldown(0));
+        window.AgentWorkspaceUI.show('events');
         const box=$('#evhead');
         if(box) box.scrollIntoView({block:'nearest'});
         return;
@@ -1208,23 +1246,46 @@ function provBadge(e){
   return '';
 }
 
+let evidenceRequest=0, evidenceViewKey='';
 async function loadEvidenceDrilldown(offset){
+  const request=++evidenceRequest, run=cur;
   const tb=$('#evtbl tbody'), head=$('#evhead'), pager=$('#evpager');
   if(!cur){return;}
   if(!EV_FILTER){
+    evidenceViewKey='';
+    window.AgentWorkspaceUI.setEvents(null);
     head.innerHTML=("<span class=\"hint\">"+esc(tr("select a risk, graph node, or overview group to inspect its evidence"))+"</span>");
     tb.innerHTML=("<tr><td colspan=\"6\" class=\"empty\">"+esc(tr("no focused selection"))+"</td></tr>");
     pager.innerHTML='';
     return;
   }
   const f=EV_FILTER;
+  const key=JSON.stringify([run,f,offset||0]);
+  if(key!==evidenceViewKey){
+    evidenceViewKey=key;
+    window.AgentWorkspaceUI.setEvents({title:f.title});
+    head.textContent=tx('Selected: {title}',{title:f.title||tr('evidence')});
+    tb.innerHTML='<tr><td colspan="6" class="empty">'+esc(tr('loading…'))+'</td></tr>';
+    pager.innerHTML='';
+  }
   const p=new URLSearchParams();
   p.set('run',cur); p.set('limit',EV_LIMIT); p.set('offset',offset||0);
   if(f.lens)p.set('lens',f.lens);
   if(f.group)p.set('group',f.group);
   if(f.focus)p.set('focus',f.focus);
   if(f.refs&&f.refs.length)p.set('refs',f.refs.slice(0,80).join(','));
-  const d=await j('/api/events?'+p.toString());
+  let d;
+  try{d=await j('/api/events?'+p.toString());}
+  catch(error){
+    if(request!==evidenceRequest || run!==cur || f!==EV_FILTER)return;
+    evidenceViewKey='';
+    window.AgentWorkspaceUI.setEvents({title:f.title,count:tr('unknown')});
+    tb.innerHTML='<tr><td colspan="6" class="empty">'+esc(tr('Evidence could not be loaded.'))+'</td></tr>';
+    pager.innerHTML='';
+    throw error;
+  }
+  if(request!==evidenceRequest || run!==cur || f!==EV_FILTER)return;
+  window.AgentWorkspaceUI.setEvents({title:f.title,count:d.total||0});
   EV_OFFSET=d.offset||0;
   const rows=d.events||[];
   const refCount=(f.refs&&f.refs.length)?' · '+tx("{count} refs", {count: f.refs.length}):'';
@@ -1249,6 +1310,7 @@ async function loadEvidenceDrilldown(offset){
 }
 
 function renderEgress(rows){
+  $('#egress-count').textContent=tx('{count} destination records',{count:(rows||[]).length});
   const tb=$('#egtbl tbody');
   if(!rows||!rows.length){tb.innerHTML=("<tr><td colspan=\"8\" class=\"empty\">"+esc(tr("no outbound network"))+"</td></tr>");return;}
   tb.innerHTML=rows.map(e=>{
@@ -1270,6 +1332,7 @@ function fmtRange(a,b){ const f=s=>(s||'').replace('T',' ').replace(/\.\d+Z?$/,'
 // here is demo-specific: it renders whatever /api/outbound returns, and shows an
 // explicit empty state when a run had no outbound surfaces.
 function renderOutbound(surfaces){
+  $('#outbound-count').textContent=tx('{count} surfaces',{count:(surfaces||[]).length});
   const el=$('#outbound');
   if(!surfaces||!surfaces.length){ el.innerHTML=("<div class=\"empty\">"+esc(tr("No outbound surfaces observed"))+"</div>"); return; }
   el.innerHTML=surfaces.map((s,i)=>{
@@ -1313,6 +1376,7 @@ function focusSurface(s){
 }
 
 function renderProcessTree(procs){
+  $('#process-count').textContent=tx('{count} process records',{count:(procs||[]).length});
   const el=$('#ptree');
   if(!procs||!procs.length){el.innerHTML=("<div class=\"empty\">"+esc(tr("no process events"))+"</div>");return;}
   const byPid={}, kids={};
@@ -1416,6 +1480,7 @@ async function loadCompliance(run){
   }
 }
 function renderCompliance(rep){
+  $('#compliance-count').textContent=rep?.summary ? tx('{count} controls in total',{count:rep.summary.total||0}) : tr('Not recorded');
   const sumEl=$('#compsummary'), listEl=$('#complist'), disEl=$('#compdisclaimer');
   if(!rep || rep.error || !rep.summary){
     sumEl.innerHTML=''; listEl.innerHTML='<div class="empty">'+esc((rep&&rep.error)||tr("no compliance mapping for this run"))+'</div>'; disEl.textContent=''; return;
@@ -1639,6 +1704,7 @@ let runRequest=0;
 async function loadRun(run){
   const request=++runRequest;
   cur=run;
+  window.AgentWorkspaceUI.setRun(run);
   window.AgentContextUI.setRun(run);
   const q='run='+encodeURIComponent(run);
   const lq=q+'&lens='+encodeURIComponent(LENS)+'&detail='+encodeURIComponent(DETAIL)+(GRAPH_FOCUS?'&focus='+encodeURIComponent(GRAPH_FOCUS):'')+[...OV].map(o=>'&overlay='+o).join('');
@@ -1658,12 +1724,21 @@ async function loadRun(run){
   renderOutbound(ob); renderEgress(eg); renderProcessTree(pr); showDetail(SEL);
   loadCompliance(run);
   await loadEvidenceDrilldown(EV_OFFSET);
+  if(request!==runRequest || cur!==run)return;
   await loadTimeline(run, tlOffset);
+  if(request!==runRequest || cur!==run)return;
   $('#loaderror').hidden=true;
 }
 
+let timelineRequest=0;
 async function loadTimeline(run, offset){
-  const d=await j('/api/timeline?run='+encodeURIComponent(run)+'&limit='+TL_LIMIT+'&offset='+offset);
+  if(run!==cur)return;
+  const request=++timelineRequest;
+  let d;
+  try{d=await j('/api/timeline?run='+encodeURIComponent(run)+'&limit='+TL_LIMIT+'&offset='+offset);}
+  catch(error){if(request===timelineRequest && run===cur)throw error;return;}
+  if(request!==timelineRequest || run!==cur)return;
+  $('#timeline-count').textContent=tx('{count} events',{count:d.total||0});
   tlOffset=d.offset;
   renderTimeline(d.events);
   if(offset===0)renderProducerProfile(d.events);
@@ -1716,13 +1791,21 @@ document.querySelectorAll('.language-switch a').forEach(link=>{
   });
 });
 
-window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,navigateGraph:async(run,id)=>{
+window.AgentWorkspaceUI.init({tr,tx,esc,selectSource:source=>window.AgentContextUI.selectSource(source)});
+window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,
+  overviewChanged:value=>window.AgentWorkspaceUI.setOverview(value),
+  overviewFailed:()=>window.AgentWorkspaceUI.overviewError(),
+  sourceChanged:source=>window.AgentWorkspaceUI.setSource(source),
+  contentChanged:(key,label)=>window.AgentWorkspaceUI.setContent(key,label),
+  revealContent:()=>window.AgentWorkspaceUI.show('content'),
+  navigateGraph:async(run,id)=>{
   if(run!==cur)throw new Error(tr('The selected run changed.'));
   LENS='default';DETAIL='raw';GRAPH_FOCUS=id;SEL=id;EXPAND_MODE='lineage';EV_FILTER=null;EV_OFFSET=0;
   $('#lenssel').value=LENS;$('#detailsel').value=DETAIL;stopPlay();
   await loadRun(run);
   if(SEL!==id)throw new Error(tr('The recorded node is not available in this graph view.'));
   await loadPreview(run,id,true);
+  window.AgentWorkspaceUI.show('summary');
   $('#graphcard').scrollIntoView({block:'start',behavior:'smooth'});
 }});
 

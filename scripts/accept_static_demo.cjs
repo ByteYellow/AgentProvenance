@@ -4,6 +4,7 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const { gunzipSync } = require('node:zlib');
+const { tmpdir } = require('node:os');
 
 async function main() {
   const site = new URL(process.argv[2]), native = new URL(process.argv[3]);
@@ -28,7 +29,9 @@ async function main() {
     const compare=async query=>{
       const [expected,actual]=await Promise.all([responseJSON(context.request,new URL(query,native).href),page.evaluate(q=>AgentProvReplay.query(q),query)]);
       // Import locations differ; compare the same content-addressed object path.
-      const normalize=v=>JSON.parse(JSON.stringify(v).replace(/\/tmp\/agentprov-(?:public-demo|demo)-[0-9]+\/state\/provenance\/objects\//g,'/demo/objects/'));
+      const root=tmpdir().replace(/\/$/,'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      const importedPath=new RegExp(root+'/agentprov-(?:public-demo|demo)-[0-9]+/state/provenance/objects/','g');
+      const normalize=v=>JSON.parse(JSON.stringify(v).replace(importedPath,'/demo/objects/'));
       try {assert.deepEqual(normalize(actual),normalize(expected));}catch(e){console.error('Query mismatch: '+query);throw e;}report.parity++;return actual;
     };
     await compare('/api/runs');
@@ -89,6 +92,24 @@ async function main() {
     // Use actual UI controls for the recorded DeepSeek task, with no API backend.
     await page.goto(new URL('en/replay.html?run=run-dbc2adf273d4',site).href);
     await page.waitForFunction(()=>document.querySelector('#context-summary')?.textContent.includes('13 message records'));
+    assert.equal(await page.locator('#inspection').isHidden(),true);
+    assert.equal(await page.locator('.auxiliary-fold[open]').count(),0);
+    assert.equal(await page.locator('#session-count').innerText(),'1');
+    assert.equal(await page.locator('[data-investigation]').count(),3);
+    await page.locator('#session-directory-open').click();
+    const source=await page.locator('[data-session-source]').first().getAttribute('data-session-source');
+    await page.locator('[data-session-source]').first().click();
+    await page.waitForSelector('#context-body [data-entry]');
+    assert.equal(await page.locator('#context-source').inputValue(),source);
+    const sourceQuery='/api/context/entries?run=run-dbc2adf273d4&source='+encodeURIComponent(source)+'&group=conversation&limit=30';
+    const scoped=await page.evaluate(q=>AgentProvReplay.query(q),sourceQuery);
+    const expectedSource=await responseJSON(context.request,new URL(sourceQuery,native).href);
+    assert.deepEqual(scoped.entries,expectedSource.entries);
+    assert.equal(Boolean(scoped.next_cursor),Boolean(expectedSource.next_cursor));
+    report.parity++;
+    assert.deepEqual(await page.locator('#context-body [data-entry]').evaluateAll(nodes=>nodes.map(n=>n.dataset.entry)),scoped.entries.map(entry=>entry.id));
+    await page.locator('#context-source').selectOption('');
+    await page.locator('#context-fold > summary').click();
     assert.equal(await page.locator('#context-fold').evaluate(e=>e.open),false);
     for(const id of ['graphcard','siglist','focusedevidence','outboundcard','tl','ptree','egtbl','compliancecard'])assert.equal(await page.locator('#'+id).count(),1);
     for(const lens of await page.locator('#lenssel option').evaluateAll(options=>options.map(o=>o.value))){
@@ -101,6 +122,7 @@ async function main() {
     await page.waitForFunction(()=>window._lensManifest?.lens==='file-artifact'&&window._lensManifest?.query.detail==='raw');
     await page.locator('#dag [data-id="workspace_file/report.py"]').click();
     await page.waitForFunction(()=>document.querySelector('#content-body')?.textContent.includes('def daily_revenue'));
+    await page.locator('#inspection-tab-content').click();
     assert.equal(await page.locator('#context-fold').evaluate(e=>e.open),false);
     await page.locator('#content-choice').selectOption({label:'Raw saved object'});
     await page.waitForFunction(()=>document.querySelector('#content-body')?.textContent.includes('content_ref'));
@@ -147,6 +169,9 @@ async function main() {
     }
     assert.deepEqual(errors,[]);
     console.log(JSON.stringify({...report,passed:true},null,2));
+  } catch(error) {
+    if(errors.length)console.error(JSON.stringify({browserErrors:errors}));
+    throw error;
   } finally {await browser.close();}
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

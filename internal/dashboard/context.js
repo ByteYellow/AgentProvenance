@@ -35,7 +35,8 @@ window.AgentContextUI = (() => {
   function coverageSections(value) {
     const reports = value?.coverage || [];
     return {
-      sessions:reports.filter(c => !['runtime_correlation','discovery'].includes(c.source?.channel)),
+      sessions:reports.filter(c => !['runtime_correlation','discovery','processing'].includes(c.source?.channel)),
+      processing:reports.filter(c => c.source?.channel === 'processing'),
       discoveries:reports.filter(c => c.source?.channel === 'discovery'),
       associations:reports.filter(c => c.source?.channel === 'runtime_correlation'),
       runtime:runtimePresentation(value?.runtime_coverage?.capture),
@@ -55,7 +56,8 @@ window.AgentContextUI = (() => {
     });
     $('context-source').onchange = () => {
       state.source = $('context-source').value;
-      resetPage(); loadList();
+      state.node = ''; state.returnView = null;
+      resetPage(); syncControls(); loadList();
     };
     $('context-refresh').onclick = () => { resetPage(); refreshSummary(); loadList(); };
     document.querySelectorAll('[data-context-tab]').forEach(button => {
@@ -153,12 +155,14 @@ window.AgentContextUI = (() => {
     $('context-linked-label').textContent = state.node ? t('Only records connected by stored evidence edges') + ': ' + state.node : '';
     $('context-source').value = state.source;
     $('context-source').disabled = state.tab === 'coverage';
+    api.sourceChanged?.(state.source);
   }
   function changeTab(tab) {
     state.tab = tab; state.node = ''; state.returnView = null;
     resetPage(); syncControls(); loadList();
   }
   function scrollRegion(id) {
+    if (id === 'savedcontent') api.revealContent?.();
     const header = document.querySelector('body > header'), region = $(id);
     const inset = header && getComputedStyle(header).position === 'sticky' ? header.getBoundingClientRect().height : 0;
     region.style.scrollMarginTop = Math.ceil(inset + 12) + 'px';
@@ -170,6 +174,11 @@ window.AgentContextUI = (() => {
     if (tab && tab !== state.tab) changeTab(tab);
     else if (!state.page) loadList();
     scrollRegion('agentcontext');
+  }
+  function selectSource(source) {
+    if (!state) return;
+    state.source = source; state.node = ''; state.returnView = null; state.tab = 'conversation';
+    resetPage(); syncControls(); open('conversation');
   }
   function setRun(nextRun) {
     if (!nextRun) return;
@@ -185,6 +194,7 @@ window.AgentContextUI = (() => {
       listRequest++; listLoading = false; previewRequest++; previewKey = ''; previewChoices = [];
       if ($('content-dialog').open) $('content-dialog').close();
       $('content-empty').hidden = false; $('content-pane').hidden = true;
+      api.contentChanged?.('');
       overview = null;
       $('context-summary').textContent = t('loading…');
       $('context-body').innerHTML = ''; $('context-compare').hidden = true;
@@ -204,13 +214,15 @@ window.AgentContextUI = (() => {
       const sections = coverageSections(value), reports = sections.sessions.length ? sections.sessions : sections.discoveries;
       const sources = [...new Set(reports.map(c => c.source?.harness).filter(Boolean))];
       const hints = [...new Set(reports.map(c => t(statusNames[c.status] || c.status)))];
+      const processingHint = sections.processing.some(c=>!['ok','empty'].includes(c.status)) ? t('Processing diagnostics require attention') : '';
       $('context-summary').textContent = [sources.join(' / '), api.tx('{messages} message records · {calls} tool calls · {results} results', {messages:unknown(value.messages),calls:unknown(value.tool_calls),results:unknown(value.tool_results)}),reports.some(c=>c.prior_context) ? t('Includes prior context') : '',hints.length ? t('Session capture')+': '+hints.join(' / ') : ''].filter(Boolean).join(' · ');
       if (coverageChanged) $('context-source').innerHTML = `<option value="">${e(t('All recorded sessions'))}</option>` + sections.sessions.filter(c => c.source?.id).map(c => `<option value="${e(c.source.id)}">${e(c.source.harness)} · ${e(c.source.session_id || c.source.id)}</option>`).join('');
       syncControls();
       $('context-nav-count').textContent = unknown(value.messages);
       $('context-nav-tools').textContent = unknown(value.tool_calls);
       $('context-nav-config').textContent = unknown(value.snapshots);
-      $('context-nav-coverage').textContent = [hints.length ? t('Session capture')+': '+hints.join(' / ') : '',t('Runtime capture')+': '+t(sections.runtime.label)].filter(Boolean).join(' · ');
+      $('context-nav-coverage').textContent = [hints.length ? t('Session capture')+': '+hints.join(' / ') : '',t('Runtime capture')+': '+t(sections.runtime.label),processingHint].filter(Boolean).join(' · ');
+      api.overviewChanged?.(value);
       if (state.tab === 'coverage' && state.open && coverageChanged) {
         const scroll = $('context-body').scrollTop;
         renderCoverage(); $('context-body').scrollTop = scroll;
@@ -218,6 +230,7 @@ window.AgentContextUI = (() => {
     } catch (error) {
       if (request !== summaryRequest || run !== currentRun) return;
       $('context-summary').textContent = t('Context coverage unavailable');
+      api.overviewFailed?.();
       if (state.open && state.tab === 'coverage') $('context-body').innerHTML = errorHTML(error);
     }
   }
@@ -325,7 +338,10 @@ window.AgentContextUI = (() => {
       const prior = report.prior_context;
       const history = prior ? `<details><summary>${e(t('Prior context'))} · ${e(t('Source range'))} ${e(prior.first_line)}–${e(prior.last_line)}</summary>${notice('Retained history is not execution in this run. Historical approvals do not authorize new actions.')}${counts(prior.counts)}<dl><dt>${e(t('Source range'))}</dt><dd>${e([prior.started_at,prior.ended_at].filter(Boolean).join(' → ') || t('Source time not recorded'))}</dd><dt>${e(t('Missing fields'))}</dt><dd>${e(missingFields(prior.missing_fields))}</dd></dl></details>` : '';
       return `<article class="context-coverage" data-session-coverage><h3>${e(src.harness || t('Source'))} · ${e(t('Session capture'))} ${status(report.status)}</h3>${prior ? '<h4>'+e(t('Current execution range'))+'</h4>' : ''}${counts(report.counts)}${report.missing_fields?.length ? notice(t('Missing fields')+': '+missingFields(report.missing_fields)) : ''}${(report.issues || []).map(issue => `<p class="context-notice">${e(t(issue.code))}${issue.line ? ' · '+e(t('line'))+' '+e(issue.line) : ''}${issue.field ? ' · '+e(issue.field) : ''}${issue.scope === 'prior_context' ? ' · '+e(t('Prior context')) : ''}</p>`).join('')}<details data-source-diagnostics><summary>${e(t('Source and evidence'))}</summary>${notice('Counts describe this processing range, not the whole run. Unknown counts are not zero.')}<dl>${fields.map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl></details>${history}</article>`;
-    }).join('') + sections.discoveries.map(renderDiscoveryCoverage).join('') + notice('Context coverage, runtime coverage, and signature verification are separate checks.') + notice('Configuration snapshots show recorded changes only; completeness of the change history is unknown.') + (overview.has_more_sources ? notice('Source report limit reached. Additional sources are not shown here.') : '');
+    }).join('') + sections.processing.map(renderProcessingCoverage).join('') + sections.discoveries.map(renderDiscoveryCoverage).join('') + notice('Context coverage, runtime coverage, and signature verification are separate checks.') + notice('Configuration snapshots show recorded changes only; completeness of the change history is unknown.') + (overview.has_more_sources ? notice('Source report limit reached. Additional sources are not shown here.') : '');
+  }
+  function renderProcessingCoverage(report) {
+    return `<article class="context-coverage" data-processing-coverage><h3>${e(t('Processing diagnostics'))} ${status(report.status)}</h3>${(report.issues || []).map(issue=>notice(issue.code)).join('')}<dl><dt>${e(t('Parser'))}</dt><dd>${e(report.source?.parser_version || t('Not recorded'))}</dd><dt>${e(t('Observed at'))}</dt><dd>${e(report.observed_at || t('Not recorded'))}</dd></dl><details><summary>${e(t('Source and evidence'))}</summary><pre>${e(JSON.stringify(report,null,2))}</pre></details></article>`;
   }
   function renderDiscoveryCoverage(report) {
     const src = report.source || {};
@@ -454,6 +470,7 @@ window.AgentContextUI = (() => {
   function setPreview(choices,key,selected,reading = null) {
     previewRequest++; previewKey = key; previewChoices = choices; previewOffsets = reading?.offsets || [0]; previewPage = null;
     $('content-empty').hidden = true; $('content-pane').hidden = false;
+    api.contentChanged?.(key,choices[selected || 0]?.label);
     $('content-related').hidden = true; $('content-limits').textContent = '';
     $('content-format').value = reading?.format === 'bytes' ? 'bytes' : 'readable';
     renderChoices(selected); loadContent(reading?.scroll || 0);
@@ -461,6 +478,7 @@ window.AgentContextUI = (() => {
   function renderChoices(selected) {
     $('content-choice').innerHTML = previewChoices.map((choice,index)=>`<option value="${index}">${e(choice.label)}</option>`).join('');
     $('content-choice').value = String(selected);
+    api.contentChanged?.(previewKey,previewChoices[Number($('content-choice').value)]?.label);
   }
   // A display projection only: never rewrite the saved body, its digest or byte
   // offsets. Partial pages and deeply nested records stay byte-for-byte views.
@@ -552,5 +570,5 @@ window.AgentContextUI = (() => {
       $('content-prev').disabled = previewOffsets.length < 2;
     }
   }
-  return {init,setRun,selectGraph,linkedSession,open,persist,readableContent,coverageSections};
+  return {init,setRun,selectGraph,selectSource,linkedSession,open,persist,readableContent,coverageSections};
 })();

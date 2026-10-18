@@ -307,15 +307,29 @@ An absent final file does not acquire a reconstructed body.
 
 ## Dashboard
 
-The execution graph and focused evidence remain above the initially collapsed
-**Agent session** section. The session has three views: **Conversation & tools**,
-**Permissions & configuration**, and **Collection status**. Overview shortcuts
-open the corresponding view. Existing graph controls, signals, outbound data,
-timeline, process tree, network, and compliance sections remain available.
+The graph and right-hand risk list remain the main view. Selecting evidence opens
+one **Evidence reader** below the graph, with **Summary**, **Related events** and
+**Saved content** tabs. Only the active tab is shown; the reader stays hidden
+until there is something to inspect. Graph lenses, playback, zoom and evidence
+links retain their existing behavior.
 
-Use **Open saved content** or **Raw source record** to inspect a context entry in
-the independent **Saved content** panel. Body and raw-record selection, 64 KiB
-page reads, and an enlarged view do not require keeping the session expanded.
+**Agent session** starts collapsed and keeps its three views: **Conversation &
+tools**, **Permissions & configuration**, and **Collection status**. Overview
+shortcuts open them directly. Execution sources, outbound data, timeline,
+processes, network and compliance details also start collapsed, with counts in
+their headings. Risk and collection-status summaries remain visible.
+
+**Sessions & sources** groups recorded native session IDs within each harness.
+A transcript and hooks source for the same session remain separately inspectable.
+Recorded parent IDs link to sessions present in this run; missing parents and
+conflicting or cyclic records are labeled. Sources without a session identity
+have their own section, while processing diagnostics stay in collection status.
+Choose **Read source records** to filter the conversation by that exact source.
+The graph, risk list and timeline keep their whole-run scope.
+
+Use **Open saved content** or **Raw source record** to open the reader's **Saved
+content** tab. Body and raw-record selection, 64 KiB page reads, and an enlarged
+view do not require keeping the session expanded.
 The record list loads 30 entries per page; inline bodies preview at most 4 KiB
 with four concurrent reads. Back navigation retains up to 200 page cursors;
 **First page** resets the list without accumulating previous page bodies.
