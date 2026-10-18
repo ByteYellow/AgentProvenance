@@ -386,16 +386,46 @@ agentprov --data-dir .agentprov dashboard export --run RUN --output run-replay.z
 或访问原工作目录。语言切换、图谱导航、会话筛选、正文搜索和字节分页均读取包内数据。
 单 Run 分享包没有第二个 Run 可供对照。
 
-命令导出**整个 Run**，包含未归属记录。先取得一致的数据库快照，再读取已保存证据并固定包内内容，
+命令默认导出**整个 Run**，包含未归属记录。先取得一致的数据库快照，再读取已保存证据并固定包内内容，
 不从当前工作目录补齐历史正文。关联 Run 只保留引用。
 `export-inventory.json` 列出 Run、范围、文件大小和 SHA-256 摘要；命令输出 ZIP 大小与清单摘要。
-`record-selection.json` 列出已包含的来源记录 ID、类别和历史版本。
+`record-selection.json` 列出来源记录 ID、类别、历史版本及每条记录的包含或排除结果。
 文件清单中的 `record_selection` 字段记录它的大小与摘要，方便核对记录范围。
 已有的目标文件不会被覆盖。
 
-ZIP 是**未签名的分享副本**。页面保留原有验证结果与采集缺口，包内不附带原始 Bundle 或数据库。
+ZIP 是**未签名的分享副本**。完整 Run 保留原有验证结果；部分导出显示“所选证据”，
+并保留原采集缺口。包内不附带原始 Bundle 或数据库。
 分享前应检查内容：完整 Run 可能包含提示词、工具输出、配置和文件正文。命令只在本地生成文件。
-当前尚不支持仅导出某个会话或逐条排除记录。
+
+### 选择会话或排除记录
+
+同时指定 harness 和原生 Session ID，只导出该会话的上下文及明确关联的工具、事件和文件：
+
+```bash
+agentprov --data-dir .agentprov dashboard export --run RUN \
+  --harness codex --session SESSION --output session-replay.zip
+```
+
+两种范围都支持重复指定 `--exclude-category` 和 `--exclude-record`。
+类别可选 `messages`、`tools`、`configuration`、`files`、`runtime`。
+记录 ID 使用 `/api/search/sources` 返回的 `id`，例如 `entry/ENTRY_ID`、
+`1/OBJECT_HASH`、`2/TOOL_ID` 或 `3/EVENT_ID`。
+
+```bash
+agentprov --data-dir .agentprov dashboard export --run RUN \
+  --exclude-category configuration --exclude-record 3/EVENT_ID \
+  --output selected-replay.zip
+```
+
+图谱、搜索、正文、原始记录和历史版本使用同一份选择清单。排除上下文记录时，
+同时排除其历史版本及关联的工具阅读入口；运行时行为仍作为独立记录保留。
+一行原始记录同时包含保留与排除内容时，整行原文不导出。跨范围关系保留引用，标注“上下文未包含”。
+
+部分导出保留所选证据支持的分析，将省略的分析数量列在 `analysis_omissions`，
+不基于裁剪后的图重新计算结论。同一份标准化上下文正文仍存在于其他保留记录中时，
+记录清单给出复核提示。分享前检查提示与冻结回放；排除记录不会全局删除其他证据中的同文内容。
+
+CLI 和本地回放 API 已支持这些选择。当前 Dashboard 导出窗口仍准备完整 Run。
 
 ### 在 Dashboard 中预览和下载
 

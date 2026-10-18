@@ -92,8 +92,9 @@ func ReplayScript() []byte { return replayJS }
 
 // Server serves the dashboard over a single read-only *sql.DB.
 type Server struct {
-	DB            *sql.DB
-	ReplayExports *ReplayExports
+	DB               *sql.DB
+	ReplayExports    *ReplayExports
+	replayProjection *replayProjection
 }
 
 // Handler returns the dashboard's HTTP routes (static UI + JSON API).
@@ -641,6 +642,10 @@ func (s Server) runs(w http.ResponseWriter, r *http.Request) {
 // their explicit full-verification path, without treating an old bundle record
 // as verification of the current database.
 func (s Server) verifyOverview(run string) any {
+	if s.replayProjection != nil {
+		return map[string]any{"schema_version": "agentprovenance.verify/v1", "run_id": run, "status": "subset",
+			"mode": "unsigned_replay_selection", "message": "Selected evidence; full-run verification is not applied to this sharing copy."}
+	}
 	var objects int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id = ?`, run).Scan(&objects); err != nil {
 		return provenance.VerifyResult{SchemaVersion: "agentprovenance.verify/v1", RunID: run, Status: "unavailable", Error: err.Error()}

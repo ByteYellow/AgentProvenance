@@ -10,10 +10,11 @@ import (
 )
 
 func dashboardExportCmd(dataDir *string) *cobra.Command {
-	var run, output string
+	var run, output, harness, session string
+	var excludeRecords, excludeCategories []string
 	cmd := &cobra.Command{
 		Use:   "export",
-		Short: "export one complete run as an unsigned, offline replay ZIP",
+		Short: "export selected saved evidence as an unsigned, offline replay ZIP",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if run == "" || output == "" {
@@ -36,7 +37,12 @@ func dashboardExportCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer cleanup()
-			prepared, err := (dashboard.Server{DB: db}).PrepareOfflineReplay(cmd.Context(), run)
+			selection := dashboard.ReplaySelection{RunID: run, Scope: "whole_run", Harness: harness, SessionID: session,
+				ExcludeRecords: excludeRecords, ExcludeCategories: excludeCategories}
+			if harness != "" || session != "" {
+				selection.Scope = "session"
+			}
+			prepared, err := (dashboard.Server{DB: db}).PrepareSelectedOfflineReplay(cmd.Context(), selection)
 			if err != nil {
 				return err
 			}
@@ -68,11 +74,15 @@ func dashboardExportCmd(dataDir *string) *cobra.Command {
 			if err = os.Link(stage.Name(), target); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "run=%s scope=whole_run signed=false events=%d files=%d zip_bytes=%d inventory_sha256=%s output=%s\n", run, prepared.Inventory.Events, len(prepared.Inventory.Files)+1, info.Size(), prepared.InventorySHA256, target)
+			fmt.Fprintf(cmd.OutOrStdout(), "run=%s scope=%s signed=false events=%d files=%d zip_bytes=%d inventory_sha256=%s output=%s\n", run, prepared.Inventory.Scope, prepared.Inventory.Events, len(prepared.Inventory.Files)+1, info.Size(), prepared.InventorySHA256, target)
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&run, "run", "", "run to export, including all saved content and unassigned records")
+	cmd.Flags().StringVar(&run, "run", "", "run to export; all saved and unassigned records are included by default")
 	cmd.Flags().StringVar(&output, "output", "", "new ZIP file; unzip and open index.html offline")
+	cmd.Flags().StringVar(&harness, "harness", "", "limit to a native session; requires --session")
+	cmd.Flags().StringVar(&session, "session", "", "native session ID; requires --harness")
+	cmd.Flags().StringArrayVar(&excludeRecords, "exclude-record", nil, "omit a search catalog record ID and its linked readers (repeatable)")
+	cmd.Flags().StringArrayVar(&excludeCategories, "exclude-category", nil, "omit messages, tools, configuration, files, or runtime (repeatable)")
 	return cmd
 }

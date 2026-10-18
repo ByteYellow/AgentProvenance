@@ -96,6 +96,14 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 		if response.Code != 200 {
 			return nil, fmt.Errorf("export %s: HTTP %d %s", route, response.Code, response.Body.String())
 		}
+		if s.replayProjection != nil && route == "/api/context/overview" {
+			var overview agentcontext.Overview
+			if err := json.Unmarshal(response.Body.Bytes(), &overview); err != nil {
+				return nil, err
+			}
+			overview.RuntimeCoverage.Capture = s.replayProjection.capture
+			return json.Marshal(overview)
+		}
 		return json.RawMessage(response.Body.Bytes()), nil
 	}
 	q := url.Values{"run": {run}}
@@ -135,6 +143,9 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 	if err != nil {
 		return result, err
 	}
+	if s.replayProjection != nil {
+		s.replayProjection.lenses(&lenses)
+	}
 	// Load one lens at a time in the browser instead of retaining all 36 views.
 	result.Lenses, err = writeReplayLenses(w, lenses)
 	if err != nil {
@@ -166,6 +177,9 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 		views, err := provenance.BuildSessionReplayLenses(s.DB, run, scope)
 		if err != nil {
 			return result, err
+		}
+		if s.replayProjection != nil {
+			s.replayProjection.lenses(&views)
 		}
 		ref, err := writeReplayLenses(w, views)
 		if err != nil {
@@ -279,6 +293,11 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 				return result, err
 			}
 			if revisions {
+				if s.replayProjection != nil {
+					for i, entry := range page.Entries {
+						page.Entries[i] = s.replayProjection.entry(entry)
+					}
+				}
 				contextData.Entries = append(contextData.Entries, page.Entries...)
 			} else {
 				for _, e := range page.Entries {
@@ -406,9 +425,22 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 			if kind(right) != k {
 				continue
 			}
-			comparison, err := service.CompareSnapshots(ctx, run, entry.ID, "", right.ID)
+			comparison := agentcontext.SnapshotComparison{SchemaVersion: agentcontext.SchemaVersion, Scope: "recorded_values",
+				Status: "unknown", Left: entry, Right: right, Changes: []agentcontext.SnapshotChange{}, Reason: "excluded"}
+			var err error
+			if entry.Content.State != "excluded" && right.Content.State != "excluded" {
+				comparison, err = service.CompareSnapshots(ctx, run, entry.ID, "", right.ID)
+			}
 			if err != nil {
 				return result, err
+			}
+			if s.replayProjection != nil {
+				comparison.Left = s.replayProjection.entry(comparison.Left)
+				comparison.Right = s.replayProjection.entry(comparison.Right)
+				if comparison.Left.Content.State == "excluded" || comparison.Right.Content.State == "excluded" {
+					comparison.Status, comparison.Reason = "unknown", "excluded"
+					comparison.Changes = nil
+				}
 			}
 			ref, err := w.JSON(comparison)
 			if err != nil {

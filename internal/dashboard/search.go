@@ -126,6 +126,9 @@ func (s Server) SearchSources(ctx context.Context, opts SearchSourceOptions) (Se
 			return result, err
 		}
 		for _, entry := range page.Entries {
+			if s.replayProjection != nil {
+				entry = s.replayProjection.entry(entry)
+			}
 			category := "messages"
 			switch entry.Kind {
 			case "tool_call", "tool_result":

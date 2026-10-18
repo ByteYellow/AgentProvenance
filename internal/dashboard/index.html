@@ -360,7 +360,7 @@
     </h2>
     <div id="session-scope" class="session-scope" hidden>
       <strong id="session-scope-label"></strong><span id="session-scope-count"></span><button id="session-scope-clear">{{tr .Lang "Back to whole run"}}</button>
-      <small>{{tr .Lang "Session scope: graph, related events and conversation. Risk, collection status and auxiliary sections cover the whole run."}} {{tr .Lang "Risk and auxiliary evidence links return to the whole run."}}</small>
+      <small id="session-scope-explanation">{{tr .Lang "Session scope: graph, related events and conversation. Risk, collection status and auxiliary sections cover the whole run."}} {{tr .Lang "Risk and auxiliary evidence links return to the whole run."}}</small>
     </div>
     <div id="lensmeta" class="lensmeta"></div>
     <div id="scrub" class="scrub">
@@ -563,7 +563,12 @@
 <script src="/assets/workspace.js"></script>
 <script src="/assets/context.js"></script>
 <script>
-const {t: tr, locale: LANG} = window.AgentProvI18n;
+const {t: lookupText, locale: LANG} = window.AgentProvI18n;
+const partialReplay = document.querySelector('meta[name="agentprov-replay-selection"]')?.content === 'partial';
+const replayScopeText = {'Whole run':'Included records','Whole run counts':'Included record counts','Back to whole run':'Back to included records',
+  'Session scope: graph, related events and conversation. Risk, collection status and auxiliary sections cover the whole run.':'Session filters stay within this sharing copy. Capture diagnostics describe the original run.',
+  'Risk and auxiliary evidence links return to the whole run.':'Risk and auxiliary evidence links return to the included records.'};
+const tr = source => lookupText(partialReplay ? replayScopeText[source] || source : source);
 function tx(source, values) {
   return tr(source).replace(/\{(\w+)\}/g, (match, key) => Object.hasOwn(values, key) ? String(values[key]) : match);
 }
@@ -1151,6 +1156,7 @@ function renderVerify(v){
   const el=$('#verify');
   el.title='';
   if(!v||v.error||v.status==='unavailable'){el.className='badge warn';el.innerHTML=esc(tr('Verification unavailable'))+' <span class="sig">'+esc((v&&v.error)||'')+'</span>';return;}
+  if(v.status==='subset'){el.className='badge warn';el.innerHTML=esc(tr('Selected evidence'))+' <span class="sig">'+esc(tr('Unsigned sharing copy'))+'</span>';el.title=tr('Full-run verification is not applied to a selected replay.');return;}
   const counts=tx('{errors} errors · {warnings} warnings', {errors:v.error_count||0, warnings:v.warning_count||0});
   if(v.status==='deferred'){
     el.className='badge ok';

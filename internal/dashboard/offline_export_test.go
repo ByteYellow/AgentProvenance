@@ -98,7 +98,7 @@ func TestOfflineReplayFreezesOneRunAndSavedContent(t *testing.T) {
 			}
 			var manifest struct {
 				SchemaVersion string                 `json:"schema_version"`
-				Selection     replaySelection        `json:"selection"`
+				Selection     ReplaySelection        `json:"selection"`
 				Records       []replayRecordDecision `json:"records"`
 			}
 			if err := json.Unmarshal(data, &manifest); err != nil {

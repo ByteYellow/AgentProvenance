@@ -43,7 +43,7 @@ func TestReplaySelectionSessionMembership(t *testing.T) {
 	}
 	defer snapshot.Close()
 	frozen := Server{DB: snapshot.DB}
-	p, err := frozen.resolveReplaySelection(context.Background(), replaySelection{RunID: run, Scope: "session", Harness: "codex", SessionID: "worker"})
+	p, err := frozen.resolveReplaySelection(context.Background(), ReplaySelection{RunID: run, Scope: "session", Harness: "codex", SessionID: "worker"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestReplaySelectionSessionMembership(t *testing.T) {
 			t.Fatalf("outside reader not denied: %s", id)
 		}
 	}
-	quiet, err := frozen.resolveReplaySelection(context.Background(), replaySelection{RunID: run, Scope: "session", Harness: "codex", SessionID: "quiet"})
+	quiet, err := frozen.resolveReplaySelection(context.Background(), ReplaySelection{RunID: run, Scope: "session", Harness: "codex", SessionID: "quiet"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestReplaySelectionSessionMembership(t *testing.T) {
 			t.Fatalf("empty graph expanded to run: %+v", r)
 		}
 	}
-	whole, err := frozen.resolveReplaySelection(context.Background(), replaySelection{RunID: run, Scope: "whole_run"})
+	whole, err := frozen.resolveReplaySelection(context.Background(), ReplaySelection{RunID: run, Scope: "whole_run"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestReplaySelectionExcludesInvocationAliasesNotRuntimeEffects(t *testing.T)
 		t.Fatal(err)
 	}
 	server := Server{DB: db}
-	base, err := server.resolveReplaySelection(context.Background(), replaySelection{RunID: run, Scope: "whole_run"})
+	base, err := server.resolveReplaySelection(context.Background(), ReplaySelection{RunID: run, Scope: "whole_run"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestReplaySelectionExcludesInvocationAliasesNotRuntimeEffects(t *testing.T)
 	}
 	for _, exclude := range []string{call, "2/" + tool} {
 		t.Run(exclude, func(t *testing.T) {
-			p, err := server.resolveReplaySelection(context.Background(), replaySelection{RunID: run, Scope: "whole_run", ExcludeRecords: []string{exclude}})
+			p, err := server.resolveReplaySelection(context.Background(), ReplaySelection{RunID: run, Scope: "whole_run", ExcludeRecords: []string{exclude}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -171,7 +171,7 @@ func TestReplaySelectionExcludesInvocationAliasesNotRuntimeEffects(t *testing.T)
 			}
 		})
 	}
-	p, err := server.resolveReplaySelection(context.Background(), replaySelection{RunID: run, Scope: "whole_run", ExcludeRecords: []string{"3/fixture-codex-worker"}})
+	p, err := server.resolveReplaySelection(context.Background(), ReplaySelection{RunID: run, Scope: "whole_run", ExcludeRecords: []string{"3/fixture-codex-worker"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestReplaySelectionRevisionsRawSiblingsAndDuplicateContent(t *testing.T) {
 	other := src
 	other.SessionID = "two"
 	save(other, agentcontext.Record{Key: "message", Sequence: 1, Kind: "message", Role: "user", Body: ptr("other-session")})
-	base, err := (Server{DB: db}).resolveReplaySelection(ctx, replaySelection{RunID: "revisions", Scope: "whole_run"})
+	base, err := (Server{DB: db}).resolveReplaySelection(ctx, ReplaySelection{RunID: "revisions", Scope: "whole_run"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestReplaySelectionRevisionsRawSiblingsAndDuplicateContent(t *testing.T) {
 			target = r.ID
 		}
 	}
-	p, err := (Server{DB: db}).resolveReplaySelection(ctx, replaySelection{RunID: "revisions", Scope: "whole_run", ExcludeRecords: []string{target}})
+	p, err := (Server{DB: db}).resolveReplaySelection(ctx, ReplaySelection{RunID: "revisions", Scope: "whole_run", ExcludeRecords: []string{target}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +257,7 @@ func TestReplaySelectionCategoriesValidationAndDeterminism(t *testing.T) {
 	server := Server{DB: db}
 	ctx := context.Background()
 	const run = "ui-session-graph"
-	input := replaySelection{RunID: run, Scope: "whole_run", ExcludeCategories: []string{"runtime", "tools"}, ExcludeRecords: []string{"3/fixture-unassigned"}}
+	input := ReplaySelection{RunID: run, Scope: "whole_run", ExcludeCategories: []string{"runtime", "tools"}, ExcludeRecords: []string{"3/fixture-unassigned"}}
 	p, err := server.resolveReplaySelection(ctx, input)
 	if err != nil {
 		t.Fatal(err)
@@ -278,7 +278,7 @@ func TestReplaySelectionCategoriesValidationAndDeterminism(t *testing.T) {
 			t.Fatal("selection ordering changed its identity")
 		}
 	}
-	invalid := []replaySelection{
+	invalid := []ReplaySelection{
 		{RunID: run}, {RunID: run, Scope: "bogus"}, {RunID: run, Scope: "session", SessionID: "root"},
 		{RunID: run, Scope: "whole_run", Harness: "codex", SessionID: "root"},
 		{RunID: run, Scope: "whole_run", ExcludeCategories: []string{"secrets"}},
@@ -294,7 +294,7 @@ func TestReplaySelectionCategoriesValidationAndDeterminism(t *testing.T) {
 			}
 		})
 	}
-	for _, input := range []replaySelection{{RunID: "absent", Scope: "whole_run"}, {RunID: run, Scope: "session", Harness: "claude", SessionID: "worker"}} {
+	for _, input := range []ReplaySelection{{RunID: "absent", Scope: "whole_run"}, {RunID: run, Scope: "session", Harness: "claude", SessionID: "worker"}} {
 		if _, err := server.resolveReplaySelection(ctx, input); !errors.Is(err, sql.ErrNoRows) {
 			t.Fatalf("unknown selection: %v", err)
 		}
@@ -320,7 +320,7 @@ func TestReplaySelectionSnapshotFreezeAndCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer snapshot.Close()
-	input := replaySelection{RunID: "freeze", Scope: "whole_run"}
+	input := ReplaySelection{RunID: "freeze", Scope: "whole_run"}
 	before, err := (Server{DB: snapshot.DB}).resolveReplaySelection(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
@@ -373,14 +373,14 @@ func TestReplaySelectionPriorHistoryDoesNotOwnCurrentInvocation(t *testing.T) {
 	if _, err = db.Exec(`INSERT INTO graph_edges(id,run_id,from_id,to_id,edge_type,created_at) VALUES ('stale','prior',?,'current','context_tool_call','2026-10-18T00:00:00Z')`, entry.ObjectHash); err != nil {
 		t.Fatal(err)
 	}
-	p, err := (Server{DB: db}).resolveReplaySelection(ctx, replaySelection{RunID: "prior", Scope: "session", Harness: "codex", SessionID: "resumed"})
+	p, err := (Server{DB: db}).resolveReplaySelection(ctx, ReplaySelection{RunID: "prior", Scope: "session", Harness: "codex", SessionID: "resumed"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !selectionDecisions(p)["entry/"+entry.ID].Included || selectionDecisions(p)["2/current"].Included {
 		t.Fatal("prior history widened session execution")
 	}
-	p, err = (Server{DB: db}).resolveReplaySelection(ctx, replaySelection{RunID: "prior", Scope: "whole_run", ExcludeRecords: []string{"entry/" + entry.ID}})
+	p, err = (Server{DB: db}).resolveReplaySelection(ctx, ReplaySelection{RunID: "prior", Scope: "whole_run", ExcludeRecords: []string{"entry/" + entry.ID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,7 +404,7 @@ func TestReplaySelectionWarningLimitAndFailedFreezeCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p, err := (Server{DB: db}).resolveReplaySelection(ctx, replaySelection{RunID: "warnings", Scope: "whole_run", ExcludeCategories: []string{"messages"}})
+	p, err := (Server{DB: db}).resolveReplaySelection(ctx, ReplaySelection{RunID: "warnings", Scope: "whole_run", ExcludeCategories: []string{"messages"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,7 +449,7 @@ func BenchmarkReplaySelectionRuntime100K(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		p, err := server.resolveReplaySelection(context.Background(), replaySelection{RunID: "large", Scope: "whole_run"})
+		p, err := server.resolveReplaySelection(context.Background(), ReplaySelection{RunID: "large", Scope: "whole_run"})
 		if err != nil || len(p.Records) != 100000 {
 			b.Fatalf("large selection: %v", err)
 		}

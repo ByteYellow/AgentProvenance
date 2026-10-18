@@ -133,7 +133,9 @@ window.AgentWorkspaceUI = (() => {
     $('session-scope').hidden = !scope;
     $('session-scope-label').textContent = scope ? scope.harness+' · '+scope.session_id : '';
     $('session-scope-count').textContent = query ? api.tx('{tools} linked tools · {events} linked events',{tools:query.tool_count,events:query.event_count}) : '';
-    document.querySelectorAll('[data-whole-run]').forEach(el=>el.hidden=!scope);
+    document.querySelectorAll('[data-whole-run]').forEach(el=>{el.hidden=!scope;el.textContent=api.tr('Whole run');});
+    $('session-scope-clear').textContent=api.tr('Back to whole run');
+    $('session-scope-explanation').textContent=api.tr('Session scope: graph, related events and conversation. Risk, collection status and auxiliary sections cover the whole run.')+' '+api.tr('Risk and auxiliary evidence links return to the whole run.');
     setSource(selectedSource);
   }
   function setOverview(value) {

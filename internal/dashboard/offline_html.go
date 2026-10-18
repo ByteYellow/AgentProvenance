@@ -3,6 +3,7 @@ package dashboard
 import (
 	"bytes"
 	"fmt"
+	htmltext "html"
 	"net/url"
 	"strings"
 
@@ -11,6 +12,10 @@ import (
 )
 
 func offlineReplayHTML(raw []byte, locale i18n.Locale) ([]byte, error) {
+	return offlineReplayHTMLSelection(raw, locale, ReplaySelection{Scope: "whole_run"}, false)
+}
+
+func offlineReplayHTMLSelection(raw []byte, locale i18n.Locale, selection ReplaySelection, analysisOmitted bool) ([]byte, error) {
 	doc, err := html.Parse(bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
@@ -54,6 +59,10 @@ func offlineReplayHTML(raw []byte, locale i18n.Locale) ([]byte, error) {
 	if head == nil || body == nil {
 		return nil, fmt.Errorf("dashboard HTML is missing its head or body")
 	}
+	partial := selection.Scope == "session" || len(selection.ExcludeRecords) > 0 || len(selection.ExcludeCategories) > 0
+	if partial {
+		head.AppendChild(&html.Node{Type: html.ElementNode, Data: "meta", Attr: []html.Attribute{{Key: "name", Val: "agentprov-replay-selection"}, {Key: "content", Val: "partial"}}})
+	}
 	prepend := func(parent *html.Node, text string) error {
 		nodes, err := html.ParseFragment(strings.NewReader(text), parent)
 		if err != nil {
@@ -74,7 +83,26 @@ func offlineReplayHTML(raw []byte, locale i18n.Locale) ([]byte, error) {
 	if locale == i18n.Chinese {
 		label, scope, inventory = "离线回放 · 未签名的分享副本", "整个 Run · 已保存内容", "导出清单"
 	}
-	if err = prepend(body, `<nav class="offline-replay-bar"><strong>`+label+`</strong><span>`+scope+`</span><a href="../export-inventory.json" target="_blank" rel="noopener">`+inventory+`</a></nav>`); err != nil {
+	if selection.Scope == "session" {
+		scope = "Session selection · " + selection.Harness + " / " + selection.SessionID
+		if locale == i18n.Chinese {
+			scope = "会话范围 · " + selection.Harness + " / " + selection.SessionID
+		}
+	}
+	if len(selection.ExcludeRecords) > 0 || len(selection.ExcludeCategories) > 0 {
+		scope += " · exclusions applied"
+		if locale == i18n.Chinese {
+			scope = strings.TrimSuffix(scope, " · exclusions applied") + " · 已按选择排除记录"
+		}
+	}
+	if analysisOmitted {
+		if locale == i18n.Chinese {
+			scope += " · 部分分析未纳入，详见导出清单"
+		} else {
+			scope += " · some analyses omitted; see inventory"
+		}
+	}
+	if err = prepend(body, `<nav class="offline-replay-bar"><strong>`+label+`</strong><span>`+htmltext.EscapeString(scope)+`</span><a href="../export-inventory.json" target="_blank" rel="noopener">`+inventory+`</a></nav>`); err != nil {
 		return nil, err
 	}
 	var out bytes.Buffer

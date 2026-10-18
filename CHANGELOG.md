@@ -9,9 +9,13 @@ English | [中文](CHANGELOG.zh-CN.md)
 - Export a complete local run with `dashboard export --run RUN --output replay.zip`.
   The unsigned, single-run archive opens directly offline, with the existing
   graph, session and saved-content readers, a frozen file inventory and no
-  original database or Bundle. The command includes all saved run content.
+  original database or Bundle. By default, the command includes all saved run content.
   A separate record manifest lists included source IDs, categories and revisions
   from the same frozen snapshot as the replay.
+- Limit CLI or local API replay exports to a native session, or exclude records
+  and categories. The frozen selection applies to graph, search, raw and body
+  readers, including historical revisions. Cross-boundary references and omitted
+  analyses remain visible; partial copies carry a selected-evidence label.
 - Prepare and inspect a frozen whole-run replay from the Dashboard before
   downloading its ZIP. Explicit scope confirmation, saved-source counts, exact
   file inventory and archive size accompany the existing reader. Local previews

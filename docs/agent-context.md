@@ -514,21 +514,57 @@ workspace. Language switching, graph navigation, session filters, saved-content
 search and byte paging use the included data. A single-run export has no second
 run for comparison.
 
-The command exports the **whole run**, including unassigned records. It takes
+By default, the command exports the **whole run**, including unassigned records. It takes
 a consistent database snapshot, reads only saved evidence and then freezes the
 package. It never fills missing content from current workspace files. Linked
 runs remain references. `export-inventory.json` lists the run, scope, file sizes
 and SHA-256 digests; the command prints the ZIP size and inventory digest.
-`record-selection.json` lists the included source-record IDs, categories and
-saved revisions. Its size and digest appear in the inventory's `record_selection`
+`record-selection.json` lists source-record IDs, categories, saved revisions and
+inclusion or exclusion decisions. Its size and digest appear in the inventory's `record_selection`
 field, so the record list can be checked alongside the packaged files.
 Existing output files are left unchanged.
 
-This ZIP is an **unsigned sharing copy**. Original verification results and
-capture gaps remain visible, while the package contains no original Bundle or
+This ZIP is an **unsigned sharing copy**. Full-run exports retain original verification
+results; partial exports display **Selected evidence**. Capture gaps remain visible,
+while the package contains no original Bundle or
 database. Review the archive before sharing: complete runs may contain prompts,
 tool output, configuration and file contents. The command performs no upload.
-Session-only export and per-record exclusions are not available yet.
+
+### Select a Session or Exclude Records
+
+Use both the harness and native session ID to export only that session's saved
+context and explicitly associated tools, events and files:
+
+```bash
+agentprov --data-dir .agentprov dashboard export --run RUN \
+  --harness codex --session SESSION --output session-replay.zip
+```
+
+Add repeatable `--exclude-category` and `--exclude-record` options to either scope.
+Categories are `messages`, `tools`, `configuration`, `files` and `runtime`.
+Record IDs are the `id` values returned by `/api/search/sources`, such as
+`entry/ENTRY_ID`, `1/OBJECT_HASH`, `2/TOOL_ID` or `3/EVENT_ID`.
+
+```bash
+agentprov --data-dir .agentprov dashboard export --run RUN \
+  --exclude-category configuration --exclude-record 3/EVENT_ID \
+  --output selected-replay.zip
+```
+
+All readers use the same selection: graphs, search, bodies, raw records and saved
+revisions. Excluding a context record also excludes its revisions and linked tool
+readers. Runtime effects remain separate records. If a raw source line contains
+both retained and excluded entries, its raw reader is withheld. Relations outside
+the selection remain references labeled **Context not included**.
+
+Partial exports keep findings supported by retained records and list omitted
+analyses in `analysis_omissions`. They do not recalculate findings on the smaller
+graph. The record manifest warns when the same normalized context body remains
+in another selected record. Review that warning and the frozen replay before sharing;
+record exclusion does not remove matching text from all other evidence.
+
+The CLI and local replay API support these selections. The current Dashboard
+export window still prepares a complete run.
 
 ### Preview and Download in the Dashboard
 

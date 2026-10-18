@@ -277,3 +277,40 @@ func TestReplayPreviewFailedPreparationReleasesSlot(t *testing.T) {
 	}
 	_ = preparedPreview(t, h)
 }
+
+func TestReplayPreviewSelectedScopeAndExclusions(t *testing.T) {
+	m, h := previewFixture(t)
+	for _, body := range []string{
+		`{"run":"preview-run","scope":"session","harness":"codex","session_id":"native-session"}`,
+		`{"run":"preview-run","scope":"whole_run","exclude_categories":["messages"]}`,
+	} {
+		w := previewCall(h, "POST", "/api/replay/previews", body)
+		if w.Code != 201 {
+			t.Fatalf("partial preview: %d %s", w.Code, w.Body.String())
+		}
+		var preview replayPreview
+		if err := json.Unmarshal(w.Body.Bytes(), &preview); err != nil {
+			t.Fatal(err)
+		}
+		j := m.acquire(preview.ID)
+		if j == nil {
+			t.Fatal("partial preview unavailable")
+		}
+		_, all := replayZIPData(t, j.prepared)
+		if preview.Inventory.Scope == "session" {
+			if preview.Inventory.Events != 0 || !strings.Contains(all, "FROZEN-CONTEXT") {
+				t.Fatal("session preview expanded into unassigned events or lost its body")
+			}
+		} else if preview.Inventory.Events != 1 || strings.Contains(all, "FROZEN-CONTEXT") || strings.Contains(all, "FROZEN-RAW") {
+			t.Fatal("category exclusion failed in prepared archive")
+		}
+		m.release(j)
+		if w := previewCall(h, "DELETE", "/api/replay/previews/"+preview.ID, ""); w.Code != 204 {
+			t.Fatal("partial preview could not be discarded")
+		}
+	}
+	if w := previewCall(h, "POST", "/api/replay/previews", `{"run":"preview-run","scope":"whole_run","exclude_records":["3/absent"]}`); w.Code != 400 {
+		t.Fatalf("unknown record should be a request error: %d %s", w.Code, w.Body.String())
+	}
+	_ = preparedPreview(t, h)
+}

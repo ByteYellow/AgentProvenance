@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -16,6 +18,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 )
 
 type replayPreview struct {
@@ -248,13 +252,23 @@ func (m *ReplayExports) prepare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Run   string `json:"run"`
-		Scope string `json:"scope"`
+		Run               string   `json:"run"`
+		Scope             string   `json:"scope"`
+		Harness           string   `json:"harness,omitempty"`
+		SessionID         string   `json:"session_id,omitempty"`
+		ExcludeRecords    []string `json:"exclude_records,omitempty"`
+		ExcludeCategories []string `json:"exclude_categories,omitempty"`
 	}
-	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
+	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	d.DisallowUnknownFields()
-	if err := d.Decode(&input); err != nil || d.Decode(new(any)) != io.EOF || input.Run == "" || len(input.Run) > 512 || input.Scope != "whole_run" {
-		httpError(w, "Select a run and explicitly confirm whole_run scope. Session subsets and exclusions are not available yet.", http.StatusBadRequest)
+	if err := d.Decode(&input); err != nil || d.Decode(new(any)) != io.EOF {
+		httpError(w, "Supply run, scope, and optional session or exclusions as JSON.", http.StatusBadRequest)
+		return
+	}
+	selection, err := (ReplaySelection{RunID: input.Run, Scope: input.Scope, Harness: input.Harness, SessionID: input.SessionID,
+		ExcludeRecords: input.ExcludeRecords, ExcludeCategories: input.ExcludeCategories}).normalized()
+	if err != nil {
+		httpError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	var token [24]byte
@@ -276,13 +290,21 @@ func (m *ReplayExports) prepare(w http.ResponseWriter, r *http.Request) {
 	m.mu.Unlock()
 	defer m.release(j)
 	defer cancel()
-	err := m.build(ctx, j, input.Run)
+	err = m.build(ctx, j, selection)
 	if err != nil {
 		m.retire(j)
 		if r.Context().Err() != nil {
 			return
 		}
-		httpError(w, fmt.Sprintf("Could not prepare replay: %v", err), http.StatusInternalServerError)
+		code := http.StatusInternalServerError
+		if errors.Is(err, agentcontext.ErrInvalidArgument) {
+			code = http.StatusBadRequest
+		} else if errors.Is(err, sql.ErrNoRows) {
+			code = http.StatusNotFound
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			code = http.StatusRequestTimeout
+		}
+		httpError(w, fmt.Sprintf("Could not prepare replay: %v", err), code)
 		return
 	}
 	m.mu.Lock()
@@ -301,8 +323,8 @@ func (m *ReplayExports) prepare(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, j.preview)
 }
 
-func (m *ReplayExports) build(ctx context.Context, j *replayJob, run string) error {
-	p, err := m.server.PrepareOfflineReplay(ctx, run)
+func (m *ReplayExports) build(ctx context.Context, j *replayJob, selection ReplaySelection) error {
+	p, err := m.server.PrepareSelectedOfflineReplay(ctx, selection)
 	if err != nil {
 		return err
 	}

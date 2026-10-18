@@ -14,9 +14,9 @@ import (
 
 const replaySelectionLimit = 1000000
 
-// replaySelection is private until the export writer can enforce every reader
-// boundary. Record IDs use the existing search catalog, including entry/<id>.
-type replaySelection struct {
+// ReplaySelection defines a sharing copy, without changing the saved evidence.
+// Record IDs use the existing search catalog, including entry/<id>.
+type ReplaySelection struct {
 	RunID             string   `json:"run_id"`
 	Scope             string   `json:"scope"`
 	Harness           string   `json:"harness,omitempty"`
@@ -45,7 +45,7 @@ type replaySelectionWarning struct {
 }
 
 type replaySelectionPlan struct {
-	Selection replaySelection
+	Selection ReplaySelection
 	Records   []replayRecordDecision
 	Entries   map[string]agentcontext.Entry
 	// Every alias of an omitted record is denied, including its CAS envelope.
@@ -59,9 +59,9 @@ type replaySelectionPlan struct {
 	SHA256          string
 }
 
-func (selection replaySelection) normalized() (replaySelection, error) {
-	invalid := func(message string) (replaySelection, error) {
-		return replaySelection{}, fmt.Errorf("%w: %s", agentcontext.ErrInvalidArgument, message)
+func (selection ReplaySelection) normalized() (ReplaySelection, error) {
+	invalid := func(message string) (ReplaySelection, error) {
+		return ReplaySelection{}, fmt.Errorf("%w: %s", agentcontext.ErrInvalidArgument, message)
 	}
 	if selection.RunID == "" || len(selection.RunID) > 512 || len(selection.Harness) > 128 || len(selection.SessionID) > 512 {
 		return invalid("invalid replay identity")
@@ -121,7 +121,7 @@ func replayEntryCategory(entry agentcontext.Entry) string {
 // resolveReplaySelection must run against the export's private frozen database.
 // It resolves only saved relationships, without reading workspace files or
 // widening membership through a shared PID, path, cgroup or parent session.
-func (s Server) resolveReplaySelection(ctx context.Context, input replaySelection) (*replaySelectionPlan, error) {
+func (s Server) resolveReplaySelection(ctx context.Context, input ReplaySelection) (*replaySelectionPlan, error) {
 	selection, err := input.normalized()
 	if err != nil {
 		return nil, err
@@ -331,7 +331,7 @@ func (s Server) resolveReplaySelection(ctx context.Context, input replaySelectio
 	}
 	p.resolveContentBoundaries(records)
 	fingerprint, err := json.Marshal(struct {
-		Selection       replaySelection
+		Selection       ReplaySelection
 		Records         []replayRecordDecision
 		DeniedNodes     map[string]string
 		WithheldContent map[string]string

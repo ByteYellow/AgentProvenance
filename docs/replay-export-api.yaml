@@ -51,7 +51,7 @@ components:
       properties:
         schema_version: {const: agentprovenance.replay_inventory/v1}
         run_id: {type: string}
-        scope: {const: whole_run}
+        scope: {type: string, enum: [whole_run, session]}
         created_at: {type: string, format: date-time}
         commit: {type: string}
         signed: {const: false}
@@ -63,10 +63,20 @@ components:
             Optional for older exports. Describes record-selection.json, a frozen
             list of source-record IDs, categories and revision membership.
             It has schema_version agentprovenance.replay_selection/v1, selection
-            (run_id and scope), and records (id, category, optional node, indexed,
-            included). Indexed means present in the search catalog; older context
-            revisions are also included but not indexed. Whole-run exports include
-            every listed record.
+            (run_id, scope, optional harness, session_id, exclude_records and
+            exclude_categories), and records (id, category, optional node, indexed,
+            included, optional reason and related_record). Indexed means present
+            in the source search catalog; historical context revisions are also
+            listed. Only included records enter the replay. Repeated normalized
+            context bodies in retained and excluded records are reported in warnings
+            with warning_count; up to 100 examples include IDs, counts and hashes.
+        analysis_omissions:
+          type: object
+          description: >
+            Partial exports omit run-wide analyses and findings whose dependencies
+            are not retained. Counts are source minus selected rows, by table.
+            Existing findings are selected, not recalculated.
+          additionalProperties: {type: integer, minimum: 1}
         files: {type: array, items: {$ref: '#/components/schemas/File'}}
         bytes_excluding_inventory: {type: integer, minimum: 0}
     Preview:
@@ -95,7 +105,13 @@ paths:
   /api/replay/previews:
     post:
       operationId: prepareReplayPreview
-      summary: Freeze a whole run and prepare its downloadable ZIP
+      summary: Freeze a run or native session selection and prepare its downloadable ZIP
+      description: >
+        Maximum JSON body size is 1 MiB. Exclusions use saved search source IDs.
+        Removing a context record removes its revisions and linked tool readers;
+        independently captured runtime effects remain unless separately excluded.
+        Shared raw source lines are withheld if any normalized record is excluded.
+        References across the boundary are kept without the excluded bodies.
       parameters: [{$ref: '#/components/parameters/exportHeader'}]
       requestBody:
         required: true
@@ -107,7 +123,25 @@ paths:
               required: [run, scope]
               properties:
                 run: {type: string, minLength: 1, maxLength: 512}
-                scope: {const: whole_run, description: Explicit acknowledgement that all sessions and unassigned records are included.}
+                scope: {type: string, enum: [whole_run, session]}
+                harness: {type: string, minLength: 1, maxLength: 128}
+                session_id: {type: string, minLength: 1, maxLength: 512}
+                exclude_records:
+                  type: array
+                  maxItems: 4096
+                  items: {type: string, minLength: 1, maxLength: 1024}
+                exclude_categories:
+                  type: array
+                  maxItems: 5
+                  items: {type: string, enum: [messages, tools, configuration, files, runtime]}
+              allOf:
+                - if: {properties: {scope: {const: session}}}
+                  then: {required: [harness, session_id]}
+                  else:
+                    not:
+                      anyOf:
+                        - required: [harness]
+                        - required: [session_id]
       responses:
         '201':
           description: Ready, frozen preview. Download uses this inventory, not later database writes.
@@ -116,6 +150,7 @@ paths:
               schema: {$ref: '#/components/schemas/Preview'}
         '400': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
         '408': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '415': {$ref: '#/components/responses/Error'}

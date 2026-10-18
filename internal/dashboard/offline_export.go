@@ -37,17 +37,18 @@ type ReplayFile struct {
 // ReplayInventory describes the exact files frozen for a share. The inventory
 // excludes itself; its digest is returned separately by the preparation step.
 type ReplayInventory struct {
-	SchemaVersion string         `json:"schema_version"`
-	RunID         string         `json:"run_id"`
-	Scope         string         `json:"scope"`
-	CreatedAt     string         `json:"created_at"`
-	Commit        string         `json:"commit"`
-	Signed        bool           `json:"signed"`
-	Events        int            `json:"events"`
-	Contents      ReplayContents `json:"contents"`
-	Selection     ReplayFile     `json:"record_selection"`
-	Files         []ReplayFile   `json:"files"`
-	Bytes         int64          `json:"bytes_excluding_inventory"`
+	SchemaVersion     string         `json:"schema_version"`
+	RunID             string         `json:"run_id"`
+	Scope             string         `json:"scope"`
+	CreatedAt         string         `json:"created_at"`
+	Commit            string         `json:"commit"`
+	Signed            bool           `json:"signed"`
+	Events            int            `json:"events"`
+	Contents          ReplayContents `json:"contents"`
+	Selection         ReplayFile     `json:"record_selection"`
+	AnalysisOmissions map[string]int `json:"analysis_omissions,omitempty"`
+	Files             []ReplayFile   `json:"files"`
+	Bytes             int64          `json:"bytes_excluding_inventory"`
 }
 
 // Counts describe saved sources, not successful operations or collection coverage.
@@ -114,6 +115,17 @@ func (s Server) freezeReplaySource(ctx context.Context) (_ *replaySnapshot, err 
 // linked runs remain references and are never recursively exported. Source
 // content is read only through the dashboard's saved-evidence readers.
 func (s Server) PrepareOfflineReplay(ctx context.Context, run string) (_ *PreparedReplay, err error) {
+	return s.PrepareSelectedOfflineReplay(ctx, ReplaySelection{RunID: run, Scope: "whole_run"})
+}
+
+// PrepareSelectedOfflineReplay freezes a run and projects all replay readers
+// onto the same explicit selection. Related records outside it stay references.
+func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySelection) (_ *PreparedReplay, err error) {
+	input, err = input.normalized()
+	if err != nil {
+		return nil, err
+	}
+	run := input.RunID
 	if run == "" {
 		return nil, fmt.Errorf("run is required")
 	}
@@ -150,21 +162,37 @@ func (s Server) PrepareOfflineReplay(ctx context.Context, run string) (_ *Prepar
 		}
 	}
 	if selected == nil {
-		return nil, fmt.Errorf("run %q was not found", run)
+		return nil, fmt.Errorf("%w: run %q was not found", sql.ErrNoRows, run)
 	}
-	selection, err := frozen.resolveReplaySelection(ctx, replaySelection{RunID: run, Scope: "whole_run"})
+	selection, err := frozen.resolveReplaySelection(ctx, input)
 	if err != nil {
 		return nil, err
 	}
 	selectionData, err := json.Marshal(struct {
-		SchemaVersion string                 `json:"schema_version"`
-		Selection     replaySelection        `json:"selection"`
-		Records       []replayRecordDecision `json:"records"`
-	}{"agentprovenance.replay_selection/v1", selection.Selection, selection.Records})
+		SchemaVersion string                   `json:"schema_version"`
+		Selection     ReplaySelection          `json:"selection"`
+		Records       []replayRecordDecision   `json:"records"`
+		Warnings      []replaySelectionWarning `json:"warnings,omitempty"`
+		WarningCount  int                      `json:"warning_count"`
+	}{"agentprovenance.replay_selection/v1", selection.Selection, selection.Records, selection.Warnings, selection.WarningCount})
 	if err != nil {
 		return nil, err
 	}
 	selectionFile := ReplayFile{Path: "record-selection.json", SHA256: replayDigest(selectionData), Bytes: int64(len(selectionData))}
+	var omissions map[string]int
+	if selection.partial() {
+		projection, projectErr := snapshot.projectSelection(ctx, selection)
+		if projectErr != nil {
+			return nil, projectErr
+		}
+		defer projection.Close()
+		frozen = Server{DB: projection.DB, replayProjection: projection}
+		omissions = projection.omitted
+		get = replayResource(ctx, frozen.Handler())
+		if err := projection.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE run_id=?`, run).Scan(&selected.Events); err != nil {
+			return nil, err
+		}
+	}
 	// Release the resolver's lookup maps before building all graph projections.
 	selection = nil
 	writer := &staticdata.Writer{Root: root}
@@ -247,7 +275,7 @@ func (s Server) PrepareOfflineReplay(ctx context.Context, run string) (_ *Prepar
 		if getErr != nil {
 			return nil, getErr
 		}
-		page, pageErr := offlineReplayHTML(raw, lang)
+		page, pageErr := offlineReplayHTMLSelection(raw, lang, input, len(omissions) > 0)
 		if pageErr != nil {
 			return nil, pageErr
 		}
@@ -265,7 +293,8 @@ func (s Server) PrepareOfflineReplay(ctx context.Context, run string) (_ *Prepar
 	if err = write("LICENSE", license); err != nil {
 		return nil, err
 	}
-	p.Inventory = ReplayInventory{SchemaVersion: "agentprovenance.replay_inventory/v1", RunID: run, Scope: "whole_run", CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Commit: buildinfo.Commit, Events: selected.Events, Contents: contents, Selection: selectionFile}
+	p.Inventory = ReplayInventory{SchemaVersion: "agentprovenance.replay_inventory/v1", RunID: run, Scope: input.Scope, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Commit: buildinfo.Commit, Events: selected.Events, Contents: contents, Selection: selectionFile}
+	p.Inventory.AnalysisOmissions = omissions
 	if err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -335,10 +364,10 @@ func describeReplay(root string, replay ReplayRun) (ReplayContents, error) {
 	contents.ContextEntries, contents.LatestEntries = len(entries.Entries), len(entries.Latest)
 	bodies, raw := map[string]bool{}, map[string]bool{}
 	for _, entry := range entries.Entries {
-		if entry.Content.Ref != "" {
+		if entry.Content.State == "stored" && entry.Content.Ref != "" {
 			bodies[entry.Content.Ref] = true
 		}
-		if entry.RawContent.Ref != "" {
+		if entry.RawContent.State == "stored" && entry.RawContent.Ref != "" {
 			raw[entry.RawContent.Ref] = true
 		}
 	}
