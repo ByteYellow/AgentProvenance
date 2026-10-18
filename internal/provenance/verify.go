@@ -854,7 +854,11 @@ func verifyExecutionContextBindings(db *sql.DB, runID string, add issueAdder) er
 		return err
 	}
 	var correlatedEvents int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id = ? AND COALESCE(correlation_method, '') != ''`, runID).Scan(&correlatedEvents); err != nil {
+	// Unresolved or ambiguous observations can be retained without inventing a
+	// binding. Only an event claiming a positive-confidence join requires one.
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id = ?
+		AND COALESCE(correlation_method, '') NOT IN ('', 'unresolved')
+		AND COALESCE(correlation_confidence, 0) > 0`, runID).Scan(&correlatedEvents); err != nil {
 		return err
 	}
 	if correlatedEvents > 0 && bindings == 0 {

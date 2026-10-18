@@ -347,6 +347,10 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 // optional derived edge may be absent, but a failed database write must abort
 // the transaction or row savepoint instead of acknowledging partial evidence.
 func ingestFilteredWithStore(store sqlStore, event IngestEvent) (string, error) {
+	return ingestFilteredWithID(store, event, ids.New("evt"))
+}
+
+func ingestFilteredWithID(store sqlStore, event IngestEvent, eventID string) (string, error) {
 	if event.EventType == "" {
 		return "", fmt.Errorf("event_type is required")
 	}
@@ -441,7 +445,6 @@ func ingestFilteredWithStore(store sqlStore, event IngestEvent) (string, error) 
 			confidence = 0.9
 		}
 	}
-	eventID := ids.New("evt")
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if event.Timestamp != "" {
 		now = event.Timestamp
@@ -520,7 +523,7 @@ func eventIdentity(event IngestEvent) correlation.RawIdentity {
 
 func AllowedEventType(eventType string) bool {
 	switch eventType {
-	case "execve", "process_exit", "thread_exit", "syscall_result", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure", "tls_write", "tls_read", "setuid", "setgid", "ptrace", "file_rename", "file_unlink", "dns_query":
+	case "execve", "process_exit", "thread_exit", "syscall_result", "access_control", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure", "tls_write", "tls_read", "setuid", "setgid", "ptrace", "file_rename", "file_unlink", "dns_query":
 		return true
 	default:
 		return false

@@ -50,6 +50,7 @@ AgentProvenance 将应用上下文与运行时遥测关联。两类信息必须�
 | `execve` | 非空字符串数组 `argv`，或 `command` |
 | `process_exit` / `thread_exit` | 数值型 `exit_code`，或 1 到 64 之间的整数 `exit_signal` |
 | `syscall_result` | `operation` 和数值型 `syscall_result` |
+| `access_control` | 审计 schema 版本、`mechanism`（`apparmor` 或 `seccomp`）、`audit_id` 和 `decision` |
 | `process_observed` | 数值型 `pid` |
 | `file_open` / `file_write` / `secret_path` | 非空且不含 NUL 的 `path` 或 `file`，允许主机绝对路径 |
 | `network_connect` / `metadata_ip` / `private_cidr` | `dst`、`dst_ip` 或 `host` |
@@ -131,6 +132,54 @@ OpenSSL 采集代次结合内核启动实例、进程启动时间、SSL 对象�
 同一代次内 HTTP/2 多流继续共用各自方向的 HPACK 字典。任一必需生命周期探针挂载失败时，该目标的明文采集等待重试成功，能力报告列明缺失探针；其他运行时探针继续工作。
 Go TLS 与缺少 epoch 的历史来源省略 `connection_id`，其对象生命周期覆盖范围保持原状。
 接口语义见 [OpenSSL SSL_clear](https://docs.openssl.org/3.0/man3/SSL_clear/) 和 [SSL_free](https://docs.openssl.org/3.0/man3/SSL_free/)。
+
+## AppArmor 与 seccomp 审计导入
+
+读取已有 audit 文本，或每行一个对象的 `journalctl -o json` 记录：
+
+```sh
+agentprov telemetry ingest-audit --run RUN --file audit.jsonl --json
+```
+
+用 `--mechanism apparmor` 或 `--mechanism seccomp` 选择一种来源，默认读取两种。
+`--file -` 接受标准输入中的有限记录。命令只读取提供的日志，不安装 profile、不附加 seccomp
+过滤器、不修改日志配置，也不接管 auditd。
+
+Journal 记录通过 `_MACHINE_ID` 和 `_BOOT_ID` 提供来源身份。普通 audit 文本需要通过
+`--host-id` 和 `--boot-id` 指定来源主机及启动实例，不能填写正在执行导入的另一台机器的身份。
+命令会拒绝与 journal 不一致的显式身份。身份不完整的记录仍可保存，并在 `identity_incomplete`
+中计数；跨次导入去重需要完整的主机与启动身份。
+
+| 保存字段 | 含义 |
+| --- | --- |
+| `source` | `apparmor_audit` 或 `seccomp_audit` |
+| `event_type` | `access_control`，与尝试、系统调用结果分开 |
+| `audit_id`、`record_id` | 原审计时间／序号，以及稳定的来源记录标识 |
+| `timestamp`、`timestamp_precision_ns` | 审计头中的时间及其小数精度 |
+| `audit_pid`、`pid_semantics` | 日志记录的主机线程组身份，不推测线程生命周期 |
+| AppArmor 字段 | 已记录的 profile／命名空间、label、class、operation、目标、决定和掩码 |
+| seccomp 字段 | 原始架构、syscall 编号、action 码及数据部分、报告的信号；按记录中的 ABI 解析调用名称 |
+| `raw_record` | 原始消息字节数、哈希、留存状态及可选的脱敏正文 |
+
+原始消息哈希在脱敏前计算，字段会标明这一范围。新 Run 默认详细档；`--capture basic` 省略审计全文，
+保留结构化决定、引用和哈希。已有 Run 沿用固定的上下文留存设置，包括原始记录省略选项；
+修改档位不用于清理已保存内容。
+
+去重标识结合主机、启动实例、审计时间／序号、记录类型和全部解析字段。传输前缀、字段顺序和空白
+变化不会产生第二个事件。重复字段保留在身份计算中，有歧义的解析值保持未知。
+每批最多 128 行或约 1 MiB，单行最多 64 KiB。事件、图边、窗口计数和批次凭据在同一事务提交；
+数据库失败回滚当前批，已提交的前批保留，可通过再次导入去重恢复。
+汇总限制行引用和错误数量，并报告截断。超大行会停止导入；无效记录返回部分完成结果，CLI 以非零状态退出。
+
+`--run` 指定记录所属 Run，不分配 Agent 会话。审计 PID 先保留在载荷中，后续关联需要建立进程生命周期
+和操作上下文。现有遥测查询、图校验、签名 Bundle 导出和导入均保留这些未关联记录。
+读取外部机制的决定时，不再次执行 AgentProvenance 策略规则。
+
+AppArmor 的 profile 模式需要独立状态证据。seccomp 的 `LOG`、`ERRNO` 和 `KILL_PROCESS` 分别保留；
+系统调用返回和进程退出属于独立观测。缺失或无法识别的字段保持未知，普通 EPERM/EACCES 消息不作为
+AppArmor/seccomp 决定导入。PID 字段语义依据内核的
+[LSM 审计记录](https://github.com/torvalds/linux/blob/v6.8/security/lsm_audit.c)和
+[seccomp 审计记录](https://github.com/torvalds/linux/blob/v6.8/kernel/audit.c)。
 
 ## 示例
 

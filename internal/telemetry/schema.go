@@ -102,7 +102,7 @@ func TelemetrySource(source string, correlationMethod string) bool {
 		return true
 	}
 	switch source {
-	case "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf", "native_runtime", "record_file_diff", "record_process_sample":
+	case "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf", "native_runtime", "record_file_diff", "record_process_sample", "apparmor_audit", "seccomp_audit":
 		return true
 	default:
 		return false
@@ -158,6 +158,8 @@ func receiverName(source string) string {
 		return "loongcollector"
 	case "agentprov_ebpf":
 		return "agentprov_sensor"
+	case "apparmor_audit", "seccomp_audit":
+		return "linux_audit"
 	case "wrapper_runtime", "native_runtime", "record_file_diff", "record_process_sample", "filtered_telemetry":
 		return source
 	default:
@@ -170,6 +172,8 @@ func receiverName(source string) string {
 
 func sourceFormat(source string) string {
 	switch source {
+	case "apparmor_audit", "seccomp_audit":
+		return "linux_audit"
 	case "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf":
 		return "jsonl"
 	case "wrapper_runtime", "native_runtime", "record_file_diff", "record_process_sample", "filtered_telemetry":
@@ -268,6 +272,11 @@ func validateEventBody(eventType string, body map[string]any) error {
 	case "syscall_result":
 		if _, ok := numberField(body, "syscall_result"); !ok || firstString(body, "operation") == "" {
 			return fmt.Errorf("syscall_result payload requires operation and numeric syscall_result")
+		}
+	case "access_control":
+		mechanism := stringField(body, "mechanism")
+		if (mechanism != "apparmor" && mechanism != "seccomp") || stringField(body, "schema_version") != AuditSchemaVersion || stringField(body, "audit_id") == "" || stringField(body, "decision") == "" {
+			return fmt.Errorf("access_control payload requires versioned mechanism, audit_id and decision")
 		}
 	case "process_observed":
 		if _, ok := numberField(body, "pid"); !ok {

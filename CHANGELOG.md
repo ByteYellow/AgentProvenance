@@ -6,6 +6,11 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
+- Read existing AppArmor and seccomp audit text or journal JSON with
+  `telemetry ingest-audit`. Keep ABI-specific decisions and original references,
+  bound transactional batches, deduplicate by source host/boot and record identity,
+  and honor run-fixed raw-record retention. Signed bundles preserve the records;
+  importing them does not change host policy or guess Agent-session ownership.
 - Native open/connect return observations retain actual results and a shared
   operation ID with the entry record. Bounded per-thread state guards against
   reuse; asynchronous connect and restart results keep their distinct meanings.
@@ -77,6 +82,8 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Fixed
 
+- Verify unassociated telemetry without requiring a fabricated execution
+  binding; positive-confidence associations still require binding evidence.
 - Separate native thread identity from the process TGID, retain exit signals,
   and keep a process association open when its leader exits before its workers.
   Close the process lifetime when no live thread remains. Preserve these fields

@@ -22,7 +22,7 @@ func TestEvaluateMetadataIPQuarantines(t *testing.T) {
 }
 
 func TestRuntimeOutcomesDoNotRepeatAttemptPolicies(t *testing.T) {
-	for _, kind := range []string{"syscall_result", "thread_exit"} {
+	for _, kind := range []string{"syscall_result", "thread_exit", "access_control"} {
 		decision := DefaultEngine().Evaluate(Event{EventType: kind, Path: "/home/agent/.ssh/id_rsa", DstIP: "169.254.169.254"})
 		if decision.Decision != "allow" || decision.RuleID != "" {
 			t.Fatalf("outcome repeated attempt policy: %+v", decision)

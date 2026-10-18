@@ -77,6 +77,7 @@ The current MVP validates these minimum event-specific fields:
 | `execve` | `argv` as a non-empty string array, or `command` |
 | `process_exit` / `thread_exit` | numeric `exit_code`, or an integer `exit_signal` from 1 to 64 |
 | `syscall_result` | `operation` and numeric `syscall_result` |
+| `access_control` | audit schema version, `mechanism` (`apparmor` or `seccomp`), `audit_id` and `decision` |
 | `process_observed` | numeric `pid` |
 | `file_open` / `file_write` / `secret_path` | nonempty `path` or `file` without NUL; absolute host paths are accepted |
 | `network_connect` / `metadata_ip` / `private_cidr` | `dst`, `dst_ip`, or `host` |
@@ -199,6 +200,67 @@ Other runtime probes continue independently. Go TLS and
 legacy captures without an epoch omit `connection_id`; their lifecycle coverage
 is unchanged. See [OpenSSL SSL_clear](https://docs.openssl.org/3.0/man3/SSL_clear/)
 and [SSL_free](https://docs.openssl.org/3.0/man3/SSL_free/) for the API semantics.
+
+## AppArmor and seccomp audit import
+
+Read existing audit text or newline-delimited `journalctl -o json` records with:
+
+```sh
+agentprov telemetry ingest-audit --run RUN --file audit.jsonl --json
+```
+
+Use `--mechanism apparmor` or `--mechanism seccomp` to select one source; the
+default reads both. `--file -` accepts a finite input on stdin. This command
+reads supplied records without installing profiles, attaching seccomp filters,
+reconfiguring logging or taking ownership of auditd.
+
+Journal records supply their own `_MACHINE_ID` and `_BOOT_ID`. For plain audit
+text, provide `--host-id` and `--boot-id` from the originating host and boot.
+The importer never substitutes the importing machine's identity. It rejects
+conflicting supplied and journal identities. A record without complete source
+identity is retained with a warning and counted in `identity_incomplete`;
+cross-delivery deduplication requires both identities.
+
+| Stored field | Meaning |
+| --- | --- |
+| `source` | `apparmor_audit` or `seccomp_audit` |
+| `event_type` | `access_control`, separate from attempts and syscall results |
+| `audit_id`, `record_id` | Recorded audit time/serial and stable source-record identity |
+| `timestamp`, `timestamp_precision_ns` | Audit-header time and its reported decimal precision |
+| `audit_pid`, `pid_semantics` | Logged host thread-group identity; no inferred thread lifetime |
+| AppArmor fields | Recorded profile/namespace, label, class, operation, target, decision and masks |
+| seccomp fields | Raw architecture, syscall number, action code/data and reported signal; syscall names use the recorded ABI |
+| `raw_record` | Original message byte count/hash, retention state and optional redacted text |
+
+The raw-message digest is calculated before redaction and remains labelled as
+such. New runs default to detailed retention; `--capture basic` omits audit text
+while preserving structured decisions, references and hashes. Existing runs
+reuse their fixed context-retention settings, including source-record omission.
+Do not change a run's preset to thin previously saved evidence.
+
+Identity combines host, boot, audit time/serial, record type and all parsed
+fields. Transport prefixes, field order and whitespace do not create a second
+event. Repeated fields are retained for identity but ambiguous derived values
+stay unknown. Import batches contain at most 128 lines or about 1 MiB; each
+line is limited to 64 KiB. Events, edges, window counts and the batch receipt
+commit together. Database failure rolls back that batch, while prior batches
+remain available for a deduplicated retry. The summary bounds row references
+and parse errors and reports truncation. Oversized input stops the import;
+invalid records produce a partial result and a nonzero CLI exit status.
+
+`--run` selects the record container, not an Agent session. Audit PIDs stay in
+the payload until a separate association establishes process lifetime and
+operation context. The existing telemetry query, graph verification and signed
+Bundle import/export preserve these unassociated records. Reading an external
+decision does not execute AgentProvenance policy rules again.
+
+AppArmor profile mode needs separate state evidence. For seccomp, `LOG`, `ERRNO`
+and `KILL_PROCESS` remain distinct decisions; syscall returns and exits are
+independent observations. Missing or unknown fields stay unknown. Ordinary
+EPERM/EACCES messages are not accepted as AppArmor/seccomp decisions. PID field
+semantics follow the kernel's
+[LSM audit records](https://github.com/torvalds/linux/blob/v6.8/security/lsm_audit.c)
+and [seccomp audit records](https://github.com/torvalds/linux/blob/v6.8/kernel/audit.c).
 
 ## Example
 
