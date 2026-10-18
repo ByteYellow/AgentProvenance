@@ -169,7 +169,7 @@ func (s Server) resolveReplaySelection(ctx context.Context, input ReplaySelectio
 	sourceIDs := map[string]bool{}
 	service := agentcontext.Service{DB: s.DB}
 	if selection.Scope == "session" {
-		scope, err := service.SessionGraphScope(ctx, selection.RunID, selection.Harness, selection.SessionID)
+		scope, err := s.sessionGraphScope(ctx, selection.RunID, selection.Harness, selection.SessionID)
 		if err != nil {
 			return nil, err
 		}

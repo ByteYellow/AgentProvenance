@@ -36,9 +36,11 @@ type ReplayRun struct {
 	Filters   map[string]eventQuery                `json:"filters"`
 }
 type replaySession struct {
-	Lenses    staticdata.Ref            `json:"lenses"`
-	EventIDs  []string                  `json:"event_ids"`
-	Relations map[string]staticdata.Ref `json:"relations,omitempty"`
+	Lenses         staticdata.Ref                `json:"lenses"`
+	EventIDs       []string                      `json:"event_ids"`
+	Relations      map[string]staticdata.Ref     `json:"relations,omitempty"`
+	Audit          *provenance.SessionAuditScope `json:"audit,omitempty"`
+	AuditRelations *staticdata.Ref               `json:"audit_relations,omitempty"`
 }
 
 func writeReplayLenses(w *staticdata.Writer, lenses provenance.ReplayLenses) (staticdata.Ref, error) {
@@ -176,7 +178,7 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		scope, err := contextService.SessionGraphScope(ctx, run, src.Harness, src.SessionID)
+		scope, err := s.sessionGraphScope(ctx, run, src.Harness, src.SessionID)
 		if err != nil {
 			return result, err
 		}
@@ -208,7 +210,15 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 			}
 			cursor = page.NextCursor
 		}
-		result.Sessions[key] = replaySession{Lenses: ref, EventIDs: scope.EventIDs, Relations: relations}
+		saved := replaySession{Lenses: ref, EventIDs: scope.EventIDs, Relations: relations, Audit: scope.Audit}
+		if scope.Audit != nil {
+			audits, err := w.JSON(scope.AuditEvents)
+			if err != nil {
+				return result, err
+			}
+			saved.AuditRelations = &audits
+		}
+		result.Sessions[key] = saved
 	}
 	timeline, err := telemetry.ListEventsFiltered(s.DB, telemetry.Filter{RunID: run})
 	if err != nil {

@@ -6,6 +6,15 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
+- Session-scoped search, event lists and graph focus include uniquely matched
+  audit decisions through existing tool/runtime evidence. Derived membership is
+  labeled separately; conflicting or unmatched decisions remain at run scope.
+  Selected replays freeze that membership and withhold excluded supporting
+  references, without changing original audit identities.
+- The comparison API projects access-control declarations, state snapshots,
+  audit decisions, collection observations and runtime outcomes as distinct
+  observed sets with original reader references. PID and timestamp changes do
+  not create value differences; the existing comparison layout is unchanged.
 - Follow existing audit text or journal JSON files with `telemetry follow-audit`.
   Bounded batches commit evidence and source checkpoints together, resume after
   interruption, preserve partial lines, and report source replacement or

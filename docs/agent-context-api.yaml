@@ -242,6 +242,7 @@ components:
         recorded_at: {type: string}
         execution_scope: {type: string, enum: [prior_context, current_execution]}
         entry: {$ref: '#/components/schemas/Entry'}
+        session_association: {$ref: '#/components/schemas/SessionAuditRelation'}
         content:
           oneOf:
             - {$ref: '#/components/schemas/ContentRef'}
@@ -263,6 +264,26 @@ components:
         sources: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/SearchSource'}}
         has_more: {type: boolean}
         next_cursor: {type: string, description: Opaque continuation tied to run and native session scope.}
+        session_audit: {$ref: '#/components/schemas/SessionAuditScope'}
+    SessionAuditRelation:
+      type: object
+      required: [status, rule, basis]
+      description: Read-only Session membership derived from an existing tool/runtime link and a unique audit operation. Also returned by the event-list session_associations map for records on that page. Original evidence identity is unchanged.
+      properties:
+        status: {type: string, enum: [inferred, unavailable]}
+        rule: {const: agentprov.session_audit_operation/v1}
+        basis: {const: recorded_tool_runtime_and_unique_audit_operation}
+        reason: {const: replay_evidence_excluded}
+        evidence_refs: {type: array, items: {type: string}, description: Supporting event and tool nodes. Withheld entirely when selected replay evidence cannot support the original relation.}
+    SessionAuditScope:
+      type: object
+      required: [status, rule, related_count]
+      description: Audit reading-scope analysis for the requested native Session, not a measurement of audit capture completeness. Also present in query.session_scope.audit on scoped graph responses.
+      properties:
+        status: {type: string, enum: [complete, incomplete]}
+        rule: {const: agentprov.session_audit_operation/v1}
+        related_count: {type: integer, minimum: 0}
+        issues: {type: array, items: {type: string}}
     ComparisonRecord:
       type: object
       required: [dimension, key, label, operation, value, partial, evidence]

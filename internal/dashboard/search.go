@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
+	"github.com/byteyellow/agentprovenance/internal/provenance"
 )
 
 const searchSourceLimit = 50
@@ -25,31 +26,33 @@ const savedObjectScopePredicate = `EXISTS(SELECT 1 FROM graph_edges g WHERE g.ru
 // Search sources describe existing readers; they never copy or index a body.
 // The same bounded browser scanner consumes this catalog online and offline.
 type SearchSource struct {
-	ID             string                  `json:"id"`
-	Category       string                  `json:"category"`
-	Kind           string                  `json:"kind"`
-	Label          string                  `json:"label"`
-	Node           string                  `json:"node,omitempty"`
-	GraphNode      string                  `json:"graph_node,omitempty"`
-	SourceID       string                  `json:"source_id,omitempty"`
-	Harness        string                  `json:"harness,omitempty"`
-	SessionID      string                  `json:"session_id,omitempty"`
-	AgentID        string                  `json:"agent_id,omitempty"`
-	ToolCallID     string                  `json:"tool_call_id,omitempty"`
-	RecordedAt     string                  `json:"recorded_at,omitempty"`
-	ExecutionScope string                  `json:"execution_scope,omitempty"`
-	Entry          *agentcontext.Entry     `json:"entry,omitempty"`
-	Content        agentcontext.ContentRef `json:"content"`
+	ID                 string                           `json:"id"`
+	Category           string                           `json:"category"`
+	Kind               string                           `json:"kind"`
+	Label              string                           `json:"label"`
+	Node               string                           `json:"node,omitempty"`
+	GraphNode          string                           `json:"graph_node,omitempty"`
+	SourceID           string                           `json:"source_id,omitempty"`
+	Harness            string                           `json:"harness,omitempty"`
+	SessionID          string                           `json:"session_id,omitempty"`
+	AgentID            string                           `json:"agent_id,omitempty"`
+	ToolCallID         string                           `json:"tool_call_id,omitempty"`
+	RecordedAt         string                           `json:"recorded_at,omitempty"`
+	ExecutionScope     string                           `json:"execution_scope,omitempty"`
+	Entry              *agentcontext.Entry              `json:"entry,omitempty"`
+	Content            agentcontext.ContentRef          `json:"content"`
+	SessionAssociation *provenance.SessionAuditRelation `json:"session_association,omitempty"`
 }
 
 type SearchSources struct {
-	SchemaVersion string         `json:"schema_version"`
-	RunID         string         `json:"run_id"`
-	Harness       string         `json:"harness,omitempty"`
-	SessionID     string         `json:"session_id,omitempty"`
-	Sources       []SearchSource `json:"sources"`
-	HasMore       bool           `json:"has_more"`
-	NextCursor    string         `json:"next_cursor,omitempty"`
+	SchemaVersion string                        `json:"schema_version"`
+	RunID         string                        `json:"run_id"`
+	Harness       string                        `json:"harness,omitempty"`
+	SessionID     string                        `json:"session_id,omitempty"`
+	Sources       []SearchSource                `json:"sources"`
+	HasMore       bool                          `json:"has_more"`
+	NextCursor    string                        `json:"next_cursor,omitempty"`
+	SessionAudit  *provenance.SessionAuditScope `json:"session_audit,omitempty"`
 }
 
 type SearchSourceOptions struct {
@@ -102,11 +105,13 @@ func (s Server) SearchSources(ctx context.Context, opts SearchSourceOptions) (Se
 	}
 	service := agentcontext.Service{DB: s.DB}
 	tools, events, nodes := "[]", "[]", "[]"
+	var auditEvents map[string]provenance.SessionAuditRelation
 	if opts.SessionID != "" {
-		scope, err := service.SessionGraphScope(ctx, opts.RunID, opts.Harness, opts.SessionID)
+		scope, err := s.sessionGraphScope(ctx, opts.RunID, opts.Harness, opts.SessionID)
 		if err != nil {
 			return result, err
 		}
+		result.SessionAudit, auditEvents = scope.Audit, scope.AuditEvents
 		b, _ := json.Marshal(scope.ToolIDs)
 		tools = string(b)
 		b, _ = json.Marshal(scope.EventIDs)
@@ -209,6 +214,9 @@ func (s Server) SearchSources(ctx context.Context, opts SearchSourceOptions) (Se
 				item.Category, item.Label, item.ToolCallID = "tools", "tool_call", id
 			case 3:
 				item.Category, item.Label, item.Node = "runtime", kind, "runtime_event/"+id
+				if relation, ok := auditEvents[id]; ok {
+					item.SessionAssociation = &relation
+				}
 			}
 			if graph {
 				item.GraphNode = item.Node

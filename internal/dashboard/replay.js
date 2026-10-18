@@ -214,7 +214,13 @@ window.AgentProvReplay = (() => {
     if(path==='events'){
       let events=filterEvents(await asset(run.events),p,run);
       if(session){const ids=new Set(session.event_ids);events=events.filter(e=>ids.has(e.id));}
-      return pageEvents(events,p,{schema_version:'agentprovenance.dashboard_events/v1',filter:{run:id,lens:p.get('lens')||'',group:p.get('group')||'',focus:p.get('focus')||'',type:p.get('type')||'',tool_call:p.get('tool_call')||'',pid:p.get('pid')||'',harness:p.get('harness')||'',session:p.get('session')||''}});
+      const result=pageEvents(events,p,{schema_version:'agentprovenance.dashboard_events/v1',filter:{run:id,lens:p.get('lens')||'',group:p.get('group')||'',focus:p.get('focus')||'',type:p.get('type')||'',tool_call:p.get('tool_call')||'',pid:p.get('pid')||'',harness:p.get('harness')||'',session:p.get('session')||''}});
+      if(session?.audit){
+        const relations=session.audit_relations?await asset(session.audit_relations):{};
+        result.session_audit=session.audit;result.session_associations={};
+        for(const event of result.events)if(relations[event.id])result.session_associations[event.id]=relations[event.id];
+      }
+      return result;
     }
     if(path==='artifact'){const data=await asset(run.artifacts),key=(p.get('view_lang')||'en')+'/'+(p.get('mode')||'body')+'/'+p.get('node');return contentPage(data[key],p,true);}
     if(path.startsWith('context/')&&path!=='context/overview'){

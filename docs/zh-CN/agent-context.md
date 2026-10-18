@@ -357,6 +357,22 @@ Dashboard 的 `/api/lens` 和 `/api/events` 同时接受 `harness`、`session`�
 `/v1/context/entries` 也支持用 `harness` 配合 `session`，区分不同 harness 的同名会话。
 这些查询参数不改变证据 Bundle 格式。
 
+会话阅读也纳入与本会话运行时记录可靠配对的 AppArmor/seccomp 决定：进程生命周期和
+操作均须为唯一候选，操作记录已通过工具关系归属该会话，且没有冲突的工具关联。
+共享 PID、cgroup 或旧执行作用域的 `session_id` 不作为原生会话身份。
+有歧义和未配对的决定仍可在 **整个 Run** 中搜索。
+
+搜索记录和图谱聚焦节点通过 `session_association` 标明这类只读投影。
+事件列表通过 `session_associations` 返回当前页的关联标记，原始事件载荷保持不变。
+图谱的 `query.session_scope.audit` 和搜索／事件列表的 `session_audit` 提供规则、关联数量与分析限额。
+这些字段描述阅读范围，采集覆盖单独报告；原审计身份保持不变，支持关联的其他运行时记录
+也不会自动加入选中范围。
+
+部分回放从完整冻结来源确定会话成员，排除竞争候选不会产生新匹配。
+支持记录或工具被排除后，已选审计仍可阅读，关联标为 `status: unavailable`、
+`reason: replay_evidence_excluded`，并省略其依据引用。搜索、事件筛选、图谱定位与
+回放选择使用同一范围。
+
 ## 搜索已保存证据
 
 点击图谱上方的放大镜，在临时窗口中搜索。左侧显示命中片段，右侧复用证据阅读区。

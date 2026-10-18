@@ -472,6 +472,25 @@ partial graph. `/api/context/entries` and `/v1/context/entries` also accept
 `harness` alongside `session` to distinguish matching native IDs from different
 harnesses. This adds query filters without changing the evidence Bundle format.
 
+Session reading also includes AppArmor/seccomp decisions with a unique process
+lifetime and operation match to a runtime record already linked to that session's
+tool. Conflicting tool links keep the audit outside the session. A shared PID,
+cgroup, or legacy execution `session_id` does not supply native session identity.
+Ambiguous and unmatched decisions remain searchable in **Whole run**.
+
+The projection is labeled `session_association` on search records and focused
+graph nodes. The event-list response exposes page-specific `session_associations`
+without rewriting the event payloads. `query.session_scope.audit` and search/event `session_audit` report its
+rule, related count and analysis limits. These describe reading membership,
+separate from collection coverage; the original audit keeps its recorded identity.
+Supporting runtime records do not automatically become selected records.
+
+Selected replays resolve membership from the complete frozen source. Removing a
+competing candidate cannot create a new match. If supporting records or tools
+are excluded, the selected audit stays readable with `status: unavailable` and
+`reason: replay_evidence_excluded`; its relation references are omitted. Search,
+event filtering, graph focus and replay selection share this scope.
+
 ## Search Saved Evidence
 
 Use the magnifying-glass action above the graph. The temporary search window

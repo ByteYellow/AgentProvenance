@@ -736,7 +736,7 @@ func (s Server) events(w http.ResponseWriter, r *http.Request) {
 	if page == nil {
 		page = []telemetry.EventRecord{}
 	}
-	writeJSON(w, map[string]any{
+	response := map[string]any{
 		"schema_version": "agentprovenance.dashboard_events/v1",
 		"events":         page,
 		"total":          total,
@@ -748,7 +748,17 @@ func (s Server) events(w http.ResponseWriter, r *http.Request) {
 			"tool_call": r.URL.Query().Get("tool_call"), "pid": r.URL.Query().Get("pid"),
 			"harness": r.URL.Query().Get("harness"), "session": r.URL.Query().Get("session"),
 		},
-	})
+	}
+	if scope != nil && scope.Audit != nil {
+		relations := map[string]provenance.SessionAuditRelation{}
+		for _, event := range page {
+			if relation, ok := scope.AuditEvents[event.ID]; ok {
+				relations[event.ID] = relation
+			}
+		}
+		response["session_audit"], response["session_associations"] = scope.Audit, relations
+	}
+	writeJSON(w, response)
 }
 
 func (s Server) eventQueryFromRequest(run string, r *http.Request) (eventQuery, error) {
@@ -1076,7 +1086,7 @@ func (s Server) sessionScope(w http.ResponseWriter, r *http.Request) (*provenanc
 	if q.Get("harness") == "" && q.Get("session") == "" {
 		return nil, true
 	}
-	scope, err := (agentcontext.Service{DB: s.DB}).SessionGraphScope(r.Context(), q.Get("run"), q.Get("harness"), q.Get("session"))
+	scope, err := s.sessionGraphScope(r.Context(), q.Get("run"), q.Get("harness"), q.Get("session"))
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, agentcontext.ErrInvalidArgument) {
