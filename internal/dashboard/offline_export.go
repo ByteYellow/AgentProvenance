@@ -45,6 +45,7 @@ type ReplayInventory struct {
 	Signed        bool           `json:"signed"`
 	Events        int            `json:"events"`
 	Contents      ReplayContents `json:"contents"`
+	Selection     ReplayFile     `json:"record_selection"`
 	Files         []ReplayFile   `json:"files"`
 	Bytes         int64          `json:"bytes_excluding_inventory"`
 }
@@ -70,6 +71,45 @@ type PreparedReplay struct {
 
 func (p *PreparedReplay) Close() error { return os.RemoveAll(p.root) }
 
+type replaySnapshot struct {
+	DB   *sql.DB
+	root string
+}
+
+func (snapshot *replaySnapshot) Close() {
+	_ = snapshot.DB.Close()
+	_ = os.RemoveAll(snapshot.root)
+}
+
+// A separate SQLite snapshot keeps selection and every projection on the same
+// committed database version while the live collector continues writing.
+func (s Server) freezeReplaySource(ctx context.Context) (_ *replaySnapshot, err error) {
+	private, err := os.MkdirTemp("", "agentprov-replay-source-")
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(private)
+		}
+	}()
+	path := filepath.Join(private, "snapshot.db")
+	if _, err = s.DB.ExecContext(ctx, "VACUUM INTO ?", path); err != nil {
+		return nil, fmt.Errorf("freeze replay database: %w", err)
+	}
+	u := url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro&_pragma=query_only(1)"}
+	db, err := sql.Open("sqlite", u.String())
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(8)
+	if err = db.PingContext(ctx); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return &replaySnapshot{DB: db, root: private}, nil
+}
+
 // PrepareOfflineReplay freezes one complete run. Selection is explicit here;
 // linked runs remain references and are never recursively exported. Source
 // content is read only through the dashboard's saved-evidence readers.
@@ -87,25 +127,12 @@ func (s Server) PrepareOfflineReplay(ctx context.Context, run string) (_ *Prepar
 			_ = p.Close()
 		}
 	}()
-	// A separate SQLite snapshot keeps every projection on the same committed
-	// database version while the live collector continues writing to its WAL.
-	private, err := os.MkdirTemp("", "agentprov-replay-source-")
+	snapshot, err := s.freezeReplaySource(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(private)
-	snapshot := filepath.Join(private, "snapshot.db")
-	if _, err = s.DB.ExecContext(ctx, "VACUUM INTO ?", snapshot); err != nil {
-		return nil, fmt.Errorf("freeze replay database: %w", err)
-	}
-	u := url.URL{Scheme: "file", Path: snapshot, RawQuery: "mode=ro&_pragma=query_only(1)"}
-	db, err := sql.Open("sqlite", u.String())
-	if err != nil {
-		return nil, err
-	}
-	db.SetMaxOpenConns(8)
-	defer db.Close()
-	frozen := Server{DB: db}
+	defer snapshot.Close()
+	frozen := Server{DB: snapshot.DB}
 	get := replayResource(ctx, frozen.Handler())
 	raw, err := get("/api/runs")
 	if err != nil {
@@ -125,6 +152,21 @@ func (s Server) PrepareOfflineReplay(ctx context.Context, run string) (_ *Prepar
 	if selected == nil {
 		return nil, fmt.Errorf("run %q was not found", run)
 	}
+	selection, err := frozen.resolveReplaySelection(ctx, replaySelection{RunID: run, Scope: "whole_run"})
+	if err != nil {
+		return nil, err
+	}
+	selectionData, err := json.Marshal(struct {
+		SchemaVersion string                 `json:"schema_version"`
+		Selection     replaySelection        `json:"selection"`
+		Records       []replayRecordDecision `json:"records"`
+	}{"agentprovenance.replay_selection/v1", selection.Selection, selection.Records})
+	if err != nil {
+		return nil, err
+	}
+	selectionFile := ReplayFile{Path: "record-selection.json", SHA256: replayDigest(selectionData), Bytes: int64(len(selectionData))}
+	// Release the resolver's lookup maps before building all graph projections.
+	selection = nil
 	writer := &staticdata.Writer{Root: root}
 	replay, err := frozen.ExportReplay(ctx, run, writer)
 	if err != nil {
@@ -152,6 +194,9 @@ func (s Server) PrepareOfflineReplay(ctx context.Context, run string) (_ *Prepar
 			return err
 		}
 		return os.WriteFile(path, data, 0600)
+	}
+	if err = write(selectionFile.Path, selectionData); err != nil {
+		return nil, err
 	}
 	assets := map[string][]byte{
 		"theme.css": themeCSS, "context.css": contextCSS, "context.js": contextJS,
@@ -220,7 +265,7 @@ func (s Server) PrepareOfflineReplay(ctx context.Context, run string) (_ *Prepar
 	if err = write("LICENSE", license); err != nil {
 		return nil, err
 	}
-	p.Inventory = ReplayInventory{SchemaVersion: "agentprovenance.replay_inventory/v1", RunID: run, Scope: "whole_run", CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Commit: buildinfo.Commit, Events: selected.Events, Contents: contents}
+	p.Inventory = ReplayInventory{SchemaVersion: "agentprovenance.replay_inventory/v1", RunID: run, Scope: "whole_run", CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Commit: buildinfo.Commit, Events: selected.Events, Contents: contents, Selection: selectionFile}
 	if err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr

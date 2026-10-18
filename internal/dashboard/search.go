@@ -17,6 +17,11 @@ import (
 
 const searchSourceLimit = 50
 
+// The same direct relationship boundary is used by search and replay selection.
+const savedObjectScopePredicate = `EXISTS(SELECT 1 FROM graph_edges g WHERE g.run_id=o.run_id AND
+ ((g.from_id=o.hash AND g.to_id IN (SELECT value FROM json_each(?))) OR
+  (g.to_id=o.hash AND g.from_id IN (SELECT value FROM json_each(?)))))`
+
 // Search sources describe existing readers; they never copy or index a body.
 // The same bounded browser scanner consumes this catalog online and offline.
 type SearchSource struct {
@@ -151,9 +156,7 @@ func (s Server) SearchSources(ctx context.Context, opts SearchSourceOptions) (Se
 			if opts.SessionID != "" {
 				// Only direct saved object relationships qualify. Sharing a path,
 				// process or agent must not pull another session's body into scope.
-				query += ` AND EXISTS(SELECT 1 FROM graph_edges g WHERE g.run_id=o.run_id AND
-				 ((g.from_id=o.hash AND g.to_id IN (SELECT value FROM json_each(?))) OR
-				  (g.to_id=o.hash AND g.from_id IN (SELECT value FROM json_each(?)))))`
+				query += " AND " + savedObjectScopePredicate
 				args = append(args, nodes, nodes)
 			}
 			query += ` ORDER BY o.hash LIMIT ?`

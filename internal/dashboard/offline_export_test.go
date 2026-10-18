@@ -74,6 +74,7 @@ func TestOfflineReplayFreezesOneRunAndSavedContent(t *testing.T) {
 		t.Fatalf("unexpected ZIP members: %d != %d", len(z.File), len(expected)+1)
 	}
 	var evidence bytes.Buffer
+	var selectedRecords []replayRecordDecision
 	for _, f := range z.File {
 		reader, err := f.Open()
 		if err != nil {
@@ -90,6 +91,28 @@ func TestOfflineReplayFreezesOneRunAndSavedContent(t *testing.T) {
 			}
 		} else if want, ok := expected[f.Name]; !ok || want.SHA256 != replayDigest(data) || want.Bytes != int64(len(data)) {
 			t.Fatalf("file differs from frozen inventory: %s", f.Name)
+		}
+		if f.Name == p.Inventory.Selection.Path {
+			if p.Inventory.Selection.SHA256 != replayDigest(data) || p.Inventory.Selection.Bytes != int64(len(data)) {
+				t.Fatal("record selection differs from inventory")
+			}
+			var manifest struct {
+				SchemaVersion string                 `json:"schema_version"`
+				Selection     replaySelection        `json:"selection"`
+				Records       []replayRecordDecision `json:"records"`
+			}
+			if err := json.Unmarshal(data, &manifest); err != nil {
+				t.Fatal(err)
+			}
+			if manifest.SchemaVersion != "agentprovenance.replay_selection/v1" || manifest.Selection.Scope != "whole_run" || manifest.Selection.RunID != "selected-run" {
+				t.Fatalf("record selection: %+v", manifest)
+			}
+			selectedRecords = manifest.Records
+			for _, r := range selectedRecords {
+				if !r.Included || strings.Contains(r.ID, "other-run") || r.ID == "3/late" {
+					t.Fatalf("unexpected selected record: %+v", r)
+				}
+			}
 		}
 		if strings.HasPrefix(f.Name, "data/") {
 			prefix := `window.AgentProvOffline.accept("` + strings.TrimSuffix(f.Name, ".js") + `.json.gz","`
@@ -114,6 +137,9 @@ func TestOfflineReplayFreezesOneRunAndSavedContent(t *testing.T) {
 		if strings.HasSuffix(f.Name, ".db") || strings.HasSuffix(f.Name, ".forensics.json.gz") || strings.HasSuffix(f.Name, ".json.gz") {
 			t.Fatalf("extra source data packaged: %s", f.Name)
 		}
+	}
+	if len(selectedRecords) != 4 {
+		t.Fatalf("record manifest: got %d, want one entry, file, tool and event", len(selectedRecords))
 	}
 	for _, marker := range []string{"selected-run-MESSAGE", "selected-run-RAW", "selected-run-FILE", "selected-run-EVENT", "legacy_not_recorded"} {
 		if !strings.Contains(evidence.String(), marker) {

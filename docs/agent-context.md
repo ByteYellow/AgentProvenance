@@ -519,6 +519,9 @@ a consistent database snapshot, reads only saved evidence and then freezes the
 package. It never fills missing content from current workspace files. Linked
 runs remain references. `export-inventory.json` lists the run, scope, file sizes
 and SHA-256 digests; the command prints the ZIP size and inventory digest.
+`record-selection.json` lists the included source-record IDs, categories and
+saved revisions. Its size and digest appear in the inventory's `record_selection`
+field, so the record list can be checked alongside the packaged files.
 Existing output files are left unchanged.
 
 This ZIP is an **unsigned sharing copy**. Original verification results and

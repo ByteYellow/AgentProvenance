@@ -63,6 +63,18 @@ async function main(){
         assert.match(await page.locator('.offline-replay-bar').innerText(),/unsigned sharing copy/);
         const query=async q=>{report.queries++;return page.evaluate(q=>AgentProvReplay.query(q),q);};
         const q='?run='+encodeURIComponent(report.run),run=catalog.runs[report.run];
+        if(inventory.record_selection){
+          const file=inventory.record_selection,raw=fs.readFileSync(path.join(root,file.path));
+          assert.equal(raw.length,file.bytes);assert.equal(hash(raw),file.sha256);
+          const selection=JSON.parse(raw);
+          assert.equal(selection.schema_version,'agentprovenance.replay_selection/v1');
+          assert.equal(selection.selection.run_id,report.run);assert.equal(selection.selection.scope,'whole_run');
+          assert.ok(selection.records.every(r=>r.included),'whole-run selection retains every record');
+          const actual=selection.records.filter(r=>r.indexed).map(r=>r.id).sort();
+          const expected=Object.values(run.search['["",""]']).flatMap(ref=>saved(ref).sources.map(s=>s.id)).sort();
+          assert.deepEqual(actual,expected,'record manifest matches every source in the exported search catalog');
+          assert.deepEqual(selection.records.filter(r=>r.id.startsWith('entry/')).map(r=>r.id.slice(6)).sort(),saved(run.context).entries.map(e=>e.id).sort(),'record manifest includes every saved context revision');
+        }
         const index=saved(run.lenses);
         for(const [key,ref] of Object.entries(index.views)){
           const [lens,detail]=key.split('/'),expected=saved(ref).manifest;

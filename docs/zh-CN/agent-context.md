@@ -389,6 +389,8 @@ agentprov --data-dir .agentprov dashboard export --run RUN --output run-replay.z
 命令导出**整个 Run**，包含未归属记录。先取得一致的数据库快照，再读取已保存证据并固定包内内容，
 不从当前工作目录补齐历史正文。关联 Run 只保留引用。
 `export-inventory.json` 列出 Run、范围、文件大小和 SHA-256 摘要；命令输出 ZIP 大小与清单摘要。
+`record-selection.json` 列出已包含的来源记录 ID、类别和历史版本。
+文件清单中的 `record_selection` 字段记录它的大小与摘要，方便核对记录范围。
 已有的目标文件不会被覆盖。
 
 ZIP 是**未签名的分享副本**。页面保留原有验证结果与采集缺口，包内不附带原始 Bundle 或数据库。

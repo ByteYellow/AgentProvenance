@@ -57,6 +57,16 @@ components:
         signed: {const: false}
         events: {type: integer, minimum: 0}
         contents: {$ref: '#/components/schemas/Contents'}
+        record_selection:
+          allOf: [{$ref: '#/components/schemas/File'}]
+          description: >
+            Optional for older exports. Describes record-selection.json, a frozen
+            list of source-record IDs, categories and revision membership.
+            It has schema_version agentprovenance.replay_selection/v1, selection
+            (run_id and scope), and records (id, category, optional node, indexed,
+            included). Indexed means present in the search catalog; older context
+            revisions are also included but not indexed. Whole-run exports include
+            every listed record.
         files: {type: array, items: {$ref: '#/components/schemas/File'}}
         bytes_excluding_inventory: {type: integer, minimum: 0}
     Preview:
