@@ -207,6 +207,39 @@ components:
         sources: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/SearchSource'}}
         has_more: {type: boolean}
         next_cursor: {type: string, description: Opaque continuation tied to run and native session scope.}
+    ComparisonRecord:
+      type: object
+      required: [dimension, key, label, operation, value, partial, evidence]
+      properties:
+        dimension: {type: string, enum: [task, configuration, files, network, outbound]}
+        key: {type: string, description: Opaque comparable field or set identity; never a paired session or tool step.}
+        label: {type: string}
+        operation: {type: string, description: Recorded operation or existing outbound channel class.}
+        value:
+          oneOf:
+            - {$ref: '#/components/schemas/SnapshotValue'}
+            - {type: 'null'}
+          description: Null means the recorded value is unavailable; a recorded JSON null has a SnapshotValue.
+        partial: {type: boolean}
+        evidence: {$ref: '#/components/schemas/SearchSource'}
+    ComparisonIssue:
+      type: object
+      required: [source_id, dimension, code]
+      properties:
+        source_id: {type: string}
+        dimension: {type: string}
+        code: {type: string, description: Unavailable evidence, unrecorded field or projection limit.}
+    ComparisonPage:
+      type: object
+      required: [schema_version, run_id, records, issues, sources_read, has_more]
+      properties:
+        schema_version: {const: agentprovenance.comparison_records/v1}
+        run_id: {type: string}
+        records: {type: array, items: {$ref: '#/components/schemas/ComparisonRecord'}}
+        issues: {type: array, items: {$ref: '#/components/schemas/ComparisonIssue'}}
+        sources_read: {type: integer, minimum: 0, maximum: 50}
+        has_more: {type: boolean}
+        next_cursor: {type: string, description: Opaque continuation bound to the whole run.}
     Overview:
       type: object
       required: [schema_version, run_id, coverage, messages, tool_calls, tool_results, snapshots, has_more_sources, runtime_coverage]
@@ -608,6 +641,29 @@ components:
       description: Database unavailable; never reported as empty or missing evidence.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
 paths:
+  /api/compare/records:
+    servers: [{url: 'http://127.0.0.1:7396'}]
+    get:
+      operationId: readComparisonRecords
+      summary: Project saved evidence into whole-run comparison records
+      security: []
+      description: >
+        Dashboard-only read-only projection of at most 50 saved sources per page.
+        Configuration snapshots may contribute multiple fields. Rejects harness
+        and session filters. Retained prior context is excluded. An empty page
+        may have has_more=true; follow next_cursor. Values preserve JSON types
+        and full digests with previews of at most 512 UTF-8 bytes. Configuration
+        is bounded to 1 MiB and 200 fields per snapshot. Issues identify missing
+        evidence or reached limits. Queries during capture are not frozen;
+        refresh the comparison to include newly saved records.
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 16384}}
+      responses:
+        '200': {description: Bounded comparison records with existing evidence references, content: {application/json: {schema: {$ref: '#/components/schemas/ComparisonPage'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
   /api/search/sources:
     servers: [{url: 'http://127.0.0.1:7396'}]
     get:

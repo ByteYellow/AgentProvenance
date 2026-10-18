@@ -152,6 +152,7 @@ func TestContextDashboardFixture(t *testing.T) {
 	addSessionGraphFixture(t, s)
 	addSessionRelationsFixture(t, s)
 	addSearchFixture(t, s)
+	addComparisonFixture(t, s)
 }
 
 func addSessionDirectoryFixture(t *testing.T, s agentcontext.Service) {

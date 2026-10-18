@@ -88,6 +88,7 @@ async function main() {
         report.sessions++;
       }
       const session=await data(snapshot.context);
+      for(const cursor of Object.keys(snapshot.compare || {}))await compare('/api/compare/records'+q+'&cursor='+encodeURIComponent(cursor));
       for(const [identity,pages] of Object.entries(snapshot.search || {})){
         const [harness,sessionID]=JSON.parse(identity);
         for(const cursor of Object.keys(pages))await compare('/api/search/sources'+q+'&harness='+encodeURIComponent(harness)+'&session='+encodeURIComponent(sessionID)+'&cursor='+encodeURIComponent(cursor));
@@ -204,6 +205,17 @@ async function main() {
       },{run,query,category});
       const expected=await search(live),actual=await search(page);assert.ok(expected.ids.length,'historical search '+query);assert.deepEqual(actual,expected);report.parity++;
     }
+    // Compare the same historical records through native and static readers.
+    for(const [a,b] of [['run-grok-exfil','run-grok-3routes'],['run-dbc2adf273d4','run-double-attempt']]){
+      const build=page=>page.evaluate(async({a,b})=>{
+        const left=await AgentRunCompare.load({run:a,get:j}),right=await AgentRunCompare.load({run:b,get:j});
+        const result=AgentRunCompare.build(left,right);
+        return {complete:[left.complete,right.complete],...result};
+      },{a,b});
+      const expected=await build(live),actual=await build(page);
+      assert.deepEqual(actual,expected);assert.deepEqual(actual.complete,[true,true]);
+      assert.ok(actual.rows.length);assert.notEqual(actual.taskRelation,'matching_recorded_tasks');report.parity++;
+    }
     await live.close();
     await page.locator('[data-investigation="search"]').click();
     await page.locator('#search-query').fill('Ran 7 tests');await page.locator('#search-category').selectOption('tools');await page.locator('#search-submit').click();
@@ -211,6 +223,41 @@ async function main() {
     assert.ok(await page.locator('.search-result').count()>0);
     await page.waitForFunction(()=>document.querySelector('#content-body')?.textContent.includes('Ran 7 tests'));
     await page.locator('#search-close').click();
+
+    await page.goto(new URL('en/replay.html?run=run-grok-exfil',site).href);
+    await page.waitForFunction(()=>window._lensManifest && window.AgentRunCompare);
+    await page.locator('[data-investigation="compare"]').click();
+    await page.locator('#compare-b').selectOption('run-grok-3routes');
+    await page.waitForFunction(()=>document.querySelector('#compare-status').textContent==='Saved records loaded'&&!document.querySelector('#compare-refresh').disabled);
+    assert.ok(!(await page.locator('#compare-pair').innerText()).includes('undefined'));
+    assert.ok((await page.locator('#compare-task-note').innerText()).includes('comparison of records'));
+    await page.locator('[data-dimension="outbound"]').click();
+    await page.locator('#compare-only').uncheck();
+    const mixpanel=page.locator('.compare-row').filter({hasText:'api.mixpanel.com'});
+    await mixpanel.locator('summary').click();
+    assert.ok((await mixpanel.innerText()).includes('Product analytics'));
+    assert.equal(await mixpanel.locator('.compare-side').count(),2);
+    await mixpanel.locator('[data-record-read]').last().click();
+    await page.waitForFunction(()=>document.querySelector('#content-body').textContent.includes('mixpanel'));
+    assert.ok((await page.locator('#compare-reader-title').innerText()).startsWith('run-grok-3routes'));
+    await page.locator('#compare-reader-close').click();
+    await mixpanel.locator('[data-record-graph]').last().click();
+    await mixpanel.locator('.context-notice button').first().click();
+    await page.locator('#compare-return').waitFor();
+    assert.equal(await page.evaluate(()=>cur),'run-grok-3routes');
+    await page.locator('#compare-return').click();
+    await page.locator('#compare-dialog').waitFor();
+    assert.equal(await page.evaluate(()=>cur),'run-grok-exfil');
+    await mixpanel.scrollIntoViewIfNeeded();
+    await page.screenshot({path:'output/playwright/compare-grok-static-desktop.png'});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    assert.equal(await page.locator('#compare-dialog').evaluate(el=>el.scrollWidth>el.clientWidth+1),false);
+    await mixpanel.locator('[data-record-read]').last().scrollIntoViewIfNeeded();
+    await page.screenshot({path:'output/playwright/compare-grok-static-mobile.png'});
+    await page.locator('#compare-close').click();
+    await page.setViewportSize({width:1440,height:1060});
+    report.comparison='historical Grok and DeepSeek/multiagent parity; Grok source reading, graph return and mobile passed';
 
     // All published guides, images and table-of-contents links, at both sizes.
     for(const lang of ['en','zh-CN']){

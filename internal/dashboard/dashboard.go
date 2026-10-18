@@ -66,6 +66,15 @@ var searchJS []byte
 //go:embed search.css
 var searchCSS []byte
 
+//go:embed compare-engine.js
+var compareEngineJS []byte
+
+//go:embed compare.js
+var compareJS []byte
+
+//go:embed compare.css
+var compareCSS []byte
+
 //go:embed replay.js
 var replayJS []byte
 
@@ -100,7 +109,8 @@ func (s Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		_, _ = w.Write(workspaceJS)
 	})
-	for path, asset := range map[string][]byte{"/assets/search-engine.js": searchEngineJS, "/assets/search.js": searchJS, "/assets/search.css": searchCSS} {
+	for path, asset := range map[string][]byte{"/assets/search-engine.js": searchEngineJS, "/assets/search.js": searchJS, "/assets/search.css": searchCSS,
+		"/assets/compare-engine.js": compareEngineJS, "/assets/compare.js": compareJS, "/assets/compare.css": compareCSS} {
 		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
 			mime := "application/javascript; charset=utf-8"
 			if strings.HasSuffix(path, ".css") {
@@ -118,6 +128,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/lens", s.lens)
 	mux.HandleFunc("GET /api/artifact", s.artifact)
 	mux.HandleFunc("GET /api/search/sources", s.searchSources)
+	mux.HandleFunc("GET /api/compare/records", s.compareRecords)
 	mux.HandleFunc("GET /api/egress", s.egress)
 	mux.HandleFunc("GET /api/outbound", s.outbound)
 	mux.HandleFunc("GET /api/processes", s.processes)

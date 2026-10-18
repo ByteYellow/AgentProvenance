@@ -68,6 +68,10 @@ components:
         native_capture: { type: object, additionalProperties: true }
       additionalProperties: true
 paths:
+  /api/compare/records:
+    $ref: './agent-context-api.yaml#/paths/~1api~1compare~1records'
+  /api/search/sources:
+    $ref: './agent-context-api.yaml#/paths/~1api~1search~1sources'
   /api/artifact:
     $ref: './agent-context-api.yaml#/paths/~1api~1artifact'
   /v1/context/overview:

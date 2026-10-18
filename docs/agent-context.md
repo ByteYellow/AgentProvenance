@@ -460,6 +460,45 @@ envelopes are available for inspection but are not separately searched.
 Fresh public-demo exports use the same catalog and scanner. Older exports
 without a catalog display an unavailable-search message.
 
+## Compare Runs
+
+Use **Compare runs** above the graph. A starts with the current run; choose B
+and use the swap button to reverse them. The window compares whole runs and
+retains the Dashboard's session filter for your return. Each side shows its
+recorded task, time range, sources and collection status.
+
+The four views compare saved configuration fields, file evidence, network
+destinations and outbound data types. Rows start collapsed with differences
+selected. Expand a row to inspect A and B, choose a source reference, read its
+saved body or locate its recorded graph node. **Return to comparison** restores
+the original run, session scope, graph view and expanded comparison rows.
+
+- Configuration keeps JSON types, including `null`, `false`, empty arrays and
+  exact integers. Multiple recorded values retain their sources; the view does
+  not select an effective configuration. Retained prior context is excluded.
+- File access, write attempts and recorded content changes remain separate.
+  Saved file bodies compare by digest; an empty file differs from unavailable
+  content. Network rows distinguish connection attempts, requests and responses.
+- **Only A recorded** and **Only B recorded** describe one-sided evidence.
+  Incomplete values or reader limits appear as **Comparison incomplete**.
+  Both task texts and capture reports remain available when conditions differ.
+  Changes in configuration and network activity are investigation leads, not
+  an automatically inferred cause.
+
+The Dashboard-only `GET /api/compare/records?run=RUN` projects at most 50 saved
+sources per page. Follow `next_cursor` until `has_more` is false. The endpoint
+rejects session filters. Each record includes a comparison key, typed value
+digest, bounded preview and its existing reader reference. Configuration reads
+are limited to 1 MiB and 200 fields per snapshot; value previews use up to
+512 UTF-8 bytes. The browser stops at 50,000 records or 100,000 sources per run
+and reports the limit. The window lists 100 rows and 50 source references at a
+time, with controls to continue. Refresh to include records saved during capture.
+
+New public-demo exports include the same comparison catalog and reader. The
+historical Grok pair demonstrates different saved outbound surfaces, rather
+than a controlled before/after intervention. Older exports without a comparison
+catalog display the reason it is unavailable.
+
 ## External Queries and Runtime Coverage
 
 External clients use the same stored-evidence queries as the Dashboard:

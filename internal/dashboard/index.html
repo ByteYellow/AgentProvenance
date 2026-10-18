@@ -300,6 +300,7 @@
 <link rel="stylesheet" href="/assets/context.css">
 <link rel="stylesheet" href="/assets/workspace.css">
 <link rel="stylesheet" href="/assets/search.css">
+<link rel="stylesheet" href="/assets/compare.css">
 </head>
 <body>
 <header>
@@ -320,6 +321,7 @@
   <section class="card full" id="runoverview">
     <h2>{{tr .Lang "Run Overview"}}<span class="sub" data-whole-run hidden>{{tr .Lang "Whole run"}}</span><span class="spacer"></span>
       <button id="search-return" hidden>{{tr .Lang "Return to search"}}</button>
+      <button id="compare-return" hidden>{{tr .Lang "Return to comparison"}}</button>
       <nav class="investigation-actions" aria-label="{{tr .Lang "Investigation actions"}}">
         <button data-investigation="search" aria-label="{{tr .Lang "Search saved evidence"}}" title="{{tr .Lang "Search saved evidence"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></button>
         <button data-investigation="compare" aria-label="{{tr .Lang "Compare runs"}}" title="{{tr .Lang "Compare runs"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 4 4-4 4M4 7h16M8 21l-4-4 4-4m12 4H4"/></svg></button>
@@ -511,6 +513,29 @@
     <p id="search-missing"></p><pre id="search-coverage"></pre>
   </details>
 </dialog>
+<dialog id="compare-dialog" class="content-dialog context-ui compare-dialog" aria-labelledby="compare-title">
+  <div class="content-dialog-head"><h2 id="compare-title">{{tr .Lang "Compare runs"}}</h2><button id="compare-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></div>
+  <div class="compare-controls">
+    <label>A <select id="compare-a" aria-label="{{tr .Lang "Baseline run A"}}"></select></label>
+    <button id="compare-swap" title="{{tr .Lang "Swap runs"}}" aria-label="{{tr .Lang "Swap runs"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 4 4-4 4M4 7h16M8 21l-4-4 4-4m12 4H4"/></svg></button>
+    <label>B <select id="compare-b" aria-label="{{tr .Lang "Target run B"}}"></select></label>
+    <button id="compare-refresh">{{tr .Lang "Refresh comparison"}}</button><button id="compare-stop" hidden>{{tr .Lang "Stop loading"}}</button>
+  </div>
+  <p id="compare-scope-note" class="compare-note"></p>
+  <div id="compare-pair" class="compare-pair" hidden>
+    <section><h3>A <span id="compare-run-a"></span></h3><p id="compare-task-a"></p><small id="compare-time-a"></small><small id="compare-source-a"></small><small id="compare-capture-a"></small></section>
+    <section><h3>B <span id="compare-run-b"></span></h3><p id="compare-task-b"></p><small id="compare-time-b"></small><small id="compare-source-b"></small><small id="compare-capture-b"></small></section>
+  </div>
+  <div class="compare-meta"><p id="compare-task-note"></p><p id="compare-summary"></p><span id="compare-status" role="status" aria-live="polite"></span><label><input id="compare-only" type="checkbox" checked> {{tr .Lang "Differences only"}}</label></div>
+  <div class="compare-body"><nav id="compare-dimensions" class="compare-dimensions" aria-label="{{tr .Lang "Comparison dimensions"}}"></nav><div class="compare-list"><div id="compare-results" class="compare-results"></div><button id="compare-more" hidden>{{tr .Lang "Load more differences"}}</button></div></div>
+  <details class="compare-coverage"><summary>{{tr .Lang "Comparison coverage and sources"}}</summary><p>{{tr .Lang "Values are grouped by recorded field or target, not paired by session or time. Counts are record differences, not risk severity."}}</p><pre id="compare-coverage"></pre></details>
+</dialog>
+<dialog id="compare-reader-dialog" class="content-dialog context-ui compare-reader-dialog" aria-labelledby="compare-reader-title">
+  <div class="content-dialog-head"><h2 id="compare-reader-title"></h2><button id="compare-reader-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></div>
+  <div id="compare-reader"></div>
+</dialog>
+<script src="/assets/compare-engine.js"></script>
+<script src="/assets/compare.js"></script>
 <script src="/assets/search-engine.js"></script>
 <script src="/assets/search.js"></script>
 <script src="/assets/workspace.js"></script>
@@ -1937,7 +1962,7 @@ async function navigateEvidenceGraph(run,id){
   window.AgentWorkspaceUI.show('summary');
   $('#graphcard').scrollIntoView({block:'start',behavior:'smooth'});
 }
-window.AgentWorkspaceUI.init({tr,tx,esc,j,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope)),navigateSession:navigateRelatedSession,returnSession:()=>safeUI(returnRelatedSession()),search:()=>safeUI(window.AgentSearchUI.open())});
+window.AgentWorkspaceUI.init({tr,tx,esc,j,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope)),navigateSession:navigateRelatedSession,returnSession:()=>safeUI(returnRelatedSession()),search:()=>safeUI(window.AgentSearchUI.open()),compare:()=>safeUI(window.AgentCompareUI.open())});
 window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,
   overviewChanged:value=>window.AgentWorkspaceUI.setOverview(value),
   overviewFailed:()=>window.AgentWorkspaceUI.overviewError(),
@@ -1949,6 +1974,24 @@ window.AgentSearchUI.init({tr,tx,esc,j,lang:LANG,
   captureView:()=>({run:cur,scope:SESSION_SCOPE,view:graphReadingState()}),
   restoreView:async saved=>{if(cur!==saved.run)return;activateSessionScope(saved.scope);restoreGraphReading(saved.view);await loadRun(cur);window.AgentWorkspaceUI.restoreReading(saved.view.workspace);window.scrollTo({top:saved.view.pageScroll||0});},
   navigateGraph:async(id,scope)=>{if(cur!==scope.run)throw new Error(tr('The selected run changed.'));activateSessionScope(scope.session_id?{harness:scope.harness,session_id:scope.session_id}:null);await navigateEvidenceGraph(cur,id);}
+});
+window.AgentCompareUI.init({tr,tx,esc,j,lang:LANG,
+  channelLabels:CHANNEL_LABEL,dataLabels:DATA_LABEL,evidenceLabels:EVIDENCE_LABEL,
+  captureView:()=>({run:cur,scope:SESSION_SCOPE,view:graphReadingState()}),
+  restoreView:async saved=>{
+    const run=await refreshRuns(saved.run);
+    if(run!==saved.run)throw new Error(tr('The selected run changed.'));
+    restoreGraphReading(saved.view);stopPlay();window._gsig='';
+    await loadRun(saved.run,{scope:saved.scope,keepView:true});
+    window.AgentWorkspaceUI.restoreReading(saved.view.workspace);window.scrollTo({top:saved.view.pageScroll||0});
+  },
+  navigateGraph:async(run,id)=>{
+    const target=await refreshRuns(run);
+    if(target!==run)throw new Error(tr('The selected run changed.'));
+    activateSessionScope(null);
+    if(cur!==run){SEL=null;GRAPH_FOCUS='';EV_FILTER=null;EV_OFFSET=0;restoreSessionView=null;await loadRun(run,{scope:null});}
+    await navigateEvidenceGraph(run,id);
+  }
 });
 
 (async function(){

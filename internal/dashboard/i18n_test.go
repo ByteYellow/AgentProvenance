@@ -59,7 +59,7 @@ func TestDashboardCopyHasChineseCatalogEntries(t *testing.T) {
 	// these lookups are actually used in rendered controls and error states.
 	patterns := []string{`\{\{tr \.Lang "([^"]+)"`, `\b(?:tr|tx|t|notice)\(\s*"([^"\\]*(?:\\.[^"\\]*)*)"`, `\b(?:tr|tx|t|notice)\(\s*'([^'\\]*(?:\\.[^'\\]*)*)'`}
 	for _, pattern := range patterns {
-		for _, m := range regexp.MustCompile(pattern).FindAllStringSubmatch(string(indexHTML)+string(contextJS)+string(workspaceJS)+string(searchJS), -1) {
+		for _, m := range regexp.MustCompile(pattern).FindAllStringSubmatch(string(indexHTML)+string(contextJS)+string(workspaceJS)+string(searchJS)+string(compareJS), -1) {
 			source := strings.ReplaceAll(m[1], `\'`, `'`)
 			if !i18n.HasChinese(source) {
 				t.Errorf("missing Chinese copy: %q", source)

@@ -96,7 +96,7 @@ window.AgentContextUI = (() => {
       dialog.showModal();
     };
     $('content-close').onclick = () => $('content-dialog').close();
-    $('content-dialog').addEventListener('close', () => $('content-home').append($('content-pane')));
+    $('content-dialog').addEventListener('close', () => (readerLoan?.host || $('content-home')).append($('content-pane')));
     $('context-compare-clear').onclick = () => { state.compare = []; renderCompare(); renderList(); };
     $('context-compare-run').onclick = compare;
     document.querySelectorAll('[data-context-open]').forEach(button => button.onclick = () => open(button.dataset.contextOpen));
@@ -536,14 +536,14 @@ window.AgentContextUI = (() => {
     formattedContent = null; $('content-format').hidden = true; $('content-format-note').hidden = true;
     try {
       if (choice.node) {
-        const value = await api.j('/api/artifact?' + q({run,node:choice.node,mode:choice.mode || 'body',offset,limit:65536,view_lang:api.lang}));
+        const value = await api.j('/api/artifact?' + q({run:choice.run || run,node:choice.node,mode:choice.mode || 'body',offset,limit:65536,view_lang:api.lang}));
         if (request !== previewRequest || state !== current) return;
         previewPage = value;
         if (value.versions?.length) {
           const selected = Number($('content-choice').value);
           for (const version of value.versions) {
             if (previewChoices.some(c=>c.node === version.ref)) continue;
-            previewChoices.push({label:t('Saved version')+' · '+version.ref.slice(7,19),node:version.ref,mode:'body'}, {label:t('Raw saved object')+' · '+version.ref.slice(7,19),node:version.ref,mode:'raw'});
+            previewChoices.push({label:t('Saved version')+' · '+version.ref.slice(7,19),node:version.ref,mode:'body',run:choice.run}, {label:t('Raw saved object')+' · '+version.ref.slice(7,19),node:version.ref,mode:'raw',run:choice.run});
           }
           renderChoices(selected);
           if (value.versions_has_more) $('content-limits').textContent = t('More saved versions exist; use an exact object hash to query them.');
@@ -561,7 +561,7 @@ window.AgentContextUI = (() => {
         previewPage = null;
         $('content-body').textContent = t(choice.ref?.reason || 'Content was not recorded');
       } else {
-        const page = await api.j('/api/context/content?' + q({run,ref:choice.ref.ref,offset,limit:65536}));
+        const page = await api.j('/api/context/content?' + q({run:choice.run || run,ref:choice.ref.ref,offset,limit:65536}));
         if (request !== previewRequest || state !== current) return;
         previewPage = page;
         $('content-body').textContent = page.content;
@@ -585,7 +585,7 @@ window.AgentContextUI = (() => {
   }
   function borrowReader(host) {
     if(readerLoan)throw new Error('Evidence reader is already in use');
-    const saved={state,run,choices:previewChoices,key:previewKey,selected:Number($('content-choice').value),
+    const saved={state,run,host,choices:previewChoices,key:previewKey,selected:Number($('content-choice').value),
       reading:{offsets:[...previewOffsets],scroll:$('content-body').scrollTop,format:$('content-format').value},
       workspace:window.AgentWorkspaceUI.readingState()};
     readerLoan=saved;previewRequest++;
@@ -602,10 +602,11 @@ window.AgentContextUI = (() => {
       window.AgentWorkspaceUI.restoreReading(loan.workspace);
     }
   }
-  function searchEvidence(source,reading,query) {
+  function searchEvidence(source,reading,query,evidenceRun) {
     if(!readerLoan)return;
     previewHighlight=query;
     const choices=source.entry ? entryChoices(source.entry) : [{label:t('Saved content'),node:source.node,mode:'body'}, {label:t('Raw saved object'),node:source.node,mode:'raw'}];
+    if(evidenceRun)choices.forEach(choice=>{choice.run=evidenceRun;});
     const offsets=reading.offsets || (reading.offset ? [0,reading.offset] : [0]);
     setPreview(choices,'search:'+source.id,reading.raw ? 1 : 0,{offsets,scroll:reading.scroll || 0,format:reading.format || 'bytes'});
   }

@@ -36,6 +36,48 @@ type SnapshotChange struct {
 	After  SnapshotValue `json:"after"`
 }
 
+type SnapshotField struct {
+	Path  string        `json:"path"`
+	Value SnapshotValue `json:"value"`
+}
+
+// SnapshotFields projects a saved configuration into bounded, typed values.
+// It does not merge sessions, select an effective policy, or open live files.
+func (s Service) SnapshotFields(ctx context.Context, entry Entry) ([]SnapshotField, string, error) {
+	body, reason, err := s.comparisonBody(ctx, entry)
+	if err != nil || reason != "" {
+		return nil, reason, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	var value, extra any
+	if decoder.Decode(&value) != nil || decoder.Decode(&extra) != io.EOF {
+		value = string(body)
+	}
+	fields := []SnapshotField{}
+	var visit func(string, any, int)
+	visit = func(path string, value any, depth int) {
+		if len(fields) >= maxSnapshotChanges {
+			reason = "comparison_field_limit"
+			return
+		}
+		if object, ok := value.(map[string]any); ok && len(object) > 0 && depth < 32 {
+			keys := make([]string, 0, len(object))
+			for key := range object {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				visit(path+"/"+strings.ReplaceAll(strings.ReplaceAll(key, "~", "~0"), "/", "~1"), object[key], depth+1)
+			}
+			return
+		}
+		fields = append(fields, SnapshotField{Path: path, Value: snapshotValue(value, true)})
+	}
+	visit("", value, 0)
+	return fields, reason, nil
+}
+
 // SnapshotComparison compares recorded values, not effective permissions.
 // An absent field means "not recorded here", never allowed, denied, or revoked.
 type SnapshotComparison struct {

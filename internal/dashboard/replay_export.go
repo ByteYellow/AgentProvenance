@@ -22,6 +22,7 @@ type ReplayPages struct {
 	Pages   []staticdata.Ref `json:"pages"`
 }
 type ReplayRun struct {
+	Compare   map[string]staticdata.Ref            `json:"compare,omitempty"`
 	Search    map[string]map[string]staticdata.Ref `json:"search,omitempty"`
 	Sessions  map[string]replaySession             `json:"sessions,omitempty"`
 	API       map[string]staticdata.Ref            `json:"api"`
@@ -452,6 +453,21 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 			scope.Cursor = page.NextCursor
 		}
 		result.Search[string(key)] = catalog
+	}
+	result.Compare = map[string]staticdata.Ref{}
+	for cursor := ""; ; {
+		page, err := s.ComparisonRecords(ctx, run, cursor)
+		if err != nil {
+			return result, err
+		}
+		result.Compare[cursor], err = w.JSON(page)
+		if err != nil {
+			return result, err
+		}
+		if !page.HasMore {
+			break
+		}
+		cursor = page.NextCursor
 	}
 	artifacts := map[string]ReplayPages{}
 	done := map[string]bool{}

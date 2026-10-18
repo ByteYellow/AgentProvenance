@@ -45,6 +45,9 @@ jobs:
       - run: node scripts/test_context_readable.mjs
       - run: node scripts/test_context_coverage.mjs
       - run: node scripts/test_dashboard_workspace.mjs
+      - run: node scripts/test_search_engine.mjs
+      - run: node scripts/test_compare_engine.mjs
+      - run: node scripts/test_static_reader.cjs
       - run: node scripts/test_evidence_status.cjs
 
   test:

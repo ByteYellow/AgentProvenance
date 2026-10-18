@@ -6,6 +6,11 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
+- Compare two runs in a temporary Dashboard window, with configuration fields,
+  file evidence, network destinations and outbound data types. Keep recorded
+  task and capture context visible, preserve typed missing values, and link
+  each side to saved content and graph evidence. Fresh public-demo exports
+  use the same paged comparison records and reader.
 - Search saved messages, tool inputs/results, configuration, file bodies and
   runtime records in a temporary Dashboard window. Search stays within the
   current run or selected native session, with highlighted excerpts, paged

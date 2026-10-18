@@ -132,6 +132,12 @@ window.AgentProvReplay = (() => {
     const id=p.get('run');let run=catalog.runs[id];
     if(path==='frameworks'&&!run)run=catalog.runs[catalog.summaries[0].run];
     if(!run)fail('The run was not found in this public demo');
+    if(path==='compare/records'){
+      if(p.has('harness')||p.has('session'))fail('Run comparison does not accept a session filter');
+      const ref=run.compare?.[p.get('cursor')||''];
+      if(!ref)fail('Comparison records are not included in this replay or the cursor does not match the run');
+      return copy(await asset(ref));
+    }
     if(path==='search/sources'){
       const pages=run.search?.[JSON.stringify([p.get('harness')||'',p.get('session')||''])],ref=pages?.[p.get('cursor')||''];
       if(!ref)fail('Search sources are not included in this replay or the cursor does not match the scope');

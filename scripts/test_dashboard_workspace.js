@@ -17,7 +17,10 @@ async (page) => {
   check(await page.locator('#search-dialog').isVisible(),'search opens the shared temporary investigation window');
   await page.locator('#search-close').click();
   await page.waitForSelector('#content-home > #content-pane',{state:'attached'});
-  for (const action of ['compare','export']) {
+  await page.locator('[data-investigation="compare"]').click();
+  check(await page.locator('#compare-dialog').isVisible(),'comparison uses a temporary wide window');
+  await page.locator('#compare-close').click();
+  for (const action of ['export']) {
     await page.locator('[data-investigation="'+action+'"]').click();
     check(await page.locator('#investigation-dialog').innerText().then(s=>s.includes('not available in this build')),'unfinished action is explicit: '+action);
     await page.locator('#investigation-close').click();
