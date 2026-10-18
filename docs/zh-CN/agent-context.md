@@ -27,6 +27,32 @@ agentprov launch --context-session SESSION_ID -- codex resume SESSION_ID
 或 `--context-file FILE`。没有原生会话 ID 的旧日志须同时指定文件和
 `--context-session`，身份会标为用户显式指定。`--no-context` 关闭上下文采集和 hook 注入。
 
+### 留存档位
+
+默认使用 `--capture detailed` 详细档。`--capture basic` 基础档保留核心消息、工具输入与
+结果状态、Agent 关系和已支持的意图证据，省略额外原始记录、工具结果正文、恢复历史及配置正文。
+两档共用相同的解析器和关联逻辑。
+
+```sh
+agentprov launch --capture basic -- claude
+agentprov launch --capture detailed -- codex
+agentprov launch --capture basic --capture-tool-results=true -- dsh headless --json 'Run the tests.'
+agentprov context import --run NEW_RUN --harness codex --file rollout.jsonl --capture basic
+```
+
+`--capture-tool-results` 单独覆盖工具结果留存选项。关闭时，同时省略可能包含相同结果的
+原始记录与辅助会话正文，保留核心生命周期和拒绝字段。Sensor、TLS 和 `--file-diff`
+继续使用各自的设置，两档都不会自动开启工作区复制。
+
+同一 Run 的设置固定，随采集报告和证据导出保存。追加导入时不传档位参数，会复用已保存的设置；
+切换档位需要新 Run，已有内容和签名包保持原样。导入经过裁剪的 hook 日志时，须选择匹配的档位。
+Harness 自己生成的原生日志仍由它自己的留存设置管理。
+
+AgentProvenance 在写入上下文对象和 Claude hook 日志前应用留存规则。主动省略的条目保留
+身份、结果状态、实际可得的长度与摘要，并标记 `reason: capture_policy`，没有虚构的全文引用。
+单条 hook 输入上限为 40 MiB，每个 Run 的 hook 日志上限为 128 MiB；输入损坏或超出预算时，
+保存不含正文的采集诊断。两档均在存储前应用现有秘密脱敏规则。
+
 ### 原生格式兼容性
 
 | Harness | 保存的上下文 |
@@ -44,7 +70,7 @@ agentprov launch --context-session SESSION_ID -- codex resume SESSION_ID
 目录发现遵循 `CLAUDE_CONFIG_DIR`、`CODEX_HOME` 和 `DSH_HOME`。
 如果包装脚本只在子进程内部设置目录，需要显式传入该目录。
 采集在执行退出后进行，不按文件修改时间选择“最新会话”；多个候选不能唯一匹配时保留歧义。
-恢复会话会验证执行前的日志前缀，将先前记录保存为 `prior_context`，
+恢复会话会验证执行前的日志前缀，详细档将先前记录保存为 `prior_context`，
 与新记录的 `current_execution` 范围区分。历史工具调用和模型调用不会投影为本次执行。
 子会话必须有真实身份依据，单独一条委派请求不会生成虚构的子 Agent ID。
 
@@ -72,8 +98,8 @@ DeepSeek 解析支持 v3 JSONL，以及含多个连续 Zstandard 帧的 v4 JSONL
 显式导入会将保存后的覆盖报告以 JSON 输出到标准输出。只有 `ok` 和 `empty` 返回退出码 0；
 部分成功、失败、未找到来源或关联不确定，会先保存诊断，再返回非零退出码。
 已经保存的部分证据仍可查询；重复导入未改变的有效来源属于成功去重。
-这是导入状态，不代表运行时证据完整。`--after-line N` 将前 N 条物理记录保留为历史上下文，
-不丢弃它们，也不将它们视为本次执行或本次授权。
+这是导入状态，不代表运行时证据完整。`--after-line N` 将前 N 条物理记录划为历史上下文，
+详细档保存这些条目，基础档仅记录历史范围并省略条目。历史内容不计为本次执行。
 
 ## 查看与比较
 
@@ -91,12 +117,12 @@ Codex `event_msg` 中的用户、助手消息及来源提供的推理记录，�
 `response_item` 也会保存。事件形式标记为 `source_message_event` 或
 `source_reasoning_event`，完整响应项保留自己的记录。文字相似不代表身份相同，
 因此不做启发式合并。消息数量统计已保存的来源记录，不推算唯一对话轮次；
-重复导入相同证据仍会去重。原始记录与物理位置均可查看。
+重复导入相同证据仍会去重。详细档可查看原始正文，两档均保留已保存条目的物理位置。
 
 同时保留 Codex 原生消息完成事件、world-state 快照及已应用的线程配置。
 命令执行、文件变更完成报告和 token 用量保存为来源状态；执行项 ID 不用来推造模型工具调用身份。
 Claude 附件、会话辅助记录和费用估算也保存为来源状态，原生 `mode` 记录进入配置历史。
-这些记录保留原始正文与续跑区间，不额外生成对话轮次或权限批准。
+这些记录在详细档保留原始正文，并记录续跑区间，不额外生成对话轮次或权限批准。
 
 Codex 工具错误依据来源的显式标记、状态、数值退出码，以及支持的 MCP/命令执行结果封装。
 不会根据输出中的“error”字样或任意嵌套 JSON 判定失败。`returned` 仅表示记录了返回结果，

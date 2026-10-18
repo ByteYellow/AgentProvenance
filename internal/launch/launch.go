@@ -49,23 +49,25 @@ import (
 
 // Options configures a launch run.
 type Options struct {
-	Language         i18n.Locale // terminal presentation; empty uses English
-	ExplicitLanguage bool        // preserve browser negotiation unless the caller selected a language
-	DataDir          string      // AgentProvenance data dir (root --data-dir)
-	Command          []string    // the agent argv, e.g. ["claude", "-p", "..."]
-	Workdir          string      // agent working directory; "" = current dir
-	Dashboard        bool        // serve the read-only dashboard and keep it live after exit
-	DashboardAddr    string      // dashboard listen address (host:port); falls back to ephemeral if busy
-	Sensor           string      // "auto" (Linux + capable) or "off"
-	SignKeyPath      string      // optional hex ed25519 private key; when set, the sealed bundle is signed
-	FileDiff         bool        // capture the working-tree file diff (off by default; expensive in big repos)
-	SelfExe          string      // absolute path to this agentprov binary (for the sensor subprocess + hook commands)
-	JSON             bool        // caller will emit the machine report on Stdout: keep Stdout pure JSON and don't block on the dashboard
-	ContextDir       string
-	ContextFile      string
-	ContextSession   string
-	ContextHarness   string
-	NoContext        bool
+	Language           i18n.Locale // terminal presentation; empty uses English
+	ExplicitLanguage   bool        // preserve browser negotiation unless the caller selected a language
+	DataDir            string      // AgentProvenance data dir (root --data-dir)
+	Command            []string    // the agent argv, e.g. ["claude", "-p", "..."]
+	Workdir            string      // agent working directory; "" = current dir
+	Dashboard          bool        // serve the read-only dashboard and keep it live after exit
+	DashboardAddr      string      // dashboard listen address (host:port); falls back to ephemeral if busy
+	Sensor             string      // "auto" (Linux + capable) or "off"
+	SignKeyPath        string      // optional hex ed25519 private key; when set, the sealed bundle is signed
+	FileDiff           bool        // capture the working-tree file diff (off by default; expensive in big repos)
+	SelfExe            string      // absolute path to this agentprov binary (for the sensor subprocess + hook commands)
+	JSON               bool        // caller will emit the machine report on Stdout: keep Stdout pure JSON and don't block on the dashboard
+	ContextDir         string
+	ContextFile        string
+	ContextSession     string
+	ContextHarness     string
+	NoContext          bool
+	CapturePreset      string // additional context retention: detailed (default) or basic
+	CaptureToolResults *bool  // optional preset override; nil keeps the preset value
 
 	Stdout io.Writer
 	Stderr io.Writer
@@ -95,6 +97,7 @@ type Report struct {
 	IntentCoverageGaps int                                 `json:"intent_coverage_gaps"`
 	TranscriptTurns    int                                 `json:"transcript_turns"`
 	AgentContext       *agentcontext.Overview              `json:"agent_context,omitempty"`
+	CapturePolicy      *agentcontext.CapturePolicy         `json:"capture_policy,omitempty"`
 	ContextIssues      []string                            `json:"context_issues,omitempty"`
 	ArtifactCapture    *record.ArtifactCaptureReport       `json:"artifact_capture,omitempty"`
 	RuntimeCorrelation *hooksbridge.CorrelationReport      `json:"runtime_correlation,omitempty"`
@@ -108,6 +111,10 @@ func Run(opts Options) (Report, error) {
 	lang := opts.Language
 	if len(opts.Command) == 0 {
 		return Report{}, i18n.Errorf("launch: a command is required after --")
+	}
+	policy, err := agentcontext.NewCapturePolicy(opts.CapturePreset, opts.CaptureToolResults)
+	if err != nil {
+		return Report{}, err
 	}
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
@@ -136,13 +143,17 @@ func Run(opts Options) (Report, error) {
 	defer db.Close()
 
 	runID := ids.New("run")
-	report := Report{RunID: runID, Verdict: "UNKNOWN"}
+	report := Report{RunID: runID, Verdict: "UNKNOWN", CapturePolicy: &policy}
 
 	// Recognized harnesses use their native logs; Claude also gets run-owned
 	// hooks. Explicit source options support wrappers without guessing a format.
 	recipe := detectRecipe(opts.Command)
 	capture, err := prepareContext(context.Background(), opts, recipe)
 	if err != nil {
+		return report, err
+	}
+	contextService := agentcontext.Service{DB: db, Paths: paths, CapturePolicy: &policy}
+	if _, err := contextService.EnsureCapturePolicy(context.Background(), runID); err != nil {
 		return report, err
 	}
 	report.AppTier = recipe.tier
@@ -164,7 +175,7 @@ func Run(opts Options) (Report, error) {
 	command := opts.Command
 	if recipe.injectHooks && !opts.NoContext && recipe.harness == capture.harness {
 		hookLogPath = paths.Logs + string(os.PathSeparator) + "launch-" + runID + "-hooks.jsonl"
-		injected, cleanup, ierr := recipe.inject(command, opts.SelfExe, hookLogPath, paths)
+		injected, cleanup, ierr := recipe.inject(command, opts.SelfExe, hookLogPath, paths, policy)
 		if ierr != nil {
 			fmt.Fprintf(opts.Stderr, i18n.T(lang, "launch: hooks injection skipped: %v (native transcript capture remains enabled)\n"), i18n.ErrorText(lang, ierr))
 			report.AppTier = "transcript(" + capture.harness + ")"
@@ -238,6 +249,7 @@ func Run(opts Options) (Report, error) {
 	}
 
 	printBanner(opts.Stderr, report, command, lang)
+	fmt.Fprintf(opts.Stderr, i18n.T(lang, "launch: context retention=%s tool_results=%t; sensor and file capture use their own settings\n"), policy.Preset, policy.ToolResults)
 
 	// Keep launch alive across the interactive agent's Ctrl-C: the agent shares
 	// our process group and receives SIGINT directly, so we only need to stop
@@ -272,7 +284,7 @@ func Run(opts Options) (Report, error) {
 	report.ArtifactCapture = &result.ArtifactCapture
 
 	// Select source-owned identities and verified ranges after the agent exits.
-	ctxOverview, ctxErr := capture.finish(context.Background(), agentcontext.Service{DB: db, Paths: paths}, runID, hookLogPath, agentStart, time.Now())
+	ctxOverview, ctxErr := capture.finish(context.Background(), contextService, runID, hookLogPath, agentStart, time.Now())
 	if ctxErr != nil {
 		fmt.Fprintf(opts.Stderr, i18n.T(lang, "launch: agent context: %v\n"), i18n.ErrorText(lang, ctxErr))
 		contextProblem(db, paths, runID, "context_capture_failed", &report, opts.Stderr)

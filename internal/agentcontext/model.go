@@ -160,6 +160,7 @@ type Record struct {
 	// explicit Record callers use the source defaults.
 	Workdir            *string
 	ApplicationVersion *string
+	hookCapture        *hookCaptureMetadata
 }
 
 type SaveResult struct {

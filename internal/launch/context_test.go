@@ -384,8 +384,9 @@ func TestLaunchContextHelper(t *testing.T) {
 }
 
 func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
-	for _, harness := range []string{"codex", "deepseek"} {
-		t.Run(harness, func(t *testing.T) {
+	for _, tc := range []struct{ harness, preset string }{{"codex", "detailed"}, {"codex", "basic"}, {"deepseek", "detailed"}, {"deepseek", "basic"}} {
+		harness := tc.harness
+		t.Run(harness+"/"+tc.preset, func(t *testing.T) {
 			dir, workdir := t.TempDir(), t.TempDir()
 			t.Setenv("AGENTPROV_TEST_CONTEXT_HELPER", harness)
 			t.Setenv("AGENTPROV_TEST_CONTEXT_DIR", dir)
@@ -396,7 +397,7 @@ func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
 			}
 			var stdout, stderr bytes.Buffer
 			r, err := Run(Options{DataDir: t.TempDir(), Command: []string{exe, "-test.run=^TestLaunchContextHelper$"}, Workdir: workdir,
-				ContextHarness: harness, ContextDir: dir, Sensor: "off", JSON: true, Stdout: &stdout, Stderr: &stderr})
+				ContextHarness: harness, ContextDir: dir, Sensor: "off", JSON: true, CapturePreset: tc.preset, Stdout: &stdout, Stderr: &stderr})
 			if err != nil || r.ExitCode != 0 || r.HooksIngested != 1 || len(r.ContextIssues) != 0 {
 				t.Fatalf("launch: %+v %v\n%s", r, err, stderr.String())
 			}
@@ -426,6 +427,16 @@ func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
 			if err != nil || o.ToolCalls == nil || *o.ToolCalls != 1 {
 				t.Fatalf("lost portable context: %+v %v", o, err)
 			}
+			if o.CapturePolicy == nil || o.CapturePolicy.Preset != tc.preset || r.CapturePolicy == nil || r.CapturePolicy.Preset != tc.preset {
+				t.Fatal("launch capture settings did not survive export")
+			}
+			results, err := fresh.Entries(context.Background(), agentcontext.PageOptions{RunID: r.RunID, Kind: "tool_result"})
+			if err != nil || len(results.Entries) != 1 {
+				t.Fatalf("result: %+v %v", results, err)
+			}
+			if e := results.Entries[0]; (e.Content.State == "stored") != (tc.preset == "detailed") || e.Status != "returned" {
+				t.Fatalf("retention changed the core result: %+v", e)
+			}
 			if o.RuntimeCoverage.Capture.Status != "disabled" || o.RuntimeCoverage.Capture.Ref != r.RuntimeCapture.Ref || o.RuntimeCoverage.Correlation.Summary.RuntimeEvents == 0 {
 				t.Fatalf("lost capture state or wrapper events: %+v", o.RuntimeCoverage)
 			}
@@ -442,6 +453,18 @@ func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
 				t.Fatalf("verify imported: %+v %v", v, err)
 			}
 		})
+	}
+}
+
+func TestLaunchRejectsInvalidCaptureBeforeSideEffects(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "no-store")
+	var output bytes.Buffer
+	_, err := Run(Options{DataDir: dir, Command: []string{"true"}, CapturePreset: "invalid", Stdout: &output, Stderr: &output})
+	if err == nil {
+		t.Fatal("invalid policy accepted")
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) || output.Len() != 0 {
+		t.Fatal("invalid launch produced side effects")
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
@@ -44,7 +45,8 @@ func TestInjectClaudeCode(t *testing.T) {
 	paths := store.Paths{Logs: dir}
 	hookLog := filepath.Join(dir, "launch-run-x-hooks.jsonl")
 
-	got, cleanup, err := injectClaudeCode([]string{"claude", "--print", "hi"}, "/opt/agentprov", hookLog, paths)
+	policy, _ := agentcontext.NewCapturePolicy("detailed", nil)
+	got, cleanup, err := injectClaudeCode([]string{"claude", "--print", "hi"}, "/opt/agentprov", hookLog, paths, policy)
 	if err != nil {
 		t.Fatalf("inject: %v", err)
 	}
@@ -94,7 +96,8 @@ func TestInjectClaudeCode(t *testing.T) {
 
 func TestInjectRefusesExistingSettings(t *testing.T) {
 	paths := store.Paths{Logs: t.TempDir()}
-	if _, _, err := injectClaudeCode([]string{"claude", "--settings", "mine.json"}, "/opt/agentprov", "/tmp/h.jsonl", paths); err == nil {
+	policy, _ := agentcontext.NewCapturePolicy("detailed", nil)
+	if _, _, err := injectClaudeCode([]string{"claude", "--settings", "mine.json"}, "/opt/agentprov", "/tmp/h.jsonl", paths, policy); err == nil {
 		t.Fatal("expected refusal when the agent command already passes --settings")
 	}
 }
@@ -108,6 +111,28 @@ func TestShQuote(t *testing.T) {
 	for in, want := range cases {
 		if got := shQuote(in); got != want {
 			t.Errorf("shQuote(%q) = %q; want %q", in, got, want)
+		}
+	}
+}
+
+func TestHookOverlayCarriesCapturePolicy(t *testing.T) {
+	for _, preset := range []string{"basic", "detailed"} {
+		for _, keep := range []bool{true, false} {
+			policy, _ := agentcontext.NewCapturePolicy(preset, &keep)
+			paths := store.Paths{Logs: t.TempDir()}
+			argv, cleanup, err := injectClaudeCode([]string{"claude"}, "/agent prov", filepath.Join(paths.Logs, "run-hooks.jsonl"), paths, policy)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, err := os.ReadFile(argv[2])
+			cleanup()
+			want := " --capture-tool-results=false"
+			if keep {
+				want = " --capture-tool-results=true"
+			}
+			if err != nil || !strings.Contains(string(raw), " --capture '"+preset+"'") || !strings.Contains(string(raw), want) {
+				t.Fatalf("hook policy missing from overlay: %s %v", raw, err)
+			}
 		}
 	}
 }

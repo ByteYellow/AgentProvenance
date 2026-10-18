@@ -6,6 +6,21 @@ import (
 )
 
 func (p *parser) claude(top row) bool {
+	if text(top, "type") == "agentprov_hook_diagnostic" {
+		p.Source.Channel = "hooks"
+		code := text(top, "code")
+		switch code {
+		case "hook_input_limit", "hook_log_limit":
+			*p.counts().Truncated++
+		case "hook_input_invalid", "hook_input_read_failed", "hook_capture_failed":
+			*p.counts().Failed++
+		default:
+			code = "hook_capture_failed"
+			*p.counts().Failed++
+		}
+		p.issue(code, "hook_input")
+		return true
+	}
 	p.identify(text(top, "sessionId", "session_id"))
 	ts := eventTime(top)
 	changes := row{}
@@ -142,6 +157,8 @@ func (p *parser) claudeHook(top row, event, ts string) bool {
 	if len(top["permission_mode"]) > 0 {
 		p.add("configuration", key+":permissions", "", "", "", "observed", ts,
 			whole(row{"permission_mode": top["permission_mode"]}))
+	} else if p.hookCapture != nil && p.hookCapture.Permission != nil {
+		p.add("configuration", key+":permissions", "", "", "", "observed", ts, nil)
 	}
 	return true
 }

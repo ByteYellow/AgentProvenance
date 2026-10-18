@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
@@ -22,7 +23,7 @@ type recipe struct {
 	injectHooks bool
 	// inject rewrites the agent argv to load a per-run hooks overlay and returns
 	// a cleanup that removes the overlay (the hook log is kept for sealing).
-	inject func(command []string, selfExe, hookLogPath string, paths store.Paths) (newCommand []string, cleanup func(), err error)
+	inject func(command []string, selfExe, hookLogPath string, paths store.Paths, policy agentcontext.CapturePolicy) (newCommand []string, cleanup func(), err error)
 	// Native session selection is shared; recipes only declare the format and
 	// default location. No harness chooses a transcript by modification time.
 	harness string
@@ -91,11 +92,11 @@ var claudeHookEvents = []string{
 }
 
 // injectClaudeCode writes a per-run settings overlay whose hooks append every
-// event's raw JSON stdin to the run's hook log, and inserts `--settings
+// event's policy-filtered JSON stdin to the run's hook log, and inserts `--settings
 // <overlay>` right after the `claude` program. The overlay is the highest-
 // precedence non-managed settings source, so the user's ~/.claude/settings.json
 // is never read for hooks and never modified. Cleanup removes the overlay.
-func injectClaudeCode(command []string, selfExe, hookLogPath string, paths store.Paths) ([]string, func(), error) {
+func injectClaudeCode(command []string, selfExe, hookLogPath string, paths store.Paths, policy agentcontext.CapturePolicy) ([]string, func(), error) {
 	for _, a := range command[1:] {
 		if a == "--settings" || strings.HasPrefix(a, "--settings=") {
 			return command, nil, i18n.Errorf("agent command already passes --settings; refusing to override")
@@ -103,6 +104,14 @@ func injectClaudeCode(command []string, selfExe, hookLogPath string, paths store
 	}
 
 	hookCmd := shQuote(selfExe) + " internal hook-log --file " + shQuote(hookLogPath)
+	hookCmd += " --capture " + shQuote(policy.Preset)
+	if value, ok := policy.Overrides["tool_results"]; ok {
+		if value {
+			hookCmd += " --capture-tool-results=true"
+		} else {
+			hookCmd += " --capture-tool-results=false"
+		}
+	}
 	entry := []map[string]any{{
 		"hooks": []map[string]any{{"type": "command", "command": hookCmd}},
 	}}

@@ -18,6 +18,7 @@ import (
 // with a one-line verdict on exit. Evidence degrades honestly on hosts that
 // cannot run the sensor (e.g. macOS) or agents with no hooks recipe.
 func launchCmd(dataDir *string) *cobra.Command {
+	var capture captureFlags
 	var (
 		workdir                                                 string
 		noDash                                                  bool
@@ -44,24 +45,26 @@ func launchCmd(dataDir *string) *cobra.Command {
 		DisableFlagParsing: false,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			report, err := launch.Run(launch.Options{
-				Language:         commandLanguage(cmd),
-				ExplicitLanguage: cmd.Flags().Changed("lang"),
-				DataDir:          *dataDir,
-				Command:          args,
-				Workdir:          workdir,
-				Dashboard:        !noDash,
-				DashboardAddr:    dashAddr,
-				Sensor:           sensor,
-				SignKeyPath:      signKey,
-				FileDiff:         fileDiff,
-				JSON:             jsonOut,
-				ContextDir:       contextDir,
-				ContextFile:      contextFile,
-				ContextSession:   contextSession,
-				ContextHarness:   contextHarness,
-				NoContext:        noContext,
-				Stdout:           cmd.OutOrStdout(),
-				Stderr:           cmd.ErrOrStderr(),
+				Language:           commandLanguage(cmd),
+				ExplicitLanguage:   cmd.Flags().Changed("lang"),
+				DataDir:            *dataDir,
+				Command:            args,
+				Workdir:            workdir,
+				Dashboard:          !noDash,
+				DashboardAddr:      dashAddr,
+				Sensor:             sensor,
+				SignKeyPath:        signKey,
+				FileDiff:           fileDiff,
+				JSON:               jsonOut,
+				ContextDir:         contextDir,
+				ContextFile:        contextFile,
+				ContextSession:     contextSession,
+				ContextHarness:     contextHarness,
+				NoContext:          noContext,
+				CapturePreset:      capture.preset,
+				CaptureToolResults: capture.override(cmd),
+				Stdout:             cmd.OutOrStdout(),
+				Stderr:             cmd.ErrOrStderr(),
 			})
 			if err != nil {
 				return err
@@ -90,5 +93,6 @@ func launchCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().StringVar(&contextSession, "context-session", "", "native session identity to capture; required for unambiguous resume")
 	cmd.Flags().StringVar(&contextHarness, "context-harness", "", "context format for a wrapper command: claude, codex, deepseek, kimi, or grok")
 	cmd.Flags().BoolVar(&noContext, "no-context", false, "disable agent context capture and hook injection")
+	capture.bind(cmd)
 	return cmd
 }

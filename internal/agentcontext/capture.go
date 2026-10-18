@@ -71,6 +71,24 @@ func (p CapturePolicy) validate() error {
 	return nil
 }
 
+// EnsureCapturePolicy fixes the policy before launch creates hook logs or starts
+// a workload. Save uses the same transaction helper for later imports.
+func (s Service) EnsureCapturePolicy(ctx context.Context, run string) (CapturePolicy, error) {
+	if s.DB == nil || strings.TrimSpace(run) == "" {
+		return CapturePolicy{}, fmt.Errorf("capture policy requires database and run")
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return CapturePolicy{}, err
+	}
+	defer tx.Rollback()
+	p, err := s.capturePolicyForWrite(ctx, tx, run)
+	if err != nil {
+		return CapturePolicy{}, err
+	}
+	return p, tx.Commit()
+}
+
 type captureReader interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 	QueryRow(string, ...any) *sql.Row

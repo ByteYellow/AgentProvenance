@@ -85,6 +85,23 @@ func TestTextContentRedactsEscapedJSONWithoutChangingNumbers(t *testing.T) {
 	}
 }
 
+func TestTextContentPreservesUpstreamRedactionAndStillMasks(t *testing.T) {
+	s := contentTestStore(t)
+	for _, input := range []string{"already masked upstream", `{"key":"sk-upstream-12345678901234567890"}`} {
+		stored, err := s.PutTextContent(TextContentInput{RunID: "run", SourceID: "upstream", Text: input, Redacted: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		page, err := ReadTextContentPage(s.DB, "run", stored.Ref, 0, 4096)
+		if err != nil || !stored.Redacted || !page.Redacted || strings.Contains(page.Content, "sk-upstream-") {
+			t.Fatalf("upstream redaction changed local masking or metadata: %+v %v", page, err)
+		}
+		if err := VerifyTextContent(s.DB, "run", stored.Ref); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func contentTestStore(t *testing.T) ObjectStore {
 	t.Helper()
 	paths, err := store.Init(t.TempDir())

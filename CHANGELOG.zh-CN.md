@@ -8,6 +8,10 @@
 
 ### 新增
 
+- `launch` 和 `context import` 支持 `--capture basic|detailed`，默认详细档，
+  可用 `--capture-tool-results` 单独覆盖工具结果留存。启动前固定本次 Run 的设置，
+  Claude hook 日志在写盘前完成留存筛选与脱敏，并限制大小、串行写入。
+  内核、TLS 和工作区文件采集继续独立配置。
 - 使用 `dashboard export --run RUN --output replay.zip` 导出完整本地 Run。
   未签名的单 Run 分享包可解压后直接离线打开，复用图谱、会话和正文阅读器，并附固定文件清单。
   命令默认包含该 Run 全部已保存内容，不附带原始数据库或 Bundle。

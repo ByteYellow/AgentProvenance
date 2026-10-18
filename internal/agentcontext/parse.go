@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ParserVersion = "context-parser/v9"
+	ParserVersion = "context-parser/v10"
 	MaxInputBytes = 128 << 20
 	MaxLineBytes  = 40 << 20
 	MaxRecords    = 25000
@@ -59,6 +59,7 @@ type parser struct {
 	known            int64
 	recordsCreated   int
 	budgetLimited    bool
+	hookCapture      *hookCaptureMetadata
 }
 
 // Parse reads a bounded physical transcript without consulting current agent
@@ -164,6 +165,16 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		knownBefore := p.known
 		decodeErr := visitSourceObjects(line, opts.Harness, func(top row, raw []byte, ordinal int) bool {
 			p.objectOrdinal = ordinal
+			p.hookCapture = nil
+			if opts.Harness == "claude" && text(top, "hook_event_name") != "" {
+				meta, err := parseHookCapture(top)
+				if err != nil {
+					p.issue("invalid_hook_retention", "_agentprov_capture")
+					*p.counts().Failed++
+					return true
+				}
+				p.hookCapture = meta
+			}
 			start := len(p.Records)
 			known := p.consume(top)
 			if !known && len(p.Records) == start && !p.unsupported {
@@ -178,6 +189,7 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 			rawBody := string(raw)
 			for i := start; i < len(p.Records); i++ {
 				p.Records[i].RawBody = &rawBody
+				p.Records[i].hookCapture = p.hookCapture
 			}
 			return !p.unsupported && len(p.Records) < p.recordLimit()
 		})

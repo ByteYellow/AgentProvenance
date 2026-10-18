@@ -152,8 +152,8 @@ components:
         reason: {type: string, examples: [source_not_recorded, capture_limit, capture_policy, core_fields_only, derived_intent_projection]}
         digest_scope:
           type: string
-          enum: [parsed_content, source_record]
-          description: Present for deliberately omitted content when its transient bytes were available. Length and digest describe this pre-redaction input, not archived bytes or a proof that the original is retained. Such a reference has no ref. Stored content keeps its existing redacted-byte digest semantics.
+          enum: [parsed_content, source_record, hook_record]
+          description: Present for deliberately omitted content when its transient bytes were available. Length and digest describe this pre-redaction input, not archived bytes. hook_record is the writer's timestamped and normalized JSON before filtering; it is not the original stdin serialization. Such a reference has no ref. Stored content keeps its existing redacted-byte digest semantics.
     Entry:
       type: object
       required: [schema_version, id, run_id, source, source_key, sequence, kind, content, raw_content]

@@ -45,6 +45,8 @@ type TextContentInput struct {
 	SourceID  string
 	MediaType string
 	Text      string
+	// Redacted preserves an upstream redaction marker; local masking still runs.
+	Redacted bool
 	// MaxBytes optionally narrows the source and redacted-byte budget.
 	MaxBytes int64
 }
@@ -96,7 +98,7 @@ func (s ObjectStore) PutTextContent(input TextContentInput) (TextContent, error)
 	manifest := TextManifest{
 		SchemaVersion: textContentSchema, Bytes: int64(len(text)),
 		SHA256: hex.EncodeToString(sum[:]), MediaType: input.MediaType,
-		Redacted: changed, Chunks: []TextChunk{},
+		Redacted: changed || input.Redacted, Chunks: []TextChunk{},
 	}
 	for pos := 0; pos < len(text); {
 		end := pos + TextChunkBytes
@@ -129,6 +131,12 @@ func (s ObjectStore) PutTextContent(input TextContentInput) (TextContent, error)
 		return TextContent{}, err
 	}
 	return TextContent{Ref: obj.Hash, TextManifest: manifest}, nil
+}
+
+// RedactText applies the same JSON-aware masking as saved content, before an
+// upstream capture writes its own durable copy.
+func RedactText(input string) (string, bool) {
+	return redactText(input, 0)
 }
 
 // Decode JSON string escapes before matching credentials, including JSON tool

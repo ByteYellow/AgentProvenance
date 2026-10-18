@@ -29,6 +29,38 @@ commands can declare `--context-harness claude|codex|deepseek|kimi|grok` and
 identity need both `--context-file` and `--context-session`; their identity is
 explicitly operator-supplied. `--no-context` disables this capture and hooks.
 
+### Retention Presets
+
+`launch --capture detailed` is the default. Use `--capture basic` to retain core
+messages, tool inputs and outcomes, agent relationships and supported intent
+evidence without archiving the extra source records, tool-result bodies, resumed
+history and configuration bodies. Both presets use the same parsers and correlation.
+
+```sh
+agentprov launch --capture basic -- claude
+agentprov launch --capture detailed -- codex
+agentprov launch --capture basic --capture-tool-results=true -- dsh headless --json 'Run the tests.'
+agentprov context import --run NEW_RUN --harness codex --file rollout.jsonl --capture basic
+```
+
+`--capture-tool-results` overrides only tool-result retention. Disabling it also
+omits raw source records and opaque session bodies that could contain the same
+results. Core lifecycle and refusal fields remain. Sensor/TLS settings and
+`--file-diff` are independent; neither preset enables workspace copying.
+
+Settings are fixed per run and included in coverage and exported evidence.
+Appending context without capture flags reuses the saved policy. Changing the
+policy requires a new run; existing content and signed bundles are left intact.
+Import a filtered hook log with matching capture settings. Original transcripts
+owned by the harness remain under that harness's own retention settings.
+
+Filtering takes place before AgentProvenance writes context objects or its Claude
+hook sidecar. Omitted entries retain identity, outcome and available length/digest
+metadata with `reason: capture_policy`; no body reference is fabricated. Hook
+inputs are bounded to 40 MiB and each run's sidecar to 128 MiB. Malformed input or
+budget exhaustion is recorded as a body-free capture diagnostic. Both presets
+apply the existing secret redaction before storage.
+
 ### Native Format Compatibility
 
 | Harness | Recorded context |
@@ -48,7 +80,7 @@ Discovery honors `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `DSH_HOME`. When a wrapp
 sets its home only in the child process, pass that directory explicitly. Capture
 runs after execution exits. Selection does not use newest modification time:
 concurrent candidates remain ambiguous. Resume verifies the pre-run source
-prefix and retains earlier records as `prior_context`, separate from the new
+prefix and, in detailed mode, retains earlier records as `prior_context`, separate from the new
 `current_execution` source range. Historical tools and model calls are not
 projected as activity of the new run. Actual child-session
 identities can link children; a dispatch alone does not invent a child identity.
@@ -83,8 +115,9 @@ An explicit import writes its saved coverage report as JSON to stdout. Only
 sources return a nonzero status after saving the diagnostic. Partial evidence
 remains available, and repeating an unchanged successful import is successful
 deduplication. This is the import status, not proof of complete runtime coverage.
-`--after-line N` retains the first N physical records as prior context, not
-current execution; it does not discard them or authorize the new execution.
+`--after-line N` identifies the first N physical records as prior context, not
+current execution. Detailed mode retains them; basic mode records the prior range
+and omits its entries.
 
 ## Inspect and Compare
 
@@ -108,14 +141,15 @@ retained even without a `response_item` copy. Event forms carry
 their own records. Similar text is not a shared identity, so these forms are not
 heuristically collapsed. Message totals count saved source records, not unique
 conversation turns; repeat imports still deduplicate the same recorded evidence.
-Original source bodies and physical positions remain available for inspection.
+Detailed mode preserves original source bodies; both modes retain the physical
+positions of saved entries.
 
 Native Codex completed-message events, world-state snapshots and applied thread
 settings are also retained. Completed command/file-change reports and token usage
 remain source state; their execution-item IDs do not create model tool-call
 identities. Claude attachments, session bookkeeping and cost estimates remain
 source state, while native `mode` records enter configuration history. These
-records preserve their raw bodies and resume ranges without adding synthetic
+records preserve their raw bodies in detailed mode and retain resume ranges without adding synthetic
 conversation turns or permission approvals.
 
 Codex tool errors use explicit source flags/status, typed exit codes and supported

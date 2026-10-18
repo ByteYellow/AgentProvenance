@@ -85,6 +85,9 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 	truncated := map[int64]bool{}
 	intentRefs := map[string]*ContentRef{}
 	for _, r := range records {
+		if r.hookCapture != nil && digest(r.hookCapture.Policy) != digest(policy) {
+			return SaveResult{}, fmt.Errorf("hook log capture policy differs from this run; import into a new run with matching capture settings")
+		}
 		if r.Key == "" || r.Sequence < 0 || r.SourceOrdinal < 0 || r.SourceOrdinal > MaxRecords || !validKind(r.Kind) {
 			return SaveResult{}, fmt.Errorf("invalid context record identity or kind")
 		}
@@ -122,7 +125,15 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 			entry.Source.ApplicationVersion = *r.ApplicationVersion
 		}
 		bodyToStore := r.Body
-		if policy.omitBody(r) && r.Body != nil {
+		var priorOmission *ContentRef
+		if r.hookCapture != nil {
+			priorOmission = r.hookCapture.omittedBody(r)
+		}
+		if priorOmission != nil {
+			entry.Content = *priorOmission
+			bodyToStore = nil
+			addCaptureOmission(&report, r.Kind)
+		} else if policy.omitBody(r) && r.Body != nil {
 			entry.Content = omittedContent(r.Body, r.MediaType, "capture_policy", "parsed_content")
 			bodyToStore = nil
 			addCaptureOmission(&report, r.Kind)
@@ -143,7 +154,7 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 			} else {
 				body, err := objects.PutTextContent(provenance.TextContentInput{
 					RunID: runID, SourceID: "context/" + src.ID + "/" + digest([]string{r.Key, r.Kind}),
-					Text: *bodyToStore, MediaType: r.MediaType,
+					Text: *bodyToStore, MediaType: r.MediaType, Redacted: r.hookCapture.bodyRedacted(r.Kind),
 				})
 				if err != nil {
 					return SaveResult{}, err
@@ -159,6 +170,9 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 		if !policy.SourceRecords {
 			if r.RawBody != nil {
 				entry.RawContent = omittedContent(r.RawBody, "application/json", "capture_policy", "source_record")
+				if r.hookCapture != nil && r.hookCapture.Raw != nil {
+					entry.RawContent = *r.hookCapture.Raw
+				}
 				addCaptureOmission(&report, "source_records")
 				key := digest(*r.RawBody)
 				ref, seen := intentRefs[key]
@@ -194,8 +208,9 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 				report.Status = Partial
 				report.Issues = append(report.Issues, Issue{Code: "capture_limit", Line: r.Sequence, Field: "raw_content", Scope: r.ExecutionScope})
 			} else {
+				upstreamRedacted := r.hookCapture != nil && r.hookCapture.Redacted
 				raw, err := objects.PutTextContent(provenance.TextContentInput{RunID: runID,
-					SourceID: fmt.Sprintf("context/%s/raw/%d", src.ID, r.Sequence), Text: *r.RawBody, MediaType: "application/json"})
+					SourceID: fmt.Sprintf("context/%s/raw/%d", src.ID, r.Sequence), Text: *r.RawBody, MediaType: "application/json", Redacted: upstreamRedacted})
 				if err != nil {
 					return SaveResult{}, err
 				}

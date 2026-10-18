@@ -6,6 +6,11 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
+- Choose additional-context retention with `launch --capture basic|detailed`
+  and `context import --capture basic|detailed`. Detailed remains the default;
+  `--capture-tool-results` provides a focused override. Run settings are fixed
+  before launch, and Claude hook logs apply retention and redaction before
+  bounded, serialized writes. Kernel/TLS and workspace capture remain independent.
 - Export a complete local run with `dashboard export --run RUN --output replay.zip`.
   The unsigned, single-run archive opens directly offline, with the existing
   graph, session and saved-content readers, a frozen file inventory and no

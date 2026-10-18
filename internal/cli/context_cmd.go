@@ -35,7 +35,9 @@ func contextCmd(dataDir *string) *cobra.Command {
 		return enc.Encode(result)
 	}
 	var opts agentcontext.ParseOptions
+	var capture captureFlags
 	importCmd := &cobra.Command{Use: "import", Short: "Import one explicitly selected transcript without changing earlier evidence", Args: cobra.NoArgs}
+	capture.bind(importCmd)
 	importCmd.Flags().StringVar(&opts.Path, "file", "", "JSONL or Zstandard transcript file")
 	importCmd.Flags().StringVar(&opts.Harness, "harness", "", "claude, codex, kimi, grok, or deepseek")
 	importCmd.Flags().StringVar(&opts.SessionID, "session", "", "expected native session id; required if absent in the source")
@@ -45,10 +47,15 @@ func contextCmd(dataDir *string) *cobra.Command {
 		if opts.Path == "" || opts.Harness == "" {
 			return commandErrorf("--file and --harness are required")
 		}
+		policy, err := capture.policy(cmd, true)
+		if err != nil {
+			return err
+		}
 		opts.Binding = "explicit"
 		opts.BindingEvidence = []string{"user_selected_file"}
 		var status agentcontext.Status
-		err := withService(cmd, func(s agentcontext.Service) (any, error) {
+		err = withService(cmd, func(s agentcontext.Service) (any, error) {
+			s.CapturePolicy = policy
 			result, err := s.ImportFile(cmd.Context(), run, opts)
 			status = result.Coverage.Status
 			return result, err
