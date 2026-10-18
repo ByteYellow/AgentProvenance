@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance recorded context API
-  version: "1.5"
+  version: "1.6"
   description: >
     Read-only recorded evidence. Source assertions are not kernel observations
     or inferred authorizations. The dashboard exposes the same routes under
@@ -468,6 +468,49 @@ components:
         has_more: {type: boolean}
         reason: {type: string, enum: [no_recorded_graph_link]}
       description: Existing graph destinations for this record, not a new execution or identity inference.
+    SessionRef:
+      type: object
+      required: [harness, session_id, available]
+      properties:
+        run_id: {type: string}
+        run_ids: {type: array, uniqueItems: true, items: {type: string}, description: Alternative recorded occurrences when the relationship identifies a native session but not one run. Choose an occurrence for navigation; this does not multiply the action.}
+        harness: {type: string}
+        session_id: {type: string}
+        available: {type: boolean, description: At least one occurrence is available in the current store or exported catalog.}
+      description: Native identity. An unavailable target retains its harness and session ID without guessing a run. A local same-run occurrence is preferred for navigation.
+    SessionRelationEvidence:
+      type: object
+      required: [run_id, source_id, object_hash, basis]
+      properties:
+        run_id: {type: string}
+        source_id: {type: string}
+        object_hash: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        entry_id: {type: string}
+        recorded_at: {type: string}
+        basis: {type: string, enum: [same_harness_native_session_id, source_parent_session_id, native_spawn_result, native_fork_metadata, native_send_input_call]}
+    SessionRelation:
+      type: object
+      required: [id, kind, from, to, evidence]
+      properties:
+        id: {type: string}
+        kind: {type: string, enum: [same_session, parent, delegation, fork, message_request]}
+        from: {$ref: '#/components/schemas/SessionRef'}
+        to: {$ref: '#/components/schemas/SessionRef'}
+        evidence: {type: array, minItems: 1, items: {$ref: '#/components/schemas/SessionRelationEvidence'}}
+        issues: {type: array, items: {type: string, enum: [self_parent, parent_cycle, conflicting_parents]}}
+      description: Parent, delegation and fork point from the source or parent to the child; message_request points from requester to target and does not assert delivery. same_session has no temporal direction. Prior-context actions and untyped prose are excluded.
+    SessionRelationsPage:
+      type: object
+      required: [schema_version, subject, relations, has_more, limit, limited, issues]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        subject: {$ref: '#/components/schemas/SessionRef'}
+        relations: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/SessionRelation'}}
+        has_more: {type: boolean}
+        next_cursor: {type: string, description: Opaque cursor bound to the evidence snapshot; restart on HTTP 400 after sources change.}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        limited: {type: boolean, description: Discovery exceeded a source, action or body ceiling; separate from page continuation.}
+        issues: {type: array, items: {type: string, enum: [session_source_discovery_limit, session_action_discovery_limit, session_relation_body_limit]}}
     SnapshotValue:
       type: object
       required: [present, truncated]
@@ -573,6 +616,29 @@ paths:
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
       responses:
         '200': {description: Page with immutable evidence references, content: {application/json: {schema: {$ref: '#/components/schemas/EntryPage'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+        '503': {$ref: '#/components/responses/StoreUnavailable'}
+  /v1/context/session-relations:
+    get:
+      operationId: agent_context_session_relations
+      summary: Read source-backed relationships for one native session
+      description: >
+        The requested session must occur in the requested run. Discovery uses at
+        most 1024 latest same-harness source reports and 2048 typed action records;
+        action bodies over 64 KiB are skipped with a limited diagnostic. The
+        local endpoint queries the local store; static replay uses only its
+        exported catalog. Relationships neither change run membership nor
+        widen query or export scope.
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: harness, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+        - {name: session, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 512}}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 8192}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200': {description: Evidence-backed relationships and explicit discovery limits, content: {application/json: {schema: {$ref: '#/components/schemas/SessionRelationsPage'}}}}
         '400': {$ref: '#/components/responses/InvalidArgument'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/EvidenceFailure'}

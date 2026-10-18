@@ -85,12 +85,18 @@ func demoExportCmd() *cobra.Command {
 		defer cleanup()
 		server := dashboard.Server{DB: db}
 		writer := &staticdata.Writer{Root: stage}
+		visibleRuns := []string{}
+		for _, entry := range catalog {
+			if entry.Run != "" {
+				visibleRuns = append(visibleRuns, entry.Run)
+			}
+		}
 		for _, entry := range catalog {
 			if entry.Run == "" {
 				continue
 			}
 			fmt.Fprintf(cmd.ErrOrStderr(), "Exporting public replay %s...\n", entry.ID)
-			snapshot, err := server.ExportReplay(cmd.Context(), entry.Run, writer)
+			snapshot, err := server.ExportReplaySet(cmd.Context(), entry.Run, writer, visibleRuns)
 			if err != nil {
 				return err
 			}

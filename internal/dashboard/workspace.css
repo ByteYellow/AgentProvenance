@@ -43,6 +43,16 @@
 .session-source details { font-size: 12px; }
 .session-source dl { margin: 8px 0; }
 .session-source [aria-current="true"] { color: var(--acc); border-color: var(--acc); }
+.session-relations { margin:10px 0; font-size:12px; overflow-wrap:anywhere; }
+.session-relations > summary { cursor:pointer; color:var(--acc); }
+.session-relation { border-bottom:1px solid var(--line); padding:12px 0; }
+.session-relation p { margin:6px 0; }
+.session-relation small { color:var(--mut); }
+.session-relation dl { display:grid; grid-template-columns:120px minmax(0,1fr); gap:6px 12px; }
+.session-relation dd { margin:0; }
+.session-relation button, .session-relations [data-relations-more] { border:1px solid var(--line2); color:var(--acc); background:var(--panel); border-radius:6px; padding:5px 9px; cursor:pointer; }
+#session-related-back { max-width:100%; overflow-wrap:anywhere; }
+#session-related-back[hidden] { display:none; }
 .context-coverage pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; font: 12px/1.65 ui-monospace,SFMono-Regular,monospace; }
 .investigation-actions { display: flex; gap: 8px; }
 .investigation-actions button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px solid var(--line2); border-radius: 8px; color: var(--mut); background: var(--panel); cursor: pointer; }

@@ -327,6 +327,7 @@
     <div id="session-composition" class="session-composition">
       <button id="session-directory-open" aria-haspopup="dialog">{{tr .Lang "Sessions & sources"}} <span id="session-count">…</span></button>
       <div id="session-members" class="session-members" aria-live="polite"></div>
+      <button id="session-related-back" hidden></button>
     </div>
     <div id="askgrid" class="askgrid"></div>
     <nav class="context-nav" aria-label="{{tr .Lang "Recorded context shortcuts"}}">
@@ -1638,11 +1639,22 @@ let EV_FILTER=null, EV_OFFSET=0; const EV_LIMIT=50;
 const INITIAL=new URLSearchParams(location.search);
 let SESSION_SCOPE=INITIAL.get('session')&&INITIAL.get('harness')?{harness:INITIAL.get('harness'),session_id:INITIAL.get('session')}:null;
 const sessionGraphViews=new Map();
+const relatedSessionHistory=[];
+let sessionNavigation=0;
 let restoreSessionView=null;
 const sessionViewKey=scope=>JSON.stringify([cur,scope?.harness || '',scope?.session_id || '']);
+function graphReadingState(){return {LENS,DETAIL,SEL,GRAPH_FOCUS,EXPAND_MODE,EV_FILTER,EV_OFFSET,ZOOM,FIT,TCUR,scroll:$('#dag').scrollLeft,overlays:[...OV],pageScroll:window.scrollY,workspace:window.AgentWorkspaceUI.readingState()};}
+function restoreGraphReading(saved){
+  LENS=saved.LENS;DETAIL=saved.DETAIL;SEL=saved.SEL;GRAPH_FOCUS=saved.GRAPH_FOCUS;EXPAND_MODE=saved.EXPAND_MODE;
+  EV_FILTER=saved.EV_FILTER;EV_OFFSET=saved.EV_OFFSET;ZOOM=saved.ZOOM;FIT=saved.FIT;restoreSessionView=saved;
+  OV.clear();(saved.overlays||[]).forEach(value=>OV.add(value));
+  document.querySelectorAll('.chip[data-ov]').forEach(chip=>chip.classList.toggle('on',OV.has(chip.dataset.ov)));
+  $('#lenssel').value=LENS;$('#detailsel').value=DETAIL;
+}
 function activateSessionScope(next){
+  ++sessionNavigation;
   if(sessionViewKey(next)===sessionViewKey(SESSION_SCOPE))return;
-  sessionGraphViews.set(sessionViewKey(SESSION_SCOPE),{LENS,DETAIL,SEL,GRAPH_FOCUS,EXPAND_MODE,EV_FILTER,EV_OFFSET,ZOOM,FIT,TCUR,scroll:$('#dag').scrollLeft});
+  sessionGraphViews.set(sessionViewKey(SESSION_SCOPE),graphReadingState());
   if(sessionGraphViews.size>24)sessionGraphViews.delete(sessionGraphViews.keys().next().value);
   SESSION_SCOPE=next;
   const saved=sessionGraphViews.get(sessionViewKey(next));
@@ -1663,6 +1675,48 @@ function activateSessionScope(next){
 async function selectSessionScope(next){
   activateSessionScope(next);
   await loadRun(cur);
+}
+async function navigateRelatedSession(target,returning=false){
+  if(!target?.available||!target.run_id||!target.harness||!target.session_id)throw new Error(tr('Target session is not collected or included'));
+  const request=++sessionNavigation;
+  // Resolve the destination before changing the current reader or its scope.
+  const query=new URLSearchParams({run:target.run_id,harness:target.harness,session:target.session_id,limit:'50'});
+  await j('/api/context/session-relations?'+query);
+  if(request!==sessionNavigation)return false;
+  const previous={run_id:cur,scope:SESSION_SCOPE,view:graphReadingState()};
+  const selected=await refreshRuns(target.run_id,()=>request===sessionNavigation);
+  if(request!==sessionNavigation)return false;
+  if(selected!==target.run_id)throw new Error(tr('Target session is not collected or included'));
+  if(!returning){relatedSessionHistory.push(previous);if(relatedSessionHistory.length>8)relatedSessionHistory.shift();}
+  const next={harness:target.harness,session_id:target.session_id};
+  sessionGraphViews.set(sessionViewKey(SESSION_SCOPE),previous.view);
+  if(sessionGraphViews.size>24)sessionGraphViews.delete(sessionGraphViews.keys().next().value);
+  const saved=target.view||sessionGraphViews.get(JSON.stringify([target.run_id,next.harness,next.session_id]));
+  if(saved)restoreGraphReading(saved);
+  else{SEL=null;GRAPH_FOCUS='';EXPAND_MODE='lineage';EV_FILTER=null;EV_OFFSET=0;FIT=true;ZOOM=1;restoreSessionView=null;}
+  stopPlay();window._gsig='';
+  await loadRun(target.run_id,{scope:returning?target.scope:next,keepView:true});
+  if(request!==sessionNavigation)return false;
+  if(saved){window.AgentWorkspaceUI.restoreReading(saved.workspace);window.scrollTo({top:saved.pageScroll||0});}
+  window.AgentWorkspaceUI.setReturn(relatedSessionHistory.at(-1)?.run_id||'');
+  return true;
+}
+async function returnRelatedSession(){
+  const previous=relatedSessionHistory.at(-1);if(!previous)return;
+  // A return may restore the full run, with no native-session filter.
+  if(previous.scope){if(!await navigateRelatedSession({...previous,...previous.scope,available:true},true))return;}
+  else{
+    const request=++sessionNavigation;
+    const selected=await refreshRuns(previous.run_id,()=>request===sessionNavigation);
+    if(request!==sessionNavigation)return;
+    if(selected!==previous.run_id)throw new Error(tr('Target session is not collected or included'));
+    restoreGraphReading(previous.view);stopPlay();window._gsig='';
+    await loadRun(previous.run_id,{scope:null,keepView:true});
+    if(request!==sessionNavigation)return;
+    window.AgentWorkspaceUI.restoreReading(previous.view.workspace);window.scrollTo({top:previous.view.pageScroll||0});
+  }
+  if(relatedSessionHistory.at(-1)!==previous)return;
+  relatedSessionHistory.pop();window.AgentWorkspaceUI.setReturn(relatedSessionHistory.at(-1)?.run_id||'');
 }
 const requestedLens=INITIAL.get('lens');
 const requestedDetail=INITIAL.get('detail');
@@ -1737,9 +1791,13 @@ function renderIntentFlow(g){
   el.onclick=ev=>{const hit=ev.target.closest('[data-id]'); if(hit&&hit.getAttribute('data-id')) selectNode(hit.getAttribute('data-id'));};
 }
 let runRequest=0;
-async function loadRun(run){
+async function loadRun(run,options={}){
   const request=++runRequest;
-  if(cur && cur!==run){SESSION_SCOPE=null;restoreSessionView=null;const url=new URL(location.href);url.searchParams.delete('session');url.searchParams.delete('harness');history.replaceState(null,'',url);}
+  if(cur && cur!==run){SESSION_SCOPE=null;if(!options.keepView)restoreSessionView=null;}
+  if(Object.hasOwn(options,'scope'))SESSION_SCOPE=options.scope;
+  const url=new URL(location.href);url.searchParams.set('run',run);
+  for(const [key,value] of [['session',SESSION_SCOPE?.session_id],['harness',SESSION_SCOPE?.harness]]){if(value)url.searchParams.set(key,value);else url.searchParams.delete(key);}
+  history.replaceState(null,'',url);
   cur=run;
   window.AgentWorkspaceUI.setRun(run);
   window.AgentWorkspaceUI.setSession(SESSION_SCOPE);
@@ -1805,8 +1863,8 @@ function initLensSelector(available){
   sel.innerHTML=lenses.map(l=>`<option value="${esc(l)}"${l===LENS?' selected':''}>${esc(LENS_LABEL[l]||l)}</option>`).join('');
 }
 
-async function refreshRuns(keep){
-  const runs=await j('/api/runs'); const sel=$('#runsel');
+async function refreshRuns(keep,isCurrent=()=>true){
+  const runs=await j('/api/runs');if(!isCurrent())return null;const sel=$('#runsel');
   if(!runs.length){sel.innerHTML=("<option>"+esc(tr("no runs"))+"</option>");$('#verify').style.display='none';$('#profilebar').innerHTML='<div class="empty">'+esc(tr('No execution records yet. Record a run or open a signed demo.'))+'</div>';return null;}
   $('#verify').style.display='';
   const want=keep||sel.value||runs[0].run;
@@ -1836,7 +1894,7 @@ document.querySelectorAll('.language-switch a').forEach(link=>{
   });
 });
 
-window.AgentWorkspaceUI.init({tr,tx,esc,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope))});
+window.AgentWorkspaceUI.init({tr,tx,esc,j,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope)),navigateSession:navigateRelatedSession,returnSession:()=>safeUI(returnRelatedSession())});
 window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,
   overviewChanged:value=>window.AgentWorkspaceUI.setOverview(value),
   overviewFailed:()=>window.AgentWorkspaceUI.overviewError(),
@@ -1873,7 +1931,7 @@ window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,
   document.querySelectorAll('.chip[data-ov]').forEach(chip=>{
     chip.onclick=()=>{ const o=chip.getAttribute('data-ov'); if(OV.has(o)){OV.delete(o);chip.classList.remove('on');}else{OV.add(o);chip.classList.add('on');} safeUI(loadRun(cur)); };
   });
-  sel.onchange=()=>{ SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; tlOffset=0; stopPlay(); safeUI(loadRun(sel.value)); };
+  sel.onchange=()=>{ ++sessionNavigation;relatedSessionHistory.length=0;window.AgentWorkspaceUI.setReturn('');SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; tlOffset=0; stopPlay(); safeUI(loadRun(sel.value)); };
   $('#live').onclick=()=>setLive(!LIVE);
   await loadRun(first);
   if(INITIAL.get('replay')==='1'){ setLive(false); togglePlay(); }

@@ -7,6 +7,7 @@ window.AgentWorkspaceUI = (() => {
   let labels = {summary:'',events:'',content:''};
   let model = null, reportsKey = '';
   let sessionScope = null;
+  let relationEpoch = 0;
   const t = text => api.tr(text), e = value => api.esc(String(value ?? ''));
 
   // Session identity comes from source metadata. Processing diagnostics and
@@ -62,6 +63,7 @@ window.AgentWorkspaceUI = (() => {
     $('session-directory-open').onclick = () => openDirectory();
     $('session-directory-close').onclick = () => $('session-directory').close();
     $('session-scope-clear').onclick = () => api.selectSession(null);
+    $('session-related-back').onclick = () => api.returnSession();
     const actions = {search:'Search saved evidence',compare:'Compare runs',export:'Export replay'};
     document.querySelectorAll('[data-investigation]').forEach(button=>button.onclick=()=>{
       $('investigation-title').textContent = t(actions[button.dataset.investigation]);
@@ -76,6 +78,7 @@ window.AgentWorkspaceUI = (() => {
   function setRun(nextRun) {
     if (run === nextRun) return;
     run = nextRun; selectedSource = ''; tab = 'summary'; dismissed = false;
+    relationEpoch++;
     available = {summary:false,events:false,content:false}; model = null; reportsKey = '';
     labels = {summary:'',events:'',content:''};
     try {
@@ -150,7 +153,7 @@ window.AgentWorkspaceUI = (() => {
     const relations = {missing:'Parent session is not in this run',conflicting:'Conflicting parent session records',self:'Invalid self-parent record',cycle:'Cyclic parent session records'};
     $('session-directory-body').innerHTML = (limited ? `<p class="context-notice">${e(t('Source report limit reached. Additional sources are not shown here.'))}</p>` : '') + sessions.map((group,index)=>{
       const parent = group.relation === 'linked' ? `<button data-parent-session="${group.target}">${e(group.parent)}</button>` : `<span>${e([...group.parents].join(', '))} · ${e(t(relations[group.relation]))}</span>`;
-      return `<section class="session-item" id="session-item-${index}" tabindex="-1"><h3>${e(group.id)} <span>${e(group.harness)}</span><button data-view-session="${index}">${e(t('View session graph'))}</button></h3>${group.relation ? `<div class="session-parent">${e(t('Recorded parent session'))}: ${parent}</div>` : ''}${group.reports.map(sourceHTML).join('')}</section>`;
+      return `<section class="session-item" id="session-item-${index}" tabindex="-1"><h3>${e(group.id)} <span>${e(group.harness)}</span><button data-view-session="${index}">${e(t('View session graph'))}</button></h3>${group.relation ? `<div class="session-parent">${e(t('Recorded parent session'))}: ${parent}</div>` : ''}<details class="session-relations" data-relations="${index}"><summary>${e(t('Known session relationships'))} <span data-relation-count></span></summary><div data-relation-body></div></details>${group.reports.map(sourceHTML).join('')}</section>`;
     }).join('') + (unassigned.length ? `<section class="session-item"><h3>${e(t('Sources without session identity'))}</h3>${unassigned.map(sourceHTML).join('')}</section>` : '') + (!sessions.length && !unassigned.length ? `<p class="context-notice">${e(t('No native session identity recorded'))}</p>` : '');
     $('session-directory-body').querySelectorAll('[data-session-source]').forEach(button=>button.onclick=async()=>{
       const source = button.dataset.sessionSource;
@@ -163,6 +166,9 @@ window.AgentWorkspaceUI = (() => {
     });
     $('session-directory-body').querySelectorAll('[data-parent-session]').forEach(button=>button.onclick=()=>focusSession(Number(button.dataset.parentSession)));
     $('session-directory-body').querySelectorAll('[data-view-session]').forEach(button=>button.onclick=()=>selectSession(Number(button.dataset.viewSession)));
+    $('session-directory-body').querySelectorAll('[data-relations]').forEach(details=>{
+      details.addEventListener('toggle',()=>{if(details.open&&!details.dataset.loaded)loadRelations(details);});
+    });
     setSource(selectedSource);
   }
   function selectSession(index) {
@@ -189,5 +195,65 @@ window.AgentWorkspaceUI = (() => {
     if (!$('session-directory').open) $('session-directory').showModal();
     if (index != null) focusSession(index);
   }
-  return {init,setRun,setNode,setEvents,setContent,show,setOverview,overviewError,setSource,setSession,sessionDirectory};
+  async function loadRelations(details,cursor='',previous=[]) {
+    const group=model?.sessions[Number(details.dataset.relations)], currentRun=run, epoch=relationEpoch;
+    if(!group)return;
+    const body=details.querySelector('[data-relation-body]');
+    body.textContent=t('loading…');details.dataset.loaded='1';
+    try {
+      const query=new URLSearchParams({run,harness:group.harness,session:group.id,limit:'50'});
+      if(cursor)query.set('cursor',cursor);
+      const page=await api.j('/api/context/session-relations?'+query);
+      if(epoch!==relationEpoch||currentRun!==run||!details.isConnected)return;
+      const relations=[...previous,...page.relations];
+      details.querySelector('[data-relation-count]').textContent=relations.length+(page.has_more||page.limited?'+':'');
+      const kindNames={same_session:'Same native session in another run',parent:'Recorded parent / child',delegation:'Recorded delegation',fork:'Recorded fork',message_request:'Message requested'};
+      const target=relation=>relation.kind==='same_session'?relation.to:relation.from.session_id===group.id?relation.to:relation.from;
+      body.innerHTML=relations.map((relation,index)=>{
+        const dest=target(relation), other=dest.run_ids?.length||dest.run_id&&dest.run_id!==run;
+        const identity=ref=>ref.harness+' · '+ref.session_id+(ref.run_id?' · '+ref.run_id:ref.run_ids?.length?' · '+ref.run_ids.join(', '):'');
+        const evidence=relation.evidence.map(ev=>`<dl><dt>${e(t('Run'))}</dt><dd>${e(ev.run_id)}</dd><dt>${e(t('Source'))}</dt><dd>${e(ev.source_id)}</dd><dt>${e(t('Binding evidence'))}</dt><dd>${e(t(ev.basis))}</dd><dt>${e(t('Evidence references'))}</dt><dd>${e(ev.object_hash)}${ev.entry_id?'<br>'+e(ev.entry_id):''}</dd>${ev.recorded_at?`<dt>${e(t('Time'))}</dt><dd>${e(ev.recorded_at)}</dd>`:''}</dl>`).join('');
+        return `<article class="session-relation"><strong>${e(t(kindNames[relation.kind]||relation.kind))}</strong>`+
+          `<p>${e(identity(relation.from))}${relation.kind==='same_session'?' ↔ ':' → '}${e(identity(relation.to))}</p>`+
+          (other?`<small>${e(t('Other run'))}</small> `:'')+
+          (dest.available?(dest.run_ids?.length?dest.run_ids.map(id=>`<button data-open-relation="${index}" data-relation-run="${e(id)}">${e(api.tx('View in {run}',{run:id}))}</button>`).join(' '):`<button data-open-relation="${index}">${e(t('View session graph'))}</button>`):`<span>${e(t('Target session is not collected or included'))}</span>`)+
+          (relation.from.run_ids?.length||relation.to.run_ids?.length?`<p class="context-notice">${e(t('Native session relationship; choose an occurrence to read its run records.'))}</p>`:'')+
+          (relation.issues?.length?`<p class="context-notice">${relation.issues.map(issue=>e(t(issue))).join(' · ')}</p>`:'')+
+          `<details><summary>${e(t('Source and evidence'))}</summary>${evidence}</details></article>`;
+      }).join('')||`<p>${e(t('No explicit session relationships found in saved records'))}</p>`;
+      if(page.limited)body.insertAdjacentHTML('beforeend',`<p class="context-notice">${e(t('Relationship discovery is limited; additional sources or records may exist.'))}</p>`);
+      if(page.has_more)body.insertAdjacentHTML('beforeend',`<button data-relations-more>${e(t('Load more'))}</button>`);
+      body.querySelector('[data-relations-more]')?.addEventListener('click',()=>loadRelations(details,page.next_cursor,relations));
+      body.querySelectorAll('[data-open-relation]').forEach(button=>button.onclick=async()=>{
+        const dest={...target(relations[Number(button.dataset.openRelation)])};
+        if(button.dataset.relationRun)dest.run_id=button.dataset.relationRun;
+        button.disabled=true;
+        try {
+          if(await api.navigateSession(dest)===false)return;
+          $('session-directory').close();
+        } catch(error) {
+          if(epoch!==relationEpoch||currentRun!==run||!details.isConnected)return;
+          button.disabled=false;
+          let note=body.querySelector('[data-relation-error]');
+          if(!note){note=document.createElement('p');note.dataset.relationError='';note.className='context-notice';body.append(note);}
+          note.textContent=t('Recorded evidence could not be loaded.')+' '+error.message;
+        } finally {
+          if(button.isConnected)button.disabled=false;
+        }
+      });
+    } catch(error) {
+      if(epoch!==relationEpoch||currentRun!==run||!details.isConnected)return;
+      body.textContent=t('Session relationships unavailable')+' '+error.message;
+      const retry=document.createElement('button');retry.textContent=t('Retry');retry.onclick=()=>loadRelations(details);body.append(retry);
+    }
+  }
+  function setReturn(label) {
+    $('session-related-back').hidden=!label;
+    $('session-related-back').textContent=label?api.tx('Return to {run}',{run:label}):'';
+  }
+  function readingState() {return {tab,dismissed};}
+  function restoreReading(value) {
+    if(value&&Object.hasOwn(panels,value.tab)){tab=value.tab;dismissed=value.dismissed===true;renderReader();}
+  }
+  return {init,setRun,setNode,setEvents,setContent,show,setOverview,overviewError,setSource,setSession,sessionDirectory,setReturn,readingState,restoreReading};
 })();

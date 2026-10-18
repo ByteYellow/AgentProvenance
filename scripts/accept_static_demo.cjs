@@ -62,6 +62,11 @@ async function main() {
       }
       for(const [identity,scope] of Object.entries(snapshot.sessions || {})){
         const [harness,sessionID]=JSON.parse(identity),params=q+'&harness='+encodeURIComponent(harness)+'&session='+encodeURIComponent(sessionID);
+        for(const cursor of Object.keys(scope.relations||{})){
+          const query='/api/context/session-relations'+params+'&limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):'');
+          const [expected,actual]=await Promise.all([data(scope.relations[cursor]),page.evaluate(q=>AgentProvReplay.query(q),query)]);
+          assert.deepEqual(actual,expected);report.parity++;
+        }
         const scopedIndex=await data(scope.lenses);
         for(const key of Object.keys(scopedIndex.views)){
           const [lens,detail]=key.split('/'),query='/api/lens'+params+'&lens='+lens+'&detail='+detail;

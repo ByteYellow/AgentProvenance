@@ -198,7 +198,7 @@ window.AgentContextUI = (() => {
       const saved = state.reading || previousReading(run);
       if (saved) Object.assign(state,saved.view,{expanded:new Set(saved.view.expanded)});
       else state.graph = '';
-      if (states.size > 8) states.delete(states.keys().next().value);
+      if (states.size > 24) states.delete(states.keys().next().value);
       listRequest++; listLoading = false; previewRequest++; previewKey = ''; previewChoices = [];
       if ($('content-dialog').open) $('content-dialog').close();
       $('content-empty').hidden = false; $('content-pane').hidden = true;

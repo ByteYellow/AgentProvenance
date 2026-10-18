@@ -132,6 +132,21 @@ window.AgentProvReplay = (() => {
     const id=p.get('run');let run=catalog.runs[id];
     if(path==='frameworks'&&!run)run=catalog.runs[catalog.summaries[0].run];
     if(!run)fail('The run was not found in this public demo');
+    if(path==='context/session-relations'){
+      const saved=run.sessions?.[JSON.stringify([p.get('harness'),p.get('session')])];
+      const ref=saved?.relations?.[p.get('cursor')||''];
+      if(!ref)fail('Session relationships are not included in this replay');
+      if(p.has('limit')&&p.get('limit')!=='50')fail('Replay relationship pages use a limit of 50');
+      const page=copy(await asset(ref));
+      for(const relation of page.relations)for(const endpoint of [relation.from,relation.to]){
+        if(endpoint.available){
+          const key=JSON.stringify([endpoint.harness,endpoint.session_id]);
+          if(endpoint.run_ids?.length){endpoint.run_ids=endpoint.run_ids.filter(id=>catalog.runs[id]?.sessions?.[key]);endpoint.available=endpoint.run_ids.length>0;}
+          else if(!catalog.runs[endpoint.run_id]?.sessions?.[key])endpoint.available=false;
+        }
+      }
+      return page;
+    }
     let session=null;
     if(['lens','events'].includes(path)&&(p.get('harness')||p.get('session'))){
       session=run.sessions?.[JSON.stringify([p.get('harness'),p.get('session')])];

@@ -33,8 +33,9 @@ type ReplayRun struct {
 	Filters   map[string]eventQuery     `json:"filters"`
 }
 type replaySession struct {
-	Lenses   staticdata.Ref `json:"lenses"`
-	EventIDs []string       `json:"event_ids"`
+	Lenses    staticdata.Ref            `json:"lenses"`
+	EventIDs  []string                  `json:"event_ids"`
+	Relations map[string]staticdata.Ref `json:"relations,omitempty"`
 }
 
 func writeReplayLenses(w *staticdata.Writer, lenses provenance.ReplayLenses) (staticdata.Ref, error) {
@@ -72,6 +73,15 @@ type replayContext struct {
 // database. It uses the same readers as the local dashboard, including redaction,
 // content limits and absence diagnostics. It never opens a workspace file.
 func (s Server) ExportReplay(ctx context.Context, run string, w *staticdata.Writer) (ReplayRun, error) {
+	return s.ExportReplaySet(ctx, run, w, []string{run})
+}
+
+// ExportReplaySet includes relationship discovery within an explicit export
+// catalog, without following those links to copy additional runs.
+func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.Writer, visibleRuns []string) (ReplayRun, error) {
+	if visibleRuns == nil {
+		visibleRuns = []string{run}
+	}
 	result := ReplayRun{API: map[string]staticdata.Ref{}, EventRefs: map[string][]string{}, Filters: map[string]eventQuery{}}
 	h := s.Handler()
 	get := func(route string, query url.Values) (json.RawMessage, error) {
@@ -159,7 +169,24 @@ func (s Server) ExportReplay(ctx context.Context, run string, w *staticdata.Writ
 		if err != nil {
 			return result, err
 		}
-		result.Sessions[key] = replaySession{Lenses: ref, EventIDs: scope.EventIDs}
+		relations := map[string]staticdata.Ref{}
+		cursor := ""
+		for {
+			page, err := contextService.SessionRelations(ctx, agentcontext.SessionRelationOptions{RunID: run, Harness: src.Harness,
+				SessionID: src.SessionID, Limit: 50, Cursor: cursor, VisibleRuns: visibleRuns})
+			if err != nil {
+				return result, err
+			}
+			relations[cursor], err = w.JSON(page)
+			if err != nil {
+				return result, err
+			}
+			if !page.HasMore {
+				break
+			}
+			cursor = page.NextCursor
+		}
+		result.Sessions[key] = replaySession{Lenses: ref, EventIDs: scope.EventIDs, Relations: relations}
 	}
 	timeline, err := telemetry.ListEventsFiltered(s.DB, telemetry.Filter{RunID: run})
 	if err != nil {

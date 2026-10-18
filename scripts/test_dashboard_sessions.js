@@ -44,7 +44,7 @@ async (page) => {
   await item.locator('[data-parent-session]').click();
   check(await page.evaluate(()=>document.activeElement?.id).then(s=>Boolean(s)),'recorded parent link focuses a session entry');
   const parent=page.locator('.session-item').filter({has:page.locator('h3').filter({hasText:/^root codex/})});
-  await parent.locator('details > summary').click();
+  await parent.locator('.session-source details > summary').click();
   check(await parent.locator('dl').innerText().then(s=>s.includes('sha256:')),'relation source has immutable evidence reference');
   await parent.locator('[data-view-session]').click();
   await page.waitForFunction(()=>window._lensManifest.query.session_scope?.session_id==='root'&&window._lensManifest.query.session_scope.harness==='codex');

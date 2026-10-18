@@ -340,10 +340,22 @@ current execution graph. A session with no linked execution evidence has an empt
 graph and can still be read in the conversation view.
 
 Risk, collection status and auxiliary sections keep their **Whole run** scope.
-Following a risk or auxiliary evidence link returns to that scope. Recorded
-parent links stay within the current run, with the source report hash available
-under **Source and evidence**. Public-demo static exports use the same session
-selection and graph projections.
+Following a risk or auxiliary evidence link returns to that scope. Public-demo
+static exports use the same session selection and graph projections.
+
+Expand **Known session relationships** in the directory to inspect recorded
+connections. Matching harness and native session IDs link occurrences across
+runs. Source metadata supplies parent/child relationships; typed Codex records
+also supply delegation, fork and message-request relationships. Each relationship
+keeps its direction and immutable source references under **Source and evidence**.
+A message request describes the recorded request, not its delivery result.
+
+**Other run** labels cross-run destinations. When a target has several recorded
+occurrences, choose which run to view; the relationship is listed once. The return
+button restores the preceding run, session filter, graph focus, zoom and reader.
+Missing targets and conflicting parent claims remain visible. Navigation does
+not change run membership or automatically include related runs in exports.
+Static replay only discovers relationships within its exported run catalog.
 
 Use **Open saved content** or **Raw source record** to open the reader's **Saved
 content** tab. Body and raw-record selection, 64 KiB page reads, and an enlarged

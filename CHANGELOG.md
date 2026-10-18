@@ -6,6 +6,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Changed
 
+- Session directories show cross-run occurrences, recorded parent relationships,
+  and typed Codex delegation, fork and message requests with source references.
+  Related-session navigation restores the prior graph and reader on return;
+  static exports confine relationship discovery to their selected run catalog.
 - Keep the graph and risk list in place while combining node summaries, related
   events and saved content in one below-graph reader. Auxiliary sections start
   collapsed with counts; existing content paging and enlarged reading remain.

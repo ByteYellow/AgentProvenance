@@ -17,9 +17,19 @@ async function main(){
  const oldNode='runtime_process/pid/42',firstNode='runtime_process/instance/boot:42:100',secondNode='runtime_process/instance/boot:42:200';
  const events=save([{id:'first',pid:42},{id:'second',pid:42},{id:'last',pid:42},{id:'old',pid:42},{id:'new-parent-number',pid:99}]);
  const catalog={schema_version:'agentprovenance.static_replay/v1',runs:{run:{context,artifacts,events,filters:{},event_refs:{[firstNode]:['first','last'],[secondNode]:['second'],[oldNode]:['old'],'runtime_process/pid/99':[]}},legacy:{events,filters:{},event_refs:{}}},summaries:[]};
+ const relation=save({relations:[{kind:'message_request',from:{run_id:'run',harness:'codex',session_id:'root',available:true},to:{run_ids:['legacy','not-exported'],harness:'codex',session_id:'worker',available:true}},{kind:'parent',from:{run_id:'not-exported',harness:'codex',session_id:'parent',available:true},to:{run_id:'run',harness:'codex',session_id:'root',available:true}}]});
+ catalog.runs.run.sessions={'["codex","root"]':{relations:{'':relation}}};
+ catalog.runs.legacy.sessions={'["codex","worker"]':{}};
  files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
  const setup=()=>{const box={window:{},document:{querySelector:()=>({content:'/site/'})},location:new URL('https://example.test/site/en/replay.html'),URL,URLSearchParams,Map,Set,TextEncoder,TextDecoder,structuredClone,Response,DecompressionStream,crypto:webcrypto,btoa,atob,fetch:async url=>{const body=files.get(new URL(url).pathname);return new Response(body||'missing',{status:body?200:404});}};vm.runInNewContext(source,box);return box.window.AgentProvReplay;};
  const reader=setup();
+ const relationships=await reader.query('/api/context/session-relations?run=run&harness=codex&session=root&limit=50');
+ assert.deepEqual(Array.from(relationships.relations[0].to.run_ids),['legacy']);
+ assert.equal(relationships.relations[0].to.available,true);
+ assert.equal(relationships.relations[1].from.available,false);
+ await assert.rejects(()=>reader.query('/api/context/session-relations?run=run&harness=claude&session=root'),/not included/);
+ await assert.rejects(()=>reader.query('/api/context/session-relations?run=run&harness=codex&session=root&cursor=wrong'),/not included/);
+ await assert.rejects(()=>reader.query('/api/context/session-relations?run=run&harness=codex&session=root&limit=1'),/limit of 50/);
  for(const [node,ids] of [[firstNode,['first','last']],[secondNode,['second']],[oldNode,['old']],['runtime_process/pid/99',[]],['runtime_process/instance/unknown',[]]]){
   const result=await reader.query('/api/events?run=run&focus='+encodeURIComponent(node));
   assert.deepEqual(Array.from(result.events,e=>e.id),ids);assert.equal(result.total,ids.length);
