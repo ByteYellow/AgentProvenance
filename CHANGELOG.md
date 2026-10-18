@@ -37,6 +37,11 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Changed
 
+- Context evidence can record a versioned, run-fixed retention policy and
+  distinguish configured omissions from capture failures. The storage layer
+  retains a compact, source-linked Claude intent projection when original
+  records are omitted; signed bundles and selected replay exports preserve its
+  retention and sharing boundaries.
 - Session directories show cross-run occurrences, recorded parent relationships,
   and typed Codex delegation, fork and message requests with source references.
   Related-session navigation restores the prior graph and reader on return;

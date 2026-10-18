@@ -342,7 +342,7 @@ func readContentObject(db contentObjectReader, runID, ref string, target any) er
 
 // ReadObjectPayload loads a small registered object's payload. Large text lives
 // in independently bounded chunks and must use ReadTextContentPage instead.
-func ReadObjectPayload(db *sql.DB, runID, ref string, target any) error {
+func ReadObjectPayload(db contentObjectReader, runID, ref string, target any) error {
 	var obj struct {
 		Schema  string          `json:"schema"`
 		RunID   string          `json:"run_id"`

@@ -16,8 +16,9 @@ import (
 )
 
 type Service struct {
-	DB    *sql.DB
-	Paths store.Paths
+	DB            *sql.DB
+	Paths         store.Paths
+	CapturePolicy *CapturePolicy
 }
 
 func sourceID(src Source) string {
@@ -64,8 +65,13 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 		return SaveResult{}, err
 	}
 	defer tx.Rollback()
+	policy, err := s.capturePolicyForWrite(ctx, tx, runID)
+	if err != nil {
+		return SaveResult{}, err
+	}
 	objects := provenance.ObjectStore{DB: s.DB, Paths: s.Paths, Tx: tx}
 	result := SaveResult{}
+	report.CapturePolicy, report.Omissions = &policy, nil
 	report.Counts.Stored, report.Counts.Duplicates = Number(0), Number(0)
 	if report.PriorContext != nil {
 		prior := *report.PriorContext
@@ -77,6 +83,7 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 	}
 	lastCreated := time.Time{}
 	truncated := map[int64]bool{}
+	intentRefs := map[string]*ContentRef{}
 	for _, r := range records {
 		if r.Key == "" || r.Sequence < 0 || r.SourceOrdinal < 0 || r.SourceOrdinal > MaxRecords || !validKind(r.Kind) {
 			return SaveResult{}, fmt.Errorf("invalid context record identity or kind")
@@ -91,6 +98,10 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 			counts = &report.PriorContext.Counts
 		default:
 			return SaveResult{}, fmt.Errorf("invalid context execution scope")
+		}
+		if r.ExecutionScope == PriorContext && !policy.History {
+			addCaptureOmission(&report, "history")
+			continue
 		}
 		entry := Entry{
 			SchemaVersion: SchemaVersion, RunID: runID, Source: src,
@@ -110,25 +121,74 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 		if r.ApplicationVersion != nil {
 			entry.Source.ApplicationVersion = *r.ApplicationVersion
 		}
-		if r.Body != nil {
-			if len(*r.Body) > provenance.MaxTextContentBytes {
+		bodyToStore := r.Body
+		if policy.omitBody(r) && r.Body != nil {
+			entry.Content = omittedContent(r.Body, r.MediaType, "capture_policy", "parsed_content")
+			bodyToStore = nil
+			addCaptureOmission(&report, r.Kind)
+		} else if r.Kind == "session" && !policy.SourceRecords && r.Body != nil {
+			bodyToStore = coreSessionBody(src, r)
+			if bodyToStore == nil {
+				entry.Content = omittedContent(r.Body, r.MediaType, "capture_policy", "parsed_content")
+			}
+			if r.Body != nil && (bodyToStore == nil || *r.Body != *bodyToStore) {
+				addCaptureOmission(&report, "session_details")
+			}
+		}
+		if bodyToStore != nil {
+			if len(*bodyToStore) > provenance.MaxTextContentBytes {
 				entry.Content = ContentRef{State: "omitted", Reason: "capture_limit"}
 				report.Status = Partial
 				report.Issues = append(report.Issues, Issue{Code: "capture_limit", Line: r.Sequence, Field: "content", Scope: r.ExecutionScope})
 			} else {
 				body, err := objects.PutTextContent(provenance.TextContentInput{
 					RunID: runID, SourceID: "context/" + src.ID + "/" + digest([]string{r.Key, r.Kind}),
-					Text: *r.Body, MediaType: r.MediaType,
+					Text: *bodyToStore, MediaType: r.MediaType,
 				})
 				if err != nil {
 					return SaveResult{}, err
 				}
 				entry.Content = contentReference(body)
+				if r.Kind == "session" && !policy.SourceRecords {
+					entry.Content.Reason = "core_fields_only"
+				}
 			}
 		} else if entry.Content.Reason == "" {
 			entry.Content.Reason = "source_not_recorded"
 		}
-		if r.RawBody != nil {
+		if !policy.SourceRecords {
+			if r.RawBody != nil {
+				entry.RawContent = omittedContent(r.RawBody, "application/json", "capture_policy", "source_record")
+				addCaptureOmission(&report, "source_records")
+				key := digest(*r.RawBody)
+				ref, seen := intentRefs[key]
+				if !seen {
+					body, err := coreIntentRecord(src, r.RawBody)
+					if err != nil {
+						ref = &ContentRef{State: "unavailable", Reason: "intent_projection_invalid"}
+						report.Status = Partial
+						report.Issues = append(report.Issues, Issue{Code: "intent_projection_invalid", Line: r.Sequence})
+					} else if body != nil {
+						if len(*body) > provenance.MaxTextContentBytes {
+							ref = &ContentRef{State: "omitted", Reason: "capture_limit"}
+							report.Status = Partial
+							report.Issues = append(report.Issues, Issue{Code: "capture_limit", Line: r.Sequence, Field: "intent_content"})
+						} else {
+							stored, err := objects.PutTextContent(provenance.TextContentInput{RunID: runID,
+								SourceID: fmt.Sprintf("context/%s/intent/%s", src.ID, key), Text: *body, MediaType: "application/json"})
+							if err != nil {
+								return SaveResult{}, err
+							}
+							value := contentReference(stored)
+							value.Reason = "derived_intent_projection"
+							ref = &value
+						}
+					}
+					intentRefs[key] = ref
+				}
+				entry.IntentContent = ref
+			}
+		} else if r.RawBody != nil {
 			if len(*r.RawBody) > provenance.MaxTextContentBytes {
 				entry.RawContent = ContentRef{State: "omitted", Reason: "capture_limit"}
 				report.Status = Partial
@@ -142,7 +202,8 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 				entry.RawContent = contentReference(raw)
 			}
 		}
-		if (entry.Content.Reason == "capture_limit" || entry.RawContent.Reason == "capture_limit") && !truncated[r.Sequence] {
+		intentLimited := entry.IntentContent != nil && entry.IntentContent.Reason == "capture_limit"
+		if (entry.Content.Reason == "capture_limit" || entry.RawContent.Reason == "capture_limit" || intentLimited) && !truncated[r.Sequence] {
 			if counts.Truncated == nil {
 				counts.Truncated = Number(0)
 			}
@@ -180,6 +241,9 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 		}
 		if entry.RawContent.Ref != "" {
 			parents = append(parents, entry.RawContent.Ref)
+		}
+		if entry.IntentContent != nil && entry.IntentContent.Ref != "" {
+			parents = append(parents, entry.IntentContent.Ref)
 		}
 		obj, err := objects.PutExternalObject(provenance.ExternalObjectInput{
 			Type: "agent_context", SourceID: entry.ID, RunID: runID, Payload: payload, Parents: parents,

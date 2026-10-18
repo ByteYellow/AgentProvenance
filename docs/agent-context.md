@@ -610,6 +610,15 @@ External clients use the same stored-evidence queries as the Dashboard:
 - `GET /v1/context/compare?run=RUN&left=ID&right=ID`: compare recorded snapshots.
 - `GET /v1/context/links?run=RUN&entry=ID`: recorded graph links, not guesses.
 
+The optional `capture_policy` in overview and processing reports describes the
+recorded additional-context retention settings. A missing policy means settings
+were not recorded. A report's `omissions` counts normalized records intentionally
+excluded in that processing range; these omissions do not turn successful
+processing into a capture failure. Content omitted by policy has no body `ref`.
+When a length or digest is available, `digest_scope` identifies the transient
+parsed content or source record it describes. `intent_content`, when present,
+is a derived model-message source for reanalysis, not the original transcript.
+
 `launch` saves a `runtime_capture` object before bundle export. It includes the
 capture interval, kernel enablement, fresh probe snapshots and node counter
 increments. Old cumulative losses are not charged to the new run. New node losses

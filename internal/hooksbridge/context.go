@@ -146,7 +146,11 @@ func IngestContext(ctx context.Context, db *sql.DB, paths store.Paths, runID str
 			if e.Source.Channel != "hooks" {
 				continue
 			}
-			body, err := contextBody(db, runID, e.RawContent, &budget)
+			ref := e.RawContent
+			if ref.State == "omitted" && ref.Reason == "capture_policy" {
+				ref = e.Content
+			}
+			body, err := contextBody(db, runID, ref, &budget)
 			if err != nil {
 				return Summary{}, err
 			}

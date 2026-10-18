@@ -77,32 +77,35 @@ type PriorRange struct {
 }
 
 type Coverage struct {
-	SchemaVersion string      `json:"schema_version"`
-	ID            string      `json:"id"`
-	RunID         string      `json:"run_id"`
-	Source        Source      `json:"source"`
-	Status        Status      `json:"status"`
-	ObservedAt    string      `json:"observed_at"`
-	LastSuccessAt string      `json:"last_success_at,omitempty"`
-	StartedAt     string      `json:"started_at,omitempty"`
-	EndedAt       string      `json:"ended_at,omitempty"`
-	FirstLine     int64       `json:"first_line,omitempty"`
-	LastLine      int64       `json:"last_line,omitempty"`
-	Counts        Counts      `json:"counts"`
-	Issues        []Issue     `json:"issues"`
-	MissingFields []string    `json:"missing_fields"`
-	ObjectHash    string      `json:"object_hash,omitempty"`
-	PriorContext  *PriorRange `json:"prior_context,omitempty"`
+	SchemaVersion string            `json:"schema_version"`
+	ID            string            `json:"id"`
+	RunID         string            `json:"run_id"`
+	Source        Source            `json:"source"`
+	Status        Status            `json:"status"`
+	ObservedAt    string            `json:"observed_at"`
+	LastSuccessAt string            `json:"last_success_at,omitempty"`
+	StartedAt     string            `json:"started_at,omitempty"`
+	EndedAt       string            `json:"ended_at,omitempty"`
+	FirstLine     int64             `json:"first_line,omitempty"`
+	LastLine      int64             `json:"last_line,omitempty"`
+	Counts        Counts            `json:"counts"`
+	Issues        []Issue           `json:"issues"`
+	MissingFields []string          `json:"missing_fields"`
+	ObjectHash    string            `json:"object_hash,omitempty"`
+	PriorContext  *PriorRange       `json:"prior_context,omitempty"`
+	CapturePolicy *CapturePolicy    `json:"capture_policy,omitempty"`
+	Omissions     []CaptureOmission `json:"omissions,omitempty"`
 }
 
 type ContentRef struct {
-	Ref       string `json:"ref,omitempty"`
-	Bytes     *int64 `json:"bytes"`
-	SHA256    string `json:"sha256,omitempty"`
-	MediaType string `json:"media_type,omitempty"`
-	Redacted  bool   `json:"redacted"`
-	State     string `json:"state"`
-	Reason    string `json:"reason,omitempty"`
+	Ref         string `json:"ref,omitempty"`
+	Bytes       *int64 `json:"bytes"`
+	SHA256      string `json:"sha256,omitempty"`
+	MediaType   string `json:"media_type,omitempty"`
+	Redacted    bool   `json:"redacted"`
+	State       string `json:"state"`
+	Reason      string `json:"reason,omitempty"`
+	DigestScope string `json:"digest_scope,omitempty"`
 }
 
 type Entry struct {
@@ -114,21 +117,24 @@ type Entry struct {
 	Sequence      int64  `json:"sequence"`
 	// SourceOrdinal is the normalized record's position within its physical
 	// source line. Zero means older evidence did not record that position.
-	SourceOrdinal  int64      `json:"source_ordinal,omitempty"`
-	Kind           string     `json:"kind"`
-	Role           string     `json:"role,omitempty"`
-	AgentID        string     `json:"agent_id,omitempty"`
-	ToolCallID     string     `json:"tool_call_id,omitempty"`
-	ToolName       string     `json:"tool_name,omitempty"`
-	Status         string     `json:"status,omitempty"`
-	RecordedAt     string     `json:"recorded_at,omitempty"`
-	Content        ContentRef `json:"content"`
-	RawContent     ContentRef `json:"raw_content"`
-	MissingFields  []string   `json:"missing_fields,omitempty"`
-	EvidenceRefs   []string   `json:"evidence_refs,omitempty"`
-	ObjectHash     string     `json:"object_hash,omitempty"`
-	CreatedAt      string     `json:"created_at,omitempty"`
-	ExecutionScope string     `json:"execution_scope,omitempty"`
+	SourceOrdinal int64      `json:"source_ordinal,omitempty"`
+	Kind          string     `json:"kind"`
+	Role          string     `json:"role,omitempty"`
+	AgentID       string     `json:"agent_id,omitempty"`
+	ToolCallID    string     `json:"tool_call_id,omitempty"`
+	ToolName      string     `json:"tool_name,omitempty"`
+	Status        string     `json:"status,omitempty"`
+	RecordedAt    string     `json:"recorded_at,omitempty"`
+	Content       ContentRef `json:"content"`
+	RawContent    ContentRef `json:"raw_content"`
+	// IntentContent is a derived, bounded model-message projection when the
+	// source record is deliberately not retained. It is never an original record.
+	IntentContent  *ContentRef `json:"intent_content,omitempty"`
+	MissingFields  []string    `json:"missing_fields,omitempty"`
+	EvidenceRefs   []string    `json:"evidence_refs,omitempty"`
+	ObjectHash     string      `json:"object_hash,omitempty"`
+	CreatedAt      string      `json:"created_at,omitempty"`
+	ExecutionScope string      `json:"execution_scope,omitempty"`
 }
 
 // Record is a parser's transient output. Body never appears in the entry index
@@ -196,9 +202,20 @@ type Overview struct {
 	Snapshots       *int64                        `json:"snapshots"`
 	HasMoreSources  bool                          `json:"has_more_sources"`
 	RuntimeCoverage observability.RuntimeCoverage `json:"runtime_coverage"`
+	CapturePolicy   *CapturePolicy                `json:"capture_policy,omitempty"`
 }
 
 func Number(n int64) *int64 { return &n }
+
+// ContentReferences includes the derived intent source, when present. Callers
+// must apply the same reading and sharing boundaries to it as to the raw row.
+func (e Entry) ContentReferences() []ContentRef {
+	refs := []ContentRef{e.Content, e.RawContent}
+	if e.IntentContent != nil {
+		refs = append(refs, *e.IntentContent)
+	}
+	return refs
+}
 
 func contentReference(c provenance.TextContent) ContentRef {
 	return ContentRef{Ref: c.Ref, Bytes: Number(c.Bytes), SHA256: c.SHA256,

@@ -404,7 +404,7 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 			return result, err
 		}
 		contextData.Links[entry.ID] = links
-		for _, body := range []agentcontext.ContentRef{entry.Content, entry.RawContent} {
+		for _, body := range entry.ContentReferences() {
 			if body.State != "stored" || body.Ref == "" {
 				continue
 			}

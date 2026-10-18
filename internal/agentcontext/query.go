@@ -148,6 +148,11 @@ func (s Service) Overview(ctx context.Context, runID string) (Overview, error) {
 		return Overview{}, fmt.Errorf("run id is required")
 	}
 	result := Overview{SchemaVersion: SchemaVersion, RunID: runID, Coverage: []Coverage{}}
+	policy, err := readCapturePolicy(ctx, s.DB, runID)
+	if err != nil {
+		return result, err
+	}
+	result.CapturePolicy = policy
 	runtimeCoverage, err := observability.ReadRuntimeCoverage(ctx, s.DB, runID)
 	if err != nil {
 		return result, err

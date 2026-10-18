@@ -97,7 +97,37 @@ components:
         missing_fields: {$ref: '#/components/schemas/MissingSnapshotFields'}
         object_hash: {type: string}
         prior_context: {$ref: '#/components/schemas/PriorContextRange'}
+        capture_policy: {$ref: '#/components/schemas/CapturePolicy'}
+        omissions: {type: array, items: {$ref: '#/components/schemas/CaptureOmission'}}
       description: Counts and timestamps describe the current selected range. An optional prior_context reports the retained prefix separately; status accounts for issues in either range.
+    CapturePolicy:
+      type: object
+      required: [version, preset, tool_results, source_records, history, configuration]
+      properties:
+        version: {const: agentprovenance.context_capture/v1}
+        preset: {type: string, enum: [basic, detailed]}
+        tool_results: {type: boolean}
+        source_records: {type: boolean}
+        history: {type: boolean}
+        configuration: {type: boolean}
+        overrides:
+          type: object
+          additionalProperties: false
+          properties:
+            tool_results: {type: boolean}
+      description: >
+        Immutable additional-context retention settings for new writes in this run.
+        Omitted on older evidence with no recorded policy. Sensor, TLS and workspace
+        snapshots are configured independently. Excluding tool results also excludes
+        raw source records and opaque source-state bodies that may embed them.
+    CaptureOmission:
+      type: object
+      required: [category, reason, records]
+      properties:
+        category: {type: string, enum: [history, source_records, tool_result, configuration, approval, session_details]}
+        reason: {const: capture_policy}
+        records: {type: integer, minimum: 1}
+      description: Normalized records affected in this processing range. Repeated source rows may affect several records; these are not unique raw-event or byte counts. Configured omissions do not change a successful processing status to partial.
     PriorContextRange:
       type: object
       required: [first_line, last_line, counts, missing_fields]
@@ -119,7 +149,11 @@ components:
         media_type: {type: string}
         redacted: {type: boolean}
         state: {type: string, enum: [stored, unavailable, omitted]}
-        reason: {type: string, examples: [source_not_recorded, capture_limit]}
+        reason: {type: string, examples: [source_not_recorded, capture_limit, capture_policy, core_fields_only, derived_intent_projection]}
+        digest_scope:
+          type: string
+          enum: [parsed_content, source_record]
+          description: Present for deliberately omitted content when its transient bytes were available. Length and digest describe this pre-redaction input, not archived bytes or a proof that the original is retained. Such a reference has no ref. Stored content keeps its existing redacted-byte digest semantics.
     Entry:
       type: object
       required: [schema_version, id, run_id, source, source_key, sequence, kind, content, raw_content]
@@ -154,6 +188,9 @@ components:
         recorded_at: {type: string}
         content: {$ref: '#/components/schemas/ContentRef'}
         raw_content: {$ref: '#/components/schemas/ContentRef'}
+        intent_content:
+          allOf: [{$ref: '#/components/schemas/ContentRef'}]
+          description: Optional derived Claude model-message projection when raw source records are omitted. Retains supported prompt, thinking, answer and proposed tool fields for reanalysis. It is not an original transcript. Sharing exclusions apply to the whole source row, including this projection.
         missing_fields: {type: array, items: {type: string}}
         evidence_refs: {type: array, items: {type: string}}
         object_hash: {type: string}
@@ -255,6 +292,7 @@ components:
         snapshots: {$ref: '#/components/schemas/NullableCount'}
         has_more_sources: {type: boolean}
         runtime_coverage: {$ref: '#/components/schemas/RuntimeCoverage'}
+        capture_policy: {$ref: '#/components/schemas/CapturePolicy'}
       description: Latest report per source plus stored record counts including retained prior context, not estimates of current execution or uncaptured activity. Entry execution_scope and separate prior_context coverage distinguish the ranges.
     RuntimeCoverage:
       type: object

@@ -22,6 +22,77 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 )
 
+func TestSignedBasicCaptureRetainsPolicyAndReanalyzableIntent(t *testing.T) {
+	ctx := context.Background()
+	paths := mustInit(t, filepath.Join(t.TempDir(), "source"))
+	db := mustOpen(t, paths)
+	defer db.Close()
+	policy, _ := agentcontext.NewCapturePolicy("basic", nil)
+	svc := agentcontext.Service{DB: db, Paths: paths, CapturePolicy: &policy}
+	input := `{"type":"user","uuid":"u","sessionId":"s","message":{"role":"user","content":"inspect the project"}}
+{"type":"assistant","uuid":"a","sessionId":"s","timestamp":"2026-10-18T00:00:01Z","message":{"model":"m","content":[{"type":"thinking","thinking":"inspect the build configuration"},{"type":"tool_use","id":"c","name":"Bash","input":{"command":"cat Makefile"}}]}}
+{"type":"user","uuid":"r","sessionId":"s","message":{"content":[{"type":"tool_result","tool_use_id":"c","content":"TOOL-RESULT-EXCLUDED-BY-PRESET"}]}}
+`
+	parsed, err := agentcontext.Parse(ctx, strings.NewReader(input), agentcontext.ParseOptions{Harness: "claude", Binding: "explicit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Save(ctx, "basic-run", parsed.Source, parsed.Records, parsed.Coverage); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hooksbridge.IngestContext(ctx, db, paths, "basic-run"); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := hooksbridge.HarvestContextIntent(ctx, db, paths, "basic-run"); err != nil || n != 1 {
+		t.Fatalf("source intent: %d %v", n, err)
+	}
+	pub, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := (forensics.Service{DB: db, Paths: paths, SignKey: key}).ExportBundle("basic-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := forensics.VerifyBundleAttestation(bundle.Path, bundle.AttestationPath, pub); err != nil {
+		t.Fatal(err)
+	}
+	fresh := mustInit(t, filepath.Join(t.TempDir(), "offline"))
+	replay := mustOpen(t, fresh)
+	defer replay.Close()
+	if result, err := (forensics.Service{DB: replay, Paths: fresh}).ImportBundle(bundle.Path); err != nil || result.Omitted != 0 {
+		t.Fatalf("import: %+v %v", result, err)
+	}
+	if err := os.Rename(paths.Provenance, paths.Provenance+"-offline"); err != nil {
+		t.Fatal(err)
+	}
+	overview, err := (agentcontext.Service{DB: replay, Paths: fresh}).Overview(ctx, "basic-run")
+	if err != nil || overview.CapturePolicy == nil || !reflect.DeepEqual(*overview.CapturePolicy, policy) {
+		t.Fatalf("offline policy: %+v %v", overview.CapturePolicy, err)
+	}
+	if n, err := hooksbridge.HarvestContextIntent(ctx, replay, fresh, "basic-run"); err != nil || n != 1 {
+		t.Fatalf("offline intent: %d %v", n, err)
+	}
+	if _, err := hooksbridge.IngestContext(ctx, replay, fresh, "basic-run"); err != nil {
+		t.Fatal(err)
+	}
+	page, err := (agentcontext.Service{DB: replay, Paths: fresh}).Entries(ctx, agentcontext.PageOptions{RunID: "basic-run"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range page.Entries {
+		if entry.RawContent.State != "omitted" || entry.RawContent.Reason != "capture_policy" {
+			t.Fatal("original records fabricated during import")
+		}
+		if entry.Kind == "tool_result" && (entry.Content.State != "omitted" || entry.Content.Ref != "") {
+			t.Fatal("excluded result became retained")
+		}
+	}
+	if v, err := provenance.Verify(replay, "basic-run"); err != nil || v.ErrorCount != 0 {
+		t.Fatalf("offline verify: %+v %v", v, err)
+	}
+}
+
 func TestSignedPeerMessageRetainsOfflineBodyAndContract(t *testing.T) {
 	ctx := context.Background()
 	paths := mustInit(t, filepath.Join(t.TempDir(), "source"))

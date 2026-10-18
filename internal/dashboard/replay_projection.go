@@ -119,6 +119,7 @@ func (snapshot *replaySnapshot) projectSelection(ctx context.Context, plan *repl
 		OR (x.object_type='event' AND x.source_id IN (SELECT id FROM main.events))
 		OR (x.object_type='tool_call' AND x.source_id IN (SELECT id FROM main.tool_calls))
 		OR (x.object_type='agent_context_coverage' AND x.hash IN (SELECT object_hash FROM main.agent_context_reports))
+		OR x.object_type='context_capture_policy'
 		OR (x.object_type='egress_payload' AND EXISTS (SELECT 1 FROM captured.graph_edges g JOIN main.events e ON g.source_event_id=e.id AND g.run_id=e.run_id
 			WHERE g.run_id=x.run_id AND g.to_id=x.hash AND g.edge_type='endpoint_egress_payload'))
 	)`, run); err != nil {
@@ -208,7 +209,7 @@ func (snapshot *replaySnapshot) projectSelection(ctx context.Context, plan *repl
 		if plan.WithheldContent[e.RawContent.Ref] != "" {
 			p.readers[e.ObjectHash] = "raw_record_partially_excluded"
 		}
-		for _, content := range []agentcontext.ContentRef{e.Content, e.RawContent} {
+		for _, content := range e.ContentReferences() {
 			if content.State == "stored" && content.Ref != "" && plan.WithheldContent[content.Ref] == "" {
 				refs[content.Ref] = true
 			}
@@ -334,7 +335,13 @@ func (snapshot *replaySnapshot) projectSelection(ctx context.Context, plan *repl
 }
 
 func (p *replayProjection) entry(e agentcontext.Entry) agentcontext.Entry {
-	for _, body := range []*agentcontext.ContentRef{&e.Content, &e.RawContent} {
+	refs := []*agentcontext.ContentRef{&e.Content, &e.RawContent}
+	if e.IntentContent != nil {
+		content := *e.IntentContent
+		e.IntentContent = &content
+		refs = append(refs, e.IntentContent)
+	}
+	for _, body := range refs {
 		if reason := p.plan.WithheldContent[body.Ref]; reason != "" {
 			body.State, body.Reason = "excluded", reason
 		}

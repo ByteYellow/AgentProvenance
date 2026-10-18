@@ -421,6 +421,9 @@ func (p *replaySelectionPlan) resolveContentBoundaries(records map[string]replay
 		if withheldLines[rawLine{entry.Source.ID, entry.Sequence}] && entry.RawContent.State == "stored" && entry.RawContent.Ref != "" {
 			p.WithheldContent[entry.RawContent.Ref] = "shared_raw_record_excluded"
 		}
+		if withheldLines[rawLine{entry.Source.ID, entry.Sequence}] && entry.IntentContent != nil && entry.IntentContent.Ref != "" {
+			p.WithheldContent[entry.IntentContent.Ref] = "shared_intent_record_excluded"
+		}
 		if entry.Content.State != "stored" || entry.Content.SHA256 == "" {
 			continue
 		}

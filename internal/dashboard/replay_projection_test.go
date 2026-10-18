@@ -70,6 +70,70 @@ func replayZIPData(t *testing.T, p *PreparedReplay) (map[string][]byte, string) 
 	return files, all.String()
 }
 
+func TestReplayProjectionWithholdsSharedIntentAndKeepsCapturePolicy(t *testing.T) {
+	paths, db, _ := artifactStore(t)
+	ctx := context.Background()
+	policy, _ := agentcontext.NewCapturePolicy("basic", nil)
+	svc := agentcontext.Service{DB: db, Paths: paths, CapturePolicy: &policy}
+	input := `{"type":"assistant","uuid":"a","sessionId":"s","message":{"model":"m","content":[{"type":"text","text":"SELECTED-MODEL-ANSWER"},{"type":"tool_use","id":"private-call","name":"Bash","input":{"command":"EXCLUDED-TOOL-INPUT"}}]}}
+{"type":"user","uuid":"r","sessionId":"s","message":{"content":[{"type":"tool_result","tool_use_id":"private-call","content":"UNRETAINED-TOOL-OUTPUT"}]}}
+`
+	parsed, err := agentcontext.Parse(ctx, strings.NewReader(input), agentcontext.ParseOptions{Harness: "claude", Binding: "explicit"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Save(ctx, "basic-sharing", parsed.Source, parsed.Records, parsed.Coverage); err != nil {
+		t.Fatal(err)
+	}
+	page, err := svc.Entries(ctx, agentcontext.PageOptions{RunID: "basic-sharing"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var exclude string
+	for _, entry := range page.Entries {
+		if entry.Kind == "tool_call" {
+			exclude = "entry/" + entry.ID
+			if entry.IntentContent == nil || entry.IntentContent.State != "stored" {
+				t.Fatal("fixture has no shared intent projection")
+			}
+		}
+	}
+	if exclude == "" {
+		t.Fatal("fixture has no tool call")
+	}
+	for _, partial := range []bool{false, true} {
+		selection := ReplaySelection{RunID: "basic-sharing", Scope: "whole_run"}
+		if partial {
+			selection.ExcludeRecords = []string{exclude}
+		}
+		p, err := (Server{DB: db}).PrepareSelectedOfflineReplay(ctx, selection)
+		if err != nil {
+			t.Fatal(err)
+		}
+		files, all := replayZIPData(t, p)
+		p.Close()
+		if strings.Contains(all, "UNRETAINED-TOOL-OUTPUT") || !strings.Contains(all, "SELECTED-MODEL-ANSWER") {
+			t.Fatal("capture policy or retained message changed in replay")
+		}
+		if strings.Contains(all, "EXCLUDED-TOOL-INPUT") == partial {
+			t.Fatalf("partial=%v has wrong tool/intent content", partial)
+		}
+		found := false
+		for _, data := range files {
+			var overview agentcontext.Overview
+			if json.Unmarshal(data, &overview) == nil && overview.RunID == "basic-sharing" && overview.CapturePolicy != nil {
+				found = true
+				if overview.CapturePolicy.Preset != "basic" || overview.CapturePolicy.SourceRecords {
+					t.Fatalf("changed capture policy: %+v", overview.CapturePolicy)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("offline overview lost source capture policy")
+		}
+	}
+}
+
 func TestReplayProjectionSessionZIP(t *testing.T) {
 	paths, db, objects := artifactStore(t)
 	svc := agentcontext.Service{DB: db, Paths: paths}

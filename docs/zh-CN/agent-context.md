@@ -458,6 +458,12 @@ CLI、Dashboard 和本地回放 API 均支持这些选择。
 - `GET /v1/context/compare?run=RUN&left=ID&right=ID`：比较已记录快照。
 - `GET /v1/context/links?run=RUN&entry=ID`：查询已有图谱关联，不猜测归属。
 
+概览和处理报告中的可选字段 `capture_policy` 记录附加上下文的留存配置。
+旧记录没有该字段时，配置状态为未记录。报告中的 `omissions` 统计本次处理范围内
+按配置省略的标准化记录，主动省略不会将成功的处理状态改为采集失败。
+被省略的正文没有可读取的 `ref`；如有长度或摘要，`digest_scope` 会标明它对应的
+解析内容或来源记录。`intent_content` 是用于重新分析的派生模型消息，原始会话另行标识。
+
 `launch` 在导出前保存 `runtime_capture` 对象，包含采集区间、内核采集启用状态、
 本次探针快照及节点计数增量。旧的节点累计丢失不算到新运行；新发生的节点丢失也可能
 属于其他工作负载，因此 `run_dropped_events` 保持 null，对本次运行的影响无法确定。
