@@ -152,11 +152,24 @@ func IngestAuditReader(ctx context.Context, db *sql.DB, opts AuditIngestOptions,
 }
 
 func ingestAuditBatch(ctx context.Context, db *sql.DB, opts AuditIngestOptions, rows []auditInputRow, hash hash.Hash) (JSONLIngestResult, []RowResult, int, int, error) {
+	var batch JSONLIngestResult
+	var results []RowResult
+	var duplicates, unidentified int
+	err := store.WithWriteTx(ctx, db, func(tx *sql.Tx) error {
+		var err error
+		batch, results, duplicates, unidentified, err = ingestAuditBatchTx(tx, opts, rows, hash)
+		return err
+	})
+	return batch, results, duplicates, unidentified, err
+}
+
+// A following reader commits its source position in this same transaction.
+func ingestAuditBatchTx(tx *sql.Tx, opts AuditIngestOptions, rows []auditInputRow, hash hash.Hash) (JSONLIngestResult, []RowResult, int, int, error) {
 	batch := JSONLIngestResult{Format: "linux_audit", Path: fmt.Sprintf("%s#lines=%d-%d", opts.Path, rows[0].line, rows[len(rows)-1].line),
 		Read: len(rows), FileSHA256: hex.EncodeToString(hash.Sum(nil))}
 	var results []RowResult
 	duplicates, unidentified := 0, 0
-	err := store.WithWriteTx(ctx, db, func(tx *sql.Tx) error {
+	err := func() error {
 		for _, input := range rows {
 			row := RowResult{Line: input.line, DetectedFormat: "linux_audit", Status: "skipped"}
 			switch {
@@ -219,7 +232,7 @@ func ingestAuditBatch(ctx context.Context, db *sql.DB, opts AuditIngestOptions, 
 		}
 		batch.EventIDsSHA256 = hashStrings(batch.EventIDs)
 		return persistJSONLBatch(tx, JSONLIngestOptions{RunID: opts.RunID}, &batch)
-	})
+	}()
 	return batch, results, duplicates, unidentified, err
 }
 

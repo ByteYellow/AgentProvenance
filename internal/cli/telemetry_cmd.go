@@ -88,6 +88,7 @@ func telemetryCmd(dataDir, daemonURL *string) *cobra.Command {
 	cmd.AddCommand(telemetryIngestJSONLCmd(dataDir))
 	cmd.AddCommand(telemetryIngestFalcoCmd(dataDir))
 	cmd.AddCommand(telemetryIngestAuditCmd(dataDir))
+	cmd.AddCommand(telemetryFollowAuditCmd(dataDir))
 	cmd.AddCommand(telemetryAuditAssociationsCmd(dataDir, daemonURL))
 	cmd.AddCommand(telemetryPruneCmd(dataDir))
 	correlations := &cobra.Command{

@@ -2858,5 +2858,12 @@
   "Omitted bytes": "省略正文的字节数",
   "Omitted content digest": "省略正文的摘要",
   "{count} bodies not saved by retention settings": "{count} 条正文按留存设置未保存",
-  "capture_policy": "按留存设置未保存"
+  "capture_policy": "按留存设置未保存",
+  "follow an existing audit log with durable checkpoints and read-only coverage diagnostics": "持续读取现有审计日志，保存断点并报告只读采集诊断",
+  "existing append-only audit text or journal JSON file": "现有仅追加的审计文本或 journal JSON 文件",
+  "checkpoint identity; defaults to the run, file path and mechanism": "断点标识；默认由 Run、文件路径和机制确定",
+  "interval between audit source checks (50ms to 1m)": "审计来源检查间隔（50ms 至 1m）",
+  "drain complete records currently available and stop without waiting for new bytes": "处理当前已有的完整记录后退出，不等待新增内容",
+  "emit English JSON status; continuous mode emits one object per update": "输出英文 JSON 状态；持续模式每次更新输出一个对象",
+  "reader=%s status=%s reason=%s read=%d ingested=%d duplicates=%d failed=%d pending_bytes=%d\n": "采集器=%s 状态=%s 原因=%s 读取=%d 入库=%d 重复=%d 失败=%d 待处理字节=%d\n"
 }

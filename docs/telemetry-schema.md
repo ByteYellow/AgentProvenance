@@ -79,6 +79,7 @@ The current MVP validates these minimum event-specific fields:
 | `syscall_result` | `operation` and numeric `syscall_result` |
 | `access_control` | audit schema version, `mechanism` (`apparmor` or `seccomp`), `audit_id` and `decision` |
 | `access_control_state` | `agentprovenance.access_control_state/v1`, observation interval, task identity and independent `apparmor` / `seccomp` states |
+| `access_control_collection` | `agentprovenance.audit_collection/v1`, reader identity, source-only coverage, status, checkpoint and counters |
 | `process_observed` | numeric `pid` |
 | `file_open` / `file_write` / `secret_path` | nonempty `path` or `file` without NUL; absolute host paths are accepted |
 | `network_connect` / `metadata_ip` / `private_cidr` | `dst`, `dst_ip`, or `host` |
@@ -202,7 +203,7 @@ legacy captures without an epoch omit `connection_id`; their lifecycle coverage
 is unchanged. See [OpenSSL SSL_clear](https://docs.openssl.org/3.0/man3/SSL_clear/)
 and [SSL_free](https://docs.openssl.org/3.0/man3/SSL_free/) for the API semantics.
 
-## AppArmor and seccomp audit import
+## AppArmor and seccomp audit collection
 
 Read existing audit text or newline-delimited `journalctl -o json` records with:
 
@@ -262,6 +263,69 @@ EPERM/EACCES messages are not accepted as AppArmor/seccomp decisions. PID field
 semantics follow the kernel's
 [LSM audit records](https://github.com/torvalds/linux/blob/v6.8/security/lsm_audit.c)
 and [seccomp audit records](https://github.com/torvalds/linux/blob/v6.8/kernel/audit.c).
+
+### Continuous file collection
+
+Follow an existing append-only audit log or forwarded journal JSON file:
+
+```sh
+agentprov telemetry follow-audit --run RUN --file audit.jsonl --json
+```
+
+Plain audit text uses the same originating `--host-id` and `--boot-id` options
+as finite import. `--mechanism apparmor|seccomp|all` and the run's fixed retention
+settings apply to both commands. This reader runs on Linux or macOS, requires
+read access to the source, and never changes host logging or policy settings.
+It reads files, not the journal database directly or a FIFO/stdin stream.
+
+The reader starts at the beginning of a new source and saves its position in
+the local database. By default its identity combines run, absolute file path
+and mechanism. Reuse the same settings to resume. An explicit `--reader-id`
+starts an independent checkpoint; changing its source identity or retention
+settings is rejected. `--once` drains the complete records present at startup
+and exits. An unterminated last line waits for a newline on a later read.
+
+The source file serves as the durable input queue. Each transaction commits
+at most 128 records and 1 MiB, including events, deduplication, receipt and
+checkpoint. A blocked database pauses reading; a failed batch leaves the
+position unchanged and exits with an error. Restart resumes that position,
+including for records without enough identity for cross-file deduplication.
+Keep unread source files until collection catches up.
+
+File identity and bounded fingerprints detect rotation, truncation and common
+rewrites. The reader stops with an explicit reason and retains its checkpoint;
+it does not skip to the end of a replacement file. Preserve the old generation
+for recovery, then select a new reader ID for the new file. This mode expects
+append-only inputs; the fingerprints do not audit every byte of file history.
+
+`--json` emits English status objects using `agentprovenance.audit_reader/v1`.
+Continuous mode emits newline-delimited updates; `--once` emits one final
+object. Source text keeps its original language. The `reader` object contains:
+
+| Field | Meaning |
+| --- | --- |
+| `status`, `reason` | Last observed `reading`, `waiting`, `stopped` or `failed` state and machine-readable reason |
+| `observed_at`, `last_read_at` | Time of the status observation and most recent committed batch |
+| `committed_offset`, `pending_bytes` | Committed source offset and unread bytes at the last source check |
+| `read`, `ingested`, `duplicates`, `skipped`, `failed` | Cumulative checkpoint counters; ignored formats and malformed records are separate |
+| `identity_incomplete` | Supported records missing source identity needed for cross-file deduplication |
+| `coverage_scope`, `upstream_loss` | `selected_source_file` and `unknown`; upstream audit suppression/loss is not measurable from this file |
+
+Reader start, stop, failure, state changes and periodic observations are saved
+as `access_control_collection` events from `audit_reader`. They are collection
+metadata, separate from policy state, audit decisions and syscall outcomes.
+Query them through the existing telemetry interface:
+
+```sh
+agentprov telemetry list --run RUN --type access_control_collection --json
+```
+
+The daemon's `/v1/telemetry/events?run=RUN&type=access_control_collection` returns
+the same saved observations. Status timestamps describe observations rather
+than current process liveness. Signed Bundles preserve these events, while
+local reader checkpoints stay out of exports and are not resumed by import.
+This addition upgrades the local database to schema 20; back up the data
+directory before upgrading, since older binaries cannot open the newer schema.
 
 ### Configuration and task state
 

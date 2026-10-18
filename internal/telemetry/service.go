@@ -523,7 +523,7 @@ func eventIdentity(event IngestEvent) correlation.RawIdentity {
 
 func AllowedEventType(eventType string) bool {
 	switch eventType {
-	case "execve", "process_exit", "thread_exit", "syscall_result", "access_control", "access_control_state", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure", "tls_write", "tls_read", "setuid", "setgid", "ptrace", "file_rename", "file_unlink", "dns_query":
+	case "execve", "process_exit", "thread_exit", "syscall_result", "access_control", "access_control_state", "access_control_collection", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure", "tls_write", "tls_read", "setuid", "setgid", "ptrace", "file_rename", "file_unlink", "dns_query":
 		return true
 	default:
 		return false

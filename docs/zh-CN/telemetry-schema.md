@@ -52,6 +52,7 @@ AgentProvenance 将应用上下文与运行时遥测关联。两类信息必须�
 | `syscall_result` | `operation` 和数值型 `syscall_result` |
 | `access_control` | 审计 schema 版本、`mechanism`（`apparmor` 或 `seccomp`）、`audit_id` 和 `decision` |
 | `access_control_state` | `agentprovenance.access_control_state/v1`、观测区间、任务身份及独立的 `apparmor`／`seccomp` 状态 |
+| `access_control_collection` | `agentprovenance.audit_collection/v1`、采集器标识、来源范围、状态、断点和计数 |
 | `process_observed` | 数值型 `pid` |
 | `file_open` / `file_write` / `secret_path` | 非空且不含 NUL 的 `path` 或 `file`，允许主机绝对路径 |
 | `network_connect` / `metadata_ip` / `private_cidr` | `dst`、`dst_ip` 或 `host` |
@@ -134,7 +135,7 @@ OpenSSL 采集代次结合内核启动实例、进程启动时间、SSL 对象�
 Go TLS 与缺少 epoch 的历史来源省略 `connection_id`，其对象生命周期覆盖范围保持原状。
 接口语义见 [OpenSSL SSL_clear](https://docs.openssl.org/3.0/man3/SSL_clear/) 和 [SSL_free](https://docs.openssl.org/3.0/man3/SSL_free/)。
 
-## AppArmor 与 seccomp 审计导入
+## AppArmor 与 seccomp 审计采集
 
 读取已有 audit 文本，或每行一个对象的 `journalctl -o json` 记录：
 
@@ -181,6 +182,54 @@ AppArmor 的 profile 模式需要独立状态证据。seccomp 的 `LOG`、`ERRNO
 AppArmor/seccomp 决定导入。PID 字段语义依据内核的
 [LSM 审计记录](https://github.com/torvalds/linux/blob/v6.8/security/lsm_audit.c)和
 [seccomp 审计记录](https://github.com/torvalds/linux/blob/v6.8/kernel/audit.c)。
+
+### 持续文件采集
+
+持续读取已有、仅追加的 audit 日志或转发后的 journal JSON 文件：
+
+```sh
+agentprov telemetry follow-audit --run RUN --file audit.jsonl --json
+```
+
+普通 audit 文本仍使用来源主机的 `--host-id` 和 `--boot-id`。两种命令共用
+`--mechanism apparmor|seccomp|all` 和 Run 固定的留存设置。采集器支持 Linux、macOS，
+需要日志读取权限，不修改主机日志或策略配置。此入口读取普通文件，不直接读取 journal 数据库、
+FIFO 或标准输入流。
+
+首次从文件开头读取，将断点保存在本地数据库。默认标识由 Run、绝对文件路径和机制组成，
+使用相同设置重启即可续读。显式指定 `--reader-id` 可建立独立断点；已有标识的来源身份和留存设置
+不可静默改变。`--once` 处理启动时已有的完整记录后退出；末尾缺少换行的记录等待下次补齐。
+
+源文件作为持久输入队列，每批最多 128 条、1 MiB。事件、去重、批次凭据和读取断点在同一事务提交。
+数据库阻塞时暂停读取，当前批失败则保留断点并报错退出；重启从原位置继续，来源身份不完整的记录
+也不会因重启被重复读取。未读完的源文件需要保留到采集追平。
+
+文件身份和有界指纹用于检测轮转、截断及常见的覆盖写入。发现变化时停止并报告原因，保留原断点，
+不直接跳到新文件末尾。请保留旧文件用于恢复，再为新文件指定新的采集器标识。
+该模式要求输入仅追加；指纹检查不扫描全部历史字节。
+
+`--json` 使用 `agentprovenance.audit_reader/v1` 输出英文状态。持续模式每次更新输出一个 JSON 对象，
+`--once` 只输出最终对象；证据原文保留原语言。`reader` 对象包含：
+
+| 字段 | 含义 |
+| --- | --- |
+| `status`、`reason` | 最近观测的 `reading`、`waiting`、`stopped` 或 `failed` 状态，以及机器可读原因 |
+| `observed_at`、`last_read_at` | 状态观测时间、最近一次批次提交时间 |
+| `committed_offset`、`pending_bytes` | 已提交的来源字节偏移，以及最近检查时的未读字节数 |
+| `read`、`ingested`、`duplicates`、`skipped`、`failed` | 断点累计计数；不支持的记录和格式错误分别统计 |
+| `identity_incomplete` | 缺少跨文件去重所需来源身份的受支持记录数 |
+| `coverage_scope`、`upstream_loss` | 固定为 `selected_source_file` 和 `unknown`；源文件无法提供上游审计抑制或丢失总量 |
+
+启动、停止、错误、状态变化及定期观测保存为 `audit_reader` 来源的 `access_control_collection` 事件。
+这类记录描述采集情况，与策略状态、审计决定和 syscall 结果分开。通过现有遥测接口查询：
+
+```sh
+agentprov telemetry list --run RUN --type access_control_collection --json
+```
+
+后台服务的 `/v1/telemetry/events?run=RUN&type=access_control_collection` 返回同一组保存的观测。
+状态以观测时间为准，不充当当前进程存活检查。签名 Bundle 保留这些事件；本地读取断点不进入导出包，
+导入也不会恢复采集器。此功能将本地数据库升级为 schema 20；升级前请备份数据目录，旧二进制无法打开新版数据库。
 
 ### 配置声明与实际状态
 

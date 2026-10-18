@@ -6,6 +6,11 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
+- Follow existing audit text or journal JSON files with `telemetry follow-audit`.
+  Bounded batches commit evidence and source checkpoints together, resume after
+  interruption, preserve partial lines, and report source replacement or
+  truncation. Collection observations use the existing telemetry and signed
+  Bundle paths; machine output stays English and raw-record retention stays fixed.
 - Observe AppArmor labels and seccomp mode/filter counts with independent,
   default-on native sensor state readers. Timestamped procfs snapshots retain
   their own thread identity; bounded sampling reports queue loss. K8s informer
@@ -76,6 +81,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Changed
 
+- Local database schema 20 adds audit reader checkpoints. Back up the data
+  directory before upgrading; reader checkpoints are local operational state
+  and are not imported from evidence Bundles.
 - Context evidence can record a versioned, run-fixed retention policy and
   distinguish configured omissions from capture failures. The storage layer
   retains a compact, source-linked Claude intent projection when original

@@ -6,7 +6,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -16,6 +19,61 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
+
+func TestAuditCollectionUsesExistingEventsAndToolInterfaces(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("audit file following is supported on Linux and macOS")
+	}
+	paths, err := store.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	path := filepath.Join(t.TempDir(), "audit.log")
+	if err := os.WriteFile(path, []byte("ignored source record\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := telemetry.FollowAuditFile(context.Background(), db, paths, telemetry.AuditFollowOptions{
+		AuditIngestOptions: telemetry.AuditIngestOptions{RunID: "audit-coverage", Path: path}, Once: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+	want, err := telemetry.ListEventsPage(db, telemetry.ListOptions{Filter: telemetry.Filter{RunID: "audit-coverage", Type: "access_control_collection"}, Limit: 50})
+	if err != nil || want.TotalCount != 3 {
+		t.Fatalf("observations=%+v %v", want, err)
+	}
+	var baseline string
+	for _, locale := range []string{"en", "zh-CN"} {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/v1/telemetry/events?run=audit-coverage&type=access_control_collection&limit=50", nil)
+		req.Header.Set("Accept-Language", locale)
+		(daemon.Server{DB: db}).Handler().ServeHTTP(w, req)
+		var got telemetry.ListResult
+		if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &got) != nil || !reflect.DeepEqual(got, want) {
+			t.Fatalf("HTTP observation contract: status=%d body=%s", w.Code, w.Body.String())
+		}
+		if baseline != "" && baseline != w.Body.String() {
+			t.Fatal("locale changed collection API output")
+		}
+		baseline = w.Body.String()
+	}
+	got, err := aitools.Dispatch(db, "list_events", map[string]any{"run": "audit-coverage", "type": "access_control_collection", "limit": float64(50)})
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("AI/MCP shared event query: %+v %v", got, err)
+	}
+	w := httptest.NewRecorder()
+	(dashboard.Server{DB: db}).Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/events?run=audit-coverage&type=access_control_collection&limit=50", nil))
+	var dashboardPage struct {
+		Events []telemetry.EventRecord `json:"events"`
+		Total  int                     `json:"total"`
+	}
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &dashboardPage) != nil || dashboardPage.Total != want.TotalCount || len(dashboardPage.Events) != len(want.Events) {
+		t.Fatalf("dashboard event reader: %d %s", w.Code, w.Body.String())
+	}
+}
 
 func TestAuditInterfacesShareReadOnlyContract(t *testing.T) {
 	paths, err := store.Init(t.TempDir())

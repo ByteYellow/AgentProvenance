@@ -228,6 +228,15 @@ jobs:
             AGENTPROV_AUDIT_EVIDENCE_DIR=/tmp/agentprov-live/audit-evidence \
             /tmp/agentprov-live/telemetry-test -test.run '^TestLive(AppArmorAuditImport|SeccompAuditAssociations)$' -test.v -test.timeout=90s \
             | tee /tmp/agentprov-live/audit-associations.log
+      - name: Verify audit file following and signed diagnostic replay
+        run: |
+          sudo env AGENTPROV_AUDIT_FOLLOW_INPUT=/tmp/agentprov-live/audit-evidence/apparmor-journal.jsonl \
+            AGENTPROV_AUDIT_EVIDENCE_DIR=/tmp/agentprov-live/audit-evidence \
+            /tmp/agentprov-live/telemetry-test -test.run '^Test(AuditFollow|LiveAuditFileFollow)' -test.v -test.timeout=60s \
+            | tee /tmp/agentprov-live/audit-follow.log
+          sudo chown -R "$(id -u):$(id -g)" /tmp/agentprov-live/audit-evidence
+          AGENTPROV_AUDIT_FOLLOW_INPUT=/tmp/agentprov-live/audit-evidence/apparmor-journal.jsonl \
+            go test ./internal/forensics -run '^TestAuditFollowerSignedRoundtrip$' -v
       - name: Verify task state and automatic procfs snapshots
         run: |
           go test -c -o /tmp/agentprov-live/access-state-test ./internal/accesscontrol
@@ -249,6 +258,7 @@ jobs:
             /tmp/agentprov-live/openssl-read.log
             /tmp/agentprov-live/syscall-outcomes.log
             /tmp/agentprov-live/audit-associations.log
+            /tmp/agentprov-live/audit-follow.log
             /tmp/agentprov-live/audit-evidence/
             /tmp/agentprov-live/access-state.log
             /tmp/agentprov-live/sensor-state.log
