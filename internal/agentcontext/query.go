@@ -153,6 +153,11 @@ func (s Service) Overview(ctx context.Context, runID string) (Overview, error) {
 		return result, err
 	}
 	result.CapturePolicy = policy
+	settings, err := observability.ReadCaptureSettings(ctx, s.DB, runID)
+	if err != nil {
+		return result, err
+	}
+	result.CaptureSettings = settings
 	runtimeCoverage, err := observability.ReadRuntimeCoverage(ctx, s.DB, runID)
 	if err != nil {
 		return result, err

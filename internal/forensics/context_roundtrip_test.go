@@ -19,6 +19,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/forensics"
 	"github.com/byteyellow/agentprovenance/internal/hooksbridge"
 	"github.com/byteyellow/agentprovenance/internal/intent"
+	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 )
 
@@ -46,6 +47,17 @@ func TestSignedBasicCaptureRetainsPolicyAndReanalyzableIntent(t *testing.T) {
 	if n, err := hooksbridge.HarvestContextIntent(ctx, db, paths, "basic-run"); err != nil || n != 1 {
 		t.Fatalf("source intent: %d %v", n, err)
 	}
+	yes, no := true, false
+	if err := observability.SaveCaptureSettings(ctx, db, paths, "basic-run", observability.CaptureSettings{
+		Version: observability.CaptureSettingsVersion, Source: "launch", SensorMode: "auto",
+		WorkspaceSnapshot: &yes, TLSFullBody: &no, AgentContext: &yes,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := observability.ReadCaptureSettings(ctx, db, "basic-run")
+	if err != nil || settings == nil || settings.Ref == "" {
+		t.Fatalf("source settings: %+v %v", settings, err)
+	}
 	pub, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -66,9 +78,13 @@ func TestSignedBasicCaptureRetainsPolicyAndReanalyzableIntent(t *testing.T) {
 	if err := os.Rename(paths.Provenance, paths.Provenance+"-offline"); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("AGENTPROV_TLS_CAPTURE_BODY", "1")
 	overview, err := (agentcontext.Service{DB: replay, Paths: fresh}).Overview(ctx, "basic-run")
 	if err != nil || overview.CapturePolicy == nil || !reflect.DeepEqual(*overview.CapturePolicy, policy) {
 		t.Fatalf("offline policy: %+v %v", overview.CapturePolicy, err)
+	}
+	if !reflect.DeepEqual(overview.CaptureSettings, settings) {
+		t.Fatalf("offline settings changed: %+v, want %+v", overview.CaptureSettings, settings)
 	}
 	if n, err := hooksbridge.HarvestContextIntent(ctx, replay, fresh, "basic-run"); err != nil || n != 1 {
 		t.Fatalf("offline intent: %d %v", n, err)

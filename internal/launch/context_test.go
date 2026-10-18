@@ -388,6 +388,7 @@ func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
 		harness := tc.harness
 		t.Run(harness+"/"+tc.preset, func(t *testing.T) {
 			dir, workdir := t.TempDir(), t.TempDir()
+			t.Setenv("AGENTPROV_TLS_CAPTURE_BODY", "0")
 			t.Setenv("AGENTPROV_TEST_CONTEXT_HELPER", harness)
 			t.Setenv("AGENTPROV_TEST_CONTEXT_DIR", dir)
 			t.Setenv("AGENTPROV_TEST_CONTEXT_CWD", workdir)
@@ -420,6 +421,7 @@ func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
 				t.Fatalf("missing explicit capture state: %+v", r.RuntimeCapture)
 			}
 			fresh := contextService(t)
+			t.Setenv("AGENTPROV_TLS_CAPTURE_BODY", "1")
 			if _, err := (forensics.Service{DB: fresh.DB, Paths: fresh.Paths}).ImportBundle(r.BundlePath); err != nil {
 				t.Fatalf("offline bundle: %v", err)
 			}
@@ -429,6 +431,9 @@ func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
 			}
 			if o.CapturePolicy == nil || o.CapturePolicy.Preset != tc.preset || r.CapturePolicy == nil || r.CapturePolicy.Preset != tc.preset {
 				t.Fatal("launch capture settings did not survive export")
+			}
+			if s := o.CaptureSettings; s == nil || s.SensorMode != "off" || *s.WorkspaceSnapshot || *s.TLSFullBody || !*s.AgentContext || s.Ref == "" {
+				t.Fatalf("independent settings changed during import: %+v", s)
 			}
 			results, err := fresh.Entries(context.Background(), agentcontext.PageOptions{RunID: r.RunID, Kind: "tool_result"})
 			if err != nil || len(results.Entries) != 1 {

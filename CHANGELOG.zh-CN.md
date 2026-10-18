@@ -8,6 +8,9 @@
 
 ### 新增
 
+- `launch` 在采集前保存内核 Sensor、工作区快照、TLS 完整正文和 Agent 上下文的独立设置。
+  Dashboard 将这些选项与上下文留存档位分开展示，签名 Bundle 和所选回放副本保留原值；
+  旧 Run 未保存的设置显示为“未记录”。
 - Dashboard 会话、搜索、对比和回放显示已记录的上下文留存设置。
   按设置省略的正文与不可用内容分别统计，冻结导出清单保留来源 Run 的档位。
 - `launch` 和 `context import` 支持 `--capture basic|detailed`，默认详细档，

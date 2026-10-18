@@ -6,6 +6,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
+- Launch records its kernel sensor, workspace snapshot, full TLS body and agent
+  context options before capture starts. The Dashboard shows these independently
+  from context retention, and signed bundles and selected replay copies preserve
+  the recorded values. Older runs show unrecorded settings explicitly.
 - Dashboard session, search, comparison and replay views now explain recorded
   context-retention settings. Configured omissions are separate from unavailable
   content, and frozen export inventories retain the source run's preset.

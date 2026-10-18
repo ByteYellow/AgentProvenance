@@ -67,6 +67,15 @@ from unavailable bodies. Compare shows each run's preset and preserves unknown
 configuration values when their bodies were not retained. Export previews and
 offline replays keep the source run's settings, independently of sharing exclusions.
 
+New launches also save the independent sensor mode, workspace snapshot/file-body
+option, full TLS body option and agent-context setting before execution. Expand
+**Saved retention settings** to inspect them. Enabling `--file-diff` includes the
+baseline working-tree copy as well as bounded changed-file text; neither context
+preset enables it. TLS full-body retention follows `AGENTPROV_TLS_CAPTURE_BODY=1`;
+otherwise saved TLS events contain hashes and short previews. Capture diagnostics
+report which configured paths actually produced evidence. Older runs without these
+recorded options show **Not recorded** instead of using the current host's settings.
+
 ### Native Format Compatibility
 
 | Harness | Recorded context |

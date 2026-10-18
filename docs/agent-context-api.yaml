@@ -120,6 +120,25 @@ components:
         Omitted on older evidence with no recorded policy. Sensor, TLS and workspace
         snapshots are configured independently. Excluding tool results also excludes
         raw source records and opaque source-state bodies that may embed them.
+    CaptureSettings:
+      type: object
+      required: [version, source, sensor_mode, workspace_snapshot, tls_full_body, agent_context]
+      properties:
+        version: {const: agentprovenance.capture_settings/v1}
+        source: {const: launch}
+        sensor_mode: {type: string, enum: [auto, "off"]}
+        workspace_snapshot: {type: boolean}
+        tls_full_body: {type: boolean}
+        agent_context: {type: boolean}
+        ref: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+      description: >
+        Immutable options saved before launch starts its collector or workload.
+        Independent of additional-context retention. Workspace snapshots include
+        a baseline working-tree copy and bounded changed-file text. TLS false
+        retains hashes and short previews, not full bodies. These settings describe
+        configured capture paths; runtime_coverage reports actual capture results.
+        Omitted when historical evidence or another producer did not record them.
+        Contains no environment values, credentials or local paths.
     CaptureOmission:
       type: object
       required: [category, reason, records]
@@ -293,6 +312,7 @@ components:
         has_more_sources: {type: boolean}
         runtime_coverage: {$ref: '#/components/schemas/RuntimeCoverage'}
         capture_policy: {$ref: '#/components/schemas/CapturePolicy'}
+        capture_settings: {$ref: '#/components/schemas/CaptureSettings'}
       description: Latest report per source plus stored record counts including retained prior context, not estimates of current execution or uncaptured activity. Entry execution_scope and separate prior_context coverage distinguish the ranges.
     RuntimeCoverage:
       type: object

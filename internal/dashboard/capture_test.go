@@ -6,6 +6,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/hooksbridge"
+	"github.com/byteyellow/agentprovenance/internal/observability"
 )
 
 func addRetentionFixture(t *testing.T, svc agentcontext.Service) {
@@ -14,6 +15,13 @@ func addRetentionFixture(t *testing.T, svc agentcontext.Service) {
 		policy, _ := agentcontext.NewCapturePolicy(preset, nil)
 		svc.CapturePolicy = &policy
 		run := "ui-retention-" + preset
+		enabled, contextEnabled := preset == "detailed", true
+		if err := observability.SaveCaptureSettings(context.Background(), svc.DB, svc.Paths, run, observability.CaptureSettings{
+			Version: observability.CaptureSettingsVersion, Source: "launch", SensorMode: "off",
+			WorkspaceSnapshot: &enabled, TLSFullBody: &enabled, AgentContext: &contextEnabled,
+		}); err != nil {
+			t.Fatal(err)
+		}
 		source := agentcontext.Source{ID: run + "-source", Harness: "codex", Channel: "transcript", SessionID: "retention-" + preset, Binding: "explicit", ParserVersion: "synthetic-retention-fixture/v1"}
 		body := func(s string) *string { return &s }
 		records := []agentcontext.Record{

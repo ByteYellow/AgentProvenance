@@ -48,8 +48,16 @@ window.AgentContextUI = (() => {
   function renderRetention() {
     const policy = overview?.capture_policy, view = retentionPresentation(policy);
     const fields = view.settings.map(s=>`<dt>${e(t(s.label))}${s.override?' ('+e(t('Override'))+')':''}</dt><dd>${e(t(s.enabled===true?'Retained':s.enabled===false?'Not retained':'Not recorded'))}</dd>`).join('');
-    const details = fields ? `<details><summary>${e(t('Saved retention settings'))}</summary><dl>${fields}</dl><code>${e(policy.version)}</code></details>${notice('Configured omissions are listed separately from capture failures.')}${notice('Kernel/TLS and workspace capture use separate settings.')}` : '';
-    return `<article class="context-coverage" data-capture-retention><h3>${e(t('Context retention'))} <span class="context-status">${e(t(view.label))}</span></h3>${details}</article>`;
+    const independent = overview?.capture_settings;
+    const configured = value => t(value === true ? 'Enabled' : value === false ? 'Not enabled' : 'Not recorded');
+    const options = [
+      ['Kernel sensor setting', t(({auto:'Automatic',off:'Not enabled'})[independent?.sensor_mode] || 'Not recorded')],
+      ['Workspace snapshots and changed-file bodies', configured(independent?.workspace_snapshot)],
+      ['Full TLS bodies', independent?.tls_full_body === true ? t('Retained when captured') : independent?.tls_full_body === false ? t('Hash and short preview only') : t('Not recorded')],
+      ['Agent context collection', configured(independent?.agent_context)],
+    ].map(([label,value])=>`<dt>${e(t(label))}</dt><dd>${e(value)}</dd>`).join('');
+    const details = `<details><summary>${e(t('Saved retention settings'))}</summary>${fields?`<dl data-context-retention-fields>${fields}</dl><code>${e(policy.version)}</code>`:''}<h4>${e(t('Independent capture settings'))}</h4><dl data-independent-capture>${options}</dl>${notice(independent?'Recorded at launch; capture results are shown below.':'Independent settings were not recorded for this run.')}</details>`;
+    return `<article class="context-coverage" data-capture-retention><h3>${e(t('Context retention'))} <span class="context-status">${e(t(view.label))}</span></h3>${details}${fields?notice('Configured omissions are listed separately from capture failures.'):''}</article>`;
   }
 
   function runtimePresentation(capture = {}) {

@@ -194,16 +194,17 @@ type Page struct {
 }
 
 type Overview struct {
-	SchemaVersion   string                        `json:"schema_version"`
-	RunID           string                        `json:"run_id"`
-	Coverage        []Coverage                    `json:"coverage"`
-	Messages        *int64                        `json:"messages"`
-	ToolCalls       *int64                        `json:"tool_calls"`
-	ToolResults     *int64                        `json:"tool_results"`
-	Snapshots       *int64                        `json:"snapshots"`
-	HasMoreSources  bool                          `json:"has_more_sources"`
-	RuntimeCoverage observability.RuntimeCoverage `json:"runtime_coverage"`
-	CapturePolicy   *CapturePolicy                `json:"capture_policy,omitempty"`
+	SchemaVersion   string                         `json:"schema_version"`
+	RunID           string                         `json:"run_id"`
+	Coverage        []Coverage                     `json:"coverage"`
+	Messages        *int64                         `json:"messages"`
+	ToolCalls       *int64                         `json:"tool_calls"`
+	ToolResults     *int64                         `json:"tool_results"`
+	Snapshots       *int64                         `json:"snapshots"`
+	HasMoreSources  bool                           `json:"has_more_sources"`
+	RuntimeCoverage observability.RuntimeCoverage  `json:"runtime_coverage"`
+	CapturePolicy   *CapturePolicy                 `json:"capture_policy,omitempty"`
+	CaptureSettings *observability.CaptureSettings `json:"capture_settings,omitempty"`
 }
 
 func Number(n int64) *int64 { return &n }

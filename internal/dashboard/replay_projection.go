@@ -119,7 +119,7 @@ func (snapshot *replaySnapshot) projectSelection(ctx context.Context, plan *repl
 		OR (x.object_type='event' AND x.source_id IN (SELECT id FROM main.events))
 		OR (x.object_type='tool_call' AND x.source_id IN (SELECT id FROM main.tool_calls))
 		OR (x.object_type='agent_context_coverage' AND x.hash IN (SELECT object_hash FROM main.agent_context_reports))
-		OR x.object_type='context_capture_policy'
+		OR x.object_type IN ('context_capture_policy','run_capture_settings')
 		OR (x.object_type='egress_payload' AND EXISTS (SELECT 1 FROM captured.graph_edges g JOIN main.events e ON g.source_event_id=e.id AND g.run_id=e.run_id
 			WHERE g.run_id=x.run_id AND g.to_id=x.hash AND g.edge_type='endpoint_egress_payload'))
 	)`, run); err != nil {

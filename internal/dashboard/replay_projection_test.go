@@ -75,6 +75,13 @@ func TestReplayProjectionWithholdsSharedIntentAndKeepsCapturePolicy(t *testing.T
 	ctx := context.Background()
 	policy, _ := agentcontext.NewCapturePolicy("basic", nil)
 	svc := agentcontext.Service{DB: db, Paths: paths, CapturePolicy: &policy}
+	yes, no := true, false
+	if err := observability.SaveCaptureSettings(ctx, db, paths, "basic-sharing", observability.CaptureSettings{
+		Version: observability.CaptureSettingsVersion, Source: "launch", SensorMode: "auto",
+		WorkspaceSnapshot: &yes, TLSFullBody: &no, AgentContext: &yes,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	input := `{"type":"assistant","uuid":"a","sessionId":"s","message":{"model":"m","content":[{"type":"text","text":"SELECTED-MODEL-ANSWER"},{"type":"tool_use","id":"private-call","name":"Bash","input":{"command":"EXCLUDED-TOOL-INPUT"}}]}}
 {"type":"user","uuid":"r","sessionId":"s","message":{"content":[{"type":"tool_result","tool_use_id":"private-call","content":"UNRETAINED-TOOL-OUTPUT"}]}}
 `
@@ -113,6 +120,9 @@ func TestReplayProjectionWithholdsSharedIntentAndKeepsCapturePolicy(t *testing.T
 		if p.Inventory.CapturePolicy == nil || p.Inventory.CapturePolicy.Preset != "basic" || p.Inventory.CapturePolicy.ToolResults {
 			t.Fatal("frozen export preview lost source retention settings")
 		}
+		if s := p.Inventory.CaptureSettings; s == nil || s.SensorMode != "auto" || !*s.WorkspaceSnapshot || *s.TLSFullBody {
+			t.Fatalf("frozen preview lost independent settings: %+v", s)
+		}
 		files, all := replayZIPData(t, p)
 		p.Close()
 		if strings.Contains(all, "UNRETAINED-TOOL-OUTPUT") || !strings.Contains(all, "SELECTED-MODEL-ANSWER") {
@@ -128,6 +138,9 @@ func TestReplayProjectionWithholdsSharedIntentAndKeepsCapturePolicy(t *testing.T
 				found = true
 				if overview.CapturePolicy.Preset != "basic" || overview.CapturePolicy.SourceRecords {
 					t.Fatalf("changed capture policy: %+v", overview.CapturePolicy)
+				}
+				if s := overview.CaptureSettings; s == nil || !*s.WorkspaceSnapshot || *s.TLSFullBody || s.Ref == "" {
+					t.Fatalf("offline settings changed: %+v", s)
 				}
 			}
 		}

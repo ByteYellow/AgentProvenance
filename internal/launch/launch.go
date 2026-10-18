@@ -156,6 +156,17 @@ func Run(opts Options) (Report, error) {
 	if _, err := contextService.EnsureCapturePolicy(context.Background(), runID); err != nil {
 		return report, err
 	}
+	sensorMode := "auto"
+	if opts.Sensor == "off" {
+		sensorMode = "off"
+	}
+	tlsBody, contextEnabled := os.Getenv("AGENTPROV_TLS_CAPTURE_BODY") == "1", !capture.disabled
+	if err := observability.SaveCaptureSettings(context.Background(), db, paths, runID, observability.CaptureSettings{
+		Version: observability.CaptureSettingsVersion, Source: "launch", SensorMode: sensorMode,
+		WorkspaceSnapshot: &opts.FileDiff, TLSFullBody: &tlsBody, AgentContext: &contextEnabled,
+	}); err != nil {
+		return report, err
+	}
 	report.AppTier = recipe.tier
 	report.AppDetail = recipe.detail
 	report.appDetail = recipe.detailText
