@@ -70,6 +70,8 @@ components:
             listed. Only included records enter the replay. Repeated normalized
             context bodies in retained and excluded records are reported in warnings
             with warning_count; up to 100 examples include IDs, counts and hashes.
+        selection_summary:
+          $ref: '#/components/schemas/SelectionSummary'
         analysis_omissions:
           type: object
           description: >
@@ -79,6 +81,43 @@ components:
           additionalProperties: {type: integer, minimum: 1}
         files: {type: array, items: {$ref: '#/components/schemas/File'}}
         bytes_excluding_inventory: {type: integer, minimum: 0}
+    SelectionSummary:
+      type: object
+      description: >
+        Bounded preview of the frozen record manifest. Counts include saved
+        revisions and linked readers. The full manifest is inventory-listed
+        record-selection.json; this summary contains no evidence bodies.
+      required: [selection, included_records, excluded_records, exclusion_reasons, warning_count]
+      properties:
+        selection:
+          type: object
+          required: [run_id, scope]
+          properties:
+            run_id: {type: string}
+            scope: {type: string, enum: [whole_run, session]}
+            harness: {type: string}
+            session_id: {type: string}
+            exclude_records: {type: array, maxItems: 4096, items: {type: string}}
+            exclude_categories: {type: array, maxItems: 5, items: {type: string, enum: [messages, tools, configuration, files, runtime]}}
+        included_records: {type: integer, minimum: 0}
+        excluded_records: {type: integer, minimum: 0}
+        exclusion_reasons:
+          type: object
+          additionalProperties: {type: integer, minimum: 1}
+        warning_count: {type: integer, minimum: 0}
+        warnings:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            required: [code, content_sha256, included_records, excluded_records, included_count, excluded_count]
+            properties:
+              code: {const: same_content_in_retained_record}
+              content_sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+              included_records: {type: array, maxItems: 10, items: {type: string}}
+              excluded_records: {type: array, maxItems: 10, items: {type: string}}
+              included_count: {type: integer, minimum: 1}
+              excluded_count: {type: integer, minimum: 1}
     Preview:
       type: object
       required: [schema_version, id, expires_at, inventory, inventory_sha256, zip_bytes, zip_sha256]

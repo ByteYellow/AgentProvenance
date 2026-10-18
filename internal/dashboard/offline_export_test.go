@@ -108,6 +108,10 @@ func TestOfflineReplayFreezesOneRunAndSavedContent(t *testing.T) {
 				t.Fatalf("record selection: %+v", manifest)
 			}
 			selectedRecords = manifest.Records
+			summary := p.Inventory.SelectionSummary
+			if summary == nil || summary.Selection.RunID != manifest.Selection.RunID || summary.Included != len(selectedRecords) || summary.Excluded != 0 {
+				t.Fatalf("selection summary differs from frozen manifest: %+v", summary)
+			}
 			for _, r := range selectedRecords {
 				if !r.Included || strings.Contains(r.ID, "other-run") || r.ID == "3/late" {
 					t.Fatalf("unexpected selected record: %+v", r)

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const scope = {window:{}};
-for(const name of ['workspace.js','context.js','search.js','search-engine.js','compare.js','compare-engine.js','replay.js']){
+for(const name of ['workspace.js','context.js','search.js','search-engine.js','compare.js','compare-engine.js','replay.js','export.js']){
   new vm.Script(fs.readFileSync(new URL('../internal/dashboard/'+name,import.meta.url),'utf8'),{filename:name});
 }
 vm.runInNewContext(fs.readFileSync(new URL('../internal/dashboard/workspace.js',import.meta.url),'utf8'),scope);

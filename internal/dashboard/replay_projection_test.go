@@ -188,6 +188,10 @@ func TestReplayProjectionExcludesRevisionsAndSharedRawBytes(t *testing.T) {
 	if p.Inventory.Contents.ContextEntries != 2 || p.Inventory.Contents.RawRefs != 1 {
 		t.Fatalf("retained readers: %+v", p.Inventory.Contents)
 	}
+	summary := p.Inventory.SelectionSummary
+	if summary == nil || summary.Included != 2 || summary.Excluded != 2 || summary.Reasons["excluded_record"] != 1 || summary.Reasons["linked_record_excluded"] != 1 {
+		t.Fatalf("revision-aware selection summary: %+v", summary)
+	}
 }
 
 func TestReplayProjectionReaderAliasesAndReadonlyDatabase(t *testing.T) {

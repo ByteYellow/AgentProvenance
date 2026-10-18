@@ -487,17 +487,35 @@
     <p class="export-run" id="export-run"></p><p id="export-session" class="context-notice" hidden></p>
     <p>{{tr .Lang "A read-only sharing copy with the graph, sessions and saved content. Nothing is uploaded."}}</p>
     <p id="export-local-only" class="context-notice" hidden>{{tr .Lang "Prepare personal exports from dashboard serve on your local store. This replay has no export server."}}</p>
-    <div id="export-controls"><label class="export-scope"><input id="export-ack" type="checkbox">{{tr .Lang "Include the whole run: all sessions, unassigned evidence, saved bodies and raw records."}}</label>
-      <p class="context-notice">{{tr .Lang "Session-only export and record exclusions are not available yet. Review saved content before sharing."}}</p>
+    <div id="export-controls">
+      <fieldset id="export-settings">
+        <legend>{{tr .Lang "Sharing scope"}}</legend>
+        <div class="export-scope-options"><label><input name="export-scope" type="radio" value="whole_run" checked>{{tr .Lang "Whole run"}}</label><label id="export-session-option" hidden><input name="export-scope" type="radio" value="session">{{tr .Lang "Current session"}}</label></div>
+        <p id="export-scope-note" class="context-notice"></p>
+        <div id="export-category-options" class="export-category-options"></div>
+        <details id="export-record-picker" class="export-record-picker">
+          <summary>{{tr .Lang "Review and exclude records"}} <span id="export-excluded-count"></span></summary>
+          <p class="context-notice">{{tr .Lang "Excluding context also removes its saved revisions and linked tool readers. Runtime effects remain separate records."}}</p>
+          <div class="export-record-toolbar"><button id="export-record-clear" type="button">{{tr .Lang "Clear record exclusions"}}</button><button id="export-record-retry" type="button" hidden>{{tr .Lang "Retry"}}</button><span id="export-record-status" role="status"></span></div>
+          <div id="export-records" class="export-records"></div>
+          <div class="export-pagination"><button id="export-record-prev" type="button" disabled>{{tr .Lang "Previous"}}</button><span id="export-record-page"></span><button id="export-record-next" type="button" disabled>{{tr .Lang "Next"}}</button></div>
+        </details>
+      </fieldset>
+      <div id="export-reader" hidden></div>
+      <label id="export-ack-label" class="export-scope"><input id="export-ack" type="checkbox"><span id="export-ack-text"></span></label>
       <div class="export-controls"><button id="export-prepare" disabled>{{tr .Lang "Prepare preview"}}</button><button id="export-stop" hidden>{{tr .Lang "Stop loading"}}</button></div>
     </div>
     <p id="export-status" role="status" aria-live="polite"></p>
     <section id="export-result" hidden>
+      <p id="export-frozen-scope" class="export-run"></p><p id="export-selection-counts"></p>
+      <p id="export-omissions" class="context-notice" hidden></p>
+      <details id="export-warnings" class="export-warnings" hidden><summary id="export-warning-count"></summary><p>{{tr .Lang "Matching context text remains in included records. Review these references in the frozen copy before sharing."}}</p><p id="export-warning-limit" class="context-notice"></p><ul id="export-warning-items"></ul></details>
       <dl id="export-counts" class="export-counts"></dl>
       <p>{{tr .Lang "Searchable sources"}}</p><div id="export-categories" class="export-categories"></div>
       <p class="context-notice">{{tr .Lang "Source counts describe saved records. Original collection gaps and unavailable bodies remain visible in the frozen replay."}}</p>
       <div class="export-meta"><strong id="export-size"></strong><span id="export-expires"></span><span>{{tr .Lang "Unsigned sharing copy"}}</span></div>
-      <div class="export-actions"><a id="export-view" class="export-link" target="_blank" rel="noopener noreferrer">{{tr .Lang "Inspect frozen replay"}}</a><button id="export-download">{{tr .Lang "Confirm and download ZIP"}}</button><button id="export-discard">{{tr .Lang "Discard preview"}}</button></div>
+      <div class="export-actions"><a id="export-view" class="export-link" target="_blank" rel="noopener noreferrer">{{tr .Lang "Inspect frozen replay"}}</a><button id="export-download">{{tr .Lang "Confirm and download ZIP"}}</button><button id="export-discard">{{tr .Lang "Change selection"}}</button></div>
+      <p><a id="export-manifest" target="_blank" rel="noopener noreferrer">{{tr .Lang "Frozen record selection"}}</a></p>
       <details class="export-files"><summary>{{tr .Lang "Exact file inventory"}}</summary><p class="export-digest">SHA-256: <code id="export-digest"></code></p>
         <table><thead><tr><th>{{tr .Lang "File"}}</th><th>{{tr .Lang "Bytes"}}</th><th>SHA-256</th></tr></thead><tbody id="export-files"></tbody></table>
         <div class="export-pagination"><button id="export-files-prev">{{tr .Lang "Previous"}}</button><span id="export-files-count"></span><button id="export-files-next">{{tr .Lang "Next"}}</button></div>
@@ -1991,7 +2009,7 @@ async function navigateEvidenceGraph(run,id){
   $('#graphcard').scrollIntoView({block:'start',behavior:'smooth'});
 }
 window.AgentWorkspaceUI.init({tr,tx,esc,j,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope)),navigateSession:navigateRelatedSession,returnSession:()=>safeUI(returnRelatedSession()),search:()=>safeUI(window.AgentSearchUI.open()),compare:()=>safeUI(window.AgentCompareUI.open()),export:()=>safeUI(window.AgentExportUI.open())});
-window.AgentExportUI.init({tr,tx,esc,lang:LANG,scope:()=>({run:cur,...SESSION_SCOPE})});
+window.AgentExportUI.init({tr,tx,esc,j,lang:LANG,scope:()=>({run:cur,...SESSION_SCOPE})});
 window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,
   overviewChanged:value=>window.AgentWorkspaceUI.setOverview(value),
   overviewFailed:()=>window.AgentWorkspaceUI.overviewError(),

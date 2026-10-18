@@ -12,14 +12,18 @@ English | [中文](CHANGELOG.zh-CN.md)
   original database or Bundle. By default, the command includes all saved run content.
   A separate record manifest lists included source IDs, categories and revisions
   from the same frozen snapshot as the replay.
-- Limit CLI or local API replay exports to a native session, or exclude records
+- Limit CLI, Dashboard or local API replay exports to a native session, or exclude records
   and categories. The frozen selection applies to graph, search, raw and body
   readers, including historical revisions. Cross-boundary references and omitted
   analyses remain visible; partial copies carry a selected-evidence label.
-- Prepare and inspect a frozen whole-run replay from the Dashboard before
+- Prepare and inspect a frozen replay from the Dashboard before
   downloading its ZIP. Explicit scope confirmation, saved-source counts, exact
   file inventory and archive size accompany the existing reader. Local previews
   are bounded, expire automatically and are cleaned up on normal server shutdown.
+- Choose the whole run or current session, include categories and review individual
+  records with the existing body reader before exporting. The frozen preview
+  reports actual included/excluded counts, linked exclusions and repeated-content
+  warnings; changing the selection retires the previous preview.
 - Compare two runs in a temporary Dashboard window, with configuration fields,
   file evidence, network destinations and outbound data types. Keep recorded
   task and capture context visible, preserve typed missing values, and link

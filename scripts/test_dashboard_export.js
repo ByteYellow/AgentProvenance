@@ -20,7 +20,7 @@ async (page) => {
     const before=await page.evaluate(()=>({run:cur,lens:LENS,detail:DETAIL,zoom:ZOOM,scope:SESSION_SCOPE,selected:SEL,focus:GRAPH_FOCUS}));
     await page.locator('[data-investigation="export"]').click();
     check(await page.locator('#export-prepare').isDisabled(),'explicit whole-run confirmation: '+run);
-    if(run==='run-dbc2adf273d4')check(await page.locator('#export-session').innerText().then(s=>s.includes('whole run, not just')),'session filter does not silently set export scope');
+    if(run==='run-dbc2adf273d4')check(await page.locator('input[name="export-scope"][value="whole_run"]').isChecked()&&await page.locator('#export-session-option').isVisible(),'session filter offers an explicit choice without silently changing scope');
     await page.locator('#export-ack').check();
     const prepared=page.waitForResponse(r=>r.url().endsWith('/api/replay/previews')&&r.request().method()==='POST');
     await page.locator('#export-prepare').click();

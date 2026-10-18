@@ -3,6 +3,26 @@
 .export-body p { line-height: 1.55; }
 .export-run { font-weight: 600; overflow-wrap: anywhere; }
 .export-scope { display: flex; align-items: baseline; gap: 10px; margin: 18px 0; }
+.export-body fieldset { border: 0; padding: 0; margin: 18px 0; min-width: 0; }
+.export-body legend { font-weight: 600; margin-bottom: 12px; }
+.export-scope-options, .export-category-options { display: flex; flex-wrap: wrap; gap: 10px 20px; }
+.export-scope-options label, .export-category-options label { display: flex; align-items: center; gap: 7px; }
+.export-body input { accent-color: var(--acc); flex: 0 0 auto; }
+.export-record-picker { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.export-record-picker summary { cursor: pointer; }.export-record-picker summary span { color: var(--mut); margin-left: 8px; }
+.export-record-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; color: var(--mut); }
+.export-records { max-height: 340px; overflow: auto; border-block: 1px solid var(--line); }
+.export-record { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.export-record label { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
+.export-record label > span { min-width: 0; overflow-wrap: anywhere; }
+.export-record strong, .export-record small { display: block; line-height: 1.5; }
+.export-record strong { font-weight: 500; }.export-record small { color: var(--mut); font-size: 11px; }
+.export-record[data-excluded="true"] strong { color: var(--mut); }
+.export-record code { font-size: 10px; }.export-record > button { align-self: start; }
+.export-warnings { border-left: 3px solid var(--warn); padding: 10px 14px; background: var(--panel); }
+.export-warnings summary { cursor: pointer; font-weight: 600; }.export-warnings li { overflow-wrap: anywhere; margin-block: 6px; }
+.export-warnings ul { max-height: 240px; overflow: auto; padding-left: 20px; }
+#export-frozen-scope, #export-selection-counts, #export-omissions { overflow-wrap: anywhere; }
 .export-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .export-body button, .export-body a.export-link { padding: 7px 12px; border: 1px solid var(--line2); border-radius: 6px; background: var(--panel); color: var(--tx); cursor: pointer; font-size: 12px; text-decoration: none; }
 .export-body button:hover, .export-body a.export-link:hover { border-color: var(--acc); color: var(--acc); }

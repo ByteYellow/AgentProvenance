@@ -44,6 +44,30 @@ type replaySelectionWarning struct {
 	ExcludedCount int      `json:"excluded_count"`
 }
 
+// The preview uses this bounded summary instead of loading the complete record
+// manifest into the browser. Detailed membership remains in record-selection.json.
+type ReplaySelectionSummary struct {
+	Selection    ReplaySelection          `json:"selection"`
+	Included     int                      `json:"included_records"`
+	Excluded     int                      `json:"excluded_records"`
+	Reasons      map[string]int           `json:"exclusion_reasons"`
+	Warnings     []replaySelectionWarning `json:"warnings,omitempty"`
+	WarningCount int                      `json:"warning_count"`
+}
+
+func (p *replaySelectionPlan) summary() ReplaySelectionSummary {
+	s := ReplaySelectionSummary{Selection: p.Selection, Reasons: map[string]int{}, Warnings: p.Warnings, WarningCount: p.WarningCount}
+	for _, record := range p.Records {
+		if record.Included {
+			s.Included++
+		} else {
+			s.Excluded++
+			s.Reasons[record.Reason]++
+		}
+	}
+	return s
+}
+
 type replaySelectionPlan struct {
 	Selection ReplaySelection
 	Records   []replayRecordDecision

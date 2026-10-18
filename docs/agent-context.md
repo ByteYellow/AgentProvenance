@@ -563,20 +563,28 @@ graph. The record manifest warns when the same normalized context body remains
 in another selected record. Review that warning and the frozen replay before sharing;
 record exclusion does not remove matching text from all other evidence.
 
-The CLI and local replay API support these selections. The current Dashboard
-export window still prepares a complete run.
+The CLI, Dashboard and local replay API support these selections.
 
 ### Preview and Download in the Dashboard
 
 Start `dashboard serve` against your local data directory, select a run, and
-choose **Export replay**. Confirm that the package includes the whole run,
-including other sessions and unassigned evidence. The preview shows saved-source
-counts, the ZIP size and a paged file inventory. **Inspect frozen replay** opens
+choose **Export replay**. The default scope is the whole run, including other
+sessions and unassigned evidence. When a session filter is active, you can
+explicitly choose **Current session** instead. Choose content categories or open
+**Review and exclude records** to read individual sources and deselect them.
+Changing the scope clears per-record exclusions; category choices remain.
+
+Confirm the selection and prepare a frozen preview. It shows the actual included
+and excluded record counts, repeated-context warnings, saved-source counts, ZIP
+size and paged file inventory. Counts include saved revisions and linked readers,
+so they can differ from the number of checkboxes you changed. The exact decisions
+are available through **Frozen record selection**. **Inspect frozen replay** opens
 the same data that will be downloaded, so you can read the graph, conversation,
 configuration, raw records and bodies before sharing.
 
 **Confirm and download ZIP** downloads that frozen archive. Later collection
-does not change it. Preparation allows one active preview per server, expires
+does not change it. **Change selection** discards that archive before allowing
+edits. Preparation allows one active preview per server, expires
 after ten minutes, and stops after five minutes if it cannot finish. Discarding
 the preview or stopping the local server releases its temporary files; an active
 download retains its files until the response finishes. A hard process kill may

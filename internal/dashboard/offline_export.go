@@ -37,18 +37,19 @@ type ReplayFile struct {
 // ReplayInventory describes the exact files frozen for a share. The inventory
 // excludes itself; its digest is returned separately by the preparation step.
 type ReplayInventory struct {
-	SchemaVersion     string         `json:"schema_version"`
-	RunID             string         `json:"run_id"`
-	Scope             string         `json:"scope"`
-	CreatedAt         string         `json:"created_at"`
-	Commit            string         `json:"commit"`
-	Signed            bool           `json:"signed"`
-	Events            int            `json:"events"`
-	Contents          ReplayContents `json:"contents"`
-	Selection         ReplayFile     `json:"record_selection"`
-	AnalysisOmissions map[string]int `json:"analysis_omissions,omitempty"`
-	Files             []ReplayFile   `json:"files"`
-	Bytes             int64          `json:"bytes_excluding_inventory"`
+	SchemaVersion     string                  `json:"schema_version"`
+	RunID             string                  `json:"run_id"`
+	Scope             string                  `json:"scope"`
+	CreatedAt         string                  `json:"created_at"`
+	Commit            string                  `json:"commit"`
+	Signed            bool                    `json:"signed"`
+	Events            int                     `json:"events"`
+	Contents          ReplayContents          `json:"contents"`
+	Selection         ReplayFile              `json:"record_selection"`
+	SelectionSummary  *ReplaySelectionSummary `json:"selection_summary,omitempty"`
+	AnalysisOmissions map[string]int          `json:"analysis_omissions,omitempty"`
+	Files             []ReplayFile            `json:"files"`
+	Bytes             int64                   `json:"bytes_excluding_inventory"`
 }
 
 // Counts describe saved sources, not successful operations or collection coverage.
@@ -179,6 +180,7 @@ func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySe
 		return nil, err
 	}
 	selectionFile := ReplayFile{Path: "record-selection.json", SHA256: replayDigest(selectionData), Bytes: int64(len(selectionData))}
+	selectionSummary := selection.summary()
 	var omissions map[string]int
 	if selection.partial() {
 		projection, projectErr := snapshot.projectSelection(ctx, selection)
@@ -295,6 +297,7 @@ func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySe
 	}
 	p.Inventory = ReplayInventory{SchemaVersion: "agentprovenance.replay_inventory/v1", RunID: run, Scope: input.Scope, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Commit: buildinfo.Commit, Events: selected.Events, Contents: contents, Selection: selectionFile}
 	p.Inventory.AnalysisOmissions = omissions
+	p.Inventory.SelectionSummary = &selectionSummary
 	if err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr

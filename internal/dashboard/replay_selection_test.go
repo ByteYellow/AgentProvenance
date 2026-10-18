@@ -246,6 +246,10 @@ func TestReplaySelectionRevisionsRawSiblingsAndDuplicateContent(t *testing.T) {
 	if w.Code != "same_content_in_retained_record" || w.IncludedCount != 1 || w.ExcludedCount != 1 || !decisions[w.Included[0]].Included {
 		t.Fatalf("duplicate review warning: %+v", w)
 	}
+	summary := p.summary()
+	if summary.WarningCount != 1 || len(summary.Warnings) != 1 || summary.Excluded != omitted || summary.Included+summary.Excluded != len(p.Records) {
+		t.Fatalf("preview summary differs from resolved decisions: %+v", summary)
+	}
 	if len(p.WithheldContent) != 4 {
 		t.Fatalf("old/new raw versions and their body readers must be withheld: %+v", p.WithheldContent)
 	}
@@ -410,6 +414,9 @@ func TestReplaySelectionWarningLimitAndFailedFreezeCleanup(t *testing.T) {
 	}
 	if p.WarningCount != 101 || len(p.Warnings) != 100 {
 		t.Fatalf("warning bound: %d/%d", len(p.Warnings), p.WarningCount)
+	}
+	if summary := p.summary(); summary.WarningCount != 101 || len(summary.Warnings) != 100 || summary.Included != 101 || summary.Excluded != 101 {
+		t.Fatalf("preview warning bound: %+v", summary)
 	}
 	for _, warning := range p.Warnings {
 		if len(warning.Included) != 1 || len(warning.Excluded) != 1 {
