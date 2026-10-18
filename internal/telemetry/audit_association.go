@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -12,6 +13,8 @@ import (
 )
 
 const AuditAssociationRule = "agentprov.audit_lifecycle_operation/v1"
+
+var ErrAuditAssociationQuery = errors.New("invalid audit association query")
 
 const (
 	maxAuditRuntimeRows  = 50000
@@ -37,6 +40,7 @@ type AuditAssociationReport struct {
 	NextCursor    string                 `json:"next_cursor,omitempty"`
 	HasMore       bool                   `json:"has_more"`
 	RuntimeRows   int                    `json:"runtime_rows_examined"`
+	AnalysisScope string                 `json:"analysis_scope"`
 	Issues        []string               `json:"issues,omitempty"`
 	Items         []AuditAssociationItem `json:"items"`
 }
@@ -111,30 +115,41 @@ type auditAssociationCursor struct {
 	Rule, RunID, EventID, After string
 }
 
-func BuildAuditAssociations(ctx context.Context, db *sql.DB, opts AuditAssociationOptions) (AuditAssociationReport, error) {
-	report := AuditAssociationReport{SchemaVersion: "agentprovenance.audit_associations/v1", Rule: AuditAssociationRule,
-		RunID: opts.RunID, Status: "complete", Items: []AuditAssociationItem{}}
-	if db == nil || strings.TrimSpace(opts.RunID) == "" {
-		return report, fmt.Errorf("audit association requires database and run")
+func validateAuditAssociationOptions(opts AuditAssociationOptions) (AuditAssociationOptions, auditAssociationCursor, error) {
+	var cursor auditAssociationCursor
+	if strings.TrimSpace(opts.RunID) == "" || len(opts.RunID) > 1024 || len(opts.EventID) > 1024 {
+		return opts, cursor, fmt.Errorf("%w: run is required; identifiers must not exceed 1024 bytes", ErrAuditAssociationQuery)
 	}
 	if opts.Limit == 0 {
 		opts.Limit = 100
 	}
 	if opts.Limit < 1 || opts.Limit > 500 {
-		return report, fmt.Errorf("audit association limit must be between 1 and 500")
+		return opts, cursor, fmt.Errorf("%w: limit must be between 1 and 500", ErrAuditAssociationQuery)
 	}
-	report.Limit = opts.Limit
-	var cursor auditAssociationCursor
 	if opts.Cursor != "" {
 		if len(opts.Cursor) > 4096 {
-			return report, fmt.Errorf("invalid audit association cursor")
+			return opts, cursor, fmt.Errorf("%w: invalid cursor", ErrAuditAssociationQuery)
 		}
 		raw, err := base64.RawURLEncoding.DecodeString(opts.Cursor)
 		if err != nil || json.Unmarshal(raw, &cursor) != nil ||
-			cursor.Rule != AuditAssociationRule || cursor.RunID != opts.RunID || cursor.EventID != opts.EventID || cursor.After == "" {
-			return report, fmt.Errorf("invalid audit association cursor")
+			cursor.Rule != AuditAssociationRule || cursor.RunID != opts.RunID || cursor.EventID != opts.EventID || cursor.After == "" || len(cursor.After) > 1024 {
+			return opts, cursor, fmt.Errorf("%w: cursor does not match this query", ErrAuditAssociationQuery)
 		}
 	}
+	return opts, cursor, nil
+}
+
+func BuildAuditAssociations(ctx context.Context, db *sql.DB, opts AuditAssociationOptions) (AuditAssociationReport, error) {
+	report := AuditAssociationReport{SchemaVersion: "agentprovenance.audit_associations/v1", Rule: AuditAssociationRule,
+		RunID: opts.RunID, Status: "complete", AnalysisScope: "query_page", Items: []AuditAssociationItem{}}
+	opts, cursor, err := validateAuditAssociationOptions(opts)
+	if err != nil {
+		return report, err
+	}
+	if db == nil {
+		return report, fmt.Errorf("audit association database unavailable")
+	}
+	report.Limit = opts.Limit
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return report, err

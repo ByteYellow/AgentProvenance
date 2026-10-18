@@ -185,12 +185,32 @@ AppArmor/seccomp 决定导入。PID 字段语义依据内核的
 
 ```sh
 agentprov telemetry audit-associations --run RUN --limit 100 --json
+agentprov --daemon-url http://127.0.0.1:8574 telemetry audit-associations --run RUN --json
 ```
+
+同一查询还通过后台服务 `GET /v1/telemetry/audit-associations` 和 Dashboard
+`GET /api/audit/associations` 提供。参数为 `run`、可选 `event`、`limit`（1-500，默认 100）和
+`cursor`。未知或重复参数、暂不支持的 Session 筛选返回 HTTP 400；读取失败返回 503；
+没有匹配的已保存记录时返回空 `items`。后台服务沿用 Bearer Token 认证。
+[OpenAPI 契约](audit-associations-api.yaml) 列出候选、引用、实际返回值和错误响应。
+
+Python 使用 `Client.audit_associations`，AI/MCP 使用只读工具 `get_audit_associations`。
+接口字段、状态和生成的错误信息统一英文，不随语言设置改变；证据原文保持原样。
+审计导入仍由受信任的采集端或 CLI 执行。
 
 用 `--event EVENT` 查看单条已保存审计，或用 `--cursor` 读取下一页。
 结果标明分析规则 `agentprov.audit_lifecycle_operation/v1`，保留原审计 PID、Agent 会话和图边。
 迟到记录到达后，再次查询会在同一数据库快照上重新计算候选。
 签名 Bundle 导出、导入保留分析输入，可在离线数据库上使用同一规则复核。
+
+新导出的网页回放会冻结候选结果，`AgentProvReplay.query` 通过相同 Dashboard 路径支持分页。
+部分导出只包含所选审计记录；如果支持证据或竞争候选被排除，则以 `replay_evidence_excluded`
+标记并省略该关联，避免把剩余候选升级为唯一匹配。被排除的工具上下文同样省略。
+不含这项数据的旧网页回放会明确提示未收录。
+
+`analysis_scope=query_page` 描述当前在线查询的有界分析，`export_pages` 描述回放查询读取的
+冻结分页。回放中的运行时检查数和诊断属于这些分页，单条查询也沿用该范围。
+报告的 `complete` 表示分析完成，采集完整性单独报告。在线分页每页读取新快照；导出先冻结完整来源。
 
 进程关联需要来源主机、启动实例、日志 PID 一致，并有同一内核进程生命周期的观测覆盖审计区间。
 原生 Sensor 从 `/proc/1/root/etc/machine-id` 读取机器身份；节点部署需按既有配置使用宿主 PID

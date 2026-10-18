@@ -1,0 +1,182 @@
+openapi: 3.1.0
+info:
+  title: 审计关联查询接口
+  version: "1.0"
+paths:
+  /v1/telemetry/audit-associations:
+    get:
+      operationId: auditAssociations
+      summary: 查询已保存审计决定与运行时候选
+      parameters:
+        - $ref: '#/components/parameters/run'
+        - $ref: '#/components/parameters/event'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        "200":
+          description: 在同一数据库快照上进行有界只读分析
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        "400": { $ref: '#/components/responses/InvalidQuery' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "503": { $ref: '#/components/responses/Unavailable' }
+  /api/audit/associations:
+    get:
+      operationId: dashboardAuditAssociations
+      summary: 在本地 Dashboard 查询相同的审计关联
+      servers:
+        - url: http://127.0.0.1:7397
+          description: Dashboard 地址，按实际配置使用端口
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/run'
+        - $ref: '#/components/parameters/event'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        "200":
+          description: 与后台服务使用相同报告；静态回放读取冻结的导出分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        "400": { $ref: '#/components/responses/InvalidQuery' }
+        "503": { $ref: '#/components/responses/Unavailable' }
+components:
+  parameters:
+    run:
+      in: query
+      name: run
+      required: true
+      description: 精确匹配 Run ID，非空，最多 1024 个 UTF-8 字节
+      schema: { type: string, minLength: 1, maxLength: 1024 }
+    event:
+      in: query
+      name: event
+      description: 可选审计事件 ID，精确匹配，最多 1024 个 UTF-8 字节
+      schema: { type: string, maxLength: 1024 }
+    limit:
+      in: query
+      name: limit
+      schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+    cursor:
+      in: query
+      name: cursor
+      description: 同一 Run 和事件筛选的 next_cursor，按事件 ID 分页
+      schema: { type: string, maxLength: 4096 }
+  responses:
+    InvalidQuery:
+      description: 参数格式错误、未知或重复，分页上限无效或游标不匹配。不接受 Session 筛选。
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: 后台服务开启认证时，缺少或提供了无效的 Bearer Token
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unavailable:
+      description: 数据库或已保存输入读取失败，返回错误而非空报告
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    Report:
+      type: object
+      required: [schema_version, rule, run_id, status, analysis_scope, limit, has_more, runtime_rows_examined, items]
+      properties:
+        schema_version: { type: string, enum: [agentprovenance.audit_associations/v1] }
+        rule: { type: string, enum: [agentprov.audit_lifecycle_operation/v1] }
+        run_id: { type: string }
+        status: { type: string, enum: [complete, incomplete] }
+        analysis_scope:
+          type: string
+          enum: [query_page, export_pages]
+          description: 分析诊断描述查询页或所读取的冻结导出页；采集覆盖单独报告
+        limit: { type: integer, minimum: 1, maximum: 500 }
+        has_more: { type: boolean }
+        next_cursor: { type: string }
+        runtime_rows_examined: { type: integer, minimum: 0 }
+        issues: { type: array, items: { type: string } }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Item' }
+    Item:
+      type: object
+      required: [event_id, source, mechanism, decision, process, operation, evidence_scope]
+      properties:
+        event_id: { type: string }
+        source:
+          type: object
+          properties:
+            host_id: { type: string }
+            boot_id: { type: string }
+        time_window:
+          type: object
+          required: [from, until, decimal_precision_ns, source_coarse_clock_resolution_ns, basis]
+          properties:
+            from: { type: string, format: date-time }
+            until: { type: string, format: date-time }
+            decimal_precision_ns: { type: integer, format: int64 }
+            source_coarse_clock_resolution_ns: { type: integer, format: int64 }
+            basis: { type: string }
+        mechanism: { type: string, enum: [apparmor, seccomp] }
+        decision: { type: string }
+        process: { $ref: '#/components/schemas/Association' }
+        operation: { $ref: '#/components/schemas/Association' }
+        process_exit_refs: { $ref: '#/components/schemas/Refs' }
+        operations:
+          type: array
+          items: { $ref: '#/components/schemas/Operation' }
+        evidence_scope: { type: string, enum: [saved_records_only, selected_records_only] }
+    Association:
+      type: object
+      required: [status, candidate_count]
+      properties:
+        status: { type: string, enum: [unassociated, inferred, ambiguous] }
+        basis: { type: string }
+        reason: { type: string }
+        candidate_count: { type: integer, minimum: 0 }
+        candidates_truncated: { type: boolean }
+        candidates:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [id, evidence_refs]
+            properties:
+              id: { type: string }
+              evidence_refs: { $ref: '#/components/schemas/Refs' }
+    Refs:
+      type: array
+      items: { type: string }
+    Operation:
+      type: object
+      required: [id, process_instance_id, thread_instance_id, kind, attempt_state, result_state, attempt_record_count, result_record_count]
+      properties:
+        id: { type: string }
+        process_instance_id: { type: string }
+        thread_instance_id: { type: string }
+        kind: { type: string }
+        attempt_state: { type: string, enum: [observed, not_observed, conflicting] }
+        result_state: { type: string, enum: [observed, not_observed, conflicting] }
+        attempt_record_count: { type: integer, minimum: 0 }
+        result_record_count: { type: integer, minimum: 0 }
+        refs_truncated: { type: boolean }
+        attempt_refs: { $ref: '#/components/schemas/Refs' }
+        result_refs: { $ref: '#/components/schemas/Refs' }
+        syscall_result:
+          type: integer
+          format: int64
+          description: 实际记录的返回值，保留零值；缺失或冲突时省略
+        syscall_outcome: { type: string }
+        context:
+          type: array
+          items:
+            type: object
+            required: [event_id, method, confidence]
+            properties:
+              event_id: { type: string }
+              session_id: { type: string }
+              tool_call_id: { type: string }
+              method: { type: string }
+              confidence: { type: number }

@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"text/tabwriter"
 
+	"github.com/byteyellow/agentprovenance/internal/daemon"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 	"github.com/spf13/cobra"
 )
 
-func telemetryAuditAssociationsCmd(dataDir *string) *cobra.Command {
+func telemetryAuditAssociationsCmd(dataDir, daemonURL *string) *cobra.Command {
 	var opts telemetry.AuditAssociationOptions
 	var jsonOut bool
 	cmd := &cobra.Command{
@@ -20,16 +21,22 @@ func telemetryAuditAssociationsCmd(dataDir *string) *cobra.Command {
 			if opts.Limit < 1 || opts.Limit > 500 {
 				return fmt.Errorf("audit association limit must be between 1 and 500")
 			}
-			paths, err := store.Init(*dataDir)
-			if err != nil {
-				return err
+			var report telemetry.AuditAssociationReport
+			var err error
+			if *daemonURL != "" {
+				report, err = daemon.NewClient(*daemonURL).TelemetryAuditAssociations(cmd.Context(), opts)
+			} else {
+				paths, initErr := store.Init(*dataDir)
+				if initErr != nil {
+					return initErr
+				}
+				db, openErr := store.Open(paths)
+				if openErr != nil {
+					return openErr
+				}
+				defer db.Close()
+				report, err = telemetry.BuildAuditAssociations(cmd.Context(), db, opts)
 			}
-			db, err := store.Open(paths)
-			if err != nil {
-				return err
-			}
-			defer db.Close()
-			report, err := telemetry.BuildAuditAssociations(cmd.Context(), db, opts)
 			if err != nil {
 				return err
 			}

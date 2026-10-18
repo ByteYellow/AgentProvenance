@@ -266,7 +266,21 @@ and [seccomp audit records](https://github.com/torvalds/linux/blob/v6.8/kernel/a
 
 ```sh
 agentprov telemetry audit-associations --run RUN --limit 100 --json
+agentprov --daemon-url http://127.0.0.1:8574 telemetry audit-associations --run RUN --json
 ```
+
+The same reader is available at `GET /v1/telemetry/audit-associations` on the
+daemon and `GET /api/audit/associations` on the Dashboard. Both accept `run`,
+optional `event`, `limit` (1-500, default 100) and `cursor`. Unknown or repeated
+parameters, including unsupported Session filters, return HTTP 400. Read failures
+return 503; no matching saved records returns an empty `items` array. Daemon
+authentication uses the existing Bearer Token. The [OpenAPI contract](audit-associations-api.yaml)
+defines candidates, references, actual returns and error responses.
+
+Python offers `Client.audit_associations`; AI/MCP clients use the read-only
+`get_audit_associations` tool. API field names, statuses and generated errors are
+English in every locale; recorded evidence retains its original text. Audit
+import remains a trusted collector/CLI operation.
 
 Use `--event EVENT` to inspect one saved audit record, or `--cursor` for the
 next page. The result includes `agentprov.audit_lifecycle_operation/v1` as its
@@ -274,6 +288,20 @@ analysis rule. It does not overwrite an audit PID, Agent session or graph edge.
 Re-querying after a late arrival recomputes the candidates from one database
 snapshot. The saved input records survive signed Bundle export/import, so the
 same rule can be evaluated offline.
+
+Fresh webpage exports freeze these candidates, with paged queries through the
+same Dashboard path in `AgentProvReplay.query`. Partial exports only include
+selected audit records. If a supporting record or competing candidate is excluded,
+the associated inference is withheld with `replay_evidence_excluded`; the remaining
+candidate is not promoted to a unique match. Excluded tool context is omitted.
+Older webpage exports without this reader report that the data was not included.
+
+`analysis_scope=query_page` describes the live query's bounded analysis;
+`export_pages` describes the frozen pages consulted by a replay query. Its runtime
+row count and issues cover those pages, even for a single-event query. The report's
+`complete` status describes analysis completion, while capture completeness is
+reported separately. Live pagination reads a fresh snapshot per page; export
+freezes the whole source before building pages.
 
 Process association requires matching source host, boot and logged process ID,
 plus observations of one kernel process lifetime around the audit interval.

@@ -92,6 +92,23 @@ async function main(){
         let events=[];
         for(let offset=0;;offset+=500){const value=await query('/api/events'+q+'&limit=500&offset='+offset);events.push(...value.events);if(events.length>=value.total)break;}
         assert.deepEqual(events,saved(run.events));assert.equal(events.length,inventory.events);
+        if(run.audit){
+          const expected=run.audit.pages.flatMap(shard=>saved(shard.data).items);
+          for(const limit of [1,17,100,500]){
+            let items=[],cursor='';
+            do{const value=await query('/api/audit/associations'+q+'&limit='+limit+'&cursor='+encodeURIComponent(cursor));assert.equal(value.analysis_scope,'export_pages');items.push(...value.items);cursor=value.next_cursor||'';}while(cursor);
+            assert.deepEqual(items,expected,'audit pagination preserves candidates and references');
+          }
+          if(expected.length){
+            const one=await query('/api/audit/associations'+q+'&event='+encodeURIComponent(expected[0].event_id));assert.deepEqual(one.items,[expected[0]]);
+            if(report.run==='audit-interface-fixture')for(const item of expected){
+              if(partial){assert.equal(item.operation.reason,'replay_evidence_excluded');assert.equal(item.operation.status,'unassociated');assert.ok(!item.operations);}
+              else {assert.equal(item.operation.status,'ambiguous');assert.equal(item.operation.candidate_count,2);assert.ok(item.operations.some(op=>op.syscall_result===0));}
+            }
+          }
+          for(const extra of ['&session=x','&harness=claude','&limit=0','&limit=501','&limit=1.5','&limit=','&run=duplicate','&cursor=bad'])await assert.rejects(query('/api/audit/associations'+q+extra));
+          report.auditDecisions=expected.length;
+        }
         const session=saved(run.context);
         let contextText='';
         let entries=[],cursor='';
@@ -118,7 +135,7 @@ async function main(){
         await page.locator('#compare-close').click();
         await page.locator('[data-investigation="search"]').click();
         if(partial)assert.match(await page.locator('#search-scope').innerText(),/Included records/,'partial replay does not claim whole-run search');
-        await page.locator('#search-query').fill(report.run==='run-double-attempt'?'169.254.169.254':report.run==='ui-fixture'?'SAVED-OUTPUT-TAIL':'report.py');
+        await page.locator('#search-query').fill(report.run==='run-double-attempt'?'169.254.169.254':report.run==='ui-fixture'?'SAVED-OUTPUT-TAIL':report.run==='audit-interface-fixture'?'SECCOMP':'report.py');
         await page.locator('#search-submit').click();
         await page.waitForFunction(()=>!document.querySelector('#search-submit').disabled);
         assert.ok(await page.locator('.search-result').count()>0,'saved evidence remains searchable offline');
@@ -137,9 +154,11 @@ async function main(){
         assert.equal(await page.locator('#content-body').evaluate(e=>getComputedStyle(e).overflowY),'auto');
         await page.screenshot({path:'output/playwright/offline-'+report.run+'-mobile.png'});
         await page.locator('#search-close').click();
+        const englishAudit=run.audit?await query('/api/audit/associations'+q+'&limit=1'):null;
         await page.getByRole('link',{name:'中文',exact:true}).click();
         await page.waitForFunction(()=>window._lensManifest);
         assert.match(await page.locator('.offline-replay-bar').innerText(),/未签名的分享副本/);
+        if(englishAudit)assert.deepEqual(await query('/api/audit/associations'+q+'&limit=1'),englishAudit,'Chinese UI does not localize API output');
         assert.equal(report.networkRequests,0);assert.deepEqual(errors,[]);
         reports.push(report);console.log(JSON.stringify(report));
       }finally{await context.close();fs.rmSync(root,{recursive:true,force:true});}

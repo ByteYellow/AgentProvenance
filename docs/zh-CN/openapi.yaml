@@ -101,6 +101,10 @@ components:
           additionalProperties: true
       additionalProperties: true
 paths:
+  /v1/telemetry/audit-associations:
+    $ref: './audit-associations-api.yaml#/paths/~1v1~1telemetry~1audit-associations'
+  /api/audit/associations:
+    $ref: './audit-associations-api.yaml#/paths/~1api~1audit~1associations'
   /api/compare/records:
     $ref: '../agent-context-api.yaml#/paths/~1api~1compare~1records'
   /api/search/sources:

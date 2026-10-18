@@ -1,0 +1,182 @@
+openapi: 3.1.0
+info:
+  title: Audit association read API
+  version: "1.0"
+paths:
+  /v1/telemetry/audit-associations:
+    get:
+      operationId: auditAssociations
+      summary: Read saved audit decisions and runtime candidates
+      parameters:
+        - $ref: '#/components/parameters/run'
+        - $ref: '#/components/parameters/event'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        "200":
+          description: A bounded read-only projection over one database snapshot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        "400": { $ref: '#/components/responses/InvalidQuery' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "503": { $ref: '#/components/responses/Unavailable' }
+  /api/audit/associations:
+    get:
+      operationId: dashboardAuditAssociations
+      summary: Read the same audit projection on the local Dashboard
+      servers:
+        - url: http://127.0.0.1:7397
+          description: Dashboard address; use the configured port
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/run'
+        - $ref: '#/components/parameters/event'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        "200":
+          description: Same report as the daemon; static replay uses frozen export pages
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        "400": { $ref: '#/components/responses/InvalidQuery' }
+        "503": { $ref: '#/components/responses/Unavailable' }
+components:
+  parameters:
+    run:
+      in: query
+      name: run
+      required: true
+      description: Exact run ID, nonblank and at most 1024 UTF-8 bytes
+      schema: { type: string, minLength: 1, maxLength: 1024 }
+    event:
+      in: query
+      name: event
+      description: Optional exact audit event ID, at most 1024 UTF-8 bytes
+      schema: { type: string, maxLength: 1024 }
+    limit:
+      in: query
+      name: limit
+      schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+    cursor:
+      in: query
+      name: cursor
+      description: Opaque next_cursor for the same run and event; ordered by event ID
+      schema: { type: string, maxLength: 4096 }
+  responses:
+    InvalidQuery:
+      description: Malformed, unknown or repeated parameter; invalid limit or mismatched cursor. Session filters are not supported.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: Missing or invalid bearer token when daemon authentication is enabled
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unavailable:
+      description: Database or saved input could not be read; no successful empty report is returned
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    Report:
+      type: object
+      required: [schema_version, rule, run_id, status, analysis_scope, limit, has_more, runtime_rows_examined, items]
+      properties:
+        schema_version: { type: string, enum: [agentprovenance.audit_associations/v1] }
+        rule: { type: string, enum: [agentprov.audit_lifecycle_operation/v1] }
+        run_id: { type: string }
+        status: { type: string, enum: [complete, incomplete] }
+        analysis_scope:
+          type: string
+          enum: [query_page, export_pages]
+          description: Analysis diagnostics cover the query page or the frozen export pages consulted, not collection coverage
+        limit: { type: integer, minimum: 1, maximum: 500 }
+        has_more: { type: boolean }
+        next_cursor: { type: string }
+        runtime_rows_examined: { type: integer, minimum: 0 }
+        issues: { type: array, items: { type: string } }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Item' }
+    Item:
+      type: object
+      required: [event_id, source, mechanism, decision, process, operation, evidence_scope]
+      properties:
+        event_id: { type: string }
+        source:
+          type: object
+          properties:
+            host_id: { type: string }
+            boot_id: { type: string }
+        time_window:
+          type: object
+          required: [from, until, decimal_precision_ns, source_coarse_clock_resolution_ns, basis]
+          properties:
+            from: { type: string, format: date-time }
+            until: { type: string, format: date-time }
+            decimal_precision_ns: { type: integer, format: int64 }
+            source_coarse_clock_resolution_ns: { type: integer, format: int64 }
+            basis: { type: string }
+        mechanism: { type: string, enum: [apparmor, seccomp] }
+        decision: { type: string }
+        process: { $ref: '#/components/schemas/Association' }
+        operation: { $ref: '#/components/schemas/Association' }
+        process_exit_refs: { $ref: '#/components/schemas/Refs' }
+        operations:
+          type: array
+          items: { $ref: '#/components/schemas/Operation' }
+        evidence_scope: { type: string, enum: [saved_records_only, selected_records_only] }
+    Association:
+      type: object
+      required: [status, candidate_count]
+      properties:
+        status: { type: string, enum: [unassociated, inferred, ambiguous] }
+        basis: { type: string }
+        reason: { type: string }
+        candidate_count: { type: integer, minimum: 0 }
+        candidates_truncated: { type: boolean }
+        candidates:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [id, evidence_refs]
+            properties:
+              id: { type: string }
+              evidence_refs: { $ref: '#/components/schemas/Refs' }
+    Refs:
+      type: array
+      items: { type: string }
+    Operation:
+      type: object
+      required: [id, process_instance_id, thread_instance_id, kind, attempt_state, result_state, attempt_record_count, result_record_count]
+      properties:
+        id: { type: string }
+        process_instance_id: { type: string }
+        thread_instance_id: { type: string }
+        kind: { type: string }
+        attempt_state: { type: string, enum: [observed, not_observed, conflicting] }
+        result_state: { type: string, enum: [observed, not_observed, conflicting] }
+        attempt_record_count: { type: integer, minimum: 0 }
+        result_record_count: { type: integer, minimum: 0 }
+        refs_truncated: { type: boolean }
+        attempt_refs: { $ref: '#/components/schemas/Refs' }
+        result_refs: { $ref: '#/components/schemas/Refs' }
+        syscall_result:
+          type: integer
+          format: int64
+          description: Actual recorded return, including zero; omitted when absent or conflicting
+        syscall_outcome: { type: string }
+        context:
+          type: array
+          items:
+            type: object
+            required: [event_id, method, confidence]
+            properties:
+              event_id: { type: string }
+              session_id: { type: string }
+              tool_call_id: { type: string }
+              method: { type: string }
+              confidence: { type: number }

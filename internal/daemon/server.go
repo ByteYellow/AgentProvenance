@@ -92,6 +92,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/telemetry/events", s.listTelemetryEvents)
 	mux.HandleFunc("GET /v1/telemetry/windows", s.listTelemetryWindows)
 	mux.HandleFunc("GET /v1/telemetry/correlations", s.telemetryCorrelations)
+	mux.Handle("GET /v1/telemetry/audit-associations", telemetry.AuditAssociationsHandler(s.DB))
 	mux.HandleFunc("GET /v1/telemetry/spool", s.listTelemetrySpool)
 	mux.HandleFunc("GET /v1/telemetry/producer-health", s.telemetryProducerHealth)
 	mux.HandleFunc("POST /v1/telemetry/spool/process", s.processTelemetrySpool)

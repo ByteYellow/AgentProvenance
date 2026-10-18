@@ -100,10 +100,28 @@ with TemporaryDirectory(prefix="agentprov-batch-") as directory:
 | `binary` | CLI 路径，默认从 PATH 查找 `agentprov` |
 | `data_dir` | 本地数据目录 |
 | `daemon_url` | 后台服务地址；部分方法直接使用 HTTP，其余方法仍调用 CLI |
-| `env` | 调用 CLI 时追加或覆盖的环境变量 |
+| `env` | CLI 环境变量覆盖项，也用于覆盖 HTTP 后台服务令牌 |
 | `timeout` | 普通 CLI 和 HTTP 调用的超时，默认 600 秒；`None` 关闭超时 |
 
-`record`、`eval_context`、`signals` 在设置 `daemon_url` 后直接使用 HTTP。其他方法仍需 CLI。当前直接 HTTP 路径没有 Bearer Token 配置项；需要认证时，可自行调用 [REST 接口](ai-access.md)。
+`record`、`eval_context`、`signals`、`audit_associations` 在设置 `daemon_url` 后直接使用 HTTP。其他方法仍需 CLI。HTTP 从 `env` 或进程环境读取 `AGENTPROV_DAEMON_TOKEN`，作为 Bearer Token 发送；拒绝重定向，避免令牌被转发到其他地址。
+
+分页查询已保存的审计决定：
+
+```python
+from agentprov import Client
+
+client = Client(daemon_url="http://127.0.0.1:8574")
+cursor = ""
+while True:
+    page = client.audit_associations("run-example", limit=100, cursor=cursor)
+    for item in page["items"]:
+        print(item["event_id"], item["decision"], item["operation"]["status"])
+    if not page["has_more"]:
+        break
+    cursor = page["next_cursor"]
+```
+
+`event_id` 可筛选单条决定。未设置 `daemon_url` 时使用 CLI。决定、候选关联与实际结果的区别见[审计证据](telemetry-schema.md#查询运行时关联)。
 
 `iter_eval_contexts` 使用流式子进程读取结果，不使用上述 `timeout`；消费方需负责中止或限时。
 
@@ -121,6 +139,7 @@ with TemporaryDirectory(prefix="agentprov-batch-") as directory:
 | `batch_eval_contexts(...)` | 将多个评估上下文读取为列表 |
 | `iter_eval_contexts(...)` | 逐行读取上下文，适合较大批次 |
 | `signals(run_id, dimension=None)` | 读取统一信号，可按维度筛选 |
+| `audit_associations(run_id, event_id="", limit=100, cursor="")` | 查询审计决定、候选与实际结果 |
 | `score_trajectory(command, registry, ...)` | 记录并评估单次执行，返回 `TrajectoryScore` |
 | `import_signals(run_id, signals, validate=True)` | 导入单次执行的信号，默认先检查格式 |
 | `import_signal_reports(reports, engine="python-sdk")` | 批量导入评估报告 |

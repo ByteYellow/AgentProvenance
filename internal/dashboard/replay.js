@@ -122,6 +122,34 @@ window.AgentProvReplay = (() => {
     if(!/^[0-9]+$/.test(value))fail('Invalid '+label);
     const n=Number(value);if(!Number.isSafeInteger(n)||n<min||n>max)fail('Invalid '+label);return n;
   }
+  async function auditPage(index,p,id){
+    if(!index||index.schema_version!=='agentprovenance.replay_audit/v1')fail('Audit associations are not included in this replay');
+    for(const key of p.keys())if(!['run','event','limit','cursor'].includes(key)||p.getAll(key).length!==1)fail('Unsupported or repeated audit parameter');
+    const rule='agentprov.audit_lifecycle_operation/v1',event=p.get('event')||'',cursor=p.get('cursor')||'';
+    if(!id.trim()||encoder.encode(id).length>1024||encoder.encode(event).length>1024||encoder.encode(cursor).length>4096)fail('Invalid audit query');
+    const limit=range(p.get('limit'),100,1,500,'audit limit');let after='';
+    if(cursor){
+      let c;try{if(!/^[A-Za-z0-9_-]+$/.test(cursor))throw Error();c=JSON.parse(decoder.decode(Uint8Array.from(atob(cursor.replace(/-/g,'+').replace(/_/g,'/')),v=>v.charCodeAt(0))));}catch{fail('Invalid audit cursor');}
+      if(c?.Rule!==rule||c.RunID!==id||c.EventID!==event||typeof c.After!=='string'||!c.After||encoder.encode(c.After).length>1024)fail('Audit cursor does not match this query');after=c.After;
+    }
+    // SQLite orders IDs by UTF-8 bytes, not JavaScript's UTF-16 code units.
+    const cmp=(a,b)=>{const x=encoder.encode(a),y=encoder.encode(b);for(let i=0;i<Math.min(x.length,y.length);i++)if(x[i]!==y[i])return x[i]-y[i];return x.length-y.length;};
+    const out={schema_version:'agentprovenance.audit_associations/v1',rule,run_id:id,status:'complete',analysis_scope:'export_pages',limit,has_more:false,runtime_rows_examined:0,items:[]},issues=new Set();
+    for(const shard of index.pages){
+      if(cmp(shard.last,after)<=0||(event&&(cmp(event,shard.first)<0||cmp(event,shard.last)>0)))continue;
+      const page=await asset(shard.data);let used=false;
+      for(const item of page.items){
+        if(cmp(item.event_id,after)<=0||(event&&item.event_id!==event))continue;
+        if(out.items.length===limit){out.has_more=true;break;}
+        out.items.push(copy(item));used=true;
+      }
+      if(used){out.runtime_rows_examined+=page.runtime_rows_examined;if(page.status==='incomplete')out.status='incomplete';for(const issue of page.issues||[])issues.add(issue);}
+      if(out.has_more)break;
+    }
+    if(issues.size)out.issues=[...issues];
+    if(out.has_more){const bytes=encoder.encode(JSON.stringify({Rule:rule,RunID:id,EventID:event,After:out.items.at(-1).event_id}));out.next_cursor=btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+    return out;
+  }
   async function contentPage(pages,p,artifact){
     if(!pages)fail('Recorded content was not found in this replay');
     const offset=range(p.get('offset'),0,0,Number.MAX_SAFE_INTEGER,'content offset'),limit=range(p.get('limit'),65536,4,262144,'content limit');
@@ -143,6 +171,7 @@ window.AgentProvReplay = (() => {
     const id=p.get('run');let run=catalog.runs[id];
     if(path==='frameworks'&&!run)run=catalog.runs[catalog.summaries[0].run];
     if(!run)fail('The run was not found in this replay');
+    if(path==='audit/associations')return auditPage(run.audit,p,id);
     if(path==='compare/records'){
       if(p.has('harness')||p.has('session'))fail('Run comparison does not accept a session filter');
       const ref=run.compare?.[p.get('cursor')||''];

@@ -21,11 +21,12 @@ import (
 // The temporary databases themselves are not included in the shared ZIP.
 type replayProjection struct {
 	*replaySnapshot
-	plan       *replaySelectionPlan
-	boundaries map[string]string
-	readers    map[string]string
-	capture    observability.RuntimeCaptureReport
-	omitted    map[string]int
+	auditSource *sql.DB
+	plan        *replaySelectionPlan
+	boundaries  map[string]string
+	readers     map[string]string
+	capture     observability.RuntimeCaptureReport
+	omitted     map[string]int
 }
 
 func (p *replaySelectionPlan) partial() bool {
@@ -54,7 +55,7 @@ func (snapshot *replaySnapshot) projectSelection(ctx context.Context, plan *repl
 		return nil, err
 	}
 	p := &replayProjection{replaySnapshot: &replaySnapshot{DB: db, root: root}, plan: plan,
-		boundaries: map[string]string{}, readers: map[string]string{}, omitted: map[string]int{}}
+		auditSource: snapshot.DB, boundaries: map[string]string{}, readers: map[string]string{}, omitted: map[string]int{}}
 	run := plan.Selection.RunID
 	coverage, err := observability.ReadRuntimeCoverage(ctx, snapshot.DB, run)
 	if err != nil {

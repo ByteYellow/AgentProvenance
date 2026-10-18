@@ -6,6 +6,12 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
+- Query audit associations through the daemon and Dashboard read APIs, remote
+  CLI, Python SDK and AI/MCP tools, with strict pagination and explicit errors.
+  Fresh offline replays preserve frozen candidates; partial exports withhold
+  inferences whose evidence was excluded. API fields, statuses and generated
+  errors stay English across locales. The Python HTTP client supports the
+  existing daemon token and rejects redirects.
 - Inspect audit-to-runtime candidates with `telemetry audit-associations`.
   The read-only projection separates process and operation associations, keeps
   ambiguous candidates, and cites attempts, actual returns and process exits.

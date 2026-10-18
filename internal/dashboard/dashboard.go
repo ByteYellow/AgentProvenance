@@ -143,6 +143,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/artifact", s.artifact)
 	mux.HandleFunc("GET /api/search/sources", s.searchSources)
 	mux.HandleFunc("GET /api/compare/records", s.compareRecords)
+	mux.HandleFunc("GET /api/audit/associations", s.auditAssociations)
 	mux.HandleFunc("GET /api/egress", s.egress)
 	mux.HandleFunc("GET /api/outbound", s.outbound)
 	mux.HandleFunc("GET /api/processes", s.processes)

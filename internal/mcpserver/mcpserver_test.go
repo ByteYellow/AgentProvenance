@@ -2,11 +2,15 @@ package mcpserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/byteyellow/agentprovenance/internal/aitools"
+	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
 // run feeds newline-delimited JSON-RPC requests through Serve and returns the
@@ -96,10 +100,65 @@ func TestToolsListMatchesCatalog(t *testing.T) {
 		}
 		got[name] = true
 	}
-	for _, want := range []string{"verify_run", "get_signals", "list_risks", "list_events", "get_timeline", "evaluate_action"} {
+	for _, want := range []string{"verify_run", "get_signals", "list_risks", "list_events", "get_audit_associations", "get_timeline", "evaluate_action"} {
 		if !got[want] {
 			t.Errorf("tools/list missing %q", want)
 		}
+	}
+}
+
+func TestToolsCallAuditAssociationsPreservesContract(t *testing.T) {
+	paths, err := store.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	want, err := telemetry.BuildAuditAssociations(context.Background(), db, telemetry.AuditAssociationOptions{RunID: "run-audit", Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	request := `{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"get_audit_associations","arguments":{"run":"run-audit","limit":1}}}`
+	if err := Serve(db, strings.NewReader(request+"\n"), &out); err != nil {
+		t.Fatal(err)
+	}
+	var response map[string]any
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	res := result(t, response)
+	if res["isError"] != false {
+		t.Fatalf("audit tool failed: %v", res)
+	}
+	encoded, err := json.Marshal(res["structuredContent"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got telemetry.AuditAssociationReport
+	if err := json.Unmarshal(encoded, &got); err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("MCP changed the report: %+v, %v", got, err)
+	}
+	content := res["content"].([]any)[0].(map[string]any)
+	var textReport telemetry.AuditAssociationReport
+	if err := json.Unmarshal([]byte(content["text"].(string)), &textReport); err != nil || !reflect.DeepEqual(textReport, want) {
+		t.Fatalf("MCP text disagrees with structuredContent: %+v, %v", textReport, err)
+	}
+}
+
+func TestToolsCallAuditAssociationErrorIsEnglish(t *testing.T) {
+	resps := run(t, `{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"get_audit_associations","arguments":{"run":"run-audit","limit":"1"}}}`)
+	res := result(t, resps[0])
+	if res["isError"] != true {
+		t.Fatalf("invalid limit accepted: %v", res)
+	}
+	structured := res["structuredContent"].(map[string]any)
+	want := telemetry.ErrAuditAssociationQuery.Error() + ": limit must be an integer"
+	if structured["error"] != want {
+		t.Fatalf("unexpected error: %v", structured)
 	}
 }
 
