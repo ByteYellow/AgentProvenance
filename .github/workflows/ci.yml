@@ -183,7 +183,7 @@ jobs:
       - name: Install local TLS fixture dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc libssl-dev openssl python3
+          sudo apt-get install -y gcc libssl-dev openssl python3 apparmor-utils
       - name: Build sensor and fixture clients
         run: |
           mkdir -p /tmp/agentprov-live
@@ -217,9 +217,17 @@ jobs:
       - name: Verify syscall outcomes and thread-group exits
         run: |
           cd internal/sensor
-          sudo env PATH="$PATH" AGENTPROV_LIVE_OUTCOMES=1 \
+          sudo env PATH="$PATH" AGENTPROV_LIVE_OUTCOMES=1 AGENTPROV_OUTCOME_EVIDENCE_DIR=/tmp/agentprov-live/outcomes \
             /tmp/agentprov-live/sensor-test -test.run '^Test(Syscall|ExitSignal|OpenEntry|LiveSyscall)' -test.v -test.timeout=90s \
             | tee /tmp/agentprov-live/syscall-outcomes.log
+      - name: Verify real audit decisions against native syscall outcomes
+        run: |
+          go test -c -o /tmp/agentprov-live/telemetry-test ./internal/telemetry
+          sudo env AGENTPROV_AUDIT_APPARMOR_LIVE=1 AGENTPROV_AUDIT_SENSOR_LIVE=1 \
+            AGENTPROV_AUDIT_SECCOMP_EVIDENCE=/tmp/agentprov-live/outcomes \
+            AGENTPROV_AUDIT_EVIDENCE_DIR=/tmp/agentprov-live/audit-evidence \
+            /tmp/agentprov-live/telemetry-test -test.run '^TestLive(AppArmorAuditImport|SeccompAuditAssociations)$' -test.v -test.timeout=90s \
+            | tee /tmp/agentprov-live/audit-associations.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -228,6 +236,8 @@ jobs:
             /tmp/agentprov-live/acceptance.*
             /tmp/agentprov-live/openssl-read.log
             /tmp/agentprov-live/syscall-outcomes.log
+            /tmp/agentprov-live/audit-associations.log
+            /tmp/agentprov-live/audit-evidence/
 
   phase1-acceptance:
     name: Phase 1 observability smoke

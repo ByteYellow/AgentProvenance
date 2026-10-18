@@ -14,7 +14,9 @@ func TestNativeSyscallResultPreservesIdentityAndZero(t *testing.T) {
 			"syscall_result": result, "observation_stage": "result", "syscall_number": 203,
 			"operation_id": "syscall-v1:boot:43:100:42:90:200", "thread_instance_id": "boot:43:100",
 			"process_instance_id": lifecycleBoot + ":42:90", "boot_id": lifecycleBoot,
-			"monotonic_ns": "1234567890123456789", "syscall_start_ns": "1234567890123456788",
+			"host_id": "0123456789abcdef0123456789abcdef", "host_identity_source": "pid1_root_machine_id",
+			"realtime_coarse_resolution_ns": float64(4000000),
+			"monotonic_ns":                  "1234567890123456789", "syscall_start_ns": "1234567890123456788",
 		}
 		event, mapped, err := mapNative(raw)
 		if err != nil || !mapped || event.EventType != "syscall_result" || event.PID != 42 || event.TGID != 42 {
@@ -27,7 +29,7 @@ func TestNativeSyscallResultPreservesIdentityAndZero(t *testing.T) {
 		if err := json.Unmarshal([]byte(event.Payload), &body); err != nil {
 			t.Fatal(err)
 		}
-		for _, key := range []string{"operation_id", "thread_instance_id", "syscall_result", "monotonic_ns", "syscall_start_ns"} {
+		for _, key := range []string{"operation_id", "thread_instance_id", "syscall_result", "monotonic_ns", "syscall_start_ns", "host_id", "host_identity_source", "realtime_coarse_resolution_ns"} {
 			if body[key] != raw[key] {
 				t.Fatalf("lost %s: %v != %v", key, body[key], raw[key])
 			}

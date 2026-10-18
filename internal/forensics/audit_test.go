@@ -4,10 +4,13 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/forensics"
@@ -79,5 +82,75 @@ type=SECCOMP msg=audit(1792342593.759:132): pid=43 arch=c000003e syscall=39 sig=
 				t.Fatalf("reimport changed stable identity: %+v %v", result, err)
 			}
 		})
+	}
+}
+
+func TestSignedBundleRetainsAuditAssociationInputs(t *testing.T) {
+	const run = "audit-association"
+	const boot = "01234567-89ab-cdef-0123-456789abcdef"
+	paths := mustInit(t, filepath.Join(t.TempDir(), "source"))
+	db := mustOpen(t, paths)
+	defer db.Close()
+	ctx := context.Background()
+	input := `type=SECCOMP msg=audit(1792342593.757:130): pid=42 comm="fixture" arch=c00000b7 syscall=203 code=0x7ffc0000`
+	if r, err := telemetry.IngestAuditReader(ctx, db, telemetry.AuditIngestOptions{RunID: run,
+		Source: telemetry.AuditSource{HostID: "fixture-host", BootID: boot}}, strings.NewReader(input)); err != nil || r.Ingested != 1 {
+		t.Fatalf("audit import: %+v %v", r, err)
+	}
+	at := time.Unix(1792342593, 757000000).UTC()
+	for _, event := range []struct {
+		typeName, stage string
+		delta           time.Duration
+	}{{"execve", "", -5 * time.Millisecond}, {"network_connect", "attempt", 100 * time.Microsecond},
+		{"syscall_result", "result", 200 * time.Microsecond}, {"process_exit", "", 6 * time.Millisecond}} {
+		body := map[string]any{"host_id": "fixture-host", "boot_id": boot, "process_instance_id": boot + ":42:1000000000",
+			"process_start_ns": "1000000000", "monotonic_ns": fmt.Sprint(int64(10*time.Second) + int64(event.delta)),
+			"realtime_coarse_resolution_ns": int64(4 * time.Millisecond), "comm": "fixture", "command": "fixture",
+			"dst_ip": "127.0.0.1", "exit_code": 0, "exit_scope": "thread_group"}
+		if event.stage != "" {
+			body["operation_id"], body["operation"] = "syscall-v1:"+boot+":43:1000000000:42:1000000000:10000100000", "network_connect"
+			body["tid"], body["thread_instance_id"], body["thread_start_ns"] = 43, boot+":43:1000000000", "1000000000"
+			body["syscall_start_ns"], body["syscall_number"], body["sensor_arch"], body["observation_stage"] = "10000100000", 203, "arm64", event.stage
+			if event.stage == "result" {
+				body["syscall_result"], body["syscall_outcome"] = 0, "success"
+			}
+		}
+		raw, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := telemetry.IngestFiltered(db, telemetry.IngestEvent{RunID: run, PID: 42, TGID: 42,
+			Source: "agentprov_ebpf", EventType: event.typeName, Timestamp: at.Add(event.delta).Format(time.RFC3339Nano), Payload: string(raw)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before, err := telemetry.BuildAuditAssociations(ctx, db, telemetry.AuditAssociationOptions{RunID: run})
+	if err != nil || len(before.Items) != 1 || before.Items[0].Operation.Status != "inferred" {
+		t.Fatalf("before=%+v %v", before, err)
+	}
+	pub, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := (forensics.Service{DB: db, Paths: paths, SignKey: key}).ExportBundle(run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := forensics.VerifyBundleAttestation(bundle.Path, bundle.AttestationPath, pub); err != nil {
+		t.Fatal(err)
+	}
+	replayPaths := mustInit(t, filepath.Join(t.TempDir(), "replay"))
+	replayDB := mustOpen(t, replayPaths)
+	defer replayDB.Close()
+	if _, err := (forensics.Service{DB: replayDB, Paths: replayPaths}).ImportBundle(bundle.Path); err != nil {
+		t.Fatal(err)
+	}
+	after, err := telemetry.BuildAuditAssociations(ctx, replayDB, telemetry.AuditAssociationOptions{RunID: run})
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatalf("association inputs/refs changed in signed replay: before=%+v after=%+v err=%v", before, after, err)
+	}
+	verified, err := provenance.Verify(replayDB, run)
+	if err != nil || verified.ErrorCount != 0 {
+		t.Fatalf("graph verification=%+v %v", verified, err)
 	}
 }

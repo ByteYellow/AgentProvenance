@@ -181,6 +181,37 @@ AppArmor/seccomp 决定导入。PID 字段语义依据内核的
 [LSM 审计记录](https://github.com/torvalds/linux/blob/v6.8/security/lsm_audit.c)和
 [seccomp 审计记录](https://github.com/torvalds/linux/blob/v6.8/kernel/audit.c)。
 
+### 查询运行时关联
+
+```sh
+agentprov telemetry audit-associations --run RUN --limit 100 --json
+```
+
+用 `--event EVENT` 查看单条已保存审计，或用 `--cursor` 读取下一页。
+结果标明分析规则 `agentprov.audit_lifecycle_operation/v1`，保留原审计 PID、Agent 会话和图边。
+迟到记录到达后，再次查询会在同一数据库快照上重新计算候选。
+签名 Bundle 导出、导入保留分析输入，可在离线数据库上使用同一规则复核。
+
+进程关联需要来源主机、启动实例、日志 PID 一致，并有同一内核进程生命周期的观测覆盖审计区间。
+原生 Sensor 从 `/proc/1/root/etc/machine-id` 读取机器身份；节点部署需按既有配置使用宿主 PID
+可见性。读取不到时保留缺失。来源内核的 `CLOCK_REALTIME_COARSE` 分辨率保存在
+`realtime_coarse_resolution_ns`。
+
+[内核的 syscall 审计上下文](https://github.com/torvalds/linux/blob/v6.8/kernel/auditsc.c)使用粗粒度实时时钟。
+审计头的小数位数只描述打印精度。关联窗口加上已保存的来源时钟分辨率，并通过 `time_window`
+展示实际采用的区间。缺少时钟信息、生命周期证据冲突或墙上时钟与单调时钟偏差异常时保留未关联。
+导入机器不提供替代身份或时钟参数。
+
+操作关联再核对线程／操作身份和已记录字段：AppArmor `open` 使用完整绝对路径精确匹配，seccomp
+使用实际 ABI 和 syscall 编号。唯一的已保存候选标为 `inferred`，多个候选标为 `ambiguous`，
+不按最近时间选择。其他 AppArmor 操作仍可保留进程级关联。进程退出与 syscall 返回分别列出；
+Agent／Tool Call 上下文引用运行时记录原有的关联方式和置信值，不直接分配给审计事件。
+
+每个操作分别保留尝试、结果的状态、记录数和引用。两种机制的决定可引用同一操作标识。
+缺少入口或返回时显示 `not_observed`；在入口之前被 seccomp 拒绝的调用不通过信号或 errno 补造。
+候选引用有上限，并标明截断。每页最多检查 50,000 条原生记录及 32 MiB 载荷；超限返回 `incomplete`，
+该页不建立关联。高流量 Run 可缩小分页或指定单条审计查询。关联结果描述已保存证据，采集覆盖和策略状态分别提供。
+
 ## 示例
 
 有效的原始运行时事件：

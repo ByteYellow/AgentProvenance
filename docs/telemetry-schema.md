@@ -262,6 +262,52 @@ semantics follow the kernel's
 [LSM audit records](https://github.com/torvalds/linux/blob/v6.8/security/lsm_audit.c)
 and [seccomp audit records](https://github.com/torvalds/linux/blob/v6.8/kernel/audit.c).
 
+### Read-only runtime association
+
+```sh
+agentprov telemetry audit-associations --run RUN --limit 100 --json
+```
+
+Use `--event EVENT` to inspect one saved audit record, or `--cursor` for the
+next page. The result includes `agentprov.audit_lifecycle_operation/v1` as its
+analysis rule. It does not overwrite an audit PID, Agent session or graph edge.
+Re-querying after a late arrival recomputes the candidates from one database
+snapshot. The saved input records survive signed Bundle export/import, so the
+same rule can be evaluated offline.
+
+Process association requires matching source host, boot and logged process ID,
+plus observations of one kernel process lifetime around the audit interval.
+Native sensors read machine identity through `/proc/1/root/etc/machine-id`;
+the documented node deployment requires host PID visibility. Missing identity
+stays absent. The source kernel's `CLOCK_REALTIME_COARSE` resolution is retained
+as `realtime_coarse_resolution_ns`.
+
+The [kernel syscall audit context](https://github.com/torvalds/linux/blob/v6.8/kernel/auditsc.c)
+uses a coarse real-time clock. Decimal digits in the audit header describe its
+printed precision, not its accuracy. The candidate interval adds the saved
+source clock resolution and exposes that interval in `time_window`. Missing
+clock information, conflicting lifecycle evidence, or a wall/monotonic clock
+disagreement leaves the record unassociated. The importing machine supplies
+neither identity nor clock resolution.
+
+Operation association then checks the native thread/operation identity and
+the recorded fields: an exact absolute path for AppArmor `open`, or the
+recorded ABI and syscall number for seccomp. A unique saved candidate is
+`inferred`; multiple candidates are `ambiguous`, with no nearest-time winner.
+Other AppArmor operations can retain a process-level association. A process
+exit is listed separately from syscall returns. Runtime Agent/Tool Call context
+is cited with its original method and confidence, not reassigned to the audit.
+
+Each operation has separate attempt and result states, record counts and
+references. Two mechanism decisions can cite the same operation ID. A missing
+entry or return stays `not_observed`; a rejected pre-entry seccomp call is not
+reconstructed from a signal or errno. Candidate references are bounded and
+truncation is explicit. Each page examines at most 50,000 native records and
+32 MiB of their payloads; exceeding the budget returns `incomplete` and disables
+association for that page. Narrow the page or inspect one audit event when
+investigating a high-volume run. Results describe saved evidence, while capture
+coverage and policy state remain separate evidence.
+
 ## Example
 
 Valid raw runtime event:

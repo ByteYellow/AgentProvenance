@@ -6,6 +6,12 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
+- Inspect audit-to-runtime candidates with `telemetry audit-associations`.
+  The read-only projection separates process and operation associations, keeps
+  ambiguous candidates, and cites attempts, actual returns and process exits.
+  Native events now retain source machine identity and coarse-clock resolution;
+  association uses these with boot and task lifetimes, including audit timestamp
+  precision. Late evidence is re-evaluated without rewriting original records.
 - Read existing AppArmor and seccomp audit text or journal JSON with
   `telemetry ingest-audit`. Keep ABI-specific decisions and original references,
   bound transactional batches, deduplicate by source host/boot and record identity,

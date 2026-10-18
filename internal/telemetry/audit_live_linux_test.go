@@ -31,7 +31,7 @@ func TestLiveAppArmorAuditImport(t *testing.T) {
 		}
 	}
 	dir := t.TempDir()
-	probe, source, target := filepath.Join(dir, "probe"), filepath.Join(dir, "probe.c"), filepath.Join(dir, "fixture.txt")
+	probe, source, target := filepath.Join(dir, "probe"), filepath.Join(dir, "probe.c"), filepath.Join(dir, "fixture.secret")
 	const program = `#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -77,6 +77,10 @@ int main(int argc, char **argv) {
 		}
 	})
 	liveAuditCommand(t, "apparmor_parser", "-K", "-a", policyPath)
+	var finishSensor func([]int64) []byte
+	if os.Getenv("AGENTPROV_AUDIT_SENSOR_LIVE") == "1" {
+		finishSensor = startLiveAuditSensor(t)
+	}
 	type observation struct {
 		PID     int64  `json:"pid"`
 		Result  int    `json:"result"`
@@ -100,6 +104,11 @@ int main(int argc, char **argv) {
 			t.Fatalf("complain did not allow fixture open: %+v", result)
 		}
 		observations[mode] = result
+	}
+	var captured []byte
+	if finishSensor != nil {
+		captured = finishSensor([]int64{observations["enforce"].PID, observations["complain"].PID})
+		saveLiveAuditFixture(t, "apparmor-runtime.jsonl", captured)
 	}
 	matched := map[string]AuditRecord{}
 	var selected []string
@@ -134,6 +143,7 @@ int main(int argc, char **argv) {
 		t.Fatalf("actual audit decisions missing: %+v", matched)
 	}
 	input := strings.Join(selected, "\n") + "\n"
+	saveLiveAuditFixture(t, "apparmor-journal.jsonl", []byte(input))
 	db, _ := nativeTestStore(t)
 	opts := AuditIngestOptions{RunID: prefix, RetainRaw: true, Mechanism: "apparmor"}
 	imported, err := IngestAuditReader(context.Background(), db, opts, strings.NewReader(input))
@@ -144,21 +154,73 @@ int main(int argc, char **argv) {
 	if err != nil || repeated.Ingested != 0 || repeated.Duplicates != 2 {
 		t.Fatalf("live duplicate import: %+v %v", repeated, err)
 	}
+	var associations AuditAssociationReport
+	if len(captured) > 0 {
+		scanner := bufio.NewScanner(bytes.NewReader(captured))
+		scanner.Buffer(make([]byte, 4096), 1<<20)
+		for scanner.Scan() {
+			var raw map[string]any
+			if err := json.Unmarshal(scanner.Bytes(), &raw); err != nil {
+				t.Fatal(err)
+			}
+			event, ok, err := mapNative(raw)
+			if err != nil || !ok {
+				t.Fatalf("live native mapping failed: %v", err)
+			}
+			event.RunID = prefix
+			if _, err := IngestFiltered(db, event); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			t.Fatal(err)
+		}
+		associations, err = BuildAuditAssociations(context.Background(), db, AuditAssociationOptions{RunID: prefix})
+		debug, _ := json.MarshalIndent(associations, "", "  ")
+		saveLiveAuditFixture(t, "apparmor-associations.json", debug)
+		if err != nil || len(associations.Items) != 2 {
+			t.Fatalf("live associations: %+v %v", associations, err)
+		}
+		for _, item := range associations.Items {
+			if item.Process.Status != "inferred" || item.Operation.Status != "inferred" || len(item.Operations) != 1 || len(item.ProcessExits) == 0 {
+				t.Fatalf("live process/operation not associated: %+v", item)
+			}
+			op := item.Operations[0]
+			if op.AttemptState != "observed" || op.ResultState != "observed" || op.Result == nil {
+				t.Fatalf("live attempt/result missing: %+v", op)
+			}
+			if item.Decision == "DENIED" && *op.Result != -13 || item.Decision == "ALLOWED" && *op.Result < 0 {
+				t.Fatalf("sensor result disagrees with independent fixture: %+v", item)
+			}
+		}
+	}
 	if output := os.Getenv("AGENTPROV_AUDIT_EVIDENCE_DIR"); output != "" {
 		if err := os.MkdirAll(output, 0700); err != nil {
 			t.Fatal(err)
 		}
-		body, err := json.MarshalIndent(map[string]any{"fixture_profiles": profiles, "observations": observations, "audit_records": matched, "import": imported, "repeat": repeated}, "", "  ")
+		body, err := json.MarshalIndent(map[string]any{"fixture_profiles": profiles, "observations": observations, "audit_records": matched, "import": imported, "repeat": repeated, "associations": associations}, "", "  ")
 		if err != nil {
 			t.Fatal(err)
 		}
-		for name, data := range map[string][]byte{"apparmor.json": body, "apparmor-journal.jsonl": []byte(input)} {
+		for name, data := range map[string][]byte{"apparmor.json": body, "apparmor-journal.jsonl": []byte(input), "apparmor-runtime.jsonl": captured} {
 			if err := os.WriteFile(filepath.Join(output, name), data, 0600); err != nil {
 				t.Fatal(err)
 			}
 		}
 	}
 	t.Logf("actual enforce=DENIED/EACCES; complain=ALLOWED/success; imported=%d duplicates=%d", imported.Ingested, repeated.Duplicates)
+}
+
+func saveLiveAuditFixture(t *testing.T, name string, data []byte) {
+	t.Helper()
+	if output := os.Getenv("AGENTPROV_AUDIT_EVIDENCE_DIR"); output != "" {
+		if err := os.MkdirAll(output, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(output, name), data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 type auditCommandOutput struct{ bytes.Buffer }

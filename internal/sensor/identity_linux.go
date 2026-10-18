@@ -3,6 +3,7 @@
 package sensor
 
 import (
+	"encoding/hex"
 	"fmt"
 	"os"
 	"runtime"
@@ -13,6 +14,35 @@ import (
 
 	"golang.org/x/sys/unix"
 )
+
+// Use PID 1's root so a hostPID DaemonSet reports the node's machine identity,
+// not its container image's /etc/machine-id. An inaccessible source stays absent.
+var sensorHostID = sync.OnceValue(func() string {
+	raw, err := os.ReadFile("/proc/1/root/etc/machine-id")
+	if err != nil {
+		return ""
+	}
+	return normalizedMachineID(string(raw))
+})
+
+var auditClockResolution = sync.OnceValue(func() int64 {
+	var resolution unix.Timespec
+	if unix.ClockGetres(unix.CLOCK_REALTIME_COARSE, &resolution) != nil {
+		return 0
+	}
+	return resolution.Nano()
+})
+
+func normalizedMachineID(raw string) string {
+	id := strings.ToLower(strings.TrimSpace(raw))
+	if len(id) != 32 || id == strings.Repeat("0", 32) {
+		return ""
+	}
+	if _, err := hex.DecodeString(id); err != nil {
+		return ""
+	}
+	return id
+}
 
 var sensorBootID = sync.OnceValue(func() string {
 	raw, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
@@ -39,6 +69,13 @@ func processInstance(pid uint32, start uint64) string {
 }
 
 func addProcessIdentity(ev map[string]any, e sensorbpfSensorEvent) {
+	if host := sensorHostID(); host != "" {
+		ev["host_id"] = host
+		ev["host_identity_source"] = "pid1_root_machine_id"
+	}
+	if resolution := auditClockResolution(); resolution > 0 {
+		ev["realtime_coarse_resolution_ns"] = resolution
+	}
 	if boot := sensorBootID(); boot != "" {
 		ev["boot_id"] = boot
 	}
