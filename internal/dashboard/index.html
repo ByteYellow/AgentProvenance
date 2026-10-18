@@ -299,6 +299,7 @@
 </style>
 <link rel="stylesheet" href="/assets/context.css">
 <link rel="stylesheet" href="/assets/workspace.css">
+<link rel="stylesheet" href="/assets/search.css">
 </head>
 <body>
 <header>
@@ -318,6 +319,7 @@
 <main>
   <section class="card full" id="runoverview">
     <h2>{{tr .Lang "Run Overview"}}<span class="sub" data-whole-run hidden>{{tr .Lang "Whole run"}}</span><span class="spacer"></span>
+      <button id="search-return" hidden>{{tr .Lang "Return to search"}}</button>
       <nav class="investigation-actions" aria-label="{{tr .Lang "Investigation actions"}}">
         <button data-investigation="search" aria-label="{{tr .Lang "Search saved evidence"}}" title="{{tr .Lang "Search saved evidence"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></button>
         <button data-investigation="compare" aria-label="{{tr .Lang "Compare runs"}}" title="{{tr .Lang "Compare runs"}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 3 4 4-4 4M4 7h16M8 21l-4-4 4-4m12 4H4"/></svg></button>
@@ -480,6 +482,37 @@
   <div class="content-dialog-head"><h2 id="investigation-title"></h2><button id="investigation-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></div>
   <div class="investigation-notice"><p>{{tr .Lang "This action is not available in this build."}}</p><p id="investigation-scope"></p></div>
 </dialog>
+<dialog id="search-dialog" class="content-dialog context-ui search-dialog" aria-labelledby="search-title">
+  <div class="content-dialog-head"><h2 id="search-title">{{tr .Lang "Search saved evidence"}}</h2><button id="search-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></div>
+  <form id="search-form" class="search-form">
+    <input id="search-query" type="search" maxlength="256" required aria-label="{{tr .Lang "Search keyword"}}" placeholder="{{tr .Lang "Search keyword"}}">
+    <select id="search-scope" aria-label="{{tr .Lang "Search scope"}}"></select>
+    <select id="search-category" aria-label="{{tr .Lang "Content category"}}">
+      <option value="">{{tr .Lang "All saved content"}}</option><option value="messages">{{tr .Lang "Messages"}}</option>
+      <option value="tools">{{tr .Lang "Tool inputs and outputs"}}</option><option value="configuration">{{tr .Lang "Configuration"}}</option>
+      <option value="files">{{tr .Lang "Saved files"}}</option><option value="runtime">{{tr .Lang "Runtime records"}}</option>
+    </select>
+    <button id="search-submit" type="submit">{{tr .Lang "Search"}}</button><button id="search-stop" type="button" hidden>{{tr .Lang "Stop search"}}</button>
+  </form>
+  <div class="search-status"><span id="search-status" role="status" aria-live="polite"></span><span id="search-counts"></span></div>
+  <div id="search-body" class="search-body">
+    <div class="search-list"><div id="search-results" class="search-results"></div><button id="search-more" hidden>{{tr .Lang "Search next page"}}</button></div>
+    <section id="search-detail" class="search-detail" hidden aria-labelledby="search-detail-title">
+      <div class="search-detail-head"><h3 id="search-detail-title"></h3><p id="search-detail-meta"></p>
+        <select id="search-source" aria-label="{{tr .Lang "Source reference"}}" hidden></select>
+        <div class="search-links"><button id="search-raw">{{tr .Lang "Raw source record"}}</button><span id="search-links" class="search-links"></span></div>
+      </div>
+      <div id="search-reader"></div>
+    </section>
+  </div>
+  <details class="search-scope-details"><summary>{{tr .Lang "Search coverage and omissions"}}</summary>
+    <p>{{tr .Lang "Search covers latest context bodies, saved artifact versions and source fields. Raw source envelopes are available in the reader, not searched."}}</p>
+    <p>{{tr .Lang "Session search includes only its context and directly linked evidence. Unassigned records remain in whole-run search."}}</p>
+    <p id="search-missing"></p><pre id="search-coverage"></pre>
+  </details>
+</dialog>
+<script src="/assets/search-engine.js"></script>
+<script src="/assets/search.js"></script>
 <script src="/assets/workspace.js"></script>
 <script src="/assets/context.js"></script>
 <script>
@@ -527,10 +560,10 @@ const LENS_LABEL={'default':tr("Default · causality"),'security':tr("Security �
   'agent-intent':tr("Agent intent · causal DAG (prompt→action)"),'orchestration':tr("Orchestration · agents (delegation/peer)"),'intent':tr("Conformance · declared vs actual (violations)"),'substrate':tr("Substrate · producer / cgroup / workload"),'trust-origin':tr("Trust · origin"),'sandbox-boundary':tr("Sandbox · boundary")};
 const $=s=>document.querySelector(s);
 
-async function j(u){
-  if(window.AgentProvReplay)return window.AgentProvReplay.query(u);
+async function j(u,options={}){
+  if(window.AgentProvReplay)return window.AgentProvReplay.query(u,options);
   let response;
-  try{response=await fetch(u);}catch(error){throw new Error(tr('Cannot connect to the local service')+': '+error.message);}
+  try{response=await fetch(u,options);}catch(error){if(options.signal?.aborted)throw error;throw new Error(tr('Cannot connect to the local service')+': '+error.message);}
   if(!response.ok){throw new Error('HTTP '+response.status+' '+u+'\n'+(await response.text()).slice(0,2000));}
   try{return await response.json();}catch(_){throw new Error(tr('The service returned an unreadable response')+': '+u);}
 }
@@ -1894,14 +1927,7 @@ document.querySelectorAll('.language-switch a').forEach(link=>{
   });
 });
 
-window.AgentWorkspaceUI.init({tr,tx,esc,j,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope)),navigateSession:navigateRelatedSession,returnSession:()=>safeUI(returnRelatedSession())});
-window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,
-  overviewChanged:value=>window.AgentWorkspaceUI.setOverview(value),
-  overviewFailed:()=>window.AgentWorkspaceUI.overviewError(),
-  sourceChanged:source=>window.AgentWorkspaceUI.setSource(source),
-  contentChanged:(key,label)=>window.AgentWorkspaceUI.setContent(key,label),
-  revealContent:()=>window.AgentWorkspaceUI.show('content'),
-  navigateGraph:async(run,id)=>{
+async function navigateEvidenceGraph(run,id){
   if(run!==cur)throw new Error(tr('The selected run changed.'));
   LENS='default';DETAIL='raw';GRAPH_FOCUS=id;SEL=id;EXPAND_MODE='lineage';EV_FILTER=null;EV_OFFSET=0;
   $('#lenssel').value=LENS;$('#detailsel').value=DETAIL;stopPlay();
@@ -1910,7 +1936,20 @@ window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,
   await loadPreview(run,id,true);
   window.AgentWorkspaceUI.show('summary');
   $('#graphcard').scrollIntoView({block:'start',behavior:'smooth'});
-}});
+}
+window.AgentWorkspaceUI.init({tr,tx,esc,j,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope)),navigateSession:navigateRelatedSession,returnSession:()=>safeUI(returnRelatedSession()),search:()=>safeUI(window.AgentSearchUI.open())});
+window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,
+  overviewChanged:value=>window.AgentWorkspaceUI.setOverview(value),
+  overviewFailed:()=>window.AgentWorkspaceUI.overviewError(),
+  sourceChanged:source=>window.AgentWorkspaceUI.setSource(source),
+  contentChanged:(key,label)=>window.AgentWorkspaceUI.setContent(key,label),
+  revealContent:()=>window.AgentWorkspaceUI.show('content'),navigateGraph:navigateEvidenceGraph});
+window.AgentSearchUI.init({tr,tx,esc,j,lang:LANG,
+  scope:()=>({run:cur,...SESSION_SCOPE}),
+  captureView:()=>({run:cur,scope:SESSION_SCOPE,view:graphReadingState()}),
+  restoreView:async saved=>{if(cur!==saved.run)return;activateSessionScope(saved.scope);restoreGraphReading(saved.view);await loadRun(cur);window.AgentWorkspaceUI.restoreReading(saved.view.workspace);window.scrollTo({top:saved.view.pageScroll||0});},
+  navigateGraph:async(id,scope)=>{if(cur!==scope.run)throw new Error(tr('The selected run changed.'));activateSessionScope(scope.session_id?{harness:scope.harness,session_id:scope.session_id}:null);await navigateEvidenceGraph(cur,id);}
+});
 
 (async function(){
   const sel=$('#runsel');

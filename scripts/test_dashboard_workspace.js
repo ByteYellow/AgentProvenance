@@ -13,7 +13,11 @@ async (page) => {
   check(await page.locator('#inspection').isHidden(),'empty reader is hidden');
   check(await page.locator('.auxiliary-fold[open]').count()===0,'auxiliary sections start collapsed');
   check(await page.locator('#runoverview [data-investigation]').count()===3,'three investigation entries stay in the overview');
-  for (const action of ['search','compare','export']) {
+  await page.locator('[data-investigation="search"]').click();
+  check(await page.locator('#search-dialog').isVisible(),'search opens the shared temporary investigation window');
+  await page.locator('#search-close').click();
+  await page.waitForSelector('#content-home > #content-pane',{state:'attached'});
+  for (const action of ['compare','export']) {
     await page.locator('[data-investigation="'+action+'"]').click();
     check(await page.locator('#investigation-dialog').innerText().then(s=>s.includes('not available in this build')),'unfinished action is explicit: '+action);
     await page.locator('#investigation-close').click();

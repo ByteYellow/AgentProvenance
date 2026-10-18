@@ -66,6 +66,7 @@ window.AgentWorkspaceUI = (() => {
     $('session-related-back').onclick = () => api.returnSession();
     const actions = {search:'Search saved evidence',compare:'Compare runs',export:'Export replay'};
     document.querySelectorAll('[data-investigation]').forEach(button=>button.onclick=()=>{
+      if(button.dataset.investigation==='search'){api.search();return;}
       $('investigation-title').textContent = t(actions[button.dataset.investigation]);
       $('investigation-scope').textContent = t('Run')+': '+run+(sessionScope ? ' · '+sessionScope.harness+' · '+sessionScope.session_id : '');
       $('investigation-dialog').showModal();

@@ -20,9 +20,19 @@ async function main(){
  const relation=save({relations:[{kind:'message_request',from:{run_id:'run',harness:'codex',session_id:'root',available:true},to:{run_ids:['legacy','not-exported'],harness:'codex',session_id:'worker',available:true}},{kind:'parent',from:{run_id:'not-exported',harness:'codex',session_id:'parent',available:true},to:{run_id:'run',harness:'codex',session_id:'root',available:true}}]});
  catalog.runs.run.sessions={'["codex","root"]':{relations:{'':relation}}};
  catalog.runs.legacy.sessions={'["codex","worker"]':{}};
+ const search=save({schema_version:'agentprovenance.search_sources/v1',run_id:'run',sources:[{id:'entry/saved',category:'messages',content:{ref:'saved',state:'stored'}}],has_more:false});
+ catalog.runs.run.search={'["",""]':{'':search},'["codex","root"]':{'':search}};
  files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
  const setup=()=>{const box={window:{},document:{querySelector:()=>({content:'/site/'})},location:new URL('https://example.test/site/en/replay.html'),URL,URLSearchParams,Map,Set,TextEncoder,TextDecoder,structuredClone,Response,DecompressionStream,crypto:webcrypto,btoa,atob,fetch:async url=>{const body=files.get(new URL(url).pathname);return new Response(body||'missing',{status:body?200:404});}};vm.runInNewContext(source,box);return box.window.AgentProvReplay;};
  const reader=setup();
+ assert.equal((await reader.query('/api/search/sources?run=run')).sources[0].content.ref,'saved');
+ assert.equal((await reader.query('/api/search/sources?run=run&harness=codex&session=root')).sources.length,1);
+ for(const query of ['run=legacy','run=run&cursor=wrong','run=run&harness=claude&session=root'])await assert.rejects(()=>reader.query('/api/search/sources?'+query),/not included/);
+ const stopped=new AbortController();stopped.abort();
+ await assert.rejects(()=>reader.query('/api/search/sources?run=run',{signal:stopped.signal}),{name:'AbortError'});
+ const interrupted=new AbortController(),pending=setup().query('/api/search/sources?run=run',{signal:interrupted.signal});
+ interrupted.abort();await assert.rejects(()=>pending,{name:'AbortError'});
+ assert.equal((await reader.query('/api/search/sources?run=run')).sources.length,1);
  const relationships=await reader.query('/api/context/session-relations?run=run&harness=codex&session=root&limit=50');
  assert.deepEqual(Array.from(relationships.relations[0].to.run_ids),['legacy']);
  assert.equal(relationships.relations[0].to.available,true);
@@ -54,6 +64,6 @@ async function main(){
  files.set(path,gunzipSync(good));
  assert.equal((await setup().query('/api/context/content?run=run&ref=saved&limit=4')).content,'xxxx');
  files.set(path,good);
- console.log('Static reader: UTF-8 paging, process lifetime focus, legacy replay, run scope and integrity checks passed.');
+ console.log('Static reader: UTF-8 paging, process lifetime focus, legacy replay, search scopes/cancellation, run scope and integrity checks passed.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

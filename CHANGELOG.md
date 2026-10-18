@@ -4,6 +4,14 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+### Added
+
+- Search saved messages, tool inputs/results, configuration, file bodies and
+  runtime records in a temporary Dashboard window. Search stays within the
+  current run or selected native session, with highlighted excerpts, paged
+  reading, source references, cancellation and graph navigation with return.
+  Public-demo exports include the same saved-content search catalog and reader.
+
 ### Changed
 
 - Session directories show cross-run occurrences, recorded parent relationships,

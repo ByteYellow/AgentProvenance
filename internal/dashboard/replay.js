@@ -126,12 +126,17 @@ window.AgentProvReplay = (() => {
     result.content=decoder.decode(bytes.slice(start,finish));result.offset=offset;result.next_offset=offset+finish-start;result.has_more=result.next_offset<result.total_bytes;
     if(artifact){result.truncated=result.has_more;if(!result.content)delete result.content;}return result;
   }
-  async function query(value){
+  async function queryData(value){
     const u=new URL(value,location.href),p=u.searchParams,path=u.pathname.replace(/^\/api\//,''),catalog=await manifest();
     if(path==='runs')return copy(catalog.summaries);
     const id=p.get('run');let run=catalog.runs[id];
     if(path==='frameworks'&&!run)run=catalog.runs[catalog.summaries[0].run];
     if(!run)fail('The run was not found in this public demo');
+    if(path==='search/sources'){
+      const pages=run.search?.[JSON.stringify([p.get('harness')||'',p.get('session')||''])],ref=pages?.[p.get('cursor')||''];
+      if(!ref)fail('Search sources are not included in this replay or the cursor does not match the scope');
+      return copy(await asset(ref));
+    }
     if(path==='context/session-relations'){
       const saved=run.sessions?.[JSON.stringify([p.get('harness'),p.get('session')])];
       const ref=saved?.relations?.[p.get('cursor')||''];
@@ -175,6 +180,13 @@ window.AgentProvReplay = (() => {
     }
     const key=path==='compliance'?path+'/'+p.get('framework'):path;
     if(!Object.hasOwn(run.api,key))fail('Unsupported public replay query');return copy(await asset(run.api[key]));
+  }
+  async function query(value,{signal}={}){
+    signal?.throwIfAborted();
+    if(!signal)return queryData(value);
+    let onAbort;
+    const aborted=new Promise((_,reject)=>{onAbort=()=>reject(signal.reason);signal.addEventListener('abort',onAbort,{once:true});});
+    try{return await Promise.race([queryData(value),aborted]);}finally{signal.removeEventListener('abort',onAbort);}
   }
   return Object.freeze({query});
 })();

@@ -423,6 +423,43 @@ partial graph. `/api/context/entries` and `/v1/context/entries` also accept
 `harness` alongside `session` to distinguish matching native IDs from different
 harnesses. This adds query filters without changing the evidence Bundle format.
 
+## Search Saved Evidence
+
+Use the magnifying-glass action above the graph. The temporary search window
+shows matching excerpts on the left and the existing evidence reader on the
+right. With a native session selected, search starts within that session;
+**Whole run** explicitly includes other sessions and unassigned records.
+Related sessions in other runs stay outside the search.
+
+Search uses case-insensitive literal keywords, up to 256 characters. Categories
+cover messages, tool inputs/results, configuration, saved files and runtime
+records. It reads saved text in 64 KiB pages, including text beyond inline
+previews. Each source contributes its first matching excerpt; identical body
+hashes in a result page are grouped while retaining their source references.
+Filename and other source-field matches are labeled separately from body matches.
+
+Select a result to read its body or raw source record. **Locate in graph** uses
+an existing relationship; **Return to search** restores the query, selected
+source and reading position. Closing the window restores the original reader.
+Results and navigation are retained in memory for up to eight run/session views.
+
+Each result page scans until 50 matching source records or the end of the
+catalog. **Search next page** advances to the next page; **Stop search** retains the
+current results and marks the unsearched remainder. Read errors can be retried.
+Unavailable bodies and collection reports remain visible under search coverage.
+An empty result reads **No match found in saved content**. Rerun the search to
+include records added while capture was continuing.
+
+The Dashboard-only `GET /api/search/sources?run=RUN` returns a catalog of at
+most 50 existing reader references. Pass `harness` and `session` together to
+restrict it, then follow the opaque `next_cursor`. The client applies category
+and keyword matching using `/api/context/content` and `/api/artifact`; no search
+index or additional body copy is stored. Context entries use their latest saved
+revision; saved artifact versions keep their exact object hashes. Raw source
+envelopes are available for inspection but are not separately searched.
+Fresh public-demo exports use the same catalog and scanner. Older exports
+without a catalog display an unavailable-search message.
+
 ## External Queries and Runtime Coverage
 
 External clients use the same stored-evidence queries as the Dashboard:

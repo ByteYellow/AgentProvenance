@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance recorded context API
-  version: "1.6"
+  version: "1.7"
   description: >
     Read-only recorded evidence. Source assertions are not kernel observations
     or inferred authorizations. The dashboard exposes the same routes under
@@ -168,6 +168,45 @@ components:
         next_cursor: {type: string, description: Opaque continuation tied to this run and filters.}
         has_more: {type: boolean}
         limit: {type: integer, minimum: 1, maximum: 200}
+    SearchSource:
+      type: object
+      required: [id, category, kind, label, content]
+      properties:
+        id: {type: string, description: Search catalog identity, distinct from a graph node.}
+        category: {type: string, enum: [messages, tools, configuration, files, runtime]}
+        kind: {type: string}
+        label: {type: string}
+        node: {type: string, description: Exact node or object hash accepted by /api/artifact.}
+        graph_node: {type: string, description: Present when a recorded graph destination exists.}
+        source_id: {type: string}
+        harness: {type: string}
+        session_id: {type: string}
+        agent_id: {type: string}
+        tool_call_id: {type: string}
+        recorded_at: {type: string}
+        execution_scope: {type: string, enum: [prior_context, current_execution]}
+        entry: {$ref: '#/components/schemas/Entry'}
+        content:
+          oneOf:
+            - {$ref: '#/components/schemas/ContentRef'}
+            - type: object
+              required: [state]
+              properties:
+                state: {const: reader}
+                bytes: {type: 'null'}
+                redacted: {type: boolean}
+              description: Use node with /api/artifact; availability is resolved by that reader.
+    SearchSourcePage:
+      type: object
+      required: [schema_version, run_id, sources, has_more]
+      properties:
+        schema_version: {const: agentprovenance.search_sources/v1}
+        run_id: {type: string}
+        harness: {type: string}
+        session_id: {type: string}
+        sources: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/SearchSource'}}
+        has_more: {type: boolean}
+        next_cursor: {type: string, description: Opaque continuation tied to run and native session scope.}
     Overview:
       type: object
       required: [schema_version, run_id, coverage, messages, tool_calls, tool_results, snapshots, has_more_sources, runtime_coverage]
@@ -569,6 +608,32 @@ components:
       description: Database unavailable; never reported as empty or missing evidence.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
 paths:
+  /api/search/sources:
+    servers: [{url: 'http://127.0.0.1:7396'}]
+    get:
+      operationId: readSearchSources
+      summary: List saved evidence readers for Dashboard keyword search
+      security: []
+      description: >
+        Dashboard-only read-only catalog, at most 50 sources per page. Latest
+        context revisions, exact saved artifact versions, tool records and
+        runtime records are returned in successive catalog stages. A stage may
+        return an empty page with has_more=true. The client follows next_cursor
+        and scans /api/context/content or /api/artifact in bounded byte pages.
+        No body is copied or indexed. Session scope requires both harness and
+        session and uses only recorded direct relationships, without traversing
+        shared paths or related sessions. Queries during capture are not a
+        frozen snapshot; repeat a search to include newly saved records.
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: harness, in: query, schema: {type: string, minLength: 1, maxLength: 128}}
+        - {name: session, in: query, schema: {type: string, minLength: 1, maxLength: 512}}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 16384}}
+      responses:
+        '200': {description: Bounded source catalog with reader references, content: {application/json: {schema: {$ref: '#/components/schemas/SearchSourcePage'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {description: Selected native session does not occur in this run}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
   /api/artifact:
     servers: [{url: 'http://127.0.0.1:7396'}]
     get:

@@ -7,6 +7,7 @@ window.AgentContextUI = (() => {
   let api, run = '', state, listRequest = 0, previewRequest = 0, summaryRequest = 0, listLoading = false;
   let overview = null, previewChoices = [], previewKey = '', previewOffsets = [0], previewPage = null;
   let formattedContent = null;
+  let readerLoan = null, previewHighlight = '';
   let sessionScope = null;
   const sameScope = (a,b) => (a?.harness || '') === (b?.harness || '') && (a?.session_id || '') === (b?.session_id || '');
   const statusNames = {disabled:'Not enabled',no_input:'No source found',empty:'Valid empty source',ok:'Captured',partial:'Partially captured',failed:'Capture failed',ambiguous:'Ambiguous binding',legacy_not_recorded:'Not recorded in this historical run'};
@@ -188,6 +189,7 @@ window.AgentContextUI = (() => {
   }
   function setRun(nextRun,nextScope = null) {
     if (!nextRun) return;
+    window.AgentSearchUI?.scopeChanged(nextRun,nextScope);
     if (nextRun !== run || !sameScope(sessionScope,nextScope)) {
       if (state) { state.scroll = $('context-body').scrollTop; state.reading = readingState(); }
       run = nextRun;
@@ -458,6 +460,7 @@ window.AgentContextUI = (() => {
     scrollRegion('savedcontent');
   }
   async function selectGraph(node,reading = null,explicit = false) {
+    if (readerLoan) return;
     if (!state || !node || node === state.graph && (!explicit || previewKey === 'node:'+node)) return;
     state.graph = node;
     const current = state, currentRun = run;
@@ -521,6 +524,7 @@ window.AgentContextUI = (() => {
     const readable = $('content-format').value === 'readable';
     $('content-body').textContent = readable ? formattedContent : previewPage.content;
     $('content-format-note').hidden = !readable;
+    window.AgentEvidenceSearch?.highlight($('content-body'),previewHighlight);
   }
   async function loadContent(restoreScroll = 0) {
     const choice = previewChoices[Number($('content-choice').value)];
@@ -572,11 +576,39 @@ window.AgentContextUI = (() => {
         $('content-next').disabled = !page.has_more;
       }
       $('content-body').scrollTop = restoreScroll;
+      if (formattedContent == null) window.AgentEvidenceSearch?.highlight($('content-body'),previewHighlight);
     } catch (error) {
       if (request !== previewRequest || state !== current) return;
       $('content-body').textContent = t('Recorded evidence could not be loaded.')+' '+error.message;
       $('content-prev').disabled = previewOffsets.length < 2;
     }
   }
-  return {init,setRun,selectGraph,selectSource,linkedSession,open,persist,readableContent,coverageSections};
+  function borrowReader(host) {
+    if(readerLoan)throw new Error('Evidence reader is already in use');
+    const saved={state,run,choices:previewChoices,key:previewKey,selected:Number($('content-choice').value),
+      reading:{offsets:[...previewOffsets],scroll:$('content-body').scrollTop,format:$('content-format').value},
+      workspace:window.AgentWorkspaceUI.readingState()};
+    readerLoan=saved;previewRequest++;
+    host.append($('content-pane'));
+    return saved;
+  }
+  function releaseReader(loan) {
+    if(!loan || readerLoan!==loan)return;
+    previewRequest++;previewHighlight='';readerLoan=null;
+    $('content-home').append($('content-pane'));
+    if(state===loan.state && run===loan.run){
+      if(loan.choices.length)setPreview(loan.choices,loan.key,loan.selected,loan.reading);
+      else{previewChoices=[];previewKey='';previewPage=null;$('content-pane').hidden=true;$('content-empty').hidden=false;api.contentChanged?.('');}
+      window.AgentWorkspaceUI.restoreReading(loan.workspace);
+    }
+  }
+  function searchEvidence(source,reading,query) {
+    if(!readerLoan)return;
+    previewHighlight=query;
+    const choices=source.entry ? entryChoices(source.entry) : [{label:t('Saved content'),node:source.node,mode:'body'}, {label:t('Raw saved object'),node:source.node,mode:'raw'}];
+    const offsets=reading.offsets || (reading.offset ? [0,reading.offset] : [0]);
+    setPreview(choices,'search:'+source.id,reading.raw ? 1 : 0,{offsets,scroll:reading.scroll || 0,format:reading.format || 'bytes'});
+  }
+  function readerPosition(){return {offset:previewOffsets.at(-1),offsets:previewOffsets.slice(-512),scroll:$('content-body').scrollTop,raw:previewChoices[Number($('content-choice').value)]?.mode==='raw',format:$('content-format').value};}
+  return {init,setRun,selectGraph,selectSource,linkedSession,open,persist,readableContent,coverageSections,borrowReader,releaseReader,searchEvidence,readerPosition};
 })();

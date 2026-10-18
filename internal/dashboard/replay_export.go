@@ -22,15 +22,16 @@ type ReplayPages struct {
 	Pages   []staticdata.Ref `json:"pages"`
 }
 type ReplayRun struct {
-	Sessions  map[string]replaySession  `json:"sessions,omitempty"`
-	API       map[string]staticdata.Ref `json:"api"`
-	Lenses    staticdata.Ref            `json:"lenses"`
-	Events    staticdata.Ref            `json:"events"`
-	Timeline  staticdata.Ref            `json:"timeline"`
-	Context   staticdata.Ref            `json:"context"`
-	Artifacts staticdata.Ref            `json:"artifacts"`
-	EventRefs map[string][]string       `json:"event_refs"`
-	Filters   map[string]eventQuery     `json:"filters"`
+	Search    map[string]map[string]staticdata.Ref `json:"search,omitempty"`
+	Sessions  map[string]replaySession             `json:"sessions,omitempty"`
+	API       map[string]staticdata.Ref            `json:"api"`
+	Lenses    staticdata.Ref                       `json:"lenses"`
+	Events    staticdata.Ref                       `json:"events"`
+	Timeline  staticdata.Ref                       `json:"timeline"`
+	Context   staticdata.Ref                       `json:"context"`
+	Artifacts staticdata.Ref                       `json:"artifacts"`
+	EventRefs map[string][]string                  `json:"event_refs"`
+	Filters   map[string]eventQuery                `json:"filters"`
 }
 type replaySession struct {
 	Lenses    staticdata.Ref            `json:"lenses"`
@@ -418,6 +419,39 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 	result.Context, err = w.JSON(contextData)
 	if err != nil {
 		return result, err
+	}
+	result.Search = map[string]map[string]staticdata.Ref{}
+	searchScopes := []SearchSourceOptions{{RunID: run}}
+	for key := range result.Sessions {
+		var identity []string
+		if err := json.Unmarshal([]byte(key), &identity); err != nil || len(identity) != 2 {
+			return result, fmt.Errorf("invalid replay session identity")
+		}
+		searchScopes = append(searchScopes, SearchSourceOptions{RunID: run, Harness: identity[0], SessionID: identity[1]})
+	}
+	for _, scope := range searchScopes {
+		key, _ := json.Marshal([]string{scope.Harness, scope.SessionID})
+		catalog := map[string]staticdata.Ref{}
+		for {
+			page, err := s.SearchSources(ctx, scope)
+			if err != nil {
+				return result, err
+			}
+			catalog[scope.Cursor], err = w.JSON(page)
+			if err != nil {
+				return result, err
+			}
+			for _, source := range page.Sources {
+				if source.Node != "" {
+					nodes[source.Node] = true
+				}
+			}
+			if !page.HasMore {
+				break
+			}
+			scope.Cursor = page.NextCursor
+		}
+		result.Search[string(key)] = catalog
 	}
 	artifacts := map[string]ReplayPages{}
 	done := map[string]bool{}

@@ -57,6 +57,15 @@ var workspaceCSS []byte
 //go:embed workspace.js
 var workspaceJS []byte
 
+//go:embed search-engine.js
+var searchEngineJS []byte
+
+//go:embed search.js
+var searchJS []byte
+
+//go:embed search.css
+var searchCSS []byte
+
 //go:embed replay.js
 var replayJS []byte
 
@@ -91,6 +100,16 @@ func (s Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		_, _ = w.Write(workspaceJS)
 	})
+	for path, asset := range map[string][]byte{"/assets/search-engine.js": searchEngineJS, "/assets/search.js": searchJS, "/assets/search.css": searchCSS} {
+		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
+			mime := "application/javascript; charset=utf-8"
+			if strings.HasSuffix(path, ".css") {
+				mime = "text/css; charset=utf-8"
+			}
+			w.Header().Set("Content-Type", mime)
+			_, _ = w.Write(asset)
+		})
+	}
 	mux.HandleFunc("GET /api/runs", s.runs)
 	mux.HandleFunc("GET /api/overview", s.overview)
 	mux.HandleFunc("GET /api/timeline", s.timeline)
@@ -98,6 +117,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/graph", s.graph)
 	mux.HandleFunc("GET /api/lens", s.lens)
 	mux.HandleFunc("GET /api/artifact", s.artifact)
+	mux.HandleFunc("GET /api/search/sources", s.searchSources)
 	mux.HandleFunc("GET /api/egress", s.egress)
 	mux.HandleFunc("GET /api/outbound", s.outbound)
 	mux.HandleFunc("GET /api/processes", s.processes)

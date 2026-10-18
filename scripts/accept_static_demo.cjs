@@ -11,6 +11,8 @@ async function main() {
   const browser = await chromium.launch({headless:true, ...(process.env.PLAYWRIGHT_CHANNEL ? {channel:process.env.PLAYWRIGHT_CHANNEL} : {})});
   const report = {parity:0, pages:0, runs:0, sessions:0, focusedGraphs:0, contentPages:0};
   const errors = [];
+  const failedRequests = [];
+  let page;
   const responseJSON = async (request,url) => {const r=await request.get(url);assert.equal(r.status(),200,url);return r.json();};
   try {
     const context=await browser.newContext({viewport:{width:1440,height:1060},locale:'en-US'});
@@ -19,7 +21,8 @@ async function main() {
       if(url.origin===site.origin && url.pathname.startsWith(site.pathname) && !url.pathname.includes('/api/'))return route.continue();
       errors.push('Unexpected browser request: '+url);return route.abort();
     });
-    const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+    page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+    page.on('requestfailed',request=>failedRequests.push({url:request.url(),error:request.failure()?.errorText}));
     const manifest=await responseJSON(context.request,new URL('replay-manifest.json',site).href);
     assert.equal(Object.keys(manifest.runs).length,7);
     assert.ok(manifest.verifications.every(v=>v.signature_verified&&v.graph.status==='ok'));
@@ -85,6 +88,10 @@ async function main() {
         report.sessions++;
       }
       const session=await data(snapshot.context);
+      for(const [identity,pages] of Object.entries(snapshot.search || {})){
+        const [harness,sessionID]=JSON.parse(identity);
+        for(const cursor of Object.keys(pages))await compare('/api/search/sources'+q+'&harness='+encodeURIComponent(harness)+'&session='+encodeURIComponent(sessionID)+'&cursor='+encodeURIComponent(cursor));
+      }
       // Cursor representations are intentionally opaque; compare the traversed records.
       for(const group of ['','conversation','configuration'])for(const revisions of [false,true]){
         const path='/api/context/entries'+q+'&group='+group+'&revisions='+revisions+'&limit=7';
@@ -173,6 +180,7 @@ async function main() {
     await page.getByRole('tab',{name:'Permissions & configuration',exact:true}).click();
     await page.waitForFunction(()=>document.querySelector('#context-body')?.textContent.includes('workspace-write'));
     await page.locator('.language-switch a[lang="zh-CN"]').click();
+    await page.waitForURL(url=>url.pathname===new URL('zh-CN/replay.html',site).pathname);
     await page.waitForFunction(()=>window._lensManifest);
     assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN');
     assert.equal(new URL(page.url()).searchParams.get('run'),'run-dbc2adf273d4');
@@ -182,6 +190,27 @@ async function main() {
       await first.goto(site.href);await first.waitForURL('**/'+lang+'/index.html');await fresh.close();
     }
     report.ui='graph, files, session paging, graph navigation and language passed';
+
+    // The same scanner must find the same saved records through both readers.
+    const live=await browser.newPage();await live.goto(new URL('/?run=run-dbc2adf273d4&live=0',native).href);
+    await live.waitForFunction(()=>window.AgentEvidenceSearch && window._lensManifest);
+    await page.goto(new URL('en/replay.html?run=run-dbc2adf273d4',site).href);
+    await page.waitForFunction(()=>window.AgentEvidenceSearch && window._lensManifest);
+    for(const [run,query,category] of [['run-dbc2adf273d4','Ran 7 tests','tools'],['run-dbc2adf273d4','report.py','files'],['run-double-attempt','169.254.169.254',''],['run-double-attempt','install','messages']]){
+      const search=async page=>page.evaluate(async({run,query,category})=>{
+        const scanner=AgentEvidenceSearch.create({query,category,scope:{run,lang:'en'},get:j});let ids=[],last;
+        do{last=await scanner.next();if(last.error)throw new Error(last.error);ids.push(...last.hits.flatMap(h=>h.sources.map(s=>s.id)));}while(last.has_more);
+        return {ids:ids.sort(),scanned:last.stats.scanned,unavailable:last.stats.unavailable};
+      },{run,query,category});
+      const expected=await search(live),actual=await search(page);assert.ok(expected.ids.length,'historical search '+query);assert.deepEqual(actual,expected);report.parity++;
+    }
+    await live.close();
+    await page.locator('[data-investigation="search"]').click();
+    await page.locator('#search-query').fill('Ran 7 tests');await page.locator('#search-category').selectOption('tools');await page.locator('#search-submit').click();
+    await page.waitForFunction(()=>!document.querySelector('#search-submit').disabled);
+    assert.ok(await page.locator('.search-result').count()>0);
+    await page.waitForFunction(()=>document.querySelector('#content-body')?.textContent.includes('Ran 7 tests'));
+    await page.locator('#search-close').click();
 
     // All published guides, images and table-of-contents links, at both sizes.
     for(const lang of ['en','zh-CN']){
@@ -205,6 +234,7 @@ async function main() {
     console.log(JSON.stringify({...report,passed:true},null,2));
   } catch(error) {
     if(errors.length)console.error(JSON.stringify({browserErrors:errors}));
+    console.error(JSON.stringify({failedRequests:failedRequests.slice(-20),page:page && await page.evaluate(()=>({url:location.href,reader:!!window.AgentProvReplay,error:document.querySelector('#loaderror-text')?.textContent})).catch(()=>({url:page.url()}))}));
     throw error;
   } finally {await browser.close();}
 }
