@@ -78,6 +78,9 @@ var compareCSS []byte
 //go:embed replay.js
 var replayJS []byte
 
+//go:embed offline.js
+var offlineJS []byte
+
 // ReplayScript returns the browser reader used by exported public demos.
 func ReplayScript() []byte { return replayJS }
 

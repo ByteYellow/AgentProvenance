@@ -39,6 +39,6 @@ func dashboardCmd(dataDir *string) *cobra.Command {
 		},
 	}
 	serve.Flags().StringVar(&addr, "addr", "127.0.0.1:7396", "listen address (host:port)")
-	cmd.AddCommand(serve)
+	cmd.AddCommand(serve, dashboardExportCmd(dataDir))
 	return cmd
 }

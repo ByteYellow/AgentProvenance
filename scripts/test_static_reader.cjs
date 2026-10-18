@@ -66,6 +66,8 @@ async function main(){
  const first=parts.pages[0],path='/site/'+first.path,good=files.get(path);
  files.set(path,gzipSync(Buffer.from('0'.repeat(first.bytes))));
  await assert.rejects(()=>setup().query('/api/context/content?run=run&ref=saved'),/integrity check failed/);
+ files.set(path,gzipSync(Buffer.from('0'.repeat(first.bytes+1))));
+ await assert.rejects(()=>setup().query('/api/context/content?run=run&ref=saved'),/size check failed/);
  files.delete(path);await assert.rejects(()=>setup().query('/api/context/content?run=run&ref=saved'),/HTTP 404/);
  files.set(path,gunzipSync(good));
  assert.equal((await setup().query('/api/context/content?run=run&ref=saved&limit=4')).content,'xxxx');

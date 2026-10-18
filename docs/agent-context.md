@@ -499,6 +499,35 @@ historical Grok pair demonstrates different saved outbound surfaces, rather
 than a controlled before/after intervention. Older exports without a comparison
 catalog display the reason it is unavailable.
 
+## Offline Replay ZIP
+
+Export one complete local run with its graph views, sessions, saved bodies,
+configuration and raw records:
+
+```bash
+agentprov --data-dir .agentprov dashboard export --run RUN --output run-replay.zip
+```
+
+Unzip the archive and open `index.html` in a current Chrome or Edge browser.
+The reader works offline without a local server, the CLI or the original
+workspace. Language switching, graph navigation, session filters, saved-content
+search and byte paging use the included data. A single-run export has no second
+run for comparison.
+
+The command exports the **whole run**, including unassigned records. It takes
+a consistent database snapshot, reads only saved evidence and then freezes the
+package. It never fills missing content from current workspace files. Linked
+runs remain references. `export-inventory.json` lists the run, scope, file sizes
+and SHA-256 digests; the command prints the ZIP size and inventory digest.
+Existing output files are left unchanged.
+
+This ZIP is an **unsigned sharing copy**. Original verification results and
+capture gaps remain visible, while the package contains no original Bundle or
+database. Review the archive before sharing: complete runs may contain prompts,
+tool output, configuration and file contents. The command performs no upload.
+Per-record exclusions and export-preview selection are not available in this
+whole-run command.
+
 ## External Queries and Runtime Coverage
 
 External clients use the same stored-evidence queries as the Dashboard:

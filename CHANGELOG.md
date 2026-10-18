@@ -6,6 +6,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
+- Export a complete local run with `dashboard export --run RUN --output replay.zip`.
+  The unsigned, single-run archive opens directly offline, with the existing
+  graph, session and saved-content readers, a frozen file inventory and no
+  original database or Bundle. The command includes all saved run content.
 - Compare two runs in a temporary Dashboard window, with configuration fields,
   file evidence, network destinations and outbound data types. Keep recorded
   task and capture context visible, preserve typed missing values, and link

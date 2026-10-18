@@ -12,13 +12,21 @@ window.AgentProvReplay = (() => {
     if (!ref || !/^data\/[a-f0-9]{64}\.json\.gz$/.test(ref.path) || ref.sha256!==ref.path.slice(5,69) || !Number.isSafeInteger(ref.bytes) || ref.bytes < 0 || ref.bytes > 64 * 1024 * 1024) fail('Invalid replay asset');
     if (cache.has(ref.path)) { const value=cache.get(ref.path);cache.delete(ref.path);cache.set(ref.path,value);return value; }
     const pending = (async()=>{
-      const response=await fetch(new URL(ref.path,root));
-      if(!response.ok)fail('Replay data could not be loaded: HTTP '+response.status);
+      let bytes;
+      if(window.AgentProvOffline)bytes=await window.AgentProvOffline.read(ref);
+      else {
+        const response=await fetch(new URL(ref.path,root));
+        if(!response.ok)fail('Replay data could not be loaded: HTTP '+response.status);
+        bytes=new Uint8Array(await response.arrayBuffer());
+      }
       // Some static hosts transparently decode Content-Encoding: gzip.
-      let bytes=new Uint8Array(await response.arrayBuffer());
       if(bytes[0]===0x1f&&bytes[1]===0x8b){
-        const stream=new Response(bytes).body.pipeThrough(new DecompressionStream('gzip'));
-        bytes=new Uint8Array(await new Response(stream).arrayBuffer());
+        const reader=new Response(bytes).body.pipeThrough(new DecompressionStream('gzip')).getReader();
+        const chunks=[];let size=0;
+        try {
+          while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>ref.bytes)fail('Replay data size check failed');chunks.push(value);}
+        }finally{await reader.cancel();reader.releaseLock();}
+        bytes=new Uint8Array(size);let at=0;for(const chunk of chunks){bytes.set(chunk,at);at+=chunk.length;}
       }
       if(bytes.length!==ref.bytes)fail('Replay data size check failed');
       const digest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
@@ -31,7 +39,10 @@ window.AgentProvReplay = (() => {
     try{return await pending;}catch(error){remove(ref.path);throw error;}
   }
   async function manifest(){
-    if(!manifestPromise)manifestPromise=fetch(new URL('replay-manifest.json',root)).then(r=>{if(!r.ok)fail('Replay catalog unavailable');return r.json();}).then(v=>{if(v.schema_version!=='agentprovenance.static_replay/v1')fail('Unsupported replay format');return v;});
+    if(!manifestPromise){
+      const load=window.AgentProvOffline?Promise.resolve(window.AgentProvOffline.manifest()):fetch(new URL('replay-manifest.json',root)).then(r=>{if(!r.ok)fail('Replay catalog unavailable');return r.json();});
+      manifestPromise=load.then(v=>{if(v.schema_version!=='agentprovenance.static_replay/v1')fail('Unsupported replay format');return v;});
+    }
     return manifestPromise;
   }
   const clamp=(v,def,min,max)=>{const n=/^-?\d+$/.test(v||'')?Number(v):def;return Math.max(min,Math.min(max,n));};
@@ -131,7 +142,7 @@ window.AgentProvReplay = (() => {
     if(path==='runs')return copy(catalog.summaries);
     const id=p.get('run');let run=catalog.runs[id];
     if(path==='frameworks'&&!run)run=catalog.runs[catalog.summaries[0].run];
-    if(!run)fail('The run was not found in this public demo');
+    if(!run)fail('The run was not found in this replay');
     if(path==='compare/records'){
       if(p.has('harness')||p.has('session'))fail('Run comparison does not accept a session filter');
       const ref=run.compare?.[p.get('cursor')||''];
@@ -185,7 +196,7 @@ window.AgentProvReplay = (() => {
       if(path==='context/compare'){if(p.get('right_run')&&p.get('right_run')!==id)fail('Select snapshots from the current demo');const ref=data.comparisons[p.get('left')+'/'+p.get('right')];if(!ref)fail('Select two recorded snapshots of the same kind');return copy(await asset(ref));}
     }
     const key=path==='compliance'?path+'/'+p.get('framework'):path;
-    if(!Object.hasOwn(run.api,key))fail('Unsupported public replay query');return copy(await asset(run.api[key]));
+    if(!Object.hasOwn(run.api,key))fail('Unsupported replay query');return copy(await asset(run.api[key]));
   }
   async function query(value,{signal}={}){
     signal?.throwIfAborted();
