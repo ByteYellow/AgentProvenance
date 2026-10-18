@@ -81,11 +81,20 @@ var replayJS []byte
 //go:embed offline.js
 var offlineJS []byte
 
+//go:embed export.js
+var exportJS []byte
+
+//go:embed export.css
+var exportCSS []byte
+
 // ReplayScript returns the browser reader used by exported public demos.
 func ReplayScript() []byte { return replayJS }
 
 // Server serves the dashboard over a single read-only *sql.DB.
-type Server struct{ DB *sql.DB }
+type Server struct {
+	DB            *sql.DB
+	ReplayExports *ReplayExports
+}
 
 // Handler returns the dashboard's HTTP routes (static UI + JSON API).
 func (s Server) Handler() http.Handler {
@@ -113,7 +122,8 @@ func (s Server) Handler() http.Handler {
 		_, _ = w.Write(workspaceJS)
 	})
 	for path, asset := range map[string][]byte{"/assets/search-engine.js": searchEngineJS, "/assets/search.js": searchJS, "/assets/search.css": searchCSS,
-		"/assets/compare-engine.js": compareEngineJS, "/assets/compare.js": compareJS, "/assets/compare.css": compareCSS} {
+		"/assets/compare-engine.js": compareEngineJS, "/assets/compare.js": compareJS, "/assets/compare.css": compareCSS,
+		"/assets/export.js": exportJS, "/assets/export.css": exportCSS} {
 		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
 			mime := "application/javascript; charset=utf-8"
 			if strings.HasSuffix(path, ".css") {
@@ -138,6 +148,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/frameworks", s.frameworks)
 	mux.HandleFunc("GET /api/compliance", s.compliance)
 	mux.Handle("GET /api/context/", http.StripPrefix("/api", (agentcontext.Service{DB: s.DB}).ReadHandler()))
+	s.replayRoutes(mux)
 	return mux
 }
 

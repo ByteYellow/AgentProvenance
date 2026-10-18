@@ -64,15 +64,9 @@ window.AgentWorkspaceUI = (() => {
     $('session-directory-close').onclick = () => $('session-directory').close();
     $('session-scope-clear').onclick = () => api.selectSession(null);
     $('session-related-back').onclick = () => api.returnSession();
-    const actions = {search:'Search saved evidence',compare:'Compare runs',export:'Export replay'};
     document.querySelectorAll('[data-investigation]').forEach(button=>button.onclick=()=>{
-      if(button.dataset.investigation==='search'){api.search();return;}
-      if(button.dataset.investigation==='compare'){api.compare();return;}
-      $('investigation-title').textContent = t(actions[button.dataset.investigation]);
-      $('investigation-scope').textContent = t('Run')+': '+run+(sessionScope ? ' · '+sessionScope.harness+' · '+sessionScope.session_id : '');
-      $('investigation-dialog').showModal();
+      api[button.dataset.investigation]();
     });
-    $('investigation-close').onclick = () => $('investigation-dialog').close();
     window.addEventListener('pagehide', () => {
       try { sessionStorage.setItem('agentprov.workspace.reading/v1',JSON.stringify({run,tab,dismissed})); } catch (_) { /* Optional reading state. */ }
     });
@@ -88,7 +82,7 @@ window.AgentWorkspaceUI = (() => {
       if (saved?.run === run && Object.hasOwn(panels,saved.tab)) { tab = saved.tab; dismissed = saved.dismissed === true; }
     } catch (_) { /* A stale browser preference is not evidence. */ }
     if ($('session-directory').open) $('session-directory').close();
-    if ($('investigation-dialog').open) $('investigation-dialog').close();
+    if ($('export-dialog').open) $('export-dialog').close();
     $('session-count').textContent = '…'; $('session-members').textContent = t('loading…');
     $('session-directory-body').textContent = t('loading…');
     $('inspection-selection').textContent = ''; $('inspection-event-count').textContent = '';

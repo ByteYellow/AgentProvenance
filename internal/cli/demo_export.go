@@ -124,7 +124,7 @@ func demoExportCmd() *cobra.Command {
 			}
 			return os.WriteFile(dest, data, 0644)
 		}
-		for _, asset := range []string{"/assets/theme.css", "/assets/context.css", "/assets/context.js", "/assets/workspace.css", "/assets/workspace.js", "/assets/search-engine.js", "/assets/search.js", "/assets/search.css", "/assets/compare-engine.js", "/assets/compare.js", "/assets/compare.css", "/demos/demo.css", "/demos/guide.js"} {
+		for _, asset := range []string{"/assets/theme.css", "/assets/context.css", "/assets/context.js", "/assets/workspace.css", "/assets/workspace.js", "/assets/search-engine.js", "/assets/search.js", "/assets/search.css", "/assets/compare-engine.js", "/assets/compare.js", "/assets/compare.css", "/assets/export.js", "/assets/export.css", "/demos/demo.css", "/demos/guide.js"} {
 			b, err := get(asset)
 			if err != nil {
 				return err

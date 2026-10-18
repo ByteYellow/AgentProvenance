@@ -3,6 +3,7 @@ package dashboard
 import (
 	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -36,15 +37,26 @@ type ReplayFile struct {
 // ReplayInventory describes the exact files frozen for a share. The inventory
 // excludes itself; its digest is returned separately by the preparation step.
 type ReplayInventory struct {
-	SchemaVersion string       `json:"schema_version"`
-	RunID         string       `json:"run_id"`
-	Scope         string       `json:"scope"`
-	CreatedAt     string       `json:"created_at"`
-	Commit        string       `json:"commit"`
-	Signed        bool         `json:"signed"`
-	Events        int          `json:"events"`
-	Files         []ReplayFile `json:"files"`
-	Bytes         int64        `json:"bytes_excluding_inventory"`
+	SchemaVersion string         `json:"schema_version"`
+	RunID         string         `json:"run_id"`
+	Scope         string         `json:"scope"`
+	CreatedAt     string         `json:"created_at"`
+	Commit        string         `json:"commit"`
+	Signed        bool           `json:"signed"`
+	Events        int            `json:"events"`
+	Contents      ReplayContents `json:"contents"`
+	Files         []ReplayFile   `json:"files"`
+	Bytes         int64          `json:"bytes_excluding_inventory"`
+}
+
+// Counts describe saved sources, not successful operations or collection coverage.
+type ReplayContents struct {
+	Sessions       int            `json:"sessions"`
+	ContextEntries int            `json:"context_entries"`
+	LatestEntries  int            `json:"latest_context_entries"`
+	BodyRefs       int            `json:"context_body_refs"`
+	RawRefs        int            `json:"context_raw_refs"`
+	Sources        map[string]int `json:"indexed_sources"`
 }
 
 // PreparedReplay owns a private, frozen directory, independent of the source
@@ -118,6 +130,10 @@ func (s Server) PrepareOfflineReplay(ctx context.Context, run string) (_ *Prepar
 	if err != nil {
 		return nil, err
 	}
+	contents, err := describeReplay(root, replay)
+	if err != nil {
+		return nil, err
+	}
 	catalog := struct {
 		SchemaVersion string               `json:"schema_version"`
 		Summaries     []runSummary         `json:"summaries"`
@@ -142,6 +158,7 @@ func (s Server) PrepareOfflineReplay(ctx context.Context, run string) (_ *Prepar
 		"workspace.css": workspaceCSS, "workspace.js": workspaceJS,
 		"search-engine.js": searchEngineJS, "search.js": searchJS, "search.css": searchCSS,
 		"compare-engine.js": compareEngineJS, "compare.js": compareJS, "compare.css": compareCSS,
+		"export.js": exportJS, "export.css": exportCSS,
 		"replay.js": replayJS, "offline.js": offlineJS,
 		"catalog.js": []byte(`window.AgentProvOfflineCatalog="` + base64.StdEncoding.EncodeToString(manifest) + `";`),
 	}
@@ -203,7 +220,7 @@ func (s Server) PrepareOfflineReplay(ctx context.Context, run string) (_ *Prepar
 	if err = write("LICENSE", license); err != nil {
 		return nil, err
 	}
-	p.Inventory = ReplayInventory{SchemaVersion: "agentprovenance.replay_inventory/v1", RunID: run, Scope: "whole_run", CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Commit: buildinfo.Commit, Events: selected.Events}
+	p.Inventory = ReplayInventory{SchemaVersion: "agentprovenance.replay_inventory/v1", RunID: run, Scope: "whole_run", CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Commit: buildinfo.Commit, Events: selected.Events, Contents: contents}
 	if err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -242,6 +259,55 @@ func (s Server) PrepareOfflineReplay(ctx context.Context, run string) (_ *Prepar
 		return nil, err
 	}
 	return p, nil
+}
+
+func describeReplay(root string, replay ReplayRun) (ReplayContents, error) {
+	read := func(ref staticdata.Ref, out any) error {
+		f, err := os.Open(filepath.Join(root, filepath.FromSlash(ref.Path)))
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		z, err := gzip.NewReader(f)
+		if err != nil {
+			return err
+		}
+		defer z.Close()
+		b, err := io.ReadAll(io.LimitReader(z, int64(ref.Bytes)+1))
+		if err != nil {
+			return err
+		}
+		if len(b) != ref.Bytes || replayDigest(b) != ref.SHA256 {
+			return fmt.Errorf("prepared replay index changed")
+		}
+		return json.Unmarshal(b, out)
+	}
+	contents := ReplayContents{Sessions: len(replay.Sessions), Sources: map[string]int{}}
+	var entries replayContext
+	if err := read(replay.Context, &entries); err != nil {
+		return contents, err
+	}
+	contents.ContextEntries, contents.LatestEntries = len(entries.Entries), len(entries.Latest)
+	bodies, raw := map[string]bool{}, map[string]bool{}
+	for _, entry := range entries.Entries {
+		if entry.Content.Ref != "" {
+			bodies[entry.Content.Ref] = true
+		}
+		if entry.RawContent.Ref != "" {
+			raw[entry.RawContent.Ref] = true
+		}
+	}
+	contents.BodyRefs, contents.RawRefs = len(bodies), len(raw)
+	for _, ref := range replay.Search[`["",""]`] {
+		var page SearchSources
+		if err := read(ref, &page); err != nil {
+			return contents, err
+		}
+		for _, source := range page.Sources {
+			contents.Sources[source.Category]++
+		}
+	}
+	return contents, nil
 }
 
 func replayDigest(data []byte) string {

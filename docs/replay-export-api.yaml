@@ -1,0 +1,179 @@
+openapi: 3.1.0
+info:
+  title: AgentProvenance local replay export API
+  version: "1.0"
+  description: >
+    Prepare a private, frozen sharing copy without changing the evidence store.
+    Enabled by dashboard serve only. Requests require a loopback peer and host;
+    browser requests must be same-origin. Mutations require X-AgentProv-Export: 1.
+    One preparation or preview is allowed per server. Preparation has a five-minute
+    deadline; a ready preview expires after ten minutes. Closing the server normally
+    releases temporary files. Original evidence is never uploaded.
+servers:
+  - url: http://127.0.0.1:7396
+security: []
+components:
+  parameters:
+    previewID:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, pattern: '^[a-f0-9]{48}$'}
+    exportHeader:
+      name: X-AgentProv-Export
+      in: header
+      required: true
+      schema: {type: string, const: '1'}
+  schemas:
+    File:
+      type: object
+      required: [path, sha256, bytes]
+      properties:
+        path: {type: string, description: Relative path inside the archive.}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        bytes: {type: integer, minimum: 0}
+    Contents:
+      type: object
+      required: [sessions, context_entries, latest_context_entries, context_body_refs, context_raw_refs, indexed_sources]
+      properties:
+        sessions: {type: integer, minimum: 0}
+        context_entries: {type: integer, minimum: 0, description: Includes saved historical revisions.}
+        latest_context_entries: {type: integer, minimum: 0}
+        context_body_refs: {type: integer, minimum: 0, description: Distinct context body references; consult the reader for availability.}
+        context_raw_refs: {type: integer, minimum: 0}
+        indexed_sources:
+          type: object
+          description: Search index source counts by category; not the number of unique bodies or successful operations.
+          additionalProperties: {type: integer, minimum: 0}
+    Inventory:
+      type: object
+      required: [schema_version, run_id, scope, created_at, commit, signed, events, contents, files, bytes_excluding_inventory]
+      properties:
+        schema_version: {const: agentprovenance.replay_inventory/v1}
+        run_id: {type: string}
+        scope: {const: whole_run}
+        created_at: {type: string, format: date-time}
+        commit: {type: string}
+        signed: {const: false}
+        events: {type: integer, minimum: 0}
+        contents: {$ref: '#/components/schemas/Contents'}
+        files: {type: array, items: {$ref: '#/components/schemas/File'}}
+        bytes_excluding_inventory: {type: integer, minimum: 0}
+    Preview:
+      type: object
+      required: [schema_version, id, expires_at, inventory, inventory_sha256, zip_bytes, zip_sha256]
+      properties:
+        schema_version: {const: agentprovenance.replay_preview/v1}
+        id: {type: string, pattern: '^[a-f0-9]{48}$'}
+        expires_at: {type: string, format: date-time}
+        inventory: {$ref: '#/components/schemas/Inventory'}
+        inventory_sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        zip_bytes: {type: integer, minimum: 0}
+        zip_sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: {type: string}
+  responses:
+    Error:
+      description: Request rejected or unavailable; inspect error for details.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+paths:
+  /api/replay/previews:
+    post:
+      operationId: prepareReplayPreview
+      summary: Freeze a whole run and prepare its downloadable ZIP
+      parameters: [{$ref: '#/components/parameters/exportHeader'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [run, scope]
+              properties:
+                run: {type: string, minLength: 1, maxLength: 512}
+                scope: {const: whole_run, description: Explicit acknowledgement that all sessions and unassigned records are included.}
+      responses:
+        '201':
+          description: Ready, frozen preview. Download uses this inventory, not later database writes.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Preview'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '415': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /api/replay/previews/{id}:
+    parameters: [{$ref: '#/components/parameters/previewID'}]
+    get:
+      operationId: readReplayPreview
+      summary: Read the frozen inventory and archive digest
+      responses:
+        '200':
+          description: Preview metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Preview'}
+        '403': {$ref: '#/components/responses/Error'}
+        '410': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    delete:
+      operationId: discardReplayPreview
+      summary: Discard a preview; active readers retain files until they finish
+      parameters: [{$ref: '#/components/parameters/exportHeader'}]
+      responses:
+        '204': {description: Discarded or already expired.}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /api/replay/previews/{id}/download:
+    parameters: [{$ref: '#/components/parameters/previewID'}]
+    get:
+      operationId: downloadReplayArchive
+      summary: Download exactly the archive reviewed in the preview
+      parameters:
+        - name: inventory
+          in: query
+          required: true
+          schema: {type: string, pattern: '^[a-f0-9]{64}$'}
+          description: Confirmed inventory_sha256 from the preview response.
+      responses:
+        '200':
+          description: ZIP archive. X-Content-SHA256 names the complete ZIP digest.
+          content:
+            application/zip:
+              schema: {type: string, format: binary}
+        '206': {description: Byte-range response for the same frozen ZIP.}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '410': {$ref: '#/components/responses/Error'}
+        '416': {description: Requested byte range is outside the archive.}
+        '500': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /api/replay/previews/{id}/files/{file}:
+    parameters: [{$ref: '#/components/parameters/previewID'}]
+    get:
+      operationId: inspectReplayFile
+      summary: Read an inventory-listed preview asset without accessing the live store
+      parameters:
+        - name: file
+          in: path
+          required: true
+          schema: {type: string}
+          description: Relative inventory path, including slashes. Also accepts export-inventory.json. Open en/index.html or zh-CN/index.html to inspect the full frozen replay.
+      responses:
+        '200': {description: Frozen file with a type matching its extension.}
+        '206': {description: Byte range of a frozen file.}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {description: File is not in this preview inventory.}
+        '410': {$ref: '#/components/responses/Error'}
+        '416': {description: Requested byte range is outside the file.}
+        '500': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}

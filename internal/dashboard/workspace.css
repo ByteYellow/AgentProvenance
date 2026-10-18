@@ -59,9 +59,6 @@
 .investigation-actions button:hover { color: var(--acc); border-color: var(--acc); }
 .investigation-actions button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 .investigation-actions svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.investigation-dialog[open] { width: min(560px,94vw); height: auto; }
-.investigation-notice { padding: 8px 20px 20px; font-size: 14px; overflow-wrap: anywhere; }
-#investigation-scope { color: var(--mut); }
 @media(max-width: 720px) {
   .session-composition, .inspection-tabs { padding: 10px 14px; }
   .session-members { flex-basis: 100%; }

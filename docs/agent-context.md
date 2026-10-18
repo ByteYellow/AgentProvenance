@@ -525,8 +525,29 @@ This ZIP is an **unsigned sharing copy**. Original verification results and
 capture gaps remain visible, while the package contains no original Bundle or
 database. Review the archive before sharing: complete runs may contain prompts,
 tool output, configuration and file contents. The command performs no upload.
-Per-record exclusions and export-preview selection are not available in this
-whole-run command.
+Session-only export and per-record exclusions are not available yet.
+
+### Preview and Download in the Dashboard
+
+Start `dashboard serve` against your local data directory, select a run, and
+choose **Export replay**. Confirm that the package includes the whole run,
+including other sessions and unassigned evidence. The preview shows saved-source
+counts, the ZIP size and a paged file inventory. **Inspect frozen replay** opens
+the same data that will be downloaded, so you can read the graph, conversation,
+configuration, raw records and bodies before sharing.
+
+**Confirm and download ZIP** downloads that frozen archive. Later collection
+does not change it. Preparation allows one active preview per server, expires
+after ten minutes, and stops after five minutes if it cannot finish. Discarding
+the preview or stopping the local server releases its temporary files; an active
+download retains its files until the response finishes. A hard process kill may
+leave a private `agentprov-readonly-replay-*` directory in the system temporary
+directory.
+
+Browser preparation is available only over a same-origin loopback connection.
+Public and offline replays retain the export entry and explain how to use the
+local CLI. The local [replay export API](replay-export-api.yaml) documents the
+preview, inventory confirmation, download and cancellation endpoints.
 
 ## External Queries and Runtime Coverage
 

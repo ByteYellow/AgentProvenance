@@ -301,6 +301,7 @@
 <link rel="stylesheet" href="/assets/workspace.css">
 <link rel="stylesheet" href="/assets/search.css">
 <link rel="stylesheet" href="/assets/compare.css">
+<link rel="stylesheet" href="/assets/export.css">
 </head>
 <body>
 <header>
@@ -480,9 +481,29 @@
   <p class="session-scope-note">{{tr .Lang "Choose a session to filter its graph and conversation, or read one exact source. Parent links use recorded source metadata."}}</p>
   <div id="session-directory-body"></div>
 </dialog>
-<dialog id="investigation-dialog" class="content-dialog context-ui investigation-dialog" aria-labelledby="investigation-title">
-  <div class="content-dialog-head"><h2 id="investigation-title"></h2><button id="investigation-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></div>
-  <div class="investigation-notice"><p>{{tr .Lang "This action is not available in this build."}}</p><p id="investigation-scope"></p></div>
+<dialog id="export-dialog" class="content-dialog context-ui export-dialog" aria-labelledby="export-title">
+  <div class="content-dialog-head"><h2 id="export-title">{{tr .Lang "Export replay"}}</h2><button id="export-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></div>
+  <div class="export-body">
+    <p class="export-run" id="export-run"></p><p id="export-session" class="context-notice" hidden></p>
+    <p>{{tr .Lang "A read-only sharing copy with the graph, sessions and saved content. Nothing is uploaded."}}</p>
+    <p id="export-local-only" class="context-notice" hidden>{{tr .Lang "Prepare personal exports from dashboard serve on your local store. This replay has no export server."}}</p>
+    <div id="export-controls"><label class="export-scope"><input id="export-ack" type="checkbox">{{tr .Lang "Include the whole run: all sessions, unassigned evidence, saved bodies and raw records."}}</label>
+      <p class="context-notice">{{tr .Lang "Session-only export and record exclusions are not available yet. Review saved content before sharing."}}</p>
+      <div class="export-controls"><button id="export-prepare" disabled>{{tr .Lang "Prepare preview"}}</button><button id="export-stop" hidden>{{tr .Lang "Stop loading"}}</button></div>
+    </div>
+    <p id="export-status" role="status" aria-live="polite"></p>
+    <section id="export-result" hidden>
+      <dl id="export-counts" class="export-counts"></dl>
+      <p>{{tr .Lang "Searchable sources"}}</p><div id="export-categories" class="export-categories"></div>
+      <p class="context-notice">{{tr .Lang "Source counts describe saved records. Original collection gaps and unavailable bodies remain visible in the frozen replay."}}</p>
+      <div class="export-meta"><strong id="export-size"></strong><span id="export-expires"></span><span>{{tr .Lang "Unsigned sharing copy"}}</span></div>
+      <div class="export-actions"><a id="export-view" class="export-link" target="_blank" rel="noopener noreferrer">{{tr .Lang "Inspect frozen replay"}}</a><button id="export-download">{{tr .Lang "Confirm and download ZIP"}}</button><button id="export-discard">{{tr .Lang "Discard preview"}}</button></div>
+      <details class="export-files"><summary>{{tr .Lang "Exact file inventory"}}</summary><p class="export-digest">SHA-256: <code id="export-digest"></code></p>
+        <table><thead><tr><th>{{tr .Lang "File"}}</th><th>{{tr .Lang "Bytes"}}</th><th>SHA-256</th></tr></thead><tbody id="export-files"></tbody></table>
+        <div class="export-pagination"><button id="export-files-prev">{{tr .Lang "Previous"}}</button><span id="export-files-count"></span><button id="export-files-next">{{tr .Lang "Next"}}</button></div>
+      </details>
+    </section>
+  </div>
 </dialog>
 <dialog id="search-dialog" class="content-dialog context-ui search-dialog" aria-labelledby="search-title">
   <div class="content-dialog-head"><h2 id="search-title">{{tr .Lang "Search saved evidence"}}</h2><button id="search-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></div>
@@ -536,6 +557,7 @@
 </dialog>
 <script src="/assets/compare-engine.js"></script>
 <script src="/assets/compare.js"></script>
+<script src="/assets/export.js"></script>
 <script src="/assets/search-engine.js"></script>
 <script src="/assets/search.js"></script>
 <script src="/assets/workspace.js"></script>
@@ -1962,7 +1984,8 @@ async function navigateEvidenceGraph(run,id){
   window.AgentWorkspaceUI.show('summary');
   $('#graphcard').scrollIntoView({block:'start',behavior:'smooth'});
 }
-window.AgentWorkspaceUI.init({tr,tx,esc,j,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope)),navigateSession:navigateRelatedSession,returnSession:()=>safeUI(returnRelatedSession()),search:()=>safeUI(window.AgentSearchUI.open()),compare:()=>safeUI(window.AgentCompareUI.open())});
+window.AgentWorkspaceUI.init({tr,tx,esc,j,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope)),navigateSession:navigateRelatedSession,returnSession:()=>safeUI(returnRelatedSession()),search:()=>safeUI(window.AgentSearchUI.open()),compare:()=>safeUI(window.AgentCompareUI.open()),export:()=>safeUI(window.AgentExportUI.open())});
+window.AgentExportUI.init({tr,tx,esc,lang:LANG,scope:()=>({run:cur,...SESSION_SCOPE})});
 window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,
   overviewChanged:value=>window.AgentWorkspaceUI.setOverview(value),
   overviewFailed:()=>window.AgentWorkspaceUI.overviewError(),

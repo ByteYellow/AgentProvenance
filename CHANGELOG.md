@@ -10,6 +10,10 @@ English | [中文](CHANGELOG.zh-CN.md)
   The unsigned, single-run archive opens directly offline, with the existing
   graph, session and saved-content readers, a frozen file inventory and no
   original database or Bundle. The command includes all saved run content.
+- Prepare and inspect a frozen whole-run replay from the Dashboard before
+  downloading its ZIP. Explicit scope confirmation, saved-source counts, exact
+  file inventory and archive size accompany the existing reader. Local previews
+  are bounded, expire automatically and are cleaned up on normal server shutdown.
 - Compare two runs in a temporary Dashboard window, with configuration fields,
   file evidence, network destinations and outbound data types. Keep recorded
   task and capture context visible, preserve typed missing values, and link

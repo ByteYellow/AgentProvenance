@@ -22,8 +22,9 @@ async (page) => {
   await page.locator('#compare-close').click();
   for (const action of ['export']) {
     await page.locator('[data-investigation="'+action+'"]').click();
-    check(await page.locator('#investigation-dialog').innerText().then(s=>s.includes('not available in this build')),'unfinished action is explicit: '+action);
-    await page.locator('#investigation-close').click();
+    check(await page.locator('#export-dialog').isVisible(),'export opens a temporary preview window');
+    check(await page.locator('#export-prepare').isDisabled(),'whole-run scope requires explicit confirmation');
+    await page.locator('#export-close').click();
   }
   check(await page.locator('#session-members button[data-session-index]').count()===3,'three native sessions, not one per source');
   const graph = await page.evaluate(()=>JSON.stringify(window._lg));
