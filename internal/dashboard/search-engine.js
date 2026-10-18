@@ -21,7 +21,8 @@ window.AgentEvidenceSearch = (() => {
     const re = expression(query), meta = metadata(source), metaMatch = re.exec(meta);
     if (!source.node && (source.content?.state !== 'stored' || !source.content.ref)) {
       const state=source.content?.state || 'unavailable';
-      return {state,hit:metaMatch ? {source,excerpt:snippet(meta,metaMatch),offset:0,matched_in:'metadata',state} : null};
+      const reason=source.content?.reason;
+      return {state,reason,hit:metaMatch ? {source,excerpt:snippet(meta,metaMatch),offset:0,matched_in:'metadata',state,reason} : null};
     }
     let offset=0,tail='',tailOffset=0,identity=null;
     for (;;) {
@@ -32,7 +33,7 @@ window.AgentEvidenceSearch = (() => {
       check(signal);
       const state=page.content_state || 'stored';
       if (page.kind === 'unavailable' || page.kind === 'binary' || state !== 'stored') {
-        return {state,hit:metaMatch ? {source,excerpt:snippet(meta,metaMatch),offset:0,matched_in:'metadata',state} : null};
+        return {state,reason:page.reason,hit:metaMatch ? {source,excerpt:snippet(meta,metaMatch),offset:0,matched_in:'metadata',state,reason:page.reason} : null};
       }
       const content=page.content ?? '';
       if(typeof content !== 'string' || page.offset !== offset || !Number.isSafeInteger(page.next_offset) || page.next_offset !== offset+bytes(content) || !Number.isSafeInteger(page.total_bytes) || page.total_bytes>33554432 || page.next_offset>page.total_bytes || (page.has_more && page.next_offset<=offset)) throw new Error('Invalid saved-content continuation');
@@ -58,7 +59,7 @@ window.AgentEvidenceSearch = (() => {
     if(typeof query!=='string' || !query.trim() || query.length>256)throw new Error('Enter a keyword of 1 to 256 characters.');
     if(!['','messages','tools','configuration','files','runtime'].includes(category))throw new Error('Invalid search category');
     let page=null,index=0,cursor='',done=false,busy=false;
-    const stats={scanned:0,bytes:0,unavailable:0,states:{},excluded:0};
+    const stats={scanned:0,bytes:0,unavailable:0,policy_omitted:0,states:{},excluded:0};
     async function next({signal,onProgress=()=>{}}={}) {
       if(busy)throw new Error('Search is already running');
       busy=true;
@@ -78,7 +79,10 @@ window.AgentEvidenceSearch = (() => {
           if(category && source.category!==category){stats.excluded++;index++;continue;}
           const result=await scan(source,scope,query,get,signal,n=>{stats.bytes+=n;onProgress({...stats});});
           index++;stats.scanned++;
-          if(result.state!=='stored'){stats.unavailable++;stats.states[result.state]=(stats.states[result.state]||0)+1;}
+          if(result.state!=='stored'){
+            if(result.reason==='capture_policy')stats.policy_omitted++;
+            else{stats.unavailable++;stats.states[result.state]=(stats.states[result.state]||0)+1;}
+          }
           if(result.hit){
             matched++;
             const hit=result.hit,key=hit.matched_in==='body' && hit.sha256 ? source.category+'/'+hit.sha256 : source.id;

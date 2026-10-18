@@ -32,7 +32,8 @@
     const limited=(data,dimension)=>!data.complete||data.issues.some(i=>i.dimension===dimension||['all','runtime'].includes(i.dimension));
     const values=records=>[...new Set(records.map(r=>r.value?.sha256))].sort().join(',');
     const rows=[...groups.values()].map(row=>{
-      if(!row.a.length)row.status='only_b';
+      if(![...row.a,...row.b].some(r=>r.value?.present&&r.value.sha256))row.status='unknown';
+      else if(!row.a.length)row.status='only_b';
       else if(!row.b.length)row.status='only_a';
       else if([...row.a,...row.b].some(r=>!r.value?.present||!r.value.sha256||r.partial)||limited(a,row.dimension)||limited(b,row.dimension))row.status='unknown';
       else row.status=values(row.a)===values(row.b)?'common':'different';

@@ -57,6 +57,9 @@ components:
         signed: {const: false}
         events: {type: integer, minimum: 0}
         contents: {$ref: '#/components/schemas/Contents'}
+        capture_policy:
+          allOf: [{$ref: './agent-context-api.yaml#/components/schemas/CapturePolicy'}]
+          description: Source run retention settings from the frozen snapshot, when recorded. Export exclusions do not change these settings.
         record_selection:
           allOf: [{$ref: '#/components/schemas/File'}]
           description: >

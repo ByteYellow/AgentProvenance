@@ -165,6 +165,9 @@ func (s Service) CompareSnapshots(ctx context.Context, runID, leftID, rightRunID
 
 func (s Service) comparisonBody(ctx context.Context, e Entry) ([]byte, string, error) {
 	if e.Content.State != "stored" {
+		if e.Content.Reason == "capture_policy" {
+			return nil, "capture_policy", nil
+		}
 		return nil, "content_not_recorded", nil
 	}
 	var body []byte

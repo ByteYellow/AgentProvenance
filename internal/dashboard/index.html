@@ -509,6 +509,7 @@
     <section id="export-result" hidden>
       <p id="export-frozen-scope" class="export-run"></p><p id="export-selection-counts"></p>
       <p id="export-omissions" class="context-notice" hidden></p>
+      <p id="export-retention" class="context-notice"></p>
       <details id="export-warnings" class="export-warnings" hidden><summary id="export-warning-count"></summary><p>{{tr .Lang "Matching context text remains in included records. Review these references in the frozen copy before sharing."}}</p><p id="export-warning-limit" class="context-notice"></p><ul id="export-warning-items"></ul></details>
       <dl id="export-counts" class="export-counts"></dl>
       <p>{{tr .Lang "Searchable sources"}}</p><div id="export-categories" class="export-categories"></div>
@@ -562,8 +563,8 @@
   </div>
   <p id="compare-scope-note" class="compare-note"></p>
   <div id="compare-pair" class="compare-pair" hidden>
-    <section><h3>A <span id="compare-run-a"></span></h3><p id="compare-task-a"></p><small id="compare-time-a"></small><small id="compare-source-a"></small><small id="compare-capture-a"></small></section>
-    <section><h3>B <span id="compare-run-b"></span></h3><p id="compare-task-b"></p><small id="compare-time-b"></small><small id="compare-source-b"></small><small id="compare-capture-b"></small></section>
+    <section><h3>A <span id="compare-run-a"></span></h3><p id="compare-task-a"></p><small id="compare-time-a"></small><small id="compare-source-a"></small><small id="compare-capture-a"></small><small id="compare-retention-a"></small></section>
+    <section><h3>B <span id="compare-run-b"></span></h3><p id="compare-task-b"></p><small id="compare-time-b"></small><small id="compare-source-b"></small><small id="compare-capture-b"></small><small id="compare-retention-b"></small></section>
   </div>
   <div class="compare-meta"><p id="compare-task-note"></p><p id="compare-summary"></p><span id="compare-status" role="status" aria-live="polite"></span><label><input id="compare-only" type="checkbox" checked> {{tr .Lang "Differences only"}}</label></div>
   <div class="compare-body"><nav id="compare-dimensions" class="compare-dimensions" aria-label="{{tr .Lang "Comparison dimensions"}}"></nav><div class="compare-list"><div id="compare-results" class="compare-results"></div><button id="compare-more" hidden>{{tr .Lang "Load more differences"}}</button></div></div>

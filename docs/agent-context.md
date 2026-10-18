@@ -61,6 +61,12 @@ inputs are bounded to 40 MiB and each run's sidecar to 128 MiB. Malformed input 
 budget exhaustion is recorded as a body-free capture diagnostic. Both presets
 apply the existing secret redaction before storage.
 
+The Dashboard shows the recorded preset in the session summary and its effective
+settings under collection status. Search counts configured omissions separately
+from unavailable bodies. Compare shows each run's preset and preserves unknown
+configuration values when their bodies were not retained. Export previews and
+offline replays keep the source run's settings, independently of sharing exclusions.
+
 ### Native Format Compatibility
 
 | Harness | Recorded context |

@@ -8,6 +8,8 @@
 
 ### 新增
 
+- Dashboard 会话、搜索、对比和回放显示已记录的上下文留存设置。
+  按设置省略的正文与不可用内容分别统计，冻结导出清单保留来源 Run 的档位。
 - `launch` 和 `context import` 支持 `--capture basic|detailed`，默认详细档，
   可用 `--capture-tool-results` 单独覆盖工具结果留存。启动前固定本次 Run 的设置，
   Claude hook 日志在写盘前完成留存筛选与脱敏，并限制大小、串行写入。

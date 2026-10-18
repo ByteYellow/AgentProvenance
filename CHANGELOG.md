@@ -6,6 +6,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
+- Dashboard session, search, comparison and replay views now explain recorded
+  context-retention settings. Configured omissions are separate from unavailable
+  content, and frozen export inventories retain the source run's preset.
 - Choose additional-context retention with `launch --capture basic|detailed`
   and `context import --capture basic|detailed`. Detailed remains the default;
   `--capture-tool-results` provides a focused override. Run settings are fixed

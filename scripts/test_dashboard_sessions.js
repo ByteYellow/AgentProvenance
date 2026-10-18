@@ -60,8 +60,11 @@ async (page) => {
   await page.evaluate(()=>loadRun(cur));
   check(await page.evaluate(()=>window._lensManifest.query.session_scope?.session_id)==='worker','refresh retains session');
   await page.locator('[data-investigation="export"]').click();
-  check(await page.locator('#investigation-scope').innerText().then(s=>s.includes('codex · worker')),'investigation dialog states the session scope');
-  await page.locator('#investigation-close').click();
+  check(await page.locator('#export-session').innerText().then(s=>s.includes('codex · worker')),'export dialog identifies the current session filter');
+  check(await page.locator('#export-session-option').isVisible()&&await page.locator('input[name="export-scope"][value="whole_run"]').isChecked(),'export offers the current session without silently changing the sharing scope');
+  await page.locator('input[name="export-scope"][value="session"]').check();
+  check(await page.locator('#export-scope-note').innerText().then(s=>s.includes('explicitly linked records')),'session export states its evidence boundary');
+  await page.locator('#export-close').click();
   await page.screenshot({path:'output/playwright/session-scope-desktop.png'});
   await page.locator('#session-scope-clear').click();
   await page.waitForFunction(()=>!window._lensManifest.query.session_scope);

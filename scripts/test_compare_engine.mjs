@@ -25,6 +25,14 @@ assert.equal(build(run([record('task','a','task')]),run([record('task','b','task
 assert.equal(build({...a,complete:false},b).taskRelation,'task_not_recorded');
 assert.equal(build({...a,issues:[{dimension:'configuration',code:'missing'}]},b).rows.find(r=>r.key==='/plugins').status,'unknown');
 assert.equal(build(run([record('same','s','files',{partial:true})]),run([record('same','s','files')])).rows[0].status,'unknown');
+const withheld=record('unavailable',null,'configuration',{partial:true,evidence:{content:{reason:'capture_policy'}}});
+const retention=build(run([withheld]),run([record('/model','recorded')]));
+assert.equal(retention.rows.find(r=>r.key==='unavailable').status,'unknown','an omitted value is not a one-sided change');
+assert.equal(retention.rows.find(r=>r.key==='/model').status,'only_b','a retained one-sided field stays recorded evidence');
+assert.equal(retention.counts.configuration.unknown,1);
+assert.equal(retention.counts.configuration.differences,1,'unavailable placeholders do not increase recorded differences');
+assert.equal(build(run([]),run([withheld])).rows[0].status,'unknown','unknown values stay unknown after swapping sides');
+assert.equal(build(run([record('lost',null,'files')]),run([])).rows[0].status,'unknown','an unreadable file is not a known value');
 
 const pages=Array.from({length:3},(_,n)=>({schema_version:'agentprovenance.comparison_records/v1',run_id:'one',records:[record('r'+n,'v')],issues:[],sources_read:50,has_more:n<2,next_cursor:n<2?String(n+1):''}));
 const calls=[];

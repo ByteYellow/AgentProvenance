@@ -23,6 +23,7 @@ import (
 	"time"
 
 	project "github.com/byteyellow/agentprovenance"
+	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/buildinfo"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/staticdata"
@@ -37,19 +38,20 @@ type ReplayFile struct {
 // ReplayInventory describes the exact files frozen for a share. The inventory
 // excludes itself; its digest is returned separately by the preparation step.
 type ReplayInventory struct {
-	SchemaVersion     string                  `json:"schema_version"`
-	RunID             string                  `json:"run_id"`
-	Scope             string                  `json:"scope"`
-	CreatedAt         string                  `json:"created_at"`
-	Commit            string                  `json:"commit"`
-	Signed            bool                    `json:"signed"`
-	Events            int                     `json:"events"`
-	Contents          ReplayContents          `json:"contents"`
-	Selection         ReplayFile              `json:"record_selection"`
-	SelectionSummary  *ReplaySelectionSummary `json:"selection_summary,omitempty"`
-	AnalysisOmissions map[string]int          `json:"analysis_omissions,omitempty"`
-	Files             []ReplayFile            `json:"files"`
-	Bytes             int64                   `json:"bytes_excluding_inventory"`
+	SchemaVersion     string                      `json:"schema_version"`
+	RunID             string                      `json:"run_id"`
+	Scope             string                      `json:"scope"`
+	CreatedAt         string                      `json:"created_at"`
+	Commit            string                      `json:"commit"`
+	Signed            bool                        `json:"signed"`
+	Events            int                         `json:"events"`
+	Contents          ReplayContents              `json:"contents"`
+	Selection         ReplayFile                  `json:"record_selection"`
+	SelectionSummary  *ReplaySelectionSummary     `json:"selection_summary,omitempty"`
+	AnalysisOmissions map[string]int              `json:"analysis_omissions,omitempty"`
+	CapturePolicy     *agentcontext.CapturePolicy `json:"capture_policy,omitempty"`
+	Files             []ReplayFile                `json:"files"`
+	Bytes             int64                       `json:"bytes_excluding_inventory"`
 }
 
 // Counts describe saved sources, not successful operations or collection coverage.
@@ -206,6 +208,10 @@ func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySe
 	if err != nil {
 		return nil, err
 	}
+	coverage, err := (agentcontext.Service{DB: frozen.DB}).Overview(ctx, run)
+	if err != nil {
+		return nil, err
+	}
 	catalog := struct {
 		SchemaVersion string               `json:"schema_version"`
 		Summaries     []runSummary         `json:"summaries"`
@@ -297,6 +303,7 @@ func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySe
 	}
 	p.Inventory = ReplayInventory{SchemaVersion: "agentprovenance.replay_inventory/v1", RunID: run, Scope: input.Scope, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Commit: buildinfo.Commit, Events: selected.Events, Contents: contents, Selection: selectionFile}
 	p.Inventory.AnalysisOmissions = omissions
+	p.Inventory.CapturePolicy = coverage.CapturePolicy
 	p.Inventory.SelectionSummary = &selectionSummary
 	if err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {

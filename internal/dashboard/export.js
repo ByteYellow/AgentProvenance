@@ -129,7 +129,7 @@ window.AgentExportUI=(()=>{
     if(!catalog)return;
     $('export-records').innerHTML=catalog.sources.map((source,index)=>{
       const category=draft.categories.has(source.category),excluded=category||draft.records.has(source.id);
-      const state=source.entry?.status==='source_truncated'?'truncated':source.content?.state||'Not recorded';
+      const state=source.content?.reason==='capture_policy'?window.AgentContextUI.contentReason(source.content):source.entry?.status==='source_truncated'?'truncated':source.content?.state||'Not recorded';
       return `<div class="export-record" data-excluded="${excluded}"><label><input type="checkbox" data-export-record="${index}" data-record-id="${e(source.id)}" ${excluded?'':'checked'} ${category?'disabled':''}><span><strong>${e(source.label)}</strong><small>${e(t(names[source.category]||source.category))} · ${e(t(state))}${category?' · '+e(t('Excluded category')):''}</small><small>${e([source.agent_id||source.harness,source.recorded_at].filter(Boolean).join(' · '))}</small><small><code>${e(source.id)}</code></small></span></label><button type="button" data-export-inspect="${index}">${e(t('Read'))}</button></div>`;
     }).join('');
     $('export-records').querySelectorAll('[data-export-record]').forEach(input=>input.onchange=()=>{
@@ -168,6 +168,7 @@ window.AgentExportUI=(()=>{
     if(summary?.excluded_records)$('export-selection-counts').textContent+=' · '+Object.entries(summary.exclusion_reasons).map(([reason,count])=>t(reasons[reason]||reason)+': '+count).join(' · ');
     const omitted=Object.values(inventory.analysis_omissions||{}).reduce((a,b)=>a+b,0);
     $('export-omissions').hidden=!omitted;$('export-omissions').textContent=api.tx('{count} analysis records omitted from this selection. See the inventory for reasons.',{count:omitted});
+    $('export-retention').textContent=window.AgentContextUI.retentionText(inventory.capture_policy,true);
     $('export-warnings').hidden=!summary?.warning_count;$('export-warnings').open=!!summary?.warning_count;
     $('export-warning-count').textContent=api.tx('{count} repeated-content warnings',{count:summary?.warning_count||0});
     $('export-warning-limit').textContent=api.tx('Showing up to {count} examples and 10 retained references per example.',{count:100});

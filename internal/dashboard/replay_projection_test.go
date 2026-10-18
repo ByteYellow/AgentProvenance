@@ -110,6 +110,9 @@ func TestReplayProjectionWithholdsSharedIntentAndKeepsCapturePolicy(t *testing.T
 		if err != nil {
 			t.Fatal(err)
 		}
+		if p.Inventory.CapturePolicy == nil || p.Inventory.CapturePolicy.Preset != "basic" || p.Inventory.CapturePolicy.ToolResults {
+			t.Fatal("frozen export preview lost source retention settings")
+		}
 		files, all := replayZIPData(t, p)
 		p.Close()
 		if strings.Contains(all, "UNRETAINED-TOOL-OUTPUT") || !strings.Contains(all, "SELECTED-MODEL-ANSWER") {

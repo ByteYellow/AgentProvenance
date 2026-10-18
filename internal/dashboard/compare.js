@@ -91,7 +91,10 @@ window.AgentCompareUI=(()=>{
       const sources=[...new Set([...(coverage.coverage||[]).map(sourceLabel).filter(Boolean),...saved.records.filter(r=>r.evidence.category==='runtime').map(r=>r.evidence.source_id).filter(Boolean)])];
       $("compare-source-"+side).textContent=sources.join(' / ')||t('Source not recorded');
       $("compare-capture-"+side).textContent=t('Runtime collection')+': '+t(window.AgentContextUI.coverageSections(coverage).runtime.label);
+      $("compare-retention-"+side).textContent=window.AgentContextUI.retentionText(coverage.capture_policy);
       const reports=(coverage.coverage||[]).map(c=>(sourceLabel(c)||t('Source not recorded'))+': '+t(c.status||'Not recorded')+(c.missing_fields?.length?' · '+c.missing_fields.join(', '):''));
+      reports.unshift(window.AgentContextUI.retentionText(coverage.capture_policy,true));
+      reports.push(...(coverage.coverage||[]).map(c=>window.AgentContextUI.omissionText(c)).filter(Boolean));
       $('compare-coverage').textContent+=side.toUpperCase()+' · '+saved.run+'\n'+[...reports,...(capture?.issues||[]),...(capture?.limitations||[]),...saved.issues.map(i=>i.code+' · '+i.source_id)].join('\n')+'\n\n';
       if(coverage.has_more_sources)$('compare-coverage').textContent+=t('Additional sources are not shown')+'\n';
     }
@@ -118,13 +121,15 @@ window.AgentCompareUI=(()=>{
   function sideHTML(row,side,index){
     const records=row[side],id='compare-ref-'+index+'-'+side;
     if(!records.length)return `<section class="compare-side"><h3>${side.toUpperCase()}</h3><p>${e(t('Not recorded on this side'))}</p></section>`;
-    const values=[...new Map(records.map(r=>[r.value?.sha256||'unknown',r.value])).values()];
+    const values=[...new Map(records.map(r=>[r.value?.sha256||'unknown/'+(r.evidence.content?.reason||''),{value:r.value,reason:r.evidence.content?.reason}])).values()];
     const selected=Math.min(current.references.get(JSON.stringify([row.key,side]))||0,records.length-1),offset=Math.floor(selected/50)*50;
-    const display=values.slice(0,8).map(v=>valueHTML(v,row.dimension)).join('');
+    const display=values.slice(0,8).map(v=>valueHTML(v.value,row.dimension,v.reason)).join('');
     return `<section class="compare-side"><h3>${side.toUpperCase()} <small>${e(api.tx('{count} source references',{count:records.length}))}</small></h3>${display}${values.length>8?`<p>${e(t('Additional recorded values are available through their source references.'))}</p>`:''}<select id="${id}" data-row="${index}" data-side="${side}" data-offset="${offset}" aria-label="${e(t('Source reference'))} ${side.toUpperCase()}">${sourceOptions(records,offset,selected)}</select><div class="compare-links"><button data-record-read="${id}">${e(t('Read saved evidence'))}</button><button data-record-graph="${id}">${e(t('Locate in graph'))}</button>${records.length>50?`<button data-record-next="${id}">${e(t('Next source references'))}</button>`:''}</div><p id="${id}-status" class="context-notice"></p></section>`;
   }
-  function valueHTML(value,dimension){
+  function valueHTML(value,dimension,reason){
+    if(reason==='capture_policy')return `<p>${e(t(window.AgentContextUI.contentReason({reason})))}</p>`;
     if(!value)return `<p>${e(t('Value unavailable'))}</p>`;
+    if(!value.present)return `<p>${e(t('Value unavailable'))}</p>`;
     if(dimension!=='configuration'&&!value.truncated){
       try{
         const fields=JSON.parse(value.preview);

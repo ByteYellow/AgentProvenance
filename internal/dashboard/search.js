@@ -98,7 +98,8 @@ window.AgentSearchUI = (() => {
       const s=hit.source,x=hit.excerpt;
       const snippet=esc(x.text.slice(0,x.start))+'<mark>'+esc(x.text.slice(x.start,x.end))+'</mark>'+esc(x.text.slice(x.end));
       const truncated=hit.sources.some(source=>source.entry?.status==='source_truncated');
-      return `<button class="search-result" data-search-hit="${index}" aria-pressed="${index===current.selected}"><strong>${esc(t(categoryNames[s.category]))} · ${esc(s.label)}</strong><span class="search-excerpt">${snippet}</span><small>${esc([s.agent_id || s.harness,s.recorded_at].filter(Boolean).join(' · '))}</small><small>${esc(t(hit.matched_in==='metadata'?'Source field match':'Saved body match'))}${hit.sources.length>1?' · '+esc(api.tx('{count} source references',{count:hit.sources.length})):''}${hit.redacted?' · '+esc(t('Redacted')):''}${s.execution_scope==='prior_context'?' · '+esc(t('Includes prior context')):''}${truncated?' · '+esc(t('truncated')):''}${hit.state && hit.state!=='stored'?' · '+esc(t('Content was not recorded')):''}</small></button>`;
+      const bodyState=hit.reason==='capture_policy'?window.AgentContextUI.contentReason(hit):'Content was not recorded';
+      return `<button class="search-result" data-search-hit="${index}" aria-pressed="${index===current.selected}"><strong>${esc(t(categoryNames[s.category]))} · ${esc(s.label)}</strong><span class="search-excerpt">${snippet}</span><small>${esc([s.agent_id || s.harness,s.recorded_at].filter(Boolean).join(' · '))}</small><small>${esc(t(hit.matched_in==='metadata'?'Source field match':'Saved body match'))}${hit.sources.length>1?' · '+esc(api.tx('{count} source references',{count:hit.sources.length})):''}${hit.redacted?' · '+esc(t('Redacted')):''}${s.execution_scope==='prior_context'?' · '+esc(t('Includes prior context')):''}${truncated?' · '+esc(t('truncated')):''}${hit.state && hit.state!=='stored'?' · '+esc(t(bodyState)):''}</small></button>`;
     }).join('');
     $('search-results').querySelectorAll('[data-search-hit]').forEach(button=>button.onclick=()=>select(Number(button.dataset.searchHit)));
     let message=current.started ? (current.hits.length?api.tx('{count} matching records on this page',{count:current.hits.length}):t('No match found in saved content.')) : t('Search messages, tool output, configuration and saved files.');
@@ -107,6 +108,7 @@ window.AgentSearchUI = (() => {
     else if(current.hasMore)message+=' '+t('More records remain to be searched.');
     $('search-status').textContent=message;
     $('search-counts').textContent=api.tx('Checked {count} records · {missing} bodies unavailable',{count:current.stats.scanned,missing:current.stats.unavailable});
+    if(current.stats.policy_omitted)$('search-counts').textContent+=' · '+api.tx('{count} bodies not saved by retention settings',{count:current.stats.policy_omitted});
     $('search-more').hidden=!current.hasMore;
     $('search-missing').textContent=Object.entries(current.stats.states).map(([state,count])=>state+': '+count).join(' · ');
   }
@@ -147,6 +149,7 @@ window.AgentSearchUI = (() => {
       if(current!==active || scopeKey(selectedScope())!==scopeKey(scope))return;
       const reports=(overview.coverage||[]).filter(c=>!scope.session_id || c.source?.harness===scope.harness && c.source.session_id===scope.session_id);
       $('search-coverage').textContent=reports.map(c=>[c.source?.harness,c.status,...(c.issues||[]).map(i=>i.code)].filter(Boolean).join(' · ')).join('\n') || t('Not recorded');
+      $('search-coverage').textContent=window.AgentContextUI.retentionText(overview.capture_policy,true)+'\n'+$('search-coverage').textContent;
       if(overview.has_more_sources)$('search-coverage').textContent+='\n'+t('Additional sources are not shown');
     }catch(error){if(current===active)$('search-coverage').textContent=t('Context coverage unavailable');}
   }

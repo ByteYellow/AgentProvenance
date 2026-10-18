@@ -56,6 +56,11 @@ assert.equal(result.hits.length,2);assert.equal(result.hits[0].sources.length,2,
 r=reader([source('report.txt',null,'files'),source('other',null),source('empty','')]);
 result=await create({query:'report.txt',scope,get:r.get}).next();
 assert.equal(result.hits.length,1);assert.equal(result.hits[0].matched_in,'metadata');assert.equal(result.stats.unavailable,2);assert.equal(result.error,undefined);
+r=reader([{id:'policy-result',category:'tools',label:'Tool result',content:{state:'omitted',reason:'capture_policy'}},source('missing',null)]);
+result=await create({query:'Tool result',scope,get:r.get}).next();
+assert.equal(result.stats.policy_omitted,1);assert.equal(result.stats.unavailable,1);
+assert.equal(result.hits[0].reason,'capture_policy');assert.equal(result.hits[0].matched_in,'metadata');
+assert.ok(!r.calls.some(path=>path.includes('policy-result')),'omitted body has no fabricated reader request');
 r=reader([source('a','needle','messages'),source('b','needle','tools')]);
 result=await create({query:'needle',category:'tools',scope,get:r.get}).next();
 assert.equal(result.hits.length,1);assert.equal(result.hits[0].source.id,'b');assert.equal(result.stats.excluded,1);
