@@ -69,6 +69,13 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Fixed
 
+- Capture OpenSSL exports from a bounded dynamic symbol table when a large
+  unused ordinary string table prevents full symbol inspection, including
+  current Node.js binaries. Attach with validated executable-file offsets and
+  retain the existing metadata limits.
+- Reserve the SQLite writer before reading context-retention settings, so live
+  telemetry cannot invalidate a context import's read snapshot. Context records
+  and diagnostics remain atomic, including when a commit fails.
 - Ignore obsolete focused-event and timeline responses after selection changes.
   New evidence selections clear previous rows while loading; failed requests
   show an unavailable result and an unknown count.

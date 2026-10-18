@@ -7,6 +7,23 @@ import (
 	"errors"
 )
 
+// WithWriteTx reserves the SQLite writer before the callback reads a snapshot.
+// A deferred read transaction cannot upgrade a stale WAL snapshot, even with a
+// busy handler. This zero-row write changes no schema metadata and lets the
+// busy handler wait before any application reads or external writes occur.
+// The database must already have an initialized schema.
+func WithWriteTx(ctx context.Context, db *sql.DB, apply func(*sql.Tx) error) error {
+	return WithTx(ctx, db, func(tx *sql.Tx) error {
+		if err := RetryBusy(ctx, func() error {
+			_, err := tx.ExecContext(ctx, `UPDATE schema_versions SET version=version WHERE 0`)
+			return err
+		}); err != nil {
+			return err
+		}
+		return apply(tx)
+	})
+}
+
 // WithTx pins the connection until commit or rollback has completed. The
 // callback must not commit or roll back the transaction itself.
 //

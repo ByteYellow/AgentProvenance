@@ -128,6 +128,13 @@ windows still use request/response-head parsing; a recognized HTTP/2 preface is
 marked `headers_decoded: false`, while opaque binary bytes stay unclassified.
 These optional fields require no database or bundle-format migration.
 
+OpenSSL symbol inspection bounds each consumed ELF symbol/string section to
+16 MiB and their combined size to 32 MiB. When an unused ordinary symbol or
+string table exceeds those limits, the sensor can resolve exported OpenSSL
+functions from the bounded dynamic table instead. It validates file-backed
+executable offsets before attaching, without loading the oversized table.
+This supports binaries such as Node.js that embed OpenSSL and export its APIs.
+
 OpenSSL `SSL_read` and `SSL_read_ex` entry/return probes use the full kernel
 `pid_tgid` and task start time. Each API retains up to four nested calls per
 thread, with a bounded map of 4,096 threads. Returns beyond that depth are skipped

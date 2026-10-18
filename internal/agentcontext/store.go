@@ -60,11 +60,19 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 		return SaveResult{}, err
 	}
 	src.ID = sourceID(src)
-	tx, err := s.DB.BeginTx(ctx, nil)
+	var result SaveResult
+	err = store.WithWriteTx(ctx, s.DB, func(tx *sql.Tx) error {
+		var err error
+		result, err = s.saveTx(ctx, tx, runID, src, records, report)
+		return err
+	})
 	if err != nil {
 		return SaveResult{}, err
 	}
-	defer tx.Rollback()
+	return result, nil
+}
+
+func (s Service) saveTx(ctx context.Context, tx *sql.Tx, runID string, src Source, records []Record, report Coverage) (SaveResult, error) {
 	policy, err := s.capturePolicyForWrite(ctx, tx, runID)
 	if err != nil {
 		return SaveResult{}, err
@@ -322,9 +330,6 @@ func (s Service) Save(ctx context.Context, runID string, src Source, records []R
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, report.ID, runID, src.ID, src.Harness,
 		src.SessionID, report.Status, obj.Hash, report.ObservedAt)
 	if err != nil {
-		return SaveResult{}, err
-	}
-	if err := tx.Commit(); err != nil {
 		return SaveResult{}, err
 	}
 	report.ObjectHash = obj.Hash

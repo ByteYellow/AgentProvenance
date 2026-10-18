@@ -57,8 +57,12 @@ func attachTLSTarget(target tlsTarget, objs *sensorbpfObjects, skip map[string]b
 		}
 	}
 	var ex *link.Executable
+	var dynamicOffsets map[string]uint64
 	if openErr == nil {
 		openErr = validateELFMetadata(stablePath)
+		if openErr != nil && target.Kind == "openssl" {
+			dynamicOffsets, openErr = opensslDynamicOffsets(stablePath)
+		}
 	}
 	if openErr == nil {
 		ex, openErr = link.OpenExecutable(stablePath)
@@ -76,12 +80,20 @@ func attachTLSTarget(target tlsTarget, objs *sensorbpfObjects, skip map[string]b
 		}
 		var up link.Link
 		var err error
-		if enter != nil {
-			up, err = ex.Uprobe(name, enter, nil)
+		var opts *link.UprobeOptions
+		if dynamicOffsets != nil {
+			if offset := dynamicOffsets[name]; offset != 0 {
+				opts = &link.UprobeOptions{Address: offset}
+			} else {
+				err = i18n.Errorf("dynamic TLS symbol %s is missing or outside executable segments", name)
+			}
+		}
+		if err == nil && enter != nil {
+			up, err = ex.Uprobe(name, enter, opts)
 		}
 		if err == nil && ret != nil {
 			var out link.Link
-			out, err = ex.Uretprobe(name, ret, nil)
+			out, err = ex.Uretprobe(name, ret, opts)
 			if err != nil {
 				if up != nil {
 					_ = up.Close()

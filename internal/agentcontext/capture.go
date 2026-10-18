@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
+	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
 const CapturePolicyVersion = "agentprovenance.context_capture/v1"
@@ -77,16 +78,16 @@ func (s Service) EnsureCapturePolicy(ctx context.Context, run string) (CapturePo
 	if s.DB == nil || strings.TrimSpace(run) == "" {
 		return CapturePolicy{}, fmt.Errorf("capture policy requires database and run")
 	}
-	tx, err := s.DB.BeginTx(ctx, nil)
+	var p CapturePolicy
+	err := store.WithWriteTx(ctx, s.DB, func(tx *sql.Tx) error {
+		var err error
+		p, err = s.capturePolicyForWrite(ctx, tx, run)
+		return err
+	})
 	if err != nil {
 		return CapturePolicy{}, err
 	}
-	defer tx.Rollback()
-	p, err := s.capturePolicyForWrite(ctx, tx, run)
-	if err != nil {
-		return CapturePolicy{}, err
-	}
-	return p, tx.Commit()
+	return p, nil
 }
 
 type captureReader interface {
