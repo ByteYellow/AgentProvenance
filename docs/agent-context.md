@@ -543,6 +543,25 @@ are limited to 1 MiB and 200 fields per snapshot; value previews use up to
 and reports the limit. The window lists 100 rows and 50 source references at a
 time, with controls to continue. Refresh to include records saved during capture.
 
+The records endpoint also returns an `access_control` dimension. Its
+`evidence_kind` separates configuration declarations, procfs state snapshots,
+audit decisions/status, audit-file collection observations, syscall results and
+process/thread exits. `mechanism` is present on mechanism-specific evidence;
+independent syscall and exit records do not acquire a mechanism from an error
+number or signal. Audit `LOG`, `ERRNO` action data and `KILL_PROCESS` stay separate
+from recorded syscall returns and exits.
+
+These records use `comparison_scope: observed_set`: values describe the saved
+observations across a run. Keys do not pair processes or sessions across runs.
+PID, timestamps and resource revisions remain in the original evidence reader,
+outside the value digest. Missing, invalid or limited evidence produces explicit
+issues. A source-file reader reports its file-level coverage and unknown upstream
+loss. Each configuration observation is bounded to 64 declarations. Search and
+selected replay exports use the existing runtime category and original record
+IDs; unassigned audit records stay outside session-only selections. The API and
+frozen replay catalogs share this projection. The Dashboard's four comparison
+views described above are unchanged.
+
 New public-demo exports include the same comparison catalog and reader. The
 historical Grok pair demonstrates different saved outbound surfaces, rather
 than a controlled before/after intervention. Older exports without a comparison

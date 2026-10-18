@@ -21,13 +21,16 @@ import (
 // Comparison records are read projections of saved evidence. Keys identify
 // comparable fields or observed sets, never paired sessions or tool steps.
 type ComparisonRecord struct {
-	Dimension string                      `json:"dimension"`
-	Key       string                      `json:"key"`
-	Label     string                      `json:"label"`
-	Operation string                      `json:"operation"`
-	Value     *agentcontext.SnapshotValue `json:"value"`
-	Partial   bool                        `json:"partial"`
-	Evidence  SearchSource                `json:"evidence"`
+	Dimension       string                      `json:"dimension"`
+	Key             string                      `json:"key"`
+	Label           string                      `json:"label"`
+	Operation       string                      `json:"operation"`
+	EvidenceKind    string                      `json:"evidence_kind,omitempty"`
+	Mechanism       string                      `json:"mechanism,omitempty"`
+	ComparisonScope string                      `json:"comparison_scope,omitempty"`
+	Value           *agentcontext.SnapshotValue `json:"value"`
+	Partial         bool                        `json:"partial"`
+	Evidence        SearchSource                `json:"evidence"`
 }
 
 type ComparisonIssue struct {
@@ -221,7 +224,11 @@ func (s Server) ComparisonRecords(ctx context.Context, run, cursor string) (Comp
 		}
 		var payload map[string]any
 		if body == "" || decodeComparisonJSON([]byte(body), &payload) != nil {
-			issue(source, "runtime", "event_body_unavailable")
+			dimension := "runtime"
+			if accessComparisonKind(source.Kind) {
+				dimension = "access_control"
+			}
+			issue(source, dimension, "event_body_unavailable")
 			continue
 		}
 		if inner, ok := payload["payload"].(map[string]any); ok {
@@ -229,6 +236,23 @@ func (s Server) ComparisonRecords(ctx context.Context, run, cursor string) (Comp
 		}
 		if raw, ok := payload["raw"].(map[string]any); ok {
 			payload = raw
+		}
+		if accessComparisonKind(source.Kind) {
+			records, issues := comparisonAccessControl(source, payload)
+			result.Records = append(result.Records, records...)
+			result.Issues = append(result.Issues, issues...)
+			continue
+		}
+		if firstStr(payload, "observation_stage") == "attempt_and_result" &&
+			(source.Kind == "file_open" || source.Kind == "secret_path" || source.Kind == "network_connect") {
+			resultSource := source
+			resultSource.Kind = "syscall_result"
+			records, issues := comparisonAccessControl(resultSource, payload)
+			for i := range records {
+				records[i].Evidence = source
+			}
+			result.Records = append(result.Records, records...)
+			result.Issues = append(result.Issues, issues...)
 		}
 		fields := func(keys ...string) map[string]any {
 			out := map[string]any{}

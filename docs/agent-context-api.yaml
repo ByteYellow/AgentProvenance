@@ -267,10 +267,21 @@ components:
       type: object
       required: [dimension, key, label, operation, value, partial, evidence]
       properties:
-        dimension: {type: string, enum: [task, configuration, files, network, outbound]}
+        dimension: {type: string, enum: [task, configuration, files, network, outbound, access_control]}
         key: {type: string, description: Opaque comparable field or set identity; never a paired session or tool step.}
         label: {type: string}
         operation: {type: string, description: Recorded operation or existing outbound channel class.}
+        evidence_kind:
+          type: string
+          enum: [configuration_declaration, state_snapshot, audit_decision, audit_status, collection_status, syscall_result, process_exit, thread_exit]
+          description: Access-control evidence category. Audit actions and runtime results remain separate records.
+        mechanism:
+          type: string
+          enum: [apparmor, seccomp, all]
+          description: Recorded mechanism; all is only used for a combined audit-file reader. Absent on independent runtime results.
+        comparison_scope:
+          const: observed_set
+          description: Compares sets of saved observations, not matched tasks or complete enforcement coverage. Repeated values retain all source references.
         value:
           oneOf:
             - {$ref: '#/components/schemas/SnapshotValue'}
