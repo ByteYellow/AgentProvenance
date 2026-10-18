@@ -25,6 +25,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/accesscontrol"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/tlsintent"
 	"github.com/cilium/ebpf"
@@ -209,6 +210,15 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 			_ = rd.Close()
 		}
 	}
+	states := newStateSampler(opts, accesscontrol.ReadTask, emit)
+	defer func() {
+		states.close()
+		encMu.Lock()
+		defer encMu.Unlock()
+		if runErr == nil {
+			runErr = writeErr
+		}
+	}()
 
 	// Surface ring-buffer drops as a coverage-gap event so a loaded sensor is
 	// never silently blind.
@@ -258,6 +268,9 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		var e sensorbpfSensorEvent
 		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &e); err != nil {
 			continue
+		}
+		if e.Pid != uint32(os.Getpid()) && e.Kind != eventExit && e.Kind != eventThreadExit {
+			states.offer(stateTarget{pid: e.Pid, tid: e.Tid, start: e.ThreadStartNs, cgroup: e.CgroupId}, time.Now())
 		}
 		if opts.AutoTLS && e.Kind == eventExec {
 			// Coalesce process-start wakeups. Discovery has its own bounded rate

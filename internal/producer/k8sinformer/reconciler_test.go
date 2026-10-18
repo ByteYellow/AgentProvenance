@@ -54,6 +54,9 @@ func TestLastTerminationRecoveredWhileWaitingOrRunning(t *testing.T) {
 			if old := sink.bound[0]; old.ContainerID != "missed-short-job" || old.EndedAt != last.FinishedAt.Format(time.RFC3339Nano) {
 				t.Fatalf("missed last execution: %+v", old)
 			}
+			if len(sink.bound[0].AccessControl) != 0 {
+				t.Fatal("current configuration attached to recovered historical attempt")
+			}
 			if err := r.Delete(context.Background(), "default/demo", string(pod.UID)); err != nil {
 				t.Fatal(err)
 			}

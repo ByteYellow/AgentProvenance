@@ -228,6 +228,18 @@ jobs:
             AGENTPROV_AUDIT_EVIDENCE_DIR=/tmp/agentprov-live/audit-evidence \
             /tmp/agentprov-live/telemetry-test -test.run '^TestLive(AppArmorAuditImport|SeccompAuditAssociations)$' -test.v -test.timeout=90s \
             | tee /tmp/agentprov-live/audit-associations.log
+      - name: Verify task state and automatic procfs snapshots
+        run: |
+          go test -c -o /tmp/agentprov-live/access-state-test ./internal/accesscontrol
+          sudo env AGENTPROV_ACCESS_STATE_LIVE=1 AGENTPROV_ACCESS_STATE_EVIDENCE=/tmp/agentprov-live/access-state \
+            /tmp/agentprov-live/access-state-test -test.v -test.timeout=60s \
+            | tee /tmp/agentprov-live/access-state.log
+          sudo env AGENTPROV_ACCESS_STATE_LIVE=1 AGENTPROV_ACCESS_STATE_EVIDENCE=/tmp/agentprov-live/access-state \
+            /tmp/agentprov-live/sensor-test -test.run '^TestLiveSensorAccessState$' -test.v -test.timeout=30s \
+            | tee /tmp/agentprov-live/sensor-state.log
+          sudo chown -R "$(id -u):$(id -g)" /tmp/agentprov-live/access-state
+          AGENTPROV_ACCESS_STATE_EVENTS=/tmp/agentprov-live/access-state/sensor-state.jsonl \
+            go test ./internal/forensics -run '^TestLiveAccessStateSignedRoundtrip$' -v
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -238,6 +250,9 @@ jobs:
             /tmp/agentprov-live/syscall-outcomes.log
             /tmp/agentprov-live/audit-associations.log
             /tmp/agentprov-live/audit-evidence/
+            /tmp/agentprov-live/access-state.log
+            /tmp/agentprov-live/sensor-state.log
+            /tmp/agentprov-live/access-state/
 
   phase1-acceptance:
     name: Phase 1 observability smoke

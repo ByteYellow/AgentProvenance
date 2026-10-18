@@ -1159,6 +1159,8 @@
   "disable completion descriptions": "不生成补全项说明",
   "disable the eBPF sensor (record/app-context only)": "关闭 eBPF 传感器，仅保留 record 和应用上下文记录",
   "discover container and host TLS libraries/binaries and reattach after replacement": "自动发现容器及宿主机的 TLS 库或程序，替换后重新挂载",
+  "read timestamped AppArmor task state without changing policy": "只读采集带时间戳的 AppArmor 任务状态，不修改策略",
+  "read timestamped seccomp task state without changing filters": "只读采集带时间戳的 seccomp 任务状态，不修改过滤器",
   "do not serve the live dashboard": "不启动实时 Dashboard",
   "dry-run, mock, allowlist, or compensation": "dry-run、mock、allowlist 或 compensation",
   "embed EvalContext records in the batch bundle": "在批次证据包中嵌入 EvalContext 记录",

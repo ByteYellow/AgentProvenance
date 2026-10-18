@@ -38,6 +38,8 @@ func run(args []string, stdout, stderr io.Writer, capture func(io.Writer, sensor
 	})
 	flags.BoolVar(&opts.AutoTLS, "auto-tls", opts.AutoTLS, "discover and track visible container OpenSSL and Go TLS executables")
 	flags.DurationVar(&opts.TLSScanInterval, "tls-scan-interval", 2*time.Second, "interval between bounded TLS process scans")
+	flags.BoolVar(&opts.AppArmorState, "apparmor-state", true, "read timestamped AppArmor task state without changing policy")
+	flags.BoolVar(&opts.SeccompState, "seccomp-state", true, "read timestamped seccomp task state without changing filters")
 	flags.IntVar(&opts.TLSMaxTargets, "tls-max-targets", 128, "maximum concurrently tracked TLS file identities (hard limit 1024)")
 	flags.IntVar(&opts.TLSMaxProcesses, "tls-max-processes", 4096, "process directory entries examined per TLS scan (hard limit 65536)")
 	flags.Usage = func() {

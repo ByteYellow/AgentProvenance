@@ -572,7 +572,7 @@ func detectFormat(raw map[string]any) string {
 	if _, ok := raw["output_fields"]; ok {
 		return "falco"
 	}
-	if stringAt(raw, "source") == "agentprov_ebpf" {
+	if source := stringAt(raw, "source"); source == "agentprov_ebpf" || source == "procfs_access_control" {
 		return "native"
 	}
 	if stringAt(raw, "source") == "loongcollector" || stringAt(raw, "__tag__:__path__") != "" {
@@ -592,6 +592,19 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 	event := baseMappedEvent(raw, "agentprov_ebpf")
 	comm := stringAt(raw, "comm")
 	switch strings.ToLower(firstNonEmpty(stringAt(raw, "event_type"), stringAt(raw, "type"))) {
+	case "access_control_state":
+		event.EventType, event.Source = "access_control_state", "procfs_access_control"
+		// Procfs has its own task identity and observation time. Do not turn its
+		// sampling hint into a kernel lifetime, tool call or process graph node.
+		event.PID, event.TGID, event.PPID = 0, 0, 0
+		event.ContainerID = ""
+		state, _ := raw["state"].(map[string]any)
+		identity, _ := nestedMap(state, "identity")
+		if stringAt(identity, "status") != "observed" || stringAt(identity, "cgroup_id") != event.CgroupID {
+			event.CgroupID = ""
+		}
+		event.Payload = mustJSON(raw["state"])
+		return event, true, ValidateRawPayload(event.EventType, event.Payload)
 	case "process_observed":
 		event.EventType = "process_observed"
 		event.Payload = mustJSON(map[string]any{"pid": event.PID, "ppid": event.PPID, "comm": comm, "observation": stringAt(raw, "observation")})

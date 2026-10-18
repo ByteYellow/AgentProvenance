@@ -61,7 +61,7 @@ func ValidateStoredPayload(eventType, payload string) error {
 //     sensor) joined to app context through a binding. This is the real claim.
 //   - uncorrelated:     could not be resolved.
 func CorrelationClass(source, method, containerID string, confidence float64) string {
-	if source == "record" || source == "record_process_sample" || source == "record_file_diff" ||
+	if source == "record" || source == "record_process_sample" || source == "record_file_diff" || source == "procfs_access_control" ||
 		method == "zero_sdk_process_tree" {
 		return "self_observed"
 	}
@@ -102,7 +102,7 @@ func TelemetrySource(source string, correlationMethod string) bool {
 		return true
 	}
 	switch source {
-	case "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf", "native_runtime", "record_file_diff", "record_process_sample", "apparmor_audit", "seccomp_audit":
+	case "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf", "native_runtime", "record_file_diff", "record_process_sample", "apparmor_audit", "seccomp_audit", "procfs_access_control":
 		return true
 	default:
 		return false
@@ -174,7 +174,7 @@ func sourceFormat(source string) string {
 	switch source {
 	case "apparmor_audit", "seccomp_audit":
 		return "linux_audit"
-	case "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf":
+	case "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf", "procfs_access_control":
 		return "jsonl"
 	case "wrapper_runtime", "native_runtime", "record_file_diff", "record_process_sample", "filtered_telemetry":
 		return "normalized"
@@ -273,6 +273,8 @@ func validateEventBody(eventType string, body map[string]any) error {
 		if _, ok := numberField(body, "syscall_result"); !ok || firstString(body, "operation") == "" {
 			return fmt.Errorf("syscall_result payload requires operation and numeric syscall_result")
 		}
+	case "access_control_state":
+		return validateAccessStateBody(body)
 	case "access_control":
 		mechanism := stringField(body, "mechanism")
 		if (mechanism != "apparmor" && mechanism != "seccomp") || stringField(body, "schema_version") != AuditSchemaVersion || stringField(body, "audit_id") == "" || stringField(body, "decision") == "" {

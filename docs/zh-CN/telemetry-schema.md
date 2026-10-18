@@ -51,6 +51,7 @@ AgentProvenance 将应用上下文与运行时遥测关联。两类信息必须�
 | `process_exit` / `thread_exit` | 数值型 `exit_code`，或 1 到 64 之间的整数 `exit_signal` |
 | `syscall_result` | `operation` 和数值型 `syscall_result` |
 | `access_control` | 审计 schema 版本、`mechanism`（`apparmor` 或 `seccomp`）、`audit_id` 和 `decision` |
+| `access_control_state` | `agentprovenance.access_control_state/v1`、观测区间、任务身份及独立的 `apparmor`／`seccomp` 状态 |
 | `process_observed` | 数值型 `pid` |
 | `file_open` / `file_write` / `secret_path` | 非空且不含 NUL 的 `path` 或 `file`，允许主机绝对路径 |
 | `network_connect` / `metadata_ip` / `private_cidr` | `dst`、`dst_ip` 或 `host` |
@@ -180,6 +181,45 @@ AppArmor 的 profile 模式需要独立状态证据。seccomp 的 `LOG`、`ERRNO
 AppArmor/seccomp 决定导入。PID 字段语义依据内核的
 [LSM 审计记录](https://github.com/torvalds/linux/blob/v6.8/security/lsm_audit.c)和
 [seccomp 审计记录](https://github.com/torvalds/linux/blob/v6.8/kernel/audit.c)。
+
+### 配置声明与实际状态
+
+原生 Sensor 独立于审计导入读取任务状态。`sensor stream` 和 `agentprov-sensor` 默认开启两种读取，
+可以分别关闭，互不影响：
+
+```sh
+agentprov sensor stream --apparmor-state=false --seccomp-state=true
+```
+
+内核事件触发异步、有界的 procfs 读取：队列最多 128 项，调度缓存最多 2,048 项；同一任务／作用域
+仍在缓存期间，每两秒最多读取一次。空闲或已退出任务不会自动轮询补采。队列超限通过
+`state_snapshot_queue_drop` 和 `dropped_delta` 报告。能力报告中的 `apparmor_collection_enabled`、
+`seccomp_collection_enabled` 表示采集设置，实际内核策略由状态记录提供。
+
+来源 `procfs_access_control` 输出 `access_control_state`，schema 为
+`agentprovenance.access_control_state/v1`，`evidence_kind` 为 `state_snapshot`。
+载荷保存读取开始和结束时间、来源主机／启动实例、TGID（`pid`）、TID、procfs 启动时钟 tick 和
+PID 命名空间。AppArmor 只读专属的 `attr/apparmor/current`，保存标签及其中报告的模式。
+seccomp 读取任务 `status`：模式 0／1／2 对应 `disabled`／`strict`／`filter`，另保存可用的
+`filter_count`、`no_new_privs`。观测到零值、字段缺失、无权限和主动关闭分别表示。
+这些字段在观测区间内依次读取，并非原子快照。字段语义见
+[AppArmor 内核文档](https://docs.kernel.org/admin-guide/LSM/apparmor.html)及
+[procfs status 说明](https://man7.org/linux/man-pages/man5/proc_pid_status.5.html)。
+
+读取期间固定同一个 procfs 任务目录，并在前后核对身份。该身份独立于原生 `process_instance_id`，
+延迟采样不会借用触发事件的进程或 Tool Call。只有独立解析的 cgroup v2 inode 稳定且与触发记录一致时，
+才用于作用域归属，来源类型仍为 `self_observed`。归属失败时保留状态与原因；常规事件流按留存设置
+处理未关联记录，需要保存它们时应显式启用对应选项。
+
+K8s informer 将配置另存为 `k8s_api` 来源的 `access_control_config`，schema 为
+`agentprovenance.access_control_config/v1`，类型为 `configuration_declaration`。
+结构化容器字段优先于 Pod 字段；旧注解独立保留原值和字段路径。结构化字段未声明时记录
+`not_declared`，不推测默认模式。每次观测保留 Pod／容器身份、资源版本及时间。
+配置变化追加记录，历史 `pod_metadata` 和已结束的作用域保持不变；当前配置不会赋给补录的上一次执行。
+同一 informer 运行期间，只有状态导致的资源版本变化不重复写入；重启后按相同资源版本和内容去重。
+
+现有事件查询、签名 Bundle 导出和导入在两个采集档位中均保留这些记录。审计关联接口继续返回
+单次机制决定；配置和状态通过独立事件读取。这些只读观测不安装 profile、不修改过滤器，也不再次触发策略动作。
 
 ### 查询运行时关联
 

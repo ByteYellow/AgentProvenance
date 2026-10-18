@@ -302,7 +302,7 @@ func LoadEngine(path string) (Engine, error) {
 }
 
 func (e Engine) Evaluate(event Event) Decision {
-	if event.EventType == "access_control" {
+	if event.EventType == "access_control" || event.EventType == "access_control_state" || event.EventType == "access_control_config" {
 		return Decision{Decision: "allow", Reason: "external access-control observation; no policy action"}
 	}
 	// Outcome observations supplement an existing attempt. Reapplying the

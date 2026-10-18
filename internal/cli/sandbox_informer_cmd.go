@@ -263,6 +263,9 @@ func (s localK8sScopeSink) Bind(ctx context.Context, scope k8sinformer.Container
 	if err != nil {
 		return "", err
 	}
+	if err := saveK8sAccessDeclarations(ctx, tx, scope); err != nil {
+		return "", err
+	}
 	return id, tx.Commit()
 }
 

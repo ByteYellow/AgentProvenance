@@ -43,6 +43,14 @@ type=SECCOMP msg=audit(1792342593.759:132): pid=43 arch=c000003e syscall=39 sig=
 			if err != nil || result.Ingested != 3 {
 				t.Fatalf("ingest=%+v err=%v", result, err)
 			}
+			state := `{"schema_version":"agentprovenance.access_control_state/v1","evidence_kind":"state_snapshot","source":"procfs","started_at":"2026-10-19T00:00:00Z","observed_at":"2026-10-19T00:00:00.01Z","identity":{"status":"observed","pid":42,"tid":43,"start_ticks":"100"},"apparmor":{"status":"observed","source":"attr/apparmor/current","label":"fixture-policy (complain)","mode":"complain"},"seccomp":{"status":"observed","source":"status","mode_number":2,"mode":"filter","filter_count":1,"no_new_privs":0}}`
+			if _, err := telemetry.IngestFiltered(db, telemetry.IngestEvent{RunID: runID, Source: "procfs_access_control", EventType: "access_control_state", Payload: state, Timestamp: "2026-10-19T00:00:00.01Z"}); err != nil {
+				t.Fatal(err)
+			}
+			config := `{"schema_version":"agentprovenance.access_control_config/v1","evidence_kind":"configuration_declaration","source":"k8s_api","pod_uid":"fixture","container_name":"worker","declarations":[{"mechanism":"seccomp","evidence_kind":"configuration_declaration","status":"declared","source":"k8s_api:spec.securityContext.seccompProfile","observed_at":"2026-10-19T00:00:00Z","profile_type":"RuntimeDefault"}]}`
+			if _, err := db.Exec(`INSERT INTO events (id,run_id,source,event_type,payload,created_at) VALUES ('config',?,'k8s','access_control_config',?,'2026-10-19T00:00:00Z')`, runID, config); err != nil {
+				t.Fatal(err)
+			}
 			before, err := telemetry.ListEvents(db, runID, "")
 			if err != nil {
 				t.Fatal(err)

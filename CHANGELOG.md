@@ -6,6 +6,12 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
+- Observe AppArmor labels and seccomp mode/filter counts with independent,
+  default-on native sensor state readers. Timestamped procfs snapshots retain
+  their own thread identity; bounded sampling reports queue loss. K8s informer
+  observations append structured and legacy configuration declarations without
+  rewriting historical Pod metadata. These records remain separate from audit
+  decisions and syscall outcomes and survive signed Bundle roundtrips.
 - Query audit associations through the daemon and Dashboard read APIs, remote
   CLI, Python SDK and AI/MCP tools, with strict pagination and explicit errors.
   Fresh offline replays preserve frozen candidates; partial exports withhold

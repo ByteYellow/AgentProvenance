@@ -26,7 +26,7 @@ func TestSensorStatusLocalizesHistoricalReportWithoutChangingJSON(t *testing.T) 
 		t.Fatal(err)
 	}
 	// An older machine report, including an unknown extension, must survive.
-	report := `{"schema_version":"agentprovenance.sensor_capabilities/v1","status":"failed","ready":false,"reason":"load eBPF objects: not an ELF file","probes":[{"name":"Copy","category":"tls","target":"/tmp/Ready","status":"unsupported","reason":"Go TLS Read requires an amd64 ELF"}],"future_extension":"Copy"}`
+	report := `{"schema_version":"agentprovenance.sensor_capabilities/v1","status":"failed","ready":false,"reason":"load eBPF objects: not an ELF file","probes":[{"name":"Copy","category":"tls","target":"/tmp/Ready","status":"unsupported","reason":"Go TLS Read requires an amd64 ELF"}],"access_control_state":{"apparmor_collection_enabled":true,"seccomp_collection_enabled":false,"mode":"event_triggered_procfs_snapshot","queue_capacity":128,"cache_capacity":2048,"min_interval_ms":2000},"future_extension":"Copy"}`
 	path := filepath.Join(paths.Logs, "sensor-capabilities.json")
 	if err = os.WriteFile(path, []byte(report), 0600); err != nil {
 		t.Fatal(err)

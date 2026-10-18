@@ -66,6 +66,8 @@ func (r *capabilityReporter) publishLocked() {
 		Ready:         r.ready, Status: "starting", TLSDiscovery: r.discovery,
 		Probes: append(append([]ProbeCapability{}, r.base...), r.tls...),
 	}
+	report.AccessControlState = &StateCollectionCapability{AppArmor: r.opts.AppArmorState, Seccomp: r.opts.SeccompState,
+		Mode: "event_triggered_procfs_snapshot", QueueCapacity: stateQueueCapacity, CacheCapacity: stateCacheCapacity, MinIntervalMS: stateInterval.Milliseconds()}
 	sort.Slice(report.Probes, func(i, j int) bool {
 		a, b := report.Probes[i], report.Probes[j]
 		if a.Category != b.Category {

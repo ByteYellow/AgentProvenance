@@ -78,6 +78,7 @@ The current MVP validates these minimum event-specific fields:
 | `process_exit` / `thread_exit` | numeric `exit_code`, or an integer `exit_signal` from 1 to 64 |
 | `syscall_result` | `operation` and numeric `syscall_result` |
 | `access_control` | audit schema version, `mechanism` (`apparmor` or `seccomp`), `audit_id` and `decision` |
+| `access_control_state` | `agentprovenance.access_control_state/v1`, observation interval, task identity and independent `apparmor` / `seccomp` states |
 | `process_observed` | numeric `pid` |
 | `file_open` / `file_write` / `secret_path` | nonempty `path` or `file` without NUL; absolute host paths are accepted |
 | `network_connect` / `metadata_ip` / `private_cidr` | `dst`, `dst_ip`, or `host` |
@@ -261,6 +262,60 @@ EPERM/EACCES messages are not accepted as AppArmor/seccomp decisions. PID field
 semantics follow the kernel's
 [LSM audit records](https://github.com/torvalds/linux/blob/v6.8/security/lsm_audit.c)
 and [seccomp audit records](https://github.com/torvalds/linux/blob/v6.8/kernel/audit.c).
+
+### Configuration and task state
+
+The native sensor reads task state independently of the audit importer. Both
+readers default to enabled in `sensor stream` and `agentprov-sensor`; disable
+either reader without changing the other source:
+
+```sh
+agentprov sensor stream --apparmor-state=false --seccomp-state=true
+```
+
+Kernel events trigger asynchronous, bounded procfs reads: a 128-item queue,
+2,048-entry scheduling cache and at most one read per task/scope every two
+seconds while cached. No polling or extra snapshot is implied for an idle or
+already-exited task. Queue overflow emits `state_snapshot_queue_drop` with
+`dropped_delta`. The capability report's `apparmor_collection_enabled` and
+`seccomp_collection_enabled` describe reader settings, not active kernel policy.
+
+`procfs_access_control` emits `access_control_state` with schema
+`agentprovenance.access_control_state/v1`. Its `evidence_kind` is `state_snapshot`.
+The payload keeps `started_at`, `observed_at`, source host/boot, TGID (`pid`),
+TID, procfs start ticks and PID namespace. AppArmor uses only the specific
+`attr/apparmor/current` attribute, preserving the label and any reported mode.
+Seccomp reads the task's `status`: mode 0/1/2 is `disabled`/`strict`/`filter`,
+with optional `filter_count` and `no_new_privs`. Observed zero, missing data,
+permission failure and disabled collection remain distinct. These are sampled
+observations, not an atomic snapshot of all fields. See the kernel
+[AppArmor documentation](https://docs.kernel.org/admin-guide/LSM/apparmor.html)
+and [procfs status fields](https://man7.org/linux/man-pages/man5/proc_pid_status.5.html).
+
+The reader pins one procfs task directory and checks identity before and after
+reading. Its identity stays separate from native `process_instance_id`, so a
+delayed sample cannot adopt the triggering event's process or Tool Call. Scope
+attribution uses an independently resolved cgroup v2 inode only when membership
+is stable and agrees with the trigger. The source remains `self_observed`.
+Unresolved membership keeps the state without a workload attribution; ordinary
+stream retention may exclude uncorrelated records unless requested.
+
+K8s informer writes separate `access_control_config` observations from
+`k8s_api`, with schema `agentprovenance.access_control_config/v1` and kind
+`configuration_declaration`. Structured container fields override Pod fields;
+legacy annotations are retained separately with their original values and field
+paths. An absent structured field is `not_declared`, not an inferred default.
+Each observation records the Pod/container identity, resource version and time.
+Configuration changes append observations without rewriting `pod_metadata`,
+reopening closed scopes or assigning today's specification to a recovered prior
+attempt. In-process status-only version changes are suppressed; restarted
+informers deduplicate identical resource-version/content retries.
+
+Existing event queries and signed Bundle export/import preserve these records
+in both capture presets. The audit-association reader continues to return
+individual decisions; configuration and state are queried as separate events.
+None of these read-only observations install profiles, change filters or trigger
+a second policy action.
 
 ### Read-only runtime association
 
