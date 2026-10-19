@@ -927,7 +927,7 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 			_, ok := edges[edgeKey{fromID, toID, edgeType}][id]
 			return ok
 		}
-		if identity.Version != "" && identity.Version != telemetry.RuntimeProcessGraphVersion {
+		if identity.Version != "" && identity.Version != telemetry.RuntimeProcessGraphVersion && identity.Version != telemetry.RuntimeProcessGraphV2 {
 			add("error", "unsupported_runtime_process_identity", id, "unsupported process identity version %s", identity.Version)
 		}
 		if telemetry.TelemetrySource(source, correlationMethod) {

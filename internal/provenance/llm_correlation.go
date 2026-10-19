@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	llmCommandRule       = "agentprov.intent_command_scope/v2"
-	llmCommandEdgePrefix = "llm-command-v2-"
+	llmCommandRule       = "agentprov.intent_command_scope/v3"
+	llmCommandEdgePrefix = "llm-command-v3-"
 	llmCommandConfidence = 0.8
 	llmCommandWindow     = 2 * time.Minute
 	maxLLMActions        = 200000
@@ -172,21 +172,8 @@ func llmPayloadFields(payload string) []map[string]any {
 }
 
 func llmOrigin(payload string, pid int64) string {
-	fields := llmPayloadFields(payload)
-	for _, m := range fields {
-		instance, _ := m["process_instance_id"].(string)
-		if boot := correlation.ProcessInstanceBootID(instance, pid); boot != "" {
-			return "boot:" + boot
-		}
-	}
-	for _, m := range fields {
-		for _, k := range []string{"node_name", "node", "host_id", "hostname", "producer_id"} {
-			if s, ok := m[k].(string); ok && s != "" {
-				return "origin:" + s
-			}
-		}
-	}
-	return ""
+	origin, _ := correlation.CaptureOrigin(llmPayloadFields(payload), pid)
+	return origin
 }
 
 func readLLMActions(db llmQueryer, runID string, withTools bool) ([]llmAction, error) {

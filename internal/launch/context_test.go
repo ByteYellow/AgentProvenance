@@ -414,7 +414,7 @@ func TestLaunchCapturesNativeContextAndPortableBundle(t *testing.T) {
 			if c := sourceReport(t, *r.AgentContext, "discovery"); c.Status != agentcontext.OK {
 				t.Fatalf("discovery failed: %+v", c)
 			}
-			if r.RuntimeCorrelation == nil || r.RuntimeCorrelation.Ref == "" || r.RuntimeCorrelation.Method != "agentprov.command_time_process/v2" {
+			if r.RuntimeCorrelation == nil || r.RuntimeCorrelation.Ref == "" || r.RuntimeCorrelation.Method != "agentprov.command_time_process/v3" {
 				t.Fatalf("missing runtime correlation diagnostic: %+v", r.RuntimeCorrelation)
 			}
 			if r.RuntimeCapture == nil || r.RuntimeCapture.Ref == "" || r.RuntimeCapture.Status != "disabled" || r.RuntimeCapture.RunDroppedEvents != nil {

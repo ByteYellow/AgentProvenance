@@ -121,6 +121,12 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Fixed
 
+- Keep recorded host identity alongside boot/PID/start across native lifecycle
+  bindings, Hook attribution, TLS exchanges, model-command links and process
+  graphs. Missing execs, reused parent PIDs and unrelated exits no longer reuse
+  a prior process owner. Numeric-only exits leave native lifetime anchors intact.
+  New graph and derivation versions preserve historical signed graph semantics;
+  process-focused queries and replay retain the same evidence references.
 - Verify unassociated telemetry without requiring a fabricated execution
   binding; positive-confidence associations still require binding evidence.
 - Separate native thread identity from the process TGID, retain exit signals,

@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
@@ -19,14 +20,20 @@ func TestProcessFocusRetainsLifetimeInLiveAndReplay(t *testing.T) {
 	s := Server{DB: db}
 	const boot = "01234567-89ab-cdef-0123-456789abcdef"
 	want := map[string][]string{}
-	for i, birth := range []int{100, 200, 100} {
-		instance := fmt.Sprintf("%s:42:%d", boot, birth)
-		payload, _ := json.Marshal(map[string]any{"process_instance_id": instance, "argv": []string{"true"}})
+	for i, tc := range []struct {
+		birth int
+		host  string
+	}{{100, ""}, {200, ""}, {100, ""}, {100, "host-a"}, {100, "host-b"}, {100, "host-a"}} {
+		instance := fmt.Sprintf("%s:42:%d", boot, tc.birth)
+		payload, _ := json.Marshal(map[string]any{"host_id": tc.host, "process_instance_id": instance, "argv": []string{"true"}})
 		id, err := telemetry.IngestFiltered(db, telemetry.IngestEvent{RunID: "run-lifecycle", Source: "agentprov_ebpf", EventType: "execve", PID: 42, Payload: string(payload), Timestamp: fmt.Sprintf("2026-10-17T00:00:0%dZ", i)})
 		if err != nil {
 			t.Fatal(err)
 		}
 		node := "runtime_process/instance/" + instance
+		if tc.host != "" {
+			node = fmt.Sprintf("runtime_process/host/%x/instance/%s", sha256.Sum256([]byte(tc.host)), instance)
+		}
 		want[node] = append(want[node], id)
 	}
 	// An imported legacy PID node in the same run must not select the new

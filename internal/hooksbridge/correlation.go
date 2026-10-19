@@ -54,11 +54,13 @@ type correlationCall struct {
 
 type processScope struct {
 	source, origin, cgroup, container string
+	instance                          string
 	pid                               int64
 }
 
 type correlationEvent struct {
 	id, typ, command string
+	parentInstance   string
 	scope            processScope
 	ppid             int64
 	at               time.Time
@@ -252,9 +254,27 @@ func readCorrelationEvents(tx *sql.Tx, runID string, r *CorrelationReport) ([]co
 			continue
 		}
 		inner := mapAt(payload, "payload")
-		for _, layer := range []map[string]any{mapAt(inner, "raw"), inner, mapAt(payload, "raw"), payload} {
-			if e.scope.origin == "" {
-				e.scope.origin = strArg(layer, "node_name", "node", "host_id", "hostname", "producer_id")
+		layers := []map[string]any{mapAt(inner, "raw"), inner, mapAt(payload, "raw"), payload}
+		var validOrigin bool
+		e.scope.origin, validOrigin = correlation.CaptureOrigin(layers, e.scope.pid)
+		invalidInstance := !validOrigin
+		for _, layer := range layers {
+			if e.scope.source == "agentprov_ebpf" {
+				if raw := strArg(layer, "process_instance_id"); raw != "" {
+					instance := correlation.CanonicalProcessInstance(raw, e.scope.pid)
+					invalidInstance = invalidInstance || instance == "" || (e.scope.instance != "" && e.scope.instance != instance)
+					e.scope.instance = instance
+				}
+				if value, exists := layer["parent_process_instance_id"]; exists {
+					raw, ok := value.(string)
+					if !ok {
+						invalidInstance = true
+					} else if raw != "" {
+						parent := correlation.CanonicalProcessInstance(raw, e.ppid)
+						invalidInstance = invalidInstance || parent == "" || (e.parentInstance != "" && e.parentInstance != parent)
+						e.parentInstance = parent
+					}
+				}
 			}
 			if e.command == "" {
 				e.command = strArg(layer, "command", "cmdline")
@@ -262,6 +282,13 @@ func readCorrelationEvents(tx *sql.Tx, runID string, r *CorrelationReport) ([]co
 					e.truncated, _ = layer["argv_truncated"].(bool)
 				}
 			}
+		}
+		if invalidInstance {
+			r.InvalidEvents++
+			if e.typ == "execve" || e.typ == "process_exit" {
+				unsafe[unsafePID{e.scope.source, e.scope.pid}] = true
+			}
+			continue
 		}
 		events = append(events, e)
 	}
@@ -288,8 +315,8 @@ func readCorrelationEvents(tx *sql.Tx, runID string, r *CorrelationReport) ([]co
 func associateProcesses(calls []correlationCall, events []correlationEvent, r *CorrelationReport) ([]correlationLink, error) {
 	active := map[processScope]processOwner{}
 	type identity struct {
-		source, origin string
-		pid            int64
+		source, origin, instance string
+		pid                      int64
 	}
 	scopes := map[identity]processScope{}
 	var links []correlationLink
@@ -302,7 +329,7 @@ func associateProcesses(calls []correlationCall, events []correlationEvent, r *C
 		boundaries := map[identity]int{}
 		for _, e := range events[start:end] {
 			if e.typ == "execve" || e.typ == "process_exit" {
-				key := identity{e.scope.source, e.scope.origin, e.scope.pid}
+				key := identity{e.scope.source, e.scope.origin, e.scope.instance, e.scope.pid}
 				boundaries[key]++
 				if old, ok := scopes[key]; ok {
 					delete(active, old)
@@ -312,7 +339,7 @@ func associateProcesses(calls []correlationCall, events []correlationEvent, r *C
 			}
 		}
 		for _, e := range events[start:end] {
-			key := identity{e.scope.source, e.scope.origin, e.scope.pid}
+			key := identity{e.scope.source, e.scope.origin, e.scope.instance, e.scope.pid}
 			if e.typ == "process_exit" {
 				continue
 			}
@@ -345,8 +372,12 @@ func associateProcesses(calls []correlationCall, events []correlationEvent, r *C
 			}
 			parentScope := e.scope
 			parentScope.pid = e.ppid
+			parentScope.instance = e.parentInstance
 			parent, inherited := active[parentScope]
 			inherited = inherited && e.ppid > 0 && parent.start.Before(e.at) && !e.at.After(parent.call.end) && parent.depth < 64
+			if e.scope.instance != "" || e.parentInstance != "" {
+				inherited = inherited && correlation.RelatedProcessLifetime(e.parentInstance, e.scope.instance) && e.ppid != e.scope.pid
+			}
 			if candidate != nil && inherited && candidate.id != parent.call.id {
 				ambiguous = true
 			}
@@ -366,7 +397,7 @@ func associateProcesses(calls []correlationCall, events []correlationEvent, r *C
 				continue
 			}
 			active[e.scope] = owner
-			scopes[identity{e.scope.source, e.scope.origin, e.scope.pid}] = e.scope
+			scopes[identity{e.scope.source, e.scope.origin, e.scope.instance, e.scope.pid}] = e.scope
 			r.MatchedExecs++
 			links = append(links, correlationLink{owner.call.id, e.id, linkAnchor})
 		}

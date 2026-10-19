@@ -3,6 +3,7 @@ package forensics_test
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -128,6 +129,77 @@ func TestSignedBundleRetainsRuntimeLifetimes(t *testing.T) {
 	}
 }
 
+func TestSignedBundleRetainsHostScopedAndV2ProcessGraphs(t *testing.T) {
+	const runID = "run-host-lifetimes"
+	const instance = "01234567-89ab-cdef-0123-456789abcdef:42:100"
+	paths := mustInit(t, filepath.Join(t.TempDir(), "source"))
+	db := mustOpen(t, paths)
+	defer db.Close()
+	for i, host := range []string{"host-a", "host-b", ""} {
+		for _, kind := range []string{"execve", "file_open"} {
+			body, _ := json.Marshal(map[string]any{"host_id": host, "process_instance_id": instance, "command": "cat /work/config", "argv": []string{"cat", "/work/config"}, "path": "/work/config"})
+			id, err := telemetry.IngestFiltered(db, telemetry.IngestEvent{RunID: runID, Source: "agentprov_ebpf", EventType: kind, PID: 42,
+				Payload: string(body), Timestamp: fmt.Sprintf("2026-10-19T00:00:0%dZ", i)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if host == "" {
+				// V2 ignored host_id. Reproduce that saved format without editing
+				// its original boot/PID/start edges before signing the fixture.
+				if _, err := db.Exec(`UPDATE events SET payload=json_set(payload,'$.runtime_process_identity',?,'$.raw.host_id','old-host') WHERE id=?`, telemetry.RuntimeProcessGraphV2, id); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+	opts := provenance.GraphLensOptions{RunID: runID, Lens: "process", Detail: "raw"}
+	before, err := provenance.BuildGraphLens(db, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	processes := 0
+	for _, node := range before.Nodes {
+		if node.Kind == "runtime_process" {
+			processes++
+		}
+	}
+	if processes != 3 {
+		t.Fatalf("host lifetimes merged: %+v", before.Nodes)
+	}
+	pub, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := (forensics.Service{DB: db, Paths: paths, SignKey: key}).ExportBundle(runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := forensics.VerifyBundleAttestation(bundle.Path, bundle.AttestationPath, pub); err != nil {
+		t.Fatal(err)
+	}
+	replayPaths := mustInit(t, filepath.Join(t.TempDir(), "replay"))
+	replayDB := mustOpen(t, replayPaths)
+	defer replayDB.Close()
+	if _, err := (forensics.Service{DB: replayDB, Paths: replayPaths}).ImportBundle(bundle.Path); err != nil {
+		t.Fatal(err)
+	}
+	after, err := provenance.BuildGraphLens(replayDB, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Slice(before.Edges, func(i, j int) bool { return before.Edges[i].ID < before.Edges[j].ID })
+	sort.Slice(after.Edges, func(i, j int) bool { return after.Edges[i].ID < after.Edges[j].ID })
+	if !reflect.DeepEqual(before.Nodes, after.Nodes) || !reflect.DeepEqual(before.Edges, after.Edges) {
+		t.Fatal("host or historical identities changed after signed import")
+	}
+	for _, source := range []*sql.DB{db, replayDB} {
+		result, err := provenance.Verify(source, runID)
+		if err != nil || result.Status != "ok" {
+			t.Fatalf("verify=%+v err=%v", result, err)
+		}
+	}
+}
+
 func TestSignedBundleRetainsRecordedCorrelationAmbiguity(t *testing.T) {
 	const runID = "run-correlation"
 	pathsA := mustInit(t, filepath.Join(t.TempDir(), "source"))
@@ -230,10 +302,10 @@ func TestSignedBundleRetainsModelCommandDerivation(t *testing.T) {
 			expectedPair = edge
 		}
 	}
-	if expected.ID == "" || expected.DerivationRule != "agentprov.intent_command_scope/v2" || len(expected.EvidenceRefs) != 3 {
+	if expected.ID == "" || expected.DerivationRule != "agentprov.intent_command_scope/v3" || len(expected.EvidenceRefs) != 3 {
 		t.Fatalf("source inference metadata: %+v", expected)
 	}
-	if expectedPair.DerivationRule != "agentprov.tls_connection_exchange/v1" || expectedPair.Confidence == nil || *expectedPair.Confidence != 1 || len(expectedPair.EvidenceRefs) != 2 {
+	if expectedPair.DerivationRule != "agentprov.tls_connection_exchange/v2" || expectedPair.Confidence == nil || *expectedPair.Confidence != 1 || len(expectedPair.EvidenceRefs) != 2 {
 		t.Fatalf("source pairing metadata: %+v", expectedPair)
 	}
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)

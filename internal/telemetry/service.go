@@ -511,10 +511,12 @@ func eventIdentity(event IngestEvent) correlation.RawIdentity {
 		CgroupID: event.CgroupID, PID: event.PID, TGID: event.TGID, PPID: event.PPID, Timestamp: event.Timestamp}
 	if event.Source == "agentprov_ebpf" {
 		var payload struct {
+			Host    string `json:"host_id"`
 			Process string `json:"process_instance_id"`
 			Parent  string `json:"parent_process_instance_id"`
 		}
 		if json.Unmarshal([]byte(event.Payload), &payload) == nil {
+			raw.HostID = payload.Host
 			raw.ProcessInstanceID, raw.ParentProcessInstanceID = payload.Process, payload.Parent
 		}
 	}

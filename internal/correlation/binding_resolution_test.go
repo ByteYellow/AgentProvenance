@@ -179,7 +179,7 @@ func TestObserveProcessInstanceDoesNotUpgradeScopeOrFreezeAmbiguity(t *testing.T
 		if err := ObserveProcessInstance(db, raw); err != nil {
 			t.Fatal(err)
 		}
-		binding, ok, err := GetBinding(db, processBindingID(raw.ProcessInstanceID))
+		binding, ok, err := GetBinding(db, processBindingID(raw.ProcessInstanceID, raw.HostID))
 		if err != nil || ok == ambiguous || binding.ToolCallID != "" || binding.ProcessID != "" {
 			t.Fatalf("native anchor upgraded or froze attribution: %+v ok=%v err=%v", binding, ok, err)
 		}

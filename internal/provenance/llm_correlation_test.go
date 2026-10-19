@@ -108,6 +108,38 @@ func TestLLMCommandAssociationBoundaries(t *testing.T) {
 	}
 }
 
+func TestLLMCommandHonorsHostAlongsideBootIdentity(t *testing.T) {
+	const boot = "01234567-89ab-cdef-0123-456789abcdef"
+	for _, tc := range []struct {
+		name, actionHost, responseHost string
+		want                           int
+	}{
+		{"same host", "host-a", "host-a", 1},
+		{"different action host", "host-b", "host-a", 0},
+		{"missing action host", "", "host-a", 0},
+		{"different response host", "host-a", "host-b", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st, db := intentTestStore(t)
+			intentTestDecision(t, db, "decision", "2026-01-01T00:00:01Z", "cg-a", "cat /work/config")
+			intentTestEvent(t, db, "action", "execve", "2026-01-01T00:00:02Z", "cg-a", "cat /work/config")
+			for _, event := range []struct{ id, host string }{
+				{"decision-req", "host-a"}, {"decision-resp", tc.responseHost}, {"action", tc.actionHost},
+			} {
+				if _, err := db.Exec(`UPDATE events SET payload=json_set(payload,'$.host_id',?,'$.process_instance_id',?) WHERE id=?`, event.host, boot+":100:100", event.id); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := MaterializeLLMCalls(st, db, "intent-test"); err != nil {
+				t.Fatal(err)
+			}
+			if got := intentCausedCount(t, db); got != tc.want {
+				t.Fatalf("cross-host model association: got=%d want=%d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestLLMArgumentBoundaries(t *testing.T) {
 	for _, tt := range []struct {
 		name, command, decided string

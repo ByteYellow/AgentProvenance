@@ -565,16 +565,29 @@ These results are recorded with the event. Later binding changes do not replace
 the recorded choice when opening its report. Existing events and signed bundles
 keep their original correlation metadata.
 
+Native lifecycle anchors include the recorded `host_id` when present. Parent
+inheritance and exits use that same host and canonical boot/PID/start identity;
+a numeric-only exit leaves native lifetime anchors unchanged. Older captures
+without a host retain boot-based identity, separate from host-qualified anchors.
+
+Hook-to-runtime analysis uses `agentprov.command_time_process/v3`. After a
+command/time match, subsequent events must retain the captured process lifetime.
+Native child inheritance checks the exact parent lifetime, boot, host and birth
+order. Missing or conflicting lifecycle evidence is not filled by a reused PID.
+Sources without native lifetimes retain the scoped, time-bounded heuristic.
+
 ### Runtime Process Graph Identity
 
 New ingests with a PID store `runtime_process_identity` at the outer payload
-envelope, with value `agentprov.runtime_process/v2`. This records the graph
+envelope, with value `agentprov.runtime_process/v3`. This records the graph
 identity contract separately from application `process_id` and scope binding.
 
 - Native `agentprov_ebpf` records with a valid `process_instance_id`
-  (`boot UUID:PID:start ns`) use `runtime_process/instance/<identity>` nodes.
-  Labels and data-flow grouping use this identity across events, including
-  cgroup moves; another birth time or kernel boot produces a separate node.
+  (`boot UUID:PID:start ns`) use host-qualified lifetime nodes when `host_id`
+  is recorded. The opaque ID contains a host hash; node data keeps the source
+  `host_id`. Records without it use `runtime_process/instance/<identity>`.
+  Labels and data-flow grouping keep this identity across cgroup moves;
+  another host, birth time or kernel boot produces a separate node.
 - Parent and optional thread-group lifetime references must match their numeric
   identifiers, share the child's boot and start no later than the child.
   Numeric PPID/TGID observations without a valid lifetime remain event-local.
@@ -588,8 +601,9 @@ identity contract separately from application `process_id` and scope binding.
 - Graph metadata distinguishes `kernel_process_instance`, `event_observation`
   and `legacy_pid`. New process-focused event queries and replay use recorded
   process-to-event edges, with the same pagination and evidence references.
-- Verification checks v2 process edges against the event that produced them.
-  Export/import preserves the identity marker, nodes and edges. Unversioned
+- Verification checks versioned process edges against the event that produced
+  them. Export/import preserves the identity marker, nodes and edges. V2
+  records keep their original boot/PID/start graph. Unversioned
   historical records keep their numeric-PID graph and `legacy_pid` metadata;
   opening them does not rewrite signed evidence.
 
@@ -661,7 +675,7 @@ emits JSONL that the native mapper converts into the shared ingest schema,
 so native telemetry drives the same correlation → policy → risk path as other
 receivers. Ingestion preserves TLS observations. `launch` at sealing time, or
 `graph materialize-llm --run <id>`, derives exchanges over the saved messages
-using `agentprov.tls_connection_exchange/v1`:
+using `agentprov.tls_connection_exchange/v2`:
 
 - HTTP/2 pairs a unique request and final response by `connection_id` and
   `stream_id`. Concurrent streams and reversed ingestion order stay separate.
@@ -674,6 +688,9 @@ using `agentprov.tls_connection_exchange/v1`:
   or stream identity remains unknown; neither PID proximity nor an old pairing
   edge supplies the missing identity. Informational responses are retained
   separately from the final response.
+- Capture origin combines the strongest recorded host identity with its boot.
+  Explicit host/boot conflicts prevent pairing; a shared boot does not erase
+  a different host. Inconsistent identity fields across envelopes stay unknown.
 
 Each materialized `llm_message` includes a `correlation` assessment with
 `status` (`matched`, `unknown`, `ambiguous`), `reason`, rule, method, confidence
@@ -690,11 +707,12 @@ results in the local store. Original bundle files remain unchanged.
 New ingestion no longer creates the legacy temporal `llm_intent_caused` edge.
 
 The materialized `llm_caused` command association uses the stricter
-`agentprov.intent_command_scope/v2` rule:
+`agentprov.intent_command_scope/v3` rule:
 
 - An exec must occur strictly after the decision and within two minutes. TLS
   matching requires the same capture source and known kernel boot or node
-  identity, plus a shared cgroup or container; conflicting known scope keys
+  identity, retaining any recorded host alongside the boot, plus a shared
+  cgroup or container; conflicting known scope keys
   exclude a candidate. Ambiguous request/response pairings are excluded.
 - Complete `argv` is compared without case folding, path aliases or extra
   arguments. Plain literal commands are compared argument by argument; complex

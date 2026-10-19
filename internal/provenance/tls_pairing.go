@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	tlsPairRule       = "agentprov.tls_connection_exchange/v1"
-	tlsPairEdgePrefix = "tls-pair-v1-"
+	tlsPairRule       = "agentprov.tls_connection_exchange/v2"
+	tlsPairEdgePrefix = "tls-pair-v2-"
 )
 
 type tlsEvent struct {

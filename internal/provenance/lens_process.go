@@ -44,6 +44,9 @@ func addRuntimeProcessNodes(events map[string]lensEvent, add func(GraphLensNode)
 		if ref.InstanceID != "" {
 			data["process_instance_id"] = ref.InstanceID
 		}
+		if ref.HostID != "" {
+			data["host_id"] = ref.HostID
+		}
 		if role == "tgid" {
 			data["tgid"] = ref.PID
 		}

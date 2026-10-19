@@ -1,20 +1,23 @@
 package telemetry
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 )
 
-const RuntimeProcessGraphVersion = "agentprov.runtime_process/v2"
+const (
+	RuntimeProcessGraphVersion = "agentprov.runtime_process/v3"
+	RuntimeProcessGraphV2      = "agentprov.runtime_process/v2"
+)
 
 type RuntimeProcessNode struct {
 	ID         string
 	PID        int64
 	InstanceID string
+	HostID     string
 	Basis      string
 }
 
@@ -75,42 +78,38 @@ func ProcessGraphIdentity(event EventRecord) RuntimeProcessIdentity {
 	if event.PID > 0 && event.TGID != event.PID {
 		identity.ThreadGroup = observation("tgid", event.TGID)
 	}
-	if identity.Version != RuntimeProcessGraphVersion || event.Source != "agentprov_ebpf" {
+	if (identity.Version != RuntimeProcessGraphVersion && identity.Version != RuntimeProcessGraphV2) || event.Source != "agentprov_ebpf" {
 		return identity
 	}
 	instance := canonicalProcessInstance(field("process_instance_id"), event.PID)
 	if instance == "" {
 		return identity
 	}
+	if identity.Version == RuntimeProcessGraphVersion {
+		if _, valid := correlation.CaptureOrigin([]map[string]any{body}, event.PID); !valid {
+			return identity
+		}
+	}
 	node := func(id string, pid int64) RuntimeProcessNode {
-		return RuntimeProcessNode{ID: "runtime_process/instance/" + id, PID: pid, InstanceID: id, Basis: "kernel_process_instance"}
+		prefix, host := "runtime_process/", ""
+		if identity.Version == RuntimeProcessGraphVersion {
+			host = field("host_id")
+			if host != "" {
+				prefix += fmt.Sprintf("host/%x/", sha256.Sum256([]byte(host)))
+			}
+		}
+		return RuntimeProcessNode{ID: prefix + "instance/" + id, PID: pid, InstanceID: id, HostID: host, Basis: "kernel_process_instance"}
 	}
 	identity.Process = node(instance, event.PID)
-	if parent := canonicalProcessInstance(field("parent_process_instance_id"), event.PPID); relatedProcessLifetime(parent, instance) && event.PPID != event.PID {
+	if parent := canonicalProcessInstance(field("parent_process_instance_id"), event.PPID); correlation.RelatedProcessLifetime(parent, instance) && event.PPID != event.PID {
 		identity.Parent = node(parent, event.PPID)
 	}
-	if group := canonicalProcessInstance(field("thread_group_instance_id"), event.TGID); relatedProcessLifetime(group, instance) && event.TGID != event.PID {
+	if group := canonicalProcessInstance(field("thread_group_instance_id"), event.TGID); correlation.RelatedProcessLifetime(group, instance) && event.TGID != event.PID {
 		identity.ThreadGroup = node(group, event.TGID)
 	}
 	return identity
 }
 
 func canonicalProcessInstance(instance string, pid int64) string {
-	boot := correlation.ProcessInstanceBootID(instance, pid)
-	if boot == "" {
-		return ""
-	}
-	parts := strings.Split(instance, ":")
-	start, _ := strconv.ParseUint(parts[2], 10, 64)
-	return fmt.Sprintf("%s:%d:%d", strings.ToLower(boot), pid, start)
-}
-
-func relatedProcessLifetime(parent, child string) bool {
-	if parent == "" || child == "" {
-		return false
-	}
-	p, c := strings.Split(parent, ":"), strings.Split(child, ":")
-	ps, _ := strconv.ParseUint(p[2], 10, 64)
-	cs, _ := strconv.ParseUint(c[2], 10, 64)
-	return p[0] == c[0] && ps <= cs
+	return correlation.CanonicalProcessInstance(instance, pid)
 }

@@ -396,15 +396,19 @@ agentprov telemetry ingest \
 
 关联结果随事件保存，后续修改绑定不会在打开报告时替换当时的结果。已有事件和签名 Bundle 保留原来的关联信息。
 
+原生生命周期绑定包含已记录的 `host_id`。父进程继承和退出使用同一主机及规范化的 boot／PID／启动时间身份；只有数字 PID 的退出记录不关闭原生生命周期绑定。旧采集缺少主机身份时继续使用 boot 身份，与带主机的绑定分开。
+
+Hook 到运行时的分析规则为 `agentprov.command_time_process/v3`。命令和时间匹配后，后续事件还须保持已采集的进程生命周期。原生子进程继承核对父进程的确切生命周期、主机、启动实例和出生先后。生命周期缺失或冲突时，不用复用的 PID 补齐。没有原生生命周期的来源继续使用受作用域和时间限制的启发式关联。
+
 ### 运行时进程图身份
 
-带 PID 的新摄取事件在最外层 payload 保存 `runtime_process_identity=agentprov.runtime_process/v2`，区分图节点身份、应用 `process_id` 与作用域绑定。
+带 PID 的新摄取事件在最外层 payload 保存 `runtime_process_identity=agentprov.runtime_process/v3`，区分图节点身份、应用 `process_id` 与作用域绑定。
 
-- 原生 `agentprov_ebpf` 记录的有效 `process_instance_id` 格式为 `boot UUID:PID:启动纳秒数`，对应 `runtime_process/instance/<identity>` 节点。同一生命周期的名称和数据流按此身份聚合，迁移 cgroup 后仍保持身份；PID 复用或内核重启后分开。
+- 原生 `agentprov_ebpf` 记录的有效 `process_instance_id` 格式为 `boot UUID:PID:启动纳秒数`。已记录 `host_id` 时，节点 ID 包含主机哈希，节点数据保留原主机标识；缺少主机时使用 `runtime_process/instance/<identity>`。同一生命周期的名称和数据流按此身份聚合，迁移 cgroup 后仍保持身份；不同主机、PID 复用或内核重启后分开。
 - 父进程与可选线程组生命周期须匹配对应 PID、处于同一次内核启动，且启动时间不晚于子进程。缺少有效生命周期的 PPID／TGID 保存为事件级观察。目前原生 Sensor 提供进程及父进程生命周期；未提供的线程组生命周期保留为空。
 - 缺少有效原生生命周期的记录，包括当前外部接收器与进程采样记录，使用 `runtime_process/observation/<事件 ID>/<pid|ppid|tgid>`，节点标记 `identity_basis=event_observation`。仅 PID 相同的观察分别保存，不派生同进程数据流。
 - 节点元数据区分 `kernel_process_instance`、`event_observation` 和 `legacy_pid`。进程详情及回放根据已保存的进程／事件边定位，保留分页和证据引用。
-- 校验 v2 进程边时同时检查来源事件。导出／导入保留版本标记、节点和关系。没有版本标记的历史记录继续使用原有 PID 图，标记为 `legacy_pid`，读取时保留签名证据原样。
+- 校验版本化的进程边时同时检查来源事件。导出／导入保留版本标记、节点和关系。v2 记录沿用原有 boot／PID／启动时间图；没有版本标记的历史记录继续使用原有 PID 图，标记为 `legacy_pid`，读取时保留签名证据原样。
 
 这项调整不改数据库表和 Bundle 容器格式。客户端应将运行时节点 ID 作为完整标识使用，不按固定路径位置截取 PID。
 
@@ -450,19 +454,20 @@ agentprov telemetry correlations --event <event_id> --json
 
 原生传感器位于 `internal/sensor` 和 `cmd/agentprov-sensor`，支持 Linux amd64、arm64。其 JSONL 经原生事件映射后，进入与其他来源共用的关联、策略和风险流程。
 
-接收流程保留 TLS 观察记录。`launch` 封存时，或执行 `graph materialize-llm --run <id>` 时，按 `agentprov.tls_connection_exchange/v1` 分析已保存消息：
+接收流程保留 TLS 观察记录。`launch` 封存时，或执行 `graph materialize-llm --run <id>` 时，按 `agentprov.tls_connection_exchange/v2` 分析已保存消息：
 
 - HTTP/2 按 `connection_id` 与 `stream_id` 配对唯一的请求和最终响应，支持并发流和乱序入库。
 - HTTP/1.x 按采集时间检查同一采集代次内完整、严格交替的请求／响应序列。流水线重叠、相同时间、重复响应和序列缺口保留为歧义；消息截断，或已保存的 Run 采集报告记录丢失／积压时，停用串行推断。
 - 两条路径都检查采集来源、进程和作用域相容性、头部解码状态及请求响应时间。连接或流身份缺失时保持未知，不用最近 PID 事件或旧配对边填补身份。临时响应与最终响应分开保留。
+- 采集来源由最强的已记录主机身份与启动实例共同确定。明确的主机或启动身份冲突时不配对；相同 boot 不覆盖不同主机，包装层之间身份不一致时保持未知。
 
 每份物化的 `llm_message` 携带 `correlation`：状态 `matched`／`unknown`／`ambiguous`、原因、规则、方法、置信值和配对事件 ID。正文保留仍由采集设置控制；仅保存元数据也能配对。图查询将配对边标为派生关系，并附来源事件引用。HTTP/2 身份匹配使用置信值 `1`，HTTP/1 串行推断使用 `0.8`；这表示关联依据等级，而非实测准确率。
 
 重分析以事务替换 TLS 派生结果；迟到的重复记录引入歧义时，会撤回此前配对。原始事件、transcript 和 endpoint 证据继续保留。直接打开已有签名 Bundle 保持原图；明确对导入的 Run 重新分析时，在本地存储更新派生结果，原 Bundle 文件不变。新摄取不再生成旧的时间邻近关系 `llm_intent_caused`。
 
-物化后的 `llm_caused` 命令关联使用更严格的 `agentprov.intent_command_scope/v2` 规则：
+物化后的 `llm_caused` 命令关联使用更严格的 `agentprov.intent_command_scope/v3` 规则：
 
-- 执行时间严格晚于决策，间隔不超过两分钟。TLS 匹配要求相同采集来源、已知的内核启动或节点身份，以及共同的 cgroup 或容器；已知作用域字段冲突或请求／响应配对有歧义时跳过。
+- 执行时间严格晚于决策，间隔不超过两分钟。TLS 匹配要求相同采集来源、已知的内核启动或节点身份，并保留已记录的主机身份，以及共同的 cgroup 或容器；已知作用域字段冲突或请求／响应配对有歧义时跳过。
 - 按完整 `argv` 比较，保留大小写、路径和参数边界。普通命令逐参数匹配；复杂 Shell 语法要求完整的 `sh`／`bash`／`zsh` 的 `-c` 或 `-lc` 脚本参数。拼接命令文本、截断参数和 `process_observed` 采样仍作为证据保存，不作为执行锚点。
 - Transcript 需要决策原始时间、`tool_use.id`、相容的 Agent／Session 身份，以及当前版本 `agent_syscall` 中位于调用时间区间内的直接 exec 锚点。关联不再按命令文本扫描整个 Run，也不把继承的子进程边当成直接执行锚点。
 - 一个决策对应多个执行候选，或一个执行被同批多个决策匹配时，保持未关联，请求／响应正文继续保留。Endpoint 上传序号不作为模型执行锚点。

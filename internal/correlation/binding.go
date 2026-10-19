@@ -32,6 +32,7 @@ type Binding struct {
 }
 
 type RawIdentity struct {
+	HostID                  string
 	ProcessInstanceID       string
 	ParentProcessInstanceID string
 	RunID                   string
@@ -267,7 +268,9 @@ func CloseBindingByPID(db bindingPIDStore, pid int64, endedAt string) error {
 	if err != nil {
 		return fmt.Errorf("invalid process exit timestamp: %w", err)
 	}
-	rows, err := db.Query(`SELECT id, started_at FROM execution_context_bindings WHERE pid = ? AND ended_at = ''`, pid)
+	// A numeric-only exit cannot close a kernel lifetime on this or another
+	// host. Those anchors are closed exclusively by CloseProcessInstance.
+	rows, err := db.Query(`SELECT id, started_at FROM execution_context_bindings WHERE pid = ? AND ended_at = '' AND id NOT LIKE 'bind-native-%'`, pid)
 	if err != nil {
 		return err
 	}
@@ -317,7 +320,7 @@ func Resolve(db Queryer, raw RawIdentity) (Match, bool, error) {
 		}
 	}
 	if raw.ProcessInstanceID != "" {
-		match, ok, err := resolveProcessInstance(db, raw.RunID, raw.ProcessInstanceID, raw.PID, at)
+		match, ok, err := resolveProcessInstance(db, raw.RunID, raw.ProcessInstanceID, raw.HostID, raw.PID, at)
 		if err != nil || ok || match.Ambiguous {
 			return match, ok, err
 		}

@@ -53,3 +53,40 @@ func TestStampProcessGraphPreservesIntegerPrecision(t *testing.T) {
 		t.Fatalf("stamp: %s %v", payload, err)
 	}
 }
+
+func TestProcessGraphSeparatesExplicitHosts(t *testing.T) {
+	var ids []RuntimeProcessIdentity
+	for _, host := range []string{"host-a", "host-b", ""} {
+		raw, _ := json.Marshal(map[string]any{"host_id": host, "process_instance_id": lifecycleBoot + ":42:200",
+			"parent_process_instance_id": lifecycleBoot + ":1:100", "thread_group_instance_id": lifecycleBoot + ":40:100"})
+		payload, err := stampProcessGraph(string(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, ProcessGraphIdentity(EventRecord{ID: "evt", Source: "agentprov_ebpf", PID: 42, PPID: 1, TGID: 40, Payload: payload}))
+	}
+	for i := range ids {
+		for j := 0; j < i; j++ {
+			if ids[i].Process.ID == ids[j].Process.ID || ids[i].Parent.ID == ids[j].Parent.ID || ids[i].ThreadGroup.ID == ids[j].ThreadGroup.ID {
+				t.Fatalf("explicit host identity ignored: %+v / %+v", ids[i], ids[j])
+			}
+		}
+	}
+}
+
+func TestProcessGraphKeepsV2IdentityAndRejectsConflictingV3Boot(t *testing.T) {
+	body := map[string]any{"host_id": "host-a", "process_instance_id": lifecycleBoot + ":42:200", "parent_process_instance_id": lifecycleBoot + ":1:100"}
+	for _, version := range []string{RuntimeProcessGraphV2, RuntimeProcessGraphVersion} {
+		body["runtime_process_identity"] = version
+		body["boot_id"] = "11234567-89ab-cdef-0123-456789abcdef"
+		raw, _ := json.Marshal(body)
+		id := ProcessGraphIdentity(EventRecord{ID: "evt", Source: "agentprov_ebpf", PID: 42, PPID: 1, Payload: string(raw)})
+		if version == RuntimeProcessGraphV2 {
+			if id.Process.ID != "runtime_process/instance/"+lifecycleBoot+":42:200" || id.Process.HostID != "" {
+				t.Fatalf("historical v2 evidence reinterpreted: %+v", id)
+			}
+		} else if id.Process.ID != "runtime_process/observation/evt/pid" {
+			t.Fatalf("contradictory boot accepted: %+v", id)
+		}
+	}
+}
