@@ -36,6 +36,16 @@ messages, tool inputs and outcomes, agent relationships and supported intent
 evidence without archiving the extra source records, tool-result bodies, resumed
 history and configuration bodies. Both presets use the same parsers and correlation.
 
+For validated Codex session metadata, both presets retain the optional
+`Entry.session_metadata.forked_from_id` before configuration-body omission.
+It identifies the origin of a fork; `Entry.source.session_id` identifies the
+forked session, while the existing source fields and `Entry.id` locate its
+evidence. Basic retention can therefore preserve this native relationship
+without keeping the configuration body. An empty `session_metadata` object
+records no declared fork; older entries without the field fall back to a saved
+body when available, otherwise report `session_relation_metadata_unavailable`.
+Fork lineage stays separate from subagent delegation.
+
 ```sh
 agentprov launch --capture basic -- claude
 agentprov launch --capture detailed -- codex

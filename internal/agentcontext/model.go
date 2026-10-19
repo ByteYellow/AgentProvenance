@@ -108,6 +108,12 @@ type ContentRef struct {
 	DigestScope string `json:"digest_scope,omitempty"`
 }
 
+// SessionMetadata preserves native relationship facts independently of optional
+// configuration bodies. A non-nil empty value records an observed absence of a fork.
+type SessionMetadata struct {
+	ForkedFromID string `json:"forked_from_id,omitempty"`
+}
+
 type Entry struct {
 	SchemaVersion string `json:"schema_version"`
 	ID            string `json:"id"`
@@ -129,12 +135,13 @@ type Entry struct {
 	RawContent    ContentRef `json:"raw_content"`
 	// IntentContent is a derived, bounded model-message projection when the
 	// source record is deliberately not retained. It is never an original record.
-	IntentContent  *ContentRef `json:"intent_content,omitempty"`
-	MissingFields  []string    `json:"missing_fields,omitempty"`
-	EvidenceRefs   []string    `json:"evidence_refs,omitempty"`
-	ObjectHash     string      `json:"object_hash,omitempty"`
-	CreatedAt      string      `json:"created_at,omitempty"`
-	ExecutionScope string      `json:"execution_scope,omitempty"`
+	IntentContent   *ContentRef      `json:"intent_content,omitempty"`
+	MissingFields   []string         `json:"missing_fields,omitempty"`
+	EvidenceRefs    []string         `json:"evidence_refs,omitempty"`
+	ObjectHash      string           `json:"object_hash,omitempty"`
+	CreatedAt       string           `json:"created_at,omitempty"`
+	ExecutionScope  string           `json:"execution_scope,omitempty"`
+	SessionMetadata *SessionMetadata `json:"session_metadata,omitempty"`
 }
 
 // Record is a parser's transient output. Body never appears in the entry index

@@ -80,6 +80,24 @@ async function main(){
  files.set(path,gunzipSync(good));
  assert.equal((await setup().query('/api/context/content?run=run&ref=saved&limit=4')).content,'xxxx');
  files.set(path,good);
+ // Old exports without an index rule retain v1. New exports freeze v2, and
+ // mismatched or unknown versions fail instead of silently reinterpreting data.
+ for(const version of [1,2]){
+  const rule='agentprov.audit_lifecycle_operation/v'+version;
+  const item={event_id:'audit-1',decision:'ERRNO',operation:{status:version===1?'inferred':'unassociated'}};
+  const data=save({schema_version:'agentprovenance.audit_associations/v1',run_id:'run',rule,status:'complete',issues:[],items:[item]});
+  catalog.runs.run.audit={schema_version:'agentprovenance.replay_audit/v1',pages:[{first:'audit-1',last:'audit-1',data}]};
+  if(version===2)catalog.runs.run.audit.rule=rule;
+  files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
+  const report=await setup().query('/api/audit/associations?run=run');
+  assert.equal(report.rule,rule);assert.equal(report.items[0].operation.status,item.operation.status);
+  catalog.runs.run.audit.rule='agentprov.audit_lifecycle_operation/v'+(version===1?2:1);
+  files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
+  await assert.rejects(()=>setup().query('/api/audit/associations?run=run'),/does not match/);
+ }
+ catalog.runs.run.audit.rule='agentprov.audit_lifecycle_operation/v999';
+ files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
+ await assert.rejects(()=>setup().query('/api/audit/associations?run=run'),/Unsupported|unsupported/);
  console.log('Static reader: UTF-8 paging, process lifetime focus, legacy replay, search/compare scopes and cancellation, run scope and integrity checks passed.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

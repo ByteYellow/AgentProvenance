@@ -9,13 +9,19 @@
     for(;;){
       if(signal?.aborted)throw new DOMException('Aborted','AbortError');
       const page=await get('/api/compare/records?'+new URLSearchParams({run,cursor}),{signal});
+      if(signal?.aborted)throw new DOMException('Aborted','AbortError');
       if(page.schema_version!=='agentprovenance.comparison_records/v1'||page.run_id!==run||!Array.isArray(page.records)||!Array.isArray(page.issues))throw new Error('Invalid comparison records');
       const remaining=maxRecords-result.records.length;
       result.records.push(...page.records.slice(0,remaining));result.issues.push(...page.issues);result.sources+=page.sources_read;
       if(result.issues.length>2000)result.issues=[...result.issues.slice(0,1999),{dimension:'all',code:'additional_comparison_issues'}];
       onProgress(result.sources);
-      if(page.records.length>remaining || page.has_more && (result.records.length>=maxRecords || result.sources>=maxSources)){
-        result.issues.push({dimension:'all',code:'comparison_record_limit'});return result;
+      if(signal?.aborted)throw new DOMException('Aborted','AbortError');
+      const recordLimit=page.records.length>remaining || page.has_more && result.records.length>=maxRecords;
+      const sourceLimit=page.has_more && result.sources>=maxSources;
+      if(recordLimit || sourceLimit){
+        if(recordLimit)result.issues.push({dimension:'all',code:'comparison_record_limit'});
+        if(sourceLimit)result.issues.push({dimension:'all',code:'comparison_source_limit'});
+        return result;
       }
       if(!page.has_more){result.complete=true;return result;}
       if(!page.next_cursor||seen.has(page.next_cursor))throw new Error('Comparison cursor did not advance');
@@ -29,14 +35,22 @@
       if(!groups.has(record.key))groups.set(record.key,{key:record.key,dimension:record.dimension,label:record.label,operation:record.operation,a:[],b:[]});
       groups.get(record.key)[side].push(record);
     }
-    const limited=(data,row,records)=>!data.complete||data.issues.some(i=>
-      ['all','runtime'].includes(i.dimension)||i.dimension===row.dimension&&(!i.source_id||records.some(r=>r.evidence.id===i.source_id)));
+    const sideState=(data,row,records)=>{
+      const reasons=data.issues.filter(i=>['all','runtime'].includes(i.dimension)||i.dimension===row.dimension&&(!i.source_id||records.some(r=>r.evidence.id===i.source_id))).map(i=>i.code);
+      if(!data.complete&&!reasons.some(code=>['comparison_record_limit','comparison_source_limit'].includes(code)))reasons.push('comparison_scan_incomplete');
+      for(const record of records){
+        if(!record.value?.present||!record.value.sha256)reasons.push(record.evidence.content?.reason||'comparison_value_unavailable');
+        if(record.partial)reasons.push('comparison_value_partial');
+      }
+      // Readability describes retained evidence, not whether absent keys were scanned.
+      return {readable:records.some(r=>r.value?.present&&r.value.sha256),enumerationComplete:data.complete,reasons:[...new Set(reasons)]};
+    };
     const values=records=>[...new Set(records.map(r=>r.value?.sha256))].sort().join(',');
     const rows=[...groups.values()].map(row=>{
-      if(![...row.a,...row.b].some(r=>r.value?.present&&r.value.sha256))row.status='unknown';
+      row.sides={a:sideState(a,row,row.a),b:sideState(b,row,row.b)};
+      if(!row.sides.a.enumerationComplete||!row.sides.b.enumerationComplete||(!row.sides.a.readable&&!row.sides.b.readable)||row.sides.a.reasons.length||row.sides.b.reasons.length)row.status='unknown';
       else if(!row.a.length)row.status='only_b';
       else if(!row.b.length)row.status='only_a';
-      else if([...row.a,...row.b].some(r=>!r.value?.present||!r.value.sha256||r.partial)||limited(a,row,row.a)||limited(b,row,row.b))row.status='unknown';
       else row.status=values(row.a)===values(row.b)?'common':'different';
       return row;
     });

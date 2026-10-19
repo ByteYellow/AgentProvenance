@@ -3,6 +3,7 @@ window.AgentCompareUI=(()=>{
   const $=id=>document.getElementById(id),cache=new Map();
   const dimensionNames={configuration:'Configuration',files:'File evidence',network:'Network destinations',outbound:'Outbound data types',access_control:'Access control'};
   const statusNames={only_a:'Only A recorded',only_b:'Only B recorded',different:'Recorded values differ',common:'Common recorded values',unknown:'Comparison incomplete'};
+  const reasonNames={comparison_record_limit:'Comparison record limit reached',comparison_source_limit:'Comparison source limit reached',comparison_scan_incomplete:'Comparison scan incomplete',comparison_value_unavailable:'Value unavailable',comparison_value_partial:'Recorded value is partial'};
   const operationNames={recorded_configuration:'Recorded configuration',configuration_unavailable:'Configuration unavailable',saved_file_version:'Saved file version',recorded_file_change:'Recorded content change',file_open:'File open attempt',file_write:'File write attempt',secret_path:'Sensitive path access record',file_rename:'File rename record',file_unlink:'File removal record',connection_attempt:'Connection attempt',dns_lookup:'DNS lookup',captured_request:'Captured request',http_request_observed:'HTTP request observed',http_response_observed:'HTTP response observed'};
   Object.assign(operationNames,{audit_decision:'Mechanism decision',audit_status:'Audit status',state_snapshot:'Observed task state',configuration_declaration:'Configuration declarations',collection_status:'Audit collection',syscall_result:'Observed syscall return',process_exit:'Process exit record',thread_exit:'Thread exit record'});
   let api,current,controller,epoch=0,loan,returnView,originView,reading=null;
@@ -59,15 +60,22 @@ window.AgentCompareUI=(()=>{
     controller?.abort();const abort=new AbortController();controller=abort;const request=++epoch,active=current;
     $('compare-stop').hidden=false;$('compare-refresh').disabled=true;$('compare-status').textContent=t('Loading comparison records…');
     try{
-      const progress=side=>count=>{if(request===epoch)$('compare-status').textContent=side+' · '+api.tx('Checked {count} records',{count});};
+      const progress=side=>count=>{if(request===epoch)$('compare-status').textContent=side+' · '+api.tx('Scanned {count} sources',{count});};
       const a=await window.AgentRunCompare.load({run:active.a,get:api.j,signal:abort.signal,onProgress:progress('A')});
       const b=await window.AgentRunCompare.load({run:active.b,get:api.j,signal:abort.signal,onProgress:progress('B')});
       if(request!==epoch||current!==active)return;
+      if(abort.signal.aborted)throw new DOMException('Aborted','AbortError');
       active.data={a,b,tasks:{},...window.AgentRunCompare.build(a,b)};
       $('compare-status').textContent=(!a.complete||!b.complete)?t('Comparison limit reached; some saved records are not included.'):t('Saved records loaded');
       render();await renderTasks(active,request);
     }catch(error){if(request===epoch)$('compare-status').textContent=error.name==='AbortError'?t('Comparison loading stopped. Retry to load both runs.'):t('Recorded evidence could not be loaded.')+' '+t(error.message);}
     finally{if(request===epoch){controller=null;$('compare-stop').hidden=true;$('compare-refresh').disabled=false;}}
+  }
+  function scanText(saved){
+    return api.tx('Scanned {sources} sources · included {records} comparison records',{sources:saved.sources,records:saved.records.length})+' · '+t(saved.complete?'Comparison scan complete':'Comparison scan incomplete');
+  }
+  function reasonText(reason){
+    return reasonNames[reason]?t(reasonNames[reason]):t(window.AgentContextUI.contentReason({reason})||reason);
   }
   function render(){
     if(!current)return;
@@ -76,7 +84,7 @@ window.AgentCompareUI=(()=>{
     $('compare-dimensions').innerHTML=Object.entries(dimensionNames).map(([key,label])=>`<button data-dimension="${key}" aria-pressed="${current.dimension===key}">${e(t(label))}<span>${data?data.counts[key].differences:'–'}${data?.counts[key].unknown?` <small title="${e(t('Comparison incomplete'))}">? ${data.counts[key].unknown}</small>`:''}</span></button>`).join('');
     $('compare-dimensions').querySelectorAll('button').forEach(button=>button.onclick=()=>{current.dimension=button.dataset.dimension;current.limit=100;render();});
     const unknowns=data?Object.values(data.counts).reduce((n,c)=>n+c.unknown,0):0;
-    $('compare-summary').textContent=data?Object.entries(dimensionNames).map(([key,label])=>t(label)+' '+data.counts[key].differences).concat(unknowns?[t('Comparison incomplete')+' '+unknowns]:[]).join(' · '):'';
+    $('compare-summary').textContent=data?Object.entries(dimensionNames).map(([key,label])=>t(label)+' '+data.counts[key].differences).concat(unknowns?[t('Comparison incomplete')+' '+unknowns]:[],['A: '+scanText(data.a),'B: '+scanText(data.b)]).join(' · '):'';
     $('compare-pair').hidden=!data;$('compare-coverage').textContent='';
     if(!data){$('compare-results').textContent='';$('compare-task-note').textContent='';$('compare-more').hidden=true;return;}
     for(const side of ['a','b']){
@@ -96,8 +104,9 @@ window.AgentCompareUI=(()=>{
       $("compare-retention-"+side).textContent=window.AgentContextUI.retentionText(coverage.capture_policy);
       const reports=(coverage.coverage||[]).map(c=>(sourceLabel(c)||t('Source not recorded'))+': '+t(c.status||'Not recorded')+(c.missing_fields?.length?' · '+c.missing_fields.join(', '):''));
       reports.unshift(window.AgentContextUI.retentionText(coverage.capture_policy,true));
+      reports.unshift(scanText(saved));
       reports.push(...(coverage.coverage||[]).map(c=>window.AgentContextUI.omissionText(c)).filter(Boolean));
-      $('compare-coverage').textContent+=side.toUpperCase()+' · '+saved.run+'\n'+[...reports,...(capture?.issues||[]),...(capture?.limitations||[]),...saved.issues.map(i=>i.code+' · '+i.source_id)].join('\n')+'\n\n';
+      $('compare-coverage').textContent+=side.toUpperCase()+' · '+saved.run+'\n'+[...reports,...(capture?.issues||[]),...(capture?.limitations||[]),...saved.issues.map(i=>reasonText(i.code)+(i.source_id?' · '+i.source_id:''))].join('\n')+'\n\n';
       if(coverage.has_more_sources)$('compare-coverage').textContent+=t('Additional sources are not shown')+'\n';
     }
     const relation={matching_recorded_tasks:'Recorded task texts match; execution conditions may differ.',different_recorded_tasks:'Different recorded tasks; this is a comparison of records.',task_not_recorded:'Task evidence is incomplete; this is a comparison of records.'};
@@ -107,7 +116,7 @@ window.AgentCompareUI=(()=>{
     $('compare-results').innerHTML=shown.map(row=>{
       const index=data.rows.indexOf(row);
       return `<details class="compare-row" data-compare-row="${index}" ${current.expanded.has(row.key)?'open':''}><summary><span><strong>${e(row.label)}</strong><small>${e(t(operationNames[row.operation]||api.channelLabels[row.operation]||row.operation))}</small></span><span class="compare-state compare-${row.status}">${e(t(statusNames[row.status]))}</span></summary><div class="compare-sides">${sideHTML(row,'a',index)}${sideHTML(row,'b',index)}</div></details>`;
-    }).join('')||`<p class="compare-empty">${e(t(data.counts[current.dimension].total?'No differing saved values in this view.':'No records for this dimension in either run.'))}</p>`;
+    }).join('')||`<p class="compare-empty">${e(t(!data.a.complete||!data.b.complete?'No included records in this view; comparison scan incomplete.':data.counts[current.dimension].total?'No differing saved values in this view.':'No records for this dimension in either run.'))}</p>`;
     $('compare-results').querySelectorAll('[data-compare-row]').forEach(details=>details.ontoggle=()=>{if(!details.isConnected)return;const key=data.rows[Number(details.dataset.compareRow)].key;if(details.open)current.expanded.add(key);else current.expanded.delete(key);});
     $('compare-results').querySelectorAll('select[data-row]').forEach(select=>select.onchange=()=>current.references.set(referenceKey(select),Number(select.value)));
     $('compare-results').querySelectorAll('[data-record-read]').forEach(button=>button.onclick=()=>readRecord(button));
@@ -122,10 +131,11 @@ window.AgentCompareUI=(()=>{
   }
   function sideHTML(row,side,index){
     const records=row[side],id='compare-ref-'+index+'-'+side;
-    if(!records.length)return `<section class="compare-side"><h3>${side.toUpperCase()}</h3><p>${e(t('Not recorded on this side'))}</p></section>`;
+    const state=row.sides[side],reasons=state.reasons.length?`<p>${e(state.reasons.map(reasonText).join(' · '))}</p>`:'';
+    if(!records.length)return `<section class="compare-side"><h3>${side.toUpperCase()}</h3><p>${e(t(state.enumerationComplete?'Not recorded on this side':'Unknown on this side; scan incomplete'))}</p>${reasons}</section>`;
     const values=[...new Map(records.map(r=>[r.value?.sha256||'unknown/'+(r.evidence.content?.reason||''),{value:r.value,reason:r.evidence.content?.reason}])).values()];
     const selected=Math.min(current.references.get(JSON.stringify([row.key,side]))||0,records.length-1),offset=Math.floor(selected/50)*50;
-    const display=values.slice(0,8).map(v=>valueHTML(v.value,row.dimension,v.reason)).join('');
+    const display=values.slice(0,8).map(v=>valueHTML(v.value,row.dimension,v.reason)).join('')+reasons;
     return `<section class="compare-side"><h3>${side.toUpperCase()} <small>${e(api.tx('{count} source references',{count:records.length}))}</small></h3>${display}${values.length>8?`<p>${e(t('Additional recorded values are available through their source references.'))}</p>`:''}<select id="${id}" data-row="${index}" data-side="${side}" data-offset="${offset}" aria-label="${e(t('Source reference'))} ${side.toUpperCase()}">${sourceOptions(records,offset,selected)}</select><div class="compare-links"><button data-record-read="${id}">${e(t('Read saved evidence'))}</button><button data-record-graph="${id}">${e(t('Locate in graph'))}</button>${records.length>50?`<button data-record-next="${id}">${e(t('Next source references'))}</button>`:''}</div><p id="${id}-status" class="context-notice"></p></section>`;
   }
   function valueHTML(value,dimension,reason){

@@ -173,6 +173,23 @@ components:
           type: string
           enum: [parsed_content, source_record, hook_record]
           description: Present for deliberately omitted content when its transient bytes were available. Length and digest describe this pre-redaction input, not archived bytes. hook_record is the writer's timestamped and normalized JSON before filtering; it is not the original stdin serialization. Such a reference has no ref. Stored content keeps its existing redacted-byte digest semantics.
+    SessionMetadata:
+      type: object
+      properties:
+        forked_from_id:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Native Codex origin session ID for a fork, at most 512 UTF-8 bytes with no surrounding whitespace. The destination is Entry.source.session_id; this is fork lineage, not Source.parent_session_id or subagent delegation.
+      description: >
+        Optional typed metadata from a validated Codex configuration entry with
+        status session_metadata, extracted before retention can omit the body.
+        An empty object records an observed absence of a declared fork. An absent
+        Entry.session_metadata means this metadata was not retained or validated, including older
+        entries; it does not assert absence of a fork. Entry.run_id and Entry.source
+        provide run, harness and source identity, and Entry.id plus object_hash
+        identify the evidence used by session-relations. No duplicate endpoint or
+        evidence identifiers are embedded in this object.
     Entry:
       type: object
       required: [schema_version, id, run_id, source, source_key, sequence, kind, content, raw_content]
@@ -210,6 +227,7 @@ components:
         intent_content:
           allOf: [{$ref: '#/components/schemas/ContentRef'}]
           description: Optional derived Claude model-message projection when raw source records are omitted. Retains supported prompt, thinking, answer and proposed tool fields for reanalysis. It is not an original transcript. Sharing exclusions apply to the whole source row, including this projection.
+        session_metadata: {$ref: '#/components/schemas/SessionMetadata'}
         missing_fields: {type: array, items: {type: string}}
         evidence_refs: {type: array, items: {type: string}}
         object_hash: {type: string}
@@ -838,7 +856,11 @@ paths:
       description: >
         The requested session must occur in the requested run. Discovery uses at
         most 1024 latest same-harness source reports and 2048 typed action records;
-        action bodies over 64 KiB are skipped with a limited diagnostic. The
+        action bodies over 64 KiB are skipped with a limited diagnostic. Retained
+        Entry.session_metadata supplies native fork facts without reading a
+        configuration body, including under basic retention. Older entries use
+        their retained body when available; unavailable metadata and body produce
+        session_relation_metadata_unavailable rather than an inferred fork. The
         local endpoint queries the local store; static replay uses only its
         exported catalog. Relationships neither change run membership nor
         widen query or export scope.

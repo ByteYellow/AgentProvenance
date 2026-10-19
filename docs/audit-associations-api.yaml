@@ -85,7 +85,10 @@ components:
       required: [schema_version, rule, run_id, status, analysis_scope, limit, has_more, runtime_rows_examined, items]
       properties:
         schema_version: { type: string, enum: [agentprovenance.audit_associations/v1] }
-        rule: { type: string, enum: [agentprov.audit_lifecycle_operation/v1] }
+        rule:
+          type: string
+          enum: [agentprov.audit_lifecycle_operation/v1, agentprov.audit_lifecycle_operation/v2]
+          description: Live queries and fresh exports use v2. Frozen replays preserve their exported v1 or v2 rule and results without recomputation. A legacy replay index without a rule denotes v1; page and index rules must agree. The report schema remains v1.
         run_id: { type: string }
         status: { type: string, enum: [complete, incomplete] }
         analysis_scope:
@@ -133,8 +136,20 @@ components:
       required: [status, candidate_count]
       properties:
         status: { type: string, enum: [unassociated, inferred, ambiguous] }
-        basis: { type: string }
-        reason: { type: string }
+        basis:
+          type: string
+          description: Under v2, operation candidates use lifetime_syscall_time_candidate after process-lifetime, recorded-field and time-window checks. A unique candidate is inferred, not a shared audit/runtime call identity; multiple candidates remain ambiguous.
+        reason:
+          type: string
+          description: >-
+            Operation reasons in v2 include shared_call_identity_unavailable for a
+            unique inferred candidate. After a unique process lifetime is found,
+            seccomp ERRNO, KILL_PROCESS, KILL_THREAD and TRAP leave the operation
+            unassociated with seccomp_original_syscall_not_executed; TRACE and
+            USER_NOTIF require mediation evidence and use seccomp_mediation_evidence_unavailable.
+            LOG and ALLOW may produce candidates only with a matching recorded action code;
+            missing or conflicting action codes use seccomp_action_unknown or seccomp_action_conflict.
+            Process association and same-process exit references remain independent.
         candidate_count: { type: integer, minimum: 0 }
         candidates_truncated: { type: boolean }
         candidates:
@@ -151,6 +166,7 @@ components:
       items: { type: string }
     Operation:
       type: object
+      description: Saved runtime evidence for an operation candidate, including its own entry and return references. Its return is not attributed to the audit record solely by temporal proximity. An action-gated decision has no operation candidates.
       required: [id, process_instance_id, thread_instance_id, kind, attempt_state, result_state, attempt_record_count, result_record_count]
       properties:
         id: { type: string }

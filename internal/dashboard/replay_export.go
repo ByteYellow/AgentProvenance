@@ -88,6 +88,23 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 		visibleRuns = []string{run}
 	}
 	result := ReplayRun{API: map[string]staticdata.Ref{}, EventRefs: map[string][]string{}, Filters: map[string]eventQuery{}}
+	contextService := agentcontext.Service{DB: s.DB}
+	// Read the same frozen, selected database as every exported index. The
+	// overview's bounded display is not an authoritative session catalog.
+	sessions, err := contextService.EnumerateSessions(ctx, agentcontext.SessionEnumerationOptions{RunID: run})
+	if err != nil {
+		return result, err
+	}
+	if s.replayProjection != nil && s.replayProjection.plan.Selection.Scope == "session" {
+		selection := s.replayProjection.plan.Selection
+		selected := sessions[:0]
+		for _, session := range sessions {
+			if session.Harness == selection.Harness && session.SessionID == selection.SessionID {
+				selected = append(selected, session)
+			}
+		}
+		sessions = selected
+	}
 	var auditErr error
 	result.Audit, auditErr = s.exportReplayAudit(ctx, run, w)
 	if auditErr != nil {
@@ -159,22 +176,10 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 	if err != nil {
 		return result, err
 	}
-	contextService := agentcontext.Service{DB: s.DB}
-	overview, err := contextService.Overview(ctx, run)
-	if err != nil {
-		return result, err
-	}
 	result.Sessions = map[string]replaySession{}
-	for _, c := range overview.Coverage {
-		src := c.Source
-		if src.SessionID == "" || src.Harness == "unknown" || src.Harness == "launch" || src.Channel == "processing" || src.Channel == "discovery" || src.Channel == "runtime_correlation" {
-			continue
-		}
+	for _, src := range sessions {
 		keyBytes, _ := json.Marshal([]string{src.Harness, src.SessionID})
 		key := string(keyBytes)
-		if _, exists := result.Sessions[key]; exists {
-			continue
-		}
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
@@ -201,12 +206,18 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 			if err != nil {
 				return result, err
 			}
+			if page.Limited {
+				return result, fmt.Errorf("replay session relations resource limit exceeded: %s", key)
+			}
 			relations[cursor], err = w.JSON(page)
 			if err != nil {
 				return result, err
 			}
 			if !page.HasMore {
 				break
+			}
+			if page.NextCursor == "" || page.NextCursor == cursor || relations[page.NextCursor].Path != "" {
+				return result, fmt.Errorf("invalid replay session relations continuation: %s", key)
 			}
 			cursor = page.NextCursor
 		}
@@ -278,7 +289,7 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 	}
 	// Load process references in one pass; observation-local identities can be
 	// numerous, so resolving them one node at a time would add an N+1 query loop.
-	processRefs, err := s.DB.Query(`SELECT DISTINCT from_id, source_event_id FROM graph_edges
+	processRefs, err := s.DB.QueryContext(ctx, `SELECT DISTINCT from_id, source_event_id FROM graph_edges
 		WHERE run_id=? AND edge_type='runtime_process_event' AND from_id LIKE 'runtime_process/%'
 		ORDER BY from_id, source_event_id`, run)
 	if err != nil {
@@ -309,6 +320,9 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 				return result, err
 			}
 			if revisions {
+				if len(contextData.Entries)+len(page.Entries) > replaySelectionLimit {
+					return result, fmt.Errorf("replay context resource limit exceeded: more than %d entries", replaySelectionLimit)
+				}
 				if s.replayProjection != nil {
 					for i, entry := range page.Entries {
 						page.Entries[i] = s.replayProjection.entry(entry)
@@ -325,6 +339,10 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 			}
 			cursor = page.NextCursor
 		}
+	}
+	comparisons, err := replayComparisonGroups(ctx, contextData.Entries)
+	if err != nil {
+		return result, err
 	}
 	// Node -> entry navigation follows exactly the stored relations used by Entries.
 	rows, err := s.DB.QueryContext(ctx, `SELECT e.id,e.object_hash,c.to_id,g.to_id FROM agent_context_entries e
@@ -356,6 +374,9 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 		return result, err
 	}
 	for _, r := range recordRows {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 		for _, node := range r[1:] {
 			if node == "" {
 				continue
@@ -408,12 +429,6 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 		}
 		return out, nil
 	}
-	kind := func(e agentcontext.Entry) string {
-		if e.Kind == "message" && e.Role == "user" {
-			return "task"
-		}
-		return e.Kind
-	}
 	for _, entry := range contextData.Entries {
 		links, err := service.Links(ctx, run, entry.ID)
 		if err != nil {
@@ -433,13 +448,13 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 			}
 			contextData.Content[body.Ref] = p
 		}
-		k := kind(entry)
+		k := replayComparisonKind(entry)
 		if k != "task" && k != "configuration" && k != "approval" {
 			continue
 		}
-		for _, right := range contextData.Entries {
-			if kind(right) != k {
-				continue
+		for _, right := range comparisons[k] {
+			if err := ctx.Err(); err != nil {
+				return result, err
 			}
 			comparison := agentcontext.SnapshotComparison{SchemaVersion: agentcontext.SchemaVersion, Scope: "recorded_values",
 				Status: "unknown", Left: entry, Right: right, Changes: []agentcontext.SnapshotChange{}, Reason: "excluded"}
@@ -498,6 +513,9 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 			if !page.HasMore {
 				break
 			}
+			if page.NextCursor == "" || page.NextCursor == scope.Cursor || catalog[page.NextCursor].Path != "" {
+				return result, fmt.Errorf("invalid replay search continuation: %s", key)
+			}
 			scope.Cursor = page.NextCursor
 		}
 		result.Search[string(key)] = catalog
@@ -544,5 +562,60 @@ func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.W
 		}
 	}
 	result.Artifacts, err = w.JSON(artifacts)
-	return result, err
+	if err != nil {
+		return result, err
+	}
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+	return result, reconcileReplaySessions(sessions, result)
+}
+
+func replayComparisonKind(e agentcontext.Entry) string {
+	if e.Kind == "message" && e.Role == "user" {
+		return "task"
+	}
+	return e.Kind
+}
+
+// Bound the generated pairs, not just the input records or final ZIP bytes.
+// This check precedes all pair materialization, including excluded bodies.
+func replayComparisonGroups(ctx context.Context, entries []agentcontext.Entry) (map[string][]agentcontext.Entry, error) {
+	groups := map[string][]agentcontext.Entry{}
+	pairs := 0
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		kind := replayComparisonKind(entry)
+		if kind != "task" && kind != "configuration" && kind != "approval" {
+			continue
+		}
+		pairs += 2*len(groups[kind]) + 1
+		if pairs > replaySelectionLimit {
+			return nil, fmt.Errorf("replay comparison resource limit exceeded: more than %d pairs", replaySelectionLimit)
+		}
+		groups[kind] = append(groups[kind], entry)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return groups, nil
+}
+
+// Reconcile independent enumeration against every required per-session index
+// before publishing. A successful ZIP must not silently omit a scope.
+func reconcileReplaySessions(expected []agentcontext.SessionIdentity, replay ReplayRun) error {
+	if len(replay.Sessions) != len(expected) || len(replay.Search) != len(expected)+1 || replay.Search[`["",""]`][""].Path == "" {
+		return fmt.Errorf("replay session index count mismatch: expected %d, sessions %d, search scopes %d", len(expected), len(replay.Sessions), len(replay.Search))
+	}
+	for _, identity := range expected {
+		encoded, _ := json.Marshal([]string{identity.Harness, identity.SessionID})
+		key := string(encoded)
+		session, ok := replay.Sessions[key]
+		if !ok || session.Lenses.Path == "" || session.EventIDs == nil || session.Relations[""].Path == "" || replay.Search[key][""].Path == "" || (session.Audit != nil && (session.AuditRelations == nil || session.AuditRelations.Path == "")) {
+			return fmt.Errorf("replay session indexes incomplete: %s", key)
+		}
+	}
+	return nil
 }

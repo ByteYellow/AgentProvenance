@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const AuditAssociationRule = "agentprov.audit_lifecycle_operation/v1"
+const AuditAssociationRule = "agentprov.audit_lifecycle_operation/v2"
 
 var ErrAuditAssociationQuery = errors.New("invalid audit association query")
 

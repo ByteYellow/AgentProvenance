@@ -304,6 +304,10 @@ func associateAudit(input auditAssociationInput, index auditRuntimeIndex) AuditA
 	}
 	life := matched[0]
 	item.ProcessExits = auditLimitedRefs(append([]string(nil), life.exits...))
+	if reason := auditExecutionCompatibility(a); reason != "" {
+		item.Operation = auditUnknown(reason)
+		return item
+	}
 	var candidates []AuditCandidate
 	conflict := false
 	for _, op := range life.operations {
@@ -316,11 +320,44 @@ func associateAudit(input auditAssociationInput, index auditRuntimeIndex) AuditA
 		}
 		conflict = conflict || op.conflict
 	}
-	item.Operation = finishAuditAssociation(candidates, "lifetime_thread_operation_and_audit_fields", "compatible_operation_not_observed")
+	item.Operation = finishAuditAssociation(candidates, "lifetime_syscall_time_candidate", "compatible_operation_not_observed")
+	if item.Operation.Status == "inferred" {
+		item.Operation.Reason = "shared_call_identity_unavailable"
+	}
 	if conflict {
 		item.Operation.Status, item.Operation.Reason = "ambiguous", "conflicting_operation_records"
 	}
 	return item
+}
+
+// These candidates come from the normal syscall entry/return collector, not
+// from seccomp mediation. Suppressed calls never enter that execution path.
+// TRACE and USER_NOTIF can replace or skip the call and require mediation
+// evidence with a shared call identity, which this collector does not have.
+func auditExecutionCompatibility(a AuditRecord) string {
+	if a.Mechanism != "seccomp" {
+		return ""
+	}
+	switch a.Decision {
+	case "ERRNO", "KILL_PROCESS", "KILL_THREAD", "TRAP":
+		return "seccomp_original_syscall_not_executed"
+	case "TRACE", "USER_NOTIF":
+		return "seccomp_mediation_evidence_unavailable"
+	case "LOG", "ALLOW":
+		if a.ActionCode == nil {
+			return "seccomp_action_unknown"
+		}
+		want := uint32(0x7ffc0000)
+		if a.Decision == "ALLOW" {
+			want = 0x7fff0000
+		}
+		if *a.ActionCode&0xffff0000 != want {
+			return "seccomp_action_conflict"
+		}
+		return ""
+	default:
+		return "seccomp_action_unknown"
+	}
 }
 
 func finishAuditAssociation(candidates []AuditCandidate, basis, empty string) AuditAssociation {

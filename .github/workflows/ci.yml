@@ -47,6 +47,7 @@ jobs:
       - run: node scripts/test_dashboard_workspace.mjs
       - run: node scripts/test_search_engine.mjs
       - run: node scripts/test_compare_engine.mjs
+      - run: node scripts/test_compare_completeness.mjs
       - run: node scripts/test_static_reader.cjs
       - run: node scripts/test_evidence_status.cjs
 
@@ -237,6 +238,11 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" /tmp/agentprov-live/audit-evidence
           AGENTPROV_AUDIT_FOLLOW_INPUT=/tmp/agentprov-live/audit-evidence/apparmor-journal.jsonl \
             go test ./internal/forensics -run '^TestAuditFollowerSignedRoundtrip$' -v
+      - name: Verify adjacent seccomp calls never borrow executed results
+        run: |
+          sudo env AGENTPROV_AUDIT_ADJACENT_LIVE=1 AGENTPROV_AUDIT_EVIDENCE_DIR=/tmp/agentprov-live/adjacent-audit \
+            /tmp/agentprov-live/telemetry-test -test.run '^TestLiveAuditAdjacentCalls$' -test.v -test.timeout=90s \
+            | tee /tmp/agentprov-live/adjacent-audit.log
       - name: Verify mixed access-control decisions and both retention presets
         run: |
           sudo env AGENTPROV_AUDIT_MIXED_LIVE=1 AGENTPROV_AUDIT_EVIDENCE_DIR=/tmp/agentprov-live/mixed-audit \

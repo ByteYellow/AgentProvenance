@@ -133,6 +133,17 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Fixed
 
+- Audit association rule v2 excludes seccomp-blocked calls from executed syscall
+  candidates and keeps mediated calls unknown without mediation evidence. LOG and
+  AppArmor retain time-window candidates with explicit provenance; historical
+  offline replays preserve their recorded rule version.
+- Basic Codex capture preserves typed fork-session metadata without retaining
+  configuration bodies, including signed export/import and selective replay.
+- Run comparison treats unscanned ranges as unknown instead of reporting false
+  one-sided differences, with scanned counts and distinct truncation reasons.
+- Offline export enumerates all retained sessions independently of the overview's
+  256-source display limit and reconciles graph, event and search indexes before
+  delivery. Cancellation and resource limits return explicit errors.
 - Static session replay handles sessions without attributed runtime nodes.
   Demo Run and comparison selectors display readable, localized names while
   preserving original evidence IDs.

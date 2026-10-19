@@ -7,6 +7,12 @@ window.AgentAccessControlUI=(()=>{
     apparmor:{DENIED:'AppArmor rejected this operation.',ALLOWED:'AppArmor logged this operation without blocking it.',AUDIT:'AppArmor audit record.',KILLED:'AppArmor recorded a termination decision.'},
     seccomp:{ERRNO:'seccomp rejected the syscall; the actual return is recorded separately.',LOG:'seccomp logged this call without blocking it.',KILL_PROCESS:'seccomp selected process termination; exit observations are separate.',KILL_THREAD:'seccomp selected thread termination; exit observations are separate.',TRAP:'seccomp selected a SIGSYS trap.',TRACE:'seccomp selected tracing.',USER_NOTIF:'seccomp selected a userspace notification.',ALLOW:'seccomp selected ALLOW.'}
   };
+  const associationReasons={
+    shared_call_identity_unavailable:'Time and recorded fields identify a candidate; a shared audit/runtime call identity is unavailable.',
+    seccomp_original_syscall_not_executed:'seccomp prevented the original syscall from executing. Nearby syscall results remain separate.',
+    seccomp_mediation_evidence_unavailable:'seccomp tracing or notification requires mediation evidence with a shared call identity. That evidence is unavailable.',
+    replay_evidence_excluded:'Supporting records were excluded from this replay.'
+  };
   let api,run='',kind='access_control',offset=0,epoch=0,pageRequest=0,detailController,summaryController,listController,loan;
   let refreshed=0;
   const t=value=>api.tr(value),e=value=>api.esc(String(value??''));
@@ -147,8 +153,10 @@ window.AgentAccessControlUI=(()=>{
       const operations=item.operations||[];
       const labels={inferred:'Inferred operation association',ambiguous:'Multiple or conflicting operation candidates',unassociated:'Operation not associated'};
       container.querySelector('[data-access-association]').textContent=t(labels[item.operation.status]||item.operation.status)+(report.status==='incomplete'?' · '+t('Association analysis incomplete'):'');
-      if(item.operation.reason==='replay_evidence_excluded')container.querySelector('[data-access-association]').textContent+=' · '+t('Supporting records were excluded from this replay.');
-      const candidate=index=>operations.length>1?`<h5>${e(api.tx('Candidate {number}',{number:index+1}))}</h5>`:'';
+      const reason=associationReasons[item.operation.reason];
+      if(reason)container.querySelector('[data-access-association]').textContent+=' · '+t(reason);
+      if(operations.length)container.querySelector('[data-access-association]').insertAdjacentHTML('afterend',`<p class="context-notice" data-access-candidate-note>${e(t('Attempts and returns shown here are the candidates’ saved runtime evidence. The mechanism decision is a separate audit record.'))}</p>`);
+      const candidate=index=>`<h5>${e(api.tx('Candidate {number}',{number:index+1}))}</h5>`;
       container.querySelector('[data-access-attempt]').innerHTML=operations.map((op,index)=>`<article>${candidate(index)}${fields(op,['kind','attempt_state','attempt_record_count'])}${operationRefs(op,op.attempt_refs)}</article>`).join('')||`<p>${e(t('No associated operation attempt recorded.'))}</p>`;
       container.querySelector('[data-access-result]').innerHTML=operations.map((op,index)=>`<article>${candidate(index)}${fields(op,['result_state','syscall_result','syscall_outcome','result_record_count'])}${operationRefs(op,op.result_refs)}</article>`).join('')||`<p>${e(t('No associated syscall return recorded.'))}</p>`;
       if(item.process_exit_refs?.length)container.querySelector('[data-access-result]').insertAdjacentHTML('beforeend',`<details><summary>${e(t('Same-process exit records'))} · ${item.process_exit_refs.length}</summary>${refsHTML(item.process_exit_refs)}</details>`);

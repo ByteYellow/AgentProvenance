@@ -350,23 +350,35 @@ func (s Service) sessionActionRelations(ctx context.Context, opts SessionRelatio
 		if e.SchemaVersion != SchemaVersion || e.RunID != ref.run || e.ID != ref.id || e.Source.ID != ref.source || e.Source.SessionID != ref.session || e.Source.Harness != opts.Harness || len(known[e.Source.SessionID][ref.run]) == 0 {
 			return fmt.Errorf("session relation entry identity mismatch")
 		}
-		if e.Source.Harness != "codex" || e.ExecutionScope == PriorContext || e.Content.State != "stored" {
-			continue
-		}
-		page, err := provenance.ReadTextContentPage(s.DB, ref.run, e.Content.Ref, 0, 64<<10)
-		if err != nil {
-			return err
-		}
-		if page.HasMore {
-			result.Limited = true
-			if !slices.Contains(result.Issues, "session_relation_body_limit") {
-				result.Issues = append(result.Issues, "session_relation_body_limit")
-			}
+		if e.Source.Harness != "codex" || e.ExecutionScope == PriorContext {
 			continue
 		}
 		var body map[string]json.RawMessage
-		if json.Unmarshal([]byte(page.Content), &body) != nil {
-			continue
+		if e.Kind == "configuration" && e.Status == "session_metadata" && e.SessionMetadata != nil {
+			// Reconstruct only the native relation fields for the shared projection.
+			// The body may be omitted, oversized or unavailable; it is not needed.
+			body = row{"id": quoted(e.Source.SessionID), "forked_from_id": quoted(e.SessionMetadata.ForkedFromID)}
+		} else {
+			if e.Content.State != "stored" {
+				if e.Kind == "configuration" && e.Status == "session_metadata" && !slices.Contains(result.Issues, "session_relation_metadata_unavailable") {
+					result.Issues = append(result.Issues, "session_relation_metadata_unavailable")
+				}
+				continue
+			}
+			page, err := provenance.ReadTextContentPage(s.DB, ref.run, e.Content.Ref, 0, 64<<10)
+			if err != nil {
+				return err
+			}
+			if page.HasMore {
+				result.Limited = true
+				if !slices.Contains(result.Issues, "session_relation_body_limit") {
+					result.Issues = append(result.Issues, "session_relation_body_limit")
+				}
+				continue
+			}
+			if json.Unmarshal([]byte(page.Content), &body) != nil {
+				continue
+			}
 		}
 		value := func(key string) string {
 			var v string

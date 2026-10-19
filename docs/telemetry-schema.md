@@ -292,7 +292,7 @@ observed syscall return separate. The kernel's
 passes the masked action to audit logging.
 
 One operation may have both a seccomp `LOG` decision and an AppArmor `DENIED`
-decision. Both can reference the same operation ID and its failed return;
+decision. Both can cite the same candidate operation ID and its saved failed return;
 the two decisions do not create two operation attempts. A pre-entry seccomp
 `ERRNO` decision may instead have process-lifetime evidence with no native
 syscall entry or return. An enabled filter without an available audit record
@@ -436,7 +436,7 @@ English in every locale; recorded evidence retains its original text. Audit
 import remains a trusted collector/CLI operation.
 
 Use `--event EVENT` to inspect one saved audit record, or `--cursor` for the
-next page. The result includes `agentprov.audit_lifecycle_operation/v1` as its
+next page. Live queries use `agentprov.audit_lifecycle_operation/v2` as their
 analysis rule. It does not overwrite an audit PID, Agent session or graph edge.
 Re-querying after a late arrival recomputes the candidates from one database
 snapshot. The saved input records survive signed Bundle export/import, so the
@@ -447,6 +447,11 @@ same Dashboard path in `AgentProvReplay.query`. Partial exports only include
 selected audit records. If a supporting record or competing candidate is excluded,
 the associated inference is withheld with `replay_evidence_excluded`; the remaining
 candidate is not promoted to a unique match. Excluded tool context is omitted.
+The report schema stays `agentprovenance.audit_associations/v1`; the analysis
+rule is versioned separately. Existing frozen v1 webpage replays retain their
+original rule and results, rather than being recomputed or relabeled as v2.
+The replay reader accepts frozen v1 and v2 pages; a legacy index without `rule`
+means v1. Page and index rules must agree, and cursors must use the same rule.
 Older webpage exports without this reader report that the data was not included.
 
 `analysis_scope=query_page` describes the live query's bounded analysis;
@@ -471,16 +476,35 @@ clock information, conflicting lifecycle evidence, or a wall/monotonic clock
 disagreement leaves the record unassociated. The importing machine supplies
 neither identity nor clock resolution.
 
-Operation association then checks the native thread/operation identity and
+Under v2, a unique process lifetime is followed by a seccomp action compatibility
+check before searching the normal syscall collector's entry/return records:
+
+| Recorded seccomp action | Operation association |
+| --- | --- |
+| `ERRNO`, `KILL_PROCESS`, `KILL_THREAD`, `TRAP` | `unassociated`, reason `seccomp_original_syscall_not_executed`; the original call was suppressed before execution |
+| `TRACE`, `USER_NOTIF` | `unassociated`, reason `seccomp_mediation_evidence_unavailable`; mediation may replace or skip the call and needs evidence with a shared call identity |
+| `LOG`, `ALLOW` | Eligible for candidate checks only when the recorded action code agrees; missing/conflicting codes produce `seccomp_action_unknown` / `seccomp_action_conflict` |
+| Unknown action | `unassociated`, reason `seccomp_action_unknown` |
+
+Action gating leaves the process association and same-process exit references
+intact. It attaches no operation candidates or nearby syscall return to the
+blocked or mediated decision. AppArmor retains its recorded-field candidate checks.
+
+Eligible operation association then checks the native thread/operation identity and
 the recorded fields: an exact absolute path for AppArmor `open`, or the
 recorded ABI and syscall number for seccomp. A unique saved candidate is
-`inferred`; multiple candidates are `ambiguous`, with no nearest-time winner.
+`inferred`, with basis `lifetime_syscall_time_candidate` and reason
+`shared_call_identity_unavailable`. This is a time-window and recorded-field
+candidate, not a shared identity between the audit record and runtime call.
+Multiple candidates are `ambiguous`, with no nearest-time winner.
 Other AppArmor operations can retain a process-level association. A process
 exit is listed separately from syscall returns. Runtime Agent/Tool Call context
 is cited with its original method and confidence, not reassigned to the audit.
 
 Each operation has separate attempt and result states, record counts and
-references. Two mechanism decisions can cite the same operation ID. A missing
+references. Displayed attempts and returns belong to the candidate's saved runtime
+evidence; the mechanism decision remains a separate audit record. Two mechanism
+decisions can cite the same candidate operation ID. A missing
 entry or return stays `not_observed`; a rejected pre-entry seccomp call is not
 reconstructed from a signal or errno. Candidate references are bounded and
 truncation is explicit. Each page examines at most 50,000 native records and

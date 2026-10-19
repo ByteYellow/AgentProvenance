@@ -125,7 +125,8 @@ window.AgentProvReplay = (() => {
   async function auditPage(index,p,id){
     if(!index||index.schema_version!=='agentprovenance.replay_audit/v1')fail('Audit associations are not included in this replay');
     for(const key of p.keys())if(!['run','event','limit','cursor'].includes(key)||p.getAll(key).length!==1)fail('Unsupported or repeated audit parameter');
-    const rule='agentprov.audit_lifecycle_operation/v1',event=p.get('event')||'',cursor=p.get('cursor')||'';
+    const rule=index.rule||'agentprov.audit_lifecycle_operation/v1',event=p.get('event')||'',cursor=p.get('cursor')||'';
+    if(!['agentprov.audit_lifecycle_operation/v1','agentprov.audit_lifecycle_operation/v2'].includes(rule))fail('Unsupported audit association rule');
     if(!id.trim()||encoder.encode(id).length>1024||encoder.encode(event).length>1024||encoder.encode(cursor).length>4096)fail('Invalid audit query');
     const limit=range(p.get('limit'),100,1,500,'audit limit');let after='';
     if(cursor){
@@ -138,6 +139,7 @@ window.AgentProvReplay = (() => {
     for(const shard of index.pages){
       if(cmp(shard.last,after)<=0||(event&&(cmp(event,shard.first)<0||cmp(event,shard.last)>0)))continue;
       const page=await asset(shard.data);let used=false;
+      if(page.rule!==rule)fail('Audit association rule does not match the replay index');
       for(const item of page.items){
         if(cmp(item.event_id,after)<=0||(event&&item.event_id!==event))continue;
         if(out.items.length===limit){out.has_more=true;break;}

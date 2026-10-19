@@ -119,9 +119,10 @@ func (s Service) saveTx(ctx context.Context, tx *sql.Tx, runID string, src Sourc
 			SourceKey: r.Key, Sequence: r.Sequence, SourceOrdinal: r.SourceOrdinal, Kind: r.Kind,
 			Role: r.Role, AgentID: r.AgentID, ToolCallID: r.ToolCallID, ToolName: r.ToolName, Status: r.Status,
 			RecordedAt: r.RecordedAt, MissingFields: r.MissingFields,
-			Content:        ContentRef{State: "unavailable", Reason: r.MissingReason},
-			RawContent:     ContentRef{State: "unavailable", Reason: "source_not_recorded"},
-			ExecutionScope: r.ExecutionScope,
+			Content:         ContentRef{State: "unavailable", Reason: r.MissingReason},
+			RawContent:      ContentRef{State: "unavailable", Reason: "source_not_recorded"},
+			ExecutionScope:  r.ExecutionScope,
+			SessionMetadata: codexSessionMetadata(src, r),
 		}
 		if entry.AgentID == "" {
 			entry.AgentID = src.AgentID

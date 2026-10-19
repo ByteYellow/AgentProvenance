@@ -33,6 +33,13 @@ agentprov launch --context-session SESSION_ID -- codex resume SESSION_ID
 结果状态、Agent 关系和已支持的意图证据，省略额外原始记录、工具结果正文、恢复历史及配置正文。
 两档共用相同的解析器和关联逻辑。
 
+对于通过校验的 Codex 会话元数据，两档都会在省略配置正文前保留可选的
+`Entry.session_metadata.forked_from_id`。该字段表示 fork 的原会话，
+`Entry.source.session_id` 表示分叉后的会话，已有来源字段和 `Entry.id` 用于定位证据。
+因此 basic 档可以在不保留配置正文的情况下保留这条原生关系。
+空的 `session_metadata` 对象表示已观测到未声明 fork；缺少该字段的旧条目优先读取已保存正文，
+正文也不可用时报告 `session_relation_metadata_unavailable`。Fork 关系与子 Agent 委派分别保留。
+
 ```sh
 agentprov launch --capture basic -- claude
 agentprov launch --capture detailed -- codex

@@ -79,7 +79,7 @@ func newSessionAuditFixture(t *testing.T) sessionAuditFixture {
 	}
 	f.link(t, f.entry, f.worker)
 	lines := `type=AVC msg=audit(1792342593.757:130): apparmor="DENIED" operation="open" profile="fixture" pid=42 comm="fixture" name="/fixture/private.txt" requested_mask="r" denied_mask="r"
-type=SECCOMP msg=audit(1792342593.757:131): pid=42 comm="fixture" arch=c00000b7 syscall=56 code=0x5000d
+type=SECCOMP msg=audit(1792342593.757:131): pid=42 comm="fixture" arch=c00000b7 syscall=56 code=0x7ffc0000
 type=SECCOMP msg=audit(1792342593.757:132): pid=99 comm="unassigned" arch=c00000b7 syscall=56 code=0x7ffc0000
 `
 	if _, err := telemetry.IngestAuditReader(context.Background(), db, telemetry.AuditIngestOptions{RunID: sessionAuditRun, Source: telemetry.AuditSource{HostID: "fixture-host", BootID: boot}}, strings.NewReader(lines)); err != nil {
@@ -242,6 +242,94 @@ func TestSessionAuditRejectsConflictingAndLateContext(t *testing.T) {
 	}
 }
 
+func TestSessionAuditERRNOKeepsRawRunEvidenceWithoutBorrowedAssociation(t *testing.T) {
+	f := newSessionAuditFixture(t)
+	server := Server{DB: f.db}
+	ctx := context.Background()
+	// The executed call already has a tool edge. The denied call shares its PID,
+	// syscall and coarse timestamp, but must not borrow that call's result/Session.
+	const line = `type=SECCOMP msg=audit(1792342593.757:133): pid=42 comm="fixture" arch=c00000b7 syscall=56 code=0x5000d`
+	ingested, err := telemetry.IngestAuditReader(ctx, f.db, telemetry.AuditIngestOptions{
+		RunID: sessionAuditRun, RetainRaw: true,
+		Source: telemetry.AuditSource{HostID: "fixture-host", BootID: "01234567-89ab-cdef-0123-456789abcdef"},
+	}, strings.NewReader(line+"\n"))
+	if err != nil || ingested.Ingested != 1 || len(ingested.Rows) != 1 || ingested.Rows[0].EventID == "" {
+		t.Fatalf("ERRNO ingest: %+v %v", ingested, err)
+	}
+	id := ingested.Rows[0].EventID
+	var original string
+	if err := f.db.QueryRow(`SELECT payload FROM events WHERE run_id=? AND id=?`, sessionAuditRun, id).Scan(&original); err != nil {
+		t.Fatal(err)
+	}
+	report, err := telemetry.BuildAuditAssociations(ctx, f.db, telemetry.AuditAssociationOptions{RunID: sessionAuditRun, EventID: id})
+	if err != nil || len(report.Items) != 1 || report.Rule != "agentprov.audit_lifecycle_operation/v2" || report.Status != "complete" {
+		t.Fatalf("ERRNO report: %+v %v", report, err)
+	}
+	item := report.Items[0]
+	if item.EventID != id || item.Decision != "ERRNO" || item.Process.Status != "inferred" || item.Process.CandidateCount != 1 {
+		t.Fatalf("raw decision or valid process evidence lost: %+v", item)
+	}
+	if item.Operation.Status != "unassociated" || item.Operation.Reason != "seccomp_original_syscall_not_executed" || item.Operation.CandidateCount != 0 || len(item.Operation.Candidates) != 0 || len(item.Operations) != 0 {
+		t.Fatalf("ERRNO borrowed an adjacent executed operation: %+v", item)
+	}
+	scope, err := server.sessionGraphScope(ctx, sessionAuditRun, "codex", "worker")
+	if err != nil || scope.Audit == nil || scope.Audit.RelatedCount != 2 || len(scope.AuditEvents) != 2 || !slices.Contains(scope.EventIDs, f.entry) {
+		t.Fatalf("positive associations or direct runtime scope changed: %+v %v", scope, err)
+	}
+	if _, exists := scope.AuditEvents[id]; exists || slices.Contains(scope.EventIDs, id) {
+		t.Fatalf("ERRNO acquired native Session membership: %+v", scope)
+	}
+	sources := sessionAuditSources(t, server)
+	if _, exists := sources["3/"+id]; exists {
+		t.Fatal("ERRNO leaked into the Session search catalog")
+	}
+	for _, positive := range f.audits {
+		if scope.AuditEvents[positive].Status != "inferred" || sources["3/"+positive].SessionAssociation == nil {
+			t.Fatalf("ERRNO suppressed a valid positive association: %+v", scope)
+		}
+	}
+	for _, scoped := range []bool{false, true} {
+		path := "/api/events?run=" + sessionAuditRun + "&type=access_control"
+		wantTotal := 4
+		if scoped {
+			path += "&harness=codex&session=worker"
+			wantTotal = 2
+		}
+		w := httptest.NewRecorder()
+		server.Handler().ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		var events struct {
+			Total               int
+			Events              []telemetry.EventRecord
+			SessionAssociations map[string]provenance.SessionAuditRelation `json:"session_associations"`
+		}
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &events) != nil || events.Total != wantTotal || len(events.Events) != wantTotal {
+			t.Fatalf("raw/scoped event listing: %d %s", w.Code, w.Body.String())
+		}
+		if _, exists := events.SessionAssociations[id]; exists {
+			t.Fatal("ERRNO acquired a Session association in the event response")
+		}
+		found := false
+		for _, event := range events.Events {
+			if event.ID != id {
+				continue
+			}
+			found = true
+			if event.Payload != original || event.RunID != sessionAuditRun || event.Source != "seccomp_audit" || event.EventType != "access_control" || event.SessionID != "" || event.ToolCallID != "" || event.PID != 0 {
+				t.Fatalf("raw audit was rewritten or assigned: %+v", event)
+			}
+			var envelope struct {
+				Raw telemetry.AuditRecord `json:"raw"`
+			}
+			if err := json.Unmarshal([]byte(event.Payload), &envelope); err != nil || envelope.Raw.Decision != "ERRNO" || envelope.Raw.ActionCode == nil || *envelope.Raw.ActionCode != 0x5000d || envelope.Raw.RawRecord.Text != line {
+				t.Fatalf("ERRNO source record changed: %s %v", event.Payload, err)
+			}
+		}
+		if found == scoped {
+			t.Fatalf("ERRNO raw-run visibility=%t with scoped=%t", found, scoped)
+		}
+	}
+}
+
 func TestSessionAuditReplayFreezesMembershipAndExclusions(t *testing.T) {
 	f := newSessionAuditFixture(t)
 	server := Server{DB: f.db}
@@ -347,7 +435,7 @@ func TestSessionAuditSourcePagingAndEnglishMetadata(t *testing.T) {
 	// More than one catalog page; every record remains individually addressable.
 	var lines strings.Builder
 	for i := 200; i < 705; i++ {
-		fmt.Fprintf(&lines, "type=SECCOMP msg=audit(1792342593.757:%d): pid=42 arch=c00000b7 syscall=56 code=0x5000d\n", i)
+		fmt.Fprintf(&lines, "type=SECCOMP msg=audit(1792342593.757:%d): pid=42 arch=c00000b7 syscall=56 code=0x7ffc0000\n", i)
 	}
 	if _, err := telemetry.IngestAuditReader(context.Background(), f.db, telemetry.AuditIngestOptions{RunID: sessionAuditRun, Source: telemetry.AuditSource{HostID: "fixture-host", BootID: "01234567-89ab-cdef-0123-456789abcdef"}}, strings.NewReader(lines.String())); err != nil {
 		t.Fatal(err)

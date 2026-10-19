@@ -205,7 +205,7 @@ Linux 可能只记录动作类型：`ERRNO` 的日志为 `code=0x50000` 时，�
 内核的 [seccomp 决策路径](https://github.com/torvalds/linux/blob/v6.8/kernel/seccomp.c)
 将掩码后的动作传给审计日志。
 
-同一操作可能同时产生 seccomp `LOG` 和 AppArmor `DENIED`，两条决定引用同一操作 ID 及失败返回，
+同一操作可能同时产生 seccomp `LOG` 和 AppArmor `DENIED`，两条决定可引用同一候选操作 ID 及其已保存的失败返回，
 操作尝试只计一次。在 syscall 入口前发生的 seccomp `ERRNO` 则可能只有进程生命周期证据，
 没有原生入口或返回记录。过滤器已启用、没有可用审计时，仅保留实际状态证据。
 
@@ -314,13 +314,16 @@ Python 使用 `Client.audit_associations`，AI/MCP 使用只读工具 `get_audit
 审计导入仍由受信任的采集端或 CLI 执行。
 
 用 `--event EVENT` 查看单条已保存审计，或用 `--cursor` 读取下一页。
-结果标明分析规则 `agentprov.audit_lifecycle_operation/v1`，保留原审计 PID、Agent 会话和图边。
+在线查询标明分析规则 `agentprov.audit_lifecycle_operation/v2`，保留原审计 PID、Agent 会话和图边。
 迟到记录到达后，再次查询会在同一数据库快照上重新计算候选。
 签名 Bundle 导出、导入保留分析输入，可在离线数据库上使用同一规则复核。
 
 新导出的网页回放会冻结候选结果，`AgentProvReplay.query` 通过相同 Dashboard 路径支持分页。
 部分导出只包含所选审计记录；如果支持证据或竞争候选被排除，则以 `replay_evidence_excluded`
 标记并省略该关联，避免把剩余候选升级为唯一匹配。被排除的工具上下文同样省略。
+报告 schema 仍为 `agentprovenance.audit_associations/v1`，分析规则单独版本化。
+已经冻结的 v1 网页回放保留原规则和结果，不重新计算或改标为 v2。回放读取器支持冻结的
+v1 和 v2 分页；旧索引未标记 `rule` 时按 v1 读取。分页与索引规则必须一致，游标也须使用同一规则。
 不含这项数据的旧网页回放会明确提示未收录。
 
 `analysis_scope=query_page` 描述当前在线查询的有界分析，`export_pages` 描述回放查询读取的
@@ -337,12 +340,27 @@ Python 使用 `Client.audit_associations`，AI/MCP 使用只读工具 `get_audit
 展示实际采用的区间。缺少时钟信息、生命周期证据冲突或墙上时钟与单调时钟偏差异常时保留未关联。
 导入机器不提供替代身份或时钟参数。
 
-操作关联再核对线程／操作身份和已记录字段：AppArmor `open` 使用完整绝对路径精确匹配，seccomp
-使用实际 ABI 和 syscall 编号。唯一的已保存候选标为 `inferred`，多个候选标为 `ambiguous`，
+v2 在找到唯一进程生命周期后，先检查 seccomp 动作兼容性，再搜索常规 syscall 采集器的入口／返回记录：
+
+| 记录的 seccomp 动作 | 操作关联 |
+| --- | --- |
+| `ERRNO`、`KILL_PROCESS`、`KILL_THREAD`、`TRAP` | `unassociated`，原因 `seccomp_original_syscall_not_executed`；原调用在执行前被阻止 |
+| `TRACE`、`USER_NOTIF` | `unassociated`，原因 `seccomp_mediation_evidence_unavailable`；介入处理可能替换或跳过调用，需要带共同调用标识的证据 |
+| `LOG`、`ALLOW` | 仅在已记录 action code 一致时进入候选筛选；缺失／冲突分别使用 `seccomp_action_unknown`／`seccomp_action_conflict` |
+| 未知动作 | `unassociated`，原因 `seccomp_action_unknown` |
+
+动作兼容性检查独立保留进程关联和同进程退出引用，不为被阻止或介入处理的决定附加操作候选或邻近调用的返回值。
+AppArmor 继续按其已记录字段筛选候选。
+
+可继续关联的操作再核对线程／操作身份和已记录字段：AppArmor `open` 使用完整绝对路径精确匹配，seccomp
+使用实际 ABI 和 syscall 编号。唯一的已保存候选标为 `inferred`，依据为 `lifetime_syscall_time_candidate`，
+原因为 `shared_call_identity_unavailable`：时间窗口和已记录字段共同确定候选，审计记录与运行时调用缺少共同调用标识。
+多个候选标为 `ambiguous`，
 不按最近时间选择。其他 AppArmor 操作仍可保留进程级关联。进程退出与 syscall 返回分别列出；
 Agent／Tool Call 上下文引用运行时记录原有的关联方式和置信值，不直接分配给审计事件。
 
-每个操作分别保留尝试、结果的状态、记录数和引用。两种机制的决定可引用同一操作标识。
+每个操作分别保留尝试、结果的状态、记录数和引用。界面中的尝试和返回值来自候选操作已保存的运行时证据，
+机制决定来自独立的审计记录。两种机制的决定可引用同一候选操作标识。
 缺少入口或返回时显示 `not_observed`；在入口之前被 seccomp 拒绝的调用不通过信号或 errno 补造。
 候选引用有上限，并标明截断。每页最多检查 50,000 条原生记录及 32 MiB 载荷；超限返回 `incomplete`，
 该页不建立关联。高流量 Run 可缩小分页或指定单条审计查询。关联结果描述已保存证据，采集覆盖和策略状态分别提供。

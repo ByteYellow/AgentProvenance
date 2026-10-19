@@ -21,6 +21,7 @@ func (s Server) auditAssociations(w http.ResponseWriter, r *http.Request) {
 
 type replayAuditIndex struct {
 	SchemaVersion string            `json:"schema_version"`
+	Rule          string            `json:"rule"`
 	Pages         []replayAuditPage `json:"pages"`
 }
 
@@ -31,7 +32,7 @@ type replayAuditPage struct {
 }
 
 func (s Server) exportReplayAudit(ctx context.Context, run string, w *staticdata.Writer) (*replayAuditIndex, error) {
-	index := &replayAuditIndex{SchemaVersion: "agentprovenance.replay_audit/v1", Pages: []replayAuditPage{}}
+	index := &replayAuditIndex{SchemaVersion: "agentprovenance.replay_audit/v1", Rule: telemetry.AuditAssociationRule, Pages: []replayAuditPage{}}
 	source := s.DB
 	var admitted map[string]bool
 	if p := s.replayProjection; p != nil {
