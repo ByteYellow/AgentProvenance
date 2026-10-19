@@ -265,6 +265,12 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" /tmp/agentprov-live/access-state
           AGENTPROV_ACCESS_STATE_EVENTS=/tmp/agentprov-live/access-state/sensor-state.jsonl \
             go test ./internal/forensics -run '^TestLiveAccessStateSignedRoundtrip$' -v
+      - name: Make live evidence readable for artifact upload
+        if: always()
+        run: |
+          if [ -d /tmp/agentprov-live ]; then
+            sudo chown -R "$(id -u):$(id -g)" /tmp/agentprov-live
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
