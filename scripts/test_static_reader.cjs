@@ -20,6 +20,10 @@ async function main(){
  const relation=save({relations:[{kind:'message_request',from:{run_id:'run',harness:'codex',session_id:'root',available:true},to:{run_ids:['legacy','not-exported'],harness:'codex',session_id:'worker',available:true}},{kind:'parent',from:{run_id:'not-exported',harness:'codex',session_id:'parent',available:true},to:{run_id:'run',harness:'codex',session_id:'root',available:true}}]});
  catalog.runs.run.sessions={'["codex","root"]':{relations:{'':relation}}};
  catalog.runs.legacy.sessions={'["codex","worker"]':{}};
+ const emptyNode={id:'overview/agent_network',kind:'overview'};
+ const emptyNodes=save({[emptyNode.id]:emptyNode});
+ const emptyView=save({manifest:{nodes:[emptyNode],edges:[],query:{layout_hint:'overview',raw_event_count:0}},focus_edges:[],priorities:[],total_nodes:1,total_edges:0});
+ catalog.runs.run.sessions['["codex","empty"]']={lenses:save({views:{'default/summary':emptyView},nodes:emptyNodes,focus_nodes:emptyNodes,present:null}),event_ids:null};
  const search=save({schema_version:'agentprovenance.search_sources/v1',run_id:'run',sources:[{id:'entry/saved',category:'messages',content:{ref:'saved',state:'stored'}}],has_more:false});
  catalog.runs.run.search={'["",""]':{'':search},'["codex","root"]':{'':search}};
  const comparison=save({schema_version:'agentprovenance.comparison_records/v1',run_id:'run',records:[],issues:[],sources_read:1,has_more:false});
@@ -27,6 +31,10 @@ async function main(){
  files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
  const setup=()=>{const box={window:{},document:{querySelector:()=>({content:'/site/'})},location:new URL('https://example.test/site/en/replay.html'),URL,URLSearchParams,Map,Set,TextEncoder,TextDecoder,structuredClone,Response,DecompressionStream,crypto:webcrypto,btoa,atob,fetch:async url=>{const body=files.get(new URL(url).pathname);return new Response(body||'missing',{status:body?200:404});}};vm.runInNewContext(source,box);return box.window.AgentProvReplay;};
  const reader=setup();
+ const emptyFocus=await reader.query('/api/lens?run=run&harness=codex&session=empty&focus=overview%2Fagent_network');
+ assert.equal(emptyFocus.nodes[0].id,emptyNode.id);
+ assert.equal((await reader.query('/api/events?run=run&harness=codex&session=empty')).total,0);
+ await assert.rejects(()=>reader.query('/api/lens?run=run&harness=codex&session=empty&focus=outside'),/outside the recorded session/);
  assert.equal((await reader.query('/api/search/sources?run=run')).sources[0].content.ref,'saved');
  assert.equal((await reader.query('/api/compare/records?run=run')).sources_read,1);
  for(const query of ['run=legacy','run=run&cursor=wrong','run=not-exported'])await assert.rejects(()=>reader.query('/api/compare/records?'+query),/not included|not found/);

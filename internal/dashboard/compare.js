@@ -35,7 +35,7 @@ window.AgentCompareUI=(()=>{
     try{
       const runs=await api.j('/api/runs');
       if(request!==epoch||!$('compare-dialog').open)return;
-      const options=runs.map(r=>`<option value="${e(r.run)}">${e(r.run)} (${e(r.events)})</option>`).join('');
+      const options=runs.map(r=>`<option value="${e(r.run)}" title="${e(r.run)}">${e(window.runDisplayName?.(r.run)||r.run)} (${e(r.events)})</option>`).join('');
       $('compare-a').innerHTML=options;$('compare-b').innerHTML=`<option value="">${e(t('Choose another run'))}</option>`+options;
       if(!runs.some(r=>r.run===current.a)){current.a=run;current.data=null;}
       if(!runs.some(r=>r.run===current.b)){current.b='';current.data=null;}
@@ -81,7 +81,8 @@ window.AgentCompareUI=(()=>{
     if(!data){$('compare-results').textContent='';$('compare-task-note').textContent='';$('compare-more').hidden=true;return;}
     for(const side of ['a','b']){
       const saved=data[side],coverage=saved.coverage;
-      $("compare-run-"+side).textContent=saved.run;
+      $("compare-run-"+side).textContent=window.runDisplayName?.(saved.run)||saved.run;
+      $("compare-run-"+side).title=saved.run;
       $("compare-task-"+side).textContent=data.tasks[side]||t('Task not recorded');
       const capture=coverage.runtime_coverage?.capture;
       const times=saved.records.filter(r=>r.evidence.entry||r.evidence.category==='runtime').map(r=>r.evidence.recorded_at).filter(at=>at&&Number.isFinite(Date.parse(at))).sort((a,b)=>Date.parse(a)-Date.parse(b));

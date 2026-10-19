@@ -1757,6 +1757,8 @@ let cur=null, tlOffset=0; const TL_LIMIT=50;
 let SIGS=[], SIG_OFFSET=0; const SIG_LIMIT=12;
 let EV_FILTER=null, EV_OFFSET=0; const EV_LIMIT=50;
 const INITIAL=new URLSearchParams(location.search);
+const RUN_LABELS={{.RunLabels}}||{};
+function runDisplayName(run){return RUN_LABELS[run]?tr(RUN_LABELS[run]):run;}
 let SESSION_SCOPE=INITIAL.get('session')&&INITIAL.get('harness')?{harness:INITIAL.get('harness'),session_id:INITIAL.get('session')}:null;
 const sessionGraphViews=new Map();
 const relatedSessionHistory=[];
@@ -1989,7 +1991,7 @@ async function refreshRuns(keep,isCurrent=()=>true){
   if(!runs.length){sel.innerHTML=("<option>"+esc(tr("no runs"))+"</option>");$('#verify').style.display='none';$('#profilebar').innerHTML='<div class="empty">'+esc(tr('No execution records yet. Record a run or open a signed demo.'))+'</div>';return null;}
   $('#verify').style.display='';
   const want=keep||sel.value||runs[0].run;
-  sel.innerHTML=runs.map(r=>`<option value="${esc(r.run)}"${r.run===want?' selected':''}>${esc(r.run)} (${r.events})</option>`).join('');
+  sel.innerHTML=runs.map(r=>`<option value="${esc(r.run)}" title="${esc(r.run)}"${r.run===want?' selected':''}>${esc(runDisplayName(r.run))} (${r.events})</option>`).join('');
   return sel.value;
 }
 

@@ -207,7 +207,7 @@ window.AgentProvReplay = (() => {
       const index=await asset(session?session.lenses:run.lenses),key=(p.get('lens')||'default')+'/'+(p.get('detail')||'summary');
       if(!index.views[key])fail('Unknown graph view');
       const [view,nodes]=await Promise.all([asset(index.views[key]),asset(p.get('focus')?index.focus_nodes:index.nodes)]);
-      if(session&&p.get('focus')&&!index.present.includes(p.get('focus'))&&!view.manifest.nodes.some(n=>n.id===p.get('focus')))fail('Focus is outside the recorded session graph');
+      if(session&&p.get('focus')&&!(index.present||[]).includes(p.get('focus'))&&!view.manifest.nodes.some(n=>n.id===p.get('focus')))fail('Focus is outside the recorded session graph');
       return lensView({views:{[key]:view},nodes,present:index.present},p);
     }
     if(path==='timeline')return pageEvents(await asset(run.timeline)||[],p);

@@ -54,6 +54,31 @@ func TestDashboardUnknownRoutesDoNotRenderTheRunPage(t *testing.T) {
 	}
 }
 
+func TestRunLabelsArePresentationOnly(t *testing.T) {
+	db := newDashboardTestDB(t)
+	insertDashboardEvent(t, db, "label-event", "execve", `{}`)
+	server := Server{DB: db, RunLabels: map[string]string{"run-dash": "Diagnostic repair: before"}}
+	for _, lang := range []string{"en", "zh-CN"} {
+		w := httptest.NewRecorder()
+		server.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/?lang="+lang, nil))
+		if w.Code != 200 || !strings.Contains(w.Body.String(), `"run-dash":"Diagnostic repair: before"`) {
+			t.Fatalf("missing presentation label: %d", w.Code)
+		}
+		w = httptest.NewRecorder()
+		server.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/runs?lang="+lang, nil))
+		var runs []runSummary
+		if err := json.Unmarshal(w.Body.Bytes(), &runs); err != nil || len(runs) != 1 || runs[0].Run != "run-dash" || strings.Contains(w.Body.String(), "Diagnostic repair") {
+			t.Fatalf("run identity changed: %s", w.Body.String())
+		}
+	}
+	if got := i18n.T(i18n.Chinese, "Diagnostic repair: before"); got != "诊断修复 · 修复前" {
+		t.Fatalf("unexpected Chinese title: %s", got)
+	}
+	if got := i18n.T(i18n.Chinese, "Diagnostic repair: after"); got != "诊断修复 · 修复后" {
+		t.Fatalf("unexpected Chinese title: %s", got)
+	}
+}
+
 func TestDashboardCopyHasChineseCatalogEntries(t *testing.T) {
 	// New copy must have a translation. Browser checks separately verify that
 	// these lookups are actually used in rendered controls and error states.

@@ -100,6 +100,7 @@ func ReplayScript() []byte { return replayJS }
 type Server struct {
 	DB               *sql.DB
 	ReplayExports    *ReplayExports
+	RunLabels        map[string]string // Presentation-only titles; evidence identities stay unchanged.
 	replayProjection *replayProjection
 }
 
@@ -592,7 +593,8 @@ func (s Server) index(w http.ResponseWriter, r *http.Request) {
 	err := indexTemplate.Execute(&page, struct {
 		Lang                   i18n.Locale
 		EnglishURL, ChineseURL string
-	}{lang, i18n.URL(r.URL.RequestURI(), i18n.English), i18n.URL(r.URL.RequestURI(), i18n.Chinese)})
+		RunLabels              map[string]string
+	}{lang, i18n.URL(r.URL.RequestURI(), i18n.English), i18n.URL(r.URL.RequestURI(), i18n.Chinese), s.RunLabels})
 	if err != nil {
 		http.Error(w, i18n.T(lang, "dashboard unavailable"), http.StatusInternalServerError)
 		return

@@ -42,7 +42,9 @@ func TestOfflineReplayFreezesOneRunAndSavedContent(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO tool_calls (id,run_id,status,result_ref,created_at) VALUES ('unsaved-tool','selected-run','completed',?,'2026-10-18T00:00:01Z')`, currentFile); err != nil {
 		t.Fatal(err)
 	}
-	p, err := (Server{DB: db}).PrepareOfflineReplay(ctx, "selected-run")
+	p, err := (Server{DB: db, RunLabels: map[string]string{
+		"selected-run": "Diagnostic repair: before", "other-run": "EXCLUDED-RUN-TITLE",
+	}}).PrepareOfflineReplay(ctx, "selected-run")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,6 +86,12 @@ func TestOfflineReplayFreezesOneRunAndSavedContent(t *testing.T) {
 		reader.Close()
 		if err != nil {
 			t.Fatal(err)
+		}
+		if bytes.Contains(data, []byte("EXCLUDED-RUN-TITLE")) {
+			t.Fatal("excluded run title leaked into replay")
+		}
+		if (f.Name == "en/index.html" || f.Name == "zh-CN/index.html") && !bytes.Contains(data, []byte("Diagnostic repair: before")) {
+			t.Fatal("selected run title missing from replay")
 		}
 		if f.Name == "export-inventory.json" {
 			if replayDigest(data) != p.InventorySHA256 {

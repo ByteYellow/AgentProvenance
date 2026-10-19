@@ -108,10 +108,12 @@ func demoCmd() *cobra.Command {
 				return err
 			}
 			defer ln.Close()
-			exports := dashboard.NewReplayExports(dashboard.Server{DB: db})
+			dashboardServer := dashboard.Server{DB: db, RunLabels: demoRunLabels(selected)}
+			exports := dashboard.NewReplayExports(dashboardServer)
 			defer exports.Close()
+			dashboardServer.ReplayExports = exports
 			mux := http.NewServeMux()
-			mux.Handle("/", dashboard.Server{DB: db, ReplayExports: exports}.Handler())
+			mux.Handle("/", dashboardServer.Handler())
 			mux.HandleFunc("/demos/", demoGallery(selected))
 			server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 			done := make(chan error, 1)
@@ -160,6 +162,16 @@ func demoCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "print JSON (also disables browser launch)")
 	cmd.AddCommand(demoExportCmd())
 	return cmd
+}
+
+func demoRunLabels(entries []demo.Entry) map[string]string {
+	labels := make(map[string]string)
+	for _, entry := range entries {
+		if entry.Run != "" {
+			labels[entry.Run] = entry.Title
+		}
+	}
+	return labels
 }
 
 // Captures sharing a guide describe one investigation. Keep its recorded runs

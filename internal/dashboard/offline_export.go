@@ -149,7 +149,11 @@ func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySe
 		return nil, err
 	}
 	defer snapshot.Close()
-	frozen := Server{DB: snapshot.DB}
+	labels := map[string]string{}
+	if label := s.RunLabels[run]; label != "" {
+		labels[run] = label
+	}
+	frozen := Server{DB: snapshot.DB, RunLabels: labels}
 	get := replayResource(ctx, frozen.Handler())
 	raw, err := get("/api/runs")
 	if err != nil {
@@ -192,7 +196,7 @@ func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySe
 			return nil, projectErr
 		}
 		defer projection.Close()
-		frozen = Server{DB: projection.DB, replayProjection: projection}
+		frozen = Server{DB: projection.DB, RunLabels: labels, replayProjection: projection}
 		omissions = projection.omitted
 		get = replayResource(ctx, frozen.Handler())
 		if err := projection.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE run_id=?`, run).Scan(&selected.Events); err != nil {

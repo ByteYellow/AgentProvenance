@@ -192,6 +192,19 @@ async function main() {
     }
     report.ui='graph, files, session paging, graph navigation and language passed';
 
+    for(const [lang,before,after] of [['en','Diagnostic repair: before','Diagnostic repair: after'],['zh-CN','诊断修复 · 修复前','诊断修复 · 修复后']]){
+      await page.goto(new URL(lang+'/replay.html?run=run-e9c3f452461a',site).href);
+      await page.waitForFunction(()=>window._lensManifest && document.querySelector('#runsel')?.options.length);
+      assert.ok((await page.locator('#runsel option:checked').innerText()).startsWith(before));
+      assert.equal(await page.locator('#runsel').inputValue(),'run-e9c3f452461a');
+      await page.locator('[data-investigation="compare"]').click();
+      await page.waitForFunction(()=>document.querySelector('#compare-a')?.options.length>1);
+      assert.ok((await page.locator('#compare-a option[value="run-e9c3f452461a"]').innerText()).startsWith(before));
+      assert.ok((await page.locator('#compare-b option[value="run-2267309eda57"]').innerText()).startsWith(after));
+      await page.locator('#compare-close').click();
+    }
+    report.runLabels='English and Chinese run and comparison selectors preserve evidence IDs';
+
     // The same scanner must find the same saved records through both readers.
     const live=await browser.newPage();await live.goto(new URL('/?run=run-dbc2adf273d4&live=0',native).href);
     await live.waitForFunction(()=>window.AgentEvidenceSearch && window._lensManifest);
@@ -263,7 +276,7 @@ async function main() {
     for(const lang of ['en','zh-CN']){
       await page.goto(new URL(lang+'/index.html',site).href);
       const links=await page.locator('a[href]').evaluateAll(a=>[...new Set(a.map(x=>x.href).filter(s=>/\/(demos|guides)\/[^/]+\.html/.test(s)))]);
-      assert.equal(links.length,manifest.guides.length-6+9);
+      assert.equal(links.length,manifest.guides.filter(g=>!g.ID.startsWith('release-v')).length+11);
       assert.equal(await page.locator('a[href*="benchmarks"]').count(),0);
       const allGuides=[...new Set([...links,...manifest.guides.map(g=>new URL(lang+'/guides/'+g.ID+'.html',site).href)])];
       for(const href of allGuides){

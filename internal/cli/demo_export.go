@@ -83,7 +83,7 @@ func demoExportCmd() *cobra.Command {
 			return err
 		}
 		defer cleanup()
-		server := dashboard.Server{DB: db}
+		server := dashboard.Server{DB: db, RunLabels: demoRunLabels(catalog)}
 		writer := &staticdata.Writer{Root: stage}
 		visibleRuns := []string{}
 		for _, entry := range catalog {

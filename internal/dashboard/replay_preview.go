@@ -58,7 +58,7 @@ type ReplayExports struct {
 }
 
 func NewReplayExports(server Server) *ReplayExports {
-	return &ReplayExports{server: Server{DB: server.DB}, ttl: 10 * time.Minute, timeout: 5 * time.Minute}
+	return &ReplayExports{server: Server{DB: server.DB, RunLabels: server.RunLabels}, ttl: 10 * time.Minute, timeout: 5 * time.Minute}
 }
 
 func (m *ReplayExports) Close() {

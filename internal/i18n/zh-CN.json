@@ -234,6 +234,8 @@
   "Agent team": "Agent 团队",
   "Investigation workflow": "完整调查流程",
   "Investigate a failed task": "调查一次失败任务",
+  "Diagnostic repair: before": "诊断修复 · 修复前",
+  "Diagnostic repair: after": "诊断修复 · 修复后",
   "Follow a real agent and reviewer through tests, denied diagnostics, evidence search and a two-run comparison.": "沿主 Agent 与审查者的真实执行，查看测试、诊断拒绝、证据搜索和前后对比。",
   "Replay the repair": "回放修复后的执行",
   "Continue the same native session, disable unnecessary diagnostics and inspect the successful report.": "继续原生会话，关闭不必要的诊断，查看成功生成的报表。",
