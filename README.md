@@ -80,8 +80,8 @@ To replay offline, download the CLI:
 
 Download the archive for your platform and its `.sha256` file from
 [Releases](https://github.com/ByteYellow/AgentProvenance/releases).
-The archive example below uses the published v0.9.0 release. The current source
-adds the investigation-and-repair demo described below; see [release status](#release-status).
+The archive example below uses v0.10.0, including the investigation-and-repair
+demo described below; see [release status](#release-status).
 
 | Platform | Archive suffix |
 | --- | --- |
@@ -93,9 +93,9 @@ adds the investigation-and-repair demo described below; see [release status](#re
 On Linux x86-64, verify and extract the downloaded archive:
 
 ```sh
-sha256sum -c agentprov_v0.9.0_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.10.0_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.9.0_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.10.0_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -532,7 +532,7 @@ evidence is kept as recorded.
 
 ## Release status
 
-v0.10.0 is in release review. It connects related sessions, saved-content search,
+v0.10.0 connects related sessions, saved-content search,
 Run comparison and selective offline sharing in the Dashboard. AppArmor and
 seccomp records explain access decisions, while basic and detailed capture
 presets let users choose how much Agent context to retain.

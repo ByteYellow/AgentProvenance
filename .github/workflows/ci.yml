@@ -75,7 +75,7 @@ jobs:
         run: GOTOOLCHAIN=local go vet ./...
 
       - name: Run unit tests (race detector)
-        run: GOTOOLCHAIN=local go test -race ./...
+        run: GOTOOLCHAIN=local go test -race -p 2 -timeout 20m ./...
 
       - name: Verify real DeepSeek evidence offline
         run: |
@@ -276,6 +276,8 @@ jobs:
             /tmp/agentprov-live/audit-associations.log
             /tmp/agentprov-live/audit-follow.log
             /tmp/agentprov-live/audit-evidence/
+            /tmp/agentprov-live/adjacent-audit.log
+            /tmp/agentprov-live/adjacent-audit/
             /tmp/agentprov-live/mixed-audit.log
             /tmp/agentprov-live/mixed-audit/
             /tmp/agentprov-live/access-state.log

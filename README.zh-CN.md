@@ -75,8 +75,8 @@ AgentProvenance 把任务要求、工具返回结果和操作系统中的实际�
 需要离线回放时，下载 CLI：
 
 在[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应平台的
-压缩包和同名 `.sha256` 校验文件。下载示例使用已发布的 v0.9.0；
-下文的调查与修复示例随当前源码提供，详情见[版本进展](#版本进展)。
+压缩包和同名 `.sha256` 校验文件。下载示例使用 v0.10.0，
+包含下文的调查与修复示例，详情见[版本进展](#版本进展)。
 
 | 平台 | 压缩包后缀 |
 | --- | --- |
@@ -88,9 +88,9 @@ AgentProvenance 把任务要求、工具返回结果和操作系统中的实际�
 以 Linux x86-64 为例，下载后校验并解压：
 
 ```sh
-sha256sum -c agentprov_v0.9.0_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.10.0_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.9.0_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.10.0_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -493,7 +493,7 @@ CLI 和工具输出默认英文，原始证据不翻译。
 
 ## 版本进展
 
-v0.10.0 正在进行发布前确认。本版把关联会话、正文搜索、执行对比和选择性离线分享
+v0.10.0 把关联会话、正文搜索、执行对比和选择性离线分享
 串成完整的调查流程，并接入 AppArmor、seccomp 的访问控制记录。
 采集支持基础档和详细档，用户可以按需要选择 Agent 上下文的留存范围。
 
