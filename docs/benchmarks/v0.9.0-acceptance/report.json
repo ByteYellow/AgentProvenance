@@ -2,7 +2,7 @@
   "schema_version": "agentprovenance.v090_acceptance/v1",
   "checked_at": "2026-10-08",
   "base_commit": "186e6c7ce889df0c414fd01c65bf504b44273c58",
-  "scope": "v0.9.0 A1-A4 and B1; x86 KVM/K3s regression; no ARM live rerun or 24-hour soak",
+  "scope": "v0.9.0 agent-context capture, session binding, configuration history and saved-evidence reading; x86 KVM/K3s regression; ARM live rerun and 24-hour soak excluded",
   "binaries": {
     "agentprov": "ff10e1e9ed95dbb97dddca6033b74fba43d6767c790260bfb5dcd09d64104c08",
     "agentprov-sensor": "0e1331b77173527c8c4937e6e5324b16f1809174b1e8f7fa31fa40df3a5724ee",
