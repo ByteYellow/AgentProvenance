@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"database/sql"
-	"sync"
 	"testing"
 )
 
@@ -56,23 +55,20 @@ func TestRetryBusyWritesOnceAfterAnotherWriterCommits(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer other.Close()
-	contended, committed := make(chan struct{}), make(chan error, 1)
-	go func() { <-contended; committed <- tx.Commit() }()
-	var once sync.Once
 	attempts := 0
 	err = RetryBusy(context.Background(), func() error {
 		attempts++
 		_, err := other.Exec(`UPDATE leases SET status=status||'-updated' WHERE id='lock'`)
-		if IsBusy(err) {
-			once.Do(func() { close(contended) })
+		if attempts == 1 && IsBusy(err) {
+			// Finish the competing commit before returning the real busy error.
+			// Retry correctness must not depend on CI scheduling or disk latency.
+			if commitErr := tx.Commit(); commitErr != nil {
+				t.Fatal(commitErr)
+			}
 		}
 		return err
 	})
-	once.Do(func() { close(contended) })
-	if commitErr := <-committed; commitErr != nil {
-		t.Fatal(commitErr)
-	}
-	if err != nil || attempts < 2 {
+	if err != nil || attempts != 2 {
 		t.Fatalf("attempts=%d err=%v", attempts, err)
 	}
 	var status string
