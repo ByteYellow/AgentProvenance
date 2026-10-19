@@ -2,11 +2,12 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"os"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/spf13/cobra"
 )
 
@@ -24,18 +25,16 @@ func internalCmd() *cobra.Command {
 	return cmd
 }
 
-// internalHookLogCmd appends the hook event's raw JSON stdin to a run's hook log
+// internalHookLogCmd appends the hook event's retained JSON to a run's hook log
 // as one line. This is the command every entry in launch's per-run Claude Code
 // settings overlay points at; the resulting JSONL is folded into the graph by
 // `hooks bridge` at seal time.
 //
-// It reads all of stdin, then appends it plus a newline in a single O_APPEND
-// write so concurrent hook processes do not interleave typical (single-line)
-// events. Very large multi-line payloads can still split under load; the bridge
-// tolerates partial lines, and the essential events (tool calls, delegation,
-// SendMessage) are single-line.
+// Input and log size are bounded. Retention and redaction precede the write;
+// malformed input is replaced by a body-free diagnostic, never an agent error.
 func internalHookLogCmd() *cobra.Command {
 	var file string
+	var capture captureFlags
 	cmd := &cobra.Command{
 		Use:    "hook-log",
 		Short:  "append a hook event (stdin JSON) to a run hook log",
@@ -45,36 +44,45 @@ func internalHookLogCmd() *cobra.Command {
 			if file == "" {
 				return commandErrorf("--file is required")
 			}
-			data, err := io.ReadAll(cmd.InOrStdin())
+			policy, err := capture.policy(cmd, false)
 			if err != nil {
 				return err
 			}
-			// Stamp a real wall-clock timestamp. Hook stdin carries no time field,
-			// so without this the bridge falls back to a synthetic epoch and the
-			// resulting tool_call windows cannot be time-joined to kernel effects.
-			// Injected as `_ts` so a real `ts` (if a future hook adds one) still
-			// wins in the bridge's firstStr("ts","_ts","timestamp") order.
-			data = stampHookTS(data)
+			data, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), agentcontext.MaxLineBytes+1))
+			code := ""
+			switch {
+			case err != nil:
+				code = "hook_input_read_failed"
+			case len(data) > agentcontext.MaxLineBytes:
+				code = "hook_input_limit"
+			default:
+				// Hook stdin has no timestamp; stamp before retaining the fields
+				// used to correlate tool windows with kernel events.
+				data, err = agentcontext.RetainHookEvent(stampHookTS(data), *policy)
+				if errors.Is(err, agentcontext.ErrHookCaptureLimit) {
+					code = "hook_input_limit"
+				} else if err != nil {
+					code = "hook_input_invalid"
+				} else if len(data)+1 > agentcontext.MaxLineBytes {
+					code = "hook_input_limit"
+				}
+			}
+			if code != "" {
+				data = agentcontext.HookCaptureDiagnostic(code)
+				fmt.Fprintf(cmd.ErrOrStderr(), "hook-log: %s\n", code)
+			}
 			// A hook must never break the agent: swallow write errors to stderr
 			// rather than returning nonzero (a nonzero PreToolUse hook can abort
 			// the agent's tool call). Missing evidence is acceptable; a broken
 			// agent run is not.
-			f, err := os.OpenFile(file, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), commandText(cmd, "hook-log: open: %v\n"), err)
-				return nil
-			}
-			defer f.Close()
-			if len(data) > 0 && data[len(data)-1] != '\n' {
-				data = append(data, '\n')
-			}
-			if _, err := f.Write(data); err != nil {
+			if err := appendHookLog(file, append(data, '\n'), agentcontext.MaxInputBytes); err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), commandText(cmd, "hook-log: write: %v\n"), err)
 			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&file, "file", "", "hook log file to append to")
+	capture.bind(cmd)
 	return cmd
 }
 
@@ -82,12 +90,12 @@ func internalHookLogCmd() *cobra.Command {
 // payload is not a JSON object it is returned unchanged (the bridge tolerates
 // unstamped lines).
 func stampHookTS(data []byte) []byte {
-	var obj map[string]any
-	if err := json.Unmarshal(data, &obj); err != nil {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(data, &obj); err != nil || obj == nil {
 		return data
 	}
 	if _, ok := obj["_ts"]; !ok {
-		obj["_ts"] = time.Now().UTC().Format(time.RFC3339Nano)
+		obj["_ts"], _ = json.Marshal(time.Now().UTC().Format(time.RFC3339Nano))
 	}
 	stamped, err := json.Marshal(obj)
 	if err != nil {

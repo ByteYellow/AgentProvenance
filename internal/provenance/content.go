@@ -45,6 +45,8 @@ type TextContentInput struct {
 	SourceID  string
 	MediaType string
 	Text      string
+	// Redacted preserves an upstream redaction marker; local masking still runs.
+	Redacted bool
 	// MaxBytes optionally narrows the source and redacted-byte budget.
 	MaxBytes int64
 }
@@ -96,7 +98,7 @@ func (s ObjectStore) PutTextContent(input TextContentInput) (TextContent, error)
 	manifest := TextManifest{
 		SchemaVersion: textContentSchema, Bytes: int64(len(text)),
 		SHA256: hex.EncodeToString(sum[:]), MediaType: input.MediaType,
-		Redacted: changed, Chunks: []TextChunk{},
+		Redacted: changed || input.Redacted, Chunks: []TextChunk{},
 	}
 	for pos := 0; pos < len(text); {
 		end := pos + TextChunkBytes
@@ -129,6 +131,12 @@ func (s ObjectStore) PutTextContent(input TextContentInput) (TextContent, error)
 		return TextContent{}, err
 	}
 	return TextContent{Ref: obj.Hash, TextManifest: manifest}, nil
+}
+
+// RedactText applies the same JSON-aware masking as saved content, before an
+// upstream capture writes its own durable copy.
+func RedactText(input string) (string, bool) {
+	return redactText(input, 0)
 }
 
 // Decode JSON string escapes before matching credentials, including JSON tool
@@ -199,7 +207,7 @@ func VerifyTextContent(db *sql.DB, runID, ref string) error {
 
 // ReadTextContentPage uses run-scoped, hash-checked stored bytes, never a source
 // transcript or a current workspace file. Offsets count redacted UTF-8 bytes.
-func ReadTextContentPage(db *sql.DB, runID, ref string, offset, limit int64) (ContentPage, error) {
+func ReadTextContentPage(db contentObjectReader, runID, ref string, offset, limit int64) (ContentPage, error) {
 	var manifestObject struct {
 		Payload struct {
 			Kind     string       `json:"kind"`
@@ -289,13 +297,22 @@ func ReadTextContentPage(db *sql.DB, runID, ref string, offset, limit int64) (Co
 	return page, nil
 }
 
-func readContentObject(db *sql.DB, runID, ref string, target any) error {
+type contentObjectReader interface {
+	QueryRow(string, ...any) *sql.Row
+}
+
+type contentLookupError struct{ err error }
+
+func (e *contentLookupError) Error() string { return "stored content lookup: " + e.err.Error() }
+func (e *contentLookupError) Unwrap() error { return e.err }
+
+func readContentObject(db contentObjectReader, runID, ref string, target any) error {
 	if runID == "" || !strings.HasPrefix(ref, "sha256:") {
 		return fmt.Errorf("run id and content hash are required")
 	}
 	var path string
 	if err := db.QueryRow(`SELECT path FROM provenance_objects WHERE run_id = ? AND hash = ?`, runID, ref).Scan(&path); err != nil {
-		return fmt.Errorf("stored content lookup: %w", err)
+		return &contentLookupError{err: err}
 	}
 	info, err := os.Stat(path)
 	if err != nil || !info.Mode().IsRegular() {
@@ -333,7 +350,7 @@ func readContentObject(db *sql.DB, runID, ref string, target any) error {
 
 // ReadObjectPayload loads a small registered object's payload. Large text lives
 // in independently bounded chunks and must use ReadTextContentPage instead.
-func ReadObjectPayload(db *sql.DB, runID, ref string, target any) error {
+func ReadObjectPayload(db contentObjectReader, runID, ref string, target any) error {
 	var obj struct {
 		Schema  string          `json:"schema"`
 		RunID   string          `json:"run_id"`

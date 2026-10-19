@@ -2,7 +2,8 @@
 
 [English](../capabilities.md) | 中文
 
-这里汇总证据模型、进阶命令、部署方式和架构。首次使用请从[快速开始](../../README.zh-CN.md#快速开始)进入；v0.9.0 的会话、配置和采集报告见 [Agent 会话指南](agent-context.md)。
+这里汇总证据模型、进阶命令、部署方式和架构。首次使用请从[快速开始](../../README.zh-CN.md#快速开始)进入。
+会话、配置、搜索、对比和采集设置见 [Agent 会话指南](agent-context.md)。
 
 ## 安全闭环
 
@@ -22,7 +23,7 @@ security analysis     安全分析
   behavior baseline / suspicious event / taint lineage / risk decision
 
 response              响应
-  audit / deny / kill / quarantine / taint / forensics / 飞书或钉钉通知
+  audit / deny / kill / quarantine / taint / forensics
 ```
 
 传统主机监控关注“这个进程做了什么”。AgentProvenance 在此基础上补充
@@ -31,7 +32,7 @@ Agent、任务和工具调用的上下文，进一步回答：“这次行为属
 
 当前已实现证据图、运行时关联、diff/blame、遥测批次清单、策略判定、
 风险与基线偏差信号、响应记录、污点标记、隔离、取证导出和原生 eBPF 传感器。
-飞书、钉钉等通知适配器仍属于后续计划；Falco、Tetragon 接收器保留兼容性维护。
+暂不扩展飞书、钉钉等通知适配器；Falco、Tetragon 接收器保留兼容性维护。
 
 ## 核心模型
 
@@ -474,7 +475,7 @@ Qwen，以及本地 vLLM/Ollama 服务。未配置 API Key 时会使用离线测
 
 ## 可视化界面
 
-v0.9.0 在图谱下方加入默认收起的 **Agent 会话**，包含对话与工具、权限与配置、采集情况。
+图谱下方提供默认收起的 **Agent 会话**，包含对话与工具、权限与配置、采集情况。
 完整工具输出和文件正文在独立阅读区打开，不依赖会话展开。
 操作步骤和最新截图见 [Agent 会话指南](agent-context.md)及 [DeepSeek 示例](../../demo/deepseek-context/README.zh-CN.md)。
 
@@ -946,9 +947,5 @@ docs/                   产品、部署、接口、验收与设计文档
 
 ## 后续方向
 
-- 扩大 TLS 格式与二进制支持范围，包括 ARM64 Go TLS 响应、BoringSSL 和更多裁剪符号的程序。
-- 补充更长时间运行与真实磁盘故障验收；现有压力测试和本轮回归结果见[验收报告](../benchmarks/v0.9.0-acceptance/README.zh-CN.md)。
-- 研究异机存证和采集时签名。
-- [中心证据服务](central-evidence-service-design.md)目前处于设计阶段。
-
-历史路线图保留在 [v0.7 设计](roadmap-v0.7.md)中，当前单节点交付范围见[收尾标准](project-closeout.md)。
+暂不新增功能，重点提升证据与关联的准确性、采集稳定性和使用体验。
+后续根据实际使用中发现的问题，完善调查流程和文档，降低使用难度。

@@ -4,6 +4,12 @@ package i18n
 // translate arbitrary JSON, recorded commands, paths, or evidence bodies.
 var RuntimeDiagnostics = NewDiagnosticCatalog(
 	"ELF section table missing or outside file",
+	"ELF metadata section index outside table",
+	"ELF symbol/string section outside file",
+	"invalid ELF section-name string table",
+	"invalid ELF dynamic symbol string-table link",
+	"ambiguous dynamic TLS symbol %s",
+	"dynamic TLS symbol %s is missing or outside executable segments",
 	"ELF symbol/string metadata exceeds 32 MiB",
 	"ELF symbol/string section exceeds 16 MiB",
 	"Go TLS Read exceeds the 128 return-probe attachment limit",

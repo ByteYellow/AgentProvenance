@@ -6,6 +6,19 @@ import (
 	"testing"
 )
 
+func TestHTTP10VersionSurvivesReassembly(t *testing.T) {
+	r := NewReassembler()
+	for _, step := range []struct{ direction, data string }{
+		{Request, "GET /v1/models HTTP/1.0\r\nHost: api.example\r\n\r\n"},
+		{Response, "HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\n{}"},
+	} {
+		msgs := r.Add(Chunk{PID: 42, Conn: 9, Direction: step.direction, Data: []byte(step.data)})
+		if len(msgs) != 1 || msgs[0].Protocol != ProtoHTTP10 || msgs[0].StreamID != 0 {
+			t.Fatalf("HTTP/1.0 metadata changed: %+v", msgs)
+		}
+	}
+}
+
 // feed splits full into byte slices of size split and feeds them as ordered
 // Chunks on one connection/direction, returning all completed messages.
 func feed(r *Reassembler, pid uint32, conn uint64, dir string, full string, split int) []Message {
@@ -81,27 +94,21 @@ func TestContentLengthResponse(t *testing.T) {
 	}
 }
 
-func TestCloseFramedResponseFlushedOnNextRequestSameConn(t *testing.T) {
-	// A close-framed response (no Content-Length, no chunked) has no in-band
-	// terminator, so parseOne can't complete it. On a reused SSL* connection the
-	// next request is the completion signal — the response must not be lost.
+func TestCloseFramedResponseWaitsForExplicitBoundary(t *testing.T) {
 	r := NewReassembler()
 	resp := "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n" +
 		`{"model":"deepseek-v4-flash","choices":[{"message":{"content":"hi"}}]}`
 	if msgs := r.Add(Chunk{PID: 1, Conn: 9, Direction: Response, Data: []byte(resp)}); len(msgs) != 0 {
 		t.Fatalf("close-framed response should buffer, not emit yet: got %d", len(msgs))
 	}
-	// A new request on the same conn (SSL* reused) flushes the pending response.
 	req := "POST /v2 HTTP/1.1\r\nHost: api.deepseek.com\r\nContent-Length: 0\r\n\r\n"
 	msgs := r.Add(Chunk{PID: 1, Conn: 9, Direction: Request, Data: []byte(req)})
-	var gotResp bool
-	for _, m := range msgs {
-		if m.Direction == Response && m.Status == 200 && m.Model == "deepseek-v4-flash" {
-			gotResp = true
-		}
+	if len(msgs) != 1 || msgs[0].Direction != Request {
+		t.Fatalf("a request must not end the buffered response: %+v", msgs)
 	}
-	if !gotResp {
-		t.Fatalf("pending close-framed response not flushed on next request: %+v", msgs)
+	msgs = r.Release(Chunk{PID: 1, Conn: 9})
+	if len(msgs) != 1 || msgs[0].Status != 200 || msgs[0].Model != "deepseek-v4-flash" || !msgs[0].Truncated {
+		t.Fatalf("explicit boundary must retain the partial response: %+v", msgs)
 	}
 }
 

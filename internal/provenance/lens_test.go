@@ -29,8 +29,38 @@ func TestStoredAppProcessEdgesExposeInferenceWithoutRewritingLegacy(t *testing.T
 			if edge.Derived || edge.DerivationRule != "" {
 				t.Fatal("legacy signed relation was reinterpreted")
 			}
-		} else if !edge.Derived || edge.DerivationRule != correlation.AppProcessMethod || edge.Confidence != correlation.AppProcessConfidence || len(edge.EvidenceRefs) != 3 {
+		} else if !edge.Derived || edge.DerivationRule != correlation.AppProcessMethod || edge.Confidence == nil || *edge.Confidence != correlation.AppProcessConfidence || len(edge.EvidenceRefs) != 3 {
 			t.Fatalf("inference metadata missing: %+v", edge)
+		}
+	}
+}
+
+func TestPriorCorrelationVersionsRemainDerived(t *testing.T) {
+	db := newLensTestDB(t)
+	for _, tc := range []struct{ prefix, kind, rule string }{
+		{"agent-correlation-v2-", "agent_syscall", "agentprov.command_time_process/v2"},
+		{"llm-command-v2-", "llm_caused", "agentprov.intent_command_scope/v2"},
+		{"tls-pair-v1-http1_serial-", "llm_call", "agentprov.tls_connection_exchange/v1"},
+	} {
+		if _, err := db.Exec(`INSERT INTO graph_edges (id,run_id,from_id,to_id,edge_type,source_event_id,created_at)
+			VALUES (?,'run-lens','from','runtime_event/to',?,'source','2026-09-28T00:00:00Z')`, tc.prefix+"old", tc.kind); err != nil {
+			t.Fatal(err)
+		}
+		edges, err := graphLensEdges(db, "run-lens")
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, edge := range edges {
+			if edge.ID == tc.prefix+"old" {
+				found = true
+				if !edge.Derived || edge.DerivationRule != tc.rule || edge.Confidence == nil || *edge.Confidence != 0.8 || len(edge.EvidenceRefs) < 2 {
+					t.Fatalf("old inference was relabeled: %+v", edge)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("old edge missing")
 		}
 	}
 }
@@ -70,7 +100,7 @@ func TestGraphLensDataFlowDerivesSecretToNetworkEdge(t *testing.T) {
 	if edge.FromID != "runtime_process/pid/4242" || edge.ToID == "" {
 		t.Fatalf("derived edge path=%s -> %s", edge.FromID, edge.ToID)
 	}
-	if edge.DerivationRule != "dataflow.same_process.secret_to_network.aggregate.v1" || edge.Confidence < 0.8 {
+	if edge.DerivationRule != "dataflow.same_process.secret_to_network.aggregate.v1" || edge.Confidence == nil || *edge.Confidence < 0.8 {
 		t.Fatalf("derived metadata not strong enough: %+v", edge)
 	}
 	if got := intFromEdgeData(edge, "source_count"); got != 1 {

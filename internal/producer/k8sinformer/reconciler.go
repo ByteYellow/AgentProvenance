@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/accesscontrol"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -31,6 +33,7 @@ type ContainerScope struct {
 	StartedAt      string
 	EndedAt        string
 	ObservedAt     string
+	AccessControl  []accesscontrol.Declaration
 }
 
 type ScopeResolver interface {
@@ -58,7 +61,7 @@ type ReconcilerReport struct {
 type bindingState struct {
 	bindingID   string
 	containerID string
-	cgroupID    string
+	scope       ContainerScope
 	closed      bool
 }
 
@@ -153,10 +156,28 @@ func (r *ScopeReconciler) Upsert(ctx context.Context, pod *corev1.Pod) error {
 					continue
 				}
 				previous.closed = true
+				previous.scope.EndedAt = endedAt
 				r.mu.Lock()
 				r.bindings[key] = previous
 				r.mu.Unlock()
 				r.bindingsClosed.Add(1)
+			}
+			if !observed.historical {
+				declarations := accessDeclarations(pod, status.Name, now.Format(time.RFC3339Nano))
+				if !sameAccessDeclarations(previous.scope.AccessControl, declarations) {
+					// Refresh only configuration evidence, preserving the original
+					// run, execution interval and binding identity.
+					scope := previous.scope
+					scope.AccessControl, scope.ObservedAt = declarations, now.Format(time.RFC3339Nano)
+					if _, err := r.Sink.Bind(ctx, scope); err != nil {
+						errs = append(errs, fmt.Sprintf("configuration %s: %v", status.Name, err))
+						continue
+					}
+					previous.scope = scope
+					r.mu.Lock()
+					r.bindings[key] = previous
+					r.mu.Unlock()
+				}
 			}
 			if observed.historical {
 				r.mu.Lock()
@@ -191,14 +212,19 @@ func (r *ScopeReconciler) Upsert(ctx context.Context, pod *corev1.Pod) error {
 			r.mu.Unlock()
 			r.bindingsClosed.Add(1)
 		}
-		bindingID, err := r.Sink.Bind(ctx, ContainerScope{
+		scope := ContainerScope{
 			RunID: r.runID(pod), SessionID: string(pod.UID), PodName: pod.Name,
 			Namespace: pod.Namespace, PodUID: string(pod.UID), NodeName: pod.Spec.NodeName,
 			ContainerName: status.Name, ContainerID: containerID, Image: status.Image,
 			ServiceAccount: pod.Spec.ServiceAccountName, Labels: cloneLabels(pod.Labels),
 			PodIP: pod.Status.PodIP, CgroupID: cgroupID, PID: pid,
 			StartedAt: startedAt, EndedAt: endedAt, ObservedAt: now.Format(time.RFC3339Nano),
-		})
+		}
+		// The current Pod specification cannot describe a missed prior attempt.
+		if !observed.historical {
+			scope.AccessControl = accessDeclarations(pod, status.Name, scope.ObservedAt)
+		}
+		bindingID, err := r.Sink.Bind(ctx, scope)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("bind %s: %v", status.Name, err))
 			continue
@@ -207,7 +233,7 @@ func (r *ScopeReconciler) Upsert(ctx context.Context, pod *corev1.Pod) error {
 		if observed.historical {
 			r.recovered[key] = containerID
 		} else {
-			r.bindings[key] = bindingState{bindingID: bindingID, containerID: containerID, cgroupID: cgroupID, closed: endedAt != ""}
+			r.bindings[key] = bindingState{bindingID: bindingID, containerID: containerID, scope: scope, closed: endedAt != ""}
 		}
 		latency := now.Sub(pod.CreationTimestamp.Time).Seconds() * 1000
 		if latency >= 0 {

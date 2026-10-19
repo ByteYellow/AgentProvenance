@@ -37,8 +37,8 @@ echo "== bind ToolCallScope"
   --attempt attempt-phase1-accept \
   --tool-call tool-phase1-accept \
   --process process-phase1-accept \
-  --container-id agentprov-phase1-container \
-  --cgroup-id agentprov-phase1-cgroup \
+  --container-id agentprov-demo-container \
+  --cgroup-id agentprov-demo-cgroup \
   --pid 4242 \
   --started-at "$STARTED_AT" \
   --source phase1_accept
@@ -51,7 +51,7 @@ TETRAGON_INGEST="$(cat /tmp/agentprov-accept-tetragon.json)"
 assert_contains "$TETRAGON_INGEST" '"receiver_summary"'
 assert_contains "$TETRAGON_INGEST" '"row_results"'
 assert_contains "$TETRAGON_INGEST" '"detected_format": "tetragon"'
-assert_contains "$TETRAGON_INGEST" '"correlation_method": "pid_time_window:pid+time"'
+assert_contains "$TETRAGON_INGEST" '"correlation_method": "pid_time_window:pid+time+container_id"'
 
 echo "== assert normalized telemetry"
 TELEMETRY_OUTPUT="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept)"
@@ -65,7 +65,7 @@ assert_contains "$TELEMETRY_JSON" '"event_count": 3'
 assert_contains "$TELEMETRY_JSON" '"result_set_id": "sha256:'
 assert_contains "$TELEMETRY_JSON" '"page_hash": "sha256:'
 assert_contains "$TELEMETRY_JSON" '"tool_call_id": "tool-phase1-accept"'
-assert_contains "$TELEMETRY_JSON" '"correlation_method": "pid_time_window:pid+time"'
+assert_contains "$TELEMETRY_JSON" '"correlation_method": "pid_time_window:pid+time+container_id"'
 TELEMETRY_PAGE1="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-phase1-accept --limit 2 --json)"
 assert_contains "$TELEMETRY_PAGE1" '"event_count": 2'
 assert_contains "$TELEMETRY_PAGE1" '"has_more": true'

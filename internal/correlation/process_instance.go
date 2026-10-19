@@ -15,7 +15,10 @@ type ProcessStore interface {
 	bindingExecer
 }
 
-func processBindingID(instance string) string {
+func processBindingID(instance, host string) string {
+	if host != "" {
+		instance = host + "\x00" + instance
+	}
 	return fmt.Sprintf("bind-native-%x", sha256.Sum256([]byte(instance)))
 }
 
@@ -36,21 +39,58 @@ func validProcessInstance(instance string, pid int64) bool {
 	return err == nil && nerr == nil && p == pid && ns > 0
 }
 
-func resolveProcessInstance(db Queryer, runID, instance string, pid int64, at string) (Match, bool, error) {
+// ProcessInstanceBootID returns the kernel boot identity only for a validated
+// native process instance. It is shared by scope attribution and graph analysis.
+func ProcessInstanceBootID(instance string, pid int64) string {
 	if !validProcessInstance(instance, pid) {
+		return ""
+	}
+	boot, _, _ := strings.Cut(instance, ":")
+	return strings.ToLower(boot)
+}
+
+func CanonicalProcessInstance(instance string, pid int64) string {
+	boot := ProcessInstanceBootID(instance, pid)
+	if boot == "" {
+		return ""
+	}
+	parts := strings.Split(instance, ":")
+	start, _ := strconv.ParseUint(parts[2], 10, 64)
+	return fmt.Sprintf("%s:%d:%d", boot, pid, start)
+}
+
+// RelatedProcessLifetime accepts validated, canonical identities only.
+func RelatedProcessLifetime(parent, child string) bool {
+	p, c := strings.Split(parent, ":"), strings.Split(child, ":")
+	if len(p) != 3 || len(c) != 3 || p[0] != c[0] {
+		return false
+	}
+	ps, pe := strconv.ParseUint(p[2], 10, 64)
+	cs, ce := strconv.ParseUint(c[2], 10, 64)
+	return pe == nil && ce == nil && ps > 0 && ps <= cs
+}
+
+func resolveProcessInstance(db Queryer, runID, instance, host string, pid int64, at string) (Match, bool, error) {
+	instance = CanonicalProcessInstance(instance, pid)
+	if instance == "" {
 		return Match{}, false, nil
 	}
-	return resolveWindow(db, runID, "kernel_process_instance", "boot+pid+start", "id = ? AND pid = ?", .98, at, false, processBindingID(instance), pid)
+	basis := "boot+pid+start"
+	if host != "" {
+		basis = "host+" + basis
+	}
+	return resolveWindow(db, runID, "kernel_process_instance", basis, "id = ? AND pid = ?", .98, at, false, processBindingID(instance, host), pid)
 }
 
 // ObserveProcessInstance retains a process-scoped anchor, never a new whole-
 // cgroup binding. Only an observed cgroup/container or a kernel-identified
 // parent can seed it; bare PID/PPID proximity cannot establish ancestry.
 func ObserveProcessInstance(db ProcessStore, raw RawIdentity) error {
-	if !validProcessInstance(raw.ProcessInstanceID, raw.PID) {
+	instance := CanonicalProcessInstance(raw.ProcessInstanceID, raw.PID)
+	if instance == "" {
 		return nil
 	}
-	id := processBindingID(raw.ProcessInstanceID)
+	id := processBindingID(instance, raw.HostID)
 	var existing string
 	err := db.QueryRow(`SELECT id FROM execution_context_bindings WHERE id=?`, id).Scan(&existing)
 	if err == nil {
@@ -63,16 +103,14 @@ func ObserveProcessInstance(db ProcessStore, raw RawIdentity) error {
 	if err != nil {
 		return err
 	}
-	if !ok && validProcessInstance(raw.ParentProcessInstanceID, raw.PPID) {
-		child := strings.Split(raw.ProcessInstanceID, ":")
-		parent := strings.Split(raw.ParentProcessInstanceID, ":")
-		childNS, _ := strconv.ParseUint(child[2], 10, 64)
-		parentNS, _ := strconv.ParseUint(parent[2], 10, 64)
-		if child[0] == parent[0] && parentNS <= childNS && raw.PID != raw.PPID {
-			seed, ok, err = resolveProcessInstance(db, raw.RunID, raw.ParentProcessInstanceID, raw.PPID, raw.Timestamp)
-		}
+	if seed.Ambiguous {
+		return nil
 	}
-	if err != nil || !ok {
+	parent := CanonicalProcessInstance(raw.ParentProcessInstanceID, raw.PPID)
+	if !ok && RelatedProcessLifetime(parent, instance) && raw.PID != raw.PPID {
+		seed, ok, err = resolveProcessInstance(db, raw.RunID, parent, raw.HostID, raw.PPID, raw.Timestamp)
+	}
+	if err != nil || !ok || seed.Ambiguous {
 		return err
 	}
 	b := seed.Binding
@@ -81,6 +119,7 @@ func ObserveProcessInstance(db ProcessStore, raw RawIdentity) error {
 	// Preserve the root scope's source/confidence, but the method and exact
 	// binding ID distinguish lifecycle evidence from polling-based matches.
 	b.Confidence = seed.Confidence
+	b.ConfidenceSet = true
 	_, err = RecordBinding(db, b)
 	return err
 }
@@ -88,13 +127,14 @@ func ObserveProcessInstance(db ProcessStore, raw RawIdentity) error {
 // CloseProcessInstance uses the captured lifetime identity. A delayed exit
 // must not close a different process that has reused the same numeric PID.
 func CloseProcessInstance(db ProcessStore, raw RawIdentity) error {
-	if !validProcessInstance(raw.ProcessInstanceID, raw.PID) {
+	instance := CanonicalProcessInstance(raw.ProcessInstanceID, raw.PID)
+	if instance == "" {
 		return nil
 	}
 	_, err := time.Parse(time.RFC3339Nano, raw.Timestamp)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(`UPDATE execution_context_bindings SET ended_at=? WHERE id=? AND ended_at=''`, raw.Timestamp, processBindingID(raw.ProcessInstanceID))
+	_, err = db.Exec(`UPDATE execution_context_bindings SET ended_at=? WHERE id=? AND ended_at=''`, raw.Timestamp, processBindingID(instance, raw.HostID))
 	return err
 }

@@ -2,10 +2,11 @@
 
 English | [中文](README.zh-CN.md)
 
-The agreed A1–A4 and B1 scope passed the checks below, based on
+Agent-context capture, session binding, configuration history and saved-evidence
+reading passed the checks below, based on
 `186e6c7ce889df0c414fd01c65bf504b44273c58` plus the fixes in this change.
 [report.json](report.json) preserves checks, counts, binary/object hashes and
-initial failures. This is an acceptance result, not a published release.
+initial failures. These checks were recorded on 2026-10-08, before the release.
 
 | Gate | Result |
 | --- | --- |
@@ -35,7 +36,7 @@ At commit `1b279ba`, [CI](https://github.com/ByteYellow/AgentProvenance/actions/
 and the [portable archive workflow](https://github.com/ByteYellow/AgentProvenance/actions/runs/37796934625)
 passed, including live amd64 capture on Go 1.23–1.26, historical compatibility,
 and Linux/macOS amd64/arm64 builds and extracted-archive checks. Publishing was
-skipped as intended for the review branch; v0.9.0 has not been published.
+skipped as intended for the review branch at the time of these checks.
 
 ## Fixes found by acceptance
 

@@ -96,7 +96,7 @@ func deriveGraphLensEdges(lens string, events map[string]lensEvent, detail strin
 				CreatedAt:      sink.CreatedAt,
 				Derived:        true,
 				DerivationRule: rule,
-				Confidence:     conf,
+				Confidence:     graphConfidence(conf),
 				EvidenceRefs:   []string{src.NodeID, sink.NodeID},
 			})
 		}
@@ -127,6 +127,7 @@ func deriveAggregatedDataFlowEdges(sources, sinks []lensEvent) []GraphLensEdge {
 				continue
 			}
 			rule := strings.Replace(baseRule, ".v1", ".aggregate.v1", 1)
+			rule = strings.Replace(rule, ".v2", ".aggregate.v2", 1)
 			toID := "egress_group/" + safeGraphID(scopeKey)
 			key := scopeKey + "|" + rule
 			group := groups[key]
@@ -167,7 +168,7 @@ func deriveAggregatedDataFlowEdges(sources, sinks []lensEvent) []GraphLensEdge {
 			CreatedAt:      group.createdAt,
 			Derived:        true,
 			DerivationRule: group.rule,
-			Confidence:     group.confidence,
+			Confidence:     graphConfidence(group.confidence),
 			EvidenceRefs:   capStringSlice(refs, 80),
 			Data: map[string]any{
 				"source_count":       len(group.sourceRefs),

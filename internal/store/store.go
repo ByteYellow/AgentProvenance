@@ -12,7 +12,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 19
+const SchemaVersion = 20
 
 type Paths struct {
 	Root       string
@@ -108,6 +108,11 @@ func EnsureSchema(db *sql.DB) error {
 		}
 		if version > SchemaVersion {
 			return i18n.Errorf("database schema %d is newer than supported %d; downgrade is not supported", version, SchemaVersion)
+		}
+		// Current stores need no DDL or version-row writes. In particular, a
+		// read-only CLI query must not compete with the collector's writer.
+		if version == SchemaVersion {
+			return nil
 		}
 	}
 
@@ -489,6 +494,13 @@ func EnsureSchema(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS telemetry_native_counters (
 			name TEXT PRIMARY KEY,
 			value INTEGER NOT NULL DEFAULT 0
+		);`,
+		`CREATE TABLE IF NOT EXISTS telemetry_audit_checkpoints (
+			id TEXT PRIMARY KEY,
+			run_id TEXT NOT NULL,
+			revision INTEGER NOT NULL,
+			checkpoint_json TEXT NOT NULL,
+			updated_at TEXT NOT NULL
 		);`,
 		`CREATE TABLE IF NOT EXISTS record_batches (
 			id TEXT PRIMARY KEY,

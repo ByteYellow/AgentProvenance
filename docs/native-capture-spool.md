@@ -33,6 +33,8 @@ that every kernel event will be retained under arbitrary load.
 Each accepted normalized row is appended to a mode-0600 file and fsynced.
 The file's directory is synced when created. A batch is sealed at its size or
 event limit, or on the next flush tick, and then becomes eligible for processing.
+Sealing runs independently of replay, so a slow backlog does not delay the flush
+timer. The worker rechecks queue priorities after each batch.
 Schema 17 metadata distinguishes `initializing`, `capturing`, `queued`,
 `processing`, and `processed` batches. No producer row can enter an initializing
 batch: the file must first be created, its directory synced, and the metadata
@@ -45,7 +47,13 @@ A partial final row is truncated and counted as `dropped_partial_recovery`.
 Interrupted processing returns to the queue. A per-batch, per-line receipt is
 committed in the same transaction as its event, graph side effects, event
 windows, and evidence batch manifest. Retrying the same spool row does not
-duplicate the accepted event. Two separate captures with identical bytes remain
+duplicate the accepted event. A file is processed in chunks of at most 16 rows;
+a chunk also ends after the current row once 50 ms has elapsed. Events, receipts,
+manifests and counters commit together in each chunk. If a later chunk fails,
+earlier commits remain available for retry. Transient SQLite busy/locked errors
+receive at most three attempts; other failures retain their original error.
+Opening a store at the current schema version does not write migration metadata.
+Two separate captures with identical bytes remain
 two events. Hashes verify spool contents before replay.
 
 Restart may discard an empty or missing initializing file, since it could not

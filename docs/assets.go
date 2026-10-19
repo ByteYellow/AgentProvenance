@@ -9,6 +9,7 @@ import (
 // Files excludes acceptance reports, internal plans and implementation proposals.
 //
 //go:embed release-start.md capabilities.md agent-context.md graph-commands.md amd64-kvm-k3s.md native-capture-spool.md deployment-modes.md security-commands.md compliance.md python-sdk.md ai-tools.md ai-access.md telemetry-schema.md comparisons.md supply-chain-demo.md falco-receiver.md openapi.yaml agent-context-api.yaml releases/*.md zh-CN/release-start.md zh-CN/capabilities.md zh-CN/agent-context.md zh-CN/graph-commands.md zh-CN/amd64-kvm-k3s.md zh-CN/native-capture-spool.md zh-CN/deployment-modes.md zh-CN/security-commands.md zh-CN/compliance.md zh-CN/python-sdk.md zh-CN/ai-tools.md zh-CN/ai-access.md zh-CN/telemetry-schema.md zh-CN/comparisons.md zh-CN/supply-chain-demo.md zh-CN/falco-receiver.md zh-CN/openapi.yaml zh-CN/releases/*.md img/*.png img/*.gif assets/*.svg assets/*.png
+//go:embed audit-associations-api.yaml replay-export-api.yaml zh-CN/audit-associations-api.yaml
 var Files embed.FS
 
 type Entry struct{ ID, Title, Path, Group string }
@@ -46,7 +47,7 @@ func Catalog() []Entry {
 		{"telemetry", "Telemetry schema", "docs/telemetry-schema.md", "Integrate"},
 		{"comparisons", "Related projects", "docs/comparisons.md", "Reference"},
 		{"falco", "Falco compatibility", "docs/falco-receiver.md", "Reference"},
-		{"release-notes", "Release notes", "docs/releases/v0.9.0.md", "Reference"},
+		{"release-notes", "Release notes", "docs/releases/v0.10.0.md", "Reference"},
 		{"changelog", "Release history", "CHANGELOG.md", "Reference"},
 	}
 }
@@ -64,7 +65,7 @@ func Groups() []Group {
 // Pages also includes linked historical release notes without crowding navigation.
 func Pages() []Entry {
 	pages := Catalog()
-	for _, version := range []string{"v0.7.2", "v0.8.0", "v0.8.1", "v0.8.2-rc.1", "v0.8.2-rc.2", "v0.8.2"} {
+	for _, version := range []string{"v0.7.2", "v0.8.0", "v0.8.1", "v0.8.2-rc.1", "v0.8.2-rc.2", "v0.8.2", "v0.9.0"} {
 		pages = append(pages, Entry{"release-" + version, version, "docs/releases/" + version + ".md", "Reference"})
 	}
 	return pages

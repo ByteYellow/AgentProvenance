@@ -20,6 +20,17 @@ func TestCapturedTimestampPrecedesDrain(t *testing.T) {
 	}
 }
 
+func TestNormalizedMachineIdentity(t *testing.T) {
+	for _, bad := range []string{"", "uninitialized", "host-name", "00000000000000000000000000000000", "0123456789abcdef0123456789abcdeg"} {
+		if got := normalizedMachineID(bad); got != "" {
+			t.Fatalf("accepted invalid machine identity %q", got)
+		}
+	}
+	if got := normalizedMachineID("0123456789ABCDEF0123456789ABCDEF\n"); got != "0123456789abcdef0123456789abcdef" {
+		t.Fatalf("machine identity=%q", got)
+	}
+}
+
 func TestOpenRetryRetainsObservedFailure(t *testing.T) {
 	e := sensorbpfSensorEvent{Kind: eventOpen, Dport: 1, Conn: ^uint64(5)} // -ENXIO
 	copy(e.Path[:], "/dev/tty")

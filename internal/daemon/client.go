@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -168,6 +169,28 @@ func (c Client) TelemetryCorrelations(runID, eventID string) (telemetry.Correlat
 	}
 	var report telemetry.CorrelationReport
 	err := c.getJSON("/v1/telemetry/correlations?"+values.Encode(), &report)
+	return report, err
+}
+
+func (c Client) TelemetryAuditAssociations(ctx context.Context, opts telemetry.AuditAssociationOptions) (telemetry.AuditAssociationReport, error) {
+	var report telemetry.AuditAssociationReport
+	q := url.Values{"run": {opts.RunID}}
+	if opts.EventID != "" {
+		q.Set("event", opts.EventID)
+	}
+	if opts.Cursor != "" {
+		q.Set("cursor", opts.Cursor)
+	}
+	if opts.Limit != 0 {
+		q.Set("limit", fmt.Sprint(opts.Limit))
+	}
+	if _, err := telemetry.ParseAuditAssociationQuery(q); err != nil {
+		return report, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/v1/telemetry/audit-associations?"+q.Encode(), nil)
+	if err == nil {
+		err = c.do(req, &report)
+	}
 	return report, err
 }
 

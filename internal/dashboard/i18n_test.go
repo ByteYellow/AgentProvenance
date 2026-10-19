@@ -54,12 +54,37 @@ func TestDashboardUnknownRoutesDoNotRenderTheRunPage(t *testing.T) {
 	}
 }
 
+func TestRunLabelsArePresentationOnly(t *testing.T) {
+	db := newDashboardTestDB(t)
+	insertDashboardEvent(t, db, "label-event", "execve", `{}`)
+	server := Server{DB: db, RunLabels: map[string]string{"run-dash": "Diagnostic repair: before"}}
+	for _, lang := range []string{"en", "zh-CN"} {
+		w := httptest.NewRecorder()
+		server.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/?lang="+lang, nil))
+		if w.Code != 200 || !strings.Contains(w.Body.String(), `"run-dash":"Diagnostic repair: before"`) {
+			t.Fatalf("missing presentation label: %d", w.Code)
+		}
+		w = httptest.NewRecorder()
+		server.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/api/runs?lang="+lang, nil))
+		var runs []runSummary
+		if err := json.Unmarshal(w.Body.Bytes(), &runs); err != nil || len(runs) != 1 || runs[0].Run != "run-dash" || strings.Contains(w.Body.String(), "Diagnostic repair") {
+			t.Fatalf("run identity changed: %s", w.Body.String())
+		}
+	}
+	if got := i18n.T(i18n.Chinese, "Diagnostic repair: before"); got != "诊断修复 · 修复前" {
+		t.Fatalf("unexpected Chinese title: %s", got)
+	}
+	if got := i18n.T(i18n.Chinese, "Diagnostic repair: after"); got != "诊断修复 · 修复后" {
+		t.Fatalf("unexpected Chinese title: %s", got)
+	}
+}
+
 func TestDashboardCopyHasChineseCatalogEntries(t *testing.T) {
 	// New copy must have a translation. Browser checks separately verify that
 	// these lookups are actually used in rendered controls and error states.
 	patterns := []string{`\{\{tr \.Lang "([^"]+)"`, `\b(?:tr|tx|t|notice)\(\s*"([^"\\]*(?:\\.[^"\\]*)*)"`, `\b(?:tr|tx|t|notice)\(\s*'([^'\\]*(?:\\.[^'\\]*)*)'`}
 	for _, pattern := range patterns {
-		for _, m := range regexp.MustCompile(pattern).FindAllStringSubmatch(string(indexHTML)+string(contextJS), -1) {
+		for _, m := range regexp.MustCompile(pattern).FindAllStringSubmatch(string(indexHTML)+string(contextJS)+string(workspaceJS)+string(accessControlJS)+string(searchJS)+string(compareJS)+string(exportJS), -1) {
 			source := strings.ReplaceAll(m[1], `\'`, `'`)
 			if !i18n.HasChinese(source) {
 				t.Errorf("missing Chinese copy: %q", source)
@@ -100,6 +125,8 @@ func TestDashboardContextVocabularyHasChinese(t *testing.T) {
 		"No records in this selection. See collection status for missing or unsupported sources.",
 		"Runtime capture", "Run-specific dropped events", "Kernel readiness confirmed",
 		"runtime_capture_not_recorded", "node_loss_during_capture", "probe_snapshot_stale",
+		"Operation", "Target", "Status", "Reason", "Saved", "Duplicates", "Skipped", "Failed",
+		"State observed at", "Records read",
 	} {
 		if !i18n.HasChinese(source) {
 			t.Errorf("missing Chinese context vocabulary: %q", source)

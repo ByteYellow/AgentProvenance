@@ -44,6 +44,12 @@ jobs:
           node-version: "22"
       - run: node scripts/test_context_readable.mjs
       - run: node scripts/test_context_coverage.mjs
+      - run: node scripts/test_dashboard_workspace.mjs
+      - run: node scripts/test_search_engine.mjs
+      - run: node scripts/test_compare_engine.mjs
+      - run: node scripts/test_compare_completeness.mjs
+      - run: node scripts/test_static_reader.cjs
+      - run: node scripts/test_evidence_status.cjs
 
   test:
     name: Go tests
@@ -69,7 +75,7 @@ jobs:
         run: GOTOOLCHAIN=local go vet ./...
 
       - name: Run unit tests (race detector)
-        run: GOTOOLCHAIN=local go test -race ./...
+        run: GOTOOLCHAIN=local go test -race -p 2 -timeout 20m ./...
 
       - name: Verify real DeepSeek evidence offline
         run: |
@@ -178,7 +184,7 @@ jobs:
       - name: Install local TLS fixture dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc libssl-dev openssl python3
+          sudo apt-get install -y gcc libssl-dev openssl python3 apparmor-utils
       - name: Build sensor and fixture clients
         run: |
           mkdir -p /tmp/agentprov-live
@@ -203,11 +209,86 @@ jobs:
           cd internal/sensor
           sudo env PATH="$PATH" AGENTPROV_LIVE_GOTLS=1 \
             /tmp/agentprov-live/sensor-test -test.run '^TestLiveGoTLSReadConcurrentStackGrowth$' -test.v
+      - name: Verify OpenSSL read pairing and connection lifecycle isolation
+        run: |
+          cd internal/sensor
+          sudo env PATH="$PATH" AGENTPROV_LIVE_OPENSSL=1 \
+            /tmp/agentprov-live/sensor-test -test.run '^Test(OpenSSLReadObject|TLSMessageMap|LiveOpenSSL)' -test.v -test.timeout=120s \
+            | tee /tmp/agentprov-live/openssl-read.log
+      - name: Verify syscall outcomes and thread-group exits
+        run: |
+          cd internal/sensor
+          sudo env PATH="$PATH" AGENTPROV_LIVE_OUTCOMES=1 AGENTPROV_OUTCOME_EVIDENCE_DIR=/tmp/agentprov-live/outcomes \
+            /tmp/agentprov-live/sensor-test -test.run '^Test(Syscall|ExitSignal|OpenEntry|LiveSyscall)' -test.v -test.timeout=90s \
+            | tee /tmp/agentprov-live/syscall-outcomes.log
+      - name: Verify real audit decisions against native syscall outcomes
+        run: |
+          go test -c -o /tmp/agentprov-live/telemetry-test ./internal/telemetry
+          sudo env AGENTPROV_AUDIT_APPARMOR_LIVE=1 AGENTPROV_AUDIT_SENSOR_LIVE=1 \
+            AGENTPROV_AUDIT_SECCOMP_EVIDENCE=/tmp/agentprov-live/outcomes \
+            AGENTPROV_AUDIT_EVIDENCE_DIR=/tmp/agentprov-live/audit-evidence \
+            /tmp/agentprov-live/telemetry-test -test.run '^TestLive(AppArmorAuditImport|SeccompAuditAssociations)$' -test.v -test.timeout=90s \
+            | tee /tmp/agentprov-live/audit-associations.log
+      - name: Verify audit file following and signed diagnostic replay
+        run: |
+          sudo env AGENTPROV_AUDIT_FOLLOW_INPUT=/tmp/agentprov-live/audit-evidence/apparmor-journal.jsonl \
+            AGENTPROV_AUDIT_EVIDENCE_DIR=/tmp/agentprov-live/audit-evidence \
+            /tmp/agentprov-live/telemetry-test -test.run '^Test(AuditFollow|LiveAuditFileFollow)' -test.v -test.timeout=60s \
+            | tee /tmp/agentprov-live/audit-follow.log
+          sudo chown -R "$(id -u):$(id -g)" /tmp/agentprov-live/audit-evidence
+          AGENTPROV_AUDIT_FOLLOW_INPUT=/tmp/agentprov-live/audit-evidence/apparmor-journal.jsonl \
+            go test ./internal/forensics -run '^TestAuditFollowerSignedRoundtrip$' -v
+      - name: Verify adjacent seccomp calls never borrow executed results
+        run: |
+          sudo env AGENTPROV_AUDIT_ADJACENT_LIVE=1 AGENTPROV_AUDIT_EVIDENCE_DIR=/tmp/agentprov-live/adjacent-audit \
+            /tmp/agentprov-live/telemetry-test -test.run '^TestLiveAuditAdjacentCalls$' -test.v -test.timeout=90s \
+            | tee /tmp/agentprov-live/adjacent-audit.log
+      - name: Verify mixed access-control decisions and both retention presets
+        run: |
+          sudo env AGENTPROV_AUDIT_MIXED_LIVE=1 AGENTPROV_AUDIT_EVIDENCE_DIR=/tmp/agentprov-live/mixed-audit \
+            /tmp/agentprov-live/telemetry-test -test.run '^TestLiveAccessControlMixedMatrix$' -test.v -test.timeout=90s \
+            | tee /tmp/agentprov-live/mixed-audit.log
+          sudo chown -R "$(id -u):$(id -g)" /tmp/agentprov-live/mixed-audit
+          AGENTPROV_AUDIT_MIXED_EVIDENCE=/tmp/agentprov-live/mixed-audit AGENTPROV_AUDIT_MIXED_OUTPUT=/tmp/agentprov-live/mixed-bundles \
+            go test ./internal/forensics -run '^TestLiveMixedAuditSignedRoundtrip$' -v
+          AGENTPROV_AUDIT_MIXED_BUNDLES=/tmp/agentprov-live/mixed-bundles \
+            go test ./internal/dashboard -run '^TestRecordedMixedAuditReplay$' -v
+      - name: Verify task state and automatic procfs snapshots
+        run: |
+          go test -c -o /tmp/agentprov-live/access-state-test ./internal/accesscontrol
+          sudo env AGENTPROV_ACCESS_STATE_LIVE=1 AGENTPROV_ACCESS_STATE_EVIDENCE=/tmp/agentprov-live/access-state \
+            /tmp/agentprov-live/access-state-test -test.v -test.timeout=60s \
+            | tee /tmp/agentprov-live/access-state.log
+          sudo env AGENTPROV_ACCESS_STATE_LIVE=1 AGENTPROV_ACCESS_STATE_EVIDENCE=/tmp/agentprov-live/access-state \
+            /tmp/agentprov-live/sensor-test -test.run '^TestLiveSensorAccessState$' -test.v -test.timeout=30s \
+            | tee /tmp/agentprov-live/sensor-state.log
+          sudo chown -R "$(id -u):$(id -g)" /tmp/agentprov-live/access-state
+          AGENTPROV_ACCESS_STATE_EVENTS=/tmp/agentprov-live/access-state/sensor-state.jsonl \
+            go test ./internal/forensics -run '^TestLiveAccessStateSignedRoundtrip$' -v
+      - name: Make live evidence readable for artifact upload
+        if: always()
+        run: |
+          if [ -d /tmp/agentprov-live ]; then
+            sudo chown -R "$(id -u):$(id -g)" /tmp/agentprov-live
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: amd64-live-evidence-go-${{ matrix.go }}
-          path: /tmp/agentprov-live/acceptance.*
+          path: |
+            /tmp/agentprov-live/acceptance.*
+            /tmp/agentprov-live/openssl-read.log
+            /tmp/agentprov-live/syscall-outcomes.log
+            /tmp/agentprov-live/audit-associations.log
+            /tmp/agentprov-live/audit-follow.log
+            /tmp/agentprov-live/audit-evidence/
+            /tmp/agentprov-live/adjacent-audit.log
+            /tmp/agentprov-live/adjacent-audit/
+            /tmp/agentprov-live/mixed-audit.log
+            /tmp/agentprov-live/mixed-audit/
+            /tmp/agentprov-live/access-state.log
+            /tmp/agentprov-live/sensor-state.log
+            /tmp/agentprov-live/access-state/
 
   phase1-acceptance:
     name: Phase 1 observability smoke
@@ -232,3 +313,16 @@ jobs:
           GOTOOLCHAIN=local go build -o /tmp/agentprov-readiness ./cmd/agentprov
           python3 scripts/accept_daemon_readiness.py \
             --agentprov /tmp/agentprov-readiness --report /tmp/daemon-readiness.json
+
+      - name: Verify audit interfaces with real CLI, HTTP, SDK and MCP
+        run: |
+          python3 scripts/accept_audit_interfaces.py \
+            --agentprov /tmp/agentprov-readiness --report /tmp/audit-interfaces.json
+
+      - name: Upload audit interface acceptance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-interface-acceptance
+          path: /tmp/audit-interfaces.json
+          if-no-files-found: ignore

@@ -2,15 +2,17 @@
 
 [English](README.md) | 中文
 
-先看 DeepSeek 完成一次开发任务，再体验单 Agent 风险调查、团队协作和跨 Pod 执行。七份签名记录都可以在 macOS 或 Linux 上离线回放；两个评估器示例提供独立的接入指南。重新采集所需的环境与凭据见各示例说明。
+先看 DeepSeek 调查并修复一次失败任务，再体验单 Agent 风险调查、团队协作和跨 Pod 执行。九份签名记录都可以在 macOS 或 Linux 上离线回放；两个评估器示例提供独立的接入指南。重新采集所需的环境与凭据见各示例说明。
 
 ## 一条命令打开
 
-从[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。只有自行从源码构建时才需要 Go。本文对应 v0.9.0；该版本压缩包发布前，请使用快速开始中的源码构建路径。CLI 内嵌七份签名采集记录和九个指南入口，包括两个可选评估器示例：
+从[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。本文对应当前源码；新版本发布前，可从当前源码构建，体验新增的调查流程。CLI 内嵌九份签名记录和两个可选评估器示例：
 
 ```sh
 ./agentprov demo                         # gallery: all demos
 ./agentprov demo --list                  # list replay names and setup guides
+./agentprov demo investigation-workflow  # inspection and repair, loaded together
+./agentprov demo investigation-repaired  # start from the successful second run
 ./agentprov demo deepseek-context        # task, tools, configuration and saved files
 ./agentprov demo snake-supply-chain      # one signed capture
 ./agentprov demo multiagent-provenance
@@ -38,7 +40,16 @@ AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
 
 Jev 示例可通过 `--agentprov` 使用包内 CLI，无需自行构建。在线评估需要 Python 和模型接口凭据。
 
-## v0.9.0 新增：一次普通开发任务
+## 完整调查流程：检查、修复、对比与分享
+
+[调查与修复示例](investigation-workflow/README.zh-CN.md)让同一个 DeepSeek 原生会话
+完成两次真实执行。Agent 委派代码审查，运行七项测试，并遇到可选诊断被拒绝。
+随后它关闭多余诊断，成功生成总额仍为 `42.00` 的报表，环境的安全策略保持原样。
+
+从**关联会话**查看委派，搜索具体报错，检查 AppArmor/seccomp 决策，再对比保存的文件，
+最后选择证据导出只读回放。两份签名记录一起加载，回放无需模型账号或虚拟机。
+
+## 普通开发任务
 
 [DeepSeek 会话示例](deepseek-context/README.zh-CN.md)记录为 Python 报表增加按日汇总的真实任务。可查看原始任务、12 组工具输入与结果、五条配置记录、保存的文件正文，以及两条工具与运行时之间的推断关联。七项测试通过是已保存的真实结果，回放时不会重新调用模型。上下文覆盖、运行时覆盖和权限记录分别展示。
 

@@ -123,3 +123,35 @@ func TestSnapshotComparisonHTTPReadsOnlyRecordedRedactedValues(t *testing.T) {
 		t.Fatalf("missing right accepted: %d", w.Code)
 	}
 }
+
+func TestSnapshotFieldsPreserveTypesPathsAndLimits(t *testing.T) {
+	s, ctx := testService(t), context.Background()
+	body := `{"empty":{},"list":[],"a/b":{"~value":null},"integer":9007199254740993,"flag":false}`
+	entry := snapshot(t, s, "fields", "fields", "configuration", "observed", &body)
+	fields, reason, err := s.SnapshotFields(ctx, entry)
+	if err != nil || reason != "" || len(fields) != 5 {
+		t.Fatalf("fields: %+v %s %v", fields, reason, err)
+	}
+	want := map[string]string{"/empty": "{}", "/list": "[]", "/a~1b/~0value": "null", "/integer": "9007199254740993", "/flag": "false"}
+	for _, field := range fields {
+		if field.Value.Preview != want[field.Path] || !field.Value.Present || field.Value.SHA256 == "" {
+			t.Fatalf("field type or identity lost: %+v", field)
+		}
+	}
+	many := map[string]int{}
+	for i := 0; i < 201; i++ {
+		many[fmt.Sprintf("%03d", i)] = i
+	}
+	raw, _ := json.Marshal(many)
+	body = string(raw)
+	entry = snapshot(t, s, "fields", "many", "configuration", "observed", &body)
+	fields, reason, err = s.SnapshotFields(ctx, entry)
+	if err != nil || reason != "comparison_field_limit" || len(fields) != 200 || fields[0].Path != "/000" || fields[199].Path != "/199" {
+		t.Fatalf("field budget: %d %s %v", len(fields), reason, err)
+	}
+	missing := snapshot(t, s, "fields", "missing", "configuration", "observed", nil)
+	fields, reason, err = s.SnapshotFields(ctx, missing)
+	if err != nil || reason != "content_not_recorded" || len(fields) != 0 {
+		t.Fatalf("missing became empty: %+v %s %v", fields, reason, err)
+	}
+}

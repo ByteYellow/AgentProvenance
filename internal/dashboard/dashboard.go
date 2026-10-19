@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"net"
@@ -23,7 +24,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -51,14 +51,58 @@ var contextCSS []byte
 //go:embed context.js
 var contextJS []byte
 
+//go:embed workspace.css
+var workspaceCSS []byte
+
+//go:embed workspace.js
+var workspaceJS []byte
+
+//go:embed access-control.js
+var accessControlJS []byte
+
+//go:embed access-control.css
+var accessControlCSS []byte
+
+//go:embed search-engine.js
+var searchEngineJS []byte
+
+//go:embed search.js
+var searchJS []byte
+
+//go:embed search.css
+var searchCSS []byte
+
+//go:embed compare-engine.js
+var compareEngineJS []byte
+
+//go:embed compare.js
+var compareJS []byte
+
+//go:embed compare.css
+var compareCSS []byte
+
 //go:embed replay.js
 var replayJS []byte
+
+//go:embed offline.js
+var offlineJS []byte
+
+//go:embed export.js
+var exportJS []byte
+
+//go:embed export.css
+var exportCSS []byte
 
 // ReplayScript returns the browser reader used by exported public demos.
 func ReplayScript() []byte { return replayJS }
 
 // Server serves the dashboard over a single read-only *sql.DB.
-type Server struct{ DB *sql.DB }
+type Server struct {
+	DB               *sql.DB
+	ReplayExports    *ReplayExports
+	RunLabels        map[string]string // Presentation-only titles; evidence identities stay unchanged.
+	replayProjection *replayProjection
+}
 
 // Handler returns the dashboard's HTTP routes (static UI + JSON API).
 func (s Server) Handler() http.Handler {
@@ -77,6 +121,27 @@ func (s Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		_, _ = w.Write(contextJS)
 	})
+	mux.HandleFunc("GET /assets/workspace.css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		_, _ = w.Write(workspaceCSS)
+	})
+	mux.HandleFunc("GET /assets/workspace.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		_, _ = w.Write(workspaceJS)
+	})
+	for path, asset := range map[string][]byte{"/assets/search-engine.js": searchEngineJS, "/assets/search.js": searchJS, "/assets/search.css": searchCSS,
+		"/assets/access-control.js": accessControlJS, "/assets/access-control.css": accessControlCSS,
+		"/assets/compare-engine.js": compareEngineJS, "/assets/compare.js": compareJS, "/assets/compare.css": compareCSS,
+		"/assets/export.js": exportJS, "/assets/export.css": exportCSS} {
+		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
+			mime := "application/javascript; charset=utf-8"
+			if strings.HasSuffix(path, ".css") {
+				mime = "text/css; charset=utf-8"
+			}
+			w.Header().Set("Content-Type", mime)
+			_, _ = w.Write(asset)
+		})
+	}
 	mux.HandleFunc("GET /api/runs", s.runs)
 	mux.HandleFunc("GET /api/overview", s.overview)
 	mux.HandleFunc("GET /api/timeline", s.timeline)
@@ -84,12 +149,16 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/graph", s.graph)
 	mux.HandleFunc("GET /api/lens", s.lens)
 	mux.HandleFunc("GET /api/artifact", s.artifact)
+	mux.HandleFunc("GET /api/search/sources", s.searchSources)
+	mux.HandleFunc("GET /api/compare/records", s.compareRecords)
+	mux.HandleFunc("GET /api/audit/associations", s.auditAssociations)
 	mux.HandleFunc("GET /api/egress", s.egress)
 	mux.HandleFunc("GET /api/outbound", s.outbound)
 	mux.HandleFunc("GET /api/processes", s.processes)
 	mux.HandleFunc("GET /api/frameworks", s.frameworks)
 	mux.HandleFunc("GET /api/compliance", s.compliance)
 	mux.Handle("GET /api/context/", http.StripPrefix("/api", (agentcontext.Service{DB: s.DB}).ReadHandler()))
+	s.replayRoutes(mux)
 	return mux
 }
 
@@ -524,7 +593,8 @@ func (s Server) index(w http.ResponseWriter, r *http.Request) {
 	err := indexTemplate.Execute(&page, struct {
 		Lang                   i18n.Locale
 		EnglishURL, ChineseURL string
-	}{lang, i18n.URL(r.URL.RequestURI(), i18n.English), i18n.URL(r.URL.RequestURI(), i18n.Chinese)})
+		RunLabels              map[string]string
+	}{lang, i18n.URL(r.URL.RequestURI(), i18n.English), i18n.URL(r.URL.RequestURI(), i18n.Chinese), s.RunLabels})
 	if err != nil {
 		http.Error(w, i18n.T(lang, "dashboard unavailable"), http.StatusInternalServerError)
 		return
@@ -577,84 +647,29 @@ func (s Server) runs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, out)
 }
 
-// overview bundles verify + signals + risks for one run in a single call.
-// graph verify re-reads and re-hashes every provenance object (seconds for a
-// large run), and the overview endpoint is hit on first load AND on every live
-// refresh. For a read-only dashboard the result is stable until the run's data
-// changes, so cache it keyed by a cheap fingerprint (object + event counts).
-// This turns the multi-second Run Overview into an instant load after the first.
-var (
-	verifyCacheMu sync.Mutex
-	verifyCache   = map[string]verifyCacheEntry{}
-)
-
-type verifyCacheEntry struct {
-	fingerprint string
-	result      any
-}
-
-func (s Server) cachedVerify(run string) any {
-	var objs, evs int
-	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id = ?`, run).Scan(&objs)
-	_ = s.DB.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id = ?`, run).Scan(&evs)
-	fp := fmt.Sprintf("%d:%d", objs, evs)
-	verifyCacheMu.Lock()
-	if e, ok := verifyCache[run]; ok && e.fingerprint == fp {
-		verifyCacheMu.Unlock()
-		return e.result
+// Verify current evidence on each overview request. Counts cannot invalidate a
+// cached result when relationships or object bytes change. Large stores keep
+// their explicit full-verification path, without treating an old bundle record
+// as verification of the current database.
+func (s Server) verifyOverview(run string) any {
+	if s.replayProjection != nil {
+		return map[string]any{"schema_version": "agentprovenance.verify/v1", "run_id": run, "status": "subset",
+			"mode": "unsigned_replay_selection", "message": "Selected evidence; full-run verification is not applied to this sharing copy."}
 	}
-	verifyCacheMu.Unlock()
-
-	// The local dashboard is an investigation UI. Full graph verification can
-	// re-hash tens of thousands of objects and should stay an explicit CLI/API
-	// action for large imported bundles. When a ready forensics bundle exists,
-	// import already verified its embedded object content before committing rows;
-	// surface that fast provenance posture here and keep the page responsive.
-	if bundle := s.cachedBundleVerify(run, objs); bundle != nil {
-		verifyCacheMu.Lock()
-		verifyCache[run] = verifyCacheEntry{fingerprint: fp, result: bundle}
-		verifyCacheMu.Unlock()
-		return bundle
+	var objects int
+	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id = ?`, run).Scan(&objects); err != nil {
+		return provenance.VerifyResult{SchemaVersion: "agentprovenance.verify/v1", RunID: run, Status: "unavailable", Error: err.Error()}
 	}
-
-	var result any
-	if v, err := provenance.Verify(s.DB, run); err == nil {
-		result = v
-	} else {
-		result = map[string]any{"error": err.Error()}
+	if objects > 5000 {
+		return map[string]any{
+			"schema_version": "agentprovenance.verify/v1", "run_id": run,
+			"status": "deferred", "error_count": 0, "warning_count": 1,
+			"mode":    "deferred_full_verify",
+			"message": "full graph verification is available through `agentprov graph verify`",
+		}
 	}
-	verifyCacheMu.Lock()
-	verifyCache[run] = verifyCacheEntry{fingerprint: fp, result: result}
-	verifyCacheMu.Unlock()
+	result, _ := provenance.Verify(s.DB, run)
 	return result
-}
-
-func (s Server) cachedBundleVerify(run string, objectCount int) any {
-	var bundleID, sha, status string
-	var size int64
-	err := s.DB.QueryRow(`SELECT id, sha256, size_bytes, status FROM forensics_bundles
-		WHERE run_id = ? ORDER BY created_at DESC LIMIT 1`, run).Scan(&bundleID, &sha, &size, &status)
-	if err == nil && status == "ready" && sha != "" {
-		return map[string]any{
-			"status":        "ok",
-			"error_count":   0,
-			"warning_count": 0,
-			"mode":          "forensics_bundle",
-			"bundle_id":     bundleID,
-			"bundle_sha256": sha,
-			"bundle_bytes":  size,
-		}
-	}
-	if objectCount > 5000 {
-		return map[string]any{
-			"status":        "deferred",
-			"error_count":   0,
-			"warning_count": 1,
-			"mode":          "deferred_full_verify",
-			"message":       "full graph verification is available through `agentprov graph verify`",
-		}
-	}
-	return nil
 }
 
 func (s Server) overview(w http.ResponseWriter, r *http.Request) {
@@ -664,7 +679,7 @@ func (s Server) overview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := map[string]any{}
-	out["verify"] = s.cachedVerify(run)
+	out["verify"] = s.verifyOverview(run)
 	if sig, err := signals.Export(s.DB, run); err == nil {
 		out["signals"] = sig
 	}
@@ -712,6 +727,16 @@ func (s Server) events(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err.Error(), 500)
 		return
 	}
+	scope, ok := s.sessionScope(w, r)
+	if !ok {
+		return
+	}
+	if scope != nil {
+		q.SessionEventIDs = scope.EventIDs
+		if len(q.SessionEventIDs) == 0 {
+			q.None = true
+		}
+	}
 	page, total, err := s.queryEventsPage(run, q, limit, offset)
 	if err != nil {
 		httpError(w, err.Error(), 500)
@@ -720,7 +745,7 @@ func (s Server) events(w http.ResponseWriter, r *http.Request) {
 	if page == nil {
 		page = []telemetry.EventRecord{}
 	}
-	writeJSON(w, map[string]any{
+	response := map[string]any{
 		"schema_version": "agentprovenance.dashboard_events/v1",
 		"events":         page,
 		"total":          total,
@@ -730,8 +755,19 @@ func (s Server) events(w http.ResponseWriter, r *http.Request) {
 			"run": run, "lens": r.URL.Query().Get("lens"), "group": r.URL.Query().Get("group"),
 			"focus": r.URL.Query().Get("focus"), "type": r.URL.Query().Get("type"),
 			"tool_call": r.URL.Query().Get("tool_call"), "pid": r.URL.Query().Get("pid"),
+			"harness": r.URL.Query().Get("harness"), "session": r.URL.Query().Get("session"),
 		},
-	})
+	}
+	if scope != nil && scope.Audit != nil {
+		relations := map[string]provenance.SessionAuditRelation{}
+		for _, event := range page {
+			if relation, ok := scope.AuditEvents[event.ID]; ok {
+				relations[event.ID] = relation
+			}
+		}
+		response["session_audit"], response["session_associations"] = scope.Audit, relations
+	}
+	writeJSON(w, response)
 }
 
 func (s Server) eventQueryFromRequest(run string, r *http.Request) (eventQuery, error) {
@@ -756,8 +792,8 @@ func (s Server) eventQueryFromRequest(run string, r *http.Request) (eventQuery, 
 		switch {
 		case strings.HasPrefix(focus, "runtime_event/"):
 			q.IDs = []string{strings.TrimPrefix(focus, "runtime_event/")}
-		case strings.HasPrefix(focus, "runtime_process/pid/"):
-			q.PID = strings.TrimPrefix(focus, "runtime_process/pid/")
+		case strings.HasPrefix(focus, "runtime_process/"):
+			q.RuntimeProcessNode = focus
 		case strings.HasPrefix(focus, "process/"):
 			q.ProcessID = focus
 		case !strings.Contains(focus, "/"):
@@ -769,15 +805,17 @@ func (s Server) eventQueryFromRequest(run string, r *http.Request) (eventQuery, 
 }
 
 type eventQuery struct {
-	None       bool
-	IDs        []string
-	Types      []string
-	Type       string
-	ToolCallID string
-	ProcessID  string
-	PID        string
-	PayloadAny []string
-	PayloadNot []string
+	SessionEventIDs    []string
+	None               bool
+	IDs                []string
+	Types              []string
+	Type               string
+	ToolCallID         string
+	ProcessID          string
+	RuntimeProcessNode string
+	PID                string
+	PayloadAny         []string
+	PayloadNot         []string
 }
 
 func applyLensGroupFilter(q *eventQuery, lens, group string) {
@@ -850,6 +888,25 @@ func (s Server) resolveEventRefs(run string, refs []string) ([]string, error) {
 		switch {
 		case strings.HasPrefix(ref, "runtime_event/"):
 			add(strings.TrimPrefix(ref, "runtime_event/"))
+		case strings.HasPrefix(ref, "runtime_process/"):
+			rows, err := s.DB.Query(`SELECT DISTINCT source_event_id FROM graph_edges
+				WHERE run_id=? AND from_id=? AND edge_type='runtime_process_event'`, run, ref)
+			if err != nil {
+				return nil, err
+			}
+			for rows.Next() {
+				var id string
+				if err := rows.Scan(&id); err != nil {
+					rows.Close()
+					return nil, err
+				}
+				add(id)
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return nil, err
+			}
 		case strings.HasPrefix(ref, "policy_decision/"):
 			id := strings.TrimPrefix(ref, "policy_decision/")
 			var eventID string
@@ -933,6 +990,11 @@ func (s Server) queryEventsPage(run string, q eventQuery, limit, offset int) ([]
 func eventWhereClause(run string, q eventQuery) (string, []any) {
 	args := []any{run}
 	clauses := []string{"run_id = ?"}
+	if q.SessionEventIDs != nil {
+		encoded, _ := json.Marshal(q.SessionEventIDs)
+		clauses = append(clauses, "id IN (SELECT value FROM json_each(?))")
+		args = append(args, string(encoded))
+	}
 	if len(q.IDs) > 0 {
 		ph := make([]string, 0, len(q.IDs))
 		for _, id := range q.IDs {
@@ -964,6 +1026,10 @@ func eventWhereClause(run string, q eventQuery) (string, []any) {
 	if q.PID != "" {
 		clauses = append(clauses, "pid = ?")
 		args = append(args, q.PID)
+	}
+	if q.RuntimeProcessNode != "" {
+		clauses = append(clauses, `id IN (SELECT source_event_id FROM graph_edges WHERE run_id=? AND from_id=? AND edge_type='runtime_process_event')`)
+		args = append(args, run, q.RuntimeProcessNode)
 	}
 	if len(q.PayloadAny) > 0 {
 		ors := make([]string, 0, len(q.PayloadAny))
@@ -1000,19 +1066,48 @@ func (s Server) lens(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "run is required", 400)
 		return
 	}
+	scope, ok := s.sessionScope(w, r)
+	if !ok {
+		return
+	}
 	manifest, err := provenance.BuildGraphLens(s.DB, provenance.GraphLensOptions{
-		RunID:    run,
-		Lens:     r.URL.Query().Get("lens"),
-		Focus:    r.URL.Query().Get("focus"),
-		Detail:   r.URL.Query().Get("detail"),
-		Overlays: r.URL.Query()["overlay"],
-		Limit:    atoiClamp(r.URL.Query().Get("limit"), 500, 1, 2000),
+		SessionScope: scope,
+		RunID:        run,
+		Lens:         r.URL.Query().Get("lens"),
+		Focus:        r.URL.Query().Get("focus"),
+		Detail:       r.URL.Query().Get("detail"),
+		Overlays:     r.URL.Query()["overlay"],
+		Limit:        atoiClamp(r.URL.Query().Get("limit"), 500, 1, 2000),
 	})
 	if err != nil {
-		httpError(w, err.Error(), 500)
+		status := http.StatusInternalServerError
+		if errors.Is(err, provenance.ErrSessionFocus) {
+			status = http.StatusBadRequest
+		}
+		httpError(w, err.Error(), status)
 		return
 	}
 	writeJSON(w, manifest)
+}
+
+func (s Server) sessionScope(w http.ResponseWriter, r *http.Request) (*provenance.GraphSessionScope, bool) {
+	q := r.URL.Query()
+	if q.Get("harness") == "" && q.Get("session") == "" {
+		return nil, true
+	}
+	scope, err := s.sessionGraphScope(r.Context(), q.Get("run"), q.Get("harness"), q.Get("session"))
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, agentcontext.ErrInvalidArgument) {
+			status = http.StatusBadRequest
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			status = http.StatusNotFound
+		}
+		httpError(w, "Recorded session scope could not be loaded.", status)
+		return nil, false
+	}
+	return scope, true
 }
 
 // renderLLMMessage turns a captured llm_message provenance object into a readable

@@ -96,6 +96,19 @@ class RewardTests(unittest.TestCase):
 
 
 class ClientTests(unittest.TestCase):
+    def test_audit_associations_cli_and_validation(self):
+        result = {"schema_version": "agentprovenance.audit_associations/v1", "items": []}
+        client = FakeClient({"telemetry": result})
+        self.assertEqual(client.audit_associations("run-x", event_id="audit-x", limit=1, cursor="next"), result)
+        self.assertEqual(client.calls[0], ["telemetry", "audit-associations", "--run", "run-x", "--limit", "1", "--json", "--event", "audit-x", "--cursor", "next"])
+        for limit in (0, 501, True, 1.5, "1", None):
+            with self.assertRaises(ValueError):
+                client.audit_associations("run-x", limit=limit)
+        for run in ("", "  ", 1, "x" * 1025):
+            with self.assertRaises(ValueError):
+                client.audit_associations(run)
+        self.assertEqual(len(client.calls), 1)
+
     def test_score_trajectory_assembles_report(self):
         client = FakeClient({
             "record": {"run_id": "run-x", "schema_version": "agentprovenance.record_manifest/v1"},
@@ -133,15 +146,27 @@ class DaemonModeTests(unittest.TestCase):
     """Daemon hot-path routing: with daemon_url set, record/eval_context/signals
     go over HTTP instead of forking the CLI."""
 
-    def _serve(self, routes):
+    def _serve(self, routes, *, token=None, redirect=None):
         import http.server
         import threading
+
+        requests = []
+        self.requests = requests
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def log_message(self, *a):
                 pass
 
             def _reply(self, key):
+                requests.append((self.path, self.headers.get("Authorization")))
+                if token is not None and self.headers.get("Authorization") != "Bearer " + token:
+                    self.send_error(401)
+                    return
+                if redirect:
+                    self.send_response(302)
+                    self.send_header("Location", redirect)
+                    self.end_headers()
+                    return
                 body = json.dumps(routes.get(key, {})).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -167,6 +192,30 @@ class DaemonModeTests(unittest.TestCase):
 
         self.addCleanup(_cleanup)
         return f"http://127.0.0.1:{server.server_address[1]}"
+
+    def test_audit_query_and_daemon_auth(self):
+        from urllib.parse import parse_qs, urlparse
+        from unittest.mock import patch
+
+        payload = {"schema_version": "agentprovenance.audit_associations/v1", "items": [{"event_id": "audit", "operations": [{"syscall_result": 0}]}]}
+        url = self._serve({"/v1/telemetry/audit-associations": payload}, token="test-token")
+        with patch.dict(os.environ, {"AGENTPROV_DAEMON_TOKEN": "env-token"}):
+            client = ap.Client(daemon_url=url, env={"AGENTPROV_DAEMON_TOKEN": "test-token"}, timeout=5)
+            self.assertEqual(client.audit_associations("run / one", event_id="event & one", cursor="cursor", limit=1), payload)
+            query = parse_qs(urlparse(self.requests[-1][0]).query)
+            self.assertEqual(query, {"run": ["run / one"], "event": ["event & one"], "cursor": ["cursor"], "limit": ["1"]})
+            client.env.clear()
+            with self.assertRaisesRegex(RuntimeError, "status=401"):
+                client.audit_associations("run")
+
+    def test_daemon_token_is_not_forwarded_on_redirect(self):
+        target = self._serve({})
+        target_requests = self.requests
+        source = self._serve({}, redirect=target + "/redirected")
+        client = ap.Client(daemon_url=source, env={"AGENTPROV_DAEMON_TOKEN": "test-token"}, timeout=5)
+        with self.assertRaisesRegex(RuntimeError, "status=302"):
+            client.audit_associations("run")
+        self.assertEqual(target_requests, [])
 
     def test_record_and_signals_over_daemon(self):
         url = self._serve({

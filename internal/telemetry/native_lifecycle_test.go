@@ -97,6 +97,30 @@ func TestNativeLifetimeRejectsPIDReuseAndParentSpoof(t *testing.T) {
 	}
 }
 
+func TestNativeLifetimeDoesNotInheritOtherHost(t *testing.T) {
+	db, paths := nativeTestStore(t)
+	n := nativeTestStream(t, db, paths, NativeStreamOptions{Ingest: JSONLIngestOptions{DropUncorrelated: true}, BatchEvents: 1})
+	nativeBind(t, db, "scope", "run-lifetime")
+	for i, event := range []map[string]any{
+		{"host_id": "host-a", "pid": 10, "ppid": 1, "cgroup_id": "scope", "process_instance_id": lifecycleBoot + ":10:100", "parent_process_instance_id": lifecycleBoot + ":1:50"},
+		{"host_id": "host-b", "pid": 11, "ppid": 10, "cgroup_id": "other", "process_instance_id": lifecycleBoot + ":11:200", "parent_process_instance_id": lifecycleBoot + ":10:100"},
+	} {
+		event["event_type"], event["command"] = "execve", "true"
+		event["timestamp"] = fmt.Sprintf("2026-09-19T00:00:00.%d00Z", i+1)
+		raw, _ := json.Marshal(event)
+		if _, err := n.Write(append(raw, '\n')); err != nil {
+			t.Fatal(err)
+		}
+		if err := n.Process(32); err != nil {
+			t.Fatal(err)
+		}
+	}
+	status, err := ReadNativeStreamStatus(db)
+	if err != nil || status.Counters["ingested"] != 1 || status.PendingEvents != 1 {
+		t.Fatalf("cross-host parent inherited: %+v %v", status, err)
+	}
+}
+
 func TestNativeDrainHonorsCancellation(t *testing.T) {
 	db, paths := nativeTestStore(t)
 	n := nativeTestStream(t, db, paths, NativeStreamOptions{BatchEvents: 1})

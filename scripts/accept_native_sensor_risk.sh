@@ -70,7 +70,11 @@ assert_contains "$TELEMETRY_JSON" '"event_type": "execve"'
 assert_contains "$TELEMETRY_JSON" '"event_type": "metadata_ip"'
 assert_contains "$TELEMETRY_JSON" '"event_type": "private_cidr"'
 assert_contains "$TELEMETRY_JSON" '"event_type": "file_write"'
-assert_contains "$TELEMETRY_JSON" '"tool_call_id": "tool-native"'
+assert_contains "$TELEMETRY_JSON" '"tool_call_id": ""'
+assert_contains "$TELEMETRY_JSON" '"process_id": ""'
+CORRELATIONS_JSON="$("$BIN" --data-dir "$DATA_DIR" telemetry correlations --run run-native-sensor --json)"
+assert_contains "$CORRELATIONS_JSON" '"status": "scope_only"'
+assert_contains "$CORRELATIONS_JSON" '"scope_only": true'
 # Own-sensor telemetry is independently kernel-correlated, not a self-join.
 assert_contains "$TELEMETRY_JSON" '"correlation_class": "kernel_correlated"'
 

@@ -237,6 +237,42 @@ func TestUpgradeRealSchema15PreservesEventsAndFalcoSpool(t *testing.T) {
 	}
 }
 
+func TestUpgradeSchema19AddsAuditCheckpointWithoutChangingEvidence(t *testing.T) {
+	paths, err := Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	// The only schema-20 addition is the private reader checkpoint table.
+	for _, statement := range []string{
+		`DROP TABLE telemetry_audit_checkpoints`,
+		`DELETE FROM schema_versions WHERE version>19`,
+		`INSERT OR IGNORE INTO schema_versions VALUES(19,'previous version','2026-10-19')`,
+		`INSERT INTO events(id,source,event_type,payload,created_at) VALUES('old','seccomp_audit','access_control','{"keep":"exact"}','2026-10-18T00:00:00.010Z')`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := EnsureSchema(db); err != nil {
+		t.Fatal(err)
+	}
+	var payload, stamp string
+	if err := db.QueryRow(`SELECT payload,created_at FROM events WHERE id='old'`).Scan(&payload, &stamp); err != nil || payload != `{"keep":"exact"}` || stamp != "2026-10-18T00:00:00.010Z" {
+		t.Fatalf("upgrade rewrote evidence: %s %s %v", payload, stamp, err)
+	}
+	if _, err := db.Exec(`INSERT INTO telemetry_audit_checkpoints VALUES('reader','run',1,'{}','now')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureSchema(db); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestNewerSchemaIsRejectedBeforeMigrationWrites(t *testing.T) {
 	paths := openTestDB(t)
 	db, err := Open(*paths)

@@ -1,5 +1,7 @@
 package provenance
 
+import "github.com/byteyellow/agentprovenance/internal/telemetry"
+
 const graphLensSchemaVersion = "agentprovenance.graph_lens/v1"
 
 var availableGraphLenses = []string{
@@ -18,12 +20,13 @@ var availableGraphLenses = []string{
 }
 
 type GraphLensOptions struct {
-	RunID    string
-	Lens     string
-	Focus    string
-	Overlays []string
-	Limit    int
-	Detail   string
+	SessionScope *GraphSessionScope
+	RunID        string
+	Lens         string
+	Focus        string
+	Overlays     []string
+	Limit        int
+	Detail       string
 }
 
 type GraphLensManifest struct {
@@ -40,19 +43,20 @@ type GraphLensManifest struct {
 }
 
 type GraphLensQuery struct {
-	Focus         string   `json:"focus,omitempty"`
-	Overlays      []string `json:"overlays,omitempty"`
-	Limit         int      `json:"limit"`
-	Detail        string   `json:"detail"`
-	Truncated     bool     `json:"truncated"`
-	NodeCount     int      `json:"node_count"`
-	EdgeCount     int      `json:"edge_count"`
-	Derived       int      `json:"derived_edge_count"`
-	RawEventCount int      `json:"raw_event_count"`
-	OmittedNodes  int      `json:"omitted_nodes,omitempty"`
-	OmittedEdges  int      `json:"omitted_edges,omitempty"`
-	LensRules     []string `json:"lens_rules"`
-	LayoutHint    string   `json:"layout_hint"`
+	SessionScope  *GraphSessionQuery `json:"session_scope,omitempty"`
+	Focus         string             `json:"focus,omitempty"`
+	Overlays      []string           `json:"overlays,omitempty"`
+	Limit         int                `json:"limit"`
+	Detail        string             `json:"detail"`
+	Truncated     bool               `json:"truncated"`
+	NodeCount     int                `json:"node_count"`
+	EdgeCount     int                `json:"edge_count"`
+	Derived       int                `json:"derived_edge_count"`
+	RawEventCount int                `json:"raw_event_count"`
+	OmittedNodes  int                `json:"omitted_nodes,omitempty"`
+	OmittedEdges  int                `json:"omitted_edges,omitempty"`
+	LensRules     []string           `json:"lens_rules"`
+	LayoutHint    string             `json:"layout_hint"`
 }
 
 type GraphLensNode struct {
@@ -74,10 +78,12 @@ type GraphLensEdge struct {
 	CreatedAt      string         `json:"created_at,omitempty"`
 	Derived        bool           `json:"derived"`
 	DerivationRule string         `json:"derivation_rule,omitempty"`
-	Confidence     float64        `json:"confidence,omitempty"`
+	Confidence     *float64       `json:"confidence,omitempty"`
 	EvidenceRefs   []string       `json:"evidence_refs,omitempty"`
 	Data           map[string]any `json:"data,omitempty"`
 }
+
+func graphConfidence(value float64) *float64 { return &value }
 
 type GraphLensOverlay struct {
 	TargetID string         `json:"target_id"`
@@ -88,6 +94,7 @@ type GraphLensOverlay struct {
 }
 
 type lensEvent struct {
+	processIdentity       *telemetry.RuntimeProcessIdentity
 	ID                    string
 	NodeID                string
 	Type                  string

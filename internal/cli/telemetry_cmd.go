@@ -87,6 +87,9 @@ func telemetryCmd(dataDir, daemonURL *string) *cobra.Command {
 	cmd.AddCommand(telemetryIngestCmd(dataDir))
 	cmd.AddCommand(telemetryIngestJSONLCmd(dataDir))
 	cmd.AddCommand(telemetryIngestFalcoCmd(dataDir))
+	cmd.AddCommand(telemetryIngestAuditCmd(dataDir))
+	cmd.AddCommand(telemetryFollowAuditCmd(dataDir))
+	cmd.AddCommand(telemetryAuditAssociationsCmd(dataDir, daemonURL))
 	cmd.AddCommand(telemetryPruneCmd(dataDir))
 	correlations := &cobra.Command{
 		Use:   "correlations",
@@ -382,6 +385,10 @@ func telemetryBindCmd(dataDir *string) *cobra.Command {
 			}
 			defer db.Close()
 			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), commandLanguage(cmd))
+			binding.ConfidenceSet = cmd.Flags().Changed("confidence")
+			if !binding.ConfidenceSet {
+				binding.Confidence = correlation.DefaultBindingConfidence(binding.BindingSource)
+			}
 			id, err := correlation.RecordBinding(db, binding)
 			if err != nil {
 				return err

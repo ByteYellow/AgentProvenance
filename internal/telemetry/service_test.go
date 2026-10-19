@@ -63,7 +63,7 @@ func TestIngestFilteredCorrelatesRawRuntimeEvent(t *testing.T) {
 	if event.RunID != "run-1" || event.SessionID != "session-1" || event.ToolCallID != "tool-1" || event.ProcessID != "proc-1" {
 		t.Fatalf("event correlation = %+v, want run/session/tool/process", event)
 	}
-	if !strings.Contains(event.CorrelationMethod, "container_time_window") || event.CorrelationConfidence <= 0 {
+	if event.CorrelationMethod != "pid_time_window:pid+time+container_id" || event.CorrelationConfidence <= 0 {
 		t.Fatalf("correlation method/confidence = %q %.2f", event.CorrelationMethod, event.CorrelationConfidence)
 	}
 	if !strings.Contains(event.Payload, `"binding_id"`) {
@@ -158,8 +158,8 @@ func TestIngestFilteredCorrelatesCgroupScopedRuntimeEvent(t *testing.T) {
 		t.Fatalf("events = %d, want 1", len(events))
 	}
 	event := events[0]
-	if event.ToolCallID != "tool-1" || event.ProcessID != "proc-1" {
-		t.Fatalf("event correlation = %+v, want tool/process", event)
+	if event.SessionID != "session-1" || event.ToolCallID != "" || event.ProcessID != "" {
+		t.Fatalf("event correlation = %+v, want scope-only context", event)
 	}
 	if event.CorrelationMethod != "cgroup_time_window:cgroup_id+time" {
 		t.Fatalf("correlation method = %q", event.CorrelationMethod)
@@ -168,8 +168,15 @@ func TestIngestFilteredCorrelatesCgroupScopedRuntimeEvent(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE edge_type = 'runtime_tool_call_event' AND from_id = 'tool-1'`).Scan(&edgeCount); err != nil {
 		t.Fatal(err)
 	}
-	if edgeCount == 0 {
-		t.Fatalf("missing runtime_tool_call_event edge for cgroup-scoped event")
+	if edgeCount != 0 {
+		t.Fatalf("cgroup-only match created %d tool-call edges", edgeCount)
+	}
+	report, err := BuildCorrelationReport(db, CorrelationReportOptions{EventID: event.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Items) != 1 || report.Items[0].Match.Status != "scope_only" || report.Items[0].Binding == nil {
+		t.Fatalf("lost scope-only correlation through attempt envelope: %+v", report)
 	}
 }
 
@@ -212,8 +219,8 @@ func TestIngestFilteredLinksPassiveCgroupEventToRuntimeProcess(t *testing.T) {
 
 	var count int
 	if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges
-		WHERE run_id = 'run-passive' AND from_id = 'runtime_process/pid/4242'
-		AND to_id = ? AND edge_type = 'runtime_process_event'`, "runtime_event/"+eventID).Scan(&count); err != nil {
+		WHERE run_id = 'run-passive' AND from_id = ?
+		AND to_id = ? AND edge_type = 'runtime_process_event'`, "runtime_process/observation/"+eventID+"/pid", "runtime_event/"+eventID).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	if count != 1 {

@@ -156,14 +156,28 @@ func TestNativeStreamSealsAndProcessesWhileCaptureContinues(t *testing.T) {
 	for i := 0; i < 97; i++ {
 		nativeWrite(t, n, "untracked", "/tmp/identical")
 	}
-	if err := n.Flush(); err != nil {
-		t.Fatal(err)
+	// The partial last batch must be sealed and ingested by the running
+	// supervisor, without a manual flush, shutdown, or extra Process call.
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		status, err := ReadNativeStreamStatus(db)
+		if err != nil {
+			cancel()
+			<-done
+			t.Fatal(err)
+		}
+		if status.Counters["ingested"] == 97 && status.QueuedBatches == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			cancel()
+			<-done
+			t.Fatalf("live capture stalled: %+v", status)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 	cancel()
 	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
-	if err := n.Process(128); err != nil {
 		t.Fatal(err)
 	}
 	var count, distinct, rawDistinct int
@@ -404,7 +418,7 @@ func TestNativeGraphFailureDoesNotAcknowledgePartialEvidence(t *testing.T) {
 	}
 }
 
-func TestNativeLateTLSUsesCaptureTimeForCausalEdges(t *testing.T) {
+func TestNativeLateTLSKeepsCaptureTimeWithoutGuessingPairs(t *testing.T) {
 	db, paths := nativeTestStore(t)
 	n := nativeTestStream(t, db, paths, NativeStreamOptions{BatchEvents: 1})
 	nativeBind(t, db, "known", "run-late-tls")
@@ -424,8 +438,11 @@ func TestNativeLateTLSUsesCaptureTimeForCausalEdges(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*),COALESCE(MAX(created_at),'') FROM graph_edges WHERE edge_type='llm_call'`).Scan(&count, &capturedAt); err != nil {
 		t.Fatal(err)
 	}
-	if count != 1 || capturedAt != "2026-09-19T00:00:00.1Z" {
+	if count != 0 || capturedAt != "" {
 		t.Fatalf("late TLS call count=%d captured_at=%s", count, capturedAt)
+	}
+	if err := db.QueryRow(`SELECT created_at FROM events WHERE event_type='tls_read'`).Scan(&capturedAt); err != nil || capturedAt != "2026-09-19T00:00:00.1Z" {
+		t.Fatalf("late TLS capture time=%s err=%v", capturedAt, err)
 	}
 }
 
@@ -653,5 +670,87 @@ func TestNativeRestartDefersCleanupFailureWithoutBlockingCapture(t *testing.T) {
 	}
 	if status.Counters["ingested"] != 2 || status.CleanupPendingBatches != 1 {
 		t.Fatalf("status=%+v", status)
+	}
+}
+
+func TestNativeChunkRecoveryPreservesCommittedReceipts(t *testing.T) {
+	db, paths := nativeTestStore(t)
+	n := nativeTestStream(t, db, paths, NativeStreamOptions{BatchEvents: 64})
+	for i := 0; i < 64; i++ {
+		nativeWrite(t, n, "unknown", fmt.Sprintf("/tmp/chunk-%02d", i))
+	}
+	if _, err := db.Exec(`CREATE TRIGGER fail_later_chunk BEFORE INSERT ON events WHEN NEW.payload LIKE '%/tmp/chunk-32%' BEGIN SELECT RAISE(ABORT,'later chunk failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Process(32); err == nil {
+		t.Fatal("expected later chunk failure")
+	}
+	var before, receipts int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events`).Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM telemetry_native_rows`).Scan(&receipts); err != nil {
+		t.Fatal(err)
+	}
+	if before == 0 || before >= 64 || receipts != before {
+		t.Fatalf("committed=%d receipts=%d", before, receipts)
+	}
+	if _, err := db.Exec(`DROP TRIGGER fail_later_chunk`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE telemetry_spool_batches SET status='processing' WHERE format='native'`); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Close(); err != nil {
+		t.Fatal(err)
+	}
+	n = nativeTestStream(t, db, paths, NativeStreamOptions{})
+	if err := n.Process(32); err != nil {
+		t.Fatal(err)
+	}
+	var count, distinct, maxBatch, covered int
+	if err := db.QueryRow(`SELECT COUNT(*),COUNT(DISTINCT raw_event_id) FROM events`).Scan(&count, &distinct); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT MAX(ingested_count),SUM(ingested_count) FROM telemetry_batches`).Scan(&maxBatch, &covered); err != nil {
+		t.Fatal(err)
+	}
+	status, err := ReadNativeStreamStatus(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 64 || distinct != 64 || covered != 64 || maxBatch > maxNativeTransactionRows || status.Counters["ingested"] != 64 || status.QueuedBatches != 0 {
+		t.Fatalf("count=%d distinct=%d covered=%d max=%d status=%+v", count, distinct, covered, maxBatch, status)
+	}
+}
+
+func TestNativeCancellationLeavesRowsImmediatelyReplayable(t *testing.T) {
+	db, paths := nativeTestStore(t)
+	n := nativeTestStream(t, db, paths, NativeStreamOptions{BatchEvents: 8, FlushInterval: time.Millisecond})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- n.Run(ctx, func(err error) { t.Errorf("worker: %v", err) }) }()
+	for i := 0; i < 97; i++ {
+		nativeWrite(t, n, "untracked", fmt.Sprintf("/tmp/cancel-%d", i))
+	}
+	if err := n.Flush(); err != nil {
+		cancel()
+		<-done
+		t.Fatal(err)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Process(128); err != nil {
+		t.Fatal(err)
+	}
+	status, err := ReadNativeStreamStatus(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.PendingEvents != 0 || status.Counters["ingested"] != 97 || status.Counters["retry_failures"] != 0 {
+		t.Fatalf("shutdown deferred or duplicated accepted rows: %+v", status)
 	}
 }

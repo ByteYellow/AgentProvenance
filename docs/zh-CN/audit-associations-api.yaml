@@ -1,0 +1,196 @@
+openapi: 3.1.0
+info:
+  title: 审计关联查询接口
+  version: "1.0"
+paths:
+  /v1/telemetry/audit-associations:
+    get:
+      operationId: auditAssociations
+      summary: 查询已保存审计决定与运行时候选
+      parameters:
+        - $ref: '#/components/parameters/run'
+        - $ref: '#/components/parameters/event'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        "200":
+          description: 在同一数据库快照上进行有界只读分析
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        "400": { $ref: '#/components/responses/InvalidQuery' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "503": { $ref: '#/components/responses/Unavailable' }
+  /api/audit/associations:
+    get:
+      operationId: dashboardAuditAssociations
+      summary: 在本地 Dashboard 查询相同的审计关联
+      servers:
+        - url: http://127.0.0.1:7397
+          description: Dashboard 地址，按实际配置使用端口
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/run'
+        - $ref: '#/components/parameters/event'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+      responses:
+        "200":
+          description: 与后台服务使用相同报告；静态回放读取冻结的导出分页
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        "400": { $ref: '#/components/responses/InvalidQuery' }
+        "503": { $ref: '#/components/responses/Unavailable' }
+components:
+  parameters:
+    run:
+      in: query
+      name: run
+      required: true
+      description: 精确匹配 Run ID，非空，最多 1024 个 UTF-8 字节
+      schema: { type: string, minLength: 1, maxLength: 1024 }
+    event:
+      in: query
+      name: event
+      description: 可选审计事件 ID，精确匹配，最多 1024 个 UTF-8 字节
+      schema: { type: string, maxLength: 1024 }
+    limit:
+      in: query
+      name: limit
+      schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+    cursor:
+      in: query
+      name: cursor
+      description: 同一 Run 和事件筛选的 next_cursor，按事件 ID 分页
+      schema: { type: string, maxLength: 4096 }
+  responses:
+    InvalidQuery:
+      description: 参数格式错误、未知或重复，分页上限无效或游标不匹配。不接受 Session 筛选。
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: 后台服务开启认证时，缺少或提供了无效的 Bearer Token
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unavailable:
+      description: 数据库或已保存输入读取失败，返回错误而非空报告
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    Report:
+      type: object
+      required: [schema_version, rule, run_id, status, analysis_scope, limit, has_more, runtime_rows_examined, items]
+      properties:
+        schema_version: { type: string, enum: [agentprovenance.audit_associations/v1] }
+        rule:
+          type: string
+          enum: [agentprov.audit_lifecycle_operation/v1, agentprov.audit_lifecycle_operation/v2]
+          description: 在线查询和新导出使用 v2。冻结回放保留导出时的 v1 或 v2 规则及结果，不重新计算。旧回放索引未标记 rule 时按 v1 读取，分页与索引的规则必须一致。报告 schema 仍为 v1。
+        run_id: { type: string }
+        status: { type: string, enum: [complete, incomplete] }
+        analysis_scope:
+          type: string
+          enum: [query_page, export_pages]
+          description: 分析诊断描述查询页或所读取的冻结导出页；采集覆盖单独报告
+        limit: { type: integer, minimum: 1, maximum: 500 }
+        has_more: { type: boolean }
+        next_cursor: { type: string }
+        runtime_rows_examined: { type: integer, minimum: 0 }
+        issues: { type: array, items: { type: string } }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Item' }
+    Item:
+      type: object
+      required: [event_id, source, mechanism, decision, process, operation, evidence_scope]
+      properties:
+        event_id: { type: string }
+        source:
+          type: object
+          properties:
+            host_id: { type: string }
+            boot_id: { type: string }
+        time_window:
+          type: object
+          required: [from, until, decimal_precision_ns, source_coarse_clock_resolution_ns, basis]
+          properties:
+            from: { type: string, format: date-time }
+            until: { type: string, format: date-time }
+            decimal_precision_ns: { type: integer, format: int64 }
+            source_coarse_clock_resolution_ns: { type: integer, format: int64 }
+            basis: { type: string }
+        mechanism: { type: string, enum: [apparmor, seccomp] }
+        decision: { type: string }
+        process: { $ref: '#/components/schemas/Association' }
+        operation: { $ref: '#/components/schemas/Association' }
+        process_exit_refs: { $ref: '#/components/schemas/Refs' }
+        operations:
+          type: array
+          items: { $ref: '#/components/schemas/Operation' }
+        evidence_scope: { type: string, enum: [saved_records_only, selected_records_only] }
+    Association:
+      type: object
+      required: [status, candidate_count]
+      properties:
+        status: { type: string, enum: [unassociated, inferred, ambiguous] }
+        basis:
+          type: string
+          description: v2 在检查进程生命周期、已记录字段和时间窗口后，以 lifetime_syscall_time_candidate 表示操作候选。唯一候选标为 inferred，审计与运行时记录仍缺少共同调用标识；多个候选保留 ambiguous。
+        reason:
+          type: string
+          description: >-
+            v2 的唯一推断候选使用 shared_call_identity_unavailable。
+            找到唯一进程生命周期后，seccomp 的 ERRNO、KILL_PROCESS、KILL_THREAD 和 TRAP
+            以 seccomp_original_syscall_not_executed 保持操作未关联；TRACE 和 USER_NOTIF
+            需要介入处理证据，使用 seccomp_mediation_evidence_unavailable。
+            LOG 和 ALLOW 仅在已记录 action code 一致时进入候选筛选，缺失或冲突分别使用
+            seccomp_action_unknown 或 seccomp_action_conflict。进程关联与同进程退出引用独立保留。
+        candidate_count: { type: integer, minimum: 0 }
+        candidates_truncated: { type: boolean }
+        candidates:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [id, evidence_refs]
+            properties:
+              id: { type: string }
+              evidence_refs: { $ref: '#/components/schemas/Refs' }
+    Refs:
+      type: array
+      items: { type: string }
+    Operation:
+      type: object
+      description: 候选操作已保存的运行时证据，包含自身的入口和返回引用。仅凭时间邻近不把其返回值归给审计记录。被动作兼容性检查排除的决定没有操作候选。
+      required: [id, process_instance_id, thread_instance_id, kind, attempt_state, result_state, attempt_record_count, result_record_count]
+      properties:
+        id: { type: string }
+        process_instance_id: { type: string }
+        thread_instance_id: { type: string }
+        kind: { type: string }
+        attempt_state: { type: string, enum: [observed, not_observed, conflicting] }
+        result_state: { type: string, enum: [observed, not_observed, conflicting] }
+        attempt_record_count: { type: integer, minimum: 0 }
+        result_record_count: { type: integer, minimum: 0 }
+        refs_truncated: { type: boolean }
+        attempt_refs: { $ref: '#/components/schemas/Refs' }
+        result_refs: { $ref: '#/components/schemas/Refs' }
+        syscall_result:
+          type: integer
+          format: int64
+          description: 实际记录的返回值，保留零值；缺失或冲突时省略
+        syscall_outcome: { type: string }
+        context:
+          type: array
+          items:
+            type: object
+            required: [event_id, method, confidence]
+            properties:
+              event_id: { type: string }
+              session_id: { type: string }
+              tool_call_id: { type: string }
+              method: { type: string }
+              confidence: { type: number }

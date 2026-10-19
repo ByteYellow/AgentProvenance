@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
@@ -26,14 +27,23 @@ func TestHarvestTranscriptSetLinksSubAgentDecision(t *testing.T) {
 	const run = "run-sub"
 
 	ins := func(id, etype, payload string) {
-		if _, err := db.Exec(`INSERT INTO events (id, run_id, source, event_type, payload, created_at)
-			VALUES (?, ?, 'agentprov_ebpf', ?, ?, '2026-01-01T00:00:01Z')`, id, run, etype, payload); err != nil {
+		if _, err := db.Exec(`INSERT INTO events (id, run_id, source, event_type, payload, created_at, pid)
+			VALUES (?, ?, 'agentprov_ebpf', ?, ?, '2026-01-01T00:00:02Z', 100)`, id, run, etype, payload); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// The syscall the delegate's command actually ran, plus an unrelated one.
-	ins("ev-setup", "execve", `{"payload":{"raw":{"command":"python3 ../pysnake-helper/setup.py install"}}}`)
+	ins("ev-setup", "execve", `{"payload":{"raw":{"argv":["python3","../pysnake-helper/setup.py","install"],"command":"python3 ../pysnake-helper/setup.py install"}}}`)
 	ins("ev-other", "execve", `{"payload":{"raw":{"command":"ls -la /tmp/build"}}}`)
+	if _, err := db.Exec(`INSERT INTO tool_calls (id,run_id,agent_id,command,status,created_at,started_at,ended_at)
+		VALUES ('tool-bob',?,'bob123abc','python3 ../pysnake-helper/setup.py install','completed',
+		'2026-01-01T00:00:01Z','2026-01-01T00:00:01Z','2026-01-01T00:00:03Z')`, run); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO graph_edges (id,run_id,from_id,to_id,edge_type,source_event_id,created_at)
+		VALUES (?,?,'tool-bob','runtime_event/ev-setup','agent_syscall','ev-setup','2026-01-01T00:00:02Z')`, correlation.AppProcessEdgePrefix+"test", run); err != nil {
+		t.Fatal(err)
+	}
 
 	// Real Claude Code transcript shape. The MAIN agent only delegates (its Bash
 	// does not match the setup execve); BOB, a sub-agent, decides the setup command.
@@ -44,7 +54,7 @@ func TestHarvestTranscriptSetLinksSubAgentDecision(t *testing.T) {
 {"type":"assistant","message":{"role":"assistant","model":"deepseek-v4-pro","stop_reason":"tool_use","content":[{"type":"thinking","thinking":"Delegating to the team."},{"type":"tool_use","name":"Bash","input":{"command":"git status --short"}}]}}
 `)
 	mustWrite(t, subPath, `{"type":"user","message":{"role":"user","content":"Run the setup command alice relayed."}}
-{"type":"assistant","message":{"role":"assistant","model":"deepseek-v4-pro","stop_reason":"tool_use","content":[{"type":"thinking","thinking":"Running the setup as instructed."},{"type":"tool_use","name":"Bash","input":{"command":"python3 ../pysnake-helper/setup.py install"}}]}}
+{"type":"assistant","timestamp":"2026-01-01T00:00:00Z","agentId":"bob123abc","message":{"role":"assistant","model":"deepseek-v4-pro","stop_reason":"tool_use","content":[{"type":"thinking","thinking":"Running the setup as instructed."},{"type":"tool_use","id":"tool-bob","name":"Bash","input":{"command":"python3 ../pysnake-helper/setup.py install"}}]}}
 `)
 
 	subs := []AgentTranscript{{AgentID: "bob123abc", Path: subPath}}

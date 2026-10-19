@@ -5,6 +5,7 @@ package sensor
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -24,6 +25,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/accesscontrol"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/tlsintent"
 	"github.com/cilium/ebpf"
@@ -33,18 +35,22 @@ import (
 )
 
 const (
-	eventExec    = 1
-	eventConnect = 2
-	eventOpen    = 3
-	eventExit    = 4
-	eventSSL     = 5
-	eventSSLRead = 6
-	eventSetuid  = 7
-	eventPtrace  = 8
-	eventRename  = 9
-	eventUnlink  = 10
-	eventDNS     = 11
-	eventFork    = 12
+	eventExec          = 1
+	eventConnect       = 2
+	eventOpen          = 3
+	eventExit          = 4
+	eventSSL           = 5
+	eventSSLRead       = 6
+	eventSetuid        = 7
+	eventPtrace        = 8
+	eventRename        = 9
+	eventUnlink        = 10
+	eventDNS           = 11
+	eventFork          = 12
+	eventSSLReset      = 13
+	eventSSLRelease    = 14
+	eventSyscallResult = 15
+	eventThreadExit    = 16
 )
 
 type sensorTracepoint struct {
@@ -89,6 +95,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		{"sched", "sched_process_exec", objs.HandleExec},
 		{"syscalls", "sys_enter_execve", objs.HandleExecve},
 		{"syscalls", "sys_enter_connect", objs.HandleConnect},
+		{"syscalls", "sys_exit_connect", objs.HandleConnectReturn},
 		{"syscalls", "sys_enter_openat", objs.HandleOpenat},
 		{"syscalls", "sys_exit_openat", objs.HandleOpenReturn},
 		{"sched", "sched_process_exit", objs.HandleExit},
@@ -203,6 +210,15 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 			_ = rd.Close()
 		}
 	}
+	states := newStateSampler(opts, accesscontrol.ReadTask, emit)
+	defer func() {
+		states.close()
+		encMu.Lock()
+		defer encMu.Unlock()
+		if runErr == nil {
+			runErr = writeErr
+		}
+	}()
 
 	// Surface ring-buffer drops as a coverage-gap event so a loaded sensor is
 	// never silently blind.
@@ -229,7 +245,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		}
 		emit(map[string]any{
 			"source": "agentprov_ebpf", "event_type": "resource_pressure",
-			"resource": "sensor_tls_reassembly", "signal": "reassembly_limit",
+			"resource": "sensor_tls_reassembly", "signal": "reassembly_gap",
 			"dropped_delta": tlsLoss.Streams, "dropped_bytes_delta": tlsLoss.Bytes,
 			"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
 		})
@@ -253,6 +269,9 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &e); err != nil {
 			continue
 		}
+		if e.Pid != uint32(os.Getpid()) && e.Kind != eventExit && e.Kind != eventThreadExit {
+			states.offer(stateTarget{pid: e.Pid, tid: e.Tid, start: e.ThreadStartNs, cgroup: e.CgroupId}, time.Now())
+		}
 		if opts.AutoTLS && e.Kind == eventExec {
 			// Coalesce process-start wakeups. Discovery has its own bounded rate
 			// and never blocks ring-buffer draining.
@@ -271,7 +290,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 				n = len(e.Path)
 			}
 			for _, msg := range reasm.Add(tlsintent.Chunk{
-				PID: e.Pid, Conn: e.Conn, Direction: dir,
+				PID: e.Pid, Conn: e.Conn, ProcessStartNS: e.ProcessStartNs, Epoch: e.ConnEpoch, Direction: dir,
 				Data: append([]byte(nil), e.Path[:n]...), Truncated: e.Dport == 1,
 			}) {
 				emit(tlsMessageMap(msg, e, resolver))
@@ -279,8 +298,24 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 			reportTLSLoss(false)
 			continue
 		}
+		if e.Kind == eventSSLReset || e.Kind == eventSSLRelease {
+			c := tlsintent.Chunk{PID: e.Pid, Conn: e.Conn, ProcessStartNS: e.ProcessStartNs, Epoch: e.ConnEpoch}
+			if e.Kind == eventSSLReset {
+				reasm.Reset(c)
+			} else {
+				for _, msg := range reasm.Release(c) {
+					emit(tlsMessageMap(msg, e, resolver))
+				}
+			}
+			reportTLSLoss(false)
+			continue
+		}
+		if e.Kind == eventExec {
+			reasm.EndProcess(e.Pid, e.ProcessStartNs, true)
+			reportTLSLoss(false)
+		}
 		if e.Kind == eventExit {
-			for _, msg := range reasm.FlushPID(e.Pid) {
+			for _, msg := range reasm.EndProcess(e.Pid, e.ProcessStartNs, false) {
 				emit(tlsMessageMap(msg, e, resolver))
 			}
 			reportTLSLoss(false)
@@ -303,18 +338,30 @@ func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgro
 		etype = "tls_read"
 	}
 	ev := map[string]any{
-		"source":       "agentprov_ebpf",
-		"pid":          e.Pid,
-		"tgid":         e.Tgid,
-		"ppid":         e.Ppid,
-		"cgroup_id":    strconv.FormatUint(e.CgroupId, 10),
-		"container_id": containerID,
-		"timestamp":    eventTimestamp(e),
-		"comm":         cstr(e.Comm[:]),
-		"event_type":   etype,
-		"data":         string(msg.Body),
-		"length":       len(msg.Body),
-		"protocol":     msg.Protocol,
+		"source":          "agentprov_ebpf",
+		"pid":             e.Pid,
+		"tgid":            e.Pid,
+		"tid":             e.Tid,
+		"ppid":            e.Ppid,
+		"cgroup_id":       strconv.FormatUint(e.CgroupId, 10),
+		"container_id":    containerID,
+		"timestamp":       eventTimestamp(e),
+		"comm":            cstr(e.Comm[:]),
+		"event_type":      etype,
+		"data":            string(msg.Body),
+		"length":          len(msg.Body),
+		"protocol":        msg.Protocol,
+		"headers_decoded": true,
+	}
+	if msg.StreamID != 0 {
+		ev["stream_id"] = msg.StreamID
+	}
+	if process := processInstance(msg.PID, msg.ProcessStartNS); process != "" && msg.Conn != 0 && msg.Epoch != 0 {
+		id := sha256.Sum256([]byte(fmt.Sprintf("openssl:%s:%x:%d", process, msg.Conn, msg.Epoch)))
+		ev["connection_id"] = fmt.Sprintf("tls-v1:%x", id)
+	}
+	if contentType := msg.Headers["content-type"]; contentType != "" {
+		ev["content_type"] = contentType
 	}
 	if msg.Truncated {
 		ev["truncated"] = true
@@ -541,7 +588,8 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 	ev := map[string]any{
 		"source":       "agentprov_ebpf",
 		"pid":          e.Pid,
-		"tgid":         e.Tgid,
+		"tgid":         e.Pid,
+		"tid":          e.Tid,
 		"ppid":         e.Ppid,
 		"cgroup_id":    strconv.FormatUint(e.CgroupId, 10),
 		"container_id": containerID,
@@ -549,6 +597,7 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 		"comm":         cstr(e.Comm[:]),
 	}
 	addProcessIdentity(ev, e)
+	addSyscallIdentity(ev, e)
 	switch e.Kind {
 	case eventFork:
 		ev["event_type"] = "process_observed"
@@ -563,9 +612,17 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 		}
 	case eventConnect:
 		ev["event_type"] = "network_connect"
+		ev["observation_stage"] = "attempt"
 		ev["dst_ip"] = ipv4(e.Daddr)
 		ev["dst_port"] = ntohs(e.Dport)
-	case eventOpen:
+	case eventOpen, eventSyscallResult:
+		if e.Kind == eventSyscallResult && e.SyscallKind == eventConnect {
+			ev["event_type"] = "syscall_result"
+			ev["dst_ip"] = ipv4(e.Daddr)
+			ev["dst_port"] = ntohs(e.Dport)
+			addSyscallResult(ev, e)
+			break
+		}
 		path := cstr(e.Path[:])
 		mode := "write"
 		if e.ExitCode == 1 {
@@ -578,15 +635,23 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 			return nil
 		}
 		ev["event_type"] = "file_open"
+		ev["observation_stage"] = "attempt"
 		ev["path"] = path
 		ev["mode"] = mode
 		if e.Dport == 1 {
 			ev["path_observation"] = "syscall_exit_retry"
 			ev["syscall_result"] = int64(e.Conn)
+			if e.SyscallStartNs != 0 {
+				addSyscallResult(ev, e)
+				ev["observation_stage"] = "attempt_and_result"
+			}
 		}
-	case eventExit:
-		ev["event_type"] = "process_exit"
-		ev["exit_code"] = e.ExitCode
+		if e.Kind == eventSyscallResult {
+			ev["event_type"] = "syscall_result"
+			addSyscallResult(ev, e)
+		}
+	case eventExit, eventThreadExit:
+		addExitResult(ev, e)
 	case eventSetuid:
 		if e.Daddr == 1 {
 			ev["event_type"] = "setgid"

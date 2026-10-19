@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/byteyellow/agentprovenance/internal/aitools"
 	"github.com/byteyellow/agentprovenance/internal/mcpserver"
@@ -33,7 +34,8 @@ func aiMCPCmd(dataDir *string) *cobra.Command {
 			"clients (Claude Desktop, the mcp inspector) can query the verifiable provenance " +
 			"graph and pre-flight proposed actions through the trusted policy gate. The tool set " +
 			"is the same one served by `ai tools`/`ai call`. Only JSON-RPC is written to stdout.",
-		Args: cobra.NoArgs,
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			db, cleanup, err := openLocalDB(*dataDir)
 			if err != nil {
@@ -48,8 +50,9 @@ func aiMCPCmd(dataDir *string) *cobra.Command {
 func aiToolsCmd() *cobra.Command {
 	var provider string
 	cmd := &cobra.Command{
-		Use:   "tools",
-		Short: "emit AI tool definitions for a provider (generic|anthropic|openai)",
+		Use:          "tools",
+		SilenceUsage: true,
+		Short:        "emit AI tool definitions for a provider (generic|anthropic|openai)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var tools []map[string]any
 			switch provider {
@@ -60,7 +63,7 @@ func aiToolsCmd() *cobra.Command {
 			case "openai":
 				tools = aitools.OpenAITools()
 			default:
-				return commandErrorf("unknown provider %q (want generic|anthropic|openai)", provider)
+				return fmt.Errorf("unknown provider %q (want generic|anthropic|openai)", provider)
 			}
 			enc := json.NewEncoder(cmd.OutOrStdout())
 			enc.SetIndent("", "  ")
@@ -78,14 +81,15 @@ func aiToolsCmd() *cobra.Command {
 func aiCallCmd(dataDir *string) *cobra.Command {
 	var input string
 	cmd := &cobra.Command{
-		Use:   "call <tool>",
-		Short: "dispatch one AI tool with a JSON --input",
-		Args:  cobra.ExactArgs(1),
+		Use:          "call <tool>",
+		SilenceUsage: true,
+		Short:        "dispatch one AI tool with a JSON --input",
+		Args:         cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			parsed := map[string]any{}
 			if input != "" {
 				if err := json.Unmarshal([]byte(input), &parsed); err != nil {
-					return commandErrorf("invalid --input JSON: %w", err)
+					return fmt.Errorf("invalid --input JSON: %w", err)
 				}
 			}
 			db, cleanup, err := openLocalDB(*dataDir)

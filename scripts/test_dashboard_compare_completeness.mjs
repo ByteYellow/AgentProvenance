@@ -1,0 +1,151 @@
+// Isolated browser regression: real comparison assets/markup, synthetic API responses.
+// Run with playwright available on NODE_PATH; optional first argument is the evidence directory.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {createRequire} from 'node:module';
+
+const {chromium}=createRequire(import.meta.url)('playwright');
+const root=fileURLToPath(new URL('../',import.meta.url));
+const output=path.resolve(process.argv[2]||path.join(root,'output/playwright'));
+fs.mkdirSync(output,{recursive:true});
+const template=fs.readFileSync(path.join(root,'internal/dashboard/index.html'),'utf8');
+const markup=template.slice(template.indexOf('<dialog id="compare-dialog"'),template.indexOf('<script src="/assets/compare-engine.js"'));
+const zh=JSON.parse(fs.readFileSync(path.join(root,'internal/i18n/zh-CN.json'),'utf8'));
+const browser=await chromium.launch({headless:true,channel:'chrome'});
+const page=await browser.newPage({viewport:{width:1440,height:1050}});
+const errors=[];
+page.on('pageerror',error=>errors.push(error.message));
+const done=()=>page.waitForFunction(()=>!document.getElementById('compare-refresh').disabled);
+const text=id=>page.locator('#'+id).textContent();
+const refresh=async mode=>{
+  await page.evaluate(mode=>window.compareFixture.mode=mode,mode);
+  await page.locator('#compare-refresh').click();
+  await done();
+};
+try{
+  await page.setContent('<button id="compare-return" hidden></button>'+markup.replace(/\{\{tr \.Lang "([^"]+)"\}\}/g,'$1'));
+  for(const name of ['theme','context','compare'])await page.addStyleTag({path:path.join(root,'internal/dashboard/'+name+'.css')});
+  for(const name of ['compare-engine','compare'])await page.addScriptTag({path:path.join(root,'internal/dashboard/'+name+'.js')});
+  await page.evaluate(zh=>{
+    const record=(key,dimension='configuration',extra={})=>({key,dimension,label:key,operation:'recorded_configuration',value:{present:true,sha256:key,preview:JSON.stringify(key)},evidence:{id:key},...extra});
+    const records=Array.from({length:105},(_,i)=>record('shared-'+String(i).padStart(3,'0')));
+    records.push(...Array.from({length:59},(_,i)=>record('shared-000','configuration',{evidence:{id:'reference-'+i}})));
+    const capped=Array.from({length:50000},(_,i)=>record('network-'+i,'network'));
+    const state=window.compareFixture={mode:'records',lang:'en',calls:[]};
+    const tr=value=>state.lang==='zh-CN'?zh[value]||value:value;
+    window.AgentContextUI={coverageSections:()=>({runtime:{label:'Not recorded'}}),retentionText:()=>'',omissionText:()=>'',contentReason:({reason})=>reason==='capture_policy'?'Not saved by this run’s retention settings.':reason};
+    window.AgentCompareUI.init({tr,tx:(value,args)=>tr(value).replace(/\{(\w+)\}/g,(_,key)=>args[key]),esc:value=>String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),channelLabels:{},captureView:()=>({run:'a'}),j:async(url)=>{
+      const u=new URL(url,'http://fixture');
+      if(u.pathname==='/api/runs')return [{run:'a',events:1},{run:'b',events:1}];
+      if(u.pathname==='/api/context/overview')return {coverage:[]};
+      const run=u.searchParams.get('run'),cursor=u.searchParams.get('cursor');
+      state.calls.push({run,cursor});
+      const response={schema_version:'agentprovenance.comparison_records/v1',run_id:run,records:[],issues:[],sources_read:50,has_more:false,next_cursor:''};
+      if(state.mode==='pending'){
+        state.mode='records';
+        return new Promise(resolve=>state.release=()=>resolve({...response,records:[record('stale-response')]}));
+      }
+      if(state.mode==='retention')return {...response,records:run==='a'?[
+        record('omitted','configuration',{value:null,partial:true,evidence:{id:'omitted',content:{reason:'capture_policy'}}}),
+        record('missing','configuration',{value:null,evidence:{id:'missing',content:{reason:'missing_body'}}})
+      ]:[record('retained')]};
+      if(run==='b')return {...response,records};
+      if(state.mode==='sources')return {...response,sources_read:100000,has_more:true,next_cursor:'next'};
+      if(state.mode==='full')return {...response,records:cursor?[record('only-a')]:records,has_more:!cursor,next_cursor:cursor?'':'next'};
+      return {...response,records:cursor?records:capped,has_more:!cursor,next_cursor:cursor?'':'next'};
+    }});
+  },zh);
+  await page.evaluate(()=>window.AgentCompareUI.open());
+  await page.locator('#compare-b').selectOption('b');
+  await done();
+  assert.match(await text('compare-summary'),/Configuration 0/);
+  assert.match(await text('compare-summary'),/A: Scanned 50 sources · included 50000 comparison records · Comparison scan incomplete/);
+  assert.match(await text('compare-summary'),/B: Scanned 50 sources · included 164 comparison records · Comparison scan complete/);
+  assert.equal(await page.locator('.compare-row').count(),100);
+  assert.equal(await page.locator('.compare-only_a,.compare-only_b,.compare-different').count(),0);
+  const row=page.locator('.compare-row').filter({hasText:'shared-000'});
+  await row.locator('summary').click();
+  assert.match(await row.locator('.compare-side').nth(0).innerText(),/Unknown on this side; scan incomplete/);
+  assert.match(await row.locator('.compare-side').nth(0).innerText(),/Comparison record limit reached/);
+  assert.match(await row.locator('.compare-side').nth(1).innerText(),/"shared-000"/);
+  await row.locator('[data-record-next]').click();
+  assert.equal(await row.locator('select option').count(),10);
+  assert.equal(await row.locator('select').inputValue(),'50');
+  await page.locator('#compare-more').click();
+  assert.equal(await page.locator('.compare-row').count(),105);
+  assert.equal(await row.locator('select').inputValue(),'50');
+  assert.equal(await page.locator('#compare-more').isHidden(),true);
+  await page.locator('#compare-only').uncheck();
+  assert.equal(await page.locator('.compare-row').count(),100);
+  assert.equal(await page.locator('.compare-only_a,.compare-only_b').count(),0);
+  await page.screenshot({path:path.join(output,'compare-truncated-desktop.png')});
+  await page.locator('#compare-swap').click();
+  await done();
+  assert.equal(await page.locator('#compare-a').inputValue(),'b');
+  assert.match(await text('compare-summary'),/B: Scanned 50 sources · included 50000 comparison records · Comparison scan incomplete/);
+  await row.locator('summary').click();
+  assert.match(await row.locator('.compare-side').nth(1).innerText(),/Unknown on this side; scan incomplete/);
+  assert.equal(await page.locator('.compare-only_a,.compare-only_b').count(),0);
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.locator('#compare-dialog').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+  await page.screenshot({path:path.join(output,'compare-truncated-mobile.png')});
+  await page.setViewportSize({width:1440,height:1050});
+  await refresh('sources');
+  assert.match(await text('compare-coverage'),/Comparison source limit reached/);
+  assert.match(await text('compare-summary'),/100000 sources · included 0 comparison records/);
+  assert.equal(await page.locator('.compare-only_a,.compare-only_b').count(),0);
+  await page.locator('[data-dimension="files"]').click();
+  assert.match(await text('compare-results'),/No included records in this view; comparison scan incomplete/);
+  await page.locator('[data-dimension="configuration"]').click();
+  await refresh('full');
+  assert.match(await text('compare-summary'),/Configuration 1/);
+  assert.match(await text('compare-summary'),/B: Scanned 100 sources · included 165 comparison records · Comparison scan complete/);
+  assert.equal(await page.locator('.compare-only_b').count(),1);
+  await page.locator('#compare-only').check();
+  assert.equal(await page.locator('.compare-row').count(),1);
+  await refresh('retention');
+  assert.match(await text('compare-summary'),/Configuration 1/);
+  assert.equal(await page.locator('.compare-unknown').count(),2);
+  assert.equal(await page.locator('.compare-only_a').count(),1);
+  const omitted=page.locator('.compare-row').filter({hasText:'omitted'});
+  await omitted.locator('summary').click();
+  assert.match(await omitted.innerText(),/Not saved by this run’s retention settings/);
+  const missing=page.locator('.compare-row').filter({hasText:'missing'});
+  await missing.locator('summary').click();
+  assert.match(await missing.innerText(),/missing_body/);
+  const before=await text('compare-summary');
+  await page.evaluate(()=>window.compareFixture.mode='pending');
+  await page.locator('#compare-refresh').click();
+  await page.waitForFunction(()=>!!window.compareFixture.release);
+  await page.locator('#compare-stop').click();
+  await page.evaluate(()=>{window.compareFixture.release();delete window.compareFixture.release;});
+  await done();
+  assert.match(await text('compare-status'),/loading stopped/);
+  assert.equal(await text('compare-summary'),before,'cancellation keeps the previously published result');
+  assert.doesNotMatch(await text('compare-results'),/stale-response/);
+  await refresh('records');
+  assert.equal(await page.locator('.compare-only_a,.compare-only_b').count(),0);
+  await page.evaluate(()=>window.compareFixture.mode='pending');
+  await page.locator('#compare-refresh').click();
+  await page.waitForFunction(()=>!!window.compareFixture.release);
+  await page.locator('#compare-swap').click();
+  await done();
+  await page.evaluate(()=>window.compareFixture.release());
+  assert.equal(await page.locator('#compare-a').inputValue(),'a');
+  assert.doesNotMatch(await text('compare-results'),/stale-response/);
+  await page.locator('#compare-close').click();
+  await page.evaluate(()=>window.AgentCompareUI.open());
+  assert.match(await text('compare-summary'),/Comparison scan incomplete/);
+  await page.evaluate(()=>window.compareFixture.lang='zh-CN');
+  await refresh('sources');
+  assert.match(await text('compare-summary'),/已扫描 100000 个来源/);
+  assert.match(await text('compare-coverage'),/已达到对照来源数量上限/);
+  await row.locator('summary').click();
+  assert.match(await row.innerText(),/此侧尚未确定；扫描未完成/);
+  assert.deepEqual(errors,[]);
+  console.log('PASS: real comparison UI with synthetic API fixtures: record/source caps, scan counts/reasons, readable retained values, 100-row pagination, 50-reference pagination, A/B symmetry, full-scan one-sided count, retention/missing-body reasons, cancellation and stale-response protection, reopen, Chinese copy, desktop/mobile overflow.');
+}finally{
+  await browser.close();
+}

@@ -1,13 +1,14 @@
 package provenance
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/ids"
+	storepkg "github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/tlsintent"
 )
 
@@ -16,53 +17,103 @@ const (
 	edgeLLMBody     = "llm_body"     // runtime_event(tls) -> the objectified body
 	edgeLLMRequest  = "llm_request"  // llm_call -> request body object
 	edgeLLMResponse = "llm_response" // llm_call -> response body object
-	edgeLLMCaused   = "llm_caused"   // llm_call -> the syscall/action it caused
+	edgeLLMCaused   = "llm_caused"   // llm_call -> inferred command execution
 )
 
 // MaterializeLLMCalls turns the captured LLM traffic into verifiable evidence:
-// each reassembled tls_write/tls_read body (when full capture is on) is stored as
-// a content-addressed `llm_message` object, and every paired request/response
-// (from the ingest-time `llm_call` edge) becomes a first-class `llm_call` node
-// that references the model's actual prompt and completion. Idempotent. Returns
-// the number of llm_call nodes built.
+// each tls_write/tls_read gets a content-addressed message with its pairing
+// assessment and optional saved body. Connection/stream identities determine
+// pairs; old ingestion-time edges are not matching inputs. Derived TLS results
+// are atomically replaced, leaving transcript and endpoint captures intact.
 func MaterializeLLMCalls(store ObjectStore, db *sql.DB, runID string) (int, error) {
 	if runID == "" {
 		return 0, fmt.Errorf("materialize llm calls: run id is required")
 	}
-	for _, q := range []string{
-		`DELETE FROM graph_edges WHERE run_id = ? AND edge_type IN ('llm_body','llm_request','llm_response','llm_caused')`,
-		`DELETE FROM provenance_objects WHERE run_id = ? AND object_type = 'llm_message'`,
-	} {
-		if _, err := db.Exec(q, runID); err != nil {
-			return 0, fmt.Errorf("materialize llm calls: clear: %w", err)
-		}
+	var n int
+	err := storepkg.WithTx(context.Background(), db, func(tx *sql.Tx) error {
+		var err error
+		n, err = materializeLLMCallsTx(store, tx, runID)
+		return err
+	})
+	if err != nil {
+		return 0, err
 	}
+	return n, nil
+}
+
+func materializeLLMCallsTx(store ObjectStore, tx *sql.Tx, runID string) (int, error) {
+	store.Tx = tx
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	// Objectify each TLS body that carries full content.
-	rows, err := db.Query(`SELECT id, event_type, COALESCE(payload,'')
-		FROM events WHERE run_id = ? AND event_type IN ('tls_write','tls_read')`, runID)
+	// Read the complete matching input before replacing any derived objects.
+	rows, err := tx.Query(`SELECT id,event_type,COALESCE(payload,''),created_at,source,COALESCE(session_id,''),cgroup_id,container_id,pid
+		FROM events WHERE run_id = ? AND event_type IN ('tls_write','tls_read') ORDER BY id LIMIT ?`, runID, maxLLMActions+1)
 	if err != nil {
 		return 0, err
 	}
 	objByEvent := map[string]string{}
-	respCommands := map[string][]string{} // tls_read event id -> commands the model decided to run
-	type row struct{ id, etype, payload string }
-	var evs []row
+	var evs []tlsEvent
+	bytes := 0
 	for rows.Next() {
-		var r row
-		if err := rows.Scan(&r.id, &r.etype, &r.payload); err != nil {
+		var r tlsEvent
+		if err := rows.Scan(&r.id, &r.etype, &r.payload, &r.timestamp, &r.scope.source, &r.scope.session, &r.scope.cgroup, &r.scope.container, &r.pid); err != nil {
 			rows.Close()
 			return 0, err
 		}
+		bytes += len(r.payload)
+		if len(evs) >= maxLLMActions || bytes > maxLLMMatchBytes {
+			rows.Close()
+			return 0, fmt.Errorf("materialize llm calls: TLS input limit exceeded")
+		}
+		r.at, _ = time.Parse(time.RFC3339Nano, r.timestamp)
+		r.scope.origin = llmOrigin(r.payload, r.pid)
+		readTLSIdentity(&r)
 		evs = append(evs, r)
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	captureGap := false
+	if len(evs) > 0 {
+		captureGap, err = tlsCaptureGap(tx, runID)
+		if err != nil {
+			return 0, fmt.Errorf("materialize llm calls: capture report: %w", err)
+		}
+	}
+	ps, reports := pairTLSMessages(evs, captureGap)
+	var decisions []llmDecision
+	for _, p := range ps {
+		req, resp := evs[p.request], evs[p.response]
+		content, _ := tlsBodyContent(resp.payload)
+		for _, command := range tlsintent.ParseSemantics(tlsintent.Response, []byte(content)).ToolCommands {
+			decisions = append(decisions, llmDecision{node: "llm_call/" + req.id, sourceEvent: resp.id, command: command, at: resp.at, scope: resp.scope})
+		}
+	}
+	actions, err := readLLMActions(tx, runID, false)
+	if err != nil {
+		return 0, err
+	}
+	matches, err := matchLLMDecisions(decisions, actions)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(`DELETE FROM graph_edges WHERE run_id=? AND (
+		edge_type IN ('llm_call','llm_intent_caused','llm_body') OR
+		(edge_type IN ('llm_request','llm_response','llm_caused') AND from_id IN (
+			SELECT 'llm_call/' || id FROM events WHERE run_id=? AND event_type='tls_write')))`, runID, runID); err != nil {
+		return 0, fmt.Errorf("materialize llm calls: clear edges: %w", err)
+	}
+	if _, err := tx.Exec(`DELETE FROM provenance_objects WHERE run_id=? AND object_type='llm_message'
+		AND (source_id LIKE 'llm_request/%' OR source_id LIKE 'llm_response/%')`, runID); err != nil {
+		return 0, fmt.Errorf("materialize llm calls: clear objects: %w", err)
+	}
+	// Objectify each TLS body, including decisions with no attributable execution.
 	for _, r := range evs {
 		content, model := tlsBodyContent(r.payload)
-		if content == "" {
-			continue
-		}
 		dir, prefix := tlsintent.Request, "llm_request"
 		if r.etype == "tls_read" {
 			dir, prefix = tlsintent.Response, "llm_response"
@@ -71,191 +122,53 @@ func MaterializeLLMCalls(store ObjectStore, db *sql.DB, runID string) (int, erro
 		if model == "" {
 			model = sem.Model
 		}
-		if dir == tlsintent.Response {
-			respCommands[r.id] = sem.ToolCommands
-		}
 		res, err := store.PutExternalObject(ExternalObjectInput{
 			Type:     "llm_message",
 			SourceID: prefix + "/" + r.id,
 			RunID:    runID,
-			Payload:  map[string]any{"direction": dir, "model": model, "content": content, "semantics": sem},
+			Payload: map[string]any{"direction": dir, "model": model, "content": content, "semantics": sem,
+				"content_saved": content != "", "http_identity": r.http, "truncated": r.truncated, "correlation": reports[r.id]},
 		})
 		if err != nil {
 			return 0, fmt.Errorf("materialize llm calls: objectify %s: %w", r.id, err)
 		}
 		objByEvent[r.id] = res.Hash
-		if err := insertLLMEdge(db, runID, "runtime_event/"+r.id, res.Hash, edgeLLMBody, r.id, now); err != nil {
+		if err := insertLLMEdge(tx, runID, "runtime_event/"+r.id, res.Hash, edgeLLMBody, r.id, now); err != nil {
 			return 0, err
 		}
 	}
 
-	// Build one llm_call node per paired request/response (the ingest-time pairing).
-	pairs, err := db.Query(`SELECT from_id, to_id FROM graph_edges WHERE run_id = ? AND edge_type = 'llm_call'`, runID)
-	if err != nil {
-		return 0, err
-	}
-	type pair struct{ from, to string }
-	var ps []pair
-	for pairs.Next() {
-		var p pair
-		if err := pairs.Scan(&p.from, &p.to); err != nil {
-			pairs.Close()
-			return 0, err
-		}
-		ps = append(ps, p)
-	}
-	pairs.Close()
 	n := 0
 	for _, p := range ps {
-		reqID := strings.TrimPrefix(p.from, "runtime_event/")
-		respID := strings.TrimPrefix(p.to, "runtime_event/")
+		reqID, respID := evs[p.request].id, evs[p.response].id
 		reqObj, respObj := objByEvent[reqID], objByEvent[respID]
 		if reqObj == "" && respObj == "" {
 			continue
 		}
 		llmNode := "llm_call/" + reqID // deterministic: one llm_call per request
-		if err := insertLLMEdge(db, runID, llmNode, reqObj, edgeLLMRequest, reqID, now); err != nil {
+		report := reports[reqID]
+		if _, err := tx.Exec(`INSERT INTO graph_edges (id,run_id,rollout_id,from_id,to_id,edge_type,source_event_id,created_at)
+			VALUES (?,?,'',?,?,'llm_call',?,?)`, tlsPairEdgePrefix+report.Method+"-"+ids.New("edge"), runID,
+			"runtime_event/"+reqID, "runtime_event/"+respID, respID, evs[p.response].at.UTC().Format(time.RFC3339Nano)); err != nil {
+			return 0, fmt.Errorf("materialize llm calls: insert pair: %w", err)
+		}
+		if err := insertLLMEdge(tx, runID, llmNode, reqObj, edgeLLMRequest, reqID, now); err != nil {
 			return 0, err
 		}
-		if err := insertLLMEdge(db, runID, llmNode, respObj, edgeLLMResponse, respID, now); err != nil {
+		if err := insertLLMEdge(tx, runID, llmNode, respObj, edgeLLMResponse, respID, now); err != nil {
 			return 0, err
-		}
-		// Direct link: connect the llm_call NODE only to the execve(s) whose
-		// command matches what the model actually decided to run. The ingest-time
-		// llm_intent_caused edges link the response to EVERY action in the time
-		// window (hundreds, in a busy run); command-matching keeps the rendered
-		// "decided -> caused this syscall" edge precise. Those broad
-		// llm_intent_caused edges stay in the DB for the full-observability raw view.
-		actions, err := commandMatchedActions(db, runID, respCommands[respID])
-		if err != nil {
-			return 0, err
-		}
-		for _, actionNode := range actions {
-			if err := insertLLMEdge(db, runID, llmNode, actionNode, edgeLLMCaused, respID, now); err != nil {
-				return 0, err
-			}
 		}
 		n++
 	}
-	return n, nil
-}
-
-// commandMatchedActions returns the runtime-event nodes whose command line matches
-// one of the commands the model decided to run, collected before any write (to
-// avoid the single-connection nested-cursor footgun). Empty when the model
-// decided no command or nothing ran it -- we link only what we can attribute.
-//
-// It scans BOTH execve events and process_observed samples. The eBPF execve
-// captures argv from user memory at exec and intermittently truncates it to just
-// the program (e.g. "/usr/bin/python3", losing the script path) -- which strips
-// the distinctive token command-match needs. The record process sampler reads the
-// full command line from /proc/<pid>/cmdline independently, so it carries the
-// complete command for the same action. Matching against both makes the llm_caused
-// edge robust to execve argv truncation: when the execve string is stripped, the
-// process_observed sample still ties the decided command to the syscall it ran.
-func commandMatchedActions(db *sql.DB, runID string, commands []string) ([]string, error) {
-	if len(commands) == 0 {
-		return nil, nil
-	}
-	rows, err := db.Query(`SELECT id, event_type, COALESCE(payload,'') FROM events
-		WHERE run_id = ? AND event_type IN ('execve', 'process_observed')`, runID)
-	if err != nil {
-		return nil, fmt.Errorf("materialize llm calls: command match: %w", err)
-	}
-	defer rows.Close()
-	var out []string
-	seen := map[string]bool{}
-	for rows.Next() {
-		var id, eventType, payload string
-		if err := rows.Scan(&id, &eventType, &payload); err != nil {
-			return nil, err
-		}
-		cmd := actionCommand(eventType, payload)
-		if cmd == "" {
-			continue
-		}
-		for _, decided := range commands {
-			if commandsMatch(cmd, decided) {
-				node := "runtime_event/" + id
-				if !seen[node] {
-					seen[node] = true
-					out = append(out, node)
-				}
-				break
+	for i, d := range decisions {
+		if action, ok := matches[i]; ok {
+			if err := insertLLMEdge(tx, runID, d.node, action, edgeLLMCaused, d.sourceEvent, now); err != nil {
+				return 0, err
 			}
 		}
 	}
-	return out, rows.Err()
+	return n, nil
 }
-
-// actionCommand pulls the command line from a runtime action event: execve carries
-// argv (possibly truncated) in its own envelope; a record process sample carries
-// the full /proc/<pid>/cmdline command in the record envelope.
-func actionCommand(eventType, payload string) string {
-	if eventType == "process_observed" {
-		var proc struct {
-			Command string `json:"command"`
-		}
-		if err := json.Unmarshal(unwrapRecordProcessPayload(payload), &proc); err == nil {
-			return proc.Command
-		}
-		return ""
-	}
-	return execveCommand(payload)
-}
-
-// execveCommand pulls the command line from an execve event payload, handling the
-// recorder envelope ({payload:{raw:{command}}}) and the flat shape.
-func execveCommand(payload string) string {
-	var m map[string]any
-	if json.Unmarshal([]byte(payload), &m) != nil {
-		return ""
-	}
-	inner := m
-	if p, ok := m["payload"].(map[string]any); ok {
-		inner = p
-	}
-	if raw, ok := inner["raw"].(map[string]any); ok {
-		if c, _ := raw["command"].(string); c != "" {
-			return c
-		}
-	}
-	c, _ := inner["command"].(string)
-	return c
-}
-
-// commandsMatch reports whether a runtime action's command line ran the command
-// the model decided to run. It requires one command to be a PREFIX of the other
-// (after normalization): the actual process command begins with the decided one
-// (extra trailing args allowed), or vice-versa when the sample is itself clipped.
-//
-// Prefix, not substring, is what keeps attribution both precise and clean:
-//   - Precise: several commands in one workspace share a long directory-path
-//     token (`/home/u/proj/...`), so token- or substring-matching cross-links
-//     `ls`, `git`, and `rg` to each other. A prefix match does not.
-//   - Clean: Claude runs each command as `bash -c 'source <snapshot> && <cmd>'`.
-//     That wrapper CONTAINS the decided command but does not start with it, so a
-//     prefix match attaches llm_caused to the command's own process, not the
-//     shell-plumbing wrapper.
-//
-// This does not cost truncation robustness: the eBPF execve may be argv-truncated,
-// but the record process sample carries the full /proc/cmdline for the same action
-// (see commandMatchedActions), and that starts with the decided command. A command
-// under 12 chars is too generic to attribute.
-func commandsMatch(actual, decided string) bool {
-	a := normCmd(actual)
-	d := normCmd(decided)
-	short, long := d, a
-	if len(a) < len(d) {
-		short, long = a, d
-	}
-	if len(short) < 12 {
-		return false
-	}
-	return strings.HasPrefix(long, short)
-}
-
-func normCmd(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }
 
 // insertLLMEdge writes one graph edge. An empty endpoint is a legitimate skip
 // (e.g. a request with no captured response body) and returns nil; a real write
@@ -269,8 +182,12 @@ func insertLLMEdge(db llmEdgeWriter, runID, from, to, edgeType, sourceEvent, now
 	if from == "" || to == "" {
 		return nil
 	}
+	id := ids.New("edge")
+	if edgeType == edgeLLMCaused {
+		id = llmCommandEdgePrefix + id
+	}
 	if _, err := db.Exec(`INSERT INTO graph_edges (id, run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at)
-		VALUES (?, ?, '', ?, ?, ?, ?, ?)`, ids.New("edge"), runID, from, to, edgeType, sourceEvent, now); err != nil {
+		VALUES (?, ?, '', ?, ?, ?, ?, ?)`, id, runID, from, to, edgeType, sourceEvent, now); err != nil {
 		return fmt.Errorf("materialize llm calls: insert %s edge: %w", edgeType, err)
 	}
 	return nil

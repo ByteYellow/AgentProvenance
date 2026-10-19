@@ -15,7 +15,7 @@ python3 -m pip install -e .
 export AGENTPROV_BIN=/absolute/path/to/agentprov
 ```
 
-Set `AGENTPROV_BIN` to the CLI path. See [Quickstart](../README.md#quickstart) for prebuilt packages. The `agentprov` and `agentprov_eval` packages export the same API. Tool output and JSON fields remain English.
+Set `AGENTPROV_BIN` to the CLI path. See [Quickstart](../README.md#quickstart) for prebuilt packages. The `agentprov` and `agentprov_eval` packages export the same API. JSON field names, statuses and generated errors use English. Saved evidence retains its original language.
 
 ## Record, evaluate and import
 
@@ -98,10 +98,30 @@ Signal import and forensic export are enabled by default. Set `import_signals=Fa
 | `binary` | CLI path; defaults to `agentprov` on PATH |
 | `data_dir` | Local data directory |
 | `daemon_url` | Daemon address; selected methods use HTTP, while others still call the CLI |
-| `env` | Environment overrides for CLI subprocesses |
+| `env` | Environment overrides for CLI subprocesses; also overrides the HTTP daemon token |
 | `timeout` | Timeout for ordinary CLI and HTTP calls, default 600 seconds; `None` disables it |
 
-With `daemon_url`, `record`, `eval_context` and `signals` call HTTP directly. Other methods still require the CLI. The direct HTTP path has no Bearer Token option; use the [REST API](ai-access.md) directly when authentication is required.
+With `daemon_url`, `record`, `eval_context`, `signals` and `audit_associations` call HTTP directly. Other methods still require the CLI. HTTP reads `AGENTPROV_DAEMON_TOKEN` from `env` or the process environment and sends it as a Bearer Token. Redirects are rejected so credentials remain at the configured daemon address.
+
+Read saved audit decisions page by page:
+
+```python
+from agentprov import Client
+
+client = Client(daemon_url="http://127.0.0.1:8574")
+cursor = ""
+while True:
+    page = client.audit_associations("run-example", limit=100, cursor=cursor)
+    for item in page["items"]:
+        print(item["event_id"], item["decision"], item["operation"]["status"])
+    if not page["has_more"]:
+        break
+    cursor = page["next_cursor"]
+```
+
+Use `event_id` to inspect one decision. Without `daemon_url`, the same method
+calls the CLI. See [audit evidence](telemetry-schema.md#read-only-runtime-association)
+for the distinction between decision, candidate association and observed outcome.
 
 `iter_eval_contexts` streams from a subprocess and does not use `timeout`; consumers manage cancellation or deadlines.
 
@@ -119,6 +139,7 @@ With `daemon_url`, `record`, `eval_context` and `signals` call HTTP directly. Ot
 | `batch_eval_contexts(...)` | Read contexts into a list |
 | `iter_eval_contexts(...)` | Stream contexts line by line |
 | `signals(run_id, dimension=None)` | Read unified signals, optionally filtered by dimension |
+| `audit_associations(run_id, event_id="", limit=100, cursor="")` | Read saved audit decisions, candidates and observed outcomes |
 | `score_trajectory(command, registry, ...)` | Record and evaluate one run; return a `TrajectoryScore` |
 | `import_signals(run_id, signals, validate=True)` | Import signals with optional local validation |
 | `import_signal_reports(reports, engine="python-sdk")` | Import evaluator reports in a batch |

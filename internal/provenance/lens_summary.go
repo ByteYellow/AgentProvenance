@@ -327,16 +327,16 @@ func substrateScopeLabel(scope string) string {
 	}
 }
 
-func substrateScopeConfidence(scope string) float64 {
+func substrateScopeConfidence(scope string) *float64 {
 	switch scope {
 	case "record":
-		return 1.0
+		return graphConfidence(1.0)
 	case "k8s_cgroup":
-		return 0.8
+		return graphConfidence(0.8)
 	case "ai_asserted":
-		return 0.5
+		return graphConfidence(0.5)
 	default:
-		return 0
+		return nil
 	}
 }
 

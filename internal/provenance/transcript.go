@@ -2,6 +2,7 @@ package provenance
 
 import (
 	"bufio"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
 // AgentTranscript is a sub-agent's own session transcript, located via the hook
@@ -28,6 +31,9 @@ type TranscriptStream struct {
 	AgentID   string
 	Reader    io.Reader
 	SourceRef string
+	// ToolNodes maps native IDs to graph IDs from this stream's stored context.
+	// A non-nil map disables fallback to unscoped native IDs.
+	ToolNodes map[string]string
 }
 
 func HarvestTranscriptStreams(objects ObjectStore, db *sql.DB, runID string, inputs []TranscriptStream) (int, error) {
@@ -45,17 +51,54 @@ func HarvestTranscriptStreams(objects ObjectStore, db *sql.DB, runID string, inp
 		r := &io.LimitedReader{R: input.Reader, N: budget + 1}
 		turns, err := parseTranscript(r)
 		budget = r.N - 1
-		if err != nil || budget < 0 {
-			return 0, fmt.Errorf("transcript stream exceeds limits or cannot be parsed")
+		if err != nil {
+			return 0, fmt.Errorf("transcript stream %d: %w", i+1, err)
+		}
+		if budget < 0 {
+			return 0, fmt.Errorf("transcript stream exceeds limits")
 		}
 		parsed[i] = turns
 	}
-	tx, err := db.Begin()
+	var total int
+	err := store.WithTx(context.Background(), db, func(tx *sql.Tx) error {
+		var err error
+		total, err = replaceTranscriptStreams(objects, tx, runID, inputs, parsed)
+		return err
+	})
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	return total, nil
+}
+
+func replaceTranscriptStreams(objects ObjectStore, tx *sql.Tx, runID string, inputs []TranscriptStream, parsed [][]transcriptTurn) (int, error) {
 	objects.Tx = tx
+	var decisions []llmDecision
+	for i, input := range inputs {
+		nodePrefix, _ := transcriptNamespace(input.AgentID)
+		for j, turn := range parsed[i] {
+			at, _ := time.Parse(time.RFC3339Nano, turn.Timestamp)
+			for k, command := range turn.ShellCommands {
+				toolID := turn.ShellToolIDs[k]
+				if input.ToolNodes != nil {
+					toolID = input.ToolNodes[toolID]
+				}
+				decisions = append(decisions, llmDecision{
+					node: fmt.Sprintf("llm_call/%s-%d", nodePrefix, j), command: command,
+					at: at, transcript: true, toolID: toolID,
+					agentID: turn.AgentID, sessionID: turn.SessionID,
+				})
+			}
+		}
+	}
+	actions, err := readLLMActions(tx, runID, true)
+	if err != nil {
+		return 0, err
+	}
+	matches, err := matchLLMDecisions(decisions, actions)
+	if err != nil {
+		return 0, err
+	}
 	if _, err := tx.Exec(`DELETE FROM provenance_objects WHERE run_id=? AND source_id LIKE 'transcript/%'`, runID); err != nil {
 		return 0, err
 	}
@@ -64,14 +107,18 @@ func HarvestTranscriptStreams(objects ObjectStore, db *sql.DB, runID string, inp
 	}
 	total, now := 0, time.Now().UTC().Format(time.RFC3339Nano)
 	for i, input := range inputs {
-		n, err := harvestTranscriptTurns(objects, db, tx, runID, input.AgentID, now, input.SourceRef, parsed[i])
+		n, err := harvestTranscriptTurns(objects, tx, runID, input.AgentID, now, input.SourceRef, parsed[i])
 		if err != nil {
 			return 0, err
 		}
 		total += n
 	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
+	for i, d := range decisions {
+		if action, ok := matches[i]; ok {
+			if err := insertLLMEdge(tx, runID, d.node, action, edgeLLMCaused, "", now); err != nil {
+				return 0, err
+			}
+		}
 	}
 	return total, nil
 }
@@ -151,72 +198,37 @@ func fileStem(path string) string {
 // transcript into the shared llm_call graph. Sub-agent turns are namespaced by
 // agent id so they neither collide with the main turns nor with each other, and
 // so a missing/unreadable sub-agent file is skipped rather than aborting the run.
-// The single up-front cleanup makes the whole set idempotent per run.
+// All readable inputs are parsed and matched together before atomic replacement.
 func HarvestTranscriptSet(store ObjectStore, db *sql.DB, runID, mainPath string, subs []AgentTranscript) (int, error) {
-	if runID == "" {
-		return 0, fmt.Errorf("harvest transcript: run id is required")
+	if runID == "" || len(subs) > 255 {
+		return 0, fmt.Errorf("invalid transcript file scope")
 	}
-	// Idempotent: clear prior transcript-sourced objects and edges for the run.
-	// The namespaced ids below all sort under these two prefixes, so this one
-	// cleanup covers the main transcript and every sub-agent transcript.
-	if _, err := db.Exec(`DELETE FROM provenance_objects WHERE run_id = ? AND source_id LIKE 'transcript/%'`, runID); err != nil {
-		return 0, err
-	}
-	if _, err := db.Exec(`DELETE FROM graph_edges WHERE run_id = ? AND from_id LIKE 'llm_call/tr-%'`, runID); err != nil {
-		return 0, err
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	total := 0
-	// Main transcript first (agentID "" -> the original tr-<i> / transcript/req-<i>
-	// naming, so existing bundles and callers are unchanged).
-	n, err := harvestTranscriptFile(store, db, runID, mainPath, "", now, false)
-	if err != nil {
-		return total, err
-	}
-	total += n
-	for _, sub := range subs {
-		if sub.Path == "" || sub.Path == mainPath {
+	var files []*os.File
+	defer func() {
+		for _, f := range files {
+			f.Close()
+		}
+	}()
+	var inputs []TranscriptStream
+	entries := append([]AgentTranscript{{Path: mainPath}}, subs...)
+	for i, entry := range entries {
+		if entry.Path == "" || (i > 0 && entry.Path == mainPath) {
 			continue
 		}
-		// Sub-agent files may live on a different host than the one sealing the
-		// run; a missing one is skipped, not fatal.
-		n, err := harvestTranscriptFile(store, db, runID, sub.Path, sub.AgentID, now, true)
+		f, err := os.Open(entry.Path)
 		if err != nil {
-			return total, err
+			if i > 0 && os.IsNotExist(err) {
+				continue
+			}
+			return 0, fmt.Errorf("harvest transcript: open %s: %w", entry.Path, err)
 		}
-		total += n
+		files = append(files, f)
+		inputs = append(inputs, TranscriptStream{AgentID: entry.AgentID, Reader: f})
 	}
-	return total, nil
+	return HarvestTranscriptStreams(store, db, runID, inputs)
 }
 
-// harvestTranscriptFile ingests one transcript file's turns under the namespace
-// derived from agentID. When skipMissing is set (sub-agent transcripts), an
-// absent file yields zero turns instead of an error.
-func harvestTranscriptFile(store ObjectStore, db *sql.DB, runID, path, agentID, now string, skipMissing bool) (int, error) {
-	if path == "" {
-		return 0, nil
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		if skipMissing && os.IsNotExist(err) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("harvest transcript: open %s: %w", path, err)
-	}
-	defer f.Close()
-
-	turns, err := parseTranscript(f)
-	if err != nil {
-		return 0, err
-	}
-	if len(turns) == 0 {
-		return 0, nil
-	}
-	return harvestTranscriptTurns(store, db, db, runID, agentID, now, "", turns)
-}
-
-func harvestTranscriptTurns(store ObjectStore, db *sql.DB, writer llmEdgeWriter, runID, agentID, now, sourceRef string, turns []transcriptTurn) (int, error) {
+func harvestTranscriptTurns(store ObjectStore, writer llmEdgeWriter, runID, agentID, now, sourceRef string, turns []transcriptTurn) (int, error) {
 	nodePrefix, srcPrefix := transcriptNamespace(agentID)
 	var parents []string
 	if sourceRef != "" {
@@ -244,6 +256,7 @@ func harvestTranscriptTurns(store ObjectStore, db *sql.DB, writer llmEdgeWriter,
 				"direction": "response", "model": t.Model, "content": string(respContent),
 				"semantics": map[string]any{
 					"model": t.Model, "tool_calls": t.DecidedTools, "stop_reason": t.StopReason, "agent_id": agentID,
+					"timestamp": t.Timestamp, "session_id": t.SessionID, "source_agent_id": t.AgentID, "shell_tool_ids": t.ShellToolIDs,
 				},
 			},
 		})
@@ -257,16 +270,6 @@ func harvestTranscriptTurns(store ObjectStore, db *sql.DB, writer llmEdgeWriter,
 		}
 		if err := insertLLMEdge(writer, runID, llmNode, respObj.Hash, edgeLLMResponse, "", now); err != nil {
 			return n, err
-		}
-		// Link the decided shell commands to the syscalls that actually ran them.
-		actions, err := commandMatchedActions(db, runID, t.ShellCommands)
-		if err != nil {
-			return n, err
-		}
-		for _, action := range actions {
-			if err := insertLLMEdge(writer, runID, llmNode, action, edgeLLMCaused, "", now); err != nil {
-				return n, err
-			}
 		}
 		n++
 	}
@@ -294,13 +297,20 @@ type transcriptTurn struct {
 	ContentBlocks []any    // raw assistant content blocks (for the response object)
 	DecidedTools  []string // readable decided tool calls ("Bash: cat x", "Read: y")
 	ShellCommands []string // just the shell commands, for syscall command-match
+	ShellToolIDs  []string // tool_use ids, aligned with ShellCommands
+	Timestamp     string
+	SessionID     string
+	AgentID       string
 	StopReason    string
 }
 
 // transcriptLine is the tolerant projection of one transcript JSONL row.
 type transcriptLine struct {
-	Type    string `json:"type"`
-	Message struct {
+	Type      string `json:"type"`
+	Timestamp string `json:"timestamp"`
+	SessionID string `json:"sessionId"`
+	AgentID   string `json:"agentId"`
+	Message   struct {
 		Role       string          `json:"role"`
 		Model      string          `json:"model"`
 		StopReason string          `json:"stop_reason"`
@@ -315,14 +325,19 @@ func parseTranscript(r io.Reader) ([]transcriptTurn, error) {
 	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
 	var turns []transcriptTurn
 	lastPrompt := ""
+	lineNumber := 0
 	for sc.Scan() {
+		lineNumber++
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {
 			continue
 		}
+		if !strings.HasPrefix(line, "{") {
+			return nil, fmt.Errorf("transcript line %d must be a JSON object", lineNumber)
+		}
 		var tl transcriptLine
-		if json.Unmarshal([]byte(line), &tl) != nil {
-			continue
+		if err := json.Unmarshal([]byte(line), &tl); err != nil {
+			return nil, fmt.Errorf("invalid transcript JSON at line %d: %w", lineNumber, err)
 		}
 		switch tl.Type {
 		case "user":
@@ -334,11 +349,15 @@ func parseTranscript(r io.Reader) ([]transcriptTurn, error) {
 			}
 		case "assistant":
 			var blocks []any
-			if json.Unmarshal(tl.Message.Content, &blocks) != nil {
-				continue
+			if err := json.Unmarshal(tl.Message.Content, &blocks); err != nil {
+				return nil, fmt.Errorf("invalid assistant content at line %d: %w", lineNumber, err)
+			}
+			if blocks == nil {
+				return nil, fmt.Errorf("assistant content at line %d must be an array", lineNumber)
 			}
 			turn := transcriptTurn{
 				Prompt: lastPrompt, Model: tl.Message.Model, StopReason: tl.Message.StopReason,
+				Timestamp: tl.Timestamp, SessionID: tl.SessionID, AgentID: tl.AgentID,
 				ContentBlocks: blocks,
 			}
 			collectAssistantBlocks(blocks, &turn)
@@ -379,6 +398,8 @@ func collectAssistantBlocks(blocks []any, turn *transcriptTurn) {
 			}
 			if shell != "" {
 				turn.ShellCommands = append(turn.ShellCommands, shell)
+				id, _ := m["id"].(string)
+				turn.ShellToolIDs = append(turn.ShellToolIDs, id)
 			}
 		}
 	}

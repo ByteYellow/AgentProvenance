@@ -37,6 +37,7 @@ async (page) => {
   const file = name => page.locator('#dag [data-id="workspace_file/'+name+'"]');
   await file('report.py').click();
   await readyContent('def daily_revenue');
+  await page.locator('#inspection-tab-content').click();
   check(!await page.locator('#context-fold').evaluate(el=>el.open), 'real saved file works while session is collapsed');
   check((await page.locator('#content-body').innerText()).includes('Decimal'), 'recorded implementation body available offline');
   await page.locator('#content-choice').selectOption({label:'Raw saved object'});
@@ -44,6 +45,7 @@ async (page) => {
   check(true, 'file raw descriptor is distinct from its saved text');
   await file('test_report.py').click();
   await readyContent('test_cli_daily_output');
+  await page.locator('#inspection-tab-content').click();
   check(true, 'switching files selects the recorded test source');
   await page.locator('#savedcontent').scrollIntoViewIfNeeded();
   await page.screenshot({path:'output/playwright/deepseek-file-en.png'});
@@ -132,6 +134,7 @@ async (page) => {
   await page.screenshot({path:'output/playwright/deepseek-coverage-zh.png'});
   await page.setViewportSize({width:390,height:844});
   check(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1), 'mobile has no page-wide overflow');
+  await page.locator('#inspection-tab-content').click();
   await page.locator('#content-expand').click();
   check(await page.locator('#content-dialog').evaluate(el=>el.getBoundingClientRect().width<=innerWidth), 'mobile saved-content dialog fits');
   check(await page.locator('#content-close').evaluate(el=>el.getBoundingClientRect().bottom<=innerHeight), 'mobile close control stays visible');

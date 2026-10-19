@@ -1,7 +1,7 @@
 package tlsintent
 
-// CaptureLoss counts plaintext that could not be reassembled within the memory
-// budget. It is separate from kernel ring-buffer drops.
+// CaptureLoss counts plaintext lost to parser limits, invalidated connection
+// state or stale generations. It is separate from kernel ring-buffer drops.
 type CaptureLoss struct {
 	Streams uint64
 	Bytes   uint64

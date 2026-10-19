@@ -4,7 +4,7 @@
 
 [![体验在线 Demo](docs/assets/online-demo-button-zh-CN.svg)](https://ByteYellow.github.io/AgentProvenance/)
 
-**直接体验 7 份签名回放，查看执行图谱、Agent 会话和文件正文。**
+**直接体验 9 份签名回放，查看执行图谱、Agent 会话、访问控制决策和文件正文。**
 无需安装、注册或 API Key。
 
 # AgentProvenance
@@ -75,7 +75,8 @@ AgentProvenance 把任务要求、工具返回结果和操作系统中的实际�
 需要离线回放时，下载 CLI：
 
 在[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应平台的
-压缩包和同名 `.sha256` 校验文件。以下示例使用 v0.9.0。
+压缩包和同名 `.sha256` 校验文件。下载示例使用 v0.10.0，
+包含下文的调查与修复示例，详情见[版本进展](#版本进展)。
 
 | 平台 | 压缩包后缀 |
 | --- | --- |
@@ -87,9 +88,9 @@ AgentProvenance 把任务要求、工具返回结果和操作系统中的实际�
 以 Linux x86-64 为例，下载后校验并解压：
 
 ```sh
-sha256sum -c agentprov_v0.9.0_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.10.0_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.9.0_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.10.0_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -101,9 +102,10 @@ Windows 用户在 WSL 中运行 Linux 包。回放可以离线使用，
 [![Demo 示例首页，点击在线体验](docs/img/demo-gallery-zh-CN.png)](https://ByteYellow.github.io/AgentProvenance/)
 
 点击**打开回放**查看签名执行记录，点击**阅读指南**查看图文说明。
-示例库共有 **7 份签名回放、9 篇指南**。建议先看新版的 DeepSeek 开发任务：
+当前示例库共有 **9 份签名回放、11 篇示例指南**。建议先体验调查与修复流程：
 
 ```sh
+./agentprov demo investigation-workflow
 ./agentprov demo deepseek-context
 ./agentprov demo multiagent-provenance
 ./agentprov demo --list
@@ -113,11 +115,9 @@ CLI 校验签名后，用独立的临时目录打开可视化界面。按 Ctrl-C
 不会重新运行记录中的命令。无图形界面或远程机器可添加 `--no-browser`，
 通过端口转发访问输出的本地地址。
 
-如需从源码构建 v0.9.0，先安装 Go 1.23+：
+如需构建当前源码，先安装 Go 1.23+，再从仓库根目录运行：
 
 ```sh
-git clone --branch v0.9.0 https://github.com/ByteYellow/AgentProvenance
-cd AgentProvenance
 go build -o agentprov ./cmd/agentprov
 ./agentprov demo
 ```
@@ -147,6 +147,8 @@ Codex 和 DeepSeek Harness 使用同样的入口：
 ```
 
 Linux eBPF 采集需要传感器、受支持的内核和 BPF/perf 权限。
+Agent 上下文默认使用详细档。给 `launch` 添加 `--capture basic`，可减少补充上下文的留存。
+内核、TLS 和工作区采集仍可独立配置。
 macOS 支持应用侧记录和回放。自定义会话目录、续跑及格式支持范围，
 见 [Agent 会话指南](docs/zh-CN/agent-context.md)。
 
@@ -217,7 +219,7 @@ AgentProvenance 再把这些信息与文件变化、最终产物关联起来：
 
 ## Agent 会话
 
-v0.9.0 将任务和对话放进执行证据页面。**执行图谱在上，Agent 会话在下，默认收起。**
+任务、对话和执行证据在同一页面阅读。**执行图谱在上，Agent 会话在下，默认收起。**
 
 | 视图 | 可以查看什么 |
 | --- | --- |
@@ -259,10 +261,13 @@ v0.9.0 将任务和对话放进执行证据页面。**执行图谱在上，Agent
 | 图谱浏览 | 按进程、文件与产物、网络、Agent 意图、协作关系、数据流和部署环境查看同一次执行 |
 | 时间线与详情 | 按发生顺序浏览事件，选中节点后检查对应的来源证据 |
 | Agent 会话 | 从工具结果跳转到关联图谱，查看任务、权限和配置历史 |
+| 关联会话 | 从概览或单个会话的按钮进入，查看已保存的父子、委派与共享证据关系 |
 | 正文阅读区 | 分页阅读已保存的工具输出和文件内容，不依赖会话面板是否展开 |
+| 访问控制 | 查看 AppArmor/seccomp 审计、任务状态与配置，沿操作尝试检查机制判定及已记录的结果 |
+| 搜索、对比与导出 | 在临时调查窗口中查找正文、比较两次运行，或预览只读导出的内容 |
 | 采集与校验 | 检查会话采集情况、探针是否可用、关联缺口和完整性校验结果 |
 
-![Agent 会话收起时，仍可查看已保存的文件正文](demo/deepseek-context/dashboard-file-zh-CN.png)
+![调查与修复：会话、访问控制证据与执行图谱](demo/investigation-workflow/dashboard-overview-zh-CN.png)
 
 查看自己的执行记录：
 
@@ -270,10 +275,27 @@ v0.9.0 将任务和对话放进执行证据页面。**执行图谱在上，Agent
 ./agentprov dashboard serve
 ```
 
-本地界面的页面资源内置于 CLI，无需外部网页服务。在线 Demo 为公开示例提供相同的只读浏览体验。
+本地界面的页面资源内置于 CLI，无需外部网页服务。在线 Demo 可只读浏览公开示例。
 面对大量事件，界面先展示汇总关系，再按需展开详情，避免把全部原始事件堆在一张图里。
 
 ## 演示
+
+### 调查失败，再比较修复结果
+
+一个真实 DeepSeek 会话完成两次执行：委派代码审查、运行七项测试、发现可选诊断被拒绝，
+再关闭多余诊断，成功生成报表。沿父子会话查看协作，搜索具体报错，检查 AppArmor/seccomp
+记录，对比文件变化，最后选择证据导出只读回放。
+
+在当前源码目录中运行：
+
+```sh
+go build -o agentprov ./cmd/agentprov
+./agentprov demo investigation-workflow
+```
+
+命令会同时加载两份签名记录。在**对比**中，将 A 设为**诊断修复 · 修复前**，
+将 B 设为**诊断修复 · 修复后**。在**文件证据**中查看 `settings.json` 和生成的报表；
+**配置**维度展示 Harness 设置。[查看完整调查路线](demo/investigation-workflow/README.zh-CN.md)。
 
 <a id="demo关联多-agent-的任务委派协作消息与系统调用"></a>
 
@@ -324,7 +346,7 @@ v0.9.0 将任务和对话放进执行证据页面。**执行图谱在上，Agent
 | [LLM Judge](demo/llm-judge/README.zh-CN.md) | 外部模型读取证据，返回附有证据引用的分析结果 |
 | [Jev 评估器](demo/jev-judge/README.zh-CN.md) | 结构化评估、规则对比与人工复核 |
 
-前面的七个回放入口均可离线体验。LLM Judge 和 Jev 是可选集成指南，
+9 份签名回放均可离线体验。LLM Judge 和 Jev 是可选集成指南，
 实时评估需要按各自说明配置模型服务。Grok 示例是有明确采集时间和复现范围的历史记录，
 不代表其当前服务的行为。
 
@@ -471,14 +493,16 @@ CLI 和工具输出默认英文，原始证据不翻译。
 
 ## 版本进展
 
-v0.9.0 完善 Agent 会话，新增 DeepSeek Harness 接入、任务与配置历史、采集报告和正文阅读。
-完整只读 Demo 与中英文文档也可以直接在网页体验。
+v0.10.0 把关联会话、正文搜索、执行对比和选择性离线分享
+串成完整的调查流程，并接入 AppArmor、seccomp 的访问控制记录。
+采集支持基础档和详细档，用户可以按需要选择 Agent 上下文的留存范围。
+
+后续暂不新增功能，重点提升准确性、采集稳定性和使用体验。
 
 升级前请备份数据目录；升级后的数据库不支持直接用旧版程序打开。
 macOS 包尚未经过 Apple 公证；下载校验和用于检查压缩包完整性。
 
-[发行说明](docs/zh-CN/releases/v0.9.0.md) · [变更记录](CHANGELOG.zh-CN.md) ·
-[验证记录](docs/benchmarks/v0.9.0-acceptance/README.zh-CN.md) ·
+[发行说明](docs/zh-CN/releases/v0.10.0.md) · [变更记录](CHANGELOG.zh-CN.md) ·
 [后续方向](docs/zh-CN/capabilities.md#后续方向)
 
 ## 开发
@@ -500,7 +524,7 @@ ARM64 实机与 KVM/K3s 实验环境的验收结果另有报告，不等同于�
 各验收脚本的环境要求不同。部分脚本需要 root、会创建 Pod 或安装服务，
 请勿直接批量执行全部 `scripts/accept_*.sh`。
 环境测试请按 [KVM/K3s 部署指南](docs/zh-CN/amd64-kvm-k3s.md)操作，
-单节点压力测试见[收尾指南](docs/zh-CN/project-closeout.md)。
+单节点压力测试见[部署与性能基线](docs/zh-CN/project-closeout.md)。
 
 ## 作者与许可
 

@@ -19,6 +19,7 @@ func (s Service) ReadHandler() http.Handler {
 	mux.HandleFunc("GET /context/content", s.httpContent)
 	mux.HandleFunc("GET /context/compare", s.httpCompare)
 	mux.HandleFunc("GET /context/links", s.httpLinks)
+	mux.HandleFunc("GET /context/session-relations", s.httpSessionRelations)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
@@ -42,6 +43,22 @@ func (s Service) ReadHandler() http.Handler {
 		}
 		mux.ServeHTTP(w, r)
 	})
+}
+
+func (s Service) httpSessionRelations(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit := 50
+	if q.Get("limit") != "" {
+		n, err := strconv.Atoi(q.Get("limit"))
+		if err != nil || n < 1 || n > 200 {
+			contextError(w, 400, "invalid_argument", "limit must be between 1 and 200.")
+			return
+		}
+		limit = n
+	}
+	value, err := s.SessionRelations(r.Context(), SessionRelationOptions{RunID: q.Get("run"), Harness: q.Get("harness"),
+		SessionID: q.Get("session"), Limit: limit, Cursor: q.Get("cursor")})
+	contextResult(w, value, err)
 }
 
 func (s Service) httpLinks(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +118,7 @@ func (s Service) httpEntries(w http.ResponseWriter, r *http.Request) {
 		}
 		revisions = v
 	}
-	value, err := s.Entries(r.Context(), PageOptions{RunID: q.Get("run"), SourceID: q.Get("source"), SessionID: q.Get("session"),
+	value, err := s.Entries(r.Context(), PageOptions{RunID: q.Get("run"), Harness: q.Get("harness"), SourceID: q.Get("source"), SessionID: q.Get("session"),
 		Kind: q.Get("kind"), ToolCallID: q.Get("tool_call"), EntryID: q.Get("entry"), NodeID: q.Get("node"), Group: q.Get("group"),
 		Cursor: q.Get("cursor"), Limit: limit, IncludeRevisions: revisions})
 	contextResult(w, value, err)

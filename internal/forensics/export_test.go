@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,20 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
+
+func TestRequiredObjectOverLimitFailsExport(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "large-object.json")
+	if err := os.WriteFile(path, []byte(strings.Repeat("x", maxInlineObjectBytes+1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	blobs, omitted, err := embedObjectBlobs([]map[string]any{{"hash": "sha256:large", "path": path}})
+	if err == nil || !strings.Contains(err.Error(), "required object sha256:large exceeds") {
+		t.Fatalf("expected explicit size failure, got %v", err)
+	}
+	if len(blobs) != 0 || len(omitted) != 0 {
+		t.Fatal("required object must not become an optional omission")
+	}
+}
 
 func TestExportBundleIncludesRiskResponseEvidence(t *testing.T) {
 	root := t.TempDir()

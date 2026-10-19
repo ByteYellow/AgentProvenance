@@ -4,12 +4,15 @@
 const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const { gunzipSync } = require('node:zlib');
+const { tmpdir } = require('node:os');
 
 async function main() {
   const site = new URL(process.argv[2]), native = new URL(process.argv[3]);
   const browser = await chromium.launch({headless:true, ...(process.env.PLAYWRIGHT_CHANNEL ? {channel:process.env.PLAYWRIGHT_CHANNEL} : {})});
-  const report = {parity:0, pages:0, runs:0, focusedGraphs:0, contentPages:0};
+  const report = {parity:0, pages:0, runs:0, sessions:0, focusedGraphs:0, contentPages:0};
   const errors = [];
+  const failedRequests = [];
+  let page;
   const responseJSON = async (request,url) => {const r=await request.get(url);assert.equal(r.status(),200,url);return r.json();};
   try {
     const context=await browser.newContext({viewport:{width:1440,height:1060},locale:'en-US'});
@@ -18,17 +21,20 @@ async function main() {
       if(url.origin===site.origin && url.pathname.startsWith(site.pathname) && !url.pathname.includes('/api/'))return route.continue();
       errors.push('Unexpected browser request: '+url);return route.abort();
     });
-    const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+    page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+    page.on('requestfailed',request=>failedRequests.push({url:request.url(),error:request.failure()?.errorText}));
     const manifest=await responseJSON(context.request,new URL('replay-manifest.json',site).href);
-    assert.equal(Object.keys(manifest.runs).length,7);
+    assert.equal(Object.keys(manifest.runs).length,9);
     assert.ok(manifest.verifications.every(v=>v.signature_verified&&v.graph.status==='ok'));
     const data=async ref=>{const r=await context.request.get(new URL(ref.path,site).href);assert.ok(r.ok());return JSON.parse(gunzipSync(await r.body()).toString());};
     await page.goto(new URL('en/replay.html?run=run-dbc2adf273d4',site).href);
     await page.waitForFunction(()=>window._lensManifest && document.querySelector('#dag svg'));
     const compare=async query=>{
-      const [expected,actual]=await Promise.all([responseJSON(context.request,new URL(query,native).href),page.evaluate(q=>AgentProvReplay.query(q),query)]);
+      const [expected,actual]=await Promise.all([responseJSON(context.request,new URL(query,native).href),page.evaluate(q=>AgentProvReplay.query(q),query)]).catch(error=>{console.error('Query failed: '+query);throw error;});
       // Import locations differ; compare the same content-addressed object path.
-      const normalize=v=>JSON.parse(JSON.stringify(v).replace(/\/tmp\/agentprov-(?:public-demo|demo)-[0-9]+\/state\/provenance\/objects\//g,'/demo/objects/'));
+      const root=tmpdir().replace(/\/$/,'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      const importedPath=new RegExp(root+'/agentprov-(?:public-demo|demo)-[0-9]+/state/provenance/objects/','g');
+      const normalize=v=>JSON.parse(JSON.stringify(v).replace(importedPath,'/demo/objects/'));
       try {assert.deepEqual(normalize(actual),normalize(expected));}catch(e){console.error('Query mismatch: '+query);throw e;}report.parity++;return actual;
     };
     await compare('/api/runs');
@@ -57,7 +63,36 @@ async function main() {
       for(const id of Object.keys(snapshot.event_refs).filter(id=>!id.startsWith('runtime_event/')).slice(0,12)){
         await compare('/api/events'+q+'&ref='+encodeURIComponent(id)+'&ref=runtime_event/missing');
       }
+      for(const [identity,scope] of Object.entries(snapshot.sessions || {})){
+        const [harness,sessionID]=JSON.parse(identity),params=q+'&harness='+encodeURIComponent(harness)+'&session='+encodeURIComponent(sessionID);
+        for(const cursor of Object.keys(scope.relations||{})){
+          const query='/api/context/session-relations'+params+'&limit=50'+(cursor?'&cursor='+encodeURIComponent(cursor):'');
+          const [expected,actual]=await Promise.all([data(scope.relations[cursor]),page.evaluate(q=>AgentProvReplay.query(q),query)]);
+          assert.deepEqual(actual,expected);report.parity++;
+        }
+        const scopedIndex=await data(scope.lenses);
+        for(const key of Object.keys(scopedIndex.views)){
+          const [lens,detail]=key.split('/'),query='/api/lens'+params+'&lens='+lens+'&detail='+detail;
+          await compare(query);await compare(query+'&overlay=risk&overlay=trust');
+          const view=await data(scopedIndex.views[key]);
+          const byKind=new Map();for(const node of view.manifest.nodes)if(!byKind.has(node.kind))byKind.set(node.kind,node.id);
+          for(const id of byKind.values())await compare(query+'&focus='+encodeURIComponent(id));
+        }
+        for(const offset of [0,7,100000])await compare('/api/events'+params+'&limit=7&offset='+offset);
+        for(const id of Object.keys(snapshot.event_refs).filter(id=>!id.startsWith('runtime_event/')).slice(0,12))await compare('/api/events'+params+'&ref='+encodeURIComponent(id));
+        for(const group of ['conversation','configuration']){
+          const path='/api/context/entries'+params+'&group='+group+'&limit=7';
+          const collect=async fetchPage=>{let cursor='',entries=[];do{const result=await fetchPage(path+(cursor?'&cursor='+encodeURIComponent(cursor):''));entries.push(...result.entries);cursor=result.next_cursor||'';}while(cursor);return entries;};
+          assert.deepEqual(await collect(q=>page.evaluate(q=>AgentProvReplay.query(q),q)),await collect(q=>responseJSON(context.request,new URL(q,native).href)));report.parity++;
+        }
+        report.sessions++;
+      }
       const session=await data(snapshot.context);
+      for(const cursor of Object.keys(snapshot.compare || {}))await compare('/api/compare/records'+q+'&cursor='+encodeURIComponent(cursor));
+      for(const [identity,pages] of Object.entries(snapshot.search || {})){
+        const [harness,sessionID]=JSON.parse(identity);
+        for(const cursor of Object.keys(pages))await compare('/api/search/sources'+q+'&harness='+encodeURIComponent(harness)+'&session='+encodeURIComponent(sessionID)+'&cursor='+encodeURIComponent(cursor));
+      }
       // Cursor representations are intentionally opaque; compare the traversed records.
       for(const group of ['','conversation','configuration'])for(const revisions of [false,true]){
         const path='/api/context/entries'+q+'&group='+group+'&revisions='+revisions+'&limit=7';
@@ -89,7 +124,35 @@ async function main() {
     // Use actual UI controls for the recorded DeepSeek task, with no API backend.
     await page.goto(new URL('en/replay.html?run=run-dbc2adf273d4',site).href);
     await page.waitForFunction(()=>document.querySelector('#context-summary')?.textContent.includes('13 message records'));
+    assert.equal(await page.locator('#inspection').isHidden(),true);
+    assert.equal(await page.locator('.auxiliary-fold[open]').count(),0);
+    assert.equal(await page.locator('#session-count').innerText(),'1');
+    assert.equal(await page.locator('[data-investigation]').count(),3);
+    await page.locator('#session-directory-open').click();
+    const source=await page.locator('[data-session-source]').first().getAttribute('data-session-source');
+    await page.locator('[data-session-source]').first().click();
+    await page.waitForSelector('#context-body [data-entry]');
+    assert.equal(await page.locator('#context-source').inputValue(),source);
+    const sourceQuery='/api/context/entries?run=run-dbc2adf273d4&source='+encodeURIComponent(source)+'&group=conversation&limit=30';
+    const scoped=await page.evaluate(q=>AgentProvReplay.query(q),sourceQuery);
+    const expectedSource=await responseJSON(context.request,new URL(sourceQuery,native).href);
+    assert.deepEqual(scoped.entries,expectedSource.entries);
+    assert.equal(Boolean(scoped.next_cursor),Boolean(expectedSource.next_cursor));
+    report.parity++;
+    assert.deepEqual(await page.locator('#context-body [data-entry]').evaluateAll(nodes=>nodes.map(n=>n.dataset.entry)),scoped.entries.map(entry=>entry.id));
+    await page.locator('#context-source').selectOption('');
+    await page.locator('#context-fold > summary').click();
     assert.equal(await page.locator('#context-fold').evaluate(e=>e.open),false);
+    await page.locator('#session-members [data-session-index]').first().click();
+    await page.waitForFunction(()=>window._lensManifest?.query.session_scope);
+    const scope=await page.evaluate(()=>window._lensManifest.query.session_scope);
+    const scopeQuery='?run=run-dbc2adf273d4&harness='+encodeURIComponent(scope.harness)+'&session='+encodeURIComponent(scope.session_id);
+    await compare('/api/lens'+scopeQuery+'&lens=default&detail=summary');
+    assert.ok(await page.locator('#session-scope').isVisible());
+    assert.equal(await page.locator('#context-source option').count(),scope.source_count+1);
+    await page.locator('#session-scope-clear').click();
+    await page.waitForFunction(()=>!window._lensManifest?.query.session_scope);
+    assert.equal(await page.locator('#session-scope').isHidden(),true);
     for(const id of ['graphcard','siglist','focusedevidence','outboundcard','tl','ptree','egtbl','compliancecard'])assert.equal(await page.locator('#'+id).count(),1);
     for(const lens of await page.locator('#lenssel option').evaluateAll(options=>options.map(o=>o.value))){
       await page.locator('#lenssel').selectOption(lens);
@@ -101,6 +164,7 @@ async function main() {
     await page.waitForFunction(()=>window._lensManifest?.lens==='file-artifact'&&window._lensManifest?.query.detail==='raw');
     await page.locator('#dag [data-id="workspace_file/report.py"]').click();
     await page.waitForFunction(()=>document.querySelector('#content-body')?.textContent.includes('def daily_revenue'));
+    await page.locator('#inspection-tab-content').click();
     assert.equal(await page.locator('#context-fold').evaluate(e=>e.open),false);
     await page.locator('#content-choice').selectOption({label:'Raw saved object'});
     await page.waitForFunction(()=>document.querySelector('#content-body')?.textContent.includes('content_ref'));
@@ -117,6 +181,7 @@ async function main() {
     await page.getByRole('tab',{name:'Permissions & configuration',exact:true}).click();
     await page.waitForFunction(()=>document.querySelector('#context-body')?.textContent.includes('workspace-write'));
     await page.locator('.language-switch a[lang="zh-CN"]').click();
+    await page.waitForURL(url=>url.pathname===new URL('zh-CN/replay.html',site).pathname);
     await page.waitForFunction(()=>window._lensManifest);
     assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN');
     assert.equal(new URL(page.url()).searchParams.get('run'),'run-dbc2adf273d4');
@@ -127,11 +192,91 @@ async function main() {
     }
     report.ui='graph, files, session paging, graph navigation and language passed';
 
+    for(const [lang,before,after] of [['en','Diagnostic repair: before','Diagnostic repair: after'],['zh-CN','诊断修复 · 修复前','诊断修复 · 修复后']]){
+      await page.goto(new URL(lang+'/replay.html?run=run-e9c3f452461a',site).href);
+      await page.waitForFunction(()=>window._lensManifest && document.querySelector('#runsel')?.options.length);
+      assert.ok((await page.locator('#runsel option:checked').innerText()).startsWith(before));
+      assert.equal(await page.locator('#runsel').inputValue(),'run-e9c3f452461a');
+      await page.locator('[data-investigation="compare"]').click();
+      await page.waitForFunction(()=>document.querySelector('#compare-a')?.options.length>1);
+      assert.ok((await page.locator('#compare-a option[value="run-e9c3f452461a"]').innerText()).startsWith(before));
+      assert.ok((await page.locator('#compare-b option[value="run-2267309eda57"]').innerText()).startsWith(after));
+      await page.locator('#compare-close').click();
+    }
+    report.runLabels='English and Chinese run and comparison selectors preserve evidence IDs';
+
+    // The same scanner must find the same saved records through both readers.
+    const live=await browser.newPage();await live.goto(new URL('/?run=run-dbc2adf273d4&live=0',native).href);
+    await live.waitForFunction(()=>window.AgentEvidenceSearch && window._lensManifest);
+    await page.goto(new URL('en/replay.html?run=run-dbc2adf273d4',site).href);
+    await page.waitForFunction(()=>window.AgentEvidenceSearch && window._lensManifest);
+    for(const [run,query,category] of [['run-dbc2adf273d4','Ran 7 tests','tools'],['run-dbc2adf273d4','report.py','files'],['run-double-attempt','169.254.169.254',''],['run-double-attempt','install','messages']]){
+      const search=async page=>page.evaluate(async({run,query,category})=>{
+        const scanner=AgentEvidenceSearch.create({query,category,scope:{run,lang:'en'},get:j});let ids=[],last;
+        do{last=await scanner.next();if(last.error)throw new Error(last.error);ids.push(...last.hits.flatMap(h=>h.sources.map(s=>s.id)));}while(last.has_more);
+        return {ids:ids.sort(),scanned:last.stats.scanned,unavailable:last.stats.unavailable};
+      },{run,query,category});
+      const expected=await search(live),actual=await search(page);assert.ok(expected.ids.length,'historical search '+query);assert.deepEqual(actual,expected);report.parity++;
+    }
+    // Compare the same historical records through native and static readers.
+    for(const [a,b] of [['run-grok-exfil','run-grok-3routes'],['run-dbc2adf273d4','run-double-attempt']]){
+      const build=page=>page.evaluate(async({a,b})=>{
+        const left=await AgentRunCompare.load({run:a,get:j}),right=await AgentRunCompare.load({run:b,get:j});
+        const result=AgentRunCompare.build(left,right);
+        return {complete:[left.complete,right.complete],...result};
+      },{a,b});
+      const expected=await build(live),actual=await build(page);
+      assert.deepEqual(actual,expected);assert.deepEqual(actual.complete,[true,true]);
+      assert.ok(actual.rows.length);assert.notEqual(actual.taskRelation,'matching_recorded_tasks');report.parity++;
+    }
+    await live.close();
+    await page.locator('[data-investigation="search"]').click();
+    await page.locator('#search-query').fill('Ran 7 tests');await page.locator('#search-category').selectOption('tools');await page.locator('#search-submit').click();
+    await page.waitForFunction(()=>!document.querySelector('#search-submit').disabled);
+    assert.ok(await page.locator('.search-result').count()>0);
+    await page.waitForFunction(()=>document.querySelector('#content-body')?.textContent.includes('Ran 7 tests'));
+    await page.locator('#search-close').click();
+
+    await page.goto(new URL('en/replay.html?run=run-grok-exfil',site).href);
+    await page.waitForFunction(()=>window._lensManifest && window.AgentRunCompare);
+    await page.locator('[data-investigation="compare"]').click();
+    await page.locator('#compare-b').selectOption('run-grok-3routes');
+    await page.waitForFunction(()=>document.querySelector('#compare-status').textContent==='Saved records loaded'&&!document.querySelector('#compare-refresh').disabled);
+    assert.ok(!(await page.locator('#compare-pair').innerText()).includes('undefined'));
+    assert.ok((await page.locator('#compare-task-note').innerText()).includes('comparison of records'));
+    await page.locator('[data-dimension="outbound"]').click();
+    await page.locator('#compare-only').uncheck();
+    const mixpanel=page.locator('.compare-row').filter({hasText:'api.mixpanel.com'});
+    await mixpanel.locator('summary').click();
+    assert.ok((await mixpanel.innerText()).includes('Product analytics'));
+    assert.equal(await mixpanel.locator('.compare-side').count(),2);
+    await mixpanel.locator('[data-record-read]').last().click();
+    await page.waitForFunction(()=>document.querySelector('#content-body').textContent.includes('mixpanel'));
+    assert.ok((await page.locator('#compare-reader-title').innerText()).startsWith('run-grok-3routes'));
+    await page.locator('#compare-reader-close').click();
+    await mixpanel.locator('[data-record-graph]').last().click();
+    await mixpanel.locator('.context-notice button').first().click();
+    await page.locator('#compare-return').waitFor();
+    assert.equal(await page.evaluate(()=>cur),'run-grok-3routes');
+    await page.locator('#compare-return').click();
+    await page.locator('#compare-dialog').waitFor();
+    assert.equal(await page.evaluate(()=>cur),'run-grok-exfil');
+    await mixpanel.scrollIntoViewIfNeeded();
+    await page.screenshot({path:'output/playwright/compare-grok-static-desktop.png'});
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    assert.equal(await page.locator('#compare-dialog').evaluate(el=>el.scrollWidth>el.clientWidth+1),false);
+    await mixpanel.locator('[data-record-read]').last().scrollIntoViewIfNeeded();
+    await page.screenshot({path:'output/playwright/compare-grok-static-mobile.png'});
+    await page.locator('#compare-close').click();
+    await page.setViewportSize({width:1440,height:1060});
+    report.comparison='historical Grok and DeepSeek/multiagent parity; Grok source reading, graph return and mobile passed';
+
     // All published guides, images and table-of-contents links, at both sizes.
     for(const lang of ['en','zh-CN']){
       await page.goto(new URL(lang+'/index.html',site).href);
       const links=await page.locator('a[href]').evaluateAll(a=>[...new Set(a.map(x=>x.href).filter(s=>/\/(demos|guides)\/[^/]+\.html/.test(s)))]);
-      assert.equal(links.length,manifest.guides.length-6+9);
+      assert.equal(links.length,manifest.guides.filter(g=>!g.ID.startsWith('release-v')).length+11);
       assert.equal(await page.locator('a[href*="benchmarks"]').count(),0);
       const allGuides=[...new Set([...links,...manifest.guides.map(g=>new URL(lang+'/guides/'+g.ID+'.html',site).href)])];
       for(const href of allGuides){
@@ -147,6 +292,10 @@ async function main() {
     }
     assert.deepEqual(errors,[]);
     console.log(JSON.stringify({...report,passed:true},null,2));
+  } catch(error) {
+    if(errors.length)console.error(JSON.stringify({browserErrors:errors}));
+    console.error(JSON.stringify({failedRequests:failedRequests.slice(-20),page:page && await page.evaluate(()=>({url:location.href,reader:!!window.AgentProvReplay,error:document.querySelector('#loaderror-text')?.textContent})).catch(()=>({url:page.url()}))}));
+    throw error;
   } finally {await browser.close();}
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

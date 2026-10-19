@@ -42,6 +42,7 @@ def main():
         catalog = json.loads(run('demo', '--list', '--json'))
         replay = [d for d in catalog if d.get('run')]
         expected_replays = {
+            'investigation-workflow', 'investigation-repaired',
             'snake-supply-chain', 'multiagent-provenance', 'k8s-cross-pod-a2a',
             'k8s-substrate', 'grok-codebase-exfil', 'grok-3routes', 'deepseek-context',
         }

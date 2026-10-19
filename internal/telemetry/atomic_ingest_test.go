@@ -82,7 +82,7 @@ func TestIngestFilteredPreservesCaptureTime(t *testing.T) {
 
 func TestFalcoBatchFailedRowLeavesNoPartialEvidence(t *testing.T) {
 	db, _ := nativeTestStore(t)
-	if _, err := db.Exec(`CREATE TRIGGER fail_first_row BEFORE INSERT ON graph_edges WHEN NEW.from_id='runtime_process/pid/4242' BEGIN SELECT RAISE(ABORT,'injected failure'); END`); err != nil {
+	if _, err := db.Exec(`CREATE TRIGGER fail_first_row BEFORE INSERT ON graph_edges WHEN NEW.source_event_id IN (SELECT id FROM events WHERE pid=4242) BEGIN SELECT RAISE(ABORT,'injected failure'); END`); err != nil {
 		t.Fatal(err)
 	}
 	input := `{"time":"2026-01-01T00:00:00Z","output_fields":{"evt.type":"execve","proc.pid":4242,"proc.cmdline":"echo bad"}}
@@ -95,7 +95,7 @@ func TestFalcoBatchFailedRowLeavesNoPartialEvidence(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE pid=4242`).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("failed row persisted: count=%d err=%v", count, err)
 	}
-	if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE from_id='runtime_process/pid/4242' OR to_id='runtime_process/pid/4242'`).Scan(&count); err != nil || count != 0 {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE source_event_id NOT IN (SELECT id FROM events)`).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("failed row edges persisted: count=%d err=%v", count, err)
 	}
 }

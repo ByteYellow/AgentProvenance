@@ -83,12 +83,14 @@ assert_contains "$TELEMETRY_JSON" '"event_type": "execve"'
 assert_contains "$TELEMETRY_JSON" '"event_type": "metadata_ip"'
 assert_contains "$TELEMETRY_JSON" '"event_type": "private_cidr"'
 assert_contains "$TELEMETRY_JSON" '"event_type": "secret_path"'
-assert_contains "$TELEMETRY_JSON" '"tool_call_id": "tool-falco-risk"'
+assert_contains "$TELEMETRY_JSON" '"tool_call_id": ""'
+assert_contains "$TELEMETRY_JSON" '"process_id": ""'
 
 CORRELATIONS_JSON="$("$BIN" --data-dir "$DATA_DIR" telemetry correlations --run run-falco-risk-realistic --json)"
 assert_contains "$CORRELATIONS_JSON" '"schema_version": "agentprovenance.telemetry_correlations/v1"'
 assert_contains "$CORRELATIONS_JSON" '"count": 4'
 assert_contains "$CORRELATIONS_JSON" '"tool_call_id": "tool-falco-risk"'
+assert_contains "$CORRELATIONS_JSON" '"status": "scope_only"'
 assert_contains "$CORRELATIONS_JSON" '"matched_keys"'
 
 METADATA_EVENT_ID="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-falco-risk-realistic --type metadata_ip | awk 'NR == 2 {print $1}')"

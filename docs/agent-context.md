@@ -29,6 +29,63 @@ commands can declare `--context-harness claude|codex|deepseek|kimi|grok` and
 identity need both `--context-file` and `--context-session`; their identity is
 explicitly operator-supplied. `--no-context` disables this capture and hooks.
 
+### Retention Presets
+
+`launch --capture detailed` is the default. Use `--capture basic` to retain core
+messages, tool inputs and outcomes, agent relationships and supported intent
+evidence without archiving the extra source records, tool-result bodies, resumed
+history and configuration bodies. Both presets use the same parsers and correlation.
+
+For validated Codex session metadata, both presets retain the optional
+`Entry.session_metadata.forked_from_id` before configuration-body omission.
+It identifies the origin of a fork; `Entry.source.session_id` identifies the
+forked session, while the existing source fields and `Entry.id` locate its
+evidence. Basic retention can therefore preserve this native relationship
+without keeping the configuration body. An empty `session_metadata` object
+records no declared fork; older entries without the field fall back to a saved
+body when available, otherwise report `session_relation_metadata_unavailable`.
+Fork lineage stays separate from subagent delegation.
+
+```sh
+agentprov launch --capture basic -- claude
+agentprov launch --capture detailed -- codex
+agentprov launch --capture basic --capture-tool-results=true -- dsh headless --json 'Run the tests.'
+agentprov context import --run NEW_RUN --harness codex --file rollout.jsonl --capture basic
+```
+
+`--capture-tool-results` overrides only tool-result retention. Disabling it also
+omits raw source records and opaque session bodies that could contain the same
+results. Core lifecycle and refusal fields remain. Sensor/TLS settings and
+`--file-diff` are independent; neither preset enables workspace copying.
+
+Settings are fixed per run and included in coverage and exported evidence.
+Appending context without capture flags reuses the saved policy. Changing the
+policy requires a new run; existing content and signed bundles are left intact.
+Import a filtered hook log with matching capture settings. Original transcripts
+owned by the harness remain under that harness's own retention settings.
+
+Filtering takes place before AgentProvenance writes context objects or its Claude
+hook sidecar. Omitted entries retain identity, outcome and available length/digest
+metadata with `reason: capture_policy`; no body reference is fabricated. Hook
+inputs are bounded to 40 MiB and each run's sidecar to 128 MiB. Malformed input or
+budget exhaustion is recorded as a body-free capture diagnostic. Both presets
+apply the existing secret redaction before storage.
+
+The Dashboard shows the recorded preset in the session summary and its effective
+settings under collection status. Search counts configured omissions separately
+from unavailable bodies. Compare shows each run's preset and preserves unknown
+configuration values when their bodies were not retained. Export previews and
+offline replays keep the source run's settings, independently of sharing exclusions.
+
+New launches also save the independent sensor mode, workspace snapshot/file-body
+option, full TLS body option and agent-context setting before execution. Expand
+**Saved retention settings** to inspect them. Enabling `--file-diff` includes the
+baseline working-tree copy as well as bounded changed-file text; neither context
+preset enables it. TLS full-body retention follows `AGENTPROV_TLS_CAPTURE_BODY=1`;
+otherwise saved TLS events contain hashes and short previews. Capture diagnostics
+report which configured paths actually produced evidence. Older runs without these
+recorded options show **Not recorded** instead of using the current host's settings.
+
 ### Native Format Compatibility
 
 | Harness | Recorded context |
@@ -48,7 +105,7 @@ Discovery honors `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, and `DSH_HOME`. When a wrapp
 sets its home only in the child process, pass that directory explicitly. Capture
 runs after execution exits. Selection does not use newest modification time:
 concurrent candidates remain ambiguous. Resume verifies the pre-run source
-prefix and retains earlier records as `prior_context`, separate from the new
+prefix and, in detailed mode, retains earlier records as `prior_context`, separate from the new
 `current_execution` source range. Historical tools and model calls are not
 projected as activity of the new run. Actual child-session
 identities can link children; a dispatch alone does not invent a child identity.
@@ -83,8 +140,9 @@ An explicit import writes its saved coverage report as JSON to stdout. Only
 sources return a nonzero status after saving the diagnostic. Partial evidence
 remains available, and repeating an unchanged successful import is successful
 deduplication. This is the import status, not proof of complete runtime coverage.
-`--after-line N` retains the first N physical records as prior context, not
-current execution; it does not discard them or authorize the new execution.
+`--after-line N` identifies the first N physical records as prior context, not
+current execution. Detailed mode retains them; basic mode records the prior range
+and omits its entries.
 
 ## Inspect and Compare
 
@@ -108,14 +166,15 @@ retained even without a `response_item` copy. Event forms carry
 their own records. Similar text is not a shared identity, so these forms are not
 heuristically collapsed. Message totals count saved source records, not unique
 conversation turns; repeat imports still deduplicate the same recorded evidence.
-Original source bodies and physical positions remain available for inspection.
+Detailed mode preserves original source bodies; both modes retain the physical
+positions of saved entries.
 
 Native Codex completed-message events, world-state snapshots and applied thread
 settings are also retained. Completed command/file-change reports and token usage
 remain source state; their execution-item IDs do not create model tool-call
 identities. Claude attachments, session bookkeeping and cost estimates remain
 source state, while native `mode` records enter configuration history. These
-records preserve their raw bodies and resume ranges without adding synthetic
+records preserve their raw bodies in detailed mode and retain resume ranges without adding synthetic
 conversation turns or permission approvals.
 
 Codex tool errors use explicit source flags/status, typed exit codes and supported
@@ -307,15 +366,76 @@ An absent final file does not acquire a reconstructed body.
 
 ## Dashboard
 
-The execution graph and focused evidence remain above the initially collapsed
-**Agent session** section. The session has three views: **Conversation & tools**,
-**Permissions & configuration**, and **Collection status**. Overview shortcuts
-open the corresponding view. Existing graph controls, signals, outbound data,
-timeline, process tree, network, and compliance sections remain available.
+The graph and right-hand risk list remain the main view. Selecting evidence opens
+one **Evidence reader** below the graph, with **Summary**, **Related events** and
+**Saved content** tabs. Only the active tab is shown; the reader stays hidden
+until there is something to inspect. Graph lenses, playback, zoom and evidence
+links retain their existing behavior.
 
-Use **Open saved content** or **Raw source record** to inspect a context entry in
-the independent **Saved content** panel. Body and raw-record selection, 64 KiB
-page reads, and an enlarged view do not require keeping the session expanded.
+**Access control** keeps four read-only entries in the overview: audit records,
+observed task state, configuration declarations and audit collection. Counts
+refer to saved records across the whole run. Open an entry to browse 25 records
+per page; source bodies use the existing enlarged reader.
+
+Selecting an audit record shows **Operation attempt**, **Mechanism decision**
+and **Observed result** below the graph. AppArmor and seccomp keep their own
+decisions. Candidate operations retain their association status; absent returns
+remain absent, and same-process exit references are listed separately. Multiple
+decisions can cite the same operation ID without creating extra attempts.
+Source references and the association rule are expandable. Configuration and
+timestamped task state are read separately from these individual decisions.
+
+**Agent session** starts collapsed and keeps its three views: **Conversation &
+tools**, **Permissions & configuration**, and **Collection status**. Overview
+shortcuts open them directly. Execution sources, outbound data, timeline,
+processes, network and compliance details also start collapsed, with counts in
+their headings. Risk and collection-status summaries remain visible.
+
+**Sessions & sources** groups recorded native session IDs within each harness.
+A transcript and hooks source for the same session remain separately inspectable.
+Recorded parent IDs link to sessions present in this run; missing parents and
+conflicting or cyclic records are labeled. Sources without a session identity
+have their own section, while processing diagnostics stay in collection status.
+Click a session in the overview, or choose **View session graph** in the directory,
+to filter the graph, related events and conversation. The scope label shows the
+harness, native session ID, linked tool count and linked event count. **Back to
+whole run** restores the previous lens, selected node, zoom and reading position.
+Language switches and refreshes retain the session. **Read source records** opens
+one source within the selected session; without a session filter it changes only
+the conversation reader.
+
+Session membership follows saved context-to-tool and tool-to-runtime edges.
+Shared processes, files, directories and cgroups do not pull in another session's
+events. Summary counts are calculated after filtering. Existing inferred edges
+retain their rule and confidence; prior transcript history is excluded from the
+current execution graph. A session with no linked execution evidence has an empty
+graph and can still be read in the conversation view.
+
+Risk, collection status and auxiliary sections keep their **Whole run** scope.
+Following a risk or auxiliary evidence link returns to that scope. Public-demo
+static exports use the same session selection and graph projections.
+
+Click **Related sessions** in the overview to open recorded connections for the
+selected session. Without a session filter, it opens a session with a recorded
+parent, or the first session. Every directory entry also has a **Related sessions**
+button. Counts appear after reading the relationships; `+` marks additional or
+limited results. Closing the directory keeps the current graph and reader.
+Matching harness and native session IDs link occurrences across
+runs. Source metadata supplies parent/child relationships; typed Codex records
+also supply delegation, fork and message-request relationships. Each relationship
+keeps its direction and immutable source references under **Source and evidence**.
+A message request describes the recorded request, not its delivery result.
+
+**Other run** labels cross-run destinations. When a target has several recorded
+occurrences, choose which run to view; the relationship is listed once. The return
+button restores the preceding run, session filter, graph focus, zoom and reader.
+Missing targets and conflicting parent claims remain visible. Navigation does
+not change run membership or automatically include related runs in exports.
+Static replay only discovers relationships within its exported run catalog.
+
+Use **Open saved content** or **Raw source record** to open the reader's **Saved
+content** tab. Body and raw-record selection, 64 KiB page reads, and an enlarged
+view do not require keeping the session expanded.
 The record list loads 30 entries per page; inline bodies preview at most 4 KiB
 with four concurrent reads. Back navigation retains up to 200 page cursors;
 **First page** resets the list without accumulating previous page bodies.
@@ -354,9 +474,10 @@ This endpoint reads only saved objects and identified database records. It never
 opens a tool result path or a workspace file as a replacement historical body.
 Metadata-only artifacts remain explicitly unavailable in body mode; raw mode
 still exposes their recorded metadata. Legacy inline objects retain an 8 MiB
-read budget. New chunked text supports up to 32 MiB without raising the existing
-4 MiB per-object bundle limit, and storage chunks are not counted as file
-artifacts. Signed offline HTTP-paging tests cover all three former size boundaries.
+read budget. New chunked text supports up to 32 MiB; storage chunks are not counted
+as file artifacts. Forensics exports allow required provenance objects up to
+16 MiB each and optional snapshot files up to 4 MiB. Larger required objects
+fail export explicitly. Signed offline HTTP-paging tests cover the former size boundaries.
 The changed-file writer uses the same chunked storage. Real record subprocess
 tests verify capture, redaction, signing, and offline content beyond 8 MiB;
 launch tests cover its opt-in and disabled paths. These are deterministic test
@@ -368,6 +489,227 @@ The reader does not retroactively create bodies that an older capture omitted.
 The dashboard and daemon share read-only `/api/context/*` and `/v1/context/*`
 routes. See the [API contract](agent-context-api.yaml) for fields, pagination,
 errors and compatibility semantics.
+
+The Dashboard's `/api/lens` and `/api/events` accept `harness` and `session`
+together to select a recorded native session. The filter intersects other graph
+or event filters; a missing session returns 404, and an incomplete pair returns
+400. Scoped lens responses include `query.session_scope` with the identity,
+link basis and counts. Resolution is limited to 256 sources and 10,000 current
+tool records per session; exceeding a limit returns an error rather than a
+partial graph. `/api/context/entries` and `/v1/context/entries` also accept
+`harness` alongside `session` to distinguish matching native IDs from different
+harnesses. This adds query filters without changing the evidence Bundle format.
+
+Session reading also includes AppArmor/seccomp decisions with a unique process
+lifetime and operation match to a runtime record already linked to that session's
+tool. Conflicting tool links keep the audit outside the session. A shared PID,
+cgroup, or legacy execution `session_id` does not supply native session identity.
+Ambiguous and unmatched decisions remain searchable in **Whole run**.
+
+The projection is labeled `session_association` on search records and focused
+graph nodes. The event-list response exposes page-specific `session_associations`
+without rewriting the event payloads. `query.session_scope.audit` and search/event `session_audit` report its
+rule, related count and analysis limits. These describe reading membership,
+separate from collection coverage; the original audit keeps its recorded identity.
+Supporting runtime records do not automatically become selected records.
+
+Selected replays resolve membership from the complete frozen source. Removing a
+competing candidate cannot create a new match. If supporting records or tools
+are excluded, the selected audit stays readable with `status: unavailable` and
+`reason: replay_evidence_excluded`; its relation references are omitted. Search,
+event filtering, graph focus and replay selection share this scope.
+
+## Search Saved Evidence
+
+Use the magnifying-glass action above the graph. The temporary search window
+shows matching excerpts on the left and the existing evidence reader on the
+right. With a native session selected, search starts within that session;
+**Whole run** explicitly includes other sessions and unassigned records.
+Related sessions in other runs stay outside the search.
+
+Search uses case-insensitive literal keywords, up to 256 characters. Categories
+cover messages, tool inputs/results, configuration, saved files and runtime
+records. It reads saved text in 64 KiB pages, including text beyond inline
+previews. Each source contributes its first matching excerpt; identical body
+hashes in a result page are grouped while retaining their source references.
+Filename and other source-field matches are labeled separately from body matches.
+
+Select a result to read its body or raw source record. **Locate in graph** uses
+an existing relationship; **Return to search** restores the query, selected
+source and reading position. Closing the window restores the original reader.
+Results and navigation are retained in memory for up to eight run/session views.
+
+Each result page scans until 50 matching source records or the end of the
+catalog. **Search next page** advances to the next page; **Stop search** retains the
+current results and marks the unsearched remainder. Read errors can be retried.
+Unavailable bodies and collection reports remain visible under search coverage.
+An empty result reads **No match found in saved content**. Rerun the search to
+include records added while capture was continuing.
+
+The Dashboard-only `GET /api/search/sources?run=RUN` returns a catalog of at
+most 50 existing reader references. Pass `harness` and `session` together to
+restrict it, then follow the opaque `next_cursor`. The client applies category
+and keyword matching using `/api/context/content` and `/api/artifact`; no search
+index or additional body copy is stored. Context entries use their latest saved
+revision; saved artifact versions keep their exact object hashes. Raw source
+envelopes are available for inspection but are not separately searched.
+Fresh public-demo exports use the same catalog and scanner. Older exports
+without a catalog display an unavailable-search message.
+
+## Compare Runs
+
+Use **Compare runs** above the graph. A starts with the current run; choose B
+and use the swap button to reverse them. The window compares whole runs and
+retains the Dashboard's session filter for your return. Each side shows its
+recorded task, time range, sources and collection status.
+
+The five views compare saved configuration fields, file evidence, network
+destinations, outbound data types and access-control observations. Rows start collapsed with differences
+selected. Expand a row to inspect A and B, choose a source reference, read its
+saved body or locate its recorded graph node. **Return to comparison** restores
+the original run, session scope, graph view and expanded comparison rows.
+
+- Configuration keeps JSON types, including `null`, `false`, empty arrays and
+  exact integers. Multiple recorded values retain their sources; the view does
+  not select an effective configuration. Retained prior context is excluded.
+- File access, write attempts and recorded content changes remain separate.
+  Saved file bodies compare by digest; an empty file differs from unavailable
+  content. Network rows distinguish connection attempts, requests and responses.
+- **Only A recorded** and **Only B recorded** describe one-sided evidence.
+  Incomplete values or reader limits appear as **Comparison incomplete**.
+  Both task texts and capture reports remain available when conditions differ.
+  Changes in configuration and network activity are investigation leads, not
+  an automatically inferred cause.
+
+The Dashboard-only `GET /api/compare/records?run=RUN` projects at most 50 saved
+sources per page. Follow `next_cursor` until `has_more` is false. The endpoint
+rejects session filters. Each record includes a comparison key, typed value
+digest, bounded preview and its existing reader reference. Configuration reads
+are limited to 1 MiB and 200 fields per snapshot; value previews use up to
+512 UTF-8 bytes. The browser stops at 50,000 records or 100,000 sources per run
+and reports the limit. The window lists 100 rows and 50 source references at a
+time, with controls to continue. Refresh to include records saved during capture.
+
+The records endpoint also returns an `access_control` dimension. Its
+`evidence_kind` separates configuration declarations, procfs state snapshots,
+audit decisions/status, audit-file collection observations, syscall results and
+process/thread exits. `mechanism` is present on mechanism-specific evidence;
+independent syscall and exit records do not acquire a mechanism from an error
+number or signal. Audit `LOG`, `ERRNO` action data and `KILL_PROCESS` stay separate
+from recorded syscall returns and exits.
+
+These records use `comparison_scope: observed_set`: values describe the saved
+observations across a run. Keys do not pair processes or sessions across runs.
+PID, timestamps and resource revisions remain in the original evidence reader,
+outside the value digest. Missing, invalid or limited evidence produces explicit
+issues. A source-file reader reports its file-level coverage and unknown upstream
+loss. Each configuration observation is bounded to 64 declarations. Search and
+selected replay exports use the existing runtime category and original record
+IDs; unassigned audit records stay outside session-only selections. The API and
+frozen replay catalogs share this projection. The **Access control** view shows
+these fields alongside the existing source-reader and graph links.
+
+New public-demo exports include the same comparison catalog and reader. The
+historical Grok pair demonstrates different saved outbound surfaces, rather
+than a controlled before/after intervention. Older exports without a comparison
+catalog display the reason it is unavailable.
+
+## Offline Replay ZIP
+
+Export one complete local run with its graph views, sessions, saved bodies,
+configuration and raw records:
+
+```bash
+agentprov --data-dir .agentprov dashboard export --run RUN --output run-replay.zip
+```
+
+Unzip the archive and open `index.html` in a current Chrome or Edge browser.
+The reader works offline without a local server, the CLI or the original
+workspace. Language switching, graph navigation, session filters, saved-content
+search and byte paging use the included data. A single-run export has no second
+run for comparison.
+
+By default, the command exports the **whole run**, including unassigned records. It takes
+a consistent database snapshot, reads only saved evidence and then freezes the
+package. It never fills missing content from current workspace files. Linked
+runs remain references. `export-inventory.json` lists the run, scope, file sizes
+and SHA-256 digests; the command prints the ZIP size and inventory digest.
+`record-selection.json` lists source-record IDs, categories, saved revisions and
+inclusion or exclusion decisions. Its size and digest appear in the inventory's `record_selection`
+field, so the record list can be checked alongside the packaged files.
+Existing output files are left unchanged.
+
+This ZIP is an **unsigned sharing copy**. Full-run exports retain original verification
+results; partial exports display **Selected evidence**. Capture gaps remain visible,
+while the package contains no original Bundle or
+database. Review the archive before sharing: complete runs may contain prompts,
+tool output, configuration and file contents. The command performs no upload.
+
+### Select a Session or Exclude Records
+
+Use both the harness and native session ID to export only that session's saved
+context and explicitly associated tools, events and files:
+
+```bash
+agentprov --data-dir .agentprov dashboard export --run RUN \
+  --harness codex --session SESSION --output session-replay.zip
+```
+
+Add repeatable `--exclude-category` and `--exclude-record` options to either scope.
+Categories are `messages`, `tools`, `configuration`, `files` and `runtime`.
+Record IDs are the `id` values returned by `/api/search/sources`, such as
+`entry/ENTRY_ID`, `1/OBJECT_HASH`, `2/TOOL_ID` or `3/EVENT_ID`.
+
+```bash
+agentprov --data-dir .agentprov dashboard export --run RUN \
+  --exclude-category configuration --exclude-record 3/EVENT_ID \
+  --output selected-replay.zip
+```
+
+All readers use the same selection: graphs, search, bodies, raw records and saved
+revisions. Excluding a context record also excludes its revisions and linked tool
+readers. Runtime effects remain separate records. If a raw source line contains
+both retained and excluded entries, its raw reader is withheld. Relations outside
+the selection remain references labeled **Context not included**.
+
+Partial exports keep findings supported by retained records and list omitted
+analyses in `analysis_omissions`. They do not recalculate findings on the smaller
+graph. The record manifest warns when the same normalized context body remains
+in another selected record. Review that warning and the frozen replay before sharing;
+record exclusion does not remove matching text from all other evidence.
+
+The CLI, Dashboard and local replay API support these selections.
+
+### Preview and Download in the Dashboard
+
+Start `dashboard serve` against your local data directory, select a run, and
+choose **Export replay**. The default scope is the whole run, including other
+sessions and unassigned evidence. When a session filter is active, you can
+explicitly choose **Current session** instead. Choose content categories or open
+**Review and exclude records** to read individual sources and deselect them.
+Changing the scope clears per-record exclusions; category choices remain.
+
+Confirm the selection and prepare a frozen preview. It shows the actual included
+and excluded record counts, repeated-context warnings, saved-source counts, ZIP
+size and paged file inventory. Counts include saved revisions and linked readers,
+so they can differ from the number of checkboxes you changed. The exact decisions
+are available through **Frozen record selection**. **Inspect frozen replay** opens
+the same data that will be downloaded, so you can read the graph, conversation,
+configuration, raw records and bodies before sharing.
+
+**Confirm and download ZIP** downloads that frozen archive. Later collection
+does not change it. **Change selection** discards that archive before allowing
+edits. Preparation allows one active preview per server, expires
+after ten minutes, and stops after five minutes if it cannot finish. Discarding
+the preview or stopping the local server releases its temporary files; an active
+download retains its files until the response finishes. A hard process kill may
+leave a private `agentprov-readonly-replay-*` directory in the system temporary
+directory.
+
+Browser preparation is available only over a same-origin loopback connection.
+Public and offline replays retain the export entry and explain how to use the
+local CLI. The local [replay export API](replay-export-api.yaml) documents the
+preview, inventory confirmation, download and cancellation endpoints.
 
 ## External Queries and Runtime Coverage
 
@@ -382,6 +724,15 @@ External clients use the same stored-evidence queries as the Dashboard:
   bounded content pages. Follow `next_offset` while `has_more` is true.
 - `GET /v1/context/compare?run=RUN&left=ID&right=ID`: compare recorded snapshots.
 - `GET /v1/context/links?run=RUN&entry=ID`: recorded graph links, not guesses.
+
+The optional `capture_policy` in overview and processing reports describes the
+recorded additional-context retention settings. A missing policy means settings
+were not recorded. A report's `omissions` counts normalized records intentionally
+excluded in that processing range; these omissions do not turn successful
+processing into a capture failure. Content omitted by policy has no body `ref`.
+When a length or digest is available, `digest_scope` identifies the transient
+parsed content or source record it describes. `intent_content`, when present,
+is a derived model-message source for reanalysis, not the original transcript.
 
 `launch` saves a `runtime_capture` object before bundle export. It includes the
 capture interval, kernel enablement, fresh probe snapshots and node counter

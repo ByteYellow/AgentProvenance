@@ -40,6 +40,7 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 	var noPolicy bool
 	var keepUncorrelated bool
 	var autoTLS bool
+	var appArmorState, seccompState bool
 	var tlsInterval time.Duration
 	var tlsTargets, tlsProcesses int
 	var captureOpts telemetry.NativeStreamOptions
@@ -104,6 +105,8 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 				LibcLib:         os.Getenv("AGENTPROV_LIBC_LIB"),
 				Context:         ctx,
 				AutoTLS:         autoTLS,
+				AppArmorState:   appArmorState,
+				SeccompState:    seccompState,
 				TLSScanInterval: tlsInterval,
 				TLSMaxTargets:   tlsTargets,
 				TLSMaxProcesses: tlsProcesses,
@@ -165,6 +168,8 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 	stream.Flags().Int64Var(&captureOpts.MaxQueuedBytes, "max-queued-bytes", 256<<20, "maximum native spool backlog bytes; new events are counted as dropped when full")
 	stream.Flags().IntVar(&captureOpts.MaxQueuedBatches, "max-queued-batches", 4096, "maximum active spool batches")
 	stream.Flags().BoolVar(&autoTLS, "auto-tls", true, "discover container and host TLS libraries/binaries and reattach after replacement")
+	stream.Flags().BoolVar(&appArmorState, "apparmor-state", true, "read timestamped AppArmor task state without changing policy")
+	stream.Flags().BoolVar(&seccompState, "seccomp-state", true, "read timestamped seccomp task state without changing filters")
 	stream.Flags().DurationVar(&tlsInterval, "tls-scan-interval", 2*time.Second, "interval for automatic TLS target discovery")
 	stream.Flags().IntVar(&tlsTargets, "tls-max-targets", 128, "maximum automatically attached TLS targets")
 	stream.Flags().IntVar(&tlsProcesses, "tls-max-processes", 4096, "maximum visible processes inspected per TLS discovery scan")

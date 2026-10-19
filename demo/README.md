@@ -2,8 +2,8 @@
 
 English | [中文](README.zh-CN.md)
 
-Start with a real DeepSeek development task, then explore a single-agent risk
-investigation, team collaboration and cross-Pod execution. Seven signed captures
+Start with an investigation and repair of a real DeepSeek task, then explore a single-agent risk
+investigation, team collaboration and cross-Pod execution. Nine signed captures
 replay offline on macOS or Linux; two optional evaluator examples provide setup
 guides. Live capture requirements are listed in each guide.
 
@@ -13,13 +13,14 @@ Download the matching Linux/macOS amd64/arm64 archive from
 [Releases](https://github.com/ByteYellow/AgentProvenance/releases),
 verify its checksum and extract it as shown in the [Quickstart](../README.md#quickstart).
 Go is needed only if you choose to build from source. These instructions describe
-v0.9.0; before its archive is published, follow the source-build path in the Quickstart.
-The CLI embeds seven signed captures and nine guide entries, including two
-optional evaluator examples:
+the current source tree. Build it to try the investigation workflow before the
+next release. The CLI embeds nine signed captures and two optional evaluator examples:
 
 ```sh
 ./agentprov demo                         # gallery: all demos
 ./agentprov demo --list                  # list replay names and setup guides
+./agentprov demo investigation-workflow  # inspection and repair, loaded together
+./agentprov demo investigation-repaired  # start from the successful second run
 ./agentprov demo deepseek-context        # task, tools, configuration and saved files
 ./agentprov demo snake-supply-chain      # one signed capture
 ./agentprov demo multiagent-provenance
@@ -55,7 +56,18 @@ AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
 Jev's guide supports the supplied CLI through `--agentprov`; a source build is
 optional. Its live capture still requires Python, credentials and explicit consent.
 
-## New in v0.9.0: an ordinary development task
+## Investigation workflow: inspect, repair, compare and share
+
+[The investigation workflow](investigation-workflow/) follows one native DeepSeek
+session across two real runs. The agent delegates review, runs seven tests and
+encounters denied optional diagnostics. It then disables those diagnostics and
+successfully produces the same `42.00` report. The environment's policies stay in place.
+
+Open **Related sessions**, search the recorded error, inspect AppArmor/seccomp
+decisions, compare saved files and download a selected read-only replay.
+Both signed captures load together; no model account or VM is needed for replay.
+
+## Development task
 
 [DeepSeek context](deepseek-context/) records a real task that adds daily totals
 to a Python report. Inspect the original task, 12 tool inputs/results, five

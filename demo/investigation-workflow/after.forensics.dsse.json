@@ -1,0 +1,10 @@
+{
+  "payloadType": "application/vnd.in-toto+json",
+  "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJzdWJqZWN0IjpbeyJuYW1lIjoiZm9yZW5zaWNzL3J1bi0yMjY3MzA5ZWRhNTciLCJkaWdlc3QiOnsic2hhMjU2IjoiOWU4MzgzZjMzNWNiNDg4ODFiMWRkOGY1MzI5YjhkMDM3ODU1MDFlYWE2ZWYwYzAwZjQyODE3YmFhMTFmY2JkNyJ9fV0sInByZWRpY2F0ZVR5cGUiOiJodHRwczovL2FnZW50cHJvdmVuYW5jZS5kZXYvRXZpZGVuY2UvdjEiLCJwcmVkaWNhdGUiOnsiYnVuZGxlX2lkIjoiZm9yZW5zaWNzLTIzNGY0ZDQ1OGEwMiIsImNyZWF0ZWRfYXQiOiIyMDI2LTEwLTE5VDA0OjU4OjM5LjYwMzY1MjMxNVoiLCJraW5kIjoiZm9yZW5zaWNzX2J1bmRsZSIsInJ1bl9pZCI6InJ1bi0yMjY3MzA5ZWRhNTciLCJzY2hlbWFfdmVyc2lvbiI6ImFnZW50cHJvdmVuYW5jZS5mb3JlbnNpY3NfZXhwb3J0L3YxIn19",
+  "signatures": [
+    {
+      "keyid": "20c1103ec2d695d0",
+      "sig": "k4a/bmRalvQpUmQ8S6eqK6pcWA/dmvFNW/SpEFzc3HsdTKTNz0okSmJCsphPwilBxQ9SxGWz+RGepWksWtoMAg=="
+    }
+  ]
+}

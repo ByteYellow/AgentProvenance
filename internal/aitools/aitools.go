@@ -83,6 +83,7 @@ func Catalog() []Tool {
 				})
 			},
 		},
+		auditAssociationsTool(),
 		{
 			Name:        "get_timeline",
 			Description: "Get the merged application-context + runtime-telemetry timeline for a run.",

@@ -2,7 +2,7 @@
 
 English | [中文](zh-CN/ai-tools.md)
 
-These eight tools are shared by `ai call`, stdio MCP and provider tool definitions. See [AI access](ai-access.md) for setup.
+These nine tools are shared by `ai call`, stdio MCP and provider tool definitions. See [AI access](ai-access.md) for setup.
 
 `bind_scope` and `record_tool_call` write application context. Other tools are read-only. Preflight and context operations do not launch commands.
 
@@ -39,6 +39,23 @@ Filter runtime events by type. Returns up to 50 events by default. For subsequen
 | `limit` | `integer` | no | max events (default 50) |
 | `run` | `string` | yes | run id |
 | `type` | `string` | no | optional event_type filter, e.g. execve, metadata_ip |
+
+## `get_audit_associations`: Inspect audit evidence
+
+Read AppArmor/seccomp decisions and their process/operation candidates. Returns
+`agentprovenance.audit_associations/v1`, keeping ambiguous candidates, evidence
+references and actual syscall returns distinct from mechanism decisions.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `run` | `string` | yes | exact run ID |
+| `event` | `string` | no | exact saved audit event ID |
+| `limit` | `integer` | no | 1-500 decisions, default 100 |
+| `cursor` | `string` | no | previous next_cursor for the same run and event |
+
+Unsupported parameters are rejected. This tool changes neither host policy nor
+evidence. See [audit association](telemetry-schema.md#read-only-runtime-association)
+for analysis limits and attribution semantics.
 
 ## `get_timeline`: Query the timeline
 
@@ -96,7 +113,7 @@ agentprov ai tools --provider openai
 agentprov --data-dir .agentprov ai call list_events --input '{"run":"run-example","limit":20}'
 ```
 
-Replace `run-example` with a recorded run ID. The provider options emit definitions without calling a model. Tool descriptions and output default to English.
+Replace `run-example` with a recorded run ID. The provider options emit definitions without calling a model. Tool descriptions, JSON field names, statuses and generated errors use English. Saved evidence retains its original language.
 
 A `tools/call` request over MCP:
 

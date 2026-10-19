@@ -7,6 +7,9 @@ window.AgentContextUI = (() => {
   let api, run = '', state, listRequest = 0, previewRequest = 0, summaryRequest = 0, listLoading = false;
   let overview = null, previewChoices = [], previewKey = '', previewOffsets = [0], previewPage = null;
   let formattedContent = null;
+  let readerLoan = null, previewHighlight = '';
+  let sessionScope = null;
+  const sameScope = (a,b) => (a?.harness || '') === (b?.harness || '') && (a?.session_id || '') === (b?.session_id || '');
   const statusNames = {disabled:'Not enabled',no_input:'No source found',empty:'Valid empty source',ok:'Captured',partial:'Partially captured',failed:'Capture failed',ambiguous:'Ambiguous binding',legacy_not_recorded:'Not recorded in this historical run'};
   const associationNames = {no_input:'No runtime input',empty:'No eligible tool input',ok:'Association pass completed',partial:'Partial tool association',ambiguous:'Association ambiguous',failed:'Association failed'};
   const associationIssues = {runtime_exec_unassociated:'Some saved process executions have no tool-call link.',multiple_runtime_candidates:'Multiple association candidates remain unresolved.',tool_time_not_recorded:'Some tool calls lack usable start or end times.',runtime_scope_not_recorded:'Some runtime events lack scope information.',runtime_time_or_payload_invalid:'Some runtime timestamps or payloads could not be used.',context_runtime_correlation_failed:'Tool-to-runtime association failed.'};
@@ -23,6 +26,40 @@ window.AgentContextUI = (() => {
   const notice = message => `<p class="context-notice">${e(t(message))}</p>`;
   const missingFields = fields => (fields || []).map(field => t(missingNames[field] || field)).join(', ') || t('None reported');
 
+  function retentionPresentation(policy) {
+    if (!policy) return {label:'Retention settings not recorded',settings:[]};
+    const labels = {tool_results:'Tool-result bodies',source_records:'Raw source records',history:'Resumed history',configuration:'Configuration bodies'};
+    return {label:({basic:'Basic context',detailed:'Detailed context'})[policy.preset] || 'Retention settings unavailable',
+      settings:Object.entries(labels).map(([key,label])=>({key,label,enabled:typeof policy[key]==='boolean'?policy[key]:null,override:Object.hasOwn(policy.overrides||{},key)}))};
+  }
+  function retentionText(policy, details = false) {
+    const view = retentionPresentation(policy);
+    return [t('Context retention')+': '+t(view.label),...view.settings.filter(s=>details||s.override).map(s=>t(s.label)+': '+t(s.enabled===true?'Retained':s.enabled===false?'Not retained':'Not recorded')+(s.override?' ('+t('Override')+')':''))].join(' · ');
+  }
+  function contentReason(ref) {
+    if (ref?.reason === 'capture_policy') return 'Not saved by this run’s retention settings.';
+    return ref?.reason || 'Content was not recorded';
+  }
+  function omissionText(report) {
+    const labels = {tool_result:'Tool-result bodies',source_records:'Raw source records',history:'Resumed history',configuration:'Configuration bodies',approval:'Approval bodies',session_details:'Additional session bodies'};
+    const omissions = (report.omissions || []).filter(o=>o.reason==='capture_policy');
+    return omissions.length ? t('Not retained in this processing range')+': '+omissions.map(o=>t(labels[o.category]||o.category)+' '+o.records).join(' · ') : '';
+  }
+  function renderRetention() {
+    const policy = overview?.capture_policy, view = retentionPresentation(policy);
+    const fields = view.settings.map(s=>`<dt>${e(t(s.label))}${s.override?' ('+e(t('Override'))+')':''}</dt><dd>${e(t(s.enabled===true?'Retained':s.enabled===false?'Not retained':'Not recorded'))}</dd>`).join('');
+    const independent = overview?.capture_settings;
+    const configured = value => t(value === true ? 'Enabled' : value === false ? 'Not enabled' : 'Not recorded');
+    const options = [
+      ['Kernel sensor setting', t(({auto:'Automatic',off:'Not enabled'})[independent?.sensor_mode] || 'Not recorded')],
+      ['Workspace snapshots and changed-file bodies', configured(independent?.workspace_snapshot)],
+      ['Full TLS bodies', independent?.tls_full_body === true ? t('Retained when captured') : independent?.tls_full_body === false ? t('Hash and short preview only') : t('Not recorded')],
+      ['Agent context collection', configured(independent?.agent_context)],
+    ].map(([label,value])=>`<dt>${e(t(label))}</dt><dd>${e(value)}</dd>`).join('');
+    const details = `<details><summary>${e(t('Saved retention settings'))}</summary>${fields?`<dl data-context-retention-fields>${fields}</dl><code>${e(policy.version)}</code>`:''}<h4>${e(t('Independent capture settings'))}</h4><dl data-independent-capture>${options}</dl>${notice(independent?'Recorded at launch; capture results are shown below.':'Independent settings were not recorded for this run.')}</details>`;
+    return `<article class="context-coverage" data-capture-retention><h3>${e(t('Context retention'))} <span class="context-status">${e(t(view.label))}</span></h3>${details}${fields?notice('Configured omissions are listed separately from capture failures.'):''}</article>`;
+  }
+
   function runtimePresentation(capture = {}) {
     // Presentation never upgrades unknown run impact from node-wide counters.
     if (capture.run_dropped_events > 0) return {state:'failed',label:'Run event loss confirmed',message:'Some events from this run were lost. The runtime record is incomplete.'};
@@ -35,7 +72,8 @@ window.AgentContextUI = (() => {
   function coverageSections(value) {
     const reports = value?.coverage || [];
     return {
-      sessions:reports.filter(c => !['runtime_correlation','discovery'].includes(c.source?.channel)),
+      sessions:reports.filter(c => !['runtime_correlation','discovery','processing'].includes(c.source?.channel)),
+      processing:reports.filter(c => c.source?.channel === 'processing'),
       discoveries:reports.filter(c => c.source?.channel === 'discovery'),
       associations:reports.filter(c => c.source?.channel === 'runtime_correlation'),
       runtime:runtimePresentation(value?.runtime_coverage?.capture),
@@ -51,11 +89,15 @@ window.AgentContextUI = (() => {
     $('context-fold').addEventListener('toggle', () => {
       if (!state) return;
       state.open = $('context-fold').open;
-      if (state.open && !state.page && !listLoading) loadList();
+      if (state.open && !listLoading) {
+        if (!state.page) loadList();
+        else if (!$('context-body').childElementCount) renderList(true);
+      }
     });
     $('context-source').onchange = () => {
       state.source = $('context-source').value;
-      resetPage(); loadList();
+      state.node = ''; state.returnView = null;
+      resetPage(); syncControls(); loadList();
     };
     $('context-refresh').onclick = () => { resetPage(); refreshSummary(); loadList(); };
     document.querySelectorAll('[data-context-tab]').forEach(button => {
@@ -88,7 +130,7 @@ window.AgentContextUI = (() => {
       dialog.showModal();
     };
     $('content-close').onclick = () => $('content-dialog').close();
-    $('content-dialog').addEventListener('close', () => $('content-home').append($('content-pane')));
+    $('content-dialog').addEventListener('close', () => (readerLoan?.host || $('content-home')).append($('content-pane')));
     $('context-compare-clear').onclick = () => { state.compare = []; renderCompare(); renderList(); };
     $('context-compare-run').onclick = compare;
     document.querySelectorAll('[data-context-open]').forEach(button => button.onclick = () => open(button.dataset.contextOpen));
@@ -97,7 +139,7 @@ window.AgentContextUI = (() => {
   function readingState() {
     if (!state) return null;
     const choice = previewChoices[Number($('content-choice').value)];
-    return {run,view:{tab:state.tab,source:state.source,cursor:state.cursor,history:state.history.slice(-200),pageNumber:state.pageNumber,selected:state.selected,node:state.node,graph:state.graph,scroll:$('context-body').scrollTop,open:state.open,expanded:[...state.expanded].slice(-200)},
+    return {run,sessionScope,view:{tab:state.tab,source:state.source,cursor:state.cursor,history:state.history.slice(-200),pageNumber:state.pageNumber,selected:state.selected,node:state.node,graph:state.graph,scroll:$('context-body').scrollTop,open:state.open,expanded:[...state.expanded].slice(-200)},
       preview:choice ? {entry:choice.entry?.id || '',raw:choice.node ? choice.mode === 'raw' : choice.mode === 'raw',node:choice.node || '',offsets:previewOffsets.slice(-512),scroll:$('content-body').scrollTop,format:$('content-format').value} : null};
   }
   function persist() {
@@ -111,6 +153,7 @@ window.AgentContextUI = (() => {
       if (!text || text.length > 65536) return null;
       const saved = JSON.parse(text), view = saved.view;
       if (saved.run !== nextRun || !view || !['conversation','configuration','coverage'].includes(view.tab)) return null;
+      if (!sameScope(saved.sessionScope,sessionScope)) return null;
       for (const key of ['source','cursor','selected','node','graph']) if (typeof view[key] !== 'string' || view[key].length > 8192) return null;
       if (!Array.isArray(view.history) || view.history.length > 200 || !view.history.every(v=>typeof v==='string' && v.length<8192)) return null;
       if (!Array.isArray(view.expanded) || view.expanded.length>200 || !view.expanded.every(v=>typeof v==='string' && v.length<512)) return null;
@@ -153,12 +196,14 @@ window.AgentContextUI = (() => {
     $('context-linked-label').textContent = state.node ? t('Only records connected by stored evidence edges') + ': ' + state.node : '';
     $('context-source').value = state.source;
     $('context-source').disabled = state.tab === 'coverage';
+    api.sourceChanged?.(state.source);
   }
   function changeTab(tab) {
     state.tab = tab; state.node = ''; state.returnView = null;
     resetPage(); syncControls(); loadList();
   }
   function scrollRegion(id) {
+    if (id === 'savedcontent') api.revealContent?.();
     const header = document.querySelector('body > header'), region = $(id);
     const inset = header && getComputedStyle(header).position === 'sticky' ? header.getBoundingClientRect().height : 0;
     region.style.scrollMarginTop = Math.ceil(inset + 12) + 'px';
@@ -171,20 +216,29 @@ window.AgentContextUI = (() => {
     else if (!state.page) loadList();
     scrollRegion('agentcontext');
   }
-  function setRun(nextRun) {
+  function selectSource(source) {
+    if (!state) return;
+    state.source = source; state.node = ''; state.returnView = null; state.tab = 'conversation';
+    resetPage(); syncControls(); open('conversation');
+  }
+  function setRun(nextRun,nextScope = null) {
     if (!nextRun) return;
-    if (nextRun !== run) {
+    window.AgentSearchUI?.scopeChanged(nextRun,nextScope);
+    if (nextRun !== run || !sameScope(sessionScope,nextScope)) {
       if (state) { state.scroll = $('context-body').scrollTop; state.reading = readingState(); }
       run = nextRun;
-      if (!states.has(run)) states.set(run, freshState());
-      state = states.get(run);
+      sessionScope = nextScope;
+      const key = JSON.stringify([run,sessionScope?.harness || '',sessionScope?.session_id || '']);
+      if (!states.has(key)) states.set(key, freshState());
+      state = states.get(key);
       const saved = state.reading || previousReading(run);
       if (saved) Object.assign(state,saved.view,{expanded:new Set(saved.view.expanded)});
       else state.graph = '';
-      if (states.size > 8) states.delete(states.keys().next().value);
+      if (states.size > 24) states.delete(states.keys().next().value);
       listRequest++; listLoading = false; previewRequest++; previewKey = ''; previewChoices = [];
       if ($('content-dialog').open) $('content-dialog').close();
       $('content-empty').hidden = false; $('content-pane').hidden = true;
+      api.contentChanged?.('');
       overview = null;
       $('context-summary').textContent = t('loading…');
       $('context-body').innerHTML = ''; $('context-compare').hidden = true;
@@ -199,18 +253,21 @@ window.AgentContextUI = (() => {
     try {
       const value = await api.j('/api/context/overview?' + q({run}));
       if (request !== summaryRequest || run !== currentRun) return;
-      const coverageChanged = JSON.stringify([overview?.coverage,overview?.runtime_coverage]) !== JSON.stringify([value.coverage,value.runtime_coverage]);
+      const coverageChanged = JSON.stringify([overview?.coverage,overview?.runtime_coverage,overview?.capture_policy]) !== JSON.stringify([value.coverage,value.runtime_coverage,value.capture_policy]);
       overview = value;
       const sections = coverageSections(value), reports = sections.sessions.length ? sections.sessions : sections.discoveries;
       const sources = [...new Set(reports.map(c => c.source?.harness).filter(Boolean))];
       const hints = [...new Set(reports.map(c => t(statusNames[c.status] || c.status)))];
-      $('context-summary').textContent = [sources.join(' / '), api.tx('{messages} message records · {calls} tool calls · {results} results', {messages:unknown(value.messages),calls:unknown(value.tool_calls),results:unknown(value.tool_results)}),reports.some(c=>c.prior_context) ? t('Includes prior context') : '',hints.length ? t('Session capture')+': '+hints.join(' / ') : ''].filter(Boolean).join(' · ');
-      if (coverageChanged) $('context-source').innerHTML = `<option value="">${e(t('All recorded sessions'))}</option>` + sections.sessions.filter(c => c.source?.id).map(c => `<option value="${e(c.source.id)}">${e(c.source.harness)} · ${e(c.source.session_id || c.source.id)}</option>`).join('');
+      const processingHint = sections.processing.some(c=>!['ok','empty'].includes(c.status)) ? t('Processing diagnostics require attention') : '';
+      $('context-summary').textContent = [sessionScope ? t('Whole run counts') : '',sources.join(' / '), api.tx('{messages} message records · {calls} tool calls · {results} results', {messages:unknown(value.messages),calls:unknown(value.tool_calls),results:unknown(value.tool_results)}),reports.some(c=>c.prior_context) ? t('Includes prior context') : '',hints.length ? t('Session capture')+': '+hints.join(' / ') : ''].filter(Boolean).join(' · ');
+      if (value.capture_policy) $('context-summary').textContent += ' · '+retentionText(value.capture_policy);
+      if (coverageChanged) $('context-source').innerHTML = `<option value="">${e(t(sessionScope ? 'All sources in this session' : 'All recorded sessions'))}</option>` + sections.sessions.filter(c => c.source?.id && (!sessionScope || c.source.harness === sessionScope.harness && c.source.session_id === sessionScope.session_id)).map(c => `<option value="${e(c.source.id)}">${e(c.source.harness)} · ${e(c.source.session_id || c.source.id)}</option>`).join('');
       syncControls();
       $('context-nav-count').textContent = unknown(value.messages);
       $('context-nav-tools').textContent = unknown(value.tool_calls);
       $('context-nav-config').textContent = unknown(value.snapshots);
-      $('context-nav-coverage').textContent = [hints.length ? t('Session capture')+': '+hints.join(' / ') : '',t('Runtime capture')+': '+t(sections.runtime.label)].filter(Boolean).join(' · ');
+      $('context-nav-coverage').textContent = [hints.length ? t('Session capture')+': '+hints.join(' / ') : '',t('Runtime capture')+': '+t(sections.runtime.label),processingHint].filter(Boolean).join(' · ');
+      api.overviewChanged?.(value);
       if (state.tab === 'coverage' && state.open && coverageChanged) {
         const scroll = $('context-body').scrollTop;
         renderCoverage(); $('context-body').scrollTop = scroll;
@@ -218,6 +275,7 @@ window.AgentContextUI = (() => {
     } catch (error) {
       if (request !== summaryRequest || run !== currentRun) return;
       $('context-summary').textContent = t('Context coverage unavailable');
+      api.overviewFailed?.();
       if (state.open && state.tab === 'coverage') $('context-body').innerHTML = errorHTML(error);
     }
   }
@@ -230,7 +288,7 @@ window.AgentContextUI = (() => {
     $('context-body').innerHTML = notice('loading…');
     $('context-prev').disabled = true; $('context-next').disabled = true;
     try {
-      const page = await api.j('/api/context/entries?' + q({run,source:current.source,group:current.node ? '' : current.tab,node:current.node,cursor:current.cursor,limit:30}));
+      const page = await api.j('/api/context/entries?' + q({run,harness:sessionScope?.harness,session:sessionScope?.session_id,source:current.source,group:current.node ? '' : current.tab,node:current.node,cursor:current.cursor,limit:30}));
       if (request !== listRequest || state !== current) return;
       current.page = page;
       if (restore) current.scroll = scroll;
@@ -305,7 +363,7 @@ window.AgentContextUI = (() => {
     if (element.dataset.loaded) return;
     element.dataset.loaded = 'true';
     if (entry.content?.state !== 'stored' || !entry.content.ref) {
-      element.innerHTML = notice(entry.content?.reason || 'Content was not recorded'); return;
+      element.innerHTML = notice(contentReason(entry.content)); return;
     }
     try {
       const page = await api.j('/api/context/content?' + q({run:entry.run_id,ref:entry.content.ref,limit:4096}));
@@ -318,14 +376,18 @@ window.AgentContextUI = (() => {
     listRequest++; listLoading = false; $('context-pager').hidden = true; $('context-compare').hidden = true;
     if (!overview) { $('context-body').innerHTML = notice('loading…'); return; }
     const sections = coverageSections(overview);
-    $('context-body').innerHTML = renderRuntimeCoverage() + sections.associations.map(renderAssociationCoverage).join('') + sections.sessions.map(report => {
+    $('context-body').innerHTML = renderRetention() + renderRuntimeCoverage() + sections.associations.map(renderAssociationCoverage).join('') + sections.sessions.map(report => {
       const src = report.source || {};
       const fields = [['Session',src.session_id],['Source path',src.path],['Binding',src.binding],['Parser',src.parser_version],['Source version',src.application_version || src.format_version],['Observed at',report.observed_at],['Last successful capture',report.last_success_at],['Source range',[report.first_line,report.last_line].filter(x=>x!=null && x!==0).join(' – ')],['Missing fields',missingFields(report.missing_fields)],['Binding evidence',(src.binding_evidence || []).join('\n')]];
       const counts = value => `<div class="context-counts">${Object.entries(value || {}).map(([key,n]) => `<span>${e(t(key))}<b>${e(unknown(n))}</b></span>`).join('')}</div>`;
       const prior = report.prior_context;
       const history = prior ? `<details><summary>${e(t('Prior context'))} · ${e(t('Source range'))} ${e(prior.first_line)}–${e(prior.last_line)}</summary>${notice('Retained history is not execution in this run. Historical approvals do not authorize new actions.')}${counts(prior.counts)}<dl><dt>${e(t('Source range'))}</dt><dd>${e([prior.started_at,prior.ended_at].filter(Boolean).join(' → ') || t('Source time not recorded'))}</dd><dt>${e(t('Missing fields'))}</dt><dd>${e(missingFields(prior.missing_fields))}</dd></dl></details>` : '';
-      return `<article class="context-coverage" data-session-coverage><h3>${e(src.harness || t('Source'))} · ${e(t('Session capture'))} ${status(report.status)}</h3>${prior ? '<h4>'+e(t('Current execution range'))+'</h4>' : ''}${counts(report.counts)}${report.missing_fields?.length ? notice(t('Missing fields')+': '+missingFields(report.missing_fields)) : ''}${(report.issues || []).map(issue => `<p class="context-notice">${e(t(issue.code))}${issue.line ? ' · '+e(t('line'))+' '+e(issue.line) : ''}${issue.field ? ' · '+e(issue.field) : ''}${issue.scope === 'prior_context' ? ' · '+e(t('Prior context')) : ''}</p>`).join('')}<details data-source-diagnostics><summary>${e(t('Source and evidence'))}</summary>${notice('Counts describe this processing range, not the whole run. Unknown counts are not zero.')}<dl>${fields.map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl></details>${history}</article>`;
-    }).join('') + sections.discoveries.map(renderDiscoveryCoverage).join('') + notice('Context coverage, runtime coverage, and signature verification are separate checks.') + notice('Configuration snapshots show recorded changes only; completeness of the change history is unknown.') + (overview.has_more_sources ? notice('Source report limit reached. Additional sources are not shown here.') : '');
+      const omitted = omissionText(report);
+      return `<article class="context-coverage" data-session-coverage><h3>${e(src.harness || t('Source'))} · ${e(t('Session capture'))} ${status(report.status)}</h3>${prior ? '<h4>'+e(t('Current execution range'))+'</h4>' : ''}${counts(report.counts)}${omitted?notice(omitted):''}${report.missing_fields?.length ? notice(t('Missing fields')+': '+missingFields(report.missing_fields)) : ''}${(report.issues || []).map(issue => `<p class="context-notice">${e(t(issue.code))}${issue.line ? ' · '+e(t('line'))+' '+e(issue.line) : ''}${issue.field ? ' · '+e(issue.field) : ''}${issue.scope === 'prior_context' ? ' · '+e(t('Prior context')) : ''}</p>`).join('')}<details data-source-diagnostics><summary>${e(t('Source and evidence'))}</summary>${notice('Counts describe this processing range, not the whole run. Unknown counts are not zero.')}<dl>${fields.map(([key,value])=>`<dt>${e(t(key))}</dt><dd>${e(value || t('Not recorded'))}</dd>`).join('')}</dl></details>${history}</article>`;
+    }).join('') + sections.processing.map(renderProcessingCoverage).join('') + sections.discoveries.map(renderDiscoveryCoverage).join('') + notice('Context coverage, runtime coverage, and signature verification are separate checks.') + notice('Configuration snapshots show recorded changes only; completeness of the change history is unknown.') + (overview.has_more_sources ? notice('Source report limit reached. Additional sources are not shown here.') : '');
+  }
+  function renderProcessingCoverage(report) {
+    return `<article class="context-coverage" data-processing-coverage><h3>${e(t('Processing diagnostics'))} ${status(report.status)}</h3>${(report.issues || []).map(issue=>notice(issue.code)).join('')}<dl><dt>${e(t('Parser'))}</dt><dd>${e(report.source?.parser_version || t('Not recorded'))}</dd><dt>${e(t('Observed at'))}</dt><dd>${e(report.observed_at || t('Not recorded'))}</dd></dl><details><summary>${e(t('Source and evidence'))}</summary><pre>${e(JSON.stringify(report,null,2))}</pre></details></article>`;
   }
   function renderDiscoveryCoverage(report) {
     const src = report.source || {};
@@ -434,13 +496,14 @@ window.AgentContextUI = (() => {
     scrollRegion('savedcontent');
   }
   async function selectGraph(node,reading = null,explicit = false) {
+    if (readerLoan) return;
     if (!state || !node || node === state.graph && (!explicit || previewKey === 'node:'+node)) return;
     state.graph = node;
     const current = state, currentRun = run;
     const choices = [{label:t('Recorded graph content'),node,mode:'body'}, {label:t('Raw saved object'),node,mode:'raw'}];
     setPreview(choices,'node:'+node,reading?.raw ? 1 : 0,reading);
     try {
-      const page = await api.j('/api/context/entries?' + q({run,node,limit:50}));
+      const page = await api.j('/api/context/entries?' + q({run,node,harness:sessionScope?.harness,session:sessionScope?.session_id,limit:50}));
       if (state !== current || run !== currentRun || state.graph !== node || previewKey !== 'node:'+node) return;
       const selected = previewChoices[Number($('content-choice').value)];
       previewChoices = previewChoices.filter(choice=>!choice.entry).concat((page.entries || []).flatMap(entryChoices));
@@ -454,6 +517,7 @@ window.AgentContextUI = (() => {
   function setPreview(choices,key,selected,reading = null) {
     previewRequest++; previewKey = key; previewChoices = choices; previewOffsets = reading?.offsets || [0]; previewPage = null;
     $('content-empty').hidden = true; $('content-pane').hidden = false;
+    api.contentChanged?.(key,choices[selected || 0]?.label);
     $('content-related').hidden = true; $('content-limits').textContent = '';
     $('content-format').value = reading?.format === 'bytes' ? 'bytes' : 'readable';
     renderChoices(selected); loadContent(reading?.scroll || 0);
@@ -461,6 +525,7 @@ window.AgentContextUI = (() => {
   function renderChoices(selected) {
     $('content-choice').innerHTML = previewChoices.map((choice,index)=>`<option value="${index}">${e(choice.label)}</option>`).join('');
     $('content-choice').value = String(selected);
+    api.contentChanged?.(previewKey,previewChoices[Number($('content-choice').value)]?.label);
   }
   // A display projection only: never rewrite the saved body, its digest or byte
   // offsets. Partial pages and deeply nested records stay byte-for-byte views.
@@ -495,6 +560,7 @@ window.AgentContextUI = (() => {
     const readable = $('content-format').value === 'readable';
     $('content-body').textContent = readable ? formattedContent : previewPage.content;
     $('content-format-note').hidden = !readable;
+    window.AgentEvidenceSearch?.highlight($('content-body'),previewHighlight);
   }
   async function loadContent(restoreScroll = 0) {
     const choice = previewChoices[Number($('content-choice').value)];
@@ -506,20 +572,20 @@ window.AgentContextUI = (() => {
     formattedContent = null; $('content-format').hidden = true; $('content-format-note').hidden = true;
     try {
       if (choice.node) {
-        const value = await api.j('/api/artifact?' + q({run,node:choice.node,mode:choice.mode || 'body',offset,limit:65536,view_lang:api.lang}));
+        const value = await api.j('/api/artifact?' + q({run:choice.run || run,node:choice.node,mode:choice.mode || 'body',offset,limit:65536,view_lang:api.lang}));
         if (request !== previewRequest || state !== current) return;
         previewPage = value;
         if (value.versions?.length) {
           const selected = Number($('content-choice').value);
           for (const version of value.versions) {
             if (previewChoices.some(c=>c.node === version.ref)) continue;
-            previewChoices.push({label:t('Saved version')+' · '+version.ref.slice(7,19),node:version.ref,mode:'body'}, {label:t('Raw saved object')+' · '+version.ref.slice(7,19),node:version.ref,mode:'raw'});
+            previewChoices.push({label:t('Saved version')+' · '+version.ref.slice(7,19),node:version.ref,mode:'body',run:choice.run}, {label:t('Raw saved object')+' · '+version.ref.slice(7,19),node:version.ref,mode:'raw',run:choice.run});
           }
           renderChoices(selected);
           if (value.versions_has_more) $('content-limits').textContent = t('More saved versions exist; use an exact object hash to query them.');
         }
         $('content-meta').textContent = [value.ref,value.sha256 ? t('Body SHA-256')+': '+value.sha256 : '',value.source && t(value.source),value.redacted ? t('Redacted') : ''].filter(Boolean).join(' · ');
-        if (value.kind === 'unavailable' || value.kind === 'binary') $('content-body').textContent = t(value.reason || 'Content was not recorded');
+        if (value.kind === 'unavailable' || value.kind === 'binary') $('content-body').textContent = t(contentReason(value));
         else if (value.kind === 'diff') {
           $('content-body').classList.add('diff');
           $('content-body').innerHTML = (value.content || '').split('\n').map(line => `<span class="${line.startsWith('+')?'add':line.startsWith('-')?'del':line.startsWith('@@')?'hunk':''}">${e(line)}</span>`).join('\n');
@@ -529,9 +595,10 @@ window.AgentContextUI = (() => {
         $('content-next').disabled = !value.has_more;
       } else if (choice.ref?.state !== 'stored' || !choice.ref.ref) {
         previewPage = null;
-        $('content-body').textContent = t(choice.ref?.reason || 'Content was not recorded');
+        $('content-body').textContent = t(contentReason(choice.ref));
+        if (choice.ref?.reason === 'capture_policy') $('content-meta').textContent = [choice.ref.bytes == null ? '' : t('Omitted bytes')+': '+choice.ref.bytes,choice.ref.sha256 ? t('Omitted content digest')+': '+choice.ref.sha256 : '',choice.ref.digest_scope].filter(Boolean).join(' · ');
       } else {
-        const page = await api.j('/api/context/content?' + q({run,ref:choice.ref.ref,offset,limit:65536}));
+        const page = await api.j('/api/context/content?' + q({run:choice.run || run,ref:choice.ref.ref,offset,limit:65536}));
         if (request !== previewRequest || state !== current) return;
         previewPage = page;
         $('content-body').textContent = page.content;
@@ -546,11 +613,40 @@ window.AgentContextUI = (() => {
         $('content-next').disabled = !page.has_more;
       }
       $('content-body').scrollTop = restoreScroll;
+      if (formattedContent == null) window.AgentEvidenceSearch?.highlight($('content-body'),previewHighlight);
     } catch (error) {
       if (request !== previewRequest || state !== current) return;
       $('content-body').textContent = t('Recorded evidence could not be loaded.')+' '+error.message;
       $('content-prev').disabled = previewOffsets.length < 2;
     }
   }
-  return {init,setRun,selectGraph,linkedSession,open,persist,readableContent,coverageSections};
+  function borrowReader(host) {
+    if(readerLoan)throw new Error('Evidence reader is already in use');
+    const saved={state,run,host,choices:previewChoices,key:previewKey,selected:Number($('content-choice').value),
+      reading:{offsets:[...previewOffsets],scroll:$('content-body').scrollTop,format:$('content-format').value},
+      workspace:window.AgentWorkspaceUI.readingState()};
+    readerLoan=saved;previewRequest++;
+    host.append($('content-pane'));
+    return saved;
+  }
+  function releaseReader(loan) {
+    if(!loan || readerLoan!==loan)return;
+    previewRequest++;previewHighlight='';readerLoan=null;
+    $('content-home').append($('content-pane'));
+    if(state===loan.state && run===loan.run){
+      if(loan.choices.length)setPreview(loan.choices,loan.key,loan.selected,loan.reading);
+      else{previewChoices=[];previewKey='';previewPage=null;$('content-pane').hidden=true;$('content-empty').hidden=false;api.contentChanged?.('');}
+      window.AgentWorkspaceUI.restoreReading(loan.workspace);
+    }
+  }
+  function searchEvidence(source,reading,query,evidenceRun) {
+    if(!readerLoan)return;
+    previewHighlight=query;
+    const choices=source.entry ? entryChoices(source.entry) : [{label:t('Saved content'),node:source.node,mode:'body'}, {label:t('Raw saved object'),node:source.node,mode:'raw'}];
+    if(evidenceRun)choices.forEach(choice=>{choice.run=evidenceRun;});
+    const offsets=reading.offsets || (reading.offset ? [0,reading.offset] : [0]);
+    setPreview(choices,'search:'+source.id,reading.raw ? 1 : 0,{offsets,scroll:reading.scroll || 0,format:reading.format || 'bytes'});
+  }
+  function readerPosition(){return {offset:previewOffsets.at(-1),offsets:previewOffsets.slice(-512),scroll:$('content-body').scrollTop,raw:previewChoices[Number($('content-choice').value)]?.mode==='raw',format:$('content-format').value};}
+  return {init,setRun,selectGraph,selectSource,linkedSession,open,persist,readableContent,coverageSections,borrowReader,releaseReader,searchEvidence,readerPosition,retentionPresentation,retentionText,contentReason,omissionText};
 })();

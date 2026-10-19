@@ -3,6 +3,7 @@ package provenance
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -77,6 +78,9 @@ func verifyAgentContext(db *sql.DB, runID string, add issueAdder) error {
 					RawContent json.RawMessage `json:"raw_content"`
 				}
 				if err := ReadObjectPayload(db, runID, v.hash, &payload); err != nil {
+					if contentQueryFailed(err) {
+						return err
+					}
 					add("error", "context_object_invalid", v.id, "context object cannot be verified: %v", err)
 					continue
 				}
@@ -129,6 +133,9 @@ func verifyAgentContext(db *sql.DB, runID string, add issueAdder) error {
 						err = VerifyTextContent(db, runID, ref.Ref)
 					}
 					if err != nil {
+						if contentQueryFailed(err) {
+							return err
+						}
 						add("error", "context_content_invalid", v.id, "context content cannot be verified: %v", err)
 					} else {
 						checked[ref.Ref] = true
@@ -139,4 +146,9 @@ func verifyAgentContext(db *sql.DB, runID string, add issueAdder) error {
 		}
 	}
 	return nil
+}
+
+func contentQueryFailed(err error) bool {
+	var lookup *contentLookupError
+	return errors.As(err, &lookup) && !errors.Is(err, sql.ErrNoRows)
 }

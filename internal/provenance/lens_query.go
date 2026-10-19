@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/i18n"
@@ -30,6 +31,25 @@ func BuildGraphLens(db *sql.DB, opts GraphLensOptions) (GraphLensManifest, error
 	if err != nil {
 		return GraphLensManifest{}, err
 	}
+	nodes, events, edges = sessionLensData(opts.SessionScope, nodes, events, edges)
+	if opts.SessionScope != nil && opts.Focus != "" {
+		if _, ok := nodes[opts.Focus]; !ok {
+			// Aggregation creates display nodes outside the canonical subset. They
+			// remain valid focus targets in the selected session's current view.
+			unfocused := opts
+			unfocused.Focus = ""
+			visible := false
+			for _, n := range buildGraphLensFromData(unfocused, maps.Clone(nodes), events, edges).Nodes {
+				if n.ID == opts.Focus {
+					visible = true
+					break
+				}
+			}
+			if !visible {
+				return GraphLensManifest{}, ErrSessionFocus
+			}
+		}
+	}
 	return buildGraphLensFromData(opts, nodes, events, edges), nil
 }
 
@@ -48,6 +68,7 @@ func buildGraphLensFromData(opts GraphLensOptions, nodes map[string]GraphLensNod
 		Lens:            lens,
 		AvailableLenses: append([]string{}, availableGraphLenses...),
 		Query: GraphLensQuery{
+			SessionScope:  opts.SessionScope.query(),
 			Focus:         opts.Focus,
 			Overlays:      cleanOverlays(opts.Overlays),
 			Limit:         opts.Limit,
@@ -84,6 +105,11 @@ func buildGraphLensFromData(opts GraphLensOptions, nodes map[string]GraphLensNod
 	}
 	if opts.Focus != "" {
 		used[opts.Focus] = true
+	}
+	if opts.SessionScope != nil && lens == "default" && detail != "summary" && opts.Focus == "" {
+		for _, id := range opts.SessionScope.ToolIDs {
+			used[id] = true
+		}
 	}
 	manifest.Nodes = sortedLensNodes(nodes, used)
 	manifest.Query.NodeCount = len(manifest.Nodes)
@@ -132,8 +158,12 @@ func PrintGraphLensManifest(out io.Writer, manifest GraphLensManifest, languages
 		fmt.Fprintf(out, i18n.T(lang, "  summary=%s\n"), line)
 	}
 	for _, edge := range manifest.DerivedEdges {
-		fmt.Fprintf(out, i18n.T(lang, "  derived_edge=%s %s -> %s confidence=%.2f rule=%s evidence=%s\n"),
-			edge.EdgeType, edge.FromID, edge.ToID, edge.Confidence, edge.DerivationRule, strings.Join(edge.EvidenceRefs, ","))
+		confidence := i18n.T(lang, "unknown")
+		if edge.Confidence != nil {
+			confidence = fmt.Sprintf("%.2f", *edge.Confidence)
+		}
+		fmt.Fprintf(out, i18n.T(lang, "  derived_edge=%s %s -> %s confidence=%s rule=%s evidence=%s\n"),
+			edge.EdgeType, edge.FromID, edge.ToID, confidence, edge.DerivationRule, strings.Join(edge.EvidenceRefs, ","))
 	}
 	for _, edge := range manifest.Edges {
 		fmt.Fprintf(out, i18n.T(lang, "  edge=%s %s -> %s source_event=%s\n"), edge.EdgeType, edge.FromID, edge.ToID, edge.SourceEventID)

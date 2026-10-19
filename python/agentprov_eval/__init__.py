@@ -68,6 +68,12 @@ class CommandResult:
         return json.loads(self.stdout)
 
 
+class _NoDaemonRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        # A daemon token must stay at the explicitly configured endpoint.
+        return None
+
+
 class Client:
     """Small wrapper around the local agentprov CLI.
 
@@ -143,8 +149,11 @@ class Client:
         return self._daemon_call(urllib.request.Request(url, method="GET"), path)
 
     def _daemon_call(self, req: "urllib.request.Request", path: str) -> dict[str, Any]:
+        token = self.env.get("AGENTPROV_DAEMON_TOKEN", os.environ.get("AGENTPROV_DAEMON_TOKEN", ""))
+        if token:
+            req.add_header("Authorization", "Bearer " + token)
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            with urllib.request.build_opener(_NoDaemonRedirect()).open(req, timeout=self.timeout) as resp:
                 body = resp.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", "replace")
@@ -297,6 +306,33 @@ class Client:
         args = ["signals", "list", "--run", run_id, "--json"]
         if dimension is not None:
             args.extend(["--dimension", dimension])
+        return self.run_cli(args).json()
+
+    def audit_associations(
+        self, run_id: str, *, event_id: str = "", limit: int = 100, cursor: str = ""
+    ) -> dict[str, Any]:
+        """Read one page of saved audit decisions and runtime candidates.
+
+        Reuse next_cursor with the same run/event to continue. Decisions,
+        candidate attribution and actual syscall outcomes are separate fields.
+        """
+        if not isinstance(run_id, str) or not run_id.strip():
+            raise ValueError("run_id is required")
+        if not isinstance(event_id, str) or not isinstance(cursor, str):
+            raise ValueError("event_id and cursor must be strings")
+        if len(run_id.encode()) > 1024 or len(event_id.encode()) > 1024 or len(cursor.encode()) > 4096:
+            raise ValueError("audit query identifier or cursor exceeds its size limit")
+        if type(limit) is not int or not 1 <= limit <= 500:
+            raise ValueError("limit must be an integer from 1 to 500")
+        if self.daemon_url:
+            return self._daemon_get("/v1/telemetry/audit-associations", {
+                "run": run_id, "event": event_id, "limit": str(limit), "cursor": cursor,
+            })
+        args = ["telemetry", "audit-associations", "--run", run_id, "--limit", str(limit), "--json"]
+        if event_id:
+            args.extend(["--event", event_id])
+        if cursor:
+            args.extend(["--cursor", cursor])
         return self.run_cli(args).json()
 
     def score_trajectory(

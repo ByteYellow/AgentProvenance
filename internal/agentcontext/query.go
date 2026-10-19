@@ -40,6 +40,10 @@ func (s Service) Entries(ctx context.Context, opts PageOptions) (Page, error) {
 	}
 	where := []string{"e.run_id = ?"}
 	args := []any{opts.RunID}
+	if opts.Harness != "" {
+		where = append(where, `EXISTS (SELECT 1 FROM agent_context_reports r WHERE r.run_id=e.run_id AND r.source_id=e.source_id AND r.harness=?)`)
+		args = append(args, opts.Harness)
+	}
 	for _, filter := range []struct{ column, value string }{
 		{"session_id", opts.SessionID}, {"source_id", opts.SourceID},
 		{"kind", opts.Kind}, {"tool_call_id", opts.ToolCallID},
@@ -144,6 +148,16 @@ func (s Service) Overview(ctx context.Context, runID string) (Overview, error) {
 		return Overview{}, fmt.Errorf("run id is required")
 	}
 	result := Overview{SchemaVersion: SchemaVersion, RunID: runID, Coverage: []Coverage{}}
+	policy, err := readCapturePolicy(ctx, s.DB, runID)
+	if err != nil {
+		return result, err
+	}
+	result.CapturePolicy = policy
+	settings, err := observability.ReadCaptureSettings(ctx, s.DB, runID)
+	if err != nil {
+		return result, err
+	}
+	result.CaptureSettings = settings
 	runtimeCoverage, err := observability.ReadRuntimeCoverage(ctx, s.DB, runID)
 	if err != nil {
 		return result, err

@@ -26,6 +26,27 @@ components:
         type: string
       description: 要查询的执行 ID
   schemas:
+    VerifyResult:
+      type: object
+      required: [schema_version, run_id, status, issue_count, error_count, warning_count, issues]
+      properties:
+        schema_version: { type: string, enum: [agentprovenance.verify/v1] }
+        run_id: { type: string }
+        status: { type: string, enum: [ok, failed, unavailable] }
+        issue_count: { type: integer, minimum: 0 }
+        error_count: { type: integer, minimum: 0 }
+        warning_count: { type: integer, minimum: 0 }
+        error: { type: string, description: 验证未能完成时保留的运行错误。问题计数仅涵盖已完成的检查。 }
+        issues:
+          type: [array, "null"]
+          items:
+            type: object
+            required: [severity, kind, id, message]
+            properties:
+              severity: { type: string, enum: [error, warning] }
+              kind: { type: string }
+              id: { type: string }
+              message: { type: string }
     VersionedEnvelope:
       type: object
       description: 响应通过 schema_version 标识数据格式版本
@@ -80,6 +101,14 @@ components:
           additionalProperties: true
       additionalProperties: true
 paths:
+  /v1/telemetry/audit-associations:
+    $ref: './audit-associations-api.yaml#/paths/~1v1~1telemetry~1audit-associations'
+  /api/audit/associations:
+    $ref: './audit-associations-api.yaml#/paths/~1api~1audit~1associations'
+  /api/compare/records:
+    $ref: '../agent-context-api.yaml#/paths/~1api~1compare~1records'
+  /api/search/sources:
+    $ref: '../agent-context-api.yaml#/paths/~1api~1search~1sources'
   /api/artifact:
     $ref: '../agent-context-api.yaml#/paths/~1api~1artifact'
   /v1/context/overview:
@@ -167,7 +196,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VersionedEnvelope'
+                $ref: '#/components/schemas/VerifyResult'
+        '503':
+          description: 验证未能完成，状态为 unavailable，并保留运行错误原因
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyResult'
   /v1/graph/explain:
     get:
       operationId: explain

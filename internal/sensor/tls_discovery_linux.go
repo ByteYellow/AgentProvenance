@@ -202,6 +202,9 @@ func tlsFileIdentity(path string) (string, error) {
 
 func classifyTLSExecutable(path string) executableKind {
 	if err := validateELFMetadata(path); err != nil {
+		if offsets, err := opensslDynamicOffsets(path); err == nil && (offsets["SSL_write"] != 0 || offsets["SSL_write_ex"] != 0) {
+			return executableKind{kind: "openssl"}
+		}
 		return executableKind{unsupported: true}
 	}
 	f, err := elf.Open(path)

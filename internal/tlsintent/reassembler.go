@@ -29,27 +29,34 @@ const (
 
 // Protocol values on a reassembled Message.
 const (
+	ProtoHTTP10 = "http/1.0"
 	ProtoHTTP11 = "http/1.1"
 	ProtoH2     = "h2" // parsed from h2 frames + HPACK (see http2.go)
 )
 
 // Chunk is one ordered segment of TLS plaintext from the eBPF probe. A large
 // request/response arrives as several Chunks with increasing arrival order on the
-// same (PID, Conn) TLS connection. This is the eBPF<->userspace contract.
+// same process lifetime, TLS object and capture epoch. Producers without an
+// epoch retain their existing best-effort address-based parsing.
 type Chunk struct {
-	PID       uint32
-	Conn      uint64 // the SSL* pointer: identifies one TLS connection
-	Direction string // Request or Response
-	Data      []byte
-	Truncated bool // the kernel dropped bytes past its capture cap for this call
+	PID            uint32
+	Conn           uint64 // TLS object address; reusable across connection lifetimes
+	ProcessStartNS uint64
+	Epoch          uint64 // capture generation; zero for producers without lifecycle probes
+	Direction      string // Request or Response
+	Data           []byte
+	Truncated      bool // the kernel dropped bytes past its capture cap for this call
 }
 
 // Message is a fully reassembled HTTP/1.1 message plus minimal LLM semantics.
 type Message struct {
-	PID       uint32
-	Conn      uint64
-	Direction string // Request or Response
-	Protocol  string // ProtoHTTP11 or ProtoH2
+	PID            uint32
+	Conn           uint64
+	ProcessStartNS uint64
+	Epoch          uint64
+	Direction      string // Request or Response
+	Protocol       string // ProtoHTTP11 or ProtoH2
+	StreamID       uint32 // HTTP/2 stream ID; zero for HTTP/1.x
 
 	// HTTP surface.
 	Method  string // request only
@@ -70,12 +77,13 @@ type Message struct {
 // messages that became complete. It handles HTTP keep-alive (several messages on
 // one connection) by keeping the pipelined remainder after each complete message.
 type Reassembler struct {
-	streams    map[streamKey]*stream
-	h2Conns    map[connKey]struct{} // connections seen to speak h2 (client preface)
-	MaxBytes   int                  // per-direction retained byte cap, including HTTP/2
-	MaxStreams int                  // active connection-directions; 0 -> 128
-	tick       uint64
-	loss       CaptureLoss
+	streams     map[streamKey]*stream
+	h2Conns     map[connKey]struct{} // connections seen to speak h2 (client preface)
+	connections map[connKey]*connectionState
+	MaxBytes    int // per-direction retained byte cap, including HTTP/2
+	MaxStreams  int // active connection-directions; 0 -> 128
+	tick        uint64
+	loss        CaptureLoss
 }
 
 type streamKey struct {
@@ -107,7 +115,7 @@ func NewReassembler() *Reassembler {
 
 // Add feeds one Chunk and returns every message that completed as a result
 // (usually zero or one).
-func (r *Reassembler) Add(c Chunk) []Message {
+func (r *Reassembler) Add(c Chunk) (messages []Message) {
 	if r.streams == nil {
 		r.streams = map[streamKey]*stream{}
 	}
@@ -117,18 +125,12 @@ func (r *Reassembler) Add(c Chunk) []Message {
 	if len(c.Data) == 0 && !c.Truncated {
 		return nil
 	}
-	// A new request on this connection means any buffered response for it has
-	// completed: HTTP/1.1 is strictly request→response→request, so the client only
-	// sends again after fully reading the prior response — and the SSL* pointer is
-	// commonly freed+reused for the next connection. This is the ONLY in-band
-	// completion signal for a close-framed response (no Content-Length, no chunked
-	// terminator), which otherwise sits buffered until process-exit Flush and is
-	// lost on a long-lived workload. Flush it here so the response isn't dropped.
-	var flushed []Message
-	_, isHTTP2 := r.h2Conns[connKey{c.PID, c.Conn}]
-	if c.Direction == Request && !isHTTP2 {
-		flushed = r.flushDir(c.PID, c.Conn, Response)
+	if !r.acceptConnection(c) {
+		r.loss.Streams++
+		r.loss.Bytes += uint64(len(c.Data))
+		return nil
 	}
+	defer func() { stampIdentity(messages, c.ProcessStartNS, c.Epoch) }()
 
 	k := streamKey{c.PID, c.Conn, c.Direction}
 	s := r.streams[k]
@@ -143,7 +145,7 @@ func (r *Reassembler) Add(c Chunk) []Message {
 	s.lastUsed = r.tick
 	if s.exceeded {
 		r.loss.Bytes += uint64(len(c.Data))
-		return flushed
+		return nil
 	}
 	if c.Truncated {
 		s.truncated = true
@@ -185,7 +187,7 @@ func (r *Reassembler) Add(c Chunk) []Message {
 					out[i].Truncated = true
 				}
 			}
-			return append(flushed, out...)
+			return out
 		}
 		out := s.h2.consume(c.Data, c.PID, c.Conn)
 		if s.truncated {
@@ -193,7 +195,7 @@ func (r *Reassembler) Add(c Chunk) []Message {
 				out[i].Truncated = true
 			}
 		}
-		return append(flushed, out...)
+		return out
 	}
 
 	max := r.byteLimit()
@@ -222,7 +224,7 @@ func (r *Reassembler) Add(c Chunk) []Message {
 		s.buf.Write(rest)
 		s.truncated = false
 	}
-	return append(flushed, out...)
+	return out
 }
 
 // Flush emits whatever is buffered for a connection as a best-effort (possibly
@@ -235,6 +237,10 @@ func (r *Reassembler) Flush(pid uint32, conn uint64) []Message {
 		out = append(out, r.flushDir(pid, conn, dir)...)
 	}
 	delete(r.h2Conns, connKey{pid, conn})
+	if state := r.connections[connKey{pid, conn}]; state != nil {
+		stampIdentity(out, state.start, state.epoch)
+		delete(r.connections, connKey{pid, conn})
+	}
 	return out
 }
 
@@ -370,11 +376,17 @@ func parseStartAndHeaders(pid uint32, conn uint64, direction string, headerBytes
 	switch {
 	case strings.HasPrefix(startLine, "HTTP/"):
 		msg.Direction = Response
+		if fields[0] == "HTTP/1.0" {
+			msg.Protocol = ProtoHTTP10
+		}
 		if len(fields) >= 2 {
 			msg.Status, _ = strconv.Atoi(fields[1])
 		}
 	case len(fields) >= 2:
 		msg.Direction = Request
+		if len(fields) >= 3 && fields[2] == "HTTP/1.0" {
+			msg.Protocol = ProtoHTTP10
+		}
 		msg.Method = fields[0]
 		msg.Path = fields[1]
 		msg.Host = headers["host"]

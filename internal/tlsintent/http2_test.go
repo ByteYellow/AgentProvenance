@@ -49,8 +49,8 @@ func TestH2RequestHeadersAndBody(t *testing.T) {
 		t.Fatalf("expected 1 message, got %d", len(msgs))
 	}
 	m := msgs[0]
-	if m.Protocol != ProtoH2 {
-		t.Errorf("protocol = %q, want %q", m.Protocol, ProtoH2)
+	if m.Protocol != ProtoH2 || m.StreamID != 1 {
+		t.Errorf("protocol/stream = %q/%d, want h2/1", m.Protocol, m.StreamID)
 	}
 	if m.Method != "POST" || m.Path != "/v1/messages" || m.Host != "api.anthropic.com" {
 		t.Errorf("request line = %s %s %s", m.Method, m.Path, m.Host)
@@ -81,8 +81,8 @@ func TestH2ResponseOnSameConnection(t *testing.T) {
 		t.Fatalf("expected 1 response message, got %d", len(msgs))
 	}
 	m := msgs[0]
-	if m.Direction != Response || m.Status != 200 {
-		t.Errorf("direction=%s status=%d, want response/200", m.Direction, m.Status)
+	if m.Direction != Response || m.Status != 200 || m.StreamID != 1 {
+		t.Errorf("direction=%s status=%d stream=%d, want response/200/1", m.Direction, m.Status, m.StreamID)
 	}
 	if m.Model != "gpt-x" {
 		t.Errorf("model = %q", m.Model)
@@ -121,5 +121,37 @@ func TestH2PaddedDataStripped(t *testing.T) {
 	msgs := r.Add(Chunk{PID: 3, Conn: 3, Direction: Request, Data: stream})
 	if len(msgs) != 1 || string(msgs[0].Body) != string(body) {
 		t.Fatalf("padded body not stripped correctly: %+v", msgs)
+	}
+}
+
+func TestH2MultiplexedMessagesRetainStreamID(t *testing.T) {
+	r := NewReassembler()
+	requests := []byte(h2ClientPreface)
+	for _, id := range []uint32{1, 3, 5} {
+		hdr := hpackEncode([2]string{":method", "GET"}, [2]string{":path", "/"}, [2]string{":authority", "api.example"})
+		requests = append(requests, h2Frame(h2FrameHeaders, h2FlagEndHeaders|h2FlagEndStream, id, hdr)...)
+	}
+	msgs := r.Add(Chunk{PID: 9, Conn: 1, Direction: Request, Data: requests})
+	if len(msgs) != 3 {
+		t.Fatalf("requests = %+v", msgs)
+	}
+	for i, id := range []uint32{1, 3, 5} {
+		if msgs[i].StreamID != id {
+			t.Fatalf("request %d has stream %d, want %d", i, msgs[i].StreamID, id)
+		}
+	}
+	var responses []byte
+	for _, id := range []uint32{5, 1, 3} {
+		hdr := hpackEncode([2]string{":status", "200"})
+		responses = append(responses, h2Frame(h2FrameHeaders, h2FlagEndHeaders|h2FlagEndStream, id, hdr)...)
+	}
+	msgs = r.Add(Chunk{PID: 9, Conn: 1, Direction: Response, Data: responses})
+	if len(msgs) != 3 {
+		t.Fatalf("responses = %+v", msgs)
+	}
+	for i, id := range []uint32{5, 1, 3} {
+		if msgs[i].StreamID != id {
+			t.Fatalf("response %d has stream %d, want %d", i, msgs[i].StreamID, id)
+		}
 	}
 }

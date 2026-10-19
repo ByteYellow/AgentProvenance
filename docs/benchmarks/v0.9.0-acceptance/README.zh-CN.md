@@ -2,10 +2,10 @@
 
 [English](README.md) | 中文
 
-已确定的 A1～A4、B1 通过下列验收。代码基于
+Agent 上下文采集、会话绑定、配置历史和证据阅读通过下列验收。代码基于
 `186e6c7ce889df0c414fd01c65bf504b44273c58`，包含本次发现并修复的问题。
 [report.json](report.json) 保存各项检查、数量、程序与探针校验值，以及初次失败的原因。
-这里记录的是验收结果，正式版尚未发布。
+本文记录 2026-10-08、正式发布前的检查结果。
 
 | 验收项目 | 结果 |
 | --- | --- |
@@ -32,9 +32,9 @@ API 失败及阅读位置保持，不把它们当作真实模型执行。Claude/
 提交 `1b279ba` 的 [CI](https://github.com/ByteYellow/AgentProvenance/actions/runs/37796934431)
 与[便携包工作流](https://github.com/ByteYellow/AgentProvenance/actions/runs/37796934625)均已通过。
 包括 Go 1.23–1.26 的 amd64 实时采集、旧数据兼容，以及 Linux/macOS 的 amd64、arm64
-构建与解压后验收。review 分支的发布步骤按设计跳过，尚未创建 v0.9.0 发行版。
+构建与解压后验收。该次工作流按 review 分支的规则跳过发布步骤。
 
-## 本轮修复
+## 检查中发现并修复的问题
 
 - C 源码与 ARM64 探针已有子进程出生 cgroup 修复，amd64 预编译探针却仍是旧版本。
   使用 KVM 内核 BTF 重新生成后，原先失败的 `clone-child:birth_cgroup` 通过。ARM64 文件未改动。

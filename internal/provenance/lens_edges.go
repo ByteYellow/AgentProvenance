@@ -21,13 +21,39 @@ func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
 		if err := rows.Scan(&edge.ID, &edge.FromID, &edge.ToID, &edge.EdgeType, &edge.SourceEventID, &edge.CreatedAt); err != nil {
 			return nil, err
 		}
-		if edge.EdgeType == "agent_syscall" && strings.HasPrefix(edge.ID, correlation.AppProcessEdgePrefix) {
+		if edge.EdgeType == "agent_syscall" && (strings.HasPrefix(edge.ID, correlation.AppProcessEdgePrefix) || strings.HasPrefix(edge.ID, "agent-correlation-v2-")) {
 			edge.Derived, edge.DerivationRule = true, correlation.AppProcessMethod
-			edge.Confidence = correlation.AppProcessConfidence
+			if strings.HasPrefix(edge.ID, "agent-correlation-v2-") {
+				edge.DerivationRule = "agentprov.command_time_process/v2"
+			}
+			edge.Confidence = graphConfidence(correlation.AppProcessConfidence)
 			edge.EvidenceRefs = []string{edge.FromID, edge.ToID}
 			if edge.SourceEventID != "" && edge.ToID != "runtime_event/"+edge.SourceEventID {
 				edge.EvidenceRefs = append(edge.EvidenceRefs, "runtime_event/"+edge.SourceEventID)
 			}
+		}
+		if edge.EdgeType == edgeLLMCaused && (strings.HasPrefix(edge.ID, llmCommandEdgePrefix) || strings.HasPrefix(edge.ID, "llm-command-v2-")) {
+			edge.Derived, edge.DerivationRule = true, llmCommandRule
+			if strings.HasPrefix(edge.ID, "llm-command-v2-") {
+				edge.DerivationRule = "agentprov.intent_command_scope/v2"
+			}
+			edge.Confidence = graphConfidence(llmCommandConfidence)
+			edge.EvidenceRefs = []string{edge.FromID, edge.ToID}
+			if edge.SourceEventID != "" {
+				edge.EvidenceRefs = append(edge.EvidenceRefs, "runtime_event/"+edge.SourceEventID)
+			}
+		}
+		if edge.EdgeType == "llm_call" && (strings.HasPrefix(edge.ID, tlsPairEdgePrefix) || strings.HasPrefix(edge.ID, "tls-pair-v1-")) {
+			edge.Derived, edge.DerivationRule = true, tlsPairRule
+			prefix := tlsPairEdgePrefix
+			if strings.HasPrefix(edge.ID, "tls-pair-v1-") {
+				prefix, edge.DerivationRule = "tls-pair-v1-", "agentprov.tls_connection_exchange/v1"
+			}
+			edge.Confidence = graphConfidence(1)
+			if strings.HasPrefix(edge.ID, prefix+"http1_serial-") {
+				edge.Confidence = graphConfidence(0.8)
+			}
+			edge.EvidenceRefs = []string{edge.FromID, edge.ToID}
 		}
 		edges = append(edges, edge)
 	}
@@ -169,10 +195,9 @@ func isStructuralEdge(edgeType string) bool {
 	case "runtime_tool_call_process", "runtime_tool_call_file",
 		"runtime_process_file", "runtime_attempt_file",
 		"runtime_event_policy_decision", "policy_decision_risk_signal", "risk_signal_response_action",
-		// llm_intent_caused (tls_read event -> syscall) is deliberately NOT rendered:
-		// once materialized, MaterializeLLMCalls lifts the same link onto the
-		// llm_call node as llm_caused, so rendering both would double every
-		// intent->action edge.
+		// Legacy llm_intent_caused (nearby response -> syscall) is not rendered.
+		// New llm_caused associations require an identified exchange and a unique
+		// scoped command match; the old temporal edge supplies no causal anchor.
 		"llm_call", "llm_request", "llm_response", "llm_caused",
 		"attempt_snapshot", "snapshot_parent", "promotion_winner",
 		"agent_spawn", "agent_message", "agent_tool_call", "agent_syscall",

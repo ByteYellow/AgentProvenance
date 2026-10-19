@@ -24,6 +24,10 @@ type Options struct {
 	TLSScanInterval time.Duration
 	TLSMaxTargets   int
 	TLSMaxProcesses int
+	// State readers use procfs independently of eBPF. Snapshots are timestamped
+	// observations of a task, never syscall verdicts or kernel lifetime aliases.
+	AppArmorState bool
+	SeccompState  bool
 	// Diagnostics receives capability changes as JSON prefixed with
 	// "agentprov-sensor: capabilities ". Nil defaults to stderr.
 	Diagnostics io.Writer
@@ -62,11 +66,21 @@ type TLSDiscoveryReport struct {
 }
 
 type CapabilityReport struct {
-	SchemaVersion string             `json:"schema_version"`
-	UpdatedAt     string             `json:"updated_at"`
-	Ready         bool               `json:"ready"`
-	Status        string             `json:"status"` // starting, ready, degraded, stopped, or failed
-	Reason        string             `json:"reason,omitempty"`
-	Probes        []ProbeCapability  `json:"probes"`
-	TLSDiscovery  TLSDiscoveryReport `json:"tls_discovery"`
+	SchemaVersion      string                     `json:"schema_version"`
+	UpdatedAt          string                     `json:"updated_at"`
+	Ready              bool                       `json:"ready"`
+	Status             string                     `json:"status"` // starting, ready, degraded, stopped, or failed
+	Reason             string                     `json:"reason,omitempty"`
+	Probes             []ProbeCapability          `json:"probes"`
+	TLSDiscovery       TLSDiscoveryReport         `json:"tls_discovery"`
+	AccessControlState *StateCollectionCapability `json:"access_control_state,omitempty"`
+}
+
+type StateCollectionCapability struct {
+	AppArmor      bool   `json:"apparmor_collection_enabled"`
+	Seccomp       bool   `json:"seccomp_collection_enabled"`
+	Mode          string `json:"mode"`
+	QueueCapacity int    `json:"queue_capacity"`
+	CacheCapacity int    `json:"cache_capacity"`
+	MinIntervalMS int64  `json:"min_interval_ms"`
 }

@@ -61,7 +61,7 @@ func ValidateStoredPayload(eventType, payload string) error {
 //     sensor) joined to app context through a binding. This is the real claim.
 //   - uncorrelated:     could not be resolved.
 func CorrelationClass(source, method, containerID string, confidence float64) string {
-	if source == "record" || source == "record_process_sample" || source == "record_file_diff" ||
+	if source == "record" || source == "record_process_sample" || source == "record_file_diff" || source == "procfs_access_control" || source == "audit_reader" ||
 		method == "zero_sdk_process_tree" {
 		return "self_observed"
 	}
@@ -102,7 +102,7 @@ func TelemetrySource(source string, correlationMethod string) bool {
 		return true
 	}
 	switch source {
-	case "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf", "native_runtime", "record_file_diff", "record_process_sample":
+	case "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf", "native_runtime", "record_file_diff", "record_process_sample", "apparmor_audit", "seccomp_audit", "procfs_access_control", "audit_reader":
 		return true
 	default:
 		return false
@@ -118,7 +118,7 @@ type EventExplanation struct {
 	SchemaError           string   `json:"schema_error,omitempty"`
 	IdentityKeys          []string `json:"identity_keys,omitempty"`
 	CorrelationMethod     string   `json:"correlation_method,omitempty"`
-	CorrelationConfidence float64  `json:"correlation_confidence,omitempty"`
+	CorrelationConfidence float64  `json:"correlation_confidence"`
 	CorrelationClass      string   `json:"correlation_class,omitempty"`
 	CorrelationStatus     string   `json:"correlation_status"`
 }
@@ -158,6 +158,8 @@ func receiverName(source string) string {
 		return "loongcollector"
 	case "agentprov_ebpf":
 		return "agentprov_sensor"
+	case "apparmor_audit", "seccomp_audit":
+		return "linux_audit"
 	case "wrapper_runtime", "native_runtime", "record_file_diff", "record_process_sample", "filtered_telemetry":
 		return source
 	default:
@@ -170,9 +172,11 @@ func receiverName(source string) string {
 
 func sourceFormat(source string) string {
 	switch source {
-	case "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf":
+	case "apparmor_audit", "seccomp_audit":
+		return "linux_audit"
+	case "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf", "procfs_access_control":
 		return "jsonl"
-	case "wrapper_runtime", "native_runtime", "record_file_diff", "record_process_sample", "filtered_telemetry":
+	case "wrapper_runtime", "native_runtime", "record_file_diff", "record_process_sample", "filtered_telemetry", "audit_reader":
 		return "normalized"
 	default:
 		return "unknown"
@@ -259,9 +263,37 @@ func validateEventBody(eventType string, body map[string]any) error {
 		if stringSlice(body["argv"]) == nil && stringField(body, "command") == "" {
 			return fmt.Errorf("execve payload requires argv[] or command")
 		}
-	case "process_exit":
-		if _, ok := numberField(body, "exit_code"); !ok {
-			return fmt.Errorf("process_exit payload requires numeric exit_code")
+	case "process_exit", "thread_exit":
+		_, code := numberField(body, "exit_code")
+		signal, signaled := numberField(body, "exit_signal")
+		if !code && (!signaled || signal <= 0 || signal > 64 || signal != float64(int(signal))) {
+			return fmt.Errorf("%s payload requires numeric exit_code or valid exit_signal", eventType)
+		}
+	case "syscall_result":
+		if _, ok := numberField(body, "syscall_result"); !ok || firstString(body, "operation") == "" {
+			return fmt.Errorf("syscall_result payload requires operation and numeric syscall_result")
+		}
+	case "access_control_state":
+		return validateAccessStateBody(body)
+	case "access_control_collection":
+		if stringField(body, "schema_version") != AuditCollectionSchema || stringField(body, "evidence_kind") != "collection_status" || stringField(body, "reader_id") == "" || stringField(body, "source_path") == "" || stringField(body, "coverage_scope") != "selected_source_file" || stringField(body, "upstream_loss") != "unknown" {
+			return fmt.Errorf("access_control_collection payload requires versioned reader identity and explicit source-only coverage")
+		}
+		switch stringField(body, "status") {
+		case "reading", "waiting", "stopped", "failed":
+		default:
+			return fmt.Errorf("access_control_collection status must be reading, waiting, stopped or failed")
+		}
+		for _, key := range []string{"committed_offset", "pending_bytes", "read", "ingested", "duplicates", "skipped", "failed", "identity_incomplete", "batches"} {
+			value, ok := numberField(body, key)
+			if !ok || value < 0 || value != float64(int64(value)) {
+				return fmt.Errorf("access_control_collection %s must be a nonnegative integer", key)
+			}
+		}
+	case "access_control":
+		mechanism := stringField(body, "mechanism")
+		if (mechanism != "apparmor" && mechanism != "seccomp") || stringField(body, "schema_version") != AuditSchemaVersion || stringField(body, "audit_id") == "" || stringField(body, "decision") == "" {
+			return fmt.Errorf("access_control payload requires versioned mechanism, audit_id and decision")
 		}
 	case "process_observed":
 		if _, ok := numberField(body, "pid"); !ok {

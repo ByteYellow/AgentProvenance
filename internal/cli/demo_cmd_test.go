@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,6 +16,18 @@ import (
 	"github.com/byteyellow/agentprovenance/demo"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
+
+func TestDemoReplayStartsWithLiveRefreshDisabled(t *testing.T) {
+	for _, entry := range demo.Catalog() {
+		if entry.Run == "" {
+			continue
+		}
+		u, err := url.Parse(demoRunURL(entry))
+		if err != nil || u.Query().Get("live") != "0" || u.Query().Get("run") != entry.Run {
+			t.Fatalf("invalid historical replay link for %s: %v", entry.ID, err)
+		}
+	}
+}
 
 func TestAllBundledDemosVerify(t *testing.T) {
 	dir := t.TempDir()
@@ -122,6 +135,34 @@ func TestDemoRejectsUnknownNamesAndSharedStores(t *testing.T) {
 		cmd.SetArgs(args)
 		if err := cmd.Execute(); err == nil {
 			t.Fatalf("expected error for %q", args)
+		}
+	}
+}
+
+func TestNamedDemoIncludesOnlyItsCompanionCaptures(t *testing.T) {
+	catalog := demo.Catalog()
+	for _, tc := range []struct {
+		id   string
+		want []string
+	}{
+		{"investigation-workflow", []string{"investigation-workflow", "investigation-repaired"}},
+		{"investigation-repaired", []string{"investigation-workflow", "investigation-repaired"}},
+		{"grok-3routes", []string{"grok-codebase-exfil", "grok-3routes"}},
+		{"deepseek-context", []string{"deepseek-context"}},
+		{"jev-judge", []string{"jev-judge"}},
+	} {
+		var selected []demo.Entry
+		for _, entry := range catalog {
+			if entry.ID == tc.id {
+				selected = relatedDemoCaptures(catalog, entry)
+			}
+		}
+		var got []string
+		for _, entry := range selected {
+			got = append(got, entry.ID)
+		}
+		if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+			t.Errorf("%s: %v; want %v", tc.id, got, tc.want)
 		}
 	}
 }

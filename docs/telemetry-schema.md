@@ -75,9 +75,13 @@ The current MVP validates these minimum event-specific fields:
 | Event type | Required body |
 | --- | --- |
 | `execve` | `argv` as a non-empty string array, or `command` |
-| `process_exit` | numeric `exit_code` |
+| `process_exit` / `thread_exit` | numeric `exit_code`, or an integer `exit_signal` from 1 to 64 |
+| `syscall_result` | `operation` and numeric `syscall_result` |
+| `access_control` | audit schema version, `mechanism` (`apparmor` or `seccomp`), `audit_id` and `decision` |
+| `access_control_state` | `agentprovenance.access_control_state/v1`, observation interval, task identity and independent `apparmor` / `seccomp` states |
+| `access_control_collection` | `agentprovenance.audit_collection/v1`, reader identity, source-only coverage, status, checkpoint and counters |
 | `process_observed` | numeric `pid` |
-| `file_open` / `file_write` / `secret_path` | non-traversal `path` or `file`; absolute host paths are accepted |
+| `file_open` / `file_write` / `secret_path` | nonempty `path` or `file` without NUL; absolute host paths are accepted |
 | `network_connect` / `metadata_ip` / `private_cidr` | `dst`, `dst_ip`, or `host` |
 | `abnormal_process_tree` | numeric `pid` or `command` |
 | `policy_verdict` | `decision` or `verdict` |
@@ -94,13 +98,44 @@ required-body validation:
 | `dns_query` | `host` (resolved name; egress by name, not just IP) |
 | `tls_write` / `tls_read` | `preview_sha256` + short `preview` + allow-listed `http` metadata by default; optional body content as described below |
 
-Empty paths and `..` traversal segments are rejected for file-oriented events.
-Raw telemetry accepts absolute host paths; workspace file nodes retain their
-relative-path constraint. The privilege/tamper/DNS/TLS types carry the fields
+Empty paths and NUL bytes are rejected for file-oriented events. Raw telemetry
+retains absolute paths and dot segments as observed syscall arguments; workspace
+file nodes retain their separate relative-path constraint. The privilege/tamper/DNS/TLS types carry the fields
 above but are not subject to a strict required-body check.
 
 `secret_path` now covers a sensitive-path **read**, not only a write: the native
 sensor captures filtered read opens of credential/secret paths.
+
+### Native syscall attempts and outcomes
+
+New native `openat`/amd64 `open` and IPv4 `connect` observations distinguish
+`observation_stage: attempt` from a separate `syscall_result` event. The latter
+retains the actual kernel return value, target and operation name. The existing
+sensitive-read filters apply to both records. If the pathname becomes readable
+only on return, one `attempt_and_result` record retains `path_observation:
+syscall_exit_retry` instead of inventing an earlier path observation.
+
+`operation_id` combines the boot, process and thread lifetimes with syscall
+entry time. Entry and return also retain the raw syscall number, `sensor_arch`,
+and decimal-string monotonic timestamps. `sensor_arch` names the sensor build,
+not a decoded audit ABI. In-flight state is limited to 4,096 threads, checked
+against task lifetime and syscall number, and removed on return, exec or exit.
+Capacity and ring-buffer failures contribute to capture-loss diagnostics.
+
+`syscall_outcome` distinguishes `success`, `failure`, asynchronous connect
+`pending`, and internal `kernel_restart`. An open result describes opening the
+file, not reading its contents; a connect result describes connection setup,
+not bytes sent. Outcome records do not repeat the original attempt's policy
+decisions. Seccomp can reject a call before these entry probes, leaving no
+paired return observation; a return code alone does not identify its cause.
+
+For new native events, `pid` and `tgid` identify the host thread group, while
+`tid`, `thread_instance_id` and `thread_start_ns` retain the executing thread.
+`thread_exit` leaves the process association open. `process_exit` is emitted
+when no live thread remains, with `raw_exit_status` and either `exit_code` or
+`exit_signal`. A signal termination has no fabricated successful exit code.
+Historical records keep their original fields and identities. These additions
+use the existing event payload and need no database or Bundle migration.
 
 `AGENTPROV_TLS_CAPTURE_BODY=1` explicitly retains captured plaintext in the
 normalized event's `content` field for model-call materialization. This does
@@ -108,6 +143,375 @@ not guarantee a complete request or response. Without that
 opt-in, normalization stores a hash and short preview rather than the full body.
 Captured prompts, responses and raw spool payloads may contain sensitive data;
 restrict access to the data directory and review bundles before sharing them.
+
+For reassembled TLS messages, `http` preserves the sensor's parsed fields:
+
+| Field | Meaning |
+| --- | --- |
+| `protocol`, `kind`, `headers_decoded` | HTTP version, request/response direction and reported header decoding state |
+| `method`, `host`, `path`, `endpoint` | Request method, authority and encoded path; endpoint is authority + path |
+| `status`, `content_type`, `is_stream` | Response status, media type without parameters and SSE indicator |
+| `model`, `stream_id` | Model ID when available; HTTP/2 stream number within its connection |
+| `connection_id` | Opaque `tls-v1:` capture-generation ID when OpenSSL lifecycle tracking and process identity are available |
+
+Endpoint metadata excludes URL userinfo, query strings and fragments. Headers
+such as Authorization and Cookie are not copied into `http`. Body/preview and
+raw capture retention follow their existing settings independently. A stream ID
+is connection-local and must be combined with a connection lifetime for pairing.
+Reassembled `data` is the body, so it is not scanned for HTTP headers. Older raw
+windows still use request/response-head parsing; a recognized HTTP/2 preface is
+marked `headers_decoded: false`, while opaque binary bytes stay unclassified.
+These optional fields require no database or bundle-format migration.
+
+OpenSSL symbol inspection bounds each consumed ELF symbol/string section to
+16 MiB and their combined size to 32 MiB. When an unused ordinary symbol or
+string table exceeds those limits, the sensor can resolve exported OpenSSL
+functions from the bounded dynamic table instead. It validates file-backed
+executable offsets before attaching, without loading the oversized table.
+This supports binaries such as Node.js that embed OpenSSL and export its APIs.
+
+OpenSSL `SSL_read` and `SSL_read_ex` entry/return probes use the full kernel
+`pid_tgid` and task start time. Each API retains up to four nested calls per
+thread, with a bounded map of 4,096 threads. Returns beyond that depth are skipped
+without consuming an outer frame and contribute to capture-loss diagnostics.
+Returned byte counts are checked against the original buffer capacity; unreadable
+`SSL_read_ex` output pointers also count as capture loss. Thread exit and successful
+exec clear both read stacks, including the previous TID when a worker becomes the
+process leader during exec. The existing
+per-call plaintext cap remains 4 KiB. This pairing covers function invocations;
+HTTP request/response association is a separate step.
+
+OpenSSL capture generations combine the kernel boot, process start, SSL object
+address and a kernel-stamped epoch. `SSL_new`, `SSL_clear`, `SSL_free` and BIO/FD
+replacement probes bound the lifetime of retained HTTP/HPACK state. Each chunk
+carries its epoch, and reads retain the entry epoch through return, so a lost
+boundary record or delayed old read cannot join a newer buffered connection.
+The epoch map holds at most 16,384 objects; userspace also bounds active and
+closed-generation metadata. Discarded partial state is reported as a
+`sensor_tls_reassembly` / `reassembly_gap` resource-pressure event.
+
+Clear/rebind entries and `SSL_free` are conservative parsing boundaries:
+the former may fail and the latter may only decrement a reference count.
+The connection ID therefore identifies an observed capture generation, not a
+TCP socket or proof of a completed handshake. Pending release/exit data remains
+best-effort and truncated; new requests no longer implicitly end old responses.
+Within one generation, HTTP/2 streams share their direction's HPACK dictionary.
+If any required lifecycle probe fails, plaintext attachment for that target
+waits for a successful retry; the capability report identifies the missing probe.
+Other runtime probes continue independently. Go TLS and
+legacy captures without an epoch omit `connection_id`; their lifecycle coverage
+is unchanged. See [OpenSSL SSL_clear](https://docs.openssl.org/3.0/man3/SSL_clear/)
+and [SSL_free](https://docs.openssl.org/3.0/man3/SSL_free/) for the API semantics.
+
+## AppArmor and seccomp audit collection
+
+Connect existing AppArmor and seccomp logs to a run's evidence. Choose the
+reader for your input, then query saved decisions and runtime candidates:
+
+| Task | Command | Input and result |
+| --- | --- | --- |
+| Import an existing log | `telemetry ingest-audit` | Read a finite audit text or journal JSON file, then exit |
+| Collect new log records | `telemetry follow-audit` | Follow an append-only file and resume from a saved checkpoint |
+| Inspect associations | `telemetry audit-associations` | Query saved decisions, process candidates and observed outcomes |
+
+For a saved file with one `journalctl -o json` object per line:
+
+```sh
+agentprov telemetry ingest-audit --run RUN --file audit.jsonl --json
+agentprov telemetry audit-associations --run RUN --limit 100 --json
+```
+
+Use `--mechanism apparmor` or `--mechanism seccomp` to select one source; the
+default reads both. `--file -` accepts a finite input on stdin. This command
+reads supplied records without installing profiles, attaching seccomp filters,
+reconfiguring logging or taking ownership of auditd.
+
+JSON field names, statuses, reason codes and generated errors use English across
+CLI, HTTP, SDK and MCP. Saved paths, commands and log text retain their original
+language, subject to the run's retention and redaction settings.
+
+`ingest-audit` processes a finite input; `follow-audit` follows an existing
+append-only file. Start either reader separately from `launch`, which does not
+start an audit reader automatically. Native sensor procfs snapshots record
+enabled state; audit readers add the decisions reported by the source log.
+
+Journal records supply their own `_MACHINE_ID` and `_BOOT_ID`. For plain audit
+text, provide `--host-id` and `--boot-id` from the originating host and boot.
+The importer never substitutes the importing machine's identity. It rejects
+conflicting supplied and journal identities. A record without complete source
+identity is retained with a warning and counted in `identity_incomplete`;
+cross-delivery deduplication requires both identities.
+
+| Stored field | Meaning |
+| --- | --- |
+| `source` | `apparmor_audit` or `seccomp_audit` |
+| `event_type` | `access_control`, separate from attempts and syscall results |
+| `audit_id`, `record_id` | Recorded audit time/serial and stable source-record identity |
+| `timestamp`, `timestamp_precision_ns` | Audit-header time and its reported decimal precision |
+| `audit_pid`, `pid_semantics` | Logged host thread-group identity; no inferred thread lifetime |
+| AppArmor fields | Recorded profile/namespace, label, class, operation, target, decision and masks |
+| seccomp fields | Raw architecture, syscall number, action code/data and reported signal; syscall names use the recorded ABI |
+| `raw_record` | Original message byte count/hash, retention state and optional redacted text |
+
+The raw-message digest is calculated before redaction and remains labelled as
+such. New runs default to detailed retention; `--capture basic` omits audit text
+while preserving structured decisions, references and hashes. Existing runs
+reuse their fixed context-retention settings, including source-record omission.
+Do not change a run's preset to thin previously saved evidence.
+
+Identity combines host, boot, audit time/serial, record type and all parsed
+fields. Transport prefixes, field order and whitespace do not create a second
+event. Repeated fields are retained for identity but ambiguous derived values
+stay unknown. Import batches contain at most 128 lines or about 1 MiB; each
+line is limited to 64 KiB. Events, edges, window counts and the batch receipt
+commit together. Database failure rolls back that batch, while prior batches
+remain available for a deduplicated retry. The summary bounds row references
+and parse errors and reports truncation. Oversized input stops the import;
+invalid records produce a partial result and a nonzero CLI exit status.
+
+`--run` selects the record container, not an Agent session. Audit PIDs stay in
+the payload until a separate association establishes process lifetime and
+operation context. The existing telemetry query, graph verification and signed
+Bundle import/export preserve these unassociated records. Reading an external
+decision does not execute AgentProvenance policy rules again.
+
+AppArmor profile mode needs separate state evidence. For seccomp, `LOG`, `ERRNO`
+and `KILL_PROCESS` remain distinct decisions; syscall returns and exits are
+independent observations. Missing or unknown fields stay unknown. Ordinary
+EPERM/EACCES messages are not accepted as AppArmor/seccomp decisions. PID field
+semantics follow the kernel's
+[LSM audit records](https://github.com/torvalds/linux/blob/v6.8/security/lsm_audit.c)
+and [seccomp audit records](https://github.com/torvalds/linux/blob/v6.8/kernel/audit.c).
+
+`action_data` is the low 16 bits of the **logged** `action_code`, not an observed
+errno. Linux can log the masked action alone: an `ERRNO` decision with
+`code=0x50000` has logged low bits of zero even when the process receives EPERM.
+Keep the action, configured filter data (when independently available) and
+observed syscall return separate. The kernel's
+[seccomp decision path](https://github.com/torvalds/linux/blob/v6.8/kernel/seccomp.c)
+passes the masked action to audit logging.
+
+One operation may have both a seccomp `LOG` decision and an AppArmor `DENIED`
+decision. Both can cite the same candidate operation ID and its saved failed return;
+the two decisions do not create two operation attempts. A pre-entry seccomp
+`ERRNO` decision may instead have process-lifetime evidence with no native
+syscall entry or return. An enabled filter without an available audit record
+remains state evidence only.
+
+### Continuous file collection
+
+Follow an existing append-only audit log or forwarded journal JSON file:
+
+```sh
+agentprov telemetry follow-audit --run RUN --file audit.jsonl --json
+```
+
+Plain audit text uses the same originating `--host-id` and `--boot-id` options
+as finite import. `--mechanism apparmor|seccomp|all` and the run's fixed retention
+settings apply to both commands. This reader runs on Linux or macOS, requires
+read access to the source, and never changes host logging or policy settings.
+It reads files, not the journal database directly or a FIFO/stdin stream.
+
+The reader starts at the beginning of a new source and saves its position in
+the local database. By default its identity combines run, absolute file path
+and mechanism. Reuse the same settings to resume. An explicit `--reader-id`
+starts an independent checkpoint; changing its source identity or retention
+settings is rejected. `--once` drains the complete records present at startup
+and exits. An unterminated last line waits for a newline on a later read.
+
+The source file serves as the durable input queue. Each transaction commits
+at most 128 records and 1 MiB, including events, deduplication, receipt and
+checkpoint. A blocked database pauses reading; a failed batch leaves the
+position unchanged and exits with an error. Restart resumes that position,
+including for records without enough identity for cross-file deduplication.
+Keep unread source files until collection catches up.
+
+File identity and bounded fingerprints detect rotation, truncation and common
+rewrites. The reader stops with an explicit reason and retains its checkpoint;
+it does not skip to the end of a replacement file. Preserve the old generation
+for recovery, then select a new reader ID for the new file. This mode expects
+append-only inputs; the fingerprints do not audit every byte of file history.
+
+`--json` emits English status objects using `agentprovenance.audit_reader/v1`.
+Continuous mode emits newline-delimited updates; `--once` emits one final
+object. Source text keeps its original language. The `reader` object contains:
+
+| Field | Meaning |
+| --- | --- |
+| `status`, `reason` | Last observed `reading`, `waiting`, `stopped` or `failed` state and machine-readable reason |
+| `observed_at`, `last_read_at` | Time of the status observation and most recent committed batch |
+| `committed_offset`, `pending_bytes` | Committed source offset and unread bytes at the last source check |
+| `read`, `ingested`, `duplicates`, `skipped`, `failed` | Cumulative checkpoint counters; ignored formats and malformed records are separate |
+| `identity_incomplete` | Supported records missing source identity needed for cross-file deduplication |
+| `coverage_scope`, `upstream_loss` | `selected_source_file` and `unknown`; upstream audit suppression/loss is not measurable from this file |
+
+Reader start, stop, failure, state changes and periodic observations are saved
+as `access_control_collection` events from `audit_reader`. They are collection
+metadata, separate from policy state, audit decisions and syscall outcomes.
+Query them through the existing telemetry interface:
+
+```sh
+agentprov telemetry list --run RUN --type access_control_collection --json
+```
+
+The daemon's `/v1/telemetry/events?run=RUN&type=access_control_collection` returns
+the same saved observations. Status timestamps describe observations rather
+than current process liveness. Signed Bundles preserve these events, while
+local reader checkpoints stay out of exports and are not resumed by import.
+This addition upgrades the local database to schema 20; back up the data
+directory before upgrading, since older binaries cannot open the newer schema.
+
+### Configuration and task state
+
+The native sensor reads task state independently of the audit importer. Both
+readers default to enabled in `sensor stream` and `agentprov-sensor`; disable
+either reader without changing the other source:
+
+```sh
+agentprov sensor stream --apparmor-state=false --seccomp-state=true
+```
+
+Kernel events trigger asynchronous, bounded procfs reads: a 128-item queue,
+2,048-entry scheduling cache and at most one read per task/scope every two
+seconds while cached. No polling or extra snapshot is implied for an idle or
+already-exited task. Queue overflow emits `state_snapshot_queue_drop` with
+`dropped_delta`. The capability report's `apparmor_collection_enabled` and
+`seccomp_collection_enabled` describe reader settings, not active kernel policy.
+
+`procfs_access_control` emits `access_control_state` with schema
+`agentprovenance.access_control_state/v1`. Its `evidence_kind` is `state_snapshot`.
+The payload keeps `started_at`, `observed_at`, source host/boot, TGID (`pid`),
+TID, procfs start ticks and PID namespace. AppArmor uses only the specific
+`attr/apparmor/current` attribute, preserving the label and any reported mode.
+Seccomp reads the task's `status`: mode 0/1/2 is `disabled`/`strict`/`filter`,
+with optional `filter_count` and `no_new_privs`. Observed zero, missing data,
+permission failure and disabled collection remain distinct. These are sampled
+observations, not an atomic snapshot of all fields. See the kernel
+[AppArmor documentation](https://docs.kernel.org/admin-guide/LSM/apparmor.html)
+and [procfs status fields](https://man7.org/linux/man-pages/man5/proc_pid_status.5.html).
+
+The reader pins one procfs task directory and checks identity before and after
+reading. Its identity stays separate from native `process_instance_id`, so a
+delayed sample cannot adopt the triggering event's process or Tool Call. Scope
+attribution uses an independently resolved cgroup v2 inode only when membership
+is stable and agrees with the trigger. The source remains `self_observed`.
+Unresolved membership keeps the state without a workload attribution; ordinary
+stream retention may exclude uncorrelated records unless requested.
+
+K8s informer writes separate `access_control_config` observations from
+`k8s_api`, with schema `agentprovenance.access_control_config/v1` and kind
+`configuration_declaration`. Structured container fields override Pod fields;
+legacy annotations are retained separately with their original values and field
+paths. An absent structured field is `not_declared`, not an inferred default.
+Each observation records the Pod/container identity, resource version and time.
+Configuration changes append observations without rewriting `pod_metadata`,
+reopening closed scopes or assigning today's specification to a recovered prior
+attempt. In-process status-only version changes are suppressed; restarted
+informers deduplicate identical resource-version/content retries.
+
+Existing event queries and signed Bundle export/import preserve these records
+in both capture presets. The audit-association reader continues to return
+individual decisions; configuration and state are queried as separate events.
+None of these read-only observations install profiles, change filters or trigger
+a second policy action.
+
+### Read-only runtime association
+
+```sh
+agentprov telemetry audit-associations --run RUN --limit 100 --json
+agentprov --daemon-url http://127.0.0.1:8574 telemetry audit-associations --run RUN --json
+```
+
+The same reader is available at `GET /v1/telemetry/audit-associations` on the
+daemon and `GET /api/audit/associations` on the Dashboard. Both accept `run`,
+optional `event`, `limit` (1-500, default 100) and `cursor`. Unknown or repeated
+parameters, including unsupported Session filters, return HTTP 400. Read failures
+return 503; no matching saved records returns an empty `items` array. Daemon
+authentication uses the existing Bearer Token. The [OpenAPI contract](audit-associations-api.yaml)
+defines candidates, references, actual returns and error responses.
+
+Python offers `Client.audit_associations`; AI/MCP clients use the read-only
+`get_audit_associations` tool. API field names, statuses and generated errors are
+English in every locale; recorded evidence retains its original text. Audit
+import remains a trusted collector/CLI operation.
+
+Use `--event EVENT` to inspect one saved audit record, or `--cursor` for the
+next page. Live queries use `agentprov.audit_lifecycle_operation/v2` as their
+analysis rule. It does not overwrite an audit PID, Agent session or graph edge.
+Re-querying after a late arrival recomputes the candidates from one database
+snapshot. The saved input records survive signed Bundle export/import, so the
+same rule can be evaluated offline.
+
+Fresh webpage exports freeze these candidates, with paged queries through the
+same Dashboard path in `AgentProvReplay.query`. Partial exports only include
+selected audit records. If a supporting record or competing candidate is excluded,
+the associated inference is withheld with `replay_evidence_excluded`; the remaining
+candidate is not promoted to a unique match. Excluded tool context is omitted.
+The report schema stays `agentprovenance.audit_associations/v1`; the analysis
+rule is versioned separately. Existing frozen v1 webpage replays retain their
+original rule and results, rather than being recomputed or relabeled as v2.
+The replay reader accepts frozen v1 and v2 pages; a legacy index without `rule`
+means v1. Page and index rules must agree, and cursors must use the same rule.
+Older webpage exports without this reader report that the data was not included.
+
+`analysis_scope=query_page` describes the live query's bounded analysis;
+`export_pages` describes the frozen pages consulted by a replay query. Its runtime
+row count and issues cover those pages, even for a single-event query. The report's
+`complete` status describes analysis completion, while capture completeness is
+reported separately. Live pagination reads a fresh snapshot per page; export
+freezes the whole source before building pages.
+
+Process association requires matching source host, boot and logged process ID,
+plus observations of one kernel process lifetime around the audit interval.
+Native sensors read machine identity through `/proc/1/root/etc/machine-id`;
+the documented node deployment requires host PID visibility. Missing identity
+stays absent. The source kernel's `CLOCK_REALTIME_COARSE` resolution is retained
+as `realtime_coarse_resolution_ns`.
+
+The [kernel syscall audit context](https://github.com/torvalds/linux/blob/v6.8/kernel/auditsc.c)
+uses a coarse real-time clock. Decimal digits in the audit header describe its
+printed precision, not its accuracy. The candidate interval adds the saved
+source clock resolution and exposes that interval in `time_window`. Missing
+clock information, conflicting lifecycle evidence, or a wall/monotonic clock
+disagreement leaves the record unassociated. The importing machine supplies
+neither identity nor clock resolution.
+
+Under v2, a unique process lifetime is followed by a seccomp action compatibility
+check before searching the normal syscall collector's entry/return records:
+
+| Recorded seccomp action | Operation association |
+| --- | --- |
+| `ERRNO`, `KILL_PROCESS`, `KILL_THREAD`, `TRAP` | `unassociated`, reason `seccomp_original_syscall_not_executed`; the original call was suppressed before execution |
+| `TRACE`, `USER_NOTIF` | `unassociated`, reason `seccomp_mediation_evidence_unavailable`; mediation may replace or skip the call and needs evidence with a shared call identity |
+| `LOG`, `ALLOW` | Eligible for candidate checks only when the recorded action code agrees; missing/conflicting codes produce `seccomp_action_unknown` / `seccomp_action_conflict` |
+| Unknown action | `unassociated`, reason `seccomp_action_unknown` |
+
+Action gating leaves the process association and same-process exit references
+intact. It attaches no operation candidates or nearby syscall return to the
+blocked or mediated decision. AppArmor retains its recorded-field candidate checks.
+
+Eligible operation association then checks the native thread/operation identity and
+the recorded fields: an exact absolute path for AppArmor `open`, or the
+recorded ABI and syscall number for seccomp. A unique saved candidate is
+`inferred`, with basis `lifetime_syscall_time_candidate` and reason
+`shared_call_identity_unavailable`. This is a time-window and recorded-field
+candidate, not a shared identity between the audit record and runtime call.
+Multiple candidates are `ambiguous`, with no nearest-time winner.
+Other AppArmor operations can retain a process-level association. A process
+exit is listed separately from syscall returns. Runtime Agent/Tool Call context
+is cited with its original method and confidence, not reassigned to the audit.
+
+Each operation has separate attempt and result states, record counts and
+references. Displayed attempts and returns belong to the candidate's saved runtime
+evidence; the mechanism decision remains a separate audit record. Two mechanism
+decisions can cite the same candidate operation ID. A missing
+entry or return stays `not_observed`; a rejected pre-entry seccomp call is not
+reconstructed from a signal or errno. Candidate references are bounded and
+truncation is explicit. Each page examines at most 50,000 native records and
+32 MiB of their payloads; exceeding the budget returns `incomplete` and disables
+association for that page. Narrow the page or inspect one audit event when
+investigating a high-volume run. Results describe saved evidence, while capture
+coverage and policy state remain separate evidence.
 
 ## Example
 
@@ -155,16 +559,95 @@ Current confidence tiers:
 | Method | Confidence | Notes |
 | --- | --- | --- |
 | Direct process / self-observed wrapper evidence | `1.0` | Self-consistency is not independent kernel corroboration |
-| Real cgroup + time window | `0.98` | Supervised Linux capture; strong subtree join |
-| Container + time window | `0.92` | Common runtime/collector join |
-| PID + time window | `0.85` | Useful fallback; weaker because of PID reuse and missed short-lived descendants |
+| Real cgroup + time window | `0.98` | Execution-scope attribution |
+| Container + time window | `0.92` | Execution-scope attribution |
+| PID + time window | `0.85` | Process attribution, constrained by supplied scope keys; subject to PID reuse |
 | `k8s_cgroup` binding source | default `0.8` | Passive Pod attribution without a recorder launch |
 | `ai_asserted` binding source | default `0.5` | App-supplied claim, intentionally lower trust |
 
-The final match uses the lower of the method confidence and a stored positive
+The final match uses the lower of the method confidence and the stored
 binding confidence. These source values are defaults, not enforced limits on
 every custom binding. Confidence is not a statistically calibrated probability.
 Reported methods may also include a suffix describing the matched keys.
+
+Confidence values are finite numbers in `[0,1]`. An omitted binding confidence
+uses the source default; an explicit `0` stays zero during resolution, process-
+lifetime inheritance, query and export. `telemetry bind --confidence 0` and
+`POST /v1/telemetry/bind` follow the same rule. Negative, out-of-range and `null`
+inputs are rejected. Clients that previously sent zero to request a default
+should omit the field instead. Existing stored rows and signed bundles are not
+rewritten.
+
+Unified signals use the same numeric range and preserve explicit zero; omission
+retains their default of `1`. Internal Go producers use `ConfidenceSet: true`
+to supply an explicit zero. Graph edges with no recorded confidence leave the
+field absent; the Dashboard shows `unknown` rather than `0.00`. Unresolved or
+ambiguous joins retain their status/method alongside the numeric confidence.
+
+Resolution checks the application process ID, kernel process-lifetime ID, then
+PID with compatible scope keys before falling back to cgroup/container scope.
+Every lookup uses the event's captured timestamp. A supplied process-lifetime
+or application process ID disables bare-PID fallback. Container/cgroup matches
+retain the common run, session and attempt; tool-call and application-process
+IDs require more specific evidence.
+
+Overlapping bindings are evaluated together. Conflicting candidates retain only
+their common execution scope; conflicting runs remain unresolved. The saved
+correlation envelope and `telemetry correlations` report include `scope_only`,
+`ambiguous`, `candidate_count` and up to 32 sorted `candidate_binding_ids` when
+applicable. All active candidates participate in resolution, even when the
+diagnostic list is shortened. Report status distinguishes `scope_only` and
+`ambiguous` from `resolved`, `provided` and `unresolved`.
+
+These results are recorded with the event. Later binding changes do not replace
+the recorded choice when opening its report. Existing events and signed bundles
+keep their original correlation metadata.
+
+Native lifecycle anchors include the recorded `host_id` when present. Parent
+inheritance and exits use that same host and canonical boot/PID/start identity;
+a numeric-only exit leaves native lifetime anchors unchanged. Older captures
+without a host retain boot-based identity, separate from host-qualified anchors.
+
+Hook-to-runtime analysis uses `agentprov.command_time_process/v3`. After a
+command/time match, subsequent events must retain the captured process lifetime.
+Native child inheritance checks the exact parent lifetime, boot, host and birth
+order. Missing or conflicting lifecycle evidence is not filled by a reused PID.
+Sources without native lifetimes retain the scoped, time-bounded heuristic.
+
+### Runtime Process Graph Identity
+
+New ingests with a PID store `runtime_process_identity` at the outer payload
+envelope, with value `agentprov.runtime_process/v3`. This records the graph
+identity contract separately from application `process_id` and scope binding.
+
+- Native `agentprov_ebpf` records with a valid `process_instance_id`
+  (`boot UUID:PID:start ns`) use host-qualified lifetime nodes when `host_id`
+  is recorded. The opaque ID contains a host hash; node data keeps the source
+  `host_id`. Records without it use `runtime_process/instance/<identity>`.
+  Labels and data-flow grouping keep this identity across cgroup moves;
+  another host, birth time or kernel boot produces a separate node.
+- Parent and optional thread-group lifetime references must match their numeric
+  identifiers, share the child's boot and start no later than the child.
+  Numeric PPID/TGID observations without a valid lifetime remain event-local.
+  The native sensor currently supplies process and parent lifetimes; a missing
+  thread-group lifetime is not synthesized from its TGID.
+- Records without a usable native lifetime, including current external
+  receiver and process-sampler records, use
+  `runtime_process/observation/<event ID>/<pid|ppid|tgid>`. Their node metadata
+  reports `identity_basis=event_observation`. Matching numeric PIDs alone does
+  not join these observations or generate a same-process data-flow inference.
+- Graph metadata distinguishes `kernel_process_instance`, `event_observation`
+  and `legacy_pid`. New process-focused event queries and replay use recorded
+  process-to-event edges, with the same pagination and evidence references.
+- Verification checks versioned process edges against the event that produced
+  them. Export/import preserves the identity marker, nodes and edges. V2
+  records keep their original boot/PID/start graph. Unversioned
+  historical records keep their numeric-PID graph and `legacy_pid` metadata;
+  opening them does not rewrite signed evidence.
+
+This changes no database tables or bundle container format. Clients should treat
+runtime graph node IDs as opaque strings rather than extracting a PID from a
+fixed path segment.
 
 In record-only mode, a synthetic scope id is sufficient because there is no
 kernel telemetry to join. In supervised mode, `record` creates a real cgroup
@@ -208,7 +691,7 @@ access, and secret-path reads create `policy_decisions`, `risk_signals`,
 policy evaluation while retaining normalization, correlation, and storage.
 
 `telemetry correlations --json` explains the second half of the path: why a
-normalized runtime event was attached to a ToolCallScope. The report includes
+normalized runtime event was attached to an execution scope or tool call. The report includes
 the raw runtime identity, resolved application context, matched binding,
 matched identity keys such as `pid`, `container_id`, `cgroup_id`, and `time`,
 confidence, time window, and drill-down refs.
@@ -228,12 +711,66 @@ The receiver maps recognized substrate events into the normalized schema:
 The native sensor (`internal/sensor`, `cmd/agentprov-sensor`; Linux amd64/arm64)
 emits JSONL that the native mapper converts into the shared ingest schema,
 so native telemetry drives the same correlation → policy → risk path as other
-receivers. Ingestion also derives `llm_call` (TLS request → response) and
-`llm_intent_caused` (TLS response → later action) edges from nearby events.
-The current heuristic chooses the latest event within a two-minute window in
-the same run and, when known, process; `llm_call` uses the first response
-segment. These are inferred relationships, not proof that a response caused
-a syscall, correctly paired concurrent requests, or complete stream reassembly.
+receivers. Ingestion preserves TLS observations. `launch` at sealing time, or
+`graph materialize-llm --run <id>`, derives exchanges over the saved messages
+using `agentprov.tls_connection_exchange/v2`:
+
+- HTTP/2 pairs a unique request and final response by `connection_id` and
+  `stream_id`. Concurrent streams and reversed ingestion order stay separate.
+- HTTP/1.x accepts only complete, strictly alternating request/response records
+  on one capture generation, ordered by capture time. Pipelining, equal times,
+  duplicate responses or a broken sequence remain ambiguous. Truncation or a
+  saved run report indicating capture loss/backlog prevents serial inference.
+- Both paths require compatible capture origin, process and scope, decoded
+  headers, and a response timestamp at or after its request. Missing connection
+  or stream identity remains unknown; neither PID proximity nor an old pairing
+  edge supplies the missing identity. Informational responses are retained
+  separately from the final response.
+- Capture origin combines the strongest recorded host identity with its boot.
+  Explicit host/boot conflicts prevent pairing; a shared boot does not erase
+  a different host. Inconsistent identity fields across envelopes stay unknown.
+
+Each materialized `llm_message` includes a `correlation` assessment with
+`status` (`matched`, `unknown`, `ambiguous`), `reason`, rule, method, confidence
+and matched peer event ID. Body retention remains opt-in; metadata-only messages
+can still be paired. Graph queries expose pairing edges as derived, with source
+event references. HTTP/2 identity matches use confidence `1`; HTTP/1 serial
+inference uses `0.8`. These are association grades, not measured accuracy rates.
+
+Reanalysis atomically replaces TLS-derived exchanges, including withdrawing a
+pair when a late duplicate makes it ambiguous. It keeps raw events, transcript
+and endpoint evidence intact. Opening an existing signed bundle preserves its
+recorded graph; explicitly reanalysing an imported run creates updated derived
+results in the local store. Original bundle files remain unchanged.
+New ingestion no longer creates the legacy temporal `llm_intent_caused` edge.
+
+The materialized `llm_caused` command association uses the stricter
+`agentprov.intent_command_scope/v3` rule:
+
+- An exec must occur strictly after the decision and within two minutes. TLS
+  matching requires the same capture source and known kernel boot or node
+  identity, retaining any recorded host alongside the boot, plus a shared
+  cgroup or container; conflicting known scope keys
+  exclude a candidate. Ambiguous request/response pairings are excluded.
+- Complete `argv` is compared without case folding, path aliases or extra
+  arguments. Plain literal commands are compared argument by argument; complex
+  shell syntax requires an intact `sh`/`bash`/`zsh -c` or `-lc` script argument.
+  Joined command text, truncated argv and `process_observed` samples remain
+  evidence, but do not supply an execution anchor.
+- Transcript matching requires a recorded decision timestamp, `tool_use.id`,
+  compatible agent/session identity, and the current direct `agent_syscall`
+  exec anchor within the tool's recorded interval. It does not search the whole
+  run by command text. Inherited child edges are not reused as direct anchors.
+- A decision with multiple execution candidates, or an exec claimed by multiple
+  decisions in the analysis input, remains unlinked. Request/response objects
+  are retained for inspection. Endpoint upload ordering supplies no such anchor.
+
+New command edges carry a versioned ID. Graph queries expose `derived: true`,
+the rule name, heuristic confidence `0.8`, and evidence references, including
+after signed bundle export/import. Existing imported edges retain their original
+metadata. TLS and transcript passes use bounded inputs and transactional
+replacement; an input-limit or database error preserves the previous stored
+result instead of publishing a partial rebuild.
 
 For local supervised capture, the CLI also exposes:
 

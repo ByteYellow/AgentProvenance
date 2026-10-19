@@ -4,7 +4,7 @@
 
 本文说明已有工具接口及后续接入方向。AgentProvenance 除了供人查询，也可以被 Agent 调用。后台服务的 `/v1` REST 接口和 CLI 的 `--json` 输出构成基础契约；MCP、OpenAPI、模型工具描述和 SDK 封装应复用这些能力，避免各自维护不同的数据语义。
 
-接口参考：[中文 OpenAPI](openapi.yaml) · [八个 AI/MCP 工具](ai-tools.md) · [Python 接入](python-sdk.md)。
+接口参考：[中文 OpenAPI](openapi.yaml) · [九个 AI/MCP 工具](ai-tools.md) · [Python 接入](python-sdk.md)。
 
 ## 信任边界
 
@@ -18,7 +18,7 @@
 
 ## 基础查询契约
 
-以下能力已有后台服务接口及 CLI 命令，使用带版本的 JSON 结果。表格是底层查询范围；当前 MCP 和模型工具目录只暴露其中一部分，见后文的八个工具。
+以下能力已有后台服务接口及 CLI 命令，使用带版本的 JSON 结果。表格是底层查询范围；当前 MCP 和模型工具目录只暴露其中一部分，见后文的九个工具。
 
 | 操作 | 后台服务接口 | CLI | 格式版本 |
 |---|---|---|---|
@@ -33,6 +33,7 @@
 | list_events | GET /v1/telemetry/events?run=（分页） | telemetry list --run --json | agentprovenance.telemetry_events/v1 |
 | list_windows | GET /v1/telemetry/windows?run= | telemetry windows --run --json | agentprovenance.telemetry_event_windows/v1 |
 | explain_correlations | GET /v1/telemetry/correlations?run= | telemetry correlations --run --json | agentprovenance.telemetry_correlations/v1 |
+| get_audit_associations | GET /v1/telemetry/audit-associations?run= | telemetry audit-associations --run --json | agentprovenance.audit_associations/v1 |
 | health | GET /v1/health | 后台服务接口 | agentprovenance.daemon_health/v1 |
 
 表内命令省略了具体参数值，实际使用时需填写执行 ID 等信息。
@@ -56,9 +57,9 @@
 
 ### MCP 服务
 
-`agentprov ai mcp` 通过标准输入、标准输出传输 JSON-RPC 2.0，默认 MCP 协议版本为 `2025-06-18`。它与模型工具描述和 `ai call` 复用 `internal/aitools.Catalog()`、`Dispatch`，当前提供八个工具：
+`agentprov ai mcp` 通过标准输入、标准输出传输 JSON-RPC 2.0，默认 MCP 协议版本为 `2025-06-18`。它与模型工具描述和 `ai call` 复用 `internal/aitools.Catalog()`、`Dispatch`，当前提供九个工具：
 
-- 五个查询工具：`verify_run`、`get_signals`、`list_risks`、`list_events`、`get_timeline`。
+- 六个查询工具：`verify_run`、`get_signals`、`list_risks`、`list_events`、`get_timeline`、`get_audit_associations`。
 - 策略预检：`evaluate_action`。
 - 应用上下文写入：`bind_scope`、`record_tool_call`。
 

@@ -2,6 +2,269 @@
 
 English | [中文](CHANGELOG.zh-CN.md)
 
+## v0.10.0 - 2026-10-19
+
+### Added
+
+- A signed investigation-and-repair demo follows one real DeepSeek session and
+  its subagents across two runs, with tests, AppArmor/seccomp decisions, file
+  changes, search, comparison and selected offline sharing. Named demos load
+  companion captures together. The Linux capture runner verifies independent import.
+
+- Dashboard access-control entries separate saved audits, task state,
+  configuration and collection observations. Audit detail keeps attempts,
+  mechanism decisions and actual outcomes side by side; comparison gains an
+  access-control view. Online and offline readers use the same evidence APIs.
+- Session-scoped search, event lists and graph focus include uniquely matched
+  audit decisions through existing tool/runtime evidence. Derived membership is
+  labeled separately; conflicting or unmatched decisions remain at run scope.
+  Selected replays freeze that membership and withhold excluded supporting
+  references, without changing original audit identities.
+- The comparison API projects access-control declarations, state snapshots,
+  audit decisions, collection observations and runtime outcomes as distinct
+  observed sets with original reader references. PID and timestamp changes do
+  not create value differences; sources retain their original reader links.
+- Follow existing audit text or journal JSON files with `telemetry follow-audit`.
+  Bounded batches commit evidence and source checkpoints together, resume after
+  interruption, preserve partial lines, and report source replacement or
+  truncation. Collection observations use the existing telemetry and signed
+  Bundle paths; machine output stays English and raw-record retention stays fixed.
+- Observe AppArmor labels and seccomp mode/filter counts with independent,
+  default-on native sensor state readers. Timestamped procfs snapshots retain
+  their own thread identity; bounded sampling reports queue loss. K8s informer
+  observations append structured and legacy configuration declarations without
+  rewriting historical Pod metadata. These records remain separate from audit
+  decisions and syscall outcomes and survive signed Bundle roundtrips.
+- Query audit associations through the daemon and Dashboard read APIs, remote
+  CLI, Python SDK and AI/MCP tools, with strict pagination and explicit errors.
+  Fresh offline replays preserve frozen candidates; partial exports withhold
+  inferences whose evidence was excluded. API fields, statuses and generated
+  errors stay English across locales. The Python HTTP client supports the
+  existing daemon token and rejects redirects.
+- Inspect audit-to-runtime candidates with `telemetry audit-associations`.
+  The read-only projection separates process and operation associations, keeps
+  ambiguous candidates, and cites attempts, actual returns and process exits.
+  Native events now retain source machine identity and coarse-clock resolution;
+  association uses these with boot and task lifetimes, including audit timestamp
+  precision. Late evidence is re-evaluated without rewriting original records.
+- Read existing AppArmor and seccomp audit text or journal JSON with
+  `telemetry ingest-audit`. Keep ABI-specific decisions and original references,
+  bound transactional batches, deduplicate by source host/boot and record identity,
+  and honor run-fixed raw-record retention. Signed bundles preserve the records;
+  importing them does not change host policy or guess Agent-session ownership.
+- Native open/connect return observations retain actual results and a shared
+  operation ID with the entry record. Bounded per-thread state guards against
+  reuse; asynchronous connect and restart results keep their distinct meanings.
+  Outcome observations do not repeat attempt-level risk decisions.
+- Launch records its kernel sensor, workspace snapshot, full TLS body and agent
+  context options before capture starts. The Dashboard shows these independently
+  from context retention, and signed bundles and selected replay copies preserve
+  the recorded values. Older runs show unrecorded settings explicitly.
+- Dashboard session, search, comparison and replay views now explain recorded
+  context-retention settings. Configured omissions are separate from unavailable
+  content, and frozen export inventories retain the source run's preset.
+- Choose additional-context retention with `launch --capture basic|detailed`
+  and `context import --capture basic|detailed`. Detailed remains the default;
+  `--capture-tool-results` provides a focused override. Run settings are fixed
+  before launch, and Claude hook logs apply retention and redaction before
+  bounded, serialized writes. Kernel/TLS and workspace capture remain independent.
+- Export a complete local run with `dashboard export --run RUN --output replay.zip`.
+  The unsigned, single-run archive opens directly offline, with the existing
+  graph, session and saved-content readers, a frozen file inventory and no
+  original database or Bundle. By default, the command includes all saved run content.
+  A separate record manifest lists included source IDs, categories and revisions
+  from the same frozen snapshot as the replay.
+- Limit CLI, Dashboard or local API replay exports to a native session, or exclude records
+  and categories. The frozen selection applies to graph, search, raw and body
+  readers, including historical revisions. Cross-boundary references and omitted
+  analyses remain visible; partial copies carry a selected-evidence label.
+- Prepare and inspect a frozen replay from the Dashboard before
+  downloading its ZIP. Explicit scope confirmation, saved-source counts, exact
+  file inventory and archive size accompany the existing reader. Local previews
+  are bounded, expire automatically and are cleaned up on normal server shutdown.
+- Choose the whole run or current session, include categories and review individual
+  records with the existing body reader before exporting. The frozen preview
+  reports actual included/excluded counts, linked exclusions and repeated-content
+  warnings; changing the selection retires the previous preview.
+- Compare two runs in a temporary Dashboard window, with configuration fields,
+  file evidence, network destinations and outbound data types. Keep recorded
+  task and capture context visible, preserve typed missing values, and link
+  each side to saved content and graph evidence. Fresh public-demo exports
+  use the same paged comparison records and reader.
+- Search saved messages, tool inputs/results, configuration, file bodies and
+  runtime records in a temporary Dashboard window. Search stays within the
+  current run or selected native session, with highlighted excerpts, paged
+  reading, source references, cancellation and graph navigation with return.
+  Public-demo exports include the same saved-content search catalog and reader.
+
+### Changed
+
+- Keep a visible **Related sessions** button in the run overview and beside
+  every native session. Open the selected session's relationships directly,
+  load evidence on demand, and retain the graph and keyboard focus on return.
+- Clarify the separate audit-reader workflow and seccomp logged action data.
+  Controlled Linux checks now cover mixed AppArmor/seccomp decisions, logged
+  ERRNO, ordinary permission failures, and signed/offline replay under both
+  retention presets.
+- Local database schema 20 adds audit reader checkpoints. Back up the data
+  directory before upgrading; reader checkpoints are local operational state
+  and are not imported from evidence Bundles.
+- Context evidence can record a versioned, run-fixed retention policy and
+  distinguish configured omissions from capture failures. The storage layer
+  retains a compact, source-linked Claude intent projection when original
+  records are omitted; signed bundles and selected replay exports preserve its
+  retention and sharing boundaries.
+- Session directories show cross-run occurrences, recorded parent relationships,
+  and typed Codex delegation, fork and message requests with source references.
+  Related-session navigation restores the prior graph and reader on return;
+  static exports confine relationship discovery to their selected run catalog.
+- Keep the graph and risk list in place while combining node summaries, related
+  events and saved content in one below-graph reader. Auxiliary sections start
+  collapsed with counts; existing content paging and enlarged reading remain.
+- Add a session/source directory based on recorded harness and native session
+  identities, with parent references, conflict labels and exact-source context
+  navigation. Processing diagnostics remain separate from native sessions.
+- Include the reader and session directory in public-demo static exports.
+- Filter graphs, linked events and conversation by recorded native session.
+  Calculate summaries within that scope, preserve inferred-edge confidence,
+  and restore the previous view when returning to the whole run. Risk and
+  auxiliary sections state their whole-run scope. Static replay uses the same
+  projections; context queries support namespaced harness/session filters.
+
+### Fixed
+
+- Audit association rule v2 excludes seccomp-blocked calls from executed syscall
+  candidates and keeps mediated calls unknown without mediation evidence. LOG and
+  AppArmor retain time-window candidates with explicit provenance; historical
+  offline replays preserve their recorded rule version.
+- Basic Codex capture preserves typed fork-session metadata without retaining
+  configuration bodies, including signed export/import and selective replay.
+- Run comparison treats unscanned ranges as unknown instead of reporting false
+  one-sided differences, with scanned counts and distinct truncation reasons.
+- Offline export enumerates all retained sessions independently of the overview's
+  256-source display limit and reconciles graph, event and search indexes before
+  delivery. Cancellation and resource limits return explicit errors.
+- Static session replay handles sessions without attributed runtime nodes.
+  Demo Run and comparison selectors display readable, localized names while
+  preserving original evidence IDs.
+- Run comparison shows readable task text from the current main session. A
+  missing body now affects its own source records, while known values from
+  unrelated sources remain comparable. Saved file changes and audit decisions
+  appear before lower-level observations.
+- Portable exports include required provenance objects up to 16 MiB, separately
+  from the 4 MiB snapshot-file cap. Larger required objects fail export explicitly
+  instead of producing a replay with missing graph objects.
+- Record-manifest verification applies the same redaction as materialization,
+  avoiding false mismatches for credential-variable expressions while still
+  detecting command changes.
+
+- Audit CLI failures and AI tool diagnostics keep English machine-facing errors
+  without appending localized usage text. JSON audit readers also keep daemon
+  warnings in English; explicit help and ordinary terminal output remain localized.
+  End-to-end checks cover real CLI, HTTP, Python SDK and MCP processes with both
+  retention presets, pagination and original-language evidence.
+- Keep recorded host identity alongside boot/PID/start across native lifecycle
+  bindings, Hook attribution, TLS exchanges, model-command links and process
+  graphs. Missing execs, reused parent PIDs and unrelated exits no longer reuse
+  a prior process owner. Numeric-only exits leave native lifetime anchors intact.
+  New graph and derivation versions preserve historical signed graph semantics;
+  process-focused queries and replay retain the same evidence references.
+- Verify unassociated telemetry without requiring a fabricated execution
+  binding; positive-confidence associations still require binding evidence.
+- Separate native thread identity from the process TGID, retain exit signals,
+  and keep a process association open when its leader exits before its workers.
+  Close the process lifetime when no live thread remains. Preserve these fields
+  through ingestion and signed bundles; add controlled Linux outcome tests.
+- Capture OpenSSL exports from a bounded dynamic symbol table when a large
+  unused ordinary string table prevents full symbol inspection, including
+  current Node.js binaries. Attach with validated executable-file offsets and
+  retain the existing metadata limits.
+- Reserve the SQLite writer before reading context-retention settings, so live
+  telemetry cannot invalidate a context import's read snapshot. Context records
+  and diagnostics remain atomic, including when a commit fails.
+- Ignore obsolete focused-event and timeline responses after selection changes.
+  New evidence selections clear previous rows while loading; failed requests
+  show an unavailable result and an unknown count.
+- Replace endpoint capture projections atomically, including payload objects,
+  events, policy decisions and signals. Missing bodies, malformed metadata and
+  failed writes retain the previous graph; retries replace owned policy counters.
+- Commit intent diffs, their graph edges, signals and any new tool attribution
+  together. Unreadable model evidence aborts reanalysis; repeated analysis keeps
+  peer-message contract identities stable.
+- Replace policy replay results in one transaction, preserving the previous
+  decisions and session state on failure and removing stale counter projections.
+- Discard database connections after failed reanalysis commits so an unfinished
+  SQLite transaction cannot leak into subsequent requests. Reuse unchanged
+  content-addressed objects and stage replacements before renaming them.
+- Avoid schema writes when opening an up-to-date store. Process native spool
+  files in short transactions, retry transient SQLite contention, and preserve
+  committed row receipts across interruptions so capture and investigation can
+  share the store. Seal batches independently of replay and refresh queue
+  priorities after each batch to avoid delaying new evidence behind retries.
+- Reject malformed transcript rows before replacing derived evidence, retaining
+  the previous graph and reporting the source line.
+- Recheck current evidence in Dashboard overviews, including imported runs,
+  instead of reusing results based on event/object counts or bundle metadata.
+- Keep unknown substrate confidence absent and preserve historical process-view
+  projections in the six pinned v0.8.2 demo bundles.
+- Match live OpenSSL test fixtures by their captured kernel PID so lifecycle
+  checks also work across WSL PID namespaces.
+- Preserve explicit zero confidence in scope bindings, process-lifetime
+  inheritance and unified signals. Omitted inputs retain source defaults;
+  invalid numeric values are rejected. Graph views distinguish unknown
+  confidence from zero, including read-only replay and signed bundle roundtrips.
+- Propagate verification database failures instead of reporting missing evidence.
+  CLI JSON and the daemon API expose `status: unavailable` with the failure
+  reason; the API returns HTTP 503. Dashboard verification errors are shown
+  separately. Overview checks use the current database and object contents.
+- Separate cgroup/container scope attribution from tool-call and application-
+  process attribution. Process matches use captured time and compatible scope
+  keys; parent PIDs no longer borrow a child binding's tool identity.
+- Preserve common context and bounded candidate diagnostics for overlapping
+  bindings instead of choosing the most recently started call. Correlation
+  reports retain the recorded ambiguity after subsequent binding changes.
+- Prevent ambiguous scope matches from seeding native process-lifetime anchors.
+  Historical events and signed bundles retain their recorded metadata.
+- Match model decisions to subsequent exec records using complete argument
+  boundaries, a two-minute window and compatible capture scope. Conflicting
+  decisions or executions stay unlinked; truncated commands and process samples
+  no longer supply command-execution anchors.
+- Link transcript decisions through recorded tool-use IDs and current direct
+  tool-to-exec associations. Preserve source timestamps and identities, and
+  expose new model-execution links as versioned inferences with evidence refs.
+- Replace TLS/transcript analysis atomically so read or write failures preserve
+  the last stored graph. Endpoint imports retain upload and policy evidence
+  without attributing uploads to the nearest chat call.
+- Preserve native process lifetimes in new runtime graph nodes, parent/thread
+  references, labels and inferred data flows. Reused PIDs and different kernel
+  boots remain separate; records without a usable lifetime use event-local
+  process observations. Existing signed graphs keep their original identifiers.
+- Keep process-focused event queries, pagination and static replay tied to graph
+  identities. Verification checks new process edges against their source events;
+  signed export/import preserves the same identities and relationships.
+- Preserve parsed HTTP/1.x and HTTP/2 metadata from TLS capture through ingestion
+  and signed export/import, including HTTP/2 stream IDs. Reassembled bodies are
+  no longer reinterpreted as HTTP headers. Endpoint metadata omits URL credentials,
+  query strings and fragments; arbitrary headers remain outside the allow-list.
+- Pair OpenSSL read entry/return probes by thread and task lifetime instead of
+  process ID. Bounded per-thread stacks preserve nested calls, validate returned
+  lengths and clear abandoned contexts on thread exit or successful exec. Stack overflow and invalid
+  output pointers contribute to capture-loss diagnostics. Regenerate both sensor
+  architectures and add live nesting, cleanup and 32-thread byte-for-byte tests.
+- Isolate OpenSSL HTTP/HPACK state by process lifetime and kernel-stamped capture
+  generation. Object reuse, clear/rebind and delayed reads cannot inherit a prior
+  generation's buffers or dynamic header table. Retain optional connection IDs
+  through ingestion and signed bundles, and report discarded partial state.
+  Remove implicit response completion on the next request; preserve same-
+  generation HTTP/2 multiplexing and keepalive. Add real OpenSSL lifecycle tests.
+- Replace nearest-request TLS associations with versioned connection/stream
+  pairing. HTTP/1 serial inference rejects overlapping, truncated or ambiguous
+  sequences and recorded capture gaps; HTTP/2 multiplexing uses stream identity.
+  Preserve unknown/ambiguous assessments alongside optional message bodies.
+- Stop generating temporal response-to-syscall causal edges during ingestion.
+  TLS reanalysis withdraws invalidated pairs atomically, preserves transcript
+  and endpoint objects, and carries pairing diagnostics through signed replay.
+
 ## v0.9.0 - 2026-10-09
 
 Recorded agent sessions, configuration history, and portable full-text evidence.

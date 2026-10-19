@@ -89,7 +89,7 @@ func TestAiAssertedBindingConfidenceCapped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Resolve by process_id (method confidence 1.0); scanOne takes the min with
+	// Resolve by process_id (method confidence 1.0); resolution takes the min with
 	// the binding confidence, so the app-asserted join reads honestly lower.
 	aiMatch, ok, err := Resolve(db, RawIdentity{RunID: "run-ai", ProcessID: "proc-ai", Timestamp: started})
 	if err != nil || !ok {
@@ -312,7 +312,7 @@ func TestChildEventResolvesViaContainerNotPid(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !ok || match.RunID != "run-child" || match.ToolCallID != "tc" {
+	if !ok || match.RunID != "run-child" || match.ToolCallID != "" || match.ProcessID != "" || !match.ScopeOnly {
 		t.Fatalf("child event should attribute to scope via container: ok=%v match=%+v", ok, match)
 	}
 	if !strings.Contains(match.Method, "container") {

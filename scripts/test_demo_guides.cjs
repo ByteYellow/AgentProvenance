@@ -20,7 +20,7 @@ async function main() {
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(new URL('/demos/?lang=en', base).href);
     const guides = await page.locator('a[href^="/demos/docs/"]').evaluateAll(links => [...new Set(links.map(link => link.pathname))]);
-    assert.equal(guides.length, 9);
+    assert.equal(guides.length, 11);
     for (const lang of ['en', 'zh-CN']) {
       for (const guide of guides) {
         await page.setViewportSize({ width: 1440, height: 1060 });

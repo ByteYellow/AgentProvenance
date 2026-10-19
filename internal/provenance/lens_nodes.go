@@ -5,10 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[string]lensEvent, error) {
@@ -35,6 +33,8 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 			return nil, nil, err
 		}
 		ev.NodeID = "runtime_event/" + ev.ID
+		identity := lensProcessIdentity(ev)
+		ev.processIdentity = &identity
 		ev.Path = payloadString(ev.Payload, "path", "file")
 		ev.Destination = payloadString(ev.Payload, "host", "dst_host", "dst_ip", "dst", "destination")
 		events[ev.NodeID] = ev
@@ -49,7 +49,9 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 				"container_id": ev.ContainerID, "cgroup_id": ev.CgroupID, "binding_source": ev.BindingSource,
 				"correlation_method": ev.CorrelationMethod, "correlation_confidence": ev.CorrelationConfidence,
 				"process_id": ev.ProcessID, "tool_call_id": ev.ToolCallID, "path": ev.Path, "destination": ev.Destination,
-				"created_at": ev.CreatedAt,
+				"created_at":           ev.CreatedAt,
+				"runtime_process_node": identity.Process.ID, "process_instance_id": identity.Process.InstanceID,
+				"process_identity_basis": identity.Process.Basis,
 			},
 		})
 	}
@@ -77,100 +79,7 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 	if err := addProvenanceObjectNodes(db, runID, add); err != nil {
 		return nil, nil, err
 	}
-	// runtime_process/pid/<pid> nodes are referenced by edges but otherwise carry
-	// only the bare pid. Enrich them with the command from the matching execve
-	// event so the graph shows the process NAME and the pid together (label =
-	// command, subtitle = pid) instead of an opaque number.
-	pidCommand := map[int64]string{}
-	// A PID can have several execs. Pick the latest observed label within each
-	// evidence tier, not whichever event happens to be last in map iteration.
-	ordered := make([]lensEvent, 0, len(events))
-	for _, ev := range events {
-		ordered = append(ordered, ev)
-	}
-	sort.Slice(ordered, func(i, j int) bool {
-		a, _ := time.Parse(time.RFC3339Nano, ordered[i].CreatedAt)
-		b, _ := time.Parse(time.RFC3339Nano, ordered[j].CreatedAt)
-		if a.Equal(b) {
-			return ordered[i].ID < ordered[j].ID
-		}
-		return a.After(b)
-	})
-	// execve is authoritative (the real exec). Then process_observed (the record
-	// ps-sampler) fills in pids whose execve wasn't captured — e.g. processes that
-	// were already running when the sensor attached — so the graph shows a name
-	// instead of a bare pid.
-	for _, ev := range ordered {
-		if ev.Type == "execve" && ev.PID > 0 {
-			if _, named := pidCommand[ev.PID]; named {
-				continue
-			}
-			if cmd := payloadString(ev.Payload, "command", "cmdline", "comm"); cmd != "" {
-				pidCommand[ev.PID] = cmd
-			}
-		}
-	}
-	for _, ev := range ordered {
-		if ev.Type == "process_observed" && ev.PID > 0 {
-			if _, named := pidCommand[ev.PID]; named {
-				continue
-			}
-			if cmd := payloadString(ev.Payload, "command", "cmdline", "comm"); cmd != "" {
-				pidCommand[ev.PID] = cmd
-			}
-		}
-	}
-	// Final fallback: a pid still unnamed but seen in ANY other event (connect,
-	// file, exit, ...) carries the comm the sensor stamps on every event. A real
-	// agent spawns many short-lived children whose execve is missed (exec'd
-	// before the sensor attached, or dropped under load) yet still do I/O — use
-	// their comm so the graph shows "bash"/"claude"/"git" instead of a bare pid.
-	// tgidName maps a thread-group id to a process name, so runtime_process/tgid/N
-	// nodes (created from runtime_process_thread edges) show a name instead of a
-	// bare number. Prefer the leader thread (pid==tgid); otherwise any thread's
-	// comm/command.
-	tgidName := map[int64]string{}
-	tgidLeader := map[int64]bool{}
-	for _, ev := range ordered {
-		if ev.PID <= 0 {
-			continue
-		}
-		name := payloadString(ev.Payload, "command", "cmdline", "comm")
-		if name == "" {
-			continue
-		}
-		if _, named := pidCommand[ev.PID]; !named {
-			pidCommand[ev.PID] = name
-		}
-		if ev.TGID > 0 {
-			if _, ok := tgidName[ev.TGID]; !ok || (ev.PID == ev.TGID && !tgidLeader[ev.TGID]) {
-				tgidName[ev.TGID] = name
-				tgidLeader[ev.TGID] = ev.PID == ev.TGID
-			}
-		}
-	}
-	for pid, cmd := range pidCommand {
-		id := fmt.Sprintf("runtime_process/pid/%d", pid)
-		add(GraphLensNode{
-			ID:          id,
-			Kind:        "runtime_process",
-			Subtype:     fmt.Sprintf("pid %d", pid),
-			Label:       cmd,
-			TrustOrigin: "runtime_observed",
-			Data:        map[string]any{"pid": pid, "command": cmd},
-		})
-	}
-	for tgid, name := range tgidName {
-		id := fmt.Sprintf("runtime_process/tgid/%d", tgid)
-		add(GraphLensNode{
-			ID:          id,
-			Kind:        "runtime_process",
-			Subtype:     fmt.Sprintf("tgid %d (thread group)", tgid),
-			Label:       name,
-			TrustOrigin: "runtime_observed",
-			Data:        map[string]any{"tgid": tgid, "command": name},
-		})
-	}
+	addRuntimeProcessNodes(events, add)
 	return nodes, events, nil
 }
 
@@ -422,6 +331,7 @@ type llmMessageSummary struct {
 	StopReason   string
 	Command      string
 	Prompt       string
+	Correlation  *tlsPairing
 }
 
 // llmMessageMeta reads a stored llm_message object file and pulls out the model,
@@ -440,9 +350,10 @@ func llmMessageMeta(path string) llmMessageSummary {
 	}
 	var obj struct {
 		Payload struct {
-			Content   string `json:"content"`
-			Model     string `json:"model"`
-			Semantics struct {
+			Content     string      `json:"content"`
+			Model       string      `json:"model"`
+			Correlation *tlsPairing `json:"correlation"`
+			Semantics   struct {
 				Model        string   `json:"model"`
 				ToolCalls    []string `json:"tool_calls"`
 				ToolsOffered []string `json:"tools_offered"`
@@ -463,6 +374,7 @@ func llmMessageMeta(path string) llmMessageSummary {
 		StopReason:   obj.Payload.Semantics.StopReason,
 		Command:      command,
 		Prompt:       prompt,
+		Correlation:  obj.Payload.Correlation,
 	}
 	llmMetaCache.Store(path, out)
 	return out
@@ -534,15 +446,19 @@ func addProvenanceObjectNodes(db *sql.DB, runID string, add func(GraphLensNode))
 					label += " [" + meta.Model + "]"
 				}
 			}
+			data := map[string]any{
+				"hash": hash, "source_id": sourceID, "path": path, "model": meta.Model,
+				"tool_decision": meta.ToolCalls, "tools_offered": meta.ToolsOffered,
+				"message_count": meta.MessageCount, "stop_reason": meta.StopReason,
+				"prompt": meta.Prompt, "command": meta.Command,
+			}
+			if meta.Correlation != nil {
+				data["correlation"] = meta.Correlation
+			}
 			add(GraphLensNode{
 				ID: hash, Kind: kind, Subtype: "llm_message", Label: label,
 				TrustOrigin: "content_addressed",
-				Data: map[string]any{
-					"hash": hash, "source_id": sourceID, "path": path, "model": meta.Model,
-					"tool_decision": meta.ToolCalls, "tools_offered": meta.ToolsOffered,
-					"message_count": meta.MessageCount, "stop_reason": meta.StopReason,
-					"prompt": meta.Prompt, "command": meta.Command,
-				},
+				Data:        data,
 			})
 			continue
 		}

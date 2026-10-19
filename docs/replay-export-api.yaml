@@ -1,0 +1,266 @@
+openapi: 3.1.0
+info:
+  title: AgentProvenance local replay export API
+  version: "1.0"
+  description: >
+    Prepare a private, frozen sharing copy without changing the evidence store.
+    Enabled by dashboard serve only. Requests require a loopback peer and host;
+    browser requests must be same-origin. Mutations require X-AgentProv-Export: 1.
+    One preparation or preview is allowed per server. Preparation has a five-minute
+    deadline; a ready preview expires after ten minutes. Closing the server normally
+    releases temporary files. Original evidence is never uploaded.
+servers:
+  - url: http://127.0.0.1:7396
+security: []
+components:
+  parameters:
+    previewID:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, pattern: '^[a-f0-9]{48}$'}
+    exportHeader:
+      name: X-AgentProv-Export
+      in: header
+      required: true
+      schema: {type: string, const: '1'}
+  schemas:
+    File:
+      type: object
+      required: [path, sha256, bytes]
+      properties:
+        path: {type: string, description: Relative path inside the archive.}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        bytes: {type: integer, minimum: 0}
+    Contents:
+      type: object
+      required: [sessions, context_entries, latest_context_entries, context_body_refs, context_raw_refs, indexed_sources]
+      properties:
+        sessions: {type: integer, minimum: 0}
+        context_entries: {type: integer, minimum: 0, description: Includes saved historical revisions.}
+        latest_context_entries: {type: integer, minimum: 0}
+        context_body_refs: {type: integer, minimum: 0, description: Distinct context body references; consult the reader for availability.}
+        context_raw_refs: {type: integer, minimum: 0}
+        indexed_sources:
+          type: object
+          description: Search index source counts by category; not the number of unique bodies or successful operations.
+          additionalProperties: {type: integer, minimum: 0}
+    Inventory:
+      type: object
+      required: [schema_version, run_id, scope, created_at, commit, signed, events, contents, files, bytes_excluding_inventory]
+      properties:
+        schema_version: {const: agentprovenance.replay_inventory/v1}
+        run_id: {type: string}
+        scope: {type: string, enum: [whole_run, session]}
+        created_at: {type: string, format: date-time}
+        commit: {type: string}
+        signed: {const: false}
+        events: {type: integer, minimum: 0}
+        contents: {$ref: '#/components/schemas/Contents'}
+        capture_policy:
+          allOf: [{$ref: './agent-context-api.yaml#/components/schemas/CapturePolicy'}]
+          description: Source run retention settings from the frozen snapshot, when recorded. Export exclusions do not change these settings.
+        record_selection:
+          allOf: [{$ref: '#/components/schemas/File'}]
+          description: >
+            Optional for older exports. Describes record-selection.json, a frozen
+            list of source-record IDs, categories and revision membership.
+            It has schema_version agentprovenance.replay_selection/v1, selection
+            (run_id, scope, optional harness, session_id, exclude_records and
+            exclude_categories), and records (id, category, optional node, indexed,
+            included, optional reason and related_record). Indexed means present
+            in the source search catalog; historical context revisions are also
+            listed. Only included records enter the replay. Repeated normalized
+            context bodies in retained and excluded records are reported in warnings
+            with warning_count; up to 100 examples include IDs, counts and hashes.
+        selection_summary:
+          $ref: '#/components/schemas/SelectionSummary'
+        analysis_omissions:
+          type: object
+          description: >
+            Partial exports omit run-wide analyses and findings whose dependencies
+            are not retained. Counts are source minus selected rows, by table.
+            Existing findings are selected, not recalculated.
+          additionalProperties: {type: integer, minimum: 1}
+        files: {type: array, items: {$ref: '#/components/schemas/File'}}
+        bytes_excluding_inventory: {type: integer, minimum: 0}
+    SelectionSummary:
+      type: object
+      description: >
+        Bounded preview of the frozen record manifest. Counts include saved
+        revisions and linked readers. The full manifest is inventory-listed
+        record-selection.json; this summary contains no evidence bodies.
+      required: [selection, included_records, excluded_records, exclusion_reasons, warning_count]
+      properties:
+        selection:
+          type: object
+          required: [run_id, scope]
+          properties:
+            run_id: {type: string}
+            scope: {type: string, enum: [whole_run, session]}
+            harness: {type: string}
+            session_id: {type: string}
+            exclude_records: {type: array, maxItems: 4096, items: {type: string}}
+            exclude_categories: {type: array, maxItems: 5, items: {type: string, enum: [messages, tools, configuration, files, runtime]}}
+        included_records: {type: integer, minimum: 0}
+        excluded_records: {type: integer, minimum: 0}
+        exclusion_reasons:
+          type: object
+          additionalProperties: {type: integer, minimum: 1}
+        warning_count: {type: integer, minimum: 0}
+        warnings:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            required: [code, content_sha256, included_records, excluded_records, included_count, excluded_count]
+            properties:
+              code: {const: same_content_in_retained_record}
+              content_sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+              included_records: {type: array, maxItems: 10, items: {type: string}}
+              excluded_records: {type: array, maxItems: 10, items: {type: string}}
+              included_count: {type: integer, minimum: 1}
+              excluded_count: {type: integer, minimum: 1}
+    Preview:
+      type: object
+      required: [schema_version, id, expires_at, inventory, inventory_sha256, zip_bytes, zip_sha256]
+      properties:
+        schema_version: {const: agentprovenance.replay_preview/v1}
+        id: {type: string, pattern: '^[a-f0-9]{48}$'}
+        expires_at: {type: string, format: date-time}
+        inventory: {$ref: '#/components/schemas/Inventory'}
+        inventory_sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        zip_bytes: {type: integer, minimum: 0}
+        zip_sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: {type: string}
+  responses:
+    Error:
+      description: Request rejected or unavailable; inspect error for details.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+paths:
+  /api/replay/previews:
+    post:
+      operationId: prepareReplayPreview
+      summary: Freeze a run or native session selection and prepare its downloadable ZIP
+      description: >
+        Maximum JSON body size is 1 MiB. Exclusions use saved search source IDs.
+        Removing a context record removes its revisions and linked tool readers;
+        independently captured runtime effects remain unless separately excluded.
+        Shared raw source lines are withheld if any normalized record is excluded.
+        References across the boundary are kept without the excluded bodies.
+      parameters: [{$ref: '#/components/parameters/exportHeader'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [run, scope]
+              properties:
+                run: {type: string, minLength: 1, maxLength: 512}
+                scope: {type: string, enum: [whole_run, session]}
+                harness: {type: string, minLength: 1, maxLength: 128}
+                session_id: {type: string, minLength: 1, maxLength: 512}
+                exclude_records:
+                  type: array
+                  maxItems: 4096
+                  items: {type: string, minLength: 1, maxLength: 1024}
+                exclude_categories:
+                  type: array
+                  maxItems: 5
+                  items: {type: string, enum: [messages, tools, configuration, files, runtime]}
+              allOf:
+                - if: {properties: {scope: {const: session}}}
+                  then: {required: [harness, session_id]}
+                  else:
+                    not:
+                      anyOf:
+                        - required: [harness]
+                        - required: [session_id]
+      responses:
+        '201':
+          description: Ready, frozen preview. Download uses this inventory, not later database writes.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Preview'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '415': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /api/replay/previews/{id}:
+    parameters: [{$ref: '#/components/parameters/previewID'}]
+    get:
+      operationId: readReplayPreview
+      summary: Read the frozen inventory and archive digest
+      responses:
+        '200':
+          description: Preview metadata
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Preview'}
+        '403': {$ref: '#/components/responses/Error'}
+        '410': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    delete:
+      operationId: discardReplayPreview
+      summary: Discard a preview; active readers retain files until they finish
+      parameters: [{$ref: '#/components/parameters/exportHeader'}]
+      responses:
+        '204': {description: Discarded or already expired.}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /api/replay/previews/{id}/download:
+    parameters: [{$ref: '#/components/parameters/previewID'}]
+    get:
+      operationId: downloadReplayArchive
+      summary: Download exactly the archive reviewed in the preview
+      parameters:
+        - name: inventory
+          in: query
+          required: true
+          schema: {type: string, pattern: '^[a-f0-9]{64}$'}
+          description: Confirmed inventory_sha256 from the preview response.
+      responses:
+        '200':
+          description: ZIP archive. X-Content-SHA256 names the complete ZIP digest.
+          content:
+            application/zip:
+              schema: {type: string, format: binary}
+        '206': {description: Byte-range response for the same frozen ZIP.}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '410': {$ref: '#/components/responses/Error'}
+        '416': {description: Requested byte range is outside the archive.}
+        '500': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /api/replay/previews/{id}/files/{file}:
+    parameters: [{$ref: '#/components/parameters/previewID'}]
+    get:
+      operationId: inspectReplayFile
+      summary: Read an inventory-listed preview asset without accessing the live store
+      parameters:
+        - name: file
+          in: path
+          required: true
+          schema: {type: string}
+          description: Relative inventory path, including slashes. Also accepts export-inventory.json. Open en/index.html or zh-CN/index.html to inspect the full frozen replay.
+      responses:
+        '200': {description: Frozen file with a type matching its extension.}
+        '206': {description: Byte range of a frozen file.}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {description: File is not in this preview inventory.}
+        '410': {$ref: '#/components/responses/Error'}
+        '416': {description: Requested byte range is outside the file.}
+        '500': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}

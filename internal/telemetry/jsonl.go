@@ -572,7 +572,7 @@ func detectFormat(raw map[string]any) string {
 	if _, ok := raw["output_fields"]; ok {
 		return "falco"
 	}
-	if stringAt(raw, "source") == "agentprov_ebpf" {
+	if source := stringAt(raw, "source"); source == "agentprov_ebpf" || source == "procfs_access_control" {
 		return "native"
 	}
 	if stringAt(raw, "source") == "loongcollector" || stringAt(raw, "__tag__:__path__") != "" {
@@ -592,6 +592,19 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 	event := baseMappedEvent(raw, "agentprov_ebpf")
 	comm := stringAt(raw, "comm")
 	switch strings.ToLower(firstNonEmpty(stringAt(raw, "event_type"), stringAt(raw, "type"))) {
+	case "access_control_state":
+		event.EventType, event.Source = "access_control_state", "procfs_access_control"
+		// Procfs has its own task identity and observation time. Do not turn its
+		// sampling hint into a kernel lifetime, tool call or process graph node.
+		event.PID, event.TGID, event.PPID = 0, 0, 0
+		event.ContainerID = ""
+		state, _ := raw["state"].(map[string]any)
+		identity, _ := nestedMap(state, "identity")
+		if stringAt(identity, "status") != "observed" || stringAt(identity, "cgroup_id") != event.CgroupID {
+			event.CgroupID = ""
+		}
+		event.Payload = mustJSON(raw["state"])
+		return event, true, ValidateRawPayload(event.EventType, event.Payload)
 	case "process_observed":
 		event.EventType = "process_observed"
 		event.Payload = mustJSON(map[string]any{"pid": event.PID, "ppid": event.PPID, "comm": comm, "observation": stringAt(raw, "observation")})
@@ -676,12 +689,27 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 			payload["syscall_result"] = intAt(raw, "syscall_result")
 		}
 		event.Payload = mustJSON(payload)
-	case "process_exit", "exit":
+	case "syscall_result":
+		event.EventType = "syscall_result"
+		payload := map[string]any{"comm": comm}
+		for _, key := range []string{"path", "mode", "dst_ip", "dst_port"} {
+			if value, ok := raw[key]; ok {
+				payload[key] = value
+			}
+		}
+		event.Payload = mustJSON(payload)
+	case "process_exit", "exit", "thread_exit":
 		event.EventType = "process_exit"
-		event.Payload = mustJSON(map[string]any{
-			"exit_code": intAt(raw, "exit_code"),
-			"comm":      comm,
-		})
+		if stringAt(raw, "event_type") == "thread_exit" || stringAt(raw, "type") == "thread_exit" {
+			event.EventType = "thread_exit"
+		}
+		payload := map[string]any{"comm": comm}
+		for _, key := range []string{"exit_code", "exit_signal", "raw_exit_status", "termination", "exit_scope", "core_dump_flag"} {
+			if value, ok := raw[key]; ok {
+				payload[key] = value
+			}
+		}
+		event.Payload = mustJSON(payload)
 	case "setuid":
 		event.EventType = "setuid"
 		event.Payload = mustJSON(map[string]any{"uid": intAt(raw, "uid"), "comm": comm})
@@ -720,24 +748,30 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 	default:
 		return IngestEvent{}, false, nil
 	}
-	if instance := stringAt(raw, "process_instance_id"); instance != "" {
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
-			return event, false, err
-		}
-		payload["process_instance_id"] = instance
-		payload["parent_process_instance_id"] = stringAt(raw, "parent_process_instance_id")
-		event.Payload = mustJSON(payload)
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+		return event, false, err
 	}
+	for _, key := range []string{
+		"host_id", "host_identity_source", "realtime_coarse_resolution_ns",
+		"process_instance_id", "parent_process_instance_id", "thread_group_instance_id",
+		"boot_id", "tid", "thread_instance_id", "thread_start_ns", "process_start_ns", "monotonic_ns",
+		"operation_id", "operation", "syscall_number", "sensor_arch", "syscall_start_ns", "syscall_duration_ns",
+		"observation_stage", "syscall_result", "syscall_outcome", "errno",
+	} {
+		if value, ok := raw[key]; ok {
+			payload[key] = value
+		}
+	}
+	event.Payload = mustJSON(payload)
 	return event, true, nil
 }
 
 // sslPayload normalizes a captured TLS plaintext preview. By default it stores a
 // sha256 of the captured bytes plus a short human-triage preview (NOT the full
 // plaintext), since prompt/response text is sensitive; the full preview length
-// is recorded for context. It also derives privacy-safe HTTP provenance metadata
-// (endpoint/model/streaming) under "http" via tlsMeta, which reads only the
-// allow-listed head of the request/response, never the body. direction is
+// is recorded for context. Parsed HTTP metadata is allow-listed under "http";
+// older raw captures fall back to parsing the request/response head. direction is
 // "request" (tls_write) or "response" (tls_read).
 func sslPayload(raw map[string]any, comm, direction string) string {
 	data := stringAt(raw, "data")
@@ -751,7 +785,7 @@ func sslPayload(raw map[string]any, comm, direction string) string {
 	if truncated, _ := raw["truncated"].(bool); truncated {
 		payload["truncated"] = true
 	}
-	if m := stringAt(raw, "model"); m != "" {
+	if m := boundedHTTPText(stringAt(raw, "model"), 256); m != "" {
 		payload["model"] = m
 	}
 	// Privacy: the full reassembled body (the model's actual prompt/completion) is
@@ -760,7 +794,7 @@ func sslPayload(raw map[string]any, comm, direction string) string {
 	if data != "" && os.Getenv("AGENTPROV_TLS_CAPTURE_BODY") == "1" {
 		payload["content"] = data
 	}
-	if meta := tlsMeta(data, direction); meta != nil {
+	if meta := capturedTLSMeta(raw, direction); meta != nil {
 		payload["http"] = meta
 	}
 	return mustJSON(payload)

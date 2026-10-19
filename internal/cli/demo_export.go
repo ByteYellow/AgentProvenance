@@ -83,14 +83,20 @@ func demoExportCmd() *cobra.Command {
 			return err
 		}
 		defer cleanup()
-		server := dashboard.Server{DB: db}
+		server := dashboard.Server{DB: db, RunLabels: demoRunLabels(catalog)}
 		writer := &staticdata.Writer{Root: stage}
+		visibleRuns := []string{}
+		for _, entry := range catalog {
+			if entry.Run != "" {
+				visibleRuns = append(visibleRuns, entry.Run)
+			}
+		}
 		for _, entry := range catalog {
 			if entry.Run == "" {
 				continue
 			}
 			fmt.Fprintf(cmd.ErrOrStderr(), "Exporting public replay %s...\n", entry.ID)
-			snapshot, err := server.ExportReplay(cmd.Context(), entry.Run, writer)
+			snapshot, err := server.ExportReplaySet(cmd.Context(), entry.Run, writer, visibleRuns)
 			if err != nil {
 				return err
 			}
@@ -118,7 +124,7 @@ func demoExportCmd() *cobra.Command {
 			}
 			return os.WriteFile(dest, data, 0644)
 		}
-		for _, asset := range []string{"/assets/theme.css", "/assets/context.css", "/assets/context.js", "/demos/demo.css", "/demos/guide.js"} {
+		for _, asset := range []string{"/assets/theme.css", "/assets/context.css", "/assets/context.js", "/assets/workspace.css", "/assets/workspace.js", "/assets/access-control.js", "/assets/access-control.css", "/assets/search-engine.js", "/assets/search.js", "/assets/search.css", "/assets/compare-engine.js", "/assets/compare.js", "/assets/compare.css", "/assets/export.js", "/assets/export.css", "/demos/demo.css", "/demos/guide.js"} {
 			b, err := get(asset)
 			if err != nil {
 				return err
@@ -222,7 +228,7 @@ func demoExportCmd() *cobra.Command {
 		if err = os.Rename(stage, target); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Static demo site: %s\n7 signed replays, 9 demo guides, %d user guides and release history, English and Chinese.\n", target, len(projectdocs.Catalog()))
+		fmt.Fprintf(cmd.OutOrStdout(), "Static demo site: %s\n%d signed replays, %d demo guide entries, %d user guides and release history, English and Chinese.\n", target, len(manifest.Runs), len(catalog), len(projectdocs.Catalog()))
 		return nil
 	}}
 	cmd.Flags().StringVar(&output, "output", "", "new directory for the static website")

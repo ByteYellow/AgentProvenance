@@ -55,7 +55,10 @@ echo "== assert normalized + correlated telemetry"
 TELEMETRY_JSON="$("$BIN" --data-dir "$DATA_DIR" telemetry list --run run-tetragon --json)"
 assert_contains "$TELEMETRY_JSON" '"event_type": "execve"'
 assert_contains "$TELEMETRY_JSON" '"source": "tetragon_jsonl"'
-assert_contains "$TELEMETRY_JSON" '"tool_call_id": "tool-tetragon"'
+assert_contains "$TELEMETRY_JSON" '"tool_call_id": ""'
+assert_contains "$TELEMETRY_JSON" '"process_id": ""'
 assert_contains "$TELEMETRY_JSON" '"correlation_class": "kernel_correlated"'
+CORRELATIONS_JSON="$("$BIN" --data-dir "$DATA_DIR" telemetry correlations --run run-tetragon --json)"
+assert_contains "$CORRELATIONS_JSON" '"status": "scope_only"'
 
 echo "Tetragon ingest acceptance passed"

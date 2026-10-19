@@ -1,24 +1,157 @@
 package telemetry
 
 import (
+	"encoding/hex"
+	"encoding/json"
+	"math"
+	"mime"
+	"net/url"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
-// tlsMeta extracts privacy-safe HTTP provenance metadata from a captured TLS
-// plaintext window. The SSL uprobe copies at most 256 bytes (internal/sensor/
-// exec.c, sensor_event.path[256]), so this sees only the head of a request or
-// response. It returns an allow-listed field set -- protocol, request line,
-// host, status, content type, stream flag, and a best-effort model id -- and
-// NEVER headers or body wholesale, so it adds provenance (which endpoint/model,
-// streaming or not) without persisting prompt/response content.
-//
-// HTTP/2 is detected and labeled but NOT decoded: HPACK header decoding needs
-// per-connection dynamic-table state reconstructed across many writes, which a
-// single isolated capture cannot provide. Emitting guessed h2 headers would be
-// worse than honestly reporting headers_decoded=false. direction ("request" or
-// "response", from the tls_write/tls_read event type) disambiguates when the
-// captured bytes are too short or too binary to classify on their own.
+// capturedTLSMeta prefers the sensor's parsed fields. For reassembled captures,
+// data is a decoded BODY, not an HTTP message: sniffing it can turn text inside
+// a prompt into a fictitious endpoint or protocol. Legacy raw windows still use
+// tlsMeta, without attempting stateless HPACK decoding.
+func capturedTLSMeta(raw map[string]any, direction string) map[string]any {
+	value, parsed := raw["protocol"]
+	if !parsed {
+		return sanitizeTLSMeta(tlsMeta(stringAt(raw, "data"), direction), direction)
+	}
+	protocol, _ := value.(string)
+	if protocol != "http/1.0" && protocol != "http/1.1" && protocol != "h2" {
+		return nil
+	}
+	meta := map[string]any{"protocol": protocol, "kind": direction}
+	for _, key := range []string{"method", "path", "host", "content_type", "model"} {
+		if value, ok := raw[key].(string); ok {
+			meta[key] = value
+		}
+	}
+	if decoded, ok := raw["headers_decoded"].(bool); ok {
+		meta["headers_decoded"] = decoded
+	}
+	if id, ok := raw["connection_id"].(string); ok && strings.HasPrefix(id, "tls-v1:") && len(id) == 71 {
+		if _, err := hex.DecodeString(id[7:]); err == nil {
+			meta["connection_id"] = id
+		}
+	}
+	if status := httpMetadataNumber(raw["status"]); status >= 100 && status <= 599 {
+		meta["status"] = int(status)
+	}
+	if id := httpMetadataNumber(raw["stream_id"]); protocol == "h2" && id > 0 && id <= 0x7fffffff {
+		meta["stream_id"] = id
+	}
+	return sanitizeTLSMeta(meta, direction)
+}
+
+// Only endpoint identity and the small protocol allow-list survive here. Query
+// strings, fragments, URL userinfo, arbitrary headers and body fields stay out.
+func sanitizeTLSMeta(meta map[string]any, direction string) map[string]any {
+	if len(meta) == 0 {
+		return nil
+	}
+	out := map[string]any{"kind": direction}
+	for _, key := range []string{"protocol", "headers_decoded", "stream_id", "connection_id"} {
+		if value, ok := meta[key]; ok {
+			out[key] = value
+		}
+	}
+	if direction == "request" {
+		if method, _ := meta["method"].(string); httpMethods[method] {
+			out["method"] = method
+		}
+		path, _ := meta["path"].(string)
+		if path = safeHTTPPath(path); path != "" {
+			out["path"] = path
+		}
+		host, _ := meta["host"].(string)
+		if host = safeHTTPHost(host); host != "" {
+			out["host"] = host
+			if path != "" {
+				out["endpoint"] = host + path
+			}
+		}
+	} else if status, ok := meta["status"].(int); ok && status >= 100 && status <= 599 {
+		out["status"] = status
+	}
+	if ct, _ := meta["content_type"].(string); boundedHTTPText(ct, 256) != "" {
+		if mediaType, _, err := mime.ParseMediaType(ct); err == nil {
+			out["content_type"] = mediaType
+			if mediaType == "text/event-stream" {
+				out["is_stream"] = true
+			}
+		}
+	}
+	if model, _ := meta["model"].(string); boundedHTTPText(model, 256) != "" {
+		out["model"] = model
+	}
+	if len(out) == 1 {
+		return nil
+	}
+	return out
+}
+
+func boundedHTTPText(value string, limit int) string {
+	if len(value) > limit || strings.IndexFunc(value, unicode.IsControl) >= 0 {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func safeHTTPHost(value string) string {
+	value = boundedHTTPText(value, 255)
+	if value == "" || strings.ContainsAny(value, "/?#@\\") {
+		return ""
+	}
+	u, err := url.Parse("//" + value)
+	if err != nil || u.Hostname() == "" || u.User != nil {
+		return ""
+	}
+	return strings.ToLower(u.Host)
+}
+
+func safeHTTPPath(value string) string {
+	value = boundedHTTPText(value, 8192)
+	if value == "" || value == "*" {
+		return value
+	}
+	u, err := url.Parse(value)
+	if err != nil || (u.Scheme != "" && u.Scheme != "http" && u.Scheme != "https") {
+		return ""
+	}
+	path := u.EscapedPath()
+	if !strings.HasPrefix(path, "/") || len(path) > 4096 {
+		return ""
+	}
+	return path
+}
+
+func httpMetadataNumber(value any) int64 {
+	switch n := value.(type) {
+	case int:
+		return int64(n)
+	case int64:
+		return n
+	case uint32:
+		return int64(n)
+	case float64:
+		if n >= 0 && n <= math.MaxInt32 && math.Trunc(n) == n {
+			return int64(n)
+		}
+	case json.Number:
+		number, err := n.Int64()
+		if err == nil {
+			return number
+		}
+	}
+	return 0
+}
+
+// tlsMeta reads older raw TLS windows. A recognizable HTTP/2 preface remains
+// undecoded here; arbitrary binary content does not identify its protocol.
 func tlsMeta(data, direction string) map[string]any {
 	if data == "" {
 		return nil
@@ -43,13 +176,6 @@ func tlsMeta(data, direction string) map[string]any {
 		if path != "" {
 			meta["path"] = path
 		}
-	default:
-		// Not recognizable HTTP/1.x text. If it is mostly non-printable it is
-		// almost certainly h2 frames (HPACK); label it rather than decode it.
-		if looksBinary(data) {
-			meta["protocol"] = "h2"
-			meta["headers_decoded"] = false
-		}
 	}
 
 	// Header-derived fields, present only when they fit the captured window
@@ -64,11 +190,17 @@ func tlsMeta(data, direction string) map[string]any {
 		}
 	}
 
-	// Best-effort model id: provenance metadata (which model was called), not
-	// content. Taken only if the "model" JSON key survived the 256B window; the
-	// message/prompt content is never read.
-	if model := jsonStringValue(data, "model"); model != "" {
-		meta["model"] = model
+	// Only a complete top-level JSON model field is metadata. A prompt containing
+	// the string "model" must not become the model identity.
+	body := data
+	if end := strings.Index(data, "\r\n\r\n"); end >= 0 {
+		body = data[end+4:]
+	}
+	var modelBody struct {
+		Model string `json:"model"`
+	}
+	if json.Unmarshal([]byte(body), &modelBody) == nil && boundedHTTPText(modelBody.Model, 256) != "" {
+		meta["model"] = modelBody.Model
 	}
 
 	if len(meta) == 0 {
@@ -160,54 +292,4 @@ func headerValue(data, name string) string {
 		}
 	}
 	return ""
-}
-
-// jsonStringValue finds `"key":"value"` anywhere in data and returns value, or
-// "" if absent. Intentionally tiny: it pulls a single scalar id, not structure.
-func jsonStringValue(data, key string) string {
-	needle := `"` + key + `"`
-	i := strings.Index(data, needle)
-	if i < 0 {
-		return ""
-	}
-	rest := data[i+len(needle):]
-	colon := strings.IndexByte(rest, ':')
-	if colon < 0 {
-		return ""
-	}
-	rest = rest[colon+1:]
-	open := strings.IndexByte(rest, '"')
-	if open < 0 {
-		return ""
-	}
-	rest = rest[open+1:]
-	end := strings.IndexByte(rest, '"')
-	if end < 0 {
-		return "" // value truncated by the capture window
-	}
-	return rest[:end]
-}
-
-// looksBinary reports whether the head of data is mostly non-printable, the
-// signature of HTTP/2 framing (length/type/flags bytes + HPACK) rather than
-// HTTP/1.x text.
-func looksBinary(data string) bool {
-	n := len(data)
-	if n > 64 {
-		n = 64
-	}
-	if n == 0 {
-		return false
-	}
-	nonPrintable := 0
-	for i := 0; i < n; i++ {
-		c := data[i]
-		if c == '\t' || c == '\r' || c == '\n' {
-			continue
-		}
-		if c < 0x20 || c > 0x7e {
-			nonPrintable++
-		}
-	}
-	return nonPrintable*5 > n // >20% non-printable
 }

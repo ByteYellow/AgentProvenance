@@ -69,6 +69,7 @@ type Signal struct {
 	Value             float64   `json:"value"`
 	Reference         string    `json:"reference,omitempty"`
 	Confidence        float64   `json:"confidence"`
+	ConfidenceSet     bool      `json:"-"` // True for an explicit zero; unset Go literals retain the legacy default.
 	RecommendedAction string    `json:"recommended_action,omitempty"`
 	ProducedBy        string    `json:"produced_by"`
 	EvidenceRefs      string    `json:"evidence_refs"` // JSON array; defaults to "[]"
@@ -115,7 +116,7 @@ func Export(db *sql.DB, runID string) (SignalSet, error) {
 // created_at, and JSON defaults when unset. Records projected from a legacy
 // silo (SourceTable+SourceID set) are idempotent: re-projecting the same source
 // row is a no-op rather than a duplicate.
-func Record(db *sql.DB, s Signal) (string, error) {
+func Record(db signalWriter, s Signal) (string, error) {
 	id, _, err := record(db, s)
 	return id, err
 }
@@ -127,7 +128,12 @@ func RecordCounting(db *sql.DB, s Signal) (bool, error) {
 	return inserted, err
 }
 
-func record(db *sql.DB, s Signal) (string, bool, error) {
+// Both a database and its owning transaction can persist a projection.
+type signalWriter interface {
+	Exec(string, ...any) (sql.Result, error)
+}
+
+func record(db signalWriter, s Signal) (string, bool, error) {
 	if !s.Dimension.Valid() {
 		return "", false, fmt.Errorf("signals: invalid dimension %q", s.Dimension)
 	}
@@ -143,8 +149,11 @@ func record(db *sql.DB, s Signal) (string, bool, error) {
 	if s.ID == "" {
 		s.ID = ids.New("sig")
 	}
-	if s.Confidence <= 0 {
+	if !s.ConfidenceSet && s.Confidence == 0 {
 		s.Confidence = 1
+	}
+	if err := validateConfidence(s.Confidence); err != nil {
+		return "", false, err
 	}
 	if s.EvidenceRefs == "" {
 		s.EvidenceRefs = "[]"
@@ -228,6 +237,7 @@ func Query(db *sql.DB, f Filter) ([]Signal, error) {
 			return nil, fmt.Errorf("signals: scan: %w", err)
 		}
 		s.Dimension = Dimension(dim)
+		s.ConfidenceSet = true
 		out = append(out, s)
 	}
 	return out, rows.Err()

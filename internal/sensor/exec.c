@@ -31,6 +31,10 @@ char LICENSE[] SEC("license") = "GPL";
 #define EVENT_UNLINK 10  // unlinkat: file delete
 #define EVENT_DNS 11     // getaddrinfo uprobe: resolved hostname (egress by name)
 #define EVENT_FORK 12
+#define EVENT_SSL_RESET 13
+#define EVENT_SSL_RELEASE 14
+#define EVENT_SYSCALL_RESULT 15
+#define EVENT_THREAD_EXIT 16
 #define AF_INET 2
 
 // argv is captured as fixed-size slots (constant offsets keep the BPF verifier
@@ -45,13 +49,20 @@ char LICENSE[] SEC("license") = "GPL";
 struct sensor_event {
 	__u32 kind;
 	__u32 pid;
-	__u32 tgid;
+	__u32 tid;
 	__u32 ppid;
 	__u64 cgroup_id;
 	__u64 ktime_ns;  // capture time, independent of userspace/ingest backlog
 	__u64 process_start_ns;
 	__u64 parent_start_ns;
+	__u64 thread_start_ns;
+	__u64 syscall_start_ns;
+	__s64 syscall_nr;
+	__s64 syscall_result;
+	__u32 syscall_kind;
+	__u32 raw_exit_status;
 	__u64 conn;      // tls: the SSL* pointer identifying the connection (reassembly key)
+	__u64 conn_epoch; // OpenSSL capture generation; zero for untracked TLS stacks
 	__u32 daddr;     // connect: dst IPv4 (net order); tls: valid bytes in this chunk
 	__u16 dport;     // connect: dst port (net order); tls: 1 if the message was truncated at the chunk cap
 	__s32 exit_code; // exit: process exit code; tls: total plaintext length of the call
@@ -60,8 +71,8 @@ struct sensor_event {
 	__u8 args[ARGS_BUF]; // exec: MAX_ARGS fixed slots of argv
 };
 
-// drops counts ring-buffer reservation failures, so userspace can surface a
-// coverage gap instead of going silently blind under load.
+// drops counts capture failures (including bounded read-context overflow), so
+// userspace can surface a coverage gap instead of going silently blind.
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
 	__uint(max_entries, 1);
@@ -75,6 +86,45 @@ static __always_inline void count_drop(void) {
 	if (d)
 		__sync_fetch_and_add(d, 1);
 }
+
+// A process can have several simultaneous TLS readers. Keep independent,
+// bounded stacks per pid_tgid, with task lifetime guarding against TID reuse.
+#define SSL_READ_DEPTH 4
+struct ssl_read_ctx {
+	__u64 buf;
+	__u64 ssl;
+	__u64 capacity;
+	__u64 readbytes;
+	__u64 epoch;
+};
+struct ssl_read_stack {
+	__u64 task_start;
+	__u32 depth;
+	__u32 reserved;
+	struct ssl_read_ctx frames[SSL_READ_DEPTH];
+};
+#define SSL_READ_MAP(name) \
+struct { \
+	__uint(type, BPF_MAP_TYPE_HASH); \
+	__uint(max_entries, 4096); \
+	__type(key, __u64); \
+	__type(value, struct ssl_read_stack); \
+} name SEC(".maps")
+SSL_READ_MAP(ssl_read_bufs);
+SSL_READ_MAP(ssl_read_ex_bufs);
+
+struct ssl_conn_key {
+	__u64 start;
+	__u64 conn;
+	__u32 pid;
+	__u32 reserved;
+};
+struct {
+	__uint(type, BPF_MAP_TYPE_LRU_HASH);
+	__uint(max_entries, 16384);
+	__type(key, struct ssl_conn_key);
+	__type(value, __u64);
+} ssl_epochs SEC(".maps");
 
 // argv_scratch stashes a process's argv (captured at sys_enter_execve) keyed by
 // pid, so the successful sched_process_exec emit can attach the real command
@@ -105,6 +155,40 @@ struct {
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 1 << 24);
 } events SEC(".maps");
+
+// One in-flight syscall per thread. Lifetime and syscall checks prevent a
+// missing return/exec/exit from pairing a later call with a stale entry.
+struct syscall_ctx {
+	__u64 task_start_ns;
+	__u64 start_ns;
+	__s64 nr;
+	__u64 path_ptr;
+	__u64 flags;
+	__u32 kind;
+	__u32 daddr;
+	__u16 dport;
+	__u8 path_retry;
+	__u8 reserved;
+	char path[256];
+};
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 4096);
+	__type(key, __u64);
+	__type(value, struct syscall_ctx);
+} syscall_calls SEC(".maps");
+
+struct process_exit_key {
+	__u64 start_ns;
+	__u32 pid;
+	__u32 reserved;
+};
+struct {
+	__uint(type, BPF_MAP_TYPE_LRU_HASH);
+	__uint(max_entries, 16384);
+	__type(key, struct process_exit_key);
+	__type(value, __u8);
+} exited_groups SEC(".maps");
 
 #if defined(__TARGET_ARCH_x86)
 // Cache the cgroup's kernel name while the task still exists. A short-lived Pod
@@ -159,12 +243,19 @@ static __always_inline void fill_common(struct sensor_event *e) {
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 	__u64 id = bpf_get_current_pid_tgid();
 	e->pid = (__u32)(id >> 32);
-	e->tgid = (__u32)id;
+	e->tid = (__u32)id;
 	e->ppid = BPF_CORE_READ(task, real_parent, tgid);
 	e->cgroup_id = bpf_get_current_cgroup_id();
 	e->ktime_ns = bpf_ktime_get_ns();
 	e->process_start_ns = BPF_CORE_READ(task, group_leader, start_time);
 	e->parent_start_ns = BPF_CORE_READ(task, real_parent, group_leader, start_time);
+	e->thread_start_ns = BPF_CORE_READ(task, start_time);
+	e->syscall_start_ns = 0;
+	e->syscall_nr = 0;
+	e->syscall_result = 0;
+	e->syscall_kind = 0;
+	e->raw_exit_status = 0;
+	e->conn_epoch = 0;
 #if defined(__TARGET_ARCH_x86)
 	capture_cgroup_identity(task, e->cgroup_id);
 #endif
@@ -185,9 +276,10 @@ int handle_fork(struct bpf_raw_tracepoint_args *ctx) {
 	fill_common(e);
 	e->kind = EVENT_FORK;
 	e->pid = pid;
-	e->tgid = pid;
+	e->tid = pid;
 	e->ppid = BPF_CORE_READ(child, real_parent, tgid);
 	e->process_start_ns = BPF_CORE_READ(child, group_leader, start_time);
+	e->thread_start_ns = BPF_CORE_READ(child, start_time);
 	e->parent_start_ns = BPF_CORE_READ(child, real_parent, group_leader, start_time);
 	// clone3(CLONE_INTO_CGROUP) can place the child in a different cgroup
 	// before this tracepoint. The current task is still the parent here.
@@ -225,6 +317,18 @@ int handle_execve(struct trace_event_raw_sys_enter *ctx) {
 
 SEC("tp/sched/sched_process_exec")
 int handle_exec(struct trace_event_raw_sched_process_exec *ctx) {
+	// A successful exec replaces the address space without returning from TLS.
+	// A non-leader exec also changes TID, so clear the pre-exec identity too.
+	__u64 id = bpf_get_current_pid_tgid();
+	__u64 old_id = (id & 0xffffffff00000000ULL) | (__u32)BPF_CORE_READ(ctx, old_pid);
+	bpf_map_delete_elem(&syscall_calls, &id);
+	bpf_map_delete_elem(&ssl_read_bufs, &id);
+	bpf_map_delete_elem(&ssl_read_ex_bufs, &id);
+	if (old_id != id) {
+		bpf_map_delete_elem(&syscall_calls, &old_id);
+		bpf_map_delete_elem(&ssl_read_bufs, &old_id);
+		bpf_map_delete_elem(&ssl_read_ex_bufs, &old_id);
+	}
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
 	if (!e) {
 		count_drop();
@@ -248,14 +352,30 @@ int handle_exec(struct trace_event_raw_sched_process_exec *ctx) {
 	return 0;
 }
 
+static __always_inline void fill_syscall(struct sensor_event *e, struct syscall_ctx *call) {
+	e->syscall_start_ns = call->start_ns;
+	e->syscall_nr = call->nr;
+	e->syscall_kind = call->kind;
+}
+
 SEC("tp/syscalls/sys_enter_connect")
 int handle_connect(struct trace_event_raw_sys_enter *ctx) {
+	__u64 id = bpf_get_current_pid_tgid();
+	bpf_map_delete_elem(&syscall_calls, &id);
 	struct sockaddr_in sa = {};
 	void *uaddr = (void *)ctx->args[1];
 	if (bpf_probe_read_user(&sa, sizeof(sa), uaddr))
 		return 0;
 	if (sa.sin_family != AF_INET)
 		return 0;
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	struct syscall_ctx call = {
+		.task_start_ns = BPF_CORE_READ(task, start_time),
+		.start_ns = bpf_ktime_get_ns(), .nr = ctx->id,
+		.kind = EVENT_CONNECT, .daddr = sa.sin_addr.s_addr, .dport = sa.sin_port,
+	};
+	if (bpf_map_update_elem(&syscall_calls, &id, &call, BPF_ANY))
+		count_drop();
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
 	if (!e) {
 		count_drop();
@@ -264,6 +384,7 @@ int handle_connect(struct trace_event_raw_sys_enter *ctx) {
 	e->exit_code = 0;
 	e->kind = EVENT_CONNECT;
 	fill_common(e);
+	fill_syscall(e, &call);
 	e->daddr = sa.sin_addr.s_addr;
 	e->dport = sa.sin_port;
 	e->path[0] = 0;
@@ -311,19 +432,9 @@ static __always_inline int noise_file_prefix(const char *p) {
 	return 0;
 }
 
-struct open_retry_ctx {
-	__u64 path;
-	__u64 flags;
-	__u64 ktime_ns;
-};
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 4096);
-	__type(key, __u64);
-	__type(value, struct open_retry_ctx);
-} open_retries SEC(".maps");
-
-static __always_inline int emit_open(const char *path, long flags, __u64 captured_at, long result) {
+static __always_inline int emit_open(const char *path, long flags, long nr) {
+	__u64 id = bpf_get_current_pid_tgid();
+	bpf_map_delete_elem(&syscall_calls, &id);
 	int is_write = (flags & OPEN_WRITE_MASK) != 0;
 	// Filter noise reads BEFORE reserving: a discarded ringbuf record still
 	// occupies space until drained, so the prefix check must precede reserve.
@@ -333,6 +444,19 @@ static __always_inline int emit_open(const char *path, long flags, __u64 capture
 		if (noise_read_prefix(pfx))
 			return 0;
 	}
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	struct syscall_ctx call = {
+		.task_start_ns = BPF_CORE_READ(task, start_time),
+		.start_ns = bpf_ktime_get_ns(), .nr = nr, .kind = EVENT_OPEN,
+		.path_ptr = (__u64)path, .flags = flags,
+	};
+	call.path_retry = bpf_probe_read_user_str(call.path, sizeof(call.path), path) <= 0;
+	if (bpf_map_update_elem(&syscall_calls, &id, &call, BPF_ANY))
+		count_drop();
+	// The kernel may fault the pathname in before return. Keep that later
+	// observation separate from paths already read at entry.
+	if (call.path_retry)
+		return 0;
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
 	if (!e) {
 		count_drop();
@@ -340,24 +464,11 @@ static __always_inline int emit_open(const char *path, long flags, __u64 capture
 	}
 	e->kind = EVENT_OPEN;
 	e->daddr = 0;
-	e->dport = captured_at ? 1 : 0;
+	e->dport = 0;
 	fill_common(e);
+	fill_syscall(e, &call);
 	e->args[0] = 0;
-	e->path[0] = 0;
-	long path_read = bpf_probe_read_user_str(&e->path, sizeof(e->path), path);
-	// Probe reads cannot fault in userspace pages. Retry only failed reads
-	// after the syscall has touched the pathname, retaining entry capture time.
-	if (path_read < 0 && !captured_at) {
-		__u64 tid = bpf_get_current_pid_tgid();
-		struct open_retry_ctx retry = {.path = (__u64)path, .flags = flags, .ktime_ns = e->ktime_ns};
-		if (bpf_map_update_elem(&open_retries, &tid, &retry, BPF_ANY))
-			count_drop();
-		bpf_ringbuf_discard(e, 0);
-		return 0;
-	}
-	if (captured_at)
-		e->ktime_ns = captured_at;
-	e->conn = (__u64)result; // open retry only: syscall return value, not a TLS connection
+	__builtin_memcpy(e->path, call.path, sizeof(e->path));
 	e->exit_code = is_write ? 0 : 1; // 0 = write, 1 = read
 	bpf_ringbuf_submit(e, 0);
 	return 0;
@@ -365,51 +476,105 @@ static __always_inline int emit_open(const char *path, long flags, __u64 capture
 
 SEC("tp/syscalls/sys_enter_openat")
 int handle_openat(struct trace_event_raw_sys_enter *ctx) {
-	return emit_open((const char *)ctx->args[1], (long)ctx->args[2], 0, 0);
+	return emit_open((const char *)ctx->args[1], (long)ctx->args[2], ctx->id);
+}
+
+static __always_inline int emit_syscall_result(struct trace_event_raw_sys_exit *ctx, __u32 kind) {
+	__u64 id = bpf_get_current_pid_tgid();
+	struct syscall_ctx *p = bpf_map_lookup_elem(&syscall_calls, &id);
+	if (!p)
+		return 0;
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	if (p->task_start_ns != BPF_CORE_READ(task, start_time) || p->nr != ctx->id || p->kind != kind) {
+		bpf_map_delete_elem(&syscall_calls, &id);
+		return 0;
+	}
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		bpf_map_delete_elem(&syscall_calls, &id);
+		return 0;
+	}
+	fill_common(e);
+	fill_syscall(e, p);
+	e->kind = EVENT_SYSCALL_RESULT;
+	e->syscall_result = ctx->ret;
+	e->exit_code = (p->flags & OPEN_WRITE_MASK) ? 0 : 1;
+	e->daddr = p->daddr;
+	e->dport = p->dport;
+	e->args[0] = 0;
+	__builtin_memcpy(e->path, p->path, sizeof(e->path));
+	if (kind == EVENT_OPEN && p->path_retry) {
+		// Retain the existing combined entry/retry record, with both timestamps.
+		e->kind = EVENT_OPEN;
+		e->dport = 1;
+		e->conn = (__u64)ctx->ret;
+		if (bpf_probe_read_user_str(e->path, sizeof(e->path), (void *)p->path_ptr) <= 0) {
+			count_drop();
+			bpf_ringbuf_discard(e, 0);
+			bpf_map_delete_elem(&syscall_calls, &id);
+			return 0;
+		}
+	}
+	bpf_map_delete_elem(&syscall_calls, &id);
+	bpf_ringbuf_submit(e, 0);
+	return 0;
 }
 
 SEC("tp/syscalls/sys_exit_openat")
 int handle_open_return(struct trace_event_raw_sys_exit *ctx) {
-	__u64 tid = bpf_get_current_pid_tgid();
-	struct open_retry_ctx *p = bpf_map_lookup_elem(&open_retries, &tid);
-	if (!p)
-		return 0;
-	struct open_retry_ctx retry = *p;
-	bpf_map_delete_elem(&open_retries, &tid);
-	return emit_open((const char *)retry.path, (long)retry.flags, retry.ktime_ns, ctx->ret);
+	return emit_syscall_result(ctx, EVENT_OPEN);
+}
+
+SEC("tp/syscalls/sys_exit_connect")
+int handle_connect_return(struct trace_event_raw_sys_exit *ctx) {
+	return emit_syscall_result(ctx, EVENT_CONNECT);
 }
 
 #if defined(__TARGET_ARCH_x86)
 SEC("tp/syscalls/sys_enter_open")
 int handle_open(struct trace_event_raw_sys_enter *ctx) {
-	return emit_open((const char *)ctx->args[0], (long)ctx->args[1], 0, 0);
+	return emit_open((const char *)ctx->args[0], (long)ctx->args[1], ctx->id);
 }
 #endif
 
-// Process (thread-group-leader) exit: bounds the process lifetime so the
-// correlation engine can close time windows and resist pid reuse. Also frees any
-// stale argv stash for the pid.
+// A leader can exit while worker threads continue. Close the process lifetime
+// only after all threads have left userspace; retain other exits as thread facts.
 SEC("tp/sched/sched_process_exit")
 int handle_exit(struct trace_event_raw_sched_process_template *ctx) {
 	__u64 id = bpf_get_current_pid_tgid();
-	bpf_map_delete_elem(&open_retries, &id);
-	if ((__u32)(id >> 32) != (__u32)id)
-		return 0; // only the group leader == process exit, not per-thread
+	bpf_map_delete_elem(&syscall_calls, &id);
+	bpf_map_delete_elem(&ssl_read_bufs, &id);
+	bpf_map_delete_elem(&ssl_read_ex_bufs, &id);
 	__u32 pid = (__u32)(id >> 32);
-	bpf_map_delete_elem(&argv_scratch, &pid);
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	__u32 kind = EVENT_THREAD_EXIT;
+	if (BPF_CORE_READ(task, signal, live.counter) == 0) {
+		struct process_exit_key key = {.start_ns = BPF_CORE_READ(task, group_leader, start_time), .pid = pid};
+		__u8 seen = 1;
+		if (!bpf_map_update_elem(&exited_groups, &key, &seen, BPF_NOEXIST))
+			kind = EVENT_EXIT;
+		bpf_map_delete_elem(&argv_scratch, &pid);
+	}
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
 	if (!e) {
 		count_drop();
 		return 0;
 	}
-	e->kind = EVENT_EXIT;
+	e->kind = kind;
 	e->daddr = 0;
 	e->dport = 0;
 	fill_common(e);
 	e->path[0] = 0;
 	e->args[0] = 0;
-	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-	e->exit_code = (BPF_CORE_READ(task, exit_code) >> 8) & 0xff;
+	e->raw_exit_status = BPF_CORE_READ(task, exit_code);
+	if (kind == EVENT_EXIT) {
+		if (BPF_CORE_READ(task, signal, flags) & 0x4) // SIGNAL_GROUP_EXIT
+			e->raw_exit_status = BPF_CORE_READ(task, signal, group_exit_code);
+		else
+			e->raw_exit_status = BPF_CORE_READ(task, group_leader, exit_code);
+	}
+	e->exit_code = (e->raw_exit_status >> 8) & 0xff;
 	bpf_ringbuf_submit(e, 0);
 	return 0;
 }
@@ -618,7 +783,79 @@ int BPF_UPROBE(handle_getaddrinfo, const char *node) {
 // when --ssl-lib is given. We emit the FULL buffer as ordered SSL_CHUNK-sized
 // chunks keyed by the SSL* pointer (conn); userspace reassembles them into
 // complete HTTP/1.1 or HTTP/2 messages.
-static __always_inline void emit_ssl_chunks(__u32 kind, __u64 conn, const char *buf, int total) {
+static __always_inline __u64 ssl_epoch(__u64 conn, int rotate, int release) {
+	if (!conn)
+		return 0;
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	struct ssl_conn_key key = {
+		.start = BPF_CORE_READ(task, group_leader, start_time),
+		.conn = conn, .pid = bpf_get_current_pid_tgid() >> 32,
+	};
+	__u64 *saved = bpf_map_lookup_elem(&ssl_epochs, &key);
+	__u64 epoch = saved ? *saved : 0;
+	if (release) {
+		bpf_map_delete_elem(&ssl_epochs, &key);
+		return epoch;
+	}
+	if (rotate || !epoch) {
+		epoch = bpf_ktime_get_ns();
+		// Concurrent first reads/writes must converge on one generation.
+		long err = bpf_map_update_elem(&ssl_epochs, &key, &epoch, rotate ? BPF_ANY : BPF_NOEXIST);
+		if (err && rotate) {
+			bpf_map_delete_elem(&ssl_epochs, &key);
+			count_drop();
+			return 0;
+		}
+		saved = bpf_map_lookup_elem(&ssl_epochs, &key);
+		if (!saved) {
+			count_drop();
+			return 0;
+		}
+		epoch = *saved;
+	}
+	return epoch;
+}
+
+static __always_inline void emit_ssl_boundary(__u64 conn, int release) {
+	__u64 epoch = ssl_epoch(conn, !release, release);
+	if (!epoch)
+		return;
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		return;
+	}
+	fill_common(e);
+	e->kind = release ? EVENT_SSL_RELEASE : EVENT_SSL_RESET;
+	e->conn = conn;
+	e->conn_epoch = epoch;
+	e->daddr = e->dport = e->exit_code = 0;
+	e->path[0] = e->args[0] = 0;
+	bpf_ringbuf_submit(e, 0);
+}
+
+SEC("uretprobe/SSL_new")
+int BPF_URETPROBE(handle_ssl_new, void *ssl) {
+	emit_ssl_boundary((__u64)ssl, 0);
+	return 0;
+}
+
+// Conservatively invalidate at clear/BIO/FD mutation entry, even if the call
+// later fails or changes only a reference. This is a capture boundary, not a
+// claim that a TCP connection closed. Chunk epochs survive lost boundary events.
+SEC("uprobe/SSL_clear")
+int BPF_UPROBE(handle_ssl_reset, void *ssl) {
+	emit_ssl_boundary((__u64)ssl, 0);
+	return 0;
+}
+
+SEC("uprobe/SSL_free")
+int BPF_UPROBE(handle_ssl_release, void *ssl) {
+	emit_ssl_boundary((__u64)ssl, 1);
+	return 0;
+}
+
+static __always_inline void emit_ssl_chunks(__u32 kind, __u64 conn, __u64 epoch, const char *buf, int total) {
 	for (int i = 0; i < SSL_MAX_CHUNKS; i++) {
 		int off = i * SSL_CHUNK;
 		if (off >= total)
@@ -639,6 +876,7 @@ static __always_inline void emit_ssl_chunks(__u32 kind, __u64 conn, const char *
 		e->dport = (total > SSL_CHUNK * SSL_MAX_CHUNKS && i == SSL_MAX_CHUNKS - 1) ? 1 : 0;
 		e->exit_code = total;
 		fill_common(e);
+		e->conn_epoch = epoch;
 		e->args[0] = 0;
 		if (bpf_probe_read_user(&e->path, len, buf + off)) {
 			bpf_ringbuf_discard(e, 0);
@@ -653,7 +891,7 @@ SEC("uprobe/SSL_write")
 int BPF_UPROBE(handle_ssl_write, void *ssl, const void *buf, int num) {
 	if (!buf || num <= 0)
 		return 0;
-	emit_ssl_chunks(EVENT_SSL, (__u64)ssl, (const char *)buf, num);
+	emit_ssl_chunks(EVENT_SSL, (__u64)ssl, ssl_epoch((__u64)ssl, 0, 0), (const char *)buf, num);
 	return 0;
 }
 
@@ -669,7 +907,7 @@ int handle_go_tls_write(struct pt_regs *ctx) {
 	__u64 len = ctx->cx;
 	if (!buf || len == 0 || len > (1u << 20))
 		return 0;
-	emit_ssl_chunks(EVENT_SSL, conn, buf, (int)len);
+	emit_ssl_chunks(EVENT_SSL, conn, 0, buf, (int)len);
 	return 0;
 }
 
@@ -761,7 +999,18 @@ int handle_go_tls_read_return(struct pt_regs *ctx) {
 		}
 		state.buf = hi - state.stack_buf_offset;
 	}
-	emit_ssl_chunks(EVENT_SSL_READ, state.conn, (const char *)state.buf, (int)n);
+	emit_ssl_chunks(EVENT_SSL_READ, state.conn, 0, (const char *)state.buf, (int)n);
+	return 0;
+}
+#endif
+
+#if defined(__TARGET_ARCH_arm64)
+// ARM64 Go ABIInternal uses R0/R1/R2 for this receiver and slice. Keep the
+// plaintext probe separate from OpenSSL lifecycle tracking.
+SEC("uprobe/go_tls_write")
+int BPF_UPROBE(handle_go_tls_write, void *conn, const void *buf, __u64 num) {
+	if (buf && num > 0 && num <= 0x7fffffff)
+		emit_ssl_chunks(EVENT_SSL, (__u64)conn, 0, (const char *)buf, (int)num);
 	return 0;
 }
 #endif
@@ -774,83 +1023,119 @@ SEC("uprobe/SSL_write_ex")
 int BPF_UPROBE(handle_ssl_write_ex, void *ssl, const void *buf, __u64 num) {
 	if (!buf || num == 0 || num > (1u << 20))
 		return 0;
-	emit_ssl_chunks(EVENT_SSL, (__u64)ssl, (const char *)buf, (int)num);
+	emit_ssl_chunks(EVENT_SSL, (__u64)ssl, ssl_epoch((__u64)ssl, 0, 0), (const char *)buf, (int)num);
 	return 0;
 }
 
-// SSL_read(ssl, buf, num): the plaintext lands in buf only AFTER the call, so we
-// stash (buf, ssl) at entry and read it on return (the return value is the count).
-struct ssl_read_ctx {
-	__u64 buf;
-	__u64 ssl;
-};
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 4096);
-	__type(key, __u32);
-	__type(value, struct ssl_read_ctx);
-} ssl_read_bufs SEC(".maps");
+static __always_inline void push_ssl_read(void *map, struct ssl_read_ctx *call) {
+	__u64 id = bpf_get_current_pid_tgid();
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	__u64 start = BPF_CORE_READ(task, start_time);
+	struct ssl_read_stack *stack = bpf_map_lookup_elem(map, &id);
+	if (!stack || stack->task_start != start) {
+		struct ssl_read_stack fresh = {.task_start = start};
+		if (bpf_map_update_elem(map, &id, &fresh, BPF_ANY)) {
+			count_drop();
+			return;
+		}
+		stack = bpf_map_lookup_elem(map, &id);
+		if (!stack) {
+			count_drop();
+			return;
+		}
+	}
+	__u32 depth = stack->depth;
+	// Retain skipped depth so an overflowing inner return cannot pop an outer
+	// buffer. Saturation poisons this thread's stack until exit instead of wrap.
+	if (depth == ~0u) {
+		count_drop();
+		return;
+	}
+	stack->depth = depth + 1;
+	if (depth >= SSL_READ_DEPTH) {
+		count_drop();
+		return;
+	}
+	stack->frames[depth] = *call;
+}
+
+static __always_inline int pop_ssl_read(void *map, struct ssl_read_ctx *call) {
+	__u64 id = bpf_get_current_pid_tgid();
+	struct ssl_read_stack *stack = bpf_map_lookup_elem(map, &id);
+	if (!stack)
+		return 0;
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	if (stack->task_start != BPF_CORE_READ(task, start_time) || !stack->depth) {
+		bpf_map_delete_elem(map, &id);
+		count_drop();
+		return 0;
+	}
+	if (stack->depth == ~0u)
+		return 0;
+	__u32 depth = stack->depth - 1;
+	stack->depth = depth;
+	if (depth >= SSL_READ_DEPTH)
+		return 0;
+	*call = stack->frames[depth];
+	if (!depth)
+		bpf_map_delete_elem(map, &id);
+	return 1;
+}
+
+// SSL_read's return value is the byte count; failed reads still pop a frame.
 
 SEC("uprobe/SSL_read")
 int BPF_UPROBE(handle_ssl_read_enter, void *ssl, void *buf, int num) {
-	__u32 pid = (__u32)(bpf_get_current_pid_tgid() >> 32);
-	struct ssl_read_ctx c = {.buf = (__u64)buf, .ssl = (__u64)ssl};
-	bpf_map_update_elem(&ssl_read_bufs, &pid, &c, BPF_ANY);
+	struct ssl_read_ctx c = {
+		.buf = (__u64)buf, .ssl = (__u64)ssl,
+		.capacity = num > 0 ? (__u64)num : 0,
+		.epoch = ssl_epoch((__u64)ssl, 0, 0),
+	};
+	push_ssl_read(&ssl_read_bufs, &c);
 	return 0;
 }
 
 SEC("uretprobe/SSL_read")
 int BPF_URETPROBE(handle_ssl_read_exit, int ret) {
-	__u32 pid = (__u32)(bpf_get_current_pid_tgid() >> 32);
-	struct ssl_read_ctx *c = bpf_map_lookup_elem(&ssl_read_bufs, &pid);
-	if (!c)
+	struct ssl_read_ctx c = {};
+	if (!pop_ssl_read(&ssl_read_bufs, &c) || ret <= 0)
 		return 0;
-	__u64 buf = c->buf, ssl = c->ssl;
-	bpf_map_delete_elem(&ssl_read_bufs, &pid);
-	if (ret <= 0 || buf == 0)
+	if (!c.buf || (__u64)ret > c.capacity) {
+		count_drop();
 		return 0;
-	emit_ssl_chunks(EVENT_SSL_READ, ssl, (const char *)buf, ret);
+	}
+	emit_ssl_chunks(EVENT_SSL_READ, c.ssl, c.epoch, (const char *)c.buf, ret);
 	return 0;
 }
 
 // SSL_read_ex(ssl, buf, num, *readbytes): the modern variant. Unlike SSL_read,
 // the byte count is written to *readbytes (not the return value, which is 1/0
 // success), so we stash the out-param pointer at entry and read *readbytes on
-// return. Separate map from SSL_read so the two paths never clobber each other.
-struct ssl_read_ex_ctx {
-	__u64 buf;
-	__u64 ssl;
-	__u64 readbytes; // *size_t out-param holding the count after the call
-};
-struct {
-	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 4096);
-	__type(key, __u32);
-	__type(value, struct ssl_read_ex_ctx);
-} ssl_read_ex_bufs SEC(".maps");
+// return. Independent stacks keep the legacy and *_ex ABIs separate.
 
 SEC("uprobe/SSL_read_ex")
 int BPF_UPROBE(handle_ssl_read_ex_enter, void *ssl, void *buf, __u64 num, __u64 *readbytes) {
-	__u32 pid = (__u32)(bpf_get_current_pid_tgid() >> 32);
-	struct ssl_read_ex_ctx c = {.buf = (__u64)buf, .ssl = (__u64)ssl, .readbytes = (__u64)readbytes};
-	bpf_map_update_elem(&ssl_read_ex_bufs, &pid, &c, BPF_ANY);
+	struct ssl_read_ctx c = {
+		.buf = (__u64)buf, .ssl = (__u64)ssl,
+		.capacity = num, .readbytes = (__u64)readbytes,
+		.epoch = ssl_epoch((__u64)ssl, 0, 0),
+	};
+	push_ssl_read(&ssl_read_ex_bufs, &c);
 	return 0;
 }
 
 SEC("uretprobe/SSL_read_ex")
 int BPF_URETPROBE(handle_ssl_read_ex_exit, int ret) {
-	__u32 pid = (__u32)(bpf_get_current_pid_tgid() >> 32);
-	struct ssl_read_ex_ctx *c = bpf_map_lookup_elem(&ssl_read_ex_bufs, &pid);
-	if (!c)
-		return 0;
-	__u64 buf = c->buf, ssl = c->ssl, rbptr = c->readbytes;
-	bpf_map_delete_elem(&ssl_read_ex_bufs, &pid);
-	if (ret <= 0 || buf == 0 || rbptr == 0)
+	struct ssl_read_ctx c = {};
+	if (!pop_ssl_read(&ssl_read_ex_bufs, &c) || ret != 1)
 		return 0;
 	__u64 n = 0;
-	bpf_probe_read_user(&n, sizeof(n), (void *)rbptr);
-	if (n == 0 || n > (1u << 20))
+	if (!c.buf || bpf_probe_read_user(&n, sizeof(n), (void *)c.readbytes) ||
+		n > c.capacity || n > (1u << 20)) {
+		count_drop();
 		return 0;
-	emit_ssl_chunks(EVENT_SSL_READ, ssl, (const char *)buf, (int)n);
+	}
+	if (n)
+		emit_ssl_chunks(EVENT_SSL_READ, c.ssl, c.epoch, (const char *)c.buf, (int)n);
 	return 0;
 }

@@ -1,6 +1,24 @@
 package telemetry
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestEventExplanationRetainsZeroConfidence(t *testing.T) {
+	explanation := ExplainEventRecord(EventRecord{EventType: "exec", Source: "agentprov_ebpf", CorrelationMethod: "unresolved", CorrelationConfidence: 0})
+	raw, err := json.Marshal(explanation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if string(fields["correlation_confidence"]) != "0" {
+		t.Fatalf("explicit zero omitted: %s", raw)
+	}
+}
 
 func TestCorrelationClass(t *testing.T) {
 	cases := []struct {

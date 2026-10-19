@@ -70,6 +70,41 @@ func runContextCLI(t *testing.T, dir string, args ...string) ([]byte, error) {
 	return out.Bytes(), err
 }
 
+func TestContextCaptureFlagsAndAppendPolicy(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(t.TempDir(), "transcript.jsonl")
+	input := `{"type":"session_meta","payload":{"id":"s"}}` + "\n" + `{"type":"response_item","payload":{"type":"function_call_output","call_id":"c","output":"RESULT"}}` + "\n"
+	if err := os.WriteFile(path, []byte(input), 0600); err != nil {
+		t.Fatal(err)
+	}
+	base := []string{"import", "--run", "run", "--file", path, "--harness", "codex"}
+	output, err := runContextCLI(t, dir, append(base, "--capture", "basic")...)
+	var result agentcontext.SaveResult
+	if err != nil || json.Unmarshal(output, &result) != nil || result.Coverage.CapturePolicy == nil || result.Coverage.CapturePolicy.Preset != "basic" {
+		t.Fatalf("basic import: %s %v", output, err)
+	}
+	output, err = runContextCLI(t, dir, base...)
+	if err != nil || json.Unmarshal(output, &result) != nil || result.Coverage.CapturePolicy.ToolResults || result.Stored != 0 {
+		t.Fatalf("append must reuse policy: %s %v", output, err)
+	}
+	if _, err := runContextCLI(t, dir, append(base, "--capture", "detailed")...); err == nil {
+		t.Fatal("mid-run retention change accepted")
+	}
+	other := append([]string{}, base...)
+	other[2] = "override"
+	output, err = runContextCLI(t, dir, append(other, "--capture", "basic", "--capture-tool-results=true")...)
+	if err != nil || json.Unmarshal(output, &result) != nil || !result.Coverage.CapturePolicy.ToolResults || result.Coverage.CapturePolicy.SourceRecords {
+		t.Fatalf("result override: %s %v", output, err)
+	}
+	invalidDir := filepath.Join(t.TempDir(), "not-created")
+	if _, err := runContextCLI(t, invalidDir, append(base, "--capture", "invalid")...); err == nil {
+		t.Fatal("invalid capture accepted")
+	}
+	if _, err := os.Stat(invalidDir); !os.IsNotExist(err) {
+		t.Fatal("invalid policy created storage")
+	}
+}
+
 func TestContextImportExitStatusRetainsCoverageJSON(t *testing.T) {
 	const session = `{"type":"session_meta","payload":{"id":"s"}}` + "\n"
 	for _, tc := range []struct {

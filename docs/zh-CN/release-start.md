@@ -12,18 +12,22 @@ Agent 会话和文件正文。站点也收录了完整的项目介绍、采集�
 ```
 
 点击**打开回放**查看签名执行记录，点击**阅读指南**查看图文说明。
-包内共有七份回放和九篇指南。回放无需 Go、Docker、Agent 账号或 API Key。
+包内共有九份回放和十一个指南入口。回放无需 Go、Docker、Agent 账号或 API Key。
 
-## 先看 DeepSeek 开发任务
+## 调查失败，再比较修复结果
 
 ```sh
-./agentprov demo deepseek-context
+./agentprov demo investigation-workflow
 ```
 
-真实 Agent 给 Python 报表增加按日汇总，并通过七项测试。
-执行图谱在上，**Agent 会话在下，默认收起**。展开会话可以查看任务和工具结果，
-在**权限与配置**中了解当时的设置，在**采集情况**中查看记录范围。
-选择图中的文件即可打开已保存的正文，收起会话后仍能继续阅读。
+一个真实 DeepSeek 会话委派代码审查、运行七项测试，并遇到可选诊断被拒绝。
+随后它继续原会话，关闭多余诊断，成功生成报表。命令会同时加载两份签名记录。
+
+在**对比**中，将 A 设为**诊断修复 · 修复前**，将 B 设为**诊断修复 · 修复后**。
+在**文件证据**中查看 `settings.json` 和报表；**配置**维度展示 Harness 设置。
+
+打开**关联会话**查看委派与继续执行关系。搜索具体报错，检查 AppArmor/seccomp 决策，
+比较保存的文件，再选择证据导出只读页面。任务、配置和采集情况均可从执行概览进入。
 
 CLI 先校验签名，再导入独立的临时目录。回放可以离线使用，不会重新运行记录中的命令。
 按 Ctrl-C 退出时，程序关闭本地服务并清理临时数据。
@@ -32,6 +36,7 @@ CLI 先校验签名，再导入独立的临时目录。回放可以离线使用�
 
 ```sh
 ./agentprov demo --list
+./agentprov demo deepseek-context
 ./agentprov demo multiagent-provenance
 ./agentprov demo k8s-cross-pod-a2a
 ./agentprov demo --no-browser

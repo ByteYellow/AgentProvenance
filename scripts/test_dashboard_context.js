@@ -21,7 +21,7 @@ async (page) => {
   for (const id of ['graphcard','siglist','focusedevidence','outboundcard','tl','ptree','egtbl','compliancecard']) check(await page.locator('#'+id).count()===1,'retains '+id);
   check(await page.locator('#runoverview .context-nav button').count()===5,'overview retains task, tool, file, configuration and coverage shortcuts');
   await page.getByRole('button',{name:'File evidence',exact:true}).click();
-  await page.waitForFunction(()=>Math.abs(document.querySelector('#savedcontent').getBoundingClientRect().top-document.querySelector('body > header').getBoundingClientRect().bottom-12)<5);
+  await page.waitForFunction(()=>{const top=document.querySelector('#savedcontent').getBoundingClientRect().top;return top>=document.querySelector('body > header').getBoundingClientRect().bottom && top<innerHeight;});
   check(!await page.locator('#context-fold').evaluate(el=>el.open),'file shortcut opens independent preview without expanding session');
   await page.getByRole('button',{name:'Permissions & configuration 2',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('#context-tab-configuration')?.getAttribute('aria-selected')==='true');
@@ -56,7 +56,7 @@ async (page) => {
   const tail = await page.locator('#content-body').innerText();
   await page.getByRole('button',{name:'Expand saved content',exact:true}).click();
   check(await page.locator('#content-dialog').evaluate(el=>el.open),'content expands independently');
-  await page.getByRole('button',{name:'Close',exact:true}).click();
+  await page.locator('#content-close').click();
   check(await page.locator('#content-body').innerText()===tail,'close preserves content page');
   await page.locator('#content-choice').selectOption('1');
   await readyBody('"fixture":true');
@@ -65,6 +65,7 @@ async (page) => {
   await readyBody('SAVED-OUTPUT-START');
   await toolResult().getByRole('button',{name:'Locate in graph',exact:true}).click();
   await page.locator('#detail-session').waitFor();
+  await page.locator('#detail > details > summary').click();
   check(await page.locator('#detail').innerText().then(text=>text.includes('python3 report.py') && text.includes('context-tool-')),'session follows exact recorded tool link');
   await page.locator('#detail-session').click();
   await page.waitForFunction(()=>document.querySelectorAll('#context-body [data-entry]').length===2);
@@ -100,6 +101,7 @@ async (page) => {
   await readyBody('SAVED-OUTPUT-START');
   await page.locator('#content-next').click();
   await readyBody('SAVED-OUTPUT-TAIL');
+  await page.locator('#inspection-tab-summary').click();
   await page.locator('#detail-content').click();
   await page.waitForFunction(()=>document.querySelector('#content-choice')?.selectedOptions[0]?.textContent==='Recorded graph content');
   check(true,'explicit graph content selection replaces the session preview');
@@ -132,7 +134,7 @@ async (page) => {
   check(await page.locator('#content-dialog').evaluate(el=>el.getBoundingClientRect().width<=innerWidth),'mobile dialog fits viewport');
   check(await page.locator('#content-next').evaluate(el=>el.getBoundingClientRect().bottom<=innerHeight && el.getBoundingClientRect().top>=0),'mobile dialog pagination stays visible');
   await page.screenshot({path:'output/playwright/context-mobile-content.png'});
-  await page.getByRole('button',{name:'关闭',exact:true}).click();
+  await page.locator('#content-close').click();
   await page.route('**/api/context/entries?*', route=>route.fulfill({status:503,contentType:'application/json',body:'{"error":{"message":"test unavailable"}}'}));
   await page.getByRole('button',{name:'刷新已保存记录',exact:true}).click();
   await page.locator('#context-body [role=alert]').waitFor();

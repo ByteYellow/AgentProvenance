@@ -161,6 +161,11 @@ printf 'value = 2\n' > app.py && echo note > note.txt && wait`,
 		}
 	}
 
+	// Exercise the same redaction boundary used by environment-loading launchers.
+	redactedCommand := `bash -c 'export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$ANTHROPIC_AUTH_TOKEN}"; echo ok'`
+	if _, err := db.Exec(`UPDATE fork_attempts SET command = ? WHERE id = ?`, redactedCommand, result.AttemptID); err != nil {
+		t.Fatal(err)
+	}
 	materialized, err := (provenance.ObjectStore{DB: db, Paths: paths}).MaterializeRun("run-record-test")
 	if err != nil {
 		t.Fatal(err)
@@ -209,6 +214,20 @@ printf 'value = 2\n' > app.py && echo note > note.txt && wait`,
 	}
 	if verify.ErrorCount != 0 {
 		t.Fatalf("verify errors=%d issues=%+v", verify.ErrorCount, verify.Issues)
+	}
+	if _, err := db.Exec(`UPDATE fork_attempts SET command = ? WHERE id = ?`, redactedCommand+"; echo changed", result.AttemptID); err != nil {
+		t.Fatal(err)
+	}
+	verify, err = provenance.Verify(db, "run-record-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundMismatch := false
+	for _, issue := range verify.Issues {
+		foundMismatch = foundMismatch || issue.Kind == "record_manifest_mismatch"
+	}
+	if !foundMismatch {
+		t.Fatal("accepted changed non-secret command text")
 	}
 }
 

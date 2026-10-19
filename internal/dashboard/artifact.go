@@ -70,6 +70,12 @@ func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
 		httpError(w, "mode must be body or raw", http.StatusBadRequest)
 		return
 	}
+	if s.replayProjection != nil {
+		if result, excluded := s.replayProjection.excludedArtifact(node, mode); excluded {
+			writeJSON(w, result)
+			return
+		}
+	}
 	offset, err := artifactRange(q.Get("offset"), 0)
 	if err != nil {
 		httpError(w, err.Error(), http.StatusBadRequest)

@@ -1,6 +1,7 @@
 package intent
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/hooksbridge"
 	"github.com/byteyellow/agentprovenance/internal/security"
+	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
 // Result summarizes a Materialize run.
@@ -30,7 +32,8 @@ const (
 )
 
 // Materialize computes the Intent-Runtime Diff for a run and persists it. It is
-// idempotent: prior diff rows and edges for the run are cleared first. It first
+// idempotent: attribution, diff rows, edges and signals share one transaction.
+// Read, write or commit failures preserve the previous analysis. It first
 // runs the command-match attribution (hooksbridge.CorrelateSyscalls) so runtime
 // effects are tied to the agent whose tool call caused them -- the effects are
 // normally pinned by the sensor to the record-scope tool call, not the agent's
@@ -39,6 +42,19 @@ func Materialize(db *sql.DB, runID string) (Result, error) {
 	if runID == "" {
 		return Result{}, fmt.Errorf("intent materialize: run id is required")
 	}
+	var res Result
+	err := store.WithTx(context.Background(), db, func(tx *sql.Tx) error {
+		var err error
+		res, err = materialize(tx, runID)
+		return err
+	})
+	if err != nil {
+		return Result{RunID: runID}, err
+	}
+	return res, nil
+}
+
+func materialize(db *sql.Tx, runID string) (Result, error) {
 	res := Result{RunID: runID, ByStatus: map[string]int{}}
 	eng := security.DefaultEngine()
 
@@ -53,7 +69,7 @@ func Materialize(db *sql.DB, runID string) (Result, error) {
 		return res, fmt.Errorf("intent materialize: read attribution: %w", err)
 	}
 	if existing == 0 {
-		if _, err := hooksbridge.CorrelateSyscalls(db, runID); err != nil {
+		if _, err := hooksbridge.CorrelateSyscallsTx(db, runID); err != nil {
 			return res, fmt.Errorf("intent materialize: correlate syscalls: %w", err)
 		}
 	}
@@ -67,7 +83,7 @@ func Materialize(db *sql.DB, runID string) (Result, error) {
 	}
 	res.Effects = len(effects)
 
-	contracts, err := ExtractContracts(db, runID, DefaultProfiles())
+	contracts, err := extractContracts(db, runID, DefaultProfiles())
 	if err != nil {
 		return res, fmt.Errorf("intent materialize: extract contracts: %w", err)
 	}
@@ -99,7 +115,7 @@ func Materialize(db *sql.DB, runID string) (Result, error) {
 // quality/security signals rather than living in a parallel silo, and any
 // consumer (dashboard, observe summary, launch verdict) sees it. Idempotent:
 // prior intent_conformance signals for the run are cleared first.
-func emitSignals(db *sql.DB, runID string, diffs []IntentRuntimeDiff) error {
+func emitSignals(db *sql.Tx, runID string, diffs []IntentRuntimeDiff) error {
 	if _, err := db.Exec(`DELETE FROM signals WHERE run_id = ? AND dimension = 'intent_conformance'`, runID); err != nil {
 		return err
 	}
@@ -169,7 +185,7 @@ var effectEventTypes = []string{"execve", "secret_path", "metadata_ip", "private
 // intent_coverage_gap rather than inventing a mismatch. This is the crux of the
 // honesty contract: an effect we cannot tie to captured intent is a gap, not a
 // rogue action.
-func normalizeEffects(db *sql.DB, runID string, eng security.Engine, allowLegacyWindows bool) ([]RuntimeEffect, error) {
+func normalizeEffects(db intentQueryer, runID string, eng security.Engine, allowLegacyWindows bool) ([]RuntimeEffect, error) {
 	// tool_call -> agent
 	agentOf := map[string]string{}
 	arows, err := db.Query(`SELECT id, agent_id FROM tool_calls WHERE run_id = ? AND agent_id != ''`, runID)
@@ -315,7 +331,7 @@ type toolCallWindows []toolCallWindow
 // Windows are only usable once hook events carry real timestamps (launch's
 // hook-log stamps them); tool_calls left at the synthetic epoch are ignored so a
 // bogus 2026-01-01 window can never bracket a real effect.
-func loadToolCallWindows(db *sql.DB, runID string) (toolCallWindows, error) {
+func loadToolCallWindows(db intentQueryer, runID string) (toolCallWindows, error) {
 	rows, err := db.Query(`SELECT id, agent_id, command, started_at, ended_at FROM tool_calls
 		WHERE run_id = ? AND agent_id != '' AND started_at != ''`, runID)
 	if err != nil {
@@ -395,12 +411,7 @@ func programName(command string) string {
 	return prog
 }
 
-func persistDiffs(db *sql.DB, runID string, diffs []IntentRuntimeDiff) error {
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+func persistDiffs(tx *sql.Tx, runID string, diffs []IntentRuntimeDiff) error {
 	if _, err := tx.Exec(`DELETE FROM intent_diffs WHERE run_id = ?`, runID); err != nil {
 		return err
 	}
@@ -440,7 +451,7 @@ func persistDiffs(db *sql.DB, runID string, diffs []IntentRuntimeDiff) error {
 			}
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 // insertEdge writes a graph edge with a per-persist monotonic id, so the primary

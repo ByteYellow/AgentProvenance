@@ -12,13 +12,21 @@ window.AgentProvReplay = (() => {
     if (!ref || !/^data\/[a-f0-9]{64}\.json\.gz$/.test(ref.path) || ref.sha256!==ref.path.slice(5,69) || !Number.isSafeInteger(ref.bytes) || ref.bytes < 0 || ref.bytes > 64 * 1024 * 1024) fail('Invalid replay asset');
     if (cache.has(ref.path)) { const value=cache.get(ref.path);cache.delete(ref.path);cache.set(ref.path,value);return value; }
     const pending = (async()=>{
-      const response=await fetch(new URL(ref.path,root));
-      if(!response.ok)fail('Replay data could not be loaded: HTTP '+response.status);
+      let bytes;
+      if(window.AgentProvOffline)bytes=await window.AgentProvOffline.read(ref);
+      else {
+        const response=await fetch(new URL(ref.path,root));
+        if(!response.ok)fail('Replay data could not be loaded: HTTP '+response.status);
+        bytes=new Uint8Array(await response.arrayBuffer());
+      }
       // Some static hosts transparently decode Content-Encoding: gzip.
-      let bytes=new Uint8Array(await response.arrayBuffer());
       if(bytes[0]===0x1f&&bytes[1]===0x8b){
-        const stream=new Response(bytes).body.pipeThrough(new DecompressionStream('gzip'));
-        bytes=new Uint8Array(await new Response(stream).arrayBuffer());
+        const reader=new Response(bytes).body.pipeThrough(new DecompressionStream('gzip')).getReader();
+        const chunks=[];let size=0;
+        try {
+          while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>ref.bytes)fail('Replay data size check failed');chunks.push(value);}
+        }finally{await reader.cancel();reader.releaseLock();}
+        bytes=new Uint8Array(size);let at=0;for(const chunk of chunks){bytes.set(chunk,at);at+=chunk.length;}
       }
       if(bytes.length!==ref.bytes)fail('Replay data size check failed');
       const digest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
@@ -31,7 +39,10 @@ window.AgentProvReplay = (() => {
     try{return await pending;}catch(error){remove(ref.path);throw error;}
   }
   async function manifest(){
-    if(!manifestPromise)manifestPromise=fetch(new URL('replay-manifest.json',root)).then(r=>{if(!r.ok)fail('Replay catalog unavailable');return r.json();}).then(v=>{if(v.schema_version!=='agentprovenance.static_replay/v1')fail('Unsupported replay format');return v;});
+    if(!manifestPromise){
+      const load=window.AgentProvOffline?Promise.resolve(window.AgentProvOffline.manifest()):fetch(new URL('replay-manifest.json',root)).then(r=>{if(!r.ok)fail('Replay catalog unavailable');return r.json();});
+      manifestPromise=load.then(v=>{if(v.schema_version!=='agentprovenance.static_replay/v1')fail('Unsupported replay format');return v;});
+    }
     return manifestPromise;
   }
   const clamp=(v,def,min,max)=>{const n=/^-?\d+$/.test(v||'')?Number(v):def;return Math.max(min,Math.min(max,n));};
@@ -79,7 +90,12 @@ window.AgentProvReplay = (() => {
     const lens=p.get('lens')||'',group=(p.get('group')||'').trim(),focus=(p.get('focus')||'').trim();
     const q=copy(run.filters[lens+'/'+group]||run.filters[lens+'/']||{});
     q.Type=p.get('type')||'';q.ToolCallID=p.get('tool_call')||'';q.ProcessID=p.get('process')||'';q.PID=p.get('pid')||'';
-    if(focus.startsWith('runtime_event/'))q.IDs=[focus.slice(14)];else if(focus.startsWith('runtime_process/pid/'))q.PID=focus.slice(20);else if(focus.startsWith('process/'))q.ProcessID=focus;else if(focus&&!focus.includes('/'))q.ToolCallID=focus;
+    if(focus.startsWith('runtime_event/'))q.IDs=[focus.slice(14)];
+    else if(focus.startsWith('runtime_process/')){
+      if(Object.hasOwn(run.event_refs||{},focus)){q.IDs=run.event_refs[focus];q.None=!q.IDs.length;}
+      else if(focus.startsWith('runtime_process/pid/'))q.PID=focus.slice(20);
+      else q.None=true;
+    }else if(focus.startsWith('process/'))q.ProcessID=focus;else if(focus&&!focus.includes('/'))q.ToolCallID=focus;
     return events.filter(e=>{
       if(q.None||(q.IDs?.length&&!q.IDs.includes(e.id))||(q.Types?.length&&!q.Types.includes(e.event_type)))return false;
       for(const [a,b] of [['Type','event_type'],['ToolCallID','tool_call_id'],['ProcessID','process_id'],['PID','pid']])if(q[a]&&String(e[b])!==String(q[a]))return false;
@@ -93,7 +109,7 @@ window.AgentProvReplay = (() => {
     const revisions=p.get('revisions')==='true';
     const entries=data.entries.filter(e=>{
       if(!revisions&&!latest.has(e.id))return false;if(node&&!linked.has(e.id))return false;
-      for(const [key,value] of [['source',e.source.id],['session',e.source.session_id],['kind',e.kind],['entry',e.id],['tool_call',e.tool_call_id]])if(p.get(key)&&p.get(key)!==value)return false;
+      for(const [key,value] of [['source',e.source.id],['session',e.source.session_id],['harness',e.source.harness],['kind',e.kind],['entry',e.id],['tool_call',e.tool_call_id]])if(p.get(key)&&p.get(key)!==value)return false;
       return !group||(group==='configuration'?['configuration','approval'].includes(e.kind):['message','tool_call','tool_result','task','session'].includes(e.kind));
     });
     const limit=clamp(p.get('limit'),50,1,200),query=new URLSearchParams(p);query.delete('cursor');query.delete('limit');query.sort();const fingerprint=query.toString();
@@ -105,6 +121,36 @@ window.AgentProvReplay = (() => {
     if(value===null)return fallback;
     if(!/^[0-9]+$/.test(value))fail('Invalid '+label);
     const n=Number(value);if(!Number.isSafeInteger(n)||n<min||n>max)fail('Invalid '+label);return n;
+  }
+  async function auditPage(index,p,id){
+    if(!index||index.schema_version!=='agentprovenance.replay_audit/v1')fail('Audit associations are not included in this replay');
+    for(const key of p.keys())if(!['run','event','limit','cursor'].includes(key)||p.getAll(key).length!==1)fail('Unsupported or repeated audit parameter');
+    const rule=index.rule||'agentprov.audit_lifecycle_operation/v1',event=p.get('event')||'',cursor=p.get('cursor')||'';
+    if(!['agentprov.audit_lifecycle_operation/v1','agentprov.audit_lifecycle_operation/v2'].includes(rule))fail('Unsupported audit association rule');
+    if(!id.trim()||encoder.encode(id).length>1024||encoder.encode(event).length>1024||encoder.encode(cursor).length>4096)fail('Invalid audit query');
+    const limit=range(p.get('limit'),100,1,500,'audit limit');let after='';
+    if(cursor){
+      let c;try{if(!/^[A-Za-z0-9_-]+$/.test(cursor))throw Error();c=JSON.parse(decoder.decode(Uint8Array.from(atob(cursor.replace(/-/g,'+').replace(/_/g,'/')),v=>v.charCodeAt(0))));}catch{fail('Invalid audit cursor');}
+      if(c?.Rule!==rule||c.RunID!==id||c.EventID!==event||typeof c.After!=='string'||!c.After||encoder.encode(c.After).length>1024)fail('Audit cursor does not match this query');after=c.After;
+    }
+    // SQLite orders IDs by UTF-8 bytes, not JavaScript's UTF-16 code units.
+    const cmp=(a,b)=>{const x=encoder.encode(a),y=encoder.encode(b);for(let i=0;i<Math.min(x.length,y.length);i++)if(x[i]!==y[i])return x[i]-y[i];return x.length-y.length;};
+    const out={schema_version:'agentprovenance.audit_associations/v1',rule,run_id:id,status:'complete',analysis_scope:'export_pages',limit,has_more:false,runtime_rows_examined:0,items:[]},issues=new Set();
+    for(const shard of index.pages){
+      if(cmp(shard.last,after)<=0||(event&&(cmp(event,shard.first)<0||cmp(event,shard.last)>0)))continue;
+      const page=await asset(shard.data);let used=false;
+      if(page.rule!==rule)fail('Audit association rule does not match the replay index');
+      for(const item of page.items){
+        if(cmp(item.event_id,after)<=0||(event&&item.event_id!==event))continue;
+        if(out.items.length===limit){out.has_more=true;break;}
+        out.items.push(copy(item));used=true;
+      }
+      if(used){out.runtime_rows_examined+=page.runtime_rows_examined;if(page.status==='incomplete')out.status='incomplete';for(const issue of page.issues||[])issues.add(issue);}
+      if(out.has_more)break;
+    }
+    if(issues.size)out.issues=[...issues];
+    if(out.has_more){const bytes=encoder.encode(JSON.stringify({Rule:rule,RunID:id,EventID:event,After:out.items.at(-1).event_id}));out.next_cursor=btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+    return out;
   }
   async function contentPage(pages,p,artifact){
     if(!pages)fail('Recorded content was not found in this replay');
@@ -121,20 +167,63 @@ window.AgentProvReplay = (() => {
     result.content=decoder.decode(bytes.slice(start,finish));result.offset=offset;result.next_offset=offset+finish-start;result.has_more=result.next_offset<result.total_bytes;
     if(artifact){result.truncated=result.has_more;if(!result.content)delete result.content;}return result;
   }
-  async function query(value){
+  async function queryData(value){
     const u=new URL(value,location.href),p=u.searchParams,path=u.pathname.replace(/^\/api\//,''),catalog=await manifest();
     if(path==='runs')return copy(catalog.summaries);
     const id=p.get('run');let run=catalog.runs[id];
     if(path==='frameworks'&&!run)run=catalog.runs[catalog.summaries[0].run];
-    if(!run)fail('The run was not found in this public demo');
+    if(!run)fail('The run was not found in this replay');
+    if(path==='audit/associations')return auditPage(run.audit,p,id);
+    if(path==='compare/records'){
+      if(p.has('harness')||p.has('session'))fail('Run comparison does not accept a session filter');
+      const ref=run.compare?.[p.get('cursor')||''];
+      if(!ref)fail('Comparison records are not included in this replay or the cursor does not match the run');
+      return copy(await asset(ref));
+    }
+    if(path==='search/sources'){
+      const pages=run.search?.[JSON.stringify([p.get('harness')||'',p.get('session')||''])],ref=pages?.[p.get('cursor')||''];
+      if(!ref)fail('Search sources are not included in this replay or the cursor does not match the scope');
+      return copy(await asset(ref));
+    }
+    if(path==='context/session-relations'){
+      const saved=run.sessions?.[JSON.stringify([p.get('harness'),p.get('session')])];
+      const ref=saved?.relations?.[p.get('cursor')||''];
+      if(!ref)fail('Session relationships are not included in this replay');
+      if(p.has('limit')&&p.get('limit')!=='50')fail('Replay relationship pages use a limit of 50');
+      const page=copy(await asset(ref));
+      for(const relation of page.relations)for(const endpoint of [relation.from,relation.to]){
+        if(endpoint.available){
+          const key=JSON.stringify([endpoint.harness,endpoint.session_id]);
+          if(endpoint.run_ids?.length){endpoint.run_ids=endpoint.run_ids.filter(id=>catalog.runs[id]?.sessions?.[key]);endpoint.available=endpoint.run_ids.length>0;}
+          else if(!catalog.runs[endpoint.run_id]?.sessions?.[key])endpoint.available=false;
+        }
+      }
+      return page;
+    }
+    let session=null;
+    if(['lens','events'].includes(path)&&(p.get('harness')||p.get('session'))){
+      session=run.sessions?.[JSON.stringify([p.get('harness'),p.get('session')])];
+      if(!session)fail('Recorded session scope is unavailable in this replay');
+    }
     if(path==='lens'){
-      const index=await asset(run.lenses),key=(p.get('lens')||'default')+'/'+(p.get('detail')||'summary');
+      const index=await asset(session?session.lenses:run.lenses),key=(p.get('lens')||'default')+'/'+(p.get('detail')||'summary');
       if(!index.views[key])fail('Unknown graph view');
       const [view,nodes]=await Promise.all([asset(index.views[key]),asset(p.get('focus')?index.focus_nodes:index.nodes)]);
+      if(session&&p.get('focus')&&!(index.present||[]).includes(p.get('focus'))&&!view.manifest.nodes.some(n=>n.id===p.get('focus')))fail('Focus is outside the recorded session graph');
       return lensView({views:{[key]:view},nodes,present:index.present},p);
     }
     if(path==='timeline')return pageEvents(await asset(run.timeline)||[],p);
-    if(path==='events')return pageEvents(filterEvents(await asset(run.events),p,run),p,{schema_version:'agentprovenance.dashboard_events/v1',filter:{run:id,lens:p.get('lens')||'',group:p.get('group')||'',focus:p.get('focus')||'',type:p.get('type')||'',tool_call:p.get('tool_call')||'',pid:p.get('pid')||''}});
+    if(path==='events'){
+      let events=filterEvents(await asset(run.events),p,run);
+      if(session){const ids=new Set(session.event_ids);events=events.filter(e=>ids.has(e.id));}
+      const result=pageEvents(events,p,{schema_version:'agentprovenance.dashboard_events/v1',filter:{run:id,lens:p.get('lens')||'',group:p.get('group')||'',focus:p.get('focus')||'',type:p.get('type')||'',tool_call:p.get('tool_call')||'',pid:p.get('pid')||'',harness:p.get('harness')||'',session:p.get('session')||''}});
+      if(session?.audit){
+        const relations=session.audit_relations?await asset(session.audit_relations):{};
+        result.session_audit=session.audit;result.session_associations={};
+        for(const event of result.events)if(relations[event.id])result.session_associations[event.id]=relations[event.id];
+      }
+      return result;
+    }
     if(path==='artifact'){const data=await asset(run.artifacts),key=(p.get('view_lang')||'en')+'/'+(p.get('mode')||'body')+'/'+p.get('node');return contentPage(data[key],p,true);}
     if(path.startsWith('context/')&&path!=='context/overview'){
       const data=await asset(run.context);
@@ -144,7 +233,14 @@ window.AgentProvReplay = (() => {
       if(path==='context/compare'){if(p.get('right_run')&&p.get('right_run')!==id)fail('Select snapshots from the current demo');const ref=data.comparisons[p.get('left')+'/'+p.get('right')];if(!ref)fail('Select two recorded snapshots of the same kind');return copy(await asset(ref));}
     }
     const key=path==='compliance'?path+'/'+p.get('framework'):path;
-    if(!Object.hasOwn(run.api,key))fail('Unsupported public replay query');return copy(await asset(run.api[key]));
+    if(!Object.hasOwn(run.api,key))fail('Unsupported replay query');return copy(await asset(run.api[key]));
+  }
+  async function query(value,{signal}={}){
+    signal?.throwIfAborted();
+    if(!signal)return queryData(value);
+    let onAbort;
+    const aborted=new Promise((_,reject)=>{onAbort=()=>reject(signal.reason);signal.addEventListener('abort',onAbort,{once:true});});
+    try{return await Promise.race([queryData(value),aborted]);}finally{signal.removeEventListener('abort',onAbort);}
   }
   return Object.freeze({query});
 })();

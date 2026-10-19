@@ -29,22 +29,29 @@ type sensorbpfGoReadKey struct {
 	Frame     uint64
 }
 
-type sensorbpfOpenRetryCtx struct {
-	Path    uint64
-	Flags   uint64
-	KtimeNs uint64
+type sensorbpfProcessExitKey struct {
+	StartNs  uint64
+	Pid      uint32
+	Reserved uint32
 }
 
 type sensorbpfSensorEvent struct {
 	Kind           uint32
 	Pid            uint32
-	Tgid           uint32
+	Tid            uint32
 	Ppid           uint32
 	CgroupId       uint64
 	KtimeNs        uint64
 	ProcessStartNs uint64
 	ParentStartNs  uint64
+	ThreadStartNs  uint64
+	SyscallStartNs uint64
+	SyscallNr      int64
+	SyscallResult  int64
+	SyscallKind    uint32
+	RawExitStatus  uint32
 	Conn           uint64
+	ConnEpoch      uint64
 	Daddr          uint32
 	Dport          uint16
 	_              [2]byte
@@ -55,15 +62,39 @@ type sensorbpfSensorEvent struct {
 	_              [4]byte
 }
 
-type sensorbpfSslReadCtx struct {
-	Buf uint64
-	Ssl uint64
+type sensorbpfSslConnKey struct {
+	Start    uint64
+	Conn     uint64
+	Pid      uint32
+	Reserved uint32
 }
 
-type sensorbpfSslReadExCtx struct {
-	Buf       uint64
-	Ssl       uint64
-	Readbytes uint64
+type sensorbpfSslReadStack struct {
+	TaskStart uint64
+	Depth     uint32
+	Reserved  uint32
+	Frames    [4]struct {
+		Buf       uint64
+		Ssl       uint64
+		Capacity  uint64
+		Readbytes uint64
+		Epoch     uint64
+	}
+}
+
+type sensorbpfSyscallCtx struct {
+	TaskStartNs uint64
+	StartNs     uint64
+	Nr          int64
+	PathPtr     uint64
+	Flags       uint64
+	Kind        uint32
+	Daddr       uint32
+	Dport       uint16
+	PathRetry   uint8
+	Reserved    uint8
+	Path        [256]int8
+	_           [4]byte
 }
 
 // loadSensorbpf returns the embedded CollectionSpec for sensorbpf.
@@ -108,6 +139,7 @@ type sensorbpfSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type sensorbpfProgramSpecs struct {
 	HandleConnect         *ebpf.ProgramSpec `ebpf:"handle_connect"`
+	HandleConnectReturn   *ebpf.ProgramSpec `ebpf:"handle_connect_return"`
 	HandleExec            *ebpf.ProgramSpec `ebpf:"handle_exec"`
 	HandleExecve          *ebpf.ProgramSpec `ebpf:"handle_execve"`
 	HandleExit            *ebpf.ProgramSpec `ebpf:"handle_exit"`
@@ -125,10 +157,13 @@ type sensorbpfProgramSpecs struct {
 	HandleSendto          *ebpf.ProgramSpec `ebpf:"handle_sendto"`
 	HandleSetgid          *ebpf.ProgramSpec `ebpf:"handle_setgid"`
 	HandleSetuid          *ebpf.ProgramSpec `ebpf:"handle_setuid"`
+	HandleSslNew          *ebpf.ProgramSpec `ebpf:"handle_ssl_new"`
 	HandleSslReadEnter    *ebpf.ProgramSpec `ebpf:"handle_ssl_read_enter"`
 	HandleSslReadExEnter  *ebpf.ProgramSpec `ebpf:"handle_ssl_read_ex_enter"`
 	HandleSslReadExExit   *ebpf.ProgramSpec `ebpf:"handle_ssl_read_ex_exit"`
 	HandleSslReadExit     *ebpf.ProgramSpec `ebpf:"handle_ssl_read_exit"`
+	HandleSslRelease      *ebpf.ProgramSpec `ebpf:"handle_ssl_release"`
+	HandleSslReset        *ebpf.ProgramSpec `ebpf:"handle_ssl_reset"`
 	HandleSslWrite        *ebpf.ProgramSpec `ebpf:"handle_ssl_write"`
 	HandleSslWriteEx      *ebpf.ProgramSpec `ebpf:"handle_ssl_write_ex"`
 	HandleUnlink          *ebpf.ProgramSpec `ebpf:"handle_unlink"`
@@ -145,10 +180,12 @@ type sensorbpfMapSpecs struct {
 	CgroupNames       *ebpf.MapSpec `ebpf:"cgroup_names"`
 	Drops             *ebpf.MapSpec `ebpf:"drops"`
 	Events            *ebpf.MapSpec `ebpf:"events"`
+	ExitedGroups      *ebpf.MapSpec `ebpf:"exited_groups"`
 	GoReadBufs        *ebpf.MapSpec `ebpf:"go_read_bufs"`
-	OpenRetries       *ebpf.MapSpec `ebpf:"open_retries"`
+	SslEpochs         *ebpf.MapSpec `ebpf:"ssl_epochs"`
 	SslReadBufs       *ebpf.MapSpec `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.MapSpec `ebpf:"ssl_read_ex_bufs"`
+	SyscallCalls      *ebpf.MapSpec `ebpf:"syscall_calls"`
 }
 
 // sensorbpfObjects contains all objects after they have been loaded into the kernel.
@@ -176,10 +213,12 @@ type sensorbpfMaps struct {
 	CgroupNames       *ebpf.Map `ebpf:"cgroup_names"`
 	Drops             *ebpf.Map `ebpf:"drops"`
 	Events            *ebpf.Map `ebpf:"events"`
+	ExitedGroups      *ebpf.Map `ebpf:"exited_groups"`
 	GoReadBufs        *ebpf.Map `ebpf:"go_read_bufs"`
-	OpenRetries       *ebpf.Map `ebpf:"open_retries"`
+	SslEpochs         *ebpf.Map `ebpf:"ssl_epochs"`
 	SslReadBufs       *ebpf.Map `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.Map `ebpf:"ssl_read_ex_bufs"`
+	SyscallCalls      *ebpf.Map `ebpf:"syscall_calls"`
 }
 
 func (m *sensorbpfMaps) Close() error {
@@ -190,10 +229,12 @@ func (m *sensorbpfMaps) Close() error {
 		m.CgroupNames,
 		m.Drops,
 		m.Events,
+		m.ExitedGroups,
 		m.GoReadBufs,
-		m.OpenRetries,
+		m.SslEpochs,
 		m.SslReadBufs,
 		m.SslReadExBufs,
+		m.SyscallCalls,
 	)
 }
 
@@ -202,6 +243,7 @@ func (m *sensorbpfMaps) Close() error {
 // It can be passed to loadSensorbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type sensorbpfPrograms struct {
 	HandleConnect         *ebpf.Program `ebpf:"handle_connect"`
+	HandleConnectReturn   *ebpf.Program `ebpf:"handle_connect_return"`
 	HandleExec            *ebpf.Program `ebpf:"handle_exec"`
 	HandleExecve          *ebpf.Program `ebpf:"handle_execve"`
 	HandleExit            *ebpf.Program `ebpf:"handle_exit"`
@@ -219,10 +261,13 @@ type sensorbpfPrograms struct {
 	HandleSendto          *ebpf.Program `ebpf:"handle_sendto"`
 	HandleSetgid          *ebpf.Program `ebpf:"handle_setgid"`
 	HandleSetuid          *ebpf.Program `ebpf:"handle_setuid"`
+	HandleSslNew          *ebpf.Program `ebpf:"handle_ssl_new"`
 	HandleSslReadEnter    *ebpf.Program `ebpf:"handle_ssl_read_enter"`
 	HandleSslReadExEnter  *ebpf.Program `ebpf:"handle_ssl_read_ex_enter"`
 	HandleSslReadExExit   *ebpf.Program `ebpf:"handle_ssl_read_ex_exit"`
 	HandleSslReadExit     *ebpf.Program `ebpf:"handle_ssl_read_exit"`
+	HandleSslRelease      *ebpf.Program `ebpf:"handle_ssl_release"`
+	HandleSslReset        *ebpf.Program `ebpf:"handle_ssl_reset"`
 	HandleSslWrite        *ebpf.Program `ebpf:"handle_ssl_write"`
 	HandleSslWriteEx      *ebpf.Program `ebpf:"handle_ssl_write_ex"`
 	HandleUnlink          *ebpf.Program `ebpf:"handle_unlink"`
@@ -232,6 +277,7 @@ type sensorbpfPrograms struct {
 func (p *sensorbpfPrograms) Close() error {
 	return _SensorbpfClose(
 		p.HandleConnect,
+		p.HandleConnectReturn,
 		p.HandleExec,
 		p.HandleExecve,
 		p.HandleExit,
@@ -249,10 +295,13 @@ func (p *sensorbpfPrograms) Close() error {
 		p.HandleSendto,
 		p.HandleSetgid,
 		p.HandleSetuid,
+		p.HandleSslNew,
 		p.HandleSslReadEnter,
 		p.HandleSslReadExEnter,
 		p.HandleSslReadExExit,
 		p.HandleSslReadExit,
+		p.HandleSslRelease,
+		p.HandleSslReset,
 		p.HandleSslWrite,
 		p.HandleSslWriteEx,
 		p.HandleUnlink,

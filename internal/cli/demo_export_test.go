@@ -81,3 +81,18 @@ func TestProjectPresentationDoesNotAlterCodeOrEnableScripts(t *testing.T) {
 		t.Fatalf("%s %v", result, err)
 	}
 }
+
+func TestDemoIncludesLinkedAPIContracts(t *testing.T) {
+	h := demoGallery(demo.Catalog())
+	for _, file := range []string{"audit-associations-api.yaml", "replay-export-api.yaml", "zh-CN/audit-associations-api.yaml"} {
+		route := "/demos/assets/docs/" + file
+		w := httptest.NewRecorder()
+		h(w, httptest.NewRequest("GET", route, nil))
+		if w.Code != 200 || !strings.Contains(w.Body.String(), "openapi:") {
+			t.Fatalf("missing API contract %s: status %d", file, w.Code)
+		}
+		if got := projectDocLink("docs/agent-context.md", file); got != route {
+			t.Errorf("contract link %s = %s; want %s", file, got, route)
+		}
+	}
+}

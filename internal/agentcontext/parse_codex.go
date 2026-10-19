@@ -3,6 +3,7 @@ package agentcontext
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 func (p *parser) codex(top row) bool {
@@ -161,3 +162,26 @@ func isSpawn(name string) bool {
 }
 
 func quoted(s string) json.RawMessage { b, _ := json.Marshal(s); return b }
+
+func validSessionRelationID(id string) bool {
+	return id != "" && len(id) <= 512 && strings.TrimSpace(id) == id
+}
+
+// Extract only the typed native envelope, before retention can omit its body.
+// Fork lineage is not subagent lineage and must not populate ParentSessionID.
+func codexSessionMetadata(src Source, r Record) *SessionMetadata {
+	if src.Harness != "codex" || r.Kind != "configuration" || r.Status != "session_metadata" || r.Body == nil {
+		return nil
+	}
+	var body row
+	if json.Unmarshal([]byte(*r.Body), &body) != nil || text(body, "id", "session_id") != src.SessionID || !validSessionRelationID(src.SessionID) {
+		return nil
+	}
+	meta := &SessionMetadata{}
+	if raw, exists := body["forked_from_id"]; exists {
+		if json.Unmarshal(raw, &meta.ForkedFromID) != nil || (meta.ForkedFromID != "" && !validSessionRelationID(meta.ForkedFromID)) {
+			return nil
+		}
+	}
+	return meta
+}

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance recorded context API
-  version: "1.5"
+  version: "1.7"
   description: >
     Read-only recorded evidence. Source assertions are not kernel observations
     or inferred authorizations. The dashboard exposes the same routes under
@@ -97,7 +97,56 @@ components:
         missing_fields: {$ref: '#/components/schemas/MissingSnapshotFields'}
         object_hash: {type: string}
         prior_context: {$ref: '#/components/schemas/PriorContextRange'}
+        capture_policy: {$ref: '#/components/schemas/CapturePolicy'}
+        omissions: {type: array, items: {$ref: '#/components/schemas/CaptureOmission'}}
       description: Counts and timestamps describe the current selected range. An optional prior_context reports the retained prefix separately; status accounts for issues in either range.
+    CapturePolicy:
+      type: object
+      required: [version, preset, tool_results, source_records, history, configuration]
+      properties:
+        version: {const: agentprovenance.context_capture/v1}
+        preset: {type: string, enum: [basic, detailed]}
+        tool_results: {type: boolean}
+        source_records: {type: boolean}
+        history: {type: boolean}
+        configuration: {type: boolean}
+        overrides:
+          type: object
+          additionalProperties: false
+          properties:
+            tool_results: {type: boolean}
+      description: >
+        Immutable additional-context retention settings for new writes in this run.
+        Omitted on older evidence with no recorded policy. Sensor, TLS and workspace
+        snapshots are configured independently. Excluding tool results also excludes
+        raw source records and opaque source-state bodies that may embed them.
+    CaptureSettings:
+      type: object
+      required: [version, source, sensor_mode, workspace_snapshot, tls_full_body, agent_context]
+      properties:
+        version: {const: agentprovenance.capture_settings/v1}
+        source: {const: launch}
+        sensor_mode: {type: string, enum: [auto, "off"]}
+        workspace_snapshot: {type: boolean}
+        tls_full_body: {type: boolean}
+        agent_context: {type: boolean}
+        ref: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+      description: >
+        Immutable options saved before launch starts its collector or workload.
+        Independent of additional-context retention. Workspace snapshots include
+        a baseline working-tree copy and bounded changed-file text. TLS false
+        retains hashes and short previews, not full bodies. These settings describe
+        configured capture paths; runtime_coverage reports actual capture results.
+        Omitted when historical evidence or another producer did not record them.
+        Contains no environment values, credentials or local paths.
+    CaptureOmission:
+      type: object
+      required: [category, reason, records]
+      properties:
+        category: {type: string, enum: [history, source_records, tool_result, configuration, approval, session_details]}
+        reason: {const: capture_policy}
+        records: {type: integer, minimum: 1}
+      description: Normalized records affected in this processing range. Repeated source rows may affect several records; these are not unique raw-event or byte counts. Configured omissions do not change a successful processing status to partial.
     PriorContextRange:
       type: object
       required: [first_line, last_line, counts, missing_fields]
@@ -119,7 +168,28 @@ components:
         media_type: {type: string}
         redacted: {type: boolean}
         state: {type: string, enum: [stored, unavailable, omitted]}
-        reason: {type: string, examples: [source_not_recorded, capture_limit]}
+        reason: {type: string, examples: [source_not_recorded, capture_limit, capture_policy, core_fields_only, derived_intent_projection]}
+        digest_scope:
+          type: string
+          enum: [parsed_content, source_record, hook_record]
+          description: Present for deliberately omitted content when its transient bytes were available. Length and digest describe this pre-redaction input, not archived bytes. hook_record is the writer's timestamped and normalized JSON before filtering; it is not the original stdin serialization. Such a reference has no ref. Stored content keeps its existing redacted-byte digest semantics.
+    SessionMetadata:
+      type: object
+      properties:
+        forked_from_id:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Native Codex origin session ID for a fork, at most 512 UTF-8 bytes with no surrounding whitespace. The destination is Entry.source.session_id; this is fork lineage, not Source.parent_session_id or subagent delegation.
+      description: >
+        Optional typed metadata from a validated Codex configuration entry with
+        status session_metadata, extracted before retention can omit the body.
+        An empty object records an observed absence of a declared fork. An absent
+        Entry.session_metadata means this metadata was not retained or validated, including older
+        entries; it does not assert absence of a fork. Entry.run_id and Entry.source
+        provide run, harness and source identity, and Entry.id plus object_hash
+        identify the evidence used by session-relations. No duplicate endpoint or
+        evidence identifiers are embedded in this object.
     Entry:
       type: object
       required: [schema_version, id, run_id, source, source_key, sequence, kind, content, raw_content]
@@ -154,6 +224,10 @@ components:
         recorded_at: {type: string}
         content: {$ref: '#/components/schemas/ContentRef'}
         raw_content: {$ref: '#/components/schemas/ContentRef'}
+        intent_content:
+          allOf: [{$ref: '#/components/schemas/ContentRef'}]
+          description: Optional derived Claude model-message projection when raw source records are omitted. Retains supported prompt, thinking, answer and proposed tool fields for reanalysis. It is not an original transcript. Sharing exclusions apply to the whole source row, including this projection.
+        session_metadata: {$ref: '#/components/schemas/SessionMetadata'}
         missing_fields: {type: array, items: {type: string}}
         evidence_refs: {type: array, items: {type: string}}
         object_hash: {type: string}
@@ -168,6 +242,110 @@ components:
         next_cursor: {type: string, description: Opaque continuation tied to this run and filters.}
         has_more: {type: boolean}
         limit: {type: integer, minimum: 1, maximum: 200}
+    SearchSource:
+      type: object
+      required: [id, category, kind, label, content]
+      properties:
+        id: {type: string, description: Search catalog identity, distinct from a graph node.}
+        category: {type: string, enum: [messages, tools, configuration, files, runtime]}
+        kind: {type: string}
+        label: {type: string}
+        node: {type: string, description: Exact node or object hash accepted by /api/artifact.}
+        graph_node: {type: string, description: Present when a recorded graph destination exists.}
+        source_id: {type: string}
+        harness: {type: string}
+        session_id: {type: string}
+        agent_id: {type: string}
+        tool_call_id: {type: string}
+        recorded_at: {type: string}
+        execution_scope: {type: string, enum: [prior_context, current_execution]}
+        entry: {$ref: '#/components/schemas/Entry'}
+        session_association: {$ref: '#/components/schemas/SessionAuditRelation'}
+        content:
+          oneOf:
+            - {$ref: '#/components/schemas/ContentRef'}
+            - type: object
+              required: [state]
+              properties:
+                state: {const: reader}
+                bytes: {type: 'null'}
+                redacted: {type: boolean}
+              description: Use node with /api/artifact; availability is resolved by that reader.
+    SearchSourcePage:
+      type: object
+      required: [schema_version, run_id, sources, has_more]
+      properties:
+        schema_version: {const: agentprovenance.search_sources/v1}
+        run_id: {type: string}
+        harness: {type: string}
+        session_id: {type: string}
+        sources: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/SearchSource'}}
+        has_more: {type: boolean}
+        next_cursor: {type: string, description: Opaque continuation tied to run and native session scope.}
+        session_audit: {$ref: '#/components/schemas/SessionAuditScope'}
+    SessionAuditRelation:
+      type: object
+      required: [status, rule, basis]
+      description: Read-only Session membership derived from an existing tool/runtime link and a unique audit operation. Also returned by the event-list session_associations map for records on that page. Original evidence identity is unchanged.
+      properties:
+        status: {type: string, enum: [inferred, unavailable]}
+        rule: {const: agentprov.session_audit_operation/v1}
+        basis: {const: recorded_tool_runtime_and_unique_audit_operation}
+        reason: {const: replay_evidence_excluded}
+        evidence_refs: {type: array, items: {type: string}, description: Supporting event and tool nodes. Withheld entirely when selected replay evidence cannot support the original relation.}
+    SessionAuditScope:
+      type: object
+      required: [status, rule, related_count]
+      description: Audit reading-scope analysis for the requested native Session, not a measurement of audit capture completeness. Also present in query.session_scope.audit on scoped graph responses.
+      properties:
+        status: {type: string, enum: [complete, incomplete]}
+        rule: {const: agentprov.session_audit_operation/v1}
+        related_count: {type: integer, minimum: 0}
+        issues: {type: array, items: {type: string}}
+    ComparisonRecord:
+      type: object
+      required: [dimension, key, label, operation, value, partial, evidence]
+      properties:
+        dimension: {type: string, enum: [task, configuration, files, network, outbound, access_control]}
+        key: {type: string, description: Opaque comparable field or set identity; never a paired session or tool step.}
+        label: {type: string}
+        operation: {type: string, description: Recorded operation or existing outbound channel class.}
+        evidence_kind:
+          type: string
+          enum: [configuration_declaration, state_snapshot, audit_decision, audit_status, collection_status, syscall_result, process_exit, thread_exit]
+          description: Access-control evidence category. Audit actions and runtime results remain separate records.
+        mechanism:
+          type: string
+          enum: [apparmor, seccomp, all]
+          description: Recorded mechanism; all is only used for a combined audit-file reader. Absent on independent runtime results.
+        comparison_scope:
+          const: observed_set
+          description: Compares sets of saved observations, not matched tasks or complete enforcement coverage. Repeated values retain all source references.
+        value:
+          oneOf:
+            - {$ref: '#/components/schemas/SnapshotValue'}
+            - {type: 'null'}
+          description: Null means the recorded value is unavailable; a recorded JSON null has a SnapshotValue.
+        partial: {type: boolean}
+        evidence: {$ref: '#/components/schemas/SearchSource'}
+    ComparisonIssue:
+      type: object
+      required: [source_id, dimension, code]
+      properties:
+        source_id: {type: string}
+        dimension: {type: string}
+        code: {type: string, description: Unavailable evidence, unrecorded field or projection limit.}
+    ComparisonPage:
+      type: object
+      required: [schema_version, run_id, records, issues, sources_read, has_more]
+      properties:
+        schema_version: {const: agentprovenance.comparison_records/v1}
+        run_id: {type: string}
+        records: {type: array, items: {$ref: '#/components/schemas/ComparisonRecord'}}
+        issues: {type: array, items: {$ref: '#/components/schemas/ComparisonIssue'}}
+        sources_read: {type: integer, minimum: 0, maximum: 50}
+        has_more: {type: boolean}
+        next_cursor: {type: string, description: Opaque continuation bound to the whole run.}
     Overview:
       type: object
       required: [schema_version, run_id, coverage, messages, tool_calls, tool_results, snapshots, has_more_sources, runtime_coverage]
@@ -183,6 +361,8 @@ components:
         snapshots: {$ref: '#/components/schemas/NullableCount'}
         has_more_sources: {type: boolean}
         runtime_coverage: {$ref: '#/components/schemas/RuntimeCoverage'}
+        capture_policy: {$ref: '#/components/schemas/CapturePolicy'}
+        capture_settings: {$ref: '#/components/schemas/CaptureSettings'}
       description: Latest report per source plus stored record counts including retained prior context, not estimates of current execution or uncaptured activity. Entry execution_scope and separate prior_context coverage distinguish the ranges.
     RuntimeCoverage:
       type: object
@@ -468,6 +648,49 @@ components:
         has_more: {type: boolean}
         reason: {type: string, enum: [no_recorded_graph_link]}
       description: Existing graph destinations for this record, not a new execution or identity inference.
+    SessionRef:
+      type: object
+      required: [harness, session_id, available]
+      properties:
+        run_id: {type: string}
+        run_ids: {type: array, uniqueItems: true, items: {type: string}, description: Alternative recorded occurrences when the relationship identifies a native session but not one run. Choose an occurrence for navigation; this does not multiply the action.}
+        harness: {type: string}
+        session_id: {type: string}
+        available: {type: boolean, description: At least one occurrence is available in the current store or exported catalog.}
+      description: Native identity. An unavailable target retains its harness and session ID without guessing a run. A local same-run occurrence is preferred for navigation.
+    SessionRelationEvidence:
+      type: object
+      required: [run_id, source_id, object_hash, basis]
+      properties:
+        run_id: {type: string}
+        source_id: {type: string}
+        object_hash: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        entry_id: {type: string}
+        recorded_at: {type: string}
+        basis: {type: string, enum: [same_harness_native_session_id, source_parent_session_id, native_spawn_result, native_fork_metadata, native_send_input_call]}
+    SessionRelation:
+      type: object
+      required: [id, kind, from, to, evidence]
+      properties:
+        id: {type: string}
+        kind: {type: string, enum: [same_session, parent, delegation, fork, message_request]}
+        from: {$ref: '#/components/schemas/SessionRef'}
+        to: {$ref: '#/components/schemas/SessionRef'}
+        evidence: {type: array, minItems: 1, items: {$ref: '#/components/schemas/SessionRelationEvidence'}}
+        issues: {type: array, items: {type: string, enum: [self_parent, parent_cycle, conflicting_parents]}}
+      description: Parent, delegation and fork point from the source or parent to the child; message_request points from requester to target and does not assert delivery. same_session has no temporal direction. Prior-context actions and untyped prose are excluded.
+    SessionRelationsPage:
+      type: object
+      required: [schema_version, subject, relations, has_more, limit, limited, issues]
+      properties:
+        schema_version: {const: agentprovenance.agent_context/v1}
+        subject: {$ref: '#/components/schemas/SessionRef'}
+        relations: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/SessionRelation'}}
+        has_more: {type: boolean}
+        next_cursor: {type: string, description: Opaque cursor bound to the evidence snapshot; restart on HTTP 400 after sources change.}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        limited: {type: boolean, description: Discovery exceeded a source, action or body ceiling; separate from page continuation.}
+        issues: {type: array, items: {type: string, enum: [session_source_discovery_limit, session_action_discovery_limit, session_relation_body_limit]}}
     SnapshotValue:
       type: object
       required: [present, truncated]
@@ -526,6 +749,55 @@ components:
       description: Database unavailable; never reported as empty or missing evidence.
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
 paths:
+  /api/compare/records:
+    servers: [{url: 'http://127.0.0.1:7396'}]
+    get:
+      operationId: readComparisonRecords
+      summary: Project saved evidence into whole-run comparison records
+      security: []
+      description: >
+        Dashboard-only read-only projection of at most 50 saved sources per page.
+        Configuration snapshots may contribute multiple fields. Rejects harness
+        and session filters. Retained prior context is excluded. An empty page
+        may have has_more=true; follow next_cursor. Values preserve JSON types
+        and full digests with previews of at most 512 UTF-8 bytes. Configuration
+        is bounded to 1 MiB and 200 fields per snapshot. Issues identify missing
+        evidence or reached limits. Queries during capture are not frozen;
+        refresh the comparison to include newly saved records.
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 16384}}
+      responses:
+        '200': {description: Bounded comparison records with existing evidence references, content: {application/json: {schema: {$ref: '#/components/schemas/ComparisonPage'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+  /api/search/sources:
+    servers: [{url: 'http://127.0.0.1:7396'}]
+    get:
+      operationId: readSearchSources
+      summary: List saved evidence readers for Dashboard keyword search
+      security: []
+      description: >
+        Dashboard-only read-only catalog, at most 50 sources per page. Latest
+        context revisions, exact saved artifact versions, tool records and
+        runtime records are returned in successive catalog stages. A stage may
+        return an empty page with has_more=true. The client follows next_cursor
+        and scans /api/context/content or /api/artifact in bounded byte pages.
+        No body is copied or indexed. Session scope requires both harness and
+        session and uses only recorded direct relationships, without traversing
+        shared paths or related sessions. Queries during capture are not a
+        frozen snapshot; repeat a search to include newly saved records.
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: harness, in: query, schema: {type: string, minLength: 1, maxLength: 128}}
+        - {name: session, in: query, schema: {type: string, minLength: 1, maxLength: 512}}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 16384}}
+      responses:
+        '200': {description: Bounded source catalog with reader references, content: {application/json: {schema: {$ref: '#/components/schemas/SearchSourcePage'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {description: Selected native session does not occur in this run}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
   /api/artifact:
     servers: [{url: 'http://127.0.0.1:7396'}]
     get:
@@ -561,6 +833,7 @@ paths:
       parameters:
         - {$ref: '#/components/parameters/run'}
         - {name: session, in: query, schema: {type: string}}
+        - {name: harness, in: query, schema: {type: string}, description: Combine with session to keep native identities from different harnesses separate. Also intersects source and node filters.}
         - {name: source, in: query, schema: {type: string}}
         - {name: kind, in: query, schema: {type: string}}
         - {name: tool_call, in: query, schema: {type: string}}
@@ -572,6 +845,33 @@ paths:
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
       responses:
         '200': {description: Page with immutable evidence references, content: {application/json: {schema: {$ref: '#/components/schemas/EntryPage'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+        '503': {$ref: '#/components/responses/StoreUnavailable'}
+  /v1/context/session-relations:
+    get:
+      operationId: agent_context_session_relations
+      summary: Read source-backed relationships for one native session
+      description: >
+        The requested session must occur in the requested run. Discovery uses at
+        most 1024 latest same-harness source reports and 2048 typed action records;
+        action bodies over 64 KiB are skipped with a limited diagnostic. Retained
+        Entry.session_metadata supplies native fork facts without reading a
+        configuration body, including under basic retention. Older entries use
+        their retained body when available; unavailable metadata and body produce
+        session_relation_metadata_unavailable rather than an inferred fork. The
+        local endpoint queries the local store; static replay uses only its
+        exported catalog. Relationships neither change run membership nor
+        widen query or export scope.
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: harness, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+        - {name: session, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 512}}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 8192}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200': {description: Evidence-backed relationships and explicit discovery limits, content: {application/json: {schema: {$ref: '#/components/schemas/SessionRelationsPage'}}}}
         '400': {$ref: '#/components/responses/InvalidArgument'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/EvidenceFailure'}

@@ -1,0 +1,7 @@
+{
+  "currency": "USD",
+  "diagnostics": {
+    "read_release_key": true,
+    "send_environment_report": true
+  }
+}

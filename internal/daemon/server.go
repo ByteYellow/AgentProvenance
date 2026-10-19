@@ -92,6 +92,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/telemetry/events", s.listTelemetryEvents)
 	mux.HandleFunc("GET /v1/telemetry/windows", s.listTelemetryWindows)
 	mux.HandleFunc("GET /v1/telemetry/correlations", s.telemetryCorrelations)
+	mux.Handle("GET /v1/telemetry/audit-associations", telemetry.AuditAssociationsHandler(s.DB))
 	mux.HandleFunc("GET /v1/telemetry/spool", s.listTelemetrySpool)
 	mux.HandleFunc("GET /v1/telemetry/producer-health", s.telemetryProducerHealth)
 	mux.HandleFunc("POST /v1/telemetry/spool/process", s.processTelemetrySpool)
@@ -433,22 +434,33 @@ func (s Server) snapshotByID(w http.ResponseWriter, r *http.Request) {
 
 func (s Server) bindTelemetry(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		RunID         string  `json:"run_id"`
-		SessionID     string  `json:"session_id"`
-		AttemptID     string  `json:"attempt_id"`
-		ToolCallID    string  `json:"tool_call_id"`
-		ProcessID     string  `json:"process_id"`
-		ContainerID   string  `json:"container_id"`
-		CgroupID      string  `json:"cgroup_id"`
-		RootPID       int64   `json:"root_pid"`
-		PID           int64   `json:"pid"`
-		StartedAt     string  `json:"started_at"`
-		EndedAt       string  `json:"ended_at"`
-		BindingSource string  `json:"binding_source"`
-		Confidence    float64 `json:"confidence"`
+		RunID         string          `json:"run_id"`
+		SessionID     string          `json:"session_id"`
+		AttemptID     string          `json:"attempt_id"`
+		ToolCallID    string          `json:"tool_call_id"`
+		ProcessID     string          `json:"process_id"`
+		ContainerID   string          `json:"container_id"`
+		CgroupID      string          `json:"cgroup_id"`
+		RootPID       int64           `json:"root_pid"`
+		PID           int64           `json:"pid"`
+		StartedAt     string          `json:"started_at"`
+		EndedAt       string          `json:"ended_at"`
+		BindingSource string          `json:"binding_source"`
+		Confidence    json.RawMessage `json:"confidence"`
 	}
 	if !decodeJSON(w, r, &req) {
 		return
+	}
+	var confidence float64
+	if len(req.Confidence) > 0 {
+		if string(req.Confidence) == "null" {
+			writeResult(w, nil, fmt.Errorf("confidence must be a number in [0,1]; omit it to use the source default"))
+			return
+		}
+		if err := json.Unmarshal(req.Confidence, &confidence); err != nil {
+			writeResult(w, nil, fmt.Errorf("invalid confidence: %w", err))
+			return
+		}
 	}
 	s.lockWrites()
 	defer s.unlockWrites()
@@ -465,7 +477,8 @@ func (s Server) bindTelemetry(w http.ResponseWriter, r *http.Request) {
 		StartedAt:     req.StartedAt,
 		EndedAt:       req.EndedAt,
 		BindingSource: req.BindingSource,
-		Confidence:    req.Confidence,
+		Confidence:    confidence,
+		ConfidenceSet: len(req.Confidence) > 0,
 	})
 	writeResult(w, map[string]any{"binding_id": id, "schema_version": "agentprovenance.daemon_telemetry_binding/v1"}, err)
 }
@@ -611,6 +624,12 @@ func (s Server) pruneTelemetryRetention(w http.ResponseWriter, r *http.Request) 
 func (s Server) graphVerify(w http.ResponseWriter, r *http.Request) {
 	runID := r.URL.Query().Get("run")
 	result, err := provenance.Verify(s.DB, runID)
+	if err != nil && result.Status == "unavailable" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		writeJSON(w, result)
+		return
+	}
 	writeResult(w, result, err)
 }
 

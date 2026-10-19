@@ -130,6 +130,106 @@ func TestCorrelationRetriesAndProcessLifetimes(t *testing.T) {
 	}
 }
 
+func TestCorrelationHonorsCapturedProcessIdentity(t *testing.T) {
+	const boot = "01234567-89ab-cdef-0123-456789abcdef"
+	const otherBoot = "11234567-89ab-cdef-0123-456789abcdef"
+	for _, tc := range []struct {
+		name, kind, instance, parent, host string
+		pid, ppid                          int64
+		want                               int
+	}{
+		{"same lifetime", "file_write", boot + ":100:100", "", "host-a", 100, 1, 2},
+		{"reused PID without captured exec", "file_write", boot + ":100:500", "", "host-a", 100, 1, 1},
+		{"different boot", "file_write", otherBoot + ":100:100", "", "host-a", 100, 1, 1},
+		{"different host", "file_write", boot + ":100:100", "", "host-b", 100, 1, 1},
+		{"missing lifetime", "file_write", "", "", "host-a", 100, 1, 1},
+		{"invalid lifetime", "file_write", "invalid", "", "host-a", 100, 1, 1},
+		{"exact parent", "execve", boot + ":101:200", boot + ":100:100", "host-a", 101, 100, 2},
+		{"reused parent PID", "execve", boot + ":101:600", boot + ":100:500", "host-a", 101, 100, 1},
+		{"missing parent identity", "execve", boot + ":101:200", "", "host-a", 101, 100, 1},
+		{"parent from another boot", "execve", otherBoot + ":101:200", boot + ":100:100", "host-a", 101, 100, 1},
+		{"parent newer than child", "execve", boot + ":101:50", boot + ":100:100", "host-a", 101, 100, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, _ := openTestStore(t)
+			correlationTool(t, db, "call", "python task.py", 0, 10)
+			correlationRuntime(t, db, "root", "execve", "python task.py", 100, 1, 1)
+			correlationRuntime(t, db, "candidate", tc.kind, "helper", tc.pid, tc.ppid, 2)
+			for _, e := range []struct{ id, instance, parent, host string }{
+				{"root", boot + ":100:100", boot + ":1:1", "host-a"},
+				{"candidate", tc.instance, tc.parent, tc.host},
+			} {
+				if _, err := db.Exec(`UPDATE events SET payload=json_set(payload,
+					'$.payload.raw.process_instance_id',?,'$.payload.raw.parent_process_instance_id',?,
+					'$.payload.raw.host_id',?) WHERE id=?`, e.instance, e.parent, e.host, e.id); err != nil {
+					t.Fatal(err)
+				}
+			}
+			r, err := CorrelateSyscallsWithReport(db, "run")
+			if err != nil || r.Edges != tc.want {
+				t.Fatalf("captured identity ignored: %+v links=%v err=%v", r, correlationLinks(t, db), err)
+			}
+		})
+	}
+}
+
+func TestCorrelationLateExitDoesNotCloseReusedPID(t *testing.T) {
+	const boot = "01234567-89ab-cdef-0123-456789abcdef"
+	db, _ := openTestStore(t)
+	correlationTool(t, db, "a", "task-a", 0, 10)
+	correlationTool(t, db, "b", "task-b", 0, 10)
+	for _, e := range []struct{ id, kind, command, instance string }{
+		{"a", "execve", "task-a", boot + ":100:100"},
+		{"b", "execve", "task-b", boot + ":100:200"},
+		{"exit-a", "process_exit", "", boot + ":100:100"},
+		{"write-b", "file_write", "", boot + ":100:200"},
+	} {
+		sec := map[string]int{"a": 1, "b": 2, "exit-a": 3, "write-b": 4}[e.id]
+		correlationRuntime(t, db, e.id, e.kind, e.command, 100, 1, sec)
+		if _, err := db.Exec(`UPDATE events SET payload=json_set(payload,'$.payload.raw.process_instance_id',?) WHERE id=?`, e.instance, e.id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := CorrelateSyscallsWithReport(db, "run"); err != nil {
+		t.Fatal(err)
+	}
+	if got := correlationLinks(t, db); !reflect.DeepEqual(got, map[string]string{"a": "a", "b": "b", "write-b": "b"}) {
+		t.Fatalf("old lifetime exit closed current owner: %v", got)
+	}
+}
+
+func TestCorrelationRejectsConflictingParentIdentity(t *testing.T) {
+	const boot = "01234567-89ab-cdef-0123-456789abcdef"
+	for _, parent := range []any{boot + ":100:500", "invalid", 100} {
+		t.Run(fmt.Sprint(parent), func(t *testing.T) {
+			db, _ := openTestStore(t)
+			correlationTool(t, db, "call", "python task.py", 0, 10)
+			correlationRuntime(t, db, "root", "execve", "python task.py", 100, 1, 1)
+			correlationRuntime(t, db, "child", "execve", "helper", 101, 100, 2)
+			for _, e := range []struct{ id, instance string }{
+				{"root", boot + ":100:100"}, {"child", boot + ":101:600"},
+			} {
+				if _, err := db.Exec(`UPDATE events SET payload=json_set(payload,'$.payload.raw.process_instance_id',?) WHERE id=?`, e.instance, e.id); err != nil {
+					t.Fatal(err)
+				}
+			}
+			encoded, err := json.Marshal(parent)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.Exec(`UPDATE events SET payload=json_set(payload,
+				'$.payload.raw.parent_process_instance_id',json(?),
+				'$.parent_process_instance_id',?) WHERE id='child'`, string(encoded), boot+":100:100"); err != nil {
+				t.Fatal(err)
+			}
+			r, err := CorrelateSyscallsWithReport(db, "run")
+			if err != nil || r.InvalidEvents != 1 || !reflect.DeepEqual(correlationLinks(t, db), map[string]string{"root": "call"}) {
+				t.Fatalf("conflicting parent was inherited: %+v links=%v err=%v", r, correlationLinks(t, db), err)
+			}
+		})
+	}
+}
+
 func TestCorrelationDescendantsRespectScopeAndTime(t *testing.T) {
 	db, _ := openTestStore(t)
 	correlationTool(t, db, "a", "sh -c task", 0, 10)
@@ -259,7 +359,7 @@ func TestCorrelationComparesInstantsNotTimestampStrings(t *testing.T) {
 }
 
 func TestCorrelationRollbackKeepsPublishedEdges(t *testing.T) {
-	for _, failure := range []string{"insert", "delete", "read"} {
+	for _, failure := range []string{"insert", "delete", "read", "commit"} {
 		t.Run(failure, func(t *testing.T) {
 			db, _ := openTestStore(t)
 			correlationTool(t, db, "a", "python task.py", 0, 10)
@@ -269,7 +369,17 @@ func TestCorrelationRollbackKeepsPublishedEdges(t *testing.T) {
 			}
 			before := correlationLinks(t, db)
 			var query string
-			if failure == "read" {
+			if failure == "commit" {
+				for _, stmt := range []string{
+					`CREATE TABLE commit_parent (id INTEGER PRIMARY KEY)`,
+					`CREATE TABLE commit_child (id INTEGER REFERENCES commit_parent(id) DEFERRABLE INITIALLY DEFERRED)`,
+				} {
+					if _, err := db.Exec(stmt); err != nil {
+						t.Fatal(err)
+					}
+				}
+				query = `CREATE TRIGGER fail_correlation AFTER INSERT ON graph_edges BEGIN INSERT INTO commit_child VALUES(1); END`
+			} else if failure == "read" {
 				query = `ALTER TABLE tool_calls RENAME TO unavailable_calls`
 			} else {
 				query = fmt.Sprintf(`CREATE TRIGGER fail_correlation BEFORE %s ON graph_edges BEGIN SELECT RAISE(ABORT,'simulated write failure'); END`, failure)

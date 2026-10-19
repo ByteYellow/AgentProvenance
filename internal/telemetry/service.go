@@ -347,6 +347,10 @@ func IngestFiltered(db *sql.DB, event IngestEvent) (string, error) {
 // optional derived edge may be absent, but a failed database write must abort
 // the transaction or row savepoint instead of acknowledging partial evidence.
 func ingestFilteredWithStore(store sqlStore, event IngestEvent) (string, error) {
+	return ingestFilteredWithID(store, event, ids.New("evt"))
+}
+
+func ingestFilteredWithID(store sqlStore, event IngestEvent, eventID string) (string, error) {
 	if event.EventType == "" {
 		return "", fmt.Errorf("event_type is required")
 	}
@@ -428,8 +432,11 @@ func ingestFilteredWithStore(store sqlStore, event IngestEvent) (string, error) 
 			event.Payload = correlation.EventPayloadWithCorrelation(event.Payload, match, true)
 		} else if event.RunID == "" || event.SessionID == "" || event.ToolCallID == "" {
 			method = "unresolved"
+			if match.Ambiguous {
+				method = match.Method
+			}
 			confidence = 0
-			event.Payload = correlation.EventPayloadWithCorrelation(event.Payload, correlation.Match{}, false)
+			event.Payload = correlation.EventPayloadWithCorrelation(event.Payload, match, false)
 		}
 	}
 	if event.Source == "record_process_sample" && event.EventType == "process_observed" {
@@ -438,7 +445,6 @@ func ingestFilteredWithStore(store sqlStore, event IngestEvent) (string, error) 
 			confidence = 0.9
 		}
 	}
-	eventID := ids.New("evt")
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if event.Timestamp != "" {
 		now = event.Timestamp
@@ -447,6 +453,14 @@ func ingestFilteredWithStore(store sqlStore, event IngestEvent) (string, error) 
 	if event.RolloutID != "" || event.AttemptID != "" {
 		payload = fmt.Sprintf(`{"rollout_id":%q,"attempt_id":%q,"payload":%s}`, event.RolloutID, event.AttemptID, event.Payload)
 	}
+	if event.PID > 0 {
+		var err error
+		payload, err = stampProcessGraph(payload)
+		if err != nil {
+			return "", err
+		}
+	}
+	event.Payload = payload
 	_, err := store.Exec(`INSERT INTO events
 		(id, run_id, session_id, tool_call_id, process_id, snapshot_id, raw_event_id, correlation_method, correlation_confidence, container_id, cgroup_id, pid, tgid, ppid, binding_source, source, event_type, payload, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -497,10 +511,12 @@ func eventIdentity(event IngestEvent) correlation.RawIdentity {
 		CgroupID: event.CgroupID, PID: event.PID, TGID: event.TGID, PPID: event.PPID, Timestamp: event.Timestamp}
 	if event.Source == "agentprov_ebpf" {
 		var payload struct {
+			Host    string `json:"host_id"`
 			Process string `json:"process_instance_id"`
 			Parent  string `json:"parent_process_instance_id"`
 		}
 		if json.Unmarshal([]byte(event.Payload), &payload) == nil {
+			raw.HostID = payload.Host
 			raw.ProcessInstanceID, raw.ParentProcessInstanceID = payload.Process, payload.Parent
 		}
 	}
@@ -509,7 +525,7 @@ func eventIdentity(event IngestEvent) correlation.RawIdentity {
 
 func AllowedEventType(eventType string) bool {
 	switch eventType {
-	case "execve", "process_exit", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure", "tls_write", "tls_read", "setuid", "setgid", "ptrace", "file_rename", "file_unlink", "dns_query":
+	case "execve", "process_exit", "thread_exit", "syscall_result", "access_control", "access_control_state", "access_control_collection", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure", "tls_write", "tls_read", "setuid", "setgid", "ptrace", "file_rename", "file_unlink", "dns_query":
 		return true
 	default:
 		return false
@@ -539,22 +555,20 @@ func recordRuntimeCausalityEdges(db sqlStore, event IngestEvent, eventID, now st
 	insert(event.ToolCallID, eventNode, "runtime_tool_call_event")
 	insert(event.ProcessID, eventNode, "runtime_process_event")
 	insert(event.SnapshotID, eventNode, "runtime_snapshot_event")
-	if event.PID != 0 {
-		processNode := fmt.Sprintf("runtime_process/pid/%d", event.PID)
+	identity := ProcessGraphIdentity(EventRecord{ID: eventID, Source: event.Source, Payload: event.Payload, PID: event.PID, PPID: event.PPID, TGID: event.TGID})
+	if processNode := identity.Process.ID; processNode != "" {
 		if event.ProcessID != "" {
 			insert(event.ProcessID, processNode, "runtime_process_observed")
 		}
 		insert(processNode, eventNode, "runtime_process_event")
 	}
-	if event.PID != 0 && event.PPID != 0 {
-		parentNode := fmt.Sprintf("runtime_process/pid/%d", event.PPID)
-		childNode := fmt.Sprintf("runtime_process/pid/%d", event.PID)
+	if identity.Process.ID != "" && identity.Parent.ID != "" {
+		parentNode, childNode := identity.Parent.ID, identity.Process.ID
 		insert(parentNode, childNode, "runtime_process_parent")
 		insert(childNode, parentNode, "runtime_process_child_of")
 	}
-	if event.PID != 0 && event.TGID != 0 && event.TGID != event.PID {
-		threadGroupNode := fmt.Sprintf("runtime_process/tgid/%d", event.TGID)
-		processNode := fmt.Sprintf("runtime_process/pid/%d", event.PID)
+	if identity.Process.ID != "" && identity.ThreadGroup.ID != "" && event.TGID != event.PID {
+		threadGroupNode, processNode := identity.ThreadGroup.ID, identity.Process.ID
 		insert(threadGroupNode, processNode, "runtime_process_thread")
 	}
 	if event.EventType == "file_write" || event.EventType == "file_open" {
@@ -579,105 +593,10 @@ func recordRuntimeCausalityEdges(db sqlStore, event IngestEvent, eventID, now st
 			}
 		}
 	}
-	// Intent -> action causal edge: if a TLS response (the model's decision) was
-	// observed in the same scope shortly before this action event, link it. This
-	// is the "LLM intent caused this syscall" edge over the verifiable DAG.
-	if llmActionEventType(event.EventType) {
-		if intentID := recentLLMIntent(db, event.RunID, event.ProcessID, now); intentID != "" {
-			insert("runtime_event/"+intentID, eventNode, "llm_intent_caused")
-		}
-	}
-	// Request -> response pairing: when a TLS response arrives, link it to the
-	// most recent TLS request in the same scope. This forms the llm_call as a
-	// DERIVED edge over the trusted tls_write/tls_read events -- not a new,
-	// model-forgeable raw event type. A streaming (SSE) response surfaces as many
-	// tls_read events, so we dedup: the first response segment wins and a request
-	// gets exactly one llm_call edge. (Full chunk reassembly is a deferred TODO.)
-	if event.EventType == "tls_read" {
-		if reqID := recentLLMRequest(db, event.RunID, event.ProcessID, now); reqID != "" {
-			fromNode := "runtime_event/" + reqID
-			if !edgeExists(db, fromNode, "llm_call") {
-				insert(fromNode, eventNode, "llm_call")
-			}
-		}
-	}
+	// TLS pairing is a reanalysis over connection/stream identities. Ingest
+	// preserves observations without choosing a "nearest" request or claiming
+	// that a recent response caused every subsequent syscall.
 	return writeErr
-}
-
-// edgeExists reports whether a graph edge of edgeType already originates from
-// fromID, so callers can keep a relationship 1:1 (e.g. one request -> one
-// llm_call despite a streamed, multi-segment response).
-func edgeExists(db sqlStore, fromID, edgeType string) bool {
-	var x int
-	return db.QueryRow(`SELECT 1 FROM graph_edges WHERE from_id = ? AND edge_type = ? LIMIT 1`, fromID, edgeType).Scan(&x) == nil
-}
-
-// llmActionEventType reports whether an event is an "action" that an LLM
-// response could plausibly have caused (exec/egress/file effects).
-func llmActionEventType(eventType string) bool {
-	switch eventType {
-	case "execve", "network_connect", "metadata_ip", "private_cidr", "file_write", "secret_path":
-		return true
-	default:
-		return false
-	}
-}
-
-// recentLLMIntent returns the id of the most recent tls_read (LLM response)
-// event in the same scope within the pairing window before now, or "".
-func recentLLMIntent(db sqlStore, runID, processID, now string) string {
-	return recentScopedEvent(db, "tls_read", runID, processID, now)
-}
-
-// recentLLMRequest returns the id of the most recent tls_write (LLM request)
-// event in the same scope within the pairing window before now, or "".
-func recentLLMRequest(db sqlStore, runID, processID, now string) string {
-	return recentScopedEvent(db, "tls_write", runID, processID, now)
-}
-
-// recentScopedEvent returns the id of the most recent event of eventType in the
-// same run (and process, when known) within a 2-minute window before now, or ""
-// if none. Parse instants: RFC3339Nano strings with different fractional
-// precision or offsets cannot be compared chronologically as text.
-func recentScopedEvent(db sqlStore, eventType, runID, processID, now string) string {
-	if runID == "" {
-		return ""
-	}
-	instant, err := time.Parse(time.RFC3339Nano, now)
-	if err != nil {
-		return ""
-	}
-	windowStart := instant.Add(-2 * time.Minute)
-	query := `SELECT id, created_at FROM events WHERE run_id = ? AND event_type = ?`
-	args := []any{runID, eventType}
-	if processID != "" {
-		query += ` AND process_id = ?`
-		args = append(args, processID)
-	}
-	rows, err := db.Query(query, args...)
-	if err != nil {
-		return ""
-	}
-	defer rows.Close()
-	var selected string
-	var latest time.Time
-	for rows.Next() {
-		var id, timestamp string
-		if rows.Scan(&id, &timestamp) != nil {
-			return ""
-		}
-		at, err := time.Parse(time.RFC3339Nano, timestamp)
-		if err != nil || at.Before(windowStart) || at.After(instant) {
-			continue
-		}
-		if selected == "" || at.After(latest) || (at.Equal(latest) && id > selected) {
-			selected, latest = id, at
-		}
-	}
-	if rows.Err() != nil {
-		return ""
-	}
-	return selected
 }
 
 // substantiveAbsFilePath returns the absolute file path from a raw file event's

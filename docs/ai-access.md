@@ -42,6 +42,7 @@ current MCP and provider catalogs expose a subset, listed in section 2.1.
 | list_events | GET /v1/telemetry/events?run= (paged) | telemetry list --run --json | agentprovenance.telemetry_events/v1 |
 | list_windows | GET /v1/telemetry/windows?run= | telemetry windows --run --json | agentprovenance.telemetry_event_windows/v1 |
 | explain_correlations | GET /v1/telemetry/correlations?run= | telemetry correlations --run --json | agentprovenance.telemetry_correlations/v1 |
+| get_audit_associations | GET /v1/telemetry/audit-associations?run= | telemetry audit-associations --run --json | agentprovenance.audit_associations/v1 |
 | health | GET /v1/health | (daemon) | agentprovenance.daemon_health/v1 |
 
 Context-write surface (phase 2, **shipped** as AI tools): `bind_scope` (register a
@@ -68,7 +69,7 @@ executes; the AI tool deliberately does not). Gate (phase 3, shipped):
 
 A stdio MCP server (spec revision `2025-06-18`, JSON-RPC 2.0 over stdin/stdout)
 generated from the same `internal/aitools.Catalog()` / `Dispatch` as the provider
-tool-schemas and `ai call` — so MCP clients see exactly the eight tools (five read,
+tool-schemas and `ai call` — so MCP clients see exactly the nine tools (six read,
 the `evaluate_action` gate, and the `bind_scope` / `record_tool_call` context-write
 tools) with no separate contract to drift. The two write tools carry
 `annotations.readOnlyHint=false`; everything else is hinted read-only. Only

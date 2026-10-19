@@ -2,7 +2,8 @@
 
 [English](../ai-tools.md) | 中文
 
-以下八个工具共用于 `ai call`、stdio MCP 和模型工具描述。参数名及 JSON 结果保持英文。接入步骤见 [AI 接入指南](ai-access.md)。
+以下九个工具共用于 `ai call`、stdio MCP 和模型工具描述。参数名及系统生成的 JSON 字段保持英文。
+接入步骤见 [AI 接入指南](ai-access.md)。
 
 工具分为查询、预检和上下文写入。`bind_scope` 与 `record_tool_call` 写入应用上下文；其他工具只读。预检和上下文写入均不启动命令。
 
@@ -39,6 +40,21 @@
 | `limit` | `integer` | 否 | 返回数量上限，默认 50 |
 | `run` | `string` | 是 | 执行 ID |
 | `type` | `string` | 否 | 可选事件类型，例如 execve、metadata_ip |
+
+## `get_audit_associations`：查询审计关联
+
+读取 AppArmor/seccomp 决定及进程、操作候选，返回 `agentprovenance.audit_associations/v1`。
+结果分别提供候选状态、证据引用和实际 syscall 返回，保留歧义。
+
+| 参数 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `run` | `string` | 是 | 精确的执行 ID |
+| `event` | `string` | 否 | 精确的审计事件 ID |
+| `limit` | `integer` | 否 | 每页 1-500 条，默认 100 |
+| `cursor` | `string` | 否 | 同一 Run 和事件筛选下，上页返回的 next_cursor |
+
+未知参数会被拒绝。该工具只读，不修改主机策略或证据。
+分析上限与关联语义见[审计关联](telemetry-schema.md#查询运行时关联)。
 
 ## `get_timeline`：查询时间线
 
@@ -96,7 +112,8 @@ agentprov ai tools --provider openai
 agentprov --data-dir .agentprov ai call list_events --input '{"run":"run-example","limit":20}'
 ```
 
-将 `run-example` 替换为已记录的执行 ID。三个 provider 选项只生成工具定义，不会调用模型。工具描述和输出默认英文。
+将 `run-example` 替换为已记录的执行 ID。三个 provider 选项只生成工具定义，不会调用模型。
+工具描述、JSON 字段、状态和系统生成的错误统一使用英文，已保存的证据保留原语言。
 
 MCP 的 `tools/call` 请求示例：
 

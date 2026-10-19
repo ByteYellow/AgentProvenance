@@ -4,7 +4,7 @@
 
 [![Try the online demo](docs/assets/online-demo-button.svg)](https://ByteYellow.github.io/AgentProvenance/)
 
-**Explore 7 signed replays: graphs, Agent sessions and saved files.**
+**Explore 9 signed replays: graphs, Agent sessions, access decisions and saved files.**
 No installation, account or API key required.
 
 # AgentProvenance
@@ -80,7 +80,8 @@ To replay offline, download the CLI:
 
 Download the archive for your platform and its `.sha256` file from
 [Releases](https://github.com/ByteYellow/AgentProvenance/releases).
-The examples below use v0.9.0.
+The archive example below uses v0.10.0, including the investigation-and-repair
+demo described below; see [release status](#release-status).
 
 | Platform | Archive suffix |
 | --- | --- |
@@ -92,9 +93,9 @@ The examples below use v0.9.0.
 On Linux x86-64, verify and extract the downloaded archive:
 
 ```sh
-sha256sum -c agentprov_v0.9.0_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.10.0_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.9.0_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.10.0_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -106,10 +107,11 @@ agent account or API key and works offline.
 [![Demo library — open the online demo](docs/img/demo-gallery.png)](https://ByteYellow.github.io/AgentProvenance/)
 
 Choose **Open replay** to explore a signed execution, or **Read guide** to open
-its illustrated guide. The library includes **seven signed replays and nine
-guides**. Start with the new DeepSeek development task:
+its illustrated guide. The current demo library includes **nine signed replays
+and eleven demo guides**. Start with the investigation-and-repair workflow:
 
 ```sh
+./agentprov demo investigation-workflow
 ./agentprov demo deepseek-context
 ./agentprov demo multiagent-provenance
 ./agentprov demo --list
@@ -120,11 +122,9 @@ store. Ctrl-C closes it and removes that store. Recorded commands are never reru
 For remote or headless machines, add `--no-browser` and access the local address
 through your usual port forwarding.
 
-To build v0.9.0 from source, install Go 1.23+:
+To build the current source checkout, install Go 1.23+ and run from the repository root:
 
 ```sh
-git clone --branch v0.9.0 https://github.com/ByteYellow/AgentProvenance
-cd AgentProvenance
 go build -o agentprov ./cmd/agentprov
 ./agentprov demo
 ```
@@ -155,6 +155,9 @@ Codex and DeepSeek Harness use the same entry point:
 ```
 
 Linux eBPF capture requires the sensor, a supported kernel and BPF/perf access.
+Agent context uses the detailed capture preset by default. Add `--capture basic`
+to `launch` to retain less supplemental context; kernel, TLS and workspace
+capture remain independently configurable.
 macOS supports application recording and replay. Custom session directories,
 resumed sessions and source formats are covered in the
 [Agent session guide](docs/agent-context.md).
@@ -234,7 +237,7 @@ actions, not access to a model's internal reasoning.
 
 ## Agent session
 
-v0.9.0 brings the task and conversation into the same view as execution evidence.
+Read the task and conversation in the same view as execution evidence.
 The graph stays above **Agent session**, which is **collapsed by default**.
 
 | View | What you can inspect |
@@ -279,10 +282,13 @@ activity, risk signals and saved evidence into one investigation view.
 | Graph Explorer | Switch between process, file/artifact, network, agent intent, orchestration, data flow and deployment views |
 | Timeline and details | Follow the order of events, select a node and inspect its source evidence |
 | Agent session | Navigate from a tool result to linked graph evidence; inspect task and permission/configuration history |
+| Related sessions | Open the overview button or a session's relationship button to inspect saved parent, delegation and shared-evidence links |
 | Saved-content reader | Read captured tool output or file text in pages, independently of the session panel |
+| Access control | Inspect AppArmor/seccomp audit records, task-state observations and configuration; follow an operation attempt through its decision and recorded result |
+| Search, compare and export | Find saved text, compare two runs or preview a read-only export in temporary investigation windows |
 | Coverage and verification | Review session capture, probe availability, association gaps and integrity results |
 
-![Saved file text with Agent session collapsed](demo/deepseek-context/dashboard-file.png)
+![Investigation workflow: sessions, access-control evidence and the execution graph](demo/investigation-workflow/dashboard-overview.png)
 
 Open your own recorded runs with:
 
@@ -291,11 +297,30 @@ Open your own recorded runs with:
 ```
 
 The local Dashboard serves its assets from the CLI and needs no external web
-service. The online demo provides the same read-only investigation experience
-for the bundled public captures. Views summarize large event sets and let you
+service. The online demo provides read-only investigation of the bundled public
+captures. Views summarize large event sets and let you
 drill into details instead of placing every raw event on one canvas.
 
 ## Demos
+
+### Investigate a failure, then compare the repair
+
+One real DeepSeek session spans two executions: delegate code review, run seven
+tests, inspect denied optional diagnostics, then disable those diagnostics and
+produce the report successfully. Follow parent/child sessions, search saved
+errors, inspect AppArmor/seccomp records, compare files and export a selected replay.
+
+From the current source checkout:
+
+```sh
+go build -o agentprov ./cmd/agentprov
+./agentprov demo investigation-workflow
+```
+
+The command loads both signed captures together. In **Compare**, choose
+**Diagnostic repair: before** as A and **Diagnostic repair: after** as B.
+Inspect `settings.json` and the generated reports under **File evidence**;
+**Configuration** shows the Harness settings. [Follow the walkthrough](demo/investigation-workflow/README.md).
 
 <a id="demo-multi-agent-causality-delegation-peer-message-syscall-evidence"></a>
 
@@ -348,7 +373,7 @@ how these sources are joined.
 | [LLM Judge](demo/llm-judge/README.md) | An external model reads evidence and returns findings with evidence references |
 | [Jev evaluator](demo/jev-judge/README.md) | Structured evaluation, rule comparison and human review |
 
-The first seven replay entries work offline. LLM Judge and Jev are optional
+The nine signed replay entries work offline. LLM Judge and Jev are optional
 integration guides; live evaluation requires the provider setup described in
 each guide. Grok examples are dated captures with reproduction limits, not a
 statement about the current service.
@@ -507,16 +532,19 @@ evidence is kept as recorded.
 
 ## Release status
 
-v0.9.0 adds richer Agent sessions, DeepSeek Harness integration, task and
-configuration history, collection reports and saved-content browsing. It also
-brings the complete read-only demo and bilingual documentation to the web.
+v0.10.0 connects related sessions, saved-content search,
+Run comparison and selective offline sharing in the Dashboard. AppArmor and
+seccomp records explain access decisions, while basic and detailed capture
+presets let users choose how much Agent context to retain.
 
-For upgrades, back up your data directory before opening it with v0.9.0.
+No new features are planned for now. The next phase focuses on accuracy,
+capture reliability and ease of use.
+
+For upgrades, back up your data directory before opening it with a newer version.
 An upgraded database should not be reopened with an older binary. macOS archives
 are not Apple notarized; download checksums verify archive integrity.
 
-[Release notes](docs/releases/v0.9.0.md) · [Changelog](CHANGELOG.md) ·
-[Validation details](docs/benchmarks/v0.9.0-acceptance/README.md) ·
+[Release notes](docs/releases/v0.10.0.md) · [Changelog](CHANGELOG.md) ·
 [Future work](docs/capabilities.md#future-work)
 
 ## Development
@@ -538,7 +566,7 @@ reports are distinct from hosted CI.
 Acceptance scripts are environment-specific. Do not run every
 `scripts/accept_*.sh` indiscriminately: some require root, create Pods, or install
 services. Use the [KVM/K3s runbook](docs/amd64-kvm-k3s.md) for those gates and the
-[closeout guide](docs/project-closeout.md) for the single-node pressure tests.
+[deployment and performance baseline](docs/project-closeout.md) for the single-node pressure tests.
 
 ## Author and License
 

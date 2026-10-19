@@ -92,7 +92,12 @@ func TestDemoCopyHasChineseCatalogEntries(t *testing.T) {
 
 func TestLocalizedGuideLinksKeepExplicitLanguage(t *testing.T) {
 	entries := demo.Catalog()
-	entry := entries[0]
+	var entry demo.Entry
+	for _, candidate := range entries {
+		if candidate.ID == "snake-supply-chain" {
+			entry = candidate
+		}
+	}
 	source := []byte("# 指南\n\n[English](README.md)\n\n[中文](README.zh-CN.md)\n\n[团队](../multiagent-provenance)\n\n[外部](https://example.com/README.md)\n")
 	html, _, err := renderLocalizedDemoGuide(entry, entries, source, i18n.Chinese)
 	if err != nil {

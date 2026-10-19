@@ -54,3 +54,23 @@ func TestSensorLanguageLeavesTelemetryAndReadyUnchanged(t *testing.T) {
 		}
 	}
 }
+
+func TestStateReadersDefaultOnAndCanBeDisabledIndependently(t *testing.T) {
+	for _, tt := range []struct {
+		flags  []string
+		aa, sc bool
+	}{{nil, true, true}, {[]string{"--apparmor-state=false"}, false, true}, {[]string{"--seccomp-state=false"}, true, false}, {[]string{"--apparmor-state=false", "--seccomp-state=false"}, false, false}} {
+		for _, lang := range []string{"en", "zh-CN"} {
+			args := append([]string{"--lang", lang}, tt.flags...)
+			code := run(args, io.Discard, io.Discard, func(_ io.Writer, opts sensor.Options) error {
+				if opts.AppArmorState != tt.aa || opts.SeccompState != tt.sc {
+					t.Fatalf("%v: wrong state reader settings: %+v", args, opts)
+				}
+				return nil
+			})
+			if code != 0 {
+				t.Fatalf("flags rejected: %v", args)
+			}
+		}
+	}
+}

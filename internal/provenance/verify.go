@@ -6,12 +6,15 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/i18n"
+	"github.com/byteyellow/agentprovenance/internal/redact"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
@@ -30,14 +33,17 @@ type VerifyResult struct {
 	ErrorCount    int           `json:"error_count"`
 	WarningCount  int           `json:"warning_count"`
 	Issues        []VerifyIssue `json:"issues"`
+	Error         string        `json:"error,omitempty"`
 }
 
 func VerifyRun(db *sql.DB, runID string, out io.Writer, languages ...i18n.Locale) error {
 	result, err := Verify(db, runID)
+	if result.SchemaVersion != "" {
+		PrintVerifyResult(out, result, languages...)
+	}
 	if err != nil {
 		return err
 	}
-	PrintVerifyResult(out, result, languages...)
 	if result.ErrorCount > 0 {
 		return i18n.Errorf("graph verify failed: errors=%d warnings=%d", result.ErrorCount, result.WarningCount)
 	}
@@ -46,10 +52,12 @@ func VerifyRun(db *sql.DB, runID string, out io.Writer, languages ...i18n.Locale
 
 func VerifyRunJSON(db *sql.DB, runID string, out io.Writer) error {
 	result, err := Verify(db, runID)
-	if err != nil {
-		return err
+	if result.SchemaVersion != "" {
+		if printErr := PrintVerifyResultJSON(out, result); printErr != nil {
+			return errors.Join(err, printErr)
+		}
 	}
-	if err := PrintVerifyResultJSON(out, result); err != nil {
+	if err != nil {
 		return err
 	}
 	if result.ErrorCount > 0 {
@@ -58,11 +66,17 @@ func VerifyRunJSON(db *sql.DB, runID string, out io.Writer) error {
 	return nil
 }
 
-func Verify(db *sql.DB, runID string) (VerifyResult, error) {
+func Verify(db *sql.DB, runID string) (result VerifyResult, err error) {
 	if runID == "" {
 		return VerifyResult{}, i18n.Errorf("run_id is required")
 	}
-	result := VerifyResult{SchemaVersion: "agentprovenance.verify/v1", RunID: runID, Status: "ok"}
+	result = VerifyResult{SchemaVersion: "agentprovenance.verify/v1", RunID: runID, Status: "ok"}
+	defer func() {
+		if err != nil {
+			result.Status = "unavailable"
+			result.Error = err.Error()
+		}
+	}()
 	add := func(severity, kind, id, format string, args ...any) {
 		result.Issues = append(result.Issues, VerifyIssue{
 			Severity: severity,
@@ -80,7 +94,9 @@ func Verify(db *sql.DB, runID string) (VerifyResult, error) {
 	// A run that left no trace anywhere is not "ok" -- there is nothing to
 	// verify. Without this guard every check below runs over empty result sets
 	// and the run passes clean, so `graph verify <typo>` reports a false green.
-	if !runExists(db, runID) {
+	if found, err := runExists(db, runID); err != nil {
+		return result, fmt.Errorf("check run existence: %w", err)
+	} else if !found {
 		add("error", "unknown_run", runID, "run %s has no evidence in any table; nothing to verify", runID)
 		result.Status = "failed"
 		return result, nil
@@ -141,11 +157,17 @@ func Verify(db *sql.DB, runID string) (VerifyResult, error) {
 
 func PrintVerifyResult(out io.Writer, result VerifyResult, languages ...i18n.Locale) {
 	lang := presentationLocale(languages)
-	status := "ok"
-	if result.ErrorCount > 0 {
-		status = "failed"
+	status := result.Status
+	if status == "" {
+		status = "ok"
+		if result.ErrorCount > 0 {
+			status = "failed"
+		}
 	}
 	fmt.Fprintf(out, i18n.T(lang, "run=%s status=%s errors=%d warnings=%d issues=%d\n"), result.RunID, status, result.ErrorCount, result.WarningCount, result.IssueCount)
+	if result.Error != "" {
+		fmt.Fprintf(out, "verification_error=%q\n", result.Error)
+	}
 	for _, issue := range result.Issues {
 		fmt.Fprintf(out, i18n.T(lang, "issue severity=%s kind=%s id=%s message=%q\n"), issue.Severity, issue.Kind, issue.ID, issue.Message)
 	}
@@ -170,23 +192,41 @@ func verifyRollouts(db *sql.DB, runID string, add issueAdder) error {
 		if err := rows.Scan(&id, &baseSnapshotID, &status, &winnerAttemptID, &promotionID, &riskStatus); err != nil {
 			return err
 		}
-		if !exists(db, `SELECT 1 FROM snapshots WHERE id = ?`, baseSnapshotID) {
+		if found, err := exists(db, `SELECT 1 FROM snapshots WHERE id = ?`, baseSnapshotID); err != nil {
+			return err
+		} else if !found {
 			add("error", "missing_snapshot", id, "rollout base_snapshot_id %s does not exist", baseSnapshotID)
 		}
-		if winnerAttemptID != "" && !exists(db, `SELECT 1 FROM fork_attempts WHERE id = ? AND rollout_id = ?`, winnerAttemptID, id) {
-			add("error", "missing_winner_attempt", id, "winner_attempt_id %s does not belong to rollout", winnerAttemptID)
+		if winnerAttemptID != "" {
+			if found, err := exists(db, `SELECT 1 FROM fork_attempts WHERE id = ? AND rollout_id = ?`, winnerAttemptID, id); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_winner_attempt", id, "winner_attempt_id %s does not belong to rollout", winnerAttemptID)
+			}
 		}
-		if promotionID != "" && !exists(db, `SELECT 1 FROM promotions WHERE id = ? AND rollout_id = ?`, promotionID, id) {
-			add("error", "missing_promotion", id, "promotion_id %s does not belong to rollout", promotionID)
+		if promotionID != "" {
+			if found, err := exists(db, `SELECT 1 FROM promotions WHERE id = ? AND rollout_id = ?`, promotionID, id); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_promotion", id, "promotion_id %s does not belong to rollout", promotionID)
+			}
 		}
-		if promotionID != "" && winnerAttemptID != "" && !exists(db, `SELECT 1 FROM promotions WHERE id = ? AND rollout_id = ? AND attempt_id = ?`, promotionID, id, winnerAttemptID) {
-			add("error", "promotion_winner_mismatch", id, "promotion_id %s does not promote winner_attempt_id %s", promotionID, winnerAttemptID)
+		if promotionID != "" && winnerAttemptID != "" {
+			if found, err := exists(db, `SELECT 1 FROM promotions WHERE id = ? AND rollout_id = ? AND attempt_id = ?`, promotionID, id, winnerAttemptID); err != nil {
+				return err
+			} else if !found {
+				add("error", "promotion_winner_mismatch", id, "promotion_id %s does not promote winner_attempt_id %s", promotionID, winnerAttemptID)
+			}
 		}
 		if status == "completed" && winnerAttemptID == "" {
 			add("error", "missing_winner_attempt", id, "completed rollout has no winner_attempt_id")
 		}
-		if riskStatus == "clean" && winnerAttemptID != "" && attemptIsTainted(db, winnerAttemptID) {
-			add("error", "tainted_winner", id, "clean rollout points to tainted/quarantined winner %s", winnerAttemptID)
+		if riskStatus == "clean" && winnerAttemptID != "" {
+			if found, err := attemptIsTainted(db, winnerAttemptID); err != nil {
+				return err
+			} else if found {
+				add("error", "tainted_winner", id, "clean rollout points to tainted/quarantined winner %s", winnerAttemptID)
+			}
 		}
 	}
 	return rows.Err()
@@ -249,14 +289,22 @@ func verifyAttempts(db *sql.DB, runID string, add issueAdder) error {
 		if err := rows.Scan(&id, &rolloutID, &toolCallID, &snapshotID, &status, &riskStatus, &isWinner, &artifact); err != nil {
 			return err
 		}
-		if !exists(db, `SELECT 1 FROM rollouts WHERE id = ? AND run_id = ?`, rolloutID, runID) {
+		if found, err := exists(db, `SELECT 1 FROM rollouts WHERE id = ? AND run_id = ?`, rolloutID, runID); err != nil {
+			return err
+		} else if !found {
 			add("error", "missing_rollout", id, "attempt rollout_id %s does not exist in run", rolloutID)
 		}
-		if !exists(db, `SELECT 1 FROM snapshots WHERE id = ?`, snapshotID) {
+		if found, err := exists(db, `SELECT 1 FROM snapshots WHERE id = ?`, snapshotID); err != nil {
+			return err
+		} else if !found {
 			add("error", "missing_snapshot", id, "attempt snapshot_id %s does not exist", snapshotID)
 		}
-		if toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ? AND attempt_id = ?`, toolCallID, id) {
-			add("error", "missing_tool_call", id, "attempt tool_call_id %s does not point back to attempt", toolCallID)
+		if toolCallID != "" {
+			if found, err := exists(db, `SELECT 1 FROM tool_calls WHERE id = ? AND attempt_id = ?`, toolCallID, id); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_tool_call", id, "attempt tool_call_id %s does not point back to attempt", toolCallID)
+			}
 		}
 		if isWinner != 0 && (status == "quarantined" || riskStatus == "tainted") {
 			add("error", "tainted_winner", id, "winner attempt status=%s risk=%s", status, riskStatus)
@@ -281,14 +329,26 @@ func verifyToolCalls(db *sql.DB, runID string, add issueAdder) error {
 		if err := rows.Scan(&id, &rolloutID, &attemptID, &sessionID, &resultRef); err != nil {
 			return err
 		}
-		if rolloutID != "" && !exists(db, `SELECT 1 FROM rollouts WHERE id = ? AND run_id = ?`, rolloutID, runID) {
-			add("error", "missing_rollout", id, "tool_call rollout_id %s does not exist in run", rolloutID)
+		if rolloutID != "" {
+			if found, err := exists(db, `SELECT 1 FROM rollouts WHERE id = ? AND run_id = ?`, rolloutID, runID); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_rollout", id, "tool_call rollout_id %s does not exist in run", rolloutID)
+			}
 		}
-		if attemptID != "" && !exists(db, `SELECT 1 FROM fork_attempts WHERE id = ?`, attemptID) {
-			add("error", "missing_attempt", id, "tool_call attempt_id %s does not exist", attemptID)
+		if attemptID != "" {
+			if found, err := exists(db, `SELECT 1 FROM fork_attempts WHERE id = ?`, attemptID); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_attempt", id, "tool_call attempt_id %s does not exist", attemptID)
+			}
 		}
-		if sessionID != "" && !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) {
-			add("error", "missing_session", id, "tool_call session_id %s does not exist", sessionID)
+		if sessionID != "" {
+			if found, err := exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_session", id, "tool_call session_id %s does not exist", sessionID)
+			}
 		}
 		if resultRef != "" {
 			if _, err := os.Stat(resultRef); err != nil {
@@ -314,11 +374,17 @@ func verifyProcesses(db *sql.DB, runID string, add issueAdder) error {
 		if err := rows.Scan(&id, &sessionID, &toolCallID, &processStatus, &toolCallStatus); err != nil {
 			return err
 		}
-		if !exists(db, `SELECT 1 FROM sessions WHERE id = ? AND run_id = ?`, sessionID, runID) {
+		if found, err := exists(db, `SELECT 1 FROM sessions WHERE id = ? AND run_id = ?`, sessionID, runID); err != nil {
+			return err
+		} else if !found {
 			add("error", "missing_session", id, "process session_id %s does not exist in run", sessionID)
 		}
-		if toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID) {
-			add("error", "missing_tool_call", id, "process tool_call_id %s does not exist", toolCallID)
+		if toolCallID != "" {
+			if found, err := exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_tool_call", id, "process tool_call_id %s does not exist", toolCallID)
+			}
 		}
 		if isTerminalToolCallStatus(toolCallStatus) && isNonTerminalProcessStatus(processStatus) {
 			add("error", "stale_process_status", id, "tool_call %s is %s but process is still %s", toolCallID, toolCallStatus, processStatus)
@@ -357,24 +423,47 @@ func verifyEvents(db *sql.DB, runID string, add issueAdder) error {
 		if err := rows.Scan(&id, &sessionID, &toolCallID, &processID, &snapshotID, &correlationMethod, &correlationConfidence); err != nil {
 			return err
 		}
-		externalContext := externalContextBindingExists(db, runID, sessionID, "", toolCallID, processID)
-		if sessionID != "" && !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) && !externalContext {
-			add("error", "missing_session", id, "event session_id %s does not exist", sessionID)
+		externalContext, err := externalContextBindingExists(db, runID, sessionID, "", toolCallID, processID)
+		if err != nil {
+			return err
 		}
-		if toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID) && !externalContext {
-			add("error", "missing_tool_call", id, "event tool_call_id %s does not exist", toolCallID)
+		if sessionID != "" {
+			if found, err := exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID); err != nil {
+				return err
+			} else if !found && !externalContext {
+				add("error", "missing_session", id, "event session_id %s does not exist", sessionID)
+			}
 		}
-		if processID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ?`, processID) && !externalContext {
-			add("error", "missing_process", id, "event process_id %s does not exist", processID)
+		if toolCallID != "" {
+			if found, err := exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID); err != nil {
+				return err
+			} else if !found && !externalContext {
+				add("error", "missing_tool_call", id, "event tool_call_id %s does not exist", toolCallID)
+			}
 		}
-		if snapshotID != "" && !exists(db, `SELECT 1 FROM snapshots WHERE id = ?`, snapshotID) {
-			add("error", "missing_snapshot", id, "event snapshot_id %s does not exist", snapshotID)
+		if processID != "" {
+			if found, err := exists(db, `SELECT 1 FROM processes WHERE id = ?`, processID); err != nil {
+				return err
+			} else if !found && !externalContext {
+				add("error", "missing_process", id, "event process_id %s does not exist", processID)
+			}
 		}
-		if correlationMethod != "" && correlationConfidence <= 0 {
+		if snapshotID != "" {
+			if found, err := exists(db, `SELECT 1 FROM snapshots WHERE id = ?`, snapshotID); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_snapshot", id, "event snapshot_id %s does not exist", snapshotID)
+			}
+		}
+		if math.IsNaN(correlationConfidence) || math.IsInf(correlationConfidence, 0) || correlationConfidence < 0 || correlationConfidence > 1 {
 			add("error", "invalid_correlation_confidence", id, "event correlation_method %s has confidence %.2f", correlationMethod, correlationConfidence)
 		}
-		if toolCallID != "" && processID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ? AND tool_call_id = ?`, processID, toolCallID) && !externalContext {
-			add("error", "event_process_tool_call_mismatch", id, "event process_id %s is not bound to tool_call_id %s", processID, toolCallID)
+		if toolCallID != "" && processID != "" {
+			if found, err := exists(db, `SELECT 1 FROM processes WHERE id = ? AND tool_call_id = ?`, processID, toolCallID); err != nil {
+				return err
+			} else if !found && !externalContext {
+				add("error", "event_process_tool_call_mismatch", id, "event process_id %s is not bound to tool_call_id %s", processID, toolCallID)
+			}
 		}
 	}
 	return rows.Err()
@@ -391,17 +480,33 @@ func verifyExternalEffects(db *sql.DB, runID string, add issueAdder) error {
 		if err := rows.Scan(&id, &attemptID, &sessionID, &toolCallID, &processID, &mode, &decision); err != nil {
 			return err
 		}
-		if attemptID != "" && !exists(db, `SELECT 1 FROM fork_attempts WHERE id = ?`, attemptID) {
-			add("error", "missing_attempt", id, "external effect attempt_id %s does not exist", attemptID)
+		if attemptID != "" {
+			if found, err := exists(db, `SELECT 1 FROM fork_attempts WHERE id = ?`, attemptID); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_attempt", id, "external effect attempt_id %s does not exist", attemptID)
+			}
 		}
-		if sessionID != "" && !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) {
-			add("error", "missing_session", id, "external effect session_id %s does not exist", sessionID)
+		if sessionID != "" {
+			if found, err := exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_session", id, "external effect session_id %s does not exist", sessionID)
+			}
 		}
-		if toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID) {
-			add("error", "missing_tool_call", id, "external effect tool_call_id %s does not exist", toolCallID)
+		if toolCallID != "" {
+			if found, err := exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_tool_call", id, "external effect tool_call_id %s does not exist", toolCallID)
+			}
 		}
-		if processID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ?`, processID) {
-			add("error", "missing_process", id, "external effect process_id %s does not exist", processID)
+		if processID != "" {
+			if found, err := exists(db, `SELECT 1 FROM processes WHERE id = ?`, processID); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_process", id, "external effect process_id %s does not exist", processID)
+			}
 		}
 		if !oneOf(mode, "dry-run", "mock", "allowlist", "compensation") {
 			add("error", "invalid_external_effect_mode", id, "invalid mode %s", mode)
@@ -426,19 +531,30 @@ func verifyPolicyDecisions(db *sql.DB, runID string, add issueAdder) error {
 		}
 		policyNodeID := "policy_decision/" + id
 		if eventID != "" {
-			if !exists(db, `SELECT 1 FROM events WHERE id = ?`, eventID) {
+			if found, err := exists(db, `SELECT 1 FROM events WHERE id = ?`, eventID); err != nil {
+				return err
+			} else if !found {
 				add("error", "missing_policy_event", id, "policy decision event_id %s does not exist", eventID)
 			}
-			if !edgeExists(db, runID, "runtime_event/"+eventID, policyNodeID, "runtime_event_policy_decision") {
+			if found, err := edgeExists(db, runID, "runtime_event/"+eventID, policyNodeID, "runtime_event_policy_decision"); err != nil {
+				return err
+			} else if !found {
 				add("error", "missing_policy_decision_edge", id, "runtime event %s is not linked to policy decision %s", eventID, id)
 			}
 		}
 		if sessionID != "" {
-			externalContext := externalContextBindingExists(db, runID, sessionID, "", "", "")
-			if !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) && !externalContext {
+			externalContext, err := externalContextBindingExists(db, runID, sessionID, "", "", "")
+			if err != nil {
+				return err
+			}
+			if found, err := exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID); err != nil {
+				return err
+			} else if !found && !externalContext {
 				add("error", "missing_policy_session", id, "policy decision session_id %s does not exist", sessionID)
 			}
-			if !edgeExists(db, runID, policyNodeID, sessionID, "policy_decision_session") {
+			if found, err := edgeExists(db, runID, policyNodeID, sessionID, "policy_decision_session"); err != nil {
+				return err
+			} else if !found {
 				add("error", "missing_policy_session_edge", id, "policy decision %s is not linked to session %s", id, sessionID)
 			}
 		}
@@ -460,23 +576,33 @@ func verifyRiskAndResponses(db *sql.DB, runID string, add issueAdder) error {
 		if decision == "allow" {
 			continue
 		}
-		if !exists(db, `SELECT 1 FROM risk_signals WHERE run_id = ? AND policy_decision_id = ?`, runID, id) {
+		if found, err := exists(db, `SELECT 1 FROM risk_signals WHERE run_id = ? AND policy_decision_id = ?`, runID, id); err != nil {
+			return err
+		} else if !found {
 			add("error", "missing_policy_risk_signal", id, "non-allow policy decision %s has no risk signal", id)
 		}
-		if !exists(db, `SELECT 1 FROM response_actions WHERE run_id = ? AND policy_decision_id = ?`, runID, id) {
+		if found, err := exists(db, `SELECT 1 FROM response_actions WHERE run_id = ? AND policy_decision_id = ?`, runID, id); err != nil {
+			return err
+		} else if !found {
 			add("error", "missing_policy_response_action", id, "non-allow policy decision %s has no response action", id)
 		}
 		// Unified signal model: a non-allow policy decision must also surface as a
 		// security-dimension signal (via its risk_signal). The policy path writes
 		// this live and a writeback failure emits an observable error event, so a
 		// missing unified signal here is a real integrity gap.
-		if !exists(db, `SELECT 1 FROM signals s JOIN risk_signals r ON s.source_id = r.id
+		if found, err := exists(db, `SELECT 1 FROM signals s JOIN risk_signals r ON s.source_id = r.id
 			WHERE s.dimension = 'security' AND s.source_table = 'risk_signals'
-			AND r.policy_decision_id = ? AND s.run_id = ?`, id, runID) {
+			AND r.policy_decision_id = ? AND s.run_id = ?`, id, runID); err != nil {
+			return err
+		} else if !found {
 			add("error", "missing_policy_unified_signal", id, "non-allow policy decision %s has no unified security signal", id)
 		}
-		if eventID != "" && !edgeExists(db, runID, "runtime_event/"+eventID, "policy_decision/"+id, "runtime_event_policy_decision") {
-			add("error", "missing_policy_decision_edge", id, "runtime event %s is not linked to policy decision %s", eventID, id)
+		if eventID != "" {
+			if found, err := edgeExists(db, runID, "runtime_event/"+eventID, "policy_decision/"+id, "runtime_event_policy_decision"); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_policy_decision_edge", id, "runtime event %s is not linked to policy decision %s", eventID, id)
+			}
 		}
 	}
 	if err := policies.Err(); err != nil {
@@ -493,16 +619,26 @@ func verifyRiskAndResponses(db *sql.DB, runID string, add issueAdder) error {
 		if err := risks.Scan(&id, &eventID, &policyDecisionID, &recommendedAction); err != nil {
 			return err
 		}
-		if policyDecisionID == "" || !exists(db, `SELECT 1 FROM policy_decisions WHERE id = ? AND run_id = ?`, policyDecisionID, runID) {
+		if found, err := exists(db, `SELECT 1 FROM policy_decisions WHERE id = ? AND run_id = ?`, policyDecisionID, runID); err != nil {
+			return err
+		} else if policyDecisionID == "" || !found {
 			add("error", "missing_risk_policy_decision", id, "risk signal %s references missing policy decision %s", id, policyDecisionID)
 		}
-		if eventID == "" || !exists(db, `SELECT 1 FROM events WHERE id = ? AND run_id = ?`, eventID, runID) {
+		if found, err := exists(db, `SELECT 1 FROM events WHERE id = ? AND run_id = ?`, eventID, runID); err != nil {
+			return err
+		} else if eventID == "" || !found {
 			add("error", "missing_risk_event", id, "risk signal %s references missing runtime event %s", id, eventID)
 		}
-		if policyDecisionID != "" && !edgeExists(db, runID, "policy_decision/"+policyDecisionID, "risk_signal/"+id, "policy_decision_risk_signal") {
-			add("error", "missing_risk_signal_edge", id, "policy decision %s is not linked to risk signal %s", policyDecisionID, id)
+		if policyDecisionID != "" {
+			if found, err := edgeExists(db, runID, "policy_decision/"+policyDecisionID, "risk_signal/"+id, "policy_decision_risk_signal"); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_risk_signal_edge", id, "policy decision %s is not linked to risk signal %s", policyDecisionID, id)
+			}
 		}
-		if !exists(db, `SELECT 1 FROM response_actions WHERE run_id = ? AND risk_signal_id = ?`, runID, id) {
+		if found, err := exists(db, `SELECT 1 FROM response_actions WHERE run_id = ? AND risk_signal_id = ?`, runID, id); err != nil {
+			return err
+		} else if !found {
 			add("error", "missing_risk_response_action", id, "risk signal %s has no response action", id)
 		}
 		if !oneOf(recommendedAction, "audit", "deny", "kill", "quarantine", "taint", "export", "notify") {
@@ -523,17 +659,29 @@ func verifyRiskAndResponses(db *sql.DB, runID string, add issueAdder) error {
 		if err := responses.Scan(&id, &riskSignalID, &policyDecisionID, &actionType, &targetType, &targetID, &status); err != nil {
 			return err
 		}
-		if riskSignalID == "" || !exists(db, `SELECT 1 FROM risk_signals WHERE id = ? AND run_id = ?`, riskSignalID, runID) {
+		if found, err := exists(db, `SELECT 1 FROM risk_signals WHERE id = ? AND run_id = ?`, riskSignalID, runID); err != nil {
+			return err
+		} else if riskSignalID == "" || !found {
 			add("error", "missing_response_risk_signal", id, "response action %s references missing risk signal %s", id, riskSignalID)
 		}
-		if policyDecisionID == "" || !exists(db, `SELECT 1 FROM policy_decisions WHERE id = ? AND run_id = ?`, policyDecisionID, runID) {
+		if found, err := exists(db, `SELECT 1 FROM policy_decisions WHERE id = ? AND run_id = ?`, policyDecisionID, runID); err != nil {
+			return err
+		} else if policyDecisionID == "" || !found {
 			add("error", "missing_response_policy_decision", id, "response action %s references missing policy decision %s", id, policyDecisionID)
 		}
-		if riskSignalID != "" && policyDecisionID != "" && !exists(db, `SELECT 1 FROM risk_signals WHERE id = ? AND policy_decision_id = ? AND run_id = ?`, riskSignalID, policyDecisionID, runID) {
-			add("error", "response_risk_policy_mismatch", id, "response action %s risk %s is not linked to policy decision %s", id, riskSignalID, policyDecisionID)
+		if riskSignalID != "" && policyDecisionID != "" {
+			if found, err := exists(db, `SELECT 1 FROM risk_signals WHERE id = ? AND policy_decision_id = ? AND run_id = ?`, riskSignalID, policyDecisionID, runID); err != nil {
+				return err
+			} else if !found {
+				add("error", "response_risk_policy_mismatch", id, "response action %s risk %s is not linked to policy decision %s", id, riskSignalID, policyDecisionID)
+			}
 		}
-		if riskSignalID != "" && !edgeExists(db, runID, "risk_signal/"+riskSignalID, "response_action/"+id, "risk_signal_response_action") {
-			add("error", "missing_response_action_edge", id, "risk signal %s is not linked to response action %s", riskSignalID, id)
+		if riskSignalID != "" {
+			if found, err := edgeExists(db, runID, "risk_signal/"+riskSignalID, "response_action/"+id, "risk_signal_response_action"); err != nil {
+				return err
+			} else if !found {
+				add("error", "missing_response_action_edge", id, "risk signal %s is not linked to response action %s", riskSignalID, id)
+			}
 		}
 		if !oneOf(actionType, "audit", "deny", "kill", "quarantine", "taint", "export", "notify") {
 			add("error", "invalid_response_action_type", id, "response action %s has invalid action_type %s", id, actionType)
@@ -577,9 +725,13 @@ func verifyObjects(db *sql.DB, runID string, add issueAdder) error {
 		}
 		if objectType == "record_manifest" {
 			expected, err := BuildRecordManifest(db, runID)
+			var matches bool
+			if err == nil {
+				matches, err = recordManifestEqual(obj.Payload["manifest"], expected)
+			}
 			if err != nil {
 				add("error", "record_manifest_rebuild_failed", sourceID, "record manifest cannot be rebuilt: %v", err)
-			} else if !jsonEqual(obj.Payload["manifest"], expected) {
+			} else if !matches {
 				add("error", "record_manifest_mismatch", sourceID, "record manifest object does not match rebuilt manifest")
 			}
 		}
@@ -590,6 +742,9 @@ func verifyObjects(db *sql.DB, runID string, add issueAdder) error {
 		if contentRef != "" && (objectType == "artifact" || objectType == "text_content") {
 			if !checkedText[contentRef] {
 				if err := VerifyTextContent(db, runID, contentRef); err != nil {
+					if contentQueryFailed(err) {
+						return err
+					}
 					add("error", "text_content_invalid", sourceID, "saved text cannot be verified: %v", err)
 				}
 				checkedText[contentRef] = true
@@ -610,7 +765,9 @@ func verifyObjects(db *sql.DB, runID string, add issueAdder) error {
 			if parent == "" {
 				continue
 			}
-			if !exists(db, `SELECT 1 FROM provenance_objects WHERE hash = ?`, parent) {
+			if found, err := exists(db, `SELECT 1 FROM provenance_objects WHERE hash = ?`, parent); err != nil {
+				return err
+			} else if !found {
 				add("error", "missing_parent_object", sourceID, "parent object %s does not exist", parent)
 			}
 		}
@@ -622,6 +779,21 @@ func jsonEqual(a, b any) bool {
 	aa, errA := normalizedJSON(a)
 	bb, errB := normalizedJSON(b)
 	return errA == nil && errB == nil && bytes.Equal(aa, bb)
+}
+
+func recordManifestEqual(saved any, expected RecordManifest) (bool, error) {
+	raw, err := json.Marshal(expected)
+	if err != nil {
+		return false, err
+	}
+	// ObjectStore masks secrets before hashing. Rebuild the same representation
+	// without changing the signed object or weakening its hash verification.
+	masked, _ := redact.Redact(string(raw))
+	var comparable any
+	if err := json.Unmarshal([]byte(masked), &comparable); err != nil {
+		return false, err
+	}
+	return jsonEqual(saved, comparable), nil
 }
 
 func normalizedJSON(value any) ([]byte, error) {
@@ -652,33 +824,61 @@ func verifyExecutionContextBindings(db *sql.DB, runID string, add issueAdder) er
 			return err
 		}
 		externalContext := isExternalRuntimeBinding(containerID, cgroupID, rootPID, pid, source)
-		if confidence <= 0 {
-			add("error", "invalid_binding_confidence", id, "execution context binding confidence %.2f must be positive", confidence)
+		if math.IsNaN(confidence) || math.IsInf(confidence, 0) || confidence < 0 || confidence > 1 {
+			add("error", "invalid_binding_confidence", id, "execution context binding confidence %.2f must be in [0,1]", confidence)
 		}
-		if sessionID != "" && !exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID) && !externalContext {
-			add("error", "missing_session", id, "binding session_id %s does not exist", sessionID)
+		if sessionID != "" {
+			if found, err := exists(db, `SELECT 1 FROM sessions WHERE id = ?`, sessionID); err != nil {
+				return err
+			} else if !found && !externalContext {
+				add("error", "missing_session", id, "binding session_id %s does not exist", sessionID)
+			}
 		}
-		if attemptID != "" && !exists(db, `SELECT 1 FROM fork_attempts WHERE id = ?`, attemptID) && !externalContext {
-			add("error", "missing_attempt", id, "binding attempt_id %s does not exist", attemptID)
+		if attemptID != "" {
+			if found, err := exists(db, `SELECT 1 FROM fork_attempts WHERE id = ?`, attemptID); err != nil {
+				return err
+			} else if !found && !externalContext {
+				add("error", "missing_attempt", id, "binding attempt_id %s does not exist", attemptID)
+			}
 		}
-		if toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID) && !externalContext {
-			add("error", "missing_tool_call", id, "binding tool_call_id %s does not exist", toolCallID)
+		if toolCallID != "" {
+			if found, err := exists(db, `SELECT 1 FROM tool_calls WHERE id = ?`, toolCallID); err != nil {
+				return err
+			} else if !found && !externalContext {
+				add("error", "missing_tool_call", id, "binding tool_call_id %s does not exist", toolCallID)
+			}
 		}
-		if processID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ?`, processID) && !externalContext {
-			add("error", "missing_process", id, "binding process_id %s does not exist", processID)
+		if processID != "" {
+			if found, err := exists(db, `SELECT 1 FROM processes WHERE id = ?`, processID); err != nil {
+				return err
+			} else if !found && !externalContext {
+				add("error", "missing_process", id, "binding process_id %s does not exist", processID)
+			}
 		}
-		if processID != "" && toolCallID != "" && !exists(db, `SELECT 1 FROM processes WHERE id = ? AND tool_call_id = ?`, processID, toolCallID) && !externalContext {
-			add("error", "binding_process_tool_call_mismatch", id, "binding process_id %s is not bound to tool_call_id %s", processID, toolCallID)
+		if processID != "" && toolCallID != "" {
+			if found, err := exists(db, `SELECT 1 FROM processes WHERE id = ? AND tool_call_id = ?`, processID, toolCallID); err != nil {
+				return err
+			} else if !found && !externalContext {
+				add("error", "binding_process_tool_call_mismatch", id, "binding process_id %s is not bound to tool_call_id %s", processID, toolCallID)
+			}
 		}
-		if attemptID != "" && toolCallID != "" && !exists(db, `SELECT 1 FROM tool_calls WHERE id = ? AND attempt_id = ?`, toolCallID, attemptID) && !externalContext {
-			add("error", "binding_attempt_tool_call_mismatch", id, "binding tool_call_id %s is not bound to attempt_id %s", toolCallID, attemptID)
+		if attemptID != "" && toolCallID != "" {
+			if found, err := exists(db, `SELECT 1 FROM tool_calls WHERE id = ? AND attempt_id = ?`, toolCallID, attemptID); err != nil {
+				return err
+			} else if !found && !externalContext {
+				add("error", "binding_attempt_tool_call_mismatch", id, "binding tool_call_id %s is not bound to attempt_id %s", toolCallID, attemptID)
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
 	var correlatedEvents int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id = ? AND COALESCE(correlation_method, '') != ''`, runID).Scan(&correlatedEvents); err != nil {
+	// Unresolved or ambiguous observations can be retained without inventing a
+	// binding. Only an event claiming a positive-confidence join requires one.
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id = ?
+		AND COALESCE(correlation_method, '') NOT IN ('', 'unresolved')
+		AND COALESCE(correlation_confidence, 0) > 0`, runID).Scan(&correlatedEvents); err != nil {
 		return err
 	}
 	if correlatedEvents > 0 && bindings == 0 {
@@ -739,7 +939,17 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 
 	for _, e := range events {
 		id, toolCallID, processID, eventType, payload, correlationMethod, source := e.id, e.toolCallID, e.processID, e.eventType, e.payload, e.correlationMethod, e.source
-		pid, tgid, ppid := e.pid, e.tgid, e.ppid
+		identity := telemetry.ProcessGraphIdentity(telemetry.EventRecord{ID: id, Source: source, Payload: payload, PID: e.pid, TGID: e.tgid, PPID: e.ppid})
+		hasProcessEdge := func(fromID, toID, edgeType string) bool {
+			if identity.Version == "" {
+				return hasEdge(fromID, toID, edgeType)
+			}
+			_, ok := edges[edgeKey{fromID, toID, edgeType}][id]
+			return ok
+		}
+		if identity.Version != "" && identity.Version != telemetry.RuntimeProcessGraphVersion && identity.Version != telemetry.RuntimeProcessGraphV2 {
+			add("error", "unsupported_runtime_process_identity", id, "unsupported process identity version %s", identity.Version)
+		}
 		if telemetry.TelemetrySource(source, correlationMethod) {
 			if err := telemetry.ValidateStoredPayload(eventType, payload); err != nil {
 				add("error", "invalid_telemetry_payload_schema", id, "event %s type=%s has invalid telemetry payload: %v", id, eventType, err)
@@ -766,27 +976,30 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 		if isRuntimeTelemetry && processID != "" && !hasEdge(processID, eventNode, "runtime_process_event") {
 			add("error", "missing_runtime_process_event_edge", id, "process %s is not linked to runtime event %s", processID, id)
 		}
-		if isRuntimeTelemetry && pid != 0 && processID != "" {
-			processNode := fmt.Sprintf("runtime_process/pid/%d", pid)
-			if !hasEdge(processID, processNode, "runtime_process_observed") {
-				add("error", "missing_runtime_process_observed_edge", id, "process %s is not linked to observed pid %d", processID, pid)
+		if isRuntimeTelemetry && identity.Process.ID != "" {
+			processNode := identity.Process.ID
+			if identity.Version != "" && !hasProcessEdge(processNode, eventNode, "runtime_process_event") {
+				add("error", "missing_runtime_process_event_edge", id, "observed process %s is not linked to event %s", processNode, id)
+			}
+			if processID != "" {
+				if !hasProcessEdge(processID, processNode, "runtime_process_observed") {
+					add("error", "missing_runtime_process_observed_edge", id, "process %s is not linked to observed process %s", processID, processNode)
+				}
 			}
 		}
-		if isRuntimeTelemetry && pid != 0 && ppid != 0 {
-			parentNode := fmt.Sprintf("runtime_process/pid/%d", ppid)
-			childNode := fmt.Sprintf("runtime_process/pid/%d", pid)
-			if !hasEdge(parentNode, childNode, "runtime_process_parent") {
-				add("error", "missing_runtime_process_parent_edge", id, "pid %d is not linked as parent of pid %d", ppid, pid)
+		if isRuntimeTelemetry && identity.Process.ID != "" && identity.Parent.ID != "" {
+			parentNode, childNode := identity.Parent.ID, identity.Process.ID
+			if !hasProcessEdge(parentNode, childNode, "runtime_process_parent") {
+				add("error", "missing_runtime_process_parent_edge", id, "process %s is not linked as parent of %s", parentNode, childNode)
 			}
-			if !hasEdge(childNode, parentNode, "runtime_process_child_of") {
-				add("error", "missing_runtime_process_child_edge", id, "pid %d is not linked back to parent pid %d", pid, ppid)
+			if !hasProcessEdge(childNode, parentNode, "runtime_process_child_of") {
+				add("error", "missing_runtime_process_child_edge", id, "process %s is not linked back to parent %s", childNode, parentNode)
 			}
 		}
-		if isRuntimeTelemetry && pid != 0 && tgid != 0 && pid != tgid {
-			threadGroupNode := fmt.Sprintf("runtime_process/tgid/%d", tgid)
-			processNode := fmt.Sprintf("runtime_process/pid/%d", pid)
-			if !hasEdge(threadGroupNode, processNode, "runtime_process_thread") {
-				add("error", "missing_runtime_process_thread_edge", id, "tgid %d is not linked to pid %d", tgid, pid)
+		if isRuntimeTelemetry && identity.Process.ID != "" && identity.ThreadGroup.ID != "" && e.pid != e.tgid {
+			threadGroupNode, processNode := identity.ThreadGroup.ID, identity.Process.ID
+			if !hasProcessEdge(threadGroupNode, processNode, "runtime_process_thread") {
+				add("error", "missing_runtime_process_thread_edge", id, "thread group %s is not linked to %s", threadGroupNode, processNode)
 			}
 		}
 		if eventType == "file_write" || eventType == "file_open" {
@@ -841,7 +1054,9 @@ func verifyTelemetryBatches(db *sql.DB, runID string, add issueAdder) error {
 			add("error", "telemetry_batch_event_hash_mismatch", id, "telemetry batch event_ids_sha256 mismatch got=%s want=%s", got, eventIDsHash)
 		}
 		for _, eventID := range eventIDs {
-			if !exists(db, `SELECT 1 FROM events WHERE id = ? AND run_id = ?`, eventID, runID) {
+			if found, err := exists(db, `SELECT 1 FROM events WHERE id = ? AND run_id = ?`, eventID, runID); err != nil {
+				return err
+			} else if !found {
 				add("error", "telemetry_batch_missing_event", id, "telemetry batch references missing event %s", eventID)
 			}
 		}
@@ -905,7 +1120,9 @@ func verifyProcessObservations(db *sql.DB, runID string, add issueAdder) error {
 			add("error", "missing_orphan_lifecycle_policy_decision", id, "outlived process pid %d has no linked orphan lifecycle policy decision", proc.PID)
 		}
 		for _, decisionID := range refs.policyDecisionIDs {
-			if !exists(db, `SELECT 1 FROM policy_decisions WHERE id = ? AND run_id = ? AND rule_id = 'zero_sdk_orphan_observe_only' AND decision = 'audit'`, decisionID, runID) {
+			if found, err := exists(db, `SELECT 1 FROM policy_decisions WHERE id = ? AND run_id = ? AND rule_id = 'zero_sdk_orphan_observe_only' AND decision = 'audit'`, decisionID, runID); err != nil {
+				return err
+			} else if !found {
 				add("error", "missing_orphan_lifecycle_policy_decision", id, "outlived process pid %d references missing policy decision %s", proc.PID, decisionID)
 			}
 		}
@@ -954,8 +1171,11 @@ func verifyReplayManifest(db *sql.DB, runID string, add issueAdder) error {
 		if isNoRolloutRun(err) {
 			return nil
 		}
-		add("error", "replay_manifest_failed", runID, "replay manifest cannot be built: %v", err)
-		return nil
+		if errors.Is(err, sql.ErrNoRows) {
+			add("error", "replay_manifest_failed", runID, "replay manifest references missing evidence: %v", err)
+			return nil
+		}
+		return fmt.Errorf("build replay manifest: %w", err)
 	}
 	if manifest.SchemaVersion != "agentprovenance.replay/v1" {
 		add("error", "invalid_replay_schema", runID, "unexpected replay schema %s", manifest.SchemaVersion)
@@ -985,16 +1205,28 @@ func verifyReplayManifest(db *sql.DB, runID string, add issueAdder) error {
 	return nil
 }
 
-func attemptIsTainted(db *sql.DB, attemptID string) bool {
+func attemptIsTainted(db *sql.DB, attemptID string) (bool, error) {
 	var status, risk string
-	_ = db.QueryRow(`SELECT status, risk_status FROM fork_attempts WHERE id = ?`, attemptID).Scan(&status, &risk)
-	return status == "quarantined" || risk == "tainted"
+	err := db.QueryRow(`SELECT status, risk_status FROM fork_attempts WHERE id = ?`, attemptID).Scan(&status, &risk)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("check attempt risk: %w", err)
+	}
+	return status == "quarantined" || risk == "tainted", nil
 }
 
-func exists(db *sql.DB, query string, args ...any) bool {
+func exists(db *sql.DB, query string, args ...any) (bool, error) {
 	var one int
 	err := db.QueryRow(query, args...).Scan(&one)
-	return err == nil
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("verify reference lookup: %w", err)
+	}
+	return true, nil
 }
 
 // runExists reports whether a run_id has any evidence at all. A run is not a row
@@ -1002,16 +1234,18 @@ func exists(db *sql.DB, query string, args ...any) bool {
 // tables -- so existence is presence in any of them. A single legitimate
 // record-only run lands at least a session, so a sparse run still verifies; only
 // a run with no rows anywhere (a typo, a wrong id) is treated as unknown.
-func runExists(db *sql.DB, runID string) bool {
+func runExists(db *sql.DB, runID string) (bool, error) {
 	for _, table := range []string{"sessions", "rollouts", "tool_calls", "events", "provenance_objects"} {
-		if exists(db, `SELECT 1 FROM `+table+` WHERE run_id = ? LIMIT 1`, runID) {
-			return true
+		if found, err := exists(db, `SELECT 1 FROM `+table+` WHERE run_id = ? LIMIT 1`, runID); err != nil {
+			return false, fmt.Errorf("check %s: %w", table, err)
+		} else if found {
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
-func externalContextBindingExists(db *sql.DB, runID, sessionID, attemptID, toolCallID, processID string) bool {
+func externalContextBindingExists(db *sql.DB, runID, sessionID, attemptID, toolCallID, processID string) (bool, error) {
 	clauses := []string{"run_id = ?"}
 	args := []any{runID}
 	for _, item := range []struct {
@@ -1030,16 +1264,19 @@ func externalContextBindingExists(db *sql.DB, runID, sessionID, attemptID, toolC
 		args = append(args, item.value)
 	}
 	if len(clauses) == 1 {
-		return false
+		return false, nil
 	}
 	query := `SELECT COALESCE(container_id, ''), COALESCE(cgroup_id, ''), COALESCE(root_pid, 0), COALESCE(pid, 0), COALESCE(binding_source, '')
 		FROM execution_context_bindings WHERE ` + strings.Join(clauses, " AND ") + ` ORDER BY created_at DESC LIMIT 1`
 	var containerID, cgroupID, source string
 	var rootPID, pid int64
 	if err := db.QueryRow(query, args...).Scan(&containerID, &cgroupID, &rootPID, &pid, &source); err != nil {
-		return false
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("check external context binding: %w", err)
 	}
-	return isExternalRuntimeBinding(containerID, cgroupID, rootPID, pid, source)
+	return isExternalRuntimeBinding(containerID, cgroupID, rootPID, pid, source), nil
 }
 
 func isExternalRuntimeBinding(containerID, cgroupID string, rootPID, pid int64, source string) bool {
@@ -1054,7 +1291,7 @@ func isExternalRuntimeBinding(containerID, cgroupID string, rootPID, pid int64, 
 	}
 }
 
-func edgeExists(db *sql.DB, runID, fromID, toID, edgeType string) bool {
+func edgeExists(db *sql.DB, runID, fromID, toID, edgeType string) (bool, error) {
 	return exists(db, `SELECT 1 FROM graph_edges WHERE run_id = ? AND from_id = ? AND to_id = ? AND edge_type = ?`, runID, fromID, toID, edgeType)
 }
 
@@ -1068,19 +1305,23 @@ type edgeKey struct {
 // existence can be checked in memory instead of one query per lookup. All
 // edgeExists calls in verifyRuntimeCausality share the same run_id, so this set
 // is an exact substitute for that query.
-func loadRunEdgeSet(db *sql.DB, runID string) (map[edgeKey]struct{}, error) {
-	rows, err := db.Query(`SELECT from_id, to_id, edge_type FROM graph_edges WHERE run_id = ?`, runID)
+func loadRunEdgeSet(db *sql.DB, runID string) (map[edgeKey]map[string]struct{}, error) {
+	rows, err := db.Query(`SELECT from_id, to_id, edge_type, COALESCE(source_event_id,'') FROM graph_edges WHERE run_id = ?`, runID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	set := map[edgeKey]struct{}{}
+	set := map[edgeKey]map[string]struct{}{}
 	for rows.Next() {
 		var k edgeKey
-		if err := rows.Scan(&k.fromID, &k.toID, &k.edgeType); err != nil {
+		var eventID string
+		if err := rows.Scan(&k.fromID, &k.toID, &k.edgeType, &eventID); err != nil {
 			return nil, err
 		}
-		set[k] = struct{}{}
+		if set[k] == nil {
+			set[k] = map[string]struct{}{}
+		}
+		set[k][eventID] = struct{}{}
 	}
 	return set, rows.Err()
 }
