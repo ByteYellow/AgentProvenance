@@ -299,6 +299,7 @@
 </style>
 <link rel="stylesheet" href="/assets/context.css">
 <link rel="stylesheet" href="/assets/workspace.css">
+<link rel="stylesheet" href="/assets/access-control.css">
 <link rel="stylesheet" href="/assets/search.css">
 <link rel="stylesheet" href="/assets/compare.css">
 <link rel="stylesheet" href="/assets/export.css">
@@ -343,6 +344,7 @@
       <button data-context-open="configuration">{{tr .Lang "Permissions & configuration"}} <span id="context-nav-config">…</span></button>
       <button data-context-open="coverage">{{tr .Lang "Collection status"}} <span id="context-nav-coverage">…</span></button>
     </nav>
+    <div class="access-bar"><strong>{{tr .Lang "Access control"}}</strong><small>{{tr .Lang "Whole run"}} · AppArmor / seccomp</small><nav id="access-summary" aria-label="{{tr .Lang "Access-control evidence"}}"></nav></div>
     <details id="profile-fold" class="auxiliary-fold"><summary>{{tr .Lang "Execution scope & sources"}} <span class="sub" data-whole-run hidden>{{tr .Lang "Whole run"}}</span></summary><div id="profilebar" class="profilebar"></div></details>
   </section>
   <section class="card hero" id="graphcard">
@@ -482,6 +484,16 @@
   <p class="session-scope-note">{{tr .Lang "Choose a session to filter its graph and conversation, or read one exact source. Parent links use recorded source metadata."}}</p>
   <div id="session-directory-body"></div>
 </dialog>
+<dialog id="access-dialog" class="content-dialog context-ui" aria-labelledby="access-title">
+  <div class="content-dialog-head"><h2 id="access-title">{{tr .Lang "Access-control evidence"}}</h2><button id="access-close" aria-label="{{tr .Lang "Close"}}">×</button></div>
+  <div class="access-toolbar"><select id="access-kind" aria-label="{{tr .Lang "Evidence kind"}}"></select><button id="access-refresh">{{tr .Lang "Refresh saved records"}}</button><span>{{tr .Lang "Whole run"}}</span></div>
+  <p id="access-note"></p><div id="access-list" aria-live="polite"></div>
+  <div class="access-pager"><button id="access-prev">{{tr .Lang "Previous"}}</button><span id="access-page"></span><button id="access-next">{{tr .Lang "Next"}}</button></div>
+</dialog>
+<dialog id="access-reader-dialog" class="content-dialog context-ui" aria-labelledby="access-reader-title">
+  <div class="content-dialog-head"><h2 id="access-reader-title">{{tr .Lang "Saved content"}}</h2><button id="access-reader-close" aria-label="{{tr .Lang "Close"}}">×</button></div>
+  <div id="access-reader"></div>
+</dialog>
 <dialog id="export-dialog" class="content-dialog context-ui export-dialog" aria-labelledby="export-title">
   <div class="content-dialog-head"><h2 id="export-title">{{tr .Lang "Export replay"}}</h2><button id="export-close" title="{{tr .Lang "Close"}}" aria-label="{{tr .Lang "Close"}}">×</button></div>
   <div class="export-body">
@@ -581,6 +593,7 @@
 <script src="/assets/search-engine.js"></script>
 <script src="/assets/search.js"></script>
 <script src="/assets/workspace.js"></script>
+<script src="/assets/access-control.js"></script>
 <script src="/assets/context.js"></script>
 <script>
 const {t: lookupText, locale: LANG} = window.AgentProvI18n;
@@ -1112,7 +1125,7 @@ const DETAIL_HINT=("<span class=\"hint\">"+esc(tr("click any node to highlight i
 function showDetail(id,explicit=false){
   const el=$('#detail');
   const n=id&&(window._lg.nodes||[]).find(x=>x.id===id);
-  const fieldsOpen=el.dataset.node===id && Boolean(el.querySelector('details')?.open);
+  const fieldsOpen=el.dataset.node===id && Boolean(el.querySelector('[data-node-fields]')?.open);
   el.dataset.node=id||'';
   window.AgentWorkspaceUI.setNode(n,explicit);
   if(!n){el.innerHTML=DETAIL_HINT;return;}
@@ -1140,7 +1153,8 @@ function showDetail(id,explicit=false){
     `<button data-expand="raw">${esc(tr("raw events"))}</button>`;
   el.innerHTML=`<h3><span style="color:${c}">●</span> ${esc(nodeLabel(n))} ${badges}</h3>`+
     `<div class="expandbar">${expandButtons}<button id="detail-session">${esc(tr('Locate session records'))}</button><button id="detail-content">${esc(tr('Saved content'))}</button></div>`+
-    `<details${fieldsOpen?' open':''}><summary>${esc(tr("Original evidence fields"))}</summary><dl>${rows}</dl></details>`;
+    `<details data-node-fields${fieldsOpen?' open':''}><summary>${esc(tr("Original evidence fields"))}</summary><dl>${rows}</dl></details>`;
+  window.AgentAccessControlUI.selectNode(n,el);
   $('#detail-session').onclick=()=>window.AgentContextUI.linkedSession(n.id);
   $('#detail-content').onclick=()=>{
     safeUI(loadPreview(cur,n.id,true));
@@ -1906,6 +1920,7 @@ async function loadRun(run,options={}){
   history.replaceState(null,'',url);
   cur=run;
   window.AgentWorkspaceUI.setRun(run);
+  window.AgentAccessControlUI.setRun(run);
   window.AgentWorkspaceUI.setSession(SESSION_SCOPE);
   window.AgentContextUI.setRun(run,SESSION_SCOPE);
   const q='run='+encodeURIComponent(run);
@@ -2011,6 +2026,10 @@ async function navigateEvidenceGraph(run,id){
   $('#graphcard').scrollIntoView({block:'start',behavior:'smooth'});
 }
 window.AgentWorkspaceUI.init({tr,tx,esc,j,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope)),navigateSession:navigateRelatedSession,returnSession:()=>safeUI(returnRelatedSession()),search:()=>safeUI(window.AgentSearchUI.open()),compare:()=>safeUI(window.AgentCompareUI.open()),export:()=>safeUI(window.AgentExportUI.open())});
+window.AgentAccessControlUI.init({tr,tx,esc,j,navigateGraph:async(run,id)=>{
+  if(run!==cur)throw new Error(tr('The selected run changed.'));
+  activateSessionScope(null);await navigateEvidenceGraph(run,id);
+}});
 window.AgentExportUI.init({tr,tx,esc,j,lang:LANG,scope:()=>({run:cur,...SESSION_SCOPE})});
 window.AgentContextUI.init({tr,tx,esc,j,lang:LANG,
   overviewChanged:value=>window.AgentWorkspaceUI.setOverview(value),

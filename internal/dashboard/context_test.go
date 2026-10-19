@@ -75,7 +75,7 @@ func TestContextDashboardLayoutAndAssets(t *testing.T) {
 			}
 		}
 	}
-	for path, mime := range map[string]string{"/assets/context.js": "application/javascript", "/assets/context.css": "text/css", "/assets/workspace.js": "application/javascript", "/assets/workspace.css": "text/css"} {
+	for path, mime := range map[string]string{"/assets/context.js": "application/javascript", "/assets/context.css": "text/css", "/assets/workspace.js": "application/javascript", "/assets/workspace.css": "text/css", "/assets/access-control.js": "application/javascript", "/assets/access-control.css": "text/css"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 		if w.Code != 200 || w.Body.Len() < 100 || !strings.Contains(w.Header().Get("Content-Type"), mime) {
@@ -154,6 +154,11 @@ func TestContextDashboardFixture(t *testing.T) {
 	addSearchFixture(t, s)
 	addComparisonFixture(t, s)
 	addRetentionFixture(t, s)
+	addAccessComparisonFixture(t, Server{DB: db}, "ui-access-a")
+	addAccessComparisonFixture(t, Server{DB: db}, "ui-access-b")
+	if _, err := db.Exec(`UPDATE events SET payload=replace(payload,'RuntimeDefault','Unconfined') WHERE run_id='ui-access-b' AND event_type='access_control_config'`); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func addSessionDirectoryFixture(t *testing.T, s agentcontext.Service) {

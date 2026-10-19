@@ -57,6 +57,12 @@ var workspaceCSS []byte
 //go:embed workspace.js
 var workspaceJS []byte
 
+//go:embed access-control.js
+var accessControlJS []byte
+
+//go:embed access-control.css
+var accessControlCSS []byte
+
 //go:embed search-engine.js
 var searchEngineJS []byte
 
@@ -123,6 +129,7 @@ func (s Server) Handler() http.Handler {
 		_, _ = w.Write(workspaceJS)
 	})
 	for path, asset := range map[string][]byte{"/assets/search-engine.js": searchEngineJS, "/assets/search.js": searchJS, "/assets/search.css": searchCSS,
+		"/assets/access-control.js": accessControlJS, "/assets/access-control.css": accessControlCSS,
 		"/assets/compare-engine.js": compareEngineJS, "/assets/compare.js": compareJS, "/assets/compare.css": compareCSS,
 		"/assets/export.js": exportJS, "/assets/export.css": exportCSS} {
 		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {

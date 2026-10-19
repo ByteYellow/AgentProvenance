@@ -59,7 +59,7 @@ func TestDashboardCopyHasChineseCatalogEntries(t *testing.T) {
 	// these lookups are actually used in rendered controls and error states.
 	patterns := []string{`\{\{tr \.Lang "([^"]+)"`, `\b(?:tr|tx|t|notice)\(\s*"([^"\\]*(?:\\.[^"\\]*)*)"`, `\b(?:tr|tx|t|notice)\(\s*'([^'\\]*(?:\\.[^'\\]*)*)'`}
 	for _, pattern := range patterns {
-		for _, m := range regexp.MustCompile(pattern).FindAllStringSubmatch(string(indexHTML)+string(contextJS)+string(workspaceJS)+string(searchJS)+string(compareJS)+string(exportJS), -1) {
+		for _, m := range regexp.MustCompile(pattern).FindAllStringSubmatch(string(indexHTML)+string(contextJS)+string(workspaceJS)+string(accessControlJS)+string(searchJS)+string(compareJS)+string(exportJS), -1) {
 			source := strings.ReplaceAll(m[1], `\'`, `'`)
 			if !i18n.HasChinese(source) {
 				t.Errorf("missing Chinese copy: %q", source)
@@ -100,6 +100,8 @@ func TestDashboardContextVocabularyHasChinese(t *testing.T) {
 		"No records in this selection. See collection status for missing or unsupported sources.",
 		"Runtime capture", "Run-specific dropped events", "Kernel readiness confirmed",
 		"runtime_capture_not_recorded", "node_loss_during_capture", "probe_snapshot_stale",
+		"Operation", "Target", "Status", "Reason", "Saved", "Duplicates", "Skipped", "Failed",
+		"State observed at", "Records read",
 	} {
 		if !i18n.HasChinese(source) {
 			t.Errorf("missing Chinese context vocabulary: %q", source)

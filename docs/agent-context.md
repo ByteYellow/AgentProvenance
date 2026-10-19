@@ -362,6 +362,19 @@ one **Evidence reader** below the graph, with **Summary**, **Related events** an
 until there is something to inspect. Graph lenses, playback, zoom and evidence
 links retain their existing behavior.
 
+**Access control** keeps four read-only entries in the overview: audit records,
+observed task state, configuration declarations and audit collection. Counts
+refer to saved records across the whole run. Open an entry to browse 25 records
+per page; source bodies use the existing enlarged reader.
+
+Selecting an audit record shows **Operation attempt**, **Mechanism decision**
+and **Observed result** below the graph. AppArmor and seccomp keep their own
+decisions. Candidate operations retain their association status; absent returns
+remain absent, and same-process exit references are listed separately. Multiple
+decisions can cite the same operation ID without creating extra attempts.
+Source references and the association rule are expandable. Configuration and
+timestamped task state are read separately from these individual decisions.
+
 **Agent session** starts collapsed and keeps its three views: **Conversation &
 tools**, **Permissions & configuration**, and **Collection status**. Overview
 shortcuts open them directly. Execution sources, outbound data, timeline,
@@ -539,8 +552,8 @@ and use the swap button to reverse them. The window compares whole runs and
 retains the Dashboard's session filter for your return. Each side shows its
 recorded task, time range, sources and collection status.
 
-The four views compare saved configuration fields, file evidence, network
-destinations and outbound data types. Rows start collapsed with differences
+The five views compare saved configuration fields, file evidence, network
+destinations, outbound data types and access-control observations. Rows start collapsed with differences
 selected. Expand a row to inspect A and B, choose a source reference, read its
 saved body or locate its recorded graph node. **Return to comparison** restores
 the original run, session scope, graph view and expanded comparison rows.
@@ -582,8 +595,8 @@ issues. A source-file reader reports its file-level coverage and unknown upstrea
 loss. Each configuration observation is bounded to 64 declarations. Search and
 selected replay exports use the existing runtime category and original record
 IDs; unassigned audit records stay outside session-only selections. The API and
-frozen replay catalogs share this projection. The Dashboard's four comparison
-views described above are unchanged.
+frozen replay catalogs share this projection. The **Access control** view shows
+these fields alongside the existing source-reader and graph links.
 
 New public-demo exports include the same comparison catalog and reader. The
 historical Grok pair demonstrates different saved outbound surfaces, rather

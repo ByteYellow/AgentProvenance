@@ -279,7 +279,10 @@ activity, risk signals and saved evidence into one investigation view.
 | Graph Explorer | Switch between process, file/artifact, network, agent intent, orchestration, data flow and deployment views |
 | Timeline and details | Follow the order of events, select a node and inspect its source evidence |
 | Agent session | Navigate from a tool result to linked graph evidence; inspect task and permission/configuration history |
+| Related sessions | Open the overview button or a session's relationship button to inspect saved parent, delegation and shared-evidence links |
 | Saved-content reader | Read captured tool output or file text in pages, independently of the session panel |
+| Access control | Inspect AppArmor/seccomp audit records, task-state observations and configuration; follow an operation attempt through its decision and recorded result |
+| Search, compare and export | Find saved text, compare two runs or preview a read-only export in temporary investigation windows |
 | Coverage and verification | Review session capture, probe availability, association gaps and integrity results |
 
 ![Saved file text with Agent session collapsed](demo/deepseek-context/dashboard-file.png)
@@ -291,8 +294,8 @@ Open your own recorded runs with:
 ```
 
 The local Dashboard serves its assets from the CLI and needs no external web
-service. The online demo provides the same read-only investigation experience
-for the bundled public captures. Views summarize large event sets and let you
+service. The online demo provides read-only investigation of the bundled public
+captures. Views summarize large event sets and let you
 drill into details instead of placing every raw event on one canvas.
 
 ## Demos

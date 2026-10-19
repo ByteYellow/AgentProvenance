@@ -1,6 +1,6 @@
 (function(root){
   'use strict';
-  const dimensions=['configuration','files','network','outbound'];
+  const dimensions=['configuration','files','network','outbound','access_control'];
   const maxRecords=50000,maxSources=100000;
   async function load({run,get,signal,onProgress=()=>{}}){
     const result={run,records:[],issues:[],sources:0,complete:false,coverage:null};

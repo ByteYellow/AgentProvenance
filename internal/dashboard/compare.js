@@ -1,9 +1,10 @@
 window.AgentCompareUI=(()=>{
   'use strict';
   const $=id=>document.getElementById(id),cache=new Map();
-  const dimensionNames={configuration:'Configuration',files:'File evidence',network:'Network destinations',outbound:'Outbound data types'};
+  const dimensionNames={configuration:'Configuration',files:'File evidence',network:'Network destinations',outbound:'Outbound data types',access_control:'Access control'};
   const statusNames={only_a:'Only A recorded',only_b:'Only B recorded',different:'Recorded values differ',common:'Common recorded values',unknown:'Comparison incomplete'};
   const operationNames={recorded_configuration:'Recorded configuration',configuration_unavailable:'Configuration unavailable',saved_file_version:'Saved file version',recorded_file_change:'Recorded content change',file_open:'File open attempt',file_write:'File write attempt',secret_path:'Sensitive path access record',file_rename:'File rename record',file_unlink:'File removal record',connection_attempt:'Connection attempt',dns_lookup:'DNS lookup',captured_request:'Captured request',http_request_observed:'HTTP request observed',http_response_observed:'HTTP response observed'};
+  Object.assign(operationNames,{audit_decision:'Mechanism decision',audit_status:'Audit status',state_snapshot:'Observed task state',configuration_declaration:'Configuration declarations',collection_status:'Audit collection',syscall_result:'Observed syscall return',process_exit:'Process exit record',thread_exit:'Thread exit record'});
   let api,current,controller,epoch=0,loan,returnView,originView,reading=null;
   const t=value=>api.tr(value),e=value=>api.esc(String(value??''));
   function init(options){
@@ -99,7 +100,7 @@ window.AgentCompareUI=(()=>{
       if(coverage.has_more_sources)$('compare-coverage').textContent+=t('Additional sources are not shown')+'\n';
     }
     const relation={matching_recorded_tasks:'Recorded task texts match; execution conditions may differ.',different_recorded_tasks:'Different recorded tasks; this is a comparison of records.',task_not_recorded:'Task evidence is incomplete; this is a comparison of records.'};
-    $('compare-task-note').textContent=t(relation[data.taskRelation]);
+    $('compare-task-note').textContent=t(relation[data.taskRelation])+(current.dimension==='access_control'?' '+t('Comparing saved observation sets, not paired operations or enforcement coverage.'):'');
     const rows=data.rows.filter(r=>r.dimension===current.dimension&&(!current.only||r.status!=='common'));
     const shown=rows.slice(0,current.limit);
     $('compare-results').innerHTML=shown.map(row=>{
@@ -135,6 +136,7 @@ window.AgentCompareUI=(()=>{
         const fields=JSON.parse(value.preview);
         if(fields&&typeof fields==='object'&&!Array.isArray(fields)&&Object.values(fields).every(v=>v===null||typeof v==='string'||typeof v==='boolean'||typeof v==='number'&&Number.isSafeInteger(v))){
           const labels={data_class:'Recorded data',evidence_level:'Evidence level',decision:'Recorded decision',sha256:'Body SHA-256',redacted:'Redacted',method:'HTTP method',protocol:'Protocol',status:'HTTP status',status_code:'HTTP status',ret:'Return value',errno:'Error number',op:'Operation',mode:'Access mode',flags:'Flags',new_path:'New path',policy_decision:'Recorded decision',blocked:'Blocked'};
+          if(dimension==='access_control')Object.assign(labels,{status:'Status',mode:'Mode',profile:'Profile',profile_namespace:'Profile namespace',label:'Label',class:'Class',operation:'Operation',target:'Target',requested_mask:'Requested access',denied_mask:'Denied access',arch:'Architecture',abi:'ABI',syscall_number:'System call number',syscall_name:'System call',action_code:'Logged action code',action_data:'Logged action data',signal:'Logged signal',filter_count:'Filter count',mode_number:'Mode number',no_new_privs:'No new privileges',source:'Source',reason:'Reason',profile_type:'Profile type',localhost_profile:'Local profile',coverage_scope:'Coverage scope',upstream_loss:'Upstream loss',syscall_result:'Return value',syscall_outcome:'Observed outcome'});
           return Object.keys(fields).length?`<dl>${Object.entries(fields).map(([key,v])=>`<dt>${e(t(labels[key]||key))}</dt><dd>${e(key==='data_class'?api.dataLabels[v]||v:key==='evidence_level'?api.evidenceLabels[v]||v:v===null?'null':String(v))}</dd>`).join('')}</dl>`:`<p>${e(t('Target recorded; outcome fields unavailable.'))}</p>`;
         }
       }catch(_){}

@@ -6,6 +6,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
+- D-layout access-control entries separate saved audits, task state,
+  configuration and collection observations. Audit detail keeps attempts,
+  mechanism decisions and actual outcomes side by side; comparison gains an
+  access-control view. Online and offline readers use the same evidence APIs.
 - Session-scoped search, event lists and graph focus include uniquely matched
   audit decisions through existing tool/runtime evidence. Derived membership is
   labeled separately; conflicting or unmatched decisions remain at run scope.
@@ -14,7 +18,7 @@ English | [中文](CHANGELOG.zh-CN.md)
 - The comparison API projects access-control declarations, state snapshots,
   audit decisions, collection observations and runtime outcomes as distinct
   observed sets with original reader references. PID and timestamp changes do
-  not create value differences; the existing comparison layout is unchanged.
+  not create value differences; sources retain their original reader links.
 - Follow existing audit text or journal JSON files with `telemetry follow-audit`.
   Bounded batches commit evidence and source checkpoints together, resume after
   interruption, preserve partial lines, and report source replacement or

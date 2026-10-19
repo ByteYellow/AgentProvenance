@@ -33,6 +33,13 @@ assert.equal(retention.counts.configuration.unknown,1);
 assert.equal(retention.counts.configuration.differences,1,'unavailable placeholders do not increase recorded differences');
 assert.equal(build(run([]),run([withheld])).rows[0].status,'unknown','unknown values stay unknown after swapping sides');
 assert.equal(build(run([record('lost',null,'files')]),run([])).rows[0].status,'unknown','an unreadable file is not a known value');
+const accessA=run([record('apparmor/open','denied','access_control',{operation:'audit_decision'}),record('seccomp/state','filter','access_control',{operation:'state_snapshot'}),record('runtime/result','failed','access_control',{operation:'syscall_result'})]);
+const accessB=run([record('apparmor/open','allowed','access_control',{operation:'audit_decision'}),record('seccomp/state','filter','access_control',{operation:'state_snapshot'}),record('runtime/result','failed','access_control',{operation:'syscall_result'})]);
+const access=build(accessA,accessB);
+assert.equal(access.rows.find(r=>r.key==='apparmor/open').status,'different','changed decisions are shown');
+assert.equal(access.rows.find(r=>r.key==='runtime/result').status,'common','decisions do not rewrite the actual result');
+assert.equal(access.counts.access_control.differences,1);
+assert.equal(build({...accessA,issues:[{dimension:'access_control',code:'audit_fields_incomplete'}]},accessB).rows.find(r=>r.key==='apparmor/open').status,'unknown','incomplete observations remain explicit');
 
 const pages=Array.from({length:3},(_,n)=>({schema_version:'agentprovenance.comparison_records/v1',run_id:'one',records:[record('r'+n,'v')],issues:[],sources_read:50,has_more:n<2,next_cursor:n<2?String(n+1):''}));
 const calls=[];

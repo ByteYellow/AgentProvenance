@@ -239,6 +239,7 @@ func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySe
 	assets := map[string][]byte{
 		"theme.css": themeCSS, "context.css": contextCSS, "context.js": contextJS,
 		"workspace.css": workspaceCSS, "workspace.js": workspaceJS,
+		"access-control.css": accessControlCSS, "access-control.js": accessControlJS,
 		"search-engine.js": searchEngineJS, "search.js": searchJS, "search.css": searchCSS,
 		"compare-engine.js": compareEngineJS, "compare.js": compareJS, "compare.css": compareCSS,
 		"export.js": exportJS, "export.css": exportCSS,
