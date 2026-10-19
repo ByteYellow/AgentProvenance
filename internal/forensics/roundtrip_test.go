@@ -91,6 +91,43 @@ func TestForensicsBundleRoundTripIsPortable(t *testing.T) {
 	}
 }
 
+func TestLargeReplayManifestSurvivesPortableExport(t *testing.T) {
+	const runID = "run-large-manifest"
+	content := []byte(`{"context":"` + strings.Repeat("x", 5<<20) + `"}`)
+	pathsA := mustInit(t, filepath.Join(t.TempDir(), "A"))
+	dbA := mustOpen(t, pathsA)
+	defer dbA.Close()
+	hash := writeObjectBlob(t, dbA, pathsA, runID, content)
+	if _, err := dbA.Exec(`UPDATE provenance_objects SET object_type='replay_manifest' WHERE hash=?`, hash); err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := (forensics.Service{DB: dbA, Paths: pathsA}).Export(runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(pathsA.Provenance, "objects")); err != nil {
+		t.Fatal(err)
+	}
+	pathsB := mustInit(t, filepath.Join(t.TempDir(), "B"))
+	dbB := mustOpen(t, pathsB)
+	defer dbB.Close()
+	info, err := (forensics.Service{DB: dbB, Paths: pathsB}).ImportBundle(bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.ObjectBlobs != 1 || info.Omitted != 0 {
+		t.Fatalf("large structural object was omitted: %+v", info)
+	}
+	var path string
+	if err := dbB.QueryRow(`SELECT path FROM provenance_objects WHERE hash=?`, hash).Scan(&path); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != string(content) || !strings.HasPrefix(path, pathsB.Root) {
+		t.Fatalf("manifest did not survive independent import: path=%s err=%v", path, err)
+	}
+}
+
 // TestForensicsImportRejectsTamperedObject codifies verify-before-commit: a bundle
 // whose embedded object content no longer matches its declared hash must be refused
 // outright (a tampered captured artifact can never enter the store).

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/i18n"
+	"github.com/byteyellow/agentprovenance/internal/redact"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
@@ -724,9 +725,13 @@ func verifyObjects(db *sql.DB, runID string, add issueAdder) error {
 		}
 		if objectType == "record_manifest" {
 			expected, err := BuildRecordManifest(db, runID)
+			var matches bool
+			if err == nil {
+				matches, err = recordManifestEqual(obj.Payload["manifest"], expected)
+			}
 			if err != nil {
 				add("error", "record_manifest_rebuild_failed", sourceID, "record manifest cannot be rebuilt: %v", err)
-			} else if !jsonEqual(obj.Payload["manifest"], expected) {
+			} else if !matches {
 				add("error", "record_manifest_mismatch", sourceID, "record manifest object does not match rebuilt manifest")
 			}
 		}
@@ -774,6 +779,21 @@ func jsonEqual(a, b any) bool {
 	aa, errA := normalizedJSON(a)
 	bb, errB := normalizedJSON(b)
 	return errA == nil && errB == nil && bytes.Equal(aa, bb)
+}
+
+func recordManifestEqual(saved any, expected RecordManifest) (bool, error) {
+	raw, err := json.Marshal(expected)
+	if err != nil {
+		return false, err
+	}
+	// ObjectStore masks secrets before hashing. Rebuild the same representation
+	// without changing the signed object or weakening its hash verification.
+	masked, _ := redact.Redact(string(raw))
+	var comparable any
+	if err := json.Unmarshal([]byte(masked), &comparable); err != nil {
+		return false, err
+	}
+	return jsonEqual(saved, comparable), nil
 }
 
 func normalizedJSON(value any) ([]byte, error) {

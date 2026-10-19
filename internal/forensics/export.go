@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -138,10 +139,8 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 
 	// Embed artifact content inline so the bundle is self-contained AND the DSSE
 	// signature covers it (tampering a captured artifact then breaks the signature).
-	// Content over maxInlineContentBytes is NOT embedded — it is recorded in
-	// "omitted_content" (hash/size/reason) so the gap is explicit, never silent,
-	// and the bundle stays small for large real captures. The provenance row + hash
-	// always travel, so the graph and integrity checks are unaffected.
+	// Snapshot files may be omitted with an explicit size/reason. Provenance
+	// objects are required by graph verification and must travel in full.
 	var omitted []map[string]any
 	objectBlobs, omittedObj, err := embedObjectBlobs(bundle["provenance_objects"])
 	if err != nil {
@@ -242,14 +241,14 @@ func stmtDigest(s attest.Statement) string {
 	return s.Subject[0].Digest["sha256"]
 }
 
-// maxInlineContentBytes caps how large a single artifact/snapshot file may be to
-// travel inline in the bundle. Captured demo artifacts are well under this; the
-// cap only matters for very large real captures, where oversized content is
-// recorded in omitted_content rather than bloating a single in-memory JSON file.
+// Snapshot bodies are optional; larger structural objects (such as a replay
+// manifest containing a resumed session) need a separate, bounded budget.
 const maxInlineContentBytes = 4 << 20 // 4 MiB
+const maxInlineObjectBytes = 16 << 20 // 16 MiB
 
 // embedObjectBlobs reads each content-addressed provenance object blob and returns
-// the inline-embeddable ones plus an explicit list of any omitted for size.
+// its complete bytes. An oversized object fails export rather than producing a
+// bundle that only verifies while the original capture directory is available.
 func embedObjectBlobs(rows any) (blobs []map[string]any, omitted []map[string]any, err error) {
 	list, _ := rows.([]map[string]any)
 	blobs = []map[string]any{}
@@ -259,16 +258,17 @@ func embedObjectBlobs(rows any) (blobs []map[string]any, omitted []map[string]an
 		if hash == "" || path == "" {
 			continue
 		}
-		content, readErr := os.ReadFile(path)
+		file, readErr := os.Open(path)
 		if readErr != nil {
 			return nil, nil, fmt.Errorf("read object blob %s: %w", hash, readErr)
 		}
-		if len(content) > maxInlineContentBytes {
-			omitted = append(omitted, map[string]any{
-				"kind": "object", "ref": hash, "size_bytes": len(content),
-				"reason": fmt.Sprintf("exceeds inline cap (%d bytes)", maxInlineContentBytes),
-			})
-			continue
+		content, readErr := io.ReadAll(io.LimitReader(file, maxInlineObjectBytes+1))
+		_ = file.Close()
+		if readErr != nil {
+			return nil, nil, fmt.Errorf("read object blob %s: %w", hash, readErr)
+		}
+		if len(content) > maxInlineObjectBytes {
+			return nil, nil, fmt.Errorf("required object %s exceeds inline object cap (%d bytes)", hash, maxInlineObjectBytes)
 		}
 		blobs = append(blobs, map[string]any{
 			"hash":        hash,
