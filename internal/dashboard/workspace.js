@@ -8,6 +8,7 @@ window.AgentWorkspaceUI = (() => {
   let model = null, reportsKey = '';
   let sessionScope = null;
   let relationEpoch = 0;
+  const relationCounts = new Map();
   const t = text => api.tr(text), e = value => api.esc(String(value ?? ''));
 
   // Session identity comes from source metadata. Processing diagnostics and
@@ -61,6 +62,7 @@ window.AgentWorkspaceUI = (() => {
     });
     $('inspection-close').onclick = () => { dismissed = true; renderReader(); };
     $('session-directory-open').onclick = () => openDirectory();
+    $('session-relations-open').onclick = () => openRelationships();
     $('session-directory-close').onclick = () => $('session-directory').close();
     $('session-scope-clear').onclick = () => api.selectSession(null);
     $('session-related-back').onclick = () => api.returnSession();
@@ -75,6 +77,7 @@ window.AgentWorkspaceUI = (() => {
     if (run === nextRun) return;
     run = nextRun; selectedSource = ''; tab = 'summary'; dismissed = false;
     relationEpoch++;
+    relationCounts.clear(); updateRelationCount();
     available = {summary:false,events:false,content:false}; model = null; reportsKey = '';
     labels = {summary:'',events:'',content:''};
     try {
@@ -137,11 +140,13 @@ window.AgentWorkspaceUI = (() => {
     $('session-scope-clear').textContent=api.tr('Back to whole run');
     $('session-scope-explanation').textContent=api.tr('Session scope: graph, related events and conversation. Risk, collection status and auxiliary sections cover the whole run.')+' '+api.tr('Risk and auxiliary evidence links return to the whole run.');
     setSource(selectedSource);
+    updateRelationCount();
   }
   function setOverview(value) {
     const key = JSON.stringify([value?.coverage,value?.has_more_sources]);
     if (key === reportsKey) return;
     reportsKey = key; model = sessionDirectory(value);
+    relationEpoch++; relationCounts.clear(); updateRelationCount();
     const {sessions,unassigned,limited} = model;
     $('session-count').textContent = sessions.length + (limited ? '+' : '');
     const shortID = id => id.length>26 ? id.slice(0,14)+'…'+id.slice(-8) : id;
@@ -151,7 +156,7 @@ window.AgentWorkspaceUI = (() => {
     const relations = {missing:'Parent session is not in this run',conflicting:'Conflicting parent session records',self:'Invalid self-parent record',cycle:'Cyclic parent session records'};
     $('session-directory-body').innerHTML = (limited ? `<p class="context-notice">${e(t('Source report limit reached. Additional sources are not shown here.'))}</p>` : '') + sessions.map((group,index)=>{
       const parent = group.relation === 'linked' ? `<button data-parent-session="${group.target}">${e(group.parent)}</button>` : `<span>${e([...group.parents].join(', '))} · ${e(t(relations[group.relation]))}</span>`;
-      return `<section class="session-item" id="session-item-${index}" tabindex="-1"><h3>${e(group.id)} <span>${e(group.harness)}</span><button data-view-session="${index}">${e(t('View session graph'))}</button></h3>${group.relation ? `<div class="session-parent">${e(t('Recorded parent session'))}: ${parent}</div>` : ''}<details class="session-relations" data-relations="${index}"><summary>${e(t('Known session relationships'))} <span data-relation-count></span></summary><div data-relation-body></div></details>${group.reports.map(sourceHTML).join('')}</section>`;
+      return `<section class="session-item" id="session-item-${index}" tabindex="-1"><h3>${e(group.id)} <span>${e(group.harness)}</span><button data-view-session="${index}">${e(t('View session graph'))}</button></h3>${group.relation ? `<div class="session-parent">${e(t('Recorded parent session'))}: ${parent}</div>` : ''}<div class="session-relations" data-relations="${index}"><button data-relations-toggle aria-expanded="false" aria-controls="session-relations-${index}">${e(t('Related sessions'))} <span data-relation-count></span><span class="session-relations-chevron" aria-hidden="true">⌄</span></button><div data-relation-body id="session-relations-${index}" hidden></div></div>${group.reports.map(sourceHTML).join('')}</section>`;
     }).join('') + (unassigned.length ? `<section class="session-item"><h3>${e(t('Sources without session identity'))}</h3>${unassigned.map(sourceHTML).join('')}</section>` : '') + (!sessions.length && !unassigned.length ? `<p class="context-notice">${e(t('No native session identity recorded'))}</p>` : '');
     $('session-directory-body').querySelectorAll('[data-session-source]').forEach(button=>button.onclick=async()=>{
       const source = button.dataset.sessionSource;
@@ -165,7 +170,7 @@ window.AgentWorkspaceUI = (() => {
     $('session-directory-body').querySelectorAll('[data-parent-session]').forEach(button=>button.onclick=()=>focusSession(Number(button.dataset.parentSession)));
     $('session-directory-body').querySelectorAll('[data-view-session]').forEach(button=>button.onclick=()=>selectSession(Number(button.dataset.viewSession)));
     $('session-directory-body').querySelectorAll('[data-relations]').forEach(details=>{
-      details.addEventListener('toggle',()=>{if(details.open&&!details.dataset.loaded)loadRelations(details);});
+      details.querySelector('[data-relations-toggle]').onclick=()=>toggleRelationships(details);
     });
     setSource(selectedSource);
   }
@@ -182,6 +187,7 @@ window.AgentWorkspaceUI = (() => {
   }
   function overviewError() {
     model = null; reportsKey = ''; $('session-count').textContent = '…';
+    relationEpoch++; relationCounts.clear(); updateRelationCount();
     $('session-members').textContent = t('Context coverage unavailable');
     $('session-directory-body').textContent = t('Context coverage unavailable');
   }
@@ -192,6 +198,36 @@ window.AgentWorkspaceUI = (() => {
   function openDirectory(index) {
     if (!$('session-directory').open) $('session-directory').showModal();
     if (index != null) focusSession(index);
+  }
+  function updateRelationCount() {
+    const count=sessionScope?relationCounts.get(JSON.stringify([sessionScope.harness,sessionScope.session_id])):null;
+    $('session-relations-count').hidden=count==null;
+    $('session-relations-count').textContent=count??'';
+  }
+  function toggleRelationships(details,open) {
+    const button=details.querySelector('[data-relations-toggle]');
+    open=open??button.getAttribute('aria-expanded')!=='true';
+    button.setAttribute('aria-expanded',String(open));
+    details.querySelector('[data-relation-body]').hidden=!open;
+    if(open&&!details.dataset.loaded)loadRelations(details);
+    else if(open)revealRelationships(details);
+  }
+  function revealRelationships(details) {
+    const button=details.querySelector('[data-relations-toggle]');
+    if(document.activeElement===button&&button.getAttribute('aria-expanded')==='true') {
+      details.closest('.session-item').scrollIntoView({block:'start'});
+    }
+  }
+  function openRelationships() {
+    openDirectory();
+    const sessions=model?.sessions||[];
+    let index=sessions.findIndex(group=>group.harness===sessionScope?.harness&&group.id===sessionScope?.session_id);
+    if(index<0)index=Math.max(0,sessions.findIndex(group=>group.relation));
+    const details=$('session-directory-body').querySelector(`[data-relations="${index}"]`);
+    if(!details)return;
+    toggleRelationships(details,true);
+    const button=details.querySelector('[data-relations-toggle]');
+    button.focus({preventScroll:true});button.scrollIntoView({block:'nearest'});
   }
   async function loadRelations(details,cursor='',previous=[]) {
     const group=model?.sessions[Number(details.dataset.relations)], currentRun=run, epoch=relationEpoch;
@@ -204,7 +240,9 @@ window.AgentWorkspaceUI = (() => {
       const page=await api.j('/api/context/session-relations?'+query);
       if(epoch!==relationEpoch||currentRun!==run||!details.isConnected)return;
       const relations=[...previous,...page.relations];
-      details.querySelector('[data-relation-count]').textContent=relations.length+(page.has_more||page.limited?'+':'');
+      const count=relations.length+(page.has_more||page.limited?'+':'');
+      details.querySelector('[data-relation-count]').textContent=count;
+      relationCounts.set(group.key,count);updateRelationCount();
       const kindNames={same_session:'Same native session in another run',parent:'Recorded parent / child',delegation:'Recorded delegation',fork:'Recorded fork',message_request:'Message requested'};
       const target=relation=>relation.kind==='same_session'?relation.to:relation.from.session_id===group.id?relation.to:relation.from;
       body.innerHTML=relations.map((relation,index)=>{
@@ -239,6 +277,7 @@ window.AgentWorkspaceUI = (() => {
           if(button.isConnected)button.disabled=false;
         }
       });
+      if(!cursor)revealRelationships(details);
     } catch(error) {
       if(epoch!==relationEpoch||currentRun!==run||!details.isConnected)return;
       body.textContent=t('Session relationships unavailable')+' '+error.message;

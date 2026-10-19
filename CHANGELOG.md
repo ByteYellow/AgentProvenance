@@ -90,6 +90,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Changed
 
+- Keep a visible **Related sessions** button in the run overview and beside
+  every native session. Open the selected session's relationships directly,
+  load evidence on demand, and retain the graph and keyboard focus on return.
 - Clarify the separate audit-reader workflow and seccomp logged action data.
   Controlled Linux checks now cover mixed AppArmor/seccomp decisions, logged
   ERRNO, ordinary permission failures, and signed/offline replay under both

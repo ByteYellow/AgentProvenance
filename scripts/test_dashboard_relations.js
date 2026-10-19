@@ -18,7 +18,7 @@ async (page) => {
     await page.locator('#session-directory-open').click();
     const item=page.locator('.session-item').filter({has:page.locator('h3').filter({hasText:/^worker codex/})});
     const fold=item.locator('.session-relations');
-    if(!await fold.evaluate(el=>el.open))await fold.locator('> summary').click();
+    if(await fold.locator('[data-relations-toggle]').getAttribute('aria-expanded')!=='true')await fold.locator('[data-relations-toggle]').click();
     await fold.locator('.session-relation').first().waitFor();
     return fold;
   }
@@ -53,7 +53,7 @@ async (page) => {
   await page.waitForFunction(()=>window._lensManifest?.run_id==='ui-session-related');
   await page.locator('#session-directory-open').click();
   const orphan=page.locator('.session-item').filter({has:page.locator('h3').filter({hasText:/^orphan codex/})}).locator('.session-relations');
-  await orphan.locator('> summary').click();
+  await orphan.locator('[data-relations-toggle]').click();
   await orphan.locator('.session-relation').waitFor();
   check(await orphan.innerText().then(s=>s.includes('Target session is not collected or included')),'missing target remains a referenced identity');
   check(await orphan.locator('[data-open-relation]').count()===0,'missing target has no fabricated navigation');
@@ -62,7 +62,7 @@ async (page) => {
   await page.waitForFunction(()=>window._lensManifest?.run_id==='ui-session-related');
   await page.locator('#session-directory-open').click();
   const root=page.locator('.session-item').filter({has:page.locator('h3').filter({hasText:/^root codex/})}).locator('.session-relations');
-  await root.locator('> summary').click();
+  await root.locator('[data-relations-toggle]').click();
   await root.locator('.session-relation').first().waitFor();
   check(await root.innerText().then(s=>s.includes('同一原生会话的其他运行记录')),'same session across runs has a distinct translated label');
   await root.locator('.session-relation').first().scrollIntoViewIfNeeded();

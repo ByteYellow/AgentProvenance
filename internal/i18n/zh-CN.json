@@ -2736,6 +2736,8 @@
   "Recorded parent session": "来源记录的父会话",
   "Read source records": "查看来源记录",
   "Known session relationships": "已知会话关联",
+  "Related sessions": "关联会话",
+  "Inspect recorded session relationships": "查看已记录的会话关系及来源",
   "Retry": "重试",
   "Time": "时间",
   "Same native session in another run": "同一原生会话的其他运行记录",

@@ -392,8 +392,12 @@ Risk, collection status and auxiliary sections keep their **Whole run** scope.
 Following a risk or auxiliary evidence link returns to that scope. Public-demo
 static exports use the same session selection and graph projections.
 
-Expand **Known session relationships** in the directory to inspect recorded
-connections. Matching harness and native session IDs link occurrences across
+Click **Related sessions** in the overview to open recorded connections for the
+selected session. Without a session filter, it opens a session with a recorded
+parent, or the first session. Every directory entry also has a **Related sessions**
+button. Counts appear after reading the relationships; `+` marks additional or
+limited results. Closing the directory keeps the current graph and reader.
+Matching harness and native session IDs link occurrences across
 runs. Source metadata supplies parent/child relationships; typed Codex records
 also supply delegation, fork and message-request relationships. Each relationship
 keeps its direction and immutable source references under **Source and evidence**.
