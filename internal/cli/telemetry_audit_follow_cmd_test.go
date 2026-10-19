@@ -5,15 +5,57 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"unicode"
 
+	"github.com/byteyellow/agentprovenance/internal/daemon"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
+
+func TestAuditReaderJSONDiagnosticsStayEnglish(t *testing.T) {
+	for _, name := range []string{"ingest-audit", "follow-audit"} {
+		for _, machine := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/json=%t", name, machine), func(t *testing.T) {
+				dir := t.TempDir()
+				path := filepath.Join(t.TempDir(), "audit.log")
+				if err := os.WriteFile(path, []byte(auditCLIRecord+"\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				lock, err := json.Marshal(daemon.LockInfo{PID: os.Getppid(), Addr: "127.0.0.1:1"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, ".daemon.lock"), lock, 0600); err != nil {
+					t.Fatal(err)
+				}
+				root := NewRootCommand()
+				var stdout, stderr bytes.Buffer
+				root.SetOut(&stdout)
+				root.SetErr(&stderr)
+				args := []string{"--lang", "zh-CN", "--data-dir", dir, "telemetry", name, "--run", "fixture", "--file", path}
+				if name == "follow-audit" {
+					args = append(args, "--once")
+				}
+				if machine {
+					args = append(args, "--json")
+				}
+				root.SetArgs(args)
+				if err := root.Execute(); err != nil {
+					t.Fatal(err)
+				}
+				hasChinese := strings.ContainsFunc(stderr.String(), func(r rune) bool { return unicode.Is(unicode.Han, r) })
+				if stderr.Len() == 0 || hasChinese == machine {
+					t.Fatalf("unexpected diagnostic language: %q", stderr.String())
+				}
+			})
+		}
+	}
+}
 
 func TestAuditFollowJSONEnglishAndSourceTextUnchanged(t *testing.T) {
 	for _, lang := range []string{"en", "zh-CN"} {

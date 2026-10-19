@@ -17,7 +17,8 @@ export AGENTPROV_BIN=/absolute/path/to/agentprov
 
 将 `AGENTPROV_BIN` 改为 CLI 的实际路径。预编译 CLI 的安装方法见[快速开始](../../README.zh-CN.md#快速开始)。
 
-`agentprov` 和 `agentprov_eval` 导出同一组 Python 接口；下文使用 `from agentprov import ...`。命令输出和 JSON 字段保持英文。
+`agentprov` 和 `agentprov_eval` 导出同一组 Python 接口；下文使用 `from agentprov import ...`。
+JSON 字段、状态和系统生成的错误统一使用英文，已保存的证据保留原语言。
 
 ## 记录、评估并导入结果
 

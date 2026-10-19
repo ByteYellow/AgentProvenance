@@ -113,7 +113,7 @@ agentprov ai tools --provider openai
 agentprov --data-dir .agentprov ai call list_events --input '{"run":"run-example","limit":20}'
 ```
 
-Replace `run-example` with a recorded run ID. The provider options emit definitions without calling a model. Tool descriptions and output default to English.
+Replace `run-example` with a recorded run ID. The provider options emit definitions without calling a model. Tool descriptions, JSON field names, statuses and generated errors use English. Saved evidence retains its original language.
 
 A `tools/call` request over MCP:
 

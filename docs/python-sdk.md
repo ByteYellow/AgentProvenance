@@ -15,7 +15,7 @@ python3 -m pip install -e .
 export AGENTPROV_BIN=/absolute/path/to/agentprov
 ```
 
-Set `AGENTPROV_BIN` to the CLI path. See [Quickstart](../README.md#quickstart) for prebuilt packages. The `agentprov` and `agentprov_eval` packages export the same API. Tool output and JSON fields remain English.
+Set `AGENTPROV_BIN` to the CLI path. See [Quickstart](../README.md#quickstart) for prebuilt packages. The `agentprov` and `agentprov_eval` packages export the same API. JSON field names, statuses and generated errors use English. Saved evidence retains its original language.
 
 ## Record, evaluate and import
 

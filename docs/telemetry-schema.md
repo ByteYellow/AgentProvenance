@@ -205,16 +205,30 @@ and [SSL_free](https://docs.openssl.org/3.0/man3/SSL_free/) for the API semantic
 
 ## AppArmor and seccomp audit collection
 
-Read existing audit text or newline-delimited `journalctl -o json` records with:
+Connect existing AppArmor and seccomp logs to a run's evidence. Choose the
+reader for your input, then query saved decisions and runtime candidates:
+
+| Task | Command | Input and result |
+| --- | --- | --- |
+| Import an existing log | `telemetry ingest-audit` | Read a finite audit text or journal JSON file, then exit |
+| Collect new log records | `telemetry follow-audit` | Follow an append-only file and resume from a saved checkpoint |
+| Inspect associations | `telemetry audit-associations` | Query saved decisions, process candidates and observed outcomes |
+
+For a saved file with one `journalctl -o json` object per line:
 
 ```sh
 agentprov telemetry ingest-audit --run RUN --file audit.jsonl --json
+agentprov telemetry audit-associations --run RUN --limit 100 --json
 ```
 
 Use `--mechanism apparmor` or `--mechanism seccomp` to select one source; the
 default reads both. `--file -` accepts a finite input on stdin. This command
 reads supplied records without installing profiles, attaching seccomp filters,
 reconfiguring logging or taking ownership of auditd.
+
+JSON field names, statuses, reason codes and generated errors use English across
+CLI, HTTP, SDK and MCP. Saved paths, commands and log text retain their original
+language, subject to the run's retention and redaction settings.
 
 `ingest-audit` processes a finite input; `follow-audit` follows an existing
 append-only file. Start either reader separately from `launch`, which does not

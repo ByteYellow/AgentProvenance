@@ -299,3 +299,16 @@ jobs:
           GOTOOLCHAIN=local go build -o /tmp/agentprov-readiness ./cmd/agentprov
           python3 scripts/accept_daemon_readiness.py \
             --agentprov /tmp/agentprov-readiness --report /tmp/daemon-readiness.json
+
+      - name: Verify audit interfaces with real CLI, HTTP, SDK and MCP
+        run: |
+          python3 scripts/accept_audit_interfaces.py \
+            --agentprov /tmp/agentprov-readiness --report /tmp/audit-interfaces.json
+
+      - name: Upload audit interface acceptance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-interface-acceptance
+          path: /tmp/audit-interfaces.json
+          if-no-files-found: ignore

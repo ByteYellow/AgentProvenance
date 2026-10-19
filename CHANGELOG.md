@@ -121,6 +121,11 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Fixed
 
+- Audit CLI failures and AI tool diagnostics keep English machine-facing errors
+  without appending localized usage text. JSON audit readers also keep daemon
+  warnings in English; explicit help and ordinary terminal output remain localized.
+  End-to-end checks cover real CLI, HTTP, Python SDK and MCP processes with both
+  retention presets, pagination and original-language evidence.
 - Keep recorded host identity alongside boot/PID/start across native lifecycle
   bindings, Hook attribution, TLS exchanges, model-command links and process
   graphs. Missing execs, reused parent PIDs and unrelated exits no longer reuse

@@ -10,6 +10,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/daemon"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 	"github.com/spf13/cobra"
@@ -20,9 +21,10 @@ func telemetryFollowAuditCmd(dataDir *string) *cobra.Command {
 	var preset string
 	var jsonOut bool
 	cmd := &cobra.Command{
-		Use:   "follow-audit",
-		Short: "follow an existing audit log with durable checkpoints and read-only coverage diagnostics",
-		Args:  cobra.NoArgs,
+		Use:          "follow-audit",
+		Short:        "follow an existing audit log with durable checkpoints and read-only coverage diagnostics",
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			paths, err := store.Init(*dataDir)
 			if err != nil {
@@ -33,7 +35,11 @@ func telemetryFollowAuditCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), commandLanguage(cmd))
+			locale := commandLanguage(cmd)
+			if jsonOut {
+				locale = i18n.English
+			}
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), locale)
 			service := agentcontext.Service{DB: db, Paths: paths}
 			if cmd.Flags().Changed("capture") {
 				policy, err := agentcontext.NewCapturePolicy(preset, nil)

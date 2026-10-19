@@ -137,15 +137,27 @@ Go TLS 与缺少 epoch 的历史来源省略 `connection_id`，其对象生命�
 
 ## AppArmor 与 seccomp 审计采集
 
-读取已有 audit 文本，或每行一个对象的 `journalctl -o json` 记录：
+把已有 AppArmor 和 seccomp 日志接入 Run 的证据。根据输入选择读取方式，再查询决定与运行时关联：
+
+| 任务 | 命令 | 输入与结果 |
+| --- | --- | --- |
+| 导入已有日志 | `telemetry ingest-audit` | 读取有限的 audit 文本或 journal JSON 文件，完成后退出 |
+| 持续采集日志 | `telemetry follow-audit` | 跟踪仅追加的文件，重启后从断点续读 |
+| 查询关联 | `telemetry audit-associations` | 查询已保存的决定、进程候选与实际结果 |
+
+例如，读取每行一个对象的 `journalctl -o json` 文件：
 
 ```sh
 agentprov telemetry ingest-audit --run RUN --file audit.jsonl --json
+agentprov telemetry audit-associations --run RUN --limit 100 --json
 ```
 
 用 `--mechanism apparmor` 或 `--mechanism seccomp` 选择一种来源，默认读取两种。
 `--file -` 接受标准输入中的有限记录。命令只读取提供的日志，不安装 profile、不附加 seccomp
 过滤器、不修改日志配置，也不接管 auditd。
+
+CLI、HTTP、SDK 和 MCP 的 JSON 字段、状态、原因码及系统生成的错误统一使用英文。
+路径、命令和日志正文按 Run 的留存及脱敏设置保存，保留原语言。
 
 `ingest-audit` 一次性处理已有记录；`follow-audit` 持续跟随已有、仅追加的日志文件。
 两者需要在 `launch` 之外单独启动，`launch` 暂不自动启动审计读取器。

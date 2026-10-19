@@ -8,6 +8,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/daemon"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 	"github.com/spf13/cobra"
@@ -18,9 +19,10 @@ func telemetryIngestAuditCmd(dataDir *string) *cobra.Command {
 	var preset string
 	var jsonOut bool
 	cmd := &cobra.Command{
-		Use:   "ingest-audit",
-		Short: "read existing AppArmor/seccomp audit text or journal JSON without changing host policies",
-		Args:  cobra.NoArgs,
+		Use:          "ingest-audit",
+		Short:        "read existing AppArmor/seccomp audit text or journal JSON without changing host policies",
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var input io.Reader = cmd.InOrStdin()
 			if opts.Path != "-" {
@@ -40,7 +42,11 @@ func telemetryIngestAuditCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
-			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), commandLanguage(cmd))
+			locale := commandLanguage(cmd)
+			if jsonOut {
+				locale = i18n.English
+			}
+			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), locale)
 			service := agentcontext.Service{DB: db, Paths: paths}
 			if cmd.Flags().Changed("capture") {
 				policy, err := agentcontext.NewCapturePolicy(preset, nil)

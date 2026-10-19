@@ -16,7 +16,8 @@ func telemetryAuditAssociationsCmd(dataDir, daemonURL *string) *cobra.Command {
 	var jsonOut bool
 	cmd := &cobra.Command{
 		Use: "audit-associations", Args: cobra.NoArgs,
-		Short: "inspect audit process and operation candidates without changing original evidence",
+		SilenceUsage: true,
+		Short:        "inspect audit process and operation candidates without changing original evidence",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if opts.Limit < 1 || opts.Limit > 500 {
 				return fmt.Errorf("audit association limit must be between 1 and 500")
