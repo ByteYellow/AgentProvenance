@@ -237,6 +237,16 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" /tmp/agentprov-live/audit-evidence
           AGENTPROV_AUDIT_FOLLOW_INPUT=/tmp/agentprov-live/audit-evidence/apparmor-journal.jsonl \
             go test ./internal/forensics -run '^TestAuditFollowerSignedRoundtrip$' -v
+      - name: Verify mixed access-control decisions and both retention presets
+        run: |
+          sudo env AGENTPROV_AUDIT_MIXED_LIVE=1 AGENTPROV_AUDIT_EVIDENCE_DIR=/tmp/agentprov-live/mixed-audit \
+            /tmp/agentprov-live/telemetry-test -test.run '^TestLiveAccessControlMixedMatrix$' -test.v -test.timeout=90s \
+            | tee /tmp/agentprov-live/mixed-audit.log
+          sudo chown -R "$(id -u):$(id -g)" /tmp/agentprov-live/mixed-audit
+          AGENTPROV_AUDIT_MIXED_EVIDENCE=/tmp/agentprov-live/mixed-audit AGENTPROV_AUDIT_MIXED_OUTPUT=/tmp/agentprov-live/mixed-bundles \
+            go test ./internal/forensics -run '^TestLiveMixedAuditSignedRoundtrip$' -v
+          AGENTPROV_AUDIT_MIXED_BUNDLES=/tmp/agentprov-live/mixed-bundles \
+            go test ./internal/dashboard -run '^TestRecordedMixedAuditReplay$' -v
       - name: Verify task state and automatic procfs snapshots
         run: |
           go test -c -o /tmp/agentprov-live/access-state-test ./internal/accesscontrol
@@ -260,6 +270,8 @@ jobs:
             /tmp/agentprov-live/audit-associations.log
             /tmp/agentprov-live/audit-follow.log
             /tmp/agentprov-live/audit-evidence/
+            /tmp/agentprov-live/mixed-audit.log
+            /tmp/agentprov-live/mixed-audit/
             /tmp/agentprov-live/access-state.log
             /tmp/agentprov-live/sensor-state.log
             /tmp/agentprov-live/access-state/

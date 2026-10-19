@@ -147,6 +147,10 @@ agentprov telemetry ingest-audit --run RUN --file audit.jsonl --json
 `--file -` 接受标准输入中的有限记录。命令只读取提供的日志，不安装 profile、不附加 seccomp
 过滤器、不修改日志配置，也不接管 auditd。
 
+`ingest-audit` 一次性处理已有记录；`follow-audit` 持续跟随已有、仅追加的日志文件。
+两者需要在 `launch` 之外单独启动，`launch` 暂不自动启动审计读取器。
+原生 Sensor 的 procfs 快照记录已启用状态，审计读取器补充来源日志报告的实际决定。
+
 Journal 记录通过 `_MACHINE_ID` 和 `_BOOT_ID` 提供来源身份。普通 audit 文本需要通过
 `--host-id` 和 `--boot-id` 指定来源主机及启动实例，不能填写正在执行导入的另一台机器的身份。
 命令会拒绝与 journal 不一致的显式身份。身份不完整的记录仍可保存，并在 `identity_incomplete`
@@ -182,6 +186,16 @@ AppArmor 的 profile 模式需要独立状态证据。seccomp 的 `LOG`、`ERRNO
 AppArmor/seccomp 决定导入。PID 字段语义依据内核的
 [LSM 审计记录](https://github.com/torvalds/linux/blob/v6.8/security/lsm_audit.c)和
 [seccomp 审计记录](https://github.com/torvalds/linux/blob/v6.8/kernel/audit.c)。
+
+`action_data` 是**日志中** `action_code` 的低 16 位，不是观测到的 errno。
+Linux 可能只记录动作类型：`ERRNO` 的日志为 `code=0x50000` 时，低位为零，进程仍可能收到 EPERM。
+动作、独立来源记录的过滤器参数和实际 syscall 返回值应分别读取。
+内核的 [seccomp 决策路径](https://github.com/torvalds/linux/blob/v6.8/kernel/seccomp.c)
+将掩码后的动作传给审计日志。
+
+同一操作可能同时产生 seccomp `LOG` 和 AppArmor `DENIED`，两条决定引用同一操作 ID 及失败返回，
+操作尝试只计一次。在 syscall 入口前发生的 seccomp `ERRNO` 则可能只有进程生命周期证据，
+没有原生入口或返回记录。过滤器已启用、没有可用审计时，仅保留实际状态证据。
 
 ### 持续文件采集
 

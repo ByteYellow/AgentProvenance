@@ -90,6 +90,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Changed
 
+- Clarify the separate audit-reader workflow and seccomp logged action data.
+  Controlled Linux checks now cover mixed AppArmor/seccomp decisions, logged
+  ERRNO, ordinary permission failures, and signed/offline replay under both
+  retention presets.
 - Local database schema 20 adds audit reader checkpoints. Back up the data
   directory before upgrading; reader checkpoints are local operational state
   and are not imported from evidence Bundles.

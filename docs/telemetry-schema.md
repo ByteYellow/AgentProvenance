@@ -216,6 +216,11 @@ default reads both. `--file -` accepts a finite input on stdin. This command
 reads supplied records without installing profiles, attaching seccomp filters,
 reconfiguring logging or taking ownership of auditd.
 
+`ingest-audit` processes a finite input; `follow-audit` follows an existing
+append-only file. Start either reader separately from `launch`, which does not
+start an audit reader automatically. Native sensor procfs snapshots record
+enabled state; audit readers add the decisions reported by the source log.
+
 Journal records supply their own `_MACHINE_ID` and `_BOOT_ID`. For plain audit
 text, provide `--host-id` and `--boot-id` from the originating host and boot.
 The importer never substitutes the importing machine's identity. It rejects
@@ -263,6 +268,21 @@ EPERM/EACCES messages are not accepted as AppArmor/seccomp decisions. PID field
 semantics follow the kernel's
 [LSM audit records](https://github.com/torvalds/linux/blob/v6.8/security/lsm_audit.c)
 and [seccomp audit records](https://github.com/torvalds/linux/blob/v6.8/kernel/audit.c).
+
+`action_data` is the low 16 bits of the **logged** `action_code`, not an observed
+errno. Linux can log the masked action alone: an `ERRNO` decision with
+`code=0x50000` has logged low bits of zero even when the process receives EPERM.
+Keep the action, configured filter data (when independently available) and
+observed syscall return separate. The kernel's
+[seccomp decision path](https://github.com/torvalds/linux/blob/v6.8/kernel/seccomp.c)
+passes the masked action to audit logging.
+
+One operation may have both a seccomp `LOG` decision and an AppArmor `DENIED`
+decision. Both can reference the same operation ID and its failed return;
+the two decisions do not create two operation attempts. A pre-entry seccomp
+`ERRNO` decision may instead have process-lifetime evidence with no native
+syscall entry or return. An enabled filter without an available audit record
+remains state evidence only.
 
 ### Continuous file collection
 

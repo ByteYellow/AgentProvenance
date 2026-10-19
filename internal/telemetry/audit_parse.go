@@ -243,6 +243,8 @@ func ParseAuditLine(line []byte, source AuditSource) (AuditRecord, bool, error) 
 		}
 		code := strings.TrimPrefix(strings.ToLower(get("code")), "0x")
 		if parsed, err := strconv.ParseUint(code, 16, 32); err == nil {
+			// Preserve logged bits only. Linux seccomp audit can mask filter data
+			// out of code, so a zero low word does not establish errno or success.
 			c, data := uint32(parsed), uint16(parsed&0xffff)
 			out.ActionCode, out.ActionData = &c, &data
 			if action := seccompAction(c & 0xffff0000); action != "" {

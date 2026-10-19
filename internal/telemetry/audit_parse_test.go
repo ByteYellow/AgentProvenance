@@ -106,6 +106,28 @@ func TestAuditJournalAndTextDeduplicateBySourceRecord(t *testing.T) {
 	}
 }
 
+func TestAuditSeccompActionOnlyCodeDoesNotInventErrno(t *testing.T) {
+	for _, abi := range []string{"arch=c00000b7 syscall=56", "arch=c000003e syscall=257"} {
+		r := parseAuditTest(t, auditTestPrefix+"pid=42 "+abi+" sig=0 code=0x50000")
+		if r.Decision != "ERRNO" || r.SyscallName != "openat" || r.ActionData == nil || *r.ActionData != 0 {
+			t.Fatalf("logged action bits changed: %+v", r)
+		}
+		data, err := json.Marshal(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var object map[string]any
+		if err := json.Unmarshal(data, &object); err != nil {
+			t.Fatal(err)
+		}
+		for _, key := range []string{"errno", "syscall_result", "syscall_outcome", "mode", "target", "profile"} {
+			if _, invented := object[key]; invented {
+				t.Fatalf("audit-only code fabricated %s: %s", key, data)
+			}
+		}
+	}
+}
+
 func TestAuditParserDoesNotOverwriteAmbiguousFields(t *testing.T) {
 	r := parseAuditTest(t, auditTestSeccomp+" pid=43 code=0x80000000 syscall=42")
 	if r.AuditPID != nil || r.SyscallNumber != nil || r.ActionCode != nil || r.Decision != "unknown" || len(r.Warnings) < 3 {
