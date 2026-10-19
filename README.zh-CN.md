@@ -265,7 +265,7 @@ v0.9.0 将任务和对话放进执行证据页面。**执行图谱在上，Agent
 | 搜索、对比与导出 | 在临时调查窗口中查找正文、比较两次运行，或预览只读导出的内容 |
 | 采集与校验 | 检查会话采集情况、探针是否可用、关联缺口和完整性校验结果 |
 
-![Agent 会话收起时，仍可查看已保存的文件正文](demo/deepseek-context/dashboard-file-zh-CN.png)
+![调查与修复：会话、访问控制证据与执行图谱](demo/investigation-workflow/dashboard-overview-zh-CN.png)
 
 查看自己的执行记录：
 
@@ -277,6 +277,21 @@ v0.9.0 将任务和对话放进执行证据页面。**执行图谱在上，Agent
 面对大量事件，界面先展示汇总关系，再按需展开详情，避免把全部原始事件堆在一张图里。
 
 ## 演示
+
+### 调查失败，再比较修复结果
+
+一个真实 DeepSeek 会话完成两次执行：委派代码审查、运行七项测试、发现可选诊断被拒绝，
+再关闭多余诊断，成功生成报表。沿父子会话查看协作，搜索具体报错，检查 AppArmor/seccomp
+记录，对比文件变化，最后选择证据导出只读回放。
+
+在当前源码目录中运行：
+
+```sh
+go build -o agentprov ./cmd/agentprov
+./agentprov demo investigation-workflow
+```
+
+命令会同时加载两份签名记录。[查看完整调查路线](demo/investigation-workflow/README.zh-CN.md)。
 
 <a id="demo关联多-agent-的任务委派协作消息与系统调用"></a>
 
@@ -503,7 +518,7 @@ ARM64 实机与 KVM/K3s 实验环境的验收结果另有报告，不等同于�
 各验收脚本的环境要求不同。部分脚本需要 root、会创建 Pod 或安装服务，
 请勿直接批量执行全部 `scripts/accept_*.sh`。
 环境测试请按 [KVM/K3s 部署指南](docs/zh-CN/amd64-kvm-k3s.md)操作，
-单节点压力测试见[收尾指南](docs/zh-CN/project-closeout.md)。
+单节点压力测试见[部署与性能基线](docs/zh-CN/project-closeout.md)。
 
 ## 作者与许可
 

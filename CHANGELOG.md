@@ -6,7 +6,12 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Added
 
-- D-layout access-control entries separate saved audits, task state,
+- A signed investigation-and-repair demo follows one real DeepSeek session and
+  its subagents across two runs, with tests, AppArmor/seccomp decisions, file
+  changes, search, comparison and selected offline sharing. Named demos load
+  companion captures together. The Linux capture runner verifies independent import.
+
+- Dashboard access-control entries separate saved audits, task state,
   configuration and collection observations. Audit detail keeps attempts,
   mechanism decisions and actual outcomes side by side; comparison gains an
   access-control view. Online and offline readers use the same evidence APIs.
@@ -127,6 +132,17 @@ English | [中文](CHANGELOG.zh-CN.md)
   projections; context queries support namespaced harness/session filters.
 
 ### Fixed
+
+- Run comparison shows readable task text from the current main session. A
+  missing body now affects its own source records, while known values from
+  unrelated sources remain comparable. Saved file changes and audit decisions
+  appear before lower-level observations.
+- Portable exports include required provenance objects up to 16 MiB, separately
+  from the 4 MiB snapshot-file cap. Larger required objects fail export explicitly
+  instead of producing a replay with missing graph objects.
+- Record-manifest verification applies the same redaction as materialization,
+  avoiding false mismatches for credential-variable expressions while still
+  detecting command changes.
 
 - Audit CLI failures and AI tool diagnostics keep English machine-facing errors
   without appending localized usage text. JSON audit readers also keep daemon

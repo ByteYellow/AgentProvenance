@@ -228,7 +228,7 @@ func demoExportCmd() *cobra.Command {
 		if err = os.Rename(stage, target); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Static demo site: %s\n7 signed replays, 9 demo guides, %d user guides and release history, English and Chinese.\n", target, len(projectdocs.Catalog()))
+		fmt.Fprintf(cmd.OutOrStdout(), "Static demo site: %s\n%d signed replays, %d demo guide entries, %d user guides and release history, English and Chinese.\n", target, len(manifest.Runs), len(catalog), len(projectdocs.Catalog()))
 		return nil
 	}}
 	cmd.Flags().StringVar(&output, "output", "", "new directory for the static website")

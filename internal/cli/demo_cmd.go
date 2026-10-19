@@ -71,7 +71,7 @@ func demoCmd() *cobra.Command {
 				if chosen == nil {
 					return commandErrorf("unknown demo %q; use agentprov demo --list", args[0])
 				}
-				selected = []demo.Entry{*chosen}
+				selected = relatedDemoCaptures(catalog, *chosen)
 			}
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
@@ -108,8 +108,10 @@ func demoCmd() *cobra.Command {
 				return err
 			}
 			defer ln.Close()
+			exports := dashboard.NewReplayExports(dashboard.Server{DB: db})
+			defer exports.Close()
 			mux := http.NewServeMux()
-			mux.Handle("/", dashboard.Server{DB: db}.Handler())
+			mux.Handle("/", dashboard.Server{DB: db, ReplayExports: exports}.Handler())
 			mux.HandleFunc("/demos/", demoGallery(selected))
 			server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 			done := make(chan error, 1)
@@ -160,6 +162,18 @@ func demoCmd() *cobra.Command {
 	return cmd
 }
 
+// Captures sharing a guide describe one investigation. Keep its recorded runs
+// available together so Compare and cross-run session links work from a named demo.
+func relatedDemoCaptures(catalog []demo.Entry, chosen demo.Entry) []demo.Entry {
+	var selected []demo.Entry
+	for _, entry := range catalog {
+		if entry.Directory == chosen.Directory {
+			selected = append(selected, entry)
+		}
+	}
+	return selected
+}
+
 func prepareDemo(dir, dataDir string, entry demo.Entry, files fs.FS) (demoVerification, error) {
 	result := demoVerification{ID: entry.ID}
 	bundle := entry.Bundle + ".forensics.json.gz"
@@ -201,7 +215,7 @@ func prepareDemo(dir, dataDir string, entry demo.Entry, files fs.FS) (demoVerifi
 }
 
 func demoRunURL(entry demo.Entry) string {
-	return "/?" + url.Values{"run": {entry.Run}, "lens": {entry.Lens}, "replay": {"1"}}.Encode()
+	return "/?" + url.Values{"run": {entry.Run}, "lens": {entry.Lens}, "replay": {"1"}, "live": {"0"}}.Encode()
 }
 
 func openDemoBrowser(parent context.Context, link string) error {

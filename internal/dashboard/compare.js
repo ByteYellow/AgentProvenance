@@ -171,12 +171,12 @@ window.AgentCompareUI=(()=>{
   }
   async function renderTasks(active,request){
     for(const side of ['a','b']){
-      const record=active.data[side].records.find(r=>r.dimension==='task'&&r.evidence.entry?.content.state==='stored');
+      const record=window.AgentRunCompare.taskRecord(active.data[side]);
       active.data.tasks[side]=t('Task not recorded');$('compare-task-'+side).textContent=active.data.tasks[side];
       if(!record)continue;
       try{const page=await api.j('/api/context/content?'+new URLSearchParams({run:active.data[side].run,ref:record.evidence.entry.content.ref,offset:'0',limit:'4096'}),{signal:controller?.signal});
         if(current!==active||request!==epoch)return;
-        let text=page.content;try{const parsed=JSON.parse(text);if(typeof parsed==='string')text=parsed;}catch(_){}
+        const text=window.AgentContextUI.readableContent(page.content,record.evidence.entry,t('Other recorded fields'))??page.content;
         active.data.tasks[side]=text.slice(0,200)+(text.length>200||page.has_more?'…':'');$('compare-task-'+side).textContent=active.data.tasks[side];
       }catch(error){if(current===active&&request===epoch)$('compare-task-'+side).textContent=t('Recorded evidence could not be loaded.');}
     }

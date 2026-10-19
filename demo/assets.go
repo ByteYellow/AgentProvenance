@@ -6,7 +6,7 @@ import "embed"
 // Files preserves the original bundles, attestations and public keys unchanged.
 // Evaluator source and capture scripts ship in the release archive, not the CLI.
 //
-//go:embed */*.json.gz */*.dsse.json */*.pub */README.md */README.zh-CN.md */*.png jev-judge/validation-*.json deepseek-context/capture-manifest.json
+//go:embed */*.json.gz */*.dsse.json */*.pub */README.md */README.zh-CN.md */*.png jev-judge/validation-*.json deepseek-context/capture-manifest.json investigation-workflow/capture-manifest.json
 var Files embed.FS
 
 type Entry struct {
@@ -25,6 +25,8 @@ type Entry struct {
 // separate because they have different runs and signing keys.
 func Catalog() []Entry {
 	return []Entry{
+		{"investigation-workflow", "Investigate a failed task", "Follow a real agent and reviewer through tests, denied diagnostics, evidence search and a two-run comparison.", "investigation-workflow", "run-e9c3f452461a", "before", "default", "demo-signing.pub", "Offline signed replay; both inspection and repair are loaded together."},
+		{"investigation-repaired", "Replay the repair", "Continue the same native session, disable unnecessary diagnostics and inspect the successful report.", "investigation-workflow", "run-2267309eda57", "after", "default", "demo-signing.pub", "Offline signed replay; both inspection and repair are loaded together."},
 		{"snake-supply-chain", "One agent: supply chain", "Follow a poisoned install from tool call to file, network and artifact evidence.", "snake-supply-chain", "run-snake-supervised", "run-snake-supervised", "agent-intent", "attestation.pub", "Offline signed replay; no account or VM required."},
 		{"multiagent-provenance", "An agent team", "Follow delegation, peer influence, a refusal and a later install attempt.", "multiagent-provenance", "run-double-attempt", "run-double-attempt", "orchestration", "attestation.pub", "Offline signed replay; shared-process attribution includes inference."},
 		{"k8s-cross-pod-a2a", "Across Kubernetes Pods", "Inspect live cross-Pod network and runtime evidence alongside replayed application hooks.", "k8s-cross-pod-a2a", "a2a-demo", "run-a2a-demo", "substrate", "attestation.pub", "Offline signed replay; Kubernetes is only needed to recapture."},

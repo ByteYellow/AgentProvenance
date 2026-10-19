@@ -1,4 +1,4 @@
-/* Layout D keeps investigation on the graph and shares one evidence reader. */
+/* The workspace keeps investigation on the graph and shares one evidence reader. */
 .session-scope { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:12px 20px; border-bottom:1px solid var(--line); font-size:12px; background:var(--panel2); overflow-wrap:anywhere; }
 .session-scope[hidden], [data-whole-run][hidden] { display:none; }
 .session-scope strong { min-width:0; color:var(--acc); }

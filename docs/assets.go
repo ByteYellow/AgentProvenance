@@ -9,6 +9,7 @@ import (
 // Files excludes acceptance reports, internal plans and implementation proposals.
 //
 //go:embed release-start.md capabilities.md agent-context.md graph-commands.md amd64-kvm-k3s.md native-capture-spool.md deployment-modes.md security-commands.md compliance.md python-sdk.md ai-tools.md ai-access.md telemetry-schema.md comparisons.md supply-chain-demo.md falco-receiver.md openapi.yaml agent-context-api.yaml releases/*.md zh-CN/release-start.md zh-CN/capabilities.md zh-CN/agent-context.md zh-CN/graph-commands.md zh-CN/amd64-kvm-k3s.md zh-CN/native-capture-spool.md zh-CN/deployment-modes.md zh-CN/security-commands.md zh-CN/compliance.md zh-CN/python-sdk.md zh-CN/ai-tools.md zh-CN/ai-access.md zh-CN/telemetry-schema.md zh-CN/comparisons.md zh-CN/supply-chain-demo.md zh-CN/falco-receiver.md zh-CN/openapi.yaml zh-CN/releases/*.md img/*.png img/*.gif assets/*.svg assets/*.png
+//go:embed audit-associations-api.yaml replay-export-api.yaml zh-CN/audit-associations-api.yaml
 var Files embed.FS
 
 type Entry struct{ ID, Title, Path, Group string }

@@ -29,17 +29,21 @@
       if(!groups.has(record.key))groups.set(record.key,{key:record.key,dimension:record.dimension,label:record.label,operation:record.operation,a:[],b:[]});
       groups.get(record.key)[side].push(record);
     }
-    const limited=(data,dimension)=>!data.complete||data.issues.some(i=>i.dimension===dimension||['all','runtime'].includes(i.dimension));
+    const limited=(data,row,records)=>!data.complete||data.issues.some(i=>
+      ['all','runtime'].includes(i.dimension)||i.dimension===row.dimension&&(!i.source_id||records.some(r=>r.evidence.id===i.source_id)));
     const values=records=>[...new Set(records.map(r=>r.value?.sha256))].sort().join(',');
     const rows=[...groups.values()].map(row=>{
       if(![...row.a,...row.b].some(r=>r.value?.present&&r.value.sha256))row.status='unknown';
       else if(!row.a.length)row.status='only_b';
       else if(!row.b.length)row.status='only_a';
-      else if([...row.a,...row.b].some(r=>!r.value?.present||!r.value.sha256||r.partial)||limited(a,row.dimension)||limited(b,row.dimension))row.status='unknown';
+      else if([...row.a,...row.b].some(r=>!r.value?.present||!r.value.sha256||r.partial)||limited(a,row,row.a)||limited(b,row,row.b))row.status='unknown';
       else row.status=values(row.a)===values(row.b)?'common':'different';
       return row;
     });
-    rows.sort((a,b)=>dimensions.indexOf(a.dimension)-dimensions.indexOf(b.dimension)||a.label.localeCompare(b.label)||a.key.localeCompare(b.key));
+    // Put inspectable content and decisions before lower-level observations.
+    const priority=row=>({saved_file_version:0,recorded_file_change:1,audit_decision:0,configuration_declaration:1,state_snapshot:2,collection_status:3}[row.operation]??4);
+    const statusOrder={different:0,only_a:1,only_b:1,unknown:2,common:3};
+    rows.sort((a,b)=>dimensions.indexOf(a.dimension)-dimensions.indexOf(b.dimension)||priority(a)-priority(b)||statusOrder[a.status]-statusOrder[b.status]||a.label.localeCompare(b.label)||a.key.localeCompare(b.key));
     const counts={};
     for(const dimension of dimensions){const selected=rows.filter(r=>r.dimension===dimension);counts[dimension]={total:selected.length,differences:selected.filter(r=>r.status!=='common'&&r.status!=='unknown').length,unknown:selected.filter(r=>r.status==='unknown').length};}
     const tasks=data=>data.records.filter(r=>r.dimension==='task');
@@ -48,5 +52,12 @@
       ? values(ta)===values(tb)?'matching_recorded_tasks':'different_recorded_tasks':'task_not_recorded';
     return {rows,counts,taskRelation};
   }
-  root.AgentRunCompare={load,build,dimensions};
+  function taskRecord(data){
+    const tasks=data.records.filter(r=>r.dimension==='task'&&r.evidence.entry?.content.state==='stored');
+    const roots=tasks.filter(r=>!r.evidence.entry.source?.parent_session_id);
+    const candidates=roots.length?roots:tasks;
+    return candidates.find(r=>r.evidence.entry.execution_scope==='current_execution')
+      ||candidates.find(r=>r.evidence.entry.execution_scope!=='prior_context')||candidates[0];
+  }
+  root.AgentRunCompare={load,build,dimensions,taskRecord};
 })(typeof window==='undefined'?globalThis:window);

@@ -285,7 +285,7 @@ activity, risk signals and saved evidence into one investigation view.
 | Search, compare and export | Find saved text, compare two runs or preview a read-only export in temporary investigation windows |
 | Coverage and verification | Review session capture, probe availability, association gaps and integrity results |
 
-![Saved file text with Agent session collapsed](demo/deepseek-context/dashboard-file.png)
+![Investigation workflow: sessions, access-control evidence and the execution graph](demo/investigation-workflow/dashboard-overview.png)
 
 Open your own recorded runs with:
 
@@ -299,6 +299,22 @@ captures. Views summarize large event sets and let you
 drill into details instead of placing every raw event on one canvas.
 
 ## Demos
+
+### Investigate a failure, then compare the repair
+
+One real DeepSeek session spans two executions: delegate code review, run seven
+tests, inspect denied optional diagnostics, then disable those diagnostics and
+produce the report successfully. Follow parent/child sessions, search saved
+errors, inspect AppArmor/seccomp records, compare files and export a selected replay.
+
+From the current source checkout:
+
+```sh
+go build -o agentprov ./cmd/agentprov
+./agentprov demo investigation-workflow
+```
+
+The command loads both signed captures together. [Follow the walkthrough](demo/investigation-workflow/README.md).
 
 <a id="demo-multi-agent-causality-delegation-peer-message-syscall-evidence"></a>
 
@@ -541,7 +557,7 @@ reports are distinct from hosted CI.
 Acceptance scripts are environment-specific. Do not run every
 `scripts/accept_*.sh` indiscriminately: some require root, create Pods, or install
 services. Use the [KVM/K3s runbook](docs/amd64-kvm-k3s.md) for those gates and the
-[closeout guide](docs/project-closeout.md) for the single-node pressure tests.
+[deployment and performance baseline](docs/project-closeout.md) for the single-node pressure tests.
 
 ## Author and License
 

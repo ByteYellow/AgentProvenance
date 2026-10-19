@@ -464,9 +464,10 @@ This endpoint reads only saved objects and identified database records. It never
 opens a tool result path or a workspace file as a replacement historical body.
 Metadata-only artifacts remain explicitly unavailable in body mode; raw mode
 still exposes their recorded metadata. Legacy inline objects retain an 8 MiB
-read budget. New chunked text supports up to 32 MiB without raising the existing
-4 MiB per-object bundle limit, and storage chunks are not counted as file
-artifacts. Signed offline HTTP-paging tests cover all three former size boundaries.
+read budget. New chunked text supports up to 32 MiB; storage chunks are not counted
+as file artifacts. Forensics exports allow required provenance objects up to
+16 MiB each and optional snapshot files up to 4 MiB. Larger required objects
+fail export explicitly. Signed offline HTTP-paging tests cover the former size boundaries.
 The changed-file writer uses the same chunked storage. Real record subprocess
 tests verify capture, redaction, signing, and offline content beyond 8 MiB;
 launch tests cover its opt-in and disabled paths. These are deterministic test

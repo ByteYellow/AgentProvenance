@@ -4,7 +4,7 @@ import vm from 'node:vm';
 
 const env={URLSearchParams,DOMException};
 vm.runInNewContext(fs.readFileSync(new URL('../internal/dashboard/compare-engine.js',import.meta.url),'utf8'),env);
-const {build,load}=env.AgentRunCompare;
+const {build,load,taskRecord}=env.AgentRunCompare;
 const record=(key,sha,dimension='configuration',extra={})=>({key,dimension,label:key,operation:'recorded_configuration',value:sha?{present:true,sha256:sha}:null,evidence:{id:key},...extra});
 const run=records=>({records,complete:true,issues:[]});
 let a=run([record('/model','a'),record('/null','null'),record('/plugins','[]'),record('/empty-file','empty','files'),record('open/report','open','files'),record('write/report','write','files'),record('task','task','task')]);
@@ -24,6 +24,9 @@ assert.equal(build(run([]),run([])).taskRelation,'task_not_recorded');
 assert.equal(build(run([record('task','a','task')]),run([record('task','b','task')])).taskRelation,'different_recorded_tasks');
 assert.equal(build({...a,complete:false},b).taskRelation,'task_not_recorded');
 assert.equal(build({...a,issues:[{dimension:'configuration',code:'missing'}]},b).rows.find(r=>r.key==='/plugins').status,'unknown');
+assert.equal(build({...a,issues:[{dimension:'configuration',source_id:'another-source',code:'missing'}]},b).rows.find(r=>r.key==='/plugins').status,'common','an unrelated source gap does not hide known values');
+assert.equal(build({...a,issues:[{dimension:'configuration',source_id:'/plugins',code:'missing'}]},b).rows.find(r=>r.key==='/plugins').status,'unknown','a matching source gap remains visible');
+assert.equal(build({...a,issues:[{dimension:'all',source_id:'another-source',code:'limit'}]},b).rows.find(r=>r.key==='/plugins').status,'unknown','global gaps still affect comparison');
 assert.equal(build(run([record('same','s','files',{partial:true})]),run([record('same','s','files')])).rows[0].status,'unknown');
 const withheld=record('unavailable',null,'configuration',{partial:true,evidence:{content:{reason:'capture_policy'}}});
 const retention=build(run([withheld]),run([record('/model','recorded')]));
@@ -39,7 +42,19 @@ const access=build(accessA,accessB);
 assert.equal(access.rows.find(r=>r.key==='apparmor/open').status,'different','changed decisions are shown');
 assert.equal(access.rows.find(r=>r.key==='runtime/result').status,'common','decisions do not rewrite the actual result');
 assert.equal(access.counts.access_control.differences,1);
+assert.equal(access.rows[0].operation,'audit_decision','decisions precede runtime outcome observations');
+const fileRecords=[record('/runtime','r','files',{operation:'file_open'}),record('settings.json','old','files',{operation:'saved_file_version'}),record('unavailable',null,'files',{operation:'saved_file_version'})];
+const ordered=build(run(fileRecords),run([record('settings.json','new','files',{operation:'saved_file_version'})]));
+assert.equal(ordered.rows[0].label,'settings.json','changed saved files precede runtime paths and unavailable bodies');
+assert.equal(ordered.rows.length,3,'reading order does not omit any evidence');
 assert.equal(build({...accessA,issues:[{dimension:'access_control',code:'audit_fields_incomplete'}]},accessB).rows.find(r=>r.key==='apparmor/open').status,'unknown','incomplete observations remain explicit');
+
+const task=(id,parent,scope,state='stored')=>record(id,id,'task',{evidence:{entry:{source:{parent_session_id:parent},execution_scope:scope,content:{state}}}});
+const childTask=task('child','root','current_execution'),oldTask=task('old','','prior_context'),currentTask=task('current','','current_execution');
+assert.equal(taskRecord(run([childTask,oldTask,currentTask])).key,'current','the current root task precedes child and retained tasks');
+assert.equal(taskRecord(run([childTask,oldTask])).key,'old','retained root context takes precedence over a delegated task');
+assert.equal(taskRecord(run([childTask])).key,'child','a child-only capture retains its available task');
+assert.equal(taskRecord(run([task('missing','','current_execution','missing')])),undefined);
 
 const pages=Array.from({length:3},(_,n)=>({schema_version:'agentprovenance.comparison_records/v1',run_id:'one',records:[record('r'+n,'v')],issues:[],sources_read:50,has_more:n<2,next_cursor:n<2?String(n+1):''}));
 const calls=[];

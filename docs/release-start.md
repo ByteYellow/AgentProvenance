@@ -13,20 +13,23 @@ For offline replay, open the demo library from the extracted archive:
 ```
 
 Choose **Open replay** to explore a signed execution or **Read guide** for its
-illustrated walkthrough. Seven replays and nine guides are included. No Go,
+illustrated walkthrough. Nine replays and eleven guides are included. No Go,
 Docker, agent account or API key is needed for replay.
 
-## Start with DeepSeek
+## Investigate, repair and compare
 
 ```sh
-./agentprov demo deepseek-context
+./agentprov demo investigation-workflow
 ```
 
-A real agent adds daily totals to a Python report and passes seven tests.
-The graph appears above **Agent session**, which starts collapsed. Expand it
-to read the task and tool results, inspect **Permissions and configuration**,
-and check **Collection status**. Select a file in the graph to read its saved
-text; the reader stays available with the session collapsed.
+A real DeepSeek session delegates code review, runs seven tests and encounters
+denied optional diagnostics. It then continues the same session, disables those
+diagnostics and successfully produces the report. Both signed runs load together.
+
+Open **Related sessions** to inspect delegation and continuation. Search the
+recorded error, inspect AppArmor/seccomp decisions, compare the saved files, then
+export selected evidence as a read-only page. Task, configuration and collection
+details remain available from the overview.
 
 The CLI checks the evidence signature and imports into a temporary store.
 Replay works offline and never runs the recorded commands. Ctrl-C closes the
@@ -36,6 +39,7 @@ server and removes its temporary data.
 
 ```sh
 ./agentprov demo --list
+./agentprov demo deepseek-context
 ./agentprov demo multiagent-provenance
 ./agentprov demo k8s-cross-pod-a2a
 ./agentprov demo --no-browser

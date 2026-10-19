@@ -24,7 +24,7 @@ async function main() {
     page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
     page.on('requestfailed',request=>failedRequests.push({url:request.url(),error:request.failure()?.errorText}));
     const manifest=await responseJSON(context.request,new URL('replay-manifest.json',site).href);
-    assert.equal(Object.keys(manifest.runs).length,7);
+    assert.equal(Object.keys(manifest.runs).length,9);
     assert.ok(manifest.verifications.every(v=>v.signature_verified&&v.graph.status==='ok'));
     const data=async ref=>{const r=await context.request.get(new URL(ref.path,site).href);assert.ok(r.ok());return JSON.parse(gunzipSync(await r.body()).toString());};
     await page.goto(new URL('en/replay.html?run=run-dbc2adf273d4',site).href);
