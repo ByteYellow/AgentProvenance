@@ -133,6 +133,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Fixed
 
+- Static session replay handles sessions without attributed runtime nodes.
+  Demo Run and comparison selectors display readable, localized names while
+  preserving original evidence IDs.
 - Run comparison shows readable task text from the current main session. A
   missing body now affects its own source records, while known values from
   unrelated sources remain comparable. Saved file changes and audit decisions

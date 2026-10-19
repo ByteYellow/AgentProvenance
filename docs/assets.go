@@ -47,7 +47,7 @@ func Catalog() []Entry {
 		{"telemetry", "Telemetry schema", "docs/telemetry-schema.md", "Integrate"},
 		{"comparisons", "Related projects", "docs/comparisons.md", "Reference"},
 		{"falco", "Falco compatibility", "docs/falco-receiver.md", "Reference"},
-		{"release-notes", "Release notes", "docs/releases/v0.9.0.md", "Reference"},
+		{"release-notes", "Release notes", "docs/releases/v0.10.0.md", "Reference"},
 		{"changelog", "Release history", "CHANGELOG.md", "Reference"},
 	}
 }
@@ -65,7 +65,7 @@ func Groups() []Group {
 // Pages also includes linked historical release notes without crowding navigation.
 func Pages() []Entry {
 	pages := Catalog()
-	for _, version := range []string{"v0.7.2", "v0.8.0", "v0.8.1", "v0.8.2-rc.1", "v0.8.2-rc.2", "v0.8.2"} {
+	for _, version := range []string{"v0.7.2", "v0.8.0", "v0.8.1", "v0.8.2-rc.1", "v0.8.2-rc.2", "v0.8.2", "v0.9.0"} {
 		pages = append(pages, Entry{"release-" + version, version, "docs/releases/" + version + ".md", "Reference"})
 	}
 	return pages

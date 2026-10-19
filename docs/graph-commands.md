@@ -5,6 +5,11 @@ English | [简体中文](zh-CN/graph-commands.md)
 The Git-like provenance surface over content-addressed evidence objects. The
 README carries a short summary; this is the complete reference.
 
+For browser-based investigation, see the [Agent session guide](agent-context.md)
+for search, cross-Run comparison and selected replay export. The
+[investigation demo](../demo/investigation-workflow/README.md) walks through all three
+with a pair of signed captures.
+
 ```sh
 ./agentprov graph trace --run run-demo-bugfix
 ./agentprov graph refs --run run-demo-bugfix

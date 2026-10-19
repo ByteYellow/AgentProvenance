@@ -55,7 +55,9 @@ AgentProvenance importer reads their records without installing or changing them
 
 ### Compare the Two Runs
 
-Choose the inspection Run as A and the repaired Run as B. In **File evidence**,
+Choose **Diagnostic repair: before** as A and **Diagnostic repair: after** as B.
+The original Run IDs remain `run-e9c3f452461a` and `run-2267309eda57`, respectively.
+In **File evidence**,
 inspect `settings.json`, `output/diagnostics.json`, `output/report.json`, and
 `review.md`. Read the saved bodies for the exact changes.
 

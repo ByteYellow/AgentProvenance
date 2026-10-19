@@ -2,7 +2,7 @@
 
 English | [中文](zh-CN/capabilities.md)
 
-Detailed evidence models, advanced commands, deployment options and architecture. Start with the [Quickstart](../README.md#quickstart); see the [Agent session guide](agent-context.md) for v0.9.0 sessions, configuration and coverage.
+Detailed evidence models, advanced commands, deployment options and architecture. Start with the [Quickstart](../README.md#quickstart); see the [Agent session guide](agent-context.md) for sessions, configuration, search, comparison and capture settings.
 
 ## Security Loop
 
@@ -22,7 +22,7 @@ security analysis
   behavior baseline / suspicious event / taint lineage / risk decision
 
 response
-  audit / deny / kill / quarantine / taint / forensics / Feishu or DingTalk notification
+  audit / deny / kill / quarantine / taint / forensics
 ```
 
 This makes AgentProvenance closer to an AI-era HIDS/control-plane layer than a
@@ -35,7 +35,7 @@ The project currently implements the evidence graph, runtime correlation,
 diff/blame, telemetry batch manifests, policy decisions, normalized risk
 signals, baseline deviation records, response action records, taint,
 quarantine, forensics/export foundations, and a native eBPF sensor.
-Feishu/DingTalk response adapters belong to the next security-control phases;
+Feishu/DingTalk response adapters are not planned at this time;
 third-party receivers (Falco/Tetragon) are maintained for compatibility, not
 extended.
 
@@ -546,7 +546,7 @@ flags, IDs, paths, and original evidence keep their original values.
 
 ## Web Dashboard
 
-v0.9.0 adds **Agent session** below the graph, collapsed by default, with
+**Agent session** appears below the graph, collapsed by default, with
 conversation/tools, permissions/configuration and collection status. A separate
 reader opens full tool output and saved file text independently of session expansion.
 See the [session guide](agent-context.md) and [DeepSeek walkthrough](../demo/deepseek-context/README.md).
@@ -1064,9 +1064,6 @@ and `forensics`. `substrate` contains runtime facts AgentProvenance can consume.
 
 ## Future Work
 
-- Broader TLS support, including ARM64 Go TLS responses, BoringSSL and more stripped binaries.
-- Longer-running workloads and real disk-failure validation; current regression evidence is in the [acceptance report](benchmarks/v0.9.0-acceptance/README.md).
-- Off-host evidence storage and capture-time signing.
-- The [central evidence service](central-evidence-service-design.md) remains a design.
-
-The [v0.7 roadmap](roadmap-v0.7.md) is historical; [closeout criteria](project-closeout.md) describe the current single-node scope.
+No new features are planned for now. Development will focus on evidence and
+correlation accuracy, capture reliability, and ease of use. Improvements will
+follow issues found in real use, with clearer investigation flows and documentation.

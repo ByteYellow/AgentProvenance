@@ -26,6 +26,10 @@ A real DeepSeek session delegates code review, runs seven tests and encounters
 denied optional diagnostics. It then continues the same session, disables those
 diagnostics and successfully produces the report. Both signed runs load together.
 
+In **Compare**, set A to **Diagnostic repair: before** and B to
+**Diagnostic repair: after**. Read `settings.json` and the reports under
+**File evidence**; **Configuration** shows Harness settings.
+
 Open **Related sessions** to inspect delegation and continuation. Search the
 recorded error, inspect AppArmor/seccomp decisions, compare the saved files, then
 export selected evidence as a read-only page. Task, configuration and collection

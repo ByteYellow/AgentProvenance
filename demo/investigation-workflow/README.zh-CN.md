@@ -51,7 +51,9 @@ AgentProvenance 只读取和关联这些记录。
 
 ### 比较两次执行
 
-把检查阶段选为 A，修复阶段选为 B。在**文件证据**中查看 `settings.json`、
+将 A 设为**诊断修复 · 修复前**，将 B 设为**诊断修复 · 修复后**。
+两次执行的原始 ID 分别为 `run-e9c3f452461a` 和 `run-2267309eda57`。
+在**文件证据**中查看 `settings.json`、
 `output/diagnostics.json`、`output/report.json` 和 `review.md`，打开保存正文阅读变化。
 
 **配置**维度展示 Harness 的配置历史，`settings.json` 这样的业务配置文件放在
