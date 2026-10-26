@@ -526,6 +526,11 @@ ARM64 实机与 KVM/K3s 实验环境的验收结果另有报告，不等同于�
 环境测试请按 [KVM/K3s 部署指南](docs/zh-CN/amd64-kvm-k3s.md)操作，
 单节点压力测试见[部署与性能基线](docs/zh-CN/project-closeout.md)。
 
+## 安全报告
+
+发现疑似安全漏洞，请通过 [byteyellow@qq.com](mailto:byteyellow@qq.com) 私密报告。
+支持的版本与处理流程见[安全政策](docs/zh-CN/security.md)。
+
 ## 作者与许可
 
 由 [ByteYellow](https://github.com/ByteYellow) 开发和维护。

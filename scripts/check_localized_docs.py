@@ -42,6 +42,8 @@ def main():
         if path in chinese or path.name in {"AGENTS.md", "SKILL.md"}:
             continue
         candidates = [path.with_name(path.stem + ".zh-CN.md")]
+        if path == ROOT / "SECURITY.md":
+            candidates.append(ROOT / "docs/zh-CN/security.md")
         if path.is_relative_to(ROOT / "docs"):
             candidates.append(ROOT / "docs/zh-CN" / path.relative_to(ROOT / "docs"))
         if not any(p.is_file() for p in candidates):
