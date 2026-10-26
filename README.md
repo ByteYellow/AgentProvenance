@@ -568,6 +568,11 @@ Acceptance scripts are environment-specific. Do not run every
 services. Use the [KVM/K3s runbook](docs/amd64-kvm-k3s.md) for those gates and the
 [deployment and performance baseline](docs/project-closeout.md) for the single-node pressure tests.
 
+## Security
+
+Report suspected vulnerabilities privately to [byteyellow@qq.com](mailto:byteyellow@qq.com).
+See the [security policy](SECURITY.md) for supported versions and the reporting process.
+
 ## Author and License
 
 Built and maintained by [ByteYellow](https://github.com/ByteYellow).
