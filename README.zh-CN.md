@@ -528,7 +528,8 @@ ARM64 实机与 KVM/K3s 实验环境的验收结果另有报告，不等同于�
 
 ## 安全报告
 
-发现疑似安全漏洞，请通过 [byteyellow@qq.com](mailto:byteyellow@qq.com) 私密报告。
+发现疑似安全漏洞，请通过 [GitHub 私密漏洞报告](https://github.com/ByteYellow/AgentProvenance/security/advisories/new)
+提交，或发送邮件至 [byteyellow@qq.com](mailto:byteyellow@qq.com)。
 支持的版本与处理流程见[安全政策](docs/zh-CN/security.md)。
 
 ## 作者与许可

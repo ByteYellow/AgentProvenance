@@ -570,7 +570,8 @@ services. Use the [KVM/K3s runbook](docs/amd64-kvm-k3s.md) for those gates and t
 
 ## Security
 
-Report suspected vulnerabilities privately to [byteyellow@qq.com](mailto:byteyellow@qq.com).
+Report suspected vulnerabilities through [GitHub private reporting](https://github.com/ByteYellow/AgentProvenance/security/advisories/new)
+or email [byteyellow@qq.com](mailto:byteyellow@qq.com).
 See the [security policy](SECURITY.md) for supported versions and the reporting process.
 
 ## Author and License

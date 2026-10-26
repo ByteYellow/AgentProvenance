@@ -9,7 +9,11 @@
 
 ## 报告安全漏洞
 
-请发送邮件至 [byteyellow@qq.com](mailto:byteyellow@qq.com)，主题使用
+请通过 [GitHub 私密漏洞报告](https://github.com/ByteYellow/AgentProvenance/security/advisories/new)
+提交。也可以在仓库的 **Security → Advisories → Report a vulnerability** 中打开
+报告表单。报告通过私密渠道处理，不会作为公开 Issue 展示。
+
+也可以发送邮件至 [byteyellow@qq.com](mailto:byteyellow@qq.com)，主题使用
 “[AgentProvenance Security] 问题简述”。协调披露期间，请将漏洞细节和利用代码
 保留在私密沟通中。
 

@@ -10,7 +10,11 @@ advisory.
 
 ## Reporting a Vulnerability
 
-Please email [byteyellow@qq.com](mailto:byteyellow@qq.com) with the subject
+Submit a [private vulnerability report on GitHub](https://github.com/ByteYellow/AgentProvenance/security/advisories/new).
+You can also find this form under **Security → Advisories → Report a vulnerability**
+in the repository. Reports are handled privately rather than as public issues.
+
+Alternatively, email [byteyellow@qq.com](mailto:byteyellow@qq.com) with the subject
 "[AgentProvenance Security] Brief description". Keep vulnerability details and
 exploit code private while we coordinate disclosure.
 
