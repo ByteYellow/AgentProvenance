@@ -2,6 +2,7 @@ package record
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -16,6 +17,14 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
+
+// policyFixtureService gives the pre-existing behavior tests the permissive
+// policy they were written under: shell interpreters allowed and no workdir
+// confinement (their workdirs are plain t.TempDir() trees). The hardened
+// defaults themselves are covered by policy_test.go.
+func policyFixtureService(db *sql.DB, paths store.Paths) Service {
+	return Service{DB: db, Paths: paths, Options: Options{AllowShell: true, AllowAnyWorkdir: true}}
+}
 
 func TestRecordRunCreatesZeroSDKProvenance(t *testing.T) {
 	root := t.TempDir()
@@ -44,7 +53,7 @@ printf '%%s\n' "$!" > %s
 printf 'value = 2\n' > app.py && echo note > note.txt && wait`,
 		fixtureShellQuote(observedFile), fixtureShellQuote(pidFile))
 
-	result, err := (Service{DB: db, Paths: paths}).Run(Request{
+	result, err := (policyFixtureService(db, paths)).Run(Request{
 		RunID:            "run-record-test",
 		Name:             "record-test",
 		Workdir:          workdir,
@@ -247,7 +256,7 @@ func TestRecordObjectifiesChangedFilesForPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := (Service{DB: db, Paths: paths}).Run(Request{
+	if _, err := (policyFixtureService(db, paths)).Run(Request{
 		RunID: "run-obj", Name: "obj", Workdir: workdir,
 		Command:          []string{"sh", "-lc", "printf 'print(42)\\n' > game.py"},
 		SampleIntervalMS: 10, PostRootGraceMS: 50,
@@ -332,7 +341,7 @@ func TestRecordDescendantBindingsDoNotClaimWholeCgroup(t *testing.T) {
 	if err := os.MkdirAll(workdir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	result, err := (Service{DB: db, Paths: paths}).Run(Request{
+	result, err := (policyFixtureService(db, paths)).Run(Request{
 		RunID:            "run-scope-cgroup",
 		Name:             "scope-cgroup",
 		Workdir:          workdir,
@@ -390,7 +399,7 @@ func TestRecordDoesNotLaunchWithoutPublishedScope(t *testing.T) {
 	if err := os.MkdirAll(workdir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_, err = (Service{DB: db, Paths: paths}).Run(Request{
+	_, err = (policyFixtureService(db, paths)).Run(Request{
 		RunID: "run-scope-failure", Workdir: workdir,
 		Command: []string{"sh", "-c", "touch launched"},
 	})
@@ -432,7 +441,7 @@ while not observed_path.exists():
         raise RuntimeError("child was never sampled")
     time.sleep(0.01)
 pathlib.Path("orphan-marker").write_text("started\n")`
-	result, err := (Service{DB: db, Paths: paths}).Run(Request{
+	result, err := (policyFixtureService(db, paths)).Run(Request{
 		RunID:   "run-record-orphan-test",
 		Name:    "record-orphan-test",
 		Workdir: workdir,
@@ -547,7 +556,7 @@ func TestRecordStartFailureReturnsFailedManifest(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result, err := (Service{DB: db, Paths: paths}).Run(Request{
+	result, err := (policyFixtureService(db, paths)).Run(Request{
 		RunID:   "run-record-start-failure",
 		Name:    "record-start-failure",
 		Workdir: workdir,
@@ -597,7 +606,7 @@ func TestConcurrentRecordPreservesGraphConsistency(t *testing.T) {
 	defer db.Close()
 
 	const n = 6
-	service := Service{DB: db, Paths: paths}
+	service := policyFixtureService(db, paths)
 	results := make([]Result, n)
 	errs := make([]error, n)
 	var wg sync.WaitGroup

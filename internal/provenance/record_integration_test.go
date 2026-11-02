@@ -29,7 +29,11 @@ func TestVerifyRejectsMissingOrphanLifecycleEvidence(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workdir, "app.py"), []byte("value = 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := (record.Service{DB: db, Paths: paths}).Run(record.Request{
+	// 测试是本地同权调用方：显式放开 shell 与任意 workdir，保持被测语义不变。
+	result, err := (record.Service{DB: db, Paths: paths, Options: record.Options{
+		AllowShell:      true,
+		AllowAnyWorkdir: true,
+	}}).Run(record.Request{
 		RunID: "run-orphan-verify", Name: "orphan-verify", Workdir: workdir,
 		Command: []string{"sh", "-c", "printf 'value = 2\\n' > app.py"},
 	})

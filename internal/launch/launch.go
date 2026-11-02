@@ -278,7 +278,17 @@ func Run(opts Options) (Report, error) {
 	if opts.JSON {
 		agentOutput = opts.Stderr
 	}
-	result, rerr := (record.Service{DB: db, Paths: paths}).Run(record.Request{
+	// Local, same-privilege wrapper: launch runs the user's own agent in the
+	// user's own directory and environment for arbitrarily long sessions, so it
+	// keeps the pre-hardening execution semantics (no timeout, any interpreter,
+	// any workdir, full env — the child needs the hooks/context bridge vars).
+	// The strict zero-value policy is the daemon HTTP path's default.
+	result, rerr := (record.Service{DB: db, Paths: paths, Options: record.Options{
+		Timeout:         -1,
+		AllowShell:      true,
+		AllowAnyWorkdir: true,
+		InheritFullEnv:  true,
+	}}).Run(record.Request{
 		RunID:           runID,
 		Name:            "launch",
 		Workdir:         opts.Workdir,

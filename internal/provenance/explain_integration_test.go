@@ -37,7 +37,10 @@ func TestExplainFileJSONManifest(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workdir, "app.py"), []byte("value = 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := (record.Service{DB: db, Paths: paths}).Run(record.Request{
+	result, err := (record.Service{DB: db, Paths: paths, Options: record.Options{
+		AllowShell:      true, // 测试为本地同权调用方：放开 shell/任意 workdir，保持被测语义
+		AllowAnyWorkdir: true,
+	}}).Run(record.Request{
 		RunID:   "run-explain-json",
 		Name:    "explain-json",
 		Workdir: workdir,
@@ -171,7 +174,10 @@ func TestExplainJSONV02EvidenceObjectsRisks(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workdir, "app.py"), []byte("value = 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := (record.Service{DB: db, Paths: paths}).Run(record.Request{
+	result, err := (record.Service{DB: db, Paths: paths, Options: record.Options{
+		AllowShell:      true, // 测试为本地同权调用方：放开 shell/任意 workdir，保持被测语义
+		AllowAnyWorkdir: true,
+	}}).Run(record.Request{
 		RunID:   "run-explain-v02",
 		Name:    "explain-v02",
 		Workdir: workdir,
@@ -279,7 +285,10 @@ func TestExplainJSONV02AllTargets(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workdir, "app.py"), []byte("value = 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := (record.Service{DB: db, Paths: paths}).Run(record.Request{
+	result, err := (record.Service{DB: db, Paths: paths, Options: record.Options{
+		AllowShell:      true, // 测试为本地同权调用方：放开 shell/任意 workdir，保持被测语义
+		AllowAnyWorkdir: true,
+	}}).Run(record.Request{
 		RunID:   "run-explain-targets",
 		Name:    "explain-targets",
 		Workdir: workdir,
@@ -486,7 +495,10 @@ func TestExplainCausalityPathDepthAndLimit(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workdir, "app.py"), []byte("value = 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := (record.Service{DB: db, Paths: paths}).Run(record.Request{
+	result, err := (record.Service{DB: db, Paths: paths, Options: record.Options{
+		AllowShell:      true, // 测试为本地同权调用方：放开 shell/任意 workdir，保持被测语义
+		AllowAnyWorkdir: true,
+	}}).Run(record.Request{
 		RunID:   "run-explain-depth",
 		Name:    "explain-depth",
 		Workdir: workdir,
@@ -610,7 +622,10 @@ func TestPhase1JSONSchemaVersions(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(workdir, "app.py"), []byte("value = 1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := (record.Service{DB: db, Paths: paths}).Run(record.Request{
+	if _, err := (record.Service{DB: db, Paths: paths, Options: record.Options{
+		AllowShell:      true, // 测试为本地同权调用方：放开 shell/任意 workdir，保持被测语义
+		AllowAnyWorkdir: true,
+	}}).Run(record.Request{
 		RunID:   "run-schema",
 		Name:    "schema",
 		Workdir: workdir,
