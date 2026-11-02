@@ -96,7 +96,7 @@ func TestAuditInterfacesShareReadOnlyContract(t *testing.T) {
 	}
 	server := httptest.NewServer((daemon.Server{DB: db, AuthToken: "test-token"}).Handler())
 	defer server.Close()
-	client := daemon.NewClient(server.URL)
+	client := daemon.NewClient(server.URL, "")
 	client.Token = ""
 	opts := telemetry.AuditAssociationOptions{RunID: "run/one", Limit: 1}
 	if _, err := client.TelemetryAuditAssociations(ctx, opts); err == nil {

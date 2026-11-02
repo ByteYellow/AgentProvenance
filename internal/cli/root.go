@@ -25,6 +25,7 @@ func NewRootCommand() *cobra.Command {
 	}
 	root.PersistentFlags().StringVar(&dataDir, "data-dir", store.DefaultDataDir, "local AgentProvenance data directory")
 	root.PersistentFlags().StringVar(&daemonURL, "daemon-url", firstEnv("AGENTPROV_DAEMON_URL"), "local daemon URL; also read from AGENTPROV_DAEMON_URL")
+	clientDataDir = &dataDir
 
 	root.AddCommand(demoCmd())
 	root.AddCommand(launchCmd(&dataDir))
@@ -70,11 +71,25 @@ func NewRootCommand() *cobra.Command {
 	return root
 }
 
+// clientDataDir points at the root command's --data-dir flag value, wired in
+// NewRootCommand before any command runs. Daemon clients must resolve the
+// bearer token from the same data directory the target daemon serves from.
+var clientDataDir *string
+
+// effectiveDataDir returns the parsed root --data-dir value, falling back to
+// the default data directory when no root command wired the flag.
+func effectiveDataDir() string {
+	if clientDataDir != nil && *clientDataDir != "" {
+		return *clientDataDir
+	}
+	return store.DefaultDataDir
+}
+
 func daemonClient(daemonURL string) (daemon.Client, bool) {
 	if daemonURL == "" {
 		return daemon.Client{}, false
 	}
-	return daemon.NewClient(daemonURL), true
+	return daemon.NewClient(daemonURL, effectiveDataDir()), true
 }
 
 func firstEnv(names ...string) string {

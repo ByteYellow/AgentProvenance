@@ -3,6 +3,7 @@ package computerapi
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	runtimeplane "github.com/byteyellow/agentprovenance/internal/substrate/runtime"
+	"github.com/byteyellow/agentprovenance/internal/substrate/session"
 )
 
 type Service struct {
@@ -152,9 +154,18 @@ func (s Service) ExportArtifact(sessionID, filePath, name, toolCallID string) (s
 	if name == "" {
 		name = filepath.Base(filePath)
 	}
+	cleanName, err := sanitizeArtifactName(name)
+	if err != nil {
+		return "", security.DecisionRecord{}, err
+	}
 	artifactID := ids.New("artifact")
-	artifactPath := filepath.Join(s.Paths.Artifacts, artifactID+"-"+name)
-	if err := os.WriteFile(artifactPath, body, 0o644); err != nil {
+	artifactPath := filepath.Join(s.Paths.Artifacts, artifactID+"-"+cleanName)
+	// 最终 join+Clean 后二次复核：即使拼接前缀吸收了首个 ".."（如 artifactID+"-"+name），
+	// 只要 Clean 后的落点越出 Artifacts 目录即拒绝（M9 路径穿越任意写）。
+	if err := ensureInsideArtifacts(s.Paths.Artifacts, artifactPath); err != nil {
+		return "", security.DecisionRecord{}, err
+	}
+	if err := os.WriteFile(artifactPath, body, 0o600); err != nil {
 		return "", security.DecisionRecord{}, err
 	}
 	record, err := s.recordEvent(security.Event{
@@ -174,6 +185,10 @@ func (s Service) ExportArtifact(sessionID, filePath, name, toolCallID string) (s
 }
 
 func (s Service) Call(sessionID, module, function string, args map[string]string, toolCallID string, stream bool) (string, security.DecisionRecord, error) {
+	// exec 入容器前校验：会话必须存在、running 且 lease 活跃（H3 跨会话 RCE 加固）。
+	if err := session.GuardExec(s.DB, sessionID); err != nil {
+		return "", security.DecisionRecord{}, err
+	}
 	meta, err := s.sessionMeta(sessionID)
 	if err != nil {
 		return "", security.DecisionRecord{}, err
@@ -209,6 +224,47 @@ func (s Service) Call(sessionID, module, function string, args map[string]string
 		"result_ref": "process:" + processID,
 	})
 	return processID, record, err
+}
+
+// ErrInvalidArtifactName 导出目标名不合法（空、含路径分隔符、含 ".."、以 "." 开头
+// 或含 [A-Za-z0-9._-] 之外字符）。调用方可用 errors.Is 判别。
+var ErrInvalidArtifactName = errors.New("invalid artifact name")
+
+// sanitizeArtifactName 白名单化导出名（M9 修复）：只允许 [A-Za-z0-9._-]，
+// 并额外拒绝以 "." 开头与包含 ".." 的名字，杜绝把穿越段拼进 artifactID+"-"+name。
+// 兜底校验由 ensureInsideArtifacts 在最终 join+Clean 后完成。
+func sanitizeArtifactName(name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("%w: name is empty", ErrInvalidArtifactName)
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return "", fmt.Errorf("%w: %q contains a path separator", ErrInvalidArtifactName, name)
+	}
+	if strings.Contains(name, "..") {
+		return "", fmt.Errorf("%w: %q contains a parent-directory segment", ErrInvalidArtifactName, name)
+	}
+	if strings.HasPrefix(name, ".") {
+		return "", fmt.Errorf("%w: %q starts with a dot (hidden or relative segment)", ErrInvalidArtifactName, name)
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
+		default:
+			return "", fmt.Errorf("%w: %q contains character %q outside [A-Za-z0-9._-]", ErrInvalidArtifactName, name, r)
+		}
+	}
+	return name, nil
+}
+
+// ensureInsideArtifacts 校验最终落点严格位于 artifacts 目录之内。
+// 注意不能用 cleanPath == cleanRoot 放行边界值：目录本身不可作为导出文件。
+func ensureInsideArtifacts(artifactsDir, artifactPath string) error {
+	cleanRoot := filepath.Clean(artifactsDir)
+	cleanPath := filepath.Clean(artifactPath)
+	if cleanPath == cleanRoot || !strings.HasPrefix(cleanPath, cleanRoot+string(os.PathSeparator)) {
+		return fmt.Errorf("%w: destination %q escapes artifacts directory", ErrInvalidArtifactName, artifactPath)
+	}
+	return nil
 }
 
 func (s Service) sessionMeta(sessionID string) (SessionMeta, error) {
