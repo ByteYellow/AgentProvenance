@@ -1,10 +1,12 @@
 package record
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -26,6 +28,11 @@ import (
 type Service struct {
 	DB    *sql.DB
 	Paths store.Paths
+	// Options carries the execution hardening policy; the zero value is the
+	// strict (fail-closed) default: DefaultExecTimeout timeout with process
+	// group kill, shell interpreters refused, cwd confined to the workspace
+	// root, minimal child environment. See the Options doc comment.
+	Options Options
 }
 
 type Request struct {
@@ -85,16 +92,11 @@ func (s Service) Run(req Request) (Result, error) {
 	if len(req.Command) == 0 {
 		return Result{}, fmt.Errorf("command is required after --")
 	}
-	workdir := strings.TrimSpace(req.Workdir)
-	if workdir == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return Result{}, err
-		}
-		workdir = cwd
-	}
-	absWorkdir, err := filepath.Abs(workdir)
-	if err != nil {
+	opts := s.Options
+	// Policy preflight (C2 hardening): refuse shell interpreters and confine
+	// the working directory BEFORE any snapshot, graph row, or workspace
+	// directory is created, so a refused request leaves zero side effects.
+	if err := checkShellPolicy(req.Command, opts.AllowShell); err != nil {
 		return Result{}, err
 	}
 	if req.RunID == "" {
@@ -102,6 +104,10 @@ func (s Service) Run(req Request) (Result, error) {
 	}
 	if req.Name == "" {
 		req.Name = "record"
+	}
+	absWorkdir, err := s.resolveWorkdir(req.Workdir, req.RunID, opts)
+	if err != nil {
+		return Result{}, err
 	}
 	sampleInterval := time.Duration(req.SampleIntervalMS) * time.Millisecond
 	if sampleInterval <= 0 {
@@ -197,8 +203,26 @@ func (s Service) Run(req Request) (Result, error) {
 	}
 	s.insertGraphEdges(req.RunID, rolloutID, baseSnapshotID, attemptID, sessionID, toolCallID, processID, now)
 
-	cmd := exec.Command(req.Command[0], req.Command[1:]...)
+	// Bound the execution (C2 hardening): a child that never exits can no
+	// longer wedge this worker. On deadline the Cancel below SIGKILLs the
+	// child's whole process group (see applyExecutionAttrs), not just the
+	// root process.
+	execTimeout := opts.Timeout
+	if execTimeout == 0 {
+		execTimeout = DefaultExecTimeout
+	}
+	execCtx := context.Background()
+	if execTimeout > 0 {
+		var cancelTimeout func()
+		execCtx, cancelTimeout = context.WithTimeout(execCtx, execTimeout)
+		defer cancelTimeout()
+	}
+	cmd := exec.CommandContext(execCtx, req.Command[0], req.Command[1:]...)
 	cmd.Dir = absWorkdir
+	// Minimal environment: never hand the daemon's full environment (API keys,
+	// auth tokens, service credentials) to a recorded child unless the caller
+	// explicitly opted in.
+	cmd.Env = childEnv(opts.InheritFullEnv)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if req.Stdout != nil {
@@ -208,6 +232,16 @@ func (s Service) Run(req Request) (Result, error) {
 		cmd.Stderr = req.Stderr
 	}
 	cmd.Stdin = os.Stdin
+	applyExecutionAttrs(cmd)
+	if processGroupKillSupported() {
+		cmd.Cancel = func() error {
+			killProcessGroup(cmd.Process.Pid)
+			return nil
+		}
+	}
+	// Bound the post-exit I/O drain so grandchildren holding the inherited
+	// pipes cannot keep Wait blocked long after the recorded root is gone.
+	cmd.WaitDelay = 2 * time.Second
 	// Place the child (and, by inheritance, its whole subtree) into a dedicated
 	// cgroup so independent kernel telemetry auto-joins to this scope by
 	// cgroup_id at 0.98 -- no pid polling, no pid-reuse window. On Linux this
@@ -276,6 +310,7 @@ func (s Service) Run(req Request) (Result, error) {
 		ids.New("evt"), req.RunID, sessionID, toolCallID, processID, pid, int64(os.Getpid()), fmt.Sprintf(`{"attempt_id":%q,"command":%q,"mode":"zero_sdk"}`, attemptID, commandText), startedAt)
 
 	err = cmd.Wait()
+	timedOut := execCtx.Err() != nil
 	postRootGraceStarted := time.Now()
 	time.Sleep(postRootGrace)
 	close(stopSampler)
@@ -283,7 +318,15 @@ func (s Service) Run(req Request) (Result, error) {
 	wallMS := time.Since(start).Milliseconds()
 	exitCode := 0
 	status := "passed"
-	if err != nil {
+	failureReason := ""
+	switch {
+	case timedOut:
+		status = "failed"
+		exitCode = 124
+		failureReason = fmt.Sprintf("execution timed out after %s; the process group was killed", execTimeout)
+	case err != nil && !errors.Is(err, exec.ErrWaitDelay):
+		// ErrWaitDelay only means grandchildren held the pipes past WaitDelay;
+		// the root process itself already exited and its status is authoritative.
 		status = "failed"
 		exitCode = 1
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -399,7 +442,7 @@ func (s Service) Run(req Request) (Result, error) {
 		attemptID, float64(wallMS)/1000.0*0.001, endedAt, rolloutID)
 	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, pid, ppid, payload, created_at)
 		VALUES (?, ?, ?, ?, ?, 'record', 'exec_end', ?, ?, ?, ?)`,
-		ids.New("evt"), req.RunID, sessionID, toolCallID, processID, pid, int64(os.Getpid()), fmt.Sprintf(`{"attempt_id":%q,"exit_code":%d,"status":%q,"wall_ms":%d,"changed_files":%d}`, attemptID, exitCode, status, wallMS, len(changed)), endedAt)
+		ids.New("evt"), req.RunID, sessionID, toolCallID, processID, pid, int64(os.Getpid()), fmt.Sprintf(`{"attempt_id":%q,"exit_code":%d,"status":%q,"wall_ms":%d,"changed_files":%d,"timed_out":%t}`, attemptID, exitCode, status, wallMS, len(changed), timedOut), endedAt)
 	_ = correlation.CloseBinding(s.DB, processID, endedAt)
 	return Result{
 		RunID:            req.RunID,
@@ -423,6 +466,7 @@ func (s Service) Run(req Request) (Result, error) {
 		CWD:              absWorkdir,
 		StartedAt:        startedAt,
 		EndedAt:          endedAt,
+		FailureReason:    failureReason,
 		ArtifactCapture:  artifactCapture,
 	}, nil
 }

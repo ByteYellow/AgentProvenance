@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -130,7 +133,7 @@ func TestRecordEndpointRunsAndReturnsRunID(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{
 		"name":    "daemon-record-test",
-		"workdir": t.TempDir(),
+		"workdir": recordWorkdir(t, s.Paths.Workspaces),
 		"command": []string{"true"},
 	})
 	resp, err := http.Post(srv.URL+"/v1/record", "application/json", bytes.NewReader(body))
@@ -153,6 +156,17 @@ func TestRecordEndpointRunsAndReturnsRunID(t *testing.T) {
 	}
 }
 
+// recordWorkdir returns a per-test working directory under the store's
+// workspace root, as required by the record workdir-confinement policy.
+func recordWorkdir(t *testing.T, workspaceRoot string) string {
+	t.Helper()
+	dir := filepath.Join(workspaceRoot, "record-tests", strings.NewReplacer("/", "_", ".", "_").Replace(t.Name()))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func TestRecordEndpointRequiresCommand(t *testing.T) {
 	s := testServer(t)
 	srv := httptest.NewServer(s.Handler())
@@ -171,16 +185,19 @@ func TestRecordEndpointRequiresCommand(t *testing.T) {
 // recorded via the daemon (Mode 2) and via the core record.Service the CLI wraps
 // (Mode 1) must produce structurally identical evidence (status, exit, command,
 // changed-file count), modulo per-run identifiers/timestamps. It guards against
-// the two customer tracks (RL CLI vs sidecar daemon) silently diverging.
+// the two customer tracks (RL CLI vs sidecar daemon) silently diverging. Each
+// mode records in its own store-confinement-compliant workspace directory; the
+// compared fields are invariant to that choice (the recorded command touches
+// nothing).
 func TestRecordCrossModeConsistency(t *testing.T) {
-	workdir := t.TempDir()
 	cmd := []string{"true"}
 
 	// Mode 2: daemon HTTP record.
 	s := testServer(t)
 	srv := httptest.NewServer(s.Handler())
 	defer srv.Close()
-	body, _ := json.Marshal(map[string]any{"name": "xmode", "workdir": workdir, "command": cmd})
+	daemonWorkdir := recordWorkdir(t, s.Paths.Workspaces)
+	body, _ := json.Marshal(map[string]any{"name": "xmode", "workdir": daemonWorkdir, "command": cmd})
 	resp, err := http.Post(srv.URL+"/v1/record", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
@@ -194,7 +211,7 @@ func TestRecordCrossModeConsistency(t *testing.T) {
 	// Mode 1: the core record.Service the CLI invokes, on an independent store.
 	cliServer := testServer(t)
 	cliResult, err := record.Service{DB: cliServer.DB, Paths: cliServer.Paths}.Run(record.Request{
-		Name: "xmode", Workdir: workdir, Command: cmd,
+		Name: "xmode", Workdir: recordWorkdir(t, cliServer.Paths.Workspaces), Command: cmd,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -221,7 +238,9 @@ func TestRecordCrossModeConsistency(t *testing.T) {
 
 // TestDaemonAuthToken verifies bearer-token enforcement: with a token set,
 // API routes require it (401 otherwise), health stays open, and the correct
-// token passes. With no token configured the API is open (backward compatible).
+// token passes. With no token configured the API stays open — in production
+// `daemon serve` only reaches that state via the explicit --insecure-open
+// escape hatch; otherwise it generates a token into <data-dir>/auth-token.
 func TestDaemonAuthToken(t *testing.T) {
 	s := testServer(t)
 	s.AuthToken = "secret-token"
@@ -272,7 +291,7 @@ func TestDaemonAuthToken(t *testing.T) {
 		}
 	}
 
-	// No token configured -> open.
+	// No token configured -> open (insecure-open escape hatch).
 	open := testServer(t)
 	openSrv := httptest.NewServer(open.Handler())
 	defer openSrv.Close()

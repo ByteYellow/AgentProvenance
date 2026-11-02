@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
+	"github.com/byteyellow/agentprovenance/internal/evidence"
+	observability "github.com/byteyellow/agentprovenance/internal/observability"
 	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
@@ -154,4 +156,57 @@ func TestImportBundleRejectsUnknownColumns(t *testing.T) {
 	if qerr := db.QueryRow(`SELECT COUNT(*) FROM leases`).Scan(&count); qerr != nil {
 		t.Fatalf("leases table should still exist: %v", qerr)
 	}
+}
+
+// TestRedactBundleTextsMasksFreeTextColumns 断言导出 backstop 覆盖事件 payload、
+// 录制的 command 列（tool_calls/processes/fork_attempts）、lease task_yaml 与
+// evidence manifest 摘要——这些列都引用捕获原文，等价于 H4 的 bundle 泄漏向量；
+// provenance_objects 保持原样（内容寻址，materialize 时已掩码，此处重掩码会破坏哈希）。
+func TestRedactBundleTextsMasksFreeTextColumns(t *testing.T) {
+	truncatedPEM := "-----BEGIN OPENSSH PRIVATE KEY-----\nMIIEpAIBAAKCAQEA7X9qFAKE"
+	bundle := map[string]any{
+		"tool_calls":         []map[string]any{{"id": "tc1", "command": `["echo","github_pat_11ABcdEF0aBcDeFgHiJkLmNoPqRsTuVwxYz"]`}},
+		"processes":          []map[string]any{{"id": "p1", "command": `["id"]`}},
+		"fork_attempts":      []map[string]any{{"id": "f1", "command": truncatedPEM}},
+		"leases":             []map[string]any{{"id": "l1", "task_yaml": "token: super-secret-token-42"}},
+		"events":             []map[string]any{{"id": "e1", "payload": `{"argv":["echo","https://admin:SuperSecret9@github.com/acme/x.git"]}`}},
+		"sessions":           []map[string]any{{"id": "s1", "container_id": "c1"}},
+		"provenance_objects": []map[string]any{{"hash": "sha256:abc", "payload": "token: super-secret-token-42"}},
+	}
+	manifest := evidence.Manifest{Summary: observability.Summary{
+		TopEvidenceRefs: []observability.EvidenceSummary{{Ref: "ref1", Type: "exec", Summary: "ran echo sk-abcdefghijklmnop123456"}},
+	}}
+	redactBundleTexts(bundle, &manifest)
+
+	assertMasked := func(name string, got any, secret string) {
+		s, _ := got.(string)
+		if strings.Contains(s, secret) {
+			t.Fatalf("%s: secret %q leaked: %q", name, secret, s)
+		}
+		if !strings.Contains(s, "***REDACTED***") {
+			t.Fatalf("%s: expected mask, got %q", name, s)
+		}
+	}
+	tc := bundle["tool_calls"].([]map[string]any)[0]
+	assertMasked("tool_calls.command", tc["command"], "github_pat_11ABcdEF0aBcDeFgHiJkLmNoPqRsTuVwxYz")
+	fa := bundle["fork_attempts"].([]map[string]any)[0]
+	assertMasked("fork_attempts.command", fa["command"], "MIIEpAIBAAKCAQEA7X9qFAKE")
+	le := bundle["leases"].([]map[string]any)[0]
+	assertMasked("leases.task_yaml", le["task_yaml"], "super-secret-token-42")
+	ev := bundle["events"].([]map[string]any)[0]
+	assertMasked("events.payload", ev["payload"], "SuperSecret9")
+	// 无机密内容保持原样（掩码按内容触发，不碰路径/ID/普通值）。
+	p := bundle["processes"].([]map[string]any)[0]
+	if p["command"] != `["id"]` {
+		t.Fatalf("clean command must stay verbatim, got %q", p["command"])
+	}
+	if s := bundle["sessions"].([]map[string]any)[0]["container_id"]; s != "c1" {
+		t.Fatalf("unrelated columns must stay verbatim, got %v", s)
+	}
+	// provenance_objects 不动（materialize 时已掩码，此处重掩码会破坏内容寻址哈希）。
+	po := bundle["provenance_objects"].([]map[string]any)[0]
+	if po["payload"] != "token: super-secret-token-42" {
+		t.Fatalf("provenance_objects must be left untouched, got %v", po["payload"])
+	}
+	assertMasked("evidence_manifest.summary", manifest.Summary.TopEvidenceRefs[0].Summary, "sk-abcdefghijklmnop123456")
 }

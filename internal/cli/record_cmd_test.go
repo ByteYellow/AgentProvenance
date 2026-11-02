@@ -30,6 +30,25 @@ func TestRecordJSONKeepsChildOutputSeparate(t *testing.T) {
 	}
 }
 
+// TestRecordLocalInheritsFullEnvironment pins the local CLI record path to the
+// pre-hardening behavior: the recorded child keeps the caller's full
+// environment (model API keys, proxy settings, virtualenvs). The strict
+// allow-list env policy must stay confined to the daemon HTTP path.
+func TestRecordLocalInheritsFullEnvironment(t *testing.T) {
+	t.Setenv("AGENTPROV_ENV_MARKER", "passed-through")
+	root := NewRootCommand()
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"--data-dir", t.TempDir(), "record", "--json", "--workdir", t.TempDir(), "--post-root-grace-ms", "1", "--", "sh", "-c", `printf 'MARKER=%s\n' "$AGENTPROV_ENV_MARKER"`})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("record command: %v %s", err, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "MARKER=passed-through") {
+		t.Fatalf("recorded child lost the caller environment: %s", stderr.String())
+	}
+}
+
 func TestRecordJSONPreservesArtifactCaptureState(t *testing.T) {
 	zero := 0
 	for _, report := range []record.ArtifactCaptureReport{

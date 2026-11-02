@@ -102,6 +102,13 @@ type Server struct {
 	ReplayExports    *ReplayExports
 	RunLabels        map[string]string // Presentation-only titles; evidence identities stay unchanged.
 	replayProjection *replayProjection
+
+	// ListenAddr optionally records the dashboard's actual listen address
+	// ("host:port"). When set, request Host headers must name its host part;
+	// when empty, any localhost or literal-IP Host is accepted and every other
+	// name is rejected. The guard defends all routes against DNS rebinding and
+	// cross-site browser reads (see origin_guard.go).
+	ListenAddr string
 }
 
 // Handler returns the dashboard's HTTP routes (static UI + JSON API).
@@ -159,7 +166,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/compliance", s.compliance)
 	mux.Handle("GET /api/context/", http.StripPrefix("/api", (agentcontext.Service{DB: s.DB}).ReadHandler()))
 	s.replayRoutes(mux)
-	return mux
+	return s.sameOriginGuard(mux)
 }
 
 // rawBody unwraps the stored telemetry payload ({"payload":{"raw":{...}}} or

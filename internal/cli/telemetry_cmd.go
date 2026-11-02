@@ -126,7 +126,7 @@ func telemetryCmd(dataDir, daemonURL *string) *cobra.Command {
 			var report telemetry.ProducerHealthReport
 			var err error
 			if *daemonURL != "" {
-				report, err = daemon.NewClient(*daemonURL).TelemetryProducerHealth(producerHealthRunID)
+				report, err = daemon.NewClient(*daemonURL, *dataDir).TelemetryProducerHealth(producerHealthRunID)
 			} else {
 				var paths store.Paths
 				paths, err = store.Init(*dataDir)

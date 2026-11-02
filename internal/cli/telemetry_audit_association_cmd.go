@@ -25,7 +25,7 @@ func telemetryAuditAssociationsCmd(dataDir, daemonURL *string) *cobra.Command {
 			var report telemetry.AuditAssociationReport
 			var err error
 			if *daemonURL != "" {
-				report, err = daemon.NewClient(*daemonURL).TelemetryAuditAssociations(cmd.Context(), opts)
+				report, err = daemon.NewClient(*daemonURL, *dataDir).TelemetryAuditAssociations(cmd.Context(), opts)
 			} else {
 				paths, initErr := store.Init(*dataDir)
 				if initErr != nil {

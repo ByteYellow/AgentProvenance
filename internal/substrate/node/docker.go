@@ -42,19 +42,7 @@ func (r *DockerRuntime) CreateSession(req CreateSessionRequest) (string, error) 
 	if req.Image == "" {
 		return "", fmt.Errorf("task image is required")
 	}
-	hostCfg := &container.HostConfig{
-		Mounts: []mount.Mount{{
-			Type:   mount.TypeBind,
-			Source: req.WorkspaceHostPath,
-			Target: "/workspace",
-		}},
-	}
-	if req.DockerNetworkName != "" {
-		hostCfg.NetworkMode = container.NetworkMode(req.DockerNetworkName)
-	}
-	if req.MemoryMB > 0 {
-		hostCfg.Resources.Memory = req.MemoryMB * 1024 * 1024
-	}
+	hostCfg := buildHostConfig(req)
 	cfg := &container.Config{
 		Image:      req.Image,
 		WorkingDir: "/workspace",
@@ -87,6 +75,31 @@ func (r *DockerRuntime) CreateSession(req CreateSessionRequest) (string, error) 
 		return "", err
 	}
 	return resp.ID, nil
+}
+
+// buildHostConfig 构造会话容器的宿主侧配置。安全基线（H3 加固）：
+//   - CapDrop ALL：容器内（含 exec 派生的进程）不保留任何 Linux capability，
+//     防止借助 setuid/root 特权读写宿主 bind mount 之外的资源；
+//   - SecurityOpt no-new-privileges：exec/setuid 无法在容器内提权。
+//
+// workspace bind mount 保持读写（业务需要会话写 /workspace）。
+func buildHostConfig(req CreateSessionRequest) *container.HostConfig {
+	hostCfg := &container.HostConfig{
+		CapDrop:     []string{"ALL"},
+		SecurityOpt: []string{"no-new-privileges"},
+		Mounts: []mount.Mount{{
+			Type:   mount.TypeBind,
+			Source: req.WorkspaceHostPath,
+			Target: "/workspace",
+		}},
+	}
+	if req.DockerNetworkName != "" {
+		hostCfg.NetworkMode = container.NetworkMode(req.DockerNetworkName)
+	}
+	if req.MemoryMB > 0 {
+		hostCfg.Resources.Memory = req.MemoryMB * 1024 * 1024
+	}
+	return hostCfg
 }
 
 func (r *DockerRuntime) Exec(containerID string, command []string, stream bool) (ExecResult, error) {
