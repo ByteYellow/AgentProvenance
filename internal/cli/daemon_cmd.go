@@ -3,9 +3,11 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -31,6 +33,10 @@ func daemonCmd(dataDir *string) *cobra.Command {
 	var gcInterval time.Duration
 	var gcLimit int
 	var authToken string
+	var insecureOpen bool
+	var ingestAllowDir string
+	var recordAllowShell bool
+	var recordTimeout time.Duration
 	serve := &cobra.Command{
 		Use:   "serve",
 		Short: "run the local AgentProvenance daemon/API server",
@@ -39,7 +45,20 @@ func daemonCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// P1 fix: take the instance lock BEFORE reading or persisting the
+			// auth token. A failed startup must never rotate the credentials a
+			// live daemon and its clients are still using.
+			if info, active := daemon.ActiveLock(*dataDir); active {
+				closeFn()
+				return fmt.Errorf("another agentprov daemon (pid %d) already owns data dir %s and listens on %s; stop it first or point clients at --daemon-url http://%s", info.PID, *dataDir, info.Addr, info.Addr)
+			}
+			releaseLock, lockErr := daemon.AcquireLock(*dataDir, listen)
+			if lockErr != nil {
+				closeFn()
+				return lockErr
+			}
 			defer closeFn()
+			defer releaseLock()
 			server.SampleInterval = sampleInterval
 			server.SampleLimit = sampleLimit
 			server.SampleTimeout = sampleTimeout
@@ -55,15 +74,25 @@ func daemonCmd(dataDir *string) *cobra.Command {
 			server.SpoolDropPolicy = spoolDropPolicy
 			server.GCInterval = gcInterval
 			server.GCLimit = gcLimit
-			if authToken == "" {
-				authToken = os.Getenv("AGENTPROV_DAEMON_TOKEN")
+			server.RecordAllowShell = recordAllowShell
+			server.RecordExecTimeout = recordTimeout
+			resolvedToken, tokenErr := resolveServeToken(*dataDir, authToken, insecureOpen, listen, cmd.OutOrStdout(), cmd.ErrOrStderr())
+			if tokenErr != nil {
+				return tokenErr
 			}
+			authToken = resolvedToken
 			server.AuthToken = authToken
-			releaseLock, lockErr := daemon.AcquireLock(*dataDir, listen)
-			if lockErr != nil {
-				return lockErr
+			if ingestAllowDir == "" {
+				ingestAllowDir = filepath.Join(*dataDir, "ingest")
 			}
-			defer releaseLock()
+			absAllow, absErr := filepath.Abs(ingestAllowDir)
+			if absErr != nil {
+				return absErr
+			}
+			if mkErr := os.MkdirAll(absAllow, 0o700); mkErr != nil {
+				return mkErr
+			}
+			server.IngestAllowDir = absAllow
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 			go server.StartSampler(ctx)
@@ -101,8 +130,52 @@ func daemonCmd(dataDir *string) *cobra.Command {
 	serve.Flags().StringVar(&spoolDropPolicy, "spool-drop-policy", "reject", "telemetry spool queue-full behavior: reject or drop_oldest")
 	serve.Flags().DurationVar(&gcInterval, "gc-interval", 5*time.Second, "background async GC interval; set 0 to disable")
 	serve.Flags().IntVar(&gcLimit, "gc-limit", 100, "maximum queued GC jobs processed per interval")
-	serve.Flags().StringVar(&authToken, "auth-token", "", "require this bearer token on API routes except GET /v1/health, /v1/ready and /v1/live (also AGENTPROV_DAEMON_TOKEN); empty = open")
+	serve.Flags().StringVar(&authToken, "auth-token", "", "bearer token required on API routes except GET /v1/health, /v1/ready and /v1/live (also AGENTPROV_DAEMON_TOKEN); empty = generate a strong random token, persist it to <data-dir>/auth-token (0600) and print it")
+	serve.Flags().BoolVar(&insecureOpen, "insecure-open", false, "escape hatch: run the API without authentication (explicit opt-in only; a loud warning is printed)")
+	serve.Flags().StringVar(&ingestAllowDir, "ingest-allow-dir", "", "only files inside this directory may be read by /v1/leases (task) and /v1/telemetry/ingest-falco (file); default <data-dir>/ingest")
+	serve.Flags().BoolVar(&recordAllowShell, "record-allow-shell", false, "execution policy for the authenticated /v1/record API: running arbitrary programs for authenticated callers is the product design, this switch only controls the shell wrapper form — permit shell interpreters (sh -c ...) as argv[0]; default false = refused")
+	serve.Flags().DurationVar(&recordTimeout, "record-timeout", 0, "execution policy for the authenticated /v1/record API: per-exec timeout, 0 = policy default (60s), negative = unbounded")
 	cmd := &cobra.Command{Use: "daemon", Short: "local daemon/API server commands"}
 	cmd.AddCommand(serve)
 	return cmd
+}
+
+// resolveServeToken decides the bearer token for `daemon serve`:
+//
+//  1. explicit --auth-token / AGENTPROV_DAEMON_TOKEN wins and is never
+//     persisted (operator-managed credential);
+//  2. --insecure-open runs without a token (loud warning on stderr);
+//  3. otherwise a non-empty <data-dir>/auth-token is REUSED — no rotation, so
+//     clients configured with the old token keep working across restarts;
+//  4. only when nothing exists yet is a fresh token generated and persisted.
+//
+// Callers must hold the per-data-dir instance lock before step 4 can run, so a
+// second serve that loses the lock race never overwrites live credentials.
+// The token value itself is only ever printed at first generation.
+func resolveServeToken(dataDir, explicit string, insecureOpen bool, listen string, stdout, stderr io.Writer) (string, error) {
+	if explicit == "" {
+		explicit = os.Getenv("AGENTPROV_DAEMON_TOKEN")
+	}
+	if explicit != "" {
+		return explicit, nil
+	}
+	if insecureOpen {
+		fmt.Fprintf(stderr, "WARNING: --insecure-open is set: the daemon API has NO authentication on http://%s — every local process can read the evidence store, ingest data, exec in containers and run commands as this user.\n", listen)
+		return "", nil
+	}
+	if existing := daemon.ReadAuthToken(dataDir); existing != "" {
+		fmt.Fprintf(stderr, "reusing existing auth token from %s\n", daemon.TokenPath(dataDir))
+		return existing, nil
+	}
+	// Fail-closed default (C1): generate a strong random token, persist
+	// it for API clients, and require it on every non-health route.
+	token, err := daemon.GenerateAuthToken()
+	if err != nil {
+		return "", err
+	}
+	if err := daemon.WriteAuthTokenFile(dataDir, token); err != nil {
+		return "", err
+	}
+	fmt.Fprintf(stdout, "daemon auth token generated (file %s, mode 0600):\n%s\n", daemon.TokenPath(dataDir), token)
+	return token, nil
 }

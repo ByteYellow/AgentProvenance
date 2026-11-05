@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/baseline"
@@ -28,8 +27,13 @@ type Client struct {
 	Token   string
 }
 
-func NewClient(baseURL string) Client {
-	return Client{BaseURL: strings.TrimRight(baseURL, "/"), HTTP: http.DefaultClient, Token: os.Getenv("AGENTPROV_DAEMON_TOKEN")}
+// NewClient builds a daemon API client. dataDir must be the data directory the
+// target daemon serves from: the bearer token is resolved from the
+// AGENTPROV_DAEMON_TOKEN environment variable first, then from the auth-token
+// file `daemon serve` persists in dataDir. An empty dataDir falls back to the
+// default ".agentprov" directory.
+func NewClient(baseURL, dataDir string) Client {
+	return Client{BaseURL: strings.TrimRight(baseURL, "/"), HTTP: http.DefaultClient, Token: resolveClientToken(dataDir)}
 }
 
 func (c Client) CreateLease(task string) (string, error) {
@@ -343,6 +347,10 @@ type SnapshotCreateResponse struct {
 }
 
 // authorize attaches the bearer token to a request when one is configured.
+// The token is resolved by NewClient from, in order of precedence: an explicit
+// Token assignment, AGENTPROV_DAEMON_TOKEN, and finally the auth-token file
+// that `daemon serve` persists in its data directory — so CLI commands work
+// against a token-protected daemon without extra flags.
 func (c Client) authorize(req *http.Request) {
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)

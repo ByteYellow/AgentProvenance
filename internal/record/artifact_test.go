@@ -31,7 +31,7 @@ func artifactTestService(t *testing.T) Service {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	return Service{DB: db, Paths: paths}
+	return Service{DB: db, Paths: paths, Options: Options{AllowShell: true, AllowAnyWorkdir: true}}
 }
 
 func readCapturedText(t *testing.T, s Service, run, ref string) string {

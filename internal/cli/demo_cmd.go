@@ -203,14 +203,14 @@ func prepareDemo(dir, dataDir string, entry demo.Entry, files fs.FS) (demoVerifi
 			return result, err
 		}
 	}
-	info, err := importForensics(dataDir, filepath.Join(dest, bundle), filepath.Join(dest, entry.Key))
+	info, verified, err := importForensics(dataDir, filepath.Join(dest, bundle), filepath.Join(dest, entry.Key), false, nil)
 	if err != nil {
 		return result, err
 	}
 	if info.RunID != entry.Run {
 		return result, commandErrorf("unexpected bundle run %q, want %q", info.RunID, entry.Run)
 	}
-	result.SignatureVerified = true
+	result.SignatureVerified = verified
 	db, err := store.Open(store.ResolvePaths(dataDir))
 	if err != nil {
 		return result, err
