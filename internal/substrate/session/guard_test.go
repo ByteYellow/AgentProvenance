@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"path/filepath"
@@ -107,17 +108,19 @@ func TestGuardExecRejectsInactiveLease(t *testing.T) {
 
 func TestGuardExecRejectsMissingLeaseRow(t *testing.T) {
 	db := newGuardDB(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	// store.Open 的 DSN 对所有连接开了 foreign_keys：借单条连接临时关掉 FK，
 	// 插入 lease 行缺失的会话，覆盖 guard 的 lease 不存在分支。
-	conn, err := db.Conn(t.Context())
+	conn, err := db.Conn(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := conn.ExecContext(t.Context(), `PRAGMA foreign_keys = OFF`); err != nil {
+	if _, err := conn.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.ExecContext(t.Context(), `INSERT INTO sessions (id, lease_id, run_id, container_id, workspace_host_path, runtime, status, startup_cold_ms, created_at, updated_at)
+	if _, err := conn.ExecContext(ctx, `INSERT INTO sessions (id, lease_id, run_id, container_id, workspace_host_path, runtime, status, startup_cold_ms, created_at, updated_at)
 		VALUES ('sbx-orphan', 'lease-ghost', 'run-guard', 'ctr-o', '/tmp/ws-guard', 'docker', 'running', 0, ?, ?)`, now, now); err != nil {
 		t.Fatal(err)
 	}
