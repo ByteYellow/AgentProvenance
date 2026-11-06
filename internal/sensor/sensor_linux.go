@@ -53,6 +53,7 @@ const (
 	eventSyscallResult = 15
 	eventThreadExit    = 16
 	eventSSLCheckpoint = 17
+	eventTLSDiscovery  = 18
 )
 
 type sensorTracepoint struct {
@@ -70,7 +71,18 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	}
 
 	var objs sensorbpfObjects
-	if err := loadSensorbpfObjects(&objs, nil); err != nil {
+	spec, err := loadSensorbpf()
+	if err == nil {
+		enabled := uint32(0)
+		if opts.AutoTLS {
+			enabled = 1
+		}
+		err = spec.RewriteConstants(map[string]interface{}{"tls_auto_discovery": enabled})
+		if err == nil {
+			err = spec.LoadAndAssign(&objs, nil)
+		}
+	}
+	if err != nil {
 		return i18n.Errorf("load eBPF objects: %w", err)
 	}
 	defer objs.Close()
@@ -184,7 +196,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	tlsCtx, stopTLS := context.WithCancel(ctx)
 	tlsDone := make(chan struct{})
 	initialized := make(chan struct{})
-	tlsWake := make(chan struct{}, 1)
+	tlsWake := newTLSHintQueue()
 	go func() { defer close(tlsDone); runTLSDiscovery(tlsCtx, &objs, opts, reporter, initialized, tlsWake) }()
 	defer func() { stopTLS(); <-tlsDone }()
 	<-initialized
@@ -274,13 +286,11 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		if e.Pid != uint32(os.Getpid()) && e.Kind != eventExit && e.Kind != eventThreadExit {
 			states.offer(stateTarget{pid: e.Pid, tid: e.Tid, start: e.ThreadStartNs, cgroup: e.CgroupId}, time.Now())
 		}
-		if opts.AutoTLS && e.Kind == eventExec {
-			// Coalesce process-start wakeups. Discovery has its own bounded rate
-			// and never blocks ring-buffer draining.
-			select {
-			case tlsWake <- struct{}{}:
-			default:
-			}
+		if opts.AutoTLS && e.Pid != uint32(os.Getpid()) && tlsDiscoveryEvent(e) {
+			tlsWake.offer(e.Pid, e.ProcessStartNs, e.Kind == eventExec, e.Kind == eventOpen || e.Kind == eventTLSDiscovery, time.Now())
+		}
+		if e.Kind == eventTLSDiscovery {
+			continue
 		}
 		if e.Kind == eventSSL || e.Kind == eventSSLRead || e.Kind == eventSSLCheckpoint {
 			for _, msg := range reasm.Add(tlsChunk(e)) {
@@ -315,6 +325,17 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 			emit(m)
 		}
 	}
+}
+
+func tlsDiscoveryEvent(e sensorbpfSensorEvent) bool {
+	if e.Kind == eventExec || e.Kind == eventConnect || e.Kind == eventTLSDiscovery {
+		return true
+	}
+	if e.Kind != eventOpen {
+		return false
+	}
+	name := filepath.Base(string(bytes.TrimRight(e.Path[:], "\x00")))
+	return strings.HasPrefix(name, "libssl.so") || strings.HasPrefix(name, "libssl-")
 }
 
 func tlsChunk(e sensorbpfSensorEvent) tlsintent.Chunk {

@@ -452,6 +452,28 @@ components:
             truncated_maps: {type: integer}
             skipped_targets: {type: integer}
             unsupported_executables: {type: integer}
+            sweep_passes: {type: integer, minimum: 0, description: Number of bounded periodic process-scan passes since sensor startup.}
+            event_discovery:
+              type: object
+              description: Cumulative sensor-lifetime discovery counters. Hints select a process to inspect; they do not attribute a captured action. Attachment latency starts when the sensor consumes the triggering event.
+              properties:
+                queue_capacity: {type: integer, minimum: 0}
+                pending: {type: integer, minimum: 0, description: Processes awaiting a scheduled retry; excludes completed coalescing entries.}
+                hints: {type: integer, minimum: 0}
+                coalesced: {type: integer, minimum: 0}
+                queue_drops: {type: integer, minimum: 0}
+                process_scans: {type: integer, minimum: 0}
+                retry_scans: {type: integer, minimum: 0}
+                exited_processes: {type: integer, minimum: 0}
+                changed_processes: {type: integer, minimum: 0}
+                unreadable_processes: {type: integer, minimum: 0}
+                unresolved_mounts: {type: integer, minimum: 0}
+                truncated_maps: {type: integer, minimum: 0}
+                skipped_targets: {type: integer, minimum: 0}
+                unsupported_executables: {type: integer, minimum: 0}
+                attached_targets: {type: integer, minimum: 0}
+                last_attach_latency_ms: {type: integer, minimum: 0}
+                max_attach_latency_ms: {type: integer, minimum: 0}
             reason: {type: string}
             limitations: {type: [array, "null"], items: {type: string}}
     RuntimeCorrelationCoverage:

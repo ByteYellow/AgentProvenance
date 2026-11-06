@@ -92,7 +92,7 @@ func (r *capabilityReporter) publishLocked() {
 			}
 		}
 	}
-	if r.discovery.Enabled && (r.discovery.Reason != "" || r.discovery.SkippedTargets > 0 || r.discovery.UnreadableProcesses > 0 || r.discovery.TruncatedMaps > 0 || r.discovery.UnsupportedExecutables > 0) {
+	if r.discovery.HasGaps() {
 		report.Status = "degraded"
 	}
 	if r.terminalStatus != "" {

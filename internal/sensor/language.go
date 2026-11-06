@@ -29,6 +29,9 @@ func PrintCapabilities(out io.Writer, report CapabilityReport, lang i18n.Locale)
 	d := report.TLSDiscovery
 	fmt.Fprintf(out, i18n.T(lang, "TLS discovery: %s; scan complete: %s; interval: %d ms; active targets: %d/%d; processes scanned: %d/%d\n"), yesNo(d.Enabled), yesNo(d.ScanComplete), d.ScanIntervalMS, d.ActiveTargets, d.MaxTargets, d.ProcessesScanned, d.MaxProcessesPerScan)
 	fmt.Fprintf(out, i18n.T(lang, "TLS gaps: unreadable processes=%d unresolved mounts=%d truncated maps=%d skipped targets=%d unsupported executables=%d\n"), d.UnreadableProcesses, d.UnresolvedMounts, d.TruncatedMaps, d.SkippedTargets, d.UnsupportedExecutables)
+	if e := d.EventDiscovery; e != nil {
+		fmt.Fprintf(out, i18n.T(lang, "TLS event discovery: hints=%d coalesced=%d queue drops=%d process scans=%d retry scans=%d attached targets=%d max attach latency=%d ms\n"), e.Hints, e.Coalesced, e.QueueDrops, e.ProcessScans, e.RetryScans, e.AttachedTargets, e.MaxAttachLatencyMS)
+	}
 	if d.Reason != "" {
 		fmt.Fprintf(out, i18n.T(lang, "  Reason: %s\n"), i18n.RuntimeDiagnostics.Text(lang, d.Reason))
 	}

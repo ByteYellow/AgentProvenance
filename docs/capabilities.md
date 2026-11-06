@@ -878,6 +878,23 @@ separate byte ranges remain separate. A closing checkpoint carries
 `checkpoint: true` rather than claiming a retained byte range. Historical events
 without sequence fields retain their recorded metadata and rule version.
 
+Automatic TLS discovery uses exec, connect and library-open hints to inspect
+the indicated process, while retaining periodic bounded scans. Finite retries
+cover mappings loaded after exec; a later library-open hint starts a new retry
+cycle. Discovery work has bounded queues, coalescing and per-batch limits.
+Internal library hints do not add ordinary shared-library reads to the graph.
+Recently attached inodes have a 30-second reuse period within the existing
+target budget. Expired idle entries are removed on the next complete scan;
+capacity pressure can reclaim idle entries earlier.
+
+The capability report includes `tls_discovery.event_discovery` counters for
+queue loss, retries, process exits, discovery failures and attachment latency,
+plus `sweep_passes` for periodic scan work. These counters cover the sensor
+lifetime. The first TLS call may precede attachment; explicitly configured
+library/executable targets are attached before the ready notification. Library
+path hints inspect the first 256 bytes; periodic mapping scans remain the
+fallback for longer or unrecognized paths.
+
 **Correlate & verify**
 
 | Capability | What it does |

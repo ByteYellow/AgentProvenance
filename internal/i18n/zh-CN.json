@@ -2395,6 +2395,8 @@
   "automatic discovery disabled": "自动发现已关闭",
   "processes must be visible in the sensor PID namespace; container roots/maps must be readable": "进程必须在传感器的 PID 命名空间内可见，容器根目录和内存映射必须可读",
   "polling can miss TLS activity before attachment and processes shorter than the scan interval": "轮询可能遗漏挂载前的 TLS 活动，以及寿命短于扫描间隔的进程",
+  "first TLS use can precede event-driven attachment; explicit targets are attached before readiness": "首次 TLS 调用可能早于事件触发挂载；显式指定的目标在就绪前挂载",
+  "TLS event discovery: hints=%d coalesced=%d queue drops=%d process scans=%d retry scans=%d attached targets=%d max attach latency=%d ms\n": "TLS 事件发现：提示=%d，合并=%d，队列丢弃=%d，进程检查=%d，重试检查=%d，新增挂载目标=%d，最长挂载延迟=%d 毫秒\n",
   "stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered": "去除符号的 Go 程序、不支持的 Go ABI、自定义或静态 TLS 实现可能无法覆盖",
   "telemetry spool backpressure: queued=%d queued_bytes=%d incoming_bytes=%d max_queued=%d max_queued_bytes=%d max_batch_bytes=%d reason=%s": "遥测缓冲队列已触发背压：排队批次=%d，排队字节=%d，待写入字节=%d，批次上限=%d，字节上限=%d，单批字节上限=%d，原因=%s",
   "Sensor status: %s; ready: %s\n": "传感器状态：%s；就绪：%s\n",

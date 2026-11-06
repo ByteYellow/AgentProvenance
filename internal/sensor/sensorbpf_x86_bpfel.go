@@ -200,6 +200,7 @@ type sensorbpfMapSpecs struct {
 	SslReadBufs       *ebpf.MapSpec `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.MapSpec `ebpf:"ssl_read_ex_bufs"`
 	SyscallCalls      *ebpf.MapSpec `ebpf:"syscall_calls"`
+	TlsDiscoverySeen  *ebpf.MapSpec `ebpf:"tls_discovery_seen"`
 	TlsSequences      *ebpf.MapSpec `ebpf:"tls_sequences"`
 }
 
@@ -234,6 +235,7 @@ type sensorbpfMaps struct {
 	SslReadBufs       *ebpf.Map `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.Map `ebpf:"ssl_read_ex_bufs"`
 	SyscallCalls      *ebpf.Map `ebpf:"syscall_calls"`
+	TlsDiscoverySeen  *ebpf.Map `ebpf:"tls_discovery_seen"`
 	TlsSequences      *ebpf.Map `ebpf:"tls_sequences"`
 }
 
@@ -251,6 +253,7 @@ func (m *sensorbpfMaps) Close() error {
 		m.SslReadBufs,
 		m.SslReadExBufs,
 		m.SyscallCalls,
+		m.TlsDiscoverySeen,
 		m.TlsSequences,
 	)
 }

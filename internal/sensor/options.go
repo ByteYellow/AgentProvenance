@@ -18,8 +18,8 @@ type Options struct {
 	Context  context.Context
 	OnReady  func()
 	// AutoTLS scans visible processes, including container mount namespaces,
-	// for mapped OpenSSL libraries and Go TLS executables. Polling cannot capture
-	// a process that starts and exits entirely between scans.
+	// for mapped OpenSSL libraries and Go TLS executables. Bounded event-driven
+	// discovery supplements polling; first use can still precede attachment.
 	AutoTLS         bool
 	TLSScanInterval time.Duration
 	TLSMaxTargets   int
@@ -49,20 +49,55 @@ type ProbeCapability struct {
 }
 
 type TLSDiscoveryReport struct {
-	Enabled                bool     `json:"enabled"`
-	ScanIntervalMS         int64    `json:"scan_interval_ms"`
-	MaxTargets             int      `json:"max_targets"`
-	MaxProcessesPerScan    int      `json:"max_processes_per_scan"`
-	ActiveTargets          int      `json:"active_targets"`
-	ScanComplete           bool     `json:"scan_complete"`
-	ProcessesScanned       int      `json:"processes_scanned"`
-	UnreadableProcesses    int      `json:"unreadable_processes"`
-	UnresolvedMounts       int      `json:"unresolved_mounts"`
-	TruncatedMaps          int      `json:"truncated_maps"`
-	SkippedTargets         int      `json:"skipped_targets"`
-	UnsupportedExecutables int      `json:"unsupported_executables"`
-	Reason                 string   `json:"reason,omitempty"`
-	Limitations            []string `json:"limitations"`
+	Enabled                bool                     `json:"enabled"`
+	ScanIntervalMS         int64                    `json:"scan_interval_ms"`
+	MaxTargets             int                      `json:"max_targets"`
+	MaxProcessesPerScan    int                      `json:"max_processes_per_scan"`
+	ActiveTargets          int                      `json:"active_targets"`
+	ScanComplete           bool                     `json:"scan_complete"`
+	ProcessesScanned       int                      `json:"processes_scanned"`
+	UnreadableProcesses    int                      `json:"unreadable_processes"`
+	UnresolvedMounts       int                      `json:"unresolved_mounts"`
+	TruncatedMaps          int                      `json:"truncated_maps"`
+	SkippedTargets         int                      `json:"skipped_targets"`
+	UnsupportedExecutables int                      `json:"unsupported_executables"`
+	Reason                 string                   `json:"reason,omitempty"`
+	Limitations            []string                 `json:"limitations"`
+	SweepPasses            uint64                   `json:"sweep_passes"`
+	EventDiscovery         *TLSEventDiscoveryReport `json:"event_discovery,omitempty"`
+}
+
+type TLSEventDiscoveryReport struct {
+	QueueCapacity          int    `json:"queue_capacity"`
+	Pending                int    `json:"pending"`
+	Hints                  uint64 `json:"hints"`
+	Coalesced              uint64 `json:"coalesced"`
+	QueueDrops             uint64 `json:"queue_drops"`
+	ProcessScans           uint64 `json:"process_scans"`
+	RetryScans             uint64 `json:"retry_scans"`
+	ExitedProcesses        uint64 `json:"exited_processes"`
+	ChangedProcesses       uint64 `json:"changed_processes"`
+	UnreadableProcesses    uint64 `json:"unreadable_processes"`
+	UnresolvedMounts       uint64 `json:"unresolved_mounts"`
+	TruncatedMaps          uint64 `json:"truncated_maps"`
+	UnsupportedExecutables uint64 `json:"unsupported_executables"`
+	SkippedTargets         uint64 `json:"skipped_targets"`
+	AttachedTargets        uint64 `json:"attached_targets"`
+	LastAttachLatencyMS    int64  `json:"last_attach_latency_ms"`
+	MaxAttachLatencyMS     int64  `json:"max_attach_latency_ms"`
+}
+
+// HasGaps includes discovery failures, not normal process exits or PID/exec
+// changes. Counters in EventDiscovery cover the sensor lifetime.
+func (d TLSDiscoveryReport) HasGaps() bool {
+	if !d.Enabled {
+		return false
+	}
+	if d.Reason != "" || d.SkippedTargets > 0 || d.UnreadableProcesses > 0 || d.UnresolvedMounts > 0 || d.TruncatedMaps > 0 || d.UnsupportedExecutables > 0 {
+		return true
+	}
+	e := d.EventDiscovery
+	return e != nil && (e.QueueDrops > 0 || e.UnreadableProcesses > 0 || e.UnresolvedMounts > 0 || e.TruncatedMaps > 0 || e.SkippedTargets > 0 || e.UnsupportedExecutables > 0)
 }
 
 type CapabilityReport struct {

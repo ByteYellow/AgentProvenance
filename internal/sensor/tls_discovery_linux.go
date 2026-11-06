@@ -107,6 +107,10 @@ func (s *tlsProcessScanner) add(path, kind string) {
 
 func (s *tlsProcessScanner) scanProcess(pid string) {
 	base := filepath.Join(s.root, pid)
+	s.scanAt(base)
+}
+
+func (s *tlsProcessScanner) scanAt(base string) {
 	maps, err := os.Open(filepath.Join(base, "maps"))
 	if err != nil {
 		// Normal exit races are not a permissions degradation.
@@ -183,6 +187,71 @@ func (s *tlsProcessScanner) scanProcess(pid string) {
 	if kind.kind != "" {
 		s.add(path, kind.kind)
 	}
+}
+
+// The kernel hint selects a PID to inspect, not an execution attribution. Read
+// one pinned proc directory and check its independently observed identity on
+// both sides of the scan. Attachment still verifies the discovered file inode.
+func (s *tlsProcessScanner) scanPID(pid uint32, previous tlsProcessIdentity) (map[string]tlsTarget, TLSDiscoveryReport, tlsProcessIdentity, error) {
+	base := filepath.Join(s.root, strconv.FormatUint(uint64(pid), 10))
+	dir, err := os.Open(base)
+	if err != nil {
+		return nil, TLSDiscoveryReport{}, previous, err
+	}
+	defer dir.Close()
+	pinned := fmt.Sprintf("/proc/self/fd/%d", dir.Fd())
+	before, err := tlsProcIdentity(pinned, pid)
+	if err != nil {
+		return nil, TLSDiscoveryReport{}, previous, err
+	}
+	if previous.ticks != "" && previous != before {
+		return nil, TLSDiscoveryReport{}, before, errTLSProcessChanged
+	}
+	part := &tlsProcessScanner{root: s.root, maxProcesses: s.maxProcesses, maxTargets: s.maxTargets,
+		seen: map[string]tlsTarget{}, cache: s.cache}
+	part.scanAt(pinned)
+	after, err := tlsProcIdentity(pinned, pid)
+	if err != nil {
+		return nil, part.stats, before, err
+	}
+	if before != after {
+		return nil, part.stats, after, errTLSProcessChanged
+	}
+	for key, target := range part.seen {
+		target.Path = strings.Replace(target.Path, pinned+"/", base+"/", 1)
+		part.seen[key] = target
+	}
+	return part.seen, part.stats, before, nil
+}
+
+var errTLSProcessChanged = fmt.Errorf("TLS discovery process changed during observation")
+
+func tlsProcIdentity(base string, pid uint32) (tlsProcessIdentity, error) {
+	f, err := os.Open(filepath.Join(base, "stat"))
+	if err != nil {
+		return tlsProcessIdentity{}, err
+	}
+	raw, err := io.ReadAll(io.LimitReader(f, 8193))
+	_ = f.Close()
+	if err != nil {
+		return tlsProcessIdentity{}, err
+	}
+	left, right := strings.IndexByte(string(raw), '('), strings.LastIndexByte(string(raw), ')')
+	if len(raw) > 8192 || left <= 0 || right <= left || strings.TrimSpace(string(raw[:left])) != strconv.FormatUint(uint64(pid), 10) {
+		return tlsProcessIdentity{}, errTLSProcessChanged
+	}
+	fields := strings.Fields(string(raw[right+1:]))
+	if len(fields) < 20 {
+		return tlsProcessIdentity{}, errTLSProcessChanged
+	}
+	if _, err := strconv.ParseUint(fields[19], 10, 64); err != nil {
+		return tlsProcessIdentity{}, errTLSProcessChanged
+	}
+	exe, err := tlsFileIdentity(filepath.Join(base, "exe"))
+	if err != nil {
+		return tlsProcessIdentity{}, err
+	}
+	return tlsProcessIdentity{ticks: fields[19], executable: exe}, nil
 }
 
 // Inode and device identify the object to which uprobes attach. Size and mtime

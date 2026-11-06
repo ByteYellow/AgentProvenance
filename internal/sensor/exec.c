@@ -18,6 +18,7 @@
 #include <bpf/bpf_tracing.h>
 
 char LICENSE[] SEC("license") = "GPL";
+const volatile __u32 tls_auto_discovery = 0;
 
 #define EVENT_EXEC 1
 #define EVENT_CONNECT 2
@@ -36,6 +37,7 @@ char LICENSE[] SEC("license") = "GPL";
 #define EVENT_SYSCALL_RESULT 15
 #define EVENT_THREAD_EXIT 16
 #define EVENT_SSL_CHECKPOINT 17
+#define EVENT_TLS_DISCOVERY 18
 #define AF_INET 2
 
 // argv is captured as fixed-size slots (constant offsets keep the BPF verifier
@@ -210,6 +212,13 @@ struct {
 	__type(key, struct process_exit_key);
 	__type(value, __u8);
 } exited_groups SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_LRU_HASH);
+	__uint(max_entries, 4096);
+	__type(key, struct process_exit_key);
+	__type(value, __u64);
+} tls_discovery_seen SEC(".maps");
 
 #if defined(__TARGET_ARCH_x86)
 // Cache the cgroup's kernel name while the task still exists. A short-lived Pod
@@ -455,24 +464,55 @@ static __always_inline int noise_file_prefix(const char *p) {
 	return 0;
 }
 
+static __always_inline int tls_library_path(const char *p) {
+	for (int i = 0; i < 248; i++) {
+		if (!p[i]) return 0;
+		if (i && p[i-1] != '/') continue;
+		if (p[i] == 'l' && p[i+1] == 'i' && p[i+2] == 'b' &&
+		    p[i+3] == 's' && p[i+4] == 's' && p[i+5] == 'l' &&
+		    (p[i+6] == '-' || (p[i+6] == '.' && p[i+7] == 's' && p[i+8] == 'o')))
+			return 1;
+	}
+	return 0;
+}
+
 static __always_inline int emit_open(const char *path, long flags, long nr) {
 	__u64 id = bpf_get_current_pid_tgid();
 	bpf_map_delete_elem(&syscall_calls, &id);
 	int is_write = (flags & OPEN_WRITE_MASK) != 0;
+	struct syscall_ctx call = {};
 	// Filter noise reads BEFORE reserving: a discarded ringbuf record still
 	// occupies space until drained, so the prefix check must precede reserve.
 	if (!is_write) {
 		char pfx[8] = {};
 		bpf_probe_read_user(pfx, sizeof(pfx), path);
-		if (noise_read_prefix(pfx))
+		if (noise_read_prefix(pfx)) {
+			// Library reads remain absent from file evidence. A narrow internal
+			// hint lets userspace inspect mappings after a delayed dlopen.
+			if (tls_auto_discovery && bpf_probe_read_user_str(call.path, sizeof(call.path), path) > 0 && tls_library_path(call.path)) {
+				struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+				struct process_exit_key key = {.start_ns = BPF_CORE_READ(task, group_leader, start_time), .pid = id >> 32};
+				__u64 now = bpf_ktime_get_ns();
+				__u64 *last = bpf_map_lookup_elem(&tls_discovery_seen, &key);
+				if (last && now - *last < 100000000ULL) return 0;
+				bpf_map_update_elem(&tls_discovery_seen, &key, &now, BPF_ANY);
+				struct sensor_event *hint = bpf_ringbuf_reserve(&events, sizeof(*hint), 0);
+				if (!hint) { count_drop(); return 0; }
+				fill_common(hint);
+				hint->kind = EVENT_TLS_DISCOVERY;
+				hint->path[0] = hint->args[0] = 0;
+				bpf_ringbuf_submit(hint, 0);
+			}
 			return 0;
+		}
 	}
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-	struct syscall_ctx call = {
-		.task_start_ns = BPF_CORE_READ(task, start_time),
-		.start_ns = bpf_ktime_get_ns(), .nr = nr, .kind = EVENT_OPEN,
-		.path_ptr = (__u64)path, .flags = flags,
-	};
+	call.task_start_ns = BPF_CORE_READ(task, start_time);
+	call.start_ns = bpf_ktime_get_ns();
+	call.nr = nr;
+	call.kind = EVENT_OPEN;
+	call.path_ptr = (__u64)path;
+	call.flags = flags;
 	call.path_retry = bpf_probe_read_user_str(call.path, sizeof(call.path), path) <= 0;
 	if (bpf_map_update_elem(&syscall_calls, &id, &call, BPF_ANY))
 		count_drop();

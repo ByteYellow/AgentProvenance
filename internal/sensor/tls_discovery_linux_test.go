@@ -3,9 +3,11 @@
 package sensor
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -31,6 +33,98 @@ func fakeTLSProcess(t *testing.T, root, pid, source string) string {
 		t.Fatal(err)
 	}
 	return lib
+}
+
+func writeTLSProcIdentity(t *testing.T, root, pid, ticks string) {
+	t.Helper()
+	fields := append([]string{"S"}, strings.Fields(strings.Repeat("0 ", 18))...)
+	fields = append(fields, ticks)
+	if err := os.WriteFile(filepath.Join(root, pid, "stat"), []byte(pid+" (fixture with ) spaces) "+strings.Join(fields, " ")), 0600); err != nil {
+		t.Fatal(err)
+	}
+	exe := filepath.Join(root, pid, "exe")
+	if _, err := os.Stat(exe); os.IsNotExist(err) {
+		if err := os.WriteFile(exe, []byte("fixture executable"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestTLSProcessScannerTargetsPIDWithoutAdvancingSweep(t *testing.T) {
+	root := t.TempDir()
+	for i := 100; i < 120; i++ {
+		pid := fmt.Sprint(i)
+		fakeTLSProcess(t, root, pid, "")
+		writeTLSProcIdentity(t, root, pid, "123")
+	}
+	s := newTLSProcessScanner(root, 1, 8)
+	defer s.close()
+	targets, _, identity, err := s.scanPID(119, tlsProcessIdentity{})
+	if err != nil || len(targets) != 1 || identity.ticks != "123" || s.stats.ProcessesScanned != 0 || len(s.seen) != 0 {
+		t.Fatalf("targeted scan: targets=%v id=%+v err=%v sweep=%+v", targets, identity, err, s.stats)
+	}
+	for _, target := range targets {
+		if !strings.Contains(target.Path, "/119/root/") || strings.Contains(target.Path, "/proc/self/fd/") {
+			t.Fatalf("temporary proc descriptor escaped: %+v", target)
+		}
+	}
+	writeTLSProcIdentity(t, root, "119", "124")
+	targets, _, _, err = s.scanPID(119, identity)
+	if !errors.Is(err, errTLSProcessChanged) || len(targets) != 0 {
+		t.Fatalf("reused PID accepted: targets=%v err=%v", targets, err)
+	}
+	if _, _, _, err = s.scanPID(999, tlsProcessIdentity{}); !os.IsNotExist(err) {
+		t.Fatalf("exited process: %v", err)
+	}
+}
+
+func TestTLSProcessScannerDetectsExecBetweenRetries(t *testing.T) {
+	root := t.TempDir()
+	fakeTLSProcess(t, root, "101", "")
+	writeTLSProcIdentity(t, root, "101", "123")
+	s := newTLSProcessScanner(root, 1, 8)
+	_, _, identity, err := s.scanPID(101, tlsProcessIdentity{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "101", "exe")
+	if err := os.WriteFile(path+".next", []byte("next executable"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(path+".next", path); err != nil {
+		t.Fatal(err)
+	}
+	if targets, _, _, err := s.scanPID(101, identity); !errors.Is(err, errTLSProcessChanged) || len(targets) != 0 {
+		t.Fatalf("new image reused pending discovery: %v %v", targets, err)
+	}
+}
+
+func TestTLSTrackerReusesIdleInodesWithinExistingBudget(t *testing.T) {
+	var links []*countingTLSLink
+	tracker := newTLSTracker(1, func(target tlsTarget, _ map[string]bool) *tlsAttachment {
+		l := &countingTLSLink{}
+		links = append(links, l)
+		return &tlsAttachment{target: target, links: []tlsLink{l}, probes: []ProbeCapability{{Name: "SSL_write", Status: "attached"}}}
+	})
+	defer tracker.close()
+	tracker.retainFor = 30 * time.Second
+	now := time.Now()
+	first := map[string]tlsTarget{"one": {Key: "one", Path: "/first"}}
+	tracker.reconcile(first, true, now)
+	tracker.reconcile(nil, true, now.Add(time.Second))
+	tracker.reconcile(first, false, now.Add(2*time.Second))
+	if len(links) != 1 || links[0].closed != 0 {
+		t.Fatal("warm inode was detached or attached twice")
+	}
+	tracker.reconcile(nil, true, now.Add(3*time.Second))
+	tracker.reconcile(map[string]tlsTarget{"two": {Key: "two", Path: "/second"}}, false, now.Add(4*time.Second))
+	if len(tracker.entries) != 1 || tracker.entries["two"] == nil || links[0].closed != 1 {
+		t.Fatal("idle cache blocked new work or exceeded target budget")
+	}
+	tracker.reconcile(nil, true, now.Add(time.Minute))
+	if len(tracker.entries) != 0 || links[1].closed != 1 {
+		t.Fatal("idle cache never expired")
+	}
 }
 
 func completeTLSScan(t *testing.T, s *tlsProcessScanner) (map[string]tlsTarget, TLSDiscoveryReport) {

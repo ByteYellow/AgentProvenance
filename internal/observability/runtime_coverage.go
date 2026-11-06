@@ -143,7 +143,7 @@ func BuildRuntimeCapture(runID, kernelState string, before, after CaptureSnapsho
 			r.Issues = append(r.Issues, "probe_coverage_degraded")
 		}
 		for _, c := range []*sensor.CapabilityReport{before.Capabilities, after.Capabilities} {
-			if c.TLSDiscovery.Enabled && (c.TLSDiscovery.Reason != "" || c.TLSDiscovery.SkippedTargets > 0 || c.TLSDiscovery.UnreadableProcesses > 0 || c.TLSDiscovery.TruncatedMaps > 0 || c.TLSDiscovery.UnsupportedExecutables > 0) {
+			if c.TLSDiscovery.HasGaps() {
 				r.Limitations = append(r.Limitations, "tls_discovery_partial")
 			}
 			for _, p := range c.Probes {
