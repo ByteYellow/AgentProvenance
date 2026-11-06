@@ -12,6 +12,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/attest"
 	"github.com/byteyellow/agentprovenance/internal/forensics"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -95,11 +96,16 @@ func forensicsCmd(dataDir, daemonURL *string) *cobra.Command {
 	var importPubKey string
 	var importAllowUnverified bool
 	importCmd := &cobra.Command{
-		Use:   "import <bundle.json|bundle.json.gz>",
-		Short: "import a forensics bundle into the local store (replay a captured run)",
-		Args:  cobra.ExactArgs(1),
+		Use:          "import <bundle.json|bundle.json.gz>",
+		Short:        "import a forensics bundle into the local store (replay a captured run)",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			info, verified, err := importForensics(*dataDir, args[0], importPubKey, importAllowUnverified, cmd.ErrOrStderr())
+			locale := commandLanguage(cmd)
+			if jsonOut {
+				locale = i18n.English
+			}
+			info, verified, err := importForensics(*dataDir, args[0], importPubKey, importAllowUnverified, cmd.ErrOrStderr(), locale)
 			if err != nil {
 				return err
 			}
@@ -124,7 +130,7 @@ func forensicsCmd(dataDir, daemonURL *string) *cobra.Command {
 		},
 	}
 	importCmd.Flags().BoolVar(&jsonOut, "json", false, "emit structured forensics import JSON")
-	importCmd.Flags().StringVar(&importPubKey, "pub-key", "", "hex ed25519 public key file; when set, verify the bundle's .dsse.json attestation before importing")
+	importCmd.Flags().StringVar(&importPubKey, "pub-key", "", "hex ed25519 public key file; required unless --allow-unverified explicitly skips signature verification")
 	importCmd.Flags().BoolVar(&importAllowUnverified, "allow-unverified", false, "explicitly skip attestation verification when --pub-key is absent; the import is loudly warned as unverified")
 	cmd := &cobra.Command{Use: "forensics", Short: "forensics bundle commands"}
 	cmd.AddCommand(export)
@@ -151,17 +157,21 @@ func importAttestationStatus(verified bool) string {
 	return "unverified"
 }
 
-func importForensics(dataDir, bundlePath, pubKeyPath string, allowUnverified bool, stderr io.Writer) (forensics.ImportInfo, bool, error) {
+func importForensics(dataDir, bundlePath, pubKeyPath string, allowUnverified bool, stderr io.Writer, locale i18n.Locale) (forensics.ImportInfo, bool, error) {
 	// Verify-before-import, fail-closed by default: a bundle is only imported
 	// when its DSSE attestation verifies against the on-disk bytes (catches a
 	// tampered or substituted bundle before any of it touches the store), or
 	// when the operator explicitly accepts an unverified import via
 	// --allow-unverified (loudly warned). An unflagged import is refused.
+	errorf := fmt.Errorf
+	if locale == i18n.Chinese {
+		errorf = commandErrorf
+	}
 	var verified bool
 	switch {
 	case pubKeyPath != "":
 		if allowUnverified && stderr != nil {
-			fmt.Fprintln(stderr, "note: --allow-unverified ignored; --pub-key verification takes precedence")
+			fmt.Fprintln(stderr, i18n.T(locale, "note: --allow-unverified ignored; --pub-key verification takes precedence"))
 		}
 		pub, err := attest.LoadPublicKeyHex(pubKeyPath)
 		if err != nil {
@@ -169,18 +179,15 @@ func importForensics(dataDir, bundlePath, pubKeyPath string, allowUnverified boo
 		}
 		attPath := forensicsAttestationPath(bundlePath)
 		if err := forensics.VerifyBundleAttestation(bundlePath, attPath, pub); err != nil {
-			return forensics.ImportInfo{}, false, commandErrorf("attestation verify failed: %w", err)
+			return forensics.ImportInfo{}, false, errorf("attestation verify failed: %w", err)
 		}
 		verified = true
 	case allowUnverified:
 		if stderr != nil {
-			fmt.Fprintln(stderr, "WARNING: --allow-unverified: importing WITHOUT signature verification; forensics evidence integrity is NOT guaranteed (导入未经验证，取证链完整性无保证)")
+			fmt.Fprintln(stderr, i18n.T(locale, "WARNING: --allow-unverified: importing WITHOUT signature verification; attestation status is unverified"))
 		}
 	default:
-		return forensics.ImportInfo{}, false, commandErrorf(
-			"refusing to import an unverified bundle: no --pub-key given; " +
-				"pass --pub-key <hex-ed25519-public-key-file> to verify the bundle's .dsse.json attestation before import, " +
-				"or pass --allow-unverified to skip verification explicitly (forensics chain-of-custody integrity is not guaranteed | 导入未经验证，取证链完整性无保证)")
+		return forensics.ImportInfo{}, false, errorf("refusing to import an unverified bundle: pass --pub-key <hex-ed25519-public-key-file> to verify the .dsse.json attestation, or --allow-unverified to explicitly import without signature verification")
 	}
 	paths, err := store.Init(dataDir)
 	if err != nil {

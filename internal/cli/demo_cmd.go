@@ -19,6 +19,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/demo"
 	"github.com/byteyellow/agentprovenance/internal/dashboard"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/spf13/cobra"
@@ -203,7 +204,7 @@ func prepareDemo(dir, dataDir string, entry demo.Entry, files fs.FS) (demoVerifi
 			return result, err
 		}
 	}
-	info, verified, err := importForensics(dataDir, filepath.Join(dest, bundle), filepath.Join(dest, entry.Key), false, nil)
+	info, verified, err := importForensics(dataDir, filepath.Join(dest, bundle), filepath.Join(dest, entry.Key), false, nil, i18n.English)
 	if err != nil {
 		return result, err
 	}

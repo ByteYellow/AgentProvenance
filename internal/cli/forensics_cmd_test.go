@@ -5,10 +5,12 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/byteyellow/agentprovenance/internal/attest"
 )
@@ -100,7 +102,7 @@ func TestForensicsImportAllowUnverifiedWarnsAndMarksUnverified(t *testing.T) {
 	if !strings.Contains(stdout, "imported run=t-import-run") || !strings.Contains(stdout, "attestation=unverified") {
 		t.Fatalf("output must mark the import unverified: %s", stdout)
 	}
-	if !strings.Contains(stderr, "WARNING") || !strings.Contains(stderr, "取证链完整性无保证") {
+	if !strings.Contains(stderr, "WARNING") || !strings.Contains(stderr, "WITHOUT signature verification") {
 		t.Fatalf("missing loud unverified warning on stderr: %s", stderr)
 	}
 
@@ -122,6 +124,91 @@ func TestForensicsImportAllowUnverifiedWarnsAndMarksUnverified(t *testing.T) {
 	}
 	if got.RunID != "t-import-run" || got.AttestationVerified || got.AttestationStatus != "unverified" {
 		t.Fatalf("JSON must mark import unverified: %+v", got)
+	}
+}
+
+func TestForensicsImportDiagnosticLanguage(t *testing.T) {
+	for _, locale := range []string{"en", "zh-CN"} {
+		for _, jsonMode := range []bool{false, true} {
+			for _, mode := range []string{"refused", "unverified", "wrong-key", "key-precedence"} {
+				t.Run(fmt.Sprintf("%s/json=%t/%s", locale, jsonMode, mode), func(t *testing.T) {
+					dir := t.TempDir()
+					pub, priv, _, err := attest.GenerateKey()
+					if err != nil {
+						t.Fatal(err)
+					}
+					bundle := writeForensicsImportBundle(t, dir, priv)
+					args := []string{"--data-dir", filepath.Join(dir, "store"), "--lang", locale, "forensics", "import", bundle}
+					if jsonMode {
+						args = append(args, "--json")
+					}
+					switch mode {
+					case "unverified":
+						args = append(args, "--allow-unverified")
+					case "wrong-key", "key-precedence":
+						if mode == "wrong-key" {
+							pub, _, _, err = attest.GenerateKey()
+							if err != nil {
+								t.Fatal(err)
+							}
+						}
+						args = append(args, "--pub-key", writeForensicsPubKey(t, dir, pub), "--allow-unverified")
+					}
+					root := NewRootCommand()
+					var stdout, stderr bytes.Buffer
+					root.SetOut(&stdout)
+					root.SetErr(&stderr)
+					root.SetArgs(args)
+					err = root.Execute()
+					failed := mode == "refused" || mode == "wrong-key"
+					if (err != nil) != failed {
+						t.Fatalf("mode=%s error=%v", mode, err)
+					}
+					if failed && stdout.Len() != 0 {
+						t.Fatalf("refused import emitted stdout: %s", stdout.String())
+					}
+					diagnostic := stderr.String() + ErrorText(root, err)
+					hasChinese := strings.ContainsFunc(diagnostic, func(r rune) bool { return unicode.Is(unicode.Han, r) })
+					wantChinese := locale == "zh-CN" && !jsonMode
+					if diagnostic == "" || hasChinese != wantChinese {
+						t.Fatalf("diagnostic language: want Chinese=%t, got %q", wantChinese, diagnostic)
+					}
+					if strings.Contains(diagnostic, "Usage:") || strings.Contains(diagnostic, "用法：") {
+						t.Fatalf("import failure printed usage: %q", diagnostic)
+					}
+					if jsonMode && !failed {
+						var result forensicsImportResult
+						if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+							t.Fatal(err)
+						}
+						verified := mode == "key-precedence"
+						if result.AttestationVerified != verified || result.AttestationStatus != importAttestationStatus(verified) {
+							t.Fatalf("verification status changed: %+v", result)
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestForensicsImportHelpExplainsVerificationDefault(t *testing.T) {
+	for _, tc := range []struct{ locale, want string }{
+		{"en", "required unless --allow-unverified"},
+		{"zh-CN", "除非显式使用 --allow-unverified"},
+	} {
+		t.Run(tc.locale, func(t *testing.T) {
+			root := NewRootCommand()
+			var output bytes.Buffer
+			root.SetOut(&output)
+			root.SetArgs([]string{"--lang", tc.locale, "forensics", "import", "--help"})
+			if err := root.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(output.String(), tc.want) {
+				t.Fatalf("help omits default verification: %s", output.String())
+			}
+		})
 	}
 }
 
