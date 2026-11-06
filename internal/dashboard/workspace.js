@@ -110,7 +110,7 @@ window.AgentWorkspaceUI = (() => {
   function setNode(value, explicit = false) {
     const id = value?.id || '';
     available.summary = Boolean(id);
-    labels.summary = value?.label || id;
+    labels.summary = value ? (api.nodeLabel?.(value) || value.label || id) : '';
     if (explicit) { tab = 'summary'; dismissed = false; }
     renderReader();
   }
@@ -288,9 +288,41 @@ window.AgentWorkspaceUI = (() => {
     $('session-related-back').hidden=!label;
     $('session-related-back').textContent=label?api.tx('Return to {run}',{run:label}):'';
   }
+  function describeAssociation(node, host) {
+    host.querySelector('[data-intent-association]')?.remove();
+    if(node?.kind!=='intent_diff')return;
+    const data=node.data||{}, association=data.association||{};
+    const states={bound:t('Bound to a tool call'),policy_scope:t('Explicit policy scope'),candidate:t('One candidate, binding unresolved'),ambiguous:t('Multiple candidate messages'),missing:t('Intent not captured for this scope')};
+    const bases={tool_call_id:t('Tool call identity'),explicit_policy_scope:t('Explicit policy scope'),validity_interval:t('Within policy validity interval'),same_agent:t('Same receiving agent'),missing_operation_binding:t('Operation binding not recorded'),message_not_after_effect:t('Message observed no later than the effect'),time_unknown:t('Capture order unknown')};
+    const list=value=>Array.isArray(value)?value.filter(x=>typeof x==='string'&&x):[];
+    const refs=[...new Set(list(association.evidence_refs))];
+    const candidates=Array.isArray(association.candidates)?association.candidates:[];
+    const basisHTML=value=>list(value).map(b=>e(bases[b]||b)).join(' · ');
+    const referenceHTML=ref=>{
+      const label=api.evidenceLabel?.(ref)||ref;
+      return `<div class="association-reference"><div>${label!==ref?`<strong>${e(label)}</strong>`:''}<code>${e(ref)}</code></div><span><button data-association-read="${e(ref)}">${e(t('Read saved evidence'))}</button><button data-association-graph="${e(ref)}">${e(t('Locate in graph'))}</button></span></div>`;
+    };
+    const section=document.createElement('section');
+    section.className='evidence-association';section.dataset.intentAssociation=association.status||'historical';
+    section.innerHTML=`<h4>${e(t('Intent association'))} <span>${e(states[association.status]||t('Recorded under an earlier analysis rule'))}</span></h4>`+
+      (data.tool_call_id?`<p>${e(t('Tool call'))}: <button data-association-graph="${e(data.tool_call_id)}">${e(data.tool_call_id)}</button></p>`:'')+
+      (association.basis?.length?`<p class="association-basis">${basisHTML(association.basis)}</p>`:'')+
+      (candidates.length?`<p>${e(api.tx('{count} candidate messages',{count:candidates.length}))}</p><ol class="association-candidates">${candidates.map(candidate=>`<li><div class="association-basis">${basisHTML(candidate.basis)}</div>${[...new Set([candidate.source,...list(candidate.evidence_refs)])].filter(x=>typeof x==='string'&&x).map(referenceHTML).join('')}</li>`).join('')}</ol>`:'')+
+      `<details><summary>${e(t('Association evidence'))}${refs.length?' · '+refs.length:''}</summary><p>${e(t('Analysis rule'))}: <code>${e(data.rule_version||t('Not recorded'))}</code></p>${refs.map(referenceHTML).join('')}</details><p class="association-error" role="status" hidden></p>`;
+    host.insertBefore(section,host.querySelector('[data-node-fields]'));
+    section.querySelectorAll('[data-association-read],[data-association-graph]').forEach(button=>button.onclick=async()=>{
+      const errorBox=section.querySelector('.association-error');errorBox.hidden=true;button.disabled=true;
+      try {
+        if(button.dataset.associationRead){await api.readEvidence(button.dataset.associationRead);show('content');}
+        else await api.navigateGraph(button.dataset.associationGraph);
+      } catch(error) {
+        if(section.isConnected){errorBox.textContent=t('Recorded evidence could not be loaded.')+' '+error.message;errorBox.hidden=false;}
+      } finally {if(button.isConnected)button.disabled=false;}
+    });
+  }
   function readingState() {return {tab,dismissed};}
   function restoreReading(value) {
     if(value&&Object.hasOwn(panels,value.tab)){tab=value.tab;dismissed=value.dismissed===true;renderReader();}
   }
-  return {init,setRun,setNode,setEvents,setContent,show,setOverview,overviewError,setSource,setSession,sessionDirectory,setReturn,readingState,restoreReading};
+  return {init,setRun,setNode,setEvents,setContent,show,setOverview,overviewError,setSource,setSession,sessionDirectory,setReturn,readingState,restoreReading,describeAssociation};
 })();

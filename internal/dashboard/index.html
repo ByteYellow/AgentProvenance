@@ -700,6 +700,7 @@ function nodeLabel(n) {
       case 'refused_but_runtime_happened':return tr('⊘ refusal bypassed');
       case 'decided_and_executed':return tx('✓ {operation} as declared',{operation:d.operation||''});
       case 'intent_coverage_gap':return tr('? uncaptured intent');
+      case 'intent_association_gap':return tr('? unresolved intent association');
     }
   }
   if(kind==='message'||kind==='relay'){
@@ -1135,6 +1136,7 @@ function showDetail(id,explicit=false){
   Object.keys(d).forEach(key=>{
     let v=d[key];
     if(key==='payload'){ try{v=JSON.stringify(JSON.parse(v),null,2);}catch(_){v=String(v);} }
+    else if(v!==null && typeof v==='object'){v=JSON.stringify(v,null,2);}
     else if(typeof v==='number'){ v=(key.indexOf('confidence')>=0)?(+v).toFixed(2):v; }
     if(v==='' || v==null || v===false)return;
     rows+=`<dt title="${esc(key)}">${esc(tr(key))}</dt><dd>${esc(v)}</dd>`;
@@ -1154,6 +1156,7 @@ function showDetail(id,explicit=false){
   el.innerHTML=`<h3><span style="color:${c}">●</span> ${esc(nodeLabel(n))} ${badges}</h3>`+
     `<div class="expandbar">${expandButtons}<button id="detail-session">${esc(tr('Locate session records'))}</button><button id="detail-content">${esc(tr('Saved content'))}</button></div>`+
     `<details data-node-fields${fieldsOpen?' open':''}><summary>${esc(tr("Original evidence fields"))}</summary><dl>${rows}</dl></details>`;
+  window.AgentWorkspaceUI.describeAssociation(n,el);
   window.AgentAccessControlUI.selectNode(n,el);
   $('#detail-session').onclick=()=>window.AgentContextUI.linkedSession(n.id);
   $('#detail-content').onclick=()=>{
@@ -2027,7 +2030,11 @@ async function navigateEvidenceGraph(run,id){
   window.AgentWorkspaceUI.show('summary');
   $('#graphcard').scrollIntoView({block:'start',behavior:'smooth'});
 }
-window.AgentWorkspaceUI.init({tr,tx,esc,j,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope)),navigateSession:navigateRelatedSession,returnSession:()=>safeUI(returnRelatedSession()),search:()=>safeUI(window.AgentSearchUI.open()),compare:()=>safeUI(window.AgentCompareUI.open()),export:()=>safeUI(window.AgentExportUI.open())});
+window.AgentWorkspaceUI.init({tr,tx,esc,j,nodeLabel,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope)),navigateSession:navigateRelatedSession,returnSession:()=>safeUI(returnRelatedSession()),search:()=>safeUI(window.AgentSearchUI.open()),compare:()=>safeUI(window.AgentCompareUI.open()),export:()=>safeUI(window.AgentExportUI.open()),
+  evidenceLabel:ref=>{const node=window._lg?.nodes?.find(n=>n.id===ref);return node?nodeLabel(node):ref;},
+  readEvidence:ref=>window.AgentContextUI.selectGraph(ref,null,true),
+  navigateGraph:async ref=>{activateSessionScope(null);await navigateEvidenceGraph(cur,ref);}
+});
 window.AgentAccessControlUI.init({tr,tx,esc,j,navigateGraph:async(run,id)=>{
   if(run!==cur)throw new Error(tr('The selected run changed.'));
   activateSessionScope(null);await navigateEvidenceGraph(run,id);

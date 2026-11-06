@@ -191,6 +191,11 @@ new analysis uses `agentprov.intent_scope/v3`. Signed bundle export includes the
 saved analysis and its graph references. Import preserves those records and their
 historical rule version; `intent diff` explicitly recomputes the local analysis.
 
+Select a conformance node in the Dashboard to inspect its tool scope, association
+status, candidate messages and supporting records. Message bodies use the shared
+evidence reader; the analysis rule and references remain available in the detail.
+The same view is included in offline replay exports.
+
 Peer messages without a recipient-side tool-call binding remain `candidate` or
 `ambiguous`, even when there is only one nearby message. Their `association`
 includes source references, matching basis and the affected runtime events.
