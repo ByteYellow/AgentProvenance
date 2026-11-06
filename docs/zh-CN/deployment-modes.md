@@ -71,6 +71,14 @@ KVM 虚拟机与 K3s 的 systemd 采集服务、节点事件归属配置见[部�
 
 `/v1/live` 检查 HTTP 服务是否存活；`/v1/ready` 和 `/v1/health` 检查数据库及表结构是否可用。存储失败时，无法读取的计数保持 `null`。服务就绪状态与历史证据覆盖率是两回事，这些接口也不能证明每个后台工作进程都在推进。
 
+### Docker 会话兼容配置
+
+兼容命令 `lease`、`session`、`api` 使用 Docker 工作区。Linux 和 macOS 上，新建和恢复的会话默认采用 CLI 或后台服务进程的有效 UID:GID，覆盖镜像中的 `USER`。这样既能写入挂载的工作区，也无需恢复 `CAP_DAC_OVERRIDE` 或向所有用户开放工作区写权限。默认的非 root 用户使用容器内的 `HOME=/tmp` 存放缓存；依赖安装到工作区的虚拟环境或项目目录。所有 Linux capability 继续移除，`no-new-privileges` 继续启用。
+
+特殊镜像可在任务 YAML 中设置 `user: "1000:1000"`，也可以使用镜像内的用户名。显式指定用户时保留镜像的 home 环境，该用户的 UID:GID 需要具备工作区访问权限。使用 rootless Docker 或用户命名空间映射时，应选择映射到工作区所有者的容器身份；rootless 服务所有者的文件通常对应 `user: "0:0"`。需要 root 的系统依赖应在构建镜像时安装。
+
+Docker 29.0-29.2 最低要求 API 1.44，当前内置客户端默认最高使用 1.43，详见 [Docker API 版本表](https://docs.docker.com/reference/api/engine/#api-version-matrix)。连接这些服务时，为兼容命令设置 `DOCKER_API_VERSION=1.44`；会话创建、执行和清理已在 Docker 29.1.3 上按此配置验收。该设置会关闭 API 版本协商，只在服务端需要时使用。常规 `record`、`launch` 和回放不使用这个 Docker 会话客户端。
+
 ## 3. 中心化证据服务：仅有设计
 
 面向多节点的共享安全调查、审计、SRE、合规和事件复盘。当前版本未实现，组件职责、故障处理、容量指标和信任假设见[中心化服务设计](central-evidence-service-design.md)。

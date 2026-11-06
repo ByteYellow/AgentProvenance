@@ -43,18 +43,7 @@ func (r *DockerRuntime) CreateSession(req CreateSessionRequest) (string, error) 
 		return "", fmt.Errorf("task image is required")
 	}
 	hostCfg := buildHostConfig(req)
-	cfg := &container.Config{
-		Image:      req.Image,
-		WorkingDir: "/workspace",
-		Tty:        false,
-		OpenStdin:  true,
-		Cmd:        []string{"sleep", "infinity"},
-		Labels: map[string]string{
-			"agentprov.session_id": req.SessionID,
-			"agentprov.lease_id":   req.LeaseID,
-			"agentprov.run_id":     req.RunID,
-		},
-	}
+	cfg := buildContainerConfig(req)
 	resp, err := r.Client.ContainerCreate(ctx, cfg, hostCfg, nil, nil, "agentprov-"+req.SessionID)
 	if err != nil {
 		if !isNoSuchImage(err) {
@@ -77,12 +66,29 @@ func (r *DockerRuntime) CreateSession(req CreateSessionRequest) (string, error) 
 	return resp.ID, nil
 }
 
-// buildHostConfig 构造会话容器的宿主侧配置。安全基线（H3 加固）：
-//   - CapDrop ALL：容器内（含 exec 派生的进程）不保留任何 Linux capability，
-//     防止借助 setuid/root 特权读写宿主 bind mount 之外的资源；
-//   - SecurityOpt no-new-privileges：exec/setuid 无法在容器内提权。
-//
-// workspace bind mount 保持读写（业务需要会话写 /workspace）。
+func buildContainerConfig(req CreateSessionRequest) *container.Config {
+	cfg := &container.Config{
+		Image: req.Image, User: req.User, WorkingDir: "/workspace",
+		Tty: false, OpenStdin: true, Cmd: []string{"sleep", "infinity"},
+		Labels: map[string]string{
+			"agentprov.session_id": req.SessionID,
+			"agentprov.lease_id":   req.LeaseID,
+			"agentprov.run_id":     req.RunID,
+		},
+	}
+	// With all capabilities dropped, container root cannot bypass the host
+	// workspace's ownership. Match its creator instead of weakening permissions.
+	if cfg.User == "" && os.Geteuid() >= 0 && os.Getegid() >= 0 {
+		cfg.User = fmt.Sprintf("%d:%d", os.Geteuid(), os.Getegid())
+		if os.Geteuid() != 0 {
+			// Arbitrary host UIDs may have no passwd entry or writable image home.
+			cfg.Env = []string{"HOME=/tmp"}
+		}
+	}
+	return cfg
+}
+
+// Drop capabilities and block privilege gains while keeping the workspace writable.
 func buildHostConfig(req CreateSessionRequest) *container.HostConfig {
 	hostCfg := &container.HostConfig{
 		CapDrop:     []string{"ALL"},

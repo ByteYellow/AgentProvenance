@@ -47,6 +47,7 @@ type CreateSessionRequest struct {
 	LeaseID           string
 	RunID             string
 	Image             string
+	User              string
 	WorkspaceHostPath string
 	MemoryMB          int64
 	CPURequest        float64

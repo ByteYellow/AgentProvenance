@@ -1,10 +1,31 @@
 package node
 
 import (
+	"fmt"
+	"os"
 	"testing"
 
 	"github.com/docker/docker/api/types/mount"
 )
+
+func TestBuildContainerConfigWorkspaceUser(t *testing.T) {
+	cfg := buildContainerConfig(CreateSessionRequest{Image: "python:3-slim"})
+	if os.Geteuid() >= 0 && os.Getegid() >= 0 {
+		want := fmt.Sprintf("%d:%d", os.Geteuid(), os.Getegid())
+		if cfg.User != want {
+			t.Fatalf("User = %q, want workspace creator %q", cfg.User, want)
+		}
+		if os.Geteuid() != 0 && (len(cfg.Env) != 1 || cfg.Env[0] != "HOME=/tmp") {
+			t.Fatalf("non-root home = %v, want HOME=/tmp", cfg.Env)
+		}
+	}
+	for _, user := range []string{"1000:1000", "node", "0:0"} {
+		explicit := buildContainerConfig(CreateSessionRequest{Image: "custom", User: user})
+		if explicit.User != user || len(explicit.Env) != 0 {
+			t.Fatalf("explicit image user/home overridden: %+v", explicit)
+		}
+	}
+}
 
 func TestBuildHostConfigDropsAllCapabilities(t *testing.T) {
 	req := CreateSessionRequest{WorkspaceHostPath: "/tmp/ap-data/workspaces/sbx-x"}
