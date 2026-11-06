@@ -224,6 +224,43 @@ func TestEndpointEmptyMarkersAndRepeatedPaths(t *testing.T) {
 	}
 }
 
+func TestEndpointContentMatchIsIndependentOfNearbyRead(t *testing.T) {
+	for _, tc := range []struct {
+		name, content, want string
+		markers             []string
+	}{
+		{"unrelated_body", "ordinary diagnostic", "not_matched", nil},
+		{"only_common_text", "CANARY appears in documentation", "capture_reported", []string{"UNIQUE-FIXTURE-CANARY"}},
+		{"unique_content", "UNIQUE-FIXTURE-CANARY", "matched", []string{"UNIQUE-FIXTURE-CANARY"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, db := intentTestStore(t)
+			addEndpointRead(t, db, "read", "2026-11-06T00:00:01Z", `{"path":"/work/secret"}`)
+			addEndpointNetwork(t, db, "send", "intent-test", "network_connect", "sink.example", "2026-11-06T00:00:02Z")
+			if _, err := db.Exec(`UPDATE events SET process_id='read-process' WHERE id='send'`); err != nil {
+				t.Fatal(err)
+			}
+			tx, err := db.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+			body, _ := json.Marshal(map[string]any{"files": []any{map[string]string{"path": "/work/secret", "content": tc.content}}})
+			meta := endpointMeta{ObservedAt: "2026-11-06T00:00:03Z", Host: "sink.example", RuntimeEventID: "send", CanaryHits: tc.markers}
+			a, err := buildEndpointAssociation(tx, "intent-test", meta, body, []string{"/work/secret"}, "2026-11-06T00:00:04Z")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if a.ContentMatch.Status != tc.want || a.SourceReads.Status != "candidate" || a.Execution.Status != "bound" {
+				t.Fatalf("nearby read upgraded content or source evidence: %+v", a)
+			}
+			if len(a.SourceReads.Candidates) != 1 || a.SourceReads.Candidates[0].EventID != "read" {
+				t.Fatalf("candidate source was lost: %+v", a.SourceReads)
+			}
+		})
+	}
+}
+
 func TestEndpointMissingPathPreservesUnresolvedReferences(t *testing.T) {
 	_, db := intentTestStore(t)
 	tx, err := db.Begin()

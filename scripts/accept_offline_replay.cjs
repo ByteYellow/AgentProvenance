@@ -1,5 +1,6 @@
 // Verify downloaded replay ZIPs in an offline browser, using no source store.
 // Usage: node scripts/accept_offline_replay.cjs replay.zip [another.zip ...]
+// AGENTPROV_REPLAY_SEARCH_QUERY selects a known saved phrase for a custom capture.
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -135,7 +136,7 @@ async function main(){
         await page.locator('#compare-close').click();
         await page.locator('[data-investigation="search"]').click();
         if(partial)assert.match(await page.locator('#search-scope').innerText(),/Included records/,'partial replay does not claim whole-run search');
-        await page.locator('#search-query').fill(report.run==='run-double-attempt'?'169.254.169.254':report.run==='ui-fixture'?'SAVED-OUTPUT-TAIL':report.run==='audit-interface-fixture'?'SECCOMP':'report.py');
+        await page.locator('#search-query').fill(process.env.AGENTPROV_REPLAY_SEARCH_QUERY||(report.run==='run-double-attempt'?'169.254.169.254':report.run==='ui-fixture'?'SAVED-OUTPUT-TAIL':report.run==='audit-interface-fixture'?'SECCOMP':'report.py'));
         await page.locator('#search-submit').click();
         await page.waitForFunction(()=>!document.querySelector('#search-submit').disabled);
         assert.ok(await page.locator('.search-result').count()>0,'saved evidence remains searchable offline');
