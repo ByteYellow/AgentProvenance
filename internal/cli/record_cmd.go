@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
 	"sync"
@@ -46,6 +47,11 @@ func recordCmd(dataDir *string) *cobra.Command {
 			if withJSON {
 				childOutput = cmd.ErrOrStderr()
 			}
+			// The child receives terminal Ctrl-C directly. Keep the recorder
+			// alive long enough to persist the exit and its execution evidence.
+			interrupts := make(chan os.Signal, 4)
+			signal.Notify(interrupts, os.Interrupt)
+			defer signal.Stop(interrupts)
 			// Local, same-privilege caller: the CLI runs as the invoking user
 			// with no privilege boundary to cross, so it keeps the pre-hardening
 			// execution semantics (any interpreter, any workdir, no timeout, and
@@ -58,6 +64,7 @@ func recordCmd(dataDir *string) *cobra.Command {
 				AllowShell:      true,
 				AllowAnyWorkdir: true,
 				InheritFullEnv:  true,
+				Foreground:      true,
 			}}).Run(record.Request{
 				RunID:            runID,
 				Name:             name,
@@ -65,6 +72,7 @@ func recordCmd(dataDir *string) *cobra.Command {
 				Command:          args,
 				SampleIntervalMS: sampleIntervalMS,
 				PostRootGraceMS:  postRootGraceMS,
+				Stdin:            cmd.InOrStdin(),
 				Stdout:           childOutput,
 				Stderr:           cmd.ErrOrStderr(),
 			})

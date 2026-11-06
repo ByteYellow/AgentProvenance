@@ -69,6 +69,7 @@ type Options struct {
 	CapturePreset      string // additional context retention: detailed (default) or basic
 	CaptureToolResults *bool  // optional preset override; nil keeps the preset value
 
+	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
 }
@@ -118,6 +119,9 @@ func Run(opts Options) (Report, error) {
 	}
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
+	}
+	if opts.Stdin == nil {
+		opts.Stdin = os.Stdin
 	}
 	if opts.Stderr == nil {
 		opts.Stderr = os.Stderr
@@ -288,12 +292,14 @@ func Run(opts Options) (Report, error) {
 		AllowShell:      true,
 		AllowAnyWorkdir: true,
 		InheritFullEnv:  true,
+		Foreground:      true,
 	}}).Run(record.Request{
 		RunID:           runID,
 		Name:            "launch",
 		Workdir:         opts.Workdir,
 		Command:         command,
 		DisableSnapshot: !opts.FileDiff,
+		Stdin:           opts.Stdin,
 		Stdout:          agentOutput,
 		Stderr:          opts.Stderr,
 	})

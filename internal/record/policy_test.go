@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -219,6 +220,56 @@ func TestRecordPolicyMinimizesChildEnvironment(t *testing.T) {
 	}
 	if !strings.Contains(fullOut.String(), "AGENTPROV_POLICY_CANARY") {
 		t.Fatalf("InheritFullEnv did not pass the daemon environment through")
+	}
+}
+
+func TestRecordPolicyStdinIsExplicit(t *testing.T) {
+	paths, db := newPolicyTestStore(t)
+	svc := Service{DB: db, Paths: paths, Options: Options{AllowShell: true}}
+	for _, tc := range []struct {
+		name string
+		in   io.Reader
+		want string
+	}{
+		{name: "noninteractive", want: "stdin-eof"},
+		{name: "explicit-input", in: strings.NewReader("request-input\n"), want: "request-input"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			read, write, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer read.Close()
+			if _, err := io.WriteString(write, "parent-input\n"); err != nil {
+				t.Fatal(err)
+			}
+			write.Close()
+			original := os.Stdin
+			os.Stdin = read
+			defer func() { os.Stdin = original }()
+			var out bytes.Buffer
+			result, err := svc.Run(Request{
+				RunID: "run-stdin-" + tc.name, Stdin: tc.in, Stdout: &out, DisableSnapshot: true,
+				Command: []string{"sh", "-c", `if IFS= read -r line; then printf '%s' "$line"; else printf stdin-eof; fi`},
+			})
+			if err != nil || result.ExitCode != 0 || out.String() != tc.want {
+				t.Fatalf("stdin result=%+v error=%v output=%q, want %q", result, err, out.String(), tc.want)
+			}
+		})
+	}
+}
+
+func TestRecordForegroundRequiresUnboundedTimeout(t *testing.T) {
+	paths, db := newPolicyTestStore(t)
+	for _, timeout := range []time.Duration{0, time.Second} {
+		svc := Service{DB: db, Paths: paths, Options: Options{Foreground: true, Timeout: timeout}}
+		if _, err := svc.Run(Request{Command: []string{"true"}}); err == nil || !strings.Contains(err.Error(), "foreground") {
+			t.Fatalf("foreground with timeout %s: %v", timeout, err)
+		}
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM snapshots`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("invalid execution mode created snapshots: count=%d error=%v", count, err)
 	}
 }
 

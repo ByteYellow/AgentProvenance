@@ -49,6 +49,7 @@ type Request struct {
 	// every run, dominating startup and disk. On Linux the kernel sensor's
 	// file_write events already capture what changed at higher fidelity.
 	DisableSnapshot bool      `json:"disable_snapshot"`
+	Stdin           io.Reader `json:"-"`
 	Stdout          io.Writer `json:"-"`
 	Stderr          io.Writer `json:"-"`
 }
@@ -93,6 +94,9 @@ func (s Service) Run(req Request) (Result, error) {
 		return Result{}, fmt.Errorf("command is required after --")
 	}
 	opts := s.Options
+	if opts.Foreground && opts.Timeout >= 0 {
+		return Result{}, fmt.Errorf("record policy: foreground execution requires an unbounded timeout")
+	}
 	// Policy preflight (C2 hardening): refuse shell interpreters and confine
 	// the working directory BEFORE any snapshot, graph row, or workspace
 	// directory is created, so a refused request leaves zero side effects.
@@ -231,9 +235,8 @@ func (s Service) Run(req Request) (Result, error) {
 	if req.Stderr != nil {
 		cmd.Stderr = req.Stderr
 	}
-	cmd.Stdin = os.Stdin
-	applyExecutionAttrs(cmd)
-	if processGroupKillSupported() {
+	cmd.Stdin = req.Stdin
+	if applyExecutionAttrs(cmd, opts.Foreground) {
 		cmd.Cancel = func() error {
 			killProcessGroup(cmd.Process.Pid)
 			return nil
@@ -323,14 +326,14 @@ func (s Service) Run(req Request) (Result, error) {
 	case timedOut:
 		status = "failed"
 		exitCode = 124
-		failureReason = fmt.Sprintf("execution timed out after %s; the process group was killed", execTimeout)
+		failureReason = fmt.Sprintf("execution timed out after %s; the recorded command was terminated", execTimeout)
 	case err != nil && !errors.Is(err, exec.ErrWaitDelay):
 		// ErrWaitDelay only means grandchildren held the pipes past WaitDelay;
 		// the root process itself already exited and its status is authoritative.
 		status = "failed"
 		exitCode = 1
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
+			exitCode = commandExitCode(exitErr)
 		}
 	}
 	endedAt := time.Now().UTC().Format(time.RFC3339Nano)

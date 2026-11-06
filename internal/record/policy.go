@@ -63,6 +63,10 @@ type Options struct {
 	// InheritFullEnv passes the daemon process environment to the child
 	// verbatim instead of the minimal allowlist. Default false.
 	InheritFullEnv bool
+	// Foreground preserves the caller's process group for local terminal
+	// input and signals. It requires Timeout < 0; bounded noninteractive jobs
+	// use an isolated process group so cancellation cannot kill the caller.
+	Foreground bool
 }
 
 // shellInterpreterNames are the interpreter basenames whose invocation is
