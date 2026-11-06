@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 )
@@ -30,15 +31,22 @@ const assertedConfidence = 0.5
 
 // IntentContract is what one agent action declares it should and must-not do.
 type IntentContract struct {
-	ID         string  `json:"id"`
-	Kind       string  `json:"kind"`
-	ScopeAgent string  `json:"scope_agent"`
-	ToolCallID string  `json:"tool_call_id,omitempty"`
-	Operation  string  `json:"operation"`
-	Target     string  `json:"target"`
-	Profile    Profile `json:"-"`
-	Source     string  `json:"source"`
-	Confidence float64 `json:"confidence"`
+	ID           string   `json:"id"`
+	Kind         string   `json:"kind"`
+	ScopeAgent   string   `json:"scope_agent"`
+	ToolCallID   string   `json:"tool_call_id,omitempty"`
+	Operation    string   `json:"operation"`
+	Target       string   `json:"target"`
+	Profile      Profile  `json:"-"`
+	Source       string   `json:"source"`
+	Confidence   float64  `json:"confidence"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
+	ObservedAt   string   `json:"observed_at,omitempty"`
+	// A persistent policy is explicitly supplied metadata, never inferred from
+	// message wording. Its validity interval is local to this run and agent.
+	ScopeKind  string `json:"scope_kind,omitempty"`
+	ScopeStart string `json:"scope_start,omitempty"`
+	ScopeEnd   string `json:"scope_end,omitempty"`
 	// Negative marks a refusal: the agent declared it would NOT do the proposed
 	// action, so the baseline sensitive effects become a hard forbid for it.
 	Negative bool `json:"negative,omitempty"`
@@ -74,30 +82,32 @@ func extractContracts(db intentQueryer, runID string, profiles map[string]Profil
 			// A refusal is a negative contract: the agent said it would not act,
 			// so any baseline-sensitive effect later attributed to it is a bypass.
 			out = append(out, IntentContract{
-				ID:         "contract/" + id,
-				Kind:       ContractRefusal,
-				ScopeAgent: agentID,
-				ToolCallID: id,
-				Operation:  "refusal",
-				Target:     strings.TrimPrefix(command, "[llm refusal] "),
-				Profile:    Profile{Operation: "refusal"},
-				Source:     "refusal " + id,
-				Confidence: assertedConfidence,
-				Negative:   true,
+				ID:           "contract/" + id,
+				Kind:         ContractRefusal,
+				ScopeAgent:   agentID,
+				ToolCallID:   id,
+				Operation:    "refusal",
+				Target:       strings.TrimPrefix(command, "[llm refusal] "),
+				Profile:      Profile{Operation: "refusal"},
+				Source:       "refusal " + id,
+				Confidence:   assertedConfidence,
+				EvidenceRefs: []string{id},
+				Negative:     true,
 			})
 			continue
 		}
 		op := inferOperation(command)
 		out = append(out, IntentContract{
-			ID:         "contract/" + id,
-			Kind:       ContractToolCall,
-			ScopeAgent: agentID,
-			ToolCallID: id,
-			Operation:  op,
-			Target:     command,
-			Profile:    profileFor(profiles, op),
-			Source:     "tool_call " + id,
-			Confidence: assertedConfidence,
+			ID:           "contract/" + id,
+			Kind:         ContractToolCall,
+			ScopeAgent:   agentID,
+			ToolCallID:   id,
+			Operation:    op,
+			Target:       command,
+			Profile:      profileFor(profiles, op),
+			Source:       "tool_call " + id,
+			Confidence:   assertedConfidence,
+			EvidenceRefs: []string{id},
 		})
 	}
 	err = rows.Err()
@@ -177,30 +187,29 @@ func extractModelResponseContracts(db intentQueryer, runID string) ([]IntentCont
 	return out, rows.Err()
 }
 
-// extractMessageContracts turns each peer SendMessage into a contract that
-// governs the RECIPIENT: the instruction alice sends bob ("install X") declares
-// what bob's ensuing runtime should be about, so bob reading a foreign secret
-// while acting on it is a peer_message_intent_mismatch. The agent_message edges
-// route sender -> body-object -> recipient; we pair them via the shared object.
+// Messages retain recipient scope and their content-addressed source. Only
+// explicit recipient-side bindings can narrow them to a particular operation.
 func extractMessageContracts(db intentQueryer, runID string, profiles map[string]Profile) ([]IntentContract, error) {
-	rows, err := db.Query(`SELECT from_id, to_id FROM graph_edges
+	rows, err := db.Query(`SELECT from_id, to_id, created_at FROM graph_edges
 		WHERE run_id = ? AND edge_type = 'agent_message'`, runID)
 	if err != nil {
 		return nil, err
 	}
-	senderOf := map[string]string{}    // object hash -> sender agent node
-	recipientOf := map[string]string{} // object hash -> recipient agent node
+	recipientOf := map[string]map[string]string{} // object -> recipient -> capture time
 	for rows.Next() {
-		var from, to string
-		if err := rows.Scan(&from, &to); err != nil {
+		var from, to, at string
+		if err := rows.Scan(&from, &to, &at); err != nil {
 			rows.Close()
 			return nil, err
 		}
-		switch {
-		case strings.HasPrefix(to, "sha256:"):
-			senderOf[to] = from
-		case strings.HasPrefix(from, "sha256:"):
-			recipientOf[from] = to
+		if strings.HasPrefix(from, "sha256:") && strings.HasPrefix(to, "agent/") {
+			if recipientOf[from] == nil {
+				recipientOf[from] = map[string]string{}
+			}
+			prior, ok := recipientOf[from][to]
+			if !ok || earlierMessageTime(at, prior) {
+				recipientOf[from][to] = at
+			}
 		}
 	}
 	err = rows.Err()
@@ -215,95 +224,133 @@ func extractMessageContracts(db intentQueryer, runID string, profiles map[string
 		hashes = append(hashes, hash)
 	}
 	sort.Strings(hashes)
-	i := 0
 	for _, hash := range hashes {
-		recipient := recipientOf[hash]
-		body, err := readMessageBody(db, runID, hash)
+		msg, err := readMessage(db, runID, hash)
 		if err != nil {
 			return nil, fmt.Errorf("read peer message %s: %w", hash, err)
 		}
-		if body == "" {
+		if msg.Body == "" {
 			continue
 		}
-		op := inferOperation(body)
-		recipientAgent := strings.TrimPrefix(recipient, "agent/")
-		i++
-		out = append(out, IntentContract{
-			ID:         fmt.Sprintf("contract/msg-%d", i),
-			Kind:       ContractPeerMessage,
-			ScopeAgent: recipientAgent,
-			Operation:  op,
-			Target:     body,
-			Profile:    profileFor(profiles, op),
-			Source:     "peer_message " + strings.TrimPrefix(senderOf[hash], "agent/") + "->" + recipientAgent,
-			Confidence: assertedConfidence,
-		})
+		var recipients []string
+		for recipient := range recipientOf[hash] {
+			recipients = append(recipients, recipient)
+		}
+		sort.Strings(recipients)
+		for _, recipient := range recipients {
+			op := inferOperation(msg.Body)
+			recipientAgent := strings.TrimPrefix(recipient, "agent/")
+			c := IntentContract{
+				ID:           fmt.Sprintf("contract/message/%x", sha256.Sum256([]byte(hash+"/"+recipient))),
+				Kind:         ContractPeerMessage,
+				ScopeAgent:   recipientAgent,
+				Operation:    op,
+				Target:       msg.Body,
+				Profile:      profileFor(profiles, op),
+				Source:       hash,
+				Confidence:   assertedConfidence,
+				EvidenceRefs: []string{hash},
+				ObservedAt:   recipientOf[hash][recipient],
+			}
+			// Explicit metadata is scoped to this recipient. A sender's SendMessage
+			// call ID is not the recipient's subsequent execution identity.
+			if msg.Scope.AgentID == recipientAgent {
+				switch msg.Scope.Kind {
+				case "tool_call":
+					var agent string
+					err := db.QueryRow(`SELECT agent_id FROM tool_calls WHERE run_id=? AND id=?`, runID, msg.Scope.ToolCallID).Scan(&agent)
+					if err != nil && err != sql.ErrNoRows {
+						return nil, err
+					}
+					if err == nil && agent == recipientAgent {
+						c.ToolCallID = msg.Scope.ToolCallID
+					}
+				case "agent_policy":
+					c.ScopeKind, c.ScopeStart, c.ScopeEnd = "agent_policy", msg.Scope.Start, msg.Scope.End
+				}
+			}
+			out = append(out, c)
+		}
 	}
 	return out, nil
 }
 
-// readMessageBody fetches an objectified agent-message body (content-addressed on
-// disk) and returns its text.
-func readMessageBody(db intentQueryer, runID, hash string) (string, error) {
+type peerMessage struct {
+	Body       string `json:"body"`
+	Content    string `json:"content"`
+	ContentRef string `json:"content_ref"`
+	Scope      struct {
+		Kind       string `json:"kind"`
+		AgentID    string `json:"agent_id"`
+		ToolCallID string `json:"tool_call_id"`
+		Start      string `json:"valid_from"`
+		End        string `json:"valid_until"`
+	} `json:"intent_scope"`
+}
+
+func earlierMessageTime(a, b string) bool {
+	ta, ea := time.Parse(time.RFC3339Nano, a)
+	tb, eb := time.Parse(time.RFC3339Nano, b)
+	return ea == nil && (eb != nil || ta.Before(tb))
+}
+
+func readMessage(db intentQueryer, runID, hash string) (peerMessage, error) {
 	var path string
 	if err := db.QueryRow(`SELECT path FROM provenance_objects WHERE run_id = ? AND hash = ?`, runID, hash).Scan(&path); err != nil {
-		return "", err
+		return peerMessage{}, err
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return peerMessage{}, err
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil || !info.Mode().IsRegular() {
-		return "", fmt.Errorf("message object is not a readable regular file")
+		return peerMessage{}, fmt.Errorf("message object is not a readable regular file")
 	}
 	raw, err := io.ReadAll(io.LimitReader(f, (8<<20)+1))
 	if err != nil {
-		return "", err
+		return peerMessage{}, err
 	}
 	if len(raw) > 8<<20 {
-		return "", fmt.Errorf("legacy message object exceeds read limit")
+		return peerMessage{}, fmt.Errorf("legacy message object exceeds read limit")
 	}
 	if fmt.Sprintf("sha256:%x", sha256.Sum256(raw)) != hash {
-		return "", fmt.Errorf("message object hash mismatch")
+		return peerMessage{}, fmt.Errorf("message object hash mismatch")
 	}
 	var obj struct {
-		RunID   string `json:"run_id"`
-		Payload struct {
-			Body       string `json:"body"`
-			Content    string `json:"content"`
-			ContentRef string `json:"content_ref"`
-		} `json:"payload"`
+		RunID   string      `json:"run_id"`
+		Payload peerMessage `json:"payload"`
 	}
 	if err := json.Unmarshal(raw, &obj); err != nil {
-		return "", err
+		return peerMessage{}, err
 	}
 	if obj.RunID != runID {
-		return "", fmt.Errorf("message object run mismatch")
+		return peerMessage{}, fmt.Errorf("message object run mismatch")
 	}
 	if obj.Payload.ContentRef != "" {
 		var body strings.Builder
 		for offset := int64(0); ; {
 			page, err := provenance.ReadTextContentPage(db, runID, obj.Payload.ContentRef, offset, provenance.MaxContentPageBytes)
 			if err != nil {
-				return "", err
+				return peerMessage{}, err
 			}
 			body.WriteString(page.Content)
 			if !page.HasMore {
 				if fmt.Sprintf("%x", sha256.Sum256([]byte(body.String()))) != page.SHA256 {
-					return "", fmt.Errorf("message content digest mismatch")
+					return peerMessage{}, fmt.Errorf("message content digest mismatch")
 				}
-				return body.String(), nil
+				obj.Payload.Body = body.String()
+				return obj.Payload, nil
 			}
 			if page.NextOffset <= offset {
-				return "", fmt.Errorf("message page did not advance")
+				return peerMessage{}, fmt.Errorf("message page did not advance")
 			}
 			offset = page.NextOffset
 		}
 	}
-	if obj.Payload.Body != "" {
-		return obj.Payload.Body, nil
+	if obj.Payload.Body == "" {
+		obj.Payload.Body = obj.Payload.Content
 	}
-	return obj.Payload.Content, nil
+	return obj.Payload, nil
 }

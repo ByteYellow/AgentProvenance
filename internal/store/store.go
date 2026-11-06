@@ -801,6 +801,7 @@ func EnsureSchema(db *sql.DB) error {
 	}
 	alterStmts := []string{
 		`ALTER TABLE intent_diffs ADD COLUMN rule_version TEXT NOT NULL DEFAULT 'agentprov.intent_scope/v1';`,
+		`ALTER TABLE intent_diffs ADD COLUMN association TEXT NOT NULL DEFAULT '{}';`,
 		`ALTER TABLE agent_context_entries ADD COLUMN source_ordinal INTEGER NOT NULL DEFAULT 0;`,
 		`CREATE INDEX IF NOT EXISTS idx_agent_context_position ON agent_context_entries(run_id, source_id, source_sequence, source_ordinal, id);`,
 		`DROP INDEX IF EXISTS idx_agent_context_page;`,

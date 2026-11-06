@@ -17,14 +17,16 @@ import (
 
 // Result summarizes a Materialize run.
 type Result struct {
-	RunID        string         `json:"run_id"`
-	RuleVersion  string         `json:"rule_version"`
-	Effects      int            `json:"effects"`
-	Contracts    int            `json:"contracts"`
-	Diffs        int            `json:"diffs"`
-	ByStatus     map[string]int `json:"by_status"`
-	Mismatches   int            `json:"mismatches"`
-	CoverageGaps int            `json:"coverage_gaps"`
+	RunID           string         `json:"run_id"`
+	RuleVersion     string         `json:"rule_version"`
+	Effects         int            `json:"effects"`
+	Contracts       int            `json:"contracts"`
+	Diffs           int            `json:"diffs"`
+	ByStatus        map[string]int `json:"by_status"`
+	Mismatches      int            `json:"mismatches"`
+	CoverageGaps    int            `json:"coverage_gaps"`
+	AssociationGaps int            `json:"association_gaps"`
+	MismatchEvents  int            `json:"mismatch_events"`
 }
 
 // Edge types wiring the diff into the signed graph.
@@ -107,15 +109,23 @@ func materialize(db *sql.Tx, runID string) (Result, error) {
 	if err := emitSignals(db, runID, diffs); err != nil {
 		return res, err
 	}
+	mismatchEvents := map[string]bool{}
 	for _, d := range diffs {
 		res.ByStatus[d.Status]++
 		if d.Status == StatusMismatch || d.Status == StatusRefusedBypass {
 			res.Mismatches++
+			for _, id := range d.EventIDs {
+				mismatchEvents[id] = true
+			}
 		}
 		if d.Status == StatusCoverageGap {
 			res.CoverageGaps++
 		}
+		if d.Status == StatusAssociationGap {
+			res.AssociationGaps++
+		}
 	}
+	res.MismatchEvents = len(mismatchEvents)
 	return res, nil
 }
 
@@ -134,12 +144,20 @@ func emitSignals(db *sql.Tx, runID string, diffs []IntentRuntimeDiff) error {
 		if sev == "" {
 			continue // decided_and_executed: a healthy match raises no signal
 		}
+		association, err := json.Marshal(d.Association)
+		if err != nil {
+			return err
+		}
+		refs, err := json.Marshal(d.Association.EvidenceRefs)
+		if err != nil {
+			return err
+		}
 		if _, err := db.Exec(`INSERT INTO signals
 			(id, dimension, signal_type, graph_ref_kind, graph_ref_id, run_id, tool_call_id, severity,
-			 confidence, recommended_action, produced_by, source_table, source_id, created_at)
-			VALUES (?, 'intent_conformance', ?, 'node', ?, ?, ?, ?, ?, ?, 'intent.diff', 'intent_diffs', ?, ?)`,
+			 confidence, recommended_action, produced_by, source_table, source_id, created_at, evidence_refs, payload)
+			VALUES (?, 'intent_conformance', ?, 'node', ?, ?, ?, ?, ?, ?, 'intent.diff', 'intent_diffs', ?, ?, ?, ?)`,
 			"sig-"+trimDiff(d.ID), signalType(d), d.ID, runID, d.ToolCallID, sev,
-			d.Confidence, recommendedAction(d.Status), d.ID, now); err != nil {
+			d.Confidence, recommendedAction(d.Status), d.ID, now, string(refs), string(association)); err != nil {
 			return err
 		}
 	}
@@ -152,7 +170,7 @@ func severityForStatus(status string) string {
 		return "critical"
 	case StatusMismatch:
 		return "high"
-	case StatusCoverageGap:
+	case StatusCoverageGap, StatusAssociationGap:
 		return "info"
 	default:
 		return "" // decided_and_executed
@@ -174,6 +192,8 @@ func recommendedAction(status string) string {
 		return "review: runtime exceeded declared intent"
 	case StatusCoverageGap:
 		return "improve intent capture for this scope"
+	case StatusAssociationGap:
+		return "review candidate intent sources and operation bindings"
 	}
 	return ""
 }
@@ -312,7 +332,7 @@ func normalizeEffects(db intentQueryer, runID string, eng security.Engine, allow
 		}
 		out = append(out, RuntimeEffect{
 			Kind: kind, Target: target, AgentID: agent,
-			ToolCallID: tc, EventID: id, Confidence: conf,
+			ToolCallID: tc, EventID: id, Confidence: conf, ObservedAt: createdAt,
 		})
 	}
 	return out, rows.Err()
@@ -434,12 +454,16 @@ func persistDiffs(tx *sql.Tx, runID string, diffs []IntentRuntimeDiff) error {
 		declared, _ := json.Marshal(d.Declared)
 		forbidden, _ := json.Marshal(d.Forbidden)
 		observed, _ := json.Marshal(d.Observed)
+		association, err := json.Marshal(d.Association)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.Exec(`INSERT INTO intent_diffs
 			(id, run_id, agent_id, tool_call_id, contract_kind, operation, target, status, finding, confidence,
-			 declared_effects, forbidden_effects, observed_effects, mismatch_reason, source, rule_version, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 declared_effects, forbidden_effects, observed_effects, mismatch_reason, source, rule_version, created_at, association)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			d.ID, runID, d.AgentID, d.ToolCallID, d.ContractKind, d.Operation, d.Target, d.Status, d.Finding, d.Confidence,
-			string(declared), string(forbidden), string(observed), d.MismatchReason, d.Source, d.RuleVersion, now); err != nil {
+			string(declared), string(forbidden), string(observed), d.MismatchReason, d.Source, d.RuleVersion, now, string(association)); err != nil {
 			return err
 		}
 		// Keep each observed event as a separate support reference.
@@ -451,6 +475,18 @@ func persistDiffs(tx *sql.Tx, runID string, diffs []IntentRuntimeDiff) error {
 		}
 		if scope != "agent/" {
 			if err := insertEdge(tx, runID, scope, d.ID, edgeIntentContract, now, &seq); err != nil {
+				return err
+			}
+		}
+		var sourceRefs []string
+		for _, candidate := range d.Association.Candidates {
+			sourceRefs = append(sourceRefs, candidate.EvidenceRefs...)
+		}
+		if strings.HasPrefix(d.Source, "sha256:") {
+			sourceRefs = append(sourceRefs, d.Source)
+		}
+		for _, ref := range uniqueStrings(sourceRefs) {
+			if err := insertEdge(tx, runID, ref, d.ID, edgeIntentContract, now, &seq); err != nil {
 				return err
 			}
 		}

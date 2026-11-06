@@ -155,8 +155,46 @@ func (snapshot *replaySnapshot) projectSelection(ctx context.Context, plan *repl
 		INSERT OR IGNORE INTO replay_nodes SELECT 'response_action/'||id FROM main.response_actions;`); err != nil {
 		return nil, err
 	}
+	// Admit analyses before their signals, using their actual support references.
+	// Legacy analyses store effect kinds, not event objects; their graph edges
+	// provide the event identity. Every required source must survive selection.
+	association := `CASE WHEN json_valid(x.association) THEN x.association ELSE '{}' END`
+	observed := `CASE WHEN json_valid(x.observed_effects) THEN x.observed_effects ELSE 'null' END`
+	candidate := `CASE WHEN c.type='object' THEN c.value ELSE '{}' END`
+	if err = copyTable("intent_diffs", `x.run_id=?
+		AND (x.tool_call_id='' OR x.tool_call_id IN (SELECT id FROM main.tool_calls))
+		AND (
+		 (json_extract(`+association+`,'$.status') IS NOT NULL
+		  AND json_type(`+association+`,'$.evidence_refs')='array'
+		  AND json_array_length(`+association+`,'$.evidence_refs')>0
+		  AND NOT EXISTS (SELECT 1 FROM json_each(`+association+`,'$.evidence_refs') r
+		    WHERE r.type!='text' OR r.value NOT IN (SELECT id FROM replay_nodes))
+		  AND NOT EXISTS (SELECT 1 FROM json_each(`+association+`,'$.candidates') c
+		    WHERE c.type!='object' OR COALESCE(json_type(`+candidate+`,'$.evidence_refs'),'')!='array'
+		      OR json_array_length(`+candidate+`,'$.evidence_refs')=0
+		      OR EXISTS (SELECT 1 FROM json_each(`+candidate+`,'$.evidence_refs') r
+		         WHERE r.type!='text' OR r.value NOT IN (SELECT id FROM replay_nodes))))
+		 OR
+		 (json_extract(`+association+`,'$.status') IS NULL AND x.tool_call_id!=''
+		  AND json_type(`+observed+`)='array' AND json_array_length(`+observed+`)>0
+		  AND (
+		   NOT EXISTS (SELECT 1 FROM json_each(`+observed+`) e
+		    WHERE CASE WHEN e.type='object' THEN COALESCE(json_extract(e.value,'$.event_id'),'') ELSE '' END NOT IN (SELECT id FROM main.events))
+		   OR (NOT EXISTS (SELECT 1 FROM json_each(`+observed+`) e WHERE e.type!='text')
+		    AND EXISTS (SELECT 1 FROM captured.graph_edges g WHERE g.run_id=x.run_id AND g.from_id=x.id AND g.edge_type='intent_diff_effect')))
+		  AND NOT EXISTS (SELECT 1 FROM captured.graph_edges g WHERE g.run_id=x.run_id AND g.from_id=x.id AND g.edge_type='intent_diff_effect'
+		    AND g.to_id NOT IN (SELECT 'runtime_event/'||id FROM main.events))
+		  AND NOT EXISTS (SELECT 1 FROM captured.graph_edges g WHERE g.run_id=x.run_id AND g.to_id=x.id AND g.edge_type='intent_contract'
+		    AND g.from_id NOT IN (SELECT id FROM replay_nodes))
+		  AND NOT EXISTS (SELECT 1 FROM captured.events e WHERE e.run_id=x.run_id AND e.tool_call_id=x.tool_call_id AND e.id NOT IN (SELECT id FROM main.events))))`, run); err != nil {
+		return nil, err
+	}
+	if err = exec(`INSERT OR IGNORE INTO replay_nodes SELECT id FROM main.intent_diffs`); err != nil {
+		return nil, err
+	}
 	if err = copyTable("signals", `x.run_id=? AND (x.event_id IN (SELECT id FROM main.events)
-		OR (x.source_table='risk_signals' AND x.source_id IN (SELECT id FROM main.risk_signals)))
+		OR (x.source_table='risk_signals' AND x.source_id IN (SELECT id FROM main.risk_signals))
+		OR (x.source_table='intent_diffs' AND x.source_id IN (SELECT id FROM main.intent_diffs)))
 		AND (x.tool_call_id='' OR x.tool_call_id IN (SELECT id FROM main.tool_calls))
 		AND (x.object_ref='' OR x.object_ref IN (SELECT hash FROM main.provenance_objects))
 		AND (x.graph_ref_id='' OR x.graph_ref_id IN (SELECT id FROM replay_nodes)
@@ -170,16 +208,6 @@ func (snapshot *replaySnapshot) projectSelection(ctx context.Context, plan *repl
 		return nil, err
 	}
 	if err = exec(`INSERT OR IGNORE INTO replay_nodes SELECT id FROM main.signals`); err != nil {
-		return nil, err
-	}
-	if err = copyTable("intent_diffs", `x.run_id=? AND x.tool_call_id!='' AND x.tool_call_id IN (SELECT id FROM main.tool_calls)
-		AND json_type(CASE WHEN json_valid(x.observed_effects) THEN x.observed_effects ELSE 'null' END)='array'
-		AND NOT EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(x.observed_effects) THEN x.observed_effects ELSE '[]' END) e
-		 WHERE CASE WHEN e.type='object' THEN COALESCE(json_extract(e.value,'$.event_id'),'') ELSE '' END NOT IN (SELECT id FROM main.events))
-		AND NOT EXISTS (SELECT 1 FROM captured.events e WHERE e.run_id=x.run_id AND e.tool_call_id=x.tool_call_id AND e.id NOT IN (SELECT id FROM main.events))`, run); err != nil {
-		return nil, err
-	}
-	if err = exec(`INSERT OR IGNORE INTO replay_nodes SELECT id FROM main.intent_diffs`); err != nil {
 		return nil, err
 	}
 	if err = copyTable("graph_edges", `x.run_id=? AND (NOT EXISTS (SELECT 1 FROM captured.events e WHERE e.run_id=x.run_id AND e.id=x.source_event_id)

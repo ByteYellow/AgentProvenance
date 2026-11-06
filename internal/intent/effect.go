@@ -56,6 +56,7 @@ type RuntimeEffect struct {
 	ToolCallID string     `json:"tool_call_id"`
 	EventID    string     `json:"event_id"`
 	Confidence float64    `json:"confidence"`
+	ObservedAt string     `json:"observed_at,omitempty"`
 }
 
 // classifyEvent maps a stored event to a normalized effect. It returns ok=false

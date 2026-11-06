@@ -420,7 +420,7 @@ func redactBundleTexts(bundle map[string]any, manifest *evidence.Manifest) {
 		for _, row := range rows {
 			textColumns := []string{"payload", "command", "task_yaml"}
 			if key == "intent_diffs" {
-				textColumns = append(textColumns, "target", "mismatch_reason", "source")
+				textColumns = append(textColumns, "target", "mismatch_reason", "source", "association")
 			}
 			for _, col := range textColumns {
 				if p, ok := row[col].(string); ok && p != "" {

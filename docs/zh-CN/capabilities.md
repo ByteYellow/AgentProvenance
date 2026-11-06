@@ -156,24 +156,38 @@ agentprov intent diff --run <run_id>
 | 判定 | 含义 |
 |---|---|
 | `declared_vs_effect_mismatch` | 实际行为超出声明范围，例如安装依赖时读取无关凭证并连接云元数据地址 |
-| `peer_message_intent_mismatch` | 超出声明范围的行为源于另一个 Agent 发来的消息 |
+| `peer_message_intent_mismatch` | 行为超出了明确绑定的委托契约，或适用于当前操作的持续策略范围 |
 | `refused_but_runtime_happened` | 模型已拒绝该动作，但仍观测到对应行为 |
 | `decided_and_executed` | 观测到声明中的行为，且未发现违反该契约的情况 |
 | `intent_coverage_gap` | 观测到敏感行为，但缺少对应的意图记录，无法完成比较 |
+| `intent_association_gap` | 存在发给该 Agent 的消息，但缺少消息到具体操作的绑定；结果保留候选消息 |
 
 工具契约只覆盖对应的工具调用。同一 Agent 的调用 A 已有契约，而调用 B 的敏感事件
 没有匹配契约时，B 会保留独立的覆盖缺口和原始事件引用。分析记录包含 `rule_version`，
-新分析使用 `agentprov.intent_scope/v2`。签名包包含已保存的分析结果及图谱引用；
+新分析使用 `agentprov.intent_scope/v3`。签名包包含已保存的分析结果及图谱引用；
 导入时保留历史规则版本，执行 `intent diff` 才会重新计算本地分析结果。
+
+消息没有绑定到接收方的具体工具调用时，关联状态为 `candidate`（候选）或
+`ambiguous`（多个候选）。只有一条邻近消息时也保留候选状态。结果中的 `association`
+保存消息引用、匹配依据和受影响的运行时事件；采集时间只用于筛选候选。
+生产端可在保存的消息中提供 `intent_scope`：`kind: "tool_call"` 搭配接收方的
+`agent_id`、`tool_call_id`；持续策略则使用 `kind: "agent_policy"`、该 Agent
+和明确的 `[valid_from, valid_until)` 生效区间。普通消息按一次性委托处理。
+
+`mismatches` 统计违反的契约数，`mismatch_events` 对支持这些结论的事件去重，
+`association_gaps` 统计关联待确认的作用域。关系置信度取决于契约与运行时归属的
+共同依据，原始事件的记录质量保持原样。选择性回放只保留支持证据齐全的分析；
+因排除证据而省略的分析会计入导出摘要。
 
 判定以**具体操作的声明范围**为依据。例如，网络连接可能超出只读文件工具的职责，
 却属于 `bash` 的可用能力；读取未声明的敏感凭证也可能构成偏差。
 Agent 正常读取自身凭证的情况，则由同一套策略引擎中的相应规则识别。
 
-结果写入统一信号模型的 `intent_conformance` 维度，可影响 `launch` 的最终判断，
+结果写入统一信号模型的 `intent_conformance` 维度。契约违规影响 `launch` 的最终判断，
+关联待确认和意图覆盖缺口作为提示信息保留，
 并在 **Conformance · declared vs actual** 视图中展示“声明 → 判定 → 观测行为”。
-[多 Agent 示例](../../demo/multiagent-provenance/README.zh-CN.md)中，`alice` 诱导 `bob`
-安装恶意依赖，相关偏差被标记为 `peer_message_intent_mismatch`。
+[多 Agent 示例](../../demo/multiagent-provenance/README.zh-CN.md)包含委托消息和恶意安装行为。
+历史签名包保留原规则结论；重新分析时，工具级违规与尚未明确的消息归属分别展示。
 
 ## 部署模式
 

@@ -255,19 +255,23 @@ func addAgentNodes(db *sql.DB, runID string, add func(GraphLensNode)) error {
 // refusal bypass, a healthy green match, or a muted coverage gap.
 func addIntentDiffNodes(db *sql.DB, runID string, add func(GraphLensNode)) error {
 	rows, err := db.Query(`SELECT id, COALESCE(agent_id,''), COALESCE(contract_kind,''), COALESCE(operation,''),
-		COALESCE(status,''), COALESCE(finding,''), COALESCE(confidence,0), COALESCE(observed_effects,'[]'), COALESCE(mismatch_reason,''), tool_call_id, source, rule_version
+		COALESCE(status,''), COALESCE(finding,''), COALESCE(confidence,0), COALESCE(observed_effects,'[]'), COALESCE(mismatch_reason,''), tool_call_id, source, rule_version, association
 		FROM intent_diffs WHERE run_id = ?`, runID)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, agentID, kind, operation, status, finding, observed, reason, toolCallID, source, ruleVersion string
+		var id, agentID, kind, operation, status, finding, observed, reason, toolCallID, source, ruleVersion, association string
 		var confidence float64
-		if err := rows.Scan(&id, &agentID, &kind, &operation, &status, &finding, &confidence, &observed, &reason, &toolCallID, &source, &ruleVersion); err != nil {
+		if err := rows.Scan(&id, &agentID, &kind, &operation, &status, &finding, &confidence, &observed, &reason, &toolCallID, &source, &ruleVersion, &association); err != nil {
 			return err
 		}
 		label := intentDiffLabel(status, finding, operation)
+		var associationData map[string]any
+		if err := json.Unmarshal([]byte(association), &associationData); err != nil {
+			return fmt.Errorf("intent association %s: %w", id, err)
+		}
 		add(GraphLensNode{
 			ID:      id,
 			Kind:    "intent_diff",
@@ -278,6 +282,7 @@ func addIntentDiffNodes(db *sql.DB, runID string, add func(GraphLensNode)) error
 				"status": status, "finding": finding, "operation": operation, "contract_kind": kind,
 				"agent_id": agentID, "confidence": confidence, "observed_effects": observed, "reason": reason,
 				"tool_call_id": toolCallID, "source": source, "rule_version": ruleVersion,
+				"association": associationData,
 			},
 		})
 	}
@@ -298,6 +303,8 @@ func intentDiffLabel(status, finding, operation string) string {
 		return "✓ " + operation + " as declared"
 	case "intent_coverage_gap":
 		return "? uncaptured intent"
+	case "intent_association_gap":
+		return "? unresolved intent association"
 	default:
 		return head
 	}
@@ -311,7 +318,7 @@ func intentDiffRisk(status string) string {
 		return "critical"
 	case "declared_vs_effect_mismatch":
 		return "high"
-	case "intent_coverage_gap":
+	case "intent_coverage_gap", "intent_association_gap":
 		return "info"
 	default:
 		return ""

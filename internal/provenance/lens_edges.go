@@ -2,6 +2,7 @@ package provenance
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -11,7 +12,7 @@ import (
 
 func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
 	rows, err := db.Query(`SELECT e.id, e.from_id, e.to_id, e.edge_type, COALESCE(e.source_event_id,''), e.created_at,
-		COALESCE(d.rule_version,''), COALESCE(d.confidence,0)
+		COALESCE(d.rule_version,''), COALESCE(d.confidence,0), COALESCE(d.association,'{}')
 		FROM graph_edges e LEFT JOIN intent_diffs d ON d.run_id=e.run_id AND d.id=CASE e.edge_type
 			WHEN 'intent_contract' THEN e.to_id WHEN 'intent_diff_effect' THEN e.from_id ELSE '' END
 		WHERE e.run_id = ? ORDER BY e.created_at ASC, e.id ASC`, runID)
@@ -22,15 +23,30 @@ func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
 	var edges []GraphLensEdge
 	for rows.Next() {
 		var edge GraphLensEdge
-		var intentRule string
+		var intentRule, associationJSON string
 		var intentConfidence float64
-		if err := rows.Scan(&edge.ID, &edge.FromID, &edge.ToID, &edge.EdgeType, &edge.SourceEventID, &edge.CreatedAt, &intentRule, &intentConfidence); err != nil {
+		if err := rows.Scan(&edge.ID, &edge.FromID, &edge.ToID, &edge.EdgeType, &edge.SourceEventID, &edge.CreatedAt, &intentRule, &intentConfidence, &associationJSON); err != nil {
 			return nil, err
 		}
 		if intentRule != "" {
 			edge.Derived, edge.DerivationRule = true, intentRule
 			edge.Confidence = graphConfidence(intentConfidence)
 			edge.EvidenceRefs = []string{edge.FromID, edge.ToID}
+			var association struct {
+				Status       string   `json:"status"`
+				EvidenceRefs []string `json:"evidence_refs"`
+			}
+			if err := json.Unmarshal([]byte(associationJSON), &association); err != nil {
+				return nil, fmt.Errorf("intent edge %s: %w", edge.ID, err)
+			}
+			if association.Status != "" {
+				edge.Data = map[string]any{"association_status": association.Status}
+			}
+			for _, ref := range association.EvidenceRefs {
+				if ref != edge.FromID && ref != edge.ToID {
+					edge.EvidenceRefs = append(edge.EvidenceRefs, ref)
+				}
+			}
 		}
 		if edge.EdgeType == "agent_syscall" && (strings.HasPrefix(edge.ID, correlation.AppProcessEdgePrefix) || strings.HasPrefix(edge.ID, "agent-correlation-v2-")) {
 			edge.Derived, edge.DerivationRule = true, correlation.AppProcessMethod

@@ -2,6 +2,7 @@ package intent
 
 import (
 	"database/sql"
+	"slices"
 	"testing"
 	"time"
 
@@ -130,7 +131,7 @@ func TestMaterializeToolCoverageGapKeepsReferences(t *testing.T) {
 		for _, edge := range graph.DerivedEdges {
 			if edge.FromID == id || edge.ToID == id {
 				refs++
-				if edge.DerivationRule != RuleVersion || edge.Confidence == nil || len(edge.EvidenceRefs) != 2 {
+				if edge.DerivationRule != RuleVersion || edge.Confidence == nil || !slices.Contains(edge.EvidenceRefs, edge.FromID) || !slices.Contains(edge.EvidenceRefs, edge.ToID) || !slices.Contains(edge.EvidenceRefs, "runtime_event/uncovered-secret") {
 					t.Fatalf("graph lost analysis support: %+v", edge)
 				}
 			}

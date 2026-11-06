@@ -76,33 +76,34 @@ type Options struct {
 
 // Report is the machine-readable outcome of a launch run.
 type Report struct {
-	appDetail          message
-	sysReason          message
-	RunID              string                              `json:"run_id"`
-	ExitCode           int                                 `json:"exit_code"`
-	Status             string                              `json:"status"`
-	AppTier            string                              `json:"app_tier"`
-	AppDetail          string                              `json:"app_detail,omitempty"`
-	SysTier            string                              `json:"sys_tier"`
-	SysDegradeReason   string                              `json:"sys_degrade_reason,omitempty"`
-	Events             int                                 `json:"events"`
-	HighRisk           int                                 `json:"high_risk"`
-	Signals            int                                 `json:"signals"`
-	Verdict            string                              `json:"verdict"`
-	BundlePath         string                              `json:"bundle_path,omitempty"`
-	Signed             bool                                `json:"signed"`
-	AttestationPath    string                              `json:"attestation_path,omitempty"`
-	DashboardURL       string                              `json:"dashboard_url,omitempty"`
-	HooksIngested      int                                 `json:"hooks_ingested"`
-	IntentMismatches   int                                 `json:"intent_mismatches"`
-	IntentCoverageGaps int                                 `json:"intent_coverage_gaps"`
-	TranscriptTurns    int                                 `json:"transcript_turns"`
-	AgentContext       *agentcontext.Overview              `json:"agent_context,omitempty"`
-	CapturePolicy      *agentcontext.CapturePolicy         `json:"capture_policy,omitempty"`
-	ContextIssues      []string                            `json:"context_issues,omitempty"`
-	ArtifactCapture    *record.ArtifactCaptureReport       `json:"artifact_capture,omitempty"`
-	RuntimeCorrelation *hooksbridge.CorrelationReport      `json:"runtime_correlation,omitempty"`
-	RuntimeCapture     *observability.RuntimeCaptureReport `json:"runtime_capture,omitempty"`
+	appDetail             message
+	sysReason             message
+	RunID                 string                              `json:"run_id"`
+	ExitCode              int                                 `json:"exit_code"`
+	Status                string                              `json:"status"`
+	AppTier               string                              `json:"app_tier"`
+	AppDetail             string                              `json:"app_detail,omitempty"`
+	SysTier               string                              `json:"sys_tier"`
+	SysDegradeReason      string                              `json:"sys_degrade_reason,omitempty"`
+	Events                int                                 `json:"events"`
+	HighRisk              int                                 `json:"high_risk"`
+	Signals               int                                 `json:"signals"`
+	Verdict               string                              `json:"verdict"`
+	BundlePath            string                              `json:"bundle_path,omitempty"`
+	Signed                bool                                `json:"signed"`
+	AttestationPath       string                              `json:"attestation_path,omitempty"`
+	DashboardURL          string                              `json:"dashboard_url,omitempty"`
+	HooksIngested         int                                 `json:"hooks_ingested"`
+	IntentMismatches      int                                 `json:"intent_mismatches"`
+	IntentCoverageGaps    int                                 `json:"intent_coverage_gaps"`
+	IntentAssociationGaps int                                 `json:"intent_association_gaps"`
+	TranscriptTurns       int                                 `json:"transcript_turns"`
+	AgentContext          *agentcontext.Overview              `json:"agent_context,omitempty"`
+	CapturePolicy         *agentcontext.CapturePolicy         `json:"capture_policy,omitempty"`
+	ContextIssues         []string                            `json:"context_issues,omitempty"`
+	ArtifactCapture       *record.ArtifactCaptureReport       `json:"artifact_capture,omitempty"`
+	RuntimeCorrelation    *hooksbridge.CorrelationReport      `json:"runtime_correlation,omitempty"`
+	RuntimeCapture        *observability.RuntimeCaptureReport `json:"runtime_capture,omitempty"`
 }
 
 // Run executes the full launch lifecycle and returns its Report. The returned
@@ -414,6 +415,7 @@ func seal(db *sql.DB, paths store.Paths, runID, signKeyPath string, report *Repo
 	} else {
 		report.IntentMismatches = idr.Mismatches
 		report.IntentCoverageGaps = idr.CoverageGaps
+		report.IntentAssociationGaps = idr.AssociationGaps
 	}
 
 	// Apply policy to the captured events so the verdict reads policy-applied

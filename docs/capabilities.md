@@ -178,17 +178,33 @@ against the normalized **RuntimeEffects** attributed to its scope. The verdicts:
 | verdict | meaning |
 | --- | --- |
 | `declared_vs_effect_mismatch` | the runtime exceeded the declared contract (e.g. an *install* that read a foreign secret and egressed to the metadata IP) |
-| `peer_message_intent_mismatch` | a mismatch whose intent came from another agent's message (the multi-agent lateral-influence finding) |
+| `peer_message_intent_mismatch` | an explicitly bound peer contract, or an applicable persistent peer policy, whose declared boundary was exceeded |
 | `refused_but_runtime_happened` | a refused action's effects occurred anyway |
 | `decided_and_executed` | declared effects appeared, no violation |
 | `intent_coverage_gap` | sensitive effects with **no** captured intent — an honest gap, never a fabricated finding |
+| `intent_association_gap` | peer messages exist for the agent, but the affected operation has no message binding; the result retains one or more candidates |
 
 Tool contracts cover their own tool call. If one agent has a captured contract
 for call A and a sensitive event from call B without a matching contract, B keeps
 its own coverage gap and event references. Analysis records include `rule_version`;
-new analysis uses `agentprov.intent_scope/v2`. Signed bundle export includes the
+new analysis uses `agentprov.intent_scope/v3`. Signed bundle export includes the
 saved analysis and its graph references. Import preserves those records and their
 historical rule version; `intent diff` explicitly recomputes the local analysis.
+
+Peer messages without a recipient-side tool-call binding remain `candidate` or
+`ambiguous`, even when there is only one nearby message. Their `association`
+includes source references, matching basis and the affected runtime events.
+Capture time filters candidates; it does not establish a binding. Producers can
+record an `intent_scope` on the saved message: `kind: "tool_call"` with the
+recipient's `agent_id` and `tool_call_id`, or `kind: "agent_policy"` with that
+agent and an explicit `[valid_from, valid_until)` interval. Ordinary messages
+do not become persistent policies from their wording.
+
+`mismatches` counts violated contracts; `mismatch_events` counts distinct
+supporting events, and `association_gaps` counts unresolved scopes. Relation
+confidence is bounded by both the contract and runtime attribution, while raw
+event quality is preserved. Selective replay retains an analysis only with all
+of its support references; exclusions are listed in its omission summary.
 
 The finding is **conditional on each action's declared contract**, which is what
 separates it from a global policy rule: a network connect is drift for a
@@ -196,13 +212,15 @@ read-only file tool but permitted for `bash`; reading `~/.aws/credentials` is
 drift for *any* operation that did not declare it. A foreign-secret read is told
 apart from the agent's own credentials by the same policy engine the sensor uses.
 
-Verdicts feed an `intent_conformance` dimension in the unified signal model, flip
-the `launch` verdict, and render in the **Conformance · declared vs actual**
+Verdicts feed an `intent_conformance` dimension in the unified signal model.
+Contract violations affect the `launch` verdict; association and coverage gaps
+remain informational. Results render in the **Conformance · declared vs actual**
 graph lens (contract scope → verdict → observed effects, alongside the
 delegation and peer agent structure). The
-[multi-agent](../demo/multiagent-provenance/README.md) demo shows a poisoned
-install that `alice` instructs `bob` to run surfacing as a
-`peer_message_intent_mismatch`.
+[multi-agent](../demo/multiagent-provenance/README.md) demo contains a peer
+instruction and a poisoned install. Historical signed analysis keeps its original
+rule; reanalysis distinguishes the tool-level violation from unresolved message
+attribution.
 
 ## Deployment Modes
 
