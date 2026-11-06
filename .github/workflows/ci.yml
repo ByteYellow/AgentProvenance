@@ -221,6 +221,12 @@ jobs:
           sudo env PATH="$PATH" AGENTPROV_LIVE_OPENSSL=1 AGENTPROV_LIVE_TLS_CLIENT=/tmp/agentprov-live/go-client \
             /tmp/agentprov-live/sensor-test -test.run '^TestLiveTLSDiscoveryShortClient$' -test.v -test.timeout=120s \
             | tee /tmp/agentprov-live/tls-discovery.log
+      - name: Verify shutdown under continuous node traffic
+        run: |
+          cd internal/sensor
+          sudo env AGENTPROV_LIVE_SHUTDOWN=1 \
+            /tmp/agentprov-live/sensor-test -test.run '^TestLiveSensorShutdown$' -test.v -test.timeout=60s \
+            | tee /tmp/agentprov-live/shutdown.log
       - name: Verify procfs identity in a nested PID namespace
         # Exercise procfs identity independently from the host's initial PIDs.
         # unshare changes only this test process and its children.
@@ -300,6 +306,7 @@ jobs:
             /tmp/agentprov-live/acceptance.*
             /tmp/agentprov-live/openssl-read.log
             /tmp/agentprov-live/tls-discovery.log
+            /tmp/agentprov-live/shutdown.log
             /tmp/agentprov-live/pid-namespace.log
             /tmp/agentprov-live/pid-namespace-mismatch.log
             /tmp/agentprov-live/syscall-outcomes.log

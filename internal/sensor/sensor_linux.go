@@ -108,11 +108,14 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	defer procfs.publish(reporter, true)
 
 	var links []link.Link
-	defer func() {
+	detachProbes := sync.OnceValue(func() error {
+		var err error
 		for _, l := range links {
-			_ = l.Close()
+			err = errors.Join(err, l.Close())
 		}
-	}()
+		return err
+	})
+	defer detachProbes()
 	attach := func(p sensorTracepoint, required bool, category string) error {
 		probe := ProbeCapability{Name: p.group + "/" + p.name, Category: category, Required: required, Status: "attached"}
 		tp, err := link.Tracepoint(p.group, p.name, p.prog, nil)
@@ -204,15 +207,6 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	}
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	stopReader := make(chan struct{})
-	defer close(stopReader)
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = rd.Flush()
-		case <-stopReader:
-		}
-	}()
 	// Run discovery separately from ring-buffer consumption. Its bounded first
 	// pass attaches configured targets before the workload readiness callback.
 	tlsCtx, stopTLS := context.WithCancel(ctx)
@@ -220,7 +214,41 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	initialized := make(chan struct{})
 	tlsWake := newTLSHintQueue()
 	go func() { defer close(tlsDone); runTLSDiscovery(tlsCtx, &objs, opts, reporter, initialized, tlsWake) }()
-	defer func() { stopTLS(); <-tlsDone }()
+	stopProducers := sync.OnceValue(func() error {
+		stopTLS()
+		err := detachProbes()
+		<-tlsDone
+		return err
+	})
+	stopReader, shutdownDone := make(chan struct{}), make(chan struct{})
+	var shutdownErr error
+	go func() {
+		defer close(shutdownDone)
+		select {
+		case <-ctx.Done():
+			// Flush has no producer-position snapshot. Detach every producer first
+			// so shutdown drains a finite tail even on a continuously busy node.
+			shutdownErr = stopProducers()
+			if shutdownErr == nil {
+				shutdownErr = rd.Flush()
+			}
+			if shutdownErr != nil {
+				_ = rd.Close()
+			}
+		case <-stopReader:
+		}
+	}()
+	defer func() {
+		close(stopReader)
+		<-shutdownDone
+		err := stopProducers()
+		if err == nil {
+			err = shutdownErr
+		}
+		if err != nil {
+			runErr = errors.Join(runErr, i18n.Errorf("stop sensor capture: %w", err))
+		}
+	}()
 	<-initialized
 	if ctx.Err() != nil {
 		return nil

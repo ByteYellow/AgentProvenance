@@ -32,6 +32,15 @@
 - 在原有详情阅读器中展示意图、归属和 TLS 完整性。签名包往返及选择性离线回放保留相同状态，
   采集截断与正文分页分别表达。
 
+### 原生采集可靠性
+
+- 修复 x86 上跨 PID 命名空间的 procfs 身份解析，保留原始内核任务身份并报告映射缺口。
+- 支持去除符号表的 amd64 Go TLS 程序、PIE，以及可解析函数符号的 BoringSSL 程序。
+  可用 `--tls-target` 提前挂载已知目标。
+- 采用有界读取队列和可配置的内核缓冲，默认缓冲为 64 MiB。停止时先卸载系统调用和 TLS
+  探针，再排空已接收记录，持续繁忙的节点也能正常结束采集。
+- 补齐当前 ELF 诊断的中文文案，保留历史诊断翻译；Linux CI 增加持续负载下的停机回归。
+
 感谢 [@8eeth0ven](https://github.com/8eeth0ven) 在
 [PR #34](https://github.com/ByteYellow/AgentProvenance/pull/34) 中贡献安全加固改进。
 [发行说明草稿](docs/zh-CN/releases/v0.10.1.md)。

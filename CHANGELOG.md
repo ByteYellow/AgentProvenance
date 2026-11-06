@@ -42,6 +42,18 @@ English | [中文](CHANGELOG.zh-CN.md)
   including signed-bundle roundtrips and selected offline replays. Keep capture
   truncation distinct from body pagination.
 
+### Native capture reliability
+
+- Resolve x86 procfs identities across PID namespaces while retaining original
+  kernel task identities and reporting mapping gaps.
+- Support stripped amd64 Go TLS executables and PIE, plus BoringSSL fixtures
+  with resolvable function symbols. Prepare known targets with `--tls-target`.
+- Use a bounded reader queue and a configurable kernel ring buffer, defaulting
+  to 64 MiB. Stop syscall and TLS probes before draining queued records so a
+  busy node does not prevent graceful shutdown.
+- Restore Chinese rendering for current ELF diagnostics while retaining
+  historical message translations. Cover active-load shutdown in Linux CI.
+
 Thanks to [@8eeth0ven](https://github.com/8eeth0ven) for security hardening
 contributions in [PR #34](https://github.com/ByteYellow/AgentProvenance/pull/34).
 [Release notes draft](docs/releases/v0.10.1.md).
