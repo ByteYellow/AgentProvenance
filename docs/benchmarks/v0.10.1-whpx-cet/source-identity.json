@@ -1,0 +1,17 @@
+{
+  "base_commit": "533c1d6fecd3ed2a9f3a05bb542c8ed6144da400",
+  "production_code_commit": "d77712dca426ddbea3340f0a74ecf316bb491c83",
+  "binary_sha256": {
+    "agentprov": "7e97820e60299a4973247756f9770e9a89883d2d2977bb5bffa6d89e0df6a270",
+    "agentprov-sensor": "d6a896257a661361a8cfde35763d73bdfaf330848bf7dc2b5d66376a1b537ac3",
+    "sensor.test": "6d7105a2e5d6e25592059e0fe053827f5fde4edda699801ec7310216f09df540"
+  },
+  "arm64_object_blob": "eea40f0b0eff876dd60126b0b03b652cca9b8152",
+  "changes": "WHPX CPU configuration, guest acceptance preflight and documentation; production binaries unchanged",
+  "acceptance_script_sha256": {
+    "scripts/accept_kvm_guest.py": "a55d82ff58658f9557cb0a80769e25c53f5d0769ba2545b041ee36e96ae440e0",
+    "scripts/test_kvm_guest.py": "6614b66f0285213f30f38d0f00da96f808479837ffcc1e87d6ecc3585d692469"
+  },
+  "qemu_executable_sha256": "47d57a6072e0bb3bd98f87926eb129eb1736dfe818c67b3b81ef7ce4edd0b3cd",
+  "upstream_cpuid_source": "https://github.com/qemu/qemu/blob/v11.1.0/target/i386/whpx/whpx-all.c"
+}

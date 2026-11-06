@@ -86,13 +86,26 @@ checking for `svm` and loading `kvm_amd`. On this host, the update restored actu
 KVM VM creation and acceleration. The [post-reboot acceptance](benchmarks/v0.10.1-kvm-postreboot/README.md)
 passed native capture, TLS, systemd, K3s, signed replay and recovery checks.
 
-CET under WHPX remains unresolved on this host. QEMU 11.1.0 passes a small
-shadow-stack check, but the Ubuntu 6.8 guest still panics after losing PID 1.
-Clean boots with the collector, K3s and Docker disabled reproduced the failure.
-Use the verified KVM path here: it boots without `nousershstk`, though its nested
-CPU does not expose `user_shstk`. Earlier disposable WHPX tests used
-`nousershstk` to disable guest user shadow stacks; that setting remains recorded
-in the [earlier evidence](benchmarks/v0.10.1-procfs/README.md).
+For QEMU 11.1.0 on WHPX, explicitly select a CPU model that exposes both CET and
+its state-saving dependencies:
+
+```text
+qemu-system-x86_64.exe -accel whpx -cpu max ...
+```
+
+Cold boot the guest after changing this option. On this host, the default CPU
+exposed `user_shstk` while Linux used FXSAVE, so shadow-stack state was not saved
+across task switches and PID 1 could crash. With `-cpu max`, Linux uses XSAVES
+and includes the CET user state. The [CET follow-up](benchmarks/v0.10.1-whpx-cet/README.md)
+records enabled shadow-stack context-switch tests and collection acceptance.
+No `nousershstk` parameter is needed for this configuration.
+
+`accept_kvm_guest.py` rejects x86 guests exposing `user_shstk` without both
+`xsave` and `xsaves`, and records the CPU flags in its report. Under QEMU 11.1.0's
+WHPX implementation, `cet-ss=off` alone does not reliably mask the exposed CET
+flag. Earlier failing runs and their temporary `nousershstk` setting remain
+in the [historical evidence](benchmarks/v0.10.1-procfs/README.md).
+The verified KVM path remains available; its nested CPU does not expose `user_shstk`.
 
 ## Build and regenerate
 

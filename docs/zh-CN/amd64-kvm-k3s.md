@@ -49,10 +49,21 @@ AMD Windows 主机在安装 KB5127648 后，`26300.9711` 版本可能失去 WSL 
 本机更新后已恢复真实 KVM 虚拟机创建与加速；[重启后验收](../benchmarks/v0.10.1-kvm-postreboot/README.zh-CN.md)
 中的原生采集、TLS、systemd、K3s、签名回放和故障恢复均已通过。
 
-本机 WHPX 下的 CET 问题仍未解决：QEMU 11.1.0 通过小型影子栈检查，但 Ubuntu 6.8 guest
-仍会因 PID 1 退出而崩溃。冷启动时禁用采集器、K3s 和 Docker 后，也复现了故障。
-本机使用已验收的 KVM 路径：启动参数不需要 `nousershstk`，其嵌套 CPU 未暴露 `user_shstk`。
-此前 WHPX 临时副本使用 `nousershstk` 关闭 guest 用户态影子栈，具体设置保留在[此前证据](../benchmarks/v0.10.1-procfs/README.zh-CN.md)中。
+QEMU 11.1.0 使用 WHPX 时，应显式选择同时暴露 CET 及其状态保存能力的 CPU 模型：
+
+```text
+qemu-system-x86_64.exe -accel whpx -cpu max ...
+```
+
+修改参数后冷启动 guest。本机此前的默认 CPU 暴露了 `user_shstk`，但 Linux 使用 FXSAVE，
+任务切换时没有保存影子栈状态，导致 PID 1 崩溃。使用 `-cpu max` 后，Linux 启用 XSAVES，
+并保存 CET 用户态状态。[CET 后续验收](../benchmarks/v0.10.1-whpx-cet/README.zh-CN.md)
+记录了开启影子栈的上下文切换测试与采集验收。这套配置无需 `nousershstk` 参数。
+
+`accept_kvm_guest.py` 会拒绝暴露 `user_shstk`、却缺少 `xsave` 或 `xsaves` 的 x86 guest，
+并在报告中记录 CPU 标志。QEMU 11.1.0 的 WHPX 实现中，单独设置 `cet-ss=off`
+无法可靠屏蔽 CET 标志。此前失败记录及临时使用的 `nousershstk` 参数保留在[历史证据](../benchmarks/v0.10.1-procfs/README.zh-CN.md)中。
+已经验收的 KVM 路径仍可使用，其嵌套 CPU 未暴露 `user_shstk`。
 
 ## 构建与重新生成探针
 

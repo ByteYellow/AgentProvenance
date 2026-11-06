@@ -1,0 +1,7 @@
+Guest CPU preflight and signed replay tests passed
+Independent native capture passed
+Service and signed export/import passed
+K3s attribution passed
+Container TLS recreation passed
+Crash recovery passed
+Daemon health and storage faults passed

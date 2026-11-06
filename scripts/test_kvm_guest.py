@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 
-from accept_kvm_guest import export_signed_replay, validate_guest_platform
+from accept_kvm_guest import export_signed_replay, validate_guest_cpu, validate_guest_platform
 
 
 class GuestPlatformTest(unittest.TestCase):
@@ -18,6 +18,38 @@ class GuestPlatformTest(unittest.TestCase):
         for vendor in ("", "Microsoft Corporation", "Dell Inc."):
             with self.assertRaises(SystemExit):
                 validate_guest_platform("microsoft", vendor)
+
+
+class GuestCPUTest(unittest.TestCase):
+    def test_cet_without_xsave_is_rejected(self):
+        with self.assertRaisesRegex(SystemExit, "cold boot with -cpu max"):
+            validate_guest_cpu("x86_64", "flags\t: fpu sse2 user_shstk\n")
+
+    def test_cet_without_supervisor_state_save_is_rejected(self):
+        with self.assertRaisesRegex(SystemExit, "xsaves is missing"):
+            validate_guest_cpu("x86_64", "flags : fpu xsave user_shstk\n")
+
+    def test_every_cpu_is_checked(self):
+        with self.assertRaisesRegex(SystemExit, "CPU 1"):
+            validate_guest_cpu("x86_64", "flags : xsave xsaves user_shstk\n"
+                              "flags : fpu user_shstk\n")
+
+    def test_consistent_cet_is_recorded(self):
+        result = validate_guest_cpu("x86_64", "flags : fpu xsave xsaves user_shstk\n")
+        self.assertEqual(result["x86_cet_check"], "passed")
+        self.assertIn("user_shstk", result["common_flags"])
+
+    def test_guest_without_cet_remains_supported(self):
+        self.assertEqual(validate_guest_cpu("x86_64", "flags : fpu sse2\n")
+                         ["x86_cet_check"], "passed")
+
+    def test_missing_x86_flags_is_rejected(self):
+        with self.assertRaisesRegex(SystemExit, "cannot inspect"):
+            validate_guest_cpu("x86_64", "processor : 0\n")
+
+    def test_arm_is_not_subject_to_x86_check(self):
+        self.assertEqual(validate_guest_cpu("aarch64", "Features : fp asimd\n")
+                         ["x86_cet_check"], "not_applicable")
 
 
 class SignedReplayTest(unittest.TestCase):

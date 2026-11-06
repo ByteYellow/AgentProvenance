@@ -2,6 +2,11 @@
 
 English | [中文](README.zh-CN.md)
 
+Follow-up: the WHPX/CET crash below was subsequently resolved by selecting
+`-cpu max`, which exposes the missing state-save capabilities. See the
+[CET configuration and acceptance report](../v0.10.1-whpx-cet/README.md).
+This report retains the original KVM results and failing WHPX controls.
+
 Tested on 2026-11-06 after the user restarted Windows. **Real KVM acceleration
 is restored and the functional acceptance gates passed.** The remaining
 WHPX/CET failure is documented separately below.

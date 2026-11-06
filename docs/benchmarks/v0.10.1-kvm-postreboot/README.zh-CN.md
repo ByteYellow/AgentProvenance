@@ -2,6 +2,10 @@
 
 [English](README.md) | 中文
 
+后续结果：下文记录的 WHPX/CET 崩溃已通过 `-cpu max` 补齐状态保存能力而解决，
+详见[CET 配置与验收报告](../v0.10.1-whpx-cet/README.zh-CN.md)。
+本报告保留原始 KVM 结果与失败的 WHPX 对照记录。
+
 2026-11-06，用户重启 Windows 后补跑验收。**真实 KVM 加速已恢复，功能验收全部通过。**
 WHPX 下仍存在的 CET 崩溃在下文单独记录。
 

@@ -2,8 +2,8 @@
 
 [English](README.md) | 中文
 
-后续结果：Windows 重启后，真实 KVM 已恢复，功能验收通过。
-[重启后报告](../v0.10.1-kvm-postreboot/README.zh-CN.md)也记录了仍存在的 WHPX/CET 故障。
+后续结果：Windows 重启后，真实 KVM 已恢复，[功能验收通过](../v0.10.1-kvm-postreboot/README.zh-CN.md)。
+随后通过匹配的 CPU 模型解决了 WHPX 崩溃，详见[CET 后续验收](../v0.10.1-whpx-cet/README.zh-CN.md)。
 本报告保留此前的验收结果和重启前安装状态。
 
 2026-11-06 从 `fix/v0.10.1-pr34-integration` 的 `2ab9e92` 继续验收。

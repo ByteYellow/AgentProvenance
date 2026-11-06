@@ -45,6 +45,26 @@ def validate_guest_platform(virtualization, dmi_vendor):
     raise SystemExit(f"expected QEMU/KVM guest, got {virtualization} (DMI vendor: {dmi_vendor or 'unavailable'})")
 
 
+def validate_guest_cpu(architecture, cpuinfo):
+    if architecture not in {"x86_64", "amd64"}:
+        return {"architecture": architecture, "x86_cet_check": "not_applicable"}
+    flags = [set(line.split(":", 1)[1].split()) for line in cpuinfo.splitlines()
+             if line.partition(":")[0].strip() == "flags"]
+    if not flags:
+        raise SystemExit("cannot inspect x86 guest CPU flags in /proc/cpuinfo")
+    for index, features in enumerate(flags):
+        missing = {"xsave", "xsaves"} - features
+        if "user_shstk" in features and missing:
+            raise SystemExit(
+                f"inconsistent x86 guest CPU {index}: user_shstk is exposed but "
+                f"{', '.join(sorted(missing))} is missing; CET task state may not "
+                "survive context switches. For QEMU/WHPX, cold boot with -cpu max "
+                "and recheck the guest CPU before running workloads.")
+    return {"architecture": architecture, "logical_cpus": len(flags),
+            "x86_cet_check": "passed",
+            "common_flags": sorted(set.intersection(*flags))}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--agentprov", default="/usr/local/bin/agentprov")
@@ -59,6 +79,7 @@ def main():
     except OSError:
         dmi_vendor = ""
     validate_guest_platform(virtualization, dmi_vendor)
+    cpu_capabilities = validate_guest_cpu(platform.machine(), Path("/proc/cpuinfo").read_text())
     subprocess.run(["systemctl", "is-active", "--quiet", "agentprov-sensor.service"], check=True)
     invocation = subprocess.check_output(["systemctl", "show", "agentprov-sensor.service", "--property=InvocationID", "--value"], text=True).strip()
     deadline = time.monotonic() + 15
@@ -109,6 +130,7 @@ def main():
             "architecture": platform.machine(), "kernel": platform.release(),
             "virtualization": virtualization,
             "dmi_vendor": dmi_vendor,
+            "cpu_capabilities": cpu_capabilities,
             "boot_id": Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
             "run_id": run, "native_events": len(native), "event_types": sorted(types),
             "cgroups": cgroups, "verification": verification,

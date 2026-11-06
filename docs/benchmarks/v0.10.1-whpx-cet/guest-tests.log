@@ -1,0 +1,15 @@
+test_arm_is_not_subject_to_x86_check (test_kvm_guest.GuestCPUTest.test_arm_is_not_subject_to_x86_check) ... ok
+test_cet_without_supervisor_state_save_is_rejected (test_kvm_guest.GuestCPUTest.test_cet_without_supervisor_state_save_is_rejected) ... ok
+test_cet_without_xsave_is_rejected (test_kvm_guest.GuestCPUTest.test_cet_without_xsave_is_rejected) ... ok
+test_consistent_cet_is_recorded (test_kvm_guest.GuestCPUTest.test_consistent_cet_is_recorded) ... ok
+test_every_cpu_is_checked (test_kvm_guest.GuestCPUTest.test_every_cpu_is_checked) ... ok
+test_guest_without_cet_remains_supported (test_kvm_guest.GuestCPUTest.test_guest_without_cet_remains_supported) ... ok
+test_missing_x86_flags_is_rejected (test_kvm_guest.GuestCPUTest.test_missing_x86_flags_is_rejected) ... ok
+test_microsoft_without_qemu_dmi_is_not_the_lab_guest (test_kvm_guest.GuestPlatformTest.test_microsoft_without_qemu_dmi_is_not_the_lab_guest) ... ok
+test_qemu_whpx_keeps_microsoft_cpuid (test_kvm_guest.GuestPlatformTest.test_qemu_whpx_keeps_microsoft_cpuid) ... ok
+test_signed_bundle_handoff (test_kvm_guest.SignedReplayTest.test_signed_bundle_handoff) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 1.137s
+
+OK

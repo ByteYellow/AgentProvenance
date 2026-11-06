@@ -1,0 +1,122 @@
+{
+  "schema_version": "agentprovenance.sensor_live_acceptance/v1",
+  "architecture": "x86_64",
+  "kernel": "6.8.0-139-generic",
+  "pause_drain_seconds": 1.5,
+  "checks": {
+    "execve": true,
+    "file_open": true,
+    "file_rename": true,
+    "file_unlink": true,
+    "network_connect": true,
+    "dns_query": true,
+    "process_exit": true,
+    "sensitive_read": true,
+    "file_write": true,
+    "setuid": true,
+    "setgid": true,
+    "ptrace": true,
+    "legacy_open_x86": true,
+    "cgroup_identity": true,
+    "dns_glibc_c_abi": true,
+    "dns_udp": true,
+    "python-openssl-ex:tls_write": true,
+    "python-openssl-ex:tls_write:http_metadata": true,
+    "python-openssl-ex:tls_write:connection_id": true,
+    "python-openssl-ex:tls_read": true,
+    "python-openssl-ex:tls_read:http_metadata": true,
+    "python-openssl-ex:tls_read:connection_id": true,
+    "python-openssl-ex:same_connection_lifetime": true,
+    "c-openssl-legacy:tls_write": true,
+    "c-openssl-legacy:tls_write:http_metadata": true,
+    "c-openssl-legacy:tls_write:connection_id": true,
+    "c-openssl-legacy:tls_read": true,
+    "c-openssl-legacy:tls_read:http_metadata": true,
+    "c-openssl-legacy:tls_read:connection_id": true,
+    "c-openssl-legacy:same_connection_lifetime": true,
+    "c-openssl-ex:tls_write": true,
+    "c-openssl-ex:tls_write:http_metadata": true,
+    "c-openssl-ex:tls_write:connection_id": true,
+    "c-openssl-ex:tls_read": true,
+    "c-openssl-ex:tls_read:http_metadata": true,
+    "c-openssl-ex:tls_read:connection_id": true,
+    "c-openssl-ex:same_connection_lifetime": true,
+    "go-abiinternal:tls_write": true,
+    "go-abiinternal:tls_write:http_metadata": true,
+    "go-abiinternal:tls_write:untracked_lifetime": true,
+    "go-abiinternal:tls_read": true,
+    "go-abiinternal:tls_read:http_metadata": true,
+    "go-abiinternal:tls_read:untracked_lifetime": true,
+    "sensor_clean_exit": true,
+    "no_tls_attach_warning": true,
+    "parent_process_instance": true,
+    "fork-child:lifetime": true,
+    "fork-child:parent": true,
+    "fork-child:ordering": true,
+    "fork-child:birth_cgroup": true,
+    "migration-child:lifetime": true,
+    "migration-child:parent": true,
+    "migration-child:ordering": true,
+    "migration-child:birth_cgroup": true,
+    "cgroup_migration": true,
+    "clone-child:lifetime": true,
+    "clone-child:parent": true,
+    "clone-child:ordering": true,
+    "clone-child:birth_cgroup": true,
+    "clone_into_cgroup": true,
+    "required_cgroup_lifecycle": true,
+    "capture_time_before_drain": true
+  },
+  "passed": true,
+  "kernel_pids": {
+    "python-openssl-ex": 2493,
+    "c-openssl-legacy": 2501,
+    "c-openssl-ex": 2503,
+    "go-abiinternal": 2505
+  },
+  "caller_pids": {
+    "python-openssl-ex": 2493,
+    "c-openssl-legacy": 2501,
+    "c-openssl-ex": 2503,
+    "go-abiinternal": 2505
+  },
+  "lifecycle": {
+    "fixtures": {
+      "fork-child": {
+        "caller_pid": 2498
+      },
+      "target_cgroup_id": "7376",
+      "migration-child": {
+        "caller_pid": 2499
+      },
+      "clone-child": {
+        "caller_pid": 2500
+      }
+    },
+    "gaps": {}
+  },
+  "child_kernel_pids": {
+    "fork-child": 2498,
+    "migration-child": 2499,
+    "clone-child": 2500
+  },
+  "event_types": {
+    "access_control_state": 26,
+    "process_observed": 10,
+    "execve": 5,
+    "file_open": 11,
+    "syscall_result": 22,
+    "file_rename": 1,
+    "file_unlink": 2,
+    "setgid": 1,
+    "setuid": 1,
+    "ptrace": 1,
+    "dns_query": 4,
+    "network_connect": 11,
+    "process_exit": 8,
+    "tls_write": 8,
+    "tls_read": 8,
+    "thread_exit": 8
+  },
+  "event_count": 127
+}
