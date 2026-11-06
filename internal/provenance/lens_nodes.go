@@ -69,6 +69,22 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 		if endpointData != nil {
 			node.Data["endpoint_association"] = endpointData
 		}
+		if ev.Type == "tls_write" || ev.Type == "tls_read" {
+			var meta struct {
+				Capture         *tlsintent.CaptureIntegrity `json:"capture"`
+				Truncated       bool                        `json:"truncated"`
+				ContentEncoding string                      `json:"content_encoding"`
+			}
+			if json.Unmarshal([]byte(ev.Payload), &meta) == nil {
+				if meta.Capture != nil {
+					node.Data["capture"] = meta.Capture
+				}
+				node.Data["truncated"] = meta.Truncated
+				if meta.ContentEncoding != "" {
+					node.Data["content_encoding"] = meta.ContentEncoding
+				}
+			}
+		}
 		add(node)
 	}
 	if err := rows.Err(); err != nil {

@@ -155,6 +155,7 @@ func TestContextDashboardFixture(t *testing.T) {
 	addComparisonFixture(t, s)
 	addRetentionFixture(t, s)
 	addIntentAssociationFixture(t, db, paths)
+	addTLSDetailFixture(t, db, paths)
 	for _, mode := range []string{"candidates", "bound", "missing"} {
 		addEndpointAssociationFixture(t, db, paths, "ui-endpoint-"+mode, mode)
 	}

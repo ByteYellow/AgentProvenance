@@ -86,6 +86,10 @@
 .endpoint-stage h5 span { font-weight:400; color:var(--mut); }
 .endpoint-stage code { overflow-wrap:anywhere; }
 .association-error { color:var(--mut); }
+.tls-fields { display:grid; grid-template-columns:minmax(100px,180px) minmax(0,1fr); gap:6px 16px; }
+.tls-fields dt { color:var(--mut); }
+.tls-fields dd { margin:0; overflow-wrap:anywhere; }
+.tls-capture[data-tls-capture="incomplete"] h4 span { color:var(--mut); }
 @media(max-width: 720px) {
   .session-composition, .inspection-tabs { padding: 10px 14px; }
   .session-members { flex-basis: 100%; }

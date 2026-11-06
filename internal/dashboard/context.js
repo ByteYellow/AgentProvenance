@@ -569,12 +569,14 @@ window.AgentContextUI = (() => {
     $('content-body').textContent = t('loading…'); $('content-body').className = 'content-body';
     $('content-prev').disabled = true; $('content-next').disabled = true;
     $('content-meta').textContent = ''; $('content-page-label').textContent = '';
+    $('content-tls').innerHTML = '';
     formattedContent = null; $('content-format').hidden = true; $('content-format-note').hidden = true;
     try {
       if (choice.node) {
         const value = await api.j('/api/artifact?' + q({run:choice.run || run,node:choice.node,mode:choice.mode || 'body',offset,limit:65536,view_lang:api.lang}));
         if (request !== previewRequest || state !== current) return;
         previewPage = value;
+        $('content-tls').innerHTML = window.AgentWorkspaceUI.tlsCaptureHTML(value.tls);
         if (value.versions?.length) {
           const selected = Number($('content-choice').value);
           for (const version of value.versions) {

@@ -570,6 +570,29 @@ components:
               ref: {type: string}
               source_id: {type: string}
         versions_has_more: {type: boolean}
+        tls:
+          type: object
+          description: TLS/message capture metadata copied from the saved record. Independent of response paging and object integrity. Omitted for other evidence types; an absent capture field preserves unknown historical completeness.
+          required: [truncated]
+          properties:
+            truncated: {type: boolean, description: Capture truncation recorded by the producer, not preview pagination.}
+            content_encoding: {type: string}
+            capture:
+              type: object
+              required: [rule, state, reason, data_kind]
+              properties:
+                rule: {type: string}
+                state: {type: string}
+                reason: {type: string}
+                data_kind: {type: string}
+                position:
+                  type: object
+                  properties:
+                    stream_id: {type: string, pattern: '^[0-9]+$'}
+                    call_sequence: {type: string, pattern: '^[0-9]+$'}
+                    offset: {type: integer, minimum: 0}
+                    total_bytes: {type: integer, minimum: 0}
+                    checkpoint: {type: boolean}
       description: >
         Saved-only artifact or database-record preview. Legacy objects retain an
         8 MiB read budget; new stored text can span 32 MiB using bounded chunks.

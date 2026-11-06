@@ -878,6 +878,13 @@ separate byte ranges remain separate. A closing checkpoint carries
 `checkpoint: true` rather than claiming a retained byte range. Historical events
 without sequence fields retain their recorded metadata and rule version.
 
+The Dashboard shows message completeness in the existing evidence detail and
+saved-content reader. It identifies retained fragments and their gap reason;
+capture positions and encoding are available in expandable metadata. Content
+paging is separate from capture completeness, and historical records without
+capture metadata remain labelled as unrecorded. Read-only exports preserve
+these states and the saved body pages.
+
 Automatic TLS discovery uses exec, connect and library-open hints to inspect
 the indicated process, while retaining periodic bounded scans. Finite retries
 cover mappings loaded after exec; a later library-open hint starts a new retry

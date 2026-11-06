@@ -356,9 +356,33 @@ window.AgentWorkspaceUI = (() => {
     host.insertBefore(section,host.querySelector('[data-node-fields]'));
     associationActions(section);
   }
+  function tlsCaptureHTML(meta) {
+    if(!meta)return '';
+    const c=meta.capture, position=c?.position;
+    const incomplete=meta.truncated===true || Boolean(c&&(c.state!=='complete'||c.reason||(c.data_kind&&c.data_kind!=='http_body')));
+    const state=c?.state==='unresolved'?'unresolved':incomplete?'incomplete':c?'complete':'unrecorded';
+    const labels={complete:t('HTTP body decoded'),incomplete:t('Capture gap recorded'),unresolved:t('Capture state unresolved'),unrecorded:t('Capture completeness not recorded')};
+    const kinds={http_body:t('HTTP body'),tls_fragment:t('Raw TLS fragment'),hpack_fragment:t('Undecoded HPACK fragment'),http2_data_fragment:t('HTTP/2 data fragment')};
+    const reasons={capture_limit:t('Per-call capture limit reached'),reassembly_limit:t('Reassembly buffer limit reached'),http2_frame_sequence:t('HTTP/2 frame sequence interrupted'),unsupported_header_frame:t('Unsupported HTTP/2 header frame'),hpack_decode_failed:t('HPACK state could not be decoded'),connection_state_evicted:t('Connection parsing state evicted'),tls_call_sequence:t('TLS call sequence has a gap'),tls_chunk_sequence:t('TLS byte sequence has a gap or reordering'),tls_sequence_reset:t('TLS capture sequence changed'),invalid_tls_chunk_metadata:t('TLS byte position metadata is invalid'),invalid_capture_metadata:t('Capture metadata is invalid')};
+    const field=(label,value)=>value==null||value===''?'':`<dt>${e(label)}</dt><dd><code>${e(value)}</code></dd>`;
+    const fields=field(t('Analysis rule'),c?.rule)+field(t('Content encoding'),meta.content_encoding)+
+      field(t('Capture stream'),position?.stream_id)+field(t('TLS call sequence'),position?.call_sequence)+
+      (position?.checkpoint?field(t('Record kind'),t('Sequence checkpoint')):field(t('Byte offset in call'),position?.offset)+field(t('TLS call bytes'),position?.total_bytes));
+    return `<section class="evidence-association tls-capture" data-tls-capture="${state}"><h4>${e(t('Message completeness'))}<span>${e(labels[state])}</span></h4>`+
+      (c?.data_kind?`<p>${e(kinds[c.data_kind]||c.data_kind)}</p>`:'')+
+      (c?.reason?`<p>${e(reasons[c.reason]||c.reason)}</p>`:'')+
+      (incomplete?`<p class="association-basis">${e(t('Retained fragments are displayed without model-intent interpretation.'))}</p>`:'')+
+      (fields?`<details><summary>${e(t('Capture metadata'))}</summary><dl class="tls-fields">${fields}</dl></details>`:'')+`</section>`;
+  }
+  function describeTLS(node,host) {
+    host.querySelector('[data-tls-capture]')?.remove();
+    if(!node || !['tls_write','tls_read','llm_message'].includes(node.subtype))return;
+    const holder=document.createElement('div');holder.innerHTML=tlsCaptureHTML(node.data||{});
+    host.insertBefore(holder.firstElementChild,host.querySelector('[data-node-fields]'));
+  }
   function readingState() {return {tab,dismissed};}
   function restoreReading(value) {
     if(value&&Object.hasOwn(panels,value.tab)){tab=value.tab;dismissed=value.dismissed===true;renderReader();}
   }
-  return {init,setRun,setNode,setEvents,setContent,show,setOverview,overviewError,setSource,setSession,sessionDirectory,setReturn,readingState,restoreReading,describeAssociation,describeEndpoint};
+  return {init,setRun,setNode,setEvents,setContent,show,setOverview,overviewError,setSource,setSession,sessionDirectory,setReturn,readingState,restoreReading,describeAssociation,describeEndpoint,describeTLS,tlsCaptureHTML};
 })();

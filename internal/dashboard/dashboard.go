@@ -1128,6 +1128,7 @@ func renderLLMMessageLocale(data []byte, lang i18n.Locale) ([]byte, bool) {
 	var obj struct {
 		Type    string `json:"type"`
 		Payload struct {
+			tlsPreview
 			Direction string `json:"direction"`
 			Model     string `json:"model"`
 			Content   string `json:"content"`
@@ -1145,6 +1146,15 @@ func renderLLMMessageLocale(data []byte, lang i18n.Locale) ([]byte, bool) {
 	}
 	p := obj.Payload
 	var b strings.Builder
+	if p.Truncated || p.Capture.Incomplete() || (p.ContentEncoding != "" && p.ContentEncoding != "utf-8") {
+		b.WriteString(i18n.T(lang, "Retained fragment"))
+		if p.ContentEncoding != "" {
+			fmt.Fprintf(&b, " (%s)", p.ContentEncoding)
+		}
+		b.WriteString("\n\n")
+		b.WriteString(p.Content)
+		return []byte(b.String()), true
+	}
 	fmt.Fprintf(&b, i18n.T(lang, "%s   model: %s\n"), i18n.T(lang, strings.ToUpper(p.Direction)), p.Model)
 	s := p.Semantics
 	if p.Direction == "request" {
