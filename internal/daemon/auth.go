@@ -1,14 +1,18 @@
 package daemon
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -65,23 +69,22 @@ func resolveClientToken(dataDir string) string {
 	return ReadAuthToken(dataDir)
 }
 
-// csrfGuard rejects browser-initiated cross-site write requests (drive-by
-// no-cors POST, form POST, DNS-rebinding pages). Rules for every non-GET
-// request: a cross-origin Origin header is rejected, Sec-Fetch-Site: cross-site
-// is rejected, and a non-application/json Content-Type is rejected. Plain API
-// clients (curl, the CLI) send neither Origin nor Sec-Fetch headers and post
-// JSON, so they are unaffected. GET/HEAD/OPTIONS stay exempt.
-func csrfGuard(next http.Handler) http.Handler {
+// csrfGuard runs after withAuth. Authenticated API clients may use arbitrary
+// DNS names; open mode trusts only literal addresses and the configured host.
+func (s Server) csrfGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+		if publicHealthRequest(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if !sameOriginRequest(r) || r.Header.Get("Sec-Fetch-Site") == "cross-site" || !jsonContentType(r) {
+		write := r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions
+		write = write || (r.URL.Path == "/v1/evidence/manifest" && manifestMaterializationRequested(r))
+		if (s.AuthToken == "" && !trustedOpenHost(r.Host, s.ListenAddr)) || !sameOriginRequest(r) ||
+			(write && (!sameSiteMetadata(r) || !jsonContentType(r))) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusForbidden)
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error": "cross-site or non-JSON write requests are rejected by this daemon",
+				"error": "untrusted host, cross-origin request, or non-JSON write rejected",
 			})
 			return
 		}
@@ -89,32 +92,99 @@ func csrfGuard(next http.Handler) http.Handler {
 	})
 }
 
+func publicHealthRequest(r *http.Request) bool {
+	return r.Method == http.MethodGet && (r.URL.Path == "/v1/health" || r.URL.Path == "/v1/ready" || r.URL.Path == "/v1/live")
+}
+
+func trustedOpenHost(authority, listen string) bool {
+	host, _, ok := originAuthority(authority, "http")
+	if !ok {
+		return false
+	}
+	host = strings.TrimSuffix(host, ".")
+	if strings.EqualFold(host, "localhost") || net.ParseIP(host) != nil {
+		return true
+	}
+	configured, _, ok := originAuthority(listen, "http")
+	return ok && strings.EqualFold(host, strings.TrimSuffix(configured, "."))
+}
+
+func sameSiteMetadata(r *http.Request) bool {
+	values := r.Header.Values("Sec-Fetch-Site")
+	return len(values) == 0 || (len(values) == 1 && (values[0] == "same-origin" || values[0] == "none"))
+}
+
 // sameOriginRequest reports whether a request that carries an Origin header is
 // same-origin. Requests without an Origin header (curl, the CLI) pass.
 func sameOriginRequest(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
+	values := r.Header.Values("Origin")
+	if len(values) == 0 {
 		return true
 	}
-	u, err := url.Parse(origin)
-	if err != nil || u.Host == "" || u.Host != r.Host {
+	if len(values) != 1 {
 		return false
 	}
-	return true
+	u, err := url.Parse(values[0])
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if err != nil || u.Scheme != scheme || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(values[0], "#") {
+		return false
+	}
+	fromHost, fromPort, fromOK := originAuthority(u.Host, scheme)
+	toHost, toPort, toOK := originAuthority(r.Host, scheme)
+	return fromOK && toOK && strings.EqualFold(fromHost, toHost) && fromPort == toPort
 }
 
-// jsonContentType reports whether the request's Content-Type is
-// application/json (parameters such as charset are ignored). A missing
-// Content-Type header passes: the daemon's own clients always set JSON, and
-// bodyless writes (e.g. DELETE) legitimately omit it. Browsers always attach a
-// Content-Type to POSTs, so cross-site text/plain / form-urlencoded drive-by
-// requests are rejected.
-func jsonContentType(r *http.Request) bool {
-	ct := r.Header.Get("Content-Type")
-	if ct == "" {
-		return true
+// originAuthority validates a host/port without resolving DNS. Default ports
+// compare equally to their explicit form, as they do in a browser origin.
+func originAuthority(authority, scheme string) (string, string, bool) {
+	u, err := url.Parse(scheme + "://" + authority)
+	if err != nil || u.Host == "" || u.Host != authority || u.User != nil || u.Path != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return "", "", false
 	}
-	mediaType, _, err := mime.ParseMediaType(ct)
+	host, port := u.Hostname(), u.Port()
+	if host == "" {
+		return "", "", false
+	}
+	if port == "" {
+		port = "80"
+		if scheme == "https" {
+			port = "443"
+		}
+	}
+	n, err := strconv.Atoi(port)
+	if err != nil || n < 1 || n > 65535 {
+		return "", "", false
+	}
+	return host, strconv.Itoa(n), true
+}
+
+// Only truly empty writes may omit Content-Type, including chunked empty bodies.
+func jsonContentType(r *http.Request) bool {
+	values := r.Header.Values("Content-Type")
+	if len(values) == 0 {
+		if r.Body == nil || r.Body == http.NoBody {
+			return true
+		}
+		if r.ContentLength > 0 {
+			return false
+		}
+		var first [1]byte
+		n, err := io.ReadFull(r.Body, first[:])
+		if n > 0 {
+			r.Body = struct {
+				io.Reader
+				io.Closer
+			}{io.MultiReader(bytes.NewReader(first[:n]), r.Body), r.Body}
+		}
+		return n == 0 && err == io.EOF
+	}
+	if len(values) != 1 {
+		return false
+	}
+	mediaType, _, err := mime.ParseMediaType(values[0])
 	if err != nil {
 		return false
 	}

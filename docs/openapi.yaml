@@ -12,13 +12,12 @@ servers:
     description: local sidecar daemon (agentprov daemon serve)
 security:
   - bearerAuth: []
-  - {}
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
-      description: optional; set when the daemon runs with --auth-token
+      description: Required by default; daemon serve generates or reuses <data-dir>/auth-token. Only explicit --insecure-open disables authentication.
   parameters:
     run:
       name: run

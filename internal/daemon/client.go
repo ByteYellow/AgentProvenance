@@ -298,12 +298,13 @@ func (c Client) GraphLens(opts provenance.GraphLensOptions) (provenance.GraphLen
 }
 
 func (c Client) EvidenceManifest(runID string, materialize bool) (evidence.MaterializedManifest, error) {
+	var result evidence.MaterializedManifest
+	if materialize {
+		err := c.postJSON("/v1/evidence/manifest", map[string]any{"run_id": runID}, &result)
+		return result, err
+	}
 	values := url.Values{}
 	values.Set("run", runID)
-	if materialize {
-		values.Set("materialize", "1")
-	}
-	var result evidence.MaterializedManifest
 	err := c.getJSON("/v1/evidence/manifest?"+values.Encode(), &result)
 	return result, err
 }

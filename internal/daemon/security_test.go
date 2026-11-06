@@ -65,7 +65,7 @@ func TestCSRFGuardRejectsCrossSiteWrites(t *testing.T) {
 	}{
 		{"plain JSON POST no Origin", "application/json", nil, http.StatusOK},
 		{"JSON charset param", "application/json; charset=utf-8", nil, http.StatusOK},
-		{"no Content-Type header", "", nil, http.StatusOK},
+		{"body without Content-Type header", "", nil, http.StatusForbidden},
 		{"cross-site Origin", "application/json", map[string]string{"Origin": "https://evil.example"}, http.StatusForbidden},
 		{"text/plain drive-by", "text/plain", map[string]string{"Origin": "https://evil.example", "Sec-Fetch-Site": "cross-site", "Sec-Fetch-Mode": "no-cors"}, http.StatusForbidden},
 		{"form-urlencoded no-cors", "application/x-www-form-urlencoded", nil, http.StatusForbidden},

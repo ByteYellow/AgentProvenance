@@ -31,12 +31,12 @@ assert_contains() {
 post_json() {
   local path="$1"
   local body="$2"
-  curl -fsS -X POST "$DAEMON_URL$path" -H 'Content-Type: application/json' -d "$body"
+  curl -fsS -X POST "$DAEMON_URL$path" -H "Authorization: Bearer ${AGENTPROV_DAEMON_TOKEN:-}" -H 'Content-Type: application/json' -d "$body"
 }
 
 get_json() {
   local path="$1"
-  curl -fsS "$DAEMON_URL$path"
+  curl -fsS "$DAEMON_URL$path" -H "Authorization: Bearer ${AGENTPROV_DAEMON_TOKEN:-}"
 }
 
 echo "== build agentprov"
@@ -46,6 +46,7 @@ echo "== start daemon"
 rm -rf "$DATA_DIR" "$DATA_DIR.daemon.log"
 "$BIN" --data-dir "$DATA_DIR" daemon serve \
   --listen "$LISTEN" \
+  --ingest-allow-dir "$ROOT_DIR/examples/telemetry" \
   --sample-interval 0 \
   --spool-interval 0 \
   --spool-limit 10 \
@@ -61,6 +62,10 @@ for _ in $(seq 1 80); do
 done
 HEALTH="$(cat /tmp/agentprov-daemon-health.json 2>/dev/null || true)"
 assert_contains "$HEALTH" '"status":"ok"'
+if [[ -z "${AGENTPROV_DAEMON_TOKEN:-}" ]]; then
+  AGENTPROV_DAEMON_TOKEN="$(cat "$DATA_DIR/auth-token")"
+  export AGENTPROV_DAEMON_TOKEN
+fi
 
 echo "== bind ToolCallScope through daemon API"
 BIND_JSON="$(post_json /v1/telemetry/bind '{
@@ -80,7 +85,7 @@ assert_contains "$BIND_JSON" '"schema_version":"agentprovenance.daemon_telemetry
 
 echo "== ingest Falco risk stream through daemon API"
 INGEST_JSON="$(post_json /v1/telemetry/ingest-falco '{
-  "file":"examples/telemetry/falco-risk-events.jsonl",
+  "file":"falco-risk-events.jsonl",
   "run_id":"run-daemon-api-accept",
   "queued":true
 }')"
@@ -220,7 +225,7 @@ assert_contains "$EXPLAIN_CLI_JSON" '"type": "event"'
 assert_contains "$EXPLAIN_CLI_JSON" '"runtime_events":'
 
 echo "== materialize evidence manifest through daemon API"
-EVIDENCE_JSON="$(get_json '/v1/evidence/manifest?run=run-daemon-api-accept&materialize=1')"
+EVIDENCE_JSON="$(post_json '/v1/evidence/manifest' '{"run_id":"run-daemon-api-accept"}')"
 assert_contains "$EVIDENCE_JSON" '"manifest"'
 assert_contains "$EVIDENCE_JSON" '"schema_version":"agentprovenance.evidence_manifest/v1"'
 assert_contains "$EVIDENCE_JSON" '"risk_count":3'

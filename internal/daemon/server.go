@@ -29,9 +29,9 @@ import (
 	securitymodel "github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/signal"
 	signalsmodel "github.com/byteyellow/agentprovenance/internal/signals"
-	session "github.com/byteyellow/agentprovenance/internal/substrate/session"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	runtimeplane "github.com/byteyellow/agentprovenance/internal/substrate/runtime"
+	session "github.com/byteyellow/agentprovenance/internal/substrate/session"
 	"github.com/byteyellow/agentprovenance/internal/substrate/state"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
@@ -60,6 +60,8 @@ type Server struct {
 	// <data-dir>/auth-token when none is provided; empty = open and is only reachable
 	// via the explicit --insecure-open escape hatch.
 	AuthToken string
+	// ListenAddr also defines the optional DNS host trusted in open mode.
+	ListenAddr string
 	// IngestAllowDir confines file-path inputs of /v1/leases (task) and
 	// /v1/telemetry/ingest-falco (file). Empty = <data-dir>/ingest.
 	IngestAllowDir string
@@ -117,6 +119,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/graph/lens", s.graphLens)
 	mux.Handle("GET /v1/context/", http.StripPrefix("/v1", (agentcontext.Service{DB: s.DB}).ReadHandler()))
 	mux.HandleFunc("GET /v1/evidence/manifest", s.evidenceManifest)
+	mux.HandleFunc("POST /v1/evidence/manifest", s.materializeEvidenceManifest)
 	mux.HandleFunc("POST /v1/forensics/export", s.forensicsExport)
 	mux.HandleFunc("POST /v1/forensics/export-batch", s.forensicsExportBatch)
 	mux.HandleFunc("GET /v1/observe/summary", s.observeSummary)
@@ -128,7 +131,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/signal/context", s.signalContext)
 	mux.HandleFunc("POST /v1/signal/run", s.signalRun)
 	mux.HandleFunc("POST /v1/signal/import", s.signalImport)
-	return s.withAuth(csrfGuard(mux))
+	return s.withAuth(s.csrfGuard(mux))
 }
 
 // ingestedAllowDir returns the configured ingest allow directory, defaulting to
@@ -199,7 +202,7 @@ func (s Server) withAuth(next http.Handler) http.Handler {
 	}
 	want := "Bearer " + s.AuthToken
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && (r.URL.Path == "/v1/health" || r.URL.Path == "/v1/ready" || r.URL.Path == "/v1/live") {
+		if publicHealthRequest(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -789,13 +792,39 @@ func (s Server) graphLens(w http.ResponseWriter, r *http.Request) {
 
 func (s Server) evidenceManifest(w http.ResponseWriter, r *http.Request) {
 	runID := r.URL.Query().Get("run")
-	materialize := r.URL.Query().Get("materialize") == "1" || r.URL.Query().Get("materialize") == "true"
+	materialize := manifestMaterializationRequested(r)
 	objectLimit := 25
 	if materialize {
+		// Keep authenticated legacy clients working; anonymous GET/HEAD must
+		// remain read-only even when no browser metadata was sent.
+		if s.AuthToken == "" || r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodPost)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			writeJSON(w, map[string]any{"error": "use POST /v1/evidence/manifest with a JSON run_id to materialize evidence"})
+			return
+		}
 		s.lockWrites()
 		defer s.unlockWrites()
 	}
 	result, err := buildEvidenceManifest(s.DB, s.Paths, runID, objectLimit, materialize)
+	writeResult(w, result, err)
+}
+
+func manifestMaterializationRequested(r *http.Request) bool {
+	value := r.URL.Query().Get("materialize")
+	return value == "1" || value == "true"
+}
+
+func (s Server) materializeEvidenceManifest(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RunID string `json:"run_id"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	s.lockWrites()
+	defer s.unlockWrites()
+	result, err := buildEvidenceManifest(s.DB, s.Paths, req.RunID, 25, true)
 	writeResult(w, result, err)
 }
 

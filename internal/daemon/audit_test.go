@@ -48,7 +48,7 @@ func TestAuditCollectionUsesExistingEventsAndToolInterfaces(t *testing.T) {
 	var baseline string
 	for _, locale := range []string{"en", "zh-CN"} {
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/v1/telemetry/events?run=audit-coverage&type=access_control_collection&limit=50", nil)
+		req := httptest.NewRequest("GET", "http://localhost/v1/telemetry/events?run=audit-coverage&type=access_control_collection&limit=50", nil)
 		req.Header.Set("Accept-Language", locale)
 		(daemon.Server{DB: db}).Handler().ServeHTTP(w, req)
 		var got telemetry.ListResult

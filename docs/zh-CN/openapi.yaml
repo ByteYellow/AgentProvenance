@@ -10,13 +10,12 @@ servers:
   description: 本地后台服务（agentprov daemon serve）
 security:
 - bearerAuth: []
-- {}
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
-      description: 可选；服务使用 --auth-token 启动时需要提供
+      description: 默认必需；daemon serve 生成或复用 <data-dir>/auth-token。只有显式使用 --insecure-open 才关闭鉴权。
   parameters:
     run:
       name: run

@@ -93,6 +93,7 @@ func daemonCmd(dataDir *string) *cobra.Command {
 				return mkErr
 			}
 			server.IngestAllowDir = absAllow
+			server.ListenAddr = listen
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 			go server.StartSampler(ctx)

@@ -142,6 +142,32 @@ The daemon's `/v1/live` endpoint checks HTTP liveness, while `/v1/ready` and
 storage failure. Readiness and historical evidence coverage are different
 properties; neither endpoint proves every background worker is progressing.
 
+### API authentication and browser access
+
+`daemon serve` requires a bearer token by default. It reuses or generates
+`<data-dir>/auth-token` with mode `0600`; `--auth-token` or
+`AGENTPROV_DAEMON_TOKEN` can supply an operator-managed token. CLI clients must
+use the same `--data-dir`, or set `AGENTPROV_DAEMON_TOKEN` explicitly. Only GET
+`/v1/health`, `/v1/ready`, and `/v1/live` are anonymous health checks.
+
+Writes with a body require `Content-Type: application/json`; empty DELETE and
+POST requests may omit it. Browser requests must have a matching Origin, and
+write requests accept only `Sec-Fetch-Site: same-origin`, `none`, or an absent
+header. Origin checks use the direct HTTP/TLS connection, not untrusted
+`X-Forwarded-*` headers. Authenticated CLI/SDK clients can use remote hosts and
+custom DNS names without browser headers.
+
+`--insecure-open` explicitly disables authentication. In that mode, all
+non-health requests require a Host naming localhost, a literal IP, or the
+hostname configured with `--listen`. Arbitrary DNS names are rejected on reads
+as well as writes. Keep this mode restricted to trusted local development.
+
+Use `POST /v1/evidence/manifest` with `{"run_id":"<run_id>"}` to materialize an
+evidence manifest. Ordinary GET remains read-only. The legacy
+`GET ...?materialize=1` form requires a valid bearer token; open-mode callers
+must switch to POST. The CLI's `evidence manifest --materialize` handles this
+automatically.
+
 ### Docker session compatibility
 
 The compatibility `lease` / `session` / `api` commands use Docker-backed
