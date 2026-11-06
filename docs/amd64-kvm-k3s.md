@@ -100,6 +100,10 @@ sudo agentprov --data-dir /var/lib/agentprov record --run demo-kvm -- sh -c 'id;
 sudo python3 scripts/accept_kvm_guest.py --report /tmp/kvm-acceptance.json
 ```
 
+The acceptance script signs the captured bundle with a temporary key and verifies
+it before importing into a fresh replay store. It saves the bundle, DSSE attestation,
+and public key beside the report. The private key is removed with the temporary workspace.
+
 The installer enables `agentprov-sensor.service`, stores evidence under
 `/var/lib/agentprov`, and checks that its probes attached. `record` must use the
 same data directory. Stop the collector with `systemctl stop agentprov-sensor`;

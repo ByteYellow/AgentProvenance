@@ -13,6 +13,27 @@ import time
 import uuid
 
 
+def export_signed_replay(base, run, report_path, directory):
+    private_key = Path(directory) / "bundle-signing.key"
+    public_key = report_path.with_suffix(".pub")
+    subprocess.run(base + ["forensics", "keygen", "--priv", str(private_key),
+        "--pub", str(public_key)], check=True, stdout=subprocess.DEVNULL)
+    exported = json.loads(subprocess.check_output(base + ["forensics", "export", run,
+        "--sign-key", str(private_key), "--json"], text=True))
+    if not exported.get("signed") or not exported.get("attestation_path"):
+        raise RuntimeError("guest bundle export did not produce an attestation")
+    bundle_out = report_path.with_suffix(".forensics.json")
+    attestation_out = bundle_out.with_suffix(".dsse.json")
+    shutil.copyfile(exported["path"], bundle_out)
+    shutil.copyfile(exported["attestation_path"], attestation_out)
+    replay = [base[0], "--data-dir", str(Path(directory) / "replay")]
+    imported = json.loads(subprocess.check_output(replay + ["forensics", "import", str(bundle_out),
+        "--pub-key", str(public_key), "--json"], text=True))
+    if imported.get("run_id") != run or not imported.get("attestation_verified"):
+        raise RuntimeError("guest bundle replay did not verify the expected signed run")
+    return bundle_out, attestation_out, public_key, replay, imported
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--agentprov", default="/usr/local/bin/agentprov")
@@ -66,12 +87,8 @@ def main():
             raise RuntimeError("record did not create a kernel cgroup scope")
         subprocess.run(base + ["graph", "materialize", "--run", run], check=True, stdout=subprocess.DEVNULL)
         verification = query("graph", "verify", "--run", run)
-        exported = query("forensics", "export", run)
-        bundle = Path(exported["path"])
-        bundle_out = report_path.with_suffix(".forensics.json")
-        shutil.copyfile(bundle, bundle_out)
-        replay = [args.agentprov, "--data-dir", str(Path(directory) / "replay")]
-        imported = json.loads(subprocess.check_output(replay + ["forensics", "import", str(bundle_out), "--json"], text=True))
+        bundle_out, attestation_out, public_key, replay, imported = export_signed_replay(
+            base, run, report_path, directory)
         replay_verification = json.loads(subprocess.check_output(replay + ["graph", "verify", "--run", run, "--json"], text=True))
         report = {
             "schema_version": "agentprovenance.kvm_guest_acceptance/v1",
@@ -82,6 +99,8 @@ def main():
             "cgroups": cgroups, "verification": verification,
             "replay_verification": replay_verification,
             "bundle_sha256": hashlib.sha256(bundle_out.read_bytes()).hexdigest(),
+            "attestation_path": str(attestation_out), "public_key_path": str(public_key),
+            "attestation_verified": imported["attestation_verified"],
             "imported_run": imported.get("run_id"), "passed": True,
         }
         report_path.write_text(json.dumps(report, indent=2) + "\n")

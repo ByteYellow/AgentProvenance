@@ -66,6 +66,8 @@ sudo agentprov --data-dir /var/lib/agentprov record --run demo-kvm -- sh -c 'id;
 sudo python3 scripts/accept_kvm_guest.py --report /tmp/kvm-acceptance.json
 ```
 
+验收脚本使用临时密钥签署采集包，验签通过后导入新的回放库。证据包、DSSE 签名和公钥保存在报告旁，私钥随临时工作目录一起清理。
+
 安装器启用 `agentprov-sensor.service`，将证据保存在 `/var/lib/agentprov`，并检查探针是否挂载。`record` 必须使用同一个数据目录。
 
 执行 `systemctl stop agentprov-sensor` 可停止采集器。服务通过 SIGINT 卸载 eBPF 并关闭摄入流程。数据在虚拟机重启后保留，但服务无法补回停止期间发生的事件。
