@@ -288,28 +288,12 @@ window.AgentWorkspaceUI = (() => {
     $('session-related-back').hidden=!label;
     $('session-related-back').textContent=label?api.tx('Return to {run}',{run:label}):'';
   }
-  function describeAssociation(node, host) {
-    host.querySelector('[data-intent-association]')?.remove();
-    if(node?.kind!=='intent_diff')return;
-    const data=node.data||{}, association=data.association||{};
-    const states={bound:t('Bound to a tool call'),policy_scope:t('Explicit policy scope'),candidate:t('One candidate, binding unresolved'),ambiguous:t('Multiple candidate messages'),missing:t('Intent not captured for this scope')};
-    const bases={tool_call_id:t('Tool call identity'),explicit_policy_scope:t('Explicit policy scope'),validity_interval:t('Within policy validity interval'),same_agent:t('Same receiving agent'),missing_operation_binding:t('Operation binding not recorded'),message_not_after_effect:t('Message observed no later than the effect'),time_unknown:t('Capture order unknown')};
-    const list=value=>Array.isArray(value)?value.filter(x=>typeof x==='string'&&x):[];
-    const refs=[...new Set(list(association.evidence_refs))];
-    const candidates=Array.isArray(association.candidates)?association.candidates:[];
-    const basisHTML=value=>list(value).map(b=>e(bases[b]||b)).join(' · ');
-    const referenceHTML=ref=>{
-      const label=api.evidenceLabel?.(ref)||ref;
-      return `<div class="association-reference"><div>${label!==ref?`<strong>${e(label)}</strong>`:''}<code>${e(ref)}</code></div><span><button data-association-read="${e(ref)}">${e(t('Read saved evidence'))}</button><button data-association-graph="${e(ref)}">${e(t('Locate in graph'))}</button></span></div>`;
-    };
-    const section=document.createElement('section');
-    section.className='evidence-association';section.dataset.intentAssociation=association.status||'historical';
-    section.innerHTML=`<h4>${e(t('Intent association'))} <span>${e(states[association.status]||t('Recorded under an earlier analysis rule'))}</span></h4>`+
-      (data.tool_call_id?`<p>${e(t('Tool call'))}: <button data-association-graph="${e(data.tool_call_id)}">${e(data.tool_call_id)}</button></p>`:'')+
-      (association.basis?.length?`<p class="association-basis">${basisHTML(association.basis)}</p>`:'')+
-      (candidates.length?`<p>${e(api.tx('{count} candidate messages',{count:candidates.length}))}</p><ol class="association-candidates">${candidates.map(candidate=>`<li><div class="association-basis">${basisHTML(candidate.basis)}</div>${[...new Set([candidate.source,...list(candidate.evidence_refs)])].filter(x=>typeof x==='string'&&x).map(referenceHTML).join('')}</li>`).join('')}</ol>`:'')+
-      `<details><summary>${e(t('Association evidence'))}${refs.length?' · '+refs.length:''}</summary><p>${e(t('Analysis rule'))}: <code>${e(data.rule_version||t('Not recorded'))}</code></p>${refs.map(referenceHTML).join('')}</details><p class="association-error" role="status" hidden></p>`;
-    host.insertBefore(section,host.querySelector('[data-node-fields]'));
+  const associationList=value=>Array.isArray(value)?value.filter(x=>typeof x==='string'&&x):[];
+  function associationReference(ref) {
+    const label=api.evidenceLabel?.(ref)||ref;
+    return `<div class="association-reference"><div>${label!==ref?`<strong>${e(label)}</strong>`:''}<code>${e(ref)}</code></div><span><button data-association-read="${e(ref)}">${e(t('Read saved evidence'))}</button><button data-association-graph="${e(ref)}">${e(t('Locate in graph'))}</button></span></div>`;
+  }
+  function associationActions(section) {
     section.querySelectorAll('[data-association-read],[data-association-graph]').forEach(button=>button.onclick=async()=>{
       const errorBox=section.querySelector('.association-error');errorBox.hidden=true;button.disabled=true;
       try {
@@ -320,9 +304,61 @@ window.AgentWorkspaceUI = (() => {
       } finally {if(button.isConnected)button.disabled=false;}
     });
   }
+  function describeAssociation(node, host) {
+    host.querySelector('[data-intent-association]')?.remove();
+    if(node?.kind!=='intent_diff')return;
+    const data=node.data||{}, association=data.association||{};
+    const states={bound:t('Bound to a tool call'),policy_scope:t('Explicit policy scope'),candidate:t('One candidate, binding unresolved'),ambiguous:t('Multiple candidate messages'),missing:t('Intent not captured for this scope')};
+    const bases={tool_call_id:t('Tool call identity'),explicit_policy_scope:t('Explicit policy scope'),validity_interval:t('Within policy validity interval'),same_agent:t('Same receiving agent'),missing_operation_binding:t('Operation binding not recorded'),message_not_after_effect:t('Message observed no later than the effect'),time_unknown:t('Capture order unknown')};
+    const list=associationList;
+    const refs=[...new Set(list(association.evidence_refs))];
+    const candidates=Array.isArray(association.candidates)?association.candidates:[];
+    const basisHTML=value=>list(value).map(b=>e(bases[b]||b)).join(' · ');
+    const referenceHTML=associationReference;
+    const section=document.createElement('section');
+    section.className='evidence-association';section.dataset.intentAssociation=association.status||'historical';
+    section.innerHTML=`<h4>${e(t('Intent association'))} <span>${e(states[association.status]||t('Recorded under an earlier analysis rule'))}</span></h4>`+
+      (data.tool_call_id?`<p>${e(t('Tool call'))}: <button data-association-graph="${e(data.tool_call_id)}">${e(data.tool_call_id)}</button></p>`:'')+
+      (association.basis?.length?`<p class="association-basis">${basisHTML(association.basis)}</p>`:'')+
+      (candidates.length?`<p>${e(api.tx('{count} candidate messages',{count:candidates.length}))}</p><ol class="association-candidates">${candidates.map(candidate=>`<li><div class="association-basis">${basisHTML(candidate.basis)}</div>${[...new Set([candidate.source,...list(candidate.evidence_refs)])].filter(x=>typeof x==='string'&&x).map(referenceHTML).join('')}</li>`).join('')}</ol>`:'')+
+      `<details><summary>${e(t('Association evidence'))}${refs.length?' · '+refs.length:''}</summary><p>${e(t('Analysis rule'))}: <code>${e(data.rule_version||t('Not recorded'))}</code></p>${refs.map(referenceHTML).join('')}</details><p class="association-error" role="status" hidden></p>`;
+    host.insertBefore(section,host.querySelector('[data-node-fields]'));
+    associationActions(section);
+  }
+  function describeEndpoint(node, host) {
+    host.querySelector('[data-endpoint-association]')?.remove();
+    const data=node?.data||{}, a=data.endpoint_association;
+    if(!a&&!(node?.subtype==='egress_payload'||data.source==='endpoint_capture'))return;
+    const section=document.createElement('section');section.className='evidence-association';section.dataset.endpointAssociation=a?.rule_version||'historical';
+    if(!a){
+      section.innerHTML=`<h4>${e(t('Outbound evidence'))}</h4><p>${e(t('Recorded under an earlier analysis rule'))}</p>`;
+      host.insertBefore(section,host.querySelector('[data-node-fields]'));return;
+    }
+    const content=a.content_match||{}, source=a.source_reads||{}, execution=a.execution||{};
+    const candidates=Array.isArray(source.candidates)?source.candidates:[];
+    const list=associationList;
+    const states={matched:t('Markers found in captured body'),capture_reported:t('Match reported by capture source'),not_matched:t('No marker match recorded'),unknown:t('Attribution unresolved'),path_unavailable:t('Source path not recorded'),candidate:t('One candidate, binding unresolved'),ambiguous:t('Multiple candidate reads'),partial:t('Some reads explicitly linked'),linked:t('Linked by capture reference and content version'),bound:t('Bound by capture operation reference'),conflicting:t('Capture reference conflicts with runtime evidence')};
+    const bases={structured_path_match:t('Exact structured path'),read_before_capture:t('Read observed before capture'),read_after_capture:t('Read observed after capture'),time_unknown:t('Capture order unknown'),time_precision_overlap:t('Timestamp precision overlaps'),path_context_unknown:t('Path context not recorded'),content_sha256_match:t('Saved content version matches'),capture_source_reference:t('Explicit source reference from capture'),capture_operation_reference:t('Explicit operation reference from capture'),same_run:t('Same run'),destination_match:t('Destination matches'),execution_reference_unavailable:t('Referenced operation unavailable'),execution_reference_conflict:t('Referenced operation conflicts'),execution_identity_missing:t('Operation identity not recorded')};
+    const basis=value=>list(value).map(b=>e(bases[b]||b)).join(' · ');
+    const values=value=>list(value).map(s=>`<code>${e(s)}</code>`).join(' · ');
+    const state=s=>e(states[s]||s||t('Not recorded'));
+    section.innerHTML=`<h4>${e(t('Outbound evidence'))}</h4>`+
+      `<div class="endpoint-stage" data-endpoint-stage="content"><h5>${e(t('Body content match'))}<span>${state(content.status)}</span></h5>${content.markers?.length?`<p>${values(content.markers)}</p>`:''}${content.paths?.length?`<p>${values(content.paths)}</p>`:''}</div>`+
+      `<div class="endpoint-stage" data-endpoint-stage="sources"><h5>${e(t('Source-read association'))}<span>${state(source.status)}</span></h5>`+
+      (candidates.length?`<details ${candidates.length<=3?'open':''}><summary>${e(api.tx('{count} source-read records',{count:candidates.length}))}</summary><ol class="association-candidates">${candidates.map(c=>`<li><p><code>${e(c.path)}</code> · ${c.status==='candidate'?e(t('Candidate source read')):state(c.status)}</p><p class="association-basis">${basis(c.basis)}</p>${list(c.evidence_refs).map(associationReference).join('')}</li>`).join('')}</ol></details>`:'')+
+      (source.unresolved_references?.length?`<details><summary>${e(t('Unresolved source references'))}</summary>${list(source.unresolved_references).map(associationReference).join('')}</details>`:'')+`</div>`+
+      `<div class="endpoint-stage" data-endpoint-stage="execution"><h5>${e(t('Execution attribution'))}<span>${state(execution.status)}</span></h5>`+
+      (execution.basis?.length?`<p class="association-basis">${basis(execution.basis)}</p>`:'')+
+      (execution.process_id?`<p>${e(t('Process'))}: <code>${e(execution.process_id)}</code></p>`:'')+
+      (execution.tool_call_id?`<p>${e(t('Tool call'))}: <button data-association-graph="${e(execution.tool_call_id)}">${e(execution.tool_call_id)}</button></p>`:'')+
+      list(execution.evidence_refs).map(associationReference).join('')+`</div>`+
+      `<details><summary>${e(t('Association evidence'))}</summary><dl><dt>${e(t('Analysis rule'))}</dt><dd><code>${e(a.rule_version)}</code></dd><dt>${e(t('Capture time'))}</dt><dd>${e(a.observed_at||t('Not recorded'))}</dd><dt>${e(t('Ingestion time'))}</dt><dd>${e(a.ingested_at||t('Not recorded'))}</dd></dl></details><p class="association-error" role="status" hidden></p>`;
+    host.insertBefore(section,host.querySelector('[data-node-fields]'));
+    associationActions(section);
+  }
   function readingState() {return {tab,dismissed};}
   function restoreReading(value) {
     if(value&&Object.hasOwn(panels,value.tab)){tab=value.tab;dismissed=value.dismissed===true;renderReader();}
   }
-  return {init,setRun,setNode,setEvents,setContent,show,setOverview,overviewError,setSource,setSession,sessionDirectory,setReturn,readingState,restoreReading,describeAssociation};
+  return {init,setRun,setNode,setEvents,setContent,show,setOverview,overviewError,setSource,setSession,sessionDirectory,setReturn,readingState,restoreReading,describeAssociation,describeEndpoint};
 })();

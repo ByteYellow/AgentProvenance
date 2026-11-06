@@ -19,6 +19,7 @@ Env:
   BLOCK_UPLOAD=1 (default; set 0 to observe-only without blocking)
 """
 import gzip, json, os, ssl, sys, time, urllib.request, urllib.error
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", "8088"))
@@ -45,6 +46,7 @@ def _body_facts(body):
 
 
 def _record(kind, method, path, body, extra=""):
+    observed_at = datetime.now(timezone.utc).isoformat(timespec="microseconds")
     _seq[0] += 1
     n = _seq[0]
     safe = "".join(c if c.isalnum() else "_" for c in path)[:50]
@@ -54,7 +56,7 @@ def _record(kind, method, path, body, extra=""):
     with open(os.path.join(DUMP, f"{n:03d}_{kind}_{safe}.meta.json"), "w") as f:
         json.dump({"seq": n, "kind": kind, "method": method, "path": path,
                    "host": UPSTREAM_HOST, "size": len(body or b""), "canary_hits": hits,
-                   "is_git_bundle": bundle}, f)
+                   "is_git_bundle": bundle, "observed_at": observed_at}, f)
     tag = "  [git-bundle]" if bundle else ""
     flag = f"  !! CANARIES: {hits}" if hits else ""
     print(f"[{time.strftime('%H:%M:%S')}] {kind:10s} {method} {path}  {len(body or b'')}B{tag}{flag}{extra}", flush=True)

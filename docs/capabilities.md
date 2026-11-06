@@ -187,7 +187,7 @@ against the normalized **RuntimeEffects** attributed to its scope. The verdicts:
 Tool contracts cover their own tool call. If one agent has a captured contract
 for call A and a sensitive event from call B without a matching contract, B keeps
 its own coverage gap and event references. Analysis records include `rule_version`;
-new analysis uses `agentprov.intent_scope/v3`. Signed bundle export includes the
+new analysis uses `agentprov.intent_scope/v4`. Signed bundle export includes the
 saved analysis and its graph references. Import preserves those records and their
 historical rule version; `intent diff` explicitly recomputes the local analysis.
 
@@ -226,6 +226,44 @@ delegation and peer agent structure). The
 instruction and a poisoned install. Historical signed analysis keeps its original
 rule; reanalysis distinguishes the tool-level violation from unresolved message
 attribution.
+
+### Endpoint Content and Execution Attribution
+
+`graph ingest-endpoint` records three independent stages under
+`endpoint_association` (`agentprov.endpoint_attribution/v2`):
+
+| Stage | Support and result |
+|---|---|
+| Body content match | Saved marker hits checked against the captured bytes; capture-reported hits are labeled separately when the original bytes do not contain the literal marker. |
+| Source-read association | Exact structured paths, capture order and available content versions produce all eligible reads. One read stays a candidate until explicitly linked. |
+| Execution attribution | A capture's `runtime_event_id` references a same-run network operation with a matching destination and compatible order; its saved process/tool identity supplies the binding. |
+
+Capture metadata can provide `observed_at` (RFC 3339, retaining its precision),
+`working_directory`, `runtime_event_id` and `source_read_events`. These are
+producer assertions: a reference must come from the capture path, not from a
+nearby event chosen during import. A source link additionally needs an exact
+saved byte-version match (`content_sha256` or `file_sha256`), a resolved path,
+a read strictly before the capture and a valid execution reference. This supports
+explicit cross-process transfers while retaining separate reader and sender identities.
+Missing or overlapping times, unresolved paths and multiple candidates remain visible.
+Ingestion time is stored separately from capture time.
+
+The graph keeps `sensitive_source_payload` for captured content/path matches,
+`candidate_sensitive_data_flow` for possible reads, `confirmed_sensitive_data_flow`
+for capture-linked reads, and `endpoint_execution_reference` for the operation
+reference. New edges carry the saved rule, status and evidence references, without
+an invented numeric confidence. Common run/process membership is a scope relation;
+it does not supply a missing content-transfer reference. Unbound model responses
+also stay independent of the run's first tool call.
+
+Select an endpoint event or payload to read **Body content match / Source-read
+association / Execution attribution** in the existing Dashboard detail. Signed
+bundles retain the frozen stages and original rule. During selective replay,
+excluding a supporting read or operation also excludes the dependent endpoint
+envelope; the preview lists that reason before download. Other selected reads
+remain available, and candidate sets are never reduced to manufacture a unique source.
+Historical Grok bundles keep their original analysis; new imports of raw endpoint
+dumps use this rule.
 
 ## Deployment Modes
 

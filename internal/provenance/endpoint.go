@@ -29,15 +29,19 @@ type EndpointResult struct {
 // endpointMeta is one record the capture proxy wrote for a request or response.
 // (proxy writes <seq>_<kind>_<path>.{meta.json,body.bin}; kind is req|resp|EXFIL-REQ.)
 type endpointMeta struct {
-	Seq         int      `json:"seq"`
-	Kind        string   `json:"kind"`
-	Method      string   `json:"method"`
-	Path        string   `json:"path"`
-	Host        string   `json:"host"` // upstream host the proxy forwarded this request to
-	Size        int      `json:"size"`
-	CanaryHits  []string `json:"canary_hits"`   // canary strings the proxy matched in this body
-	IsGitBundle bool     `json:"is_git_bundle"` // proxy-detected git-bundle marker
-	base        string   // path without .meta.json (to find the sibling .body.bin)
+	Seq              int      `json:"seq"`
+	Kind             string   `json:"kind"`
+	Method           string   `json:"method"`
+	Path             string   `json:"path"`
+	Host             string   `json:"host"` // upstream host the proxy forwarded this request to
+	Size             int      `json:"size"`
+	CanaryHits       []string `json:"canary_hits"`   // canary strings the proxy matched in this body
+	IsGitBundle      bool     `json:"is_git_bundle"` // proxy-detected git-bundle marker
+	ObservedAt       string   `json:"observed_at,omitempty"`
+	WorkingDirectory string   `json:"working_directory,omitempty"`
+	RuntimeEventID   string   `json:"runtime_event_id,omitempty"`
+	SourceReadEvents []string `json:"source_read_events,omitempty"`
+	base             string   // path without .meta.json (to find the sibling .body.bin)
 }
 
 // endpointDstHost is the destination the capture recorded for a request. It comes
@@ -103,6 +107,11 @@ func IngestEndpointDump(store ObjectStore, db *sql.DB, runID, dumpDir string) (E
 		if m.Kind == "" || m.Path == "" {
 			return res, fmt.Errorf("ingest endpoint: metadata %s requires kind and path", mp)
 		}
+		if m.ObservedAt != "" {
+			if _, _, ok := endpointTimeRange(m.ObservedAt); !ok {
+				return res, fmt.Errorf("ingest endpoint: metadata %s has an invalid observed_at", mp)
+			}
+		}
 		m.base = strings.TrimSuffix(mp, ".meta.json")
 		metas = append(metas, m)
 	}
@@ -159,16 +168,6 @@ func replaceEndpointDump(store ObjectStore, db *sql.Tx, runID string, metas []en
 
 	chatResponses := pairEndpointChatResponses(metas)
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	// Attribute the egress to the SAME session/process the kernel saw reading the
-	// files, so the exfil renders as one chain with the rest of the run's activity.
-	sessionID, processID, err := runSessionProcess(db, runID)
-	if err != nil {
-		return res, err
-	}
-	toolCallID, err := runToolCall(db, runID, processID)
-	if err != nil {
-		return res, err
-	}
 
 	for _, m := range metas {
 		switch {
@@ -193,7 +192,7 @@ func replaceEndpointDump(store ObjectStore, db *sql.Tx, runID string, metas []en
 			transportBlocked := m.Kind == "EXFIL-REQ" || m.Kind == "exfil-req"
 			class := classifyEndpointPayload(m.Path, body, m.CanaryHits, m.IsGitBundle)
 			blocked := transportBlocked && class.Sensitive
-			if err := ingestEgress(store, db, runID, m, body, blocked, sessionID, processID, toolCallID, now); err != nil {
+			if err := ingestEgress(store, db, runID, m, body, blocked, now); err != nil {
 				return res, err
 			}
 			res.Egress++
@@ -260,6 +259,7 @@ func isEndpointEgress(path string) bool {
 }
 
 func classifyEndpointPayload(path string, body []byte, canaries []string, isBundle bool) endpointPayloadClass {
+	canaries = dedupStrings(canaries)
 	p := strings.ToLower(strings.Split(path, "?")[0])
 	c := endpointPayloadClass{Kind: "vendor_storage"}
 	if strings.Contains(p, "/traces") {
@@ -339,7 +339,7 @@ func pathsContainingCanaries(files any, canaries []string) []string {
 		}
 	}
 	sort.Strings(paths)
-	return paths
+	return dedupStrings(paths)
 }
 
 // ingestChatCall objectifies the request + response bodies and builds an llm_call
@@ -375,7 +375,7 @@ func ingestChatCall(store ObjectStore, db *sql.Tx, runID string, m endpointMeta,
 
 // ingestEgress records a data-egress upload as a network_connect event (so the
 // intent diff sees an effect) plus a content-addressed descriptor of the payload.
-func ingestEgress(store ObjectStore, db *sql.Tx, runID string, m endpointMeta, body []byte, blocked bool, sessionID, processID, toolCallID, now string) error {
+func ingestEgress(store ObjectStore, db *sql.Tx, runID string, m endpointMeta, body []byte, blocked bool, now string) error {
 	sum := sha256.Sum256(body)
 	digest := "sha256:" + hex.EncodeToString(sum[:])
 	// Prefer the proxy's own detection (it saw the whole body); fall back to
@@ -386,12 +386,18 @@ func ingestEgress(store ObjectStore, db *sql.Tx, runID string, m endpointMeta, b
 	// upload -- the demo's smoking gun, now a first-class field on the egress node.
 	canaries := m.CanaryHits
 	class := classifyEndpointPayload(m.Path, body, canaries, isBundle)
+	association, err := buildEndpointAssociation(db, runID, m, body, class.CanaryPaths, now)
+	if err != nil {
+		return err
+	}
 	fields := map[string]any{
 		"kind": "egress_payload", "egress_kind": class.Kind, "path": m.Path, "bytes": len(body),
 		"payload_sha256": digest, "is_git_bundle": isBundle, "canary_hits": canaries,
 		"canary_paths": class.CanaryPaths, "codebase_payload": class.Codebase,
 		"upload_failure": class.UploadFailure, "blocked": blocked,
 		"policy_decision": ternary(blocked && class.Sensitive, "deny", "observe"),
+		"dst_host":        endpointDstHost(m), "endpoint_association": association,
+		"capture_context": map[string]any{"observed_at": m.ObservedAt, "working_directory": m.WorkingDirectory, "runtime_event_id": m.RuntimeEventID, "source_read_events": m.SourceReadEvents},
 	}
 	obj, err := store.PutExternalObject(ExternalObjectInput{
 		Type: "egress_payload", SourceID: fmt.Sprintf("endpoint/egress-%d", m.Seq), RunID: runID,
@@ -403,26 +409,27 @@ func ingestEgress(store ObjectStore, db *sql.Tx, runID string, m endpointMeta, b
 	// A network_connect event so intent.classifyEvent sees a real network effect
 	// with no declared intent (the codebase left the box, or was blocked leaving).
 	eventID := ids.New("evt")
-	payload, _ := json.Marshal(map[string]any{
-		"dst_host": endpointDstHost(m), "path": m.Path, "bytes": len(body),
-		"payload_sha256": digest, "is_git_bundle": isBundle, "canary_hits": canaries,
-		"canary_paths": class.CanaryPaths, "egress_kind": class.Kind, "codebase_payload": class.Codebase,
-		"upload_failure": class.UploadFailure, "blocked": blocked,
-		"policy_decision": ternary(blocked && class.Sensitive, "deny", "observe"),
-	})
-	// Attribute the egress to grok's session/process so it joins the same chain as
-	// the kernel's reads of those files.
+	fields["payload_ref"] = obj.Hash
+	payload, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	at := m.ObservedAt
+	if at == "" {
+		at = now
+	}
+	execution := association.Execution
 	if _, err := db.Exec(`INSERT INTO events (id, run_id, session_id, process_id, tool_call_id, source, event_type, payload, created_at)
-		VALUES (?, ?, ?, ?, ?, 'endpoint_capture', 'network_connect', ?, ?)`, eventID, runID, sessionID, processID, toolCallID, string(payload), now); err != nil {
+		VALUES (?, ?, ?, ?, ?, 'endpoint_capture', 'network_connect', ?, ?)`, eventID, runID, execution.SessionID, execution.ProcessID, execution.ToolCallID, string(payload), at); err != nil {
 		return err
 	}
 	// Link the egress event node to the payload evidence object.
-	if err := insertLLMEdge(db, runID, "runtime_event/"+eventID, obj.Hash, "endpoint_egress_payload", eventID, now); err != nil {
+	if err := insertLLMEdge(db, runID, "runtime_event/"+eventID, obj.Hash, "endpoint_egress_payload", eventID, at); err != nil {
 		return err
 	}
 	// Endpoint ordering alone supplies no model-to-execution anchor. Keep the
 	// upload and its policy evidence without attaching it to a nearby chat call.
-	if err := linkCanarySources(db, runID, eventID, obj.Hash, class.CanaryPaths, now); err != nil {
+	if err := linkCanarySources(db, runID, eventID, obj.Hash, association, at); err != nil {
 		return err
 	}
 	// A blocked codebase upload becomes a first-class deny in the risk -> response
@@ -442,78 +449,29 @@ func ingestEgress(store ObjectStore, db *sql.Tx, runID string, m endpointMeta, b
 	return nil
 }
 
-func linkCanarySources(db *sql.Tx, runID, sinkEventID, objectHash string, paths []string, now string) error {
-	for _, path := range paths {
+func linkCanarySources(db *sql.Tx, runID, sinkEventID, objectHash string, association endpointAssociation, now string) error {
+	if err := insertLLMEdge(db, runID, objectHash, "runtime_event/"+sinkEventID, "payload_egress_attempt", sinkEventID, now); err != nil {
+		return err
+	}
+	for _, path := range association.ContentMatch.Paths {
 		fileNode := "workspace_file/" + path
-		for _, edge := range []struct{ from, to, kind string }{
-			{fileNode, objectHash, "sensitive_source_payload"},
-			{objectHash, "runtime_event/" + sinkEventID, "payload_egress_attempt"},
-		} {
-			if err := insertLLMEdge(db, runID, edge.from, edge.to, edge.kind, sinkEventID, now); err != nil {
-				return err
-			}
-		}
-		var sourceEventID string
-		like := "%" + path + "%"
-		err := db.QueryRow(`SELECT id FROM events WHERE run_id = ? AND event_type IN ('secret_path','file_open','openat')
-			AND payload LIKE ? ORDER BY created_at DESC LIMIT 1`, runID, like).Scan(&sourceEventID)
-		if err != nil && err != sql.ErrNoRows {
+		if err := insertLLMEdge(db, runID, fileNode, objectHash, "sensitive_source_payload", sinkEventID, now); err != nil {
 			return err
 		}
-		if sourceEventID != "" {
-			for _, edge := range []struct{ from, to, kind string }{
-				{"runtime_event/" + sourceEventID, objectHash, "sensitive_source_payload"},
-				{"runtime_event/" + sourceEventID, "runtime_event/" + sinkEventID, "confirmed_sensitive_data_flow"},
-			} {
-				if err := insertLLMEdge(db, runID, edge.from, edge.to, edge.kind, sinkEventID, now); err != nil {
-					return err
-				}
-			}
+	}
+	for _, candidate := range association.SourceReads.Candidates {
+		kind := "candidate_sensitive_data_flow"
+		if candidate.Status == "linked" {
+			kind = "confirmed_sensitive_data_flow"
 		}
+		if err := insertLLMEdge(db, runID, "runtime_event/"+candidate.EventID, "runtime_event/"+sinkEventID, kind, sinkEventID, now); err != nil {
+			return err
+		}
+	}
+	if association.Execution.Status == "bound" {
+		return insertLLMEdge(db, runID, "runtime_event/"+association.Execution.EventID, "runtime_event/"+sinkEventID, "endpoint_execution_reference", sinkEventID, now)
 	}
 	return nil
-}
-
-// runSessionProcess returns the session and process the run's activity is under,
-// preferring the process the kernel saw reading a secret path (so the egress
-// attaches to the same node as the reads), falling back to any of the run's.
-func runSessionProcess(db *sql.Tx, runID string) (sessionID, processID string, err error) {
-	err = db.QueryRow(`SELECT COALESCE(process_id,''), COALESCE(session_id,'') FROM events
-		WHERE run_id = ? AND event_type = 'secret_path' AND COALESCE(process_id,'') != '' LIMIT 1`, runID).Scan(&processID, &sessionID)
-	if err != nil && err != sql.ErrNoRows {
-		return "", "", err
-	}
-	if sessionID == "" {
-		err = db.QueryRow(`SELECT p.id, p.session_id FROM processes p JOIN sessions s ON p.session_id = s.id
-			WHERE s.run_id = ? ORDER BY p.started_at LIMIT 1`, runID).Scan(&processID, &sessionID)
-		if err != nil && err != sql.ErrNoRows {
-			return "", "", err
-		}
-	}
-	if sessionID == "" {
-		err = db.QueryRow(`SELECT id FROM sessions WHERE run_id = ? LIMIT 1`, runID).Scan(&sessionID)
-		if err != nil && err != sql.ErrNoRows {
-			return "", "", err
-		}
-	}
-	return sessionID, processID, nil
-}
-
-func runToolCall(db *sql.Tx, runID, processID string) (string, error) {
-	var toolCallID string
-	if processID != "" {
-		err := db.QueryRow(`SELECT COALESCE(tool_call_id,'') FROM processes WHERE id = ?`, processID).Scan(&toolCallID)
-		if err != nil && err != sql.ErrNoRows {
-			return "", err
-		}
-	}
-	if toolCallID == "" {
-		err := db.QueryRow(`SELECT id FROM tool_calls WHERE run_id = ? ORDER BY started_at LIMIT 1`, runID).Scan(&toolCallID)
-		if err != nil && err != sql.ErrNoRows {
-			return "", err
-		}
-	}
-	return toolCallID, nil
 }
 
 // responseDeclaresToolCall reports whether the model's response (JSON or SSE)

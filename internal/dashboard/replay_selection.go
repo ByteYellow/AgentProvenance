@@ -338,12 +338,19 @@ func (s Server) resolveReplaySelection(ctx context.Context, input ReplaySelectio
 		}
 		records[id] = r
 	}
-	p.Records = make([]replayRecordDecision, 0, len(records))
 	for _, id := range ids {
 		r := records[id]
 		if seed := seeds[groups.root(id)]; r.Included && seed != "" {
 			r.Included, r.Reason, r.RelatedRecord = false, "linked_record_excluded", seed
 		}
+		records[id] = r
+	}
+	if err := s.excludeEndpointDependencies(ctx, selection.RunID, records); err != nil {
+		return nil, err
+	}
+	p.Records = make([]replayRecordDecision, 0, len(records))
+	for _, id := range ids {
+		r := records[id]
 		if !r.Included && r.Node != "" {
 			p.DeniedNodes[r.Node] = r.Reason
 		}
@@ -365,6 +372,54 @@ func (s Server) resolveReplaySelection(ctx context.Context, input ReplaySelectio
 	}
 	p.SHA256 = replayDigest(fingerprint)
 	return p, ctx.Err()
+}
+
+// Endpoint envelopes include their frozen candidate details. Withholding a
+// supporting record must withhold that envelope, not rewrite its hash or narrow
+// its candidates. The selection preview reports this before download.
+func (s Server) excludeEndpointDependencies(ctx context.Context, run string, records map[string]replayRecordDecision) error {
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,payload FROM events WHERE run_id=? AND source='endpoint_capture' ORDER BY id`, run)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, raw string
+		if err := rows.Scan(&id, &raw); err != nil {
+			return err
+		}
+		record := records["3/"+id]
+		if !record.Included {
+			continue
+		}
+		var payload struct {
+			Association struct {
+				SourceReads struct {
+					Candidates []struct {
+						EventID string `json:"event_id"`
+					} `json:"candidates"`
+				} `json:"source_reads"`
+				Execution struct {
+					EventID string `json:"event_id"`
+				} `json:"execution"`
+			} `json:"endpoint_association"`
+		}
+		if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+			return fmt.Errorf("endpoint selection %s: %w", id, err)
+		}
+		refs := []string{payload.Association.Execution.EventID}
+		for _, candidate := range payload.Association.SourceReads.Candidates {
+			refs = append(refs, candidate.EventID)
+		}
+		for _, ref := range refs {
+			if support, exists := records["3/"+ref]; exists && !support.Included {
+				record.Included, record.Reason, record.RelatedRecord = false, "endpoint_support_not_included", support.ID
+				records[record.ID] = record
+				break
+			}
+		}
+	}
+	return rows.Err()
 }
 
 func (p *replaySelectionPlan) addObjectAliases(ctx context.Context, s Server) error {

@@ -81,6 +81,10 @@
 .association-reference span { display:flex; flex-wrap:wrap; gap:6px; }
 .evidence-association details { margin-top:12px; }
 .evidence-association summary { cursor:pointer; }
+.endpoint-stage + .endpoint-stage { border-top:1px solid var(--line); margin-top:12px; padding-top:12px; }
+.endpoint-stage h5 { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:13px; margin:0; }
+.endpoint-stage h5 span { font-weight:400; color:var(--mut); }
+.endpoint-stage code { overflow-wrap:anywhere; }
 .association-error { color:var(--mut); }
 @media(max-width: 720px) {
   .session-composition, .inspection-tabs { padding: 10px 14px; }

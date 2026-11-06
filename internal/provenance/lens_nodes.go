@@ -38,7 +38,17 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 		ev.Path = payloadString(ev.Payload, "path", "file")
 		ev.Destination = payloadString(ev.Payload, "host", "dst_host", "dst_ip", "dst", "destination")
 		events[ev.NodeID] = ev
-		add(GraphLensNode{
+		var endpointData map[string]any
+		if ev.Source == "endpoint_capture" {
+			var payload struct {
+				Association map[string]any `json:"endpoint_association"`
+			}
+			if err := json.Unmarshal([]byte(ev.Payload), &payload); err != nil {
+				return nil, nil, fmt.Errorf("endpoint event %s: %w", ev.ID, err)
+			}
+			endpointData = payload.Association
+		}
+		node := GraphLensNode{
 			ID:      ev.NodeID,
 			Kind:    "runtime_event",
 			Subtype: ev.Type,
@@ -53,7 +63,11 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 				"runtime_process_node": identity.Process.ID, "process_instance_id": identity.Process.InstanceID,
 				"process_identity_basis": identity.Process.Basis,
 			},
-		})
+		}
+		if endpointData != nil {
+			node.Data["endpoint_association"] = endpointData
+		}
+		add(node)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
@@ -475,7 +489,7 @@ func addProvenanceObjectNodes(db *sql.DB, runID string, add func(GraphLensNode))
 			if hits, ok := meta["canary_hits"].([]any); ok && len(hits) > 0 {
 				label = fmt.Sprintf("%s: %d canary", label, len(hits))
 			}
-			add(GraphLensNode{
+			node := GraphLensNode{
 				ID: hash, Kind: "artifact", Subtype: "egress_payload", Label: label,
 				Risk: riskIf(stringFromAny(meta["policy_decision"]) == "deny"), TrustOrigin: "content_addressed",
 				Data: map[string]any{
@@ -483,7 +497,11 @@ func addProvenanceObjectNodes(db *sql.DB, runID string, add func(GraphLensNode))
 					"size_bytes": sizeBytes, "egress_kind": meta["egress_kind"], "canary_hits": meta["canary_hits"],
 					"canary_paths": meta["canary_paths"], "blocked": meta["blocked"], "policy_decision": meta["policy_decision"],
 				},
-			})
+			}
+			if association := meta["endpoint_association"]; association != nil {
+				node.Data["endpoint_association"] = association
+			}
+			add(node)
 			continue
 		}
 		// A SendMessage body is objectified for verifiability, but it should read

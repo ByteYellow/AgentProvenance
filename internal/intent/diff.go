@@ -33,7 +33,7 @@ const (
 // from a peer message -- the multi-agent lateral-influence finding.
 const FindingPeerMessageMismatch = "peer_message_intent_mismatch"
 
-const RuleVersion = "agentprov.intent_scope/v3"
+const RuleVersion = "agentprov.intent_scope/v4"
 
 type IntentCandidate struct {
 	ContractID   string   `json:"contract_id"`

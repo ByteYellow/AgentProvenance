@@ -103,21 +103,25 @@ func TestIngestEndpointDump(t *testing.T) {
 	if objs != 2 {
 		t.Errorf("egress_payload objects = %d, want 2", objs)
 	}
-	var flows, denies int
+	var flows, candidates, denies int
 	db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE run_id=? AND from_id='runtime_event/evt-secret-source' AND edge_type='confirmed_sensitive_data_flow'`, run).Scan(&flows)
+	db.QueryRow(`SELECT COUNT(*) FROM graph_edges WHERE run_id=? AND from_id='runtime_event/evt-secret-source' AND edge_type='candidate_sensitive_data_flow'`, run).Scan(&candidates)
 	db.QueryRow(`SELECT COUNT(*) FROM policy_decisions WHERE run_id=? AND rule_id='sensitive_context_egress_block'`, run).Scan(&denies)
-	if flows != 1 || denies != 1 {
-		t.Errorf("confirmed flow=%d deny=%d, want 1/1", flows, denies)
+	if flows != 0 || candidates != 1 || denies != 1 {
+		t.Errorf("confirmed flow=%d candidate=%d deny=%d, want 0/1/1", flows, candidates, denies)
 	}
 
-	// Endpoint captures have no kernel PID, but the ingest joins them to the
-	// process that produced the sensitive read. The summary lens must retain
-	// that source -> payload -> egress path without a run-wide fallback.
+	// Missing capture time and execution identity keep the read as a candidate.
+	// Content and deny evidence remain available without borrowing its process.
 	lens, err := BuildGraphLens(db, GraphLensOptions{RunID: run, Lens: "data-flow-taint", Limit: 100})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(lens.Edges)+len(lens.DerivedEdges) == 0 || !lensHasKind(lens, "egress_group") {
+	flowKinds := map[string]int{}
+	for _, edge := range append(lens.Edges, lens.DerivedEdges...) {
+		flowKinds[edge.EdgeType]++
+	}
+	if flowKinds["candidate_sensitive_data_flow"] != 1 || flowKinds["sensitive_source_payload"] != 1 || flowKinds["payload_egress_attempt"] != 2 || flowKinds["confirmed_sensitive_data_flow"] != 0 {
 		t.Fatalf("endpoint taint summary lost source-to-egress path: nodes=%d edges=%d derived=%d", len(lens.Nodes), len(lens.Edges), len(lens.DerivedEdges))
 	}
 

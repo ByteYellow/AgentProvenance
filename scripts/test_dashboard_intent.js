@@ -29,7 +29,7 @@ async (page) => {
   await page.locator('[data-inspection-tab="summary"]').click();
   check(await page.locator('.association-candidates li').count()===2,'returning from the reader preserves all candidates');
   await page.locator('[data-intent-association] summary').click();
-  check(await page.locator('[data-intent-association]').innerText().then(s=>s.includes('agentprov.intent_scope/v3')&&s.includes('runtime_event/ui-intent-secret')),'analysis rule and runtime evidence remain inspectable');
+  check(await page.locator('[data-intent-association]').innerText().then(s=>s.includes('agentprov.intent_scope/v4')&&s.includes('runtime_event/ui-intent-secret')),'analysis rule and runtime evidence remain inspectable');
   await page.locator('[data-node-fields] summary').click();
   check(await page.locator('[data-node-fields]').innerText().then(s=>s.includes('"candidates"')&&!s.includes('[object Object]')),'structured original fields are readable JSON');
   await page.locator('[data-investigation="search"]').click();

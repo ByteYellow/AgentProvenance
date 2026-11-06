@@ -155,6 +155,9 @@ func TestContextDashboardFixture(t *testing.T) {
 	addComparisonFixture(t, s)
 	addRetentionFixture(t, s)
 	addIntentAssociationFixture(t, db, paths)
+	for _, mode := range []string{"candidates", "bound", "missing"} {
+		addEndpointAssociationFixture(t, db, paths, "ui-endpoint-"+mode, mode)
+	}
 	addAccessComparisonFixture(t, Server{DB: db}, "ui-access-a")
 	addAccessComparisonFixture(t, Server{DB: db}, "ui-access-b")
 	if _, err := db.Exec(`UPDATE events SET payload=replace(payload,'RuntimeDefault','Unconfined') WHERE run_id='ui-access-b' AND event_type='access_control_config'`); err != nil {

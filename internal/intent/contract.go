@@ -130,14 +130,6 @@ func extractContracts(db intentQueryer, runID string, profiles map[string]Profil
 }
 
 func extractModelResponseContracts(db intentQueryer, runID string) ([]IntentContract, error) {
-	var rootAgent string
-	if err := db.QueryRow(`SELECT id FROM agents WHERE run_id = ? AND parent_agent_id = '' ORDER BY created_at,id LIMIT 1`, runID).Scan(&rootAgent); err != nil && err != sql.ErrNoRows {
-		return nil, err
-	}
-	var rootToolCall string
-	if err := db.QueryRow(`SELECT id FROM tool_calls WHERE run_id = ? ORDER BY started_at,id LIMIT 1`, runID).Scan(&rootToolCall); err != nil && err != sql.ErrNoRows {
-		return nil, err
-	}
 	rows, err := db.Query(`SELECT source_id, path, hash FROM provenance_objects
 		WHERE run_id = ? AND object_type = 'llm_message' AND source_id LIKE 'endpoint/resp-%' ORDER BY source_id`, runID)
 	if err != nil {
@@ -179,9 +171,9 @@ func extractModelResponseContracts(db intentQueryer, runID string) ([]IntentCont
 		seq := strings.TrimPrefix(sourceID, "endpoint/resp-")
 		out = append(out, IntentContract{
 			ID: "contract/endpoint-response-" + seq, Kind: ContractModelResponse,
-			ScopeAgent: rootAgent, ToolCallID: rootToolCall, Operation: "text_response",
-			Target:  "model returned text without declaring a tool call",
-			Profile: Profile{Operation: "text_response"}, Source: sourceID, Confidence: assertedConfidence,
+			Operation: "text_response",
+			Target:    "model returned text without declaring a tool call",
+			Profile:   Profile{Operation: "text_response"}, Source: hash, EvidenceRefs: []string{hash}, Confidence: assertedConfidence,
 		})
 	}
 	return out, rows.Err()

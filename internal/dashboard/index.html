@@ -1157,6 +1157,7 @@ function showDetail(id,explicit=false){
     `<div class="expandbar">${expandButtons}<button id="detail-session">${esc(tr('Locate session records'))}</button><button id="detail-content">${esc(tr('Saved content'))}</button></div>`+
     `<details data-node-fields${fieldsOpen?' open':''}><summary>${esc(tr("Original evidence fields"))}</summary><dl>${rows}</dl></details>`;
   window.AgentWorkspaceUI.describeAssociation(n,el);
+  window.AgentWorkspaceUI.describeEndpoint(n,el);
   window.AgentAccessControlUI.selectNode(n,el);
   $('#detail-session').onclick=()=>window.AgentContextUI.linkedSession(n.id);
   $('#detail-content').onclick=()=>{

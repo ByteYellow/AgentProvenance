@@ -238,6 +238,32 @@ func TestDiffSingleUnboundPeerIsStillCandidate(t *testing.T) {
 	}
 }
 
+func TestEndpointModelResponseDoesNotBorrowFirstTool(t *testing.T) {
+	db := attributionStore(t, false)
+	obj, err := (provenance.ObjectStore{DB: db, Paths: store.Paths{Root: t.TempDir()}}).PutExternalObject(provenance.ExternalObjectInput{
+		RunID: "run", Type: "llm_message", SourceID: "endpoint/resp-1", Payload: map[string]any{"direction": "response", "content": "done", "semantics": map[string]any{"intent_role": "primary", "declared_tool_call": false}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs, err := ExtractContracts(db, "run", DefaultProfiles())
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, c := range cs {
+		if c.Kind == ContractModelResponse {
+			found = true
+			if c.ToolCallID != "" || c.ScopeAgent != "" || !reflect.DeepEqual(c.EvidenceRefs, []string{obj.Hash}) {
+				t.Fatalf("unanchored model response acquired execution: %+v", c)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("unanchored response evidence was discarded")
+	}
+}
+
 func TestDiffRefusalDoesNotCoverOtherTool(t *testing.T) {
 	c := IntentContract{ID: "contract/refusal", Kind: ContractRefusal, ScopeAgent: "bob", ToolCallID: "refusal", Negative: true, Confidence: .5}
 	e := RuntimeEffect{Kind: EffectSecretRead, AgentID: "bob", ToolCallID: "independent", EventID: "secret", Confidence: 1}
