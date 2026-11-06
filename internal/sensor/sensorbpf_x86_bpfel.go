@@ -52,6 +52,9 @@ type sensorbpfSensorEvent struct {
 	RawExitStatus  uint32
 	Conn           uint64
 	ConnEpoch      uint64
+	TlsStream      uint64
+	TlsCall        uint64
+	TlsOffset      uint32
 	Daddr          uint32
 	Dport          uint16
 	_              [2]byte
@@ -59,7 +62,6 @@ type sensorbpfSensorEvent struct {
 	Comm           [16]uint8
 	Path           [256]uint8
 	Args           [512]uint8
-	_              [4]byte
 }
 
 type sensorbpfSslConnKey struct {
@@ -95,6 +97,18 @@ type sensorbpfSyscallCtx struct {
 	Reserved    uint8
 	Path        [256]int8
 	_           [4]byte
+}
+
+type sensorbpfTlsSequence struct {
+	Generation uint64
+	Calls      uint64
+}
+
+type sensorbpfTlsStreamKey struct {
+	Conn     sensorbpfSslConnKey
+	Epoch    uint64
+	Kind     uint32
+	Reserved uint32
 }
 
 // loadSensorbpf returns the embedded CollectionSpec for sensorbpf.
@@ -186,6 +200,7 @@ type sensorbpfMapSpecs struct {
 	SslReadBufs       *ebpf.MapSpec `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.MapSpec `ebpf:"ssl_read_ex_bufs"`
 	SyscallCalls      *ebpf.MapSpec `ebpf:"syscall_calls"`
+	TlsSequences      *ebpf.MapSpec `ebpf:"tls_sequences"`
 }
 
 // sensorbpfObjects contains all objects after they have been loaded into the kernel.
@@ -219,6 +234,7 @@ type sensorbpfMaps struct {
 	SslReadBufs       *ebpf.Map `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.Map `ebpf:"ssl_read_ex_bufs"`
 	SyscallCalls      *ebpf.Map `ebpf:"syscall_calls"`
+	TlsSequences      *ebpf.Map `ebpf:"tls_sequences"`
 }
 
 func (m *sensorbpfMaps) Close() error {
@@ -235,6 +251,7 @@ func (m *sensorbpfMaps) Close() error {
 		m.SslReadBufs,
 		m.SslReadExBufs,
 		m.SyscallCalls,
+		m.TlsSequences,
 	)
 }
 

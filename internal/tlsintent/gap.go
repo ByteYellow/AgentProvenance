@@ -2,13 +2,14 @@ package tlsintent
 
 import "sort"
 
-const CaptureRule = "agentprov.tls_reassembly/v2"
+const CaptureRule = "agentprov.tls_reassembly/v3"
 
 type CaptureIntegrity struct {
-	Rule     string `json:"rule"`
-	State    string `json:"state"`
-	Reason   string `json:"reason"`
-	DataKind string `json:"data_kind"`
+	Rule     string         `json:"rule"`
+	State    string         `json:"state"`
+	Reason   string         `json:"reason"`
+	DataKind string         `json:"data_kind"`
+	Position *ChunkPosition `json:"position,omitempty"`
 }
 
 func (c *CaptureIntegrity) Incomplete() bool {
@@ -16,16 +17,20 @@ func (c *CaptureIntegrity) Incomplete() bool {
 }
 
 const (
-	GapCaptureLimit = "capture_limit"
-	GapBufferLimit  = "reassembly_limit"
-	GapHTTP2Frames  = "http2_frame_sequence"
-	GapHTTP2Push    = "unsupported_header_frame"
-	GapHPACK        = "hpack_decode_failed"
-	GapStreamLimit  = "connection_state_evicted"
-	DataHTTPBody    = "http_body"
-	DataTLSFragment = "tls_fragment"
-	DataHPACK       = "hpack_fragment"
-	DataHTTP2Body   = "http2_data_fragment"
+	GapCaptureLimit  = "capture_limit"
+	GapBufferLimit   = "reassembly_limit"
+	GapHTTP2Frames   = "http2_frame_sequence"
+	GapHTTP2Push     = "unsupported_header_frame"
+	GapHPACK         = "hpack_decode_failed"
+	GapStreamLimit   = "connection_state_evicted"
+	GapCallSequence  = "tls_call_sequence"
+	GapChunkSequence = "tls_chunk_sequence"
+	GapSequenceReset = "tls_sequence_reset"
+	GapChunkMetadata = "invalid_tls_chunk_metadata"
+	DataHTTPBody     = "http_body"
+	DataTLSFragment  = "tls_fragment"
+	DataHPACK        = "hpack_fragment"
+	DataHTTP2Body    = "http2_data_fragment"
 )
 
 func (r *Reassembler) connectionGap(c Chunk) string {
@@ -56,8 +61,13 @@ func (r *Reassembler) fragment(c Chunk, data []byte, reason, kind string) []Mess
 	if _, known := r.h2Conns[connKey{c.PID, c.Conn}]; known {
 		protocol = ProtoH2
 	}
+	var position *ChunkPosition
+	if c.Position != nil {
+		copy := *c.Position
+		position = &copy
+	}
 	return []Message{{PID: c.PID, Conn: c.Conn, Direction: c.Direction, Protocol: protocol,
-		Body: append([]byte(nil), data...), Truncated: true, CaptureGap: reason, DataKind: kind}}
+		Body: append([]byte(nil), data...), Truncated: true, CaptureGap: reason, DataKind: kind, Position: position}}
 }
 
 // Preserve retained bodies, unfinished HPACK blocks and frame bytes separately;

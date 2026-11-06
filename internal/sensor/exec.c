@@ -35,6 +35,7 @@ char LICENSE[] SEC("license") = "GPL";
 #define EVENT_SSL_RELEASE 14
 #define EVENT_SYSCALL_RESULT 15
 #define EVENT_THREAD_EXIT 16
+#define EVENT_SSL_CHECKPOINT 17
 #define AF_INET 2
 
 // argv is captured as fixed-size slots (constant offsets keep the BPF verifier
@@ -63,6 +64,9 @@ struct sensor_event {
 	__u32 raw_exit_status;
 	__u64 conn;      // tls: the SSL* pointer identifying the connection (reassembly key)
 	__u64 conn_epoch; // OpenSSL capture generation; zero for untracked TLS stacks
+	__u64 tls_stream; // sequence-map generation, independent of TLS object lifetime
+	__u64 tls_call;   // incremented before emitting ANY chunk, including failed captures
+	__u32 tls_offset;
 	__u32 daddr;     // connect: dst IPv4 (net order); tls: valid bytes in this chunk
 	__u16 dport;     // connect: dst port (net order); tls: 1 if the message was truncated at the chunk cap
 	__s32 exit_code; // exit: process exit code; tls: total plaintext length of the call
@@ -125,6 +129,23 @@ struct {
 	__type(key, struct ssl_conn_key);
 	__type(value, __u64);
 } ssl_epochs SEC(".maps");
+
+struct tls_stream_key {
+	struct ssl_conn_key conn;
+	__u64 epoch;
+	__u32 kind;
+	__u32 reserved;
+};
+struct tls_sequence {
+	__u64 generation;
+	__u64 calls;
+};
+struct {
+	__uint(type, BPF_MAP_TYPE_LRU_HASH);
+	__uint(max_entries, 16384);
+	__type(key, struct tls_stream_key);
+	__type(value, struct tls_sequence);
+} tls_sequences SEC(".maps");
 
 // argv_scratch stashes a process's argv (captured at sys_enter_execve) keyed by
 // pid, so the successful sched_process_exec emit can attach the real command
@@ -256,6 +277,8 @@ static __always_inline void fill_common(struct sensor_event *e) {
 	e->syscall_kind = 0;
 	e->raw_exit_status = 0;
 	e->conn_epoch = 0;
+	e->tls_stream = e->tls_call = 0;
+	e->tls_offset = 0;
 #if defined(__TARGET_ARCH_x86)
 	capture_cgroup_identity(task, e->cgroup_id);
 #endif
@@ -780,9 +803,9 @@ int BPF_UPROBE(handle_getaddrinfo, const char *node) {
 // Boundary tracing: uprobes on SSL_write/SSL_read and the modern *_ex variants
 // capture the plaintext an agent sends/receives over TLS (the LLM
 // request/response) without instrumenting it. Attached to a libssl path only
-// when --ssl-lib is given. We emit the FULL buffer as ordered SSL_CHUNK-sized
-// chunks keyed by the SSL* pointer (conn); userspace reassembles them into
-// complete HTTP/1.1 or HTTP/2 messages.
+// when --ssl-lib is given or automatic discovery attaches the library. Each
+// call emits at most SSL_CHUNK * SSL_MAX_CHUNKS bytes. Call numbers and offsets
+// let userspace detect missing chunks before interpreting HTTP/HPACK state.
 static __always_inline __u64 ssl_epoch(__u64 conn, int rotate, int release) {
 	if (!conn)
 		return 0;
@@ -816,7 +839,76 @@ static __always_inline __u64 ssl_epoch(__u64 conn, int rotate, int release) {
 	return epoch;
 }
 
+static __always_inline void tls_stream_key_init(struct tls_stream_key *key, __u64 conn, __u64 epoch, __u32 kind) {
+	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+	key->conn.start = BPF_CORE_READ(task, group_leader, start_time);
+	key->conn.conn = conn;
+	key->conn.pid = bpf_get_current_pid_tgid() >> 32;
+	key->epoch = epoch;
+	key->kind = kind;
+}
+
+static __always_inline struct tls_sequence *tls_sequence_for(struct tls_stream_key *key) {
+	struct tls_sequence *saved = bpf_map_lookup_elem(&tls_sequences, key);
+	if (saved)
+		return saved;
+	struct tls_sequence fresh = {.generation = bpf_ktime_get_ns()};
+	bpf_map_update_elem(&tls_sequences, key, &fresh, BPF_NOEXIST);
+	return bpf_map_lookup_elem(&tls_sequences, key);
+}
+
+static __always_inline __u64 next_tls_call(__u32 kind, __u64 conn, __u64 epoch, __u64 *generation) {
+	struct tls_stream_key key = {};
+	tls_stream_key_init(&key, conn, epoch, kind);
+	struct tls_sequence *saved = tls_sequence_for(&key);
+	if (!saved)
+		return 0;
+	*generation = saved->generation;
+	return __sync_fetch_and_add(&saved->calls, 1) + 1;
+}
+
+static __always_inline void missing_tls_call(__u32 kind, __u64 conn, __u64 epoch) {
+	__u64 generation = 0;
+	if (conn)
+		next_tls_call(kind, conn, epoch, &generation);
+	count_drop();
+}
+
+static __always_inline void emit_ssl_checkpoint(__u64 conn, __u64 epoch, __u32 kind) {
+	struct tls_stream_key key = {};
+	tls_stream_key_init(&key, conn, epoch, kind);
+	struct tls_sequence *saved = bpf_map_lookup_elem(&tls_sequences, &key);
+	if (!saved || !saved->calls)
+		return;
+	__u64 generation = saved->generation, calls = saved->calls;
+	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	if (!e) {
+		count_drop();
+		return;
+	}
+	fill_common(e);
+	e->kind = EVENT_SSL_CHECKPOINT;
+	e->conn = conn;
+	e->conn_epoch = epoch;
+	e->tls_stream = generation;
+	e->tls_call = calls;
+	e->dport = kind == EVENT_SSL_READ;
+	e->daddr = e->exit_code = 0;
+	e->path[0] = e->args[0] = 0;
+	bpf_ringbuf_submit(e, 0);
+}
+
 static __always_inline void emit_ssl_boundary(__u64 conn, int release) {
+	// A high-water mark makes a lost final call visible even when no later
+	// plaintext arrives. The following boundary still carries the object epoch.
+	struct tls_stream_key key = {};
+	tls_stream_key_init(&key, conn, 0, 0);
+	__u64 *old = bpf_map_lookup_elem(&ssl_epochs, &key.conn);
+	if (old) {
+		__u64 old_epoch = *old;
+		emit_ssl_checkpoint(conn, old_epoch, EVENT_SSL);
+		emit_ssl_checkpoint(conn, old_epoch, EVENT_SSL_READ);
+	}
 	__u64 epoch = ssl_epoch(conn, !release, release);
 	if (!epoch)
 		return;
@@ -856,6 +948,12 @@ int BPF_UPROBE(handle_ssl_release, void *ssl) {
 }
 
 static __always_inline void emit_ssl_chunks(__u32 kind, __u64 conn, __u64 epoch, const char *buf, int total) {
+	__u64 generation = 0;
+	__u64 call = next_tls_call(kind, conn, epoch, &generation);
+	if (!call) {
+		count_drop();
+		return;
+	}
 	for (int i = 0; i < SSL_MAX_CHUNKS; i++) {
 		int off = i * SSL_CHUNK;
 		if (off >= total)
@@ -877,6 +975,9 @@ static __always_inline void emit_ssl_chunks(__u32 kind, __u64 conn, __u64 epoch,
 		e->exit_code = total;
 		fill_common(e);
 		e->conn_epoch = epoch;
+		e->tls_stream = generation;
+		e->tls_call = call;
+		e->tls_offset = off;
 		e->args[0] = 0;
 		if (bpf_probe_read_user(&e->path, len, buf + off)) {
 			bpf_ringbuf_discard(e, 0);
@@ -905,8 +1006,12 @@ int handle_go_tls_write(struct pt_regs *ctx) {
 	__u64 conn = ctx->ax;
 	const char *buf = (const char *)ctx->bx;
 	__u64 len = ctx->cx;
-	if (!buf || len == 0 || len > (1u << 20))
+	if (!buf || len == 0)
 		return 0;
+	if (len > (1u << 20)) {
+		missing_tls_call(EVENT_SSL, conn, 0);
+		return 0;
+	}
 	emit_ssl_chunks(EVENT_SSL, conn, 0, buf, (int)len);
 	return 0;
 }
@@ -989,12 +1094,12 @@ int handle_go_tls_read_return(struct pt_regs *ctx) {
 	if (n <= 0)
 		return 0;
 	if ((__u64)n > state.len || n > 0x7fffffff) {
-		count_drop();
+		missing_tls_call(EVENT_SSL_READ, state.conn, 0);
 		return 0;
 	}
 	if (state.stack_buf_offset) {
 		if (state.stack_buf_offset > hi - lo) {
-			count_drop();
+			missing_tls_call(EVENT_SSL_READ, state.conn, 0);
 			return 0;
 		}
 		state.buf = hi - state.stack_buf_offset;
@@ -1011,6 +1116,8 @@ SEC("uprobe/go_tls_write")
 int BPF_UPROBE(handle_go_tls_write, void *conn, const void *buf, __u64 num) {
 	if (buf && num > 0 && num <= 0x7fffffff)
 		emit_ssl_chunks(EVENT_SSL, (__u64)conn, 0, (const char *)buf, (int)num);
+	else if (buf && num > 0x7fffffff)
+		missing_tls_call(EVENT_SSL, (__u64)conn, 0);
 	return 0;
 }
 #endif
@@ -1021,8 +1128,12 @@ int BPF_UPROBE(handle_go_tls_write, void *conn, const void *buf, __u64 num) {
 // ignore the *written out-param. num is size_t; clamp before the signed emit.
 SEC("uprobe/SSL_write_ex")
 int BPF_UPROBE(handle_ssl_write_ex, void *ssl, const void *buf, __u64 num) {
-	if (!buf || num == 0 || num > (1u << 20))
+	if (!buf || num == 0)
 		return 0;
+	if (num > (1u << 20)) {
+		missing_tls_call(EVENT_SSL, (__u64)ssl, ssl_epoch((__u64)ssl, 0, 0));
+		return 0;
+	}
 	emit_ssl_chunks(EVENT_SSL, (__u64)ssl, ssl_epoch((__u64)ssl, 0, 0), (const char *)buf, (int)num);
 	return 0;
 }
@@ -1035,12 +1146,12 @@ static __always_inline void push_ssl_read(void *map, struct ssl_read_ctx *call) 
 	if (!stack || stack->task_start != start) {
 		struct ssl_read_stack fresh = {.task_start = start};
 		if (bpf_map_update_elem(map, &id, &fresh, BPF_ANY)) {
-			count_drop();
+			missing_tls_call(EVENT_SSL_READ, call->ssl, call->epoch);
 			return;
 		}
 		stack = bpf_map_lookup_elem(map, &id);
 		if (!stack) {
-			count_drop();
+			missing_tls_call(EVENT_SSL_READ, call->ssl, call->epoch);
 			return;
 		}
 	}
@@ -1048,12 +1159,12 @@ static __always_inline void push_ssl_read(void *map, struct ssl_read_ctx *call) 
 	// Retain skipped depth so an overflowing inner return cannot pop an outer
 	// buffer. Saturation poisons this thread's stack until exit instead of wrap.
 	if (depth == ~0u) {
-		count_drop();
+		missing_tls_call(EVENT_SSL_READ, call->ssl, call->epoch);
 		return;
 	}
 	stack->depth = depth + 1;
 	if (depth >= SSL_READ_DEPTH) {
-		count_drop();
+		missing_tls_call(EVENT_SSL_READ, call->ssl, call->epoch);
 		return;
 	}
 	stack->frames[depth] = *call;
@@ -1101,7 +1212,7 @@ int BPF_URETPROBE(handle_ssl_read_exit, int ret) {
 	if (!pop_ssl_read(&ssl_read_bufs, &c) || ret <= 0)
 		return 0;
 	if (!c.buf || (__u64)ret > c.capacity) {
-		count_drop();
+		missing_tls_call(EVENT_SSL_READ, c.ssl, c.epoch);
 		return 0;
 	}
 	emit_ssl_chunks(EVENT_SSL_READ, c.ssl, c.epoch, (const char *)c.buf, ret);
@@ -1132,7 +1243,7 @@ int BPF_URETPROBE(handle_ssl_read_ex_exit, int ret) {
 	__u64 n = 0;
 	if (!c.buf || bpf_probe_read_user(&n, sizeof(n), (void *)c.readbytes) ||
 		n > c.capacity || n > (1u << 20)) {
-		count_drop();
+		missing_tls_call(EVENT_SSL_READ, c.ssl, c.epoch);
 		return 0;
 	}
 	if (n)

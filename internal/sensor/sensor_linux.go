@@ -52,6 +52,7 @@ const (
 	eventSSLRelease    = 14
 	eventSyscallResult = 15
 	eventThreadExit    = 16
+	eventSSLCheckpoint = 17
 )
 
 type sensorTracepoint struct {
@@ -281,19 +282,8 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 			default:
 			}
 		}
-		if e.Kind == eventSSL || e.Kind == eventSSLRead {
-			dir := tlsintent.Request
-			if e.Kind == eventSSLRead {
-				dir = tlsintent.Response
-			}
-			n := int(e.Daddr) // valid bytes in this chunk's path[]
-			if n < 0 || n > len(e.Path) {
-				n = len(e.Path)
-			}
-			for _, msg := range reasm.Add(tlsintent.Chunk{
-				PID: e.Pid, Conn: e.Conn, ProcessStartNS: e.ProcessStartNs, Epoch: e.ConnEpoch, Direction: dir,
-				Data: append([]byte(nil), e.Path[:n]...), Truncated: e.Dport == 1,
-			}) {
+		if e.Kind == eventSSL || e.Kind == eventSSLRead || e.Kind == eventSSLCheckpoint {
+			for _, msg := range reasm.Add(tlsChunk(e)) {
 				emit(tlsMessageMap(msg, e, resolver))
 			}
 			reportTLSLoss(false)
@@ -325,6 +315,22 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 			emit(m)
 		}
 	}
+}
+
+func tlsChunk(e sensorbpfSensorEvent) tlsintent.Chunk {
+	dir := tlsintent.Request
+	if e.Kind == eventSSLRead || (e.Kind == eventSSLCheckpoint && e.Dport == 1) {
+		dir = tlsintent.Response
+	}
+	c := tlsintent.Chunk{PID: e.Pid, Conn: e.Conn, ProcessStartNS: e.ProcessStartNs, Epoch: e.ConnEpoch,
+		Direction: dir, Checkpoint: e.Kind == eventSSLCheckpoint,
+		Position: &tlsintent.ChunkPosition{StreamID: e.TlsStream, CallSequence: e.TlsCall,
+			Offset: e.TlsOffset, TotalBytes: uint32(e.ExitCode)}}
+	if !c.Checkpoint {
+		c.Data = append([]byte(nil), e.Path[:min(e.Daddr, uint32(len(e.Path)))]...)
+		c.Truncated = e.Dport == 1
+	}
+	return c
 }
 
 // tlsMessageMap turns a reassembled HTTP/1.1 LLM message into the normalized
@@ -359,7 +365,11 @@ func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgro
 		if kind == "" {
 			kind = tlsintent.DataHTTPBody
 		}
-		ev["capture"] = map[string]any{"rule": tlsintent.CaptureRule, "state": "incomplete", "reason": msg.CaptureGap, "data_kind": kind}
+		capture := map[string]any{"rule": tlsintent.CaptureRule, "state": "incomplete", "reason": msg.CaptureGap, "data_kind": kind}
+		if msg.Position != nil {
+			capture["position"] = msg.Position
+		}
+		ev["capture"] = capture
 		if kind != tlsintent.DataHTTPBody {
 			ev["data"] = base64.StdEncoding.EncodeToString(msg.Body)
 			ev["data_encoding"] = "base64"

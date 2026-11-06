@@ -74,6 +74,9 @@ func (r *Reassembler) discardConnection(key connKey) {
 		k := streamKey{key.pid, key.conn, dir}
 		if s := r.streams[k]; s != nil {
 			n := s.buf.Len()
+			if s.capture != nil {
+				n += len(s.capture.pending)
+			}
 			if s.h2 != nil {
 				n += s.h2.retainedBytes()
 			}

@@ -26,9 +26,9 @@ static void exchange(SSL *ssl, const char *data, int n, int ex) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 4) return 2;
+    if (argc != 4 && argc != 5) return 2;
     int port = atoi(argv[1]), total = atoi(argv[2]), ex = atoi(argv[3]);
-    if (total < 4095 || total > 8192) return 2;
+    if (total < 4095 || total > 1048577) return 2;
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in addr = {.sin_family = AF_INET, .sin_port = htons(port)};
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -42,7 +42,17 @@ int main(int argc, char **argv) {
     char *request = malloc((size_t)total + 1);
     if (!request || snprintf(request, (size_t)total + 1, format, body) != header) return 7;
     memset(request + header, 'x', (size_t)body);
+    if (argc == 5) {
+        puts("ready");
+        fflush(stdout);
+        if (getchar() == EOF) return 8;
+    }
     exchange(ssl, request, total, ex);
+    if (argc == 5) {
+        puts("first-complete");
+        fflush(stdout);
+        if (getchar() == EOF) return 8;
+    }
     const char *next = "GET /after HTTP/1.1\r\nHost: localhost\r\n\r\n";
     exchange(ssl, next, (int)strlen(next), ex);
     printf("%d\n", body);

@@ -22,10 +22,28 @@ func tlsCaptureIntegrity(raw map[string]any) *tlsintent.CaptureIntegrity {
 	if !ok {
 		return &tlsintent.CaptureIntegrity{State: "unresolved", Reason: "invalid_capture_metadata"}
 	}
-	return &tlsintent.CaptureIntegrity{
+	capture := &tlsintent.CaptureIntegrity{
 		Rule: boundedHTTPText(stringAt(fields, "rule"), 128), State: boundedHTTPText(stringAt(fields, "state"), 32),
 		Reason: boundedHTTPText(stringAt(fields, "reason"), 128), DataKind: boundedHTTPText(stringAt(fields, "data_kind"), 64),
 	}
+	if position, ok := fields["position"].(map[string]any); ok {
+		// Copy only the small typed position contract, retaining 64-bit identity
+		// as decimal strings across JSON and browser consumers.
+		data, err := json.Marshal(map[string]any{
+			"stream_id":     boundedHTTPText(stringAt(position, "stream_id"), 20),
+			"call_sequence": boundedHTTPText(stringAt(position, "call_sequence"), 20),
+			"offset":        position["offset"], "total_bytes": position["total_bytes"],
+			"checkpoint": position["checkpoint"] == true,
+		})
+		var p tlsintent.ChunkPosition
+		if err == nil && position["offset"] != nil && position["total_bytes"] != nil &&
+			json.Unmarshal(data, &p) == nil && p.StreamID != 0 && p.CallSequence != 0 &&
+			p.Offset <= tlsintent.CallCaptureLimit && p.TotalBytes <= 0x7fffffff &&
+			((p.Checkpoint && p.Offset == 0 && p.TotalBytes == 0) || (!p.Checkpoint && p.TotalBytes > p.Offset)) {
+			capture.Position = &p
+		}
+	}
+	return capture
 }
 
 // capturedTLSMeta prefers the sensor's parsed fields. For reassembled captures,

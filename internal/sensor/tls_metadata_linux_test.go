@@ -5,6 +5,7 @@ package sensor
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +27,14 @@ func TestTLSMessageMapPreservesUndecodedBinaryFragment(t *testing.T) {
 	capture, _ := got["capture"].(map[string]any)
 	if capture["rule"] != tlsintent.CaptureRule || capture["reason"] != tlsintent.GapHPACK || capture["data_kind"] != tlsintent.DataHPACK {
 		t.Fatalf("capture boundary missing: %+v", got)
+	}
+	msg.DataKind = tlsintent.DataTLSFragment
+	msg.Position = &tlsintent.ChunkPosition{StreamID: 123456789012345678, CallSequence: 19, Offset: 768, TotalBytes: 4096}
+	got = tlsMessageMap(msg, sensorbpfSensorEvent{Pid: 42, CgroupId: 7}, r)
+	raw, err := json.Marshal(got["capture"])
+	var metadata tlsintent.CaptureIntegrity
+	if err != nil || json.Unmarshal(raw, &metadata) != nil || metadata.Position == nil || *metadata.Position != *msg.Position {
+		t.Fatalf("fragment position changed through JSON: %s %v", raw, err)
 	}
 }
 

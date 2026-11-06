@@ -34,10 +34,9 @@ const (
 	ProtoH2     = "h2" // parsed from h2 frames + HPACK (see http2.go)
 )
 
-// Chunk is one ordered segment of TLS plaintext from the eBPF probe. A large
-// request/response arrives as several Chunks with increasing arrival order on the
-// same process lifetime, TLS object and capture epoch. Producers without an
-// epoch retain their existing best-effort address-based parsing.
+// Chunk is one captured segment of TLS plaintext. Native Position metadata
+// checks call continuity and byte order within a process/connection lifetime.
+// Producers without positions retain best-effort ordered-stream parsing.
 type Chunk struct {
 	PID            uint32
 	Conn           uint64 // TLS object address; reusable across connection lifetimes
@@ -46,9 +45,11 @@ type Chunk struct {
 	Direction      string // Request or Response
 	Data           []byte
 	Truncated      bool // the kernel dropped bytes past its capture cap for this call
+	Position       *ChunkPosition
+	Checkpoint     bool // producer's last call number at a lifecycle boundary; no data
 }
 
-// Message is a fully reassembled HTTP/1.1 message plus minimal LLM semantics.
+// Message holds a decoded HTTP message or an explicitly incomplete fragment.
 type Message struct {
 	PID            uint32
 	Conn           uint64
@@ -66,9 +67,10 @@ type Message struct {
 	Headers map[string]string
 	Body    []byte // decoded body: dechunked and, for SSE, the joined data: payloads
 
-	Truncated  bool   // some bytes were dropped, so Body may be incomplete
-	CaptureGap string // why framing or retained content is incomplete
-	DataKind   string // empty/http_body for decoded bodies; otherwise an undecoded fragment
+	Truncated  bool           // some bytes were dropped, so Body may be incomplete
+	CaptureGap string         // why framing or retained content is incomplete
+	DataKind   string         // empty/http_body for decoded bodies; otherwise an undecoded fragment
+	Position   *ChunkPosition // position of a contiguous raw TLS fragment, not a decoded HTTP body
 
 	// Minimal LLM semantics (best-effort; empty when not an LLM call).
 	Model    string
@@ -100,11 +102,13 @@ type connKey struct {
 }
 
 type stream struct {
-	buf      bytes.Buffer
-	isH2     bool
-	h2       *h2Parser // set once the stream is known to be h2
-	lastUsed uint64
-	gap      string
+	buf         bytes.Buffer
+	isH2        bool
+	h2          *h2Parser // set once the stream is known to be h2
+	lastUsed    uint64
+	gap         string
+	capture     *captureSequence
+	unsequenced bool
 }
 
 const defaultMaxBytes = 1 << 20 // 1 MiB per stream
@@ -114,8 +118,7 @@ func NewReassembler() *Reassembler {
 	return &Reassembler{streams: map[streamKey]*stream{}, h2Conns: map[connKey]struct{}{}, MaxBytes: defaultMaxBytes}
 }
 
-// Add feeds one Chunk and returns every message that completed as a result
-// (usually zero or one).
+// Add returns completed messages and any fragments released after a capture gap.
 func (r *Reassembler) Add(c Chunk) (messages []Message) {
 	if r.streams == nil {
 		r.streams = map[streamKey]*stream{}
@@ -123,7 +126,7 @@ func (r *Reassembler) Add(c Chunk) (messages []Message) {
 	if r.h2Conns == nil {
 		r.h2Conns = map[connKey]struct{}{}
 	}
-	if len(c.Data) == 0 && !c.Truncated {
+	if len(c.Data) == 0 && !c.Truncated && !c.Checkpoint {
 		return nil
 	}
 	if !r.acceptConnection(c) {
@@ -144,6 +147,21 @@ func (r *Reassembler) Add(c Chunk) (messages []Message) {
 	}
 	r.tick++
 	s.lastUsed = r.tick
+	if c.Checkpoint {
+		return r.captureCheckpoint(c, s)
+	}
+	if c.Position != nil {
+		return r.addPositioned(c, s)
+	}
+	if s.capture != nil {
+		messages = append(messages, r.invalidateCapture(c, s, GapCallSequence)...)
+		messages = append(messages, r.flushCapture(c, s)...)
+	}
+	s.unsequenced = true
+	return append(messages, r.addData(c, s)...)
+}
+
+func (r *Reassembler) addData(c Chunk, s *stream) []Message {
 	if s.gap != "" {
 		return r.fragment(c, c.Data, s.gap, DataTLSFragment)
 	}
@@ -200,6 +218,7 @@ func (r *Reassembler) Add(c Chunk) (messages []Message) {
 	}
 
 	max := r.byteLimit()
+	bufferedBefore := s.buf.Len()
 	remaining := max - s.buf.Len()
 	if remaining < len(c.Data) {
 		if remaining > 0 {
@@ -228,6 +247,9 @@ func (r *Reassembler) Add(c Chunk) (messages []Message) {
 		r.loss.Streams++ // The missing byte count is unknown at this boundary.
 	}
 	if s.gap != "" {
+		if bufferedBefore != 0 || s.buf.Len() != len(c.Data) {
+			c.Position = nil
+		}
 		out = append(out, r.fragment(c, s.buf.Bytes(), s.gap, DataTLSFragment)...)
 		s.buf = bytes.Buffer{}
 	}
@@ -260,14 +282,21 @@ func (r *Reassembler) flushDir(pid uint32, conn uint64, dir string) []Message {
 		return nil
 	}
 	var out []Message
+	if s.capture != nil && !s.capture.ended {
+		c := Chunk{PID: pid, Conn: conn, Direction: dir}
+		out = append(out, r.invalidateCapture(c, s, GapChunkSequence)...)
+		out = append(out, r.flushCapture(c, s)...)
+	}
 	if s.h2 != nil {
-		out = s.h2.flush(pid, conn)
+		if s.gap == "" {
+			out = append(out, s.h2.flush(pid, conn)...)
+		}
 		delete(r.streams, k)
 		return out
 	}
 	if s.buf.Len() == 0 {
 		delete(r.streams, k)
-		return nil
+		return out
 	}
 	if msg, ok := parseBestEffort(pid, conn, dir, s.buf.Bytes(), s.isH2); ok {
 		msg.Truncated = true

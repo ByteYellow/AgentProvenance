@@ -862,10 +862,21 @@ capture gap stops parsing that direction until a new capture generation: later
 bytes are retained as fragments rather than joined to the preceding message.
 HTTP/2 frame-sequence and HPACK failures follow the same rule. Already complete
 messages and the other direction's independent decoder remain available.
+The native producer numbers TLS calls and records chunk offsets before writing
+to the ring buffer. Missing or reordered chunks, skipped calls, and sequence-map
+resets therefore invalidate framing before later bytes reach the HTTP parser.
+OpenSSL lifecycle checkpoints also report the last call number, covering a lost
+final call when that checkpoint is received.
+
 Evidence records carry the gap reason and data kind; binary fragments use
 base64 with a hash of the original bytes. Full fragment content follows the same
 `AGENTPROV_TLS_CAPTURE_BODY=1` opt-in as message bodies. Incomplete captures do
 not produce model tool decisions or request/response matches.
+Contiguous fragments from one call are saved together. Their `capture.position`
+records the sequence generation, call number, byte offset and total call length;
+separate byte ranges remain separate. A closing checkpoint carries
+`checkpoint: true` rather than claiming a retained byte range. Historical events
+without sequence fields retain their recorded metadata and rule version.
 
 **Correlate & verify**
 

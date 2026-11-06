@@ -43,6 +43,9 @@ func (r *Reassembler) evictOldest() {
 			r.markGap(Chunk{PID: key.pid, Conn: key.conn, Direction: dir}, s, GapStreamLimit)
 			r.loss.Streams++
 			r.loss.Bytes += uint64(s.buf.Len())
+			if s.capture != nil {
+				r.loss.Bytes += uint64(len(s.capture.pending))
+			}
 			if s.h2 != nil {
 				r.loss.Bytes += uint64(s.h2.retainedBytes())
 			}
