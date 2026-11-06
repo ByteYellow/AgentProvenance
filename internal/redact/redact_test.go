@@ -2,9 +2,54 @@ package redact
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
+
+func TestRedactQuotedCommandsAcrossJSONLayers(t *testing.T) {
+	for _, command := range []string{
+		`export SERVICE_API_KEY="${SERVICE_API_KEY:-$BACKUP_TOKEN}"; exec worker --dry-run`,
+		`upload --password="correct horse battery staple" --dry-run`,
+		`upload --password='correct horse battery staple' --dry-run`,
+		`{"authorization":"Bearer opaque-token-value","operation":"inspect"}`,
+	} {
+		want := RedactString(command)
+		if want == command {
+			t.Fatalf("fixture did not trigger masking: %q", command)
+		}
+		for depth := 1; depth <= 3; depth++ {
+			t.Run(fmt.Sprintf("%s/depth-%d", command, depth), func(t *testing.T) {
+				in := command
+				for i := 0; i < depth; i++ {
+					raw, err := json.Marshal(map[string]string{"command": in, "id": "keep-this-id"})
+					if err != nil {
+						t.Fatal(err)
+					}
+					in = string(raw)
+				}
+				masked := RedactString(in)
+				if again, changed := Redact(masked); changed || again != masked {
+					t.Fatalf("masking is not idempotent: %q", masked)
+				}
+				out := masked
+				for i := 0; i < depth; i++ {
+					var decoded map[string]string
+					if err := json.Unmarshal([]byte(out), &decoded); err != nil {
+						t.Fatalf("invalid JSON at layer %d: %v", i, err)
+					}
+					if decoded["id"] != "keep-this-id" {
+						t.Fatal("unrelated identifier changed")
+					}
+					out = decoded["command"]
+				}
+				if out != want {
+					t.Fatalf("different masking after JSON serialization: got %q, want %q", out, want)
+				}
+			})
+		}
+	}
+}
 
 // The literal key shape that actually leaked into the committed demo bundles
 // (a DeepSeek key: sk- + 32 hex). Kept as a test fixture so a regression that

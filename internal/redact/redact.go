@@ -23,6 +23,7 @@
 package redact
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 )
@@ -97,8 +98,8 @@ var urlQueryKeyRe = regexp.MustCompile(`(?i)([?&](?:key|signature|sig)=)([^&\s"'
 
 // kvPlan describes one value span to replace.
 type kvPlan struct {
-	start  int // start of the value content to replace (after key+sep+quote/scheme)
-	end    int // end of the span, exclusive
+	start  int  // start of the value content to replace (after key+sep+quote/scheme)
+	end    int  // end of the span, exclusive
 	quoted bool // wrap the replacement in quotes (JSON object/array values)
 }
 
@@ -107,6 +108,45 @@ type kvPlan struct {
 // substrings, and the kv/URL scanners stop at quotes, backslashes and
 // structural bytes, so the surrounding document stays well-formed.
 func Redact(s string) (string, bool) {
+	// Mask decoded strings before their enclosing JSON. A command must have the
+	// same representation in a table column and a content-addressed object.
+	stringsChanged := false
+	if json.Valid([]byte(s)) {
+		s, stringsChanged = redactJSONStrings(s)
+	}
+	out, changed := redactText(s)
+	return out, stringsChanged || changed
+}
+
+func redactJSONStrings(s string) (string, bool) {
+	var b strings.Builder
+	last := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] != '"' {
+			continue
+		}
+		end := closeQuote(s, i+1, '"') + 1
+		var decoded string
+		// The caller has validated the complete JSON document.
+		if err := json.Unmarshal([]byte(s[i:end]), &decoded); err != nil {
+			return s, false
+		}
+		if masked, changed := Redact(decoded); changed {
+			encoded, _ := json.Marshal(masked)
+			b.WriteString(s[last:i])
+			b.Write(encoded)
+			last = end
+		}
+		i = end - 1
+	}
+	if last == 0 {
+		return s, false
+	}
+	b.WriteString(s[last:])
+	return b.String(), true
+}
+
+func redactText(s string) (string, bool) {
 	changed := false
 	for _, re := range tokenRes {
 		if re.MatchString(s) {
