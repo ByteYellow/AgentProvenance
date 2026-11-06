@@ -206,7 +206,7 @@ func exportForensics(dataDir, daemonURL, runID, signKeyPath string) (forensics.B
 	// Signing uses a local key, so a --sign-key export always runs against the
 	// local store rather than the daemon.
 	if signKeyPath == "" {
-		if client, ok := daemonClient(daemonURL); ok {
+		if client, ok := daemonClient(daemonURL, dataDir); ok {
 			return client.ExportForensics(runID)
 		}
 	}
@@ -285,7 +285,7 @@ func forensicsKeygenCmd() *cobra.Command {
 }
 
 func exportBatchForensics(dataDir, daemonURL string, opts forensics.BatchExportOptions) (forensics.BatchBundleInfo, error) {
-	if client, ok := daemonClient(daemonURL); ok {
+	if client, ok := daemonClient(daemonURL, dataDir); ok {
 		return client.ExportBatchForensics(opts)
 	}
 	paths, err := store.Init(dataDir)

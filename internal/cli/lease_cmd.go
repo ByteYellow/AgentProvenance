@@ -13,7 +13,7 @@ func leaseCmd(dataDir, daemonURL *string) *cobra.Command {
 		Use:   "create",
 		Short: "create a sandbox lease",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if client, ok := daemonClient(*daemonURL); ok {
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
 				id, err := client.CreateLease(taskPath)
 				if err != nil {
 					return err

@@ -18,7 +18,7 @@ func snapshotCmd(dataDir, daemonURL *string) *cobra.Command {
 			if typ != "directory" {
 				return commandErrorf("only --type directory is supported")
 			}
-			if client, ok := daemonClient(*daemonURL); ok {
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
 				result, err := client.CreateSnapshot(args[0], typ, path, name)
 				if err != nil {
 					return err
@@ -160,7 +160,7 @@ func snapshotCmd(dataDir, daemonURL *string) *cobra.Command {
 		Short: "resume a directory snapshot into a running session",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if client, ok := daemonClient(*daemonURL); ok {
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
 				sessionID, err := client.ResumeSnapshot(args[0], resumeLeaseID)
 				if err != nil {
 					return err

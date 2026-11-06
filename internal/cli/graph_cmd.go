@@ -327,7 +327,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 			if verifyRunID == "" {
 				return commandErrorf("--run is required")
 			}
-			if client, ok := daemonClient(*daemonURL); ok {
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
 				result, err := client.VerifyGraph(verifyRunID)
 				if err != nil {
 					return err
@@ -436,7 +436,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 				Limit:    lensLimit,
 				Detail:   lensDetail,
 			}
-			if client, ok := daemonClient(*daemonURL); ok {
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
 				manifest, err := client.GraphLens(opts)
 				if err != nil {
 					return err
@@ -495,7 +495,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 				Cursor:   explainCursor,
 				WithJSON: explainJSON,
 			}
-			if client, ok := daemonClient(*daemonURL); ok {
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
 				manifest, err := client.ExplainGraph(opts)
 				if err != nil {
 					return err

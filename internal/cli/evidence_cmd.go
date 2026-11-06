@@ -352,7 +352,7 @@ func joinAnd(parts []string) string {
 }
 
 func evidenceManifest(dataDir, daemonURL, runID string, objectLimit int, materializeObject bool) (evidence.MaterializedManifest, error) {
-	if client, ok := daemonClient(daemonURL); ok {
+	if client, ok := daemonClient(daemonURL, dataDir); ok {
 		return client.EvidenceManifest(runID, materializeObject)
 	}
 	paths, err := store.Init(dataDir)

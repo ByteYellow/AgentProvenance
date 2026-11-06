@@ -239,7 +239,7 @@ func telemetryCmd(dataDir, daemonURL *string) *cobra.Command {
 }
 
 func telemetryCorrelations(dataDir, daemonURL, runID, eventID string) (telemetry.CorrelationReport, error) {
-	if client, ok := daemonClient(daemonURL); ok {
+	if client, ok := daemonClient(daemonURL, dataDir); ok {
 		return client.TelemetryCorrelations(runID, eventID)
 	}
 	paths, err := store.Init(dataDir)

@@ -13,7 +13,7 @@ func execCmd(dataDir, daemonURL *string) *cobra.Command {
 		Hidden: true,
 		Args:   cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if client, ok := daemonClient(*daemonURL); ok {
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
 				processID, err := client.Exec(args[0], args[1:], stream, cmd.OutOrStdout())
 				if err != nil {
 					return err

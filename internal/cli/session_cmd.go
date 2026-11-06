@@ -14,7 +14,7 @@ func sessionCmd(dataDir, daemonURL *string) *cobra.Command {
 		Use:   "create",
 		Short: "create a Docker-backed sandbox session",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if client, ok := daemonClient(*daemonURL); ok {
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
 				id, err := client.CreateSession(leaseID)
 				if err != nil {
 					return err
@@ -72,7 +72,7 @@ func sessionCmd(dataDir, daemonURL *string) *cobra.Command {
 		Short: "stop a sandbox session container",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if client, ok := daemonClient(*daemonURL); ok {
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
 				if err := client.StopSession(args[0]); err != nil {
 					return err
 				}
@@ -97,7 +97,7 @@ func sessionCmd(dataDir, daemonURL *string) *cobra.Command {
 		Short: "set sandbox CPU profile for think/tool phases",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if client, ok := daemonClient(*daemonURL); ok {
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
 				if err := client.SetSessionCPUProfile(args[0], cpuProfile); err != nil {
 					return err
 				}
@@ -123,7 +123,7 @@ func sessionCmd(dataDir, daemonURL *string) *cobra.Command {
 		Short:   "remove a sandbox session container",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if client, ok := daemonClient(*daemonURL); ok {
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
 				if err := client.RemoveSession(args[0]); err != nil {
 					return err
 				}
@@ -153,7 +153,7 @@ func sessionCmd(dataDir, daemonURL *string) *cobra.Command {
 }
 
 func listSessions(dataDir, daemonURL string) ([]control.SessionInfo, error) {
-	if client, ok := daemonClient(daemonURL); ok {
+	if client, ok := daemonClient(daemonURL, dataDir); ok {
 		return client.ListSessions()
 	}
 	paths, err := store.Init(dataDir)
@@ -169,7 +169,7 @@ func listSessions(dataDir, daemonURL string) ([]control.SessionInfo, error) {
 }
 
 func inspectSession(dataDir, daemonURL, sessionID string) (control.SessionInfo, error) {
-	if client, ok := daemonClient(daemonURL); ok {
+	if client, ok := daemonClient(daemonURL, dataDir); ok {
 		return client.InspectSession(sessionID)
 	}
 	paths, err := store.Init(dataDir)

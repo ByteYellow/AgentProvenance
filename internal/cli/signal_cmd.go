@@ -26,7 +26,7 @@ func signalCmd(dataDir, daemonURL *string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var report signal.EvalReport
 			var err error
-			if client, ok := daemonClient(*daemonURL); ok {
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
 				if external == "" {
 					report, err = client.RunBuiltinSignals(runID)
 				} else {
@@ -149,7 +149,7 @@ func signalCmd(dataDir, daemonURL *string) *cobra.Command {
 				return err
 			}
 			var report signal.EvalReport
-			if client, ok := daemonClient(*daemonURL); ok {
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
 				report, err = client.ImportSignals(importRunID, "imported-external-evaluator", output.Signals)
 			} else {
 				report, err = signal.ImportSignals(importRunID, "imported-external-evaluator", output.Signals)
@@ -233,7 +233,7 @@ func signalDB(dataDir string) (*sql.DB, func(), error) {
 }
 
 func signalContext(dataDir, daemonURL, runID string) (signal.EvalContext, error) {
-	if client, ok := daemonClient(daemonURL); ok {
+	if client, ok := daemonClient(daemonURL, dataDir); ok {
 		return client.SignalContext(runID)
 	}
 	db, closeFn, err := signalDB(dataDir)

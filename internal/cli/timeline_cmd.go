@@ -57,7 +57,7 @@ func timelineCmd(dataDir, daemonURL *string) *cobra.Command {
 }
 
 func timelineManifest(dataDir, daemonURL string, opts provenance.TimelineOptions) (provenance.TimelineManifest, error) {
-	if client, ok := daemonClient(daemonURL); ok {
+	if client, ok := daemonClient(daemonURL, dataDir); ok {
 		return client.Timeline(opts)
 	}
 	db, cleanup, err := openLocalDB(dataDir)
