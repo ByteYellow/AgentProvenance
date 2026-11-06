@@ -2,6 +2,10 @@
 
 [English](README.md) | 中文
 
+后续结果：Windows 重启后，真实 KVM 已恢复，功能验收通过。
+[重启后报告](../v0.10.1-kvm-postreboot/README.zh-CN.md)也记录了仍存在的 WHPX/CET 故障。
+本报告保留此前的验收结果和重启前安装状态。
+
 2026-11-06 从 `fix/v0.10.1-pr34-integration` 的 `2ab9e92` 继续验收。
 本轮修复 WSL 直接采集，并增加嵌套 PID 命名空间回归检查。
 [源码与程序校验值](source-identity.json)记录实际测试版本；ARM64 eBPF 对象保持原样。

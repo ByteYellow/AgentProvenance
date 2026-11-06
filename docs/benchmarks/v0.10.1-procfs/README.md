@@ -2,6 +2,11 @@
 
 English | [中文](README.zh-CN.md)
 
+Subsequent result: after the Windows restart, real KVM was restored and its
+functional gates passed. The [post-reboot report](../v0.10.1-kvm-postreboot/README.md)
+also records the remaining WHPX/CET failure. This report preserves the earlier
+pre-reboot results and installation state.
+
 Tested on 2026-11-06 from `fix/v0.10.1-pr34-integration`, starting at `2ab9e92`.
 This follow-up repairs direct WSL collection and adds a nested PID namespace
 regression gate. [Source and binary hashes](source-identity.json) identify the

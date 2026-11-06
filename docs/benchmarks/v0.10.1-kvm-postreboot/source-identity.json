@@ -1,0 +1,12 @@
+{
+  "source_commit": "8ea1dbf226cba48e38754ee7d90af7d0fa6fbdf5",
+  "code_commit": "d77712dca426ddbea3340f0a74ecf316bb491c83",
+  "binary_sha256": {
+    "agentprov": "7e97820e60299a4973247756f9770e9a89883d2d2977bb5bffa6d89e0df6a270",
+    "agentprov-sensor": "d6a896257a661361a8cfde35763d73bdfaf330848bf7dc2b5d66376a1b537ac3",
+    "sensor.test": "6d7105a2e5d6e25592059e0fe053827f5fde4edda699801ec7310216f09df540"
+  },
+  "binary_hashes_match_procfs_acceptance": true,
+  "arm64_object_blob": "eea40f0b0eff876dd60126b0b03b652cca9b8152",
+  "production_code_changes_this_run": false
+}

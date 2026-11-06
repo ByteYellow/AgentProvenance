@@ -82,15 +82,17 @@ On AMD Windows hosts, build `26300.9711` can lose WSL nested virtualization afte
 KB5127648. Microsoft lists the fix in
 [KB5127936, build 26300.9818](https://support.microsoft.com/en-us/servicing/os/windows-11/2026/10/kb5127936-windows-11-25h2-26h2-update).
 Install the applicable fixed cumulative update and restart Windows before
-checking for `svm`, loading `kvm_amd` and rerunning the KVM gates. Merely creating
-`/dev/kvm` or changing its permissions does not restore CPU virtualization.
+checking for `svm` and loading `kvm_amd`. On this host, the update restored actual
+KVM VM creation and acceleration. The [post-reboot acceptance](benchmarks/v0.10.1-kvm-postreboot/README.md)
+passed native capture, TLS, systemd, K3s, signed replay and recovery checks.
 
-CET under WHPX remains under investigation. QEMU 11.1.0 boots with the default
-kernel command line and passes an explicit shadow-stack enable/return check,
-but sustained operation still encountered a PID 1 shadow-stack page fault.
-Upgrading QEMU alone has not resolved it. A disposable acceptance guest can use
-`nousershstk`; this disables guest user shadow stacks and must be recorded in
-its environment evidence. See the [follow-up evidence](benchmarks/v0.10.1-procfs/README.md).
+CET under WHPX remains unresolved on this host. QEMU 11.1.0 passes a small
+shadow-stack check, but the Ubuntu 6.8 guest still panics after losing PID 1.
+Clean boots with the collector, K3s and Docker disabled reproduced the failure.
+Use the verified KVM path here: it boots without `nousershstk`, though its nested
+CPU does not expose `user_shstk`. Earlier disposable WHPX tests used
+`nousershstk` to disable guest user shadow stacks; that setting remains recorded
+in the [earlier evidence](benchmarks/v0.10.1-procfs/README.md).
 
 ## Build and regenerate
 

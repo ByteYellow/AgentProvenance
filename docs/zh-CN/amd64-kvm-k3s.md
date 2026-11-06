@@ -45,9 +45,14 @@ ARM64 对象保持原样，继续使用已有的宿主机 PID 路径。
 
 AMD Windows 主机在安装 KB5127648 后，`26300.9711` 版本可能失去 WSL 嵌套虚拟化能力。
 微软在 [KB5127936（26300.9818）](https://support.microsoft.com/en-us/servicing/os/windows-11/2026/10/kb5127936-windows-11-25h2-26h2-update)中列出了修复。
-安装适用的修复版累积更新并重启 Windows 后，再检查 `svm`、加载 `kvm_amd` 并补跑 KVM 验收；手动创建 `/dev/kvm` 或改权限无法恢复 CPU 虚拟化能力。
+安装适用的修复版累积更新并重启 Windows 后，再检查 `svm` 并加载 `kvm_amd`。
+本机更新后已恢复真实 KVM 虚拟机创建与加速；[重启后验收](../benchmarks/v0.10.1-kvm-postreboot/README.zh-CN.md)
+中的原生采集、TLS、systemd、K3s、签名回放和故障恢复均已通过。
 
-WHPX 下的 CET 仍在排查：QEMU 11.1.0 能按默认参数启动，也通过了影子栈启用与函数返回检查，但持续运行后仍出现 PID 1 的影子栈页面异常。单独升级 QEMU 尚未解决此问题。临时验收副本可使用 `nousershstk`；该设置会关闭 guest 的用户态影子栈，应在记录中明确注明。详见[后续验收证据](../benchmarks/v0.10.1-procfs/README.zh-CN.md)。
+本机 WHPX 下的 CET 问题仍未解决：QEMU 11.1.0 通过小型影子栈检查，但 Ubuntu 6.8 guest
+仍会因 PID 1 退出而崩溃。冷启动时禁用采集器、K3s 和 Docker 后，也复现了故障。
+本机使用已验收的 KVM 路径：启动参数不需要 `nousershstk`，其嵌套 CPU 未暴露 `user_shstk`。
+此前 WHPX 临时副本使用 `nousershstk` 关闭 guest 用户态影子栈，具体设置保留在[此前证据](../benchmarks/v0.10.1-procfs/README.zh-CN.md)中。
 
 ## 构建与重新生成探针
 
