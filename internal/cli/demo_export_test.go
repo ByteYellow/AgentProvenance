@@ -54,6 +54,10 @@ func TestCompleteDocumentationKeepsOverviewAndReference(t *testing.T) {
 	}{
 		{"/demos/guide/start?lang=en", []string{"Agent session", "Runtime capture", "Features and docs", "agentprovenance-cover-en.png", "three-axis-observability.svg", "Browse demos", "/demos/guide/capabilities?lang=en"}},
 		{"/demos/guide/capabilities?lang=zh-CN", []string{"核心模型", "部署模式", "外部评估器协议", "架构", "evidence-dag-zh-CN.svg"}},
+		{"/demos/guide/upgrade-v0.10.1?lang=en", []string{"Upgrading to v0.10.1", "record-timeout", "/demos/guide/release-v0.10.1?lang=en", "latest published release"}},
+		{"/demos/guide/upgrade-v0.10.1?lang=zh-CN", []string{"升级到 v0.10.1", "record-timeout", "/demos/guide/release-v0.10.1?lang=zh-CN"}},
+		{"/demos/guide/release-v0.10.1?lang=en", []string{"Release notes draft", "/demos/guide/upgrade-v0.10.1?lang=en"}},
+		{"/demos/guide/release-v0.10.1?lang=zh-CN", []string{"发行说明草稿", "/demos/guide/upgrade-v0.10.1?lang=zh-CN"}},
 	} {
 		w := httptest.NewRecorder()
 		h(w, httptest.NewRequest("GET", c.route, nil))

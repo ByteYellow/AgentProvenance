@@ -13,8 +13,9 @@ Download the matching Linux/macOS amd64/arm64 archive from
 [Releases](https://github.com/ByteYellow/AgentProvenance/releases),
 verify its checksum and extract it as shown in the [Quickstart](../README.md#quickstart).
 Go is needed only if you choose to build from source. These instructions describe
-the current source tree. Build it to try the investigation workflow before the
-next release. The CLI embeds nine signed captures and two optional evaluator examples:
+the current source tree. For upcoming changes, see the
+[v0.10.1 upgrade guide](../docs/upgrading-v0.10.1.md).
+The CLI embeds nine signed captures and two optional evaluator examples:
 
 ```sh
 ./agentprov demo                         # gallery: all demos
@@ -74,6 +75,23 @@ to a Python report. Inspect the original task, 12 tool inputs/results, five
 configuration records, saved file text and two inferred tool/runtime links.
 The seven-test result is recorded evidence, not a replay-time model call.
 Context coverage, runtime coverage and permission records are shown separately.
+
+### Reading correlation details
+
+The current reader keeps the full Run graph and the Search, Compare and Export
+actions in their usual positions. Select evidence to inspect its original record,
+supporting references and any unresolved associations:
+
+- Intent coverage identifies the particular tool call. Delegation candidates
+  remain separate from an explicitly bound message.
+- Outbound details distinguish a body match, candidate source reads and execution
+  identity. Each stage keeps its own supporting references.
+- TLS content shows complete messages or retained fragments, with gap reasons
+  and capture positions when recorded. Body pagination is shown separately.
+
+Historical captures retain their original rules and recorded fields. New detail
+fields appear when the selected capture includes them; older captures keep an
+unknown or not-recorded state. Local and online replay use the same reader.
 
 Run `agentprov demo deepseek-context` with the v0.9.0 CLI. Replay is signed,
 offline and needs no DeepSeek account or VM. Source builds use the same command;

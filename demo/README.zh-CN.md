@@ -6,7 +6,7 @@
 
 ## 一条命令打开
 
-从[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。本文对应当前源码；新版本发布前，可从当前源码构建，体验新增的调查流程。CLI 内嵌九份签名记录和两个可选评估器示例：
+从[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。本文对应当前源码，下一版本的变化见 [v0.10.1 升级指南](../docs/zh-CN/upgrading-v0.10.1.md)。CLI 内嵌九份签名记录和两个可选评估器示例：
 
 ```sh
 ./agentprov demo                         # gallery: all demos
@@ -54,6 +54,18 @@ Jev 示例可通过 `--agentprov` 使用包内 CLI，无需自行构建。在线
 [DeepSeek 会话示例](deepseek-context/README.zh-CN.md)记录为 Python 报表增加按日汇总的真实任务。可查看原始任务、12 组工具输入与结果、五条配置记录、保存的文件正文，以及两条工具与运行时之间的推断关联。七项测试通过是已保存的真实结果，回放时不会重新调用模型。上下文覆盖、运行时覆盖和权限记录分别展示。
 
 使用 v0.9.0 CLI 运行 `agentprov demo deepseek-context`，源码构建后的用法相同。签名回放可离线运行，无需 DeepSeek 账号或 VM；六份历史采集包保持原样。
+
+### 阅读关联详情
+
+页面保留完整 Run 图，以及原位置的搜索、对比和导出入口。选中证据后，
+可以查看原始记录、支持引用及尚待确认的关联：
+
+- 意图覆盖具体到工具调用。委派候选与明确绑定的消息分别展示。
+- 外传详情区分正文命中、源读取候选和执行身份，每一段保留对应依据。
+- TLS 正文显示完整消息或保留片段；已有记录提供缺口原因及采集位置，正文分页单独显示。
+
+历史采集保留当时的规则与原始字段。新字段随实际记录显示，旧记录缺失的部分保留为未知或未记录。
+本地与在线回放使用同一套阅读器。
 
 ## 1. 单个 Agent：供应链执行
 
