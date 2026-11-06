@@ -3,11 +3,11 @@ package sensor
 import (
 	"bytes"
 	"debug/elf"
+	"encoding/binary"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"strings"
 	"testing"
 )
 
@@ -63,8 +63,11 @@ func TestGoTLSReadReturnOffsetsExecutableAndStripped(t *testing.T) {
 	if output, err := exec.Command("go", "build", "-ldflags=-s -w", "-o", bin, "testdata/tls_client.go").CombinedOutput(); err != nil {
 		t.Fatalf("build stripped Go ELF: %v\n%s", err, output)
 	}
-	if _, err := goTLSReadReturnOffsets(bin); err == nil || !strings.Contains(err.Error(), "unstripped") {
-		t.Fatalf("stripped Go binary should explicitly reject Read attachment, got %v", err)
+	if offsets, err := goTLSReadReturnOffsets(bin); err != nil || len(offsets) == 0 {
+		t.Fatalf("stripped Go Read returns=%v error=%v", offsets, err)
+	}
+	if kind := classifyTLSExecutable(bin); kind.kind != "go" || kind.unsupported {
+		t.Fatalf("stripped classification: %+v", kind)
 	}
 }
 
@@ -85,6 +88,54 @@ func TestGoTLSReadABIIsExplicit(t *testing.T) {
 	for _, version := range []string{"go1.16.0", "go1.27.0", "devel go1.27", "go1.26rc1", "other"} {
 		if err := supportedGoTLSABI(version); err == nil {
 			t.Errorf("accepted unreviewed ABI %s", version)
+		}
+	}
+}
+
+func TestGoPCLNMalformedTablesStayBounded(t *testing.T) {
+	for _, data := range [][]byte{nil, make([]byte, 72), bytes.Repeat([]byte{0xff}, 128), make([]byte, maxELFSymbolBytes+1)} {
+		if _, _, err := goPCLNFunction(data, 0x400000, goTLSReadSymbol); err == nil {
+			t.Fatal("accepted malformed pclntab")
+		}
+	}
+}
+
+func TestGoPCLNBoundsOnValidHeader(t *testing.T) {
+	data := make([]byte, 256)
+	binary.LittleEndian.PutUint32(data, 0xfffffff1)
+	data[6], data[7] = 1, 8
+	put := func(off int, v uint64) { binary.LittleEndian.PutUint64(data[off:], v) }
+	put(8, 1)
+	put(32, 72)
+	put(40, 100)
+	put(64, 128)
+	copy(data[72:], goTLSReadSymbol)
+	binary.LittleEndian.PutUint32(data[128:], 16)
+	binary.LittleEndian.PutUint32(data[132:], 16)
+	binary.LittleEndian.PutUint32(data[136:], 32)
+	binary.LittleEndian.PutUint32(data[144:], 16)
+	start, size, err := goPCLNFunction(data, 0x400000, goTLSReadSymbol)
+	if err != nil || start != 0x400010 || size != 16 {
+		t.Fatalf("valid index: %x %d %v", start, size, err)
+	}
+	for _, tc := range []struct {
+		off   int
+		value uint64
+	}{{8, ^uint64(0)}, {8, 200001}, {32, 0}, {40, maxELFSymbolBytes + 73}, {64, 255}} {
+		bad := append([]byte(nil), data...)
+		binary.LittleEndian.PutUint64(bad[tc.off:], tc.value)
+		if _, _, err := goPCLNFunction(bad, 0x400000, goTLSReadSymbol); err == nil {
+			t.Fatalf("accepted invalid field %d", tc.off)
+		}
+	}
+	for _, tc := range []struct {
+		off   int
+		value uint32
+	}{{132, 1}, {132, 255}, {144, 17}, {148, 29}, {136, 16}} {
+		bad := append([]byte(nil), data...)
+		binary.LittleEndian.PutUint32(bad[tc.off:], tc.value)
+		if _, _, err := goPCLNFunction(bad, 0x400000, goTLSReadSymbol); err == nil {
+			t.Fatalf("accepted invalid function field %d", tc.off)
 		}
 	}
 }

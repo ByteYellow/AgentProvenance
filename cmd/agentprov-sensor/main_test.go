@@ -74,3 +74,15 @@ func TestStateReadersDefaultOnAndCanBeDisabledIndependently(t *testing.T) {
 		}
 	}
 }
+
+func TestCaptureBufferAndKnownTLSFlags(t *testing.T) {
+	code := run([]string{"--ring-buffer-mib", "32", "--tls-target", "/opt/client", "--tls-target", "/opt/libssl.so"}, io.Discard, io.Discard, func(_ io.Writer, opts sensor.Options) error {
+		if opts.RingBufferMiB != 32 || len(opts.TLSTargets) != 2 || opts.TLSTargets[0] != "/opt/client" || opts.TLSTargets[1] != "/opt/libssl.so" {
+			t.Fatalf("capture options lost: %+v", opts)
+		}
+		return nil
+	})
+	if code != 0 {
+		t.Fatalf("exit=%d", code)
+	}
+}

@@ -60,6 +60,8 @@ qemu-system-x86_64.exe -accel whpx -cpu max ...
 并保存 CET 用户态状态。[CET 后续验收](../benchmarks/v0.10.1-whpx-cet/README.zh-CN.md)
 记录了开启影子栈的上下文切换测试与采集验收。这套配置无需 `nousershstk` 参数。
 
+剩余的 `misordered xstate` 警告已通过本地 [QEMU WHPX 补丁](../../scripts/patches/qemu-11.1-whpx-xsave-ecx.patch)解决：读取 XSAVE 组件偏移时，同时传递来自虚拟化层的 ECX 属性。[后续报告](../benchmarks/v0.10.1-followup/README.zh-CN.md)保留了源码、构建校验值、修正后的 CPUID 和 CET 测试结果。当前使用本地编译的 QEMU 11.1.0，原版程序保留备份。
+
 `accept_kvm_guest.py` 会拒绝暴露 `user_shstk`、却缺少 `xsave` 或 `xsaves` 的 x86 guest，
 并在报告中记录 CPU 标志。QEMU 11.1.0 的 WHPX 实现中，单独设置 `cet-ss=off`
 无法可靠屏蔽 CET 标志。此前失败记录及临时使用的 `nousershstk` 参数保留在[历史证据](../benchmarks/v0.10.1-procfs/README.zh-CN.md)中。
@@ -115,14 +117,31 @@ sudo python3 scripts/accept_kvm_guest.py --report /tmp/kvm-acceptance.json
 ```sh
 AGENTPROV_SSL_LIB=/usr/lib/x86_64-linux-gnu/libssl.so.3
 AGENTPROV_LIBC_LIB=/usr/lib/x86_64-linux-gnu/libc.so.6
-AGENTPROV_GO_TLS_BIN=/absolute/path/to/unstripped-go-agent
+AGENTPROV_GO_TLS_BIN=/absolute/path/to/go-agent
 ```
 
-修改显式路径后需要重启服务。原生采集默认也启用 TLS 自动发现：扫描可见进程的映射和容器根目录，为 OpenSSL 及保留符号的 Go 程序挂载探针，并处理目标替换与退出。使用 `sensor stream --auto-tls=false` 可关闭自动发现。
+修改显式路径后需要重启服务。原生采集默认也启用 TLS 自动发现：扫描可见进程的映射和容器根目录，为 OpenSSL 及受支持的 Go 程序挂载探针，并处理目标替换与退出。使用 `sensor stream --auto-tls=false` 可关闭自动发现。
 
 发现过程对扫描进程数和目标数设有上限，并报告挂载失败。观测到进程启动时，还会触发经过合并和限流的扫描。对于支持的 overlay 挂载，发现器会解析底层 inode，让共享同一个库的容器共用一次挂载。无法解析或不支持的 overlay 布局会报告覆盖缺口，不重复安装探针。
 
-Go 响应采集目前限于 amd64、Go ABIInternal 1.23–1.26 且保留符号的程序。版本不受支持或符号被剥离时，会报告覆盖降级。自动发现不保证捕获探针挂载前的首次请求，也不保证覆盖在两次扫描之间启动并退出的进程。BoringSSL、任意静态或自定义 TLS 实现，以及没有受支持明文探针的加密流量，不在已声明的覆盖范围内。
+amd64、Go ABIInternal 1.23–1.26 的程序现在支持保留符号和 `-s -w` 去符号两种构建，也支持 PIE。去符号构建需要保留 Go 函数表；解析器会检查元数据大小和指令范围。Go Read 仍在解码得到的返回指令处挂载普通探针。
+
+BoringSSL 的 `SSL_read/SSL_write` 路径已验证动态库和保留函数符号的静态链接程序。BoringSSL 没有提供的 `_ex` 接口标为 `not_applicable`。未知 ABI、无法定位函数的 C TLS 实现需要单独适配。
+
+自动发现会在就绪前为宿主机已安装的 OpenSSL 库预挂载探针。已知的应用程序或容器专用库可以提前指定可见路径，支持多次传入：
+
+```sh
+sudo agentprov-sensor --tls-target /opt/agent/client \
+  --tls-target /opt/container-root/usr/lib/libssl.so.3
+```
+
+`agentprov sensor stream` 也支持这组参数。先在能力报告中确认目标探针已挂载，再启动工作负载；目标文件替换后会重新检查。未提前配置、刚出现的容器文件仍可能在自动挂载前发出首次 TLS 调用。[后续验收](../benchmarks/v0.10.1-followup/README.zh-CN.md)覆盖了无启动等待的首次请求、并发读取和容器重建。
+
+### 采集缓冲
+
+原生采集默认使用 64 MiB 内核环形缓冲区，以及最多 16,384 条记录的用户态队列（事件数据占 14.375 MiB）。环形缓冲区读取与 JSON 输出、procfs 查询分开执行；两个进程缓存各限制为 4,096 项。收到 SIGINT/SIGTERM 后，会排空已经进入队列的记录再退出。
+
+使用 `--ring-buffer-mib 16` 可恢复原来的内核缓冲预算，也可设置为 1～256 之间的其他 2 的幂。两个采集命令都支持该参数。能力报告中的 `capture_buffers` 会列出实际缓冲大小；超载时仍输出 `resource_pressure` 并计入丢失统计。[压力测试报告](../benchmarks/v0.10.1-followup/pressure.json)记录了完整事件数、立即停止、主动超载和峰值内存。此次虚拟机使用默认缓冲时，突发测试的 RSS 峰值约为 259 MiB。
 
 并发 Read 用例已在 WSL 上使用 Go 1.23.12、1.24.0、1.25.0 和 1.26 验收，包括 goroutine 栈增长、实际返回字节和上下文清理。CI 的 Go TLS 实机矩阵覆盖相同的四个次版本，结果与产物附在各拉取请求的检查中。
 

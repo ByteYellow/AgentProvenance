@@ -74,6 +74,9 @@ func (r *capabilityReporter) publishLocked() {
 		Ready:         r.ready, Status: "starting", TLSDiscovery: r.discovery,
 		Probes: append(append([]ProbeCapability{}, r.base...), r.tls...),
 	}
+	if r.opts.RingBufferMiB > 0 {
+		report.CaptureBuffers = &CaptureBufferReport{RingBytes: r.opts.RingBufferMiB << 20, QueueEvents: sensorQueueCapacity, QueueBytes: sensorQueueCapacity * sensorEventBytes}
+	}
 	report.AccessControlState = &StateCollectionCapability{AppArmor: r.opts.AppArmorState, Seccomp: r.opts.SeccompState,
 		Mode: "event_triggered_procfs_snapshot", QueueCapacity: stateQueueCapacity, CacheCapacity: stateCacheCapacity, MinIntervalMS: stateInterval.Milliseconds()}
 	if r.procfs != nil {

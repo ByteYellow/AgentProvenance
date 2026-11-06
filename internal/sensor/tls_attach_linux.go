@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -62,9 +63,10 @@ func attachTLSTarget(target tlsTarget, objs *sensorbpfObjects, skip map[string]b
 	var ex *link.Executable
 	var dynamicOffsets map[string]uint64
 	if openErr == nil {
-		openErr = validateELFMetadata(stablePath)
-		if openErr != nil && target.Kind == "openssl" {
-			dynamicOffsets, openErr = opensslDynamicOffsets(stablePath)
+		if target.Kind == "openssl" {
+			dynamicOffsets, openErr = opensslProbeOffsets(stablePath)
+		} else {
+			openErr = validateELFMetadata(stablePath)
 		}
 	}
 	if openErr == nil {
@@ -75,6 +77,11 @@ func attachTLSTarget(target tlsTarget, objs *sensorbpfObjects, skip map[string]b
 			return
 		}
 		probe := ProbeCapability{Name: name, Category: "tls", Target: target.Path, Status: "attached"}
+		if target.Kind == "openssl" && dynamicOffsets["SSL_set_custom_verify"] != 0 && (name == "SSL_write_ex" || name == "SSL_read_ex") && dynamicOffsets[name] == 0 {
+			probe.Status, probe.Reason = "not_applicable", "BoringSSL uses SSL_read/SSL_write; this _ex API is absent"
+			a.probes = append(a.probes, probe)
+			return
+		}
 		if openErr != nil {
 			probe.Status = "failed"
 			probe.Reason = capabilityFailure(openErr)
@@ -137,6 +144,13 @@ func attachTLSTarget(target tlsTarget, objs *sensorbpfObjects, skip map[string]b
 		attach("SSL_read", objs.HandleSslReadEnter, objs.HandleSslReadExit)
 		attach("SSL_read_ex", objs.HandleSslReadExEnter, objs.HandleSslReadExExit)
 	} else {
+		if openErr == nil && runtime.GOARCH == "amd64" {
+			var offset uint64
+			offset, _, openErr = goTLSFunctionLocation(stablePath, "crypto/tls.(*Conn).Write")
+			if openErr == nil {
+				dynamicOffsets = map[string]uint64{"crypto/tls.(*Conn).Write": offset}
+			}
+		}
 		attach("crypto/tls.(*Conn).Write", goTLSWriteProgram(objs), nil)
 		if skip["crypto/tls.(*Conn).Read"] {
 			return a
@@ -325,6 +339,16 @@ func runTLSDiscovery(ctx context.Context, objs *sensorbpfObjects, opts Options, 
 	if opts.GoTLSBin != "" {
 		explicit = append(explicit, tlsTarget{Path: opts.GoTLSBin, Kind: "go"})
 	}
+	for _, path := range opts.TLSTargets {
+		explicit = append(explicit, tlsTarget{Path: path, Kind: "auto"})
+	}
+	// Pre-attach installed shared libraries so the first host process need not
+	// race process discovery. Container-private inodes still need known paths.
+	if opts.AutoTLS {
+		for _, path := range systemTLSLibraries() {
+			explicit = append(explicit, tlsTarget{Path: path, Kind: "openssl"})
+		}
+	}
 	schedule := newTLSHintSchedule()
 	var fullScans uint64
 	publish := func(scan TLSDiscoveryReport) {
@@ -348,7 +372,7 @@ func runTLSDiscovery(ctx context.Context, objs *sensorbpfObjects, opts Options, 
 		scan.Limitations = []string{
 			"processes must be visible in the sensor PID namespace; container roots/maps must be readable",
 			"first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
-			"stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered",
+			"amd64 Go 1.23–1.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported",
 		}
 		probes := []ProbeCapability{}
 		if !opts.AutoTLS {
@@ -366,6 +390,15 @@ func runTLSDiscovery(ctx context.Context, objs *sensorbpfObjects, opts Options, 
 		pinned := map[string]tlsTarget{}
 		for _, target := range explicit {
 			abs, err := filepath.Abs(target.Path)
+			if target.Kind == "auto" && err == nil {
+				kind := classifyTLSExecutable(abs)
+				if kind.kind == "" {
+					target.Kind = "openssl"
+					err = fmt.Errorf("known TLS target has no supported TLS functions")
+				} else {
+					target.Kind = kind.kind
+				}
+			}
 			if err == nil {
 				var backing string
 				backing, err = tlsBackingPath("/proc/self", target.Path, abs)
@@ -484,4 +517,17 @@ func capabilityFailure(reason error) string {
 		return s[:2048] + " (truncated)"
 	}
 	return s
+}
+
+func systemTLSLibraries() []string {
+	var paths []string
+	for _, dir := range []string{"/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu", "/lib/aarch64-linux-gnu", "/usr/lib/aarch64-linux-gnu", "/lib64", "/usr/lib64", "/lib", "/usr/lib"} {
+		for _, name := range []string{"libssl.so.3", "libssl.so.1.1", "libssl.so"} {
+			path := filepath.Join(dir, name)
+			if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+				paths = append(paths, path)
+			}
+		}
+	}
+	return paths
 }

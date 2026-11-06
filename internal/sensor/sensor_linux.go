@@ -64,6 +64,15 @@ type sensorTracepoint struct {
 // RunWithOptions loads the configured eBPF probes and writes normalized JSONL
 // telemetry until SIGINT/SIGTERM. It requires root or CAP_BPF + CAP_PERFMON.
 func RunWithOptions(out io.Writer, opts Options) (runErr error) {
+	if len(opts.TLSTargets) > 1024 {
+		return fmt.Errorf("at most 1024 known TLS targets are allowed")
+	}
+	if opts.RingBufferMiB == 0 {
+		opts.RingBufferMiB = 64
+	}
+	if opts.RingBufferMiB < 1 || opts.RingBufferMiB > 256 || opts.RingBufferMiB&(opts.RingBufferMiB-1) != 0 {
+		return fmt.Errorf("ring-buffer-mib must be a power of two between 1 and 256")
+	}
 	reporter := newCapabilityReporter(opts)
 	defer func() { reporter.finish(runErr) }()
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -73,6 +82,9 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	var objs sensorbpfObjects
 	var procfs *procfsResolver
 	spec, err := loadSensorbpf()
+	if err == nil {
+		spec.Maps["events"].MaxEntries = uint32(opts.RingBufferMiB << 20)
+	}
 	if err == nil {
 		procfs, err = configureProcfsNamespace(spec)
 	}
@@ -183,6 +195,8 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		return i18n.Errorf("open ringbuf: %w", err)
 	}
 	defer rd.Close()
+	records, readResult, stopRecords := readSensorEvents(rd)
+	defer stopRecords()
 
 	parent := opts.Context
 	if parent == nil {
@@ -195,7 +209,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	go func() {
 		select {
 		case <-ctx.Done():
-			_ = rd.Close()
+			_ = rd.Flush()
 		case <-stopReader:
 		}
 	}()
@@ -275,11 +289,13 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		lastTLSLossReport = time.Now()
 	}
 	defer reportTLSLoss(true)
+	// Drain independently of JSON/procfs work. The queue is bounded and blocks
+	// when full: overload remains visible through the kernel drop counter.
 	for {
-		rec, err := rd.Read()
-		if err != nil {
-			if errors.Is(err, ringbuf.ErrClosed) {
-				reportTLSLoss(true)
+		e, ok := <-records
+		if !ok {
+			err := <-readResult
+			if errors.Is(err, ringbuf.ErrClosed) || errors.Is(err, ringbuf.ErrFlushed) {
 				encMu.Lock()
 				err = writeErr
 				encMu.Unlock()
@@ -287,10 +303,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 			}
 			return i18n.Errorf("read sensor ring buffer: %w", err)
 		}
-		var e sensorbpfSensorEvent
-		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &e); err != nil {
-			continue
-		}
+
 		task := procfs.resolve(e)
 		procfs.publish(reporter, false)
 		if task.PID != 0 && task.PID != uint32(os.Getpid()) && e.Kind != eventExit && e.Kind != eventThreadExit {
@@ -370,7 +383,7 @@ func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgro
 	task := eventProcTask(e, proc)
 	containerID := resolver.resolve(e.CgroupId)
 	if containerID == "" && task.PID != 0 {
-		containerID = containerIDForPID(task.PID)
+		containerID = resolver.forProcess(e, task.PID)
 	}
 	etype := "tls_write"
 	if msg.Direction == tlsintent.Response {
@@ -477,7 +490,18 @@ type dropLookuper interface {
 // The container's cgroup directory outlives its short-lived processes, so this
 // survives a process whose /proc entry is already gone by the time userspace
 // drains the ring buffer - the failure mode of the previous /proc-only lookup.
+type containerProcessKey struct {
+	pid           uint32
+	start, cgroup uint64
+}
+type containerProcessEntry struct {
+	id string
+	at time.Time
+}
+
 type cgroupResolver struct {
+	processCache map[containerProcessKey]containerProcessEntry
+
 	root            string
 	kernelName      func(uint64) string
 	mu              sync.RWMutex
@@ -629,17 +653,42 @@ func (r *cgroupResolver) refresh() {
 	r.lastRefresh = now
 }
 
+// A process-lifetime key prevents PID reuse from borrowing a cached identity.
+// The one-second TTL permits later cgroup metadata to become visible, including
+// misses. A hard cap bounds host activity without an ever-growing PID list.
+func (r *cgroupResolver) forProcess(e sensorbpfSensorEvent, pid uint32) string {
+	if e.ProcessStartNs == 0 {
+		return containerIDForPID(pid)
+	}
+	key := containerProcessKey{pid, e.ProcessStartNs, e.CgroupId}
+	now := time.Now()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if cached, ok := r.processCache[key]; ok && now.Sub(cached.at) < time.Second {
+		return cached.id
+	}
+	id := containerIDForPID(pid)
+	if r.processCache == nil || len(r.processCache) >= 4096 {
+		r.processCache = make(map[containerProcessKey]containerProcessEntry)
+	}
+	r.processCache[key] = containerProcessEntry{id, now}
+	return id
+}
+
 // normalize maps a raw kernel event to the normalized telemetry schema consumed
 // by `telemetry ingest` (container_id, cgroup_id, pid/tgid/ppid, source,
 // event_type, payload). container_id is best-effort from /proc/<pid>/cgroup.
 func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver, proc ...procTaskIDs) map[string]any {
+	if (e.Kind == eventOpen || e.Kind == eventSyscallResult && e.SyscallKind != eventConnect) && e.ExitCode == 1 && !sensitiveReadPath(cstr(e.Path[:])) {
+		return nil
+	}
 	task := eventProcTask(e, proc)
 	// Prefer the race-free cgroup-id -> container-id resolution; the /proc lookup
 	// is a fallback for the live process and for hosts where the cgroup dir name
 	// does not carry the id.
 	containerID := resolver.resolve(e.CgroupId)
 	if containerID == "" && task.PID != 0 {
-		containerID = containerIDForPID(task.PID)
+		containerID = resolver.forProcess(e, task.PID)
 	}
 	ev := map[string]any{
 		"source":       "agentprov_ebpf",

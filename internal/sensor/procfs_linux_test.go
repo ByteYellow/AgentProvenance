@@ -70,3 +70,32 @@ func TestProcfsObjectMapIsBoundedAndLifetimeKeyed(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestProcfsCacheBoundsAndExitEviction(t *testing.T) {
+	lookups := 0
+	r := &procfsResolver{lookup: func(k procTaskKey) (procTaskIDs, error) { lookups++; return procTaskIDs{PID: 1, TID: 2}, nil }}
+	e := sensorbpfSensorEvent{Pid: 1, Tid: 2, ThreadStartNs: 10}
+	r.resolve(e)
+	r.resolve(e)
+	if lookups != 1 {
+		t.Fatalf("repeated task lookup=%d", lookups)
+	}
+	e.Kind = eventThreadExit
+	r.resolve(e)
+	if len(r.cache) != 0 {
+		t.Fatal("exited thread retained")
+	}
+	e.Kind = eventOpen
+	for i := uint64(1); i <= 10000; i++ {
+		e.ThreadStartNs = i
+		r.resolve(e)
+		if len(r.cache) > 4096 {
+			t.Fatal("unbounded task cache")
+		}
+	}
+	e.ThreadStartNs = 0
+	r.resolve(e)
+	if _, ok := r.cache[procTaskKey{0, uint64(1)<<32 | 2}]; ok {
+		t.Fatal("cached incomplete identity")
+	}
+}

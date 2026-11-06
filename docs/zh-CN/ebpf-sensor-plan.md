@@ -11,7 +11,7 @@
 - `execve` 及 argv、IPv4 `connect`、`openat`、`process_exit`。文件打开覆盖写入和经过过滤的敏感读取，凭据或密钥路径读取映射为 `secret_path`。
 - 权限与文件操作：`setuid`、`setgid`、`ptrace`、`rename`、`renameat`、`renameat2`、`unlinkat`；amd64 还处理旧式 `open` 和 `unlink`。
 - OpenSSL 明文边界：`SSL_write`、`SSL_read`、`SSL_write_ex`、`SSL_read_ex` uprobe。标准化后默认保留捕获字节哈希、短预览和允许保留的 HTTP 元数据。预览仍可能包含敏感内容，不等于自动脱敏保证。
-- Go TLS：amd64、arm64 均支持未去除符号的 `crypto/tls` 写入采集。amd64 还支持 Go 1.23–1.26 ABIInternal 的读取返回点采集，按 goroutine 和栈帧配对。HTTP/1.1 与 HTTP/2/HPACK 重组已经实现，但仍受捕获范围和缓冲上限约束。
+- Go TLS：amd64、arm64 均支持未去除符号的 `crypto/tls` 写入采集。amd64 还支持 Go 1.23–1.26 ABIInternal 的读取返回点采集，按 goroutine 和栈帧配对，并支持保留函数表的去符号及 PIE 构建。HTTP/1.1 与 HTTP/2/HPACK 重组已经实现，但仍受捕获范围和缓冲上限约束。
 - DNS：glibc 的 `getaddrinfo` uprobe，以及 amd64 的 UDP/sendto DNS 采集。
 - TLS 自动发现：扫描可见进程映射和容器根目录，跟踪目标并对共享库去重，同时报告覆盖限制。
 
@@ -21,7 +21,7 @@
 
 常驻采集入口是 `agentprov sensor stream`。它将原生事件分成有界批次并持久化，按采集时间关联，重试迟到绑定，默认运行策略评估，无需另行手工导入 JSONL。重启、重试和丢失计数规则见[持久缓冲说明](native-capture-spool.md)。普通 KVM 虚拟机在来宾内部运行采集器。
 
-尚未覆盖的方向包括 ARM64 Go TLS 读取、更广的 DNS 与网络路径、BoringSSL，以及当前不支持的去符号或静态 TLS 目标。amd64 系统调用、TLS、KVM 和 K3s 已有[实测报告](../benchmarks/amd64-kvm-k3s/README.zh-CN.md)。权限调用尝试不证明提权成功；自动发现也不能保证挂载前的事件可被捕获。
+尚未覆盖的方向包括 ARM64 Go TLS 读取、更广的 DNS 与网络路径、未知 TLS ABI 和无法定位函数的 C TLS 目标。amd64 去符号 Go、BoringSSL 动态库及静态链接程序已有[后续验收](../benchmarks/v0.10.1-followup/README.zh-CN.md)。amd64 系统调用、TLS、KVM 和 K3s 已有[实测报告](../benchmarks/amd64-kvm-k3s/README.zh-CN.md)。权限调用尝试不证明提权成功；自动发现也不能保证挂载前的事件可被捕获。
 
 ## 最初设计：历史记录
 

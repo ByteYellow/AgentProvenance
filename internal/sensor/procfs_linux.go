@@ -19,6 +19,7 @@ type procTaskIDs struct {
 // The map is bounded in the kernel and keyed by the original task lifetime.
 // Numeric procfs addresses never replace kernel evidence or TLS stream keys.
 type procfsResolver struct {
+	cache       map[procTaskKey]procTaskIDs
 	namespace   *os.File
 	lookup      func(procTaskKey) (procTaskIDs, error)
 	report      ProcfsIdentityReport
@@ -35,7 +36,21 @@ func (r *procfsResolver) resolve(e sensorbpfSensorEvent) procTaskIDs {
 	if r == nil {
 		return procTaskIDs{PID: e.Pid, TID: e.Tid}
 	}
-	ids, err := r.lookup(procTaskKey{e.ThreadStartNs, uint64(e.Pid)<<32 | uint64(e.Tid)})
+	key := procTaskKey{e.ThreadStartNs, uint64(e.Pid)<<32 | uint64(e.Tid)}
+	ids, ok := r.cache[key]
+	var err error
+	if !ok {
+		ids, err = r.lookup(key)
+		if err == nil && e.ThreadStartNs != 0 && ids.PID != 0 && ids.TID != 0 {
+			if r.cache == nil || len(r.cache) >= 4096 {
+				r.cache = make(map[procTaskKey]procTaskIDs)
+			}
+			r.cache[key] = ids
+		}
+	}
+	if e.Kind == eventExit || e.Kind == eventThreadExit {
+		delete(r.cache, key)
+	}
 	if err != nil || e.ThreadStartNs == 0 {
 		r.report.LookupMisses++
 		return procTaskIDs{}

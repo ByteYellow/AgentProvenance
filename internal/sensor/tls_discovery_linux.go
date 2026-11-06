@@ -6,10 +6,12 @@ import (
 	"bufio"
 	"debug/buildinfo"
 	"debug/elf"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -303,6 +305,13 @@ func classifyTLSExecutable(path string) executableKind {
 	}
 	if symErr != nil {
 		if _, err := buildinfo.ReadFile(path); err == nil {
+			if runtime.GOARCH == "amd64" {
+				if _, _, err := goTLSFunctionLocation(path, "crypto/tls.(*Conn).Write"); err == nil {
+					return executableKind{kind: "go"}
+				} else if errors.Is(err, errGoTLSNotLinked) {
+					return executableKind{}
+				}
+			}
 			return executableKind{kind: "go", unsupported: true}
 		}
 	}

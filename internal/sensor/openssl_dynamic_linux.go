@@ -12,7 +12,16 @@ import (
 // Large executables can have a small exported symbol table and an unrelated
 // oversized debug string table. Resolve only bounded dynamic metadata, then
 // pass file offsets so the uprobe library never lazily loads the latter.
-func opensslDynamicOffsets(path string) (map[string]uint64, error) {
+func opensslDynamicOffsets(path string) (map[string]uint64, error) { return opensslOffsets(path, true) }
+
+func opensslProbeOffsets(path string) (map[string]uint64, error) {
+	if err := validateELFMetadata(path); err != nil {
+		return opensslDynamicOffsets(path)
+	}
+	return opensslOffsets(path, false)
+}
+
+func opensslOffsets(path string, dynamicOnly bool) (map[string]uint64, error) {
 	if err := validateELFDynamicMetadata(path); err != nil {
 		return nil, err
 	}
@@ -26,11 +35,17 @@ func opensslDynamicOffsets(path string) (map[string]uint64, error) {
 		return nil, err
 	}
 	syms, err := f.DynamicSymbols()
+	if !dynamicOnly {
+		if regular, regularErr := f.Symbols(); regularErr == nil {
+			syms = append(syms, regular...)
+			err = nil
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
 	wanted := map[string]bool{}
-	for _, name := range []string{"SSL_new", "SSL_free", "SSL_clear", "SSL_set_bio", "SSL_set0_rbio", "SSL_set0_wbio", "SSL_set_fd", "SSL_set_rfd", "SSL_set_wfd", "SSL_write", "SSL_write_ex", "SSL_read", "SSL_read_ex"} {
+	for _, name := range []string{"SSL_set_custom_verify", "SSL_new", "SSL_free", "SSL_clear", "SSL_set_bio", "SSL_set0_rbio", "SSL_set0_wbio", "SSL_set_fd", "SSL_set_rfd", "SSL_set_wfd", "SSL_write", "SSL_write_ex", "SSL_read", "SSL_read_ex"} {
 		wanted[name] = true
 	}
 	result := map[string]uint64{}

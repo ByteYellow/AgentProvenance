@@ -37,6 +37,8 @@ func sensorCmd(dataDir *string) *cobra.Command {
 // wired it by hand). Runs until SIGINT/SIGTERM.
 func sensorStreamCmd(dataDir *string) *cobra.Command {
 	var sslLib string
+	var ringMiB int
+	var tlsKnown []string
 	var noPolicy bool
 	var keepUncorrelated bool
 	var autoTLS bool
@@ -100,8 +102,9 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 			}
 			fmt.Fprintln(stderr, commandText(cmd, "agentprov sensor stream: capturing kernel telemetry -> durable spool -> store (ctrl-c to stop)"))
 			sensorErr := sensor.RunWithOptions(capture, sensor.Options{
-				SSLLib:          resolvedSSLLib,
-				GoTLSBin:        os.Getenv("AGENTPROV_GO_TLS_BIN"),
+				SSLLib:        resolvedSSLLib,
+				GoTLSBin:      os.Getenv("AGENTPROV_GO_TLS_BIN"),
+				RingBufferMiB: ringMiB, TLSTargets: tlsKnown,
 				LibcLib:         os.Getenv("AGENTPROV_LIBC_LIB"),
 				Context:         ctx,
 				AutoTLS:         autoTLS,
@@ -171,6 +174,8 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 	stream.Flags().BoolVar(&appArmorState, "apparmor-state", true, "read timestamped AppArmor task state without changing policy")
 	stream.Flags().BoolVar(&seccompState, "seccomp-state", true, "read timestamped seccomp task state without changing filters")
 	stream.Flags().DurationVar(&tlsInterval, "tls-scan-interval", 2*time.Second, "interval for automatic TLS target discovery")
+	stream.Flags().IntVar(&ringMiB, "ring-buffer-mib", 64, "kernel event buffer in MiB (power of two, 1 to 256)")
+	stream.Flags().StringArrayVar(&tlsKnown, "tls-target", nil, "known TLS library or Go executable to attach before readiness (repeatable)")
 	stream.Flags().IntVar(&tlsTargets, "tls-max-targets", 128, "maximum automatically attached TLS targets")
 	stream.Flags().IntVar(&tlsProcesses, "tls-max-processes", 4096, "maximum visible processes inspected per TLS discovery scan")
 	return stream

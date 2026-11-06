@@ -100,6 +100,13 @@ and includes the CET user state. The [CET follow-up](benchmarks/v0.10.1-whpx-cet
 records enabled shadow-stack context-switch tests and collection acceptance.
 No `nousershstk` parameter is needed for this configuration.
 
+The remaining `misordered xstate` warning is fixed locally by the
+[QEMU WHPX patch](../scripts/patches/qemu-11.1-whpx-xsave-ecx.patch), which copies
+XSAVE component ECX attributes from the hypervisor along with their offsets.
+The [follow-up report](benchmarks/v0.10.1-followup/README.md) records the source,
+build hashes, corrected CPUID and CET checks. This is a local QEMU 11.1.0 build;
+the upstream stock executable remains available as a backup.
+
 `accept_kvm_guest.py` rejects x86 guests exposing `user_shstk` without both
 `xsave` and `xsaves`, and records the CPU flags in its report. Under QEMU 11.1.0's
 WHPX implementation, `cet-ss=off` alone does not reliably mask the exposed CET
@@ -170,12 +177,12 @@ Optional `/etc/default/agentprov-sensor` settings:
 ```sh
 AGENTPROV_SSL_LIB=/usr/lib/x86_64-linux-gnu/libssl.so.3
 AGENTPROV_LIBC_LIB=/usr/lib/x86_64-linux-gnu/libc.so.6
-AGENTPROV_GO_TLS_BIN=/absolute/path/to/unstripped-go-agent
+AGENTPROV_GO_TLS_BIN=/absolute/path/to/go-agent
 ```
 
 Restart the service after changing explicit paths. Native collection also enables
 automatic TLS discovery by default: it scans visible process mappings and
-container roots, attaches OpenSSL and unstripped Go targets, and reconciles
+container roots, attaches OpenSSL and supported Go targets, and reconciles
 replacement or departed targets. `sensor stream --auto-tls=false` disables it.
 Discovery has bounded process/target budgets and reports attachment failures.
 Observed process starts also wake a coalesced, rate-limited discovery scan.
@@ -183,12 +190,46 @@ For supported overlay mounts, discovery resolves the backing inode so containers
 sharing one library receive one attachment. Unresolvable or unsupported overlay
 layouts report a coverage limitation rather than installing duplicate probes.
 
-Go response capture is limited to amd64 Go ABIInternal 1.23–1.26 with symbols;
-unsupported versions and stripped binaries report degraded coverage. Automatic
-discovery does not guarantee a first request before attachment, nor coverage for
-a process that starts and exits between discovery passes. BoringSSL, arbitrary
-static/custom TLS stacks and encrypted traffic without a supported plaintext
-probe are not claimed as covered.
+amd64 Go ABIInternal 1.23–1.26 supports both regular and stripped (`-s -w`)
+executables, including PIE, when their Go function table is retained. Function
+metadata and instruction ranges are bounded before attachment. Go Read still
+uses ordinary probes at decoded return instructions.
+
+OpenSSL-compatible BoringSSL `SSL_read/SSL_write` paths are verified for shared
+libraries and static linkage with function symbols. Missing BoringSSL `_ex`
+APIs are reported as `not_applicable`. Unknown ABIs and C TLS implementations
+without resolvable function symbols require a separate adapter.
+
+Automatic discovery pre-attaches installed host OpenSSL libraries before
+readiness. For a known application or container-private library, specify its
+visible file path before starting the workload; repeated targets are supported:
+
+```sh
+sudo agentprov-sensor --tls-target /opt/agent/client \
+  --tls-target /opt/container-root/usr/lib/libssl.so.3
+```
+
+The same flags are available on `agentprov sensor stream`. Check that the target
+probes are attached in the capability report, then start the workload. Paths are
+revisited after replacement. Newly appearing, unconfigured container inodes can
+still make their first TLS call before automatic attachment. The
+[follow-up acceptance](benchmarks/v0.10.1-followup/README.md) covers first calls
+without startup delays, concurrent reads, and container recreation.
+
+### Capture buffering
+
+The native reader uses a 64 MiB kernel ring by default and a 16,384-record
+userspace queue (14.375 MiB of event payload). JSON output and procfs lookups run
+outside the ring-draining goroutine; process caches each hold at most 4,096
+entries. SIGINT/SIGTERM drains queued records before returning.
+
+Use `--ring-buffer-mib 16` for the former kernel budget or another power of two
+from 1 to 256. Both sensor entry points accept this option. Capability JSON
+includes `capture_buffers` with the configured ring and queue sizes. Kernel
+overflow still emits `resource_pressure` and feeds the existing loss counters.
+The [pressure report](benchmarks/v0.10.1-followup/pressure.json) records exact
+counts, immediate shutdown, deliberate overload and peak RSS. This VM reached
+about 259 MiB RSS during the burst test with the default buffers.
 
 The concurrent Read fixture has been run with Go 1.23.12, 1.24.0, 1.25.0 and 1.26 on WSL,
 including goroutine stack growth, exact returned bytes, and context cleanup.

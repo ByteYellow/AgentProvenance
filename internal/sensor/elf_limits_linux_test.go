@@ -19,6 +19,7 @@ func TestELFPreflightRejectsHugeLinkedStringTable(t *testing.T) {
 	binary.LittleEndian.PutUint16(data[60:], 3)
 	binary.LittleEndian.PutUint32(data[64+64+4:], 2)
 	binary.LittleEndian.PutUint64(data[64+64+32:], 24)
+	binary.LittleEndian.PutUint32(data[64+64+40:], 2)
 	binary.LittleEndian.PutUint32(data[64+128+4:], 3)
 	binary.LittleEndian.PutUint64(data[64+128+32:], 1<<40)
 	path := filepath.Join(t.TempDir(), "malformed")

@@ -3082,5 +3082,9 @@
   "Process": "进程",
   "Candidate source read": "候选源读取",
   "candidate_sensitive_data_flow": "候选敏感数据流",
-  "endpoint_execution_reference": "采集操作引用"
+  "endpoint_execution_reference": "采集操作引用",
+  "kernel event buffer in MiB (power of two, 1 to 256)": "内核事件缓冲区大小，单位 MiB（1～256，须为 2 的幂）",
+  "known TLS library or Go executable to attach before readiness (repeatable)": "采集器就绪前预挂载的 TLS 库或 Go 可执行文件（可重复指定）",
+  "ring-buffer-mib must be a power of two between 1 and 256": "ring-buffer-mib 须为 1～256 之间的 2 的幂",
+  "at most 1024 known TLS targets are allowed": "最多可指定 1024 个已知 TLS 目标"
 }

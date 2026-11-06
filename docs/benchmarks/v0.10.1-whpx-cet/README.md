@@ -1,5 +1,7 @@
 # v0.10.1 WHPX CPU configuration and CET verification
 
+Follow-up: the remaining XSAVE warning is resolved in the [capture/WHPX/TLS follow-up](../v0.10.1-followup/README.md). The logs below preserve the earlier stock-QEMU run.
+
 English | [中文](README.zh-CN.md)
 
 Tested on 2026-11-06–07, Asia/Shanghai. **The reproduced WHPX guest crash is

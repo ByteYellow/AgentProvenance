@@ -12,6 +12,12 @@ import (
 // degraded coverage; OnReady only promises the required syscall probes and the
 // ring-buffer reader are active, not that every TLS implementation is covered.
 type Options struct {
+	// RingBufferMiB is a power of two from 1 to 256; zero selects 64 MiB.
+	RingBufferMiB int
+	// TLSTargets are known OpenSSL/BoringSSL libraries or Go executables to
+	// attach before readiness. Paths are refreshed after atomic replacement.
+	TLSTargets []string
+
 	SSLLib   string
 	LibcLib  string
 	GoTLSBin string
@@ -100,7 +106,15 @@ func (d TLSDiscoveryReport) HasGaps() bool {
 	return e != nil && (e.QueueDrops > 0 || e.UnreadableProcesses > 0 || e.UnresolvedMounts > 0 || e.TruncatedMaps > 0 || e.SkippedTargets > 0 || e.UnsupportedExecutables > 0)
 }
 
+type CaptureBufferReport struct {
+	RingBytes   int `json:"ring_bytes"`
+	QueueEvents int `json:"queue_events"`
+	QueueBytes  int `json:"queue_bytes"`
+}
+
 type CapabilityReport struct {
+	CaptureBuffers *CaptureBufferReport `json:"capture_buffers,omitempty"`
+
 	SchemaVersion      string                     `json:"schema_version"`
 	UpdatedAt          string                     `json:"updated_at"`
 	Ready              bool                       `json:"ready"`
@@ -129,3 +143,6 @@ type StateCollectionCapability struct {
 	CacheCapacity int    `json:"cache_capacity"`
 	MinIntervalMS int64  `json:"min_interval_ms"`
 }
+
+const sensorQueueCapacity = 16384
+const sensorEventBytes = 920

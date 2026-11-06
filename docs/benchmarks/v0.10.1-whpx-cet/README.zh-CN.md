@@ -1,5 +1,7 @@
 # v0.10.1 WHPX CPU 配置修复与 CET 验收
 
+后续进展：剩余 XSAVE 警告已在[采集、WHPX 与 TLS 后续修复](../v0.10.1-followup/README.zh-CN.md)中解决。下方日志保留当时使用原版 QEMU 的结果。
+
 [English](README.md) | 中文
 
 验收时间为北京时间 2026-11-06 至 07 日。**使用 `-cpu max` 后，已复现的 WHPX guest 崩溃得到解决，CET 保持开启。**
