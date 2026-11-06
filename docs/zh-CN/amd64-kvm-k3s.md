@@ -51,9 +51,15 @@ scripts/regen-sensor.sh
 scripts/regen-sensor.sh --check
 ```
 
-如果发行版单独提供 `bpftool` 包，可安装它来代替 `linux-tools-*`。可通过 `BPFTOOL` 和 `VMLINUX_BTF` 指定工具及匹配的 BTF。脚本只选择本机架构，不会重新生成另一种架构的对象。
+如果发行版单独提供 `bpftool` 包，可安装它来代替 `linux-tools-*`。可通过 `BPFTOOL` 和 `VMLINUX_BTF` 指定工具及匹配的 BTF。生成参数显式指定 BPF ISA v3，以支持 TLS 调用序号使用的原子递增指令。脚本只选择本机架构，不会重新生成另一种架构的对象。
 
 `--check` 比较生成的 Go 绑定，不保证不同内核或编译器生成的 `.o` 文件逐字节相同。
+
+在 WSL 的 Windows 挂载盘上运行全量测试时，可关闭测试结果缓存，避免 Go 对大量测试文件访问记录反复解析挂载路径。构建缓存仍可使用：
+
+```sh
+go test -race -count=1 -p 2 -timeout 20m ./...
+```
 
 ## 在 KVM 虚拟机中安装
 
@@ -165,7 +171,7 @@ sudo env PATH="$PATH" AGENTPROV_LIVE_GOTLS=1 \
 
 ## 后台服务就绪与存储故障
 
-`GET /v1/live` 表示 HTTP 进程可以响应。`GET /v1/ready` 和 `GET /v1/health` 检查数据库及表结构，检查时限为两秒。数据库错误、缺少必需表或结构不兼容时返回 503；未知队列数量保持 `null`。这三个 GET 接口不要求可选的 API bearer token。
+`GET /v1/live` 表示 HTTP 进程可以响应。`GET /v1/ready` 和 `GET /v1/health` 检查数据库及表结构，检查时限为两秒。数据库错误、缺少必需表或结构不兼容时返回 503；未知队列数量保持 `null`。这三个 GET 接口无需认证。其他 API 默认要求 bearer token；未显式配置时，`daemon serve` 会在 `<data-dir>/auth-token` 中生成。
 
 查询可用性与证据覆盖分别报告。数据库可用但存在历史丢失时，HTTP 返回 200，并报告 `status: degraded`、`coverage_status: gaps_recorded` 和 `ready: true`。待关联事件单独报告。就绪检查不证明每个后台工作器都在推进，还应查看传感器存活状态、实际能力和积压。
 

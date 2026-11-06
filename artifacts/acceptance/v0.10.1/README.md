@@ -10,7 +10,7 @@ artifact, not a published release.
 - Build: Go 1.23.0, `linux/amd64`, `CGO_ENABLED=0`.
 - [Download ZIP](AgentProvenance-v0.10.1-x86-acceptance-4828cce.zip?raw=true) (about 68 MiB).
 - [Archive checksum](SHA256SUMS); individual file checksums are inside the ZIP.
-- ARM64 acceptance is complete; x86 live acceptance is pending.
+- ARM64 acceptance was completed earlier. The x86 package and corrected build passed the Ubuntu guest gates on 2026-11-06; see the [report and remaining environment limits](../../../docs/benchmarks/v0.10.1-x86/README.md). This ZIP retains the original `4828cce` build.
 
 ## Requirements
 

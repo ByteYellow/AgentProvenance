@@ -1,0 +1,181 @@
+=== RUN   TestLiveOpenSSLConnectionLifecycle
+    openssl_lifecycle_linux_test.go:124: five HTTPS exchanges: keepalive stable; clear, BIO rebind and reference release isolated; exact response bytes, zero capture gaps
+--- PASS: TestLiveOpenSSLConnectionLifecycle (2.93s)
+=== RUN   TestLiveOpenSSLLifetimePairing
+=== RUN   TestLiveOpenSSLLifetimePairing/reuse
+=== RUN   TestLiveOpenSSLLifetimePairing/late-read
+--- PASS: TestLiveOpenSSLLifetimePairing (1.56s)
+    --- PASS: TestLiveOpenSSLLifetimePairing/reuse (0.00s)
+    --- PASS: TestLiveOpenSSLLifetimePairing/late-read (0.00s)
+=== RUN   TestLiveOpenSSLLifecycleAttachmentFailure
+--- PASS: TestLiveOpenSSLLifecycleAttachmentFailure (0.92s)
+=== RUN   TestLiveOpenSSLReadPairing
+=== RUN   TestLiveOpenSSLReadPairing/normal/ex=0
+=== RUN   TestLiveOpenSSLReadPairing/normal/ex=1
+=== RUN   TestLiveOpenSSLReadPairing/nested/ex=0
+=== RUN   TestLiveOpenSSLReadPairing/nested/ex=1
+=== RUN   TestLiveOpenSSLReadPairing/overflow/ex=0
+=== RUN   TestLiveOpenSSLReadPairing/overflow/ex=1
+=== RUN   TestLiveOpenSSLReadPairing/failure/ex=0
+=== RUN   TestLiveOpenSSLReadPairing/failure/ex=1
+=== RUN   TestLiveOpenSSLReadPairing/oversize/ex=0
+=== RUN   TestLiveOpenSSLReadPairing/oversize/ex=1
+=== RUN   TestLiveOpenSSLReadPairing/bad-out/ex=1
+=== RUN   TestLiveOpenSSLReadPairing/exit/ex=0
+=== RUN   TestLiveOpenSSLReadPairing/exit/ex=1
+=== RUN   TestLiveOpenSSLReadPairing/exec/ex=0
+=== RUN   TestLiveOpenSSLReadPairing/exec/ex=1
+--- PASS: TestLiveOpenSSLReadPairing (1.16s)
+    --- PASS: TestLiveOpenSSLReadPairing/normal/ex=0 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/normal/ex=1 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/nested/ex=0 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/nested/ex=1 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/overflow/ex=0 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/overflow/ex=1 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/failure/ex=0 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/failure/ex=1 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/oversize/ex=0 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/oversize/ex=1 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/bad-out/ex=1 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/exit/ex=0 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/exit/ex=1 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/exec/ex=0 (0.00s)
+    --- PASS: TestLiveOpenSSLReadPairing/exec/ex=1 (0.00s)
+=== RUN   TestLiveOpenSSLReadConcurrent
+=== RUN   TestLiveOpenSSLReadConcurrent/legacy
+    openssl_read_linux_test.go:138: 32 simultaneously blocked TLS reads matched exact return bytes; zero drops and retained contexts
+=== RUN   TestLiveOpenSSLReadConcurrent/ex
+    openssl_read_linux_test.go:138: 32 simultaneously blocked TLS reads matched exact return bytes; zero drops and retained contexts
+=== RUN   TestLiveOpenSSLReadConcurrent/mixed
+    openssl_read_linux_test.go:138: 32 simultaneously blocked TLS reads matched exact return bytes; zero drops and retained contexts
+--- PASS: TestLiveOpenSSLReadConcurrent (1.38s)
+    --- PASS: TestLiveOpenSSLReadConcurrent/legacy (0.07s)
+    --- PASS: TestLiveOpenSSLReadConcurrent/ex (0.07s)
+    --- PASS: TestLiveOpenSSLReadConcurrent/mixed (0.07s)
+=== RUN   TestLiveTLSDiscoveryShortClient
+=== RUN   TestLiveTLSDiscoveryShortClient/automatic
+    tls_discovery_live_linux_test.go:198: first requests captured=0/1; initial client wall=131.907451ms; test-process CPU=30.065ms; discovery={Enabled:true ScanIntervalMS:2000 MaxTargets:128 MaxProcessesPerScan:4096 ActiveTargets:0 ScanComplete:true ProcessesScanned:48 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 SkippedTargets:0 UnsupportedExecutables:0 Reason: Limitations:[processes must be visible in the sensor PID namespace; container roots/maps must be readable first TLS use can precede event-driven attachment; explicit targets are attached before readiness stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered] SweepPasses:1 EventDiscovery:0xc003828090}
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3237: exec=0 request=0
+    tls_discovery_live_linux_test.go:211: event discovery counters: {QueueCapacity:128 Pending:0 Hints:4 Coalesced:2 QueueDrops:0 ProcessScans:2 RetryScans:0 ExitedProcesses:2 ChangedProcesses:0 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 UnsupportedExecutables:0 SkippedTargets:0 AttachedTargets:0 LastAttachLatencyMS:0 MaxAttachLatencyMS:0}
+=== RUN   TestLiveTLSDiscoveryShortClient/explicit
+    tls_discovery_live_linux_test.go:198: first requests captured=0/1; initial client wall=128.137465ms; test-process CPU=40.847ms; discovery={Enabled:true ScanIntervalMS:2000 MaxTargets:128 MaxProcessesPerScan:4096 ActiveTargets:0 ScanComplete:true ProcessesScanned:51 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 SkippedTargets:0 UnsupportedExecutables:0 Reason: Limitations:[processes must be visible in the sensor PID namespace; container roots/maps must be readable first TLS use can precede event-driven attachment; explicit targets are attached before readiness stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered] SweepPasses:1 EventDiscovery:0xc002f02090}
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3294: exec=0 request=0
+    tls_discovery_live_linux_test.go:211: event discovery counters: {QueueCapacity:128 Pending:0 Hints:17 Coalesced:3 QueueDrops:0 ProcessScans:13 RetryScans:0 ExitedProcesses:13 ChangedProcesses:0 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 UnsupportedExecutables:0 SkippedTargets:0 AttachedTargets:0 LastAttachLatencyMS:0 MaxAttachLatencyMS:0}
+=== RUN   TestLiveTLSDiscoveryShortClient/explicit-no-auto
+    tls_discovery_live_linux_test.go:198: first requests captured=0/1; initial client wall=130.082494ms; test-process CPU=21.565ms; discovery={Enabled:false ScanIntervalMS:2000 MaxTargets:128 MaxProcessesPerScan:4096 ActiveTargets:0 ScanComplete:true ProcessesScanned:0 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 SkippedTargets:0 UnsupportedExecutables:0 Reason: Limitations:[processes must be visible in the sensor PID namespace; container roots/maps must be readable first TLS use can precede event-driven attachment; explicit targets are attached before readiness stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered] SweepPasses:0 EventDiscovery:<nil>}
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3323: exec=0 request=0
+=== RUN   TestLiveTLSDiscoveryShortClient/delayed-load
+    tls_discovery_live_linux_test.go:198: first requests captured=0/1; initial client wall=831.992556ms; test-process CPU=32.485ms; discovery={Enabled:true ScanIntervalMS:2000 MaxTargets:128 MaxProcessesPerScan:4096 ActiveTargets:0 ScanComplete:true ProcessesScanned:48 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 SkippedTargets:0 UnsupportedExecutables:0 Reason: Limitations:[processes must be visible in the sensor PID namespace; container roots/maps must be readable first TLS use can precede event-driven attachment; explicit targets are attached before readiness stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered] SweepPasses:1 EventDiscovery:0xc00348e990}
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3336: exec=0 request=0
+    tls_discovery_live_linux_test.go:211: event discovery counters: {QueueCapacity:128 Pending:0 Hints:4 Coalesced:1 QueueDrops:0 ProcessScans:3 RetryScans:0 ExitedProcesses:3 ChangedProcesses:0 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 UnsupportedExecutables:0 SkippedTargets:0 AttachedTargets:0 LastAttachLatencyMS:0 MaxAttachLatencyMS:0}
+=== RUN   TestLiveTLSDiscoveryShortClient/delayed-system-library
+    tls_discovery_live_linux_test.go:198: first requests captured=0/1; initial client wall=832.142356ms; test-process CPU=34.335ms; discovery={Enabled:true ScanIntervalMS:2000 MaxTargets:128 MaxProcessesPerScan:4096 ActiveTargets:0 ScanComplete:true ProcessesScanned:48 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 SkippedTargets:0 UnsupportedExecutables:0 Reason: Limitations:[processes must be visible in the sensor PID namespace; container roots/maps must be readable first TLS use can precede event-driven attachment; explicit targets are attached before readiness stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered] SweepPasses:1 EventDiscovery:0xc003274090}
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3397: exec=0 request=0
+    tls_discovery_live_linux_test.go:211: event discovery counters: {QueueCapacity:128 Pending:0 Hints:4 Coalesced:1 QueueDrops:0 ProcessScans:3 RetryScans:0 ExitedProcesses:3 ChangedProcesses:0 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 UnsupportedExecutables:0 SkippedTargets:0 AttachedTargets:0 LastAttachLatencyMS:0 MaxAttachLatencyMS:0}
+=== RUN   TestLiveTLSDiscoveryShortClient/concurrent
+    tls_discovery_live_linux_test.go:198: first requests captured=0/8; initial client wall=133.542999ms; test-process CPU=49.283ms; discovery={Enabled:true ScanIntervalMS:2000 MaxTargets:128 MaxProcessesPerScan:4096 ActiveTargets:0 ScanComplete:true ProcessesScanned:48 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 SkippedTargets:0 UnsupportedExecutables:0 Reason: Limitations:[processes must be visible in the sensor PID namespace; container roots/maps must be readable first TLS use can precede event-driven attachment; explicit targets are attached before readiness stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered] SweepPasses:1 EventDiscovery:0xc0036041b0}
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3416: exec=0 request=0
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3417: exec=0 request=0
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3410: exec=0 request=0
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3411: exec=0 request=0
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3412: exec=0 request=0
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3413: exec=0 request=0
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3414: exec=0 request=0
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3415: exec=0 request=0
+    tls_discovery_live_linux_test.go:211: event discovery counters: {QueueCapacity:128 Pending:0 Hints:25 Coalesced:16 QueueDrops:0 ProcessScans:9 RetryScans:0 ExitedProcesses:9 ChangedProcesses:0 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 UnsupportedExecutables:0 SkippedTargets:0 AttachedTargets:0 LastAttachLatencyMS:0 MaxAttachLatencyMS:0}
+=== RUN   TestLiveTLSDiscoveryShortClient/warm-inode
+    tls_discovery_live_linux_test.go:198: first requests captured=0/2; initial client wall=128.443447ms; test-process CPU=57.675ms; discovery={Enabled:true ScanIntervalMS:2000 MaxTargets:128 MaxProcessesPerScan:4096 ActiveTargets:0 ScanComplete:true ProcessesScanned:53 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 SkippedTargets:0 UnsupportedExecutables:0 Reason: Limitations:[processes must be visible in the sensor PID namespace; container roots/maps must be readable first TLS use can precede event-driven attachment; explicit targets are attached before readiness stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered] SweepPasses:2 EventDiscovery:0xc001f10090}
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3461: exec=0 request=0
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3468: exec=0 request=0
+    tls_discovery_live_linux_test.go:211: event discovery counters: {QueueCapacity:128 Pending:0 Hints:7 Coalesced:4 QueueDrops:0 ProcessScans:3 RetryScans:0 ExitedProcesses:3 ChangedProcesses:0 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 UnsupportedExecutables:0 SkippedTargets:0 AttachedTargets:0 LastAttachLatencyMS:0 MaxAttachLatencyMS:0}
+=== RUN   TestLiveTLSDiscoveryShortClient/new-go-executable
+    tls_discovery_live_linux_test.go:198: first requests captured=0/1; initial client wall=85.648434ms; test-process CPU=28.928ms; discovery={Enabled:true ScanIntervalMS:2000 MaxTargets:128 MaxProcessesPerScan:4096 ActiveTargets:0 ScanComplete:true ProcessesScanned:49 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 SkippedTargets:0 UnsupportedExecutables:0 Reason: Limitations:[processes must be visible in the sensor PID namespace; container roots/maps must be readable first TLS use can precede event-driven attachment; explicit targets are attached before readiness stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered] SweepPasses:1 EventDiscovery:0xc00348c990}
+    tls_discovery_live_linux_test.go:201: first request missing or duplicated for PID 3502: exec=0 request=0
+    tls_discovery_live_linux_test.go:211: event discovery counters: {QueueCapacity:128 Pending:0 Hints:3 Coalesced:1 QueueDrops:0 ProcessScans:2 RetryScans:0 ExitedProcesses:2 ChangedProcesses:0 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 UnsupportedExecutables:0 SkippedTargets:0 AttachedTargets:0 LastAttachLatencyMS:0 MaxAttachLatencyMS:0}
+--- FAIL: TestLiveTLSDiscoveryShortClient (58.20s)
+    --- FAIL: TestLiveTLSDiscoveryShortClient/automatic (7.07s)
+    --- FAIL: TestLiveTLSDiscoveryShortClient/explicit (8.53s)
+    --- FAIL: TestLiveTLSDiscoveryShortClient/explicit-no-auto (4.94s)
+    --- FAIL: TestLiveTLSDiscoveryShortClient/delayed-load (7.52s)
+    --- FAIL: TestLiveTLSDiscoveryShortClient/delayed-system-library (7.12s)
+    --- FAIL: TestLiveTLSDiscoveryShortClient/concurrent (6.30s)
+    --- FAIL: TestLiveTLSDiscoveryShortClient/warm-inode (9.93s)
+    --- FAIL: TestLiveTLSDiscoveryShortClient/new-go-executable (6.70s)
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4095/ex=0
+    tls_gap_linux_test.go:114: real HTTPS: total=4095 ex=0 requests=2 responses=2 fragments=0 loss={Streams:0 Bytes:0}
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4095/ex=1
+    tls_gap_linux_test.go:114: real HTTPS: total=4095 ex=1 requests=2 responses=2 fragments=0 loss={Streams:0 Bytes:0}
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0
+    tls_gap_linux_test.go:114: real HTTPS: total=4096 ex=0 requests=2 responses=2 fragments=0 loss={Streams:0 Bytes:0}
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0/transport_middle
+    tls_gap_linux_test.go:351: kernel capture fault replay: complete=0 responses=2 fragments=3 gaps=1
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0/transport_first_call
+    tls_gap_linux_test.go:351: kernel capture fault replay: complete=0 responses=2 fragments=1 gaps=1
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0/transport_last_call
+    tls_gap_linux_test.go:351: kernel capture fault replay: complete=1 responses=2 fragments=1 gaps=1
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0/transport_last_chunk
+    tls_gap_linux_test.go:351: kernel capture fault replay: complete=0 responses=2 fragments=2 gaps=1
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0/transport_duplicate
+    tls_gap_linux_test.go:351: kernel capture fault replay: complete=2 responses=2 fragments=0 gaps=0
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0/transport_reorder
+    tls_gap_linux_test.go:351: kernel capture fault replay: complete=0 responses=2 fragments=4 gaps=1
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1
+    tls_gap_linux_test.go:114: real HTTPS: total=4096 ex=1 requests=2 responses=2 fragments=0 loss={Streams:0 Bytes:0}
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1/transport_middle
+    tls_gap_linux_test.go:351: kernel capture fault replay: complete=0 responses=2 fragments=3 gaps=1
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1/transport_first_call
+    tls_gap_linux_test.go:351: kernel capture fault replay: complete=0 responses=2 fragments=1 gaps=1
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1/transport_last_call
+    tls_gap_linux_test.go:351: kernel capture fault replay: complete=1 responses=2 fragments=1 gaps=1
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1/transport_last_chunk
+    tls_gap_linux_test.go:351: kernel capture fault replay: complete=0 responses=2 fragments=2 gaps=1
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1/transport_duplicate
+    tls_gap_linux_test.go:351: kernel capture fault replay: complete=2 responses=2 fragments=0 gaps=0
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1/transport_reorder
+    tls_gap_linux_test.go:351: kernel capture fault replay: complete=0 responses=2 fragments=4 gaps=1
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4097/ex=0
+    tls_gap_linux_test.go:114: real HTTPS: total=4097 ex=0 requests=0 responses=2 fragments=2 loss={Streams:1 Bytes:0}
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=4097/ex=1
+    tls_gap_linux_test.go:114: real HTTPS: total=4097 ex=1 requests=0 responses=2 fragments=2 loss={Streams:1 Bytes:0}
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=8192/ex=0
+    tls_gap_linux_test.go:114: real HTTPS: total=8192 ex=0 requests=0 responses=2 fragments=2 loss={Streams:1 Bytes:0}
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=8192/ex=1
+    tls_gap_linux_test.go:114: real HTTPS: total=8192 ex=1 requests=0 responses=2 fragments=2 loss={Streams:1 Bytes:0}
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=1048577/ex=0
+    tls_gap_linux_test.go:114: real HTTPS: total=1048577 ex=0 requests=0 responses=2 fragments=2 loss={Streams:1 Bytes:0}
+=== RUN   TestLiveOpenSSLCaptureGapKeepalive/bytes=1048577/ex=1
+    tls_gap_linux_test.go:114: real HTTPS: total=1048577 ex=1 requests=0 responses=2 fragments=1 loss={Streams:1 Bytes:0}
+--- PASS: TestLiveOpenSSLCaptureGapKeepalive (2.75s)
+    --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4095/ex=0 (0.01s)
+    --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4095/ex=1 (0.01s)
+    --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0 (0.01s)
+        --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0/transport_middle (0.00s)
+        --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0/transport_first_call (0.00s)
+        --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0/transport_last_call (0.00s)
+        --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0/transport_last_chunk (0.00s)
+        --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0/transport_duplicate (0.00s)
+        --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=0/transport_reorder (0.00s)
+    --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1 (0.01s)
+        --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1/transport_middle (0.00s)
+        --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1/transport_first_call (0.00s)
+        --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1/transport_last_call (0.00s)
+        --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1/transport_last_chunk (0.00s)
+        --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1/transport_duplicate (0.00s)
+        --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4096/ex=1/transport_reorder (0.00s)
+    --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4097/ex=0 (0.01s)
+    --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=4097/ex=1 (0.01s)
+    --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=8192/ex=0 (0.01s)
+    --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=8192/ex=1 (0.01s)
+    --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=1048577/ex=0 (0.02s)
+    --- PASS: TestLiveOpenSSLCaptureGapKeepalive/bytes=1048577/ex=1 (0.02s)
+=== RUN   TestLiveOpenSSLRingLossSequence
+    tls_gap_linux_test.go:272: actual ring exhaustion: kernel drops=2 sequence gaps=2 request fragments=2, both requests reached server
+--- PASS: TestLiveOpenSSLRingLossSequence (2.56s)
+=== RUN   TestTLSMessageMapPreservesUndecodedBinaryFragment
+--- PASS: TestTLSMessageMapPreservesUndecodedBinaryFragment (0.00s)
+=== RUN   TestTLSMessageMapPreservesParsedMetadata
+--- PASS: TestTLSMessageMapPreservesParsedMetadata (0.00s)
+=== RUN   TestTLSMessageMapConnectionIdentity
+--- PASS: TestTLSMessageMapConnectionIdentity (0.00s)
+FAIL

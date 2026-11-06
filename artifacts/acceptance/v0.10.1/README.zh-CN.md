@@ -8,7 +8,7 @@
 - 构建：Go 1.23.0，`linux/amd64`，`CGO_ENABLED=0`。
 - [下载 ZIP](AgentProvenance-v0.10.1-x86-acceptance-4828cce.zip?raw=true)，约 68 MiB。
 - [压缩包校验值](SHA256SUMS)；包内另附逐文件校验值。
-- ARM64 验收已完成，x86 实机验收待执行。
+- ARM64 已完成验收。原 x86 包及修正后的程序已于 2026-11-06 通过 Ubuntu guest 验收，详见[结果与环境限制](../../../docs/benchmarks/v0.10.1-x86/README.zh-CN.md)。本 ZIP 仍保留原始 `4828cce` 构建。
 
 ## 环境要求
 

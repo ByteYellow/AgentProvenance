@@ -1,0 +1,49 @@
+?   	github.com/byteyellow/agentprovenance	[no test files]
+?   	github.com/byteyellow/agentprovenance/cmd/agentprov	[no test files]
+?   	github.com/byteyellow/agentprovenance/demo	[no test files]
+?   	github.com/byteyellow/agentprovenance/docs	[no test files]
+ok  	github.com/byteyellow/agentprovenance/cmd/agentprov-sensor	0.008s
+ok  	github.com/byteyellow/agentprovenance/internal/accesscontrol	0.004s
+ok  	github.com/byteyellow/agentprovenance/internal/adapter	0.003s
+?   	github.com/byteyellow/agentprovenance/internal/buildinfo	[no test files]
+ok  	github.com/byteyellow/agentprovenance/internal/agentcontext	3.845s
+ok  	github.com/byteyellow/agentprovenance/internal/aitools	0.047s
+ok  	github.com/byteyellow/agentprovenance/internal/attest	0.004s
+ok  	github.com/byteyellow/agentprovenance/internal/baseline	0.046s
+ok  	github.com/byteyellow/agentprovenance/internal/cli	12.369s
+ok  	github.com/byteyellow/agentprovenance/internal/compliance	0.053s
+ok  	github.com/byteyellow/agentprovenance/internal/computerapi	0.476s
+ok  	github.com/byteyellow/agentprovenance/internal/control	0.045s
+ok  	github.com/byteyellow/agentprovenance/internal/correlation	0.562s
+ok  	github.com/byteyellow/agentprovenance/internal/cost	0.156s
+ok  	github.com/byteyellow/agentprovenance/internal/daemon	1.855s
+?   	github.com/byteyellow/agentprovenance/internal/envtemplate	[no test files]
+?   	github.com/byteyellow/agentprovenance/internal/ids	[no test files]
+?   	github.com/byteyellow/agentprovenance/internal/ports	[no test files]
+ok  	github.com/byteyellow/agentprovenance/internal/dashboard	45.135s
+ok  	github.com/byteyellow/agentprovenance/internal/effects	0.053s
+ok  	github.com/byteyellow/agentprovenance/internal/evidence	0.352s
+ok  	github.com/byteyellow/agentprovenance/internal/forensics	6.508s
+ok  	github.com/byteyellow/agentprovenance/internal/hooksbridge	1.509s
+ok  	github.com/byteyellow/agentprovenance/internal/i18n	0.318s
+ok  	github.com/byteyellow/agentprovenance/internal/intent	0.550s
+ok  	github.com/byteyellow/agentprovenance/internal/launch	2.407s
+ok  	github.com/byteyellow/agentprovenance/internal/mcpserver	0.034s
+ok  	github.com/byteyellow/agentprovenance/internal/observability	0.203s
+ok  	github.com/byteyellow/agentprovenance/internal/producer	0.049s
+ok  	github.com/byteyellow/agentprovenance/internal/producer/k8sinformer	1.153s
+ok  	github.com/byteyellow/agentprovenance/internal/provenance	18.756s
+?   	github.com/byteyellow/agentprovenance/internal/staticdata	[no test files]
+?   	github.com/byteyellow/agentprovenance/internal/substrate/runtime	[no test files]
+ok  	github.com/byteyellow/agentprovenance/internal/record	13.127s
+ok  	github.com/byteyellow/agentprovenance/internal/redact	0.239s
+ok  	github.com/byteyellow/agentprovenance/internal/security	0.285s
+ok  	github.com/byteyellow/agentprovenance/internal/sensor	0.726s
+ok  	github.com/byteyellow/agentprovenance/internal/signal	0.058s
+ok  	github.com/byteyellow/agentprovenance/internal/signals	0.182s
+ok  	github.com/byteyellow/agentprovenance/internal/store	0.318s
+ok  	github.com/byteyellow/agentprovenance/internal/substrate/node	0.005s
+ok  	github.com/byteyellow/agentprovenance/internal/substrate/session	0.102s
+ok  	github.com/byteyellow/agentprovenance/internal/substrate/state	0.104s
+ok  	github.com/byteyellow/agentprovenance/internal/telemetry	3.011s
+ok  	github.com/byteyellow/agentprovenance/internal/tlsintent	0.009s

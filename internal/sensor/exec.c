@@ -384,6 +384,13 @@ int handle_exec(struct trace_event_raw_sched_process_exec *ctx) {
 	return 0;
 }
 
+// Named syscall tracepoints store __syscall_nr as a 32-bit int followed by
+// alignment padding, unlike raw_syscalls' long id. The padding is unspecified
+// (and nonzero on x86); never use it as part of entry/return pairing identity.
+static __always_inline __s64 syscall_number(__s64 id) {
+	return (__s32)id;
+}
+
 static __always_inline void fill_syscall(struct sensor_event *e, struct syscall_ctx *call) {
 	e->syscall_start_ns = call->start_ns;
 	e->syscall_nr = call->nr;
@@ -403,7 +410,7 @@ int handle_connect(struct trace_event_raw_sys_enter *ctx) {
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 	struct syscall_ctx call = {
 		.task_start_ns = BPF_CORE_READ(task, start_time),
-		.start_ns = bpf_ktime_get_ns(), .nr = ctx->id,
+		.start_ns = bpf_ktime_get_ns(), .nr = syscall_number(ctx->id),
 		.kind = EVENT_CONNECT, .daddr = sa.sin_addr.s_addr, .dport = sa.sin_port,
 	};
 	if (bpf_map_update_elem(&syscall_calls, &id, &call, BPF_ANY))
@@ -539,7 +546,7 @@ static __always_inline int emit_open(const char *path, long flags, long nr) {
 
 SEC("tp/syscalls/sys_enter_openat")
 int handle_openat(struct trace_event_raw_sys_enter *ctx) {
-	return emit_open((const char *)ctx->args[1], (long)ctx->args[2], ctx->id);
+	return emit_open((const char *)ctx->args[1], (long)ctx->args[2], syscall_number(ctx->id));
 }
 
 static __always_inline int emit_syscall_result(struct trace_event_raw_sys_exit *ctx, __u32 kind) {
@@ -548,7 +555,7 @@ static __always_inline int emit_syscall_result(struct trace_event_raw_sys_exit *
 	if (!p)
 		return 0;
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-	if (p->task_start_ns != BPF_CORE_READ(task, start_time) || p->nr != ctx->id || p->kind != kind) {
+	if (p->task_start_ns != BPF_CORE_READ(task, start_time) || p->nr != syscall_number(ctx->id) || p->kind != kind) {
 		bpf_map_delete_elem(&syscall_calls, &id);
 		return 0;
 	}
@@ -597,7 +604,7 @@ int handle_connect_return(struct trace_event_raw_sys_exit *ctx) {
 #if defined(__TARGET_ARCH_x86)
 SEC("tp/syscalls/sys_enter_open")
 int handle_open(struct trace_event_raw_sys_enter *ctx) {
-	return emit_open((const char *)ctx->args[0], (long)ctx->args[1], ctx->id);
+	return emit_open((const char *)ctx->args[0], (long)ctx->args[1], syscall_number(ctx->id));
 }
 #endif
 

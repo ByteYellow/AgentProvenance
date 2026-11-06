@@ -84,9 +84,18 @@ scripts/regen-sensor.sh --check
 
 On distributions with a standalone package, install `bpftool` instead of
 `linux-tools-*`. `BPFTOOL` and `VMLINUX_BTF` can point to the matching tool and
-BTF. The script selects only the native architecture and never regenerates the
+BTF. Generation explicitly targets BPF ISA v3 for the atomic fetch-add used by
+TLS call sequencing. The script selects only the native architecture and never regenerates the
 other architecture. `--check` compares generated Go bindings; it does not claim
 byte-for-byte `.o` reproducibility across kernels or compiler versions.
+
+When running the full suite from a Windows-mounted WSL checkout, disable test
+result caching so Go does not repeatedly resolve the large fixture access log
+across the mount. Build caching remains available:
+
+```sh
+go test -race -count=1 -p 2 -timeout 20m ./...
+```
 
 ## Install inside a KVM guest
 
@@ -250,7 +259,8 @@ Pod gate proves late syscall attribution, not zero-gap TLS attachment.
 `GET /v1/health` check the database and schema, with a two-second check deadline.
 Database errors, missing required tables and incompatible schemas return 503;
 unknown queue counts stay null. These three GET endpoints remain accessible
-without the optional API bearer token.
+without authentication. Other API routes require a bearer token by default;
+`daemon serve` creates one in `<data-dir>/auth-token` when none is supplied.
 
 Query availability is distinct from evidence coverage. Historical loss produces
 `status: degraded`, `coverage_status: gaps_recorded` and `ready: true` with HTTP

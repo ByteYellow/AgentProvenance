@@ -1,0 +1,25 @@
+{
+  "base_commit": "45d1c00ae896097c96121c7944c16d02d95ae24b",
+  "baseline_package_source": "4828cce10f0b53630d0a298affc760d5b1d6682c",
+  "build_toolchain": "go1.23.12 linux/amd64",
+  "cgo_enabled": false,
+  "source_files_sha256": {
+    "internal/sensor/exec.c": "65520226bf281df2ec589bcd538f54e9330e9c979bf7c4c352cc01450e8808bb",
+    "internal/sensor/gen.go": "25682bddb227ac03499969df459570ede002272848cbed38d2705b9516906a37",
+    "internal/sensor/outcome_live_linux_test.go": "cbebb68ca61c12055b8927f3281d45f9ee05676d08bc332533ffff7c13f7e9f4",
+    "internal/sensor/sensorbpf_x86_bpfel.o": "99fb1d54aabed43876eb891c7f4e68c8d77c64336d282cf70a99a21743a81c3e",
+    "internal/sensor/sensorbpf_arm64_bpfel.o": "f533e32b812fc5794f24e9caa4d9397e1b09eba5747072ee299a93a20564aaba"
+  },
+  "binary_sha256": {
+    "agentprov": "4845c4f1bcdbc507f3a071358c0c05c33ac74276204e10d492240d723f821ee1",
+    "agentprov-sensor": "54b80ff8f02adb1abd6a4dfe2340b0ff95a51d488f11a68d8c29091684588af5",
+    "sensor.test": "6de594282ef6b38b6c1f89d09ce7380d24d865a79b1f1f5dae9e956580ba164c"
+  },
+  "arm64_object_unchanged": true,
+  "bpf_build": {
+    "kernel_btf": "6.18.33.2-microsoft-standard-WSL2",
+    "clang": "Ubuntu clang version 21.1.8 (6ubuntu1)",
+    "isa": "v3",
+    "regeneration_check": "passed"
+  }
+}

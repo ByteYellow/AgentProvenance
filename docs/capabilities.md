@@ -944,7 +944,7 @@ fallback for longer or unrecognized paths.
 | Capability | What it does |
 |---|---|
 | CLI / JSON | every command has a stable `--json` contract with result/page integrity hashes |
-| Daemon API | `daemon serve` — binding, ingest, query, verify, record, forensics, signals over HTTP; optional bearer-token auth |
+| Daemon API | `daemon serve` — binding, ingest, query, verify, record, forensics, signals over HTTP; bearer-token authentication enabled by default |
 | AI tools + MCP | the read surface, the `evaluate_action` gate, and context-write (`bind_scope` / `record_tool_call`) via `ai call` and stdio MCP (`ai mcp`) |
 | Evaluator / RL | `signal context / import`, trajectory manifests, and a Python SDK (offline batch + in-loop scoring) — emits evidence, not reward policy |
 | Substrate evidence | Docker/local process metadata, cgroup/pid identity, filesystem baseline/diff/replay, telemetry spool, windows, retention, 100k-pressure tested |

@@ -816,7 +816,7 @@ TLS 自动发现会根据执行、连接和库打开事件，定向检查对应�
 | 能力 | 说明 |
 |---|---|
 | CLI / JSON | 面向查询与集成的命令提供 `--json` 输出，并包含相应的结果集或分页完整性信息 |
-| 本地服务 API | `daemon serve` 通过 HTTP 提供绑定、事件接收、查询、验证、记录、取证和信号接口，可启用 Bearer Token 认证 |
+| 本地服务 API | `daemon serve` 通过 HTTP 提供绑定、事件接收、查询、验证、记录、取证和信号接口，默认启用 Bearer Token 认证 |
 | AI 工具与 MCP | 通过 `ai call` 和 stdio MCP（`ai mcp`）提供查询、`evaluate_action` 预检和上下文写入 |
 | 评估器与 RL | `signal context / import`、轨迹清单与 Python SDK 支持离线批量评估或在执行流程中评分；奖励策略由外部系统定义 |
 | 运行环境信息 | 记录 Docker/本地进程元数据、cgroup/PID、文件系统状态、时间范围和保留策略；事件缓冲与查询已有 10 万事件规模的单节点测试 |

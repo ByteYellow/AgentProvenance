@@ -1,0 +1,6 @@
+test_signed_bundle_handoff (test_kvm_guest.SignedReplayTest.test_signed_bundle_handoff) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.474s
+
+OK

@@ -146,6 +146,13 @@ func TestLiveSyscallOutcomes(t *testing.T) {
 				if e.SyscallStartNs == 0 || row == nil {
 					continue
 				}
+				wantNumber := int64(unix.SYS_OPENAT)
+				if e.SyscallKind == eventConnect {
+					wantNumber = int64(unix.SYS_CONNECT)
+				}
+				if e.SyscallNr != wantNumber {
+					t.Fatalf("syscall number includes tracepoint padding: got %d want %d", e.SyscallNr, wantNumber)
+				}
 				if e.SyscallKind == eventOpen && !strings.HasPrefix(cstr(e.Path[:]), dir+"/") {
 					continue
 				}

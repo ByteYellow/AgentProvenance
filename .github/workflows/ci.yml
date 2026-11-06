@@ -215,6 +215,12 @@ jobs:
           sudo env PATH="$PATH" AGENTPROV_LIVE_OPENSSL=1 \
             /tmp/agentprov-live/sensor-test -test.run '^Test(OpenSSLReadObject|TLSMessageMap|LiveOpenSSL)' -test.v -test.timeout=120s \
             | tee /tmp/agentprov-live/openssl-read.log
+      - name: Verify bounded discovery of short-lived TLS clients
+        run: |
+          cd internal/sensor
+          sudo env PATH="$PATH" AGENTPROV_LIVE_OPENSSL=1 AGENTPROV_LIVE_TLS_CLIENT=/tmp/agentprov-live/go-client \
+            /tmp/agentprov-live/sensor-test -test.run '^TestLiveTLSDiscoveryShortClient$' -test.v -test.timeout=120s \
+            | tee /tmp/agentprov-live/tls-discovery.log
       - name: Verify syscall outcomes and thread-group exits
         run: |
           cd internal/sensor
@@ -278,6 +284,7 @@ jobs:
           path: |
             /tmp/agentprov-live/acceptance.*
             /tmp/agentprov-live/openssl-read.log
+            /tmp/agentprov-live/tls-discovery.log
             /tmp/agentprov-live/syscall-outcomes.log
             /tmp/agentprov-live/audit-associations.log
             /tmp/agentprov-live/audit-follow.log
