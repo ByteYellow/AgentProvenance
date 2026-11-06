@@ -74,9 +74,12 @@ func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
 				edge.EvidenceRefs = append(edge.EvidenceRefs, "runtime_event/"+edge.SourceEventID)
 			}
 		}
-		if edge.EdgeType == "llm_call" && (strings.HasPrefix(edge.ID, tlsPairEdgePrefix) || strings.HasPrefix(edge.ID, "tls-pair-v1-")) {
+		if edge.EdgeType == "llm_call" && (strings.HasPrefix(edge.ID, tlsPairEdgePrefix) || strings.HasPrefix(edge.ID, "tls-pair-v2-") || strings.HasPrefix(edge.ID, "tls-pair-v1-")) {
 			edge.Derived, edge.DerivationRule = true, tlsPairRule
 			prefix := tlsPairEdgePrefix
+			if strings.HasPrefix(edge.ID, "tls-pair-v2-") {
+				prefix, edge.DerivationRule = "tls-pair-v2-", "agentprov.tls_connection_exchange/v2"
+			}
 			if strings.HasPrefix(edge.ID, "tls-pair-v1-") {
 				prefix, edge.DerivationRule = "tls-pair-v1-", "agentprov.tls_connection_exchange/v1"
 			}

@@ -5,6 +5,7 @@ package tlsintent
 type connectionState struct {
 	start, epoch, lastUsed uint64
 	closed                 bool
+	gaps                   map[string]string
 }
 
 func stampIdentity(messages []Message, start, epoch uint64) {

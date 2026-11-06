@@ -40,6 +40,7 @@ func (r *Reassembler) evictOldest() {
 	for _, dir := range []string{Request, Response} {
 		key := streamKey{oldest.pid, oldest.conn, dir}
 		if s := r.streams[key]; s != nil {
+			r.markGap(Chunk{PID: key.pid, Conn: key.conn, Direction: dir}, s, GapStreamLimit)
 			r.loss.Streams++
 			r.loss.Bytes += uint64(s.buf.Len())
 			if s.h2 != nil {
@@ -85,7 +86,8 @@ func (p *h2Parser) fail(extra int) {
 	if len(p.streams) == 0 {
 		p.loss.Streams++
 	}
-	p.buf.Reset()
-	p.streams = map[uint32]*h2Stream{}
 	p.failed = true
+	if p.failureReason == "" {
+		p.failureReason = GapBufferLimit
+	}
 }

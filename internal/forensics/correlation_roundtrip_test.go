@@ -264,6 +264,7 @@ func TestSignedBundleRetainsModelCommandDerivation(t *testing.T) {
 	for _, ev := range []struct{ id, typ, at, content string }{
 		{"req", "tls_write", "2026-10-17T00:00:00Z", `{"messages":[{"role":"user","content":"Read config"}]}`},
 		{"resp", "tls_read", "2026-10-17T00:00:01Z", `{"content":[{"type":"tool_use","name":"Bash","input":{"command":"cat /work/config"}}]}`},
+		{"gap", "tls_read", "2026-10-17T00:00:01.5Z", `{"content":[{"type":"tool_use","name":"Bash","input":{"command":"cat /work/incomplete"}}]}`},
 		{"exec", "execve", "2026-10-17T00:00:02Z", ""},
 	} {
 		payload := map[string]any{"content": ev.content, "process_instance_id": boot + ":100:800", "argv": []string{"cat", "/work/config"}}
@@ -275,6 +276,10 @@ func TestSignedBundleRetainsModelCommandDerivation(t *testing.T) {
 				http["status"] = 200
 			}
 			payload["http"] = http
+			if ev.id == "gap" {
+				http["stream_id"] = 3
+				payload["capture"] = map[string]any{"rule": "agentprov.tls_reassembly/v2", "state": "incomplete", "reason": "capture_limit", "data_kind": "http_body"}
+			}
 		}
 		body, _ := json.Marshal(payload)
 		if _, err := db.Exec(`INSERT INTO events (id,run_id,source,event_type,created_at,cgroup_id,pid,payload) VALUES (?,?,'agentprov_ebpf',?,?,'cg-a',100,?)`, ev.id, runID, ev.typ, ev.at, string(body)); err != nil {
@@ -305,7 +310,7 @@ func TestSignedBundleRetainsModelCommandDerivation(t *testing.T) {
 	if expected.ID == "" || expected.DerivationRule != "agentprov.intent_command_scope/v3" || len(expected.EvidenceRefs) != 3 {
 		t.Fatalf("source inference metadata: %+v", expected)
 	}
-	if expectedPair.DerivationRule != "agentprov.tls_connection_exchange/v2" || expectedPair.Confidence == nil || *expectedPair.Confidence != 1 || len(expectedPair.EvidenceRefs) != 2 {
+	if expectedPair.DerivationRule != "agentprov.tls_connection_exchange/v3" || expectedPair.Confidence == nil || *expectedPair.Confidence != 1 || len(expectedPair.EvidenceRefs) != 2 {
 		t.Fatalf("source pairing metadata: %+v", expectedPair)
 	}
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -350,7 +355,32 @@ func TestSignedBundleRetainsModelCommandDerivation(t *testing.T) {
 		}
 		return out
 	}
-	if before, after := correlations(original), correlations(replayed); len(before) != 2 || !reflect.DeepEqual(before, after) {
+	if before, after := correlations(original), correlations(replayed); len(before) != 3 || !reflect.DeepEqual(before, after) {
 		t.Fatalf("pair diagnostics changed in replay: %v / %v", before, after)
+	}
+	var gapBefore string
+	for i, graph := range []provenance.GraphLensManifest{original, replayed} {
+		found := false
+		for _, node := range graph.Nodes {
+			if node.Data["source_id"] != "llm_response/gap" {
+				continue
+			}
+			found = true
+			if node.Data["command"] != "" || node.Data["truncated"] != true || node.Data["capture"] == nil {
+				t.Fatalf("incomplete content became intent in graph: %+v", node)
+			}
+			raw, err := json.Marshal(node.Data["capture"])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if i == 0 {
+				gapBefore = string(raw)
+			} else if string(raw) != gapBefore {
+				t.Fatalf("capture gap changed in signed replay: %s / %s", gapBefore, raw)
+			}
+		}
+		if !found {
+			t.Fatal("incomplete TLS evidence missing from graph")
+		}
 	}
 }

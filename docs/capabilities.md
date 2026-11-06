@@ -856,6 +856,17 @@ retries, transaction-level deduplication, and per-probe coverage reports. See
 [the deployment and acceptance runbook](../docs/amd64-kvm-k3s.md) for the exact
 syscall/TLS coverage and [spool guarantees](../docs/native-capture-spool.md).
 
+TLS plaintext capture currently retains up to 4 KiB per SSL call. Larger HTTP
+messages remain readable when their TLS calls are fully captured. A reported
+capture gap stops parsing that direction until a new capture generation: later
+bytes are retained as fragments rather than joined to the preceding message.
+HTTP/2 frame-sequence and HPACK failures follow the same rule. Already complete
+messages and the other direction's independent decoder remain available.
+Evidence records carry the gap reason and data kind; binary fragments use
+base64 with a hash of the original bytes. Full fragment content follows the same
+`AGENTPROV_TLS_CAPTURE_BODY=1` opt-in as message bodies. Incomplete captures do
+not produce model tool decisions or request/response matches.
+
 **Correlate & verify**
 
 | Capability | What it does |

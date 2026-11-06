@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/byteyellow/agentprovenance/internal/tlsintent"
 )
 
 func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[string]lensEvent, error) {
@@ -345,14 +347,17 @@ func intentDiffRisk(status string) string {
 var llmMetaCache sync.Map // path -> llmMessageSummary
 
 type llmMessageSummary struct {
-	Model        string
-	ToolCalls    []string
-	ToolsOffered []string
-	MessageCount int
-	StopReason   string
-	Command      string
-	Prompt       string
-	Correlation  *tlsPairing
+	Model           string
+	ToolCalls       []string
+	ToolsOffered    []string
+	MessageCount    int
+	StopReason      string
+	Command         string
+	Prompt          string
+	Correlation     *tlsPairing
+	Capture         *tlsintent.CaptureIntegrity
+	Truncated       bool
+	ContentEncoding string
 }
 
 // llmMessageMeta reads a stored llm_message object file and pulls out the model,
@@ -371,10 +376,13 @@ func llmMessageMeta(path string) llmMessageSummary {
 	}
 	var obj struct {
 		Payload struct {
-			Content     string      `json:"content"`
-			Model       string      `json:"model"`
-			Correlation *tlsPairing `json:"correlation"`
-			Semantics   struct {
+			Content         string                      `json:"content"`
+			Model           string                      `json:"model"`
+			Correlation     *tlsPairing                 `json:"correlation"`
+			Capture         *tlsintent.CaptureIntegrity `json:"capture"`
+			Truncated       bool                        `json:"truncated"`
+			ContentEncoding string                      `json:"content_encoding"`
+			Semantics       struct {
 				Model        string   `json:"model"`
 				ToolCalls    []string `json:"tool_calls"`
 				ToolsOffered []string `json:"tools_offered"`
@@ -386,16 +394,24 @@ func llmMessageMeta(path string) llmMessageSummary {
 	if json.Unmarshal(raw, &obj) != nil {
 		return llmMessageSummary{}
 	}
+	if obj.Payload.Truncated || obj.Payload.Capture.Incomplete() || (obj.Payload.ContentEncoding != "" && obj.Payload.ContentEncoding != "utf-8") {
+		out := llmMessageSummary{Correlation: obj.Payload.Correlation, Capture: obj.Payload.Capture,
+			Truncated: true, ContentEncoding: obj.Payload.ContentEncoding}
+		llmMetaCache.Store(path, out)
+		return out
+	}
 	prompt, command := llmContentSummary(obj.Payload.Content)
 	out := llmMessageSummary{
-		Model:        firstString([]string{obj.Payload.Model, obj.Payload.Semantics.Model}),
-		ToolCalls:    obj.Payload.Semantics.ToolCalls,
-		ToolsOffered: obj.Payload.Semantics.ToolsOffered,
-		MessageCount: obj.Payload.Semantics.MessageCount,
-		StopReason:   obj.Payload.Semantics.StopReason,
-		Command:      command,
-		Prompt:       prompt,
-		Correlation:  obj.Payload.Correlation,
+		Model:           firstString([]string{obj.Payload.Model, obj.Payload.Semantics.Model}),
+		ToolCalls:       obj.Payload.Semantics.ToolCalls,
+		ToolsOffered:    obj.Payload.Semantics.ToolsOffered,
+		MessageCount:    obj.Payload.Semantics.MessageCount,
+		StopReason:      obj.Payload.Semantics.StopReason,
+		Command:         command,
+		Prompt:          prompt,
+		Correlation:     obj.Payload.Correlation,
+		Capture:         obj.Payload.Capture,
+		ContentEncoding: obj.Payload.ContentEncoding,
 	}
 	llmMetaCache.Store(path, out)
 	return out
@@ -475,6 +491,15 @@ func addProvenanceObjectNodes(db *sql.DB, runID string, add func(GraphLensNode))
 			}
 			if meta.Correlation != nil {
 				data["correlation"] = meta.Correlation
+			}
+			if meta.Capture != nil {
+				data["capture"] = meta.Capture
+			}
+			if meta.Truncated {
+				data["truncated"] = true
+			}
+			if meta.ContentEncoding != "" {
+				data["content_encoding"] = meta.ContentEncoding
 			}
 			add(GraphLensNode{
 				ID: hash, Kind: kind, Subtype: "llm_message", Label: label,

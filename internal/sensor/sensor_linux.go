@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -351,7 +352,18 @@ func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgro
 		"data":            string(msg.Body),
 		"length":          len(msg.Body),
 		"protocol":        msg.Protocol,
-		"headers_decoded": true,
+		"headers_decoded": msg.DataKind == "" || msg.DataKind == tlsintent.DataHTTPBody,
+	}
+	if msg.CaptureGap != "" {
+		kind := msg.DataKind
+		if kind == "" {
+			kind = tlsintent.DataHTTPBody
+		}
+		ev["capture"] = map[string]any{"rule": tlsintent.CaptureRule, "state": "incomplete", "reason": msg.CaptureGap, "data_kind": kind}
+		if kind != tlsintent.DataHTTPBody {
+			ev["data"] = base64.StdEncoding.EncodeToString(msg.Body)
+			ev["data_encoding"] = "base64"
+		}
 	}
 	if msg.StreamID != 0 {
 		ev["stream_id"] = msg.StreamID

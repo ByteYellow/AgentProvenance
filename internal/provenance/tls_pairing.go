@@ -9,11 +9,13 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/byteyellow/agentprovenance/internal/tlsintent"
 )
 
 const (
-	tlsPairRule       = "agentprov.tls_connection_exchange/v2"
-	tlsPairEdgePrefix = "tls-pair-v2-"
+	tlsPairRule       = "agentprov.tls_connection_exchange/v3"
+	tlsPairEdgePrefix = "tls-pair-v3-"
 )
 
 type tlsEvent struct {
@@ -23,6 +25,8 @@ type tlsEvent struct {
 	pid                           int64
 	http                          tlsHTTPIdentity
 	truncated                     bool
+	capture                       *tlsintent.CaptureIntegrity
+	contentEncoding               string
 }
 
 type tlsHTTPIdentity struct {
@@ -49,15 +53,27 @@ func readTLSIdentity(r *tlsEvent) {
 	data := []byte(r.payload)
 	for depth := 0; depth < 4; depth++ {
 		var body struct {
-			HTTP      tlsHTTPIdentity `json:"http"`
-			Truncated bool            `json:"truncated"`
-			Payload   json.RawMessage `json:"payload"`
-			Raw       json.RawMessage `json:"raw"`
+			HTTP            tlsHTTPIdentity             `json:"http"`
+			Truncated       bool                        `json:"truncated"`
+			Capture         *tlsintent.CaptureIntegrity `json:"capture"`
+			ContentEncoding string                      `json:"content_encoding"`
+			Payload         json.RawMessage             `json:"payload"`
+			Raw             json.RawMessage             `json:"raw"`
 		}
 		if json.Unmarshal(data, &body) != nil {
 			return
 		}
 		r.truncated = r.truncated || body.Truncated
+		if body.Capture != nil {
+			if r.capture == nil || body.Capture.Incomplete() {
+				r.capture = body.Capture
+			}
+			r.truncated = r.truncated || body.Capture.Incomplete()
+		}
+		if body.ContentEncoding != "" {
+			r.contentEncoding = body.ContentEncoding
+			r.truncated = r.truncated || body.ContentEncoding != "utf-8"
+		}
 		switch {
 		case len(body.Payload) > 0:
 			data = body.Payload

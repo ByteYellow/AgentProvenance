@@ -3,12 +3,31 @@
 package sensor
 
 import (
+	"bytes"
+	"encoding/base64"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/tlsintent"
 )
+
+func TestTLSMessageMapPreservesUndecodedBinaryFragment(t *testing.T) {
+	r := newCgroupResolver()
+	r.byID[7], r.lastRefresh = "container-test", time.Now()
+	msg := tlsintent.Message{PID: 42, Conn: 99, ProcessStartNS: 100, Epoch: 10,
+		Direction: tlsintent.Request, Body: []byte{0xff, 0, 0x81}, Truncated: true,
+		CaptureGap: tlsintent.GapHPACK, DataKind: tlsintent.DataHPACK}
+	got := tlsMessageMap(msg, sensorbpfSensorEvent{Pid: 42, CgroupId: 7, ProcessStartNs: 100}, r)
+	data, err := base64.StdEncoding.DecodeString(got["data"].(string))
+	if err != nil || !bytes.Equal(data, msg.Body) || got["headers_decoded"] != false || got["data_encoding"] != "base64" || got["truncated"] != true {
+		t.Fatalf("binary fragment changed: %+v err=%v", got, err)
+	}
+	capture, _ := got["capture"].(map[string]any)
+	if capture["rule"] != tlsintent.CaptureRule || capture["reason"] != tlsintent.GapHPACK || capture["data_kind"] != tlsintent.DataHPACK {
+		t.Fatalf("capture boundary missing: %+v", got)
+	}
+}
 
 func TestTLSMessageMapPreservesParsedMetadata(t *testing.T) {
 	r := newCgroupResolver()

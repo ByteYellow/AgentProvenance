@@ -66,7 +66,9 @@ type Message struct {
 	Headers map[string]string
 	Body    []byte // decoded body: dechunked and, for SSE, the joined data: payloads
 
-	Truncated bool // some bytes were dropped, so Body may be incomplete
+	Truncated  bool   // some bytes were dropped, so Body may be incomplete
+	CaptureGap string // why framing or retained content is incomplete
+	DataKind   string // empty/http_body for decoded bodies; otherwise an undecoded fragment
 
 	// Minimal LLM semantics (best-effort; empty when not an LLM call).
 	Model    string
@@ -98,12 +100,11 @@ type connKey struct {
 }
 
 type stream struct {
-	buf       bytes.Buffer
-	truncated bool
-	isH2      bool
-	h2        *h2Parser // set once the stream is known to be h2
-	lastUsed  uint64
-	exceeded  bool
+	buf      bytes.Buffer
+	isH2     bool
+	h2       *h2Parser // set once the stream is known to be h2
+	lastUsed uint64
+	gap      string
 }
 
 const defaultMaxBytes = 1 << 20 // 1 MiB per stream
@@ -138,18 +139,13 @@ func (r *Reassembler) Add(c Chunk) (messages []Message) {
 		for len(r.streams) >= r.streamLimit() {
 			r.evictOldest()
 		}
-		s = &stream{}
+		s = &stream{gap: r.connectionGap(c)}
 		r.streams[k] = s
 	}
 	r.tick++
 	s.lastUsed = r.tick
-	if s.exceeded {
-		r.loss.Bytes += uint64(len(c.Data))
-		return nil
-	}
-	if c.Truncated {
-		s.truncated = true
-		r.loss.Streams++ // The missing byte count is unknown at this boundary.
+	if s.gap != "" {
+		return r.fragment(c, c.Data, s.gap, DataTLSFragment)
 	}
 
 	// h2 detection: the client preface on the request stream marks the whole
@@ -177,22 +173,27 @@ func (r *Reassembler) Add(c Chunk) (messages []Message) {
 			r.loss.Bytes += s.h2.loss.Bytes
 			s.h2.loss = CaptureLoss{}
 		}()
-		// Hand over any bytes buffered before detection, then this chunk.
+		// Hand over bytes buffered before detection, then this chunk. A gap is
+		// AFTER the captured prefix, so already complete messages remain intact.
+		var out []Message
 		if s.buf.Len() > 0 {
 			pre := append([]byte(nil), s.buf.Bytes()...)
 			s.buf = bytes.Buffer{}
-			out := append(s.h2.consume(pre, c.PID, c.Conn), s.h2.consume(c.Data, c.PID, c.Conn)...)
-			if s.truncated {
-				for i := range out {
-					out[i].Truncated = true
-				}
-			}
-			return out
+			out = s.h2.consume(pre, c.PID, c.Conn)
 		}
-		out := s.h2.consume(c.Data, c.PID, c.Conn)
-		if s.truncated {
-			for i := range out {
-				out[i].Truncated = true
+		rejected := len(c.Data) > s.h2.byteLimit()-s.h2.retainedBytes() || s.h2.failed
+		out = append(out, s.h2.consume(c.Data, c.PID, c.Conn)...)
+		if s.h2.failed || c.Truncated {
+			reason := GapCaptureLimit
+			if s.h2.failed {
+				reason = s.h2.failureReason
+			} else {
+				r.loss.Streams++
+			}
+			r.markGap(c, s, reason)
+			out = append(out, s.h2.drainGap(c.PID, c.Conn, reason)...)
+			if rejected {
+				out = append(out, r.fragment(c, c.Data, reason, DataTLSFragment)...)
 			}
 		}
 		return out
@@ -204,7 +205,7 @@ func (r *Reassembler) Add(c Chunk) (messages []Message) {
 		if remaining > 0 {
 			s.buf.Write(c.Data[:remaining])
 		}
-		s.truncated, s.exceeded = true, true
+		r.markGap(c, s, GapBufferLimit)
 		r.loss.Streams++
 		r.loss.Bytes += uint64(len(c.Data) - remaining)
 	} else {
@@ -217,12 +218,18 @@ func (r *Reassembler) Add(c Chunk) (messages []Message) {
 		if !ok || consumed <= 0 {
 			break
 		}
-		msg.Truncated = s.truncated
 		out = append(out, msg)
 		rest := append([]byte(nil), s.buf.Bytes()[consumed:]...)
 		s.buf.Reset()
 		s.buf.Write(rest)
-		s.truncated = false
+	}
+	if c.Truncated && s.gap == "" {
+		r.markGap(c, s, GapCaptureLimit)
+		r.loss.Streams++ // The missing byte count is unknown at this boundary.
+	}
+	if s.gap != "" {
+		out = append(out, r.fragment(c, s.buf.Bytes(), s.gap, DataTLSFragment)...)
+		s.buf = bytes.Buffer{}
 	}
 	return out
 }
