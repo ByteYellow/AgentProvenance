@@ -18,6 +18,7 @@ type capabilityReporter struct {
 	base           []ProbeCapability
 	tls            []ProbeCapability
 	discovery      TLSDiscoveryReport
+	procfs         *ProcfsIdentityReport
 	ready          bool
 	previous       string
 	terminalStatus string
@@ -60,6 +61,13 @@ func (r *capabilityReporter) finish(err error) {
 	r.publishLocked()
 }
 
+func (r *capabilityReporter) updateProcfs(report ProcfsIdentityReport) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.procfs = &report
+	r.publishLocked()
+}
+
 func (r *capabilityReporter) publishLocked() {
 	report := CapabilityReport{
 		SchemaVersion: "agentprovenance.sensor_capabilities/v1",
@@ -68,6 +76,10 @@ func (r *capabilityReporter) publishLocked() {
 	}
 	report.AccessControlState = &StateCollectionCapability{AppArmor: r.opts.AppArmorState, Seccomp: r.opts.SeccompState,
 		Mode: "event_triggered_procfs_snapshot", QueueCapacity: stateQueueCapacity, CacheCapacity: stateCacheCapacity, MinIntervalMS: stateInterval.Milliseconds()}
+	if r.procfs != nil {
+		copy := *r.procfs
+		report.ProcfsIdentity = &copy
+	}
 	sort.Slice(report.Probes, func(i, j int) bool {
 		a, b := report.Probes[i], report.Probes[j]
 		if a.Category != b.Category {
@@ -93,6 +105,9 @@ func (r *capabilityReporter) publishLocked() {
 		}
 	}
 	if r.discovery.HasGaps() {
+		report.Status = "degraded"
+	}
+	if r.procfs != nil && r.procfs.LookupMisses > 0 {
 		report.Status = "degraded"
 	}
 	if r.terminalStatus != "" {

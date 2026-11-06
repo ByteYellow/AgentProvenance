@@ -1,0 +1,19 @@
+=== RUN   TestLiveTLSDiscoveryShortClient
+=== RUN   TestLiveTLSDiscoveryShortClient/delayed-load
+    tls_discovery_live_linux_test.go:204: first requests captured=1/1; initial client wall=850.065213ms; test-process CPU=232.213ms; discovery={Enabled:true ScanIntervalMS:2000 MaxTargets:128 MaxProcessesPerScan:4096 ActiveTargets:0 ScanComplete:true ProcessesScanned:59 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 SkippedTargets:0 UnsupportedExecutables:1 Reason: Limitations:[processes must be visible in the sensor PID namespace; container roots/maps must be readable first TLS use can precede event-driven attachment; explicit targets are attached before readiness stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered] SweepPasses:1 EventDiscovery:0xc00322ef30}
+    tls_discovery_live_linux_test.go:217: event discovery counters: {QueueCapacity:128 Pending:2 Hints:5 Coalesced:1 QueueDrops:0 ProcessScans:14 RetryScans:10 ExitedProcesses:1 ChangedProcesses:0 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 UnsupportedExecutables:3 SkippedTargets:0 AttachedTargets:1 LastAttachLatencyMS:16 MaxAttachLatencyMS:16}
+--- PASS: TestLiveTLSDiscoveryShortClient (16.38s)
+    --- PASS: TestLiveTLSDiscoveryShortClient/delayed-load (16.17s)
+=== RUN   TestLiveTLSDiscoveryShortClient
+=== RUN   TestLiveTLSDiscoveryShortClient/delayed-load
+    tls_discovery_live_linux_test.go:204: first requests captured=1/1; initial client wall=832.531415ms; test-process CPU=180.438ms; discovery={Enabled:true ScanIntervalMS:2000 MaxTargets:128 MaxProcessesPerScan:4096 ActiveTargets:0 ScanComplete:true ProcessesScanned:58 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 SkippedTargets:0 UnsupportedExecutables:1 Reason: Limitations:[processes must be visible in the sensor PID namespace; container roots/maps must be readable first TLS use can precede event-driven attachment; explicit targets are attached before readiness stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered] SweepPasses:1 EventDiscovery:0xc002cb6750}
+    tls_discovery_live_linux_test.go:217: event discovery counters: {QueueCapacity:128 Pending:1 Hints:3 Coalesced:1 QueueDrops:0 ProcessScans:7 RetryScans:5 ExitedProcesses:0 ChangedProcesses:0 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 UnsupportedExecutables:0 SkippedTargets:0 AttachedTargets:1 LastAttachLatencyMS:18 MaxAttachLatencyMS:18}
+--- PASS: TestLiveTLSDiscoveryShortClient (15.67s)
+    --- PASS: TestLiveTLSDiscoveryShortClient/delayed-load (15.55s)
+=== RUN   TestLiveTLSDiscoveryShortClient
+=== RUN   TestLiveTLSDiscoveryShortClient/delayed-load
+    tls_discovery_live_linux_test.go:204: first requests captured=1/1; initial client wall=832.068967ms; test-process CPU=81.442ms; discovery={Enabled:true ScanIntervalMS:2000 MaxTargets:128 MaxProcessesPerScan:4096 ActiveTargets:0 ScanComplete:true ProcessesScanned:54 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 SkippedTargets:0 UnsupportedExecutables:0 Reason: Limitations:[processes must be visible in the sensor PID namespace; container roots/maps must be readable first TLS use can precede event-driven attachment; explicit targets are attached before readiness stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered] SweepPasses:1 EventDiscovery:0xc0031ab3b0}
+    tls_discovery_live_linux_test.go:217: event discovery counters: {QueueCapacity:128 Pending:1 Hints:3 Coalesced:1 QueueDrops:0 ProcessScans:7 RetryScans:5 ExitedProcesses:0 ChangedProcesses:0 UnreadableProcesses:0 UnresolvedMounts:0 TruncatedMaps:0 UnsupportedExecutables:0 SkippedTargets:0 AttachedTargets:1 LastAttachLatencyMS:25 MaxAttachLatencyMS:25}
+--- PASS: TestLiveTLSDiscoveryShortClient (12.48s)
+    --- PASS: TestLiveTLSDiscoveryShortClient/delayed-load (12.36s)
+PASS

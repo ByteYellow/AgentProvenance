@@ -5,7 +5,19 @@ import subprocess
 import tempfile
 import unittest
 
-from accept_kvm_guest import export_signed_replay
+from accept_kvm_guest import export_signed_replay, validate_guest_platform
+
+
+class GuestPlatformTest(unittest.TestCase):
+    def test_qemu_whpx_keeps_microsoft_cpuid(self):
+        validate_guest_platform("microsoft", "QEMU")
+        validate_guest_platform("kvm", "")
+        validate_guest_platform("qemu", "QEMU")
+
+    def test_microsoft_without_qemu_dmi_is_not_the_lab_guest(self):
+        for vendor in ("", "Microsoft Corporation", "Dell Inc."):
+            with self.assertRaises(SystemExit):
+                validate_guest_platform("microsoft", vendor)
 
 
 class SignedReplayTest(unittest.TestCase):

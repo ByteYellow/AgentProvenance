@@ -109,6 +109,16 @@ type CapabilityReport struct {
 	Probes             []ProbeCapability          `json:"probes"`
 	TLSDiscovery       TLSDiscoveryReport         `json:"tls_discovery"`
 	AccessControlState *StateCollectionCapability `json:"access_control_state,omitempty"`
+	ProcfsIdentity     *ProcfsIdentityReport      `json:"procfs_identity,omitempty"`
+}
+
+type ProcfsIdentityReport struct {
+	Mode             string `json:"mode"`
+	PIDNamespace     string `json:"pid_namespace"`
+	MapCapacity      int    `json:"map_capacity"`
+	TranslatedEvents uint64 `json:"translated_events"`
+	OutsideNamespace uint64 `json:"outside_namespace_events"`
+	LookupMisses     uint64 `json:"lookup_misses"`
 }
 
 type StateCollectionCapability struct {

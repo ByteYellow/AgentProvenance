@@ -71,7 +71,12 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	}
 
 	var objs sensorbpfObjects
+	var procfs *procfsResolver
 	spec, err := loadSensorbpf()
+	if err == nil {
+		procfs, err = configureProcfsNamespace(spec)
+	}
+	defer procfs.close()
 	if err == nil {
 		enabled := uint32(0)
 		if opts.AutoTLS {
@@ -86,6 +91,9 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		return i18n.Errorf("load eBPF objects: %w", err)
 	}
 	defer objs.Close()
+	bindProcfsResolver(procfs, &objs)
+	procfs.publish(reporter, true)
+	defer procfs.publish(reporter, true)
 
 	var links []link.Link
 	defer func() {
@@ -283,18 +291,20 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &e); err != nil {
 			continue
 		}
-		if e.Pid != uint32(os.Getpid()) && e.Kind != eventExit && e.Kind != eventThreadExit {
-			states.offer(stateTarget{pid: e.Pid, tid: e.Tid, start: e.ThreadStartNs, cgroup: e.CgroupId}, time.Now())
+		task := procfs.resolve(e)
+		procfs.publish(reporter, false)
+		if task.PID != 0 && task.PID != uint32(os.Getpid()) && e.Kind != eventExit && e.Kind != eventThreadExit {
+			states.offer(stateTarget{pid: task.PID, tid: task.TID, start: e.ThreadStartNs, cgroup: e.CgroupId}, time.Now())
 		}
-		if opts.AutoTLS && e.Pid != uint32(os.Getpid()) && tlsDiscoveryEvent(e) {
-			tlsWake.offer(e.Pid, e.ProcessStartNs, e.Kind == eventExec, e.Kind == eventOpen || e.Kind == eventTLSDiscovery, time.Now())
+		if opts.AutoTLS && task.PID != 0 && task.PID != uint32(os.Getpid()) && tlsDiscoveryEvent(e) {
+			tlsWake.offer(task.PID, e.ProcessStartNs, e.Kind == eventExec, e.Kind == eventOpen || e.Kind == eventTLSDiscovery, time.Now())
 		}
 		if e.Kind == eventTLSDiscovery {
 			continue
 		}
 		if e.Kind == eventSSL || e.Kind == eventSSLRead || e.Kind == eventSSLCheckpoint {
 			for _, msg := range reasm.Add(tlsChunk(e)) {
-				emit(tlsMessageMap(msg, e, resolver))
+				emit(tlsMessageMap(msg, e, resolver, task))
 			}
 			reportTLSLoss(false)
 			continue
@@ -305,7 +315,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 				reasm.Reset(c)
 			} else {
 				for _, msg := range reasm.Release(c) {
-					emit(tlsMessageMap(msg, e, resolver))
+					emit(tlsMessageMap(msg, e, resolver, task))
 				}
 			}
 			reportTLSLoss(false)
@@ -317,11 +327,11 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		}
 		if e.Kind == eventExit {
 			for _, msg := range reasm.EndProcess(e.Pid, e.ProcessStartNs, false) {
-				emit(tlsMessageMap(msg, e, resolver))
+				emit(tlsMessageMap(msg, e, resolver, task))
 			}
 			reportTLSLoss(false)
 		}
-		if m := normalize(e, resolver); m != nil {
+		if m := normalize(e, resolver, task); m != nil {
 			emit(m)
 		}
 	}
@@ -356,10 +366,11 @@ func tlsChunk(e sensorbpfSensorEvent) tlsintent.Chunk {
 
 // tlsMessageMap turns a reassembled HTTP/1.1 LLM message into the normalized
 // event map, reusing the last chunk's process/cgroup context.
-func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any {
+func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgroupResolver, proc ...procTaskIDs) map[string]any {
+	task := eventProcTask(e, proc)
 	containerID := resolver.resolve(e.CgroupId)
-	if containerID == "" {
-		containerID = containerIDForPID(e.Pid)
+	if containerID == "" && task.PID != 0 {
+		containerID = containerIDForPID(task.PID)
 	}
 	etype := "tls_write"
 	if msg.Direction == tlsintent.Response {
@@ -421,6 +432,7 @@ func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgro
 		ev["status"] = msg.Status
 	}
 	addProcessIdentity(ev, e)
+	addProcfsIdentity(ev, task)
 	return ev
 }
 
@@ -620,13 +632,14 @@ func (r *cgroupResolver) refresh() {
 // normalize maps a raw kernel event to the normalized telemetry schema consumed
 // by `telemetry ingest` (container_id, cgroup_id, pid/tgid/ppid, source,
 // event_type, payload). container_id is best-effort from /proc/<pid>/cgroup.
-func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any {
+func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver, proc ...procTaskIDs) map[string]any {
+	task := eventProcTask(e, proc)
 	// Prefer the race-free cgroup-id -> container-id resolution; the /proc lookup
 	// is a fallback for the live process and for hosts where the cgroup dir name
 	// does not carry the id.
 	containerID := resolver.resolve(e.CgroupId)
-	if containerID == "" {
-		containerID = containerIDForPID(e.Pid)
+	if containerID == "" && task.PID != 0 {
+		containerID = containerIDForPID(task.PID)
 	}
 	ev := map[string]any{
 		"source":       "agentprov_ebpf",
@@ -641,6 +654,7 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 	}
 	addProcessIdentity(ev, e)
 	addSyscallIdentity(ev, e)
+	addProcfsIdentity(ev, task)
 	switch e.Kind {
 	case eventFork:
 		ev["event_type"] = "process_observed"

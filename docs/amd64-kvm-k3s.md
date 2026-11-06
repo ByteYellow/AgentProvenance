@@ -62,6 +62,36 @@ request/response bodies, Go TLS request/response bodies, and capture time under 
 drain. Privilege tests prove observation of **attempts**, not successful privilege
 escalation. The fixtures use loopback services and synthetic text without API keys.
 
+## WSL process identities and Windows hosts
+
+The amd64 sensor resolves each task into the collector's procfs PID namespace.
+Kernel `pid`, `tid` and process-instance IDs retain their original values;
+`procfs_pid`, `procfs_tid` and `procfs_pid_namespace` record the separate lookup
+address and survive ingestion. The map holds at most 16,384 task lifetimes.
+Access-state sampling, event-driven TLS discovery and container lookup use the
+procfs address, including for tasks in descendant container namespaces.
+
+Capability reports include `procfs_identity`: `translated_events` counts
+translations, `outside_namespace_events` counts tasks outside the visible view,
+and `lookup_misses` reports missing/evicted mappings and degrades coverage.
+Missing mappings never fall back to opening an unrelated numeric kernel PID.
+The sensor rejects a proc mount whose PID view differs from its own namespace.
+The preserved ARM64 object continues to use its existing host-PID path.
+
+On AMD Windows hosts, build `26300.9711` can lose WSL nested virtualization after
+KB5127648. Microsoft lists the fix in
+[KB5127936, build 26300.9818](https://support.microsoft.com/en-us/servicing/os/windows-11/2026/10/kb5127936-windows-11-25h2-26h2-update).
+Install the applicable fixed cumulative update and restart Windows before
+checking for `svm`, loading `kvm_amd` and rerunning the KVM gates. Merely creating
+`/dev/kvm` or changing its permissions does not restore CPU virtualization.
+
+CET under WHPX remains under investigation. QEMU 11.1.0 boots with the default
+kernel command line and passes an explicit shadow-stack enable/return check,
+but sustained operation still encountered a PID 1 shadow-stack page fault.
+Upgrading QEMU alone has not resolved it. A disposable acceptance guest can use
+`nousershstk`; this disables guest user shadow stacks and must be recorded in
+its environment evidence. See the [follow-up evidence](benchmarks/v0.10.1-procfs/README.md).
+
 ## Build and regenerate
 
 Run on Linux amd64 with Go 1.23 or newer. Building committed objects needs no

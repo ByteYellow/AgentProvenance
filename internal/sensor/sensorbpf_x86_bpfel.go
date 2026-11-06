@@ -29,6 +29,16 @@ type sensorbpfGoReadKey struct {
 	Frame     uint64
 }
 
+type sensorbpfProcTaskIds struct {
+	Pid uint32
+	Tid uint32
+}
+
+type sensorbpfProcTaskKey struct {
+	Start   uint64
+	PidTgid uint64
+}
+
 type sensorbpfProcessExitKey struct {
 	StartNs  uint64
 	Pid      uint32
@@ -196,6 +206,7 @@ type sensorbpfMapSpecs struct {
 	Events            *ebpf.MapSpec `ebpf:"events"`
 	ExitedGroups      *ebpf.MapSpec `ebpf:"exited_groups"`
 	GoReadBufs        *ebpf.MapSpec `ebpf:"go_read_bufs"`
+	ProcTasks         *ebpf.MapSpec `ebpf:"proc_tasks"`
 	SslEpochs         *ebpf.MapSpec `ebpf:"ssl_epochs"`
 	SslReadBufs       *ebpf.MapSpec `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.MapSpec `ebpf:"ssl_read_ex_bufs"`
@@ -231,6 +242,7 @@ type sensorbpfMaps struct {
 	Events            *ebpf.Map `ebpf:"events"`
 	ExitedGroups      *ebpf.Map `ebpf:"exited_groups"`
 	GoReadBufs        *ebpf.Map `ebpf:"go_read_bufs"`
+	ProcTasks         *ebpf.Map `ebpf:"proc_tasks"`
 	SslEpochs         *ebpf.Map `ebpf:"ssl_epochs"`
 	SslReadBufs       *ebpf.Map `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.Map `ebpf:"ssl_read_ex_bufs"`
@@ -249,6 +261,7 @@ func (m *sensorbpfMaps) Close() error {
 		m.Events,
 		m.ExitedGroups,
 		m.GoReadBufs,
+		m.ProcTasks,
 		m.SslEpochs,
 		m.SslReadBufs,
 		m.SslReadExBufs,

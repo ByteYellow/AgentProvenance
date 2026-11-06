@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -28,8 +29,10 @@ func TestLiveSensorAccessState(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	ready, finished := make(chan struct{}), make(chan error, 1)
+	var capabilities CapabilityReport
 	go func() {
-		finished <- RunWithOptions(f, Options{Context: ctx, AppArmorState: true, SeccompState: true, Diagnostics: io.Discard, OnReady: func() { close(ready) }})
+		finished <- RunWithOptions(f, Options{Context: ctx, AppArmorState: true, SeccompState: true, Diagnostics: io.Discard, OnReady: func() { close(ready) },
+			OnCapabilities: func(report CapabilityReport) { capabilities = report }})
 	}()
 	select {
 	case <-ready:
@@ -53,6 +56,12 @@ func TestLiveSensorAccessState(t *testing.T) {
 	}
 	if err != nil {
 		t.Fatal(err)
+	}
+	if runtime.GOARCH == "amd64" {
+		if p := capabilities.ProcfsIdentity; p == nil || p.Mode != "kernel_namespace_mapping" || p.PIDNamespace == "" || p.LookupMisses != 0 {
+			t.Fatalf("missing or incomplete procfs identity coverage: %+v", p)
+		}
+		t.Logf("procfs identity coverage: %+v", *capabilities.ProcfsIdentity)
 	}
 	if _, err := f.Seek(0, 0); err != nil {
 		t.Fatal(err)

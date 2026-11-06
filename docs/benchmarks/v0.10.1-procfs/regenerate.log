@@ -1,0 +1,5 @@
+== generate Linux amd64 sensor bindings
+Compiled /mnt/c/Users/19487/Documents/Codex/2026-09-19/new-chat/work/agentprov-v0101-x86/internal/sensor/sensorbpf_x86_bpfel.o
+Stripped /mnt/c/Users/19487/Documents/Codex/2026-09-19/new-chat/work/agentprov-v0101-x86/internal/sensor/sensorbpf_x86_bpfel.o
+Wrote /mnt/c/Users/19487/Documents/Codex/2026-09-19/new-chat/work/agentprov-v0101-x86/internal/sensor/sensorbpf_x86_bpfel.go
+regen-sensor: amd64 done

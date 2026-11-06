@@ -221,6 +221,55 @@ struct {
 } tls_discovery_seen SEC(".maps");
 
 #if defined(__TARGET_ARCH_x86)
+// Resolve procfs addresses separately from the initial-namespace evidence IDs.
+// Keep the namespace FD open in userspace so its inode cannot be recycled.
+const volatile __u64 proc_pidns_ino = 0;
+struct proc_task_key {
+	__u64 start;
+	__u64 pid_tgid;
+};
+struct proc_task_ids {
+	__u32 pid;
+	__u32 tid;
+};
+struct {
+	__uint(type, BPF_MAP_TYPE_LRU_HASH);
+	__uint(max_entries, 16384);
+	__type(key, struct proc_task_key);
+	__type(value, struct proc_task_ids);
+} proc_tasks SEC(".maps");
+
+static __always_inline __u32 proc_task_nr(struct task_struct *task) {
+	struct pid *pid = BPF_CORE_READ(task, thread_pid);
+	unsigned int level = BPF_CORE_READ(pid, level);
+	struct upid *numbers = __builtin_preserve_access_index(&pid->numbers[0]);
+	// Linux limits PID namespace nesting to 32. Include ancestor namespaces:
+	// container tasks must be addressable from the collector's procfs as well.
+	for (int i = 0; i <= 32; i++) {
+		if (i > level)
+			break;
+		struct upid *number = numbers + i;
+		if (BPF_CORE_READ(number, ns, ns.inum) == proc_pidns_ino)
+			return BPF_CORE_READ(number, nr);
+	}
+	return 0;
+}
+
+static __always_inline void capture_proc_task(struct task_struct *task, struct sensor_event *e) {
+	if (!proc_pidns_ino)
+		return;
+	struct proc_task_key key = {.start = e->thread_start_ns,
+		.pid_tgid = ((__u64)e->pid << 32) | e->tid};
+	if (bpf_map_lookup_elem(&proc_tasks, &key))
+		return;
+	struct task_struct *leader = BPF_CORE_READ(task, group_leader);
+	struct proc_task_ids ids = {.tid = proc_task_nr(task)};
+	ids.pid = task == leader ? ids.tid : proc_task_nr(leader);
+	// Zero IDs explicitly mark tasks outside the collector's visible namespace.
+	if (bpf_map_update_elem(&proc_tasks, &key, &ids, BPF_ANY))
+		count_drop();
+}
+
 // Cache the cgroup's kernel name while the task still exists. A short-lived Pod
 // can lose BOTH /proc/PID and its cgroup directory before userspace drains the
 // ring buffer. Retaining a bounded identity map makes late informer attribution
@@ -290,6 +339,7 @@ static __always_inline void fill_common(struct sensor_event *e) {
 	e->tls_offset = 0;
 #if defined(__TARGET_ARCH_x86)
 	capture_cgroup_identity(task, e->cgroup_id);
+	capture_proc_task(task, e);
 #endif
 	bpf_get_current_comm(&e->comm, sizeof(e->comm));
 }
@@ -319,6 +369,7 @@ int handle_fork(struct bpf_raw_tracepoint_args *ctx) {
 	e->cgroup_id = BPF_CORE_READ(group, kn, id);
 #if defined(__TARGET_ARCH_x86)
 	capture_cgroup_identity(child, e->cgroup_id);
+	capture_proc_task(child, e);
 #endif
 	bpf_ringbuf_submit(e, 0);
 	return 0;

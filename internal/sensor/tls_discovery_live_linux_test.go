@@ -184,6 +184,12 @@ func TestLiveTLSDiscoveryShortClient(t *testing.T) {
 					t.Fatal(err)
 				}
 				pid, _ := event["pid"].(float64)
+				if local, ok := event["procfs_pid"].(float64); ok {
+					if pid == 0 || event["process_instance_id"] == "" || event["procfs_pid_namespace"] == "" {
+						t.Fatal("translated event lost kernel identity or procfs namespace")
+					}
+					pid = local
+				}
 				if _, ok := wanted[int(pid)]; !ok {
 					continue
 				}

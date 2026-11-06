@@ -757,6 +757,7 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 		"host_id", "host_identity_source", "realtime_coarse_resolution_ns",
 		"process_instance_id", "parent_process_instance_id", "thread_group_instance_id",
 		"boot_id", "tid", "thread_instance_id", "thread_start_ns", "process_start_ns", "monotonic_ns",
+		"procfs_pid", "procfs_tid", "procfs_pid_namespace",
 		"operation_id", "operation", "syscall_number", "sensor_arch", "syscall_start_ns", "syscall_duration_ns",
 		"observation_stage", "syscall_result", "syscall_outcome", "errno",
 	} {

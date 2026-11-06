@@ -1,0 +1,46 @@
+{
+  "schema_version": "agentprovenance.kvm_guest_acceptance/v1",
+  "architecture": "x86_64",
+  "kernel": "6.8.0-139-generic",
+  "virtualization": "microsoft",
+  "dmi_vendor": "QEMU",
+  "boot_id": "76b011d4-8ffc-41f5-a697-b5ae6afed413",
+  "run_id": "run-kvm-c9bad465232a",
+  "native_events": 20,
+  "event_types": [
+    "execve",
+    "file_open",
+    "file_write",
+    "network_connect",
+    "process_exit",
+    "process_observed",
+    "syscall_result"
+  ],
+  "cgroups": [
+    "7367"
+  ],
+  "verification": {
+    "schema_version": "agentprovenance.verify/v1",
+    "run_id": "run-kvm-c9bad465232a",
+    "status": "ok",
+    "issue_count": 0,
+    "error_count": 0,
+    "warning_count": 0,
+    "issues": null
+  },
+  "replay_verification": {
+    "schema_version": "agentprovenance.verify/v1",
+    "run_id": "run-kvm-c9bad465232a",
+    "status": "ok",
+    "issue_count": 0,
+    "error_count": 0,
+    "warning_count": 0,
+    "issues": null
+  },
+  "bundle_sha256": "75e5b9fd2ddec48fa83912ade189eeab4c4a4cebd0184b925709eb29f3589714",
+  "attestation_path": "/var/tmp/agentprov-procfs/results/guest-service.forensics.dsse.json",
+  "public_key_path": "/var/tmp/agentprov-procfs/results/guest-service.pub",
+  "attestation_verified": true,
+  "imported_run": "run-kvm-c9bad465232a",
+  "passed": true
+}

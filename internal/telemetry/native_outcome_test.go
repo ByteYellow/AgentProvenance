@@ -50,6 +50,26 @@ func TestNativeExitSignalDoesNotBecomeSuccessfulExit(t *testing.T) {
 	}
 }
 
+func TestNativeProcfsAddressDoesNotReplaceKernelIdentity(t *testing.T) {
+	for _, kind := range []string{"execve", "file_open", "tls_write"} {
+		raw := map[string]any{"source": "agentprov_ebpf", "event_type": kind, "pid": float64(9001), "tgid": float64(9001), "tid": float64(9002),
+			"process_instance_id": lifecycleBoot + ":9001:123", "procfs_pid": float64(41), "procfs_tid": float64(42), "procfs_pid_namespace": "pid:[123]"}
+		event, ok, err := mapNative(raw)
+		if err != nil || !ok || event.PID != 9001 || event.TGID != 9001 {
+			t.Fatalf("procfs address replaced kernel identity: %+v %v", event, err)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(event.Payload), &payload); err != nil {
+			t.Fatal(err)
+		}
+		for _, key := range []string{"process_instance_id", "tid", "procfs_pid", "procfs_tid", "procfs_pid_namespace"} {
+			if payload[key] != raw[key] {
+				t.Fatalf("%s lost %s", kind, key)
+			}
+		}
+	}
+}
+
 func TestNativeMissingOutcomeIsNotZero(t *testing.T) {
 	for _, raw := range []map[string]any{
 		{"event_type": "process_exit"},

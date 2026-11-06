@@ -54,6 +54,9 @@
 Go runner 堆栈位于 `computeTestInputsID` / `search.InDir` / `filepath.EvalSymlinks`，当时测试子进程已退出；保留[初次部分日志](full-race-incomplete.log)。
 最终两次全量验证均使用 `-count=1` 跳过测试结果缓存并通过，所有用例、断言和超时保持原样。
 
+
+[后续验收](../v0.10.1-procfs/README.zh-CN.md)已补齐 WSL 命名空间适配，并记录宿主环境排查。以下保留本次原始验收状态。
+
 ## 环境限制与后续事项
 
 - **KVM 加速**：当前 Windows/WSL 主机加载 `kvm_amd` 仍报 `SVM not supported by CPU 0`，本轮使用 WHPX。嵌套虚拟化恢复后，还需在真正的 KVM 加速环境补跑。

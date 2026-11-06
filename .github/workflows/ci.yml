@@ -221,6 +221,21 @@ jobs:
           sudo env PATH="$PATH" AGENTPROV_LIVE_OPENSSL=1 AGENTPROV_LIVE_TLS_CLIENT=/tmp/agentprov-live/go-client \
             /tmp/agentprov-live/sensor-test -test.run '^TestLiveTLSDiscoveryShortClient$' -test.v -test.timeout=120s \
             | tee /tmp/agentprov-live/tls-discovery.log
+      - name: Verify procfs identity in a nested PID namespace
+        # Exercise procfs identity independently from the host's initial PIDs.
+        # unshare changes only this test process and its children.
+        run: |
+          cd internal/sensor
+          sudo env PATH="$PATH" AGENTPROV_ACCESS_STATE_LIVE=1 AGENTPROV_LIVE_OPENSSL=1 AGENTPROV_LIVE_TLS_CLIENT=/tmp/agentprov-live/go-client \
+            unshare --mount --pid --fork --mount-proc /tmp/agentprov-live/sensor-test \
+            -test.run '^TestLiveSensorAccessState$|^TestLiveTLSDiscoveryShortClient$/(automatic|concurrent|delayed-load|new-go-executable)$' \
+            -test.v -test.timeout=90s | tee /tmp/agentprov-live/pid-namespace.log
+          if sudo env AGENTPROV_ACCESS_STATE_LIVE=1 unshare --pid --fork \
+            /tmp/agentprov-live/sensor-test -test.run '^TestLiveSensorAccessState$' -test.v -test.timeout=30s \
+            > /tmp/agentprov-live/pid-namespace-mismatch.log 2>&1; then
+            echo 'sensor accepted a proc mount from another PID namespace'; exit 1
+          fi
+          grep -Fq 'procfs PID namespace does not match the collector' /tmp/agentprov-live/pid-namespace-mismatch.log
       - name: Verify syscall outcomes and thread-group exits
         run: |
           cd internal/sensor
@@ -285,6 +300,8 @@ jobs:
             /tmp/agentprov-live/acceptance.*
             /tmp/agentprov-live/openssl-read.log
             /tmp/agentprov-live/tls-discovery.log
+            /tmp/agentprov-live/pid-namespace.log
+            /tmp/agentprov-live/pid-namespace-mismatch.log
             /tmp/agentprov-live/syscall-outcomes.log
             /tmp/agentprov-live/audit-associations.log
             /tmp/agentprov-live/audit-follow.log

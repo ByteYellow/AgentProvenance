@@ -33,6 +33,22 @@ AgentProvenance 支持 Linux x86-64（Go 中称为 `amd64`）和 ARM64，两种�
 
 权限相关用例证明的是能够观察到**操作尝试**，不代表成功提权。测试使用回环服务和合成文本，不使用 API 密钥。
 
+## WSL 进程身份与 Windows 主机
+
+amd64 传感器会把任务映射到采集器可见的 procfs PID 命名空间。
+原始 `pid`、`tid` 和进程实例 ID 保留内核值；`procfs_pid`、`procfs_tid`、`procfs_pid_namespace` 单独记录查询地址，入库时也会保留。
+映射按任务生命周期区分，最多保存 16,384 项。状态采样、事件驱动 TLS 发现和容器查找使用 procfs 地址，也能处理子容器命名空间中的任务。
+
+能力报告新增 `procfs_identity`：`translated_events` 记录转换次数，`outside_namespace_events` 记录可见范围之外的事件，`lookup_misses` 记录映射缺失或被淘汰的情况，并将覆盖状态标为降级。
+映射缺失时不会拿内核 PID 去尝试打开另一个同号进程。proc 挂载与采集器自身 PID 视图不一致时，会在启动阶段报错。
+ARM64 对象保持原样，继续使用已有的宿主机 PID 路径。
+
+AMD Windows 主机在安装 KB5127648 后，`26300.9711` 版本可能失去 WSL 嵌套虚拟化能力。
+微软在 [KB5127936（26300.9818）](https://support.microsoft.com/en-us/servicing/os/windows-11/2026/10/kb5127936-windows-11-25h2-26h2-update)中列出了修复。
+安装适用的修复版累积更新并重启 Windows 后，再检查 `svm`、加载 `kvm_amd` 并补跑 KVM 验收；手动创建 `/dev/kvm` 或改权限无法恢复 CPU 虚拟化能力。
+
+WHPX 下的 CET 仍在排查：QEMU 11.1.0 能按默认参数启动，也通过了影子栈启用与函数返回检查，但持续运行后仍出现 PID 1 的影子栈页面异常。单独升级 QEMU 尚未解决此问题。临时验收副本可使用 `nousershstk`；该设置会关闭 guest 的用户态影子栈，应在记录中明确注明。详见[后续验收证据](../benchmarks/v0.10.1-procfs/README.zh-CN.md)。
+
 ## 构建与重新生成探针
 
 在 Linux amd64 上使用 Go 1.23 或更高版本。直接构建仓库中已提交的对象，不需要 Clang 或内核头文件：

@@ -65,6 +65,9 @@ subprocesses exited. [Initial partial log](full-race-incomplete.log).
 Both final full-suite runs passed with `-count=1` to bypass test-result caching;
 all tests, assertions and timeouts were kept intact.
 
+
+The [procfs follow-up](../v0.10.1-procfs/README.md) records the subsequent WSL namespace fix and host investigation. The observations below describe this original run.
+
 ## Environment boundaries and follow-up
 
 - **KVM acceleration:** this Windows/WSL host still rejects `kvm_amd` with

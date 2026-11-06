@@ -34,6 +34,17 @@ def export_signed_replay(base, run, report_path, directory):
     return bundle_out, attestation_out, public_key, replay, imported
 
 
+def validate_guest_platform(virtualization, dmi_vendor):
+    # WHPX can expose Microsoft's hypervisor CPUID while DMI still identifies
+    # QEMU. Keep both observations; accepting "microsoft" alone would also
+    # admit an ordinary Hyper-V VM and would not establish this guest setup.
+    if virtualization in {"kvm", "qemu"}:
+        return
+    if virtualization == "microsoft" and dmi_vendor.casefold() == "qemu":
+        return
+    raise SystemExit(f"expected QEMU/KVM guest, got {virtualization} (DMI vendor: {dmi_vendor or 'unavailable'})")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--agentprov", default="/usr/local/bin/agentprov")
@@ -43,8 +54,11 @@ def main():
     if os.geteuid() != 0:
         parser.error("run inside the guest as root")
     virtualization = subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip()
-    if virtualization not in {"kvm", "qemu"}:
-        raise SystemExit(f"expected QEMU/KVM guest, got {virtualization}")
+    try:
+        dmi_vendor = Path("/sys/class/dmi/id/sys_vendor").read_text().strip()
+    except OSError:
+        dmi_vendor = ""
+    validate_guest_platform(virtualization, dmi_vendor)
     subprocess.run(["systemctl", "is-active", "--quiet", "agentprov-sensor.service"], check=True)
     invocation = subprocess.check_output(["systemctl", "show", "agentprov-sensor.service", "--property=InvocationID", "--value"], text=True).strip()
     deadline = time.monotonic() + 15
@@ -94,6 +108,7 @@ def main():
             "schema_version": "agentprovenance.kvm_guest_acceptance/v1",
             "architecture": platform.machine(), "kernel": platform.release(),
             "virtualization": virtualization,
+            "dmi_vendor": dmi_vendor,
             "boot_id": Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
             "run_id": run, "native_events": len(native), "event_types": sorted(types),
             "cgroups": cgroups, "verification": verification,
