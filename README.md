@@ -547,6 +547,9 @@ are not Apple notarized; download checksums verify archive integrity.
 [Release notes](docs/releases/v0.10.0.md) · [Changelog](CHANGELOG.md) ·
 [Future work](docs/capabilities.md#future-work)
 
+Building the upcoming maintenance version from source? See the
+[v0.10.1 upgrade guide](docs/upgrading-v0.10.1.md) for changed defaults and migration commands.
+
 ## Development
 
 ```sh
@@ -577,6 +580,9 @@ See the [security policy](SECURITY.md) for supported versions and the reporting 
 ## Author and License
 
 Built and maintained by [ByteYellow](https://github.com/ByteYellow).
+
+Thanks to [@8eeth0ven](https://github.com/8eeth0ven) for the security hardening
+contributions in [PR #34](https://github.com/ByteYellow/AgentProvenance/pull/34).
 
 Licensed under the Apache License 2.0 — see [LICENSE](LICENSE).
 Copyright 2026 ByteYellow.

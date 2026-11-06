@@ -505,6 +505,9 @@ macOS 包尚未经过 Apple 公证；下载校验和用于检查压缩包完整�
 [发行说明](docs/zh-CN/releases/v0.10.0.md) · [变更记录](CHANGELOG.zh-CN.md) ·
 [后续方向](docs/zh-CN/capabilities.md#后续方向)
 
+从源码试用下一维护版本时，请先阅读 [v0.10.1 升级指南](docs/zh-CN/upgrading-v0.10.1.md)，
+了解默认行为变化及迁移命令。
+
 ## 开发
 
 ```sh
@@ -535,6 +538,9 @@ ARM64 实机与 KVM/K3s 实验环境的验收结果另有报告，不等同于�
 ## 作者与许可
 
 由 [ByteYellow](https://github.com/ByteYellow) 开发和维护。
+
+感谢 [@8eeth0ven](https://github.com/8eeth0ven) 在
+[PR #34](https://github.com/ByteYellow/AgentProvenance/pull/34) 中贡献安全加固改进。
 
 采用 Apache License 2.0 许可证，详见 [LICENSE](LICENSE)。
 Copyright 2026 ByteYellow。

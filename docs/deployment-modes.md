@@ -144,6 +144,9 @@ properties; neither endpoint proves every background worker is progressing.
 
 ### API authentication and browser access
 
+For existing deployments, see the [v0.10.1 upgrade guide](upgrading-v0.10.1.md)
+for token setup, HTTP execution defaults, signed imports and migration commands.
+
 `daemon serve` requires a bearer token by default. It reuses or generates
 `<data-dir>/auth-token` with mode `0600`; `--auth-token` or
 `AGENTPROV_DAEMON_TOKEN` can supply an operator-managed token. CLI clients must

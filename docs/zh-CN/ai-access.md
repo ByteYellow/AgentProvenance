@@ -6,6 +6,11 @@
 
 接口参考：[中文 OpenAPI](openapi.yaml) · [九个 AI/MCP 工具](ai-tools.md) · [Python 接入](python-sdk.md)。
 
+通过 daemon 接入时，除健康检查外需要 Bearer Token。CLI 使用所选数据目录中的令牌，
+直接调用 HTTP 时发送 `Authorization: Bearer <token>`，Python SDK 读取 `AGENTPROV_DAEMON_TOKEN`。
+写入请求体使用 JSON，具体步骤见[连接与迁移指南](upgrading-v0.10.1.md#连接-daemon)。
+本地 stdio MCP 使用进程对数据目录的访问权限，不经过 HTTP 鉴权。
+
 ## 信任边界
 
 这条边界适用于所有适配器：

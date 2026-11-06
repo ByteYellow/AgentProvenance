@@ -2,6 +2,48 @@
 
 English | [中文](CHANGELOG.zh-CN.md)
 
+## Unreleased - v0.10.1
+
+### Security and compatibility
+
+- Require daemon bearer authentication by default, reuse the protected token
+  file and validate browser origins, Fetch Metadata and write content types.
+  Keep health checks anonymous and ordinary GET requests read-only.
+- Keep interactive `launch`/`record` input, Ctrl-C and long tasks working while
+  retaining separate HTTP execution limits and descendant cleanup. Isolate
+  data-directory, authentication and language state between CLI command trees.
+- Verify forensics signatures before import; require an explicit unverified
+  option for unsigned captures. Keep verification outcomes in text and JSON,
+  and keep JSON-mode diagnostics English across interface languages.
+- Restrict server-side file ingestion and artifact export paths. Accept valid
+  artifact names without relaxing destination checks or private file modes.
+- Keep Docker capabilities dropped and `no-new-privileges` enabled. Default to
+  the caller's effective UID:GID for writable workspaces; honor explicit task users.
+- Update signed-import scripts, SDK examples and bilingual migration guidance.
+  See the [upgrade guide](docs/upgrading-v0.10.1.md) for changed defaults.
+- Keep quoted-command redaction consistent across table fields and JSON objects,
+  so signed record exports remain verifiable after import.
+
+### Evidence accuracy
+
+- Compute intent coverage per tool call. Preserve ambiguous delegation
+  candidates, explicit call bindings and separately applicable persistent policies.
+- Separate outbound body matches, candidate source reads and execution identity.
+  Match structured paths, available versions and observation times; retain
+  unknown and ambiguous attribution with evidence references and rule versions.
+- Isolate HTTP/1.1 and HTTP/2 HPACK state after TLS gaps. Retain incomplete
+  fragments and call/chunk positions without extracting model decisions from
+  partial bytes; aggregate contiguous fragments from the same call.
+- Trigger bounded TLS target discovery from process/library hints and reuse
+  attached library targets for subsequent short-lived processes.
+- Show intent, attribution and TLS integrity in the existing detail readers,
+  including signed-bundle roundtrips and selected offline replays. Keep capture
+  truncation distinct from body pagination.
+
+Thanks to [@8eeth0ven](https://github.com/8eeth0ven) for security hardening
+contributions in [PR #34](https://github.com/ByteYellow/AgentProvenance/pull/34).
+[Release notes draft](docs/releases/v0.10.1.md).
+
 ## v0.10.0 - 2026-10-19
 
 ### Added

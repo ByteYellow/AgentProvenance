@@ -73,6 +73,9 @@ KVM 虚拟机与 K3s 的 systemd 采集服务、节点事件归属配置见[部�
 
 ### API 鉴权与浏览器访问
 
+已有部署请先阅读 [v0.10.1 升级指南](upgrading-v0.10.1.md)，其中包含令牌配置、
+HTTP 执行默认值、签名导入和对应迁移命令。
+
 `daemon serve` 默认要求 Bearer token。服务复用或生成 `<data-dir>/auth-token`，文件权限为 `0600`；也可以通过 `--auth-token` 或 `AGENTPROV_DAEMON_TOKEN` 指定自管 token。CLI 客户端需要使用相同的 `--data-dir`，或显式设置 `AGENTPROV_DAEMON_TOKEN`。只有 GET `/v1/health`、`/v1/ready`、`/v1/live` 三个健康检查接口允许匿名访问。
 
 带正文的写请求必须使用 `Content-Type: application/json`；空体 DELETE、POST 可以省略该头。浏览器请求的 Origin 必须匹配，写请求的 `Sec-Fetch-Site` 仅接受 `same-origin`、`none` 或缺省。Origin 检查依据直接连接的 HTTP/TLS 状态，不信任请求中的 `X-Forwarded-*` 头。已鉴权的 CLI、SDK 可以通过远程地址或自定义域名访问，无需发送浏览器专用头。

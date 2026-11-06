@@ -103,12 +103,19 @@ Signal import and forensic export are enabled by default. Set `import_signals=Fa
 
 With `daemon_url`, `record`, `eval_context`, `signals` and `audit_associations` call HTTP directly. Other methods still require the CLI. HTTP reads `AGENTPROV_DAEMON_TOKEN` from `env` or the process environment and sends it as a Bearer Token. Redirects are rejected so credentials remain at the configured daemon address.
 
-Read saved audit decisions page by page:
+HTTP methods require an explicit token even when `data_dir` is set. Read the
+daemon's generated token locally, then query saved audit decisions page by page:
 
 ```python
+from pathlib import Path
 from agentprov import Client
 
-client = Client(daemon_url="http://127.0.0.1:8574")
+data_dir = Path.home() / ".agentprov"  # Use the daemon's actual data directory.
+client = Client(
+    data_dir=data_dir,
+    daemon_url="http://127.0.0.1:8574",
+    env={"AGENTPROV_DAEMON_TOKEN": (data_dir / "auth-token").read_text().strip()},
+)
 cursor = ""
 while True:
     page = client.audit_associations("run-example", limit=100, cursor=cursor)
@@ -118,6 +125,16 @@ while True:
         break
     cursor = page["next_cursor"]
 ```
+
+For an operator-managed token, supply that value instead, or set
+`AGENTPROV_DAEMON_TOKEN` in the process environment. Keep tokens out of source
+control and captured workspaces.
+
+HTTP `record` uses the daemon's execution policy: a 60-second default limit,
+workspace confinement, a minimal child environment and an explicit shell opt-in.
+The SDK's `env` configures the client, not the remotely executed child. Local CLI
+recording retains the caller's environment. See the
+[upgrade guide](upgrading-v0.10.1.md#choose-the-execution-path) for migration options.
 
 Use `event_id` to inspect one decision. Without `daemon_url`, the same method
 calls the CLI. See [audit evidence](telemetry-schema.md#read-only-runtime-association)
