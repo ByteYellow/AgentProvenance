@@ -76,7 +76,7 @@ also remains in effect; capability and gap reports retain these boundaries.
 | K3s container TLS recreation | 30/30 | [Report](kvm-container-tls.json) |
 | Late binding, SIGKILL recovery and deduplication | 13/13 | [Report](kvm-node-capture.json) |
 | Sensor/CLI/telemetry/producer race checks | Passed | [Log](race.log) |
-| CLI and translation tests | Passed | [Log](cli-tests.log) |
+| CLI and translation tests | Earlier run; superseded by the final-source correction | [Original log](cli-tests.log), [corrected result](../v0.10.1-shutdown/README.md) |
 | Updated guest services | Both active and ready with the configured buffers | [KVM](kvm-installed.json), [WHPX](whpx-installed.json) |
 
 The live service still reports `degraded` when it encounters unsupported
@@ -88,3 +88,7 @@ binaries, QEMU and BoringSSL fixture versions are recorded in
 [source-identity.json](source-identity.json). [SHA256SUMS](SHA256SUMS) covers this
 evidence directory. The existing branch receives the changes; no release or
 merge is performed.
+
+The [shutdown follow-up](../v0.10.1-shutdown/README.md) fixes continuous-traffic
+drain behavior and the final-tree translation failure. It includes ARM64 live
+regression and retains the measurements above as historical evidence.

@@ -44,9 +44,12 @@
 | K3s 容器 TLS 重建 | 30/30 | [报告](kvm-container-tls.json) |
 | 迟到绑定、SIGKILL 恢复、去重 | 13/13 | [报告](kvm-node-capture.json) |
 | 传感器、CLI、摄入、生产者 race 检查 | 通过 | [日志](race.log) |
-| CLI 与中文翻译测试 | 通过 | [日志](cli-tests.log) |
+| CLI 与中文翻译测试 | 较早一轮结果，以最终源码修正验收为准 | [原日志](cli-tests.log)、[修正结果](../v0.10.1-shutdown/README.zh-CN.md) |
 | 虚拟机服务更新 | 两台服务均已运行、就绪，缓冲配置生效 | [KVM](kvm-installed.json)、[WHPX](whpx-installed.json) |
 
 后台仍有未支持的 TLS 程序，所以常驻服务会如实报告 `degraded`，具体原因保留在能力报告中；两台 guest 的必需系统调用采集均已就绪。
 
 BPF 对象保持原样，包括 ARM64 对象。源码、程序、QEMU 及 BoringSSL 测试库的版本和校验值见 [source-identity.json](source-identity.json)，证据文件校验值见 [SHA256SUMS](SHA256SUMS)。本轮只更新当前分支。
+
+[停机后续验收](../v0.10.1-shutdown/README.zh-CN.md)修复了持续流量下的排空行为和最终源码的翻译检查失败，
+补充了 ARM64 实机回归。上面的测量记录继续作为历史证据保留。
