@@ -7,6 +7,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/hooksbridge"
+	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/security"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
@@ -88,6 +89,85 @@ func TestDerivedEffectConfidenceIsNotKernelIdentity(t *testing.T) {
 		if e.AgentID != "a" || e.ToolCallID != "a" || e.Confidence != correlation.AppProcessConfidence {
 			t.Fatalf("inferred identity overstated: %+v", e)
 		}
+	}
+}
+
+func TestMaterializeToolCoverageGapKeepsReferences(t *testing.T) {
+	db := attributionStore(t, false)
+	for _, statement := range []string{
+		`INSERT INTO tool_calls (id,run_id,agent_id,command,status,created_at) VALUES ('no-intent','run','a','','completed','2026-09-28T00:01:00Z')`,
+		`INSERT INTO events (id,run_id,tool_call_id,source,event_type,payload,correlation_confidence,created_at) VALUES ('uncovered-secret','run','no-intent','agentprov_ebpf','secret_path','{"path":"/home/example/.aws/credentials","comm":"cat"}',1,'2026-09-28T00:01:01Z')`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if result, err := Materialize(db, "run"); err != nil || result.RuleVersion != RuleVersion {
+			t.Fatal(err)
+		}
+		var id, agent, status string
+		if err := db.QueryRow(`SELECT id,agent_id,status FROM intent_diffs WHERE run_id='run' AND tool_call_id='no-intent'`).Scan(&id, &agent, &status); err != nil {
+			t.Fatalf("tool gap not stored: %v", err)
+		}
+		if agent != "a" || status != StatusCoverageGap {
+			t.Fatalf("tool gap scope: agent=%s status=%s", agent, status)
+		}
+		graph, err := provenance.BuildGraphLens(db, provenance.GraphLensOptions{RunID: "run", Lens: "intent", Detail: "raw"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, node := range graph.Nodes {
+			if node.ID == id {
+				found = node.Data["rule_version"] == RuleVersion && node.Data["tool_call_id"] == "no-intent"
+			}
+		}
+		if !found {
+			t.Fatal("graph lost tool gap identity or rule version")
+		}
+		refs := 0
+		for _, edge := range graph.DerivedEdges {
+			if edge.FromID == id || edge.ToID == id {
+				refs++
+				if edge.DerivationRule != RuleVersion || edge.Confidence == nil || len(edge.EvidenceRefs) != 2 {
+					t.Fatalf("graph lost analysis support: %+v", edge)
+				}
+			}
+		}
+		if refs != 2 {
+			t.Fatalf("want tool and event references, got %d", refs)
+		}
+		for _, query := range []string{
+			`SELECT COUNT(*) FROM graph_edges WHERE from_id='no-intent' AND to_id=? AND edge_type='intent_contract'`,
+			`SELECT COUNT(*) FROM graph_edges WHERE from_id=? AND to_id='runtime_event/uncovered-secret' AND edge_type='intent_diff_effect'`,
+			`SELECT COUNT(*) FROM signals WHERE source_id=? AND tool_call_id='no-intent' AND signal_type='intent_coverage_gap' AND severity='info'`,
+		} {
+			var n int
+			if err := db.QueryRow(query, id).Scan(&n); err != nil || n != 1 {
+				t.Fatalf("gap reference missing/duplicated: n=%d err=%v query=%s", n, err, query)
+			}
+		}
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE id='uncovered-secret'`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("raw evidence was changed: %d %v", count, err)
+	}
+}
+
+func TestMaterializeUnattributedGapsDoNotCollideAcrossRuns(t *testing.T) {
+	db := attributionStore(t, false)
+	for _, run := range []string{"one", "two", "one"} {
+		if _, err := db.Exec(`INSERT OR IGNORE INTO events (id,run_id,event_type,source,payload,created_at) VALUES (?,?,'secret_path','agentprov_ebpf','{"path":"/work/.aws/credentials"}','2026-11-06T00:00:00Z')`, "secret-"+run, run); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Materialize(db, run); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(DISTINCT id) FROM intent_diffs WHERE run_id IN ('one','two') AND rule_version=?`, RuleVersion).Scan(&count); err != nil || count != 2 {
+		t.Fatalf("run-local gaps collided: %d %v", count, err)
 	}
 }
 

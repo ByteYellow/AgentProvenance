@@ -255,17 +255,16 @@ func addAgentNodes(db *sql.DB, runID string, add func(GraphLensNode)) error {
 // refusal bypass, a healthy green match, or a muted coverage gap.
 func addIntentDiffNodes(db *sql.DB, runID string, add func(GraphLensNode)) error {
 	rows, err := db.Query(`SELECT id, COALESCE(agent_id,''), COALESCE(contract_kind,''), COALESCE(operation,''),
-		COALESCE(status,''), COALESCE(finding,''), COALESCE(confidence,0), COALESCE(observed_effects,'[]'), COALESCE(mismatch_reason,'')
+		COALESCE(status,''), COALESCE(finding,''), COALESCE(confidence,0), COALESCE(observed_effects,'[]'), COALESCE(mismatch_reason,''), tool_call_id, source, rule_version
 		FROM intent_diffs WHERE run_id = ?`, runID)
 	if err != nil {
-		// Table may not exist on an older imported store: degrade to no nodes.
-		return nil
+		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, agentID, kind, operation, status, finding, observed, reason string
+		var id, agentID, kind, operation, status, finding, observed, reason, toolCallID, source, ruleVersion string
 		var confidence float64
-		if err := rows.Scan(&id, &agentID, &kind, &operation, &status, &finding, &confidence, &observed, &reason); err != nil {
+		if err := rows.Scan(&id, &agentID, &kind, &operation, &status, &finding, &confidence, &observed, &reason, &toolCallID, &source, &ruleVersion); err != nil {
 			return err
 		}
 		label := intentDiffLabel(status, finding, operation)
@@ -278,6 +277,7 @@ func addIntentDiffNodes(db *sql.DB, runID string, add func(GraphLensNode)) error
 			Data: map[string]any{
 				"status": status, "finding": finding, "operation": operation, "contract_kind": kind,
 				"agent_id": agentID, "confidence": confidence, "observed_effects": observed, "reason": reason,
+				"tool_call_id": toolCallID, "source": source, "rule_version": ruleVersion,
 			},
 		})
 	}

@@ -1,8 +1,9 @@
 package intent
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"sort"
-	"strings"
 )
 
 func isBaselineForbidden(k EffectKind) bool {
@@ -29,6 +30,8 @@ const (
 // from a peer message -- the multi-agent lateral-influence finding.
 const FindingPeerMessageMismatch = "peer_message_intent_mismatch"
 
+const RuleVersion = "agentprov.intent_scope/v2"
+
 // IntentRuntimeDiff is one reconciliation of a contract against the effects
 // attributed to its scope.
 type IntentRuntimeDiff struct {
@@ -47,39 +50,43 @@ type IntentRuntimeDiff struct {
 	Observed       []EffectKind `json:"observed_effects"`
 	MismatchReason string       `json:"mismatch_reason,omitempty"`
 	Source         string       `json:"source"`
+	RuleVersion    string       `json:"rule_version"`
 	EventIDs       []string     `json:"event_ids,omitempty"`
 }
 
 // Diff reconciles contracts against runtime effects and returns typed diffs.
 func Diff(contracts []IntentContract, effects []RuntimeEffect) []IntentRuntimeDiff {
-	byAgent := map[string][]RuntimeEffect{}
-	byToolCall := map[string][]RuntimeEffect{}
-	contractedAgents := map[string]bool{}
-	contractedToolCalls := map[string]bool{}
-	for _, e := range effects {
-		byAgent[e.AgentID] = append(byAgent[e.AgentID], e)
+	byAgent := map[string][]int{}
+	byToolCall := map[string][]int{}
+	covered := make([]bool, len(effects))
+	for i, e := range effects {
+		byAgent[e.AgentID] = append(byAgent[e.AgentID], i)
 		if e.ToolCallID != "" {
-			byToolCall[e.ToolCallID] = append(byToolCall[e.ToolCallID], e)
+			byToolCall[e.ToolCallID] = append(byToolCall[e.ToolCallID], i)
 		}
 	}
 
 	var out []IntentRuntimeDiff
 	for _, c := range contracts {
-		contractedAgents[c.ScopeAgent] = true
-		if c.ToolCallID != "" {
-			contractedToolCalls[c.ToolCallID] = true
+		var candidates []int
+		if c.ScopeAgent != "" {
+			candidates = byAgent[c.ScopeAgent]
 		}
-
-		// Scope the effects a contract is answerable for: a tool_call contract
-		// owns its own tool_call's effects; a peer_message/refusal contract
-		// governs everything its target agent did.
-		scope := byAgent[c.ScopeAgent]
-		if (c.Kind == ContractToolCall || c.Kind == ContractModelResponse) && c.ToolCallID != "" {
-			if te, ok := byToolCall[c.ToolCallID]; ok {
-				scope = te
-			} else {
-				scope = nil // no effects attributed to this specific tool call
+		if c.Kind == ContractToolCall || c.Kind == ContractModelResponse {
+			// A missing tool identity never widens a tool contract to its agent.
+			candidates = nil
+			if c.ToolCallID != "" {
+				candidates = byToolCall[c.ToolCallID]
 			}
+		}
+		var scope []RuntimeEffect
+		for _, index := range candidates {
+			e := effects[index]
+			if c.ScopeAgent != "" && e.AgentID != "" && c.ScopeAgent != e.AgentID {
+				continue
+			}
+			covered[index] = true
+			scope = append(scope, e)
 		}
 
 		forbidden := c.Profile.forbiddenSet()
@@ -107,7 +114,7 @@ func Diff(contracts []IntentContract, effects []RuntimeEffect) []IntentRuntimeDi
 					ID: "diff/" + trimContract(c.ID) + "/ok", RunID: "", AgentID: c.ScopeAgent, ToolCallID: c.ToolCallID,
 					ContractKind: c.Kind, Operation: c.Operation, Target: c.Target,
 					Status: StatusExecuted, Confidence: c.Confidence,
-					Declared: c.Profile.Declared, Observed: kindsOf(scope), Source: c.Source,
+					Declared: c.Profile.Declared, Observed: kindsOf(scope), Source: c.Source, EventIDs: eventIDsOf(scope),
 				})
 			}
 			continue
@@ -138,49 +145,39 @@ func Diff(contracts []IntentContract, effects []RuntimeEffect) []IntentRuntimeDi
 	// coverage gap, NOT a rogue action -- we will not claim "executed without
 	// intent" when we may simply have failed to capture the intent (in-process
 	// sub-agents share one kernel scope; command-match can miss). Benign effects
-	// with no contract are not reported. Grouped by the scope we could resolve
-	// (agent, else the owning tool call).
-	type gapBucket struct {
-		effects []RuntimeEffect
-		isAgent bool
+	// with no contract are not reported. Keep the most specific known scope.
+	type gapScope struct {
+		agent, tool string
 	}
-	gaps := map[string]*gapBucket{}
-	for _, e := range effects {
-		if !isBaselineForbidden(e.Kind) {
+	gaps := map[gapScope][]RuntimeEffect{}
+	for index, e := range effects {
+		if !isBaselineForbidden(e.Kind) || covered[index] {
 			continue
 		}
-		if e.AgentID != "" && contractedAgents[e.AgentID] {
-			continue // its contract handled it (as match or mismatch) above
-		}
-		if e.ToolCallID != "" && contractedToolCalls[e.ToolCallID] {
-			continue
-		}
-		key := "scope:" + e.ToolCallID
-		isAgent := false
-		if e.AgentID != "" {
-			key, isAgent = "agent:"+e.AgentID, true
-		}
-		if gaps[key] == nil {
-			gaps[key] = &gapBucket{isAgent: isAgent}
-		}
-		gaps[key].effects = append(gaps[key].effects, e)
+		key := gapScope{agent: e.AgentID, tool: e.ToolCallID}
+		gaps[key] = append(gaps[key], e)
 	}
 	for key, b := range gaps {
+		scopeKey := fmt.Sprintf("%d:%s%d:%s", len(key.agent), key.agent, len(key.tool), key.tool)
 		d := IntentRuntimeDiff{
-			ID: "diff/gap/" + shorten(key, 24), ContractKind: "none", Status: StatusCoverageGap, Confidence: 0,
-			Observed:       kindsOf(b.effects),
-			MismatchReason: "sensitive runtime effects observed (" + joinKinds(kindsOf(b.effects)) + ") but no intent contract was captured for this scope",
-			Source:         "coverage", EventIDs: eventIDsOf(b.effects),
-		}
-		if b.isAgent {
-			d.AgentID = strings.TrimPrefix(key, "agent:")
-		} else {
-			d.ToolCallID = strings.TrimPrefix(key, "scope:")
+			ID: fmt.Sprintf("diff/gap/%x", sha256.Sum256([]byte(scopeKey))), ContractKind: "none", Status: StatusCoverageGap, Confidence: 0,
+			AgentID: key.agent, ToolCallID: key.tool,
+			Observed:       kindsOf(b),
+			MismatchReason: "sensitive runtime effects observed (" + joinKinds(kindsOf(b)) + ") but no intent contract was captured for this scope",
+			Source:         "coverage", EventIDs: eventIDsOf(b),
 		}
 		out = append(out, d)
 	}
 
-	sort.SliceStable(out, func(i, j int) bool { return statusRank(out[i].Status) < statusRank(out[j].Status) })
+	for i := range out {
+		out[i].RuleVersion = RuleVersion
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if a, b := statusRank(out[i].Status), statusRank(out[j].Status); a != b {
+			return a < b
+		}
+		return out[i].ID < out[j].ID
+	})
 	return out
 }
 
@@ -219,16 +216,20 @@ func kindsOf(es []RuntimeEffect) []EffectKind {
 			out = append(out, e.Kind)
 		}
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	return out
 }
 
 func eventIDsOf(es []RuntimeEffect) []string {
+	seen := map[string]bool{}
 	var out []string
 	for _, e := range es {
-		if e.EventID != "" {
+		if e.EventID != "" && !seen[e.EventID] {
+			seen[e.EventID] = true
 			out = append(out, e.EventID)
 		}
 	}
+	sort.Strings(out)
 	return out
 }
 

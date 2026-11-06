@@ -102,6 +102,7 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 		// Unified signal model (security/cost/quality/behavior) — without it the
 		// replay has no Signals & Risk and verify flags missing_policy_unified_signal.
 		{"signals", "signals", "run_id = ?", "created_at ASC, id ASC"},
+		{"intent_diffs", "intent_diffs", "run_id = ?", "created_at ASC, id ASC"},
 		{"response_actions", "response_actions", "run_id = ?", "created_at ASC, id ASC"},
 		{"external_effects", "external_effects", "run_id = ?", "created_at ASC, id ASC"},
 		{"evidence_events", "evidence_events", "run_id = ?", "created_at ASC, id ASC"},
@@ -417,7 +418,11 @@ func redactBundleTexts(bundle map[string]any, manifest *evidence.Manifest) {
 			continue
 		}
 		for _, row := range rows {
-			for _, col := range []string{"payload", "command", "task_yaml"} {
+			textColumns := []string{"payload", "command", "task_yaml"}
+			if key == "intent_diffs" {
+				textColumns = append(textColumns, "target", "mismatch_reason", "source")
+			}
+			for _, col := range textColumns {
 				if p, ok := row[col].(string); ok && p != "" {
 					row[col] = redact.RedactString(p)
 				}

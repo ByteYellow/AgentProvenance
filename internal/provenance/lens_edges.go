@@ -10,7 +10,11 @@ import (
 )
 
 func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
-	rows, err := db.Query(`SELECT id, from_id, to_id, edge_type, COALESCE(source_event_id,''), created_at FROM graph_edges WHERE run_id = ? ORDER BY created_at ASC, id ASC`, runID)
+	rows, err := db.Query(`SELECT e.id, e.from_id, e.to_id, e.edge_type, COALESCE(e.source_event_id,''), e.created_at,
+		COALESCE(d.rule_version,''), COALESCE(d.confidence,0)
+		FROM graph_edges e LEFT JOIN intent_diffs d ON d.run_id=e.run_id AND d.id=CASE e.edge_type
+			WHEN 'intent_contract' THEN e.to_id WHEN 'intent_diff_effect' THEN e.from_id ELSE '' END
+		WHERE e.run_id = ? ORDER BY e.created_at ASC, e.id ASC`, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -18,8 +22,15 @@ func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
 	var edges []GraphLensEdge
 	for rows.Next() {
 		var edge GraphLensEdge
-		if err := rows.Scan(&edge.ID, &edge.FromID, &edge.ToID, &edge.EdgeType, &edge.SourceEventID, &edge.CreatedAt); err != nil {
+		var intentRule string
+		var intentConfidence float64
+		if err := rows.Scan(&edge.ID, &edge.FromID, &edge.ToID, &edge.EdgeType, &edge.SourceEventID, &edge.CreatedAt, &intentRule, &intentConfidence); err != nil {
 			return nil, err
+		}
+		if intentRule != "" {
+			edge.Derived, edge.DerivationRule = true, intentRule
+			edge.Confidence = graphConfidence(intentConfidence)
+			edge.EvidenceRefs = []string{edge.FromID, edge.ToID}
 		}
 		if edge.EdgeType == "agent_syscall" && (strings.HasPrefix(edge.ID, correlation.AppProcessEdgePrefix) || strings.HasPrefix(edge.ID, "agent-correlation-v2-")) {
 			edge.Derived, edge.DerivationRule = true, correlation.AppProcessMethod

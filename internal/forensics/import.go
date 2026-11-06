@@ -52,6 +52,7 @@ var importTableOrder = []string{
 	"policy_decisions",
 	"risk_signals",
 	"signals",
+	"intent_diffs",
 	"response_actions",
 	"external_effects",
 	"evidence_events",

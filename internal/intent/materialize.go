@@ -2,6 +2,7 @@ package intent
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 // Result summarizes a Materialize run.
 type Result struct {
 	RunID        string         `json:"run_id"`
+	RuleVersion  string         `json:"rule_version"`
 	Effects      int            `json:"effects"`
 	Contracts    int            `json:"contracts"`
 	Diffs        int            `json:"diffs"`
@@ -55,7 +57,7 @@ func Materialize(db *sql.DB, runID string) (Result, error) {
 }
 
 func materialize(db *sql.Tx, runID string) (Result, error) {
-	res := Result{RunID: runID, ByStatus: map[string]int{}}
+	res := Result{RunID: runID, RuleVersion: RuleVersion, ByStatus: map[string]int{}}
 	eng := security.DefaultEngine()
 
 	// Build the command-match attribution edges only when the run has none yet.
@@ -90,6 +92,13 @@ func materialize(db *sql.Tx, runID string) (Result, error) {
 	res.Contracts = len(contracts)
 
 	diffs := Diff(contracts, effects)
+	// Contract/message IDs may be local to a run; persisted IDs must not collide
+	// with another run's analysis or its signal references.
+	for i := range diffs {
+		d := &diffs[i]
+		d.RunID = runID
+		d.ID = fmt.Sprintf("diff/v2/%x", sha256.Sum256([]byte(fmt.Sprintf("%d:%s%s", len(runID), runID, d.ID))))
+	}
 	res.Diffs = len(diffs)
 
 	if err := persistDiffs(db, runID, diffs); err != nil {
@@ -128,7 +137,7 @@ func emitSignals(db *sql.Tx, runID string, diffs []IntentRuntimeDiff) error {
 		if _, err := db.Exec(`INSERT INTO signals
 			(id, dimension, signal_type, graph_ref_kind, graph_ref_id, run_id, tool_call_id, severity,
 			 confidence, recommended_action, produced_by, source_table, source_id, created_at)
-			VALUES (?, 'intent_conformance', ?, 'edge', ?, ?, ?, ?, ?, ?, 'intent.diff', 'intent_diffs', ?, ?)`,
+			VALUES (?, 'intent_conformance', ?, 'node', ?, ?, ?, ?, ?, ?, 'intent.diff', 'intent_diffs', ?, ?)`,
 			"sig-"+trimDiff(d.ID), signalType(d), d.ID, runID, d.ToolCallID, sev,
 			d.Confidence, recommendedAction(d.Status), d.ID, now); err != nil {
 			return err
@@ -427,23 +436,23 @@ func persistDiffs(tx *sql.Tx, runID string, diffs []IntentRuntimeDiff) error {
 		observed, _ := json.Marshal(d.Observed)
 		if _, err := tx.Exec(`INSERT INTO intent_diffs
 			(id, run_id, agent_id, tool_call_id, contract_kind, operation, target, status, finding, confidence,
-			 declared_effects, forbidden_effects, observed_effects, mismatch_reason, source, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 declared_effects, forbidden_effects, observed_effects, mismatch_reason, source, rule_version, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			d.ID, runID, d.AgentID, d.ToolCallID, d.ContractKind, d.Operation, d.Target, d.Status, d.Finding, d.Confidence,
-			string(declared), string(forbidden), string(observed), d.MismatchReason, d.Source, now); err != nil {
+			string(declared), string(forbidden), string(observed), d.MismatchReason, d.Source, d.RuleVersion, now); err != nil {
 			return err
 		}
-		// Wire the diff into the graph: scope -> diff node, and diff node -> each
-		// observed runtime event. Endpoints are not checked by graph verify, so
-		// these new edge types are safe to add.
+		// Keep each observed event as a separate support reference.
 		scope := "agent/" + d.AgentID
 		if d.ContractKind == ContractModelResponse && strings.HasPrefix(d.Source, "endpoint/resp-") {
 			scope = "llm_call/ep-" + strings.TrimPrefix(d.Source, "endpoint/resp-")
 		} else if d.ToolCallID != "" {
 			scope = d.ToolCallID
 		}
-		if err := insertEdge(tx, runID, scope, d.ID, edgeIntentContract, now, &seq); err != nil {
-			return err
+		if scope != "agent/" {
+			if err := insertEdge(tx, runID, scope, d.ID, edgeIntentContract, now, &seq); err != nil {
+				return err
+			}
 		}
 		for _, eid := range d.EventIDs {
 			if err := insertEdge(tx, runID, d.ID, "runtime_event/"+eid, edgeIntentEffect, now, &seq); err != nil {

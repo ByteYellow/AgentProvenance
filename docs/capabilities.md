@@ -183,6 +183,13 @@ against the normalized **RuntimeEffects** attributed to its scope. The verdicts:
 | `decided_and_executed` | declared effects appeared, no violation |
 | `intent_coverage_gap` | sensitive effects with **no** captured intent — an honest gap, never a fabricated finding |
 
+Tool contracts cover their own tool call. If one agent has a captured contract
+for call A and a sensitive event from call B without a matching contract, B keeps
+its own coverage gap and event references. Analysis records include `rule_version`;
+new analysis uses `agentprov.intent_scope/v2`. Signed bundle export includes the
+saved analysis and its graph references. Import preserves those records and their
+historical rule version; `intent diff` explicitly recomputes the local analysis.
+
 The finding is **conditional on each action's declared contract**, which is what
 separates it from a global policy rule: a network connect is drift for a
 read-only file tool but permitted for `bash`; reading `~/.aws/credentials` is
