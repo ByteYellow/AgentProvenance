@@ -58,8 +58,11 @@ The current AMD Windows host is build `26300.9711` with KB5127648. WSL exposes n
 `svm` flag and `kvm_amd` rejects the CPU. Microsoft documents the nested
 virtualization fix in [KB5127936, build 26300.9818](https://support.microsoft.com/en-us/servicing/os/windows-11/2026/10/kb5127936-windows-11-25h2-26h2-update).
 The x64 package was downloaded from the Microsoft Update Catalog and its SHA-256
-verified against catalog metadata. It has **not been installed**. Installation,
-Windows restart and actual KVM acceptance remain pending. [Host record](host-update.json)
+verified against catalog metadata. Installation completed at 23:14 Asia/Shanghai
+with WUSA exit code **3010 (success, restart required)**. The target package is
+registered and Windows reports a pending restart. The user will restart manually;
+no restart was triggered. Actual KVM and default-CET acceptance follow that reboot.
+[Host record](host-update.json) · [Installation result](update-install-result.json)
 
 QEMU 11.1.0 with Ubuntu 6.8 and default CET settings booted and passed a small
 shadow-stack enable/return test. At about 563 seconds, PID 1 faulted with error 44

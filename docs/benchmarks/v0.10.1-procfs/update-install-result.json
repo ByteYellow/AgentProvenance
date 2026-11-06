@@ -1,0 +1,21 @@
+{
+  "installer": {
+    "exitCode": 3010,
+    "completedAt": "2026-11-06T23:14:11.7081574+08:00",
+    "automaticRestart": false
+  },
+  "system_after_install": {
+    "registryBuild": "26300.9711",
+    "checkedAt": "2026-11-06T23:15:21.6553843+08:00",
+    "cbsRebootPending": true,
+    "wusaRunning": false,
+    "matchingPackages": [
+      {
+        "name": "Package_for_RollupFix~31bf3856ad364e35~amd64~~26100.9818.1.42",
+        "currentState": 96
+      }
+    ]
+  },
+  "restart_owner": "user",
+  "restart_performed": false
+}

@@ -51,8 +51,10 @@ guest 验收脚本也补上 QEMU/WHPX 的识别：hypervisor 为 Microsoft 时�
 当前 WSL 缺少 `svm` 标志，加载 `kvm_amd` 报 CPU 不支持。
 微软在 [KB5127936、build 26300.9818](https://support.microsoft.com/en-us/servicing/os/windows-11/2026/10/kb5127936-windows-11-25h2-26h2-update)
 中列出了嵌套虚拟化修复。对应 x64 安装包已从 Microsoft Update Catalog 下载，
-SHA-256 与官方目录元数据一致，**尚未安装**。安装更新、重启 Windows 后，还需补跑真正的 KVM 验收。
-[宿主与安装包记录](host-update.json)
+SHA-256 与官方目录元数据一致。安装阶段于北京时间 23:14 完成，WUSA 返回
+**3010（成功，需重启）**；目标更新包已登记，系统处于待重启状态。
+按用户要求，由用户稍后手动重启，本轮未触发重启。之后继续补跑真正的 KVM 与默认 CET 配置验收。
+[宿主与安装包记录](host-update.json) · [安装结果](update-install-result.json)
 
 QEMU 11.1.0 搭配 Ubuntu 6.8、保留默认 CET 时，可以启动并通过小型影子栈启用/返回测试；
 运行约 563 秒后，PID 1 出现异常码 44，随后内核 panic。
