@@ -2,6 +2,7 @@ package computerapi
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +84,41 @@ func TestExportArtifactDefaultsToBaseName(t *testing.T) {
 	}
 }
 
+func TestExportArtifactPreservesSafeFilenames(t *testing.T) {
+	for _, name := range []string{"报告.txt", "release notes.txt", ".env.example", "revision..txt", "résumé.json"} {
+		for _, explicit := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/explicit=%t", name, explicit), func(t *testing.T) {
+				svc, workspace := newTestService(t)
+				source, output := name, ""
+				if explicit {
+					source, output = "note.txt", name
+				}
+				if err := os.WriteFile(filepath.Join(workspace, source), []byte("canary-payload"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				ref, _, err := svc.ExportArtifact("sbx-t", "/workspace/"+source, output, "tool-t")
+				if err != nil {
+					t.Fatalf("safe filename rejected: %v", err)
+				}
+				if filepath.Dir(ref) != svc.Paths.Artifacts || !strings.HasSuffix(filepath.Base(ref), "-"+name) {
+					t.Fatalf("artifact location/name changed: %q", ref)
+				}
+				body, err := os.ReadFile(ref)
+				if err != nil || string(body) != "canary-payload" {
+					t.Fatalf("artifact content: %q, err %v", body, err)
+				}
+				info, err := os.Stat(ref)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if info.Mode().Perm() != 0o600 {
+					t.Fatalf("artifact permissions = %o, want 600", info.Mode().Perm())
+				}
+			})
+		}
+	}
+}
+
 func TestExportArtifactRejectsTraversalNames(t *testing.T) {
 	cases := []struct {
 		name string
@@ -95,12 +131,15 @@ func TestExportArtifactRejectsTraversalNames(t *testing.T) {
 		// 注：空串在本层语义是“回退为源文件名”（CLI 不传 --name 的默认用法依赖此行为），
 		// 回退结果同样必须过 sanitizeArtifactName；空串拒绝契约在 TestSanitizeArtifactNameRejectsEmpty 锁定。
 		{".", "dot"},
-		{".hidden", "dot"},
 		{"x/../y", "path separator"},
 		{"/abs/path", "path separator"},
 		{`back\slash`, "path separator"},
-		{"space name", "outside [A-Za-z0-9._-]"},
-		{"..dot", "parent-directory"},
+		{"note.txt:stream", "stream separator"},
+		{"C:note.txt", "drive or stream separator"},
+		{"note\x00.txt", "control character"},
+		{"note\n.txt", "control character"},
+		{"note\x7f.txt", "control character"},
+		{"note\xff.txt", "UTF-8"},
 	}
 	for _, tc := range cases {
 		t.Run(quoteOrDefault(tc.name), func(t *testing.T) {

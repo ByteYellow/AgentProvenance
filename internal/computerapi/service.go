@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/byteyellow/agentprovenance/internal/control"
 	"github.com/byteyellow/agentprovenance/internal/ids"
@@ -226,13 +228,11 @@ func (s Service) Call(sessionID, module, function string, args map[string]string
 	return processID, record, err
 }
 
-// ErrInvalidArtifactName 导出目标名不合法（空、含路径分隔符、含 ".."、以 "." 开头
-// 或含 [A-Za-z0-9._-] 之外字符）。调用方可用 errors.Is 判别。
+// ErrInvalidArtifactName identifies an unsafe output filename.
 var ErrInvalidArtifactName = errors.New("invalid artifact name")
 
-// sanitizeArtifactName 白名单化导出名（M9 修复）：只允许 [A-Za-z0-9._-]，
-// 并额外拒绝以 "." 开头与包含 ".." 的名字，杜绝把穿越段拼进 artifactID+"-"+name。
-// 兜底校验由 ensureInsideArtifacts 在最终 join+Clean 后完成。
+// Keep one filename component, preserving Unicode, spaces and dotfiles. The
+// generated artifact prefix and final containment check remain independent.
 func sanitizeArtifactName(name string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("%w: name is empty", ErrInvalidArtifactName)
@@ -240,17 +240,21 @@ func sanitizeArtifactName(name string) (string, error) {
 	if strings.ContainsAny(name, `/\`) {
 		return "", fmt.Errorf("%w: %q contains a path separator", ErrInvalidArtifactName, name)
 	}
-	if strings.Contains(name, "..") {
+	if strings.Contains(name, ":") {
+		return "", fmt.Errorf("%w: %q contains a drive or stream separator", ErrInvalidArtifactName, name)
+	}
+	if name == ".." {
 		return "", fmt.Errorf("%w: %q contains a parent-directory segment", ErrInvalidArtifactName, name)
 	}
-	if strings.HasPrefix(name, ".") {
-		return "", fmt.Errorf("%w: %q starts with a dot (hidden or relative segment)", ErrInvalidArtifactName, name)
+	if name == "." {
+		return "", fmt.Errorf("%w: a dot refers to a directory", ErrInvalidArtifactName)
+	}
+	if !utf8.ValidString(name) {
+		return "", fmt.Errorf("%w: filename is not valid UTF-8", ErrInvalidArtifactName)
 	}
 	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '_', r == '-':
-		default:
-			return "", fmt.Errorf("%w: %q contains character %q outside [A-Za-z0-9._-]", ErrInvalidArtifactName, name, r)
+		if unicode.IsControl(r) {
+			return "", fmt.Errorf("%w: %q contains a control character", ErrInvalidArtifactName, name)
 		}
 	}
 	return name, nil
