@@ -23,6 +23,8 @@ English | [中文](CHANGELOG.zh-CN.md)
   See the [upgrade guide](docs/upgrading-v0.10.1.md) for changed defaults.
 - Keep quoted-command redaction consistent across table fields and JSON objects,
   so signed record exports remain verifiable after import.
+- Avoid unnecessary credential-pattern scans in large saved bodies while keeping
+  the existing masking rules and full content available to replay.
 
 ### Evidence accuracy
 

@@ -218,6 +218,9 @@ func pemBodyEnd(s string, start, limit int) int {
 // follows it: quoted values through their closing quote (M5), nested JSON
 // objects/arrays in full (M3), and bare values to end of line (M5).
 func redactKVs(s string) (string, bool) {
+	if !strings.ContainsAny(s, ":=") || !mayContainCredentialKey(s) {
+		return s, false
+	}
 	matches := kvKeySepRe.FindAllStringSubmatchIndex(s, -1)
 	if matches == nil {
 		return s, false
@@ -253,6 +256,21 @@ func redactKVs(s string) (string, bool) {
 	}
 	b.WriteString(s[last:])
 	return b.String(), true
+}
+
+func mayContainCredentialKey(s string) bool {
+	// Go's case-insensitive regexp also folds long s and Kelvin sign to ASCII.
+	// Let the original matcher handle those rather than narrowing its coverage.
+	if strings.ContainsAny(s, "\u017f\u212a") {
+		return true
+	}
+	lower := strings.ToLower(s)
+	for _, part := range []string{"auth", "pass", "secret", "key", "token", "credential", "pwd"} {
+		if strings.Contains(lower, part) {
+			return true
+		}
+	}
+	return false
 }
 
 // kvValuePlan locates the value following a key+separator match ending at sep.
@@ -381,23 +399,29 @@ func jsonSpanEnd(s string, start int) int {
 // passwords and bare `?key=`/`?signature=` query values.
 func redactURLCredentials(s string) (string, bool) {
 	changed := false
-	if out := urlUserinfoRe.ReplaceAllStringFunc(s, func(m string) string {
-		g := urlUserinfoRe.FindStringSubmatch(m)
-		if g[3] == mask {
-			return m
+	// These mandatory delimiters avoid scanning ordinary multi-megabyte tool
+	// output with the URL patterns; the actual credential rules stay unchanged.
+	if strings.Contains(s, "://") && strings.Contains(s, "@") {
+		if out := urlUserinfoRe.ReplaceAllStringFunc(s, func(m string) string {
+			g := urlUserinfoRe.FindStringSubmatch(m)
+			if g[3] == mask {
+				return m
+			}
+			return g[1] + g[2] + ":" + mask + "@"
+		}); out != s {
+			s, changed = out, true
 		}
-		return g[1] + g[2] + ":" + mask + "@"
-	}); out != s {
-		s, changed = out, true
 	}
-	if out := urlQueryKeyRe.ReplaceAllStringFunc(s, func(m string) string {
-		g := urlQueryKeyRe.FindStringSubmatch(m)
-		if g[2] == mask {
-			return m
+	if strings.ContainsAny(s, "?&") && strings.Contains(s, "=") {
+		if out := urlQueryKeyRe.ReplaceAllStringFunc(s, func(m string) string {
+			g := urlQueryKeyRe.FindStringSubmatch(m)
+			if g[2] == mask {
+				return m
+			}
+			return g[1] + mask
+		}); out != s {
+			s, changed = out, true
 		}
-		return g[1] + mask
-	}); out != s {
-		s, changed = out, true
 	}
 	return s, changed
 }
