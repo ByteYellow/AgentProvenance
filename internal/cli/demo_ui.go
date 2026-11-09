@@ -52,7 +52,7 @@ type demoPage struct {
 
 func demoCategory(entry demo.Entry) string {
 	switch entry.Directory {
-	case "investigation-workflow":
+	case "investigation-workflow", "evidence-attribution":
 		return "Investigation workflow"
 	case "snake-supply-chain", "deepseek-context":
 		return "Single agent"
@@ -60,7 +60,7 @@ func demoCategory(entry demo.Entry) string {
 		return "Agent team"
 	case "k8s-cross-pod-a2a", "k8s-substrate":
 		return "Kubernetes"
-	case "grok-codebase-exfil":
+	case "grok-codebase-exfil", "endpoint-attribution":
 		return "Outbound data"
 	default:
 		return "External evaluator"

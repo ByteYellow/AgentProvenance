@@ -42,6 +42,7 @@ def main():
         catalog = json.loads(run('demo', '--list', '--json'))
         replay = [d for d in catalog if d.get('run')]
         expected_replays = {
+            'evidence-attribution', 'evidence-attribution-repaired', 'endpoint-attribution',
             'investigation-workflow', 'investigation-repaired',
             'snake-supply-chain', 'multiagent-provenance', 'k8s-cross-pod-a2a',
             'k8s-substrate', 'grok-codebase-exfil', 'grok-3routes', 'deepseek-context',
@@ -124,7 +125,8 @@ def main():
             assert len(body['content'].encode('utf-8')) <= 1024
             assert '"locale":"zh-CN"' in get('/assets/i18n.js?lang=zh-CN')
             assert '--bg:#f5f5f7' in get('/assets/theme.css')
-            for guide_id in ('start', 'quickstart', 'capabilities', 'agent-session', 'capture', 'deployment', 'durable-capture', 'graph', 'security', 'compliance', 'supply-chain', 'ai-tools', 'ai-access', 'python', 'telemetry', 'comparisons', 'falco', 'release-notes', 'changelog'):
+            guide_ids = ('start', 'quickstart', 'capabilities', 'agent-session', 'capture', 'deployment', 'durable-capture', 'graph', 'security', 'compliance', 'supply-chain', 'ai-tools', 'ai-access', 'python', 'telemetry', 'comparisons', 'falco', 'upgrade-v0.10.1', 'release-notes', 'changelog')
+            for guide_id in guide_ids:
                 for language in ('en', 'zh-CN'):
                     guide = get('/demos/guide/' + guide_id + '?lang=' + language)
                     assert '<article class="document">' in guide and '<h1' in guide
@@ -143,7 +145,7 @@ def main():
             if process.poll() is None:
                 process.kill()
                 process.wait()
-        print(json.dumps({'archive': archive.name, 'platform': meta['os'] + '/' + meta['arch'], 'signed_replays': len(replay), 'guides': len(catalog), 'user_guides': 19, 'guide_languages': ['en', 'zh-CN'], 'recorded_context': 'passed', 'no_go_required': True, 'cleanup': 'passed'}))
+        print(json.dumps({'archive': archive.name, 'platform': meta['os'] + '/' + meta['arch'], 'signed_replays': len(replay), 'guides': len(catalog), 'user_guides': len(guide_ids), 'guide_languages': ['en', 'zh-CN'], 'recorded_context': 'passed', 'no_go_required': True, 'cleanup': 'passed'}))
 
 
 if __name__ == '__main__':

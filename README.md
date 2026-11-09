@@ -4,7 +4,7 @@
 
 [![Try the online demo](docs/assets/online-demo-button.svg)](https://ByteYellow.github.io/AgentProvenance/)
 
-**Explore 9 signed replays: graphs, Agent sessions, access decisions and saved files.**
+**Explore 12 signed examples: graphs, Agent sessions, access decisions and saved files.**
 No installation, account or API key required.
 
 # AgentProvenance
@@ -80,8 +80,8 @@ To replay offline, download the CLI:
 
 Download the archive for your platform and its `.sha256` file from
 [Releases](https://github.com/ByteYellow/AgentProvenance/releases).
-The archive example below uses v0.10.0, including the investigation-and-repair
-demo described below; see [release status](#release-status).
+The archive example below uses v0.10.1, including the new evidence-attribution
+replays and the historical investigation demos; see [release status](#release-status).
 
 | Platform | Archive suffix |
 | --- | --- |
@@ -93,9 +93,9 @@ demo described below; see [release status](#release-status).
 On Linux x86-64, verify and extract the downloaded archive:
 
 ```sh
-sha256sum -c agentprov_v0.10.0_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.10.1_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.10.0_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.10.1_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -107,10 +107,12 @@ agent account or API key and works offline.
 [![Demo library — open the online demo](docs/img/demo-gallery.png)](https://ByteYellow.github.io/AgentProvenance/)
 
 Choose **Open replay** to explore a signed execution, or **Read guide** to open
-its illustrated guide. The current demo library includes **nine signed replays
-and eleven demo guides**. Start with the investigation-and-repair workflow:
+its illustrated guide. The current demo library includes **twelve signed replays
+and fourteen demo guides**, including one labeled synthetic attribution example.
+Start with the new evidence-attribution captures:
 
 ```sh
+./agentprov demo evidence-attribution
 ./agentprov demo investigation-workflow
 ./agentprov demo deepseek-context
 ./agentprov demo multiagent-provenance
@@ -363,6 +365,8 @@ how these sources are joined.
 
 | Example | What to look for |
 | --- | --- |
+| [Evidence attribution: before and after](demo/evidence-attribution/README.md) | November DeepSeek captures with tool-scoped intent, audit decisions and retained TLS fragments |
+| [Outbound attribution: synthetic example](demo/endpoint-attribution/README.md) | A body match, two candidate source reads and unresolved execution identity |
 | [DeepSeek development task](demo/deepseek-context/README.md) | Task, tool results, configuration history, passing tests and final file content |
 | [Snake supply chain](demo/snake-supply-chain/README.md) | A poisoned dependency, planted test secrets, network activity and artifact provenance |
 | [Agent team](demo/multiagent-provenance/README.md) | Delegation, peer influence, a refusal and the later execution path |
@@ -373,7 +377,7 @@ how these sources are joined.
 | [LLM Judge](demo/llm-judge/README.md) | An external model reads evidence and returns findings with evidence references |
 | [Jev evaluator](demo/jev-judge/README.md) | Structured evaluation, rule comparison and human review |
 
-The nine signed replay entries work offline. LLM Judge and Jev are optional
+The twelve signed examples work offline; one is explicitly synthetic. LLM Judge and Jev are optional
 integration guides; live evaluation requires the provider setup described in
 each guide. Grok examples are dated captures with reproduction limits, not a
 statement about the current service.
@@ -532,10 +536,11 @@ evidence is kept as recorded.
 
 ## Release status
 
-v0.10.0 connects related sessions, saved-content search,
-Run comparison and selective offline sharing in the Dashboard. AppArmor and
-seccomp records explain access decisions, while basic and detailed capture
-presets let users choose how much Agent context to retain.
+v0.10.1 strengthens daemon access control, preserves local recording compatibility,
+and explains intent associations, outbound attribution and TLS capture gaps in
+the existing evidence readers. Native capture gains bounded buffering and
+reliable shutdown. New signed captures demonstrate these details alongside the
+historical investigation, comparison and offline-sharing examples.
 
 No new features are planned for now. The next phase focuses on accuracy,
 capture reliability and ease of use.
@@ -544,11 +549,11 @@ For upgrades, back up your data directory before opening it with a newer version
 An upgraded database should not be reopened with an older binary. macOS archives
 are not Apple notarized; download checksums verify archive integrity.
 
-[Release notes](docs/releases/v0.10.0.md) · [Changelog](CHANGELOG.md) ·
+[Release notes](docs/releases/v0.10.1.md) · [Changelog](CHANGELOG.md) ·
 [Future work](docs/capabilities.md#future-work)
 
-Building the upcoming maintenance version from source? See the
-[v0.10.1 upgrade guide](docs/upgrading-v0.10.1.md) for changed defaults and migration commands.
+Before upgrading, read the [v0.10.1 upgrade guide](docs/upgrading-v0.10.1.md)
+for changed authentication, HTTP execution and signed-import defaults.
 
 ## Development
 

@@ -12,7 +12,8 @@ Agent 会话和文件正文。站点也收录了完整的项目介绍、采集�
 ```
 
 点击**打开回放**查看签名执行记录，点击**阅读指南**查看图文说明。
-包内共有九份回放和十一个指南入口。回放无需 Go、Docker、Agent 账号或 API Key。
+包内共有十二份签名示例和十四个示例指南入口，其中一份明确标注为归因合成示例。
+回放无需 Go、Docker、Agent 账号或 API Key。
 
 ## 调查失败，再比较修复结果
 
@@ -34,8 +35,14 @@ CLI 先校验签名，再导入独立的临时目录。回放可以离线使用�
 
 ## 查看其他示例
 
+[11 月的归因实录](../../demo/evidence-attribution/README.zh-CN.md)提供工具级意图关联与
+TLS 保留片段的直达入口，同时加载检查、修复两次执行。
+另有[外传归因合成示例](../../demo/endpoint-attribution/README.zh-CN.md)，展示正文命中与两条源读取候选。
+
 ```sh
 ./agentprov demo --list
+./agentprov demo evidence-attribution
+./agentprov demo endpoint-attribution
 ./agentprov demo deepseek-context
 ./agentprov demo multiagent-provenance
 ./agentprov demo k8s-cross-pod-a2a

@@ -2,8 +2,7 @@
 
 English | [中文](zh-CN/upgrading-v0.10.1.md)
 
-This guide describes the upcoming v0.10.1 changes. It applies to source builds
-on the integration branch; v0.10.0 remains the latest published release.
+This guide describes the changed defaults in v0.10.1 and how to migrate from v0.10.0.
 
 Stop writers and back up the complete data directory before upgrading. Keep the
 older binary with that backup if you need to return to the earlier version.
@@ -159,4 +158,4 @@ These details use the existing Dashboard layout and follow selected evidence
 into offline replay. Original signed bundles keep their original analysis;
 newly computed relationships carry their own rule version.
 
-[Release notes draft](releases/v0.10.1.md) · [Deployment modes](deployment-modes.md)
+[Release notes](releases/v0.10.1.md) · [Deployment modes](deployment-modes.md)

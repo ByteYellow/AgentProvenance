@@ -146,6 +146,9 @@ func TestNamedDemoIncludesOnlyItsCompanionCaptures(t *testing.T) {
 		want []string
 	}{
 		{"investigation-workflow", []string{"investigation-workflow", "investigation-repaired"}},
+		{"evidence-attribution", []string{"evidence-attribution", "evidence-attribution-repaired"}},
+		{"evidence-attribution-repaired", []string{"evidence-attribution", "evidence-attribution-repaired"}},
+		{"endpoint-attribution", []string{"endpoint-attribution"}},
 		{"investigation-repaired", []string{"investigation-workflow", "investigation-repaired"}},
 		{"grok-3routes", []string{"grok-codebase-exfil", "grok-3routes"}},
 		{"deepseek-context", []string{"deepseek-context"}},

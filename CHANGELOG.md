@@ -2,7 +2,7 @@
 
 English | [中文](CHANGELOG.zh-CN.md)
 
-## Unreleased - v0.10.1
+## v0.10.1 - 2026-11-09
 
 ### Security and compatibility
 
@@ -54,9 +54,19 @@ English | [中文](CHANGELOG.zh-CN.md)
 - Restore Chinese rendering for current ELF diagnostics while retaining
   historical message translations. Cover active-load shutdown in Linux CI.
 
+### Demos and documentation
+
+- Add signed DeepSeek inspection/repair captures from November 6, with direct
+  links to tool-scoped intent evidence and incomplete TLS messages. Keep all
+  historical bundles unchanged.
+- Add a clearly labeled synthetic outbound-attribution replay showing body
+  matches, two candidate reads and unresolved execution identity.
+- Update the bilingual README, release navigation, upgrade instructions and
+  public replay catalog together.
+
 Thanks to [@8eeth0ven](https://github.com/8eeth0ven) for security hardening
 contributions in [PR #34](https://github.com/ByteYellow/AgentProvenance/pull/34).
-[Release notes draft](docs/releases/v0.10.1.md).
+[Release notes](docs/releases/v0.10.1.md).
 
 ## v0.10.0 - 2026-10-19
 
