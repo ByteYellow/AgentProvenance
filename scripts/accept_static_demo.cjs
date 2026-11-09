@@ -24,7 +24,7 @@ async function main() {
     page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
     page.on('requestfailed',request=>failedRequests.push({url:request.url(),error:request.failure()?.errorText}));
     const manifest=await responseJSON(context.request,new URL('replay-manifest.json',site).href);
-    assert.equal(Object.keys(manifest.runs).length,9);
+    assert.equal(Object.keys(manifest.runs).length,12);
     assert.ok(manifest.verifications.every(v=>v.signature_verified&&v.graph.status==='ok'));
     const data=async ref=>{const r=await context.request.get(new URL(ref.path,site).href);assert.ok(r.ok());return JSON.parse(gunzipSync(await r.body()).toString());};
     await page.goto(new URL('en/replay.html?run=run-dbc2adf273d4',site).href);
@@ -272,11 +272,37 @@ async function main() {
     await page.setViewportSize({width:1440,height:1060});
     report.comparison='historical Grok and DeepSeek/multiagent parity; Grok source reading, graph return and mobile passed';
 
+    // New attribution examples must expose their recorded detail, not just appear in the gallery.
+    for(const lang of ['en','zh-CN']){
+      for(const [run,lens,id,selector,state] of [
+        ['run-2fd63df0ab9b','intent','diff/v2/4958f6486e058efd80454be9ea8e6b8306c9cfc69337419c20db7db94f45b96c','data-intent-association','bound'],
+        ['run-2fd63df0ab9b','agent-intent','sha256:072f5b3948ca4c5693b882722815b3958815c72ba807706b926dc67001bbbb49','data-tls-capture','incomplete'],
+        ['ui-endpoint-candidates','data-flow-taint','sha256:44fe36c9defe9293755c49b45c2223d11f6ba5ef32aba86b7f6f4b50fcef2768','data-endpoint-association',null],
+      ]){
+        const query=new URLSearchParams({run,lens,detail:'raw',live:'0',selected:id});
+        await page.goto(new URL(lang+'/replay.html?'+query,site).href);
+        await page.locator('#detail ['+selector+']').waitFor();
+        assert.equal(await page.locator('#detail').getAttribute('data-node'),id);
+        if(state)assert.equal(await page.locator('#detail ['+selector+']').getAttribute(selector),state);
+        if(selector==='data-endpoint-association'){
+          assert.equal(await page.locator('[data-endpoint-stage]').count(),3);
+          assert.equal(await page.locator('.association-candidates li').count(),2);
+          await page.locator('.association-candidates [data-association-read]').first().click();
+          await page.waitForFunction(()=>document.getElementById('content-body').textContent.includes('/fixture/secret.txt'));
+        }
+        for(const width of [1440,390]){
+          await page.setViewportSize({width,height:1060});
+          assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+        }
+      }
+    }
+    report.attribution='real intent and TLS detail, synthetic endpoint candidates; bilingual desktop/mobile passed';
+
     // All published guides, images and table-of-contents links, at both sizes.
     for(const lang of ['en','zh-CN']){
       await page.goto(new URL(lang+'/index.html',site).href);
       const links=await page.locator('a[href]').evaluateAll(a=>[...new Set(a.map(x=>x.href).filter(s=>/\/(demos|guides)\/[^/]+\.html/.test(s)))]);
-      assert.equal(links.length,manifest.guides.filter(g=>!g.ID.startsWith('release-v')).length+11);
+      assert.equal(links.length,manifest.guides.filter(g=>!g.ID.startsWith('release-v')).length+14);
       assert.equal(await page.locator('a[href*="benchmarks"]').count(),0);
       const allGuides=[...new Set([...links,...manifest.guides.map(g=>new URL(lang+'/guides/'+g.ID+'.html',site).href)])];
       for(const href of allGuides){

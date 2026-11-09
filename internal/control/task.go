@@ -9,6 +9,7 @@ import (
 type Task struct {
 	RunID          string   `yaml:"run_id"`
 	Image          string   `yaml:"image"`
+	User           string   `yaml:"user"`
 	Workspace      string   `yaml:"workspace"`
 	Command        []string `yaml:"command"`
 	RiskTier       string   `yaml:"risk_tier"`

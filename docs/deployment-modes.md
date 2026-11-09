@@ -142,6 +142,61 @@ The daemon's `/v1/live` endpoint checks HTTP liveness, while `/v1/ready` and
 storage failure. Readiness and historical evidence coverage are different
 properties; neither endpoint proves every background worker is progressing.
 
+### API authentication and browser access
+
+For existing deployments, see the [v0.10.1 upgrade guide](upgrading-v0.10.1.md)
+for token setup, HTTP execution defaults, signed imports and migration commands.
+
+`daemon serve` requires a bearer token by default. It reuses or generates
+`<data-dir>/auth-token` with mode `0600`; `--auth-token` or
+`AGENTPROV_DAEMON_TOKEN` can supply an operator-managed token. CLI clients must
+use the same `--data-dir`, or set `AGENTPROV_DAEMON_TOKEN` explicitly. Only GET
+`/v1/health`, `/v1/ready`, and `/v1/live` are anonymous health checks.
+
+Writes with a body require `Content-Type: application/json`; empty DELETE and
+POST requests may omit it. Browser requests must have a matching Origin, and
+write requests accept only `Sec-Fetch-Site: same-origin`, `none`, or an absent
+header. Origin checks use the direct HTTP/TLS connection, not untrusted
+`X-Forwarded-*` headers. Authenticated CLI/SDK clients can use remote hosts and
+custom DNS names without browser headers.
+
+`--insecure-open` explicitly disables authentication. In that mode, all
+non-health requests require a Host naming localhost, a literal IP, or the
+hostname configured with `--listen`. Arbitrary DNS names are rejected on reads
+as well as writes. Keep this mode restricted to trusted local development.
+
+Use `POST /v1/evidence/manifest` with `{"run_id":"<run_id>"}` to materialize an
+evidence manifest. Ordinary GET remains read-only. The legacy
+`GET ...?materialize=1` form requires a valid bearer token; open-mode callers
+must switch to POST. The CLI's `evidence manifest --materialize` handles this
+automatically.
+
+### Docker session compatibility
+
+The compatibility `lease` / `session` / `api` commands use Docker-backed
+workspaces. On Linux and macOS, new and resumed sessions default to the CLI or
+daemon process's effective UID:GID, overriding the image's `USER`. This keeps
+the bind-mounted workspace writable without granting `CAP_DAC_OVERRIDE` or
+making it world-writable. A non-root default user gets `HOME=/tmp` inside its
+container for caches; install dependencies in a workspace virtual environment
+or project directory. All Linux capabilities remain dropped and
+`no-new-privileges` remains enabled.
+
+Images that require a particular account can set `user: "1000:1000"` (or a named
+image user) in the task YAML. An explicit user keeps the image's home environment;
+its UID/GID must have access to the workspace. With rootless Docker or user
+namespace remapping, use the container identity mapped to the workspace owner
+(typically `user: "0:0"` for the rootless daemon owner's files). Build packages requiring root
+during image construction, before starting a session.
+
+Docker 29.0-29.2 requires at least API 1.44, above the bundled client's default
+maximum of 1.43 ([Docker API matrix](https://docs.docker.com/reference/api/engine/#api-version-matrix)).
+For those servers, run these compatibility commands with
+`DOCKER_API_VERSION=1.44`; session creation, execution and cleanup have been
+tested on Docker 29.1.3 with this override. The override disables API negotiation;
+use it only for a server that needs it. Normal `record`, `launch` and replay do not use this
+Docker session client.
+
 ## 3. Central Evidence Service (design only)
 
 This is the later enterprise shape for security, audit, SRE, compliance, and

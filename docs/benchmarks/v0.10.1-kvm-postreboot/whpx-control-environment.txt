@@ -1,0 +1,7 @@
+Linux agentprov-kvm-amd64 6.8.0-139-generic #139-Ubuntu SMP PREEMPT_DYNAMIC Sat Aug  1 03:52:05 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+root=LABEL=cloudimg-rootfs ro console=ttyS0 systemd.mask=agentprov-sensor.service systemd.mask=k3s.service systemd.mask=docker.service
+inactive
+inactive
+inactive
+user_shstk
+ 15:38:56 up 0 min,  1 user,  load average: 0.48, 0.12, 0.04

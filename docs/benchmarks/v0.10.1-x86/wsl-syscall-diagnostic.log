@@ -1,0 +1,18 @@
+=== RUN   TestDebugSyscallOutcomes
+=== RUN   TestDebugSyscallOutcomes/ordinary-permission
+    debug_linux_test.go:131: raw kind=1 pid=14635 tid=14635 nr=0 result=0 syscall=0 start=0 path=/tmp/TestDebugSyscallOutcomes3461281385/001/syscall_outcomes
+    debug_linux_test.go:131: raw kind=3 pid=14635 tid=14635 nr=144143397421313 result=0 syscall=3 start=2038409539610 path=/etc/ld.so.cache
+    debug_linux_test.go:131: raw kind=3 pid=14635 tid=14635 nr=-4294967039 result=0 syscall=3 start=2038409801195 path=/tmp/TestDebugSyscallOutcomesordinary-permission8562356/001/credentials-9000
+    debug_linux_test.go:131: raw kind=3 pid=14635 tid=14635 nr=257 result=0 syscall=3 start=2038409877019 path=/tmp/TestDebugSyscallOutcomesordinary-permission8562356/001/missing-credentials-9000
+    debug_linux_test.go:131: raw kind=4 pid=14635 tid=14635 nr=0 result=0 syscall=0 start=0 path=
+    debug_linux_test.go:235: result groups=0 oracle=1
+=== RUN   TestDebugSyscallOutcomes/seccomp-log
+    debug_linux_test.go:131: raw kind=1 pid=14636 tid=14636 nr=0 result=0 syscall=0 start=0 path=/tmp/TestDebugSyscallOutcomes3461281385/001/syscall_outcomes
+    debug_linux_test.go:131: raw kind=3 pid=14636 tid=14636 nr=-4294967039 result=0 syscall=3 start=2038418756834 path=/etc/ld.so.cache
+    debug_linux_test.go:131: raw kind=2 pid=14636 tid=14636 nr=42 result=0 syscall=2 start=2038419093541 path=
+    debug_linux_test.go:131: raw kind=4 pid=14636 tid=14636 nr=0 result=0 syscall=0 start=0 path=
+    debug_linux_test.go:235: result groups=0 oracle=1
+--- FAIL: TestDebugSyscallOutcomes (1.17s)
+    --- FAIL: TestDebugSyscallOutcomes/ordinary-permission (0.01s)
+    --- FAIL: TestDebugSyscallOutcomes/seccomp-log (0.01s)
+FAIL

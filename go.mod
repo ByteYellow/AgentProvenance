@@ -4,6 +4,7 @@ go 1.23.0
 
 require (
 	github.com/cilium/ebpf v0.16.0
+	github.com/creack/pty v1.1.24
 	github.com/docker/docker v24.0.9+incompatible
 	github.com/klauspost/compress v1.18.0
 	github.com/spf13/cobra v1.8.1

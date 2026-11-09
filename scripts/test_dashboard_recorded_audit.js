@@ -22,8 +22,9 @@ async (page) => {
     const report=await j('/api/audit/associations?run=live-audit-mixed&limit=25');
     return {events:events.events,items:report.items,rule:report.rule};
   });
-  const v1='agentprov.audit_lifecycle_operation/v1',v2='agentprov.audit_lifecycle_operation/v2';
-  check(tag==='online'?audits.rule===v2:[v1,v2].includes(audits.rule),tag==='online'?'live analysis uses rule v2':'replay retains a supported frozen rule');
+  const v1='agentprov.audit_lifecycle_operation/v1',v2='agentprov.audit_lifecycle_operation/v2',v3='agentprov.audit_lifecycle_operation/v3';
+  const current=[v2,v3].includes(audits.rule);
+  check(tag==='online'?audits.rule===v3:[v1,v2,v3].includes(audits.rule),tag==='online'?'live analysis uses rule v3':'replay retains a supported frozen rule');
   check(audits.events.length===6&&audits.items.length===6,'six original mixed-mechanism decisions');
   let inferred=0,missing=0;
   for(const event of audits.events){
@@ -39,14 +40,14 @@ async (page) => {
       const value=page.locator('[data-access-result] dt').filter({hasText:'Return value'}).locator('+ dd');
       check(await value.innerText()===String(item.operations[0].syscall_result),event.id+': actual syscall result unchanged');
       const reason='Time and recorded fields identify a candidate; a shared audit/runtime call identity is unavailable.';
-      if(audits.rule===v2){
+      if(current){
         check(item.operation.basis==='lifetime_syscall_time_candidate'&&item.operation.reason==='shared_call_identity_unavailable',event.id+': v2 time-window candidate discloses missing shared call identity');
       }
-      check(await page.locator('[data-access-association]').innerText()==='Inferred operation association'+(audits.rule===v2?' · '+reason:''),event.id+': derived association and version-appropriate reason are visible');
-      if(audits.rule===v2)check(await page.locator('[data-access-candidate-note]').innerText()==='Attempts and returns shown here are the candidates’ saved runtime evidence. The mechanism decision is a separate audit record.',event.id+': candidate evidence is explained explicitly');
+      check(await page.locator('[data-access-association]').innerText()==='Inferred operation association'+(current?' · '+reason:''),event.id+': derived association and version-appropriate reason are visible');
+      if(current)check(await page.locator('[data-access-candidate-note]').innerText()==='Attempts and returns shown here are the candidates’ saved runtime evidence. The mechanism decision is a separate audit record.',event.id+': candidate evidence is explained explicitly');
     }else{
       missing++;
-      if(audits.rule===v2){
+      if(current){
         check(item.operation.reason==='seccomp_original_syscall_not_executed'&&item.operation.candidate_count===0&&(item.operations||[]).length===0,event.id+': v2 action gate retains no executed-call candidate');
         check(await page.locator('[data-access-association]').innerText()==='Operation not associated · seccomp prevented the original syscall from executing. Nearby syscall results remain separate.',event.id+': action-gating reason is readable');
       }
@@ -82,7 +83,7 @@ async (page) => {
   const denied=page.locator('.access-record').filter({has:page.locator('code',{hasText:'DENIED'})});
   await denied.locator('[data-access-inspect]').click();
   await waitForAssociation(audits.items.find(item=>item.decision==='DENIED'));
-  if(audits.rule===v2){
+  if(current){
     check(await page.locator('[data-access-association]').innerText()==='推断的操作关联 · 根据时间和已记录字段找到候选；审计与运行时记录缺少共同的调用标识。','Chinese candidate reason is readable');
     check(await page.locator('[data-access-candidate-note]').innerText()==='此处的尝试和返回值来自候选操作已保存的运行时证据；机制决定来自独立的审计记录。','Chinese candidate evidence explanation is visible');
   }

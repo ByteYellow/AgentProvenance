@@ -36,6 +36,13 @@ func isSourceEvent(eventType, path string) bool {
 // numeric-PID grouping; new observation-local PIDs do not establish a flow.
 // Explicit application/endpoint joins remain available for PID-less evidence.
 func taintFlowScope(src, sink lensEvent, allowFallback bool) (fromNode, scopeKey, rule string, conf float64) {
+	// Versioned captures already carry their complete candidate set. A generic
+	// same-process rule must not invent a second, stronger attribution for them.
+	if sink.Source == "endpoint_capture" {
+		if a, ok := endpointFields(sink.Payload)["endpoint_association"].(map[string]any); ok && endpointString(a, "rule_version") != "" {
+			return "", "", "", 0
+		}
+	}
 	switch {
 	case src.PID > 0 && sink.PID > 0:
 		a, b := lensProcessIdentity(src), lensProcessIdentity(sink)

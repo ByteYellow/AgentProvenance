@@ -314,7 +314,7 @@ Python 使用 `Client.audit_associations`，AI/MCP 使用只读工具 `get_audit
 审计导入仍由受信任的采集端或 CLI 执行。
 
 用 `--event EVENT` 查看单条已保存审计，或用 `--cursor` 读取下一页。
-在线查询标明分析规则 `agentprov.audit_lifecycle_operation/v2`，保留原审计 PID、Agent 会话和图边。
+在线查询标明分析规则 `agentprov.audit_lifecycle_operation/v3`，保留原审计 PID、Agent 会话和图边。
 迟到记录到达后，再次查询会在同一数据库快照上重新计算候选。
 签名 Bundle 导出、导入保留分析输入，可在离线数据库上使用同一规则复核。
 
@@ -339,6 +339,12 @@ v1 和 v2 分页；旧索引未标记 `rule` 时按 v1 读取。分页与索引�
 审计头的小数位数只描述打印精度。关联窗口加上已保存的来源时钟分辨率，并通过 `time_window`
 展示实际采用的区间。缺少时钟信息、生命周期证据冲突或墙上时钟与单调时钟偏差异常时保留未关联。
 导入机器不提供替代身份或时钟参数。
+
+内核 journal 同时提供两种接收时钟时，导入保留 `journal_received_at` 和
+`journal_monotonic_ns`。操作候选以审计时间为下界、实际接收观测为上界，并核对来源时钟对
+与原生单调时钟是否一致，以 `time_basis=audit_to_journal_receipt` 标明依据。
+延迟交付产生多个候选时保留歧义。缺少接收元数据的历史记录沿用分辨率候选方法，
+历史回放保留原分析规则。粗粒度时钟的标称分辨率不再被当作内核 tick 延迟的上限。
 
 v2 在找到唯一进程生命周期后，先检查 seccomp 动作兼容性，再搜索常规 syscall 采集器的入口／返回记录：
 

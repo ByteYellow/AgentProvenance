@@ -1,0 +1,35 @@
+{
+  "schema_version": "agentprovenance.k3s_guest_acceptance/v1",
+  "architecture": "x86_64",
+  "kernel": "6.8.0-139-generic",
+  "boot_id": "76b011d4-8ffc-41f5-a697-b5ae6afed413",
+  "run_id": "run-agentprov-guest-c0ebab7ce0",
+  "native_events": 104,
+  "event_types": [
+    "execve",
+    "file_open",
+    "file_rename",
+    "file_unlink",
+    "file_write",
+    "network_connect",
+    "process_exit",
+    "process_observed",
+    "secret_path",
+    "setgid",
+    "setuid",
+    "syscall_result",
+    "thread_exit"
+  ],
+  "binding_source": "k8s_cgroup",
+  "bindings_closed": 12,
+  "verification": {
+    "schema_version": "agentprovenance.verify/v1",
+    "run_id": "run-agentprov-guest-c0ebab7ce0",
+    "status": "ok",
+    "issue_count": 0,
+    "error_count": 0,
+    "warning_count": 0,
+    "issues": null
+  },
+  "passed": true
+}

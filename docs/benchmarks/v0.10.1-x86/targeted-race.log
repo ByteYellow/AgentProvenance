@@ -1,0 +1,5 @@
+ok  	github.com/byteyellow/agentprovenance/internal/sensor	1.977s
+ok  	github.com/byteyellow/agentprovenance/internal/telemetry	66.886s
+ok  	github.com/byteyellow/agentprovenance/internal/producer	1.789s
+ok  	github.com/byteyellow/agentprovenance/internal/producer/k8sinformer	2.197s
+ok  	github.com/byteyellow/agentprovenance/internal/record	135.313s

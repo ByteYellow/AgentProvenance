@@ -106,12 +106,19 @@ with TemporaryDirectory(prefix="agentprov-batch-") as directory:
 
 `record`、`eval_context`、`signals`、`audit_associations` 在设置 `daemon_url` 后直接使用 HTTP。其他方法仍需 CLI。HTTP 从 `env` 或进程环境读取 `AGENTPROV_DAEMON_TOKEN`，作为 Bearer Token 发送；拒绝重定向，避免令牌被转发到其他地址。
 
-分页查询已保存的审计决定：
+直接走 HTTP 的方法需要显式提供令牌，设置 `data_dir` 不会自动读取令牌文件。
+下面从本机读取 daemon 生成的令牌，再分页查询已保存的审计决定：
 
 ```python
+from pathlib import Path
 from agentprov import Client
 
-client = Client(daemon_url="http://127.0.0.1:8574")
+data_dir = Path.home() / ".agentprov"  # 改为 daemon 实际使用的数据目录。
+client = Client(
+    data_dir=data_dir,
+    daemon_url="http://127.0.0.1:8574",
+    env={"AGENTPROV_DAEMON_TOKEN": (data_dir / "auth-token").read_text().strip()},
+)
 cursor = ""
 while True:
     page = client.audit_associations("run-example", limit=100, cursor=cursor)
@@ -121,6 +128,13 @@ while True:
         break
     cursor = page["next_cursor"]
 ```
+
+使用自行管理的令牌时，传入对应值，或在进程环境中设置 `AGENTPROV_DAEMON_TOKEN`。
+令牌不要放入代码仓库或被采集的工作目录。
+
+HTTP `record` 遵循 daemon 执行策略：默认限时 60 秒，限制工作目录，使用最小子进程环境，
+Shell 命令需显式允许。SDK 的 `env` 配置客户端环境，不会直接传给远端被执行的子进程。
+本地 CLI 采集保留调用方环境，迁移方式见[升级指南](upgrading-v0.10.1.md#选择执行方式)。
 
 `event_id` 可筛选单条决定。未设置 `daemon_url` 时使用 CLI。决定、候选关联与实际结果的区别见[审计证据](telemetry-schema.md#查询运行时关联)。
 

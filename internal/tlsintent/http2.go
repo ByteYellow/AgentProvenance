@@ -65,6 +65,7 @@ type h2Parser struct {
 	inHeaderBlock    bool
 	maxBytes         int
 	failed           bool
+	failureReason    string
 	loss             CaptureLoss
 }
 
@@ -128,8 +129,42 @@ func (p *h2Parser) consume(data []byte, pid uint32, conn uint64) []Message {
 		ftype := b[3]
 		flags := b[4]
 		streamID := binary.BigEndian.Uint32(b[5:9]) & 0x7fffffff
+		// RFC 9113 section 4.3: no frame may interrupt a header block. A lost
+		// continuation also loses HPACK updates, even on a different stream.
+		if (p.inHeaderBlock && (ftype != h2FrameContinuation || streamID != p.openHeaderStream)) ||
+			(ftype == h2FrameContinuation && !p.inHeaderBlock) {
+			p.failureReason = GapHTTP2Frames
+			p.fail(0)
+			break
+		}
 		if len(b) < 9+length {
 			break // payload not fully arrived
+		}
+		if ftype == 0x5 { // PUSH_PROMISE also mutates HPACK; never silently skip it.
+			p.failureReason = GapHTTP2Push
+			p.fail(0)
+			break
+		}
+		if ftype == h2FrameHeaders || ftype == h2FrameData {
+			minimum, padding := 0, 0
+			if flags&h2FlagPadded != 0 {
+				minimum++
+				if length > 0 {
+					padding = int(b[9])
+				}
+			}
+			if ftype == h2FrameHeaders && flags&h2FlagPriority != 0 {
+				minimum += 5
+			}
+			if streamID == 0 || length < minimum || padding > length-minimum {
+				p.failureReason = GapHTTP2Frames
+				p.fail(0)
+				break
+			}
+			if p.streams[streamID] == nil && len(p.streams) >= 128 {
+				p.fail(0)
+				break
+			}
 		}
 		payload := append([]byte(nil), b[9:9+length]...)
 		rest := append([]byte(nil), b[9+length:]...)
@@ -177,6 +212,9 @@ func (p *h2Parser) handleFrame(ftype, flags byte, streamID uint32, payload []byt
 		}
 		if flags&h2FlagEndHeaders != 0 {
 			p.decodeHeaders(st)
+			if p.failed {
+				return Message{}, false
+			}
 			return p.maybeEmit(streamID, pid, conn)
 		}
 		p.inHeaderBlock = true
@@ -195,6 +233,9 @@ func (p *h2Parser) handleFrame(ftype, flags byte, streamID uint32, payload []byt
 		if flags&h2FlagEndHeaders != 0 {
 			p.inHeaderBlock = false
 			p.decodeHeaders(st)
+			if p.failed {
+				return Message{}, false
+			}
 			return p.maybeEmit(streamID, pid, conn)
 		}
 		return Message{}, false
@@ -251,12 +292,15 @@ func (p *h2Parser) decodeHeaders(st *h2Stream) {
 	if err == nil {
 		err = p.dec.Close()
 	}
-	st.headerBlock = bytes.Buffer{}
 	p.dec.SetEmitFunc(func(hpack.HeaderField) {})
 	if err != nil || overflow {
+		if err != nil {
+			p.failureReason = GapHPACK
+		}
 		p.fail(0)
 		return
 	}
+	st.headerBlock = bytes.Buffer{}
 
 	st.haveHeaders = true
 }

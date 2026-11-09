@@ -1,0 +1,8 @@
+{
+  "kernel": "6.8.0-139-generic",
+  "kernel_cmdline": "BOOT_IMAGE=/vmlinuz-6.8.0-139-generic root=UUID=9a3e62be-4b82-4a7a-8f47-0b25d728fa3a ro console=tty1 console=ttyS0 nousershstk",
+  "virtualization": "QEMU/WHPX",
+  "k3s": "k3s version v1.36.4+k3s1 (4dedb15b)",
+  "go": "go version go1.23.12 linux/amd64",
+  "openssl": "OpenSSL 3.0.13 30 Jan 2024 (Library: OpenSSL 3.0.13 30 Jan 2024)"
+}

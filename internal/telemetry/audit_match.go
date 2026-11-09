@@ -61,13 +61,14 @@ type auditRuntimeIndex struct {
 }
 
 type auditOperationGroup struct {
-	view     AuditOperation
-	first    auditRuntimeFields
-	from, to time.Time
-	conflict bool
-	refs     []string
-	attempts map[string]bool
-	results  map[string]bool
+	view      AuditOperation
+	first     auditRuntimeFields
+	from, to  time.Time
+	conflict  bool
+	refs      []string
+	attempts  map[string]bool
+	results   map[string]bool
+	startMono uint64
 }
 
 func indexAuditRuntime(events []auditRuntime) auditRuntimeIndex {
@@ -174,6 +175,7 @@ func (op *auditOperationGroup) add(e auditRuntime) {
 		op.conflict = true
 	}
 	start, _ := strconv.ParseUint(f.SyscallStart, 10, 64)
+	op.startMono = start
 	if e.mono-start > math.MaxInt64 {
 		op.conflict = true
 		return
@@ -316,7 +318,12 @@ func associateAudit(input auditAssociationInput, index auditRuntimeIndex) AuditA
 		}
 		candidates = append(candidates, AuditCandidate{op.view.ID, op.refs})
 		if len(item.Operations) < maxAuditCandidates {
-			item.Operations = append(item.Operations, op.view)
+			view := op.view
+			view.TimeBasis = "audit_decimal_plus_source_coarse_clock"
+			if a.JournalReceivedAt != "" {
+				view.TimeBasis = "audit_to_journal_receipt"
+			}
+			item.Operations = append(item.Operations, view)
 		}
 		conflict = conflict || op.conflict
 	}
@@ -411,7 +418,22 @@ func (life *auditLifetime) bracket(from, to time.Time) ([]string, bool, bool) {
 }
 
 func (op *auditOperationGroup) matches(a AuditRecord, from, to time.Time) bool {
-	if !op.from.Before(to) || op.to.Before(from) {
+	if op.to.Before(from) {
+		return false
+	}
+	if a.JournalReceivedAt != "" || a.JournalMonotonicNS != "" {
+		received, err := time.Parse(time.RFC3339Nano, a.JournalReceivedAt)
+		mono, monoErr := strconv.ParseUint(a.JournalMonotonicNS, 10, 64)
+		if a.SourceFormat != "journal_json" || err != nil || monoErr != nil || received.Before(from) || mono == 0 || mono > math.MaxInt64-1000 || op.startMono >= mono+1000 {
+			return false
+		}
+		// journalctl stores receipt time to microseconds. Check the source's
+		// monotonic/realtime pair before using that actual observation bound.
+		delta := received.Sub(op.from) - time.Duration(int64(mono)-int64(op.startMono))
+		if delta > 2*time.Millisecond || delta < -2*time.Millisecond {
+			return false
+		}
+	} else if !op.from.Before(to) {
 		return false
 	}
 	if a.Comm != "" && op.first.Comm != "" && a.Comm != op.first.Comm {

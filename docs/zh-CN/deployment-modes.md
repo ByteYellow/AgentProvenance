@@ -71,6 +71,27 @@ KVM 虚拟机与 K3s 的 systemd 采集服务、节点事件归属配置见[部�
 
 `/v1/live` 检查 HTTP 服务是否存活；`/v1/ready` 和 `/v1/health` 检查数据库及表结构是否可用。存储失败时，无法读取的计数保持 `null`。服务就绪状态与历史证据覆盖率是两回事，这些接口也不能证明每个后台工作进程都在推进。
 
+### API 鉴权与浏览器访问
+
+已有部署请先阅读 [v0.10.1 升级指南](upgrading-v0.10.1.md)，其中包含令牌配置、
+HTTP 执行默认值、签名导入和对应迁移命令。
+
+`daemon serve` 默认要求 Bearer token。服务复用或生成 `<data-dir>/auth-token`，文件权限为 `0600`；也可以通过 `--auth-token` 或 `AGENTPROV_DAEMON_TOKEN` 指定自管 token。CLI 客户端需要使用相同的 `--data-dir`，或显式设置 `AGENTPROV_DAEMON_TOKEN`。只有 GET `/v1/health`、`/v1/ready`、`/v1/live` 三个健康检查接口允许匿名访问。
+
+带正文的写请求必须使用 `Content-Type: application/json`；空体 DELETE、POST 可以省略该头。浏览器请求的 Origin 必须匹配，写请求的 `Sec-Fetch-Site` 仅接受 `same-origin`、`none` 或缺省。Origin 检查依据直接连接的 HTTP/TLS 状态，不信任请求中的 `X-Forwarded-*` 头。已鉴权的 CLI、SDK 可以通过远程地址或自定义域名访问，无需发送浏览器专用头。
+
+`--insecure-open` 显式关闭鉴权。此时，除健康检查外，所有请求的 Host 都必须是 localhost、IP 字面量或 `--listen` 配置的主机名；读写接口都会拒绝其他域名。此模式仅用于可信的本地开发环境。
+
+物化证据清单使用 `POST /v1/evidence/manifest`，JSON 正文为 `{"run_id":"<run_id>"}`。普通 GET 保持只读。旧的 `GET ...?materialize=1` 形式需要有效 Bearer token；开放模式下应迁移到 POST。CLI 的 `evidence manifest --materialize` 已自动使用新调用方式。
+
+### Docker 会话兼容配置
+
+兼容命令 `lease`、`session`、`api` 使用 Docker 工作区。Linux 和 macOS 上，新建和恢复的会话默认采用 CLI 或后台服务进程的有效 UID:GID，覆盖镜像中的 `USER`。这样既能写入挂载的工作区，也无需恢复 `CAP_DAC_OVERRIDE` 或向所有用户开放工作区写权限。默认的非 root 用户使用容器内的 `HOME=/tmp` 存放缓存；依赖安装到工作区的虚拟环境或项目目录。所有 Linux capability 继续移除，`no-new-privileges` 继续启用。
+
+特殊镜像可在任务 YAML 中设置 `user: "1000:1000"`，也可以使用镜像内的用户名。显式指定用户时保留镜像的 home 环境，该用户的 UID:GID 需要具备工作区访问权限。使用 rootless Docker 或用户命名空间映射时，应选择映射到工作区所有者的容器身份；rootless 服务所有者的文件通常对应 `user: "0:0"`。需要 root 的系统依赖应在构建镜像时安装。
+
+Docker 29.0-29.2 最低要求 API 1.44，当前内置客户端默认最高使用 1.43，详见 [Docker API 版本表](https://docs.docker.com/reference/api/engine/#api-version-matrix)。连接这些服务时，为兼容命令设置 `DOCKER_API_VERSION=1.44`；会话创建、执行和清理已在 Docker 29.1.3 上按此配置验收。该设置会关闭 API 版本协商，只在服务端需要时使用。常规 `record`、`launch` 和回放不使用这个 Docker 会话客户端。
+
 ## 3. 中心化证据服务：仅有设计
 
 面向多节点的共享安全调查、审计、SRE、合规和事件复盘。当前版本未实现，组件职责、故障处理、容量指标和信任假设见[中心化服务设计](central-evidence-service-design.md)。

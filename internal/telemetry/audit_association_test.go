@@ -98,6 +98,74 @@ func TestAuditNeverChoosesNearestConcurrentCall(t *testing.T) {
 	}
 }
 
+func TestAuditUsesObservedJournalReceiptWhenCoarseClockIsStale(t *testing.T) {
+	events := auditRuntimeSet()
+	for i := range events {
+		events[i].fields.CoarseClockNS = int64(time.Millisecond)
+		if events[i].fields.Stage == "" {
+			continue
+		}
+		events[i].at = events[i].at.Add(2100 * time.Microsecond)
+		events[i].mono += uint64(2100 * time.Microsecond)
+		events[i].fields.Monotonic = strconv.FormatUint(events[i].mono, 10)
+		events[i].fields.SyscallStart = "10002200000"
+		events[i].fields.OperationID = "syscall-v1:" + events[i].fields.Thread + ":42:1000000000:10002200000"
+	}
+	a := auditInputFixture(t)
+	a.record.SourceFormat = "journal_json"
+	a.record.JournalReceivedAt = auditAssociationTime.Add(2400 * time.Microsecond).Format(time.RFC3339Nano)
+	a.record.JournalMonotonicNS = "10002400000"
+	item := associateAudit(a, indexAuditRuntime(events))
+	if item.Operation.Status != "inferred" || len(item.Operations) != 1 || item.Operations[0].TimeBasis != "audit_to_journal_receipt" {
+		t.Fatalf("observed receipt lost: %+v", item)
+	}
+	if item.TimeWindow.Until != auditAssociationTime.Add(2*time.Millisecond).Format(time.RFC3339Nano) {
+		t.Fatalf("nominal clock window changed: %+v", item.TimeWindow)
+	}
+	a.record.JournalReceivedAt, a.record.JournalMonotonicNS = "", ""
+	if got := associateAudit(a, indexAuditRuntime(events)); got.Operation.Status != "unassociated" {
+		t.Fatalf("invented receipt for historical audit: %+v", got)
+	}
+}
+
+func TestAuditJournalReceiptRejectsLaterCallsAndClockConflicts(t *testing.T) {
+	for _, tc := range []struct {
+		name, mono string
+		offset     time.Duration
+	}{
+		{"before call", "10000050000", 50 * time.Microsecond},
+		{"clock conflict", "20000000000", 300 * time.Microsecond},
+		{"invalid", "invalid", 300 * time.Microsecond},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := auditInputFixture(t)
+			a.record.SourceFormat = "journal_json"
+			a.record.JournalReceivedAt = auditAssociationTime.Add(tc.offset).Format(time.RFC3339Nano)
+			a.record.JournalMonotonicNS = tc.mono
+			item := associateAudit(a, indexAuditRuntime(auditRuntimeSet()))
+			if item.Operation.Status != "unassociated" || len(item.Operations) != 0 {
+				t.Fatalf("invalid receipt matched: %+v", item)
+			}
+		})
+	}
+}
+
+func TestDelayedJournalReceiptPreservesMultipleCandidates(t *testing.T) {
+	events := auditRuntimeSet()
+	second := auditRuntimeFixture("second-entry", 300*time.Microsecond, "attempt")
+	second.fields.SyscallStart = "10000300000"
+	second.fields.OperationID = "syscall-v1:" + second.fields.Thread + ":42:1000000000:10000300000"
+	events = append(events, second)
+	a := auditInputFixture(t)
+	a.record.SourceFormat = "journal_json"
+	a.record.JournalReceivedAt = auditAssociationTime.Add(time.Second).Format(time.RFC3339Nano)
+	a.record.JournalMonotonicNS = "11000000000"
+	item := associateAudit(a, indexAuditRuntime(events))
+	if item.Operation.Status != "ambiguous" || item.Operation.CandidateCount != 2 {
+		t.Fatalf("delayed receipt chose one call: %+v", item)
+	}
+}
+
 func TestAuditAssociationMissingAndConflictingEvidence(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

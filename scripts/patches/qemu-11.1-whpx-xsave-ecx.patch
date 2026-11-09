@@ -1,0 +1,10 @@
+--- a/target/i386/whpx/whpx-all.c
++++ b/target/i386/whpx/whpx-all.c
+@@ -2849,6 +2849,7 @@
+             if (sz != 0) {
+                 assert(esa->size == sz);
+                 esa->offset = whpx_get_supported_cpuid(0xd, i, R_EBX);
++                esa->ecx = whpx_get_supported_cpuid(0xd, i, R_ECX);
+             }
+         }
+     }

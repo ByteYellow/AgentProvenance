@@ -36,6 +36,8 @@ func run(args []string, stdout, stderr io.Writer, capture func(io.Writer, sensor
 		lang = parsed
 		return nil
 	})
+	flags.IntVar(&opts.RingBufferMiB, "ring-buffer-mib", 64, "kernel event buffer in MiB (power of two, 1 to 256)")
+	flags.Func("tls-target", "known TLS library or Go executable to attach before readiness (repeatable)", func(value string) error { opts.TLSTargets = append(opts.TLSTargets, value); return nil })
 	flags.BoolVar(&opts.AutoTLS, "auto-tls", opts.AutoTLS, "discover and track visible container OpenSSL and Go TLS executables")
 	flags.DurationVar(&opts.TLSScanInterval, "tls-scan-interval", 2*time.Second, "interval between bounded TLS process scans")
 	flags.BoolVar(&opts.AppArmorState, "apparmor-state", true, "read timestamped AppArmor task state without changing policy")
@@ -98,7 +100,7 @@ func sensorLanguage(args []string) i18n.Locale {
 			if choice, ok := i18n.Parse(value); ok {
 				lang = choice
 			}
-		} else if !equals && (key == "tls-scan-interval" || key == "tls-max-targets" || key == "tls-max-processes") {
+		} else if !equals && (key == "tls-scan-interval" || key == "tls-max-targets" || key == "tls-max-processes" || key == "ring-buffer-mib" || key == "tls-target") {
 			i++
 		}
 	}

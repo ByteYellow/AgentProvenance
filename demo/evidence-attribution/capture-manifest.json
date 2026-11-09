@@ -1,0 +1,62 @@
+{
+  "schema_version": "agentprovenance.investigation_demo/v1",
+  "captured_at": "2026-11-06T09:57:02Z",
+  "platform": "aarch64",
+  "binary_sha256": "09414fac739b18b9cdf14122bb4c16586a586ac6001ab6cee4ee4add9bf469cd",
+  "harness": "deepseek",
+  "capture": "detailed",
+  "tls_body": true,
+  "workload": "local reporting pipeline, public canary, loopback rate service",
+  "runs": [
+    {
+      "stage": "before",
+      "run_id": "run-2fd63df0ab9b",
+      "session_id": "session-400b43b2-0ca5-41fb-94f1-d4503119893b",
+      "child_sessions": [
+        "e74bfcc6-bdb8-4131-806e-545f76bfec91"
+      ],
+      "audit_records": 3,
+      "messages": 22,
+      "tool_calls": 18,
+      "report_total": "42.00",
+      "diagnostics": [
+        {
+          "pid": 744166,
+          "tid": 744166,
+          "operation": "read",
+          "result": -1,
+          "errno": 13
+        },
+        {
+          "pid": 744263,
+          "tid": 744263,
+          "operation": "connect",
+          "result": -1,
+          "errno": 1
+        }
+      ],
+      "duration_seconds": 75.77,
+      "bundle": "before.forensics.json.gz",
+      "bundle_bytes": 3158242,
+      "bundle_sha256": "e9493eccccc9c8e9007a6e2576b5ee070d9fddecd903b7bdb6120b577a0a018e"
+    },
+    {
+      "stage": "after",
+      "run_id": "run-48baa3821074",
+      "session_id": "session-400b43b2-0ca5-41fb-94f1-d4503119893b",
+      "child_sessions": [
+        "53a8953b-26a4-4ee3-86b9-d92f03360982",
+        "e74bfcc6-bdb8-4131-806e-545f76bfec91"
+      ],
+      "audit_records": 0,
+      "messages": 54,
+      "tool_calls": 51,
+      "report_total": "42.00",
+      "diagnostics": [],
+      "duration_seconds": 90.69,
+      "bundle": "after.forensics.json.gz",
+      "bundle_bytes": 4561356,
+      "bundle_sha256": "aa654fd15b7548964688c3ef598a7a80548af7ead88500c76d9c53a204cd61bb"
+    }
+  ]
+}

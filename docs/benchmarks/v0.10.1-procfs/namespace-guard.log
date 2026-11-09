@@ -1,0 +1,9 @@
+=== RUN   TestLiveSensorAccessState
+    access_state_linux_test.go:64: procfs identity coverage: {Mode:kernel_namespace_mapping PIDNamespace:pid:[4026532353] MapCapacity:16384 TranslatedEvents:23 OutsideNamespace:4 LookupMisses:0}
+    access_state_linux_test.go:110: captured 1 automatic state snapshots for pid 17
+--- PASS: TestLiveSensorAccessState (6.55s)
+PASS
+=== RUN   TestLiveSensorAccessState
+    access_state_linux_test.go:40: sensor startup: load eBPF objects: procfs PID namespace does not match the collector
+--- FAIL: TestLiveSensorAccessState (0.01s)
+FAIL

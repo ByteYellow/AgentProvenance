@@ -63,6 +63,7 @@ func launchCmd(dataDir *string) *cobra.Command {
 				NoContext:          noContext,
 				CapturePreset:      capture.preset,
 				CaptureToolResults: capture.override(cmd),
+				Stdin:              cmd.InOrStdin(),
 				Stdout:             cmd.OutOrStdout(),
 				Stderr:             cmd.ErrOrStderr(),
 			})

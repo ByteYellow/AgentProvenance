@@ -13,6 +13,58 @@ import time
 import uuid
 
 
+def export_signed_replay(base, run, report_path, directory):
+    private_key = Path(directory) / "bundle-signing.key"
+    public_key = report_path.with_suffix(".pub")
+    subprocess.run(base + ["forensics", "keygen", "--priv", str(private_key),
+        "--pub", str(public_key)], check=True, stdout=subprocess.DEVNULL)
+    exported = json.loads(subprocess.check_output(base + ["forensics", "export", run,
+        "--sign-key", str(private_key), "--json"], text=True))
+    if not exported.get("signed") or not exported.get("attestation_path"):
+        raise RuntimeError("guest bundle export did not produce an attestation")
+    bundle_out = report_path.with_suffix(".forensics.json")
+    attestation_out = bundle_out.with_suffix(".dsse.json")
+    shutil.copyfile(exported["path"], bundle_out)
+    shutil.copyfile(exported["attestation_path"], attestation_out)
+    replay = [base[0], "--data-dir", str(Path(directory) / "replay")]
+    imported = json.loads(subprocess.check_output(replay + ["forensics", "import", str(bundle_out),
+        "--pub-key", str(public_key), "--json"], text=True))
+    if imported.get("run_id") != run or not imported.get("attestation_verified"):
+        raise RuntimeError("guest bundle replay did not verify the expected signed run")
+    return bundle_out, attestation_out, public_key, replay, imported
+
+
+def validate_guest_platform(virtualization, dmi_vendor):
+    # WHPX can expose Microsoft's hypervisor CPUID while DMI still identifies
+    # QEMU. Keep both observations; accepting "microsoft" alone would also
+    # admit an ordinary Hyper-V VM and would not establish this guest setup.
+    if virtualization in {"kvm", "qemu"}:
+        return
+    if virtualization == "microsoft" and dmi_vendor.casefold() == "qemu":
+        return
+    raise SystemExit(f"expected QEMU/KVM guest, got {virtualization} (DMI vendor: {dmi_vendor or 'unavailable'})")
+
+
+def validate_guest_cpu(architecture, cpuinfo):
+    if architecture not in {"x86_64", "amd64"}:
+        return {"architecture": architecture, "x86_cet_check": "not_applicable"}
+    flags = [set(line.split(":", 1)[1].split()) for line in cpuinfo.splitlines()
+             if line.partition(":")[0].strip() == "flags"]
+    if not flags:
+        raise SystemExit("cannot inspect x86 guest CPU flags in /proc/cpuinfo")
+    for index, features in enumerate(flags):
+        missing = {"xsave", "xsaves"} - features
+        if "user_shstk" in features and missing:
+            raise SystemExit(
+                f"inconsistent x86 guest CPU {index}: user_shstk is exposed but "
+                f"{', '.join(sorted(missing))} is missing; CET task state may not "
+                "survive context switches. For QEMU/WHPX, cold boot with -cpu max "
+                "and recheck the guest CPU before running workloads.")
+    return {"architecture": architecture, "logical_cpus": len(flags),
+            "x86_cet_check": "passed",
+            "common_flags": sorted(set.intersection(*flags))}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--agentprov", default="/usr/local/bin/agentprov")
@@ -22,8 +74,12 @@ def main():
     if os.geteuid() != 0:
         parser.error("run inside the guest as root")
     virtualization = subprocess.check_output(["systemd-detect-virt", "--vm"], text=True).strip()
-    if virtualization not in {"kvm", "qemu"}:
-        raise SystemExit(f"expected QEMU/KVM guest, got {virtualization}")
+    try:
+        dmi_vendor = Path("/sys/class/dmi/id/sys_vendor").read_text().strip()
+    except OSError:
+        dmi_vendor = ""
+    validate_guest_platform(virtualization, dmi_vendor)
+    cpu_capabilities = validate_guest_cpu(platform.machine(), Path("/proc/cpuinfo").read_text())
     subprocess.run(["systemctl", "is-active", "--quiet", "agentprov-sensor.service"], check=True)
     invocation = subprocess.check_output(["systemctl", "show", "agentprov-sensor.service", "--property=InvocationID", "--value"], text=True).strip()
     deadline = time.monotonic() + 15
@@ -66,22 +122,22 @@ def main():
             raise RuntimeError("record did not create a kernel cgroup scope")
         subprocess.run(base + ["graph", "materialize", "--run", run], check=True, stdout=subprocess.DEVNULL)
         verification = query("graph", "verify", "--run", run)
-        exported = query("forensics", "export", run)
-        bundle = Path(exported["path"])
-        bundle_out = report_path.with_suffix(".forensics.json")
-        shutil.copyfile(bundle, bundle_out)
-        replay = [args.agentprov, "--data-dir", str(Path(directory) / "replay")]
-        imported = json.loads(subprocess.check_output(replay + ["forensics", "import", str(bundle_out), "--json"], text=True))
+        bundle_out, attestation_out, public_key, replay, imported = export_signed_replay(
+            base, run, report_path, directory)
         replay_verification = json.loads(subprocess.check_output(replay + ["graph", "verify", "--run", run, "--json"], text=True))
         report = {
             "schema_version": "agentprovenance.kvm_guest_acceptance/v1",
             "architecture": platform.machine(), "kernel": platform.release(),
             "virtualization": virtualization,
+            "dmi_vendor": dmi_vendor,
+            "cpu_capabilities": cpu_capabilities,
             "boot_id": Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
             "run_id": run, "native_events": len(native), "event_types": sorted(types),
             "cgroups": cgroups, "verification": verification,
             "replay_verification": replay_verification,
             "bundle_sha256": hashlib.sha256(bundle_out.read_bytes()).hexdigest(),
+            "attestation_path": str(attestation_out), "public_key_path": str(public_key),
+            "attestation_verified": imported["attestation_verified"],
             "imported_run": imported.get("run_id"), "passed": True,
         }
         report_path.write_text(json.dumps(report, indent=2) + "\n")

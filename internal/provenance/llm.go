@@ -118,7 +118,12 @@ func materializeLLMCallsTx(store ObjectStore, tx *sql.Tx, runID string) (int, er
 		if r.etype == "tls_read" {
 			dir, prefix = tlsintent.Response, "llm_response"
 		}
-		sem := tlsintent.ParseSemantics(dir, []byte(content))
+		var sem tlsintent.Semantics
+		if !r.truncated {
+			sem = tlsintent.ParseSemantics(dir, []byte(content))
+		} else {
+			model = ""
+		}
 		if model == "" {
 			model = sem.Model
 		}
@@ -127,7 +132,8 @@ func materializeLLMCallsTx(store ObjectStore, tx *sql.Tx, runID string) (int, er
 			SourceID: prefix + "/" + r.id,
 			RunID:    runID,
 			Payload: map[string]any{"direction": dir, "model": model, "content": content, "semantics": sem,
-				"content_saved": content != "", "http_identity": r.http, "truncated": r.truncated, "correlation": reports[r.id]},
+				"content_saved": content != "", "http_identity": r.http, "truncated": r.truncated, "correlation": reports[r.id],
+				"capture": r.capture, "content_encoding": r.contentEncoding},
 		})
 		if err != nil {
 			return 0, fmt.Errorf("materialize llm calls: objectify %s: %w", r.id, err)

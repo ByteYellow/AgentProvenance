@@ -1,0 +1,5 @@
+=== RUN   TestLiveGoTLSReadConcurrentStackGrowth
+    gotls_live_linux_amd64_test.go:40: attaching Read entry and 7 decoded return sites
+    gotls_live_linux_amd64_test.go:160: 32 concurrent TLS connections matched exact return bytes (71 chunks), zero drops, zero retained contexts
+--- PASS: TestLiveGoTLSReadConcurrentStackGrowth (6.78s)
+PASS

@@ -43,32 +43,34 @@ type AuditRecord struct {
 	Timestamp            string `json:"timestamp"`
 	TimestampPrecisionNS int64  `json:"timestamp_precision_ns"`
 	AuditSource
-	IdentitySource   string         `json:"identity_source"`
-	SourceFormat     string         `json:"source_format"`
-	JournalCursor    string         `json:"journal_cursor,omitempty"`
-	RecordID         string         `json:"record_id,omitempty"`
-	Decision         string         `json:"decision"`
-	AuditPID         *int64         `json:"audit_pid,omitempty"`
-	PIDSemantics     string         `json:"pid_semantics"`
-	Comm             string         `json:"comm,omitempty"`
-	Executable       string         `json:"executable,omitempty"`
-	Profile          string         `json:"profile,omitempty"`
-	ProfileNamespace string         `json:"profile_namespace,omitempty"`
-	Label            string         `json:"label,omitempty"`
-	Class            string         `json:"class,omitempty"`
-	Operation        string         `json:"operation,omitempty"`
-	Target           string         `json:"target,omitempty"`
-	RequestedMask    string         `json:"requested_mask,omitempty"`
-	DeniedMask       string         `json:"denied_mask,omitempty"`
-	Arch             string         `json:"arch,omitempty"`
-	ABI              string         `json:"abi,omitempty"`
-	SyscallNumber    *int64         `json:"syscall_number,omitempty"`
-	SyscallName      string         `json:"syscall_name,omitempty"`
-	ActionCode       *uint32        `json:"action_code,omitempty"`
-	ActionData       *uint16        `json:"action_data,omitempty"`
-	Signal           *int64         `json:"signal,omitempty"`
-	Warnings         []string       `json:"warnings,omitempty"`
-	RawRecord        AuditRawRecord `json:"raw_record"`
+	IdentitySource     string         `json:"identity_source"`
+	SourceFormat       string         `json:"source_format"`
+	JournalCursor      string         `json:"journal_cursor,omitempty"`
+	JournalReceivedAt  string         `json:"journal_received_at,omitempty"`
+	JournalMonotonicNS string         `json:"journal_monotonic_ns,omitempty"`
+	RecordID           string         `json:"record_id,omitempty"`
+	Decision           string         `json:"decision"`
+	AuditPID           *int64         `json:"audit_pid,omitempty"`
+	PIDSemantics       string         `json:"pid_semantics"`
+	Comm               string         `json:"comm,omitempty"`
+	Executable         string         `json:"executable,omitempty"`
+	Profile            string         `json:"profile,omitempty"`
+	ProfileNamespace   string         `json:"profile_namespace,omitempty"`
+	Label              string         `json:"label,omitempty"`
+	Class              string         `json:"class,omitempty"`
+	Operation          string         `json:"operation,omitempty"`
+	Target             string         `json:"target,omitempty"`
+	RequestedMask      string         `json:"requested_mask,omitempty"`
+	DeniedMask         string         `json:"denied_mask,omitempty"`
+	Arch               string         `json:"arch,omitempty"`
+	ABI                string         `json:"abi,omitempty"`
+	SyscallNumber      *int64         `json:"syscall_number,omitempty"`
+	SyscallName        string         `json:"syscall_name,omitempty"`
+	ActionCode         *uint32        `json:"action_code,omitempty"`
+	ActionData         *uint16        `json:"action_data,omitempty"`
+	Signal             *int64         `json:"signal,omitempty"`
+	Warnings           []string       `json:"warnings,omitempty"`
+	RawRecord          AuditRawRecord `json:"raw_record"`
 }
 
 var auditHeader = regexp.MustCompile(`(?:^|\s)type=([A-Z_]+|[0-9]+)\s+(?:msg=)?audit\(([0-9]{1,12})(?:\.([0-9]{1,9}))?:([0-9]{1,20})\):\s*(.*)$`)
@@ -128,6 +130,26 @@ func ParseAuditLine(line []byte, source AuditSource) (AuditRecord, bool, error) 
 		out.JournalCursor, err = read("__CURSOR")
 		if err != nil {
 			return out, false, err
+		}
+		// Journal receipt is an observed upper bound, not an estimate derived
+		// from CLOCK_REALTIME_COARSE's nominal resolution. Keep both clocks so
+		// association can reject a different clock epoch or a wall-clock jump.
+		transport, err := read("_TRANSPORT")
+		if err != nil {
+			return out, false, err
+		}
+		if transport == "kernel" {
+			rt, errRT := read("__REALTIME_TIMESTAMP")
+			mono, errMono := read("__MONOTONIC_TIMESTAMP")
+			rtUS, parseRT := strconv.ParseInt(rt, 10, 64)
+			monoUS, parseMono := strconv.ParseUint(mono, 10, 64)
+			if errRT != nil || errMono != nil {
+				return out, false, fmt.Errorf("journal receipt timestamps must be strings")
+			}
+			if parseRT == nil && parseMono == nil && rtUS > 0 && rtUS <= 253402300799999999 && monoUS > 0 && monoUS < uint64(1<<63-1)/1000 {
+				out.JournalReceivedAt = time.UnixMicro(rtUS).UTC().Format(time.RFC3339Nano)
+				out.JournalMonotonicNS = strconv.FormatUint(monoUS*1000, 10)
+			}
 		}
 		out.SourceFormat, out.IdentitySource = "journal_json", "journal_or_supplied"
 	}

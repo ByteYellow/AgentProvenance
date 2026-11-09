@@ -1,0 +1,557 @@
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+{
+  "schema_version": "agentprovenance.container_tls_acceptance/v1",
+  "architecture": "x86_64",
+  "kernel": "6.8.0-139-generic",
+  "checks": {
+    "generation_0:clients_succeeded": true,
+    "generation_1:clients_succeeded": true,
+    "container-79b8dc894c-0-ex:tls_write": true,
+    "container-79b8dc894c-0-ex:tls_write:single_chunk": true,
+    "container-79b8dc894c-0-ex:tls_read": true,
+    "container-79b8dc894c-0-ex:tls_read:single_chunk": true,
+    "container-79b8dc894c-0-go:tls_write": true,
+    "container-79b8dc894c-0-go:tls_write:single_chunk": true,
+    "container-79b8dc894c-0-go:tls_read": true,
+    "container-79b8dc894c-0-go:tls_read:single_chunk": true,
+    "container-79b8dc894c-0-legacy:tls_write": true,
+    "container-79b8dc894c-0-legacy:tls_write:single_chunk": true,
+    "container-79b8dc894c-0-legacy:tls_read": true,
+    "container-79b8dc894c-0-legacy:tls_read:single_chunk": true,
+    "container-79b8dc894c-1-ex:tls_write": true,
+    "container-79b8dc894c-1-ex:tls_write:single_chunk": true,
+    "container-79b8dc894c-1-ex:tls_read": true,
+    "container-79b8dc894c-1-ex:tls_read:single_chunk": true,
+    "container-79b8dc894c-1-go:tls_write": true,
+    "container-79b8dc894c-1-go:tls_write:single_chunk": true,
+    "container-79b8dc894c-1-go:tls_read": true,
+    "container-79b8dc894c-1-go:tls_read:single_chunk": true,
+    "container-79b8dc894c-1-legacy:tls_write": true,
+    "container-79b8dc894c-1-legacy:tls_write:single_chunk": true,
+    "container-79b8dc894c-1-legacy:tls_read": true,
+    "container-79b8dc894c-1-legacy:tls_read:single_chunk": true,
+    "two_container_generations": true,
+    "automatic_discovery_enabled": true,
+    "go_read_reported_attached": true,
+    "sensor_clean_exit": true
+  },
+  "container_ids": [
+    {
+      "ex": "01e748601ddac92579166fe0a97e89bdc88508acef35064b1587a767562ea1b0",
+      "go": "6c6fd17aec31619fd0af4aec3c205bfc05dcfba66d289982f3c8167d0df9da96",
+      "legacy": "95c084d35c22fc737da47965276433991df8f2c0dd9d94adf071d0567fc84074"
+    },
+    {
+      "ex": "9880807b4e4753eadea43f439e575cbe0eb2035f9a996e7f3a4fbebbc5d7515b",
+      "go": "bf00e18c1c6edbbf7994578652890f5cda616ebefcfbdbd516f9a29611026127",
+      "legacy": "ebbbbe207482d1711001c1982cd48c77e4a13953fcf960359e21a0f049adae24"
+    }
+  ],
+  "capability_reports": 33,
+  "final_capabilities": {
+    "capture_buffers": {
+      "ring_bytes": 67108864,
+      "queue_events": 16384,
+      "queue_bytes": 15073280
+    },
+    "schema_version": "agentprovenance.sensor_capabilities/v1",
+    "updated_at": "2026-11-06T17:07:18.279028601Z",
+    "ready": false,
+    "status": "stopped",
+    "probes": [
+      {
+        "name": "syscalls/sys_enter_sendto",
+        "category": "dns",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "getaddrinfo",
+        "category": "dns",
+        "target": "/lib/x86_64-linux-gnu/libc.so.6",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "sched/sched_process_fork",
+        "category": "process_lifecycle",
+        "required": true,
+        "status": "detached"
+      },
+      {
+        "name": "sched/sched_process_exec",
+        "category": "syscall",
+        "required": true,
+        "status": "detached"
+      },
+      {
+        "name": "sched/sched_process_exit",
+        "category": "syscall",
+        "required": true,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_enter_connect",
+        "category": "syscall",
+        "required": true,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_enter_execve",
+        "category": "syscall",
+        "required": true,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_enter_open",
+        "category": "syscall",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_enter_openat",
+        "category": "syscall",
+        "required": true,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_enter_ptrace",
+        "category": "syscall",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_enter_rename",
+        "category": "syscall",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_enter_renameat",
+        "category": "syscall",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_enter_renameat2",
+        "category": "syscall",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_enter_setgid",
+        "category": "syscall",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_enter_setuid",
+        "category": "syscall",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_enter_unlink",
+        "category": "syscall",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_enter_unlinkat",
+        "category": "syscall",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_exit_connect",
+        "category": "syscall",
+        "required": true,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_exit_open",
+        "category": "syscall",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "syscalls/sys_exit_openat",
+        "category": "syscall",
+        "required": true,
+        "status": "detached"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Read",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/19/fs/coredns",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Write",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/19/fs/coredns",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Read",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/280/fs/usr/local/bin/agentprov",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Write",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/280/fs/usr/local/bin/agentprov",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Read",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/go-client",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Write",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/go-client",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_clear",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/lib/x86_64-linux-gnu/libssl.so.3",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_free",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/lib/x86_64-linux-gnu/libssl.so.3",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_new",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/lib/x86_64-linux-gnu/libssl.so.3",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_read",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/lib/x86_64-linux-gnu/libssl.so.3",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_read_ex",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/lib/x86_64-linux-gnu/libssl.so.3",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_set0_rbio",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/lib/x86_64-linux-gnu/libssl.so.3",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_set0_wbio",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/lib/x86_64-linux-gnu/libssl.so.3",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_set_bio",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/lib/x86_64-linux-gnu/libssl.so.3",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_set_fd",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/lib/x86_64-linux-gnu/libssl.so.3",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_set_rfd",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/lib/x86_64-linux-gnu/libssl.so.3",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_set_wfd",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/lib/x86_64-linux-gnu/libssl.so.3",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_write",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/lib/x86_64-linux-gnu/libssl.so.3",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_write_ex",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/321/fs/lib/x86_64-linux-gnu/libssl.so.3",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Read",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/4/fs/usr/bin/local-path-provisioner",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Write",
+        "category": "tls",
+        "target": "/proc/1/root/var/lib/rancher/k3s/agent/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/4/fs/usr/bin/local-path-provisioner",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Read",
+        "category": "tls",
+        "target": "/proc/17189/exe",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Write",
+        "category": "tls",
+        "target": "/proc/17189/exe",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Read",
+        "category": "tls",
+        "target": "/proc/745/exe",
+        "required": false,
+        "status": "unsupported",
+        "reason": "invalid or unsupported Go pclntab"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Write",
+        "category": "tls",
+        "target": "/proc/745/exe",
+        "required": false,
+        "status": "failed",
+        "reason": "invalid or unsupported Go pclntab"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Read",
+        "category": "tls",
+        "target": "/proc/750/exe",
+        "required": false,
+        "status": "unsupported",
+        "reason": "Go TLS symbol crypto/tls.(*Conn).Write and pclntab are missing"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Write",
+        "category": "tls",
+        "target": "/proc/750/exe",
+        "required": false,
+        "status": "failed",
+        "reason": "Go TLS symbol crypto/tls.(*Conn).Write and pclntab are missing"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Read",
+        "category": "tls",
+        "target": "/proc/903/exe",
+        "required": false,
+        "status": "unsupported",
+        "reason": "Go TLS symbol crypto/tls.(*Conn).Write and pclntab are missing"
+      },
+      {
+        "name": "crypto/tls.(*Conn).Write",
+        "category": "tls",
+        "target": "/proc/903/exe",
+        "required": false,
+        "status": "failed",
+        "reason": "Go TLS symbol crypto/tls.(*Conn).Write and pclntab are missing"
+      },
+      {
+        "name": "SSL_clear",
+        "category": "tls",
+        "target": "/usr/lib/x86_64-linux-gnu/libssl.so",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_free",
+        "category": "tls",
+        "target": "/usr/lib/x86_64-linux-gnu/libssl.so",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_new",
+        "category": "tls",
+        "target": "/usr/lib/x86_64-linux-gnu/libssl.so",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_read",
+        "category": "tls",
+        "target": "/usr/lib/x86_64-linux-gnu/libssl.so",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_read_ex",
+        "category": "tls",
+        "target": "/usr/lib/x86_64-linux-gnu/libssl.so",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_set0_rbio",
+        "category": "tls",
+        "target": "/usr/lib/x86_64-linux-gnu/libssl.so",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_set0_wbio",
+        "category": "tls",
+        "target": "/usr/lib/x86_64-linux-gnu/libssl.so",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_set_bio",
+        "category": "tls",
+        "target": "/usr/lib/x86_64-linux-gnu/libssl.so",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_set_fd",
+        "category": "tls",
+        "target": "/usr/lib/x86_64-linux-gnu/libssl.so",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_set_rfd",
+        "category": "tls",
+        "target": "/usr/lib/x86_64-linux-gnu/libssl.so",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_set_wfd",
+        "category": "tls",
+        "target": "/usr/lib/x86_64-linux-gnu/libssl.so",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_write",
+        "category": "tls",
+        "target": "/usr/lib/x86_64-linux-gnu/libssl.so",
+        "required": false,
+        "status": "detached"
+      },
+      {
+        "name": "SSL_write_ex",
+        "category": "tls",
+        "target": "/usr/lib/x86_64-linux-gnu/libssl.so",
+        "required": false,
+        "status": "detached"
+      }
+    ],
+    "tls_discovery": {
+      "enabled": true,
+      "scan_interval_ms": 2000,
+      "max_targets": 128,
+      "max_processes_per_scan": 4096,
+      "active_targets": 0,
+      "scan_complete": true,
+      "processes_scanned": 147,
+      "unreadable_processes": 0,
+      "unresolved_mounts": 0,
+      "truncated_maps": 0,
+      "skipped_targets": 0,
+      "unsupported_executables": 4,
+      "limitations": [
+        "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+        "first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
+        "amd64 Go 1.23\u20131.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported"
+      ],
+      "sweep_passes": 15,
+      "event_discovery": {
+        "queue_capacity": 128,
+        "pending": 2,
+        "hints": 731,
+        "coalesced": 104,
+        "queue_drops": 0,
+        "process_scans": 990,
+        "retry_scans": 380,
+        "exited_processes": 515,
+        "changed_processes": 5,
+        "unreadable_processes": 8,
+        "unresolved_mounts": 0,
+        "truncated_maps": 0,
+        "unsupported_executables": 193,
+        "skipped_targets": 0,
+        "attached_targets": 3,
+        "last_attach_latency_ms": 11,
+        "max_attach_latency_ms": 27
+      }
+    },
+    "access_control_state": {
+      "apparmor_collection_enabled": true,
+      "seccomp_collection_enabled": true,
+      "mode": "event_triggered_procfs_snapshot",
+      "queue_capacity": 128,
+      "cache_capacity": 2048,
+      "min_interval_ms": 2000
+    },
+    "procfs_identity": {
+      "mode": "kernel_namespace_mapping",
+      "pid_namespace": "pid:[4026531836]",
+      "map_capacity": 16384,
+      "translated_events": 0,
+      "outside_namespace_events": 0,
+      "lookup_misses": 0
+    }
+  },
+  "fixture_event_types": {
+    "file_open": 54,
+    "syscall_result": 60,
+    "process_observed": 12,
+    "process_exit": 18,
+    "setuid": 43,
+    "setgid": 43,
+    "thread_exit": 39,
+    "execve": 6,
+    "network_connect": 6,
+    "tls_write": 6,
+    "tls_read": 6
+  },
+  "passed": true
+}

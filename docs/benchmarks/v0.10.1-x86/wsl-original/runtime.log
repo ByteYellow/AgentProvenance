@@ -1,0 +1,25 @@
+=== RUN   TestLiveSensorAccessState
+    access_state_linux_test.go:87: sensor did not emit target procfs state
+--- FAIL: TestLiveSensorAccessState (4.61s)
+=== RUN   TestLiveSyscallOutcomes
+=== RUN   TestLiveSyscallOutcomes/concurrent
+    outcome_live_linux_test.go:234: result groups=6 oracle=32
+=== RUN   TestLiveSyscallOutcomes/leader-exit
+    outcome_live_linux_test.go:234: result groups=0 oracle=1
+=== RUN   TestLiveSyscallOutcomes/ordinary-permission
+    outcome_live_linux_test.go:238: 2985/file_open got [] want [-13 -13]
+=== RUN   TestLiveSyscallOutcomes/seccomp-errno
+    outcome_live_linux_test.go:231: seccomp ERRNO: fixture observed EPERM; no sys_enter/paired sys_exit record was fabricated
+    outcome_live_linux_test.go:275: seccomp-errno: 0 result observations matched independent syscall returns; one final process exit; thread cleanup verified
+=== RUN   TestLiveSyscallOutcomes/seccomp-log
+    outcome_live_linux_test.go:234: result groups=0 oracle=1
+=== RUN   TestLiveSyscallOutcomes/seccomp-kill
+    outcome_live_linux_test.go:275: seccomp-kill: 0 result observations matched independent syscall returns; one final process exit; thread cleanup verified
+--- FAIL: TestLiveSyscallOutcomes (2.15s)
+    --- FAIL: TestLiveSyscallOutcomes/concurrent (0.11s)
+    --- FAIL: TestLiveSyscallOutcomes/leader-exit (0.21s)
+    --- FAIL: TestLiveSyscallOutcomes/ordinary-permission (0.01s)
+    --- PASS: TestLiveSyscallOutcomes/seccomp-errno (0.01s)
+    --- FAIL: TestLiveSyscallOutcomes/seccomp-log (0.01s)
+    --- PASS: TestLiveSyscallOutcomes/seccomp-kill (0.21s)
+FAIL

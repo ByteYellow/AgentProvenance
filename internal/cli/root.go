@@ -70,11 +70,11 @@ func NewRootCommand() *cobra.Command {
 	return root
 }
 
-func daemonClient(daemonURL string) (daemon.Client, bool) {
+func daemonClient(daemonURL, dataDir string) (daemon.Client, bool) {
 	if daemonURL == "" {
 		return daemon.Client{}, false
 	}
-	return daemon.NewClient(daemonURL), true
+	return daemon.NewClient(daemonURL, dataDir), true
 }
 
 func firstEnv(names ...string) string {

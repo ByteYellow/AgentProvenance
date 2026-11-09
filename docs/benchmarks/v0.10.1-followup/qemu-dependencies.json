@@ -1,0 +1,42 @@
+[
+  {
+    "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-glib2-2.90.1-1-any.pkg.tar.zst",
+    "sha256": "152ba3b2cfb35feebc0fcb690889b16a6f0c2b89ced52e65aea45d089f86d219"
+  },
+  {
+    "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libiconv-1.19.1-1-any.pkg.tar.zst",
+    "sha256": "50e915aa36fdbe6c84acc8954e939275609ba051cdb4eeeff3884453c28efde0"
+  },
+  {
+    "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst",
+    "sha256": "be68d7f260633284b910c588c6d82ee304a81c8817a686d2cd9df83f872c27af"
+  },
+  {
+    "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-pcre2-10.49-1-any.pkg.tar.zst",
+    "sha256": "0abc5313085a0f9b4a77a1580d92b09761371cb3a1f31d01051a94a289fb9413"
+  },
+  {
+    "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-pixman-0.46.4-3-any.pkg.tar.zst",
+    "sha256": "435715dd1ca4c55873cf3c38d644615196bc2d238e3366f8ff81cc0811260eb2"
+  },
+  {
+    "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libslirp-4.9.3-1-any.pkg.tar.zst",
+    "sha256": "f695f6084c516374a483c167407d424acc41b33b4bd22133558e87239f9db058"
+  },
+  {
+    "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-zlib-1.3.2-3-any.pkg.tar.zst",
+    "sha256": "ffde6f4ed2d879477c93b37ff14c319baf480a2aeafc065edeceafba26b71e90"
+  },
+  {
+    "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gcc-libs-16.2.0-6-any.pkg.tar.zst",
+    "sha256": "e65d2da59bb22c13eafc0fb7684b0539f63902bb94a550df1d64531a6c08363a"
+  },
+  {
+    "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-winpthreads-14.0.0.r598.ge3d18511f-1-any.pkg.tar.zst",
+    "sha256": "d875a6a969f01cc64caeebd337430d00528964123ce29c02873bb5c6c3c914b8"
+  },
+  {
+    "url": "https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libffi-3.8.0-1-any.pkg.tar.zst",
+    "sha256": "6dad7f3c6c900d3c64a4fe0c2764b405e678b22df3521d2284ffaeff0198b84b"
+  }
+]

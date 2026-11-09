@@ -26,11 +26,22 @@ import (
 // This compares every captured byte against the bytes actually returned to 32
 // concurrent goroutines, with forced stack growth within their TLS reads.
 func TestLiveGoTLSReadConcurrentStackGrowth(t *testing.T) {
+	for _, stripped := range []bool{false, true} {
+		t.Run(fmt.Sprintf("stripped=%v", stripped), func(t *testing.T) { liveGoTLSReadConcurrentStackGrowth(t, stripped) })
+	}
+}
+
+func liveGoTLSReadConcurrentStackGrowth(t *testing.T, stripped bool) {
 	if os.Getenv("AGENTPROV_LIVE_GOTLS") != "1" {
 		t.Skip("set AGENTPROV_LIVE_GOTLS=1 for real eBPF Go TLS acceptance")
 	}
 	bin := filepath.Join(t.TempDir(), "go-tls-concurrent")
-	if output, err := exec.Command("go", "build", "-o", bin, "testdata/go_tls_concurrent.go").CombinedOutput(); err != nil {
+	args := []string{"build", "-o", bin}
+	if stripped {
+		args = append(args, "-ldflags=-s -w")
+	}
+	args = append(args, "testdata/go_tls_concurrent.go")
+	if output, err := exec.Command("go", args...).CombinedOutput(); err != nil {
 		t.Fatalf("build client: %v\n%s", err, output)
 	}
 	offsets, err := goTLSReadReturnOffsets(bin)

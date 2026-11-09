@@ -1,0 +1,232 @@
+{
+  "schema_version": "agentprovenance.shutdown_regression/v1",
+  "date": "2026-11-07",
+  "implementation_commit": "687d43c6f984c8fa6c19faa719496e3b29dcca92",
+  "baseline_commit": "ddfefdf837acc131982a904bf53f646f771f3f7c",
+  "baseline_note": "The new regression fixture was compiled against the unchanged baseline implementation.",
+  "environment": {
+    "live_kernel": "6.8.0-142-generic",
+    "live_arch": "arm64",
+    "cpus": 4,
+    "sensor_build_go": "go1.23.0",
+    "linux_race_go": "go1.26.4",
+    "full_suite": "darwin/arm64 go1.23.0"
+  },
+  "before": {
+    "shutdown": {
+      "exit_code": 1,
+      "deadline_seconds": 5,
+      "failure": "shutdown_live_linux_test.go:95: sensor kept capturing under active load: 12146 -> 199968 records"
+    },
+    "translation": {
+      "exit_code": 1,
+      "missing_message": "invalid ELF symbol string-table link"
+    }
+  },
+  "after": {
+    "shutdown": {
+      "exit_code": 0,
+      "top_level_passes": 1,
+      "top_level_skips": 0,
+      "modes": [
+        "syscalls",
+        "syscalls-and-tls"
+      ],
+      "runs": [
+        {
+          "shutdown_duration": "575.612904ms",
+          "records_before_cancel": 8963,
+          "records_after_drain": 31031
+        },
+        {
+          "shutdown_duration": "745.376785ms",
+          "records_before_cancel": 9863,
+          "records_after_drain": 33283
+        }
+      ]
+    },
+    "shutdown_race": {
+      "exit_code": 0,
+      "top_level_passes": 3,
+      "top_level_skips": 0,
+      "repetitions": 3,
+      "runs": [
+        {
+          "shutdown_duration": "3.791581998s",
+          "records_before_cancel": 1389,
+          "records_after_drain": 19349
+        },
+        {
+          "shutdown_duration": "3.247166269s",
+          "records_before_cancel": 745,
+          "records_after_drain": 19748
+        },
+        {
+          "shutdown_duration": "3.130580581s",
+          "records_before_cancel": 1021,
+          "records_after_drain": 18865
+        },
+        {
+          "shutdown_duration": "3.353978863s",
+          "records_before_cancel": 822,
+          "records_after_drain": 19160
+        },
+        {
+          "shutdown_duration": "3.285704215s",
+          "records_before_cancel": 723,
+          "records_after_drain": 18623
+        },
+        {
+          "shutdown_duration": "3.181046702s",
+          "records_before_cancel": 773,
+          "records_after_drain": 19151
+        }
+      ]
+    },
+    "translation": {
+      "exit_code": 0,
+      "command": "go test ./internal/i18n -count=1"
+    },
+    "go_test": {
+      "exit_code": 0,
+      "command": "go test ./...",
+      "packages_passed": 39
+    },
+    "go_vet": {
+      "exit_code": 0,
+      "command": "go vet ./..."
+    },
+    "go_race": {
+      "exit_code": 0,
+      "command": "go test -race -p 2 -timeout 20m ./...",
+      "packages_passed": 39
+    },
+    "linux_sensor_unit_race": {
+      "exit_code": 0,
+      "top_level_passes": 55,
+      "top_level_skips": 12
+    },
+    "linux_native_race": {
+      "exit_code": 0,
+      "top_level_passes": 10,
+      "top_level_skips": 0
+    },
+    "independent_native": {
+      "exit_code": 0,
+      "checks_passed": 58,
+      "command": "python3 scripts/accept_sensor_live.py --sensor SENSOR --go-client GO_CLIENT --c-client C_CLIENT --ssl-lib /usr/lib/aarch64-linux-gnu/libssl.so.3 --pause-drain 1.5 --require-cgroup-lifecycle --report REPORT.json"
+    },
+    "pressure": {
+      "exit_code": 0,
+      "command": "python3 scripts/accept_sensor_pressure.py --sensor SENSOR --report REPORT.json",
+      "runs": [
+        {
+          "label": "candidate-burst",
+          "expected_opens": 40000,
+          "counts": {
+            "file_open": 40000,
+            "syscall_result": 40000,
+            "process_exit": 5
+          },
+          "kernel_drops": 0,
+          "workload_seconds": 0.0643,
+          "total_and_drain_seconds": 1.1885,
+          "peak_rss_kib": 257056,
+          "passed": true
+        },
+        {
+          "label": "candidate-paced",
+          "expected_opens": 160000,
+          "counts": {
+            "file_open": 160000,
+            "syscall_result": 160000,
+            "process_exit": 5
+          },
+          "kernel_drops": 0,
+          "workload_seconds": 17.0131,
+          "total_and_drain_seconds": 17.5337,
+          "peak_rss_kib": 252816,
+          "passed": true
+        },
+        {
+          "label": "overload-1MiB",
+          "expected_opens": 40000,
+          "counts": {
+            "file_open": 10125,
+            "syscall_result": 10135,
+            "process_exit": 2
+          },
+          "kernel_drops": 59743,
+          "workload_seconds": 0.0672,
+          "total_and_drain_seconds": 0.5365,
+          "peak_rss_kib": 128552,
+          "passed": true
+        }
+      ]
+    },
+    "kvm_script_tests": {
+      "exit_code": 0,
+      "passed": 9,
+      "skipped": 1,
+      "skip_reason": "optional signed-bundle roundtrip requires explicitly configured binary"
+    },
+    "frontend_regressions": {
+      "exit_code": 0,
+      "scripts_passed": 8,
+      "scripts": [
+        "test_context_readable.mjs",
+        "test_context_coverage.mjs",
+        "test_dashboard_workspace.mjs",
+        "test_search_engine.mjs",
+        "test_compare_engine.mjs",
+        "test_compare_completeness.mjs",
+        "test_static_reader.cjs",
+        "test_evidence_status.cjs"
+      ]
+    },
+    "amd64_build": {
+      "exit_code": 0,
+      "runtime_execution": "not_run_this_followup"
+    }
+  },
+  "source_sha256": {
+    ".github/workflows/ci.yml": "2c72c5634d6db159d1483a3b5badcc0bb3026fc7236e191ef218ba6b2d8506d3",
+    "internal/sensor/sensor_linux.go": "5338fca930fb35ba9e5a17b8da18c3d50409c5ac7189d9dd8690ab81f71a1590",
+    "internal/sensor/shutdown_live_linux_test.go": "9e6bbae6ca92d5319587807fc4d42f7ec0db2926978a5ae17d3786bb899d462a",
+    "internal/sensor/testdata/sensor_shutdown.c": "58cd2098e22a38aeff4bc9fa83632e92200112f6ab143aa00cbc166ee848ef7f",
+    "internal/i18n/diagnostics_test.go": "cebe70ecaa8dc5f1f64ab33e58b21042ad05c2173dd77446d44c64c8451fc24d",
+    "internal/i18n/runtime_diagnostics.go": "39551ff994bff1a0b691d337b5471d1256da67c17723cce10d97d6aa4e5fd354",
+    "internal/i18n/zh-CN.json": "fcdaf38994b8bdb6cd12408ae01a7fe345267f5cc487326b9f2c9c5e1b98c6b3"
+  },
+  "binary_sha256": {
+    "sensor-arm64": "93397a9a76889bd78d70535486a203aeb75b3a84aa614c337e9bbf3837f1a091",
+    "sensor-arm64-test-before": "26664bd7d64b9d59e414860b0db369c4d3d6e4b110d619658f7dd63349d4f7c2",
+    "sensor-arm64-test-after": "7f1d496f99445871b166e7ba1be3796a28abbf605ceb2e675bda5a418c9d2fdf",
+    "sensor-arm64-test-race": "ceb97ef4e6f2bdadebaf94fea231d84f31ec68383ea235ff08265c14032f8255",
+    "sensor-amd64-build-only": "acb4c83dc4ed33102221b55938eb0936bd8ee4f6fd6582f60156ded62abfb6f8",
+    "sensor-amd64-test-build-only": "17dfe31fc78676d21cf605142056b48f2c43ac623a3251b4904435939bcc2c3e"
+  },
+  "local_evidence_sha256": {
+    "shutdown-before.log": "c0440bd850f4f32703c63e3440a0330085f692d7c8931e92ecddc50a313ece2a",
+    "shutdown-after.log": "fd16a4f55229926d7403c20e85fcd9b44448f41cce1d6386c2deddead2a6c2fc",
+    "i18n-before.log": "265d140c2a5b92454cc212813a560d25622ed20ca0f33c7c69af68ea5a73bdac",
+    "i18n-after.log": "a5c7e78198773b04caa88b06412867b70308d899b8864e554f24a355863e48ee",
+    "go-test.log": "cdf57a95d44e562fa7b56af9357795e21c5e07add8ef3cbee51e5d4bcf3821d4",
+    "go-vet.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "go-race.log": "7b7aeb631433ca131ecb857b7f5e041f95fb3cac26585642d28d3af3a4da3d92",
+    "linux-shutdown-race.log": "f475d9d0319afdcc3a03d86304774108992caee81bcf068dbf4dc96d347c86c6",
+    "linux-sensor-unit-race.log": "b580c985bdd6e9ccefc29f3686391dda9d47373b92a3316efd07677e9e302660",
+    "linux-native-race.log": "3ed62419c8da5db3c0d173e73a065a1d7128904d09ecf4a6a3f21719fa0527a9",
+    "pressure-after.json": "957c9a5e350613c86e6f5c9826a671f8a5cecb2b20507c59781a86117a21d73e",
+    "native-after.json": "16d16450d7a141ebf4cb669de336de43d462b6b6cb99dfba9f568e76030083e3",
+    "kvm-script-tests.log": "69a44c3afed1e0253427d82c7c4850a92b1547340ca49e5449909702bacb90f7",
+    "frontend-1.log": "f6dad52718697a34c9ece5270772afe65d31742024afd40cbd17d457d0d23509",
+    "frontend-2.log": "2864e6476882bb37910620f56d974674086a5de07f2bffbe6050828dcbb0642e",
+    "frontend-3.log": "60c57b74f9b7275d96dfa7aeebe16bf1fcba151c3cf84f845d7d9ddb48b5c754",
+    "frontend-4.log": "a321f49b387045cc99af4bdb9fdc9a432fcc6bb37898148641a994ee47d23efb",
+    "frontend-5.log": "33e2f93965d26f5f03683d89204f9118e3325fb0aa9914a8e8aa13a48a96fc60",
+    "frontend-6.log": "29255c5ed30c100aba1a4061ca22cf40d9b18af334c2755c7edf43a1efd97db5",
+    "frontend-7.log": "b1631c21e3c768e923c7df3289961445521e5de955a5f656f19019115cb25027",
+    "frontend-8.log": "91e969bd1a9b301e00fb2267d72c84e44cf903ee841f977ae62c5ace0a354df4"
+  }
+}

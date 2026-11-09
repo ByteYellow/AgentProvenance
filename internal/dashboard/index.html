@@ -408,6 +408,7 @@
           <button id="content-expand" class="content-expand" title="{{tr .Lang "Expand saved content"}}" aria-label="{{tr .Lang "Expand saved content"}}">⤢</button>
         </div>
         <div id="content-meta" class="content-meta"></div>
+        <div id="content-tls"></div>
         <div id="content-format-note" class="content-format-note" hidden>{{tr .Lang "Readable view only; hashes and byte positions refer to the saved content."}}</div>
         <pre id="content-body" class="content-body" tabindex="0"></pre>
         <div class="context-pager"><button id="content-prev">{{tr .Lang "‹ prev"}}</button><span id="content-page-label"></span><button id="content-next">{{tr .Lang "next ›"}}</button><span id="content-limits"></span></div>
@@ -700,6 +701,7 @@ function nodeLabel(n) {
       case 'refused_but_runtime_happened':return tr('⊘ refusal bypassed');
       case 'decided_and_executed':return tx('✓ {operation} as declared',{operation:d.operation||''});
       case 'intent_coverage_gap':return tr('? uncaptured intent');
+      case 'intent_association_gap':return tr('? unresolved intent association');
     }
   }
   if(kind==='message'||kind==='relay'){
@@ -1033,19 +1035,21 @@ function renderProducerProfile(events){
   const record=evs.filter(e=>String(e.source||'').startsWith('record')).length;
   const pods=evs.filter(e=>e.source==='k8s'&&e.event_type==='pod_metadata').map(e=>{try{return JSON.parse(e.payload||'{}')}catch(_){return null}}).filter(p=>p&&(p.pod_name||p.pod_uid));
   const k8s=scopes.has('k8s_cgroup')||pods.length>0;
-  const tls=evs.filter(e=>/^tls_/.test(e.event_type||'') || String(e.source||'').includes('tls')).length;
+  const tlsEvents=evs.filter(e=>/^tls_/.test(e.event_type||'') || String(e.source||'').includes('tls'));
+  const tls=tlsEvents.length;
+  const tlsGaps=tlsEvents.filter(e=>{try{const p=JSON.parse(e.payload||'{}'),c=p.capture;return p.truncated===true||c&&(c.state!=='complete'||c.reason||c.data_kind&&c.data_kind!=='http_body');}catch(_){return false;}}).length;
   const cgroups=[...new Set(evs.map(e=>e.cgroup_id).filter(Boolean))];
   const pids=[...new Set(evs.map(e=>e.pid).filter(Boolean))];
   const profile=k8s?'k8s-daemonset':(kernel?tr("local/VM sensor"):(record?'local-record':tr("evidence import")));
   const scope=k8s?tr("passive cgroup attribution"):(scopes.has('record')?tr("record cgroup leaf"):(record?tr("record logical scope"):tr("imported evidence")));
   const telemetry=kernel?tx("{count}/{total} kernel-correlated", {count: kernel, total: evs.length}):(record?tx("{count}/{total} self-observed", {count: record, total: evs.length}):tr("no runtime events in page"));
-  const intent=tls?tx("TLS intent observed ({count})", {count: tls}):tr("no model-intent TLS in page");
+  const intent=tls?tx("TLS records in page ({count})", {count: tls}):tr("no model-intent TLS in page");
   const cls=k8s?'k8s':(kernel?'kernel':'');
   el.innerHTML=[
     `<div class="pcard ${cls}"><div class="k">${esc(tr("Producer profile"))}</div><div class="v">${esc(tr(profile))}</div><div class="d">${esc([...sources].slice(0,3).map(tr).join(' · ')||tr("unknown source"))}</div></div>`,
     `<div class="pcard ${k8s?'k8s':''}"><div class="k">${esc(tr("Scope source"))}</div><div class="v">${esc(pods.length?`${pods[0].namespace||'?'}/${pods[0].pod_name||pods[0].pod_uid}${pods.length>1?' +'+(pods.length-1):''}`:scope)}</div><div class="d">${esc((pods.length?scope+' · ':'')+(cgroups.length?`cgroup ${cgroups[0]}${cgroups.length>1?' +'+(cgroups.length-1):''}`:tr("no cgroup id")))}</div></div>`,
     `<div class="pcard ${kernel?'kernel':'partial'}"><div class="k">${esc(tr("Runtime telemetry"))}</div><div class="v">${esc(telemetry)}</div><div class="d">${esc(pids.length?tx("{count} pids observed", {count: pids.length}):tr("no pid evidence"))}</div></div>`,
-    `<div class="pcard ${tls?'kernel':'partial'}"><div class="k">${esc(tr("Model intent"))}</div><div class="v">${esc(intent)}</div><div class="d">${esc(tls?tr("TLS body parsed when observable"):tr("app hooks / explicit events may still apply"))}</div></div>`
+    `<div class="pcard ${tls&&!tlsGaps?'kernel':'partial'}"><div class="k">${esc(tr("Model intent"))}</div><div class="v">${esc(intent)}</div><div class="d">${esc(tlsGaps?tx("{count} records report capture gaps",{count:tlsGaps}):tls?tr("TLS body parsed when observable"):tr("app hooks / explicit events may still apply"))}</div></div>`
   ].join('');
 }
 
@@ -1135,6 +1139,7 @@ function showDetail(id,explicit=false){
   Object.keys(d).forEach(key=>{
     let v=d[key];
     if(key==='payload'){ try{v=JSON.stringify(JSON.parse(v),null,2);}catch(_){v=String(v);} }
+    else if(v!==null && typeof v==='object'){v=JSON.stringify(v,null,2);}
     else if(typeof v==='number'){ v=(key.indexOf('confidence')>=0)?(+v).toFixed(2):v; }
     if(v==='' || v==null || v===false)return;
     rows+=`<dt title="${esc(key)}">${esc(tr(key))}</dt><dd>${esc(v)}</dd>`;
@@ -1154,6 +1159,9 @@ function showDetail(id,explicit=false){
   el.innerHTML=`<h3><span style="color:${c}">●</span> ${esc(nodeLabel(n))} ${badges}</h3>`+
     `<div class="expandbar">${expandButtons}<button id="detail-session">${esc(tr('Locate session records'))}</button><button id="detail-content">${esc(tr('Saved content'))}</button></div>`+
     `<details data-node-fields${fieldsOpen?' open':''}><summary>${esc(tr("Original evidence fields"))}</summary><dl>${rows}</dl></details>`;
+  window.AgentWorkspaceUI.describeAssociation(n,el);
+  window.AgentWorkspaceUI.describeEndpoint(n,el);
+  window.AgentWorkspaceUI.describeTLS(n,el);
   window.AgentAccessControlUI.selectNode(n,el);
   $('#detail-session').onclick=()=>window.AgentContextUI.linkedSession(n.id);
   $('#detail-content').onclick=()=>{
@@ -2027,7 +2035,11 @@ async function navigateEvidenceGraph(run,id){
   window.AgentWorkspaceUI.show('summary');
   $('#graphcard').scrollIntoView({block:'start',behavior:'smooth'});
 }
-window.AgentWorkspaceUI.init({tr,tx,esc,j,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope)),navigateSession:navigateRelatedSession,returnSession:()=>safeUI(returnRelatedSession()),search:()=>safeUI(window.AgentSearchUI.open()),compare:()=>safeUI(window.AgentCompareUI.open()),export:()=>safeUI(window.AgentExportUI.open())});
+window.AgentWorkspaceUI.init({tr,tx,esc,j,nodeLabel,selectSource:source=>window.AgentContextUI.selectSource(source),selectSession:scope=>safeUI(selectSessionScope(scope)),navigateSession:navigateRelatedSession,returnSession:()=>safeUI(returnRelatedSession()),search:()=>safeUI(window.AgentSearchUI.open()),compare:()=>safeUI(window.AgentCompareUI.open()),export:()=>safeUI(window.AgentExportUI.open()),
+  evidenceLabel:ref=>{const node=window._lg?.nodes?.find(n=>n.id===ref);return node?nodeLabel(node):ref;},
+  readEvidence:ref=>window.AgentContextUI.selectGraph(ref,null,true),
+  navigateGraph:async ref=>{activateSessionScope(null);await navigateEvidenceGraph(cur,ref);}
+});
 window.AgentAccessControlUI.init({tr,tx,esc,j,navigateGraph:async(run,id)=>{
   if(run!==cur)throw new Error(tr('The selected run changed.'));
   activateSessionScope(null);await navigateEvidenceGraph(run,id);

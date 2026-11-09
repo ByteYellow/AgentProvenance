@@ -1,0 +1,25 @@
+=== RUN   TestLiveSensorAccessState
+    access_state_linux_test.go:101: captured 1 automatic state snapshots for pid 2580
+--- PASS: TestLiveSensorAccessState (3.08s)
+=== RUN   TestLiveSyscallOutcomes
+=== RUN   TestLiveSyscallOutcomes/concurrent
+    outcome_live_linux_test.go:275: concurrent: 80 result observations matched independent syscall returns; one final process exit; thread cleanup verified
+=== RUN   TestLiveSyscallOutcomes/leader-exit
+    outcome_live_linux_test.go:275: leader-exit: 2 result observations matched independent syscall returns; one final process exit; thread cleanup verified
+=== RUN   TestLiveSyscallOutcomes/ordinary-permission
+    outcome_live_linux_test.go:275: ordinary-permission: 2 result observations matched independent syscall returns; one final process exit; thread cleanup verified
+=== RUN   TestLiveSyscallOutcomes/seccomp-errno
+    outcome_live_linux_test.go:231: seccomp ERRNO: fixture observed EPERM; no sys_enter/paired sys_exit record was fabricated
+    outcome_live_linux_test.go:275: seccomp-errno: 0 result observations matched independent syscall returns; one final process exit; thread cleanup verified
+=== RUN   TestLiveSyscallOutcomes/seccomp-log
+    outcome_live_linux_test.go:275: seccomp-log: 1 result observations matched independent syscall returns; one final process exit; thread cleanup verified
+=== RUN   TestLiveSyscallOutcomes/seccomp-kill
+    outcome_live_linux_test.go:275: seccomp-kill: 0 result observations matched independent syscall returns; one final process exit; thread cleanup verified
+--- PASS: TestLiveSyscallOutcomes (1.47s)
+    --- PASS: TestLiveSyscallOutcomes/concurrent (0.28s)
+    --- PASS: TestLiveSyscallOutcomes/leader-exit (0.22s)
+    --- PASS: TestLiveSyscallOutcomes/ordinary-permission (0.01s)
+    --- PASS: TestLiveSyscallOutcomes/seccomp-errno (0.01s)
+    --- PASS: TestLiveSyscallOutcomes/seccomp-log (0.01s)
+    --- PASS: TestLiveSyscallOutcomes/seccomp-kill (0.32s)
+PASS

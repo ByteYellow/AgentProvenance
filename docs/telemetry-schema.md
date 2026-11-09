@@ -436,7 +436,7 @@ English in every locale; recorded evidence retains its original text. Audit
 import remains a trusted collector/CLI operation.
 
 Use `--event EVENT` to inspect one saved audit record, or `--cursor` for the
-next page. Live queries use `agentprov.audit_lifecycle_operation/v2` as their
+next page. Live queries use `agentprov.audit_lifecycle_operation/v3` as their
 analysis rule. It does not overwrite an audit PID, Agent session or graph edge.
 Re-querying after a late arrival recomputes the candidates from one database
 snapshot. The saved input records survive signed Bundle export/import, so the
@@ -448,9 +448,9 @@ selected audit records. If a supporting record or competing candidate is exclude
 the associated inference is withheld with `replay_evidence_excluded`; the remaining
 candidate is not promoted to a unique match. Excluded tool context is omitted.
 The report schema stays `agentprovenance.audit_associations/v1`; the analysis
-rule is versioned separately. Existing frozen v1 webpage replays retain their
-original rule and results, rather than being recomputed or relabeled as v2.
-The replay reader accepts frozen v1 and v2 pages; a legacy index without `rule`
+rule is versioned separately. Existing frozen webpage replays retain their
+original rule and results, rather than being recomputed or relabeled.
+The replay reader accepts frozen v1, v2 and v3 pages; a legacy index without `rule`
 means v1. Page and index rules must agree, and cursors must use the same rule.
 Older webpage exports without this reader report that the data was not included.
 
@@ -467,6 +467,15 @@ Native sensors read machine identity through `/proc/1/root/etc/machine-id`;
 the documented node deployment requires host PID visibility. Missing identity
 stays absent. The source kernel's `CLOCK_REALTIME_COARSE` resolution is retained
 as `realtime_coarse_resolution_ns`.
+
+Kernel journal imports also retain `journal_received_at` and
+`journal_monotonic_ns` when both receipt clocks are available. Operation
+candidates use the audit timestamp as a lower bound and the observed journal
+receipt as an upper bound, checking the source clock pair against native
+monotonic time. The operation reports `time_basis=audit_to_journal_receipt`.
+Delayed delivery can leave several candidates, which stay ambiguous. Historical
+captures without receipt metadata retain the resolution-based method. This
+avoids assuming a coarse clock's nominal resolution bounds delayed kernel ticks.
 
 The [kernel syscall audit context](https://github.com/torvalds/linux/blob/v6.8/kernel/auditsc.c)
 uses a coarse real-time clock. Decimal digits in the audit header describe its

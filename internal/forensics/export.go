@@ -102,6 +102,7 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 		// Unified signal model (security/cost/quality/behavior) — without it the
 		// replay has no Signals & Risk and verify flags missing_policy_unified_signal.
 		{"signals", "signals", "run_id = ?", "created_at ASC, id ASC"},
+		{"intent_diffs", "intent_diffs", "run_id = ?", "created_at ASC, id ASC"},
 		{"response_actions", "response_actions", "run_id = ?", "created_at ASC, id ASC"},
 		{"external_effects", "external_effects", "run_id = ?", "created_at ASC, id ASC"},
 		{"evidence_events", "evidence_events", "run_id = ?", "created_at ASC, id ASC"},
@@ -128,14 +129,17 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 		}
 		bundle[spec.key] = rows
 	}
-	// Backstop redaction: mask secrets in every event payload before the bundle
-	// is hashed and signed. Capture-time redaction (telemetry ingest, object
+	// Backstop redaction: mask secrets in every free-text column that can carry
+	// captured argv/stdout/task content (event payloads, recorded commands, lease
+	// task bodies) plus the evidence manifest summaries, before the bundle is
+	// hashed and signed. Capture-time redaction (telemetry ingest, object
 	// materialize) is the primary defense; this guarantees no bundle ever ships
 	// a plaintext credential regardless of which writer might have missed it —
 	// the export is the one sink that leaves the host and gets committed/shared.
 	// Object blob content is redacted at materialize time instead (it is
-	// content-addressed, so masking here would break its hash on import).
-	redactBundleEventPayloads(bundle["events"])
+	// content-addressed, so masking here would break its hash on import), which
+	// is why the provenance_objects section is left untouched here.
+	redactBundleTexts(bundle, &evidenceManifest)
 
 	// Embed artifact content inline so the bundle is self-contained AND the DSSE
 	// signature covers it (tampering a captured artifact then breaks the signature).
@@ -395,16 +399,41 @@ func selectRows(db *sql.DB, query string, args ...any) ([]map[string]any, error)
 	return result, rows.Err()
 }
 
-// redactBundleEventPayloads masks secrets in the `payload` column of every
-// dumped event row, in place, before the bundle is hashed and signed.
-func redactBundleEventPayloads(rows any) {
-	list, ok := rows.([]map[string]any)
-	if !ok {
-		return
+// redactBundleTexts masks secrets in the free-text columns of every dumped
+// table section — event `payload` columns, recorded `command` columns
+// (tool_calls/processes/fork_attempts), and lease `task_yaml` bodies — plus the
+// evidence manifest summaries, in place, before the bundle is hashed and
+// signed. Rows are masked per value: content without secret-shaped text is
+// left byte-identical, so hashes/paths/ids in the same rows are unaffected.
+func redactBundleTexts(bundle map[string]any, manifest *evidence.Manifest) {
+	for key, section := range bundle {
+		// provenance_objects are content-addressed: their payloads were masked
+		// at materialize time and re-masking here would be a no-op at best and
+		// a hash mismatch at worst if rules evolve; skip them entirely.
+		if key == "provenance_objects" {
+			continue
+		}
+		rows, ok := section.([]map[string]any)
+		if !ok {
+			continue
+		}
+		for _, row := range rows {
+			textColumns := []string{"payload", "command", "task_yaml"}
+			if key == "intent_diffs" {
+				textColumns = append(textColumns, "target", "mismatch_reason", "source", "association")
+			}
+			for _, col := range textColumns {
+				if p, ok := row[col].(string); ok && p != "" {
+					row[col] = redact.RedactString(p)
+				}
+			}
+		}
 	}
-	for _, row := range list {
-		if p, ok := row["payload"].(string); ok && p != "" {
-			row["payload"] = redact.RedactString(p)
+	// The evidence manifest travels as a typed struct, so its derived summary
+	// strings (which quote captured payloads) are masked here directly.
+	if manifest != nil {
+		for i := range manifest.Summary.TopEvidenceRefs {
+			manifest.Summary.TopEvidenceRefs[i].Summary = redact.RedactString(manifest.Summary.TopEvidenceRefs[i].Summary)
 		}
 	}
 }

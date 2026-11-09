@@ -2,6 +2,7 @@ package provenance
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,7 +11,12 @@ import (
 )
 
 func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
-	rows, err := db.Query(`SELECT id, from_id, to_id, edge_type, COALESCE(source_event_id,''), created_at FROM graph_edges WHERE run_id = ? ORDER BY created_at ASC, id ASC`, runID)
+	rows, err := db.Query(`SELECT e.id, e.from_id, e.to_id, e.edge_type, COALESCE(e.source_event_id,''), e.created_at,
+		COALESCE(d.rule_version,''), COALESCE(d.confidence,0), COALESCE(d.association,'{}'), COALESCE(ep.payload,'{}')
+		FROM graph_edges e LEFT JOIN intent_diffs d ON d.run_id=e.run_id AND d.id=CASE e.edge_type
+			WHEN 'intent_contract' THEN e.to_id WHEN 'intent_diff_effect' THEN e.from_id ELSE '' END
+		LEFT JOIN events ep ON ep.run_id=e.run_id AND ep.id=e.source_event_id AND ep.source='endpoint_capture'
+		WHERE e.run_id = ? ORDER BY e.created_at ASC, e.id ASC`, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -18,8 +24,33 @@ func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
 	var edges []GraphLensEdge
 	for rows.Next() {
 		var edge GraphLensEdge
-		if err := rows.Scan(&edge.ID, &edge.FromID, &edge.ToID, &edge.EdgeType, &edge.SourceEventID, &edge.CreatedAt); err != nil {
+		var intentRule, associationJSON, endpointPayload string
+		var intentConfidence float64
+		if err := rows.Scan(&edge.ID, &edge.FromID, &edge.ToID, &edge.EdgeType, &edge.SourceEventID, &edge.CreatedAt, &intentRule, &intentConfidence, &associationJSON, &endpointPayload); err != nil {
 			return nil, err
+		}
+		if err := endpointEdgeMetadata(&edge, endpointPayload); err != nil {
+			return nil, err
+		}
+		if intentRule != "" {
+			edge.Derived, edge.DerivationRule = true, intentRule
+			edge.Confidence = graphConfidence(intentConfidence)
+			edge.EvidenceRefs = []string{edge.FromID, edge.ToID}
+			var association struct {
+				Status       string   `json:"status"`
+				EvidenceRefs []string `json:"evidence_refs"`
+			}
+			if err := json.Unmarshal([]byte(associationJSON), &association); err != nil {
+				return nil, fmt.Errorf("intent edge %s: %w", edge.ID, err)
+			}
+			if association.Status != "" {
+				edge.Data = map[string]any{"association_status": association.Status}
+			}
+			for _, ref := range association.EvidenceRefs {
+				if ref != edge.FromID && ref != edge.ToID {
+					edge.EvidenceRefs = append(edge.EvidenceRefs, ref)
+				}
+			}
 		}
 		if edge.EdgeType == "agent_syscall" && (strings.HasPrefix(edge.ID, correlation.AppProcessEdgePrefix) || strings.HasPrefix(edge.ID, "agent-correlation-v2-")) {
 			edge.Derived, edge.DerivationRule = true, correlation.AppProcessMethod
@@ -43,9 +74,12 @@ func graphLensEdges(db *sql.DB, runID string) ([]GraphLensEdge, error) {
 				edge.EvidenceRefs = append(edge.EvidenceRefs, "runtime_event/"+edge.SourceEventID)
 			}
 		}
-		if edge.EdgeType == "llm_call" && (strings.HasPrefix(edge.ID, tlsPairEdgePrefix) || strings.HasPrefix(edge.ID, "tls-pair-v1-")) {
+		if edge.EdgeType == "llm_call" && (strings.HasPrefix(edge.ID, tlsPairEdgePrefix) || strings.HasPrefix(edge.ID, "tls-pair-v2-") || strings.HasPrefix(edge.ID, "tls-pair-v1-")) {
 			edge.Derived, edge.DerivationRule = true, tlsPairRule
 			prefix := tlsPairEdgePrefix
+			if strings.HasPrefix(edge.ID, "tls-pair-v2-") {
+				prefix, edge.DerivationRule = "tls-pair-v2-", "agentprov.tls_connection_exchange/v2"
+			}
 			if strings.HasPrefix(edge.ID, "tls-pair-v1-") {
 				prefix, edge.DerivationRule = "tls-pair-v1-", "agentprov.tls_connection_exchange/v1"
 			}
@@ -201,7 +235,7 @@ func isStructuralEdge(edgeType string) bool {
 		"llm_call", "llm_request", "llm_response", "llm_caused",
 		"attempt_snapshot", "snapshot_parent", "promotion_winner",
 		"agent_spawn", "agent_message", "agent_tool_call", "agent_syscall",
-		"intent_contract", "intent_diff_effect", "endpoint_egress_payload", "sensitive_source_payload", "payload_egress_attempt", "confirmed_sensitive_data_flow":
+		"intent_contract", "intent_diff_effect", "endpoint_egress_payload", "sensitive_source_payload", "payload_egress_attempt", "confirmed_sensitive_data_flow", "candidate_sensitive_data_flow", "endpoint_execution_reference":
 		return true
 	default:
 		return strings.Contains(edgeType, "policy") || strings.Contains(edgeType, "risk") ||

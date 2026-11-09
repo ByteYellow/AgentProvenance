@@ -153,11 +153,23 @@ func buildTLSCFixture(t *testing.T, source string, libraries ...string) string {
 
 func loadReadProbeObjects(t *testing.T) *sensorbpfObjects {
 	t.Helper()
+	return loadReadProbeObjectsWithRingSize(t, 0)
+}
+
+func loadReadProbeObjectsWithRingSize(t *testing.T, size uint32) *sensorbpfObjects {
+	t.Helper()
 	if err := rlimit.RemoveMemlock(); err != nil {
 		t.Fatal(err)
 	}
 	var objs sensorbpfObjects
-	if err := loadSensorbpfObjects(&objs, nil); err != nil {
+	spec, err := loadSensorbpf()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size > 0 {
+		spec.Maps["events"].MaxEntries = size
+	}
+	if err := spec.LoadAndAssign(&objs, nil); err != nil {
 		t.Fatalf("load sensor: %+v", err)
 	}
 	t.Cleanup(func() { _ = objs.Close() })

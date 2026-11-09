@@ -102,6 +102,13 @@ type Server struct {
 	ReplayExports    *ReplayExports
 	RunLabels        map[string]string // Presentation-only titles; evidence identities stay unchanged.
 	replayProjection *replayProjection
+
+	// ListenAddr optionally records the dashboard's actual listen address
+	// ("host:port"). When set, request Host headers must name its host part;
+	// when empty, any localhost or literal-IP Host is accepted and every other
+	// name is rejected. The guard defends all routes against DNS rebinding and
+	// cross-site browser reads (see origin_guard.go).
+	ListenAddr string
 }
 
 // Handler returns the dashboard's HTTP routes (static UI + JSON API).
@@ -159,7 +166,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/compliance", s.compliance)
 	mux.Handle("GET /api/context/", http.StripPrefix("/api", (agentcontext.Service{DB: s.DB}).ReadHandler()))
 	s.replayRoutes(mux)
-	return mux
+	return s.sameOriginGuard(mux)
 }
 
 // rawBody unwraps the stored telemetry payload ({"payload":{"raw":{...}}} or
@@ -1121,6 +1128,7 @@ func renderLLMMessageLocale(data []byte, lang i18n.Locale) ([]byte, bool) {
 	var obj struct {
 		Type    string `json:"type"`
 		Payload struct {
+			tlsPreview
 			Direction string `json:"direction"`
 			Model     string `json:"model"`
 			Content   string `json:"content"`
@@ -1138,6 +1146,15 @@ func renderLLMMessageLocale(data []byte, lang i18n.Locale) ([]byte, bool) {
 	}
 	p := obj.Payload
 	var b strings.Builder
+	if p.Truncated || p.Capture.Incomplete() || (p.ContentEncoding != "" && p.ContentEncoding != "utf-8") {
+		b.WriteString(i18n.T(lang, "Retained fragment"))
+		if p.ContentEncoding != "" {
+			fmt.Fprintf(&b, " (%s)", p.ContentEncoding)
+		}
+		b.WriteString("\n\n")
+		b.WriteString(p.Content)
+		return []byte(b.String()), true
+	}
 	fmt.Fprintf(&b, i18n.T(lang, "%s   model: %s\n"), i18n.T(lang, strings.ToUpper(p.Direction)), p.Model)
 	s := p.Semantics
 	if p.Direction == "request" {

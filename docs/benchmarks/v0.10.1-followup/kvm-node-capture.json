@@ -1,0 +1,353 @@
+{
+  "schema_version": "agentprovenance.node_capture_acceptance/v1",
+  "kernel": "6.8.0-139-generic",
+  "architecture": "x86_64",
+  "checks": {
+    "agentprov-late-a9f93b1a1f-0:no_early_binding": true,
+    "agentprov-late-a9f93b1a1f-1:no_early_binding": true,
+    "both_markers_durable_before_crash": true,
+    "agentprov-late-a9f93b1a1f-0:late_attribution": true,
+    "agentprov-late-a9f93b1a1f-0:closed_interval": true,
+    "agentprov-late-a9f93b1a1f-0:no_cross_run": true,
+    "agentprov-late-a9f93b1a1f-0:verified": true,
+    "agentprov-late-a9f93b1a1f-1:late_attribution": true,
+    "agentprov-late-a9f93b1a1f-1:closed_interval": true,
+    "agentprov-late-a9f93b1a1f-1:no_cross_run": true,
+    "agentprov-late-a9f93b1a1f-1:verified": true,
+    "no_duplicate_events_after_second_restart": true,
+    "collector_still_running": true
+  },
+  "runs": [
+    {
+      "run_id": "run-agentprov-late-a9f93b1a1f-0",
+      "native_events": 40,
+      "bindings": [
+        {
+          "id": "bind_k8s_d7f6656ece052ee54039873801957fa3f41e236e950ba196ee5cdb53c576e829",
+          "run_id": "run-agentprov-late-a9f93b1a1f-0",
+          "session_id": "e65923b4-b098-44c4-aa39-d367b456ad61",
+          "attempt_id": "",
+          "tool_call_id": "",
+          "process_id": "",
+          "container_id": "586b679bf9595d7d5d55fd4f54d948203e19b58bef2d67e82660075d551994a9",
+          "cgroup_id": "",
+          "root_pid": 0,
+          "pid": 0,
+          "started_at": "2026-11-06T17:07:21Z",
+          "ended_at": "2026-11-06T17:07:21.999999999Z",
+          "binding_source": "k8s_cgroup",
+          "confidence": 0.8
+        }
+      ],
+      "verification": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "run-agentprov-late-a9f93b1a1f-0",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      }
+    },
+    {
+      "run_id": "run-agentprov-late-a9f93b1a1f-1",
+      "native_events": 53,
+      "bindings": [
+        {
+          "id": "bind_k8s_a7e77898cb07d4daa8471e01bd9156bb21386eff722a48c8a98a85dae1866bf0",
+          "run_id": "run-agentprov-late-a9f93b1a1f-1",
+          "session_id": "be16bbb3-7fde-407c-973f-df9bcdba3d4f",
+          "attempt_id": "",
+          "tool_call_id": "",
+          "process_id": "",
+          "container_id": "2172811d6831a160dfa032f35625c6282716ec4b51d519bee16b9c71e5e88c89",
+          "cgroup_id": "",
+          "root_pid": 0,
+          "pid": 0,
+          "started_at": "2026-11-06T17:07:21Z",
+          "ended_at": "2026-11-06T17:07:21.999999999Z",
+          "binding_source": "k8s_cgroup",
+          "confidence": 0.8
+        },
+        {
+          "id": "bind-native-3cdd39d0e4c7aad0855848e4cc14824e7b22ac8829bbeade9be07d23b0744160",
+          "run_id": "run-agentprov-late-a9f93b1a1f-1",
+          "session_id": "be16bbb3-7fde-407c-973f-df9bcdba3d4f",
+          "attempt_id": "",
+          "tool_call_id": "",
+          "process_id": "",
+          "container_id": "",
+          "cgroup_id": "",
+          "root_pid": 0,
+          "pid": 17805,
+          "started_at": "2026-11-06T17:07:21Z",
+          "ended_at": "2026-11-06T17:07:21.999999999Z",
+          "binding_source": "k8s_cgroup",
+          "confidence": 0.8
+        },
+        {
+          "id": "bind-native-feb9061afbc04398d32df1f369bc614b4d89653f0919c40ff306f4fce58c19e7",
+          "run_id": "run-agentprov-late-a9f93b1a1f-1",
+          "session_id": "be16bbb3-7fde-407c-973f-df9bcdba3d4f",
+          "attempt_id": "",
+          "tool_call_id": "",
+          "process_id": "",
+          "container_id": "",
+          "cgroup_id": "",
+          "root_pid": 0,
+          "pid": 17801,
+          "started_at": "2026-11-06T17:07:21Z",
+          "ended_at": "2026-11-06T17:07:21.999999999Z",
+          "binding_source": "k8s_cgroup",
+          "confidence": 0.8
+        },
+        {
+          "id": "bind-native-332def7b760f8424cdd1336f9313445b4a24dfac1b2bd9ea4878f5d4fb1ca723",
+          "run_id": "run-agentprov-late-a9f93b1a1f-1",
+          "session_id": "be16bbb3-7fde-407c-973f-df9bcdba3d4f",
+          "attempt_id": "",
+          "tool_call_id": "",
+          "process_id": "",
+          "container_id": "",
+          "cgroup_id": "",
+          "root_pid": 0,
+          "pid": 17804,
+          "started_at": "2026-11-06T17:07:21Z",
+          "ended_at": "2026-11-06T17:07:21.999999999Z",
+          "binding_source": "k8s_cgroup",
+          "confidence": 0.8
+        },
+        {
+          "id": "bind-native-291c53649467d6023b172e112dbffd8d6bfc8689981a49df8d3e3607f6d9de20",
+          "run_id": "run-agentprov-late-a9f93b1a1f-1",
+          "session_id": "be16bbb3-7fde-407c-973f-df9bcdba3d4f",
+          "attempt_id": "",
+          "tool_call_id": "",
+          "process_id": "",
+          "container_id": "",
+          "cgroup_id": "",
+          "root_pid": 0,
+          "pid": 17817,
+          "started_at": "2026-11-06T17:07:21Z",
+          "ended_at": "2026-11-06T17:07:21.999999999Z",
+          "binding_source": "k8s_cgroup",
+          "confidence": 0.8
+        }
+      ],
+      "verification": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "run-agentprov-late-a9f93b1a1f-1",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      }
+    }
+  ],
+  "before_crash": {
+    "counters": {
+      "captured": 2179,
+      "excluded": 141,
+      "read": 2320
+    },
+    "queued_batches": 72,
+    "queued_bytes": 3802335,
+    "pending_events": 2179,
+    "cleanup_pending_batches": 0
+  },
+  "after_recovery": {
+    "capabilities": {
+      "access_control_state": {
+        "apparmor_collection_enabled": true,
+        "cache_capacity": 2048,
+        "min_interval_ms": 2000,
+        "mode": "event_triggered_procfs_snapshot",
+        "queue_capacity": 128,
+        "seccomp_collection_enabled": true
+      },
+      "capture_buffers": {
+        "queue_bytes": 15073280,
+        "queue_events": 16384,
+        "ring_bytes": 67108864
+      },
+      "probes": [
+        {
+          "category": "dns",
+          "name": "syscalls/sys_enter_sendto",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "dns",
+          "name": "getaddrinfo",
+          "required": false,
+          "status": "attached",
+          "target": "/lib/x86_64-linux-gnu/libc.so.6"
+        },
+        {
+          "category": "process_lifecycle",
+          "name": "sched/sched_process_fork",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "sched/sched_process_exec",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "sched/sched_process_exit",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_connect",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_execve",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_open",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_openat",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_ptrace",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_rename",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_renameat",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_renameat2",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_setgid",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_setuid",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_unlink",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_unlinkat",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_exit_connect",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_exit_open",
+          "required": false,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_exit_openat",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "tls",
+          "name": "container_tls_discovery",
+          "reason": "automatic discovery disabled",
+          "required": false,
+          "status": "disabled"
+        }
+      ],
+      "procfs_identity": {
+        "lookup_misses": 0,
+        "map_capacity": 16384,
+        "mode": "kernel_namespace_mapping",
+        "outside_namespace_events": 0,
+        "pid_namespace": "pid:[4026531836]",
+        "translated_events": 0
+      },
+      "ready": true,
+      "schema_version": "agentprovenance.sensor_capabilities/v1",
+      "status": "ready",
+      "tls_discovery": {
+        "active_targets": 0,
+        "enabled": false,
+        "limitations": [
+          "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+          "first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
+          "amd64 Go 1.23–1.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported"
+        ],
+        "max_processes_per_scan": 4096,
+        "max_targets": 128,
+        "processes_scanned": 0,
+        "scan_complete": true,
+        "scan_interval_ms": 2000,
+        "skipped_targets": 0,
+        "sweep_passes": 0,
+        "truncated_maps": 0,
+        "unreadable_processes": 0,
+        "unresolved_mounts": 0,
+        "unsupported_executables": 0
+      },
+      "updated_at": "2026-11-06T17:08:00.138208752Z"
+    },
+    "capabilities_historical": false,
+    "capture": {
+      "counters": {
+        "captured": 2414,
+        "excluded": 763,
+        "ingested": 103,
+        "read": 3143
+      },
+      "queued_batches": 93,
+      "queued_bytes": 4108996,
+      "pending_events": 2311,
+      "cleanup_pending_batches": 0
+    },
+    "collector_running": true
+  },
+  "passed": true
+}

@@ -42,31 +42,8 @@ func (r *DockerRuntime) CreateSession(req CreateSessionRequest) (string, error) 
 	if req.Image == "" {
 		return "", fmt.Errorf("task image is required")
 	}
-	hostCfg := &container.HostConfig{
-		Mounts: []mount.Mount{{
-			Type:   mount.TypeBind,
-			Source: req.WorkspaceHostPath,
-			Target: "/workspace",
-		}},
-	}
-	if req.DockerNetworkName != "" {
-		hostCfg.NetworkMode = container.NetworkMode(req.DockerNetworkName)
-	}
-	if req.MemoryMB > 0 {
-		hostCfg.Resources.Memory = req.MemoryMB * 1024 * 1024
-	}
-	cfg := &container.Config{
-		Image:      req.Image,
-		WorkingDir: "/workspace",
-		Tty:        false,
-		OpenStdin:  true,
-		Cmd:        []string{"sleep", "infinity"},
-		Labels: map[string]string{
-			"agentprov.session_id": req.SessionID,
-			"agentprov.lease_id":   req.LeaseID,
-			"agentprov.run_id":     req.RunID,
-		},
-	}
+	hostCfg := buildHostConfig(req)
+	cfg := buildContainerConfig(req)
 	resp, err := r.Client.ContainerCreate(ctx, cfg, hostCfg, nil, nil, "agentprov-"+req.SessionID)
 	if err != nil {
 		if !isNoSuchImage(err) {
@@ -87,6 +64,48 @@ func (r *DockerRuntime) CreateSession(req CreateSessionRequest) (string, error) 
 		return "", err
 	}
 	return resp.ID, nil
+}
+
+func buildContainerConfig(req CreateSessionRequest) *container.Config {
+	cfg := &container.Config{
+		Image: req.Image, User: req.User, WorkingDir: "/workspace",
+		Tty: false, OpenStdin: true, Cmd: []string{"sleep", "infinity"},
+		Labels: map[string]string{
+			"agentprov.session_id": req.SessionID,
+			"agentprov.lease_id":   req.LeaseID,
+			"agentprov.run_id":     req.RunID,
+		},
+	}
+	// With all capabilities dropped, container root cannot bypass the host
+	// workspace's ownership. Match its creator instead of weakening permissions.
+	if cfg.User == "" && os.Geteuid() >= 0 && os.Getegid() >= 0 {
+		cfg.User = fmt.Sprintf("%d:%d", os.Geteuid(), os.Getegid())
+		if os.Geteuid() != 0 {
+			// Arbitrary host UIDs may have no passwd entry or writable image home.
+			cfg.Env = []string{"HOME=/tmp"}
+		}
+	}
+	return cfg
+}
+
+// Drop capabilities and block privilege gains while keeping the workspace writable.
+func buildHostConfig(req CreateSessionRequest) *container.HostConfig {
+	hostCfg := &container.HostConfig{
+		CapDrop:     []string{"ALL"},
+		SecurityOpt: []string{"no-new-privileges"},
+		Mounts: []mount.Mount{{
+			Type:   mount.TypeBind,
+			Source: req.WorkspaceHostPath,
+			Target: "/workspace",
+		}},
+	}
+	if req.DockerNetworkName != "" {
+		hostCfg.NetworkMode = container.NetworkMode(req.DockerNetworkName)
+	}
+	if req.MemoryMB > 0 {
+		hostCfg.Resources.Memory = req.MemoryMB * 1024 * 1024
+	}
+	return hostCfg
 }
 
 func (r *DockerRuntime) Exec(containerID string, command []string, stream bool) (ExecResult, error) {

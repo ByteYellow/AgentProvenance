@@ -1,0 +1,79 @@
+{
+  "base_commit": "5b5ec5e6c6b2ff88f6c294848956629aa80edf60",
+  "branch": "fix/v0.10.1-pr34-integration",
+  "source_sha256": {
+    "cmd/agentprov-sensor/main.go": "dd03f0e9574cb04d1089a1f33898a7011538ed404d013662aa4e288ce9910153",
+    "cmd/agentprov-sensor/main_test.go": "c9291f896abb10e5c1d26b4279600e8607f8bc7f69757393144905c6e8ebeecb",
+    "internal/cli/sensor_cmd.go": "05d12621377c056d3224747ab5dd11f3977dfbb3ff8d5ff690b7620b82310c76",
+    "internal/sensor/capabilities.go": "9b13f8cc96ff6669587eff54e439da11cb90ff7031a01c791c2d09ad47234de3",
+    "internal/sensor/elf_limits_linux.go": "276e9ec0ad0aaa8612e8856f832fd681c5f82c7c040efd5d262476f2fd29bd4a",
+    "internal/sensor/elf_limits_linux_test.go": "fa7c29af0f7247d16e0fc2a0c6d13b1f21a58a70dfb06ed70d01ffd525a2b9f9",
+    "internal/sensor/gotls_attach_linux_amd64.go": "f38a34b26f4781c6c1bda63f7b968b7e6acdc07d8377174c08eaddf8c72ae60e",
+    "internal/sensor/gotls_attach_linux_amd64_test.go": "87c617b7f21b3e9f8d36a904f263f67122d898f37aa591aa77589819ca61de45",
+    "internal/sensor/gotls_live_linux_amd64_test.go": "18c38fe709f8ccf3b6a127f0518e2dffbae08f20c5c37c2cd8654af920bfa69c",
+    "internal/sensor/gotls_symbols_linux.go": "d12fa4b769ffd05f6e7365d42b911fb8e03d3401a3fe2f16ff7c9b5e36fc5ed3",
+    "internal/sensor/openssl_dynamic_linux.go": "b31d13d849f319a0141959b5b89945e1d58554120e608281183eb50056b8b32a",
+    "internal/sensor/openssl_dynamic_linux_test.go": "4a068c7e54b8a65ca549b833f72c4106f32aead925146deed0350e5bf87e1d20",
+    "internal/sensor/options.go": "89cc6c9d7831fdf01f961a7c8ad392e373c8f54a59887aacc6c3e182f6d41d2d",
+    "internal/sensor/procfs_linux.go": "da765023fc49fa7f3ed9296f6330bbccf25e5de303a16b8f09c7725e43f829ee",
+    "internal/sensor/procfs_linux_test.go": "6390be3b67c0bc4a174dd9fb6e593741a5dac164b54ca98b142e2a67d0cab5a8",
+    "internal/sensor/ring_reader_linux.go": "f1f89f175839c33e3a31b33a20a9fdfc747036fd2aa6c515997513aa571d4a30",
+    "internal/sensor/ring_reader_linux_test.go": "103229cb5f8792f37189e1ea99d648032b72eea8cdd0234f26b8462821033da5",
+    "internal/sensor/sensor_linux.go": "3835f3506b0c84c68086326e499a7652254e6a068ed1e4642db06bf2595c8e64",
+    "internal/sensor/tls_attach_linux.go": "baf2319d8b1b84c6a00c89f73bcb94785dffcf7a127d38abcde6db81fd21e0ce",
+    "internal/sensor/tls_discovery_linux.go": "b64b77ebbe0d8472978c3a53c0cb83225cf7d5fdf3a519e22629950f4a7cc127",
+    "internal/sensor/tls_variants_live_linux_amd64_test.go": "bc5d63d7998b2c974644bf589ba9ef0c0a6a07f34babbfae54a0600f290af592",
+    "internal/sensor/testdata/sensor_pressure.c": "5b5524db83c99cb6b6e255f17fe86b056e176f3c824e10cfb4115256a23f814b",
+    "internal/sensor/testdata/tls_first_request.c": "8c7e7b2c411257814f0b68ad895fb8ccbc710dd5d6c928b70373e6fcda612edd",
+    "scripts/accept_sensor_pressure.py": "75bd8faca00f5ecaeae707f01aeb203e6aeb3bca724198c0f238f19e5d5eae1b",
+    "internal/i18n/zh-CN.json": "5321dfee4a0e5043aa20080e272b3da7a8c26da6798bef8d916e09c7fdd754f3"
+  },
+  "binary_sha256": {
+    "agentprov": "d871b76f50180dc205ad67a61633e71b6d8e3582a586fa6934e642b8b68c6d6a",
+    "agentprov-sensor": "f628e42abd2a02187749d035fb6cc917b7aaee9b71956597094c9e1f1be56d05",
+    "sensor.test": "842f0178d31b5918f07ff84933fd1d971c02ecb164026101603788811b1f67c6"
+  },
+  "arm64_object_git_blob": "eea40f0b0eff876dd60126b0b03b652cca9b8152",
+  "boringssl_commit": "b69a6175320af9b6fca7295fdbb4fb130f4804a2",
+  "boringssl_fixture_sha256": {
+    "boringssl-shared": "b20d20e7a712a7a879494141003dcfed685b6efcd4de2ba098ade4c83715c7fc",
+    "boringssl-static": "2cee1ff5c109776370714e5950d31a9186c1e4842571dc3412d6ca5c3e3d2e96",
+    "libcrypto.so": "82ad3cbbb38d835329ca76b1245b2541c8e95652d1641aa7c5152dc0b3f249e9",
+    "libssl.so": "eec1bf1084a22d3e42eef7f9e1aa7519cfb1ad3b1dc9c7355dad04fc345cfc23"
+  },
+  "qemu": {
+    "source_url": "https://download.qemu.org/qemu-11.1.0.tar.xz",
+    "source_sha256": "6ee1d1a61f68212476b27108c26da5f449dc09b626d42f8279ba0dc2e08fa858",
+    "patch_sha256": "436e2ac6821e9bbfbb2d585198500ffe3aeec2b2cbf5b6c006f279f6f9569a62",
+    "executable_sha256": "e8c197f64f2c785305c36ab5e91e990b4802edfeb71a8473d97ce36daba97cac",
+    "runtime_sha256": {
+      "libasprintf-0.dll": "317a714680dd0706c4f56c06fe23a6a9af2a7703120066845c7fd4a4e8841a5d",
+      "libcharset-1.dll": "d057f3ef0932f937093bcde39e478dce31f308406f999fa963c3614ed89d9498",
+      "libffi-8.dll": "b649c515907436a3299326f83aea0e8d75c61853eb1609602603bbcb9b00b4db",
+      "libgio-2.0-0.dll": "eef35a18138b7afefaf5ade36b07b3b3ec25d21080a1c2c5eccefad383482016",
+      "libgirepository-2.0-0.dll": "517239b90be3c49fae6de28f4e0c39642ff54a638d2336d2d5b0104256a78bb7",
+      "libglib-2.0-0.dll": "84b15dc907fd1d3bb1cd799fc034d2edcbc3946c8c4acd6a8dd3ace381f9e568",
+      "libgmodule-2.0-0.dll": "79a7646945b520966dcd2541d40c109f26c42979b47bed9aabec796a8cbe20d0",
+      "libgobject-2.0-0.dll": "a417864358cbe7a1da74b7cfcc61f7d49b03772b02f29fa611b01a67d5b99632",
+      "libgthread-2.0-0.dll": "150169032b546456c868aeac4317a919d9f9e2f34f3a79bcb42b96528b451ec6",
+      "libiconv-2.dll": "587bd8c780e89f5d834c251accc6053f479713184c433e0f1bab898ee0aa3751",
+      "libintl-8.dll": "0537c3dd2378218508ebe3cc416d72a99ee2d24ae1c5525e23458f32544ef861",
+      "libpcre2-16-0.dll": "510114569c1e7cdcccb9d9d502c69853f41d78785a6918cca35964cce7940a08",
+      "libpcre2-32-0.dll": "2b96ab757af6c647cab5b4250b3241fb4694e349a329a172ecb48e6a70edb50e",
+      "libpcre2-8-0.dll": "68a7cee2acc36d6a61d73f78825d17dfd32f8580f4bb1bc399134719518213d5",
+      "libpcre2-posix-3.dll": "bc8195438a3fc637de63059cad78657df36dffa49bdf41d3e0f793b6793d7de3",
+      "libpixman-1-0.dll": "55ce45825eb8e825c635416171be4736147a6b0b690469f545d8c4ae8e85b4a3",
+      "libslirp-0.dll": "098093db72095516c877c371942444a508aaa3c546de563bd2ea36ba2e88a646",
+      "libssp-0.dll": "cf6037efa19fd9cbd59402741e201e325bb10f44aca16c56aeff8a7c188178d1",
+      "libwinpthread-1.dll": "d54ed5baa6d339e28fe18c0106caffd110ac42612908593e07211d7bb48f5e79",
+      "zlib1.dll": "a2efc7d0985a82364e79e0fdde3570f7ad66cb8cf5d60d54355a80c2504325fe"
+    },
+    "compiler": "x86_64-w64-mingw32-gcc (GCC) 13-posix"
+  },
+  "pressure_acceptance_note": "Pressure acceptance preceded the additional ELF linked-string validation and final CLI language-flag parsing; pressure path unchanged. Native/first-request acceptance uses the final binaries.",
+  "previous_acceptance_binaries": [
+    "27ca555a2ee5118b8e4232308bbbec6cca2f9624de34749f8454e4dda818d334  /tmp/sensor-after",
+    "af7ea8d582ca2034c299cfd3ca2246406af77d3751e299879ede6de94ab583e4  /tmp/sensor-after.test",
+    "dc5e2850704701808356e03d8e0860cf49ef6462f62b7f18014c651ec03fae47  /tmp/agentprov-after"
+  ]
+}

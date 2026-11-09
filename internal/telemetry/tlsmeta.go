@@ -9,19 +9,58 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/byteyellow/agentprovenance/internal/tlsintent"
 )
+
+func tlsCaptureIntegrity(raw map[string]any) *tlsintent.CaptureIntegrity {
+	value, exists := raw["capture"]
+	if !exists {
+		return nil
+	}
+	fields, ok := value.(map[string]any)
+	if !ok {
+		return &tlsintent.CaptureIntegrity{State: "unresolved", Reason: "invalid_capture_metadata"}
+	}
+	capture := &tlsintent.CaptureIntegrity{
+		Rule: boundedHTTPText(stringAt(fields, "rule"), 128), State: boundedHTTPText(stringAt(fields, "state"), 32),
+		Reason: boundedHTTPText(stringAt(fields, "reason"), 128), DataKind: boundedHTTPText(stringAt(fields, "data_kind"), 64),
+	}
+	if position, ok := fields["position"].(map[string]any); ok {
+		// Copy only the small typed position contract, retaining 64-bit identity
+		// as decimal strings across JSON and browser consumers.
+		data, err := json.Marshal(map[string]any{
+			"stream_id":     boundedHTTPText(stringAt(position, "stream_id"), 20),
+			"call_sequence": boundedHTTPText(stringAt(position, "call_sequence"), 20),
+			"offset":        position["offset"], "total_bytes": position["total_bytes"],
+			"checkpoint": position["checkpoint"] == true,
+		})
+		var p tlsintent.ChunkPosition
+		if err == nil && position["offset"] != nil && position["total_bytes"] != nil &&
+			json.Unmarshal(data, &p) == nil && p.StreamID != 0 && p.CallSequence != 0 &&
+			p.Offset <= tlsintent.CallCaptureLimit && p.TotalBytes <= 0x7fffffff &&
+			((p.Checkpoint && p.Offset == 0 && p.TotalBytes == 0) || (!p.Checkpoint && p.TotalBytes > p.Offset)) {
+			capture.Position = &p
+		}
+	}
+	return capture
+}
 
 // capturedTLSMeta prefers the sensor's parsed fields. For reassembled captures,
 // data is a decoded BODY, not an HTTP message: sniffing it can turn text inside
 // a prompt into a fictitious endpoint or protocol. Legacy raw windows still use
 // tlsMeta, without attempting stateless HPACK decoding.
 func capturedTLSMeta(raw map[string]any, direction string) map[string]any {
+	capture := tlsCaptureIntegrity(raw)
 	value, parsed := raw["protocol"]
 	if !parsed {
+		if capture.Incomplete() {
+			return nil
+		}
 		return sanitizeTLSMeta(tlsMeta(stringAt(raw, "data"), direction), direction)
 	}
 	protocol, _ := value.(string)
-	if protocol != "http/1.0" && protocol != "http/1.1" && protocol != "h2" {
+	if protocol != "http/1.0" && protocol != "http/1.1" && protocol != "h2" && !(protocol == "" && capture.Incomplete()) {
 		return nil
 	}
 	meta := map[string]any{"protocol": protocol, "kind": direction}

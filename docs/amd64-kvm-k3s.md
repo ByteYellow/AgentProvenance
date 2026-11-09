@@ -62,6 +62,68 @@ request/response bodies, Go TLS request/response bodies, and capture time under 
 drain. Privilege tests prove observation of **attempts**, not successful privilege
 escalation. The fixtures use loopback services and synthetic text without API keys.
 
+## Known kernel regression
+
+Ubuntu kernel `7.0.0-1017-azure` can omit `execve` arguments and file-operation
+events on CPUs other than the one hosting the perf attachment. GitHub confirmed
+this upstream tracing regression in [runner-images #15003](https://github.com/actions/runner-images/issues/15003).
+Use a fixed kernel or a previously validated kernel for native capture. The CI
+live matrix uses Ubuntu 22.04 while that runner image is affected. Successful
+probe attachment alone will not expose this event-delivery failure; run the
+live sensor acceptance below when qualifying a new kernel.
+
+## WSL process identities and Windows hosts
+
+The amd64 sensor resolves each task into the collector's procfs PID namespace.
+Kernel `pid`, `tid` and process-instance IDs retain their original values;
+`procfs_pid`, `procfs_tid` and `procfs_pid_namespace` record the separate lookup
+address and survive ingestion. The map holds at most 16,384 task lifetimes.
+Access-state sampling, event-driven TLS discovery and container lookup use the
+procfs address, including for tasks in descendant container namespaces.
+
+Capability reports include `procfs_identity`: `translated_events` counts
+translations, `outside_namespace_events` counts tasks outside the visible view,
+and `lookup_misses` reports missing/evicted mappings and degrades coverage.
+Missing mappings never fall back to opening an unrelated numeric kernel PID.
+The sensor rejects a proc mount whose PID view differs from its own namespace.
+The preserved ARM64 object continues to use its existing host-PID path.
+
+On AMD Windows hosts, build `26300.9711` can lose WSL nested virtualization after
+KB5127648. Microsoft lists the fix in
+[KB5127936, build 26300.9818](https://support.microsoft.com/en-us/servicing/os/windows-11/2026/10/kb5127936-windows-11-25h2-26h2-update).
+Install the applicable fixed cumulative update and restart Windows before
+checking for `svm` and loading `kvm_amd`. On this host, the update restored actual
+KVM VM creation and acceleration. The [post-reboot acceptance](benchmarks/v0.10.1-kvm-postreboot/README.md)
+passed native capture, TLS, systemd, K3s, signed replay and recovery checks.
+
+For QEMU 11.1.0 on WHPX, explicitly select a CPU model that exposes both CET and
+its state-saving dependencies:
+
+```text
+qemu-system-x86_64.exe -accel whpx -cpu max ...
+```
+
+Cold boot the guest after changing this option. On this host, the default CPU
+exposed `user_shstk` while Linux used FXSAVE, so shadow-stack state was not saved
+across task switches and PID 1 could crash. With `-cpu max`, Linux uses XSAVES
+and includes the CET user state. The [CET follow-up](benchmarks/v0.10.1-whpx-cet/README.md)
+records enabled shadow-stack context-switch tests and collection acceptance.
+No `nousershstk` parameter is needed for this configuration.
+
+The remaining `misordered xstate` warning is fixed locally by the
+[QEMU WHPX patch](../scripts/patches/qemu-11.1-whpx-xsave-ecx.patch), which copies
+XSAVE component ECX attributes from the hypervisor along with their offsets.
+The [follow-up report](benchmarks/v0.10.1-followup/README.md) records the source,
+build hashes, corrected CPUID and CET checks. This is a local QEMU 11.1.0 build;
+the upstream stock executable remains available as a backup.
+
+`accept_kvm_guest.py` rejects x86 guests exposing `user_shstk` without both
+`xsave` and `xsaves`, and records the CPU flags in its report. Under QEMU 11.1.0's
+WHPX implementation, `cet-ss=off` alone does not reliably mask the exposed CET
+flag. Earlier failing runs and their temporary `nousershstk` setting remain
+in the [historical evidence](benchmarks/v0.10.1-procfs/README.md).
+The verified KVM path remains available; its nested CPU does not expose `user_shstk`.
+
 ## Build and regenerate
 
 Run on Linux amd64 with Go 1.23 or newer. Building committed objects needs no
@@ -84,9 +146,18 @@ scripts/regen-sensor.sh --check
 
 On distributions with a standalone package, install `bpftool` instead of
 `linux-tools-*`. `BPFTOOL` and `VMLINUX_BTF` can point to the matching tool and
-BTF. The script selects only the native architecture and never regenerates the
+BTF. Generation explicitly targets BPF ISA v3 for the atomic fetch-add used by
+TLS call sequencing. The script selects only the native architecture and never regenerates the
 other architecture. `--check` compares generated Go bindings; it does not claim
 byte-for-byte `.o` reproducibility across kernels or compiler versions.
+
+When running the full suite from a Windows-mounted WSL checkout, disable test
+result caching so Go does not repeatedly resolve the large fixture access log
+across the mount. Build caching remains available:
+
+```sh
+go test -race -count=1 -p 2 -timeout 20m ./...
+```
 
 ## Install inside a KVM guest
 
@@ -100,6 +171,10 @@ sudo agentprov --data-dir /var/lib/agentprov record --run demo-kvm -- sh -c 'id;
 sudo python3 scripts/accept_kvm_guest.py --report /tmp/kvm-acceptance.json
 ```
 
+The acceptance script signs the captured bundle with a temporary key and verifies
+it before importing into a fresh replay store. It saves the bundle, DSSE attestation,
+and public key beside the report. The private key is removed with the temporary workspace.
+
 The installer enables `agentprov-sensor.service`, stores evidence under
 `/var/lib/agentprov`, and checks that its probes attached. `record` must use the
 same data directory. Stop the collector with `systemctl stop agentprov-sensor`;
@@ -112,12 +187,12 @@ Optional `/etc/default/agentprov-sensor` settings:
 ```sh
 AGENTPROV_SSL_LIB=/usr/lib/x86_64-linux-gnu/libssl.so.3
 AGENTPROV_LIBC_LIB=/usr/lib/x86_64-linux-gnu/libc.so.6
-AGENTPROV_GO_TLS_BIN=/absolute/path/to/unstripped-go-agent
+AGENTPROV_GO_TLS_BIN=/absolute/path/to/go-agent
 ```
 
 Restart the service after changing explicit paths. Native collection also enables
 automatic TLS discovery by default: it scans visible process mappings and
-container roots, attaches OpenSSL and unstripped Go targets, and reconciles
+container roots, attaches OpenSSL and supported Go targets, and reconciles
 replacement or departed targets. `sensor stream --auto-tls=false` disables it.
 Discovery has bounded process/target budgets and reports attachment failures.
 Observed process starts also wake a coalesced, rate-limited discovery scan.
@@ -125,12 +200,46 @@ For supported overlay mounts, discovery resolves the backing inode so containers
 sharing one library receive one attachment. Unresolvable or unsupported overlay
 layouts report a coverage limitation rather than installing duplicate probes.
 
-Go response capture is limited to amd64 Go ABIInternal 1.23–1.26 with symbols;
-unsupported versions and stripped binaries report degraded coverage. Automatic
-discovery does not guarantee a first request before attachment, nor coverage for
-a process that starts and exits between discovery passes. BoringSSL, arbitrary
-static/custom TLS stacks and encrypted traffic without a supported plaintext
-probe are not claimed as covered.
+amd64 Go ABIInternal 1.23–1.26 supports both regular and stripped (`-s -w`)
+executables, including PIE, when their Go function table is retained. Function
+metadata and instruction ranges are bounded before attachment. Go Read still
+uses ordinary probes at decoded return instructions.
+
+OpenSSL-compatible BoringSSL `SSL_read/SSL_write` paths are verified for shared
+libraries and static linkage with function symbols. Missing BoringSSL `_ex`
+APIs are reported as `not_applicable`. Unknown ABIs and C TLS implementations
+without resolvable function symbols require a separate adapter.
+
+Automatic discovery pre-attaches installed host OpenSSL libraries before
+readiness. For a known application or container-private library, specify its
+visible file path before starting the workload; repeated targets are supported:
+
+```sh
+sudo agentprov-sensor --tls-target /opt/agent/client \
+  --tls-target /opt/container-root/usr/lib/libssl.so.3
+```
+
+The same flags are available on `agentprov sensor stream`. Check that the target
+probes are attached in the capability report, then start the workload. Paths are
+revisited after replacement. Newly appearing, unconfigured container inodes can
+still make their first TLS call before automatic attachment. The
+[follow-up acceptance](benchmarks/v0.10.1-followup/README.md) covers first calls
+without startup delays, concurrent reads, and container recreation.
+
+### Capture buffering
+
+The native reader uses a 64 MiB kernel ring by default and a 16,384-record
+userspace queue (14.375 MiB of event payload). JSON output and procfs lookups run
+outside the ring-draining goroutine; process caches each hold at most 4,096
+entries. SIGINT/SIGTERM drains queued records before returning.
+
+Use `--ring-buffer-mib 16` for the former kernel budget or another power of two
+from 1 to 256. Both sensor entry points accept this option. Capability JSON
+includes `capture_buffers` with the configured ring and queue sizes. Kernel
+overflow still emits `resource_pressure` and feeds the existing loss counters.
+The [pressure report](benchmarks/v0.10.1-followup/pressure.json) records exact
+counts, immediate shutdown, deliberate overload and peak RSS. This VM reached
+about 259 MiB RSS during the burst test with the default buffers.
 
 The concurrent Read fixture has been run with Go 1.23.12, 1.24.0, 1.25.0 and 1.26 on WSL,
 including goroutine stack growth, exact returned bytes, and context cleanup.
@@ -246,7 +355,8 @@ Pod gate proves late syscall attribution, not zero-gap TLS attachment.
 `GET /v1/health` check the database and schema, with a two-second check deadline.
 Database errors, missing required tables and incompatible schemas return 503;
 unknown queue counts stay null. These three GET endpoints remain accessible
-without the optional API bearer token.
+without authentication. Other API routes require a bearer token by default;
+`daemon serve` creates one in `<data-dir>/auth-token` when none is supplied.
 
 Query availability is distinct from evidence coverage. Historical loss produces
 `status: degraded`, `coverage_status: gaps_recorded` and `ready: true` with HTTP

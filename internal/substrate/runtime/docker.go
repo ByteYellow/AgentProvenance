@@ -41,6 +41,7 @@ func (d *DockerDriver) CreateSession(ctx context.Context, req CreateSessionReque
 		LeaseID:           req.LeaseID,
 		RunID:             req.RunID,
 		Image:             req.Image,
+		User:              req.User,
 		WorkspaceHostPath: req.WorkspaceHostPath,
 		MemoryMB:          req.MemoryMB,
 		CPURequest:        req.CPURequest,

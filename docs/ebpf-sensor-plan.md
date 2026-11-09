@@ -21,7 +21,7 @@ Probes (all → the normalized schema, ingested as `source=agentprov_ebpf`):
   sensitive text. Ingest derives `llm_call` and `llm_intent_caused` relationships;
   these are heuristics, not direct kernel proof of causation. See the
   [telemetry schema](telemetry-schema.md).
-- Go TLS: unstripped `crypto/tls` write capture on amd64/arm64; amd64 Go
+- Go TLS: `crypto/tls` write capture on amd64/arm64 (ARM64 requires symbols); amd64 Go
   ABIInternal 1.23-1.26 read capture at decoded return sites, paired by
   goroutine/frame. HTTP/1.1 and HTTP/2/HPACK reassembly are implemented.
 - DNS: `getaddrinfo` uprobe (glibc), plus amd64 UDP/sendto DNS capture.
@@ -39,7 +39,8 @@ bindings), and evaluates runtime policy without a manual JSONL ingest step.
 drop-accounting guarantees. Ordinary KVM guests run the collector in-guest.
 
 Open follow-ups include ARM64 Go TLS reads, broader DNS/network coverage,
-BoringSSL and unsupported stripped/static TLS targets. amd64 live syscall/TLS,
+unknown TLS ABIs and symbol-less C TLS targets. amd64 stripped Go and BoringSSL shared/static paths now have
+[follow-up acceptance](benchmarks/v0.10.1-followup/README.md). amd64 live syscall/TLS,
 KVM and K3s gates already have [checked reports](benchmarks/amd64-kvm-k3s/README.md).
 Observed privilege-call attempts are not proof of successful escalation, and
 automatic discovery cannot guarantee capture before attachment.

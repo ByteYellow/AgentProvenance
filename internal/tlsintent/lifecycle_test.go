@@ -62,8 +62,9 @@ func TestLifetimeChangeResetsHPACKDictionary(t *testing.T) {
 		t.Fatalf("initial connection failed: %+v", got)
 	}
 	// No lifecycle event: the generation on the data must still isolate HPACK.
-	if got := r.Add(lifecycleChunk(11, Request, frame(indexed))); len(got) != 0 {
-		t.Fatalf("new connection decoded a prior connection's dynamic index: %+v", got)
+	if got := r.Add(lifecycleChunk(11, Request, frame(indexed))); len(got) != 1 || got[0].DataKind != DataHPACK ||
+		got[0].CaptureGap != GapHPACK || got[0].Host != "" || got[0].Method != "" || !bytes.Equal(got[0].Body, indexed) {
+		t.Fatalf("new connection did not preserve the undecodable header block: %+v", got)
 	}
 	if loss := r.TakeLoss(); loss.Streams == 0 {
 		t.Fatal("undecodable header block must report a gap")

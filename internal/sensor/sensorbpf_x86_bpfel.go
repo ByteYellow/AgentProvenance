@@ -29,6 +29,16 @@ type sensorbpfGoReadKey struct {
 	Frame     uint64
 }
 
+type sensorbpfProcTaskIds struct {
+	Pid uint32
+	Tid uint32
+}
+
+type sensorbpfProcTaskKey struct {
+	Start   uint64
+	PidTgid uint64
+}
+
 type sensorbpfProcessExitKey struct {
 	StartNs  uint64
 	Pid      uint32
@@ -52,6 +62,9 @@ type sensorbpfSensorEvent struct {
 	RawExitStatus  uint32
 	Conn           uint64
 	ConnEpoch      uint64
+	TlsStream      uint64
+	TlsCall        uint64
+	TlsOffset      uint32
 	Daddr          uint32
 	Dport          uint16
 	_              [2]byte
@@ -59,7 +72,6 @@ type sensorbpfSensorEvent struct {
 	Comm           [16]uint8
 	Path           [256]uint8
 	Args           [512]uint8
-	_              [4]byte
 }
 
 type sensorbpfSslConnKey struct {
@@ -95,6 +107,18 @@ type sensorbpfSyscallCtx struct {
 	Reserved    uint8
 	Path        [256]int8
 	_           [4]byte
+}
+
+type sensorbpfTlsSequence struct {
+	Generation uint64
+	Calls      uint64
+}
+
+type sensorbpfTlsStreamKey struct {
+	Conn     sensorbpfSslConnKey
+	Epoch    uint64
+	Kind     uint32
+	Reserved uint32
 }
 
 // loadSensorbpf returns the embedded CollectionSpec for sensorbpf.
@@ -182,10 +206,13 @@ type sensorbpfMapSpecs struct {
 	Events            *ebpf.MapSpec `ebpf:"events"`
 	ExitedGroups      *ebpf.MapSpec `ebpf:"exited_groups"`
 	GoReadBufs        *ebpf.MapSpec `ebpf:"go_read_bufs"`
+	ProcTasks         *ebpf.MapSpec `ebpf:"proc_tasks"`
 	SslEpochs         *ebpf.MapSpec `ebpf:"ssl_epochs"`
 	SslReadBufs       *ebpf.MapSpec `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.MapSpec `ebpf:"ssl_read_ex_bufs"`
 	SyscallCalls      *ebpf.MapSpec `ebpf:"syscall_calls"`
+	TlsDiscoverySeen  *ebpf.MapSpec `ebpf:"tls_discovery_seen"`
+	TlsSequences      *ebpf.MapSpec `ebpf:"tls_sequences"`
 }
 
 // sensorbpfObjects contains all objects after they have been loaded into the kernel.
@@ -215,10 +242,13 @@ type sensorbpfMaps struct {
 	Events            *ebpf.Map `ebpf:"events"`
 	ExitedGroups      *ebpf.Map `ebpf:"exited_groups"`
 	GoReadBufs        *ebpf.Map `ebpf:"go_read_bufs"`
+	ProcTasks         *ebpf.Map `ebpf:"proc_tasks"`
 	SslEpochs         *ebpf.Map `ebpf:"ssl_epochs"`
 	SslReadBufs       *ebpf.Map `ebpf:"ssl_read_bufs"`
 	SslReadExBufs     *ebpf.Map `ebpf:"ssl_read_ex_bufs"`
 	SyscallCalls      *ebpf.Map `ebpf:"syscall_calls"`
+	TlsDiscoverySeen  *ebpf.Map `ebpf:"tls_discovery_seen"`
+	TlsSequences      *ebpf.Map `ebpf:"tls_sequences"`
 }
 
 func (m *sensorbpfMaps) Close() error {
@@ -231,10 +261,13 @@ func (m *sensorbpfMaps) Close() error {
 		m.Events,
 		m.ExitedGroups,
 		m.GoReadBufs,
+		m.ProcTasks,
 		m.SslEpochs,
 		m.SslReadBufs,
 		m.SslReadExBufs,
 		m.SyscallCalls,
+		m.TlsDiscoverySeen,
+		m.TlsSequences,
 	)
 }
 

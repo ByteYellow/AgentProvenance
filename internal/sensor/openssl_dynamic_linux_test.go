@@ -169,3 +169,16 @@ func TestOpenSSLDynamicOffsetsLiveExecutable(t *testing.T) {
 		t.Fatalf("live executable discovery: %+v", got)
 	}
 }
+
+func TestOrdinarySymbolsCannotReadArbitraryLinkedSections(t *testing.T) {
+	path := dynamicTLSFixture(t, func(b []byte) {
+		// Ordinary symbols must link a bounded string table as well. An attacker
+		// cannot point them at an unrelated PROGBITS section to bypass the budget.
+		binary.LittleEndian.PutUint32(b[128+2*64+4:], uint32(elf.SHT_SYMTAB))
+		binary.LittleEndian.PutUint32(b[128+2*64+40:], 1)
+		binary.LittleEndian.PutUint64(b[128+4*64+32:], 0)
+	})
+	if err := validateELFMetadata(path); err == nil {
+		t.Fatal("accepted non-string linked symbol data")
+	}
+}

@@ -122,7 +122,7 @@ func (s SpoolService) Enqueue(req SpoolEnqueueRequest) (SpoolBatch, error) {
 	}
 	id := ids.New("spool")
 	spoolPath := filepath.Join(s.Paths.Spool, id+".jsonl")
-	target, err := os.OpenFile(spoolPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	target, err := os.OpenFile(spoolPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return SpoolBatch{}, err
 	}

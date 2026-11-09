@@ -6,7 +6,7 @@ import "embed"
 // Files preserves the original bundles, attestations and public keys unchanged.
 // Evaluator source and capture scripts ship in the release archive, not the CLI.
 //
-//go:embed */*.json.gz */*.dsse.json */*.pub */README.md */README.zh-CN.md */*.png jev-judge/validation-*.json deepseek-context/capture-manifest.json investigation-workflow/capture-manifest.json
+//go:embed */*.json.gz */*.dsse.json */*.pub */README.md */README.zh-CN.md */*.png jev-judge/validation-*.json deepseek-context/capture-manifest.json investigation-workflow/capture-manifest.json evidence-attribution/capture-manifest.json
 var Files embed.FS
 
 type Entry struct {
@@ -25,6 +25,9 @@ type Entry struct {
 // separate because they have different runs and signing keys.
 func Catalog() []Entry {
 	return []Entry{
+		{"evidence-attribution", "Evidence attribution: before", "Inspect a November 2026 DeepSeek capture with tool-scoped intent, audit decisions and explicit TLS gaps.", "evidence-attribution", "run-2fd63df0ab9b", "before", "default", "demo-signing.pub", "Offline signed replay; both inspection and repair are loaded together."},
+		{"evidence-attribution-repaired", "Evidence attribution: after", "Compare the repair in the same native session, including saved files, tool results and runtime evidence.", "evidence-attribution", "run-48baa3821074", "after", "default", "demo-signing.pub", "Offline signed replay; both inspection and repair are loaded together."},
+		{"endpoint-attribution", "Outbound attribution: synthetic example", "Separate a body match from two candidate source reads and an unresolved execution identity.", "endpoint-attribution", "ui-endpoint-candidates", "candidates", "data-flow-taint", "attestation.pub", "Signed synthetic example with a public canary; no real external transmission."},
 		{"investigation-workflow", "Diagnostic repair: before", "Follow a real agent and reviewer through tests, denied diagnostics, evidence search and a two-run comparison.", "investigation-workflow", "run-e9c3f452461a", "before", "default", "demo-signing.pub", "Offline signed replay; both inspection and repair are loaded together."},
 		{"investigation-repaired", "Diagnostic repair: after", "Continue the same native session, disable unnecessary diagnostics and inspect the successful report.", "investigation-workflow", "run-2267309eda57", "after", "default", "demo-signing.pub", "Offline signed replay; both inspection and repair are loaded together."},
 		{"snake-supply-chain", "One agent: supply chain", "Follow a poisoned install from tool call to file, network and artifact evidence.", "snake-supply-chain", "run-snake-supervised", "run-snake-supervised", "agent-intent", "attestation.pub", "Offline signed replay; no account or VM required."},

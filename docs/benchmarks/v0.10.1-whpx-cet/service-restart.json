@@ -1,0 +1,14 @@
+{
+  "before": {
+    "run-kvm-6a436ddebda1": 27,
+    "run-agentprov-guest-e6fc631117": 114
+  },
+  "after": {
+    "run-kvm-6a436ddebda1": 27,
+    "run-agentprov-guest-e6fc631117": 114
+  },
+  "preserved": true,
+  "service": "active",
+  "ready": true,
+  "passed": true
+}

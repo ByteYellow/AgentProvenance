@@ -1,0 +1,23 @@
+{
+  "host_architecture": "AMD Ryzen 5 7500F / Windows x64",
+  "windows_build": "26300.9711",
+  "installed_regression_update": "KB5127648",
+  "wsl_version": "2.7.12",
+  "wsl_kernel": "6.18.33.2-microsoft-standard-WSL2",
+  "nested_virtualization": "svm absent; kvm_amd: SVM not supported by CPU",
+  "fixed_update": "KB5127936",
+  "fixed_build": "26300.9818",
+  "package_size": 4898703157,
+  "package_sha256": "ed0e63076f3f11eca26927a6fe8d2b417125cc7b8e1c33d25d64680f74b4b448",
+  "package_download_verified": true,
+  "installed": true,
+  "restarted": false,
+  "sources": [
+    "https://github.com/microsoft/WSL/issues/41917",
+    "https://support.microsoft.com/en-us/servicing/os/windows-11/2026/10/kb5127936-windows-11-25h2-26h2-update",
+    "https://www.catalog.update.microsoft.com/Search.aspx?q=KB5127936"
+  ],
+  "install_state": "completed_restart_required",
+  "installer_exit_code": 3010,
+  "installed_at": "2026-11-06T23:14:11.7081574+08:00"
+}

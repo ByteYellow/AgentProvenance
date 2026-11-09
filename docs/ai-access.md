@@ -10,6 +10,14 @@ English | [中文](zh-CN/ai-access.md)
 
 Reference: [OpenAPI](openapi.yaml) · [AI/MCP tools](ai-tools.md) · [Python integration](python-sdk.md).
 
+Daemon-backed adapters require a bearer token except for health checks. CLI
+clients use the selected data directory's token; direct HTTP clients send
+`Authorization: Bearer <token>`. The Python SDK reads `AGENTPROV_DAEMON_TOKEN`.
+Keep write bodies JSON. See the
+[connection and migration guide](upgrading-v0.10.1.md#connect-to-the-daemon).
+Local stdio MCP uses the process's data-directory permissions rather than HTTP
+authentication.
+
 ## 0. The trust boundary (load-bearing, applies to every adapter)
 
 - An agent MAY **query everything** (read tools) and MAY **assert its own

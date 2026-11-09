@@ -2,15 +2,18 @@
 
 [English](README.md) | 中文
 
-先看 DeepSeek 调查并修复一次失败任务，再体验单 Agent 风险调查、团队协作和跨 Pod 执行。九份签名记录都可以在 macOS 或 Linux 上离线回放；两个评估器示例提供独立的接入指南。重新采集所需的环境与凭据见各示例说明。
+先看 DeepSeek 调查并修复一次失败任务，再体验单 Agent 风险调查、团队协作和跨 Pod 执行。十二份签名示例可在 macOS 或 Linux 上离线回放，其中一份明确标注为归因合成示例；两个评估器示例提供独立的接入指南。
 
 ## 一条命令打开
 
-从[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。本文对应当前源码；新版本发布前，可从当前源码构建，体验新增的调查流程。CLI 内嵌九份签名记录和两个可选评估器示例：
+从[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。本文对应 v0.10.1，默认行为的变化见 [升级指南](../docs/zh-CN/upgrading-v0.10.1.md)。CLI 内嵌十二份签名示例和两个可选评估器示例：
 
 ```sh
 ./agentprov demo                         # gallery: all demos
 ./agentprov demo --list                  # list replay names and setup guides
+./agentprov demo evidence-attribution    # November capture: intent, audit and TLS details
+./agentprov demo evidence-attribution-repaired
+./agentprov demo endpoint-attribution    # synthetic example: two candidate source reads
 ./agentprov demo investigation-workflow  # inspection and repair, loaded together
 ./agentprov demo investigation-repaired  # start from the successful second run
 ./agentprov demo deepseek-context        # task, tools, configuration and saved files
@@ -40,6 +43,16 @@ AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
 
 Jev 示例可通过 `--agentprov` 使用包内 CLI，无需自行构建。在线评估需要 Python 和模型接口凭据。
 
+## v0.10.1 新增：归因详情
+
+[证据归因示例](evidence-attribution/README.zh-CN.md)提供 11 月 6 日的两次真实 DeepSeek 执行，
+可直接打开工具级意图关联和保留的 TLS 片段。对比同一原生会话的检查与修复，再查看每条关联的证据依据。
+
+[外传归因示例](endpoint-attribution/README.zh-CN.md)为独立的签名合成样本：
+正文命中公开标记，源读取保留两条候选，执行身份尚未确定。指南分别解释这三段结果。
+
+原有九份历史签名采集记录保留原样。
+
 ## 完整调查流程：检查、修复、对比与分享
 
 [调查与修复示例](investigation-workflow/README.zh-CN.md)让同一个 DeepSeek 原生会话
@@ -53,7 +66,19 @@ Jev 示例可通过 `--agentprov` 使用包内 CLI，无需自行构建。在线
 
 [DeepSeek 会话示例](deepseek-context/README.zh-CN.md)记录为 Python 报表增加按日汇总的真实任务。可查看原始任务、12 组工具输入与结果、五条配置记录、保存的文件正文，以及两条工具与运行时之间的推断关联。七项测试通过是已保存的真实结果，回放时不会重新调用模型。上下文覆盖、运行时覆盖和权限记录分别展示。
 
-使用 v0.9.0 CLI 运行 `agentprov demo deepseek-context`，源码构建后的用法相同。签名回放可离线运行，无需 DeepSeek 账号或 VM；六份历史采集包保持原样。
+运行 `agentprov demo deepseek-context` 可以打开最初随 v0.9.0 提供的示例。签名回放可离线运行，无需 DeepSeek 账号或 VM。
+
+### 阅读关联详情
+
+页面保留完整 Run 图，以及原位置的搜索、对比和导出入口。选中证据后，
+可以查看原始记录、支持引用及尚待确认的关联：
+
+- 意图覆盖具体到工具调用。委派候选与明确绑定的消息分别展示。
+- 外传详情区分正文命中、源读取候选和执行身份，每一段保留对应依据。
+- TLS 正文显示完整消息或保留片段；已有记录提供缺口原因及采集位置，正文分页单独显示。
+
+历史采集保留当时的规则与原始字段。新字段随实际记录显示，旧记录缺失的部分保留为未知或未记录。
+本地与在线回放使用同一套阅读器。
 
 ## 1. 单个 Agent：供应链执行
 

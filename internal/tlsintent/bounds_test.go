@@ -28,9 +28,12 @@ func TestReassemblerBoundsConnectionsAndReleasesOnExit(t *testing.T) {
 func TestReassemblerCapsSingleOversizedChunkExactly(t *testing.T) {
 	r := NewReassembler()
 	r.MaxBytes = 128
-	r.Add(Chunk{PID: 1, Conn: 1, Direction: Response, Data: bytes.Repeat([]byte("x"), 10000)})
-	if got := r.streams[streamKey{1, 1, Response}].buf.Len(); got != 128 {
-		t.Fatalf("oversized chunk bypassed cap: %d", got)
+	got := r.Add(Chunk{PID: 1, Conn: 1, Direction: Response, Data: bytes.Repeat([]byte("x"), 10000)})
+	if len(got) != 1 || len(got[0].Body) != 128 || got[0].CaptureGap != GapBufferLimit || got[0].DataKind != DataTLSFragment || !got[0].Truncated {
+		t.Fatalf("oversized chunk was not preserved within the cap: %+v", got)
+	}
+	if retained := r.streams[streamKey{1, 1, Response}].buf.Len(); retained != 0 {
+		t.Fatalf("already emitted fragment remained buffered: %d", retained)
 	}
 	loss := r.TakeLoss()
 	if loss.Bytes != 10000-128 || loss.Streams != 1 {

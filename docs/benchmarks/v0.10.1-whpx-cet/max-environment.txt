@@ -1,0 +1,21 @@
+Linux agentprov-kvm-amd64 6.8.0-139-generic #139-Ubuntu SMP PREEMPT_DYNAMIC Sat Aug  1 03:52:05 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+root=LABEL=cloudimg-rootfs ro console=ttyS0 systemd.mask=agentprov-sensor.service systemd.mask=k3s.service systemd.mask=docker.service
+flags		: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm rep_good nopl cpuid extd_apicid tsc_known_freq pni pclmulqdq ssse3 fma cx16 sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw perfctr_core ssbd ibrs ibpb stibp vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves user_shstk avx512_bf16 clzero xsaveerptr arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avx512vbmi umip avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq rdpid fsrm
+[    0.831928] x86/fpu: misordered xstate at 1408
+[    0.854000] x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
+[    0.854928] x86/fpu: Supporting XSAVE feature 0x002: 'SSE registers'
+[    0.855928] x86/fpu: Supporting XSAVE feature 0x004: 'AVX registers'
+[    0.856928] x86/fpu: Supporting XSAVE feature 0x020: 'AVX-512 opmask'
+[    0.857928] x86/fpu: Supporting XSAVE feature 0x040: 'AVX-512 Hi256'
+[    0.858926] x86/fpu: Supporting XSAVE feature 0x080: 'AVX-512 ZMM_Hi256'
+[    0.858928] x86/fpu: Supporting XSAVE feature 0x800: 'Control-flow User registers'
+[    0.859928] x86/fpu: xstate_offset[2]:  576, xstate_sizes[2]:  256
+[    0.860928] x86/fpu: xstate_offset[5]:  832, xstate_sizes[5]:   64
+[    0.861928] x86/fpu: xstate_offset[6]:  896, xstate_sizes[6]:  512
+[    0.862928] x86/fpu: xstate_offset[7]: 1408, xstate_sizes[7]: 1024
+[    0.863928] x86/fpu: xstate_offset[11]: 2432, xstate_sizes[11]:   16
+[    0.864928] x86/fpu: Enabled xstate features 0x8e7, context size is 2448 bytes, using 'compacted' format.
+[    1.197017] pci 0000:00:01.0: Video device with shadowed ROM at [mem 0x000c0000-0x000dffff]
+inactive
+inactive
+inactive

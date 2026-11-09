@@ -23,6 +23,10 @@ func TestOpenSSLReadObjectUsesThreadStacks(t *testing.T) {
 			if m == nil || m.Type != ebpf.LRUHash || m.KeySize != 24 || m.ValueSize != 8 || m.MaxEntries != 16384 {
 				t.Fatalf("missing bounded OpenSSL lifetime map: %+v", m)
 			}
+			m = spec.Maps["tls_sequences"]
+			if m == nil || m.Type != ebpf.LRUHash || m.KeySize != 40 || m.ValueSize != 16 || m.MaxEntries != 16384 {
+				t.Fatalf("missing bounded per-direction TLS sequence map: %+v", m)
+			}
 			for _, name := range []string{"handle_ssl_read_enter", "handle_ssl_read_exit", "handle_ssl_read_ex_enter", "handle_ssl_read_ex_exit", "handle_exit", "handle_exec", "handle_ssl_new", "handle_ssl_reset", "handle_ssl_release", "handle_go_tls_write"} {
 				if spec.Programs[name] == nil {
 					t.Errorf("missing probe %s", name)

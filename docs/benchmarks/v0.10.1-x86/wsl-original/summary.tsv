@@ -1,0 +1,4 @@
+check	exit_code	status
+runtime	1	FAIL
+openssl-discovery	1	FAIL
+go-tls-read	0	PASS

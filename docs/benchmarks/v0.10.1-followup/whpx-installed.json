@@ -1,0 +1,15 @@
+{
+  "collector_running": true,
+  "ready": true,
+  "status": "degraded",
+  "capture_buffers": {
+    "queue_bytes": 15073280,
+    "queue_events": 16384,
+    "ring_bytes": 67108864
+  },
+  "binary_sha256": {
+    "agentprov": "d871b76f50180dc205ad67a61633e71b6d8e3582a586fa6934e642b8b68c6d6a",
+    "agentprov-sensor": "f628e42abd2a02187749d035fb6cc917b7aaee9b71956597094c9e1f1be56d05"
+  },
+  "passed": true
+}

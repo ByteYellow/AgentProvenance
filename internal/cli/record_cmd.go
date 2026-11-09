@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
 	"sync"
@@ -46,13 +47,32 @@ func recordCmd(dataDir *string) *cobra.Command {
 			if withJSON {
 				childOutput = cmd.ErrOrStderr()
 			}
-			result, err := (record.Service{DB: db, Paths: paths}).Run(record.Request{
+			// The child receives terminal Ctrl-C directly. Keep the recorder
+			// alive long enough to persist the exit and its execution evidence.
+			interrupts := make(chan os.Signal, 4)
+			signal.Notify(interrupts, os.Interrupt)
+			defer signal.Stop(interrupts)
+			// Local, same-privilege caller: the CLI runs as the invoking user
+			// with no privilege boundary to cross, so it keeps the pre-hardening
+			// execution semantics (any interpreter, any workdir, no timeout, and
+			// the caller's full environment). InheritFullEnv preserves model API
+			// keys, proxy settings, and virtualenv variables that recorded agents
+			// rely on; the strict zero-value policy is the daemon HTTP path's
+			// default.
+			result, err := (record.Service{DB: db, Paths: paths, Options: record.Options{
+				Timeout:         -1,
+				AllowShell:      true,
+				AllowAnyWorkdir: true,
+				InheritFullEnv:  true,
+				Foreground:      true,
+			}}).Run(record.Request{
 				RunID:            runID,
 				Name:             name,
 				Workdir:          workdir,
 				Command:          args,
 				SampleIntervalMS: sampleIntervalMS,
 				PostRootGraceMS:  postRootGraceMS,
+				Stdin:            cmd.InOrStdin(),
 				Stdout:           childOutput,
 				Stderr:           cmd.ErrOrStderr(),
 			})
@@ -105,7 +125,15 @@ func recordBatchCmd(dataDir *string) *cobra.Command {
 			}
 			defer db.Close()
 			daemon.WarnIfDaemonActive(*dataDir, cmd.ErrOrStderr(), commandLanguage(cmd))
-			service := record.Service{DB: db, Paths: paths}
+			// Same-privilege local batch caller: keep pre-hardening execution
+			// semantics (see the single-record path above), including the full
+			// caller environment via InheritFullEnv.
+			service := record.Service{DB: db, Paths: paths, Options: record.Options{
+				Timeout:         -1,
+				AllowShell:      true,
+				AllowAnyWorkdir: true,
+				InheritFullEnv:  true,
+			}}
 			startedAt := time.Now().UTC().Format(time.RFC3339Nano)
 			items := make([]recordBatchItem, 0, len(jobs))
 			statusCounts := map[string]int{}

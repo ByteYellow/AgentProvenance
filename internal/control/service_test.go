@@ -12,7 +12,9 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/substrate/state"
 )
 
-type fakeDriver struct{}
+type fakeDriver struct {
+	created *[]runtimeplane.CreateSessionRequest
+}
 
 var fakeCPUWeights []int64
 
@@ -36,7 +38,10 @@ func (fakeDriver) Capabilities() runtimeplane.Capabilities {
 	}
 }
 
-func (fakeDriver) CreateSession(ctx context.Context, req runtimeplane.CreateSessionRequest) (string, error) {
+func (d fakeDriver) CreateSession(ctx context.Context, req runtimeplane.CreateSessionRequest) (string, error) {
+	if d.created != nil {
+		*d.created = append(*d.created, req)
+	}
 	return "container-" + req.SessionID, nil
 }
 
@@ -90,12 +95,13 @@ func TestCreateLeaseAndSession(t *testing.T) {
 	defer db.Close()
 
 	taskPath := filepath.Join(root, "task.yaml")
-	taskYAML := []byte("run_id: run-test\nimage: alpine:3.20\nworkspace: /workspace\nrisk_tier: medium\n")
+	taskYAML := []byte("run_id: run-test\nimage: alpine:3.20\nuser: '1000:1000'\nworkspace: /workspace\nrisk_tier: medium\n")
 	if err := osWriteFile(taskPath, taskYAML); err != nil {
 		t.Fatal(err)
 	}
 
-	svc := Service{DB: db, Paths: paths, Driver: fakeDriver{}}
+	var created []runtimeplane.CreateSessionRequest
+	svc := Service{DB: db, Paths: paths, Driver: fakeDriver{created: &created}}
 	fakeCPUWeights = nil
 	leaseID, err := svc.CreateLease(taskPath)
 	if err != nil {
@@ -107,6 +113,9 @@ func TestCreateLeaseAndSession(t *testing.T) {
 	}
 	if leaseID == "" || sessionID == "" {
 		t.Fatalf("empty ids lease=%q session=%q", leaseID, sessionID)
+	}
+	if len(created) != 1 || created[0].User != "1000:1000" {
+		t.Fatalf("task user not passed to runtime: %+v", created)
 	}
 
 	var leaseStatus, sessionStatus string

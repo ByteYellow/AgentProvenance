@@ -3,9 +3,9 @@
 English | [中文](README.zh-CN.md)
 
 Start with an investigation and repair of a real DeepSeek task, then explore a single-agent risk
-investigation, team collaboration and cross-Pod execution. Nine signed captures
-replay offline on macOS or Linux; two optional evaluator examples provide setup
-guides. Live capture requirements are listed in each guide.
+investigation, team collaboration and cross-Pod execution. Twelve signed examples
+replay offline on macOS or Linux, including one labeled synthetic attribution
+example. Two optional evaluator examples provide setup guides.
 
 ## One-command entry
 
@@ -13,12 +13,16 @@ Download the matching Linux/macOS amd64/arm64 archive from
 [Releases](https://github.com/ByteYellow/AgentProvenance/releases),
 verify its checksum and extract it as shown in the [Quickstart](../README.md#quickstart).
 Go is needed only if you choose to build from source. These instructions describe
-the current source tree. Build it to try the investigation workflow before the
-next release. The CLI embeds nine signed captures and two optional evaluator examples:
+v0.10.1. For changed defaults, see the
+[v0.10.1 upgrade guide](../docs/upgrading-v0.10.1.md).
+The CLI embeds twelve signed examples and two optional evaluator examples:
 
 ```sh
 ./agentprov demo                         # gallery: all demos
 ./agentprov demo --list                  # list replay names and setup guides
+./agentprov demo evidence-attribution    # November capture: intent, audit and TLS details
+./agentprov demo evidence-attribution-repaired
+./agentprov demo endpoint-attribution    # synthetic example: two candidate source reads
 ./agentprov demo investigation-workflow  # inspection and repair, loaded together
 ./agentprov demo investigation-repaired  # start from the successful second run
 ./agentprov demo deepseek-context        # task, tools, configuration and saved files
@@ -56,6 +60,19 @@ AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline
 Jev's guide supports the supplied CLI through `--agentprov`; a source build is
 optional. Its live capture still requires Python, credentials and explicit consent.
 
+## New in v0.10.1: attribution details
+
+[Evidence attribution](evidence-attribution/) provides two real November 6
+DeepSeek captures, with direct links to tool-scoped intent and retained TLS
+fragments. Compare the inspection and repair in one native session, then follow
+the evidence behind the displayed associations.
+
+[Outbound attribution](endpoint-attribution/) is a separate, signed synthetic
+example: the body contains a public marker, two source reads remain candidates,
+and execution identity is unresolved. Its guide separates those three questions.
+
+The nine earlier signed captures remain unchanged.
+
 ## Investigation workflow: inspect, repair, compare and share
 
 [The investigation workflow](investigation-workflow/) follows one native DeepSeek
@@ -75,9 +92,25 @@ configuration records, saved file text and two inferred tool/runtime links.
 The seven-test result is recorded evidence, not a replay-time model call.
 Context coverage, runtime coverage and permission records are shown separately.
 
-Run `agentprov demo deepseek-context` with the v0.9.0 CLI. Replay is signed,
-offline and needs no DeepSeek account or VM. Source builds use the same command;
-the six historical capture bundles remain unchanged.
+### Reading correlation details
+
+The current reader keeps the full Run graph and the Search, Compare and Export
+actions in their usual positions. Select evidence to inspect its original record,
+supporting references and any unresolved associations:
+
+- Intent coverage identifies the particular tool call. Delegation candidates
+  remain separate from an explicitly bound message.
+- Outbound details distinguish a body match, candidate source reads and execution
+  identity. Each stage keeps its own supporting references.
+- TLS content shows complete messages or retained fragments, with gap reasons
+  and capture positions when recorded. Body pagination is shown separately.
+
+Historical captures retain their original rules and recorded fields. New detail
+fields appear when the selected capture includes them; older captures keep an
+unknown or not-recorded state. Local and online replay use the same reader.
+
+Run `agentprov demo deepseek-context` to open the original v0.9.0 example.
+Replay is signed, offline and needs no DeepSeek account or VM.
 
 ## 1. One agent: supply-chain execution
 

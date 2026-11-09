@@ -1,0 +1,11 @@
+{
+  "uptime_seconds": 600.54,
+  "cet_check": "enable=0 status_result=0 status=1 nested_return=42 disable=0",
+  "parallel_cet_checks_passed": 4,
+  "parallel_cet_seconds_each": 300,
+  "collector_running": true,
+  "collector_ready": true,
+  "kernel_panic_or_segfault_reported": false,
+  "misordered_xstate_boot_warning": true,
+  "passed": true
+}

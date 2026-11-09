@@ -33,6 +33,47 @@ AgentProvenance 支持 Linux x86-64（Go 中称为 `amd64`）和 ARM64，两种�
 
 权限相关用例证明的是能够观察到**操作尝试**，不代表成功提权。测试使用回环服务和合成文本，不使用 API 密钥。
 
+## 已知内核问题
+
+Ubuntu 内核 `7.0.0-1017-azure` 存在上游追踪回归：部分 CPU 上的 `execve` 参数和文件操作事件会漏采。
+GitHub 已在 [runner-images #15003](https://github.com/actions/runner-images/issues/15003) 中确认此问题。
+原生采集应使用修复后的内核，或已有验收记录的内核；受影响期间，CI 实机矩阵使用 Ubuntu 22.04。
+此时探针仍可能挂载成功，因此更换内核后，需要执行下方的传感器实机验收，检查事件是否实际送达。
+
+## WSL 进程身份与 Windows 主机
+
+amd64 传感器会把任务映射到采集器可见的 procfs PID 命名空间。
+原始 `pid`、`tid` 和进程实例 ID 保留内核值；`procfs_pid`、`procfs_tid`、`procfs_pid_namespace` 单独记录查询地址，入库时也会保留。
+映射按任务生命周期区分，最多保存 16,384 项。状态采样、事件驱动 TLS 发现和容器查找使用 procfs 地址，也能处理子容器命名空间中的任务。
+
+能力报告新增 `procfs_identity`：`translated_events` 记录转换次数，`outside_namespace_events` 记录可见范围之外的事件，`lookup_misses` 记录映射缺失或被淘汰的情况，并将覆盖状态标为降级。
+映射缺失时不会拿内核 PID 去尝试打开另一个同号进程。proc 挂载与采集器自身 PID 视图不一致时，会在启动阶段报错。
+ARM64 对象保持原样，继续使用已有的宿主机 PID 路径。
+
+AMD Windows 主机在安装 KB5127648 后，`26300.9711` 版本可能失去 WSL 嵌套虚拟化能力。
+微软在 [KB5127936（26300.9818）](https://support.microsoft.com/en-us/servicing/os/windows-11/2026/10/kb5127936-windows-11-25h2-26h2-update)中列出了修复。
+安装适用的修复版累积更新并重启 Windows 后，再检查 `svm` 并加载 `kvm_amd`。
+本机更新后已恢复真实 KVM 虚拟机创建与加速；[重启后验收](../benchmarks/v0.10.1-kvm-postreboot/README.zh-CN.md)
+中的原生采集、TLS、systemd、K3s、签名回放和故障恢复均已通过。
+
+QEMU 11.1.0 使用 WHPX 时，应显式选择同时暴露 CET 及其状态保存能力的 CPU 模型：
+
+```text
+qemu-system-x86_64.exe -accel whpx -cpu max ...
+```
+
+修改参数后冷启动 guest。本机此前的默认 CPU 暴露了 `user_shstk`，但 Linux 使用 FXSAVE，
+任务切换时没有保存影子栈状态，导致 PID 1 崩溃。使用 `-cpu max` 后，Linux 启用 XSAVES，
+并保存 CET 用户态状态。[CET 后续验收](../benchmarks/v0.10.1-whpx-cet/README.zh-CN.md)
+记录了开启影子栈的上下文切换测试与采集验收。这套配置无需 `nousershstk` 参数。
+
+剩余的 `misordered xstate` 警告已通过本地 [QEMU WHPX 补丁](../../scripts/patches/qemu-11.1-whpx-xsave-ecx.patch)解决：读取 XSAVE 组件偏移时，同时传递来自虚拟化层的 ECX 属性。[后续报告](../benchmarks/v0.10.1-followup/README.zh-CN.md)保留了源码、构建校验值、修正后的 CPUID 和 CET 测试结果。当前使用本地编译的 QEMU 11.1.0，原版程序保留备份。
+
+`accept_kvm_guest.py` 会拒绝暴露 `user_shstk`、却缺少 `xsave` 或 `xsaves` 的 x86 guest，
+并在报告中记录 CPU 标志。QEMU 11.1.0 的 WHPX 实现中，单独设置 `cet-ss=off`
+无法可靠屏蔽 CET 标志。此前失败记录及临时使用的 `nousershstk` 参数保留在[历史证据](../benchmarks/v0.10.1-procfs/README.zh-CN.md)中。
+已经验收的 KVM 路径仍可使用，其嵌套 CPU 未暴露 `user_shstk`。
+
 ## 构建与重新生成探针
 
 在 Linux amd64 上使用 Go 1.23 或更高版本。直接构建仓库中已提交的对象，不需要 Clang 或内核头文件：
@@ -51,9 +92,15 @@ scripts/regen-sensor.sh
 scripts/regen-sensor.sh --check
 ```
 
-如果发行版单独提供 `bpftool` 包，可安装它来代替 `linux-tools-*`。可通过 `BPFTOOL` 和 `VMLINUX_BTF` 指定工具及匹配的 BTF。脚本只选择本机架构，不会重新生成另一种架构的对象。
+如果发行版单独提供 `bpftool` 包，可安装它来代替 `linux-tools-*`。可通过 `BPFTOOL` 和 `VMLINUX_BTF` 指定工具及匹配的 BTF。生成参数显式指定 BPF ISA v3，以支持 TLS 调用序号使用的原子递增指令。脚本只选择本机架构，不会重新生成另一种架构的对象。
 
 `--check` 比较生成的 Go 绑定，不保证不同内核或编译器生成的 `.o` 文件逐字节相同。
+
+在 WSL 的 Windows 挂载盘上运行全量测试时，可关闭测试结果缓存，避免 Go 对大量测试文件访问记录反复解析挂载路径。构建缓存仍可使用：
+
+```sh
+go test -race -count=1 -p 2 -timeout 20m ./...
+```
 
 ## 在 KVM 虚拟机中安装
 
@@ -66,6 +113,8 @@ sudo agentprov --data-dir /var/lib/agentprov record --run demo-kvm -- sh -c 'id;
 sudo python3 scripts/accept_kvm_guest.py --report /tmp/kvm-acceptance.json
 ```
 
+验收脚本使用临时密钥签署采集包，验签通过后导入新的回放库。证据包、DSSE 签名和公钥保存在报告旁，私钥随临时工作目录一起清理。
+
 安装器启用 `agentprov-sensor.service`，将证据保存在 `/var/lib/agentprov`，并检查探针是否挂载。`record` 必须使用同一个数据目录。
 
 执行 `systemctl stop agentprov-sensor` 可停止采集器。服务通过 SIGINT 卸载 eBPF 并关闭摄入流程。数据在虚拟机重启后保留，但服务无法补回停止期间发生的事件。
@@ -75,14 +124,31 @@ sudo python3 scripts/accept_kvm_guest.py --report /tmp/kvm-acceptance.json
 ```sh
 AGENTPROV_SSL_LIB=/usr/lib/x86_64-linux-gnu/libssl.so.3
 AGENTPROV_LIBC_LIB=/usr/lib/x86_64-linux-gnu/libc.so.6
-AGENTPROV_GO_TLS_BIN=/absolute/path/to/unstripped-go-agent
+AGENTPROV_GO_TLS_BIN=/absolute/path/to/go-agent
 ```
 
-修改显式路径后需要重启服务。原生采集默认也启用 TLS 自动发现：扫描可见进程的映射和容器根目录，为 OpenSSL 及保留符号的 Go 程序挂载探针，并处理目标替换与退出。使用 `sensor stream --auto-tls=false` 可关闭自动发现。
+修改显式路径后需要重启服务。原生采集默认也启用 TLS 自动发现：扫描可见进程的映射和容器根目录，为 OpenSSL 及受支持的 Go 程序挂载探针，并处理目标替换与退出。使用 `sensor stream --auto-tls=false` 可关闭自动发现。
 
 发现过程对扫描进程数和目标数设有上限，并报告挂载失败。观测到进程启动时，还会触发经过合并和限流的扫描。对于支持的 overlay 挂载，发现器会解析底层 inode，让共享同一个库的容器共用一次挂载。无法解析或不支持的 overlay 布局会报告覆盖缺口，不重复安装探针。
 
-Go 响应采集目前限于 amd64、Go ABIInternal 1.23–1.26 且保留符号的程序。版本不受支持或符号被剥离时，会报告覆盖降级。自动发现不保证捕获探针挂载前的首次请求，也不保证覆盖在两次扫描之间启动并退出的进程。BoringSSL、任意静态或自定义 TLS 实现，以及没有受支持明文探针的加密流量，不在已声明的覆盖范围内。
+amd64、Go ABIInternal 1.23–1.26 的程序现在支持保留符号和 `-s -w` 去符号两种构建，也支持 PIE。去符号构建需要保留 Go 函数表；解析器会检查元数据大小和指令范围。Go Read 仍在解码得到的返回指令处挂载普通探针。
+
+BoringSSL 的 `SSL_read/SSL_write` 路径已验证动态库和保留函数符号的静态链接程序。BoringSSL 没有提供的 `_ex` 接口标为 `not_applicable`。未知 ABI、无法定位函数的 C TLS 实现需要单独适配。
+
+自动发现会在就绪前为宿主机已安装的 OpenSSL 库预挂载探针。已知的应用程序或容器专用库可以提前指定可见路径，支持多次传入：
+
+```sh
+sudo agentprov-sensor --tls-target /opt/agent/client \
+  --tls-target /opt/container-root/usr/lib/libssl.so.3
+```
+
+`agentprov sensor stream` 也支持这组参数。先在能力报告中确认目标探针已挂载，再启动工作负载；目标文件替换后会重新检查。未提前配置、刚出现的容器文件仍可能在自动挂载前发出首次 TLS 调用。[后续验收](../benchmarks/v0.10.1-followup/README.zh-CN.md)覆盖了无启动等待的首次请求、并发读取和容器重建。
+
+### 采集缓冲
+
+原生采集默认使用 64 MiB 内核环形缓冲区，以及最多 16,384 条记录的用户态队列（事件数据占 14.375 MiB）。环形缓冲区读取与 JSON 输出、procfs 查询分开执行；两个进程缓存各限制为 4,096 项。收到 SIGINT/SIGTERM 后，会排空已经进入队列的记录再退出。
+
+使用 `--ring-buffer-mib 16` 可恢复原来的内核缓冲预算，也可设置为 1～256 之间的其他 2 的幂。两个采集命令都支持该参数。能力报告中的 `capture_buffers` 会列出实际缓冲大小；超载时仍输出 `resource_pressure` 并计入丢失统计。[压力测试报告](../benchmarks/v0.10.1-followup/pressure.json)记录了完整事件数、立即停止、主动超载和峰值内存。此次虚拟机使用默认缓冲时，突发测试的 RSS 峰值约为 259 MiB。
 
 并发 Read 用例已在 WSL 上使用 Go 1.23.12、1.24.0、1.25.0 和 1.26 验收，包括 goroutine 栈增长、实际返回字节和上下文清理。CI 的 Go TLS 实机矩阵覆盖相同的四个次版本，结果与产物附在各拉取请求的检查中。
 
@@ -163,7 +229,7 @@ sudo env PATH="$PATH" AGENTPROV_LIVE_GOTLS=1 \
 
 ## 后台服务就绪与存储故障
 
-`GET /v1/live` 表示 HTTP 进程可以响应。`GET /v1/ready` 和 `GET /v1/health` 检查数据库及表结构，检查时限为两秒。数据库错误、缺少必需表或结构不兼容时返回 503；未知队列数量保持 `null`。这三个 GET 接口不要求可选的 API bearer token。
+`GET /v1/live` 表示 HTTP 进程可以响应。`GET /v1/ready` 和 `GET /v1/health` 检查数据库及表结构，检查时限为两秒。数据库错误、缺少必需表或结构不兼容时返回 503；未知队列数量保持 `null`。这三个 GET 接口无需认证。其他 API 默认要求 bearer token；未显式配置时，`daemon serve` 会在 `<data-dir>/auth-token` 中生成。
 
 查询可用性与证据覆盖分别报告。数据库可用但存在历史丢失时，HTTP 返回 200，并报告 `status: degraded`、`coverage_status: gaps_recorded` 和 `ready: true`。待关联事件单独报告。就绪检查不证明每个后台工作器都在推进，还应查看传感器存活状态、实际能力和积压。
 

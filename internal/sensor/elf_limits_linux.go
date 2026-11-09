@@ -150,13 +150,13 @@ func validateELFTables(path string, dynamicOnly bool) error {
 		if err := check(i, m); err != nil {
 			return err
 		}
-		if dynamicOnly && m.kind == elf.SHT_DYNSYM {
+		if m.kind == elf.SHT_DYNSYM || !dynamicOnly && m.kind == elf.SHT_SYMTAB {
 			strings, err := read(m.link)
 			if err != nil {
 				return err
 			}
 			if strings.kind != elf.SHT_STRTAB {
-				return i18n.Errorf("invalid ELF dynamic symbol string-table link")
+				return i18n.Errorf("invalid ELF symbol string-table link")
 			}
 			if err := check(m.link, strings); err != nil {
 				return err

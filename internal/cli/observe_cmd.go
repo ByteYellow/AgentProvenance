@@ -80,7 +80,7 @@ func observeSummaryCmd(dataDir, daemonURL *string) *cobra.Command {
 }
 
 func observeSummary(dataDir, daemonURL, runID string, topN int) (observability.Summary, error) {
-	if client, ok := daemonClient(daemonURL); ok {
+	if client, ok := daemonClient(daemonURL, dataDir); ok {
 		return client.ObserveSummary(runID, topN)
 	}
 	db, cleanup, err := openLocalDB(dataDir)

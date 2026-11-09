@@ -1,0 +1,18 @@
+enable=0 status_result=0 status=1 nested_return=42 disable=0
+ 16:03:08 up 7 min,  1 user,  load average: 0.54, 0.21, 0.07
+[    0.831928] x86/fpu: misordered xstate at 1408
+[    0.854000] x86/fpu: Supporting XSAVE feature 0x001: 'x87 floating point registers'
+[    0.854928] x86/fpu: Supporting XSAVE feature 0x002: 'SSE registers'
+[    0.855928] x86/fpu: Supporting XSAVE feature 0x004: 'AVX registers'
+[    0.856928] x86/fpu: Supporting XSAVE feature 0x020: 'AVX-512 opmask'
+[    0.857928] x86/fpu: Supporting XSAVE feature 0x040: 'AVX-512 Hi256'
+[    0.858926] x86/fpu: Supporting XSAVE feature 0x080: 'AVX-512 ZMM_Hi256'
+[    0.858928] x86/fpu: Supporting XSAVE feature 0x800: 'Control-flow User registers'
+[    0.859928] x86/fpu: xstate_offset[2]:  576, xstate_sizes[2]:  256
+[    0.860928] x86/fpu: xstate_offset[5]:  832, xstate_sizes[5]:   64
+[    0.861928] x86/fpu: xstate_offset[6]:  896, xstate_sizes[6]:  512
+[    0.862928] x86/fpu: xstate_offset[7]: 1408, xstate_sizes[7]: 1024
+[    0.863928] x86/fpu: xstate_offset[11]: 2432, xstate_sizes[11]:   16
+[    0.864928] x86/fpu: Enabled xstate features 0x8e7, context size is 2448 bytes, using 'compacted' format.
+x86_Thread_features:
+x86_Thread_features_locked:

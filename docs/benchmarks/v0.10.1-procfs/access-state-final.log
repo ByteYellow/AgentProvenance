@@ -1,0 +1,5 @@
+=== RUN   TestLiveSensorAccessState
+    access_state_linux_test.go:64: procfs identity coverage: {Mode:kernel_namespace_mapping PIDNamespace:pid:[4026532223] MapCapacity:16384 TranslatedEvents:140 OutsideNamespace:0 LookupMisses:0}
+    access_state_linux_test.go:110: captured 1 automatic state snapshots for pid 79177
+--- PASS: TestLiveSensorAccessState (7.29s)
+PASS

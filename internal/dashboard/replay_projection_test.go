@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
+	"github.com/byteyellow/agentprovenance/internal/intent"
 	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
@@ -406,6 +407,146 @@ func TestReplayProjectionAnalysisFollowsRetainedEvidence(t *testing.T) {
 	}
 	if p.Inventory.AnalysisOmissions["signals"] != 2 || !strings.Contains(string(files["en/index.html"]), "some analyses omitted") {
 		t.Fatal("omitted analysis not disclosed")
+	}
+}
+
+func TestReplayProjectionRealIntentAnalysis(t *testing.T) {
+	paths, db, _ := artifactStore(t)
+	svc := agentcontext.Service{DB: db, Paths: paths}
+	addSessionGraphFixture(t, svc)
+	ctx := context.Background()
+	const run = "ui-session-graph"
+	tools, events := map[string]string{}, map[string]string{}
+	for _, name := range []string{"worker", "root"} {
+		scope, err := svc.SessionGraphScope(ctx, run, "codex", name)
+		if err != nil || len(scope.ToolIDs) == 0 || len(scope.EventIDs) == 0 {
+			t.Fatalf("fixture: %+v %v", scope, err)
+		}
+		tools[name], events[name] = scope.ToolIDs[0], scope.EventIDs[0]
+		if _, err := db.Exec(`UPDATE tool_calls SET agent_id=?,command='python setup.py install' WHERE id=?`, name, tools[name]); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`UPDATE events SET tool_call_id=?,event_type='secret_path',payload='{"path":"/work/.aws/credentials"}' WHERE id=?`, tools[name], events[name]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := intent.Materialize(db, run); err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]string{}
+	for _, name := range []string{"worker", "root"} {
+		var idsValue string
+		if err := db.QueryRow(`SELECT id FROM intent_diffs WHERE tool_call_id=? AND status=?`, tools[name], intent.StatusMismatch).Scan(&idsValue); err != nil {
+			t.Fatal(err)
+		}
+		ids[name] = idsValue
+	}
+	p, err := (Server{DB: db}).PrepareSelectedOfflineReplay(ctx, ReplaySelection{RunID: run, Scope: "session", Harness: "codex", SessionID: "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	_, all := replayZIPData(t, p)
+	if !strings.Contains(all, ids["worker"]) || !strings.Contains(all, `"association_status":"bound"`) || !strings.Contains(all, `"source_table":"intent_diffs"`) {
+		t.Fatal("real materialized intent or its signal missing from selected replay")
+	}
+	if strings.Contains(all, `"reason":"install produced`) && strings.Contains(all, `"tool_call_id":"`+tools["root"]+`"`) {
+		t.Fatal("unselected intent content leaked")
+	}
+	if p.Inventory.AnalysisOmissions["intent_diffs"] != 1 {
+		t.Fatalf("expected only unselected analysis omitted: %+v", p.Inventory.AnalysisOmissions)
+	}
+}
+
+func TestReplayProjectionDoesNotNarrowPeerCandidateSet(t *testing.T) {
+	paths, db, objects := artifactStore(t)
+	svc := agentcontext.Service{DB: db, Paths: paths}
+	addSessionGraphFixture(t, svc)
+	ctx := context.Background()
+	const run = "ui-session-graph"
+	scope, err := svc.SessionGraphScope(ctx, run, "codex", "worker")
+	if err != nil || len(scope.ToolIDs) == 0 || len(scope.EventIDs) == 0 {
+		t.Fatalf("fixture: %+v %v", scope, err)
+	}
+	tool, event := scope.ToolIDs[0], scope.EventIDs[0]
+	if _, err := db.Exec(`UPDATE tool_calls SET agent_id='worker',command='python setup.py install' WHERE id=?`, tool); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE events SET tool_call_id=?,event_type='secret_path',payload='{"path":"/work/.aws/credentials"}',created_at='2026-11-06T00:00:02Z' WHERE id=?`, tool, event); err != nil {
+		t.Fatal(err)
+	}
+	var refs []string
+	for _, id := range []string{"message-one", "message-two"} {
+		obj, err := objects.PutExternalObject(provenance.ExternalObjectInput{RunID: run, Type: "artifact", SourceID: "agent_message/" + id, Payload: map[string]any{"body": "install " + id}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		refs = append(refs, obj.Hash)
+		if _, err := db.Exec(`INSERT INTO graph_edges(id,run_id,from_id,to_id,edge_type,created_at) VALUES (?, ?,?,'agent/worker','agent_message','2026-11-06T00:00:00Z')`, id, run, obj.Hash); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := intent.Materialize(db, run); err != nil {
+		t.Fatal(err)
+	}
+	var id, raw string
+	if err := db.QueryRow(`SELECT id,association FROM intent_diffs WHERE status=?`, intent.StatusAssociationGap).Scan(&id, &raw); err != nil {
+		t.Fatal(err)
+	}
+	for _, exclude := range []bool{false, true} {
+		selection := ReplaySelection{RunID: run, Scope: "whole_run"}
+		if exclude {
+			selection.ExcludeRecords = []string{"1/" + refs[1]}
+		}
+		snapshot, err := (Server{DB: db}).freezeReplaySource(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan, err := (Server{DB: snapshot.DB}).resolveReplaySelection(ctx, selection)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := snapshot.projectSelection(ctx, plan)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var count int
+		if err := p.DB.QueryRow(`SELECT COUNT(*) FROM intent_diffs WHERE id=?`, id).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if exclude && count != 0 || !exclude && count != 1 {
+			t.Fatalf("candidate-set projection, exclude=%v count=%d", exclude, count)
+		}
+		if !exclude {
+			var got string
+			if err := p.DB.QueryRow(`SELECT association FROM intent_diffs WHERE id=?`, id).Scan(&got); err != nil || got != raw {
+				t.Fatalf("candidate metadata rewritten: %s %v", got, err)
+			}
+		} else {
+			if err := p.DB.QueryRow(`SELECT COUNT(*) FROM signals WHERE source_id=?`, id).Scan(&count); err != nil || count != 0 {
+				t.Fatalf("excluded analysis signal retained: %d %v", count, err)
+			}
+			if err := p.DB.QueryRow(`SELECT COUNT(*) FROM events WHERE id=?`, event).Scan(&count); err != nil || count != 1 {
+				t.Fatalf("source exclusion removed runtime event: %d %v", count, err)
+			}
+			if p.omitted["intent_diffs"] != 1 {
+				t.Fatalf("analysis omission not disclosed: %+v", p.omitted)
+			}
+		}
+		p.Close()
+		snapshot.Close()
+		prepared, err := (Server{DB: db}).PrepareSelectedOfflineReplay(ctx, selection)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, all := replayZIPData(t, prepared)
+		prepared.Close()
+		if !exclude && (!strings.Contains(all, `"association_status":"ambiguous"`) || !strings.Contains(all, "install message-two")) {
+			t.Fatal("offline replay lost candidate state or source")
+		}
+		if exclude && (strings.Contains(all, "install message-two") || strings.Contains(all, `"association_status":"candidate"`)) {
+			t.Fatal("excluded source leaked or narrowed candidate set")
+		}
 	}
 }
 

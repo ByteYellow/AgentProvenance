@@ -1,0 +1,76 @@
+{
+  "schema_version": "agentprovenance.sensor_pressure/v1",
+  "runs": [
+    {
+      "label": "baseline-burst",
+      "expected_opens": 40000,
+      "counts": {
+        "file_open": 1242,
+        "syscall_result": 1239,
+        "process_exit": 0
+      },
+      "kernel_drops": 60428,
+      "workload_seconds": 0.1164,
+      "total_and_drain_seconds": 0.6816,
+      "peak_rss_kib": 126092,
+      "passed": false
+    },
+    {
+      "label": "candidate-burst",
+      "expected_opens": 40000,
+      "counts": {
+        "file_open": 40000,
+        "syscall_result": 40000,
+        "process_exit": 5
+      },
+      "kernel_drops": 0,
+      "workload_seconds": 0.1166,
+      "total_and_drain_seconds": 2.7888,
+      "peak_rss_kib": 265608,
+      "passed": true
+    },
+    {
+      "label": "baseline-paced",
+      "expected_opens": 160000,
+      "counts": {
+        "file_open": 134410,
+        "syscall_result": 134339,
+        "process_exit": 0
+      },
+      "kernel_drops": 33477,
+      "workload_seconds": 17.5116,
+      "total_and_drain_seconds": 18.2573,
+      "peak_rss_kib": 127528,
+      "passed": false
+    },
+    {
+      "label": "candidate-paced",
+      "expected_opens": 160000,
+      "counts": {
+        "file_open": 160000,
+        "syscall_result": 160000,
+        "process_exit": 5
+      },
+      "kernel_drops": 0,
+      "workload_seconds": 16.9161,
+      "total_and_drain_seconds": 17.5365,
+      "peak_rss_kib": 252776,
+      "passed": true
+    },
+    {
+      "label": "overload-1MiB",
+      "expected_opens": 40000,
+      "counts": {
+        "file_open": 9073,
+        "syscall_result": 9120,
+        "process_exit": 2
+      },
+      "kernel_drops": 61810,
+      "workload_seconds": 0.1165,
+      "total_and_drain_seconds": 1.083,
+      "peak_rss_kib": 119268,
+      "passed": true
+    }
+  ],
+  "passed": true
+}

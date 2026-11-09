@@ -54,8 +54,8 @@ func intentDiffCmd(dataDir *string) *cobra.Command {
 				enc.SetIndent("", "  ")
 				return enc.Encode(res)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "run=%s effects=%d contracts=%d diffs=%d mismatches=%d coverage_gaps=%d\n"),
-				res.RunID, res.Effects, res.Contracts, res.Diffs, res.Mismatches, res.CoverageGaps)
+			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "run=%s effects=%d contracts=%d diffs=%d mismatches=%d mismatch_events=%d coverage_gaps=%d association_gaps=%d\n"),
+				res.RunID, res.Effects, res.Contracts, res.Diffs, res.Mismatches, res.MismatchEvents, res.CoverageGaps, res.AssociationGaps)
 			return printIntentDiffs(cmd, db, runID)
 		},
 	}
@@ -68,7 +68,7 @@ func printIntentDiffs(cmd *cobra.Command, db *sql.DB, runID string) error {
 	rows, err := db.Query(`SELECT status, finding, contract_kind, operation, agent_id, round(confidence,2), mismatch_reason
 		FROM intent_diffs WHERE run_id = ? ORDER BY
 		CASE status WHEN 'refused_but_runtime_happened' THEN 0 WHEN 'declared_vs_effect_mismatch' THEN 1
-		WHEN 'intent_coverage_gap' THEN 2 ELSE 3 END`, runID)
+		WHEN 'intent_coverage_gap' THEN 2 WHEN 'intent_association_gap' THEN 2 ELSE 3 END`, runID)
 	if err != nil {
 		return err
 	}
@@ -90,6 +90,9 @@ func printIntentDiffs(cmd *cobra.Command, db *sql.DB, runID string) error {
 	}
 	if !any {
 		fmt.Fprintln(w, commandText(cmd, "(no diffs)"))
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 	return w.Flush()
 }

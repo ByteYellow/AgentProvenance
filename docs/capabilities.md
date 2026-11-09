@@ -178,10 +178,38 @@ against the normalized **RuntimeEffects** attributed to its scope. The verdicts:
 | verdict | meaning |
 | --- | --- |
 | `declared_vs_effect_mismatch` | the runtime exceeded the declared contract (e.g. an *install* that read a foreign secret and egressed to the metadata IP) |
-| `peer_message_intent_mismatch` | a mismatch whose intent came from another agent's message (the multi-agent lateral-influence finding) |
+| `peer_message_intent_mismatch` | an explicitly bound peer contract, or an applicable persistent peer policy, whose declared boundary was exceeded |
 | `refused_but_runtime_happened` | a refused action's effects occurred anyway |
 | `decided_and_executed` | declared effects appeared, no violation |
 | `intent_coverage_gap` | sensitive effects with **no** captured intent — an honest gap, never a fabricated finding |
+| `intent_association_gap` | peer messages exist for the agent, but the affected operation has no message binding; the result retains one or more candidates |
+
+Tool contracts cover their own tool call. If one agent has a captured contract
+for call A and a sensitive event from call B without a matching contract, B keeps
+its own coverage gap and event references. Analysis records include `rule_version`;
+new analysis uses `agentprov.intent_scope/v4`. Signed bundle export includes the
+saved analysis and its graph references. Import preserves those records and their
+historical rule version; `intent diff` explicitly recomputes the local analysis.
+
+Select a conformance node in the Dashboard to inspect its tool scope, association
+status, candidate messages and supporting records. Message bodies use the shared
+evidence reader; the analysis rule and references remain available in the detail.
+The same view is included in offline replay exports.
+
+Peer messages without a recipient-side tool-call binding remain `candidate` or
+`ambiguous`, even when there is only one nearby message. Their `association`
+includes source references, matching basis and the affected runtime events.
+Capture time filters candidates; it does not establish a binding. Producers can
+record an `intent_scope` on the saved message: `kind: "tool_call"` with the
+recipient's `agent_id` and `tool_call_id`, or `kind: "agent_policy"` with that
+agent and an explicit `[valid_from, valid_until)` interval. Ordinary messages
+do not become persistent policies from their wording.
+
+`mismatches` counts violated contracts; `mismatch_events` counts distinct
+supporting events, and `association_gaps` counts unresolved scopes. Relation
+confidence is bounded by both the contract and runtime attribution, while raw
+event quality is preserved. Selective replay retains an analysis only with all
+of its support references; exclusions are listed in its omission summary.
 
 The finding is **conditional on each action's declared contract**, which is what
 separates it from a global policy rule: a network connect is drift for a
@@ -189,13 +217,53 @@ read-only file tool but permitted for `bash`; reading `~/.aws/credentials` is
 drift for *any* operation that did not declare it. A foreign-secret read is told
 apart from the agent's own credentials by the same policy engine the sensor uses.
 
-Verdicts feed an `intent_conformance` dimension in the unified signal model, flip
-the `launch` verdict, and render in the **Conformance · declared vs actual**
+Verdicts feed an `intent_conformance` dimension in the unified signal model.
+Contract violations affect the `launch` verdict; association and coverage gaps
+remain informational. Results render in the **Conformance · declared vs actual**
 graph lens (contract scope → verdict → observed effects, alongside the
 delegation and peer agent structure). The
-[multi-agent](../demo/multiagent-provenance/README.md) demo shows a poisoned
-install that `alice` instructs `bob` to run surfacing as a
-`peer_message_intent_mismatch`.
+[multi-agent](../demo/multiagent-provenance/README.md) demo contains a peer
+instruction and a poisoned install. Historical signed analysis keeps its original
+rule; reanalysis distinguishes the tool-level violation from unresolved message
+attribution.
+
+### Endpoint Content and Execution Attribution
+
+`graph ingest-endpoint` records three independent stages under
+`endpoint_association` (`agentprov.endpoint_attribution/v2`):
+
+| Stage | Support and result |
+|---|---|
+| Body content match | Saved marker hits checked against the captured bytes; capture-reported hits are labeled separately when the original bytes do not contain the literal marker. |
+| Source-read association | Exact structured paths, capture order and available content versions produce all eligible reads. One read stays a candidate until explicitly linked. |
+| Execution attribution | A capture's `runtime_event_id` references a same-run network operation with a matching destination and compatible order; its saved process/tool identity supplies the binding. |
+
+Capture metadata can provide `observed_at` (RFC 3339, retaining its precision),
+`working_directory`, `runtime_event_id` and `source_read_events`. These are
+producer assertions: a reference must come from the capture path, not from a
+nearby event chosen during import. A source link additionally needs an exact
+saved byte-version match (`content_sha256` or `file_sha256`), a resolved path,
+a read strictly before the capture and a valid execution reference. This supports
+explicit cross-process transfers while retaining separate reader and sender identities.
+Missing or overlapping times, unresolved paths and multiple candidates remain visible.
+Ingestion time is stored separately from capture time.
+
+The graph keeps `sensitive_source_payload` for captured content/path matches,
+`candidate_sensitive_data_flow` for possible reads, `confirmed_sensitive_data_flow`
+for capture-linked reads, and `endpoint_execution_reference` for the operation
+reference. New edges carry the saved rule, status and evidence references, without
+an invented numeric confidence. Common run/process membership is a scope relation;
+it does not supply a missing content-transfer reference. Unbound model responses
+also stay independent of the run's first tool call.
+
+Select an endpoint event or payload to read **Body content match / Source-read
+association / Execution attribution** in the existing Dashboard detail. Signed
+bundles retain the frozen stages and original rule. During selective replay,
+excluding a supporting read or operation also excludes the dependent endpoint
+envelope; the preview lists that reason before download. Other selected reads
+remain available, and candidate sets are never reduced to manufacture a unique source.
+Historical Grok bundles keep their original analysis; new imports of raw endpoint
+dumps use this rule.
 
 ## Deployment Modes
 
@@ -788,6 +856,52 @@ retries, transaction-level deduplication, and per-probe coverage reports. See
 [the deployment and acceptance runbook](../docs/amd64-kvm-k3s.md) for the exact
 syscall/TLS coverage and [spool guarantees](../docs/native-capture-spool.md).
 
+TLS plaintext capture currently retains up to 4 KiB per SSL call. Larger HTTP
+messages remain readable when their TLS calls are fully captured. A reported
+capture gap stops parsing that direction until a new capture generation: later
+bytes are retained as fragments rather than joined to the preceding message.
+HTTP/2 frame-sequence and HPACK failures follow the same rule. Already complete
+messages and the other direction's independent decoder remain available.
+The native producer numbers TLS calls and records chunk offsets before writing
+to the ring buffer. Missing or reordered chunks, skipped calls, and sequence-map
+resets therefore invalidate framing before later bytes reach the HTTP parser.
+OpenSSL lifecycle checkpoints also report the last call number, covering a lost
+final call when that checkpoint is received.
+
+Evidence records carry the gap reason and data kind; binary fragments use
+base64 with a hash of the original bytes. Full fragment content follows the same
+`AGENTPROV_TLS_CAPTURE_BODY=1` opt-in as message bodies. Incomplete captures do
+not produce model tool decisions or request/response matches.
+Contiguous fragments from one call are saved together. Their `capture.position`
+records the sequence generation, call number, byte offset and total call length;
+separate byte ranges remain separate. A closing checkpoint carries
+`checkpoint: true` rather than claiming a retained byte range. Historical events
+without sequence fields retain their recorded metadata and rule version.
+
+The Dashboard shows message completeness in the existing evidence detail and
+saved-content reader. It identifies retained fragments and their gap reason;
+capture positions and encoding are available in expandable metadata. Content
+paging is separate from capture completeness, and historical records without
+capture metadata remain labelled as unrecorded. Read-only exports preserve
+these states and the saved body pages.
+
+Automatic TLS discovery uses exec, connect and library-open hints to inspect
+the indicated process, while retaining periodic bounded scans. Finite retries
+cover mappings loaded after exec; a later library-open hint starts a new retry
+cycle. Discovery work has bounded queues, coalescing and per-batch limits.
+Internal library hints do not add ordinary shared-library reads to the graph.
+Recently attached inodes have a 30-second reuse period within the existing
+target budget. Expired idle entries are removed on the next complete scan;
+capacity pressure can reclaim idle entries earlier.
+
+The capability report includes `tls_discovery.event_discovery` counters for
+queue loss, retries, process exits, discovery failures and attachment latency,
+plus `sweep_passes` for periodic scan work. These counters cover the sensor
+lifetime. The first TLS call may precede attachment; explicitly configured
+library/executable targets are attached before the ready notification. Library
+path hints inspect the first 256 bytes; periodic mapping scans remain the
+fallback for longer or unrecognized paths.
+
 **Correlate & verify**
 
 | Capability | What it does |
@@ -830,7 +944,7 @@ syscall/TLS coverage and [spool guarantees](../docs/native-capture-spool.md).
 | Capability | What it does |
 |---|---|
 | CLI / JSON | every command has a stable `--json` contract with result/page integrity hashes |
-| Daemon API | `daemon serve` — binding, ingest, query, verify, record, forensics, signals over HTTP; optional bearer-token auth |
+| Daemon API | `daemon serve` — binding, ingest, query, verify, record, forensics, signals over HTTP; bearer-token authentication enabled by default |
 | AI tools + MCP | the read surface, the `evaluate_action` gate, and context-write (`bind_scope` / `record_tool_call`) via `ai call` and stdio MCP (`ai mcp`) |
 | Evaluator / RL | `signal context / import`, trajectory manifests, and a Python SDK (offline batch + in-loop scoring) — emits evidence, not reward policy |
 | Substrate evidence | Docker/local process metadata, cgroup/pid identity, filesystem baseline/diff/replay, telemetry spool, windows, retention, 100k-pressure tested |

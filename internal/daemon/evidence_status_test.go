@@ -25,7 +25,9 @@ func TestBindingAPIConfidence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := testServer(t)
 			w := httptest.NewRecorder()
-			s.Handler().ServeHTTP(w, httptest.NewRequest("POST", "/v1/telemetry/bind", strings.NewReader(`{"run_id":"r","process_id":"p","binding_source":"ai_asserted"`+tc.field+`}`)))
+			req := httptest.NewRequest("POST", "http://localhost/v1/telemetry/bind", strings.NewReader(`{"run_id":"r","process_id":"p","binding_source":"ai_asserted"`+tc.field+`}`))
+			req.Header.Set("Content-Type", "application/json")
+			s.Handler().ServeHTTP(w, req)
 			if w.Code != tc.status {
 				t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 			}
@@ -52,7 +54,7 @@ func TestGraphVerifyAPIUnavailable(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()
-	s.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/v1/graph/verify?run=r", nil))
+	s.Handler().ServeHTTP(w, httptest.NewRequest("GET", "http://localhost/v1/graph/verify?run=r", nil))
 	var result provenance.VerifyResult
 	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)

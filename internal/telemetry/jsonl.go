@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -756,6 +757,7 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 		"host_id", "host_identity_source", "realtime_coarse_resolution_ns",
 		"process_instance_id", "parent_process_instance_id", "thread_group_instance_id",
 		"boot_id", "tid", "thread_instance_id", "thread_start_ns", "process_start_ns", "monotonic_ns",
+		"procfs_pid", "procfs_tid", "procfs_pid_namespace",
 		"operation_id", "operation", "syscall_number", "sensor_arch", "syscall_start_ns", "syscall_duration_ns",
 		"observation_stage", "syscall_result", "syscall_outcome", "errno",
 	} {
@@ -775,17 +777,35 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 // "request" (tls_write) or "response" (tls_read).
 func sslPayload(raw map[string]any, comm, direction string) string {
 	data := stringAt(raw, "data")
-	sum := sha256.Sum256([]byte(data))
+	bytes := []byte(data)
+	encoding := ""
+	if stringAt(raw, "data_encoding") == "base64" {
+		if decoded, err := base64.StdEncoding.DecodeString(data); err == nil {
+			bytes, encoding = decoded, "base64"
+		}
+	}
+	sum := sha256.Sum256(bytes)
 	payload := map[string]any{
 		"preview_sha256": hex.EncodeToString(sum[:]),
 		"preview":        truncatePreview(data, 80),
 		"length":         intAt(raw, "length"),
 		"comm":           comm,
 	}
+	if encoding != "" {
+		payload["content_encoding"] = encoding
+		payload["length"] = len(bytes)
+	}
+	capture := tlsCaptureIntegrity(raw)
+	if capture != nil {
+		payload["capture"] = capture
+		if capture.Incomplete() {
+			payload["truncated"] = true
+		}
+	}
 	if truncated, _ := raw["truncated"].(bool); truncated {
 		payload["truncated"] = true
 	}
-	if m := boundedHTTPText(stringAt(raw, "model"), 256); m != "" {
+	if m := boundedHTTPText(stringAt(raw, "model"), 256); m != "" && !capture.Incomplete() {
 		payload["model"] = m
 	}
 	// Privacy: the full reassembled body (the model's actual prompt/completion) is

@@ -4,7 +4,7 @@
 
 [![体验在线 Demo](docs/assets/online-demo-button-zh-CN.svg)](https://ByteYellow.github.io/AgentProvenance/)
 
-**直接体验 9 份签名回放，查看执行图谱、Agent 会话、访问控制决策和文件正文。**
+**直接体验 12 份签名示例，查看执行图谱、Agent 会话、访问控制决策和文件正文。**
 无需安装、注册或 API Key。
 
 # AgentProvenance
@@ -75,8 +75,8 @@ AgentProvenance 把任务要求、工具返回结果和操作系统中的实际�
 需要离线回放时，下载 CLI：
 
 在[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应平台的
-压缩包和同名 `.sha256` 校验文件。下载示例使用 v0.10.0，
-包含下文的调查与修复示例，详情见[版本进展](#版本进展)。
+压缩包和同名 `.sha256` 校验文件。下载示例使用 v0.10.1，
+包含新的证据关联实录和历史调查示例，详情见[版本进展](#版本进展)。
 
 | 平台 | 压缩包后缀 |
 | --- | --- |
@@ -88,9 +88,9 @@ AgentProvenance 把任务要求、工具返回结果和操作系统中的实际�
 以 Linux x86-64 为例，下载后校验并解压：
 
 ```sh
-sha256sum -c agentprov_v0.10.0_linux_amd64.tar.gz.sha256
+sha256sum -c agentprov_v0.10.1_linux_amd64.tar.gz.sha256
 mkdir agentprov-demo
-tar -xzf agentprov_v0.10.0_linux_amd64.tar.gz -C agentprov-demo
+tar -xzf agentprov_v0.10.1_linux_amd64.tar.gz -C agentprov-demo
 cd agentprov-demo
 ./agentprov demo
 ```
@@ -102,9 +102,11 @@ Windows 用户在 WSL 中运行 Linux 包。回放可以离线使用，
 [![Demo 示例首页，点击在线体验](docs/img/demo-gallery-zh-CN.png)](https://ByteYellow.github.io/AgentProvenance/)
 
 点击**打开回放**查看签名执行记录，点击**阅读指南**查看图文说明。
-当前示例库共有 **9 份签名回放、11 篇示例指南**。建议先体验调查与修复流程：
+当前示例库共有 **12 份签名回放、14 篇示例指南**，其中一份明确标注为合成归因示例。
+建议先查看本期新增的证据关联实录：
 
 ```sh
+./agentprov demo evidence-attribution
 ./agentprov demo investigation-workflow
 ./agentprov demo deepseek-context
 ./agentprov demo multiagent-provenance
@@ -336,6 +338,8 @@ go build -o agentprov ./cmd/agentprov
 
 | 示例 | 可以重点看什么 |
 | --- | --- |
+| [证据归因：修复前后](demo/evidence-attribution/README.zh-CN.md) | 11 月 DeepSeek 实录中的工具级意图、审计决定和保留的 TLS 片段 |
+| [外传归因：合成示例](demo/endpoint-attribution/README.zh-CN.md) | 正文命中、两条源读取候选和待确认的执行身份 |
 | [DeepSeek 开发任务](demo/deepseek-context/README.zh-CN.md) | 原始任务、工具结果、配置历史、测试结果和最终文件正文 |
 | [贪吃蛇供应链案例](demo/snake-supply-chain/README.zh-CN.md) | 被投毒的依赖、预置的测试凭据、网络活动与产物来源 |
 | [多 Agent 协作](demo/multiagent-provenance/README.zh-CN.md) | 任务委派、同伴影响、拒绝动作与后续执行路径 |
@@ -346,7 +350,7 @@ go build -o agentprov ./cmd/agentprov
 | [LLM Judge](demo/llm-judge/README.zh-CN.md) | 外部模型读取证据，返回附有证据引用的分析结果 |
 | [Jev 评估器](demo/jev-judge/README.zh-CN.md) | 结构化评估、规则对比与人工复核 |
 
-9 份签名回放均可离线体验。LLM Judge 和 Jev 是可选集成指南，
+12 份签名示例均可离线体验，其中一份明确标注为合成样本。LLM Judge 和 Jev 是可选集成指南，
 实时评估需要按各自说明配置模型服务。Grok 示例是有明确采集时间和复现范围的历史记录，
 不代表其当前服务的行为。
 
@@ -493,17 +497,21 @@ CLI 和工具输出默认英文，原始证据不翻译。
 
 ## 版本进展
 
-v0.10.0 把关联会话、正文搜索、执行对比和选择性离线分享
-串成完整的调查流程，并接入 AppArmor、seccomp 的访问控制记录。
-采集支持基础档和详细档，用户可以按需要选择 Agent 上下文的留存范围。
+v0.10.1 加强 daemon 访问控制，保留本地采集的交互与兼容性，
+并在原有证据详情中说明意图关联、外传归因和 TLS 采集缺口。
+原生采集补齐有界缓冲和可靠停机。新增签名实录展示这些变化，
+原有调查、对比和离线分享示例继续保留。
 
 后续暂不新增功能，重点提升准确性、采集稳定性和使用体验。
 
 升级前请备份数据目录；升级后的数据库不支持直接用旧版程序打开。
 macOS 包尚未经过 Apple 公证；下载校验和用于检查压缩包完整性。
 
-[发行说明](docs/zh-CN/releases/v0.10.0.md) · [变更记录](CHANGELOG.zh-CN.md) ·
+[发行说明](docs/zh-CN/releases/v0.10.1.md) · [变更记录](CHANGELOG.zh-CN.md) ·
 [后续方向](docs/zh-CN/capabilities.md#后续方向)
+
+升级前请阅读 [v0.10.1 升级指南](docs/zh-CN/upgrading-v0.10.1.md)，
+了解鉴权、HTTP 执行和签名导入的默认行为变化。
 
 ## 开发
 
@@ -535,6 +543,9 @@ ARM64 实机与 KVM/K3s 实验环境的验收结果另有报告，不等同于�
 ## 作者与许可
 
 由 [ByteYellow](https://github.com/ByteYellow) 开发和维护。
+
+感谢 [@8eeth0ven](https://github.com/8eeth0ven) 在
+[PR #34](https://github.com/ByteYellow/AgentProvenance/pull/34) 中贡献安全加固改进。
 
 采用 Apache License 2.0 许可证，详见 [LICENSE](LICENSE)。
 Copyright 2026 ByteYellow。

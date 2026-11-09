@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -51,6 +52,8 @@ const (
 	eventSSLRelease    = 14
 	eventSyscallResult = 15
 	eventThreadExit    = 16
+	eventSSLCheckpoint = 17
+	eventTLSDiscovery  = 18
 )
 
 type sensorTracepoint struct {
@@ -61,6 +64,15 @@ type sensorTracepoint struct {
 // RunWithOptions loads the configured eBPF probes and writes normalized JSONL
 // telemetry until SIGINT/SIGTERM. It requires root or CAP_BPF + CAP_PERFMON.
 func RunWithOptions(out io.Writer, opts Options) (runErr error) {
+	if len(opts.TLSTargets) > 1024 {
+		return fmt.Errorf("at most 1024 known TLS targets are allowed")
+	}
+	if opts.RingBufferMiB == 0 {
+		opts.RingBufferMiB = 64
+	}
+	if opts.RingBufferMiB < 1 || opts.RingBufferMiB > 256 || opts.RingBufferMiB&(opts.RingBufferMiB-1) != 0 {
+		return fmt.Errorf("ring-buffer-mib must be a power of two between 1 and 256")
+	}
 	reporter := newCapabilityReporter(opts)
 	defer func() { reporter.finish(runErr) }()
 	if err := rlimit.RemoveMemlock(); err != nil {
@@ -68,17 +80,42 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	}
 
 	var objs sensorbpfObjects
-	if err := loadSensorbpfObjects(&objs, nil); err != nil {
+	var procfs *procfsResolver
+	spec, err := loadSensorbpf()
+	if err == nil {
+		spec.Maps["events"].MaxEntries = uint32(opts.RingBufferMiB << 20)
+	}
+	if err == nil {
+		procfs, err = configureProcfsNamespace(spec)
+	}
+	defer procfs.close()
+	if err == nil {
+		enabled := uint32(0)
+		if opts.AutoTLS {
+			enabled = 1
+		}
+		err = spec.RewriteConstants(map[string]interface{}{"tls_auto_discovery": enabled})
+		if err == nil {
+			err = spec.LoadAndAssign(&objs, nil)
+		}
+	}
+	if err != nil {
 		return i18n.Errorf("load eBPF objects: %w", err)
 	}
 	defer objs.Close()
+	bindProcfsResolver(procfs, &objs)
+	procfs.publish(reporter, true)
+	defer procfs.publish(reporter, true)
 
 	var links []link.Link
-	defer func() {
+	detachProbes := sync.OnceValue(func() error {
+		var err error
 		for _, l := range links {
-			_ = l.Close()
+			err = errors.Join(err, l.Close())
 		}
-	}()
+		return err
+	})
+	defer detachProbes()
 	attach := func(p sensorTracepoint, required bool, category string) error {
 		probe := ProbeCapability{Name: p.group + "/" + p.name, Category: category, Required: required, Status: "attached"}
 		tp, err := link.Tracepoint(p.group, p.name, p.prog, nil)
@@ -161,6 +198,8 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		return i18n.Errorf("open ringbuf: %w", err)
 	}
 	defer rd.Close()
+	records, readResult, stopRecords := readSensorEvents(rd)
+	defer stopRecords()
 
 	parent := opts.Context
 	if parent == nil {
@@ -168,23 +207,48 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	}
 	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	stopReader := make(chan struct{})
-	defer close(stopReader)
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = rd.Close()
-		case <-stopReader:
-		}
-	}()
 	// Run discovery separately from ring-buffer consumption. Its bounded first
 	// pass attaches configured targets before the workload readiness callback.
 	tlsCtx, stopTLS := context.WithCancel(ctx)
 	tlsDone := make(chan struct{})
 	initialized := make(chan struct{})
-	tlsWake := make(chan struct{}, 1)
+	tlsWake := newTLSHintQueue()
 	go func() { defer close(tlsDone); runTLSDiscovery(tlsCtx, &objs, opts, reporter, initialized, tlsWake) }()
-	defer func() { stopTLS(); <-tlsDone }()
+	stopProducers := sync.OnceValue(func() error {
+		stopTLS()
+		err := detachProbes()
+		<-tlsDone
+		return err
+	})
+	stopReader, shutdownDone := make(chan struct{}), make(chan struct{})
+	var shutdownErr error
+	go func() {
+		defer close(shutdownDone)
+		select {
+		case <-ctx.Done():
+			// Flush has no producer-position snapshot. Detach every producer first
+			// so shutdown drains a finite tail even on a continuously busy node.
+			shutdownErr = stopProducers()
+			if shutdownErr == nil {
+				shutdownErr = rd.Flush()
+			}
+			if shutdownErr != nil {
+				_ = rd.Close()
+			}
+		case <-stopReader:
+		}
+	}()
+	defer func() {
+		close(stopReader)
+		<-shutdownDone
+		err := stopProducers()
+		if err == nil {
+			err = shutdownErr
+		}
+		if err != nil {
+			runErr = errors.Join(runErr, i18n.Errorf("stop sensor capture: %w", err))
+		}
+	}()
 	<-initialized
 	if ctx.Err() != nil {
 		return nil
@@ -253,11 +317,13 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		lastTLSLossReport = time.Now()
 	}
 	defer reportTLSLoss(true)
+	// Drain independently of JSON/procfs work. The queue is bounded and blocks
+	// when full: overload remains visible through the kernel drop counter.
 	for {
-		rec, err := rd.Read()
-		if err != nil {
-			if errors.Is(err, ringbuf.ErrClosed) {
-				reportTLSLoss(true)
+		e, ok := <-records
+		if !ok {
+			err := <-readResult
+			if errors.Is(err, ringbuf.ErrClosed) || errors.Is(err, ringbuf.ErrFlushed) {
 				encMu.Lock()
 				err = writeErr
 				encMu.Unlock()
@@ -265,35 +331,21 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 			}
 			return i18n.Errorf("read sensor ring buffer: %w", err)
 		}
-		var e sensorbpfSensorEvent
-		if err := binary.Read(bytes.NewReader(rec.RawSample), binary.LittleEndian, &e); err != nil {
+
+		task := procfs.resolve(e)
+		procfs.publish(reporter, false)
+		if task.PID != 0 && task.PID != uint32(os.Getpid()) && e.Kind != eventExit && e.Kind != eventThreadExit {
+			states.offer(stateTarget{pid: task.PID, tid: task.TID, start: e.ThreadStartNs, cgroup: e.CgroupId}, time.Now())
+		}
+		if opts.AutoTLS && task.PID != 0 && task.PID != uint32(os.Getpid()) && tlsDiscoveryEvent(e) {
+			tlsWake.offer(task.PID, e.ProcessStartNs, e.Kind == eventExec, e.Kind == eventOpen || e.Kind == eventTLSDiscovery, time.Now())
+		}
+		if e.Kind == eventTLSDiscovery {
 			continue
 		}
-		if e.Pid != uint32(os.Getpid()) && e.Kind != eventExit && e.Kind != eventThreadExit {
-			states.offer(stateTarget{pid: e.Pid, tid: e.Tid, start: e.ThreadStartNs, cgroup: e.CgroupId}, time.Now())
-		}
-		if opts.AutoTLS && e.Kind == eventExec {
-			// Coalesce process-start wakeups. Discovery has its own bounded rate
-			// and never blocks ring-buffer draining.
-			select {
-			case tlsWake <- struct{}{}:
-			default:
-			}
-		}
-		if e.Kind == eventSSL || e.Kind == eventSSLRead {
-			dir := tlsintent.Request
-			if e.Kind == eventSSLRead {
-				dir = tlsintent.Response
-			}
-			n := int(e.Daddr) // valid bytes in this chunk's path[]
-			if n < 0 || n > len(e.Path) {
-				n = len(e.Path)
-			}
-			for _, msg := range reasm.Add(tlsintent.Chunk{
-				PID: e.Pid, Conn: e.Conn, ProcessStartNS: e.ProcessStartNs, Epoch: e.ConnEpoch, Direction: dir,
-				Data: append([]byte(nil), e.Path[:n]...), Truncated: e.Dport == 1,
-			}) {
-				emit(tlsMessageMap(msg, e, resolver))
+		if e.Kind == eventSSL || e.Kind == eventSSLRead || e.Kind == eventSSLCheckpoint {
+			for _, msg := range reasm.Add(tlsChunk(e)) {
+				emit(tlsMessageMap(msg, e, resolver, task))
 			}
 			reportTLSLoss(false)
 			continue
@@ -304,7 +356,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 				reasm.Reset(c)
 			} else {
 				for _, msg := range reasm.Release(c) {
-					emit(tlsMessageMap(msg, e, resolver))
+					emit(tlsMessageMap(msg, e, resolver, task))
 				}
 			}
 			reportTLSLoss(false)
@@ -316,22 +368,50 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		}
 		if e.Kind == eventExit {
 			for _, msg := range reasm.EndProcess(e.Pid, e.ProcessStartNs, false) {
-				emit(tlsMessageMap(msg, e, resolver))
+				emit(tlsMessageMap(msg, e, resolver, task))
 			}
 			reportTLSLoss(false)
 		}
-		if m := normalize(e, resolver); m != nil {
+		if m := normalize(e, resolver, task); m != nil {
 			emit(m)
 		}
 	}
 }
 
+func tlsDiscoveryEvent(e sensorbpfSensorEvent) bool {
+	if e.Kind == eventExec || e.Kind == eventConnect || e.Kind == eventTLSDiscovery {
+		return true
+	}
+	if e.Kind != eventOpen {
+		return false
+	}
+	name := filepath.Base(string(bytes.TrimRight(e.Path[:], "\x00")))
+	return strings.HasPrefix(name, "libssl.so") || strings.HasPrefix(name, "libssl-")
+}
+
+func tlsChunk(e sensorbpfSensorEvent) tlsintent.Chunk {
+	dir := tlsintent.Request
+	if e.Kind == eventSSLRead || (e.Kind == eventSSLCheckpoint && e.Dport == 1) {
+		dir = tlsintent.Response
+	}
+	c := tlsintent.Chunk{PID: e.Pid, Conn: e.Conn, ProcessStartNS: e.ProcessStartNs, Epoch: e.ConnEpoch,
+		Direction: dir, Checkpoint: e.Kind == eventSSLCheckpoint,
+		Position: &tlsintent.ChunkPosition{StreamID: e.TlsStream, CallSequence: e.TlsCall,
+			Offset: e.TlsOffset, TotalBytes: uint32(e.ExitCode)}}
+	if !c.Checkpoint {
+		c.Data = append([]byte(nil), e.Path[:min(e.Daddr, uint32(len(e.Path)))]...)
+		c.Truncated = e.Dport == 1
+	}
+	return c
+}
+
 // tlsMessageMap turns a reassembled HTTP/1.1 LLM message into the normalized
 // event map, reusing the last chunk's process/cgroup context.
-func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any {
+func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgroupResolver, proc ...procTaskIDs) map[string]any {
+	task := eventProcTask(e, proc)
 	containerID := resolver.resolve(e.CgroupId)
-	if containerID == "" {
-		containerID = containerIDForPID(e.Pid)
+	if containerID == "" && task.PID != 0 {
+		containerID = resolver.forProcess(e, task.PID)
 	}
 	etype := "tls_write"
 	if msg.Direction == tlsintent.Response {
@@ -351,7 +431,22 @@ func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgro
 		"data":            string(msg.Body),
 		"length":          len(msg.Body),
 		"protocol":        msg.Protocol,
-		"headers_decoded": true,
+		"headers_decoded": msg.DataKind == "" || msg.DataKind == tlsintent.DataHTTPBody,
+	}
+	if msg.CaptureGap != "" {
+		kind := msg.DataKind
+		if kind == "" {
+			kind = tlsintent.DataHTTPBody
+		}
+		capture := map[string]any{"rule": tlsintent.CaptureRule, "state": "incomplete", "reason": msg.CaptureGap, "data_kind": kind}
+		if msg.Position != nil {
+			capture["position"] = msg.Position
+		}
+		ev["capture"] = capture
+		if kind != tlsintent.DataHTTPBody {
+			ev["data"] = base64.StdEncoding.EncodeToString(msg.Body)
+			ev["data_encoding"] = "base64"
+		}
 	}
 	if msg.StreamID != 0 {
 		ev["stream_id"] = msg.StreamID
@@ -378,6 +473,7 @@ func tlsMessageMap(msg tlsintent.Message, e sensorbpfSensorEvent, resolver *cgro
 		ev["status"] = msg.Status
 	}
 	addProcessIdentity(ev, e)
+	addProcfsIdentity(ev, task)
 	return ev
 }
 
@@ -422,7 +518,18 @@ type dropLookuper interface {
 // The container's cgroup directory outlives its short-lived processes, so this
 // survives a process whose /proc entry is already gone by the time userspace
 // drains the ring buffer - the failure mode of the previous /proc-only lookup.
+type containerProcessKey struct {
+	pid           uint32
+	start, cgroup uint64
+}
+type containerProcessEntry struct {
+	id string
+	at time.Time
+}
+
 type cgroupResolver struct {
+	processCache map[containerProcessKey]containerProcessEntry
+
 	root            string
 	kernelName      func(uint64) string
 	mu              sync.RWMutex
@@ -574,16 +681,42 @@ func (r *cgroupResolver) refresh() {
 	r.lastRefresh = now
 }
 
+// A process-lifetime key prevents PID reuse from borrowing a cached identity.
+// The one-second TTL permits later cgroup metadata to become visible, including
+// misses. A hard cap bounds host activity without an ever-growing PID list.
+func (r *cgroupResolver) forProcess(e sensorbpfSensorEvent, pid uint32) string {
+	if e.ProcessStartNs == 0 {
+		return containerIDForPID(pid)
+	}
+	key := containerProcessKey{pid, e.ProcessStartNs, e.CgroupId}
+	now := time.Now()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if cached, ok := r.processCache[key]; ok && now.Sub(cached.at) < time.Second {
+		return cached.id
+	}
+	id := containerIDForPID(pid)
+	if r.processCache == nil || len(r.processCache) >= 4096 {
+		r.processCache = make(map[containerProcessKey]containerProcessEntry)
+	}
+	r.processCache[key] = containerProcessEntry{id, now}
+	return id
+}
+
 // normalize maps a raw kernel event to the normalized telemetry schema consumed
 // by `telemetry ingest` (container_id, cgroup_id, pid/tgid/ppid, source,
 // event_type, payload). container_id is best-effort from /proc/<pid>/cgroup.
-func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any {
+func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver, proc ...procTaskIDs) map[string]any {
+	if (e.Kind == eventOpen || e.Kind == eventSyscallResult && e.SyscallKind != eventConnect) && e.ExitCode == 1 && !sensitiveReadPath(cstr(e.Path[:])) {
+		return nil
+	}
+	task := eventProcTask(e, proc)
 	// Prefer the race-free cgroup-id -> container-id resolution; the /proc lookup
 	// is a fallback for the live process and for hosts where the cgroup dir name
 	// does not carry the id.
 	containerID := resolver.resolve(e.CgroupId)
-	if containerID == "" {
-		containerID = containerIDForPID(e.Pid)
+	if containerID == "" && task.PID != 0 {
+		containerID = resolver.forProcess(e, task.PID)
 	}
 	ev := map[string]any{
 		"source":       "agentprov_ebpf",
@@ -598,6 +731,7 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver) map[string]any 
 	}
 	addProcessIdentity(ev, e)
 	addSyscallIdentity(ev, e)
+	addProcfsIdentity(ev, task)
 	switch e.Kind {
 	case eventFork:
 		ev["event_type"] = "process_observed"

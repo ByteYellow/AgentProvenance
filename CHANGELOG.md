@@ -2,6 +2,75 @@
 
 English | [中文](CHANGELOG.zh-CN.md)
 
+## v0.10.1 - 2026-11-09
+
+### Security and compatibility
+
+- Require daemon bearer authentication by default, reuse the protected token
+  file and validate browser origins, Fetch Metadata and write content types.
+  Keep health checks anonymous and ordinary GET requests read-only.
+- Keep interactive `launch`/`record` input, Ctrl-C and long tasks working while
+  retaining separate HTTP execution limits and descendant cleanup. Isolate
+  data-directory, authentication and language state between CLI command trees.
+- Verify forensics signatures before import; require an explicit unverified
+  option for unsigned captures. Keep verification outcomes in text and JSON,
+  and keep JSON-mode diagnostics English across interface languages.
+- Restrict server-side file ingestion and artifact export paths. Accept valid
+  artifact names without relaxing destination checks or private file modes.
+- Keep Docker capabilities dropped and `no-new-privileges` enabled. Default to
+  the caller's effective UID:GID for writable workspaces; honor explicit task users.
+- Update signed-import scripts, SDK examples and bilingual migration guidance.
+  See the [upgrade guide](docs/upgrading-v0.10.1.md) for changed defaults.
+- Keep quoted-command redaction consistent across table fields and JSON objects,
+  so signed record exports remain verifiable after import.
+- Avoid unnecessary credential-pattern scans in large saved bodies while keeping
+  the existing masking rules and full content available to replay.
+
+### Evidence accuracy
+
+- Compute intent coverage per tool call. Preserve ambiguous delegation
+  candidates, explicit call bindings and separately applicable persistent policies.
+- Separate outbound body matches, candidate source reads and execution identity.
+  Match structured paths, available versions and observation times; retain
+  unknown and ambiguous attribution with evidence references and rule versions.
+- Isolate HTTP/1.1 and HTTP/2 HPACK state after TLS gaps. Retain incomplete
+  fragments and call/chunk positions without extracting model decisions from
+  partial bytes; aggregate contiguous fragments from the same call.
+- Trigger bounded TLS target discovery from process/library hints and reuse
+  attached library targets for subsequent short-lived processes.
+- Show intent, attribution and TLS integrity in the existing detail readers,
+  including signed-bundle roundtrips and selected offline replays. Keep capture
+  truncation distinct from body pagination.
+
+### Native capture reliability
+
+- Preserve journal receipt clocks for audit candidate matching, checking them
+  against native monotonic timestamps and retaining ambiguous candidates.
+- Propagate failures through Linux acceptance log pipelines.
+- Resolve x86 procfs identities across PID namespaces while retaining original
+  kernel task identities and reporting mapping gaps.
+- Support stripped amd64 Go TLS executables and PIE, plus BoringSSL fixtures
+  with resolvable function symbols. Prepare known targets with `--tls-target`.
+- Use a bounded reader queue and a configurable kernel ring buffer, defaulting
+  to 64 MiB. Stop syscall and TLS probes before draining queued records so a
+  busy node does not prevent graceful shutdown.
+- Restore Chinese rendering for current ELF diagnostics while retaining
+  historical message translations. Cover active-load shutdown in Linux CI.
+
+### Demos and documentation
+
+- Add signed DeepSeek inspection/repair captures from November 6, with direct
+  links to tool-scoped intent evidence and incomplete TLS messages. Keep all
+  historical bundles unchanged.
+- Add a clearly labeled synthetic outbound-attribution replay showing body
+  matches, two candidate reads and unresolved execution identity.
+- Update the bilingual README, release navigation, upgrade instructions and
+  public replay catalog together.
+
+Thanks to [@8eeth0ven](https://github.com/8eeth0ven) for security hardening
+contributions in [PR #34](https://github.com/ByteYellow/AgentProvenance/pull/34).
+[Release notes](docs/releases/v0.10.1.md).
+
 ## v0.10.0 - 2026-10-19
 
 ### Added

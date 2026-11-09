@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/byteyellow/agentprovenance/internal/tlsintent"
 )
 
 func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[string]lensEvent, error) {
@@ -38,7 +40,17 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 		ev.Path = payloadString(ev.Payload, "path", "file")
 		ev.Destination = payloadString(ev.Payload, "host", "dst_host", "dst_ip", "dst", "destination")
 		events[ev.NodeID] = ev
-		add(GraphLensNode{
+		var endpointData map[string]any
+		if ev.Source == "endpoint_capture" {
+			var payload struct {
+				Association map[string]any `json:"endpoint_association"`
+			}
+			if err := json.Unmarshal([]byte(ev.Payload), &payload); err != nil {
+				return nil, nil, fmt.Errorf("endpoint event %s: %w", ev.ID, err)
+			}
+			endpointData = payload.Association
+		}
+		node := GraphLensNode{
 			ID:      ev.NodeID,
 			Kind:    "runtime_event",
 			Subtype: ev.Type,
@@ -53,7 +65,27 @@ func graphLensNodes(db *sql.DB, runID string) (map[string]GraphLensNode, map[str
 				"runtime_process_node": identity.Process.ID, "process_instance_id": identity.Process.InstanceID,
 				"process_identity_basis": identity.Process.Basis,
 			},
-		})
+		}
+		if endpointData != nil {
+			node.Data["endpoint_association"] = endpointData
+		}
+		if ev.Type == "tls_write" || ev.Type == "tls_read" {
+			var meta struct {
+				Capture         *tlsintent.CaptureIntegrity `json:"capture"`
+				Truncated       bool                        `json:"truncated"`
+				ContentEncoding string                      `json:"content_encoding"`
+			}
+			if json.Unmarshal([]byte(ev.Payload), &meta) == nil {
+				if meta.Capture != nil {
+					node.Data["capture"] = meta.Capture
+				}
+				node.Data["truncated"] = meta.Truncated
+				if meta.ContentEncoding != "" {
+					node.Data["content_encoding"] = meta.ContentEncoding
+				}
+			}
+		}
+		add(node)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
@@ -255,20 +287,23 @@ func addAgentNodes(db *sql.DB, runID string, add func(GraphLensNode)) error {
 // refusal bypass, a healthy green match, or a muted coverage gap.
 func addIntentDiffNodes(db *sql.DB, runID string, add func(GraphLensNode)) error {
 	rows, err := db.Query(`SELECT id, COALESCE(agent_id,''), COALESCE(contract_kind,''), COALESCE(operation,''),
-		COALESCE(status,''), COALESCE(finding,''), COALESCE(confidence,0), COALESCE(observed_effects,'[]'), COALESCE(mismatch_reason,'')
+		COALESCE(status,''), COALESCE(finding,''), COALESCE(confidence,0), COALESCE(observed_effects,'[]'), COALESCE(mismatch_reason,''), tool_call_id, source, rule_version, association
 		FROM intent_diffs WHERE run_id = ?`, runID)
 	if err != nil {
-		// Table may not exist on an older imported store: degrade to no nodes.
-		return nil
+		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var id, agentID, kind, operation, status, finding, observed, reason string
+		var id, agentID, kind, operation, status, finding, observed, reason, toolCallID, source, ruleVersion, association string
 		var confidence float64
-		if err := rows.Scan(&id, &agentID, &kind, &operation, &status, &finding, &confidence, &observed, &reason); err != nil {
+		if err := rows.Scan(&id, &agentID, &kind, &operation, &status, &finding, &confidence, &observed, &reason, &toolCallID, &source, &ruleVersion, &association); err != nil {
 			return err
 		}
 		label := intentDiffLabel(status, finding, operation)
+		var associationData map[string]any
+		if err := json.Unmarshal([]byte(association), &associationData); err != nil {
+			return fmt.Errorf("intent association %s: %w", id, err)
+		}
 		add(GraphLensNode{
 			ID:      id,
 			Kind:    "intent_diff",
@@ -278,6 +313,8 @@ func addIntentDiffNodes(db *sql.DB, runID string, add func(GraphLensNode)) error
 			Data: map[string]any{
 				"status": status, "finding": finding, "operation": operation, "contract_kind": kind,
 				"agent_id": agentID, "confidence": confidence, "observed_effects": observed, "reason": reason,
+				"tool_call_id": toolCallID, "source": source, "rule_version": ruleVersion,
+				"association": associationData,
 			},
 		})
 	}
@@ -298,6 +335,8 @@ func intentDiffLabel(status, finding, operation string) string {
 		return "✓ " + operation + " as declared"
 	case "intent_coverage_gap":
 		return "? uncaptured intent"
+	case "intent_association_gap":
+		return "? unresolved intent association"
 	default:
 		return head
 	}
@@ -311,7 +350,7 @@ func intentDiffRisk(status string) string {
 		return "critical"
 	case "declared_vs_effect_mismatch":
 		return "high"
-	case "intent_coverage_gap":
+	case "intent_coverage_gap", "intent_association_gap":
 		return "info"
 	default:
 		return ""
@@ -324,14 +363,17 @@ func intentDiffRisk(status string) string {
 var llmMetaCache sync.Map // path -> llmMessageSummary
 
 type llmMessageSummary struct {
-	Model        string
-	ToolCalls    []string
-	ToolsOffered []string
-	MessageCount int
-	StopReason   string
-	Command      string
-	Prompt       string
-	Correlation  *tlsPairing
+	Model           string
+	ToolCalls       []string
+	ToolsOffered    []string
+	MessageCount    int
+	StopReason      string
+	Command         string
+	Prompt          string
+	Correlation     *tlsPairing
+	Capture         *tlsintent.CaptureIntegrity
+	Truncated       bool
+	ContentEncoding string
 }
 
 // llmMessageMeta reads a stored llm_message object file and pulls out the model,
@@ -350,10 +392,13 @@ func llmMessageMeta(path string) llmMessageSummary {
 	}
 	var obj struct {
 		Payload struct {
-			Content     string      `json:"content"`
-			Model       string      `json:"model"`
-			Correlation *tlsPairing `json:"correlation"`
-			Semantics   struct {
+			Content         string                      `json:"content"`
+			Model           string                      `json:"model"`
+			Correlation     *tlsPairing                 `json:"correlation"`
+			Capture         *tlsintent.CaptureIntegrity `json:"capture"`
+			Truncated       bool                        `json:"truncated"`
+			ContentEncoding string                      `json:"content_encoding"`
+			Semantics       struct {
 				Model        string   `json:"model"`
 				ToolCalls    []string `json:"tool_calls"`
 				ToolsOffered []string `json:"tools_offered"`
@@ -365,16 +410,24 @@ func llmMessageMeta(path string) llmMessageSummary {
 	if json.Unmarshal(raw, &obj) != nil {
 		return llmMessageSummary{}
 	}
+	if obj.Payload.Truncated || obj.Payload.Capture.Incomplete() || (obj.Payload.ContentEncoding != "" && obj.Payload.ContentEncoding != "utf-8") {
+		out := llmMessageSummary{Correlation: obj.Payload.Correlation, Capture: obj.Payload.Capture,
+			Truncated: true, ContentEncoding: obj.Payload.ContentEncoding}
+		llmMetaCache.Store(path, out)
+		return out
+	}
 	prompt, command := llmContentSummary(obj.Payload.Content)
 	out := llmMessageSummary{
-		Model:        firstString([]string{obj.Payload.Model, obj.Payload.Semantics.Model}),
-		ToolCalls:    obj.Payload.Semantics.ToolCalls,
-		ToolsOffered: obj.Payload.Semantics.ToolsOffered,
-		MessageCount: obj.Payload.Semantics.MessageCount,
-		StopReason:   obj.Payload.Semantics.StopReason,
-		Command:      command,
-		Prompt:       prompt,
-		Correlation:  obj.Payload.Correlation,
+		Model:           firstString([]string{obj.Payload.Model, obj.Payload.Semantics.Model}),
+		ToolCalls:       obj.Payload.Semantics.ToolCalls,
+		ToolsOffered:    obj.Payload.Semantics.ToolsOffered,
+		MessageCount:    obj.Payload.Semantics.MessageCount,
+		StopReason:      obj.Payload.Semantics.StopReason,
+		Command:         command,
+		Prompt:          prompt,
+		Correlation:     obj.Payload.Correlation,
+		Capture:         obj.Payload.Capture,
+		ContentEncoding: obj.Payload.ContentEncoding,
 	}
 	llmMetaCache.Store(path, out)
 	return out
@@ -455,6 +508,15 @@ func addProvenanceObjectNodes(db *sql.DB, runID string, add func(GraphLensNode))
 			if meta.Correlation != nil {
 				data["correlation"] = meta.Correlation
 			}
+			if meta.Capture != nil {
+				data["capture"] = meta.Capture
+			}
+			if meta.Truncated {
+				data["truncated"] = true
+			}
+			if meta.ContentEncoding != "" {
+				data["content_encoding"] = meta.ContentEncoding
+			}
 			add(GraphLensNode{
 				ID: hash, Kind: kind, Subtype: "llm_message", Label: label,
 				TrustOrigin: "content_addressed",
@@ -468,7 +530,7 @@ func addProvenanceObjectNodes(db *sql.DB, runID string, add func(GraphLensNode))
 			if hits, ok := meta["canary_hits"].([]any); ok && len(hits) > 0 {
 				label = fmt.Sprintf("%s: %d canary", label, len(hits))
 			}
-			add(GraphLensNode{
+			node := GraphLensNode{
 				ID: hash, Kind: "artifact", Subtype: "egress_payload", Label: label,
 				Risk: riskIf(stringFromAny(meta["policy_decision"]) == "deny"), TrustOrigin: "content_addressed",
 				Data: map[string]any{
@@ -476,7 +538,11 @@ func addProvenanceObjectNodes(db *sql.DB, runID string, add func(GraphLensNode))
 					"size_bytes": sizeBytes, "egress_kind": meta["egress_kind"], "canary_hits": meta["canary_hits"],
 					"canary_paths": meta["canary_paths"], "blocked": meta["blocked"], "policy_decision": meta["policy_decision"],
 				},
-			})
+			}
+			if association := meta["endpoint_association"]; association != nil {
+				node.Data["endpoint_association"] = association
+			}
+			add(node)
 			continue
 		}
 		// A SendMessage body is objectified for verifiability, but it should read

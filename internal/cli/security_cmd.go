@@ -172,7 +172,7 @@ func securityResponsesCmd(dataDir, daemonURL *string) *cobra.Command {
 }
 
 func securityRisks(dataDir, daemonURL, runID string) (securitymodel.RiskSignalsReport, error) {
-	if client, ok := daemonClient(daemonURL); ok {
+	if client, ok := daemonClient(daemonURL, dataDir); ok {
 		return client.SecurityRisks(runID)
 	}
 	db, cleanup, err := openLocalDB(dataDir)
@@ -184,7 +184,7 @@ func securityRisks(dataDir, daemonURL, runID string) (securitymodel.RiskSignalsR
 }
 
 func securityDeviations(dataDir, daemonURL, runID string) (baseline.DeviationsReport, error) {
-	if client, ok := daemonClient(daemonURL); ok {
+	if client, ok := daemonClient(daemonURL, dataDir); ok {
 		return client.SecurityDeviations(runID)
 	}
 	db, cleanup, err := openLocalDB(dataDir)
@@ -196,7 +196,7 @@ func securityDeviations(dataDir, daemonURL, runID string) (baseline.DeviationsRe
 }
 
 func securityResponses(dataDir, daemonURL, runID string) (securitymodel.ResponseActionsReport, error) {
-	if client, ok := daemonClient(daemonURL); ok {
+	if client, ok := daemonClient(daemonURL, dataDir); ok {
 		return client.SecurityResponses(runID)
 	}
 	db, cleanup, err := openLocalDB(dataDir)

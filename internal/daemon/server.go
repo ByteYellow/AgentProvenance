@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ import (
 	signalsmodel "github.com/byteyellow/agentprovenance/internal/signals"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	runtimeplane "github.com/byteyellow/agentprovenance/internal/substrate/runtime"
+	session "github.com/byteyellow/agentprovenance/internal/substrate/session"
 	"github.com/byteyellow/agentprovenance/internal/substrate/state"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
@@ -54,9 +56,23 @@ type Server struct {
 	GCInterval         time.Duration
 	GCLimit            int
 	// AuthToken, when set, requires every request except the health endpoints to carry
-	// `Authorization: Bearer <AuthToken>`. Empty = open (backward compatible).
+	// `Authorization: Bearer <AuthToken>`. `daemon serve` generates a strong token into
+	// <data-dir>/auth-token when none is provided; empty = open and is only reachable
+	// via the explicit --insecure-open escape hatch.
 	AuthToken string
-	writeMu   *sync.Mutex
+	// ListenAddr also defines the optional DNS host trusted in open mode.
+	ListenAddr string
+	// IngestAllowDir confines file-path inputs of /v1/leases (task) and
+	// /v1/telemetry/ingest-falco (file). Empty = <data-dir>/ingest.
+	IngestAllowDir string
+	// RecordAllowShell / RecordExecTimeout feed record.Options for /v1/record:
+	// the execution policy of the authenticated record API. Running arbitrary
+	// programs for authenticated callers is the product design; these only
+	// control the shell wrapper form (AllowShell, default false) and the
+	// per-exec bound (Timeout: 0 = policy default, negative = unbounded).
+	RecordAllowShell  bool
+	RecordExecTimeout time.Duration
+	writeMu           *sync.Mutex
 }
 
 func NewServer(dataDir string) (Server, func(), error) {
@@ -103,6 +119,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/graph/lens", s.graphLens)
 	mux.Handle("GET /v1/context/", http.StripPrefix("/v1", (agentcontext.Service{DB: s.DB}).ReadHandler()))
 	mux.HandleFunc("GET /v1/evidence/manifest", s.evidenceManifest)
+	mux.HandleFunc("POST /v1/evidence/manifest", s.materializeEvidenceManifest)
 	mux.HandleFunc("POST /v1/forensics/export", s.forensicsExport)
 	mux.HandleFunc("POST /v1/forensics/export-batch", s.forensicsExportBatch)
 	mux.HandleFunc("GET /v1/observe/summary", s.observeSummary)
@@ -114,7 +131,65 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/signal/context", s.signalContext)
 	mux.HandleFunc("POST /v1/signal/run", s.signalRun)
 	mux.HandleFunc("POST /v1/signal/import", s.signalImport)
-	return s.withAuth(mux)
+	return s.withAuth(s.csrfGuard(mux))
+}
+
+// ingestedAllowDir returns the configured ingest allow directory, defaulting to
+// <data-dir>/ingest. Both file-reading write endpoints (leases task, falco
+// ingest) resolve inputs against it, so an attacker-supplied path can never
+// reach files outside the operator-designated drop zone.
+func (s Server) ingestAllowDir() (string, error) {
+	allow := s.IngestAllowDir
+	if allow == "" {
+		if s.Paths.Root == "" {
+			return "", errors.New("ingest allow directory is not configured")
+		}
+		allow = filepath.Join(s.Paths.Root, "ingest")
+	}
+	return filepath.Abs(allow)
+}
+
+// resolveWithinIngestAllowDir validates that path (after lexical cleaning and
+// symlink resolution) lies inside the ingest allow directory, and returns the
+// resolved path to open. The containment check uses filepath.Rel so ".."
+// escapes and prefix-spoofing siblings ("allowed-dir-evil") are rejected.
+func (s Server) resolveWithinIngestAllowDir(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", errors.New("file path is required")
+	}
+	allow, err := s.ingestAllowDir()
+	if err != nil {
+		return "", errors.New("ingest allow directory is not usable")
+	}
+	allowResolved := resolveExistingSymlinks(allow)
+	// Relative paths are interpreted against the allow directory (not the
+	// daemon's working directory), so they can only ever land inside it.
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(allow, path)
+	}
+	resolved := resolveExistingSymlinks(filepath.Clean(path))
+	rel, err := filepath.Rel(allowResolved, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == "." {
+		return "", errors.New("path is outside the ingest allow directory")
+	}
+	return resolved, nil
+}
+
+// resolveExistingSymlinks resolves symlinks on the deepest existing prefix of
+// path so that a symlink planted inside the allow directory cannot point the
+// read outside it. Non-existent paths resolve their parent directory.
+func resolveExistingSymlinks(path string) string {
+	path = filepath.Clean(path)
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	dir, base := filepath.Split(path)
+	if dir != "" {
+		if resolvedDir, err := filepath.EvalSymlinks(filepath.Clean(dir)); err == nil {
+			return filepath.Join(resolvedDir, base)
+		}
+	}
+	return path
 }
 
 // withAuth requires a bearer token on every route except the health endpoints
@@ -127,7 +202,7 @@ func (s Server) withAuth(next http.Handler) http.Handler {
 	}
 	want := "Bearer " + s.AuthToken
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && (r.URL.Path == "/v1/health" || r.URL.Path == "/v1/ready" || r.URL.Path == "/v1/live") {
+		if publicHealthRequest(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -272,6 +347,11 @@ func (s Server) gcOnce() {
 		VALUES ('evt-' || lower(hex(randomblob(6))), 'daemon_gc', 'gc_worker', ?, ?)`, payload, now)
 }
 
+// errLeaseTaskInvalid is a fixed, content-free error: YAML parse errors from
+// control.CreateLease embed fragments of the file's raw content, which must
+// never be echoed back to the caller (arbitrary-file-read oracle).
+var errLeaseTaskInvalid = errors.New("lease task load failed: task must be a valid task YAML file inside the ingest allow directory")
+
 func (s Server) createLease(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Task string `json:"task"`
@@ -279,10 +359,21 @@ func (s Server) createLease(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	resolved, err := s.resolveWithinIngestAllowDir(req.Task)
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
 	s.lockWrites()
 	defer s.unlockWrites()
-	id, err := s.control().CreateLease(req.Task)
-	writeResult(w, map[string]any{"lease_id": id}, err)
+	id, err := s.control().CreateLease(resolved)
+	if err != nil {
+		// Never surface the underlying error: os.ReadFile / yaml.Unmarshal errors
+		// echo fragments of the file content back to the caller.
+		writeResult(w, nil, errLeaseTaskInvalid)
+		return
+	}
+	writeResult(w, map[string]any{"lease_id": id}, nil)
 }
 
 func (s Server) createSession(w http.ResponseWriter, r *http.Request) {
@@ -363,6 +454,20 @@ func (s Server) sessionByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s Server) exec(w http.ResponseWriter, r *http.Request, sessionID string) {
+	// H3：进入容器执行命令前必须确认会话存在、running 且 lease 活跃，
+	// 否则仅凭会话 id 即可跨会话 exec（sentinel 错误映射 HTTP 语义，不透出驱动细节）。
+	if err := session.GuardExec(s.DB, sessionID); err != nil {
+		switch {
+		case errors.Is(err, session.ErrSessionNotFound):
+			w.WriteHeader(http.StatusNotFound)
+		case errors.Is(err, session.ErrSessionNotRunning), errors.Is(err, session.ErrLeaseInactive):
+			w.WriteHeader(http.StatusConflict)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+		writeJSON(w, map[string]any{"error": err.Error()})
+		return
+	}
 	var req struct {
 		Command []string `json:"command"`
 		Stream  bool     `json:"stream"`
@@ -494,13 +599,21 @@ func (s Server) ingestFalco(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	// Both the sync and async paths read attacker-supplied paths from disk;
+	// confine every read to the ingest allow directory (symlinks resolved and
+	// re-checked) so this endpoint cannot be turned into arbitrary file read.
+	resolved, err := s.resolveWithinIngestAllowDir(req.File)
+	if err != nil {
+		writeResult(w, nil, err)
+		return
+	}
 	if req.Async || req.Queued {
 		s.lockWrites()
 		defer s.unlockWrites()
 		batch, err := (telemetry.SpoolService{DB: s.DB, Paths: s.Paths}).Enqueue(telemetry.SpoolEnqueueRequest{
 			Format:         "falco",
 			RunID:          req.RunID,
-			SourcePath:     req.File,
+			SourcePath:     resolved,
 			PolicyEnabled:  !req.NoPolicy,
 			MaxQueued:      s.SpoolMaxQueued,
 			MaxQueuedBytes: s.SpoolMaxBytes,
@@ -512,13 +625,13 @@ func (s Server) ingestFalco(w http.ResponseWriter, r *http.Request) {
 	}
 	s.lockWrites()
 	defer s.unlockWrites()
-	file, err := os.Open(req.File)
+	file, err := os.Open(resolved)
 	if err != nil {
 		writeResult(w, nil, err)
 		return
 	}
 	defer file.Close()
-	result, err := telemetry.IngestFalco(s.DB, telemetry.FalcoIngestOptions{Path: req.File, RunID: req.RunID}, file)
+	result, err := telemetry.IngestFalco(s.DB, telemetry.FalcoIngestOptions{Path: resolved, RunID: req.RunID}, file)
 	if err == nil && !req.NoPolicy {
 		evaluateTelemetryPolicy(s.DB, &result)
 	}
@@ -679,13 +792,39 @@ func (s Server) graphLens(w http.ResponseWriter, r *http.Request) {
 
 func (s Server) evidenceManifest(w http.ResponseWriter, r *http.Request) {
 	runID := r.URL.Query().Get("run")
-	materialize := r.URL.Query().Get("materialize") == "1" || r.URL.Query().Get("materialize") == "true"
+	materialize := manifestMaterializationRequested(r)
 	objectLimit := 25
 	if materialize {
+		// Keep authenticated legacy clients working; anonymous GET/HEAD must
+		// remain read-only even when no browser metadata was sent.
+		if s.AuthToken == "" || r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodPost)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			writeJSON(w, map[string]any{"error": "use POST /v1/evidence/manifest with a JSON run_id to materialize evidence"})
+			return
+		}
 		s.lockWrites()
 		defer s.unlockWrites()
 	}
 	result, err := buildEvidenceManifest(s.DB, s.Paths, runID, objectLimit, materialize)
+	writeResult(w, result, err)
+}
+
+func manifestMaterializationRequested(r *http.Request) bool {
+	value := r.URL.Query().Get("materialize")
+	return value == "1" || value == "true"
+}
+
+func (s Server) materializeEvidenceManifest(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RunID string `json:"run_id"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	s.lockWrites()
+	defer s.unlockWrites()
+	result, err := buildEvidenceManifest(s.DB, s.Paths, req.RunID, 25, true)
 	writeResult(w, result, err)
 }
 
@@ -726,7 +865,14 @@ func (s Server) recordRun(w http.ResponseWriter, r *http.Request) {
 		writeResult(w, nil, errors.New("command is required"))
 		return
 	}
-	result, err := record.Service{DB: s.DB, Paths: s.Paths}.Run(req)
+	result, err := record.Service{
+		DB:    s.DB,
+		Paths: s.Paths,
+		Options: record.Options{
+			AllowShell: s.RecordAllowShell,
+			Timeout:    s.RecordExecTimeout,
+		},
+	}.Run(req)
 	writeResult(w, result, err)
 }
 

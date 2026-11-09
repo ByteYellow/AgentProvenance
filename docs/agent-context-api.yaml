@@ -452,6 +452,28 @@ components:
             truncated_maps: {type: integer}
             skipped_targets: {type: integer}
             unsupported_executables: {type: integer}
+            sweep_passes: {type: integer, minimum: 0, description: Number of bounded periodic process-scan passes since sensor startup.}
+            event_discovery:
+              type: object
+              description: Cumulative sensor-lifetime discovery counters. Hints select a process to inspect; they do not attribute a captured action. Attachment latency starts when the sensor consumes the triggering event.
+              properties:
+                queue_capacity: {type: integer, minimum: 0}
+                pending: {type: integer, minimum: 0, description: Processes awaiting a scheduled retry; excludes completed coalescing entries.}
+                hints: {type: integer, minimum: 0}
+                coalesced: {type: integer, minimum: 0}
+                queue_drops: {type: integer, minimum: 0}
+                process_scans: {type: integer, minimum: 0}
+                retry_scans: {type: integer, minimum: 0}
+                exited_processes: {type: integer, minimum: 0}
+                changed_processes: {type: integer, minimum: 0}
+                unreadable_processes: {type: integer, minimum: 0}
+                unresolved_mounts: {type: integer, minimum: 0}
+                truncated_maps: {type: integer, minimum: 0}
+                skipped_targets: {type: integer, minimum: 0}
+                unsupported_executables: {type: integer, minimum: 0}
+                attached_targets: {type: integer, minimum: 0}
+                last_attach_latency_ms: {type: integer, minimum: 0}
+                max_attach_latency_ms: {type: integer, minimum: 0}
             reason: {type: string}
             limitations: {type: [array, "null"], items: {type: string}}
     RuntimeCorrelationCoverage:
@@ -548,6 +570,29 @@ components:
               ref: {type: string}
               source_id: {type: string}
         versions_has_more: {type: boolean}
+        tls:
+          type: object
+          description: TLS/message capture metadata copied from the saved record. Independent of response paging and object integrity. Omitted for other evidence types; an absent capture field preserves unknown historical completeness.
+          required: [truncated]
+          properties:
+            truncated: {type: boolean, description: Capture truncation recorded by the producer, not preview pagination.}
+            content_encoding: {type: string}
+            capture:
+              type: object
+              required: [rule, state, reason, data_kind]
+              properties:
+                rule: {type: string}
+                state: {type: string}
+                reason: {type: string}
+                data_kind: {type: string}
+                position:
+                  type: object
+                  properties:
+                    stream_id: {type: string, pattern: '^[0-9]+$'}
+                    call_sequence: {type: string, pattern: '^[0-9]+$'}
+                    offset: {type: integer, minimum: 0}
+                    total_bytes: {type: integer, minimum: 0}
+                    checkpoint: {type: boolean}
       description: >
         Saved-only artifact or database-record preview. Legacy objects retain an
         8 MiB read budget; new stored text can span 32 MiB using bounded chunks.

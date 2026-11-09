@@ -22,7 +22,8 @@ jobs:
 
   jev-demo:
     name: Jev demo (keyless, Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
+    # Python 3.9 compatibility builds are available for Ubuntu 24.04, not 26.04.
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python: ["3.9", "3.13"]
@@ -169,9 +170,14 @@ jobs:
 
   sensor-live-amd64:
     name: amd64 syscalls and TLS (Go ${{ matrix.go }})
-    runs-on: ubuntu-24.04
-    needs: sensor-build
+    defaults:
+      run:
+        shell: bash
+    # Ubuntu 24.04's 7.0.0-1017-azure drops faultable syscall-entry BPF events.
+    # https://github.com/actions/runner-images/issues/15003
+    runs-on: ubuntu-22.04
     strategy:
+      fail-fast: false
       matrix:
         go: ["1.23.x", "1.24.x", "1.25.x", "1.26.x"]
     timeout-minutes: 10
@@ -187,6 +193,7 @@ jobs:
           sudo apt-get install -y gcc libssl-dev openssl python3 apparmor-utils
       - name: Build sensor and fixture clients
         run: |
+          python3 -m unittest discover -s scripts -p test_accept_sensor_live.py -v
           mkdir -p /tmp/agentprov-live
           CGO_ENABLED=0 go build -o /tmp/agentprov-live/sensor ./cmd/agentprov-sensor
           CGO_ENABLED=0 go build -o /tmp/agentprov-live/go-client ./internal/sensor/testdata/tls_client.go
@@ -215,6 +222,33 @@ jobs:
           sudo env PATH="$PATH" AGENTPROV_LIVE_OPENSSL=1 \
             /tmp/agentprov-live/sensor-test -test.run '^Test(OpenSSLReadObject|TLSMessageMap|LiveOpenSSL)' -test.v -test.timeout=120s \
             | tee /tmp/agentprov-live/openssl-read.log
+      - name: Verify bounded discovery of short-lived TLS clients
+        run: |
+          cd internal/sensor
+          sudo env PATH="$PATH" AGENTPROV_LIVE_OPENSSL=1 AGENTPROV_LIVE_TLS_CLIENT=/tmp/agentprov-live/go-client \
+            /tmp/agentprov-live/sensor-test -test.run '^TestLiveTLSDiscoveryShortClient$' -test.v -test.timeout=120s \
+            | tee /tmp/agentprov-live/tls-discovery.log
+      - name: Verify shutdown under continuous node traffic
+        run: |
+          cd internal/sensor
+          sudo env AGENTPROV_LIVE_SHUTDOWN=1 \
+            /tmp/agentprov-live/sensor-test -test.run '^TestLiveSensorShutdown$' -test.v -test.timeout=60s \
+            | tee /tmp/agentprov-live/shutdown.log
+      - name: Verify procfs identity in a nested PID namespace
+        # Exercise procfs identity independently from the host's initial PIDs.
+        # unshare changes only this test process and its children.
+        run: |
+          cd internal/sensor
+          sudo env PATH="$PATH" AGENTPROV_ACCESS_STATE_LIVE=1 AGENTPROV_LIVE_OPENSSL=1 AGENTPROV_LIVE_TLS_CLIENT=/tmp/agentprov-live/go-client \
+            unshare --mount --pid --fork --mount-proc /tmp/agentprov-live/sensor-test \
+            -test.run '^TestLiveSensorAccessState$|^TestLiveTLSDiscoveryShortClient$/(automatic|concurrent|delayed-load|new-go-executable)$' \
+            -test.v -test.timeout=90s | tee /tmp/agentprov-live/pid-namespace.log
+          if sudo env AGENTPROV_ACCESS_STATE_LIVE=1 unshare --pid --fork \
+            /tmp/agentprov-live/sensor-test -test.run '^TestLiveSensorAccessState$' -test.v -test.timeout=30s \
+            > /tmp/agentprov-live/pid-namespace-mismatch.log 2>&1; then
+            echo 'sensor accepted a proc mount from another PID namespace'; exit 1
+          fi
+          grep -Fq 'procfs PID namespace does not match the collector' /tmp/agentprov-live/pid-namespace-mismatch.log
       - name: Verify syscall outcomes and thread-group exits
         run: |
           cd internal/sensor
@@ -278,6 +312,10 @@ jobs:
           path: |
             /tmp/agentprov-live/acceptance.*
             /tmp/agentprov-live/openssl-read.log
+            /tmp/agentprov-live/tls-discovery.log
+            /tmp/agentprov-live/shutdown.log
+            /tmp/agentprov-live/pid-namespace.log
+            /tmp/agentprov-live/pid-namespace-mismatch.log
             /tmp/agentprov-live/syscall-outcomes.log
             /tmp/agentprov-live/audit-associations.log
             /tmp/agentprov-live/audit-follow.log

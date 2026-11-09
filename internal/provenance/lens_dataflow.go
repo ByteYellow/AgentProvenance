@@ -21,7 +21,7 @@ func buildDataFlowSummaryEdges(events map[string]lensEvent, edges []GraphLensEdg
 	out := deriveAggregatedDataFlowEdges(sources, sinks)
 	for _, edge := range edges {
 		switch edge.EdgeType {
-		case "sensitive_source_payload", "payload_egress_attempt", "confirmed_sensitive_data_flow":
+		case "sensitive_source_payload", "payload_egress_attempt", "confirmed_sensitive_data_flow", "candidate_sensitive_data_flow", "endpoint_execution_reference":
 			out = append(out, edge)
 		}
 	}

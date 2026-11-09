@@ -4,9 +4,11 @@ package sensor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -23,6 +25,8 @@ type tlsAttachment struct {
 	links       []tlsLink
 	probes      []ProbeCapability
 	lastAttempt time.Time
+	lastSeen    time.Time
+	idle        bool
 }
 
 func (a *tlsAttachment) close() {
@@ -59,9 +63,10 @@ func attachTLSTarget(target tlsTarget, objs *sensorbpfObjects, skip map[string]b
 	var ex *link.Executable
 	var dynamicOffsets map[string]uint64
 	if openErr == nil {
-		openErr = validateELFMetadata(stablePath)
-		if openErr != nil && target.Kind == "openssl" {
-			dynamicOffsets, openErr = opensslDynamicOffsets(stablePath)
+		if target.Kind == "openssl" {
+			dynamicOffsets, openErr = opensslProbeOffsets(stablePath)
+		} else {
+			openErr = validateELFMetadata(stablePath)
 		}
 	}
 	if openErr == nil {
@@ -72,6 +77,11 @@ func attachTLSTarget(target tlsTarget, objs *sensorbpfObjects, skip map[string]b
 			return
 		}
 		probe := ProbeCapability{Name: name, Category: "tls", Target: target.Path, Status: "attached"}
+		if target.Kind == "openssl" && dynamicOffsets["SSL_set_custom_verify"] != 0 && (name == "SSL_write_ex" || name == "SSL_read_ex") && dynamicOffsets[name] == 0 {
+			probe.Status, probe.Reason = "not_applicable", "BoringSSL uses SSL_read/SSL_write; this _ex API is absent"
+			a.probes = append(a.probes, probe)
+			return
+		}
 		if openErr != nil {
 			probe.Status = "failed"
 			probe.Reason = capabilityFailure(openErr)
@@ -134,6 +144,13 @@ func attachTLSTarget(target tlsTarget, objs *sensorbpfObjects, skip map[string]b
 		attach("SSL_read", objs.HandleSslReadEnter, objs.HandleSslReadExit)
 		attach("SSL_read_ex", objs.HandleSslReadExEnter, objs.HandleSslReadExExit)
 	} else {
+		if openErr == nil && runtime.GOARCH == "amd64" {
+			var offset uint64
+			offset, _, openErr = goTLSFunctionLocation(stablePath, "crypto/tls.(*Conn).Write")
+			if openErr == nil {
+				dynamicOffsets = map[string]uint64{"crypto/tls.(*Conn).Write": offset}
+			}
+		}
 		attach("crypto/tls.(*Conn).Write", goTLSWriteProgram(objs), nil)
 		if skip["crypto/tls.(*Conn).Read"] {
 			return a
@@ -162,6 +179,7 @@ type tlsTracker struct {
 	entries    map[string]*tlsAttachment
 	pinned     map[string]tlsTarget
 	attach     func(tlsTarget, map[string]bool) *tlsAttachment
+	retainFor  time.Duration
 }
 
 func newTLSTracker(maxTargets int, attach func(tlsTarget, map[string]bool) *tlsAttachment) *tlsTracker {
@@ -180,6 +198,10 @@ func (t *tlsTracker) reconcile(observed map[string]tlsTarget, complete bool, now
 				continue
 			}
 			if _, ok := t.pinned[key]; ok {
+				continue
+			}
+			entry.idle = true
+			if t.retainFor > 0 && now.Sub(entry.lastSeen) < t.retainFor {
 				continue
 			}
 			entry.close()
@@ -209,6 +231,7 @@ func (t *tlsTracker) reconcile(observed map[string]tlsTarget, complete bool, now
 	for _, key := range keys {
 		target := all[key]
 		if old := t.entries[key]; old != nil {
+			old.lastSeen, old.idle = now, false
 			// Retry only failed probes. Reattaching working probes, even briefly,
 			// produces duplicate TLS plaintext and corrupts message reassembly.
 			skip := map[string]bool{}
@@ -255,10 +278,25 @@ func (t *tlsTracker) reconcile(observed map[string]tlsTarget, complete bool, now
 			}
 		}
 		if len(t.entries) >= t.maxTargets {
+			// Reuse recently observed inodes between bursts, but make room for
+			// a new target before consuming capacity with an idle cache entry.
+			var oldest string
+			for candidate, entry := range t.entries {
+				if _, pinned := t.pinned[candidate]; !pinned && entry.idle && (oldest == "" || entry.lastSeen.Before(t.entries[oldest].lastSeen)) {
+					oldest = candidate
+				}
+			}
+			if oldest != "" {
+				t.entries[oldest].close()
+				delete(t.entries, oldest)
+			}
+		}
+		if len(t.entries) >= t.maxTargets {
 			skipped++
 			continue
 		}
 		t.entries[key] = t.attach(target, nil)
+		t.entries[key].lastSeen = now
 	}
 	return skipped
 }
@@ -285,11 +323,12 @@ func tlsDefaults(opts Options) Options {
 	return opts
 }
 
-func runTLSDiscovery(ctx context.Context, objs *sensorbpfObjects, opts Options, reporter *capabilityReporter, initialized chan<- struct{}, wake <-chan struct{}) {
+func runTLSDiscovery(ctx context.Context, objs *sensorbpfObjects, opts Options, reporter *capabilityReporter, initialized chan<- struct{}, wake *tlsHintQueue) {
 	opts = tlsDefaults(opts)
 	tracker := newTLSTracker(opts.TLSMaxTargets, func(target tlsTarget, skip map[string]bool) *tlsAttachment {
 		return attachTLSTarget(target, objs, skip)
 	})
+	tracker.retainFor = 30 * time.Second
 	defer tracker.close()
 	scanner := newTLSProcessScanner("/proc", opts.TLSMaxProcesses, opts.TLSMaxTargets)
 	defer scanner.close()
@@ -300,16 +339,40 @@ func runTLSDiscovery(ctx context.Context, objs *sensorbpfObjects, opts Options, 
 	if opts.GoTLSBin != "" {
 		explicit = append(explicit, tlsTarget{Path: opts.GoTLSBin, Kind: "go"})
 	}
+	for _, path := range opts.TLSTargets {
+		explicit = append(explicit, tlsTarget{Path: path, Kind: "auto"})
+	}
+	// Pre-attach installed shared libraries so the first host process need not
+	// race process discovery. Container-private inodes still need known paths.
+	if opts.AutoTLS {
+		for _, path := range systemTLSLibraries() {
+			explicit = append(explicit, tlsTarget{Path: path, Kind: "openssl"})
+		}
+	}
+	schedule := newTLSHintSchedule()
+	var fullScans uint64
 	publish := func(scan TLSDiscoveryReport) {
 		scan.Enabled = opts.AutoTLS
 		scan.ScanIntervalMS = opts.TLSScanInterval.Milliseconds()
 		scan.MaxTargets = opts.TLSMaxTargets
 		scan.MaxProcessesPerScan = opts.TLSMaxProcesses
 		scan.ActiveTargets = len(tracker.entries)
+		scan.SweepPasses = fullScans
+		if opts.AutoTLS {
+			stats := schedule.stats
+			for _, pending := range schedule.pending {
+				if !pending.finished && pending.attempt < len(tlsDiscoveryRetryDelays) {
+					stats.Pending++
+				}
+			}
+			stats.Hints = wake.offered.Load()
+			stats.QueueDrops += wake.dropped.Load()
+			scan.EventDiscovery = &stats
+		}
 		scan.Limitations = []string{
 			"processes must be visible in the sensor PID namespace; container roots/maps must be readable",
-			"polling can miss TLS activity before attachment and processes shorter than the scan interval",
-			"stripped Go binaries, unsupported Go ABIs, custom/static TLS implementations may not be covered",
+			"first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
+			"amd64 Go 1.23–1.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported",
 		}
 		probes := []ProbeCapability{}
 		if !opts.AutoTLS {
@@ -320,12 +383,22 @@ func runTLSDiscovery(ctx context.Context, objs *sensorbpfObjects, opts Options, 
 		}
 		reporter.updateTLS(probes, scan)
 	}
+	var latest TLSDiscoveryReport
 	scan := func() {
 		// Refresh explicit paths too: replacing a configured executable/library
 		// atomically must not leave uprobes pinned to its old inode forever.
 		pinned := map[string]tlsTarget{}
 		for _, target := range explicit {
 			abs, err := filepath.Abs(target.Path)
+			if target.Kind == "auto" && err == nil {
+				kind := classifyTLSExecutable(abs)
+				if kind.kind == "" {
+					target.Kind = "openssl"
+					err = fmt.Errorf("known TLS target has no supported TLS functions")
+				} else {
+					target.Kind = kind.kind
+				}
+			}
 			if err == nil {
 				var backing string
 				backing, err = tlsBackingPath("/proc/self", target.Path, abs)
@@ -347,38 +420,90 @@ func runTLSDiscovery(ctx context.Context, objs *sensorbpfObjects, opts Options, 
 		observed := map[string]tlsTarget{}
 		status := TLSDiscoveryReport{ScanComplete: true}
 		if opts.AutoTLS {
+			fullScans++
 			observed, status = scanner.scan()
 		}
 		status.SkippedTargets += tracker.reconcile(observed, status.ScanComplete, time.Now())
-		publish(status)
+		latest = status
+		publish(latest)
 	}
 	scan()
 	close(initialized)
-	lastScan := time.Now()
-	minimumInterval := 250 * time.Millisecond
-	if opts.TLSScanInterval < minimumInterval {
-		minimumInterval = opts.TLSScanInterval
-	}
+	defer func() { publish(latest) }()
 	ticker := time.NewTicker(opts.TLSScanInterval)
 	defer ticker.Stop()
+	timer := time.NewTimer(time.Hour)
+	defer timer.Stop()
+	var nextBatch time.Time
+	lastPublish := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-		case <-wake:
+			scan()
+			lastPublish = time.Now()
+		case hint := <-wake.items:
+			schedule.add(hint)
+		case <-timer.C:
 		}
-		if delay := time.Until(lastScan.Add(minimumInterval)); delay > 0 {
-			timer := time.NewTimer(delay)
+		for n := 0; n < tlsDiscoveryBatchSize && len(wake.items) > 0; n++ {
+			schedule.add(<-wake.items)
+		}
+		if !time.Now().Before(nextBatch) {
+			for _, pending := range schedule.due(time.Now()) {
+				if ctx.Err() != nil {
+					return
+				}
+				schedule.stats.ProcessScans++
+				if pending.attempt > 0 {
+					schedule.stats.RetryScans++
+				}
+				observed, status, identity, err := scanner.scanPID(pending.hint.pid, pending.identity)
+				pending.identity = identity
+				schedule.stats.UnreadableProcesses += uint64(status.UnreadableProcesses)
+				schedule.stats.UnresolvedMounts += uint64(status.UnresolvedMounts)
+				schedule.stats.TruncatedMaps += uint64(status.TruncatedMaps)
+				schedule.stats.UnsupportedExecutables += uint64(status.UnsupportedExecutables)
+				schedule.stats.SkippedTargets += uint64(status.SkippedTargets)
+				switch {
+				case os.IsNotExist(err):
+					schedule.stats.ExitedProcesses++
+				case errors.Is(err, errTLSProcessChanged):
+					schedule.stats.ChangedProcesses++
+				case err != nil:
+					schedule.stats.UnreadableProcesses++
+				}
+				if err == nil {
+					fresh := map[string]bool{}
+					for key := range observed {
+						fresh[key] = tracker.entries[key] == nil
+					}
+					schedule.stats.SkippedTargets += uint64(tracker.reconcile(observed, false, time.Now()))
+					for key := range observed {
+						if entry := tracker.entries[key]; fresh[key] && entry != nil && len(entry.links) > 0 {
+							schedule.stats.AttachedTargets++
+							latency := time.Since(pending.hint.observed).Milliseconds()
+							schedule.stats.LastAttachLatencyMS = latency
+							schedule.stats.MaxAttachLatencyMS = max(schedule.stats.MaxAttachLatencyMS, latency)
+						}
+					}
+				}
+				schedule.advance(pending, err != nil)
+			}
+			nextBatch = time.Now().Add(tlsDiscoveryBatchInterval)
+		}
+		if time.Since(lastPublish) >= time.Second {
+			publish(latest)
+			lastPublish = time.Now()
+		}
+		if !timer.Stop() {
 			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return
 			case <-timer.C:
+			default:
 			}
 		}
-		scan()
-		lastScan = time.Now()
+		timer.Reset(schedule.next(time.Now(), nextBatch))
 	}
 }
 
@@ -392,4 +517,17 @@ func capabilityFailure(reason error) string {
 		return s[:2048] + " (truncated)"
 	}
 	return s
+}
+
+func systemTLSLibraries() []string {
+	var paths []string
+	for _, dir := range []string{"/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu", "/lib/aarch64-linux-gnu", "/usr/lib/aarch64-linux-gnu", "/lib64", "/usr/lib64", "/lib", "/usr/lib"} {
+		for _, name := range []string{"libssl.so.3", "libssl.so.1.1", "libssl.so"} {
+			path := filepath.Join(dir, name)
+			if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+				paths = append(paths, path)
+			}
+		}
+	}
+	return paths
 }

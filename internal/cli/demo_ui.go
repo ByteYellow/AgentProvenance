@@ -52,7 +52,7 @@ type demoPage struct {
 
 func demoCategory(entry demo.Entry) string {
 	switch entry.Directory {
-	case "investigation-workflow":
+	case "investigation-workflow", "evidence-attribution":
 		return "Investigation workflow"
 	case "snake-supply-chain", "deepseek-context":
 		return "Single agent"
@@ -60,7 +60,7 @@ func demoCategory(entry demo.Entry) string {
 		return "Agent team"
 	case "k8s-cross-pod-a2a", "k8s-substrate":
 		return "Kubernetes"
-	case "grok-codebase-exfil":
+	case "grok-codebase-exfil", "endpoint-attribution":
 		return "Outbound data"
 	default:
 		return "External evaluator"
@@ -298,6 +298,20 @@ func (ids *demoHeadingIDs) Put(value []byte) { ids.used[string(value)] = true }
 
 func demoGuideLink(entry demo.Entry, entries []demo.Entry, href string) string {
 	u, err := url.Parse(href)
+	// Public README links open Pages; the embedded reader keeps known captures local.
+	if err == nil && u.Scheme == "https" && strings.EqualFold(u.Host, "byteyellow.github.io") && u.User == nil &&
+		(u.Path == "/AgentProvenance/en/replay.html" || u.Path == "/AgentProvenance/zh-CN/replay.html") {
+		for _, candidate := range entries {
+			if candidate.Run != "" && candidate.Run == u.Query().Get("run") {
+				query := u.Query()
+				query.Set("lang", strings.Split(u.Path, "/")[2])
+				query.Set("live", "0")
+				u.Scheme, u.Host, u.Path = "", "", "/"
+				u.RawQuery = query.Encode()
+				return u.String()
+			}
+		}
+	}
 	if err != nil || u.IsAbs() || u.Host != "" || u.Path == "" || strings.HasPrefix(u.Path, "/") {
 		return href
 	}

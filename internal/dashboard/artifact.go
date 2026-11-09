@@ -17,6 +17,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
+	"github.com/byteyellow/agentprovenance/internal/tlsintent"
 )
 
 const (
@@ -52,6 +53,22 @@ type artifactResp struct {
 	HasMore         bool              `json:"has_more"`
 	Versions        []artifactVersion `json:"versions,omitempty"`
 	VersionsHasMore bool              `json:"versions_has_more,omitempty"`
+	TLS             *tlsPreview       `json:"tls,omitempty"`
+}
+
+// Capture metadata is independent of page truncation and object verification.
+type tlsPreview struct {
+	Capture         *tlsintent.CaptureIntegrity `json:"capture,omitempty"`
+	Truncated       bool                        `json:"truncated"`
+	ContentEncoding string                      `json:"content_encoding,omitempty"`
+}
+
+func tlsPreviewMetadata(payload []byte) *tlsPreview {
+	var meta tlsPreview
+	if err := json.Unmarshal(payload, &meta); err != nil {
+		meta = tlsPreview{Capture: &tlsintent.CaptureIntegrity{State: "unresolved", Reason: "invalid_capture_metadata"}}
+	}
+	return &meta
 }
 
 // artifact reads only run-scoped saved evidence. A result_ref that names a live
@@ -114,7 +131,7 @@ func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		content, found, err := s.nodeDBContentLocale(run, node, lang, mode)
+		content, tls, found, err := s.nodeDBContentLocale(run, node, lang, mode)
 		if err != nil {
 			httpError(w, "recorded content lookup failed", http.StatusInternalServerError)
 			return
@@ -125,6 +142,7 @@ func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		resp.Source, resp.Integrity = "db", "database_record"
+		resp.TLS = tls
 		if content == nil {
 			resp.ContentState, resp.Reason = "read_limit", "Legacy record exceeds the bounded read limit."
 			writeJSON(w, resp)
@@ -168,9 +186,13 @@ func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
 		// Non-artifact objects may use a structured content field. Only decode
 		// the body-specific payload after identifying an artifact envelope.
 		var header struct {
-			Type string `json:"type"`
+			Type    string          `json:"type"`
+			Payload json.RawMessage `json:"payload"`
 		}
 		_ = json.Unmarshal(data, &header)
+		if header.Type == "llm_message" {
+			resp.TLS = tlsPreviewMetadata(header.Payload)
+		}
 		if mode == "body" && (header.Type == "artifact" || header.Type == "text_content") {
 			if json.Unmarshal(data, &obj) != nil {
 				resp.ContentState, resp.Reason = "integrity_failure", "Saved artifact has an invalid content descriptor."
@@ -402,28 +424,32 @@ func (s Server) readArtifactObject(run, ref string) ([]byte, string, error) {
 	return raw, "", nil
 }
 
-func (s Server) nodeDBContentLocale(run, node string, lang i18n.Locale, mode string) ([]byte, bool, error) {
+func (s Server) nodeDBContentLocale(run, node string, lang i18n.Locale, mode string) ([]byte, *tlsPreview, bool, error) {
 	if strings.HasPrefix(node, "runtime_event/") {
 		var eventType string
 		var payload sql.NullString
 		err := s.DB.QueryRow(`SELECT event_type, CASE WHEN length(CAST(COALESCE(payload,'') AS BLOB)) <= ? THEN COALESCE(payload,'') END
 			FROM events WHERE run_id = ? AND id = ?`, artifactReadBytes, run, strings.TrimPrefix(node, "runtime_event/")).Scan(&eventType, &payload)
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, false, nil
+			return nil, nil, false, nil
 		}
 		if err != nil {
-			return nil, false, err
+			return nil, nil, false, err
 		}
 		if !payload.Valid {
-			return nil, true, nil
+			return nil, nil, true, nil
+		}
+		var tls *tlsPreview
+		if eventType == "tls_write" || eventType == "tls_read" {
+			tls = tlsPreviewMetadata([]byte(payload.String))
 		}
 		if mode == "raw" {
-			return []byte(payload.String), true, nil
+			return []byte(payload.String), tls, true, nil
 		}
 		var b bytes.Buffer
 		fmt.Fprintf(&b, i18n.T(lang, "event: %s\n\n"), eventType)
 		b.WriteString(payload.String)
-		return b.Bytes(), true, nil
+		return b.Bytes(), tls, true, nil
 	}
 	var cmd, savedStatus, savedPolicy sql.NullString
 	err := s.DB.QueryRow(`SELECT CASE WHEN bytes <= ? THEN command END,
@@ -433,18 +459,18 @@ func (s Server) nodeDBContentLocale(run, node string, lang i18n.Locale, mode str
 		length(CAST(COALESCE(command,'') AS BLOB)) + length(CAST(COALESCE(status,'') AS BLOB)) + length(CAST(COALESCE(policy_decision,'') AS BLOB)) AS bytes
 		FROM tool_calls WHERE run_id = ? AND id = ?)`, artifactReadBytes, artifactReadBytes, artifactReadBytes, run, node).Scan(&cmd, &savedStatus, &savedPolicy)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	if !cmd.Valid {
-		return nil, true, nil
+		return nil, nil, true, nil
 	}
 	status, policy := savedStatus.String, savedPolicy.String
 	if mode == "raw" {
 		b, err := json.Marshal(map[string]string{"command": cmd.String, "status": status, "policy_decision": policy})
-		return b, true, err
+		return b, nil, true, err
 	}
 	var b bytes.Buffer
 	if status != "" {
@@ -455,5 +481,5 @@ func (s Server) nodeDBContentLocale(run, node string, lang i18n.Locale, mode str
 		b.WriteString("\n\n")
 	}
 	b.WriteString(cmd.String)
-	return b.Bytes(), true, nil
+	return b.Bytes(), nil, true, nil
 }

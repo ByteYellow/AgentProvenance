@@ -11,6 +11,9 @@ func TestPersistedDiagnosticsKeepOpaqueValues(t *testing.T) {
 	tests := []struct{ source, want string }{
 		{"remove memlock: failed to set memlock rlimit: operation not permitted", "解除锁定内存限制失败：设置锁定内存限制失败：权限不足（operation not permitted）"},
 		{"attach Go TLS Read return +0x12: not an ELF file", "挂载 Go TLS Read 返回点 +0x12 失败：不是 ELF 文件"},
+		{"invalid ELF dynamic symbol string-table link", "ELF 动态符号表的字符串表引用无效"},
+		{"invalid ELF symbol string-table link", "ELF 符号表的字符串表引用无效"},
+		{"stop sensor capture: permission denied", "停止传感器采集：访问被拒绝（permission denied）"},
 		{`native capture file /tmp/Copy/ready is missing; captured evidence cannot be recovered`, `原生采集文件 /tmp/Copy/ready 缺失，无法恢复其中的证据`},
 		{`unsupported Go TLS Read ABI "go1.27\"Copy" (supported: Go 1.23–1.26 amd64 ABIInternal)`, `不支持 Go TLS Read ABI "go1.27\"Copy"，支持 Go 1.23–1.26 amd64 ABIInternal`},
 		{`load eBPF objects: third-party verifier diagnostic`, `加载 eBPF 对象失败：third-party verifier diagnostic`},

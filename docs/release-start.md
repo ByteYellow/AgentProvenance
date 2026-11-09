@@ -13,7 +13,8 @@ For offline replay, open the demo library from the extracted archive:
 ```
 
 Choose **Open replay** to explore a signed execution or **Read guide** for its
-illustrated walkthrough. Nine replays and eleven guides are included. No Go,
+illustrated walkthrough. Twelve signed examples and fourteen demo guides are included,
+with one explicitly synthetic attribution example. No Go,
 Docker, agent account or API key is needed for replay.
 
 ## Investigate, repair and compare
@@ -41,8 +42,16 @@ server and removes its temporary data.
 
 ## More examples
 
+The [November attribution capture](../demo/evidence-attribution/README.md) has
+direct links to tool-scoped intent and retained TLS fragments. Both inspection
+and repair load together. A separate
+[synthetic outbound example](../demo/endpoint-attribution/README.md) shows two
+candidate source reads alongside a body match.
+
 ```sh
 ./agentprov demo --list
+./agentprov demo evidence-attribution
+./agentprov demo endpoint-attribution
 ./agentprov demo deepseek-context
 ./agentprov demo multiagent-provenance
 ./agentprov demo k8s-cross-pod-a2a

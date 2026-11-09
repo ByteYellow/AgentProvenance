@@ -19,6 +19,9 @@ func main() {
 	if delay, _ := strconv.Atoi(os.Getenv("AGENTPROV_TLS_START_DELAY_SECONDS")); delay > 0 {
 		time.Sleep(time.Duration(delay) * time.Second)
 	}
+	if delay, _ := strconv.Atoi(os.Getenv("AGENTPROV_TLS_START_DELAY_MS")); delay > 0 {
+		time.Sleep(time.Duration(delay) * time.Millisecond)
+	}
 	// The acceptance starts its own loopback TLS server with a temporary cert.
 	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // local fixture only

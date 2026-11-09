@@ -788,7 +788,25 @@ func recordManifestEqual(saved any, expected RecordManifest) (bool, error) {
 	}
 	// ObjectStore masks secrets before hashing. Rebuild the same representation
 	// without changing the signed object or weakening its hash verification.
-	masked, _ := redact.Redact(string(raw))
+	//
+	// Masking rules can tighten between releases; bundles signed under older
+	// rules carry objects masked with the rule set of their day. A rebuild is
+	// therefore compared under the current rules first and, failing that, under
+	// the frozen legacy (v0.10.0) rules — either match proves the underlying
+	// evidence is unchanged. The object's own sha256 was already verified above
+	// against the stored hash, so this fallback weakens nothing: it only stops
+	// stricter masking from retroactively breaking verification of historical,
+	// correctly signed bundles.
+	if matchesCurrent, err := maskedManifestMatches(saved, raw, redact.Redact); err != nil {
+		return false, err
+	} else if matchesCurrent {
+		return true, nil
+	}
+	return maskedManifestMatches(saved, raw, redact.RedactLegacy)
+}
+
+func maskedManifestMatches(saved any, raw []byte, maskFn func(string) (string, bool)) (bool, error) {
+	masked, _ := maskFn(string(raw))
 	var comparable any
 	if err := json.Unmarshal([]byte(masked), &comparable); err != nil {
 		return false, err

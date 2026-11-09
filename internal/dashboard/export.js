@@ -2,7 +2,7 @@ window.AgentExportUI=(()=>{
   'use strict';
   const $=id=>document.getElementById(id);
   const names={messages:'Messages',tools:'Tool inputs and outputs',configuration:'Configuration',files:'Saved files',runtime:'Runtime records'};
-  const reasons={outside_scope:'Outside selected session',excluded_record:'Explicit record exclusions',excluded_category:'Excluded categories',linked_record_excluded:'Linked readers and revisions'};
+  const reasons={outside_scope:'Outside selected session',excluded_record:'Explicit record exclusions',excluded_category:'Excluded categories',linked_record_excluded:'Linked readers and revisions',endpoint_support_not_included:'Endpoint captures with excluded association evidence'};
   let api,scope,draft,preview,controller,catalogController,loan,cleanup=Promise.resolve(),epoch=0,catalogEpoch=0,downloadRequested=false,opening=false,page=0,catalog;
   const t=s=>api.tr(s),e=s=>api.esc(String(s??''));
   const bytes=n=>new Intl.NumberFormat(api.lang,{maximumFractionDigits:2}).format(n/1048576)+' MiB';

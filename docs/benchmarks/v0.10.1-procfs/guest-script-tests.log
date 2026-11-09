@@ -1,0 +1,8 @@
+test_microsoft_without_qemu_dmi_is_not_the_lab_guest (test_kvm_guest.GuestPlatformTest.test_microsoft_without_qemu_dmi_is_not_the_lab_guest) ... ok
+test_qemu_whpx_keeps_microsoft_cpuid (test_kvm_guest.GuestPlatformTest.test_qemu_whpx_keeps_microsoft_cpuid) ... ok
+test_signed_bundle_handoff (test_kvm_guest.SignedReplayTest.test_signed_bundle_handoff) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.737s
+
+OK

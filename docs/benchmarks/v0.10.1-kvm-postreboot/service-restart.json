@@ -1,0 +1,14 @@
+{
+  "before": {
+    "run-kvm-c8338fa2c82a": 27,
+    "run-agentprov-guest-7ba67f2efb": 111
+  },
+  "after": {
+    "run-kvm-c8338fa2c82a": 27,
+    "run-agentprov-guest-7ba67f2efb": 111
+  },
+  "preserved": true,
+  "service": "active",
+  "ready": true,
+  "passed": true
+}

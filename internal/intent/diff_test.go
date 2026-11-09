@@ -33,8 +33,8 @@ func TestDiffDeclaredVsEffectMismatch(t *testing.T) {
 	if !containsKind(d.Observed, EffectSecretRead) {
 		t.Errorf("mismatch should cite secret_read; observed=%v", d.Observed)
 	}
-	if d.Confidence < 0.99 {
-		t.Errorf("kernel-witnessed violation should be high confidence, got %.2f", d.Confidence)
+	if d.Confidence != .5 || effects[1].Confidence != 1 || d.Association.Status != "bound" {
+		t.Errorf("relation must retain the asserted contract grade and unchanged runtime evidence: %+v", d)
 	}
 }
 
@@ -42,7 +42,7 @@ func TestDiffDeclaredVsEffectMismatch(t *testing.T) {
 // recipient reading a foreign secret, is a peer_message_intent_mismatch.
 func TestDiffPeerMessageMismatch(t *testing.T) {
 	contracts := []IntentContract{{
-		ID: "contract/msg-1", Kind: ContractPeerMessage, ScopeAgent: "bob",
+		ID: "contract/msg-1", Kind: ContractPeerMessage, ScopeAgent: "bob", ToolCallID: "tcx",
 		Operation: "install", Target: "python3 setup.py install", Profile: profileFor(profiles(), "install"), Confidence: 0.5,
 	}}
 	effects := []RuntimeEffect{
@@ -66,7 +66,7 @@ func TestDiffRefusedButRuntimeHappened(t *testing.T) {
 		Operation: "refusal", Profile: Profile{Operation: "refusal"}, Negative: true, Confidence: 0.5,
 	}}
 	effects := []RuntimeEffect{
-		{Kind: EffectSecretRead, Target: "/root/.aws/credentials", AgentID: "recon", ToolCallID: "tcr", EventID: "e5", Confidence: 1},
+		{Kind: EffectSecretRead, Target: "/root/.aws/credentials", AgentID: "recon", ToolCallID: "refusal-1", EventID: "e5", Confidence: 1},
 	}
 	diffs := Diff(contracts, effects)
 	if _, ok := findDiff(diffs, func(d IntentRuntimeDiff) bool { return d.Status == StatusRefusedBypass }); !ok {

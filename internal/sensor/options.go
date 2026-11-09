@@ -12,14 +12,20 @@ import (
 // degraded coverage; OnReady only promises the required syscall probes and the
 // ring-buffer reader are active, not that every TLS implementation is covered.
 type Options struct {
+	// RingBufferMiB is a power of two from 1 to 256; zero selects 64 MiB.
+	RingBufferMiB int
+	// TLSTargets are known OpenSSL/BoringSSL libraries or Go executables to
+	// attach before readiness. Paths are refreshed after atomic replacement.
+	TLSTargets []string
+
 	SSLLib   string
 	LibcLib  string
 	GoTLSBin string
 	Context  context.Context
 	OnReady  func()
 	// AutoTLS scans visible processes, including container mount namespaces,
-	// for mapped OpenSSL libraries and Go TLS executables. Polling cannot capture
-	// a process that starts and exits entirely between scans.
+	// for mapped OpenSSL libraries and Go TLS executables. Bounded event-driven
+	// discovery supplements polling; first use can still precede attachment.
 	AutoTLS         bool
 	TLSScanInterval time.Duration
 	TLSMaxTargets   int
@@ -49,23 +55,66 @@ type ProbeCapability struct {
 }
 
 type TLSDiscoveryReport struct {
-	Enabled                bool     `json:"enabled"`
-	ScanIntervalMS         int64    `json:"scan_interval_ms"`
-	MaxTargets             int      `json:"max_targets"`
-	MaxProcessesPerScan    int      `json:"max_processes_per_scan"`
-	ActiveTargets          int      `json:"active_targets"`
-	ScanComplete           bool     `json:"scan_complete"`
-	ProcessesScanned       int      `json:"processes_scanned"`
-	UnreadableProcesses    int      `json:"unreadable_processes"`
-	UnresolvedMounts       int      `json:"unresolved_mounts"`
-	TruncatedMaps          int      `json:"truncated_maps"`
-	SkippedTargets         int      `json:"skipped_targets"`
-	UnsupportedExecutables int      `json:"unsupported_executables"`
-	Reason                 string   `json:"reason,omitempty"`
-	Limitations            []string `json:"limitations"`
+	Enabled                bool                     `json:"enabled"`
+	ScanIntervalMS         int64                    `json:"scan_interval_ms"`
+	MaxTargets             int                      `json:"max_targets"`
+	MaxProcessesPerScan    int                      `json:"max_processes_per_scan"`
+	ActiveTargets          int                      `json:"active_targets"`
+	ScanComplete           bool                     `json:"scan_complete"`
+	ProcessesScanned       int                      `json:"processes_scanned"`
+	UnreadableProcesses    int                      `json:"unreadable_processes"`
+	UnresolvedMounts       int                      `json:"unresolved_mounts"`
+	TruncatedMaps          int                      `json:"truncated_maps"`
+	SkippedTargets         int                      `json:"skipped_targets"`
+	UnsupportedExecutables int                      `json:"unsupported_executables"`
+	Reason                 string                   `json:"reason,omitempty"`
+	Limitations            []string                 `json:"limitations"`
+	SweepPasses            uint64                   `json:"sweep_passes"`
+	EventDiscovery         *TLSEventDiscoveryReport `json:"event_discovery,omitempty"`
+}
+
+type TLSEventDiscoveryReport struct {
+	QueueCapacity          int    `json:"queue_capacity"`
+	Pending                int    `json:"pending"`
+	Hints                  uint64 `json:"hints"`
+	Coalesced              uint64 `json:"coalesced"`
+	QueueDrops             uint64 `json:"queue_drops"`
+	ProcessScans           uint64 `json:"process_scans"`
+	RetryScans             uint64 `json:"retry_scans"`
+	ExitedProcesses        uint64 `json:"exited_processes"`
+	ChangedProcesses       uint64 `json:"changed_processes"`
+	UnreadableProcesses    uint64 `json:"unreadable_processes"`
+	UnresolvedMounts       uint64 `json:"unresolved_mounts"`
+	TruncatedMaps          uint64 `json:"truncated_maps"`
+	UnsupportedExecutables uint64 `json:"unsupported_executables"`
+	SkippedTargets         uint64 `json:"skipped_targets"`
+	AttachedTargets        uint64 `json:"attached_targets"`
+	LastAttachLatencyMS    int64  `json:"last_attach_latency_ms"`
+	MaxAttachLatencyMS     int64  `json:"max_attach_latency_ms"`
+}
+
+// HasGaps includes discovery failures, not normal process exits or PID/exec
+// changes. Counters in EventDiscovery cover the sensor lifetime.
+func (d TLSDiscoveryReport) HasGaps() bool {
+	if !d.Enabled {
+		return false
+	}
+	if d.Reason != "" || d.SkippedTargets > 0 || d.UnreadableProcesses > 0 || d.UnresolvedMounts > 0 || d.TruncatedMaps > 0 || d.UnsupportedExecutables > 0 {
+		return true
+	}
+	e := d.EventDiscovery
+	return e != nil && (e.QueueDrops > 0 || e.UnreadableProcesses > 0 || e.UnresolvedMounts > 0 || e.TruncatedMaps > 0 || e.SkippedTargets > 0 || e.UnsupportedExecutables > 0)
+}
+
+type CaptureBufferReport struct {
+	RingBytes   int `json:"ring_bytes"`
+	QueueEvents int `json:"queue_events"`
+	QueueBytes  int `json:"queue_bytes"`
 }
 
 type CapabilityReport struct {
+	CaptureBuffers *CaptureBufferReport `json:"capture_buffers,omitempty"`
+
 	SchemaVersion      string                     `json:"schema_version"`
 	UpdatedAt          string                     `json:"updated_at"`
 	Ready              bool                       `json:"ready"`
@@ -74,6 +123,16 @@ type CapabilityReport struct {
 	Probes             []ProbeCapability          `json:"probes"`
 	TLSDiscovery       TLSDiscoveryReport         `json:"tls_discovery"`
 	AccessControlState *StateCollectionCapability `json:"access_control_state,omitempty"`
+	ProcfsIdentity     *ProcfsIdentityReport      `json:"procfs_identity,omitempty"`
+}
+
+type ProcfsIdentityReport struct {
+	Mode             string `json:"mode"`
+	PIDNamespace     string `json:"pid_namespace"`
+	MapCapacity      int    `json:"map_capacity"`
+	TranslatedEvents uint64 `json:"translated_events"`
+	OutsideNamespace uint64 `json:"outside_namespace_events"`
+	LookupMisses     uint64 `json:"lookup_misses"`
 }
 
 type StateCollectionCapability struct {
@@ -84,3 +143,6 @@ type StateCollectionCapability struct {
 	CacheCapacity int    `json:"cache_capacity"`
 	MinIntervalMS int64  `json:"min_interval_ms"`
 }
+
+const sensorQueueCapacity = 16384
+const sensorEventBytes = 920

@@ -138,6 +138,20 @@ func TestRuntimeCaptureReadIsSavedNotLive(t *testing.T) {
 	}
 }
 
+func TestRuntimeCapturePreservesEventDiscoveryLimits(t *testing.T) {
+	before, after := capturePair()
+	after.Capabilities.TLSDiscovery = sensor.TLSDiscoveryReport{Enabled: true,
+		EventDiscovery: &sensor.TLSEventDiscoveryReport{QueueDrops: 2, ProcessScans: 10, RetryScans: 4}}
+	r := BuildRuntimeCapture("run", "observed", before, after, true)
+	found := false
+	for _, limitation := range r.Limitations {
+		found = found || limitation == "tls_discovery_partial"
+	}
+	if !found || r.CapabilitiesEnd.TLSDiscovery.EventDiscovery.QueueDrops != 2 || r.RunDroppedEvents != nil {
+		t.Fatalf("discovery limits lost or converted into run event loss: %+v", r)
+	}
+}
+
 func TestCaptureRejectsStaleAndOversizedProbeSnapshots(t *testing.T) {
 	db, paths := coverageDB(t)
 	start := time.Now().UTC().Add(-time.Second)

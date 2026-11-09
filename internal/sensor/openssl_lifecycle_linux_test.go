@@ -281,13 +281,8 @@ func reassembleLifecycle(events []sensorbpfSensorEvent, skipBoundary bool) ([]tl
 	for _, e := range events {
 		c := tlsintent.Chunk{PID: e.Pid, Conn: e.Conn, ProcessStartNS: e.ProcessStartNs, Epoch: e.ConnEpoch}
 		switch e.Kind {
-		case eventSSL, eventSSLRead:
-			c.Direction = tlsintent.Request
-			if e.Kind == eventSSLRead {
-				c.Direction = tlsintent.Response
-			}
-			c.Data, c.Truncated = e.Path[:e.Daddr], e.Dport == 1
-			messages = append(messages, r.Add(c)...)
+		case eventSSL, eventSSLRead, eventSSLCheckpoint:
+			messages = append(messages, r.Add(tlsChunk(e))...)
 		case eventSSLReset:
 			if !skipBoundary {
 				r.Reset(c)

@@ -1,0 +1,22 @@
+{
+  "windows": {
+    "build": "26300.9818",
+    "rebootPending": false,
+    "boot": "2026-11-06T23:23:06.5000000+08:00"
+  },
+  "wsl_kernel": "6.18.33.2-microsoft-standard-WSL2",
+  "svm_present": true,
+  "kvm_api": 12,
+  "vm_creation_succeeded": true,
+  "qmp_kvm": {
+    "enabled": true,
+    "present": true
+  },
+  "linux_qemu": "10.2.1",
+  "windows_qemu": "11.1.0",
+  "kvm_guest_kernel": "6.8.0-139-generic",
+  "kvm_guest_user_shstk": false,
+  "whpx_guest_user_shstk": true,
+  "kvm_cmdline_override": false,
+  "arm64_object_unchanged": true
+}

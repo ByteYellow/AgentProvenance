@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const AuditAssociationRule = "agentprov.audit_lifecycle_operation/v2"
+const AuditAssociationRule = "agentprov.audit_lifecycle_operation/v3"
 
 var ErrAuditAssociationQuery = errors.New("invalid audit association query")
 
@@ -85,6 +85,7 @@ type AuditOperation struct {
 	ProcessInstance string            `json:"process_instance_id"`
 	ThreadInstance  string            `json:"thread_instance_id"`
 	Kind            string            `json:"kind"`
+	TimeBasis       string            `json:"time_basis,omitempty"`
 	AttemptState    string            `json:"attempt_state"`
 	ResultState     string            `json:"result_state"`
 	AttemptCount    int               `json:"attempt_record_count"`

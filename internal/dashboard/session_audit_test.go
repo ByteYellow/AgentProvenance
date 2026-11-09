@@ -262,7 +262,7 @@ func TestSessionAuditERRNOKeepsRawRunEvidenceWithoutBorrowedAssociation(t *testi
 		t.Fatal(err)
 	}
 	report, err := telemetry.BuildAuditAssociations(ctx, f.db, telemetry.AuditAssociationOptions{RunID: sessionAuditRun, EventID: id})
-	if err != nil || len(report.Items) != 1 || report.Rule != "agentprov.audit_lifecycle_operation/v2" || report.Status != "complete" {
+	if err != nil || len(report.Items) != 1 || report.Rule != telemetry.AuditAssociationRule || report.Status != "complete" {
 		t.Fatalf("ERRNO report: %+v %v", report, err)
 	}
 	item := report.Items[0]

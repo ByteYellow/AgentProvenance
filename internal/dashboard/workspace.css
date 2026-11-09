@@ -66,6 +66,30 @@
 .investigation-actions button:hover { color: var(--acc); border-color: var(--acc); }
 .investigation-actions button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
 .investigation-actions svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.evidence-association { padding: 12px 0; margin: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 13px; overflow-wrap: anywhere; }
+.evidence-association h4 { display:flex; flex-wrap:wrap; gap:8px 16px; margin:0 0 10px; font-size:14px; }
+.evidence-association h4 span, .association-basis { color:var(--mut); font-weight:400; }
+.evidence-association p { margin:8px 0; }
+.evidence-association button { color:var(--acc); background:var(--panel); border:1px solid var(--line2); border-radius:6px; padding:5px 8px; cursor:pointer; font:inherit; overflow-wrap:anywhere; }
+.evidence-association button:focus-visible { outline:2px solid var(--acc); outline-offset:2px; }
+.association-candidates { margin:8px 0 16px; padding-left:22px; }
+.association-candidates li { padding:8px 0; }
+.association-reference { display:flex; align-items:center; flex-wrap:wrap; gap:8px 16px; margin:8px 0; }
+.association-reference > div { flex:1 1 240px; min-width:0; }
+.association-reference strong { display:block; font-weight:500; margin-bottom:4px; }
+.association-reference code { overflow-wrap:anywhere; font-size:12px; color:var(--mut); }
+.association-reference span { display:flex; flex-wrap:wrap; gap:6px; }
+.evidence-association details { margin-top:12px; }
+.evidence-association summary { cursor:pointer; }
+.endpoint-stage + .endpoint-stage { border-top:1px solid var(--line); margin-top:12px; padding-top:12px; }
+.endpoint-stage h5 { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:13px; margin:0; }
+.endpoint-stage h5 span { font-weight:400; color:var(--mut); }
+.endpoint-stage code { overflow-wrap:anywhere; }
+.association-error { color:var(--mut); }
+.tls-fields { display:grid; grid-template-columns:minmax(100px,180px) minmax(0,1fr); gap:6px 16px; }
+.tls-fields dt { color:var(--mut); }
+.tls-fields dd { margin:0; overflow-wrap:anywhere; }
+.tls-capture[data-tls-capture="incomplete"] h4 span { color:var(--mut); }
 @media(max-width: 720px) {
   .session-composition, .inspection-tabs { padding: 10px 14px; }
   .session-members { flex-basis: 100%; }

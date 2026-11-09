@@ -1,0 +1,24 @@
+?   	github.com/byteyellow/agentprovenance	[no test files]
+?   	github.com/byteyellow/agentprovenance/cmd/agentprov	[no test files]
+ok  	github.com/byteyellow/agentprovenance/cmd/agentprov-sensor	(cached)
+?   	github.com/byteyellow/agentprovenance/demo	[no test files]
+?   	github.com/byteyellow/agentprovenance/docs	[no test files]
+ok  	github.com/byteyellow/agentprovenance/internal/accesscontrol	(cached)
+ok  	github.com/byteyellow/agentprovenance/internal/adapter	(cached)
+ok  	github.com/byteyellow/agentprovenance/internal/agentcontext	(cached)
+ok  	github.com/byteyellow/agentprovenance/internal/aitools	(cached)
+ok  	github.com/byteyellow/agentprovenance/internal/attest	(cached)
+?   	github.com/byteyellow/agentprovenance/internal/buildinfo	[no test files]
+ok  	github.com/byteyellow/agentprovenance/internal/baseline	(cached)
+ok  	github.com/byteyellow/agentprovenance/internal/cli	214.804s
+ok  	github.com/byteyellow/agentprovenance/internal/compliance	(cached)
+ok  	github.com/byteyellow/agentprovenance/internal/computerapi	(cached)
+ok  	github.com/byteyellow/agentprovenance/internal/control	(cached)
+ok  	github.com/byteyellow/agentprovenance/internal/correlation	(cached)
+ok  	github.com/byteyellow/agentprovenance/internal/cost	(cached)
+ok  	github.com/byteyellow/agentprovenance/internal/daemon	18.866s
+?   	github.com/byteyellow/agentprovenance/internal/envtemplate	[no test files]
+?   	github.com/byteyellow/agentprovenance/internal/ids	[no test files]
+?   	github.com/byteyellow/agentprovenance/internal/ports	[no test files]
+?   	github.com/byteyellow/agentprovenance/internal/staticdata	[no test files]
+?   	github.com/byteyellow/agentprovenance/internal/substrate/runtime	[no test files]
