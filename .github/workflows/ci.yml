@@ -22,7 +22,8 @@ jobs:
 
   jev-demo:
     name: Jev demo (keyless, Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
+    # Python 3.9 compatibility builds are available for Ubuntu 24.04, not 26.04.
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python: ["3.9", "3.13"]
