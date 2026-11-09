@@ -240,7 +240,21 @@ def main():
         for name in caller_pids:
             matches = {row["pid"] for row in rows if row.get("event_type") == "execve" and name in row.get("command", "")}
             if len(matches) != 1:
-                raise RuntimeError(f"expected one exec identity for {name}, got {matches}")
+                # Preserve only fixture identities, never unrelated host argv.
+                diagnostic = {
+                    "passed": False,
+                    "error": f"expected one exec identity for {name}, got {sorted(matches)}",
+                    "architecture": platform.machine(), "kernel": platform.release(),
+                    "caller_pids": caller_pids,
+                    "event_types": dict(collections.Counter(row["event_type"] for row in rows)),
+                    "fixture_exec": [row for row in rows if row.get("event_type") == "execve" and (
+                        row.get("pid") in caller_pids.values() or
+                        any(marker in row.get("command", "") for marker in caller_pids))],
+                    "sensor_stderr": error_path.read_text(),
+                }
+                report_path.write_text(json.dumps(diagnostic, indent=2) + "\n")
+                print(json.dumps(diagnostic, indent=2))
+                raise RuntimeError(diagnostic["error"])
             pids[name] = matches.pop()
         checks = {}
         worker_rows = [row for row in rows if row.get("pid") == pids["python-openssl-ex"]]
