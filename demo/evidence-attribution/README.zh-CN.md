@@ -27,9 +27,9 @@ agentprov demo evidence-attribution
 
 ## 直接查看新版详情
 
-1. [查看一条工具级意图关联](/?run=run-2fd63df0ab9b&lens=intent&detail=raw&live=0&selected=diff%2Fv2%2F4958f6486e058efd80454be9ea8e6b8306c9cfc69337419c20db7db94f45b96c#inspection)。
+1. [查看一条工具级意图关联](https://byteyellow.github.io/AgentProvenance/zh-CN/replay.html?run=run-2fd63df0ab9b&lens=intent&detail=raw&live=0&selected=diff%2Fv2%2F4958f6486e058efd80454be9ea8e6b8306c9cfc69337419c20db7db94f45b96c#inspection)。
    选中记录列出具体工具调用、支持它的运行时事件及 `agentprov.intent_scope/v4` 规则。
-2. [查看一段保留的 TLS 片段](/?run=run-2fd63df0ab9b&lens=agent-intent&detail=raw&live=0&selected=sha256%3A072f5b3948ca4c5693b882722815b3958815c72ba807706b926dc67001bbbb49#inspection)。
+2. [查看一段保留的 TLS 片段](https://byteyellow.github.io/AgentProvenance/zh-CN/replay.html?run=run-2fd63df0ab9b&lens=agent-intent&detail=raw&live=0&selected=sha256%3A072f5b3948ca4c5693b882722815b3958815c72ba807706b926dc67001bbbb49#inspection)。
    记录提供采集上限、调用位置和原始字节数，规则为 `agentprov.tls_reassembly/v3`。
    阅读器分别展示保留片段与完整 HTTP 内容。
 3. 打开**关联会话**查看审查者，通过**搜索**阅读工具结果和文件。

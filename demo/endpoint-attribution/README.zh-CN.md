@@ -10,7 +10,7 @@
 agentprov demo endpoint-attribution
 ```
 
-[直接打开归因记录](/?run=ui-endpoint-candidates&lens=data-flow-taint&detail=raw&live=0&selected=sha256%3A44fe36c9defe9293755c49b45c2223d11f6ba5ef32aba86b7f6f4b50fcef2768#inspection)。
+[直接打开归因记录](https://byteyellow.github.io/AgentProvenance/zh-CN/replay.html?run=ui-endpoint-candidates&lens=data-flow-taint&detail=raw&live=0&selected=sha256%3A44fe36c9defe9293755c49b45c2223d11f6ba5ef32aba86b7f6f4b50fcef2768#inspection)。
 
 ## 三段证据分别看什么
 

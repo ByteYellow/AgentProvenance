@@ -32,10 +32,10 @@ steps between the two runs.
 
 ## Open the new details
 
-1. [Inspect a tool-scoped intent association](/?run=run-2fd63df0ab9b&lens=intent&detail=raw&live=0&selected=diff%2Fv2%2F4958f6486e058efd80454be9ea8e6b8306c9cfc69337419c20db7db94f45b96c#inspection).
+1. [Inspect a tool-scoped intent association](https://byteyellow.github.io/AgentProvenance/en/replay.html?run=run-2fd63df0ab9b&lens=intent&detail=raw&live=0&selected=diff%2Fv2%2F4958f6486e058efd80454be9ea8e6b8306c9cfc69337419c20db7db94f45b96c#inspection).
    The selected evidence names the tool call, supporting runtime event and
    `agentprov.intent_scope/v4` rule.
-2. [Inspect a retained TLS fragment](/?run=run-2fd63df0ab9b&lens=agent-intent&detail=raw&live=0&selected=sha256%3A072f5b3948ca4c5693b882722815b3958815c72ba807706b926dc67001bbbb49#inspection).
+2. [Inspect a retained TLS fragment](https://byteyellow.github.io/AgentProvenance/en/replay.html?run=run-2fd63df0ab9b&lens=agent-intent&detail=raw&live=0&selected=sha256%3A072f5b3948ca4c5693b882722815b3958815c72ba807706b926dc67001bbbb49#inspection).
    The record reports a capture limit, call position and the original byte count
    under `agentprov.tls_reassembly/v3`. The reader distinguishes captured fragments
    from complete HTTP content.

@@ -29,6 +29,32 @@ func TestDemoReplayStartsWithLiveRefreshDisabled(t *testing.T) {
 	}
 }
 
+func TestPublicReplayGuideLinksStayLocalForBundledRuns(t *testing.T) {
+	entries := demo.Catalog()
+	for _, language := range []string{"en", "zh-CN"} {
+		href := "https://byteyellow.github.io/AgentProvenance/" + language + "/replay.html?run=run-2fd63df0ab9b&lens=intent&detail=raw&live=1&selected=diff%2Fv2%2Fexample#inspection"
+		mapped := demoGuideLink(entries[0], entries, href)
+		u, err := url.Parse(mapped)
+		if err != nil || u.IsAbs() || u.Host != "" || u.Path != "/" || u.Fragment != "inspection" {
+			t.Fatalf("invalid local replay URL: %q (%v)", mapped, err)
+		}
+		for key, want := range map[string]string{"lang": language, "run": "run-2fd63df0ab9b", "lens": "intent", "detail": "raw", "selected": "diff/v2/example", "live": "0"} {
+			if got := u.Query().Get(key); got != want {
+				t.Errorf("%s = %q, want %q", key, got, want)
+			}
+		}
+	}
+	for _, href := range []string{
+		"https://example.com/AgentProvenance/en/replay.html?run=run-2fd63df0ab9b",
+		"https://byteyellow.github.io/AgentProvenance/en/replay.html?run=unknown",
+		"https://byteyellow.github.io/AgentProvenance/en/index.html",
+	} {
+		if got := demoGuideLink(entries[0], entries, href); got != href {
+			t.Errorf("external reference changed: %q -> %q", href, got)
+		}
+	}
+}
+
 func TestAllBundledDemosVerify(t *testing.T) {
 	dir := t.TempDir()
 	dataDir := filepath.Join(dir, "state")

@@ -11,7 +11,7 @@ questions when a body match has more than one possible source read.
 agentprov demo endpoint-attribution
 ```
 
-[Open the selected attribution record](/?run=ui-endpoint-candidates&lens=data-flow-taint&detail=raw&live=0&selected=sha256%3A44fe36c9defe9293755c49b45c2223d11f6ba5ef32aba86b7f6f4b50fcef2768#inspection).
+[Open the selected attribution record](https://byteyellow.github.io/AgentProvenance/en/replay.html?run=ui-endpoint-candidates&lens=data-flow-taint&detail=raw&live=0&selected=sha256%3A44fe36c9defe9293755c49b45c2223d11f6ba5ef32aba86b7f6f4b50fcef2768#inspection).
 
 ## Read the three evidence layers
 
