@@ -126,7 +126,7 @@ window.AgentProvReplay = (() => {
     if(!index||index.schema_version!=='agentprovenance.replay_audit/v1')fail('Audit associations are not included in this replay');
     for(const key of p.keys())if(!['run','event','limit','cursor'].includes(key)||p.getAll(key).length!==1)fail('Unsupported or repeated audit parameter');
     const rule=index.rule||'agentprov.audit_lifecycle_operation/v1',event=p.get('event')||'',cursor=p.get('cursor')||'';
-    if(!['agentprov.audit_lifecycle_operation/v1','agentprov.audit_lifecycle_operation/v2'].includes(rule))fail('Unsupported audit association rule');
+    if(!['agentprov.audit_lifecycle_operation/v1','agentprov.audit_lifecycle_operation/v2','agentprov.audit_lifecycle_operation/v3'].includes(rule))fail('Unsupported audit association rule');
     if(!id.trim()||encoder.encode(id).length>1024||encoder.encode(event).length>1024||encoder.encode(cursor).length>4096)fail('Invalid audit query');
     const limit=range(p.get('limit'),100,1,500,'audit limit');let after='';
     if(cursor){

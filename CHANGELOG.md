@@ -44,6 +44,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Native capture reliability
 
+- Preserve journal receipt clocks for audit candidate matching, checking them
+  against native monotonic timestamps and retaining ambiguous candidates.
+- Propagate failures through Linux acceptance log pipelines.
 - Resolve x86 procfs identities across PID namespaces while retaining original
   kernel task identities and reporting mapping gaps.
 - Support stripped amd64 Go TLS executables and PIE, plus BoringSSL fixtures

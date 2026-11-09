@@ -106,6 +106,29 @@ func TestAuditJournalAndTextDeduplicateBySourceRecord(t *testing.T) {
 	}
 }
 
+func TestAuditJournalReceiptPreservesSourceClockPair(t *testing.T) {
+	fields := map[string]any{"MESSAGE": auditTestSeccomp, "_TRANSPORT": "kernel",
+		"_MACHINE_ID": auditTestSource.HostID, "_BOOT_ID": auditTestSource.BootID,
+		"__REALTIME_TIMESTAMP": "1792342593759400", "__MONOTONIC_TIMESTAMP": "10002400"}
+	data, _ := json.Marshal(fields)
+	r, ok, err := ParseAuditLine(data, AuditSource{})
+	if err != nil || !ok || r.JournalReceivedAt != "2026-10-18T16:56:33.7594Z" || r.JournalMonotonicNS != "10002400000" {
+		t.Fatalf("receipt=%+v err=%v", r, err)
+	}
+	plain := parseAuditTest(t, auditTestSeccomp)
+	if r.RecordID != plain.RecordID || r.Timestamp != plain.Timestamp {
+		t.Fatal("receipt changed original audit identity")
+	}
+	for _, transport := range []string{"stdout", "syslog", ""} {
+		fields["_TRANSPORT"] = transport
+		data, _ := json.Marshal(fields)
+		r, _, err = ParseAuditLine(data, AuditSource{})
+		if err != nil || r.JournalReceivedAt != "" || r.JournalMonotonicNS != "" {
+			t.Fatalf("non-kernel transport supplied receipt: %+v %v", r, err)
+		}
+	}
+}
+
 func TestAuditSeccompActionOnlyCodeDoesNotInventErrno(t *testing.T) {
 	for _, abi := range []string{"arch=c00000b7 syscall=56", "arch=c000003e syscall=257"} {
 		r := parseAuditTest(t, auditTestPrefix+"pid=42 "+abi+" sig=0 code=0x50000")

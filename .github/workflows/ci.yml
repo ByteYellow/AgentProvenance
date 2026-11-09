@@ -170,6 +170,9 @@ jobs:
 
   sensor-live-amd64:
     name: amd64 syscalls and TLS (Go ${{ matrix.go }})
+    defaults:
+      run:
+        shell: bash
     # Ubuntu 24.04's 7.0.0-1017-azure drops faultable syscall-entry BPF events.
     # https://github.com/actions/runner-images/issues/15003
     runs-on: ubuntu-22.04

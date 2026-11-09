@@ -87,7 +87,7 @@ components:
         schema_version: { type: string, enum: [agentprovenance.audit_associations/v1] }
         rule:
           type: string
-          enum: [agentprov.audit_lifecycle_operation/v1, agentprov.audit_lifecycle_operation/v2]
+          enum: [agentprov.audit_lifecycle_operation/v1, agentprov.audit_lifecycle_operation/v2, agentprov.audit_lifecycle_operation/v3]
           description: Live queries and fresh exports use v2. Frozen replays preserve their exported v1 or v2 rule and results without recomputation. A legacy replay index without a rule denotes v1; page and index rules must agree. The report schema remains v1.
         run_id: { type: string }
         status: { type: string, enum: [complete, incomplete] }
@@ -173,6 +173,7 @@ components:
         process_instance_id: { type: string }
         thread_instance_id: { type: string }
         kind: { type: string }
+        time_basis: { type: string, description: Clock evidence used to select the operation candidate. }
         attempt_state: { type: string, enum: [observed, not_observed, conflicting] }
         result_state: { type: string, enum: [observed, not_observed, conflicting] }
         attempt_record_count: { type: integer, minimum: 0 }
