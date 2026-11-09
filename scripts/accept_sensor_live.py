@@ -8,12 +8,13 @@ import argparse
 import collections
 import ctypes
 import errno
-from datetime import datetime
+from datetime import datetime, timezone
 import http.server
 import json
 import os
 from pathlib import Path
 import platform
+import re
 import signal
 import socket
 import ssl
@@ -22,6 +23,17 @@ import sys
 import tempfile
 import threading
 import time
+
+
+def timestamp_ns(value):
+    """Parse RFC3339Nano without losing ordering on Python 3.9/3.10."""
+    match = re.fullmatch(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})", value)
+    if match is None:
+        raise ValueError(f"invalid RFC3339 timestamp: {value}")
+    seconds, fraction, offset = match.groups()
+    instant = datetime.fromisoformat(seconds + offset.replace("Z", "+00:00"))
+    delta = instant - datetime(1970, 1, 1, tzinfo=timezone.utc)
+    return (delta.days * 86400 + delta.seconds) * 1_000_000_000 + int((fraction or "0").ljust(9, "0"))
 
 
 def lifecycle_worker(directory):
@@ -217,7 +229,7 @@ def main():
                             proc.wait()
                 if args.pause_drain > 0:
                     time.sleep(args.pause_drain)
-                    resumed_at = time.time()
+                    resumed_at = time.time_ns()
                     sensor.send_signal(signal.SIGCONT)
                 time.sleep(1)  # drain the ring buffer before signal shutdown
             finally:
@@ -325,7 +337,7 @@ def main():
                 row.get("process_instance_id") == identity for row in child_rows)
             checks[f"{name}:parent"] = bool(birth) and birth.get("ppid") == pids["python-openssl-ex"] and birth.get("parent_process_instance_id") == parent_instance
             checks[f"{name}:ordering"] = bool(birth) and bool(exit_event) and (
-                datetime.fromisoformat(birth["timestamp"]) <= datetime.fromisoformat(file_event["timestamp"]) <= datetime.fromisoformat(exit_event["timestamp"]))
+                timestamp_ns(birth["timestamp"]) <= timestamp_ns(file_event["timestamp"]) <= timestamp_ns(exit_event["timestamp"]))
             checks[f"{name}:birth_cgroup"] = bool(birth) and birth.get("cgroup_id") == file_event.get("cgroup_id")
             if name == "migration-child":
                 after = next((row for row in child_rows if row.get("path") == "migration-after.env"), {})
@@ -337,7 +349,7 @@ def main():
         fixture_pids = set(pids.values()) | set(child_pids.values())
         if args.pause_drain > 0:
             checks["capture_time_before_drain"] = all(
-                datetime.fromisoformat(row["timestamp"].replace("Z", "+00:00")).timestamp() < resumed_at - args.pause_drain / 2
+                timestamp_ns(row["timestamp"]) < resumed_at - int(args.pause_drain * 1_000_000_000 / 2)
                 for row in rows if row.get("pid") in fixture_pids)
         report = {
             "schema_version": "agentprovenance.sensor_live_acceptance/v1",
