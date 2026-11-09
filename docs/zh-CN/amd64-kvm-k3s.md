@@ -33,6 +33,13 @@ AgentProvenance 支持 Linux x86-64（Go 中称为 `amd64`）和 ARM64，两种�
 
 权限相关用例证明的是能够观察到**操作尝试**，不代表成功提权。测试使用回环服务和合成文本，不使用 API 密钥。
 
+## 已知内核问题
+
+Ubuntu 内核 `7.0.0-1017-azure` 存在上游追踪回归：部分 CPU 上的 `execve` 参数和文件操作事件会漏采。
+GitHub 已在 [runner-images #15003](https://github.com/actions/runner-images/issues/15003) 中确认此问题。
+原生采集应使用修复后的内核，或已有验收记录的内核；受影响期间，CI 实机矩阵使用 Ubuntu 22.04。
+此时探针仍可能挂载成功，因此更换内核后，需要执行下方的传感器实机验收，检查事件是否实际送达。
+
 ## WSL 进程身份与 Windows 主机
 
 amd64 传感器会把任务映射到采集器可见的 procfs PID 命名空间。

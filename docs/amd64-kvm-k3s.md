@@ -62,6 +62,16 @@ request/response bodies, Go TLS request/response bodies, and capture time under 
 drain. Privilege tests prove observation of **attempts**, not successful privilege
 escalation. The fixtures use loopback services and synthetic text without API keys.
 
+## Known kernel regression
+
+Ubuntu kernel `7.0.0-1017-azure` can omit `execve` arguments and file-operation
+events on CPUs other than the one hosting the perf attachment. GitHub confirmed
+this upstream tracing regression in [runner-images #15003](https://github.com/actions/runner-images/issues/15003).
+Use a fixed kernel or a previously validated kernel for native capture. The CI
+live matrix uses Ubuntu 22.04 while that runner image is affected. Successful
+probe attachment alone will not expose this event-delivery failure; run the
+live sensor acceptance below when qualifying a new kernel.
+
 ## WSL process identities and Windows hosts
 
 The amd64 sensor resolves each task into the collector's procfs PID namespace.
