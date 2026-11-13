@@ -47,6 +47,7 @@ var RuntimeDiagnostics = NewDiagnosticCatalog(
 	"invalid record request: %w",
 	"load eBPF objects: %w",
 	"migrate schema: %w",
+	"migrate execution handoff schema: %w",
 	"native capture file %s is missing; captured evidence cannot be recovered",
 	"native capture file exceeds 16 MiB limit",
 	"native collector already owns this store: %w",

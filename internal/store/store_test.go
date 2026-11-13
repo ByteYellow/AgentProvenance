@@ -297,3 +297,42 @@ func TestNewerSchemaIsRejectedBeforeMigrationWrites(t *testing.T) {
 		t.Fatal("old binary mutated newer schema")
 	}
 }
+
+func TestUpgradeSchema20AddsHandoffLedgerWithoutChangingEvents(t *testing.T) {
+	paths := openTestDB(t)
+	db, err := Open(*paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, stmt := range []string{
+		`DROP TABLE execution_attempt_history`,
+		`DROP TABLE execution_attempts`,
+		`DROP TABLE execution_dispatches`,
+		`DELETE FROM schema_versions WHERE version>20`,
+		`INSERT OR IGNORE INTO schema_versions VALUES(20,'previous version','2026-11-09')`,
+		`INSERT INTO events(id,run_id,source,event_type,payload,created_at) VALUES('old-execution-evidence','old-run','record','exec_start','{"original":true}','2026-11-09T00:00:00Z')`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if err := EnsureSchema(db); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, table := range []string{"execution_dispatches", "execution_attempts", "execution_attempt_history"} {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("missing ledger table %s: %d %v", table, count, err)
+		}
+	}
+	var payload, created string
+	if err := db.QueryRow(`SELECT payload,created_at FROM events WHERE id='old-execution-evidence'`).Scan(&payload, &created); err != nil {
+		t.Fatal(err)
+	}
+	if payload != `{"original":true}` || created != "2026-11-09T00:00:00Z" {
+		t.Fatalf("upgrade changed historical evidence: %q %q", payload, created)
+	}
+}

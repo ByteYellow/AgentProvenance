@@ -12,7 +12,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 20
+const SchemaVersion = 21
 
 type Paths struct {
 	Root       string
@@ -894,6 +894,9 @@ func EnsureSchema(db *sql.DB) error {
 		if _, err := db.Exec(stmt); err != nil && !isDuplicateColumn(err) {
 			return i18n.Errorf("migrate schema: %w", err)
 		}
+	}
+	if err := ensureHandoffSchema(db); err != nil {
+		return i18n.Errorf("migrate execution handoff schema: %w", err)
 	}
 	if _, err := db.Exec(`INSERT OR IGNORE INTO schema_versions (version, description, applied_at)
 		VALUES (1, 'initial local control plane schema', datetime('now'))`); err != nil {

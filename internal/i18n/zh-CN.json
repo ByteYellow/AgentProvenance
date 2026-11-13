@@ -2365,6 +2365,7 @@
   "invalid record request: %w": "记录请求无效：%w",
   "load eBPF objects: %w": "加载 eBPF 对象失败：%w",
   "migrate schema: %w": "迁移数据库结构失败：%w",
+  "migrate execution handoff schema: %w": "迁移跨沙箱执行记录结构失败：%w",
   "native capture file %s is missing; captured evidence cannot be recovered": "原生采集文件 %s 缺失，无法恢复其中的证据",
   "native capture file exceeds 16 MiB limit": "原生采集文件超过 16 MiB 上限",
   "native collector already owns this store: %w": "已有原生采集器占用此存储：%w",
