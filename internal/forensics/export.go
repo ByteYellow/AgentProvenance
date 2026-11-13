@@ -1,6 +1,7 @@
 package forensics
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"database/sql"
@@ -55,6 +56,40 @@ func (s Service) Export(runID string) (string, error) {
 }
 
 func (s Service) ExportBundle(runID string) (BundleInfo, error) {
+	return s.exportBundle(context.Background(), runID, 0)
+}
+
+// ExportBundleBounded uses the existing bundle format with a cumulative content
+// budget. Handoff callers use a frozen database and a private output directory.
+func (s Service) ExportBundleBounded(ctx context.Context, runID string, limit int64) (BundleInfo, error) {
+	if limit < 1 || limit > MaxStrictBundleBytes {
+		return BundleInfo{}, fmt.Errorf("invalid bundle export limit")
+	}
+	return s.exportBundle(ctx, runID, limit)
+}
+
+type exportBudget struct {
+	ctx   context.Context
+	limit int64
+	used  int64
+}
+
+func (b *exportBudget) add(n int64) error {
+	if err := b.ctx.Err(); err != nil {
+		return err
+	}
+	if n < 0 || (b.limit > 0 && n > b.limit-b.used) {
+		return fmt.Errorf("bundle export exceeds content budget")
+	}
+	b.used += n
+	return nil
+}
+
+func (s Service) exportBundle(ctx context.Context, runID string, limit int64) (BundleInfo, error) {
+	budget := &exportBudget{ctx: ctx, limit: limit}
+	if err := budget.add(0); err != nil {
+		return BundleInfo{}, err
+	}
 	if runID == "" {
 		return BundleInfo{}, fmt.Errorf("run_id is required")
 	}
@@ -117,13 +152,22 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 		"evidence_manifest": evidenceManifest,
 		"telemetry_batches": telemetryBatchSummaries(batches),
 	}
+	if limit > 0 {
+		initial, err := json.Marshal(bundle)
+		if err != nil {
+			return BundleInfo{}, err
+		}
+		if err := budget.add(int64(len(initial))); err != nil {
+			return BundleInfo{}, err
+		}
+	}
 	for _, spec := range specs {
 		// The run id is bound once per "?" placeholder in the WHERE clause.
 		args := make([]any, strings.Count(spec.where, "?"))
 		for i := range args {
 			args[i] = runID
 		}
-		rows, err := selectRows(s.DB, "SELECT * FROM "+spec.table+" WHERE "+spec.where+" ORDER BY "+spec.order, args...)
+		rows, err := selectRowsBounded(s.DB, budget, "SELECT * FROM "+spec.table+" WHERE "+spec.where+" ORDER BY "+spec.order, args...)
 		if err != nil {
 			return BundleInfo{}, fmt.Errorf("dump %s: %w", spec.table, err)
 		}
@@ -146,11 +190,11 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 	// Snapshot files may be omitted with an explicit size/reason. Provenance
 	// objects are required by graph verification and must travel in full.
 	var omitted []map[string]any
-	objectBlobs, omittedObj, err := embedObjectBlobs(bundle["provenance_objects"])
+	objectBlobs, omittedObj, err := embedObjectBlobsBounded(bundle["provenance_objects"], budget)
 	if err != nil {
 		return BundleInfo{}, err
 	}
-	snapshotFiles, omittedSnap, err := embedSnapshotFiles(bundle["snapshots"])
+	snapshotFiles, omittedSnap, err := embedSnapshotFilesBounded(bundle["snapshots"], budget)
 	if err != nil {
 		return BundleInfo{}, err
 	}
@@ -163,6 +207,12 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 	if err != nil {
 		return BundleInfo{}, err
 	}
+	if err := ctx.Err(); err != nil {
+		return BundleInfo{}, err
+	}
+	if limit > 0 && int64(len(raw)) > limit {
+		return BundleInfo{}, fmt.Errorf("serialized bundle exceeds export limit")
+	}
 	bundleID := ids.New("forensics")
 	path := filepath.Join(s.Paths.Artifacts, bundleID+".json")
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
@@ -171,7 +221,7 @@ func (s Service) ExportBundle(runID string) (BundleInfo, error) {
 	sum := sha256.Sum256(raw)
 	hash := hex.EncodeToString(sum[:])
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, err = s.DB.Exec(`INSERT INTO forensics_bundles (id, run_id, path, sha256, size_bytes, status, created_at)
+	_, err = s.DB.ExecContext(ctx, `INSERT INTO forensics_bundles (id, run_id, path, sha256, size_bytes, status, created_at)
 		VALUES (?, ?, ?, ?, ?, 'ready', ?)`, bundleID, runID, path, hash, len(raw), now)
 	if err != nil {
 		return BundleInfo{}, err
@@ -254,9 +304,16 @@ const maxInlineObjectBytes = 16 << 20 // 16 MiB
 // its complete bytes. An oversized object fails export rather than producing a
 // bundle that only verifies while the original capture directory is available.
 func embedObjectBlobs(rows any) (blobs []map[string]any, omitted []map[string]any, err error) {
+	return embedObjectBlobsBounded(rows, &exportBudget{ctx: context.Background()})
+}
+
+func embedObjectBlobsBounded(rows any, budget *exportBudget) (blobs []map[string]any, omitted []map[string]any, err error) {
 	list, _ := rows.([]map[string]any)
 	blobs = []map[string]any{}
 	for _, r := range list {
+		if err := budget.add(0); err != nil {
+			return nil, nil, err
+		}
 		hash, _ := r["hash"].(string)
 		path, _ := r["path"].(string)
 		if hash == "" || path == "" {
@@ -274,6 +331,9 @@ func embedObjectBlobs(rows any) (blobs []map[string]any, omitted []map[string]an
 		if len(content) > maxInlineObjectBytes {
 			return nil, nil, fmt.Errorf("required object %s exceeds inline object cap (%d bytes)", hash, maxInlineObjectBytes)
 		}
+		if err := budget.add(int64(base64.StdEncoding.EncodedLen(len(content))) + 256); err != nil {
+			return nil, nil, err
+		}
 		blobs = append(blobs, map[string]any{
 			"hash":        hash,
 			"content_b64": base64.StdEncoding.EncodeToString(content),
@@ -285,9 +345,16 @@ func embedObjectBlobs(rows any) (blobs []map[string]any, omitted []map[string]an
 // embedSnapshotFiles walks each snapshot directory and returns its files inline,
 // recording any oversized file as omitted rather than silently dropping it.
 func embedSnapshotFiles(rows any) (files []map[string]any, omitted []map[string]any, err error) {
+	return embedSnapshotFilesBounded(rows, &exportBudget{ctx: context.Background()})
+}
+
+func embedSnapshotFilesBounded(rows any, budget *exportBudget) (files []map[string]any, omitted []map[string]any, err error) {
 	list, _ := rows.([]map[string]any)
 	files = []map[string]any{}
 	for _, r := range list {
+		if err := budget.add(0); err != nil {
+			return nil, nil, err
+		}
 		id, _ := r["id"].(string)
 		dir, _ := r["path"].(string)
 		if id == "" || dir == "" {
@@ -305,6 +372,9 @@ func embedSnapshotFiles(rows any) (files []map[string]any, omitted []map[string]
 			walkRoot = filepath.Dir(dir)
 		}
 		walkErr := filepath.WalkDir(dir, func(p string, d fs.DirEntry, e error) error {
+			if err := budget.add(0); err != nil {
+				return err
+			}
 			if e != nil {
 				return e
 			}
@@ -320,15 +390,37 @@ func embedSnapshotFiles(rows any) (files []map[string]any, omitted []map[string]
 				return e
 			}
 			if fi.Size() > maxInlineContentBytes {
+				if err := budget.add(int64(len(rel)) + 256); err != nil {
+					return err
+				}
 				omitted = append(omitted, map[string]any{
 					"kind": "snapshot_file", "ref": id, "name": rel, "size_bytes": fi.Size(),
 					"reason": fmt.Sprintf("exceeds inline cap (%d bytes)", maxInlineContentBytes),
 				})
 				return nil
 			}
-			content, e := os.ReadFile(p)
+			var content []byte
+			if budget.limit == 0 {
+				content, e = os.ReadFile(p)
+			} else {
+				if !fi.Mode().IsRegular() {
+					return fmt.Errorf("snapshot contains a non-regular file: %s", rel)
+				}
+				f, err := os.Open(p)
+				if err != nil {
+					return err
+				}
+				content, e = io.ReadAll(io.LimitReader(f, maxInlineContentBytes+1))
+				_ = f.Close()
+			}
 			if e != nil {
 				return e
+			}
+			if budget.limit > 0 && len(content) > maxInlineContentBytes {
+				return fmt.Errorf("snapshot file grew during export: %s", rel)
+			}
+			if err := budget.add(int64(base64.StdEncoding.EncodedLen(len(content))) + int64(len(rel)) + 256); err != nil {
+				return err
 			}
 			files = append(files, map[string]any{
 				"snapshot_id": id,
@@ -366,7 +458,11 @@ func telemetryBatchSummaries(batches []telemetry.BatchRecord) []map[string]any {
 }
 
 func selectRows(db *sql.DB, query string, args ...any) ([]map[string]any, error) {
-	rows, err := db.Query(query, args...)
+	return selectRowsBounded(db, &exportBudget{ctx: context.Background()}, query, args...)
+}
+
+func selectRowsBounded(db *sql.DB, budget *exportBudget, query string, args ...any) ([]map[string]any, error) {
+	rows, err := db.QueryContext(budget.ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -392,6 +488,15 @@ func selectRows(db *sql.DB, query string, args ...any) ([]map[string]any, error)
 				item[column] = string(v)
 			default:
 				item[column] = v
+			}
+		}
+		if budget.limit > 0 {
+			raw, err := json.Marshal(item)
+			if err != nil {
+				return nil, err
+			}
+			if err := budget.add(int64(len(raw)) + 2); err != nil {
+				return nil, err
 			}
 		}
 		result = append(result, item)

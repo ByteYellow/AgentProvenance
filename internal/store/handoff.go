@@ -54,6 +54,33 @@ func ensureHandoffSchema(db *sql.DB) error {
 				requested_at_ns INTEGER NOT NULL
 			)`,
 			`CREATE INDEX IF NOT EXISTS idx_execution_stop_attempt ON execution_stop_requests(attempt_id)`,
+			`CREATE TABLE IF NOT EXISTS execution_deliveries (
+				id TEXT PRIMARY KEY,
+				attempt_id TEXT NOT NULL REFERENCES execution_attempts(id),
+				operation_id TEXT NOT NULL,
+				receiver_id TEXT NOT NULL,
+				package_version INTEGER NOT NULL,
+				manifest_json BLOB NOT NULL,
+				manifest_sha256 TEXT NOT NULL,
+				bundle_path TEXT NOT NULL,
+				receipt_json BLOB,
+				created_at_ns INTEGER NOT NULL,
+				UNIQUE(attempt_id, operation_id),
+				UNIQUE(attempt_id, receiver_id, package_version)
+			)`,
+			`CREATE TABLE IF NOT EXISTS execution_delivery_receipts (
+				receipt_key TEXT PRIMARY KEY,
+				target_key TEXT NOT NULL,
+				attempt_id TEXT NOT NULL,
+				receiver_id TEXT NOT NULL,
+				package_version INTEGER NOT NULL,
+				manifest_json BLOB NOT NULL,
+				manifest_sha256 TEXT NOT NULL,
+				bundle_path TEXT NOT NULL,
+				receipt_json BLOB NOT NULL,
+				created_at_ns INTEGER NOT NULL,
+				UNIQUE(target_key, attempt_id, receiver_id, package_version)
+			)`,
 		} {
 			if _, err := tx.Exec(stmt); err != nil {
 				return err

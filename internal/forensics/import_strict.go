@@ -28,6 +28,13 @@ const MaxStrictBundleBytes int64 = 256 << 20
 // The caller verifies the sender and signature first. The decoded bundle is
 // retained by digest; its projection never replaces existing evidence rows.
 func (s Service) ImportBundleStrict(ctx context.Context, path, expectedRun string) (ImportInfo, error) {
+	return s.ImportBundleStrictWithCommit(ctx, path, expectedRun, nil)
+}
+
+// ImportBundleStrictWithCommit lets the authenticated handoff receiver commit
+// its receipt alongside the projection. The hook is internal trusted code; an
+// error rolls back every imported row. The archive is already durable.
+func (s Service) ImportBundleStrictWithCommit(ctx context.Context, path, expectedRun string, commit func(*sql.Tx, string) error) (ImportInfo, error) {
 	if !bundleComponent(expectedRun) {
 		return ImportInfo{}, fmt.Errorf("invalid expected bundle run")
 	}
@@ -103,6 +110,9 @@ func (s Service) ImportBundleStrict(ctx context.Context, path, expectedRun strin
 			if err := copyStrictRows(ctx, tx, source, table, archive); err != nil {
 				return err
 			}
+		}
+		if commit != nil {
+			return commit(tx, filepath.Join(archive, "bundle.json"))
 		}
 		return nil
 	})

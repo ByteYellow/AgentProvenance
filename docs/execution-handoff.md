@@ -8,7 +8,8 @@ uses explicit references for navigation and evidence delivery.
 
 The current implementation provides durable admission, a bounded command worker,
 restart recovery, stop requests and an authenticated HTTP API in `internal/handoff`
-and `internal/daemon`. Evidence-transfer receipts, capability manifests and
+and `internal/daemon`. The delivery library also provides signed packages and
+durable receiving receipts. Its transport wiring, capability manifests and
 Dashboard integration are being implemented. The
 existing synchronous `POST /v1/record` API keeps its current behavior.
 
@@ -210,14 +211,60 @@ hashes, object sizes and embedded-content references. Integer fields retain thei
 the database references them. A database failure can leave an unreferenced archive
 for later reconciliation; no receipt is issued by this method.
 
-Sender authorization, signature verification and durable delivery receipts belong
-to the delivery protocol and are not yet exposed through this importer. The
-existing replay import keeps its replacement behavior for compatibility.
+The authenticated delivery receiver uses `ImportBundleStrictWithCommit` to save
+its receipt in the same transaction as the evidence projection. The existing
+replay import keeps its replacement behavior for compatibility.
+
+## Signed delivery
+
+`handoff.DeliveryService` prepares immutable packages from a frozen SQLite view.
+It exports saved evidence without rerunning analysis. Repeated analysis preserves
+the first creation time of an unchanged content-addressed object, so later
+packages can reuse that object without conflicting with earlier evidence.
+
+The DSSE/in-toto manifest uses `agentprovenance.execution_delivery/v1`. It binds:
+
+- The fully qualified source, target instance/generation, dispatch, attempt,
+  local Run and canonical request digest.
+- The configured receiver, stable delivery operation, package version and
+  preceding manifest digest.
+- The attempt revision, saved checkpoint, execution/capture/delivery states,
+  export time, exact bundle digest and byte count.
+
+`Prepare` persists the package before adding its outbox row. Retrying the same
+operation returns the same bytes, including after restart. A new operation creates
+a new package version. Archives and ledger entries are retained; no automatic
+delivery cleanup is currently enabled. A failed publication or transaction can
+leave an unreferenced archive for reconciliation.
+
+`handoff.DeliveryReceiver` takes the expected identity from a separately trusted
+admission record. It pins the target public key, receiver identity and permitted
+source namespace. It verifies the signed statement and bundle checkpoint before
+importing. The received archive is synchronized first; evidence rows, the original
+manifest and the signed `agentprovenance.execution_receipt/v1` receipt then commit
+atomically. Failed imports or receipt writes return no acknowledgment. A lost
+receipt can be retrieved by resending the same manifest.
+
+The sender verifies the receiver's pinned signature and the exact manifest/range
+before persisting acknowledgment. Attempt delivery is `acknowledged` only when all
+prepared packages have receipts. A new package reopens this aggregate state while
+preserving old receipts. Capture state remains unchanged. Versions are received
+in order, and each new version names the preceding manifest; conflicting IDs or
+missing predecessors return a conflict.
+
+Each service processes one package at a time. Manifests and receipts are capped
+at 64 KiB; uncompressed bundle JSON is capped at 256 MiB. The exporter applies a
+cumulative body/record budget and checks final serialized size. Cancellation
+stops queued work, database queries and body copies. Transport adapters must also
+set read deadlines for stalled network connections. Keep signing keys separate
+from transport credentials and retain verification keys for archived evidence.
+The HTTP executor does not yet expose these library delivery operations.
 
 ## Compatibility and tests
 
-Database schemas 21 and 22 add the execution ledger and durable stop requests without renaming legacy tables or
-rewriting existing events. Older binaries reject the newer schema; use a backup
+Database schemas 21-23 add the execution ledger, durable stop requests and delivery
+outbox/receipts without renaming legacy tables or rewriting existing events.
+Older binaries reject the newer schema; use a backup
 for a downgrade. Historic signed packages retain their original format.
 
 Run the contract and persistence regressions with:
@@ -237,3 +284,8 @@ separate acceptance gates.
 Strict-import regressions cover concurrent retransmission, conflicting evidence,
 whole-transaction rollback, storage errors, portable content, missing bodies,
 decoded-size limits and legacy-import interoperability.
+Delivery regressions run a real CSV command, transfer its output and artifact to
+a separate store, remove the source files, and verify the received graph and
+content. They cover pinned identities/keys, tampering, lost receipts, restarts,
+atomic acknowledgment failures, concurrent retries, ordered extensions and
+reanalysis before a late-evidence package.

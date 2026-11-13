@@ -337,3 +337,44 @@ func TestUpgradeSchema20AddsHandoffLedgerWithoutChangingEvents(t *testing.T) {
 		t.Fatalf("upgrade changed historical evidence: %q %q", payload, created)
 	}
 }
+
+func TestUpgradeSchema22AddsDeliveryWithoutChangingAttempts(t *testing.T) {
+	paths := openTestDB(t)
+	db, err := Open(*paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, stmt := range []string{
+		`DROP TABLE execution_delivery_receipts`,
+		`DROP TABLE execution_deliveries`,
+		`DELETE FROM schema_versions WHERE version>22`,
+		`INSERT OR IGNORE INTO schema_versions VALUES(22,'previous version','2026-11-14')`,
+		`INSERT INTO execution_dispatches VALUES('d','p','s','{}','original','1')`,
+		`INSERT INTO execution_attempts(id,dispatch_key,attempt_number,operation_key,request_hash,request_json,local_run_id,execution_state,capture_state,delivery_state,revision,created_at_ns,updated_at_ns,expires_at_ns)
+		VALUES('a','d',1,'o','h','{}','r','succeeded','draining','pending',8,1,2,3)`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if err := EnsureSchema(db); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, table := range []string{"execution_deliveries", "execution_delivery_receipts"} {
+		var count int
+		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("delivery migration %s: %d %v", table, count, err)
+		}
+	}
+	var execution, capture, delivery string
+	var revision int
+	if err := db.QueryRow("SELECT execution_state,capture_state,delivery_state,revision FROM execution_attempts WHERE id='a'").Scan(&execution, &capture, &delivery, &revision); err != nil {
+		t.Fatal(err)
+	}
+	if execution != "succeeded" || capture != "draining" || delivery != "pending" || revision != 8 {
+		t.Fatal("migration changed saved attempt")
+	}
+}

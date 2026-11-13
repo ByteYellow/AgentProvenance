@@ -412,9 +412,14 @@ func (c *materializeContext) put(obj provenanceObject) (string, error) {
 		return "", err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	const query = `INSERT OR REPLACE INTO provenance_objects
+	// Reanalysis may encounter the same immutable object. Keep its first
+	// creation time so a later signed package does not rewrite that identity.
+	const query = `INSERT INTO provenance_objects
 		(hash, object_type, source_id, run_id, rollout_id, parent_hashes, path, size_bytes, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(hash) DO UPDATE SET object_type=excluded.object_type,
+		 source_id=excluded.source_id,run_id=excluded.run_id,rollout_id=excluded.rollout_id,
+		 parent_hashes=excluded.parent_hashes,path=excluded.path,size_bytes=excluded.size_bytes`
 	args := []any{hash, obj.Type, obj.SourceID, obj.RunID, obj.RolloutID, strings.Join(obj.Parents, ","), path, len(raw), now}
 	if c.store.Tx != nil {
 		_, err = c.store.Tx.Exec(query, args...)
