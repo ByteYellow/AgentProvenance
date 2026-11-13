@@ -47,6 +47,13 @@ func ensureHandoffSchema(db *sql.DB) error {
 				created_at_ns INTEGER NOT NULL,
 				PRIMARY KEY(attempt_id, revision)
 			)`,
+			`CREATE TABLE IF NOT EXISTS execution_stop_requests (
+				operation_key TEXT PRIMARY KEY,
+				attempt_id TEXT NOT NULL REFERENCES execution_attempts(id),
+				principal_id TEXT NOT NULL,
+				requested_at_ns INTEGER NOT NULL
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_execution_stop_attempt ON execution_stop_requests(attempt_id)`,
 		} {
 			if _, err := tx.Exec(stmt); err != nil {
 				return err

@@ -6,9 +6,10 @@ This protocol connects an originating Agent Tool Call to independent commands
 executed by another trusted producer. It preserves each executor's local Run and
 uses explicit references for navigation and evidence delivery.
 
-The current implementation provides the durable admission and execution-state
-ledger in `internal/handoff`. The remote transport, command worker, receipts,
-capability manifests and Dashboard integration are being implemented. The
+The current implementation provides durable admission, a bounded command worker,
+restart recovery, stop requests and an authenticated HTTP API in `internal/handoff`
+and `internal/daemon`. Evidence-transfer receipts, capability manifests and
+Dashboard integration are being implemented. The
 existing synchronous `POST /v1/record` API keeps its current behavior.
 
 The local record engine exposes trusted in-process lifecycle hooks. Its prepared
@@ -19,6 +20,52 @@ client must not supply that context. Completion and the associated status rows
 commit together, and evidence-write failures return an error. A failed checkpoint
 after launch terminates and reaps the recorded process rather than continuing
 without its execution evidence.
+
+## Enable the executor
+
+The API is disabled by default. Configure one trusted caller and one target in
+an operator-owned JSON file; no credentials are stored in this file:
+
+```json
+{
+  "target": {"producer_id": "lab", "instance_id": "vm-one", "generation": "deployment-one"},
+  "caller": {"principal_id": "tool-router", "producer_id": "developer-mac", "namespace": "local-user"},
+  "concurrency": 2
+}
+```
+
+```sh
+agentprov --data-dir ./executor-data daemon serve --execution-config ./execution.json
+```
+
+Use an isolated data directory for acceptance. Keep the daemon on loopback and
+forward its port through the existing SSH connection. The caller uses the daemon
+bearer credential and is trusted to assign native Tool Call references within
+its configured namespace. `--insecure-open` is incompatible with this feature.
+Shell, workdir and environment restrictions follow the existing record policy.
+
+| Endpoint | Operation |
+| --- | --- |
+| `POST /v1/executions` | Admit a command; 202 for a new attempt, 200 for an idempotent replay |
+| `GET /v1/executions/{id}` | Read attempt, checkpoint, local scope, output references and stop-request state |
+| `GET /v1/executions?run=...&harness=...&session=...&tool_call=...` | Page through attempts for one source call |
+| `POST /v1/executions/{id}/stop` | Persist `{"operation_id":"unique-stop-operation"}`; 202 acknowledges the request |
+
+See the [OpenAPI contract](execution-handoff-api.yaml) for schemas and errors.
+JSON writes are limited to 1 MiB and reject unknown fields or trailing JSON.
+The daemon's existing bearer, Origin and Fetch Metadata checks remain in effect.
+
+The worker holds an exclusive store lock, runs at most the configured number of
+commands (default two), and keeps pending jobs in SQLite. On restart it recovers
+saved execution-end events; unresolved starts become `unknown`. Recovery never
+signals a process using only a historical PID. Stop requests for unresolved
+attempts remain visible for operator reconciliation.
+
+Each output stream retains at most 1 MiB before redaction and chunked storage;
+larger streams report truncation and their observed byte count. `basic` omits
+tool-result bodies unless explicitly enabled. Restart recovery reports lost
+output as unknown. Successful execution currently leaves capture at `draining`
+and delivery at `pending`, awaiting their respective evidence and receipt stages.
 
 ## Identity and trust
 
@@ -51,7 +98,7 @@ collector is outside the authenticity boundary of that producer's records.
 | `dispatch_id` | Logical handoff, scoped to the source producer and namespace |
 | `operation_id` | Idempotency key for one admission or explicit reexecution |
 | `previous_attempt_id` | Latest stopped or unknown attempt, required for reexecution |
-| `valid_until` | Absolute admission deadline, at most 24 hours after receipt |
+| `valid_until` | Absolute admission/start deadline, at most 24 hours after receipt |
 | `command` | Argument array, workdir, snapshot and context-retention settings |
 
 Admission reserves the SQLite writer and commits the dispatch, attempt, request
@@ -67,7 +114,8 @@ resolved; the executor never automatically queues an unknown attempt again.
 
 Expired requests return `execution_request_expired`, including after deduplication
 records have been removed. Their saved results remain queryable. An accepted
-operation's admission deadline is not its command timeout. Ledger records have
+operation still queued past this deadline fails without starting. Once running,
+the command uses the executor's separate timeout policy. Ledger records have
 no automatic garbage collection in this implementation. A future cleanup policy
 must retain all unexpired operation keys and all records required by evidence
 and recovery retention; it must never silently admit an expired request anew.
@@ -121,8 +169,10 @@ digest. Neither field is changed by successful command completion. Late evidence
 creates an additional package/version linked to the original digest.
 
 Disconnecting a transport or cancelling a query leaves execution unchanged.
-Stopping an attempt is a separate authenticated, idempotent operation; its
-receipt records the requested process scope and observed outcome.
+Stopping an attempt is a separate authenticated, idempotent operation. Its receipt
+confirms storage of the request; the checkpoint records the observed command
+outcome. Active noninteractive commands are cancelled through their process
+group. Descendants outside that group require separate scope reconciliation.
 
 ## Capability and receipt contract
 
@@ -146,17 +196,21 @@ They describe their selection separately from the original package signature.
 
 ## Compatibility and tests
 
-Database schema 21 adds the execution ledger without renaming legacy tables or
+Database schemas 21 and 22 add the execution ledger and durable stop requests without renaming legacy tables or
 rewriting existing events. Older binaries reject the newer schema; use a backup
 for a downgrade. Historic signed packages retain their original format.
 
 Run the contract and persistence regressions with:
 
 ```sh
-go test -race ./internal/handoff ./internal/store
+go test -race ./internal/handoff ./internal/daemon ./internal/store
 ```
 
 The tests cover concurrent admission and worker claims, explicit reexecution,
 source isolation, parameter conflicts, expiry, reopen recovery, transactional
-history failures, bounded pagination and query cancellation. End-to-end remote
-execution and evidence-transfer acceptance are separate integration gates.
+history failures, bounded pagination, query cancellation, real command execution,
+output retention, exclusive ownership and recovery of saved completion events.
+`scripts/accept_execution_handoff.py` exercises an isolated daemon's public API
+with concurrent CSV analysis, output artifacts, retry and cancellation. It uses
+explicit fixture call IDs; native harness integration and evidence transfer have
+separate acceptance gates.

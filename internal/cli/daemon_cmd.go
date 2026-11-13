@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/daemon"
+	"github.com/byteyellow/agentprovenance/internal/handoff"
+	"github.com/byteyellow/agentprovenance/internal/record"
 	"github.com/spf13/cobra"
 )
 
@@ -37,10 +40,11 @@ func daemonCmd(dataDir *string) *cobra.Command {
 	var ingestAllowDir string
 	var recordAllowShell bool
 	var recordTimeout time.Duration
+	var executionConfig string
 	serve := &cobra.Command{
 		Use:   "serve",
 		Short: "run the local AgentProvenance daemon/API server",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 			server, closeFn, err := daemon.NewServer(*dataDir)
 			if err != nil {
 				return err
@@ -96,6 +100,29 @@ func daemonCmd(dataDir *string) *cobra.Command {
 			server.ListenAddr = listen
 			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
+			if executionConfig != "" {
+				if server.AuthToken == "" || insecureOpen {
+					return fmt.Errorf("execution handoff requires authentication; remove --insecure-open")
+				}
+				f, err := os.Open(executionConfig)
+				if err != nil {
+					return err
+				}
+				config, readErr := handoff.ReadConfig(f)
+				closeErr := f.Close()
+				if err := errors.Join(readErr, closeErr); err != nil {
+					return err
+				}
+				server.Execution = &handoff.Executor{Ledger: handoff.Ledger{DB: server.DB, Target: config.Target},
+					Paths: server.Paths, Concurrency: config.Concurrency,
+					Options: record.Options{AllowShell: recordAllowShell, Timeout: recordTimeout}}
+				server.ExecutionCaller = config.Principal()
+				closeExecutor, err := server.Execution.Start(ctx)
+				if err != nil {
+					return err
+				}
+				defer func() { runErr = errors.Join(runErr, closeExecutor()) }()
+			}
 			go server.StartSampler(ctx)
 			go server.StartSpoolWorker(ctx)
 			go server.StartEvidenceWorker(ctx)
@@ -136,6 +163,7 @@ func daemonCmd(dataDir *string) *cobra.Command {
 	serve.Flags().StringVar(&ingestAllowDir, "ingest-allow-dir", "", "only files inside this directory may be read by /v1/leases (task) and /v1/telemetry/ingest-falco (file); default <data-dir>/ingest")
 	serve.Flags().BoolVar(&recordAllowShell, "record-allow-shell", false, "execution policy for the authenticated /v1/record API: running arbitrary programs for authenticated callers is the product design, this switch only controls the shell wrapper form — permit shell interpreters (sh -c ...) as argv[0]; default false = refused")
 	serve.Flags().DurationVar(&recordTimeout, "record-timeout", 0, "execution policy for the authenticated /v1/record API: per-exec timeout, 0 = policy default (60s), negative = unbounded")
+	serve.Flags().StringVar(&executionConfig, "execution-config", "", "trusted caller and target configuration for durable execution handoff; disabled by default")
 	cmd := &cobra.Command{Use: "daemon", Short: "local daemon/API server commands"}
 	cmd.AddCommand(serve)
 	return cmd

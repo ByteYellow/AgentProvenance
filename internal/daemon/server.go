@@ -22,6 +22,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/cost"
 	"github.com/byteyellow/agentprovenance/internal/evidence"
 	"github.com/byteyellow/agentprovenance/internal/forensics"
+	"github.com/byteyellow/agentprovenance/internal/handoff"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
@@ -72,6 +73,8 @@ type Server struct {
 	// per-exec bound (Timeout: 0 = policy default, negative = unbounded).
 	RecordAllowShell  bool
 	RecordExecTimeout time.Duration
+	Execution         *handoff.Executor
+	ExecutionCaller   handoff.Principal
 	writeMu           *sync.Mutex
 }
 
@@ -104,6 +107,10 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/snapshots", s.createSnapshot)
 	mux.HandleFunc("/v1/snapshots/", s.snapshotByID)
 	mux.HandleFunc("POST /v1/record", s.recordRun)
+	mux.HandleFunc("POST /v1/executions", s.submitExecution)
+	mux.HandleFunc("GET /v1/executions", s.listExecutions)
+	mux.HandleFunc("GET /v1/executions/{id}", s.getExecution)
+	mux.HandleFunc("POST /v1/executions/{id}/stop", s.stopExecution)
 	mux.HandleFunc("POST /v1/telemetry/bind", s.bindTelemetry)
 	mux.HandleFunc("GET /v1/telemetry/events", s.listTelemetryEvents)
 	mux.HandleFunc("GET /v1/telemetry/windows", s.listTelemetryWindows)

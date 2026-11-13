@@ -306,6 +306,7 @@ func TestUpgradeSchema20AddsHandoffLedgerWithoutChangingEvents(t *testing.T) {
 	}
 	defer db.Close()
 	for _, stmt := range []string{
+		`DROP TABLE execution_stop_requests`,
 		`DROP TABLE execution_attempt_history`,
 		`DROP TABLE execution_attempts`,
 		`DROP TABLE execution_dispatches`,
@@ -322,7 +323,7 @@ func TestUpgradeSchema20AddsHandoffLedgerWithoutChangingEvents(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, table := range []string{"execution_dispatches", "execution_attempts", "execution_attempt_history"} {
+	for _, table := range []string{"execution_dispatches", "execution_attempts", "execution_attempt_history", "execution_stop_requests"} {
 		var count int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&count); err != nil || count != 1 {
 			t.Fatalf("missing ledger table %s: %d %v", table, count, err)

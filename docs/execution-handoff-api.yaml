@@ -1,0 +1,256 @@
+openapi: 3.1.0
+info:
+  title: AgentProvenance execution handoff API
+  version: "1.0"
+  description: >
+    Opt-in authenticated single-router execution API. Admission is durable and
+    independent of the HTTP connection. Command completion, capture sealing and
+    evidence acknowledgement are separate states. See execution-handoff.md.
+servers:
+  - url: http://127.0.0.1:8574
+security:
+  - bearerAuth: []
+paths:
+  /v1/executions:
+    post:
+      operationId: submitExecution
+      summary: Admit one independent command or return an existing operation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Request' }
+      responses:
+        '202':
+          description: Attempt durably accepted; Location identifies its status URL
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Admission' }
+        '200':
+          description: Previously admitted operation returned without reexecution
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Admission' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '410': { $ref: '#/components/responses/Error' }
+        '413': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+    get:
+      operationId: listExecutions
+      summary: List attempts for one native Tool Call in the authenticated namespace
+      parameters:
+        - { name: run, in: query, required: true, schema: { type: string } }
+        - { name: harness, in: query, required: true, schema: { type: string } }
+        - { name: session, in: query, required: true, schema: { type: string } }
+        - { name: tool_call, in: query, required: true, schema: { type: string } }
+        - { name: after, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: Bounded sequence-ordered page; next_after is present only with more results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [schema_version, attempts]
+                properties:
+                  schema_version: { const: agentprovenance.execution_handoff/v1 }
+                  attempts: { type: array, items: { $ref: '#/components/schemas/Attempt' } }
+                  next_after: { type: integer, minimum: 1 }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/executions/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      operationId: getExecution
+      summary: Read attempt, last saved checkpoint and stop request state
+      responses:
+        '200':
+          description: Coherent read of saved state and evidence
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [schema_version, attempt, stop_requested]
+                properties:
+                  schema_version: { const: agentprovenance.execution_handoff/v1 }
+                  attempt: { $ref: '#/components/schemas/Attempt' }
+                  stop_requested: { type: boolean }
+                  checkpoint_ref: { type: string }
+                  checkpoint: { $ref: '#/components/schemas/Checkpoint' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/executions/{id}/stop:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: stopExecution
+      summary: Persist an idempotent stop request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [operation_id]
+              properties:
+                operation_id: { type: string, minLength: 1 }
+      responses:
+        '202':
+          description: Request stored; consult execution state for the observed outcome
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [schema_version, attempt_id, operation_id, state, requested_at]
+                properties:
+                  schema_version: { const: agentprovenance.execution_handoff/v1 }
+                  attempt_id: { type: string }
+                  operation_id: { type: string }
+                  state: { const: requested }
+                  requested_at: { type: string, format: date-time }
+        default: { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  responses:
+    Error:
+      description: >
+        English error code. Invalid input is 400, unauthenticated 401,
+        unauthorized 403, unknown/disabled 404, conflict 409, expired 410,
+        oversized 413, storage failure 500, unavailable worker 503.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              schema_version: { const: agentprovenance.execution_handoff/v1 }
+              error: { type: string }
+  schemas:
+    Source:
+      type: object
+      additionalProperties: false
+      required: [producer_id, namespace, run_id, harness, session_id, tool_call_id]
+      properties:
+        producer_id: { type: string, minLength: 1 }
+        namespace: { type: string, minLength: 1 }
+        run_id: { type: string, minLength: 1 }
+        harness: { type: string, minLength: 1 }
+        session_id: { type: string, minLength: 1 }
+        tool_call_id: { type: string, minLength: 1 }
+    Target:
+      type: object
+      additionalProperties: false
+      required: [producer_id, instance_id, generation]
+      properties:
+        producer_id: { type: string, minLength: 1 }
+        instance_id: { type: string, minLength: 1 }
+        generation: { type: string, minLength: 1 }
+    Command:
+      type: object
+      additionalProperties: false
+      required: [argv]
+      properties:
+        argv: { type: array, minItems: 1, maxItems: 256, items: { type: string } }
+        workdir: { type: string, default: '' }
+        disable_snapshot: { type: boolean, default: false }
+        sample_interval_ms: { type: integer, minimum: 0, maximum: 60000, default: 25 }
+        post_root_grace_ms: { type: integer, minimum: 0, maximum: 30000, default: 250 }
+        capture_preset: { type: string, enum: [basic, detailed], default: detailed }
+        tool_results: { type: boolean }
+    Request:
+      type: object
+      additionalProperties: false
+      required: [schema_version, source, target, dispatch_id, operation_id, valid_until, command]
+      properties:
+        schema_version: { const: agentprovenance.execution_handoff/v1 }
+        source: { $ref: '#/components/schemas/Source' }
+        target: { $ref: '#/components/schemas/Target' }
+        dispatch_id: { type: string, minLength: 1 }
+        operation_id: { type: string, minLength: 1 }
+        previous_attempt_id: { type: string }
+        valid_until: { type: string, format: date-time }
+        command: { $ref: '#/components/schemas/Command' }
+    State:
+      type: object
+      required: [execution, capture, delivery]
+      properties:
+        execution: { enum: [accepted, starting, running, succeeded, failed, cancelled, unknown] }
+        capture: { enum: [not_ready, collecting, draining, sealed, incomplete] }
+        delivery: { enum: [pending, transferring, acknowledged, conflict] }
+    Attempt:
+      type: object
+      required: [schema_version, sequence, id, attempt_number, request_hash, digest_version, request, local_run_id, state, revision, created_at, updated_at]
+      properties:
+        schema_version: { const: agentprovenance.execution_handoff/v1 }
+        sequence: { type: integer, minimum: 1 }
+        id: { type: string }
+        attempt_number: { type: integer, minimum: 1 }
+        request_hash: { type: string, pattern: '^[0-9a-f]{64}$' }
+        digest_version: { const: agentprovenance.execution_request_sha256/v1 }
+        request: { $ref: '#/components/schemas/Request' }
+        local_run_id: { type: string }
+        state: { $ref: '#/components/schemas/State' }
+        revision: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Admission:
+      type: object
+      required: [schema_version, attempt, reused]
+      properties:
+        schema_version: { const: agentprovenance.execution_handoff/v1 }
+        attempt: { $ref: '#/components/schemas/Attempt' }
+        reused: { type: boolean }
+    Output:
+      type: object
+      required: [state]
+      properties:
+        state: { enum: [stored, omitted, truncated, unavailable, unknown] }
+        ref: { type: string, description: Content-addressed text manifest reference }
+        observed_bytes: { type: integer, minimum: 0, description: Absent when not observed }
+        retained_bytes: { type: integer, minimum: 0, description: Bytes after redaction; absent when unknown }
+        reason: { type: string }
+    Checkpoint:
+      type: object
+      required: [schema_version, attempt_id, revision, source, target, dispatch_id, request_hash, digest_version, state, reason, at]
+      properties:
+        schema_version: { const: agentprovenance.execution_handoff/v1 }
+        attempt_id: { type: string }
+        revision: { type: integer, minimum: 1 }
+        source: { $ref: '#/components/schemas/Source' }
+        target: { $ref: '#/components/schemas/Target' }
+        dispatch_id: { type: string }
+        request_hash: { type: string }
+        digest_version: { const: agentprovenance.execution_request_sha256/v1 }
+        state: { $ref: '#/components/schemas/State' }
+        reason: { type: string }
+        at: { type: string, format: date-time }
+        scope:
+          type: object
+          required: [run_id, rollout_id, attempt_id, session_id, tool_call_id, process_id, base_snapshot_id, binding_id, cgroup_id, scope_kind, workdir, started_at]
+          properties:
+            run_id: { type: string }
+            rollout_id: { type: string }
+            attempt_id: { type: string }
+            session_id: { type: string }
+            tool_call_id: { type: string }
+            process_id: { type: string }
+            base_snapshot_id: { type: string }
+            binding_id: { type: string }
+            cgroup_id: { type: string }
+            scope_kind: { enum: [cgroup, logical_process_scope] }
+            workdir: { type: string }
+            started_at: { type: string, format: date-time }
+            root_pid: { type: integer, minimum: 1 }
+            start_event_id: { type: string }
+        result:
+          type: object
+          description: Existing record result including exit code, observed descendants and artifact capture. Recovery can leave unavailable fields empty.
+        stdout: { $ref: '#/components/schemas/Output' }
+        stderr: { $ref: '#/components/schemas/Output' }
+        error: { type: string }

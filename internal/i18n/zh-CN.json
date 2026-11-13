@@ -1260,6 +1260,7 @@
   "continue recording later jobs when one job fails": "作业失败后继续记录后续作业",
   "custom compliance ruleset YAML": "自定义合规规则 YAML",
   "daemon listen address": "后台服务监听地址",
+  "trusted caller and target configuration for durable execution handoff; disabled by default": "持久化执行交接的可信调用端与目标配置；默认关闭",
   "dashboard listen address (falls back to an ephemeral port if busy)": "Dashboard 监听地址；端口被占用时使用临时端口",
   "dashboard listen address to test": "要检查的 Dashboard 监听地址",
   "default artifact state id": "默认产物状态 ID",

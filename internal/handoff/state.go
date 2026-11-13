@@ -42,7 +42,7 @@ func (s ExecutionState) CanTransition(next ExecutionState) bool {
 	case Accepted:
 		return next == Starting || next == Failed || next == Cancelled
 	case Starting:
-		return next == Running || next == Failed || next == Cancelled || next == Unknown
+		return next == Running || next == Succeeded || next == Failed || next == Cancelled || next == Unknown
 	case Running:
 		return next == Succeeded || next == Failed || next == Cancelled || next == Unknown
 	case Unknown:
