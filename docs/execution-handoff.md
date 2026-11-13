@@ -11,6 +11,15 @@ ledger in `internal/handoff`. The remote transport, command worker, receipts,
 capability manifests and Dashboard integration are being implemented. The
 existing synchronous `POST /v1/record` API keeps its current behavior.
 
+The local record engine exposes trusted in-process lifecycle hooks. Its prepared
+checkpoint follows the saved execution binding and precedes command launch. Its
+started checkpoint includes the actual PID and persisted start-event reference.
+Execution cancellation uses an executor-owned context; a disconnected HTTP
+client must not supply that context. Completion and the associated status rows
+commit together, and evidence-write failures return an error. A failed checkpoint
+after launch terminates and reaps the recorded process rather than continuing
+without its execution evidence.
+
 ## Identity and trust
 
 Every source reference contains `producer_id`, `namespace`, `run_id`, `harness`,

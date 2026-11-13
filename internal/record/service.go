@@ -32,7 +32,8 @@ type Service struct {
 	// strict (fail-closed) default: DefaultExecTimeout timeout with process
 	// group kill, shell interpreters refused, cwd confined to the workspace
 	// root, minimal child environment. See the Options doc comment.
-	Options Options
+	Options   Options
+	Lifecycle *Lifecycle
 }
 
 type Request struct {
@@ -78,6 +79,8 @@ type Result struct {
 	EndedAt          string                `json:"ended_at"`
 	FailureReason    string                `json:"failure_reason"`
 	ArtifactCapture  ArtifactCaptureReport `json:"artifact_capture"`
+	Scope            *ExecutionScope       `json:"execution_scope,omitempty"`
+	EndEventID       string                `json:"end_event_id,omitempty"`
 }
 
 type ObservedProcess struct {
@@ -90,6 +93,15 @@ type ObservedProcess struct {
 }
 
 func (s Service) Run(req Request) (Result, error) {
+	return s.RunContext(context.Background(), req)
+}
+
+// RunContext accepts an execution lifetime owned by the caller. HTTP request
+// contexts must not be used for durable remote jobs; their executor owns it.
+func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
+	if err := ctx.Err(); err != nil {
+		return Result{}, err
+	}
 	if len(req.Command) == 0 {
 		return Result{}, fmt.Errorf("command is required after --")
 	}
@@ -205,7 +217,9 @@ func (s Service) Run(req Request) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	s.insertGraphEdges(req.RunID, rolloutID, baseSnapshotID, attemptID, sessionID, toolCallID, processID, now)
+	if err := s.insertGraphEdges(req.RunID, rolloutID, baseSnapshotID, attemptID, sessionID, toolCallID, processID, now); err != nil {
+		return Result{}, errors.Join(err, s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, err.Error()))
+	}
 
 	// Bound the execution (C2 hardening): a child that never exits can no
 	// longer wedge this worker. On deadline the Cancel below SIGKILLs the
@@ -215,7 +229,7 @@ func (s Service) Run(req Request) (Result, error) {
 	if execTimeout == 0 {
 		execTimeout = DefaultExecTimeout
 	}
-	execCtx := context.Background()
+	execCtx := ctx
 	if execTimeout > 0 {
 		var cancelTimeout func()
 		execCtx, cancelTimeout = context.WithTimeout(execCtx, execTimeout)
@@ -265,13 +279,33 @@ func (s Service) Run(req Request) (Result, error) {
 		StartedAt: startedAt, BindingSource: "zero_sdk_record",
 	})
 	if err != nil {
-		_ = s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, err.Error())
-		return Result{}, fmt.Errorf("publish execution scope before launch: %w", err)
+		return Result{}, errors.Join(fmt.Errorf("publish execution scope before launch: %w", err),
+			s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, err.Error()))
+	}
+	scopeKind := "cgroup"
+	if strings.HasPrefix(scopeCgroupID, "agentprov-record-") {
+		scopeKind = "logical_process_scope"
+	}
+	scope := ExecutionScope{RunID: req.RunID, RolloutID: rolloutID, AttemptID: attemptID, SessionID: sessionID,
+		ToolCallID: toolCallID, ProcessID: processID, BaseSnapshotID: baseSnapshotID, BindingID: bindingID,
+		CgroupID: scopeCgroupID, ScopeKind: scopeKind, Workdir: absWorkdir, StartedAt: startedAt}
+	if s.Lifecycle != nil && s.Lifecycle.Prepared != nil {
+		if err := s.Lifecycle.Prepared(scope); err != nil {
+			return Result{RunID: req.RunID, Scope: &scope}, errors.Join(err,
+				s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, err.Error()),
+				correlation.CloseBindingByID(s.DB, bindingID, time.Now().UTC().Format(time.RFC3339Nano)))
+		}
 	}
 	if err := cmd.Start(); err != nil {
 		endedAt := time.Now().UTC().Format(time.RFC3339Nano)
-		_ = s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, err.Error())
-		_ = correlation.CloseBindingByID(s.DB, bindingID, endedAt)
+		status, exitCode := "failed", 125
+		if errors.Is(execCtx.Err(), context.Canceled) {
+			status, exitCode = "cancelled", 130
+		} else if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
+			exitCode = 124
+		}
+		persistErr := errors.Join(s.markStopped(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, status, exitCode, err.Error()),
+			correlation.CloseBindingByID(s.DB, bindingID, endedAt))
 		artifactCapture := newArtifactCaptureReport()
 		if !req.DisableSnapshot {
 			artifactCapture.Status, artifactCapture.Reason = "failed", "File snapshot capture was not performed because the command could not start."
@@ -280,6 +314,7 @@ func (s Service) Run(req Request) (Result, error) {
 		if saveErr := s.persistArtifactReport(req.RunID, rolloutID, &artifactCapture); saveErr != nil {
 			artifactCapture.Status = "failed"
 			artifactCapture.Issues = append(artifactCapture.Issues, "report_storage_failed")
+			persistErr = errors.Join(persistErr, saveErr)
 		}
 		return Result{
 			RunID:           req.RunID,
@@ -291,29 +326,50 @@ func (s Service) Run(req Request) (Result, error) {
 			ProcessID:       processID,
 			Workdir:         absWorkdir,
 			Command:         commandText,
-			ExitCode:        125,
-			Status:          "failed",
+			ExitCode:        exitCode,
+			Status:          status,
 			WallMS:          time.Since(start).Milliseconds(),
 			CWD:             absWorkdir,
 			StartedAt:       startedAt,
 			EndedAt:         endedAt,
 			FailureReason:   err.Error(),
 			ArtifactCapture: artifactCapture,
-		}, nil
+			Scope:           &scope,
+		}, persistErr
 	}
 	pid := int64(cmd.Process.Pid)
+	scope.RootPID = pid
 	// Start observing immediately; post-spawn database writes can outlast a
 	// short-lived child, especially while another collector holds the writer.
 	stopSampler := make(chan struct{})
 	samplerDone := make(chan []ObservedProcess, 1)
 	go sampleProcessTree(pid, sampleInterval, stopSampler, samplerDone)
-	_, _ = s.DB.Exec(`UPDATE execution_context_bindings SET root_pid = ?, pid = ? WHERE id = ?`, pid, pid, bindingID)
-	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, pid, ppid, payload, created_at)
-		VALUES (?, ?, ?, ?, ?, 'record', 'exec_start', ?, ?, ?, ?)`,
-		ids.New("evt"), req.RunID, sessionID, toolCallID, processID, pid, int64(os.Getpid()), fmt.Sprintf(`{"attempt_id":%q,"command":%q,"mode":"zero_sdk"}`, attemptID, commandText), startedAt)
+	abortStarted := func(cause error) (Result, error) {
+		if !opts.Foreground {
+			killProcessGroup(cmd.Process.Pid)
+		}
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		close(stopSampler)
+		<-samplerDone
+		endedAt := time.Now().UTC().Format(time.RFC3339Nano)
+		return Result{RunID: req.RunID, RootPID: pid, Scope: &scope, EndedAt: endedAt}, errors.Join(cause,
+			s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, cause.Error()),
+			correlation.CloseBindingByID(s.DB, bindingID, endedAt))
+	}
+	scope.StartEventID, err = s.persistStart(scope, commandText)
+	if err != nil {
+		return abortStarted(fmt.Errorf("persist execution start: %w", err))
+	}
+	if s.Lifecycle != nil && s.Lifecycle.Started != nil {
+		if err := s.Lifecycle.Started(scope); err != nil {
+			return abortStarted(err)
+		}
+	}
 
 	err = cmd.Wait()
-	timedOut := execCtx.Err() != nil
+	timedOut := errors.Is(execCtx.Err(), context.DeadlineExceeded)
+	cancelled := errors.Is(execCtx.Err(), context.Canceled)
 	postRootGraceStarted := time.Now()
 	time.Sleep(postRootGrace)
 	close(stopSampler)
@@ -323,6 +379,10 @@ func (s Service) Run(req Request) (Result, error) {
 	status := "passed"
 	failureReason := ""
 	switch {
+	case cancelled:
+		status = "cancelled"
+		exitCode = 130
+		failureReason = "execution cancelled; the recorded command was terminated"
 	case timedOut:
 		status = "failed"
 		exitCode = 124
@@ -435,19 +495,7 @@ func (s Service) Run(req Request) (Result, error) {
 	if (artifactCapture.Status == "partial" || artifactCapture.Status == "failed") && req.Stderr != nil {
 		fmt.Fprintf(req.Stderr, "record: artifact capture %s (stored=%d, omitted=%d, failed=%d)\n", artifactCapture.Status, artifactCapture.Stored, artifactCapture.Omitted, artifactCapture.Failed)
 	}
-	_, _ = s.DB.Exec(`UPDATE processes SET status = ?, exit_code = ?, ended_at = ? WHERE id = ?`, processStatus(status), exitCode, endedAt, processID)
-	_, _ = s.DB.Exec(`UPDATE sessions SET status = 'stopped', updated_at = ? WHERE id = ?`, endedAt, sessionID)
-	_, _ = s.DB.Exec(`UPDATE tool_calls SET status = ?, exit_code = ?, wall_ms = ?, cost_estimate = ?, ended_at = ? WHERE id = ?`,
-		status, exitCode, wallMS, float64(wallMS)/1000.0*0.001, endedAt, toolCallID)
-	_, _ = s.DB.Exec(`UPDATE fork_attempts SET status = ?, exit_code = ?, wall_ms = ?, score = ?, cost_estimate = ?, output_summary = ?, is_winner = 1 WHERE id = ?`,
-		status, exitCode, wallMS, score(exitCode, wallMS), float64(wallMS)/1000.0*0.001, fmt.Sprintf("changed_files=%d", len(changed)), attemptID)
-	_, _ = s.DB.Exec(`UPDATE rollouts SET status = 'completed', winner_attempt_id = ?, cost_estimate = ?, risk_status = 'clean', updated_at = ? WHERE id = ?`,
-		attemptID, float64(wallMS)/1000.0*0.001, endedAt, rolloutID)
-	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, pid, ppid, payload, created_at)
-		VALUES (?, ?, ?, ?, ?, 'record', 'exec_end', ?, ?, ?, ?)`,
-		ids.New("evt"), req.RunID, sessionID, toolCallID, processID, pid, int64(os.Getpid()), fmt.Sprintf(`{"attempt_id":%q,"exit_code":%d,"status":%q,"wall_ms":%d,"changed_files":%d,"timed_out":%t}`, attemptID, exitCode, status, wallMS, len(changed), timedOut), endedAt)
-	_ = correlation.CloseBinding(s.DB, processID, endedAt)
-	return Result{
+	result := Result{
 		RunID:            req.RunID,
 		RolloutID:        rolloutID,
 		BaseSnapshotID:   baseSnapshotID,
@@ -471,7 +519,13 @@ func (s Service) Run(req Request) (Result, error) {
 		EndedAt:          endedAt,
 		FailureReason:    failureReason,
 		ArtifactCapture:  artifactCapture,
-	}, nil
+		Scope:            &scope,
+	}
+	result.EndEventID, err = s.persistCompletion(result, timedOut, cancelled)
+	if err != nil {
+		return result, fmt.Errorf("persist execution completion: %w", err)
+	}
+	return result, nil
 }
 
 func observedProcessPayload(proc ObservedProcess, rootPID int64, cwd, boundary string) map[string]any {
@@ -635,7 +689,7 @@ func descendantsOf(rootPID int64, procs []ObservedProcess) []ObservedProcess {
 	return out
 }
 
-func (s Service) insertGraphEdges(runID, rolloutID, snapshotID, attemptID, sessionID, toolCallID, processID, createdAt string) {
+func (s Service) insertGraphEdges(runID, rolloutID, snapshotID, attemptID, sessionID, toolCallID, processID, createdAt string) error {
 	edges := [][3]string{
 		{rolloutID, attemptID, "rollout_attempt"},
 		{snapshotID, attemptID, "snapshot_attempt"},
@@ -644,24 +698,44 @@ func (s Service) insertGraphEdges(runID, rolloutID, snapshotID, attemptID, sessi
 		{toolCallID, sessionID, "tool_call_session"},
 		{toolCallID, processID, "tool_call_process"},
 	}
-	for _, edge := range edges {
-		_, _ = s.DB.Exec(`INSERT INTO graph_edges (id, run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at)
+	return store.WithWriteTx(context.Background(), s.DB, func(tx *sql.Tx) error {
+		for _, edge := range edges {
+			if _, err := tx.Exec(`INSERT INTO graph_edges (id, run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, 'record', ?)`,
-			ids.New("edge"), runID, rolloutID, edge[0], edge[1], edge[2], createdAt)
-	}
+				ids.New("edge"), runID, rolloutID, edge[0], edge[1], edge[2], createdAt); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (s Service) markFailed(runID, rolloutID, attemptID, sessionID, toolCallID, processID, reason string) error {
+	return s.markStopped(runID, rolloutID, attemptID, sessionID, toolCallID, processID, "failed", 125, reason)
+}
+
+func (s Service) markStopped(runID, rolloutID, attemptID, sessionID, toolCallID, processID, status string, exitCode int, reason string) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, _ = s.DB.Exec(`UPDATE processes SET status = 'failed', exit_code = 125, ended_at = ? WHERE id = ?`, now, processID)
-	_, _ = s.DB.Exec(`UPDATE sessions SET status = 'stopped', updated_at = ? WHERE id = ?`, now, sessionID)
-	_, _ = s.DB.Exec(`UPDATE tool_calls SET status = 'failed', exit_code = 125, result_ref = ?, ended_at = ? WHERE id = ?`, reason, now, toolCallID)
-	_, _ = s.DB.Exec(`UPDATE fork_attempts SET status = 'failed', exit_code = 125, output_summary = ? WHERE id = ?`, reason, attemptID)
-	_, _ = s.DB.Exec(`UPDATE rollouts SET status = 'failed', updated_at = ? WHERE id = ?`, now, rolloutID)
-	_, _ = s.DB.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
+	return store.WithWriteTx(context.Background(), s.DB, func(tx *sql.Tx) error {
+		for _, update := range []struct {
+			sql  string
+			args []any
+		}{
+			{`UPDATE processes SET status=?,exit_code=?,ended_at=? WHERE id=?`, []any{status, exitCode, now, processID}},
+			{`UPDATE sessions SET status='stopped',updated_at=? WHERE id=?`, []any{now, sessionID}},
+			{`UPDATE tool_calls SET status=?,exit_code=?,result_ref=?,ended_at=? WHERE id=?`, []any{status, exitCode, reason, now, toolCallID}},
+			{`UPDATE fork_attempts SET status=?,exit_code=?,output_summary=? WHERE id=?`, []any{status, exitCode, reason, attemptID}},
+			{`UPDATE rollouts SET status=?,updated_at=? WHERE id=?`, []any{status, now, rolloutID}},
+		} {
+			if err := updateOne(tx, update.sql, update.args...); err != nil {
+				return err
+			}
+		}
+		_, err := tx.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
 		VALUES (?, ?, ?, ?, ?, 'record', 'exec_error', ?, ?)`,
-		ids.New("evt"), runID, sessionID, toolCallID, processID, fmt.Sprintf(`{"reason":%q}`, reason), now)
-	return nil
+			ids.New("evt"), runID, sessionID, toolCallID, processID, fmt.Sprintf(`{"reason":%q}`, reason), now)
+		return err
+	})
 }
 
 func changedFiles(baseDir, workdir string) ([]string, error) {
