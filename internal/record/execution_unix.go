@@ -28,9 +28,7 @@ func commandExitCode(err *exec.ExitError) int {
 	return err.ExitCode()
 }
 
-// killProcessGroup SIGKILLs the negative pgid (whole tree) and then the leader
-// itself, best effort.
-func killProcessGroup(pid int) {
-	_ = syscall.Kill(-pid, syscall.SIGKILL)
-	_ = syscall.Kill(pid, syscall.SIGKILL)
+// A process group excludes descendants that created another session or group.
+func killProcessGroup(pid int) error {
+	return syscall.Kill(-pid, syscall.SIGKILL)
 }

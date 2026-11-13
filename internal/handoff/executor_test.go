@@ -2,6 +2,7 @@ package handoff
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -213,6 +214,55 @@ func TestExecutorRecoversSavedEndWithoutReexecution(t *testing.T) {
 		t.Run(fmt.Sprintf("saved_start_%t", savedStart), func(t *testing.T) {
 			testRecoveredCompletion(t, savedStart)
 		})
+	}
+}
+
+func TestObservedExecutionDoesNotDeclarePopulatedScopeStopped(t *testing.T) {
+	for _, status := range []string{"cancelled", "failed", "passed"} {
+		empty := false
+		r := record.Result{Status: status, RootPID: 42, EndEventID: "end", ExitCode: 130,
+			Stop: &record.StopReport{Method: "cgroup_kill", SignalSent: true, ScopeEmpty: &empty}}
+		got, err := observedExecution(r)
+		if err != nil || got != Unknown {
+			t.Fatalf("populated scope became terminal %s: %s %v", status, got, err)
+		}
+	}
+}
+
+func TestExecutorRecoversStopReport(t *testing.T) {
+	e, p, request := testExecutor(t)
+	request.Command.Argv = []string{"sleep", "60"}
+	a, _, err := e.Ledger.Admit(context.Background(), p, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := a.State
+	state.Execution = Starting
+	a, err = e.saveCheckpoint(context.Background(), a, Checkpoint{State: state, Reason: "executor_claim"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	svc := record.Service{DB: e.Ledger.DB, Paths: e.Paths, Lifecycle: &record.Lifecycle{
+		Prepared: func(scope record.ExecutionScope) error {
+			var err error
+			a, err = e.saveCheckpoint(context.Background(), a, Checkpoint{State: a.State, Reason: "scope_prepared", Scope: &scope})
+			return err
+		},
+		Started: func(record.ExecutionScope) error { cancel(); return nil },
+	}}
+	r, err := svc.RunContext(ctx, record.Request{RunID: a.LocalRunID, Command: request.Command.Argv,
+		DisableSnapshot: true, PostRootGraceMS: 1, Stdout: io.Discard, Stderr: io.Discard})
+	if err != nil || r.Stop == nil {
+		t.Fatalf("stopped result: %+v %v", r, err)
+	}
+	startExecutor(t, e)
+	report := waitExecution(t, e, p, a.ID, Cancelled)
+	want, _ := json.Marshal(r.Stop)
+	got, _ := json.Marshal(report.Checkpoint.Result.Stop)
+	if string(want) != string(got) || report.Attempt.State.Capture != Incomplete {
+		t.Fatalf("recovery changed stop evidence: %s -> %s", want, got)
 	}
 }
 

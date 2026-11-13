@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/attest"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
@@ -161,6 +162,53 @@ func TestDeliveryRealCommandSurvivesLostReceiptAndReopen(t *testing.T) {
 		t.Fatalf("received artifact: %+v %v", artifact, err)
 	}
 	if err := provenance.VerifyRun(f.receiver.DB, f.report.Attempt.LocalRunID, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDeliveryPreservesStopReport(t *testing.T) {
+	f := testDelivery(t)
+	r := f.report.Attempt.Request
+	r.DispatchID, r.OperationID, r.Source.ToolCallID = "stop-dispatch", "stop-operation", "stop-call"
+	r.Command = Command{Argv: []string{"sleep", "60"}, DisableSnapshot: true, PostRootGraceMS: 1}
+	a, _, err := f.sender.Ledger.Admit(context.Background(), f.principal, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &Executor{Ledger: f.sender.Ledger, Paths: f.sender.Paths, PollInterval: 5 * time.Millisecond}
+	stop := startExecutor(t, e)
+	waitExecution(t, e, f.principal, a.ID, Running)
+	if _, err := e.Ledger.RequestStop(context.Background(), f.principal, a.ID, "stop"); err != nil {
+		t.Fatal(err)
+	}
+	f.report = waitExecution(t, e, f.principal, a.ID, Cancelled)
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+	if f.report.Checkpoint.Result.Stop == nil {
+		t.Fatal("stop report missing from execution checkpoint")
+	}
+	d := f.prepare(t, "stopped-evidence")
+	f.receive(t, d)
+	var raw string
+	if err := f.receiver.DB.QueryRow(`SELECT json_extract(payload,'$.stop_report') FROM events WHERE id=?`,
+		f.report.Checkpoint.Result.EndEventID).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	var got, want map[string]any
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(f.report.Checkpoint.Result.Stop)
+	if err := json.Unmarshal(data, &want); err != nil {
+		t.Fatal(err)
+	}
+	gotJSON, _ := json.Marshal(got)
+	wantJSON, _ := json.Marshal(want)
+	if !bytes.Equal(gotJSON, wantJSON) {
+		t.Fatalf("signed delivery changed stop evidence: %s != %s", gotJSON, wantJSON)
+	}
+	if err := provenance.VerifyRun(f.receiver.DB, a.LocalRunID, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 }

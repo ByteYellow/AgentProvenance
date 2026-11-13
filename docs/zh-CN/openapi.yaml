@@ -115,6 +115,10 @@ paths:
         default: { $ref: '../execution-handoff-api.yaml#/components/responses/Error' }
   /v1/executions/{id}:
     $ref: '../execution-handoff-api.yaml#/paths/~1v1~1executions~1{id}'
+  /v1/execution-deliveries/{id}:
+    $ref: '../execution-handoff-api.yaml#/paths/~1v1~1execution-deliveries~1{id}'
+  /v1/execution-deliveries/{id}/bundle:
+    $ref: '../execution-handoff-api.yaml#/paths/~1v1~1execution-deliveries~1{id}~1bundle'
   /v1/telemetry/audit-associations:
     $ref: './audit-associations-api.yaml#/paths/~1v1~1telemetry~1audit-associations'
   /api/audit/associations:

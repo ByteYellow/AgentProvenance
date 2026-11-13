@@ -233,6 +233,9 @@ func (e *Executor) execute(ctx context.Context, a Attempt) error {
 		// subsequent capture operation, with its own evidence and timeout.
 		state.Capture = Draining
 	}
+	if r.Stop != nil && (r.Stop.ScopeEmpty == nil || !*r.Stop.ScopeEmpty) {
+		state.Capture = Incomplete
+	}
 	out, outErr := e.saveOutput(a, "stdout", stdout)
 	errout, errErr := e.saveOutput(a, "stderr", stderr)
 	c := Checkpoint{State: state, Reason: "execution_completed", Scope: r.Scope, Result: &r, Stdout: &out, Stderr: &errout}
@@ -244,6 +247,9 @@ func (e *Executor) execute(ctx context.Context, a Attempt) error {
 }
 
 func observedExecution(r record.Result) (ExecutionState, error) {
+	if r.Stop != nil && r.Stop.ScopeEmpty != nil && !*r.Stop.ScopeEmpty {
+		return Unknown, nil
+	}
 	switch r.Status {
 	case "passed":
 		if r.RootPID > 0 && r.EndEventID != "" && r.ExitCode == 0 {
@@ -330,10 +336,11 @@ func (e *Executor) recoverCompletion(ctx context.Context, a Attempt, scope recor
 		return nil, err
 	}
 	var payload struct {
-		AttemptID string `json:"attempt_id"`
-		Status    string `json:"status"`
-		ExitCode  int    `json:"exit_code"`
-		WallMS    int64  `json:"wall_ms"`
+		AttemptID string             `json:"attempt_id"`
+		Status    string             `json:"status"`
+		ExitCode  int                `json:"exit_code"`
+		WallMS    int64              `json:"wall_ms"`
+		Stop      *record.StopReport `json:"stop_report"`
 	}
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		return nil, err
@@ -351,7 +358,7 @@ func (e *Executor) recoverCompletion(ctx context.Context, a Attempt, scope recor
 	return &record.Result{RunID: a.LocalRunID, RolloutID: scope.RolloutID, AttemptID: scope.AttemptID,
 		SessionID: scope.SessionID, ToolCallID: scope.ToolCallID, ProcessID: scope.ProcessID, RootPID: pid,
 		Workdir: scope.Workdir, StartedAt: scope.StartedAt, EndedAt: ended, EndEventID: id, Scope: &scope,
-		Status: payload.Status, ExitCode: payload.ExitCode, WallMS: payload.WallMS}, nil
+		Status: payload.Status, ExitCode: payload.ExitCode, WallMS: payload.WallMS, Stop: payload.Stop}, nil
 }
 
 type outputBuffer struct {

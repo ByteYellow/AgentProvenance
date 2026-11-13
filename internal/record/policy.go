@@ -24,7 +24,7 @@ const DefaultExecTimeout = 60 * time.Second
 // it. The zero value is the fail-closed policy:
 //
 //   - Timeout: DefaultExecTimeout (60s); a timed-out child has its whole
-//     process group SIGKILLed.
+//     owned Linux cgroup stopped, or the process group when no cgroup is available.
 //   - AllowShell=false: argv[0] being a shell interpreter (sh/bash/zsh/dash/
 //     fish/ksh/csh/tcsh/pwsh/cmd, absolute paths included -- i.e. every
 //     `sh -c ...` shape) is refused, which removes the most common wrapper

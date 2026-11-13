@@ -29,8 +29,8 @@ type Service struct {
 	DB    *sql.DB
 	Paths store.Paths
 	// Options carries the execution hardening policy; the zero value is the
-	// strict (fail-closed) default: DefaultExecTimeout timeout with process
-	// group kill, shell interpreters refused, cwd confined to the workspace
+	// strict (fail-closed) default: DefaultExecTimeout with scope cancellation,
+	// shell interpreters refused, cwd confined to the workspace
 	// root, minimal child environment. See the Options doc comment.
 	Options   Options
 	Lifecycle *Lifecycle
@@ -81,6 +81,7 @@ type Result struct {
 	ArtifactCapture  ArtifactCaptureReport `json:"artifact_capture"`
 	Scope            *ExecutionScope       `json:"execution_scope,omitempty"`
 	EndEventID       string                `json:"end_event_id,omitempty"`
+	Stop             *StopReport           `json:"stop_report,omitempty"`
 }
 
 type ObservedProcess struct {
@@ -221,10 +222,7 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 		return Result{}, errors.Join(err, s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, err.Error()))
 	}
 
-	// Bound the execution (C2 hardening): a child that never exits can no
-	// longer wedge this worker. On deadline the Cancel below SIGKILLs the
-	// child's whole process group (see applyExecutionAttrs), not just the
-	// root process.
+	// The execution owner supplies cancellation; timeout uses the same stop path.
 	execTimeout := opts.Timeout
 	if execTimeout == 0 {
 		execTimeout = DefaultExecTimeout
@@ -250,23 +248,16 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 		cmd.Stderr = req.Stderr
 	}
 	cmd.Stdin = req.Stdin
-	if applyExecutionAttrs(cmd, opts.Foreground) {
-		cmd.Cancel = func() error {
-			killProcessGroup(cmd.Process.Pid)
-			return nil
-		}
-	}
+	group := applyExecutionAttrs(cmd, opts.Foreground)
 	// Bound the post-exit I/O drain so grandchildren holding the inherited
 	// pipes cannot keep Wait blocked long after the recorded root is gone.
 	cmd.WaitDelay = 2 * time.Second
-	// Place the child (and, by inheritance, its whole subtree) into a dedicated
-	// cgroup so independent kernel telemetry auto-joins to this scope by
-	// cgroup_id at 0.98 -- no pid polling, no pid-reuse window. On Linux this
-	// returns the real cgroup inode (== bpf_get_current_cgroup_id); elsewhere it
-	// falls back to the synthetic logical id, preserving prior behavior. See
-	// cgroup_linux.go / cgroup_other.go.
-	scopeCgroupID, scopeCleanup := prepareScopeCgroup(cmd, attemptID)
-	defer scopeCleanup()
+	// The child is born in its own scope, which is also the stop boundary.
+	cgroup := prepareScopeCgroup(cmd, attemptID)
+	defer cgroup.cleanup()
+	scopeCgroupID := cgroup.id
+	stop := executionStop{cmd: cmd, cgroup: cgroup, group: group}
+	cmd.Cancel = stop.signal
 	start := time.Now()
 	startedAt := start.UTC().Format(time.RFC3339Nano)
 	// Publish the scope before the child can emit its first syscall. A live
@@ -345,15 +336,13 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 	samplerDone := make(chan []ObservedProcess, 1)
 	go sampleProcessTree(pid, sampleInterval, stopSampler, samplerDone)
 	abortStarted := func(cause error) (Result, error) {
-		if !opts.Foreground {
-			killProcessGroup(cmd.Process.Pid)
-		}
-		_ = cmd.Process.Kill()
+		_ = stop.signal()
 		_ = cmd.Wait()
+		stopReport := stop.finish()
 		close(stopSampler)
 		<-samplerDone
 		endedAt := time.Now().UTC().Format(time.RFC3339Nano)
-		return Result{RunID: req.RunID, RootPID: pid, Scope: &scope, EndedAt: endedAt}, errors.Join(cause,
+		return Result{RunID: req.RunID, RootPID: pid, Scope: &scope, EndedAt: endedAt, Stop: stopReport}, errors.Join(cause,
 			s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, cause.Error()),
 			correlation.CloseBindingByID(s.DB, bindingID, endedAt))
 	}
@@ -370,6 +359,12 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 	err = cmd.Wait()
 	timedOut := errors.Is(execCtx.Err(), context.DeadlineExceeded)
 	cancelled := errors.Is(execCtx.Err(), context.Canceled)
+	// Wait may win the race with context cancellation after the root exits.
+	// The open cgroup is still an owned target; a reaped PID is not.
+	if (timedOut || cancelled) && cgroup.kill != nil {
+		_ = stop.signal()
+	}
+	stopReport := stop.finish()
 	postRootGraceStarted := time.Now()
 	time.Sleep(postRootGrace)
 	close(stopSampler)
@@ -520,6 +515,7 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 		FailureReason:    failureReason,
 		ArtifactCapture:  artifactCapture,
 		Scope:            &scope,
+		Stop:             stopReport,
 	}
 	result.EndEventID, err = s.persistCompletion(result, timedOut, cancelled)
 	if err != nil {

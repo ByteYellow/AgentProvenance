@@ -67,6 +67,22 @@ saved execution-end events; unresolved starts become `unknown`. Recovery never
 signals a process using only a historical PID. Stop requests for unresolved
 attempts remain visible for operator reconciliation.
 
+On Linux with a writable cgroup v2 subtree, cancellation, execution timeout and
+post-launch checkpoint failure stop the owned cgroup using `cgroup.kill`. This
+includes descendants that create a separate process group with `setsid`. The
+executor holds the cgroup directory open and never adopts a pre-existing scope.
+After the root is reaped, it waits up to two seconds for `cgroup.events` to report
+an empty subtree. Other concurrent execution scopes are left running.
+
+The result's `stop_report` records the method, signal result, observation times,
+`scope_empty` and any error. A still-populated scope leaves the attempt `unknown`.
+If cgroup stopping fails, the root is stopped and the scope error is retained.
+Without a kernel cgroup, cancellation retains the existing process-group/root
+behavior: command status describes the root, `scope_empty` is null and capture
+is `incomplete`. Stop reports persist with the end event and survive recovery
+and signed delivery. Processes deliberately moved outside the owned cgroup
+require separate operator reconciliation.
+
 Each output stream retains at most 1 MiB before redaction and chunked storage;
 larger streams report truncation and their observed byte count. `basic` omits
 tool-result bodies unless explicitly enabled. Restart recovery reports lost

@@ -2,6 +2,7 @@ package record
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -108,6 +109,13 @@ func TestExecutionContextCancellation(t *testing.T) {
 	}
 	if !strings.Contains(payload, `"cancelled":true`) || !strings.Contains(payload, `"timed_out":false`) {
 		t.Fatalf("cancellation lost in completion evidence: %s", payload)
+	}
+	var saved struct {
+		Stop *StopReport `json:"stop_report"`
+	}
+	if err := json.Unmarshal([]byte(payload), &saved); err != nil || saved.Stop == nil || r.Stop == nil ||
+		saved.Stop.Method != r.Stop.Method || saved.Stop.RequestedAt != r.Stop.RequestedAt || saved.Stop.ObservedAt != r.Stop.ObservedAt {
+		t.Fatalf("stop evidence was not saved with completion: %+v %v", saved.Stop, err)
 	}
 	if err := syscall.Kill(int(r.RootPID), 0); !errors.Is(err, syscall.ESRCH) {
 		t.Fatalf("cancelled child still exists: %v", err)

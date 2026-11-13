@@ -309,15 +309,15 @@ func TestPrepareScopeCgroupContract(t *testing.T) {
 	// cleanup that is safe to call (idempotently). On non-Linux this is the
 	// synthetic fallback; on Linux it is the real cgroup id or, on any failure
 	// (no cgroup v2 / not delegated), the same fallback.
-	id, cleanup := prepareScopeCgroup(&exec.Cmd{}, "attempt-xyz")
-	if id == "" {
+	cgroup := prepareScopeCgroup(&exec.Cmd{}, "attempt-xyz")
+	if cgroup.id == "" {
 		t.Fatal("prepareScopeCgroup returned empty scope id")
 	}
-	if cleanup == nil {
+	if cgroup.cleanup == nil {
 		t.Fatal("prepareScopeCgroup returned nil cleanup")
 	}
-	cleanup()
-	cleanup() // must not panic on a second call
+	cgroup.cleanup()
+	cgroup.cleanup() // must not panic on a second call
 }
 
 func TestRecordDescendantBindingsDoNotClaimWholeCgroup(t *testing.T) {

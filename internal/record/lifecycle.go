@@ -80,7 +80,8 @@ func (s Service) persistCompletion(r Result, timedOut, cancelled bool) (string, 
 			}
 		}
 		payload, err := json.Marshal(map[string]any{"attempt_id": r.AttemptID, "exit_code": r.ExitCode, "status": r.Status,
-			"wall_ms": r.WallMS, "changed_files": len(r.ChangedFiles), "timed_out": timedOut, "cancelled": cancelled})
+			"wall_ms": r.WallMS, "changed_files": len(r.ChangedFiles), "timed_out": timedOut, "cancelled": cancelled,
+			"stop_report": r.Stop})
 		if err != nil {
 			return err
 		}

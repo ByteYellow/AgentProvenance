@@ -405,6 +405,22 @@ components:
         result:
           type: object
           description: Existing record result including exit code, observed descendants and artifact capture. Recovery can leave unavailable fields empty.
+          properties:
+            stop_report: { $ref: '#/components/schemas/ExecutionStopReport' }
         stdout: { $ref: '#/components/schemas/Output' }
         stderr: { $ref: '#/components/schemas/Output' }
+        error: { type: string }
+    ExecutionStopReport:
+      type: object
+      required: [method, requested_at, observed_at, signal_sent, scope_empty]
+      properties:
+        method: { enum: [cgroup_kill, process_group, root_process] }
+        requested_at: { type: string, format: date-time }
+        observed_at: { type: string, format: date-time }
+        signal_sent:
+          type: boolean
+          description: The selected stop method accepted the signal; scope population is observed separately.
+        scope_empty:
+          type: [boolean, 'null']
+          description: True when the owned cgroup subtree was observed empty, false when still populated after the bounded wait, null when unavailable or observation failed.
         error: { type: string }
