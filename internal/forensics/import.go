@@ -73,9 +73,21 @@ func (s Service) ImportBundle(path string) (ImportInfo, error) {
 	if err != nil {
 		return ImportInfo{}, fmt.Errorf("read bundle: %w", err)
 	}
+	return s.importBundle(context.Background(), path, raw)
+}
+
+func (s Service) importBundle(ctx context.Context, path string, raw []byte) (ImportInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return ImportInfo{}, err
+	}
 	var bundle map[string]any
-	if err := json.Unmarshal(raw, &bundle); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&bundle); err != nil {
 		return ImportInfo{}, fmt.Errorf("decode bundle: %w", err)
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return ImportInfo{}, fmt.Errorf("bundle must contain one JSON object")
 	}
 	runID, _ := bundle["run_id"].(string)
 	if runID == "" {
@@ -88,6 +100,9 @@ func (s Service) ImportBundle(path string) (ImportInfo, error) {
 	// tampered artifact can never enter the store. The actual write + path rewrite
 	// happens in restoreEmbeddedContent once the rows are committed.
 	for _, b := range tableRows(bundle, "object_blobs") {
+		if err := ctx.Err(); err != nil {
+			return ImportInfo{}, err
+		}
 		hash, _ := b["hash"].(string)
 		enc, _ := b["content_b64"].(string)
 		content, decErr := base64.StdEncoding.DecodeString(enc)
@@ -105,7 +120,6 @@ func (s Service) ImportBundle(path string) (ImportInfo, error) {
 	// scoping filter), so we disable FK enforcement on a dedicated connection and
 	// rely on the lens round-trip diff as the real fidelity check. A dedicated
 	// conn keeps the pragma from leaking to other pooled connections.
-	ctx := context.Background()
 	conn, err := s.DB.Conn(ctx)
 	if err != nil {
 		return ImportInfo{}, err
@@ -132,7 +146,7 @@ func (s Service) ImportBundle(path string) (ImportInfo, error) {
 		if len(rows) == 0 {
 			continue
 		}
-		n, err := insertRows(tx, table, rows)
+		n, err := insertRows(ctx, tx, table, rows)
 		if err != nil {
 			return ImportInfo{}, err
 		}
@@ -142,7 +156,7 @@ func (s Service) ImportBundle(path string) (ImportInfo, error) {
 	// The historical telemetry_batches key contains display summaries, not
 	// database rows. Only the newer full records can restore membership checks.
 	if rows := tableRows(bundle, "telemetry_batch_records"); len(rows) > 0 {
-		n, err := insertRows(tx, "telemetry_batches", rows)
+		n, err := insertRows(ctx, tx, "telemetry_batches", rows)
 		if err != nil {
 			return ImportInfo{}, err
 		}
@@ -155,7 +169,7 @@ func (s Service) ImportBundle(path string) (ImportInfo, error) {
 	}
 	// Write verified blobs + snapshot files to this store and rewrite their (now
 	// machine-local) paths in the committed rows.
-	objectBlobs, snapshotFiles, omitted, err := s.restoreEmbeddedContent(bundle, runID)
+	objectBlobs, snapshotFiles, omitted, err := s.restoreEmbeddedContent(ctx, bundle, runID)
 	if err != nil {
 		return ImportInfo{}, err
 	}
@@ -185,24 +199,27 @@ func readBundleBytes(path string) ([]byte, error) {
 	return out, nil
 }
 
-func (s Service) restoreEmbeddedContent(bundle map[string]any, runID string) (int, int, int, error) {
-	objectCount, err := s.restoreObjectBlobs(tableRows(bundle, "object_blobs"))
+func (s Service) restoreEmbeddedContent(ctx context.Context, bundle map[string]any, runID string) (int, int, int, error) {
+	objectCount, err := s.restoreObjectBlobs(ctx, tableRows(bundle, "object_blobs"))
 	if err != nil {
 		return 0, 0, 0, err
 	}
-	snapshotCount, err := s.restoreSnapshotFiles(runID, tableRows(bundle, "snapshot_files"))
+	snapshotCount, err := s.restoreSnapshotFiles(ctx, runID, tableRows(bundle, "snapshot_files"))
 	if err != nil {
 		return 0, 0, 0, err
 	}
 	return objectCount, snapshotCount, len(tableRows(bundle, "omitted_content")), nil
 }
 
-func (s Service) restoreObjectBlobs(rows []map[string]any) (int, error) {
+func (s Service) restoreObjectBlobs(ctx context.Context, rows []map[string]any) (int, error) {
 	count := 0
 	for _, row := range rows {
+		if err := ctx.Err(); err != nil {
+			return count, err
+		}
 		hash, _ := row["hash"].(string)
-		contentB64, _ := row["content_b64"].(string)
-		if hash == "" || contentB64 == "" {
+		contentB64, hasContent := row["content_b64"].(string)
+		if hash == "" || !hasContent {
 			continue
 		}
 		content, err := base64.StdEncoding.DecodeString(contentB64)
@@ -219,7 +236,7 @@ func (s Service) restoreObjectBlobs(rows []map[string]any) (int, error) {
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			return count, err
 		}
-		if _, err := s.DB.Exec(`UPDATE provenance_objects SET path = ?, size_bytes = ? WHERE hash = ?`, path, len(content), hash); err != nil {
+		if _, err := s.DB.ExecContext(ctx, `UPDATE provenance_objects SET path = ?, size_bytes = ? WHERE hash = ?`, path, len(content), hash); err != nil {
 			return count, err
 		}
 		count++
@@ -227,14 +244,17 @@ func (s Service) restoreObjectBlobs(rows []map[string]any) (int, error) {
 	return count, nil
 }
 
-func (s Service) restoreSnapshotFiles(runID string, rows []map[string]any) (int, error) {
+func (s Service) restoreSnapshotFiles(ctx context.Context, runID string, rows []map[string]any) (int, error) {
 	count := 0
 	roots := map[string]string{}
 	for _, row := range rows {
+		if err := ctx.Err(); err != nil {
+			return count, err
+		}
 		snapshotID, _ := row["snapshot_id"].(string)
 		name, _ := row["name"].(string)
-		contentB64, _ := row["content_b64"].(string)
-		if snapshotID == "" || name == "" || contentB64 == "" {
+		contentB64, hasContent := row["content_b64"].(string)
+		if snapshotID == "" || name == "" || !hasContent {
 			continue
 		}
 		rel, err := cleanBundleRelPath(name)
@@ -260,7 +280,7 @@ func (s Service) restoreSnapshotFiles(runID string, rows []map[string]any) (int,
 		count++
 	}
 	for snapshotID, root := range roots {
-		if _, err := s.DB.Exec(`UPDATE snapshots SET path = ? WHERE id = ?`, root, snapshotID); err != nil {
+		if _, err := s.DB.ExecContext(ctx, `UPDATE snapshots SET path = ? WHERE id = ?`, root, snapshotID); err != nil {
 			return count, err
 		}
 	}
@@ -285,10 +305,9 @@ func tableRows(bundle map[string]any, key string) []map[string]any {
 
 // insertRows writes each row into the table by its own column names, so it stays
 // correct regardless of schema column order or which columns the export carried.
-// SQLite's type affinity coerces JSON float64s back into INTEGER/REAL columns, so
-// numeric ids and pids round-trip without explicit conversion.
-func insertRows(tx *sql.Tx, table string, rows []map[string]any) (int, error) {
-	allowed, err := tableColumns(tx, table)
+// JSON integers are decoded without floating-point rounding.
+func insertRows(ctx context.Context, tx *sql.Tx, table string, rows []map[string]any) (int, error) {
+	allowed, err := tableColumns(ctx, tx, table)
 	if err != nil {
 		return 0, err
 	}
@@ -318,10 +337,20 @@ func insertRows(tx *sql.Tx, table string, rows []map[string]any) (int, error) {
 			}
 			quoted[i] = ident
 			vals[i] = row[c]
+			if number, ok := row[c].(json.Number); ok {
+				if strings.ContainsAny(number.String(), ".eE") {
+					vals[i], err = number.Float64()
+				} else {
+					vals[i], err = number.Int64()
+				}
+				if err != nil {
+					return count, fmt.Errorf("invalid numeric value for %s.%s: %w", table, c, err)
+				}
+			}
 		}
 		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(cols)), ",")
 		q := fmt.Sprintf("INSERT OR REPLACE INTO %s (%s) VALUES (%s)", tableIdent, strings.Join(quoted, ","), placeholders)
-		if _, err := tx.Exec(q, vals...); err != nil {
+		if _, err := tx.ExecContext(ctx, q, vals...); err != nil {
 			return count, fmt.Errorf("insert into %s: %w", table, err)
 		}
 		count++
@@ -329,12 +358,12 @@ func insertRows(tx *sql.Tx, table string, rows []map[string]any) (int, error) {
 	return count, nil
 }
 
-func tableColumns(tx *sql.Tx, table string) (map[string]struct{}, error) {
+func tableColumns(ctx context.Context, tx *sql.Tx, table string) (map[string]struct{}, error) {
 	tableIdent, err := quoteIdent(table)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query("PRAGMA table_info(" + tableIdent + ")")
+	rows, err := tx.QueryContext(ctx, "PRAGMA table_info("+tableIdent+")")
 	if err != nil {
 		return nil, fmt.Errorf("read columns for %s: %w", table, err)
 	}

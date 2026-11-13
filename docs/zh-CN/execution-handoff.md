@@ -154,13 +154,28 @@ unknown 确认为运行中或终态。运行及终态记录需要执行器生成
 完整导出保留原包及签名；选择性阅读导出只包含选中内容和允许公开的引用元数据，
 单独标注选择范围及其签名状态。
 
+## 证据导入
+
+`forensics.Service.ImportBundleStrict` 提供交付链路的接收端存储操作。
+先在隔离目录校验完整包，将正文按解码后 Bundle 的 SHA-256 保存，再用一个事务
+提交全部证据行。同内容重发复用已有记录；同 ID 携带不同证据时返回
+`bundle_evidence_conflict`，整批回滚，已有记录与本地正文路径保持原样。
+
+支持 JSON 和 gzip，解码后的 JSON 上限为 256 MiB，超限明确失败。
+导入检查预期 Run、记录身份、对象哈希、对象大小和正文引用，保留 64 位整数
+及空文件。归档文件同步落盘后才写入数据库引用；数据库失败时可能留下待核对的
+未引用归档，这个方法本身不生成交付回执。
+
+发送端授权、签名验证和持久交付回执由交付协议完成，尚未通过此入口开放。
+已有回放导入保留原有覆盖行为，保持兼容。
+
 ## 兼容与测试
 
 数据库 schema 21、22 增加执行账本和持久停止请求，保留既有物理表名和事件内容。
 旧程序会拒绝新版 schema；降级使用升级前备份。历史签名包维持原有格式。
 
 ```sh
-go test -race ./internal/handoff ./internal/daemon ./internal/store
+go test -race ./internal/handoff ./internal/daemon ./internal/store ./internal/forensics
 ```
 
 回归测试覆盖并发接收与启动权、显式重执行、来源隔离、参数冲突、过期、重开数据库、
@@ -168,3 +183,5 @@ go test -race ./internal/handoff ./internal/daemon ./internal/store
 `scripts/accept_execution_handoff.py` 通过独立 Daemon 的公共 API 验证并发 CSV 分析、
 文件产物、重试和取消。该脚本使用明确标注的调用标识 fixture；原生 harness 接入和
 证据传输分别验收。
+严格导入的回归覆盖并发重发、证据冲突、整批回滚、存储错误、正文迁移、
+缺失正文、解码大小限制，以及与旧回放导入的兼容。

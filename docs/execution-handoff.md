@@ -194,6 +194,26 @@ Full exports preserve original evidence packages and signatures. Selective
 reading exports include only selected contents and permitted reference metadata.
 They describe their selection separately from the original package signature.
 
+## Evidence import
+
+`forensics.Service.ImportBundleStrict` provides the receiving-store operation
+for handoff delivery. It stages a complete bundle, publishes its embedded content
+under the decoded bundle's SHA-256, then commits all evidence rows in one
+transaction. Repeated rows with identical content are reused. An existing ID with
+different evidence returns `bundle_evidence_conflict` and rolls back the entire
+projection; existing records and local content paths remain unchanged.
+
+The importer accepts JSON or gzip, with a 256 MiB limit on decoded JSON. Oversized
+input fails explicitly. It validates the expected Run, record identities, object
+hashes, object sizes and embedded-content references. Integer fields retain their
+64-bit values, and empty files are preserved. Archives are synchronized before
+the database references them. A database failure can leave an unreferenced archive
+for later reconciliation; no receipt is issued by this method.
+
+Sender authorization, signature verification and durable delivery receipts belong
+to the delivery protocol and are not yet exposed through this importer. The
+existing replay import keeps its replacement behavior for compatibility.
+
 ## Compatibility and tests
 
 Database schemas 21 and 22 add the execution ledger and durable stop requests without renaming legacy tables or
@@ -203,7 +223,7 @@ for a downgrade. Historic signed packages retain their original format.
 Run the contract and persistence regressions with:
 
 ```sh
-go test -race ./internal/handoff ./internal/daemon ./internal/store
+go test -race ./internal/handoff ./internal/daemon ./internal/store ./internal/forensics
 ```
 
 The tests cover concurrent admission and worker claims, explicit reexecution,
@@ -214,3 +234,6 @@ output retention, exclusive ownership and recovery of saved completion events.
 with concurrent CSV analysis, output artifacts, retry and cancellation. It uses
 explicit fixture call IDs; native harness integration and evidence transfer have
 separate acceptance gates.
+Strict-import regressions cover concurrent retransmission, conflicting evidence,
+whole-transaction rollback, storage errors, portable content, missing bodies,
+decoded-size limits and legacy-import interoperability.
