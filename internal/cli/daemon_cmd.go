@@ -117,6 +117,10 @@ func daemonCmd(dataDir *string) *cobra.Command {
 					Paths: server.Paths, Concurrency: config.Concurrency,
 					Options: record.Options{AllowShell: recordAllowShell, Timeout: recordTimeout}}
 				server.ExecutionCaller = config.Principal()
+				server.ExecutionDelivery, err = config.DeliveryService(filepath.Dir(executionConfig), server.Execution.Ledger, server.Paths)
+				if err != nil {
+					return err
+				}
 				closeExecutor, err := server.Execution.Start(ctx)
 				if err != nil {
 					return err

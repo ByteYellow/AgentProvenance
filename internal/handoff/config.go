@@ -4,6 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
+
+	"github.com/byteyellow/agentprovenance/internal/attest"
+	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
 // Config is operator-owned. The existing daemon bearer credential authenticates
@@ -15,7 +19,14 @@ type Config struct {
 		ProducerID  string `json:"producer_id"`
 		Namespace   string `json:"namespace"`
 	} `json:"caller"`
-	Concurrency int `json:"concurrency"`
+	Concurrency int             `json:"concurrency"`
+	Delivery    *DeliveryConfig `json:"delivery,omitempty"`
+}
+
+type DeliveryConfig struct {
+	ReceiverID            string `json:"receiver_id"`
+	SignKeyFile           string `json:"sign_key_file"`
+	ReceiverPublicKeyFile string `json:"receiver_public_key_file"`
 }
 
 func ReadConfig(r io.Reader) (Config, error) {
@@ -41,7 +52,34 @@ func ReadConfig(r io.Reader) (Config, error) {
 	if c.Concurrency < 1 || c.Concurrency > 32 {
 		return c, fmt.Errorf("execution concurrency must be between 1 and 32")
 	}
+	if c.Delivery != nil && (!validID(c.Delivery.ReceiverID) || c.Delivery.SignKeyFile == "" || c.Delivery.ReceiverPublicKeyFile == "") {
+		return c, fmt.Errorf("delivery configuration requires receiver identity and key files")
+	}
 	return c, nil
+}
+
+// DeliveryService resolves key paths relative to the operator's configuration.
+// A missing or invalid key aborts startup instead of disabling verification.
+func (c Config) DeliveryService(baseDir string, ledger Ledger, paths store.Paths) (*DeliveryService, error) {
+	if c.Delivery == nil {
+		return nil, nil
+	}
+	resolve := func(path string) string {
+		if filepath.IsAbs(path) {
+			return path
+		}
+		return filepath.Join(baseDir, path)
+	}
+	key, err := attest.LoadPrivateKeyHex(resolve(c.Delivery.SignKeyFile))
+	if err != nil {
+		return nil, err
+	}
+	pub, err := attest.LoadPublicKeyHex(resolve(c.Delivery.ReceiverPublicKeyFile))
+	if err != nil {
+		return nil, err
+	}
+	s := &DeliveryService{Ledger: ledger, Paths: paths, SignKey: key, ReceiverID: c.Delivery.ReceiverID, ReceiverKey: pub}
+	return s, s.validate()
 }
 
 func (c Config) Principal() Principal {

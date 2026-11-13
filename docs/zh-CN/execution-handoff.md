@@ -6,8 +6,9 @@
 执行端保留自己的 Run，通过显式引用实现调查跳转和证据交付。
 
 当前实现提供持久接收账本、有界命令执行器、重启恢复、停止请求和鉴权 HTTP API，
-代码位于 `internal/handoff` 和 `internal/daemon`。交付库已提供签名包和持久接收回执；
-传输接线、能力清单和 Dashboard 接入正在实现。
+代码位于 `internal/handoff` 和 `internal/daemon`。拉取 API 和
+`forensics collect-execution` 已支持签名证据包及持久接收回执；
+能力清单和 Dashboard 接入正在实现。
 现有同步接口 `POST /v1/record` 保持原有行为。
 
 本地 record 引擎提供可信的进程内生命周期回调：准备阶段在绑定保存后、命令启动前
@@ -42,8 +43,12 @@ agentprov --data-dir ./executor-data daemon serve --execution-config ./execution
 | `GET /v1/executions/{id}` | 查询尝试、检查点、本地作用域、输出引用和停止请求 |
 | `GET /v1/executions?run=...&harness=...&session=...&tool_call=...` | 分页查询来源调用的执行尝试 |
 | `POST /v1/executions/{id}/stop` | 提交 `{"operation_id":"unique-stop-operation"}`；202 表示请求已保存 |
+| `POST /v1/executions/{id}/deliveries` | 提交 `{"operation_id":"stable-delivery-operation"}`；新包返回 201，重发返回 200 |
+| `GET /v1/execution-deliveries/{id}` | 读取签名清单及已保存的接收回执 |
+| `GET /v1/execution-deliveries/{id}/bundle` | 下载签名对应的原始字节；需要鉴权，禁止缓存，以附件返回 |
+| `POST /v1/execution-deliveries/{id}/receipt` | 提交接收方的 DSSE 回执；持久保存后返回 200 |
 
-字段和错误码见 [OpenAPI 定义](../execution-handoff-api.yaml)。JSON 写请求最多 1 MiB，
+字段和错误码见 [OpenAPI 定义](../execution-handoff-api.yaml)。执行 JSON 写请求最多 1 MiB，回执上限为 64 KiB，
 拒绝未知字段和尾随 JSON；保留现有 bearer、Origin 和 Fetch Metadata 校验。
 
 执行器独占数据目录，默认同时运行两个命令，其余任务保存在 SQLite。
@@ -198,7 +203,46 @@ DSSE/in-toto 清单使用 `agentprovenance.execution_delivery/v1`，绑定以下
 每个服务一次处理一个包。清单和回执上限为 64 KiB，未压缩 Bundle JSON 上限为
 256 MiB；导出累计检查记录及正文预算，并校验最终序列化大小。取消操作覆盖排队、
 数据库查询和正文复制；传输适配器还需设置网络读取超时。签名密钥与传输凭据分别
-保管，历史公钥用于归档验证。当前 HTTP 执行入口尚未开放这些交付库操作。
+保管，历史公钥用于归档验证。
+
+### 配置与接收
+
+两端分别使用 `agentprov forensics keygen --priv signing.key --pub signing.pub`
+生成密钥对，通过可信管理渠道交换公钥。私钥保留在各自机器，文件权限设为 `0600`。
+启动执行器前，在 `execution.json` 中加入以下可选配置：
+
+```json
+"delivery": {
+  "receiver_id": "investigator",
+  "sign_key_file": "executor.key",
+  "receiver_public_key_file": "investigator.pub"
+}
+```
+
+密钥路径相对于配置文件解析；文件缺失或内容无效时启动失败。
+省略 `delivery` 时，交付接口保持关闭。调用端通过已有 SSH 隧道拉取证据，无需开放接收端口。
+
+提交命令时，将经过鉴权的 `POST /v1/executions` 响应保存为 `admission.json`。
+接收时使用这份独立的来源记录、运维配置中的调用方及目标身份，以及预先核对的执行端公钥：
+
+```sh
+# 将 AGENTPROV_DAEMON_TOKEN 设为执行器的传输凭据。
+agentprov --data-dir ./received-evidence --daemon-url http://127.0.0.1:18575 \
+  forensics collect-execution ./admission.json \
+  --execution-config ./execution.json --receiver investigator \
+  --sign-key ./investigator.key --pub-key ./executor.pub \
+  --operation collect-initial
+```
+
+命令输出使用英文字段的 JSON。`acknowledged` 表示接收端已提交证据和签名回执，
+执行端也已保存该回执。最后确认失败时，输出 `receipt_persisted` 并以错误退出；
+沿用原接收记录和操作 ID 重试即可。进程重启后继续使用已保存的记录。
+补交新证据时使用新的操作 ID，生成新的包版本。`--timeout` 限制整个接收过程，
+默认三分钟；单次 HTTP 传输最多两分钟。客户端拒绝重定向，元数据响应上限为 256 KiB。
+
+[HTTP 交付验收脚本](../../scripts/accept_execution_delivery.py) 运行真实 CSV 命令，
+通过公开 CLI 连续接收两次，检查接收端图谱和制品正文。
+该脚本使用 HTTP 测试入口，原生 harness 与 Sensor 另行验收。
 
 ## 兼容与测试
 

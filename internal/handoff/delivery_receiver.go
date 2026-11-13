@@ -43,15 +43,9 @@ func (s *DeliveryReceiver) Receive(ctx context.Context, expected ExecutionIdenti
 		len(s.TargetKey) != ed25519.PublicKeySize || s.Target.Validate() != nil || bundle == nil {
 		return nil, fmt.Errorf("invalid delivery receiver configuration")
 	}
-	if expected.validate() != nil || expected.Target != s.Target || s.Caller.Authorize(expected.Source, expected.Target) != nil {
-		return nil, ErrForbidden
-	}
-	m, err := verifyManifest(envelope, s.TargetKey)
+	m, err := s.VerifyManifest(expected, envelope)
 	if err != nil {
 		return nil, err
-	}
-	if m.Identity != expected || m.ReceiverID != s.ID {
-		return nil, ErrForbidden
 	}
 	manifestHash := attest.DigestSHA256(envelope)
 	release, err := s.slot.acquire(ctx)
@@ -67,6 +61,26 @@ func (s *DeliveryReceiver) Receive(ctx context.Context, expected ExecutionIdenti
 	} else if !errors.Is(err, ErrNotFound) {
 		return nil, err
 	}
+	return s.receiveNew(ctx, expected, envelope, bundle, m, manifestHash)
+}
+
+// VerifyManifest allows a pull client to authenticate the package before
+// opening its body stream. The receiver repeats the check before persistence.
+func (s *DeliveryReceiver) VerifyManifest(expected ExecutionIdentity, envelope []byte) (DeliveryManifest, error) {
+	if expected.validate() != nil || expected.Target != s.Target || s.Caller.Authorize(expected.Source, expected.Target) != nil {
+		return DeliveryManifest{}, ErrForbidden
+	}
+	m, err := verifyManifest(envelope, s.TargetKey)
+	if err != nil {
+		return DeliveryManifest{}, err
+	}
+	if m.Identity != expected || m.ReceiverID != s.ID {
+		return DeliveryManifest{}, ErrForbidden
+	}
+	return m, nil
+}
+
+func (s *DeliveryReceiver) receiveNew(ctx context.Context, expected ExecutionIdentity, envelope []byte, bundle io.Reader, m DeliveryManifest, manifestHash string) ([]byte, error) {
 	if err := s.checkPredecessor(ctx, s.DB, m); err != nil {
 		return nil, err
 	}
@@ -196,6 +210,10 @@ func checkDeliveryFile(ctx context.Context, path string, m DeliveryManifest) err
 		return err
 	}
 	defer f.Close()
+	return checkDeliveryHandle(ctx, f, m)
+}
+
+func checkDeliveryHandle(ctx context.Context, f *os.File, m DeliveryManifest) error {
 	info, err := f.Stat()
 	if err != nil {
 		return err

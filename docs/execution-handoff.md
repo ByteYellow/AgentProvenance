@@ -8,8 +8,8 @@ uses explicit references for navigation and evidence delivery.
 
 The current implementation provides durable admission, a bounded command worker,
 restart recovery, stop requests and an authenticated HTTP API in `internal/handoff`
-and `internal/daemon`. The delivery library also provides signed packages and
-durable receiving receipts. Its transport wiring, capability manifests and
+and `internal/daemon`. Signed packages and durable receiving receipts are available
+through the pull API and `forensics collect-execution`. Capability manifests and
 Dashboard integration are being implemented. The
 existing synchronous `POST /v1/record` API keeps its current behavior.
 
@@ -51,9 +51,14 @@ Shell, workdir and environment restrictions follow the existing record policy.
 | `GET /v1/executions/{id}` | Read attempt, checkpoint, local scope, output references and stop-request state |
 | `GET /v1/executions?run=...&harness=...&session=...&tool_call=...` | Page through attempts for one source call |
 | `POST /v1/executions/{id}/stop` | Persist `{"operation_id":"unique-stop-operation"}`; 202 acknowledges the request |
+| `POST /v1/executions/{id}/deliveries` | Prepare `{"operation_id":"stable-delivery-operation"}`; 201 for a new package, 200 for replay |
+| `GET /v1/execution-deliveries/{id}` | Read the signed manifest and any saved receipt |
+| `GET /v1/execution-deliveries/{id}/bundle` | Download the exact signed bytes; authenticated, no-store, attachment-only |
+| `POST /v1/execution-deliveries/{id}/receipt` | Submit the receiver's DSSE envelope; 200 after durable acknowledgment |
 
 See the [OpenAPI contract](execution-handoff-api.yaml) for schemas and errors.
-JSON writes are limited to 1 MiB and reject unknown fields or trailing JSON.
+Execution JSON writes are limited to 1 MiB; receipt envelopes have a 64 KiB limit.
+Unknown request fields and trailing JSON are rejected.
 The daemon's existing bearer, Origin and Fetch Metadata checks remain in effect.
 
 The worker holds an exclusive store lock, runs at most the configured number of
@@ -258,7 +263,52 @@ cumulative body/record budget and checks final serialized size. Cancellation
 stops queued work, database queries and body copies. Transport adapters must also
 set read deadlines for stalled network connections. Keep signing keys separate
 from transport credentials and retain verification keys for archived evidence.
-The HTTP executor does not yet expose these library delivery operations.
+
+### Configure and collect
+
+Generate one signing keypair on each side with `agentprov forensics keygen --priv
+signing.key --pub signing.pub`. Exchange and pin the public keys through the trusted
+administration channel. Keep each private key on its owner host with mode `0600`.
+Add this optional block to the executor's `execution.json` before starting it:
+
+```json
+"delivery": {
+  "receiver_id": "investigator",
+  "sign_key_file": "executor.key",
+  "receiver_public_key_file": "investigator.pub"
+}
+```
+
+Key paths are relative to the configuration file. Invalid or missing keys fail
+startup. Omitting `delivery` leaves its HTTP routes disabled. The caller pulls
+over the existing SSH tunnel; it needs no inbound receiver port.
+
+Save the authenticated `POST /v1/executions` response as `admission.json` when
+submitting the command. Collection uses this independent source identity, the
+operator's caller/target configuration and pinned executor key:
+
+```sh
+# Set AGENTPROV_DAEMON_TOKEN to the executor's transport credential.
+agentprov --data-dir ./received-evidence --daemon-url http://127.0.0.1:18575 \
+  forensics collect-execution ./admission.json \
+  --execution-config ./execution.json --receiver investigator \
+  --sign-key ./investigator.key --pub-key ./executor.pub \
+  --operation collect-initial
+```
+
+The output is English-keyed JSON. `acknowledged` means the receiver has committed
+the evidence and signed receipt, and the executor has saved that receipt. If the
+final confirmation fails, output reports `receipt_persisted` and the command exits
+with an error; retry with the same admission and operation. Each new process can
+recover from the saved records. New evidence requires a new operation and package
+version. `--timeout` bounds the whole collection (default three minutes); each
+HTTP transfer is limited to two minutes. The client rejects redirects and bounds
+metadata responses to 256 KiB.
+
+The [HTTP delivery acceptance script](../scripts/accept_execution_delivery.py)
+runs a CSV command, collects twice through the public CLI, verifies the received
+graph and reads the transferred artifact. It is an HTTP fixture, separate from
+native harness and Sensor acceptance.
 
 ## Compatibility and tests
 

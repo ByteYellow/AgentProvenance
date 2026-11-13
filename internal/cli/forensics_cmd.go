@@ -138,6 +138,7 @@ func forensicsCmd(dataDir, daemonURL *string) *cobra.Command {
 	cmd.AddCommand(importCmd)
 	cmd.AddCommand(forensicsVerifyAttestationCmd())
 	cmd.AddCommand(forensicsKeygenCmd())
+	cmd.AddCommand(forensicsCollectExecutionCmd(dataDir, daemonURL))
 	return cmd
 }
 

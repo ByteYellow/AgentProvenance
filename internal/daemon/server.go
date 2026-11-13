@@ -75,6 +75,7 @@ type Server struct {
 	RecordExecTimeout time.Duration
 	Execution         *handoff.Executor
 	ExecutionCaller   handoff.Principal
+	ExecutionDelivery *handoff.DeliveryService
 	writeMu           *sync.Mutex
 }
 
@@ -111,6 +112,10 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/executions", s.listExecutions)
 	mux.HandleFunc("GET /v1/executions/{id}", s.getExecution)
 	mux.HandleFunc("POST /v1/executions/{id}/stop", s.stopExecution)
+	mux.HandleFunc("POST /v1/executions/{id}/deliveries", s.prepareExecutionDelivery)
+	mux.HandleFunc("GET /v1/execution-deliveries/{id}", s.getExecutionDelivery)
+	mux.HandleFunc("GET /v1/execution-deliveries/{id}/bundle", s.downloadExecutionDelivery)
+	mux.HandleFunc("POST /v1/execution-deliveries/{id}/receipt", s.acknowledgeExecutionDelivery)
 	mux.HandleFunc("POST /v1/telemetry/bind", s.bindTelemetry)
 	mux.HandleFunc("GET /v1/telemetry/events", s.listTelemetryEvents)
 	mux.HandleFunc("GET /v1/telemetry/windows", s.listTelemetryWindows)

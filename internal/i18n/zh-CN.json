@@ -3097,5 +3097,13 @@
   "kernel event buffer in MiB (power of two, 1 to 256)": "内核事件缓冲区大小，单位 MiB（1～256，须为 2 的幂）",
   "known TLS library or Go executable to attach before readiness (repeatable)": "采集器就绪前预挂载的 TLS 库或 Go 可执行文件（可重复指定）",
   "ring-buffer-mib must be a power of two between 1 and 256": "ring-buffer-mib 须为 1～256 之间的 2 的幂",
-  "at most 1024 known TLS targets are allowed": "最多可指定 1024 个已知 TLS 目标"
+  "at most 1024 known TLS targets are allowed": "最多可指定 1024 个已知 TLS 目标",
+  "receive signed execution evidence and acknowledge its persisted receipt": "接收签名执行证据，并确认已持久保存的回执",
+  "trusted caller and target configuration for evidence collection": "证据接收使用的可信调用方与目标配置",
+  "receiver identity pinned by the execution server": "执行服务预先配置的接收方身份",
+  "hex ed25519 private key file for signing the receiving receipt": "用于签署接收回执的十六进制 ed25519 私钥文件",
+  "pinned execution server public key file (hex ed25519)": "预先核对的执行服务公钥文件（十六进制 ed25519）",
+  "stable delivery operation id; reuse it when retrying the same package": "稳定的交付操作 ID；重试同一包时沿用此 ID",
+  "total timeout for evidence collection and acknowledgment": "证据接收与确认的总超时",
+  "execution collection requires --daemon-url and a positive --timeout": "接收执行证据需要指定 --daemon-url，并设置大于零的 --timeout"
 }

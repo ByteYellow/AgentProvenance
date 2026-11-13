@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -268,6 +269,28 @@ func (s *DeliveryService) Get(ctx context.Context, p Principal, id string) (Deli
 		return Delivery{}, err
 	}
 	return d, nil
+}
+
+// OpenBundle verifies and rewinds the same descriptor that the transport sends.
+// A missing or damaged archive is reported before any successful response.
+func (s *DeliveryService) OpenBundle(ctx context.Context, p Principal, id string) (Delivery, *os.File, error) {
+	d, err := s.Get(ctx, p, id)
+	if err != nil {
+		return Delivery{}, nil, err
+	}
+	f, err := os.Open(d.BundlePath)
+	if err != nil {
+		return Delivery{}, nil, err
+	}
+	if err := checkDeliveryHandle(ctx, f, d.Manifest); err != nil {
+		f.Close()
+		return Delivery{}, nil, err
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		f.Close()
+		return Delivery{}, nil, err
+	}
+	return d, f, nil
 }
 
 // Acknowledge updates only delivery state. All outstanding packages, including

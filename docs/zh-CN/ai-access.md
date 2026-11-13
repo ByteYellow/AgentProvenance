@@ -43,6 +43,13 @@
 
 表内命令省略了具体参数值，实际使用时需填写执行 ID 等信息。
 
+[执行交接接口](execution-handoff.md)提供可选的执行尝试与签名证据包查询：
+`GET /v1/executions`、`GET /v1/executions/{id}`、
+`GET /v1/execution-deliveries/{id}` 和
+`GET /v1/execution-deliveries/{id}/bundle`。这些接口需要管理员提供执行配置，
+已列入只读 OpenAPI，尚未加入 MCP 工具目录。执行提交、停止和接收回执使用
+独立的[执行接口契约](../execution-handoff-api.yaml)。
+
 应用上下文写入工具已经提供：`bind_scope` 通过 `correlation.RecordBinding` 注册 ToolCallScope，`record_tool_call` 记录应用声明的工具调用。它们只写应用侧上下文，来源强制标记为 `binding_source=ai_asserted`，调用状态标记为 `status=asserted`，不执行命令，也不创建系统事件。因此，这些记录不能冒充独立的内核关联证据。
 
 后台服务对应的接口为 `POST /v1/telemetry/bind` 和 `POST /v1/record`。后者还会实际执行命令，不能与只声明调用的 AI 工具混为一谈。策略预检工具 `evaluate_action` 也已提供。

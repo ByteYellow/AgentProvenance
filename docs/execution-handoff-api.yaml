@@ -114,6 +114,80 @@ paths:
                   state: { const: requested }
                   requested_at: { type: string, format: date-time }
         default: { $ref: '#/components/responses/Error' }
+  /v1/executions/{id}/deliveries:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: prepareExecutionDelivery
+      summary: Freeze a signed package or retrieve the same delivery operation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [operation_id]
+              properties:
+                operation_id: { type: string, minLength: 1 }
+      responses:
+        '201':
+          description: Immutable package and outbox entry persisted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveryResponse' }
+        '200':
+          description: Original package returned for a repeated operation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveryResponse' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/execution-deliveries/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: '^[0-9a-f]{64}$' } }
+    get:
+      operationId: getExecutionDelivery
+      summary: Read the signed manifest and any saved receiving receipt
+      responses:
+        '200':
+          description: Saved delivery metadata; server filesystem paths are excluded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveryResponse' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/execution-deliveries/{id}/bundle:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: '^[0-9a-f]{64}$' } }
+    get:
+      operationId: downloadExecutionDelivery
+      summary: Download the immutable bytes bound by the signed manifest
+      responses:
+        '200':
+          description: Verified archive, streamed with Content-Length and no-store caching
+          headers:
+            ETag: { schema: { type: string }, description: Quoted sha256 digest of the exact body }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/execution-deliveries/{id}/receipt:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: '^[0-9a-f]{64}$' } }
+    post:
+      operationId: acknowledgeExecutionDelivery
+      summary: Verify and persist a pinned receiver's signed acknowledgment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Envelope' }
+      responses:
+        '200':
+          description: Receipt saved, or identical package already acknowledged
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveryResponse' }
+        default: { $ref: '#/components/responses/Error' }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer }
@@ -132,6 +206,86 @@ components:
               schema_version: { const: agentprovenance.execution_handoff/v1 }
               error: { type: string }
   schemas:
+    ExecutionIdentity:
+      type: object
+      additionalProperties: false
+      required: [source, target, dispatch_id, attempt_id, request_hash, digest_version, local_run_id]
+      properties:
+        source: { $ref: '#/components/schemas/Source' }
+        target: { $ref: '#/components/schemas/Target' }
+        dispatch_id: { type: string }
+        attempt_id: { type: string }
+        request_hash: { type: string, pattern: '^[0-9a-f]{64}$' }
+        digest_version: { const: agentprovenance.execution_request_sha256/v1 }
+        local_run_id: { type: string }
+    Envelope:
+      type: object
+      additionalProperties: false
+      required: [payloadType, payload, signatures]
+      description: DSSE/in-toto envelope, at most 64 KiB; verify with a configured public key
+      properties:
+        payloadType: { const: application/vnd.in-toto+json }
+        payload: { type: string, contentEncoding: base64 }
+        signatures:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [sig]
+            properties:
+              keyid: { type: string }
+              sig: { type: string, contentEncoding: base64 }
+    DeliveryManifest:
+      type: object
+      additionalProperties: false
+      required: [schema_version, id, identity, receiver_id, package_version, attempt_revision, checkpoint_ref, state, bundle_sha256, bundle_bytes, snapshot_at]
+      properties:
+        schema_version: { const: agentprovenance.execution_delivery/v1 }
+        id: { type: string, pattern: '^[0-9a-f]{64}$' }
+        identity: { $ref: '#/components/schemas/ExecutionIdentity' }
+        receiver_id: { type: string }
+        package_version: { type: integer, minimum: 1 }
+        previous_manifest_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        attempt_revision: { type: integer, minimum: 1 }
+        checkpoint_ref: { type: string, pattern: '^sha256:[0-9a-f]{64}$' }
+        state: { $ref: '#/components/schemas/State' }
+        bundle_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        bundle_bytes: { type: integer, minimum: 1, maximum: 268435456 }
+        snapshot_at: { type: string, format: date-time, description: Export time for the frozen database view }
+    Delivery:
+      type: object
+      additionalProperties: false
+      required: [manifest, envelope, manifest_sha256]
+      properties:
+        manifest: { $ref: '#/components/schemas/DeliveryManifest' }
+        envelope: { $ref: '#/components/schemas/Envelope' }
+        manifest_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        receipt: { $ref: '#/components/schemas/Envelope' }
+    DeliveryResponse:
+      type: object
+      additionalProperties: false
+      required: [schema_version, delivery, reused]
+      properties:
+        schema_version: { const: agentprovenance.execution_delivery/v1 }
+        delivery: { $ref: '#/components/schemas/Delivery' }
+        reused: { type: boolean }
+    DeliveryReceipt:
+      type: object
+      additionalProperties: false
+      required: [schema_version, delivery_id, identity, receiver_id, package_version, manifest_sha256, bundle_sha256, bundle_bytes, status, received_at]
+      description: Authenticated predicate inside the receipt envelope
+      properties:
+        schema_version: { const: agentprovenance.execution_receipt/v1 }
+        delivery_id: { type: string, pattern: '^[0-9a-f]{64}$' }
+        identity: { $ref: '#/components/schemas/ExecutionIdentity' }
+        receiver_id: { type: string }
+        package_version: { type: integer, minimum: 1 }
+        manifest_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        bundle_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        bundle_bytes: { type: integer, minimum: 1, maximum: 268435456 }
+        status: { const: persisted }
+        received_at: { type: string, format: date-time }
     Source:
       type: object
       additionalProperties: false

@@ -53,6 +53,15 @@ current MCP and provider catalogs expose a subset, listed in section 2.1.
 | get_audit_associations | GET /v1/telemetry/audit-associations?run= | telemetry audit-associations --run --json | agentprovenance.audit_associations/v1 |
 | health | GET /v1/health | (daemon) | agentprovenance.daemon_health/v1 |
 
+The optional [execution handoff API](execution-handoff.md) adds authenticated
+reads for execution attempts and signed delivery packages:
+`GET /v1/executions`, `GET /v1/executions/{id}`,
+`GET /v1/execution-deliveries/{id}` and
+`GET /v1/execution-deliveries/{id}/bundle`. These routes require an operator-owned
+execution configuration and are included in the read-only OpenAPI definition;
+they are not added to the MCP tool catalog. Admission, stop and receipt writes
+use the separate [execution contract](execution-handoff-api.yaml).
+
 Context-write surface (phase 2, **shipped** as AI tools): `bind_scope` (register a
 ToolCallScope binding, over `correlation.RecordBinding`) and `record_tool_call`
 (anchor an app-asserted tool call). Both write only app-side context — forced
