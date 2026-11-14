@@ -267,3 +267,26 @@ func TestDemoLibraryPreservesEveryEntry(t *testing.T) {
 		}
 	}
 }
+
+func TestDemoNavigationIncludesPortableEvidenceGuides(t *testing.T) {
+	h := demoGallery(demo.Catalog())
+	for _, lang := range []i18n.Locale{i18n.English, i18n.Chinese} {
+		w := httptest.NewRecorder()
+		h(w, httptest.NewRequest("GET", "/demos/?lang="+string(lang), nil))
+		if w.Code != 200 {
+			t.Fatal(w.Code)
+		}
+		static, err := staticDemoHTML(w.Body.Bytes(), string(lang)+"/index.html", lang, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, id := range []string{"demo-library", "execution-handoff", "gvisor-seccheck", "notebook-context", "browser-context"} {
+			if !strings.Contains(w.Body.String(), `href="/demos/guide/`+id+`?lang=`+string(lang)+`"`) {
+				t.Errorf("%s homepage omits guide %s", lang, id)
+			}
+			if !strings.Contains(string(static), `href="guides/`+id+`.html"`) {
+				t.Errorf("%s static homepage omits guide %s", lang, id)
+			}
+		}
+	}
+}

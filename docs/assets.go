@@ -43,6 +43,9 @@ func Catalog() []Entry {
 		{"capture", "Linux, KVM and Kubernetes", "docs/amd64-kvm-k3s.md", "Record and deploy"},
 		{"deployment", "Deployment modes", "docs/deployment-modes.md", "Record and deploy"},
 		{"durable-capture", "Continuous capture and recovery", "docs/native-capture-spool.md", "Record and deploy"},
+		{"execution-handoff", "Cross-sandbox execution", "docs/execution-handoff.md", "Record and deploy"},
+		{"gvisor-seccheck", "gVisor collection", "docs/gvisor-seccheck.md", "Record and deploy"},
+		{"demo-library", "Choose an investigation", "docs/demo-library.md", "Investigate evidence"},
 		{"graph", "Trace and compare", "docs/graph-commands.md", "Investigate evidence"},
 		{"security", "Security and policies", "docs/security-commands.md", "Investigate evidence"},
 		{"compliance", "Compliance evidence", "docs/compliance.md", "Investigate evidence"},
@@ -51,6 +54,8 @@ func Catalog() []Entry {
 		{"ai-access", "API access and permissions", "docs/ai-access.md", "Integrate"},
 		{"python", "Python integration", "docs/python-sdk.md", "Integrate"},
 		{"telemetry", "Telemetry schema", "docs/telemetry-schema.md", "Integrate"},
+		{"notebook-context", "Notebook context", "docs/notebook-context.md", "Integrate"},
+		{"browser-context", "Browser context", "docs/browser-context.md", "Integrate"},
 		{"comparisons", "Related projects", "docs/comparisons.md", "Reference"},
 		{"falco", "Falco compatibility", "docs/falco-receiver.md", "Reference"},
 		{"release-notes", "Release notes", "docs/releases/v0.10.1.md", "Reference"},
@@ -69,16 +74,9 @@ func Groups() []Group {
 	return groups
 }
 
-// Pages includes linked guides and historical releases without crowding navigation.
+// Pages adds historical releases without crowding current documentation navigation.
 func Pages() []Entry {
 	pages := Catalog()
-	pages = append(pages,
-		Entry{"demo-library", "Choose an investigation", "docs/demo-library.md", "Investigate evidence"},
-		Entry{"execution-handoff", "Cross-sandbox execution", "docs/execution-handoff.md", "Record and deploy"},
-		Entry{"gvisor-seccheck", "gVisor collection", "docs/gvisor-seccheck.md", "Record and deploy"},
-		Entry{"notebook-context", "Notebook context", "docs/notebook-context.md", "Integrate"},
-		Entry{"browser-context", "Browser context", "docs/browser-context.md", "Integrate"},
-	)
 	for _, version := range []string{"v0.7.2", "v0.8.0", "v0.8.1", "v0.8.2-rc.1", "v0.8.2-rc.2", "v0.8.2", "v0.9.0", "v0.10.0", "v0.10.1"} {
 		pages = append(pages, Entry{"release-" + version, version, "docs/releases/" + version + ".md", "Reference"})
 	}
