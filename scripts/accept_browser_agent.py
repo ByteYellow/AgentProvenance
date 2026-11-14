@@ -154,7 +154,8 @@ do not resend the operation. This is a small local browsing fixture."""
               "matches": matches, "attachments": attachments, "graph": graph, "bundle": bundle,
               "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
               "claude_version": subprocess.check_output([str(claude), "--version"], text=True).strip(),
-              "source_capture": "native_claude_hooks_and_chromium", "runtime_capture": "disabled"}
+              "source_capture": "native_claude_hooks_and_chromium", "native_sensor": "disabled",
+              "process_sampling": "launch"}
     (out / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({"run_id": run, "agent_calls": len(call_ids), "browser_operations": len(native), "graph_errors": graph["error_count"]}))
 

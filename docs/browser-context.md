@@ -196,7 +196,8 @@ fixture verifies native Agent/Browser links, repeat import, signed delivery to a
 separate store and full/selected offline ZIPs. Repeat with `--capture basic` for
 body-independent association. Provider usage is capped per invocation; logs,
 captures and fixture keys remain in the private output directory. System
-telemetry is off in this application-entry check.
+Sensor capture is off in this application-entry check; launch's process sampling
+remains recorded separately.
 
 References: [browser contexts](https://playwright.dev/python/docs/api/class-browsercontext),
 [request lifecycle](https://playwright.dev/python/docs/api/class-request),

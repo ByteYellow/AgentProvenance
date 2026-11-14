@@ -126,6 +126,6 @@ PYTHONPATH=python .venv-browser/bin/python scripts/accept_browser_agent.py \
   --claude /absolute/path/to/claude --capture detailed
 ```
 
-任务读取本地表格、下载 CSV 并截图。脚本检查 Agent／Browser 原生关联、重复导入、独立存储中的签名导入，以及完整和选择性离线 ZIP。再用 `--capture basic` 检查省略正文后关联是否保留。每次模型调用设有费用上限；日志、采集记录及验收签名密钥留在私有输出目录。本项验收关闭系统遥测，专门检查应用操作入口。
+任务读取本地表格、下载 CSV 并截图。脚本检查 Agent／Browser 原生关联、重复导入、独立存储中的签名导入，以及完整和选择性离线 ZIP。再用 `--capture basic` 检查省略正文后关联是否保留。每次模型调用设有费用上限；日志、采集记录及验收签名密钥留在私有输出目录。本项验收关闭原生 Sensor，专门检查应用操作入口；launch 的进程抽样记录仍单独保留。
 
 参考：[browser context](https://playwright.dev/python/docs/api/class-browsercontext)、[请求生命周期](https://playwright.dev/python/docs/api/class-request)、[Chromium target/session 身份](https://chromedevtools.github.io/devtools-protocol/tot/Target/)。
