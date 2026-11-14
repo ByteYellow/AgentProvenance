@@ -373,7 +373,7 @@ func ingestSecCheckEvent(db sqlStore, event IngestEvent) (string, bool, error) {
 	}
 	if e.Kind == "stream" {
 		switch e.Reason {
-		case "connected", "disconnected", "receiver_ready", "receiver_stopped":
+		case "connected", "disconnected", "receiver_ready", "receiver_stopped", "stale_endpoint_recovered":
 			counters[e.Reason] = 1
 		default:
 			counters["stream_diagnostics"] = 1

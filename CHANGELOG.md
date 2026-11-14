@@ -15,6 +15,10 @@ English | [中文](CHANGELOG.zh-CN.md)
   `telemetry receive-seccheck`, and inspect source-specific producer health.
   Preserve receiver lifecycle/capability records and drain accepted data on stop.
   See the [SecCheck receiver guide](docs/gvisor-seccheck.md).
+- Recover stale SecCheck endpoints after collector crashes without replacing
+  active listeners or unrelated files. Persist restart gaps and document live
+  trace reconnection. Add real runtime congestion and durable-backlog recovery
+  acceptance with source-lifetime and evidence-preservation checks.
 - Export an empty read-only view when a runtime-only Run excludes all runtime
   records, retaining the selection inventory without copying excluded bodies.
 

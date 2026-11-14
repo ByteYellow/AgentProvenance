@@ -143,6 +143,28 @@ exec 环境变量及凭据字段被省略，命令参数在落盘前经过现有
 一条事件；相同身份对应不同正文时，批次保留并记录冲突。重连创建新的观察序列。
 当前协议没有跨连接的持久 producer 序号，无法据此对任意跨连接重发去重。
 
+### 重启与重连
+
+接收器通过端点锁避免相互替换套接字。异常退出后，只清理由接收器用户拥有、
+且经连接检查确认已失效的套接字。普通文件、符号链接和活动监听器保留原样；
+私有 `.lock` 文件留给下次启动继续使用。
+
+使用同一数据目录和登记配置重启，可恢复已经持久接收的批次。恢复遗留端点时
+保存 `stale_endpoint_recovered`，健康报告增加
+`sentry_node_receiver_restart_gap`。这是节点范围的中断诊断，丢失数量保留未知。
+
+固定版本 runsc 的发送端沿用原连接。沙箱仍在运行时，先等待新接收器显示
+`listening`，再用原运行时状态目录和配置重建 trace session：
+
+```sh
+sudo /path/to/runsc --root=/run/agentprov-runsc trace create \
+  --force --config=/absolute/path/to/trace.json workload-1
+```
+
+沙箱生命周期保持不变，新连接独立记录丢失计数和观察序号；断线期间的事件保留为
+采集缺口。接收器暂时过慢时，runsc 会丢弃未能发送的消息，并在后续送达消息中
+报告累计丢失数；若没有后续消息，最终丢失总量保持未知。
+
 图谱校验检查保存的登记证据及完整限定的身份。签名 Bundle 导入、导出保留事件
 和图边，既有原生进程身份版本与历史签名数据保持原样。
 
@@ -169,6 +191,21 @@ sudo python3 scripts/accept_seccheck.py \
 脚本需要 Python 3.11 或更新版本，保存登记配置、运行时配置、CLI 状态、健康结果、
 图验证结果及二进制摘要。结束后清理自身的运行时状态与网络 namespace 挂载，
 保留 Docker/K3s 的现有配置。
+
+故障验收使用相同参数，另选一个新输出目录：
+
+```sh
+sudo python3 scripts/accept_seccheck_faults.py \
+  --cli /tmp/agentprov --runsc /absolute/path/to/runsc \
+  --rootfs /absolute/path/to/rootfs --workload /tmp/seccheck.test \
+  --output /absolute/path/to/new-fault-acceptance-directory
+```
+
+脚本暂停真实接收进程，让沙箱产生有界 syscall 突发，核对上游实际报告的丢失；
+再向独立测试库注入临时写入失败，保留已 fsync 的批次后强杀采集器。重新启动并
+接回同一沙箱后，检查身份连续性、原证据不变、恢复记录去重、采集缺口及图谱校验，
+并通过签名导出、导入核对全部观察记录及诊断保真。
+数据库故障通过测试触发器注入；运行时、进程信号、套接字拥塞和重启均实际执行。
 
 准备独立 OCI 根文件系统、固定版本运行时及其相邻的 `gvisor-bin` 目录。
 无需修改 Docker 或 K3s 的运行时配置。按 Linux 主机架构编译并运行：

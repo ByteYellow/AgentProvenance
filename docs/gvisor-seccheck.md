@@ -169,6 +169,33 @@ retains the batch with an error. A reconnect starts a new observation sequence.
 This protocol does not supply a durable producer sequence for deduplicating
 arbitrary resends across connections.
 
+### Restart and Reconnect
+
+An endpoint lock prevents two receivers from replacing each other's socket.
+After an abrupt exit, the receiver reclaims an owned stale socket only after
+checking that it refuses connections. Existing files, symlinks and active
+listeners are retained. The private `.lock` file remains for later startups.
+
+Restart with the same data directory and registration to recover accepted
+spool observations. A recovered endpoint saves `stale_endpoint_recovered`;
+producer health includes `sentry_node_receiver_restart_gap`. This node-level
+diagnostic records an interval with unknown loss, without assigning a count.
+
+The pinned runsc sink keeps its original connection. For a still-running
+sandbox, wait for the restarted receiver to report `listening`, then recreate
+its trace session using the original runtime state and tracing configuration:
+
+```sh
+sudo /path/to/runsc --root=/run/agentprov-runsc trace create \
+  --force --config=/absolute/path/to/trace.json workload-1
+```
+
+The sandbox lifetime stays the same; the new connection has an independent
+loss counter and observation sequence. Events emitted during the disconnected
+interval remain a capture gap. When the receiver is temporarily slow, runsc
+drops messages that cannot be sent; a later delivered message reports the
+cumulative counter. No later message means the final loss total is unknown.
+
 Graph verification checks the saved registration and source-qualified identities.
 Signed Bundle export/import preserves these records and their graph edges.
 Existing native process-identity versions and historical signed data remain
@@ -200,6 +227,24 @@ sudo python3 scripts/accept_seccheck.py \
 It requires Python 3.11 or later and preserves the registration, runtime config,
 CLI status, health, graph verification and binary digests. It cleans its own
 runtime state and network namespace mounts without changing Docker/K3s.
+
+The fault acceptance script uses the same arguments with a fresh output path:
+
+```sh
+sudo python3 scripts/accept_seccheck_faults.py \
+  --cli /tmp/agentprov --runsc /absolute/path/to/runsc \
+  --rootfs /absolute/path/to/rootfs --workload /tmp/seccheck.test \
+  --output /absolute/path/to/new-fault-acceptance-directory
+```
+
+It pauses the real receiver while the sandbox emits a bounded syscall burst,
+checks actual reported loss, injects a temporary database insertion failure to
+retain fsynced batches, and kills the collector. It then restarts collection,
+reconnects the same sandbox and checks retained identities, unchanged evidence,
+one event per recovered observation, capture gaps and graph verification. A
+signed export/import checks that all observations and diagnostics stay unchanged.
+The database failure affects only this script's private store. Runtime, process
+signals, socket congestion and restart are real; no kernel crash is simulated.
 
 Use an isolated OCI root filesystem, the pinned runtime distribution and its
 adjacent `gvisor-bin` directory. No Docker or K3s runtime registration is needed.

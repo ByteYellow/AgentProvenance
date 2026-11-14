@@ -123,6 +123,10 @@ func BuildProducerHealth(db *sql.DB, opts ProducerHealthOptions) (ProducerHealth
 	if sentry.QueuedBatches > 0 || sentry.LastError != "" {
 		report.Coverage.Complete = false
 	}
+	if sentry.Counters["stale_endpoint_recovered"] > 0 {
+		report.Coverage.Complete = false
+		report.Coverage.Issues = append(report.Coverage.Issues, "sentry_node_receiver_restart_gap")
+	}
 	if report.Events.BySource[secCheckSource] > 0 {
 		report.Coverage.Complete = false
 		report.Coverage.Issues = append(report.Coverage.Issues, "sentry_partial_checkpoint_coverage")

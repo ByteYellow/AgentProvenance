@@ -44,6 +44,15 @@ func (r Receiver) Serve(ctx context.Context) error {
 	if r.HandshakeTimeout <= 0 || r.HandshakeTimeout > time.Minute {
 		return fmt.Errorf("invalid SecCheck handshake timeout")
 	}
+	endpointLock, err := lockEndpoint(r.SocketPath + ".lock")
+	if err != nil {
+		return err
+	}
+	defer endpointLock.Close()
+	recovered, err := recoverEndpoint(r.SocketPath)
+	if err != nil {
+		return err
+	}
 	ln, err := net.ListenUnix("unixpacket", &net.UnixAddr{Name: r.SocketPath, Net: "unixpacket"})
 	if err != nil {
 		return err
@@ -66,6 +75,11 @@ func (r Receiver) Serve(ctx context.Context) error {
 	defer cancel()
 	stop := context.AfterFunc(ctx, func() { _ = ln.Close() })
 	defer stop()
+	if recovered {
+		if err := r.Sink(ctx, Record{Kind: "stream", Reason: "stale_endpoint_recovered", Registration: r.Registration, ConnectionID: ids.New("secconn"), ReceivedAt: time.Now().UTC()}); err != nil {
+			return err
+		}
+	}
 	if r.Ready != nil {
 		if err := r.Ready(); err != nil {
 			return err
@@ -117,6 +131,63 @@ func (r Receiver) Serve(ctx context.Context) error {
 			}
 		}()
 	}
+}
+
+// Keep the lock inode after close so concurrent collectors share one lock even
+// when the socket is absent between an abrupt exit and a fresh bind.
+func lockEndpoint(path string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0600)
+	if err != nil {
+		return nil, err
+	}
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || !ok || stat.Uid != uint32(os.Geteuid()) {
+		f.Close()
+		return nil, fmt.Errorf("SecCheck endpoint lock must be a private regular file owned by the receiver")
+	}
+	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("SecCheck endpoint is owned by another receiver: %w", err)
+	}
+	return f, nil
+}
+
+func recoverEndpoint(path string) (bool, error) {
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if info.Mode()&os.ModeSocket == 0 || !ok || stat.Uid != uint32(os.Geteuid()) {
+		return false, fmt.Errorf("SecCheck endpoint exists and is not an owned socket")
+	}
+	conn, err := net.DialTimeout("unixpacket", path, 100*time.Millisecond)
+	if err == nil {
+		conn.Close()
+		return false, fmt.Errorf("SecCheck endpoint has an active listener")
+	}
+	if !errors.Is(err, unix.ECONNREFUSED) {
+		return false, fmt.Errorf("SecCheck endpoint liveness is unresolved: %w", err)
+	}
+	now, err := os.Lstat(path)
+	if err != nil {
+		return false, err
+	}
+	if !os.SameFile(info, now) {
+		return false, fmt.Errorf("SecCheck endpoint changed during recovery")
+	}
+	if err := os.Remove(path); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (r Receiver) receive(ctx context.Context, conn *net.UnixConn, emit func(Record) error) error {

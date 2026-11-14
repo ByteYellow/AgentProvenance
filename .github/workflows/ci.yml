@@ -78,6 +78,9 @@ jobs:
       - name: Check native execution acceptance assertions
         run: python3 -m unittest discover -s scripts -p 'test_execution_native*.py' -v
 
+      - name: Check SecCheck fault acceptance assertions
+        run: python3 -m unittest discover -s scripts -p 'test_accept_seccheck_faults.py' -v
+
       - name: Run unit tests (race detector)
         run: GOTOOLCHAIN=local go test -race -p 2 -timeout 20m ./...
 

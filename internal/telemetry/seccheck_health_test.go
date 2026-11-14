@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/byteyellow/agentprovenance/internal/seccheck/wire"
@@ -22,6 +23,32 @@ func TestProducerHealthIncludesSentryWithoutClaimingComplete(t *testing.T) {
 	}
 	if report.Coverage.Complete {
 		t.Fatal("a registered Sentry scope was promoted to complete capture")
+	}
+}
+
+func TestSecCheckRestartGapDoesNotInventLossCount(t *testing.T) {
+	db, paths := nativeTestStore(t)
+	s, err := NewSecCheckStream(db, paths, NativeStreamOptions{BatchEvents: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	r := secCheckTestRecord(t, &wire.Open{ContextData: secCheckTestContext()}, wire.MessageType_MESSAGE_SYSCALL_OPEN, 1)
+	r.Kind, r.Reason, r.Packet, r.DroppedDelta = "stream", "stale_endpoint_recovered", nil, nil
+	for i := 0; i < 2; i++ {
+		if err := s.Sink("sentry-run", r.Registration)(context.Background(), r); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Drain(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	report, err := BuildProducerHealth(db, ProducerHealthOptions{RunID: "sentry-run"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.SecCheckCapture.Counters["stale_endpoint_recovered"] != 1 || report.SecCheckCapture.Counters["reported_dropped_events"] != 0 || report.Events.SensorDroppedEvents != 0 || report.Coverage.HasSensorDrops || report.Coverage.Complete || !slices.Contains(report.Coverage.Issues, "sentry_node_receiver_restart_gap") {
+		t.Fatalf("unknown restart gap misreported: %+v", report)
 	}
 }
 
