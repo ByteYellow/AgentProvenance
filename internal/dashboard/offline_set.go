@@ -56,6 +56,7 @@ func (c *ReplayContents) add(other ReplayContents) {
 	c.LatestEntries += other.LatestEntries
 	c.BodyRefs += other.BodyRefs
 	c.RawRefs += other.RawRefs
+	c.AttachmentRefs += other.AttachmentRefs
 	for category, count := range other.Sources {
 		c.Sources[category] += count
 	}

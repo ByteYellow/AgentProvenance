@@ -25,6 +25,40 @@ type contextIndexFields struct {
 	Observed      string `json:"observed_at"`
 }
 
+type contextAttachmentReference struct {
+	Ref               string `json:"ref"`
+	State             string `json:"state"`
+	Bytes             *int64 `json:"bytes"`
+	SHA256            string `json:"sha256"`
+	MediaType         string `json:"media_type"`
+	DigestScope       string `json:"digest_scope"`
+	SourceMediaType   string `json:"source_media_type"`
+	SourceBytes       int64  `json:"source_bytes"`
+	SourceSHA256      string `json:"source_sha256"`
+	SourceDigestScope string `json:"source_digest_scope"`
+	Width             int    `json:"width"`
+	Height            int    `json:"height"`
+	Transformation    string `json:"transformation"`
+	Privacy           string `json:"privacy"`
+}
+
+func verifyContextAttachment(db *sql.DB, run string, ref contextAttachmentReference) error {
+	if ref.State != "stored" {
+		return nil
+	}
+	a, err := ReadAttachmentManifest(db, run, ref.Ref)
+	if err != nil {
+		return err
+	}
+	if ref.Bytes == nil || *ref.Bytes != a.Bytes || ref.SHA256 != a.SHA256 || ref.MediaType != a.MediaType ||
+		ref.DigestScope != "stored_raster_bytes" || ref.SourceDigestScope != "decoded_source_bytes" ||
+		ref.SourceMediaType != a.SourceMediaType || ref.SourceBytes != a.SourceBytes || ref.SourceSHA256 != a.SourceSHA256 ||
+		ref.Width != a.Width || ref.Height != a.Height || ref.Transformation != a.Transformation || ref.Privacy != a.Privacy {
+		return fmt.Errorf("attachment metadata does not match manifest")
+	}
+	return nil
+}
+
 // Context indexes are projections of signed objects. Verify both the projection
 // and every declared body reference, including raw records and full text tails.
 func verifyAgentContext(db *sql.DB, runID string, add issueAdder) error {
@@ -74,8 +108,9 @@ func verifyAgentContext(db *sql.DB, runID string, add issueAdder) error {
 						Version string `json:"parser_version"`
 						Harness string `json:"harness"`
 					} `json:"source"`
-					Content    json.RawMessage `json:"content"`
-					RawContent json.RawMessage `json:"raw_content"`
+					Content     json.RawMessage              `json:"content"`
+					RawContent  json.RawMessage              `json:"raw_content"`
+					Attachments []contextAttachmentReference `json:"attachments"`
 				}
 				if err := ReadObjectPayload(db, runID, v.hash, &payload); err != nil {
 					if contentQueryFailed(err) {
@@ -110,6 +145,14 @@ func verifyAgentContext(db *sql.DB, runID string, add issueAdder) error {
 				}
 				if table != "agent_context_entries" {
 					continue
+				}
+				for _, ref := range payload.Attachments {
+					if err := verifyContextAttachment(db, runID, ref); err != nil {
+						if contentQueryFailed(err) {
+							return err
+						}
+						add("error", "context_attachment_invalid", v.id, "context attachment cannot be verified: %v", err)
+					}
 				}
 				for _, raw := range []json.RawMessage{payload.Content, payload.RawContent} {
 					var ref struct {

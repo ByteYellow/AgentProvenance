@@ -2,6 +2,7 @@ package provenance
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -736,6 +737,14 @@ func verifyObjects(db *sql.DB, runID string, add issueAdder) error {
 			}
 		}
 		contentRef, _ := obj.Payload["content_ref"].(string)
+		if objectType == "attachment_content" {
+			if err := VerifyAttachment(context.Background(), db, runID, hash); err != nil {
+				if contentQueryFailed(err) {
+					return err
+				}
+				add("error", "attachment_content_invalid", sourceID, "saved attachment cannot be verified: %v", err)
+			}
+		}
 		if objectType == "text_content" || obj.Payload["kind"] == "stored_text" {
 			contentRef = hash
 		}

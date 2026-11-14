@@ -3,6 +3,7 @@ package dashboard
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -17,12 +18,13 @@ const replaySelectionLimit = 1000000
 // ReplaySelection defines a sharing copy, without changing the saved evidence.
 // Record IDs use the existing search catalog, including entry/<id>.
 type ReplaySelection struct {
-	RunID             string   `json:"run_id"`
-	Scope             string   `json:"scope"`
-	Harness           string   `json:"harness,omitempty"`
-	SessionID         string   `json:"session_id,omitempty"`
-	ExcludeRecords    []string `json:"exclude_records,omitempty"`
-	ExcludeCategories []string `json:"exclude_categories,omitempty"`
+	RunID              string   `json:"run_id"`
+	Scope              string   `json:"scope"`
+	Harness            string   `json:"harness,omitempty"`
+	SessionID          string   `json:"session_id,omitempty"`
+	ExcludeRecords     []string `json:"exclude_records,omitempty"`
+	ExcludeCategories  []string `json:"exclude_categories,omitempty"`
+	ExcludeAttachments []string `json:"exclude_attachments,omitempty"`
 }
 
 type replayRecordDecision struct {
@@ -102,8 +104,14 @@ func (selection ReplaySelection) normalized() (ReplaySelection, error) {
 	default:
 		return invalid("unknown replay scope")
 	}
-	if len(selection.ExcludeRecords) > 4096 || len(selection.ExcludeCategories) > 5 {
+	if len(selection.ExcludeRecords) > 4096 || len(selection.ExcludeCategories) > 5 || len(selection.ExcludeAttachments) > 256 {
 		return invalid("replay exclusion list exceeds its limit")
+	}
+	for _, ref := range selection.ExcludeAttachments {
+		b, err := hex.DecodeString(strings.TrimPrefix(ref, "sha256:"))
+		if err != nil || len(ref) != 71 || len(b) != 32 || strings.ToLower(ref) != ref {
+			return invalid("invalid attachment reference")
+		}
 	}
 	for _, id := range selection.ExcludeRecords {
 		if id == "" || len(id) > 1024 {
@@ -117,6 +125,7 @@ func (selection ReplaySelection) normalized() (ReplaySelection, error) {
 	}
 	selection.ExcludeRecords = sortedReplayStrings(selection.ExcludeRecords)
 	selection.ExcludeCategories = sortedReplayStrings(selection.ExcludeCategories)
+	selection.ExcludeAttachments = sortedReplayStrings(selection.ExcludeAttachments)
 	return selection, nil
 }
 
@@ -360,6 +369,19 @@ func (s Server) resolveReplaySelection(ctx context.Context, input ReplaySelectio
 	if err := p.addObjectAliases(ctx, s); err != nil {
 		return nil, err
 	}
+	availableAttachments := map[string]bool{}
+	for _, e := range p.Entries {
+		for _, a := range e.Attachments {
+			if a.State == "stored" {
+				availableAttachments[a.Ref] = true
+			}
+		}
+	}
+	for _, ref := range selection.ExcludeAttachments {
+		if !availableAttachments[ref] {
+			return nil, fmt.Errorf("%w: attachment is not recorded in this run", agentcontext.ErrInvalidArgument)
+		}
+	}
 	p.resolveContentBoundaries(records)
 	fingerprint, err := json.Marshal(struct {
 		Selection       ReplaySelection
@@ -461,15 +483,28 @@ func (p *replaySelectionPlan) resolveContentBoundaries(records map[string]replay
 	}
 	withheldLines := map[rawLine]bool{}
 	retainedBodies := map[string]bool{}
+	retainedAttachments := map[string]bool{}
 	for id, entry := range p.Entries {
 		if !records["entry/"+id].Included {
 			withheldLines[rawLine{entry.Source.ID, entry.Sequence}] = true
 		} else if entry.Content.State == "stored" {
 			retainedBodies[entry.Content.Ref] = true
 		}
+		if records["entry/"+id].Included {
+			for _, a := range entry.Attachments {
+				if a.State == "stored" {
+					retainedAttachments[a.Ref] = true
+				}
+			}
+		}
 	}
 	for id, entry := range p.Entries {
 		r := records["entry/"+id]
+		for _, a := range entry.Attachments {
+			if a.State == "stored" && a.Ref != "" && !r.Included && !retainedAttachments[a.Ref] {
+				p.WithheldContent[a.Ref] = "record_excluded"
+			}
+		}
 		if !r.Included && entry.Content.State == "stored" && entry.Content.Ref != "" && !retainedBodies[entry.Content.Ref] {
 			p.WithheldContent[entry.Content.Ref] = "record_excluded"
 		}
@@ -492,6 +527,9 @@ func (p *replaySelectionPlan) resolveContentBoundaries(records map[string]replay
 		} else {
 			c.excluded = append(c.excluded, r.ID)
 		}
+	}
+	for _, ref := range p.Selection.ExcludeAttachments {
+		p.WithheldContent[ref] = "attachment_excluded"
 	}
 	for ref, reason := range p.WithheldContent {
 		p.DeniedNodes[ref] = reason

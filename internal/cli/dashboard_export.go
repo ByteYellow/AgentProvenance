@@ -14,7 +14,7 @@ import (
 
 func dashboardExportCmd(dataDir *string) *cobra.Command {
 	var run, output, harness, session, selectionFile string
-	var excludeRecords, excludeCategories []string
+	var excludeRecords, excludeCategories, excludeAttachments []string
 	cmd := &cobra.Command{
 		Use:   "export",
 		Short: "export selected saved evidence as an unsigned, offline replay ZIP",
@@ -24,13 +24,13 @@ func dashboardExportCmd(dataDir *string) *cobra.Command {
 				return fmt.Errorf("--output and either --run or --selection-file are required")
 			}
 			selection := dashboard.ReplaySelection{RunID: run, Scope: "whole_run", Harness: harness, SessionID: session,
-				ExcludeRecords: excludeRecords, ExcludeCategories: excludeCategories}
+				ExcludeRecords: excludeRecords, ExcludeCategories: excludeCategories, ExcludeAttachments: excludeAttachments}
 			if harness != "" || session != "" {
 				selection.Scope = "session"
 			}
 			selections := []dashboard.ReplaySelection{selection}
 			if selectionFile != "" {
-				for _, flag := range []string{"run", "harness", "session", "exclude-record", "exclude-category"} {
+				for _, flag := range []string{"run", "harness", "session", "exclude-record", "exclude-category", "exclude-attachment"} {
 					if cmd.Flags().Changed(flag) {
 						return fmt.Errorf("--selection-file cannot be combined with --%s", flag)
 					}
@@ -101,6 +101,7 @@ func dashboardExportCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().StringVar(&session, "session", "", "native session ID; requires --harness")
 	cmd.Flags().StringArrayVar(&excludeRecords, "exclude-record", nil, "omit a search catalog record ID and its linked readers (repeatable)")
 	cmd.Flags().StringArrayVar(&excludeCategories, "exclude-category", nil, "omit messages, tools, configuration, files, or runtime (repeatable)")
+	cmd.Flags().StringArrayVar(&excludeAttachments, "exclude-attachment", nil, "omit a stored attachment reference while retaining its text record (repeatable)")
 	return cmd
 }
 

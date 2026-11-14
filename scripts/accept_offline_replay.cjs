@@ -55,8 +55,8 @@ async function main(){
           const master=JSON.parse(fs.readFileSync(path.join(root,inventory.record_selection.path)));
           assert.equal(master.schema_version,'agentprovenance.replay_selection_set/v1');assert.deepEqual(master.runs,items);
           assert.equal(items.reduce((n,item)=>n+item.events,0),inventory.events);
-          for(const key of ['sessions','context_entries','latest_context_entries','context_body_refs','context_raw_refs'])
-            assert.equal(items.reduce((n,item)=>n+item.contents[key],0),inventory.contents[key]);
+          for(const key of ['sessions','context_entries','latest_context_entries','context_body_refs','context_raw_refs','attachment_refs'])
+            assert.equal(items.reduce((n,item)=>n+(item.contents[key]||0),0),inventory.contents[key]||0);
         }
         const saved=ref=>{
           const file=fs.readFileSync(path.join(root,ref.path.replace('.json.gz','.js')),'utf8');
@@ -84,7 +84,7 @@ async function main(){
           const selection=JSON.parse(raw);
           assert.equal(selection.schema_version,'agentprovenance.replay_selection/v1');
           assert.equal(selection.selection.run_id,runID);assert.equal(selection.selection.scope,item.scope);
-          partial=item.scope==='session'||(selection.selection.exclude_records||[]).length>0||(selection.selection.exclude_categories||[]).length>0;
+          partial=item.scope==='session'||(selection.selection.exclude_records||[]).length>0||(selection.selection.exclude_categories||[]).length>0||(selection.selection.exclude_attachments||[]).length>0;
           if(!partial)assert.ok(selection.records.every(r=>r.included),'whole-run selection retains every record');
           else assert.match(await page.locator('#verify').innerText(),/Selected evidence/);
           const actual=selection.records.filter(r=>r.included&&r.indexed).map(r=>r.id).sort();
@@ -154,6 +154,37 @@ async function main(){
         let entries=[],cursor='';
         do{const value=await query('/api/context/entries'+q+'&revisions=true&limit=200&cursor='+encodeURIComponent(cursor));entries.push(...value.entries);cursor=value.next_cursor||'';}while(cursor);
         assert.deepEqual(entries,session.entries);
+        const attachments=session.attachments||{};
+        assert.equal(Object.keys(attachments).length,item.contents.attachment_refs||0);
+        for(const entry of entries)for(const attachment of entry.attachments||[]){
+          if(attachment.state!=='stored'){
+            assert.ok(!attachments[attachment.ref],'excluded or omitted attachment has no binary index');
+            if(attachment.ref)await assert.rejects(query('/api/context/attachment'+q+'&ref='+encodeURIComponent(attachment.ref)));
+            continue;
+          }
+          const shards=attachments[attachment.ref];assert.ok(shards);
+          const expected=Buffer.concat(shards.pages.map(ref=>Buffer.from(saved(ref).data,'base64')));
+          assert.equal(hash(expected),attachment.sha256);assert.equal(expected.length,attachment.bytes);
+          const chunks=[];let offset=0;
+          do{
+            const value=await query('/api/context/attachment'+q+'&ref='+encodeURIComponent(attachment.ref)+'&offset='+offset+'&limit=7193');
+            assert.equal(value.encoding,'base64');assert.equal(value.media_type,'image/png');assert.equal(value.offset,offset);
+            assert.equal(value.sha256,attachment.sha256);assert.equal(value.total_bytes,attachment.bytes);
+            const decoded=Buffer.from(value.data,'base64');assert.equal(value.next_offset-offset,decoded.length);
+            assert.ok(value.next_offset>offset);chunks.push(decoded);offset=value.next_offset;
+            assert.equal(value.has_more,offset<expected.length);
+          }while(offset<expected.length);
+          assert.deepEqual(Buffer.concat(chunks),expected);
+          const dimensions=await page.evaluate(async data=>{
+            const bytes=Uint8Array.from(atob(data),x=>x.charCodeAt(0));
+            const bitmap=await createImageBitmap(new Blob([bytes],{type:'image/png'}));
+            const result=[bitmap.width,bitmap.height];bitmap.close();return result;
+          },expected.toString('base64'));
+          assert.deepEqual(dimensions,[attachment.width,attachment.height]);
+          for(const invalid of ['&offset=-1','&offset='+String(expected.length+1),'&limit=0','&limit=262145'])
+            await assert.rejects(query('/api/context/attachment'+q+'&ref='+encodeURIComponent(attachment.ref)+invalid));
+          report.attachments=(report.attachments||0)+1;
+        }
         for(const [ref,pages] of Object.entries(session.content)){
           for(const offset of [...new Set([0,pages.offsets.at(-1)])]){
             const value=await query('/api/context/content'+q+'&ref='+ref+'&offset='+offset);

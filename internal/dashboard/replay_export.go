@@ -72,6 +72,7 @@ type replayContext struct {
 	Nodes       map[string][]string                `json:"nodes"`
 	Links       map[string]agentcontext.EntryLinks `json:"links"`
 	Content     map[string]ReplayPages             `json:"content"`
+	Attachments map[string]ReplayPages             `json:"attachments,omitempty"`
 	Comparisons map[string]staticdata.Ref          `json:"comparisons"`
 }
 
@@ -457,6 +458,25 @@ func (s Server) exportReplaySet(ctx context.Context, run string, w *staticdata.W
 			return result, err
 		}
 		contextData.Links[entry.ID] = links
+		for _, attachment := range entry.Attachments {
+			if attachment.State != "stored" || attachment.Ref == "" {
+				continue
+			}
+			if contextData.Attachments == nil {
+				contextData.Attachments = map[string]ReplayPages{}
+			}
+			if _, ok := contextData.Attachments[attachment.Ref]; ok {
+				continue
+			}
+			if err := provenance.VerifyAttachment(ctx, s.DB, run, attachment.Ref); err != nil {
+				return result, err
+			}
+			p, err := pages("/api/context/attachment", url.Values{"run": {run}, "ref": {attachment.Ref}})
+			if err != nil {
+				return result, err
+			}
+			contextData.Attachments[attachment.Ref] = p
+		}
 		for _, body := range entry.ContentReferences() {
 			if body.State != "stored" || body.Ref == "" {
 				continue

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance recorded context API
-  version: "1.8"
+  version: "1.9"
   description: >
     Read-only recorded evidence. Source assertions are not kernel observations
     or inferred authorizations. The dashboard exposes the same routes under
@@ -79,8 +79,9 @@ components:
               media_type: {type: string}
               bytes: {type: integer, minimum: 0}
               sha256: {type: string}
-              reason: {const: attachment_not_retained}
-            description: Digest and byte count cover the JSON-encoded source value, not decoded binary content.
+              reason: {type: string, examples: [attachment_not_retained, unsupported_media_type, invalid_base64, attachment_size_limit]}
+              digest_scope: {type: string, enum: [source_json_value, decoded_source_bytes]}
+            description: Digest and byte count use digest_scope; historical records without it describe the JSON-encoded source value.
       description: >
         Native message and parent headers retained in both capture presets.
         Only execute_reply reports the request outcome; IOPub output and idle
@@ -161,6 +162,7 @@ components:
         source_records: {type: boolean}
         history: {type: boolean}
         configuration: {type: boolean}
+        attachments: {type: boolean, description: Optional independent raster-retention override. When absent, follows tool_results. Historical entries are unchanged.}
         overrides:
           type: object
           additionalProperties: false
@@ -222,8 +224,8 @@ components:
         reason: {type: string, examples: [source_not_recorded, capture_limit, capture_policy, core_fields_only, derived_intent_projection]}
         digest_scope:
           type: string
-          enum: [parsed_content, source_record, hook_record]
-          description: Present for deliberately omitted content when its transient bytes were available. Length and digest describe this pre-redaction input, not archived bytes. hook_record is the writer's timestamped and normalized JSON before filtering; it is not the original stdin serialization. Such a reference has no ref. Stored content keeps its existing redacted-byte digest semantics.
+          enum: [parsed_content, source_record, hook_record, stored_raster_bytes]
+          description: Omitted text scopes describe transient pre-redaction input without a stored ref. hook_record is the writer's timestamped and normalized JSON before filtering. stored_raster_bytes identifies the retained, metadata-stripped image bytes; pixel content is unredacted. Stored text keeps its existing redacted-byte digest semantics.
     SessionMetadata:
       type: object
       properties:
@@ -280,6 +282,7 @@ components:
           description: Optional derived Claude model-message projection when raw source records are omitted. Retains supported prompt, thinking, answer and proposed tool fields for reanalysis. It is not an original transcript. Sharing exclusions apply to the whole source row, including this projection.
         session_metadata: {$ref: '#/components/schemas/SessionMetadata'}
         notebook: {$ref: '#/components/schemas/NotebookMessage'}
+        attachments: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/AttachmentRef'}}
         missing_fields: {type: array, items: {type: string}}
         evidence_refs: {type: array, items: {type: string}}
         object_hash: {type: string}
@@ -589,6 +592,42 @@ components:
         has_more: {type: boolean}
         sha256: {type: string}
         redacted: {type: boolean}
+    AttachmentRef:
+      allOf:
+        - {$ref: '#/components/schemas/ContentRef'}
+        - type: object
+          required: [source_media_type, source_bytes, source_sha256, source_digest_scope]
+          properties:
+            source_media_type: {type: string}
+            source_bytes: {type: integer, minimum: 0}
+            source_sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+            source_digest_scope: {type: string, enum: [source_json_value, decoded_source_bytes]}
+            width: {type: integer, minimum: 1, maximum: 8192}
+            height: {type: integer, minimum: 1, maximum: 8192}
+            transformation: {const: raster_reencode/v1}
+            privacy: {const: visual_content_unredacted}
+      description: >
+        Stored PNG/JPEG inputs become derived static PNG attachments with source
+        and retained digests. Source metadata and trailing bytes are removed;
+        pixels are not OCR-redacted. No image bytes occur in entry text. Limits:
+        8 MiB source and saved image, 16 megapixels, 256 distinct attachment
+        manifests and 64 MiB retained raster bytes per run. Omitted records retain
+        source identity and reasons; capture_policy is intentional omission.
+    AttachmentPage:
+      type: object
+      required: [schema_version, run_id, ref, media_type, encoding, data, offset, next_offset, total_bytes, has_more, sha256]
+      properties:
+        schema_version: {const: agentprovenance.raster_attachment/v1}
+        run_id: {type: string}
+        ref: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        media_type: {const: image/png}
+        encoding: {const: base64}
+        data: {type: string, contentEncoding: base64, description: "A bounded page, not a complete image unless has_more is false and offset is zero."}
+        offset: {type: integer, minimum: 0}
+        next_offset: {type: integer, minimum: 0}
+        total_bytes: {type: integer, minimum: 1, maximum: 8388608}
+        has_more: {type: boolean}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$', description: SHA-256 of all retained decoded image bytes.}
     ArtifactPage:
       type: object
       required: [schema_version, kind, content_state, mode, size, truncated, redacted, offset, next_offset, total_bytes, has_more]
@@ -984,6 +1023,21 @@ paths:
         - {name: limit, in: query, schema: {type: integer, minimum: 4, maximum: 262144, default: 65536}}
       responses:
         '200': {description: Hash-checked content page, content: {application/json: {schema: {$ref: '#/components/schemas/ContentPage'}}}}
+        '400': {$ref: '#/components/responses/InvalidArgument'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/EvidenceFailure'}
+        '503': {$ref: '#/components/responses/StoreUnavailable'}
+  /v1/context/attachment:
+    get:
+      operationId: agent_context_attachment
+      summary: Read a hash-checked page of a retained raster attachment
+      parameters:
+        - {$ref: '#/components/parameters/run'}
+        - {name: ref, in: query, required: true, schema: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, default: 0}, description: Decoded image byte offset.}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 262144, default: 65536}}
+      responses:
+        '200': {description: JSON page containing base64 image bytes, content: {application/json: {schema: {$ref: '#/components/schemas/AttachmentPage'}}}}
         '400': {$ref: '#/components/responses/InvalidArgument'}
         '404': {$ref: '#/components/responses/NotFound'}
         '500': {$ref: '#/components/responses/EvidenceFailure'}

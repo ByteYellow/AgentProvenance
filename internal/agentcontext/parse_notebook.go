@@ -28,10 +28,11 @@ type NotebookScope struct {
 }
 
 type NotebookOmission struct {
-	MediaType string `json:"media_type"`
-	Bytes     int64  `json:"bytes"`
-	SHA256    string `json:"sha256"`
-	Reason    string `json:"reason"`
+	MediaType   string `json:"media_type"`
+	Bytes       int64  `json:"bytes"`
+	SHA256      string `json:"sha256"`
+	Reason      string `json:"reason"`
+	DigestScope string `json:"digest_scope,omitempty"`
 }
 
 // NotebookMessage is independent of body retention. Native parent identity
@@ -176,9 +177,8 @@ func (p *parser) notebook(top row) bool {
 		notebookIDValid(m.ParentSession) && notebookIDValid(m.ParentMessageID) {
 		callID, m.Association = call(m.ParentSession, m.ParentMessageID), "native_parent_header"
 	}
-	// Preserve safe text as inert JSON. Binary MIME values stay out of both the
-	// normalized body and its source projection until attachment retention is used.
-	projected := notebookContent(content, &m)
+	// Binary MIME values never enter the text projection, even when retained.
+	projected, attachments := notebookContent(content, &m)
 	if buffers := msg["buffers"]; len(buffers) > 0 && string(buffers) != "[]" && string(buffers) != "null" {
 		sum := sha256.Sum256(buffers)
 		m.OmittedContent = append(m.OmittedContent, NotebookOmission{MediaType: "application/vnd.jupyter.buffers+json",
@@ -199,6 +199,7 @@ func (p *parser) notebook(top row) bool {
 	}
 	r := &p.Records[len(p.Records)-1]
 	r.Notebook = &m
+	r.Attachments = attachments
 	projection := map[string]any{"schema_version": NotebookCaptureVersion, "channel": m.Channel,
 		"direction": m.Direction, "header": h, "parent_header": parent, "content": projected,
 		"omitted_content": m.OmittedContent}
@@ -208,8 +209,9 @@ func (p *parser) notebook(top row) bool {
 	return true
 }
 
-func notebookContent(content row, message *NotebookMessage) row {
+func notebookContent(content row, message *NotebookMessage) (row, []AttachmentInput) {
 	projected := row{}
+	var attachments []AttachmentInput
 	for k, v := range content {
 		projected[k] = v
 	}
@@ -226,12 +228,15 @@ func notebookContent(content row, message *NotebookMessage) row {
 			case "text/plain", "text/html", "text/markdown", "application/json":
 				kept[media] = value
 			default:
-				sum := sha256.Sum256(value)
-				message.OmittedContent = append(message.OmittedContent, NotebookOmission{MediaType: media,
-					Bytes: int64(len(value)), SHA256: hex.EncodeToString(sum[:]), Reason: "attachment_not_retained"})
+				a := notebookAttachment(media, value)
+				attachments = append(attachments, a)
+				if a.Reason != "" {
+					message.OmittedContent = append(message.OmittedContent, NotebookOmission{MediaType: media,
+						Bytes: a.SourceBytes, SHA256: a.SourceSHA256, Reason: a.Reason, DigestScope: a.DigestScope})
+				}
 			}
 		}
 		projected["data"] = whole(kept)
 	}
-	return projected
+	return projected, attachments
 }

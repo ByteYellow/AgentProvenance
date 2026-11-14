@@ -54,6 +54,10 @@ agentprov context import --run NEW_RUN --harness codex --file rollout.jsonl --ca
 原始记录与辅助会话正文，保留核心生命周期和拒绝字段。Sensor、TLS 和 `--file-diff`
 继续使用各自的设置，两档都不会自动开启工作区复制。
 
+Notebook 图片可以通过 `--capture-attachments` 独立选择留存；未设置时跟随工具结果。
+图片使用独立、有界的内容对象，保留可见像素，不做 OCR 脱敏，详见
+[Notebook 图片附件](notebook-context.md#图片附件)。
+
 同一 Run 的设置固定，随采集报告和证据导出保存。追加导入时不传档位参数，会复用已保存的设置；
 切换档位需要新 Run，已有内容和签名包保持原样。导入经过裁剪的 hook 日志时，须选择匹配的档位。
 Harness 自己生成的原生日志仍由它自己的留存设置管理。
@@ -510,7 +514,9 @@ agentprov --data-dir .agentprov dashboard export --run RUN \
 不基于裁剪后的图重新计算结论。同一份标准化上下文正文仍存在于其他保留记录中时，
 记录清单给出复核提示。分享前检查提示与冻结回放；排除记录不会全局删除其他证据中的同文内容。
 
-CLI、Dashboard 和本地回放 API 均支持这些选择。
+CLI、Dashboard 和本地回放 API 均支持上述记录和类别选择。
+CLI 还支持重复指定 `--exclude-attachment sha256:HASH`，保留上下文文字并排除图片。
+本地 API 和选择文件使用 `exclude_attachments`；原签名证据保持原样。
 
 ### 一起导出多个 Run
 

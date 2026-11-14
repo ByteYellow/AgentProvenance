@@ -380,6 +380,20 @@ func objectRoot(paths store.Paths) string {
 }
 
 func (c *materializeContext) put(obj provenanceObject) (string, error) {
+	obj = c.prepareObject(obj)
+	raw, err := json.Marshal(obj)
+	if err != nil {
+		return "", err
+	}
+	// Mask textual evidence before hashing. Typed raster chunks use the private
+	// writer below after image validation, without applying text regexes to bytes.
+	if red, changed := redact.Redact(string(raw)); changed {
+		raw = []byte(red)
+	}
+	return c.persistObject(obj, raw)
+}
+
+func (c *materializeContext) prepareObject(obj provenanceObject) provenanceObject {
 	obj.Schema = "agentprov.provenance.object.v1"
 	if obj.RunID == "" {
 		obj.RunID = c.runID
@@ -391,17 +405,10 @@ func (c *materializeContext) put(obj provenanceObject) (string, error) {
 		obj.Payload = map[string]any{}
 	}
 	sort.Strings(obj.Parents)
-	raw, err := json.Marshal(obj)
-	if err != nil {
-		return "", err
-	}
-	// Backstop redaction before the object is hashed: content-addressed objects
-	// (LLM message bodies, artifacts) are exported and shared, so mask any secret
-	// here too. Redacting before the hash keeps the object self-consistent (the
-	// stored hash matches the stored, masked bytes on import verification).
-	if red, changed := redact.Redact(string(raw)); changed {
-		raw = []byte(red)
-	}
+	return obj
+}
+
+func (c *materializeContext) persistObject(obj provenanceObject, raw []byte) (string, error) {
 	sum := sha256.Sum256(raw)
 	hash := "sha256:" + hex.EncodeToString(sum[:])
 	path := c.objectPath(hash)
@@ -421,6 +428,7 @@ func (c *materializeContext) put(obj provenanceObject) (string, error) {
 		 source_id=excluded.source_id,run_id=excluded.run_id,rollout_id=excluded.rollout_id,
 		 parent_hashes=excluded.parent_hashes,path=excluded.path,size_bytes=excluded.size_bytes`
 	args := []any{hash, obj.Type, obj.SourceID, obj.RunID, obj.RolloutID, strings.Join(obj.Parents, ","), path, len(raw), now}
+	var err error
 	if c.store.Tx != nil {
 		_, err = c.store.Tx.Exec(query, args...)
 	} else {

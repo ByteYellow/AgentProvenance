@@ -12,7 +12,15 @@ async function main(){
  const parts={offsets:[],pages:[]};
  for(let offset=0;offset<bytes.length;){let end=Math.min(offset+65536,bytes.length);while(end<bytes.length&&(bytes[end]&0xc0)===0x80)end--;parts.offsets.push(offset);parts.pages.push(save({content:bytes.subarray(offset,end).toString(),offset,next_offset:end,total_bytes:bytes.length,has_more:end<bytes.length,integrity:'verified'}));offset=end;}
  const unavailable={offsets:[0],pages:[save({content_state:'legacy_not_recorded',total_bytes:null,has_more:false,offset:0,next_offset:0})]};
- const context=save({entries:[],latest:[],nodes:{},links:{},content:{saved:parts},comparisons:{}});
+ const raster=Buffer.alloc(180000);for(let i=0;i<raster.length;i++)raster[i]=i%251;
+ const rasterRef='sha256:'+hash(Buffer.from('attachment manifest'));
+ const attachment={offsets:[],pages:[]};
+ for(let offset=0;offset<raster.length;offset+=65536){
+  const end=Math.min(offset+65536,raster.length);attachment.offsets.push(offset);
+  attachment.pages.push(save({schema_version:'agentprovenance.raster_attachment/v1',run_id:'run',ref:rasterRef,media_type:'image/png',encoding:'base64',data:raster.subarray(offset,end).toString('base64'),offset,next_offset:end,total_bytes:raster.length,has_more:end<raster.length,sha256:hash(raster)}));
+ }
+ const contextValue={entries:[],latest:[],nodes:{},links:{},content:{saved:parts},attachments:{[rasterRef]:attachment},comparisons:{}};
+ const context=save(contextValue);
  const artifacts=save({'en/body/file':parts,'en/body/unavailable':unavailable});
  const oldNode='runtime_process/pid/42',firstNode='runtime_process/instance/boot:42:100',secondNode='runtime_process/instance/boot:42:200';
  const events=save([{id:'first',pid:42},{id:'second',pid:42},{id:'last',pid:42},{id:'old',pid:42},{id:'new-parent-number',pid:99}]);
@@ -34,6 +42,23 @@ async function main(){
  files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
  const setup=()=>{const box={window:{},document:{querySelector:()=>({content:'/site/'})},location:new URL('https://example.test/site/en/replay.html'),URL,URLSearchParams,Map,Set,TextEncoder,TextDecoder,structuredClone,Response,DecompressionStream,crypto:webcrypto,btoa,atob,fetch:async url=>{const body=files.get(new URL(url).pathname);return new Response(body||'missing',{status:body?200:404});}};vm.runInNewContext(source,box);return box.window.AgentProvReplay;};
  const reader=setup();
+ for(const offset of [0,17,65535,65536,131070,raster.length])for(const limit of [1,7193,65536,262144]){
+  const value=await reader.query('/api/context/attachment?run=run&ref='+rasterRef+'&offset='+offset+'&limit='+limit);
+  const end=Math.min(offset+limit,raster.length);assert.deepEqual(Buffer.from(value.data,'base64'),raster.subarray(offset,end));
+  assert.equal(value.next_offset,end);assert.equal(value.has_more,end<raster.length);assert.equal(value.sha256,hash(raster));
+ }
+ await assert.rejects(()=>reader.query('/api/context/attachment?run=run&ref=absent'));
+ for(const query of ['run=legacy','run=other','run=run&offset=-1','run=run&offset=180001','run=run&limit=0','run=run&limit=262145'])
+  await assert.rejects(()=>reader.query('/api/context/attachment?ref='+rasterRef+'&'+query));
+ const attachmentOriginal=attachment.pages[1];
+ for(const mutation of [{run_id:'other'},{media_type:'image/svg+xml'},{offset:65537},{next_offset:65539},{total_bytes:8388609},{encoding:'url'},{data:'%%invalid%%'}]){
+  const originalPage=JSON.parse(gunzipSync(files.get('/site/'+attachmentOriginal.path)));
+  attachment.pages[1]=save({...originalPage,...mutation});catalog.runs.run.context=save(contextValue);
+  files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
+  await assert.rejects(()=>setup().query('/api/context/attachment?run=run&ref='+rasterRef+'&offset=65530&limit=20'));
+ }
+ attachment.pages[1]=attachmentOriginal;catalog.runs.run.context=context;
+ files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
  const executionFirst=await reader.query('/api/execution-links?run=run&harness=codex&limit=1');
  assert.equal(executionFirst.links.length,0);assert.equal(executionFirst.scanned,1);assert.equal(executionFirst.has_more,true);
  const executionNext=await reader.query('/api/execution-links?run=run&harness=codex&limit=1&cursor='+executionFirst.next_cursor);

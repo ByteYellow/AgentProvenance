@@ -64,6 +64,7 @@ type ReplayContents struct {
 	LatestEntries  int            `json:"latest_context_entries"`
 	BodyRefs       int            `json:"context_body_refs"`
 	RawRefs        int            `json:"context_raw_refs"`
+	AttachmentRefs int            `json:"attachment_refs"`
 	Sources        map[string]int `json:"indexed_sources"`
 }
 
@@ -385,6 +386,7 @@ func describeReplay(root string, replay ReplayRun) (ReplayContents, error) {
 		}
 	}
 	contents.BodyRefs, contents.RawRefs = len(bodies), len(raw)
+	contents.AttachmentRefs = len(entries.Attachments)
 	for _, ref := range replay.Search[`["",""]`] {
 		var page SearchSources
 		if err := read(ref, &page); err != nil {

@@ -253,13 +253,14 @@ func (m *ReplayExports) prepare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Run               *string         `json:"run"`
-		Scope             *string         `json:"scope"`
-		Harness           *string         `json:"harness,omitempty"`
-		SessionID         *string         `json:"session_id,omitempty"`
-		ExcludeRecords    []string        `json:"exclude_records,omitempty"`
-		ExcludeCategories []string        `json:"exclude_categories,omitempty"`
-		Selections        json.RawMessage `json:"selections,omitempty"`
+		Run                *string         `json:"run"`
+		Scope              *string         `json:"scope"`
+		Harness            *string         `json:"harness,omitempty"`
+		SessionID          *string         `json:"session_id,omitempty"`
+		ExcludeRecords     []string        `json:"exclude_records,omitempty"`
+		ExcludeCategories  []string        `json:"exclude_categories,omitempty"`
+		ExcludeAttachments []string        `json:"exclude_attachments,omitempty"`
+		Selections         json.RawMessage `json:"selections,omitempty"`
 	}
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	d.DisallowUnknownFields()
@@ -269,7 +270,7 @@ func (m *ReplayExports) prepare(w http.ResponseWriter, r *http.Request) {
 	}
 	var inputs []ReplaySelection
 	if input.Selections != nil {
-		if input.Run != nil || input.Scope != nil || input.Harness != nil || input.SessionID != nil || input.ExcludeRecords != nil || input.ExcludeCategories != nil {
+		if input.Run != nil || input.Scope != nil || input.Harness != nil || input.SessionID != nil || input.ExcludeRecords != nil || input.ExcludeCategories != nil || input.ExcludeAttachments != nil {
 			httpError(w, "Do not combine selections with single-run fields.", http.StatusBadRequest)
 			return
 		}
@@ -287,7 +288,7 @@ func (m *ReplayExports) prepare(w http.ResponseWriter, r *http.Request) {
 			return *p
 		}
 		inputs = []ReplaySelection{{RunID: value(input.Run), Scope: value(input.Scope), Harness: value(input.Harness), SessionID: value(input.SessionID),
-			ExcludeRecords: input.ExcludeRecords, ExcludeCategories: input.ExcludeCategories}}
+			ExcludeRecords: input.ExcludeRecords, ExcludeCategories: input.ExcludeCategories, ExcludeAttachments: input.ExcludeAttachments}}
 	}
 	selections, err := normalizeReplaySelections(inputs)
 	if err != nil {

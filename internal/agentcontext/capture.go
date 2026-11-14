@@ -25,6 +25,15 @@ type CapturePolicy struct {
 	History       bool            `json:"history"`
 	Configuration bool            `json:"configuration"`
 	Overrides     map[string]bool `json:"overrides,omitempty"`
+	// Nil follows ToolResults, preserving the serialized historical policy.
+	Attachments *bool `json:"attachments,omitempty"`
+}
+
+func (p CapturePolicy) RetainAttachments() bool {
+	if p.Attachments != nil {
+		return *p.Attachments
+	}
+	return p.ToolResults
 }
 
 type CaptureOmission struct {

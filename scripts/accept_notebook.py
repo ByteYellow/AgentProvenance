@@ -7,6 +7,8 @@ Creates only a new output directory and owns/stops its kernel.
 """
 
 import argparse
+import base64
+import hashlib
 import json
 import os
 import pathlib
@@ -75,10 +77,13 @@ def verify_store(binary, out, capture):
 
     private, public = root / "signing.key", root / "signing.pub"
     command(root / "key-store", "forensics", "keygen", "--priv", private, "--pub", public, structured=False)
-    for preset in ("basic", "detailed"):
+    variants = ("basic", "detailed", "detailed-no-attachments") if capture.get("attachment_source_sha256") else ("basic", "detailed")
+    for preset in variants:
         data, replay, run = root / preset, root / (preset + "-replay"), "notebook-" + preset
         for filename in ("first.jsonl", "restarted.jsonl"):
-            args = ("context", "import", "--run", run, "--harness", "jupyter", "--file", out / filename, "--capture", preset)
+            args = ("context", "import", "--run", run, "--harness", "jupyter", "--file", out / filename, "--capture", preset.split("-")[0])
+            if preset == "detailed-no-attachments":
+                args += ("--capture-attachments=false",)
             imported = command(data, *args)
             repeated = command(data, *args)
             if imported["stored"] == 0 or repeated["stored"] != 0 or repeated["duplicates"] != imported["stored"]:
@@ -138,11 +143,38 @@ def verify_store(binary, out, capture):
                 text = command(replay, "context", "content", "--run", run, "--ref", entry["content"]["ref"])
                 if "LATE_A" not in text["content"]:
                     raise AssertionError("late output body unavailable after source-store removal")
+        attachments = [(entry, item) for entry in entries for item in entry.get("attachments", [])]
+        if capture.get("attachment_source_sha256"):
+            if len(attachments) != 1:
+                raise AssertionError("expected one native raster attachment")
+            entry, item = attachments[0]
+            parent = capture["restarted_request"]
+            if entry["notebook"]["parent_message_id"] != parent["msg_id"] or item["source_sha256"] != capture["attachment_source_sha256"]:
+                raise AssertionError("attachment lost source bytes or its native request")
+            if preset == "detailed":
+                image, offset = bytearray(), 0
+                while True:
+                    saved = command(replay, "context", "attachment", "--run", run, "--ref", item["ref"], "--offset", offset, "--limit", "7193")
+                    image.extend(base64.b64decode(saved["data"], validate=True))
+                    if not saved["has_more"]:
+                        break
+                    if saved["next_offset"] <= offset:
+                        raise AssertionError("attachment page did not advance")
+                    offset = saved["next_offset"]
+                if hashlib.sha256(image).hexdigest() != item["sha256"] or not image.startswith(b"\x89PNG\r\n\x1a\n"):
+                    raise AssertionError("retained attachment failed verification")
+                (out / "retained-chart.png").write_bytes(image)
+                (out / "attachment-entry.json").write_text(json.dumps(entry, indent=2) + "\n")
+                command(replay, "dashboard", "export", "--run", run, "--output", out / "attachments-full.zip", structured=False)
+                command(replay, "dashboard", "export", "--run", run, "--exclude-attachment", item["ref"], "--output", out / "attachments-excluded.zip", structured=False)
+            elif item["state"] != "omitted" or item["reason"] != "capture_policy" or item.get("ref"):
+                raise AssertionError("disabled attachment retention saved image bytes")
         graph = command(replay, "graph", "verify", "--run", run, "--json")
         if graph["error_count"] or graph["warning_count"]:
             raise AssertionError("replayed graph verification failed")
         results[preset] = {"entries": len(entries), "requests": len(calls), "native_parent_outputs": len(parents),
-                           "late_outputs": len(late), "bundle_sha256": bundle["sha256"], "graph": graph}
+                           "late_outputs": len(late), "attachments": [item for _, item in attachments],
+                           "bundle_sha256": bundle["sha256"], "graph": graph}
     if identities["basic"] != identities["detailed"]:
         raise AssertionError("capture preset changed native parent relationships")
     (out / "cli-results.json").write_text(json.dumps(results, indent=2) + "\n")
@@ -153,6 +185,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True)
     parser.add_argument("--agentprov", help="also verify import, graph projection and signed round trip using this binary")
+    parser.add_argument("--attachments", action="store_true", help="also generate a PNG chart, read its typed attachment and export full/excluded replay ZIPs")
     args = parser.parse_args()
     out = pathlib.Path(args.output).resolve()
     out.mkdir(mode=0o700)
@@ -199,13 +232,24 @@ def main():
         if scope["kernel_session_id"] == result["first_scope"]["kernel_session_id"]:
             raise AssertionError("native kernel restart reused its session")
         with Recorder(out / "restarted.jsonl", scope, client_version=jupyter_client.__version__) as recorder:
-            rc = request(c, recorder, "import csv, io, json\nfrom pathlib import Path\n"
+            code = "import csv, io, json\nfrom pathlib import Path\n" \
                 "rows=list(csv.DictReader(io.StringIO('item,value\\na,7\\nb,11\\n')))\n"
-                "total=sum(int(r['value']) for r in rows)\nPath('result.json').write_text(json.dumps({'total':total}))\nprint('TOTAL', total)")
+            code += "total=sum(int(r['value']) for r in rows)\nPath('result.json').write_text(json.dumps({'total':total}))\nprint('TOTAL', total)"
+            if args.attachments:
+                code += "\n" + CHART_CODE
+            rc = request(c, recorder, code)
             after = collect(c, [c], recorder, [rc], ["TOTAL 18"])
             if json.loads((out / "result.json").read_text()) != {"total": 18}:
                 raise AssertionError("data-analysis artifact differs")
             result.update(restarted_scope=scope, restarted_request=rc, restarted_messages=len(after))
+            if args.attachments:
+                displays = [m for m in after if "image/png" in m["content"].get("data", {})]
+                if len(displays) != 1 or displays[0]["parent_header"].get("msg_id") != rc["msg_id"]:
+                    raise AssertionError("native chart output missing or associated with another request")
+                source = base64.b64decode(displays[0]["content"]["data"]["image/png"], validate=True)
+                if source != (out / "chart.png").read_bytes():
+                    raise AssertionError("native display differs from the saved chart")
+                result["attachment_source_sha256"] = hashlib.sha256(source).hexdigest()
         (out / "result-manifest.json").write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps(result, indent=2))
     finally:
@@ -215,6 +259,30 @@ def main():
         manager.cleanup_resources()
     if args.agentprov:
         verify_store(str(pathlib.Path(args.agentprov).resolve()), out, result)
+
+
+CHART_CODE = r'''
+import base64, struct, zlib
+from IPython.display import display
+w, h = 480, 240
+pixels = bytearray()
+for y in range(h):
+    pixels.append(0)
+    for x in range(w):
+        color = (247, 249, 252)
+        if y == 210 or x == 45:
+            color = (100, 110, 125)
+        for i, row in enumerate(rows):
+            if 90 + i * 160 <= x < 190 + i * 160 and 210 - int(row['value']) * 15 <= y < 210:
+                color = [(0, 112, 242), (20, 155, 105)][i]
+        pixels.extend(color)
+def chunk(kind, data):
+    return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
+png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!2I5B', w, h, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b'')
+Path('chart.png').write_bytes(png)
+display({'image/png': base64.b64encode(png).decode(), 'text/plain': 'CSV values: a=7, b=11; total=18',
+         'text/html': '<script>globalThis.evidenceExecuted=1</script><img src="https://invalid.example/never-fetch">'}, raw=True)
+'''
 
 
 if __name__ == "__main__":

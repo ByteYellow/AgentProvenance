@@ -268,11 +268,32 @@ window.AgentProvReplay = (() => {
       const data=await asset(run.context);
       if(path==='context/entries')return contextEntries(data,p,id);
       if(path==='context/content')return contentPage(data.content[p.get('ref')],p,false);
+      if(path==='context/attachment')return attachmentPage(data.attachments?.[p.get('ref')],p,id);
       if(path==='context/links'){const result=data.links[p.get('entry')];if(!result)fail('Session entry was not found');return copy(result);}
       if(path==='context/compare'){if(p.get('right_run')&&p.get('right_run')!==id)fail('Select snapshots from the current demo');const ref=data.comparisons[p.get('left')+'/'+p.get('right')];if(!ref)fail('Select two recorded snapshots of the same kind');return copy(await asset(ref));}
     }
     const key=path==='compliance'?path+'/'+p.get('framework'):path;
     if(!Object.hasOwn(run.api,key))fail('Unsupported replay query');return copy(await asset(run.api[key]));
+  }
+  async function attachmentPage(pages,p,run){
+    if(!pages)fail('Recorded attachment was not found in this replay');
+    const offset=range(p.get('offset'),0,0,8388608,'attachment offset'),limit=range(p.get('limit'),65536,1,262144,'attachment limit');
+    let index=pages.offsets.findLastIndex(n=>n<=offset);if(index<0)fail('Invalid attachment offset');
+    let result,at=offset;const parts=[];
+    do{
+      const page=await asset(pages.pages[index]);
+      if(page.schema_version!=='agentprovenance.raster_attachment/v1'||page.run_id!==run||page.ref!==p.get('ref')||page.encoding!=='base64'||page.media_type!=='image/png'||!Number.isSafeInteger(page.total_bytes)||page.total_bytes<1||page.total_bytes>8388608)fail('Invalid attachment page');
+      if(!result)result=copy(page);
+      if(offset>page.total_bytes||page.total_bytes!==result.total_bytes||page.sha256!==result.sha256||page.offset!==pages.offsets[index]||page.offset>at)fail('Invalid attachment continuation');
+      let bytes;try{bytes=Uint8Array.from(atob(page.data),c=>c.charCodeAt(0));}catch{fail('Invalid attachment encoding');}
+      if(page.next_offset!==page.offset+bytes.length||page.next_offset>page.total_bytes||page.has_more!==(page.next_offset<page.total_bytes))fail('Invalid attachment byte count');
+      const end=Math.min(offset+limit,page.total_bytes,page.next_offset),start=at-page.offset;
+      parts.push(bytes.slice(start,end-page.offset));at=end;
+      if(at>=Math.min(offset+limit,page.total_bytes))break;
+      if(!bytes.length||++index>=pages.pages.length)fail('Missing attachment page');
+    }while(true);
+    let binary='';for(const part of parts)for(let i=0;i<part.length;i+=8192)binary+=String.fromCharCode(...part.subarray(i,i+8192));
+    return {...result,data:btoa(binary),offset,next_offset:at,has_more:at<result.total_bytes};
   }
   async function query(value,{signal}={}){
     signal?.throwIfAborted();

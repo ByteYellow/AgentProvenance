@@ -5,6 +5,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
@@ -105,6 +106,9 @@ func injectClaudeCode(command []string, selfExe, hookLogPath string, paths store
 
 	hookCmd := shQuote(selfExe) + " internal hook-log --file " + shQuote(hookLogPath)
 	hookCmd += " --capture " + shQuote(policy.Preset)
+	if policy.Attachments != nil {
+		hookCmd += " --capture-attachments=" + strconv.FormatBool(*policy.Attachments)
+	}
 	if value, ok := policy.Overrides["tool_results"]; ok {
 		if value {
 			hookCmd += " --capture-tool-results=true"

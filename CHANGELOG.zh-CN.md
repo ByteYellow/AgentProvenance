@@ -8,6 +8,9 @@
 
 ### Notebook 上下文
 
+- PNG、JPEG 输出保存为有界的静态 PNG 附件，独立记录来源与留存摘要、像素隐私状态。
+  新增 `--capture-attachments`、附件分页读取及签名验证；离线导出可通过
+  `--exclude-attachment` 保留文字并排除图片。真实 kernel 用例增加图表及完整、过滤回放。
 - 支持导入 Jupyter 原生消息，区分 kernel、客户端及请求身份，通过父消息头关联
   输出；保留 basic／detailed 留存档位，迟到输出不覆盖调用结束状态。新增有界
   Python 记录器、签名往返测试及真实 kernel 验收用例，详见

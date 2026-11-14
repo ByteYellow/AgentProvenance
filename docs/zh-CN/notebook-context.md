@@ -66,13 +66,53 @@ agentprov context coverage --run RUN_ID
 记录器默认最多 128 MiB、24,998 条消息，单条最多 32 MiB，可调低。超限时追加
 `notebook_gap` 并返回错误，导入后显示采集缺口；导入本身继续受已有处理预算限制。
 
-正文投影保留纯文本、以文本阅读的 HTML／Markdown 和 JSON。其他 MIME 内容从
-正文和来源投影中省略，在 `omitted_content` 中记录类型及原始 JSON 值的摘要。
-`raw_content.reason=notebook_protocol_projection` 标明这是经过筛选的来源投影。
-当前记录器拒绝传输二进制 buffers；图片等类型化附件及专用阅读器后续单独接入。
+正文投影保留纯文本、按文本阅读的 HTML／Markdown 和 JSON。PNG、JPEG 输出保存为
+独立的内容寻址附件，base64 图片数据不进入会话正文或来源投影。SVG 等其他 MIME
+内容保留省略原因及来源值摘要。`raw_content.reason=notebook_protocol_projection`
+标明这是筛选后的来源投影。记录器继续拒绝传输二进制 buffers。
 
-签名 Bundle 保留原生消息头、作用域、留存正文及图谱引用。现有选择性导出按整条
-上下文记录应用选择范围。
+### 图片附件
+
+详细档默认保存图片，基础档默认省略。`--capture-attachments=true|false` 可以独立
+覆盖这一选择；没有显式设置时，附件跟随 `--capture-tool-results`。设置在同一 Run
+中保持固定，主动省略图片时仍保留原生输出关系。
+
+PNG、JPEG 经过解码和检查后，重新编码为静态 PNG。附件分别记录来源和留存图片的
+字节摘要、尺寸及 `transformation: raster_reencode/v1`。重新编码会移除原图元数据
+和尾部数据；图中可见内容保持原样，不做 OCR 脱敏，并标注
+`privacy: visual_content_unredacted`。分享前应检查图片中的敏感内容。
+
+| 项目 | 限额 |
+| --- | --- |
+| 来源或留存图片 | 每张各 8 MiB |
+| 图片尺寸 | 每边最多 8,192 像素，总计最多 16,777,216 像素 |
+| 每条记录附件 | 32 个 |
+| 每个 Run 的独立附件 | 256 个，留存图片字节合计 64 MiB |
+| 单次读取 | 最多 256 KiB 解码后字节 |
+
+无效或超限图片保留省略原因和来源摘要。Run 限额跨导入累计；重复导入相同输出时
+复用附件。原始采集文件继续受导入前的文件与消息大小限制。
+
+从 `context list` 的 `entries[].attachments` 取得引用后，分页读取：
+
+```bash
+agentprov context attachment --run RUN_ID --ref sha256:ATTACHMENT_HASH --limit 65536
+```
+
+JSON 中的 `data` 为当前页的 base64，`offset` 和 `next_offset` 按解码后的字节计数，
+`sha256` 对应整张留存图片。HTTP 接口为
+`GET /v1/context/attachment?run=RUN_ID&ref=sha256:ATTACHMENT_HASH`。
+
+签名 Bundle 包含图片清单与分块。只分享文字、排除指定图片时执行：
+
+```bash
+agentprov dashboard export --run RUN_ID \
+  --exclude-attachment sha256:ATTACHMENT_HASH --output text-replay.zip
+```
+
+该参数可以重复指定；本地导出 API 和选择文件使用 `exclude_attachments`。
+显式排除某个附件引用，会排除所有已选记录中使用该引用的图片；排除整条记录时，
+其他已选记录独立使用的图片继续保留。只读 ZIP 保存排除标记，原证据和签名包保持原样。
 
 ## 真实协议用例
 
@@ -86,6 +126,10 @@ PYTHONPATH=python python scripts/accept_notebook.py --output /tmp/notebook-accep
 加上 `--agentprov /path/to/agentprov` 可通过公共 CLI 验证两档留存、重复导入、图谱投影、
 原生输出关系、签名导入导出，以及移走原存储后的读取。脚本在私有输出目录生成验收专用
 签名密钥，结果保存到 `cli-results.json`。
+
+加上 `--attachments` 会在重启后的 kernel 中根据 CSV 数值生成真实 PNG 图表，
+并记录一段按文本读取的 HTML 输出。与 `--agentprov` 一起使用时，还会验证图片分页、
+签名往返、详细档关闭图片，并生成包含图片和排除图片的两份回放 ZIP。
 
 输出目录必须尚不存在。用例启动自己的 kernel，记录两个客户端、后台迟到输出，
 随后重启 kernel，将 CSV 求和结果写入 `result.json`；退出时停止自己的 kernel 并

@@ -17,6 +17,7 @@ func (s Service) ReadHandler() http.Handler {
 	mux.HandleFunc("GET /context/overview", s.httpOverview)
 	mux.HandleFunc("GET /context/entries", s.httpEntries)
 	mux.HandleFunc("GET /context/content", s.httpContent)
+	mux.HandleFunc("GET /context/attachment", s.httpAttachment)
 	mux.HandleFunc("GET /context/compare", s.httpCompare)
 	mux.HandleFunc("GET /context/links", s.httpLinks)
 	mux.HandleFunc("GET /context/session-relations", s.httpSessionRelations)
@@ -43,6 +44,27 @@ func (s Service) ReadHandler() http.Handler {
 		}
 		mux.ServeHTTP(w, r)
 	})
+}
+
+func (s Service) httpAttachment(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	offset, limit := int64(0), int64(64<<10)
+	for key, target := range map[string]*int64{"offset": &offset, "limit": &limit} {
+		if raw := q.Get(key); raw != "" {
+			value, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil {
+				contextError(w, 400, "invalid_argument", "Invalid attachment byte range.")
+				return
+			}
+			*target = value
+		}
+	}
+	if offset < 0 || limit < 1 || limit > provenance.MaxContentPageBytes || len(q.Get("ref")) != 71 {
+		contextError(w, 400, "invalid_argument", "A stored attachment hash and a bounded byte range are required.")
+		return
+	}
+	value, err := provenance.ReadAttachmentPage(r.Context(), s.DB, q.Get("run"), q.Get("ref"), offset, limit)
+	contextResult(w, value, err)
 }
 
 func (s Service) httpSessionRelations(w http.ResponseWriter, r *http.Request) {

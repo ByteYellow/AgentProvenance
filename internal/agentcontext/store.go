@@ -92,6 +92,7 @@ func (s Service) saveTx(ctx context.Context, tx *sql.Tx, runID string, src Sourc
 	lastCreated := time.Time{}
 	truncated := map[int64]bool{}
 	intentRefs := map[string]*ContentRef{}
+	var attachments *attachmentBudget
 	for _, r := range records {
 		if r.hookCapture != nil && digest(r.hookCapture.Policy) != digest(policy) {
 			return SaveResult{}, fmt.Errorf("hook log capture policy differs from this run; import into a new run with matching capture settings")
@@ -229,6 +230,30 @@ func (s Service) saveTx(ctx context.Context, tx *sql.Tx, runID string, src Sourc
 			}
 		}
 		intentLimited := entry.IntentContent != nil && entry.IntentContent.Reason == "capture_limit"
+		if len(r.Attachments) > 32 {
+			return SaveResult{}, fmt.Errorf("record attachment count exceeds limit")
+		}
+		for _, input := range r.Attachments {
+			if attachments == nil {
+				attachments, err = loadAttachmentBudget(ctx, tx, runID)
+				if err != nil {
+					return SaveResult{}, err
+				}
+			}
+			attachment, err := attachments.save(ctx, objects, runID, input, policy.RetainAttachments())
+			if err != nil {
+				return SaveResult{}, err
+			}
+			entry.Attachments = append(entry.Attachments, attachment)
+			if attachment.State != "stored" {
+				if attachment.Reason == "capture_policy" {
+					addCaptureOmission(&report, "attachments")
+				} else {
+					report.Status = Partial
+					report.Issues = append(report.Issues, Issue{Code: attachment.Reason, Line: r.Sequence, Field: "attachments", Scope: r.ExecutionScope})
+				}
+			}
+		}
 		if (entry.Content.Reason == "capture_limit" || entry.RawContent.Reason == "capture_limit" || intentLimited) && !truncated[r.Sequence] {
 			if counts.Truncated == nil {
 				counts.Truncated = Number(0)
@@ -270,6 +295,11 @@ func (s Service) saveTx(ctx context.Context, tx *sql.Tx, runID string, src Sourc
 		}
 		if entry.IntentContent != nil && entry.IntentContent.Ref != "" {
 			parents = append(parents, entry.IntentContent.Ref)
+		}
+		for _, attachment := range entry.Attachments {
+			if attachment.Ref != "" {
+				parents = append(parents, attachment.Ref)
+			}
 		}
 		obj, err := objects.PutExternalObject(provenance.ExternalObjectInput{
 			Type: "agent_context", SourceID: entry.ID, RunID: runID, Payload: payload, Parents: parents,

@@ -16,7 +16,7 @@ func offlineReplayHTML(raw []byte, locale i18n.Locale) ([]byte, error) {
 }
 
 func offlineReplayHTMLSelection(raw []byte, locale i18n.Locale, selection ReplaySelection, analysisOmitted bool) ([]byte, error) {
-	partial := selection.Scope == "session" || len(selection.ExcludeRecords) > 0 || len(selection.ExcludeCategories) > 0
+	partial := selection.Scope == "session" || len(selection.ExcludeRecords) > 0 || len(selection.ExcludeCategories) > 0 || len(selection.ExcludeAttachments) > 0
 	return offlineReplayHTMLSet(raw, locale, []ReplaySelection{selection}, partial, analysisOmitted)
 }
 
@@ -99,7 +99,7 @@ func offlineReplayHTMLSet(raw []byte, locale i18n.Locale, selections []ReplaySel
 			scope = "会话范围 · " + selection.Harness + " / " + selection.SessionID
 		}
 	}
-	if len(selections) == 1 && (len(selection.ExcludeRecords) > 0 || len(selection.ExcludeCategories) > 0) {
+	if len(selections) == 1 && (len(selection.ExcludeRecords) > 0 || len(selection.ExcludeCategories) > 0 || len(selection.ExcludeAttachments) > 0) {
 		scope += " · exclusions applied"
 		if locale == i18n.Chinese {
 			scope = strings.TrimSuffix(scope, " · exclusions applied") + " · 已按选择排除记录"

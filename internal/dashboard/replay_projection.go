@@ -30,7 +30,7 @@ type replayProjection struct {
 }
 
 func (p *replaySelectionPlan) partial() bool {
-	return p.Selection.Scope != "whole_run" || len(p.Selection.ExcludeRecords) > 0 || len(p.Selection.ExcludeCategories) > 0
+	return p.Selection.Scope != "whole_run" || len(p.Selection.ExcludeRecords) > 0 || len(p.Selection.ExcludeCategories) > 0 || len(p.Selection.ExcludeAttachments) > 0
 }
 
 func (snapshot *replaySnapshot) projectSelection(ctx context.Context, plan *replaySelectionPlan) (_ *replayProjection, err error) {
@@ -243,6 +243,11 @@ func (snapshot *replaySnapshot) projectSelection(ctx context.Context, plan *repl
 				refs[content.Ref] = true
 			}
 		}
+		for _, attachment := range e.Attachments {
+			if attachment.State == "stored" && attachment.Ref != "" && plan.WithheldContent[attachment.Ref] == "" {
+				refs[attachment.Ref] = true
+			}
+		}
 	}
 	rows, err := conn.QueryContext(ctx, `SELECT hash FROM provenance_objects WHERE object_type='artifact'`)
 	if err != nil {
@@ -291,13 +296,14 @@ func (snapshot *replaySnapshot) projectSelection(ctx context.Context, plan *repl
 			return nil, err
 		}
 		var body struct {
-			Manifest provenance.TextManifest `json:"text_manifest"`
+			Manifest   provenance.TextManifest       `json:"text_manifest"`
+			Attachment provenance.AttachmentManifest `json:"attachment_manifest"`
 		}
 		// Missing or damaged stored bodies keep the ordinary reader's absence
 		// diagnostics. They are not reconstructed from the current workspace.
 		dependencies := []string{ref}
 		if err := provenance.ReadObjectPayload(snapshot.DB, run, ref, &body); err == nil {
-			for _, chunk := range body.Manifest.Chunks {
+			for _, chunk := range append(body.Manifest.Chunks, body.Attachment.Chunks...) {
 				if plan.WithheldContent[chunk.Ref] == "" {
 					dependencies = append(dependencies, chunk.Ref)
 				}
@@ -308,7 +314,7 @@ func (snapshot *replaySnapshot) projectSelection(ctx context.Context, plan *repl
 			return nil, marshalErr
 		}
 		if _, err = contentTx.ExecContext(ctx, `INSERT OR IGNORE INTO main.provenance_objects SELECT * FROM captured.provenance_objects
-			WHERE run_id=? AND object_type IN ('text_content','text_chunk') AND hash IN (SELECT value FROM json_each(?))`, run, string(encoded)); err != nil {
+			WHERE run_id=? AND object_type IN ('text_content','text_chunk','attachment_content','attachment_chunk') AND hash IN (SELECT value FROM json_each(?))`, run, string(encoded)); err != nil {
 			return nil, err
 		}
 	}
@@ -365,6 +371,10 @@ func (snapshot *replaySnapshot) projectSelection(ctx context.Context, plan *repl
 
 func (p *replayProjection) entry(e agentcontext.Entry) agentcontext.Entry {
 	refs := []*agentcontext.ContentRef{&e.Content, &e.RawContent}
+	e.Attachments = append([]agentcontext.AttachmentRef(nil), e.Attachments...)
+	for i := range e.Attachments {
+		refs = append(refs, &e.Attachments[i].ContentRef)
+	}
 	if e.IntentContent != nil {
 		content := *e.IntentContent
 		e.IntentContent = &content

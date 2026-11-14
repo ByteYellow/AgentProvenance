@@ -1,4 +1,9 @@
 {
+  "override typed attachment retention; defaults to tool-result retention": "单独设置类型化附件留存；默认跟随工具结果留存",
+  "Read a bounded base64 page of a stored raster attachment": "分页读取已保存图片附件的 base64 数据",
+  "stored attachment manifest reference": "已保存附件的清单引用",
+  "decoded byte offset": "解码后的字节偏移量",
+  "omit a stored attachment reference while retaining its text record (repeatable)": "排除指定附件并保留对应文字记录（可重复）",
   "Candidate {number}": "候选 {number}",
   "Access control": "访问控制",
   "Access-control evidence": "访问控制证据",

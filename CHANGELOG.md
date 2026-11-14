@@ -6,6 +6,11 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Notebook context
 
+- Retain PNG/JPEG outputs as bounded, content-addressed static PNG attachments,
+  with separate source/retained digests and explicit pixel-privacy metadata.
+  Add `--capture-attachments`, paged attachment reads, signed verification and
+  `--exclude-attachment` for text-only offline sharing. Extend the native kernel
+  fixture with a real chart and full/filtered replay exports.
 - Import native Jupyter message captures with scoped kernel/frontend identities,
   parent-header output relationships and basic/detailed retention. Preserve late
   output without treating it as execution completion. Add a bounded local Python

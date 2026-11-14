@@ -1,9 +1,14 @@
 package forensics_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
+	"fmt"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -22,6 +27,11 @@ func TestNotebookSignedRoundTripRetainsNativeParents(t *testing.T) {
 {"type":"notebook_message","schema_version":"agentprovenance.jupyter_capture/v1","channel":"shell","direction":"receive","message":{"header":{"session":"kernel","msg_id":"r1","msg_type":"execute_reply","date":"2026-11-14T10:00:01Z","version":"5.3"},"parent_header":{"session":"client","msg_id":"c1","msg_type":"execute_request"},"content":{"status":"ok","execution_count":1}}}
 {"type":"notebook_message","schema_version":"agentprovenance.jupyter_capture/v1","channel":"iopub","direction":"receive","message":{"header":{"session":"kernel","msg_id":"late","msg_type":"stream","date":"2026-11-14T10:00:02Z","version":"5.3"},"parent_header":{"session":"client","msg_id":"c1","msg_type":"execute_request"},"content":{"name":"stdout","text":"late output"}}}
 `
+	var raster bytes.Buffer
+	if err := png.Encode(&raster, image.NewGray(image.Rect(0, 0, 4, 3))); err != nil {
+		t.Fatal(err)
+	}
+	rich := fmt.Sprintf(`{"type":"notebook_message","schema_version":"agentprovenance.jupyter_capture/v1","channel":"iopub","direction":"receive","message":{"header":{"session":"kernel","msg_id":"chart","msg_type":"display_data","version":"5.3"},"parent_header":{"session":"client","msg_id":"c1","msg_type":"execute_request"},"content":{"data":{"image/png":%q,"text/plain":"chart"}}}}`+"\n", base64.StdEncoding.EncodeToString(raster.Bytes()))
 	for _, preset := range []string{"basic", "detailed"} {
 		t.Run(preset, func(t *testing.T) {
 			ctx := context.Background()
@@ -30,7 +40,7 @@ func TestNotebookSignedRoundTripRetainsNativeParents(t *testing.T) {
 			defer db.Close()
 			policy, _ := agentcontext.NewCapturePolicy(preset, nil)
 			svc := agentcontext.Service{DB: db, Paths: paths, CapturePolicy: &policy}
-			parsed, err := agentcontext.Parse(ctx, strings.NewReader(input), agentcontext.ParseOptions{Harness: "jupyter", Binding: "explicit"})
+			parsed, err := agentcontext.Parse(ctx, strings.NewReader(input+rich), agentcontext.ParseOptions{Harness: "jupyter", Binding: "explicit"})
 			if err != nil || parsed.Coverage.Status != agentcontext.OK {
 				t.Fatalf("parse: %+v %v", parsed.Coverage, err)
 			}
@@ -66,10 +76,24 @@ func TestNotebookSignedRoundTripRetainsNativeParents(t *testing.T) {
 			}
 			reader := agentcontext.Service{DB: replay, Paths: fresh}
 			after, err := reader.Entries(ctx, agentcontext.PageOptions{RunID: "notebook"})
-			if err != nil || len(after.Entries) != 4 {
+			if err != nil || len(after.Entries) != 5 {
 				t.Fatalf("round trip: %+v %v", after, err)
 			}
 			for i, e := range after.Entries {
+				if !reflect.DeepEqual(e.Attachments, before.Entries[i].Attachments) {
+					t.Fatal("attachment references changed")
+				}
+				for _, a := range e.Attachments {
+					if preset == "basic" {
+						if a.State != "omitted" {
+							t.Fatal("basic retained pixels")
+						}
+						continue
+					}
+					if err := provenance.VerifyAttachment(ctx, replay, "notebook", a.Ref); err != nil {
+						t.Fatal(err)
+					}
+				}
 				if !reflect.DeepEqual(e.Notebook, before.Entries[i].Notebook) || !reflect.DeepEqual(e.Source, before.Entries[i].Source) || e.ToolCallID != before.Entries[i].ToolCallID {
 					t.Fatal("notebook scope or native parent changed")
 				}

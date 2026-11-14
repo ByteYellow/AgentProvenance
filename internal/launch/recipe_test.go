@@ -119,6 +119,8 @@ func TestHookOverlayCarriesCapturePolicy(t *testing.T) {
 	for _, preset := range []string{"basic", "detailed"} {
 		for _, keep := range []bool{true, false} {
 			policy, _ := agentcontext.NewCapturePolicy(preset, &keep)
+			attachments := !keep
+			policy.Attachments = &attachments
 			paths := store.Paths{Logs: t.TempDir()}
 			argv, cleanup, err := injectClaudeCode([]string{"claude"}, "/agent prov", filepath.Join(paths.Logs, "run-hooks.jsonl"), paths, policy)
 			if err != nil {
@@ -132,6 +134,13 @@ func TestHookOverlayCarriesCapturePolicy(t *testing.T) {
 			}
 			if err != nil || !strings.Contains(string(raw), " --capture '"+preset+"'") || !strings.Contains(string(raw), want) {
 				t.Fatalf("hook policy missing from overlay: %s %v", raw, err)
+			}
+			attachmentFlag := " --capture-attachments=true"
+			if keep {
+				attachmentFlag = " --capture-attachments=false"
+			}
+			if !strings.Contains(string(raw), attachmentFlag) {
+				t.Fatalf("independent attachment policy missing from overlay: %s", raw)
 			}
 		}
 	}

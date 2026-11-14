@@ -144,6 +144,7 @@ type Entry struct {
 	ExecutionScope  string           `json:"execution_scope,omitempty"`
 	SessionMetadata *SessionMetadata `json:"session_metadata,omitempty"`
 	Notebook        *NotebookMessage `json:"notebook,omitempty"`
+	Attachments     []AttachmentRef  `json:"attachments,omitempty"`
 }
 
 // Record is a parser's transient output. Body never appears in the entry index
@@ -170,6 +171,7 @@ type Record struct {
 	Workdir            *string
 	ApplicationVersion *string
 	Notebook           *NotebookMessage
+	Attachments        []AttachmentInput
 	rawProjection      string
 	hookCapture        *hookCaptureMetadata
 }

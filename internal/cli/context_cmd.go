@@ -114,6 +114,20 @@ func contextCmd(dataDir *string) *cobra.Command {
 		})
 	}
 	var left, right, rightRun string
+	var attachmentRef string
+	var attachmentOffset, attachmentLimit int64
+	attachment := &cobra.Command{Use: "attachment", Short: "Read a bounded base64 page of a stored raster attachment", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if attachmentRef == "" {
+				return commandErrorf("--ref is required")
+			}
+			return withService(cmd, func(s agentcontext.Service) (any, error) {
+				return provenance.ReadAttachmentPage(cmd.Context(), s.DB, run, attachmentRef, attachmentOffset, attachmentLimit)
+			})
+		}}
+	attachment.Flags().StringVar(&attachmentRef, "ref", "", "stored attachment manifest reference")
+	attachment.Flags().Int64Var(&attachmentOffset, "offset", 0, "decoded byte offset")
+	attachment.Flags().Int64Var(&attachmentLimit, "limit", 64<<10, "maximum bytes per page (up to 262144)")
 	compare := &cobra.Command{Use: "compare", Short: "Compare two recorded task, configuration, or approval snapshots", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return withService(cmd, func(s agentcontext.Service) (any, error) {
@@ -140,6 +154,6 @@ func contextCmd(dataDir *string) *cobra.Command {
 				return hooksbridge.IngestContext(cmd.Context(), s.DB, s.Paths, run)
 			})
 		}}
-	root.AddCommand(importCmd, list, overview, content, compare, links, project)
+	root.AddCommand(importCmd, list, overview, content, attachment, compare, links, project)
 	return root
 }

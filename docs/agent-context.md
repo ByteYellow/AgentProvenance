@@ -62,6 +62,10 @@ omits raw source records and opaque session bodies that could contain the same
 results. Core lifecycle and refusal fields remain. Sensor/TLS settings and
 `--file-diff` are independent; neither preset enables workspace copying.
 
+For native Notebook rasters, `--capture-attachments` independently controls image
+retention; otherwise it follows tool results. Images use separate, bounded objects
+and retain visible pixels without OCR redaction. See [Notebook attachments](notebook-context.md#raster-attachments).
+
 Settings are fixed per run and included in coverage and exported evidence.
 Appending context without capture flags reuses the saved policy. Changing the
 policy requires a new run; existing content and signed bundles are left intact.
@@ -682,7 +686,10 @@ graph. The record manifest warns when the same normalized context body remains
 in another selected record. Review that warning and the frozen replay before sharing;
 record exclusion does not remove matching text from all other evidence.
 
-The CLI, Dashboard and local replay API support these selections.
+The CLI, Dashboard and local replay API support these record/category selections.
+The CLI also accepts repeatable `--exclude-attachment sha256:HASH` to keep a context
+entry's text while excluding a retained raster. The local API and selection files
+use `exclude_attachments`; original signed evidence is preserved.
 
 ### Include Several Runs
 

@@ -94,14 +94,60 @@ recording with an error; import reports the gap. Files and processing also use
 the existing context import budgets.
 
 The text projection retains plain text, HTML/Markdown as inert text, and JSON.
-Other MIME values are excluded from normalized and retained source bodies;
-their media types and source-JSON digests are listed in `omitted_content`.
-`raw_content.reason=notebook_protocol_projection` identifies the reduced
-representation. Transport buffers are rejected by this recorder. Rich binary
-attachments and their dedicated reader remain a separate integration step.
+PNG and JPEG outputs use separate content-addressed attachments. Their base64
+bytes never enter conversation text or retained source projections. Unsupported
+MIME values, including SVG, retain an omission reason and source-value digest.
+`raw_content.reason=notebook_protocol_projection` identifies this reduced source
+representation. Transport buffers are rejected by this recorder.
 
-Signed Bundles preserve native headers, scope metadata, retained content and
-graph references. Existing selection filters apply to the whole context entry.
+### Raster attachments
+
+Detailed capture retains raster output by default; basic capture omits it.
+`--capture-attachments=true|false` overrides that choice independently. Without
+an override, attachments follow `--capture-tool-results`. Settings are fixed for
+the Run, and intentional omission retains the native output relationship.
+
+Each PNG/JPEG is decoded, checked and reencoded as a static PNG. The reference
+records both the source and retained byte digests, dimensions and
+`transformation: raster_reencode/v1`. Reencoding removes source metadata and
+trailing bytes. Pixel content is retained without OCR redaction and is marked
+`privacy: visual_content_unredacted`; inspect images before sharing.
+
+| Budget | Limit |
+| --- | --- |
+| Source or retained image | 8 MiB each |
+| Dimensions | 8,192 per side; 16,777,216 total pixels |
+| Attachments per record | 32 |
+| Distinct attachments per Run | 256; 64 MiB of retained image bytes |
+| Read page | 256 KiB of decoded bytes |
+
+Invalid or over-budget images retain an omission reason and source digest. The
+Run budget persists across imports; reimporting an identical output reuses its
+attachment. Source-file limits still apply before import.
+
+Read `entries[].attachments` from `context list`, then request bounded JSON pages:
+
+```bash
+agentprov context attachment --run RUN_ID --ref sha256:ATTACHMENT_HASH --limit 65536
+```
+
+`data` contains base64 for that page, `offset` and `next_offset` count decoded
+bytes, and `sha256` identifies the entire retained image. The HTTP equivalent is
+`GET /v1/context/attachment?run=RUN_ID&ref=sha256:ATTACHMENT_HASH`.
+
+Signed Bundles include image manifests and chunks. To share text without a chosen
+image, use its attachment reference:
+
+```bash
+agentprov dashboard export --run RUN_ID \
+  --exclude-attachment sha256:ATTACHMENT_HASH --output text-replay.zip
+```
+
+The flag is repeatable. The local export API and selection files accept
+`exclude_attachments`. An explicit reference excludes that image from every
+included entry using it; excluding a whole record preserves images independently
+used by other selected records. The read-only ZIP records exclusions while
+leaving original evidence and signed Bundles unchanged.
 
 ## Reproduce the native protocol fixture
 
@@ -124,5 +170,10 @@ public CLI: repeated import, graph projection, native output links, signed expor
 and import, and reading after the original store has been moved. It creates a
 fixture-only signing key under the private output directory. Results are saved
 in `cli-results.json`.
+
+Add `--attachments` to generate a real PNG chart and inert HTML output. With
+`--agentprov`, the fixture also verifies image paging and signed round trips,
+checks detailed capture with images disabled, and produces full and image-excluded
+replay ZIPs. The chart is generated inside the restarted kernel from the CSV values.
 
 Protocol reference: [Jupyter messaging](https://jupyter-client.readthedocs.io/en/stable/messaging.html).

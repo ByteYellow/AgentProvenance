@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance local replay export API
-  version: "1.0"
+  version: "1.1"
   description: >
     Prepare a private, frozen sharing copy without changing the evidence store.
     Enabled by dashboard serve only. Requests require a loopback peer and host;
@@ -41,6 +41,7 @@ components:
         latest_context_entries: {type: integer, minimum: 0}
         context_body_refs: {type: integer, minimum: 0, description: Distinct context body references; consult the reader for availability.}
         context_raw_refs: {type: integer, minimum: 0}
+        attachment_refs: {type: integer, minimum: 0, description: Distinct retained raster attachments in this reading copy.}
         indexed_sources:
           type: object
           description: Search index source counts by category; not the number of unique bodies or successful operations.
@@ -139,6 +140,11 @@ components:
           type: array
           maxItems: 5
           items: {type: string, enum: [messages, tools, configuration, files, runtime]}
+        exclude_attachments:
+          type: array
+          maxItems: 256
+          items: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+          description: Exclude attachment pixels while retaining the context text. References must exist in the selected run.
       allOf:
         - if: {properties: {scope: {const: session}}}
           then: {required: [harness, session_id]}
@@ -179,6 +185,11 @@ components:
           type: array
           maxItems: 5
           items: {type: string, enum: [messages, tools, configuration, files, runtime]}
+        exclude_attachments:
+          type: array
+          maxItems: 256
+          items: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+          description: Exclude attachment pixels while retaining the context text. References must exist in the selected run.
       allOf:
         - if: {properties: {scope: {const: session}}}
           then: {required: [harness, session_id]}
