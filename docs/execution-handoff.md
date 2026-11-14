@@ -290,6 +290,29 @@ or identity conflicts fail the query rather than producing an empty page.
 The [typed API](execution-handoff-api.yaml) describes these read responses.
 Reading stored links needs no running executor or access to its workspace.
 
+### Share execution links offline
+
+The [offline replay exporter](agent-context.md) includes a paged execution-link
+index from the same frozen snapshot as the selected runs. Its static reader
+accepts the same `/api/execution-links` query and native-call filters under
+`file://`; it does not contact an executor. Older replays without this index
+report that execution links were not included.
+
+- Both runs selected: retain the admitted source, delivery and receiving receipt.
+- Caller only: retain the admission and mark `execution_run_not_selected`;
+  omit the execution's checkpoint, delivery and receipt.
+- Execution only: retain its delivery with `basis=unanchored_delivery` and
+  `source_run_not_selected`. The originating call is a reference, not copied content.
+- Caller call excluded: omit its outgoing link and admission. A selected
+  execution retains a boundary with `source_call_excluded_by_selection`.
+- Part of an execution excluded: omit the embedded checkpoint and mark
+  `checkpoint_excluded_by_selection`, retaining the original checkpoint reference.
+
+Session, category and record exclusions apply before link shards are written.
+Links never add another run to the export. The ZIP remains an unsigned reading
+copy; original signed Bundles are separate artifacts. Existing graph, session,
+search and Compare views retain their selected content.
+
 ### Verify a real agent task
 
 [`accept_execution_native.py`](../scripts/accept_execution_native.py) exercises

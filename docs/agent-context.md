@@ -711,6 +711,10 @@ Totals sum the per-run counts. `record-selection.json` indexes the per-run
 manifests under `selections/`. Original signed Bundles remain separate from this
 unsigned reading copy. Review each run's selected content before sharing.
 
+Saved execution links use the same selection. The offline reader retains paged
+forward/reverse queries and marks missing endpoints or excluded calls; partial
+execution exports omit embedded checkpoints. See [execution-link sharing](execution-handoff.md#share-execution-links-offline).
+
 The local API accepts the same array as `{"selections": [...]}`; see the
 [replay export API](replay-export-api.yaml). The Dashboard export dialog retains
 its single-run selection workflow.

@@ -174,9 +174,10 @@ func (s Server) prepareReplaySet(ctx context.Context, snapshot *replaySnapshot, 
 		Runs          map[string]ReplayRun `json:"runs"`
 	}{SchemaVersion: "agentprovenance.static_replay/v1", Runs: map[string]ReplayRun{}}
 	var runs []ReplayRunInventory
+	executionSelections := map[string]replayExecutionSelection{}
 	partial, analysisOmitted := false, false
 	for _, input := range inputs {
-		item, replay, err := frozen.prepareReplayRun(ctx, snapshot, input, visibleRuns, writer)
+		item, replay, err := frozen.prepareReplayRun(ctx, snapshot, input, visibleRuns, writer, executionSelections)
 		if err != nil {
 			return nil, fmt.Errorf("prepare replay run %q: %w", input.RunID, err)
 		}
@@ -185,6 +186,16 @@ func (s Server) prepareReplaySet(ctx context.Context, snapshot *replaySnapshot, 
 		catalog.Runs[input.RunID] = replay
 		partial = partial || (&replaySelectionPlan{Selection: input}).partial()
 		analysisOmitted = analysisOmitted || len(item.AnalysisOmissions) > 0
+	}
+	// Resolve cross-run links only after every member's selection is known.
+	// No unfiltered intermediate shards are written into the shared directory.
+	for _, input := range inputs {
+		replay := catalog.Runs[input.RunID]
+		replay.Executions, err = frozen.exportExecutionLinks(ctx, input.RunID, writer, executionSelections)
+		if err != nil {
+			return nil, fmt.Errorf("prepare replay execution links %q: %w", input.RunID, err)
+		}
+		catalog.Runs[input.RunID] = replay
 	}
 	manifest, err := json.Marshal(catalog)
 	if err != nil {

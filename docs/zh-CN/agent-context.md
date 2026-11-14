@@ -536,6 +536,9 @@ agentprov --data-dir .agentprov dashboard export \
 `record-selection.json` 索引 `selections/` 下的逐 Run 清单。
 原始签名 Bundle 与这个未签名阅读副本分别保存；分享前检查各 Run 实际包含的内容。
 
+已保存的执行关联遵守同一选择范围。离线阅读器保留分页双向查询，并标记未选的一端或
+被排除的调用；部分执行导出省略内嵌检查点。详见[离线分享执行关联](execution-handoff.md#离线分享执行关联)。
+
 本地 API 使用 `{"selections": [...]}` 提交同一数组，详见[回放导出 API](../replay-export-api.yaml)。
 Dashboard 导出弹窗继续使用现有单 Run 选择方式。
 

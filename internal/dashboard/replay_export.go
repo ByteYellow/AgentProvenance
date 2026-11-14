@@ -22,18 +22,19 @@ type ReplayPages struct {
 	Pages   []staticdata.Ref `json:"pages"`
 }
 type ReplayRun struct {
-	Audit     *replayAuditIndex                    `json:"audit,omitempty"`
-	Compare   map[string]staticdata.Ref            `json:"compare,omitempty"`
-	Search    map[string]map[string]staticdata.Ref `json:"search,omitempty"`
-	Sessions  map[string]replaySession             `json:"sessions,omitempty"`
-	API       map[string]staticdata.Ref            `json:"api"`
-	Lenses    staticdata.Ref                       `json:"lenses"`
-	Events    staticdata.Ref                       `json:"events"`
-	Timeline  staticdata.Ref                       `json:"timeline"`
-	Context   staticdata.Ref                       `json:"context"`
-	Artifacts staticdata.Ref                       `json:"artifacts"`
-	EventRefs map[string][]string                  `json:"event_refs"`
-	Filters   map[string]eventQuery                `json:"filters"`
+	Executions *replayExecutionIndex                `json:"execution_links,omitempty"`
+	Audit      *replayAuditIndex                    `json:"audit,omitempty"`
+	Compare    map[string]staticdata.Ref            `json:"compare,omitempty"`
+	Search     map[string]map[string]staticdata.Ref `json:"search,omitempty"`
+	Sessions   map[string]replaySession             `json:"sessions,omitempty"`
+	API        map[string]staticdata.Ref            `json:"api"`
+	Lenses     staticdata.Ref                       `json:"lenses"`
+	Events     staticdata.Ref                       `json:"events"`
+	Timeline   staticdata.Ref                       `json:"timeline"`
+	Context    staticdata.Ref                       `json:"context"`
+	Artifacts  staticdata.Ref                       `json:"artifacts"`
+	EventRefs  map[string][]string                  `json:"event_refs"`
+	Filters    map[string]eventQuery                `json:"filters"`
 }
 type replaySession struct {
 	Lenses         staticdata.Ref                `json:"lenses"`
@@ -84,6 +85,25 @@ func (s Server) ExportReplay(ctx context.Context, run string, w *staticdata.Writ
 // ExportReplaySet includes relationship discovery within an explicit export
 // catalog, without following those links to copy additional runs.
 func (s Server) ExportReplaySet(ctx context.Context, run string, w *staticdata.Writer, visibleRuns []string) (ReplayRun, error) {
+	if visibleRuns == nil {
+		visibleRuns = []string{run}
+	}
+	result, err := s.exportReplaySet(ctx, run, w, visibleRuns)
+	if err != nil {
+		return result, err
+	}
+	selections := map[string]replayExecutionSelection{}
+	for _, id := range visibleRuns {
+		selections[id] = replayExecutionSelection{Selection: ReplaySelection{RunID: id, Scope: "whole_run"}}
+	}
+	if s.replayProjection != nil {
+		selections[run] = executionSelection(s.replayProjection.plan)
+	}
+	result.Executions, err = s.exportExecutionLinks(ctx, run, w, selections)
+	return result, err
+}
+
+func (s Server) exportReplaySet(ctx context.Context, run string, w *staticdata.Writer, visibleRuns []string) (ReplayRun, error) {
 	if visibleRuns == nil {
 		visibleRuns = []string{run}
 	}

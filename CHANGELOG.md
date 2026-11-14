@@ -6,6 +6,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Cross-sandbox execution
 
+- Keep paged execution links in offline replays, including native-call filters
+  and explicit boundaries for unselected runs or excluded calls. Partial exports
+  omit embedded checkpoints rather than copying excluded execution metadata.
 - Query saved execution links in both directions through the daemon and Dashboard
   read APIs. Preserve signed delivery and receiving receipts with caller anchors,
   retain late-package history, and identify caller evidence absent from an import.

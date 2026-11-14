@@ -122,6 +122,44 @@ window.AgentProvReplay = (() => {
     if(!/^[0-9]+$/.test(value))fail('Invalid '+label);
     const n=Number(value);if(!Number.isSafeInteger(n)||n<min||n>max)fail('Invalid '+label);return n;
   }
+  async function executionLinks(index,p,id){
+    if(index?.schema_version!=='agentprovenance.replay_execution_links/v1')fail('Execution links are not included in this replay');
+    for(const key of p.keys())if(!['run','direction','harness','session','tool_call','limit','cursor'].includes(key)||p.getAll(key).length!==1)fail('Unsupported or repeated execution parameter');
+    const direction=p.get('direction')||'outgoing',limit=range(p.get('limit'),50,1,100,'execution limit');
+    if(!['outgoing','incoming'].includes(direction))fail('Invalid execution direction');
+    const filters=['harness','session','tool_call'].map(k=>p.get(k)||'');
+    for(const value of [id,...filters])if(encoder.encode(value).length>512||value.trim()!==value||/[\x00-\x1f\x7f-\x9f]/.test(value))fail('Invalid execution identity');
+    const query=JSON.stringify([id,direction,...filters]),shards=index.directions?.[direction];
+    if(!Array.isArray(shards))fail('Execution direction is not included in this replay');
+    let total=0;
+    for(const shard of shards){if(!Number.isSafeInteger(shard.count)||shard.count<1||shard.count>50)fail('Invalid execution shard');total+=shard.count;}
+    if(total>1000000)fail('Execution replay exceeds its record limit');
+    let offset=0;
+    if(p.get('cursor')){
+      const raw=p.get('cursor');let cursor;
+      try{if(raw.length>4096||!/^[A-Za-z0-9_-]+$/.test(raw))throw Error();cursor=JSON.parse(decoder.decode(Uint8Array.from(atob(raw.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0))));}catch{fail('Invalid execution cursor');}
+      if(cursor.schema!==index.schema_version||cursor.query!==query||!Number.isSafeInteger(cursor.offset)||cursor.offset<0||cursor.offset>total)fail('Execution cursor does not match this query');
+      offset=cursor.offset;
+    }
+    const result={schema_version:'agentprovenance.execution_links/v1',run_id:id,direction,links:[],scanned:0,limit,has_more:false};
+    let start=0;
+    for(const shard of shards){
+      const end=start+shard.count;
+      if(end<=offset){start=end;continue;}
+      const links=await asset(shard.data);
+      if(!Array.isArray(links)||links.length!==shard.count)fail('Execution shard count does not match its index');
+      for(let at=Math.max(0,offset-start);at<links.length&&result.scanned<limit;at++){
+        const link=links[at],src=link.identity?.source;
+        if(!src||(direction==='outgoing'?src.run_id:link.identity.local_run_id)!==id)fail('Execution link does not match this run');
+        result.scanned++;
+        if(filters.every((value,i)=>!value||value===[src.harness,src.session_id,src.tool_call_id][i]))result.links.push(copy(link));
+      }
+      start=end;if(result.scanned===limit)break;
+    }
+    result.has_more=offset+result.scanned<total;
+    if(result.has_more){const bytes=encoder.encode(JSON.stringify({schema:index.schema_version,query,offset:offset+result.scanned}));result.next_cursor=btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+    return result;
+  }
   async function auditPage(index,p,id){
     if(!index||index.schema_version!=='agentprovenance.replay_audit/v1')fail('Audit associations are not included in this replay');
     for(const key of p.keys())if(!['run','event','limit','cursor'].includes(key)||p.getAll(key).length!==1)fail('Unsupported or repeated audit parameter');
@@ -173,6 +211,7 @@ window.AgentProvReplay = (() => {
     const id=p.get('run');let run=catalog.runs[id];
     if(path==='frameworks'&&!run)run=catalog.runs[catalog.summaries[0].run];
     if(!run)fail('The run was not found in this replay');
+    if(path==='execution-links')return executionLinks(run.execution_links,p,id);
     if(path==='audit/associations')return auditPage(run.audit,p,id);
     if(path==='compare/records'){
       if(p.has('harness')||p.has('session'))fail('Run comparison does not accept a session filter');

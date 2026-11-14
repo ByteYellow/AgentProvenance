@@ -28,9 +28,20 @@ async function main(){
  catalog.runs.run.search={'["",""]':{'':search},'["codex","root"]':{'':search}};
  const comparison=save({schema_version:'agentprovenance.comparison_records/v1',run_id:'run',records:[],issues:[],sources_read:1,has_more:false});
  catalog.runs.run.compare={'':comparison};
+ const executionA={identity:{source:{run_id:'run',harness:'claude',session_id:'root',tool_call_id:'call-a'},local_run_id:'worker'},basis:'authenticated_admission',issues:['execution_run_not_selected']};
+ const executionB={identity:{source:{run_id:'run',harness:'codex',session_id:'root',tool_call_id:'call-b'},local_run_id:'worker-b'},basis:'authenticated_delivery',issues:[]};
+ catalog.runs.run.execution_links={schema_version:'agentprovenance.replay_execution_links/v1',directions:{outgoing:[{count:1,data:save([executionA])},{count:1,data:save([executionB])}],incoming:[]}};
  files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
  const setup=()=>{const box={window:{},document:{querySelector:()=>({content:'/site/'})},location:new URL('https://example.test/site/en/replay.html'),URL,URLSearchParams,Map,Set,TextEncoder,TextDecoder,structuredClone,Response,DecompressionStream,crypto:webcrypto,btoa,atob,fetch:async url=>{const body=files.get(new URL(url).pathname);return new Response(body||'missing',{status:body?200:404});}};vm.runInNewContext(source,box);return box.window.AgentProvReplay;};
  const reader=setup();
+ const executionFirst=await reader.query('/api/execution-links?run=run&harness=codex&limit=1');
+ assert.equal(executionFirst.links.length,0);assert.equal(executionFirst.scanned,1);assert.equal(executionFirst.has_more,true);
+ const executionNext=await reader.query('/api/execution-links?run=run&harness=codex&limit=1&cursor='+executionFirst.next_cursor);
+ assert.equal(executionNext.links[0].identity.source.tool_call_id,'call-b');assert.equal(executionNext.has_more,false);
+ const executionAll=await reader.query('/api/execution-links?run=run');
+ assert.equal(executionAll.links.length,2);assert.equal(executionAll.links[0].issues[0],'execution_run_not_selected');
+ assert.equal((await reader.query('/api/execution-links?run=run&direction=incoming')).links.length,0);
+ for(const query of ['run=legacy','run=run&direction=sideways','run=run&limit=0','run=run&limit=101','run=run&cursor=wrong','run=run&harness=%00','run=run&session=%20root','run=run&run=run','run=run&harness=claude&cursor='+executionFirst.next_cursor,'run=run&direction=incoming&cursor='+executionFirst.next_cursor])await assert.rejects(()=>reader.query('/api/execution-links?'+query));
  const emptyFocus=await reader.query('/api/lens?run=run&harness=codex&session=empty&focus=overview%2Fagent_network');
  assert.equal(emptyFocus.nodes[0].id,emptyNode.id);
  assert.equal((await reader.query('/api/events?run=run&harness=codex&session=empty')).total,0);
@@ -44,6 +55,10 @@ async function main(){
  const stopped=new AbortController();stopped.abort();
  await assert.rejects(()=>reader.query('/api/search/sources?run=run',{signal:stopped.signal}),{name:'AbortError'});
  await assert.rejects(()=>reader.query('/api/compare/records?run=run',{signal:stopped.signal}),{name:'AbortError'});
+ await assert.rejects(()=>reader.query('/api/execution-links?run=run',{signal:stopped.signal}),{name:'AbortError'});
+ const stopExecution=new AbortController(),pendingExecution=setup().query('/api/execution-links?run=run',{signal:stopExecution.signal});
+ stopExecution.abort();await assert.rejects(()=>pendingExecution,{name:'AbortError'});
+ assert.equal((await reader.query('/api/execution-links?run=run')).links.length,2);
  const interrupted=new AbortController(),pending=setup().query('/api/search/sources?run=run',{signal:interrupted.signal});
  interrupted.abort();await assert.rejects(()=>pending,{name:'AbortError'});
  assert.equal((await reader.query('/api/search/sources?run=run')).sources.length,1);
@@ -80,6 +95,18 @@ async function main(){
  files.set(path,gunzipSync(good));
  assert.equal((await setup().query('/api/context/content?run=run&ref=saved&limit=4')).content,'xxxx');
  files.set(path,good);
+ const originalExecution=catalog.runs.run.execution_links.directions.outgoing[0];
+ for(const shard of [{...originalExecution,count:2},{...originalExecution,count:0},{count:1,data:save([{...executionA,identity:{...executionA.identity,source:{...executionA.identity.source,run_id:'other'}}}])}]){
+  catalog.runs.run.execution_links.directions.outgoing[0]=shard;
+  files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
+  await assert.rejects(()=>setup().query('/api/execution-links?run=run'),/shard|does not match/);
+ }
+ catalog.runs.run.execution_links.directions.outgoing[0]=originalExecution;
+ files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
+ const executionPath='/site/'+originalExecution.data.path,executionBytes=files.get(executionPath);
+ files.set(executionPath,gzipSync(Buffer.from('x'.repeat(originalExecution.data.bytes))));
+ await assert.rejects(()=>setup().query('/api/execution-links?run=run'),/integrity check failed/);
+ files.set(executionPath,executionBytes);
  // Old exports without an index rule retain v1. New exports freeze v3, and
  // mismatched or unknown versions fail instead of silently reinterpreting data.
  for(const version of [1,2,3]){

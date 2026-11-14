@@ -227,6 +227,23 @@ Hook 不自动授权。获准后，包装器提交请求、等待执行、验证
 字段及错误格式见[接口定义](../execution-handoff-api.yaml)。查询已保存关联无需连接
 执行器，也不读取其原始工作目录。
 
+### 离线分享执行关联
+
+[离线回放导出](agent-context.md)在同一冻结快照中生成所选 Run 的分页执行关联索引。
+静态阅读器在 `file://` 下支持相同的 `/api/execution-links` 查询及原生调用筛选，
+无需连接执行器。旧回放缺少该索引时，会明确提示未包含执行关联。
+
+- 同时选择两端：保留调用准入、交付及接收回执。
+- 只选调用端：保留准入记录，标记 `execution_run_not_selected`，省略执行检查点、交付和回执。
+- 只选执行端：保留交付，使用 `basis=unanchored_delivery` 和 `source_run_not_selected`。
+  来源调用只保留引用，不复制正文。
+- 排除来源调用：省略其正向关联和准入记录；已选执行保留 `source_call_excluded_by_selection` 边界。
+- 排除部分执行记录：省略内嵌检查点，标记 `checkpoint_excluded_by_selection`，保留原检查点引用。
+
+会话、类别和记录筛选在写入关联分片前生效；关联不会自动将其他 Run 加入导出。
+ZIP 仍是未签名的阅读副本，原始签名 Bundle 单独保存。图谱、会话、搜索和 Compare
+继续展示所选内容。
+
 ### 验证真实 Agent 任务
 
 [`accept_execution_native.py`](../../scripts/accept_execution_native.py) 在调用端验证

@@ -61,7 +61,7 @@ func (c *ReplayContents) add(other ReplayContents) {
 	}
 }
 
-func (s Server) prepareReplayRun(ctx context.Context, snapshot *replaySnapshot, input ReplaySelection, visibleRuns []string, w *staticdata.Writer) (ReplayRunInventory, ReplayRun, error) {
+func (s Server) prepareReplayRun(ctx context.Context, snapshot *replaySnapshot, input ReplaySelection, visibleRuns []string, w *staticdata.Writer, executionSelections map[string]replayExecutionSelection) (ReplayRunInventory, ReplayRun, error) {
 	item := ReplayRunInventory{RunID: input.RunID, Scope: input.Scope}
 	selection, err := s.resolveReplaySelection(ctx, input)
 	if err != nil {
@@ -97,6 +97,7 @@ func (s Server) prepareReplayRun(ctx context.Context, snapshot *replaySnapshot, 
 	}
 	item.Selection = ReplayFile{Path: name, SHA256: replayDigest(data), Bytes: int64(len(data))}
 	item.SelectionSummary = selection.summary()
+	executionSelections[input.RunID] = executionSelection(selection)
 	if selection.partial() {
 		projection, err := snapshot.projectSelection(ctx, selection)
 		if err != nil {
@@ -110,7 +111,7 @@ func (s Server) prepareReplayRun(ctx context.Context, snapshot *replaySnapshot, 
 	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE run_id=?`, input.RunID).Scan(&item.Events); err != nil {
 		return item, ReplayRun{}, err
 	}
-	replay, err := s.ExportReplaySet(ctx, input.RunID, w, visibleRuns)
+	replay, err := s.exportReplaySet(ctx, input.RunID, w, visibleRuns)
 	if err != nil {
 		return item, replay, err
 	}

@@ -1,6 +1,7 @@
 // Verify downloaded replay ZIPs in an offline browser, using no source store.
 // Usage: node scripts/accept_offline_replay.cjs replay.zip [another.zip ...]
 // AGENTPROV_REPLAY_SEARCH_QUERY selects a known saved phrase for a custom capture.
+// AGENTPROV_REPLAY_SEARCH_QUERIES optionally maps run IDs to saved search phrases.
 const {chromium}=require('playwright');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -105,6 +106,32 @@ async function main(){
         let events=[];
         for(let offset=0;;offset+=500){const value=await query('/api/events'+q+'&limit=500&offset='+offset);events.push(...value.events);if(events.length>=value.total)break;}
         assert.deepEqual(events,saved(run.events));assert.equal(events.length,item.events);
+        if(run.execution_links){
+          for(const direction of ['outgoing','incoming']){
+            const expected=run.execution_links.directions[direction].flatMap(shard=>saved(shard.data));
+            for(const limit of [1,17,100]){
+              let links=[],cursor='',scanned=0;
+              do{
+                const value=await query('/api/execution-links'+q+'&direction='+direction+'&limit='+limit+'&cursor='+encodeURIComponent(cursor));
+                assert.equal(value.schema_version,'agentprovenance.execution_links/v1');assert.equal(value.run_id,runID);assert.equal(value.direction,direction);
+                assert.equal(value.scanned,Math.min(limit,expected.length-scanned));scanned+=value.scanned;
+                assert.equal(value.has_more,scanned<expected.length);
+                links.push(...value.links);cursor=value.next_cursor||'';assert.equal(Boolean(cursor),value.has_more);
+              }while(cursor);
+              assert.deepEqual(links,expected,'offline execution links retain direction, identity and evidence boundaries');
+            }
+            if(expected.length){
+              const src=expected[0].identity.source;
+              let links=[],cursor='';
+              do{
+                const value=await query('/api/execution-links'+q+'&direction='+direction+'&limit=1&harness='+encodeURIComponent(src.harness)+'&session='+encodeURIComponent(src.session_id)+'&tool_call='+encodeURIComponent(src.tool_call_id)+'&cursor='+encodeURIComponent(cursor));
+                links.push(...value.links);cursor=value.next_cursor||'';
+              }while(cursor);
+              assert.deepEqual(links,expected.filter(link=>['harness','session_id','tool_call_id'].every(key=>link.identity.source[key]===src[key])));
+            }
+            report.executionLinks=(report.executionLinks||0)+expected.length;
+          }
+        }
         if(run.audit){
           const expected=run.audit.pages.flatMap(shard=>saved(shard.data).items);
           for(const limit of [1,17,100,500]){
@@ -176,7 +203,8 @@ async function main(){
         assert.equal(await page.locator('#runsel').inputValue(),runID,'closing Compare preserves the current run');
         await page.locator('[data-investigation="search"]').click();
         if(partial)assert.match(await page.locator('#search-scope').innerText(),/Included records/,'partial replay does not claim whole-run search');
-        await page.locator('#search-query').fill(process.env.AGENTPROV_REPLAY_SEARCH_QUERY||(runID==='run-double-attempt'?'169.254.169.254':runID==='ui-fixture'?'SAVED-OUTPUT-TAIL':runID==='audit-interface-fixture'?'SECCOMP':'report.py'));
+        const searchQueries=JSON.parse(process.env.AGENTPROV_REPLAY_SEARCH_QUERIES||'{}');
+        await page.locator('#search-query').fill(searchQueries[runID]||process.env.AGENTPROV_REPLAY_SEARCH_QUERY||(runID==='run-double-attempt'?'169.254.169.254':runID==='ui-fixture'?'SAVED-OUTPUT-TAIL':runID==='audit-interface-fixture'?'SECCOMP':'report.py'));
         await page.locator('#search-submit').click();
         await page.waitForFunction(()=>!document.querySelector('#search-submit').disabled);
         assert.ok(await page.locator('.search-result').count()>0,'saved evidence remains searchable offline');
@@ -197,11 +225,13 @@ async function main(){
         await page.screenshot({path:screenshot+'-mobile.png'});
         await page.locator('#search-close').click();
         const englishAudit=run.audit?await query('/api/audit/associations'+q+'&limit=1'):null;
+        const englishExecution=run.execution_links?await query('/api/execution-links'+q+'&limit=1'):null;
         await page.getByRole('link',{name:'中文',exact:true}).click();
         await page.waitForFunction(()=>window._lensManifest);
         assert.equal(await page.locator('#runsel').inputValue(),runID,'language switch preserves the current run');
         assert.match(await page.locator('.offline-replay-bar').innerText(),/未签名的分享副本/);
         if(englishAudit)assert.deepEqual(await query('/api/audit/associations'+q+'&limit=1'),englishAudit,'Chinese UI does not localize API output');
+        if(englishExecution)assert.deepEqual(await query('/api/execution-links'+q+'&limit=1'),englishExecution,'execution link output remains English in both locales');
         assert.equal(await page.evaluate(()=>globalThis.evidenceExecuted),undefined,'evidence remains inert text');
         await page.close();
         }
