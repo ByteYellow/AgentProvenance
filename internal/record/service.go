@@ -280,7 +280,10 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 	}
 	scope := ExecutionScope{RunID: req.RunID, RolloutID: rolloutID, AttemptID: attemptID, SessionID: sessionID,
 		ToolCallID: toolCallID, ProcessID: processID, BaseSnapshotID: baseSnapshotID, BindingID: bindingID,
-		CgroupID: scopeCgroupID, ScopeKind: scopeKind, Workdir: absWorkdir, StartedAt: startedAt}
+		CgroupID: scopeCgroupID, ScopeKind: scopeKind, Workdir: absWorkdir, StartedAt: startedAt, RecoveryAnchor: cgroup.anchor}
+	if deadline, ok := execCtx.Deadline(); ok {
+		scope.DeadlineAt = deadline.UTC().Format(time.RFC3339Nano)
+	}
 	if s.Lifecycle != nil && s.Lifecycle.Prepared != nil {
 		if err := s.Lifecycle.Prepared(scope); err != nil {
 			return Result{RunID: req.RunID, Scope: &scope}, errors.Join(err,

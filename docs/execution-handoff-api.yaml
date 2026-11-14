@@ -402,6 +402,8 @@ components:
             started_at: { type: string, format: date-time }
             root_pid: { type: integer, minimum: 1 }
             start_event_id: { type: string }
+            recovery_anchor: { $ref: '#/components/schemas/ScopeRecoveryAnchor' }
+            deadline_at: { type: string, format: date-time, description: Original execution deadline saved before launch; absent when no deadline applies }
         result:
           type: object
           description: Existing record result including exit code, observed descendants and artifact capture. Recovery can leave unavailable fields empty.
@@ -412,6 +414,28 @@ components:
         stderr: { $ref: '#/components/schemas/Output' }
         error: { type: string }
         capture_report: { $ref: '#/components/schemas/NativeCaptureReport' }
+        recovery_report: { $ref: '#/components/schemas/ScopeRecoveryReport' }
+    ScopeRecoveryAnchor:
+      type: object
+      required: [schema_version, boot_id, filesystem_id]
+      properties:
+        schema_version: { const: agentprovenance.linux_cgroup_recovery/v1 }
+        boot_id: { type: string, minLength: 1 }
+        filesystem_id: { type: string, minLength: 1 }
+      description: Saved before launch. Recovery verifies this anchor and scope.cgroup_id against the reopened cgroup v2 directory, retaining its descriptor for observation and stop.
+    ScopeRecoveryReport:
+      type: object
+      required: [scope_observation]
+      properties:
+        scope_observation: { $ref: '#/components/schemas/ScopeObservation' }
+        stop_report: { $ref: '#/components/schemas/ExecutionStopReport' }
+      description: >
+        Scope observation after executor restart. When no execution-end record
+        survived, result is absent and output is unknown. Verified live scopes
+        are monitored without rerunning the command; confirmed stop is cancelled,
+        confirmed timeout is failed, and natural disappearance keeps execution
+        unknown. Capture remains incomplete. Saved reports are included in signed
+        delivery even when no exit code is available.
     ScopeObservation:
       type: object
       required: [scope_kind, cgroup_id, observed_at, empty]

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/record"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -41,6 +42,12 @@ type Checkpoint struct {
 	Stderr        *Output                `json:"stderr,omitempty"`
 	Error         string                 `json:"error,omitempty"`
 	Capture       *NativeCaptureReport   `json:"capture_report,omitempty"`
+	Recovery      *ScopeRecoveryReport   `json:"recovery_report,omitempty"`
+}
+
+type ScopeRecoveryReport struct {
+	Observation *record.ScopeObservation `json:"scope_observation"`
+	Stop        *record.StopReport       `json:"stop_report,omitempty"`
 }
 
 type Report struct {
@@ -143,6 +150,12 @@ func (e *Executor) commitCheckpoint(ctx context.Context, a Attempt, c Checkpoint
 		}
 		if c.Scope == nil && previous != nil {
 			c.Scope = previous.Scope
+		}
+		if c.Scope != nil && c.Recovery != nil && c.Recovery.Observation != nil &&
+			c.Recovery.Observation.Empty != nil && *c.Recovery.Observation.Empty {
+			if err := correlation.CloseBindingByID(tx, c.Scope.BindingID, c.Recovery.Observation.ObservedAt); err != nil {
+				return err
+			}
 		}
 		if c.Capture == nil && previous != nil {
 			c.Capture = previous.Capture

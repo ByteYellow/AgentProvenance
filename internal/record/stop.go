@@ -25,6 +25,7 @@ type executionCgroup struct {
 	kill    func() error
 	empty   func() (bool, error)
 	cleanup func()
+	anchor  *ScopeRecoveryAnchor
 }
 
 func logicalCgroup(attemptID string) executionCgroup {

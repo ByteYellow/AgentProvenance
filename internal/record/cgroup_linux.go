@@ -56,7 +56,7 @@ func prepareScopeCgroup(cmd *exec.Cmd, attemptID string) executionCgroup {
 		_ = os.Remove(dir)
 		return fallback
 	}
-	st, ok := info.Sys().(*syscall.Stat_t)
+	_, ok := info.Sys().(*syscall.Stat_t)
 	var fs unix.Statfs_t
 	if !ok || unix.Fstatfs(int(dirFile.Fd()), &fs) != nil || fs.Type != unix.CGROUP2_SUPER_MAGIC {
 		_ = dirFile.Close()
@@ -69,7 +69,11 @@ func prepareScopeCgroup(cmd *exec.Cmd, attemptID string) executionCgroup {
 	}
 	cmd.SysProcAttr.UseCgroupFD = true
 	cmd.SysProcAttr.CgroupFD = int(dirFile.Fd())
+	return ownedScopeCgroup(dirFile, info, dir)
+}
 
+func ownedScopeCgroup(dirFile *os.File, info os.FileInfo, dir string) executionCgroup {
+	st := info.Sys().(*syscall.Stat_t)
 	var cleanupOnce sync.Once
 	cleanup := func() {
 		cleanupOnce.Do(func() {
@@ -89,7 +93,7 @@ func prepareScopeCgroup(cmd *exec.Cmd, attemptID string) executionCgroup {
 		return os.NewFile(uintptr(fd), name), nil
 	}
 	return executionCgroup{
-		id: strconv.FormatUint(st.Ino, 10), cleanup: cleanup,
+		id: strconv.FormatUint(st.Ino, 10), cleanup: cleanup, anchor: cgroupRecoveryAnchor(dirFile),
 		kill: func() error {
 			f, err := openControl("cgroup.kill", unix.O_WRONLY)
 			if err != nil {

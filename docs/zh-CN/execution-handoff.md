@@ -52,12 +52,20 @@ agentprov --data-dir ./executor-data daemon serve --execution-config ./execution
 拒绝未知字段和尾随 JSON；保留现有 bearer、Origin 和 Fetch Metadata 校验。
 
 执行器独占数据目录，默认同时运行两个命令，其余任务保存在 SQLite。
-重启时读取已保存的结束事件；启动结果缺少依据时保留 `unknown`，不使用历史 PID
-直接发送信号。未知尝试的停止请求继续保留，供运维核对。
+重启时读取已保存的结束事件。Linux 命令仍在运行时，核对启动前保存的 boot、
+cgroup 文件系统和内核 cgroup ID，再重新打开原作用域。恢复的任务占用执行名额，
+沿用原超时期限及已保存的停止请求，命令只执行一次。启动状态不明，或旧记录缺少
+恢复身份时，保留 `unknown` 和停止请求，供运维核对。
+
+检查点的 `recovery_report` 保存作用域观察和停止结果。确认停止后为 `cancelled`，
+确认超时停止后为 `failed`；自然退出且没有已保存的结束事件时，执行保持 `unknown`，
+退出码留空。丢失的输出标为未知，采集保持 `incomplete`。作用域为空的观察与检查点
+在同一事务中保存并关闭绑定，签名交付保留这些记录。恢复后持续使用已核验的 cgroup
+句柄；即使同名路径被替换，也不会转向新作用域或历史 PID。
 
 Linux 上具备可写 cgroup v2 子树时，取消、执行超时和启动后检查点失败都会通过
 `cgroup.kill` 停止本次执行的 cgroup，包括使用 `setsid` 新建进程组的子进程。
-执行器持续持有 cgroup 目录句柄，并且只使用本次新建的作用域。根进程回收后，
+新命令使用新建的作用域，重启恢复核对已保存的身份；执行器持续持有 cgroup 目录句柄。根进程回收后，
 最多等待两秒，读取 `cgroup.events` 确认子树是否为空；其他并发执行保持运行。
 
 结果中的 `stop_report` 保存停止方式、信号结果、观察时间、`scope_empty` 和错误。
@@ -375,7 +383,7 @@ agentprov --data-dir ./received-evidence --daemon-url http://127.0.0.1:18575 \
 
 ## 兼容与测试
 
-数据库 schema 21–24 增加执行账本、持久停止请求、交付发件记录和回执，以及作用域采集计数，
+数据库 schema 21–25 增加执行账本、持久停止请求、交付发件记录和回执，以及作用域采集和采样缺口计数，
 保留既有物理表名和事件内容。
 旧程序会拒绝新版 schema；降级使用升级前备份。历史签名包维持原有格式。
 
@@ -385,6 +393,17 @@ go test -race ./internal/handoff ./internal/daemon ./internal/store ./internal/f
 
 回归测试覆盖并发接收与启动权、显式重执行、来源隔离、参数冲突、过期、重开数据库、
 历史写入失败回滚、有界分页、取消查询、真实命令、输出留存、独占执行器及结束事件恢复。
+在具备可写 cgroup v2 权限的 Linux 主机上，运行真实崩溃和身份重用回归：
+
+```sh
+AGENTPROV_TEST_REQUIRE_CGROUP=1 go test -count=1 -v ./internal/handoff ./internal/record \
+  -run 'TestExecutorRecoversLiveScope|TestRecoveredScope'
+```
+
+测试让执行器异常退出、命令继续运行，再检查停止请求、自然退出、原超时期限、
+单次副作用、签名交付及旁路对照进程。同时验证同名 cgroup 替换，以及 boot、
+文件系统和 cgroup 身份不匹配时的处置。
+
 `scripts/accept_execution_handoff.py` 通过独立 Daemon 的公共 API 验证并发 CSV 分析、
 文件产物、重试和取消。该脚本使用明确标注的调用标识 fixture；原生 harness 接入和
 证据传输分别验收。

@@ -54,7 +54,8 @@ func (e *Executor) Start(ctx context.Context) (func() error, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := e.recover(ctx); err != nil {
+	recovered, err := e.recover(ctx)
+	if err != nil {
 		lock.Close()
 		return nil, err
 	}
@@ -66,7 +67,7 @@ func (e *Executor) Start(ctx context.Context) (func() error, error) {
 		defer close(done)
 		defer lock.Close()
 		defer e.running.Store(false)
-		result = e.loop(runCtx, concurrency, interval)
+		result = e.loop(runCtx, concurrency, interval, recovered)
 	}()
 	var once sync.Once
 	return func() error {
@@ -83,11 +84,18 @@ type executionDone struct {
 	err error
 }
 
-func (e *Executor) loop(ctx context.Context, concurrency int, interval time.Duration) (result error) {
+func (e *Executor) loop(ctx context.Context, concurrency int, interval time.Duration, recovered []recoveredExecution) (result error) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	done := make(chan executionDone, concurrency)
+	done := make(chan executionDone, max(concurrency, len(recovered)))
 	active := map[string]context.CancelFunc{}
+	for _, task := range recovered {
+		execCtx, cancel := context.WithCancel(ctx)
+		active[task.attempt.ID] = cancel
+		go func(task recoveredExecution) {
+			done <- executionDone{task.attempt.ID, e.monitorRecovered(execCtx, task, interval)}
+		}(task)
+	}
 	defer func() {
 		if result == context.Canceled && ctx.Err() != nil {
 			result = nil
@@ -323,42 +331,74 @@ func (e *Executor) failAttempt(a Attempt, r record.Result, cause error) error {
 	return err
 }
 
-func (e *Executor) recover(ctx context.Context) error {
+func (e *Executor) recover(ctx context.Context) (recovered []recoveredExecution, err error) {
+	defer func() {
+		if err != nil {
+			for _, task := range recovered {
+				task.scope.Close()
+			}
+		}
+	}()
 	var after int64
 	for {
 		attempts, err := e.attempts(ctx, []ExecutionState{Starting, Running}, after, 100)
 		if err != nil {
-			return err
+			return recovered, err
 		}
 		if len(attempts) == 0 {
-			return e.recoverPendingCapture(ctx)
+			return recovered, e.recoverPendingCapture(ctx)
 		}
 		for _, a := range attempts {
 			after = a.Sequence
 			previous, _, err := readCheckpoint(ctx, e.Ledger.DB, a)
 			if err != nil {
-				return err
+				return recovered, err
 			}
 			state := a.State
 			state.Execution, state.Capture = Unknown, Incomplete
 			c := Checkpoint{State: state, Reason: "executor_restarted_unknown"}
+			var live *record.RecoveredScope
 			if previous != nil && previous.Scope != nil {
+				c.Stdout = &Output{State: "unknown", Reason: "executor_restart"}
+				c.Stderr = &Output{State: "unknown", Reason: "executor_restart"}
 				r, err := e.recoverCompletion(ctx, a, *previous.Scope)
 				if err != nil {
-					return err
+					return recovered, err
 				}
 				if r != nil {
 					c.Result, c.Reason = r, "execution_end_recovered"
 					c.State.Execution, err = observedExecution(*r)
 					if err != nil {
-						return err
+						return recovered, err
 					}
-					c.Stdout = &Output{State: "unknown", Reason: "executor_restart"}
-					c.Stderr = &Output{State: "unknown", Reason: "executor_restart"}
+				} else {
+					live, c.Recovery = recoverScope(*previous.Scope)
+					if live != nil {
+						c.State.Execution, c.Reason = Running, "execution_scope_recovered"
+					}
 				}
 			}
-			if _, err := e.saveCheckpoint(ctx, a, c); err != nil {
-				return err
+			if live != nil && len(recovered) >= 32 {
+				live.Close()
+				return recovered, fmt.Errorf("too many live scopes to recover")
+			}
+			var deadline time.Time
+			if live != nil && previous.Scope.DeadlineAt != "" {
+				deadline, err = time.Parse(time.RFC3339Nano, previous.Scope.DeadlineAt)
+				if err != nil {
+					live.Close()
+					return recovered, fmt.Errorf("invalid saved execution deadline: %w", err)
+				}
+			}
+			updated, err := e.saveCheckpoint(ctx, a, c)
+			if err != nil {
+				if live != nil {
+					live.Close()
+				}
+				return recovered, err
+			}
+			if live != nil {
+				recovered = append(recovered, recoveredExecution{attempt: updated, scope: live, deadline: deadline})
 			}
 		}
 	}

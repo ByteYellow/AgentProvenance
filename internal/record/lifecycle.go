@@ -15,20 +15,22 @@ import (
 // ExecutionScope is prepared before exec and then enriched with the observed
 // root PID and saved start event. A logical fallback cgroup is not a kernel ID.
 type ExecutionScope struct {
-	RunID          string `json:"run_id"`
-	RolloutID      string `json:"rollout_id"`
-	AttemptID      string `json:"attempt_id"`
-	SessionID      string `json:"session_id"`
-	ToolCallID     string `json:"tool_call_id"`
-	ProcessID      string `json:"process_id"`
-	BaseSnapshotID string `json:"base_snapshot_id"`
-	BindingID      string `json:"binding_id"`
-	CgroupID       string `json:"cgroup_id"`
-	ScopeKind      string `json:"scope_kind"`
-	Workdir        string `json:"workdir"`
-	StartedAt      string `json:"started_at"`
-	RootPID        int64  `json:"root_pid,omitempty"`
-	StartEventID   string `json:"start_event_id,omitempty"`
+	RunID          string               `json:"run_id"`
+	RolloutID      string               `json:"rollout_id"`
+	AttemptID      string               `json:"attempt_id"`
+	SessionID      string               `json:"session_id"`
+	ToolCallID     string               `json:"tool_call_id"`
+	ProcessID      string               `json:"process_id"`
+	BaseSnapshotID string               `json:"base_snapshot_id"`
+	BindingID      string               `json:"binding_id"`
+	CgroupID       string               `json:"cgroup_id"`
+	ScopeKind      string               `json:"scope_kind"`
+	Workdir        string               `json:"workdir"`
+	StartedAt      string               `json:"started_at"`
+	RootPID        int64                `json:"root_pid,omitempty"`
+	StartEventID   string               `json:"start_event_id,omitempty"`
+	RecoveryAnchor *ScopeRecoveryAnchor `json:"recovery_anchor,omitempty"`
+	DeadlineAt     string               `json:"deadline_at,omitempty"`
 }
 
 // ScopeObservation is read through the still-owned cgroup descriptor, before

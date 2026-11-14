@@ -63,14 +63,27 @@ The daemon's existing bearer, Origin and Fetch Metadata checks remain in effect.
 
 The worker holds an exclusive store lock, runs at most the configured number of
 commands (default two), and keeps pending jobs in SQLite. On restart it recovers
-saved execution-end events; unresolved starts become `unknown`. Recovery never
-signals a process using only a historical PID. Stop requests for unresolved
-attempts remain visible for operator reconciliation.
+saved execution-end events. When a Linux command is still running, it verifies
+the saved boot, cgroup filesystem and kernel cgroup ID before reopening that
+scope. The recovered task occupies an execution slot and retains its original
+deadline and durable stop requests. The command is not launched again.
+Unresolved starts and legacy scopes without a recovery anchor become `unknown`;
+their stop requests remain visible for operator reconciliation.
+
+The checkpoint's `recovery_report` records scope observations and any stop
+result. A confirmed stop produces `cancelled`; a confirmed timeout produces
+`failed`. If the scope empties naturally and no execution-end record survived,
+execution remains `unknown`, with no invented exit code. Lost output remains
+unknown and capture remains `incomplete`. The binding closes with the empty-scope
+observation in the same transaction as the checkpoint. Signed delivery retains
+these observations. Recovery controls only the verified cgroup descriptor,
+including after a same-name path replacement; it never falls back to an old PID.
 
 On Linux with a writable cgroup v2 subtree, cancellation, execution timeout and
 post-launch checkpoint failure stop the owned cgroup using `cgroup.kill`. This
 includes descendants that create a separate process group with `setsid`. The
-executor holds the cgroup directory open and never adopts a pre-existing scope.
+executor holds the cgroup directory open. New commands use newly created scopes;
+restart recovery can reopen only a scope matching its saved identity.
 After the root is reaped, it waits up to two seconds for `cgroup.events` to report
 an empty subtree. Other concurrent execution scopes are left running.
 
@@ -475,8 +488,8 @@ native harness and Sensor acceptance.
 
 ## Compatibility and tests
 
-Database schemas 21-24 add the execution ledger, durable stop requests, delivery
-outbox/receipts and per-scope capture accounting without renaming legacy tables
+Database schemas 21-25 add the execution ledger, durable stop requests, delivery
+outbox/receipts, per-scope capture accounting and sampling-gap counts without renaming legacy tables
 or rewriting existing events.
 Older binaries reject the newer schema; use a backup
 for a downgrade. Historic signed packages retain their original format.
@@ -491,6 +504,18 @@ The tests cover concurrent admission and worker claims, explicit reexecution,
 source isolation, parameter conflicts, expiry, reopen recovery, transactional
 history failures, bounded pagination, query cancellation, real command execution,
 output retention, exclusive ownership and recovery of saved completion events.
+On a Linux host with writable cgroup v2 permissions, run the real crash and
+identity-reuse regressions with:
+
+```sh
+AGENTPROV_TEST_REQUIRE_CGROUP=1 go test -count=1 -v ./internal/handoff ./internal/record \
+  -run 'TestExecutorRecoversLiveScope|TestRecoveredScope'
+```
+
+These tests terminate the owning worker while its command survives, then check
+stop requests, natural exit, the original deadline, single execution, signed
+delivery and an unrelated live process. They also replace a cgroup at the same
+path and reject mismatched boot, filesystem and cgroup identities.
 `scripts/accept_execution_handoff.py` exercises an isolated daemon's public API
 with concurrent CSV analysis, output artifacts, retry and cancellation. It uses
 explicit fixture call IDs; native harness integration and evidence transfer have

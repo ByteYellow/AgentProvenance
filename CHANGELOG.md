@@ -8,6 +8,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 - Add an opt-in durable execution handoff API with scoped source identities,
   idempotent admission, explicit retries, stop requests and signed evidence receipts.
+- Recover surviving Linux execution scopes after a worker crash by checking the
+  saved boot, filesystem and cgroup identity. Preserve the original deadline and
+  stop requests without rerunning commands; deliver scope observations while
+  keeping lost output, exit status and capture gaps explicit.
 - Integrate shared native capture with per-execution cgroup boundaries and
   durable scope accounting, retaining capture gaps separately from command results.
 - Preserve procfs sampling triggers separately from observed task identity so
