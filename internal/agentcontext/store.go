@@ -129,6 +129,7 @@ func (s Service) saveTx(ctx context.Context, tx *sql.Tx, runID string, src Sourc
 			SessionMetadata: codexSessionMetadata(src, r),
 			Notebook:        r.Notebook,
 			NotebookRequest: r.NotebookRequest,
+			Browser:         r.Browser,
 		}
 		if entry.AgentID == "" {
 			entry.AgentID = src.AgentID

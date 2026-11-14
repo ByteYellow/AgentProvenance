@@ -42,6 +42,7 @@ type Source struct {
 	BindingEvidence    []string       `json:"binding_evidence,omitempty"`
 	Workdir            string         `json:"workdir,omitempty"`
 	Notebook           *NotebookScope `json:"notebook,omitempty"`
+	Browser            *BrowserScope  `json:"browser,omitempty"`
 }
 
 // Counts are observations over one processing range, not estimates of all
@@ -145,6 +146,7 @@ type Entry struct {
 	SessionMetadata *SessionMetadata `json:"session_metadata,omitempty"`
 	Notebook        *NotebookMessage `json:"notebook,omitempty"`
 	NotebookRequest *NotebookRequest `json:"notebook_request,omitempty"`
+	Browser         *BrowserEvent    `json:"browser,omitempty"`
 	Attachments     []AttachmentRef  `json:"attachments,omitempty"`
 }
 
@@ -173,6 +175,7 @@ type Record struct {
 	ApplicationVersion *string
 	Notebook           *NotebookMessage
 	NotebookRequest    *NotebookRequest
+	Browser            *BrowserEvent
 	Attachments        []AttachmentInput
 	rawProjection      string
 	hookCapture        *hookCaptureMetadata

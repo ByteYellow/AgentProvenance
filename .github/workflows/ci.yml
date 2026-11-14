@@ -66,6 +66,27 @@ jobs:
       - run: PYTHONPATH=python python -m unittest discover -s python/tests -p 'test_notebook*.py' -v
       - run: PYTHONPATH=python python scripts/accept_notebook_mcp.py --output "$RUNNER_TEMP/notebook-mcp-check"
 
+  browser-entry:
+    name: Native Chromium context
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23.x"
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: python/browser-requirements.txt
+      - run: python -m pip install -r python/browser-requirements.txt
+      - run: python -m playwright install --with-deps chromium
+      - run: PYTHONPATH=python python -m unittest discover -s python/tests -p 'test_browser.py' -v
+      - run: go build -o "$RUNNER_TEMP/agentprov-browser-check" ./cmd/agentprov
+      - run: PYTHONPATH=python python scripts/accept_browser.py --output "$RUNNER_TEMP/browser-check" --agentprov "$RUNNER_TEMP/agentprov-browser-check"
+
   test:
     name: Go tests
     runs-on: ubuntu-latest

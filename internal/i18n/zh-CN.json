@@ -2536,6 +2536,7 @@
   "JSONL or Zstandard transcript file": "JSONL 或 Zstandard 会话日志文件",
   "claude, codex, kimi, grok, or deepseek": "claude、codex、kimi、grok 或 deepseek",
   "claude, codex, kimi, grok, deepseek, or jupyter": "claude、codex、kimi、grok、deepseek 或 jupyter",
+  "claude, codex, kimi, grok, deepseek, jupyter, or browser": "claude、codex、kimi、grok、deepseek、jupyter 或 browser",
   "Project saved context into the evidence graph without executing tools": "将已保存的上下文投影到证据图，不执行工具",
   "expected native session id; required if absent in the source": "预期的原生会话 ID；来源没有记录时必须指定",
   "List recorded messages, tools, snapshots, and source references": "列出已记录的消息、工具、快照及来源引用",

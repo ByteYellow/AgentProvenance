@@ -6,6 +6,10 @@
 
 ## 未发布
 
+### 浏览器上下文
+
+- 新增可选的独立 Playwright/Chromium 入口及原生上下文导入。页面、frame、请求、重定向和 worker 身份独立于工具操作与留存档位保存。写盘前处理传输字段，复用截图附件，并提供并发浏览器和签名导入导出的验收脚本。详见[浏览器指南](docs/browser-context.zh-CN.md)。
+
 ### Notebook 上下文
 
 - 新增可选的 stdio MCP Notebook 入口，保持 kernel 变量，支持明确重启与只读结果查询。

@@ -4,6 +4,14 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+### Browser context
+
+- Add an optional owned Playwright/Chromium entry and native context importer.
+  Preserve scoped page, frame, request, redirect and worker identities separately
+  from tool operations and retention presets. Apply transport-field privacy
+  projection, reuse screenshot attachments, and add concurrent browser and signed
+  round-trip acceptance. See the [browser guide](docs/browser-context.md).
+
 ### Notebook context
 
 - Add an optional stdio MCP Notebook entry with a persistent kernel, explicit

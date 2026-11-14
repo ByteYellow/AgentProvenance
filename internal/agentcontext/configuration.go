@@ -27,6 +27,9 @@ var configurationPaths = []struct {
 }
 
 func missingSnapshots(harness string, records []Record) []string {
+	if harness == "browser" {
+		return []string{"browser_observation_completeness", "system_event_attribution"}
+	}
 	if harness == "jupyter" {
 		return []string{"kernel_observation_completeness", "system_event_attribution"}
 	}

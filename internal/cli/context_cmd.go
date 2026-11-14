@@ -40,7 +40,7 @@ func contextCmd(dataDir *string) *cobra.Command {
 	importCmd := &cobra.Command{Use: "import", Short: "Import one explicitly selected transcript without changing earlier evidence", Args: cobra.NoArgs}
 	capture.bind(importCmd)
 	importCmd.Flags().StringVar(&opts.Path, "file", "", "JSONL or Zstandard transcript file")
-	importCmd.Flags().StringVar(&opts.Harness, "harness", "", "claude, codex, kimi, grok, deepseek, or jupyter")
+	importCmd.Flags().StringVar(&opts.Harness, "harness", "", "claude, codex, kimi, grok, deepseek, jupyter, or browser")
 	importCmd.Flags().StringVar(&opts.SessionID, "session", "", "expected native session id; required if absent in the source")
 	importCmd.Flags().StringVar(&opts.AgentID, "agent", "", "source-provided agent id, when separate from session identity")
 	importCmd.Flags().Int64Var(&opts.AfterLine, "after-line", 0, "retain records through this resume cursor as prior context, not current execution")
