@@ -31,6 +31,17 @@ func (c Client) Executions(ctx context.Context, source handoff.Source, after int
 	return result, err
 }
 
+func (c Client) ExecutionLinks(ctx context.Context, opts handoff.ExecutionLinksOptions) (handoff.ExecutionLinksPage, error) {
+	var result handoff.ExecutionLinksPage
+	q := url.Values{"run": {opts.RunID}, "direction": {opts.Direction}, "harness": {opts.Harness},
+		"session": {opts.SessionID}, "tool_call": {opts.ToolCallID}, "cursor": {opts.Cursor}}
+	if opts.Limit != 0 {
+		q.Set("limit", fmt.Sprint(opts.Limit))
+	}
+	err := c.executionJSON(ctx, http.MethodGet, "/v1/execution-links?"+q.Encode(), nil, &result)
+	return result, err
+}
+
 func (c Client) StopExecution(ctx context.Context, id, operation string) (handoff.StopReceipt, error) {
 	var result handoff.StopReceipt
 	err := c.executionJSON(ctx, http.MethodPost, "/v1/executions/"+url.PathEscape(id)+"/stop",

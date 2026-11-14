@@ -62,6 +62,9 @@ func forensicsCollectExecutionCmd(dataDir, daemonURL *string) *cobra.Command {
 			receiver := &handoff.DeliveryReceiver{DB: db, Paths: paths, ID: receiverID, SignKey: key, Target: config.Target, TargetKey: pub, Caller: config.Principal()}
 			ctx, cancel := context.WithTimeout(cmd.Context(), timeout)
 			defer cancel()
+			if receiver.SourceAdmissionRef, err = receiver.RecordAdmission(ctx, admission.Attempt.Request, admission.Attempt); err != nil {
+				return err
+			}
 			client := daemon.NewClient(*daemonURL, *dataDir)
 			result, err := client.CollectExecution(ctx, handoff.IdentityOf(admission.Attempt), operation, receiver)
 			if err == nil || len(result.Receipt) != 0 {

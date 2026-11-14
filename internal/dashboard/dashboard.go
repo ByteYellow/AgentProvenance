@@ -29,6 +29,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/compliance"
+	"github.com/byteyellow/agentprovenance/internal/handoff"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/redact"
@@ -165,6 +166,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/frameworks", s.frameworks)
 	mux.HandleFunc("GET /api/compliance", s.compliance)
 	mux.Handle("GET /api/context/", http.StripPrefix("/api", (agentcontext.Service{DB: s.DB}).ReadHandler()))
+	mux.Handle("GET /api/execution-links", (handoff.EvidenceService{DB: s.DB}).ReadHandler())
 	s.replayRoutes(mux)
 	return s.sameOriginGuard(mux)
 }

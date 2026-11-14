@@ -131,6 +131,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/graph/explain", s.graphExplain)
 	mux.HandleFunc("GET /v1/graph/lens", s.graphLens)
 	mux.Handle("GET /v1/context/", http.StripPrefix("/v1", (agentcontext.Service{DB: s.DB}).ReadHandler()))
+	mux.Handle("GET /v1/execution-links", (handoff.EvidenceService{DB: s.DB}).ReadHandler())
 	mux.HandleFunc("GET /v1/evidence/manifest", s.evidenceManifest)
 	mux.HandleFunc("POST /v1/evidence/manifest", s.materializeEvidenceManifest)
 	mux.HandleFunc("POST /v1/forensics/export", s.forensicsExport)

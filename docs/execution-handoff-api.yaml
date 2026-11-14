@@ -11,6 +11,53 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /v1/execution-links:
+    get: &readExecutionLinks
+      operationId: readExecutionLinks
+      summary: Read bidirectional links from locally saved admission and delivery evidence
+      description: >
+        This read API does not contact an executor. Outgoing links start at a caller Run;
+        incoming links start at an execution Run. Native filters apply within a bounded
+        scanned page, so an empty filtered page can still have a next_cursor.
+        Incoming links select the latest saved package version per admission.
+      parameters:
+        - { name: run, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 512 } }
+        - { name: direction, in: query, schema: { type: string, enum: [outgoing, incoming], default: outgoing } }
+        - { name: harness, in: query, schema: { type: string, maxLength: 512 } }
+        - { name: session, in: query, schema: { type: string, maxLength: 512 } }
+        - { name: tool_call, in: query, schema: { type: string, maxLength: 512 } }
+        - { name: cursor, in: query, schema: { type: string, maxLength: 4096 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: Saved links with qualified identities and separate evidence states
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExecutionLinksPage' }
+        default:
+          description: English read error; malformed queries fail instead of returning a partial result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [schema_version, error]
+                properties:
+                  schema_version: { const: agentprovenance.execution_links/v1 }
+                  error:
+                    type: object
+                    required: [code, message]
+                    properties:
+                      code: { enum: [invalid_argument, evidence_read_failed, method_not_allowed] }
+                      message: { type: string }
+  /api/execution-links:
+    get:
+      <<: *readExecutionLinks
+      operationId: readDashboardExecutionLinks
+      security: []
+      description: >
+        Dashboard alias for the local saved-evidence query, protected by its existing
+        Host and Origin guard instead of daemon bearer authentication. It supports
+        the same bounded pagination and native identity filters.
   /v1/executions:
     post:
       operationId: submitExecution
@@ -236,6 +283,46 @@ components:
         target_key_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
         receiver_id: { type: string, minLength: 1 }
         receiver_key_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+    DeliveryEvidence:
+      type: object
+      additionalProperties: false
+      required: [schema_version, admission_ref, manifest, receipt, target_verifier, receiver_verifier]
+      properties:
+        schema_version: { const: agentprovenance.execution_delivery_evidence/v1 }
+        admission_ref: { type: string, pattern: '^sha256:[0-9a-f]{64}$' }
+        manifest: { type: string, contentEncoding: base64, maxLength: 87384, description: Original signed DSSE manifest bytes }
+        receipt: { type: string, contentEncoding: base64, maxLength: 87384, description: Original signed DSSE receiving receipt bytes }
+        target_verifier: { type: string, pattern: '^[0-9a-f]{64}$', description: Public Ed25519 verification material; pinned by the source admission fingerprint }
+        receiver_verifier: { type: string, pattern: '^[0-9a-f]{64}$', description: Public Ed25519 verification material; pinned by the source admission fingerprint }
+    ExecutionLink:
+      type: object
+      additionalProperties: false
+      required: [identity, admission_ref, basis, issues]
+      properties:
+        identity: { $ref: '#/components/schemas/ExecutionIdentity' }
+        admission_ref: { type: string, pattern: '^sha256:[0-9a-f]{64}$' }
+        admission: { $ref: '#/components/schemas/SourceAdmission' }
+        delivery_ref: { type: string, pattern: '^sha256:[0-9a-f]{64}$' }
+        manifest: { $ref: '#/components/schemas/DeliveryManifest' }
+        receipt: { $ref: '#/components/schemas/DeliveryReceipt' }
+        checkpoint: { $ref: '#/components/schemas/Checkpoint' }
+        basis:
+          enum: [authenticated_admission, authenticated_delivery, unanchored_delivery]
+          description: Admission-only, both signatures match the source anchor, or signed delivery whose source anchor is absent from this store
+        issues: { type: array, items: { type: string } }
+    ExecutionLinksPage:
+      type: object
+      additionalProperties: false
+      required: [schema_version, run_id, direction, links, scanned, limit, has_more]
+      properties:
+        schema_version: { const: agentprovenance.execution_links/v1 }
+        run_id: { type: string }
+        direction: { enum: [outgoing, incoming] }
+        links: { type: array, items: { $ref: '#/components/schemas/ExecutionLink' } }
+        scanned: { type: integer, minimum: 0, maximum: 100 }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+        has_more: { type: boolean }
+        next_cursor: { type: string, maxLength: 4096 }
     Envelope:
       type: object
       additionalProperties: false

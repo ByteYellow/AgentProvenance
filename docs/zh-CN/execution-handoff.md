@@ -199,9 +199,33 @@ Hook 不自动授权。获准后，包装器提交请求、等待执行、验证
 会随签名 Bundle 导出。它记录接收事实；执行结果和交付确认继续使用各自的证据。
 传输恢复仍使用原来的路由文件。
 
+收到签名包后，同一事务会保存 `execution_delivery_evidence` 对象，保留原始签名清单、
+接收回执和公开验签材料。调用端接收记录中的指纹限定所用公钥。原生路由和
+`forensics collect-execution` 都会保存这条关系；重复收取已接收的包可以补上缺少的
+关系记录，命令沿用原尝试。签名 Bundle 导出会保留这些对象。
+
 工具输出从本地已验证的证据投影读取，沿用脱敏规则和每路 1 MiB 留存上限，
 发生截断时会提示。此路径需要保存工具结果，可使用 detailed，或显式选择
 `--capture basic --capture-tool-results=true`。预检不会自动改变用户的省略设置。
+
+### 查询已保存的执行关联
+
+在本地 Daemon 调用 `GET /v1/execution-links?run=<caller-run>&direction=outgoing`，
+或在 Dashboard 调用 `GET /api/execution-links`，查看调用侧的执行关系。
+使用 `run=<execution-run>&direction=incoming` 可从执行侧查询来源调用。
+响应分别保留 producer、命名空间、harness、原生会话与调用、目标实例与代次、派发及尝试。
+可选 `harness`、`session`、`tool_call` 筛选作用于每个已扫描页面；只要 `has_more`
+为 true，就继续使用 `next_cursor`，包括筛选后为空的页面。`limit` 范围是 1-100。
+
+读取时核对对象哈希、两端签名及调用端记录中的公钥指纹，按包版本返回每条接收记录的
+最新交付，历史包继续保留。`manifest.state` 是执行端快照，`receipt.status=persisted`
+记录接收端已保存证据；发送端是否收到 ACK 需查其对应记录。
+只导入执行端 Bundle 时，`basis=unanchored_delivery` 和
+`source_admission_not_included` 标明缺少调用侧记录。再导入独立签名的调用侧 Bundle
+即可解析该引用。哈希、签名或身份冲突会返回错误。
+
+字段及错误格式见[接口定义](../execution-handoff-api.yaml)。查询已保存关联无需连接
+执行器，也不读取其原始工作目录。
 
 ### 验证真实 Agent 任务
 

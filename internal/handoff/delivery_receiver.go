@@ -21,15 +21,16 @@ import (
 )
 
 type DeliveryReceiver struct {
-	DB        *sql.DB
-	Paths     store.Paths
-	ID        string
-	SignKey   ed25519.PrivateKey
-	Target    Target
-	TargetKey ed25519.PublicKey
-	Caller    Principal
-	Now       func() time.Time
-	slot      deliverySlot
+	DB                 *sql.DB
+	Paths              store.Paths
+	ID                 string
+	SignKey            ed25519.PrivateKey
+	Target             Target
+	TargetKey          ed25519.PublicKey
+	Caller             Principal
+	Now                func() time.Time
+	SourceAdmissionRef string
+	slot               deliverySlot
 }
 
 // Receive expects an identity saved from an authenticated admission. Trust is
@@ -56,6 +57,13 @@ func (s *DeliveryReceiver) Receive(ctx context.Context, expected ExecutionIdenti
 	if receipt, path, err := s.saved(ctx, s.DB, m, manifestHash); err == nil {
 		if err := checkDeliveryFile(ctx, path, m); err != nil {
 			return nil, err
+		}
+		if s.SourceAdmissionRef != "" {
+			if err := store.WithWriteTx(ctx, s.DB, func(tx *sql.Tx) error {
+				return s.saveDeliveryEvidence(ctx, tx, m, envelope, receipt)
+			}); err != nil {
+				return nil, err
+			}
 		}
 		return receipt, nil
 	} else if !errors.Is(err, ErrNotFound) {
@@ -115,7 +123,7 @@ func (s *DeliveryReceiver) receiveNew(ctx context.Context, expected ExecutionIde
 		func(tx *sql.Tx, archivePath string) error {
 			if existing, _, err := s.saved(ctx, tx, m, manifestHash); err == nil {
 				receipt = existing
-				return nil
+				return s.saveDeliveryEvidence(ctx, tx, m, envelope, receipt)
 			} else if !errors.Is(err, ErrNotFound) {
 				return err
 			}
@@ -138,7 +146,10 @@ func (s *DeliveryReceiver) receiveNew(ctx context.Context, expected ExecutionIde
 				(receipt_key,target_key,attempt_id,receiver_id,package_version,manifest_json,manifest_sha256,bundle_path,receipt_json,created_at_ns)
 				VALUES (?,?,?,?,?,?,?,?,?,?)`, receiptKey(m), targetKey(m.Identity.Target), expected.AttemptID, s.ID,
 				m.PackageVersion, envelope, manifestHash, archivePath, receipt, now.UnixNano())
-			return err
+			if err != nil {
+				return err
+			}
+			return s.saveDeliveryEvidence(ctx, tx, m, envelope, receipt)
 		})
 	if err != nil {
 		return nil, err
@@ -287,10 +298,7 @@ func checkDeliveryCheckpoint(ctx context.Context, path string, m DeliveryManifes
 		}
 		c := obj.Payload
 		if obj.Schema != "agentprov.provenance.object.v1" || obj.Type != checkpointType || obj.RunID != b.RunID ||
-			c.SchemaVersion != SchemaVersion || c.Source != m.Identity.Source || c.Target != m.Identity.Target ||
-			c.AttemptID != m.Identity.AttemptID || c.DispatchID != m.Identity.DispatchID || c.RequestHash != m.Identity.RequestHash ||
-			c.DigestVersion != m.Identity.DigestVersion || c.Revision < 1 || c.Revision > m.AttemptRevision ||
-			c.State.Execution != m.State.Execution || c.State.Capture != m.State.Capture {
+			!checkpointMatchesManifest(c, m) {
 			return fmt.Errorf("%w: delivery checkpoint identity or state mismatch", ErrConflict)
 		}
 		return ctx.Err()

@@ -6,6 +6,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Cross-sandbox execution
 
+- Query saved execution links in both directions through the daemon and Dashboard
+  read APIs. Preserve signed delivery and receiving receipts with caller anchors,
+  retain late-package history, and identify caller evidence absent from an import.
 - Preserve native caller admission as immutable provenance with qualified call
   identity, retry lineage and configured signing-key fingerprints, including
   signed Bundle round trips independently of temporary route files.

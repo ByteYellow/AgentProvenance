@@ -67,6 +67,10 @@ components:
         native_capture: { type: object, additionalProperties: true }
       additionalProperties: true
 paths:
+  /v1/execution-links:
+    $ref: './execution-handoff-api.yaml#/paths/~1v1~1execution-links'
+  /api/execution-links:
+    $ref: './execution-handoff-api.yaml#/paths/~1api~1execution-links'
   /v1/executions:
     get:
       summary: List execution attempts for one native Tool Call

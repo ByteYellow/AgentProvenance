@@ -100,6 +100,10 @@ components:
           additionalProperties: true
       additionalProperties: true
 paths:
+  /v1/execution-links:
+    $ref: '../execution-handoff-api.yaml#/paths/~1v1~1execution-links'
+  /api/execution-links:
+    $ref: '../execution-handoff-api.yaml#/paths/~1api~1execution-links'
   /v1/executions:
     get:
       summary: 查询一个原生工具调用的执行尝试

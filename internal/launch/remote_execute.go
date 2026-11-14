@@ -95,7 +95,7 @@ func ExecuteRemoteCall(ctx context.Context, routePath, requestPath, nativeComman
 		exitCode = 1
 		resultErr = errors.Join(resultErr, ctx.Err(), stopErr)
 	}()
-	if _, err := receiver.RecordAdmission(ctx, request, admission.Attempt); err != nil {
+	if receiver.SourceAdmissionRef, err = receiver.RecordAdmission(ctx, request, admission.Attempt); err != nil {
 		return 1, fmt.Errorf("remote execution accepted but source evidence could not be saved; reuse the prepared request to recover: %w", err)
 	}
 	admissionPath := strings.TrimSuffix(requestPath, ".json") + "-admission.json"

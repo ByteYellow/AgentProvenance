@@ -53,6 +53,27 @@ func waitAPIExecution(t *testing.T, client Client, id string, wanted handoff.Exe
 	return report
 }
 
+func TestExecutionLinksAPIKeepsDaemonAuthentication(t *testing.T) {
+	s := testServer(t)
+	s.AuthToken = "read-fixture-token"
+	h := httptest.NewServer(s.Handler())
+	defer h.Close()
+	c := Client{BaseURL: h.URL, HTTP: h.Client()}
+	opts := handoff.ExecutionLinksOptions{RunID: "saved-run", Direction: "incoming"}
+	if _, err := c.ExecutionLinks(context.Background(), opts); err == nil {
+		t.Fatal("unauthenticated execution links exposed")
+	}
+	c.Token = s.AuthToken
+	page, err := c.ExecutionLinks(context.Background(), opts)
+	if err != nil || page.SchemaVersion != handoff.ExecutionLinksSchema || page.Direction != "incoming" || len(page.Links) != 0 {
+		t.Fatalf("execution read route: %+v %v", page, err)
+	}
+	opts.Direction = "invalid"
+	if _, err := c.ExecutionLinks(context.Background(), opts); err == nil {
+		t.Fatal("invalid query accepted")
+	}
+}
+
 func TestExecutionAPIRequestLifetimeRetryAndStop(t *testing.T) {
 	s, request := executionServer(t)
 	server := httptest.NewServer(s.Handler())

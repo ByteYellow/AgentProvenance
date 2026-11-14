@@ -254,11 +254,41 @@ credentials or local configuration paths and is included in signed Bundle export
 It records admission; later results and delivery acknowledgment retain their
 own evidence. The original route files remain the inputs for transport recovery.
 
+After receiving a signed package, the same transaction saves an
+`execution_delivery_evidence` object with the original manifest, receipt and
+public verification material. The caller admission pins those public keys by
+fingerprint. Both native routing and `forensics collect-execution` save this
+relationship; retrying a previously received package can add its missing link
+without rerunning the command. Signed Bundle exports retain these objects.
+
 Tool output is read from the locally verified evidence projection, subject to
 the existing redaction and 1 MiB-per-stream retention limit. Truncation is reported.
 This path requires retained tool results; use detailed capture or explicitly
 select `--capture basic --capture-tool-results=true`. Configuration preflight
 does not silently change a selected omission policy.
+
+### Query saved execution links
+
+Use `GET /v1/execution-links?run=<caller-run>&direction=outgoing` on the local
+daemon, or `GET /api/execution-links` on the Dashboard. Query
+`run=<execution-run>&direction=incoming` to return toward the originating call.
+The response retains producer, namespace, harness, native session/call, target
+instance/generation, dispatch and attempt. Optional `harness`, `session` and
+`tool_call` filters apply within each scanned page. Follow `next_cursor` while
+`has_more` is true, including after an empty filtered page. `limit` is 1-100.
+
+The reader verifies object hashes, both signatures and the admission's pinned
+fingerprints. It returns the latest saved package version per admission and
+leaves prior immutable packages available as evidence. `manifest.state` is the
+executor's snapshot; `receipt.status=persisted` is the receiver's observation.
+The signed receiving receipt does not report whether the sender received its ACK.
+If only the execution Bundle was imported, `basis=unanchored_delivery` and
+`source_admission_not_included` identify the missing caller record. Importing
+the separately signed caller Bundle resolves that reference. Hash, signature
+or identity conflicts fail the query rather than producing an empty page.
+
+The [typed API](execution-handoff-api.yaml) describes these read responses.
+Reading stored links needs no running executor or access to its workspace.
 
 ### Verify a real agent task
 

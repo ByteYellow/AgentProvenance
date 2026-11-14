@@ -293,6 +293,10 @@ func TestNativeRemoteCommandSignedResultAndReplay(t *testing.T) {
 	if err := db.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id=? AND object_type='execution_source_admission'`, route.RunID).Scan(&admissionCount); err != nil || admissionCount != 1 {
 		t.Fatalf("replayed admission was duplicated: %d %v", admissionCount, err)
 	}
+	var proofCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id=? AND object_type='execution_delivery_evidence'`, admission.Attempt.LocalRunID).Scan(&proofCount); err != nil || proofCount != 1 {
+		t.Fatalf("native delivery link was not saved exactly once: %d %v", proofCount, err)
+	}
 	report, err := x.server.Execution.Ledger.Report(context.Background(), x.server.ExecutionCaller, admission.Attempt.ID)
 	if err != nil {
 		t.Fatal(err)
