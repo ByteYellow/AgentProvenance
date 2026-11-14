@@ -6,6 +6,11 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Cross-sandbox execution
 
+- Preserve native caller admission as immutable provenance with qualified call
+  identity, retry lineage and configured signing-key fingerprints, including
+  signed Bundle round trips independently of temporary route files.
+- Preserve cancellation handling after authenticated admission, including while
+  persisting source evidence or collecting results, and send a durable stop request.
 - Export explicitly selected local runs in one offline replay ZIP using
   `dashboard export --selection-file`. Keep independent session filters and
   exclusions, freeze one snapshot, and use the existing Run selector and Compare

@@ -279,6 +279,20 @@ func TestNativeRemoteCommandSignedResultAndReplay(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	var admissionRef string
+	if err := db.QueryRow(`SELECT hash FROM provenance_objects WHERE run_id=? AND object_type='execution_source_admission'`, route.RunID).Scan(&admissionRef); err != nil {
+		t.Fatalf("native source admission is missing from evidence storage: %v", err)
+	}
+	var source struct {
+		Identity handoff.ExecutionIdentity `json:"identity"`
+	}
+	if err := provenance.ReadObjectPayload(db, route.RunID, admissionRef, &source); err != nil || source.Identity != handoff.IdentityOf(admission.Attempt) {
+		t.Fatalf("source admission identity: %+v %v", source, err)
+	}
+	var admissionCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id=? AND object_type='execution_source_admission'`, route.RunID).Scan(&admissionCount); err != nil || admissionCount != 1 {
+		t.Fatalf("replayed admission was duplicated: %d %v", admissionCount, err)
+	}
 	report, err := x.server.Execution.Ledger.Report(context.Background(), x.server.ExecutionCaller, admission.Attempt.ID)
 	if err != nil {
 		t.Fatal(err)

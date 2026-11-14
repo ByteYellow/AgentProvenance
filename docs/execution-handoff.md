@@ -238,10 +238,21 @@ background Bash requests are rejected. Use the remote workdir for shared files.
 
 Requests and admissions are saved under
 `<data-dir>/execution-routes/<run-id>/`. Reinvoking the same prepared call recovers
-the existing attempt; changing its command is a conflict. A cancelled wrapper
-requests a durable stop and prints the saved admission for status reconciliation.
+the existing attempt; changing its command is a conflict. After authenticated
+admission, a cancelled wrapper requests a durable stop, including during local
+evidence persistence and collection. Reuse the prepared request to recover the
+attempt if cancellation prevented the admission file from being saved.
 Delivery errors leave the admission available for `forensics collect-execution`.
 Execution, capture and delivery states are printed separately.
+
+The router also saves a content-addressed `execution_source_admission` object
+in the caller Run. It records the qualified native call, dispatch and attempt,
+explicit-retry predecessor, authenticated principal and configured signing-key
+fingerprints. Repeated admission keeps the original object; a conflicting
+identity or fingerprint fails explicitly. This metadata carries no command body,
+credentials or local configuration paths and is included in signed Bundle export.
+It records admission; later results and delivery acknowledgment retain their
+own evidence. The original route files remain the inputs for transport recovery.
 
 Tool output is read from the locally verified evidence projection, subject to
 the existing redaction and 1 MiB-per-stream retention limit. Truncation is reported.
@@ -435,8 +446,8 @@ creates an additional package/version linked to the original digest.
 Disconnecting a transport or cancelling a query leaves execution unchanged.
 Stopping an attempt is a separate authenticated, idempotent operation. Its receipt
 confirms storage of the request; the checkpoint records the observed command
-outcome. Active noninteractive commands are cancelled through their process
-group. Descendants outside that group require separate scope reconciliation.
+outcome. An owned Linux cgroup includes descendants outside the root process
+group; other environments use the process-group fallback described above.
 
 ## Capability and receipt contract
 

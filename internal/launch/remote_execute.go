@@ -20,7 +20,7 @@ import (
 
 // ExecuteRemoteCall runs only after the harness has approved the rewritten
 // tool. Reinvocation reuses the saved request; it never invents a retry attempt.
-func ExecuteRemoteCall(ctx context.Context, routePath, requestPath, nativeCommand string, stdout, stderr io.Writer) (int, error) {
+func ExecuteRemoteCall(ctx context.Context, routePath, requestPath, nativeCommand string, stdout, stderr io.Writer) (exitCode int, resultErr error) {
 	route, err := ReadRemoteRoute(routePath)
 	if err != nil {
 		return 1, err
@@ -80,6 +80,24 @@ func ExecuteRemoteCall(ctx context.Context, routePath, requestPath, nativeComman
 		admission.Attempt.RequestHash != digest || admission.Attempt.DigestVersion != handoff.DigestVersion {
 		return 1, fmt.Errorf("remote admission does not match prepared command")
 	}
+	// Cancellation can arrive while saving admission or collecting evidence,
+	// not only during status polling. Stop only the authenticated attempt.
+	defer func() {
+		if ctx.Err() == nil {
+			return
+		}
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopCancel()
+		stop, stopErr := client.StopExecution(stopCtx, admission.Attempt.ID, "wrapper-stop-"+request.OperationID)
+		if stopErr == nil {
+			fmt.Fprintf(stderr, "agentprov: stop request %s; query the prepared request for its observed result\n", stop.State)
+		}
+		exitCode = 1
+		resultErr = errors.Join(resultErr, ctx.Err(), stopErr)
+	}()
+	if _, err := receiver.RecordAdmission(ctx, request, admission.Attempt); err != nil {
+		return 1, fmt.Errorf("remote execution accepted but source evidence could not be saved; reuse the prepared request to recover: %w", err)
+	}
 	admissionPath := strings.TrimSuffix(requestPath, ".json") + "-admission.json"
 	if err := saveRouteJSON(admissionPath, admission, true); err != nil {
 		return 1, fmt.Errorf("remote execution accepted but local admission could not be saved: %w", err)
@@ -87,15 +105,6 @@ func ExecuteRemoteCall(ctx context.Context, routePath, requestPath, nativeComman
 	fmt.Fprintf(stderr, "agentprov: remote attempt %s; source %s/%s; instance %s\n", admission.Attempt.ID, request.Source.SessionID, request.Source.ToolCallID, request.Target.InstanceID)
 	report, err := waitRemoteCall(ctx, client, admission, route.WaitCapture)
 	if err != nil {
-		if ctx.Err() != nil {
-			stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			stop, stopErr := client.StopExecution(stopCtx, admission.Attempt.ID, "wrapper-stop-"+request.OperationID)
-			stopCancel()
-			if stopErr == nil {
-				fmt.Fprintf(stderr, "agentprov: stop request %s; query the saved admission for its observed result\n", stop.State)
-			}
-			return 1, errors.Join(err, stopErr)
-		}
 		return 1, err
 	}
 	collection, err := client.CollectExecution(ctx, handoff.IdentityOf(admission.Attempt), "native-result-"+request.OperationID, receiver)

@@ -220,6 +220,22 @@ components:
         request_hash: { type: string, pattern: '^[0-9a-f]{64}$' }
         digest_version: { const: agentprovenance.execution_request_sha256/v1 }
         local_run_id: { type: string }
+    SourceAdmission:
+      type: object
+      additionalProperties: false
+      description: Immutable caller-side provenance payload recorded from authenticated admission; command bodies and credential paths are omitted.
+      required: [schema_version, identity, principal_id, operation_id, attempt_number, accepted_at, target_key_sha256, receiver_id, receiver_key_sha256]
+      properties:
+        schema_version: { const: agentprovenance.execution_source_admission/v1 }
+        identity: { $ref: '#/components/schemas/ExecutionIdentity' }
+        principal_id: { type: string, minLength: 1 }
+        operation_id: { type: string, minLength: 1 }
+        previous_attempt_id: { type: string }
+        attempt_number: { type: integer, minimum: 1 }
+        accepted_at: { type: string, format: date-time }
+        target_key_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        receiver_id: { type: string, minLength: 1 }
+        receiver_key_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
     Envelope:
       type: object
       additionalProperties: false

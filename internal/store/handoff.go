@@ -10,6 +10,8 @@ import (
 func ensureHandoffSchema(db *sql.DB) error {
 	return WithWriteTx(context.Background(), db, func(tx *sql.Tx) error {
 		for _, stmt := range []string{
+			`CREATE INDEX IF NOT EXISTS idx_execution_source_admission_lookup ON provenance_objects(source_id)
+				WHERE object_type='execution_source_admission'`,
 			`CREATE TABLE IF NOT EXISTS execution_dispatches (
 				dispatch_key TEXT PRIMARY KEY,
 				principal_id TEXT NOT NULL,
