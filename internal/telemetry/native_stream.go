@@ -122,6 +122,9 @@ type NativeStream struct {
 	service    SpoolService
 	opts       NativeStreamOptions
 	mu         sync.Mutex
+	processing sync.RWMutex
+	claimMu    sync.Mutex
+	active     map[string]bool
 	file       *os.File
 	id         string
 	size       int64
@@ -132,6 +135,7 @@ type NativeStream struct {
 	closed     bool
 	producerID string
 	sequence   uint64
+	accepted   uint64
 	rejections []NativeRejection
 	removeFile func(string) error
 }
@@ -170,9 +174,9 @@ func incrementNative(db sqlStore, name string, value int64) error {
 	return err
 }
 
-func (n *NativeStream) flushCounters() error {
+func (n *NativeStream) flushCountersContext(ctx context.Context) error {
 	for name, value := range n.counters {
-		if err := incrementNative(n.service.DB, name, value); err != nil {
+		if _, err := store.ExecRetry(ctx, n.service.DB, `INSERT INTO telemetry_native_counters(name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=value+excluded.value`, name, value); err != nil {
 			return err
 		}
 		delete(n.counters, name)
@@ -334,6 +338,7 @@ func (n *NativeStream) appendLine(line []byte) error {
 		return err
 	}
 	n.count++
+	n.accepted++
 	n.size += int64(len(encoded))
 	n.counters["captured"]++
 	if n.count >= n.opts.BatchEvents {
@@ -343,8 +348,15 @@ func (n *NativeStream) appendLine(line []byte) error {
 }
 
 func (n *NativeStream) seal() error {
+	return n.sealContext(context.Background())
+}
+
+func (n *NativeStream) sealContext(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if n.file == nil && n.id == "" {
-		return n.flushCounters()
+		return n.flushCountersContext(ctx)
 	}
 	if n.file != nil {
 		if err := n.file.Sync(); err != nil {
@@ -355,16 +367,20 @@ func (n *NativeStream) seal() error {
 		}
 		n.file = nil
 	}
-	if err := n.sealFile(n.id); err != nil {
+	if err := n.sealFileContext(ctx, n.id); err != nil {
 		return err
 	}
 	n.id, n.size, n.count = "", 0, 0
-	return n.flushCounters()
+	return n.flushCountersContext(ctx)
 }
 
 func (n *NativeStream) sealFile(id string) error {
+	return n.sealFileContext(context.Background(), id)
+}
+
+func (n *NativeStream) sealFileContext(ctx context.Context, id string) error {
 	var path string
-	if err := n.service.DB.QueryRow(`SELECT spool_path FROM telemetry_spool_batches WHERE id=?`, id).Scan(&path); err != nil {
+	if err := n.service.DB.QueryRowContext(ctx, `SELECT spool_path FROM telemetry_spool_batches WHERE id=?`, id).Scan(&path); err != nil {
 		return err
 	}
 	f, err := os.OpenFile(path, os.O_RDWR, 0)
@@ -387,6 +403,9 @@ func (n *NativeStream) sealFile(id string) error {
 	var size int64
 	count := 0
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		line, readErr := reader.ReadBytes('\n')
 		if len(line) > 1<<20 {
 			return i18n.Errorf("native spool row exceeds 1 MiB")
@@ -412,7 +431,7 @@ func (n *NativeStream) sealFile(id string) error {
 		size += int64(len(line))
 		count++
 	}
-	_, err = store.ExecRetry(context.Background(), n.service.DB, `UPDATE telemetry_spool_batches SET status='queued',size_bytes=?,file_sha256=?,event_count=?,updated_at=? WHERE id=? AND status='capturing'`, size, hex.EncodeToString(hash.Sum(nil)), count, time.Now().UTC().Format(time.RFC3339Nano), id)
+	_, err = store.ExecRetry(ctx, n.service.DB, `UPDATE telemetry_spool_batches SET status='queued',size_bytes=?,file_sha256=?,event_count=?,updated_at=? WHERE id=? AND status='capturing'`, size, hex.EncodeToString(hash.Sum(nil)), count, time.Now().UTC().Format(time.RFC3339Nano), id)
 	return err
 }
 
@@ -499,6 +518,11 @@ func (n *NativeStream) removeProcessedFile(id, path string) error {
 }
 
 func (n *NativeStream) cleanupProcessed(limit int) error {
+	n.processing.RLock()
+	defer n.processing.RUnlock()
+	if n.closed {
+		return os.ErrClosed
+	}
 	rows, err := n.service.DB.Query(`SELECT id,spool_path FROM telemetry_spool_batches WHERE format='native' AND status='processed' AND spool_path!='' AND retry_at<=? ORDER BY retry_at,updated_at LIMIT ?`, time.Now().UnixMilli(), limit)
 	if err != nil {
 		return err
@@ -540,6 +564,8 @@ func (n *NativeStream) cleanupProcessed(limit int) error {
 func (n *NativeStream) Flush() error { n.mu.Lock(); defer n.mu.Unlock(); return n.seal() }
 
 func (n *NativeStream) Close() error {
+	n.processing.Lock()
+	defer n.processing.Unlock()
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if n.closed {
@@ -662,24 +688,11 @@ func (n *NativeStream) processContext(ctx context.Context, limit int) (int, erro
 			if firstErr == nil {
 				firstErr = err
 			}
-			retryError, retryAt := err.Error(), time.Now().Add(5*time.Second).UnixMilli()
-			if ctx.Err() != nil {
-				retryError, retryAt = "", 0
-			}
-			_, updateErr := store.ExecRetry(context.Background(), n.service.DB, `UPDATE telemetry_spool_batches SET status='queued',error=?,retry_at=? WHERE id=? AND status='processing'`, retryError, retryAt, id)
-			if updateErr != nil {
-				return 0, updateErr
-			}
 			if ctx.Err() != nil {
 				return 0, ctx.Err()
 			}
 			if err := incrementNative(n.service.DB, "retry_failures", 1); err != nil {
 				return 0, err
-			}
-			// A cleanup error occurs after the evidence transaction committed;
-			// keep it processed and retry only deletion, never event ingestion.
-			if _, updateErr := store.ExecRetry(context.Background(), n.service.DB, `UPDATE telemetry_spool_batches SET error=?,retry_at=?,updated_at=? WHERE id=? AND status='processed' AND spool_path!=''`, err.Error(), time.Now().Add(5*time.Second).UnixMilli(), time.Now().UTC().Format(time.RFC3339Nano), id); updateErr != nil {
-				return 0, updateErr
 			}
 		}
 	}
@@ -723,8 +736,7 @@ func (n *NativeStream) Drain(ctx context.Context) error {
 					return err
 				}
 				if err := n.processBatchContext(ctx, id); err != nil {
-					_, resetErr := store.ExecRetry(context.Background(), n.service.DB, `UPDATE telemetry_spool_batches SET status='queued',error=?,retry_at=? WHERE id=? AND status='processing'`, err.Error(), time.Now().Add(time.Second).UnixMilli(), id)
-					return errors.Join(err, resetErr)
+					return err
 				}
 			}
 			cursor = ids[len(ids)-1]
@@ -744,9 +756,53 @@ func (n *NativeStream) processBatch(id string) error {
 	return n.processBatchContext(context.Background(), id)
 }
 
-func (n *NativeStream) processBatchContext(ctx context.Context, id string) error {
+func (n *NativeStream) processBatchContext(ctx context.Context, id string) (processErr error) {
+	n.processing.RLock()
+	defer n.processing.RUnlock()
+	if n.closed {
+		return os.ErrClosed
+	}
+	// The exclusive collector lock excludes other processes. Keep an in-process
+	// owner across the SQL claim and its result: cancellation may be reported
+	// after an autocommit already changed the durable batch state.
+	n.claimMu.Lock()
+	if n.active[id] {
+		n.claimMu.Unlock()
+		return nil
+	}
+	if n.active == nil {
+		n.active = make(map[string]bool)
+	}
+	n.active[id] = true
+	n.claimMu.Unlock()
+	defer func() {
+		n.claimMu.Lock()
+		delete(n.active, id)
+		n.claimMu.Unlock()
+	}()
 	db := n.service.DB
-	claim, err := store.ExecRetry(ctx, db, `UPDATE telemetry_spool_batches SET status='processing',attempts=attempts+1 WHERE id=? AND status='queued'`, id)
+	// Reset before releasing ownership, including an unacknowledged SQL claim.
+	defer func() {
+		if processErr == nil {
+			return
+		}
+		processErr = errors.Join(processErr, ctx.Err())
+		retryError, retryAt := processErr.Error(), time.Now().Add(5*time.Second).UnixMilli()
+		if ctx.Err() != nil {
+			retryError, retryAt = "", 0
+		}
+		resetCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_, err := store.ExecRetry(resetCtx, db, `UPDATE telemetry_spool_batches SET
+			status=CASE WHEN status='processing' THEN 'queued' ELSE status END,
+			error=?,retry_at=?,updated_at=? WHERE id=? AND
+			(status='processing' OR (status='processed' AND spool_path!=''))`,
+			retryError, retryAt, time.Now().UTC().Format(time.RFC3339Nano), id)
+		processErr = errors.Join(processErr, err)
+	}()
+	// An ownerless processing row can remain after a failed reset. The local
+	// owner above also makes that row retryable without stealing another worker.
+	claim, err := store.ExecRetry(ctx, db, `UPDATE telemetry_spool_batches SET status='processing',attempts=attempts+1 WHERE id=? AND status IN ('queued','processing')`, id)
 	if err != nil {
 		return err
 	}

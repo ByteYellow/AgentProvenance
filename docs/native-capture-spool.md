@@ -129,6 +129,38 @@ is not a successful write. Missing paths after retry remain diagnostic failures.
 
 ## Status and limits
 
+### Shared-capture checkpoints
+
+The `NativeStream` integration API provides `SnapshotPrefix` and `DrainPrefix`
+for a collector that keeps accepting events while a caller waits for a fixed
+spool range. The snapshot seals the current file and records the collector
+epoch, accepted-row sequence, counters, and the pending batch IDs, hashes and
+row counts. Later batches do not extend the wait. An incomplete input line
+must be completed first; a snapshot larger than 4096 batches returns an explicit
+limit error instead of truncating its range.
+
+`ReadNativePrefix` reports ingested, dropped, failed and pending rows, plus
+retained cleanup failures. `settled` means every batch has durable row outcomes;
+those outcomes can include loss. Missing or changed batch metadata is an error.
+The retained batch ledger supports readback after restart and payload removal.
+Collector epochs remain distinct across restarts.
+
+The drain uses the caller's deadline, or three seconds by default. It keeps
+unresolved rows and their original TTL, reports cancellation or storage errors,
+and allows replay alongside the normal worker without duplicating events.
+Only the worker that claimed a batch resets its failed processing state.
+Ownership covers SQL result delivery too: a cancellation reported after the
+claim committed cannot strand the batch or let a second worker steal it.
+If resetting the durable state fails, the exclusive collector can retry the
+ownerless batch once storage recovers.
+
+This checkpoint covers the **accepted spool**, including pending older batches.
+Kernel-ring consumption, decoder queues and a workload's collection window are
+separate boundaries. Execution capture sealing must account for those boundaries
+before recording a sealed run; this API alone does not change that state.
+
+### Node status
+
 ```sh
 agentprov --data-dir /var/lib/agentprov sensor status --json
 ```
