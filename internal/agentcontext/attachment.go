@@ -119,7 +119,13 @@ func (b *attachmentBudget) save(ctx context.Context, objects provenance.ObjectSt
 		a.Reason = input.Reason
 		return a, nil
 	}
-	prepared, err := provenance.PrepareRasterAttachment(ctx, input.MediaType, input.Data)
+	var prepared provenance.PreparedAttachment
+	var err error
+	if input.MediaType == provenance.HARMediaType {
+		prepared, err = provenance.PrepareHARAttachment(ctx, input.Data)
+	} else {
+		prepared, err = provenance.PrepareRasterAttachment(ctx, input.MediaType, input.Data)
+	}
 	if err != nil {
 		var invalid *provenance.AttachmentError
 		if errors.As(err, &invalid) {
@@ -145,7 +151,7 @@ func (b *attachmentBudget) save(ctx context.Context, objects provenance.ObjectSt
 		b.known[prepared.SourceID()] = true
 		b.bytes += m.Bytes
 	}
-	a.ContentRef = ContentRef{Ref: saved.Ref, State: "stored", Bytes: Number(m.Bytes), SHA256: m.SHA256, MediaType: m.MediaType, DigestScope: "stored_raster_bytes"}
+	a.ContentRef = ContentRef{Ref: saved.Ref, State: "stored", Bytes: Number(m.Bytes), SHA256: m.SHA256, MediaType: m.MediaType, DigestScope: m.DigestScope()}
 	a.Width, a.Height, a.Transformation, a.Privacy = m.Width, m.Height, m.Transformation, m.Privacy
 	return a, nil
 }

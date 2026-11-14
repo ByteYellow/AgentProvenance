@@ -19,7 +19,9 @@ async function main(){
   const end=Math.min(offset+65536,raster.length);attachment.offsets.push(offset);
   attachment.pages.push(save({schema_version:'agentprovenance.raster_attachment/v1',run_id:'run',ref:rasterRef,media_type:'image/png',encoding:'base64',data:raster.subarray(offset,end).toString('base64'),offset,next_offset:end,total_bytes:raster.length,has_more:end<raster.length,sha256:hash(raster)}));
  }
- const contextValue={entries:[],latest:[],nodes:{},links:{},content:{saved:parts},attachments:{[rasterRef]:attachment},comparisons:{}};
+ const harRef='sha256:'+hash(Buffer.from('har manifest')),har=Buffer.from(JSON.stringify({log:{version:'1.2',entries:[],comment:'x'.repeat(150000)}})),harPages={offsets:[],pages:[]};
+ for(let offset=0;offset<har.length;offset+=65536){const end=Math.min(offset+65536,har.length);harPages.offsets.push(offset);harPages.pages.push(save({schema_version:'agentprovenance.har_attachment/v1',run_id:'run',ref:harRef,media_type:'application/har+json',encoding:'base64',data:har.subarray(offset,end).toString('base64'),offset,next_offset:end,total_bytes:har.length,has_more:end<har.length,sha256:hash(har)}));}
+ const contextValue={entries:[],latest:[],nodes:{},links:{},content:{saved:parts},attachments:{[rasterRef]:attachment,[harRef]:harPages},comparisons:{}};
  const context=save(contextValue);
  const artifacts=save({'en/body/file':parts,'en/body/unavailable':unavailable});
  const oldNode='runtime_process/pid/42',firstNode='runtime_process/instance/boot:42:100',secondNode='runtime_process/instance/boot:42:200';
@@ -42,6 +44,11 @@ async function main(){
  files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
  const setup=()=>{const box={window:{},document:{querySelector:()=>({content:'/site/'})},location:new URL('https://example.test/site/en/replay.html'),URL,URLSearchParams,Map,Set,TextEncoder,TextDecoder,structuredClone,Response,DecompressionStream,crypto:webcrypto,btoa,atob,fetch:async url=>{const body=files.get(new URL(url).pathname);return new Response(body||'missing',{status:body?200:404});}};vm.runInNewContext(source,box);return box.window.AgentProvReplay;};
  const reader=setup();
+ for(const offset of [0,65535,131070,har.length])for(const limit of [1,7193,262144]){
+  const value=await reader.query('/api/context/attachment?run=run&ref='+harRef+'&offset='+offset+'&limit='+limit);
+  assert.equal(value.media_type,'application/har+json');assert.equal(value.schema_version,'agentprovenance.har_attachment/v1');
+  assert.deepEqual(Buffer.from(value.data,'base64'),har.subarray(offset,Math.min(offset+limit,har.length)));
+ }
  for(const offset of [0,17,65535,65536,131070,raster.length])for(const limit of [1,7193,65536,262144]){
   const value=await reader.query('/api/context/attachment?run=run&ref='+rasterRef+'&offset='+offset+'&limit='+limit);
   const end=Math.min(offset+limit,raster.length);assert.deepEqual(Buffer.from(value.data,'base64'),raster.subarray(offset,end));
@@ -51,7 +58,7 @@ async function main(){
  for(const query of ['run=legacy','run=other','run=run&offset=-1','run=run&offset=180001','run=run&limit=0','run=run&limit=262145'])
   await assert.rejects(()=>reader.query('/api/context/attachment?ref='+rasterRef+'&'+query));
  const attachmentOriginal=attachment.pages[1];
- for(const mutation of [{run_id:'other'},{media_type:'image/svg+xml'},{offset:65537},{next_offset:65539},{total_bytes:8388609},{encoding:'url'},{data:'%%invalid%%'}]){
+ for(const mutation of [{run_id:'other'},{media_type:'image/svg+xml'},{media_type:'application/har+json',schema_version:'agentprovenance.har_attachment/v1'},{offset:65537},{next_offset:65539},{total_bytes:8388609},{encoding:'url'},{data:'%%invalid%%'}]){
   const originalPage=JSON.parse(gunzipSync(files.get('/site/'+attachmentOriginal.path)));
   attachment.pages[1]=save({...originalPage,...mutation});catalog.runs.run.context=save(contextValue);
   files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));

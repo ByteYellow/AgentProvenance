@@ -176,19 +176,31 @@ async function main(){
           const chunks=[];let offset=0;
           do{
             const value=await query('/api/context/attachment'+q+'&ref='+encodeURIComponent(attachment.ref)+'&offset='+offset+'&limit=7193');
-            assert.equal(value.encoding,'base64');assert.equal(value.media_type,'image/png');assert.equal(value.offset,offset);
+            assert.equal(value.encoding,'base64');assert.equal(value.media_type,attachment.media_type);assert.equal(value.offset,offset);
             assert.equal(value.sha256,attachment.sha256);assert.equal(value.total_bytes,attachment.bytes);
             const decoded=Buffer.from(value.data,'base64');assert.equal(value.next_offset-offset,decoded.length);
             assert.ok(value.next_offset>offset);chunks.push(decoded);offset=value.next_offset;
             assert.equal(value.has_more,offset<expected.length);
           }while(offset<expected.length);
           assert.deepEqual(Buffer.concat(chunks),expected);
+          if(attachment.media_type==='image/png'){
           const dimensions=await page.evaluate(async data=>{
             const bytes=Uint8Array.from(atob(data),x=>x.charCodeAt(0));
             const bitmap=await createImageBitmap(new Blob([bytes],{type:'image/png'}));
             const result=[bitmap.width,bitmap.height];bitmap.close();return result;
           },expected.toString('base64'));
           assert.deepEqual(dimensions,[attachment.width,attachment.height]);
+          }else{
+            assert.equal(attachment.media_type,'application/har+json');
+            const har=JSON.parse(expected.toString('utf8'));assert.equal(har.log.version,'1.2');
+            assert.equal(har.log._agentprovenance.privacy,'headers_cookies_query_bodies_omitted');
+            for(const e of har.log.entries){
+              assert.equal(e.request.headers.length,0);assert.equal(e.request.cookies.length,0);
+              assert.equal(e.response.headers.length,0);assert.equal(e.response.cookies.length,0);
+              assert.ok(!Object.hasOwn(e.response.content,'text'));assert.ok(!Object.hasOwn(e.request,'postData'));
+            }
+            report.harAttachments=(report.harAttachments||0)+1;
+          }
           for(const invalid of ['&offset=-1','&offset='+String(expected.length+1),'&limit=0','&limit=262145'])
             await assert.rejects(query('/api/context/attachment'+q+'&ref='+encodeURIComponent(attachment.ref)+invalid));
           report.attachments=(report.attachments||0)+1;

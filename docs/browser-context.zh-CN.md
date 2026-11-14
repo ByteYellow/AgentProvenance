@@ -2,7 +2,7 @@
 
 [English](browser-context.md) | 中文
 
-通过可选的 Playwright 入口记录独立 Chromium context，保存操作、页面、frame、请求、重定向、Service Worker 流量、下载摘要和截图。记录使用现有上下文接口导入，沿用签名 Bundle 和离线阅读副本。
+通过可选的 Playwright 入口记录独立 Chromium context，保存操作、页面、frame、请求、重定向、Service Worker 流量、下载摘要、截图和隐私过滤后的 HAR。记录使用现有上下文接口导入，沿用签名 Bundle 和离线阅读副本。
 
 ## 安装
 
@@ -47,7 +47,19 @@ agentprov context list --run research
 agentprov dashboard export --run research --output research.zip
 ```
 
-`--capture basic` 保留身份与操作摘要，省略可选的原始记录、结果正文和截图。`--capture-attachments=false` 可独立关闭截图存储；采集端的 `screenshots=False` 可直接跳过像素获取。使用 `context attachment` 分页读取截图，使用 `dashboard export --exclude-attachment REF` 从分享副本中排除其字节内容。
+`--capture basic` 保留身份与操作摘要，省略可选的原始记录、结果正文、截图和 HAR。`--capture-attachments=false` 可独立关闭附件存储。采集端的 `screenshots=False` 跳过像素获取，`har=False` 跳过 HAR 构建，原生网络事件仍保留。使用 `context attachment` 分页读取附件，使用 `dashboard export --exclude-attachment REF` 从分享副本中排除其字节内容。
+
+## HAR 网络记录
+
+选择性导出排除某条请求记录时，包含它的整份 HAR 也会从阅读副本中排除，原因为 `har_request_excluded`。原始附件保持不变。
+
+context 关闭时，采集端生成 HAR 1.2 格式的 `application/har+json` 附件。每条请求在 `_agentprovenance` 中保留 CDP session、target、request ID 和重定向序号。导入端将这些身份与已观测请求核对，再次执行字段过滤后保存。来源与留存内容分别计算 SHA-256 摘要。
+
+HAR 省略 HTTP 头、Cookie、查询参数值以及请求和响应正文，保留路径与方法。请求结果分为 `finished`、`failed`、`redirected` 和 `pending`；context 关闭时仍可能存在未结束请求。
+
+未知阶段耗时使用 `-1`。HAR 的 `time` 是已观测阶段耗时之和，SSL 已包含在 connect 中，不重复计算。`observed_duration_ms` 另行保存有原生起止时间的请求总间隔。阶段全部未知时，总和为零，此时应阅读未知标记，而不是将其作为实际耗时。
+
+每份 HAR 最多包含 4,096 条记录，重定向逐跳计数，大小上限为 8 MiB。超限后标记 `incomplete` 并记录省略条数，原生事件继续按自身限额采集。全部附件共用每个 Run 256 份清单、64 MiB 的留存预算。接口以 JSON/base64 分页返回，阅读时不执行响应内容，也不自动访问记录中的 URL。
 
 ## 身份与隐私
 
@@ -64,6 +76,6 @@ PYTHONPATH=python .venv-browser/bin/python scripts/accept_browser.py \
   --output /tmp/browser-check --agentprov /absolute/path/to/agentprov
 ```
 
-脚本启动两个独立浏览器，每个浏览器有两个并发页面，检查重定向、iframe、Worker、后台请求、下载摘要、截图、隐私标记、两档留存及独立存储中的签名导入，并生成完整与排除截图的离线 ZIP。该流程使用受控浏览器任务，不需要模型 API Key 或系统 Sensor。
+脚本启动两个独立浏览器，每个浏览器有两个并发页面，检查重定向、iframe、Worker、后台请求、下载摘要、截图、HAR 请求集合一致性、隐私标记、两档留存及独立存储中的签名导入，并生成完整、排除全部附件、仅保留 HAR 和排除单条请求的离线 ZIP。该流程使用受控浏览器任务，不需要模型 API Key 或系统 Sensor。
 
 参考：[browser context](https://playwright.dev/python/docs/api/class-browsercontext)、[请求生命周期](https://playwright.dev/python/docs/api/class-request)、[Chromium target/session 身份](https://chromedevtools.github.io/devtools-protocol/tot/Target/)。

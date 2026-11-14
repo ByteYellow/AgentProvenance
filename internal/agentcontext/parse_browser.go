@@ -1,8 +1,13 @@
 package agentcontext
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/url"
+
+	"github.com/byteyellow/agentprovenance/internal/provenance"
 )
 
 const BrowserCaptureVersion = "agentprovenance.browser_capture/v1"
@@ -31,24 +36,25 @@ func (s BrowserScope) valid() bool {
 // OperationID is present only for explicit tool observations. A page's unrelated
 // requests keep their native identity without borrowing the last tool call.
 type BrowserEvent struct {
-	EventID            string `json:"event_id"`
-	Kind               string `json:"kind"`
-	TargetID           string `json:"target_id,omitempty"`
-	TargetType         string `json:"target_type,omitempty"`
-	CDPSessionID       string `json:"cdp_session_id,omitempty"`
-	FrameID            string `json:"frame_id,omitempty"`
-	LoaderID           string `json:"loader_id,omitempty"`
-	RequestID          string `json:"request_id,omitempty"`
-	RedirectIndex      int    `json:"redirect_index"`
-	RequestKey         string `json:"request_key,omitempty"`
-	InitiatorRequestID string `json:"initiator_request_id,omitempty"`
-	OperationID        string `json:"operation_id,omitempty"`
-	Operation          string `json:"operation,omitempty"`
-	DownloadID         string `json:"download_id,omitempty"`
-	Association        string `json:"association"`
-	URL                string `json:"url,omitempty"`
-	Method             string `json:"method,omitempty"`
-	HTTPStatus         int    `json:"http_status,omitempty"`
+	EventID            string   `json:"event_id"`
+	Kind               string   `json:"kind"`
+	TargetID           string   `json:"target_id,omitempty"`
+	TargetType         string   `json:"target_type,omitempty"`
+	CDPSessionID       string   `json:"cdp_session_id,omitempty"`
+	FrameID            string   `json:"frame_id,omitempty"`
+	LoaderID           string   `json:"loader_id,omitempty"`
+	RequestID          string   `json:"request_id,omitempty"`
+	RedirectIndex      int      `json:"redirect_index"`
+	RequestKey         string   `json:"request_key,omitempty"`
+	InitiatorRequestID string   `json:"initiator_request_id,omitempty"`
+	OperationID        string   `json:"operation_id,omitempty"`
+	Operation          string   `json:"operation,omitempty"`
+	DownloadID         string   `json:"download_id,omitempty"`
+	Association        string   `json:"association"`
+	URL                string   `json:"url,omitempty"`
+	Method             string   `json:"method,omitempty"`
+	HTTPStatus         int      `json:"http_status,omitempty"`
+	RequestKeys        []string `json:"request_keys,omitempty"`
 }
 
 func browserURL(raw string) string {
@@ -114,6 +120,7 @@ func (p *parser) browser(top row) bool {
 	// Ignore incoming derived keys, association claims and unselected protocol
 	// fields. RawContent is this privacy projection, never the unfiltered row.
 	event.RequestKey, event.Association, event.URL, event.Method, event.HTTPStatus = "", "browser_target", "", "", 0
+	event.RequestKeys = nil
 	payload := obj(top["payload"])
 	projected := row{}
 	for _, field := range []string{"url", "initiator_url", "redirect_url"} {
@@ -139,7 +146,15 @@ func (p *parser) browser(top row) bool {
 	event.URL, event.Method = text(projected, "url"), text(projected, "method")
 	_ = json.Unmarshal(projected["status"], &event.HTTPStatus)
 	kind, status, callID, tool := "session", "observed", "", ""
+	var har *AttachmentInput
 	switch event.Kind {
+	case "har":
+		event.OperationID, event.Operation, event.RequestID, event.CDPSessionID, event.TargetID, event.TargetType = "", "", "", "", "", ""
+		event.Association = "browser_context"
+		input, summary, requests := p.browserHAR(top["har"], string(top["har"]) == "null" && text(payload, "reason") == "capture_policy")
+		event.RequestKeys = requests
+		har = &input
+		projected = summary
 	case "gap":
 		p.issue("browser_capture_gap", "capture")
 		*p.counts().Truncated++
@@ -178,7 +193,7 @@ func (p *parser) browser(top row) bool {
 		return false
 	}
 	validTarget := event.TargetType == "page" || event.TargetType == "iframe" || event.TargetType == "worker" || event.TargetType == "service_worker"
-	if event.Kind != "gap" && event.Kind != "closed" && (!notebookIDValid(event.TargetID) || !validTarget || !notebookIDValid(event.CDPSessionID)) {
+	if event.Kind != "gap" && event.Kind != "closed" && event.Kind != "har" && (!notebookIDValid(event.TargetID) || !validTarget || !notebookIDValid(event.CDPSessionID)) {
 		p.issue("browser_target_invalid", "target_id")
 		*p.counts().Failed++
 		return true
@@ -192,6 +207,9 @@ func (p *parser) browser(top row) bool {
 	}
 	if event.OperationID != "" {
 		owners["operation:"+event.OperationID] = digest([]string{event.TargetID, event.CDPSessionID, event.Operation})
+	}
+	if event.Kind == "request" {
+		owners["request:"+event.RequestKey] = digest([]string{event.TargetID, event.TargetType, event.FrameID, event.LoaderID})
 	}
 	for id, owner := range owners {
 		if previous, exists := p.browserOwners[id]; exists && previous != owner {
@@ -222,9 +240,61 @@ func (p *parser) browser(top row) bool {
 	if event.Kind == "screenshot" {
 		r.Attachments = []AttachmentInput{notebookAttachment("image/png", top["image"])}
 	}
+	if har != nil {
+		r.Attachments = []AttachmentInput{*har}
+	}
 	projection := map[string]any{"schema_version": BrowserCaptureVersion, "browser": event, "payload": projected}
 	raw, _ := json.Marshal(projection)
 	value := string(raw)
 	r.RawBody, r.rawProjection = &value, "browser_privacy_projection"
 	return true
+}
+
+func (p *parser) browserHAR(raw json.RawMessage, disabled bool) (AttachmentInput, row, []string) {
+	sum := sha256.Sum256(raw)
+	input := AttachmentInput{MediaType: provenance.HARMediaType, Data: raw, SourceBytes: int64(len(raw)), SourceSHA256: hex.EncodeToString(sum[:]), DigestScope: "decoded_source_bytes"}
+	summary := row{}
+	var requests []string
+	if disabled {
+		input.Data = nil
+		input.Reason = "capture_policy"
+		summary["reason"] = json.RawMessage(`"capture_policy"`)
+		return input, summary, nil
+	}
+	h, _, err := provenance.ProjectHAR(p.ctx, raw)
+	if err != nil {
+		input.Reason = "invalid_har"
+		var invalid *provenance.AttachmentError
+		if errors.As(err, &invalid) {
+			input.Reason = invalid.Reason
+		}
+	} else {
+		var scope BrowserScope
+		encoded, _ := json.Marshal(h.Log.Meta.Scope)
+		if json.Unmarshal(encoded, &scope) != nil || scope != *p.Source.Browser {
+			input.Reason = "har_scope_mismatch"
+		}
+		for _, entry := range h.Log.Entries {
+			n := entry.Native
+			request := "browser-request-" + digest([]any{p.Source.SessionID, n.Session, n.Request, n.Hop})
+			requests = append(requests, request)
+			if p.browserOwners["session:"+n.Session] != digest([]string{n.Target, n.TargetType}) || p.browserOwners["request:"+request] != digest([]string{n.Target, n.TargetType, n.Frame, n.Loader}) {
+				input.Reason = "har_request_not_observed"
+			}
+		}
+		summary["entries"], _ = json.Marshal(len(h.Log.Entries))
+		summary["capture_state"], _ = json.Marshal(h.Log.Meta.State)
+		summary["omitted_entries"], _ = json.Marshal(h.Log.Meta.Omitted)
+		if h.Log.Meta.State == "incomplete" {
+			p.issue("browser_har_incomplete", "har")
+			*p.counts().Truncated++
+		}
+	}
+	if input.Reason != "" {
+		input.Data = nil
+		requests = nil
+		p.issue(input.Reason, "har")
+		*p.counts().Failed++
+	}
+	return input, summary, requests
 }

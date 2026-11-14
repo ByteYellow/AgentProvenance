@@ -116,6 +116,20 @@ async def run_browser(out, origin, suffix):
         raise AssertionError("iframe native request missing")
     if any(r.get("operation_id") for r in requests):
         raise AssertionError("background request borrowed a tool operation")
+    archives = [r["har"] for r in rows if r.get("kind") == "har"]
+    if len(archives) != 1 or archives[0]["log"]["_agentprovenance"]["capture_state"] != "closed":
+        raise AssertionError("HAR archive missing or incomplete")
+    har_entries = archives[0]["log"]["entries"]
+    key = lambda r: (r["cdp_session_id"], r["request_id"], r["redirect_index"])
+    if {key(e["_agentprovenance"]) for e in har_entries} != {key(r) for r in requests}:
+        raise AssertionError("HAR native request set differs from captured requests")
+    if not any(e["_agentprovenance"]["outcome"] == "redirected" for e in har_entries):
+        raise AssertionError("HAR lost redirect outcome")
+    if not any(e["_agentprovenance"]["observed_duration_ms"] is not None and e["_agentprovenance"]["observed_duration_ms"] > 0 for e in har_entries):
+        raise AssertionError("HAR native duration unavailable")
+    for e in har_entries:
+        if e["request"]["headers"] or e["request"]["cookies"] or e["response"]["headers"] or e["response"]["cookies"] or "text" in e["response"]["content"]:
+            raise AssertionError("HAR retained private transport data")
     return {"scope": scope, "browser_version": version, "pages": [a, b], "events": len(rows),
             "requests": len(requests), "worker_requests": len(worker), "operations": len([r for r in rows if r.get("kind") == "action_start"])}
 
@@ -172,8 +186,8 @@ def verify_store(binary, out):
         if graph["error_count"] or graph["warning_count"]:
             raise AssertionError("browser graph verification failed")
         attachments = [a for e in original for a in e.get("attachments", [])]
-        if len(attachments) != 2:
-            raise AssertionError("browser screenshot references missing")
+        if len(attachments) != 4 or sum(a["source_media_type"] == "application/har+json" for a in attachments) != 2:
+            raise AssertionError("browser screenshot or HAR references missing")
         if preset == "detailed":
             for item in attachments:
                 content, offset = bytearray(), 0
@@ -184,10 +198,19 @@ def verify_store(binary, out):
                         break
                     offset = page["next_offset"]
                 if hashlib.sha256(content).hexdigest() != item["sha256"]:
-                    raise AssertionError("browser screenshot digest mismatch")
+                    raise AssertionError("browser attachment digest mismatch")
+                if item["media_type"] == "application/har+json":
+                    archive = json.loads(content)
+                    if SECRET.encode() in content or not archive["log"]["entries"]:
+                        raise AssertionError("stored HAR privacy or content failure")
             cli(restored, "dashboard", "export", "--run", run, "--output", out / "browser-full.zip", json_result=False)
-            cli(restored, "dashboard", "export", "--run", run, "--exclude-attachment", attachments[0]["ref"],
-                "--exclude-attachment", attachments[1]["ref"], "--output", out / "browser-excluded.zip", json_result=False)
+            excluded = [flag for a in attachments for flag in ("--exclude-attachment", a["ref"])]
+            cli(restored, "dashboard", "export", "--run", run, *excluded, "--output", out / "browser-excluded.zip", json_result=False)
+            images = [flag for a in attachments if a["media_type"] == "image/png" for flag in ("--exclude-attachment", a["ref"])]
+            cli(restored, "dashboard", "export", "--run", run, *images, "--output", out / "browser-har-only.zip", json_result=False)
+            request = next(e for e in original if e.get("browser", {}).get("kind") == "request")
+            cli(restored, "dashboard", "export", "--run", run, "--exclude-record", "entry/" + request["id"],
+                "--output", out / "browser-request-excluded.zip", json_result=False)
         elif any(a["state"] != "omitted" or a["reason"] != "capture_policy" for a in attachments):
             raise AssertionError("disabled screenshot retention saved pixels")
         results[preset] = {"run_id": run, "entries": len(original), "attachments": attachments, "graph": graph, "bundle_sha256": bundle["sha256"]}

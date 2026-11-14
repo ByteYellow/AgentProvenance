@@ -12,6 +12,8 @@ import tempfile
 import uuid
 from urllib.parse import urlsplit, urlunsplit
 
+from .browser_har import HARCapture
+
 
 SCHEMA = "agentprovenance.browser_capture/v1"
 PLACEMENT = ("producer_id", "namespace", "instance_id", "generation")
@@ -144,10 +146,11 @@ class Browser:
     Operations use Playwright; requests retain native CDP identities. The helper
     does not infer that a click caused every request observed in its time window.
     """
-    def __init__(self, path, placement, *, screenshots=True, channel=None):
+    def __init__(self, path, placement, *, screenshots=True, har=True, channel=None):
         if set(placement) != set(PLACEMENT) or not all(map(_id, placement.values())):
             raise ValueError("invalid browser placement")
         self.path, self.placement, self.screenshots, self.channel = Path(path), dict(placement), screenshots, channel
+        self.har_enabled, self.har = har, None
         self.capture = self.cdp = self.owner = self.context = self.playwright = self.temp = None
         self.sessions, self.targets, self.frames, self.requests, self.downloads = {}, {}, {}, {}, {}
         self.pages, self.locks, self.tasks, self.ready = {}, {}, set(), {}
@@ -191,6 +194,8 @@ class Browser:
         ws = await connect("ws://127.0.0.1:" + port + endpoint, proxy=None, max_size=4 << 20, max_queue=32)
         self.capture = Capture(self.path, {**self.placement, "browser_id": endpoint.rsplit("/", 1)[-1],
                                           "context_id": self.context_id}, browser_version=self.owner.browser.version)
+        if self.har_enabled:
+            self.har = HARCapture(self.capture.scope)
         self.cdp = _CDP(ws, self._event)
         self.cdp.reader.add_done_callback(lambda _: self._fail("browser_connection_closed"))
         self.download_path = Path(self.temp.name) / "downloads"
@@ -316,23 +321,35 @@ class Browser:
             hop = previous["redirect_index"] + 1 if previous and "redirectResponse" in params else 0
             if previous and "redirectResponse" in params:
                 self._response(previous, params["redirectResponse"])
+                if self.har:
+                    self.har.finish(previous, params.get("timestamp"), "redirected", redirect=safe_url(params["request"]["url"]))
             native = {**identity, "request_id": params["requestId"], "redirect_index": hop,
                       "frame_id": params.get("frameId", ""), "loader_id": params.get("loaderId", ""),
                       "initiator_request_id": params.get("initiator", {}).get("requestId", "")}
             self.requests[key] = native
             request = params["request"]
-            self._emit("request", native, payload={"url": safe_url(request["url"]), "method": request["method"],
-                       "resource_type": params.get("type", ""), "initiator_type": params.get("initiator", {}).get("type", "")})
+            payload = {"url": safe_url(request["url"]), "method": request["method"],
+                       "resource_type": params.get("type", ""), "initiator_type": params.get("initiator", {}).get("type", "")}
+            self._emit("request", native, payload=payload)
+            if self.har:
+                self.har.request(native, payload, params.get("timestamp"), params.get("wallTime"))
         elif previous and method == "Network.responseReceived":
             self._response(previous, params["response"])
         elif previous and method == "Network.loadingFinished":
             self._emit("request_finished", previous, payload={"encoded_bytes": int(params.get("encodedDataLength", 0))})
+            if self.har:
+                self.har.finish(previous, params.get("timestamp"), "finished", encoded=int(params.get("encodedDataLength", 0)))
         elif previous and method == "Network.loadingFailed":
             self._emit("request_failed", previous, payload={"error_code": params.get("errorText", "")})
+            if self.har:
+                self.har.finish(previous, params.get("timestamp"), "failed")
 
     def _response(self, identity, response):
-        self._emit("response", identity, payload={"url": safe_url(response["url"]), "status": int(response["status"]),
-                   "mime_type": response.get("mimeType", ""), "from_service_worker": response.get("fromServiceWorker", False)})
+        payload = {"url": safe_url(response["url"]), "status": int(response["status"]),
+                   "mime_type": response.get("mimeType", ""), "from_service_worker": response.get("fromServiceWorker", False)}
+        self._emit("response", identity, payload=payload)
+        if self.har:
+            self.har.response(identity, payload, response.get("protocol", ""), response.get("timing"))
 
     async def _download(self, identity, state):
         guid = identity["download_id"]
@@ -410,6 +427,8 @@ class Browser:
             if self.tasks:
                 await asyncio.wait_for(asyncio.gather(*tuple(self.tasks), return_exceptions=True), 20)
             if self.capture and not self.capture.stopped:
+                self._emit("har", har=self.har.document(incomplete=bool(self.failure)) if self.har else None,
+                           payload={} if self.har else {"reason": "capture_policy"})
                 self._emit("closed", payload={"reason": "context_closed"})
         finally:
             try:

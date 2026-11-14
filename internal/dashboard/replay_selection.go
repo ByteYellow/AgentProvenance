@@ -484,9 +484,13 @@ func (p *replaySelectionPlan) resolveContentBoundaries(records map[string]replay
 	withheldLines := map[rawLine]bool{}
 	retainedBodies := map[string]bool{}
 	retainedAttachments := map[string]bool{}
+	excludedBrowserRequests := map[string]bool{}
 	for id, entry := range p.Entries {
 		if !records["entry/"+id].Included {
 			withheldLines[rawLine{entry.Source.ID, entry.Sequence}] = true
+			if entry.Browser != nil && entry.Browser.RequestKey != "" {
+				excludedBrowserRequests[entry.Browser.RequestKey] = true
+			}
 		} else if entry.Content.State == "stored" {
 			retainedBodies[entry.Content.Ref] = true
 		}
@@ -500,6 +504,20 @@ func (p *replaySelectionPlan) resolveContentBoundaries(records map[string]replay
 	}
 	for id, entry := range p.Entries {
 		r := records["entry/"+id]
+		// An archive is an atomic retained attachment. Withhold it when any of
+		// its supporting request observations is outside the sharing selection.
+		if entry.Browser != nil && entry.Browser.Kind == "har" {
+			for _, request := range entry.Browser.RequestKeys {
+				if excludedBrowserRequests[request] {
+					for _, a := range entry.Attachments {
+						if a.State == "stored" {
+							p.WithheldContent[a.Ref] = "har_request_excluded"
+						}
+					}
+					break
+				}
+			}
+		}
 		for _, a := range entry.Attachments {
 			if a.State == "stored" && a.Ref != "" && !r.Included && !retainedAttachments[a.Ref] {
 				p.WithheldContent[a.Ref] = "record_excluded"

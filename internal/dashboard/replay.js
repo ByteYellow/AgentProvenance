@@ -282,9 +282,10 @@ window.AgentProvReplay = (() => {
     let result,at=offset;const parts=[];
     do{
       const page=await asset(pages.pages[index]);
-      if(page.schema_version!=='agentprovenance.raster_attachment/v1'||page.run_id!==run||page.ref!==p.get('ref')||page.encoding!=='base64'||page.media_type!=='image/png'||!Number.isSafeInteger(page.total_bytes)||page.total_bytes<1||page.total_bytes>8388608)fail('Invalid attachment page');
+      const mediaOK=(page.schema_version==='agentprovenance.raster_attachment/v1'&&page.media_type==='image/png')||(page.schema_version==='agentprovenance.har_attachment/v1'&&page.media_type==='application/har+json');
+      if(!mediaOK||page.run_id!==run||page.ref!==p.get('ref')||page.encoding!=='base64'||!Number.isSafeInteger(page.total_bytes)||page.total_bytes<1||page.total_bytes>8388608)fail('Invalid attachment page');
       if(!result)result=copy(page);
-      if(offset>page.total_bytes||page.total_bytes!==result.total_bytes||page.sha256!==result.sha256||page.offset!==pages.offsets[index]||page.offset>at)fail('Invalid attachment continuation');
+      if(offset>page.total_bytes||page.total_bytes!==result.total_bytes||page.media_type!==result.media_type||page.schema_version!==result.schema_version||page.sha256!==result.sha256||page.offset!==pages.offsets[index]||page.offset>at)fail('Invalid attachment continuation');
       let bytes;try{bytes=Uint8Array.from(atob(page.data),c=>c.charCodeAt(0));}catch{fail('Invalid attachment encoding');}
       if(page.next_offset!==page.offset+bytes.length||page.next_offset>page.total_bytes||page.has_more!==(page.next_offset<page.total_bytes))fail('Invalid attachment byte count');
       const end=Math.min(offset+limit,page.total_bytes,page.next_offset),start=at-page.offset;

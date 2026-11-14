@@ -6,6 +6,48 @@ import unittest
 from unittest.mock import patch
 
 from agentprov.browser import Browser, Capture, _CDP, safe_url
+from agentprov.browser_har import HARCapture
+
+
+class HARTests(unittest.TestCase):
+    def native(self, session="page", hop=0):
+        return dict(target_id=session, target_type="page", cdp_session_id=session, request_id="same",
+                    redirect_index=hop, frame_id="frame", loader_id="loader")
+
+    def test_native_hops_and_unknown_timing(self):
+        h = HARCapture({})
+        for n in (self.native(), self.native("other"), self.native(hop=1)):
+            h.request(n, {"url": "https://example.test/path?__redacted__", "method": "GET"}, 10, 1800000000)
+        h.response(self.native(), {"status": 302, "mime_type": "text/plain"}, "h2",
+                   dict(requestTime=10, sendStart=1, sendEnd=2, receiveHeadersEnd=5))
+        h.finish(self.native(), 10.01, "redirected", redirect="https://example.test/next")
+        h.finish(self.native("other"), 10.02, "failed")
+        entries = h.document()["log"]["entries"]
+        self.assertEqual(len(entries), 3)
+        self.assertEqual([e["_agentprovenance"]["outcome"] for e in entries], ["redirected", "failed", "pending"])
+        self.assertAlmostEqual(entries[0]["_agentprovenance"]["observed_duration_ms"], 10)
+        self.assertEqual(entries[0]["timings"]["dns"], -1)
+        self.assertEqual(entries[1]["time"], 0)
+        self.assertTrue(all(v == -1 for v in entries[1]["timings"].values()))
+        self.assertIsNone(entries[2]["_agentprovenance"]["observed_duration_ms"])
+        with self.assertRaises(ValueError):
+            h.request(self.native(), {"url": "https://example.test/", "method": "GET"}, 10, 1800000000)
+
+    def test_entry_and_byte_limits_are_explicit(self):
+        for budget in ({"max_entries": 1}, {"max_bytes": 16384}):
+            h = HARCapture({}, **budget)
+            for i in range(20):
+                h.request(self.native(str(i)), {"url": "https://example.test/" + "x" * 1000, "method": "GET"}, 10, 1800000000)
+            document = h.document()
+            self.assertEqual(document["log"]["_agentprovenance"]["capture_state"], "incomplete")
+            self.assertEqual(document["log"]["_agentprovenance"]["omitted_entries"] + len(h.entries), 20)
+            self.assertLess(len(json.dumps(document).encode()), h.max_bytes)
+
+    def test_missing_clock_does_not_invent_start(self):
+        h = HARCapture({})
+        h.request(self.native(), {"url": "https://example.test/", "method": "GET"}, None, 1800000000)
+        self.assertEqual(h.document()["log"]["entries"], [])
+        self.assertEqual(h.omitted, 1)
 
 
 class BrowserTests(unittest.TestCase):

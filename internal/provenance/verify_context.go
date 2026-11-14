@@ -51,7 +51,7 @@ func verifyContextAttachment(db *sql.DB, run string, ref contextAttachmentRefere
 		return err
 	}
 	if ref.Bytes == nil || *ref.Bytes != a.Bytes || ref.SHA256 != a.SHA256 || ref.MediaType != a.MediaType ||
-		ref.DigestScope != "stored_raster_bytes" || ref.SourceDigestScope != "decoded_source_bytes" ||
+		ref.DigestScope != a.DigestScope() || ref.SourceDigestScope != "decoded_source_bytes" ||
 		ref.SourceMediaType != a.SourceMediaType || ref.SourceBytes != a.SourceBytes || ref.SourceSHA256 != a.SourceSHA256 ||
 		ref.Width != a.Width || ref.Height != a.Height || ref.Transformation != a.Transformation || ref.Privacy != a.Privacy {
 		return fmt.Errorf("attachment metadata does not match manifest")

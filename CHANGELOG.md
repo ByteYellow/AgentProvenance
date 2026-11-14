@@ -4,6 +4,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Browser captures retain bounded, privacy-projected HAR attachments with native
+  request and redirect identities, explicit pending/failed outcomes, independent
+  capture controls, signed portability and selective offline export.
+
 ### Browser context
 
 - Add an optional owned Playwright/Chromium entry and native context importer.

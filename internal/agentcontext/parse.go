@@ -48,6 +48,7 @@ type row map[string]json.RawMessage
 
 type parser struct {
 	Parsed
+	ctx              context.Context
 	opts             ParseOptions
 	line             int64
 	objectOrdinal    int
@@ -91,7 +92,7 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 		prefix = &prefixReader{r: r, hash: sha256.New(), remaining: opts.Cursor.Bytes}
 		r = prefix
 	}
-	p := parser{opts: opts, callNames: map[string]string{}, startedCalls: map[string]bool{}}
+	p := parser{ctx: ctx, opts: opts, callNames: map[string]string{}, startedCalls: map[string]bool{}}
 	if opts.Budget != nil {
 		defer func() { opts.Budget.Records -= p.recordsCreated }()
 	}

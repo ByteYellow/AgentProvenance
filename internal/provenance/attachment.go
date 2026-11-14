@@ -47,8 +47,8 @@ type Attachment struct {
 	AttachmentManifest
 }
 
-// PreparedAttachment keeps the validated raster private. Only these bytes may
-// enter the binary writer, which intentionally does not redact pixel data.
+// PreparedAttachment keeps validated bytes private. Media-specific preparation
+// owns projection; the chunk writer never applies text regexes to binary data.
 type PreparedAttachment struct {
 	manifest AttachmentManifest
 	data     []byte
@@ -56,7 +56,24 @@ type PreparedAttachment struct {
 
 func (p PreparedAttachment) Manifest() AttachmentManifest { return p.manifest }
 func (p PreparedAttachment) SourceID() string {
+	if p.manifest.SchemaVersion == HARAttachmentSchema {
+		return "har/v1/" + p.manifest.SourceSHA256 + "/" + p.manifest.SHA256
+	}
 	return "raster/v1/" + p.manifest.SourceSHA256 + "/" + p.manifest.SHA256
+}
+
+func (m AttachmentManifest) DigestScope() string {
+	if m.SchemaVersion == HARAttachmentSchema {
+		return "stored_har_bytes"
+	}
+	return "stored_raster_bytes"
+}
+
+func (m AttachmentManifest) kind() string {
+	if m.SchemaVersion == HARAttachmentSchema {
+		return "har"
+	}
+	return "raster"
 }
 
 type AttachmentError struct{ Reason string }
@@ -134,8 +151,8 @@ func (s ObjectStore) PutAttachment(ctx context.Context, run string, p PreparedAt
 		end := min(pos+AttachmentChunkBytes, len(p.data))
 		part := p.data[pos:end]
 		sum := sha256.Sum256(part)
-		obj := c.prepareObject(provenanceObject{Type: "attachment_chunk", SourceID: "raster/chunk/" + hex.EncodeToString(sum[:]),
-			Payload: map[string]any{"kind": "raster_chunk", "encoding": "base64", "bytes": len(part)}})
+		obj := c.prepareObject(provenanceObject{Type: "attachment_chunk", SourceID: m.kind() + "/chunk/" + hex.EncodeToString(sum[:]),
+			Payload: map[string]any{"kind": m.kind() + "_chunk", "encoding": "base64", "bytes": len(part)}})
 		// Redact only the envelope. Regex matches in base64 are not pixel secrets.
 		raw, err := json.Marshal(obj)
 		if err != nil {
@@ -157,7 +174,7 @@ func (s ObjectStore) PutAttachment(ctx context.Context, run string, p PreparedAt
 		parents = append(parents, ref)
 	}
 	obj, err := s.PutExternalObject(ExternalObjectInput{RunID: run, Type: "attachment_content", SourceID: p.SourceID(),
-		Parents: parents, Payload: map[string]any{"kind": "stored_raster", "attachment_manifest": m}})
+		Parents: parents, Payload: map[string]any{"kind": "stored_" + m.kind(), "attachment_manifest": m}})
 	return Attachment{Ref: obj.Hash, AttachmentManifest: m}, err
 }
 
@@ -178,11 +195,13 @@ func ReadAttachmentManifest(db contentObjectReader, run, ref string) (Attachment
 		b, err := hex.DecodeString(s)
 		return err == nil && len(b) == 32 && strings.ToLower(s) == s
 	}
-	if obj.Type != "attachment_content" || obj.Payload.Kind != "stored_raster" || m.SchemaVersion != AttachmentSchema ||
-		m.MediaType != "image/png" || (m.SourceMediaType != "image/png" && m.SourceMediaType != "image/jpeg") ||
-		m.Transformation != "raster_reencode/v1" || m.Privacy != "visual_content_unredacted" ||
+	raster := m.SchemaVersion == AttachmentSchema && m.MediaType == "image/png" && (m.SourceMediaType == "image/png" || m.SourceMediaType == "image/jpeg") &&
+		m.Transformation == "raster_reencode/v1" && m.Privacy == "visual_content_unredacted" &&
+		m.Width > 0 && m.Height > 0 && m.Width <= 8192 && m.Height <= 8192 && int64(m.Width)*int64(m.Height) <= MaxAttachmentPixels
+	har := m.SchemaVersion == HARAttachmentSchema && m.MediaType == HARMediaType && m.SourceMediaType == HARMediaType &&
+		m.Transformation == "har_projection/v1" && m.Privacy == "headers_cookies_query_bodies_omitted" && m.Width == 0 && m.Height == 0
+	if obj.Type != "attachment_content" || obj.Payload.Kind != "stored_"+m.kind() || (!raster && !har) ||
 		m.Bytes <= 0 || m.Bytes > MaxAttachmentBytes || m.SourceBytes <= 0 || m.SourceBytes > MaxAttachmentBytes ||
-		m.Width <= 0 || m.Height <= 0 || m.Width > 8192 || m.Height > 8192 || int64(m.Width)*int64(m.Height) > MaxAttachmentPixels ||
 		!validDigest(m.SHA256) || !validDigest(m.SourceSHA256) || len(m.Chunks) == 0 || len(m.Chunks) > MaxAttachmentBytes/AttachmentChunkBytes || len(obj.Parents) != len(m.Chunks) {
 		return Attachment{}, fmt.Errorf("invalid attachment manifest")
 	}
@@ -230,7 +249,7 @@ func ReadAttachmentPage(ctx context.Context, db contentObjectReader, run, ref st
 		return AttachmentPage{}, ErrContentRange
 	}
 	end := min(offset+limit, a.Bytes)
-	p := AttachmentPage{SchemaVersion: AttachmentSchema, RunID: run, Ref: ref, MediaType: a.MediaType, Encoding: "base64",
+	p := AttachmentPage{SchemaVersion: a.SchemaVersion, RunID: run, Ref: ref, MediaType: a.MediaType, Encoding: "base64",
 		Data: []byte{}, Offset: offset, NextOffset: end, TotalBytes: a.Bytes, HasMore: end < a.Bytes, SHA256: a.SHA256}
 	var pos int64
 	for _, part := range a.Chunks {
@@ -250,7 +269,7 @@ func ReadAttachmentPage(ctx context.Context, db contentObjectReader, run, ref st
 			if err := readContentObject(db, run, part.Ref, &obj); err != nil {
 				return AttachmentPage{}, err
 			}
-			if obj.Type != "attachment_chunk" || obj.Payload.Kind != "raster_chunk" || obj.Payload.Encoding != "base64" || obj.Payload.Bytes != part.Bytes || int64(len(obj.Payload.Data)) != part.Bytes {
+			if obj.Type != "attachment_chunk" || obj.Payload.Kind != a.kind()+"_chunk" || obj.Payload.Encoding != "base64" || obj.Payload.Bytes != part.Bytes || int64(len(obj.Payload.Data)) != part.Bytes {
 				return AttachmentPage{}, fmt.Errorf("invalid attachment chunk")
 			}
 			p.Data = append(p.Data, obj.Payload.Data[max(0, offset-pos):min(part.Bytes, end-pos)]...)
@@ -277,6 +296,9 @@ func VerifyAttachment(ctx context.Context, db contentObjectReader, run, ref stri
 	sum := sha256.Sum256(b.Bytes())
 	if hex.EncodeToString(sum[:]) != a.SHA256 {
 		return fmt.Errorf("attachment digest mismatch")
+	}
+	if a.SchemaVersion == HARAttachmentSchema {
+		return verifyHAR(ctx, b.Bytes())
 	}
 	cfg, err := png.DecodeConfig(bytes.NewReader(b.Bytes()))
 	if err != nil || cfg.Width != a.Width || cfg.Height != a.Height {
