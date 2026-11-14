@@ -16,6 +16,11 @@ func offlineReplayHTML(raw []byte, locale i18n.Locale) ([]byte, error) {
 }
 
 func offlineReplayHTMLSelection(raw []byte, locale i18n.Locale, selection ReplaySelection, analysisOmitted bool) ([]byte, error) {
+	partial := selection.Scope == "session" || len(selection.ExcludeRecords) > 0 || len(selection.ExcludeCategories) > 0
+	return offlineReplayHTMLSet(raw, locale, []ReplaySelection{selection}, partial, analysisOmitted)
+}
+
+func offlineReplayHTMLSet(raw []byte, locale i18n.Locale, selections []ReplaySelection, partial, analysisOmitted bool) ([]byte, error) {
 	doc, err := html.Parse(bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
@@ -59,7 +64,6 @@ func offlineReplayHTMLSelection(raw []byte, locale i18n.Locale, selection Replay
 	if head == nil || body == nil {
 		return nil, fmt.Errorf("dashboard HTML is missing its head or body")
 	}
-	partial := selection.Scope == "session" || len(selection.ExcludeRecords) > 0 || len(selection.ExcludeCategories) > 0
 	if partial {
 		head.AppendChild(&html.Node{Type: html.ElementNode, Data: "meta", Attr: []html.Attribute{{Key: "name", Val: "agentprov-replay-selection"}, {Key: "content", Val: "partial"}}})
 	}
@@ -83,13 +87,19 @@ func offlineReplayHTMLSelection(raw []byte, locale i18n.Locale, selection Replay
 	if locale == i18n.Chinese {
 		label, scope, inventory = "离线回放 · 未签名的分享副本", "整个 Run · 已保存内容", "导出清单"
 	}
-	if selection.Scope == "session" {
+	selection := selections[0]
+	if len(selections) > 1 {
+		scope = fmt.Sprintf("Selected runs: %d; see inventory for each scope", len(selections))
+		if locale == i18n.Chinese {
+			scope = fmt.Sprintf("已选 %d 个 Run，各自范围见导出清单", len(selections))
+		}
+	} else if selection.Scope == "session" {
 		scope = "Session selection · " + selection.Harness + " / " + selection.SessionID
 		if locale == i18n.Chinese {
 			scope = "会话范围 · " + selection.Harness + " / " + selection.SessionID
 		}
 	}
-	if len(selection.ExcludeRecords) > 0 || len(selection.ExcludeCategories) > 0 {
+	if len(selections) == 1 && (len(selection.ExcludeRecords) > 0 || len(selection.ExcludeCategories) > 0) {
 		scope += " · exclusions applied"
 		if locale == i18n.Chinese {
 			scope = strings.TrimSuffix(scope, " · exclusions applied") + " · 已按选择排除记录"

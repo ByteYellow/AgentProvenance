@@ -6,6 +6,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Cross-sandbox execution
 
+- Export explicitly selected local runs in one offline replay ZIP using
+  `dashboard export --selection-file`. Keep independent session filters and
+  exclusions, freeze one snapshot, and use the existing Run selector and Compare
+  offline. The local replay API accepts the same selection set.
 - Add optional sender-copy retention after signed acknowledgment and request
   expiry. Persist retirement before file removal, resume interrupted cleanup,
   and preserve manifests, receipts, deduplication records and received evidence.

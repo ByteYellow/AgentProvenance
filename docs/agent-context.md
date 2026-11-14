@@ -680,6 +680,41 @@ record exclusion does not remove matching text from all other evidence.
 
 The CLI, Dashboard and local replay API support these selections.
 
+### Include Several Runs
+
+To share a caller and its imported execution runs together, use an explicit
+selection file. All named runs must already be in the local store. For example,
+`selections.json` can contain:
+
+```json
+[
+  {"run_id": "CALLER_RUN", "scope": "session", "harness": "claude", "session_id": "SESSION"},
+  {"run_id": "EXECUTION_RUN", "scope": "whole_run", "exclude_categories": ["configuration"]}
+]
+```
+
+```bash
+agentprov --data-dir .agentprov dashboard export \
+  --selection-file selections.json --output execution-replay.zip
+```
+
+Each run has one selection, with its own session filter and exclusions. The file
+accepts 1–64 runs and at most 1 MiB of JSON; it is exclusive with the single-run
+selection flags. All runs use one database snapshot. A missing run/session or a
+resource limit fails preparation without publishing a partial ZIP.
+
+The reader's existing Run selector and Compare work with the included runs.
+Relationships do not automatically add runs or evidence. For multiple runs,
+`export-inventory.json` uses `scope: run_set`, keeps the first run as `run_id`, and
+lists each run's content counts, selection and capture settings under `runs`.
+Totals sum the per-run counts. `record-selection.json` indexes the per-run
+manifests under `selections/`. Original signed Bundles remain separate from this
+unsigned reading copy. Review each run's selected content before sharing.
+
+The local API accepts the same array as `{"selections": [...]}`; see the
+[replay export API](replay-export-api.yaml). The Dashboard export dialog retains
+its single-run selection workflow.
+
 ### Preview and Download in the Dashboard
 
 Start `dashboard serve` against your local data directory, select a run, and

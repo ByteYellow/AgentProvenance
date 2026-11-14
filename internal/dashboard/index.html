@@ -600,6 +600,7 @@
 const {t: lookupText, locale: LANG} = window.AgentProvI18n;
 const partialReplay = document.querySelector('meta[name="agentprov-replay-selection"]')?.content === 'partial';
 const replayScopeText = {'Whole run':'Included records','Whole run counts':'Included record counts','Back to whole run':'Back to included records',
+  'Comparing two whole runs. Session filters are retained for your return, not applied to A or B.':'Comparing included records from two runs. Export exclusions remain in effect for A and B.',
   'Session scope: graph, related events and conversation. Risk, collection status and auxiliary sections cover the whole run.':'Session filters stay within this sharing copy. Capture diagnostics describe the original run.',
   'Risk and auxiliary evidence links return to the whole run.':'Risk and auxiliary evidence links return to the included records.'};
 const tr = source => lookupText(partialReplay ? replayScopeText[source] || source : source);

@@ -509,6 +509,36 @@ agentprov --data-dir .agentprov dashboard export --run RUN \
 
 CLI、Dashboard 和本地回放 API 均支持这些选择。
 
+### 一起导出多个 Run
+
+将调用端及已导入的执行端记录放入同一分享包时，使用明确的选择清单。
+所有 Run 都需已保存在本地数据目录中。例如，`selections.json` 内容如下：
+
+```json
+[
+  {"run_id": "CALLER_RUN", "scope": "session", "harness": "claude", "session_id": "SESSION"},
+  {"run_id": "EXECUTION_RUN", "scope": "whole_run", "exclude_categories": ["configuration"]}
+]
+```
+
+```bash
+agentprov --data-dir .agentprov dashboard export \
+  --selection-file selections.json --output execution-replay.zip
+```
+
+每个 Run 只出现一次，分别设置会话范围和排除项。清单支持 1～64 个 Run，JSON 文件最多 1 MiB；
+与单 Run 的选择参数互斥。全部记录读取同一份数据库快照。任一 Run 或会话不存在，或达到资源限额时，
+导出明确失败，不生成缺少部分 Run 的 ZIP。
+
+阅读器沿用现有 Run 选择器和 Compare。关联关系不会自动扩大导出范围。
+多个 Run 的 `export-inventory.json` 使用 `scope: run_set`，`run_id` 为首个所选 Run，
+`runs` 分别列出内容计数、选择范围和采集设置；总计为各 Run 数量之和。
+`record-selection.json` 索引 `selections/` 下的逐 Run 清单。
+原始签名 Bundle 与这个未签名阅读副本分别保存；分享前检查各 Run 实际包含的内容。
+
+本地 API 使用 `{"selections": [...]}` 提交同一数组，详见[回放导出 API](../replay-export-api.yaml)。
+Dashboard 导出弹窗继续使用现有单 Run 选择方式。
+
 ### 在 Dashboard 中预览和下载
 
 对本地数据目录运行 `dashboard serve`，选择 Run 后点击**导出回放**。

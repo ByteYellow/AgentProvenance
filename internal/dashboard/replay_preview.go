@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -252,21 +253,43 @@ func (m *ReplayExports) prepare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input struct {
-		Run               string   `json:"run"`
-		Scope             string   `json:"scope"`
-		Harness           string   `json:"harness,omitempty"`
-		SessionID         string   `json:"session_id,omitempty"`
-		ExcludeRecords    []string `json:"exclude_records,omitempty"`
-		ExcludeCategories []string `json:"exclude_categories,omitempty"`
+		Run               *string         `json:"run"`
+		Scope             *string         `json:"scope"`
+		Harness           *string         `json:"harness,omitempty"`
+		SessionID         *string         `json:"session_id,omitempty"`
+		ExcludeRecords    []string        `json:"exclude_records,omitempty"`
+		ExcludeCategories []string        `json:"exclude_categories,omitempty"`
+		Selections        json.RawMessage `json:"selections,omitempty"`
 	}
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	d.DisallowUnknownFields()
 	if err := d.Decode(&input); err != nil || d.Decode(new(any)) != io.EOF {
-		httpError(w, "Supply run, scope, and optional session or exclusions as JSON.", http.StatusBadRequest)
+		httpError(w, "Supply a run selection or an explicit selections array as JSON.", http.StatusBadRequest)
 		return
 	}
-	selection, err := (ReplaySelection{RunID: input.Run, Scope: input.Scope, Harness: input.Harness, SessionID: input.SessionID,
-		ExcludeRecords: input.ExcludeRecords, ExcludeCategories: input.ExcludeCategories}).normalized()
+	var inputs []ReplaySelection
+	if input.Selections != nil {
+		if input.Run != nil || input.Scope != nil || input.Harness != nil || input.SessionID != nil || input.ExcludeRecords != nil || input.ExcludeCategories != nil {
+			httpError(w, "Do not combine selections with single-run fields.", http.StatusBadRequest)
+			return
+		}
+		decoder := json.NewDecoder(bytes.NewReader(input.Selections))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&inputs); err != nil {
+			httpError(w, "Supply an array of run selections.", http.StatusBadRequest)
+			return
+		}
+	} else {
+		value := func(p *string) string {
+			if p == nil {
+				return ""
+			}
+			return *p
+		}
+		inputs = []ReplaySelection{{RunID: value(input.Run), Scope: value(input.Scope), Harness: value(input.Harness), SessionID: value(input.SessionID),
+			ExcludeRecords: input.ExcludeRecords, ExcludeCategories: input.ExcludeCategories}}
+	}
+	selections, err := normalizeReplaySelections(inputs)
 	if err != nil {
 		httpError(w, err.Error(), http.StatusBadRequest)
 		return
@@ -290,7 +313,7 @@ func (m *ReplayExports) prepare(w http.ResponseWriter, r *http.Request) {
 	m.mu.Unlock()
 	defer m.release(j)
 	defer cancel()
-	err = m.build(ctx, j, selection)
+	err = m.build(ctx, j, selections)
 	if err != nil {
 		m.retire(j)
 		if r.Context().Err() != nil {
@@ -323,8 +346,8 @@ func (m *ReplayExports) prepare(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, j.preview)
 }
 
-func (m *ReplayExports) build(ctx context.Context, j *replayJob, selection ReplaySelection) error {
-	p, err := m.server.PrepareSelectedOfflineReplay(ctx, selection)
+func (m *ReplayExports) build(ctx context.Context, j *replayJob, selections []ReplaySelection) error {
+	p, err := m.server.PrepareOfflineReplaySet(ctx, selections)
 	if err != nil {
 		return err
 	}

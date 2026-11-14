@@ -136,3 +136,86 @@ func TestDashboardExportSelectionFlags(t *testing.T) {
 		})
 	}
 }
+
+func TestDashboardExportSelectionFile(t *testing.T) {
+	t.Setenv("AGENTPROV_DAEMON_URL", "")
+	root := t.TempDir()
+	dataDir := filepath.Join(root, "store")
+	db, cleanup, err := openLocalDB(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	svc := agentcontext.Service{DB: db, Paths: store.ResolvePaths(dataDir)}
+	for _, run := range []string{"caller", "worker", "unselected"} {
+		body := "saved " + run
+		if _, err := svc.Save(context.Background(), run, agentcontext.Source{Harness: "codex", SessionID: "session", ParserVersion: "fixture/v1", Binding: "explicit"},
+			[]agentcontext.Record{{Key: "message", Kind: "message", Body: &body}}, agentcontext.Coverage{Status: agentcontext.OK}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	selected := `[{"run_id":"caller","scope":"whole_run"},{"run_id":"worker","scope":"session","harness":"codex","session_id":"session"}]`
+	for _, tc := range []struct {
+		name, data string
+		args       []string
+		valid      bool
+	}{
+		{name: "two-runs", data: selected, valid: true},
+		{name: "mixed-run", data: selected, args: []string{"--run", "caller"}},
+		{name: "mixed-exclusion", data: selected, args: []string{"--exclude-category", "messages"}},
+		{name: "mixed-session", data: selected, args: []string{"--session", "session"}},
+		{name: "missing-second", data: strings.ReplaceAll(selected, "worker", "absent")},
+		{name: "duplicate", data: strings.ReplaceAll(selected, "worker", "caller")},
+		{name: "empty", data: "[]"},
+		{name: "null", data: "null"},
+		{name: "object", data: `{}`},
+		{name: "unknown-field", data: `[{"run_id":"caller","scope":"whole_run","include":"all"}]`},
+		{name: "trailing-json", data: selected + `{}`},
+		{name: "oversize", data: strings.Repeat(" ", 1<<20) + selected},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			input, output := filepath.Join(root, tc.name+".json"), filepath.Join(root, tc.name+".zip")
+			if err := os.WriteFile(input, []byte(tc.data), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cmd := NewRootCommand()
+			var out bytes.Buffer
+			cmd.SetOut(&out)
+			cmd.SetErr(&bytes.Buffer{})
+			cmd.SetArgs(append([]string{"--data-dir", dataDir, "dashboard", "export", "--selection-file", input, "--output", output}, tc.args...))
+			err := cmd.Execute()
+			if !tc.valid {
+				if err == nil {
+					t.Fatal("invalid export succeeded")
+				}
+				if _, statErr := os.Stat(output); !os.IsNotExist(statErr) {
+					t.Fatal("failed export published a ZIP")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(out.String(), "scope=run_set") {
+				t.Fatal(out.String())
+			}
+			z, err := zip.OpenReader(output)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer z.Close()
+			r, err := z.Open("export-inventory.json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer r.Close()
+			var inventory dashboard.ReplayInventory
+			if err := json.NewDecoder(r).Decode(&inventory); err != nil {
+				t.Fatal(err)
+			}
+			if inventory.Scope != "run_set" || len(inventory.Runs) != 2 || inventory.Runs[0].RunID != "caller" || inventory.Runs[1].RunID != "worker" || inventory.Contents.ContextEntries != 2 {
+				t.Fatalf("unexpected set: %+v", inventory)
+			}
+		})
+	}
+}

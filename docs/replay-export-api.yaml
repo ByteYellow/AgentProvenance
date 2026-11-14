@@ -50,8 +50,8 @@ components:
       required: [schema_version, run_id, scope, created_at, commit, signed, events, contents, files, bytes_excluding_inventory]
       properties:
         schema_version: {const: agentprovenance.replay_inventory/v1}
-        run_id: {type: string}
-        scope: {type: string, enum: [whole_run, session]}
+        run_id: {type: string, description: Primary run; the first explicit selection for a run_set.}
+        scope: {type: string, enum: [whole_run, session, run_set]}
         created_at: {type: string, format: date-time}
         commit: {type: string}
         signed: {const: false}
@@ -60,6 +60,16 @@ components:
         capture_policy:
           allOf: [{$ref: './agent-context-api.yaml#/components/schemas/CapturePolicy'}]
           description: Source run retention settings from the frozen snapshot, when recorded. Export exclusions do not change these settings.
+        capture_settings: {$ref: './agent-context-api.yaml#/components/schemas/CaptureSettings'}
+        runs:
+          type: array
+          minItems: 2
+          maxItems: 64
+          description: >
+            Present for run_set. Ordered explicit selections from one snapshot.
+            Each run keeps its own policy, coverage and exclusions. Top-level
+            events and content counts are per-run sums, not cross-run unique counts.
+          items: {$ref: '#/components/schemas/RunInventory'}
         record_selection:
           allOf: [{$ref: '#/components/schemas/File'}]
           description: >
@@ -73,6 +83,9 @@ components:
             listed. Only included records enter the replay. Repeated normalized
             context bodies in retained and excluded records are reported in warnings
             with warning_count; up to 100 examples include IDs, counts and hashes.
+            For run_set this file uses agentprovenance.replay_selection_set/v1
+            and contains runs matching Inventory.runs. Each run points to its
+            own v1 selection manifest under selections/.
         selection_summary:
           $ref: '#/components/schemas/SelectionSummary'
         analysis_omissions:
@@ -84,6 +97,100 @@ components:
           additionalProperties: {type: integer, minimum: 1}
         files: {type: array, items: {$ref: '#/components/schemas/File'}}
         bytes_excluding_inventory: {type: integer, minimum: 0}
+      allOf:
+        - if: {properties: {scope: {const: run_set}}}
+          then:
+            required: [runs]
+            not:
+              anyOf:
+                - required: [selection_summary]
+                - required: [capture_policy]
+                - required: [capture_settings]
+          else: {not: {required: [runs]}}
+    RunInventory:
+      type: object
+      required: [run_id, scope, events, contents, record_selection, selection_summary]
+      properties:
+        run_id: {type: string}
+        scope: {type: string, enum: [whole_run, session]}
+        events: {type: integer, minimum: 0}
+        contents: {$ref: '#/components/schemas/Contents'}
+        record_selection: {$ref: '#/components/schemas/File'}
+        selection_summary: {$ref: '#/components/schemas/SelectionSummary'}
+        capture_policy: {$ref: './agent-context-api.yaml#/components/schemas/CapturePolicy'}
+        capture_settings: {$ref: './agent-context-api.yaml#/components/schemas/CaptureSettings'}
+        analysis_omissions:
+          type: object
+          additionalProperties: {type: integer, minimum: 1}
+    Selection:
+      type: object
+      additionalProperties: false
+      required: [run_id, scope]
+      properties:
+        run_id: {type: string, minLength: 1, maxLength: 512}
+        scope: {type: string, enum: [whole_run, session]}
+        harness: {type: string, minLength: 1, maxLength: 128}
+        session_id: {type: string, minLength: 1, maxLength: 512}
+        exclude_records:
+          type: array
+          maxItems: 4096
+          items: {type: string, minLength: 1, maxLength: 1024}
+        exclude_categories:
+          type: array
+          maxItems: 5
+          items: {type: string, enum: [messages, tools, configuration, files, runtime]}
+      allOf:
+        - if: {properties: {scope: {const: session}}}
+          then: {required: [harness, session_id]}
+          else:
+            not:
+              anyOf:
+                - required: [harness]
+                - required: [session_id]
+    SelectionSetRequest:
+      type: object
+      additionalProperties: false
+      required: [selections]
+      properties:
+        selections:
+          type: array
+          minItems: 1
+          maxItems: 64
+          description: >
+            One explicit selection per run, with unique run_id values. Related
+            runs are not added automatically. A one-member set retains the
+            existing single-run inventory and manifest format. Oversized sets
+            and any missing run/session fail the entire preparation.
+          items: {$ref: '#/components/schemas/Selection'}
+    SingleSelectionRequest:
+      type: object
+      additionalProperties: false
+      required: [run, scope]
+      properties:
+        run: {type: string, minLength: 1, maxLength: 512}
+        scope: {type: string, enum: [whole_run, session]}
+        harness: {type: string, minLength: 1, maxLength: 128}
+        session_id: {type: string, minLength: 1, maxLength: 512}
+        exclude_records:
+          type: array
+          maxItems: 4096
+          items: {type: string, minLength: 1, maxLength: 1024}
+        exclude_categories:
+          type: array
+          maxItems: 5
+          items: {type: string, enum: [messages, tools, configuration, files, runtime]}
+      allOf:
+        - if: {properties: {scope: {const: session}}}
+          then: {required: [harness, session_id]}
+          else:
+            not:
+              anyOf:
+                - required: [harness]
+                - required: [session_id]
+    PrepareRequest:
+      oneOf:
+        - {$ref: '#/components/schemas/SingleSelectionRequest'}
+        - {$ref: '#/components/schemas/SelectionSetRequest'}
     SelectionSummary:
       type: object
       description: >
@@ -92,16 +199,7 @@ components:
         record-selection.json; this summary contains no evidence bodies.
       required: [selection, included_records, excluded_records, exclusion_reasons, warning_count]
       properties:
-        selection:
-          type: object
-          required: [run_id, scope]
-          properties:
-            run_id: {type: string}
-            scope: {type: string, enum: [whole_run, session]}
-            harness: {type: string}
-            session_id: {type: string}
-            exclude_records: {type: array, maxItems: 4096, items: {type: string}}
-            exclude_categories: {type: array, maxItems: 5, items: {type: string, enum: [messages, tools, configuration, files, runtime]}}
+        selection: {$ref: '#/components/schemas/Selection'}
         included_records: {type: integer, minimum: 0}
         excluded_records: {type: integer, minimum: 0}
         exclusion_reasons:
@@ -147,43 +245,22 @@ paths:
   /api/replay/previews:
     post:
       operationId: prepareReplayPreview
-      summary: Freeze a run or native session selection and prepare its downloadable ZIP
+      summary: Freeze explicit run or session selections and prepare a downloadable ZIP
       description: >
         Maximum JSON body size is 1 MiB. Exclusions use saved search source IDs.
         Removing a context record removes its revisions and linked tool readers;
         independently captured runtime effects remain unless separately excluded.
         Shared raw source lines are withheld if any normalized record is excluded.
         References across the boundary are kept without the excluded bodies.
+        Use either the legacy run fields or selections, never both. All members
+        use one database snapshot; one failed member fails the whole preparation.
+        Data and selection manifests share a 900 MiB limit. No truncation is used.
       parameters: [{$ref: '#/components/parameters/exportHeader'}]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              additionalProperties: false
-              required: [run, scope]
-              properties:
-                run: {type: string, minLength: 1, maxLength: 512}
-                scope: {type: string, enum: [whole_run, session]}
-                harness: {type: string, minLength: 1, maxLength: 128}
-                session_id: {type: string, minLength: 1, maxLength: 512}
-                exclude_records:
-                  type: array
-                  maxItems: 4096
-                  items: {type: string, minLength: 1, maxLength: 1024}
-                exclude_categories:
-                  type: array
-                  maxItems: 5
-                  items: {type: string, enum: [messages, tools, configuration, files, runtime]}
-              allOf:
-                - if: {properties: {scope: {const: session}}}
-                  then: {required: [harness, session_id]}
-                  else:
-                    not:
-                      anyOf:
-                        - required: [harness]
-                        - required: [session_id]
+            schema: {$ref: '#/components/schemas/PrepareRequest'}
       responses:
         '201':
           description: Ready, frozen preview. Download uses this inventory, not later database writes.

@@ -2847,6 +2847,8 @@
   "native session ID; requires --harness": "原生会话 ID，需同时指定 --harness",
   "run to export; all saved and unassigned records are included by default": "要导出的 Run；默认包含全部已保存内容与未归属记录",
   "new ZIP file; unzip and open index.html offline": "新建 ZIP 文件；解压后离线打开 index.html",
+  "JSON array of explicit run/session selections; exclusive with single-run selection flags": "明确指定 Run 或会话范围的 JSON 数组文件；与单 Run 选择参数互斥",
+  "Comparing included records from two runs. Export exclusions remain in effect for A and B.": "比较两次 Run 在分享包中包含的记录；A、B 各自的导出排除项仍然生效。",
   "new directory for the static website": "静态网站的新输出目录",
   "Browse recorded executions. No install or API key required.": "直接浏览执行记录，无需安装或 API Key。",
   "Download CLI": "下载 CLI",

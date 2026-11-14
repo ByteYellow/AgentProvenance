@@ -52,6 +52,7 @@ type ReplayInventory struct {
 	AnalysisOmissions map[string]int                 `json:"analysis_omissions,omitempty"`
 	CapturePolicy     *agentcontext.CapturePolicy    `json:"capture_policy,omitempty"`
 	CaptureSettings   *observability.CaptureSettings `json:"capture_settings,omitempty"`
+	Runs              []ReplayRunInventory           `json:"runs,omitempty"`
 	Files             []ReplayFile                   `json:"files"`
 	Bytes             int64                          `json:"bytes_excluding_inventory"`
 }
@@ -126,14 +127,26 @@ func (s Server) PrepareOfflineReplay(ctx context.Context, run string) (_ *Prepar
 // PrepareSelectedOfflineReplay freezes a run and projects all replay readers
 // onto the same explicit selection. Related records outside it stay references.
 func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySelection) (_ *PreparedReplay, err error) {
-	input, err = input.normalized()
+	return s.PrepareOfflineReplaySet(ctx, []ReplaySelection{input})
+}
+
+// PrepareOfflineReplaySet prepares only the explicitly selected runs. Every
+// index is derived from one committed snapshot, with a separate selection for
+// each run. Relationship discovery never adds another run to the export.
+func (s Server) PrepareOfflineReplaySet(ctx context.Context, inputs []ReplaySelection) (_ *PreparedReplay, err error) {
+	inputs, err = normalizeReplaySelections(inputs)
 	if err != nil {
 		return nil, err
 	}
-	run := input.RunID
-	if run == "" {
-		return nil, fmt.Errorf("run is required")
+	snapshot, err := s.freezeReplaySource(ctx)
+	if err != nil {
+		return nil, err
 	}
+	defer snapshot.Close()
+	return s.prepareReplaySet(ctx, snapshot, inputs)
+}
+
+func (s Server) prepareReplaySet(ctx context.Context, snapshot *replaySnapshot, inputs []ReplaySelection) (_ *PreparedReplay, err error) {
 	root, err := os.MkdirTemp("", "agentprov-readonly-replay-")
 	if err != nil {
 		return nil, err
@@ -144,85 +157,35 @@ func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySe
 			_ = p.Close()
 		}
 	}()
-	snapshot, err := s.freezeReplaySource(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer snapshot.Close()
 	labels := map[string]string{}
-	if label := s.RunLabels[run]; label != "" {
-		labels[run] = label
+	visibleRuns := make([]string, 0, len(inputs))
+	for _, input := range inputs {
+		visibleRuns = append(visibleRuns, input.RunID)
+		if label := s.RunLabels[input.RunID]; label != "" {
+			labels[input.RunID] = label
+		}
 	}
 	frozen := Server{DB: snapshot.DB, RunLabels: labels}
 	get := replayResource(ctx, frozen.Handler())
-	raw, err := get("/api/runs")
-	if err != nil {
-		return nil, err
-	}
-	var all []runSummary
-	if err = json.Unmarshal(raw, &all); err != nil {
-		return nil, err
-	}
-	var selected *runSummary
-	for _, item := range all {
-		if item.Run == run {
-			selected = &item
-			break
-		}
-	}
-	if selected == nil {
-		return nil, fmt.Errorf("%w: run %q was not found", sql.ErrNoRows, run)
-	}
-	selection, err := frozen.resolveReplaySelection(ctx, input)
-	if err != nil {
-		return nil, err
-	}
-	selectionData, err := json.Marshal(struct {
-		SchemaVersion string                   `json:"schema_version"`
-		Selection     ReplaySelection          `json:"selection"`
-		Records       []replayRecordDecision   `json:"records"`
-		Warnings      []replaySelectionWarning `json:"warnings,omitempty"`
-		WarningCount  int                      `json:"warning_count"`
-	}{"agentprovenance.replay_selection/v1", selection.Selection, selection.Records, selection.Warnings, selection.WarningCount})
-	if err != nil {
-		return nil, err
-	}
-	selectionFile := ReplayFile{Path: "record-selection.json", SHA256: replayDigest(selectionData), Bytes: int64(len(selectionData))}
-	selectionSummary := selection.summary()
-	var omissions map[string]int
-	if selection.partial() {
-		projection, projectErr := snapshot.projectSelection(ctx, selection)
-		if projectErr != nil {
-			return nil, projectErr
-		}
-		defer projection.Close()
-		frozen = Server{DB: projection.DB, RunLabels: labels, replayProjection: projection}
-		omissions = projection.omitted
-		get = replayResource(ctx, frozen.Handler())
-		if err := projection.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE run_id=?`, run).Scan(&selected.Events); err != nil {
-			return nil, err
-		}
-	}
-	// Release the resolver's lookup maps before building all graph projections.
-	selection = nil
 	writer := &staticdata.Writer{Root: root}
-	replay, err := frozen.ExportReplay(ctx, run, writer)
-	if err != nil {
-		return nil, err
-	}
-	contents, err := describeReplay(root, replay)
-	if err != nil {
-		return nil, err
-	}
-	coverage, err := (agentcontext.Service{DB: frozen.DB}).Overview(ctx, run)
-	if err != nil {
-		return nil, err
-	}
 	catalog := struct {
 		SchemaVersion string               `json:"schema_version"`
 		Summaries     []runSummary         `json:"summaries"`
 		Runs          map[string]ReplayRun `json:"runs"`
-	}{"agentprovenance.static_replay/v1", []runSummary{*selected}, map[string]ReplayRun{run: replay}}
+	}{SchemaVersion: "agentprovenance.static_replay/v1", Runs: map[string]ReplayRun{}}
+	var runs []ReplayRunInventory
+	partial, analysisOmitted := false, false
+	for _, input := range inputs {
+		item, replay, err := frozen.prepareReplayRun(ctx, snapshot, input, visibleRuns, writer)
+		if err != nil {
+			return nil, fmt.Errorf("prepare replay run %q: %w", input.RunID, err)
+		}
+		runs = append(runs, item)
+		catalog.Summaries = append(catalog.Summaries, runSummary{Run: input.RunID, Events: item.Events})
+		catalog.Runs[input.RunID] = replay
+		partial = partial || (&replaySelectionPlan{Selection: input}).partial()
+		analysisOmitted = analysisOmitted || len(item.AnalysisOmissions) > 0
+	}
 	manifest, err := json.Marshal(catalog)
 	if err != nil {
 		return nil, err
@@ -237,8 +200,19 @@ func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySe
 		}
 		return os.WriteFile(path, data, 0600)
 	}
-	if err = write(selectionFile.Path, selectionData); err != nil {
-		return nil, err
+	selectionFile := runs[0].Selection
+	if len(runs) > 1 {
+		data, err := json.Marshal(struct {
+			SchemaVersion string               `json:"schema_version"`
+			Runs          []ReplayRunInventory `json:"runs"`
+		}{"agentprovenance.replay_selection_set/v1", runs})
+		if err != nil {
+			return nil, err
+		}
+		selectionFile = ReplayFile{Path: "record-selection.json", SHA256: replayDigest(data), Bytes: int64(len(data))}
+		if err = write(selectionFile.Path, data); err != nil {
+			return nil, err
+		}
 	}
 	assets := map[string][]byte{
 		"theme.css": themeCSS, "context.css": contextCSS, "context.js": contextJS,
@@ -290,7 +264,7 @@ func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySe
 		if getErr != nil {
 			return nil, getErr
 		}
-		page, pageErr := offlineReplayHTMLSelection(raw, lang, input, len(omissions) > 0)
+		page, pageErr := offlineReplayHTMLSet(raw, lang, inputs, partial, analysisOmitted)
 		if pageErr != nil {
 			return nil, pageErr
 		}
@@ -308,11 +282,21 @@ func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySe
 	if err = write("LICENSE", license); err != nil {
 		return nil, err
 	}
-	p.Inventory = ReplayInventory{SchemaVersion: "agentprovenance.replay_inventory/v1", RunID: run, Scope: input.Scope, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Commit: buildinfo.Commit, Events: selected.Events, Contents: contents, Selection: selectionFile}
-	p.Inventory.AnalysisOmissions = omissions
-	p.Inventory.CapturePolicy = coverage.CapturePolicy
-	p.Inventory.CaptureSettings = coverage.CaptureSettings
-	p.Inventory.SelectionSummary = &selectionSummary
+	first := runs[0]
+	p.Inventory = ReplayInventory{SchemaVersion: "agentprovenance.replay_inventory/v1", RunID: first.RunID, Scope: first.Scope, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Commit: buildinfo.Commit, Events: first.Events, Contents: first.Contents, Selection: selectionFile}
+	if len(runs) == 1 {
+		p.Inventory.AnalysisOmissions = first.AnalysisOmissions
+		p.Inventory.CapturePolicy, p.Inventory.CaptureSettings = first.CapturePolicy, first.CaptureSettings
+		p.Inventory.SelectionSummary = &first.SelectionSummary
+	} else {
+		p.Inventory.Scope, p.Inventory.Runs = "run_set", runs
+		p.Inventory.Events = 0
+		p.Inventory.Contents = ReplayContents{Sources: map[string]int{}}
+		for _, item := range runs {
+			p.Inventory.Events += item.Events
+			p.Inventory.Contents.add(item.Contents)
+		}
+	}
 	if err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
