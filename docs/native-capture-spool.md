@@ -159,6 +159,38 @@ Kernel-ring consumption, decoder queues and a workload's collection window are
 separate boundaries. Execution capture sealing must account for those boundaries
 before recording a sealed run; this API alone does not change that state.
 
+### Kernel and decoder checkpoints
+
+An in-process integration can pass a fresh `sensor.NewCheckpointer()` through
+`Options.Checkpointer` for one `RunWithOptions` invocation. After `OnReady`, call
+`Checkpoint(ctx, callback)` to insert a marker into the same kernel ring as the
+syscall and TLS records. The small marker program is invoked explicitly and is
+never attached to a network interface. Collection stays active throughout.
+
+The ordered decoder consumes earlier records first, waits for their queued
+AppArmor/seccomp state observations, and calls the callback while holding the
+JSON writer lock. The callback can take a `NativeStream.SnapshotPrefix` without
+later JSON writes entering that range. Drain that prefix after the callback
+returns. Callbacks must return promptly, honor the caller's context and avoid
+recursively requesting a checkpoint.
+
+The result records the collector generation, marker sequence, kernel monotonic
+time, observation time and decoded-record count. Kernel drops, state-queue drops
+and pending TLS stream/byte counts are **collector-wide**. Pending TLS buffers
+remain available for normal HTTP parsing; a checkpoint does not flush a partial
+message or attribute shared-node loss to a particular run.
+
+Calls serialize and default to a three-second deadline. A full ring, blocked
+decoder, failed writer or expired deadline returns an error. An expired marker
+cannot complete a later request. Once a callback starts, cancellation waits for
+it to return, so it cannot mutate caller-owned data after `Checkpoint` returns.
+Each collector restart requires a new checkpointer. Existing CLI collection
+keeps its current behavior when this optional integration is absent.
+
+This boundary and the accepted-spool prefix are inputs to execution capture
+sealing. The execution controller still needs to establish the workload window,
+observe background processes and persist the resulting capture status.
+
 ### Node status
 
 ```sh
@@ -220,6 +252,20 @@ identical distinct events, privacy before persistence, and collector exclusion.
 `internal/correlation/binding_test.go` covers delayed exits after PID reuse.
 Additional regressions cover same-batch exits, normalized row growth, lost
 capture files, pre-capture initialization recovery and cleanup errors at restart.
+
+With Linux BPF and cgroup v2 permissions, run the shared-capture boundary fixtures:
+
+```sh
+AGENTPROV_TEST_NATIVE_PREFIX=1 go test ./internal/telemetry \
+  -run '^TestLiveNative(Prefix|Boundary)WhileSensorContinues$' -count=1 -v
+AGENTPROV_TEST_SENSOR_BOUNDARY=1 go test ./internal/sensor \
+  -run '^TestLiveKernelCheckpointFullRingRetainsOrder$' -count=1 -v
+```
+
+These fixtures check earlier file events, a blocked JSON writer, continued
+capture after the checkpoint, and a full-ring timeout followed by an ordered
+retry. They create isolated test scopes and release their probes and scopes on
+completion. Without their opt-in environment variables, the fixtures skip.
 
 ## Interface language
 

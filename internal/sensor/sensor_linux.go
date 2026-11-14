@@ -253,11 +253,6 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	if ctx.Err() != nil {
 		return nil
 	}
-	reporter.publish(true)
-	if opts.OnReady != nil {
-		opts.OnReady()
-	}
-
 	resolver := newCgroupResolver()
 	configureCgroupResolver(resolver, &objs)
 	enc := json.NewEncoder(out)
@@ -317,6 +312,46 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		lastTLSLossReport = time.Now()
 	}
 	defer reportTLSLoss(true)
+	if opts.Checkpointer != nil {
+		marker, err := newKernelCheckpointer(objs.Events)
+		if err != nil {
+			return fmt.Errorf("prepare sensor checkpoint: %w", err)
+		}
+		if err := opts.Checkpointer.bind(marker.inject); err != nil {
+			marker.close()
+			return err
+		}
+		defer func() { opts.Checkpointer.stop(); marker.close() }()
+		reporter.add(ProbeCapability{Name: "capture_checkpoint", Category: "buffer", Required: true, Status: "attached"})
+	}
+	prepareBoundary := func(ctx context.Context, b *CaptureBoundary, callback func(CaptureBoundary) error) error {
+		if err := states.flush(ctx); err != nil {
+			return err
+		}
+		reportTLSLoss(true)
+		if err := objs.Drops.Lookup(uint32(0), &b.KernelDrops); err != nil {
+			return fmt.Errorf("read sensor checkpoint drops: %w", err)
+		}
+		if states != nil {
+			b.StateQueueDrops = states.totalDropped.Load()
+		}
+		b.PendingTLSStreams, b.PendingTLSBytes = reasm.Pending()
+		encMu.Lock()
+		defer encMu.Unlock()
+		if err := errors.Join(writeErr, ctx.Err()); err != nil {
+			return err
+		}
+		b.ObservedAt = time.Now().UTC()
+		if callback != nil {
+			return callback(*b)
+		}
+		return nil
+	}
+	reporter.publish(true)
+	if opts.OnReady != nil {
+		opts.OnReady()
+	}
+	var decoded uint64
 	// Drain independently of JSON/procfs work. The queue is bounded and blocks
 	// when full: overload remains visible through the kernel drop counter.
 	for {
@@ -331,6 +366,11 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 			}
 			return i18n.Errorf("read sensor ring buffer: %w", err)
 		}
+		if e.Kind == eventCaptureBoundary {
+			opts.Checkpointer.consume(e.Conn, CaptureBoundary{KernelTimeNS: e.KtimeNs, DecodedRecords: decoded}, prepareBoundary)
+			continue
+		}
+		decoded++
 
 		task := procfs.resolve(e)
 		procfs.publish(reporter, false)

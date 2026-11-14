@@ -1,6 +1,7 @@
 package sensor
 
 import (
+	"context"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -17,15 +18,17 @@ const (
 type stateTarget struct {
 	pid, tid      uint32
 	start, cgroup uint64
+	barrier       chan struct{}
 }
 
 type stateSampler struct {
-	queue   chan stateTarget
-	done    chan struct{}
-	seen    map[stateTarget]time.Time
-	order   []stateTarget
-	next    int
-	dropped atomic.Int64
+	queue        chan stateTarget
+	done         chan struct{}
+	seen         map[stateTarget]time.Time
+	order        []stateTarget
+	next         int
+	dropped      atomic.Int64
+	totalDropped atomic.Uint64
 }
 
 // Only the ring-buffer reader offers work. Filesystem I/O and encoding run in
@@ -52,6 +55,11 @@ func newStateSampler(opts Options, read func(int, int, accesscontrol.Options) ac
 			case target, ok := <-s.queue:
 				if !ok {
 					return
+				}
+				if target.barrier != nil {
+					loss()
+					close(target.barrier)
+					continue
 				}
 				snapshot := read(int(target.pid), int(target.tid), accesscontrol.Options{AppArmor: opts.AppArmorState, Seccomp: opts.SeccompState})
 				ev := map[string]any{"source": "procfs_access_control", "event_type": "access_control_state", "state": snapshot, "timestamp": snapshot.ObservedAt}
@@ -91,6 +99,26 @@ func (s *stateSampler) offer(target stateTarget, now time.Time) {
 	case s.queue <- target:
 	default:
 		s.dropped.Add(1)
+		s.totalDropped.Add(1)
+	}
+}
+
+// Called by the decoder, which is the sole producer of sampling work.
+func (s *stateSampler) flush(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	done := make(chan struct{})
+	select {
+	case s.queue <- stateTarget{barrier: done}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

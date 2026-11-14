@@ -23,6 +23,9 @@ type Options struct {
 	GoTLSBin string
 	Context  context.Context
 	OnReady  func()
+	// Checkpointer optionally enables ordered kernel/decoder boundaries for a
+	// shared collector. Use a fresh NewCheckpointer for each sensor invocation.
+	Checkpointer *Checkpointer
 	// AutoTLS scans visible processes, including container mount namespaces,
 	// for mapped OpenSSL libraries and Go TLS executables. Bounded event-driven
 	// discovery supplements polling; first use can still precede attachment.

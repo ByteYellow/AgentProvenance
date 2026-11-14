@@ -1,7 +1,10 @@
 package sensor
 
 import (
+	"context"
+	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -68,5 +71,27 @@ func TestStateSamplingOptOut(t *testing.T) {
 		t.Fatal("disabled sampler started")
 	}
 	s.offer(stateTarget{pid: 1, tid: 1}, time.Now())
+	s.close()
+}
+
+func TestStateSamplingBoundaryWaitsForPriorObservations(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var emitted atomic.Int64
+	s := newStateSampler(Options{SeccompState: true}, func(pid, tid int, _ accesscontrol.Options) accesscontrol.Snapshot {
+		close(entered)
+		<-release
+		return accesscontrol.Snapshot{ObservedAt: time.Now().UTC().Format(time.RFC3339Nano)}
+	}, func(any) { emitted.Add(1) })
+	s.offer(stateTarget{pid: 1, tid: 1}, time.Now())
+	<-entered
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if err := s.flush(ctx); !errors.Is(err, context.DeadlineExceeded) || emitted.Load() != 0 {
+		t.Fatalf("snapshot still running, flush=%v emitted=%d", err, emitted.Load())
+	}
+	close(release)
+	if err := s.flush(context.Background()); err != nil || emitted.Load() != 1 {
+		t.Fatalf("prior observation missing at boundary: %d %v", emitted.Load(), err)
+	}
 	s.close()
 }

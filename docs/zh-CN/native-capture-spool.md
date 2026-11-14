@@ -112,6 +112,27 @@ open 路径在 syscall 入口不可读时，使用有界线程表在 syscall 返
 内核缓冲区、解码队列和任务采集窗口各有独立边界，执行收尾需完成这些交接后再封存 Run。
 该接口自身不改变 Run 的采集状态。
 
+### 内核与解码检查点
+
+进程内集成可以创建 `sensor.NewCheckpointer()`，通过 `Options.Checkpointer` 传给一次
+`RunWithOptions`。收到 `OnReady` 后，调用 `Checkpoint(ctx, callback)`，向 syscall 和 TLS
+记录共用的内核环形缓冲区写入标记。标记程序由调用方显式触发，不挂载网络接口；采集持续运行。
+
+解码器先处理标记之前的记录，再等待此前排队的 AppArmor/seccomp 状态观察，最后在持有 JSON
+写入锁时执行回调。回调可调用 `NativeStream.SnapshotPrefix`，固定对应的已接收范围；
+回调返回后再排空这个范围。回调需及时返回、遵守调用方的 context，并避免递归请求检查点。
+
+结果保存采集器代次、标记序号、内核单调时钟、观察时间和已解码记录数。
+内核丢失、状态队列丢失、待重组 TLS 流数和字节数均为**采集器级指标**。
+TLS 缓冲区继续参与正常 HTTP 解析；检查点不强制结束半条消息，也不将共享节点的丢失计数分配给某次运行。
+
+检查点请求串行处理，默认截止时间为三秒。缓冲区满、解码阻塞、写入失败或超时都会返回错误。
+过期标记不会完成后续请求。回调已经开始时，取消操作会等它返回，确保 `Checkpoint` 返回后
+不再修改调用方的数据。采集器重启须创建新的 checkpointer；未启用该集成的 CLI 采集行为保持不变。
+
+内核与解码边界、已接收的 spool 范围共同用于执行封存。执行控制器还需确定任务采集窗口、
+观察后台进程，并持久化相应的采集状态。
+
 ### 节点状态
 
 ```sh
@@ -164,6 +185,18 @@ AGENTPROV_LIVE_LIFECYCLE_EVENTS=/path/to/acceptance.events.jsonl \
 `internal/correlation/binding_test.go` 覆盖 PID 复用后的迟到退出事件。
 
 补充回归还覆盖同批退出事件、规范化后单行大小增长、采集文件丢失、接收事件前的初始化恢复，以及重启时的清理错误。测试覆盖不等于长期运行验收；长期负载和不同存储设备的验证应单独记录。
+
+在具备 BPF 与 cgroup v2 权限的 Linux 环境执行持续采集检查点用例：
+
+```sh
+AGENTPROV_TEST_NATIVE_PREFIX=1 go test ./internal/telemetry \
+  -run '^TestLiveNative(Prefix|Boundary)WhileSensorContinues$' -count=1 -v
+AGENTPROV_TEST_SENSOR_BOUNDARY=1 go test ./internal/sensor \
+  -run '^TestLiveKernelCheckpointFullRingRetainsOrder$' -count=1 -v
+```
+
+这些用例检查先前文件事件、JSON 写入阻塞、检查点后的持续采集，以及缓冲区满时的超时与有序重试。
+测试使用隔离作用域，结束时释放探针并清理作用域；未设置上述环境变量时跳过。
 
 ## 界面语言
 

@@ -5,6 +5,7 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,10 +24,13 @@ import (
 // Select only this test's two kernel cgroups. The payload is the sensor's actual
 // output; no event identities, timestamps, or process observations are added.
 type nativePrefixLiveWriter struct {
-	stream *NativeStream
-	groups map[string]bool
-	marks  map[string]chan struct{}
-	mu     sync.Mutex
+	stream  *NativeStream
+	groups  map[string]bool
+	marks   map[string]chan struct{}
+	mu      sync.Mutex
+	block   string
+	entered chan struct{}
+	release chan struct{}
 }
 
 func (w *nativePrefixLiveWriter) Write(data []byte) (int, error) {
@@ -40,6 +44,11 @@ func (w *nativePrefixLiveWriter) Write(data []byte) (int, error) {
 	if !w.groups[group] {
 		return len(data), nil
 	}
+	if path, _ := event["path"].(string); w.block != "" && filepath.Base(path) == w.block {
+		w.block = ""
+		close(w.entered)
+		<-w.release
+	}
 	n, err := w.stream.Write(data)
 	if err == nil && event["event_type"] == "file_open" && event["mode"] == "write" {
 		path, _ := event["path"].(string)
@@ -52,12 +61,27 @@ func (w *nativePrefixLiveWriter) Write(data []byte) (int, error) {
 }
 
 func TestLiveNativePrefixWhileSensorContinues(t *testing.T) {
+	runLiveNativePrefix(t, false)
+}
+
+func TestLiveNativeBoundaryWhileSensorContinues(t *testing.T) {
+	runLiveNativePrefix(t, true)
+}
+
+func runLiveNativePrefix(t *testing.T, withBoundary bool) {
+	t.Helper()
 	if os.Getenv("AGENTPROV_TEST_NATIVE_PREFIX") != "1" {
 		t.Skip("set AGENTPROV_TEST_NATIVE_PREFIX=1 on Linux with BPF and cgroup v2 permissions")
 	}
 	db, paths := nativeTestStore(t)
 	n := nativeTestStream(t, db, paths, NativeStreamOptions{BatchEvents: 64})
 	writer := &nativePrefixLiveWriter{stream: n, groups: map[string]bool{}, marks: map[string]chan struct{}{}}
+	var releaseOnce sync.Once
+	if withBoundary {
+		writer.block = "prefix-0.txt"
+		writer.entered, writer.release = make(chan struct{}), make(chan struct{})
+		defer releaseOnce.Do(func() { close(writer.release) })
+	}
 	work := t.TempDir()
 	commands := make([]*exec.Cmd, 2)
 	marks := make([]chan struct{}, 2)
@@ -94,8 +118,14 @@ func TestLiveNativePrefixWhileSensorContinues(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	ready, done := make(chan struct{}), make(chan error, 1)
+	var checkpointer *sensor.Checkpointer
+	if withBoundary {
+		checkpointer = sensor.NewCheckpointer()
+	}
 	go func() {
-		done <- sensor.RunWithOptions(writer, sensor.Options{Context: ctx, Diagnostics: io.Discard, OnReady: func() { close(ready) }})
+		done <- sensor.RunWithOptions(writer, sensor.Options{Context: ctx, Diagnostics: io.Discard,
+			Checkpointer: checkpointer, AppArmorState: withBoundary, SeccompState: withBoundary,
+			OnReady: func() { close(ready) }})
 	}()
 	stopped := false
 	stop := func() {
@@ -132,6 +162,9 @@ func TestLiveNativePrefixWhileSensorContinues(t *testing.T) {
 		if err != nil || string(body) != "captured by native sensor\n" {
 			t.Fatalf("fixture %d file output: %q %v", i, body, err)
 		}
+		if withBoundary {
+			return
+		}
 		select {
 		case <-marks[i]:
 		case <-time.After(5 * time.Second):
@@ -139,11 +172,52 @@ func TestLiveNativePrefixWhileSensorContinues(t *testing.T) {
 		}
 	}
 	run(0)
-	prefix, err := n.SnapshotPrefix(context.Background())
+	var prefix NativePrefix
+	var err error
+	if withBoundary {
+		select {
+		case <-writer.entered:
+		case <-time.After(5 * time.Second):
+			t.Fatal("first event did not reach the blocked writer")
+		}
+		blockedCtx, cancelBlocked := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		_, err := checkpointer.Checkpoint(blockedCtx, func(sensor.CaptureBoundary) error {
+			t.Error("checkpoint overtook a blocked event writer")
+			return nil
+		})
+		cancelBlocked()
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("blocked decoder checkpoint: %v", err)
+		}
+		releaseOnce.Do(func() { close(writer.release) })
+		boundaryCtx, cancelBoundary := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancelBoundary()
+		boundary, checkpointErr := checkpointer.Checkpoint(boundaryCtx, func(sensor.CaptureBoundary) error {
+			prefix, err = n.SnapshotPrefix(boundaryCtx)
+			return err
+		})
+		err = checkpointErr
+		if err != nil || boundary.KernelTimeNS == 0 || boundary.DecodedRecords == 0 || boundary.Sequence != 2 {
+			t.Fatalf("live sensor boundary=%+v error=%v", boundary, err)
+		}
+		select {
+		case <-marks[0]:
+		default:
+			t.Fatal("kernel checkpoint overtook the earlier file write")
+		}
+		t.Logf("kernel boundary: %+v", boundary)
+	} else {
+		prefix, err = n.SnapshotPrefix(context.Background())
+	}
 	if err != nil || prefix.Sequence == 0 || len(prefix.Batches) == 0 {
 		t.Fatalf("live prefix=%+v error=%v", prefix, err)
 	}
 	run(1)
+	if withBoundary {
+		if _, err := checkpointer.Checkpoint(context.Background(), nil); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := n.Flush(); err != nil {
 		t.Fatal(err)
 	}

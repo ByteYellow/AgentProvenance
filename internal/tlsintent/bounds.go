@@ -10,6 +10,25 @@ type CaptureLoss struct {
 // TakeLoss returns and resets loss counters since the previous call.
 func (r *Reassembler) TakeLoss() CaptureLoss { loss := r.loss; r.loss = CaptureLoss{}; return loss }
 
+// Pending reports buffered plaintext without flushing or changing parsing
+// state. Empty keep-alive connections are not pending messages.
+func (r *Reassembler) Pending() (streams, bytes int) {
+	for _, s := range r.streams {
+		n := s.buf.Len()
+		if s.capture != nil {
+			n += len(s.capture.pending)
+		}
+		if s.h2 != nil {
+			n += s.h2.retainedBytes()
+		}
+		if n > 0 {
+			streams++
+			bytes += n
+		}
+	}
+	return streams, bytes
+}
+
 func (r *Reassembler) byteLimit() int {
 	if r.MaxBytes > 0 {
 		return r.MaxBytes
