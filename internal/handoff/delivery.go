@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/attest"
 	"github.com/byteyellow/agentprovenance/internal/forensics"
@@ -25,6 +26,7 @@ type DeliveryService struct {
 	SignKey     ed25519.PrivateKey
 	ReceiverID  string
 	ReceiverKey ed25519.PublicKey
+	Retention   time.Duration
 	slot        deliverySlot
 }
 
@@ -53,11 +55,12 @@ type Delivery struct {
 	ManifestSHA256 string           `json:"manifest_sha256"`
 	Receipt        json.RawMessage  `json:"receipt,omitempty"`
 	BundlePath     string           `json:"-"`
+	Storage        *DeliveryStorage `json:"storage,omitempty"`
 }
 
 func (s *DeliveryService) validate() error {
 	if s.Ledger.DB == nil || s.Paths.Root == "" || s.Ledger.Target.Validate() != nil ||
-		!validID(s.ReceiverID) || len(s.SignKey) != ed25519.PrivateKeySize || len(s.ReceiverKey) != ed25519.PublicKeySize {
+		!validID(s.ReceiverID) || len(s.SignKey) != ed25519.PrivateKeySize || len(s.ReceiverKey) != ed25519.PublicKeySize || s.Retention < 0 {
 		return fmt.Errorf("invalid delivery service configuration")
 	}
 	return nil
@@ -88,6 +91,9 @@ func (s *DeliveryService) Prepare(ctx context.Context, p Principal, attemptID, o
 	if existing, err := s.read(ctx, s.Ledger.DB, id); err == nil {
 		if existing.Manifest.ReceiverID != s.ReceiverID {
 			return Delivery{}, false, ErrConflict
+		}
+		if existing.retired() {
+			return Delivery{}, false, ErrDeliveryRetired
 		}
 		if err := checkDeliveryFile(ctx, existing.BundlePath, existing.Manifest); err != nil {
 			return Delivery{}, false, err
@@ -217,6 +223,9 @@ func (s *DeliveryService) Prepare(ctx context.Context, p Principal, attemptID, o
 		return Delivery{}, false, err
 	}
 	if reused {
+		if d.retired() {
+			return Delivery{}, false, ErrDeliveryRetired
+		}
 		if err := checkDeliveryFile(ctx, d.BundlePath, d.Manifest); err != nil {
 			return Delivery{}, false, err
 		}
@@ -238,8 +247,11 @@ func latestDelivery(ctx context.Context, q queryer, attempt, receiver string) (i
 func (s *DeliveryService) read(ctx context.Context, q queryer, id string) (Delivery, error) {
 	var d Delivery
 	var envelope, receipt []byte
-	err := q.QueryRowContext(ctx, `SELECT manifest_json,manifest_sha256,bundle_path,receipt_json FROM execution_deliveries WHERE id=?`, id).
-		Scan(&envelope, &d.ManifestSHA256, &d.BundlePath, &receipt)
+	var until, retired, purged int64
+	err := q.QueryRowContext(ctx, `SELECT d.manifest_json,d.manifest_sha256,d.bundle_path,d.receipt_json,
+		COALESCE(r.retain_until_ns,0),COALESCE(r.retired_at_ns,0),COALESCE(r.purged_at_ns,0)
+		FROM execution_deliveries d LEFT JOIN execution_delivery_retention r ON r.delivery_id=d.id WHERE d.id=?`, id).
+		Scan(&envelope, &d.ManifestSHA256, &d.BundlePath, &receipt, &until, &retired, &purged)
 	if errors.Is(err, sql.ErrNoRows) {
 		return d, ErrNotFound
 	}
@@ -247,6 +259,17 @@ func (s *DeliveryService) read(ctx context.Context, q queryer, id string) (Deliv
 		return d, err
 	}
 	d.Envelope, d.Receipt = envelope, receipt
+	if until != 0 {
+		d.Storage = &DeliveryStorage{State: "retained", RetainUntil: time.Unix(0, until).UTC()}
+		if retired != 0 {
+			t := time.Unix(0, retired).UTC()
+			d.Storage.State, d.Storage.RetiredAt = "retired", &t
+		}
+		if purged != 0 {
+			t := time.Unix(0, purged).UTC()
+			d.Storage.PurgedAt = &t
+		}
+	}
 	if attest.DigestSHA256(d.Envelope) != d.ManifestSHA256 {
 		return d, fmt.Errorf("saved delivery manifest digest mismatch")
 	}
@@ -278,8 +301,14 @@ func (s *DeliveryService) OpenBundle(ctx context.Context, p Principal, id string
 	if err != nil {
 		return Delivery{}, nil, err
 	}
+	if d.retired() {
+		return Delivery{}, nil, ErrDeliveryRetired
+	}
 	f, err := os.Open(d.BundlePath)
 	if err != nil {
+		if latest, readErr := s.Get(ctx, p, id); readErr == nil && latest.retired() {
+			return Delivery{}, nil, ErrDeliveryRetired
+		}
 		return Delivery{}, nil, err
 	}
 	if err := checkDeliveryHandle(ctx, f, d.Manifest); err != nil {
@@ -332,6 +361,9 @@ func (s *DeliveryService) Acknowledge(ctx context.Context, p Principal, id strin
 		if _, err := tx.ExecContext(ctx, "UPDATE execution_deliveries SET receipt_json=? WHERE id=?", raw, id); err != nil {
 			return err
 		}
+		if err := s.scheduleRetention(ctx, tx, a, id); err != nil {
+			return err
+		}
 		var pending int
 		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM execution_deliveries WHERE attempt_id=? AND receipt_json IS NULL)`, a.ID).Scan(&pending); err != nil {
 			return err
@@ -343,8 +375,8 @@ func (s *DeliveryService) Acknowledge(ctx context.Context, p Principal, id strin
 		if err := s.deliveryTransition(ctx, tx, a, next, "delivery_receipt_persisted", attest.DigestSHA256(raw)); err != nil {
 			return err
 		}
-		d.Receipt = append([]byte(nil), raw...)
-		return nil
+		d, err = s.read(ctx, tx, id)
+		return err
 	})
 	return d, err
 }

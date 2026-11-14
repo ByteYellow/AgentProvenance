@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
@@ -41,6 +42,20 @@ func TestExecutionCaptureConfig(t *testing.T) {
 	}
 }
 
+func TestExecutionDeliveryRetentionConfig(t *testing.T) {
+	base := `{"target":{"producer_id":"vm","instance_id":"one","generation":"first"},"caller":{"principal_id":"router","producer_id":"mac","namespace":"user"},"delivery":{"receiver_id":"receiver","sign_key_file":"sender.key","receiver_public_key_file":"receiver.pub","retention_hours":`
+	for _, hours := range []string{"0", "1", "720"} {
+		if _, err := ReadConfig(strings.NewReader(base + hours + `}}`)); err != nil {
+			t.Fatalf("retention %s hours: %v", hours, err)
+		}
+	}
+	for _, hours := range []string{"-1", "1.5", "2562048"} {
+		if _, err := ReadConfig(strings.NewReader(base + hours + `}}`)); err == nil {
+			t.Fatalf("accepted invalid retention: %s", hours)
+		}
+	}
+}
+
 func TestExecutionDeliveryConfigLoadsRelativePinnedKeys(t *testing.T) {
 	root := t.TempDir()
 	pub, key, err := ed25519.GenerateKey(rand.Reader)
@@ -52,7 +67,7 @@ func TestExecutionDeliveryConfigLoadsRelativePinnedKeys(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	raw := `{"target":{"producer_id":"vm","instance_id":"one","generation":"first"},"caller":{"principal_id":"router","producer_id":"mac","namespace":"user"},"delivery":{"receiver_id":"receiver","sign_key_file":"sender.key","receiver_public_key_file":"receiver.pub"}}`
+	raw := `{"target":{"producer_id":"vm","instance_id":"one","generation":"first"},"caller":{"principal_id":"router","producer_id":"mac","namespace":"user"},"delivery":{"receiver_id":"receiver","sign_key_file":"sender.key","receiver_public_key_file":"receiver.pub","retention_hours":720}}`
 	c, err := ReadConfig(strings.NewReader(raw))
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +82,7 @@ func TestExecutionDeliveryConfigLoadsRelativePinnedKeys(t *testing.T) {
 	}
 	defer db.Close()
 	s, err := c.DeliveryService(root, Ledger{DB: db, Target: c.Target}, paths)
-	if err != nil || s.ReceiverID != "receiver" || !s.ReceiverKey.Equal(pub) {
+	if err != nil || s.ReceiverID != "receiver" || !s.ReceiverKey.Equal(pub) || s.Retention != 720*time.Hour {
 		t.Fatalf("key configuration: %+v %v", s, err)
 	}
 	if err := os.Remove(filepath.Join(root, "receiver.pub")); err != nil {

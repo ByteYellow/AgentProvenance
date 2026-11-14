@@ -6,6 +6,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/attest"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -68,6 +69,7 @@ type DeliveryConfig struct {
 	ReceiverID            string `json:"receiver_id"`
 	SignKeyFile           string `json:"sign_key_file"`
 	ReceiverPublicKeyFile string `json:"receiver_public_key_file"`
+	RetentionHours        int64  `json:"retention_hours,omitempty"`
 }
 
 func ReadConfig(r io.Reader) (Config, error) {
@@ -95,6 +97,9 @@ func ReadConfig(r io.Reader) (Config, error) {
 	}
 	if c.Delivery != nil && (!validID(c.Delivery.ReceiverID) || c.Delivery.SignKeyFile == "" || c.Delivery.ReceiverPublicKeyFile == "") {
 		return c, fmt.Errorf("delivery configuration requires receiver identity and key files")
+	}
+	if c.Delivery != nil && (c.Delivery.RetentionHours < 0 || c.Delivery.RetentionHours > int64((1<<63-1)/time.Hour)) {
+		return c, fmt.Errorf("delivery retention_hours must be a nonnegative, representable duration")
 	}
 	if c.Capture != nil {
 		if err := c.Capture.Validate(); err != nil {
@@ -124,7 +129,11 @@ func (c Config) DeliveryService(baseDir string, ledger Ledger, paths store.Paths
 	if err != nil {
 		return nil, err
 	}
-	s := &DeliveryService{Ledger: ledger, Paths: paths, SignKey: key, ReceiverID: c.Delivery.ReceiverID, ReceiverKey: pub}
+	if c.Delivery.RetentionHours < 0 || c.Delivery.RetentionHours > int64((1<<63-1)/time.Hour) {
+		return nil, fmt.Errorf("invalid delivery retention_hours")
+	}
+	s := &DeliveryService{Ledger: ledger, Paths: paths, SignKey: key, ReceiverID: c.Delivery.ReceiverID, ReceiverKey: pub,
+		Retention: time.Duration(c.Delivery.RetentionHours) * time.Hour}
 	return s, s.validate()
 }
 

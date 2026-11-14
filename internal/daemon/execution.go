@@ -30,6 +30,7 @@ func executionFailure(w http.ResponseWriter, err error) {
 		{handoff.ErrInvalid, http.StatusBadRequest}, {handoff.ErrForbidden, http.StatusForbidden},
 		{handoff.ErrNotFound, http.StatusNotFound}, {handoff.ErrConflict, http.StatusConflict},
 		{handoff.ErrStale, http.StatusConflict}, {handoff.ErrExpired, http.StatusGone},
+		{handoff.ErrDeliveryRetired, http.StatusGone},
 	} {
 		if errors.Is(err, known.err) {
 			executionError(w, known.status, known.err.Error())

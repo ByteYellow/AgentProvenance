@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/handoff"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -101,6 +102,47 @@ func TestExecutionDeliveryAPILostAcknowledgment(t *testing.T) {
 				t.Fatalf("metadata: %+v %v", got, err)
 			}
 		})
+	}
+}
+
+func TestExecutionDeliveryAPIRetiredPackageAndGC(t *testing.T) {
+	s, request, receiver := deliveryServer(t)
+	s.ExecutionDelivery.Retention = time.Hour
+	server := httptest.NewServer(s.Handler())
+	defer server.Close()
+	client := Client{BaseURL: server.URL, HTTP: server.Client(), Token: s.AuthToken}
+	ctx := context.Background()
+	a, err := client.SubmitExecution(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitAPIExecution(t, client, a.Attempt.ID, handoff.Succeeded)
+	result, err := client.CollectExecution(ctx, handoff.IdentityOf(a.Attempt), "retention", receiver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.ExecutionDelivery.Ledger.Now = func() time.Time { return request.ValidUntil.Add(2 * time.Hour) }
+	s.gcOnce(ctx)
+	got, err := client.ExecutionDelivery(ctx, result.DeliveryID)
+	if err != nil || got.Delivery.Storage == nil || got.Delivery.Storage.PurgedAt == nil || !bytes.Equal(got.Delivery.Receipt, result.Receipt) {
+		t.Fatalf("retained metadata: %+v %v", got.Delivery.Storage, err)
+	}
+	for _, route := range []struct{ method, path, body string }{
+		{"GET", "/v1/execution-deliveries/" + result.DeliveryID + "/bundle", ""},
+		{"POST", "/v1/executions/" + a.Attempt.ID + "/deliveries", `{"operation_id":"retention"}`},
+	} {
+		r := httptest.NewRequest(route.method, route.path, strings.NewReader(route.body))
+		r.Header.Set("Authorization", "Bearer "+s.AuthToken)
+		r.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		s.Handler().ServeHTTP(w, r)
+		if w.Code != http.StatusGone || !strings.Contains(w.Body.String(), `"error":"execution_delivery_retired"`) {
+			t.Fatalf("retired %s: %d %s", route.path, w.Code, w.Body.String())
+		}
+	}
+	var payload string
+	if err := s.DB.QueryRow(`SELECT payload FROM events WHERE event_type='execution_delivery_cleanup'`).Scan(&payload); err != nil || !strings.Contains(payload, `"purged":1`) {
+		t.Fatalf("cleanup result unavailable: %q %v", payload, err)
 	}
 }
 

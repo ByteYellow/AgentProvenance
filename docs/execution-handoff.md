@@ -496,9 +496,10 @@ The DSSE/in-toto manifest uses `agentprovenance.execution_delivery/v1`. It binds
 
 `Prepare` persists the package before adding its outbox row. Retrying the same
 operation returns the same bytes, including after restart. A new operation creates
-a new package version. Archives and ledger entries are retained; no automatic
-delivery cleanup is currently enabled. A failed publication or transaction can
-leave an unreferenced archive for reconciliation.
+a new package version. Transfer copies are retained by default; optional sender
+cleanup is described below. A failed publication or transaction can leave an
+unreferenced archive for reconciliation; automatic cleanup does not age-delete
+these archives or active preparation directories.
 
 `handoff.DeliveryReceiver` takes the expected identity from a separately trusted
 admission record. It pins the target public key, receiver identity and permitted
@@ -521,6 +522,36 @@ cumulative body/record budget and checks final serialized size. Cancellation
 stops queued work, database queries and body copies. Transport adapters must also
 set read deadlines for stalled network connections. Keep signing keys separate
 from transport credentials and retain verification keys for archived evidence.
+
+### Sender-copy retention
+
+Set `delivery.retention_hours` to a positive whole number, for example `720`
+for 30 days. Omitted or `0` keeps transfer copies indefinitely. The daemon's
+existing GC worker handles at most `min(--gc-limit, 1000)` packages per pass;
+`--gc-interval=0` disables its automatic cleanup.
+
+The first saved receipt starts the local retention window. A copy remains until
+both that window and the original execution request's validity have elapsed.
+Existing receipts without a deadline receive a full window when the worker first
+observes the enabled policy. Receipt retries and later configuration changes keep
+the saved deadline; setting retention to zero pauses cleanup.
+
+Cleanup first persists retirement, then removes only the sender's `bundle.json`
+and `manifest.dsse.json` transfer files and their empty package directory. It
+retries interrupted removals. The API's optional `storage` object reports the
+deadline, retirement and completed purge separately from the signed manifest.
+Unexpected directory entries or filesystem failures leave retirement visible,
+are logged as errors and remain retryable. GC outcomes are saved as
+`execution_delivery_cleanup` events; already-open downloads may finish.
+
+After retirement, preparing the same operation or downloading its body returns
+HTTP 410 `execution_delivery_retired`. Metadata queries and receipt replay still
+work. A new explicit delivery operation can produce the next version from retained
+source evidence. Signed manifests, receipts, operation deduplication records,
+source evidence and receiver archives are not removed by this policy. The ledger
+is retained for the lifetime of the store; processed native-spool payload cleanup
+continues to follow its existing settlement rules. This setting bounds acknowledged
+transfer copies, not total evidence-store growth.
 
 ### Configure and collect
 
@@ -570,8 +601,8 @@ native harness and Sensor acceptance.
 
 ## Compatibility and tests
 
-Database schemas 21-25 add the execution ledger, durable stop requests, delivery
-outbox/receipts, per-scope capture accounting and sampling-gap counts without renaming legacy tables
+Database schemas 21-26 add the execution ledger, durable stop requests, delivery
+outbox/receipts, sender-copy retention, per-scope capture accounting and sampling-gap counts without renaming legacy tables
 or rewriting existing events.
 Older binaries reject the newer schema; use a backup
 for a downgrade. Historic signed packages retain their original format.

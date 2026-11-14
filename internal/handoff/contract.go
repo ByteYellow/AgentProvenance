@@ -21,12 +21,13 @@ const (
 )
 
 var (
-	ErrInvalid   = errors.New("invalid_execution_request")
-	ErrForbidden = errors.New("execution_source_forbidden")
-	ErrConflict  = errors.New("execution_conflict")
-	ErrExpired   = errors.New("execution_request_expired")
-	ErrNotFound  = errors.New("execution_not_found")
-	ErrStale     = errors.New("execution_revision_conflict")
+	ErrInvalid         = errors.New("invalid_execution_request")
+	ErrForbidden       = errors.New("execution_source_forbidden")
+	ErrConflict        = errors.New("execution_conflict")
+	ErrExpired         = errors.New("execution_request_expired")
+	ErrNotFound        = errors.New("execution_not_found")
+	ErrStale           = errors.New("execution_revision_conflict")
+	ErrDeliveryRetired = errors.New("execution_delivery_retired")
 )
 
 type Source struct {

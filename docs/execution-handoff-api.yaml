@@ -120,6 +120,7 @@ paths:
     post:
       operationId: prepareExecutionDelivery
       summary: Freeze a signed package or retrieve the same delivery operation
+      description: A retired operation returns 410 execution_delivery_retired; use a new explicit operation to prepare another version.
       requestBody:
         required: true
         content:
@@ -161,6 +162,7 @@ paths:
     get:
       operationId: downloadExecutionDelivery
       summary: Download the immutable bytes bound by the signed manifest
+      description: A retired sender copy returns 410 execution_delivery_retired. Its metadata and receipt remain queryable.
       responses:
         '200':
           description: Verified archive, streamed with Content-Length and no-store caching
@@ -195,7 +197,7 @@ components:
     Error:
       description: >
         English error code. Invalid input is 400, unauthenticated 401,
-        unauthorized 403, unknown/disabled 404, conflict 409, expired 410,
+        unauthorized 403, unknown/disabled 404, conflict 409, expired request or retired delivery 410,
         oversized 413, storage failure 500, unavailable worker 503.
       content:
         application/json:
@@ -262,6 +264,17 @@ components:
         envelope: { $ref: '#/components/schemas/Envelope' }
         manifest_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
         receipt: { $ref: '#/components/schemas/Envelope' }
+        storage: { $ref: '#/components/schemas/DeliveryStorage' }
+    DeliveryStorage:
+      type: object
+      additionalProperties: false
+      required: [state, retain_until]
+      description: Local sender-copy retention, outside the immutable signed manifest. Omitted until a retention deadline is assigned. Retirement disables new downloads; purged_at records durable file removal.
+      properties:
+        state: { type: string, enum: [retained, retired] }
+        retain_until: { type: string, format: date-time }
+        retired_at: { type: string, format: date-time }
+        purged_at: { type: string, format: date-time }
     DeliveryResponse:
       type: object
       additionalProperties: false

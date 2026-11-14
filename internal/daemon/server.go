@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -333,18 +334,18 @@ func (s Server) StartGCWorker(ctx context.Context) {
 	}
 	ticker := time.NewTicker(s.GCInterval)
 	defer ticker.Stop()
-	s.gcOnce()
+	s.gcOnce(ctx)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.gcOnce()
+			s.gcOnce(ctx)
 		}
 	}
 }
 
-func (s Server) gcOnce() {
+func (s Server) gcOnce(ctx context.Context) {
 	limit := s.GCLimit
 	if limit <= 0 {
 		limit = 100
@@ -357,6 +358,29 @@ func (s Server) gcOnce() {
 	}
 	_, _ = s.DB.Exec(`INSERT INTO events (id, source, event_type, payload, created_at)
 		VALUES ('evt-' || lower(hex(randomblob(6))), 'daemon_gc', 'gc_worker', ?, ?)`, payload, now)
+	if s.ExecutionDelivery != nil {
+		result, cleanupErr := s.ExecutionDelivery.PruneAcknowledged(ctx, min(limit, 1000))
+		if cleanupErr != nil {
+			log.Printf("execution delivery cleanup: %v", cleanupErr)
+		}
+		if result.Scheduled != 0 || result.Retired != 0 || result.Purged != 0 || cleanupErr != nil {
+			record := struct {
+				handoff.DeliveryCleanup
+				Error string `json:"error,omitempty"`
+			}{DeliveryCleanup: result}
+			if cleanupErr != nil {
+				record.Error = cleanupErr.Error()
+			}
+			raw, err := json.Marshal(record)
+			if err == nil {
+				_, err = s.DB.ExecContext(ctx, `INSERT INTO events(id,source,event_type,payload,created_at)
+					VALUES ('evt-' || lower(hex(randomblob(6))), 'daemon_gc', 'execution_delivery_cleanup', ?, ?)`, string(raw), now)
+			}
+			if err != nil {
+				log.Printf("persist execution delivery cleanup result: %v", err)
+			}
+		}
+	}
 }
 
 // errLeaseTaskInvalid is a fixed, content-free error: YAML parse errors from

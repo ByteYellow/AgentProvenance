@@ -68,6 +68,15 @@ func ensureHandoffSchema(db *sql.DB) error {
 				UNIQUE(attempt_id, operation_id),
 				UNIQUE(attempt_id, receiver_id, package_version)
 			)`,
+			`CREATE TABLE IF NOT EXISTS execution_delivery_retention (
+				delivery_id TEXT PRIMARY KEY REFERENCES execution_deliveries(id),
+				retain_until_ns INTEGER NOT NULL,
+				retired_at_ns INTEGER NOT NULL DEFAULT 0,
+				purged_at_ns INTEGER NOT NULL DEFAULT 0,
+				last_attempt_ns INTEGER NOT NULL DEFAULT 0
+			)`,
+			`CREATE INDEX IF NOT EXISTS idx_execution_delivery_retention_due ON execution_delivery_retention(purged_at_ns,retain_until_ns)`,
+			`CREATE INDEX IF NOT EXISTS idx_execution_delivery_acknowledged ON execution_deliveries(receiver_id,created_at_ns,id) WHERE receipt_json IS NOT NULL`,
 			`CREATE TABLE IF NOT EXISTS execution_delivery_receipts (
 				receipt_key TEXT PRIMARY KEY,
 				target_key TEXT NOT NULL,

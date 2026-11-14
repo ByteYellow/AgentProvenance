@@ -12,7 +12,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 25
+const SchemaVersion = 26
 
 type Paths struct {
 	Root       string
