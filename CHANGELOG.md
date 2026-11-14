@@ -26,6 +26,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 - Add a real-agent acceptance script for native session/command identity,
   isolated execution scopes, request replay, signed output and stopped-executor
   verification, with a documented container-caller deployment.
+- Add a native two-session acceptance matrix for concurrent identical commands,
+  recovery after a lost receipt response, independently idempotent reexecution
+  and signed side-effect checks after executor shutdown.
 
 ## v0.10.1 - 2026-11-09
 

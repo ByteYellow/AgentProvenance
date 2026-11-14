@@ -228,6 +228,44 @@ python3 scripts/accept_execution_native.py run \
 同节点容器可显式共享宿主网络以访问回环地址，同时保留独立账号、PID 和挂载环境，
 并在运行清单中记录这一部署方式。
 
+### 并发调用与回执响应丢失
+
+[`accept_execution_native_matrix.py`](../../scripts/accept_execution_native_matrix.py)
+用于两个原生会话的组合验收。执行端使用独立测试环境，启用原生采集、签名交付，
+并发数至少为 2。先通过 `prepare` 创建两个不同的执行端工作目录：
+
+```sh
+python3 scripts/accept_execution_native_matrix.py prepare \
+  --workdir /isolated/tasks/a --case a --fixture-url http://127.0.0.1:18581
+python3 scripts/accept_execution_native_matrix.py prepare \
+  --workdir /isolated/tasks/b --case b --fixture-url http://127.0.0.1:18581
+```
+
+分别配置两份调用端路由，指向这两个目录及同一个回环执行地址，并设置
+`file_diff: true` 和 180 秒超时。调用端放在同一 Linux 节点，或共享该节点网络
+的容器内，让两条命令都能访问测试同步点。执行端目录无需挂载到调用端。
+调用端配置好模型服务后运行：
+
+```sh
+python3 scripts/accept_execution_native_matrix.py run \
+  --agentprov /path/to/agentprov --claude /path/to/claude \
+  --route-a /operator/route-a.json --route-b /operator/route-b.json \
+  --fixture-port 18581 --output /path/to/new/matrix-acceptance
+```
+
+两个原生调用都执行 `python3 analyze.py`，到达同一同步点后才继续，确保实际存在
+并发。测试专用的本地转发器在执行端保存回执后，丢弃一次响应；脚本随后使用原
+准备请求恢复交付，核对签名包与回执身份保持一致。之后重发两个原请求，显式
+重执行其中一个调用，再重复提交该重执行请求。初次执行各产生一次副作用，
+重执行的一方总计两次；按来源查询时只返回本会话的尝试。
+
+测试启动两个真实模型会话，每个传入 0.25 美元的预算参数。保留 `initial.json`、
+`fixture.json`、`result.json` 和两份调用端数据。停止执行端并移走其工作目录后，
+使用 `verify`，保留 `--agentprov`、`--route-a`、`--route-b` 和 `--output` 参数，
+检查已保存的图谱、内核文件与网络事件及签名制品正文。调用端数据目录位置保持不变。
+这项检查针对接收端存储恢复，浏览器回放另行验收。转发器仅用于故障注入，
+不会随 daemon 安装。
+
 ## 身份与信任
 
 来源引用包含 `producer_id`、`namespace`、`run_id`、`harness`、`session_id`

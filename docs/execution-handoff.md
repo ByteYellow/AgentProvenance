@@ -287,6 +287,50 @@ Use an SSH loopback tunnel across hosts. A same-node container can use a
 deliberately shared host network for the loopback endpoint while using a non-root
 user and separate PID/mount namespaces; record this topology in the run manifest.
 
+### Concurrent calls and a lost receipt response
+
+[`accept_execution_native_matrix.py`](../scripts/accept_execution_native_matrix.py)
+adds a two-session native acceptance case. Use an isolated executor with native
+capture, signed delivery and concurrency of at least two. Prepare two different
+executor workdirs with the script's `prepare` command:
+
+```sh
+python3 scripts/accept_execution_native_matrix.py prepare \
+  --workdir /isolated/tasks/a --case a --fixture-url http://127.0.0.1:18581
+python3 scripts/accept_execution_native_matrix.py prepare \
+  --workdir /isolated/tasks/b --case b --fixture-url http://127.0.0.1:18581
+```
+
+Configure two caller routes with these workdirs, the same loopback executor URL,
+`file_diff: true` and a 180-second timeout. Run the caller on the same Linux node,
+or in a container sharing that node's network, so both commands can reach the
+test barrier. The task directories stay on the executor, outside the caller's
+mounts. With the caller's provider already configured:
+
+```sh
+python3 scripts/accept_execution_native_matrix.py run \
+  --agentprov /path/to/agentprov --claude /path/to/claude \
+  --route-a /operator/route-a.json --route-b /operator/route-b.json \
+  --fixture-port 18581 --output /path/to/new/matrix-acceptance
+```
+
+Both native calls run `python3 analyze.py`. A two-party barrier establishes that
+they actually overlap. A test-only loopback relay drops one response after the
+executor persists its receipt; the script then recovers the same prepared call.
+It checks unchanged signed-package/receipt identities, replays both requests,
+explicitly reexecutes one call and repeats that retry request. The saved command
+side effects must be one per initial call and exactly two for the reexecuted
+call. Source queries must return only their own attempts.
+
+The test starts two real model-backed sessions with a USD 0.25 budget flag each.
+Retain `initial.json`, `fixture.json`, `result.json` and both caller stores.
+After stopping the executor and moving its workdirs away, run `verify` with
+`--agentprov`, `--route-a`, `--route-b` and `--output` to check the saved graphs,
+native file/network events and signed artifact bodies. Keep the caller stores
+at their original paths. This fixture checks receiver-store recovery; browser replay is
+tested separately. The relay is only for fault injection and is not installed
+with the daemon.
+
 ## Identity and trust
 
 Every source reference contains `producer_id`, `namespace`, `run_id`, `harness`,
