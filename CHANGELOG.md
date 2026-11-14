@@ -2,6 +2,19 @@
 
 English | [中文](CHANGELOG.zh-CN.md)
 
+## Unreleased
+
+### Cross-sandbox execution
+
+- Add an opt-in durable execution handoff API with scoped source identities,
+  idempotent admission, explicit retries, stop requests and signed evidence receipts.
+- Integrate shared native capture with per-execution cgroup boundaries and
+  durable scope accounting, retaining capture gaps separately from command results.
+- Route native Claude Code Bash calls through a configured trusted executor with
+  `launch --remote-execution`. Preserve native session/call IDs and permission
+  checks, verify returned evidence, and reject disabled hooks before task launch.
+  See the [execution handoff guide](docs/execution-handoff.md).
+
 ## v0.10.1 - 2026-11-09
 
 ### Security and compatibility

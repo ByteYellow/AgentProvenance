@@ -66,6 +66,7 @@ type Options struct {
 	ContextSession     string
 	ContextHarness     string
 	NoContext          bool
+	RemoteExecution    string // opt-in operator-owned Claude Bash routing configuration
 	CapturePreset      string // additional context retention: detailed (default) or basic
 	CaptureToolResults *bool  // optional preset override; nil keeps the preset value
 
@@ -153,9 +154,24 @@ func Run(opts Options) (Report, error) {
 	// Recognized harnesses use their native logs; Claude also gets run-owned
 	// hooks. Explicit source options support wrappers without guessing a format.
 	recipe := detectRecipe(opts.Command)
+	if opts.RemoteExecution != "" && (recipe.harness != "claude" || opts.NoContext ||
+		(opts.ContextHarness != "" && opts.ContextHarness != "claude")) {
+		return report, fmt.Errorf("remote execution requires Claude Code with context capture enabled")
+	}
 	capture, err := prepareContext(context.Background(), opts, recipe)
 	if err != nil {
 		return report, err
+	}
+	if opts.RemoteExecution != "" {
+		if capture.disabled || !recipe.injectHooks || recipe.harness != capture.harness {
+			return report, fmt.Errorf("remote execution requires active Claude hook injection")
+		}
+		if err := checkRemoteClaudeMode(opts.Command); err != nil {
+			return report, err
+		}
+		if err := checkRemoteClaudeVersion(opts.Command[0]); err != nil {
+			return report, err
+		}
 	}
 	contextService := agentcontext.Service{DB: db, Paths: paths, CapturePolicy: &policy}
 	if _, err := contextService.EnsureCapturePolicy(context.Background(), runID); err != nil {
@@ -189,10 +205,26 @@ func Run(opts Options) (Report, error) {
 	hookLogPath := ""
 	var cleanupInjection func()
 	command := opts.Command
+	routePath := ""
+	if opts.RemoteExecution != "" {
+		routePath, err = prepareRemoteRoute(opts, paths, runID, policy)
+		if err != nil {
+			return report, err
+		}
+	}
 	if recipe.injectHooks && !opts.NoContext && recipe.harness == capture.harness {
 		hookLogPath = paths.Logs + string(os.PathSeparator) + "launch-" + runID + "-hooks.jsonl"
 		injected, cleanup, ierr := recipe.inject(command, opts.SelfExe, hookLogPath, paths, policy)
+		if ierr == nil && routePath != "" {
+			ierr = addRemoteClaudeHooks(injected[2], opts.SelfExe, routePath)
+		}
 		if ierr != nil {
+			if routePath != "" {
+				if cleanup != nil {
+					cleanup()
+				}
+				return report, fmt.Errorf("remote execution hook setup failed: %w", ierr)
+			}
 			fmt.Fprintf(opts.Stderr, i18n.T(lang, "launch: hooks injection skipped: %v (native transcript capture remains enabled)\n"), i18n.ErrorText(lang, ierr))
 			report.AppTier = "transcript(" + capture.harness + ")"
 			report.appDetail = messagef("hooks unavailable; native %s session records will be checked after exit", capture.harness)
@@ -205,6 +237,11 @@ func Run(opts Options) (Report, error) {
 	}
 	if cleanupInjection != nil {
 		defer cleanupInjection()
+	}
+	if routePath != "" {
+		if err := checkRemoteClaudeHooks(command, opts, routePath); err != nil {
+			return report, err
+		}
 	}
 
 	// --- System-side sensor: kernel telemetry when the host can provide it.

@@ -29,6 +29,7 @@ func launchCmd(dataDir *string) *cobra.Command {
 		jsonOut                                                 bool
 		contextDir, contextFile, contextSession, contextHarness string
 		noContext                                               bool
+		remoteExecution                                         string
 	)
 	cmd := &cobra.Command{
 		Use:   "launch [flags] -- <agent command...>",
@@ -61,6 +62,7 @@ func launchCmd(dataDir *string) *cobra.Command {
 				ContextSession:     contextSession,
 				ContextHarness:     contextHarness,
 				NoContext:          noContext,
+				RemoteExecution:    remoteExecution,
 				CapturePreset:      capture.preset,
 				CaptureToolResults: capture.override(cmd),
 				Stdin:              cmd.InOrStdin(),
@@ -94,6 +96,7 @@ func launchCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().StringVar(&contextSession, "context-session", "", "native session identity to capture; required for unambiguous resume")
 	cmd.Flags().StringVar(&contextHarness, "context-harness", "", "context format for a wrapper command: claude, codex, deepseek, kimi, or grok")
 	cmd.Flags().BoolVar(&noContext, "no-context", false, "disable agent context capture and hook injection")
+	cmd.Flags().StringVar(&remoteExecution, "remote-execution", "", "operator-owned configuration to route Claude Bash commands to a trusted executor")
 	capture.bind(cmd)
 	return cmd
 }

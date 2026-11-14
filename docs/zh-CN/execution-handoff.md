@@ -112,6 +112,71 @@ TLS 及写入前 spool 丢失继续作为采集器级信号报告。TLS 缓存�
 执行结果、采集收尾及证据回执分别保存。收尾中途重启时，保留命令结果及已有边界，将采集标为
 未完成，不重新执行命令。
 
+## 路由 Claude 原生 Bash 调用
+
+`launch --remote-execution route.json -- claude ...` 将 Claude Code 原生
+`session_id`、`tool_use_id` 接入执行交接协议。该模式要求 Claude Code 2.1.295
+或更新版本、已启用 hooks，并使用本地前台会话。不传此参数时保持原有 launch 行为。
+任务启动前先运行一次不调用模型、不保存会话的初始化检查，确认当前有效配置确实
+执行了路由 hook。关闭 hooks 或初始化失败时停止启动，并保留本地诊断日志。
+
+先按后文配置执行端签名交付。远端工作目录须位于执行器允许的工作区内；Bash
+路由还需要运维人员显式使用 `--record-allow-shell` 启动该执行器。工作目录、
+环境变量和执行超时继续沿用原有约束。
+
+调用端配置放在 Agent 工作区之外：
+
+```json
+{
+  "schema_version": "agentprovenance.claude_command_route/v1",
+  "url": "http://127.0.0.1:18575",
+  "token_file": "executor.token",
+  "execution_config": "execution.json",
+  "workdir": "/srv/agentprov/workspaces/analysis",
+  "receiver_id": "investigator",
+  "sign_key_file": "investigator.key",
+  "public_key_file": "executor.pub",
+  "timeout_seconds": 300,
+  "file_diff": false
+}
+```
+
+凭据及执行配置路径相对于本文件解析。`execution.json` 中的调用端、执行目标须
+与执行器配置一致。传输使用 HTTPS，或经 SSH 隧道连接的回环 IP HTTP 地址。
+`shell` 默认为 `/bin/bash`；`timeout_seconds` 限定包装命令的接收、等待和交付总时长，
+执行端自己的超时仍独立生效。
+
+设置 `file_diff: true` 可复用快照和制品采集保存变更文件正文。该选项会在每条
+命令前复制工作目录，适合独立任务目录。关闭时省略逐命令快照，已启用的内核
+文件事件采集继续工作。
+
+```sh
+agentprov --data-dir ./caller-evidence launch \
+  --remote-execution /path/to/operator/route.json -- claude
+```
+
+每次 PreToolUse 先生成稳定请求，此时尚未提交执行。Hook 将 Bash 改写为本地
+远端命令包装器，并在命令中保留原始内容，交由 Claude 原有权限流程检查。
+Hook 不自动授权。获准后，包装器提交请求、等待执行、验证签名结果、保存回执，
+再返回已留存的 stdout/stderr 和远端退出码。
+
+临时配置使用 [Claude 的 hook 失败阻断机制](https://code.claude.com/docs/en/hooks#block-the-action-when-a-hook-fails)。
+准备失败会拒绝调用；关闭 hooks 的模式和脱离前台的启动模式会被预检拒绝。
+路由属于可信接入，权限控制由 harness 和操作系统继续承担。
+
+只有 Bash 在远端执行；Read、Write、Edit 保持本地。SessionStart 会向 Agent
+说明目标实例和远端目录。每次 Bash 启动独立 shell，目录切换和环境变量不会
+跨调用保留；显式后台 Bash 请求会被拒绝。跨调用共享文件使用远端工作目录。
+
+请求和接收记录保存在 `<data-dir>/execution-routes/<run-id>/`。
+再次运行同一已准备调用会恢复原尝试，修改命令则报冲突。包装器取消时提交持久
+停止请求，并打印已保存的接收记录路径，供查询实际结果。交付失败后可通过
+`forensics collect-execution` 接着收取。执行、采集和交付状态分别输出。
+
+工具输出从本地已验证的证据投影读取，沿用脱敏规则和每路 1 MiB 留存上限，
+发生截断时会提示。此路径需要保存工具结果，可使用 detailed，或显式选择
+`--capture basic --capture-tool-results=true`。预检不会自动改变用户的省略设置。
+
 ## 身份与信任
 
 来源引用包含 `producer_id`、`namespace`、`run_id`、`harness`、`session_id`
@@ -299,7 +364,7 @@ agentprov --data-dir ./received-evidence --daemon-url http://127.0.0.1:18575 \
 
 ## 兼容与测试
 
-数据库 schema 21–23 增加执行账本、持久停止请求及交付发件记录和回执，
+数据库 schema 21–24 增加执行账本、持久停止请求、交付发件记录和回执，以及作用域采集计数，
 保留既有物理表名和事件内容。
 旧程序会拒绝新版 schema；降级使用升级前备份。历史签名包维持原有格式。
 

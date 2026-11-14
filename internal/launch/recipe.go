@@ -143,3 +143,31 @@ func injectClaudeCode(command []string, selfExe, hookLogPath string, paths store
 func shQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
+
+func addRemoteClaudeHooks(path, selfExe, route string) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var overlay struct {
+		Hooks map[string][]map[string]any `json:"hooks"`
+	}
+	if err := json.Unmarshal(raw, &overlay); err != nil {
+		return err
+	}
+	command := shQuote(selfExe) + " internal remote-hook --route " + shQuote(route) + " || exit 2"
+	for _, event := range []string{"SessionStart", "PreToolUse"} {
+		entry := map[string]any{
+			"hooks": []map[string]any{{"type": "command", "command": command, "timeout": 10, "onFailure": "block"}},
+		}
+		if event == "PreToolUse" {
+			entry["matcher"] = "Bash"
+		}
+		overlay.Hooks[event] = append(overlay.Hooks[event], entry)
+	}
+	raw, err = json.MarshalIndent(overlay, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, raw, 0o600)
+}

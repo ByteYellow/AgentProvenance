@@ -145,6 +145,81 @@ Execution success and receipt acknowledgment remain separate from capture state.
 If the executor restarts during draining, it preserves the command result and
 saved boundary, marks capture incomplete, and does not repeat the command.
 
+## Route native Claude Bash calls
+
+`launch --remote-execution route.json -- claude ...` connects Claude Code's
+native `session_id` and `tool_use_id` to the execution protocol. This opt-in
+integration requires Claude Code 2.1.295 or later, enabled hooks and a local
+foreground session. The normal launch path is unchanged without this option.
+Before launching the task, a no-model, non-persisted initialization probe checks
+that the route hook actually runs under the effective settings. Disabled hooks
+or a failed probe abort launch; its local log is retained for diagnosis.
+
+Enable signed delivery on the executor as described below. Its workdir must
+remain inside the executor's workspace root. Bash routing also requires the
+operator to start that executor with `--record-allow-shell`; existing workdir,
+environment and execution-time limits still apply.
+
+Keep this caller-side configuration outside the agent workspace:
+
+```json
+{
+  "schema_version": "agentprovenance.claude_command_route/v1",
+  "url": "http://127.0.0.1:18575",
+  "token_file": "executor.token",
+  "execution_config": "execution.json",
+  "workdir": "/srv/agentprov/workspaces/analysis",
+  "receiver_id": "investigator",
+  "sign_key_file": "investigator.key",
+  "public_key_file": "executor.pub",
+  "timeout_seconds": 300,
+  "file_diff": false
+}
+```
+
+Credential and execution-configuration paths are relative to this file.
+`execution.json` supplies the same caller/target identities as the executor.
+The transport must be HTTPS or literal loopback HTTP through the SSH tunnel.
+`shell` defaults to `/bin/bash`. `timeout_seconds` bounds the wrapper's admission,
+execution wait and collection; it does not extend the executor's own timeout.
+Set `file_diff: true` to retain changed-file bodies using the existing snapshot
+and artifact capture. This copies the workdir before each command, so use a
+dedicated task workspace. Otherwise kernel file events remain available when
+native capture is enabled, without a per-command workspace snapshot.
+
+```sh
+agentprov --data-dir ./caller-evidence launch \
+  --remote-execution /path/to/operator/route.json -- claude
+```
+
+The per-run PreToolUse hook prepares a stable request without submitting it.
+It rewrites Bash to the local remote-command wrapper, leaving the original
+command visible for Claude's normal permission checks. The hook does not grant
+permission. Once approved, the wrapper submits, waits, verifies the signed result,
+persists the receipt and returns retained stdout/stderr with the remote exit code.
+The overlay uses [Claude's blocking hook failure handling](https://code.claude.com/docs/en/hooks#block-the-action-when-a-hook-fails).
+Preparation failures are denied; hook-disabled and detached launch modes are
+rejected. Remote routing is a trusted integration, not a replacement for the
+harness's permission policy or OS isolation.
+
+Only Bash is remote. Read, Write and Edit remain local. SessionStart explains
+the target and remote workdir to the agent. Each Bash call starts an independent
+shell; directory and environment changes do not persist between calls. Explicit
+background Bash requests are rejected. Use the remote workdir for shared files.
+
+Requests and admissions are saved under
+`<data-dir>/execution-routes/<run-id>/`. Reinvoking the same prepared call recovers
+the existing attempt; changing its command is a conflict. A cancelled wrapper
+requests a durable stop and prints the saved admission for status reconciliation.
+Delivery errors leave the admission available for `forensics collect-execution`.
+Execution, capture and delivery states are printed separately.
+
+Tool output is read from the locally verified evidence projection, subject to
+the existing redaction and 1 MiB-per-stream retention limit. Truncation is reported.
+This path requires retained tool results; use detailed capture or explicitly
+select `--capture basic --capture-tool-results=true`. Configuration preflight
+does not silently change a selected omission policy.
+
 ## Identity and trust
 
 Every source reference contains `producer_id`, `namespace`, `run_id`, `harness`,
@@ -384,8 +459,9 @@ native harness and Sensor acceptance.
 
 ## Compatibility and tests
 
-Database schemas 21-23 add the execution ledger, durable stop requests and delivery
-outbox/receipts without renaming legacy tables or rewriting existing events.
+Database schemas 21-24 add the execution ledger, durable stop requests, delivery
+outbox/receipts and per-scope capture accounting without renaming legacy tables
+or rewriting existing events.
 Older binaries reject the newer schema; use a backup
 for a downgrade. Historic signed packages retain their original format.
 

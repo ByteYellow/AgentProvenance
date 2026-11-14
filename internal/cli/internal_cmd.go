@@ -22,6 +22,7 @@ func internalCmd() *cobra.Command {
 		Hidden: true,
 	}
 	cmd.AddCommand(internalHookLogCmd())
+	cmd.AddCommand(internalRemoteHookCmd(), internalRemoteCommandCmd())
 	return cmd
 }
 
