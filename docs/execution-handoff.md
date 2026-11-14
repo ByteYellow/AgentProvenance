@@ -86,8 +86,39 @@ require separate operator reconciliation.
 Each output stream retains at most 1 MiB before redaction and chunked storage;
 larger streams report truncation and their observed byte count. `basic` omits
 tool-result bodies unless explicitly enabled. Restart recovery reports lost
-output as unknown. Successful execution currently leaves capture at `draining`
-and delivery at `pending`, awaiting their respective evidence and receipt stages.
+output as unknown. Without an attached capture controller, successful execution
+leaves capture at `draining`. Delivery advances independently through signed
+packages and durable receipts.
+
+### Native capture boundaries
+
+The in-process executor can share a live Sensor and durable native spool through
+`Executor.Capture`. The operator owns their lifetime: start capture before the
+executor, and stop the executor before capture. The daemon CLI does not yet wire
+this controller automatically.
+
+Before launch, the controller requires the execution's owned kernel cgroup and
+ready mandatory probes. It inserts a marker into the live kernel ring and saves
+the corresponding decoder boundary, capability snapshot and fixed spool prefix.
+A failed preflight prevents command launch. At completion, `scope_observation`
+records population through the still-owned directory descriptor; normal success
+leaves deliberately backgrounded descendants running.
+
+After the saved end event, the controller takes another boundary and drains that
+finite prefix with a three-second default budget. `capture_report` retains both
+boundaries and their counters. An empty scope, settled prefix and no observed
+loss (including TLS reassembly loss) or buffered TLS allow `sealed`; pending
+work, loss, changed collector identity or an unavailable population observation
+produces `incomplete`. Buffered TLS is
+reported without flushing live connections. Probe limitations remain in the
+saved capabilities.
+
+The prefix and counters are collector-wide. Unresolved events from another
+workload can keep the shared prefix pending; the report preserves that uncertainty
+instead of assigning a loss count to the execution or expiring records early.
+Execution success and receipt acknowledgment remain separate from capture state.
+If the executor restarts during draining, it preserves the command result and
+saved boundary, marks capture incomplete, and does not repeat the command.
 
 ## Identity and trust
 

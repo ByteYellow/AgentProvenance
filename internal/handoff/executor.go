@@ -27,6 +27,7 @@ type Executor struct {
 	Options      record.Options
 	Concurrency  int
 	PollInterval time.Duration
+	Capture      *NativeCapture
 	running      atomic.Bool
 }
 
@@ -155,17 +156,24 @@ func (e *Executor) loop(ctx context.Context, concurrency int, interval time.Dura
 	}
 }
 
-func (e *Executor) attempts(ctx context.Context, states []ExecutionState, after int64, limit int) ([]Attempt, error) {
+func (e *Executor) attempts(ctx context.Context, states []ExecutionState, after int64, limit int, captures ...CaptureState) ([]Attempt, error) {
 	placeholders := make([]string, len(states))
 	args := []any{e.Ledger.Target.ProducerID, e.Ledger.Target.InstanceID, e.Ledger.Target.Generation, after}
 	for i, state := range states {
 		placeholders[i] = "?"
 		args = append(args, state)
 	}
+	captureFilter := ""
+	if len(captures) > 0 {
+		captureFilter = ` AND a.capture_state IN (` + strings.TrimSuffix(strings.Repeat("?,", len(captures)), ",") + `)`
+		for _, capture := range captures {
+			args = append(args, capture)
+		}
+	}
 	args = append(args, limit)
 	rows, err := e.Ledger.DB.QueryContext(ctx, attemptSelect+` WHERE json_extract(a.request_json,'$.target.producer_id')=?
 		AND json_extract(a.request_json,'$.target.instance_id')=? AND json_extract(a.request_json,'$.target.generation')=?
-		AND a.sequence>? AND a.execution_state IN (`+strings.Join(placeholders, ",")+`) ORDER BY a.sequence LIMIT ?`, args...)
+		AND a.sequence>? AND a.execution_state IN (`+strings.Join(placeholders, ",")+`)`+captureFilter+` ORDER BY a.sequence LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -190,6 +198,7 @@ func (e *Executor) execute(ctx context.Context, a Attempt) error {
 		return e.failAttempt(a, record.Result{}, err)
 	}
 	stdout, stderr := &outputBuffer{retain: policy.ToolResults}, &outputBuffer{retain: policy.ToolResults}
+	var captureStart *NativeCapturePoint
 	svc := record.Service{DB: e.Ledger.DB, Paths: e.Paths, Options: e.Options, Lifecycle: &record.Lifecycle{
 		Prepared: func(scope record.ExecutionScope) error {
 			stop, err := e.Ledger.stopRequested(ctx, a.ID)
@@ -199,7 +208,15 @@ func (e *Executor) execute(ctx context.Context, a Attempt) error {
 			if stop {
 				return context.Canceled
 			}
-			updated, err := e.saveCheckpoint(ctx, a, Checkpoint{State: a.State, Reason: "scope_prepared", Scope: &scope})
+			var capture *NativeCaptureReport
+			if e.Capture != nil {
+				captureStart, err = e.Capture.Begin(ctx, scope)
+				if err != nil {
+					return fmt.Errorf("prepare execution capture: %w", err)
+				}
+				capture = &NativeCaptureReport{SchemaVersion: nativeCaptureSchema, State: Collecting, Start: captureStart, Issues: []string{}}
+			}
+			updated, err := e.saveCheckpoint(ctx, a, Checkpoint{State: a.State, Reason: "scope_prepared", Scope: &scope, Capture: capture})
 			if err == nil {
 				a = updated
 			}
@@ -242,7 +259,20 @@ func (e *Executor) execute(ctx context.Context, a Attempt) error {
 	if err := errors.Join(outErr, errErr); err != nil {
 		c.State.Capture, c.Error = Incomplete, err.Error()
 	}
-	_, err = e.saveCheckpoint(context.Background(), a, c)
+	a, err = e.saveCheckpoint(context.Background(), a, c)
+	if err != nil || e.Capture == nil || captureStart == nil {
+		return err
+	}
+	// Execution cancellation has already reaped the root. Capture gets its own
+	// bounded lifetime so a stop can still persist the events preceding it.
+	report := e.Capture.Finish(context.Background(), *captureStart, r)
+	captureState := report.State
+	if a.State.Capture == Incomplete {
+		captureState, report.State = Incomplete, Incomplete
+	}
+	c.State, c.Capture, c.Reason = a.State, &report, "capture_finished"
+	c.State.Capture = captureState
+	_, err = e.commitCheckpoint(context.Background(), a, c, true)
 	return err
 }
 
@@ -288,7 +318,7 @@ func (e *Executor) recover(ctx context.Context) error {
 			return err
 		}
 		if len(attempts) == 0 {
-			return nil
+			return e.recoverPendingCapture(ctx)
 		}
 		for _, a := range attempts {
 			after = a.Sequence
@@ -321,6 +351,32 @@ func (e *Executor) recover(ctx context.Context) error {
 	}
 }
 
+func (e *Executor) recoverPendingCapture(ctx context.Context) error {
+	var after int64
+	for {
+		attempts, err := e.attempts(ctx, []ExecutionState{Succeeded, Failed, Cancelled, Unknown}, after, 100, Draining, Collecting)
+		if err != nil || len(attempts) == 0 {
+			return err
+		}
+		for _, a := range attempts {
+			after = a.Sequence
+			previous, _, err := readCheckpoint(ctx, e.Ledger.DB, a)
+			if err != nil {
+				return err
+			}
+			if previous == nil || previous.Capture == nil {
+				continue
+			}
+			c := *previous
+			c.State, c.Reason = a.State, "capture_interrupted_by_restart"
+			c.State.Capture, c.Capture = Incomplete, nil
+			if _, err := e.saveCheckpoint(ctx, a, c); err != nil {
+				return err
+			}
+		}
+	}
+}
+
 // Recovery reads immutable local event identities, never kills a process by a
 // stale PID, and never starts another command for an unresolved attempt.
 func (e *Executor) recoverCompletion(ctx context.Context, a Attempt, scope record.ExecutionScope) (*record.Result, error) {
@@ -336,11 +392,12 @@ func (e *Executor) recoverCompletion(ctx context.Context, a Attempt, scope recor
 		return nil, err
 	}
 	var payload struct {
-		AttemptID string             `json:"attempt_id"`
-		Status    string             `json:"status"`
-		ExitCode  int                `json:"exit_code"`
-		WallMS    int64              `json:"wall_ms"`
-		Stop      *record.StopReport `json:"stop_report"`
+		AttemptID        string                   `json:"attempt_id"`
+		Status           string                   `json:"status"`
+		ExitCode         int                      `json:"exit_code"`
+		WallMS           int64                    `json:"wall_ms"`
+		Stop             *record.StopReport       `json:"stop_report"`
+		ScopeObservation *record.ScopeObservation `json:"scope_observation"`
 	}
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		return nil, err
@@ -358,7 +415,8 @@ func (e *Executor) recoverCompletion(ctx context.Context, a Attempt, scope recor
 	return &record.Result{RunID: a.LocalRunID, RolloutID: scope.RolloutID, AttemptID: scope.AttemptID,
 		SessionID: scope.SessionID, ToolCallID: scope.ToolCallID, ProcessID: scope.ProcessID, RootPID: pid,
 		Workdir: scope.Workdir, StartedAt: scope.StartedAt, EndedAt: ended, EndEventID: id, Scope: &scope,
-		Status: payload.Status, ExitCode: payload.ExitCode, WallMS: payload.WallMS, Stop: payload.Stop}, nil
+		Status: payload.Status, ExitCode: payload.ExitCode, WallMS: payload.WallMS, Stop: payload.Stop,
+		ScopeObservation: payload.ScopeObservation}, nil
 }
 
 type outputBuffer struct {

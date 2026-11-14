@@ -40,6 +40,7 @@ type Checkpoint struct {
 	Stdout        *Output                `json:"stdout,omitempty"`
 	Stderr        *Output                `json:"stderr,omitempty"`
 	Error         string                 `json:"error,omitempty"`
+	Capture       *NativeCaptureReport   `json:"capture_report,omitempty"`
 }
 
 type Report struct {
@@ -105,6 +106,12 @@ func readCheckpoint(ctx context.Context, db checkpointReader, a Attempt) (*Check
 // saveCheckpoint commits state, history and the content-addressed observation
 // index in one transaction. Uncommitted object files are merely orphan blobs.
 func (e *Executor) saveCheckpoint(ctx context.Context, a Attempt, c Checkpoint) (Attempt, error) {
+	return e.commitCheckpoint(ctx, a, c, false)
+}
+
+// Capture completion may race an independently acknowledged delivery. Merge
+// only that dimension, without overwriting another execution/capture change.
+func (e *Executor) commitCheckpoint(ctx context.Context, a Attempt, c Checkpoint, captureOnly bool) (Attempt, error) {
 	var saved Attempt
 	err := store.WithWriteTx(ctx, e.Ledger.DB, func(tx *sql.Tx) error {
 		current, err := readAttempt(ctx, tx, "a.id=?", a.ID)
@@ -115,7 +122,11 @@ func (e *Executor) saveCheckpoint(ctx context.Context, a Attempt, c Checkpoint) 
 			return ErrForbidden
 		}
 		if current.Revision != a.Revision {
-			return ErrStale
+			if !captureOnly || current.State.Execution != a.State.Execution || current.State.Capture != a.State.Capture {
+				return ErrStale
+			}
+			a = current
+			c.State.Delivery = current.State.Delivery
 		}
 		if c.State.Execution != a.State.Execution && !a.State.Execution.CanTransition(c.State.Execution) {
 			return transitionError(a.State.Execution, c.State.Execution)
@@ -132,6 +143,20 @@ func (e *Executor) saveCheckpoint(ctx context.Context, a Attempt, c Checkpoint) 
 		}
 		if c.Scope == nil && previous != nil {
 			c.Scope = previous.Scope
+		}
+		if c.Capture == nil && previous != nil {
+			c.Capture = previous.Capture
+			if c.Capture != nil && c.State.Capture == Incomplete {
+				copy := *c.Capture
+				copy.State = Incomplete
+				copy.Issues = append(append([]string{}, copy.Issues...), c.Reason)
+				c.Capture = &copy
+			}
+		}
+		if c.Capture != nil {
+			copy := *c.Capture
+			copy.State = c.State.Capture
+			c.Capture = &copy
 		}
 		a.Revision++
 		a.State, a.UpdatedAt = c.State, e.Ledger.now()

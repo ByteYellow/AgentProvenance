@@ -407,9 +407,106 @@ components:
           description: Existing record result including exit code, observed descendants and artifact capture. Recovery can leave unavailable fields empty.
           properties:
             stop_report: { $ref: '#/components/schemas/ExecutionStopReport' }
+            scope_observation: { $ref: '#/components/schemas/ScopeObservation' }
         stdout: { $ref: '#/components/schemas/Output' }
         stderr: { $ref: '#/components/schemas/Output' }
         error: { type: string }
+        capture_report: { $ref: '#/components/schemas/NativeCaptureReport' }
+    ScopeObservation:
+      type: object
+      required: [scope_kind, cgroup_id, observed_at, empty]
+      properties:
+        scope_kind: { enum: [cgroup, logical_process_scope] }
+        cgroup_id: { type: string }
+        observed_at: { type: string, format: date-time }
+        empty:
+          type: [boolean, 'null']
+          description: Population read through the owned cgroup descriptor before cleanup. Null when unavailable or observation failed.
+        error: { type: string }
+    NativeCaptureReport:
+      type: object
+      required: [schema_version, state, issues]
+      properties:
+        schema_version: { const: agentprovenance.execution_native_capture/v1 }
+        state: { enum: [not_ready, collecting, draining, sealed, incomplete] }
+        start: { $ref: '#/components/schemas/NativeCapturePoint' }
+        end: { $ref: '#/components/schemas/NativeCapturePoint' }
+        scope_observation: { $ref: '#/components/schemas/ScopeObservation' }
+        shared_prefix: { $ref: '#/components/schemas/NativePrefixProgress' }
+        issues: { type: array, items: { type: string } }
+        error: { type: string }
+      description: >
+        Fixed sensor and spool boundaries for the execution. Shared counters and
+        backlog cover the collector, not an exact per-run loss count. Sealed
+        describes a closed observed interval within the saved probe capabilities.
+    NativeCapturePoint:
+      type: object
+      required: [scope, sensor, spool, capabilities]
+      properties:
+        scope: { $ref: '#/components/schemas/Checkpoint/properties/scope' }
+        sensor: { $ref: '#/components/schemas/SensorBoundary' }
+        spool: { $ref: '#/components/schemas/NativePrefix' }
+        capabilities: { $ref: 'agent-context-api.yaml#/components/schemas/ProbeSnapshot' }
+    SensorBoundary:
+      type: object
+      required: [schema_version, boundary, collector_id, sequence, kernel_time_ns, observed_at, decoded_records, kernel_drops, state_queue_drops, pending_tls_streams, pending_tls_bytes]
+      properties:
+        schema_version: { const: agentprovenance.sensor_boundary/v1 }
+        boundary: { const: ring_and_decoder }
+        collector_id: { type: string, minLength: 1 }
+        sequence: { type: integer, minimum: 1 }
+        kernel_time_ns: { type: integer, minimum: 1 }
+        observed_at: { type: string, format: date-time }
+        decoded_records: { type: integer, minimum: 0 }
+        kernel_drops: { type: integer, minimum: 0 }
+        state_queue_drops: { type: integer, minimum: 0 }
+        tls_lost_streams:
+          type: integer
+          minimum: 0
+          description: Collector-lifetime TLS reassembly loss; absent in earlier boundary records.
+        tls_lost_bytes:
+          type: integer
+          minimum: 0
+          description: Collector-lifetime TLS reassembly loss; absent in earlier boundary records.
+        pending_tls_streams: { type: integer, minimum: 0 }
+        pending_tls_bytes: { type: integer, minimum: 0 }
+    NativePrefix:
+      type: object
+      required: [schema_version, boundary, collector_id, sequence, observed_at, counters, batches]
+      properties:
+        schema_version: { const: agentprovenance.native_spool_prefix/v1 }
+        boundary: { const: accepted_spool }
+        collector_id: { type: string, minLength: 1 }
+        sequence: { type: integer, minimum: 0 }
+        observed_at: { type: string, format: date-time }
+        counters:
+          type: object
+          additionalProperties: { type: integer, minimum: 0 }
+        batches:
+          type: array
+          maxItems: 4096
+          items:
+            type: object
+            required: [id, sha256, event_count]
+            properties:
+              id: { type: string, minLength: 1 }
+              sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+              event_count: { type: integer, minimum: 0, maximum: 4096 }
+    NativePrefixProgress:
+      type: object
+      required: [state, observed_at, batches, pending_batches, events, ingested, dropped, failed, pending, cleanup_pending]
+      properties:
+        state: { enum: [pending, settled] }
+        observed_at: { type: string, format: date-time }
+        batches: { type: integer, minimum: 0 }
+        pending_batches: { type: integer, minimum: 0 }
+        events: { type: integer, minimum: 0 }
+        ingested: { type: integer, minimum: 0 }
+        dropped: { type: integer, minimum: 0 }
+        failed: { type: integer, minimum: 0 }
+        pending: { type: integer, minimum: 0 }
+        cleanup_pending: { type: integer, minimum: 0 }
+        last_error: { type: string }
     ExecutionStopReport:
       type: object
       required: [method, requested_at, observed_at, signal_sent, scope_empty]

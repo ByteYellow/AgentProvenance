@@ -305,4 +305,19 @@ func TestNormalCompletionKeepsObserveOnlyDescendants(t *testing.T) {
 	if err != nil || !strings.Contains(string(raw), "populated 1\n") {
 		t.Fatalf("normal completion killed the observed background child: %q %v", raw, err)
 	}
+	encoded, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved struct {
+		Observation *struct {
+			Empty *bool `json:"empty"`
+		} `json:"scope_observation"`
+	}
+	if err := json.Unmarshal(encoded, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if saved.Observation == nil || saved.Observation.Empty == nil || *saved.Observation.Empty {
+		t.Fatalf("normal completion did not retain populated scope: %s", encoded)
+	}
 }

@@ -47,6 +47,11 @@ func testDelivery(t *testing.T) deliveryFixture {
 	if err := stop(); err != nil {
 		t.Fatal(err)
 	}
+	return deliveryFromReport(t, e, p, report, work)
+}
+
+func deliveryFromReport(t *testing.T, e *Executor, p Principal, report Report, work string) deliveryFixture {
+	t.Helper()
 	pub, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +70,7 @@ func testDelivery(t *testing.T) deliveryFixture {
 	}
 	t.Cleanup(func() { db.Close() })
 	s := &DeliveryService{Ledger: e.Ledger, Paths: e.Paths, SignKey: key, ReceiverID: "investigator", ReceiverKey: recvPub}
-	receiver := &DeliveryReceiver{DB: db, Paths: paths, ID: s.ReceiverID, SignKey: recvKey, Target: r.Target, TargetKey: pub, Caller: p}
+	receiver := &DeliveryReceiver{DB: db, Paths: paths, ID: s.ReceiverID, SignKey: recvKey, Target: report.Attempt.Request.Target, TargetKey: pub, Caller: p}
 	return deliveryFixture{s, receiver, p, report, work}
 }
 

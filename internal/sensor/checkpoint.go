@@ -27,6 +27,8 @@ type CaptureBoundary struct {
 	DecodedRecords    uint64    `json:"decoded_records"`
 	KernelDrops       uint64    `json:"kernel_drops"`
 	StateQueueDrops   uint64    `json:"state_queue_drops"`
+	TLSLostStreams    uint64    `json:"tls_lost_streams"`
+	TLSLostBytes      uint64    `json:"tls_lost_bytes"`
 	PendingTLSStreams int       `json:"pending_tls_streams"`
 	PendingTLSBytes   int       `json:"pending_tls_bytes"`
 }

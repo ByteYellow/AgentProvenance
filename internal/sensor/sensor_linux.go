@@ -290,10 +290,12 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	// into complete HTTP/1.1 or HTTP/2/HPACK request/response messages before
 	// emitting.
 	reasm := tlsintent.NewReassembler()
-	var tlsLoss tlsintent.CaptureLoss
+	var tlsLoss, totalTLSLoss tlsintent.CaptureLoss
 	var lastTLSLossReport time.Time
 	reportTLSLoss := func(force bool) {
 		loss := reasm.TakeLoss()
+		totalTLSLoss.Streams += loss.Streams
+		totalTLSLoss.Bytes += loss.Bytes
 		tlsLoss.Streams += loss.Streams
 		tlsLoss.Bytes += loss.Bytes
 		if tlsLoss.Streams == 0 && tlsLoss.Bytes == 0 {
@@ -336,6 +338,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 			b.StateQueueDrops = states.totalDropped.Load()
 		}
 		b.PendingTLSStreams, b.PendingTLSBytes = reasm.Pending()
+		b.TLSLostStreams, b.TLSLostBytes = totalTLSLoss.Streams, totalTLSLoss.Bytes
 		encMu.Lock()
 		defer encMu.Unlock()
 		if err := errors.Join(writeErr, ctx.Err()); err != nil {

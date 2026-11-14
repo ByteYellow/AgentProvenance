@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/ids"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -28,6 +29,30 @@ type ExecutionScope struct {
 	StartedAt      string `json:"started_at"`
 	RootPID        int64  `json:"root_pid,omitempty"`
 	StartEventID   string `json:"start_event_id,omitempty"`
+}
+
+// ScopeObservation is read through the still-owned cgroup descriptor, before
+// cleanup. Empty is unknown when population cannot be observed.
+type ScopeObservation struct {
+	ScopeKind  string `json:"scope_kind"`
+	CgroupID   string `json:"cgroup_id"`
+	ObservedAt string `json:"observed_at"`
+	Empty      *bool  `json:"empty"`
+	Error      string `json:"error,omitempty"`
+}
+
+func (c executionCgroup) observe(scope ExecutionScope) *ScopeObservation {
+	o := &ScopeObservation{ScopeKind: scope.ScopeKind, CgroupID: c.id}
+	if c.empty != nil {
+		empty, err := c.empty()
+		if err != nil {
+			o.Error = err.Error()
+		} else {
+			o.Empty = &empty
+		}
+	}
+	o.ObservedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	return o
 }
 
 // Lifecycle hooks are trusted in-process integration points, never decoded
@@ -81,7 +106,7 @@ func (s Service) persistCompletion(r Result, timedOut, cancelled bool) (string, 
 		}
 		payload, err := json.Marshal(map[string]any{"attempt_id": r.AttemptID, "exit_code": r.ExitCode, "status": r.Status,
 			"wall_ms": r.WallMS, "changed_files": len(r.ChangedFiles), "timed_out": timedOut, "cancelled": cancelled,
-			"stop_report": r.Stop})
+			"stop_report": r.Stop, "scope_observation": r.ScopeObservation})
 		if err != nil {
 			return err
 		}

@@ -82,6 +82,7 @@ type Result struct {
 	Scope            *ExecutionScope       `json:"execution_scope,omitempty"`
 	EndEventID       string                `json:"end_event_id,omitempty"`
 	Stop             *StopReport           `json:"stop_report,omitempty"`
+	ScopeObservation *ScopeObservation     `json:"scope_observation,omitempty"`
 }
 
 type ObservedProcess struct {
@@ -342,9 +343,10 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 		close(stopSampler)
 		<-samplerDone
 		endedAt := time.Now().UTC().Format(time.RFC3339Nano)
-		return Result{RunID: req.RunID, RootPID: pid, Scope: &scope, EndedAt: endedAt, Stop: stopReport}, errors.Join(cause,
-			s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, cause.Error()),
-			correlation.CloseBindingByID(s.DB, bindingID, endedAt))
+		return Result{RunID: req.RunID, RootPID: pid, Scope: &scope, EndedAt: endedAt, Stop: stopReport,
+				ScopeObservation: cgroup.observe(scope)}, errors.Join(cause,
+				s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, cause.Error()),
+				correlation.CloseBindingByID(s.DB, bindingID, endedAt))
 	}
 	scope.StartEventID, err = s.persistStart(scope, commandText)
 	if err != nil {
@@ -516,6 +518,7 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 		ArtifactCapture:  artifactCapture,
 		Scope:            &scope,
 		Stop:             stopReport,
+		ScopeObservation: cgroup.observe(scope),
 	}
 	result.EndEventID, err = s.persistCompletion(result, timedOut, cancelled)
 	if err != nil {
