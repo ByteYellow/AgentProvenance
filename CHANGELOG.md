@@ -4,6 +4,14 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+### Runtime collection
+
+- Add a bounded, version-pinned gVisor SecCheck transport receiver with
+  registered sandbox identities, separate thread/process lifetimes and stream
+  loss diagnostics. Include live `systrap` acceptance for two concurrent Linux
+  sandboxes. Spool, graph and user-facing setup integration remain in progress.
+  See the [SecCheck receiver guide](docs/gvisor-seccheck.md).
+
 ### Cross-sandbox execution
 
 - Reconcile interrupted sender publications with cross-process leases and
