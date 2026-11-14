@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -13,6 +14,59 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/hooksbridge"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 )
+
+func TestPreparedSearchScopeKeepsEveryPageAndAudit(t *testing.T) {
+	f := newSessionAuditFixture(t)
+	server := Server{DB: f.db}
+	ctx := context.Background()
+	opts := SearchSourceOptions{RunID: sessionAuditRun, Harness: "codex", SessionID: "worker"}
+	scope, err := server.sessionGraphScope(ctx, opts.RunID, opts.Harness, opts.SessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared := &searchSessionScope{RunID: opts.RunID, GraphSessionScope: *scope}
+	pages := 0
+	for {
+		want, err := server.SearchSources(ctx, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := server.searchSourcesPage(ctx, opts, prepared)
+		if err != nil || !reflect.DeepEqual(want, got) {
+			t.Fatalf("prepared page changed source or audit: %v\nwant=%+v\ngot=%+v", err, want, got)
+		}
+		pages++
+		if !want.HasMore {
+			break
+		}
+		opts.Cursor = want.NextCursor
+	}
+	if pages < 4 {
+		t.Fatalf("search stages skipped: %d", pages)
+	}
+	for _, other := range []SearchSourceOptions{
+		{RunID: "other", Harness: "codex", SessionID: "worker"},
+		{RunID: opts.RunID, Harness: "claude", SessionID: "worker"},
+		{RunID: opts.RunID, Harness: "codex", SessionID: "other"},
+		{RunID: opts.RunID},
+	} {
+		if _, err := server.searchSourcesPage(ctx, other, prepared); !errors.Is(err, agentcontext.ErrInvalidArgument) {
+			t.Fatalf("prepared scope crossed identity: %+v %v", other, err)
+		}
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := server.searchSourcesPage(canceled, opts, prepared); !errors.Is(err, context.Canceled) {
+		t.Fatalf("prepared scope concealed cancellation: %v", err)
+	}
+	// Online requests must still resolve membership from the current database.
+	if _, err := f.db.Exec(`DELETE FROM agent_context_reports WHERE run_id=?`, opts.RunID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.SearchSources(ctx, opts); err == nil {
+		t.Fatal("online query reused export membership")
+	}
+}
 
 func allSearchSources(t *testing.T, server Server, opts SearchSourceOptions) []SearchSource {
 	t.Helper()

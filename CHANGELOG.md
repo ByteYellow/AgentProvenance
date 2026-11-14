@@ -4,6 +4,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Reduce repeated object reads and session-scope queries in offline exports with
+  many sessions. Reuse verified payloads within a bounded per-export cache and
+  stream search pages using the same scope as the session graph. Live queries,
+  discovery limits and selective-sharing boundaries remain unchanged.
 - Browser captures retain bounded, privacy-projected HAR attachments with native
   request and redirect identities, explicit pending/failed outcomes, independent
   capture controls, signed portability and selective offline export.

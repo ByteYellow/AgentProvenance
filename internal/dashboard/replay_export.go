@@ -200,6 +200,9 @@ func (s Server) exportReplaySet(ctx context.Context, run string, w *staticdata.W
 		return result, err
 	}
 	result.Sessions = map[string]replaySession{}
+	result.Search = map[string]map[string]staticdata.Ref{}
+	searchNodes := map[string]bool{}
+	relationReader := contextService.NewSessionRelationReader()
 	for _, src := range sessions {
 		keyBytes, _ := json.Marshal([]string{src.Harness, src.SessionID})
 		key := string(keyBytes)
@@ -224,7 +227,7 @@ func (s Server) exportReplaySet(ctx context.Context, run string, w *staticdata.W
 		relations := map[string]staticdata.Ref{}
 		cursor := ""
 		for {
-			page, err := contextService.SessionRelations(ctx, agentcontext.SessionRelationOptions{RunID: run, Harness: src.Harness,
+			page, err := relationReader.SessionRelations(ctx, agentcontext.SessionRelationOptions{RunID: run, Harness: src.Harness,
 				SessionID: src.SessionID, Limit: 50, Cursor: cursor, VisibleRuns: visibleRuns})
 			if err != nil {
 				return result, err
@@ -253,6 +256,13 @@ func (s Server) exportReplaySet(ctx context.Context, run string, w *staticdata.W
 			saved.AuditRelations = &audits
 		}
 		result.Sessions[key] = saved
+		// Stream this session's search while its audited scope is available,
+		// instead of retaining every scope or resolving it again for each page.
+		result.Search[key], err = s.exportSearchSources(ctx, SearchSourceOptions{RunID: run, Harness: src.Harness, SessionID: src.SessionID},
+			&searchSessionScope{RunID: run, GraphSessionScope: *scope}, w, searchNodes)
+		if err != nil {
+			return result, err
+		}
 	}
 	timeline, err := telemetry.ListEventsFiltered(s.DB, telemetry.Filter{RunID: run})
 	if err != nil {
@@ -526,41 +536,12 @@ func (s Server) exportReplaySet(ctx context.Context, run string, w *staticdata.W
 	if err != nil {
 		return result, err
 	}
-	result.Search = map[string]map[string]staticdata.Ref{}
-	searchScopes := []SearchSourceOptions{{RunID: run}}
-	for key := range result.Sessions {
-		var identity []string
-		if err := json.Unmarshal([]byte(key), &identity); err != nil || len(identity) != 2 {
-			return result, fmt.Errorf("invalid replay session identity")
-		}
-		searchScopes = append(searchScopes, SearchSourceOptions{RunID: run, Harness: identity[0], SessionID: identity[1]})
+	result.Search[`["",""]`], err = s.exportSearchSources(ctx, SearchSourceOptions{RunID: run}, nil, w, nodes)
+	if err != nil {
+		return result, err
 	}
-	for _, scope := range searchScopes {
-		key, _ := json.Marshal([]string{scope.Harness, scope.SessionID})
-		catalog := map[string]staticdata.Ref{}
-		for {
-			page, err := s.SearchSources(ctx, scope)
-			if err != nil {
-				return result, err
-			}
-			catalog[scope.Cursor], err = w.JSON(page)
-			if err != nil {
-				return result, err
-			}
-			for _, source := range page.Sources {
-				if source.Node != "" {
-					nodes[source.Node] = true
-				}
-			}
-			if !page.HasMore {
-				break
-			}
-			if page.NextCursor == "" || page.NextCursor == scope.Cursor || catalog[page.NextCursor].Path != "" {
-				return result, fmt.Errorf("invalid replay search continuation: %s", key)
-			}
-			scope.Cursor = page.NextCursor
-		}
-		result.Search[string(key)] = catalog
+	for node := range searchNodes {
+		nodes[node] = true
 	}
 	result.Compare = map[string]staticdata.Ref{}
 	for cursor := ""; ; {
@@ -611,6 +592,32 @@ func (s Server) exportReplaySet(ctx context.Context, run string, w *staticdata.W
 		return result, err
 	}
 	return result, reconcileReplaySessions(sessions, result)
+}
+
+func (s Server) exportSearchSources(ctx context.Context, opts SearchSourceOptions, scope *searchSessionScope, w *staticdata.Writer, nodes map[string]bool) (map[string]staticdata.Ref, error) {
+	catalog := map[string]staticdata.Ref{}
+	for {
+		page, err := s.searchSourcesPage(ctx, opts, scope)
+		if err != nil {
+			return nil, err
+		}
+		catalog[opts.Cursor], err = w.JSON(page)
+		if err != nil {
+			return nil, err
+		}
+		for _, source := range page.Sources {
+			if source.Node != "" {
+				nodes[source.Node] = true
+			}
+		}
+		if !page.HasMore {
+			return catalog, nil
+		}
+		if page.NextCursor == "" || page.NextCursor == opts.Cursor || catalog[page.NextCursor].Path != "" {
+			return nil, fmt.Errorf("invalid replay search continuation: %s/%s", opts.Harness, opts.SessionID)
+		}
+		opts.Cursor = page.NextCursor
+	}
 }
 
 func replayComparisonKind(e agentcontext.Entry) string {

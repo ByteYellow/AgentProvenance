@@ -83,12 +83,26 @@ func (s Server) searchSources(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s Server) SearchSources(ctx context.Context, opts SearchSourceOptions) (SearchSources, error) {
+	return s.searchSourcesPage(ctx, opts, nil)
+}
+
+// A prepared scope belongs to one frozen, selected export database. Online
+// requests resolve their scope afresh instead of retaining membership between pages.
+type searchSessionScope struct {
+	RunID string
+	provenance.GraphSessionScope
+}
+
+func (s Server) searchSourcesPage(ctx context.Context, opts SearchSourceOptions, prepared *searchSessionScope) (SearchSources, error) {
 	result := SearchSources{SchemaVersion: "agentprovenance.search_sources/v1", RunID: opts.RunID,
 		Harness: opts.Harness, SessionID: opts.SessionID, Sources: []SearchSource{}}
 	invalid := func() (SearchSources, error) {
 		return result, fmt.Errorf("%w: invalid search scope or cursor", agentcontext.ErrInvalidArgument)
 	}
 	if opts.RunID == "" || len(opts.RunID) > 512 || len(opts.Harness) > 128 || len(opts.SessionID) > 512 || (opts.Harness == "") != (opts.SessionID == "") {
+		return invalid()
+	}
+	if prepared != nil && (opts.SessionID == "" || prepared.RunID != opts.RunID || prepared.Harness != opts.Harness || prepared.SessionID != opts.SessionID) {
 		return invalid()
 	}
 	key, _ := json.Marshal([]string{opts.RunID, opts.Harness, opts.SessionID})
@@ -107,9 +121,15 @@ func (s Server) SearchSources(ctx context.Context, opts SearchSourceOptions) (Se
 	tools, events, nodes := "[]", "[]", "[]"
 	var auditEvents map[string]provenance.SessionAuditRelation
 	if opts.SessionID != "" {
-		scope, err := s.sessionGraphScope(ctx, opts.RunID, opts.Harness, opts.SessionID)
-		if err != nil {
-			return result, err
+		var scope *provenance.GraphSessionScope
+		if prepared != nil {
+			scope = &prepared.GraphSessionScope
+		} else {
+			var err error
+			scope, err = s.sessionGraphScope(ctx, opts.RunID, opts.Harness, opts.SessionID)
+			if err != nil {
+				return result, err
+			}
 		}
 		result.SessionAudit, auditEvents = scope.Audit, scope.AuditEvents
 		b, _ := json.Marshal(scope.ToolIDs)

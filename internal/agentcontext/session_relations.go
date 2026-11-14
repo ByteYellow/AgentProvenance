@@ -66,6 +66,12 @@ func nativeSession(src Source) bool {
 // SessionRelations is a read projection over immutable source records. It never
 // changes run membership or treats shared resources as a session relationship.
 func (s Service) SessionRelations(ctx context.Context, opts SessionRelationOptions) (SessionRelationsPage, error) {
+	return s.sessionRelations(ctx, opts, func(run, hash string, target any) error {
+		return provenance.ReadObjectPayload(s.DB, run, hash, target)
+	})
+}
+
+func (s Service) sessionRelations(ctx context.Context, opts SessionRelationOptions, readPayload func(string, string, any) error) (SessionRelationsPage, error) {
 	result := SessionRelationsPage{SchemaVersion: SchemaVersion,
 		Subject:   SessionRef{RunID: opts.RunID, Harness: opts.Harness, SessionID: opts.SessionID, Available: true},
 		Relations: []SessionRelation{}, Issues: []string{}}
@@ -122,7 +128,7 @@ func (s Service) SessionRelations(ctx context.Context, opts SessionRelationOptio
 			return result, err
 		}
 		var c Coverage
-		if err := provenance.ReadObjectPayload(s.DB, ref.run, ref.hash, &c); err != nil {
+		if err := readPayload(ref.run, ref.hash, &c); err != nil {
 			return result, err
 		}
 		if c.SchemaVersion != SchemaVersion || c.RunID != ref.run || c.Source.ID != ref.source || c.Source.SessionID != ref.session || c.Source.Harness != opts.Harness {
@@ -242,7 +248,7 @@ func (s Service) SessionRelations(ctx context.Context, opts SessionRelationOptio
 	}
 	// Only typed native envelopes carry session relations. Arbitrary prose,
 	// shell arguments, Agent display names and prior transcript context do not.
-	if err := s.sessionActionRelations(ctx, opts, known, targets, refFor, add, &result); err != nil {
+	if err := s.sessionActionRelations(ctx, opts, known, targets, refFor, add, &result, readPayload); err != nil {
 		return result, err
 	}
 	for _, relation := range relations {
@@ -300,7 +306,8 @@ func parentCycle(child, parent string, parents map[string]map[string]bool) bool 
 
 func (s Service) sessionActionRelations(ctx context.Context, opts SessionRelationOptions, known map[string]map[string][]Coverage,
 	targets func(string, string) []SessionRef, refFor func(string, string) SessionRef,
-	add func(string, SessionRef, SessionRef, []SessionRelationEvidence, ...string), result *SessionRelationsPage) error {
+	add func(string, SessionRef, SessionRef, []SessionRelationEvidence, ...string), result *SessionRelationsPage,
+	readPayload func(string, string, any) error) error {
 	sources := []string{}
 	for _, runs := range known {
 		for _, reports := range runs {
@@ -344,7 +351,7 @@ func (s Service) sessionActionRelations(ctx context.Context, opts SessionRelatio
 			return err
 		}
 		var e Entry
-		if err := provenance.ReadObjectPayload(s.DB, ref.run, ref.hash, &e); err != nil {
+		if err := readPayload(ref.run, ref.hash, &e); err != nil {
 			return err
 		}
 		if e.SchemaVersion != SchemaVersion || e.RunID != ref.run || e.ID != ref.id || e.Source.ID != ref.source || e.Source.SessionID != ref.session || e.Source.Harness != opts.Harness || len(known[e.Source.SessionID][ref.run]) == 0 {
