@@ -4,7 +4,6 @@ package handoff
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,32 +14,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/producer"
+	"github.com/byteyellow/agentprovenance/internal/record"
 	"github.com/byteyellow/agentprovenance/internal/sensor"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
-
-// The fixture keeps only actual sensor records for scopes created in its own
-// temporary store. It does not insert event identities or rewrite payloads.
-type executionCaptureWriter struct {
-	db     *sql.DB
-	stream *telemetry.NativeStream
-}
-
-func (w executionCaptureWriter) Write(data []byte) (int, error) {
-	var event map[string]any
-	if err := json.Unmarshal(data, &event); err != nil {
-		return 0, err
-	}
-	group := fmt.Sprint(event["cgroup_id"])
-	var known bool
-	if err := w.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM execution_context_bindings WHERE cgroup_id=?)`, group).Scan(&known); err != nil {
-		return 0, err
-	}
-	if !known && event["event_type"] != "resource_pressure" {
-		return len(data), nil
-	}
-	return w.stream.Write(data)
-}
 
 func TestLiveExecutorSealsNativeCapture(t *testing.T) {
 	if os.Getenv("AGENTPROV_TEST_EXECUTION_CAPTURE") != "1" {
@@ -48,8 +26,12 @@ func TestLiveExecutorSealsNativeCapture(t *testing.T) {
 	}
 	e, p, request := testExecutor(t)
 	e.Options.AllowShell = true
+	ingest := telemetry.JSONLIngestOptions{Format: "native", DropUncorrelated: true}
+	if own := producer.SelfCgroupID(); own != "" {
+		ingest.ExcludeCgroupIDs = []string{own}
+	}
 	stream, err := telemetry.NewNativeStream(e.Ledger.DB, e.Paths, telemetry.NativeStreamOptions{
-		Ingest: telemetry.JSONLIngestOptions{Format: "native", DropUncorrelated: true}, BatchEvents: 128})
+		Ingest: ingest, BatchEvents: 128})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +47,7 @@ func TestLiveExecutorSealsNativeCapture(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ready, done := make(chan struct{}), make(chan error, 1)
 	go func() {
-		done <- sensor.RunWithOptions(executionCaptureWriter{e.Ledger.DB, stream}, sensor.Options{
+		done <- sensor.RunWithOptions(stream, sensor.Options{
 			Context: ctx, Checkpointer: cp, Diagnostics: io.Discard, OnReady: func() { close(ready) },
 			OnCapabilities: func(report sensor.CapabilityReport) { capsMu.Lock(); caps = report; capsMu.Unlock() },
 		})
@@ -91,6 +73,14 @@ func TestLiveExecutorSealsNativeCapture(t *testing.T) {
 		t.Fatalf("sensor start: %v", err)
 	case <-time.After(10 * time.Second):
 		t.Fatal("sensor readiness timeout")
+	}
+	// A separate recorder creates real node events without publishing bindings
+	// into this executor's store. Its backlog must remain visible throughout.
+	foreign, _, _ := testExecutor(t)
+	if _, err := (record.Service{DB: foreign.Ledger.DB, Paths: foreign.Paths}).Run(record.Request{
+		RunID: "unrelated-node-work", Command: []string{"touch", "unrelated.txt"}, DisableSnapshot: true, PostRootGraceMS: 1,
+	}); err != nil {
+		t.Fatal(err)
 	}
 	stopExecutor := startExecutor(t, e)
 	defer func() {
@@ -120,13 +110,14 @@ func TestLiveExecutorSealsNativeCapture(t *testing.T) {
 		writeCaptureReport(t, r)
 		c := r.Checkpoint.Capture
 		if r.Attempt.State.Execution != Succeeded || r.Attempt.State.Capture != Sealed || c == nil || c.State != Sealed ||
-			c.Start.Sensor.KernelTimeNS == 0 || c.End.Sensor.Sequence <= c.Start.Sensor.Sequence || c.Progress.State != "settled" ||
+			c.Start.Sensor.KernelTimeNS == 0 || c.End.Sensor.Sequence <= c.Start.Sensor.Sequence || c.ScopeProgress == nil || c.ScopeProgress.State != "settled" ||
+			c.Progress == nil || c.Progress.Pending == 0 || c.Progress.State != "pending" ||
 			c.Scope.Empty == nil || !*c.Scope.Empty || groups[r.Checkpoint.Scope.CgroupID] {
 			t.Fatalf("native execution not sealed independently: %+v capture=%+v", r, c)
 		}
 		groups[r.Checkpoint.Scope.CgroupID] = true
-		t.Logf("attempt=%s run=%s cgroup=%s boundaries=%d..%d shared_prefix=%+v", id, r.Attempt.LocalRunID,
-			r.Checkpoint.Scope.CgroupID, c.Start.Sensor.Sequence, c.End.Sensor.Sequence, c.Progress)
+		t.Logf("attempt=%s run=%s cgroup=%s boundaries=%d..%d scope=%+v shared_prefix=%+v", id, r.Attempt.LocalRunID,
+			r.Checkpoint.Scope.CgroupID, c.Start.Sensor.Sequence, c.End.Sensor.Sequence, c.ScopeProgress, c.Progress)
 		var count int
 		if err := e.Ledger.DB.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id=? AND cgroup_id=? AND source='agentprov_ebpf' AND event_type='file_write' AND json_extract(payload,'$.payload.raw.path')='result.txt'`, r.Attempt.LocalRunID, r.Checkpoint.Scope.CgroupID).Scan(&count); err != nil || count == 0 {
 			rows, queryErr := e.Ledger.DB.Query(`SELECT run_id,event_type,source,payload FROM events WHERE event_type='file_write' LIMIT 20`)

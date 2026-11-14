@@ -29,8 +29,11 @@ def main():
     parser.add_argument("--config", type=pathlib.Path, required=True)
     parser.add_argument("--token-file", type=pathlib.Path, required=True)
     parser.add_argument("--output", type=pathlib.Path, required=True)
+    parser.add_argument("--require-sealed", action="store_true", help="Require native scope capture to seal for completed and stopped tasks")
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
+    if args.require_sealed and not config.get("capture"):
+        parser.error("--require-sealed requires native capture configuration")
     token = args.token_file.read_text().strip()
     if not token:
         raise RuntimeError("empty authentication token")
@@ -100,6 +103,14 @@ def main():
                     raise RuntimeError("native capture lacks live start/end boundaries")
                 if capture["state"] != report["attempt"]["state"]["capture"]:
                     raise RuntimeError("native capture report disagrees with attempt")
+                if capture.get("schema_version") == "agentprovenance.execution_native_capture/v2":
+                    progress = capture.get("scope_progress", {})
+                    if not capture.get("scope_prefix") or not capture.get("shared_prefix") or not progress:
+                        raise RuntimeError("native capture lacks scope or shared accounting")
+                    if progress["events"] != sum(progress[key] for key in ("ingested", "dropped", "failed", "pending")):
+                        raise RuntimeError("native scope accounting is inconsistent")
+                if args.require_sealed and capture["state"] != "sealed":
+                    raise RuntimeError("task capture did not seal: " + json.dumps(capture))
                 scope = report["checkpoint"]["scope"]
                 cursor = ""
                 found = []
@@ -129,6 +140,8 @@ def main():
         wait(retry, "running")
         stop = api("POST", "/v1/executions/" + retry["id"] + "/stop", {"operation_id": nonce + "-stop"})
         cancelled = wait(retry, "cancelled")
+        if args.require_sealed and cancelled["attempt"]["state"]["capture"] != "sealed":
+            raise RuntimeError("stopped task capture did not seal: " + json.dumps(cancelled))
         source = requests[0]["source"]
         query = urllib.parse.urlencode({"run": source["run_id"], "harness": source["harness"],
                                        "session": source["session_id"], "tool_call": source["tool_call_id"], "limit": 100})
@@ -141,6 +154,8 @@ def main():
         if config.get("capture"):
             result["checks"].extend(["native_capture_boundaries", "native_artifact_writes"])
             result["native_file_events"] = native_file_events
+            if args.require_sealed:
+                result["checks"].append("scope_capture_sealed")
         args.output.write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps({"status": "passed", "checks": result["checks"], "output": str(args.output)}))
     finally:

@@ -58,9 +58,12 @@ func (c executionCgroup) observe(scope ExecutionScope) *ScopeObservation {
 // Lifecycle hooks are trusted in-process integration points, never decoded
 // from an API request. A failing Prepared hook prevents command launch. A
 // failing Started hook terminates and reaps the already-started process.
+// Completed runs after the end event is committed, while the scope is still
+// owned. A hook error is returned alongside the saved execution result.
 type Lifecycle struct {
-	Prepared func(ExecutionScope) error
-	Started  func(ExecutionScope) error
+	Prepared  func(ExecutionScope) error
+	Started   func(ExecutionScope) error
+	Completed func(Result) error
 }
 
 func (s Service) persistStart(scope ExecutionScope, command string) (string, error) {

@@ -159,6 +159,22 @@ Kernel-ring consumption, decoder queues and a workload's collection window are
 separate boundaries. Execution capture sealing must account for those boundaries
 before recording a sealed run; this API alone does not change that state.
 
+### Execution-scope accounting
+
+`SnapshotScopePrefix(start, end, cgroup)` selects the complete accepted interval
+between two sealed snapshots of the same collector epoch, including batches
+already processed and cleaned. The caller retains the owned cgroup through the
+end boundary. `DrainScopePrefix` and `ReadNativeScopePrefix` report that cgroup's
+outcomes plus unclassified records; other cgroups retain their own queue state.
+Membership and outcomes are persisted with the batch seal and evidence writes,
+respectively. Missing, changed or noncontiguous metadata returns an error.
+
+Schema 24 adds collector sequence and scope-count metadata without rewriting
+saved evidence. Existing queued batches retain their row receipts and replay
+normally; only newly recorded intervals support scope accounting. Shared
+backlog and unlocalized collector losses remain separate report fields. This
+accounting does not change event attribution or late-binding retention.
+
 ### Kernel and decoder checkpoints
 
 An in-process integration can pass a fresh `sensor.NewCheckpointer()` through

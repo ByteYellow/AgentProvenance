@@ -10,7 +10,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
-const nativeCaptureSchema = "agentprovenance.execution_native_capture/v1"
+const nativeCaptureSchema = "agentprovenance.execution_native_capture/v2"
 
 type NativeCapturePoint struct {
 	Scope        record.ExecutionScope   `json:"scope"`
@@ -19,8 +19,8 @@ type NativeCapturePoint struct {
 	Capabilities sensor.CapabilityReport `json:"capabilities"`
 }
 
-// The shared prefix includes unresolved node events. Pending outcomes remain
-// explicit; the controller never expires them early to claim a complete run.
+// The shared prefix remains visible. Only the execution's collector interval,
+// cgroup and unclassified rows participate in scope-drain completion.
 type NativeCaptureReport struct {
 	SchemaVersion string                          `json:"schema_version"`
 	State         CaptureState                    `json:"state"`
@@ -28,6 +28,8 @@ type NativeCaptureReport struct {
 	End           *NativeCapturePoint             `json:"end,omitempty"`
 	Scope         *record.ScopeObservation        `json:"scope_observation,omitempty"`
 	Progress      *telemetry.NativePrefixProgress `json:"shared_prefix,omitempty"`
+	ScopePrefix   *telemetry.NativeScopePrefix    `json:"scope_prefix,omitempty"`
+	ScopeProgress *telemetry.NativePrefixProgress `json:"scope_progress,omitempty"`
 	Issues        []string                        `json:"issues"`
 	Error         string                          `json:"error,omitempty"`
 }
@@ -100,10 +102,28 @@ func (n *NativeCapture) Finish(ctx context.Context, start NativeCapturePoint, re
 		return r
 	}
 	r.End = end
-	progress, err := n.Stream.DrainPrefix(ctx, end.Spool)
-	r.Progress = &progress
+	prefix, err := n.Stream.SnapshotScopePrefix(ctx, start.Spool, end.Spool, start.Scope.CgroupID)
+	if err != nil {
+		r.Issues, r.Error = append(r.Issues, "scope_checkpoint_failed"), err.Error()
+		return r
+	}
+	r.ScopePrefix = &prefix
+	progress, err := n.Stream.DrainScopePrefix(ctx, prefix)
+	r.ScopeProgress = &progress
 	if err != nil {
 		r.Issues, r.Error = append(r.Issues, "spool_drain_failed"), err.Error()
+	}
+	// Preserve node backlog separately, including when scope drain timed out.
+	sharedCtx, sharedCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	shared, sharedErr := n.Stream.ReadPrefix(sharedCtx, end.Spool)
+	sharedCancel()
+	if sharedErr != nil {
+		r.Issues = append(r.Issues, "shared_prefix_status_unavailable")
+		if r.Error == "" {
+			r.Error = sharedErr.Error()
+		}
+	} else {
+		r.Progress = &shared
 	}
 	r.Issues = append(r.Issues, nativeCaptureIssues(start, *end, r.Scope, progress)...)
 	if len(r.Issues) == 0 {
@@ -133,17 +153,17 @@ func nativeCaptureIssues(start, end NativeCapturePoint, scope *record.ScopeObser
 	if end.Sensor.TLSLostStreams != start.Sensor.TLSLostStreams || end.Sensor.TLSLostBytes != start.Sensor.TLSLostBytes {
 		issues = append(issues, "shared_tls_loss")
 	}
-	for _, key := range []string{"invalid", "dropped_oversize", "dropped_queue_full", "dropped_partial_recovery", "expired_uncorrelated"} {
+	for _, key := range []string{"invalid", "dropped_oversize", "dropped_queue_full", "dropped_partial_recovery"} {
 		if end.Spool.Counters[key] != start.Spool.Counters[key] {
 			issues = append(issues, "shared_spool_loss")
 			break
 		}
 	}
 	if progress.State != "settled" || progress.PendingBatches != 0 || progress.Pending != 0 {
-		issues = append(issues, "shared_prefix_pending")
+		issues = append(issues, "scope_prefix_pending")
 	}
 	if progress.Dropped != 0 || progress.Failed != 0 {
-		issues = append(issues, "shared_prefix_loss")
+		issues = append(issues, "scope_prefix_loss")
 	}
 	return issues
 }

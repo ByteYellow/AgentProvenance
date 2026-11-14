@@ -12,7 +12,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 23
+const SchemaVersion = 24
 
 type Paths struct {
 	Root       string
@@ -495,6 +495,15 @@ func EnsureSchema(db *sql.DB) error {
 			name TEXT PRIMARY KEY,
 			value INTEGER NOT NULL DEFAULT 0
 		);`,
+		`CREATE TABLE IF NOT EXISTS telemetry_native_scope_counts (
+			batch_id TEXT NOT NULL REFERENCES telemetry_spool_batches(id) ON DELETE CASCADE,
+			cgroup_id TEXT NOT NULL,
+			event_count INTEGER NOT NULL,
+			ingested_count INTEGER NOT NULL DEFAULT 0,
+			dropped_count INTEGER NOT NULL DEFAULT 0,
+			failed_count INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY(batch_id, cgroup_id)
+		);`,
 		`CREATE TABLE IF NOT EXISTS telemetry_audit_checkpoints (
 			id TEXT PRIMARY KEY,
 			run_id TEXT NOT NULL,
@@ -881,6 +890,9 @@ func EnsureSchema(db *sql.DB) error {
 		`ALTER TABLE telemetry_spool_batches ADD COLUMN retry_at INTEGER NOT NULL DEFAULT 0;`,
 		`ALTER TABLE telemetry_spool_batches ADD COLUMN event_count INTEGER NOT NULL DEFAULT 0;`,
 		`ALTER TABLE telemetry_spool_batches ADD COLUMN dropped_count INTEGER NOT NULL DEFAULT 0;`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN native_collector_id TEXT NOT NULL DEFAULT '';`,
+		`ALTER TABLE telemetry_spool_batches ADD COLUMN native_first_sequence INTEGER NOT NULL DEFAULT 0;`,
+		`CREATE INDEX IF NOT EXISTS idx_native_spool_sequence ON telemetry_spool_batches(native_collector_id, native_first_sequence);`,
 		`CREATE INDEX IF NOT EXISTS idx_native_spool_ready ON telemetry_spool_batches(format, status, retry_at, created_at);`,
 		// Multi-agent orchestration: which agent/sub-agent ran a tool call (from
 		// the harness hooks bridge). Empty for main-thread / non-agent calls.

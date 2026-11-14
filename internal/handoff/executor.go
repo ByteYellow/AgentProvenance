@@ -199,6 +199,7 @@ func (e *Executor) execute(ctx context.Context, a Attempt) error {
 	}
 	stdout, stderr := &outputBuffer{retain: policy.ToolResults}, &outputBuffer{retain: policy.ToolResults}
 	var captureStart *NativeCapturePoint
+	completed := false
 	svc := record.Service{DB: e.Ledger.DB, Paths: e.Paths, Options: e.Options, Lifecycle: &record.Lifecycle{
 		Prepared: func(scope record.ExecutionScope) error {
 			stop, err := e.Ledger.stopRequested(ctx, a.ID)
@@ -231,15 +232,27 @@ func (e *Executor) execute(ctx context.Context, a Attempt) error {
 			}
 			return err
 		},
+		Completed: func(result record.Result) error {
+			completed = true
+			return e.completeAttempt(a, result, captureStart, stdout, stderr)
+		},
 	}}
 	cmd := a.Request.Command
 	r, err := svc.RunContext(ctx, record.Request{RunID: a.LocalRunID, Name: "remote execution", Command: cmd.Argv,
 		Workdir: cmd.Workdir, DisableSnapshot: cmd.DisableSnapshot, SampleIntervalMS: cmd.SampleIntervalMS,
 		PostRootGraceMS: cmd.PostRootGraceMS, Stdout: stdout, Stderr: stderr})
+	if completed {
+		return err
+	}
 	if err != nil {
 		return e.failAttempt(a, r, err)
 	}
+	return e.completeAttempt(a, r, captureStart, stdout, stderr)
+}
+
+func (e *Executor) completeAttempt(a Attempt, r record.Result, captureStart *NativeCapturePoint, stdout, stderr *outputBuffer) error {
 	state := a.State
+	var err error
 	state.Execution, err = observedExecution(r)
 	if err != nil {
 		return e.failAttempt(a, r, err)

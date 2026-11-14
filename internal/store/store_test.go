@@ -298,6 +298,56 @@ func TestNewerSchemaIsRejectedBeforeMigrationWrites(t *testing.T) {
 	}
 }
 
+func TestUpgradeSchema23PreservesNativeSpool(t *testing.T) {
+	paths := openTestDB(t)
+	db, err := Open(*paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, stmt := range []string{
+		`DROP TABLE telemetry_native_scope_counts`,
+		`DROP INDEX idx_native_spool_sequence`,
+		`ALTER TABLE telemetry_spool_batches DROP COLUMN native_collector_id`,
+		`ALTER TABLE telemetry_spool_batches DROP COLUMN native_first_sequence`,
+		`DELETE FROM schema_versions WHERE version>23`,
+		`INSERT OR IGNORE INTO schema_versions VALUES(23,'previous version','2026-11-14')`,
+		`INSERT INTO telemetry_spool_batches(id,format,spool_path,status,event_count,ingested_count,created_at,updated_at) VALUES('old-native','native','retained.jsonl','queued',2,1,'old-time','old-time')`,
+		`INSERT INTO telemetry_native_rows(batch_id,line,outcome,event_id) VALUES('old-native',1,'ingested','original-event')`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if err := EnsureSchema(db); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var epoch, path, status, event string
+	var first, total, ingested int
+	if err := db.QueryRow(`SELECT native_collector_id,native_first_sequence,spool_path,status,event_count,ingested_count FROM telemetry_spool_batches WHERE id='old-native'`).
+		Scan(&epoch, &first, &path, &status, &total, &ingested); err != nil {
+		t.Fatal(err)
+	}
+	if epoch != "" || first != 0 || path != "retained.jsonl" || status != "queued" || total != 2 || ingested != 1 {
+		t.Fatalf("upgrade changed native backlog: %q %d %q %s %d %d", epoch, first, path, status, total, ingested)
+	}
+	if err := db.QueryRow(`SELECT event_id FROM telemetry_native_rows WHERE batch_id='old-native' AND line=1`).Scan(&event); err != nil || event != "original-event" {
+		t.Fatalf("upgrade changed native receipt: %q %v", event, err)
+	}
+	if _, err := db.Exec(`INSERT INTO telemetry_native_scope_counts(batch_id,cgroup_id,event_count) VALUES('old-native','fixture',1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`DELETE FROM telemetry_spool_batches WHERE id='old-native'`); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM telemetry_native_scope_counts`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("scope counts outlived batch retention: %d %v", count, err)
+	}
+}
+
 func TestUpgradeSchema20AddsHandoffLedgerWithoutChangingEvents(t *testing.T) {
 	paths := openTestDB(t)
 	db, err := Open(*paths)

@@ -524,6 +524,11 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 	if err != nil {
 		return result, fmt.Errorf("persist execution completion: %w", err)
 	}
+	if s.Lifecycle != nil && s.Lifecycle.Completed != nil {
+		if err := s.Lifecycle.Completed(result); err != nil {
+			return result, fmt.Errorf("execution completion hook: %w", err)
+		}
+	}
 	return result, nil
 }
 

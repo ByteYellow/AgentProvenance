@@ -48,6 +48,10 @@ type NativePrefixProgress struct {
 	pending        []string
 }
 
+func (n *NativeStream) ReadPrefix(ctx context.Context, p NativePrefix) (NativePrefixProgress, error) {
+	return ReadNativePrefix(ctx, n.service.DB, p)
+}
+
 // SnapshotPrefix seals the current file under the capture lock, then snapshots
 // metadata in one read transaction. Already committed batches need no replay.
 // A partial JSON line must be completed before it can belong to a checkpoint.

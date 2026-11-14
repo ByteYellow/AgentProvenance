@@ -208,7 +208,7 @@ func (n *NativeStream) openBatch() error {
 	if n.opts.PolicyEnabled {
 		policy = 1
 	}
-	_, err = store.ExecRetry(context.Background(), n.service.DB, `INSERT INTO telemetry_spool_batches (id,format,source_path,spool_path,status,size_bytes,native_options,expires_at,policy_enabled,created_at,updated_at) VALUES (?,'native','sensor:stream',?,'initializing',?,?,?,?,?,?)`, id, path, n.opts.BatchBytes, string(options), now.Add(n.opts.PendingTTL).UnixMilli(), policy, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+	_, err = store.ExecRetry(context.Background(), n.service.DB, `INSERT INTO telemetry_spool_batches (id,format,source_path,spool_path,status,size_bytes,native_options,expires_at,policy_enabled,created_at,updated_at,native_collector_id,native_first_sequence) VALUES (?,'native','sensor:stream',?,'initializing',?,?,?,?,?,?,?,?)`, id, path, n.opts.BatchBytes, string(options), now.Add(n.opts.PendingTTL).UnixMilli(), policy, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), n.producerID, n.accepted+1)
 	if err != nil {
 		return err
 	}
@@ -402,6 +402,7 @@ func (n *NativeStream) sealFileContext(ctx context.Context, id string) error {
 	hash := sha256.New()
 	var size int64
 	count := 0
+	scopes := map[string]int64{}
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -430,9 +431,32 @@ func (n *NativeStream) sealFileContext(ctx context.Context, id string) error {
 		hash.Write(line)
 		size += int64(len(line))
 		count++
+		if count > 4096 {
+			return i18n.Errorf("native spool batch exceeds event limit")
+		}
+		var event IngestEvent
+		if json.Unmarshal(line, &event) != nil {
+			scopes[""]++
+		} else {
+			scopes[nativeScopeKey(event)]++
+		}
 	}
-	_, err = store.ExecRetry(ctx, n.service.DB, `UPDATE telemetry_spool_batches SET status='queued',size_bytes=?,file_sha256=?,event_count=?,updated_at=? WHERE id=? AND status='capturing'`, size, hex.EncodeToString(hash.Sum(nil)), count, time.Now().UTC().Format(time.RFC3339Nano), id)
-	return err
+	return store.WithWriteTx(ctx, n.service.DB, func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `UPDATE telemetry_spool_batches SET status='queued',size_bytes=?,file_sha256=?,event_count=?,updated_at=? WHERE id=? AND status='capturing'`, size, hex.EncodeToString(hash.Sum(nil)), count, time.Now().UTC().Format(time.RFC3339Nano), id)
+		if err != nil {
+			return err
+		}
+		changed, err := result.RowsAffected()
+		if err != nil || changed == 0 {
+			return err
+		}
+		for group, total := range scopes {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO telemetry_native_scope_counts(batch_id,cgroup_id,event_count) VALUES (?,?,?)`, id, group, total); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (n *NativeStream) recover() error {
@@ -953,6 +977,10 @@ func (n *NativeStream) processNativeChunk(ctx context.Context, id, path, expecte
 	if _, err := tx.Exec(`UPDATE telemetry_spool_batches SET updated_at=? WHERE id=?`, time.Now().UTC().Format(time.RFC3339Nano), id); err != nil {
 		return 0, nil, err
 	}
+	var scoped bool
+	if err := tx.QueryRow(`SELECT native_collector_id!='' FROM telemetry_spool_batches WHERE id=?`, id).Scan(&scoped); err != nil {
+		return 0, nil, err
+	}
 	started := time.Now()
 	count := 0
 	ingested, dropped, failed := 0, 0, 0
@@ -976,6 +1004,7 @@ func (n *NativeStream) processNativeChunk(ctx context.Context, id, path, expecte
 		var event IngestEvent
 		outcome, eventID := "", ""
 		if err := json.Unmarshal(lines[line-1], &event); err != nil {
+			event = IngestEvent{}
 			outcome = "invalid"
 			failed++
 		} else {
@@ -1026,6 +1055,11 @@ func (n *NativeStream) processNativeChunk(ctx context.Context, id, path, expecte
 		}
 		if _, err := tx.Exec(`INSERT INTO telemetry_native_rows(batch_id,line,outcome,event_id) VALUES (?,?,?,?)`, id, line, outcome, eventID); err != nil {
 			return 0, nil, err
+		}
+		if scoped {
+			if err := recordNativeScopeOutcome(tx, id, nativeScopeKey(event), outcome); err != nil {
+				return 0, nil, err
+			}
 		}
 	}
 	for runID, result := range groups {

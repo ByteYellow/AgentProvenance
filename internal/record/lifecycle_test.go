@@ -15,7 +15,7 @@ import (
 
 func TestExecutionLifecycleRunsAfterSavedBindings(t *testing.T) {
 	paths, db := newPolicyTestStore(t)
-	prepared, started := false, false
+	prepared, started, completed := false, false, false
 	var scope ExecutionScope
 	svc := Service{DB: db, Paths: paths, Lifecycle: &Lifecycle{
 		Prepared: func(s ExecutionScope) error {
@@ -46,10 +46,24 @@ func TestExecutionLifecycleRunsAfterSavedBindings(t *testing.T) {
 			}
 			return nil
 		},
+		Completed: func(r Result) error {
+			completed = true
+			if !started || r.Scope == nil || r.Scope.BindingID != scope.BindingID || r.EndEventID == "" {
+				t.Fatalf("invalid completed scope: %+v", r)
+			}
+			var ended string
+			if err := db.QueryRow(`SELECT ended_at FROM execution_context_bindings WHERE id=?`, scope.BindingID).Scan(&ended); err != nil {
+				return err
+			}
+			if ended == "" {
+				t.Fatal("completion callback preceded persisted end")
+			}
+			return nil
+		},
 	}}
 	r, err := svc.Run(Request{RunID: "lifecycle", Command: []string{"true"}, DisableSnapshot: true, PostRootGraceMS: 1, Stdout: io.Discard, Stderr: io.Discard})
-	if err != nil || !prepared || !started || r.Scope == nil || r.EndEventID == "" || r.Status != "passed" {
-		t.Fatalf("lifecycle: %+v %v prepared=%t started=%t", r, err, prepared, started)
+	if err != nil || !prepared || !started || !completed || r.Scope == nil || r.EndEventID == "" || r.Status != "passed" {
+		t.Fatalf("lifecycle: %+v %v prepared=%t started=%t completed=%t", r, err, prepared, started, completed)
 	}
 	var terminal string
 	if err := db.QueryRow(`SELECT event_type FROM events WHERE id=?`, r.EndEventID).Scan(&terminal); err != nil || terminal != "exec_end" {
@@ -57,12 +71,35 @@ func TestExecutionLifecycleRunsAfterSavedBindings(t *testing.T) {
 	}
 }
 
+func TestCompletedHookFailurePreservesExecutionResult(t *testing.T) {
+	for _, command := range []string{"true", "false"} {
+		t.Run(command, func(t *testing.T) {
+			paths, db := newPolicyTestStore(t)
+			failed := errors.New("capture completion unavailable")
+			calls := 0
+			svc := Service{DB: db, Paths: paths, Lifecycle: &Lifecycle{Completed: func(Result) error {
+				calls++
+				return failed
+			}}}
+			r, err := svc.Run(Request{RunID: "completion-error", Command: []string{command}, DisableSnapshot: true, PostRootGraceMS: 1})
+			if !errors.Is(err, failed) || calls != 1 || r.EndEventID == "" {
+				t.Fatalf("completion error lost: calls=%d result=%+v err=%v", calls, r, err)
+			}
+			var saved int
+			if err := db.QueryRow(`SELECT json_extract(payload,'$.exit_code') FROM events WHERE id=?`, r.EndEventID).Scan(&saved); err != nil || saved != r.ExitCode {
+				t.Fatalf("saved execution result changed: %d %+v %v", saved, r, err)
+			}
+		})
+	}
+}
+
 func TestPreparedFailurePreventsLaunch(t *testing.T) {
 	paths, db := newPolicyTestStore(t)
 	refused := errors.New("handoff preparation failed")
 	svc := Service{DB: db, Paths: paths, Options: Options{AllowShell: true}, Lifecycle: &Lifecycle{
-		Prepared: func(ExecutionScope) error { return refused },
-		Started:  func(ExecutionScope) error { t.Fatal("started after refusal"); return nil },
+		Prepared:  func(ExecutionScope) error { return refused },
+		Started:   func(ExecutionScope) error { t.Fatal("started after refusal"); return nil },
+		Completed: func(Result) error { t.Fatal("completed after refusal"); return nil },
 	}}
 	r, err := svc.Run(Request{RunID: "refused", Command: []string{"sh", "-c", "printf ran > marker"}, DisableSnapshot: true})
 	if !errors.Is(err, refused) || r.Scope == nil || r.RootPID != 0 {

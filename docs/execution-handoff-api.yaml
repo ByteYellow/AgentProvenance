@@ -427,18 +427,22 @@ components:
       type: object
       required: [schema_version, state, issues]
       properties:
-        schema_version: { const: agentprovenance.execution_native_capture/v1 }
+        schema_version: { enum: [agentprovenance.execution_native_capture/v1, agentprovenance.execution_native_capture/v2] }
         state: { enum: [not_ready, collecting, draining, sealed, incomplete] }
         start: { $ref: '#/components/schemas/NativeCapturePoint' }
         end: { $ref: '#/components/schemas/NativeCapturePoint' }
         scope_observation: { $ref: '#/components/schemas/ScopeObservation' }
         shared_prefix: { $ref: '#/components/schemas/NativePrefixProgress' }
+        scope_prefix: { $ref: '#/components/schemas/NativeScopePrefix' }
+        scope_progress: { $ref: '#/components/schemas/NativePrefixProgress' }
         issues: { type: array, items: { type: string } }
         error: { type: string }
       description: >
         Fixed sensor and spool boundaries for the execution. Shared counters and
-        backlog cover the collector, not an exact per-run loss count. Sealed
-        describes a closed observed interval within the saved probe capabilities.
+        backlog cover the collector, not an exact per-run loss count. Version 2
+        uses scope_progress for closure, retaining shared_prefix independently.
+        Scope counts include unclassified rows conservatively. Sealed describes
+        a closed observed interval within the saved probe capabilities.
     NativeCapturePoint:
       type: object
       required: [scope, sensor, spool, capabilities]
@@ -492,6 +496,33 @@ components:
               id: { type: string, minLength: 1 }
               sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
               event_count: { type: integer, minimum: 0, maximum: 4096 }
+    NativeScopePrefix:
+      type: object
+      required: [schema_version, collector_id, cgroup_id, after_sequence, through_sequence, observed_at, batches]
+      properties:
+        schema_version: { const: agentprovenance.native_scope_prefix/v1 }
+        collector_id: { type: string, minLength: 1 }
+        cgroup_id: { type: string, minLength: 1 }
+        after_sequence: { type: integer, minimum: 0 }
+        through_sequence: { type: integer, minimum: 0 }
+        observed_at: { type: string, format: date-time }
+        batches:
+          type: array
+          maxItems: 4096
+          items:
+            type: object
+            required: [id, sha256, event_count, first_sequence, matched_events, unscoped_events]
+            properties:
+              id: { type: string, minLength: 1 }
+              sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+              event_count: { type: integer, minimum: 1, maximum: 4096 }
+              first_sequence: { type: integer, minimum: 1 }
+              matched_events: { type: integer, minimum: 0, maximum: 4096 }
+              unscoped_events: { type: integer, minimum: 0, maximum: 4096 }
+      description: >
+        Complete accepted sequence interval in one collector epoch. Batch hashes
+        and membership counts survive payload cleanup. Different cgroups and
+        earlier/later intervals remain separately accounted for.
     NativePrefixProgress:
       type: object
       required: [state, observed_at, batches, pending_batches, events, ingested, dropped, failed, pending, cleanup_pending]

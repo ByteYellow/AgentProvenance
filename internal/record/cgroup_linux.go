@@ -43,8 +43,8 @@ func prepareScopeCgroup(cmd *exec.Cmd, attemptID string) executionCgroup {
 		return fallback
 	}
 	// Hold the cgroup directory open: its fd is what the kernel uses to place the
-	// child at clone time. It must stay open until after cmd.Start(), so the
-	// caller-deferred cleanup closes it.
+	// child at clone time. Keep it through completion hooks so cancellation and
+	// collector end boundaries refer to this scope until final cleanup.
 	dirFile, err := os.Open(dir)
 	if err != nil {
 		_ = os.Remove(dir)

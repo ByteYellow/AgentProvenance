@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/record"
 	"github.com/byteyellow/agentprovenance/internal/sensor"
@@ -26,6 +27,50 @@ func (f *fixtureBoundary) Checkpoint(ctx context.Context, callback func(sensor.C
 	b := sensor.CaptureBoundary{SchemaVersion: "agentprovenance.sensor_boundary/v1", Boundary: "ring_and_decoder",
 		CollectorID: "fixture-collector", Sequence: f.sequence, KernelTimeNS: f.sequence, ObservedAt: time.Now().UTC()}
 	return b, callback(b)
+}
+
+func TestNativeCaptureUnrelatedPendingDoesNotBlockScope(t *testing.T) {
+	e, _, _ := testExecutor(t)
+	stream, err := telemetry.NewNativeStream(e.Ledger.DB, e.Paths, telemetry.NativeStreamOptions{
+		Ingest: telemetry.JSONLIngestOptions{DropUncorrelated: true}, PendingTTL: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Close()
+	binding, err := correlation.RecordBinding(e.Ledger.DB, correlation.Binding{RunID: "owned-run", SessionID: "owned-session",
+		ToolCallID: "owned-tool", ProcessID: "owned-process", CgroupID: "42", StartedAt: "2026-09-19T00:00:00Z"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := &NativeCapture{Checkpointer: &fixtureBoundary{}, Stream: stream, Timeout: 200 * time.Millisecond,
+		Capabilities: func() sensor.CapabilityReport { return sensor.CapabilityReport{Ready: true} }}
+	scope := record.ExecutionScope{RunID: "owned-run", BindingID: binding, ScopeKind: "cgroup", CgroupID: "42"}
+	start, err := n.Begin(context.Background(), scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{
+		`{"event_type":"file_write","cgroup_id":"42","path":"/tmp/owned","time":"2026-09-19T00:00:00.250Z"}`,
+		`{"event_type":"file_write","cgroup_id":"other","path":"/tmp/unrelated","time":"2026-09-19T00:00:00.250Z"}`,
+	} {
+		if _, err := stream.Write([]byte(raw + "\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	empty := true
+	report := n.Finish(context.Background(), *start, record.Result{Scope: &scope, RootPID: 42, EndEventID: "end",
+		ScopeObservation: &record.ScopeObservation{ScopeKind: "cgroup", CgroupID: "42", Empty: &empty}})
+	if report.State != Sealed {
+		t.Fatalf("unrelated cgroup blocked the owned scope: %+v", report)
+	}
+	status, err := telemetry.ReadNativeStreamStatus(e.Ledger.DB)
+	if err != nil || status.PendingEvents != 1 || status.Counters["expired_uncorrelated"] != 0 {
+		t.Fatalf("unrelated pending evidence was removed: %+v %v", status, err)
+	}
+	var count int
+	if err := e.Ledger.DB.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id='owned-run' AND event_type='file_write'`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("owned evidence not committed: %d %v", count, err)
+	}
 }
 
 func TestNativeCaptureFixedPoints(t *testing.T) {
@@ -119,13 +164,16 @@ func TestNativeCaptureIssueMatrix(t *testing.T) {
 		}, "shared_spool_loss"},
 		{"pending", func(_ *NativeCapturePoint, _ *record.ScopeObservation, p *telemetry.NativePrefixProgress) {
 			p.State, p.Pending = "pending", 1
-		}, "shared_prefix_pending"},
+		}, "scope_prefix_pending"},
 		{"expired", func(_ *NativeCapturePoint, _ *record.ScopeObservation, p *telemetry.NativePrefixProgress) {
 			p.Dropped = 1
-		}, "shared_prefix_loss"},
+		}, "scope_prefix_loss"},
 		{"invalid", func(_ *NativeCapturePoint, _ *record.ScopeObservation, p *telemetry.NativePrefixProgress) {
 			p.Failed = 1
-		}, "shared_prefix_loss"},
+		}, "scope_prefix_loss"},
+		{"other_scope_expiry", func(p *NativeCapturePoint, _ *record.ScopeObservation, _ *telemetry.NativePrefixProgress) {
+			p.Spool.Counters["expired_uncorrelated"] = 10
+		}, ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			start := NativeCapturePoint{Scope: record.ExecutionScope{CgroupID: "42"},

@@ -123,18 +123,24 @@ A failed preflight prevents command launch. At completion, `scope_observation`
 records population through the still-owned directory descriptor; normal success
 leaves deliberately backgrounded descendants running.
 
-After the saved end event, the controller takes another boundary and drains that
-finite prefix with a three-second default budget. `capture_report` retains both
-boundaries and their counters. An empty scope, settled prefix and no observed
-loss (including TLS reassembly loss) or buffered TLS allow `sealed`; pending
-work, loss, changed collector identity or an unavailable population observation
-produces `incomplete`. Buffered TLS is
-reported without flushing live connections. Probe limitations remain in the
-saved capabilities.
+After the saved end event, the controller takes another boundary while still
+holding the owned cgroup. It drains this collector epoch's accepted sequence
+interval for that cgroup, with a three-second default budget. Unclassified rows
+in the interval are included conservatively. An empty scope, settled scope
+interval and no observed loss or buffered TLS allow `sealed`; pending scope
+records, loss, changed collector identity or unknown population produce
+`incomplete`. The cgroup is released after the completion hook returns.
 
-The prefix and counters are collector-wide. Unresolved events from another
-workload can keep the shared prefix pending; the report preserves that uncertainty
-instead of assigning a loss count to the execution or expiring records early.
+`capture_report` version 2 retains `scope_prefix`, its durable `scope_progress`,
+and the collector-wide `shared_prefix` separately. Unresolved rows in other
+cgroups keep their original retention and processing status without blocking
+this execution's scope drain. Scope counts survive batch payload cleanup;
+already processed loss within the interval remains visible. Unlocalized kernel,
+state-queue, TLS and pre-persistence spool losses remain collector-wide signals.
+Buffered TLS is reported without flushing live connections. Probe limitations
+remain in the saved capabilities. Historical version-1 reports keep their
+original shared-prefix interpretation.
+
 Execution success and receipt acknowledgment remain separate from capture state.
 If the executor restarts during draining, it preserves the command result and
 saved boundary, marks capture incomplete, and does not repeat the command.
@@ -397,6 +403,9 @@ output retention, exclusive ownership and recovery of saved completion events.
 with concurrent CSV analysis, output artifacts, retry and cancellation. It uses
 explicit fixture call IDs; native harness integration and evidence transfer have
 separate acceptance gates.
+With native capture configured, add `--require-sealed` to require clean scope
+closure for both completed and stopped tasks. Shared node backlog remains in
+the report independently of this assertion.
 Strict-import regressions cover concurrent retransmission, conflicting evidence,
 whole-transaction rollback, storage errors, portable content, missing bodies,
 decoded-size limits and legacy-import interoperability.

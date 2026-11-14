@@ -371,8 +371,18 @@ func TestNativePrefixSnapshotDoesNotTruncate(t *testing.T) {
 }
 
 func TestNativePrefixReportsCommittedChunkOnFailure(t *testing.T) {
+	nativeReportsCommittedChunkOnFailure(t, false)
+}
+
+func TestNativeScopeReportsCommittedChunkOnFailure(t *testing.T) {
+	nativeReportsCommittedChunkOnFailure(t, true)
+}
+
+func nativeReportsCommittedChunkOnFailure(t *testing.T, scoped bool) {
+	t.Helper()
 	db, paths := nativeTestStore(t)
 	n := nativeTestStream(t, db, paths, NativeStreamOptions{BatchEvents: 32})
+	start := scopeSnapshot(t, n)
 	for i := 0; i < 20; i++ {
 		nativeWrite(t, n, "first", fmt.Sprintf("/tmp/chunk-%d", i))
 	}
@@ -380,18 +390,36 @@ func TestNativePrefixReportsCommittedChunkOnFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	drain := func() (NativePrefixProgress, error) { return n.DrainPrefix(context.Background(), p) }
+	if scoped {
+		rangePrefix := scopeRange(t, n, start, p, "first")
+		drain = func() (NativePrefixProgress, error) { return n.DrainScopePrefix(context.Background(), rangePrefix) }
+	}
+	// The time budget may commit fewer than 16 rows. Fail only after the first
+	// transaction updates its durable count, independent of scheduling speed.
 	if _, err := db.Exec(`CREATE TRIGGER fail_later_chunk BEFORE INSERT ON events
-		WHEN (SELECT COUNT(*) FROM events)>=16 BEGIN SELECT RAISE(ABORT,'later chunk failure'); END`); err != nil {
+		WHEN (SELECT SUM(ingested_count) FROM telemetry_spool_batches)>0
+		BEGIN SELECT RAISE(ABORT,'later chunk failure'); END`); err != nil {
 		t.Fatal(err)
 	}
-	progress, err := n.DrainPrefix(context.Background(), p)
-	if err == nil || !strings.Contains(err.Error(), "later chunk failure") || progress.Ingested != 16 || progress.Pending != 4 || progress.State != "pending" {
-		t.Fatalf("partial committed progress=%+v error=%v", progress, err)
+	progress, err := drain()
+	var committed, receipts, counted int64
+	if readErr := db.QueryRow(`SELECT (SELECT COUNT(*) FROM events),
+		(SELECT COUNT(*) FROM telemetry_native_rows),
+		(SELECT SUM(ingested_count) FROM telemetry_native_scope_counts)`).Scan(&committed, &receipts, &counted); readErr != nil {
+		t.Fatal(readErr)
+	}
+	if committed < 1 || committed > maxNativeTransactionRows || receipts != committed || counted != committed {
+		t.Fatalf("partial transaction receipts diverged: events=%d receipts=%d scope=%d", committed, receipts, counted)
+	}
+	if err == nil || !strings.Contains(err.Error(), "later chunk failure") || progress.Ingested != committed ||
+		progress.Pending != 20-committed || progress.State != "pending" || progress.Events != 20 || progress.Failed != 0 || progress.Dropped != 0 {
+		t.Fatalf("partial committed=%d progress=%+v error=%v", committed, progress, err)
 	}
 	if _, err := db.Exec(`DROP TRIGGER fail_later_chunk`); err != nil {
 		t.Fatal(err)
 	}
-	progress, err = n.DrainPrefix(context.Background(), p)
+	progress, err = drain()
 	if err != nil || progress.Ingested != 20 || progress.State != "settled" {
 		t.Fatalf("retry progress=%+v error=%v", progress, err)
 	}
