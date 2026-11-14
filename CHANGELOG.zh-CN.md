@@ -11,7 +11,9 @@
 - 新增固定版本的 gVisor SecCheck 传输接收器，限制消息大小，按登记的沙箱作用域
   区分线程和进程生命周期，并记录连接与丢失诊断。提供两个并发 Linux 沙箱的
   `systrap` 实机验收。复用持久缓冲完成来源隔离、进程及文件图谱、签名 Bundle
-  往返；用户配置入口和 producer 健康报告继续接入。
+  往返。通过 `telemetry seccheck-config` 生成配置，使用
+  `telemetry receive-seccheck` 启动采集，并在 producer 健康报告中查看独立来源统计。
+  保存接收器生命周期及能力记录，停止时处理已接收的数据。
   详见 [SecCheck 接收器指南](docs/zh-CN/gvisor-seccheck.md)。
 - 仅包含运行时事件的 Run 排除全部运行时记录后，可导出空的只读回放，
   保留选择清单，不复制被排除的正文。

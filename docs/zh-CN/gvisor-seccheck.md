@@ -7,8 +7,94 @@
 `a0e6be6fb5e03d8ebea13592f36a097c7e9a41b9`。
 
 类型化事件和连接诊断已接入现有持久缓冲、运行时图谱、签名 Bundle 及离线回放链路。
-用户采集配置和 producer 健康报告继续推进，
-目前尚未增加面向用户的采集命令。
+使用 `telemetry seccheck-config` 生成运行时采集配置，再通过
+`telemetry receive-seccheck` 在 Linux amd64/arm64 上接收已登记的沙箱事件。
+
+## 启动采集
+
+安装固定版本的 runsc 发行包，保留相邻的 `gvisor-bin` 目录。启动负载前执行
+`runsc --version` 核对版本。接收器校验协议 v1；配置中的运行时版本由可信启动方
+声明，握手消息本身只携带协议版本。
+
+创建接收器用户拥有的 `0700` 目录。套接字权限为 `0600`，接收器与运行时启动方
+使用同一个本地 UID。套接字完整路径须短于 108 字节。以下示例以 root 运行：
+
+```sh
+sudo install -d -m 700 /run/agentprov-seccheck
+agentprov telemetry seccheck-config \
+  --socket /run/agentprov-seccheck/workload.sock > trace.json
+```
+
+将可信登记配置保存为 `registration.json`：
+
+```json
+{
+  "schema_version": "agentprovenance.seccheck_collection/v1",
+  "runtime_release": "release-20261109.0",
+  "targets": [{
+    "run_id": "gvisor-example",
+    "socket_path": "/run/agentprov-seccheck/workload.sock",
+    "registration": {
+      "namespace": "local",
+      "instance_id": "node-1",
+      "generation": "workload-lifetime-1",
+      "sandbox_id": "workload-1",
+      "container_id": "workload-1",
+      "peer_uid": 0
+    }
+  }]
+}
+```
+
+登记的 container ID 与 OCI 容器名称保持一致。创建新的沙箱生命周期时分配新的
+generation。一个接收命令独占该数据目录的 SecCheck 队列，最多接收 64 个登记目标；
+套接字路径和生命周期作用域均须唯一。
+
+在一个终端启动接收器：
+
+```sh
+sudo agentprov --data-dir /var/lib/agentprov telemetry receive-seccheck \
+  --config registration.json --json
+```
+
+等待输出 `state: listening`，再在另一个终端使用生成的配置运行已有 OCI bundle：
+
+```sh
+sudo /path/to/runsc --root=/run/agentprov-runsc --platform=systrap \
+  --pod-init-config=/absolute/path/to/trace.json \
+  run --bundle=/absolute/path/to/oci-bundle workload-1
+```
+
+负载结束、对应目标显示 `disconnected` 后，用 Ctrl-C 或 SIGTERM 停止接收器。
+它会关闭接入、处理已接收记录并输出最终状态。存储或排空失败时返回非零退出码，
+未处理的持久批次留给下次启动恢复。沙箱的创建、调度和停止仍由外部启动方负责。
+
+## 状态与能力
+
+`--json` 输出 `agentprovenance.seccheck_status/v1`，包含本次进程的目标连接状态、
+已接收记录、上游报告丢失、身份字段缺口和节点队列。`last_worker_error` 保留最近一次
+重试诊断，`error` 表示采集终止错误。状态输出失败也会停止采集。
+周期状态写到标准输出，避免反复追加到证据图。
+
+已有 CLI 和需鉴权的健康接口可以读取持久统计：
+
+```sh
+agentprov --data-dir /var/lib/agentprov telemetry producer-health \
+  --run gvisor-example --json
+```
+
+响应增加 `events.by_source.gvisor_seccheck` 和 `seccheck_node_capture`，
+保留原来的 `native_node_capture`。队列与丢失计数采用节点范围，即使指定了 Run。
+新增连接统计在摄取时按唯一记录累加，历史包导入不重建累计计数；逐条诊断仍随证据保存。
+
+就绪和正常停止记录保存 producer 版本、登记生命周期及能力报告，并进入签名导出。
+系统遥测覆盖为 `partial`，身份域为 Sentry；本 producer 的模型意图和应用上下文能力为
+`none`。生成配置请求十个采集点，实际收到的消息用于确认已观察到的覆盖范围。
+队列排空后仍保留局部覆盖状态。原始报文正文、exec 环境和凭据结构不留存，正规化参数经过脱敏。
+
+通过 `--batch-events`、`--batch-bytes`、`--max-queued-bytes` 和
+`--max-queued-batches` 调整共享队列。默认单批 256 条／1 MiB，队列上限
+256 MiB／4096 批。`--drain-timeout` 默认 30 秒。
 
 ## 作用域与身份
 
@@ -68,6 +154,21 @@ exec 环境变量及凭据字段被省略，命令参数在落盘前经过现有
 用于签名核验。分类排除同样适用；排除全部运行时记录时，回放展示空视图和选择清单。
 
 ## Linux 验收
+
+正式 CLI 验收脚本复用传输测试的受控负载，并发运行两个隔离沙箱：
+
+```sh
+go build -o /tmp/agentprov ./cmd/agentprov
+CGO_ENABLED=0 go test -c ./internal/seccheck -o /tmp/seccheck.test
+sudo python3 scripts/accept_seccheck.py \
+  --cli /tmp/agentprov --runsc /absolute/path/to/runsc \
+  --rootfs /absolute/path/to/rootfs --workload /tmp/seccheck.test \
+  --output /absolute/path/to/new-acceptance-directory
+```
+
+脚本需要 Python 3.11 或更新版本，保存登记配置、运行时配置、CLI 状态、健康结果、
+图验证结果及二进制摘要。结束后清理自身的运行时状态与网络 namespace 挂载，
+保留 Docker/K3s 的现有配置。
 
 准备独立 OCI 根文件系统、固定版本运行时及其相邻的 `gvisor-bin` 目录。
 无需修改 Docker 或 K3s 的运行时配置。按 Linux 主机架构编译并运行：

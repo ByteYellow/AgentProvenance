@@ -10,8 +10,10 @@ English | [中文](CHANGELOG.zh-CN.md)
   registered sandbox identities, separate thread/process lifetimes and stream
   loss diagnostics. Include live `systrap` acceptance for two concurrent Linux
   sandboxes. Reuse the durable spool for source-isolated ingestion, qualified
-  process/file graphs and signed Bundle round trips; user-facing setup and
-  producer health integration remain in progress.
+  process/file graphs and signed Bundle round trips. Generate pinned runtime
+  configuration with `telemetry seccheck-config`, collect through
+  `telemetry receive-seccheck`, and inspect source-specific producer health.
+  Preserve receiver lifecycle/capability records and drain accepted data on stop.
   See the [SecCheck receiver guide](docs/gvisor-seccheck.md).
 - Export an empty read-only view when a runtime-only Run excludes all runtime
   records, retaining the selection inventory without copying excluded bodies.

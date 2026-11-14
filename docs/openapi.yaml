@@ -53,6 +53,44 @@ components:
       properties:
         schema_version: { type: string }
       additionalProperties: true
+    RuntimeStreamStatus:
+      type: object
+      required: [counters, queued_batches, queued_bytes, pending_events, cleanup_pending_batches]
+      properties:
+        counters: { type: object, additionalProperties: { type: integer } }
+        queued_batches: { type: integer, minimum: 0 }
+        queued_bytes: { type: integer, minimum: 0 }
+        pending_events: { type: integer, minimum: 0 }
+        cleanup_pending_batches: { type: integer, minimum: 0 }
+        last_error: { type: string }
+    ProducerHealth:
+      type: object
+      required: [schema_version, generated_at, limits, spool, events, coverage, native_node_capture, seccheck_node_capture]
+      properties:
+        schema_version: { type: string, enum: [agentprovenance.producer_health/v1] }
+        generated_at: { type: string, format: date-time }
+        run_id: { type: string }
+        limits: { type: object }
+        spool: { type: object }
+        events:
+          type: object
+          required: [runtime_events, correlated_events, uncorrelated_events, sensor_dropped_events, by_source]
+          properties:
+            runtime_events: { type: integer, minimum: 0 }
+            correlated_events: { type: integer, minimum: 0 }
+            uncorrelated_events: { type: integer, minimum: 0 }
+            sensor_dropped_events: { type: integer, minimum: 0 }
+            by_source: { type: object, additionalProperties: { type: integer, minimum: 0 } }
+        coverage:
+          type: object
+          required: [correlation_ratio, has_sensor_drops, complete]
+          properties:
+            correlation_ratio: { type: number, minimum: 0, maximum: 1 }
+            has_sensor_drops: { type: boolean, description: Includes node-wide reported or possible loss; not an exact loss count for the selected Run. }
+            complete: { type: boolean, description: "False for the partial Sentry checkpoint subset, including a fully drained queue." }
+            issues: { type: array, items: { type: string } }
+        native_node_capture: { $ref: '#/components/schemas/RuntimeStreamStatus' }
+        seccheck_node_capture: { $ref: '#/components/schemas/RuntimeStreamStatus', description: Node-wide durable SecCheck counters and spool state; not a live connection report. }
     DaemonHealth:
       type: object
       required: [schema_version, status, ready, checks, coverage_status]
@@ -238,4 +276,4 @@ paths:
       parameters:
         - { name: run, in: query, required: false, schema: { type: string } }
       responses:
-        "200": { description: producer health report, content: { application/json: { schema: { $ref: "#/components/schemas/VersionedEnvelope" } } } }
+        "200": { description: producer health report, content: { application/json: { schema: { $ref: "#/components/schemas/ProducerHealth" } } } }

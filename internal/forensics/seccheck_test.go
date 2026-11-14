@@ -44,12 +44,16 @@ func TestSecCheckSignedRoundtripAndScopeValidation(t *testing.T) {
 		if err := stream.Sink("sentry-roundtrip", reg)(context.Background(), r); err != nil {
 			t.Fatal(err)
 		}
+		capabilities := seccheck.ReceiverCapabilities()
+		if err := stream.Sink("sentry-roundtrip", reg)(context.Background(), seccheck.Record{Kind: "stream", Reason: "receiver_ready", Registration: reg, ConnectionID: "collector", ReceivedAt: time.Unix(1800000000, 0).UTC(), Capabilities: &capabilities}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := stream.Drain(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	before, err := telemetry.ListEvents(db, "sentry-roundtrip", "")
-	if err != nil || len(before) != 2 {
+	if err != nil || len(before) != 4 {
 		t.Fatalf("events=%d %v", len(before), err)
 	}
 	public, key, err := ed25519.GenerateKey(rand.Reader)
@@ -77,7 +81,16 @@ func TestSecCheckSignedRoundtripAndScopeValidation(t *testing.T) {
 	if err != nil || verified.ErrorCount != 0 || verified.WarningCount != 0 {
 		t.Fatalf("verify=%+v %v", verified, err)
 	}
-	first, second := telemetry.ProcessGraphIdentity(after[0]), telemetry.ProcessGraphIdentity(after[1])
+	var observed []telemetry.EventRecord
+	for _, event := range after {
+		if event.PID > 0 {
+			observed = append(observed, event)
+		}
+	}
+	if len(observed) != 2 {
+		t.Fatalf("process observations: %d", len(observed))
+	}
+	first, second := telemetry.ProcessGraphIdentity(observed[0]), telemetry.ProcessGraphIdentity(observed[1])
 	if first.Process.ID == second.Process.ID || first.Process.Basis != "sentry_process_instance" {
 		t.Fatal("sandbox identities merged")
 	}

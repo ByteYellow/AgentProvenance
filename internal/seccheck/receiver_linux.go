@@ -27,8 +27,8 @@ func (r Receiver) Serve(ctx context.Context) error {
 	if r.Sink == nil {
 		return fmt.Errorf("SecCheck sink is required")
 	}
-	if !filepath.IsAbs(r.SocketPath) || len(r.SocketPath) >= 108 {
-		return fmt.Errorf("invalid SecCheck socket path")
+	if err := ValidateSocketPath(r.SocketPath); err != nil {
+		return err
 	}
 	dir, err := os.Lstat(filepath.Dir(r.SocketPath))
 	if err != nil {
@@ -66,6 +66,11 @@ func (r Receiver) Serve(ctx context.Context) error {
 	defer cancel()
 	stop := context.AfterFunc(ctx, func() { _ = ln.Close() })
 	defer stop()
+	if r.Ready != nil {
+		if err := r.Ready(); err != nil {
+			return err
+		}
+	}
 	var wg sync.WaitGroup
 	defer wg.Wait()
 	var sinkMu sync.Mutex

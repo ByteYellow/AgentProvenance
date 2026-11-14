@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -27,7 +28,8 @@ type ProducerHealthReport struct {
 	Coverage      ProducerCoverageHealth `json:"coverage"`
 	// NativeCapture is node-wide even when RunID filters the event view: an
 	// unresolved or dropped row cannot honestly be assigned to a particular run.
-	NativeCapture NativeStreamStatus `json:"native_node_capture"`
+	NativeCapture   NativeStreamStatus `json:"native_node_capture"`
+	SecCheckCapture NativeStreamStatus `json:"seccheck_node_capture"`
 }
 
 type ProducerLimits struct {
@@ -60,9 +62,10 @@ type ProducerEventHealth struct {
 }
 
 type ProducerCoverageHealth struct {
-	CorrelationRatio float64 `json:"correlation_ratio"`
-	HasSensorDrops   bool    `json:"has_sensor_drops"`
-	Complete         bool    `json:"complete"`
+	CorrelationRatio float64  `json:"correlation_ratio"`
+	HasSensorDrops   bool     `json:"has_sensor_drops"`
+	Complete         bool     `json:"complete"`
+	Issues           []string `json:"issues,omitempty"`
 }
 
 func BuildProducerHealth(db *sql.DB, opts ProducerHealthOptions) (ProducerHealthReport, error) {
@@ -93,6 +96,11 @@ func BuildProducerHealth(db *sql.DB, opts ProducerHealthOptions) (ProducerHealth
 		return report, err
 	}
 	report.NativeCapture = native
+	sentry, err := readStreamStatus(context.Background(), db, secCheckSource)
+	if err != nil {
+		return report, err
+	}
+	report.SecCheckCapture = sentry
 	if report.Events.RuntimeEvents > 0 {
 		report.Coverage.CorrelationRatio = float64(report.Events.CorrelatedEvents) / float64(report.Events.RuntimeEvents)
 	}
@@ -105,6 +113,19 @@ func BuildProducerHealth(db *sql.DB, opts ProducerHealthOptions) (ProducerHealth
 	report.Coverage.Complete = report.Events.RuntimeEvents > 0 && report.Events.UncorrelatedEvents == 0 && !report.Coverage.HasSensorDrops
 	if native.QueuedBatches > 0 {
 		report.Coverage.Complete = false
+	}
+	for _, name := range []string{"reported_dropped_events", "dropped_queue_full", "dropped_oversize", "dropped_partial_recovery", "drop_counter_decreased"} {
+		if sentry.Counters[name] > 0 {
+			report.Coverage.HasSensorDrops = true
+			report.Coverage.Complete = false
+		}
+	}
+	if sentry.QueuedBatches > 0 || sentry.LastError != "" {
+		report.Coverage.Complete = false
+	}
+	if report.Events.BySource[secCheckSource] > 0 {
+		report.Coverage.Complete = false
+		report.Coverage.Issues = append(report.Coverage.Issues, "sentry_partial_checkpoint_coverage")
 	}
 	return report, nil
 }
@@ -238,6 +259,6 @@ func producerRuntimeSources() []string {
 		"agentprov_ebpf", "external_telemetry", "falco_jsonl", "filtered_telemetry", "kernel",
 		"loongcollector", "loongcollector_jsonl", "native_runtime", "record_file_diff",
 		"record_process_sample", "runtime", "tetragon_jsonl", "wrapper_runtime", "zero_sdk_record",
-		"zero_sdk_record_descendant",
+		"zero_sdk_record_descendant", secCheckSource,
 	}
 }

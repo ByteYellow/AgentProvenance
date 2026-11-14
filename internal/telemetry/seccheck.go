@@ -33,23 +33,24 @@ type SecCheckContext struct {
 }
 
 type SecCheckEvidence struct {
-	SchemaVersion        string                `json:"schema_version"`
-	RuntimeRelease       string                `json:"runtime_release"`
-	Registration         seccheck.Registration `json:"registration"`
-	ConnectionID         string                `json:"connection_id"`
-	Sequence             uint64                `json:"sequence"`
-	ReceivedAt           time.Time             `json:"received_at"`
-	ProtocolVersion      uint32                `json:"protocol_version"`
-	PeerPID              int32                 `json:"transport_peer_pid"`
-	Kind                 string                `json:"kind"`
-	Reason               string                `json:"reason,omitempty"`
-	Context              *SecCheckContext      `json:"context,omitempty"`
-	PacketSHA256         string                `json:"packet_sha256,omitempty"`
-	PacketBytes          int                   `json:"packet_bytes,omitempty"`
-	Header               *seccheck.Header      `json:"header,omitempty"`
-	DroppedDelta         *uint64               `json:"dropped_delta,omitempty"`
-	DropCounterDecreased bool                  `json:"drop_counter_decreased,omitempty"`
-	IdentityGaps         []string              `json:"identity_gaps,omitempty"`
+	SchemaVersion        string                 `json:"schema_version"`
+	RuntimeRelease       string                 `json:"runtime_release"`
+	Registration         seccheck.Registration  `json:"registration"`
+	ConnectionID         string                 `json:"connection_id"`
+	Sequence             uint64                 `json:"sequence"`
+	ReceivedAt           time.Time              `json:"received_at"`
+	ProtocolVersion      uint32                 `json:"protocol_version"`
+	PeerPID              int32                  `json:"transport_peer_pid"`
+	Kind                 string                 `json:"kind"`
+	Reason               string                 `json:"reason,omitempty"`
+	Context              *SecCheckContext       `json:"context,omitempty"`
+	PacketSHA256         string                 `json:"packet_sha256,omitempty"`
+	PacketBytes          int                    `json:"packet_bytes,omitempty"`
+	Header               *seccheck.Header       `json:"header,omitempty"`
+	DroppedDelta         *uint64                `json:"dropped_delta,omitempty"`
+	DropCounterDecreased bool                   `json:"drop_counter_decreased,omitempty"`
+	IdentityGaps         []string               `json:"identity_gaps,omitempty"`
+	Capabilities         *seccheck.Capabilities `json:"capabilities,omitempty"`
 }
 
 func (e SecCheckEvidence) identity() (seccheck.Identity, error) {
@@ -144,7 +145,7 @@ func MapSecCheckRecord(runID string, rec seccheck.Record) (IngestEvent, error) {
 		Registration: rec.Registration, ConnectionID: rec.ConnectionID, Sequence: rec.Sequence,
 		ReceivedAt: rec.ReceivedAt.UTC(), ProtocolVersion: rec.ProtocolVersion, PeerPID: rec.PeerPID,
 		Kind: rec.Kind, Reason: rec.Reason, DroppedDelta: rec.DroppedDelta,
-		DropCounterDecreased: rec.DropCounterDecreased, IdentityGaps: id.Gaps}
+		DropCounterDecreased: rec.DropCounterDecreased, IdentityGaps: id.Gaps, Capabilities: rec.Capabilities}
 	body := map[string]any{"observation_stage": "collector", "operation": "collection", "pid": 0}
 	event := IngestEvent{RunID: runID, Source: secCheckSource, EventType: "runtime_collection",
 		ContainerID: id.Scope, Timestamp: rec.ReceivedAt.UTC().Format(time.RFC3339Nano)}
@@ -353,7 +354,37 @@ func ingestSecCheckEvent(db sqlStore, event IngestEvent) (string, bool, error) {
 		return "", false, err
 	}
 	id, err = ingestFilteredWithID(db, event, id)
-	return id, false, err
+	if err != nil {
+		return id, false, err
+	}
+	e, err := readSecCheckEvidence(event.Payload)
+	if err != nil {
+		return id, false, err
+	}
+	counters := map[string]int64{}
+	if e.Kind == "event" && len(e.IdentityGaps) > 0 {
+		counters["identity_gap_records"] = 1
+	}
+	if e.DroppedDelta != nil {
+		counters["reported_dropped_events"] = int64(*e.DroppedDelta)
+	}
+	if e.DropCounterDecreased {
+		counters["drop_counter_decreased"] = 1
+	}
+	if e.Kind == "stream" {
+		switch e.Reason {
+		case "connected", "disconnected", "receiver_ready", "receiver_stopped":
+			counters[e.Reason] = 1
+		default:
+			counters["stream_diagnostics"] = 1
+		}
+	}
+	for name, value := range counters {
+		if err := incrementNative(db, secCheckSource+"."+name, value); err != nil {
+			return id, false, err
+		}
+	}
+	return id, false, nil
 }
 
 func sentryProcessGraph(event EventRecord, fallback RuntimeProcessIdentity) RuntimeProcessIdentity {

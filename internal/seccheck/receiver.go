@@ -20,8 +20,9 @@ type Record struct {
 	DroppedDelta    *uint64      `json:"dropped_delta,omitempty"`
 	// A decrease may be a wrap or reset. Report the boundary without inventing
 	// a precise loss count. Each new connection has an independent counter.
-	DropCounterDecreased bool    `json:"drop_counter_decreased,omitempty"`
-	Packet               *Packet `json:"-"`
+	DropCounterDecreased bool          `json:"drop_counter_decreased,omitempty"`
+	Packet               *Packet       `json:"-"`
+	Capabilities         *Capabilities `json:"capabilities,omitempty"`
 }
 
 // Sink synchronously accepts one observation. Production consumers must durably
@@ -34,4 +35,6 @@ type Receiver struct {
 	Registration     Registration
 	Sink             Sink
 	HandshakeTimeout time.Duration
+	// Ready runs after the private endpoint is listening, before accepting peers.
+	Ready func() error
 }
