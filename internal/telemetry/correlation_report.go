@@ -277,6 +277,9 @@ func matchedCorrelationKeys(method string) []string {
 }
 
 func correlationReason(event EventRecord) string {
+	if event.CorrelationMethod == "sampling_trigger_scope:cgroup_id+time" {
+		return "the kernel sampling trigger identifies this Run; procfs task identity was unavailable"
+	}
 	switch correlationStatus(event) {
 	case "ambiguous":
 		return "overlapping bindings disagree; only their common execution scope is retained"

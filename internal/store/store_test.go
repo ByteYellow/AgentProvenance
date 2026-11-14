@@ -348,6 +348,40 @@ func TestUpgradeSchema23PreservesNativeSpool(t *testing.T) {
 	}
 }
 
+func TestUpgradeSchema24PreservesScopeCounts(t *testing.T) {
+	paths := openTestDB(t)
+	db, err := Open(*paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, stmt := range []string{
+		`ALTER TABLE telemetry_native_scope_counts DROP COLUMN sampling_gap_count`,
+		`DELETE FROM schema_versions WHERE version>24`,
+		`INSERT OR IGNORE INTO schema_versions VALUES(24,'previous version','2026-11-14')`,
+		`INSERT INTO telemetry_spool_batches(id,format,spool_path,status,event_count,ingested_count,created_at,updated_at) VALUES('scope-upgrade','native','retained.jsonl','queued',2,1,'old-time','old-time')`,
+		`INSERT INTO telemetry_native_scope_counts(batch_id,cgroup_id,event_count,ingested_count) VALUES('scope-upgrade','5',2,1)`,
+		`INSERT INTO telemetry_native_rows(batch_id,line,outcome,event_id) VALUES('scope-upgrade',1,'ingested','original-event')`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if err := EnsureSchema(db); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var total, ingested, gaps int
+	if err := db.QueryRow(`SELECT event_count,ingested_count,sampling_gap_count FROM telemetry_native_scope_counts WHERE batch_id='scope-upgrade' AND cgroup_id='5'`).Scan(&total, &ingested, &gaps); err != nil || total != 2 || ingested != 1 || gaps != 0 {
+		t.Fatalf("upgrade changed scope counts: %d %d %d %v", total, ingested, gaps, err)
+	}
+	var event string
+	if err := db.QueryRow(`SELECT event_id FROM telemetry_native_rows WHERE batch_id='scope-upgrade' AND line=1`).Scan(&event); err != nil || event != "original-event" {
+		t.Fatalf("upgrade changed native receipt: %q %v", event, err)
+	}
+}
+
 func TestUpgradeSchema20AddsHandoffLedgerWithoutChangingEvents(t *testing.T) {
 	paths := openTestDB(t)
 	db, err := Open(*paths)

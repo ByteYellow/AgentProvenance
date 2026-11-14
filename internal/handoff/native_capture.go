@@ -165,5 +165,8 @@ func nativeCaptureIssues(start, end NativeCapturePoint, scope *record.ScopeObser
 	if progress.Dropped != 0 || progress.Failed != 0 {
 		issues = append(issues, "scope_prefix_loss")
 	}
+	if progress.SamplingGaps != 0 {
+		issues = append(issues, "scope_state_sampling_gap")
+	}
 	return issues
 }

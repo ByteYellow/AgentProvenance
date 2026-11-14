@@ -44,7 +44,7 @@ func nativeScopeKey(event IngestEvent) string {
 	return event.CgroupID
 }
 
-func recordNativeScopeOutcome(tx *sql.Tx, batch, group, outcome string) error {
+func recordNativeScopeOutcome(tx *sql.Tx, batch, group, outcome string, samplingGap bool) error {
 	ingested, dropped, failed := 0, 0, 0
 	switch outcome {
 	case "ingested":
@@ -56,10 +56,14 @@ func recordNativeScopeOutcome(tx *sql.Tx, batch, group, outcome string) error {
 	default:
 		return fmt.Errorf("unknown native scope outcome %q", outcome)
 	}
+	gap := 0
+	if samplingGap {
+		gap = 1
+	}
 	result, err := tx.Exec(`UPDATE telemetry_native_scope_counts SET
-		ingested_count=ingested_count+?,dropped_count=dropped_count+?,failed_count=failed_count+?
+		ingested_count=ingested_count+?,dropped_count=dropped_count+?,failed_count=failed_count+?,sampling_gap_count=sampling_gap_count+?
 		WHERE batch_id=? AND cgroup_id=? AND ingested_count+dropped_count+failed_count<event_count`,
-		ingested, dropped, failed, batch, group)
+		ingested, dropped, failed, gap, batch, group)
 	if err != nil {
 		return err
 	}
@@ -175,7 +179,7 @@ func ReadNativeScopePrefix(ctx context.Context, db *sql.DB, p NativeScopePrefix)
 			(state != "queued" && state != "processing" && state != "processed") {
 			return r, fmt.Errorf("native scope checkpoint metadata conflict: %s", b.ID)
 		}
-		rows, err := tx.QueryContext(ctx, `SELECT cgroup_id,event_count,ingested_count,dropped_count,failed_count
+		rows, err := tx.QueryContext(ctx, `SELECT cgroup_id,event_count,ingested_count,dropped_count,failed_count,sampling_gap_count
 			FROM telemetry_native_scope_counts WHERE batch_id=?`, b.ID)
 		if err != nil {
 			return r, err
@@ -183,12 +187,12 @@ func ReadNativeScopePrefix(ctx context.Context, db *sql.DB, p NativeScopePrefix)
 		var total, totalIn, totalDrop, totalFail, matched, unscoped, pending int64
 		for rows.Next() {
 			var group string
-			var events, in, drop, fail int64
-			if err := rows.Scan(&group, &events, &in, &drop, &fail); err != nil {
+			var events, in, drop, fail, gaps int64
+			if err := rows.Scan(&group, &events, &in, &drop, &fail, &gaps); err != nil {
 				rows.Close()
 				return r, err
 			}
-			if events < 1 || in < 0 || drop < 0 || fail < 0 || in > events || drop > events-in || fail > events-in-drop {
+			if events < 1 || in < 0 || drop < 0 || fail < 0 || in > events || drop > events-in || fail > events-in-drop || gaps < 0 || gaps > in {
 				rows.Close()
 				return r, fmt.Errorf("invalid native scope outcomes: %s", b.ID)
 			}
@@ -200,6 +204,7 @@ func ReadNativeScopePrefix(ctx context.Context, db *sql.DB, p NativeScopePrefix)
 					matched = events
 				}
 				r.Events, r.Ingested, r.Dropped, r.Failed = r.Events+events, r.Ingested+in, r.Dropped+drop, r.Failed+fail
+				r.SamplingGaps += gaps
 				pending += events - in - drop - fail
 			}
 		}

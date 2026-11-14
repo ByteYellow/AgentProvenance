@@ -401,9 +401,13 @@ stream retention may exclude uncorrelated records unless requested.
 An optional `sampling_trigger` records `source: agentprov_ebpf`, the triggering
 `cgroup_id` and its `observed_at` time. These describe why the read was scheduled,
 including when the task has already exited. Native spool accounting uses that
-scope if the read has no confirmed workload membership. It leaves task identity,
-event attribution and the observation's unavailable reason unchanged. Existing
-spool rows without the separate accounting field keep their original scope.
+scope if the read has no confirmed workload membership. A failed task read with
+an unambiguous binding at trigger time can be retained as a Run-level collection
+observation using `sampling_trigger_scope:cgroup_id+time`; process, Tool Call,
+session and observed cgroup fields remain empty. Its original unavailable reason
+and trigger are retained. Existing spool rows without the separate accounting
+field keep their original scope. Durable `sampling_gaps` counts distinguish
+these saved observations from pending work and transport loss.
 
 K8s informer writes separate `access_control_config` observations from
 `k8s_api`, with schema `agentprovenance.access_control_config/v1` and kind

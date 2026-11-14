@@ -12,7 +12,7 @@ import (
 )
 
 const DefaultDataDir = ".agentprov"
-const SchemaVersion = 24
+const SchemaVersion = 25
 
 type Paths struct {
 	Root       string
@@ -892,6 +892,7 @@ func EnsureSchema(db *sql.DB) error {
 		`ALTER TABLE telemetry_spool_batches ADD COLUMN dropped_count INTEGER NOT NULL DEFAULT 0;`,
 		`ALTER TABLE telemetry_spool_batches ADD COLUMN native_collector_id TEXT NOT NULL DEFAULT '';`,
 		`ALTER TABLE telemetry_spool_batches ADD COLUMN native_first_sequence INTEGER NOT NULL DEFAULT 0;`,
+		`ALTER TABLE telemetry_native_scope_counts ADD COLUMN sampling_gap_count INTEGER NOT NULL DEFAULT 0;`,
 		`CREATE INDEX IF NOT EXISTS idx_native_spool_sequence ON telemetry_spool_batches(native_collector_id, native_first_sequence);`,
 		`CREATE INDEX IF NOT EXISTS idx_native_spool_ready ON telemetry_spool_batches(format, status, retry_at, created_at);`,
 		// Multi-agent orchestration: which agent/sub-agent ran a tool call (from

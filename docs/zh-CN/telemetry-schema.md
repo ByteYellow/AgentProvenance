@@ -288,8 +288,11 @@ seccomp 读取任务 `status`：模式 0／1／2 对应 `disabled`／`strict`／
 
 可选字段 `sampling_trigger` 保存触发来源 `source: agentprov_ebpf`、`cgroup_id` 及
 触发时间 `observed_at`，进程退出后仍能知道这次读取由何处触发。读取结果缺少已确认的
-工作负载身份时，原生 spool 用该来源分配采样计数；进程身份、事件归属和读取失败原因
-保持原样。没有独立计数字段的旧 spool 记录沿用原有作用域。
+工作负载身份时，原生 spool 用该来源分配采样计数。进程读取失败且触发时间对应的绑定
+无歧义时，按 `sampling_trigger_scope:cgroup_id+time` 保存为 Run 级采集记录；
+进程、Tool Call、会话和实际 cgroup 字段保持为空，保留原始失败原因及触发来源。
+没有独立计数字段的旧 spool 记录沿用原有作用域。持久计数 `sampling_gaps` 将这些
+已保存的状态缺口与待处理记录、传输丢失分别呈现。
 
 K8s informer 将配置另存为 `k8s_api` 来源的 `access_control_config`，schema 为
 `agentprovenance.access_control_config/v1`，类型为 `configuration_declaration`。

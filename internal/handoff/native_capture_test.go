@@ -171,6 +171,9 @@ func TestNativeCaptureIssueMatrix(t *testing.T) {
 		{"invalid", func(_ *NativeCapturePoint, _ *record.ScopeObservation, p *telemetry.NativePrefixProgress) {
 			p.Failed = 1
 		}, "scope_prefix_loss"},
+		{"sampling_gap", func(_ *NativeCapturePoint, _ *record.ScopeObservation, p *telemetry.NativePrefixProgress) {
+			p.Ingested, p.SamplingGaps = 1, 1
+		}, "scope_state_sampling_gap"},
 		{"other_scope_expiry", func(p *NativeCapturePoint, _ *record.ScopeObservation, _ *telemetry.NativePrefixProgress) {
 			p.Spool.Counters["expired_uncorrelated"] = 10
 		}, ""},

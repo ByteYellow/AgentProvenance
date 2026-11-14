@@ -1012,7 +1012,11 @@ func (n *NativeStream) processNativeChunk(ctx context.Context, id, path, expecte
 			if err := correlation.ObserveProcessInstance(tx, identity); err != nil {
 				return 0, nil, err
 			}
-			if opts.Ingest.DropUncorrelated && event.EventType != "resource_pressure" {
+			samplingScope, err := nativeSamplingScope(tx, event)
+			if err != nil {
+				return 0, nil, err
+			}
+			if opts.Ingest.DropUncorrelated && event.EventType != "resource_pressure" && samplingScope == nil {
 				_, ok, err := correlation.Resolve(tx, identity)
 				if err != nil {
 					return 0, nil, err
@@ -1027,7 +1031,7 @@ func (n *NativeStream) processNativeChunk(ctx context.Context, id, path, expecte
 			}
 			if outcome == "" {
 				var err error
-				eventID, err = ingestFilteredWithStore(tx, event)
+				eventID, err = ingestFilteredWithScope(tx, event, ids.New("evt"), samplingScope)
 				if err != nil {
 					return 0, nil, err
 				}
@@ -1057,7 +1061,7 @@ func (n *NativeStream) processNativeChunk(ctx context.Context, id, path, expecte
 			return 0, nil, err
 		}
 		if scoped {
-			if err := recordNativeScopeOutcome(tx, id, nativeScopeKey(event), outcome); err != nil {
+			if err := recordNativeScopeOutcome(tx, id, nativeScopeKey(event), outcome, outcome == "ingested" && nativeSamplingGap(event)); err != nil {
 				return 0, nil, err
 			}
 		}

@@ -12,6 +12,9 @@ English | [中文](CHANGELOG.zh-CN.md)
   durable scope accounting, retaining capture gaps separately from command results.
 - Preserve procfs sampling triggers separately from observed task identity so
   unrelated short-lived processes do not block every execution's capture closure.
+- Persist unavailable procfs reads as Run-level collection evidence when their
+  trigger scope is unambiguous. Keep sampling gaps explicit after queue settlement,
+  replay and cleanup, without assigning a process or Tool Call to the failed read.
 - Route native Claude Code Bash calls through a configured trusted executor with
   `launch --remote-execution`. Preserve native session/call IDs and permission
   checks, verify returned evidence, and reject disabled hooks before task launch.

@@ -535,6 +535,10 @@ components:
         ingested: { type: integer, minimum: 0 }
         dropped: { type: integer, minimum: 0 }
         failed: { type: integer, minimum: 0 }
+        sampling_gaps:
+          type: integer
+          minimum: 0
+          description: Persisted procfs observations with unavailable task or security state; a subset of ingested, not pending or dropped. Absent from older reports.
         pending: { type: integer, minimum: 0 }
         cleanup_pending: { type: integer, minimum: 0 }
         last_error: { type: string }

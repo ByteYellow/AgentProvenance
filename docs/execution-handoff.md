@@ -127,8 +127,8 @@ After the saved end event, the controller takes another boundary while still
 holding the owned cgroup. It drains this collector epoch's accepted sequence
 interval for that cgroup, with a three-second default budget. Unclassified rows
 in the interval are included conservatively. An empty scope, settled scope
-interval and no observed loss or buffered TLS allow `sealed`; pending scope
-records, loss, changed collector identity or unknown population produce
+interval and no observed loss, state-sampling gaps or buffered TLS allow `sealed`;
+pending records, loss, state-sampling gaps, changed collector identity or unknown population produce
 `incomplete`. The cgroup is released after the completion hook returns.
 
 `capture_report` version 2 retains `scope_prefix`, its durable `scope_progress`,
@@ -148,9 +148,18 @@ saved boundary, marks capture incomplete, and does not repeat the command.
 Procfs state snapshots retain a separate `sampling_trigger` when a kernel event
 requested the read. This assigns sampling work to its original scope for capture
 accounting, even if the task exited before procfs could read it. Actual task state
-and workload attribution still use independently observed procfs identity. An
-unresolved sample remains pending for its triggering scope, rather than blocking
-every concurrent execution. Older spooled records retain their original accounting.
+still uses independently observed procfs identity. When the task is unavailable,
+an unambiguous binding at the trigger time can retain the failed observation in
+that Run with method `sampling_trigger_scope:cgroup_id+time`. It carries no
+observed process, Tool Call, session or cgroup membership. Unbound or ambiguous
+triggers retain the existing late-binding behavior.
+
+Durably ingested unavailable task/security observations increment `sampling_gaps`,
+a subset of `ingested`. The prefix can be `settled` while capture remains
+`incomplete` with `scope_state_sampling_gap`; no drain timeout is needed to report
+an already completed failed read. Counts survive replay and spool cleanup.
+Schema 25 adds this counter without changing old events or signed reports;
+historical reports retain their original interpretation.
 
 ## Route native Claude Bash calls
 

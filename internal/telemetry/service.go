@@ -354,6 +354,10 @@ func ingestFilteredWithStore(store sqlStore, event IngestEvent) (string, error) 
 }
 
 func ingestFilteredWithID(store sqlStore, event IngestEvent, eventID string) (string, error) {
+	return ingestFilteredWithScope(store, event, eventID, nil)
+}
+
+func ingestFilteredWithScope(store sqlStore, event IngestEvent, eventID string, samplingScope *correlation.Match) (string, error) {
 	if event.EventType == "" {
 		return "", fmt.Errorf("event_type is required")
 	}
@@ -390,7 +394,14 @@ func ingestFilteredWithID(store sqlStore, event IngestEvent, eventID string) (st
 	confidence := 1.0
 	bindingSource := event.BindingSource
 	if event.RunID == "" || event.SessionID == "" || event.ToolCallID == "" || event.ProcessID == "" {
-		match, ok, err := correlation.Resolve(store, raw)
+		var match correlation.Match
+		var ok bool
+		var err error
+		if samplingScope != nil {
+			match, ok = *samplingScope, true
+		} else {
+			match, ok, err = correlation.Resolve(store, raw)
+		}
 		if err != nil {
 			return "", err
 		}

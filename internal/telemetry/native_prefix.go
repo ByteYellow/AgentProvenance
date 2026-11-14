@@ -42,6 +42,7 @@ type NativePrefixProgress struct {
 	Ingested       int64     `json:"ingested"`
 	Dropped        int64     `json:"dropped"`
 	Failed         int64     `json:"failed"`
+	SamplingGaps   int64     `json:"sampling_gaps,omitempty"`
 	Pending        int64     `json:"pending"`
 	CleanupPending int       `json:"cleanup_pending"`
 	LastError      string    `json:"last_error,omitempty"`
@@ -165,22 +166,24 @@ func ReadNativePrefix(ctx context.Context, db *sql.DB, p NativePrefix) (NativePr
 			args = append(args, batch.ID)
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT id,format,file_sha256,event_count,status,
-			ingested_count,dropped_count,failed_count,spool_path,error FROM telemetry_spool_batches WHERE id IN (`+
+			ingested_count,dropped_count,failed_count,spool_path,error,
+			(SELECT COALESCE(SUM(sampling_gap_count),0) FROM telemetry_native_scope_counts s WHERE s.batch_id=telemetry_spool_batches.id)
+			FROM telemetry_spool_batches WHERE id IN (`+
 			strings.TrimSuffix(strings.Repeat("?,", len(args)), ",")+`) ORDER BY id`, args...)
 		if err != nil {
 			return r, err
 		}
 		for rows.Next() {
 			var id, format, hash, state, path, problem string
-			var count, ingested, dropped, failed int64
-			if err := rows.Scan(&id, &format, &hash, &count, &state, &ingested, &dropped, &failed, &path, &problem); err != nil {
+			var count, ingested, dropped, failed, gaps int64
+			if err := rows.Scan(&id, &format, &hash, &count, &state, &ingested, &dropped, &failed, &path, &problem, &gaps); err != nil {
 				rows.Close()
 				return r, err
 			}
 			batch := expected[id]
 			if format != "native" || hash != batch.SHA256 || count != batch.EventCount ||
 				ingested < 0 || dropped < 0 || failed < 0 || ingested > count || dropped > count || failed > count ||
-				ingested+dropped+failed > count || (state != "queued" && state != "processing" && state != "processed") ||
+				ingested+dropped+failed > count || gaps < 0 || gaps > ingested || (state != "queued" && state != "processing" && state != "processed") ||
 				(state == "processed" && ingested+dropped+failed != count) {
 				rows.Close()
 				return r, fmt.Errorf("native spool checkpoint metadata conflict: %s", id)
@@ -190,6 +193,7 @@ func ReadNativePrefix(ctx context.Context, db *sql.DB, p NativePrefix) (NativePr
 			r.Ingested += ingested
 			r.Dropped += dropped
 			r.Failed += failed
+			r.SamplingGaps += gaps
 			r.Pending += count - ingested - dropped - failed
 			if state != "processed" {
 				r.PendingBatches++
