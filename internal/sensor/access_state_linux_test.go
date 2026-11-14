@@ -87,6 +87,9 @@ func TestLiveSensorAccessState(t *testing.T) {
 		if event.State.Seccomp.Status != "observed" {
 			t.Fatalf("missing actual state: %+v", event.State)
 		}
+		if event.State.SamplingTrigger == nil || event.State.SamplingTrigger.Source != "agentprov_ebpf" || event.State.SamplingTrigger.CgroupID == "" {
+			t.Fatalf("missing live sampling trigger: %+v", event.State)
+		}
 		found++
 	}
 	if err := scanner.Err(); err != nil {

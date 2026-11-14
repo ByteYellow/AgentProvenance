@@ -22,10 +22,11 @@ func TestStateSamplingIsBoundedAndNeverAliasesKernelIdentity(t *testing.T) {
 		return accesscontrol.Snapshot{ObservedAt: "2026-10-19T00:00:00Z", Identity: accesscontrol.TaskIdentity{Status: "observed", PID: pid, TID: tid, CgroupID: "5"}}
 	}, func(v any) { emitted = append(emitted, v.(map[string]any)) })
 	now := time.Now()
-	target := stateTarget{pid: 42, tid: 43, start: 100, cgroup: 5}
+	target := stateTarget{pid: 42, tid: 43, start: 100, cgroup: 5, triggeredAt: "2026-10-19T00:00:00Z"}
 	s.offer(target, now)
 	<-entered
 	for i := 0; i < 100; i++ {
+		target.triggeredAt = now.Add(time.Duration(i) * time.Millisecond).UTC().Format(time.RFC3339Nano)
 		s.offer(target, now.Add(time.Millisecond))
 	}
 	if len(s.queue) != 0 {
@@ -41,6 +42,10 @@ func TestStateSamplingIsBoundedAndNeverAliasesKernelIdentity(t *testing.T) {
 	s.close()
 	if len(emitted) < 2 || emitted[0]["source"] != "procfs_access_control" || emitted[0]["cgroup_id"] != "5" {
 		t.Fatalf("no independent snapshot: %+v", emitted)
+	}
+	first := emitted[0]["state"].(accesscontrol.Snapshot)
+	if first.SamplingTrigger == nil || first.SamplingTrigger.CgroupID != "5" || first.SamplingTrigger.ObservedAt != "2026-10-19T00:00:00Z" {
+		t.Fatalf("sampling origin lost: %+v", first)
 	}
 	var drops int64
 	for i, item := range emitted {
@@ -62,6 +67,26 @@ func TestStateSamplingIsBoundedAndNeverAliasesKernelIdentity(t *testing.T) {
 	}
 	if drops == 0 {
 		t.Fatal("queue loss not emitted")
+	}
+}
+
+func TestStateSamplingMissingTaskKeepsTriggerSeparate(t *testing.T) {
+	var emitted map[string]any
+	s := newStateSampler(Options{SeccompState: true}, func(pid, tid int, _ accesscontrol.Options) accesscontrol.Snapshot {
+		return accesscontrol.Snapshot{SchemaVersion: accesscontrol.StateSchema, EvidenceKind: "state_snapshot", Source: "procfs",
+			StartedAt: "2026-10-19T00:00:00Z", ObservedAt: "2026-10-19T00:00:00.01Z",
+			Identity: accesscontrol.TaskIdentity{Status: "unavailable", Reason: "not_present", PID: pid, TID: tid},
+			AppArmor: accesscontrol.State{Status: "disabled"}, Seccomp: accesscontrol.State{Status: "unavailable", Reason: "not_present"}}
+	}, func(v any) { emitted = v.(map[string]any) })
+	s.offer(stateTarget{pid: 42, tid: 43, start: 100, cgroup: 5, triggeredAt: "2026-10-19T00:00:00Z"}, time.Now())
+	s.close()
+	snapshot := emitted["state"].(accesscontrol.Snapshot)
+	if err := accesscontrol.ValidateSnapshot(snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.SamplingTrigger == nil || snapshot.SamplingTrigger.CgroupID != "5" || snapshot.Identity.CgroupID != "" ||
+		snapshot.Identity.Status != "unavailable" || emitted["cgroup_id"] != nil || emitted["pid"] != nil {
+		t.Fatalf("trigger substituted for observed state: %+v", emitted)
 	}
 }
 

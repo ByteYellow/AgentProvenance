@@ -398,6 +398,13 @@ is stable and agrees with the trigger. The source remains `self_observed`.
 Unresolved membership keeps the state without a workload attribution; ordinary
 stream retention may exclude uncorrelated records unless requested.
 
+An optional `sampling_trigger` records `source: agentprov_ebpf`, the triggering
+`cgroup_id` and its `observed_at` time. These describe why the read was scheduled,
+including when the task has already exited. Native spool accounting uses that
+scope if the read has no confirmed workload membership. It leaves task identity,
+event attribution and the observation's unavailable reason unchanged. Existing
+spool rows without the separate accounting field keep their original scope.
+
 K8s informer writes separate `access_control_config` observations from
 `k8s_api`, with schema `agentprovenance.access_control_config/v1` and kind
 `configuration_declaration`. Structured container fields override Pod fields;

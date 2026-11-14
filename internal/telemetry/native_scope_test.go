@@ -59,6 +59,46 @@ func TestNativeScopeObservedAccessState(t *testing.T) {
 	}
 }
 
+func TestNativeScopeSamplingTriggerDoesNotBlockOtherWorkloads(t *testing.T) {
+	db, paths := nativeTestStore(t)
+	n := nativeTestStream(t, db, paths, NativeStreamOptions{Ingest: JSONLIngestOptions{DropUncorrelated: true}, PendingTTL: time.Hour})
+	nativeBind(t, db, "5", "run-owned")
+	start := scopeSnapshot(t, n)
+	nativeWrite(t, n, "5", "/tmp/owned")
+	var snapshot map[string]any
+	if err := json.Unmarshal([]byte(stateFixture), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	snapshot["identity"] = map[string]any{"status": "unavailable", "pid": 42, "tid": 43, "reason": "not_present"}
+	for _, mechanism := range []string{"apparmor", "seccomp"} {
+		snapshot[mechanism] = map[string]any{"status": "unavailable", "reason": "not_present"}
+	}
+	snapshot["sampling_trigger"] = map[string]any{"source": "agentprov_ebpf", "cgroup_id": "6", "observed_at": "2026-10-19T00:00:00Z"}
+	line, err := json.Marshal(map[string]any{"source": "procfs_access_control", "event_type": "access_control_state", "state": snapshot, "timestamp": snapshot["observed_at"]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.Write(append(line, '\n')); err != nil {
+		t.Fatal(err)
+	}
+	end := scopeSnapshot(t, n)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	p := scopeRange(t, n, start, end, "5")
+	progress, err := n.DrainScopePrefix(ctx, p)
+	if err != nil || progress.State != "settled" || progress.Events != 1 || progress.Ingested != 1 {
+		t.Fatalf("unrelated unavailable snapshot blocked owned capture: %+v %v", progress, err)
+	}
+	other, err := ReadNativeScopePrefix(context.Background(), db, scopeRange(t, n, start, end, "6"))
+	if err != nil || other.Events != 1 || other.Pending != 1 || other.Ingested != 0 {
+		t.Fatalf("actual sampling gap lost: %+v %v", other, err)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE source='procfs_access_control'`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("sampling trigger upgraded to observed state attribution: %d %v", count, err)
+	}
+}
+
 func TestNativeScopeConcurrentIntervals(t *testing.T) {
 	db, paths := nativeTestStore(t)
 	n := nativeTestStream(t, db, paths, NativeStreamOptions{Ingest: JSONLIngestOptions{DropUncorrelated: true}, PendingTTL: time.Hour})

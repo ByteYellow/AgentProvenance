@@ -372,8 +372,8 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 
 		task := procfs.resolve(e)
 		procfs.publish(reporter, false)
-		if task.PID != 0 && task.PID != uint32(os.Getpid()) && e.Kind != eventExit && e.Kind != eventThreadExit {
-			states.offer(stateTarget{pid: task.PID, tid: task.TID, start: e.ThreadStartNs, cgroup: e.CgroupId}, time.Now())
+		if states != nil && task.PID != 0 && task.PID != uint32(os.Getpid()) && e.Kind != eventExit && e.Kind != eventThreadExit {
+			states.offer(stateTarget{pid: task.PID, tid: task.TID, start: e.ThreadStartNs, cgroup: e.CgroupId, triggeredAt: eventTimestamp(e)}, time.Now())
 		}
 		if opts.AutoTLS && task.PID != 0 && task.PID != uint32(os.Getpid()) && tlsDiscoveryEvent(e) {
 			tlsWake.offer(task.PID, e.ProcessStartNs, e.Kind == eventExec, e.Kind == eventOpen || e.Kind == eventTLSDiscovery, time.Now())

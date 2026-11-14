@@ -605,6 +605,9 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 			event.CgroupID = ""
 		}
 		event.Payload = mustJSON(raw["state"])
+		if trigger, ok := nestedMap(state, "sampling_trigger"); ok {
+			event.CaptureCgroupID = stringAt(trigger, "cgroup_id")
+		}
 		return event, true, ValidateRawPayload(event.EventType, event.Payload)
 	case "process_observed":
 		event.EventType = "process_observed"

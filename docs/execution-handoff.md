@@ -145,6 +145,13 @@ Execution success and receipt acknowledgment remain separate from capture state.
 If the executor restarts during draining, it preserves the command result and
 saved boundary, marks capture incomplete, and does not repeat the command.
 
+Procfs state snapshots retain a separate `sampling_trigger` when a kernel event
+requested the read. This assigns sampling work to its original scope for capture
+accounting, even if the task exited before procfs could read it. Actual task state
+and workload attribution still use independently observed procfs identity. An
+unresolved sample remains pending for its triggering scope, rather than blocking
+every concurrent execution. Older spooled records retain their original accounting.
+
 ## Route native Claude Bash calls
 
 `launch --remote-execution route.json -- claude ...` connects Claude Code's

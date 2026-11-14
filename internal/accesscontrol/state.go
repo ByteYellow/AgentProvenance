@@ -38,17 +38,26 @@ type TaskIdentity struct {
 	CgroupReason string `json:"cgroup_reason,omitempty"`
 }
 
+// SamplingTrigger identifies the kernel observation that requested a procfs
+// read. It is separate from the task actually found by that later read.
+type SamplingTrigger struct {
+	Source     string `json:"source"`
+	CgroupID   string `json:"cgroup_id"`
+	ObservedAt string `json:"observed_at"`
+}
+
 type Snapshot struct {
-	SchemaVersion string       `json:"schema_version"`
-	EvidenceKind  string       `json:"evidence_kind"`
-	Source        string       `json:"source"`
-	HostID        string       `json:"host_id,omitempty"`
-	BootID        string       `json:"boot_id,omitempty"`
-	StartedAt     string       `json:"started_at"`
-	ObservedAt    string       `json:"observed_at"`
-	Identity      TaskIdentity `json:"identity"`
-	AppArmor      State        `json:"apparmor"`
-	Seccomp       State        `json:"seccomp"`
+	SchemaVersion   string           `json:"schema_version"`
+	EvidenceKind    string           `json:"evidence_kind"`
+	Source          string           `json:"source"`
+	HostID          string           `json:"host_id,omitempty"`
+	BootID          string           `json:"boot_id,omitempty"`
+	StartedAt       string           `json:"started_at"`
+	ObservedAt      string           `json:"observed_at"`
+	Identity        TaskIdentity     `json:"identity"`
+	AppArmor        State            `json:"apparmor"`
+	Seccomp         State            `json:"seccomp"`
+	SamplingTrigger *SamplingTrigger `json:"sampling_trigger,omitempty"`
 }
 
 // Declaration records the API field that was observed, including absence. The
@@ -87,6 +96,13 @@ func ValidateSnapshot(s Snapshot) error {
 	end, e2 := time.Parse(time.RFC3339Nano, s.ObservedAt)
 	if e1 != nil || e2 != nil || end.Before(start) || s.Identity.PID < 1 || s.Identity.TID < 1 {
 		return fmt.Errorf("access control state requires task identity and observation interval")
+	}
+	if t := s.SamplingTrigger; t != nil {
+		group, groupErr := strconv.ParseUint(t.CgroupID, 10, 64)
+		_, timeErr := time.Parse(time.RFC3339Nano, t.ObservedAt)
+		if t.Source != "agentprov_ebpf" || groupErr != nil || group == 0 || timeErr != nil {
+			return fmt.Errorf("invalid access control sampling trigger")
+		}
 	}
 	if s.Identity.Status != "observed" && s.Identity.Status != "unavailable" && s.Identity.Status != "unsupported" {
 		return fmt.Errorf("invalid access control task status")

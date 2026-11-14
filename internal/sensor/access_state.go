@@ -18,6 +18,7 @@ const (
 type stateTarget struct {
 	pid, tid      uint32
 	start, cgroup uint64
+	triggeredAt   string
 	barrier       chan struct{}
 }
 
@@ -62,6 +63,10 @@ func newStateSampler(opts Options, read func(int, int, accesscontrol.Options) ac
 					continue
 				}
 				snapshot := read(int(target.pid), int(target.tid), accesscontrol.Options{AppArmor: opts.AppArmorState, Seccomp: opts.SeccompState})
+				if target.cgroup != 0 && target.triggeredAt != "" {
+					snapshot.SamplingTrigger = &accesscontrol.SamplingTrigger{Source: "agentprov_ebpf",
+						CgroupID: strconv.FormatUint(target.cgroup, 10), ObservedAt: target.triggeredAt}
+				}
 				ev := map[string]any{"source": "procfs_access_control", "event_type": "access_control_state", "state": snapshot, "timestamp": snapshot.ObservedAt}
 				// PID hints initiate sampling, but do not join the procfs task to the
 				// earlier kernel lifetime. Only independently observed membership
@@ -82,19 +87,21 @@ func (s *stateSampler) offer(target stateTarget, now time.Time) {
 	if s == nil || target.pid == 0 || target.tid == 0 {
 		return
 	}
-	if seen, ok := s.seen[target]; ok && now.Sub(seen) < stateInterval {
+	key := target
+	key.triggeredAt = ""
+	if seen, ok := s.seen[key]; ok && now.Sub(seen) < stateInterval {
 		return
 	}
-	if _, ok := s.seen[target]; !ok {
+	if _, ok := s.seen[key]; !ok {
 		if len(s.order) < stateCacheCapacity {
-			s.order = append(s.order, target)
+			s.order = append(s.order, key)
 		} else {
 			delete(s.seen, s.order[s.next])
-			s.order[s.next] = target
+			s.order[s.next] = key
 			s.next = (s.next + 1) % stateCacheCapacity
 		}
 	}
-	s.seen[target] = now
+	s.seen[key] = now
 	select {
 	case s.queue <- target:
 	default:

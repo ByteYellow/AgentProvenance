@@ -10,6 +10,8 @@ English | [中文](CHANGELOG.zh-CN.md)
   idempotent admission, explicit retries, stop requests and signed evidence receipts.
 - Integrate shared native capture with per-execution cgroup boundaries and
   durable scope accounting, retaining capture gaps separately from command results.
+- Preserve procfs sampling triggers separately from observed task identity so
+  unrelated short-lived processes do not block every execution's capture closure.
 - Route native Claude Code Bash calls through a configured trusted executor with
   `launch --remote-execution`. Preserve native session/call IDs and permission
   checks, verify returned evidence, and reject disabled hooks before task launch.

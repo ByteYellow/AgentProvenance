@@ -32,6 +32,10 @@ type NativeScopeBatch struct {
 }
 
 func nativeScopeKey(event IngestEvent) string {
+	if event.Source == "procfs_access_control" && event.EventType == "access_control_state" &&
+		(event.CgroupID == "" || event.CgroupID == "0") && event.CaptureCgroupID != "" && event.CaptureCgroupID != "0" {
+		return event.CaptureCgroupID
+	}
 	knownSource := event.Source == "agentprov_ebpf" || (event.Source == "procfs_access_control" && event.EventType == "access_control_state")
 	if !knownSource || event.CgroupID == "0" {
 		return ""

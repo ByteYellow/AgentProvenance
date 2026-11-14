@@ -63,13 +63,16 @@ type IngestEvent struct {
 	RawEventID  string
 	ContainerID string
 	CgroupID    string
-	PID         int64
-	TGID        int64
-	PPID        int64
-	Timestamp   string
-	Source      string
-	EventType   string
-	Payload     string
+	// CaptureCgroupID assigns sampling work to its triggering scope for spool
+	// accounting only. It must never participate in event/process attribution.
+	CaptureCgroupID string `json:",omitempty"`
+	PID             int64
+	TGID            int64
+	PPID            int64
+	Timestamp       string
+	Source          string
+	EventType       string
+	Payload         string
 	// BindingSource records which binding tier produced this event's
 	// correlation (e.g. ai_asserted, zero_sdk_record, control_plane). When the
 	// event is resolved against a stored binding it is overwritten from the

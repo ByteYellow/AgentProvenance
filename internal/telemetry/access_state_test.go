@@ -79,3 +79,36 @@ func TestStatePassesDurableCaptureWithScopeOnlyAttribution(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNativeSamplingTriggerOnlyAffectsCaptureAccounting(t *testing.T) {
+	var state map[string]any
+	if err := json.Unmarshal([]byte(stateFixture), &state); err != nil {
+		t.Fatal(err)
+	}
+	trigger := map[string]any{"source": "agentprov_ebpf", "cgroup_id": "6", "observed_at": "2026-10-19T00:00:00Z"}
+	state["sampling_trigger"] = trigger
+	raw := map[string]any{"source": "procfs_access_control", "event_type": "access_control_state", "state": state,
+		"cgroup_id": "6", "timestamp": "2026-10-19T00:00:00.01Z"}
+	event, _, err := mapNative(raw)
+	if err != nil || event.CgroupID != "" || event.CaptureCgroupID != "6" || nativeScopeKey(event) != "6" {
+		t.Fatalf("trigger scope accounting: %+v %v", event, err)
+	}
+	identity := eventIdentity(event)
+	if identity.CgroupID != "" || identity.PID != 0 || identity.ProcessInstanceID != "" {
+		t.Fatalf("trigger became event identity: %+v", identity)
+	}
+	// Previously serialized rows keep their original unclassified accounting.
+	legacy := event
+	legacy.CaptureCgroupID = ""
+	if nativeScopeKey(legacy) != "" {
+		t.Fatal("legacy spool payload was reinterpreted on replay")
+	}
+	for _, item := range []struct{ key, value string }{{"source", "other"}, {"cgroup_id", "0"}, {"cgroup_id", "invalid"}, {"observed_at", "invalid"}} {
+		original := trigger[item.key]
+		trigger[item.key] = item.value
+		if _, _, err := mapNative(raw); err == nil {
+			t.Fatalf("invalid trigger accepted: %s=%s", item.key, item.value)
+		}
+		trigger[item.key] = original
+	}
+}
