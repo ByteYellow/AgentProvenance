@@ -120,8 +120,14 @@ func IngestContext(ctx context.Context, db *sql.DB, paths store.Paths, runID str
 			if e.ToolCallID == "" || e.Status == "context_replacement" {
 				continue
 			}
+			// IOPub output can arrive after idle or a later request. Only the
+			// shell execute_reply reports the request's terminal outcome.
+			if e.Notebook != nil && (e.Notebook.MessageType != "execute_reply" ||
+				(e.Status != "returned" && e.Status != "error" && e.Status != "aborted")) {
+				continue
+			}
 			id, event := agentcontext.ToolNodeID(e), "PostToolUse"
-			if e.Status == "error" {
+			if e.Status == "error" || e.Notebook != nil && e.Status == "aborted" {
 				event = "PostToolUseFailure"
 			}
 			if old, exists := results[id]; exists && old.Event != event {

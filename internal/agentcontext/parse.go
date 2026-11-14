@@ -60,6 +60,7 @@ type parser struct {
 	recordsCreated   int
 	budgetLimited    bool
 	hookCapture      *hookCaptureMetadata
+	notebookMessages map[string]string
 }
 
 // Parse reads a bounded physical transcript without consulting current agent
@@ -67,7 +68,7 @@ type parser struct {
 func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) {
 	opts.Harness = canonicalHarness(opts.Harness)
 	switch opts.Harness {
-	case "claude", "codex", "kimi", "grok", "deepseek":
+	case "claude", "codex", "kimi", "grok", "deepseek", "jupyter":
 	default:
 		return Parsed{}, fmt.Errorf("unsupported context harness %q", opts.Harness)
 	}
@@ -157,7 +158,7 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 			}
 			continue
 		}
-		if opts.Harness == "deepseek" && !ended {
+		if (opts.Harness == "deepseek" || opts.Harness == "jupyter") && !ended {
 			p.issue("incomplete_tail", "input")
 			*p.counts().Deferred++
 			break
@@ -177,7 +178,7 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 			}
 			start := len(p.Records)
 			known := p.consume(top)
-			if !known && len(p.Records) == start && !p.unsupported {
+			if !known && len(p.Records) == start && !p.unsupported && opts.Harness != "jupyter" {
 				p.add("session", p.positionKey("unrecognized"), "", "", "", "unrecognized", eventTime(top), whole(top))
 			}
 			if known {
@@ -188,7 +189,9 @@ func Parse(ctx context.Context, r io.Reader, opts ParseOptions) (Parsed, error) 
 			}
 			rawBody := string(raw)
 			for i := start; i < len(p.Records); i++ {
-				p.Records[i].RawBody = &rawBody
+				if opts.Harness != "jupyter" {
+					p.Records[i].RawBody = &rawBody
+				}
 				p.Records[i].hookCapture = p.hookCapture
 			}
 			return !p.unsupported && len(p.Records) < p.recordLimit()
@@ -356,6 +359,8 @@ func (p *parser) consume(top row) bool {
 		return p.grok(top)
 	case "deepseek":
 		return p.deepseek(top)
+	case "jupyter":
+		return p.notebook(top)
 	}
 	return false
 }

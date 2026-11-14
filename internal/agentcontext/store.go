@@ -123,6 +123,7 @@ func (s Service) saveTx(ctx context.Context, tx *sql.Tx, runID string, src Sourc
 			RawContent:      ContentRef{State: "unavailable", Reason: "source_not_recorded"},
 			ExecutionScope:  r.ExecutionScope,
 			SessionMetadata: codexSessionMetadata(src, r),
+			Notebook:        r.Notebook,
 		}
 		if entry.AgentID == "" {
 			entry.AgentID = src.AgentID
@@ -224,6 +225,7 @@ func (s Service) saveTx(ctx context.Context, tx *sql.Tx, runID string, src Sourc
 					return SaveResult{}, err
 				}
 				entry.RawContent = contentReference(raw)
+				entry.RawContent.Reason = r.rawProjection
 			}
 		}
 		intentLimited := entry.IntentContent != nil && entry.IntentContent.Reason == "capture_limit"

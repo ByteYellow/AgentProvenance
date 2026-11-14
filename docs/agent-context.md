@@ -29,6 +29,10 @@ commands can declare `--context-harness claude|codex|deepseek|kimi|grok` and
 identity need both `--context-file` and `--context-session`; their identity is
 explicitly operator-supplied. `--no-context` disables this capture and hooks.
 
+For Jupyter-based analysis tools, the [Notebook context guide](notebook-context.md)
+records native requests, replies and late output through an explicit tool-side
+recorder, then imports them with `context import --harness jupyter`.
+
 ### Retention Presets
 
 `launch --capture detailed` is the default. Use `--capture basic` to retain core

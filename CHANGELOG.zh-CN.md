@@ -6,6 +6,16 @@
 
 ## 未发布
 
+### Notebook 上下文
+
+- 支持导入 Jupyter 原生消息，区分 kernel、客户端及请求身份，通过父消息头关联
+  输出；保留 basic／detailed 留存档位，迟到输出不覆盖调用结束状态。新增有界
+  Python 记录器、签名往返测试及真实 kernel 验收用例，详见
+  [Jupyter 上下文指南](docs/zh-CN/notebook-context.md)。
+- 新增 `context project`，将独立导入的上下文投影到图谱，不执行工具或改写原记录。
+- 独立编码 SQLite 文件路径与连接参数，修复数据目录包含 `#`、`?`、`%` 时的
+  数据库路径误解析。
+
 ### 运行时采集
 
 - 新增固定版本的 gVisor SecCheck 传输接收器，限制消息大小，按登记的沙箱作用域

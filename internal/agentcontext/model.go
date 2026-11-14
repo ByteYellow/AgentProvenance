@@ -28,19 +28,20 @@ const (
 )
 
 type Source struct {
-	ID                 string   `json:"id"`
-	Harness            string   `json:"harness"`
-	Channel            string   `json:"channel,omitempty"`
-	SessionID          string   `json:"session_id"`
-	ParentSessionID    string   `json:"parent_session_id,omitempty"`
-	AgentID            string   `json:"agent_id,omitempty"`
-	Path               string   `json:"path,omitempty"`
-	ParserVersion      string   `json:"parser_version"`
-	ApplicationVersion string   `json:"application_version,omitempty"`
-	FormatVersion      string   `json:"format_version,omitempty"`
-	Binding            string   `json:"binding"`
-	BindingEvidence    []string `json:"binding_evidence,omitempty"`
-	Workdir            string   `json:"workdir,omitempty"`
+	ID                 string         `json:"id"`
+	Harness            string         `json:"harness"`
+	Channel            string         `json:"channel,omitempty"`
+	SessionID          string         `json:"session_id"`
+	ParentSessionID    string         `json:"parent_session_id,omitempty"`
+	AgentID            string         `json:"agent_id,omitempty"`
+	Path               string         `json:"path,omitempty"`
+	ParserVersion      string         `json:"parser_version"`
+	ApplicationVersion string         `json:"application_version,omitempty"`
+	FormatVersion      string         `json:"format_version,omitempty"`
+	Binding            string         `json:"binding"`
+	BindingEvidence    []string       `json:"binding_evidence,omitempty"`
+	Workdir            string         `json:"workdir,omitempty"`
+	Notebook           *NotebookScope `json:"notebook,omitempty"`
 }
 
 // Counts are observations over one processing range, not estimates of all
@@ -142,6 +143,7 @@ type Entry struct {
 	CreatedAt       string           `json:"created_at,omitempty"`
 	ExecutionScope  string           `json:"execution_scope,omitempty"`
 	SessionMetadata *SessionMetadata `json:"session_metadata,omitempty"`
+	Notebook        *NotebookMessage `json:"notebook,omitempty"`
 }
 
 // Record is a parser's transient output. Body never appears in the entry index
@@ -167,6 +169,8 @@ type Record struct {
 	// explicit Record callers use the source defaults.
 	Workdir            *string
 	ApplicationVersion *string
+	Notebook           *NotebookMessage
+	rawProjection      string
 	hookCapture        *hookCaptureMetadata
 }
 

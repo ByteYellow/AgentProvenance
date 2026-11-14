@@ -11,8 +11,59 @@ import (
 	"testing"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
+	"github.com/byteyellow/agentprovenance/internal/hooksbridge"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
+
+func TestContextProjectCommand(t *testing.T) {
+	dir := t.TempDir()
+	paths, err := store.Init(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	svc := agentcontext.Service{DB: db, Paths: paths}
+	input, result := `{"command":"printf recorded"}`, "recorded output"
+	_, err = svc.Save(context.Background(), "run", agentcontext.Source{Harness: "codex", SessionID: "s", ParserVersion: "test/v1", Binding: "explicit"}, []agentcontext.Record{
+		{Key: "call", Sequence: 1, Kind: "tool_call", ToolName: "shell_command", ToolCallID: "c", Body: &input},
+		{Key: "result", Sequence: 2, Kind: "tool_result", ToolCallID: "c", Status: "returned", Body: &result},
+	}, agentcontext.Coverage{Status: agentcontext.OK})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM tool_calls`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("import changed projection implicitly: %d %v", count, err)
+	}
+	before, err := svc.Entries(context.Background(), agentcontext.PageOptions{RunID: "run"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		out, err := runContextCLI(t, dir, "project", "--run", "run")
+		var summary hooksbridge.Summary
+		if err != nil || json.Unmarshal(out, &summary) != nil || summary.ToolCalls != 1 {
+			t.Fatalf("project: %s %v", out, err)
+		}
+		if err := db.QueryRow(`SELECT COUNT(*) FROM tool_calls`).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("reprojection duplicated tools: %d %v", count, err)
+		}
+	}
+	after, err := svc.Entries(context.Background(), agentcontext.PageOptions{RunID: "run"})
+	if err != nil || !reflect.DeepEqual(before.Entries, after.Entries) {
+		t.Fatal("projection changed source entries")
+	}
+	for _, e := range after.Entries {
+		links, err := svc.Links(context.Background(), "run", e.ID)
+		if err != nil || len(links.Links) != 1 {
+			t.Fatalf("recorded link: %+v %v", links, err)
+		}
+	}
+}
 
 func TestContextSnapshotComparisonCLIIsLanguageIndependent(t *testing.T) {
 	dir := t.TempDir()

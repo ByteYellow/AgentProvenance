@@ -27,6 +27,9 @@ agentprov launch --context-session SESSION_ID -- codex resume SESSION_ID
 或 `--context-file FILE`。没有原生会话 ID 的旧日志须同时指定文件和
 `--context-session`，身份会标为用户显式指定。`--no-context` 关闭上下文采集和 hook 注入。
 
+使用 Jupyter 执行分析任务时，可按 [Notebook 上下文指南](notebook-context.md)在工具入口
+接入记录器，保存原生请求、回复及延迟输出，再通过 `context import --harness jupyter` 导入。
+
 ### 留存档位
 
 默认使用 `--capture detailed` 详细档。`--capture basic` 基础档保留核心消息、工具输入与

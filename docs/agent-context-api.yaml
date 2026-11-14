@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance recorded context API
-  version: "1.7"
+  version: "1.8"
   description: >
     Read-only recorded evidence. Source assertions are not kernel observations
     or inferred authorizations. The dashboard exposes the same routes under
@@ -37,6 +37,57 @@ components:
         binding: {type: string, examples: [explicit, exact, matched, ambiguous, unknown], description: Matched is unique source metadata and time-window attribution, not kernel-proven identity.}
         binding_evidence: {type: array, items: {type: string}}
         workdir: {type: string}
+        notebook: {$ref: '#/components/schemas/NotebookScope'}
+    NotebookScope:
+      type: object
+      required: [producer_id, namespace, instance_id, generation, notebook_id, kernel_id, kernel_session_id]
+      properties:
+        producer_id: {type: string}
+        namespace: {type: string}
+        instance_id: {type: string}
+        generation: {type: string}
+        notebook_id: {type: string}
+        kernel_id: {type: string}
+        kernel_session_id: {type: string}
+      description: >
+        Placement asserted by an explicitly selected local Jupyter capture.
+        Generation is assigned by the launcher; kernel_session_id is observed
+        in kernel_info_reply. Source.session_id is a digest-qualified identity
+        over these fields. Restarting a kernel changes its session, while a
+        reconnect to the same kernel can reuse it. This metadata grants no
+        authenticated remote principal or per-cell operating-system attribution.
+    NotebookMessage:
+      type: object
+      required: [message_id, message_session, message_type, channel, direction, association]
+      properties:
+        message_id: {type: string}
+        message_session: {type: string}
+        message_type: {type: string}
+        parent_message_id: {type: string}
+        parent_session: {type: string}
+        channel: {type: string, enum: [shell, control, iopub]}
+        direction: {type: string, enum: [send, receive]}
+        association: {type: string, enum: [native_request, native_parent_header, kernel_session]}
+        observed_at: {type: string}
+        execution_count: {type: integer, minimum: 0, description: Native display counter; never an association key.}
+        omitted_content:
+          type: array
+          items:
+            type: object
+            required: [media_type, bytes, sha256, reason]
+            properties:
+              media_type: {type: string}
+              bytes: {type: integer, minimum: 0}
+              sha256: {type: string}
+              reason: {const: attachment_not_retained}
+            description: Digest and byte count cover the JSON-encoded source value, not decoded binary content.
+      description: >
+        Native message and parent headers retained in both capture presets.
+        Only execute_reply reports the request outcome; IOPub output and idle
+        may precede or follow other requests. Parentless output has kernel-level
+        scope. raw_content.reason=notebook_protocol_projection identifies a
+        reduced source representation without binary MIME data, arbitrary
+        metadata or transport buffers. Text HTML remains inert saved text.
     Counts:
       type: object
       required: [discovered, matched, read, parsed, stored, duplicates, truncated, failed, unrecognized, deferred]
@@ -228,6 +279,7 @@ components:
           allOf: [{$ref: '#/components/schemas/ContentRef'}]
           description: Optional derived Claude model-message projection when raw source records are omitted. Retains supported prompt, thinking, answer and proposed tool fields for reanalysis. It is not an original transcript. Sharing exclusions apply to the whole source row, including this projection.
         session_metadata: {$ref: '#/components/schemas/SessionMetadata'}
+        notebook: {$ref: '#/components/schemas/NotebookMessage'}
         missing_fields: {type: array, items: {type: string}}
         evidence_refs: {type: array, items: {type: string}}
         object_hash: {type: string}

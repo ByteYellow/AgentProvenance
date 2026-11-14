@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
+	"github.com/byteyellow/agentprovenance/internal/hooksbridge"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/spf13/cobra"
@@ -39,7 +40,7 @@ func contextCmd(dataDir *string) *cobra.Command {
 	importCmd := &cobra.Command{Use: "import", Short: "Import one explicitly selected transcript without changing earlier evidence", Args: cobra.NoArgs}
 	capture.bind(importCmd)
 	importCmd.Flags().StringVar(&opts.Path, "file", "", "JSONL or Zstandard transcript file")
-	importCmd.Flags().StringVar(&opts.Harness, "harness", "", "claude, codex, kimi, grok, or deepseek")
+	importCmd.Flags().StringVar(&opts.Harness, "harness", "", "claude, codex, kimi, grok, deepseek, or jupyter")
 	importCmd.Flags().StringVar(&opts.SessionID, "session", "", "expected native session id; required if absent in the source")
 	importCmd.Flags().StringVar(&opts.AgentID, "agent", "", "source-provided agent id, when separate from session identity")
 	importCmd.Flags().Int64Var(&opts.AfterLine, "after-line", 0, "retain records through this resume cursor as prior context, not current execution")
@@ -133,6 +134,12 @@ func contextCmd(dataDir *string) *cobra.Command {
 			})
 		}}
 	links.Flags().StringVar(&entryID, "entry", "", "immutable context entry id")
-	root.AddCommand(importCmd, list, overview, content, compare, links)
+	project := &cobra.Command{Use: "project", Short: "Project saved context into the evidence graph without executing tools", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return withService(cmd, func(s agentcontext.Service) (any, error) {
+				return hooksbridge.IngestContext(cmd.Context(), s.DB, s.Paths, run)
+			})
+		}}
+	root.AddCommand(importCmd, list, overview, content, compare, links, project)
 	return root
 }

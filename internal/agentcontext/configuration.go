@@ -27,6 +27,9 @@ var configurationPaths = []struct {
 }
 
 func missingSnapshots(harness string, records []Record) []string {
+	if harness == "jupyter" {
+		return []string{"kernel_observation_completeness", "system_event_attribution"}
+	}
 	seen := map[string]bool{}
 	for _, record := range records {
 		seen[record.Kind] = record.Body != nil || seen[record.Kind]

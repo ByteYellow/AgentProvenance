@@ -2530,6 +2530,8 @@
   "source-provided agent id, when separate from session identity": "来源提供的 Agent ID（与会话身份分离时）",
   "JSONL or Zstandard transcript file": "JSONL 或 Zstandard 会话日志文件",
   "claude, codex, kimi, grok, or deepseek": "claude、codex、kimi、grok 或 deepseek",
+  "claude, codex, kimi, grok, deepseek, or jupyter": "claude、codex、kimi、grok、deepseek 或 jupyter",
+  "Project saved context into the evidence graph without executing tools": "将已保存的上下文投影到证据图，不执行工具",
   "expected native session id; required if absent in the source": "预期的原生会话 ID；来源没有记录时必须指定",
   "List recorded messages, tools, snapshots, and source references": "列出已记录的消息、工具、快照及来源引用",
   "continuation cursor from a previous page": "上一页返回的续读游标",

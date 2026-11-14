@@ -4,6 +4,18 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+### Notebook context
+
+- Import native Jupyter message captures with scoped kernel/frontend identities,
+  parent-header output relationships and basic/detailed retention. Preserve late
+  output without treating it as execution completion. Add a bounded local Python
+  recorder, signed round-trip checks and a real kernel acceptance fixture. See
+  the [Jupyter context guide](docs/notebook-context.md).
+- Add `context project` to build graph relationships from independently imported
+  context without executing tools or changing the original records.
+- Encode SQLite database paths independently of URI parameters so literal
+  `#`, `?`, and `%` in a data directory keep their intended file identity.
+
 ### Runtime collection
 
 - Add a bounded, version-pinned gVisor SecCheck transport receiver with
