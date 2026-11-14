@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from accept_seccheck_faults import latest_status, spool_inventory, wait_for
+from accept_seccheck_faults import latest_status, require_preserved_records, spool_inventory, wait_for
 
 
 class FaultAcceptanceChecks(unittest.TestCase):
@@ -37,6 +37,14 @@ class FaultAcceptanceChecks(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "deadline"):
             wait_for(lambda: False, "no producer", timeout=0)
         self.assertEqual(wait_for(lambda: 7, "ready"), 7)
+
+    def test_preservation_requires_real_evidence(self):
+        with self.assertRaisesRegex(RuntimeError, "requires committed"):
+            require_preserved_records({}, {})
+        for after in ({}, {"record": "changed"}):
+            with self.assertRaisesRegex(RuntimeError, "changed or disappeared"):
+                require_preserved_records({"record": "body"}, after)
+        require_preserved_records({"record": "body"}, {"record": "body", "later": "body"})
 
 
 if __name__ == "__main__":

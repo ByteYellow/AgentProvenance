@@ -43,6 +43,13 @@ def spool_inventory(directory):
     return records
 
 
+def require_preserved_records(before, after):
+    if not before:
+        raise RuntimeError("preservation check requires committed observations")
+    if any(after.get(key) != value for key, value in before.items()):
+        raise RuntimeError("previously committed evidence changed or disappeared")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("cli", "runsc", "rootfs", "workload", "output"):
@@ -122,6 +129,16 @@ def main():
             loss = wait_for(lambda: latest_status(first_status).get("targets", [{}])[0].get("reported_dropped_events", 0), "Sentry reports actual loss")
             write_json(args.output / "congestion.json", latest_status(first_status))
 
+            def committed_marker():
+                with sqlite3.connect(f"file:{store / 'agentprov.db'}?mode=ro", uri=True) as db:
+                    observations = dict(db.execute("SELECT raw_event_id,payload FROM events WHERE source='gvisor_seccheck'"))
+                if any(json.loads(value).get("path", "").startswith("/tmp/seccheck-after-burst-") for value in observations.values()):
+                    return observations
+                return None
+
+            baseline = wait_for(committed_marker, "pre-fault evidence committed")
+            write_json(args.output / "committed-before-fault.json", baseline)
+
             # Hold semantic insertion, not socket acceptance, to leave real fsynced backlog.
             with sqlite3.connect(store / "agentprov.db", timeout=15) as db:
                 db.execute("CREATE TRIGGER acceptance_hold BEFORE INSERT ON events WHEN NEW.source='gvisor_seccheck' BEGIN SELECT RAISE(ABORT,'acceptance ingestion hold'); END")
@@ -138,6 +155,7 @@ def main():
             with sqlite3.connect(store / "agentprov.db", timeout=15) as db:
                 before = dict(db.execute("SELECT raw_event_id,payload FROM events WHERE source='gvisor_seccheck'"))
                 db.execute("DROP TRIGGER acceptance_hold")
+            require_preserved_records(baseline, before)
             second, second_status = start_collector(2)
             command = [str(args.runsc), "--root=" + str(state), "trace", "create", "--force", "--config=" + str(bundle / "trace.json"), name]
             result = subprocess.run(command, capture_output=True, text=True, timeout=15)
@@ -163,7 +181,7 @@ def main():
                 rows = db.execute("SELECT raw_event_id,payload FROM events WHERE source='gvisor_seccheck'").fetchall()
             saved = dict(rows)
             assert len(saved) == len(rows) and pending.keys() <= saved.keys()
-            assert all(saved[key] == value for key, value in before.items())
+            require_preserved_records(before, saved)
             for identity, record in pending.items():
                 body = json.loads(saved[identity])
                 assert all(body.get(key) == value for key, value in json.loads(record["Payload"]).items())
