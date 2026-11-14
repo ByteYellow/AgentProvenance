@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -143,6 +144,48 @@ func TestExecutionDeliveryAPIRetiredPackageAndGC(t *testing.T) {
 	var payload string
 	if err := s.DB.QueryRow(`SELECT payload FROM events WHERE event_type='execution_delivery_cleanup'`).Scan(&payload); err != nil || !strings.Contains(payload, `"purged":1`) {
 		t.Fatalf("cleanup result unavailable: %q %v", payload, err)
+	}
+}
+
+func TestExecutionDeliveryGCReconcilesFailedPublication(t *testing.T) {
+	s, request, _ := deliveryServer(t)
+	server := httptest.NewServer(s.Handler())
+	defer server.Close()
+	client := Client{BaseURL: server.URL, HTTP: server.Client(), Token: s.AuthToken}
+	ctx := context.Background()
+	a, err := client.SubmitExecution(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitAPIExecution(t, client, a.Attempt.ID, handoff.Succeeded)
+	kept, err := client.PrepareExecutionDelivery(ctx, a.Attempt.ID, "kept")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Exec(`CREATE TRIGGER reject_delivery BEFORE INSERT ON execution_deliveries
+		BEGIN SELECT RAISE(ABORT,'injected publication failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.PrepareExecutionDelivery(ctx, a.Attempt.ID, "failed"); err == nil {
+		t.Fatal("database publication failure was hidden")
+	}
+	root := filepath.Join(s.Paths.Artifacts, "execution-deliveries")
+	packages, err := filepath.Glob(filepath.Join(root, "package-*"))
+	if err != nil || len(packages) != 2 {
+		t.Fatalf("failure did not reach publication: %v %v", packages, err)
+	}
+	s.gcOnce(ctx)
+	packages, err = filepath.Glob(filepath.Join(root, "package-*"))
+	if err != nil || len(packages) != 1 {
+		t.Fatalf("GC retained an unreferenced publication: %v %v", packages, err)
+	}
+	d, reader, err := s.ExecutionDelivery.OpenBundle(ctx, s.ExecutionCaller, kept.Delivery.Manifest.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	if n, err := io.Copy(io.Discard, reader); err != nil || n != d.Manifest.BundleBytes {
+		t.Fatalf("GC damaged pending delivery: %d %v", n, err)
 	}
 }
 

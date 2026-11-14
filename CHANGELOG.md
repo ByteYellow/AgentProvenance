@@ -6,6 +6,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Cross-sandbox execution
 
+- Reconcile interrupted sender publications with cross-process leases and
+  indexed reference checks. Clean abandoned staging and unreferenced packages
+  while retaining active publishers, registered deliveries and receiver evidence.
 - Keep paged execution links in offline replays, including native-call filters
   and explicit boundaries for unselected runs or excluded calls. Partial exports
   omit embedded checkpoints rather than copying excluded execution metadata.
@@ -24,7 +27,8 @@ English | [中文](CHANGELOG.zh-CN.md)
 - Add optional sender-copy retention after signed acknowledgment and request
   expiry. Persist retirement before file removal, resume interrupted cleanup,
   and preserve manifests, receipts, deduplication records and received evidence.
-  Retired downloads return `execution_delivery_retired`; cleanup is off by default.
+  Retired downloads return `execution_delivery_retired`; acknowledged-copy cleanup
+  is off by default.
 - Add an opt-in durable execution handoff API with scoped source identities,
   idempotent admission, explicit retries, stop requests and signed evidence receipts.
 - Recover surviving Linux execution scopes after a worker crash by checking the

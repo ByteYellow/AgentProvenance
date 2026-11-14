@@ -360,6 +360,7 @@ func (s Server) gcOnce(ctx context.Context) {
 	_, _ = s.DB.Exec(`INSERT INTO events (id, source, event_type, payload, created_at)
 		VALUES ('evt-' || lower(hex(randomblob(6))), 'daemon_gc', 'gc_worker', ?, ?)`, payload, now)
 	if s.ExecutionDelivery != nil {
+		s.reconcileExecutionPublications(ctx, min(limit, 1000))
 		result, cleanupErr := s.ExecutionDelivery.PruneAcknowledged(ctx, min(limit, 1000))
 		if cleanupErr != nil {
 			log.Printf("execution delivery cleanup: %v", cleanupErr)

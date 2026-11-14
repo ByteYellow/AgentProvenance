@@ -2,8 +2,10 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -12,6 +14,31 @@ import (
 )
 
 const executionTransferTimeout = 2 * time.Minute
+
+func (s Server) reconcileExecutionPublications(ctx context.Context, limit int) {
+	ctx, cancel := context.WithTimeout(ctx, executionTransferTimeout)
+	defer cancel()
+	result, cleanupErr := s.ExecutionDelivery.ReconcilePublications(ctx, limit)
+	if result.Removed == 0 && cleanupErr == nil {
+		return
+	}
+	record := struct {
+		handoff.PublicationCleanup
+		Error string `json:"error,omitempty"`
+	}{PublicationCleanup: result}
+	if cleanupErr != nil {
+		record.Error = cleanupErr.Error()
+		log.Printf("execution publication cleanup: %v", cleanupErr)
+	}
+	raw, err := json.Marshal(record)
+	if err == nil {
+		_, err = s.DB.ExecContext(ctx, `INSERT INTO events(id,source,event_type,payload,created_at)
+			VALUES ('evt-' || lower(hex(randomblob(6))), 'daemon_gc', 'execution_publication_cleanup', ?, ?)`, string(raw), time.Now().UTC().Format(time.RFC3339Nano))
+	}
+	if err != nil {
+		log.Printf("persist execution publication cleanup result: %v", err)
+	}
+}
 
 type ExecutionDeliveryResponse struct {
 	SchemaVersion string           `json:"schema_version"`

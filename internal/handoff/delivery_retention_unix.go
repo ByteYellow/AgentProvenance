@@ -33,7 +33,13 @@ func removeDeliveryPackage(ctx context.Context, paths store.Paths, bundle string
 	if err != nil {
 		return 0, err
 	}
-	defer unix.Close(rfd)
+	rootDir := os.NewFile(uintptr(rfd), root)
+	defer rootDir.Close()
+	return removeDeliveryPackageAt(ctx, rootDir, name)
+}
+
+func removeDeliveryPackageAt(ctx context.Context, root *os.File, name string) (int64, error) {
+	rfd := int(root.Fd())
 	fd, err := unix.Openat(rfd, name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 	if errors.Is(err, unix.ENOENT) {
 		return 0, unix.Fsync(rfd)

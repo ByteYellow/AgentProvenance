@@ -106,6 +106,11 @@ func (s *DeliveryService) Prepare(ctx context.Context, p Principal, attemptID, o
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return Delivery{}, false, err
 	}
+	publication, err := acquirePublication(ctx, root, false)
+	if err != nil {
+		return Delivery{}, false, err
+	}
+	defer publication.Close()
 	work, err := os.MkdirTemp(root, ".prepare-")
 	if err != nil {
 		return Delivery{}, false, err

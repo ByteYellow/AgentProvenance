@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -53,6 +54,38 @@ func TestSignalsTableExists(t *testing.T) {
 	err = db.QueryRow(`SELECT name FROM sqlite_master WHERE type='table' AND name='signals'`).Scan(&name)
 	if err != nil {
 		t.Fatalf("signals table not created: %v", err)
+	}
+}
+
+func TestUpgradeSchema26IndexesPublicationReferences(t *testing.T) {
+	paths := openTestDB(t)
+	db, err := Open(*paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, statement := range []string{
+		`DROP INDEX idx_execution_delivery_path`,
+		`DELETE FROM schema_versions WHERE version>26`,
+		`INSERT OR IGNORE INTO schema_versions VALUES(26,'previous version','2026-11-14')`,
+		`INSERT INTO events(id,source,event_type,payload,created_at) VALUES('retained','fixture','test','{"original":true}','original-time')`,
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if err := EnsureSchema(db); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var id, parent, unused int
+	var detail, payload, created string
+	if err := db.QueryRow(`EXPLAIN QUERY PLAN SELECT 1 FROM execution_deliveries WHERE bundle_path>=? AND bundle_path<?`, "/data/package/", "/data/package0").Scan(&id, &parent, &unused, &detail); err != nil || !strings.Contains(detail, "idx_execution_delivery_path") {
+		t.Fatalf("publication reference lookup is not indexed: %s %v", detail, err)
+	}
+	if err := db.QueryRow(`SELECT payload,created_at FROM events WHERE id='retained'`).Scan(&payload, &created); err != nil || payload != `{"original":true}` || created != "original-time" {
+		t.Fatalf("upgrade changed evidence: %s %s %v", payload, created, err)
 	}
 }
 

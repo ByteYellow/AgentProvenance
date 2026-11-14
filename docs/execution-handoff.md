@@ -617,6 +617,27 @@ is retained for the lifetime of the store; processed native-spool payload cleanu
 continues to follow its existing settlement rules. This setting bounds acknowledged
 transfer copies, not total evidence-store growth.
 
+### Interrupted publication cleanup
+
+The same GC worker also removes abandoned `.prepare-*` staging directories and
+unreferenced `package-*` directories under the sender's `execution-deliveries`.
+This reconciliation runs even when acknowledged-copy retention is disabled.
+It streams directory entries, checks indexed database references and removes at
+most `min(--gc-limit, 1000)` directories per pass. A pass has a two-minute deadline.
+
+Publishers hold a shared cross-process lease from staging through the outbox
+commit. GC takes an exclusive lease and defers a pass while any publisher is
+active. A process crash releases its lease; the next pass can reclaim abandoned
+files without using their age as evidence of abandonment. Registered packages,
+including pending deliveries and other receiver identities, remain retained.
+Database errors stop reconciliation; unexpected files or links are reported and
+left for inspection. Successful removals and errors produce
+`execution_publication_cleanup` events. Receiver archives and source evidence
+are outside this cleanup directory.
+
+Stop all writers before upgrading a shared store, then restart them with the
+same upgraded version so every publisher participates in this lease protocol.
+
 ### Configure and collect
 
 Generate one signing keypair on each side with `agentprov forensics keygen --priv
@@ -665,8 +686,9 @@ native harness and Sensor acceptance.
 
 ## Compatibility and tests
 
-Database schemas 21-26 add the execution ledger, durable stop requests, delivery
-outbox/receipts, sender-copy retention, per-scope capture accounting and sampling-gap counts without renaming legacy tables
+Database schemas 21-27 add the execution ledger, durable stop requests, delivery
+outbox/receipts, sender-copy retention, indexed publication references,
+per-scope capture accounting and sampling-gap counts without renaming legacy tables
 or rewriting existing events.
 Older binaries reject the newer schema; use a backup
 for a downgrade. Historic signed packages retain their original format.

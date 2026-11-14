@@ -74,6 +74,7 @@ func ensureHandoffSchema(db *sql.DB) error {
 				UNIQUE(attempt_id, operation_id),
 				UNIQUE(attempt_id, receiver_id, package_version)
 			)`,
+			`CREATE INDEX IF NOT EXISTS idx_execution_delivery_path ON execution_deliveries(bundle_path)`,
 			`CREATE TABLE IF NOT EXISTS execution_delivery_retention (
 				delivery_id TEXT PRIMARY KEY REFERENCES execution_deliveries(id),
 				retain_until_ns INTEGER NOT NULL,
