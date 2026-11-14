@@ -249,6 +249,44 @@ This path requires retained tool results; use detailed capture or explicitly
 select `--capture basic --capture-tool-results=true`. Configuration preflight
 does not silently change a selected omission policy.
 
+### Verify a real agent task
+
+[`accept_execution_native.py`](../scripts/accept_execution_native.py) exercises
+the native Claude route on the caller. It uses the caller's existing provider
+configuration and makes model requests, with a USD 0.25 session budget flag.
+Use an isolated executor workdir containing `input.csv`:
+
+```csv
+team,amount
+alpha,10
+beta,20
+alpha,30
+```
+
+Enable native capture and signed delivery on the executor, and set `file_diff:
+true` in the caller route. Then run:
+
+```sh
+python3 scripts/accept_execution_native.py run \
+  --agentprov /path/to/agentprov --claude /path/to/claude \
+  --route /path/to/operator/route.json --output /path/to/new/acceptance
+```
+
+The script checks native session/tool IDs and commands, distinct cgroups, settled
+capture intervals, exact-request replay, acknowledged signed delivery, native
+open-for-write evidence and the retained `totals.json` body. Sampling gaps stay
+visible. After stopping the executor and removing or moving its task workdir,
+run `verify` with the same arguments except `--claude` to read the receiving
+store independently. Keep that caller store at its original path for this check.
+Browser `file://` replay is a separate acceptance step.
+
+The caller can run on macOS or inside a Linux container. The container needs
+provider access, the protected route configuration and a writable evidence
+directory; it does not need BPF privileges or the executor workspace mounted.
+Use an SSH loopback tunnel across hosts. A same-node container can use a
+deliberately shared host network for the loopback endpoint while using a non-root
+user and separate PID/mount namespaces; record this topology in the run manifest.
+
 ## Identity and trust
 
 Every source reference contains `producer_id`, `namespace`, `run_id`, `harness`,

@@ -23,6 +23,9 @@ English | [中文](CHANGELOG.zh-CN.md)
   `launch --remote-execution`. Preserve native session/call IDs and permission
   checks, verify returned evidence, and reject disabled hooks before task launch.
   See the [execution handoff guide](docs/execution-handoff.md).
+- Add a real-agent acceptance script for native session/command identity,
+  isolated execution scopes, request replay, signed output and stopped-executor
+  verification, with a documented container-caller deployment.
 
 ## v0.10.1 - 2026-11-09
 

@@ -196,6 +196,38 @@ Hook 不自动授权。获准后，包装器提交请求、等待执行、验证
 发生截断时会提示。此路径需要保存工具结果，可使用 detailed，或显式选择
 `--capture basic --capture-tool-results=true`。预检不会自动改变用户的省略设置。
 
+### 验证真实 Agent 任务
+
+[`accept_execution_native.py`](../../scripts/accept_execution_native.py) 在调用端验证
+Claude 原生路由。脚本沿用已配置的模型服务，会发起真实请求，并传入 0.25 美元的
+会话预算参数。先在独立的执行端工作目录准备 `input.csv`：
+
+```csv
+team,amount
+alpha,10
+beta,20
+alpha,30
+```
+
+执行端启用原生采集及签名交付，调用端路由设置 `file_diff: true`，然后运行：
+
+```sh
+python3 scripts/accept_execution_native.py run \
+  --agentprov /path/to/agentprov --claude /path/to/claude \
+  --route /path/to/operator/route.json --output /path/to/new/acceptance
+```
+
+脚本核对原生会话、调用 ID 和命令、独立 cgroup、采集区间收尾、原请求重发、签名
+交付、内核打开文件写入事件及留存的 `totals.json` 正文；状态采样缺口照常保留。
+停止执行端并移走或删除其任务目录后，把命令中的 `run` 换成 `verify`，去掉
+`--claude` 参数，验证调用端已收到的证据。此检查保持调用端数据目录位置不变。
+浏览器 `file://` 回放另行验收。
+
+调用端可以运行在 macOS 或 Linux 容器中。容器需要模型服务、受保护的路由配置
+和可写证据目录，无须 BPF 权限或挂载执行端工作区。跨主机通过 SSH 本地转发接入；
+同节点容器可显式共享宿主网络以访问回环地址，同时保留独立账号、PID 和挂载环境，
+并在运行清单中记录这一部署方式。
+
 ## 身份与信任
 
 来源引用包含 `producer_id`、`namespace`、`run_id`、`harness`、`session_id`
