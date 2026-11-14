@@ -135,19 +135,21 @@ func (s Server) exportReplaySet(ctx context.Context, run string, w *staticdata.W
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		if s.replayProjection != nil && route == "/api/context/overview" {
+			// The selection was validated against the frozen source. Its private
+			// projection can be empty after all runtime records are excluded.
+			overview, err := contextService.Overview(ctx, run)
+			if err != nil {
+				return nil, err
+			}
+			overview.RuntimeCoverage.Capture = s.replayProjection.capture
+			return json.Marshal(overview)
+		}
 		r := httptest.NewRequest(http.MethodGet, route+"?"+query.Encode(), nil).WithContext(ctx)
 		response := httptest.NewRecorder()
 		h.ServeHTTP(response, r)
 		if response.Code != 200 {
 			return nil, fmt.Errorf("export %s: HTTP %d %s", route, response.Code, response.Body.String())
-		}
-		if s.replayProjection != nil && route == "/api/context/overview" {
-			var overview agentcontext.Overview
-			if err := json.Unmarshal(response.Body.Bytes(), &overview); err != nil {
-				return nil, err
-			}
-			overview.RuntimeCoverage.Capture = s.replayProjection.capture
-			return json.Marshal(overview)
 		}
 		return json.RawMessage(response.Body.Bytes()), nil
 	}

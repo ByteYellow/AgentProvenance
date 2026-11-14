@@ -59,8 +59,13 @@ func ValidateStoredPayload(eventType, payload string) error {
 //     no correlation was performed.
 //   - kernel_correlated: independent system telemetry (Falco/Tetragon/own eBPF
 //     sensor) joined to app context through a binding. This is the real claim.
+//   - runtime_scoped: Sentry telemetry assigned to a registered sandbox Run,
+//     without a host PID or application Tool Call join.
 //   - uncorrelated:     could not be resolved.
 func CorrelationClass(source, method, containerID string, confidence float64) string {
+	if source == "gvisor_seccheck" && method == "runtime_scope" {
+		return "runtime_scoped"
+	}
 	if source == "record" || source == "record_process_sample" || source == "record_file_diff" || source == "procfs_access_control" || source == "audit_reader" ||
 		method == "zero_sdk_process_tree" {
 		return "self_observed"
@@ -102,7 +107,7 @@ func TelemetrySource(source string, correlationMethod string) bool {
 		return true
 	}
 	switch source {
-	case "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf", "native_runtime", "record_file_diff", "record_process_sample", "apparmor_audit", "seccomp_audit", "procfs_access_control", "audit_reader":
+	case "gvisor_seccheck", "filtered_telemetry", "wrapper_runtime", "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf", "native_runtime", "record_file_diff", "record_process_sample", "apparmor_audit", "seccomp_audit", "procfs_access_control", "audit_reader":
 		return true
 	default:
 		return false
@@ -172,6 +177,8 @@ func receiverName(source string) string {
 
 func sourceFormat(source string) string {
 	switch source {
+	case "gvisor_seccheck":
+		return "seccheck_protobuf"
 	case "apparmor_audit", "seccomp_audit":
 		return "linux_audit"
 	case "tetragon_jsonl", "falco_jsonl", "loongcollector_jsonl", "agentprov_ebpf", "procfs_access_control":
@@ -259,6 +266,11 @@ func findForbiddenRawPayloadField(value any) string {
 
 func validateEventBody(eventType string, body map[string]any) error {
 	switch eventType {
+	case "runtime_collection", "runtime_observation":
+		envelope, ok := body["sentry"].(map[string]any)
+		if !ok || stringField(envelope, "schema_version") != SecCheckSchema || stringField(body, "operation") == "" || stringField(body, "observation_stage") == "" {
+			return fmt.Errorf("%s requires a versioned runtime observation", eventType)
+		}
 	case "execve":
 		if stringSlice(body["argv"]) == nil && stringField(body, "command") == "" {
 			return fmt.Errorf("execve payload requires argv[] or command")

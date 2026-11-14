@@ -896,6 +896,7 @@ func verifyExecutionContextBindings(db *sql.DB, runID string, add issueAdder) er
 	// binding. Only an event claiming a positive-confidence join requires one.
 	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id = ?
 		AND COALESCE(correlation_method, '') NOT IN ('', 'unresolved')
+		AND NOT (source='gvisor_seccheck' AND correlation_method='runtime_scope')
 		AND COALESCE(correlation_confidence, 0) > 0`, runID).Scan(&correlatedEvents); err != nil {
 		return err
 	}
@@ -913,12 +914,14 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 	// Preloading first removes both.
 	type runtimeEvent struct {
 		id, toolCallID, processID, eventType, payload, correlationMethod, source string
+		sessionID, containerID, cgroupID, rawID, createdAt                       string
 		pid, tgid, ppid                                                          int64
 	}
 	rows, err := db.Query(`SELECT id, COALESCE(tool_call_id, ''), COALESCE(process_id, ''), event_type, payload,
 		COALESCE(correlation_method, ''),
 		COALESCE(source, ''),
-		COALESCE(pid, 0), COALESCE(tgid, 0), COALESCE(ppid, 0)
+		COALESCE(pid, 0), COALESCE(tgid, 0), COALESCE(ppid, 0),
+		COALESCE(session_id,''),container_id,cgroup_id,raw_event_id,created_at
 		FROM events WHERE run_id = ?`, runID)
 	if err != nil {
 		return err
@@ -927,7 +930,7 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 	toolCallIDs := map[string]struct{}{}
 	for rows.Next() {
 		var e runtimeEvent
-		if err := rows.Scan(&e.id, &e.toolCallID, &e.processID, &e.eventType, &e.payload, &e.correlationMethod, &e.source, &e.pid, &e.tgid, &e.ppid); err != nil {
+		if err := rows.Scan(&e.id, &e.toolCallID, &e.processID, &e.eventType, &e.payload, &e.correlationMethod, &e.source, &e.pid, &e.tgid, &e.ppid, &e.sessionID, &e.containerID, &e.cgroupID, &e.rawID, &e.createdAt); err != nil {
 			rows.Close()
 			return err
 		}
@@ -965,8 +968,14 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 			_, ok := edges[edgeKey{fromID, toID, edgeType}][id]
 			return ok
 		}
-		if identity.Version != "" && identity.Version != telemetry.RuntimeProcessGraphVersion && identity.Version != telemetry.RuntimeProcessGraphV2 {
+		sentryVersion := source == "gvisor_seccheck" && identity.Version == telemetry.RuntimeSentryGraphVersion
+		if identity.Version != "" && identity.Version != telemetry.RuntimeProcessGraphVersion && identity.Version != telemetry.RuntimeProcessGraphV2 && !sentryVersion {
 			add("error", "unsupported_runtime_process_identity", id, "unsupported process identity version %s", identity.Version)
+		}
+		if source == "gvisor_seccheck" {
+			if err := telemetry.ValidateSecCheckStoredEvent(telemetry.EventRecord{ID: id, RunID: runID, Source: source, Payload: payload, PID: e.pid, TGID: e.tgid, PPID: e.ppid, SessionID: e.sessionID, ToolCallID: toolCallID, ProcessID: processID, ContainerID: e.containerID, CgroupID: e.cgroupID, RawEventID: e.rawID, CreatedAt: e.createdAt, CorrelationMethod: correlationMethod}); err != nil {
+				add("error", "invalid_seccheck_scope", id, "SecCheck scope evidence is invalid: %v", err)
+			}
 		}
 		if telemetry.TelemetrySource(source, correlationMethod) {
 			if err := telemetry.ValidateStoredPayload(eventType, payload); err != nil {
@@ -1021,8 +1030,12 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 			}
 		}
 		if eventType == "file_write" || eventType == "file_open" {
-			if path := verifyPayloadPath(payload); path != "" {
-				fileNode := "workspace_file/" + path
+			path := verifyPayloadPath(payload)
+			fileNode := "workspace_file/" + path
+			if source == "gvisor_seccheck" {
+				fileNode, path = telemetry.SecCheckFileNode(telemetry.EventRecord{ID: id, Source: source, Payload: payload})
+			}
+			if path != "" && fileNode != "" {
 				if !hasEdge(eventNode, fileNode, "runtime_event_file") {
 					add("error", "missing_runtime_event_file_edge", id, "runtime event %s is not linked to file %s", id, path)
 				}

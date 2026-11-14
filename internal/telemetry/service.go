@@ -393,7 +393,14 @@ func ingestFilteredWithScope(store sqlStore, event IngestEvent, eventID string, 
 	method := "provided_context"
 	confidence := 1.0
 	bindingSource := event.BindingSource
-	if event.RunID == "" || event.SessionID == "" || event.ToolCallID == "" || event.ProcessID == "" {
+	if event.Source == "gvisor_seccheck" {
+		// Sentry numbers live in its root PID namespace, not the host's. Only
+		// the trusted receiver's Run assignment is available at this boundary.
+		if event.RunID == "" || event.SessionID != "" || event.ToolCallID != "" || event.ProcessID != "" || event.CgroupID != "" || event.CaptureCgroupID != "" {
+			return "", fmt.Errorf("SecCheck requires a Run scope without host or Tool Call identity")
+		}
+		method, bindingSource = "runtime_scope", "gvisor_registration"
+	} else if event.RunID == "" || event.SessionID == "" || event.ToolCallID == "" || event.ProcessID == "" {
 		var match correlation.Match
 		var ok bool
 		var err error
@@ -469,7 +476,7 @@ func ingestFilteredWithScope(store sqlStore, event IngestEvent, eventID string, 
 	}
 	if event.PID > 0 {
 		var err error
-		payload, err = stampProcessGraph(payload)
+		payload, err = stampProcessGraphForSource(payload, event.Source)
 		if err != nil {
 			return "", err
 		}
@@ -488,7 +495,7 @@ func ingestFilteredWithScope(store sqlStore, event IngestEvent, eventID string, 
 	// Consume process_exit to CLOSE the exiting pid's correlation window, so a
 	// later event that reuses the pid does not over-bind to this dead scope.
 	// Use the event's own timestamp when present (chronological close), else now.
-	if event.EventType == "process_exit" && event.PID != 0 {
+	if event.EventType == "process_exit" && event.PID != 0 && event.Source != "gvisor_seccheck" {
 		var err error
 		if raw.ProcessInstanceID != "" {
 			err = correlation.CloseProcessInstance(store, raw)
@@ -539,7 +546,7 @@ func eventIdentity(event IngestEvent) correlation.RawIdentity {
 
 func AllowedEventType(eventType string) bool {
 	switch eventType {
-	case "execve", "process_exit", "thread_exit", "syscall_result", "access_control", "access_control_state", "access_control_collection", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure", "tls_write", "tls_read", "setuid", "setgid", "ptrace", "file_rename", "file_unlink", "dns_query":
+	case "runtime_collection", "runtime_observation", "execve", "process_exit", "thread_exit", "syscall_result", "access_control", "access_control_state", "access_control_collection", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure", "tls_write", "tls_read", "setuid", "setgid", "ptrace", "file_rename", "file_unlink", "dns_query":
 		return true
 	default:
 		return false
@@ -593,8 +600,11 @@ func recordRuntimeCausalityEdges(db sqlStore, event IngestEvent, eventID, now st
 			// file lens works without a record workspace diff.
 			path = substantiveAbsFilePath(event.Payload)
 		}
-		if path != "" {
-			fileNode := "workspace_file/" + path
+		fileNode := "workspace_file/" + path
+		if event.Source == secCheckSource {
+			fileNode, path = SecCheckFileNode(EventRecord{ID: eventID, Source: event.Source, Payload: event.Payload})
+		}
+		if path != "" && fileNode != "" {
 			insert(eventNode, fileNode, "runtime_event_file")
 			if event.ProcessID != "" {
 				insert(event.ProcessID, fileNode, "runtime_process_file")

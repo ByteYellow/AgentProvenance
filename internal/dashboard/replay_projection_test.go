@@ -350,6 +350,40 @@ func TestReplayProjectionEmptySelection(t *testing.T) {
 	}
 }
 
+func TestReplayProjectionExcludesAllRuntimeOnlyEvidence(t *testing.T) {
+	_, db, _ := artifactStore(t)
+	const run = "runtime-only-selection"
+	const marker = "EXCLUDED-RUNTIME-ONLY-BODY"
+	if _, err := db.Exec(`INSERT INTO events(id,run_id,source,event_type,payload,created_at)
+		VALUES('runtime-only-event',?,'fixture','file_open',?,'2026-11-14T00:00:00Z')`, run, `{"path":"`+marker+`"}`); err != nil {
+		t.Fatal(err)
+	}
+	p, err := (Server{DB: db}).PrepareSelectedOfflineReplay(context.Background(), ReplaySelection{
+		RunID: run, Scope: "whole_run", ExcludeCategories: []string{"runtime"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	files, contents := replayZIPData(t, p)
+	if strings.Contains(contents, marker) {
+		t.Fatal("excluded runtime body leaked into empty replay")
+	}
+	// The selection inventory retains excluded IDs; evidence readers must not.
+	for name, data := range files {
+		if strings.HasPrefix(name, "data/") && strings.Contains(string(data), "runtime-only-event") {
+			t.Fatalf("excluded runtime record leaked into reader: %s", name)
+		}
+	}
+	if p.Inventory.Events != 0 || p.Inventory.SelectionSummary == nil || p.Inventory.SelectionSummary.Included != 0 || p.Inventory.SelectionSummary.Excluded != 1 {
+		t.Fatalf("empty selection inventory: %+v", p.Inventory)
+	}
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id=?`, run).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("source evidence changed: %d %v", count, err)
+	}
+}
+
 func TestReplayProjectionAnalysisFollowsRetainedEvidence(t *testing.T) {
 	paths, db, _ := artifactStore(t)
 	svc := agentcontext.Service{DB: db, Paths: paths}

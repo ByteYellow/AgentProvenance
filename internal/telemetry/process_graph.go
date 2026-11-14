@@ -11,6 +11,7 @@ import (
 const (
 	RuntimeProcessGraphVersion = "agentprov.runtime_process/v3"
 	RuntimeProcessGraphV2      = "agentprov.runtime_process/v2"
+	RuntimeSentryGraphVersion  = "agentprov.sentry_process/v1"
 )
 
 type RuntimeProcessNode struct {
@@ -31,6 +32,10 @@ type RuntimeProcessIdentity struct {
 // Stamp new ingests, not imported evidence. Readers retain the historical PID
 // graph for unversioned records without silently rewriting their signed edges.
 func stampProcessGraph(payload string) (string, error) {
+	return stampProcessGraphForSource(payload, "")
+}
+
+func stampProcessGraphForSource(payload, source string) (string, error) {
 	var body map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(payload), &body); err != nil {
 		return "", err
@@ -38,7 +43,11 @@ func stampProcessGraph(payload string) (string, error) {
 	if body == nil {
 		return "", fmt.Errorf("process graph payload must be an object")
 	}
-	version, _ := json.Marshal(RuntimeProcessGraphVersion)
+	name := RuntimeProcessGraphVersion
+	if source == secCheckSource {
+		name = RuntimeSentryGraphVersion
+	}
+	version, _ := json.Marshal(name)
 	body["runtime_process_identity"] = version
 	raw, err := json.Marshal(body)
 	return string(raw), err
@@ -77,6 +86,9 @@ func ProcessGraphIdentity(event EventRecord) RuntimeProcessIdentity {
 	}
 	if event.PID > 0 && event.TGID != event.PID {
 		identity.ThreadGroup = observation("tgid", event.TGID)
+	}
+	if identity.Version == RuntimeSentryGraphVersion && event.Source == secCheckSource {
+		return sentryProcessGraph(event, identity)
 	}
 	if (identity.Version != RuntimeProcessGraphVersion && identity.Version != RuntimeProcessGraphV2) || event.Source != "agentprov_ebpf" {
 		return identity

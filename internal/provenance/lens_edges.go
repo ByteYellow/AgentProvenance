@@ -474,6 +474,13 @@ func inferLensNode(id string) GraphLensNode {
 		return GraphLensNode{ID: id, Kind: "runtime_process", Label: lensShortRef(id), TrustOrigin: "runtime_observed"}
 	case strings.HasPrefix(id, "workspace_file/"):
 		return GraphLensNode{ID: id, Kind: "file", Label: strings.TrimPrefix(id, "workspace_file/"), TrustOrigin: "workspace_state"}
+	case strings.HasPrefix(id, "runtime_file/"):
+		parts := strings.SplitN(id, "/", 4)
+		label := id
+		if len(parts) == 4 {
+			label = parts[3]
+		}
+		return GraphLensNode{ID: id, Kind: "file", Label: label, TrustOrigin: "runtime_observed"}
 	case strings.HasPrefix(id, "agent/"):
 		return GraphLensNode{ID: id, Kind: "agent", Label: strings.TrimPrefix(id, "agent/"), TrustOrigin: "agent_asserted"}
 	case strings.HasPrefix(id, "llm_call/"):

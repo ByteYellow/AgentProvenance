@@ -9,8 +9,12 @@ English | [中文](CHANGELOG.zh-CN.md)
 - Add a bounded, version-pinned gVisor SecCheck transport receiver with
   registered sandbox identities, separate thread/process lifetimes and stream
   loss diagnostics. Include live `systrap` acceptance for two concurrent Linux
-  sandboxes. Spool, graph and user-facing setup integration remain in progress.
+  sandboxes. Reuse the durable spool for source-isolated ingestion, qualified
+  process/file graphs and signed Bundle round trips; user-facing setup and
+  producer health integration remain in progress.
   See the [SecCheck receiver guide](docs/gvisor-seccheck.md).
+- Export an empty read-only view when a runtime-only Run excludes all runtime
+  records, retaining the selection inventory without copying excluded bodies.
 
 ### Cross-sandbox execution
 

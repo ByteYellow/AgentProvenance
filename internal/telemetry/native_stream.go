@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -79,6 +80,10 @@ func ReadNativeStreamStatus(db *sql.DB) (NativeStreamStatus, error) {
 }
 
 func ReadNativeStreamStatusContext(ctx context.Context, db *sql.DB) (NativeStreamStatus, error) {
+	return readStreamStatus(ctx, db, "native")
+}
+
+func readStreamStatus(ctx context.Context, db *sql.DB, format string) (NativeStreamStatus, error) {
 	out := NativeStreamStatus{Counters: map[string]int64{}}
 	rows, err := db.QueryContext(ctx, `SELECT name, value FROM telemetry_native_counters`)
 	if err != nil {
@@ -91,23 +96,27 @@ func ReadNativeStreamStatusContext(ctx context.Context, db *sql.DB) (NativeStrea
 			rows.Close()
 			return out, err
 		}
-		out.Counters[key] = value
+		if format == "native" && !strings.Contains(key, ".") {
+			out.Counters[key] = value
+		} else if format != "native" && strings.HasPrefix(key, format+".") {
+			out.Counters[strings.TrimPrefix(key, format+".")] = value
+		}
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
 		return out, err
 	}
-	err = db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(size_bytes),0), COALESCE(SUM(event_count-ingested_count-dropped_count-failed_count),0), COALESCE(SUM(CASE WHEN status='processed' THEN 1 ELSE 0 END),0) FROM telemetry_spool_batches WHERE format='native' AND (status IN ('initializing','capturing','queued','processing') OR (status='processed' AND spool_path!=''))`).Scan(&out.QueuedBatches, &out.QueuedBytes, &out.PendingEvents, &out.CleanupPendingBatches)
+	err = db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(size_bytes),0), COALESCE(SUM(event_count-ingested_count-dropped_count-failed_count),0), COALESCE(SUM(CASE WHEN status='processed' THEN 1 ELSE 0 END),0) FROM telemetry_spool_batches WHERE format=? AND (status IN ('initializing','capturing','queued','processing') OR (status='processed' AND spool_path!=''))`, format).Scan(&out.QueuedBatches, &out.QueuedBytes, &out.PendingEvents, &out.CleanupPendingBatches)
 	if err != nil {
 		return out, err
 	}
 	var captured int64
-	if err := db.QueryRowContext(ctx, `SELECT COALESCE(SUM(event_count),0) FROM telemetry_spool_batches WHERE format='native'`).Scan(&captured); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COALESCE(SUM(event_count),0) FROM telemetry_spool_batches WHERE format=?`, format).Scan(&captured); err != nil {
 		return out, err
 	}
 	out.Counters["captured"] = captured
-	err = db.QueryRowContext(ctx, `SELECT error FROM telemetry_spool_batches WHERE format='native' AND error!='' AND (status IN ('initializing','capturing','queued','processing') OR (status='processed' AND spool_path!='')) ORDER BY updated_at DESC LIMIT 1`).Scan(&out.LastError)
+	err = db.QueryRowContext(ctx, `SELECT error FROM telemetry_spool_batches WHERE format=? AND error!='' AND (status IN ('initializing','capturing','queued','processing') OR (status='processed' AND spool_path!='')) ORDER BY updated_at DESC LIMIT 1`, format).Scan(&out.LastError)
 	if err != nil && err != sql.ErrNoRows {
 		return out, err
 	}
@@ -121,6 +130,7 @@ func ReadNativeStreamStatusContext(ctx context.Context, db *sql.DB) (NativeStrea
 type NativeStream struct {
 	service    SpoolService
 	opts       NativeStreamOptions
+	format     string
 	mu         sync.Mutex
 	processing sync.RWMutex
 	claimMu    sync.Mutex
@@ -141,18 +151,23 @@ type NativeStream struct {
 }
 
 func NewNativeStream(db *sql.DB, paths store.Paths, options NativeStreamOptions) (*NativeStream, error) {
+	return newRuntimeStream(db, paths, options, "native")
+}
+
+func newRuntimeStream(db *sql.DB, paths store.Paths, options NativeStreamOptions, format string) (*NativeStream, error) {
 	opts := options.defaults()
+	opts.Ingest.Format = format
 	if opts.BatchEvents < 1 || opts.BatchEvents > 4096 || opts.BatchBytes < 1024 || opts.BatchBytes > 16<<20 || opts.PendingTTL < time.Millisecond || opts.FlushInterval < time.Millisecond || opts.MaxQueuedBytes < opts.BatchBytes || opts.MaxQueuedBatches < 1 {
 		return nil, i18n.Errorf("invalid native spool limits: batch events 1..4096, batch bytes 1 KiB..16 MiB, positive intervals, queue >= batch")
 	}
 	if err := os.MkdirAll(paths.Spool, 0o700); err != nil {
 		return nil, err
 	}
-	lock, err := lockNativeStream(filepath.Join(paths.Spool, "native.lock"))
+	lock, err := lockNativeStream(filepath.Join(paths.Spool, format+".lock"))
 	if err != nil {
 		return nil, err
 	}
-	n := &NativeStream{service: SpoolService{DB: db, Paths: paths}, opts: opts, counters: map[string]int64{}, lock: lock, producerID: ids.New("sensor")}
+	n := &NativeStream{service: SpoolService{DB: db, Paths: paths}, opts: opts, format: format, counters: map[string]int64{}, lock: lock, producerID: ids.New("sensor")}
 	if err := n.recover(); err != nil {
 		n.lock.Close()
 		return nil, err
@@ -176,7 +191,7 @@ func incrementNative(db sqlStore, name string, value int64) error {
 
 func (n *NativeStream) flushCountersContext(ctx context.Context) error {
 	for name, value := range n.counters {
-		if _, err := store.ExecRetry(ctx, n.service.DB, `INSERT INTO telemetry_native_counters(name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=value+excluded.value`, name, value); err != nil {
+		if _, err := store.ExecRetry(ctx, n.service.DB, `INSERT INTO telemetry_native_counters(name,value) VALUES (?,?) ON CONFLICT(name) DO UPDATE SET value=value+excluded.value`, n.counterName(name), value); err != nil {
 			return err
 		}
 		delete(n.counters, name)
@@ -184,20 +199,23 @@ func (n *NativeStream) flushCountersContext(ctx context.Context) error {
 	return nil
 }
 
+func (n *NativeStream) counterName(name string) string {
+	if n.format == "native" {
+		return name
+	}
+	return n.format + "." + name
+}
+
+func (n *NativeStream) increment(db sqlStore, name string, value int64) error {
+	return incrementNative(db, n.counterName(name), value)
+}
+
 func (n *NativeStream) openBatch() error {
 	// Reserve a whole batch: queue limits remain conservative even if the
 	// process dies between a file write and updating its durable row count.
 	// Successfully committed evidence does not free disk capacity until its
 	// payload has actually been removed. Count cleanup failures as backlog too.
-	var queued int
-	var queuedBytes int64
-	if err := n.service.DB.QueryRow(`SELECT COUNT(*),COALESCE(SUM(size_bytes),0) FROM telemetry_spool_batches WHERE status IN ('initializing','capturing','queued','processing') OR (format='native' AND status='processed' AND spool_path!='')`).Scan(&queued, &queuedBytes); err != nil {
-		return err
-	}
-	if queued >= n.opts.MaxQueuedBatches || queuedBytes+n.opts.BatchBytes > n.opts.MaxQueuedBytes {
-		return SpoolBackpressureError{Queued: queued, QueuedBytes: queuedBytes, IncomingBytes: n.opts.BatchBytes, MaxQueued: n.opts.MaxQueuedBatches, MaxQueuedBytes: n.opts.MaxQueuedBytes, MaxBatchBytes: n.opts.BatchBytes, Reason: "telemetry_native_spool_capacity_full"}
-	}
-	id := ids.New("native")
+	id := ids.New(n.format)
 	path := filepath.Join(n.service.Paths.Spool, id+".jsonl")
 	options, err := json.Marshal(n.opts)
 	if err != nil {
@@ -208,7 +226,24 @@ func (n *NativeStream) openBatch() error {
 	if n.opts.PolicyEnabled {
 		policy = 1
 	}
-	_, err = store.ExecRetry(context.Background(), n.service.DB, `INSERT INTO telemetry_spool_batches (id,format,source_path,spool_path,status,size_bytes,native_options,expires_at,policy_enabled,created_at,updated_at,native_collector_id,native_first_sequence) VALUES (?,'native','sensor:stream',?,'initializing',?,?,?,?,?,?,?,?)`, id, path, n.opts.BatchBytes, string(options), now.Add(n.opts.PendingTTL).UnixMilli(), policy, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), n.producerID, n.accepted+1)
+	collector, first := "", uint64(0)
+	sourcePath := n.format + ":stream"
+	if n.format == "native" {
+		collector, first = n.producerID, n.accepted+1
+		sourcePath = "sensor:stream"
+	}
+	err = store.WithWriteTx(context.Background(), n.service.DB, func(tx *sql.Tx) error {
+		var queued int
+		var queuedBytes int64
+		if err := tx.QueryRow(`SELECT COUNT(*),COALESCE(SUM(size_bytes),0) FROM telemetry_spool_batches WHERE status IN ('initializing','capturing','queued','processing') OR (format IN ('native','gvisor_seccheck') AND status='processed' AND spool_path!='')`).Scan(&queued, &queuedBytes); err != nil {
+			return err
+		}
+		if queued >= n.opts.MaxQueuedBatches || queuedBytes+n.opts.BatchBytes > n.opts.MaxQueuedBytes {
+			return SpoolBackpressureError{Queued: queued, QueuedBytes: queuedBytes, IncomingBytes: n.opts.BatchBytes, MaxQueued: n.opts.MaxQueuedBatches, MaxQueuedBytes: n.opts.MaxQueuedBytes, MaxBatchBytes: n.opts.BatchBytes, Reason: "telemetry_native_spool_capacity_full"}
+		}
+		_, err := tx.Exec(`INSERT INTO telemetry_spool_batches (id,format,source_path,spool_path,status,size_bytes,native_options,expires_at,policy_enabled,created_at,updated_at,native_collector_id,native_first_sequence) VALUES (?,?,?,?,'initializing',?,?,?,?,?,?,?,?)`, id, n.format, sourcePath, path, n.opts.BatchBytes, string(options), now.Add(n.opts.PendingTTL).UnixMilli(), policy, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), collector, first)
+		return err
+	})
 	if err != nil {
 		return err
 	}
@@ -303,6 +338,12 @@ func (n *NativeStream) appendLine(line []byte) error {
 		n.counters["invalid_payload_"+event.EventType]++
 		return n.reject(event, err.Error())
 	}
+	return n.appendEvent(event)
+}
+
+// Prepared events share the native spool's durability and recovery, while each
+// producer keeps its own mapping, namespace, lock and status accounting.
+func (n *NativeStream) appendEvent(event IngestEvent) error {
 	event.Payload = redact.RedactString(event.Payload)
 	encoded, err := json.Marshal(event)
 	if err != nil {
@@ -310,7 +351,11 @@ func (n *NativeStream) appendLine(line []byte) error {
 	}
 	encoded = append(encoded, '\n')
 	if int64(len(encoded)) > n.opts.BatchBytes || len(encoded) >= 1<<20 {
-		return incrementNative(n.service.DB, "dropped_oversize", 1)
+		err := n.increment(n.service.DB, "dropped_oversize", 1)
+		if n.format != "native" {
+			return errors.Join(err, fmt.Errorf("runtime observation exceeds spool row limit"))
+		}
+		return err
 	}
 	if n.file != nil && (n.count >= n.opts.BatchEvents || n.size+int64(len(encoded)) > n.opts.BatchBytes) {
 		if err := n.seal(); err != nil {
@@ -326,7 +371,11 @@ func (n *NativeStream) appendLine(line []byte) error {
 		if err := n.openBatch(); err != nil {
 			var pressure SpoolBackpressureError
 			if errors.As(err, &pressure) {
-				return incrementNative(n.service.DB, "dropped_queue_full", 1)
+				countErr := n.increment(n.service.DB, "dropped_queue_full", 1)
+				if n.format != "native" {
+					return errors.Join(err, countErr)
+				}
+				return countErr
 			}
 			return err
 		}
@@ -422,7 +471,7 @@ func (n *NativeStream) sealFileContext(ctx context.Context, id string) error {
 				if err := f.Sync(); err != nil {
 					return err
 				}
-				if err := incrementNative(n.service.DB, "dropped_partial_recovery", 1); err != nil {
+				if err := n.increment(n.service.DB, "dropped_partial_recovery", 1); err != nil {
 					return err
 				}
 			}
@@ -451,6 +500,9 @@ func (n *NativeStream) sealFileContext(ctx context.Context, id string) error {
 			return err
 		}
 		for group, total := range scopes {
+			if n.format != "native" {
+				break
+			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO telemetry_native_scope_counts(batch_id,cgroup_id,event_count) VALUES (?,?,?)`, id, group, total); err != nil {
 				return err
 			}
@@ -465,7 +517,7 @@ func (n *NativeStream) recover() error {
 	// bounded runtime sweeps so a removal failure cannot block startup.
 	cursor := ""
 	for {
-		rows, err := n.service.DB.Query(`SELECT id,status,spool_path FROM telemetry_spool_batches WHERE format='native' AND id>? AND status IN ('initializing','capturing','processing') ORDER BY id LIMIT 256`, cursor)
+		rows, err := n.service.DB.Query(`SELECT id,status,spool_path FROM telemetry_spool_batches WHERE format=? AND id>? AND status IN ('initializing','capturing','processing') ORDER BY id LIMIT 256`, n.format, cursor)
 		if err != nil {
 			return err
 		}
@@ -547,7 +599,7 @@ func (n *NativeStream) cleanupProcessed(limit int) error {
 	if n.closed {
 		return os.ErrClosed
 	}
-	rows, err := n.service.DB.Query(`SELECT id,spool_path FROM telemetry_spool_batches WHERE format='native' AND status='processed' AND spool_path!='' AND retry_at<=? ORDER BY retry_at,updated_at LIMIT ?`, time.Now().UnixMilli(), limit)
+	rows, err := n.service.DB.Query(`SELECT id,spool_path FROM telemetry_spool_batches WHERE format=? AND status='processed' AND spool_path!='' AND retry_at<=? ORDER BY retry_at,updated_at LIMIT ?`, n.format, time.Now().UnixMilli(), limit)
 	if err != nil {
 		return err
 	}
@@ -575,7 +627,7 @@ func (n *NativeStream) cleanupProcessed(limit int) error {
 			if _, updateErr := store.ExecRetry(context.Background(), n.service.DB, `UPDATE telemetry_spool_batches SET error=?,retry_at=?,updated_at=? WHERE id=? AND status='processed' AND spool_path!=''`, err.Error(), time.Now().Add(5*time.Second).UnixMilli(), time.Now().UTC().Format(time.RFC3339Nano), v.id); updateErr != nil {
 				return updateErr
 			}
-			if err := incrementNative(n.service.DB, "cleanup_failures", 1); err != nil {
+			if err := n.increment(n.service.DB, "cleanup_failures", 1); err != nil {
 				return err
 			}
 		}
@@ -686,7 +738,7 @@ func (n *NativeStream) processContext(ctx context.Context, limit int) (int, erro
 	now := time.Now().UnixMilli()
 	// Expired batches must not be starved by a continuous supply of fresh
 	// batches; release their capacity before prioritizing new work.
-	rows, err := n.service.DB.Query(`SELECT id FROM telemetry_spool_batches WHERE format='native' AND status='queued' AND retry_at<=? ORDER BY CASE WHEN expires_at<=? THEN 0 ELSE 1 END,retry_at,created_at LIMIT ?`, now, now, limit)
+	rows, err := n.service.DB.Query(`SELECT id FROM telemetry_spool_batches WHERE format=? AND status='queued' AND retry_at<=? ORDER BY CASE WHEN expires_at<=? THEN 0 ELSE 1 END,retry_at,created_at LIMIT ?`, n.format, now, now, limit)
 	if err != nil {
 		return 0, err
 	}
@@ -715,7 +767,7 @@ func (n *NativeStream) processContext(ctx context.Context, limit int) (int, erro
 			if ctx.Err() != nil {
 				return 0, ctx.Err()
 			}
-			if err := incrementNative(n.service.DB, "retry_failures", 1); err != nil {
+			if err := n.increment(n.service.DB, "retry_failures", 1); err != nil {
 				return 0, err
 			}
 		}
@@ -728,13 +780,13 @@ func (n *NativeStream) processContext(ctx context.Context, limit int) (int, erro
 // TTL; neither a full-node empty queue nor TTL expiry is required to seal a run.
 func (n *NativeStream) Drain(ctx context.Context) error {
 	for pass := 0; pass < 8; pass++ {
-		before, err := ReadNativeStreamStatusContext(ctx, n.service.DB)
+		before, err := readStreamStatus(ctx, n.service.DB, n.format)
 		if err != nil {
 			return err
 		}
 		cursor := ""
 		for {
-			rows, err := n.service.DB.QueryContext(ctx, `SELECT id FROM telemetry_spool_batches WHERE format='native' AND status='queued' AND id>? ORDER BY id LIMIT 32`, cursor)
+			rows, err := n.service.DB.QueryContext(ctx, `SELECT id FROM telemetry_spool_batches WHERE format=? AND status='queued' AND id>? ORDER BY id LIMIT 32`, n.format, cursor)
 			if err != nil {
 				return err
 			}
@@ -765,7 +817,7 @@ func (n *NativeStream) Drain(ctx context.Context) error {
 			}
 			cursor = ids[len(ids)-1]
 		}
-		after, err := ReadNativeStreamStatusContext(ctx, n.service.DB)
+		after, err := readStreamStatus(ctx, n.service.DB, n.format)
 		if err != nil {
 			return err
 		}
@@ -903,10 +955,10 @@ func (n *NativeStream) processBatchContext(ctx context.Context, id string) (proc
 		if opts.PolicyEnabled {
 			for _, result := range groups {
 				evaluateSpoolPolicy(db, result)
-				if err := incrementNative(db, "policy_failures", int64(result.Failed)); err != nil {
+				if err := n.increment(db, "policy_failures", int64(result.Failed)); err != nil {
 					return err
 				}
-				if err := incrementNative(db, "policy_decisions", int64(result.PolicyDecisions)); err != nil {
+				if err := n.increment(db, "policy_decisions", int64(result.PolicyDecisions)); err != nil {
 					return err
 				}
 			}
@@ -983,7 +1035,7 @@ func (n *NativeStream) processNativeChunk(ctx context.Context, id, path, expecte
 	}
 	started := time.Now()
 	count := 0
-	ingested, dropped, failed := 0, 0, 0
+	ingested, dropped, failed, duplicates := 0, 0, 0, 0
 	groups := map[string]*JSONLIngestResult{}
 	for line := offset + 1; line <= len(lines); line++ {
 		if count > 0 && (count >= maxNativeTransactionRows || time.Since(started) >= nativeTransactionBudget) {
@@ -1016,7 +1068,7 @@ func (n *NativeStream) processNativeChunk(ctx context.Context, id, path, expecte
 			if err != nil {
 				return 0, nil, err
 			}
-			if opts.Ingest.DropUncorrelated && event.EventType != "resource_pressure" && samplingScope == nil {
+			if n.format == "native" && opts.Ingest.DropUncorrelated && event.EventType != "resource_pressure" && samplingScope == nil {
 				_, ok, err := correlation.Resolve(tx, identity)
 				if err != nil {
 					return 0, nil, err
@@ -1031,7 +1083,12 @@ func (n *NativeStream) processNativeChunk(ctx context.Context, id, path, expecte
 			}
 			if outcome == "" {
 				var err error
-				eventID, err = ingestFilteredWithScope(tx, event, ids.New("evt"), samplingScope)
+				duplicate := false
+				if n.format == "gvisor_seccheck" {
+					eventID, duplicate, err = ingestSecCheckEvent(tx, event)
+				} else {
+					eventID, err = ingestFilteredWithScope(tx, event, ids.New("evt"), samplingScope)
+				}
 				if err != nil {
 					return 0, nil, err
 				}
@@ -1039,20 +1096,29 @@ func (n *NativeStream) processNativeChunk(ctx context.Context, id, path, expecte
 				if err != nil {
 					return 0, nil, err
 				}
-				if err := recordNativeCoverage(tx, event); err != nil {
-					return 0, nil, err
+				if n.format == "native" {
+					if err := recordNativeCoverage(tx, event); err != nil {
+						return 0, nil, err
+					}
 				}
-				if err := updateNativeWindows(tx, record); err != nil {
-					return 0, nil, err
+				if !duplicate {
+					if err := updateNativeWindows(tx, record); err != nil {
+						return 0, nil, err
+					}
 				}
 				result := groups[record.RunID]
 				if result == nil {
-					result = &JSONLIngestResult{Format: "native", Path: path, FileSHA256: expectedHash}
+					result = &JSONLIngestResult{Format: n.format, Path: path, FileSHA256: expectedHash}
 					groups[record.RunID] = result
 				}
 				result.Read++
-				result.Ingested++
-				result.EventIDs = append(result.EventIDs, eventID)
+				if duplicate {
+					result.Skipped++
+					duplicates++
+				} else {
+					result.Ingested++
+					result.EventIDs = append(result.EventIDs, eventID)
+				}
 				outcome = "ingested"
 				ingested++
 			}
@@ -1072,8 +1138,8 @@ func (n *NativeStream) processNativeChunk(ctx context.Context, id, path, expecte
 			return 0, nil, err
 		}
 	}
-	for name, count := range map[string]int{"ingested": ingested, "expired_uncorrelated": dropped, "invalid": failed} {
-		if err := incrementNative(tx, name, int64(count)); err != nil {
+	for name, count := range map[string]int{"ingested": ingested - duplicates, "duplicates": duplicates, "expired_uncorrelated": dropped, "invalid": failed} {
+		if err := n.increment(tx, name, int64(count)); err != nil {
 			return 0, nil, err
 		}
 	}
