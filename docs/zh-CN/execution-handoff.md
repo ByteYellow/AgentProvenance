@@ -73,9 +73,23 @@ Linux 上具备可写 cgroup v2 子树时，取消、执行超时和启动后检
 
 ### 原生采集边界
 
-进程内执行器可通过 `Executor.Capture` 共享一个持续运行的 Sensor 和持久 spool。
-集成方负责启动与关闭顺序：先启动采集，再启动执行器；关闭时先停止执行器，再停止
-采集。Daemon CLI 暂未自动接入该控制器。
+Linux 上可在执行配置中增加 `"capture": {"mode": "native"}`，由 Daemon 启动一个
+共享 Sensor 和持久 spool。运行账号需要 BPF 权限及可写的 cgroup v2 子树。省略
+`capture` 时，保留外部采集器或仅命令记录的部署方式，macOS 也可使用。
+
+Daemon 等待必需探针就绪后，再启动执行器和 HTTP 监听。准备失败会释放采集器锁；
+Sensor 或 spool 意外退出时，Daemon 停止服务。正常关闭先收尾执行任务，再关闭采集。
+同一数据目录拒绝重复启动采集器。`sensor status --json` 可查询对应能力快照与队列计数。
+
+可选配置包括：`ring_buffer_mib`（默认 64，范围 1–256 的二次幂）、`tls_targets`
+（最多 128 个绝对路径）、`auto_tls`、`apparmor_state`、`seccomp_state`（默认启用）、
+`no_policy`（默认 false）、`startup_timeout_seconds`（默认 15，范围 1–120）及
+`close_timeout_seconds`（默认 3，范围 1–30）。同时沿用 `AGENTPROV_SSL_LIB`、
+`AGENTPROV_GO_TLS_BIN`、`AGENTPROV_LIBC_LIB` 环境配置。
+采集复用现有有界 spool 和迟到绑定留存机制，排除 Daemon 自身 cgroup；数据目录中的
+任务工作区仍参与采集。
+
+进程内集成也可直接配置 `Executor.Capture`，按相同顺序管理启动和关闭。
 
 命令启动前，控制器检查本次执行拥有的内核 cgroup 和必需探针的就绪状态，在内核
 环形缓冲区插入标记，保存对应的解码边界、能力快照及固定 spool 范围。准备失败时

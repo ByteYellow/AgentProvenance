@@ -9,12 +9,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/daemon"
 	"github.com/byteyellow/agentprovenance/internal/handoff"
 	"github.com/byteyellow/agentprovenance/internal/record"
+	"github.com/byteyellow/agentprovenance/internal/sensor"
 	"github.com/spf13/cobra"
 )
 
@@ -98,7 +100,7 @@ func daemonCmd(dataDir *string) *cobra.Command {
 			}
 			server.IngestAllowDir = absAllow
 			server.ListenAddr = listen
-			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			ctx, stop := signal.NotifyContext(cmd.Context(), syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 			if executionConfig != "" {
 				if server.AuthToken == "" || insecureOpen {
@@ -121,16 +123,34 @@ func daemonCmd(dataDir *string) *cobra.Command {
 				if err != nil {
 					return err
 				}
+				if config.Capture != nil {
+					capture, err := startExecutionCapture(ctx, server.DB, server.Paths, *config.Capture,
+						commandLanguage(cmd), cmd.ErrOrStderr(), sensor.RunWithOptions)
+					if err != nil {
+						return err
+					}
+					server.Execution.Capture = capture.Controller
+					defer func() { runErr = errors.Join(runErr, capture.Close()) }()
+					go func() {
+						select {
+						case <-capture.failed:
+							stop()
+						case <-ctx.Done():
+						}
+					}()
+				}
 				closeExecutor, err := server.Execution.Start(ctx)
 				if err != nil {
 					return err
 				}
 				defer func() { runErr = errors.Join(runErr, closeExecutor()) }()
 			}
-			go server.StartSampler(ctx)
-			go server.StartSpoolWorker(ctx)
-			go server.StartEvidenceWorker(ctx)
-			go server.StartGCWorker(ctx)
+			var workers sync.WaitGroup
+			for _, worker := range []func(context.Context){server.StartSampler, server.StartSpoolWorker, server.StartEvidenceWorker, server.StartGCWorker} {
+				workers.Add(1)
+				go func(run func(context.Context)) { defer workers.Done(); run(ctx) }(worker)
+			}
+			defer func() { stop(); workers.Wait() }()
 			fmt.Fprintf(cmd.ErrOrStderr(), commandText(cmd, "agentprov daemon listening on http://%s sample_interval=%s sample_limit=%d sample_timeout=%s spool_interval=%s evidence_interval=%s gc_interval=%s\n"), listen, sampleInterval, sampleLimit, sampleTimeout, spoolInterval, evidenceInterval, gcInterval)
 			httpServer := &http.Server{Addr: listen, Handler: server.Handler()}
 			go func() {

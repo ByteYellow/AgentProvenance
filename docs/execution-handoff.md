@@ -92,10 +92,29 @@ packages and durable receipts.
 
 ### Native capture boundaries
 
-The in-process executor can share a live Sensor and durable native spool through
-`Executor.Capture`. The operator owns their lifetime: start capture before the
-executor, and stop the executor before capture. The daemon CLI does not yet wire
-this controller automatically.
+On Linux, add `"capture": {"mode": "native"}` to the execution configuration to
+start one shared Sensor and durable native spool with the daemon. It requires
+BPF permissions and a writable cgroup v2 subtree. Omit `capture` to retain an
+externally managed sensor or command-only deployment, including macOS.
+
+The daemon waits for required probes before starting its execution worker and
+HTTP listener. Startup failure releases the collector lock. An unexpected sensor
+or spool failure stops the daemon; normal shutdown closes active executions
+before the collector. A second collector using the same store is refused.
+`sensor status --json` reads the same capability snapshot and spool counters.
+
+Optional capture settings are `ring_buffer_mib` (default 64, power of two from
+1 to 256), `tls_targets` (up to 128 absolute paths), `auto_tls`, `apparmor_state`
+and `seccomp_state` (each enabled by default), `no_policy` (default false),
+`startup_timeout_seconds` (default 15, range 1 to 120) and
+`close_timeout_seconds` (default 3, range 1 to 30). Existing `AGENTPROV_SSL_LIB`,
+`AGENTPROV_GO_TLS_BIN` and `AGENTPROV_LIBC_LIB` target settings are also used.
+Collection uses the existing bounded native spool and late-binding retention.
+It excludes the daemon's own cgroup; task workspaces inside the data directory
+remain observable.
+
+In-process integrations can also supply `Executor.Capture` and own the same
+start/stop ordering themselves.
 
 Before launch, the controller requires the execution's owned kernel cgroup and
 ready mandatory probes. It inserts a marker into the live kernel ring and saves

@@ -68,7 +68,7 @@ def main():
         while True:
             report = api("GET", "/v1/executions/" + attempt_id)
             state = report["attempt"]["state"]["execution"]
-            if state == "succeeded":
+            if state == "succeeded" and (not config.get("capture") or report["attempt"]["state"]["capture"] in {"sealed", "incomplete"}):
                 break
             if state in {"failed", "unknown", "cancelled"} or time.monotonic() > deadline:
                 raise RuntimeError("execution did not succeed: " + state)

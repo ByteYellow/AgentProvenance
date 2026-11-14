@@ -27,6 +27,20 @@ func TestExecutionConfig(t *testing.T) {
 	}
 }
 
+func TestExecutionCaptureConfig(t *testing.T) {
+	base := `{"target":{"producer_id":"vm","instance_id":"one","generation":"first"},"caller":{"principal_id":"router","producer_id":"mac","namespace":"user"},"capture":`
+	if _, err := ReadConfig(strings.NewReader(base + `{"mode":"native"}}`)); err != nil {
+		t.Fatalf("native capture configuration: %v", err)
+	}
+	for _, capture := range []string{`{}`, `{"mode":"unknown"}`, `{"mode":"native","ring_buffer_mib":3}`,
+		`{"mode":"native","close_timeout_seconds":-1}`, `{"mode":"native","startup_timeout_seconds":121}`,
+		`{"mode":"native","tls_targets":["relative/libssl.so"]}`} {
+		if _, err := ReadConfig(strings.NewReader(base + capture + `}`)); err == nil {
+			t.Fatalf("accepted invalid capture configuration: %s", capture)
+		}
+	}
+}
+
 func TestExecutionDeliveryConfigLoadsRelativePinnedKeys(t *testing.T) {
 	root := t.TempDir()
 	pub, key, err := ed25519.GenerateKey(rand.Reader)

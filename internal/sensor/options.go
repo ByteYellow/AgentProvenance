@@ -22,7 +22,10 @@ type Options struct {
 	LibcLib  string
 	GoTLSBin string
 	Context  context.Context
-	OnReady  func()
+	// ContextOnly leaves OS signal handling to the embedding supervisor, which
+	// cancels Context after its executions have recorded their final boundary.
+	ContextOnly bool
+	OnReady     func()
 	// Checkpointer optionally enables ordered kernel/decoder boundaries for a
 	// shared collector. Use a fresh NewCheckpointer for each sensor invocation.
 	Checkpointer *Checkpointer

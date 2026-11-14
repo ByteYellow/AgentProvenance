@@ -15,7 +15,6 @@ import (
 	"io/fs"
 	"net"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -201,11 +200,7 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	records, readResult, stopRecords := readSensorEvents(rd)
 	defer stopRecords()
 
-	parent := opts.Context
-	if parent == nil {
-		parent = context.Background()
-	}
-	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
+	ctx, stop := sensorContext(opts)
 	defer stop()
 	// Run discovery separately from ring-buffer consumption. Its bounded first
 	// pass attaches configured targets before the workload readiness callback.

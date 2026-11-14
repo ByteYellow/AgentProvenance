@@ -49,7 +49,9 @@ def main():
         while time.monotonic() < deadline:
             result = api("GET", "/v1/executions/" + attempt["id"])
             if result["attempt"]["state"]["execution"] == state:
-                return result
+                capture = result["attempt"]["state"]["capture"]
+                if state == "running" or not config.get("capture") or capture in {"sealed", "incomplete"}:
+                    return result
             if result["attempt"]["state"]["execution"] in {"failed", "unknown"}:
                 raise RuntimeError(json.dumps(result))
             time.sleep(0.05)
@@ -86,11 +88,37 @@ def main():
             raise RuntimeError("concurrent calls shared local identity")
         if all(s["scope_kind"] == "cgroup" for s in scopes) and len({s["cgroup_id"] for s in scopes}) != 2:
             raise RuntimeError("concurrent calls shared a kernel scope")
+        native_file_events = []
         for request, report in zip(requests, reports):
             if report["checkpoint"]["source"] != request["source"]:
                 raise RuntimeError("source attribution changed")
             if "totals.json" not in report["checkpoint"]["result"]["changed_files"]:
                 raise RuntimeError("analysis artifact was not captured")
+            if config.get("capture"):
+                capture = report["checkpoint"].get("capture_report", {})
+                if not capture.get("start") or not capture.get("end"):
+                    raise RuntimeError("native capture lacks live start/end boundaries")
+                if capture["state"] != report["attempt"]["state"]["capture"]:
+                    raise RuntimeError("native capture report disagrees with attempt")
+                scope = report["checkpoint"]["scope"]
+                cursor = ""
+                found = []
+                while True:
+                    query = urllib.parse.urlencode({"run": scope["run_id"], "type": "file_write", "limit": 100, "cursor": cursor})
+                    page = api("GET", "/v1/telemetry/events?" + query)
+                    for event in page["events"]:
+                        payload = json.loads(event["payload"])
+                        raw = payload.get("payload", {}).get("raw", {})
+                        if event["source"] == "agentprov_ebpf" and event["cgroup_id"] == scope["cgroup_id"] and pathlib.PurePosixPath(raw.get("path", "")).name == "totals.json":
+                            found.append({"event_id": event["id"], "run_id": event["run_id"], "cgroup_id": event["cgroup_id"], "path": raw["path"]})
+                    if not page["has_more"]:
+                        break
+                    if not page.get("next_cursor") or page["next_cursor"] == cursor:
+                        raise RuntimeError("native file evidence pagination did not advance")
+                    cursor = page["next_cursor"]
+                if not found:
+                    raise RuntimeError("task artifact lacks a native file-write event in its own scope")
+                native_file_events.extend(found)
         replay = api("POST", "/v1/executions", requests[0])
         if not replay["reused"] or replay["attempt"]["id"] != submitted[0]["id"]:
             raise RuntimeError("transport retry repeated execution")
@@ -110,6 +138,9 @@ def main():
         result = {"fixture": "execution-handoff-http/v1", "target": config["target"],
                   "requests": requests, "completed": reports, "replay": replay, "stop": stop, "cancelled": cancelled,
                   "checks": ["concurrent_analysis", "source_isolation", "artifact_capture", "idempotent_replay", "explicit_retry", "durable_stop"]}
+        if config.get("capture"):
+            result["checks"].extend(["native_capture_boundaries", "native_artifact_writes"])
+            result["native_file_events"] = native_file_events
         args.output.write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps({"status": "passed", "checks": result["checks"], "output": str(args.output)}))
     finally:
