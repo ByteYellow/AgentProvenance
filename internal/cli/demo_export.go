@@ -33,6 +33,44 @@ type publicReplayManifest struct {
 	Verifications []demoVerification             `json:"verifications"`
 }
 
+type publicReplayCatalog struct {
+	Guides        []projectdocs.Entry       `json:"guides"`
+	SchemaVersion string                    `json:"schema_version"`
+	Commit        string                    `json:"commit"`
+	Summaries     json.RawMessage           `json:"summaries"`
+	RunIndexes    map[string]staticdata.Ref `json:"run_indexes"`
+	Frameworks    *staticdata.Ref           `json:"frameworks,omitempty"`
+	Verifications []demoVerification        `json:"verifications"`
+}
+
+type publicReplayRunIndex struct {
+	SchemaVersion string              `json:"schema_version"`
+	RunID         string              `json:"run_id"`
+	Run           dashboard.ReplayRun `json:"run"`
+}
+
+func buildPublicReplayCatalog(manifest publicReplayManifest, writer *staticdata.Writer) (publicReplayCatalog, error) {
+	catalog := publicReplayCatalog{
+		SchemaVersion: "agentprovenance.static_catalog/v1", Commit: manifest.Commit,
+		Guides: manifest.Guides, Summaries: manifest.Summaries, Verifications: manifest.Verifications,
+		RunIndexes: make(map[string]staticdata.Ref, len(manifest.Runs)),
+	}
+	for id, run := range manifest.Runs {
+		if ref, ok := run.API["frameworks"]; ok {
+			if catalog.Frameworks != nil && *catalog.Frameworks != ref {
+				return publicReplayCatalog{}, fmt.Errorf("shared framework catalog differs for run %q", id)
+			}
+			catalog.Frameworks = &ref
+		}
+		ref, err := writer.JSON(publicReplayRunIndex{SchemaVersion: "agentprovenance.replay_run/v1", RunID: id, Run: run})
+		if err != nil {
+			return publicReplayCatalog{}, fmt.Errorf("export replay index %q: %w", id, err)
+		}
+		catalog.RunIndexes[id] = ref
+	}
+	return catalog, nil
+}
+
 func demoExportCmd() *cobra.Command {
 	var output string
 	cmd := &cobra.Command{Use: "export", Short: "build a static website from the bundled public demos and guides", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
@@ -217,6 +255,19 @@ func demoExportCmd() *cobra.Command {
 			return err
 		}
 		if err = write("replay-manifest.json", data); err != nil {
+			return err
+		}
+		// Keep the original manifest for existing readers and tooling. The current
+		// reader loads only this directory and the selected run's hashed index.
+		lazy, err := buildPublicReplayCatalog(manifest, writer)
+		if err != nil {
+			return err
+		}
+		data, err = json.Marshal(lazy)
+		if err != nil {
+			return err
+		}
+		if err = write("replay-catalog.json", data); err != nil {
 			return err
 		}
 		if err = write("index.html", []byte(publicSiteIndex)); err != nil {

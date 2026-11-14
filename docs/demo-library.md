@@ -69,4 +69,21 @@ selected reading copy and its original signed evidence bundle are separate
 artifacts; keep the original bundle and public key when signature verification
 is needed.
 
+## Loading recordings
+
+The static site loads a small catalog first, then the index and evidence for the
+selected Run. Comparing Runs or following a related session loads the additional
+recording when needed. Historical recordings stay unloaded until requested.
+
+Existing replay links and original signed bundles remain available. The reader
+also supports older sites with a single manifest and self-contained offline
+exports.
+
+To compare two exported sites on the same machine, run
+`node scripts/bench_static_replay.cjs BEFORE_DIRECTORY AFTER_DIRECTORY` with the
+Playwright dependency installed. `PLAYWRIGHT_CHANNEL=chrome` selects an installed
+Chrome browser. The JSON report separates cold and warm cache measurements,
+transferred bytes, graph readiness and retained JavaScript heap. It also records
+the browser, CPU and source commits.
+
 Return to [all demo commands](../demo/README.md) or the [project quickstart](../README.md#quickstart).

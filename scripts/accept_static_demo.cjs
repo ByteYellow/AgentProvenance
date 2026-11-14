@@ -5,11 +5,12 @@ const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const { gunzipSync } = require('node:zlib');
 const { tmpdir } = require('node:os');
+const { createHash } = require('node:crypto');
 
 async function main() {
   const site = new URL(process.argv[2]), native = new URL(process.argv[3]);
   const browser = await chromium.launch({headless:true, ...(process.env.PLAYWRIGHT_CHANNEL ? {channel:process.env.PLAYWRIGHT_CHANNEL} : {})});
-  const report = {parity:0, pages:0, runs:0, sessions:0, focusedGraphs:0, contentPages:0};
+  const report = {parity:0, pages:0, runs:0, sessions:0, focusedGraphs:0, contentPages:0, runIndexes:0};
   const errors = [];
   const failedRequests = [];
   let page;
@@ -21,14 +22,30 @@ async function main() {
       if(url.origin===site.origin && url.pathname.startsWith(site.pathname) && !url.pathname.includes('/api/'))return route.continue();
       errors.push('Unexpected browser request: '+url);return route.abort();
     });
+    const browserPaths=[];
     page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+    page.on('request',request=>browserPaths.push(new URL(request.url()).pathname));
     page.on('requestfailed',request=>failedRequests.push({url:request.url(),error:request.failure()?.errorText}));
     const manifest=await responseJSON(context.request,new URL('replay-manifest.json',site).href);
     assert.equal(Object.keys(manifest.runs).length,12);
     assert.ok(manifest.verifications.every(v=>v.signature_verified&&v.graph.status==='ok'));
+    const catalog=await responseJSON(context.request,new URL('replay-catalog.json',site).href);
+    assert.equal(catalog.schema_version,'agentprovenance.static_catalog/v1');
+    assert.equal(catalog.commit,manifest.commit);assert.deepEqual(catalog.summaries,manifest.summaries);
+    assert.deepEqual(Object.keys(catalog.run_indexes).sort(),Object.keys(manifest.runs).sort());
+    for(const [run,ref] of Object.entries(catalog.run_indexes)){
+      const response=await context.request.get(new URL(ref.path,site).href);assert.equal(response.status(),200);
+      const bytes=gunzipSync(await response.body());assert.equal(bytes.length,ref.bytes);
+      assert.equal(createHash('sha256').update(bytes).digest('hex'),ref.sha256);
+      const index=JSON.parse(bytes);assert.equal(index.schema_version,'agentprovenance.replay_run/v1');
+      assert.equal(index.run_id,run);assert.deepEqual(index.run,manifest.runs[run]);report.runIndexes++;
+    }
     const data=async ref=>{const r=await context.request.get(new URL(ref.path,site).href);assert.ok(r.ok());return JSON.parse(gunzipSync(await r.body()).toString());};
     await page.goto(new URL('en/replay.html?run=run-dbc2adf273d4',site).href);
     await page.waitForFunction(()=>window._lensManifest && document.querySelector('#dag svg'));
+    const indexPaths=Object.values(catalog.run_indexes).map(ref=>new URL(ref.path,site).pathname);
+    assert.deepEqual([...new Set(browserPaths.filter(path=>indexPaths.includes(path)))],[new URL(catalog.run_indexes['run-dbc2adf273d4'].path,site).pathname]);
+    assert.ok(!browserPaths.includes(new URL('replay-manifest.json',site).pathname),'the browser must not load the full legacy manifest');
     const compare=async query=>{
       const [expected,actual]=await Promise.all([responseJSON(context.request,new URL(query,native).href),page.evaluate(q=>AgentProvReplay.query(q),query)]).catch(error=>{console.error('Query failed: '+query);throw error;});
       // Import locations differ; compare the same content-addressed object path.

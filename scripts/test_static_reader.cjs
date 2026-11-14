@@ -157,6 +157,78 @@ async function main(){
  catalog.runs.run.audit.rule='agentprov.audit_lifecycle_operation/v999';
  files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
  await assert.rejects(()=>setup().query('/api/audit/associations?run=run'),/Unsupported|unsupported/);
- console.log('Static reader: UTF-8 paging, process lifetime focus, legacy replay, search/compare scopes and cancellation, run scope and integrity checks passed.');
+ await catalogChecks();
+ console.log('Static reader: UTF-8 paging, process lifetime focus, legacy replay, search/compare scopes and cancellation, lazy run catalogs, run scope and integrity checks passed.');
+}
+
+async function catalogChecks(){
+ const files=new Map(),requests=[];
+ const save=value=>{const bytes=Buffer.from(JSON.stringify(value)),sha=createHash('sha256').update(bytes).digest('hex'),path='data/'+sha+'.json.gz';files.set('/site/'+path,gzipSync(bytes));return {path,sha256:sha,bytes:bytes.length};};
+ const relations=save({relations:[
+  {from:{run_id:'a',harness:'codex',session_id:'root',available:true},to:{run_ids:['b','excluded'],harness:'codex',session_id:'child',available:true}},
+  {from:{run_id:'missing',harness:'codex',session_id:'root',available:true},to:{run_id:'a',harness:'codex',session_id:'missing',available:true}}
+ ]});
+ const runs={
+  a:{api:{summary:save({run_id:'a',value:'A'})},sessions:{'["codex","root"]':{relations:{'':relations}}}},
+  b:{api:{summary:save({run_id:'b',value:'B'})},sessions:{'["codex","child"]':{}}},
+  archived:{api:{summary:save({run_id:'archived',value:'historical'})},sessions:{}}
+ };
+ const catalog={schema_version:'agentprovenance.static_catalog/v1',summaries:Object.keys(runs).map(run=>({run})),frameworks:save([{id:'built-in',control_count:1}]),run_indexes:{}};
+ for(const [run_id,run] of Object.entries(runs))catalog.run_indexes[run_id]=save({schema_version:'agentprovenance.replay_run/v1',run_id,run});
+ const compact='/site/replay-catalog.json',legacy='/site/replay-manifest.json';
+ const publish=()=>files.set(compact,Buffer.from(JSON.stringify(catalog)));
+ publish();
+ const setup=(options={})=>{
+  const window={};
+  if(options.offline)window.AgentProvOffline={manifest:()=>({schema_version:'agentprovenance.static_replay/v1',runs,summaries:catalog.summaries}),read:ref=>files.get('/site/'+ref.path)};
+  const box={window,document:{querySelector:()=>({content:'/site/'})},location:new URL('https://example.test/site/en/replay.html'),URL,URLSearchParams,Map,Set,TextEncoder,TextDecoder,structuredClone,Response,DecompressionStream,crypto:webcrypto,btoa,atob,fetch:async url=>{const path=new URL(url).pathname;requests.push(path);if(options.fetch)return options.fetch(path);const bytes=files.get(path);return new Response(bytes||'missing',{status:bytes?200:404});}};
+  vm.runInNewContext(source,box);return window.AgentProvReplay;
+ };
+ const reader=setup();
+ assert.equal((await reader.query('/api/runs')).length,3);
+ assert.deepEqual(requests,[compact],'listing runs must not load per-run indexes or the legacy manifest');
+ assert.equal((await reader.query('/api/frameworks'))[0].id,'built-in');
+ assert.deepEqual(requests,[compact,'/site/'+catalog.frameworks.path],'global frameworks must not load an unrelated run index');
+ const result=await Promise.all([reader.query('/api/summary?run=a'),reader.query('/api/summary?run=a')]);
+ assert.equal(result[0].value,'A');assert.equal(result[1].value,'A');
+ assert.equal(requests.filter(path=>path==='/site/'+catalog.run_indexes.a.path).length,1);
+ assert.ok(!requests.includes('/site/'+catalog.run_indexes.b.path));
+ assert.ok(!requests.includes('/site/'+catalog.run_indexes.archived.path));
+ const linked=await reader.query('/api/context/session-relations?run=a&harness=codex&session=root');
+ assert.deepEqual(Array.from(linked.relations[0].to.run_ids),['b']);
+ assert.equal(linked.relations[1].from.available,false);assert.equal(linked.relations[1].to.available,false);
+ assert.equal((await reader.query('/api/summary?run=b')).value,'B');
+ assert.equal((await reader.query('/api/summary?run=a')).value,'A');
+ assert.equal(requests.filter(path=>path==='/site/'+catalog.run_indexes.b.path).length,1);
+ assert.ok(!requests.includes('/site/'+catalog.run_indexes.archived.path),'unrelated archives must stay unloaded');
+ assert.ok(!requests.includes(legacy));
+ for(const id of ['absent','__proto__','constructor'])await assert.rejects(()=>reader.query('/api/summary?run='+id),/not found/);
+ const good=catalog.run_indexes.a;
+ for(const value of [{schema_version:'unknown',run_id:'a',run:runs.a},{schema_version:'agentprovenance.replay_run/v1',run_id:'b',run:runs.b},{schema_version:'agentprovenance.replay_run/v1',run_id:'a',run:null}]){
+  catalog.run_indexes.a=save(value);publish();
+  await assert.rejects(()=>setup().query('/api/summary?run=a'),/run index/);
+ }
+ catalog.run_indexes.a=good;publish();
+ const goodBytes=files.get('/site/'+good.path);
+ files.set('/site/'+good.path,gzipSync(Buffer.from('x'.repeat(good.bytes))));
+ await assert.rejects(()=>setup().query('/api/summary?run=a'),/integrity check/);
+ files.delete('/site/'+good.path);
+ const recovering=setup();await assert.rejects(()=>recovering.query('/api/summary?run=a'),/HTTP 404/);
+ files.set('/site/'+good.path,goodBytes);assert.equal((await recovering.query('/api/summary?run=a')).value,'A');
+ files.set(legacy,Buffer.from(JSON.stringify({schema_version:'agentprovenance.static_replay/v1',runs,summaries:catalog.summaries})));
+ for(const [status,body] of [[403,'forbidden'],[500,'unavailable'],[200,'{broken'],[200,'{"schema_version":"unknown"}']]){
+  requests.length=0;
+  await assert.rejects(()=>setup({fetch:path=>new Response(path===compact?body:files.get(path),{status:path===compact?status:200})}).query('/api/runs'));
+  assert.deepEqual(requests,[compact],'an invalid current catalog must not silently use an older manifest');
+ }
+ files.delete(compact);requests.length=0;
+ assert.equal((await setup().query('/api/summary?run=a')).value,'A');
+ assert.deepEqual(requests.slice(0,2),[compact,legacy]);
+ requests.length=0;assert.equal((await setup({offline:true}).query('/api/summary?run=a')).value,'A');
+ assert.deepEqual(requests,[],'file:// exports must stay entirely offline');
+ publish();requests.length=0;
+ const stopped=new AbortController();stopped.abort();
+ await assert.rejects(()=>setup().query('/api/summary?run=a',{signal:stopped.signal}),{name:'AbortError'});
+ assert.deepEqual(requests,[]);
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

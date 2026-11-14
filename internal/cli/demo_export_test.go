@@ -1,13 +1,114 @@
 package cli
 
 import (
+	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"io"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/byteyellow/agentprovenance/demo"
+	"github.com/byteyellow/agentprovenance/internal/dashboard"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
+	"github.com/byteyellow/agentprovenance/internal/staticdata"
 )
+
+func TestPublicReplayCatalogPreservesIndependentRunIndexes(t *testing.T) {
+	writer := &staticdata.Writer{Root: t.TempDir()}
+	frameworks, err := writer.JSON([]map[string]string{{"id": "built-in"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snapshot dashboard.ReplayRun
+	if err := json.Unmarshal([]byte(`{"api":{},"event_refs":{"runtime_process/one":["event-1"]},"sessions":{"[\"codex\",\"root\"]":{"event_ids":["event-1"]}}}`), &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	snapshot.API["frameworks"] = frameworks
+	manifest := publicReplayManifest{
+		SchemaVersion: "agentprovenance.static_replay/v1", Commit: "source-sha",
+		Summaries: json.RawMessage(`[{"run":"one"},{"run":"other/instance"}]`),
+		Runs:      map[string]dashboard.ReplayRun{"one": snapshot, "other/instance": snapshot},
+	}
+	before, _ := json.Marshal(manifest)
+	catalog, err := buildPublicReplayCatalog(manifest, writer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if catalog.SchemaVersion != "agentprovenance.static_catalog/v1" || catalog.Commit != manifest.Commit || !bytes.Equal(catalog.Summaries, manifest.Summaries) || len(catalog.RunIndexes) != len(manifest.Runs) {
+		t.Fatalf("catalog metadata changed: %+v", catalog)
+	}
+	if catalog.Frameworks == nil || *catalog.Frameworks != frameworks {
+		t.Fatal("global framework lookup must not require a run index")
+	}
+	if catalog.RunIndexes["one"].SHA256 == catalog.RunIndexes["other/instance"].SHA256 {
+		t.Fatal("same-shaped runs must keep independent identities")
+	}
+	for id, ref := range catalog.RunIndexes {
+		compressed, err := os.ReadFile(filepath.Join(writer.Root, ref.Path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		z, err := gzip.NewReader(bytes.NewReader(compressed))
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(z)
+		z.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		digest := sha256.Sum256(data)
+		if len(data) != ref.Bytes || hex.EncodeToString(digest[:]) != ref.SHA256 || ref.Path != "data/"+ref.SHA256+".json.gz" {
+			t.Fatal("run index failed its recorded integrity check")
+		}
+		var index publicReplayRunIndex
+		if err := json.Unmarshal(data, &index); err != nil {
+			t.Fatal(err)
+		}
+		if index.SchemaVersion != "agentprovenance.replay_run/v1" || index.RunID != id {
+			t.Fatalf("index lost its run identity: %+v", index)
+		}
+		got, _ := json.Marshal(index.Run)
+		want, _ := json.Marshal(manifest.Runs[id])
+		if !bytes.Equal(got, want) {
+			t.Fatalf("run %s changed during catalog splitting", id)
+		}
+	}
+	if after, _ := json.Marshal(manifest); !bytes.Equal(before, after) {
+		t.Fatal("legacy manifest was modified")
+	}
+	written := writer.Bytes
+	if _, err := buildPublicReplayCatalog(manifest, writer); err != nil || writer.Bytes != written {
+		t.Fatalf("identical indexes were not reused: %v", err)
+	}
+}
+
+func TestPublicReplayCatalogPropagatesWriteFailure(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(root, []byte("occupied"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	manifest := publicReplayManifest{Runs: map[string]dashboard.ReplayRun{"one": {}}}
+	if _, err := buildPublicReplayCatalog(manifest, &staticdata.Writer{Root: root}); err == nil {
+		t.Fatal("failed index publication must abort the export")
+	}
+}
+
+func TestPublicReplayCatalogRejectsConflictingFrameworks(t *testing.T) {
+	manifest := publicReplayManifest{Runs: map[string]dashboard.ReplayRun{
+		"a": {API: map[string]staticdata.Ref{"frameworks": {SHA256: "first"}}},
+		"b": {API: map[string]staticdata.Ref{"frameworks": {SHA256: "second"}}},
+	}}
+	if _, err := buildPublicReplayCatalog(manifest, &staticdata.Writer{Root: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "framework catalog differs") {
+		t.Fatalf("conflicting global catalog: %v", err)
+	}
+}
 
 func TestStaticDemoURLsUnderProjectSubpath(t *testing.T) {
 	cases := []struct{ input, file, want string }{

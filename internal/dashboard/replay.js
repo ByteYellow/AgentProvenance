@@ -40,10 +40,30 @@ window.AgentProvReplay = (() => {
   }
   async function manifest(){
     if(!manifestPromise){
-      const load=window.AgentProvOffline?Promise.resolve(window.AgentProvOffline.manifest()):fetch(new URL('replay-manifest.json',root)).then(r=>{if(!r.ok)fail('Replay catalog unavailable');return r.json();});
-      manifestPromise=load.then(v=>{if(v.schema_version!=='agentprovenance.static_replay/v1')fail('Unsupported replay format');return v;});
+      const load=async()=>{
+        if(window.AgentProvOffline)return window.AgentProvOffline.manifest();
+        let response=await fetch(new URL('replay-catalog.json',root));
+        // Older sites have only the full manifest. Other failures must remain
+        // visible rather than mixing a failed catalog with stale evidence.
+        if(response.status===404)response=await fetch(new URL('replay-manifest.json',root));
+        if(!response.ok)fail('Replay catalog unavailable: HTTP '+response.status);
+        return response.json();
+      };
+      manifestPromise=load().then(v=>{
+        if(v.schema_version==='agentprovenance.static_catalog/v1'){
+          if(!v.run_indexes||typeof v.run_indexes!=='object'||Array.isArray(v.run_indexes))fail('Invalid replay catalog');
+        }else if(v.schema_version!=='agentprovenance.static_replay/v1')fail('Unsupported replay format');
+        return v;
+      });
     }
     return manifestPromise;
+  }
+  async function replayRun(catalog,id){
+    if(catalog.schema_version==='agentprovenance.static_replay/v1')return Object.hasOwn(catalog.runs,id)?catalog.runs[id]:null;
+    if(!Object.hasOwn(catalog.run_indexes,id))return null;
+    const index=await asset(catalog.run_indexes[id]);
+    if(index?.schema_version!=='agentprovenance.replay_run/v1'||index.run_id!==id||!index.run||typeof index.run!=='object'||Array.isArray(index.run))fail('Invalid replay run index');
+    return index.run;
   }
   const clamp=(v,def,min,max)=>{const n=/^-?\d+$/.test(v||'')?Number(v):def;return Math.max(min,Math.min(max,n));};
   function overlays(manifest,wanted,nodes,present){
@@ -208,8 +228,9 @@ window.AgentProvReplay = (() => {
   async function queryData(value){
     const u=new URL(value,location.href),p=u.searchParams,path=u.pathname.replace(/^\/api\//,''),catalog=await manifest();
     if(path==='runs')return copy(catalog.summaries);
-    const id=p.get('run');let run=catalog.runs[id];
-    if(path==='frameworks'&&!run)run=catalog.runs[catalog.summaries[0].run];
+    if(path==='frameworks'&&catalog.frameworks)return copy(await asset(catalog.frameworks));
+    const id=p.get('run');let run=await replayRun(catalog,id);
+    if(path==='frameworks'&&!run)run=await replayRun(catalog,catalog.summaries[0]?.run);
     if(!run)fail('The run was not found in this replay');
     if(path==='execution-links')return executionLinks(run.execution_links,p,id);
     if(path==='audit/associations')return auditPage(run.audit,p,id);
@@ -233,8 +254,11 @@ window.AgentProvReplay = (() => {
       for(const relation of page.relations)for(const endpoint of [relation.from,relation.to]){
         if(endpoint.available){
           const key=JSON.stringify([endpoint.harness,endpoint.session_id]);
-          if(endpoint.run_ids?.length){endpoint.run_ids=endpoint.run_ids.filter(id=>catalog.runs[id]?.sessions?.[key]);endpoint.available=endpoint.run_ids.length>0;}
-          else if(!catalog.runs[endpoint.run_id]?.sessions?.[key])endpoint.available=false;
+          if(endpoint.run_ids?.length){
+            const available=[];
+            for(const otherID of endpoint.run_ids)if((await replayRun(catalog,otherID))?.sessions?.[key])available.push(otherID);
+            endpoint.run_ids=available;endpoint.available=available.length>0;
+          }else if(!(await replayRun(catalog,endpoint.run_id))?.sessions?.[key])endpoint.available=false;
         }
       }
       return page;
