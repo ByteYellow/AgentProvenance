@@ -154,6 +154,7 @@ class Browser:
         self.capture = self.cdp = self.owner = self.context = self.playwright = self.temp = None
         self.sessions, self.targets, self.frames, self.requests, self.downloads = {}, {}, {}, {}, {}
         self.pages, self.locks, self.tasks, self.ready = {}, {}, set(), {}
+        self.operations = set()
         self.context_id, self.closing, self.failure = "", False, None
         self.failure_error = None
         self.image_count = self.image_bytes = 0
@@ -375,15 +376,21 @@ class Browser:
         self.pages[target] = page
         return target
 
-    async def operation(self, target, name, value=""):
+    async def operation(self, target, name, value="", *, operation_id=None):
         if self.failure or self.cdp.closed:
             raise RuntimeError(self.failure or "browser connection closed") from self.failure_error
         if target not in self.pages or name not in ("navigate", "click", "read_text", "screenshot"):
             raise ValueError("unknown browser page or operation")
         if not isinstance(value, str) or len(value.encode()) > 16384:
             raise ValueError("browser argument size limit")
+        operation_id = operation_id or str(uuid.uuid4())
+        if not _id(operation_id):
+            raise ValueError("invalid browser operation identity")
         async with self.locks.setdefault(target, asyncio.Lock()):
-            identity = {**self.sessions[self.targets[target]], "operation_id": str(uuid.uuid4()), "operation": name}
+            if operation_id in self.operations:
+                raise ValueError("browser operation identity already used")
+            self.operations.add(operation_id)
+            identity = {**self.sessions[self.targets[target]], "operation_id": operation_id, "operation": name}
             payload = {"url": safe_url(value)} if name == "navigate" else {}
             self._emit("action_start", identity, payload=payload)
             if self.failure or self.capture.stopped:

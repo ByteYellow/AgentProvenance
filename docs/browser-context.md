@@ -55,6 +55,57 @@ Apply workload filesystem/network restrictions at the deployment boundary.
 
 ## Read and share
 
+### Connect an Agent through MCP
+
+The optional stdio server owns the same recorded browser. Configure your Agent's
+MCP client with absolute paths and a new private capture directory:
+
+```json
+{
+  "mcpServers": {
+    "browser": {
+      "command": "/path/to/.venv-browser/bin/python",
+      "args": ["-m", "agentprov.browser_mcp", "--capture-dir", "/private/captures/task-1",
+        "--producer-id", "node-a", "--namespace", "research",
+        "--instance-id", "sandbox-42", "--generation", "launch-1"],
+      "env": {"PYTHONPATH": "/path/to/AgentProvenance/python"}
+    }
+  }
+}
+```
+
+Use `browser_pages` to find the default page, `browser_new_page` for another
+page, and `browser_execute(page_id, action, value)` for one operation. After a
+waiting timeout, call `browser_result(operation_id)` instead of repeating the
+operation. Waiting, execution and capture have separate status fields. Caller
+cancellation stops waiting; server shutdown cancels outstanding tasks and closes
+the owned browser. There is no HTTP listener or persistent reconnect protocol.
+
+Record the Agent with `agentprov launch` or its supported hooks/transcript
+integration. Import `CAPTURE_DIR/browser.jsonl` into that same Run, then project:
+
+```sh
+agentprov context import --run RUN --harness browser --file CAPTURE_DIR/browser.jsonl
+agentprov context project --run RUN
+agentprov context links --run RUN --entry AGENT_RESULT_ENTRY_ID
+```
+
+The versioned tool result retains `browser_operation` before body filtering,
+including in basic mode. Its full scope, page, operation ID and action resolve
+to one native capture. Both hook and transcript observations retain navigation;
+competing claims stay `browser_operation_unresolved`. Links use
+`source_asserted_native_identity` and rule `browser-mcp/v1`. Polling results do not
+create another execution link, and network traffic keeps its own native scope.
+Signed import preserves references. Excluding the supporting operation from an
+offline copy removes its navigation link while preserving the caller's reference.
+
+Each server retains at most 1,024 operations with 32 pending, and returns at most
+32 KiB of page text per result. `--no-screenshots` and `--no-har` control capture
+at the producer. Page text, URLs and tool inputs may contain private data; review
+the Agent's saved context as well as Browser attachments before sharing.
+
+### Import a standalone capture
+
 ```sh
 agentprov context import --run research --harness browser --file browser.jsonl --capture detailed
 agentprov context project --run research
@@ -125,6 +176,27 @@ screenshots, HAR request-set equality, privacy canaries, both retention presets 
 separate store. It produces full, attachment-excluded, HAR-only and
 request-excluded offline ZIPs. No model
 API key or system sensor is required.
+
+Exercise the actual stdio MCP protocol without a model key:
+
+```sh
+PYTHONPATH=python .venv-browser/bin/python scripts/accept_browser_mcp.py --output /tmp/browser-mcp-check
+```
+
+For a real Agent task, use an existing Claude Code provider configuration:
+
+```sh
+PYTHONPATH=python .venv-browser/bin/python scripts/accept_browser_agent.py \
+  --output /private/browser-agent-check --agentprov /absolute/path/to/agentprov \
+  --claude /absolute/path/to/claude --capture detailed
+```
+
+The task reads a local table, downloads its CSV and takes a screenshot. The
+fixture verifies native Agent/Browser links, repeat import, signed delivery to a
+separate store and full/selected offline ZIPs. Repeat with `--capture basic` for
+body-independent association. Provider usage is capped per invocation; logs,
+captures and fixture keys remain in the private output directory. System
+telemetry is off in this application-entry check.
 
 References: [browser contexts](https://playwright.dev/python/docs/api/class-browsercontext),
 [request lifecycle](https://playwright.dev/python/docs/api/class-request),

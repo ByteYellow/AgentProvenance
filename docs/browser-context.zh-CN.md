@@ -40,6 +40,40 @@ async with Browser("browser.jsonl", placement) as browser:
 
 ## 阅读和分享
 
+### 通过 MCP 接入 Agent
+
+可选的 stdio 服务管理同一个带采集能力的浏览器。在 Agent 的 MCP 配置中使用绝对路径，并指定一个新的私有采集目录：
+
+```json
+{
+  "mcpServers": {
+    "browser": {
+      "command": "/path/to/.venv-browser/bin/python",
+      "args": ["-m", "agentprov.browser_mcp", "--capture-dir", "/private/captures/task-1",
+        "--producer-id", "node-a", "--namespace", "research",
+        "--instance-id", "sandbox-42", "--generation", "launch-1"],
+      "env": {"PYTHONPATH": "/path/to/AgentProvenance/python"}
+    }
+  }
+}
+```
+
+先用 `browser_pages` 获取默认页面，用 `browser_new_page` 创建其他页面，再调用 `browser_execute(page_id, action, value)` 执行操作。等待超时后，用 `browser_result(operation_id)` 查询原操作，不要重新发起。等待、执行和采集各有状态字段。调用方取消时停止等待；服务关闭时取消待处理任务并关闭自身浏览器。此入口使用 stdio，不开放 HTTP 端口，也不提供跨服务重启的续接协议。
+
+通过 `agentprov launch` 或已支持的 hooks／会话适配记录 Agent。将 `CAPTURE_DIR/browser.jsonl` 导入同一个 Run 后生成关联：
+
+```sh
+agentprov context import --run RUN --harness browser --file CAPTURE_DIR/browser.jsonl
+agentprov context project --run RUN
+agentprov context links --run RUN --entry AGENT_RESULT_ENTRY_ID
+```
+
+工具结果中的 `browser_operation` 在正文筛选前提取，basic 模式也保留。完整作用域、页面、操作 ID 和动作类型共同匹配原生记录。hooks 和会话文件中的同一次调用均可跳转；多个调用争用同一操作时，保留 `browser_operation_unresolved`。关联依据为 `source_asserted_native_identity`，规则版本为 `browser-mcp/v1`。查询结果不新增执行关系，网络请求继续保留自己的原生作用域。
+
+签名导入保留这些引用。离线副本排除支撑操作时移除相应跳转，调用方原始引用仍保留。每个服务最多记录 1,024 次操作，同时待处理上限为 32 次，单次结果最多返回 32 KiB 页面文字。`--no-screenshots`、`--no-har` 在采集端关闭对应内容。页面文字、URL 和工具输入可能包含私密数据，分享前需同时检查 Agent 上下文与浏览器附件。
+
+### 导入独立采集记录
+
 ```sh
 agentprov context import --run research --harness browser --file browser.jsonl --capture detailed
 agentprov context project --run research
@@ -77,5 +111,21 @@ PYTHONPATH=python .venv-browser/bin/python scripts/accept_browser.py \
 ```
 
 脚本启动两个独立浏览器，每个浏览器有两个并发页面，检查重定向、iframe、Worker、后台请求、下载摘要、截图、HAR 请求集合一致性、隐私标记、两档留存及独立存储中的签名导入，并生成完整、排除全部附件、仅保留 HAR 和排除单条请求的离线 ZIP。该流程使用受控浏览器任务，不需要模型 API Key 或系统 Sensor。
+
+通过真实 stdio MCP 协议验收，无需模型 Key：
+
+```sh
+PYTHONPATH=python .venv-browser/bin/python scripts/accept_browser_mcp.py --output /tmp/browser-mcp-check
+```
+
+使用现有 Claude Code 服务配置，运行真实 Agent 任务：
+
+```sh
+PYTHONPATH=python .venv-browser/bin/python scripts/accept_browser_agent.py \
+  --output /private/browser-agent-check --agentprov /absolute/path/to/agentprov \
+  --claude /absolute/path/to/claude --capture detailed
+```
+
+任务读取本地表格、下载 CSV 并截图。脚本检查 Agent／Browser 原生关联、重复导入、独立存储中的签名导入，以及完整和选择性离线 ZIP。再用 `--capture basic` 检查省略正文后关联是否保留。每次模型调用设有费用上限；日志、采集记录及验收签名密钥留在私有输出目录。本项验收关闭系统遥测，专门检查应用操作入口。
 
 参考：[browser context](https://playwright.dev/python/docs/api/class-browsercontext)、[请求生命周期](https://playwright.dev/python/docs/api/class-request)、[Chromium target/session 身份](https://chromedevtools.github.io/devtools-protocol/tot/Target/)。

@@ -137,17 +137,18 @@ type Entry struct {
 	RawContent    ContentRef `json:"raw_content"`
 	// IntentContent is a derived, bounded model-message projection when the
 	// source record is deliberately not retained. It is never an original record.
-	IntentContent   *ContentRef      `json:"intent_content,omitempty"`
-	MissingFields   []string         `json:"missing_fields,omitempty"`
-	EvidenceRefs    []string         `json:"evidence_refs,omitempty"`
-	ObjectHash      string           `json:"object_hash,omitempty"`
-	CreatedAt       string           `json:"created_at,omitempty"`
-	ExecutionScope  string           `json:"execution_scope,omitempty"`
-	SessionMetadata *SessionMetadata `json:"session_metadata,omitempty"`
-	Notebook        *NotebookMessage `json:"notebook,omitempty"`
-	NotebookRequest *NotebookRequest `json:"notebook_request,omitempty"`
-	Browser         *BrowserEvent    `json:"browser,omitempty"`
-	Attachments     []AttachmentRef  `json:"attachments,omitempty"`
+	IntentContent    *ContentRef       `json:"intent_content,omitempty"`
+	MissingFields    []string          `json:"missing_fields,omitempty"`
+	EvidenceRefs     []string          `json:"evidence_refs,omitempty"`
+	ObjectHash       string            `json:"object_hash,omitempty"`
+	CreatedAt        string            `json:"created_at,omitempty"`
+	ExecutionScope   string            `json:"execution_scope,omitempty"`
+	SessionMetadata  *SessionMetadata  `json:"session_metadata,omitempty"`
+	Notebook         *NotebookMessage  `json:"notebook,omitempty"`
+	NotebookRequest  *NotebookRequest  `json:"notebook_request,omitempty"`
+	Browser          *BrowserEvent     `json:"browser,omitempty"`
+	BrowserOperation *BrowserOperation `json:"browser_operation,omitempty"`
+	Attachments      []AttachmentRef   `json:"attachments,omitempty"`
 }
 
 // Record is a parser's transient output. Body never appears in the entry index
@@ -176,6 +177,7 @@ type Record struct {
 	Notebook           *NotebookMessage
 	NotebookRequest    *NotebookRequest
 	Browser            *BrowserEvent
+	BrowserOperation   *BrowserOperation
 	Attachments        []AttachmentInput
 	rawProjection      string
 	hookCapture        *hookCaptureMetadata

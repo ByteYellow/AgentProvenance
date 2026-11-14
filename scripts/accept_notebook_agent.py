@@ -33,7 +33,8 @@ def main():
     parser.add_argument("--claude", required=True, type=pathlib.Path)
     parser.add_argument("--capture", choices=("basic", "detailed"), default="detailed")
     args = parser.parse_args()
-    out, binary, claude = args.output.absolute(), args.agentprov.resolve(), args.claude.resolve()
+    # Preserve the CLI entry name: launch selects its harness from argv[0].
+    out, binary, claude = args.output.absolute(), args.agentprov.resolve(), args.claude.absolute()
     out.mkdir(mode=0o700)
     work = out / "work"
     work.mkdir()

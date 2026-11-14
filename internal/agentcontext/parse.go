@@ -432,6 +432,12 @@ func (p *parser) add(kind, key, role, callID, name, status, timestamp string, bo
 			r.NotebookRequest = p.hookCapture.NotebookRequest
 		}
 	}
+	if kind == "tool_result" && browserTool(r.ToolName) {
+		r.BrowserOperation = browserResultReference(body)
+		if r.BrowserOperation == nil && p.hookCapture != nil {
+			r.BrowserOperation = p.hookCapture.BrowserOperation
+		}
+	}
 	if len(body) != 0 && string(body) != "null" {
 		value := string(body)
 		r.MediaType = "application/json"

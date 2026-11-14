@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance recorded context API
-  version: "1.11"
+  version: "1.12"
   description: >
     Read-only recorded evidence. Source assertions are not kernel observations
     or inferred authorizations. The dashboard exposes the same routes under
@@ -50,6 +50,19 @@ components:
         browser_id: {type: string}
         context_id: {type: string}
       description: Local placement and native Chromium browser/context identity. The source session is qualified by every field; opening the same URL never merges contexts.
+    BrowserOperation:
+      type: object
+      required: [scope, target_id, operation_id, operation]
+      properties:
+        scope: {$ref: '#/components/schemas/BrowserScope'}
+        target_id: {type: string, minLength: 1}
+        operation_id: {type: string, minLength: 1}
+        operation: {type: string, enum: [navigate, click, read_text, screenshot]}
+      description: >
+        Versioned execution-result reference from the Browser MCP entry. Retained
+        independently of optional bodies. Exact scope, page and operation identity
+        can resolve to a captured operation in the same Run; conflicting claims
+        remain unresolved. Read-only result queries create no new execution link.
     BrowserEvent:
       type: object
       required: [event_id, kind, redirect_index, association]
@@ -335,6 +348,7 @@ components:
         session_metadata: {$ref: '#/components/schemas/SessionMetadata'}
         notebook: {$ref: '#/components/schemas/NotebookMessage'}
         notebook_request: {$ref: '#/components/schemas/NotebookRequest'}
+        browser_operation: {$ref: '#/components/schemas/BrowserOperation'}
         browser: {$ref: '#/components/schemas/BrowserEvent'}
         attachments: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/AttachmentRef'}}
         missing_fields: {type: array, items: {type: string}}
@@ -845,11 +859,11 @@ components:
             required: [node_id, relation]
             properties:
               node_id: {type: string}
-              relation: {type: string, enum: [context_tool_call, context_tool_result, context_notebook_request, context_notebook_caller]}
+              relation: {type: string, enum: [context_tool_call, context_tool_result, context_notebook_request, context_notebook_caller, context_browser_operation, context_browser_caller]}
               basis: {const: source_asserted_native_identity}
-              rule: {const: jupyter-mcp/v1}
+              rule: {type: string, enum: [jupyter-mcp/v1, browser-mcp/v1]}
         has_more: {type: boolean}
-        reason: {type: string, enum: [no_recorded_graph_link, prior_context_not_current_execution, notebook_request_unresolved]}
+        reason: {type: string, enum: [no_recorded_graph_link, prior_context_not_current_execution, notebook_request_unresolved, browser_operation_unresolved]}
       description: Existing graph destinations for this record, not a new execution or identity inference.
     SessionRef:
       type: object

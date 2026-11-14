@@ -16,15 +16,16 @@ const hookCaptureVersion = "agentprovenance.hook_retention/v1"
 var ErrHookCaptureLimit = errors.New("normalized hook exceeds capture limit")
 
 type hookCaptureMetadata struct {
-	Version         string           `json:"version"`
-	Policy          CapturePolicy    `json:"policy"`
-	Raw             *ContentRef      `json:"raw,omitempty"`
-	ToolResult      *ContentRef      `json:"tool_result,omitempty"`
-	Approval        *ContentRef      `json:"approval,omitempty"`
-	Permission      *ContentRef      `json:"permission,omitempty"`
-	Redacted        bool             `json:"redacted,omitempty"`
-	RedactedBodies  []string         `json:"redacted_bodies,omitempty"`
-	NotebookRequest *NotebookRequest `json:"notebook_request,omitempty"`
+	Version          string            `json:"version"`
+	Policy           CapturePolicy     `json:"policy"`
+	Raw              *ContentRef       `json:"raw,omitempty"`
+	ToolResult       *ContentRef       `json:"tool_result,omitempty"`
+	Approval         *ContentRef       `json:"approval,omitempty"`
+	Permission       *ContentRef       `json:"permission,omitempty"`
+	Redacted         bool              `json:"redacted,omitempty"`
+	RedactedBodies   []string          `json:"redacted_bodies,omitempty"`
+	NotebookRequest  *NotebookRequest  `json:"notebook_request,omitempty"`
+	BrowserOperation *BrowserOperation `json:"browser_operation,omitempty"`
 }
 
 // RetainHookEvent applies the run's policy before the hook sidecar is written.
@@ -42,6 +43,9 @@ func RetainHookEvent(data []byte, policy CapturePolicy) ([]byte, error) {
 	meta := hookCaptureMetadata{Version: hookCaptureVersion, Policy: policy}
 	if text(top, "hook_event_name") == "PostToolUse" && notebookTool(text(top, "tool_name")) {
 		meta.NotebookRequest = notebookResultReference(top["tool_response"])
+	}
+	if text(top, "hook_event_name") == "PostToolUse" && browserTool(text(top, "tool_name")) {
+		meta.BrowserOperation = browserResultReference(top["tool_response"])
 	}
 	if !policy.SourceRecords {
 		original := string(whole(top))
@@ -155,6 +159,9 @@ func parseHookCapture(top row) (*hookCaptureMetadata, error) {
 	}
 	if meta.NotebookRequest != nil && !meta.NotebookRequest.valid() {
 		return nil, fmt.Errorf("invalid notebook request retention metadata")
+	}
+	if meta.BrowserOperation != nil && !meta.BrowserOperation.valid() {
+		return nil, fmt.Errorf("invalid browser operation retention metadata")
 	}
 	if len(meta.RedactedBodies) > 6 || (len(meta.RedactedBodies) > 0 && !meta.Redacted) {
 		return nil, fmt.Errorf("invalid hook redaction metadata")

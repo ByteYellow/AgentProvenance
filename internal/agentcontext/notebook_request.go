@@ -27,33 +27,7 @@ func notebookTool(name string) bool {
 }
 
 func notebookResultReference(raw json.RawMessage) *NotebookRequest {
-	var encoded string
-	if json.Unmarshal(raw, &encoded) == nil {
-		return notebookResultPayload([]byte(encoded))
-	}
-	var value row
-	if json.Unmarshal(raw, &value) == nil && value != nil {
-		if text(value, "schema_version") == NotebookToolResultVersion {
-			var ref NotebookRequest
-			if text(value, "operation") == "execute" && json.Unmarshal(value["notebook_request"], &ref) == nil && ref.valid() {
-				return &ref
-			}
-			return nil
-		}
-		// MCP uses structuredContent on the wire. The Python SDK exposes its
-		// snake_case equivalent; accept that envelope when importing SDK logs.
-		for _, key := range []string{"structuredContent", "structured_content"} {
-			if nested, ok := value[key]; ok {
-				return notebookResultPayload(nested)
-			}
-		}
-		raw = value["content"]
-	}
-	var blocks []row
-	if json.Unmarshal(raw, &blocks) != nil || len(blocks) != 1 || text(blocks[0], "type") != "text" {
-		return nil
-	}
-	return notebookResultPayload([]byte(text(blocks[0], "text")))
+	return notebookResultPayload(nativeToolResult(raw))
 }
 
 func notebookResultPayload(raw json.RawMessage) *NotebookRequest {

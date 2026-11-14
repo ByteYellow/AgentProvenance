@@ -103,6 +103,9 @@ func (s Service) saveTx(ctx context.Context, tx *sql.Tx, runID string, src Sourc
 		if r.NotebookRequest != nil && (!r.NotebookRequest.valid() || r.Kind != "tool_result" || !notebookTool(r.ToolName)) {
 			return SaveResult{}, fmt.Errorf("invalid notebook tool request reference")
 		}
+		if r.BrowserOperation != nil && (!r.BrowserOperation.valid() || r.Kind != "tool_result" || !browserTool(r.ToolName)) {
+			return SaveResult{}, fmt.Errorf("invalid browser tool operation reference")
+		}
 		counts := &report.Counts
 		switch r.ExecutionScope {
 		case "", CurrentExecution:
@@ -123,13 +126,14 @@ func (s Service) saveTx(ctx context.Context, tx *sql.Tx, runID string, src Sourc
 			SourceKey: r.Key, Sequence: r.Sequence, SourceOrdinal: r.SourceOrdinal, Kind: r.Kind,
 			Role: r.Role, AgentID: r.AgentID, ToolCallID: r.ToolCallID, ToolName: r.ToolName, Status: r.Status,
 			RecordedAt: r.RecordedAt, MissingFields: r.MissingFields,
-			Content:         ContentRef{State: "unavailable", Reason: r.MissingReason},
-			RawContent:      ContentRef{State: "unavailable", Reason: "source_not_recorded"},
-			ExecutionScope:  r.ExecutionScope,
-			SessionMetadata: codexSessionMetadata(src, r),
-			Notebook:        r.Notebook,
-			NotebookRequest: r.NotebookRequest,
-			Browser:         r.Browser,
+			Content:          ContentRef{State: "unavailable", Reason: r.MissingReason},
+			RawContent:       ContentRef{State: "unavailable", Reason: "source_not_recorded"},
+			ExecutionScope:   r.ExecutionScope,
+			SessionMetadata:  codexSessionMetadata(src, r),
+			Notebook:         r.Notebook,
+			NotebookRequest:  r.NotebookRequest,
+			Browser:          r.Browser,
+			BrowserOperation: r.BrowserOperation,
 		}
 		if entry.AgentID == "" {
 			entry.AgentID = src.AgentID

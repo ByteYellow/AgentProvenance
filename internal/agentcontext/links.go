@@ -40,7 +40,7 @@ func (s Service) Links(ctx context.Context, runID, entryID string) (EntryLinks, 
 		return result, nil
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT DISTINCT g.to_id, g.edge_type FROM graph_edges g
-		WHERE g.run_id=? AND g.from_id=? AND g.edge_type IN ('context_tool_call','context_tool_result','context_notebook_request','context_notebook_caller')
+		WHERE g.run_id=? AND g.from_id=? AND g.edge_type IN ('context_tool_call','context_tool_result','context_notebook_request','context_notebook_caller','context_browser_operation','context_browser_caller')
 		AND (g.edge_type IN ('context_tool_call','context_tool_result') OR EXISTS (SELECT 1 FROM tool_calls t WHERE t.run_id=g.run_id AND t.id=g.to_id))
 		ORDER BY g.to_id, g.edge_type LIMIT 201`, runID, e.ObjectHash)
 	if err != nil {
@@ -54,6 +54,9 @@ func (s Service) Links(ctx context.Context, runID, entryID string) (EntryLinks, 
 		}
 		if link.Relation == "context_notebook_request" || link.Relation == "context_notebook_caller" {
 			link.Basis, link.Rule = "source_asserted_native_identity", "jupyter-mcp/v1"
+		}
+		if link.Relation == "context_browser_operation" || link.Relation == "context_browser_caller" {
+			link.Basis, link.Rule = "source_asserted_native_identity", "browser-mcp/v1"
 		}
 		result.Links = append(result.Links, link)
 	}
@@ -73,6 +76,15 @@ func (s Service) Links(ctx context.Context, runID, entryID string) (EntryLinks, 
 		}
 		if !resolved {
 			result.Reason = "notebook_request_unresolved"
+		}
+	}
+	if e.BrowserOperation != nil {
+		resolved := false
+		for _, link := range result.Links {
+			resolved = resolved || link.Relation == "context_browser_operation"
+		}
+		if !resolved {
+			result.Reason = "browser_operation_unresolved"
 		}
 	}
 	return result, nil
