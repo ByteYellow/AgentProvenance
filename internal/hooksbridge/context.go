@@ -235,7 +235,7 @@ func IngestContext(ctx context.Context, db *sql.DB, paths store.Paths, runID str
 		WHERE run_id=? AND edge_type IN ('agent_spawn','agent_message','agent_tool_call')`, runID); err != nil {
 		return sum, err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM graph_edges WHERE run_id=? AND edge_type IN ('context_tool_call','context_tool_result')`, runID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM graph_edges WHERE run_id=? AND edge_type IN ('context_tool_call','context_tool_result','context_notebook_request','context_notebook_caller')`, runID); err != nil {
 		return sum, err
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT id FROM tool_calls WHERE run_id=? AND agent_id != ''`, runID)
@@ -272,8 +272,34 @@ func IngestContext(ctx context.Context, db *sql.DB, paths store.Paths, runID str
 			}
 		}
 	}
+	notebookTargets, notebookCallers := map[string]string{}, map[string]string{}
+	for _, match := range agentcontext.NotebookAssociations(entries) {
+		caller, request := agentcontext.ToolNodeID(match.Caller), agentcontext.ToolNodeID(match.Request)
+		if !existing[caller] || !existing[request] {
+			continue
+		}
+		notebookTargets[caller], notebookCallers[request] = request, caller
+	}
+	// Hooks and transcripts can independently describe the same invocation.
+	// Retain a navigation edge from each observation after resolving its identity.
+	for _, entry := range entries {
+		if entry.ExecutionScope == agentcontext.PriorContext {
+			continue
+		}
+		id := agentcontext.ToolNodeID(entry)
+		if target := notebookTargets[id]; target != "" && entry.Kind == "tool_result" && entry.NotebookRequest != nil {
+			if err := writeEdge(tx, runID, entry.ObjectHash, target, "context_notebook_request", entry.RecordedAt); err != nil {
+				return sum, err
+			}
+		}
+		if caller := notebookCallers[id]; caller != "" && entry.Kind == "tool_call" && entry.Source.Harness == "jupyter" {
+			if err := writeEdge(tx, runID, entry.ObjectHash, caller, "context_notebook_caller", entry.RecordedAt); err != nil {
+				return sum, err
+			}
+		}
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE graph_edges SET source_event_id='agent_context'
-		WHERE run_id=? AND edge_type IN ('context_tool_call','context_tool_result')`, runID); err != nil {
+		WHERE run_id=? AND edge_type IN ('context_tool_call','context_tool_result','context_notebook_request','context_notebook_caller')`, runID); err != nil {
 		return sum, err
 	}
 	return sum, tx.Commit()

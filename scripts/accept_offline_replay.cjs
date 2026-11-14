@@ -154,6 +154,14 @@ async function main(){
         let entries=[],cursor='';
         do{const value=await query('/api/context/entries'+q+'&revisions=true&limit=200&cursor='+encodeURIComponent(cursor));entries.push(...value.entries);cursor=value.next_cursor||'';}while(cursor);
         assert.deepEqual(entries,session.entries);
+        for(const entry of entries.filter(e=>e.notebook_request||(e.source.harness==='jupyter'&&e.kind==='tool_call'))){
+          const links=await query('/api/context/links'+q+'&entry='+encodeURIComponent(entry.id));
+          assert.deepEqual(links,session.links[entry.id],'offline native references retain recorded navigation');
+          for(const link of links.links.filter(l=>l.relation==='context_notebook_request'||l.relation==='context_notebook_caller')){
+            assert.equal(link.basis,'source_asserted_native_identity');assert.equal(link.rule,'jupyter-mcp/v1');
+            report.notebookLinks=(report.notebookLinks||0)+1;
+          }
+        }
         const attachments=session.attachments||{};
         assert.equal(Object.keys(attachments).length,item.contents.attachment_refs||0);
         for(const entry of entries)for(const attachment of entry.attachments||[]){

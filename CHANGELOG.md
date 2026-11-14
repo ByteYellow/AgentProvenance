@@ -6,6 +6,11 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Notebook context
 
+- Add an optional stdio MCP Notebook entry with a persistent kernel, explicit
+  restart and read-only result polling. Preserve native request references from
+  Agent tool results in both capture presets, with unique same-Run bidirectional
+  links and selection-aware offline navigation. Include protocol and real-Agent
+  acceptance scripts without adding a remote execution endpoint.
 - Retain PNG/JPEG outputs as bounded, content-addressed static PNG attachments,
   with separate source/retained digests and explicit pixel-privacy metadata.
   Add `--capture-attachments`, paged attachment reads, signed verification and

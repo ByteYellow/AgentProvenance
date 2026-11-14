@@ -56,6 +56,14 @@ components:
         over these fields. Restarting a kernel changes its session, while a
         reconnect to the same kernel can reuse it. This metadata grants no
         authenticated remote principal or per-cell operating-system attribution.
+    NotebookRequest:
+      type: object
+      required: [scope, message_session, message_id]
+      properties:
+        scope: {$ref: '#/components/schemas/NotebookScope'}
+        message_session: {type: string, minLength: 1, maxLength: 512}
+        message_id: {type: string, minLength: 1, maxLength: 512}
+      description: Native Jupyter request reference asserted by the selected MCP execution tool result. Retained independently of optional bodies. Resolution requires a unique caller and a matching current-Run request with the full scope. It does not grant a remote principal or per-cell kernel attribution.
     NotebookMessage:
       type: object
       required: [message_id, message_session, message_type, channel, direction, association]
@@ -282,6 +290,7 @@ components:
           description: Optional derived Claude model-message projection when raw source records are omitted. Retains supported prompt, thinking, answer and proposed tool fields for reanalysis. It is not an original transcript. Sharing exclusions apply to the whole source row, including this projection.
         session_metadata: {$ref: '#/components/schemas/SessionMetadata'}
         notebook: {$ref: '#/components/schemas/NotebookMessage'}
+        notebook_request: {$ref: '#/components/schemas/NotebookRequest'}
         attachments: {type: array, maxItems: 32, items: {$ref: '#/components/schemas/AttachmentRef'}}
         missing_fields: {type: array, items: {type: string}}
         evidence_refs: {type: array, items: {type: string}}
@@ -780,9 +789,11 @@ components:
             required: [node_id, relation]
             properties:
               node_id: {type: string}
-              relation: {type: string, enum: [context_tool_call, context_tool_result]}
+              relation: {type: string, enum: [context_tool_call, context_tool_result, context_notebook_request, context_notebook_caller]}
+              basis: {const: source_asserted_native_identity}
+              rule: {const: jupyter-mcp/v1}
         has_more: {type: boolean}
-        reason: {type: string, enum: [no_recorded_graph_link]}
+        reason: {type: string, enum: [no_recorded_graph_link, prior_context_not_current_execution, notebook_request_unresolved]}
       description: Existing graph destinations for this record, not a new execution or identity inference.
     SessionRef:
       type: object

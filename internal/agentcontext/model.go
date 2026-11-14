@@ -144,6 +144,7 @@ type Entry struct {
 	ExecutionScope  string           `json:"execution_scope,omitempty"`
 	SessionMetadata *SessionMetadata `json:"session_metadata,omitempty"`
 	Notebook        *NotebookMessage `json:"notebook,omitempty"`
+	NotebookRequest *NotebookRequest `json:"notebook_request,omitempty"`
 	Attachments     []AttachmentRef  `json:"attachments,omitempty"`
 }
 
@@ -171,6 +172,7 @@ type Record struct {
 	Workdir            *string
 	ApplicationVersion *string
 	Notebook           *NotebookMessage
+	NotebookRequest    *NotebookRequest
 	Attachments        []AttachmentInput
 	rawProjection      string
 	hookCapture        *hookCaptureMetadata

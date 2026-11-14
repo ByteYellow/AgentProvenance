@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	ParserVersion = "context-parser/v10"
+	ParserVersion = "context-parser/v11"
 	MaxInputBytes = 128 << 20
 	MaxLineBytes  = 40 << 20
 	MaxRecords    = 25000
@@ -420,6 +420,12 @@ func (p *parser) add(kind, key, role, callID, name, status, timestamp string, bo
 	}
 	if kind == "tool_result" && name == "" {
 		r.ToolName = p.callNames[callID]
+	}
+	if kind == "tool_result" && notebookTool(r.ToolName) {
+		r.NotebookRequest = notebookResultReference(body)
+		if r.NotebookRequest == nil && p.hookCapture != nil {
+			r.NotebookRequest = p.hookCapture.NotebookRequest
+		}
 	}
 	if len(body) != 0 && string(body) != "null" {
 		value := string(body)

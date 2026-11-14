@@ -61,6 +61,81 @@ under your own source-log policy.
 
 ## Association and lifecycle
 
+### Agent entry through MCP
+
+The optional stdio server exposes `notebook_execute`, `notebook_result`, and
+`notebook_restart`. It owns one persistent Python kernel. Install the pinned
+dependencies in a dedicated Python 3.11+ environment:
+
+```bash
+python -m pip install -r python/notebook-requirements.txt
+```
+
+Add this server to the selected Agent's MCP configuration, using absolute paths:
+
+```json
+{
+  "mcpServers": {
+    "notebook": {
+      "command": "/path/to/venv/bin/python",
+      "args": ["-m", "agentprov.notebook_mcp",
+        "--workdir", "/task", "--capture-dir", "/private/new-capture",
+        "--producer-id", "notebook-entry", "--namespace", "team-a",
+        "--instance-id", "vm-a", "--generation", "lifecycle-1",
+        "--notebook-id", "analysis"],
+      "env": {"PYTHONPATH": "/path/to/AgentProvenance/python"}
+    }
+  }
+}
+```
+
+The working directory must exist; the capture directory must be new. Run the
+server inside the selected sandbox: it executes Python with its user's file and
+network permissions. The kernel starts with a minimal environment rather than
+inheriting provider credentials. Keep source captures private and separate from
+the task's shared files.
+
+Launch Claude Code with this configuration through `agentprov launch`. The hook
+overlay records its native Tool Call ID and MCP result. Import the generated
+Jupyter capture files into that same Run, then run `context project` as above.
+The result's `notebook_request` retains the full scope and frontend/session
+message identity in both basic and detailed capture. The versioned
+`agentprovenance.notebook_tool_result/v1` envelope distinguishes execution from
+read-only polling.
+
+Projection links a unique caller to a recorded request in both directions.
+Hooks and transcripts retain their own observations of that same invocation.
+`context links` reports `source_asserted_native_identity` and `jupyter-mcp/v1`;
+missing or conflicting references remain unresolved. Signed Bundles retain the
+reference and edges. A selective replay omitting the destination removes its
+navigation link while retaining the caller's recorded reference.
+
+An execution wait is bounded to 120 seconds. If the native reply has not arrived,
+a timeout returns `unknown` with a message ID; use `notebook_result` to read its
+progress without sending code again.
+Channel readers continue between tool calls, including delayed output after
+`idle`. `notebook_restart` explicitly clears variables and starts a new kernel
+identity. The server retains up to 1,024 request summaries, each with 32 KiB of
+text and 128 output items; native capture uses the shared session budgets below.
+
+Keyless protocol acceptance and a real Agent task are separate commands:
+
+```bash
+PYTHONPATH=python python scripts/accept_notebook_mcp.py --output /tmp/notebook-mcp-check
+PYTHONPATH=python python scripts/accept_notebook_agent.py \
+  --agentprov /path/to/agentprov --claude /path/to/claude \
+  --output /tmp/notebook-agent-check
+```
+
+The second command uses your existing Claude provider configuration and a small
+budget. It checks two native tool calls, CSV totals, request references, signed
+import, and offline export. Its output directory includes private logs and a
+fixture signing key. Inspect it before sharing.
+Pass `--capture basic` to verify the same relationships without retained result
+bodies. The fixture disables system telemetry to isolate this application entry.
+
+### Native identity rules
+
 - The launcher supplies producer, namespace, instance and generation. The kernel
   session comes from a native `kernel_info_reply`. A local import treats these as
   source assertions and does not establish an authenticated remote identity.

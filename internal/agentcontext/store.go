@@ -100,6 +100,9 @@ func (s Service) saveTx(ctx context.Context, tx *sql.Tx, runID string, src Sourc
 		if r.Key == "" || r.Sequence < 0 || r.SourceOrdinal < 0 || r.SourceOrdinal > MaxRecords || !validKind(r.Kind) {
 			return SaveResult{}, fmt.Errorf("invalid context record identity or kind")
 		}
+		if r.NotebookRequest != nil && (!r.NotebookRequest.valid() || r.Kind != "tool_result" || !notebookTool(r.ToolName)) {
+			return SaveResult{}, fmt.Errorf("invalid notebook tool request reference")
+		}
 		counts := &report.Counts
 		switch r.ExecutionScope {
 		case "", CurrentExecution:
@@ -125,6 +128,7 @@ func (s Service) saveTx(ctx context.Context, tx *sql.Tx, runID string, src Sourc
 			ExecutionScope:  r.ExecutionScope,
 			SessionMetadata: codexSessionMetadata(src, r),
 			Notebook:        r.Notebook,
+			NotebookRequest: r.NotebookRequest,
 		}
 		if entry.AgentID == "" {
 			entry.AgentID = src.AgentID

@@ -16,14 +16,15 @@ const hookCaptureVersion = "agentprovenance.hook_retention/v1"
 var ErrHookCaptureLimit = errors.New("normalized hook exceeds capture limit")
 
 type hookCaptureMetadata struct {
-	Version        string        `json:"version"`
-	Policy         CapturePolicy `json:"policy"`
-	Raw            *ContentRef   `json:"raw,omitempty"`
-	ToolResult     *ContentRef   `json:"tool_result,omitempty"`
-	Approval       *ContentRef   `json:"approval,omitempty"`
-	Permission     *ContentRef   `json:"permission,omitempty"`
-	Redacted       bool          `json:"redacted,omitempty"`
-	RedactedBodies []string      `json:"redacted_bodies,omitempty"`
+	Version         string           `json:"version"`
+	Policy          CapturePolicy    `json:"policy"`
+	Raw             *ContentRef      `json:"raw,omitempty"`
+	ToolResult      *ContentRef      `json:"tool_result,omitempty"`
+	Approval        *ContentRef      `json:"approval,omitempty"`
+	Permission      *ContentRef      `json:"permission,omitempty"`
+	Redacted        bool             `json:"redacted,omitempty"`
+	RedactedBodies  []string         `json:"redacted_bodies,omitempty"`
+	NotebookRequest *NotebookRequest `json:"notebook_request,omitempty"`
 }
 
 // RetainHookEvent applies the run's policy before the hook sidecar is written.
@@ -39,6 +40,9 @@ func RetainHookEvent(data []byte, policy CapturePolicy) ([]byte, error) {
 	// The writer owns this namespace; stdin cannot supply retention claims.
 	delete(top, "_agentprov_capture")
 	meta := hookCaptureMetadata{Version: hookCaptureVersion, Policy: policy}
+	if text(top, "hook_event_name") == "PostToolUse" && notebookTool(text(top, "tool_name")) {
+		meta.NotebookRequest = notebookResultReference(top["tool_response"])
+	}
 	if !policy.SourceRecords {
 		original := string(whole(top))
 		if len(original) > MaxLineBytes {
@@ -148,6 +152,9 @@ func parseHookCapture(top row) (*hookCaptureMetadata, error) {
 	}
 	if (meta.ToolResult != nil && meta.Policy.ToolResults) || ((meta.Approval != nil || meta.Permission != nil) && meta.Policy.Configuration) {
 		return nil, fmt.Errorf("hook omission conflicts with retention policy")
+	}
+	if meta.NotebookRequest != nil && !meta.NotebookRequest.valid() {
+		return nil, fmt.Errorf("invalid notebook request retention metadata")
 	}
 	if len(meta.RedactedBodies) > 6 || (len(meta.RedactedBodies) > 0 && !meta.Redacted) {
 		return nil, fmt.Errorf("invalid hook redaction metadata")

@@ -8,6 +8,9 @@
 
 ### Notebook 上下文
 
+- 新增可选的 stdio MCP Notebook 入口，保持 kernel 变量，支持明确重启与只读结果查询。
+  两档采集均保留 Agent 工具结果中的原生请求引用，按同一 Run 内的唯一匹配建立双向关联，
+  离线跳转遵循分享选择范围。提供协议与真实 Agent 验收脚本，不增加远端执行接口。
 - PNG、JPEG 输出保存为有界的静态 PNG 附件，独立记录来源与留存摘要、像素隐私状态。
   新增 `--capture-attachments`、附件分页读取及签名验证；离线导出可通过
   `--exclude-attachment` 保留文字并排除图片。真实 kernel 用例增加图表及完整、过滤回放。

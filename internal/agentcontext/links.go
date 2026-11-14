@@ -12,6 +12,8 @@ func ToolNodeID(e Entry) string {
 type GraphLink struct {
 	NodeID   string `json:"node_id"`
 	Relation string `json:"relation"`
+	Basis    string `json:"basis,omitempty"`
+	Rule     string `json:"rule,omitempty"`
 }
 
 type EntryLinks struct {
@@ -37,9 +39,10 @@ func (s Service) Links(ctx context.Context, runID, entryID string) (EntryLinks, 
 		result.Reason = "prior_context_not_current_execution"
 		return result, nil
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT DISTINCT to_id, edge_type FROM graph_edges
-		WHERE run_id=? AND from_id=? AND edge_type IN ('context_tool_call','context_tool_result')
-		ORDER BY to_id, edge_type LIMIT 201`, runID, e.ObjectHash)
+	rows, err := s.DB.QueryContext(ctx, `SELECT DISTINCT g.to_id, g.edge_type FROM graph_edges g
+		WHERE g.run_id=? AND g.from_id=? AND g.edge_type IN ('context_tool_call','context_tool_result','context_notebook_request','context_notebook_caller')
+		AND (g.edge_type IN ('context_tool_call','context_tool_result') OR EXISTS (SELECT 1 FROM tool_calls t WHERE t.run_id=g.run_id AND t.id=g.to_id))
+		ORDER BY g.to_id, g.edge_type LIMIT 201`, runID, e.ObjectHash)
 	if err != nil {
 		return result, err
 	}
@@ -48,6 +51,9 @@ func (s Service) Links(ctx context.Context, runID, entryID string) (EntryLinks, 
 		var link GraphLink
 		if err := rows.Scan(&link.NodeID, &link.Relation); err != nil {
 			return result, err
+		}
+		if link.Relation == "context_notebook_request" || link.Relation == "context_notebook_caller" {
+			link.Basis, link.Rule = "source_asserted_native_identity", "jupyter-mcp/v1"
 		}
 		result.Links = append(result.Links, link)
 	}
@@ -59,6 +65,15 @@ func (s Service) Links(ctx context.Context, runID, entryID string) (EntryLinks, 
 	}
 	if len(result.Links) == 0 {
 		result.Reason = "no_recorded_graph_link"
+	}
+	if e.NotebookRequest != nil {
+		resolved := false
+		for _, link := range result.Links {
+			resolved = resolved || link.Relation == "context_notebook_request"
+		}
+		if !resolved {
+			result.Reason = "notebook_request_unresolved"
+		}
 	}
 	return result, nil
 }

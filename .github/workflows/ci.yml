@@ -52,6 +52,20 @@ jobs:
       - run: node scripts/test_static_reader.cjs
       - run: node scripts/test_evidence_status.cjs
 
+  notebook-entry:
+    name: Notebook MCP protocol
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: python/notebook-requirements.txt
+      - run: python -m pip install -r python/notebook-requirements.txt
+      - run: PYTHONPATH=python python -m unittest discover -s python/tests -p 'test_notebook*.py' -v
+      - run: PYTHONPATH=python python scripts/accept_notebook_mcp.py --output "$RUNNER_TEMP/notebook-mcp-check"
+
   test:
     name: Go tests
     runs-on: ubuntu-latest
@@ -82,7 +96,7 @@ jobs:
         run: python3 -m unittest discover -s scripts -p 'test_accept_seccheck_faults.py' -v
 
       - name: Check notebook capture adapter
-        run: PYTHONPATH=python python3 -m unittest discover -s python/tests -p 'test_notebook.py' -v
+        run: PYTHONPATH=python python3 -m unittest discover -s python/tests -p 'test_notebook*.py' -v
 
       - name: Run unit tests (race detector)
         run: GOTOOLCHAIN=local go test -race -p 2 -timeout 20m ./...

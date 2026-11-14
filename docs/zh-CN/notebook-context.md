@@ -45,6 +45,69 @@ agentprov context coverage --run RUN_ID
 
 ## 关联与生命周期
 
+### 通过 MCP 接入 Agent
+
+可选的 stdio 服务提供 `notebook_execute`、`notebook_result` 和
+`notebook_restart`，由同一个 Python kernel 保持变量。使用独立的 Python 3.11+
+环境安装固定版本依赖：
+
+```bash
+python -m pip install -r python/notebook-requirements.txt
+```
+
+在所选 Agent 的 MCP 配置中添加服务，路径使用绝对路径：
+
+```json
+{
+  "mcpServers": {
+    "notebook": {
+      "command": "/path/to/venv/bin/python",
+      "args": ["-m", "agentprov.notebook_mcp",
+        "--workdir", "/task", "--capture-dir", "/private/new-capture",
+        "--producer-id", "notebook-entry", "--namespace", "team-a",
+        "--instance-id", "vm-a", "--generation", "lifecycle-1",
+        "--notebook-id", "analysis"],
+      "env": {"PYTHONPATH": "/path/to/AgentProvenance/python"}
+    }
+  }
+}
+```
+
+工作目录必须已存在，采集目录必须是新目录。将服务运行在选定的沙箱中，它使用运行账号的
+文件和网络权限执行 Python。kernel 使用最小环境启动，模型服务凭据留在调用端。
+原始采集文件单独保管，与任务共享目录分开。
+
+通过 `agentprov launch` 启动使用该配置的 Claude Code。hooks 会记录原生 Tool Call ID
+和 MCP 结果。再将生成的 Jupyter 采集文件导入同一个 Run，执行 `context project`。
+结果中的 `notebook_request` 独立保存完整作用域、前端会话和消息标识，basic 与 detailed
+两档都保留。`agentprovenance.notebook_tool_result/v1` 格式区分执行与只读结果查询。
+
+投影按原生标识建立唯一调用与请求之间的双向关系。同一次调用的 hooks 与会话记录分别保留。
+`context links` 返回
+`source_asserted_native_identity` 依据和 `jupyter-mcp/v1` 规则版本；引用缺失或冲突时
+保持未解析状态。签名包保留引用和关系。选择性回放排除目标记录时，同时移除目标跳转，
+保留调用端原先记录的引用。
+
+单次等待最多 120 秒。超时且原生响应尚未到达时，返回 `unknown` 和消息 ID，使用 `notebook_result` 查询进度，
+无需重新发送代码。接收循环在工具调用之间持续运行，记录 `idle` 之后的延迟输出。
+`notebook_restart` 明确清空变量并生成新的 kernel 身份。服务最多保存 1,024 个请求摘要，
+每个摘要最多包含 32 KiB 文本和 128 个输出项；原生采集共用下文的会话限额。
+
+无模型调用的协议验收与真实 Agent 任务分别运行：
+
+```bash
+PYTHONPATH=python python scripts/accept_notebook_mcp.py --output /tmp/notebook-mcp-check
+PYTHONPATH=python python scripts/accept_notebook_agent.py \
+  --agentprov /path/to/agentprov --claude /path/to/claude \
+  --output /tmp/notebook-agent-check
+```
+
+第二条命令使用已有的 Claude 模型服务配置和小额预算，检查两次原生工具调用、CSV 汇总、
+请求引用、签名导入与离线导出。输出目录包含私有日志和验收用签名私钥，分享前请检查。
+增加 `--capture basic` 可验证正文省略后的同一组关系。该验收关闭系统遥测，聚焦应用侧接入。
+
+### 原生身份规则
+
 - producer、namespace、实例和代次由启动入口提供，kernel session 来自原生回复。
   本地导入按来源声明保存这些字段，远端身份认证继续使用执行交接契约。
 - 来源身份包括 Notebook、kernel 资源及 kernel session。kernel 重启后使用新文件；
