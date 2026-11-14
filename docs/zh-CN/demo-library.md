@@ -1,0 +1,52 @@
+# 按问题选择示例
+
+[English](../demo-library.md) | 中文
+
+先选择要调查的问题，再打开对应记录。下表沿用现有示例名称，将修复前后作为同一故事的不同章节。
+
+## 推荐阅读路线
+
+| 想回答的问题 | 从这里开始 | 接着查看 |
+| --- | --- | --- |
+| 检查和修复之间发生了什么变化？ | [证据归因](../../demo/evidence-attribution/README.zh-CN.md) | 原始任务、工具调用级意图、访问控制决策、保留的 TLS 正文、文件变化和修复后的 Run |
+| 任务如何在 Agent 和工作负载之间传递？ | [多 Agent 协作](../../demo/multiagent-provenance/README.zh-CN.md) | 委派、消息和拒绝，再通过[跨 Pod 记录](../../demo/k8s-cross-pod-a2a/README.zh-CN.md)查看实际执行位置 |
+| 浏览器或 Notebook 具体做了什么？ | [浏览器采集](../browser-context.zh-CN.md)和 [Notebook 采集](notebook-context.md) | 原生操作／请求身份、输出、截图、HAR、保存正文及离线回放 |
+
+浏览器和 Notebook 指南通过可选的本地入口采集自己的任务，与内置历史实录分开展示。浏览器请求与工具操作各自保留原生身份；Notebook 的延迟输出和重启前后记录沿用对应请求的归属。
+
+远端独立命令参见[执行交接指南](execution-handoff.md)。Sentry 事件采集参见 [gVisor 指南](gvisor-seccheck.md)。
+
+## 故事章节与保留的入口
+
+| 故事 | 现有入口名称 | 独有证据 |
+| --- | --- | --- |
+| 任务调查与修复 | `evidence-attribution`、`evidence-attribution-repaired` | 11 月的两份记录，包含工具调用级意图、审计和 TLS 归因详情 |
+| 任务调查与修复 | `investigation-workflow`、`investigation-repaired` | 10 月的两份记录，包含审阅者、被拒绝的诊断、修复和对比 |
+| 任务调查与修复 | `deepseek-context` | 9 月开发任务，包含七项测试记录、工具结果、配置和最终文件 |
+| 协作与执行位置 | `multiagent-provenance` | 逻辑委派、同伴影响、拒绝和后续执行 |
+| 协作与执行位置 | `k8s-cross-pod-a2a`、`k8s-substrate` | 跨 Pod 运行时事件和部署身份；A2A 指南单独标出回放的应用 hooks |
+| 供应链调查 | `snake-supply-chain` | 恶意安装钩子、植入的测试凭据、网络尝试和制品历史 |
+| 关联语义 | `endpoint-attribution` | 已签名的合成样本，展示正文命中、源读取候选和未确定的执行身份 |
+| 外部评估器 | `llm-judge`、`jev-judge` | 可选的证据消费和人工复核示例；配置接入与回放分开进行 |
+| Grok 历史调查 | `grok-codebase-exfil`、`grok-3routes` | 两份带日期的记录，各自保留 Run 和签名密钥 |
+
+使用 `agentprov demo <入口名称>` 直接打开原记录。两组修复案例会一起载入对应的前后 Run，便于比较。旧 Run ID、签名和证据引用继续指向原来的记录。
+
+## 记录类型
+
+- **执行实录**：保存某次执行的观测结果。指南列出已记录的采集环境、来源和日期。
+- **混合来源**：应用上下文和运行时事件来自不同采集过程。K8s A2A 示例分别标注两者来源。
+- **合成样本**：用构造的输入解释关联语义。外发归因示例使用公开标记。
+- **评估器接入**：消费已有证据。无密钥 fixture 用于验证接入流程；在线研判需要指南列出的凭据。
+
+## Grok 历史记录
+
+Grok 原场景当前无法复现。两份原记录继续支持签名校验、导入、调查和离线回放。[历史指南](../../demo/grok-codebase-exfil/README.zh-CN.md)分别说明已观察到的模型请求正文、厂商遥测和第三方分析请求。
+
+新版阅读器展示历史记录时，保留原采集日期、证据和签名。重新采集的示例使用新的 Run ID 和独立签名包。
+
+## 分享调查结果
+
+在 Dashboard 的导出预览中选择 Run、会话和保存的记录。生成的只读目录可以脱离原始工作区打开。选择性阅读副本与原始签名证据包分别交付；需要校验签名时，同时保留原包和公钥。
+
+返回[示例命令目录](../../demo/README.zh-CN.md)或[项目快速开始](../../README.zh-CN.md#快速开始)。

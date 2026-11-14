@@ -4,6 +4,8 @@
 
 先看 DeepSeek 调查并修复一次失败任务，再体验单 Agent 风险调查、团队协作和跨 Pod 执行。十二份签名示例可在 macOS 或 Linux 上离线回放，其中一份明确标注为归因合成示例；两个评估器示例提供独立的接入指南。
 
+[按问题选择示例](../docs/zh-CN/demo-library.md)将这些记录按调查故事归组，并区分历史实录、混合来源、合成样本和可选接入。
+
 ## 一条命令打开
 
 从[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应 Linux/macOS、amd64/arm64 的压缩包，按[快速开始](../README.zh-CN.md#快速开始)校验并解压。本文对应 v0.10.1，默认行为的变化见 [升级指南](../docs/zh-CN/upgrading-v0.10.1.md)。CLI 内嵌十二份签名示例和两个可选评估器示例：

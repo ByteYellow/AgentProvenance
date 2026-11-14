@@ -91,7 +91,7 @@ func TestProjectPresentationDoesNotAlterCodeOrEnableScripts(t *testing.T) {
 
 func TestDemoIncludesLinkedAPIContracts(t *testing.T) {
 	h := demoGallery(demo.Catalog())
-	for _, file := range []string{"audit-associations-api.yaml", "replay-export-api.yaml", "zh-CN/audit-associations-api.yaml"} {
+	for _, file := range []string{"audit-associations-api.yaml", "replay-export-api.yaml", "execution-handoff-api.yaml", "zh-CN/audit-associations-api.yaml"} {
 		route := "/demos/assets/docs/" + file
 		w := httptest.NewRecorder()
 		h(w, httptest.NewRequest("GET", route, nil))
@@ -100,6 +100,69 @@ func TestDemoIncludesLinkedAPIContracts(t *testing.T) {
 		}
 		if got := projectDocLink("docs/agent-context.md", file); got != route {
 			t.Errorf("contract link %s = %s; want %s", file, got, route)
+		}
+	}
+}
+
+func TestPortableEvidenceGuidesKeepLocalBilingualLinks(t *testing.T) {
+	h := demoGallery(demo.Catalog())
+	for _, tc := range []struct {
+		id, source, title, chineseSource, chineseTitle string
+	}{
+		{"demo-library", "docs/demo-library.md", "Choose an investigation", "docs/zh-CN/demo-library.md", "按问题选择示例"},
+		{"execution-handoff", "docs/execution-handoff.md", "Execution handoff protocol", "docs/zh-CN/execution-handoff.md", "执行交接协议"},
+		{"gvisor-seccheck", "docs/gvisor-seccheck.md", "gVisor SecCheck Receiver", "docs/zh-CN/gvisor-seccheck.md", "gVisor SecCheck"},
+		{"notebook-context", "docs/notebook-context.md", "Jupyter request and output context", "docs/zh-CN/notebook-context.md", "Jupyter"},
+		{"browser-context", "docs/browser-context.md", "Browser context", "docs/browser-context.zh-CN.md", "浏览器上下文"},
+	} {
+		for _, chinese := range []bool{false, true} {
+			lang, source, title := i18n.English, tc.source, tc.title
+			if chinese {
+				lang, source, title = i18n.Chinese, tc.chineseSource, tc.chineseTitle
+			}
+			t.Run(tc.id+"/"+string(lang), func(t *testing.T) {
+				route := "/demos/guide/" + tc.id + "?lang=" + string(lang)
+				w := httptest.NewRecorder()
+				h(w, httptest.NewRequest("GET", route, nil))
+				if w.Code != 200 || !strings.Contains(w.Body.String(), title) {
+					t.Fatalf("guide %s: status %d, missing %q", route, w.Code, title)
+				}
+				if got := projectDocLink("README.md", source); got != route {
+					t.Fatalf("guide link %s: %s", source, got)
+				}
+				static, err := staticDemoHTML(w.Body.Bytes(), string(lang)+"/guides/"+tc.id+".html", lang, false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				other := "en"
+				if lang == i18n.English {
+					other = "zh-CN"
+				}
+				if !strings.Contains(string(static), "../../"+other+"/guides/"+tc.id+".html") {
+					t.Fatal("static guide language switch no longer stays local")
+				}
+			})
+		}
+	}
+}
+
+func TestDemoLibraryPreservesEveryEntry(t *testing.T) {
+	h := demoGallery(demo.Catalog())
+	for _, lang := range []i18n.Locale{i18n.English, i18n.Chinese} {
+		w := httptest.NewRecorder()
+		h(w, httptest.NewRequest("GET", "/demos/guide/demo-library?lang="+string(lang), nil))
+		if w.Code != 200 {
+			t.Fatal(w.Code)
+		}
+		for _, entry := range demo.Catalog() {
+			if !strings.Contains(w.Body.String(), "<code>"+entry.ID+"</code>") {
+				t.Errorf("%s inventory omits %s", lang, entry.ID)
+			}
+		}
+		for _, id := range []string{"browser-context", "notebook-context", "execution-handoff", "gvisor-seccheck"} {
+			if !strings.Contains(w.Body.String(), "/demos/guide/"+id+"?lang="+string(lang)) {
+				t.Errorf("%s inventory loses local link to %s", lang, id)
+			}
 		}
 	}
 }

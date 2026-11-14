@@ -7,6 +7,9 @@ investigation, team collaboration and cross-Pod execution. Twelve signed example
 replay offline on macOS or Linux, including one labeled synthetic attribution
 example. Two optional evaluator examples provide setup guides.
 
+[Choose an investigation](../docs/demo-library.md) groups the recordings by question and
+identifies historical captures, mixed sources, synthetic examples and optional integrations.
+
 ## One-command entry
 
 Download the matching Linux/macOS amd64/arm64 archive from
