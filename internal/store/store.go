@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,7 +80,11 @@ func Open(paths Paths) (*sql.DB, error) {
 	// attemptIsTainted), which would deadlock on a single shared connection.
 	// WAL + a busy_timeout applied to all connections lets concurrent writers
 	// serialize through the busy handler instead.
-	dsn := "file:" + paths.DB + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(FULL)"
+	// Encode the filename separately from query parameters. Literal #, ? and %
+	// in a data directory must not select a different SQLite file or connection mode.
+	uri := url.URL{Scheme: "file", Path: filepath.ToSlash(paths.DB),
+		RawQuery: "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=synchronous(FULL)"}
+	dsn := uri.String()
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
