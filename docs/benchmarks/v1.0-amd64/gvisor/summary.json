@@ -1,0 +1,297 @@
+{
+  "schema_version": "agentprovenance.gvisor_acceptance_archive/v1",
+  "archived_at": "2026-11-15T20:43:24.320550+00:00",
+  "evidence_origin": "original Linux amd64 KVM acceptance; original result files copied byte-for-byte",
+  "runtime": "runsc version release-20261109.0\nspec: 1.2.1\n",
+  "platform": [
+    "Linux",
+    "agentprov-kvm-amd64",
+    "6.8.0-139-generic",
+    "#139-Ubuntu SMP PREEMPT_DYNAMIC Sat Aug  1 03:52:05 UTC 2026",
+    "x86_64"
+  ],
+  "runtime_profile": {
+    "platform": "systrap",
+    "network": "none"
+  },
+  "cli_version": "agentprov version v1.0.0-candidate (678bf7813ab0546f8438afe3ad5c0364f20a35ea; unknown; linux/amd64)",
+  "producer_source_stamp": "678bf7813ab0546f8438afe3ad5c0364f20a35ea",
+  "build_identity_note": "Original working-tree candidate with its recorded version stamp; exact executable hashes are preserved per case. These are the original 6.8.0-139 results.",
+  "commands": {
+    "receive": [
+      "python3",
+      "scripts/accept_seccheck.py",
+      "--cli",
+      "/var/tmp/apv1/bin/agentprov",
+      "--runsc",
+      "/opt/agentprov-v1-runsc/runsc",
+      "--rootfs",
+      "/var/tmp/apv1/runtime/rootfs",
+      "--workload",
+      "/var/tmp/apv1/bin/seccheck.test",
+      "--output",
+      "/var/tmp/apv1/results/gvisor-cli"
+    ],
+    "faults": [
+      "python3",
+      "scripts/accept_seccheck_faults.py",
+      "--cli",
+      "/var/tmp/apv1/bin/agentprov",
+      "--runsc",
+      "/opt/agentprov-v1-runsc/runsc",
+      "--rootfs",
+      "/var/tmp/apv1/runtime/rootfs",
+      "--workload",
+      "/var/tmp/apv1/bin/seccheck.test",
+      "--output",
+      "/var/tmp/apv1/results/gvisor-faults"
+    ],
+    "restore-clones": [
+      "python3",
+      "scripts/accept_seccheck_restore.py",
+      "--cli",
+      "/var/tmp/apv1/bin/agentprov",
+      "--runsc",
+      "/opt/agentprov-v1-runsc/runsc",
+      "--rootfs",
+      "/var/tmp/apv1/runtime/rootfs",
+      "--output",
+      "/var/tmp/apv1/results/gvisor-restore-fixed"
+    ]
+  },
+  "cases": {
+    "receive": {
+      "result_file": "receive.result.json",
+      "result_sha256": "d3578e639460ef48eabd56fd2a3b17b0143eee30e2706b9828ef7e9901d1f2f6",
+      "source_result": "results/gvisor-cli/result.json",
+      "binary_sha256": {
+        "cli": "ec65c79ed53f81e0f2a6fb735a522c10c67b7271def6cf4f8fa57db349413579",
+        "runsc": "c58f1dc2a3855487bf3bedc2edf074123ad433f1d98fb7f451f56790e87b5c9f",
+        "workload": "2c8428cf81fe77b4ba77dc5c92fa57d74c9ddfa79734cc6c4e47fb49726c6118"
+      },
+      "events": 130,
+      "graph_verify": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "seccheck-cli",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "passed": true,
+      "recorded_exit_code": 0,
+      "last_collector_status_at": "2026-11-15T17:26:43.856336584Z",
+      "spool": {
+        "counters": {
+          "captured": 130,
+          "connected": 2,
+          "disconnected": 2,
+          "ingested": 130,
+          "read": 130,
+          "receiver_ready": 2,
+          "receiver_stopped": 2
+        },
+        "queued_batches": 0,
+        "queued_bytes": 0,
+        "pending_events": 0,
+        "cleanup_pending_batches": 0
+      },
+      "coverage": {
+        "correlation_ratio": 1,
+        "has_sensor_drops": false,
+        "complete": false,
+        "issues": [
+          "sentry_partial_checkpoint_coverage"
+        ]
+      },
+      "accepted_records_per_target": [
+        62,
+        64
+      ]
+    },
+    "faults": {
+      "result_file": "faults.result.json",
+      "result_sha256": "6c26e48c61f3049f019536d1cf0cc3fa31e3c109968282e9d13b07c1c05b88f4",
+      "source_result": "results/gvisor-faults/result.json",
+      "binary_sha256": {
+        "cli": "ec65c79ed53f81e0f2a6fb735a522c10c67b7271def6cf4f8fa57db349413579",
+        "runsc": "c58f1dc2a3855487bf3bedc2edf074123ad433f1d98fb7f451f56790e87b5c9f",
+        "workload": "2c8428cf81fe77b4ba77dc5c92fa57d74c9ddfa79734cc6c4e47fb49726c6118"
+      },
+      "events": 499,
+      "graph_verify": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "seccheck-faults",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "passed": true,
+      "recorded_exit_code": 0,
+      "last_collector_status_at": "2026-11-15T17:26:49.945642017Z",
+      "spool": {
+        "counters": {
+          "captured": 499,
+          "connected": 2,
+          "disconnected": 1,
+          "ingested": 499,
+          "read": 497,
+          "receiver_ready": 2,
+          "receiver_stopped": 1,
+          "reported_dropped_events": 15728,
+          "retry_failures": 1,
+          "stale_endpoint_recovered": 1
+        },
+        "queued_batches": 0,
+        "queued_bytes": 0,
+        "pending_events": 0,
+        "cleanup_pending_batches": 0
+      },
+      "coverage": {
+        "correlation_ratio": 1,
+        "has_sensor_drops": true,
+        "complete": false,
+        "issues": [
+          "sentry_node_receiver_restart_gap",
+          "sentry_partial_checkpoint_coverage"
+        ]
+      },
+      "observed_loss": 15724,
+      "recovered_observations": 82,
+      "preserved_observations": 341,
+      "connections": [
+        "secconn-424369852e29",
+        "secconn-59d5476e309a"
+      ],
+      "import_verify": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "seccheck-faults",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "signed_round_trip_verified": true
+    },
+    "restore-clones": {
+      "result_file": "restore-clones.result.json",
+      "result_sha256": "3b6921061c9ee99e7c5781f172cfdb11f7be921a062a529cb5a80ec5445691ab",
+      "source_result": "results/gvisor-restore-fixed/result.json",
+      "binary_sha256": {
+        "cli": "ec65c79ed53f81e0f2a6fb735a522c10c67b7271def6cf4f8fa57db349413579",
+        "runsc": "c58f1dc2a3855487bf3bedc2edf074123ad433f1d98fb7f451f56790e87b5c9f"
+      },
+      "events": 384,
+      "graph_verify": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "seccheck-restore",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "passed": true,
+      "recorded_exit_code": null,
+      "completion_basis": [
+        "result.passed=true",
+        "restore-fixed.log reports passed=true"
+      ],
+      "last_collector_status_at": "2026-11-15T17:29:43.04219888Z",
+      "phase_identities": [
+        {
+          "namespace": "restore-acceptance",
+          "instance_id": "original",
+          "generation": "1",
+          "sandbox_id": "snapshot-workload",
+          "container_id": "snapshot-workload",
+          "peer_uid": 0
+        },
+        {
+          "namespace": "restore-acceptance",
+          "instance_id": "original",
+          "generation": "2",
+          "sandbox_id": "snapshot-workload",
+          "container_id": "snapshot-workload",
+          "peer_uid": 0
+        },
+        {
+          "namespace": "restore-acceptance",
+          "instance_id": "clone-a",
+          "generation": "1",
+          "sandbox_id": "snapshot-workload",
+          "container_id": "snapshot-workload",
+          "peer_uid": 0
+        },
+        {
+          "namespace": "restore-acceptance",
+          "instance_id": "clone-b",
+          "generation": "1",
+          "sandbox_id": "snapshot-workload",
+          "container_id": "snapshot-workload",
+          "peer_uid": 0
+        }
+      ],
+      "memory_value_preserved": true,
+      "distinct_scopes": 4,
+      "distinct_process_nodes": 4,
+      "historical_spool_records": 8,
+      "historical_spool_uploads": [
+        {
+          "instance_id": "clone-a",
+          "records": 8,
+          "fresh_store_ingested": 8,
+          "fresh_store_duplicates": 0,
+          "existing_store_ingested": 0,
+          "retry_reused_receipt": true,
+          "receipt_id": "evt-seccheck-4221aff59a99175255e14c6fd2fdbb702fb5f87a6f8f69eab698f79b54f9b225"
+        },
+        {
+          "instance_id": "clone-b",
+          "records": 8,
+          "fresh_store_ingested": 0,
+          "fresh_store_duplicates": 8,
+          "existing_store_ingested": 0,
+          "retry_reused_receipt": true,
+          "receipt_id": "evt-seccheck-d2a118dded0a12835a2c5413d54e092a48aee84e7c08f538a4330dea60981a82"
+        }
+      ],
+      "copied_signing_key_rejected": true,
+      "historical_signature_verified": true,
+      "current_signed_round_trip_verified": true,
+      "acceptance_script_sha256": "c20c84a8e30d988e1c390ce102b61089c02bca3834e5316cfe07964b05950957",
+      "rootfs": {
+        "path": "/var/tmp/apv1/runtime/rootfs",
+        "program_sha256": {
+          "bin/sh": "86d31f6fb799e91fa21bad341484564510ca287703a16e9e46c53338776f4f42",
+          "bin/cat": "a63158e6e5bce20616425f5d61e5bd7374bb5bccf15bbb93ae2e40238248f179",
+          "bin/date": "225cf5c9122f922b8315538425bed7610853c853d6a2d2cfd89161b04f692367",
+          "bin/sleep": "a65efec857cfac0d4f43fc53affa73794ff1d1fdcb547931d4b92a98bda8e646"
+        },
+        "busybox_sha256": null,
+        "os_release": "PRETTY_NAME=\"Ubuntu 24.04.4 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.4 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo\n"
+      },
+      "import_verify": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "seccheck-restore",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      }
+    }
+  },
+  "initial_restore_failure": {
+    "recorded_exit_code": 1,
+    "exit_codes_file": "initial-run-exit-codes.tsv",
+    "log": "restore-first-failure.log",
+    "reason": "Result generation assumed /bin/busybox; the Ubuntu rootfs uses separate programs. Rootfs identity reporting was corrected before the successful rerun.",
+    "successful_rerun": "restore-clones.result.json",
+    "completion_log": "restore-fixed.log"
+  }
+}

@@ -1,0 +1,212 @@
+{
+  "runtime": "runsc version release-20261109.0\nspec: 1.2.1\n",
+  "platform": [
+    "Linux",
+    "agentprov-kvm-amd64",
+    "6.8.0-139-generic",
+    "#139-Ubuntu SMP PREEMPT_DYNAMIC Sat Aug  1 03:52:05 UTC 2026",
+    "x86_64"
+  ],
+  "binary_sha256": {
+    "cli": "ec65c79ed53f81e0f2a6fb735a522c10c67b7271def6cf4f8fa57db349413579",
+    "runsc": "c58f1dc2a3855487bf3bedc2edf074123ad433f1d98fb7f451f56790e87b5c9f",
+    "workload": "2c8428cf81fe77b4ba77dc5c92fa57d74c9ddfa79734cc6c4e47fb49726c6118"
+  },
+  "observed_loss": 15724,
+  "recovered_observations": 82,
+  "preserved_observations": 341,
+  "events": 499,
+  "connections": [
+    "secconn-424369852e29",
+    "secconn-59d5476e309a"
+  ],
+  "status": {
+    "schema_version": "agentprovenance.seccheck_status/v1",
+    "collector_id": "seccheck-42a824d80068",
+    "generated_at": "2026-11-15T17:26:49.945642017Z",
+    "state": "stopped",
+    "expected_runtime_release": "release-20261109.0",
+    "protocol_version": 1,
+    "capabilities": {
+      "producer": "agentprov",
+      "producer_version": "v1.0.0-candidate",
+      "producer_commit": "678bf7813ab0546f8438afe3ad5c0364f20a35ea",
+      "placement": "host_receiver",
+      "identity_domain": "sentry",
+      "system_telemetry": "partial",
+      "model_intent": "none",
+      "app_context": "none",
+      "supported_points": [
+        "container/start",
+        "sentry/clone",
+        "sentry/execve",
+        "sentry/task_exit",
+        "syscall/openat/enter",
+        "syscall/openat/exit",
+        "syscall/connect/enter",
+        "syscall/connect/exit",
+        "syscall/execve/enter",
+        "syscall/execve/exit"
+      ],
+      "enabled_points_basis": "observed_records",
+      "runtime_release_basis": "trusted_launcher_assertion",
+      "raw_packets_retained": false
+    },
+    "targets": [
+      {
+        "run_id": "seccheck-faults",
+        "socket_path": "/tmp/ap-scf-siax5k9b/events.sock",
+        "registration": {
+          "namespace": "acceptance",
+          "instance_id": "linux-node",
+          "generation": "gvisor-faults",
+          "sandbox_id": "seccheck-faults",
+          "container_id": "seccheck-faults",
+          "peer_uid": 0
+        },
+        "state": "stopped",
+        "connection_id": "secconn-424369852e29",
+        "last_observation_at": "2026-11-15T17:26:49.559803163Z",
+        "accepted_records": 74,
+        "reported_dropped_events": 0,
+        "drop_counter_decreases": 0,
+        "identity_gap_records": 0,
+        "last_diagnostic": "disconnected"
+      }
+    ],
+    "node_spool": {
+      "counters": {
+        "captured": 499,
+        "connected": 2,
+        "disconnected": 1,
+        "ingested": 499,
+        "read": 497,
+        "receiver_ready": 2,
+        "receiver_stopped": 1,
+        "reported_dropped_events": 15728,
+        "retry_failures": 1,
+        "stale_endpoint_recovered": 1
+      },
+      "queued_batches": 0,
+      "queued_bytes": 0,
+      "pending_events": 0,
+      "cleanup_pending_batches": 0
+    }
+  },
+  "health": {
+    "schema_version": "agentprovenance.producer_health/v1",
+    "generated_at": "2026-11-15T17:26:50.017006727Z",
+    "run_id": "seccheck-faults",
+    "limits": {
+      "max_queued_batches": 0,
+      "max_queued_bytes": 0,
+      "max_batch_bytes": 0,
+      "drop_policy": ""
+    },
+    "spool": {
+      "received_batches": 0,
+      "queued_batches": 0,
+      "queued_bytes": 0,
+      "processing_batches": 0,
+      "processed_batches": 0,
+      "dropped_batches": 0,
+      "dropped_bytes": 0,
+      "failed_batches": 0,
+      "ingested_events": 0,
+      "failed_events": 0,
+      "by_status": {}
+    },
+    "events": {
+      "runtime_events": 499,
+      "correlated_events": 499,
+      "uncorrelated_events": 0,
+      "sensor_dropped_events": 0,
+      "by_source": {
+        "gvisor_seccheck": 499
+      }
+    },
+    "coverage": {
+      "correlation_ratio": 1,
+      "has_sensor_drops": true,
+      "complete": false,
+      "issues": [
+        "sentry_node_receiver_restart_gap",
+        "sentry_partial_checkpoint_coverage"
+      ]
+    },
+    "native_node_capture": {
+      "counters": {
+        "captured": 0
+      },
+      "queued_batches": 0,
+      "queued_bytes": 0,
+      "pending_events": 0,
+      "cleanup_pending_batches": 0
+    },
+    "seccheck_node_capture": {
+      "counters": {
+        "captured": 499,
+        "connected": 2,
+        "disconnected": 1,
+        "ingested": 499,
+        "read": 497,
+        "receiver_ready": 2,
+        "receiver_stopped": 1,
+        "reported_dropped_events": 15728,
+        "retry_failures": 1,
+        "stale_endpoint_recovered": 1
+      },
+      "queued_batches": 0,
+      "queued_bytes": 0,
+      "pending_events": 0,
+      "cleanup_pending_batches": 0
+    }
+  },
+  "verify": {
+    "schema_version": "agentprovenance.verify/v1",
+    "run_id": "seccheck-faults",
+    "status": "ok",
+    "issue_count": 0,
+    "error_count": 0,
+    "warning_count": 0,
+    "issues": null
+  },
+  "bundle": {
+    "schema_version": "agentprovenance.forensics_export/v1",
+    "id": "forensics-a3e8ef0a169c",
+    "run_id": "seccheck-faults",
+    "path": "/var/tmp/apv1/results/gvisor-faults/store/artifacts/forensics-a3e8ef0a169c.json",
+    "sha256": "206e44048dfb308aa60db1bd6e3d8a91611531e3e5150cbdfbf295fec5a98beb",
+    "size_bytes": 1767815,
+    "status": "ready",
+    "created_at": "2026-11-15T17:26:50.258953401Z",
+    "signed": true,
+    "attestation_path": "/var/tmp/apv1/results/gvisor-faults/store/artifacts/forensics-a3e8ef0a169c.dsse.json"
+  },
+  "import": {
+    "schema_version": "agentprovenance.forensics_import/v1",
+    "run_id": "seccheck-faults",
+    "bundle_path": "/var/tmp/apv1/results/gvisor-faults/store/artifacts/forensics-a3e8ef0a169c.json",
+    "bundle_schema": "agentprovenance.forensics_bundle/v1",
+    "tables": {
+      "events": 499,
+      "graph_edges": 1144,
+      "telemetry_batches": 65
+    },
+    "total_rows": 1708,
+    "object_blobs": 0,
+    "snapshot_files": 0,
+    "omitted_content": 0,
+    "attestation_verified": true,
+    "attestation_status": "verified"
+  },
+  "import_verify": {
+    "schema_version": "agentprovenance.verify/v1",
+    "run_id": "seccheck-faults",
+    "status": "ok",
+    "issue_count": 0,
+    "error_count": 0,
+    "warning_count": 0,
+    "issues": null
+  }
+}

@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/var/tmp/apv1/src/scripts/accept_seccheck_restore.py", line 390, in <module>
+    main()
+  File "/var/tmp/apv1/src/scripts/accept_seccheck_restore.py", line 352, in main
+    'rootfs': {'path': str(args.rootfs), 'busybox_sha256': digest(args.rootfs / 'bin/busybox'),
+                                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/tmp/apv1/src/scripts/accept_seccheck.py", line 21, in digest
+    with open(path, "rb") as source:
+         ^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/var/tmp/apv1/runtime/rootfs/bin/busybox'

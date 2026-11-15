@@ -1,0 +1,180 @@
+{
+  "runtime": "runsc version release-20261109.0\nspec: 1.2.1\n",
+  "platform": [
+    "Linux",
+    "agentprov-kvm-amd64",
+    "6.8.0-139-generic",
+    "#139-Ubuntu SMP PREEMPT_DYNAMIC Sat Aug  1 03:52:05 UTC 2026",
+    "x86_64"
+  ],
+  "binary_sha256": {
+    "cli": "ec65c79ed53f81e0f2a6fb735a522c10c67b7271def6cf4f8fa57db349413579",
+    "runsc": "c58f1dc2a3855487bf3bedc2edf074123ad433f1d98fb7f451f56790e87b5c9f",
+    "workload": "2c8428cf81fe77b4ba77dc5c92fa57d74c9ddfa79734cc6c4e47fb49726c6118"
+  },
+  "events": 130,
+  "status": {
+    "schema_version": "agentprovenance.seccheck_status/v1",
+    "collector_id": "seccheck-6f4a2cb24964",
+    "generated_at": "2026-11-15T17:26:43.856336584Z",
+    "state": "stopped",
+    "expected_runtime_release": "release-20261109.0",
+    "protocol_version": 1,
+    "capabilities": {
+      "producer": "agentprov",
+      "producer_version": "v1.0.0-candidate",
+      "producer_commit": "678bf7813ab0546f8438afe3ad5c0364f20a35ea",
+      "placement": "host_receiver",
+      "identity_domain": "sentry",
+      "system_telemetry": "partial",
+      "model_intent": "none",
+      "app_context": "none",
+      "supported_points": [
+        "container/start",
+        "sentry/clone",
+        "sentry/execve",
+        "sentry/task_exit",
+        "syscall/openat/enter",
+        "syscall/openat/exit",
+        "syscall/connect/enter",
+        "syscall/connect/exit",
+        "syscall/execve/enter",
+        "syscall/execve/exit"
+      ],
+      "enabled_points_basis": "observed_records",
+      "runtime_release_basis": "trusted_launcher_assertion",
+      "raw_packets_retained": false
+    },
+    "targets": [
+      {
+        "run_id": "seccheck-cli",
+        "socket_path": "/tmp/ap-scc-r6953f8t/0.sock",
+        "registration": {
+          "namespace": "acceptance",
+          "instance_id": "linux-node",
+          "generation": "gvisor-cli",
+          "sandbox_id": "seccheck-cli-0",
+          "container_id": "seccheck-cli-0",
+          "peer_uid": 0
+        },
+        "state": "stopped",
+        "connection_id": "secconn-089cce3803f7",
+        "last_observation_at": "2026-11-15T17:26:43.522618037Z",
+        "accepted_records": 62,
+        "reported_dropped_events": 0,
+        "drop_counter_decreases": 0,
+        "identity_gap_records": 0,
+        "last_diagnostic": "disconnected"
+      },
+      {
+        "run_id": "seccheck-cli",
+        "socket_path": "/tmp/ap-scc-r6953f8t/1.sock",
+        "registration": {
+          "namespace": "acceptance",
+          "instance_id": "linux-node",
+          "generation": "gvisor-cli",
+          "sandbox_id": "seccheck-cli-1",
+          "container_id": "seccheck-cli-1",
+          "peer_uid": 0
+        },
+        "state": "stopped",
+        "connection_id": "secconn-0efd85408d08",
+        "last_observation_at": "2026-11-15T17:26:43.630550413Z",
+        "accepted_records": 64,
+        "reported_dropped_events": 0,
+        "drop_counter_decreases": 0,
+        "identity_gap_records": 0,
+        "last_diagnostic": "disconnected"
+      }
+    ],
+    "node_spool": {
+      "counters": {
+        "captured": 130,
+        "connected": 2,
+        "disconnected": 2,
+        "ingested": 130,
+        "read": 130,
+        "receiver_ready": 2,
+        "receiver_stopped": 2
+      },
+      "queued_batches": 0,
+      "queued_bytes": 0,
+      "pending_events": 0,
+      "cleanup_pending_batches": 0
+    }
+  },
+  "health": {
+    "schema_version": "agentprovenance.producer_health/v1",
+    "generated_at": "2026-11-15T17:26:43.927515569Z",
+    "run_id": "seccheck-cli",
+    "limits": {
+      "max_queued_batches": 0,
+      "max_queued_bytes": 0,
+      "max_batch_bytes": 0,
+      "drop_policy": ""
+    },
+    "spool": {
+      "received_batches": 0,
+      "queued_batches": 0,
+      "queued_bytes": 0,
+      "processing_batches": 0,
+      "processed_batches": 0,
+      "dropped_batches": 0,
+      "dropped_bytes": 0,
+      "failed_batches": 0,
+      "ingested_events": 0,
+      "failed_events": 0,
+      "by_status": {}
+    },
+    "events": {
+      "runtime_events": 130,
+      "correlated_events": 130,
+      "uncorrelated_events": 0,
+      "sensor_dropped_events": 0,
+      "by_source": {
+        "gvisor_seccheck": 130
+      }
+    },
+    "coverage": {
+      "correlation_ratio": 1,
+      "has_sensor_drops": false,
+      "complete": false,
+      "issues": [
+        "sentry_partial_checkpoint_coverage"
+      ]
+    },
+    "native_node_capture": {
+      "counters": {
+        "captured": 0
+      },
+      "queued_batches": 0,
+      "queued_bytes": 0,
+      "pending_events": 0,
+      "cleanup_pending_batches": 0
+    },
+    "seccheck_node_capture": {
+      "counters": {
+        "captured": 130,
+        "connected": 2,
+        "disconnected": 2,
+        "ingested": 130,
+        "read": 130,
+        "receiver_ready": 2,
+        "receiver_stopped": 2
+      },
+      "queued_batches": 0,
+      "queued_bytes": 0,
+      "pending_events": 0,
+      "cleanup_pending_batches": 0
+    }
+  },
+  "verify": {
+    "schema_version": "agentprovenance.verify/v1",
+    "run_id": "seccheck-cli",
+    "status": "ok",
+    "issue_count": 0,
+    "error_count": 0,
+    "warning_count": 0,
+    "issues": null
+  }
+}

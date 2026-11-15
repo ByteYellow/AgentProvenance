@@ -54,8 +54,27 @@ The v1.0 requirements are reconciled as follows:
 | Go 1.23.12, 1.24.13, 1.25.8, 1.26.4 | All 16 matrix cells passed: syscall/TLS, concurrent read and stack growth, discovery, PID namespace |
 | Full kernel ring and mismatched procfs namespace | Explicit retained-order test passed; mismatched namespace rejected |
 | Claude Code with DeepSeek | Two sessions, three attempts, explicit reexecution, lost ACK response and offline verification passed |
-| gVisor | Pinned `release-20261109.0` receive/fault tests, memory restore and two-clone checks retained from this amd64 run |
+| gVisor | Pinned `release-20261109.0` receive/fault tests, memory restore and two-clone checks; [original results and summary](gvisor/summary.json) archived |
 | Firecracker | v1.18.0 with kernel 6.18.62 booted a guest containing the final archive's CLI; two commands, native file evidence, signed receipt and retirement passed |
+
+The three gVisor result files are byte-for-byte copies of the original KVM
+records. They were produced on **Linux 6.8.0-139-generic, x86_64**, using the
+working candidate identified by CLI hash `ec65c79e…` and runsc
+`release-20261109.0`. Their original timestamps, executable hashes and coverage
+states are retained in the files and [summary](gvisor/summary.json).
+
+| Acceptance | Original result | Recorded checks |
+| --- | --- | --- |
+| Reception | [receive.result.json](gvisor/receive.result.json) | Two targets, 130 events, drained spool, no reported target drops, graph verification |
+| Fault recovery | [faults.result.json](gvisor/faults.result.json) | Pressure loss counters, 82 recovered and 341 preserved observations, reconnect, signed import and graph verification |
+| Restore / two clones | [restore-clones.result.json](gvisor/restore-clones.result.json) | Four phases, preserved memory, four distinct scopes/process nodes, eight historical spool records deduplicated across clones, receipt reuse and signer reauthorization |
+
+The first restore run failed while producing its report because it assumed a
+BusyBox rootfs. The corrected run supports the Ubuntu rootfs. The
+[original exit codes](gvisor/initial-run-exit-codes.tsv),
+[first failure](gvisor/restore-first-failure.log) and
+[successful completion record](gvisor/restore-fixed.log) are retained alongside
+the successful result. [SHA-256 checksums](gvisor/SHA256SUMS) cover the archive.
 
 The native model matrix retains `scope_state_sampling_gap` as incomplete capture.
 The previous first-request discovery failure remains in the private evidence;

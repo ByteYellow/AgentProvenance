@@ -48,8 +48,24 @@
 | Go 1.23.12、1.24.13、1.25.8、1.26.4 | 16 组全部通过，包含 syscall/TLS、并发读取与栈增长、程序发现及 PID namespace |
 | 内核环形缓冲区满、procfs namespace 不匹配 | 记录顺序保留用例通过；错误 namespace 被明确拒绝 |
 | Claude Code + DeepSeek | 两会话、三次执行、显式重执行、ACK 响应丢失恢复及离线核验通过 |
-| gVisor | 沿用本轮 amd64 已通过的固定版本接收、故障恢复、真实内存恢复和双克隆结果，版本为 `release-20261109.0` |
+| gVisor | 固定版本 `release-20261109.0` 的接收、故障恢复、真实内存恢复和双克隆通过；[原始结果及汇总](gvisor/summary.json)已归档 |
 | Firecracker | v1.18.0 配合 6.18.62 内核启动包含最终候选包 CLI 的镜像；两条命令、原生文件证据、签名回执和回收通过 |
+
+三份 gVisor 结果均按原始文件逐字节复制。当时环境为 **Linux 6.8.0-139-generic、
+x86_64**，CLI 为哈希 `ec65c79e…` 对应的工作区候选构建，runsc 版本为
+`release-20261109.0`。原始时间、程序哈希和覆盖状态保留在结果文件及
+[验收汇总](gvisor/summary.json)中。
+
+| 验收项 | 原始结果 | 记录内容 |
+| --- | --- | --- |
+| 接收 | [receive.result.json](gvisor/receive.result.json) | 两个目标、130 条事件、spool 排空、目标未报告丢失、图谱校验 |
+| 故障恢复 | [faults.result.json](gvisor/faults.result.json) | 压力丢失计数、82 条恢复记录、341 条保留记录、重连、签名导入及图谱校验 |
+| 恢复／双克隆 | [restore-clones.result.json](gvisor/restore-clones.result.json) | 四个阶段、内存状态保留、四组独立作用域和进程身份、8 条历史 spool 记录跨克隆去重、回执复用及签名重新授权 |
+
+首次恢复验收在生成报告时，因默认 rootfs 包含 BusyBox 而失败；修正为支持 Ubuntu
+rootfs 后复测通过。[原始退出码](gvisor/initial-run-exit-codes.tsv)、
+[首次失败日志](gvisor/restore-first-failure.log)和[修复后完成记录](gvisor/restore-fixed.log)
+均与最终结果一起保留。[SHA-256 校验文件](gvisor/SHA256SUMS)覆盖这些归档文件。
 
 真实模型矩阵中的 `scope_state_sampling_gap` 按采集不完整保留。此前自动发现首条
 TLS 请求失败的记录继续保存，最终四个 Go 版本的 namespace 矩阵全部通过。

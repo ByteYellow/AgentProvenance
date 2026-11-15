@@ -1,0 +1,765 @@
+{
+  "passed": true,
+  "runtime": "runsc version release-20261109.0\nspec: 1.2.1\n",
+  "platform": [
+    "Linux",
+    "agentprov-kvm-amd64",
+    "6.8.0-139-generic",
+    "#139-Ubuntu SMP PREEMPT_DYNAMIC Sat Aug  1 03:52:05 UTC 2026",
+    "x86_64"
+  ],
+  "binary_sha256": {
+    "cli": "ec65c79ed53f81e0f2a6fb735a522c10c67b7271def6cf4f8fa57db349413579",
+    "runsc": "c58f1dc2a3855487bf3bedc2edf074123ad433f1d98fb7f451f56790e87b5c9f"
+  },
+  "rootfs": {
+    "path": "/var/tmp/apv1/runtime/rootfs",
+    "program_sha256": {
+      "bin/sh": "86d31f6fb799e91fa21bad341484564510ca287703a16e9e46c53338776f4f42",
+      "bin/cat": "a63158e6e5bce20616425f5d61e5bd7374bb5bccf15bbb93ae2e40238248f179",
+      "bin/date": "225cf5c9122f922b8315538425bed7610853c853d6a2d2cfd89161b04f692367",
+      "bin/sleep": "a65efec857cfac0d4f43fc53affa73794ff1d1fdcb547931d4b92a98bda8e646"
+    },
+    "busybox_sha256": null,
+    "os_release": "PRETTY_NAME=\"Ubuntu 24.04.4 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.4 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo\n"
+  },
+  "acceptance_script_sha256": "c20c84a8e30d988e1c390ce102b61089c02bca3834e5316cfe07964b05950957",
+  "phases": [
+    {
+      "registration": {
+        "namespace": "restore-acceptance",
+        "instance_id": "original",
+        "generation": "1",
+        "sandbox_id": "snapshot-workload",
+        "container_id": "snapshot-workload",
+        "peer_uid": 0
+      },
+      "memory_value": "1794763776744302680-1",
+      "hostname": "same-snapshot-host",
+      "boot_id": "936767de-cf23-48de-9ab9-07df21945a5b",
+      "copied_signing_key_matches": true,
+      "context": {
+        "time_ns": 1794763776745366767,
+        "thread_id": 1,
+        "thread_start_ns": 1794763776728109814,
+        "group_id": 1,
+        "group_start_ns": 1794763776728109814,
+        "parent_group_id": 0
+      },
+      "status": {
+        "schema_version": "agentprovenance.seccheck_status/v1",
+        "collector_id": "seccheck-ccfab5aa9417",
+        "generated_at": "2026-11-15T17:29:38.40618955Z",
+        "state": "stopped",
+        "last_worker_error": "constraint failed: hold historical batch (1811)",
+        "expected_runtime_release": "release-20261109.0",
+        "protocol_version": 1,
+        "capabilities": {
+          "producer": "agentprov",
+          "producer_version": "v1.0.0-candidate",
+          "producer_commit": "678bf7813ab0546f8438afe3ad5c0364f20a35ea",
+          "placement": "host_receiver",
+          "identity_domain": "sentry",
+          "system_telemetry": "partial",
+          "model_intent": "none",
+          "app_context": "none",
+          "supported_points": [
+            "container/start",
+            "sentry/clone",
+            "sentry/execve",
+            "sentry/task_exit",
+            "syscall/openat/enter",
+            "syscall/openat/exit",
+            "syscall/connect/enter",
+            "syscall/connect/exit",
+            "syscall/execve/enter",
+            "syscall/execve/exit"
+          ],
+          "enabled_points_basis": "observed_records",
+          "runtime_release_basis": "trusted_launcher_assertion",
+          "raw_packets_retained": false
+        },
+        "targets": [
+          {
+            "run_id": "seccheck-restore",
+            "socket_path": "/tmp/ap-scr-zxqzgl4i/0.sock",
+            "registration": {
+              "namespace": "restore-acceptance",
+              "instance_id": "original",
+              "generation": "1",
+              "sandbox_id": "snapshot-workload",
+              "container_id": "snapshot-workload",
+              "peer_uid": 0
+            },
+            "state": "stopped",
+            "connection_id": "secconn-5a18852f8d45",
+            "last_observation_at": "2026-11-15T17:29:37.835970381Z",
+            "accepted_records": 148,
+            "reported_dropped_events": 0,
+            "drop_counter_decreases": 0,
+            "identity_gap_records": 0,
+            "last_diagnostic": "disconnected"
+          }
+        ],
+        "node_spool": {
+          "counters": {
+            "captured": 150,
+            "connected": 1,
+            "disconnected": 1,
+            "ingested": 150,
+            "read": 150,
+            "receiver_ready": 1,
+            "receiver_stopped": 1,
+            "retry_failures": 1
+          },
+          "queued_batches": 0,
+          "queued_bytes": 0,
+          "pending_events": 0,
+          "cleanup_pending_batches": 0
+        }
+      }
+    },
+    {
+      "registration": {
+        "namespace": "restore-acceptance",
+        "instance_id": "original",
+        "generation": "2",
+        "sandbox_id": "snapshot-workload",
+        "container_id": "snapshot-workload",
+        "peer_uid": 0
+      },
+      "memory_value": "1794763776744302680-1",
+      "hostname": "same-snapshot-host",
+      "boot_id": "936767de-cf23-48de-9ab9-07df21945a5b",
+      "copied_signing_key_matches": true,
+      "context": {
+        "time_ns": 1794763778967026460,
+        "thread_id": 1,
+        "thread_start_ns": 1794763776728109814,
+        "group_id": 1,
+        "group_start_ns": 1794763776728109814,
+        "parent_group_id": 0
+      },
+      "status": {
+        "schema_version": "agentprovenance.seccheck_status/v1",
+        "collector_id": "seccheck-a4fef3fb4f05",
+        "generated_at": "2026-11-15T17:29:40.0926579Z",
+        "state": "stopped",
+        "expected_runtime_release": "release-20261109.0",
+        "protocol_version": 1,
+        "capabilities": {
+          "producer": "agentprov",
+          "producer_version": "v1.0.0-candidate",
+          "producer_commit": "678bf7813ab0546f8438afe3ad5c0364f20a35ea",
+          "placement": "host_receiver",
+          "identity_domain": "sentry",
+          "system_telemetry": "partial",
+          "model_intent": "none",
+          "app_context": "none",
+          "supported_points": [
+            "container/start",
+            "sentry/clone",
+            "sentry/execve",
+            "sentry/task_exit",
+            "syscall/openat/enter",
+            "syscall/openat/exit",
+            "syscall/connect/enter",
+            "syscall/connect/exit",
+            "syscall/execve/enter",
+            "syscall/execve/exit"
+          ],
+          "enabled_points_basis": "observed_records",
+          "runtime_release_basis": "trusted_launcher_assertion",
+          "raw_packets_retained": false
+        },
+        "targets": [
+          {
+            "run_id": "seccheck-restore",
+            "socket_path": "/tmp/ap-scr-zxqzgl4i/1.sock",
+            "registration": {
+              "namespace": "restore-acceptance",
+              "instance_id": "original",
+              "generation": "2",
+              "sandbox_id": "snapshot-workload",
+              "container_id": "snapshot-workload",
+              "peer_uid": 0
+            },
+            "state": "stopped",
+            "connection_id": "secconn-0688fb72ece7",
+            "last_observation_at": "2026-11-15T17:29:39.948938285Z",
+            "accepted_records": 80,
+            "reported_dropped_events": 0,
+            "drop_counter_decreases": 0,
+            "identity_gap_records": 0,
+            "last_diagnostic": "disconnected"
+          }
+        ],
+        "node_spool": {
+          "counters": {
+            "captured": 232,
+            "connected": 2,
+            "disconnected": 2,
+            "ingested": 232,
+            "read": 232,
+            "receiver_ready": 2,
+            "receiver_stopped": 2,
+            "retry_failures": 1
+          },
+          "queued_batches": 0,
+          "queued_bytes": 0,
+          "pending_events": 0,
+          "cleanup_pending_batches": 0
+        }
+      }
+    },
+    {
+      "registration": {
+        "namespace": "restore-acceptance",
+        "instance_id": "clone-a",
+        "generation": "1",
+        "sandbox_id": "snapshot-workload",
+        "container_id": "snapshot-workload",
+        "peer_uid": 0
+      },
+      "memory_value": "1794763776744302680-1",
+      "hostname": "same-snapshot-host",
+      "boot_id": "936767de-cf23-48de-9ab9-07df21945a5b",
+      "copied_signing_key_matches": true,
+      "context": {
+        "time_ns": 1794763780557847022,
+        "thread_id": 1,
+        "thread_start_ns": 1794763776728109814,
+        "group_id": 1,
+        "group_start_ns": 1794763776728109814,
+        "parent_group_id": 0
+      },
+      "status": {
+        "schema_version": "agentprovenance.seccheck_status/v1",
+        "collector_id": "seccheck-9e16c999a957",
+        "generated_at": "2026-11-15T17:29:41.5648113Z",
+        "state": "stopped",
+        "expected_runtime_release": "release-20261109.0",
+        "protocol_version": 1,
+        "capabilities": {
+          "producer": "agentprov",
+          "producer_version": "v1.0.0-candidate",
+          "producer_commit": "678bf7813ab0546f8438afe3ad5c0364f20a35ea",
+          "placement": "host_receiver",
+          "identity_domain": "sentry",
+          "system_telemetry": "partial",
+          "model_intent": "none",
+          "app_context": "none",
+          "supported_points": [
+            "container/start",
+            "sentry/clone",
+            "sentry/execve",
+            "sentry/task_exit",
+            "syscall/openat/enter",
+            "syscall/openat/exit",
+            "syscall/connect/enter",
+            "syscall/connect/exit",
+            "syscall/execve/enter",
+            "syscall/execve/exit"
+          ],
+          "enabled_points_basis": "observed_records",
+          "runtime_release_basis": "trusted_launcher_assertion",
+          "raw_packets_retained": false
+        },
+        "targets": [
+          {
+            "run_id": "seccheck-restore",
+            "socket_path": "/tmp/ap-scr-zxqzgl4i/2.sock",
+            "registration": {
+              "namespace": "restore-acceptance",
+              "instance_id": "clone-a",
+              "generation": "1",
+              "sandbox_id": "snapshot-workload",
+              "container_id": "snapshot-workload",
+              "peer_uid": 0
+            },
+            "state": "stopped",
+            "connection_id": "secconn-cffd3f0af92c",
+            "last_observation_at": "2026-11-15T17:29:41.45927211Z",
+            "accepted_records": 73,
+            "reported_dropped_events": 0,
+            "drop_counter_decreases": 0,
+            "identity_gap_records": 0,
+            "last_diagnostic": "disconnected"
+          }
+        ],
+        "node_spool": {
+          "counters": {
+            "captured": 307,
+            "connected": 3,
+            "disconnected": 3,
+            "ingested": 307,
+            "read": 307,
+            "receiver_ready": 3,
+            "receiver_stopped": 3,
+            "retry_failures": 1
+          },
+          "queued_batches": 0,
+          "queued_bytes": 0,
+          "pending_events": 0,
+          "cleanup_pending_batches": 0
+        }
+      }
+    },
+    {
+      "registration": {
+        "namespace": "restore-acceptance",
+        "instance_id": "clone-b",
+        "generation": "1",
+        "sandbox_id": "snapshot-workload",
+        "container_id": "snapshot-workload",
+        "peer_uid": 0
+      },
+      "memory_value": "1794763776744302680-1",
+      "hostname": "same-snapshot-host",
+      "boot_id": "936767de-cf23-48de-9ab9-07df21945a5b",
+      "copied_signing_key_matches": true,
+      "context": {
+        "time_ns": 1794763782041517981,
+        "thread_id": 1,
+        "thread_start_ns": 1794763776728109814,
+        "group_id": 1,
+        "group_start_ns": 1794763776728109814,
+        "parent_group_id": 0
+      },
+      "status": {
+        "schema_version": "agentprovenance.seccheck_status/v1",
+        "collector_id": "seccheck-b224a76fddc4",
+        "generated_at": "2026-11-15T17:29:43.04219888Z",
+        "state": "stopped",
+        "expected_runtime_release": "release-20261109.0",
+        "protocol_version": 1,
+        "capabilities": {
+          "producer": "agentprov",
+          "producer_version": "v1.0.0-candidate",
+          "producer_commit": "678bf7813ab0546f8438afe3ad5c0364f20a35ea",
+          "placement": "host_receiver",
+          "identity_domain": "sentry",
+          "system_telemetry": "partial",
+          "model_intent": "none",
+          "app_context": "none",
+          "supported_points": [
+            "container/start",
+            "sentry/clone",
+            "sentry/execve",
+            "sentry/task_exit",
+            "syscall/openat/enter",
+            "syscall/openat/exit",
+            "syscall/connect/enter",
+            "syscall/connect/exit",
+            "syscall/execve/enter",
+            "syscall/execve/exit"
+          ],
+          "enabled_points_basis": "observed_records",
+          "runtime_release_basis": "trusted_launcher_assertion",
+          "raw_packets_retained": false
+        },
+        "targets": [
+          {
+            "run_id": "seccheck-restore",
+            "socket_path": "/tmp/ap-scr-zxqzgl4i/3.sock",
+            "registration": {
+              "namespace": "restore-acceptance",
+              "instance_id": "clone-b",
+              "generation": "1",
+              "sandbox_id": "snapshot-workload",
+              "container_id": "snapshot-workload",
+              "peer_uid": 0
+            },
+            "state": "stopped",
+            "connection_id": "secconn-533d48c7aaab",
+            "last_observation_at": "2026-11-15T17:29:42.943683354Z",
+            "accepted_records": 73,
+            "reported_dropped_events": 0,
+            "drop_counter_decreases": 0,
+            "identity_gap_records": 0,
+            "last_diagnostic": "disconnected"
+          }
+        ],
+        "node_spool": {
+          "counters": {
+            "captured": 382,
+            "connected": 4,
+            "disconnected": 4,
+            "ingested": 382,
+            "read": 382,
+            "receiver_ready": 4,
+            "receiver_stopped": 4,
+            "retry_failures": 1
+          },
+          "queued_batches": 0,
+          "queued_bytes": 0,
+          "pending_events": 0,
+          "cleanup_pending_batches": 0
+        }
+      }
+    }
+  ],
+  "events": 384,
+  "scopes": [
+    "gvisor/2493a34d2b0ad496c7d0c8c114866d204c32184614bd4e30f24cf6152960f5f5",
+    "gvisor/5da3df679e645c3a6ffe76865738629ef1edae2cb956afa1f3b7f65a7469bc6a",
+    "gvisor/a3152188a9b4517112b685dfdc85eec99c475cf3649758bdf1bde794392401a3",
+    "gvisor/d38437a0191c3ec9e053a57fe56775b753fd0b098d29ebccf99d1c425bd2b5a4"
+  ],
+  "process_nodes": [
+    "runtime_process/gvisor/2493a34d2b0ad496c7d0c8c114866d204c32184614bd4e30f24cf6152960f5f5/process/1:1794763776728109814",
+    "runtime_process/gvisor/5da3df679e645c3a6ffe76865738629ef1edae2cb956afa1f3b7f65a7469bc6a/process/1:1794763776728109814",
+    "runtime_process/gvisor/a3152188a9b4517112b685dfdc85eec99c475cf3649758bdf1bde794392401a3/process/1:1794763776728109814",
+    "runtime_process/gvisor/d38437a0191c3ec9e053a57fe56775b753fd0b098d29ebccf99d1c425bd2b5a4/process/1:1794763776728109814"
+  ],
+  "historical_spool": {
+    "sha256": "30b20312648c0f76819c0914bc6af923e60273c8165eda2262cf655c8ac8d66f",
+    "records": 8,
+    "event_ids": [
+      "evt-seccheck-6a0ce1e9317fe235a067309d123758548044308495306852571db76e5614c367",
+      "evt-seccheck-7a7c44d04e0bdd757109f97b78f46f88f588b0692ebe3d12af809665ca4345c6",
+      "evt-seccheck-7a76f471b058f24d68e7772651b3a91efc8ac8bf8a3fd534c43af9d82c427cc4",
+      "evt-seccheck-414ec1a6ce2362c005edc604bd62c5a6ca6c67f7b83e8ca2c04c1a6d45414a42",
+      "evt-seccheck-4f2bf5e640599931ded97fdfa01e6ba064284585b5f434642ffc602ec322c360",
+      "evt-seccheck-6f525b075a9a53dad7b867321a61e046b93d3bcda8ef369b69dc462ce2688dc7",
+      "evt-seccheck-7b089f00b6c858800a6648f678721e38428e82f46048c21321cd5faf1d9df6b7",
+      "evt-seccheck-1410dcc0b6e469bc8de28f61c88c25440c80da6053f6467224c526c19f0d87a4"
+    ],
+    "uploads": [
+      {
+        "registration": {
+          "namespace": "restore-acceptance",
+          "instance_id": "clone-a",
+          "generation": "1",
+          "sandbox_id": "snapshot-workload",
+          "container_id": "snapshot-workload",
+          "peer_uid": 0
+        },
+        "fresh_store": {
+          "schema_version": "agentprovenance.seccheck_spool_replay/v1",
+          "receipts": [
+            {
+              "run_id": "seccheck-restore",
+              "schema_version": "agentprovenance.seccheck_spool_replay/v1",
+              "receipt_id": "evt-seccheck-4221aff59a99175255e14c6fd2fdbb702fb5f87a6f8f69eab698f79b54f9b225",
+              "uploader": {
+                "namespace": "restore-acceptance",
+                "instance_id": "clone-a",
+                "generation": "1",
+                "sandbox_id": "snapshot-workload",
+                "container_id": "snapshot-workload",
+                "peer_uid": 0
+              },
+              "authority_basis": "local_operator_registration",
+              "file_sha256": "30b20312648c0f76819c0914bc6af923e60273c8165eda2262cf655c8ac8d66f",
+              "size_bytes": 12817,
+              "records": 8,
+              "ingested": 8,
+              "duplicates": 0,
+              "event_ids": [
+                "evt-seccheck-6a0ce1e9317fe235a067309d123758548044308495306852571db76e5614c367",
+                "evt-seccheck-7a7c44d04e0bdd757109f97b78f46f88f588b0692ebe3d12af809665ca4345c6",
+                "evt-seccheck-7a76f471b058f24d68e7772651b3a91efc8ac8bf8a3fd534c43af9d82c427cc4",
+                "evt-seccheck-414ec1a6ce2362c005edc604bd62c5a6ca6c67f7b83e8ca2c04c1a6d45414a42",
+                "evt-seccheck-4f2bf5e640599931ded97fdfa01e6ba064284585b5f434642ffc602ec322c360",
+                "evt-seccheck-6f525b075a9a53dad7b867321a61e046b93d3bcda8ef369b69dc462ce2688dc7",
+                "evt-seccheck-7b089f00b6c858800a6648f678721e38428e82f46048c21321cd5faf1d9df6b7",
+                "evt-seccheck-1410dcc0b6e469bc8de28f61c88c25440c80da6053f6467224c526c19f0d87a4"
+              ],
+              "received_at": "2026-11-15T17:29:43.567025449Z"
+            }
+          ],
+          "reused_receipt_ids": []
+        },
+        "existing_store": {
+          "schema_version": "agentprovenance.seccheck_spool_replay/v1",
+          "receipts": [
+            {
+              "run_id": "seccheck-restore",
+              "schema_version": "agentprovenance.seccheck_spool_replay/v1",
+              "receipt_id": "evt-seccheck-4221aff59a99175255e14c6fd2fdbb702fb5f87a6f8f69eab698f79b54f9b225",
+              "uploader": {
+                "namespace": "restore-acceptance",
+                "instance_id": "clone-a",
+                "generation": "1",
+                "sandbox_id": "snapshot-workload",
+                "container_id": "snapshot-workload",
+                "peer_uid": 0
+              },
+              "authority_basis": "local_operator_registration",
+              "file_sha256": "30b20312648c0f76819c0914bc6af923e60273c8165eda2262cf655c8ac8d66f",
+              "size_bytes": 12817,
+              "records": 8,
+              "ingested": 0,
+              "duplicates": 8,
+              "event_ids": [
+                "evt-seccheck-6a0ce1e9317fe235a067309d123758548044308495306852571db76e5614c367",
+                "evt-seccheck-7a7c44d04e0bdd757109f97b78f46f88f588b0692ebe3d12af809665ca4345c6",
+                "evt-seccheck-7a76f471b058f24d68e7772651b3a91efc8ac8bf8a3fd534c43af9d82c427cc4",
+                "evt-seccheck-414ec1a6ce2362c005edc604bd62c5a6ca6c67f7b83e8ca2c04c1a6d45414a42",
+                "evt-seccheck-4f2bf5e640599931ded97fdfa01e6ba064284585b5f434642ffc602ec322c360",
+                "evt-seccheck-6f525b075a9a53dad7b867321a61e046b93d3bcda8ef369b69dc462ce2688dc7",
+                "evt-seccheck-7b089f00b6c858800a6648f678721e38428e82f46048c21321cd5faf1d9df6b7",
+                "evt-seccheck-1410dcc0b6e469bc8de28f61c88c25440c80da6053f6467224c526c19f0d87a4"
+              ],
+              "received_at": "2026-11-15T17:29:43.618164257Z"
+            }
+          ],
+          "reused_receipt_ids": []
+        },
+        "retry": {
+          "schema_version": "agentprovenance.seccheck_spool_replay/v1",
+          "receipts": [
+            {
+              "run_id": "seccheck-restore",
+              "schema_version": "agentprovenance.seccheck_spool_replay/v1",
+              "receipt_id": "evt-seccheck-4221aff59a99175255e14c6fd2fdbb702fb5f87a6f8f69eab698f79b54f9b225",
+              "uploader": {
+                "namespace": "restore-acceptance",
+                "instance_id": "clone-a",
+                "generation": "1",
+                "sandbox_id": "snapshot-workload",
+                "container_id": "snapshot-workload",
+                "peer_uid": 0
+              },
+              "authority_basis": "local_operator_registration",
+              "file_sha256": "30b20312648c0f76819c0914bc6af923e60273c8165eda2262cf655c8ac8d66f",
+              "size_bytes": 12817,
+              "records": 8,
+              "ingested": 8,
+              "duplicates": 0,
+              "event_ids": [
+                "evt-seccheck-6a0ce1e9317fe235a067309d123758548044308495306852571db76e5614c367",
+                "evt-seccheck-7a7c44d04e0bdd757109f97b78f46f88f588b0692ebe3d12af809665ca4345c6",
+                "evt-seccheck-7a76f471b058f24d68e7772651b3a91efc8ac8bf8a3fd534c43af9d82c427cc4",
+                "evt-seccheck-414ec1a6ce2362c005edc604bd62c5a6ca6c67f7b83e8ca2c04c1a6d45414a42",
+                "evt-seccheck-4f2bf5e640599931ded97fdfa01e6ba064284585b5f434642ffc602ec322c360",
+                "evt-seccheck-6f525b075a9a53dad7b867321a61e046b93d3bcda8ef369b69dc462ce2688dc7",
+                "evt-seccheck-7b089f00b6c858800a6648f678721e38428e82f46048c21321cd5faf1d9df6b7",
+                "evt-seccheck-1410dcc0b6e469bc8de28f61c88c25440c80da6053f6467224c526c19f0d87a4"
+              ],
+              "received_at": "2026-11-15T17:29:43.567025449Z"
+            }
+          ],
+          "reused_receipt_ids": [
+            "evt-seccheck-4221aff59a99175255e14c6fd2fdbb702fb5f87a6f8f69eab698f79b54f9b225"
+          ]
+        }
+      },
+      {
+        "registration": {
+          "namespace": "restore-acceptance",
+          "instance_id": "clone-b",
+          "generation": "1",
+          "sandbox_id": "snapshot-workload",
+          "container_id": "snapshot-workload",
+          "peer_uid": 0
+        },
+        "fresh_store": {
+          "schema_version": "agentprovenance.seccheck_spool_replay/v1",
+          "receipts": [
+            {
+              "run_id": "seccheck-restore",
+              "schema_version": "agentprovenance.seccheck_spool_replay/v1",
+              "receipt_id": "evt-seccheck-d2a118dded0a12835a2c5413d54e092a48aee84e7c08f538a4330dea60981a82",
+              "uploader": {
+                "namespace": "restore-acceptance",
+                "instance_id": "clone-b",
+                "generation": "1",
+                "sandbox_id": "snapshot-workload",
+                "container_id": "snapshot-workload",
+                "peer_uid": 0
+              },
+              "authority_basis": "local_operator_registration",
+              "file_sha256": "30b20312648c0f76819c0914bc6af923e60273c8165eda2262cf655c8ac8d66f",
+              "size_bytes": 12817,
+              "records": 8,
+              "ingested": 0,
+              "duplicates": 8,
+              "event_ids": [
+                "evt-seccheck-6a0ce1e9317fe235a067309d123758548044308495306852571db76e5614c367",
+                "evt-seccheck-7a7c44d04e0bdd757109f97b78f46f88f588b0692ebe3d12af809665ca4345c6",
+                "evt-seccheck-7a76f471b058f24d68e7772651b3a91efc8ac8bf8a3fd534c43af9d82c427cc4",
+                "evt-seccheck-414ec1a6ce2362c005edc604bd62c5a6ca6c67f7b83e8ca2c04c1a6d45414a42",
+                "evt-seccheck-4f2bf5e640599931ded97fdfa01e6ba064284585b5f434642ffc602ec322c360",
+                "evt-seccheck-6f525b075a9a53dad7b867321a61e046b93d3bcda8ef369b69dc462ce2688dc7",
+                "evt-seccheck-7b089f00b6c858800a6648f678721e38428e82f46048c21321cd5faf1d9df6b7",
+                "evt-seccheck-1410dcc0b6e469bc8de28f61c88c25440c80da6053f6467224c526c19f0d87a4"
+              ],
+              "received_at": "2026-11-15T17:29:43.684454751Z"
+            }
+          ],
+          "reused_receipt_ids": []
+        },
+        "existing_store": {
+          "schema_version": "agentprovenance.seccheck_spool_replay/v1",
+          "receipts": [
+            {
+              "run_id": "seccheck-restore",
+              "schema_version": "agentprovenance.seccheck_spool_replay/v1",
+              "receipt_id": "evt-seccheck-d2a118dded0a12835a2c5413d54e092a48aee84e7c08f538a4330dea60981a82",
+              "uploader": {
+                "namespace": "restore-acceptance",
+                "instance_id": "clone-b",
+                "generation": "1",
+                "sandbox_id": "snapshot-workload",
+                "container_id": "snapshot-workload",
+                "peer_uid": 0
+              },
+              "authority_basis": "local_operator_registration",
+              "file_sha256": "30b20312648c0f76819c0914bc6af923e60273c8165eda2262cf655c8ac8d66f",
+              "size_bytes": 12817,
+              "records": 8,
+              "ingested": 0,
+              "duplicates": 8,
+              "event_ids": [
+                "evt-seccheck-6a0ce1e9317fe235a067309d123758548044308495306852571db76e5614c367",
+                "evt-seccheck-7a7c44d04e0bdd757109f97b78f46f88f588b0692ebe3d12af809665ca4345c6",
+                "evt-seccheck-7a76f471b058f24d68e7772651b3a91efc8ac8bf8a3fd534c43af9d82c427cc4",
+                "evt-seccheck-414ec1a6ce2362c005edc604bd62c5a6ca6c67f7b83e8ca2c04c1a6d45414a42",
+                "evt-seccheck-4f2bf5e640599931ded97fdfa01e6ba064284585b5f434642ffc602ec322c360",
+                "evt-seccheck-6f525b075a9a53dad7b867321a61e046b93d3bcda8ef369b69dc462ce2688dc7",
+                "evt-seccheck-7b089f00b6c858800a6648f678721e38428e82f46048c21321cd5faf1d9df6b7",
+                "evt-seccheck-1410dcc0b6e469bc8de28f61c88c25440c80da6053f6467224c526c19f0d87a4"
+              ],
+              "received_at": "2026-11-15T17:29:43.728627263Z"
+            }
+          ],
+          "reused_receipt_ids": []
+        },
+        "retry": {
+          "schema_version": "agentprovenance.seccheck_spool_replay/v1",
+          "receipts": [
+            {
+              "run_id": "seccheck-restore",
+              "schema_version": "agentprovenance.seccheck_spool_replay/v1",
+              "receipt_id": "evt-seccheck-d2a118dded0a12835a2c5413d54e092a48aee84e7c08f538a4330dea60981a82",
+              "uploader": {
+                "namespace": "restore-acceptance",
+                "instance_id": "clone-b",
+                "generation": "1",
+                "sandbox_id": "snapshot-workload",
+                "container_id": "snapshot-workload",
+                "peer_uid": 0
+              },
+              "authority_basis": "local_operator_registration",
+              "file_sha256": "30b20312648c0f76819c0914bc6af923e60273c8165eda2262cf655c8ac8d66f",
+              "size_bytes": 12817,
+              "records": 8,
+              "ingested": 0,
+              "duplicates": 8,
+              "event_ids": [
+                "evt-seccheck-6a0ce1e9317fe235a067309d123758548044308495306852571db76e5614c367",
+                "evt-seccheck-7a7c44d04e0bdd757109f97b78f46f88f588b0692ebe3d12af809665ca4345c6",
+                "evt-seccheck-7a76f471b058f24d68e7772651b3a91efc8ac8bf8a3fd534c43af9d82c427cc4",
+                "evt-seccheck-414ec1a6ce2362c005edc604bd62c5a6ca6c67f7b83e8ca2c04c1a6d45414a42",
+                "evt-seccheck-4f2bf5e640599931ded97fdfa01e6ba064284585b5f434642ffc602ec322c360",
+                "evt-seccheck-6f525b075a9a53dad7b867321a61e046b93d3bcda8ef369b69dc462ce2688dc7",
+                "evt-seccheck-7b089f00b6c858800a6648f678721e38428e82f46048c21321cd5faf1d9df6b7",
+                "evt-seccheck-1410dcc0b6e469bc8de28f61c88c25440c80da6053f6467224c526c19f0d87a4"
+              ],
+              "received_at": "2026-11-15T17:29:43.684454751Z"
+            }
+          ],
+          "reused_receipt_ids": [
+            "evt-seccheck-d2a118dded0a12835a2c5413d54e092a48aee84e7c08f538a4330dea60981a82"
+          ]
+        }
+      }
+    ],
+    "verify": {
+      "schema_version": "agentprovenance.verify/v1",
+      "run_id": "seccheck-restore",
+      "status": "ok",
+      "issue_count": 0,
+      "error_count": 0,
+      "warning_count": 0,
+      "issues": null
+    }
+  },
+  "reauthorization": {
+    "policy": "external_registration_and_host_signer_rotation",
+    "signer_scope": "trusted_host_producer",
+    "copied_key_rejected": true,
+    "historical_signature_verified": true,
+    "current_import_verified": true,
+    "retired_public_sha256": "145d4c0f1ed502a8c7ff2ba1f2c809f3ad6828b1b748d8cf0a7d783d3a114158",
+    "current_public_sha256": "c638dec1f5cb355fe0786f4b9cbe6dab4edad648813485965441faf28f8f9f65",
+    "historical_bundle": {
+      "schema_version": "agentprovenance.forensics_export/v1",
+      "id": "forensics-755ebc9cf2db",
+      "run_id": "seccheck-restore",
+      "path": "/var/tmp/apv1/results/gvisor-restore-fixed/store/artifacts/forensics-755ebc9cf2db.json",
+      "sha256": "a497486b10c984c30bc174f591483ef9eca50db3dc2baab565d8130fb2925fc4",
+      "size_bytes": 556763,
+      "status": "ready",
+      "created_at": "2026-11-15T17:29:38.52558497Z",
+      "signed": true,
+      "attestation_path": "/var/tmp/apv1/results/gvisor-restore-fixed/store/artifacts/forensics-755ebc9cf2db.dsse.json"
+    },
+    "copied_key_signed_bundle": {
+      "schema_version": "agentprovenance.forensics_export/v1",
+      "id": "forensics-7dce7c9f0a16",
+      "run_id": "seccheck-restore",
+      "path": "/var/tmp/apv1/results/gvisor-restore-fixed/store/artifacts/forensics-7dce7c9f0a16.json",
+      "sha256": "01090c33af59d2dedd162f80f20f932fe38d0781eeca2ad6585e4b7c8465005f",
+      "size_bytes": 1319808,
+      "status": "ready",
+      "created_at": "2026-11-15T17:29:44.004791308Z",
+      "signed": true,
+      "attestation_path": "/var/tmp/apv1/results/gvisor-restore-fixed/store/artifacts/forensics-7dce7c9f0a16.dsse.json"
+    }
+  },
+  "snapshot": {
+    "pages_meta.img": "6b9f29ad4fac874b623a95cf5dc88ef9dc91660dd690198c42830d8228783aa2",
+    "pages.img": "6f34d33f4b854b79ce21248058be3b5eb8b898af8337be2d138ee45e938e0d09",
+    "checkpoint.img": "e1105d21f1d836e23a4c3f7b3f0f234fc19f34da5f7df1986b6a3fe6e52b0510"
+  },
+  "verify": {
+    "schema_version": "agentprovenance.verify/v1",
+    "run_id": "seccheck-restore",
+    "status": "ok",
+    "issue_count": 0,
+    "error_count": 0,
+    "warning_count": 0,
+    "issues": null
+  },
+  "bundle": {
+    "schema_version": "agentprovenance.forensics_export/v1",
+    "id": "forensics-d93fa32b96e9",
+    "run_id": "seccheck-restore",
+    "path": "/var/tmp/apv1/results/gvisor-restore-fixed/store/artifacts/forensics-d93fa32b96e9.json",
+    "sha256": "89d5c4e455f5c6d0ecc601207b7c27498cdb10bbf5c193821feb0756c4fdd5f5",
+    "size_bytes": 1319808,
+    "status": "ready",
+    "created_at": "2026-11-15T17:29:44.166222302Z",
+    "signed": true,
+    "attestation_path": "/var/tmp/apv1/results/gvisor-restore-fixed/store/artifacts/forensics-d93fa32b96e9.dsse.json"
+  },
+  "import": {
+    "schema_version": "agentprovenance.forensics_import/v1",
+    "run_id": "seccheck-restore",
+    "bundle_path": "/var/tmp/apv1/results/gvisor-restore-fixed/store/artifacts/forensics-d93fa32b96e9.json",
+    "bundle_schema": "agentprovenance.forensics_bundle/v1",
+    "tables": {
+      "events": 384,
+      "graph_edges": 825,
+      "telemetry_batches": 50
+    },
+    "total_rows": 1259,
+    "object_blobs": 0,
+    "snapshot_files": 0,
+    "omitted_content": 0,
+    "attestation_verified": true,
+    "attestation_status": "verified"
+  },
+  "import_verify": {
+    "schema_version": "agentprovenance.verify/v1",
+    "run_id": "seccheck-restore",
+    "status": "ok",
+    "issue_count": 0,
+    "error_count": 0,
+    "warning_count": 0,
+    "issues": null
+  }
+}

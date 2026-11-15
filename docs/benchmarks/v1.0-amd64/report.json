@@ -2442,5 +2442,31 @@
   "runtime_source_commit_kind": "local clean build commit",
   "remote_runtime_commit": "3fd467d6e903524432b2eb4ce8991eef532aac37",
   "runtime_source_tree": "1743060d83b0e0fd4db45f8d07ba0aa0fc945eb3",
-  "source_equivalence": "GitHub Git Data publication preserves the complete runtime tree; local and remote commit metadata differ"
+  "source_equivalence": "GitHub Git Data publication preserves the complete runtime tree; local and remote commit metadata differ",
+  "gvisor": {
+    "summary": "gvisor/summary.json",
+    "summary_sha256": "a29685884f8c60c5d249db6dbf05845ea56edcf2a189e601a7543d4efab1fc83",
+    "runtime_release": "release-20261109.0",
+    "kernel": "6.8.0-139-generic",
+    "architecture": "x86_64",
+    "original_results": {
+      "receive": {
+        "file": "gvisor/receive.result.json",
+        "sha256": "d3578e639460ef48eabd56fd2a3b17b0143eee30e2706b9828ef7e9901d1f2f6",
+        "passed": true
+      },
+      "faults": {
+        "file": "gvisor/faults.result.json",
+        "sha256": "6c26e48c61f3049f019536d1cf0cc3fa31e3c109968282e9d13b07c1c05b88f4",
+        "passed": true
+      },
+      "restore-clones": {
+        "file": "gvisor/restore-clones.result.json",
+        "sha256": "3b6921061c9ee99e7c5781f172cfdb11f7be921a062a529cb5a80ec5445691ab",
+        "passed": true
+      }
+    },
+    "initial_restore_failure_retained": true,
+    "checksums": "gvisor/SHA256SUMS"
+  }
 }

@@ -1,0 +1,5 @@
+gvisor-wire	0
+gvisor-ingest	0
+gvisor-cli	0
+gvisor-faults	0
+gvisor-restore	1
