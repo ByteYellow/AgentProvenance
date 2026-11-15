@@ -614,8 +614,10 @@ func (r *cgroupResolver) resolve(cgroupID uint64) string {
 		return id
 	}
 	if r.kernelName != nil {
-		id = dockerCgroupRe.FindString(r.kernelName(cgroupID))
-		if id != "" {
+		if name := r.kernelName(cgroupID); name != "" {
+			id = dockerCgroupRe.FindString(name)
+			// A captured host name is a valid empty result. Missing/failed map
+			// reads remain uncached so later events can recover the identity.
 			r.remember(cgroupID, id)
 		}
 	}

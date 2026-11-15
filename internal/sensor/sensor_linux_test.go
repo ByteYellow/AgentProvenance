@@ -143,6 +143,79 @@ func TestCgroupResolverUsesCapturedKernelNameAfterProcessAndDirectoryExit(t *tes
 	}
 }
 
+func TestCgroupResolverCachesObservedHostNameUntilExpiry(t *testing.T) {
+	calls := 0
+	r := &cgroupResolver{root: t.TempDir(), retention: time.Minute, kernelName: func(uint64) string {
+		calls++
+		return "system.slice"
+	}}
+	for i := 0; i < 1000; i++ {
+		if got := r.resolve(42); got != "" {
+			t.Fatalf("host cgroup attributed to a container: %q", got)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("known host cgroup caused %d kernel lookups, want 1", calls)
+	}
+	r.refresh()
+	if got := r.resolve(42); got != "" || calls != 1 {
+		t.Fatalf("refresh discarded an unexpired observation: %q, calls=%d", got, calls)
+	}
+	r.seenAt[42] = time.Now().Add(-2 * time.Minute)
+	r.refresh()
+	r.resolve(42)
+	if calls != 2 {
+		t.Fatalf("expired host observation was not retried: %d", calls)
+	}
+}
+
+func TestCgroupResolverRetriesUnavailableKernelIdentity(t *testing.T) {
+	const cid = "8975174628cc0b9585d08bae7dfc65d661e8d307fa01f9d905685139cc0135ab"
+	calls := 0
+	r := &cgroupResolver{root: t.TempDir(), kernelName: func(uint64) string {
+		calls++
+		if calls == 1 {
+			return ""
+		}
+		return "cri-containerd-" + cid + ".scope"
+	}}
+	if got := r.resolve(42); got != "" {
+		t.Fatalf("missing kernel record invented identity: %q", got)
+	}
+	if _, cached := r.byID[42]; cached {
+		t.Fatal("missing kernel record was cached as a host cgroup")
+	}
+	if got := r.resolve(42); got != cid || calls != 2 {
+		t.Fatalf("late kernel identity not recovered: %q, calls=%d", got, calls)
+	}
+}
+
+func TestCgroupResolverRefreshReplacesObservedHostName(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "workload")
+	if err := os.Mkdir(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := uint64(info.Sys().(*syscall.Stat_t).Ino)
+	r := &cgroupResolver{root: root, kernelName: func(uint64) string { return "workload" }}
+	r.resolve(id)
+	if cached, ok := r.byID[id]; !ok || cached != "" {
+		t.Fatal("observed host name was not cached")
+	}
+	const cid = "8975174628cc0b9585d08bae7dfc65d661e8d307fa01f9d905685139cc0135ab"
+	if err := os.Rename(dir, filepath.Join(root, "docker-"+cid+".scope")); err != nil {
+		t.Fatal(err)
+	}
+	r.refresh()
+	if got := r.resolve(id); got != cid {
+		t.Fatalf("fresh directory identity did not replace host observation: %q", got)
+	}
+}
+
 type fixedDropMap uint64
 
 func (m fixedDropMap) Lookup(_ any, out any) error { *(out.(*uint64)) = uint64(m); return nil }
