@@ -3,6 +3,7 @@ package dashboard
 import (
 	"compress/gzip"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -19,6 +20,8 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/sensor"
 	"github.com/byteyellow/agentprovenance/internal/staticdata"
+	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
 func readReplayCapture(t *testing.T, files map[string][]byte, run string) ([]capturemanifest.Record, string) {
@@ -142,6 +145,13 @@ func TestOfflineCaptureManifestFrozenSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := observability.SaveCapabilityHistory(ctx, db, paths, "capture-run", c, c, at, at.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.WithWriteTx(ctx, db, func(tx *sql.Tx) error {
+		return observability.NativeCaptureObserver(db, paths)(ctx, tx, "capture-run", telemetry.NativeCaptureWindow{
+			SchemaVersion: telemetry.NativeCaptureWindowSchema, BatchID: "private-batch", StreamID: "private-stream",
+			StartedAt: at, EndedAt: at.Add(time.Second), First: c, Last: c})
+	}); err != nil {
 		t.Fatal(err)
 	}
 	want, err := (capturemanifest.Service{DB: db}).List(ctx, capturemanifest.Options{RunID: "capture-run"})

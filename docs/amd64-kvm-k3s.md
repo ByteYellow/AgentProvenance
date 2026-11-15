@@ -289,6 +289,10 @@ This is passive attribution, not a claim of nanosecond-accurate termination time
 informer, verifies the target events reached disk, kills the collector, and then
 requires late closed-window attribution, graph verification and a second restart
 without duplicate events. The older continuous gate still checks live bindings.
+It also checks that attributed Runs retain the original collector's capture
+windows after restart. Use `--artifacts <new-directory>` to retain the isolated
+store and diagnostics for signed export or offline checks; the default removes
+the temporary workspace after writing the report.
 
 Alternatively, the existing `deploy/k8s/agentprov-sensor-daemonset.yaml` emits
 raw JSONL for an external receiver. It does not itself ingest into the database.

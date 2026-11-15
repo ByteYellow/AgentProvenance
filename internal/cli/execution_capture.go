@@ -46,7 +46,8 @@ func startExecutionCapture(ctx context.Context, db *sql.DB, paths store.Paths, c
 	if own := producer.SelfCgroupID(); own != "" {
 		ingest.ExcludeCgroupIDs = []string{own}
 	}
-	stream, err := telemetry.NewNativeStream(db, paths, telemetry.NativeStreamOptions{Ingest: ingest, PolicyEnabled: !config.NoPolicy})
+	stream, err := telemetry.NewNativeStream(db, paths, telemetry.NativeStreamOptions{
+		Ingest: ingest, PolicyEnabled: !config.NoPolicy, OnCapture: observability.NativeCaptureObserver(db, paths)})
 	if err != nil {
 		return nil, err
 	}

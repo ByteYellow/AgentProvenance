@@ -102,7 +102,7 @@ components:
         started_at: {type: string}
         ended_at: {type: string}
         interval_basis:
-          enum: [recorded_observation, boundary_samples, recorded_capability_changes, source_processing_range, run_configuration, stream_observation, checkpoint_observation, recorder_observation]
+          enum: [recorded_observation, boundary_samples, recorded_capability_changes, collector_receive_window, source_processing_range, run_configuration, stream_observation, checkpoint_observation, recorder_observation]
           description: >
             Native capability changes are retained as individual intervals with
             their collector and capability revision. Historical boundary samples
@@ -111,6 +111,10 @@ components:
             continuous enabled interval or an enumeration of all events.
             recorder_observation identifies the recorder's saved start, end or
             error boundary. Polling times and settings remain source-qualified.
+            collector_receive_window identifies an original native spool receive
+            window, retaining batch and receiver identities through late binding
+            and restart. An unsealed window reports its last observation and the
+            collector_receive_window_unsealed issue, not a workload end time.
         status: {type: string, description: Original source status; not a unified completeness verdict}
         snapshots:
           type: array

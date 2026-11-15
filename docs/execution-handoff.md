@@ -575,6 +575,17 @@ gap. Intermediate required-probe failures remain capture issues even after
 recovery. Missing, conflicting or unreadable revisions make history incomplete;
 supervisors stop on a history-write failure. Older reports remain boundary-only.
 
+Passive `sensor stream` capture, including node-level K8s collection, saves each
+spool batch's original collector and capability history. Late scope bindings and
+restart recovery use those saved observations. They commit with the attributed
+events and ingestion receipts; missing history keeps the batch pending for retry.
+These records use `interval_basis: collector_receive_window` and retain the
+batch and receiver identities. The window describes receipt by the collector;
+buffered event timestamps remain unchanged. A crash before sealing adds
+`collector_receive_window_unsealed` and retains only the last observed boundary.
+It does not reconstruct the workload's capture end or assign node-level loss to
+individual Runs. Signed Bundles and selected replays retain the included objects.
+
 The local journal is under `logs/sensor-capabilities/<collector-id>/`. Each
 snapshot is bounded to 1 MiB and range reading is streamed. Keep the journal
 until all related Runs have saved their history; it is separate from exported

@@ -1,0 +1,259 @@
+package capturemanifest
+
+import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"database/sql"
+	"fmt"
+	"os"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/byteyellow/agentprovenance/internal/correlation"
+	"github.com/byteyellow/agentprovenance/internal/forensics"
+	"github.com/byteyellow/agentprovenance/internal/observability"
+	"github.com/byteyellow/agentprovenance/internal/provenance"
+	"github.com/byteyellow/agentprovenance/internal/sensor"
+	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/telemetry"
+)
+
+func passiveStream(t *testing.T, db *sql.DB, paths store.Paths) *telemetry.NativeStream {
+	t.Helper()
+	n, err := telemetry.NewNativeStream(db, paths, telemetry.NativeStreamOptions{
+		Ingest: telemetry.JSONLIngestOptions{DropUncorrelated: true}, OnCapture: observability.NativeCaptureObserver(db, paths)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { n.Close() })
+	return n
+}
+
+func passiveCapability(t *testing.T, n *telemetry.NativeStream, revision uint64) {
+	t.Helper()
+	at := time.Now().UTC()
+	state := "attached"
+	if revision == 2 {
+		state = "failed"
+	}
+	report := caps(at, state)
+	report.CollectorID, report.Revision = "original-node-collector", revision
+	report.ChangedAt = report.UpdatedAt
+	report.Producer = &sensor.CapabilityProducer{Name: "agentprov-sensor", Version: "captured-version", Commit: "captured-commit",
+		OS: "linux", Architecture: "arm64", Kernel: "captured-kernel", BootID: "captured-boot", Placement: "host_kernel", PlacementBasis: "operator_configuration"}
+	if err := n.ObserveCapabilities(report); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func passiveBind(t *testing.T, db *sql.DB, run string) {
+	t.Helper()
+	_, err := correlation.RecordBinding(db, correlation.Binding{RunID: run, SessionID: "pod-" + run, CgroupID: run,
+		StartedAt: "2026-01-01T00:00:00Z", BindingSource: correlation.BindingSourceK8sCgroup})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func passiveWrite(t *testing.T, n *telemetry.NativeStream, run string) {
+	t.Helper()
+	_, err := fmt.Fprintf(n, "{\"event_type\":\"file_write\",\"cgroup_id\":%q,\"path\":\"/captured/output.csv\",\"timestamp\":%q}\n", run, timestamp(time.Now()))
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPassiveNativeCapabilitiesSurviveLateBindingsAndRestart(t *testing.T) {
+	db, paths := testStore(t)
+	n := passiveStream(t, db, paths)
+	passiveCapability(t, n, 1)
+	passiveWrite(t, n, "pod-a")
+	passiveCapability(t, n, 2)
+	passiveCapability(t, n, 3)
+	passiveWrite(t, n, "pod-b")
+	if err := n.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Process(32); err != nil {
+		t.Fatal(err)
+	}
+	if got := all(t, db, "pod-a", 1); len(got) != 0 {
+		t.Fatalf("unbound run gained evidence: %+v", got)
+	}
+	if err := n.Close(); err != nil {
+		t.Fatal(err)
+	}
+	passiveBind(t, db, "pod-a")
+	passiveBind(t, db, "pod-b")
+	n = passiveStream(t, db, paths)
+	if _, err := db.Exec("UPDATE telemetry_spool_batches SET retry_at=0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Process(32); err != nil {
+		t.Fatal(err)
+	}
+	for _, run := range []string{"pod-a", "pod-b"} {
+		got := all(t, db, run, 1)
+		if len(got) != 3 {
+			t.Fatalf("want all three original revisions, got %+v", got)
+		}
+		for _, r := range got {
+			if r.Placement != "host_kernel" || r.ProducerVersion != "captured-version" || r.Identity["collector_id"] != "original-node-collector" || r.IntervalBasis != "collector_receive_window" || r.Identity["batch_id"] == "" || r.Identity["receiver_id"] == r.Identity["collector_id"] {
+				t.Fatalf("collector window identity changed: %+v", r)
+			}
+		}
+		if !reflect.DeepEqual(got, all(t, db, run, 50)) {
+			t.Fatal("paging changed observations")
+		}
+		if checked, err := provenance.Verify(db, run); err != nil || checked.ErrorCount != 0 {
+			t.Fatalf("verify: %+v %v", checked, err)
+		}
+	}
+	before := all(t, db, "pod-a", 3)
+	if err := n.Process(32); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(before, all(t, db, "pod-a", 1)) {
+		t.Fatal("retry duplicated windows")
+	}
+	pub, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := (forensics.Service{DB: db, Paths: paths, SignKey: key}).ExportBundle("pod-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := forensics.VerifyBundleAttestation(bundle.Path, bundle.AttestationPath, pub); err != nil {
+		t.Fatal(err)
+	}
+	dst, dest := testStore(t)
+	if _, err := (forensics.Service{DB: dst, Paths: dest}).ImportBundle(bundle.Path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(paths.Logs, paths.Logs+"-held"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(paths.Provenance, paths.Provenance+"-held"); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(before, all(t, dst, "pod-a", 1)) {
+		t.Fatal("signed import lost captured producer history")
+	}
+}
+
+func TestPassiveNativeCapabilityFailureRollsBackEventsAndReceipts(t *testing.T) {
+	db, paths := testStore(t)
+	n := passiveStream(t, db, paths)
+	passiveBind(t, db, "pod-a")
+	passiveCapability(t, n, 1)
+	passiveWrite(t, n, "pod-a")
+	if err := n.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("CREATE TRIGGER reject_capability BEFORE INSERT ON provenance_objects WHEN NEW.object_type='sensor_capability_interval' BEGIN SELECT RAISE(ABORT,'fixture capability failure'); END"); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Process(32); err == nil || !strings.Contains(err.Error(), "fixture capability failure") {
+		t.Fatalf("missing write failure: %v", err)
+	}
+	for _, table := range []string{"events", "telemetry_native_rows", "telemetry_batches", "provenance_objects"} {
+		var count int
+		if err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil || count != 0 {
+			t.Fatalf("%s count=%d err=%v", table, count, err)
+		}
+	}
+	if _, err := db.Exec("DROP TRIGGER reject_capability; UPDATE telemetry_spool_batches SET retry_at=0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Process(32); err != nil {
+		t.Fatal(err)
+	}
+	if got := all(t, db, "pod-a", 1); len(got) != 1 {
+		t.Fatalf("retry did not preserve original capture: %+v", got)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := (Service{DB: db}).List(ctx, Options{RunID: "pod-a"}); err == nil {
+		t.Fatal("cancel ignored")
+	}
+}
+
+func TestPassiveNativeMissingHistoryRetainsPendingEvidence(t *testing.T) {
+	db, paths := testStore(t)
+	n := passiveStream(t, db, paths)
+	passiveBind(t, db, "pod-a")
+	passiveCapability(t, n, 1)
+	passiveWrite(t, n, "pod-a")
+	// A missing intermediate revision is not replaced by either endpoint.
+	passiveCapability(t, n, 3)
+	if err := n.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Process(32); err == nil {
+		t.Fatal("missing history silently accepted")
+	}
+	var events, receipts int
+	if err := db.QueryRow("SELECT COUNT(*) FROM events").Scan(&events); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("SELECT COUNT(*) FROM telemetry_native_rows").Scan(&receipts); err != nil {
+		t.Fatal(err)
+	}
+	if events != 0 || receipts != 0 || len(all(t, db, "pod-a", 1)) != 0 {
+		t.Fatal("partial capability history committed")
+	}
+	status, err := telemetry.ReadNativeStreamStatus(db)
+	if err != nil || status.QueuedBatches != 1 {
+		t.Fatalf("pending evidence disappeared: %+v %v", status, err)
+	}
+}
+
+func TestPassiveNativeUnsealedWindowReportsUnknownEnd(t *testing.T) {
+	db, paths := testStore(t)
+	at := time.Now().Add(-time.Minute).UTC()
+	report := caps(at, "attached")
+	report.CollectorID, report.Revision, report.ChangedAt = "crashed-collector", 1, report.UpdatedAt
+	if err := sensor.SaveCapabilityChange(paths.Logs, report); err != nil {
+		t.Fatal(err)
+	}
+	err := store.WithWriteTx(context.Background(), db, func(tx *sql.Tx) error {
+		return observability.NativeCaptureObserver(db, paths)(context.Background(), tx, "crashed-run", telemetry.NativeCaptureWindow{
+			SchemaVersion: telemetry.NativeCaptureWindowSchema, BatchID: "crashed-batch", StreamID: "crashed-receiver",
+			StartedAt: at, First: report, Last: report})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := all(t, db, "crashed-run", 1)
+	if len(got) != 1 || !reflect.DeepEqual(got[0].Issues, []string{"collector_receive_window_unsealed"}) ||
+		got[0].StartedAt != got[0].EndedAt {
+		t.Fatalf("crash gained a confirmed receive interval: %+v", got)
+	}
+}
+
+func TestPassiveNativeOneWindowPerRunAcrossTransactionChunks(t *testing.T) {
+	db, paths := testStore(t)
+	n := passiveStream(t, db, paths)
+	passiveCapability(t, n, 1)
+	passiveBind(t, db, "pod-a")
+	for i := 0; i < 40; i++ {
+		passiveWrite(t, n, "pod-a")
+	}
+	if err := n.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if err := n.Process(32); err != nil {
+		t.Fatal(err)
+	}
+	if got := all(t, db, "pod-a", 1); len(got) != 1 {
+		t.Fatalf("transaction chunks duplicated capture windows: %+v", got)
+	}
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM events WHERE run_id='pod-a'").Scan(&count); err != nil || count != 40 {
+		t.Fatalf("lost events: %d %v", count, err)
+	}
+}

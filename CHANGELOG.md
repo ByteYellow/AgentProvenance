@@ -4,6 +4,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Preserve passive native capture windows and original Sensor capabilities
+  through late K8s bindings, spool recovery, signed Bundles and offline selection.
+  Commit observations with events and receipts; retain missing history for retry
+  and report unsealed collector windows explicitly.
 - Save ordinary `record` producer identity, polling settings, file-snapshot
   status and sampling failures in lifecycle evidence. Query and export these
   observations separately from native Sensor coverage and command exit status.

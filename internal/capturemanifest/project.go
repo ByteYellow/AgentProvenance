@@ -24,13 +24,22 @@ func (s Service) read(ctx context.Context, run string, e evidence) (Record, erro
 		if err := read(&c); err != nil {
 			return r, err
 		}
-		if c.SchemaVersion != observability.CapabilityIntervalSchema || c.RunID != run || c.Basis != "recorded_capability_changes" || c.StartedAt.IsZero() || c.EndedAt.Before(c.StartedAt) || c.Report.SchemaVersion != "agentprovenance.sensor_capabilities/v1" || c.Report.CollectorID == "" || c.Report.Revision == 0 {
+		if c.SchemaVersion != observability.CapabilityIntervalSchema || c.RunID != run || (c.Basis != "recorded_capability_changes" && c.Basis != "collector_receive_window") || c.StartedAt.IsZero() || c.EndedAt.Before(c.StartedAt) || c.Report.SchemaVersion != "agentprovenance.sensor_capabilities/v1" || c.Report.CollectorID == "" || c.Report.Revision == 0 {
 			return r, fmt.Errorf("capability interval identity mismatch")
 		}
 		r.Source, r.Placement, r.IdentityDomain = "agentprov_sensor", "local_kernel", "linux_kernel"
 		r.Status, r.StartedAt, r.EndedAt, r.IntervalBasis = c.Report.Status, timestamp(c.StartedAt), timestamp(c.EndedAt), c.Basis
 		r.ObservedAt = c.Report.ChangedAt
 		r.sensorProducer(c.Report)
+		if c.Basis == "collector_receive_window" {
+			if c.BatchID == "" || c.ReceiverID == "" || c.WindowSealed == nil {
+				return r, fmt.Errorf("native capture window identity mismatch")
+			}
+			r.Identity["batch_id"], r.Identity["receiver_id"] = c.BatchID, c.ReceiverID
+			if !*c.WindowSealed {
+				r.Issues = append(r.Issues, "collector_receive_window_unsealed")
+			}
+		}
 		r.Snapshots = append(r.Snapshots, sensorSnapshot("change", c.Report))
 	case "runtime_capture":
 		var c observability.RuntimeCaptureReport

@@ -5,6 +5,7 @@ Uses an isolated store and uniquely labelled Pods. It deliberately does not wait
 for informer bindings before starting any workload. Run as root on a test node.
 """
 import argparse
+from contextlib import nullcontext
 import json
 import os
 from pathlib import Path
@@ -33,6 +34,7 @@ def main():
     parser.add_argument("--agentprov", default="/usr/local/bin/agentprov")
     parser.add_argument("--image", default="docker.io/rancher/mirrored-library-busybox:1.37.0")
     parser.add_argument("--report", required=True)
+    parser.add_argument("--artifacts", help="keep the isolated store and logs in a new directory")
     args = parser.parse_args()
     if os.geteuid() != 0:
         parser.error("run as root on a K3s test node")
@@ -46,7 +48,11 @@ def main():
               "kernel": platform.release(), "architecture": platform.machine(), "checks": checks}
     report_path = Path(args.report).resolve()
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="agentprov-node-capture-") as directory:
+    if args.artifacts:
+        retained = Path(args.artifacts).resolve()
+        retained.mkdir(parents=True, exist_ok=False)
+    workspace = nullcontext(str(retained)) if args.artifacts else tempfile.TemporaryDirectory(prefix="agentprov-node-capture-")
+    with workspace as directory:
         root = Path(directory)
         data = root / "store"
         cli = [str(Path(args.agentprov).resolve()), "--data-dir", str(data)]
@@ -57,7 +63,7 @@ def main():
         def launch_sensor(number):
             err_path = root / f"sensor-{number}.err"
             with (root / f"sensor-{number}.out").open("w") as out, err_path.open("w") as err:
-                process = subprocess.Popen(cli + ["sensor", "stream", "--no-policy", "--auto-tls=false",
+                process = subprocess.Popen(cli + ["sensor", "stream", "--placement", "host_kernel", "--no-policy", "--auto-tls=false",
                     "--batch-events", "64", "--flush-interval", "200ms", "--pending-ttl", "2m"],
                     stdout=out, stderr=err)
             processes.append(process)
@@ -133,10 +139,27 @@ def main():
                 checks[pod + ":late_attribution"] = bool(native)
                 checks[pod + ":closed_interval"] = all(row["ended_at"] for row in bindings)
                 checks[pod + ":no_cross_run"] = all(f"late-{suffix}-{1-index}.env" not in row["payload"] for row in native)
+                original_collectors = {
+                    json.loads(line.split("agentprov-sensor: capabilities ", 1)[1])["collector_id"]
+                    for line in (root / "sensor-1.err").read_text().splitlines()
+                    if "agentprov-sensor: capabilities " in line
+                }
+                with sqlite3.connect(data / "agentprov.db", timeout=10) as db:
+                    objects = db.execute(
+                        "SELECT path FROM provenance_objects WHERE run_id=? AND object_type='sensor_capability_interval' AND source_id LIKE 'sensor-window/%'",
+                        (run,)).fetchall()
+                windows = [json.loads(Path(path).read_text())["payload"] for (path,) in objects]
+                checks[pod + ":saved_capture_windows"] = bool(windows)
+                checks[pod + ":original_collector_retained"] = bool(windows) and all(
+                    item["report"]["collector_id"] in original_collectors
+                    and item["report"].get("producer", {}).get("placement") == "host_kernel"
+                    and item["basis"] == "collector_receive_window"
+                    for item in windows)
                 subprocess.run(cli + ["graph", "materialize", "--run", run], check=True, stdout=subprocess.DEVNULL)
                 verified = query("graph", "verify", "--run", run)
                 checks[pod + ":verified"] = verified.get("valid", verified.get("status") == "ok")
-                runs.append({"run_id": run, "native_events": len(native), "bindings": bindings, "verification": verified})
+                runs.append({"run_id": run, "native_events": len(native), "bindings": bindings, "verification": verified,
+                             "capture_windows": len(windows), "original_collectors": sorted(original_collectors)})
             # Crash again after attribution: already committed batches must not
             # reinsert events when the collector recovers a second time.
             def native_ids():
@@ -153,6 +176,8 @@ def main():
             checks["no_duplicate_events_after_second_restart"] = native_ids() == committed_ids
             checks["collector_still_running"] = collector.poll() is None
             report.update(runs=runs, before_crash=before, after_recovery=query("sensor", "status"))
+            if args.artifacts:
+                report["artifacts"] = str(root)
             completed = True
         finally:
             for process in reversed(processes):

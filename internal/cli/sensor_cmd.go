@@ -14,6 +14,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/daemon"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
+	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/producer"
 	"github.com/byteyellow/agentprovenance/internal/sensor"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -85,6 +86,7 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 			stderr := cmd.ErrOrStderr()
 			captureOpts.Ingest = ingOpts
 			captureOpts.PolicyEnabled = !noPolicy
+			captureOpts.OnCapture = observability.NativeCaptureObserver(db, paths)
 			capture, err := telemetry.NewNativeStream(db, paths, captureOpts)
 			if err != nil {
 				return err
@@ -126,7 +128,11 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 				Language:        commandLanguage(cmd),
 				OnReady:         func() { fmt.Fprintln(stderr, "agentprov sensor stream: ready probes-attached") },
 				OnCapabilities: func(report sensor.CapabilityReport) {
-					if err := saveSensorCapabilities(paths, report); err != nil {
+					err := capture.ObserveCapabilities(report)
+					if err == nil {
+						err = saveSensorCapabilities(paths, report)
+					}
+					if err != nil {
 						capabilityMu.Lock()
 						capabilityErr = errors.Join(capabilityErr, err)
 						capabilityMu.Unlock()

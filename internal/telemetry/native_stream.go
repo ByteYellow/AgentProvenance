@@ -21,12 +21,15 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/ids"
 	"github.com/byteyellow/agentprovenance/internal/redact"
+	"github.com/byteyellow/agentprovenance/internal/sensor"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
 // NativeStreamOptions bounds both resident memory and the on-disk backlog.
 // PendingTTL starts at capture, not at replay, so restarts cannot renew it.
 type NativeStreamOptions struct {
+	CaptureWindow    *NativeCaptureWindow  `json:"capture_window,omitempty"`
+	OnCapture        NativeCaptureObserver `json:"-"`
 	Ingest           JSONLIngestOptions
 	BatchEvents      int
 	BatchBytes       int64
@@ -128,26 +131,30 @@ func readStreamStatus(ctx context.Context, db *sql.DB, format string) (NativeStr
 // Only counters and one partial JSON line are retained in memory. A store lock
 // prevents two collectors from reclaiming each other's in-flight batches.
 type NativeStream struct {
-	service    SpoolService
-	opts       NativeStreamOptions
-	format     string
-	mu         sync.Mutex
-	processing sync.RWMutex
-	claimMu    sync.Mutex
-	active     map[string]bool
-	file       *os.File
-	id         string
-	size       int64
-	count      int
-	partial    []byte
-	counters   map[string]int64
-	lock       *os.File
-	closed     bool
-	producerID string
-	sequence   uint64
-	accepted   uint64
-	rejections []NativeRejection
-	removeFile func(string) error
+	service         SpoolService
+	opts            NativeStreamOptions
+	format          string
+	mu              sync.Mutex
+	processing      sync.RWMutex
+	claimMu         sync.Mutex
+	active          map[string]bool
+	file            *os.File
+	id              string
+	size            int64
+	count           int
+	partial         []byte
+	counters        map[string]int64
+	lock            *os.File
+	closed          bool
+	producerID      string
+	capabilities    *sensor.CapabilityReport
+	capabilityFirst *sensor.CapabilityReport
+	capabilityStart time.Time
+	captureWindow   *NativeCaptureWindow
+	sequence        uint64
+	accepted        uint64
+	rejections      []NativeRejection
+	removeFile      func(string) error
 }
 
 func NewNativeStream(db *sql.DB, paths store.Paths, options NativeStreamOptions) (*NativeStream, error) {
@@ -217,7 +224,9 @@ func (n *NativeStream) openBatch() error {
 	// payload has actually been removed. Count cleanup failures as backlog too.
 	id := ids.New(n.format)
 	path := filepath.Join(n.service.Paths.Spool, id+".jsonl")
-	options, err := json.Marshal(n.opts)
+	opts := n.opts
+	opts.CaptureWindow = n.newCaptureWindow(id)
+	options, err := json.Marshal(opts)
 	if err != nil {
 		return err
 	}
@@ -260,6 +269,7 @@ func (n *NativeStream) openBatch() error {
 		return err
 	}
 	n.file, n.id, n.size, n.count = f, id, 0, 0
+	n.captureWindow = opts.CaptureWindow
 	return nil
 }
 
@@ -419,6 +429,11 @@ func (n *NativeStream) sealContext(ctx context.Context) error {
 	if err := n.sealFileContext(ctx, n.id); err != nil {
 		return err
 	}
+	if n.captureWindow != nil {
+		n.capabilityStart = n.captureWindow.EndedAt
+		n.capabilityFirst = n.capabilities
+		n.captureWindow = nil
+	}
 	n.id, n.size, n.count = "", 0, 0
 	return n.flushCountersContext(ctx)
 }
@@ -490,7 +505,24 @@ func (n *NativeStream) sealFileContext(ctx context.Context, id string) error {
 			scopes[nativeScopeKey(event)]++
 		}
 	}
-	return store.WithWriteTx(ctx, n.service.DB, func(tx *sql.Tx) error {
+	var sealedWindow *NativeCaptureWindow
+	err = store.WithWriteTx(ctx, n.service.DB, func(tx *sql.Tx) error {
+		if id == n.id && n.captureWindow != nil {
+			window := *n.captureWindow
+			if window.EndedAt.IsZero() {
+				window.EndedAt = time.Now().UTC()
+			}
+			opts := n.opts
+			opts.CaptureWindow = &window
+			raw, err := json.Marshal(opts)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE telemetry_spool_batches SET native_options=? WHERE id=? AND status='capturing'`, string(raw), id); err != nil {
+				return err
+			}
+			sealedWindow = &window
+		}
 		result, err := tx.ExecContext(ctx, `UPDATE telemetry_spool_batches SET status='queued',size_bytes=?,file_sha256=?,event_count=?,updated_at=? WHERE id=? AND status='capturing'`, size, hex.EncodeToString(hash.Sum(nil)), count, time.Now().UTC().Format(time.RFC3339Nano), id)
 		if err != nil {
 			return err
@@ -509,6 +541,10 @@ func (n *NativeStream) sealFileContext(ctx context.Context, id string) error {
 		}
 		return nil
 	})
+	if err == nil && sealedWindow != nil {
+		n.captureWindow = sealedWindow
+	}
+	return err
 }
 
 func (n *NativeStream) recover() error {
@@ -1133,6 +1169,17 @@ func (n *NativeStream) processNativeChunk(ctx context.Context, id, path, expecte
 		}
 	}
 	for runID, result := range groups {
+		if opts.CaptureWindow != nil && runID != "" {
+			if n.opts.OnCapture == nil {
+				return 0, nil, fmt.Errorf("native capture evidence writer is required")
+			}
+			if opts.CaptureWindow.BatchID != id {
+				return 0, nil, fmt.Errorf("native capture batch identity mismatch")
+			}
+			if err := n.opts.OnCapture(ctx, tx, runID, *opts.CaptureWindow); err != nil {
+				return 0, nil, err
+			}
+		}
 		result.EventIDsSHA256 = hashStrings(result.EventIDs)
 		if err := persistJSONLBatch(tx, JSONLIngestOptions{RunID: runID}, result); err != nil {
 			return 0, nil, err
