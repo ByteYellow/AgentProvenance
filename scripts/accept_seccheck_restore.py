@@ -5,7 +5,7 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import signal
 import sqlite3
@@ -17,6 +17,38 @@ from accept_seccheck_faults import latest_status, wait_for, require_preserved_re
 
 
 PHASES = (('original', '1'), ('original', '2'), ('clone-a', '1'), ('clone-b', '1'))
+
+
+def rootfs_path(root, name):
+    """Resolve OCI symlinks inside the fixture, including absolute targets."""
+    pending, parts, links = list(PurePosixPath(name).parts), [], 0
+    while pending:
+        part = pending.pop(0)
+        if part == '/':
+            parts = []
+        elif part == '..':
+            if parts:
+                parts.pop()
+        elif part != '.':
+            path = root.joinpath(*parts, part)
+            if path.is_symlink():
+                links += 1
+                if links > 40:
+                    raise ValueError('rootfs symlink loop: ' + name)
+                pending = list(PurePosixPath(os.readlink(path)).parts) + pending
+            else:
+                parts.append(part)
+    return root.joinpath(*parts)
+
+
+def rootfs_identity(root):
+    # Both BusyBox and distribution rootfs layouts are valid OCI fixtures.
+    # Identify the programs this workload actually executes, before starting it.
+    programs = ('bin/sh', 'bin/cat', 'bin/date', 'bin/sleep')
+    busybox, release = rootfs_path(root, 'bin/busybox'), rootfs_path(root, 'etc/os-release')
+    return {'path': str(root), 'program_sha256': {name: digest(rootfs_path(root, name)) for name in programs},
+            'busybox_sha256': digest(busybox) if busybox.is_file() else None,
+            'os_release': release.read_text() if release.is_file() else None}
 
 
 def runtime_command(command, path, timeout=30, expect_success=True, input_bytes=None):
@@ -94,6 +126,7 @@ def main():
     version = subprocess.check_output([str(args.runsc), '--version'], text=True, timeout=10)
     if 'runsc version release-20261109.0' not in version.splitlines():
         raise RuntimeError('unexpected runtime: ' + version)
+    rootfs_report = rootfs_identity(args.rootfs)
     store = args.output / 'store'
     run_id, name = 'seccheck-restore', 'snapshot-workload'
     image = args.output / 'snapshot'
@@ -349,8 +382,7 @@ def main():
                 raise RuntimeError('imported restored evidence graph verification failed')
             write_json(args.output / 'result.json', {'passed': True, 'runtime': version,
                 'platform': list(os.uname()), 'binary_sha256': {key: digest(getattr(args, key)) for key in ('cli', 'runsc')},
-                'rootfs': {'path': str(args.rootfs), 'busybox_sha256': digest(args.rootfs / 'bin/busybox'),
-                    'os_release': (args.rootfs / 'etc/os-release').read_text()},
+                'rootfs': rootfs_report,
                 'acceptance_script_sha256': digest(Path(__file__)),
                 'phases': records, 'events': len(previous), 'scopes': sorted(scopes), 'process_nodes': sorted(processes),
                 'historical_spool': {'sha256': batch[2], 'records': batch[3], 'event_ids': expected_ids,

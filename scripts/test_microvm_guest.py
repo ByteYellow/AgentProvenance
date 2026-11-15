@@ -183,18 +183,28 @@ class GuestImageDefinitionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             for directory in ('etc/agentprov-guest', 'var/lib/agentprov-guest', 'etc/ssh',
-                              'etc/systemd/system/multi-user.target.wants', 'usr/local/bin'):
+                              'etc/systemd/system/multi-user.target.wants', 'etc/systemd/network', 'usr/local/bin'):
                 (root / directory).mkdir(parents=True, exist_ok=True)
             (root / 'etc/machine-id').write_text('')
             (root / 'etc/systemd/system/multi-user.target.wants/agentprov-guest.service').symlink_to(
                 '/etc/systemd/system/agentprov-guest.service')
             binary = root / 'usr/local/bin/agentprov'
             binary.write_bytes(b'fixture-binary')
+            network = root / 'etc/systemd/network/80-guest.network'
+            network.write_text('[Match]\nName=eth0\n[Network]\nDHCP=ipv4\n')
+            network.chmod(0o644)
             with patch.object(builder.subprocess, 'check_output', return_value='fixture-version\n'), \
                  patch.object(builder.subprocess, 'run') as run:
                 builder.verify_tree(root, binary, 'fixture-version')
                 self.assertIn('agentprov-guest.service', run.call_args.args[0])
                 self.assertIn('ssh.service', run.call_args.args[0])
+                self.assertIn('systemd-udevd.service', run.call_args.args[0])
+                self.assertIn('systemd-udev-trigger.service', run.call_args.args[0])
+                self.assertIn('systemd-networkd.service', run.call_args.args[0])
+                network.chmod(0o600)
+                with self.assertRaisesRegex(RuntimeError, 'readable by networkd'):
+                    builder.verify_tree(root, binary, 'fixture-version')
+                network.chmod(0o644)
                 (root / 'etc/agentprov-guest/daemon-token').write_text('fixture-secret')
                 with self.assertRaisesRegex(RuntimeError, 'instance configuration'):
                     builder.verify_tree(root, binary, 'fixture-version')

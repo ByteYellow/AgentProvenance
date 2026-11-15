@@ -131,6 +131,7 @@ type RemoteExecutionConfig struct {
 	PublicKeyFile   string `json:"public_key_file"`
 	TimeoutSeconds  int    `json:"timeout_seconds"`
 	FileDiff        bool   `json:"file_diff,omitempty"`
+	WaitCapture     *bool  `json:"wait_capture,omitempty"`
 }
 
 type RemoteRoute struct {
@@ -197,18 +198,18 @@ func (c RemoteExecutionConfig) validate() error {
 	return nil
 }
 
-func prepareRemoteRoute(opts Options, paths store.Paths, runID string, policy agentcontext.CapturePolicy) (string, error) {
+func readRemoteConfig(path string) (RemoteExecutionConfig, error) {
 	var config RemoteExecutionConfig
-	if err := readRouteJSON(opts.RemoteExecution, &config, 64<<10); err != nil {
-		return "", err
+	if err := readRouteJSON(path, &config, 64<<10); err != nil {
+		return config, err
 	}
-	base, err := filepath.Abs(filepath.Dir(opts.RemoteExecution))
+	base, err := filepath.Abs(filepath.Dir(path))
 	if err != nil {
-		return "", err
+		return config, err
 	}
 	for _, path := range []*string{&config.TokenFile, &config.ExecutionConfig, &config.SignKeyFile, &config.PublicKeyFile} {
 		if *path == "" {
-			return "", fmt.Errorf("remote execution requires token, configuration and signing key files")
+			return config, fmt.Errorf("remote execution requires token, configuration and signing key files")
 		}
 		if !filepath.IsAbs(*path) {
 			*path = filepath.Join(base, *path)
@@ -220,7 +221,12 @@ func prepareRemoteRoute(opts Options, paths store.Paths, runID string, policy ag
 	if config.TimeoutSeconds == 0 {
 		config.TimeoutSeconds = 300
 	}
-	if err := config.validate(); err != nil {
+	return config, config.validate()
+}
+
+func prepareRemoteRoute(opts Options, paths store.Paths, runID string, policy agentcontext.CapturePolicy) (string, error) {
+	config, err := readRemoteConfig(opts.RemoteExecution)
+	if err != nil {
 		return "", err
 	}
 	// This transport returns the retained, signed command output to the tool.
@@ -256,6 +262,9 @@ func prepareRemoteRoute(opts Options, paths store.Paths, runID string, policy ag
 	route := RemoteRoute{SchemaVersion: remoteRouteSchema, RunID: runID, DataDir: root, SelfExe: exe,
 		Config: config, Target: execution.Target, Principal: execution.Principal(), Policy: policy,
 		WaitCapture: execution.Capture != nil}
+	if config.WaitCapture != nil {
+		route.WaitCapture = *config.WaitCapture
+	}
 	dir := filepath.Join(root, "execution-routes", runID)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err

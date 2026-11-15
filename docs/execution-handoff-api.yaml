@@ -11,6 +11,22 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /v1/execution-readiness:
+    get:
+      operationId: readExecutionReadiness
+      summary: Check configured executor identity, capture and delivery keys without dispatching work
+      description: >
+        Requires bearer authentication. Public-key fingerprints use SHA-256 over
+        raw Ed25519 public-key bytes. Credentials and host paths are omitted.
+        worker_running and capture_ready are current observations, separate from
+        execution outcomes and historical capture gaps.
+      responses:
+        '200':
+          description: Read-only executor configuration and current readiness
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExecutionReadiness' }
+        default: { $ref: '#/components/responses/Error' }
   /v1/execution-links:
     get: &readExecutionLinks
       operationId: readExecutionLinks
@@ -255,6 +271,21 @@ components:
               schema_version: { const: agentprovenance.execution_handoff/v1 }
               error: { type: string }
   schemas:
+    ExecutionReadiness:
+      type: object
+      required: [schema_version, target, principal_id, source_producer_id, source_namespace, worker_running, native_capture, capture_ready, receiver_id, target_key_sha256, receiver_key_sha256]
+      properties:
+        schema_version: { const: agentprovenance.execution_handoff/v1 }
+        target: { $ref: '#/components/schemas/Target' }
+        principal_id: { type: string }
+        source_producer_id: { type: string }
+        source_namespace: { type: string }
+        worker_running: { type: boolean }
+        native_capture: { type: boolean }
+        capture_ready: { type: boolean }
+        receiver_id: { type: string, description: Empty when signed delivery is not configured. }
+        target_key_sha256: { type: string, pattern: '^([0-9a-f]{64})?$', description: Empty when signed delivery is not configured. }
+        receiver_key_sha256: { type: string, pattern: '^([0-9a-f]{64})?$', description: Empty when signed delivery is not configured. }
     ExecutionIdentity:
       type: object
       additionalProperties: false

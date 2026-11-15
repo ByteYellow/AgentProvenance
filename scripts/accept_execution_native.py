@@ -151,7 +151,7 @@ def execute(args):
         raise RuntimeError("acceptance requires file_diff=true in the isolated task route")
     argv = [str(cli), "--data-dir", str(output / "data"), "launch", "--sensor", "off", "--no-dashboard", "--json",
             "--workdir", str(workdir), "--remote-execution", str(args.route.resolve()), "--",
-            str(args.claude.resolve()), "--setting-sources", "user", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+            str(args.claude.absolute()), "--setting-sources", "user", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
             "--tools", "Bash", "--allowedTools", "Bash(" + str(cli) + " internal remote-command *)",
             "--output-format", "stream-json", "--verbose", "--max-budget-usd", "0.25", "--max-turns", "8", "-p", PROMPT]
     env = dict(os.environ, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1", CLAUDE_CODE_MAX_OUTPUT_TOKENS="2000", API_TIMEOUT_MS="90000")
@@ -160,7 +160,7 @@ def execute(args):
         completed = subprocess.run(argv, cwd=workdir, env=env, stdout=out, stderr=err, timeout=300)
     save(output / "invocation.json", {"exit_code": completed.returncode, "caller_platform": platform.platform(),
                                      "binary_sha256": hashlib.sha256(cli.read_bytes()).hexdigest(),
-                                     "claude_version": run([str(args.claude.resolve()), "--version"])})
+                                     "claude_version": run([str(args.claude.absolute()), "--version"])})
     if completed.returncode:
         raise RuntimeError("native launch failed; see retained launch.stdout and launch.stderr")
     admissions = sorted((output / "data/execution-routes").glob("*/*-admission.json"))

@@ -107,6 +107,10 @@ func ExecuteRemoteCall(ctx context.Context, routePath, requestPath, nativeComman
 	if err != nil {
 		return 1, err
 	}
+	if !route.WaitCapture && report.Checkpoint != nil && report.Checkpoint.Capture != nil &&
+		(report.Attempt.State.Capture == handoff.Collecting || report.Attempt.State.Capture == handoff.Draining) {
+		fmt.Fprintln(stderr, "agentprov: executor native capture is still draining; wait_capture=false allows an earlier delivery snapshot. Set wait_capture=true in the remote route configuration to wait for capture completion.")
+	}
 	collection, err := client.CollectExecution(ctx, handoff.IdentityOf(admission.Attempt), "native-result-"+request.OperationID, receiver)
 	collectionPath := strings.TrimSuffix(requestPath, ".json") + "-collection.json"
 	if len(collection.Receipt) != 0 {
@@ -115,13 +119,15 @@ func ExecuteRemoteCall(ctx context.Context, routePath, requestPath, nativeComman
 	if err != nil {
 		return 1, fmt.Errorf("remote execution ended; evidence delivery %s (reuse this request, not a new execution): %w", collection.Status, err)
 	}
-	// Read output from the locally verified signed projection, not from an
-	// unsigned body in the status response or a remote working-directory path.
+	// A stable delivery operation returns the original immutable package even
+	// after capture advances. Read its verified checkpoint, never the latest
+	// status reference, which may not exist in the received projection.
+	manifest := collection.VerifiedManifest
 	var checkpoint handoff.Checkpoint
-	if report.CheckpointRef == "" {
-		return 1, fmt.Errorf("remote execution ended without a checkpoint reference")
+	if manifest == nil || manifest.Identity != handoff.IdentityOf(admission.Attempt) || manifest.CheckpointRef == "" {
+		return 1, fmt.Errorf("verified delivery has no matching checkpoint reference")
 	}
-	if err := provenance.ReadObjectPayload(db, admission.Attempt.LocalRunID, report.CheckpointRef, &checkpoint); err != nil {
+	if err := provenance.ReadObjectPayload(db, manifest.Identity.LocalRunID, manifest.CheckpointRef, &checkpoint); err != nil {
 		return 1, err
 	}
 	if checkpoint.AttemptID != admission.Attempt.ID || checkpoint.RequestHash != digest || checkpoint.Result == nil {
@@ -157,6 +163,10 @@ func ExecuteRemoteCall(ctx context.Context, routePath, requestPath, nativeComman
 	}
 	fmt.Fprintf(stderr, "\nagentprov: execution=%s capture=%s delivery=%s; saved admission %s\n",
 		checkpoint.State.Execution, checkpoint.State.Capture, collection.Status, admissionPath)
+	if report.CheckpointRef != manifest.CheckpointRef {
+		fmt.Fprintf(stderr, "agentprov: returned saved delivery version %d (checkpoint %s); latest remote status: execution=%s capture=%s checkpoint=%s\n",
+			manifest.PackageVersion, manifest.CheckpointRef, report.Attempt.State.Execution, report.Attempt.State.Capture, report.CheckpointRef)
+	}
 	return checkpoint.Result.ExitCode, nil
 }
 
@@ -178,6 +188,9 @@ func waitRemoteCall(ctx context.Context, client daemon.Client, admission daemon.
 		case handoff.Succeeded, handoff.Failed, handoff.Cancelled:
 			if !waitCapture || report.Attempt.State.Capture == handoff.Sealed || report.Attempt.State.Capture == handoff.Incomplete {
 				return report, nil
+			}
+			if report.Checkpoint != nil && report.Checkpoint.Capture == nil {
+				return report, fmt.Errorf("capture completion was requested but the executor checkpoint has no native capture report; enable native capture on the executor or set wait_capture=false for separately managed capture; reuse this prepared request to recover")
 			}
 		}
 		select {

@@ -177,6 +177,25 @@ schema 25 新增该计数，旧事件和签名报告保持原样，历史报告�
 命令前复制工作目录，适合独立任务目录。关闭时省略逐命令快照，已启用的内核
 文件事件采集继续工作。
 
+首次运行前，可用 `agentprov doctor --remote-execution /path/to/operator/route.json --json`
+核对配置。它通过需要认证的 `GET /v1/execution-readiness` 检查调用方、目标实例及代次、
+接收方、双方公钥指纹、执行器运行状态和采集等待设置，不派发任务，也不输出凭据。
+`launch --remote-execution` 会执行同样的检查；必要配置不匹配时，先修正再启动 Agent。
+两端程序都需要支持这个接口，旧执行器报接口不可用时应先更新。
+
+在运行时所在的 Linux 主机上，还可以检查固定版本的程序、选用的文件和设备权限：
+
+```sh
+agentprov doctor --runtime runsc --runtime-binary /opt/runsc/runsc \
+  --runtime-rootfs /path/to/rootfs --json
+agentprov doctor --runtime firecracker --runtime-binary /opt/firecracker/firecracker \
+  --runtime-rootfs /path/to/rootfs.ext4 --runtime-kernel /path/to/vmlinux --json
+```
+
+Firecracker 检查包括 `/dev/kvm`、`/dev/net/tun` 和 guest 验收脚本需要的辅助程序。
+省略的文件路径会提示尚未检查。检查期间不启动容器或虚拟机，后续继续用实际启动和证据
+用例完成运行时验收。
+
 ```sh
 agentprov --data-dir ./caller-evidence launch \
   --remote-execution /path/to/operator/route.json -- claude
@@ -200,6 +219,16 @@ Hook 不自动授权。获准后，包装器提交请求、等待执行、验证
 取消时提交持久停止请求，覆盖本地证据保存和收取结果期间。若取消导致接收记录文件
 尚未保存，可复用已准备请求恢复原尝试。交付失败后可通过
 `forensics collect-execution` 接着收取。执行、采集和交付状态分别输出。
+
+路由中设置 `wait_capture: true` 后，会等执行端的原生采集变为 `sealed` 或
+`incomplete` 再收取结果；设置为 `false` 时，命令结果可以先返回，采集继续收尾。
+省略时，只有调用端的 `execution.json` 包含 `capture` 配置才会等待。执行端独立
+配置原生采集时，建议明确设置这个选项。要求等待但执行端没有原生采集报告时，
+CLI 会指出配置问题，并保留原请求供修正配置后恢复。
+
+重复使用同一交付操作会收到原来的签名包。恢复时，从该包已验证的交付清单读取
+对应检查点和输出；远端采集已经推进时，CLI 分别显示保存的包版本与最新远端状态。
+重试原请求会补交回执、返回已保存的输出，命令只执行一次。
 
 路由同时在调用端 Run 中保存内容寻址的 `execution_source_admission` 对象，
 记录完整限定的原生调用、派发、执行尝试、显式重试前序、已认证主体及配置中的签名公钥指纹。

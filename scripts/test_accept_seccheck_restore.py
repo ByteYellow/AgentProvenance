@@ -8,10 +8,42 @@ import sys
 import tempfile
 import unittest
 
-from accept_seccheck_restore import PHASES, require_expired_endpoint, require_replay_receipt, require_restore_identities, require_signature_rejection, runtime_command
+from accept_seccheck_restore import PHASES, require_expired_endpoint, require_replay_receipt, require_restore_identities, require_signature_rejection, rootfs_identity, rootfs_path, runtime_command
 
 
 class RestoreAcceptanceChecks(unittest.TestCase):
+    def test_rootfs_identity_supports_distro_and_busybox_layouts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'usr/bin').mkdir(parents=True)
+            (root / 'bin').symlink_to('usr/bin')
+            for name in ('sh', 'cat', 'date', 'sleep'):
+                (root / 'usr/bin' / name).write_bytes(('fixture-' + name).encode())
+            report = rootfs_identity(root)
+            self.assertIsNone(report['busybox_sha256'])
+            self.assertIsNone(report['os_release'])
+            self.assertEqual(report['program_sha256']['bin/sh'], hashlib.sha256(b'fixture-sh').hexdigest())
+            (root / 'usr/bin/busybox').write_bytes(b'fixture-busybox')
+            for name in ('sh', 'cat', 'date', 'sleep'):
+                path = root / 'usr/bin' / name
+                path.unlink()
+                path.symlink_to('/bin/busybox')
+            report = rootfs_identity(root)
+            self.assertEqual(set(report['program_sha256'].values()), {hashlib.sha256(b'fixture-busybox').hexdigest()})
+            self.assertEqual(report['busybox_sha256'], hashlib.sha256(b'fixture-busybox').hexdigest())
+            (root / 'usr/bin/sh').unlink()
+            with self.assertRaises(FileNotFoundError):
+                rootfs_identity(root)
+
+    def test_rootfs_symlinks_cannot_hash_host_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'escape').symlink_to('../../etc/passwd')
+            self.assertEqual(rootfs_path(root, 'escape'), root / 'etc/passwd')
+            (root / 'loop').symlink_to('/loop')
+            with self.assertRaisesRegex(ValueError, 'symlink loop'):
+                rootfs_path(root, 'loop')
+
     def setUp(self):
         self.records, self.scopes, self.processes = [], set(), set()
         birth = 1794711967422000212

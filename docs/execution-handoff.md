@@ -226,6 +226,37 @@ and artifact capture. This copies the workdir before each command, so use a
 dedicated task workspace. Otherwise kernel file events remain available when
 native capture is enabled, without a per-command workspace snapshot.
 
+Set `wait_capture: true` in the route to wait until the executor's native capture
+is `sealed` or `incomplete` before collecting the result. Set it to `false` to
+return the command result while capture may still be draining. When omitted,
+the route waits only if its local `execution.json` includes a `capture` section.
+For native capture on a separately configured executor, set this option
+explicitly. A requested wait without an executor capture report produces a
+configuration diagnostic and preserves the prepared request for recovery.
+
+Run `agentprov doctor --remote-execution /path/to/operator/route.json --json`
+before the first task. The authenticated `GET /v1/execution-readiness` check
+compares caller/target identity, target generation, receiver identity, both
+public-key fingerprints, worker availability and capture waiting settings.
+It does not submit work or print credentials. `launch --remote-execution` runs
+the same check and stops before starting the agent if a required match fails.
+Both binaries must support this endpoint; update an older executor if the check
+reports it unavailable.
+
+On the runtime host, optional local checks inspect the pinned executable, selected
+artifacts and device access without starting a workload:
+
+```sh
+agentprov doctor --runtime runsc --runtime-binary /opt/runsc/runsc \
+  --runtime-rootfs /path/to/rootfs --json
+agentprov doctor --runtime firecracker --runtime-binary /opt/firecracker/firecracker \
+  --runtime-rootfs /path/to/rootfs.ext4 --runtime-kernel /path/to/vmlinux --json
+```
+
+The Firecracker check includes `/dev/kvm`, `/dev/net/tun` and the helpers used by
+the guest acceptance script. Missing artifact paths are reported as unchecked.
+Keep the actual boot and evidence tests as the runtime acceptance step.
+
 ```sh
 agentprov --data-dir ./caller-evidence launch \
   --remote-execution /path/to/operator/route.json -- claude
@@ -254,6 +285,13 @@ evidence persistence and collection. Reuse the prepared request to recover the
 attempt if cancellation prevented the admission file from being saved.
 Delivery errors leave the admission available for `forensics collect-execution`.
 Execution, capture and delivery states are printed separately.
+
+A repeated delivery operation returns its original signed package. Recovery
+reads the checkpoint and outputs identified by that package's verified manifest,
+even if remote capture has since advanced. When the checkpoints differ, the CLI
+prints the saved delivery version and the latest remote status separately.
+Retrying the prepared request resends the receipt and returns the saved output;
+it does not run the command again.
 
 The router also saves a content-addressed `execution_source_admission` object
 in the caller Run. It records the qualified native call, dispatch and attempt,

@@ -31,18 +31,22 @@ import accept_execution_native as native
 COMMAND = "python3 analyze.py"
 PROMPT = (
     "Run exactly one Bash tool call in the configured remote working directory: "
-    "`python3 analyze.py`. Set its timeout to 180000 milliseconds. The script is a "
+    "`python3 analyze.py`. Use that exact command string, with no cd, prefix or suffix; "
+    "the remote wrapper already sets the working directory. Set its timeout to 180000 milliseconds. The script is a "
     "synthetic CSV analysis task and contacts only its local test barrier. "
     "Do not inspect, edit or run any other file or command. After the call, report "
     "its result. If the tool reports a delivery error, report that error and stop; "
     "the operator will recover the same execution. Never retry the tool yourself."
 )
-TASK = '''import csv, json, pathlib, urllib.request
+TASK = '''import csv, json, pathlib, time, urllib.request
 case = json.loads(pathlib.Path("case.json").read_text())
 with pathlib.Path("invocations.log").open("a") as log:
     log.write(case["id"] + "\\n")
 with urllib.request.urlopen(case["fixture_url"] + "/barrier/" + case["id"], timeout=100) as response:
     assert json.load(response)["released"]
+# Keep the successful fixture observable through the asynchronous procfs sample.
+# Short-lived sampling gaps are exercised by the separate execution tests.
+time.sleep(1)
 totals = {}
 for row in csv.DictReader(pathlib.Path("input.csv").open()):
     totals[row["team"]] = totals.get(row["team"], 0) + int(row["amount"])
@@ -311,7 +315,7 @@ def execute(args):
             if not replay["reused"] or replay["attempt"]["id"] != attempt["id"]:
                 raise RuntimeError("transport replay repeated execution")
             command = [str(args.agentprov), "internal", "remote-command", "--route", case["saved_route"],
-                       "--request", case["prepared_path"], "--native-command", COMMAND]
+                       "--request", case["prepared_path"], "--native-command", attempt["request"]["command"]["argv"][2]]
             case["recovered_stdout"] = native.run(command)
             case["collection_after"] = native.load(case["prepared_path"].removesuffix(".json") + "-collection.json")
             case["report"] = api.call("GET", "/v1/executions/" + attempt["id"])
@@ -392,7 +396,9 @@ def main():
         return
     args.agentprov, args.output = args.agentprov.resolve(), args.output.resolve()
     if args.phase == "run":
-        args.claude = args.claude.resolve()
+        # launch chooses its harness from argv[0]; npm/native installations
+        # may symlink `claude` to cli.js, claude.exe or a versioned filename.
+        args.claude = args.claude.absolute()
         execute(args)
     else:
         for path in (args.route_a, args.route_b):

@@ -111,6 +111,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("/v1/snapshots/", s.snapshotByID)
 	mux.HandleFunc("POST /v1/record", s.recordRun)
 	mux.HandleFunc("POST /v1/executions", s.submitExecution)
+	mux.HandleFunc("GET /v1/execution-readiness", s.executionReadiness)
 	mux.HandleFunc("GET /v1/executions", s.listExecutions)
 	mux.HandleFunc("GET /v1/executions/{id}", s.getExecution)
 	mux.HandleFunc("POST /v1/executions/{id}/stop", s.stopExecution)

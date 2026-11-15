@@ -77,9 +77,15 @@ func TestExecutionDeliveryAPILostAcknowledgment(t *testing.T) {
 			if err == nil || partial.Status != "receipt_persisted" || len(partial.Receipt) == 0 {
 				t.Fatalf("lost ACK: %+v %v", partial, err)
 			}
+			if partial.VerifiedManifest == nil || partial.VerifiedManifest.Identity != expected || partial.VerifiedManifest.PackageVersion != 1 {
+				t.Fatalf("persisted delivery manifest missing: %+v", partial.VerifiedManifest)
+			}
 			result, err := client.CollectExecution(context.Background(), expected, "collect-1", receiver)
 			if err != nil || result.Status != "acknowledged" || !bytes.Equal(result.Receipt, partial.Receipt) {
 				t.Fatalf("recovery: %+v %v", result, err)
+			}
+			if result.VerifiedManifest == nil || *result.VerifiedManifest != *partial.VerifiedManifest {
+				t.Fatal("recovery changed the verified package")
 			}
 			report, err := client.Execution(context.Background(), admission.Attempt.ID)
 			if err != nil || report.Attempt.State.Delivery != handoff.Acknowledged || report.Attempt.State.Capture != handoff.Draining {

@@ -138,6 +138,8 @@ components:
           additionalProperties: true
       additionalProperties: true
 paths:
+  /v1/execution-readiness:
+    $ref: '../execution-handoff-api.yaml#/paths/~1v1~1execution-readiness'
   /v1/execution-links:
     $ref: '../execution-handoff-api.yaml#/paths/~1v1~1execution-links'
   /v1/capture-manifest:

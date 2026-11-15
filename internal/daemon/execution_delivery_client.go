@@ -48,6 +48,10 @@ type ExecutionCollection struct {
 	BundleSHA256   string          `json:"bundle_sha256"`
 	Status         string          `json:"status"`
 	Receipt        json.RawMessage `json:"receipt,omitempty"`
+	// VerifiedManifest describes the package accepted by the receiver, which
+	// may precede the sender's current checkpoint. It is available only after
+	// verification and persistence, and cannot be supplied by JSON decoding.
+	VerifiedManifest *handoff.DeliveryManifest `json:"-"`
 }
 
 // CollectExecution verifies and persists before acknowledging the sender. The
@@ -80,6 +84,7 @@ func (c Client) CollectExecution(ctx context.Context, expected handoff.Execution
 		return out, err
 	}
 	out.Status, out.Receipt = "receipt_persisted", receipt
+	out.VerifiedManifest = &manifest
 	ack, err := c.AcknowledgeExecutionDelivery(ctx, manifest.ID, receipt)
 	if err != nil {
 		return out, err

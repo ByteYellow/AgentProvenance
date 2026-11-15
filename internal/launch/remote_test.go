@@ -34,6 +34,7 @@ type remoteFixture struct {
 	paths         store.Paths
 	server        daemon.Server
 	requests      atomic.Int64
+	stop          func() error
 }
 
 func newRemoteFixture(t *testing.T) *remoteFixture {
@@ -42,6 +43,10 @@ func newRemoteFixture(t *testing.T) *remoteFixture {
 }
 
 func remoteFixtureWithPolicy(t *testing.T, executionPolicy record.Options) *remoteFixture {
+	return remoteFixtureWithTransport(t, executionPolicy, nil)
+}
+
+func remoteFixtureWithTransport(t *testing.T, executionPolicy record.Options, transport func(http.ResponseWriter, *http.Request, http.Handler)) *remoteFixture {
 	t.Helper()
 	x := &remoteFixture{}
 	var err error
@@ -63,12 +68,12 @@ func remoteFixtureWithPolicy(t *testing.T, executionPolicy record.Options) *remo
 		ExecutionCaller: handoff.Principal{ID: "router", ProducerID: "mac", Namespace: "user", AllowedTargets: []handoff.Target{target}}}
 	x.server.Execution = &handoff.Executor{Ledger: handoff.Ledger{DB: db, Target: target}, Paths: serverPaths,
 		Options: executionPolicy, PollInterval: time.Millisecond}
-	stop, err := x.server.Execution.Start(context.Background())
+	x.stop, err = x.server.Execution.Start(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		if err := stop(); err != nil {
+		if err := x.stop(); err != nil {
 			t.Error(err)
 		}
 	})
@@ -85,6 +90,10 @@ func remoteFixtureWithPolicy(t *testing.T, executionPolicy record.Options) *remo
 	handler := x.server.Handler()
 	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		x.requests.Add(1)
+		if transport != nil {
+			transport(w, r, handler)
+			return
+		}
 		handler.ServeHTTP(w, r)
 	}))
 	t.Cleanup(httpServer.Close)

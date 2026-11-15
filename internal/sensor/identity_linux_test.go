@@ -3,6 +3,8 @@
 package sensor
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -17,6 +19,40 @@ func TestCapturedTimestampPrecedesDrain(t *testing.T) {
 	at, err := time.Parse(time.RFC3339Nano, eventTimestamp(sensorbpfSensorEvent{KtimeNs: uint64(monotonic.Nano() - int64(2*time.Second))}))
 	if err != nil || time.Since(at) < time.Second || time.Since(at) > 3*time.Second {
 		t.Fatalf("lost kernel timestamp: %s %v", at, err)
+	}
+}
+
+func TestEventTimestampSurvivesClockReadPreemption(t *testing.T) {
+	for _, delayedRead := range []int{1, 2} {
+		t.Run(fmt.Sprintf("monotonic_read_%d", delayedRead), func(t *testing.T) {
+			base := time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
+			elapsed := 10 * time.Second
+			reads := 0
+			got := eventWallTime(uint64(7*time.Second), func() time.Time { return base.Add(elapsed) }, func() (int64, error) {
+				reads++
+				if reads == delayedRead {
+					elapsed += 8 * time.Millisecond
+				}
+				return int64(elapsed), nil
+			})
+			if !got.Equal(base.Add(7 * time.Second)) {
+				t.Fatalf("scheduler delay shifted the event: got %v want %v", got, base.Add(7*time.Second))
+			}
+		})
+	}
+}
+
+func TestEventTimestampMissingClockFallsBackToObservation(t *testing.T) {
+	now := time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
+	for _, ktime := range []uint64{0, uint64(time.Second)} {
+		reads := 0
+		got := eventWallTime(ktime, func() time.Time { return now }, func() (int64, error) {
+			reads++
+			return 0, errors.New("clock unavailable")
+		})
+		if !got.Equal(now) || (ktime == 0 && reads != 0) {
+			t.Fatalf("clock fallback: %v reads=%d", got, reads)
+		}
 	}
 }
 

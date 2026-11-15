@@ -31,11 +31,17 @@ def verify_tree(root, binary, version):
         raise RuntimeError('guest service is not enabled for boot')
     if digest(root / 'usr/local/bin/agentprov') != digest(binary):
         raise RuntimeError('guest CLI differs from the selected binary')
+    # networkd reads configuration as systemd-network, not root. Source
+    # checkouts and private build directories can have a restrictive umask.
+    network = root / 'etc/systemd/network/80-guest.network'
+    if network.stat().st_mode & 0o444 != 0o444:
+        raise RuntimeError('guest network configuration is not readable by networkd')
     installed_version = subprocess.check_output(['chroot', str(root), '/usr/local/bin/agentprov', '--version'], text=True).strip()
     if installed_version != version:
         raise RuntimeError('guest CLI version differs inside the image')
     subprocess.run(['systemd-analyze', '--root=' + str(root), '--man=no', 'verify',
-                    'agentprov-guest.service', 'ssh.service'], check=True)
+                    'agentprov-guest.service', 'ssh.service', 'systemd-networkd.service',
+                    'systemd-udevd.service', 'systemd-udev-trigger.service'], check=True)
 
 
 def main():

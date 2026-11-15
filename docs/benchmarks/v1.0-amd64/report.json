@@ -1,0 +1,1450 @@
+{
+  "schema_version": "agentprovenance.v1_amd64_acceptance/v1",
+  "recorded_date": "2026-11-16",
+  "branch": "feature/v1.0-portable-evidence",
+  "source_base": "678bf7813ab0546f8438afe3ad5c0364f20a35ea",
+  "source_state": "working-tree runtime builds; release artifact provenance is recorded separately",
+  "environment": {
+    "system": "Linux",
+    "architecture": "x86_64",
+    "kernel": "6.8.0-149-generic",
+    "cpu_count": 4,
+    "memory_kib": 4009140,
+    "python": "3.12.3"
+  },
+  "builds": {
+    "baseline-agentprov": {
+      "sha256": "df4e5b95e468214698120b31d93b512d7c0d7c50f7244e0ce8629e10f26e4c93",
+      "build": [
+        "baseline-agentprov: go1.26.4",
+        "\tpath\tgithub.com/byteyellow/agentprovenance/cmd/agentprov",
+        "\tbuild\t-buildmode=exe",
+        "\tbuild\t-compiler=gc",
+        "\tbuild\t-trimpath=true",
+        "\tbuild\tDefaultGODEBUG=containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,httpcookiemaxnum=0,multipathtcp=0,randseednop=0,rsa1024min=0,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0",
+        "\tbuild\tCGO_ENABLED=0",
+        "\tbuild\tGOARCH=amd64",
+        "\tbuild\tGOOS=linux",
+        "\tbuild\tGOAMD64=v1"
+      ],
+      "version": "agentprov version v0.10.1 (82c8f4615cfdc9daf8a0d96888a45e65a051b3f5; unknown; linux/amd64)"
+    },
+    "baseline-sensor": {
+      "sha256": "9c6b997c5c2dcc8f964cd18d494b131a6ab9f627309e75455ffabbf4e845f8ad",
+      "build": [
+        "baseline-sensor: go1.26.4",
+        "\tpath\tgithub.com/byteyellow/agentprovenance/cmd/agentprov-sensor",
+        "\tbuild\t-buildmode=exe",
+        "\tbuild\t-compiler=gc",
+        "\tbuild\t-trimpath=true",
+        "\tbuild\tDefaultGODEBUG=containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,httpcookiemaxnum=0,multipathtcp=0,randseednop=0,rsa1024min=0,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0",
+        "\tbuild\tCGO_ENABLED=0",
+        "\tbuild\tGOARCH=amd64",
+        "\tbuild\tGOOS=linux",
+        "\tbuild\tGOAMD64=v1"
+      ]
+    },
+    "agentprov": {
+      "sha256": "ec65c79ed53f81e0f2a6fb735a522c10c67b7271def6cf4f8fa57db349413579",
+      "build": [
+        "agentprov: go1.26.4",
+        "\tpath\tgithub.com/byteyellow/agentprovenance/cmd/agentprov",
+        "\tbuild\t-buildmode=exe",
+        "\tbuild\t-compiler=gc",
+        "\tbuild\t-trimpath=true",
+        "\tbuild\tDefaultGODEBUG=containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,httpcookiemaxnum=0,multipathtcp=0,randseednop=0,rsa1024min=0,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0",
+        "\tbuild\tCGO_ENABLED=0",
+        "\tbuild\tGOARCH=amd64",
+        "\tbuild\tGOOS=linux",
+        "\tbuild\tGOAMD64=v1"
+      ],
+      "version": "agentprov version v1.0.0-candidate (678bf7813ab0546f8438afe3ad5c0364f20a35ea; unknown; linux/amd64)"
+    },
+    "agentprov-current": {
+      "sha256": "4d3426813b0035926381784f19b8b90c9ad5e8cf76c160555ec701d331bd0a53",
+      "build": [
+        "agentprov-current: go1.26.4",
+        "\tpath\tgithub.com/byteyellow/agentprovenance/cmd/agentprov",
+        "\tbuild\t-buildmode=exe",
+        "\tbuild\t-compiler=gc",
+        "\tbuild\t-trimpath=true",
+        "\tbuild\tDefaultGODEBUG=containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,httpcookiemaxnum=0,multipathtcp=0,randseednop=0,rsa1024min=0,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0",
+        "\tbuild\tCGO_ENABLED=0",
+        "\tbuild\tGOARCH=amd64",
+        "\tbuild\tGOOS=linux",
+        "\tbuild\tGOAMD64=v1",
+        "\tbuild\tvcs=git",
+        "\tbuild\tvcs.revision=678bf7813ab0546f8438afe3ad5c0364f20a35ea",
+        "\tbuild\tvcs.time=2026-11-15T17:00:54Z",
+        "\tbuild\tvcs.modified=true"
+      ],
+      "version": "agentprov version v1.0.0-candidate (678bf78-working; unknown; linux/amd64)"
+    },
+    "agentprov-sensor-current": {
+      "sha256": "7eefaf4e286a211911c4d57cee94ebb15bd0fe6dddf3c4a4b009da89e866ccc3",
+      "build": [
+        "agentprov-sensor-current: go1.26.4",
+        "\tpath\tgithub.com/byteyellow/agentprovenance/cmd/agentprov-sensor",
+        "\tbuild\t-buildmode=exe",
+        "\tbuild\t-compiler=gc",
+        "\tbuild\t-trimpath=true",
+        "\tbuild\tDefaultGODEBUG=containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,httpcookiemaxnum=0,multipathtcp=0,randseednop=0,rsa1024min=0,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0",
+        "\tbuild\tCGO_ENABLED=0",
+        "\tbuild\tGOARCH=amd64",
+        "\tbuild\tGOOS=linux",
+        "\tbuild\tGOAMD64=v1",
+        "\tbuild\tvcs=git",
+        "\tbuild\tvcs.revision=678bf7813ab0546f8438afe3ad5c0364f20a35ea",
+        "\tbuild\tvcs.time=2026-11-15T17:00:54Z",
+        "\tbuild\tvcs.modified=true"
+      ]
+    }
+  },
+  "kvm": [
+    {
+      "gate": "sensor-live",
+      "exit_code": "0"
+    },
+    {
+      "gate": "lifecycle",
+      "exit_code": "0"
+    },
+    {
+      "gate": "native",
+      "exit_code": "0"
+    },
+    {
+      "gate": "pid-namespace",
+      "exit_code": "0"
+    },
+    {
+      "gate": "audit",
+      "exit_code": "0"
+    },
+    {
+      "gate": "audit-adjacent",
+      "exit_code": "0"
+    },
+    {
+      "gate": "audit-mixed",
+      "exit_code": "0"
+    },
+    {
+      "gate": "audit-roundtrip",
+      "exit_code": "0"
+    },
+    {
+      "gate": "audit-replay",
+      "exit_code": "0"
+    },
+    {
+      "gate": "audit-follow",
+      "exit_code": "0"
+    },
+    {
+      "gate": "audit-follow-sign",
+      "exit_code": "0"
+    },
+    {
+      "gate": "execution-native",
+      "exit_code": "0"
+    },
+    {
+      "gate": "prefix",
+      "exit_code": "0"
+    },
+    {
+      "gate": "record-cgroup",
+      "exit_code": "0"
+    },
+    {
+      "gate": "node",
+      "exit_code": "0"
+    },
+    {
+      "gate": "container-tls",
+      "exit_code": "0"
+    },
+    {
+      "gate": "guest-service",
+      "exit_code": "0"
+    }
+  ],
+  "go_tls": [
+    {
+      "go": "1.23.12",
+      "gate": "syscall-tls",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.23.12",
+      "gate": "concurrent-read",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.23.12",
+      "gate": "discovery",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.23.12",
+      "gate": "pid-namespace",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.24.13",
+      "gate": "syscall-tls",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.24.13",
+      "gate": "concurrent-read",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.24.13",
+      "gate": "discovery",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.24.13",
+      "gate": "pid-namespace",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.25.8",
+      "gate": "syscall-tls",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.25.8",
+      "gate": "concurrent-read",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.25.8",
+      "gate": "discovery",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.25.8",
+      "gate": "pid-namespace",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.26.4",
+      "gate": "syscall-tls",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.26.4",
+      "gate": "concurrent-read",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.26.4",
+      "gate": "discovery",
+      "exit_code": "0"
+    },
+    {
+      "go": "1.26.4",
+      "gate": "pid-namespace",
+      "exit_code": "0"
+    }
+  ],
+  "native_matrix": {
+    "sessions": 2,
+    "attempts": 3,
+    "explicit_reexecution": 1,
+    "fault": "close_after_upstream_receipt_persisted",
+    "offline_verified": true,
+    "capture_note": "scope_state_sampling_gap retained as incomplete; command side effects were not repeated during transport recovery"
+  },
+  "firecracker": {
+    "passed": true,
+    "reclaimed": true,
+    "version": "Firecracker v1.18.0\n\n2026-11-16T03:11:17.022081484 [anonymous-instance:main] Firecracker exiting successfully. exit_code=0",
+    "kernel": "6.18.62",
+    "inputs": {
+      "binary": {
+        "sha256": "4d3426813b0035926381784f19b8b90c9ad5e8cf76c160555ec701d331bd0a53"
+      },
+      "firecracker": {
+        "sha256": "b33f46cd6d88834cf6a4f8d184f08f219809c636236bffd286d233a60602a2ba"
+      },
+      "kernel": {
+        "sha256": "e6311d8c3b2fa8c0eb2e299903279eeba597ddf4eb20739264d34d130ca82f16"
+      },
+      "rootfs": {
+        "sha256": "1dc1eca058e63efb75d03194efcaba23d487961d0b7938c86227f20690b6525f"
+      }
+    },
+    "executions": 2,
+    "receipt_checks": [
+      {
+        "attempts": 2,
+        "complete": true,
+        "receipts_verified": 0,
+        "receipts_pending": 2,
+        "delivery_complete": false
+      },
+      {
+        "attempts": 2,
+        "complete": true,
+        "receipts_verified": 1,
+        "receipts_pending": 1,
+        "delivery_complete": false
+      },
+      {
+        "attempts": 2,
+        "complete": true,
+        "receipts_verified": 2,
+        "receipts_pending": 0,
+        "delivery_complete": true
+      }
+    ]
+  },
+  "performance": {
+    "sensor": {
+      "passed": true,
+      "checks": 18,
+      "budget_sha256": "55ea21d937a389aef76088a81fa974d45939c764127746e301f971a4a1e392c2",
+      "frozen_at": "2026-11-15T18:56:10.297614+00:00",
+      "allowed_regression": 0.25,
+      "checks_detail": [
+        {
+          "case": "off/burst",
+          "metric": "workload_seconds",
+          "actual": 0.032980855999994674,
+          "maximum": 0.06089625000005981,
+          "passed": true
+        },
+        {
+          "case": "minimal/burst",
+          "metric": "workload_seconds",
+          "actual": 0.08131657199965048,
+          "maximum": 0.12830727999973532,
+          "passed": true
+        },
+        {
+          "case": "minimal/burst",
+          "metric": "sensor_cpu_seconds",
+          "actual": 2.972232,
+          "maximum": 4.585363749999999,
+          "passed": true
+        },
+        {
+          "case": "minimal/burst",
+          "metric": "peak_rss_kib",
+          "actual": 250780,
+          "maximum": 313425.0,
+          "passed": true
+        },
+        {
+          "case": "minimal/burst",
+          "metric": "fixture_output_bytes",
+          "actual": 92880456,
+          "maximum": 116100862.5,
+          "passed": true
+        },
+        {
+          "case": "default/burst",
+          "metric": "workload_seconds",
+          "actual": 0.08168900400005441,
+          "maximum": 0.12457753750017674,
+          "passed": true
+        },
+        {
+          "case": "default/burst",
+          "metric": "sensor_cpu_seconds",
+          "actual": 3.7994019999999904,
+          "maximum": 5.405112500000004,
+          "passed": true
+        },
+        {
+          "case": "default/burst",
+          "metric": "peak_rss_kib",
+          "actual": 277500,
+          "maximum": 332055.0,
+          "passed": true
+        },
+        {
+          "case": "default/burst",
+          "metric": "fixture_output_bytes",
+          "actual": 92880572,
+          "maximum": 116100933.75,
+          "passed": true
+        },
+        {
+          "case": "off/paced",
+          "metric": "workload_seconds",
+          "actual": 16.305082416999994,
+          "maximum": 20.439010656249838,
+          "passed": true
+        },
+        {
+          "case": "minimal/paced",
+          "metric": "workload_seconds",
+          "actual": 16.803713690000222,
+          "maximum": 21.069771328750353,
+          "passed": true
+        },
+        {
+          "case": "minimal/paced",
+          "metric": "sensor_cpu_seconds",
+          "actual": 8.845974999999992,
+          "maximum": 13.390326250000006,
+          "passed": true
+        },
+        {
+          "case": "minimal/paced",
+          "metric": "peak_rss_kib",
+          "actual": 250184,
+          "maximum": 313270.0,
+          "passed": true
+        },
+        {
+          "case": "minimal/paced",
+          "metric": "fixture_output_bytes",
+          "actual": 371552202,
+          "maximum": 464441062.5,
+          "passed": true
+        },
+        {
+          "case": "default/paced",
+          "metric": "workload_seconds",
+          "actual": 16.807229456000186,
+          "maximum": 21.054238262499798,
+          "passed": true
+        },
+        {
+          "case": "default/paced",
+          "metric": "sensor_cpu_seconds",
+          "actual": 10.275417999999995,
+          "maximum": 14.574437500000009,
+          "passed": true
+        },
+        {
+          "case": "default/paced",
+          "metric": "peak_rss_kib",
+          "actual": 257804,
+          "maximum": 336515.0,
+          "passed": true
+        },
+        {
+          "case": "default/paced",
+          "metric": "fixture_output_bytes",
+          "actual": 371552497,
+          "maximum": 464440010.0,
+          "passed": true
+        }
+      ],
+      "budget": {
+        "fixed_allowances": {
+          "workload_seconds": 0.02,
+          "sensor_cpu_seconds": 0.02,
+          "peak_rss_kib": 0,
+          "fixture_output_bytes": 0
+        },
+        "limits": {
+          "off/burst": {
+            "workload_seconds": {
+              "baseline_median": 0.03271700000004785,
+              "maximum": 0.06089625000005981
+            }
+          },
+          "minimal/burst": {
+            "workload_seconds": {
+              "baseline_median": 0.08664582399978826,
+              "maximum": 0.12830727999973532
+            },
+            "sensor_cpu_seconds": {
+              "baseline_median": 3.652291,
+              "maximum": 4.585363749999999
+            },
+            "peak_rss_kib": {
+              "baseline_median": 250740,
+              "maximum": 313425.0
+            },
+            "fixture_output_bytes": {
+              "baseline_median": 92880690,
+              "maximum": 116100862.5
+            }
+          },
+          "default/burst": {
+            "workload_seconds": {
+              "baseline_median": 0.08366203000014139,
+              "maximum": 0.12457753750017674
+            },
+            "sensor_cpu_seconds": {
+              "baseline_median": 4.3080900000000035,
+              "maximum": 5.405112500000004
+            },
+            "peak_rss_kib": {
+              "baseline_median": 265644,
+              "maximum": 332055.0
+            },
+            "fixture_output_bytes": {
+              "baseline_median": 92880747,
+              "maximum": 116100933.75
+            }
+          },
+          "off/paced": {
+            "workload_seconds": {
+              "baseline_median": 16.33520852499987,
+              "maximum": 20.439010656249838
+            }
+          },
+          "minimal/paced": {
+            "workload_seconds": {
+              "baseline_median": 16.839817063000282,
+              "maximum": 21.069771328750353
+            },
+            "sensor_cpu_seconds": {
+              "baseline_median": 10.696261000000005,
+              "maximum": 13.390326250000006
+            },
+            "peak_rss_kib": {
+              "baseline_median": 250616,
+              "maximum": 313270.0
+            },
+            "fixture_output_bytes": {
+              "baseline_median": 371552850,
+              "maximum": 464441062.5
+            }
+          },
+          "default/paced": {
+            "workload_seconds": {
+              "baseline_median": 16.82739060999984,
+              "maximum": 21.054238262499798
+            },
+            "sensor_cpu_seconds": {
+              "baseline_median": 11.643550000000008,
+              "maximum": 14.574437500000009
+            },
+            "peak_rss_kib": {
+              "baseline_median": 269212,
+              "maximum": 336515.0
+            },
+            "fixture_output_bytes": {
+              "baseline_median": 371552008,
+              "maximum": 464440010.0
+            }
+          }
+        },
+        "baseline_report_sha256": "4880891bfbfe20ad44e5f83317a9fca1d94b8e88713d830f53a3048b49fb90fc"
+      }
+    },
+    "telemetry": {
+      "passed": true,
+      "checks": 5,
+      "budget_sha256": "b9e50695460af29cf01b65acbc11232f377de3faed9efde1be6828f7bb76512a",
+      "frozen_at": "2026-11-15T19:02:51.704953+00:00",
+      "allowed_regression": 0.25,
+      "checks_detail": [
+        {
+          "actual": 55840.91047399989,
+          "maximum": 69189.89077874983,
+          "passed": true
+        },
+        {
+          "actual": 86089728,
+          "maximum": 104448000.0,
+          "passed": true
+        },
+        {
+          "actual": 256038913,
+          "maximum": 320089601.25,
+          "passed": true
+        },
+        {
+          "actual": 1.3930340001024888,
+          "maximum": 2.842187500074033,
+          "passed": true
+        },
+        {
+          "actual": 11.150481999720796,
+          "maximum": 13.490146249888312,
+          "passed": true
+        }
+      ],
+      "budget": {
+        "baseline_sha256": [
+          "24105773dee56e3826f202d7d8509f165415db7854587170c60e8f624ab69f6c",
+          "e00a82f6cae36c0a0bbbc01204ff17bdef7c49a550b7ac5bacd669e0af2976a0",
+          "37751e2e963e10cf0d349ceeda99543f6698ba0b09d20e776bc9431f0ef7473a"
+        ],
+        "query_timer_allowance_ms": 1,
+        "baseline_medians": {
+          "drain_ms": 55351.912622999866,
+          "daemon_peak_rss_bytes": 83558400,
+          "stopped_store_bytes": 256071681,
+          "health_after_p95_ms": 1.4737500000592263,
+          "query_after_p95_ms": 9.99211699991065
+        },
+        "maximums": {
+          "drain_ms": 69189.89077874983,
+          "daemon_peak_rss_bytes": 104448000.0,
+          "stopped_store_bytes": 320089601.25,
+          "health_after_p95_ms": 2.842187500074033,
+          "query_after_p95_ms": 13.490146249888312
+        }
+      }
+    },
+    "context": {
+      "passed": true,
+      "checks": 68,
+      "budget_sha256": "ae0a8edc7c4b80e300b8ce95abbca05ed791a0db1a9b9acdc44712a46b28970e",
+      "frozen_at": "2026-11-15T19:05:08.597944+00:00",
+      "allowed_regression": 0.25,
+      "checks_detail": [
+        {
+          "case": "browser/basic",
+          "metric": "store_bytes",
+          "actual": 1268191,
+          "maximum": 1585071.25,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "attachment_bytes",
+          "actual": 0,
+          "maximum": 0.0,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "bundle_bytes",
+          "actual": 721070,
+          "maximum": 900918.75,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "replay_bytes",
+          "actual": 1237629,
+          "maximum": 1545480.0,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "peak_rss_bytes",
+          "actual": 67772416,
+          "maximum": 84771840.0,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "cpu_seconds",
+          "actual": 2.441054,
+          "maximum": 3.2467949999999997,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "import_seconds",
+          "actual": 0.7795079280003847,
+          "maximum": 1.109110932500289,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "project_seconds",
+          "actual": 0.06491848399991795,
+          "maximum": 0.12854448374985167,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "query_seconds",
+          "actual": 0.06759938799996235,
+          "maximum": 0.14215687125049498,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "bundle_seconds",
+          "actual": 0.05766868099999556,
+          "maximum": 0.12139907625003162,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "replay_seconds",
+          "actual": 1.0385501219998332,
+          "maximum": 1.4045716437499778,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "store_bytes",
+          "actual": 2002246,
+          "maximum": 2507760.0,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "attachment_bytes",
+          "actual": 45215,
+          "maximum": 56518.75,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "bundle_bytes",
+          "actual": 1697837,
+          "maximum": 2121203.75,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "replay_bytes",
+          "actual": 1564681,
+          "maximum": 1955106.25,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "peak_rss_bytes",
+          "actual": 72982528,
+          "maximum": 91745280.0,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "cpu_seconds",
+          "actual": 5.606407,
+          "maximum": 7.400281249999999,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "import_seconds",
+          "actual": 0.8872110350002913,
+          "maximum": 1.1925851549995514,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "project_seconds",
+          "actual": 0.08451222699977734,
+          "maximum": 0.13205551874993943,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "query_seconds",
+          "actual": 0.06818540699987352,
+          "maximum": 0.14121467249997294,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "bundle_seconds",
+          "actual": 0.08348956300005739,
+          "maximum": 0.17011394499950255,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "replay_seconds",
+          "actual": 1.4046426720001364,
+          "maximum": 1.811457855000117,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "excluded_replay_seconds",
+          "actual": 1.6293260319998808,
+          "maximum": 2.154571822499679,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "store_bytes",
+          "actual": 1953830,
+          "maximum": 2442116.25,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "attachment_bytes",
+          "actual": 0,
+          "maximum": 0.0,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "bundle_bytes",
+          "actual": 1616528,
+          "maximum": 2019578.75,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "replay_bytes",
+          "actual": 1535441,
+          "maximum": 1918505.0,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "peak_rss_bytes",
+          "actual": 69734400,
+          "maximum": 88448000.0,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "cpu_seconds",
+          "actual": 3.608768,
+          "maximum": 4.3932312499999995,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "import_seconds",
+          "actual": 0.8638436010000987,
+          "maximum": 1.2393982962499195,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "project_seconds",
+          "actual": 0.0571184339996762,
+          "maximum": 0.14705157374980898,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "query_seconds",
+          "actual": 0.06789706600011414,
+          "maximum": 0.13433553624911382,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "bundle_seconds",
+          "actual": 0.08593007100034811,
+          "maximum": 0.15728553375031423,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "replay_seconds",
+          "actual": 1.3513494019998689,
+          "maximum": 1.7237678337500484,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "store_bytes",
+          "actual": 793274,
+          "maximum": 991552.5,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "attachment_bytes",
+          "actual": 0,
+          "maximum": 0.0,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "bundle_bytes",
+          "actual": 189919,
+          "maximum": 237267.5,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "replay_bytes",
+          "actual": 586356,
+          "maximum": 731878.75,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "peak_rss_bytes",
+          "actual": 65388544,
+          "maximum": 82805760.0,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "cpu_seconds",
+          "actual": 1.059107,
+          "maximum": 1.383545,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "import_seconds",
+          "actual": 0.5051087490001009,
+          "maximum": 0.8178730737495699,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "project_seconds",
+          "actual": 0.03986942399978943,
+          "maximum": 0.10357474124991768,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "query_seconds",
+          "actual": 0.02857526300022073,
+          "maximum": 0.08479769750015294,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "bundle_seconds",
+          "actual": 0.0437220979997619,
+          "maximum": 0.1154853999998295,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "replay_seconds",
+          "actual": 0.3418000530000427,
+          "maximum": 0.48898835249990497,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "store_bytes",
+          "actual": 936378,
+          "maximum": 1170433.75,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "attachment_bytes",
+          "actual": 1011,
+          "maximum": 1263.75,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "bundle_bytes",
+          "actual": 379210,
+          "maximum": 473762.5,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "replay_bytes",
+          "actual": 648999,
+          "maximum": 810593.75,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "peak_rss_bytes",
+          "actual": 67997696,
+          "maximum": 86896640.0,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "cpu_seconds",
+          "actual": 1.9368459999999998,
+          "maximum": 2.4039037499999996,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "import_seconds",
+          "actual": 0.5886253539997597,
+          "maximum": 0.6366931762506056,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "project_seconds",
+          "actual": 0.04017925900006958,
+          "maximum": 0.09773549624985663,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "query_seconds",
+          "actual": 0.02777409100008299,
+          "maximum": 0.08462361749996035,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "bundle_seconds",
+          "actual": 0.045342618000177026,
+          "maximum": 0.10646328875002382,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "replay_seconds",
+          "actual": 0.4593763449997823,
+          "maximum": 0.6249627762497767,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "excluded_replay_seconds",
+          "actual": 0.748772992999875,
+          "maximum": 1.116214141250157,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "store_bytes",
+          "actual": 933764,
+          "maximum": 1167163.75,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "attachment_bytes",
+          "actual": 0,
+          "maximum": 0.0,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "bundle_bytes",
+          "actual": 376491,
+          "maximum": 470347.5,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "replay_bytes",
+          "actual": 647227,
+          "maximum": 808285.0,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "peak_rss_bytes",
+          "actual": 65679360,
+          "maximum": 82657280.0,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "cpu_seconds",
+          "actual": 1.303003,
+          "maximum": 1.66326,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "import_seconds",
+          "actual": 0.5236497440005223,
+          "maximum": 0.7216756874993735,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "project_seconds",
+          "actual": 0.04558676100032244,
+          "maximum": 0.10412260125012836,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "query_seconds",
+          "actual": 0.028230690999862418,
+          "maximum": 0.08453592125026717,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "bundle_seconds",
+          "actual": 0.046549749999940104,
+          "maximum": 0.11385453500001859,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "replay_seconds",
+          "actual": 0.4553546600000118,
+          "maximum": 0.6196722137497546,
+          "passed": true
+        }
+      ],
+      "budget": {
+        "time_allowance_seconds": 0.05,
+        "limits": {
+          "browser/basic": {
+            "store_bytes": {
+              "baseline_median": 1268057,
+              "maximum": 1585071.25
+            },
+            "attachment_bytes": {
+              "baseline_median": 0,
+              "maximum": 0.0
+            },
+            "bundle_bytes": {
+              "baseline_median": 720735,
+              "maximum": 900918.75
+            },
+            "replay_bytes": {
+              "baseline_median": 1236384,
+              "maximum": 1545480.0
+            },
+            "peak_rss_bytes": {
+              "baseline_median": 67817472,
+              "maximum": 84771840.0
+            },
+            "cpu_seconds": {
+              "baseline_median": 2.557436,
+              "maximum": 3.2467949999999997
+            },
+            "import_seconds": {
+              "baseline_median": 0.8472887460002312,
+              "maximum": 1.109110932500289
+            },
+            "project_seconds": {
+              "baseline_median": 0.06283558699988134,
+              "maximum": 0.12854448374985167
+            },
+            "query_seconds": {
+              "baseline_median": 0.07372549700039599,
+              "maximum": 0.14215687125049498
+            },
+            "bundle_seconds": {
+              "baseline_median": 0.05711926100002529,
+              "maximum": 0.12139907625003162
+            },
+            "replay_seconds": {
+              "baseline_median": 1.0836573149999822,
+              "maximum": 1.4045716437499778
+            }
+          },
+          "browser/detailed": {
+            "store_bytes": {
+              "baseline_median": 2006208,
+              "maximum": 2507760.0
+            },
+            "attachment_bytes": {
+              "baseline_median": 45215,
+              "maximum": 56518.75
+            },
+            "bundle_bytes": {
+              "baseline_median": 1696963,
+              "maximum": 2121203.75
+            },
+            "replay_bytes": {
+              "baseline_median": 1564085,
+              "maximum": 1955106.25
+            },
+            "peak_rss_bytes": {
+              "baseline_median": 73396224,
+              "maximum": 91745280.0
+            },
+            "cpu_seconds": {
+              "baseline_median": 5.880224999999999,
+              "maximum": 7.400281249999999
+            },
+            "import_seconds": {
+              "baseline_median": 0.9140681239996411,
+              "maximum": 1.1925851549995514
+            },
+            "project_seconds": {
+              "baseline_median": 0.06564441499995155,
+              "maximum": 0.13205551874993943
+            },
+            "query_seconds": {
+              "baseline_median": 0.07297173799997836,
+              "maximum": 0.14121467249997294
+            },
+            "bundle_seconds": {
+              "baseline_median": 0.09609115599960205,
+              "maximum": 0.17011394499950255
+            },
+            "replay_seconds": {
+              "baseline_median": 1.4091662840000936,
+              "maximum": 1.811457855000117
+            },
+            "excluded_replay_seconds": {
+              "baseline_median": 1.6836574579997432,
+              "maximum": 2.154571822499679
+            }
+          },
+          "browser/detailed-no-attachments": {
+            "store_bytes": {
+              "baseline_median": 1953693,
+              "maximum": 2442116.25
+            },
+            "attachment_bytes": {
+              "baseline_median": 0,
+              "maximum": 0.0
+            },
+            "bundle_bytes": {
+              "baseline_median": 1615663,
+              "maximum": 2019578.75
+            },
+            "replay_bytes": {
+              "baseline_median": 1534804,
+              "maximum": 1918505.0
+            },
+            "peak_rss_bytes": {
+              "baseline_median": 70758400,
+              "maximum": 88448000.0
+            },
+            "cpu_seconds": {
+              "baseline_median": 3.474585,
+              "maximum": 4.3932312499999995
+            },
+            "import_seconds": {
+              "baseline_median": 0.9515186369999356,
+              "maximum": 1.2393982962499195
+            },
+            "project_seconds": {
+              "baseline_median": 0.0776412589998472,
+              "maximum": 0.14705157374980898
+            },
+            "query_seconds": {
+              "baseline_median": 0.06746842899929106,
+              "maximum": 0.13433553624911382
+            },
+            "bundle_seconds": {
+              "baseline_median": 0.0858284270002514,
+              "maximum": 0.15728553375031423
+            },
+            "replay_seconds": {
+              "baseline_median": 1.3390142670000387,
+              "maximum": 1.7237678337500484
+            }
+          },
+          "jupyter/basic": {
+            "store_bytes": {
+              "baseline_median": 793242,
+              "maximum": 991552.5
+            },
+            "attachment_bytes": {
+              "baseline_median": 0,
+              "maximum": 0.0
+            },
+            "bundle_bytes": {
+              "baseline_median": 189814,
+              "maximum": 237267.5
+            },
+            "replay_bytes": {
+              "baseline_median": 585503,
+              "maximum": 731878.75
+            },
+            "peak_rss_bytes": {
+              "baseline_median": 66244608,
+              "maximum": 82805760.0
+            },
+            "cpu_seconds": {
+              "baseline_median": 1.066836,
+              "maximum": 1.383545
+            },
+            "import_seconds": {
+              "baseline_median": 0.6142984589996558,
+              "maximum": 0.8178730737495699
+            },
+            "project_seconds": {
+              "baseline_median": 0.04285979299993414,
+              "maximum": 0.10357474124991768
+            },
+            "query_seconds": {
+              "baseline_median": 0.02783815800012235,
+              "maximum": 0.08479769750015294
+            },
+            "bundle_seconds": {
+              "baseline_median": 0.0523883199998636,
+              "maximum": 0.1154853999998295
+            },
+            "replay_seconds": {
+              "baseline_median": 0.351190681999924,
+              "maximum": 0.48898835249990497
+            }
+          },
+          "jupyter/detailed": {
+            "store_bytes": {
+              "baseline_median": 936347,
+              "maximum": 1170433.75
+            },
+            "attachment_bytes": {
+              "baseline_median": 1011,
+              "maximum": 1263.75
+            },
+            "bundle_bytes": {
+              "baseline_median": 379010,
+              "maximum": 473762.5
+            },
+            "replay_bytes": {
+              "baseline_median": 648475,
+              "maximum": 810593.75
+            },
+            "peak_rss_bytes": {
+              "baseline_median": 69517312,
+              "maximum": 86896640.0
+            },
+            "cpu_seconds": {
+              "baseline_median": 1.8831229999999999,
+              "maximum": 2.4039037499999996
+            },
+            "import_seconds": {
+              "baseline_median": 0.46935454100048446,
+              "maximum": 0.6366931762506056
+            },
+            "project_seconds": {
+              "baseline_median": 0.0381883969998853,
+              "maximum": 0.09773549624985663
+            },
+            "query_seconds": {
+              "baseline_median": 0.027698893999968277,
+              "maximum": 0.08462361749996035
+            },
+            "bundle_seconds": {
+              "baseline_median": 0.04517063100001906,
+              "maximum": 0.10646328875002382
+            },
+            "replay_seconds": {
+              "baseline_median": 0.4599702209998213,
+              "maximum": 0.6249627762497767
+            },
+            "excluded_replay_seconds": {
+              "baseline_median": 0.8529713130001255,
+              "maximum": 1.116214141250157
+            }
+          },
+          "jupyter/detailed-no-attachments": {
+            "store_bytes": {
+              "baseline_median": 933731,
+              "maximum": 1167163.75
+            },
+            "attachment_bytes": {
+              "baseline_median": 0,
+              "maximum": 0.0
+            },
+            "bundle_bytes": {
+              "baseline_median": 376278,
+              "maximum": 470347.5
+            },
+            "replay_bytes": {
+              "baseline_median": 646628,
+              "maximum": 808285.0
+            },
+            "peak_rss_bytes": {
+              "baseline_median": 66125824,
+              "maximum": 82657280.0
+            },
+            "cpu_seconds": {
+              "baseline_median": 1.290608,
+              "maximum": 1.66326
+            },
+            "import_seconds": {
+              "baseline_median": 0.5373405499994988,
+              "maximum": 0.7216756874993735
+            },
+            "project_seconds": {
+              "baseline_median": 0.043298081000102684,
+              "maximum": 0.10412260125012836
+            },
+            "query_seconds": {
+              "baseline_median": 0.027628737000213732,
+              "maximum": 0.08453592125026717
+            },
+            "bundle_seconds": {
+              "baseline_median": 0.05108362800001487,
+              "maximum": 0.11385453500001859
+            },
+            "replay_seconds": {
+              "baseline_median": 0.4557377709998036,
+              "maximum": 0.6196722137497546
+            }
+          }
+        },
+        "baseline_report_sha256": "4e494247827a16430833873b9c3436a46081c918bbfd0e220c11d7902e0c3646"
+      }
+    }
+  },
+  "pressure": [
+    {
+      "label": "candidate-burst",
+      "passed": true,
+      "kernel_drops": 0,
+      "counts": {
+        "file_open": 40000,
+        "syscall_result": 40000,
+        "process_exit": 5
+      }
+    },
+    {
+      "label": "candidate-paced",
+      "passed": true,
+      "kernel_drops": 0,
+      "counts": {
+        "file_open": 160000,
+        "syscall_result": 160000,
+        "process_exit": 5
+      }
+    },
+    {
+      "label": "overload-1MiB",
+      "passed": true,
+      "kernel_drops": 60387,
+      "counts": {
+        "file_open": 9792,
+        "syscall_result": 9824,
+        "process_exit": 2
+      }
+    }
+  ],
+  "ui": {
+    "status": "preview_retained_formal_integration_deferred_by_maintainer",
+    "source": "previews/v1.0-reader",
+    "checked": [
+      "execution_bidirectional_navigation",
+      "source_call_body",
+      "browser_body_image",
+      "notebook_body_image",
+      "existing_compare_and_collapsed_session",
+      "no_external_network",
+      "zh_CN_file_offline"
+    ]
+  },
+  "evidence_sha256": {
+    "logs/recovery-regression-before.log": "fada7c2d4c7f78f15893620a0bd04d0bc1a21dea6dd22bd970ea90ec2286009f",
+    "logs/recovery-regression-after.log": "42ebd0471d1ae72a92a746167f9bc97d6ec79b2b58a795ab2606d08c5ddc399f",
+    "logs/clock-regression-before.log": "0621087065d8bd87ca0c840d23adc798cd0d18f6a9efeb3e8f964b25539acafc",
+    "logs/clock-regression-after.log": "d279f9422dc004a5e803edcd2d1b10756e14c4e0cc354d1ba8109d7f3255fd5c",
+    "logs/current-race.log": "e1b01a5a3f9a4c726934cdaa26bffc3ca94ca63d8d6348de2587a369049740a1",
+    "logs/native-matrix-current.log": "becf7cd408e4d40130993ee431954b705cecebb1b73674213dd527c794ab1875",
+    "native-matrix-current/result.json": "0fee6f61d6629e8ac5d74c6871a60fe18aea89cf1ad94ae3f1c889d2de07d85c",
+    "native-matrix-current/offline.json": "18a506479291799d75a10eb977b8c1fcc626efb90e01ba2d216f105a7fd9b0f4",
+    "logs/kvm-final.log": "39aa5eeb1b35bdd957ed7bcc357051e04c198c24ae4633efd0bfe67bce8e5704",
+    "logs/go-tls-matrix-final.log": "ac1b0c8e4bd2a6dd2dd8d79e6f4766a22c136e643d643969650b030383d7a7c9",
+    "logs/kernel-full-ring.log": "f37b7507202c556265d3a8bca2923f6109d357742ebd8281eb4598f8da3ae4f3",
+    "logs/pid-mismatch-negative.log": "40105c5d6832f677981762a555c8ecee771579e9d3d3b021922ffa9e303680d1",
+    "logs/final-go.log": "c7b8a4ae8ac44e1ef5409ca94cc94a9a014cec65925c0f67b59df132486ca436",
+    "logs/final-vet.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "logs/final-backend-python.log": "af3984cdca9362c9abd59d26a5b9e6654f29c4c1bcdd2dcdcd2872355b33180b",
+    "logs/final-kvm-python.log": "668373a38a661c5f79f740d6ce2230bf6f299e80a1ef976d131f782675563f13",
+    "logs/final-backend-frontend.log": "43fb68a9018b662cf99fcfd55802d63a3c77ffc748fe0a0044886bbe05638320",
+    "logs/final-backend-doclinks.log": "c531d860c0f0d7b3a4576fcde5043446778d21fa4527ee0ec97515e0762cfca6",
+    "ui-screenshots/report.json": "992a6478ae35d06b0887fc9b9da9d37b93ff168d20c3d76a7e3d61a8d45abd4e",
+    "ui-screenshots/offline-portable.json": "317170d876148cdb31489be1c9cd862de21b5c85539b0abe454cb9a845b98e38",
+    "guest-image-current/manifest.json": "b750f2b8b35186dc037aa64b46f953bbb2e51be64182ca4c9fc9e52000d7dce2",
+    "logs/final-changed-race.log": "d2b2dba4530c896df76624580483b16611dd1992fd68a0227f51ff5a50b3f00d",
+    "logs/final-doclinks.log": "c7402c87a495ee58a4b4abede593405fb478c0935b9464134f875000862ec068"
+  },
+  "pending": [
+    "candidate archive build and no-Go acceptance",
+    "final documentation and branch push",
+    "maintainer review of retained UI preview"
+  ],
+  "deferred": [
+    "24-hour soak",
+    "formal Dashboard UI integration until maintainer decision",
+    "main merge, tag, release and Pages publication"
+  ]
+}

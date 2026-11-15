@@ -72,6 +72,9 @@ func Preflight(opts Options) PreflightReport {
 	r.Checks = append(r.Checks, checkDashboardAddr(opts.Dashboard, opts.DashboardAddr))
 	r.Checks = append(r.Checks, checkCgroup())
 	r.Checks = append(r.Checks, checkSensor(opts.Sensor, opts.SelfExe))
+	if opts.RemoteExecution != "" {
+		r.Checks = append(r.Checks, checkRemoteExecution(opts.RemoteExecution)...)
+	}
 	return r
 }
 

@@ -391,11 +391,12 @@ Pod 元数据用于识别工作负载；事件先于绑定到达时，通过磁�
 [Kubernetes 事件归属](docs/zh-CN/design-k8s-auto-attribution.md)
 
 当前源码还包含 [gVisor SecCheck 接收器](docs/zh-CN/gvisor-seccheck.md)。
-ARM64 `systrap` 路径已实测采集、故障恢复和快照恢复／克隆；
+ARM64 和 amd64 的 `systrap` 路径均已实测采集、故障恢复和快照恢复／克隆；
 事件保留 **Sentry** 内的身份，与宿主运行时进程区分。
 原生 eBPF 则观测选定的 Linux 宿主或 guest 内核。
 [Firecracker guest 方案](docs/zh-CN/execution-handoff.md#guest-服务与镜像)
-提供固定版本的内核、rootfs 构建入口和 systemd 采集服务；实际启动与回收验收待完成。
+提供固定版本的内核、rootfs 构建入口和 systemd 采集服务。amd64 的实际启动、
+签名交付及回执齐全后的回收已经通过，见 [v1.0 验收结果](docs/benchmarks/v1.0-amd64/README.zh-CN.md)。
 
 TLS 自动发现会跟踪受支持的 OpenSSL 库和 Go 二进制，也会处理容器重建后的目标变化。
 Go TLS 响应采集目前支持 **amd64、有符号信息的 Go 1.23–1.26 二进制**。
@@ -528,6 +529,8 @@ v0.10.1 加强 daemon 访问控制，保留本地采集的交互与兼容性，
 接入条件见[部署指南](docs/zh-CN/deployment-modes.md)，
 已实现的改动见[未发布变更](CHANGELOG.zh-CN.md#未发布)。
 v1.0 发布前，上面的发行包示例继续使用 v0.10.1。
+[阅读界面候选预览](previews/v1.0-reader/README.zh-CN.md)可以在本地重新构建；
+正式 Dashboard 保留当前布局，等候选界面审核后再接入。
 
 升级前请备份数据目录；升级后的数据库不支持直接用旧版程序打开。
 macOS 包尚未经过 Apple 公证；下载校验和用于检查压缩包完整性。

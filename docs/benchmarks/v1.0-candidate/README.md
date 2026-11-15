@@ -9,6 +9,10 @@ It is separate from the published release and the default Demo catalog.
 
 ## Revision and Scope
 
+The subsequent [Linux amd64 results](../v1.0-amd64/README.md) cover KVM/K3s,
+the Go TLS matrix, delivery recovery, Firecracker boot/retirement, and frozen
+performance budgets. The tables below preserve the original Mac handoff state.
+
 | Item | Revision |
 | --- | --- |
 | Runtime used for the final ARM64 captures and integrated tests | `c22c065f5a91fd275529787558ebe9a82e4a1426` |

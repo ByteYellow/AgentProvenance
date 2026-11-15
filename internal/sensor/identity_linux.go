@@ -53,12 +53,47 @@ var sensorBootID = sync.OnceValue(func() string {
 })
 
 func eventTimestamp(e sensorbpfSensorEvent) string {
-	now := time.Now()
-	var monotonic unix.Timespec
-	if e.KtimeNs != 0 && unix.ClockGettime(unix.CLOCK_MONOTONIC, &monotonic) == nil {
-		now = now.Add(time.Duration(int64(e.KtimeNs) - monotonic.Nano()))
+	return eventWallTime(e.KtimeNs, time.Now, func() (int64, error) {
+		var monotonic unix.Timespec
+		err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &monotonic)
+		return monotonic.Nano(), err
+	}).UTC().Format(time.RFC3339Nano)
+}
+
+func eventWallTime(ktime uint64, wallNow func() time.Time, monoNow func() (int64, error)) time.Time {
+	if ktime == 0 {
+		return wallNow()
 	}
-	return now.UTC().Format(time.RFC3339Nano)
+	// Bracket the wall-clock read so scheduling between the two clocks cannot
+	// silently become a per-event offset. A slow sample is retried; the narrowest
+	// of at most five intervals bounds uncertainty if the host remains busy.
+	var best time.Time
+	var width int64
+	for range 5 {
+		before, err := monoNow()
+		if err != nil {
+			break
+		}
+		wall := wallNow()
+		after, err := monoNow()
+		if err != nil {
+			break
+		}
+		if after < before {
+			continue
+		}
+		span := after - before
+		if best.IsZero() || span < width {
+			best, width = wall.Add(time.Duration(int64(ktime)-(before+span/2))), span
+		}
+		if span <= int64(100*time.Microsecond) {
+			break
+		}
+	}
+	if best.IsZero() {
+		return wallNow()
+	}
+	return best
 }
 
 func processInstance(pid uint32, start uint64) string {

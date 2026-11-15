@@ -137,6 +137,11 @@ func Run(opts Options) (Report, error) {
 	}
 	preflight := Preflight(opts)
 	PrintPreflightLocale(opts.Stderr, preflight, lang)
+	for _, check := range preflight.Checks {
+		if strings.HasPrefix(check.Name, "remote ") && check.Status == CheckFail {
+			return Report{}, fmt.Errorf("%s: %s; %s", check.Name, check.Detail, check.Fix)
+		}
+	}
 
 	paths, err := store.Init(opts.DataDir)
 	if err != nil {

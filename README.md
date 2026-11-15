@@ -421,12 +421,13 @@ Probe reports show the syscalls, DNS and TLS paths available in that environment
 [Kubernetes attribution](docs/design-k8s-auto-attribution.md)
 
 The current source also includes a [gVisor SecCheck receiver](docs/gvisor-seccheck.md).
-Its ARM64 `systrap` path has live collection, recovery and snapshot/clone checks;
+Its ARM64 and amd64 `systrap` paths have live collection, recovery and snapshot/clone checks;
 events retain their **Sentry** identity rather than the host runtime process's
 identity. Native eBPF observes the selected Linux host or guest kernel.
 The [Firecracker guest recipe](docs/execution-handoff.md#guest-service-and-image)
-provides pinned kernel/rootfs builders and a systemd capture service; hardware
-boot and retirement acceptance is pending.
+provides pinned kernel/rootfs builders and a systemd capture service. Its amd64
+hardware boot, signed delivery and receipt-gated retirement are covered by the
+[v1.0 acceptance results](docs/benchmarks/v1.0-amd64/README.md).
 
 TLS discovery follows supported OpenSSL libraries and Go binaries, including
 container replacements. Go TLS response capture currently supports **amd64,
@@ -572,6 +573,8 @@ Read the [v1.0 source preview](docs/releases/v1.0.0-preview.md) for the workflow
 the [deployment guide](docs/deployment-modes.md) for entry requirements, and
 the [unreleased changelog](CHANGELOG.md#unreleased) for individual changes.
 The release archive examples above remain on v0.10.1 until v1.0 is published.
+The [reader candidate](previews/v1.0-reader/README.md) can be rebuilt locally for
+review; the formal Dashboard keeps its current layout pending that review.
 
 For upgrades, back up your data directory before opening it with a newer version.
 An upgraded database should not be reopened with an older binary. macOS archives

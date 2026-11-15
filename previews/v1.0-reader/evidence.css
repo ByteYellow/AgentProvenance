@@ -1,0 +1,44 @@
+.portable-summary {display:flex;align-items:center;gap:12px;cursor:pointer;padding:15px 20px;font-weight:600;list-style:none}
+.portable-summary::before {content:'›';font-size:20px;color:var(--mut);transform:rotate(0deg)}
+details[open]>.portable-summary::before {transform:rotate(90deg)}
+.portable-summary small {font-weight:400;color:var(--mut);margin-left:auto}
+.portable-body {border-top:1px solid var(--line);padding:0 20px 16px}
+.portable-row {padding:18px 0;border-bottom:1px solid var(--line);min-width:0}
+.portable-row:last-child {border-bottom:0}
+.portable-row h3 {margin:0 0 10px;font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.portable-row p {margin:8px 0;color:var(--mut);font-size:12px;overflow-wrap:anywhere}
+.portable-actions {display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.portable-actions button,.portable-more,.portable-native-tab {border:1px solid var(--line2);background:var(--panel);color:var(--acc);border-radius:7px;padding:6px 10px;cursor:pointer;font:inherit;font-size:12px}
+.portable-actions button:disabled {color:var(--mut);cursor:default;opacity:.65}
+.portable-states {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:10px 0}
+.portable-state {background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+.portable-state span {display:block;font-size:11px;color:var(--mut);margin-bottom:4px}
+.portable-state strong {font-size:13px;font-weight:500}
+.portable-state[data-tone="attention"] strong {color:#995b00}
+.portable-state[data-tone="ok"] strong {color:#16713c}
+.portable-state[data-tone="failed"] strong {color:#c02d26}
+.portable-facts {display:grid;grid-template-columns:130px minmax(0,1fr);gap:7px 12px;font-size:12px;margin:14px 0}
+.portable-facts dt {color:var(--mut)}
+.portable-facts dd {margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
+.portable-ref {font:11px/1.6 ui-monospace,monospace;color:var(--mut);overflow-wrap:anywhere}
+.portable-guidance {background:var(--panel2);border-left:2px solid var(--line2);padding:10px 12px;margin-top:12px;font-size:12px;line-height:1.7}
+.portable-guidance p {color:var(--tx)}
+.portable-native {padding:0 20px 20px;max-height:620px;overflow:auto}
+.portable-native[hidden],.portable-coverage[hidden] {display:none}
+.portable-coverage {padding:0 20px 20px}
+.portable-coverage h3 {font-size:14px;margin:16px 0 4px}
+.portable-note {font-size:12px;color:var(--mut);line-height:1.7}
+.portable-evidence-dialog {width:min(1040px,94vw);max-height:90vh;border:1px solid var(--line2);border-radius:14px;padding:0;color:var(--tx);background:var(--panel);box-shadow:var(--shadow)}
+.portable-evidence-dialog::backdrop {background:rgba(25,30,40,.3)}
+.portable-evidence-head {display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:1}
+.portable-evidence-head h2 {font-size:15px;margin:0;flex:1;overflow-wrap:anywhere}
+.portable-evidence-head button {background:var(--panel);border:1px solid var(--line2);color:var(--tx);border-radius:6px;cursor:pointer;padding:4px 10px}
+.portable-evidence-content {padding:20px;overflow:auto;max-height:75vh}
+.portable-evidence-content pre {font:12px/1.7 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+.portable-evidence-content img {display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:8px}
+.portable-evidence-dialog button:focus-visible,.portable-actions button:focus-visible,.portable-more:focus-visible {outline:2px solid var(--acc);outline-offset:2px}
+.review-nav {display:flex;align-items:center;flex-wrap:wrap;gap:8px 18px;padding:9px 26px;background:var(--panel);border-bottom:1px solid var(--line);font-size:12px}
+.review-nav strong {font-size:11px;letter-spacing:.04em;color:var(--mut)}
+.review-nav a {text-decoration:none;color:var(--acc)}
+.review-nav span {margin-left:auto;color:var(--mut)}
+@media(max-width:720px){.portable-states {grid-template-columns:1fr}.portable-facts {grid-template-columns:100px minmax(0,1fr)}.portable-summary,.portable-body {padding-left:14px;padding-right:14px}.review-nav {padding:8px 14px}.review-nav span {margin-left:0}}

@@ -4,6 +4,18 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Restore remote calls from their verified delivery checkpoint, preserving the
+  original result when capture advances or an ACK is lost. Add explicit capture
+  waiting and authenticated remote/runtime readiness diagnostics.
+- Bound kernel-to-wall-clock timestamp sampling so scheduler delays do not shift
+  adjacent runtime evidence. Complete the amd64 Go TLS, KVM/K3s and pinned runtime
+  acceptance, with frozen performance comparisons.
+- Include udev and readable service/network files in the guest image. Gate
+  Firecracker disk retirement on the target generation, expected executions and
+  every verified receiver receipt.
+- Preserve the v1.0 reader candidate, synthetic Notebook attachment sample and
+  portable build instructions for the maintainer's later UI review.
+
 For a workflow-oriented summary, see the [v1.0 source preview](docs/releases/v1.0.0-preview.md).
 
 - Keep native ingestion progressing when a capability-change callback arrives

@@ -84,6 +84,7 @@ def main():
             capture = execution['attempt']['state']['capture']
             if state == wanted and execution.get('checkpoint') and (not args.native or capture in {'sealed', 'incomplete'}):
                 if args.native and capture != 'sealed':
+                    (root / ('unexpected-' + attempt_id + '.json')).write_text(json.dumps(execution, indent=2) + '\n')
                     raise RuntimeError('native capture did not seal: ' + json.dumps(execution['attempt']['state']))
                 return execution
             if state in {'succeeded', 'failed', 'unknown', 'cancelled'} - {wanted} or time.monotonic() > deadline:
@@ -141,7 +142,10 @@ def main():
             if time.monotonic() > deadline:
                 raise RuntimeError('daemon readiness timeout')
             time.sleep(0.05)
-        code = "import csv,json; rows=list(csv.DictReader(open('credentials-fixture.csv'))); totals={}; " \
+        # This fixture requires a complete procfs state sample as well as native
+        # events. Keep its task alive long enough for the asynchronous sampler;
+        # shorter tasks can correctly retain a sampling gap and stay incomplete.
+        code = "import csv,json,time; time.sleep(1); rows=list(csv.DictReader(open('credentials-fixture.csv'))); totals={}; " \
                "[(totals.__setitem__(r['name'],totals.get(r['name'],0)+int(r['value']))) for r in rows]; " \
                "open('totals.json','w').write(json.dumps(totals,sort_keys=True)); print(json.dumps(totals,sort_keys=True))"
         valid_until = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=10)).isoformat()
@@ -159,7 +163,7 @@ def main():
         failed_request = json.loads(json.dumps(request))
         failed_request['source']['tool_call_id'] = 'expected-failure'
         failed_request['dispatch_id'], failed_request['operation_id'] = 'failed-dispatch', 'failed-operation'
-        failed_request['command']['argv'] = ['python3', '-c', "import sys; print('expected failure', file=sys.stderr); sys.exit(7)"]
+        failed_request['command']['argv'] = ['python3', '-c', "import sys,time; time.sleep(1); print('expected failure', file=sys.stderr); sys.exit(7)"]
         failed_admission = api('POST', '/v1/executions', failed_request)
         failed_admission_path = root / 'failed-admission.json'
         failed_admission_path.write_text(json.dumps(failed_admission) + '\n')
