@@ -56,6 +56,13 @@ Opening a store at the current schema version does not write migration metadata.
 Two separate captures with identical bytes remain
 two events. Hashes verify spool contents before replay.
 
+Native capability revisions are retained with their original change timestamps.
+Their effective intervals are clipped to each batch's recorded receive window.
+When a callback arrives after a batch boundary but describes an earlier change,
+preceding revisions remain as zero-duration observations at the window start.
+They add no degraded duration to that window. Missing revisions and actual clock
+reversals keep the batch pending with an explicit error.
+
 Restart may discard an empty or missing initializing file, since it could not
 have accepted a row. A missing capturing file instead fails startup and records
 the error; accepted evidence must never silently disappear. Correlation reads

@@ -209,8 +209,14 @@ func WalkCapabilityChanges(ctx context.Context, dir string, first, last Capabili
 				return fail(err)
 			}
 			until, _ = time.Parse(time.RFC3339Nano, next.ChangedAt)
-			if until.Before(from) || until.After(end) {
+			if until.Before(changed) || until.After(end) {
 				return fail(fmt.Errorf("capability history timestamps are outside ordered capture interval"))
+			}
+			changed = until
+			// A delayed callback can describe a change before this receive window.
+			// Retain the revision, but give its preceding state no window duration.
+			if until.Before(start) {
+				until = start
 			}
 		} else {
 			lastState, _ := capabilityState(last)

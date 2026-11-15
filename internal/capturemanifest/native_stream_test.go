@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"reflect"
@@ -209,6 +210,88 @@ func TestPassiveNativeMissingHistoryRetainsPendingEvidence(t *testing.T) {
 	status, err := telemetry.ReadNativeStreamStatus(db)
 	if err != nil || status.QueuedBatches != 1 {
 		t.Fatalf("pending evidence disappeared: %+v %v", status, err)
+	}
+}
+
+func TestPassiveNativeDelayedCapabilityAfterBatchSeal(t *testing.T) {
+	db, paths := testStore(t)
+	n := passiveStream(t, db, paths)
+	passiveBind(t, db, "pod-a")
+	first := caps(time.Now().Add(-2*time.Second), "attached")
+	first.CollectorID, first.Revision, first.ChangedAt = "delayed-collector", 1, first.UpdatedAt
+	last := caps(time.Now().Add(-time.Second), "failed")
+	last.CollectorID, last.Revision, last.ChangedAt = first.CollectorID, 2, last.UpdatedAt
+	if err := n.ObserveCapabilities(first); err != nil {
+		t.Fatal(err)
+	}
+	passiveWrite(t, n, "pod-a")
+	if err := n.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	// The report was created before sealing but its callback arrived afterward.
+	if err := n.ObserveCapabilities(last); err != nil {
+		t.Fatal(err)
+	}
+	passiveWrite(t, n, "pod-a")
+	if err := n.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	var raw string
+	if err := db.QueryRow(`SELECT native_options FROM telemetry_spool_batches ORDER BY created_at DESC LIMIT 1`).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	var opts telemetry.NativeStreamOptions
+	if err := json.Unmarshal([]byte(raw), &opts); err != nil || opts.CaptureWindow == nil {
+		t.Fatalf("saved receive window: %v", err)
+	}
+	window := opts.CaptureWindow
+	changed, _ := time.Parse(time.RFC3339Nano, last.ChangedAt)
+	if !changed.Before(window.StartedAt) {
+		t.Fatal("fixture did not delay the callback past the batch boundary")
+	}
+	if err := n.Process(32); err != nil {
+		t.Fatal(err)
+	}
+	status, err := telemetry.ReadNativeStreamStatus(db)
+	if err != nil || status.PendingEvents != 0 || status.QueuedBatches != 0 {
+		t.Fatalf("delayed report blocked ingestion: %+v %v", status, err)
+	}
+	var events int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM events WHERE run_id='pod-a'`).Scan(&events); err != nil || events != 2 {
+		t.Fatalf("events: %d %v", events, err)
+	}
+	got := all(t, db, "pod-a", 1)
+	seen := map[string]Record{}
+	for _, record := range got {
+		if record.Identity["batch_id"] == window.BatchID && record.IntervalBasis == "collector_receive_window" {
+			seen[record.Identity["capability_revision"]] = record
+		}
+	}
+	if len(seen) != 2 || seen["1"].ObservedAt != first.ChangedAt || seen["2"].ObservedAt != last.ChangedAt ||
+		seen["1"].StartedAt != timestamp(window.StartedAt) || seen["1"].EndedAt != timestamp(window.StartedAt) ||
+		seen["2"].StartedAt != timestamp(window.StartedAt) || seen["2"].EndedAt != timestamp(window.EndedAt) {
+		t.Fatalf("original reports or clipped intervals changed: %+v", seen)
+	}
+	if err := n.Process(32); err != nil || !reflect.DeepEqual(got, all(t, db, "pod-a", 1)) {
+		t.Fatalf("retry changed observations: %v", err)
+	}
+	pub, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := (forensics.Service{DB: db, Paths: paths, SignKey: key}).ExportBundle("pod-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := forensics.VerifyBundleAttestation(bundle.Path, bundle.AttestationPath, pub); err != nil {
+		t.Fatal(err)
+	}
+	dst, dest := testStore(t)
+	if _, err := (forensics.Service{DB: dst, Paths: dest}).ImportBundle(bundle.Path); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, all(t, dst, "pod-a", 1)) {
+		t.Fatal("signed import changed delayed capability evidence")
 	}
 }
 

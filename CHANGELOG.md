@@ -4,6 +4,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Keep native ingestion progressing when a capability-change callback arrives
+  after a batch boundary. Retain original revision timestamps and clip effective
+  intervals to the recorded receive window, while rejecting clock reversals.
 - Include original JSONL processing receipts in saved capture manifests and
   offline replay. Preserve batch digests and counters separately from unknown
   upstream capabilities; partial exports keep only wholly selected receipts.
