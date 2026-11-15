@@ -95,6 +95,13 @@ seccomp audit logging, Python 3, a static C toolchain, and a configured DeepSeek
 Harness. Keep funded credentials outside the fixture directory. The environment
 file must set `DEEPSEEK_API_KEY` or `ANTHROPIC_AUTH_TOKEN`.
 
+Build from the checkout you intend to record, retaining its source revision:
+
+```sh
+go build -ldflags "-X github.com/byteyellow/agentprovenance/internal/buildinfo.Commit=$(git rev-parse HEAD)" \
+  -o agentprov ./cmd/agentprov
+```
+
 ```sh
 sudo python3 demo/investigation-workflow/capture.py \
   --binary /absolute/path/to/agentprov \
@@ -116,3 +123,11 @@ Review `public/` before sharing. It contains signed compressed bundles, their
 public key and a manifest. The `private/` directory holds the store, logs and
 signing private key and must stay private. Keep this supplied historical capture
 intact when recording another run.
+
+New capture manifests record the CLI source revision and version, embedded
+Sensor identity, kernel and harness versions, input hashes, and TLS/libc target
+hashes. Model names come from saved request configurations and retain their
+source entry references. A build without revision metadata reports a null
+`source_commit`. Runtime coverage and artifact retention have separate summaries;
+node backlog and unknown run-level loss stay visible alongside the task results.
+The supplied historical manifest remains unchanged.

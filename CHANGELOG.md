@@ -4,6 +4,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Extend investigation recapture manifests with source, Sensor, harness and
+  input identities, evidence-backed model selections, and separate runtime
+  coverage and artifact-retention summaries. Preserve historical captures.
 - Add fixed-input Browser/Notebook storage and export measurements across three
   retention variants, with native-identity checks, signed round trips, selective
   replay checks and frozen environment-bound performance budgets.

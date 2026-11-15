@@ -86,6 +86,13 @@ AgentProvenance 只读取和关联这些记录。
 Python 3、静态 C 编译环境和已配置的 DeepSeek Harness。将有余额的凭据保存在
 工作目录之外；环境文件需提供 `DEEPSEEK_API_KEY` 或 `ANTHROPIC_AUTH_TOKEN`。
 
+从计划录制的源码版本构建，并将提交号写入二进制：
+
+```sh
+go build -ldflags "-X github.com/byteyellow/agentprovenance/internal/buildinfo.Commit=$(git rev-parse HEAD)" \
+  -o agentprov ./cmd/agentprov
+```
+
 ```sh
 sudo python3 demo/investigation-workflow/capture.py \
   --binary /absolute/path/to/agentprov \
@@ -103,3 +110,9 @@ sudo python3 demo/investigation-workflow/capture.py \
 
 分享前检查 `public/` 中的签名压缩包、公钥和清单。`private/` 保存本地数据、日志和
 签名私钥，请勿公开。新的采集结果另存，不覆盖仓库中的历史样本。
+
+新的采集清单记录 CLI 源码提交与版本、内嵌 Sensor 身份、内核与 harness 版本、
+输入文件摘要，以及 TLS 和 libc 采集目标的摘要。模型名称取自已保存的请求配置，
+同时保留来源记录引用。没有提交元数据的构建将 `source_commit` 记为 `null`。
+运行时覆盖与制品留存分别汇总，节点积压和未知的 Run 丢失数量随任务结果一并保留。
+仓库中已有的历史清单保持原样。

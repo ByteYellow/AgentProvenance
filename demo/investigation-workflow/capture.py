@@ -29,6 +29,69 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2) + "\n")
 
 
+def file_identity(path):
+    digest = hashlib.sha256()
+    size = 0
+    with Path(path).open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1 << 20), b""):
+            digest.update(chunk)
+            size += len(chunk)
+    return {"bytes": size, "sha256": digest.hexdigest()}
+
+
+def capture_identity(binary):
+    version = run([str(binary), "--version"]).stdout.strip()
+    revision = re.search(r"\(([0-9a-f]{40});", version)
+    inputs = [HERE / name for name in ("capture.py", "guard-probe.c", "task-before.txt", "task-after.txt")]
+    inputs += sorted(p for p in (HERE / "workspace").rglob("*")
+                     if p.is_file() and "__pycache__" not in p.parts)
+    return {"source_commit": revision[1] if revision else None,
+            "binary_version": version,
+            "sensor": {"mode": "embedded", "command": ["sensor", "stream"],
+                       "binary_sha256": file_identity(binary)["sha256"]},
+            "kernel": os.uname().release,
+            "inputs": [{"path": p.relative_to(HERE).as_posix(), **file_identity(p)} for p in inputs]}
+
+
+def recorded_models(cli, run_id):
+    result, cursor = [], ""
+    while True:
+        page = json.loads(run(cli + ["context", "list", "--run", run_id, "--kind", "configuration",
+                                     "--limit", "200", "--cursor", cursor]).stdout)
+        for entry in page["entries"]:
+            if entry["status"] != "request/header" or entry.get("content", {}).get("state") != "stored":
+                continue
+            text, offset = [], 0
+            while True:
+                body = json.loads(run(cli + ["context", "content", "--run", run_id, "--ref",
+                                             entry["content"]["ref"], "--offset", str(offset)]).stdout)
+                text.append(body["content"])
+                if not body["has_more"]:
+                    break
+                if body["next_offset"] <= offset:
+                    raise RuntimeError("Saved model configuration cursor did not advance")
+                offset = body["next_offset"]
+            config = json.loads("".join(text)).get("header", {}).get("config", {})
+            model, provider = config.get("model"), config.get("provider")
+            if isinstance(model, str) and isinstance(provider, str):
+                result.append({"entry_id": entry["id"], "session_id": entry["source"]["session_id"],
+                               "provider": provider, "model": model})
+        if not page["has_more"]:
+            return result
+        if not page["next_cursor"] or page["next_cursor"] == cursor:
+            raise RuntimeError("Model configuration entry cursor did not advance")
+        cursor = page["next_cursor"]
+
+
+def capture_summary(launch):
+    fields = ("status", "kernel_state", "started_at", "ended_at", "node_counter_delta",
+              "node_pending_events", "node_queued_bytes", "run_dropped_events", "run_impact", "issues", "limitations", "ref")
+    runtime = launch.get("runtime_capture", {})
+    artifacts = launch.get("artifact_capture", {})
+    return {"runtime": {key: runtime[key] for key in fields if key in runtime},
+            "artifacts": {key: artifacts[key] for key in ("status", "stored", "omitted", "failed", "ref") if key in artifacts}}
+
+
 def journal_cursor():
     last = run(["journalctl", "-k", "-n", "1", "-o", "json", "--no-pager"]).stdout
     return json.loads(last.strip().splitlines()[-1])["__CURSOR"]
@@ -143,6 +206,10 @@ def capture(args):
         "tls_body": True,
         "workload": "local reporting pipeline, public canary, loopback rate service",
         "runs": [],
+        **capture_identity(binary),
+        "harness_version": run(["runuser", "-u", args.user, "--", str(home / ".local/bin/dsh"), "--version"], env=env).stdout.strip(),
+        "tls_target": file_identity(args.tls_library),
+        "libc_target": file_identity(args.libc_library),
     }
     root_session = None
     loaded = False
@@ -235,10 +302,14 @@ def capture(args):
                       "report_total": report["total"], "diagnostics": diagnostics,
                       "duration_seconds": round(time.monotonic() - started, 2),
                       "bundle": output_bundle.name, "bundle_bytes": output_bundle.stat().st_size,
-                      "bundle_sha256": hashlib.sha256(output_bundle.read_bytes()).hexdigest()}
+                      "bundle_sha256": hashlib.sha256(output_bundle.read_bytes()).hexdigest(),
+                      "recorded_models": recorded_models(cli, run_id),
+                      "capture_summary": capture_summary(launch)}
             manifest["runs"].append(result)
             save(public / "capture-manifest.json", manifest)
             print(json.dumps(result), flush=True)
+        manifest["completed_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        save(public / "capture-manifest.json", manifest)
     finally:
         server.shutdown()
         server.server_close()

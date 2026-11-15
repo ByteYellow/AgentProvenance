@@ -19,6 +19,8 @@ jobs:
         with:
           python-version: "3.13"
       - run: python scripts/check_localized_docs.py
+      - name: Investigation capture manifest
+        run: python -m unittest discover -s demo/investigation-workflow -p 'test_capture.py' -v
       - name: Guest lifecycle hooks and image definition
         run: python -m unittest discover -s scripts -p 'test_microvm_guest.py' -v
       - name: Pinned guest kernel recipe
