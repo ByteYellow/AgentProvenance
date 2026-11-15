@@ -743,8 +743,10 @@ python3 scripts/accept_execution_seal.py \
 Amazon Linux **6.18.62**，源码提交为 `b7522fb67989bd879de78486e9e253fd2f21f1dd`。
 内核构建脚本校验固定上游配置，合入 [Sensor 配置片段](../../deploy/microvm/sensor-kernel.config)，
 再检查实际生效的 BTF、BPF events、syscall tracepoint、uprobe 和启动驱动。
-镜像及内核清单中的 `boot_tested` 为 `false`；Firecracker 实际启动和 guest 回收仍需硬件验收。
-已选 Sentry 方案的恢复与克隆验收见 [SecCheck 指南](gvisor-seccheck.md)。
+构建脚本不启动 guest，因此镜像及内核清单中的 `boot_tested` 保持 `false`。
+独立的 [amd64 验收](../benchmarks/v1.0-amd64/README.zh-CN.md)已使用 Firecracker v1.18.0
+和 6.18.62 内核实际启动 guest，验证两条命令、原生文件证据、签名交付及回执齐全后回收。
+结果索引保存对应镜像、内核和程序哈希。恢复与克隆验收选用 Sentry，见 [SecCheck 指南](gvisor-seccheck.md)。
 配置依据见上游[内核策略](https://github.com/firecracker-microvm/firecracker/blob/eaf83bb718a559d324613d566eaf776b31a62340/docs/kernel-policy.md)
 和[镜像构建指南](https://github.com/firecracker-microvm/firecracker/blob/eaf83bb718a559d324613d566eaf776b31a62340/docs/rootfs-and-kernel-setup.md)。
 

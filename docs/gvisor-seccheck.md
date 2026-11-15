@@ -274,7 +274,10 @@ the original instance and restores two clones from the same image. It verifies
 preserved memory, equal hostname/boot/PID/birth identity, four distinct graph
 identities, rejected stale trace configuration, unchanged historical evidence
 and a signed export/import. It keeps logs and hashes and removes its own runtime
-state. The selected mode is ARM64 `systrap` with networking disabled.
+state. The selected mode is `systrap` with networking disabled, exercised on
+ARM64 and amd64. The [amd64 archive](benchmarks/v1.0-amd64/README.md) includes
+the original receive, fault-recovery and restore/two-clone results, executable
+hashes, the initial rootfs-reporting failure and the corrected result.
 
 The script also retains an actual sealed queue batch and its independently
 stored digest, copies it to both clones, and replays it into fresh and existing

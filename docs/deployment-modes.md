@@ -31,8 +31,8 @@ keep their entry points.
 | Native Claude command in another sandbox | Caller on Mac or Linux; authenticated executor and native Sensor inside the target Linux environment | [Execution handoff](execution-handoff.md): SSH loopback forwarding, protected route configuration, cgroup v2 and BPF access for native capture |
 | Browser task | Optional Python entry owns a sandboxed Chromium context | [Browser context](browser-context.md): Python 3.12+, pinned Playwright/browser, native page/request references and optional stdio MCP |
 | Notebook task | Optional recorder beside the client, or a stdio MCP server owning one kernel | [Notebook context](notebook-context.md): Python 3.11+ for MCP, pinned Jupyter dependencies and native request/output references |
-| gVisor workload | SecCheck receiver outside Sentry, with a registered sandbox instance and lifecycle generation | [gVisor collection](gvisor-seccheck.md): pinned runsc, private Unix socket and durable spool; live ARM64 systrap acceptance |
-| Firecracker guest image | systemd starts the executor and Sensor inside the guest | [Guest recipe](execution-handoff.md#guest-service-and-image): pinned image/kernel builders, private configuration and persistent evidence volumes; actual hardware boot acceptance pending |
+| gVisor workload | SecCheck receiver outside Sentry, with a registered sandbox instance and lifecycle generation | [gVisor collection](gvisor-seccheck.md): pinned runsc, private Unix socket and durable spool; ARM64 and amd64 systrap reception, fault recovery and restore/clone acceptance |
+| Firecracker guest image | systemd starts the executor and Sensor inside the guest | [Guest recipe](execution-handoff.md#guest-service-and-image): pinned image/kernel builders, private configuration and persistent evidence volumes; amd64 boot, native capture, signed delivery and retirement accepted |
 
 Application entries retain native identities in both `basic` and `detailed`.
 Text, screenshots and HAR have independent retention controls. Private source
@@ -44,6 +44,55 @@ share the resulting evidence. Native kernel probes run in Linux. Ordinary
 shared-kernel Kubernetes Pods use the node sensor; guest kernels and Sentry use
 their respective collection entries. A host runtime PID is not the inner task's
 process identity.
+
+### Workload and platform scope
+
+Choose the operation entry and the runtime collector separately. The
+[ARM64 candidate record](benchmarks/v1.0-candidate/README.md) and
+[amd64 results](benchmarks/v1.0-amd64/README.md) identify the combinations actually
+exercised, their binary hashes and capture coverage.
+
+| Scenario | Current entry and evidence | Scope |
+| --- | --- | --- |
+| Coding, command-line data analysis and automated tests | `launch` / `record`, tool calls, independent command scopes, process/file/network evidence and signed artifacts | Native Linux collection; the remote Claude route supports independent Bash calls |
+| Notebook / code interpreter | Jupyter session, kernel, request and output identities; cell text, results and optional chart attachments | The supplied recorder and stdio MCP entry; shared-kernel system events retain process/scope attribution |
+| Browser / web research | Chromium page, frame, operation and request identities; text, screenshots, downloads and optional HAR | The supplied Playwright and stdio MCP entries; real Agent acceptance used application context with the native Sensor off |
+| Linux desktop / office automation | Existing system collection can observe processes, files and network activity | GUI actions, window identities and before/after screenshots still need a desktop adapter and acceptance |
+| Long-running and branching tasks | Sessions, execution attempts, durable delivery and lifecycle generations | Pinned gVisor memory restore and two-clone evidence continuity; browser login and external connection recovery require separate workflow checks |
+| RL / batch evaluation | Per-run recording, batch manifests, EvalContext and offline evaluator results | Scheduling, training, rewards and sandbox provisioning remain with the calling platform |
+| Enterprise internal platform | Authenticated local APIs, node collection, signed evidence and offline sharing | Central multi-tenant storage, SSO, quotas and HA remain outside the implemented local service |
+| Android / iOS | No native mobile collector or operation adapter | Outside the v1.0 scope |
+
+All three execution placements use these entries: an Agent and its tools in one
+observable Linux environment; an external caller using a Linux executor; or a
+containerized caller using a separate executor. The selected native Claude route
+has Mac and isolated-container caller records, with WSL-to-KVM results in the
+amd64 report. The container case uses a shared host network and a separate
+executor workspace, with explicit source and target identities.
+
+The following integration boundaries matter when choosing a sandbox platform:
+
+- **Native Linux, ordinary Pods and KVM guests:** use the Sensor in the kernel
+  that executes the task. The Pod informer tracks containers and cgroups; it
+  does not select an inner collector from a Kubernetes `RuntimeClass` handler.
+- **gVisor and Firecracker:** gVisor uses a separate SecCheck producer;
+  Firecracker uses the native executor inside the guest. The remote executor's
+  built-in capture mode is `native`, so routing a remote tool call into Sentry
+  needs its own execution-entry integration. Restore/clone acceptance is for
+  gVisor; Firecracker acceptance covers boot, execution, delivery and retirement.
+- **Kata, Cloud Hypervisor and other guest runtimes:** the guest collection
+  approach is reusable. Image/kernel preparation, instance identity, transport
+  and lifecycle acceptance remain runtime-specific work.
+- **Sandbox platforms and worker pools:** E2B, OpenSandbox, SIG Agent Sandbox,
+  OpenKruise, AIO and actor-based platforms have no dedicated adapter here.
+  Integrators can use the existing execution and evidence interfaces, but must
+  supply task-to-instance registration and lifecycle notifications. A worker
+  Pod alone is too coarse an identity for several independent sandbox actors.
+
+Browser and Notebook readers and cross-run navigation are available in the
+[candidate preview](../previews/v1.0-reader/README.md). The [demo guide](demo-library.md)
+groups examples by investigation. Formal Dashboard integration and site
+publication await the layout review.
 
 ## 1. Library / CLI-only Recorder
 

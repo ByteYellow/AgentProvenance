@@ -22,8 +22,8 @@ AgentProvenance 可以从本地命令开始使用，无需先部署一套平台�
 | 在另一沙箱执行 Claude 原生命令 | 调用端在 Mac 或 Linux；已鉴权的执行器和原生 Sensor 在目标 Linux 环境中 | [执行交接](execution-handoff.md)：SSH 本地端口转发、受保护的路由配置；原生采集需要 cgroup v2 和 BPF 权限 |
 | 浏览器任务 | 可选的 Python 入口持有独立、启用沙箱的 Chromium context | [浏览器上下文](../browser-context.zh-CN.md)：Python 3.12+、固定版本的 Playwright／浏览器，保存原生页面和请求引用，可通过 stdio MCP 接入 |
 | Notebook 任务 | 客户端旁的记录器，或持有独立 kernel 的 stdio MCP 服务 | [Notebook 上下文](notebook-context.md)：MCP 入口需要 Python 3.11+ 和固定的 Jupyter 依赖，保存原生请求与输出引用 |
-| gVisor 工作负载 | 接收器在 Sentry 外，登记沙箱实例及生命周期代次 | [gVisor 采集](gvisor-seccheck.md)：固定 runsc 版本、私有 Unix socket 和持久队列；ARM64 systrap 路径已实测 |
-| Firecracker guest 镜像 | systemd 在 guest 内启动执行器和 Sensor | [Guest 方案](execution-handoff.md#guest-服务与镜像)：固定镜像／内核构建入口、私有配置卷和持久证据卷；实际启动验收待完成 |
+| gVisor 工作负载 | 接收器在 Sentry 外，登记沙箱实例及生命周期代次 | [gVisor 采集](gvisor-seccheck.md)：固定 runsc 版本、私有 Unix socket 和持久队列；ARM64、amd64 systrap 的接收、故障恢复及恢复／克隆已验收 |
+| Firecracker guest 镜像 | systemd 在 guest 内启动执行器和 Sensor | [Guest 方案](execution-handoff.md#guest-服务与镜像)：固定镜像／内核构建入口、私有配置卷和持久证据卷；amd64 实际启动、原生采集、签名交付和回收已验收 |
 
 应用入口在 `basic` 和 `detailed` 两档保留原生身份，正文、截图和 HAR 可分别控制留存。
 私有源日志与证据库独立保存；处理敏感任务时，两处都需要设置保留策略。
@@ -31,6 +31,46 @@ AgentProvenance 可以从本地命令开始使用，无需先部署一套平台�
 Mac 可记录应用上下文、调用远端 Linux 执行器，以及查询和分享证据。
 原生内核探针在 Linux 内运行。普通共享内核的 Kubernetes Pod 使用节点传感器；
 guest 内核与 Sentry 分别使用对应入口，宿主运行时进程与内部任务身份分开记录。
+
+### 业务场景与平台范围
+
+接入时分别选择操作入口和运行时采集器。[ARM64 候选记录](../benchmarks/v1.0-candidate/README.zh-CN.md)
+与 [amd64 验收结果](../benchmarks/v1.0-amd64/README.zh-CN.md)列出实际运行过的组合、程序哈希和采集覆盖情况。
+
+| 场景 | 当前入口与证据 | 适用范围 |
+| --- | --- | --- |
+| Coding、命令行数据分析、自动化测试 | `launch`／`record`、工具调用、独立命令作用域、进程／文件／网络证据及签名产物 | Linux 原生采集；远端 Claude 入口支持独立 Bash 调用 |
+| Notebook／代码解释器 | Jupyter 会话、kernel、请求与输出身份；单元格正文、结果和可选图表附件 | 使用内置记录器或 stdio MCP 入口；共享 kernel 的系统事件保持进程／作用域粒度归属 |
+| 浏览器／网页研究 | Chromium 页面、frame、操作和请求身份；正文、截图、下载文件及可选 HAR | 使用内置 Playwright 或 stdio MCP 入口；真实 Agent 验收使用应用上下文，原生 Sensor 关闭 |
+| Linux 桌面／办公自动化 | 现有系统采集可观测进程、文件和网络 | GUI 动作、窗口身份及操作前后截图仍需桌面适配器与验收 |
+| 长程与分支任务 | 会话、执行尝试、持久交付和生命周期代次 | 固定 gVisor 版本已验证内存恢复和双克隆证据连续性；浏览器登录态与外部连接恢复需按工作流单独验证 |
+| RL／批量评估 | 按 Run 记录、批次清单、EvalContext 和离线评估结果 | 调度、训练、奖励及沙箱创建由调用方平台负责 |
+| 企业内部平台 | 已鉴权的本地 API、节点采集、签名证据和离线分享 | 中心化多租户存储、SSO、配额和高可用不在现有本地服务范围内 |
+| Android／iOS | 暂无移动端原生采集器或操作适配器 | 不纳入 v1.0 |
+
+三种执行位置均可使用这些入口：Agent 与工具同处一个可观测的 Linux 环境、
+外部 Agent 调用 Linux 执行器、容器内 Agent 调用独立执行器。选定的 Claude 原生入口
+已有 Mac 调用端和隔离容器调用端记录；amd64 报告另有 WSL 到 KVM 的结果。
+容器案例共享宿主网络，执行端使用独立工作区，两端分别登记来源与目标身份。
+
+选择沙箱平台时，还需区分以下接入范围：
+
+- **原生 Linux、普通 Pod 与 KVM guest：**Sensor 部署在实际执行任务的内核。
+  Pod informer 维护容器与 cgroup 归属，目前未实现按 Kubernetes `RuntimeClass`
+  handler 自动选择内部采集器。
+- **gVisor 与 Firecracker：**gVisor 使用独立 SecCheck producer；Firecracker 在 guest
+  内运行原生执行器。远端执行器内置采集模式为 `native`，将远端工具调用派发到 Sentry
+  仍需对接执行入口。恢复／克隆验收选用 gVisor；Firecracker 验收覆盖启动、执行、交付和回收。
+- **Kata、Cloud Hypervisor 等 guest 运行时：**可复用 guest 内采集方案，镜像／内核、
+  实例身份、传输和生命周期仍需针对所选运行时接入并验收。
+- **沙箱平台与共享工作节点：**当前没有 E2B、OpenSandbox、SIG Agent Sandbox、
+  OpenKruise、AIO 或 Actor 平台的专用适配器。接入方可使用现有执行与证据接口，
+  同时提供任务到实例的登记和生命周期通知。一个工作 Pod 承载多个独立沙箱 Actor 时，
+  需要进一步区分各实例身份。
+
+Browser／Notebook 阅读和跨 Run 跳转可在
+[候选预览](../../previews/v1.0-reader/README.zh-CN.md)中查看；[示例指南](demo-library.md)
+按调查任务整理案例。正式 Dashboard 接入和站点发布等待布局审核。
 
 ## 1. 仅用命令行记录
 

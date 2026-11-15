@@ -942,9 +942,12 @@ is Amazon Linux **6.18.62**, commit `b7522fb67989bd879de78486e9e253fd2f21f1dd`.
 The kernel builder verifies the pinned upstream configuration, adds the
 [Sensor fragment](../deploy/microvm/sensor-kernel.config), and checks effective
 BTF, BPF events, syscall tracepoint, uprobe and boot-driver settings.
-The image and kernel manifests record `boot_tested: false`; actual Firecracker
-boot and guest retirement require separate hardware acceptance. Restore/clone
-acceptance for the selected Sentry profile is described in the
+The builders do not boot a guest, so their image and kernel manifests record
+`boot_tested: false`. The separate [amd64 acceptance](benchmarks/v1.0-amd64/README.md)
+records an actual Firecracker v1.18.0 boot with kernel 6.18.62, two commands,
+native file evidence, signed delivery and receipt-gated retirement. Its result
+index retains the tested image, kernel and executable hashes. Restore/clone
+acceptance uses the selected Sentry profile described in the
 [SecCheck guide](gvisor-seccheck.md).
 See the upstream [kernel policy](https://github.com/firecracker-microvm/firecracker/blob/eaf83bb718a559d324613d566eaf776b31a62340/docs/kernel-policy.md)
 and [image setup guide](https://github.com/firecracker-microvm/firecracker/blob/eaf83bb718a559d324613d566eaf776b31a62340/docs/rootfs-and-kernel-setup.md).
