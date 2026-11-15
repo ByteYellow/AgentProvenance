@@ -68,14 +68,14 @@ type Lifecycle struct {
 	Completed func(Result) error
 }
 
-func (s Service) persistStart(scope ExecutionScope, command string) (string, error) {
+func (s Service) persistStart(scope ExecutionScope, command string, capture *CaptureReport) (string, error) {
 	eventID := ids.New("evt")
 	err := store.WithWriteTx(context.Background(), s.DB, func(tx *sql.Tx) error {
 		if err := updateOne(tx, `UPDATE execution_context_bindings SET root_pid=?,pid=? WHERE id=?`,
 			scope.RootPID, scope.RootPID, scope.BindingID); err != nil {
 			return err
 		}
-		payload, err := json.Marshal(map[string]any{"attempt_id": scope.AttemptID, "command": command, "mode": "zero_sdk"})
+		payload, err := json.Marshal(map[string]any{"attempt_id": scope.AttemptID, "command": command, "mode": "zero_sdk", "record_capture": capture})
 		if err != nil {
 			return err
 		}
@@ -90,7 +90,7 @@ func (s Service) persistStart(scope ExecutionScope, command string) (string, err
 	return eventID, nil
 }
 
-func (s Service) persistCompletion(r Result, timedOut, cancelled bool) (string, error) {
+func (s Service) persistCompletion(r Result, timedOut, cancelled bool, capture *CaptureReport) (string, error) {
 	eventID := ids.New("evt")
 	err := store.WithWriteTx(context.Background(), s.DB, func(tx *sql.Tx) error {
 		cost := float64(r.WallMS) / 1000.0 * 0.001
@@ -111,7 +111,7 @@ func (s Service) persistCompletion(r Result, timedOut, cancelled bool) (string, 
 		}
 		payload, err := json.Marshal(map[string]any{"attempt_id": r.AttemptID, "exit_code": r.ExitCode, "status": r.Status,
 			"wall_ms": r.WallMS, "changed_files": len(r.ChangedFiles), "timed_out": timedOut, "cancelled": cancelled,
-			"stop_report": r.Stop, "scope_observation": r.ScopeObservation})
+			"stop_report": r.Stop, "scope_observation": r.ScopeObservation, "record_capture": capture})
 		if err != nil {
 			return err
 		}

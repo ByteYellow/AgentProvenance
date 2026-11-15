@@ -423,7 +423,8 @@ unknown 确认为运行中或终态。运行及终态记录需要执行器生成
 在 Daemon 中调用 `GET /v1/capture-manifest?run=<run-id>&limit=50`，沿用其 Bearer
 鉴权；本地 Dashboard 使用 `GET /api/capture-manifest`。
 [接口定义](../capture-manifest-api.yaml)列出启动采集报告、原生执行检查点、应用上下文
-覆盖、留存设置、gVisor 流记录及实际观察到的事件点。`has_more` 为 `true` 时，携带 `next_cursor` 继续读取。
+覆盖、留存设置、gVisor 流记录及实际观察到的事件点，以及普通 `record` 的采集边界。
+`has_more` 为 `true` 时，携带 `next_cursor` 继续读取。
 查询保留各次报告和检查点修订，身份包含来源及生命周期代次，按证据 ID 分页。
 
 `supported`、`enabled` 和 `ready` 分别表示支持、启用和就绪状态，未知值为 `null`，
@@ -435,6 +436,15 @@ unknown 确认为运行中或终态。运行及终态记录需要执行器生成
 选择性导出只读取冻结后的选中范围，返回 `selection_scope: selected_evidence`，
 排除的原生检查点正文和探针路径保持排除。原 Bundle 签名及对象哈希保留。
 未包含该索引的旧回放会提示数据不可用。
+
+普通 `record` 在原始生命周期事件中保存采集端版本、操作系统与架构、可读取的 Linux
+内核和 boot 身份、进程轮询间隔、根进程退出后的观察时间，以及文件快照开关。
+查询记录采用 `source: record`、`identity_domain: record_scope` 和
+`interval_basis: recorder_observation`。结束或错误边界保留进程表读取失败，以及
+采样进程绑定和事件写入失败的次数；采样间隙漏掉的进程总数保持未知。文件快照单独
+记录状态，关闭时明确标为禁用。命令退出状态与采集状态分别保存。同一 Run 使用原生
+Sensor 时，内核采集能力仍由其自身的采集记录说明。旧生命周期事件保持原样；
+选择性导出排除某条生命周期事件时，也排除该事件中的采集信息。
 
 原生采集监督进程还会保留起止采样之间的能力变化。每次 Sensor 启动使用独立身份；
 探针或就绪状态变化时增加修订号并记录时间，仅计数器增长时沿用当前修订号。

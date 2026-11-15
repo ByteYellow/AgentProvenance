@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
@@ -284,10 +283,14 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 	if deadline, ok := execCtx.Deadline(); ok {
 		scope.DeadlineAt = deadline.UTC().Format(time.RFC3339Nano)
 	}
+	capture := newCapture(scope, !req.DisableSnapshot, sampleInterval, postRootGrace)
 	if s.Lifecycle != nil && s.Lifecycle.Prepared != nil {
 		if err := s.Lifecycle.Prepared(scope); err != nil {
+			capture.Issues = append(capture.Issues, "preparation_failed")
+			capture.StartedAt = ""
+			capture.finish(time.Now().UTC().Format(time.RFC3339Nano), "error", nil, nil)
 			return Result{RunID: req.RunID, Scope: &scope}, errors.Join(err,
-				s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, err.Error()),
+				s.markStopped(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, "failed", 125, err.Error(), &capture),
 				correlation.CloseBindingByID(s.DB, bindingID, time.Now().UTC().Format(time.RFC3339Nano)))
 		}
 	}
@@ -299,18 +302,22 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 		} else if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
 			exitCode = 124
 		}
-		persistErr := errors.Join(s.markStopped(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, status, exitCode, err.Error()),
-			correlation.CloseBindingByID(s.DB, bindingID, endedAt))
 		artifactCapture := newArtifactCaptureReport()
 		if !req.DisableSnapshot {
 			artifactCapture.Status, artifactCapture.Reason = "failed", "File snapshot capture was not performed because the command could not start."
 			artifactCapture.Issues = append(artifactCapture.Issues, "command_start_failed")
 		}
+		var persistErr error
 		if saveErr := s.persistArtifactReport(req.RunID, rolloutID, &artifactCapture); saveErr != nil {
 			artifactCapture.Status = "failed"
 			artifactCapture.Issues = append(artifactCapture.Issues, "report_storage_failed")
 			persistErr = errors.Join(persistErr, saveErr)
 		}
+		capture.Issues = append(capture.Issues, "command_start_failed")
+		capture.StartedAt = ""
+		capture.finish(endedAt, "error", nil, &artifactCapture)
+		persistErr = errors.Join(persistErr, s.markStopped(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, status, exitCode, err.Error(), &capture),
+			correlation.CloseBindingByID(s.DB, bindingID, endedAt))
 		return Result{
 			RunID:           req.RunID,
 			RolloutID:       rolloutID,
@@ -337,21 +344,24 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 	// Start observing immediately; post-spawn database writes can outlast a
 	// short-lived child, especially while another collector holds the writer.
 	stopSampler := make(chan struct{})
-	samplerDone := make(chan []ObservedProcess, 1)
+	samplerDone := make(chan sampledProcessTree, 1)
 	go sampleProcessTree(pid, sampleInterval, stopSampler, samplerDone)
 	abortStarted := func(cause error) (Result, error) {
 		_ = stop.signal()
 		_ = cmd.Wait()
 		stopReport := stop.finish()
 		close(stopSampler)
-		<-samplerDone
+		sampling := <-samplerDone
 		endedAt := time.Now().UTC().Format(time.RFC3339Nano)
+		capture.Issues = append(capture.Issues, "execution_capture_aborted")
+		capture.finish(endedAt, "error", &sampling.Report, nil)
 		return Result{RunID: req.RunID, RootPID: pid, Scope: &scope, EndedAt: endedAt, Stop: stopReport,
 				ScopeObservation: cgroup.observe(scope)}, errors.Join(cause,
-				s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, cause.Error()),
+				s.markStopped(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, "failed", 125, cause.Error(), &capture),
 				correlation.CloseBindingByID(s.DB, bindingID, endedAt))
 	}
-	scope.StartEventID, err = s.persistStart(scope, commandText)
+	capture.ObservedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	scope.StartEventID, err = s.persistStart(scope, commandText, &capture)
 	if err != nil {
 		return abortStarted(fmt.Errorf("persist execution start: %w", err))
 	}
@@ -373,7 +383,8 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 	postRootGraceStarted := time.Now()
 	time.Sleep(postRootGrace)
 	close(stopSampler)
-	observed := markOutlivedRoot(<-samplerDone, postRootGraceStarted.UTC().Format(time.RFC3339Nano))
+	sampling := <-samplerDone
+	observed := markOutlivedRoot(sampling.Processes, postRootGraceStarted.UTC().Format(time.RFC3339Nano))
 	wallMS := time.Since(start).Milliseconds()
 	exitCode := 0
 	status := "passed"
@@ -398,7 +409,7 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 	}
 	endedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	for _, proc := range observed {
-		_, _ = correlation.RecordBinding(s.DB, correlation.Binding{
+		_, bindErr := correlation.RecordBinding(s.DB, correlation.Binding{
 			RunID:      req.RunID,
 			SessionID:  sessionID,
 			AttemptID:  attemptID,
@@ -413,8 +424,11 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 			BindingSource: "zero_sdk_record_descendant",
 			Confidence:    0.9,
 		})
+		if bindErr != nil {
+			capture.BindingFailures++
+		}
 		payload, _ := json.Marshal(observedProcessPayload(proc, pid, absWorkdir, "root_pid_descendants+cwd+time_window"))
-		_, _ = telemetry.IngestFiltered(s.DB, telemetry.IngestEvent{
+		_, ingestErr := telemetry.IngestFiltered(s.DB, telemetry.IngestEvent{
 			RunID:       req.RunID,
 			RolloutID:   rolloutID,
 			AttemptID:   attemptID,
@@ -433,6 +447,9 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 			EventType:   "process_observed",
 			Payload:     string(payload),
 		})
+		if ingestErr != nil {
+			capture.EventFailures++
+		}
 		if proc.OutlivedRoot {
 			_ = s.persistOrphanDecision(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, proc, string(payload))
 		}
@@ -523,7 +540,8 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 		Stop:             stopReport,
 		ScopeObservation: cgroup.observe(scope),
 	}
-	result.EndEventID, err = s.persistCompletion(result, timedOut, cancelled)
+	capture.finish(endedAt, "end", &sampling.Report, &artifactCapture)
+	result.EndEventID, err = s.persistCompletion(result, timedOut, cancelled, &capture)
 	if err != nil {
 		return result, fmt.Errorf("persist execution completion: %w", err)
 	}
@@ -592,18 +610,23 @@ func markOutlivedRoot(procs []ObservedProcess, rootEndedAt string) []ObservedPro
 	return procs
 }
 
-func sampleProcessTree(rootPID int64, interval time.Duration, stop <-chan struct{}, done chan<- []ObservedProcess) {
+type sampledProcessTree struct {
+	Processes []ObservedProcess
+	Report    ProcessSampling
+}
+
+func sampleProcessTree(rootPID int64, interval time.Duration, stop <-chan struct{}, done chan<- sampledProcessTree) {
 	seen := map[int64]ObservedProcess{}
-	var mu sync.Mutex
+	report := ProcessSampling{StartedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	record := func() {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
+		report.Attempts++
 		procs, err := processTable()
 		if err != nil {
+			report.Failures++
 			return
 		}
 		descendants := descendantsOf(rootPID, procs)
-		mu.Lock()
-		defer mu.Unlock()
 		for _, proc := range descendants {
 			if proc.PID == rootPID {
 				continue
@@ -635,7 +658,8 @@ func sampleProcessTree(rootPID int64, interval time.Duration, stop <-chan struct
 				out = append(out, proc)
 			}
 			sort.Slice(out, func(i, j int) bool { return out[i].PID < out[j].PID })
-			done <- out
+			report.EndedAt = time.Now().UTC().Format(time.RFC3339Nano)
+			done <- sampledProcessTree{Processes: out, Report: report}
 			return
 		}
 	}
@@ -718,10 +742,10 @@ func (s Service) insertGraphEdges(runID, rolloutID, snapshotID, attemptID, sessi
 }
 
 func (s Service) markFailed(runID, rolloutID, attemptID, sessionID, toolCallID, processID, reason string) error {
-	return s.markStopped(runID, rolloutID, attemptID, sessionID, toolCallID, processID, "failed", 125, reason)
+	return s.markStopped(runID, rolloutID, attemptID, sessionID, toolCallID, processID, "failed", 125, reason, nil)
 }
 
-func (s Service) markStopped(runID, rolloutID, attemptID, sessionID, toolCallID, processID, status string, exitCode int, reason string) error {
+func (s Service) markStopped(runID, rolloutID, attemptID, sessionID, toolCallID, processID, status string, exitCode int, reason string, capture *CaptureReport) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	return store.WithWriteTx(context.Background(), s.DB, func(tx *sql.Tx) error {
 		for _, update := range []struct {
@@ -738,9 +762,17 @@ func (s Service) markStopped(runID, rolloutID, attemptID, sessionID, toolCallID,
 				return err
 			}
 		}
-		_, err := tx.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
+		payload := map[string]any{"reason": reason}
+		if capture != nil {
+			payload["attempt_id"], payload["record_capture"] = attemptID, capture
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(`INSERT INTO events (id, run_id, session_id, tool_call_id, process_id, source, event_type, payload, created_at)
 		VALUES (?, ?, ?, ?, ?, 'record', 'exec_error', ?, ?)`,
-			ids.New("evt"), runID, sessionID, toolCallID, processID, fmt.Sprintf(`{"reason":%q}`, reason), now)
+			ids.New("evt"), runID, sessionID, toolCallID, processID, string(raw), now)
 		return err
 	})
 }

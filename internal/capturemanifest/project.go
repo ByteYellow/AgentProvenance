@@ -188,6 +188,8 @@ func (s Service) read(ctx context.Context, run string, e evidence) (Record, erro
 		r.Snapshots = append(r.Snapshots, Snapshot{Boundary: "configuration", Status: c.SensorMode, Features: []Feature{{Name: "kernel_sensor", Category: "system_telemetry", Enabled: enabled, State: c.SensorMode, Basis: "launch_setting"}}})
 	case "sentry_stream":
 		return s.sentry(ctx, run, e)
+	case "record_capture":
+		return s.recorder(ctx, run, e)
 	default:
 		return r, fmt.Errorf("unsupported capture evidence type")
 	}

@@ -25,6 +25,10 @@ paths:
         connection, protocol message, syscall number and stage. Every positive
         loss delta, counter-reset or identity-gap observation is also retained. Witness selection
         is recomputed inside the export selection, never from excluded evidence.
+        Ordinary record observations describe process-table polling and optional
+        workspace snapshots. Their counters belong to one recorded attempt;
+        missed processes remain unknown. Separate native collectors retain their
+        own capabilities and observations.
       parameters:
         - {name: run, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 1024}}
         - {name: cursor, in: query, schema: {type: string, maxLength: 8192}}
@@ -98,13 +102,15 @@ components:
         started_at: {type: string}
         ended_at: {type: string}
         interval_basis:
-          enum: [recorded_observation, boundary_samples, recorded_capability_changes, source_processing_range, run_configuration, stream_observation, checkpoint_observation]
+          enum: [recorded_observation, boundary_samples, recorded_capability_changes, source_processing_range, run_configuration, stream_observation, checkpoint_observation, recorder_observation]
           description: >
             Native capability changes are retained as individual intervals with
             their collector and capability revision. Historical boundary samples
             leave changes between the observations unspecified.
             checkpoint_observation identifies a saved Sentry event, not a
             continuous enabled interval or an enumeration of all events.
+            recorder_observation identifies the recorder's saved start, end or
+            error boundary. Polling times and settings remain source-qualified.
         status: {type: string, description: Original source status; not a unified completeness verdict}
         snapshots:
           type: array
@@ -135,8 +141,8 @@ components:
             required: [name, scope, value, basis]
             properties:
               name: {type: string}
-              scope: {enum: [run, node, collector, scope_prefix, processing_range, sentry_connection]}
-              scope_id: {type: string, description: Native collector or Sentry connection identity}
+              scope: {enum: [run, node, collector, scope_prefix, processing_range, sentry_connection, recorder]}
+              scope_id: {type: string, description: Collector, Sentry connection or recorder attempt identity}
               value:
                 type: [string, 'null']
                 pattern: '^[0-9]+$'
@@ -155,9 +161,11 @@ components:
         observed:
           type: boolean
           description: >
-            True when a retained source event witnesses this protocol message and
-            stage. Omitted for support declarations and sources without that
-            observation. Enabled remains null without saved enablement evidence.
+            Whether retained source evidence witnesses this feature. For Sentry,
+            it identifies a protocol message and stage; for record, an owned
+            process or successful process-table sample. Omitted for support
+            declarations and sources without that observation. Enabled remains
+            null without saved enablement evidence.
         state: {type: string}
         basis: {type: string}
         reason: {type: string}

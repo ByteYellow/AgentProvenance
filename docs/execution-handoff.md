@@ -531,7 +531,8 @@ Use `GET /v1/capture-manifest?run=<run-id>&limit=50` with the daemon's bearer
 token, or `GET /api/capture-manifest` on the local Dashboard. The
 [typed response](capture-manifest-api.yaml) lists saved launch reports, native
 execution checkpoints, context coverage, retention settings and gVisor stream
-records and observed checkpoints. Continue with `next_cursor` while `has_more` is true. Pages retain
+records and observed checkpoints, plus ordinary `record` capture boundaries.
+Continue with `next_cursor` while `has_more` is true. Pages retain
 all recorded revisions and source-qualified identities, including lifecycle
 generations; ordering is by evidence ID rather than time.
 
@@ -546,6 +547,19 @@ keep all saved observations. Selected exports read only the frozen selection and
 report `selection_scope: selected_evidence`; excluded native checkpoint bodies
 and probe targets remain excluded. Original Bundle signatures and object hashes
 are unchanged. Older replays without the index report it as unavailable.
+
+Ordinary `record` saves its producer version, OS/architecture, available Linux
+kernel/boot identity, process polling interval, post-root grace period and file
+snapshot setting in the original lifecycle events. These observations use
+`source: record`, `identity_domain: record_scope` and
+`interval_basis: recorder_observation`. The end or error boundary reports
+process-table read failures and sampled-process binding/event write failures.
+The number of processes missed between samples stays unknown. File snapshots
+retain their own status; disabling them remains explicit. A command's exit
+status is separate from these capture observations. Native Sensor capabilities
+are reported by their own collector, even when both observe the same Run.
+Historical lifecycle events without these fields remain unchanged. Excluding
+a lifecycle event from replay also excludes its capture observation.
 
 Native supervisors also retain capability changes between the boundary samples.
 Each collector lifetime has a distinct ID. Probe or readiness changes receive

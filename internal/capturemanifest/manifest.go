@@ -154,8 +154,11 @@ func (s Service) List(ctx context.Context, opts Options) (Page, error) {
 		UNION ALL SELECT 'event',id,'sentry_stream',created_at FROM events
 		WHERE run_id=? AND source='gvisor_seccheck' AND event_type='runtime_collection'
 		UNION ALL SELECT 'event',id,'sentry_stream',created_at FROM events
-		WHERE run_id=? AND id IN (SELECT id FROM sentry_witnesses))
-		WHERE (kind,id) > (?,?) ORDER BY kind,id LIMIT ?`, opts.RunID, opts.RunID, opts.RunID, opts.RunID, c.Kind, c.ID, p.Limit+1)
+		WHERE run_id=? AND id IN (SELECT id FROM sentry_witnesses)
+		UNION ALL SELECT 'event',id,'record_capture',created_at FROM events
+		WHERE run_id=? AND source='record' AND event_type IN ('exec_start','exec_end','exec_error')
+			AND json_type(CASE WHEN json_valid(payload) THEN payload ELSE '{}' END,'$.record_capture') IS NOT NULL)
+		WHERE (kind,id) > (?,?) ORDER BY kind,id LIMIT ?`, opts.RunID, opts.RunID, opts.RunID, opts.RunID, opts.RunID, c.Kind, c.ID, p.Limit+1)
 	if err != nil {
 		return p, err
 	}

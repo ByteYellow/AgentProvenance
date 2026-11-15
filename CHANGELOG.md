@@ -4,6 +4,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Save ordinary `record` producer identity, polling settings, file-snapshot
+  status and sampling failures in lifecycle evidence. Query and export these
+  observations separately from native Sensor coverage and command exit status.
 - Include scoped gVisor checkpoint witnesses in saved capture manifests. Keep
   observed messages separate from receiver support and enablement, preserve
   entry/return stages and loss diagnostics, and honor selective offline exports.
