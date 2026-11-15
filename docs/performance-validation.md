@@ -107,6 +107,14 @@ rotates profile order between repeats. Captures retain separate ready and stoppe
 probe/TLS-discovery capability reports. This file workload measures the cost of the
 enabled configuration; TLS traffic and attachment storage require other workloads.
 
+Build both Sensors with the same Go toolchain, target architecture, CGO setting
+and optimization flags. Retain `go version -m /absolute/path/to/agentprov-sensor`
+for both executables alongside their build commands. The runner's `compiler`
+identity is the C compiler used for the workload fixture; it does not check the
+Sensor's Go build settings. For release acceptance, use the Go version and build
+flags from the release workflow. Rebuild a mismatched candidate before comparing
+it with a frozen budget, and retain the earlier result with its actual settings.
+
 ```sh
 MEASUREMENTS=$(mktemp -d)
 sudo python3 scripts/accept_sensor_overhead.py run \
@@ -146,7 +154,7 @@ wall time, Sensor CPU, RSS and fixture JSONL bytes. A fixed 20 ms allowance appl
 to wall and CPU time; it is declared in the instrument before measurement and
 saved in the budget. The `off` wall-time gate also detects a changed host baseline.
 Node-wide output bytes and compression size are reported, not used as fixed
-fixture limits. Environment, compiler, workload and instrument hashes must
+fixture limits. Environment, fixture compiler, workload and instrument hashes must
 match. Both successful and failed results remain on disk; exceeding any limit
 returns nonzero. Rebaseline explicitly when the environment or instrument changes.
 
