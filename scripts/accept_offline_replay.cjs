@@ -77,7 +77,7 @@ async function main(){
         assert.ok(await page.locator('#live').isHidden());
         assert.match(await page.locator('.offline-replay-bar').innerText(),/unsigned sharing copy/);
         const query=async q=>{report.queries++;return page.evaluate(q=>AgentProvReplay.query(q),q);};
-        const q='?run='+encodeURIComponent(runID),run=catalog.runs[runID];let partial=false;
+        const q='?run='+encodeURIComponent(runID),run=catalog.runs[runID];let partial=false,emptySelection=false;
         if(item.record_selection){
           const file=item.record_selection,raw=fs.readFileSync(path.join(root,file.path));
           assert.equal(raw.length,file.bytes);assert.equal(hash(raw),file.sha256);
@@ -85,6 +85,7 @@ async function main(){
           assert.equal(selection.schema_version,'agentprovenance.replay_selection/v1');
           assert.equal(selection.selection.run_id,runID);assert.equal(selection.selection.scope,item.scope);
           partial=item.scope==='session'||(selection.selection.exclude_records||[]).length>0||(selection.selection.exclude_categories||[]).length>0||(selection.selection.exclude_attachments||[]).length>0;
+          emptySelection=partial&&selection.records.length>0&&selection.records.every(r=>!r.included);
           if(!partial)assert.ok(selection.records.every(r=>r.included),'whole-run selection retains every record');
           else assert.match(await page.locator('#verify').innerText(),/Selected evidence/);
           const actual=selection.records.filter(r=>r.included&&r.indexed).map(r=>r.id).sort();
@@ -262,7 +263,18 @@ async function main(){
         await page.locator('#search-query').fill(searchQueries[runID]||process.env.AGENTPROV_REPLAY_SEARCH_QUERY||(runID==='run-double-attempt'?'169.254.169.254':runID==='ui-fixture'?'SAVED-OUTPUT-TAIL':runID==='audit-interface-fixture'?'SECCOMP':'report.py'));
         await page.locator('#search-submit').click();
         await page.waitForFunction(()=>!document.querySelector('#search-submit').disabled);
-        assert.ok(await page.locator('.search-result').count()>0,'saved evidence remains searchable offline');
+        if(emptySelection){
+          assert.equal(item.events,0,'empty selection excludes every runtime event');
+          assert.equal(saved(run.context).entries.length,0,'empty selection excludes every context entry');
+          assert.equal(Object.values(item.contents.indexed_sources||{}).reduce((a,b)=>a+b,0),0,'empty selection has no indexed sources');
+          assert.equal(await page.locator('.search-result').count(),0,'excluded evidence cannot appear as a search result');
+          assert.equal(await page.locator('#search-status').innerText(),'No match found in saved content.');
+          assert.match(await page.locator('#search-counts').innerText(),/^Checked 0 records/);
+          assert.equal((await page.locator('#content-body').innerText()).trim(),'','excluded evidence has no readable body');
+          report.emptySelections=(report.emptySelections||0)+1;
+        }else{
+          assert.ok(await page.locator('.search-result').count()>0,'saved evidence remains searchable offline');
+        }
         await page.waitForFunction(()=>!document.querySelector('#content-body').textContent.includes('loading…'));
         assert.equal(await page.locator('#content-body img, #content-body script').count(),0);
         if(runID==='ui-fixture'){
