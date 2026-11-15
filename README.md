@@ -568,8 +568,9 @@ historical investigation, comparison and offline-sharing examples.
 
 The current source is preparing v1.0: cross-sandbox execution handoff, gVisor
 collection, Browser/Notebook context and portable investigation examples.
-See the [deployment guide](docs/deployment-modes.md) for entry requirements and
-the [unreleased changelog](CHANGELOG.md#unreleased) for implemented changes.
+Read the [v1.0 source preview](docs/releases/v1.0.0-preview.md) for the workflows,
+the [deployment guide](docs/deployment-modes.md) for entry requirements, and
+the [unreleased changelog](CHANGELOG.md#unreleased) for individual changes.
 The release archive examples above remain on v0.10.1 until v1.0 is published.
 
 For upgrades, back up your data directory before opening it with a newer version.

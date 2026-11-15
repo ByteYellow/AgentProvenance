@@ -524,7 +524,8 @@ v0.10.1 加强 daemon 访问控制，保留本地采集的交互与兼容性，
 原有调查、对比和离线分享示例继续保留。
 
 当前源码正在准备 v1.0，包含跨沙箱执行交接、gVisor 采集、Browser／Notebook
-上下文及可离线交付的调查示例。接入条件见[部署指南](docs/zh-CN/deployment-modes.md)，
+上下文及可离线交付的调查示例。使用方式见 [v1.0 源码预览](docs/zh-CN/releases/v1.0.0-preview.md)，
+接入条件见[部署指南](docs/zh-CN/deployment-modes.md)，
 已实现的改动见[未发布变更](CHANGELOG.zh-CN.md#未发布)。
 v1.0 发布前，上面的发行包示例继续使用 v0.10.1。
 

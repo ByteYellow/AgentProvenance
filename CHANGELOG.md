@@ -4,6 +4,8 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+For a workflow-oriented summary, see the [v1.0 source preview](docs/releases/v1.0.0-preview.md).
+
 - Keep native ingestion progressing when a capability-change callback arrives
   after a batch boundary. Retain original revision timestamps and clip effective
   intervals to the recorded receive window, while rejecting clock reversals.
