@@ -4,6 +4,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Add an opt-in systemd guest service with authenticated readiness checks and
+  automatic stopped-store sealing. Provide a credential-free Ubuntu rootfs
+  recipe for the pinned Firecracker profile, separate configuration/evidence
+  volumes, and a real Linux service-lifecycle acceptance script.
 - Add `forensics seal-executions` to prepare signed packages from a stopped
   execution store before guest retirement. Preserve caller/instance/generation
   boundaries, reuse immutable packages on retry, and report unfinished attempts

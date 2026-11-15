@@ -739,6 +739,90 @@ sensitive-read filter. It contains no credentials. The script requires its read
 and the output write to survive import with their original cgroup attribution.
 This command-level check is separate from guest boot and snapshot acceptance.
 
+### Guest service and image
+
+The opt-in [guest deployment](../deploy/microvm/agentprov-guest.service) reuses
+`daemon serve` and `seal-executions`. Its image recipe selects Firecracker
+**v1.18.0**, source `eaf83bb718a559d324613d566eaf776b31a62340`, and an
+immutable Ubuntu 24.04 base image recorded in
+[runtime.json](../deploy/microvm/runtime.json). The selected guest kernel series
+is Amazon Linux microVM **6.18** with BTF, BPF events, syscall tracepoints,
+uprobes and cgroup v2 enabled. Kernel artifact pinning and Firecracker boot,
+snapshot and clone acceptance remain the hardware integration gate. The rootfs
+manifest records `boot_tested: false` until that separate acceptance is performed.
+See the upstream [kernel policy](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/docs/kernel-policy.md)
+and [image setup guide](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/docs/rootfs-and-kernel-setup.md).
+
+Build on a Linux machine with Docker, Python 3, `systemd-analyze`, `chroot`,
+`mkfs.ext4` and `e2fsck`:
+
+```sh
+sudo python3 scripts/build_microvm_rootfs.py \
+  --binary /path/to/linux-agentprov --output /path/to/new/guest-image
+```
+
+Use a CLI for the build machine's architecture. The builder exports an ext4
+root filesystem without mounting it, records binary/image/package hashes and
+removes its temporary container and image tag. It does not launch a VM or alter
+existing services. Distribution packages are resolved at build time; retain the
+resulting image and package inventory for the selected deployment.
+
+The guest uses three block devices:
+
+| Device | Mount | Contents and owner |
+| --- | --- | --- |
+| `/dev/vda` | `/` | Reusable systemd rootfs; no instance identities, API tokens or signing keys |
+| `/dev/vdb` | `/etc/agentprov-guest` | Read-only configuration volume provisioned by the trusted external controller |
+| `/dev/vdc` | `/var/lib/agentprov-guest` | Retained evidence volume, including the database, objects and signed packages |
+
+The configuration volume contains `execution.json` from this guide, with
+`capture.mode=native` and signed `delivery` enabled; `daemon-token` (0400/0600);
+the referenced sender private key and receiver public key; SSH `authorized_keys`
+and a fresh per-instance `ssh_host_ed25519_key`. Keep the directory private.
+The external controller assigns `target.producer_id`, `instance_id` and
+`generation`. The service never derives a new identity from a cloned hostname,
+machine ID or boot ID. SSH is key-only, and the API binds to `127.0.0.1:8574`;
+use the existing SSH forwarding path. The sample network configuration requests
+DHCP on `eth0`; the VM host supplies that network or an operator-owned replacement.
+
+The service starts with the normal boot target. Its post-start hook waits for
+the matching daemon PID, probe-gated health and an authenticated execution query.
+Only then does `systemctl start agentprov-guest` finish successfully. The API
+token is read from its private file into the daemon environment, not command-line
+arguments. Startup does not create replacement identities or credentials.
+
+On `systemctl stop agentprov-guest`, the daemon closes executions and capture,
+then the post-stop hook seals the stopped store. It writes readiness and stop
+reports plus paged package results under `guest-lifecycle/`. The operation ID
+uses the service invocation, so a retry of that hook reuses its exact packages.
+An identity/configuration change, missing readiness record or incomplete sealing
+fails visibly and retains the volume. Automatic service restart is disabled;
+the controller decides whether to restart the same instance or provision a new
+generation. This hook does not run when guest memory is resumed from a snapshot.
+
+For normal retirement, stop new dispatch at the trusted caller, let existing
+attempts finish or stop them explicitly, and collect/acknowledge evidence through
+the existing delivery protocol while the service is available. Then stop the
+service and retain its final packages and any tail evidence. The stop report's
+`sealed` describes local packaging; `receiver_acknowledged` is `null` because the
+hook does not contact the receiver, and `may_reclaim` remains `false`. The external
+controller must reconcile final packages and receiver receipts before deleting
+the evidence volume. A successful service stop alone never authorizes deletion.
+
+Exercise the service in an existing privileged Linux VM without replacing its
+installed collector:
+
+```sh
+sudo python3 scripts/accept_execution_seal.py --native \
+  --binary /path/to/agentprov --output /path/to/new/service-acceptance \
+  --guest-service-dir "$PWD/deploy/microvm"
+```
+
+The fixture installs a uniquely named runtime unit, verifies real native capture
+and automatic stop-hook packaging, independently imports the signed evidence,
+then removes only its own unit. Full guest boot and restore/clone use the
+separate runtime acceptance environment.
+
 ## Compatibility and tests
 
 Database schemas 21-27 add the execution ledger, durable stop requests, delivery

@@ -22,10 +22,14 @@ def main():
     parser.add_argument('--binary', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True, help='new directory owned by this fixture')
     parser.add_argument('--native', action='store_true', help='require Linux native kernel capture')
+    parser.add_argument('--guest-service-dir', type=Path,
+                        help='exercise the systemd unit and hooks from deploy/microvm (Linux root, --native)')
     args = parser.parse_args()
     binary, root = args.binary.resolve(), args.output.resolve()
     if args.native and platform.system() != 'Linux':
         raise SystemExit('--native requires Linux')
+    if args.guest_service_dir and (not args.native or os.geteuid() != 0):
+        raise SystemExit('--guest-service-dir requires root and --native on Linux')
     root.mkdir(parents=True, exist_ok=False)
     root.chmod(0o700)
     env = os.environ.copy()
@@ -75,12 +79,43 @@ def main():
     command = [str(binary), '--data-dir', str(store), 'daemon', 'serve', '--listen', f'127.0.0.1:{port}',
                '--execution-config', str(config_path), '--sample-interval', '0', '--gc-interval', '0']
     process = None
+    unit_path = None
+    unit_created = False
+    service_invocation = None
+    lifecycle = None
     try:
-        with (root / 'daemon.log').open('w') as log:
-            process = subprocess.Popen(command, env=daemon_env, stdout=log, stderr=subprocess.STDOUT)
+        if args.guest_service_dir:
+            deployment = args.guest_service_dir.resolve()
+            token_file = root / 'daemon-token'
+            token_file.write_text(token)
+            token_file.chmod(0o600)
+            unit_path = Path('/run/systemd/system') / ('agentprov-guest-fixture-' + nonce + '.service')
+            def quoted(value):
+                return json.dumps(str(value).replace('%', '%%'))
+            settings = {'BINARY': binary, 'CONFIG': config_path, 'TOKEN_FILE': token_file,
+                        'DATA_DIR': store, 'LISTEN': f'127.0.0.1:{port}'}
+            unit = (deployment / 'agentprov-guest.service').read_text()
+            unit += '\n[Unit]\nRequiresMountsFor=\nRequiresMountsFor=' + quoted(root) + '\n[Service]\n'
+            unit += ''.join('Environment=' + quoted('AGENTPROV_GUEST_' + key + '=' + str(value)) + '\n'
+                            for key, value in settings.items())
+            for key, action in [('ExecStart', 'serve'), ('ExecStartPost', 'ready'), ('ExecStopPost', 'seal')]:
+                unit += key + '=\n' + key + '=/usr/bin/python3 ' + quoted(deployment / 'guest_service.py') + ' ' + action + '\n'
+            with unit_path.open('x') as stream:
+                unit_created = True
+                stream.write(unit)
+            subprocess.run(['systemctl', 'daemon-reload'], check=True)
+            subprocess.run(['systemctl', 'start', unit_path.name], check=True, timeout=160)
+            service_invocation = subprocess.check_output(['systemctl', 'show', unit_path.name,
+                '--property=InvocationID', '--value'], text=True).strip()
+            ready = json.loads((store / 'guest-lifecycle' / (service_invocation + '.ready.json')).read_text())
+            if ready['target'] != config['target'] or ready['phase'] != 'ready':
+                raise RuntimeError('service readiness has the wrong execution identity')
+        else:
+            with (root / 'daemon.log').open('w') as log:
+                process = subprocess.Popen(command, env=daemon_env, stdout=log, stderr=subprocess.STDOUT)
         deadline = time.monotonic() + 60
         while True:
-            if process.poll() is not None:
+            if process is not None and process.poll() is not None:
                 raise RuntimeError('daemon exited before readiness: ' + (root / 'daemon.log').read_text())
             try:
                 health = api('GET', '/v1/ready')
@@ -116,15 +151,23 @@ def main():
             time.sleep(0.05)
         if args.native and execution['attempt']['state']['capture'] != 'sealed':
             raise RuntimeError('native capture did not seal: ' + json.dumps(execution['attempt']['state']))
-        operation = 'retirement-' + nonce
+        operation = 'guest-stop-' + service_invocation if service_invocation else 'retirement-' + nonce
         seal_command = ['--data-dir', str(store), 'forensics', 'seal-executions', '--execution-config', str(config_path), '--operation', operation]
         active = cli(seal_command, expected=1)
         if 'requires a stopped daemon' not in active.stderr:
             raise RuntimeError('active daemon was not rejected: ' + active.stderr)
-        process.send_signal(signal.SIGTERM)
-        if process.wait(timeout=60) != 0:
-            raise RuntimeError('daemon shutdown failed')
-        first, retry = cli(seal_command), cli(seal_command)
+        if unit_path:
+            subprocess.run(['systemctl', 'stop', unit_path.name], check=True, timeout=310)
+            lifecycle = json.loads((store / 'guest-lifecycle' / (service_invocation + '.stopped.json')).read_text())
+            if not lifecycle['sealed'] or lifecycle['may_reclaim'] or lifecycle['receiver_acknowledged'] is not None:
+                raise RuntimeError('unexpected systemd retirement result')
+            first = subprocess.CompletedProcess([], 0, Path(lifecycle['package_results']).read_text())
+            retry = cli(seal_command)
+        else:
+            process.send_signal(signal.SIGTERM)
+            if process.wait(timeout=60) != 0:
+                raise RuntimeError('daemon shutdown failed')
+            first, retry = cli(seal_command), cli(seal_command)
         (root / 'seal-first.jsonl').write_text(first.stdout)
         (root / 'seal-retry.jsonl').write_text(retry.stdout)
         results = [json.loads(line) for line in first.stdout.splitlines()]
@@ -184,10 +227,19 @@ def main():
                   'admission': admission, 'execution': execution, 'seal': results[-1], 'retry': repeated[-1],
                   'bundle_sha256': hashlib.sha256(bundle.read_bytes()).hexdigest(),
                   'attestation_sha256': hashlib.sha256(attestation.read_bytes()).hexdigest(),
-                  'verification': verification, 'output': expected, 'native_file_events': native_events, 'passed': True}
+                  'verification': verification, 'output': expected, 'native_file_events': native_events,
+                  'guest_service': lifecycle, 'passed': True}
         (root / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps({'passed': True, 'run_id': run_id, 'native_capture': args.native, 'report': str(root / 'report.json')}))
     finally:
+        if unit_created and unit_path.exists():
+            subprocess.run(['systemctl', 'stop', unit_path.name], check=False, timeout=310)
+            with (root / 'daemon.log').open('w') as log:
+                subprocess.run(['journalctl', '--unit', unit_path.name, '--no-pager', '-o', 'cat'],
+                               stdout=log, check=False)
+            unit_path.unlink()
+            subprocess.run(['systemctl', 'daemon-reload'], check=True)
+            subprocess.run(['systemctl', 'reset-failed', unit_path.name], check=False, capture_output=True)
         if process is not None and process.poll() is None:
             process.terminate()
             try:

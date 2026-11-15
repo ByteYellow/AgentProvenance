@@ -583,6 +583,71 @@ python3 scripts/accept_execution_seal.py \
 脚本核对导入包中的输入读取、结果写入及原 cgroup 归属。
 此脚本验收命令级流程；guest 开机和快照恢复另行验收。
 
+### Guest 服务与镜像
+
+可选的 [guest 部署](../../deploy/microvm/agentprov-guest.service) 复用
+`daemon serve` 和 `seal-executions`。镜像方案选定 Firecracker **v1.18.0**，
+源码提交为 `eaf83bb718a559d324613d566eaf776b31a62340`，Ubuntu 24.04 基础镜像的
+固定摘要保存在 [runtime.json](../../deploy/microvm/runtime.json)。guest 内核选用
+Amazon Linux microVM **6.18** 系列，需要 BTF、BPF events、syscall tracepoint、
+uprobe 和 cgroup v2。内核产物固化、Firecracker 启动及恢复／克隆留在硬件环境验收；
+rootfs 构建清单中的 `boot_tested` 初始为 `false`。
+配置依据见上游[内核策略](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/docs/kernel-policy.md)
+和[镜像构建指南](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/docs/rootfs-and-kernel-setup.md)。
+
+在安装了 Docker、Python 3、`systemd-analyze`、`chroot`、`mkfs.ext4` 和 `e2fsck` 的 Linux 上构建：
+
+```sh
+sudo python3 scripts/build_microvm_rootfs.py \
+  --binary /path/to/linux-agentprov --output /path/to/new/guest-image
+```
+
+CLI 使用构建主机对应的架构。脚本直接生成 ext4 文件，无须挂载 rootfs，保存
+二进制、镜像和软件包摘要，并清理自己创建的临时容器与镜像标签。它只构建镜像，
+不启动 VM，也不改已有服务。发行版软件包在构建时解析；部署时保留实际镜像及软件包清单。
+
+guest 使用三个块设备：
+
+| 设备 | 挂载位置 | 内容与管理方 |
+| --- | --- | --- |
+| `/dev/vda` | `/` | 可复用的 systemd rootfs，不含实例身份、API token 或签名密钥 |
+| `/dev/vdb` | `/etc/agentprov-guest` | 可信外部控制端提供的只读配置卷 |
+| `/dev/vdc` | `/var/lib/agentprov-guest` | 独立保留的证据卷，保存数据库、正文对象和签名包 |
+
+配置卷包含本指南中的 `execution.json`，启用 `capture.mode=native` 和签名 `delivery`；
+权限为 0400／0600 的 `daemon-token`；配置引用的发送端私钥、接收端公钥；SSH
+`authorized_keys` 和每个实例独立的 `ssh_host_ed25519_key`。目录只向管理账号开放。
+外部控制端指定 `target.producer_id`、`instance_id` 和 `generation`，服务沿用这些身份。
+SSH 只允许密钥登录，API 监听 `127.0.0.1:8574`，继续使用 SSH 转发连接。
+示例网络配置通过 `eth0` 请求 DHCP，VM 宿主提供网络，也可替换为运维自己的网络配置。
+
+服务随正常开机目标启动。启动后检查 daemon PID 是否匹配、探针就绪后的健康状态，
+以及带鉴权的执行查询；检查通过后，`systemctl start agentprov-guest` 才返回成功。
+API token 从私有文件读入 daemon 环境，不放入命令行参数；启动过程不生成替代身份或凭据。
+
+执行 `systemctl stop agentprov-guest` 时，daemon 先关闭任务和采集，再由停止钩子封包。
+就绪记录、停止报告和分页包索引保存在 `guest-lifecycle/`。同一次服务 invocation
+使用固定封包操作 ID，重试复用原包。身份或配置被改写、缺少就绪记录、封包未完成时，
+服务明确报错，证据卷继续保留。服务关闭自动重启，由外部控制端决定沿用原实例启动，
+还是配置新生命周期代次。内存快照恢复不会重新执行开机钩子。
+
+正常回收时，先在可信调用端停止新派发，等待现有任务结束或显式停止任务；服务仍可用时，
+通过已有交付协议拉取证据并确认接收。随后停止服务，保留最后生成的包及尾部证据。
+停止报告的 `sealed` 描述本地封包结果；钩子未联系接收端，`receiver_acknowledged`
+记录为 `null`，`may_reclaim` 保持 `false`。外部控制端核对最终包和接收回执后，
+再决定删除证据卷。
+
+在现有 Linux VM 中验证实际服务生命周期，不替换机器原有的采集器：
+
+```sh
+sudo python3 scripts/accept_execution_seal.py --native \
+  --binary /path/to/agentprov --output /path/to/new/service-acceptance \
+  --guest-service-dir "$PWD/deploy/microvm"
+```
+
+脚本创建唯一命名的临时服务，核对真实内核采集、停止钩子自动封包及独立签名导入，
+结束后只移除自己的服务。完整 guest 启动、恢复和克隆另用对应运行时环境验收。
+
 ## 兼容与测试
 
 数据库 schema 21–27 增加执行账本、持久停止请求、交付发件记录和回执、发送端副本留存、发布路径引用索引，以及作用域采集和采样缺口计数，

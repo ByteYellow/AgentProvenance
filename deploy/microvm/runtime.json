@@ -1,0 +1,10 @@
+{
+  "runtime": "firecracker",
+  "version": "v1.18.0",
+  "source_commit": "eaf83bb718a559d324613d566eaf776b31a62340",
+  "guest_family": "ubuntu-24.04-systemd",
+  "base_image": "ubuntu@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90",
+  "guest_kernel_series": "6.18",
+  "hardware_boot_acceptance": "pending",
+  "kernel_requirements": ["DEBUG_INFO_BTF", "BPF_SYSCALL", "BPF_EVENTS", "PERF_EVENTS", "KPROBE_EVENTS", "UPROBE_EVENTS", "FTRACE_SYSCALLS", "CGROUPS", "CGROUP_BPF", "EXT4_FS", "VIRTIO_BLK", "VIRTIO_NET"]
+}

@@ -1,0 +1,22 @@
+[Unit]
+Description=AgentProvenance guest execution and evidence service
+After=local-fs.target network.target
+RequiresMountsFor=/etc/agentprov-guest /var/lib/agentprov-guest
+
+[Service]
+Type=exec
+User=root
+UMask=0077
+Delegate=yes
+LimitMEMLOCK=infinity
+ExecStart=/usr/bin/python3 /usr/local/libexec/agentprov-guest serve
+ExecStartPost=/usr/bin/python3 /usr/local/libexec/agentprov-guest ready
+ExecStopPost=/usr/bin/python3 /usr/local/libexec/agentprov-guest seal
+KillSignal=SIGTERM
+KillMode=mixed
+TimeoutStartSec=150
+TimeoutStopSec=300
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
