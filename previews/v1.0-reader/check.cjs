@@ -33,7 +33,13 @@ const previewURL=(process.env.AGENTPROV_PREVIEW_URL||'http://127.0.0.1:47920').r
         const originRun=new URL(page.url()).searchParams.get('run');
         await page.locator('[data-portable-action="execution"]').first().click();
         await page.waitForFunction(run=>new URL(location.href).searchParams.get('run')!==run,originRun);
-        await page.waitForSelector('[data-portable-action="source"]');
+        await page.waitForSelector('[data-execution-direction="incoming"]');
+        await page.locator('[data-execution-direction="incoming"] [data-portable-action="source"]').first().click();
+        await page.waitForFunction(run=>new URL(location.href).searchParams.get('run')===run,originRun);
+        await page.waitForSelector('[data-dialog-entry]');
+        await page.locator('[data-dialog-entry]').first().click();
+        await page.waitForFunction(()=>document.querySelector('#portable-dialog-body pre')?.textContent.length>0);
+        assert.match(await page.locator('#portable-dialog-body pre').first().innerText(),/python3 analyze\.py/);
         result.bidirectional=true;
       }else if(name==='browser'||name==='notebook'){
         await page.locator('#context-fold>summary').click();await page.locator('#portable-native-tab').click();

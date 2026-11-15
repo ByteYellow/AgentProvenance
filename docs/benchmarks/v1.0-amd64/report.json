@@ -3,7 +3,7 @@
   "recorded_date": "2026-11-16",
   "branch": "feature/v1.0-portable-evidence",
   "source_base": "678bf7813ab0546f8438afe3ad5c0364f20a35ea",
-  "source_state": "working-tree runtime builds; release artifact provenance is recorded separately",
+  "source_state": "runtime candidate archive built from clean runtime_source_commit; earlier working-build results retained with their exact digests",
   "environment": {
     "system": "Linux",
     "architecture": "x86_64",
@@ -263,11 +263,12 @@
   "firecracker": {
     "passed": true,
     "reclaimed": true,
-    "version": "Firecracker v1.18.0\n\n2026-11-16T03:11:17.022081484 [anonymous-instance:main] Firecracker exiting successfully. exit_code=0",
+    "source_commit": "8e044fa0543c7081065940e3f4d7ae2b82265044",
+    "version": "Firecracker v1.18.0",
     "kernel": "6.18.62",
     "inputs": {
       "binary": {
-        "sha256": "4d3426813b0035926381784f19b8b90c9ad5e8cf76c160555ec701d331bd0a53"
+        "sha256": "29775053941e2356a80ceceb26fd72ea2d0341d1bf4c73be6640e5f3b01cf93c"
       },
       "firecracker": {
         "sha256": "b33f46cd6d88834cf6a4f8d184f08f219809c636236bffd286d233a60602a2ba"
@@ -276,7 +277,7 @@
         "sha256": "e6311d8c3b2fa8c0eb2e299903279eeba597ddf4eb20739264d34d130ca82f16"
       },
       "rootfs": {
-        "sha256": "1dc1eca058e63efb75d03194efcaba23d487961d0b7938c86227f20690b6525f"
+        "sha256": "4a1c9beded3afd7e12e650e5ef52e01bc7af820c4a181d50ca22f1d29618b15e"
       }
     },
     "executions": 2,
@@ -543,26 +544,31 @@
       "allowed_regression": 0.25,
       "checks_detail": [
         {
+          "metric": "drain_ms",
           "actual": 55840.91047399989,
           "maximum": 69189.89077874983,
           "passed": true
         },
         {
+          "metric": "daemon_peak_rss_bytes",
           "actual": 86089728,
           "maximum": 104448000.0,
           "passed": true
         },
         {
+          "metric": "stopped_store_bytes",
           "actual": 256038913,
           "maximum": 320089601.25,
           "passed": true
         },
         {
+          "metric": "health_after_p95_ms",
           "actual": 1.3930340001024888,
           "maximum": 2.842187500074033,
           "passed": true
         },
         {
+          "metric": "query_after_p95_ms",
           "actual": 11.150481999720796,
           "maximum": 13.490146249888312,
           "passed": true
@@ -1410,6 +1416,42 @@
       "existing_compare_and_collapsed_session",
       "no_external_network",
       "zh_CN_file_offline"
+    ],
+    "review_archive": {
+      "name": "AgentProvenance-v1.0-reader-preview-20261116.zip",
+      "bytes": 19820637,
+      "sha256": "e7336a9b0ee072036ae520999a9a1362c5e0ac30efedb2210efba7fbc2dee8ab",
+      "inventories_verified": 4
+    },
+    "interaction_results": [
+      {
+        "name": "execution",
+        "errors": [],
+        "outside": [],
+        "attempts": 2,
+        "bidirectional": true
+      },
+      {
+        "name": "browser",
+        "errors": [],
+        "outside": [],
+        "records": 23,
+        "image": true,
+        "content": true
+      },
+      {
+        "name": "notebook",
+        "errors": [],
+        "outside": [],
+        "records": 26,
+        "image": true,
+        "content": true
+      },
+      {
+        "name": "investigation",
+        "errors": [],
+        "outside": []
+      }
     ]
   },
   "evidence_sha256": {
@@ -1435,16 +1477,970 @@
     "ui-screenshots/offline-portable.json": "317170d876148cdb31489be1c9cd862de21b5c85539b0abe454cb9a845b98e38",
     "guest-image-current/manifest.json": "b750f2b8b35186dc037aa64b46f953bbb2e51be64182ca4c9fc9e52000d7dce2",
     "logs/final-changed-race.log": "d2b2dba4530c896df76624580483b16611dd1992fd68a0227f51ff5a50b3f00d",
-    "logs/final-doclinks.log": "c7402c87a495ee58a4b4abede593405fb478c0935b9464134f875000862ec068"
+    "logs/final-doclinks.log": "c7402c87a495ee58a4b4abede593405fb478c0935b9464134f875000862ec068",
+    "firecracker-release-report-copy.json": "fd1e341a128cd83c4cd2955f36450a75711453e4405ea612ec7dfb47fbeb854e",
+    "guest-image-release/manifest.json": "69a6da81c1a19f259075c0000315380b934763348949074b2b2835d38986ff7b",
+    "logs/firecracker-release.log": "3644d72bd19c8e0590a21f28486071accb18026a03f3c30811bc64743436e2a9",
+    "logs/release-build.log": "10dd11283791005ee827a0d1e676bb919a18fa8e185ab3eb670726f8a08de48c",
+    "logs/release-acceptance.log": "08c9b314236369727c4deb9be426ecbc25c751e98f07b106fdc667a3a9084f0c",
+    "ui-portable-check/ui-screenshots/report.json": "992a6478ae35d06b0887fc9b9da9d37b93ff168d20c3d76a7e3d61a8d45abd4e",
+    "performance-release/results.tsv": "ee4243f06ce74d21158b72dc471cf07c110a9b3da31f36faa95cc80e6bffdb85",
+    "performance-release/budget-verification.log": "05490c478c711fc2344ad70d822d3f23c58a08c34a59a712d2c50ddcbf21bb8b",
+    "logs/performance-release.log": "994059b6daa51b670fc1df8e48a62982af7d3da586150bfeb385079533c5d72f",
+    "telemetry-release-controls/results.tsv": "20cbbcd538a90e57dcbff7bc1e820f70b7334639db3d49d54dc2a650dde04214",
+    "telemetry-release-controls/budget-verification.log": "df318f6f4ee126056b3f6027111580d588a7f22dcee0ed61c856dbc96487a836",
+    "logs/telemetry-release-controls.log": "3bc30d787716eeed18648b04448bab6552d3c12108ed9547f6a494b22df3cc82",
+    "compatibility/legacy-release/report.json": "846b2805653fe04918f4866e5ac3a810793545f025e1c66216fccd192b0b018b",
+    "compatibility/deepseek-release/report.json": "b886204dbeb37697b773c744ff23a066b94d6fb6166eb875dd49d4eeaf326623",
+    "compatibility/results.json": "b4b4ef6882fae6aaa000378cc5cde5ab01775e677fdd8fbf7b74eb13989c7b84",
+    "logs/legacy-release.log": "05147f832166a637b8e6170da296a63c4903f8f66fd4766464338ebdce36f7a6",
+    "logs/deepseek-release.log": "b886204dbeb37697b773c744ff23a066b94d6fb6166eb875dd49d4eeaf326623"
   },
   "pending": [
-    "candidate archive build and no-Go acceptance",
-    "final documentation and branch push",
-    "maintainer review of retained UI preview"
+    "maintainer layout decision and formal Dashboard integration",
+    "main merge, tag, release and Pages publication after maintainer authorization"
   ],
   "deferred": [
     "24-hour soak",
     "formal Dashboard UI integration until maintainer decision",
     "main merge, tag, release and Pages publication"
-  ]
+  ],
+  "runtime_source_commit": "8e044fa0543c7081065940e3f4d7ae2b82265044",
+  "firecracker_working_build": {
+    "passed": true,
+    "reclaimed": true,
+    "version": "Firecracker v1.18.0\n\n2026-11-16T03:11:17.022081484 [anonymous-instance:main] Firecracker exiting successfully. exit_code=0",
+    "kernel": "6.18.62",
+    "inputs": {
+      "binary": {
+        "sha256": "4d3426813b0035926381784f19b8b90c9ad5e8cf76c160555ec701d331bd0a53"
+      },
+      "firecracker": {
+        "sha256": "b33f46cd6d88834cf6a4f8d184f08f219809c636236bffd286d233a60602a2ba"
+      },
+      "kernel": {
+        "sha256": "e6311d8c3b2fa8c0eb2e299903279eeba597ddf4eb20739264d34d130ca82f16"
+      },
+      "rootfs": {
+        "sha256": "1dc1eca058e63efb75d03194efcaba23d487961d0b7938c86227f20690b6525f"
+      }
+    },
+    "executions": 2,
+    "receipt_checks": [
+      {
+        "attempts": 2,
+        "complete": true,
+        "receipts_verified": 0,
+        "receipts_pending": 2,
+        "delivery_complete": false
+      },
+      {
+        "attempts": 2,
+        "complete": true,
+        "receipts_verified": 1,
+        "receipts_pending": 1,
+        "delivery_complete": false
+      },
+      {
+        "attempts": 2,
+        "complete": true,
+        "receipts_verified": 2,
+        "receipts_pending": 0,
+        "delivery_complete": true
+      }
+    ]
+  },
+  "release": {
+    "artifact": "agentprov_v1.0.0-candidate_linux_amd64.tar.gz",
+    "bytes": 70748487,
+    "sha256": "f2f018240c6787e65517df128678f577a9ee19e8ccacc0844126437b632e00f9",
+    "build": {
+      "version": "v1.0.0-candidate",
+      "commit": "8e044fa0543c7081065940e3f4d7ae2b82265044",
+      "build_date": "2026-11-15T19:26:33+00:00",
+      "go": "go version go1.26.4 linux/amd64",
+      "os": "linux",
+      "arch": "amd64",
+      "cgo_enabled": false,
+      "programs": [
+        "agentprov",
+        "agentprov-sensor"
+      ]
+    },
+    "acceptance": {
+      "archive": "agentprov_v1.0.0-candidate_linux_amd64.tar.gz",
+      "platform": "linux/amd64",
+      "signed_replays": 12,
+      "guides": 14,
+      "user_guides": 20,
+      "guide_languages": [
+        "en",
+        "zh-CN"
+      ],
+      "recorded_context": "passed",
+      "no_go_required": true,
+      "cleanup": "passed"
+    },
+    "binaries": {
+      "agentprov": {
+        "sha256": "29775053941e2356a80ceceb26fd72ea2d0341d1bf4c73be6640e5f3b01cf93c",
+        "bytes": 95010978
+      },
+      "agentprov-sensor": {
+        "sha256": "8377ee1beb6250f10607dc4db2dc0cde0acc39b121601d2f0d98fb17b98750c4",
+        "bytes": 7250082
+      }
+    }
+  },
+  "release_performance": {
+    "sensor": {
+      "passed": true,
+      "report_sha256": "3c61305523c6fb909574d4cd613e3fee12b93979ab445077a318300751e58d57",
+      "budget_sha256": "55ea21d937a389aef76088a81fa974d45939c764127746e301f971a4a1e392c2",
+      "checks": [
+        {
+          "case": "off/burst",
+          "metric": "workload_seconds",
+          "actual": 0.03296802599925286,
+          "maximum": 0.06089625000005981,
+          "passed": true
+        },
+        {
+          "case": "minimal/burst",
+          "metric": "workload_seconds",
+          "actual": 0.08538591300020926,
+          "maximum": 0.12830727999973532,
+          "passed": true
+        },
+        {
+          "case": "minimal/burst",
+          "metric": "sensor_cpu_seconds",
+          "actual": 2.9501739999999983,
+          "maximum": 4.585363749999999,
+          "passed": true
+        },
+        {
+          "case": "minimal/burst",
+          "metric": "peak_rss_kib",
+          "actual": 250312,
+          "maximum": 313425.0,
+          "passed": true
+        },
+        {
+          "case": "minimal/burst",
+          "metric": "fixture_output_bytes",
+          "actual": 92880540,
+          "maximum": 116100862.5,
+          "passed": true
+        },
+        {
+          "case": "default/burst",
+          "metric": "workload_seconds",
+          "actual": 0.0852493680004045,
+          "maximum": 0.12457753750017674,
+          "passed": true
+        },
+        {
+          "case": "default/burst",
+          "metric": "sensor_cpu_seconds",
+          "actual": 3.8263000000000056,
+          "maximum": 5.405112500000004,
+          "passed": true
+        },
+        {
+          "case": "default/burst",
+          "metric": "peak_rss_kib",
+          "actual": 301524,
+          "maximum": 332055.0,
+          "passed": true
+        },
+        {
+          "case": "default/burst",
+          "metric": "fixture_output_bytes",
+          "actual": 92880546,
+          "maximum": 116100933.75,
+          "passed": true
+        },
+        {
+          "case": "off/paced",
+          "metric": "workload_seconds",
+          "actual": 16.303601933999744,
+          "maximum": 20.439010656249838,
+          "passed": true
+        },
+        {
+          "case": "minimal/paced",
+          "metric": "workload_seconds",
+          "actual": 16.798361211000156,
+          "maximum": 21.069771328750353,
+          "passed": true
+        },
+        {
+          "case": "minimal/paced",
+          "metric": "sensor_cpu_seconds",
+          "actual": 8.766138000000002,
+          "maximum": 13.390326250000006,
+          "passed": true
+        },
+        {
+          "case": "minimal/paced",
+          "metric": "peak_rss_kib",
+          "actual": 250904,
+          "maximum": 313270.0,
+          "passed": true
+        },
+        {
+          "case": "minimal/paced",
+          "metric": "fixture_output_bytes",
+          "actual": 371551023,
+          "maximum": 464441062.5,
+          "passed": true
+        },
+        {
+          "case": "default/paced",
+          "metric": "workload_seconds",
+          "actual": 16.781118969999625,
+          "maximum": 21.054238262499798,
+          "passed": true
+        },
+        {
+          "case": "default/paced",
+          "metric": "sensor_cpu_seconds",
+          "actual": 9.756014000000004,
+          "maximum": 14.574437500000009,
+          "passed": true
+        },
+        {
+          "case": "default/paced",
+          "metric": "peak_rss_kib",
+          "actual": 283940,
+          "maximum": 336515.0,
+          "passed": true
+        },
+        {
+          "case": "default/paced",
+          "metric": "fixture_output_bytes",
+          "actual": 371551849,
+          "maximum": 464440010.0,
+          "passed": true
+        }
+      ]
+    },
+    "telemetry": {
+      "passed": false,
+      "report_sha256": "391f1e5d2614d5ef966214286f8c822eb814cdb8bbde197d70c6dae1000a50d8",
+      "budget_sha256": "b9e50695460af29cf01b65acbc11232f377de3faed9efde1be6828f7bb76512a",
+      "checks": [
+        {
+          "metric": "drain_ms",
+          "actual": 75893.10471600038,
+          "maximum": 69189.89077874983,
+          "passed": false
+        },
+        {
+          "metric": "daemon_peak_rss_bytes",
+          "actual": 84848640,
+          "maximum": 104448000.0,
+          "passed": true
+        },
+        {
+          "metric": "stopped_store_bytes",
+          "actual": 256165889,
+          "maximum": 320089601.25,
+          "passed": true
+        },
+        {
+          "metric": "health_after_p95_ms",
+          "actual": 0.9945800002242322,
+          "maximum": 2.842187500074033,
+          "passed": true
+        },
+        {
+          "metric": "query_after_p95_ms",
+          "actual": 7.827229999747942,
+          "maximum": 13.490146249888312,
+          "passed": true
+        }
+      ]
+    },
+    "context": {
+      "passed": true,
+      "report_sha256": "1df776578ed24451801d309be925ee9b389252e05587a6a830c10c0247aa31e8",
+      "budget_sha256": "ae0a8edc7c4b80e300b8ce95abbca05ed791a0db1a9b9acdc44712a46b28970e",
+      "checks": [
+        {
+          "case": "browser/basic",
+          "metric": "store_bytes",
+          "actual": 1268462,
+          "maximum": 1585071.25,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "attachment_bytes",
+          "actual": 0,
+          "maximum": 0.0,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "bundle_bytes",
+          "actual": 721842,
+          "maximum": 900918.75,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "replay_bytes",
+          "actual": 1240002,
+          "maximum": 1545480.0,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "peak_rss_bytes",
+          "actual": 67325952,
+          "maximum": 84771840.0,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "cpu_seconds",
+          "actual": 2.3341,
+          "maximum": 3.2467949999999997,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "import_seconds",
+          "actual": 0.7329966809993493,
+          "maximum": 1.109110932500289,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "project_seconds",
+          "actual": 0.05794796800000768,
+          "maximum": 0.12854448374985167,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "query_seconds",
+          "actual": 0.06548998500056769,
+          "maximum": 0.14215687125049498,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "bundle_seconds",
+          "actual": 0.05587572900003579,
+          "maximum": 0.12139907625003162,
+          "passed": true
+        },
+        {
+          "case": "browser/basic",
+          "metric": "replay_seconds",
+          "actual": 1.0124385060007626,
+          "maximum": 1.4045716437499778,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "store_bytes",
+          "actual": 2002516,
+          "maximum": 2507760.0,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "attachment_bytes",
+          "actual": 45215,
+          "maximum": 56518.75,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "bundle_bytes",
+          "actual": 1699564,
+          "maximum": 2121203.75,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "replay_bytes",
+          "actual": 1568403,
+          "maximum": 1955106.25,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "peak_rss_bytes",
+          "actual": 72695808,
+          "maximum": 91745280.0,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "cpu_seconds",
+          "actual": 5.439723,
+          "maximum": 7.400281249999999,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "import_seconds",
+          "actual": 1.0426212219999798,
+          "maximum": 1.1925851549995514,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "project_seconds",
+          "actual": 0.07486021000022447,
+          "maximum": 0.13205551874993943,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "query_seconds",
+          "actual": 0.06823431400061963,
+          "maximum": 0.14121467249997294,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "bundle_seconds",
+          "actual": 0.08092737800052419,
+          "maximum": 0.17011394499950255,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "replay_seconds",
+          "actual": 1.404823958999259,
+          "maximum": 1.811457855000117,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed",
+          "metric": "excluded_replay_seconds",
+          "actual": 1.7638179599998693,
+          "maximum": 2.154571822499679,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "store_bytes",
+          "actual": 1954100,
+          "maximum": 2442116.25,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "attachment_bytes",
+          "actual": 0,
+          "maximum": 0.0,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "bundle_bytes",
+          "actual": 1618244,
+          "maximum": 2019578.75,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "replay_bytes",
+          "actual": 1538444,
+          "maximum": 1918505.0,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "peak_rss_bytes",
+          "actual": 70066176,
+          "maximum": 88448000.0,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "cpu_seconds",
+          "actual": 3.4399049999999995,
+          "maximum": 4.3932312499999995,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "import_seconds",
+          "actual": 1.008748299999752,
+          "maximum": 1.2393982962499195,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "project_seconds",
+          "actual": 0.06881869300013932,
+          "maximum": 0.14705157374980898,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "query_seconds",
+          "actual": 0.06776854700001422,
+          "maximum": 0.13433553624911382,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "bundle_seconds",
+          "actual": 0.08384956200006854,
+          "maximum": 0.15728553375031423,
+          "passed": true
+        },
+        {
+          "case": "browser/detailed-no-attachments",
+          "metric": "replay_seconds",
+          "actual": 1.412737448000371,
+          "maximum": 1.7237678337500484,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "store_bytes",
+          "actual": 793337,
+          "maximum": 991552.5,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "attachment_bytes",
+          "actual": 0,
+          "maximum": 0.0,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "bundle_bytes",
+          "actual": 190132,
+          "maximum": 237267.5,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "replay_bytes",
+          "actual": 588270,
+          "maximum": 731878.75,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "peak_rss_bytes",
+          "actual": 65036288,
+          "maximum": 82805760.0,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "cpu_seconds",
+          "actual": 1.063308,
+          "maximum": 1.383545,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "import_seconds",
+          "actual": 0.5264071130004595,
+          "maximum": 0.8178730737495699,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "project_seconds",
+          "actual": 0.04378223599997,
+          "maximum": 0.10357474124991768,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "query_seconds",
+          "actual": 0.027394579999963753,
+          "maximum": 0.08479769750015294,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "bundle_seconds",
+          "actual": 0.04308976599986636,
+          "maximum": 0.1154853999998295,
+          "passed": true
+        },
+        {
+          "case": "jupyter/basic",
+          "metric": "replay_seconds",
+          "actual": 0.37236609399951703,
+          "maximum": 0.48898835249990497,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "store_bytes",
+          "actual": 936442,
+          "maximum": 1170433.75,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "attachment_bytes",
+          "actual": 1011,
+          "maximum": 1263.75,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "bundle_bytes",
+          "actual": 379622,
+          "maximum": 473762.5,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "replay_bytes",
+          "actual": 650737,
+          "maximum": 810593.75,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "peak_rss_bytes",
+          "actual": 67751936,
+          "maximum": 86896640.0,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "cpu_seconds",
+          "actual": 1.811442,
+          "maximum": 2.4039037499999996,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "import_seconds",
+          "actual": 0.5224479839998821,
+          "maximum": 0.6366931762506056,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "project_seconds",
+          "actual": 0.038985408000371535,
+          "maximum": 0.09773549624985663,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "query_seconds",
+          "actual": 0.02706518800005142,
+          "maximum": 0.08462361749996035,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "bundle_seconds",
+          "actual": 0.04782381500081101,
+          "maximum": 0.10646328875002382,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "replay_seconds",
+          "actual": 0.47088467799949285,
+          "maximum": 0.6249627762497767,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed",
+          "metric": "excluded_replay_seconds",
+          "actual": 0.91104663599981,
+          "maximum": 1.116214141250157,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "store_bytes",
+          "actual": 933828,
+          "maximum": 1167163.75,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "attachment_bytes",
+          "actual": 0,
+          "maximum": 0.0,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "bundle_bytes",
+          "actual": 376900,
+          "maximum": 470347.5,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "replay_bytes",
+          "actual": 648940,
+          "maximum": 808285.0,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "peak_rss_bytes",
+          "actual": 66265088,
+          "maximum": 82657280.0,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "cpu_seconds",
+          "actual": 1.271607,
+          "maximum": 1.66326,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "import_seconds",
+          "actual": 0.5977953020001223,
+          "maximum": 0.7216756874993735,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "project_seconds",
+          "actual": 0.04205994100084354,
+          "maximum": 0.10412260125012836,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "query_seconds",
+          "actual": 0.02870537300077558,
+          "maximum": 0.08453592125026717,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "bundle_seconds",
+          "actual": 0.04949081699942326,
+          "maximum": 0.11385453500001859,
+          "passed": true
+        },
+        {
+          "case": "jupyter/detailed-no-attachments",
+          "metric": "replay_seconds",
+          "actual": 0.4673834559998795,
+          "maximum": 0.6196722137497546,
+          "passed": true
+        }
+      ]
+    },
+    "telemetry_controls": {
+      "order": [
+        "baseline-1",
+        "candidate-1",
+        "candidate-2",
+        "baseline-2"
+      ],
+      "premeasurement": "sync completed before each independent run; the same frozen budget and workload were used",
+      "passed": true,
+      "runs": [
+        {
+          "case": "baseline-1",
+          "passed": true,
+          "binary_sha256": "df4e5b95e468214698120b31d93b512d7c0d7c50f7244e0ce8629e10f26e4c93",
+          "metrics": {
+            "drain_ms": 56125.62955099929,
+            "daemon_peak_rss_bytes": 80158720,
+            "stopped_store_bytes": 255842305,
+            "health_after_p95_ms": 0.8206339998650947,
+            "query_after_p95_ms": 7.995826999831479
+          },
+          "budget_sha256": "b9e50695460af29cf01b65acbc11232f377de3faed9efde1be6828f7bb76512a",
+          "report_sha256": "9c9df4845429f3793fefeb3fc3653d03bc117df8cce03d38807ae6dce1e45b42"
+        },
+        {
+          "case": "candidate-1",
+          "passed": true,
+          "binary_sha256": "29775053941e2356a80ceceb26fd72ea2d0341d1bf4c73be6640e5f3b01cf93c",
+          "metrics": {
+            "drain_ms": 54796.09568599972,
+            "daemon_peak_rss_bytes": 84484096,
+            "stopped_store_bytes": 256059393,
+            "health_after_p95_ms": 1.2241530002938816,
+            "query_after_p95_ms": 8.870986999681918
+          },
+          "budget_sha256": "b9e50695460af29cf01b65acbc11232f377de3faed9efde1be6828f7bb76512a",
+          "report_sha256": "2a95b2c74691f4231ca798b3bca899a58cc344fb08c73d17dffebb7eef9759d6"
+        },
+        {
+          "case": "candidate-2",
+          "passed": true,
+          "binary_sha256": "29775053941e2356a80ceceb26fd72ea2d0341d1bf4c73be6640e5f3b01cf93c",
+          "metrics": {
+            "drain_ms": 55506.15698599995,
+            "daemon_peak_rss_bytes": 84566016,
+            "stopped_store_bytes": 256047105,
+            "health_after_p95_ms": 1.223051000124542,
+            "query_after_p95_ms": 8.453241000097478
+          },
+          "budget_sha256": "b9e50695460af29cf01b65acbc11232f377de3faed9efde1be6828f7bb76512a",
+          "report_sha256": "5f5a6a70300c82025c55140f5525640c5e6cec34e962f2ccd1479016981c030e"
+        },
+        {
+          "case": "baseline-2",
+          "passed": true,
+          "binary_sha256": "df4e5b95e468214698120b31d93b512d7c0d7c50f7244e0ce8629e10f26e4c93",
+          "metrics": {
+            "drain_ms": 69045.46684999968,
+            "daemon_peak_rss_bytes": 83161088,
+            "stopped_store_bytes": 255948801,
+            "health_after_p95_ms": 1.006581999718037,
+            "query_after_p95_ms": 8.212353000089934
+          },
+          "budget_sha256": "b9e50695460af29cf01b65acbc11232f377de3faed9efde1be6828f7bb76512a",
+          "report_sha256": "e94df204c90a984904cdf5bc019d8ce7834341c64e4ee58bcc5df3d31f600542"
+        }
+      ],
+      "initial_failure_retained": true,
+      "assessment": "initial drain-time budget exceedance did not persist in the paired controls; initial cause was not instrumented"
+    }
+  },
+  "compatibility": {
+    "legacy": {
+      "status": "passed",
+      "candidate_sha256": "29775053941e2356a80ceceb26fd72ea2d0341d1bf4c73be6640e5f3b01cf93c",
+      "baseline_sha256": "063d8392c6f0f5d93486c02509dea80148ebc6884286a59cfe3e6a6da043f4e7",
+      "manifest_sha256": "22c0ae809f910bdb99dee6351ccc97a0d82818aaeef444752f4dc039677eab3b",
+      "signed_demos": 6,
+      "frozen_files": 18,
+      "query_views": 144,
+      "preserved_rows": 47997,
+      "database_upgrades": [
+        {
+          "run": "run-snake-supervised",
+          "from": 17,
+          "to": 27,
+          "preserved": true
+        },
+        {
+          "run": "run-double-attempt",
+          "from": 17,
+          "to": 27,
+          "preserved": true
+        },
+        {
+          "run": "a2a-demo",
+          "from": 17,
+          "to": 27,
+          "preserved": true
+        },
+        {
+          "run": "claude-demo",
+          "from": 17,
+          "to": 27,
+          "preserved": true
+        },
+        {
+          "run": "run-grok-exfil",
+          "from": 17,
+          "to": 27,
+          "preserved": true
+        },
+        {
+          "run": "run-grok-3routes",
+          "from": 17,
+          "to": 27,
+          "preserved": true
+        }
+      ],
+      "duplicate_import": "passed",
+      "unknown_legacy_coverage": "preserved"
+    },
+    "deepseek": {
+      "schema_version": "agentprovenance.deepseek_acceptance/v1",
+      "checked_at": "2026-11-15T19:51:02.403169+00:00",
+      "binary_sha256": "29775053941e2356a80ceceb26fd72ea2d0341d1bf4c73be6640e5f3b01cf93c",
+      "run_id": "run-dbc2adf273d4",
+      "bundle_sha256": "2a243f3b0e4319370e362e19fb9f1e51aea8a4a8aa373f866d97acec64624994",
+      "signature_verified_before_import": true,
+      "rows_preserved": 2532,
+      "object_blobs": 379,
+      "snapshot_files": 5,
+      "telemetry_batches": 18,
+      "graph_errors": 0,
+      "graph_warnings": 0,
+      "duplicate_import_preserved": true,
+      "http_checks": {
+        "entries": 73,
+        "context_content_refs": 146,
+        "context_content_bytes": 212480,
+        "saved_files": 2,
+        "tool_link_queries": 24,
+        "matched_execs": 2,
+        "negative_api_cases": 4,
+        "capture_status": "partial",
+        "run_dropped_events": null
+      }
+    }
+  },
+  "checks": {
+    "go_test": {
+      "command": "GOTOOLCHAIN=go1.26.4 go test -count=1 -p 2 -timeout 20m ./...",
+      "exit_code": 0,
+      "log": "logs/final-go.log"
+    },
+    "go_vet": {
+      "command": "GOTOOLCHAIN=go1.26.4 go vet ./...",
+      "exit_code": 0,
+      "log": "logs/final-vet.log"
+    },
+    "changed_package_race": {
+      "packages": [
+        "internal/launch",
+        "internal/daemon",
+        "internal/sensor",
+        "internal/cli",
+        "internal/i18n"
+      ],
+      "exit_code": 0,
+      "log": "logs/final-changed-race.log"
+    },
+    "python": {
+      "exit_code": 0,
+      "log": "logs/final-backend-python.log",
+      "optional_signed_cli_roundtrip": "explicitly rerun and passed in logs/final-kvm-python.log"
+    },
+    "frontend": {
+      "suites": 8,
+      "exit_code": 0,
+      "log": "logs/final-backend-frontend.log"
+    },
+    "retained_preview": {
+      "cases": 4,
+      "exit_code": 0,
+      "bidirectional_roundtrip": true,
+      "offline_file_and_Chinese": "passed"
+    },
+    "localized_docs": {
+      "documents": 77,
+      "local_links": 615,
+      "exit_code": 0
+    }
+  },
+  "runtime_source_commit_kind": "local clean build commit",
+  "remote_runtime_commit": "3fd467d6e903524432b2eb4ce8991eef532aac37",
+  "runtime_source_tree": "1743060d83b0e0fd4db45f8d07ba0aa0fc945eb3",
+  "source_equivalence": "GitHub Git Data publication preserves the complete runtime tree; local and remote commit metadata differ"
 }

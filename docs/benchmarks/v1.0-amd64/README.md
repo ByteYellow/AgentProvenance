@@ -5,8 +5,12 @@
 Recorded on 2026-11-16 for `feature/v1.0-portable-evidence`, continuing the
 [ARM64 candidate handoff](../v1.0-candidate/README.md). The
 [result index](report.json) records the tested binaries, fixed budgets, runtime
-inputs, and private evidence hashes. Runtime measurements use the working builds
-identified there; candidate archive provenance is recorded separately.
+inputs, and private evidence hashes. Earlier measurements retain their working
+build identities. The final Linux archive is built from clean commit
+`8e044fa0543c7081065940e3f4d7ae2b82265044`; its checks are recorded separately.
+The remote [runtime commit](https://github.com/ByteYellow/AgentProvenance/commit/3fd467d6e903524432b2eb4ce8991eef532aac37)
+has the identical full source tree. The result index records both commit IDs
+and the verified tree hash; the archive retains its original build identity.
 
 ## Correctness changes
 
@@ -28,6 +32,22 @@ identified there; candidate archive provenance is recorded separately.
 
 ## Runtime results
 
+The v1.0 requirements are reconciled as follows:
+
+| Requirement | Implementation and acceptance | Review boundary |
+| --- | --- | --- |
+| CS-01–05 | Native call identity, parallel attempts, explicit reexecution, receipt recovery, durable capture/delivery; live model matrix and failure regressions passed | None for the recorded paths |
+| CS-06–07 | Bidirectional links and selection-aware offline indexes; candidate interaction checks passed | Formal UI integration deferred by maintainer |
+| CS-08 | WSL caller to KVM executor and independent offline verification; ARM64 handoff results retained | Cross-machine reproduction instructions included |
+| RT-01 | Producer identity, capture manifests, capability history, late Pod attribution, JSONL receipts; KVM/K3s gates passed | Short-lived sampling gaps remain visible |
+| RT-02–04 | gVisor receive/recovery/clone checks and actual Firecracker boot/retirement passed | Pinned versions and image hashes define the tested profiles |
+| APP-01–02 | Browser/Notebook identities, retention, attachments and signed/offline round trips; reader preview includes body and image checks | Final reader placement deferred |
+| DEMO-01–06 | Existing examples preserved; investigation, remote execution and non-coding paths available in the review build | Formal gallery integration deferred with the UI |
+| DEMO-07 | Existing static publication chain retained | Publication awaits final authorization |
+| N1 | Remote and optional runtime doctor/preflight implemented and tested | CLI remains English by default |
+| N2 | Recovery guidance present in the retained candidate reader | Formal UI integration deferred |
+| N3 | Fixed runtime inputs, evidence index, portable preview builder and candidate archive workflow | Credentials and raw logs remain local |
+
 | Coverage | Result |
 | --- | --- |
 | Ubuntu KVM, Linux 6.8.0-149 | All 17 recorded gates passed: syscall/TLS, lifecycle, namespace, audit variants, recovery, K3s and container TLS |
@@ -35,7 +55,7 @@ identified there; candidate archive provenance is recorded separately.
 | Full kernel ring and mismatched procfs namespace | Explicit retained-order test passed; mismatched namespace rejected |
 | Claude Code with DeepSeek | Two sessions, three attempts, explicit reexecution, lost ACK response and offline verification passed |
 | gVisor | Pinned `release-20261109.0` receive/fault tests, memory restore and two-clone checks retained from this amd64 run |
-| Firecracker | v1.18.0 with kernel 6.18.62 booted the current guest image; two commands, native file evidence, signed receipt and retirement passed |
+| Firecracker | v1.18.0 with kernel 6.18.62 booted a guest containing the final archive's CLI; two commands, native file evidence, signed receipt and retirement passed |
 
 The native model matrix retains `scope_state_sampling_gap` as incomplete capture.
 The previous first-request discovery failure remains in the private evidence;
@@ -61,6 +81,39 @@ v1.0 source baseline because those entries are new in this version.
 See the [measurement guide](../../performance-validation.md) for workload,
 allowance, and storage definitions. Budgets and individual comparisons are
 recorded in `report.json`.
+
+The final archive also passed all 18 Sensor and 68 context-cost checks against
+the same frozen budgets. Its first telemetry drain took **75.89 s**, exceeding
+the **69.19 s** budget; the other four metrics passed. That failed measurement
+remains in `release_performance.telemetry`.
+
+After flushing pending writes before each run, the unchanged workload was
+measured in baseline/candidate/candidate/baseline order. Candidate drain times
+were **54.80 s** and **55.51 s**; baseline times were **56.13 s** and **69.05 s**.
+Every control met the original budget. The initial cause was not instrumented;
+the paired runs did not show a persistent candidate regression. All four reports
+and the initial exceedance remain available. No budget was increased.
+
+## Candidate archive
+
+`agentprov_v1.0.0-candidate_linux_amd64.tar.gz` and its SHA-256 file are retained
+in the maintainer's handoff. The result index records the complete archive hash,
+build metadata, guest rootfs and runtime input hashes. The final archive passed
+the no-Go acceptance: 12 signed replays, 14 demo guides, 20 user guides, English
+and Chinese pages, recorded-context queries, and process cleanup.
+
+The same CLI verified six frozen v0.8.2 signed examples, compared 144 graph
+views, preserved 47,997 original rows, and upgraded six databases from schema
+17 to 27. Duplicate imports and unknown historical coverage stayed intact.
+The recorded DeepSeek example also passed signature, content, query and
+duplicate-import checks. Full Go tests, vet, affected-package race tests,
+Python, eight frontend suites and localized-document checks passed.
+
+The reader preview is retained separately as
+`AgentProvenance-v1.0-reader-preview-20261116.zip`. Extract it and open
+`index.html`; all four example inventories were verified. The preview can also
+be rebuilt from the source instructions below. This candidate has not been
+published as a GitHub release.
 
 ## Reproduce and review
 
