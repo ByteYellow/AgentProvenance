@@ -88,3 +88,68 @@ and budgets are never overwritten. The detailed report schema is now `v2`.
 
 Keep local stores, generated authentication tokens and raw logs outside public
 commits. Publish only reviewed measurements and their environment/source hashes.
+
+## Measure native Sensor overhead
+
+Use a dedicated Linux test host with root/BPF privileges. The existing four-worker
+fixture issues 40,000 file opens in a burst, then 160,000 in a paced workload.
+`accept_sensor_overhead.py` runs each workload three times under each profile:
+
+| Profile | Sensor configuration |
+| --- | --- |
+| `off` | No Sensor; only workload wall time and CPU are measured |
+| `minimal` | Core probes; automatic TLS discovery and AppArmor/seccomp state sampling disabled |
+| `default` | Core probes, automatic TLS discovery and both state samplers enabled |
+
+These are measurement profiles, separate from basic/detailed context retention.
+The runner clears Sensor library-path and automatic-TLS environment overrides and
+rotates profile order between repeats. Captures retain separate ready and stopped
+probe/TLS-discovery capability reports. This file workload measures the cost of the
+enabled configuration; TLS traffic and attachment storage require other workloads.
+
+```sh
+MEASUREMENTS=$(mktemp -d)
+sudo python3 scripts/accept_sensor_overhead.py run \
+  --sensor /absolute/path/to/baseline-agentprov-sensor \
+  --output "$MEASUREMENTS/baseline"
+sudo python3 scripts/accept_sensor_overhead.py freeze \
+  --baseline "$MEASUREMENTS/baseline/report.json" \
+  --allowed-regression 0.25 --budget "$MEASUREMENTS/budget.json"
+sudo python3 scripts/accept_sensor_overhead.py run \
+  --sensor /absolute/path/to/candidate-agentprov-sensor \
+  --budget "$MEASUREMENTS/budget.json" --output "$MEASUREMENTS/candidate"
+```
+
+All collected runs must retain the exact open/result counts and five process
+exits, including immediate shutdown drain. Kernel, state-queue and TLS-discovery
+queue drop counts must stay zero. Node-wide procfs state availability is reported separately from
+fixture counts. `off` leaves collection metrics unknown. The original
+`accept_sensor_pressure.py` also retains its forced 1 MiB overload test, which
+requires reported loss rather than a zero-loss result.
+
+Reports preserve every repeat, medians and duration relative to `off`. CPU is
+waited child user/system time: workload CPU includes work charged to those
+processes; Sensor CPU includes startup, discovery and shutdown drain. Peak RSS is
+sampled every 20 ms. A blocking `wait4` measures workload completion without
+timed-wait polling rounding up short bursts. Startup and drain have separate
+timings. No policy engine or database is started.
+
+Raw JSONL size and digest cover the whole node capture. A separate byte count
+covers records with the fixture's process name. After timing, each JSONL is
+compressed with gzip level 1 and retained with stderr and the capability report
+in a private output directory. These are capture-file costs, not Bundle or
+SQLite sizes. Root-owned captures can contain background process metadata; keep
+them private and reserve several GiB of disk space.
+
+Freeze uses the three medians per workload/profile, allowing 25% regression in
+wall time, Sensor CPU, RSS and fixture JSONL bytes. A fixed 20 ms allowance applies
+to wall and CPU time; it is declared in the instrument before measurement and
+saved in the budget. The `off` wall-time gate also detects a changed host baseline.
+Node-wide output bytes and compression size are reported, not used as fixed
+fixture limits. Environment, compiler, workload and instrument hashes must
+match. Both successful and failed results remain on disk; exceeding any limit
+returns nonzero. Rebaseline explicitly when the environment or instrument changes.
+
+Optional `--source-commit FULL_SHA` records the build revision supplied by the
+operator. Sensor has no version query; retain the build command and source
+archive digest alongside the executable hash when establishing source provenance.

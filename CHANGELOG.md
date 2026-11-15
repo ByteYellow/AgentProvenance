@@ -4,6 +4,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Add repeatable native Sensor overhead measurements against an uncollected
+  workload, with separate minimal/default probe profiles, exact loss checks,
+  retained captures and environment-bound regression budgets.
 - Refresh the 100k-event acceptance for authenticated daemons. Separate ingest
   and post-ingest query measurements, account for retained storage, and freeze
   environment-bound regression budgets from three baseline runs. Preserve

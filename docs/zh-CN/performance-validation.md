@@ -80,3 +80,62 @@ python3 scripts/accept_telemetry_100k_pressure.py run \
 
 本地存储、生成的鉴权令牌和原始日志保留在公开提交之外。
 对外只发布经过检查的测量结果及其环境、源码摘要。
+
+## 测量原生 Sensor 开销
+
+使用有 root 和 BPF 权限的独立 Linux 测试主机。沿用四进程工作负载：
+突发执行 4 万次文件打开，限速执行 16 万次。
+`accept_sensor_overhead.py` 在每种配置下分别运行三次：
+
+| 配置 | Sensor 行为 |
+| --- | --- |
+| `off` | 不启动 Sensor，只测工作负载耗时和 CPU |
+| `minimal` | 启用基础探针，关闭自动 TLS 发现及 AppArmor、seccomp 状态采样 |
+| `default` | 启用基础探针、自动 TLS 发现和两种状态采样 |
+
+这些是测量用的探针组合，与应用上下文的 basic、detailed 留存档位分开。
+脚本清除指定库路径和自动 TLS 开关的环境变量覆盖，每轮轮换执行顺序，
+分别保留就绪期间和停机后的探针及 TLS 发现能力报告。
+文件工作负载测量这组配置的运行成本；TLS 流量和附件存储使用各自的工作负载。
+
+```sh
+MEASUREMENTS=$(mktemp -d)
+sudo python3 scripts/accept_sensor_overhead.py run \
+  --sensor /absolute/path/to/baseline-agentprov-sensor \
+  --output "$MEASUREMENTS/baseline"
+sudo python3 scripts/accept_sensor_overhead.py freeze \
+  --baseline "$MEASUREMENTS/baseline/report.json" \
+  --allowed-regression 0.25 --budget "$MEASUREMENTS/budget.json"
+sudo python3 scripts/accept_sensor_overhead.py run \
+  --sensor /absolute/path/to/candidate-agentprov-sensor \
+  --budget "$MEASUREMENTS/budget.json" --output "$MEASUREMENTS/candidate"
+```
+
+所有开启采集的运行都必须保留准确的打开、返回数量及 5 条进程退出记录，
+包括工作负载结束后立即停止 Sensor 的收尾数据。
+内核、状态队列和 TLS 发现队列的丢失数必须为零。
+节点级 procfs 状态可用性与工作负载事件计数分别展示。
+`off` 的采集指标保持未知。原有 `accept_sensor_pressure.py` 继续执行
+1 MiB 缓冲过载测试，要求实际报告丢失。
+
+报告保留每次结果、中位数和相对 `off` 的耗时。
+CPU 使用已回收子进程的用户态与内核态时间：工作负载记录分摊给自身进程的开销，
+Sensor 记录启动、发现和收尾开销。每 20 毫秒采样一次 RSS。
+工作负载用阻塞的 `wait4` 测量结束时刻，避免限时等待轮询抬高短任务的耗时；
+启动与收尾分别计时。测量期间不启动策略引擎或数据库。
+
+原始 JSONL 体积和摘要覆盖整个节点，另行统计工作负载进程名对应的记录字节数。
+计时结束后，用 gzip 的压缩等级 1 保存原始记录，并保留标准错误日志和能力报告。
+这些指标反映采集文件成本；Bundle 和 SQLite 分别测量。
+输出目录为私有目录，root 所有的记录可能包含后台进程元数据，应留在本地。
+重复运行前预留数 GiB 磁盘空间。
+
+预算根据每个配置和工作负载的三次中位数冻结，默认允许耗时、Sensor CPU、RSS
+和工作负载 JSONL 字节数增加 25%。耗时和 CPU 额外允许 20 毫秒计时波动；
+该数值在测量前固定于脚本，并写入预算。`off` 的耗时也参与检查，以识别主机基线变化。
+节点总输出和压缩体积只报告，不作为固定工作负载的数量上限。
+候选版本必须使用相同的环境、编译器、工作负载及测量脚本；超限时非零退出，
+成功和失败记录均保留。更换环境或测量方法时，明确建立新基线。
+
+可选的 `--source-commit FULL_SHA` 记录操作者提供的构建提交。
+Sensor 没有版本查询入口；记录源码来源时，将构建命令和源码归档摘要与二进制哈希一并保留。
