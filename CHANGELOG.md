@@ -4,6 +4,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Include scoped gVisor checkpoint witnesses in saved capture manifests. Keep
+  observed messages separate from receiver support and enablement, preserve
+  entry/return stages and loss diagnostics, and honor selective offline exports.
 - Retain native Sensor capability-change intervals, capture-side build/kernel
   identity and operator-declared placement through signed evidence and offline
   manifests. Preserve intermediate failures and report missing history explicitly.

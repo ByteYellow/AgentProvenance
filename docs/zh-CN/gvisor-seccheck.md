@@ -92,6 +92,16 @@ agentprov --data-dir /var/lib/agentprov telemetry producer-health \
 `none`。生成配置请求十个采集点，实际收到的消息用于确认已观察到的覆盖范围。
 队列排空后仍保留局部覆盖状态。原始报文正文、exec 环境和凭据结构不留存，正规化参数经过脱敏。
 
+[已保存采集清单 API](../capture-manifest-api.yaml)同时查询接收器声明与实际事件点。
+同一登记作用域、连接、协议消息、syscall 编号和阶段保留一条代表证据，标记为
+`interval_basis: checkpoint_observation`、`observed: true`。入口与返回分开，重复事件中的
+非零丢失增量、计数器重置和身份缺口另行保留。记录时间对应具体事件，启用区间保持独立。
+open、exec 等共享消息类型保留原 syscall 编号，避免按阅读端架构误解来源。
+
+这些记录支持分页、签名导入和离线查询，沿用原始证据引用。选择性导出在冻结的选中范围内
+重新选择代表证据：若排除一条记录，同一事件点可由其他选中记录支持；没有其他记录时，
+该事件点从此副本的清单中移除。
+
 通过 `--batch-events`、`--batch-bytes`、`--max-queued-bytes` 和
 `--max-queued-batches` 调整共享队列。默认单批 256 条／1 MiB，队列上限
 256 MiB／4096 批。`--drain-timeout` 默认 30 秒。

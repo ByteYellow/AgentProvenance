@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/capturemanifest"
 	"github.com/byteyellow/agentprovenance/internal/forensics"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/seccheck"
@@ -246,6 +248,55 @@ func TestSecCheckLivePersistence(t *testing.T) {
 			}
 		}
 	}
+	readManifest := func(db *sql.DB) []capturemanifest.Record {
+		t.Helper()
+		var records []capturemanifest.Record
+		cursor := ""
+		for {
+			page, err := (capturemanifest.Service{DB: db}).List(ctx, capturemanifest.Options{RunID: "gvisor-persistence", Limit: 3, Cursor: cursor})
+			if err != nil {
+				t.Fatal(err)
+			}
+			records = append(records, page.Records...)
+			if !page.HasMore {
+				return records
+			}
+			cursor = page.NextCursor
+		}
+	}
+	wantPoints, gotPoints := map[string]bool{}, map[string]bool{}
+	for _, e := range before {
+		if e.EventType == "runtime_collection" {
+			continue
+		}
+		point, err := telemetry.ReadSecCheckPoint(e)
+		if err != nil {
+			t.Fatal(err)
+		}
+		captured, err := telemetry.ReadSecCheckEvidence(e)
+		if err != nil {
+			t.Fatal(err)
+		}
+		target := point.Stage
+		if point.SyscallNumber != nil {
+			target += fmt.Sprintf("/syscall=%d", *point.SyscallNumber)
+		}
+		wantPoints[captured.Registration.SandboxID+"/"+captured.ConnectionID+"/"+point.MessageName+"/"+target] = true
+	}
+	manifest := readManifest(db)
+	for _, r := range manifest {
+		if r.IntervalBasis != "checkpoint_observation" {
+			continue
+		}
+		f := r.Snapshots[0].Features[0]
+		if f.Observed == nil || !*f.Observed || f.Enabled != nil || r.Snapshots[0].Ready != nil {
+			t.Fatalf("witness lost observation semantics: %+v", r)
+		}
+		gotPoints[r.Identity["sandbox_id"]+"/"+r.Identity["connection_id"]+"/"+f.Name+"/"+f.Target] = true
+	}
+	if len(wantPoints) == 0 || !reflect.DeepEqual(wantPoints, gotPoints) {
+		t.Fatalf("point summary differs from real captured evidence: want=%v got=%v", wantPoints, gotPoints)
+	}
 	verified, err := provenance.Verify(db, "gvisor-persistence")
 	if err != nil || verified.ErrorCount != 0 || verified.WarningCount != 0 {
 		t.Fatalf("verify=%+v %v", verified, err)
@@ -277,11 +328,15 @@ func TestSecCheckLivePersistence(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(before, after) {
 		t.Fatalf("signed evidence changed: %v", err)
 	}
+	if got := readManifest(replayDB); !reflect.DeepEqual(manifest, got) {
+		t.Fatalf("signed point witnesses changed: %+v", got)
+	}
 	verified, err = provenance.Verify(replayDB, "gvisor-persistence")
 	if err != nil || verified.ErrorCount != 0 || verified.WarningCount != 0 {
 		t.Fatalf("replay verify=%+v %v", verified, err)
 	}
 	writeJSON(filepath.Join(root, "events.json"), before)
+	writeJSON(filepath.Join(root, "capture-manifest.json"), manifest)
 	writeJSON(filepath.Join(root, "result.json"), map[string]any{"status": status, "counts": counts, "outcomes": results, "bundle": bundle, "public_key": public, "verify": verified})
-	t.Logf("persisted=%v results=%v pending=%d signed_roundtrip=%d", counts, results, status.PendingEvents, len(after))
+	t.Logf("persisted=%v results=%v pending=%d signed_roundtrip=%d observed_points=%d", counts, results, status.PendingEvents, len(after), len(gotPoints))
 }

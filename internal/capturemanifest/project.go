@@ -315,11 +315,29 @@ func (s Service) sentry(ctx context.Context, run string, e evidence) (Record, er
 	r.Identity = map[string]string{"namespace": c.Registration.Namespace, "instance_id": c.Registration.InstanceID, "generation": c.Registration.Generation,
 		"sandbox_id": c.Registration.SandboxID, "container_id": c.Registration.ContainerID, "connection_id": c.ConnectionID, "runtime_release": c.RuntimeRelease}
 	r.ObservedAt, r.Status, r.IntervalBasis = timestamp(c.ReceivedAt), c.Reason, "stream_observation"
-	r.Loss = append(r.Loss, Counter{Name: "reported_dropped_events", Scope: "sentry_connection", Value: decimal(c.DroppedDelta), Basis: "source_delta"})
+	r.Loss = append(r.Loss, Counter{Name: "reported_dropped_events", Scope: "sentry_connection", ScopeID: c.ConnectionID, Value: decimal(c.DroppedDelta), Basis: "source_delta"})
 	if c.DropCounterDecreased {
 		r.Issues = append(r.Issues, "drop_counter_decreased")
 	}
 	r.Issues = append(r.Issues, c.IdentityGaps...)
+	if c.Kind == "event" {
+		point, err := telemetry.ReadSecCheckPoint(event)
+		if err != nil {
+			return r, err
+		}
+		r.Status, r.IntervalBasis = "observed", "checkpoint_observation"
+		r.Identity["protocol_version"] = strconv.FormatUint(uint64(c.ProtocolVersion), 10)
+		r.Identity["message_type"] = strconv.FormatUint(uint64(point.MessageType), 10)
+		target := point.Stage
+		if point.SyscallNumber != nil {
+			target += "/syscall=" + strconv.FormatUint(*point.SyscallNumber, 10)
+		}
+		r.Snapshots = append(r.Snapshots, Snapshot{ObservedAt: event.CreatedAt, Boundary: "event", Status: "observed",
+			Features: []Feature{{Name: point.MessageName, Category: "system_telemetry", Target: target, Observed: ptr(true), State: "observed", Basis: "saved_sentry_event"}}})
+		if c.DroppedDelta != nil && *c.DroppedDelta > 0 {
+			r.Issues = append(r.Issues, "reported_event_loss")
+		}
+	}
 	if c.Capabilities != nil {
 		caps := c.Capabilities
 		if caps.ProducerVersion != "" {

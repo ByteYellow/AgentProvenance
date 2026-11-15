@@ -101,9 +101,24 @@ Receiver readiness and orderly stop records retain the producer version,
 registered lifetime and capability report in signed exports. System coverage is
 `partial`, identity is Sentry-local, and model intent/application context are
 `none` for this producer. The generated configuration requests ten checkpoints;
-actual observed messages establish enabled coverage. A drained queue does not
+actual observed messages record individual checkpoints rather than continuous
+enablement. A drained queue does not
 change this partial coverage to complete. No raw packet body, exec environment
 or credential structure is retained; normalized arguments are redacted.
+
+The [saved capture manifest API](capture-manifest-api.yaml) includes both receiver
+declarations and actual checkpoint witnesses. It selects one retained event per
+registered scope, connection, protocol message, syscall number and stage, with
+`interval_basis: checkpoint_observation` and `observed: true`. Entry and return
+records stay separate. Nonzero drop deltas, counter resets and identity gaps remain visible even
+for repeated points. Witness timestamps describe those saved events; the query
+does not infer an enabled interval from their absence. Open/exec message families
+retain the raw syscall number, since the reader may use a different architecture.
+
+Witnesses are paged and preserve original evidence references through signed
+import and offline export. Selective export chooses witnesses again within its
+frozen selection. An excluded record can therefore be replaced by another
+included observation of the same point, or the point disappears from that copy.
 
 Tune `--batch-events`, `--batch-bytes`, `--max-queued-bytes` and
 `--max-queued-batches` for the shared spool. Defaults are 256 records / 1 MiB per

@@ -423,7 +423,7 @@ unknown 确认为运行中或终态。运行及终态记录需要执行器生成
 在 Daemon 中调用 `GET /v1/capture-manifest?run=<run-id>&limit=50`，沿用其 Bearer
 鉴权；本地 Dashboard 使用 `GET /api/capture-manifest`。
 [接口定义](../capture-manifest-api.yaml)列出启动采集报告、原生执行检查点、应用上下文
-覆盖、留存设置与 gVisor 流记录。`has_more` 为 `true` 时，携带 `next_cursor` 继续读取。
+覆盖、留存设置、gVisor 流记录及实际观察到的事件点。`has_more` 为 `true` 时，携带 `next_cursor` 继续读取。
 查询保留各次报告和检查点修订，身份包含来源及生命周期代次，按证据 ID 分页。
 
 `supported`、`enabled` 和 `ready` 分别表示支持、启用和就绪状态，未知值为 `null`，
@@ -450,8 +450,13 @@ launch 或远端执行收尾时，逐条保存这些区间，查询中的
 本地历史位于 `logs/sensor-capabilities/<collector-id>/`，单份快照上限为 1 MiB，
 按区间逐条读取。相关 Run 保存历史前应保留该目录；导出的内容对象与本地目录独立。
 单独运行 `agentprov-sensor` 时，变化写入诊断流；使用 `sensor stream` 或 Daemon 原生
-采集可自动持久化。两个 sensor 入口均支持 `--placement`。gVisor 的接收器支持声明
-与实际观察到的事件点仍分开，后者的汇总待补齐。
+采集可自动持久化。两个 sensor 入口均支持 `--placement`。
+
+gVisor 的 `checkpoint_observation` 引用已保存的原始事件。同一实例代次与连接中，
+每种协议消息、syscall 编号和采集阶段保留一条确定的代表证据；非零丢失增量及计数器
+重置、身份缺口另行保留。`observed: true` 表示实际收到过对应消息，缺少启用或就绪证据时，
+`enabled`、`ready` 保持未知。共享消息类型保留原 syscall 编号，不用阅读端架构猜测
+调用名称。选择性导出从选中事件重新选择代表证据，排除的记录不会参与该副本的清单。
 
 ### 证据回执
 

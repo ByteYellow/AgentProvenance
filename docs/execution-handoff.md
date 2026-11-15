@@ -531,7 +531,7 @@ Use `GET /v1/capture-manifest?run=<run-id>&limit=50` with the daemon's bearer
 token, or `GET /api/capture-manifest` on the local Dashboard. The
 [typed response](capture-manifest-api.yaml) lists saved launch reports, native
 execution checkpoints, context coverage, retention settings and gVisor stream
-records. Continue with `next_cursor` while `has_more` is true. Pages retain
+records and observed checkpoints. Continue with `next_cursor` while `has_more` is true. Pages retain
 all recorded revisions and source-qualified identities, including lifecycle
 generations; ordering is by evidence ID rather than time.
 
@@ -566,8 +566,16 @@ snapshot is bounded to 1 MiB and range reading is streamed. Keep the journal
 until all related Runs have saved their history; it is separate from exported
 CAS objects. Bare `agentprov-sensor` writes changes to its diagnostic stream;
 use `sensor stream` or daemon native capture for automatic persistence. Both
-sensor commands accept `--placement`. gVisor receiver-supported point declarations
-remain separate from actually observed points; that aggregation is still pending.
+sensor commands accept `--placement`.
+
+For gVisor, `checkpoint_observation` records reference a retained runtime event.
+Each protocol message, syscall number and stage has one deterministic witness
+per registered lifetime and connection. Positive loss deltas, counter resets and identity gaps
+are retained separately, even when the checkpoint repeats. `observed: true`
+records actual receipt; `enabled` and `ready` stay unknown without their own
+evidence. Protocol message families keep the captured syscall number instead of
+guessing a syscall name from the reader's architecture. Selected exports recompute
+witnesses from included events, so an excluded source cannot support the copy.
 
 ### Evidence receipts
 

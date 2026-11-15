@@ -21,6 +21,10 @@ paths:
         Cursors bind to the Run. Live pagination can observe newly saved evidence;
         offline exports enumerate one frozen, explicitly selected snapshot.
         A failed object hash check or invalid saved identity returns an error.
+        Sentry observations select one deterministic retained witness per scoped
+        connection, protocol message, syscall number and stage. Every positive
+        loss delta, counter-reset or identity-gap observation is also retained. Witness selection
+        is recomputed inside the export selection, never from excluded evidence.
       parameters:
         - {name: run, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 1024}}
         - {name: cursor, in: query, schema: {type: string, maxLength: 8192}}
@@ -94,11 +98,13 @@ components:
         started_at: {type: string}
         ended_at: {type: string}
         interval_basis:
-          enum: [recorded_observation, boundary_samples, recorded_capability_changes, source_processing_range, run_configuration, stream_observation]
+          enum: [recorded_observation, boundary_samples, recorded_capability_changes, source_processing_range, run_configuration, stream_observation, checkpoint_observation]
           description: >
             Native capability changes are retained as individual intervals with
             their collector and capability revision. Historical boundary samples
             leave changes between the observations unspecified.
+            checkpoint_observation identifies a saved Sentry event, not a
+            continuous enabled interval or an enumeration of all events.
         status: {type: string, description: Original source status; not a unified completeness verdict}
         snapshots:
           type: array
@@ -130,7 +136,7 @@ components:
             properties:
               name: {type: string}
               scope: {enum: [run, node, collector, scope_prefix, processing_range, sentry_connection]}
-              scope_id: {type: string, description: Collector identity for a native boundary count}
+              scope_id: {type: string, description: Native collector or Sentry connection identity}
               value:
                 type: [string, 'null']
                 pattern: '^[0-9]+$'
@@ -146,6 +152,12 @@ components:
         target: {type: string}
         supported: {type: [boolean, 'null']}
         enabled: {type: [boolean, 'null']}
+        observed:
+          type: boolean
+          description: >
+            True when a retained source event witnesses this protocol message and
+            stage. Omitted for support declarations and sources without that
+            observation. Enabled remains null without saved enablement evidence.
         state: {type: string}
         basis: {type: string}
         reason: {type: string}

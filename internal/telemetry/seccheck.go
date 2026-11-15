@@ -64,27 +64,35 @@ func (e SecCheckEvidence) identity() (seccheck.Identity, error) {
 	return seccheck.IdentityFor(e.Registration, c)
 }
 
-func readSecCheckEvidence(payload string) (SecCheckEvidence, error) {
+func readSecCheckBody(payload string) (map[string]json.RawMessage, error) {
 	// Decode raw objects so nanosecond birth times never pass through float64.
 	for i := 0; i < 8; i++ {
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal([]byte(payload), &fields); err != nil {
-			return SecCheckEvidence{}, err
+			return nil, err
 		}
 		if inner, ok := fields["payload"]; ok {
 			payload = string(inner)
 			continue
 		}
-		var e SecCheckEvidence
-		if err := json.Unmarshal(fields["sentry"], &e); err != nil {
-			return e, err
-		}
-		if e.SchemaVersion != SecCheckSchema || e.ConnectionID == "" || len(e.ConnectionID) > 256 || e.ReceivedAt.IsZero() {
-			return e, fmt.Errorf("invalid SecCheck evidence envelope")
-		}
-		return e, e.Registration.Validate()
+		return fields, nil
 	}
-	return SecCheckEvidence{}, fmt.Errorf("SecCheck payload nesting exceeds limit")
+	return nil, fmt.Errorf("SecCheck payload nesting exceeds limit")
+}
+
+func readSecCheckEvidence(payload string) (SecCheckEvidence, error) {
+	var e SecCheckEvidence
+	fields, err := readSecCheckBody(payload)
+	if err != nil {
+		return e, err
+	}
+	if err := json.Unmarshal(fields["sentry"], &e); err != nil {
+		return e, err
+	}
+	if e.SchemaVersion != SecCheckSchema || e.ConnectionID == "" || len(e.ConnectionID) > 256 || e.ReceivedAt.IsZero() {
+		return e, fmt.Errorf("invalid SecCheck evidence envelope")
+	}
+	return e, e.Registration.Validate()
 }
 
 // ValidateSecCheckStoredEvent checks the registration evidence instead of

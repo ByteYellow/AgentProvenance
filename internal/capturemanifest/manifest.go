@@ -72,6 +72,7 @@ type Feature struct {
 	Target    string `json:"target,omitempty"`
 	Supported *bool  `json:"supported"`
 	Enabled   *bool  `json:"enabled"`
+	Observed  *bool  `json:"observed,omitempty"`
 	State     string `json:"state"`
 	Basis     string `json:"basis"`
 	Reason    string `json:"reason,omitempty"`
@@ -124,12 +125,37 @@ func (s Service) List(ctx context.Context, opts Options) (Page, error) {
 			return p, ErrInvalid
 		}
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT kind,id,object_type,created_at FROM (
+	// Select one retained witness per protocol point and source connection. The
+	// database groups the evidence; only one bounded page enters Go memory.
+	rows, err := s.DB.QueryContext(ctx, `WITH RECURSIVE
+		sentry_payloads(id,container_id,created_at,body,depth) AS (
+			SELECT id,container_id,created_at,payload,0 FROM events
+			WHERE run_id=? AND source='gvisor_seccheck' AND event_type<>'runtime_collection'
+			UNION ALL
+			SELECT id,container_id,created_at,json_extract(body,'$.payload'),depth+1
+			FROM sentry_payloads WHERE depth<7 AND json_type(body,'$.payload') IS NOT NULL
+		),
+		sentry_points AS (
+			SELECT * FROM sentry_payloads WHERE depth=7 OR json_type(body,'$.payload') IS NULL
+		),
+		sentry_witnesses AS (
+			SELECT MIN(id) AS id FROM sentry_points GROUP BY container_id,
+				json_extract(body,'$.sentry.connection_id'),json_extract(body,'$.sentry.runtime_release'),
+				json_extract(body,'$.sentry.protocol_version'),json_extract(body,'$.sentry.header.message_type'),
+				json_extract(body,'$.observation_stage'),body -> '$.syscall_number'
+			UNION
+			SELECT id FROM sentry_points WHERE json_extract(body,'$.sentry.dropped_delta')>0
+				OR json_extract(body,'$.sentry.drop_counter_decreased')=1
+				OR json_array_length(body,'$.sentry.identity_gaps')>0
+		)
+		SELECT kind,id,object_type,created_at FROM (
 		SELECT 'object' AS kind,hash AS id,object_type,created_at FROM provenance_objects
 		WHERE run_id=? AND object_type IN ('runtime_capture','execution_checkpoint','agent_context_coverage','context_capture_policy','run_capture_settings','sensor_capability_interval')
 		UNION ALL SELECT 'event',id,'sentry_stream',created_at FROM events
-		WHERE run_id=? AND source='gvisor_seccheck' AND event_type='runtime_collection')
-		WHERE (kind,id) > (?,?) ORDER BY kind,id LIMIT ?`, opts.RunID, opts.RunID, c.Kind, c.ID, p.Limit+1)
+		WHERE run_id=? AND source='gvisor_seccheck' AND event_type='runtime_collection'
+		UNION ALL SELECT 'event',id,'sentry_stream',created_at FROM events
+		WHERE run_id=? AND id IN (SELECT id FROM sentry_witnesses))
+		WHERE (kind,id) > (?,?) ORDER BY kind,id LIMIT ?`, opts.RunID, opts.RunID, opts.RunID, opts.RunID, c.Kind, c.ID, p.Limit+1)
 	if err != nil {
 		return p, err
 	}
