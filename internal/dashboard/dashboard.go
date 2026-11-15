@@ -28,6 +28,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
+	"github.com/byteyellow/agentprovenance/internal/capturemanifest"
 	"github.com/byteyellow/agentprovenance/internal/compliance"
 	"github.com/byteyellow/agentprovenance/internal/handoff"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
@@ -167,6 +168,7 @@ func (s Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/compliance", s.compliance)
 	mux.Handle("GET /api/context/", http.StripPrefix("/api", (agentcontext.Service{DB: s.DB}).ReadHandler()))
 	mux.Handle("GET /api/execution-links", (handoff.EvidenceService{DB: s.DB}).ReadHandler())
+	mux.Handle("GET /api/capture-manifest", (capturemanifest.Service{DB: s.DB}).Handler())
 	s.replayRoutes(mux)
 	return s.sameOriginGuard(mux)
 }

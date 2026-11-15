@@ -195,7 +195,7 @@ func TestProjectPresentationDoesNotAlterCodeOrEnableScripts(t *testing.T) {
 
 func TestDemoIncludesLinkedAPIContracts(t *testing.T) {
 	h := demoGallery(demo.Catalog())
-	for _, file := range []string{"audit-associations-api.yaml", "replay-export-api.yaml", "execution-handoff-api.yaml", "zh-CN/audit-associations-api.yaml"} {
+	for _, file := range []string{"audit-associations-api.yaml", "replay-export-api.yaml", "execution-handoff-api.yaml", "capture-manifest-api.yaml", "zh-CN/audit-associations-api.yaml"} {
 		route := "/demos/assets/docs/" + file
 		w := httptest.NewRecorder()
 		h(w, httptest.NewRequest("GET", route, nil))

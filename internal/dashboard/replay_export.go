@@ -22,6 +22,7 @@ type ReplayPages struct {
 	Pages   []staticdata.Ref `json:"pages"`
 }
 type ReplayRun struct {
+	Capture    *replayCaptureIndex                  `json:"capture_manifest,omitempty"`
 	Executions *replayExecutionIndex                `json:"execution_links,omitempty"`
 	Audit      *replayAuditIndex                    `json:"audit,omitempty"`
 	Compare    map[string]staticdata.Ref            `json:"compare,omitempty"`
@@ -130,6 +131,10 @@ func (s Server) exportReplaySet(ctx context.Context, run string, w *staticdata.W
 	result.Audit, auditErr = s.exportReplayAudit(ctx, run, w)
 	if auditErr != nil {
 		return result, auditErr
+	}
+	result.Capture, err = s.exportCaptureManifest(ctx, run, w)
+	if err != nil {
+		return result, err
 	}
 	h := s.Handler()
 	get := func(route string, query url.Values) (json.RawMessage, error) {

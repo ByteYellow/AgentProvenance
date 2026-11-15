@@ -13,6 +13,7 @@ import (
 //go:embed upgrading-v0.10.1.md zh-CN/upgrading-v0.10.1.md
 //go:embed demo-library.md zh-CN/demo-library.md execution-handoff.md zh-CN/execution-handoff.md execution-handoff-api.yaml
 //go:embed gvisor-seccheck.md zh-CN/gvisor-seccheck.md notebook-context.md zh-CN/notebook-context.md browser-context.md browser-context.zh-CN.md
+//go:embed capture-manifest-api.yaml
 var Files embed.FS
 
 type Entry struct{ ID, Title, Path, Group string }

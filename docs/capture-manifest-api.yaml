@@ -1,0 +1,148 @@
+openapi: 3.1.0
+info:
+  title: AgentProvenance saved capture manifest API
+  version: '1.0'
+  description: >
+    Read source-qualified observations saved with one Run. This query never
+    substitutes current host health or a current capability catalog. Historical
+    observations and checkpoint revisions remain separate. An empty page means
+    no matching saved observations. It does not describe collection completeness.
+servers:
+  - url: http://127.0.0.1:8574
+security:
+  - bearerAuth: []
+paths:
+  /v1/capture-manifest:
+    get: &readCaptureManifest
+      operationId: readCaptureManifest
+      summary: Read saved capture capabilities, retention and scoped counters
+      description: >
+        Pages use source kind and evidence ID ordering, not wall-clock ordering.
+        Cursors bind to the Run. Live pagination can observe newly saved evidence;
+        offline exports enumerate one frozen, explicitly selected snapshot.
+        A failed object hash check or invalid saved identity returns an error.
+      parameters:
+        - {name: run, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 1024}}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 8192}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200':
+          description: Saved observations with explicit unknown values
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Page'}
+        '400': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+        '401': {description: The daemon requires its configured bearer token}
+        '403': {description: The existing local Host and Origin guard rejects the request}
+  /api/capture-manifest:
+    get:
+      <<: *readCaptureManifest
+      operationId: readDashboardCaptureManifest
+      security: []
+      description: >
+        Dashboard alias protected by the existing local read guard. New static
+        and file-based replays support this path, the same pagination parameters
+        and an additional selection_scope field. Older replay artifacts without
+        this index return an unavailable error. No reader-host probing occurs.
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  responses:
+    Error:
+      description: English saved-evidence query error
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [schema_version, error]
+            properties:
+              schema_version: {const: agentprovenance.capture_manifest/v1}
+              error:
+                type: object
+                required: [code, message]
+                properties:
+                  code: {enum: [invalid_argument, capture_evidence_read_failed, method_not_allowed]}
+                  message: {type: string}
+  schemas:
+    Page:
+      type: object
+      required: [schema_version, run_id, basis, records, limit, has_more]
+      properties:
+        schema_version: {const: agentprovenance.capture_manifest/v1}
+        run_id: {type: string}
+        basis: {const: saved_observations}
+        selection_scope: {enum: [whole_run, selected_evidence], description: Present in offline readers only}
+        records: {type: array, items: {$ref: '#/components/schemas/Record'}}
+        limit: {type: integer, minimum: 1, maximum: 200}
+        has_more: {type: boolean}
+        next_cursor: {type: string}
+    Record:
+      type: object
+      required: [id, evidence_ref, evidence_kind, source, producer_version, producer_commit, placement, identity_domain, identity, interval_basis, status, snapshots, retention, loss, issues]
+      properties:
+        id: {type: string, description: Source kind followed by the original evidence ID}
+        evidence_ref: {type: string, description: Original object hash or runtime_event reference}
+        evidence_kind: {enum: [object, event]}
+        source: {type: string}
+        producer_version: {type: string, description: Recorded version or unknown}
+        producer_commit: {type: string, description: Recorded source identity or unknown}
+        placement: {type: string, description: Recorded collection location or the saved record's location class}
+        identity_domain: {type: string}
+        identity: {type: object, additionalProperties: {type: string}}
+        observed_at: {type: string}
+        started_at: {type: string}
+        ended_at: {type: string}
+        interval_basis:
+          enum: [recorded_observation, boundary_samples, source_processing_range, run_configuration, stream_observation]
+          description: Boundary samples leave changes between the observations unspecified
+        status: {type: string, description: Original source status; not a unified completeness verdict}
+        snapshots:
+          type: array
+          items:
+            type: object
+            required: [boundary, status, ready, features]
+            properties:
+              observed_at: {type: string}
+              boundary: {type: string}
+              status: {type: string}
+              reason: {type: string}
+              identity: {type: object, additionalProperties: {type: string}, description: Boundary-qualified collector identity when saved}
+              ready: {type: [boolean, 'null']}
+              features: {type: array, items: {$ref: '#/components/schemas/Feature'}}
+        retention:
+          type: array
+          items:
+            type: object
+            required: [category, enabled, basis]
+            properties:
+              category: {type: string}
+              enabled: {type: [boolean, 'null']}
+              basis: {type: string}
+        loss:
+          type: array
+          items:
+            type: object
+            required: [name, scope, value, basis]
+            properties:
+              name: {type: string}
+              scope: {enum: [run, node, collector, scope_prefix, processing_range, sentry_connection]}
+              scope_id: {type: string, description: Collector identity for a native boundary count}
+              value:
+                type: [string, 'null']
+                pattern: '^[0-9]+$'
+                description: Decimal text preserves uint64 precision; null means unknown
+              basis: {type: string, description: Delta, cumulative boundary or original processing-range count}
+        issues: {type: array, items: {type: string}}
+    Feature:
+      type: object
+      required: [name, category, supported, enabled, state, basis]
+      properties:
+        name: {type: string}
+        category: {type: string}
+        target: {type: string}
+        supported: {type: [boolean, 'null']}
+        enabled: {type: [boolean, 'null']}
+        state: {type: string}
+        basis: {type: string}
+        reason: {type: string}

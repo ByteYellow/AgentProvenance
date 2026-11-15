@@ -107,6 +107,10 @@ components:
 paths:
   /v1/execution-links:
     $ref: './execution-handoff-api.yaml#/paths/~1v1~1execution-links'
+  /v1/capture-manifest:
+    $ref: './capture-manifest-api.yaml#/paths/~1v1~1capture-manifest'
+  /api/capture-manifest:
+    $ref: './capture-manifest-api.yaml#/paths/~1api~1capture-manifest'
   /api/execution-links:
     $ref: './execution-handoff-api.yaml#/paths/~1api~1execution-links'
   /v1/executions:

@@ -127,6 +127,15 @@ func ValidateSecCheckStoredEvent(event EventRecord) error {
 	return validateSecCheckReplayReceipt(event, e)
 }
 
+// ReadSecCheckEvidence shares the ingest/verification identity checks with
+// saved capability readers, including replay-source receipts.
+func ReadSecCheckEvidence(event EventRecord) (SecCheckEvidence, error) {
+	if err := ValidateSecCheckStoredEvent(event); err != nil {
+		return SecCheckEvidence{}, err
+	}
+	return readSecCheckEvidence(event.Payload)
+}
+
 // MapSecCheckRecord receives the Run from the local registration, never from
 // the runtime packet. It preserves entry/return stages as separate observations.
 func MapSecCheckRecord(runID string, rec seccheck.Record) (IngestEvent, error) {

@@ -34,6 +34,8 @@ func (s CaptureSettings) validate() error {
 	return nil
 }
 
+func (s CaptureSettings) Validate() error { return s.validate() }
+
 type captureSettingsReader interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 	QueryRow(string, ...any) *sql.Row

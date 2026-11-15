@@ -36,6 +36,9 @@ func (p CapturePolicy) RetainAttachments() bool {
 	return p.ToolResults
 }
 
+// Validate uses the same retention contract for saved-evidence readers and writers.
+func (p CapturePolicy) Validate() error { return p.validate() }
+
 type CaptureOmission struct {
 	Category string `json:"category"`
 	Reason   string `json:"reason"`

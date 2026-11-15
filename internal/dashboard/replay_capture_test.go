@@ -1,0 +1,202 @@
+package dashboard
+
+import (
+	"compress/gzip"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/byteyellow/agentprovenance/internal/agentcontext"
+	"github.com/byteyellow/agentprovenance/internal/capturemanifest"
+	"github.com/byteyellow/agentprovenance/internal/observability"
+	"github.com/byteyellow/agentprovenance/internal/provenance"
+	"github.com/byteyellow/agentprovenance/internal/sensor"
+	"github.com/byteyellow/agentprovenance/internal/staticdata"
+)
+
+func readReplayCapture(t *testing.T, files map[string][]byte, run string) ([]capturemanifest.Record, string) {
+	t.Helper()
+	wrapper := string(files["assets/catalog.js"])
+	raw, err := base64.StdEncoding.DecodeString(strings.TrimSuffix(strings.TrimPrefix(wrapper, `window.AgentProvOfflineCatalog="`), `";`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var catalog struct {
+		Runs map[string]struct {
+			Capture *struct {
+				Schema string `json:"schema_version"`
+				Scope  string `json:"scope"`
+				Pages  []struct {
+					Count int            `json:"count"`
+					Data  staticdata.Ref `json:"data"`
+				} `json:"pages"`
+			} `json:"capture_manifest"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		t.Fatal(err)
+	}
+	index := catalog.Runs[run].Capture
+	if index == nil || index.Schema != "agentprovenance.replay_capture_manifest/v1" {
+		t.Fatal("offline capture manifest is missing")
+	}
+	records := []capturemanifest.Record{}
+	for _, page := range index.Pages {
+		var values []capturemanifest.Record
+		if err := json.Unmarshal(files[strings.TrimSuffix(page.Data.Path, ".json.gz")+".js"], &values); err != nil {
+			t.Fatal(err)
+		}
+		if len(values) != page.Count {
+			t.Fatal("capture shard count mismatch")
+		}
+		records = append(records, values...)
+	}
+	return records, index.Scope
+}
+
+func TestCaptureManifestExportEnumeratesAllPages(t *testing.T) {
+	_, db, objects := artifactStore(t)
+	for i := 0; i < 260; i++ {
+		_, err := objects.PutExternalObject(provenance.ExternalObjectInput{RunID: "many-captures", Type: "runtime_capture", SourceID: fmt.Sprint(i),
+			Payload: map[string]any{"schema_version": observability.RuntimeCaptureSchema, "run_id": "many-captures", "issues": []string{fmt.Sprint(i)}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	writer := &staticdata.Writer{Root: t.TempDir()}
+	index, err := (Server{DB: db}).exportCaptureManifest(context.Background(), "many-captures", writer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(index.Pages) != 6 {
+		t.Fatalf("truncated pages: %d", len(index.Pages))
+	}
+	seen := map[string]bool{}
+	for _, p := range index.Pages {
+		f, err := os.Open(filepath.Join(writer.Root, p.Data.Path))
+		if err != nil {
+			t.Fatal(err)
+		}
+		z, err := gzip.NewReader(f)
+		if err != nil {
+			f.Close()
+			t.Fatal(err)
+		}
+		var records []capturemanifest.Record
+		err = json.NewDecoder(z).Decode(&records)
+		z.Close()
+		f.Close()
+		if err != nil || len(records) != p.Count {
+			t.Fatalf("capture shard: %v", err)
+		}
+		if records[0].ID != p.First || records[len(records)-1].ID != p.Last {
+			t.Fatal("capture page bounds mismatch")
+		}
+		for _, r := range records {
+			if seen[r.ID] {
+				t.Fatal("duplicate capture observation")
+			}
+			seen[r.ID] = true
+		}
+	}
+	if len(seen) != 260 {
+		t.Fatalf("missing capture observations: %d", len(seen))
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := (Server{DB: db}).exportCaptureManifest(ctx, "many-captures", writer); err == nil {
+		t.Fatal("export cancellation ignored")
+	}
+}
+
+func TestOfflineCaptureManifestFrozenSelection(t *testing.T) {
+	paths, db, _ := artifactStore(t)
+	ctx := context.Background()
+	for _, session := range []string{"selected", "private"} {
+		body := "capture manifest " + session
+		_, err := (agentcontext.Service{DB: db, Paths: paths}).Save(ctx, "capture-run",
+			agentcontext.Source{Harness: "fixture", SessionID: session, ParserVersion: "fixture/v1", ApplicationVersion: session + "-version", Binding: "explicit"},
+			[]agentcontext.Record{{Key: "message", Kind: "message", Role: "user", Body: &body}}, agentcontext.Coverage{Status: agentcontext.OK})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	report := observability.RuntimeCaptureReport{SchemaVersion: observability.RuntimeCaptureSchema, RunID: "capture-run", Status: "partial", KernelState: "observed",
+		NodeCounterDelta: map[string]int64{"kernel_dropped_events": 9007199254740993},
+		CapabilitiesStart: &sensor.CapabilityReport{SchemaVersion: "agentprovenance.sensor_capabilities/v1", Ready: true,
+			Probes: []sensor.ProbeCapability{{Name: "file_open", Status: "attached", Target: "CAPTURE-PRIVATE-PROBE"}}}}
+	if err := observability.SaveRuntimeCapture(db, paths, &report); err != nil {
+		t.Fatal(err)
+	}
+	want, err := (capturemanifest.Service{DB: db}).List(ctx, capturemanifest.Options{RunID: "capture-run"})
+	if err != nil || want.HasMore {
+		t.Fatalf("capture: %+v %v", want, err)
+	}
+	prepared := map[string]*PreparedReplay{}
+	for _, selection := range []ReplaySelection{
+		{RunID: "capture-run", Scope: "whole_run"},
+		{RunID: "capture-run", Scope: "session", Harness: "fixture", SessionID: "selected"},
+	} {
+		p, err := (Server{DB: db}).PrepareSelectedOfflineReplay(ctx, selection)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { p.Close() })
+		prepared[selection.Scope] = p
+	}
+	report.CapabilitiesStart.Probes[0].Target = "LATE-PROBE"
+	if err := observability.SaveRuntimeCapture(db, paths, &report); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(paths.Provenance, paths.Provenance+"-unavailable"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for name, p := range prepared {
+		t.Run(name, func(t *testing.T) {
+			files, _ := replayZIPData(t, p)
+			got, scope := readReplayCapture(t, files, "capture-run")
+			if name == "whole_run" {
+				if scope != "whole_run" || !reflect.DeepEqual(got, want.Records) {
+					t.Fatalf("frozen capture changed: %s %+v", scope, got)
+				}
+			} else {
+				if scope != "selected_evidence" || len(got) == 0 {
+					t.Fatalf("missing selection boundary: %s %+v", scope, got)
+				}
+				for _, r := range got {
+					if r.Source == "agentprov_sensor" || (r.Source == "agent_context" && r.Identity["session_id"] != "selected") {
+						t.Fatalf("excluded capture evidence: %+v", r)
+					}
+				}
+			}
+			for _, raw := range files {
+				if strings.Contains(string(raw), "LATE-PROBE") || (name == "session" && (strings.Contains(string(raw), "CAPTURE-PRIVATE-PROBE") || strings.Contains(string(raw), "private-version"))) {
+					t.Fatal("excluded or late capture metadata leaked")
+				}
+			}
+			if root := os.Getenv("AGENTPROV_CAPTURE_REPLAY_OUTPUT"); root != "" {
+				if err := os.MkdirAll(root, 0700); err != nil {
+					t.Fatal(err)
+				}
+				file, err := os.OpenFile(filepath.Join(root, name+".zip"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+				if err != nil {
+					t.Fatal(err)
+				}
+				writeErr := p.WriteZIP(ctx, file)
+				closeErr := file.Close()
+				if writeErr != nil || closeErr != nil {
+					t.Fatalf("ZIP: %v %v", writeErr, closeErr)
+				}
+			}
+		})
+	}
+}

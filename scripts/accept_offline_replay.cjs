@@ -107,6 +107,28 @@ async function main(){
         let events=[];
         for(let offset=0;;offset+=500){const value=await query('/api/events'+q+'&limit=500&offset='+offset);events.push(...value.events);if(events.length>=value.total)break;}
         assert.deepEqual(events,saved(run.events));assert.equal(events.length,item.events);
+        if(run.capture_manifest){
+          const expected=run.capture_manifest.pages.flatMap(shard=>saved(shard.data));
+          for(const limit of [1,17,200]){
+            let records=[],cursor='';
+            do{
+              const value=await query('/api/capture-manifest'+q+'&limit='+limit+'&cursor='+encodeURIComponent(cursor));
+              assert.equal(value.schema_version,'agentprovenance.capture_manifest/v1');assert.equal(value.run_id,runID);
+              assert.equal(value.basis,'saved_observations');assert.equal(value.selection_scope,partial?'selected_evidence':'whole_run');
+              records.push(...value.records);cursor=value.next_cursor||'';
+              assert.equal(Boolean(cursor),value.has_more);assert.equal(value.has_more,records.length<expected.length);
+            }while(cursor);
+            assert.deepEqual(records,expected,'offline capture facts retain references, identities, intervals and unknown values');
+          }
+          for(const record of expected)for(const counter of record.loss){
+            assert.ok(counter.value===null||/^[0-9]+$/.test(counter.value),'counter remains null or decimal text');
+            if(counter.value!==null)assert.equal(typeof counter.value,'string','uint64 precision is preserved');
+          }
+          for(const extra of ['&session=x','&limit=0','&limit=201','&limit=1.5','&limit=','&run=duplicate','&cursor=bad'])await assert.rejects(query('/api/capture-manifest'+q+extra));
+          const foreign=Buffer.from(JSON.stringify({version:'agentprovenance.capture_manifest/v1',run_id:'other',kind:'object',id:'sha256:x'})).toString('base64url');
+          await assert.rejects(query('/api/capture-manifest'+q+'&cursor='+foreign));
+          report.captureObservations=(report.captureObservations||0)+expected.length;
+        }
         if(run.execution_links){
           for(const direction of ['outgoing','incoming']){
             const expected=run.execution_links.directions[direction].flatMap(shard=>saved(shard.data));

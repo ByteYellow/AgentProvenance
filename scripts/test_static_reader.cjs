@@ -41,9 +41,24 @@ async function main(){
  const executionA={identity:{source:{run_id:'run',harness:'claude',session_id:'root',tool_call_id:'call-a'},local_run_id:'worker'},basis:'authenticated_admission',issues:['execution_run_not_selected']};
  const executionB={identity:{source:{run_id:'run',harness:'codex',session_id:'root',tool_call_id:'call-b'},local_run_id:'worker-b'},basis:'authenticated_delivery',issues:[]};
  catalog.runs.run.execution_links={schema_version:'agentprovenance.replay_execution_links/v1',directions:{outgoing:[{count:1,data:save([executionA])},{count:1,data:save([executionB])}],incoming:[]}};
+ const captureRecords=[...Array.from({length:258},(_,i)=>'event/'+String(i).padStart(3,'0')),'event/\uffff','event/\u{10000}'].sort((a,b)=>Buffer.compare(Buffer.from(a),Buffer.from(b))).map(id=>({id,evidence_kind:'event',evidence_ref:'runtime_event/'+id.slice(6),loss:[{name:'drops',scope:'collector',value:'9007199254740993',basis:'saved'}]}));
+ const capturePages=[];
+ for(let offset=0;offset<captureRecords.length;offset+=50){const values=captureRecords.slice(offset,offset+50);capturePages.push({count:values.length,first:values[0].id,last:values.at(-1).id,data:save(values)});}
+ catalog.runs.run.capture_manifest={schema_version:'agentprovenance.replay_capture_manifest/v1',scope:'selected_evidence',pages:capturePages};
  files.set('/site/replay-manifest.json',Buffer.from(JSON.stringify(catalog)));
  const setup=()=>{const box={window:{},document:{querySelector:()=>({content:'/site/'})},location:new URL('https://example.test/site/en/replay.html'),URL,URLSearchParams,Map,Set,TextEncoder,TextDecoder,structuredClone,Response,DecompressionStream,crypto:webcrypto,btoa,atob,fetch:async url=>{const body=files.get(new URL(url).pathname);return new Response(body||'missing',{status:body?200:404});}};vm.runInNewContext(source,box);return box.window.AgentProvReplay;};
  const reader=setup();
+ for(const limit of [1,17,50,200]){
+  let records=[],cursor='';
+  do{const page=await reader.query('/api/capture-manifest?run=run&limit='+limit+'&cursor='+encodeURIComponent(cursor));assert.equal(page.selection_scope,'selected_evidence');records.push(...page.records);cursor=page.next_cursor||'';assert.equal(page.has_more,records.length<captureRecords.length);}while(cursor);
+  assert.deepEqual(records,captureRecords);
+ }
+ const captureFirst=await reader.query('/api/capture-manifest?run=run&limit=1');
+ const captureSecond=await reader.query('/api/capture-manifest?run=run&limit=200&cursor='+captureFirst.next_cursor);
+ assert.deepEqual(Array.from(captureSecond.records),captureRecords.slice(1,201));
+ for(const query of ['run=legacy','run=run&limit=0','run=run&limit=201','run=run&limit=','run=run&cursor=wrong','run=run&session=x','run=run&run=run'])await assert.rejects(()=>reader.query('/api/capture-manifest?'+query));
+ const foreignCursor=Buffer.from(JSON.stringify({version:'agentprovenance.capture_manifest/v1',run_id:'legacy',kind:'event',id:'001'})).toString('base64url');
+ await assert.rejects(()=>reader.query('/api/capture-manifest?run=run&cursor='+foreignCursor));
  for(const offset of [0,65535,131070,har.length])for(const limit of [1,7193,262144]){
   const value=await reader.query('/api/context/attachment?run=run&ref='+harRef+'&offset='+offset+'&limit='+limit);
   assert.equal(value.media_type,'application/har+json');assert.equal(value.schema_version,'agentprovenance.har_attachment/v1');

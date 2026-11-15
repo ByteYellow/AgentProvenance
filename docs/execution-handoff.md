@@ -520,8 +520,36 @@ remain content-addressed evidence; unknown loss counts stay unknown.
 
 Other producers keep their own source-qualified capability evidence. For
 example, [gVisor stream records](gvisor-seccheck.md) identify the Sentry domain,
-pinned protocol and available event types. A uniform per-Run capability manifest
-across producers remains part of the v1.0 integration work.
+pinned protocol and available event types.
+
+### Query saved capture observations
+
+Use `GET /v1/capture-manifest?run=<run-id>&limit=50` with the daemon's bearer
+token, or `GET /api/capture-manifest` on the local Dashboard. The
+[typed response](capture-manifest-api.yaml) lists saved launch reports, native
+execution checkpoints, context coverage, retention settings and gVisor stream
+records. Continue with `next_cursor` while `has_more` is true. Pages retain
+all recorded revisions and source-qualified identities, including lifecycle
+generations; ordering is by evidence ID rather than time.
+
+Read `supported`, `enabled` and `ready` separately. Unknown values are `null`,
+and missing producer versions are `unknown`. Loss counters carry their original
+scope and basis: a node or collector count stays at that scope. Counter values
+are decimal strings to retain 64-bit precision in browser clients. Capture
+retention and query/export selection are separate facts.
+
+New offline exports include the same paged query under `file://`. Whole exports
+keep all saved observations. Selected exports read only the frozen selection and
+report `selection_scope: selected_evidence`; excluded native checkpoint bodies
+and probe targets remain excluded. Original Bundle signatures and object hashes
+are unchanged. Older replays without the index report it as unavailable.
+
+This reader projects recorded observations. Native reports currently provide
+start/end samples; gVisor reports identify receiver-supported event points.
+Continuous capability-change history and observed enabled-point aggregation
+remain part of the v1.0 collection work.
+
+### Evidence receipts
 
 Evidence receipts bind issuer, receiver, target instance/generation,
 Dispatch/Attempt, request digest, package digest and confirmed record range.

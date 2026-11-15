@@ -4,6 +4,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Add a paged saved-capture manifest query and offline index for launch,
+  execution, context and gVisor evidence. Preserve source identities, revision
+  history, unknown values, scoped loss counters and explicit export selections.
 - Add bilingual entry guides in the README and deployment reference for remote
   commands, Browser, Notebook and gVisor. Distinguish the current source from
   published archives and document actual capture/receipt fields and guest prerequisites.

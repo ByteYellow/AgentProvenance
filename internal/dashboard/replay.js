@@ -180,6 +180,44 @@ window.AgentProvReplay = (() => {
     if(result.has_more){const bytes=encoder.encode(JSON.stringify({schema:index.schema_version,query,offset:offset+result.scanned}));result.next_cursor=btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
     return result;
   }
+  async function captureManifest(index,p,id){
+    const schema='agentprovenance.capture_manifest/v1';
+    if(index?.schema_version!=='agentprovenance.replay_capture_manifest/v1')fail('Capture capabilities are not included in this replay');
+    for(const key of p.keys())if(!['run','cursor','limit'].includes(key)||p.getAll(key).length!==1)fail('Unsupported or repeated capture manifest parameter');
+    if(!id||id.trim()!==id||encoder.encode(id).length>1024||/[\x00\r\n]/.test(id))fail('Invalid capture run');
+    const limit=range(p.get('limit'),50,1,200,'capture limit');let after='';
+    if(p.get('cursor')){
+      const raw=p.get('cursor');let cursor;
+      try{if(raw.length>8192||!/^[A-Za-z0-9_-]+$/.test(raw))throw Error();cursor=JSON.parse(decoder.decode(Uint8Array.from(atob(raw.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0))));}catch{fail('Invalid capture manifest cursor');}
+      if(cursor.version!==schema||cursor.run_id!==id||!['event','object'].includes(cursor.kind)||typeof cursor.id!=='string'||!cursor.id||encoder.encode(cursor.id).length>1024)fail('Capture manifest cursor does not match this run');
+      after=cursor.kind+'/'+cursor.id;
+    }
+    if(!['whole_run','selected_evidence'].includes(index.scope)||!Array.isArray(index.pages))fail('Invalid capture manifest index');
+    const cmp=(a,b)=>{const x=encoder.encode(a),y=encoder.encode(b);for(let i=0;i<Math.min(x.length,y.length);i++)if(x[i]!==y[i])return x[i]-y[i];return x.length-y.length;};
+    let total=0,last='';
+    for(const shard of index.pages){
+      if(!Number.isSafeInteger(shard.count)||shard.count<1||shard.count>50||typeof shard.first!=='string'||typeof shard.last!=='string'||cmp(shard.first,shard.last)>0||cmp(shard.first,last)<=0)fail('Invalid capture manifest shard');
+      total+=shard.count;last=shard.last;
+    }
+    if(total>1000000)fail('Capture manifest exceeds its record limit');
+    const out={schema_version:schema,run_id:id,basis:'saved_observations',selection_scope:index.scope,records:[],limit,has_more:false};
+    for(const shard of index.pages){
+      if(cmp(shard.last,after)<=0)continue;
+      const records=await asset(shard.data);
+      if(!Array.isArray(records)||records.length!==shard.count||records[0]?.id!==shard.first||records.at(-1)?.id!==shard.last)fail('Capture manifest shard does not match its index');
+      let previous='';
+      for(const record of records){
+        if(typeof record.id!=='string'||!record.id.startsWith(record.evidence_kind+'/')||!['event','object'].includes(record.evidence_kind)||cmp(record.id,previous)<=0)fail('Invalid capture evidence order');
+        previous=record.id;
+        if(cmp(record.id,after)<=0)continue;
+        if(out.records.length===limit){out.has_more=true;break;}
+        out.records.push(copy(record));
+      }
+      if(out.has_more)break;
+    }
+    if(out.has_more){const last=out.records.at(-1),at=last.id.indexOf('/'),bytes=encoder.encode(JSON.stringify({version:schema,run_id:id,kind:last.evidence_kind,id:last.id.slice(at+1)}));out.next_cursor=btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+    return out;
+  }
   async function auditPage(index,p,id){
     if(!index||index.schema_version!=='agentprovenance.replay_audit/v1')fail('Audit associations are not included in this replay');
     for(const key of p.keys())if(!['run','event','limit','cursor'].includes(key)||p.getAll(key).length!==1)fail('Unsupported or repeated audit parameter');
@@ -233,6 +271,7 @@ window.AgentProvReplay = (() => {
     if(path==='frameworks'&&!run)run=await replayRun(catalog,catalog.summaries[0]?.run);
     if(!run)fail('The run was not found in this replay');
     if(path==='execution-links')return executionLinks(run.execution_links,p,id);
+    if(path==='capture-manifest')return captureManifest(run.capture_manifest,p,id);
     if(path==='audit/associations')return auditPage(run.audit,p,id);
     if(path==='compare/records'){
       if(p.has('harness')||p.has('session'))fail('Run comparison does not accept a session filter');
