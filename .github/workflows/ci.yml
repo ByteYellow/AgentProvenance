@@ -121,6 +121,12 @@ jobs:
       - name: Check SecCheck acceptance assertions
         run: python3 -m unittest discover -s scripts -p 'test_accept_seccheck*.py' -v
 
+      - name: Check telemetry performance measurements
+        run: python3 -m unittest discover -s scripts -p 'test_telemetry_pressure.py' -v
+
+      - name: Exercise authenticated telemetry pressure path
+        run: python3 scripts/accept_telemetry_100k_pressure.py run --events 20 --output "$RUNNER_TEMP/telemetry-pressure-smoke"
+
       - name: Check notebook capture adapter
         run: PYTHONPATH=python python3 -m unittest discover -s python/tests -p 'test_notebook*.py' -v
 

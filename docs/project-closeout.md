@@ -46,12 +46,18 @@ AgentProvenance must prove:
 - producer health reports accepted/processed/failed/dropped batches, queued
   bytes, sensor drops, event source counts, and correlation coverage;
 - a 100k-event acceptance run emits a machine-readable report containing ingest
-  throughput, health/query p50/p95/p99, daemon CPU/RSS peaks, queue state, drop
-  state, final event count, and coverage;
+  throughput, separate during/after health and query latency samples and
+  p50/p95/p99, daemon CPU/RSS peaks, storage bytes, queue state, drop state,
+  final event count, and coverage;
 - evidence queries remain bounded and graph verification remains consistent.
 
 The pressure report is a measured baseline, not a production SLA. Different
 hosts may produce different latency and throughput values.
+
+The current [performance validation procedure](performance-validation.md) uses
+authenticated requests and three baseline runs before freezing a candidate
+budget. It preserves each run's environment, executable digest and measurement
+profile. The following older report remains a historical reference.
 
 Reference run on the macOS development host (2026-08-04, 100,000 synthetic
 Falco events): all 100,000 events were ingested with zero failed/dropped batches;

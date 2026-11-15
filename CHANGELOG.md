@@ -4,6 +4,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Refresh the 100k-event acceptance for authenticated daemons. Separate ingest
+  and post-ingest query measurements, account for retained storage, and freeze
+  environment-bound regression budgets from three baseline runs. Preserve
+  reports and caller-supplied binaries instead of removing them on exit.
 - Add `seal-executions --require-receipts` to check all final packages in a
   stopped caller/target scope. Verify persisted receipt signatures and identities,
   report pending receipts separately from local packaging, and preserve failed
