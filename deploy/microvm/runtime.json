@@ -5,6 +5,22 @@
   "guest_family": "ubuntu-24.04-systemd",
   "base_image": "ubuntu@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90",
   "guest_kernel_series": "6.18",
+  "guest_kernel": {
+    "version": "6.18.62",
+    "source_repository": "https://github.com/amazonlinux/linux.git",
+    "source_tag": "kernel6.18-6.18.62-127.179.amzn2023",
+    "source_commit": "b7522fb67989bd879de78486e9e253fd2f21f1dd",
+    "configs": {
+      "aarch64": {
+        "url": "https://raw.githubusercontent.com/firecracker-microvm/firecracker/eaf83bb718a559d324613d566eaf776b31a62340/resources/guest_configs/microvm-kernel-ci-aarch64-6.18.config",
+        "sha256": "35cce8e8b754a84523ca20dc068fc3f8f03a15523be36a8623bad54e11972e2a"
+      },
+      "x86_64": {
+        "url": "https://raw.githubusercontent.com/firecracker-microvm/firecracker/eaf83bb718a559d324613d566eaf776b31a62340/resources/guest_configs/microvm-kernel-ci-x86_64-6.18.config",
+        "sha256": "ba22401a0c7292a4c024ebcd10a562d4a1f1bfd2faed671406d3b159c0cf5215"
+      }
+    }
+  },
   "hardware_boot_acceptance": "pending",
-  "kernel_requirements": ["DEBUG_INFO_BTF", "BPF_SYSCALL", "BPF_EVENTS", "PERF_EVENTS", "KPROBE_EVENTS", "UPROBE_EVENTS", "FTRACE_SYSCALLS", "CGROUPS", "CGROUP_BPF", "EXT4_FS", "VIRTIO_BLK", "VIRTIO_NET"]
+  "kernel_requirements": ["DEBUG_INFO_BTF", "BPF_SYSCALL", "BPF_JIT", "BPF_EVENTS", "PERF_EVENTS", "KPROBE_EVENTS", "UPROBE_EVENTS", "FTRACE_SYSCALLS", "CGROUPS", "CGROUP_BPF", "IKCONFIG_PROC", "DEVTMPFS", "DEVTMPFS_MOUNT", "EXT4_FS", "VIRTIO_BLK", "VIRTIO_NET", "VIRTIO_MMIO"]
 }

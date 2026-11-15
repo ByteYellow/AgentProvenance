@@ -624,11 +624,37 @@ python3 scripts/accept_execution_seal.py \
 `daemon serve` 和 `seal-executions`。镜像方案选定 Firecracker **v1.18.0**，
 源码提交为 `eaf83bb718a559d324613d566eaf776b31a62340`，Ubuntu 24.04 基础镜像的
 固定摘要保存在 [runtime.json](../../deploy/microvm/runtime.json)。guest 内核选用
-Amazon Linux microVM **6.18** 系列，需要 BTF、BPF events、syscall tracepoint、
-uprobe 和 cgroup v2。内核产物固化、Firecracker 启动及恢复／克隆留在硬件环境验收；
-rootfs 构建清单中的 `boot_tested` 初始为 `false`。
-配置依据见上游[内核策略](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/docs/kernel-policy.md)
-和[镜像构建指南](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/docs/rootfs-and-kernel-setup.md)。
+Amazon Linux **6.18.62**，源码提交为 `b7522fb67989bd879de78486e9e253fd2f21f1dd`。
+内核构建脚本校验固定上游配置，合入 [Sensor 配置片段](../../deploy/microvm/sensor-kernel.config)，
+再检查实际生效的 BTF、BPF events、syscall tracepoint、uprobe 和启动驱动。
+镜像及内核清单中的 `boot_tested` 为 `false`；Firecracker 实际启动和 guest 回收仍需硬件验收。
+已选 Sentry 方案的恢复与克隆验收见 [SecCheck 指南](gvisor-seccheck.md)。
+配置依据见上游[内核策略](https://github.com/firecracker-microvm/firecracker/blob/eaf83bb718a559d324613d566eaf776b31a62340/docs/kernel-policy.md)
+和[镜像构建指南](https://github.com/firecracker-microvm/firecracker/blob/eaf83bb718a559d324613d566eaf776b31a62340/docs/rootfs-and-kernel-setup.md)。
+
+在 Linux ARM64 或 x86_64 主机上原生构建内核。准备 Git、Make、GCC、binutils、
+`bc`、`flex`、`bison`、OpenSSL／ELF 开发头文件、`pkg-config`、支持 DWARF 5 的
+`pahole` 和 `bpftool`。构建无需 root 或 `/dev/kvm`，也不会安装宿主内核。
+源码与输出使用不同目录：
+
+```sh
+git clone --depth 1 --single-branch \
+  --branch kernel6.18-6.18.62-127.179.amzn2023 \
+  https://github.com/amazonlinux/linux.git /path/to/linux-source
+python3 scripts/build_microvm_kernel.py \
+  --source /path/to/linux-source --output /path/to/new/guest-kernel --jobs 2
+```
+
+源码必须是固定提交的干净工作区。脚本按 SHA-256 校验上游配置；可用
+`--base-config /path/to/config` 指定已下载副本，仍执行同样的校验。
+采集所需功能和块设备、网络驱动直接编入内核，rootfs 无需另装内核模块。
+配置或编译失败时保留日志，不生成 `manifest.json`。
+
+ARM64 使用 `Image`，x86_64 使用去除调试信息后的 ELF `vmlinux`。
+输出还包括经过解析检查的 `kernel.btf`、最终 `kernel.config`、`System.map`、
+构建日志，以及输入、产物摘要和工具版本清单。将这些文件与对应 rootfs 一起保留；
+保留最终产物后可删除中间 `build/` 目录，脚本默认留存该目录便于排查。
+固定输入用于识别构建，编译器和软件包版本也会作为环境信息记录。
 
 在安装了 Docker、Python 3、`systemd-analyze`、`chroot`、`mkfs.ext4` 和 `e2fsck` 的 Linux 上构建：
 

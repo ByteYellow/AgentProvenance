@@ -56,6 +56,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Runtime collection
 
+- Add a pinned Amazon Linux 6.18.62 guest-kernel recipe for the selected
+  Firecracker profile. Verify upstream configuration digests, effective Sensor
+  and built-in boot options, BTF and architecture-specific boot images; retain
+  build provenance and keep hardware boot acceptance separate.
 - Extend the real memory-restore acceptance with copied signing credentials:
   reject new packages signed by the retired key under the current external pin,
   retain historical signature verification, and document the host-owned

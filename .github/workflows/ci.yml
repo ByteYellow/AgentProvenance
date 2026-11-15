@@ -21,6 +21,8 @@ jobs:
       - run: python scripts/check_localized_docs.py
       - name: Guest lifecycle hooks and image definition
         run: python -m unittest discover -s scripts -p 'test_microvm_guest.py' -v
+      - name: Pinned guest kernel recipe
+        run: python -m unittest discover -s scripts -p 'test_microvm_kernel.py' -v
 
   jev-demo:
     name: Jev demo (keyless, Python ${{ matrix.python }})

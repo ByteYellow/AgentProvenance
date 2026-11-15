@@ -786,12 +786,44 @@ The opt-in [guest deployment](../deploy/microvm/agentprov-guest.service) reuses
 **v1.18.0**, source `eaf83bb718a559d324613d566eaf776b31a62340`, and an
 immutable Ubuntu 24.04 base image recorded in
 [runtime.json](../deploy/microvm/runtime.json). The selected guest kernel series
-is Amazon Linux microVM **6.18** with BTF, BPF events, syscall tracepoints,
-uprobes and cgroup v2 enabled. Kernel artifact pinning and Firecracker boot,
-snapshot and clone acceptance remain the hardware integration gate. The rootfs
-manifest records `boot_tested: false` until that separate acceptance is performed.
-See the upstream [kernel policy](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/docs/kernel-policy.md)
-and [image setup guide](https://github.com/firecracker-microvm/firecracker/blob/v1.18.0/docs/rootfs-and-kernel-setup.md).
+is Amazon Linux **6.18.62**, commit `b7522fb67989bd879de78486e9e253fd2f21f1dd`.
+The kernel builder verifies the pinned upstream configuration, adds the
+[Sensor fragment](../deploy/microvm/sensor-kernel.config), and checks effective
+BTF, BPF events, syscall tracepoint, uprobe and boot-driver settings.
+The image and kernel manifests record `boot_tested: false`; actual Firecracker
+boot and guest retirement require separate hardware acceptance. Restore/clone
+acceptance for the selected Sentry profile is described in the
+[SecCheck guide](gvisor-seccheck.md).
+See the upstream [kernel policy](https://github.com/firecracker-microvm/firecracker/blob/eaf83bb718a559d324613d566eaf776b31a62340/docs/kernel-policy.md)
+and [image setup guide](https://github.com/firecracker-microvm/firecracker/blob/eaf83bb718a559d324613d566eaf776b31a62340/docs/rootfs-and-kernel-setup.md).
+
+Build the kernel natively on Linux ARM64 or x86_64. Install Git, Make, GCC and
+binutils, `bc`, `flex`, `bison`, OpenSSL/ELF development headers, `pkg-config`,
+`pahole` with DWARF 5 support, and `bpftool`. The build does not require root or
+`/dev/kvm` and never installs a host kernel. Keep the source and output directories
+separate:
+
+```sh
+git clone --depth 1 --single-branch \
+  --branch kernel6.18-6.18.62-127.179.amzn2023 \
+  https://github.com/amazonlinux/linux.git /path/to/linux-source
+python3 scripts/build_microvm_kernel.py \
+  --source /path/to/linux-source --output /path/to/new/guest-kernel --jobs 2
+```
+
+The clean checkout must match the recorded commit. Upstream configuration bytes
+are SHA-256 checked; `--base-config /path/to/config` uses a previously downloaded
+copy with the same check. Required collection and block/network drivers are
+built in because the rootfs does not ship kernel modules. Configuration or build
+failures retain logs and do not publish `manifest.json`.
+
+Use `Image` for ARM64 and the stripped ELF `vmlinux` for x86_64. The output also
+contains parsed `kernel.btf`, resolved `kernel.config`, `System.map`, build logs
+and a manifest with input/artifact hashes and tool versions. Keep these files
+with the corresponding rootfs. The intermediate `build/` directory can be
+removed after retaining the final artifacts; the script leaves it for diagnosis.
+The pinned inputs identify the build, while compiler and package versions remain
+part of its recorded environment.
 
 Build on a Linux machine with Docker, Python 3, `systemd-analyze`, `chroot`,
 `mkfs.ext4` and `e2fsck`:
