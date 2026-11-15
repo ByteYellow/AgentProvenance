@@ -4,6 +4,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Add fixed-input Browser/Notebook storage and export measurements across three
+  retention variants, with native-identity checks, signed round trips, selective
+  replay checks and frozen environment-bound performance budgets.
 - Add repeatable native Sensor overhead measurements against an uncollected
   workload, with separate minimal/default probe profiles, exact loss checks,
   retained captures and environment-bound regression budgets.

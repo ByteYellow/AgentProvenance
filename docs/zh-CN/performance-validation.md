@@ -139,3 +139,53 @@ Sensor 记录启动、发现和收尾开销。每 20 毫秒采样一次 RSS。
 
 可选的 `--source-commit FULL_SHA` 记录操作者提供的构建提交。
 Sensor 没有版本查询入口；记录源码来源时，将构建命令和源码归档摘要与二进制哈希一并保留。
+
+## 测量上下文存储与导出成本
+
+固定一组 Browser 和 Notebook 原始记录，包含截图、HAR 和图表输出。
+可用 `scripts/accept_browser.py` 与 `scripts/accept_notebook.py --attachments`
+生成这些输入。分享前检查内容，尤其是截图中的可见信息。
+成本脚本重新导入已保存的记录，测量期间不启动 Agent、浏览器、kernel 或 Sensor。
+
+```sh
+MEASUREMENTS=$(mktemp -d)
+python3 scripts/accept_context_cost.py run \
+  --agentprov /absolute/path/to/baseline-agentprov \
+  --browser-input /absolute/path/to/browser/first.jsonl \
+  --browser-input /absolute/path/to/browser/second.jsonl \
+  --notebook-input /absolute/path/to/notebook/first.jsonl \
+  --notebook-input /absolute/path/to/notebook/restarted.jsonl \
+  --output "$MEASUREMENTS/baseline"
+python3 scripts/accept_context_cost.py freeze \
+  --baseline "$MEASUREMENTS/baseline/report.json" \
+  --budget "$MEASUREMENTS/budget.json"
+```
+
+候选版本使用相同输入和环境，指定新的 `--output`，并增加
+`--budget "$MEASUREMENTS/budget.json"`。可选的 `--source-commit FULL_SHA`
+会核对 CLI 版本中的源码提交。每次测量均对 basic、detailed 和
+`--capture-attachments=false` 下的 detailed 各运行三轮，并轮换顺序。
+详细档必须实际保存附件；主动省略等场景由对应功能测试覆盖。
+三个档位下的原生操作、请求关联必须一致。
+
+报告分别统计生成 Bundle 前的存储文件逻辑体积、保留附件的字节数、签名 Bundle
+体积和只读回放 ZIP 体积。CLI 导入、投影、分页查询、签名导出、完整回放导出和
+排除附件后的导出分别计时。CPU 包含校验命令；RSS 取 `wait4` 返回的单个子进程峰值
+中的最大值。每条命令保留参数、标准输出、标准错误、耗时和退出码。
+
+脚本检查重复导入、独立存储中的签名验证、移走来源存储后的记录一致性、图谱验证、
+附件分页摘要及导出选择数量。完整阅读体验另用浏览器验收；服务停止后执行：
+
+```sh
+node scripts/accept_offline_replay.cjs \
+  "$MEASUREMENTS/candidate/1-browser-detailed/whole.zip" \
+  "$MEASUREMENTS/candidate/1-browser-detailed/excluded.zip" \
+  "$MEASUREMENTS/candidate/1-jupyter-detailed/whole.zip" \
+  "$MEASUREMENTS/candidate/1-jupyter-detailed/excluded.zip"
+```
+
+预算取各 harness、档位三次结果的中位数，允许增加 25%；CLI 耗时及 CPU 另加预先
+声明的 50 毫秒余量。输入哈希、环境和测量脚本必须一致。缺少指标、原生关联变化
+或任一指标超限时，验收失败。调查时保留原失败报告与预算。
+这组小规模固定输入测量对应体量的留存、导出成本；容量测试另设明确的工作负载。
+为来源存储、恢复存储和所有 ZIP 预留磁盘空间。生成的签名密钥、记录和命令日志留在本地。

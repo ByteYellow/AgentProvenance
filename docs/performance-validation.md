@@ -153,3 +153,62 @@ returns nonzero. Rebaseline explicitly when the environment or instrument change
 Optional `--source-commit FULL_SHA` records the build revision supplied by the
 operator. Sensor has no version query; retain the build command and source
 archive digest alongside the executable hash when establishing source provenance.
+
+## Measure context storage and export cost
+
+Keep fixed Browser and Notebook recorder captures, including screenshots/HAR and
+a raster output. The native fixtures in `scripts/accept_browser.py` and
+`scripts/accept_notebook.py --attachments` produce suitable inputs. Review them
+before sharing: screenshots can contain visible private data. The cost runner
+reimports these saved files; it does not start an Agent, browser, kernel or Sensor.
+
+```sh
+MEASUREMENTS=$(mktemp -d)
+python3 scripts/accept_context_cost.py run \
+  --agentprov /absolute/path/to/baseline-agentprov \
+  --browser-input /absolute/path/to/browser/first.jsonl \
+  --browser-input /absolute/path/to/browser/second.jsonl \
+  --notebook-input /absolute/path/to/notebook/first.jsonl \
+  --notebook-input /absolute/path/to/notebook/restarted.jsonl \
+  --output "$MEASUREMENTS/baseline"
+python3 scripts/accept_context_cost.py freeze \
+  --baseline "$MEASUREMENTS/baseline/report.json" \
+  --budget "$MEASUREMENTS/budget.json"
+```
+
+Run the candidate with the same inputs and environment, a fresh `--output`, and
+`--budget "$MEASUREMENTS/budget.json"`. Optional `--source-commit FULL_SHA` checks
+the CLI version against the recorded revision. Every run measures three repeats
+of basic, detailed and detailed with `--capture-attachments=false`, rotating the
+order. Captures must have stored attachments under detailed; use omission-focused
+functional tests separately. Native operation/request identities must match
+across all three retention variants.
+
+Reports distinguish logical store bytes before Bundle creation, retained
+attachment bytes, signed Bundle size and unsigned replay ZIP size. CLI import,
+projection, paged context listing, signed export and whole/attachment-excluded
+replay exports have separate wall times. CPU includes validation commands; peak
+RSS is the maximum child-process peak from `wait4`, not simultaneous pipeline
+memory. Each command retains arguments, stdout, stderr, duration and exit status.
+
+The runner checks duplicate import, verified signed import into an independent
+store, unchanged records after moving the source store, graph verification,
+paged attachment digests and export selection counts. The complete reading check
+is a separate browser step, run against candidate archives after services stop:
+
+```sh
+node scripts/accept_offline_replay.cjs \
+  "$MEASUREMENTS/candidate/1-browser-detailed/whole.zip" \
+  "$MEASUREMENTS/candidate/1-browser-detailed/excluded.zip" \
+  "$MEASUREMENTS/candidate/1-jupyter-detailed/whole.zip" \
+  "$MEASUREMENTS/candidate/1-jupyter-detailed/excluded.zip"
+```
+
+Budgets freeze the median of three repeats for each harness/preset, allow a 25%
+increase, and add a predeclared 50 ms allowance to CLI timing and CPU metrics.
+Input hashes, environment and measurement script must match. Missing metrics,
+changed native associations and any exceeded limit fail acceptance. Keep prior
+failures and budgets when investigating. These small, fixed captures measure
+retention/export cost at their recorded size; use additional named workloads for
+capacity testing. Reserve disk for both original and restored stores and all ZIPs.
+Generated signing keys, captures and command logs stay private.
