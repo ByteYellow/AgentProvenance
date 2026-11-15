@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-from accept_seccheck_restore import PHASES, require_expired_endpoint, require_replay_receipt, require_restore_identities, runtime_command
+from accept_seccheck_restore import PHASES, require_expired_endpoint, require_replay_receipt, require_restore_identities, require_signature_rejection, runtime_command
 
 
 class RestoreAcceptanceChecks(unittest.TestCase):
@@ -66,6 +66,29 @@ class RestoreAcceptanceChecks(unittest.TestCase):
             runtime_command(command, log, expect_success=False)
             with self.assertRaisesRegex(RuntimeError, 'exit 0'):
                 runtime_command([sys.executable, '-c', 'pass'], log, expect_success=False)
+
+    def test_fixture_secret_uses_stdin_without_log_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            secret = b'synthetic-test-key-not-a-real-credential'
+            command = [sys.executable, '-c',
+                'import sys; from pathlib import Path; '
+                f'Path({str(root / "private")!r}).write_bytes(sys.stdin.buffer.read())']
+            runtime_command(command, root / 'runtime.log', input_bytes=secret)
+            self.assertEqual((root / 'private').read_bytes(), secret)
+            self.assertNotIn(secret, (root / 'runtime.log').read_bytes())
+
+    def test_copied_key_rejection_requires_signature_failure_before_import(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory) / 'receiver'
+            error = 'Error: attestation verify failed: attest: no valid signature for key'
+            require_signature_rejection(1, error, destination)
+            for code, reason in ((0, error), (1, 'file not found'), (1, 'unknown command')):
+                with self.assertRaisesRegex(RuntimeError, 'signature trust boundary'):
+                    require_signature_rejection(code, reason, destination)
+            destination.mkdir()
+            with self.assertRaisesRegex(RuntimeError, 'created a receiving store'):
+                require_signature_rejection(1, error, destination)
 
     def test_stale_trace_must_fail_at_the_expected_endpoint(self):
         for reason in ('no such file or directory', 'connection refused'):

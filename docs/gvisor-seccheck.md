@@ -227,6 +227,23 @@ The [upstream checkpoint guide](https://gvisor.dev/docs/user_guide/checkpoint_re
 describes the runtime lifecycle; this profile is tested against the pinned release
 above, not against an arbitrary runsc version.
 
+### Restore Authorization
+
+This profile uses a private host socket and the configured Unix peer UID for
+transport authorization. A copied guest token or producer configuration does not
+register a lifetime. Keep receiver configuration on the trusted host, close the
+old endpoint, assign the new instance/generation, and install the new tracing
+configuration before releasing the work gate.
+
+The signing credential belongs to the trusted host publisher, not to each
+sandbox. If a snapshot contains a retired signing key, rotate the host signing
+key and update the receiver's current public-key pin through the trusted
+configuration channel. Keep the retired public key with archived Bundles;
+historical verification uses that key, while new imports use the current pin.
+The receiver must not choose a key from the copied guest configuration or from
+the incoming package itself. Existing `forensics keygen`, `export --sign-key`
+and `import --pub-key` provide these operations.
+
 Run the isolated memory-continuity acceptance with a fresh output directory:
 
 ```sh
@@ -248,8 +265,16 @@ The script also retains an actual sealed queue batch and its independently
 stored digest, copies it to both clones, and replays it into fresh and existing
 stores. Historical observations retain their original identities; each clone
 receives a separate durable upload receipt. Retrying the command reuses that
-receipt. Credentials remain on the host; guest-contained credential rotation
-requires its own continuity acceptance.
+receipt.
+
+The same acceptance deliberately places a synthetic retired signing key in the
+sandbox's memory-backed filesystem. Each restored copy retains it. A new package
+signed with that copied key verifies under the old public key but fails import
+under the externally rotated current key, before a receiving store is created.
+The original historical Bundle remains verifiable and the new host-signed
+package imports successfully. Private key bytes stay out of arguments and logs.
+The retained test snapshot contains the synthetic retired key: keep the output
+directory private and do not use test keys for production evidence.
 
 ### Replay a Copied Queue Batch
 

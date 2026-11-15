@@ -56,6 +56,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Runtime collection
 
+- Extend the real memory-restore acceptance with copied signing credentials:
+  reject new packages signed by the retired key under the current external pin,
+  retain historical signature verification, and document the host-owned
+  registration and key-rotation policy.
 - Add local `telemetry replay-seccheck` for verified copied queue batches.
   Preserve historical event identities while recording each uploader separately,
   reuse durable receipts on retry, and enforce signed-reference and selective

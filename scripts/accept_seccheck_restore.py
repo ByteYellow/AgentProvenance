@@ -19,11 +19,12 @@ from accept_seccheck_faults import latest_status, wait_for, require_preserved_re
 PHASES = (('original', '1'), ('original', '2'), ('clone-a', '1'), ('clone-b', '1'))
 
 
-def runtime_command(command, path, timeout=30, expect_success=True):
+def runtime_command(command, path, timeout=30, expect_success=True, input_bytes=None):
     # Detached workloads retain stdio; waiting for pipe EOF would wait for the
     # whole sandbox instead of the command. Keep failures in the same log.
     with path.open('w') as log:
-        result = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=log,
+        result = subprocess.run(command, stdin=subprocess.DEVNULL if input_bytes is None else None,
+                                input=input_bytes, stdout=log,
                                 stderr=subprocess.STDOUT, timeout=timeout)
     if (result.returncode == 0) != expect_success:
         raise RuntimeError(f'unexpected runtime exit {result.returncode}; see {path}')
@@ -73,6 +74,13 @@ def require_replay_receipt(result, registration, expected_ids, digest_value, ing
     return receipt
 
 
+def require_signature_rejection(code, error, destination):
+    if code != 1 or 'attestation verify failed: attest: no valid signature for key' not in error:
+        raise RuntimeError('copied signing key did not fail at the current signature trust boundary')
+    if destination.exists():
+        raise RuntimeError('rejected copied signing key created a receiving store')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('cli', 'runsc', 'rootfs', 'output'):
@@ -102,7 +110,13 @@ def main():
         with sqlite3.connect(f"file:{directory / 'agentprov.db'}?mode=ro", uri=True) as db:
             return dict(db.execute("SELECT raw_event_id,payload FROM events WHERE source='gvisor_seccheck'"))
 
-    with tempfile.TemporaryDirectory(prefix='ap-scr-') as sockets:
+    with tempfile.TemporaryDirectory(prefix='ap-scr-') as sockets, \
+            tempfile.TemporaryDirectory(prefix='ap-scr-retired-') as old_keys:
+        retired_private = Path(old_keys) / 'retired.key'
+        retired_public = args.output / 'retired.pub'
+        subprocess.run([str(args.cli), 'forensics', 'keygen', '--priv', str(retired_private),
+                        '--pub', str(retired_public)], capture_output=True, check=True, timeout=10)
+        retired_bytes = retired_private.read_bytes()
         try:
             records = []
             previous = None
@@ -148,8 +162,8 @@ def main():
                 common = [str(args.runsc), '--root=' + str(state), '--platform=systrap', '--network=none']
                 sandboxes.append((state, name))
 
-                def runtime(command, logfile, timeout=30, expect_success=True):
-                    return runtime_command(common + command, bundle / logfile, timeout, expect_success)
+                def runtime(command, logfile, timeout=30, expect_success=True, input_bytes=None):
+                    return runtime_command(common + command, bundle / logfile, timeout, expect_success, input_bytes)
 
                 if index == 0:
                     runtime(['--pod-init-config=' + str(bundle / 'trace.json'), 'run', '--detach',
@@ -158,6 +172,13 @@ def main():
                     runtime(['restore', '--detach', '--background=false', '--image-path=' + str(image),
                              '--bundle=' + str(bundle), name], 'restore.log')
                     runtime(['exec', name, '/bin/sh', '-c', 'test ! -e /tmp/proceed'], 'before-rebind.log')
+                    copied = subprocess.run(common + ['exec', name, '/bin/cat', '/tmp/copied-signing.key'],
+                                            capture_output=True, check=True, timeout=10)
+                    if copied.stdout != retired_bytes:
+                        raise RuntimeError('snapshot did not retain the original signing credential')
+                    copied_private = Path(old_keys) / 'copied.key'
+                    copied_private.write_bytes(copied.stdout)
+                    copied_private.chmod(0o600)
                     rejected = runtime(['trace', 'create', '--force', '--config=' + str(args.output / 'phase-0/trace.json'), name],
                                        'stale-trace.log', expect_success=False)
                     require_expired_endpoint(rejected, str(Path(sockets) / '0.sock'))
@@ -176,6 +197,11 @@ def main():
                     return result.stdout.strip() if result.returncode == 0 else None
 
                 seed = wait_for(before_ready, 'saved memory workload ready')
+                if index == 0:
+                    # Deliberately place a synthetic retired key in memory-backed
+                    # storage. Its bytes never enter argv, trace config or logs.
+                    runtime(['exec', name, '/bin/sh', '-c', 'umask 077; cat > /tmp/copied-signing.key'],
+                            'seed-credential.log', input_bytes=retired_bytes)
                 hostname = runtime(['exec', name, '/bin/hostname'], 'hostname.log').strip()
                 boot_id = runtime(['exec', name, '/bin/cat', '/proc/sys/kernel/random/boot_id'], 'boot-id.log').strip()
                 if index:
@@ -239,7 +265,11 @@ def main():
                 previous = current
                 records.append({'registration': registration, 'memory_value': seed,
                     'hostname': hostname, 'boot_id': boot_id,
+                    'copied_signing_key_matches': True,
                     'context': observed['sentry']['context'], 'status': final})
+                if index == 0:
+                    retired_bundle = run_json(args.cli, store, 'forensics', 'export', run_id,
+                                              '--sign-key', str(retired_private), '--json')
 
             with sqlite3.connect(f"file:{store / 'agentprov.db'}?mode=ro", uri=True) as db:
                 scopes = {row[0] for row in db.execute("SELECT DISTINCT container_id FROM events WHERE source='gvisor_seccheck' AND pid=1")}
@@ -272,6 +302,8 @@ def main():
             if len(saved(replay_store)) != len(expected_ids) + 2:
                 raise RuntimeError('two clones duplicated historical execution observations')
             previous = saved()
+            if any(retired_bytes.strip().decode('ascii') in payload for payload in previous.values()):
+                raise RuntimeError('synthetic private signing key leaked into captured evidence')
             replay_verify = run_json(args.cli, replay_store, 'graph', 'verify', '--run', run_id, '--json')
             if replay_verify['error_count'] or replay_verify['warning_count']:
                 raise RuntimeError('replayed historical graph verification failed')
@@ -283,6 +315,24 @@ def main():
                 private_key = Path(keys) / 'acceptance.key'
                 subprocess.run([str(args.cli), 'forensics', 'keygen', '--priv', str(private_key),
                     '--pub', str(public_key)], capture_output=True, check=True, timeout=10)
+                if digest(public_key) == digest(retired_public):
+                    raise RuntimeError('external publisher did not rotate the retired signing credential')
+                copied_signed = run_json(args.cli, store, 'forensics', 'export', run_id,
+                                         '--sign-key', str(copied_private), '--json')
+                # Positive control: this is a valid old-key signature, not a
+                # corrupt package or unrelated CLI failure.
+                for signed in (retired_bundle, copied_signed):
+                    subprocess.run([str(args.cli), 'forensics', 'verify-attestation', signed['path'],
+                        signed['attestation_path'], '--pub-key', str(retired_public)],
+                        capture_output=True, check=True, timeout=30)
+                rejected_store = args.output / 'copied-key-rejected-store'
+                rejection = subprocess.run([str(args.cli), '--data-dir', str(rejected_store),
+                    'forensics', 'import', copied_signed['path'], '--pub-key', str(public_key), '--json'],
+                    capture_output=True, text=True, timeout=30)
+                require_signature_rejection(rejection.returncode, rejection.stderr, rejected_store)
+                write_json(args.output / 'copied-key-rejection.json', {
+                    'exit_code': rejection.returncode, 'error': rejection.stderr,
+                    'receiver_store_created': rejected_store.exists()})
                 exported = run_json(args.cli, store, 'forensics', 'export', run_id,
                                     '--sign-key', str(private_key), '--json')
             receiver_store = args.output / 'receiver-store'
@@ -305,6 +355,11 @@ def main():
                 'phases': records, 'events': len(previous), 'scopes': sorted(scopes), 'process_nodes': sorted(processes),
                 'historical_spool': {'sha256': batch[2], 'records': batch[3], 'event_ids': expected_ids,
                     'uploads': replay_results, 'verify': replay_verify},
+                'reauthorization': {'policy': 'external_registration_and_host_signer_rotation',
+                    'signer_scope': 'trusted_host_producer', 'copied_key_rejected': True,
+                    'historical_signature_verified': True, 'current_import_verified': imported['attestation_verified'],
+                    'retired_public_sha256': digest(retired_public), 'current_public_sha256': digest(public_key),
+                    'historical_bundle': retired_bundle, 'copied_key_signed_bundle': copied_signed},
                 'snapshot': {p.name: digest(p) for p in image.iterdir() if p.is_file()}, 'verify': verify,
                 'bundle': exported, 'import': imported, 'import_verify': imported_verify})
         finally:
