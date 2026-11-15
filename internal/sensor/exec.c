@@ -269,6 +269,7 @@ static __always_inline void capture_proc_task(struct task_struct *task, struct s
 	if (bpf_map_update_elem(&proc_tasks, &key, &ids, BPF_ANY))
 		count_drop();
 }
+#endif
 
 // Cache the cgroup's kernel name while the task still exists. A short-lived Pod
 // can lose BOTH /proc/PID and its cgroup directory before userspace drains the
@@ -316,7 +317,6 @@ static __always_inline void capture_cgroup_identity(struct task_struct *task, __
 	}
 	bpf_map_update_elem(&cgroup_names, &id, value, BPF_NOEXIST);
 }
-#endif
 
 static __always_inline void fill_common(struct sensor_event *e) {
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
@@ -337,8 +337,8 @@ static __always_inline void fill_common(struct sensor_event *e) {
 	e->conn_epoch = 0;
 	e->tls_stream = e->tls_call = 0;
 	e->tls_offset = 0;
-#if defined(__TARGET_ARCH_x86)
 	capture_cgroup_identity(task, e->cgroup_id);
+#if defined(__TARGET_ARCH_x86)
 	capture_proc_task(task, e);
 #endif
 	bpf_get_current_comm(&e->comm, sizeof(e->comm));
@@ -367,8 +367,8 @@ int handle_fork(struct bpf_raw_tracepoint_args *ctx) {
 	// before this tracepoint. The current task is still the parent here.
 	struct cgroup *group = BPF_CORE_READ(child, cgroups, dfl_cgrp);
 	e->cgroup_id = BPF_CORE_READ(group, kn, id);
-#if defined(__TARGET_ARCH_x86)
 	capture_cgroup_identity(child, e->cgroup_id);
+#if defined(__TARGET_ARCH_x86)
 	capture_proc_task(child, e);
 #endif
 	bpf_ringbuf_submit(e, 0);

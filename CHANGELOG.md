@@ -4,6 +4,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Enable the existing bounded kernel cgroup-name cache on ARM64, preserving
+  short-lived container identity after procfs and cgroup directories disappear.
+  Check both committed probe objects and the native userspace lookup path.
 - Preserve passive native capture windows and original Sensor capabilities
   through late K8s bindings, spool recovery, signed Bundles and offline selection.
   Commit observations with events and receipts; retain missing history for retry

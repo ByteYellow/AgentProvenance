@@ -37,7 +37,7 @@ ARM64 object byte-for-byte.
 - The native stream persists bounded batches before asynchronous ingestion,
   retries late bindings at capture time, and recovers interrupted batches.
   See [native capture persistence](native-capture-spool.md) for guarantees and limits.
-- An amd64 kernel map retains up to 16,384 cgroup identities at capture time,
+- The amd64 and ARM64 kernel maps retain up to 16,384 cgroup identities at capture time,
   including up to three ancestor names. Userspace can resolve a short-lived Pod
   after both its process and cgroup directory have disappeared.
 

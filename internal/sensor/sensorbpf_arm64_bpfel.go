@@ -14,6 +14,8 @@ import (
 
 type sensorbpfArgvVal struct{ Args [512]uint8 }
 
+type sensorbpfCgroupIdentity struct{ Names [3][96]int8 }
+
 type sensorbpfProcessExitKey struct {
 	StartNs  uint64
 	Pid      uint32
@@ -169,17 +171,19 @@ type sensorbpfProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type sensorbpfMapSpecs struct {
-	ArgvBuild        *ebpf.MapSpec `ebpf:"argv_build"`
-	ArgvScratch      *ebpf.MapSpec `ebpf:"argv_scratch"`
-	Drops            *ebpf.MapSpec `ebpf:"drops"`
-	Events           *ebpf.MapSpec `ebpf:"events"`
-	ExitedGroups     *ebpf.MapSpec `ebpf:"exited_groups"`
-	SslEpochs        *ebpf.MapSpec `ebpf:"ssl_epochs"`
-	SslReadBufs      *ebpf.MapSpec `ebpf:"ssl_read_bufs"`
-	SslReadExBufs    *ebpf.MapSpec `ebpf:"ssl_read_ex_bufs"`
-	SyscallCalls     *ebpf.MapSpec `ebpf:"syscall_calls"`
-	TlsDiscoverySeen *ebpf.MapSpec `ebpf:"tls_discovery_seen"`
-	TlsSequences     *ebpf.MapSpec `ebpf:"tls_sequences"`
+	ArgvBuild         *ebpf.MapSpec `ebpf:"argv_build"`
+	ArgvScratch       *ebpf.MapSpec `ebpf:"argv_scratch"`
+	CgroupNameScratch *ebpf.MapSpec `ebpf:"cgroup_name_scratch"`
+	CgroupNames       *ebpf.MapSpec `ebpf:"cgroup_names"`
+	Drops             *ebpf.MapSpec `ebpf:"drops"`
+	Events            *ebpf.MapSpec `ebpf:"events"`
+	ExitedGroups      *ebpf.MapSpec `ebpf:"exited_groups"`
+	SslEpochs         *ebpf.MapSpec `ebpf:"ssl_epochs"`
+	SslReadBufs       *ebpf.MapSpec `ebpf:"ssl_read_bufs"`
+	SslReadExBufs     *ebpf.MapSpec `ebpf:"ssl_read_ex_bufs"`
+	SyscallCalls      *ebpf.MapSpec `ebpf:"syscall_calls"`
+	TlsDiscoverySeen  *ebpf.MapSpec `ebpf:"tls_discovery_seen"`
+	TlsSequences      *ebpf.MapSpec `ebpf:"tls_sequences"`
 }
 
 // sensorbpfObjects contains all objects after they have been loaded into the kernel.
@@ -201,23 +205,27 @@ func (o *sensorbpfObjects) Close() error {
 //
 // It can be passed to loadSensorbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type sensorbpfMaps struct {
-	ArgvBuild        *ebpf.Map `ebpf:"argv_build"`
-	ArgvScratch      *ebpf.Map `ebpf:"argv_scratch"`
-	Drops            *ebpf.Map `ebpf:"drops"`
-	Events           *ebpf.Map `ebpf:"events"`
-	ExitedGroups     *ebpf.Map `ebpf:"exited_groups"`
-	SslEpochs        *ebpf.Map `ebpf:"ssl_epochs"`
-	SslReadBufs      *ebpf.Map `ebpf:"ssl_read_bufs"`
-	SslReadExBufs    *ebpf.Map `ebpf:"ssl_read_ex_bufs"`
-	SyscallCalls     *ebpf.Map `ebpf:"syscall_calls"`
-	TlsDiscoverySeen *ebpf.Map `ebpf:"tls_discovery_seen"`
-	TlsSequences     *ebpf.Map `ebpf:"tls_sequences"`
+	ArgvBuild         *ebpf.Map `ebpf:"argv_build"`
+	ArgvScratch       *ebpf.Map `ebpf:"argv_scratch"`
+	CgroupNameScratch *ebpf.Map `ebpf:"cgroup_name_scratch"`
+	CgroupNames       *ebpf.Map `ebpf:"cgroup_names"`
+	Drops             *ebpf.Map `ebpf:"drops"`
+	Events            *ebpf.Map `ebpf:"events"`
+	ExitedGroups      *ebpf.Map `ebpf:"exited_groups"`
+	SslEpochs         *ebpf.Map `ebpf:"ssl_epochs"`
+	SslReadBufs       *ebpf.Map `ebpf:"ssl_read_bufs"`
+	SslReadExBufs     *ebpf.Map `ebpf:"ssl_read_ex_bufs"`
+	SyscallCalls      *ebpf.Map `ebpf:"syscall_calls"`
+	TlsDiscoverySeen  *ebpf.Map `ebpf:"tls_discovery_seen"`
+	TlsSequences      *ebpf.Map `ebpf:"tls_sequences"`
 }
 
 func (m *sensorbpfMaps) Close() error {
 	return _SensorbpfClose(
 		m.ArgvBuild,
 		m.ArgvScratch,
+		m.CgroupNameScratch,
+		m.CgroupNames,
 		m.Drops,
 		m.Events,
 		m.ExitedGroups,

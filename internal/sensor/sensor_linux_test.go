@@ -10,6 +10,17 @@ import (
 	"time"
 )
 
+func TestCgroupResolverKernelLookupConfigured(t *testing.T) {
+	r := newCgroupResolver()
+	configureCgroupResolver(r, &sensorbpfObjects{})
+	if r.kernelName == nil {
+		t.Fatal("native architecture has no kernel cgroup identity lookup")
+	}
+	if got := r.kernelName(42); got != "" {
+		t.Fatalf("missing map must not invent an identity: %q", got)
+	}
+}
+
 // TestCgroupResolverResolvesByInode verifies the race-free path: a container's
 // cgroup directory inode (== the kernel cgroup id) resolves to the 64-hex
 // container id parsed from the dir name, independent of any live process.

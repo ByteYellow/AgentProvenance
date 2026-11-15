@@ -590,6 +590,16 @@ func newCgroupResolver() *cgroupResolver {
 	}
 }
 
+func configureCgroupResolver(resolver *cgroupResolver, objs *sensorbpfObjects) {
+	resolver.kernelName = func(id uint64) string {
+		var names [3 * 96]byte
+		if objs.CgroupNames == nil || objs.CgroupNames.Lookup(id, &names) != nil {
+			return ""
+		}
+		return string(names[:])
+	}
+}
+
 // resolve returns the container id for a kernel cgroup id, refreshing the cache
 // once on a miss (a newly seen container's cgroup dir appears between scans).
 func (r *cgroupResolver) resolve(cgroupID uint64) string {
