@@ -76,6 +76,21 @@ def main():
         with opener.open(request, timeout=5) as response:
             return json.load(response)
 
+    def await_execution(attempt_id, wanted):
+        deadline = time.monotonic() + 60
+        while True:
+            execution = api('GET', '/v1/executions/' + attempt_id)
+            state = execution['attempt']['state']['execution']
+            capture = execution['attempt']['state']['capture']
+            if state == wanted and execution.get('checkpoint') and (not args.native or capture in {'sealed', 'incomplete'}):
+                if args.native and capture != 'sealed':
+                    raise RuntimeError('native capture did not seal: ' + json.dumps(execution['attempt']['state']))
+                return execution
+            if state in {'succeeded', 'failed', 'unknown', 'cancelled'} - {wanted} or time.monotonic() > deadline:
+                (root / ('unexpected-' + attempt_id + '.json')).write_text(json.dumps(execution, indent=2) + '\n')
+                raise RuntimeError('command did not reach ' + wanted + ': ' + state)
+            time.sleep(0.05)
+
     command = [str(binary), '--data-dir', str(store), 'daemon', 'serve', '--listen', f'127.0.0.1:{port}',
                '--execution-config', str(config_path), '--sample-interval', '0', '--gc-interval', '0']
     process = None
@@ -140,19 +155,17 @@ def main():
         admission_path = root / 'admission.json'
         admission_path.write_text(json.dumps(admission) + '\n')
         attempt_id = admission['attempt']['id']
-        deadline = time.monotonic() + 60
-        while True:
-            execution = api('GET', '/v1/executions/' + attempt_id)
-            state = execution['attempt']['state']['execution']
-            capture_ready = not args.native or execution['attempt']['state']['capture'] in {'sealed', 'incomplete'}
-            if state == 'succeeded' and execution.get('checkpoint') and capture_ready:
-                break
-            if state in {'failed', 'unknown', 'cancelled'} or time.monotonic() > deadline:
-                (root / 'failed-execution.json').write_text(json.dumps(execution, indent=2) + '\n')
-                raise RuntimeError('command did not complete: ' + state)
-            time.sleep(0.05)
-        if args.native and execution['attempt']['state']['capture'] != 'sealed':
-            raise RuntimeError('native capture did not seal: ' + json.dumps(execution['attempt']['state']))
+        execution = await_execution(attempt_id, 'succeeded')
+        failed_request = json.loads(json.dumps(request))
+        failed_request['source']['tool_call_id'] = 'expected-failure'
+        failed_request['dispatch_id'], failed_request['operation_id'] = 'failed-dispatch', 'failed-operation'
+        failed_request['command']['argv'] = ['python3', '-c', "import sys; print('expected failure', file=sys.stderr); sys.exit(7)"]
+        failed_admission = api('POST', '/v1/executions', failed_request)
+        failed_admission_path = root / 'failed-admission.json'
+        failed_admission_path.write_text(json.dumps(failed_admission) + '\n')
+        failed_execution = await_execution(failed_admission['attempt']['id'], 'failed')
+        if failed_execution['checkpoint']['result']['exit_code'] != 7:
+            raise RuntimeError('expected command exit 7 was not preserved')
         operation = 'guest-stop-' + service_invocation if service_invocation else 'retirement-' + nonce
         seal_command = ['--data-dir', str(store), 'forensics', 'seal-executions', '--execution-config', str(config_path), '--operation', operation]
         active = cli(seal_command, expected=1)
@@ -174,44 +187,66 @@ def main():
         (root / 'seal-retry.jsonl').write_text(retry.stdout)
         results = [json.loads(line) for line in first.stdout.splitlines()]
         repeated = [json.loads(line) for line in retry.stdout.splitlines()]
-        if len(results) != 2 or not results[-1]['complete'] or results[-1]['prepared'] != 1 or repeated[-1]['reused'] != 1:
+        if len(results) != 3 or not results[-1]['complete'] or results[-1]['prepared'] != 2 or repeated[-1]['reused'] != 2:
             raise RuntimeError('unexpected sealing result')
         delivery = results[0]['delivery']
-        if results[0]['status'] != 'prepared' or repeated[0]['status'] != 'reused' or delivery != repeated[0]['delivery']:
-            raise RuntimeError('retry changed immutable delivery')
+        for item, replay, original in zip(results[:-1], repeated[:-1], [execution, failed_execution], strict=True):
+            if item['status'] != 'prepared' or replay['status'] != 'reused' or item['delivery'] != replay['delivery']:
+                raise RuntimeError('retry changed immutable delivery')
+            if item['attempt_id'] != original['attempt']['id'] or item['delivery']['manifest']['state']['execution'] != original['attempt']['state']['execution']:
+                raise RuntimeError('sealing changed execution identity or outcome')
         if delivery['manifest']['state']['capture'] != execution['attempt']['state']['capture']:
             raise RuntimeError('sealing changed capture state')
-        portable = root / 'portable'
-        portable.mkdir()
-        bundle = portable / 'bundle.json'
-        shutil.copyfile(results[0]['bundle_path'], bundle)
-        attestation = portable / 'bundle.dsse.json'
-        manifest_path = Path(results[0]['bundle_path']).with_name('manifest.dsse.json')
-        shutil.copyfile(manifest_path, attestation)
-        shutil.copyfile(manifest_path, portable / 'manifest.dsse.json')
-        if hashlib.sha256(attestation.read_bytes()).hexdigest() != delivery['manifest_sha256']:
-            raise RuntimeError('copied manifest bytes differ from the sealed package')
-        cli(['forensics', 'verify-attestation', str(bundle), str(attestation), '--pub-key', str(root / 'executor.pub')])
-        collect_command = ['--data-dir', str(root / 'receipt-store'), 'forensics', 'collect-execution', str(admission_path),
-            '--execution-config', str(config_path), '--package-dir', str(portable), '--receiver', 'fixture-receiver',
-            '--sign-key', str(root / 'receiver.key'), '--pub-key', str(root / 'executor.pub')]
-        collected = json.loads(cli(collect_command).stdout)
-        repeated_collection = json.loads(cli(collect_command).stdout)
-        if collected['status'] != 'receipt_persisted' or collected != repeated_collection:
-            raise RuntimeError('offline receipt was not persisted or retry changed it')
-        receipt_path = portable / 'receipt.dsse.json'
-        receipt_path.write_text(json.dumps(collected['receipt']))
-        acknowledge_command = ['--data-dir', str(store), 'forensics', 'acknowledge-execution', collected['delivery_id'],
-            str(receipt_path), '--execution-config', str(config_path)]
-        acknowledged = json.loads(cli(acknowledge_command).stdout)
-        if json.loads(cli(acknowledge_command).stdout) != acknowledged or acknowledged['delivery']['receipt'] != collected['receipt']:
-            raise RuntimeError('sender did not persist the exact signed receipt')
+
+        def check_receipts(verified):
+            checked = cli(seal_command + ['--require-receipts'], expected=0 if verified == 2 else 1)
+            (root / f'receipt-check-{verified}.jsonl').write_text(checked.stdout)
+            (root / f'receipt-check-{verified}.stderr').write_text(checked.stderr)
+            summary = json.loads(checked.stdout.splitlines()[-1])
+            if not summary['complete'] or summary['attempts'] != 2 or summary['reused'] != 2 or \
+                    summary['receipts_verified'] != verified or summary['receipts_pending'] != 2 - verified or \
+                    summary['delivery_complete'] != (verified == 2):
+                raise RuntimeError('incorrect batch receipt summary: ' + json.dumps(summary))
+            if verified < 2 and 'sealed packages await receiver receipts' not in checked.stderr:
+                raise RuntimeError('receipt check failed for an unrelated reason: ' + checked.stderr)
+            return summary
+
+        receipt_checks = [check_receipts(0)]
+        offline_deliveries = []
+        for i, (item, saved_admission) in enumerate(zip(results[:-1], [admission_path, failed_admission_path], strict=True)):
+            package = root / ('portable' if i == 0 else 'portable-failed')
+            package.mkdir()
+            shutil.copyfile(item['bundle_path'], package / 'bundle.json')
+            manifest_path = Path(item['bundle_path']).with_name('manifest.dsse.json')
+            shutil.copyfile(manifest_path, package / 'bundle.dsse.json')
+            shutil.copyfile(manifest_path, package / 'manifest.dsse.json')
+            if hashlib.sha256((package / 'manifest.dsse.json').read_bytes()).hexdigest() != item['delivery']['manifest_sha256']:
+                raise RuntimeError('copied manifest bytes differ from the sealed package')
+            cli(['forensics', 'verify-attestation', str(package / 'bundle.json'), str(package / 'bundle.dsse.json'), '--pub-key', str(root / 'executor.pub')])
+            collect_command = ['--data-dir', str(root / 'receipt-store'), 'forensics', 'collect-execution', str(saved_admission),
+                '--execution-config', str(config_path), '--package-dir', str(package), '--receiver', 'fixture-receiver',
+                '--sign-key', str(root / 'receiver.key'), '--pub-key', str(root / 'executor.pub')]
+            collected = json.loads(cli(collect_command).stdout)
+            if collected['status'] != 'receipt_persisted' or collected != json.loads(cli(collect_command).stdout):
+                raise RuntimeError('offline receipt was not persisted or retry changed it')
+            receipt_path = package / 'receipt.dsse.json'
+            receipt_path.write_text(json.dumps(collected['receipt']))
+            acknowledge_command = ['--data-dir', str(store), 'forensics', 'acknowledge-execution', collected['delivery_id'],
+                str(receipt_path), '--execution-config', str(config_path)]
+            acknowledged = json.loads(cli(acknowledge_command).stdout)
+            if json.loads(cli(acknowledge_command).stdout) != acknowledged or acknowledged['delivery']['receipt'] != collected['receipt']:
+                raise RuntimeError('sender did not persist the exact signed receipt')
+            offline_deliveries.append({'collection': collected, 'sender_acknowledgment': acknowledged})
+            receipt_checks.append(check_receipts(i + 1))
         with sqlite3.connect(f'{(store / "agentprov.db").as_uri()}?mode=ro', uri=True) as db:
-            state = db.execute('SELECT execution_state,capture_state,delivery_state FROM execution_attempts WHERE id=?', (attempt_id,)).fetchone()
-        if state != ('succeeded', execution['attempt']['state']['capture'], 'acknowledged'):
-            raise RuntimeError('offline acknowledgment changed execution/capture or did not settle delivery')
+            for original in [execution, failed_execution]:
+                state = db.execute('SELECT execution_state,capture_state,delivery_state FROM execution_attempts WHERE id=?', (original['attempt']['id'],)).fetchone()
+                if state != (original['attempt']['state']['execution'], original['attempt']['state']['capture'], 'acknowledged'):
+                    raise RuntimeError('offline acknowledgment changed execution/capture or did not settle delivery')
         work.rename(root / 'retained-source-work')
         store.rename(root / 'retained-source-store')
+        portable = root / 'portable'
+        bundle, attestation = portable / 'bundle.json', portable / 'bundle.dsse.json'
         receiver = root / 'independent-import'
         imported = json.loads(cli(['--data-dir', str(receiver), 'forensics', 'import', str(bundle), '--pub-key', str(root / 'executor.pub'), '--json']).stdout)
         if not imported['attestation_verified']:
@@ -225,6 +260,14 @@ def main():
         body = json.loads(cli(['--data-dir', str(receiver), 'context', 'content', '--run', run_id, '--ref', stdout_ref]).stdout)
         if json.loads(body['content']) != expected:
             raise RuntimeError('imported output content mismatch')
+        failed_bundle = root / 'portable-failed' / 'bundle.json'
+        failed_import = json.loads(cli(['--data-dir', str(receiver), 'forensics', 'import', str(failed_bundle), '--pub-key', str(root / 'executor.pub'), '--json']).stdout)
+        failed_run = failed_admission['attempt']['local_run_id']
+        failed_verification = json.loads(cli(['--data-dir', str(receiver), 'graph', 'verify', '--run', failed_run, '--json']).stdout)
+        failed_body = json.loads(cli(['--data-dir', str(receiver), 'context', 'content', '--run', failed_run,
+            '--ref', failed_execution['checkpoint']['stderr']['ref']]).stdout)
+        if not failed_import['attestation_verified'] or failed_body['content'] != 'expected failure\n':
+            raise RuntimeError('failed execution evidence did not survive independent import')
         native_events = []
         if args.native:
             scope = execution['checkpoint']['scope']
@@ -252,7 +295,10 @@ def main():
                   'bundle_sha256': hashlib.sha256(bundle.read_bytes()).hexdigest(),
                   'attestation_sha256': hashlib.sha256(attestation.read_bytes()).hexdigest(),
                   'verification': verification, 'output': expected, 'native_file_events': native_events,
-                  'offline_delivery': {'collection': collected, 'sender_acknowledgment': acknowledged},
+                  'offline_delivery': offline_deliveries[0], 'failed_offline_delivery': offline_deliveries[1],
+                  'failed_execution': failed_execution, 'failed_verification': failed_verification,
+                  'failed_bundle_sha256': hashlib.sha256(failed_bundle.read_bytes()).hexdigest(),
+                  'receipt_checks': receipt_checks,
                   'guest_service': lifecycle, 'passed': True}
         (root / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps({'passed': True, 'run_id': run_id, 'native_capture': args.native, 'report': str(root / 'report.json')}))

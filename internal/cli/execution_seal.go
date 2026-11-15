@@ -14,27 +14,32 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func sealExecutions(ctx context.Context, delivery *handoff.DeliveryService, principal handoff.Principal, operation string, output io.Writer) error {
+func sealExecutions(ctx context.Context, delivery *handoff.DeliveryService, principal handoff.Principal, operation string, requireReceipts bool, output io.Writer) error {
 	encoder := json.NewEncoder(output)
 	summary, err := delivery.SealStopped(ctx, principal, operation, func(result handoff.SealResult) error {
 		return encoder.Encode(result)
 	})
+	if err == nil && requireReceipts && !summary.DeliveryComplete {
+		err = fmt.Errorf("%w: %d sealed packages await receiver receipts", handoff.ErrConflict, summary.ReceiptsPending)
+	}
 	return errors.Join(err, encoder.Encode(summary))
 }
 
 func forensicsSealExecutionsCmd(dataDir, daemonURL *string) *cobra.Command {
 	var configPath, operation string
+	var requireReceipts bool
 	cmd := &cobra.Command{Use: "seal-executions", Short: "prepare signed execution packages in a stopped local store", Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if *daemonURL != "" {
 				return fmt.Errorf("execution sealing requires the stopped local store; remove --daemon-url")
 			}
 			return withStoppedDelivery(*dataDir, configPath, "execution sealing", func(delivery *handoff.DeliveryService, principal handoff.Principal) error {
-				return sealExecutions(cmd.Context(), delivery, principal, operation, cmd.OutOrStdout())
+				return sealExecutions(cmd.Context(), delivery, principal, operation, requireReceipts, cmd.OutOrStdout())
 			})
 		}}
 	cmd.Flags().StringVar(&configPath, "execution-config", "", "trusted caller, target and delivery signing configuration")
 	cmd.Flags().StringVar(&operation, "operation", "", "stable sealing operation ID; retry the same operation to reuse immutable packages")
+	cmd.Flags().BoolVar(&requireReceipts, "require-receipts", false, "fail unless every package in this sealing operation has a verified receiver receipt")
 	_ = cmd.MarkFlagRequired("execution-config")
 	_ = cmd.MarkFlagRequired("operation")
 	return cmd

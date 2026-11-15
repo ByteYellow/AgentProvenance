@@ -89,6 +89,25 @@ func TestExecutionSealCLIJSONAndLocalBoundary(t *testing.T) {
 	}
 }
 
+func TestExecutionSealCLIRequireReceiptsEmptyScope(t *testing.T) {
+	root, config := sealCLIConfig(t)
+	cmd := NewRootCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"--data-dir", filepath.Join(root, "store"), "forensics", "seal-executions", "--execution-config", config, "--operation", "empty-scope", "--require-receipts"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(output.Bytes(), &fields); err != nil {
+		t.Fatal(err)
+	}
+	if fields["attempts"] != float64(0) || fields["receipts_verified"] != float64(0) || fields["receipts_pending"] != float64(0) || fields["delivery_complete"] != true {
+		t.Fatalf("empty scope summary: %s", output.String())
+	}
+}
+
 func TestExecutionSealCLIRejectsLiveDaemon(t *testing.T) {
 	root, config := sealCLIConfig(t)
 	paths, err := store.Init(filepath.Join(root, "store"))

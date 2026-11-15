@@ -3,6 +3,7 @@ package handoff
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +11,152 @@ import (
 	"testing"
 	"time"
 )
+
+func assertSealReceipts(t *testing.T, summary SealSummary, verified, pending int, complete bool) {
+	t.Helper()
+	raw, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if fields["receipts_verified"] != float64(verified) || fields["receipts_pending"] != float64(pending) || fields["delivery_complete"] != complete {
+		t.Fatalf("receipt summary: %s; want verified=%d pending=%d complete=%t", raw, verified, pending, complete)
+	}
+}
+
+func TestSealStoppedChecksReceiptCompletion(t *testing.T) {
+	f := testDelivery(t)
+	ctx := context.Background()
+	var item SealResult
+	summary, err := f.sender.SealStopped(ctx, f.principal, "receipt-check", func(result SealResult) error { item = result; return nil })
+	if err != nil || !summary.Complete || item.Delivery == nil {
+		t.Fatalf("prepare: %+v %v", summary, err)
+	}
+	assertSealReceipts(t, summary, 0, 1, false)
+	receipt := f.receive(t, *item.Delivery)
+	if _, err := f.sender.Acknowledge(ctx, f.principal, item.Delivery.Manifest.ID, receipt); err != nil {
+		t.Fatal(err)
+	}
+	before, err := f.sender.Ledger.Get(ctx, f.principal, item.AttemptID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err = f.sender.SealStopped(ctx, f.principal, "receipt-check", nil)
+	if err != nil || !summary.Complete || summary.Reused != 1 {
+		t.Fatalf("receipt check: %+v %v", summary, err)
+	}
+	assertSealReceipts(t, summary, 1, 0, true)
+	after, err := f.sender.Ledger.Get(ctx, f.principal, item.AttemptID)
+	if err != nil || before.Revision != after.Revision || before.State != after.State {
+		t.Fatalf("receipt check changed execution: %+v %v", after, err)
+	}
+}
+
+func TestSealStoppedRequiresEveryReceiptInTheOperation(t *testing.T) {
+	f := testDelivery(t)
+	ctx := context.Background()
+	r := f.report.Attempt.Request
+	r.DispatchID, r.OperationID, r.Source.ToolCallID = "failed-call", "failed-command", "failed-call"
+	r.Command = Command{Argv: []string{"sh", "-c", "printf 'expected failure' >&2; exit 7"}, DisableSnapshot: true, PostRootGraceMS: 1}
+	a, _, err := f.sender.Ledger.Admit(ctx, f.principal, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &Executor{Ledger: f.sender.Ledger, Paths: f.sender.Paths, PollInterval: 5 * time.Millisecond}
+	stop := startExecutor(t, e)
+	failed := waitExecution(t, e, f.principal, a.ID, Failed)
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
+	var items []SealResult
+	summary, err := f.sender.SealStopped(ctx, f.principal, "batch-stop", func(item SealResult) error { items = append(items, item); return nil })
+	if err != nil || !summary.Complete || len(items) != 2 {
+		t.Fatalf("batch prepare: %+v %v", summary, err)
+	}
+	assertSealReceipts(t, summary, 0, 2, false)
+	for i, item := range items {
+		original, err := f.sender.Ledger.Get(ctx, f.principal, item.AttemptID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		copy := f
+		copy.report.Attempt = original
+		receipt := copy.receive(t, *item.Delivery)
+		if _, err := f.sender.Acknowledge(ctx, f.principal, item.Delivery.Manifest.ID, receipt); err != nil {
+			t.Fatal(err)
+		}
+		summary, err = f.sender.SealStopped(ctx, f.principal, "batch-stop", nil)
+		if err != nil || !summary.Complete || summary.Reused != 2 {
+			t.Fatalf("batch check: %+v %v", summary, err)
+		}
+		assertSealReceipts(t, summary, i+1, 1-i, i == 1)
+	}
+	actual, err := f.sender.Ledger.Get(ctx, f.principal, a.ID)
+	if err != nil || actual.State.Execution != Failed || actual.State.Capture != failed.Attempt.State.Capture {
+		t.Fatalf("receipt changed failed execution: %+v %v", actual, err)
+	}
+	// A new sealing pass has new immutable packages and needs its own receipts.
+	summary, err = f.sender.SealStopped(ctx, f.principal, "later-stop", nil)
+	if err != nil || !summary.Complete || summary.Prepared != 2 {
+		t.Fatalf("later batch: %+v %v", summary, err)
+	}
+	assertSealReceipts(t, summary, 0, 2, false)
+}
+
+func TestSealStoppedRejectsInvalidSavedReceipt(t *testing.T) {
+	for _, problem := range []string{"malformed", "wrong_signer", "wrong_receiver", "wrong_package", "wrong_generation", "wrong_subject", "current_pin_changed"} {
+		t.Run(problem, func(t *testing.T) {
+			f := testDelivery(t)
+			ctx := context.Background()
+			d := f.prepare(t, "receipt-check")
+			raw := f.receive(t, d)
+			if _, err := f.sender.Acknowledge(ctx, f.principal, d.Manifest.ID, raw); err != nil {
+				t.Fatal(err)
+			}
+			var receipt DeliveryReceipt
+			if _, err := verifyDelivery(raw, f.sender.ReceiverKey, receiptPredicate, &receipt); err != nil {
+				t.Fatal(err)
+			}
+			key, subject := f.receiver.SignKey, d.Manifest.ID
+			switch problem {
+			case "wrong_signer":
+				key = f.sender.SignKey
+			case "wrong_receiver":
+				receipt.ReceiverID = "another-receiver"
+			case "wrong_package":
+				receipt.PackageVersion++
+			case "wrong_generation":
+				receipt.Identity.Target.Generation = "another-generation"
+			case "wrong_subject":
+				subject = "another-delivery"
+			case "current_pin_changed":
+				f.sender.ReceiverKey = f.receiver.TargetKey
+			}
+			bad, err := signDelivery(receiptPredicate, subject, d.ManifestSHA256, receipt, key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if problem == "malformed" {
+				bad = []byte(`{}`)
+			}
+			if _, err := f.sender.Ledger.DB.Exec("UPDATE execution_deliveries SET receipt_json=? WHERE id=?", bad, d.Manifest.ID); err != nil {
+				t.Fatal(err)
+			}
+			var item SealResult
+			summary, err := f.sender.SealStopped(ctx, f.principal, "receipt-check", func(result SealResult) error { item = result; return nil })
+			if err == nil || summary.Complete || summary.Failed != 1 || item.Status != "failed" || item.Error == "" {
+				t.Fatalf("invalid saved receipt accepted: %+v %v", summary, err)
+			}
+			assertSealReceipts(t, summary, 0, 0, false)
+			if _, err := f.sender.Acknowledge(ctx, f.principal, d.Manifest.ID, raw); err == nil {
+				t.Fatal("acknowledgment retry accepted a damaged saved receipt")
+			}
+		})
+	}
+}
 
 func TestSealStoppedRealCommandAndIdempotentRetry(t *testing.T) {
 	f := testDelivery(t)

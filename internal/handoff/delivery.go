@@ -338,14 +338,8 @@ func (s *DeliveryService) Acknowledge(ctx context.Context, p Principal, id strin
 	if err != nil {
 		return Delivery{}, err
 	}
-	var r DeliveryReceipt
-	subject, err := verifyDelivery(raw, s.ReceiverKey, receiptPredicate, &r)
-	if err != nil {
+	if err := s.verifyReceipt(d, raw); err != nil {
 		return Delivery{}, err
-	}
-	if !r.matches(d.Manifest, d.ManifestSHA256) || r.ReceiverID != s.ReceiverID ||
-		subject.Name != "execution-delivery/"+id || subject.Digest["sha256"] != d.ManifestSHA256 {
-		return Delivery{}, ErrConflict
 	}
 	err = store.WithWriteTx(ctx, s.Ledger.DB, func(tx *sql.Tx) error {
 		a, err := readAttempt(ctx, tx, "a.id=?", d.Manifest.Identity.AttemptID)
@@ -360,6 +354,9 @@ func (s *DeliveryService) Acknowledge(ctx context.Context, p Principal, id strin
 			return err
 		}
 		if len(stored.Receipt) != 0 {
+			if err := s.verifyReceipt(stored, stored.Receipt); err != nil {
+				return err
+			}
 			d = stored
 			return nil
 		}
@@ -384,6 +381,19 @@ func (s *DeliveryService) Acknowledge(ctx context.Context, p Principal, id strin
 		return err
 	})
 	return d, err
+}
+
+func (s *DeliveryService) verifyReceipt(d Delivery, raw []byte) error {
+	var receipt DeliveryReceipt
+	subject, err := verifyDelivery(raw, s.ReceiverKey, receiptPredicate, &receipt)
+	if err != nil {
+		return err
+	}
+	if !receipt.matches(d.Manifest, d.ManifestSHA256) || receipt.ReceiverID != s.ReceiverID ||
+		subject.Name != "execution-delivery/"+d.Manifest.ID || subject.Digest["sha256"] != d.ManifestSHA256 {
+		return ErrConflict
+	}
+	return nil
 }
 
 func (s *DeliveryService) deliveryTransition(ctx context.Context, tx *sql.Tx, a Attempt, next DeliveryState, reason, ref string) error {

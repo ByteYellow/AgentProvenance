@@ -706,7 +706,8 @@ execution and capture states intact. It refuses an active executor or daemon.
 
 Output is JSONL with English fields and status values in both interface languages.
 Each attempt reports `prepared`, `reused`, `unfinished` or `failed`, followed by a
-summary with counts and `complete`. Prepared records include the bundle path and
+summary with counts, `complete`, `receipts_verified`, `receipts_pending` and
+`delivery_complete`. Prepared records include the bundle path and
 signed manifest. Packages stay under `artifacts/execution-deliveries` in the data
 directory. Preserve the referenced packages as well as the JSONL index.
 
@@ -759,14 +760,34 @@ Use `delivery_id` from the collection result. This local command verifies the
 pinned receiver signature, exact package digest, attempt and generation before
 persisting the receipt. Retrying is safe. It changes only delivery state; all
 outstanding packages require receipts before the attempt is acknowledged.
-No executor is started, and a running daemon is rejected. Read the JSON response
-to confirm the saved receipt. The lifecycle controller still checks that all
-executions have stopped and every final package has its receipt before reclaiming
-the volume; neither command deletes evidence or changes capture completeness.
+No executor is started, and a running daemon is rejected. After returning the
+receipts, check the whole sealing operation in the retained sender store:
+
+```sh
+agentprov --data-dir /mnt/agentprov-evidence forensics seal-executions \
+  --execution-config /run/agentprov/execution.json \
+  --operation "$RETIREMENT_ID" --require-receipts
+```
+
+Reuse the original operation ID. The command verifies each saved receipt against
+the configured receiver key, package digest and execution identity. Missing
+receipts produce a nonzero exit with `complete: true`, `delivery_complete: false`
+and the pending count. Damaged or mismatched receipts report `failed` and an
+error. Once every selected package has a valid receipt, `delivery_complete` is
+true and the command exits zero. Command failures and capture gaps retain their
+original states even when their evidence is fully delivered.
+
+The summary covers this operation's configured caller and target generation;
+an empty scope reports zero attempts. The lifecycle controller checks that scope
+and count against its retirement inventory and retains other generations or
+callers' data. A new pass covering later evidence needs its own operation and
+receipts. These commands neither delete evidence nor change capture completeness.
 
 The [sealing acceptance script](../scripts/accept_execution_seal.py) starts an
-isolated local executor, runs a CSV task, stops the daemon, seals twice and
-verifies the package in a fresh store after moving the original data directory.
+isolated local executor, runs a successful CSV task and a command that exits 7,
+stops the daemon and seals twice. It checks receipt counts before delivery, after
+one receipt and after both, then verifies both signed packages and saved output
+in a fresh store after moving the original data directory.
 Use `--native` on a privileged Linux host to require sealed kernel capture:
 
 ```sh

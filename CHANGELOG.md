@@ -4,6 +4,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Add `seal-executions --require-receipts` to check all final packages in a
+  stopped caller/target scope. Verify persisted receipt signatures and identities,
+  report pending receipts separately from local packaging, and preserve failed
+  execution and incomplete capture states throughout delivery.
 - Receive sealed execution packages through `collect-execution --package-dir`
   without a running executor. Verify and persist returned receipts locally with
   `acknowledge-execution`, preserving pinned identities, predecessor ordering and

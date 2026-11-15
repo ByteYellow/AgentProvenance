@@ -557,7 +557,8 @@ agentprov --data-dir /mnt/agentprov-evidence \
 保留原执行状态和采集状态。执行器或 daemon 仍在运行时拒绝封包。
 
 中英文界面均输出英文字段和状态值的 JSONL。每条执行记录的状态为
-`prepared`、`reused`、`unfinished` 或 `failed`，最后一行汇总数量及 `complete`。
+`prepared`、`reused`、`unfinished` 或 `failed`，最后一行汇总数量及 `complete`、
+`receipts_verified`、`receipts_pending`、`delivery_complete`。
 已打包记录包含包路径和签名清单，包保存在数据目录的
 `artifacts/execution-deliveries` 下。归档时同时保留这些包和 JSONL 索引。
 
@@ -601,12 +602,27 @@ agentprov --data-dir /mnt/agentprov-evidence forensics acknowledge-execution \
 `DELIVERY_ID` 使用接收结果中的 `delivery_id`。命令校验接收方签名、包摘要、
 执行尝试和生命周期代次后保存回执。重复操作复用已有回执，只更新交付状态；
 一次尝试的所有待交付包都有回执后，交付状态才变为 `acknowledged`。
-命令不启动执行器，遇到运行中的 daemon 会拒绝操作。返回 JSON 包含已保存回执。
-外部生命周期控制端仍须核对任务已停止、所有最终包都有回执，再回收证据卷。
-这两个命令不会删除证据或改变采集完整性。
+命令不启动执行器，遇到运行中的 daemon 会拒绝操作。回执传回后，
+在保留的发送端存储中检查整批交付结果：
 
-[封包验收脚本](../../scripts/accept_execution_seal.py) 启动隔离的本地执行器，运行 CSV 任务，
-停止 daemon 后连续封包两次，再移走原数据目录，在新存储中验证签名和正文。
+```sh
+agentprov --data-dir /mnt/agentprov-evidence forensics seal-executions \
+  --execution-config /run/agentprov/execution.json \
+  --operation "$RETIREMENT_ID" --require-receipts
+```
+
+沿用最初的操作 ID。命令按配置的接收方公钥、包摘要和执行身份逐一核验已保存回执。
+回执尚未齐全时，退出码非零，汇总显示 `complete: true`、`delivery_complete: false`
+和待收数量。损坏或错配的回执显示 `failed` 及具体错误。所有选中包的回执均通过核验后，
+`delivery_complete` 为 `true`，退出码为零。任务失败、采集缺口仍保留各自的原始状态。
+
+汇总范围是本次操作配置的调用方和目标生命周期代次；空范围显示零条执行。
+生命周期控制端须将范围和数量与回收清单核对，并保留其他代次或调用方的数据。
+后续新增证据使用新操作 ID，并重新取得对应回执。这些命令不删除证据或改变采集完整性。
+
+[封包验收脚本](../../scripts/accept_execution_seal.py) 启动隔离的本地执行器，运行成功的
+CSV 任务和退出码为 7 的失败命令。停止 daemon 后连续封包两次，分别检查未收到回执、
+收到一份回执和全部收到时的结果，再移走原数据目录，在新存储中验证两份包的签名和正文。
 在具备采集权限的 Linux 主机上加 `--native`，要求内核采集达到 sealed 状态：
 
 ```sh

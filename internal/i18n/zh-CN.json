@@ -3146,5 +3146,6 @@
   "prepare signed execution packages in a stopped local store": "为已停止的本地执行库生成签名证据包",
   "trusted caller, target and delivery signing configuration": "可信调用方、目标与交付签名配置",
   "stable sealing operation ID; retry the same operation to reuse immutable packages": "稳定的封包操作 ID；重试同一操作时复用已有证据包",
+  "fail unless every package in this sealing operation has a verified receiver receipt": "本次封包中每个证据包都须有已核验的接收方回执，否则返回失败",
   "execution collection requires --daemon-url and a positive --timeout": "接收执行证据需要指定 --daemon-url，并设置大于零的 --timeout"
 }

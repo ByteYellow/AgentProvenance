@@ -19,16 +19,19 @@ type SealResult struct {
 }
 
 type SealSummary struct {
-	SchemaVersion string `json:"schema_version"`
-	OperationID   string `json:"operation_id"`
-	Target        Target `json:"target"`
-	ReceiverID    string `json:"receiver_id"`
-	Attempts      int64  `json:"attempts"`
-	Prepared      int64  `json:"prepared"`
-	Reused        int64  `json:"reused"`
-	Unfinished    int64  `json:"unfinished"`
-	Failed        int64  `json:"failed"`
-	Complete      bool   `json:"complete"`
+	SchemaVersion    string `json:"schema_version"`
+	OperationID      string `json:"operation_id"`
+	Target           Target `json:"target"`
+	ReceiverID       string `json:"receiver_id"`
+	Attempts         int64  `json:"attempts"`
+	Prepared         int64  `json:"prepared"`
+	Reused           int64  `json:"reused"`
+	Unfinished       int64  `json:"unfinished"`
+	Failed           int64  `json:"failed"`
+	Complete         bool   `json:"complete"`
+	ReceiptsVerified int64  `json:"receipts_verified"`
+	ReceiptsPending  int64  `json:"receipts_pending"`
+	DeliveryComplete bool   `json:"delivery_complete"`
 }
 
 // SealStopped prepares signed outbox packages after the executor has stopped.
@@ -78,6 +81,9 @@ func (s *DeliveryService) SealStopped(ctx context.Context, p Principal, operatio
 				summary.Unfinished++
 			} else {
 				delivery, reused, err := s.Prepare(ctx, p, a.ID, operationID)
+				if err == nil && len(delivery.Receipt) != 0 {
+					err = s.verifyReceipt(delivery, delivery.Receipt)
+				}
 				if err != nil {
 					result.Status, result.Error = "failed", err.Error()
 					summary.Failed++
@@ -86,6 +92,11 @@ func (s *DeliveryService) SealStopped(ctx context.Context, p Principal, operatio
 					}
 				} else {
 					result.Delivery, result.BundlePath = &delivery, delivery.BundlePath
+					if len(delivery.Receipt) == 0 {
+						summary.ReceiptsPending++
+					} else {
+						summary.ReceiptsVerified++
+					}
 					if reused {
 						result.Status = "reused"
 						summary.Reused++
@@ -110,6 +121,7 @@ func (s *DeliveryService) SealStopped(ctx context.Context, p Principal, operatio
 		return summary, fmt.Errorf("%w: %d executions remain unfinished", ErrConflict, summary.Unfinished)
 	}
 	summary.Complete = true
+	summary.DeliveryComplete = summary.ReceiptsVerified == summary.Attempts
 	return summary, nil
 }
 
