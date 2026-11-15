@@ -4,6 +4,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Add bilingual entry guides in the README and deployment reference for remote
+  commands, Browser, Notebook and gVisor. Distinguish the current source from
+  published archives and document actual capture/receipt fields and guest prerequisites.
 - Extend investigation recapture manifests with source, Sensor, harness and
   input identities, evidence-backed model selections, and separate runtime
   coverage and artifact-retention summaries. Preserve historical captures.

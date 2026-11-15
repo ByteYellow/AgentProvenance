@@ -1178,6 +1178,9 @@ and `forensics`. `substrate` contains runtime facts AgentProvenance can consume.
 
 ## Future Work
 
-No new features are planned for now. Development will focus on evidence and
-correlation accuracy, capture reliability, and ease of use. Improvements will
-follow issues found in real use, with clearer investigation flows and documentation.
+The v1.0 candidate extends the existing evidence model to controlled remote
+commands, Sentry-origin events and Browser/Notebook operations. Setup and
+environment requirements are in the [deployment guide](deployment-modes.md).
+Current work focuses on completing those integrations, runtime acceptance and
+portable examples. Follow-up improvements prioritize association accuracy,
+capture reliability and ease of use based on actual investigations.

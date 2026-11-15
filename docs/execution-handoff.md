@@ -9,9 +9,16 @@ uses explicit references for navigation and evidence delivery.
 The current implementation provides durable admission, a bounded command worker,
 restart recovery, stop requests and an authenticated HTTP API in `internal/handoff`
 and `internal/daemon`. Signed packages and durable receiving receipts are available
-through the pull API and `forensics collect-execution`. Capability manifests and
-Dashboard integration are being implemented. The
-existing synchronous `POST /v1/record` API keeps its current behavior.
+through the pull API and `forensics collect-execution`. Native capture checkpoints
+retain probe capabilities, scope boundaries and drain results. Read-only
+execution-link APIs expose both directions; Dashboard controls are still under
+development. The existing synchronous `POST /v1/record` API keeps its current behavior.
+
+For a first integration, follow [executor setup](#enable-the-executor),
+[native Claude routing](#route-native-claude-bash-calls), and
+[signed collection](#configure-and-collect), then
+[query the saved links](#query-saved-execution-links).
+The protocol and recovery details below describe the same workflow.
 
 The local record engine exposes trusted in-process lifecycle hooks. Its prepared
 checkpoint follows the saved execution binding and precedes command launch. Its
@@ -504,17 +511,22 @@ group; other environments use the process-group fallback described above.
 
 ## Capability and receipt contract
 
-Each local Run will retain a capability manifest with producer/version, target
-instance/generation, capture placement (host, guest or Sentry), runtime/kernel,
-actual event support and enablement, content-retention settings, readiness,
-capture intervals and known losses. Unknown loss counts stay unknown. Capability
-changes create new intervals, preserving earlier observations. Existing native
-capability and runtime-capture reports supply the native producer evidence.
+The native checkpoint's `capture_report` saves start/end probe capabilities,
+collector boundaries, owned scope and drain observations. Its surrounding
+checkpoint retains the source, target instance/generation, request digest and
+output retention. Query the saved checkpoint for that execution rather than
+substituting the collector's current health report. Earlier checkpoint objects
+remain content-addressed evidence; unknown loss counts stay unknown.
 
-Evidence receipts will bind issuer, receiver, target instance/generation,
+Other producers keep their own source-qualified capability evidence. For
+example, [gVisor stream records](gvisor-seccheck.md) identify the Sentry domain,
+pinned protocol and available event types. A uniform per-Run capability manifest
+across producers remains part of the v1.0 integration work.
+
+Evidence receipts bind issuer, receiver, target instance/generation,
 Dispatch/Attempt, request digest, package digest and confirmed record range.
 Acknowledgement follows durable receiver storage. Wrong destinations, identity
-conflicts and mismatched digests must fail without altering accepted evidence.
+conflicts and mismatched digests fail without altering accepted evidence.
 Source clocks remain available; explicit dispatch/receipt links establish
 cross-host ordering.
 

@@ -153,7 +153,10 @@ func TestCompleteDocumentationKeepsOverviewAndReference(t *testing.T) {
 		route string
 		need  []string
 	}{
-		{"/demos/guide/start?lang=en", []string{"Agent session", "Runtime capture", "Features and docs", "agentprovenance-cover-en.png", "three-axis-observability.svg", "Browse demos", "/demos/guide/capabilities?lang=en"}},
+		{"/demos/guide/start?lang=en", []string{"Agent session", "Runtime capture", "Features and docs", "agentprovenance-cover-en.png", "three-axis-observability.svg", "Browse demos", "/demos/guide/capabilities?lang=en", "Remote commands, Browser and Notebook", "/demos/guide/execution-handoff?lang=en", "/demos/guide/browser-context?lang=en", "/demos/guide/notebook-context?lang=en"}},
+		{"/demos/guide/start?lang=zh-CN", []string{"远端命令、浏览器与 Notebook", "/demos/guide/execution-handoff?lang=zh-CN", "/demos/guide/browser-context?lang=zh-CN", "/demos/guide/notebook-context?lang=zh-CN"}},
+		{"/demos/guide/deployment?lang=en", []string{"Choose a capture entry", "v0.10.1", "/demos/guide/release-notes?lang=en", "/demos/guide/gvisor-seccheck?lang=en", "systrap", "hardware boot acceptance pending"}},
+		{"/demos/guide/deployment?lang=zh-CN", []string{"选择采集入口", "v0.10.1", "/demos/guide/release-notes?lang=zh-CN", "/demos/guide/gvisor-seccheck?lang=zh-CN", "systrap", "实际启动验收待完成"}},
 		{"/demos/guide/capabilities?lang=zh-CN", []string{"核心模型", "部署模式", "外部评估器协议", "架构", "evidence-dag-zh-CN.svg"}},
 		{"/demos/guide/upgrade-v0.10.1?lang=en", []string{"Upgrading to v0.10.1", "record-timeout", "/demos/guide/release-notes?lang=en", "changed defaults in v0.10.1"}},
 		{"/demos/guide/upgrade-v0.10.1?lang=zh-CN", []string{"升级到 v0.10.1", "record-timeout", "/demos/guide/release-notes?lang=zh-CN"}},

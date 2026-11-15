@@ -6,11 +6,31 @@ AgentProvenance 可以从本地命令开始使用，无需先部署一套平台�
 
 ## 首次体验：下载后回放
 
-[v0.9.0 版本](releases/v0.9.0.md)提供 Linux 和 macOS 的 amd64、arm64 命令行压缩包。运行 `agentprov demo` 可打开本地示例首页，其中包括七份经过验证的签名记录和两个可选评估器指南。阅读页与 Dashboard 使用相同的视觉风格，支持目录、图片、表格和代码复制。
+[v0.10.1 版本](releases/v0.10.1.md)提供 Linux 和 macOS 的 amd64、arm64 命令行压缩包。运行 `agentprov demo` 可打开本地示例首页，其中包括十二份签名回放（含一份合成样本）和两个可选评估器指南。阅读页与 Dashboard 使用相同的视觉风格，支持目录、图片、表格和代码复制。
 
 具体步骤见[快速开始](../../README.zh-CN.md#快速开始)和[示例目录](../../demo/README.zh-CN.md)。网页首次访问跟随浏览器语言，其他语言回退到英文；手动选择后会记住偏好。终端默认英文，使用 `--lang zh-CN` 可选择中文。
 
-回放使用独立的临时数据目录，不会重新执行记录中的操作。实际运行评估器或 Linux 传感器仍需满足各自的环境要求。四个平台的发行包验收检查回放和清理，不代表增加了实时传感器覆盖，也不代表完成了长期运行测试。
+回放使用独立的临时数据目录，不会重新执行记录中的操作。发行包验收覆盖回放和清理；实际采集所需的环境见下表，评估器所需的配置见对应指南。
+
+## 选择采集入口
+
+下表中的 v1.0 接入能力需要构建当前源码，v0.10.1 下载包尚未包含。
+原有 `launch`、`record` 和回放命令继续使用。
+
+| 工作负载 | 采集位置 | 配置入口 |
+| --- | --- | --- |
+| 在另一沙箱执行 Claude 原生命令 | 调用端在 Mac 或 Linux；已鉴权的执行器和原生 Sensor 在目标 Linux 环境中 | [执行交接](execution-handoff.md)：SSH 本地端口转发、受保护的路由配置；原生采集需要 cgroup v2 和 BPF 权限 |
+| 浏览器任务 | 可选的 Python 入口持有独立、启用沙箱的 Chromium context | [浏览器上下文](../browser-context.zh-CN.md)：Python 3.12+、固定版本的 Playwright／浏览器，保存原生页面和请求引用，可通过 stdio MCP 接入 |
+| Notebook 任务 | 客户端旁的记录器，或持有独立 kernel 的 stdio MCP 服务 | [Notebook 上下文](notebook-context.md)：MCP 入口需要 Python 3.11+ 和固定的 Jupyter 依赖，保存原生请求与输出引用 |
+| gVisor 工作负载 | 接收器在 Sentry 外，登记沙箱实例及生命周期代次 | [gVisor 采集](gvisor-seccheck.md)：固定 runsc 版本、私有 Unix socket 和持久队列；ARM64 systrap 路径已实测 |
+| Firecracker guest 镜像 | systemd 在 guest 内启动执行器和 Sensor | [Guest 方案](execution-handoff.md#guest-服务与镜像)：固定镜像／内核构建入口、私有配置卷和持久证据卷；实际启动验收待完成 |
+
+应用入口在 `basic` 和 `detailed` 两档保留原生身份，正文、截图和 HAR 可分别控制留存。
+私有源日志与证据库独立保存；处理敏感任务时，两处都需要设置保留策略。
+
+Mac 可记录应用上下文、调用远端 Linux 执行器，以及查询和分享证据。
+原生内核探针在 Linux 内运行。普通共享内核的 Kubernetes Pod 使用节点传感器；
+guest 内核与 Sentry 分别使用对应入口，宿主运行时进程与内部任务身份分开记录。
 
 ## 1. 仅用命令行记录
 

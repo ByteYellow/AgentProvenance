@@ -164,6 +164,22 @@ macOS supports application recording and replay. Custom session directories,
 resumed sessions and source formats are covered in the
 [Agent session guide](docs/agent-context.md).
 
+### Remote commands, Browser and Notebook
+
+The **current source checkout** adds these opt-in entries for the upcoming v1.0.
+Build it using the command above; the v0.10.1 release archives retain their
+original feature set.
+
+| Task | Entry and guide |
+| --- | --- |
+| Run an Agent's command in another Linux VM or container | [Execution handoff](docs/execution-handoff.md): route native Claude Bash calls through an authenticated executor; collect signed results and receiving receipts |
+| Investigate a browser task | [Browser context](docs/browser-context.md): owned Chromium through Python or stdio MCP, with page/request identities, screenshots and HAR |
+| Investigate a notebook task | [Notebook context](docs/notebook-context.md): Jupyter requests and outputs through a recorder or stdio MCP, including late output and kernel restarts |
+
+Browser and Notebook entries use optional Python dependencies. Their guides cover
+installation, Agent configuration, retention and import into the task's Run.
+For each entry, application context and Linux runtime capture are configured separately.
+
 <a id="record-a-command-without-an-agent"></a>
 
 ### Record an ordinary command
@@ -404,6 +420,14 @@ Probe reports show the syscalls, DNS and TLS paths available in that environment
 [Durable capture](docs/native-capture-spool.md) ·
 [Kubernetes attribution](docs/design-k8s-auto-attribution.md)
 
+The current source also includes a [gVisor SecCheck receiver](docs/gvisor-seccheck.md).
+Its ARM64 `systrap` path has live collection, recovery and snapshot/clone checks;
+events retain their **Sentry** identity rather than the host runtime process's
+identity. Native eBPF observes the selected Linux host or guest kernel.
+The [Firecracker guest recipe](docs/execution-handoff.md#guest-service-and-image)
+provides pinned kernel/rootfs builders and a systemd capture service; hardware
+boot and retirement acceptance is pending.
+
 TLS discovery follows supported OpenSSL libraries and Go binaries, including
 container replacements. Go TLS response capture currently supports **amd64,
 Go 1.23–1.26, with symbols**. ARM64 Go response capture, BoringSSL and arbitrary
@@ -542,8 +566,11 @@ the existing evidence readers. Native capture gains bounded buffering and
 reliable shutdown. New signed captures demonstrate these details alongside the
 historical investigation, comparison and offline-sharing examples.
 
-No new features are planned for now. The next phase focuses on accuracy,
-capture reliability and ease of use.
+The current source is preparing v1.0: cross-sandbox execution handoff, gVisor
+collection, Browser/Notebook context and portable investigation examples.
+See the [deployment guide](docs/deployment-modes.md) for entry requirements and
+the [unreleased changelog](CHANGELOG.md#unreleased) for implemented changes.
+The release archive examples above remain on v0.10.1 until v1.0 is published.
 
 For upgrades, back up your data directory before opening it with a newer version.
 An upgraded database should not be reopened with an older binary. macOS archives

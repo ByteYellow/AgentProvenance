@@ -2,22 +2,48 @@
 
 English · [简体中文](zh-CN/deployment-modes.md)
 
-AgentProvenance should be adoptable without forcing every user into a platform
-deployment. The product has three deployment shapes.
+Start with the local CLI or a daemon beside a workload. A centralized evidence
+service is a separate design, not a prerequisite for either deployment.
 
 ## First experience: portable replay
 
-The [v0.9.0 release](releases/v0.9.0.md) provides CLI archives for
+The [v0.10.1 release](releases/v0.10.1.md) provides CLI archives for
 Linux and macOS on amd64/arm64. `agentprov demo` opens a local gallery containing
-seven verified signed captures and two optional evaluator guides, with the same
+twelve signed replays, including one synthetic example, and two optional
+evaluator guides, with the same
 visual theme as the dashboard. Guides render locally with a section outline,
 images, tables and code-copy controls. See the [Quickstart](../README.md#quickstart)
 and [complete demo index](../demo/README.md).
 
 Replay uses an isolated temporary store and does not execute the captured actions.
 Evaluator execution and live Linux capture retain their separate requirements.
-The four-platform archive gate validates replay and cleanup, not extra live
-sensor coverage or long-running capture.
+Archive acceptance covers replay and cleanup. Live collection requirements are
+listed with each capture entry below.
+
+## Choose a capture entry
+
+Build the current source for the v1.0 integrations in this table; they are not
+part of the v0.10.1 download. Existing `launch`, `record` and replay commands
+keep their entry points.
+
+| Workload | Where collection runs | Setup |
+| --- | --- | --- |
+| Native Claude command in another sandbox | Caller on Mac or Linux; authenticated executor and native Sensor inside the target Linux environment | [Execution handoff](execution-handoff.md): SSH loopback forwarding, protected route configuration, cgroup v2 and BPF access for native capture |
+| Browser task | Optional Python entry owns a sandboxed Chromium context | [Browser context](browser-context.md): Python 3.12+, pinned Playwright/browser, native page/request references and optional stdio MCP |
+| Notebook task | Optional recorder beside the client, or a stdio MCP server owning one kernel | [Notebook context](notebook-context.md): Python 3.11+ for MCP, pinned Jupyter dependencies and native request/output references |
+| gVisor workload | SecCheck receiver outside Sentry, with a registered sandbox instance and lifecycle generation | [gVisor collection](gvisor-seccheck.md): pinned runsc, private Unix socket and durable spool; live ARM64 systrap acceptance |
+| Firecracker guest image | systemd starts the executor and Sensor inside the guest | [Guest recipe](execution-handoff.md#guest-service-and-image): pinned image/kernel builders, private configuration and persistent evidence volumes; actual hardware boot acceptance pending |
+
+Application entries retain native identities in both `basic` and `detailed`.
+Text, screenshots and HAR have independent retention controls. Private source
+captures and the retained evidence store have separate lifecycles; configure
+both when handling sensitive workloads.
+
+Mac can record application context, call a remote Linux executor and inspect or
+share the resulting evidence. Native kernel probes run in Linux. Ordinary
+shared-kernel Kubernetes Pods use the node sensor; guest kernels and Sentry use
+their respective collection entries. A host runtime PID is not the inner task's
+process identity.
 
 ## 1. Library / CLI-only Recorder
 

@@ -154,6 +154,20 @@ Agent 上下文默认使用详细档。给 `launch` 添加 `--capture basic`，�
 macOS 支持应用侧记录和回放。自定义会话目录、续跑及格式支持范围，
 见 [Agent 会话指南](docs/zh-CN/agent-context.md)。
 
+### 远端命令、浏览器与 Notebook
+
+**当前源码**为 v1.0 增加了以下可选入口。按上面的命令构建后使用；
+v0.10.1 发行包仍保留原版本的功能。
+
+| 任务 | 入口与指南 |
+| --- | --- |
+| 在另一台 Linux VM 或容器执行 Agent 命令 | [跨沙箱执行交接](docs/zh-CN/execution-handoff.md)：将 Claude 原生 Bash 调用路由到已鉴权的执行器，收取签名结果和接收回执 |
+| 调查浏览器任务 | [浏览器上下文](docs/browser-context.zh-CN.md)：通过 Python 或 stdio MCP 启动独立 Chromium，保存页面、请求身份、截图和 HAR |
+| 调查 Notebook 任务 | [Notebook 上下文](docs/zh-CN/notebook-context.md)：通过记录器或 stdio MCP 保存 Jupyter 请求与输出，处理迟到输出和 kernel 重启 |
+
+浏览器和 Notebook 入口需要可选的 Python 依赖。指南包含安装、Agent 配置、
+留存设置，以及导入任务 Run 的步骤。应用上下文与 Linux 运行时采集分别配置。
+
 ### 记录普通命令
 
 不接入 Agent，也可以先记录一条命令：
@@ -376,6 +390,13 @@ Pod 元数据用于识别工作负载；事件先于绑定到达时，通过磁�
 [持久化采集](docs/zh-CN/native-capture-spool.md) ·
 [Kubernetes 事件归属](docs/zh-CN/design-k8s-auto-attribution.md)
 
+当前源码还包含 [gVisor SecCheck 接收器](docs/zh-CN/gvisor-seccheck.md)。
+ARM64 `systrap` 路径已实测采集、故障恢复和快照恢复／克隆；
+事件保留 **Sentry** 内的身份，与宿主运行时进程区分。
+原生 eBPF 则观测选定的 Linux 宿主或 guest 内核。
+[Firecracker guest 方案](docs/zh-CN/execution-handoff.md#guest-服务与镜像)
+提供固定版本的内核、rootfs 构建入口和 systemd 采集服务；实际启动与回收验收待完成。
+
 TLS 自动发现会跟踪受支持的 OpenSSL 库和 Go 二进制，也会处理容器重建后的目标变化。
 Go TLS 响应采集目前支持 **amd64、有符号信息的 Go 1.23–1.26 二进制**。
 ARM64 Go 响应采集、BoringSSL 和任意自定义 TLS 实现尚未覆盖。
@@ -502,7 +523,10 @@ v0.10.1 加强 daemon 访问控制，保留本地采集的交互与兼容性，
 原生采集补齐有界缓冲和可靠停机。新增签名实录展示这些变化，
 原有调查、对比和离线分享示例继续保留。
 
-后续暂不新增功能，重点提升准确性、采集稳定性和使用体验。
+当前源码正在准备 v1.0，包含跨沙箱执行交接、gVisor 采集、Browser／Notebook
+上下文及可离线交付的调查示例。接入条件见[部署指南](docs/zh-CN/deployment-modes.md)，
+已实现的改动见[未发布变更](CHANGELOG.zh-CN.md#未发布)。
+v1.0 发布前，上面的发行包示例继续使用 v0.10.1。
 
 升级前请备份数据目录；升级后的数据库不支持直接用旧版程序打开。
 macOS 包尚未经过 Apple 公证；下载校验和用于检查压缩包完整性。
