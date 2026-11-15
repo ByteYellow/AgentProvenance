@@ -186,8 +186,11 @@ def main():
         bundle = portable / 'bundle.json'
         shutil.copyfile(results[0]['bundle_path'], bundle)
         attestation = portable / 'bundle.dsse.json'
-        attestation.write_text(json.dumps(delivery['envelope']))
-        (portable / 'manifest.dsse.json').write_text(json.dumps(delivery['envelope']))
+        manifest_path = Path(results[0]['bundle_path']).with_name('manifest.dsse.json')
+        shutil.copyfile(manifest_path, attestation)
+        shutil.copyfile(manifest_path, portable / 'manifest.dsse.json')
+        if hashlib.sha256(attestation.read_bytes()).hexdigest() != delivery['manifest_sha256']:
+            raise RuntimeError('copied manifest bytes differ from the sealed package')
         cli(['forensics', 'verify-attestation', str(bundle), str(attestation), '--pub-key', str(root / 'executor.pub')])
         collect_command = ['--data-dir', str(root / 'receipt-store'), 'forensics', 'collect-execution', str(admission_path),
             '--execution-config', str(config_path), '--package-dir', str(portable), '--receiver', 'fixture-receiver',

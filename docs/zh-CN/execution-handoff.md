@@ -572,7 +572,8 @@ agentprov --data-dir /mnt/agentprov-evidence \
 
 ### 执行器停止后接收证据
 
-把封存目录中的 `bundle.json` 和 `manifest.dsse.json` 复制到接收端。
+把封存目录中的 `bundle.json` 和 `manifest.dsse.json` 原样复制到接收端，
+不要从 CLI 的 JSON 输出重新生成清单文件。
 调用方须保留从受信提交响应取得的 admission，接收时独立核对，
 不能用待接收包反向构造。执行端私钥保留在原执行端。
 

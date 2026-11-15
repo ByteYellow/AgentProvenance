@@ -727,7 +727,8 @@ configuration. Provision those separately from a reusable guest image.
 ### Receive evidence after the executor stops
 
 Copy each sealed package directory (`bundle.json` and `manifest.dsse.json`) to
-the receiving machine. Keep the admission saved from the authenticated submit
+the receiving machine byte for byte; do not regenerate the manifest from CLI
+JSON output. Keep the admission saved from the authenticated submit
 response; do not construct it from the incoming package. No sender private key
 is needed on the receiving machine.
 
