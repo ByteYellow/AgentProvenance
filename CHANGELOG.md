@@ -56,6 +56,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Runtime collection
 
+- Add pinned runsc memory-restore acceptance for the original instance and two
+  clones. Verify independent lifecycle-qualified graph identities despite equal
+  boot/PID/birth values, stale endpoint rejection, unchanged historical evidence
+  and signed portability. Document external registration and readiness ordering.
 - Add a bounded, version-pinned gVisor SecCheck transport receiver with
   registered sandbox identities, separate thread/process lifetimes and stream
   loss diagnostics. Include live `systrap` acceptance for two concurrent Linux

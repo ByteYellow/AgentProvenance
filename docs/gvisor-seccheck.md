@@ -201,6 +201,53 @@ Signed Bundle export/import preserves these records and their graph edges.
 Existing native process-identity versions and historical signed data remain
 unchanged.
 
+## Snapshot Restore and Clones
+
+For the pinned runsc profile, keep the receiver, private socket directory,
+registration and signing credentials on the host, outside the sandbox snapshot.
+The external launcher owns lifecycle assignment. To resume an instance, retain
+its `instance_id` and assign a new `generation`; each clone gets its own instance
+and generation. Keep historical event IDs and payloads unchanged.
+
+Use this startup order:
+
+1. Stop accepting new work and checkpoint the sandbox. Drain the old receiver and
+   close its endpoint. Retain the evidence store outside the snapshot.
+2. Prepare a fresh OCI state directory and a distinct host `linux.cgroupsPath`.
+   Register the new lifetime on a fresh private socket, then wait for the receiver
+   to report `listening`.
+3. Restore the memory image with the same runtime/platform configuration. Keep
+   application work behind a launcher-controlled readiness gate.
+4. Recreate tracing with `runsc trace create --force --config=NEW_TRACE CONTAINER`.
+   Wait for the new target to report `connected`, then release the work gate.
+
+The readiness gate belongs to the execution entry; the receiver does not suspend
+an application. Any activity before tracing reconnects stays a capture gap.
+The [upstream checkpoint guide](https://gvisor.dev/docs/user_guide/checkpoint_restore/)
+describes the runtime lifecycle; this profile is tested against the pinned release
+above, not against an arbitrary runsc version.
+
+Run the isolated memory-continuity acceptance with a fresh output directory:
+
+```sh
+sudo python3 scripts/accept_seccheck_restore.py \
+  --cli /tmp/agentprov --runsc /absolute/path/to/runsc \
+  --rootfs /absolute/path/to/rootfs \
+  --output /absolute/path/to/new-restore-acceptance-directory
+```
+
+The minimal rootfs needs BusyBox-compatible `sh`, `cat`, `date`, `hostname`,
+`sleep` and `touch`. The script checkpoints a running shell and tmpfs, resumes
+the original instance and restores two clones from the same image. It verifies
+preserved memory, equal hostname/boot/PID/birth identity, four distinct graph
+identities, rejected stale trace configuration, unchanged historical evidence
+and a signed export/import. It keeps logs and hashes and removes its own runtime
+state. The selected mode is ARM64 `systrap` with networking disabled.
+
+This acceptance keeps credentials and spool on the host. Copying a collector's
+disk state into two uploaders, including upload-origin accounting and credential
+rotation, remains a separate continuity acceptance task.
+
 ## Offline Reading
 
 After importing a signed Bundle, use the existing `dashboard export --run RUN_ID`

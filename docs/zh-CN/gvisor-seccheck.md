@@ -168,6 +168,44 @@ sudo /path/to/runsc --root=/run/agentprov-runsc trace create \
 图谱校验检查保存的登记证据及完整限定的身份。签名 Bundle 导入、导出保留事件
 和图边，既有原生进程身份版本与历史签名数据保持原样。
 
+## 快照恢复与克隆
+
+固定版本的 runsc 配置将接收器、私有套接字目录、登记信息和签名凭据放在宿主机，
+与沙箱快照分开。生命周期由外部可信启动方分配：恢复原实例时保留 `instance_id`，
+分配新的 `generation`；每份克隆分别登记实例和代次。历史事件的 ID 和正文保持原样。
+
+按以下顺序恢复：
+
+1. 暂停接收新任务，为沙箱创建快照。处理完旧接收器已收到的记录，再关闭旧端点。
+   证据存储保留在快照之外。
+2. 创建新的 OCI 状态目录和独立的宿主 `linux.cgroupsPath`。使用新的私有套接字
+   登记生命周期，等待接收器输出 `listening`。
+3. 沿用原运行时和平台配置恢复内存镜像。由执行入口的就绪门控暂缓应用任务。
+4. 执行 `runsc trace create --force --config=NEW_TRACE CONTAINER` 重建采集连接。
+   目标状态变为 `connected` 后，再放行任务。
+
+就绪门控由执行入口负责，接收器本身不暂停应用。重连前已经发生的活动保留为采集缺口。
+运行时的生命周期语义见[上游快照指南](https://gvisor.dev/docs/user_guide/checkpoint_restore/)；
+本配置按本文开头的固定版本验收。
+
+使用新的输出目录执行内存连续性验收：
+
+```sh
+sudo python3 scripts/accept_seccheck_restore.py \
+  --cli /tmp/agentprov --runsc /absolute/path/to/runsc \
+  --rootfs /absolute/path/to/rootfs \
+  --output /absolute/path/to/new-restore-acceptance-directory
+```
+
+精简 rootfs 需要兼容 BusyBox 的 `sh`、`cat`、`date`、`hostname`、`sleep` 和 `touch`。
+脚本为运行中的 shell 和 tmpfs 创建快照，再恢复原实例及两份克隆，检查内存内容、
+相同的 hostname／boot／PID／出生时间、四份独立图身份、旧采集配置拒绝、历史证据保真
+和签名导入导出。日志与摘要保留，脚本只清理自己创建的运行时状态。
+当前实测环境为 ARM64 `systrap`，关闭沙箱网络。
+
+这项验收将凭据和 spool 保留在宿主机。把采集器磁盘状态复制成两个上传端的情况，
+包括上传来源记录和凭据轮换，仍作为独立的连续性任务推进。
+
 ## 离线阅读
 
 导入签名 Bundle 后，可用现有 `dashboard export --run RUN_ID` 命令生成只读 ZIP。

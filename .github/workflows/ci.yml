@@ -116,8 +116,8 @@ jobs:
       - name: Check native execution acceptance assertions
         run: python3 -m unittest discover -s scripts -p 'test_execution_native*.py' -v
 
-      - name: Check SecCheck fault acceptance assertions
-        run: python3 -m unittest discover -s scripts -p 'test_accept_seccheck_faults.py' -v
+      - name: Check SecCheck acceptance assertions
+        run: python3 -m unittest discover -s scripts -p 'test_accept_seccheck*.py' -v
 
       - name: Check notebook capture adapter
         run: PYTHONPATH=python python3 -m unittest discover -s python/tests -p 'test_notebook*.py' -v
