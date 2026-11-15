@@ -3135,5 +3135,8 @@
   "pinned execution server public key file (hex ed25519)": "预先核对的执行服务公钥文件（十六进制 ed25519）",
   "stable delivery operation id; reuse it when retrying the same package": "稳定的交付操作 ID；重试同一包时沿用此 ID",
   "total timeout for evidence collection and acknowledgment": "证据接收与确认的总超时",
+  "prepare signed execution packages in a stopped local store": "为已停止的本地执行库生成签名证据包",
+  "trusted caller, target and delivery signing configuration": "可信调用方、目标与交付签名配置",
+  "stable sealing operation ID; retry the same operation to reuse immutable packages": "稳定的封包操作 ID；重试同一操作时复用已有证据包",
   "execution collection requires --daemon-url and a positive --timeout": "接收执行证据需要指定 --daemon-url，并设置大于零的 --timeout"
 }

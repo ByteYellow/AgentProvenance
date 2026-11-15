@@ -539,6 +539,50 @@ agentprov --data-dir ./received-evidence --daemon-url http://127.0.0.1:18575 \
 通过公开 CLI 连续接收两次，检查接收端图谱和制品正文。
 该脚本使用 HTTP 测试入口，原生 harness 与 Sensor 另行验收。
 
+### 回收前封存 guest 证据
+
+回收 guest 前，先停止执行器和采集器，再把已保存的执行记录打包。
+数据目录应放在 guest 删除后仍保留的卷上。init 服务可在 daemon 进程退出后调用：
+
+```sh
+agentprov --data-dir /mnt/agentprov-evidence \
+  forensics seal-executions \
+  --execution-config /run/agentprov/execution.json \
+  --operation "$RETIREMENT_ID" > /mnt/agentprov-evidence/seal.jsonl
+```
+
+`RETIREMENT_ID` 由可信生命周期控制端提供。中断重试沿用同一个 ID；
+后续归档需要包含新证据时，使用新的 ID。命令只处理配置中调用方命名空间和
+目标 producer、实例、生命周期代次对应的执行，按有界分页枚举，复用已有签名交付格式，
+保留原执行状态和采集状态。执行器或 daemon 仍在运行时拒绝封包。
+
+中英文界面均输出英文字段和状态值的 JSONL。每条执行记录的状态为
+`prepared`、`reused`、`unfinished` 或 `failed`，最后一行汇总数量及 `complete`。
+已打包记录包含包路径和签名清单，包保存在数据目录的
+`artifacts/execution-deliveries` 下。归档时同时保留这些包和 JSONL 索引。
+
+未结束的执行保持原状。缺少检查点、已有包损坏、存储失败、取消或输出失败时，
+命令以非零状态退出；已经准备好的包保留，供重试复用。封包失败时，init 或控制端
+必须保留证据卷。`complete` 表示选中的本地执行已打包；接收方确认仍走上文的
+签名回执流程。包正文仍在留存期内时，即使接收端已经确认，同一操作 ID 仍复用原包。
+正文已回收时返回 `execution_delivery_retired`；需要重新导出仍保留的源证据时，使用新的操作 ID。
+
+此命令只操作本地存储，拒绝 `--daemon-url`。签名密钥及外部指定的实例、生命周期代次
+来自已有执行配置，应与可重复使用的 guest 镜像分开提供。
+
+[封包验收脚本](../../scripts/accept_execution_seal.py) 启动隔离的本地执行器，运行 CSV 任务，
+停止 daemon 后连续封包两次，再移走原数据目录，在新存储中验证签名和正文。
+在具备采集权限的 Linux 主机上加 `--native`，要求内核采集达到 sealed 状态：
+
+```sh
+python3 scripts/accept_execution_seal.py \
+  --binary /path/to/agentprov --output /path/to/new/acceptance --native
+```
+
+合成输入名为 `credentials-fixture.csv`，用于触发现有敏感读取规则，内容不含凭据。
+脚本核对导入包中的输入读取、结果写入及原 cgroup 归属。
+此脚本验收命令级流程；guest 开机和快照恢复另行验收。
+
 ## 兼容与测试
 
 数据库 schema 21–27 增加执行账本、持久停止请求、交付发件记录和回执、发送端副本留存、发布路径引用索引，以及作用域采集和采样缺口计数，

@@ -684,6 +684,61 @@ runs a CSV command, collects twice through the public CLI, verifies the received
 graph and reads the transferred artifact. It is an HTTP fixture, separate from
 native harness and Sensor acceptance.
 
+### Seal a stopped guest store
+
+Before reclaiming a guest, stop its executor and collector, then prepare the saved
+executions for archival. Keep the data directory on a volume that survives guest
+deletion. An init service can invoke this command after its daemon process exits:
+
+```sh
+agentprov --data-dir /mnt/agentprov-evidence \
+  forensics seal-executions \
+  --execution-config /run/agentprov/execution.json \
+  --operation "$RETIREMENT_ID" > /mnt/agentprov-evidence/seal.jsonl
+```
+
+The trusted lifecycle controller supplies `RETIREMENT_ID`. Retry an interrupted
+operation with the same ID; a later archival pass that includes new evidence
+uses a new ID. The command selects only the configured caller namespace and
+target producer, instance and generation. It enumerates the stopped ledger in
+bounded pages, reuses the existing signed delivery format and leaves the original
+execution and capture states intact. It refuses an active executor or daemon.
+
+Output is JSONL with English fields and status values in both interface languages.
+Each attempt reports `prepared`, `reused`, `unfinished` or `failed`, followed by a
+summary with counts and `complete`. Prepared records include the bundle path and
+signed manifest. Packages stay under `artifacts/execution-deliveries` in the data
+directory. Preserve the referenced packages as well as the JSONL index.
+
+Unfinished attempts are left unchanged. Missing checkpoints, damaged existing
+packages, storage failures, cancellation and output errors produce a nonzero exit;
+successfully prepared packages remain available for retry. The init/controller
+must retain the evidence volume when sealing fails. A `complete` summary means
+the selected local executions were packaged. Receiver acknowledgment remains the
+separate signed-receipt step described above. While the package body is retained,
+the same operation reuses it, including after receiver acknowledgment. Retired
+package bodies produce `execution_delivery_retired`; use a new operation to
+export retained source evidence again.
+
+This command is local-only; `--daemon-url` is rejected. Delivery signing keys and
+the externally assigned instance/generation come from the existing execution
+configuration. Provision those separately from a reusable guest image.
+
+The [sealing acceptance script](../scripts/accept_execution_seal.py) starts an
+isolated local executor, runs a CSV task, stops the daemon, seals twice and
+verifies the package in a fresh store after moving the original data directory.
+Use `--native` on a privileged Linux host to require sealed kernel capture:
+
+```sh
+python3 scripts/accept_execution_seal.py \
+  --binary /path/to/agentprov --output /path/to/new/acceptance --native
+```
+
+The synthetic CSV is named `credentials-fixture.csv` to exercise the existing
+sensitive-read filter. It contains no credentials. The script requires its read
+and the output write to survive import with their original cgroup attribution.
+This command-level check is separate from guest boot and snapshot acceptance.
+
 ## Compatibility and tests
 
 Database schemas 21-27 add the execution ledger, durable stop requests, delivery

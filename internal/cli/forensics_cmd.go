@@ -134,6 +134,7 @@ func forensicsCmd(dataDir, daemonURL *string) *cobra.Command {
 	importCmd.Flags().BoolVar(&importAllowUnverified, "allow-unverified", false, "explicitly skip attestation verification when --pub-key is absent; the import is loudly warned as unverified")
 	cmd := &cobra.Command{Use: "forensics", Short: "forensics bundle commands"}
 	cmd.AddCommand(export)
+	cmd.AddCommand(forensicsSealExecutionsCmd(dataDir, daemonURL))
 	cmd.AddCommand(exportBatch)
 	cmd.AddCommand(importCmd)
 	cmd.AddCommand(forensicsVerifyAttestationCmd())

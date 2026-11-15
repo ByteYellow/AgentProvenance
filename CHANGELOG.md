@@ -4,6 +4,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Add `forensics seal-executions` to prepare signed packages from a stopped
+  execution store before guest retirement. Preserve caller/instance/generation
+  boundaries, reuse immutable packages on retry, and report unfinished attempts
+  and export failures separately from receiver acknowledgment.
 - Reduce repeated object reads and session-scope queries in offline exports with
   many sessions. Reuse verified payloads within a bounded per-export cache and
   stream search pages using the same scope as the session graph. Live queries,
