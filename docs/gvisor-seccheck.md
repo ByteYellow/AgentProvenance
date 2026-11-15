@@ -244,9 +244,43 @@ identities, rejected stale trace configuration, unchanged historical evidence
 and a signed export/import. It keeps logs and hashes and removes its own runtime
 state. The selected mode is ARM64 `systrap` with networking disabled.
 
-This acceptance keeps credentials and spool on the host. Copying a collector's
-disk state into two uploaders, including upload-origin accounting and credential
-rotation, remains a separate continuity acceptance task.
+The script also retains an actual sealed queue batch and its independently
+stored digest, copies it to both clones, and replays it into fresh and existing
+stores. Historical observations retain their original identities; each clone
+receives a separate durable upload receipt. Retrying the command reuses that
+receipt. Credentials remain on the host; guest-contained credential rotation
+requires its own continuity acceptance.
+
+### Replay a Copied Queue Batch
+
+Use `telemetry replay-seccheck` for a sealed normalized JSONL batch. Supply the
+SHA-256 retained by the trusted original collector and a current registration
+from outside the copied state:
+
+```sh
+agentprov --data-dir /var/lib/agentprov telemetry replay-seccheck \
+  --config /etc/agentprov/current-seccheck.json \
+  --file /private/inherited-batch.jsonl \
+  --sha256 "$EXPECTED_BATCH_SHA256" --json
+```
+
+If the configuration contains several targets, select the uploader with
+`--socket /private/current.sock`. This is a local operator command: it opens no
+listener and does not establish remote uploader authentication. Its receipt
+records `authority_basis: local_operator_registration`.
+
+The original Run, instance, generation, timestamps and event IDs stay unchanged.
+The receipt records the current uploader, original event references, batch
+digest and first-import/duplicate counts. A retry by the same uploader returns
+the original receipt; a different instance or generation receives its own.
+The target's `run_id` remains its live-collection destination; copied events and
+their receipts stay in each historical Run reported by the replay command.
+
+A batch is limited to 16 MiB and 4,096 records, with each JSONL line below 1 MiB.
+Its final newline and retained digest must match. A conflicting event, foreign
+namespace, invalid record or receipt write failure aborts the whole batch.
+Upload receipts are included in signed Bundles. Selective reading exports
+withhold a receipt when any of its supporting historical events is excluded.
 
 ## Offline Reading
 

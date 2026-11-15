@@ -124,7 +124,7 @@ func ValidateSecCheckStoredEvent(event EventRecord) error {
 	if e.Kind == "stream" && e.Reason == "" {
 		return fmt.Errorf("SecCheck stream diagnostic lacks a reason")
 	}
-	return nil
+	return validateSecCheckReplayReceipt(event, e)
 }
 
 // MapSecCheckRecord receives the Run from the local registration, never from

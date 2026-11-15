@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
+	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
 const replaySelectionLimit = 1000000
@@ -357,6 +358,9 @@ func (s Server) resolveReplaySelection(ctx context.Context, input ReplaySelectio
 	if err := s.excludeEndpointDependencies(ctx, selection.RunID, records); err != nil {
 		return nil, err
 	}
+	if err := s.excludeSecCheckReplayDependencies(ctx, selection.RunID, records); err != nil {
+		return nil, err
+	}
 	p.Records = make([]replayRecordDecision, 0, len(records))
 	for _, id := range ids {
 		r := records[id]
@@ -394,6 +398,39 @@ func (s Server) resolveReplaySelection(ctx context.Context, input ReplaySelectio
 	}
 	p.SHA256 = replayDigest(fingerprint)
 	return p, ctx.Err()
+}
+
+func (s Server) excludeSecCheckReplayDependencies(ctx context.Context, run string, records map[string]replayRecordDecision) error {
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,payload FROM events WHERE run_id=? AND source='gvisor_seccheck' AND event_type='runtime_collection' ORDER BY id`, run)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, payload string
+		if err := rows.Scan(&id, &payload); err != nil {
+			return err
+		}
+		record := records["3/"+id]
+		if !record.Included {
+			continue
+		}
+		receipt, err := telemetry.ReadSecCheckReplayReceipt(payload)
+		if err != nil {
+			return err
+		}
+		if receipt == nil {
+			continue
+		}
+		for _, ref := range receipt.EventIDs {
+			if support, exists := records["3/"+ref]; !exists || !support.Included {
+				record.Included, record.Reason, record.RelatedRecord = false, "spool_replay_support_not_included", "3/"+ref
+				records[record.ID] = record
+				break
+			}
+		}
+	}
+	return rows.Err()
 }
 
 // Endpoint envelopes include their frozen candidate details. Withholding a

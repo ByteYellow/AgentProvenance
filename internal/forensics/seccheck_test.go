@@ -1,10 +1,14 @@
 package forensics_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -26,6 +30,7 @@ func TestSecCheckSignedRoundtripAndScopeValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stream.Close()
+	var spool bytes.Buffer
 	for _, sandbox := range []string{"one", "two"} {
 		reg := seccheck.Registration{Namespace: "fixture", InstanceID: "node", Generation: "1", SandboxID: sandbox, ContainerID: sandbox}
 		c := &wire.ContextData{ContainerId: sandbox, ThreadId: 1, ThreadGroupId: 1, ThreadStartTimeNs: 1800000000000000001, ThreadGroupStartTimeNs: 1800000000000000001, TimeNs: 1800000000000000111}
@@ -41,6 +46,13 @@ func TestSecCheckSignedRoundtripAndScopeValidation(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := seccheck.Record{Kind: "event", Registration: reg, ConnectionID: "connection", Sequence: 1, ReceivedAt: time.Unix(1800000001, 0).UTC(), ProtocolVersion: 1, Packet: &packet}
+		event, err := telemetry.MapSecCheckRecord("sentry-roundtrip", r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.NewEncoder(&spool).Encode(event); err != nil {
+			t.Fatal(err)
+		}
 		if err := stream.Sink("sentry-roundtrip", reg)(context.Background(), r); err != nil {
 			t.Fatal(err)
 		}
@@ -52,8 +64,16 @@ func TestSecCheckSignedRoundtripAndScopeValidation(t *testing.T) {
 	if err := stream.Drain(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	for _, instance := range []string{"clone-a", "clone-b"} {
+		target := seccheck.Target{RunID: "uploader", SocketPath: "/tmp/registered.sock", Registration: seccheck.Registration{
+			Namespace: "fixture", InstanceID: instance, Generation: "1", SandboxID: "same", ContainerID: "same"}}
+		result, err := telemetry.ReplaySecCheckSpool(context.Background(), db, bytes.NewReader(spool.Bytes()), fmt.Sprintf("%x", sha256.Sum256(spool.Bytes())), target)
+		if err != nil || len(result.Receipts) != 1 || result.Receipts[0].Duplicates != 2 {
+			t.Fatalf("replay: %+v %v", result, err)
+		}
+	}
 	before, err := telemetry.ListEvents(db, "sentry-roundtrip", "")
-	if err != nil || len(before) != 4 {
+	if err != nil || len(before) != 6 {
 		t.Fatalf("events=%d %v", len(before), err)
 	}
 	public, key, err := ed25519.GenerateKey(rand.Reader)
@@ -93,6 +113,25 @@ func TestSecCheckSignedRoundtripAndScopeValidation(t *testing.T) {
 	first, second := telemetry.ProcessGraphIdentity(observed[0]), telemetry.ProcessGraphIdentity(observed[1])
 	if first.Process.ID == second.Process.ID || first.Process.Basis != "sentry_process_instance" {
 		t.Fatal("sandbox identities merged")
+	}
+	if _, err := replayDB.Exec(`UPDATE events SET payload=json_set(payload,'$.spool_replay.event_ids[0]',?) WHERE json_extract(payload,'$.spool_replay') IS NOT NULL`, "evt-seccheck-"+fmt.Sprintf("%064d", 0)); err != nil {
+		t.Fatal(err)
+	}
+	brokenRefs, err := provenance.Verify(replayDB, "sentry-roundtrip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundRef := false
+	for _, issue := range brokenRefs.Issues {
+		foundRef = foundRef || issue.Kind == "missing_seccheck_replay_event"
+	}
+	if !foundRef {
+		t.Fatalf("missing receipt reference accepted: %+v", brokenRefs)
+	}
+	for _, e := range after {
+		if _, err := replayDB.Exec(`UPDATE events SET payload=? WHERE id=?`, e.Payload, e.ID); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for _, statement := range []string{
 		`UPDATE events SET container_id='host-container'`,

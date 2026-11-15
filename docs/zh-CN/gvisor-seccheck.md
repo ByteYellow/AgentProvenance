@@ -203,8 +203,34 @@ sudo python3 scripts/accept_seccheck_restore.py \
 和签名导入导出。日志与摘要保留，脚本只清理自己创建的运行时状态。
 当前实测环境为 ARM64 `systrap`，关闭沙箱网络。
 
-这项验收将凭据和 spool 保留在宿主机。把采集器磁盘状态复制成两个上传端的情况，
-包括上传来源记录和凭据轮换，仍作为独立的连续性任务推进。
+脚本还会保留一份真实封存的队列批次及独立保存的摘要，将批次复制给两份克隆，
+分别重放到新存储和已有存储。历史观察保留原身份，各克隆拥有独立的持久上传回执，
+命令重试复用原回执。凭据仍保留在宿主机；guest 内凭据轮换另行验收。
+
+### 重放复制的队列批次
+
+对已封存的规范化 JSONL 批次，使用 `telemetry replay-seccheck`。
+提供原采集端独立保留的 SHA-256，以及复制状态之外的当前登记配置：
+
+```sh
+agentprov --data-dir /var/lib/agentprov telemetry replay-seccheck \
+  --config /etc/agentprov/current-seccheck.json \
+  --file /private/inherited-batch.jsonl \
+  --sha256 "$EXPECTED_BATCH_SHA256" --json
+```
+
+配置包含多个 target 时，用 `--socket /private/current.sock` 选择上传实例。
+这是本地操作员入口，不开放监听端口；回执中的授权依据为
+`authority_basis: local_operator_registration`。远端上传身份由外部传输和登记流程确认。
+
+原 Run、实例、生命周期代次、时间戳和事件 ID 保持不变。回执单独记录当前上传者、
+原事件引用、批次摘要，以及首次导入和重复记录数量。同一上传者重试返回原回执，
+另一个实例或代次获得独立回执。target 的 `run_id` 仍用于实时采集；历史事件和回执
+保留在原 Run 中，命令结果列出对应 Run。
+
+每批最多 16 MiB、4,096 条记录，单行小于 1 MiB；文件必须保留末尾换行并匹配原摘要。
+事件冲突、命名空间不符、记录无效或回执写入失败时，整批回滚。
+上传回执随签名 Bundle 保存。选择性阅读导出排除某条历史事件时，同时排除引用它的回执。
 
 ## 离线阅读
 

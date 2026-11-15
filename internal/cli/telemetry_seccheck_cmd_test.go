@@ -10,7 +10,7 @@ import (
 )
 
 func TestSecCheckPublicCollectionCommands(t *testing.T) {
-	for _, name := range []string{"receive-seccheck", "seccheck-config"} {
+	for _, name := range []string{"receive-seccheck", "seccheck-config", "replay-seccheck"} {
 		cmd, _, err := NewRootCommand().Find([]string{"telemetry", name})
 		if err != nil || cmd.Name() != name {
 			t.Fatalf("missing public collection command %s: %v", name, err)

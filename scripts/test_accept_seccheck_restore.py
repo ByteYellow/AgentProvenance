@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-from accept_seccheck_restore import PHASES, require_expired_endpoint, require_restore_identities, runtime_command
+from accept_seccheck_restore import PHASES, require_expired_endpoint, require_replay_receipt, require_restore_identities, runtime_command
 
 
 class RestoreAcceptanceChecks(unittest.TestCase):
@@ -74,6 +74,18 @@ class RestoreAcceptanceChecks(unittest.TestCase):
                     'connect("/private/other.sock"): no such file or directory'):
             with self.assertRaisesRegex(RuntimeError, 'expired endpoint'):
                 require_expired_endpoint(log, '/private/old.sock')
+
+    def test_replay_checks_history_and_upload_source_separately(self):
+        registration = self.records[2]['registration']
+        receipt = {'uploader': registration, 'file_sha256': 'original-digest', 'event_ids': ['old-event'],
+                   'records': 1, 'ingested': 0, 'duplicates': 1, 'authority_basis': 'local_operator_registration'}
+        require_replay_receipt({'receipts': [receipt]}, registration, ['old-event'], 'original-digest', 0)
+        for field, value in (('uploader', self.records[0]['registration']), ('event_ids', ['clone-event']),
+                             ('ingested', 1), ('duplicates', 0), ('file_sha256', 'changed')):
+            changed = copy.deepcopy(receipt)
+            changed[field] = value
+            with self.assertRaisesRegex(RuntimeError, 'original identity or uploader'):
+                require_replay_receipt({'receipts': [changed]}, registration, ['old-event'], 'original-digest', 0)
 
     @unittest.skipUnless(hasattr(os, 'fork'), 'requires POSIX detached child semantics')
     def test_detached_child_stdio_does_not_hold_parent_completion(self):

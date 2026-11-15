@@ -56,6 +56,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ### Runtime collection
 
+- Add local `telemetry replay-seccheck` for verified copied queue batches.
+  Preserve historical event identities while recording each uploader separately,
+  reuse durable receipts on retry, and enforce signed-reference and selective
+  export boundaries. Extend the memory-restore fixture with actual queue copies.
 - Add pinned runsc memory-restore acceptance for the original instance and two
   clones. Verify independent lifecycle-qualified graph identities despite equal
   boot/PID/birth values, stale endpoint rejection, unchanged historical evidence

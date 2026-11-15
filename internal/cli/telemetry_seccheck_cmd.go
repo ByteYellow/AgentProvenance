@@ -37,29 +37,8 @@ func telemetryReceiveSecCheckCmd(dataDir *string) *cobra.Command {
 	var jsonOut bool
 	var opts telemetry.SecCheckCollectOptions
 	cmd := &cobra.Command{Use: "receive-seccheck", Short: "receive registered gVisor observations into the durable local spool", Args: cobra.NoArgs, SilenceUsage: true, RunE: func(cmd *cobra.Command, _ []string) error {
-		f, err := os.Open(path)
+		config, err := readSecCheckCollectionConfig(path)
 		if err != nil {
-			return err
-		}
-		defer f.Close()
-		info, err := f.Stat()
-		if err != nil {
-			return err
-		}
-		if !info.Mode().IsRegular() || info.Size() > 1<<20 {
-			return fmt.Errorf("SecCheck config must be a regular file of at most 1 MiB")
-		}
-		dec := json.NewDecoder(io.LimitReader(f, (1<<20)+1))
-		dec.DisallowUnknownFields()
-		var config seccheck.CollectionConfig
-		if err := dec.Decode(&config); err != nil {
-			return fmt.Errorf("invalid SecCheck config: %w", err)
-		}
-		var extra any
-		if err := dec.Decode(&extra); err != io.EOF {
-			return fmt.Errorf("SecCheck config must contain one JSON object")
-		}
-		if err := config.Validate(); err != nil {
 			return err
 		}
 		if runtime.GOOS != "linux" || (runtime.GOARCH != "arm64" && runtime.GOARCH != "amd64") {
@@ -94,5 +73,92 @@ func telemetryReceiveSecCheckCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().Int64Var(&opts.Stream.MaxQueuedBytes, "max-queued-bytes", 256<<20, "shared spool capacity in bytes")
 	cmd.Flags().IntVar(&opts.Stream.MaxQueuedBatches, "max-queued-batches", 4096, "shared spool capacity in batches")
 	_ = cmd.MarkFlagRequired("config")
+	return cmd
+}
+
+func readSecCheckCollectionConfig(path string) (seccheck.CollectionConfig, error) {
+	var config seccheck.CollectionConfig
+	f, err := os.Open(path)
+	if err != nil {
+		return config, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return config, err
+	}
+	if !info.Mode().IsRegular() || info.Size() > 1<<20 {
+		return config, fmt.Errorf("SecCheck config must be a regular file of at most 1 MiB")
+	}
+	dec := json.NewDecoder(io.LimitReader(f, (1<<20)+1))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&config); err != nil {
+		return config, fmt.Errorf("invalid SecCheck config: %w", err)
+	}
+	if err := dec.Decode(new(any)); err != io.EOF {
+		return config, fmt.Errorf("SecCheck config must contain one JSON object")
+	}
+	return config, config.Validate()
+}
+
+func telemetryReplaySecCheckCmd(dataDir *string) *cobra.Command {
+	var configPath, socket, path, digest string
+	var jsonOut bool
+	cmd := &cobra.Command{Use: "replay-seccheck", Short: "replay a verified historical SecCheck batch with a separate uploader receipt", Args: cobra.NoArgs, SilenceUsage: true, RunE: func(cmd *cobra.Command, _ []string) error {
+		config, err := readSecCheckCollectionConfig(configPath)
+		if err != nil {
+			return err
+		}
+		var target *seccheck.Target
+		for i := range config.Targets {
+			if config.Targets[i].SocketPath == socket || (socket == "" && len(config.Targets) == 1) {
+				target = &config.Targets[i]
+			}
+		}
+		if target == nil {
+			return fmt.Errorf("select one registered uploader with --socket")
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		info, err := f.Stat()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() || info.Size() > 16<<20 {
+			return fmt.Errorf("SecCheck replay requires a regular batch file of at most 16 MiB")
+		}
+		paths, err := store.Init(*dataDir)
+		if err != nil {
+			return err
+		}
+		db, err := store.Open(paths)
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		result, err := telemetry.ReplaySecCheckSpool(cmd.Context(), db, f, digest, *target)
+		if err != nil {
+			return err
+		}
+		if jsonOut {
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(result)
+		}
+		for _, receipt := range result.Receipts {
+			fmt.Fprintf(cmd.OutOrStdout(), "receipt=%s run=%s records=%d ingested=%d duplicates=%d uploader=%s/%s\n",
+				receipt.ReceiptID, receipt.RunID, receipt.Records, receipt.Ingested, receipt.Duplicates, receipt.Uploader.InstanceID, receipt.Uploader.Generation)
+		}
+		return nil
+	}}
+	cmd.Flags().StringVar(&configPath, "config", "", "external trusted uploader registration; never use the copied snapshot configuration")
+	cmd.Flags().StringVar(&socket, "socket", "", "select the uploader by its socket path when configuration contains multiple targets")
+	cmd.Flags().StringVar(&path, "file", "", "sealed normalized SecCheck spool batch")
+	cmd.Flags().StringVar(&digest, "sha256", "", "expected SHA-256 retained outside the copied spool")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit English JSON replay receipts")
+	for _, name := range []string{"config", "file", "sha256"} {
+		_ = cmd.MarkFlagRequired(name)
+	}
 	return cmd
 }

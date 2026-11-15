@@ -936,6 +936,7 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 		return err
 	}
 	var events []runtimeEvent
+	eventSources := map[string]string{}
 	toolCallIDs := map[string]struct{}{}
 	for rows.Next() {
 		var e runtimeEvent
@@ -947,6 +948,7 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 			toolCallIDs[e.toolCallID] = struct{}{}
 		}
 		events = append(events, e)
+		eventSources[e.id] = e.source
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -984,6 +986,13 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 		if source == "gvisor_seccheck" {
 			if err := telemetry.ValidateSecCheckStoredEvent(telemetry.EventRecord{ID: id, RunID: runID, Source: source, Payload: payload, PID: e.pid, TGID: e.tgid, PPID: e.ppid, SessionID: e.sessionID, ToolCallID: toolCallID, ProcessID: processID, ContainerID: e.containerID, CgroupID: e.cgroupID, RawEventID: e.rawID, CreatedAt: e.createdAt, CorrelationMethod: correlationMethod}); err != nil {
 				add("error", "invalid_seccheck_scope", id, "SecCheck scope evidence is invalid: %v", err)
+			}
+			if receipt, err := telemetry.ReadSecCheckReplayReceipt(payload); err == nil && receipt != nil {
+				for _, ref := range receipt.EventIDs {
+					if eventSources[ref] != "gvisor_seccheck" {
+						add("error", "missing_seccheck_replay_event", id, "SecCheck replay reference %s is absent from this run", ref)
+					}
+				}
 			}
 		}
 		if telemetry.TelemetrySource(source, correlationMethod) {
