@@ -94,8 +94,11 @@ components:
         started_at: {type: string}
         ended_at: {type: string}
         interval_basis:
-          enum: [recorded_observation, boundary_samples, source_processing_range, run_configuration, stream_observation]
-          description: Boundary samples leave changes between the observations unspecified
+          enum: [recorded_observation, boundary_samples, recorded_capability_changes, source_processing_range, run_configuration, stream_observation]
+          description: >
+            Native capability changes are retained as individual intervals with
+            their collector and capability revision. Historical boundary samples
+            leave changes between the observations unspecified.
         status: {type: string, description: Original source status; not a unified completeness verdict}
         snapshots:
           type: array

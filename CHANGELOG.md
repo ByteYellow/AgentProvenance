@@ -4,6 +4,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Retain native Sensor capability-change intervals, capture-side build/kernel
+  identity and operator-declared placement through signed evidence and offline
+  manifests. Preserve intermediate failures and report missing history explicitly.
 - Add a paged saved-capture manifest query and offline index for launch,
   execution, context and gVisor evidence. Preserve source identities, revision
   history, unknown values, scoped loss counters and explicit export selections.

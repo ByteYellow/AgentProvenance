@@ -13,25 +13,27 @@ import (
 const nativeCaptureSchema = "agentprovenance.execution_native_capture/v2"
 
 type NativeCapturePoint struct {
-	Scope        record.ExecutionScope   `json:"scope"`
-	Sensor       sensor.CaptureBoundary  `json:"sensor"`
-	Spool        telemetry.NativePrefix  `json:"spool"`
-	Capabilities sensor.CapabilityReport `json:"capabilities"`
+	Scope                  record.ExecutionScope   `json:"scope"`
+	Sensor                 sensor.CaptureBoundary  `json:"sensor"`
+	Spool                  telemetry.NativePrefix  `json:"spool"`
+	Capabilities           sensor.CapabilityReport `json:"capabilities"`
+	CapabilitiesObservedAt time.Time               `json:"capabilities_observed_at,omitempty"`
 }
 
 // The shared prefix remains visible. Only the execution's collector interval,
 // cgroup and unclassified rows participate in scope-drain completion.
 type NativeCaptureReport struct {
-	SchemaVersion string                          `json:"schema_version"`
-	State         CaptureState                    `json:"state"`
-	Start         *NativeCapturePoint             `json:"start,omitempty"`
-	End           *NativeCapturePoint             `json:"end,omitempty"`
-	Scope         *record.ScopeObservation        `json:"scope_observation,omitempty"`
-	Progress      *telemetry.NativePrefixProgress `json:"shared_prefix,omitempty"`
-	ScopePrefix   *telemetry.NativeScopePrefix    `json:"scope_prefix,omitempty"`
-	ScopeProgress *telemetry.NativePrefixProgress `json:"scope_progress,omitempty"`
-	Issues        []string                        `json:"issues"`
-	Error         string                          `json:"error,omitempty"`
+	SchemaVersion     string                          `json:"schema_version"`
+	State             CaptureState                    `json:"state"`
+	Start             *NativeCapturePoint             `json:"start,omitempty"`
+	End               *NativeCapturePoint             `json:"end,omitempty"`
+	Scope             *record.ScopeObservation        `json:"scope_observation,omitempty"`
+	Progress          *telemetry.NativePrefixProgress `json:"shared_prefix,omitempty"`
+	ScopePrefix       *telemetry.NativeScopePrefix    `json:"scope_prefix,omitempty"`
+	ScopeProgress     *telemetry.NativePrefixProgress `json:"scope_progress,omitempty"`
+	Issues            []string                        `json:"issues"`
+	Error             string                          `json:"error,omitempty"`
+	CapabilityHistory *sensor.CapabilityHistoryRange  `json:"capability_history,omitempty"`
 }
 
 // NativeCapture uses one live collector for all executor jobs. Ownership and
@@ -42,6 +44,7 @@ type NativeCapture struct {
 	}
 	Stream       *telemetry.NativeStream
 	Capabilities func() sensor.CapabilityReport
+	SaveHistory  func(context.Context, string, sensor.CapabilityReport, sensor.CapabilityReport, time.Time, time.Time) (sensor.CapabilityHistoryRange, error)
 	Timeout      time.Duration
 }
 
@@ -60,6 +63,7 @@ func (n *NativeCapture) point(ctx context.Context, scope record.ExecutionScope) 
 	p := &NativeCapturePoint{Scope: scope}
 	boundary, err := n.Checkpointer.Checkpoint(ctx, func(sensor.CaptureBoundary) error {
 		p.Capabilities = n.Capabilities()
+		p.CapabilitiesObservedAt = time.Now().UTC()
 		if !p.Capabilities.Ready {
 			return fmt.Errorf("native execution capture probes are not ready")
 		}
@@ -102,6 +106,14 @@ func (n *NativeCapture) Finish(ctx context.Context, start NativeCapturePoint, re
 		return r
 	}
 	r.End = end
+	if n.SaveHistory != nil {
+		history, err := n.SaveHistory(ctx, start.Scope.RunID, start.Capabilities, end.Capabilities, start.CapabilitiesObservedAt, end.CapabilitiesObservedAt)
+		r.CapabilityHistory = &history
+		r.Issues = append(r.Issues, history.Issues...)
+		if err != nil {
+			r.Issues, r.Error = append(r.Issues, "capability_history_incomplete"), err.Error()
+		}
+	}
 	prefix, err := n.Stream.SnapshotScopePrefix(ctx, start.Spool, end.Spool, start.Scope.CgroupID)
 	if err != nil {
 		r.Issues, r.Error = append(r.Issues, "scope_checkpoint_failed"), err.Error()

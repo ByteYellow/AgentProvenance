@@ -63,6 +63,9 @@ type sensorTracepoint struct {
 // RunWithOptions loads the configured eBPF probes and writes normalized JSONL
 // telemetry until SIGINT/SIGTERM. It requires root or CAP_BPF + CAP_PERFMON.
 func RunWithOptions(out io.Writer, opts Options) (runErr error) {
+	if err := ValidatePlacement(opts.Placement); err != nil {
+		return err
+	}
 	if len(opts.TLSTargets) > 1024 {
 		return fmt.Errorf("at most 1024 known TLS targets are allowed")
 	}

@@ -19,6 +19,19 @@ func (s Service) read(ctx context.Context, run string, e evidence) (Record, erro
 	r := initial(e)
 	read := func(out any) error { return provenance.ReadObjectPayload(s.DB, run, e.id, out) }
 	switch e.objectType {
+	case "sensor_capability_interval":
+		var c observability.CapabilityInterval
+		if err := read(&c); err != nil {
+			return r, err
+		}
+		if c.SchemaVersion != observability.CapabilityIntervalSchema || c.RunID != run || c.Basis != "recorded_capability_changes" || c.StartedAt.IsZero() || c.EndedAt.Before(c.StartedAt) || c.Report.SchemaVersion != "agentprovenance.sensor_capabilities/v1" || c.Report.CollectorID == "" || c.Report.Revision == 0 {
+			return r, fmt.Errorf("capability interval identity mismatch")
+		}
+		r.Source, r.Placement, r.IdentityDomain = "agentprov_sensor", "local_kernel", "linux_kernel"
+		r.Status, r.StartedAt, r.EndedAt, r.IntervalBasis = c.Report.Status, timestamp(c.StartedAt), timestamp(c.EndedAt), c.Basis
+		r.ObservedAt = c.Report.ChangedAt
+		r.sensorProducer(c.Report)
+		r.Snapshots = append(r.Snapshots, sensorSnapshot("change", c.Report))
 	case "runtime_capture":
 		var c observability.RuntimeCaptureReport
 		if err := read(&c); err != nil {
@@ -40,6 +53,9 @@ func (s Service) read(ctx context.Context, run string, e evidence) (Record, erro
 		}{{"start", c.CapabilitiesStart}, {"end", c.CapabilitiesEnd}} {
 			if point.caps != nil {
 				r.Snapshots = append(r.Snapshots, sensorSnapshot(point.boundary, *point.caps))
+				if point.boundary == "start" || c.CapabilitiesStart == nil {
+					r.sensorProducer(*point.caps)
+				}
 			}
 		}
 		r.Loss = append(r.Loss, signedCounter("dropped_events", "run", c.RunDroppedEvents, "recorded_run_count"))
@@ -79,9 +95,13 @@ func (s Service) read(ctx context.Context, run string, e evidence) (Record, erro
 			}
 			p := sensorSnapshot(point.boundary, v.Capabilities)
 			p.ObservedAt = timestamp(v.Sensor.ObservedAt)
-			p.Identity = map[string]string{"collector_id": v.Sensor.CollectorID}
+			if p.Identity == nil {
+				p.Identity = map[string]string{}
+			}
+			p.Identity["collector_id"] = v.Sensor.CollectorID
 			r.Snapshots = append(r.Snapshots, p)
 			if point.boundary == "start" {
+				r.sensorProducer(v.Capabilities)
 				r.StartedAt = p.ObservedAt
 				r.Identity["collector_id"] = v.Sensor.CollectorID
 			} else {
@@ -190,6 +210,12 @@ func sensorSnapshot(boundary string, c sensor.CapabilityReport) Snapshot {
 		return s
 	}
 	s.Ready = ptr(c.Ready)
+	if c.CollectorID != "" {
+		s.Identity = map[string]string{"collector_id": c.CollectorID, "capability_revision": strconv.FormatUint(c.Revision, 10), "changed_at": c.ChangedAt}
+		if p := c.Producer; p != nil {
+			s.Identity["producer_version"], s.Identity["producer_commit"], s.Identity["placement"] = p.Version, p.Commit, p.Placement
+		}
+	}
 	for _, p := range c.Probes {
 		f := Feature{Name: p.Name, Category: p.Category, Target: p.Target, State: p.Status, Reason: p.Reason, Basis: "probe_observation"}
 		switch p.Status {
@@ -209,6 +235,26 @@ func sensorSnapshot(boundary string, c sensor.CapabilityReport) Snapshot {
 			Feature{Name: "seccomp_state", Category: "access_control", Enabled: ptr(p.Seccomp), State: "configured", Basis: p.Mode})
 	}
 	return s
+}
+
+func (r *Record) sensorProducer(c sensor.CapabilityReport) {
+	if c.CollectorID != "" {
+		r.Identity["collector_id"] = c.CollectorID
+		r.Identity["capability_revision"] = strconv.FormatUint(c.Revision, 10)
+	}
+	if p := c.Producer; p != nil {
+		if p.Version != "" {
+			r.ProducerVersion = p.Version
+		}
+		if p.Commit != "" {
+			r.ProducerCommit = p.Commit
+		}
+		if p.Placement != "" {
+			r.Placement = p.Placement
+		}
+		r.Identity["sensor_name"], r.Identity["os"], r.Identity["architecture"] = p.Name, p.OS, p.Architecture
+		r.Identity["kernel"], r.Identity["boot_id"], r.Identity["placement_basis"] = p.Kernel, p.BootID, p.PlacementBasis
+	}
 }
 
 func (r *Record) retention(p *agentcontext.CapturePolicy) {

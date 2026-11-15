@@ -575,6 +575,7 @@ components:
         shared_prefix: { $ref: '#/components/schemas/NativePrefixProgress' }
         scope_prefix: { $ref: '#/components/schemas/NativeScopePrefix' }
         scope_progress: { $ref: '#/components/schemas/NativePrefixProgress' }
+        capability_history: { $ref: 'agent-context-api.yaml#/components/schemas/CapabilityHistoryRange' }
         issues: { type: array, items: { type: string } }
         error: { type: string }
       description: >
@@ -591,6 +592,7 @@ components:
         sensor: { $ref: '#/components/schemas/SensorBoundary' }
         spool: { $ref: '#/components/schemas/NativePrefix' }
         capabilities: { $ref: 'agent-context-api.yaml#/components/schemas/ProbeSnapshot' }
+        capabilities_observed_at: { type: string, format: date-time, description: Local capability sampling boundary, separate from the kernel marker time. }
     SensorBoundary:
       type: object
       required: [schema_version, boundary, collector_id, sequence, kernel_time_ns, observed_at, decoded_records, kernel_drops, state_queue_drops, pending_tls_streams, pending_tls_bytes]

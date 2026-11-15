@@ -169,6 +169,7 @@ func TestNativeCheckpointPreservesGenerationAndCollectorBoundary(t *testing.T) {
 				Start:         &handoff.NativeCapturePoint{Scope: record.ExecutionScope{RunID: "r"}, Capabilities: caps(now, "attached"), Sensor: sensor.CaptureBoundary{CollectorID: "a", ObservedAt: now, KernelDrops: 9007199254740993}},
 				End:           &handoff.NativeCapturePoint{Scope: record.ExecutionScope{RunID: "r"}, Capabilities: caps(now, "attached"), Sensor: sensor.CaptureBoundary{CollectorID: "b", ObservedAt: now.Add(time.Second)}},
 				ScopeProgress: &telemetry.NativePrefixProgress{Dropped: 2, Pending: 3}}}
+		c.Capture.Start.Capabilities.Producer = &sensor.CapabilityProducer{Name: "agentprov-sensor", Version: "captured", Commit: "captured-sha", Placement: "guest_kernel"}
 		put(t, db, paths, "r", "execution_checkpoint", c.AttemptID, c)
 	}
 	got := all(t, db, "r", 1)
@@ -176,6 +177,9 @@ func TestNativeCheckpointPreservesGenerationAndCollectorBoundary(t *testing.T) {
 		t.Fatalf("clone merged: %+v", got)
 	}
 	for _, r := range got {
+		if r.Identity["producer_id"] != "guest" || r.Identity["sensor_name"] != "agentprov-sensor" || r.Placement != "guest_kernel" {
+			t.Fatalf("executor identity replaced by sensor metadata: %+v", r)
+		}
 		if r.IntervalBasis != "boundary_samples" || *r.Loss[0].Value != "9007199254740993" || !strings.Contains(strings.Join(r.Issues, ","), "collector_changed") ||
 			r.Snapshots[0].Identity["collector_id"] != "a" || r.Snapshots[1].Identity["collector_id"] != "b" || r.Loss[0].ScopeID != "a" || r.Loss[3].ScopeID != "b" {
 			t.Fatalf("source evidence changed: %+v", r)
@@ -296,5 +300,60 @@ func TestManifestRejectsCorruptObject(t *testing.T) {
 	}
 	if _, err := (Service{db}).List(context.Background(), Options{RunID: "r"}); err == nil {
 		t.Fatal("corrupt object reported as capture evidence")
+	}
+}
+
+func TestCaptureCapabilityIntervalsSignedRoundTrip(t *testing.T) {
+	db, paths := testStore(t)
+	start := time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC)
+	var first, last sensor.CapabilityReport
+	for i, status := range []string{"ready", "degraded", "ready"} {
+		at := timestamp(start.Add(time.Duration(i) * time.Second))
+		c := sensor.CapabilityReport{SchemaVersion: "agentprovenance.sensor_capabilities/v1", CollectorID: "collector-signed", Revision: uint64(i + 1), ChangedAt: at, UpdatedAt: at, Ready: true, Status: status,
+			Producer: &sensor.CapabilityProducer{Name: "agentprov-sensor", Version: "captured-version", Commit: "captured-commit", Architecture: "arm64", OS: "linux", Placement: "guest_kernel", PlacementBasis: "operator_configuration"}}
+		if err := sensor.SaveCapabilityChange(paths.Logs, c); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			first = c
+		}
+		last = c
+	}
+	history, err := observability.SaveCapabilityHistory(context.Background(), db, paths, "history", first, last, start, start.Add(3*time.Second))
+	if err != nil || history.Saved != 3 {
+		t.Fatalf("save: %+v %v", history, err)
+	}
+	before := all(t, db, "history", 1)
+	if len(before) != 3 {
+		t.Fatalf("missing intervals: %d", len(before))
+	}
+	for _, r := range before {
+		if r.ProducerVersion != "captured-version" || r.ProducerCommit != "captured-commit" || r.Placement != "guest_kernel" || r.IntervalBasis != "recorded_capability_changes" || r.Identity["collector_id"] != "collector-signed" || len(r.Snapshots) != 1 {
+			t.Fatalf("changed capture provenance: %+v", r)
+		}
+	}
+	pub, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := (forensics.Service{DB: db, Paths: paths, SignKey: key}).ExportBundle("history")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := forensics.VerifyBundleAttestation(bundle.Path, bundle.AttestationPath, pub); err != nil {
+		t.Fatal(err)
+	}
+	dst, destPaths := testStore(t)
+	if _, err := (forensics.Service{DB: dst, Paths: destPaths}).ImportBundle(bundle.Path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(paths.Provenance, paths.Provenance+"-held"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(paths.Logs, paths.Logs+"-held"); err != nil {
+		t.Fatal(err)
+	}
+	if got := all(t, dst, "history", 2); !reflect.DeepEqual(got, before) {
+		t.Fatalf("import changed intervals: %+v", got)
 	}
 }

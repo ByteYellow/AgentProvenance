@@ -100,6 +100,8 @@ Sensor 或 spool 意外退出时，Daemon 停止服务。正常关闭先收尾�
 `no_policy`（默认 false）、`startup_timeout_seconds`（默认 15，范围 1–120）及
 `close_timeout_seconds`（默认 3，范围 1–30）。同时沿用 `AGENTPROV_SSL_LIB`、
 `AGENTPROV_GO_TLS_BIN`、`AGENTPROV_LIBC_LIB` 环境配置。
+VM 内可设置 `placement: guest_kernel`，节点采集器设置 `placement: host_kernel`。
+默认值 `local_kernel` 只说明采集本地内核，不推测部署拓扑；该字段由部署方配置。
 采集复用现有有界 spool 和迟到绑定留存机制，排除 Daemon 自身 cgroup；数据目录中的
 任务工作区仍参与采集。
 
@@ -434,8 +436,22 @@ unknown 确认为运行中或终态。运行及终态记录需要执行器生成
 排除的原生检查点正文和探针路径保持排除。原 Bundle 签名及对象哈希保留。
 未包含该索引的旧回放会提示数据不可用。
 
-当前查询汇集已有记录：原生报告主要提供开始／结束采样，gVisor 记录接收器支持的
-事件点。运行中能力变化的持续记录、实际启用事件点的汇总，继续在 v1.0 采集侧补齐。
+原生采集监督进程还会保留起止采样之间的能力变化。每次 Sensor 启动使用独立身份；
+探针或就绪状态变化时增加修订号并记录时间，仅计数器增长时沿用当前修订号。
+版本、源码提交、架构、内核、boot ID 和部署方声明的采集位置随记录保存。
+能力采样时间与内核标记时间分别保留。
+
+launch 或远端执行收尾时，逐条保存这些区间，查询中的
+`interval_basis` 为 `recorded_capability_changes`。所属采集报告的
+`capability_history` 给出修订范围、已保存数量及缺口。中途必需探针失效后即使恢复，
+报告仍保留采集问题；缺失、冲突或无法读取的修订标为历史不完整，写入失败时停止采集。
+旧报告继续按起止采样解释。
+
+本地历史位于 `logs/sensor-capabilities/<collector-id>/`，单份快照上限为 1 MiB，
+按区间逐条读取。相关 Run 保存历史前应保留该目录；导出的内容对象与本地目录独立。
+单独运行 `agentprov-sensor` 时，变化写入诊断流；使用 `sensor stream` 或 Daemon 原生
+采集可自动持久化。两个 sensor 入口均支持 `--placement`。gVisor 的接收器支持声明
+与实际观察到的事件点仍分开，后者的汇总待补齐。
 
 ### 证据回执
 
@@ -723,7 +739,8 @@ guest 使用三个块设备：
 | `/dev/vdb` | `/etc/agentprov-guest` | 可信外部控制端提供的只读配置卷 |
 | `/dev/vdc` | `/var/lib/agentprov-guest` | 独立保留的证据卷，保存数据库、正文对象和签名包 |
 
-配置卷包含本指南中的 `execution.json`，启用 `capture.mode=native` 和签名 `delivery`；
+配置卷包含本指南中的 `execution.json`，启用 `capture.mode=native`、
+`capture.placement=guest_kernel` 和签名 `delivery`；
 权限为 0400／0600 的 `daemon-token`；配置引用的发送端私钥、接收端公钥；SSH
 `authorized_keys` 和每个实例独立的 `ssh_host_ed25519_key`。目录只向管理账号开放。
 外部控制端指定 `target.producer_id`、`instance_id` 和 `generation`，服务沿用这些身份。

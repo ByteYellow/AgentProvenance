@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/producer"
 	"github.com/byteyellow/agentprovenance/internal/record"
 	"github.com/byteyellow/agentprovenance/internal/sensor"
@@ -44,12 +45,24 @@ func TestLiveExecutorSealsNativeCapture(t *testing.T) {
 		defer capsMu.Unlock()
 		return caps
 	}}
+	e.Capture.SaveHistory = func(ctx context.Context, run string, first, last sensor.CapabilityReport, start, end time.Time) (sensor.CapabilityHistoryRange, error) {
+		return observability.SaveCapabilityHistory(ctx, e.Ledger.DB, e.Paths, run, first, last, start, end)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	ready, done := make(chan struct{}), make(chan error, 1)
 	go func() {
 		done <- sensor.RunWithOptions(stream, sensor.Options{
-			Context: ctx, Checkpointer: cp, Diagnostics: io.Discard, OnReady: func() { close(ready) },
-			OnCapabilities: func(report sensor.CapabilityReport) { capsMu.Lock(); caps = report; capsMu.Unlock() },
+			Context: ctx, Checkpointer: cp, Placement: "guest_kernel", Diagnostics: io.Discard, OnReady: func() { close(ready) },
+			OnCapabilities: func(report sensor.CapabilityReport) {
+				if err := sensor.SaveCapabilityChange(e.Paths.Logs, report); err != nil {
+					t.Error(err)
+					cancel()
+					return
+				}
+				capsMu.Lock()
+				caps = report
+				capsMu.Unlock()
+			},
 		})
 	}()
 	stopped := false
@@ -116,6 +129,14 @@ func TestLiveExecutorSealsNativeCapture(t *testing.T) {
 			t.Fatalf("native execution not sealed independently: %+v capture=%+v", r, c)
 		}
 		groups[r.Checkpoint.Scope.CgroupID] = true
+		if c.CapabilityHistory == nil || c.CapabilityHistory.Status != "recorded" || c.CapabilityHistory.Saved == 0 || c.Start.Capabilities.CollectorID != c.Start.Sensor.CollectorID || c.Start.Capabilities.Producer == nil || c.Start.Capabilities.Producer.Kernel == "" || c.Start.Capabilities.Producer.BootID == "" || c.Start.Capabilities.Producer.Placement != "guest_kernel" {
+			t.Fatalf("native capability history missing: %+v", c)
+		}
+		var changes int
+		if err := e.Ledger.DB.QueryRow(`SELECT COUNT(*) FROM provenance_objects WHERE run_id=? AND object_type='sensor_capability_interval'`, r.Attempt.LocalRunID).Scan(&changes); err != nil || uint64(changes) != c.CapabilityHistory.Saved {
+			t.Fatalf("history index mismatch: %d %+v %v", changes, c.CapabilityHistory, err)
+		}
+		t.Logf("producer=%+v history=%+v", c.Start.Capabilities.Producer, c.CapabilityHistory)
 		t.Logf("attempt=%s run=%s cgroup=%s boundaries=%d..%d scope=%+v shared_prefix=%+v", id, r.Attempt.LocalRunID,
 			r.Checkpoint.Scope.CgroupID, c.Start.Sensor.Sequence, c.End.Sensor.Sequence, c.ScopeProgress, c.Progress)
 		var count int

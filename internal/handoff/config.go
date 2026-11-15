@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/attest"
+	"github.com/byteyellow/agentprovenance/internal/sensor"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
@@ -30,6 +31,7 @@ type Config struct {
 // individual requests. Omitting it preserves the separate sensor deployment.
 type CaptureConfig struct {
 	Mode                  string   `json:"mode"`
+	Placement             string   `json:"placement,omitempty"`
 	RingBufferMiB         int      `json:"ring_buffer_mib,omitempty"`
 	TLSTargets            []string `json:"tls_targets,omitempty"`
 	AutoTLS               *bool    `json:"auto_tls,omitempty"`
@@ -41,6 +43,9 @@ type CaptureConfig struct {
 }
 
 func (c *CaptureConfig) Validate() error {
+	if err := sensor.ValidatePlacement(c.Placement); err != nil {
+		return err
+	}
 	if c.Mode != "native" {
 		return fmt.Errorf("execution capture mode must be native")
 	}

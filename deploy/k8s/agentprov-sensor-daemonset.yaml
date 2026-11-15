@@ -50,6 +50,7 @@ spec:
           image: agentprov-sensor:latest
           imagePullPolicy: IfNotPresent
           command: ["/usr/local/bin/agentprov-sensor"]
+          args: ["--placement", "host_kernel"]
           securityContext:
             privileged: true    # CAP_BPF/CAP_PERFMON + attach uprobes/tracepoints
           volumeMounts:

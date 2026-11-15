@@ -369,6 +369,9 @@ func Run(opts Options) (Report, error) {
 	}
 	runtimeCapture := observability.BuildRuntimeCapture(runID, kernelState, beforeCapture, afterCapture, cleanStop)
 	report.RuntimeCapture = &runtimeCapture
+	if err := observability.SaveRuntimeCapabilityHistory(context.Background(), db, paths, report.RuntimeCapture); err != nil {
+		fmt.Fprintf(opts.Stderr, "launch: save capability history: %v\n", err)
+	}
 	if err := observability.SaveRuntimeCapture(db, paths, report.RuntimeCapture); err != nil {
 		report.RuntimeCapture.Status = "failed"
 		report.RuntimeCapture.Issues = append(report.RuntimeCapture.Issues, "runtime_capture_save_failed")

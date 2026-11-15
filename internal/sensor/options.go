@@ -12,6 +12,9 @@ import (
 // degraded coverage; OnReady only promises the required syscall probes and the
 // ring-buffer reader are active, not that every TLS implementation is covered.
 type Options struct {
+	// Placement is operator-declared: host_kernel, guest_kernel or local_kernel
+	// when the deployment topology has not been specified.
+	Placement string
 	// RingBufferMiB is a power of two from 1 to 256; zero selects 64 MiB.
 	RingBufferMiB int
 	// TLSTargets are known OpenSSL/BoringSSL libraries or Go executables to
@@ -120,6 +123,10 @@ type CaptureBufferReport struct {
 
 type CapabilityReport struct {
 	CaptureBuffers *CaptureBufferReport `json:"capture_buffers,omitempty"`
+	Producer       *CapabilityProducer  `json:"producer,omitempty"`
+	CollectorID    string               `json:"collector_id,omitempty"`
+	Revision       uint64               `json:"revision,omitempty"`
+	ChangedAt      string               `json:"changed_at,omitempty"`
 
 	SchemaVersion      string                     `json:"schema_version"`
 	UpdatedAt          string                     `json:"updated_at"`
@@ -130,6 +137,18 @@ type CapabilityReport struct {
 	TLSDiscovery       TLSDiscoveryReport         `json:"tls_discovery"`
 	AccessControlState *StateCollectionCapability `json:"access_control_state,omitempty"`
 	ProcfsIdentity     *ProcfsIdentityReport      `json:"procfs_identity,omitempty"`
+}
+
+type CapabilityProducer struct {
+	Name           string `json:"name"`
+	Version        string `json:"version"`
+	Commit         string `json:"commit"`
+	OS             string `json:"os"`
+	Architecture   string `json:"architecture"`
+	Kernel         string `json:"kernel,omitempty"`
+	BootID         string `json:"boot_id,omitempty"`
+	Placement      string `json:"placement"`
+	PlacementBasis string `json:"placement_basis"`
 }
 
 type ProcfsIdentityReport struct {

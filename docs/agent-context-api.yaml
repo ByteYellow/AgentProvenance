@@ -517,6 +517,7 @@ components:
         run_impact: {type: string, enum: [unknown, no_node_loss_reported]}
         capabilities_start: {$ref: '#/components/schemas/ProbeSnapshot'}
         capabilities_end: {$ref: '#/components/schemas/ProbeSnapshot'}
+        capability_history: {$ref: '#/components/schemas/CapabilityHistoryRange'}
         issues: {type: array, items: {type: string}}
         limitations: {type: array, items: {type: string}, description: Optional probe or TLS visibility limits, separate from measured loss or processing errors. Absent in older reports.}
         rejection_examples:
@@ -539,12 +540,45 @@ components:
         collector health or complete TLS coverage. Disabled kernel capture does not
         disable recorder events. Missing historical reports remain legacy_not_recorded;
         querying or importing a run never consults the current host's sensor status.
+    CapabilityHistoryRange:
+      type: object
+      required: [saved_observations, status]
+      properties:
+        collector_id: {type: string}
+        first_revision: {type: integer, minimum: 1}
+        last_revision: {type: integer, minimum: 1}
+        saved_observations: {type: integer, minimum: 0}
+        status: {enum: [recorded, incomplete, not_recorded]}
+        error: {type: string}
+        issues: {type: array, items: {type: string}}
+        limitations: {type: array, items: {type: string}}
+      description: >
+        Capture-side materialization of immutable native Sensor revisions for this
+        Run. Each saved observation is a separate sensor_capability_interval object.
+        Incomplete ranges retain their error and successfully saved observations.
+        Older captures with no revision identity remain not_recorded.
     ProbeSnapshot:
       type: object
       required: [schema_version, updated_at, ready, status, probes, tls_discovery]
       properties:
         schema_version: {const: agentprovenance.sensor_capabilities/v1}
         updated_at: {type: string, format: date-time}
+        changed_at: {type: string, format: date-time, description: Start of this reported capability revision; unchanged by counter-only updates.}
+        collector_id: {type: string, description: One native Sensor lifetime; matches its kernel checkpointer when configured.}
+        revision: {type: integer, minimum: 1}
+        producer:
+          type: object
+          required: [name, version, commit, os, architecture, placement, placement_basis]
+          properties:
+            name: {const: agentprov-sensor}
+            version: {type: string}
+            commit: {type: string}
+            os: {type: string}
+            architecture: {type: string}
+            kernel: {type: string}
+            boot_id: {type: string}
+            placement: {enum: [local_kernel, host_kernel, guest_kernel]}
+            placement_basis: {enum: [local_kernel_only, operator_configuration]}
         ready: {type: boolean}
         status: {type: string, enum: [starting, ready, degraded, stopped, failed]}
         reason: {type: string}

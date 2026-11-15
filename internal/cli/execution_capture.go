@@ -12,6 +12,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/handoff"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
+	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/producer"
 	"github.com/byteyellow/agentprovenance/internal/sensor"
 	"github.com/byteyellow/agentprovenance/internal/store"
@@ -62,6 +63,9 @@ func startExecutionCapture(ctx context.Context, db *sql.DB, paths store.Paths, c
 			defer capsMu.Unlock()
 			return caps
 		}}
+	r.Controller.SaveHistory = func(ctx context.Context, run string, first, last sensor.CapabilityReport, start, end time.Time) (sensor.CapabilityHistoryRange, error) {
+		return observability.SaveCapabilityHistory(ctx, db, paths, run, first, last, start, end)
+	}
 	recordError := func(err error) {
 		if err == nil || err == context.Canceled {
 			return
@@ -98,18 +102,20 @@ func startExecutionCapture(ctx context.Context, db *sql.DB, paths store.Paths, c
 	enabled := func(value *bool) bool { return value == nil || *value }
 	start("sensor", func() error {
 		return runSensor(stream, sensor.Options{Context: captureCtx, ContextOnly: true,
+			Placement:     config.Placement,
 			Checkpointer:  checkpointer,
 			RingBufferMiB: config.RingBufferMiB, TLSTargets: config.TLSTargets,
 			SSLLib: os.Getenv("AGENTPROV_SSL_LIB"), LibcLib: os.Getenv("AGENTPROV_LIBC_LIB"), GoTLSBin: os.Getenv("AGENTPROV_GO_TLS_BIN"),
 			AutoTLS: enabled(config.AutoTLS), AppArmorState: enabled(config.AppArmorState), SeccompState: enabled(config.SeccompState),
 			Diagnostics: diagnostics, Language: lang,
 			OnCapabilities: func(report sensor.CapabilityReport) {
+				if err := saveSensorCapabilities(paths, report); err != nil {
+					recordError(fmt.Errorf("persist execution capture capabilities: %w", err))
+					return
+				}
 				capsMu.Lock()
 				caps = report
 				capsMu.Unlock()
-				if err := saveSensorCapabilities(paths, report); err != nil {
-					recordError(fmt.Errorf("persist execution capture capabilities: %w", err))
-				}
 			},
 			OnReady: func() { readyOnce.Do(func() { close(ready) }) },
 		})

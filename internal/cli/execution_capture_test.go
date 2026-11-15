@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -78,7 +79,7 @@ func TestExecutionCaptureStartupAndLifetime(t *testing.T) {
 }
 
 func TestExecutionCaptureStartupFailuresReleaseStore(t *testing.T) {
-	for _, mode := range []string{"probe_failure", "false_ready", "capability_write_failure", "cancelled", "timeout"} {
+	for _, mode := range []string{"probe_failure", "false_ready", "capability_write_failure", "capability_history_write_failure", "cancelled", "timeout"} {
 		t.Run(mode, func(t *testing.T) {
 			paths, err := store.Init(t.TempDir())
 			if err != nil {
@@ -91,6 +92,11 @@ func TestExecutionCaptureStartupFailuresReleaseStore(t *testing.T) {
 			defer db.Close()
 			if mode == "capability_write_failure" {
 				if err := os.Mkdir(filepath.Join(paths.Logs, "sensor-capabilities.json"), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if mode == "capability_history_write_failure" {
+				if err := os.WriteFile(filepath.Join(paths.Logs, "sensor-capabilities"), []byte("not a directory"), 0600); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -108,6 +114,10 @@ func TestExecutionCaptureStartupFailuresReleaseStore(t *testing.T) {
 						options.OnReady()
 					case "capability_write_failure":
 						options.OnCapabilities(sensor.CapabilityReport{Ready: true})
+						options.OnReady()
+					case "capability_history_write_failure":
+						at := time.Now().UTC().Format(time.RFC3339Nano)
+						options.OnCapabilities(sensor.CapabilityReport{SchemaVersion: "agentprovenance.sensor_capabilities/v1", CollectorID: "test", Revision: 1, ChangedAt: at, UpdatedAt: at, Ready: true})
 						options.OnReady()
 					case "cancelled":
 						cancel()
@@ -183,5 +193,29 @@ func TestDaemonNativeCaptureRequiresLinux(t *testing.T) {
 	defer cancel()
 	if err := cmd.ExecuteContext(ctx); err == nil || !strings.Contains(err.Error(), "requires Linux") {
 		t.Fatalf("unexpected unsupported-platform result: %v", err)
+	}
+}
+
+func TestSavedCapabilitiesRetainIntermediateChange(t *testing.T) {
+	paths, err := store.Init(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{
+		`{"schema_version":"agentprovenance.sensor_capabilities/v1","collector_id":"sensor-test","revision":1,"changed_at":"2026-11-15T00:00:00Z","updated_at":"2026-11-15T00:00:00Z","ready":true,"status":"ready"}`,
+		`{"schema_version":"agentprovenance.sensor_capabilities/v1","collector_id":"sensor-test","revision":2,"changed_at":"2026-11-15T00:00:01Z","updated_at":"2026-11-15T00:00:01Z","ready":true,"status":"degraded"}`,
+		`{"schema_version":"agentprovenance.sensor_capabilities/v1","collector_id":"sensor-test","revision":3,"changed_at":"2026-11-15T00:00:02Z","updated_at":"2026-11-15T00:00:02Z","ready":true,"status":"ready"}`,
+	} {
+		var report sensor.CapabilityReport
+		if err := json.Unmarshal([]byte(raw), &report); err != nil {
+			t.Fatal(err)
+		}
+		if err := saveSensorCapabilities(paths, report); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw, err := os.ReadFile(filepath.Join(paths.Logs, "sensor-capabilities", "sensor-test", "00000000000000000002.json"))
+	if err != nil || !strings.Contains(string(raw), `"status":"degraded"`) {
+		t.Fatalf("intermediate degradation missing: %s %v", raw, err)
 	}
 }

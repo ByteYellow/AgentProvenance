@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/byteyellow/agentprovenance/internal/buildinfo"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
+	"github.com/byteyellow/agentprovenance/internal/ids"
 )
 
 type capabilityReporter struct {
@@ -23,10 +27,42 @@ type capabilityReporter struct {
 	previous       string
 	terminalStatus string
 	terminalReason string
+	producer       CapabilityProducer
+	collectorID    string
+	state          string
+	revision       uint64
+	changedAt      string
 }
 
 func newCapabilityReporter(opts Options) *capabilityReporter {
-	return &capabilityReporter{opts: opts}
+	placement, basis := opts.Placement, "operator_configuration"
+	if placement == "" || placement == "local_kernel" {
+		placement, basis = "local_kernel", "local_kernel_only"
+	}
+	p := CapabilityProducer{Name: "agentprov-sensor", Version: buildinfo.Version, Commit: buildinfo.Commit,
+		OS: runtime.GOOS, Architecture: runtime.GOARCH, Placement: placement, PlacementBasis: basis}
+	if runtime.GOOS == "linux" {
+		if raw, err := os.ReadFile("/proc/sys/kernel/osrelease"); err == nil {
+			p.Kernel = strings.TrimSpace(string(raw))
+		}
+		if raw, err := os.ReadFile("/proc/sys/kernel/random/boot_id"); err == nil {
+			p.BootID = strings.TrimSpace(string(raw))
+		}
+	}
+	id := ids.New("sensor")
+	if opts.Checkpointer != nil {
+		id = opts.Checkpointer.epoch
+	}
+	return &capabilityReporter{opts: opts, producer: p, collectorID: id}
+}
+
+func ValidatePlacement(placement string) error {
+	switch placement {
+	case "", "local_kernel", "host_kernel", "guest_kernel":
+		return nil
+	default:
+		return fmt.Errorf("sensor placement must be local_kernel, host_kernel or guest_kernel")
+	}
 }
 
 func (r *capabilityReporter) add(probe ProbeCapability) {
@@ -74,6 +110,8 @@ func (r *capabilityReporter) publishLocked() {
 		Ready:         r.ready, Status: "starting", TLSDiscovery: r.discovery,
 		Probes: append(append([]ProbeCapability{}, r.base...), r.tls...),
 	}
+	producer := r.producer
+	report.Producer, report.CollectorID = &producer, r.collectorID
 	if r.opts.RingBufferMiB > 0 {
 		report.CaptureBuffers = &CaptureBufferReport{RingBytes: r.opts.RingBufferMiB << 20, QueueEvents: sensorQueueCapacity, QueueBytes: sensorQueueCapacity * sensorEventBytes}
 	}
@@ -130,6 +168,12 @@ func (r *capabilityReporter) publishLocked() {
 	}
 	r.previous = string(encoded)
 	report.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	state, _ := capabilityState(report)
+	if string(state) != r.state {
+		r.revision++
+		r.changedAt, r.state = report.UpdatedAt, string(state)
+	}
+	report.Revision, report.ChangedAt = r.revision, r.changedAt
 	encoded, _ = json.Marshal(report)
 	out := r.opts.Diagnostics
 	if out == nil {
@@ -144,4 +188,26 @@ func (r *capabilityReporter) publishLocked() {
 	if r.opts.OnCapabilities != nil {
 		r.opts.OnCapabilities(report)
 	}
+}
+
+// Counters remain in live snapshots and capture boundaries. A new history
+// revision describes a capability change, not each increment of a counter.
+func capabilityState(report CapabilityReport) ([]byte, error) {
+	d := report.TLSDiscovery
+	report.UpdatedAt, report.ChangedAt, report.Revision = "", "", 0
+	report.TLSDiscovery = TLSDiscoveryReport{Enabled: d.Enabled, ScanIntervalMS: d.ScanIntervalMS,
+		MaxTargets: d.MaxTargets, MaxProcessesPerScan: d.MaxProcessesPerScan,
+		ScanComplete: d.ScanComplete, Reason: d.Reason, Limitations: d.Limitations}
+	if d.HasGaps() {
+		report.TLSDiscovery.SkippedTargets = 1
+	}
+	if p := report.ProcfsIdentity; p != nil {
+		copy := *p
+		copy.TranslatedEvents, copy.OutsideNamespace, copy.LookupMisses = 0, 0, 0
+		if p.LookupMisses > 0 {
+			copy.LookupMisses = 1
+		}
+		report.ProcfsIdentity = &copy
+	}
+	return json.Marshal(report)
 }

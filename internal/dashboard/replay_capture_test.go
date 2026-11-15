@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/capturemanifest"
@@ -132,6 +133,15 @@ func TestOfflineCaptureManifestFrozenSelection(t *testing.T) {
 		CapabilitiesStart: &sensor.CapabilityReport{SchemaVersion: "agentprovenance.sensor_capabilities/v1", Ready: true,
 			Probes: []sensor.ProbeCapability{{Name: "file_open", Status: "attached", Target: "CAPTURE-PRIVATE-PROBE"}}}}
 	if err := observability.SaveRuntimeCapture(db, paths, &report); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC)
+	c := *report.CapabilitiesStart
+	c.CollectorID, c.Revision, c.ChangedAt, c.UpdatedAt = "capture-history-private", 1, at.Format(time.RFC3339Nano), at.Format(time.RFC3339Nano)
+	if err := sensor.SaveCapabilityChange(paths.Logs, c); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := observability.SaveCapabilityHistory(ctx, db, paths, "capture-run", c, c, at, at.Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
 	want, err := (capturemanifest.Service{DB: db}).List(ctx, capturemanifest.Options{RunID: "capture-run"})

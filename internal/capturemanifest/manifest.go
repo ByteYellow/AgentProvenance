@@ -126,7 +126,7 @@ func (s Service) List(ctx context.Context, opts Options) (Page, error) {
 	}
 	rows, err := s.DB.QueryContext(ctx, `SELECT kind,id,object_type,created_at FROM (
 		SELECT 'object' AS kind,hash AS id,object_type,created_at FROM provenance_objects
-		WHERE run_id=? AND object_type IN ('runtime_capture','execution_checkpoint','agent_context_coverage','context_capture_policy','run_capture_settings')
+		WHERE run_id=? AND object_type IN ('runtime_capture','execution_checkpoint','agent_context_coverage','context_capture_policy','run_capture_settings','sensor_capability_interval')
 		UNION ALL SELECT 'event',id,'sentry_stream',created_at FROM events
 		WHERE run_id=? AND source='gvisor_seccheck' AND event_type='runtime_collection')
 		WHERE (kind,id) > (?,?) ORDER BY kind,id LIMIT ?`, opts.RunID, opts.RunID, c.Kind, c.ID, p.Limit+1)

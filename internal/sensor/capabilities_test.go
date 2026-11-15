@@ -59,3 +59,29 @@ func TestCapabilityShutdownClearsReadyAndAttachedState(t *testing.T) {
 		t.Fatalf("stale ready report persisted: %+v", report)
 	}
 }
+
+func TestCapabilityProducerIdentityAndRevision(t *testing.T) {
+	var reports []map[string]any
+	r := newCapabilityReporter(Options{Diagnostics: io.Discard, OnCapabilities: func(report CapabilityReport) {
+		raw, _ := json.Marshal(report)
+		var saved map[string]any
+		if err := json.Unmarshal(raw, &saved); err != nil {
+			t.Fatal(err)
+		}
+		reports = append(reports, saved)
+	}})
+	r.publish(true)
+	r.finish(nil)
+	for i, report := range reports {
+		producer, ok := report["producer"].(map[string]any)
+		if !ok || producer["name"] != "agentprov-sensor" || producer["version"] == "" || producer["commit"] == "" || producer["architecture"] == "" || producer["placement"] != "local_kernel" {
+			t.Fatalf("missing capture-side producer identity: %#v", report)
+		}
+		if report["collector_id"] == "" || report["collector_id"] == nil || report["revision"] != float64(i+1) || report["changed_at"] == "" {
+			t.Fatalf("missing capability change identity: %#v", report)
+		}
+	}
+	if reports[0]["collector_id"] != reports[1]["collector_id"] {
+		t.Fatal("collector identity changed during shutdown")
+	}
+}

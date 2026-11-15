@@ -129,6 +129,9 @@ and `seccomp_state` (each enabled by default), `no_policy` (default false),
 `startup_timeout_seconds` (default 15, range 1 to 120) and
 `close_timeout_seconds` (default 3, range 1 to 30). Existing `AGENTPROV_SSL_LIB`,
 `AGENTPROV_GO_TLS_BIN` and `AGENTPROV_LIBC_LIB` target settings are also used.
+Set `placement` to `guest_kernel` inside a VM or `host_kernel` for a node sensor.
+The default `local_kernel` records the observed kernel without guessing the
+deployment topology. This is operator-owned configuration, not a request field.
 Collection uses the existing bounded native spool and late-binding retention.
 It excludes the daemon's own cgroup; task workspaces inside the data directory
 remain observable.
@@ -544,10 +547,27 @@ report `selection_scope: selected_evidence`; excluded native checkpoint bodies
 and probe targets remain excluded. Original Bundle signatures and object hashes
 are unchanged. Older replays without the index report it as unavailable.
 
-This reader projects recorded observations. Native reports currently provide
-start/end samples; gVisor reports identify receiver-supported event points.
-Continuous capability-change history and observed enabled-point aggregation
-remain part of the v1.0 collection work.
+Native supervisors also retain capability changes between the boundary samples.
+Each collector lifetime has a distinct ID. Probe or readiness changes receive
+a revision and timestamp; counter-only updates retain the current revision.
+Capture-side version, commit, architecture, kernel, boot ID and declared
+placement travel with the observations. Start/end sampling and kernel markers
+retain their separate times.
+
+At launch/execution close, the saved revisions become individual signed-content
+objects with `interval_basis: recorded_capability_changes`. `capability_history`
+on the enclosing report gives the observed revision range, saved count and any
+gap. Intermediate required-probe failures remain capture issues even after
+recovery. Missing, conflicting or unreadable revisions make history incomplete;
+supervisors stop on a history-write failure. Older reports remain boundary-only.
+
+The local journal is under `logs/sensor-capabilities/<collector-id>/`. Each
+snapshot is bounded to 1 MiB and range reading is streamed. Keep the journal
+until all related Runs have saved their history; it is separate from exported
+CAS objects. Bare `agentprov-sensor` writes changes to its diagnostic stream;
+use `sensor stream` or daemon native capture for automatic persistence. Both
+sensor commands accept `--placement`. gVisor receiver-supported point declarations
+remain separate from actually observed points; that aggregation is still pending.
 
 ### Evidence receipts
 
@@ -909,7 +929,7 @@ The guest uses three block devices:
 | `/dev/vdc` | `/var/lib/agentprov-guest` | Retained evidence volume, including the database, objects and signed packages |
 
 The configuration volume contains `execution.json` from this guide, with
-`capture.mode=native` and signed `delivery` enabled; `daemon-token` (0400/0600);
+`capture.mode=native`, `capture.placement=guest_kernel` and signed `delivery` enabled; `daemon-token` (0400/0600);
 the referenced sender private key and receiver public key; SSH `authorized_keys`
 and a fresh per-instance `ssh_host_ed25519_key`. Keep the directory private.
 The external controller assigns `target.producer_id`, `instance_id` and

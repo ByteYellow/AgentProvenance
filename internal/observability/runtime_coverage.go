@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -31,24 +32,25 @@ type RuntimeCoverage struct {
 }
 
 type RuntimeCaptureReport struct {
-	SchemaVersion     string                      `json:"schema_version"`
-	RunID             string                      `json:"run_id"`
-	Status            string                      `json:"status"`
-	Scope             string                      `json:"scope"`
-	KernelState       string                      `json:"kernel_state"`
-	StartedAt         string                      `json:"started_at,omitempty"`
-	EndedAt           string                      `json:"ended_at,omitempty"`
-	NodeCounterDelta  map[string]int64            `json:"node_counter_delta"`
-	NodePendingEvents *int64                      `json:"node_pending_events"`
-	NodeQueuedBytes   *int64                      `json:"node_queued_bytes"`
-	RunDroppedEvents  *int64                      `json:"run_dropped_events"`
-	RunImpact         string                      `json:"run_impact"`
-	CapabilitiesStart *sensor.CapabilityReport    `json:"capabilities_start,omitempty"`
-	CapabilitiesEnd   *sensor.CapabilityReport    `json:"capabilities_end,omitempty"`
-	Issues            []string                    `json:"issues"`
-	Limitations       []string                    `json:"limitations,omitempty"`
-	RejectionExamples []telemetry.NativeRejection `json:"rejection_examples,omitempty"`
-	Ref               string                      `json:"ref,omitempty"`
+	SchemaVersion     string                         `json:"schema_version"`
+	RunID             string                         `json:"run_id"`
+	Status            string                         `json:"status"`
+	Scope             string                         `json:"scope"`
+	KernelState       string                         `json:"kernel_state"`
+	StartedAt         string                         `json:"started_at,omitempty"`
+	EndedAt           string                         `json:"ended_at,omitempty"`
+	NodeCounterDelta  map[string]int64               `json:"node_counter_delta"`
+	NodePendingEvents *int64                         `json:"node_pending_events"`
+	NodeQueuedBytes   *int64                         `json:"node_queued_bytes"`
+	RunDroppedEvents  *int64                         `json:"run_dropped_events"`
+	RunImpact         string                         `json:"run_impact"`
+	CapabilitiesStart *sensor.CapabilityReport       `json:"capabilities_start,omitempty"`
+	CapabilitiesEnd   *sensor.CapabilityReport       `json:"capabilities_end,omitempty"`
+	CapabilityHistory *sensor.CapabilityHistoryRange `json:"capability_history,omitempty"`
+	Issues            []string                       `json:"issues"`
+	Limitations       []string                       `json:"limitations,omitempty"`
+	RejectionExamples []telemetry.NativeRejection    `json:"rejection_examples,omitempty"`
+	Ref               string                         `json:"ref,omitempty"`
 }
 
 // CaptureSnapshot is sampled only by the capture lifecycle, never when a
@@ -98,6 +100,7 @@ func ObserveCapture(ctx context.Context, db *sql.DB, paths store.Paths, startedA
 		return s
 	}
 	s.Capabilities = &caps
+	s.ObservedAt = time.Now().UTC()
 	return s
 }
 
@@ -221,7 +224,9 @@ func SaveRuntimeCapture(db *sql.DB, paths store.Paths, report *RuntimeCaptureRep
 		return err
 	}
 	var payload map[string]any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&payload); err != nil {
 		return err
 	}
 	obj, err := (provenance.ObjectStore{DB: db, Paths: paths}).PutExternalObject(provenance.ExternalObjectInput{
@@ -230,6 +235,41 @@ func SaveRuntimeCapture(db *sql.DB, paths store.Paths, report *RuntimeCaptureRep
 	if err == nil {
 		report.Ref = obj.Hash
 	}
+	return err
+}
+
+// Capture-side only: querying or importing a historical Run never reads the
+// local journal. Missing history is retained on the enclosing capture report.
+func SaveRuntimeCapabilityHistory(ctx context.Context, db *sql.DB, paths store.Paths, report *RuntimeCaptureReport) error {
+	if report == nil || report.CapabilitiesStart == nil || report.CapabilitiesEnd == nil {
+		return nil
+	}
+	start, _ := time.Parse(time.RFC3339Nano, report.StartedAt)
+	end, _ := time.Parse(time.RFC3339Nano, report.EndedAt)
+	// Launch stops its collector after the command finishes, then reads the
+	// flushed counters. That clean shutdown closes coverage at the stop change;
+	// the later health-read time is not an interval of missing workload capture.
+	if report.CapabilitiesEnd.Status == "stopped" && !slices.Contains(report.Issues, "collector_exit_unconfirmed") {
+		stopped, err := time.Parse(time.RFC3339Nano, report.CapabilitiesEnd.ChangedAt)
+		if err == nil && !stopped.Before(start) && !stopped.After(end) {
+			end = stopped
+		}
+	}
+	history, err := SaveCapabilityHistory(ctx, db, paths, report.RunID, *report.CapabilitiesStart, *report.CapabilitiesEnd, start, end)
+	report.CapabilityHistory = &history
+	report.Issues = append(report.Issues, history.Issues...)
+	report.Limitations = append(report.Limitations, history.Limitations...)
+	if len(history.Issues) != 0 || len(history.Limitations) != 0 {
+		report.Status = "partial"
+	}
+	if err != nil {
+		report.Status = "partial"
+		report.Issues = append(report.Issues, "capability_history_incomplete")
+	}
+	slices.Sort(report.Issues)
+	report.Issues = slices.Compact(report.Issues)
+	slices.Sort(report.Limitations)
+	report.Limitations = slices.Compact(report.Limitations)
 	return err
 }
 

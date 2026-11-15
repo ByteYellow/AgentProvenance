@@ -3,11 +3,13 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/byteyellow/agentprovenance/internal/daemon"
@@ -37,6 +39,7 @@ func sensorCmd(dataDir *string) *cobra.Command {
 // wired it by hand). Runs until SIGINT/SIGTERM.
 func sensorStreamCmd(dataDir *string) *cobra.Command {
 	var sslLib string
+	var placement string
 	var ringMiB int
 	var tlsKnown []string
 	var noPolicy bool
@@ -50,6 +53,9 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 		Use:   "stream",
 		Short: "per-node supervisor: run the eBPF sensor and ingest+correlate its events into the local store until interrupted",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := sensor.ValidatePlacement(placement); err != nil {
+				return err
+			}
 			paths, err := store.Init(*dataDir)
 			if err != nil {
 				return err
@@ -101,7 +107,10 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 				resolvedSSLLib = os.Getenv("AGENTPROV_SSL_LIB")
 			}
 			fmt.Fprintln(stderr, commandText(cmd, "agentprov sensor stream: capturing kernel telemetry -> durable spool -> store (ctrl-c to stop)"))
+			var capabilityMu sync.Mutex
+			var capabilityErr error
 			sensorErr := sensor.RunWithOptions(capture, sensor.Options{
+				Placement:     placement,
 				SSLLib:        resolvedSSLLib,
 				GoTLSBin:      os.Getenv("AGENTPROV_GO_TLS_BIN"),
 				RingBufferMiB: ringMiB, TLSTargets: tlsKnown,
@@ -118,10 +127,17 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 				OnReady:         func() { fmt.Fprintln(stderr, "agentprov sensor stream: ready probes-attached") },
 				OnCapabilities: func(report sensor.CapabilityReport) {
 					if err := saveSensorCapabilities(paths, report); err != nil {
+						capabilityMu.Lock()
+						capabilityErr = errors.Join(capabilityErr, err)
+						capabilityMu.Unlock()
 						fmt.Fprintf(stderr, commandText(cmd, "agentprov sensor stream: persist capabilities: %v\n"), ErrorText(cmd, err))
+						cancel()
 					}
 				},
 			})
+			capabilityMu.Lock()
+			sensorErr = errors.Join(sensorErr, capabilityErr)
+			capabilityMu.Unlock()
 			cancel()
 			workerErr := <-workerErrors
 			if err := capture.Flush(); err != nil {
@@ -162,6 +178,7 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 		},
 	}
 	stream.Flags().StringVar(&sslLib, "ssl-lib", "", "attach the TLS-plaintext uprobe to this libssl path (optional)")
+	stream.Flags().StringVar(&placement, "placement", "local_kernel", "operator-declared sensor placement: local_kernel, host_kernel or guest_kernel")
 	stream.Flags().BoolVar(&noPolicy, "no-policy", false, "skip per-batch telemetry policy evaluation")
 	stream.Flags().BoolVar(&keepUncorrelated, "keep-uncorrelated", false, "retain events outside tracked scopes (default: wait pending-ttl for late bindings, then count and expire them)")
 	stream.Flags().IntVar(&captureOpts.BatchEvents, "batch-events", 256, "maximum events per durable spool batch (1..4096)")
@@ -182,6 +199,11 @@ func sensorStreamCmd(dataDir *string) *cobra.Command {
 }
 
 func saveSensorCapabilities(paths store.Paths, report sensor.CapabilityReport) error {
+	if report.CollectorID != "" || report.Revision != 0 {
+		if err := sensor.SaveCapabilityChange(paths.Logs, report); err != nil {
+			return err
+		}
+	}
 	encoded, err := json.Marshal(report)
 	if err != nil {
 		return err

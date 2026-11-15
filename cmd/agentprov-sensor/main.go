@@ -37,6 +37,7 @@ func run(args []string, stdout, stderr io.Writer, capture func(io.Writer, sensor
 		return nil
 	})
 	flags.IntVar(&opts.RingBufferMiB, "ring-buffer-mib", 64, "kernel event buffer in MiB (power of two, 1 to 256)")
+	flags.StringVar(&opts.Placement, "placement", "local_kernel", "operator-declared sensor placement: local_kernel, host_kernel or guest_kernel")
 	flags.Func("tls-target", "known TLS library or Go executable to attach before readiness (repeatable)", func(value string) error { opts.TLSTargets = append(opts.TLSTargets, value); return nil })
 	flags.BoolVar(&opts.AutoTLS, "auto-tls", opts.AutoTLS, "discover and track visible container OpenSSL and Go TLS executables")
 	flags.DurationVar(&opts.TLSScanInterval, "tls-scan-interval", 2*time.Second, "interval between bounded TLS process scans")
@@ -75,6 +76,10 @@ func run(args []string, stdout, stderr io.Writer, capture func(io.Writer, sensor
 		return 2
 	}
 	opts.Language = lang
+	if err := sensor.ValidatePlacement(opts.Placement); err != nil {
+		fmt.Fprintln(stderr, "agentprov-sensor:", err)
+		return 2
+	}
 	if err := capture(stdout, opts); err != nil {
 		fmt.Fprintln(stderr, "agentprov-sensor:", i18n.ErrorText(lang, err))
 		return 1
@@ -100,7 +105,7 @@ func sensorLanguage(args []string) i18n.Locale {
 			if choice, ok := i18n.Parse(value); ok {
 				lang = choice
 			}
-		} else if !equals && (key == "tls-scan-interval" || key == "tls-max-targets" || key == "tls-max-processes" || key == "ring-buffer-mib" || key == "tls-target") {
+		} else if !equals && (key == "tls-scan-interval" || key == "tls-max-targets" || key == "tls-max-processes" || key == "ring-buffer-mib" || key == "tls-target" || key == "placement") {
 			i++
 		}
 	}
