@@ -570,6 +570,40 @@ agentprov --data-dir /mnt/agentprov-evidence \
 此命令只操作本地存储，拒绝 `--daemon-url`。签名密钥及外部指定的实例、生命周期代次
 来自已有执行配置，应与可重复使用的 guest 镜像分开提供。
 
+### 执行器停止后接收证据
+
+把封存目录中的 `bundle.json` 和 `manifest.dsse.json` 复制到接收端。
+调用方须保留从受信提交响应取得的 admission，接收时独立核对，
+不能用待接收包反向构造。执行端私钥保留在原执行端。
+
+```sh
+agentprov --data-dir ./received-evidence forensics collect-execution admission.json \
+  --execution-config ./trusted-target.json --package-dir ./sealed-package \
+  --receiver investigator --sign-key ./receiver.key --pub-key ./executor.pub \
+  > collection.json
+jq '.receipt' collection.json > receipt.dsse.json
+```
+
+`--package-dir` 使用本地文件传输，省略 `--daemon-url` 和 `--operation`。
+封存包已有固定交付身份，接收仍校验预先配置的发送端公钥、独立 admission、
+严格导入及前驱关系。多版本包按 `package_version` 顺序接收；缺少前驱时明确报错，
+因此最后封包时也要保留尚未接收的早期包。重复接收返回原来的签名回执。
+
+接收结果状态为 `receipt_persisted`。把 `receipt.dsse.json` 传回已停止执行器的
+证据卷，再在执行端运行：
+
+```sh
+agentprov --data-dir /mnt/agentprov-evidence forensics acknowledge-execution \
+  DELIVERY_ID receipt.dsse.json --execution-config /run/agentprov/execution.json
+```
+
+`DELIVERY_ID` 使用接收结果中的 `delivery_id`。命令校验接收方签名、包摘要、
+执行尝试和生命周期代次后保存回执。重复操作复用已有回执，只更新交付状态；
+一次尝试的所有待交付包都有回执后，交付状态才变为 `acknowledged`。
+命令不启动执行器，遇到运行中的 daemon 会拒绝操作。返回 JSON 包含已保存回执。
+外部生命周期控制端仍须核对任务已停止、所有最终包都有回执，再回收证据卷。
+这两个命令不会删除证据或改变采集完整性。
+
 [封包验收脚本](../../scripts/accept_execution_seal.py) 启动隔离的本地执行器，运行 CSV 任务，
 停止 daemon 后连续封包两次，再移走原数据目录，在新存储中验证签名和正文。
 在具备采集权限的 Linux 主机上加 `--native`，要求内核采集达到 sealed 状态：
@@ -645,7 +679,8 @@ sudo python3 scripts/accept_execution_seal.py --native \
   --guest-service-dir "$PWD/deploy/microvm"
 ```
 
-脚本创建唯一命名的临时服务，核对真实内核采集、停止钩子自动封包及独立签名导入，
+脚本创建唯一命名的临时服务，核对真实内核采集、停止钩子自动封包、
+无 daemon 的封存包接收、签名回执回写及独立签名导入，
 结束后只移除自己的服务。完整 guest 启动、恢复和克隆另用对应运行时环境验收。
 
 ## 兼容与测试

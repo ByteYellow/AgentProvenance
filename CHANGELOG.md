@@ -4,6 +4,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Receive sealed execution packages through `collect-execution --package-dir`
+  without a running executor. Verify and persist returned receipts locally with
+  `acknowledge-execution`, preserving pinned identities, predecessor ordering and
+  existing execution/capture states. No private signing keys are transferred.
 - Add an opt-in systemd guest service with authenticated readiness checks and
   automatic stopped-store sealing. Provide a credential-free Ubuntu rootfs
   recipe for the pinned Firecracker profile, separate configuration/evidence

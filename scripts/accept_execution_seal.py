@@ -137,6 +137,8 @@ def main():
                    'valid_until': valid_until, 'command': {'argv': ['python3', '-c', code], 'workdir': str(work),
                        'disable_snapshot': False, 'capture_preset': 'detailed'}}
         admission = api('POST', '/v1/executions', request)
+        admission_path = root / 'admission.json'
+        admission_path.write_text(json.dumps(admission) + '\n')
         attempt_id = admission['attempt']['id']
         deadline = time.monotonic() + 60
         while True:
@@ -185,7 +187,26 @@ def main():
         shutil.copyfile(results[0]['bundle_path'], bundle)
         attestation = portable / 'bundle.dsse.json'
         attestation.write_text(json.dumps(delivery['envelope']))
+        (portable / 'manifest.dsse.json').write_text(json.dumps(delivery['envelope']))
         cli(['forensics', 'verify-attestation', str(bundle), str(attestation), '--pub-key', str(root / 'executor.pub')])
+        collect_command = ['--data-dir', str(root / 'receipt-store'), 'forensics', 'collect-execution', str(admission_path),
+            '--execution-config', str(config_path), '--package-dir', str(portable), '--receiver', 'fixture-receiver',
+            '--sign-key', str(root / 'receiver.key'), '--pub-key', str(root / 'executor.pub')]
+        collected = json.loads(cli(collect_command).stdout)
+        repeated_collection = json.loads(cli(collect_command).stdout)
+        if collected['status'] != 'receipt_persisted' or collected != repeated_collection:
+            raise RuntimeError('offline receipt was not persisted or retry changed it')
+        receipt_path = portable / 'receipt.dsse.json'
+        receipt_path.write_text(json.dumps(collected['receipt']))
+        acknowledge_command = ['--data-dir', str(store), 'forensics', 'acknowledge-execution', collected['delivery_id'],
+            str(receipt_path), '--execution-config', str(config_path)]
+        acknowledged = json.loads(cli(acknowledge_command).stdout)
+        if json.loads(cli(acknowledge_command).stdout) != acknowledged or acknowledged['delivery']['receipt'] != collected['receipt']:
+            raise RuntimeError('sender did not persist the exact signed receipt')
+        with sqlite3.connect(f'{(store / "agentprov.db").as_uri()}?mode=ro', uri=True) as db:
+            state = db.execute('SELECT execution_state,capture_state,delivery_state FROM execution_attempts WHERE id=?', (attempt_id,)).fetchone()
+        if state != ('succeeded', execution['attempt']['state']['capture'], 'acknowledged'):
+            raise RuntimeError('offline acknowledgment changed execution/capture or did not settle delivery')
         work.rename(root / 'retained-source-work')
         store.rename(root / 'retained-source-store')
         receiver = root / 'independent-import'
@@ -228,6 +249,7 @@ def main():
                   'bundle_sha256': hashlib.sha256(bundle.read_bytes()).hexdigest(),
                   'attestation_sha256': hashlib.sha256(attestation.read_bytes()).hexdigest(),
                   'verification': verification, 'output': expected, 'native_file_events': native_events,
+                  'offline_delivery': {'collection': collected, 'sender_acknowledgment': acknowledged},
                   'guest_service': lifecycle, 'passed': True}
         (root / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
         print(json.dumps({'passed': True, 'run_id': run_id, 'native_capture': args.native, 'report': str(root / 'report.json')}))

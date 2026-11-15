@@ -6,6 +6,9 @@
 
 ## 未发布
 
+- 支持用 `collect-execution --package-dir` 接收已停止执行器的封存包，
+  再通过 `acknowledge-execution` 在执行端核验并保存签名回执。
+  沿用固定身份、前驱顺序及原执行和采集状态，交接过程无须转移签名私钥。
 - 增加可选的 systemd guest 服务，启动后核对鉴权和探针就绪，停止后自动封包。
   提供固定 Firecracker 版本对应的 Ubuntu rootfs 构建入口，分离配置卷与证据卷，
   并补充真实 Linux 服务生命周期验收脚本。

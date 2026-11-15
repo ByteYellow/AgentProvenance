@@ -107,12 +107,19 @@ func TestExecutionSealCLIRejectsLiveDaemon(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(paths.Root, ".daemon.lock"), raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cmd := NewRootCommand()
-	cmd.SetOut(io.Discard)
-	cmd.SetErr(io.Discard)
-	cmd.SetArgs([]string{"--data-dir", paths.Root, "forensics", "seal-executions", "--execution-config", config, "--operation", "retirement-1"})
-	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "requires a stopped daemon") {
-		t.Fatalf("live daemon: %v", err)
+	receipt := filepath.Join(root, "receipt.json")
+	if err := os.WriteFile(receipt, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range [][]string{{"seal-executions", "--operation", "retirement-1"}, {"acknowledge-execution", "delivery", receipt}} {
+		cmd := NewRootCommand()
+		cmd.SetOut(io.Discard)
+		cmd.SetErr(io.Discard)
+		args := append([]string{"--data-dir", paths.Root, "forensics"}, action...)
+		cmd.SetArgs(append(args, "--execution-config", config))
+		if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "requires a stopped daemon") {
+			t.Fatalf("live daemon %s: %v", action[0], err)
+		}
 	}
 	actual, err := os.ReadFile(filepath.Join(paths.Root, ".daemon.lock"))
 	if err != nil || !bytes.Equal(actual, raw) {

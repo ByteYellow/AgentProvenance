@@ -724,6 +724,45 @@ This command is local-only; `--daemon-url` is rejected. Delivery signing keys an
 the externally assigned instance/generation come from the existing execution
 configuration. Provision those separately from a reusable guest image.
 
+### Receive evidence after the executor stops
+
+Copy each sealed package directory (`bundle.json` and `manifest.dsse.json`) to
+the receiving machine. Keep the admission saved from the authenticated submit
+response; do not construct it from the incoming package. No sender private key
+is needed on the receiving machine.
+
+```sh
+agentprov --data-dir ./received-evidence forensics collect-execution admission.json \
+  --execution-config ./trusted-target.json --package-dir ./sealed-package \
+  --receiver investigator --sign-key ./receiver.key --pub-key ./executor.pub \
+  > collection.json
+jq '.receipt' collection.json > receipt.dsse.json
+```
+
+`--package-dir` replaces the HTTP transport. Omit `--daemon-url` and `--operation`:
+the saved package already has its immutable delivery identity. The same pinned
+sender key, independent admission, strict import and predecessor checks apply.
+Receive versions in ascending `package_version` order. A missing predecessor
+fails explicitly; keep earlier unreceived packages alongside the final seal.
+Repeating a received package returns the original signed receipt.
+
+The result has status `receipt_persisted`. Return `receipt.dsse.json` to the
+stopped executor's retained volume, then run there:
+
+```sh
+agentprov --data-dir /mnt/agentprov-evidence forensics acknowledge-execution \
+  DELIVERY_ID receipt.dsse.json --execution-config /run/agentprov/execution.json
+```
+
+Use `delivery_id` from the collection result. This local command verifies the
+pinned receiver signature, exact package digest, attempt and generation before
+persisting the receipt. Retrying is safe. It changes only delivery state; all
+outstanding packages require receipts before the attempt is acknowledged.
+No executor is started, and a running daemon is rejected. Read the JSON response
+to confirm the saved receipt. The lifecycle controller still checks that all
+executions have stopped and every final package has its receipt before reclaiming
+the volume; neither command deletes evidence or changes capture completeness.
+
 The [sealing acceptance script](../scripts/accept_execution_seal.py) starts an
 isolated local executor, runs a CSV task, stops the daemon, seals twice and
 verifies the package in a fresh store after moving the original data directory.
@@ -819,7 +858,8 @@ sudo python3 scripts/accept_execution_seal.py --native \
 ```
 
 The fixture installs a uniquely named runtime unit, verifies real native capture
-and automatic stop-hook packaging, independently imports the signed evidence,
+and automatic stop-hook packaging, collects the saved package without a daemon,
+returns and persists its signed receipt, independently imports the evidence,
 then removes only its own unit. Full guest boot and restore/clone use the
 separate runtime acceptance environment.
 
