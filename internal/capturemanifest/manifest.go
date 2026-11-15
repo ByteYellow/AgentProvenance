@@ -52,6 +52,7 @@ type Record struct {
 	Snapshots       []Snapshot        `json:"snapshots"`
 	Retention       []Retention       `json:"retention"`
 	Loss            []Counter         `json:"loss"`
+	Counts          []Counter         `json:"counts,omitempty"`
 	Issues          []string          `json:"issues"`
 }
 
@@ -121,7 +122,7 @@ func (s Service) List(ctx context.Context, opts Options) (Page, error) {
 		}
 		raw, err := base64.RawURLEncoding.DecodeString(opts.Cursor)
 		if err != nil || json.Unmarshal(raw, &c) != nil || c.Version != SchemaVersion || c.RunID != opts.RunID ||
-			(c.Kind != "object" && c.Kind != "event") || c.ID == "" || len(c.ID) > 1024 {
+			(c.Kind != "object" && c.Kind != "event" && c.Kind != "batch") || c.ID == "" || len(c.ID) > 1024 {
 			return p, ErrInvalid
 		}
 	}
@@ -149,6 +150,8 @@ func (s Service) List(ctx context.Context, opts Options) (Page, error) {
 				OR json_array_length(body,'$.sentry.identity_gaps')>0
 		)
 		SELECT kind,id,object_type,created_at FROM (
+		SELECT 'batch' AS kind,id,'telemetry_batch' AS object_type,created_at FROM telemetry_batches WHERE run_id=?
+		UNION ALL
 		SELECT 'object' AS kind,hash AS id,object_type,created_at FROM provenance_objects
 		WHERE run_id=? AND object_type IN ('runtime_capture','execution_checkpoint','agent_context_coverage','context_capture_policy','run_capture_settings','sensor_capability_interval')
 		UNION ALL SELECT 'event',id,'sentry_stream',created_at FROM events
@@ -158,7 +161,7 @@ func (s Service) List(ctx context.Context, opts Options) (Page, error) {
 		UNION ALL SELECT 'event',id,'record_capture',created_at FROM events
 		WHERE run_id=? AND source='record' AND event_type IN ('exec_start','exec_end','exec_error')
 			AND json_type(CASE WHEN json_valid(payload) THEN payload ELSE '{}' END,'$.record_capture') IS NOT NULL)
-		WHERE (kind,id) > (?,?) ORDER BY kind,id LIMIT ?`, opts.RunID, opts.RunID, opts.RunID, opts.RunID, opts.RunID, c.Kind, c.ID, p.Limit+1)
+		WHERE (kind,id) > (?,?) ORDER BY kind,id LIMIT ?`, opts.RunID, opts.RunID, opts.RunID, opts.RunID, opts.RunID, opts.RunID, c.Kind, c.ID, p.Limit+1)
 	if err != nil {
 		return p, err
 	}

@@ -42,6 +42,7 @@ async function main(){
  const executionB={identity:{source:{run_id:'run',harness:'codex',session_id:'root',tool_call_id:'call-b'},local_run_id:'worker-b'},basis:'authenticated_delivery',issues:[]};
  catalog.runs.run.execution_links={schema_version:'agentprovenance.replay_execution_links/v1',directions:{outgoing:[{count:1,data:save([executionA])},{count:1,data:save([executionB])}],incoming:[]}};
  const captureRecords=[...Array.from({length:258},(_,i)=>'event/'+String(i).padStart(3,'0')),'event/\uffff','event/\u{10000}'].sort((a,b)=>Buffer.compare(Buffer.from(a),Buffer.from(b))).map(id=>({id,evidence_kind:'event',evidence_ref:'runtime_event/'+id.slice(6),loss:[{name:'drops',scope:'collector',value:'9007199254740993',basis:'saved'}]}));
+ captureRecords.unshift({id:'batch/receipt',evidence_kind:'batch',evidence_ref:'telemetry_batch/receipt',loss:[{name:'upstream_dropped_events',scope:'collector',value:null,basis:'not_recorded'}],counts:[{name:'read',scope:'processing_range',value:'9007199254740993',basis:'saved_batch_receipt'}]});
  const capturePages=[];
  for(let offset=0;offset<captureRecords.length;offset+=50){const values=captureRecords.slice(offset,offset+50);capturePages.push({count:values.length,first:values[0].id,last:values.at(-1).id,data:save(values)});}
  catalog.runs.run.capture_manifest={schema_version:'agentprovenance.replay_capture_manifest/v1',scope:'selected_evidence',pages:capturePages};

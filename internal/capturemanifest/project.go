@@ -19,6 +19,8 @@ func (s Service) read(ctx context.Context, run string, e evidence) (Record, erro
 	r := initial(e)
 	read := func(out any) error { return provenance.ReadObjectPayload(s.DB, run, e.id, out) }
 	switch e.objectType {
+	case "telemetry_batch":
+		return s.batch(ctx, run, e)
 	case "sensor_capability_interval":
 		var c observability.CapabilityInterval
 		if err := read(&c); err != nil {

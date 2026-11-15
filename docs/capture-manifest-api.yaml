@@ -29,6 +29,10 @@ paths:
         workspace snapshots. Their counters belong to one recorded attempt;
         missed processes remain unknown. Separate native collectors retain their
         own capabilities and observations.
+        JSONL batch receipts preserve original processing counts and input/event
+        digests. Their upstream capability, placement and loss remain unknown.
+        Partial exports retain a receipt only when all its supporting events
+        are included; receipt counts are never rewritten for a selection.
       parameters:
         - {name: run, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 1024}}
         - {name: cursor, in: query, schema: {type: string, maxLength: 8192}}
@@ -90,8 +94,8 @@ components:
       required: [id, evidence_ref, evidence_kind, source, producer_version, producer_commit, placement, identity_domain, identity, interval_basis, status, snapshots, retention, loss, issues]
       properties:
         id: {type: string, description: Source kind followed by the original evidence ID}
-        evidence_ref: {type: string, description: Original object hash or runtime_event reference}
-        evidence_kind: {enum: [object, event]}
+        evidence_ref: {type: string, description: Original object hash or runtime_event or telemetry_batch reference}
+        evidence_kind: {enum: [object, event, batch]}
         source: {type: string}
         producer_version: {type: string, description: Recorded version or unknown}
         producer_commit: {type: string, description: Recorded source identity or unknown}
@@ -140,7 +144,7 @@ components:
               basis: {type: string}
         loss:
           type: array
-          items:
+          items: &captureCounter
             type: object
             required: [name, scope, value, basis]
             properties:
@@ -152,6 +156,14 @@ components:
                 pattern: '^[0-9]+$'
                 description: Decimal text preserves uint64 precision; null means unknown
               basis: {type: string, description: Delta, cumulative boundary or original processing-range count}
+        counts:
+          type: array
+          description: >
+            Optional processing counters, separate from capture loss. JSONL
+            receipts contain read, ingested, skipped, failed and unclassified.
+            Unclassified rows have no saved disposition; do not treat them as
+            kernel losses. Observed time is receipt persistence time.
+          items: *captureCounter
         issues: {type: array, items: {type: string}}
     Feature:
       type: object

@@ -68,6 +68,25 @@ Native stream persistence and restart recovery have a separate
 [documented contract](native-capture-spool.md). Event atomicity does not add
 crash recovery to the legacy Falco spool worker.
 
+## Saved Import Receipts
+
+The [capture manifest API](capture-manifest-api.yaml) includes JSONL import
+receipts from native, Tetragon, Falco and LoongCollector inputs. Each receipt
+retains its batch ID, input digest, ordered event-membership digest and original
+processing counts. `observed_at` is the saved receipt time, not the beginning or
+end of upstream collection. Local input paths are omitted from this projection.
+
+`counts` separates read, ingested, skipped, failed and unclassified rows from
+capture loss. Historical receipts do not retain every filter disposition;
+unclassified rows keep that distinction. Upstream version, placement, probe
+enablement and dropped-event totals remain unknown unless a separate saved
+capture report supplies them.
+
+Signed Bundle import preserves receipts. Selective offline replay includes a
+receipt only when every supporting event is selected, with at least one event.
+A partially selected batch is omitted rather than assigned new counts or a new
+digest. Whole-run export also retains empty and failed-only receipts.
+
 ## Event Body Shapes
 
 The current MVP validates these minimum event-specific fields:

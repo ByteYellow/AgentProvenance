@@ -97,10 +97,10 @@ func TestPassiveNativeCapabilitiesSurviveLateBindingsAndRestart(t *testing.T) {
 	}
 	for _, run := range []string{"pod-a", "pod-b"} {
 		got := all(t, db, run, 1)
-		if len(got) != 3 {
-			t.Fatalf("want all three original revisions, got %+v", got)
+		if len(got) != 4 || got[0].EvidenceKind != "batch" || got[0].Source != "telemetry_jsonl" {
+			t.Fatalf("want one processing receipt and all three original revisions, got %+v", got)
 		}
-		for _, r := range got {
+		for _, r := range got[1:] {
 			if r.Placement != "host_kernel" || r.ProducerVersion != "captured-version" || r.Identity["collector_id"] != "original-node-collector" || r.IntervalBasis != "collector_receive_window" || r.Identity["batch_id"] == "" || r.Identity["receiver_id"] == r.Identity["collector_id"] {
 				t.Fatalf("collector window identity changed: %+v", r)
 			}
@@ -172,7 +172,7 @@ func TestPassiveNativeCapabilityFailureRollsBackEventsAndReceipts(t *testing.T) 
 	if err := n.Process(32); err != nil {
 		t.Fatal(err)
 	}
-	if got := all(t, db, "pod-a", 1); len(got) != 1 {
+	if got := all(t, db, "pod-a", 1); len(got) != 2 || got[0].EvidenceKind != "batch" || got[1].IntervalBasis != "collector_receive_window" {
 		t.Fatalf("retry did not preserve original capture: %+v", got)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -249,8 +249,28 @@ func TestPassiveNativeOneWindowPerRunAcrossTransactionChunks(t *testing.T) {
 	if err := n.Process(32); err != nil {
 		t.Fatal(err)
 	}
-	if got := all(t, db, "pod-a", 1); len(got) != 1 {
-		t.Fatalf("transaction chunks duplicated capture windows: %+v", got)
+	// The time budget can seal a transaction before its row limit, especially
+	// under race instrumentation. Check every saved receipt and one window.
+	var receipts, largest, covered int
+	if err := db.QueryRow(`SELECT COUNT(*),MAX(ingested_count),SUM(ingested_count)
+		FROM telemetry_batches WHERE run_id='pod-a'`).Scan(&receipts, &largest, &covered); err != nil {
+		t.Fatal(err)
+	}
+	if receipts < 3 || largest > 16 || covered != 40 {
+		t.Fatalf("invalid transaction coverage: receipts=%d largest=%d covered=%d", receipts, largest, covered)
+	}
+	got := all(t, db, "pod-a", 1)
+	if len(got) != receipts+1 || got[len(got)-1].IntervalBasis != "collector_receive_window" {
+		t.Fatalf("capture window count differs from one: observations=%d receipts=%d", len(got), receipts)
+	}
+	for _, record := range got[:receipts] {
+		var saved int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM telemetry_batches WHERE run_id='pod-a' AND id=?`, record.Identity["batch_id"]).Scan(&saved); err != nil {
+			t.Fatal(err)
+		}
+		if record.EvidenceKind != "batch" || saved != 1 {
+			t.Fatalf("missing transaction receipt: %s", record.ID)
+		}
 	}
 	var count int
 	if err := db.QueryRow("SELECT COUNT(*) FROM events WHERE run_id='pod-a'").Scan(&count); err != nil || count != 40 {

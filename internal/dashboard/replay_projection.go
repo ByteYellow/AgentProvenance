@@ -109,6 +109,15 @@ func (snapshot *replaySnapshot) projectSelection(ctx context.Context, plan *repl
 			return nil, err
 		}
 	}
+	// A batch receipt is indivisible: retain its original counts and digest only
+	// when every supporting event is selected. Never recompute a partial receipt.
+	if err = copyTable("telemetry_batches", `x.run_id=? AND x.ingested_count>0
+		AND json_type(CASE WHEN json_valid(x.event_ids_json) THEN x.event_ids_json ELSE 'null' END)='array'
+		AND json_array_length(CASE WHEN json_valid(x.event_ids_json) THEN x.event_ids_json ELSE '[]' END)=x.ingested_count
+		AND NOT EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(x.event_ids_json) THEN x.event_ids_json ELSE '[]' END) j
+		 WHERE j.type!='text' OR j.value NOT IN (SELECT id FROM main.events))`, run); err != nil {
+		return nil, err
+	}
 	if err = copyTable("agent_context_reports", `x.run_id=? AND (?='whole_run' OR x.source_id IN (SELECT source_id FROM main.agent_context_entries)
 		OR (x.harness=? AND x.session_id=?))`, run, plan.Selection.Scope, plan.Selection.Harness, plan.Selection.SessionID); err != nil {
 		return nil, err

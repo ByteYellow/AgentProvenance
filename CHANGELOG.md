@@ -4,6 +4,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Include original JSONL processing receipts in saved capture manifests and
+  offline replay. Preserve batch digests and counters separately from unknown
+  upstream capabilities; partial exports keep only wholly selected receipts.
+
 - Enable the existing bounded kernel cgroup-name cache on ARM64, preserving
   short-lived container identity after procfs and cgroup directories disappear.
   Check both committed probe objects and the native userspace lookup path.

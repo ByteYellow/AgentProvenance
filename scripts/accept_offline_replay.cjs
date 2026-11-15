@@ -120,7 +120,7 @@ async function main(){
             }while(cursor);
             assert.deepEqual(records,expected,'offline capture facts retain references, identities, intervals and unknown values');
           }
-          for(const record of expected)for(const counter of record.loss){
+          for(const record of expected)for(const counter of [...record.loss,...(record.counts||[])]){
             assert.ok(counter.value===null||/^[0-9]+$/.test(counter.value),'counter remains null or decimal text');
             if(counter.value!==null)assert.equal(typeof counter.value,'string','uint64 precision is preserved');
           }

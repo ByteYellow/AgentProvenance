@@ -189,7 +189,7 @@ window.AgentProvReplay = (() => {
     if(p.get('cursor')){
       const raw=p.get('cursor');let cursor;
       try{if(raw.length>8192||!/^[A-Za-z0-9_-]+$/.test(raw))throw Error();cursor=JSON.parse(decoder.decode(Uint8Array.from(atob(raw.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0))));}catch{fail('Invalid capture manifest cursor');}
-      if(cursor.version!==schema||cursor.run_id!==id||!['event','object'].includes(cursor.kind)||typeof cursor.id!=='string'||!cursor.id||encoder.encode(cursor.id).length>1024)fail('Capture manifest cursor does not match this run');
+      if(cursor.version!==schema||cursor.run_id!==id||!['batch','event','object'].includes(cursor.kind)||typeof cursor.id!=='string'||!cursor.id||encoder.encode(cursor.id).length>1024)fail('Capture manifest cursor does not match this run');
       after=cursor.kind+'/'+cursor.id;
     }
     if(!['whole_run','selected_evidence'].includes(index.scope)||!Array.isArray(index.pages))fail('Invalid capture manifest index');
@@ -207,7 +207,7 @@ window.AgentProvReplay = (() => {
       if(!Array.isArray(records)||records.length!==shard.count||records[0]?.id!==shard.first||records.at(-1)?.id!==shard.last)fail('Capture manifest shard does not match its index');
       let previous='';
       for(const record of records){
-        if(typeof record.id!=='string'||!record.id.startsWith(record.evidence_kind+'/')||!['event','object'].includes(record.evidence_kind)||cmp(record.id,previous)<=0)fail('Invalid capture evidence order');
+        if(typeof record.id!=='string'||!record.id.startsWith(record.evidence_kind+'/')||!['batch','event','object'].includes(record.evidence_kind)||cmp(record.id,previous)<=0)fail('Invalid capture evidence order');
         previous=record.id;
         if(cmp(record.id,after)<=0)continue;
         if(out.records.length===limit){out.has_more=true;break;}
