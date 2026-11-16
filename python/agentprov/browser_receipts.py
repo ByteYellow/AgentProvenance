@@ -142,7 +142,7 @@ class ReceiptStore:
         total = 0
         for path in paths:
             log = self.logs.setdefault(path.name, dict(offset=0, scope=None, operations={}, corrupt=False,
-                                                       partial=False, gap=False, identity=None, sequence=0, modified=None,
+                                                       partial=False, gap=False, identity=None, sequence=0, prefix_digest=None,
                                                        event_ids=set()))
             try:
                 fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
@@ -155,21 +155,30 @@ class ReceiptStore:
                     identity = (info.st_dev, info.st_ino)
                     if log["identity"] is not None and (log["identity"] != identity or info.st_size < log["offset"]):
                         raise ValueError("replaced journal")
-                    modified = (info.st_mtime_ns, info.st_ctime_ns)
-                    if (log["modified"] is not None and log["modified"] != modified
-                            and info.st_size == log["offset"]):
-                        raise ValueError("rewritten journal")
                     log["identity"] = identity
-                    log["modified"] = modified
                     if total > MAX_HISTORY_BYTES:
                         self.gap = "receipt_history_budget_exceeded"
                         return
                     if log["corrupt"]:
                         continue
-                    stream.seek(log["offset"])
+                    # Timestamps can share one filesystem clock tick, and an
+                    # append can accompany a rewrite of the cached prefix.
+                    # Revalidate the exact bytes before reusing any receipt.
+                    prefix = hashlib.sha256()
+                    remaining = log["offset"]
+                    while remaining:
+                        block = stream.read(min(1 << 20, remaining))
+                        if not block:
+                            raise ValueError("truncated journal prefix")
+                        prefix.update(block)
+                        remaining -= len(block)
+                    if log["prefix_digest"] is not None and prefix.hexdigest() != log["prefix_digest"]:
+                        raise ValueError("rewritten journal prefix")
                     log["partial"] = False
-                    while True:
-                        raw = stream.readline(MAX_LINE_BYTES + 1)
+                    # Read only the size observed on this descriptor. A writer
+                    # cannot extend this scan indefinitely by appending rows.
+                    while stream.tell() < info.st_size:
+                        raw = stream.readline(min(MAX_LINE_BYTES + 1, info.st_size - stream.tell()))
                         if not raw:
                             break
                         if len(raw) > MAX_LINE_BYTES:
@@ -181,6 +190,8 @@ class ReceiptStore:
                         self._record(log, row, path.name, raw)
                         log["offset"] += len(raw)
                         log["sequence"] += 1
+                        prefix.update(raw)
+                        log["prefix_digest"] = prefix.hexdigest()
             except (OSError, ValueError, TypeError, KeyError, RecursionError):
                 log["corrupt"] = True
 

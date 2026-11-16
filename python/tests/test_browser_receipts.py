@@ -227,10 +227,29 @@ class ReceiptStoreTests(unittest.TestCase):
         self.finish(self.accept())
         self.store.result("operation")
         path = self.directory / "browser.jsonl"
+        cached_stat = path.stat()
         original = path.read_bytes()
         path.write_bytes(original.replace(b'"action_end"', b'"action_BAD"'))
         self.assertEqual(len(path.read_bytes()), len(original))
-        self.assertEqual(self.store.result("operation")["execution_reason"], "receipt_log_corrupt")
+        # A coarse filesystem clock can report identical mtime and ctime for
+        # both writes. Cache validity must follow the contents, not that clock.
+        with patch("agentprov.browser_receipts.os.fstat", return_value=cached_stat):
+            self.assertEqual(self.store.result("operation")["execution_reason"], "receipt_log_corrupt")
+
+    def test_prefix_rewrite_with_valid_append_invalidates_cache(self):
+        self.finish(self.accept())
+        self.assertEqual(self.store.result("operation")["execution_status"], "ok")
+        path = self.directory / "browser.jsonl"
+        original = path.read_bytes()
+        # Keep the appended row valid, so parsing only the new suffix would
+        # silently reuse the success cached from the modified history.
+        self.capture.event("page_title", target_id="page", payload={"title": "Next"})
+        path.write_bytes(path.read_bytes().replace(b'"action_end"', b'"action_BAD"'))
+        self.assertGreater(path.stat().st_size, len(original))
+        result = self.store.result("operation")
+        self.assertEqual(result["execution_reason"], "receipt_log_corrupt")
+        self.assertEqual(result["execution_status"], "unknown")
+        self.assertEqual(result["output"], {})
 
     def test_missing_directory_invalidates_cached_result(self):
         self.finish(self.accept())
