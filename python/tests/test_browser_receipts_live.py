@@ -43,7 +43,7 @@ class Fixture(BaseHTTPRequestHandler):
             pass
 
 
-async def live_acceptance(directory, channel=None):
+async def live_acceptance(directory, channel=None, *, custody_dir=None, native_data_dir=None, run_id=None):
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
@@ -60,6 +60,10 @@ async def live_acceptance(directory, channel=None):
     origin = "http://127.0.0.1:" + str(server.server_port)
     observations = []
     report = {"passed": False, "transport": "real stdio MCP and owned Chromium", "sensor": "off"}
+    if custody_dir:
+        assert native_data_dir and run_id and channel is None
+        custody_dir = Path(custody_dir)
+        report["sensor"] = "native_owned_launcher"
 
     @contextlib.asynccontextmanager
     async def bridge(generation):
@@ -69,6 +73,8 @@ async def live_acceptance(directory, channel=None):
                      "--instance-id", "owned", "--generation", generation, "--no-screenshots", "--no-har"]
         if channel:
             arguments += ["--channel", channel]
+        if custody_dir:
+            arguments += ["--custody-dir", str(custody_dir), "--native-data-dir", str(native_data_dir), "--run", run_id]
         parameters = StdioServerParameters(command=sys.executable, args=arguments, env=dict(os.environ))
         with (directory / (generation + ".log")).open("w") as log:
             async with stdio_client(parameters, errlog=log) as (read, write):
@@ -88,6 +94,17 @@ async def live_acceptance(directory, channel=None):
         return sum(json.loads(line).get("kind") == "action_start"
                    for path in capture.glob("browser*.jsonl") for line in path.read_text().splitlines())
 
+    async def wait_native(client, page, generation):
+        if not custody_dir:
+            return
+        for _ in range(40):
+            if any(json.loads(p.read_text())["scope"]["generation"] == generation
+                   for p in custody_dir.glob("*/launch-witness.json")):
+                return
+            await asyncio.sleep(.25)
+            await call(client, "browser_execute", page_id=page, action="read_text")
+        raise AssertionError("native launch evidence missing: " + generation)
+
     try:
         killed = False
         try:
@@ -101,6 +118,7 @@ async def live_acceptance(directory, channel=None):
                 completed = await call(client, "browser_execute", page_id=page, action="click", value="#once")
                 assert completed["execution_status"] == "ok"
                 assert await asyncio.to_thread(server.seen["/complete"].wait, 5)
+                await wait_native(client, page, "first")
                 pending = await call(client, "browser_execute", page_id=page, action="navigate",
                                      value=origin + "/pending", timeout_seconds=.1)
                 assert pending["execution_status"] == "unknown" and pending["waiting_state"] == "pending"
@@ -130,6 +148,19 @@ async def live_acceptance(directory, channel=None):
             new = await call(client, "browser_execute", page_id=pages["default_page_id"], action="navigate", value=origin)
             assert new["execution_status"] == "ok"
             assert new["browser_operation"]["scope"]["generation"] == "second"
+            await wait_native(client, pages["default_page_id"], "second")
+        if custody_dir:
+            launches = [json.loads(p.read_text()) for p in custody_dir.glob("*/launch-witness.json")]
+            assert len(launches) == 2
+            assert {p["scope"]["generation"] for p in launches} == {"first", "second"}
+            assert len({p["process_instance_id"] for p in launches}) == 2
+            sealed = [json.loads(p.read_text()) for p in custody_dir.glob("*/report.json")]
+            assert len(sealed) == 1 and sealed[0]["scope"]["generation"] == "second"
+            assert sealed[0]["native"] == "supported"
+            manifests = [json.loads(p.read_text()) for p in capture.glob("owned-*.json")]
+            assert len(manifests) == 1 and manifests[0]["placement"]["generation"] == "second"
+            report["custody"] = {"observed_launches": launches, "sealed_generations": ["second"],
+                                 "interrupted_generation": "first", "interrupted_capture": "unsealed"}
         report.update(passed=True, original_actions=before, actions_after_queries=before,
                       total_actions=action_count(), side_effect_counts=dict(server.counts),
                       completed_status="ok", interrupted_status="unknown", old_generation="first", new_generation="second")

@@ -92,10 +92,17 @@ OCI state 输出没有创建时间字段。每次执行前还会核对二进制�
 执行命令固定为：
 
 ```text
-runsc --root=ROOT exec --new-pidns --internal-pid-file=PRIVATE_FILE --cwd=WORKDIR CONTAINER ARGV...
+runsc --root=ROOT exec --new-pidns --internal-pid-file=PRIVATE_FILE --cwd=WORKDIR --pass-fd=3:3 --exec-fd=4 CONTAINER agentprov __runtime-gate ARGV...
 ```
 
 请求不能选择 runtime flags、容器 ID 或 receiver 身份。Shell interpreter 受既有 `--record-allow-shell` 策略控制；transport 只获得最小宿主环境。`--record-timeout` 与持久化 stop 请求会取消并回收本地 transport。
+
+CLI 通过文件描述符传入 root 管理的自身程序和一条私有启动管道。辅助进程先等待；
+适配器读取 Sentry PID，通过 `runsc trace procfs` 取得精确的 `clone_ts`，再将
+Target、操作、执行尝试及出生身份保存到 handoff 回执中。保存成功后才放行命令。
+辅助进程通过 `exec` 替换自身，进程出生身份保持不变。`sentry_start_ns` 使用十进制
+字符串，`gate_released` 记录是否放行。回执保存失败时，该次执行记录为失败，命令不运行。
+直接嵌入 Go 适配器且未设置 `Runsc.GateBinary` 的调用方保留原有的 PID 记录方式。
 
 可选 `seccheck` 指向原有独立 receiver。registration 的 namespace、instance、generation 必须分别匹配 Target 的 producer、instance、generation，并匹配配置容器。两个进程由 root 分别管理：
 
@@ -115,7 +122,7 @@ checkpoint 只保留选中 receiver 的状态，省略 `node_spool`。collector 
 
 沿用 `/v1/executions` 的准入、查询、stop API；adapter 结果位于 `checkpoint.runtime_report.execution` 与 `.capture`。重复提交和查询不调用第二次 `runsc exec`。
 
-- runsc 正常返回且读取到内部 PID 回执时，记录执行成功。
+- 身份回执已保存、命令已放行且 runsc 正常返回时，记录执行成功。
 - dispatch 前失败记录 Failed。dispatch 后非零返回与 runtime/control error 共用退出通道，保留 Unknown。
 - 超时、取消、结果丢失或 executor 重启后，未确认的工作负载结果为 Unknown，退出码为空。
 - 同一 Target 的 unresolved attempt 会通过 Ledger 阻止后续执行，重启后仍有效。继续执行前，由可信 launcher 回收旧工作负载并分配新 generation。
@@ -125,7 +132,10 @@ checkpoint 只保留选中 receiver 的状态，省略 `node_spool`。collector 
 
 固定版本的 [`exec` 实现](https://github.com/google/gvisor/blob/a0e6be6fb5e03d8ebea13592f36a097c7e9a41b9/runsc/cmd/exec.go#L189) 写入内部 PID，未返回出生时间；[进程创建路径](https://github.com/google/gvisor/blob/a0e6be6fb5e03d8ebea13592f36a097c7e9a41b9/pkg/sentry/kernel/kernel.go#L1523) 返回根 namespace 的 thread-group ID。[SecCheck ContextData](https://github.com/google/gvisor/blob/a0e6be6fb5e03d8ebea13592f36a097c7e9a41b9/pkg/sentry/seccheck/points/common.proto#L78) 另有精确 thread/group birth time 和 exec-session 标识。
 
-当前缺少把调用与出生身份原子绑定的回执。实现不使用 host PID、取整后的 `ps` 时间、argv 或事件到达时间补造该关系。同 PID 样本保留为待核对候选；后续需要解决 PID 复用、晚到事件、重连和生命周期绑定后再建立逐命令关联。
+私有启动管道让调用在执行前就与精确出生身份绑定。x86 实测已核对 `exec` 前后的
+身份一致性、回执保存失败时不执行命令，以及放行后取消时保留未知结果。
+R-02 接下来还需完成命令及其子进程的事件归属、接收端持久化完成水位和完整重启矩阵。
+这些工作完成前，采集报告继续保留对应缺口。
 
 ## 验证与 X86 交接
 
@@ -143,6 +153,7 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go test -c -o /tmp/runtimeadapter-amd64.te
 
 ```sh
 AGENTPROV_TEST_RUNSC=/usr/local/bin/runsc \
+AGENTPROV_TEST_RUNSC_CONTROLLED_BINARY=/usr/local/bin/agentprov \
 AGENTPROV_TEST_GVISOR_ROOTFS=/opt/agentprov-test/rootfs \
 AGENTPROV_TEST_RUNTIME_ADAPTER_OUTPUT=/root/ap-r02 \
 go test ./internal/runtimeadapter -run '^TestRunscLiveExecutionIdentityEvidence$' -count=1 -v

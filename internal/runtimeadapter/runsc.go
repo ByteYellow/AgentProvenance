@@ -52,6 +52,9 @@ type Runsc struct {
 	Options record.Options
 	// StateDir is private host-side scratch space, outside the workload mount.
 	StateDir string
+	// GateBinary is the root-owned agentprov executable passed by FD. Empty
+	// retains the legacy PID-only adapter for existing embedded callers.
+	GateBinary string
 }
 
 func (s Runsc) Admit(ctx context.Context, r Request) error {
@@ -96,6 +99,11 @@ func (s Runsc) Admit(ctx context.Context, r Request) error {
 	}
 	if err := ValidateTrustedPath(s.StateDir, true); err != nil {
 		return err
+	}
+	if s.GateBinary != "" {
+		if err := ValidateTrustedPath(s.GateBinary, false); err != nil {
+			return fmt.Errorf("runsc gate executable: %w", err)
+		}
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -202,6 +210,9 @@ func (s Runsc) control(ctx context.Context, args ...string) ([]byte, error) {
 func (s Runsc) Run(ctx context.Context, r Request, started func(Execution) error) (Execution, error) {
 	if err := s.Admit(ctx, r); err != nil {
 		return NewExecution(s.Binding, r), err
+	}
+	if s.GateBinary != "" {
+		return s.runGated(ctx, r, started)
 	}
 	return s.run(ctx, r, started)
 }

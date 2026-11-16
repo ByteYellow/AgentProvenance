@@ -15,10 +15,11 @@ import (
 )
 
 type fakeRuntime struct {
-	binding    runtimeadapter.Binding
-	runs       atomic.Int32
-	behavior   func(context.Context, runtimeadapter.Request, runtimeadapter.Execution) (runtimeadapter.Execution, error)
-	admitError error
+	binding     runtimeadapter.Binding
+	runs        atomic.Int32
+	behavior    func(context.Context, runtimeadapter.Request, runtimeadapter.Execution) (runtimeadapter.Execution, error)
+	admitError  error
+	beforeStart func(*runtimeadapter.Execution)
 }
 
 func (f *fakeRuntime) Admit(ctx context.Context, r runtimeadapter.Request) error {
@@ -33,6 +34,9 @@ func (f *fakeRuntime) Run(ctx context.Context, r runtimeadapter.Request, started
 	f.runs.Add(1)
 	e := runtimeadapter.NewExecution(f.binding, r)
 	e.State, e.Started = "running", true
+	if f.beforeStart != nil {
+		f.beforeStart(&e)
+	}
 	if err := started(e); err != nil {
 		return e, err
 	}
@@ -53,6 +57,32 @@ func testRuntimeExecutor(t *testing.T) (*Executor, Principal, Request, *fakeRunt
 	f := &fakeRuntime{binding: b}
 	e.Binding, e.Backend, e.Concurrency = &b, f, 1
 	return e, p, r, f
+}
+
+func TestRuntimeGateDeniedAfterIdentityCheckpointIsKnownFailure(t *testing.T) {
+	e, p, r, f := testRuntimeExecutor(t)
+	f.beforeStart = func(x *runtimeadapter.Execution) {
+		x.Started = false
+		x.SentryPID, x.SentryStartNS = 3, 123456789
+		x.SentryPIDBasis = "private_exec_fd_gate_and_runsc_procfs"
+	}
+	f.behavior = func(_ context.Context, _ runtimeadapter.Request, x runtimeadapter.Execution) (runtimeadapter.Execution, error) {
+		x.State = "failed"
+		x.Gaps = append(x.Gaps, "controlled_gate_not_released")
+		return x, errors.New("fixture gate denied before release")
+	}
+	a, _, err := e.Ledger.Admit(context.Background(), p, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop := startExecutor(t, e)
+	report := waitExecution(t, e, p, a.ID, Failed)
+	if report.Checkpoint.Runtime.Execution.Started || report.Checkpoint.Runtime.Execution.GateReleased {
+		t.Fatal("denied gate became a started workload")
+	}
+	if err := stop(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestRuntimeBackendUsesLedgerForIdempotencyAndQuery(t *testing.T) {

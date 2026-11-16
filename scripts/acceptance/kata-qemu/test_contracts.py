@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -72,6 +73,30 @@ class LockTests(unittest.TestCase):
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_pod_observation_recovers_only_bounded_read_timeouts(self):
+        args = argparse.Namespace(context="lab", namespace="owned", cri_endpoint="unix:///cri", kubectl="kubectl", crictl="crictl")
+        node = run.Node(args, pinned())
+        timeout = subprocess.TimeoutExpired(["kubectl", "get", "pod"], 30)
+        report = {}
+        with patch.object(node, "kubectl", side_effect=[timeout, '{"metadata":{"uid":"same"}}']) as read:
+            self.assertEqual(node.observe_pod("owned", time.monotonic() + 100, report)["metadata"]["uid"], "same")
+        self.assertEqual(read.call_count, 2)
+        self.assertEqual(len(report["pod_read_timeouts"]), 1)
+        with patch.object(node, "kubectl", side_effect=timeout) as read, self.assertRaises(subprocess.TimeoutExpired):
+            node.observe_pod("owned", time.monotonic() + 100, {})
+        self.assertEqual(read.call_count, 3)
+        with patch.object(node, "kubectl", side_effect=RuntimeError("forbidden")) as read, self.assertRaises(RuntimeError):
+            node.observe_pod("owned", time.monotonic() + 100, {})
+        self.assertEqual(read.call_count, 1)
+
+    def test_containerd_api_version_prefix_preserves_exact_build(self):
+        self.assertEqual(run.containerd_version("v2.3.4-k3s1.36"), run.containerd_version("2.3.4-k3s1.36"))
+        self.assertNotEqual(run.containerd_version("v2.3.4-k3s1.36"), run.containerd_version("2.3.4-k3s1.35"))
+        self.assertNotEqual(run.containerd_version("2.3.4+build1"), run.containerd_version("2.3.4+build2"))
+        for value in (None, "", "vv2.3.4", "2.3", "containerd://2.3.4", "2.3.4 extra"):
+            with self.subTest(value=value), self.assertRaises(common.Blocked):
+                run.containerd_version(value)
+
     def test_crictl_version_uses_real_text_contract(self):
         result = run.cri_version("Version:  0.1.0\nRuntimeName:  containerd\nRuntimeVersion:  2.3.0\nRuntimeApiVersion:  v1\n")
         self.assertEqual(result["RuntimeVersion"], "2.3.0")

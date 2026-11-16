@@ -173,7 +173,9 @@ func (e *Executor) executeBackend(ctx context.Context, a Attempt) error {
 	}
 	state := a.State
 	state.Execution, state.Capture = Unknown, Incomplete
-	if validResult && !dispatched && !result.Started {
+	gateDenied := result.SentryPIDBasis == "private_exec_fd_gate_and_runsc_procfs" &&
+		!result.Started && !result.GateReleased && result.State == "failed"
+	if validResult && ((!dispatched && !result.Started) || gateDenied) {
 		state.Execution = Failed
 		if errors.Is(runErr, context.Canceled) {
 			state.Execution = Cancelled

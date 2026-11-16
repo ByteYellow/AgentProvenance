@@ -79,7 +79,11 @@ func configureExecutionBackend(e *handoff.Executor, c handoff.Config) error {
 	if err := runtimeadapter.ValidateTrustedPath(stateDir, true); err != nil {
 		return err
 	}
-	e.Backend = runtimeadapter.Runsc{Binding: b, Config: runsc, Options: e.Options, StateDir: stateDir}
+	gate, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locate runsc gate executable: %w", err)
+	}
+	e.Backend = runtimeadapter.Runsc{Binding: b, Config: runsc, Options: e.Options, StateDir: stateDir, GateBinary: gate}
 	if c.Backend.SecCheck != nil {
 		capture := *c.Backend.SecCheck
 		e.RuntimeCapture = runtimeadapter.SecCheck{Target: b.Target, Receiver: capture.Target,

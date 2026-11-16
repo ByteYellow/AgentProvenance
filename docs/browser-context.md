@@ -283,6 +283,10 @@ queries. Then run `scripts/accept_browser_native_delivery.py` as that account to
 check repeated imports, original signed transfer, recipient verification, native
 relations and removal of unsupported relations from a selected signed reader.
 These fixtures use existing software and preserve the Chromium sandbox.
+Add `--crash-recovery` to the native fixture for a real stdio MCP bridge SIGKILL:
+the recovered result is queried repeatedly without repeating its side effect,
+both process births are checked, and only the new generation is sealed. The
+interrupted generation keeps its unsealed capture status.
 
 ### Receiver-owned Browser/runtime custody
 

@@ -141,6 +141,8 @@ type Execution struct {
 	RuntimeRelease string   `json:"runtime_release,omitempty"`
 	SentryPID      int32    `json:"sentry_pid,omitempty"`
 	SentryPIDBasis string   `json:"sentry_pid_basis,omitempty"`
+	SentryStartNS  int64    `json:"sentry_start_ns,string,omitempty"`
+	GateReleased   bool     `json:"gate_released,omitempty"`
 	Gaps           []string `json:"gaps"`
 	// Native evidence remains in record's existing objects, not a second journal.
 	Record *record.Result `json:"-"`

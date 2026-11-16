@@ -85,6 +85,7 @@ func TestRunscLiveExecutionIdentityEvidence(t *testing.T) {
 	}
 	var mu sync.Mutex
 	var samples []sample
+	var probeRecords []seccheck.Record
 	contexts := []*wire.ContextData{}
 	ready := make(chan struct{})
 	receiverCtx, stopReceiver := context.WithCancel(context.Background())
@@ -111,6 +112,9 @@ func TestRunscLiveExecutionIdentityEvidence(t *testing.T) {
 			}
 		}
 		samples = append(samples, s)
+		if os.Getenv("AGENTPROV_TEST_RUNSC_GATE") != "" || os.Getenv("AGENTPROV_TEST_RUNSC_CONTROLLED_BINARY") != "" {
+			probeRecords = append(probeRecords, r)
+		}
 		return nil
 	}}
 	go func() { done <- receiver.Serve(receiverCtx) }()
@@ -216,6 +220,20 @@ func TestRunscLiveExecutionIdentityEvidence(t *testing.T) {
 	}
 	if !observed {
 		t.Error("missing raw exec-session PID/birth sample; inspect identity artifacts")
+	}
+	if helper := os.Getenv("AGENTPROV_TEST_RUNSC_GATE"); helper != "" {
+		probeControlledGate(t, ctx, s, root, helper, func() []seccheck.Record {
+			mu.Lock()
+			defer mu.Unlock()
+			return append([]seccheck.Record(nil), probeRecords...)
+		})
+	}
+	if executable := os.Getenv("AGENTPROV_TEST_RUNSC_CONTROLLED_BINARY"); executable != "" {
+		probeGatedAdapter(t, ctx, s, root, rootfs, executable, func() []seccheck.Record {
+			mu.Lock()
+			defer mu.Unlock()
+			return append([]seccheck.Record(nil), probeRecords...)
+		})
 	}
 	r.OperationID, r.AttemptID = "cancel-operation", "cancel-attempt"
 	r.Command.Command = []string{"/bin/sleep", "30"}

@@ -30,7 +30,7 @@
     },
     "kata_config": {
       "version": null,
-      "path": "/opt/kata/share/defaults/kata-containers/configuration-qemu-runtime-rs.toml",
+      "path": "/opt/kata/share/defaults/kata-containers/runtime-rs/configuration-qemu-runtime-rs.toml",
       "sha256": null
     }
   },

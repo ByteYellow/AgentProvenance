@@ -94,10 +94,19 @@ container workspace.
 The entry is fixed to:
 
 ```text
-runsc --root=ROOT exec --new-pidns --internal-pid-file=PRIVATE_FILE --cwd=WORKDIR CONTAINER ARGV...
+runsc --root=ROOT exec --new-pidns --internal-pid-file=PRIVATE_FILE --cwd=WORKDIR --pass-fd=3:3 --exec-fd=4 CONTAINER agentprov __runtime-gate ARGV...
 ```
 
 Requests cannot choose runtime flags, container IDs or receiver identities. Shell interpreters require the existing `--record-allow-shell` policy. The transport uses a minimal host environment. `--record-timeout` and durable stop requests cancel and reap the local transport.
+
+The CLI passes its root-owned executable and a private start pipe by descriptor.
+While the helper waits, the adapter reads the Sentry PID and exact `clone_ts`
+through `runsc trace procfs`, then saves the Target, operation, attempt and birth
+identity in the handoff checkpoint. Only a successful checkpoint permits release.
+The helper then replaces itself with the command, preserving its process birth.
+`sentry_start_ns` is a decimal string; `gate_released` records dispatch. A denied
+gate records failure without running the requested command. Embedded callers
+that omit `Runsc.GateBinary` retain the legacy PID-only behavior.
 
 The optional `seccheck` block points to the existing independent receiver. Its registration namespace, instance and generation must equal the execution Target's producer, instance and generation, and the container must match. Start the receiver with its existing trusted collection configuration, redirecting JSON status into the checked file:
 
@@ -117,17 +126,22 @@ Only the selected receiver target is retained in checkpoint status snapshots. `n
 
 The original `/v1/executions` admission, query and stop APIs are unchanged. Read `checkpoint.runtime_report.execution` and `.capture` for the adapter receipt. Query and duplicate admission never invoke `runsc exec` again.
 
-- Successful runsc transport completion with its internal PID receipt records execution success.
+- Successful runsc transport completion after the identity checkpoint and gate release records execution success.
 - A failure before dispatch records failure. Nonzero runsc completion after dispatch stays unknown because the CLI shares its failure channel with runtime/control errors.
 - Timeout, cancellation, lost result or executor restart keeps an unresolved workload result unknown. Its exit code is absent.
 - An unresolved attempt fences further executions for that Target in the durable ledger, including after restart. Retire the old workload and assign a new generation through the trusted launcher before continuing.
-- `concurrency=1` serializes this executor. External container executions remain explicitly untracked; no global container lock or shared task identity is claimed.
+- `concurrency=1` serializes this executor. External container executions remain explicitly untracked.
 
 ## Identity Evidence
 
 The pinned [`exec` implementation](https://github.com/google/gvisor/blob/a0e6be6fb5e03d8ebea13592f36a097c7e9a41b9/runsc/cmd/exec.go#L189) writes the returned internal PID but not the task's birth timestamp. The pinned [process creation path](https://github.com/google/gvisor/blob/a0e6be6fb5e03d8ebea13592f36a097c7e9a41b9/pkg/sentry/kernel/kernel.go#L1523) returns its root-namespace thread-group ID. [SecCheck ContextData](https://github.com/google/gvisor/blob/a0e6be6fb5e03d8ebea13592f36a097c7e9a41b9/pkg/sentry/seccheck/points/common.proto#L78) separately carries thread/group birth times and an exec-session flag.
 
-There is no atomic call-plus-birth receipt in this integration. The adapter never substitutes a host PID, rounded `ps` time, argv, or arrival-time match for that missing identity. Even a single same-PID sample remains a candidate until PID reuse, late evidence, reconnect and lifecycle binding have been resolved by a stronger contract.
+The private gate binds a call to the exact process birth before workload dispatch.
+The x86 probe verifies that this identity survives `exec`, that a failed identity
+checkpoint prevents execution, and that cancellation after release retains an
+unknown result. The command-scoped event closure, durable receiver watermark and
+complete restart matrix remain the next R-02 integration steps. Capture reports
+continue to retain their outstanding gaps while those steps are implemented.
 
 ## Validation Commands
 
@@ -145,6 +159,7 @@ On an isolated Linux x86 host, provision the pinned root-owned runsc binary and 
 
 ```sh
 AGENTPROV_TEST_RUNSC=/usr/local/bin/runsc \
+AGENTPROV_TEST_RUNSC_CONTROLLED_BINARY=/usr/local/bin/agentprov \
 AGENTPROV_TEST_GVISOR_ROOTFS=/opt/agentprov-test/rootfs \
 AGENTPROV_TEST_RUNTIME_ADAPTER_OUTPUT=/root/ap-r02 \
 go test ./internal/runtimeadapter -run '^TestRunscLiveExecutionIdentityEvidence$' -count=1 -v

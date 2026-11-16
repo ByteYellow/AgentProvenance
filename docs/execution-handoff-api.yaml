@@ -608,11 +608,13 @@ components:
         attempt_id: { type: string, minLength: 1, description: Handoff Attempt.id, separate from the native record attempt identity. }
         run_id: { type: string, minLength: 1, description: Attempt.local_run_id. }
         state: { $ref: '#/components/schemas/State/properties/execution', description: Execution observation projected into the checkpoint; status queries do not execute work. }
-        started: { type: boolean, description: Native scope/result evidence or a started runtime transport; not confirmation that a cancelled workload terminated. }
+        started: { type: boolean, description: Native scope/result evidence, a legacy runtime transport start, or a controlled runsc gate release. Cancellation termination is reported separately. }
         exit_code: { type: integer, description: Omitted when unknown. Guest uses the native exec_end result; current runsc reports zero only on confirmed success and leaves nonzero transport outcomes unknown. }
         runtime_release: { type: string, description: Pinned runsc release; absent for Guest. }
         sentry_pid: { type: integer, minimum: 1, maximum: 2147483647, description: Sentry root-namespace process ID read from runsc internal PID output, not a host PID or a process-birth witness. }
-        sentry_pid_basis: { type: string, enum: [runsc_internal_pid_file] }
+        sentry_pid_basis: { type: string, enum: [runsc_internal_pid_file, private_exec_fd_gate_and_runsc_procfs] }
+        sentry_start_ns: { type: string, pattern: '^[1-9][0-9]*$', description: Exact Sentry process birth from the operator runtime control plane, recorded before releasing the command. }
+        gate_released: { type: boolean, description: The private command start gate was released after the durable identity checkpoint. }
         gaps: { type: array, items: { type: string }, description: Explicit association or execution gaps; an empty array is retained. }
     RuntimeCaptureReport:
       type: object

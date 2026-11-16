@@ -9,6 +9,7 @@ import platform
 import re
 import shutil
 import signal
+import subprocess
 import sys
 import time
 import tomllib
@@ -138,6 +139,14 @@ def cri_version(text):
     return fields
 
 
+def containerd_version(value):
+    # Kubelet strips the leading v that containerd's CRI Version RPC retains.
+    # Preserve every release/prerelease/build component in the comparison.
+    require(isinstance(value, str) and re.fullmatch(r"v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.+-]+)?", value),
+            "invalid containerd version")
+    return value.removeprefix("v")
+
+
 def pod_manifest(args, lock, name, assets, data, previous=None, binding_dir=None, workspace_case=None):
     argv = ["python3", "/fixture/guest.py", "--binary", "/fixture/agentprov", "--data-dir", "/evidence",
             "--lock", "/fixture/lock.json", "--binding-dir", "/binding", "--timeout", "600"]
@@ -229,11 +238,16 @@ class Node:
                 "kubectl node is not this booted node")
         require(identity.get("architecture") == "amd64" and identity.get("operatingSystem") == "linux", "node architecture mismatch")
         require(identity.get("kubeletVersion") == self.lock["kubernetes"]["kubelet_version"], "kubelet version mismatch")
-        require(identity.get("containerRuntimeVersion") == "containerd://" + self.lock["containerd"]["version"], "node containerd version mismatch")
+        locked_containerd = containerd_version(self.lock["containerd"]["version"])
+        node_runtime = identity.get("containerRuntimeVersion", "")
+        require(node_runtime.startswith("containerd://") and
+                containerd_version(node_runtime.removeprefix("containerd://")) == locked_containerd,
+                "node containerd version mismatch")
         version = json.loads(self.kubectl("version", "-o", "json"))
         require(version["serverVersion"]["gitVersion"] == self.lock["kubernetes"]["server_version"], "API server version mismatch")
         observed_cri = cri_version(command(self.cri + ["version"]))
-        require(observed_cri["RuntimeName"] == "containerd" and observed_cri["RuntimeVersion"] == self.lock["containerd"]["version"], "CRI version mismatch")
+        require(observed_cri["RuntimeName"] == "containerd" and
+                containerd_version(observed_cri["RuntimeVersion"]) == locked_containerd, "CRI version mismatch")
         rc = json.loads(self.kubectl("get", "runtimeclass", self.lock["runtime_class"], "-o", "json"))
         handler = validate_handler(self.lock, rc, json.loads(command(self.cri + ["info", "-o", "json"])))
         self.kubectl("get", "namespace", self.args.namespace, "-o", "name")
@@ -339,6 +353,22 @@ class Node:
         self.kubectl("delete", "--raw", uri, "-f", "-", input=body)
         self.kubectl("-n", self.args.namespace, "wait", "--for=delete", "pod/" + name, "--timeout=60s", timeout=75)
 
+    def observe_pod(self, name, deadline, report):
+        # Nested VM boot can temporarily starve the local API server. Retry
+        # this read only, within the existing stage deadline, and retain each
+        # timeout. Creation, execution and deletion are never replayed here.
+        for attempt in range(3):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("bounded Pod acceptance exceeded its deadline")
+            try:
+                return json.loads(self.kubectl("-n", self.args.namespace, "get", "pod", name, "-o", "json",
+                                              timeout=min(30, remaining)))
+            except subprocess.TimeoutExpired:
+                report.setdefault("pod_read_timeouts", []).append({"attempt": attempt + 1, "at_unix": time.time()})
+                if attempt == 2 or len(report["pod_read_timeouts"]) >= 6:
+                    raise
+
     def stage(self, manifest, data, report, binding_dir):
         name = manifest["metadata"]["name"]
         owner = manifest["metadata"]["labels"]["agentprov.io/acceptance-owner"]
@@ -352,7 +382,7 @@ class Node:
             deadline = time.monotonic() + 690
             bound = False
             while time.monotonic() < deadline:
-                pod = json.loads(self.kubectl("-n", self.args.namespace, "get", "pod", name, "-o", "json"))
+                pod = self.observe_pod(name, deadline, report)
                 validate_pod(pod, manifest, uid)
                 report["pod_phase"] = pod["status"]["phase"]
                 report["waiting_reasons"] = [c.get("state", {}).get("waiting", {}).get("reason")

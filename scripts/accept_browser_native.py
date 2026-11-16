@@ -160,6 +160,8 @@ def acceptance(args):
         child = ["runuser", "-u", args.browser_user, "--", "env", "PYTHONPATH=" + str(args.python_package.resolve()),
                  "PLAYWRIGHT_BROWSERS_PATH=" + str(args.browsers.resolve()), sys.executable, str(Path(__file__).resolve()),
                  "--worker", "--output", str(output), "--run", args.run]
+        if args.crash_recovery:
+            child += ["--crash-recovery", "--python-package", str(args.python_package.resolve())]
         with (output / "record.json").open("x") as out, (output / "record.stderr").open("x") as err:
             result = subprocess.run([str(binary), "--data-dir", str(data), "record", "--run", args.run,
                                      "--workdir", str(work), "--json", "--", *child], env=env, stdout=out, stderr=err, timeout=240)
@@ -205,10 +207,22 @@ def main():
     parser.add_argument("--browsers", type=Path)
     parser.add_argument("--python-package", type=Path, default=Path(__file__).resolve().parents[1] / "python")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--crash-recovery", action="store_true", help="exercise real stdio bridge SIGKILL and receipt recovery")
     args = parser.parse_args()
     os.umask(0o077)
     if args.worker:
-        asyncio.run(browser_case(args))
+        if args.crash_recovery:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("receipt_live", args.python_package / "tests/test_browser_receipts_live.py")
+            fixture = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(fixture)
+            result = asyncio.run(fixture.live_acceptance(args.output / "recovery", custody_dir=args.output / "operator",
+                                native_data_dir=args.output / "data", run_id=args.run))
+            if not result["passed"]:
+                raise RuntimeError("native receipt recovery failed")
+            save(args.output / "browser-result.json", {"status": "passed", **result})
+        else:
+            asyncio.run(browser_case(args))
     else:
         if not all((args.agentprov, args.browser_user, args.browsers)):
             parser.error("--agentprov, --browser-user and --browsers are required")

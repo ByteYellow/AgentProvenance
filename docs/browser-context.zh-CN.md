@@ -198,6 +198,10 @@ x86 实测入口为 `scripts/accept_browser_native.py`：以 root 启动 Sensor�
 `scripts/accept_browser_native_delivery.py`，检查重复导入、签名原件交付、接收方验证、
 原生关系，以及选择性导出移除依据后对应关系的同步移除。脚本使用已有软件，保留 Chromium 沙箱。
 
+增加 `--crash-recovery` 可运行真实 stdio MCP bridge 强杀恢复场景：反复查询恢复后的
+回执，核对操作只执行一次，并分别验证两次启动的进程出生身份。旧 generation 保留
+未封存状态，仅封存新 generation 的采集记录。
+
 ### 接收方 Browser／运行时归属
 
 Linux 或 macOS 上，`graph lens` 和 `dashboard export` 提供显式本地参数
