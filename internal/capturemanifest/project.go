@@ -86,6 +86,17 @@ func (s Service) read(ctx context.Context, run string, e evidence) (Record, erro
 		if c.Scope != nil {
 			r.Identity["scope_kind"], r.Identity["cgroup_id"] = c.Scope.ScopeKind, c.Scope.CgroupID
 		}
+		if err := r.projectPlatform(c); err != nil {
+			return r, err
+		}
+		if c.Runtime != nil {
+			if err := r.projectRuntime(c, run); err != nil {
+				return r, err
+			}
+			if c.Runtime.Execution.Binding.Mode == "runsc" {
+				break
+			}
+		}
 		if c.Capture == nil {
 			r.Issues = append(r.Issues, "native_capture_not_recorded")
 			break

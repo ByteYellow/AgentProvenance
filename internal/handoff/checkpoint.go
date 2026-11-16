@@ -11,6 +11,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/record"
+	"github.com/byteyellow/agentprovenance/internal/runtimeadapter"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
@@ -25,24 +26,26 @@ type Output struct {
 }
 
 type Checkpoint struct {
-	SchemaVersion string                 `json:"schema_version"`
-	AttemptID     string                 `json:"attempt_id"`
-	Revision      int64                  `json:"revision"`
-	Source        Source                 `json:"source"`
-	Target        Target                 `json:"target"`
-	DispatchID    string                 `json:"dispatch_id"`
-	RequestHash   string                 `json:"request_hash"`
-	DigestVersion string                 `json:"digest_version"`
-	State         State                  `json:"state"`
-	Reason        string                 `json:"reason"`
-	At            time.Time              `json:"at"`
-	Scope         *record.ExecutionScope `json:"scope,omitempty"`
-	Result        *record.Result         `json:"result,omitempty"`
-	Stdout        *Output                `json:"stdout,omitempty"`
-	Stderr        *Output                `json:"stderr,omitempty"`
-	Error         string                 `json:"error,omitempty"`
-	Capture       *NativeCaptureReport   `json:"capture_report,omitempty"`
-	Recovery      *ScopeRecoveryReport   `json:"recovery_report,omitempty"`
+	SchemaVersion   string                  `json:"schema_version"`
+	AttemptID       string                  `json:"attempt_id"`
+	Revision        int64                   `json:"revision"`
+	Source          Source                  `json:"source"`
+	Target          Target                  `json:"target"`
+	DispatchID      string                  `json:"dispatch_id"`
+	RequestHash     string                  `json:"request_hash"`
+	DigestVersion   string                  `json:"digest_version"`
+	State           State                   `json:"state"`
+	Reason          string                  `json:"reason"`
+	At              time.Time               `json:"at"`
+	Scope           *record.ExecutionScope  `json:"scope,omitempty"`
+	Result          *record.Result          `json:"result,omitempty"`
+	Stdout          *Output                 `json:"stdout,omitempty"`
+	Stderr          *Output                 `json:"stderr,omitempty"`
+	Error           string                  `json:"error,omitempty"`
+	Capture         *NativeCaptureReport    `json:"capture_report,omitempty"`
+	Recovery        *ScopeRecoveryReport    `json:"recovery_report,omitempty"`
+	Runtime         *RuntimeReport          `json:"runtime_report,omitempty"`
+	PlatformBinding *runtimeadapter.Binding `json:"platform_binding,omitempty"`
 }
 
 type ScopeRecoveryReport struct {
@@ -107,6 +110,9 @@ func readCheckpoint(ctx context.Context, db checkpointReader, a Attempt) (*Check
 		c.Revision > a.Revision {
 		return nil, "", fmt.Errorf("execution checkpoint identity mismatch")
 	}
+	if c.PlatformBinding != nil && c.PlatformBinding.Target != runtimeadapter.Target(a.Request.Target) {
+		return nil, "", fmt.Errorf("execution checkpoint platform target mismatch")
+	}
 	return &c, ref, nil
 }
 
@@ -148,8 +154,19 @@ func (e *Executor) commitCheckpoint(ctx context.Context, a Attempt, c Checkpoint
 		if err != nil {
 			return err
 		}
+		binding := e.runtimeBinding()
+		if previous != nil && previous.PlatformBinding != nil && *previous.PlatformBinding != binding {
+			return fmt.Errorf("execution platform binding changed without a new target generation")
+		}
+		c.PlatformBinding = &binding
 		if c.Scope == nil && previous != nil {
 			c.Scope = previous.Scope
+		}
+		if c.Runtime == nil && previous != nil {
+			c.Runtime = previous.Runtime
+		}
+		if binding.Mode == "guest" {
+			c.Runtime = guestRuntimeReport(a, c, binding)
 		}
 		if c.Scope != nil && c.Recovery != nil && c.Recovery.Observation != nil &&
 			c.Recovery.Observation.Empty != nil && *c.Recovery.Observation.Empty {

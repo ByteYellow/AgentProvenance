@@ -74,6 +74,15 @@ func (r *Record) projectObservation() {
 		o = observation("application", "recorder_method", "execution_attempt", r.Identity["attempt_id"], r.EvidenceRef)
 	case "execution_capture":
 		o = observation("unknown", "capture_not_recorded", "execution_attempt", r.Identity["attempt_id"], r.EvidenceRef)
+	case "runtime_execution":
+		o = observation("unknown", "capture_not_recorded", "execution_attempt", r.Identity["attempt_id"], r.EvidenceRef)
+		for i, snapshot := range r.Snapshots {
+			if i == 0 {
+				o = snapshot.Observation
+			} else if snapshot.Observation.ScopeRef != o.ScopeRef {
+				o.ScopeKind, o.ScopeRef = "multiple_sentry_connections", ""
+			}
+		}
 	case "context_retention", "launch_settings":
 		o = observation("unknown", "configuration_only", "run_configuration", "", r.EvidenceRef)
 	}

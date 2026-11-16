@@ -25,6 +25,7 @@ type Config struct {
 	Concurrency int             `json:"concurrency"`
 	Delivery    *DeliveryConfig `json:"delivery,omitempty"`
 	Capture     *CaptureConfig  `json:"capture,omitempty"`
+	Backend     *BackendConfig  `json:"backend,omitempty"`
 }
 
 // CaptureConfig enables a shared native collector owned by the daemon, not by
@@ -110,6 +111,9 @@ func ReadConfig(r io.Reader) (Config, error) {
 		if err := c.Capture.Validate(); err != nil {
 			return c, err
 		}
+	}
+	if err := c.validateBackendConfig(); err != nil {
+		return c, err
 	}
 	return c, nil
 }

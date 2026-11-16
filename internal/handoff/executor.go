@@ -14,6 +14,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/record"
+	"github.com/byteyellow/agentprovenance/internal/runtimeadapter"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
@@ -22,13 +23,16 @@ const maxExecutionOutput = 1 << 20
 // Executor owns durable jobs, independently of HTTP requests. The database is
 // the queue; only the bounded set of running commands occupies memory.
 type Executor struct {
-	Ledger       Ledger
-	Paths        store.Paths
-	Options      record.Options
-	Concurrency  int
-	PollInterval time.Duration
-	Capture      *NativeCapture
-	running      atomic.Bool
+	Ledger         Ledger
+	Paths          store.Paths
+	Options        record.Options
+	Concurrency    int
+	PollInterval   time.Duration
+	Capture        *NativeCapture
+	Binding        *runtimeadapter.Binding
+	Backend        runtimeadapter.ExecutionBackend
+	RuntimeCapture runtimeadapter.CaptureBackend
+	running        atomic.Bool
 }
 
 // Start takes an exclusive store lock before recovery. Close waits for active
@@ -47,11 +51,18 @@ func (e *Executor) Start(ctx context.Context) (func() error, error) {
 	if concurrency < 1 || concurrency > 32 || interval < time.Millisecond || interval > time.Second {
 		return nil, fmt.Errorf("invalid execution worker bounds")
 	}
+	if err := e.validateBackend(ctx, concurrency); err != nil {
+		return nil, err
+	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	lock, err := lockExecutor(e.Paths.Root)
 	if err != nil {
+		return nil, err
+	}
+	if err := e.validateSavedPlatformBinding(ctx); err != nil {
+		lock.Close()
 		return nil, err
 	}
 	recovered, err := e.recover(ctx)
@@ -198,6 +209,9 @@ func (e *Executor) attempts(ctx context.Context, states []ExecutionState, after 
 }
 
 func (e *Executor) execute(ctx context.Context, a Attempt) error {
+	if e.Backend != nil {
+		return e.executeBackend(ctx, a)
+	}
 	policy, err := agentcontext.NewCapturePolicy(a.Request.Command.CapturePreset, a.Request.Command.ToolResults)
 	if err != nil {
 		return e.failAttempt(a, record.Result{}, err)
@@ -246,9 +260,15 @@ func (e *Executor) execute(ctx context.Context, a Attempt) error {
 		},
 	}}
 	cmd := a.Request.Command
-	r, err := svc.RunContext(ctx, record.Request{RunID: a.LocalRunID, Name: "remote execution", Command: cmd.Argv,
-		Workdir: cmd.Workdir, DisableSnapshot: cmd.DisableSnapshot, SampleIntervalMS: cmd.SampleIntervalMS,
-		PostRootGraceMS: cmd.PostRootGraceMS, Stdout: stdout, Stderr: stderr})
+	invocation := runtimeadapter.Request{Target: runtimeadapter.Target(a.Request.Target), OperationID: a.Request.OperationID, AttemptID: a.ID,
+		Command: record.Request{RunID: a.LocalRunID, Name: "remote execution", Command: cmd.Argv,
+			Workdir: cmd.Workdir, DisableSnapshot: cmd.DisableSnapshot, SampleIntervalMS: cmd.SampleIntervalMS,
+			PostRootGraceMS: cmd.PostRootGraceMS, Stdout: stdout, Stderr: stderr}}
+	observation, err := (runtimeadapter.Native{Binding: e.runtimeBinding(), Service: svc}).Run(ctx, invocation, nil)
+	r := record.Result{}
+	if observation.Record != nil {
+		r = *observation.Record
+	}
 	if completed {
 		return err
 	}
@@ -357,6 +377,14 @@ func (e *Executor) recover(ctx context.Context) (recovered []recoveredExecution,
 			state := a.State
 			state.Execution, state.Capture = Unknown, Incomplete
 			c := Checkpoint{State: state, Reason: "executor_restarted_unknown"}
+			if previous != nil && previous.Runtime != nil && previous.Runtime.Execution.Binding.Mode == "runsc" {
+				c.Runtime = interruptedRuntime(*previous.Runtime)
+				c.Stdout, c.Stderr = &Output{State: "unknown", Reason: "executor_restart"}, &Output{State: "unknown", Reason: "executor_restart"}
+				if _, err := e.saveCheckpoint(ctx, a, c); err != nil {
+					return recovered, err
+				}
+				continue
+			}
 			var live *record.RecoveredScope
 			if previous != nil && previous.Scope != nil {
 				c.Stdout = &Output{State: "unknown", Reason: "executor_restart"}

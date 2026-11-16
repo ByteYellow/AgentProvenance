@@ -106,18 +106,16 @@ func daemonCmd(dataDir *string) *cobra.Command {
 				if server.AuthToken == "" || insecureOpen {
 					return fmt.Errorf("execution handoff requires authentication; remove --insecure-open")
 				}
-				f, err := os.Open(executionConfig)
+				config, err := readExecutionBackendConfig(executionConfig)
 				if err != nil {
-					return err
-				}
-				config, readErr := handoff.ReadConfig(f)
-				closeErr := f.Close()
-				if err := errors.Join(readErr, closeErr); err != nil {
 					return err
 				}
 				server.Execution = &handoff.Executor{Ledger: handoff.Ledger{DB: server.DB, Target: config.Target},
 					Paths: server.Paths, Concurrency: config.Concurrency,
 					Options: record.Options{AllowShell: recordAllowShell, Timeout: recordTimeout}}
+				if err := configureExecutionBackend(server.Execution, config); err != nil {
+					return err
+				}
 				server.ExecutionCaller = config.Principal()
 				server.ExecutionDelivery, err = config.DeliveryService(filepath.Dir(executionConfig), server.Execution.Ledger, server.Paths)
 				if err != nil {

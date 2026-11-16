@@ -101,7 +101,17 @@ components:
         producer_commit: {type: string, description: Recorded source identity or unknown}
         placement: {type: string, description: Recorded collection location or the saved record's location class}
         identity_domain: {type: string}
-        identity: {type: object, additionalProperties: {type: string}}
+        identity:
+          type: object
+          additionalProperties: {type: string}
+          description: >
+            Saved scope identities retain their observation domains. Runtime
+            execution checkpoints may include runtime_mode, runtime_container_id,
+            runtime_release and runtime_operation_id. sentry_pid is a Sentry PID,
+            never a host PID. Guest platform bindings retain runtime_class,
+            runtime_handler, pod_uid and guest_boot_id with
+            platform_basis=recorded_platform_binding; the Sensor's independently
+            recorded boot_id remains in each capability snapshot.
         observed_at: {type: string}
         started_at: {type: string}
         ended_at: {type: string}
@@ -139,7 +149,7 @@ components:
               boundary: {type: string}
               status: {type: string}
               reason: {type: string}
-              identity: {type: object, additionalProperties: {type: string}, description: Boundary-qualified collector identity when saved}
+              identity: {type: object, additionalProperties: {type: string}, description: 'Boundary-qualified collector identity when saved; Sentry snapshots retain only the selected receiver target and its connection ID'}
               ready: {type: [boolean, 'null']}
               features: {type: array, items: {$ref: '#/components/schemas/Feature'}}
               observation: {$ref: '#/components/schemas/Observation'}
