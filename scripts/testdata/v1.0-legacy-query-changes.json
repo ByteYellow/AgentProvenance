@@ -1,0 +1,529 @@
+{
+  "schema_version": "agentprovenance.legacy_query_changes/v1",
+  "implementation_commit": "54b7a07e4112b331078b8d1d810aed030d37ba48",
+  "reason": "Count only artifacts in the artifact overview, expose the artifact summary group, and retain saved artifact/tool-call nodes without inventing relationships. All frozen source rows, object bytes, signatures and other graph semantics remain checked against v0.8.2.",
+  "queries": {
+    "a2a-demo": {
+      "default/summary": {
+        "nodes": {
+          "removed": [
+            {
+              "id": "overview/artifacts",
+              "kind": "overview_group",
+              "label": "Artifacts: 1",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ],
+          "added": [
+            {
+              "id": "overview/artifacts",
+              "kind": "overview_group",
+              "label": "Artifacts: 0",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ]
+        }
+      }
+    },
+    "claude-demo": {
+      "default/summary": {
+        "nodes": {
+          "removed": [
+            {
+              "id": "overview/artifacts",
+              "kind": "overview_group",
+              "label": "Artifacts: 16",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ],
+          "added": [
+            {
+              "id": "overview/artifacts",
+              "kind": "overview_group",
+              "label": "Artifacts: 0",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ]
+        }
+      }
+    },
+    "run-double-attempt": {
+      "default/summary": {
+        "nodes": {
+          "removed": [
+            {
+              "id": "overview/artifacts",
+              "kind": "overview_group",
+              "label": "Artifacts: 201",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ],
+          "added": [
+            {
+              "id": "overview/artifacts",
+              "kind": "overview_group",
+              "label": "Artifacts: 7",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ]
+        }
+      },
+      "file-artifact/raw": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "sha256:0e961c1a8e24a7fd7bc5dcb2395c8578ce1f2faca0fddf31f886103abb96a135",
+              "kind": "artifact",
+              "label": "snake.py",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            },
+            {
+              "id": "sha256:15af5f6a0069f986cd48352547f0d3a69706031b2e07eaadee9d405002f73945",
+              "kind": "artifact",
+              "label": "dependency_links.txt",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            },
+            {
+              "id": "sha256:59f1b40215f1c2cc073fe2ccdb59fb0effed13eaa77d5a47d86c339545f6cb96",
+              "kind": "artifact",
+              "label": "top_level.txt",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            },
+            {
+              "id": "sha256:7dcce59c85ffc471c240665b1c02d0c4b61e46dc8880a83f2dd814b39dd0fae6",
+              "kind": "artifact",
+              "label": "PKG-INFO",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            },
+            {
+              "id": "sha256:8b13c60eec60f417881227b0d0e016cca210dbffcc3a672ec687dd9ba0811923",
+              "kind": "artifact",
+              "label": "snake.cpython-312.pyc",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            },
+            {
+              "id": "sha256:af7a8f7bc7abbe1b4571954a30d80075c15b55785985b23d89d92c6adfdac622",
+              "kind": "artifact",
+              "label": "SOURCES.txt",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            },
+            {
+              "id": "sha256:db93b3af98080041b23cd6b4949415568eaf33a6b0c6637a5253d1260579a087",
+              "kind": "artifact",
+              "label": "pysnake_helper-0.0.1-py3.12.egg",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            }
+          ]
+        }
+      },
+      "file-artifact/summary": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "file_group/artifacts",
+              "kind": "file_group",
+              "label": "artifacts: 7",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ]
+        },
+        "edges": {
+          "removed": [],
+          "added": [
+            {
+              "confidence": null,
+              "derivation_rule": null,
+              "derived": false,
+              "edge_type": "run_file_group",
+              "evidence_refs": null,
+              "from_id": "run/run-double-attempt",
+              "source_event_id": null,
+              "to_id": "file_group/artifacts"
+            }
+          ]
+        }
+      },
+      "intent/raw": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "tool-d8ae304e37cb",
+              "kind": "tool_call",
+              "label": "bash /tmp/team-run.sh",
+              "risk": null,
+              "subtype": "passed",
+              "trust_origin": "agent_asserted"
+            }
+          ]
+        }
+      },
+      "intent/summary": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "tool-d8ae304e37cb",
+              "kind": "tool_call",
+              "label": "bash /tmp/team-run.sh",
+              "risk": null,
+              "subtype": "passed",
+              "trust_origin": "agent_asserted"
+            }
+          ]
+        }
+      }
+    },
+    "run-grok-3routes": {
+      "default/summary": {
+        "nodes": {
+          "removed": [
+            {
+              "id": "overview/artifacts",
+              "kind": "overview_group",
+              "label": "Artifacts: 8",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ],
+          "added": [
+            {
+              "id": "overview/artifacts",
+              "kind": "overview_group",
+              "label": "Artifacts: 2",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ]
+        }
+      },
+      "file-artifact/summary": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "file_group/artifacts",
+              "kind": "file_group",
+              "label": "artifacts: 2",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ]
+        },
+        "edges": {
+          "removed": [],
+          "added": [
+            {
+              "confidence": null,
+              "derivation_rule": null,
+              "derived": false,
+              "edge_type": "run_file_group",
+              "evidence_refs": null,
+              "from_id": "run/run-grok-3routes",
+              "source_event_id": null,
+              "to_id": "file_group/artifacts"
+            }
+          ]
+        }
+      },
+      "intent/raw": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "tool-885fc5ee987f",
+              "kind": "tool_call",
+              "label": "bash /tmp/grok-run.sh",
+              "risk": null,
+              "subtype": "passed",
+              "trust_origin": "agent_asserted"
+            }
+          ]
+        }
+      },
+      "intent/summary": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "tool-885fc5ee987f",
+              "kind": "tool_call",
+              "label": "bash /tmp/grok-run.sh",
+              "risk": null,
+              "subtype": "passed",
+              "trust_origin": "agent_asserted"
+            }
+          ]
+        }
+      }
+    },
+    "run-grok-exfil": {
+      "default/summary": {
+        "nodes": {
+          "removed": [
+            {
+              "id": "overview/artifacts",
+              "kind": "overview_group",
+              "label": "Artifacts: 8",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ],
+          "added": [
+            {
+              "id": "overview/artifacts",
+              "kind": "overview_group",
+              "label": "Artifacts: 4",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ]
+        }
+      },
+      "file-artifact/summary": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "file_group/artifacts",
+              "kind": "file_group",
+              "label": "artifacts: 4",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ]
+        },
+        "edges": {
+          "removed": [],
+          "added": [
+            {
+              "confidence": null,
+              "derivation_rule": null,
+              "derived": false,
+              "edge_type": "run_file_group",
+              "evidence_refs": null,
+              "from_id": "run/run-grok-exfil",
+              "source_event_id": null,
+              "to_id": "file_group/artifacts"
+            }
+          ]
+        }
+      },
+      "intent/raw": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "tool-023f5fce44f7",
+              "kind": "tool_call",
+              "label": "bash /tmp/grok-run.sh",
+              "risk": null,
+              "subtype": "passed",
+              "trust_origin": "agent_asserted"
+            }
+          ]
+        }
+      },
+      "intent/summary": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "tool-023f5fce44f7",
+              "kind": "tool_call",
+              "label": "bash /tmp/grok-run.sh",
+              "risk": null,
+              "subtype": "passed",
+              "trust_origin": "agent_asserted"
+            }
+          ]
+        }
+      }
+    },
+    "run-snake-supervised": {
+      "default/summary": {
+        "nodes": {
+          "removed": [
+            {
+              "id": "overview/artifacts",
+              "kind": "overview_group",
+              "label": "Artifacts: 57",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ],
+          "added": [
+            {
+              "id": "overview/artifacts",
+              "kind": "overview_group",
+              "label": "Artifacts: 7",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ]
+        }
+      },
+      "file-artifact/raw": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "sha256:01551cd560f4de57f22803e444ff79b23e83f4a94546c9c06bd1f3da693990c0",
+              "kind": "artifact",
+              "label": "PKG-INFO",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            },
+            {
+              "id": "sha256:0b4de457eeeaeca8ff9f58acd30edaa54562cdad546804022a355b955604db6c",
+              "kind": "artifact",
+              "label": "top_level.txt",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            },
+            {
+              "id": "sha256:0c565eb6c1af0abbb12ab9411158eb4795d41656bc4a6ecc179e0a51d876e54c",
+              "kind": "artifact",
+              "label": "dependency_links.txt",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            },
+            {
+              "id": "sha256:48931b0f78c2c8f937d51df3b92633da2512e6c5a085c3bea820a366a77232e6",
+              "kind": "artifact",
+              "label": "SOURCES.txt",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            },
+            {
+              "id": "sha256:7e2aa70825a0021fa51ed0e885c51f509d69b615afc2d9f4bcd5fee0a1b6a441",
+              "kind": "artifact",
+              "label": "snake.py",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            },
+            {
+              "id": "sha256:c13f6c6808641b179ea92b9a584a6dde48d72c98d389ee1edf6555ccd8d0c338",
+              "kind": "artifact",
+              "label": "pysnake_helper-0.0.1-py3.12.egg",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            },
+            {
+              "id": "sha256:d0000952d5f0f987401c24bbdb9c7cf4cc9415b50782ac586bf87f654aa87d6a",
+              "kind": "artifact",
+              "label": "snake.cpython-312.pyc",
+              "risk": null,
+              "subtype": "artifact",
+              "trust_origin": "content_addressed"
+            }
+          ]
+        }
+      },
+      "file-artifact/summary": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "file_group/artifacts",
+              "kind": "file_group",
+              "label": "artifacts: 7",
+              "risk": null,
+              "subtype": "artifacts",
+              "trust_origin": "summary"
+            }
+          ]
+        },
+        "edges": {
+          "removed": [],
+          "added": [
+            {
+              "confidence": null,
+              "derivation_rule": null,
+              "derived": false,
+              "edge_type": "run_file_group",
+              "evidence_refs": null,
+              "from_id": "run/run-snake-supervised",
+              "source_event_id": null,
+              "to_id": "file_group/artifacts"
+            }
+          ]
+        }
+      },
+      "intent/raw": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "tool-b4720f990686",
+              "kind": "tool_call",
+              "label": "bash /tmp/snake-run.sh",
+              "risk": null,
+              "subtype": "passed",
+              "trust_origin": "agent_asserted"
+            }
+          ]
+        }
+      },
+      "intent/summary": {
+        "nodes": {
+          "removed": [],
+          "added": [
+            {
+              "id": "tool-b4720f990686",
+              "kind": "tool_call",
+              "label": "bash /tmp/snake-run.sh",
+              "risk": null,
+              "subtype": "passed",
+              "trust_origin": "agent_asserted"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

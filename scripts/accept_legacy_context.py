@@ -141,6 +141,23 @@ def lens_shape(lens):
     }
 
 
+def lens_changes(previous, current):
+    """Compare exact node/edge multisets, retaining fields and multiplicities."""
+    differences = {}
+    for key in previous.keys() | current.keys():
+        before, after = previous.get(key), current.get(key)
+        if before == after:
+            continue
+        if key in ("nodes", "edges"):
+            removed = sorted((Counter(before) - Counter(after)).elements())
+            added = sorted((Counter(after) - Counter(before)).elements())
+            differences[key] = {"removed": [json.loads(v) for v in removed],
+                                "added": [json.loads(v) for v in added]}
+        else:
+            differences[key] = {"before": before, "after": after}
+    return differences
+
+
 def check_legacy_coverage(binary, store, run):
     overview = invoke(binary, store, "context", "coverage", "--run", run)
     assert overview["run_id"] == run and not overview["has_more_sources"]
@@ -161,10 +178,15 @@ def main():
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--evidence-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True, help="new, nonexistent report/store directory")
+    parser.add_argument("--query-changes", type=Path,
+                        default=Path(__file__).parent / "testdata/v1.0-legacy-query-changes.json",
+                        help="reviewed, exact query differences from the frozen v0.8.2 contract")
     args = parser.parse_args()
     binary, baseline = args.binary.resolve(), args.baseline_binary.resolve()
     root, output = args.evidence_root.resolve(), args.output.resolve()
     manifest = read_json(args.manifest)
+    query_changes = read_json(args.query_changes)
+    assert query_changes["schema_version"] == "agentprovenance.legacy_query_changes/v1"
     demos = manifest["demos"]
     assert len(demos) == 6 and len({d["run"] for d in demos}) == 6, "six distinct historical demos required"
     baseline_hash = sha256(baseline)
@@ -179,10 +201,13 @@ def main():
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "candidate_sha256": sha256(binary), "baseline_sha256": sha256(baseline),
         "manifest_sha256": sha256(args.manifest), "frozen_files": frozen_files,
-        "scope": "offline signed imports, semantic query parity, and legacy DB migration; not rendered UI or new live capture",
+        "query_changes_sha256": sha256(args.query_changes),
+        "query_changes_commit": query_changes["implementation_commit"],
+        "scope": "offline signed imports, exact semantic query comparison with reviewed v1.0 changes, and legacy DB migration",
         "display_exclusions": ["runtime_process label (baseline map-order nondeterminism)", "layout", "relocated local content paths"],
         "demos": [],
     }
+    used_changes = set()
     for demo in demos:
         run = demo["run"]
         assert re.fullmatch(r"[a-z0-9-]+", run), "invalid run path"
@@ -207,8 +232,16 @@ def main():
                 opts = ("graph", "lens", "--run", run, "--lens", name, "--detail", detail, "--limit", "100000", "--json")
                 previous = lens_shape(invoke(baseline, old_store, *opts))
                 current = lens_shape(invoke(binary, new_store, *opts))
-                assert current == previous, f"{run}: {name}/{detail} semantic query regression"
-                views.append({"lens": name, "detail": detail, "nodes": len(current["nodes"]), "edges": len(current["edges"])})
+                changes = lens_changes(previous, current)
+                expected = query_changes["queries"].get(run, {}).get(name + "/" + detail, {})
+                if expected:
+                    used_changes.add((run, name + "/" + detail))
+                if changes != expected:
+                    (output / (run + "-" + name + "-" + detail + ".diff.json")).write_text(
+                        json.dumps({"expected": expected, "actual": changes}, indent=2) + "\n")
+                    raise AssertionError(f"{run}: {name}/{detail} semantic query regression")
+                views.append({"lens": name, "detail": detail, "nodes": len(current["nodes"]),
+                              "edges": len(current["edges"]), "reviewed_query_change": bool(expected)})
         with closing(sqlite3.connect(old_store / "agentprov.db")) as db:
             old_version = db.execute("SELECT MAX(version) FROM schema_versions").fetchone()[0]
         coverage = check_legacy_coverage(binary, new_store, run)
@@ -234,6 +267,7 @@ def main():
         })
         print(f"{run}: original signature, fields/content, {len(views)} views, DB upgrade and unknown coverage passed", flush=True)
     assert check_files(root, demos) == frozen_files, "frozen input changed during validation"
+    assert used_changes == {(run, query) for run, queries in query_changes["queries"].items() for query in queries}, "unused reviewed query change"
     report["status"] = "passed"
     path = output / "report.json"
     path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

@@ -198,6 +198,7 @@ jobs:
           name: context-compatibility
           path: |
             ${{ runner.temp }}/legacy-context-check/report.json
+            ${{ runner.temp }}/legacy-context-check/*.diff.json
             ${{ runner.temp }}/deepseek-context-check/report.json
 
   sensor-build:
