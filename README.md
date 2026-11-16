@@ -183,6 +183,7 @@ original feature set.
 | Run an Agent's command in another Linux VM or container | [Execution handoff](docs/execution-handoff.md): route native Claude Bash calls through an authenticated executor; collect signed results and receiving receipts |
 | Investigate a browser task | [Browser context](docs/browser-context.md): owned Chromium through Python or stdio MCP, with page/request identities, screenshots and HAR |
 | Investigate a notebook task | [Notebook context](docs/notebook-context.md): Jupyter requests and outputs through a recorder or stdio MCP, including late output and kernel restarts |
+| Share selected evidence with an independent verification report | [Signed reading copies](docs/derived-evidence.md): optional exporter signatures and an offline verifier using recipient-owned trust |
 
 Browser and Notebook entries use optional Python dependencies. Their guides cover
 installation, Agent configuration, retention and import into the task's Run.

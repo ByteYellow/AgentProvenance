@@ -24,12 +24,16 @@ func dashboardCmd(dataDir *string) *cobra.Command {
 		Use:   "dashboard",
 		Short: "local read-only web dashboard over the verifiable provenance graph",
 	}
-	var addr string
+	var addr, signKey, exporterID string
 	serve := &cobra.Command{
 		Use:   "serve",
 		Short: "serve the dashboard (read-only) and print its URL",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			signer, err := loadReplaySigner(cmd.Context(), signKey, exporterID)
+			if err != nil {
+				return err
+			}
 			db, cleanup, err := openLocalDB(*dataDir)
 			if err != nil {
 				return err
@@ -42,9 +46,11 @@ func dashboardCmd(dataDir *string) *cobra.Command {
 				return commandErrorf("listen %s: %w", addr, err)
 			}
 			defer ln.Close()
-			exports := dashboard.NewReplayExports(dashboard.Server{DB: db})
+			config := dashboard.Server{DB: db, ReplaySigner: signer}
+			exports := dashboard.NewReplayExports(config)
 			defer exports.Close()
-			server := &http.Server{Handler: dashboard.Server{DB: db, ReplayExports: exports}.Handler(), ReadHeaderTimeout: 5 * time.Second}
+			config.ReplayExports = exports
+			server := &http.Server{Handler: config.Handler(), ReadHeaderTimeout: 5 * time.Second}
 			defer server.Close()
 			url := commandURL(cmd, fmt.Sprintf("http://%s/", ln.Addr().String()))
 			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "AgentProvenance dashboard: %s\n(read-only; Ctrl-C to stop)\n"), url)
@@ -68,6 +74,8 @@ func dashboardCmd(dataDir *string) *cobra.Command {
 		},
 	}
 	serve.Flags().StringVar(&addr, "addr", "127.0.0.1:7396", "listen address (host:port)")
+	serve.Flags().StringVar(&signKey, "replay-sign-key", "", "operator-owned Ed25519 hex key for exported reader signatures")
+	serve.Flags().StringVar(&exporterID, "replay-exporter-id", "", "exporter identity; requires --replay-sign-key")
 	cmd.AddCommand(serve, dashboardExportCmd(dataDir))
 	return cmd
 }

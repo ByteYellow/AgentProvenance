@@ -69,6 +69,7 @@ func evidenceCmd(dataDir, daemonURL *string) *cobra.Command {
 	cmd.AddCommand(process)
 	cmd.AddCommand(manifest)
 	cmd.AddCommand(evidenceBatchSummaryCmd(dataDir))
+	cmd.AddCommand(evidenceVerifyViewCmd())
 	return cmd
 }
 

@@ -103,6 +103,7 @@ type Server struct {
 	DB               *sql.DB
 	ReplayExports    *ReplayExports
 	RunLabels        map[string]string // Presentation-only titles; evidence identities stay unchanged.
+	ReplaySigner     *ReplaySigner     `json:"-"` // Operator configuration; never supplied by export requests.
 	replayProjection *replayProjection
 
 	// ListenAddr optionally records the dashboard's actual listen address

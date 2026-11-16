@@ -1,14 +1,17 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance local replay export API
-  version: "1.1"
+  version: "1.2"
   description: >
     Prepare a private, frozen sharing copy without changing the evidence store.
     Enabled by dashboard serve only. Requests require a loopback peer and host;
     browser requests must be same-origin. Mutations require X-AgentProv-Export: 1.
     One preparation or preview is allowed per server. Preparation has a five-minute
     deadline; a ready preview expires after ten minutes. Closing the server normally
-    releases temporary files. Original evidence is never uploaded.
+    releases temporary files. Original evidence is never uploaded. An operator
+    can configure an exporter key when starting the server; requests cannot
+    provide keys or override the exporter. Such exports include a DerivedView
+    manifest and signature. Recipient trust is configured outside the package.
 servers:
   - url: http://127.0.0.1:7396
 security: []
@@ -55,7 +58,14 @@ components:
         scope: {type: string, enum: [whole_run, session, run_set]}
         created_at: {type: string, format: date-time}
         commit: {type: string}
-        signed: {const: false}
+        signed: {type: boolean, description: Whether this reader has an exporter signature. Source signatures and capture coverage are separate.}
+        signature:
+          type: object
+          required: [kind, exporter_id, key_id]
+          properties:
+            kind: {const: derived_view}
+            exporter_id: {type: string}
+            key_id: {type: string}
         events: {type: integer, minimum: 0}
         contents: {$ref: '#/components/schemas/Contents'}
         capture_policy:
@@ -342,7 +352,7 @@ paths:
           in: path
           required: true
           schema: {type: string}
-          description: Relative inventory path, including slashes. Also accepts export-inventory.json. Open en/index.html or zh-CN/index.html to inspect the full frozen replay.
+          description: Relative inventory path, including slashes. Also accepts export-inventory.json and, for signed readers, manifest.json and manifest.signature. Open en/index.html or zh-CN/index.html to inspect the full frozen replay.
       responses:
         '200': {description: Frozen file with a type matching its extension.}
         '206': {description: Byte range of a frozen file.}

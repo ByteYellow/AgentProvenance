@@ -380,5 +380,8 @@ func (m *ReplayExports) build(ctx context.Context, j *replayJob, selections []Re
 	for _, file := range j.preview.Inventory.Files {
 		j.files[file.Path] = true
 	}
+	for _, file := range p.signatureFiles {
+		j.files[file.Path] = true
+	}
 	return ctx.Err()
 }

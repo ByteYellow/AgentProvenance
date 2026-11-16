@@ -4,6 +4,13 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Add opt-in exporter signatures for selected offline readers and a standalone
+  `agentprov-verify` command. Verify file inventories and Ed25519 signatures
+  against recipient-owned keys and roles, with separate trust, source-signature
+  and collection-coverage results. Preserve unsigned exports by default.
+- Preserve host, guest, Sentry and application observation layers in capture
+  manifests, including per-interval producer identities and independent
+  execution state. Keep unspecified kernel placement explicit.
 - Restore remote calls from their verified delivery checkpoint, preserving the
   original result when capture advances or an ACK is lost. Add explicit capture
   waiting and authenticated remote/runtime readiness diagnostics.

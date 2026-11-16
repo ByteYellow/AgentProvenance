@@ -45,6 +45,7 @@ type ReplayInventory struct {
 	CreatedAt         string                         `json:"created_at"`
 	Commit            string                         `json:"commit"`
 	Signed            bool                           `json:"signed"`
+	Signature         *ReplaySignature               `json:"signature,omitempty"`
 	Events            int                            `json:"events"`
 	Contents          ReplayContents                 `json:"contents"`
 	Selection         ReplayFile                     `json:"record_selection"`
@@ -75,6 +76,7 @@ type PreparedReplay struct {
 	InventorySHA256 string
 	root            string
 	inventory       []byte
+	signatureFiles  []ReplayFile
 }
 
 func (p *PreparedReplay) Close() error { return os.RemoveAll(p.root) }
@@ -135,6 +137,9 @@ func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySe
 // index is derived from one committed snapshot, with a separate selection for
 // each run. Relationship discovery never adds another run to the export.
 func (s Server) PrepareOfflineReplaySet(ctx context.Context, inputs []ReplaySelection) (_ *PreparedReplay, err error) {
+	if s.ReplaySigner != nil {
+		return s.PrepareSignedOfflineReplaySet(ctx, inputs, *s.ReplaySigner)
+	}
 	inputs, err = normalizeReplaySelections(inputs)
 	if err != nil {
 		return nil, err
@@ -426,7 +431,8 @@ func (p *PreparedReplay) WriteZIP(ctx context.Context, out io.Writer) error {
 		return fmt.Errorf("prepared replay inventory is unavailable: %w", err)
 	}
 	z := zip.NewWriter(out)
-	files := append(frozen.Files, ReplayFile{Path: "export-inventory.json", SHA256: replayDigest(p.inventory)})
+	files := append(frozen.Files, ReplayFile{Path: "export-inventory.json", SHA256: replayDigest(p.inventory), Bytes: int64(len(p.inventory))})
+	files = append(files, p.signatureFiles...)
 	for _, file := range files {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -435,7 +441,7 @@ func (p *PreparedReplay) WriteZIP(ctx context.Context, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if replayDigest(data) != file.SHA256 || (file.Path != "export-inventory.json" && int64(len(data)) != file.Bytes) {
+		if replayDigest(data) != file.SHA256 || int64(len(data)) != file.Bytes {
 			return fmt.Errorf("prepared replay file changed: %s", file.Path)
 		}
 		header := &zip.FileHeader{Name: file.Path, Method: zip.Deflate}

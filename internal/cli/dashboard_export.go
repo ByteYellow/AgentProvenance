@@ -13,15 +13,18 @@ import (
 )
 
 func dashboardExportCmd(dataDir *string) *cobra.Command {
-	var run, output, harness, session, selectionFile string
+	var run, output, harness, session, selectionFile, signKey, exporterID string
 	var excludeRecords, excludeCategories, excludeAttachments []string
 	cmd := &cobra.Command{
 		Use:   "export",
-		Short: "export selected saved evidence as an unsigned, offline replay ZIP",
+		Short: "export selected saved evidence as an offline replay ZIP",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if output == "" || (run == "" && selectionFile == "") {
 				return fmt.Errorf("--output and either --run or --selection-file are required")
+			}
+			if (signKey == "") != (exporterID == "") {
+				return fmt.Errorf("--sign-key and --exporter-id must be supplied together")
 			}
 			selection := dashboard.ReplaySelection{RunID: run, Scope: "whole_run", Harness: harness, SessionID: session,
 				ExcludeRecords: excludeRecords, ExcludeCategories: excludeCategories, ExcludeAttachments: excludeAttachments}
@@ -58,7 +61,11 @@ func dashboardExportCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			defer cleanup()
-			prepared, err := (dashboard.Server{DB: db}).PrepareOfflineReplaySet(cmd.Context(), selections)
+			signer, err := loadReplaySigner(cmd.Context(), signKey, exporterID)
+			if err != nil {
+				return err
+			}
+			prepared, err := (dashboard.Server{DB: db, ReplaySigner: signer}).PrepareOfflineReplaySet(cmd.Context(), selections)
 			if err != nil {
 				return err
 			}
@@ -90,13 +97,19 @@ func dashboardExportCmd(dataDir *string) *cobra.Command {
 			if err = os.Link(stage.Name(), target); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "run=%s scope=%s signed=false events=%d files=%d zip_bytes=%d inventory_sha256=%s output=%s\n", prepared.Inventory.RunID, prepared.Inventory.Scope, prepared.Inventory.Events, len(prepared.Inventory.Files)+1, info.Size(), prepared.InventorySHA256, target)
+			fileCount := len(prepared.Inventory.Files) + 1
+			if prepared.Inventory.Signed {
+				fileCount += 2
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "run=%s scope=%s signed=%t events=%d files=%d zip_bytes=%d inventory_sha256=%s output=%s\n", prepared.Inventory.RunID, prepared.Inventory.Scope, prepared.Inventory.Signed, prepared.Inventory.Events, fileCount, info.Size(), prepared.InventorySHA256, target)
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&run, "run", "", "run to export; all saved and unassigned records are included by default")
 	cmd.Flags().StringVar(&selectionFile, "selection-file", "", "JSON array of explicit run/session selections; exclusive with single-run selection flags")
 	cmd.Flags().StringVar(&output, "output", "", "new ZIP file; unzip and open index.html offline")
+	cmd.Flags().StringVar(&signKey, "sign-key", "", "operator-owned Ed25519 hex key for a DerivedView exporter signature")
+	cmd.Flags().StringVar(&exporterID, "exporter-id", "", "exporter identity; requires --sign-key and does not grant recipient trust")
 	cmd.Flags().StringVar(&harness, "harness", "", "limit to a native session; requires --session")
 	cmd.Flags().StringVar(&session, "session", "", "native session ID; requires --harness")
 	cmd.Flags().StringArrayVar(&excludeRecords, "exclude-record", nil, "omit a search catalog record ID and its linked readers (repeatable)")

@@ -170,6 +170,7 @@ v0.10.1 发行包仍保留原版本的功能。
 | 在另一台 Linux VM 或容器执行 Agent 命令 | [跨沙箱执行交接](docs/zh-CN/execution-handoff.md)：将 Claude 原生 Bash 调用路由到已鉴权的执行器，收取签名结果和接收回执 |
 | 调查浏览器任务 | [浏览器上下文](docs/browser-context.zh-CN.md)：通过 Python 或 stdio MCP 启动独立 Chromium，保存页面、请求身份、截图和 HAR |
 | 调查 Notebook 任务 | [Notebook 上下文](docs/zh-CN/notebook-context.md)：通过记录器或 stdio MCP 保存 Jupyter 请求与输出，处理迟到输出和 kernel 重启 |
+| 交付选定证据并独立验证 | [签名阅读副本](docs/zh-CN/derived-evidence.md)：可选导出者签名，使用接收方配置的可信密钥进行离线验证 |
 
 浏览器和 Notebook 入口需要可选的 Python 依赖。指南包含安装、Agent 配置、
 留存设置，以及导入任务 Run 的步骤。应用上下文与 Linux 运行时采集分别配置。
