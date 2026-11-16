@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"maps"
 	"sort"
+
+	"github.com/byteyellow/agentprovenance/internal/browserlink"
 )
 
 // ReplayLensView contains server-computed relations, never browser inference.
@@ -31,6 +33,12 @@ func BuildReplayLenses(db *sql.DB, run string) (ReplayLenses, error) {
 }
 
 func BuildSessionReplayLenses(db *sql.DB, run string, scope *GraphSessionScope) (ReplayLenses, error) {
+	return BuildSessionReplayLensesWithBrowserCustody(db, run, scope, nil)
+}
+
+// BuildSessionReplayLensesWithBrowserCustody uses the same externally authorized
+// mappings and rules as the online query; replay JSON cannot authorize itself.
+func BuildSessionReplayLensesWithBrowserCustody(db *sql.DB, run string, scope *GraphSessionScope, custody []browserlink.RuntimeCustody) (ReplayLenses, error) {
 	nodes, events, err := graphLensNodes(db, run)
 	if err != nil {
 		return ReplayLenses{}, err
@@ -40,6 +48,10 @@ func BuildSessionReplayLenses(db *sql.DB, run string, scope *GraphSessionScope) 
 		return ReplayLenses{}, err
 	}
 	nodes, events, edges = sessionLensData(scope, nodes, events, edges)
+	edges, err = addBrowserLens(db, run, scope, nodes, events, edges, custody)
+	if err != nil {
+		return ReplayLenses{}, err
+	}
 	result := ReplayLenses{Nodes: maps.Clone(nodes), FocusNodes: maps.Clone(nodes), Views: map[string]ReplayLensView{}}
 	for id := range nodes {
 		result.Present = append(result.Present, id)

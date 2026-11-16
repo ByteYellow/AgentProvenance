@@ -182,7 +182,7 @@ func (s Server) prepareReplaySet(ctx context.Context, snapshot *replaySnapshot, 
 			labels[input.RunID] = label
 		}
 	}
-	frozen := Server{DB: snapshot.DB, RunLabels: labels}
+	frozen := Server{DB: snapshot.DB, RunLabels: labels, BrowserCustody: s.BrowserCustody}
 	get := replayResource(ctx, frozen.Handler())
 	writer := &staticdata.Writer{Root: root}
 	catalog := struct {

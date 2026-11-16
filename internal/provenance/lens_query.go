@@ -8,10 +8,15 @@ import (
 	"maps"
 	"strings"
 
+	"github.com/byteyellow/agentprovenance/internal/browserlink"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 func BuildGraphLens(db *sql.DB, opts GraphLensOptions) (GraphLensManifest, error) {
+	return buildGraphLensWithBrowserCustody(db, opts, nil)
+}
+
+func buildGraphLensWithBrowserCustody(db *sql.DB, opts GraphLensOptions, custody []browserlink.RuntimeCustody) (GraphLensManifest, error) {
 	opts.RunID = strings.TrimSpace(opts.RunID)
 	if opts.RunID == "" {
 		return GraphLensManifest{}, fmt.Errorf("--run is required")
@@ -32,6 +37,10 @@ func BuildGraphLens(db *sql.DB, opts GraphLensOptions) (GraphLensManifest, error
 		return GraphLensManifest{}, err
 	}
 	nodes, events, edges = sessionLensData(opts.SessionScope, nodes, events, edges)
+	edges, err = addBrowserLens(db, opts.RunID, opts.SessionScope, nodes, events, edges, custody)
+	if err != nil {
+		return GraphLensManifest{}, err
+	}
 	if opts.SessionScope != nil && opts.Focus != "" {
 		if _, ok := nodes[opts.Focus]; !ok {
 			// Aggregation creates display nodes outside the canonical subset. They

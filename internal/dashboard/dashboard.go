@@ -28,6 +28,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
+	"github.com/byteyellow/agentprovenance/internal/browsercustody"
 	"github.com/byteyellow/agentprovenance/internal/capturemanifest"
 	"github.com/byteyellow/agentprovenance/internal/compliance"
 	"github.com/byteyellow/agentprovenance/internal/handoff"
@@ -102,9 +103,10 @@ func ReplayScript() []byte { return replayJS }
 type Server struct {
 	DB               *sql.DB
 	ReplayExports    *ReplayExports
-	RunLabels        map[string]string // Presentation-only titles; evidence identities stay unchanged.
-	ReplaySigner     *ReplaySigner     `json:"-"` // Operator configuration; never supplied by export requests.
-	ReplayDelivery   ReplayDelivery    `json:"-"`
+	RunLabels        map[string]string        // Presentation-only titles; evidence identities stay unchanged.
+	ReplaySigner     *ReplaySigner            `json:"-"` // Operator configuration; never supplied by export requests.
+	ReplayDelivery   ReplayDelivery           `json:"-"`
+	BrowserCustody   *browsercustody.Verified `json:"-"` // Local operator capability; never decoded from HTTP input.
 	replayProjection *replayProjection
 
 	// ListenAddr optionally records the dashboard's actual listen address
@@ -1083,7 +1085,12 @@ func (s Server) lens(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	manifest, err := provenance.BuildGraphLens(s.DB, provenance.GraphLensOptions{
+	custody, err := s.BrowserCustody.Resolve(r.Context(), s.DB, run)
+	if err != nil {
+		httpError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	manifest, err := provenance.BuildGraphLensWithBrowserCustody(s.DB, provenance.GraphLensOptions{
 		SessionScope: scope,
 		RunID:        run,
 		Lens:         r.URL.Query().Get("lens"),
@@ -1091,7 +1098,7 @@ func (s Server) lens(w http.ResponseWriter, r *http.Request) {
 		Detail:       r.URL.Query().Get("detail"),
 		Overlays:     r.URL.Query()["overlay"],
 		Limit:        atoiClamp(r.URL.Query().Get("limit"), 500, 1, 2000),
-	})
+	}, custody)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, provenance.ErrSessionFocus) {

@@ -163,6 +163,107 @@ Receiver operator 在**采集目录之外**提供配置：
 
 `unknown` 保持原状态。只有受理记录、没有 `action_start` 的 navigate 缺少 URL 投影，可信入口返回 `browser_import_input_projection_unavailable`；普通恢复仍保留该受理记录。进程、socket、文件归属使用另外采集的运行时身份，不由此 binding 推断。
 
+### 接收方 Browser／运行时归属
+
+Linux 或 macOS 上，`graph lens` 和 `dashboard export` 提供显式本地参数
+`--browser-custody-config`。它把已认证的 Browser context 连接到操作方配置的精确原生进程生命周期，
+再保留该进程的 OS 观测。关系停留在 context／process 层；共享网络进程或 renderer 的 socket／file
+活动不会据此分配给某次点击。已有 runtime event／file 关系及 connection／stream 身份继续独立保留。
+
+分别准备三类输入：
+
+1. **Manifest 与 bridge pin**：使用上一节经接收方批准的 `browser-import.json`。
+   可信 launcher／collector 封存完整日志行，通过操作方控制的渠道提供 manifest 摘要、Run、placement、
+   bridge ID 和启动配置摘要。`shasum -a 256 /operator/sealed/browser-owned.json`
+   可核对生产方已批准的封存原始字节，接收方将结果与自己的外部 pin 比对。
+2. **Scope 与 receipt 选择项**：从 `browser_execute` 或 `browser_result` 返回的原始 receipt
+   取得六字段 `scope` 与 `digest`。可用
+   `jq '.[0] | {scope, receipt_digest: .digest}' receipts.json` 查看。
+   loader 会依据已固定摘要的原始日志重新验证所选 receipt，不采用 receipt 自带的信任声明。
+3. **Host 与进程出生身份**：可信 launcher／collector 必须记录哪个进程生命周期服务于该 context／generation。
+   使用 `agentprov --data-dir /private/evidence telemetry list --run RUN --json --limit 100`
+   查看原生证据，必要时按 `next_cursor` 翻页。选择 `source=agentprov_ebpf` 且
+   `runtime_process_identity=agentprov.runtime_process/v3` 的记录，从 payload（或嵌套的 `payload`／`raw`）
+   读取完整 `host_id`、事件 `pid` 和 `process_instance_id`，并与 launcher 的归属记录交叉核对。
+   instance 格式为 `boot-UUID:PID:process_start_ns`；boot 与 start 来自 collector 记录的内核生命周期，
+   不使用墙上时间、重新运行 `ps` 的结果或 CDP ID 拼接。宿主 PID 与 Sentry PID 分属不同身份域。
+
+当前 Browser 入口提供 CDP scope 与 receipt；context→进程的可信归属记录仍由操作方的 launcher／collector
+提供。本功能不会按进程名、URL、时间邻近或 Guest／Host PID 猜测生成该输入。
+
+`/private/receiver/browser-runtime.json` 的完整模板如下，请将每个占位符替换为批准或实际记录的值：
+
+```json
+{
+  "schema_version": "agentprovenance.browser_runtime_custody/v1",
+  "capture_config": "/private/receiver/browser-import.json",
+  "receipts": "/private/captures/task-1/receipts.json",
+  "run_id": "RUN",
+  "manifest_sha256": "sha256:<与接收方批准值相同的 manifest 摘要>",
+  "bridge_id": "research-browser-bridge",
+  "bridge_config_digest": "sha256:<与接收方批准值相同的 bridge 配置摘要>",
+  "mappings": [{
+    "scope": {
+      "producer_id": "node-a", "namespace": "research",
+      "instance_id": "sandbox-42", "generation": "launch-1",
+      "browser_id": "<记录的 browser id>", "context_id": "<记录的 context id>"
+    },
+    "receipt_digest": "sha256:<所选原始 receipt 的摘要>",
+    "role": "browser",
+    "host_id": "<原生 collector 的 host id>",
+    "pid": 1234,
+    "process_instance_id": "<记录的 boot UUID>:1234:<记录的 process start ns>"
+  }]
+}
+```
+
+摘要使用 `sha256:` 加 64 位小写十六进制字符；示例 PID 的两处值均需替换。
+role 支持 `browser`、`renderer`、`network`，同一 scope／role 的冲突进程归属会被拒绝。
+两份授权配置均须位于采集目录与存储证据目录之外，包括 Bundle／artifact 存储目录。
+接收方目录应为 `0700`，配置为 `0600` 私有普通文件，不允许符号链接或额外硬链接。
+配置上限 64 KiB、128 条 mapping。receipt 和导入的 `browser_receipt_binding` JSON 是证据记录，
+本地归属计算的授权来自显式提供的接收方配置。
+
+完成 owned import 后，执行生产命令：
+
+```sh
+agentprov --data-dir /private/evidence graph lens --run RUN --detail raw --json \
+  --browser-custody-config /private/receiver/browser-runtime.json \
+  > /private/receiver/browser-lens.json
+agentprov --data-dir /private/evidence dashboard export --run RUN \
+  --browser-custody-config /private/receiver/browser-runtime.json \
+  --output /private/receiver/browser-reader.zip
+```
+
+图查询使用本地存储，应省略 `--daemon-url`。派生阅读副本需要签名时，沿用
+`--sign-key` 和 `--exporter-id`。HTTP 请求不接受此授信参数。
+程序化调用使用 `browsercustody.Load(ctx, path, store.ResolvePaths(dataDir))` 获取 opaque capability，
+再对选定数据库调用 `Resolve(ctx, db, run)`，或设置本地 `dashboard.Server.BrowserCustody` 配置。
+JSON 解码无法创建该 capability。
+
+loader 重新核对 manifest／bridge／run／scope、receipt 和原始 source refs；resolver 将留存的原生投影
+与这些已验证来源精确匹配。basic 模式可以只保留原生投影；detailed 模式留存的原始文本可用时也会核对。
+在线查询与冻结导出使用同一套规则。通过 `--exclude-record entry/ENTRY_ID` 排除支撑记录后，对应 custody
+映射被移除；排除 `runtime` 类别后不再包含对应 OS 观测。缺少 sensor 身份或支撑时保留 unresolved。
+不指定外部 custody 配置的默认命令不会从导入对象授予运行时归属。
+
+#### 原生 Sensor 验收
+
+便携 fixture 测试会编译并运行真实 CLI，使用合成的原生事件。x86 接收方导入实际 owned capture、
+采集原生 Sensor 证据后，执行以下 opt-in 检查：
+
+```sh
+AGENTPROV_BROWSER_CUSTODY_CONFIG=/private/receiver/browser-runtime.json \
+AGENTPROV_BROWSER_DATA_DIR=/private/evidence \
+go test -p 2 -timeout 20m ./internal/provenance \
+  -run '^TestBrowserLayerOperatorIngress$' -count=1 -v
+```
+
+验收要求测试通过且 **`matched_native_process_observations > 0`**，同时核对预期 Run／scope／host／进程出生身份，
+并检查生产 CLI 图查询与 reader ZIP 的对应关系。零匹配会使该检查失败。
+两个环境变量均未设置时，测试明确 **SKIP**；因此普通 `-run Browser` 通过后，此项 sensor-on 环境验收仍待执行。
+实际环境还需覆盖并发 context、后台／缓存流量、进程复用和排除场景，并保持 operation 因果与共享进程活动分层。
+
 ## HAR 网络记录
 
 选择性导出排除某条请求记录时，包含它的整份 HAR 也会从阅读副本中排除，原因为 `har_request_excluded`。原始附件保持不变。

@@ -192,7 +192,11 @@ func (s Server) exportReplaySet(ctx context.Context, run string, w *staticdata.W
 		}
 		result.API["compliance/"+f.ID] = ref
 	}
-	lenses, err := provenance.BuildReplayLenses(s.DB, run)
+	custody, err := s.BrowserCustody.Resolve(ctx, s.DB, run)
+	if err != nil {
+		return result, err
+	}
+	lenses, err := provenance.BuildSessionReplayLensesWithBrowserCustody(s.DB, run, nil, custody)
 	if err != nil {
 		return result, err
 	}
@@ -218,7 +222,7 @@ func (s Server) exportReplaySet(ctx context.Context, run string, w *staticdata.W
 		if err != nil {
 			return result, err
 		}
-		views, err := provenance.BuildSessionReplayLenses(s.DB, run, scope)
+		views, err := provenance.BuildSessionReplayLensesWithBrowserCustody(s.DB, run, scope, custody)
 		if err != nil {
 			return result, err
 		}

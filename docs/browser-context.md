@@ -241,6 +241,128 @@ input digest and returns `browser_import_input_projection_unavailable` on this
 trusted path. Ordinary recovery still retains that admission. Process/socket/file
 attribution uses separately witnessed runtime identities, outside this binding.
 
+### Receiver-owned Browser/runtime custody
+
+On Linux or macOS, `graph lens` and `dashboard export` accept the explicit local
+`--browser-custody-config` option. It connects an authenticated Browser context
+to an operator-mapped native process lifetime, then retains that process's OS
+observations. The relation stays at context/process level: a shared network or
+renderer process does not assign its socket/file activity to an individual click.
+Existing runtime event/file and connection/stream evidence keeps its own identity.
+
+Prepare the inputs through these separate channels:
+
+1. **Manifest and bridge pins:** use the receiver-approved `browser-import.json`
+   from the preceding section. The launcher/collector seals complete log lines
+   and supplies its manifest digest, run, placement, bridge ID and launch-config
+   digest over the operator-controlled channel. Hashing the exact sealed manifest
+   with `shasum -a 256 /operator/sealed/browser-owned.json` checks the producer's
+   approved bytes; the receiver compares that result with its external pin.
+2. **Scope and receipt selector:** obtain the original receipt from
+   `browser_execute` or `browser_result`. Copy its six-field `scope` and `digest`
+   into the mapping. `jq '.[0] | {scope, receipt_digest: .digest}' receipts.json`
+   shows those selectors. The loader independently re-verifies that receipt
+   against the pinned original log; it ignores the receipt's trust claims.
+3. **Host and process birth:** the trusted launcher/collector must record which
+   process lifetime serves that exact context/generation. Inspect its native
+   evidence with `agentprov --data-dir /private/evidence telemetry list --run RUN
+   --json --limit 100`, following `next_cursor` when necessary. Use a recorded
+   `agentprov_ebpf` event with `runtime_process_identity=agentprov.runtime_process/v3`.
+   Copy the exact `host_id`, event `pid`, and `process_instance_id` from its payload
+   (or nested `payload`/`raw` envelope), and cross-check the launcher's custody
+   record. The instance has the form `boot-UUID:PID:process_start_ns`; its boot and
+   start value come from the collector's kernel lifetime identity, not wall-clock
+   time, a fresh `ps` result, or CDP IDs. Host and Sentry PIDs are separate domains.
+
+The current Browser entry supplies CDP scope and receipts. The operator's
+context-to-process custody record is a separate required input; this feature
+does not discover it by process name, URL, proximity, or a guest/host PID guess.
+
+Use this template for `/private/receiver/browser-runtime.json`, replacing every
+placeholder with the approved or recorded value:
+
+```json
+{
+  "schema_version": "agentprovenance.browser_runtime_custody/v1",
+  "capture_config": "/private/receiver/browser-import.json",
+  "receipts": "/private/captures/task-1/receipts.json",
+  "run_id": "RUN",
+  "manifest_sha256": "sha256:<same receiver-approved manifest digest>",
+  "bridge_id": "research-browser-bridge",
+  "bridge_config_digest": "sha256:<same receiver-approved bridge configuration digest>",
+  "mappings": [{
+    "scope": {
+      "producer_id": "node-a", "namespace": "research",
+      "instance_id": "sandbox-42", "generation": "launch-1",
+      "browser_id": "<recorded browser id>", "context_id": "<recorded context id>"
+    },
+    "receipt_digest": "sha256:<selected original receipt digest>",
+    "role": "browser",
+    "host_id": "<native collector host id>",
+    "pid": 1234,
+    "process_instance_id": "<recorded boot UUID>:1234:<recorded process start ns>"
+  }]
+}
+```
+
+Digest values use 64 lowercase hexadecimal characters after `sha256:`. Replace
+the example PID in both fields. Roles are `browser`, `renderer`, or `network`;
+conflicting process assignments for the same scope/role are rejected. Both
+authority files must be outside the capture and store evidence directories,
+including Bundle/artifact storage. Provision them in the receiver's private
+directory (`0700`) as private regular files (`0600`), without symlinks or extra
+hard links. The config is bounded to 64 KiB and 128 mappings. Receipts and imported
+`browser_receipt_binding` JSON describe evidence; only the explicit receiver
+configuration authorizes this local calculation.
+
+After the owned import, run the production commands:
+
+```sh
+agentprov --data-dir /private/evidence graph lens --run RUN --detail raw --json \
+  --browser-custody-config /private/receiver/browser-runtime.json \
+  > /private/receiver/browser-lens.json
+agentprov --data-dir /private/evidence dashboard export --run RUN \
+  --browser-custody-config /private/receiver/browser-runtime.json \
+  --output /private/receiver/browser-reader.zip
+```
+
+The graph command requires local access; omit `--daemon-url`. Add the usual
+`--sign-key` and `--exporter-id` to sign a derived reading copy. This option is not
+an HTTP request trust flag. Applications call `browsercustody.Load(ctx, path,
+store.ResolvePaths(dataDir))` to obtain an opaque capability, then `Resolve(ctx,
+db, run)` for the selected database, or set the local `dashboard.Server.BrowserCustody`
+configuration. Decoding JSON cannot construct that capability.
+
+The loader rechecks manifest/bridge/run/scope, receipt and original source refs.
+The resolver matches the retained native projections to those verified sources;
+basic capture can retain that projection without raw text. Detailed retained raw
+text is checked when available. Graph queries and frozen exports use the same
+rules. Excluding a supporting record with `--exclude-record entry/ENTRY_ID` drops
+its custody mapping; excluding `runtime` removes its OS observations. Missing
+sensor identity or missing support remains unresolved. The default command, with
+no external custody config, grants no runtime custody from imported objects.
+
+#### Native sensor acceptance
+
+The portable fixture tests build and execute the real CLI with synthetic native
+events. Run the opt-in check below on the x86 receiver after importing the actual
+owned capture and collecting its native sensor evidence:
+
+```sh
+AGENTPROV_BROWSER_CUSTODY_CONFIG=/private/receiver/browser-runtime.json \
+AGENTPROV_BROWSER_DATA_DIR=/private/evidence \
+go test -p 2 -timeout 20m ./internal/provenance \
+  -run '^TestBrowserLayerOperatorIngress$' -count=1 -v
+```
+
+Acceptance requires a passing test with **`matched_native_process_observations > 0`**,
+the expected run/scope/host/process birth, and the corresponding production CLI
+graph and exported reader. A zero match fails this check. With neither environment
+variable set, the test explicitly **SKIPs**; ordinary `-run Browser` test success
+therefore leaves this sensor-on acceptance pending. Exercise concurrent contexts,
+background/cache traffic, process reuse and exclusion cases in that environment
+while keeping operation-level causes separate from shared process activity.
+
 ## HAR network records
 
 On context close, the producer writes a HAR 1.2 archive as an

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 
+	"github.com/byteyellow/agentprovenance/internal/browsercustody"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/spf13/cobra"
@@ -424,6 +425,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 	var lensLimit int
 	var lensDetail string
 	var lensJSON bool
+	var lensCustodyConfig string
 	lensCmd := &cobra.Command{
 		Use:   "lens",
 		Short: "project the provenance graph through a graph explorer lens",
@@ -436,7 +438,10 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 				Limit:    lensLimit,
 				Detail:   lensDetail,
 			}
-			if client, ok := daemonClient(*daemonURL, *dataDir); ok {
+			if lensCustodyConfig != "" && *daemonURL != "" {
+				return commandErrorf("browser custody requires a local store; omit --daemon-url")
+			}
+			if client, ok := daemonClient(*daemonURL, *dataDir); ok && lensCustodyConfig == "" {
 				manifest, err := client.GraphLens(opts)
 				if err != nil {
 					return err
@@ -451,6 +456,27 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 				return err
 			}
 			defer db.Close()
+			if lensCustodyConfig != "" {
+				verified, err := browsercustody.Load(cmd.Context(), lensCustodyConfig, store.ResolvePaths(*dataDir))
+				if err != nil {
+					return err
+				}
+				if verified.RunID() != lensRunID {
+					return commandErrorf("browser custody config does not match --run")
+				}
+				custody, err := verified.Resolve(cmd.Context(), db, lensRunID)
+				if err != nil {
+					return err
+				}
+				manifest, err := provenance.BuildGraphLensWithBrowserCustody(db, opts, custody)
+				if err != nil {
+					return err
+				}
+				if lensJSON {
+					return provenance.PrintGraphLensManifestJSON(cmd.OutOrStdout(), manifest)
+				}
+				return provenance.PrintGraphLensManifest(cmd.OutOrStdout(), manifest, commandLanguage(cmd))
+			}
 			if lensJSON {
 				return provenance.GraphLensJSON(db, opts, cmd.OutOrStdout())
 			}
@@ -464,6 +490,7 @@ func graphCmd(dataDir, daemonURL *string) *cobra.Command {
 	lensCmd.Flags().StringArrayVar(&lensOverlays, "overlay", nil, "overlay annotations to add, repeatable or comma-separated: risk, trust, security")
 	lensCmd.Flags().IntVar(&lensLimit, "limit", 500, "maximum graph edges returned")
 	lensCmd.Flags().BoolVar(&lensJSON, "json", false, "emit structured graph lens JSON")
+	lensCmd.Flags().StringVar(&lensCustodyConfig, "browser-custody-config", "", "receiver-owned runtime mapping config; local only, revalidates pinned Browser receipts and retained source records")
 
 	var explainRunID string
 	var explainArtifact string

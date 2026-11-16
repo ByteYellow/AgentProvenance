@@ -153,7 +153,7 @@ func (s Server) prepareOriginalReplay(ctx context.Context, inputs []ReplaySelect
 	if len(wanted) != 0 {
 		return nil, fmt.Errorf("original run set is incomplete")
 	}
-	frozen := Server{DB: db, RunLabels: s.RunLabels}
+	frozen := Server{DB: db, RunLabels: s.RunLabels, BrowserCustody: s.BrowserCustody}
 	snapshot, err := frozen.freezeReplaySource(ctx)
 	if err != nil {
 		return nil, err

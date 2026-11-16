@@ -8,12 +8,15 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/byteyellow/agentprovenance/internal/browsercustody"
 	"github.com/byteyellow/agentprovenance/internal/dashboard"
+	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/spf13/cobra"
 )
 
 func dashboardExportCmd(dataDir *string) *cobra.Command {
 	var run, output, harness, session, selectionFile, signKey, exporterID string
+	var custodyConfig string
 	var excludeRecords, excludeCategories, excludeAttachments []string
 	var delivery dashboard.ReplayDelivery
 	cmd := &cobra.Command{
@@ -66,7 +69,21 @@ func dashboardExportCmd(dataDir *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			prepared, err := (dashboard.Server{DB: db, ReplaySigner: signer, ReplayDelivery: delivery}).PrepareOfflineReplaySet(cmd.Context(), selections)
+			var verified *browsercustody.Verified
+			if custodyConfig != "" {
+				verified, err = browsercustody.Load(cmd.Context(), custodyConfig, store.ResolvePaths(*dataDir))
+				if err != nil {
+					return err
+				}
+				selected := false
+				for _, selection := range selections {
+					selected = selected || selection.RunID == verified.RunID()
+				}
+				if !selected {
+					return commandErrorf("browser custody config run is not selected")
+				}
+			}
+			prepared, err := (dashboard.Server{DB: db, ReplaySigner: signer, ReplayDelivery: delivery, BrowserCustody: verified}).PrepareOfflineReplaySet(cmd.Context(), selections)
 			if err != nil {
 				return err
 			}
@@ -111,6 +128,7 @@ func dashboardExportCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().StringVar(&output, "output", "", "new ZIP file; unzip and open index.html offline")
 	cmd.Flags().StringVar(&signKey, "sign-key", "", "operator-owned Ed25519 hex key for a DerivedView exporter signature")
 	cmd.Flags().StringVar(&exporterID, "exporter-id", "", "exporter identity; requires --sign-key and does not grant recipient trust")
+	cmd.Flags().StringVar(&custodyConfig, "browser-custody-config", "", "receiver-owned runtime mapping config; revalidates source references against the frozen selected evidence")
 	cmd.Flags().StringVar(&delivery.Mode, "delivery", "", "reading, derived or originals; default is derived with a signing key, reading otherwise")
 	cmd.Flags().StringArrayVar(&delivery.OriginalBundleIDs, "original-bundle", nil, "registered signed bundle ID; exactly one per selected run in originals mode")
 	cmd.Flags().BoolVar(&delivery.ConfirmOriginalScope, "confirm-original-scope", false, "confirm inclusion of each whole original bundle, including content not displayed by the reader")
