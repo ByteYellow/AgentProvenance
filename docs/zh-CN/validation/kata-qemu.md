@@ -51,6 +51,12 @@ runtime-rs/QEMU 组合**，生效版本和摘要由操作者核对后填写。
 | `kubernetes` / `containerd` | API server、kubelet、运行中 CRI 的精确版本 |
 | `workload_image` | 已预载的测试容器镜像，必须使用不可变 `@sha256:` 引用 |
 | `verifier` | 指定 `--verifier` 时必填：独立验证器版本、完整源码提交及可执行文件摘要 |
+| `capture.apparmor_state` | 默认 `true`；设为 `false` 时，运行中的 Guest 内核必须未编译 AppArmor |
+
+Guest 内核未编译 AppArmor 时，可以在版本锁中将 `capture.apparmor_state` 设为 `false`。
+脚本读取 Guest 的 `/proc/config.gz` 核对内核选项，保存配置摘要和原因，并明确显示
+AppArmor 采样已关闭。Seccomp 状态采样继续启用。启用 AppArmor 采样后读取失败，
+仍按覆盖缺口处理。
 
 对核对后的产物执行 `sha256sum FILE`。BTF 摘要和精确内核 release 从对应 Guest
 构建或操作者自己的检查会话获取。构建时设置 `internal/buildinfo.Version` 和

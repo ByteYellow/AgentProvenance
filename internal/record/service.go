@@ -277,7 +277,9 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 		bindingID, err = correlation.RecordBinding(tx, correlation.Binding{
 			RunID: req.RunID, SessionID: sessionID, AttemptID: attemptID,
 			ToolCallID: toolCallID, ProcessID: processID,
-			ContainerID: "agentprov-record-" + attemptID, CgroupID: scopeCgroupID,
+			// The owned cgroup identifies this execution. A logical record ID is
+			// not a runtime container ID and would contradict native container events.
+			CgroupID:  scopeCgroupID,
 			StartedAt: startedAt, BindingSource: "zero_sdk_record",
 		})
 		return err
@@ -442,23 +444,22 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 		}
 		payload, _ := json.Marshal(observedProcessPayload(proc, pid, absWorkdir, "root_pid_descendants+cwd+time_window"))
 		_, ingestErr := telemetry.IngestFiltered(s.DB, telemetry.IngestEvent{
-			RunID:       req.RunID,
-			RolloutID:   rolloutID,
-			AttemptID:   attemptID,
-			SessionID:   sessionID,
-			ToolCallID:  toolCallID,
-			ProcessID:   processID,
-			SnapshotID:  baseSnapshotID,
-			RawEventID:  fmt.Sprintf("record-process-%d", proc.PID),
-			ContainerID: "agentprov-record-" + attemptID,
-			CgroupID:    scopeCgroupID,
-			PID:         proc.PID,
-			TGID:        proc.PID,
-			PPID:        proc.PPID,
-			Timestamp:   proc.FirstSeen,
-			Source:      "record_process_sample",
-			EventType:   "process_observed",
-			Payload:     string(payload),
+			RunID:      req.RunID,
+			RolloutID:  rolloutID,
+			AttemptID:  attemptID,
+			SessionID:  sessionID,
+			ToolCallID: toolCallID,
+			ProcessID:  processID,
+			SnapshotID: baseSnapshotID,
+			RawEventID: fmt.Sprintf("record-process-%d", proc.PID),
+			CgroupID:   scopeCgroupID,
+			PID:        proc.PID,
+			TGID:       proc.PID,
+			PPID:       proc.PPID,
+			Timestamp:  proc.FirstSeen,
+			Source:     "record_process_sample",
+			EventType:  "process_observed",
+			Payload:    string(payload),
 		})
 		if ingestErr != nil {
 			capture.EventFailures++
@@ -495,23 +496,22 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 		}
 		raw, _ := json.Marshal(payload)
 		_, ingestErr := telemetry.IngestFiltered(s.DB, telemetry.IngestEvent{
-			RunID:       req.RunID,
-			RolloutID:   rolloutID,
-			AttemptID:   attemptID,
-			SessionID:   sessionID,
-			ToolCallID:  toolCallID,
-			ProcessID:   processID,
-			SnapshotID:  baseSnapshotID,
-			RawEventID:  "record-file-" + path,
-			ContainerID: "agentprov-record-" + attemptID,
-			CgroupID:    scopeCgroupID,
-			PID:         pid,
-			TGID:        pid,
-			PPID:        int64(os.Getpid()),
-			Timestamp:   endedAt,
-			Source:      "record_file_diff",
-			EventType:   "file_write",
-			Payload:     string(raw),
+			RunID:      req.RunID,
+			RolloutID:  rolloutID,
+			AttemptID:  attemptID,
+			SessionID:  sessionID,
+			ToolCallID: toolCallID,
+			ProcessID:  processID,
+			SnapshotID: baseSnapshotID,
+			RawEventID: "record-file-" + path,
+			CgroupID:   scopeCgroupID,
+			PID:        pid,
+			TGID:       pid,
+			PPID:       int64(os.Getpid()),
+			Timestamp:  endedAt,
+			Source:     "record_file_diff",
+			EventType:  "file_write",
+			Payload:    string(raw),
 		})
 		if ingestErr != nil && len(artifactCapture.Issues) == 0 {
 			artifactCapture.Issues = append(artifactCapture.Issues, "file_event_write_failed")

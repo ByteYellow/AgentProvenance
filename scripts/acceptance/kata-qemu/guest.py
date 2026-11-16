@@ -7,6 +7,8 @@ Optional executable staging mounts only a private tmpfs in the bound Guest.
 import argparse
 import concurrent.futures
 import datetime
+import gzip
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -30,6 +32,19 @@ from staging import GuestBinaries
 
 
 HERE = Path(__file__).resolve().parent
+
+
+def state_capture_profile(lock):
+    enabled = lock.get("capture", {}).get("apparmor_state", True)
+    result = {"apparmor_state": enabled, "seccomp_state": True}
+    if not enabled:
+        with gzip.open("/proc/config.gz", "rb") as stream:
+            config = stream.read((8 << 20) + 1)
+        require(len(config) <= 8 << 20 and b"# CONFIG_SECURITY_APPARMOR is not set" in config.splitlines(),
+                "AppArmor sampling may be disabled in this fixture only when the running Guest kernel omits AppArmor")
+        result.update(apparmor_reason="CONFIG_SECURITY_APPARMOR is not set",
+                      kernel_config_sha256=hashlib.sha256(config).hexdigest())
+    return result
 
 
 def guest_probe(lock):
@@ -59,6 +74,7 @@ def guest_probe(lock):
             "container_cgroup": Path("/proc/self/cgroup").read_text().strip(),
             "privileges": [line for line in status if line.startswith(("CapEff:", "Seccomp:", "NoNewPrivs:"))],
             "tracefs": str(trace), "bpf_features": feature,
+            "state_capture_profile": state_capture_profile(lock),
             "scope": "privileged fixture container observing the Kata guest kernel"}
 
 

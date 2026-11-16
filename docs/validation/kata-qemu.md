@@ -38,6 +38,7 @@ capability checks match. The fixed profile remains `kata-qemu-runtime-rs` with Q
 | `kubernetes` / `containerd` | Exact API server, kubelet and running CRI versions |
 | `workload_image` | Preloaded test container image with immutable `@sha256:` reference |
 | `verifier` | When `--verifier` is supplied: standalone verifier version, full source commit and executable SHA-256 |
+| `capture.apparmor_state` | Defaults to `true`; `false` requires the running Guest kernel to omit AppArmor |
 
 Use `sha256sum FILE` on the reviewed artifacts. Obtain the BTF digest and exact
 kernel release from the matching guest build or an operator-owned inspection
@@ -45,6 +46,12 @@ session. Supply release build metadata for `internal/buildinfo.Version` and
 `internal/buildinfo.Commit`; the live Sensor producer must match the lock. The
 collector is embedded in `agentprov`, so its executable digest is the CLI digest.
 There is no second raw Sensor process in this profile.
+
+For Guest kernels built without AppArmor, set `capture.apparmor_state` to `false`
+in the version lock. The fixture verifies `/proc/config.gz`, saves its digest and
+the disabled kernel option, and reports AppArmor collection as disabled. Seccomp
+state sampling stays enabled. A missing AppArmor read with sampling enabled still
+counts as a coverage gap.
 
 The test container image must already contain Python 3.11+, `bpftool`, `sleep`,
 `true`, and the dynamic loader/libraries required by the selected `agentprov`

@@ -11,7 +11,42 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/byteyellow/agentprovenance/internal/correlation"
 )
+
+func TestOwnedScopeMatchesActualContainerIdentity(t *testing.T) {
+	paths, db := newPolicyTestStore(t)
+	svc := Service{DB: db, Paths: paths, Lifecycle: &Lifecycle{
+		Prepared: func(s ExecutionScope) error {
+			// A containerized recorder sees a namespace PID. Native evidence keeps
+			// its kernel PID and actual CRI container ID; the owned cgroup joins them.
+			raw := correlation.RawIdentity{ContainerID: strings.Repeat("a", 64), CgroupID: s.CgroupID,
+				PID: 266, ProcessInstanceID: "12345678-1234-1234-1234-123456789abc:266:100",
+				Timestamp: time.Now().UTC().Format(time.RFC3339Nano)}
+			match, ok, err := correlation.Resolve(db, raw)
+			if err != nil || !ok || match.RunID != s.RunID || !match.ScopeOnly || match.Ambiguous {
+				t.Fatalf("actual runtime container did not match owned scope: %+v %t %v", match, ok, err)
+			}
+			if err := correlation.ObserveProcessInstance(db, raw); err != nil {
+				return err
+			}
+			match, ok, err = correlation.Resolve(db, raw)
+			if err != nil || !ok || match.RunID != s.RunID || !strings.HasPrefix(match.Method, "kernel_process_instance:") {
+				t.Fatalf("native lifetime anchor was not retained: %+v %t %v", match, ok, err)
+			}
+			raw.CgroupID, raw.PID, raw.ProcessInstanceID = "different-scope", 267, "12345678-1234-1234-1234-123456789abc:267:200"
+			if match, ok, err := correlation.Resolve(db, raw); err != nil || ok {
+				t.Fatalf("another process in the same container inherited the execution: %+v %t %v", match, ok, err)
+			}
+			return nil
+		},
+	}}
+	if _, err := svc.Run(Request{RunID: "container-scope", Command: []string{"true"}, DisableSnapshot: true,
+		PostRootGraceMS: 1, Stdout: io.Discard, Stderr: io.Discard}); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestExecutionLifecycleRunsAfterSavedBindings(t *testing.T) {
 	paths, db := newPolicyTestStore(t)

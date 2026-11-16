@@ -30,7 +30,7 @@ def trusted_read(path):
     return raw
 
 
-def configuration(target, identity):
+def configuration(target, identity, *, apparmor_state=True):
     return {
         "target": target,
         "backend": {"mode": "guest", "guest": {key: identity[key] for key in GUEST_FIELDS}},
@@ -39,7 +39,8 @@ def configuration(target, identity):
         # Fixed resource profile for the 2 GiB nested Guest. Map allocation is
         # part of startup; readiness and zero-loss/drain checks remain required.
         "capture": {"mode": "native", "placement": "guest_kernel", "auto_tls": False, "no_policy": True,
-                    "ring_buffer_mib": 4, "startup_timeout_seconds": 120},
+                    "ring_buffer_mib": 4, "startup_timeout_seconds": 120,
+                    "apparmor_state": apparmor_state, "seccomp_state": True},
         "delivery": {"receiver_id": "fixture-receiver", "sign_key_file": "/binding/executor.key",
                      "receiver_public_key_file": "/binding/receiver.pub"},
     }
@@ -60,6 +61,9 @@ def validate_receipt(receipt, config_raw, observed, lock):
             "execution backend.guest differs from operator receipt")
     require(config.get("capture", {}).get("mode") == "native" and config["capture"].get("placement") == "guest_kernel",
             "bound Guest requires native guest_kernel capture")
+    require(config["capture"].get("apparmor_state", True) is lock.get("capture", {}).get("apparmor_state", True) and
+            config["capture"].get("seccomp_state", True) is True,
+            "bound Guest state sampling differs from the pinned capture profile")
     for key in ("runtime_class", "runtime_handler"):
         require(identity[key] == lock[key], "binding " + key + " differs from runtime lock")
     require(re.fullmatch(r"[a-f0-9]{64}", identity["container_id"]), "binding requires the raw CRI container ID")

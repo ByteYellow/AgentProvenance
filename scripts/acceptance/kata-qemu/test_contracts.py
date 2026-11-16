@@ -2,6 +2,7 @@
 import argparse
 import copy
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -70,6 +71,12 @@ class LockTests(unittest.TestCase):
         lock = pinned()
         lock["runtime_handler"] = "kata-qemu"
         self.assertIn("runtime_handler", run.lock_issues(lock))
+
+    def test_state_profile_must_be_explicit_boolean(self):
+        for value in ("false", 0, None):
+            lock = pinned()
+            lock["capture"] = {"apparmor_state": value}
+            self.assertIn("capture.apparmor_state", run.lock_issues(lock))
 
 
 class RuntimeTests(unittest.TestCase):
@@ -280,6 +287,17 @@ class BindingContracts(unittest.TestCase):
         self.assertEqual(result["backend"], {"mode": "guest", "guest": self.identity})
         self.assertNotEqual(result["target"]["generation"], result["backend"]["guest"]["pod_uid"])
 
+    def test_receipt_must_keep_the_locked_state_profile(self):
+        config = binding.configuration(self.target, self.identity, apparmor_state=False)
+        raw = json.dumps(config).encode()
+        receipt = dict(self.receipt, configuration_sha256=hashlib.sha256(raw).hexdigest())
+        with self.assertRaises(common.Blocked):
+            binding.validate_receipt(receipt, raw, self.observed, self.lock)
+        self.lock["capture"] = {"apparmor_state": False}
+        result = binding.validate_receipt(receipt, raw, self.observed, self.lock)
+        self.assertFalse(result["capture"]["apparmor_state"])
+        self.assertTrue(result["capture"]["seccomp_state"])
+
     def test_pod_boot_and_target_rejection_contract(self):
         self.assertEqual(binding.rejection_checks(self.receipt, self.raw, self.observed, self.lock),
                          ["observed_pod_uid_rejected", "observed_guest_boot_id_rejected",
@@ -329,6 +347,21 @@ class BindingContracts(unittest.TestCase):
 
 
 class GuestContracts(unittest.TestCase):
+    def test_disabled_apparmor_requires_running_kernel_evidence(self):
+        lock = pinned()
+        lock["capture"] = {"apparmor_state": False}
+        for config, accepted in ((b"# CONFIG_SECURITY_APPARMOR is not set\n", True),
+                                 (b"CONFIG_SECURITY_APPARMOR=y\n", False), (b"", False)):
+            with self.subTest(config=config), patch.object(guest.gzip, "open", return_value=io.BytesIO(config)):
+                if accepted:
+                    result = guest.state_capture_profile(lock)
+                    self.assertFalse(result["apparmor_state"])
+                    self.assertTrue(result["seccomp_state"])
+                    self.assertEqual(result["kernel_config_sha256"], hashlib.sha256(config).hexdigest())
+                else:
+                    with self.assertRaises(common.Blocked):
+                        guest.state_capture_profile(lock)
+
     def test_delivery_prelude_is_explicit_and_leaves_source_unchanged(self):
         with tempfile.TemporaryDirectory() as temporary:
             value = guest.Guest.__new__(guest.Guest)

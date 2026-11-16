@@ -95,6 +95,9 @@ printf 'value = 2\n' > app.py && echo note > note.txt && wait`,
 		t.Fatalf("file_write events = %d, want >= 2", len(events))
 	}
 	for _, event := range events {
+		if event.ContainerID != "" {
+			t.Fatalf("file diff invented a runtime container identity: %q", event.ContainerID)
+		}
 		if event.ToolCallID != result.ToolCallID || event.ProcessID != result.ProcessID {
 			t.Fatalf("event not correlated to record context: %+v", event)
 		}
@@ -113,7 +116,10 @@ printf 'value = 2\n' > app.py && echo note > note.txt && wait`,
 		if event.RawEventID == "" || event.CorrelationMethod != "zero_sdk_process_tree" || event.CorrelationConfidence != 0.9 {
 			t.Fatalf("process_observed missing raw/correlation metadata: %+v", event)
 		}
-		if event.ContainerID == "" || event.CgroupID == "" || event.PID == 0 || event.TGID == 0 || event.PPID == 0 {
+		if event.ContainerID != "" {
+			t.Fatalf("process sample invented a runtime container identity: %q", event.ContainerID)
+		}
+		if event.CgroupID == "" || event.PID == 0 || event.TGID == 0 || event.PPID == 0 {
 			t.Fatalf("process_observed missing runtime identity: %+v", event)
 		}
 		explained := telemetry.ExplainEventRecord(event)

@@ -110,6 +110,9 @@ def lock_issues(lock):
         check(bool(lock.get("kubernetes", {}).get(key)), "kubernetes." + key)
     check(bool(lock.get("containerd", {}).get("version")), "containerd.version")
     check(bool(re.fullmatch(r"[^\s@]+@sha256:[a-f0-9]{64}", lock.get("workload_image") or "")), "workload_image")
+    capture = lock.get("capture", {})
+    check(isinstance(capture, dict) and set(capture) <= {"apparmor_state"} and
+          type(capture.get("apparmor_state", True)) is bool, "capture.apparmor_state")
     return errors
 
 
@@ -297,7 +300,7 @@ class Node:
         identity = {"runtime_class": self.lock["runtime_class"], "runtime_handler": native["runtime_handler"],
                     "pod_uid": pod["metadata"]["uid"], "container_id": raw_id, "guest_boot_id": boot}
         target = {"producer_id": "kata-acceptance-fixture", "instance_id": identity["pod_uid"], "generation": "g-" + uuid.uuid4().hex}
-        config = configuration(target, identity)
+        config = configuration(target, identity, apparmor_state=self.lock.get("capture", {}).get("apparmor_state", True))
         for name in ("executor", "receiver"):
             command([self.args.binary, "forensics", "keygen", "--priv", binding_dir / (name + ".key"),
                      "--pub", binding_dir / (name + ".pub")], env=clean_env())
