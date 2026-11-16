@@ -165,7 +165,7 @@ class Browser:
     Operations use Playwright; requests retain native CDP identities. The helper
     does not infer that a click caused every request observed in its time window.
     """
-    def __init__(self, path, placement, *, screenshots=True, har=True, channel=None):
+    def __init__(self, path, placement, *, screenshots=True, har=True, channel=None, launcher=None):
         if set(placement) != set(PLACEMENT) or not all(map(_id, placement.values())):
             raise ValueError("invalid browser placement")
         self.path, self.placement, self.screenshots, self.channel = Path(path), dict(placement), screenshots, channel
@@ -177,6 +177,7 @@ class Browser:
         self.context_id, self.closing, self.failure = "", False, None
         self.failure_error = None
         self.image_count = self.image_bytes = 0
+        self.launcher = launcher
 
     async def __aenter__(self):
         try:
@@ -199,9 +200,14 @@ class Browser:
         self.playwright = await async_playwright().start()
         env = {k: v for k, v in os.environ.items() if k in ("PATH", "LANG", "LC_ALL", "SYSTEMROOT")}
         env.update(HOME=self.temp.name, TMPDIR=self.temp.name)
+        launch = {}
+        if self.launcher:
+            if self.channel:
+                raise ValueError("native custody currently uses the pinned Playwright Chromium executable")
+            launch["executable_path"] = self.launcher.prepare(self, self.playwright.chromium.executable_path)
         self.owner = await self.playwright.chromium.launch_persistent_context(
             str(profile), headless=True, channel=self.channel, env=env, chromium_sandbox=True,
-            args=["--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1"])
+            args=["--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1"], **launch)
         self.context = await self.owner.browser.new_context(viewport={"width": 1280, "height": 720}, accept_downloads=True)
         first = await self.context.new_page()
         probe = await self.context.new_cdp_session(first)

@@ -241,6 +241,49 @@ input digest and returns `browser_import_input_projection_unavailable` on this
 trusted path. Ordinary recovery still retains that admission. Process/socket/file
 attribution uses separately witnessed runtime identities, outside this binding.
 
+### Owned Linux launcher
+
+The optional Linux launcher records the Browser scope and its native process
+identity while Chromium is alive. Start the Sensor first, and use an existing
+record run that owns the Browser workload. The launcher account needs read access
+to that live evidence store; keep both the capture and operator directories private.
+
+```sh
+python3 -m agentprov.browser_mcp \
+  --capture-dir /private/captures/task-1 \
+  --producer-id browser-node --namespace tasks --instance-id task-1 --generation g1 \
+  --custody-dir /private/operator/browser \
+  --native-data-dir /private/evidence --run RUN
+```
+
+This entry uses Playwright's installed Chromium and Linux `pidfd`; custom
+`--channel` values are not supported with native custody. A private exec wrapper
+preserves the process lifetime and supplies a random 128-bit launch marker that
+fits the Sensor's argument limit. The helper checks the live CDP process, pidfd,
+host/boot, PID namespace and exact kernel birth identity. It retains the Chromium
+binary digest and the supporting native event in `launch-witness.json`.
+
+On close, the helper allows up to ten seconds for asynchronous native ingestion,
+then seals this launch's complete journal prefix. Each Browser ID gets its own
+`browser-import.json`, `receipts.json`, `browser-runtime.json` and `report.json`
+under the operator directory. A missing native witness is recorded as
+`unresolved`, with no runtime configuration issued. A restarted bridge seals its
+new launch separately; it does not authorize an earlier incomplete generation.
+The automatic mapping covers the root Browser process. Renderer and network
+service processes require their own observed lifetime mappings.
+
+Use the generated paths in the import and query commands below. Deliver the
+operator configuration through the receiver's trusted channel, separately from
+the capture. The receiver still verifies every pin, receipt and retained source.
+
+For the reproducible x86 case, run `scripts/accept_browser_native.py` as root with
+`--browser-user` selecting an unprivileged account. It covers concurrent contexts
+and tabs, redirects, frames/workers, background requests, downloads and restart
+queries. Then run `scripts/accept_browser_native_delivery.py` as that account to
+check repeated imports, original signed transfer, recipient verification, native
+relations and removal of unsupported relations from a selected signed reader.
+These fixtures use existing software and preserve the Chromium sandbox.
+
 ### Receiver-owned Browser/runtime custody
 
 On Linux or macOS, `graph lens` and `dashboard export` accept the explicit local
@@ -274,9 +317,9 @@ Prepare the inputs through these separate channels:
    start value come from the collector's kernel lifetime identity, not wall-clock
    time, a fresh `ps` result, or CDP IDs. Host and Sentry PIDs are separate domains.
 
-The current Browser entry supplies CDP scope and receipts. The operator's
-context-to-process custody record is a separate required input; this feature
-does not discover it by process name, URL, proximity, or a guest/host PID guess.
+The owned Linux launcher above supplies the root-process mapping. Other launchers
+must provide their operator-observed context-to-process record through the same
+external configuration contract.
 
 Use this template for `/private/receiver/browser-runtime.json`, replacing every
 placeholder with the approved or recorded value:

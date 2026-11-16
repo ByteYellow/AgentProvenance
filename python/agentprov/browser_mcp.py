@@ -5,6 +5,7 @@ import asyncio
 import contextlib
 import os
 from pathlib import Path
+import time
 import uuid
 from typing import Any
 
@@ -18,14 +19,16 @@ MAX_PENDING = 32
 
 
 class BrowserRuntime:
-    def __init__(self, capture_dir, placement, *, screenshots=True, har=True, channel=None):
+    def __init__(self, capture_dir, placement, *, screenshots=True, har=True, channel=None, custody=None):
         self.capture_dir = Path(capture_dir).absolute()
         self.browser = Browser(self.capture_dir / "browser.jsonl", placement,
-                               screenshots=screenshots, har=har, channel=channel)
+                               screenshots=screenshots, har=har, channel=channel, launcher=custody)
         self.receipts = ReceiptStore(self.capture_dir, placement)
         self.requests = {}
         self.closed = False
         self.lock_file = None
+        self.custody = custody
+        self.custody_error = None
 
     async def start(self):
         if self.closed or self.lock_file is not None:
@@ -44,6 +47,8 @@ class BrowserRuntime:
             if self.browser.path.exists():
                 self.browser.path = self.capture_dir / ("browser-" + str(uuid.uuid4()) + ".jsonl")
             await self.browser.start()
+            if self.custody:
+                await self.custody.start(self.browser)
         except BaseException:
             await self.close()
             raise
@@ -98,6 +103,13 @@ class BrowserRuntime:
             result = self.receipts.result(ref["operation_id"])
             request["status"], request["output"] = result["execution_status"], result["output"]
             request["output_truncated"] = result["output_truncated"]
+            if self.custody and self.custody_error is None:
+                try:
+                    await self.custody.observe(self.browser)
+                except Exception as error:
+                    # Application receipt status stays independent of native
+                    # coverage; the operator report retains the native gap.
+                    self.custody_error = type(error).__name__
 
     def _result(self, request, operation):
         pending = not request["task"].done()
@@ -114,6 +126,8 @@ class BrowserRuntime:
         return self._result(self.requests[operation_id], "read")
 
     async def close(self):
+        if self.closed:
+            return
         self.closed = True
         tasks = [r["task"] for r in self.requests.values()]
         for task in tasks:
@@ -121,8 +135,24 @@ class BrowserRuntime:
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         try:
+            if self.custody and self.custody.ready and self.custody_error is None:
+                try:
+                    # Native ingestion is asynchronous and may still be
+                    # draining Chromium's startup burst. Keep the browser
+                    # lifetime pinned during this bounded evidence wait.
+                    deadline = time.monotonic() + 10
+                    while time.monotonic() < deadline:
+                        if await self.custody.observe(self.browser):
+                            break
+                        await asyncio.sleep(.1)
+                except Exception as error:
+                    self.custody_error = type(error).__name__
             await self.browser.close()
+            if self.custody and self.custody.ready:
+                self.custody.seal(self)
         finally:
+            if self.custody:
+                self.custody.close()
             if self.lock_file:
                 self.lock_file.close()
                 self.lock_file = None
@@ -138,12 +168,21 @@ def main():
     parser.add_argument("--no-screenshots", action="store_true")
     parser.add_argument("--no-har", action="store_true")
     parser.add_argument("--channel", default=None)
+    parser.add_argument("--custody-dir", type=Path, help="operator-owned directory outside capture/data; enables Linux native custody")
+    parser.add_argument("--native-data-dir", type=Path, help="local live Sensor store for this launcher")
+    parser.add_argument("--run", help="existing record run in the live Sensor store")
     args = parser.parse_args()
+    if any((args.custody_dir, args.native_data_dir, args.run)) and not all((args.custody_dir, args.native_data_dir, args.run)):
+        parser.error("--custody-dir, --native-data-dir and --run must be supplied together")
     placement = {key: getattr(args, key) for key in ("producer_id", "namespace", "instance_id", "generation")}
 
     @contextlib.asynccontextmanager
     async def lifespan(_server):
-        runtime = BrowserRuntime(args.capture_dir, placement, screenshots=not args.no_screenshots, har=not args.no_har, channel=args.channel)
+        custody = None
+        if args.custody_dir:
+            from agentprov.browser_custody import NativeCustody
+            custody = NativeCustody(args.custody_dir, args.native_data_dir, args.run)
+        runtime = BrowserRuntime(args.capture_dir, placement, screenshots=not args.no_screenshots, har=not args.no_har, channel=args.channel, custody=custody)
         try:
             await runtime.start()
             yield runtime

@@ -60,6 +60,12 @@ provisioning remain explicit operator steps.
 - A dedicated namespace whose existing admission policy permits this privileged test Pod and three scoped `hostPath` volumes: read-only fixture inputs, read-only binding configuration, and writable evidence.
 - Guest BTF, BPF kprobe/tracepoint programs, ring/hash maps, visible tracefs, and writable delegated cgroup v2.
 
+If tracefs is absent from the privileged fixture container, add
+`--mount-guest-tracefs`. After checking the actual Pod/container and Guest boot,
+the node runner mounts tracefs inside that owned container before publishing its
+binding. Each stage records the mount and boot identity. The default remains an
+inspection-only prerequisite check; this option does not mount the node's tracefs.
+
 The handler check reads **the running CRI's `info`**, not labels or an arbitrary
 configuration file. For each created Pod it also checks CRI `inspectp`
 `runtimeHandler` by Pod UID. The node boot ID, node/API versions, runtime binary

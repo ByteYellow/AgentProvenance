@@ -163,6 +163,41 @@ Receiver operator 在**采集目录之外**提供配置：
 
 `unknown` 保持原状态。只有受理记录、没有 `action_start` 的 navigate 缺少 URL 投影，可信入口返回 `browser_import_input_projection_unavailable`；普通恢复仍保留该受理记录。进程、socket、文件归属使用另外采集的运行时身份，不由此 binding 推断。
 
+### Linux 受控启动入口
+
+可选的 Linux 启动辅助会在 Chromium 运行期间保存 Browser scope 和对应的原生进程身份。
+先启动 Sensor，并使用已建立、能够覆盖 Browser 工作负载的 record run。
+启动账号需要读取该实时证据库；采集目录和操作方配置目录都应保持私有。
+
+```sh
+python3 -m agentprov.browser_mcp \
+  --capture-dir /private/captures/task-1 \
+  --producer-id browser-node --namespace tasks --instance-id task-1 --generation g1 \
+  --custody-dir /private/operator/browser \
+  --native-data-dir /private/evidence --run RUN
+```
+
+此入口使用 Playwright 安装的 Chromium 和 Linux `pidfd`；启用原生归属时暂不支持
+自定义 `--channel`。私有启动程序保留同一进程生命周期，并生成能够完整进入 Sensor
+参数字段的 128 位随机启动标识。辅助程序核对实时 CDP 进程、pidfd、主机与启动 ID、
+PID 命名空间及内核提供的精确进程出生身份。`launch-witness.json` 保存 Chromium
+二进制摘要和对应的原生事件依据。
+
+关闭时最多等待十秒，让异步摄入处理完相关事件，再封存本次启动的完整日志前缀。
+操作方目录按 Browser ID 分别保存 `browser-import.json`、`receipts.json`、
+`browser-runtime.json` 和 `report.json`。缺少原生依据时，报告记为 `unresolved`，
+不生成运行时授权配置。Bridge 重启后单独封存新一次启动，之前未完整封存的 generation
+仍保留缺口。自动映射目前覆盖 Browser 根进程；renderer 和网络服务进程需要各自的生命周期记录。
+
+将生成的文件路径用于下文导入和查询命令。接收方通过可信通道取得操作方配置，
+并重新核对摘要、回执和保留的源记录；配置与采集内容分开交付。
+
+x86 实测入口为 `scripts/accept_browser_native.py`：以 root 启动 Sensor，
+用 `--browser-user` 指定运行 Chromium 的普通账号。场景覆盖并发 context/tab、
+重定向、iframe/worker、后台请求、下载和重启查询。随后以该普通账号运行
+`scripts/accept_browser_native_delivery.py`，检查重复导入、签名原件交付、接收方验证、
+原生关系，以及选择性导出移除依据后对应关系的同步移除。脚本使用已有软件，保留 Chromium 沙箱。
+
 ### 接收方 Browser／运行时归属
 
 Linux 或 macOS 上，`graph lens` 和 `dashboard export` 提供显式本地参数
@@ -188,8 +223,8 @@ Linux 或 macOS 上，`graph lens` 和 `dashboard export` 提供显式本地参�
    instance 格式为 `boot-UUID:PID:process_start_ns`；boot 与 start 来自 collector 记录的内核生命周期，
    不使用墙上时间、重新运行 `ps` 的结果或 CDP ID 拼接。宿主 PID 与 Sentry PID 分属不同身份域。
 
-当前 Browser 入口提供 CDP scope 与 receipt；context→进程的可信归属记录仍由操作方的 launcher／collector
-提供。本功能不会按进程名、URL、时间邻近或 Guest／Host PID 猜测生成该输入。
+上面的 Linux 受控启动入口可生成根进程映射。使用其他 launcher 时，
+由操作方通过同一外部配置契约提供实际观测到的 context→进程归属记录。
 
 `/private/receiver/browser-runtime.json` 的完整模板如下，请将每个占位符替换为批准或实际记录的值：
 

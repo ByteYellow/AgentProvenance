@@ -23,6 +23,11 @@ runtime-rs/QEMU 组合**，生效版本和摘要由操作者核对后填写。
 构建在精确固定项、CRI、QEMU 和 Guest 能力检查通过后即可使用。
 固定组合始终为 `kata-qemu-runtime-rs` 与 QEMU。
 
+如果特权测试容器内尚未挂载 tracefs，可以显式添加 `--mount-guest-tracefs`。
+节点脚本核对实际 Pod、容器和 Guest 启动身份后，在该测试容器内挂载 tracefs，
+再发布绑定回执。每阶段会记录挂载信息和 Guest boot ID。默认流程仍只检查前提条件；
+这个选项只处理本次创建的 Guest 测试容器。
+
 | 锁字段 | 需要固定的证据 |
 | --- | --- |
 | `artifacts.kata` | runtime-rs shim 版本、上游 revision、安装路径及 SHA-256 |

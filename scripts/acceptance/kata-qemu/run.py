@@ -43,6 +43,25 @@ MATRIX = {
 }
 
 
+# Explicit operator preparation inside the newly created fixture container.
+# The boot check precedes the mount so a host/Guest identity mistake fails closed.
+TRACEFS_PREPARATION = """import json,os,subprocess,sys
+from pathlib import Path
+boot=Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+assert boot == sys.argv[1] and boot != sys.argv[2] and os.geteuid() == 0
+path=Path('/sys/kernel/tracing')
+assert path.is_dir() and not path.is_symlink() and path.resolve() == path
+probe=path/'events/sched/sched_process_fork/id'
+already=probe.is_file()
+if not already:
+    subprocess.run(['mount','-t','tracefs','-o','nosuid,nodev,noexec','tracefs',str(path)],check=True,timeout=10)
+assert probe.is_file()
+mounts=[line for line in Path('/proc/self/mountinfo').read_text().splitlines() if line.split()[4] == str(path)]
+assert len(mounts) == 1 and ' - tracefs ' in mounts[0]
+print(json.dumps({'guest_boot_id':boot,'tracefs':str(path),'already_mounted':already,'mountinfo':mounts[0]}))
+"""
+
+
 @contextmanager
 def defer_sigterm():
     received = False
@@ -246,6 +265,12 @@ class Node:
         probe = "from pathlib import Path; print(Path('/proc/sys/kernel/random/boot_id').read_text().strip())"
         boot = self.kubectl("-n", self.args.namespace, "exec", pod["metadata"]["name"], "-c", "fixture", "--", "python3", "-c", probe).strip()
         require(str(uuid.UUID(boot)) == boot and boot != self.observed["node_info"]["bootID"], "invalid Guest boot identity")
+        preparation = None
+        if getattr(self.args, "mount_guest_tracefs", False):
+            preparation = json.loads(self.kubectl("-n", self.args.namespace, "exec", pod["metadata"]["name"],
+                "-c", "fixture", "--", "python3", "-c", TRACEFS_PREPARATION, boot,
+                self.observed["node_info"]["bootID"], timeout=30))
+            require(preparation.get("guest_boot_id") == boot, "Guest preparation identity changed")
         after = json.loads(self.kubectl("-n", self.args.namespace, "get", "pod", pod["metadata"]["name"], "-o", "json"))
         after_containers = [c for c in after["status"].get("containerStatuses", []) if c["name"] == "fixture"]
         require(after["metadata"]["uid"] == pod["metadata"]["uid"] and after["spec"]["nodeName"] == self.args.node and
@@ -277,7 +302,7 @@ class Node:
             path.chmod(0o400)
         save(binding_dir / "receipt.json", receipt)
         (binding_dir / "receipt.json").chmod(0o400)
-        return {**native, "container_ids": [container_id], "operator_receipt": receipt,
+        return {**native, "container_ids": [container_id], "operator_receipt": receipt, "guest_preparation": preparation,
                 "receipt_sha256": digest(binding_dir / "receipt.json"), "platform_binding": expected_platform(config)}
 
     def recover_created_uid(self, manifest, report):
@@ -395,6 +420,8 @@ def main():
     parser.add_argument("--crictl", default="crictl")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--allow-privileged-guest", action="store_true")
+    parser.add_argument("--mount-guest-tracefs", action="store_true",
+                        help="explicitly mount tracefs inside each owned Guest fixture before publishing its binding")
     args = parser.parse_args()
     os.umask(0o077)
     args.output = args.output.resolve()
