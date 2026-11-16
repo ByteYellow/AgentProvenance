@@ -27,8 +27,9 @@ func initialResult() Result {
 // unsafe/duplicate raw archive names and must not be passed to this function.
 //
 // A nil error means verification completed, not that evidence is trusted. Inspect
-// FileIntegrity and DerivedSignature separately. Malformed/unsafe inputs, I/O,
-// limits and cancellation return an error together with a partial result.
+// FileIntegrity, DerivedSignature and delivered SourceSignatures separately.
+// Malformed/unsafe inputs, I/O, limits and cancellation return an error together
+// with a partial result.
 func VerifyFS(ctx context.Context, fsys fs.FS, policy TrustPolicy, limits Limits) (Result, error) {
 	r := initialResult()
 	l, err := effectiveLimits(limits)
@@ -90,15 +91,16 @@ func verifyEntries(ctx context.Context, s *inventory, policy TrustPolicy) (Resul
 		return failedInput(r, err)
 	}
 	r.ManifestStatus, r.Manifest, r.DeclaredCoverage = "present", &m, m.Coverage
-	for _, source := range m.Sources {
-		status := SignatureUnsigned
-		if source.Signature != nil {
-			status = SignatureNotChecked
-		}
-		r.SourceSignatures = append(r.SourceSignatures, SourceResult{SourceID: source.ID, Status: status})
-	}
 	if len(m.Files) > s.paths.limits.MaxEntries {
 		return failedInput(r, fmt.Errorf("%w: manifest file count", ErrLimit))
+	}
+	// Original signatures describe the delivered original bytes, independently
+	// of the reader's signature and payload. Preserve their results on a later
+	// reader read/CRC failure, and reuse their streamed hashes in the inventory.
+	sources := verifySources(ctx, m.Sources, s, policy)
+	r.SourceSignatures = sources.results
+	if err := ctx.Err(); err != nil {
+		return r, err
 	}
 	if hasSignature {
 		var signature bytes.Buffer
@@ -128,7 +130,11 @@ func verifyEntries(ctx context.Context, s *inventory, policy TrustPolicy) (Resul
 			r.Issues = append(r.Issues, Issue{Code: "length_mismatch", Path: file.Path})
 			continue
 		}
-		digest, err := streamEntry(ctx, e, nil)
+		read, found := sources.reads[file.Path]
+		if !found {
+			read.digest, read.err = streamEntry(ctx, e, nil)
+		}
+		digest, err := read.digest, read.err
 		if err != nil {
 			return failedInput(r, fmt.Errorf("read %q: %w", file.Path, err))
 		}
@@ -147,6 +153,9 @@ func verifyEntries(ctx context.Context, s *inventory, policy TrustPolicy) (Resul
 	r.FileIntegrity = IntegrityPassed
 	if len(r.Issues) != 0 {
 		r.FileIntegrity = IntegrityFailed
+	}
+	if sources.err != nil {
+		return failedInput(r, sources.err)
 	}
 	return r, nil
 }

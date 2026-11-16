@@ -231,6 +231,7 @@ func TestPortableEvidenceGuidesKeepLocalBilingualLinks(t *testing.T) {
 		{"gvisor-seccheck", "docs/gvisor-seccheck.md", "gVisor SecCheck Receiver", "docs/zh-CN/gvisor-seccheck.md", "gVisor SecCheck"},
 		{"notebook-context", "docs/notebook-context.md", "Jupyter request and output context", "docs/zh-CN/notebook-context.md", "Jupyter"},
 		{"browser-context", "docs/browser-context.md", "Browser context", "docs/browser-context.zh-CN.md", "浏览器上下文"},
+		{"derived-evidence", "docs/derived-evidence.md", "Evidence Delivery and Verification", "docs/zh-CN/derived-evidence.md", "证据交付与独立验证"},
 		{"release-v1.0.0-preview", "docs/releases/v1.0.0-preview.md", "v1.0 Source Preview", "docs/zh-CN/releases/v1.0.0-preview.md", "v1.0 源码预览"},
 	} {
 		for _, chinese := range []bool{false, true} {

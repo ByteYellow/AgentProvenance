@@ -59,7 +59,7 @@ type ReplayExports struct {
 }
 
 func NewReplayExports(server Server) *ReplayExports {
-	return &ReplayExports{server: Server{DB: server.DB, RunLabels: server.RunLabels, ReplaySigner: server.ReplaySigner}, ttl: 10 * time.Minute, timeout: 5 * time.Minute}
+	return &ReplayExports{server: Server{DB: server.DB, RunLabels: server.RunLabels, ReplaySigner: server.ReplaySigner, ReplayDelivery: server.ReplayDelivery}, ttl: 10 * time.Minute, timeout: 5 * time.Minute}
 }
 
 func (m *ReplayExports) Close() {
@@ -261,6 +261,7 @@ func (m *ReplayExports) prepare(w http.ResponseWriter, r *http.Request) {
 		ExcludeCategories  []string        `json:"exclude_categories,omitempty"`
 		ExcludeAttachments []string        `json:"exclude_attachments,omitempty"`
 		Selections         json.RawMessage `json:"selections,omitempty"`
+		Delivery           *ReplayDelivery `json:"delivery,omitempty"`
 	}
 	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	d.DisallowUnknownFields()
@@ -295,6 +296,15 @@ func (m *ReplayExports) prepare(w http.ResponseWriter, r *http.Request) {
 		httpError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	delivery := m.server.ReplayDelivery
+	if input.Delivery != nil {
+		delivery = *input.Delivery
+	}
+	delivery, err = delivery.normalized(m.server.ReplaySigner)
+	if err != nil {
+		httpError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	var token [24]byte
 	if _, err := rand.Read(token[:]); err != nil {
 		httpError(w, "Could not create replay preview.", 500)
@@ -314,7 +324,7 @@ func (m *ReplayExports) prepare(w http.ResponseWriter, r *http.Request) {
 	m.mu.Unlock()
 	defer m.release(j)
 	defer cancel()
-	err = m.build(ctx, j, selections)
+	err = m.build(ctx, j, selections, delivery)
 	if err != nil {
 		m.retire(j)
 		if r.Context().Err() != nil {
@@ -347,8 +357,10 @@ func (m *ReplayExports) prepare(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, j.preview)
 }
 
-func (m *ReplayExports) build(ctx context.Context, j *replayJob, selections []ReplaySelection) error {
-	p, err := m.server.PrepareOfflineReplaySet(ctx, selections)
+func (m *ReplayExports) build(ctx context.Context, j *replayJob, selections []ReplaySelection, delivery ReplayDelivery) error {
+	config := m.server
+	config.ReplayDelivery = delivery
+	p, err := config.PrepareOfflineReplaySet(ctx, selections)
 	if err != nil {
 		return err
 	}

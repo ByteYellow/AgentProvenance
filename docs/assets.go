@@ -14,6 +14,7 @@ import (
 //go:embed demo-library.md zh-CN/demo-library.md execution-handoff.md zh-CN/execution-handoff.md execution-handoff-api.yaml
 //go:embed gvisor-seccheck.md zh-CN/gvisor-seccheck.md notebook-context.md zh-CN/notebook-context.md browser-context.md browser-context.zh-CN.md
 //go:embed capture-manifest-api.yaml
+//go:embed derived-evidence.md zh-CN/derived-evidence.md
 var Files embed.FS
 
 type Entry struct{ ID, Title, Path, Group string }
@@ -48,6 +49,7 @@ func Catalog() []Entry {
 		{"gvisor-seccheck", "gVisor collection", "docs/gvisor-seccheck.md", "Record and deploy"},
 		{"demo-library", "Choose an investigation", "docs/demo-library.md", "Investigate evidence"},
 		{"graph", "Trace and compare", "docs/graph-commands.md", "Investigate evidence"},
+		{"derived-evidence", "Evidence delivery and verification", "docs/derived-evidence.md", "Investigate evidence"},
 		{"security", "Security and policies", "docs/security-commands.md", "Investigate evidence"},
 		{"compliance", "Compliance evidence", "docs/compliance.md", "Investigate evidence"},
 		{"supply-chain", "Supply-chain investigation", "docs/supply-chain-demo.md", "Investigate evidence"},

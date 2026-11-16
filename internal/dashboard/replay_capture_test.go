@@ -16,6 +16,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/capturemanifest"
+	"github.com/byteyellow/agentprovenance/internal/derivedview"
 	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
 	"github.com/byteyellow/agentprovenance/internal/sensor"
@@ -173,6 +174,13 @@ func TestOfflineCaptureManifestFrozenSelection(t *testing.T) {
 		}
 		t.Cleanup(func() { p.Close() })
 		prepared[selection.Scope] = p
+		wantCoverage := derivedview.CoverageUnknown
+		if selection.Scope == "whole_run" {
+			wantCoverage = derivedview.CoverageGaps
+		}
+		if p.coverage.State != wantCoverage {
+			t.Fatalf("coverage escaped its selected scope: %s %+v", selection.Scope, p.coverage)
+		}
 	}
 	report.CapabilitiesStart.Probes[0].Target = "LATE-PROBE"
 	if err := observability.SaveRuntimeCapture(db, paths, &report); err != nil {
@@ -219,6 +227,41 @@ func TestOfflineCaptureManifestFrozenSelection(t *testing.T) {
 				closeErr := file.Close()
 				if writeErr != nil || closeErr != nil {
 					t.Fatalf("ZIP: %v %v", writeErr, closeErr)
+				}
+			}
+		})
+	}
+}
+
+func TestReplayCaptureCoverageKeepsCounterScope(t *testing.T) {
+	zero, lost := int64(0), int64(9)
+	for _, test := range []struct {
+		name   string
+		status string
+		run    *int64
+		node   int64
+		want   derivedview.CoverageState
+	}{
+		{"unmeasured", "ok", nil, 0, derivedview.CoverageUnknown},
+		{"node_loss_not_allocated", "ok", &zero, 400, derivedview.CoverageUnknown},
+		{"run_loss", "ok", &lost, 0, derivedview.CoverageGaps},
+		{"partial_report", "partial", nil, 0, derivedview.CoverageGaps},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			paths, db, _ := artifactStore(t)
+			report := observability.RuntimeCaptureReport{SchemaVersion: observability.RuntimeCaptureSchema,
+				RunID: "coverage", Status: test.status, RunDroppedEvents: test.run,
+				NodeCounterDelta: map[string]int64{"kernel_dropped_events": test.node}}
+			if err := observability.SaveRuntimeCapture(db, paths, &report); err != nil {
+				t.Fatal(err)
+			}
+			index, err := (Server{DB: db}).exportCaptureManifest(context.Background(), "coverage", &staticdata.Writer{Root: t.TempDir()})
+			if err != nil || index.coverage.State != test.want {
+				t.Fatalf("coverage: %+v %v", index, err)
+			}
+			for _, gap := range index.coverage.Gaps {
+				if gap.Count != 1 {
+					t.Fatalf("observation count became a loss estimate: %+v", gap)
 				}
 			}
 		})

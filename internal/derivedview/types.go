@@ -13,6 +13,9 @@ const (
 	ManifestPath  = "manifest.json"
 	SignaturePath = "manifest.signature"
 	RoleExporter  = "exporter"
+	RoleProducer  = "producer"
+
+	KindForensicsBundle = "forensics_bundle"
 )
 
 // File matches the path/length/hash representation used by ReplayFile.
@@ -29,6 +32,8 @@ type Reference struct {
 	Path   string `json:"path,omitempty"`
 }
 
+// KindForensicsBundle references unchanged original JSON and its DSSE envelope.
+// Hash-only references remain commitments, with no original verification.
 type Source struct {
 	ID            string     `json:"id"`
 	Kind          string     `json:"kind"`
@@ -98,7 +103,9 @@ type Manifest struct {
 }
 
 // TrustPolicy must come from the recipient, independently of the package. An
-// empty policy trusts nobody. Roles must explicitly contain RoleExporter.
+// empty policy trusts nobody. Derived signatures require RoleExporter; original
+// source signatures require RoleProducer. An empty source signature key ID may
+// be resolved by verifying against these externally configured keys only.
 // ID is descriptive; a matching package policy ID never grants trust.
 type TrustPolicy struct {
 	ID   string
@@ -138,9 +145,20 @@ type SignatureResult struct {
 	Reason        string          `json:"reason,omitempty"`
 }
 
+// SourceResult reports the original separately from the exporter's inventory.
+// Cryptographic may pass while Status is invalid if the first signed subject
+// does not match the delivered original. Trusted requires both that binding and
+// an externally authorized producer. Undelivered commitments are not_checked;
+// delivered originals with no signature reference are unsigned.
 type SourceResult struct {
-	SourceID string          `json:"source_id"`
-	Status   SignatureStatus `json:"status"`
+	SourceID      string          `json:"source_id"`
+	Status        SignatureStatus `json:"status"`
+	Cryptographic IntegrityStatus `json:"cryptographic"`
+	Trusted       bool            `json:"trusted"`
+	// KeyID is the matching external key ID for legacy envelopes with no keyid.
+	KeyID  string `json:"key_id,omitempty"`
+	Role   string `json:"role,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
 type Issue struct {
@@ -162,7 +180,9 @@ type Result struct {
 // Limits bound both metadata and streamed payload processing. Zero fields use
 // DefaultLimits; negative values are errors. MaxEntries includes directories
 // (including implicit ZIP parents) and the two reserved metadata files. Byte
-// totals include metadata, not ZIP headers.
+// totals include metadata, not ZIP headers. MaxSignatureBytes also caps each
+// delivered original DSSE envelope before decoding; original JSON is streamed
+// under the ordinary file and total byte limits, without decompression.
 type Limits struct {
 	MaxEntries          int
 	MaxFileBytes        int64

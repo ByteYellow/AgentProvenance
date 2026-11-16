@@ -89,6 +89,9 @@ func ReplayImplementationDigest(ctx context.Context, path string) (string, error
 }
 
 func (p *PreparedReplay) signDerived(ctx context.Context, source string, signer ReplaySigner) error {
+	if signer.ExporterID == "" || len(signer.Key) != ed25519.PrivateKeySize || len(signer.ImplementationSHA256) != 64 {
+		return fmt.Errorf("derived export requires an exporter ID, Ed25519 key and implementation SHA256")
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -98,6 +101,9 @@ func (p *PreparedReplay) signDerived(ctx context.Context, source string, signer 
 	}
 	pub := signer.Key.Public().(ed25519.PublicKey)
 	inventory.Signed = true
+	if inventory.DeliveryMode != DeliveryOriginals {
+		inventory.DeliveryMode = DeliveryDerived
+	}
 	inventory.Signature = &ReplaySignature{Kind: "derived_view", ExporterID: signer.ExporterID, KeyID: attest.KeyID(pub)}
 	raw, err := json.MarshalIndent(inventory, "", "  ")
 	if err != nil {
@@ -111,6 +117,15 @@ func (p *PreparedReplay) signDerived(ctx context.Context, source string, signer 
 			ImplementationSHA256: signer.ImplementationSHA256},
 		Coverage: derivedview.Coverage{State: derivedview.CoverageUnknown, Scope: inventory.Scope},
 		Exporter: derivedview.Exporter{ID: signer.ExporterID}, CreatedAt: inventory.CreatedAt,
+	}
+	if p.coverage.State != "" {
+		m.Coverage = p.coverage
+		m.Coverage.Scope = inventory.Scope
+	}
+	for _, original := range inventory.Originals {
+		m.Sources = append(m.Sources, derivedview.Source{ID: original.ID, Kind: "forensics_bundle",
+			Digest:    derivedview.Reference{Path: original.Bundle.Path, SHA256: original.Bundle.SHA256},
+			Signature: &derivedview.Reference{Path: original.Attestation.Path, SHA256: original.Attestation.SHA256}})
 	}
 	for _, f := range inventory.Files {
 		m.Files = append(m.Files, derivedview.File{Path: f.Path, SHA256: f.SHA256, Bytes: f.Bytes})

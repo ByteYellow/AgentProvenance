@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/byteyellow/agentprovenance/internal/capturemanifest"
+	"github.com/byteyellow/agentprovenance/internal/derivedview"
 	"github.com/byteyellow/agentprovenance/internal/staticdata"
 )
 
@@ -19,12 +20,14 @@ type replayCaptureIndex struct {
 	SchemaVersion string              `json:"schema_version"`
 	Scope         string              `json:"scope"`
 	Pages         []replayCapturePage `json:"pages"`
+	coverage      derivedview.Coverage
 }
 
 // Use the same frozen, selected database as the other replay readers. Native
 // checkpoints excluded by the projection must not be recovered from the source.
 func (s Server) exportCaptureManifest(ctx context.Context, run string, w *staticdata.Writer) (*replayCaptureIndex, error) {
 	index := &replayCaptureIndex{SchemaVersion: "agentprovenance.replay_capture_manifest/v1", Scope: "whole_run", Pages: []replayCapturePage{}}
+	index.coverage.State = derivedview.CoverageUnknown
 	if s.replayProjection != nil && s.replayProjection.plan.partial() {
 		index.Scope = "selected_evidence"
 	}
@@ -35,6 +38,20 @@ func (s Server) exportCaptureManifest(ctx context.Context, run string, w *static
 			return nil, err
 		}
 		count += len(page.Records)
+		for _, record := range page.Records {
+			switch record.Status {
+			case "partial", "incomplete", "degraded", "failed", "error", "unavailable", "truncated":
+				index.coverage.State = derivedview.CoverageGaps
+				addCaptureDiagnostic(&index.coverage, record.Source, "observation_status_"+record.Status)
+			}
+			for _, counter := range record.Loss {
+				// Collector cumulative counts are not allocated to this run.
+				if counter.Scope == "run" && counter.Value != nil && *counter.Value != "0" {
+					index.coverage.State = derivedview.CoverageGaps
+					addCaptureDiagnostic(&index.coverage, record.Source, "recorded_run_loss")
+				}
+			}
+		}
 		if count > replaySelectionLimit {
 			return nil, fmt.Errorf("replay capture manifest exceeds %d records; reduce the selected scope", replaySelectionLimit)
 		}
@@ -53,4 +70,16 @@ func (s Server) exportCaptureManifest(ctx context.Context, run string, w *static
 		}
 		cursor = page.NextCursor
 	}
+}
+
+// Counts here are saved observations, not the number of lost events. Detailed
+// counters keep their original scopes in the capture-manifest reader.
+func addCaptureDiagnostic(coverage *derivedview.Coverage, category, reason string) {
+	for i := range coverage.Gaps {
+		if coverage.Gaps[i].Category == category && coverage.Gaps[i].Reason == reason {
+			coverage.Gaps[i].Count++
+			return
+		}
+	}
+	coverage.Gaps = append(coverage.Gaps, derivedview.Gap{Category: category, Reason: reason, Count: 1})
 }

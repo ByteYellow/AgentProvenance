@@ -79,9 +79,9 @@ func ReadPolicy(path string) (derivedview.TrustPolicy, error) {
 	return p, nil
 }
 
-// Verify returns 0 for intact files with a trusted exporter signature, 1 for
-// failed verification, 2 for unsigned/untrusted evidence and 3 for input errors.
-// Coverage and original-source signatures remain separate report fields.
+// Verify returns 0 for intact files with trusted signatures, 1 for failed
+// verification, 2 for unsigned/untrusted evidence and 3 for input errors.
+// Delivered originals require producer authority; private commitments do not.
 func Verify(ctx context.Context, path, policyPath string, out io.Writer) (int, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -139,8 +139,25 @@ func Verify(ctx context.Context, path, policyPath string, out io.Writer) (int, e
 	if result.FileIntegrity == derivedview.IntegrityFailed || result.DerivedSignature.Status == derivedview.SignatureInvalid {
 		return 1, fmt.Errorf("exported reader verification failed")
 	}
+	trustedSources := map[string]bool{}
+	for _, source := range result.SourceSignatures {
+		if source.Status == derivedview.SignatureInvalid {
+			return 1, fmt.Errorf("original evidence signature verification failed")
+		}
+		trustedSources[source.SourceID] = source.Status == derivedview.SignatureValid && source.Trusted
+	}
 	if result.FileIntegrity != derivedview.IntegrityPassed || !result.DerivedSignature.Trusted || result.DerivedSignature.Status != derivedview.SignatureValid {
 		return 2, fmt.Errorf("exported reader is unsigned or its exporter is not trusted")
+	}
+	if result.Manifest != nil {
+		for _, source := range result.Manifest.Sources {
+			if source.Kind != derivedview.KindForensicsBundle || source.Digest.Path == "" {
+				continue
+			}
+			if !trustedSources[source.ID] {
+				return 2, fmt.Errorf("delivered original is unsigned or its producer is not trusted")
+			}
+		}
 	}
 	return 0, nil
 }

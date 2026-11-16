@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance local replay export API
-  version: "1.2"
+  version: "1.3"
   description: >
     Prepare a private, frozen sharing copy without changing the evidence store.
     Enabled by dashboard serve only. Requests require a loopback peer and host;
@@ -12,6 +12,8 @@ info:
     can configure an exporter key when starting the server; requests cannot
     provide keys or override the exporter. Such exports include a DerivedView
     manifest and signature. Recipient trust is configured outside the package.
+    Delivery modes are reading, derived and originals. Originals require explicit
+    registered bundle IDs, full-scope confirmation and whole-run selections.
 servers:
   - url: http://127.0.0.1:7396
 security: []
@@ -59,6 +61,19 @@ components:
         created_at: {type: string, format: date-time}
         commit: {type: string}
         signed: {type: boolean, description: Whether this reader has an exporter signature. Source signatures and capture coverage are separate.}
+        delivery_mode: {type: string, enum: [reading, derived, originals], description: Absent in historical unsigned exports.}
+        originals:
+          type: array
+          maxItems: 64
+          description: Explicitly selected original bundles, copied byte-for-byte. Present only for originals delivery.
+          items:
+            type: object
+            required: [id, run_id, bundle, attestation]
+            properties:
+              id: {type: string}
+              run_id: {type: string}
+              bundle: {$ref: '#/components/schemas/File'}
+              attestation: {$ref: '#/components/schemas/File'}
         signature:
           type: object
           required: [kind, exporter_id, key_id]
@@ -163,11 +178,32 @@ components:
               anyOf:
                 - required: [harness]
                 - required: [session_id]
+    Delivery:
+      type: object
+      additionalProperties: false
+      properties:
+        mode: {type: string, enum: [reading, derived, originals]}
+        original_bundle_ids:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 512}
+        confirm_original_scope: {type: boolean}
+      description: >
+        The default is derived when the operator configured an exporter key,
+        otherwise reading. Derived and originals require the operator key.
+        Originals requires exactly one registered signed bundle per selected run,
+        confirm_original_scope true and no exclusions or session selection.
+        The reader is generated from those bundle revisions, not current live data.
+        Bundle IDs and confirmation are rejected in other modes. No filesystem
+        path or signing key is accepted from the request.
     SelectionSetRequest:
       type: object
       additionalProperties: false
       required: [selections]
       properties:
+        delivery: {$ref: '#/components/schemas/Delivery'}
         selections:
           type: array
           minItems: 1
@@ -183,6 +219,7 @@ components:
       additionalProperties: false
       required: [run, scope]
       properties:
+        delivery: {$ref: '#/components/schemas/Delivery'}
         run: {type: string, minLength: 1, maxLength: 512}
         scope: {type: string, enum: [whole_run, session]}
         harness: {type: string, minLength: 1, maxLength: 128}
@@ -276,6 +313,9 @@ paths:
         Use either the legacy run fields or selections, never both. All members
         use one database snapshot; one failed member fails the whole preparation.
         Data and selection manifests share a 900 MiB limit. No truncation is used.
+        Original delivery separately limits original bytes to 900 MiB and the
+        complete reader plus originals to 1280 MiB. Each original bundle must
+        fit the strict import limit of 256 MiB.
       parameters: [{$ref: '#/components/parameters/exportHeader'}]
       requestBody:
         required: true

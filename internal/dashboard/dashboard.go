@@ -104,6 +104,7 @@ type Server struct {
 	ReplayExports    *ReplayExports
 	RunLabels        map[string]string // Presentation-only titles; evidence identities stay unchanged.
 	ReplaySigner     *ReplaySigner     `json:"-"` // Operator configuration; never supplied by export requests.
+	ReplayDelivery   ReplayDelivery    `json:"-"`
 	replayProjection *replayProjection
 
 	// ListenAddr optionally records the dashboard's actual listen address

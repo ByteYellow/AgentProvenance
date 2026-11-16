@@ -253,7 +253,7 @@ func TestInvalidClaimsRejectedBeforeSigning(t *testing.T) {
 	}
 }
 
-func TestOptionalCommitmentsAndUnsignedSource(t *testing.T) {
+func TestOptionalCommitmentsAndUndeliveredSource(t *testing.T) {
 	files, m, key, policy := fixture(t)
 	m.Sources[0].Signature = nil
 	m.IncludedRecords = &Reference{SHA256: attest.DigestSHA256([]byte("private records manifest"))}
@@ -261,7 +261,7 @@ func TestOptionalCommitmentsAndUnsignedSource(t *testing.T) {
 	m.Coverage = Coverage{State: CoverageUnknown}
 	seal(t, files, m, key)
 	got, err := VerifyFS(context.Background(), files, policy, Limits{})
-	if err != nil || got.FileIntegrity != IntegrityPassed || got.SourceSignatures[0].Status != SignatureUnsigned || got.DeclaredCoverage.State != CoverageUnknown {
+	if err != nil || got.FileIntegrity != IntegrityPassed || got.SourceSignatures[0].Status != SignatureNotChecked || got.DeclaredCoverage.State != CoverageUnknown {
 		t.Fatalf("err=%v result=%+v", err, got)
 	}
 }

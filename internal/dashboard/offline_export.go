@@ -25,6 +25,7 @@ import (
 	project "github.com/byteyellow/agentprovenance"
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
 	"github.com/byteyellow/agentprovenance/internal/buildinfo"
+	"github.com/byteyellow/agentprovenance/internal/derivedview"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/staticdata"
@@ -46,6 +47,8 @@ type ReplayInventory struct {
 	Commit            string                         `json:"commit"`
 	Signed            bool                           `json:"signed"`
 	Signature         *ReplaySignature               `json:"signature,omitempty"`
+	DeliveryMode      string                         `json:"delivery_mode,omitempty"`
+	Originals         []ReplayOriginal               `json:"originals,omitempty"`
 	Events            int                            `json:"events"`
 	Contents          ReplayContents                 `json:"contents"`
 	Selection         ReplayFile                     `json:"record_selection"`
@@ -77,6 +80,7 @@ type PreparedReplay struct {
 	root            string
 	inventory       []byte
 	signatureFiles  []ReplayFile
+	coverage        derivedview.Coverage
 }
 
 func (p *PreparedReplay) Close() error { return os.RemoveAll(p.root) }
@@ -137,7 +141,14 @@ func (s Server) PrepareSelectedOfflineReplay(ctx context.Context, input ReplaySe
 // index is derived from one committed snapshot, with a separate selection for
 // each run. Relationship discovery never adds another run to the export.
 func (s Server) PrepareOfflineReplaySet(ctx context.Context, inputs []ReplaySelection) (_ *PreparedReplay, err error) {
-	if s.ReplaySigner != nil {
+	delivery, err := s.ReplayDelivery.normalized(s.ReplaySigner)
+	if err != nil {
+		return nil, err
+	}
+	if delivery.Mode == DeliveryOriginals {
+		return s.prepareOriginalReplay(ctx, inputs, delivery)
+	}
+	if delivery.Mode == DeliveryDerived {
 		return s.PrepareSignedOfflineReplaySet(ctx, inputs, *s.ReplaySigner)
 	}
 	inputs, err = normalizeReplaySelections(inputs)
@@ -157,7 +168,7 @@ func (s Server) prepareReplaySet(ctx context.Context, snapshot *replaySnapshot, 
 	if err != nil {
 		return nil, err
 	}
-	p := &PreparedReplay{root: root}
+	p := &PreparedReplay{root: root, coverage: derivedview.Coverage{State: derivedview.CoverageUnknown}}
 	defer func() {
 		if err != nil {
 			_ = p.Close()
@@ -190,6 +201,10 @@ func (s Server) prepareReplaySet(ctx context.Context, snapshot *replaySnapshot, 
 		runs = append(runs, item)
 		catalog.Summaries = append(catalog.Summaries, runSummary{Run: input.RunID, Events: item.Events})
 		catalog.Runs[input.RunID] = replay
+		if replay.Capture != nil && replay.Capture.coverage.State == derivedview.CoverageGaps {
+			p.coverage.State = derivedview.CoverageGaps
+			p.coverage.Gaps = append(p.coverage.Gaps, replay.Capture.coverage.Gaps...)
+		}
 		partial = partial || (&replaySelectionPlan{Selection: input}).partial()
 		analysisOmitted = analysisOmitted || len(item.AnalysisOmissions) > 0
 	}
@@ -300,7 +315,7 @@ func (s Server) prepareReplaySet(ctx context.Context, snapshot *replaySnapshot, 
 		return nil, err
 	}
 	first := runs[0]
-	p.Inventory = ReplayInventory{SchemaVersion: "agentprovenance.replay_inventory/v1", RunID: first.RunID, Scope: first.Scope, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Commit: buildinfo.Commit, Events: first.Events, Contents: first.Contents, Selection: selectionFile}
+	p.Inventory = ReplayInventory{SchemaVersion: "agentprovenance.replay_inventory/v1", RunID: first.RunID, Scope: first.Scope, CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), Commit: buildinfo.Commit, Events: first.Events, Contents: first.Contents, Selection: selectionFile, DeliveryMode: DeliveryReading}
 	if len(runs) == 1 {
 		p.Inventory.AnalysisOmissions = first.AnalysisOmissions
 		p.Inventory.CapturePolicy, p.Inventory.CaptureSettings = first.CapturePolicy, first.CaptureSettings

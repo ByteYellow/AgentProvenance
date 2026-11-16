@@ -90,6 +90,83 @@ func TestRecipientTrustAndCoverageAreIndependent(t *testing.T) {
 	}
 }
 
+func TestVerifierRequiresDeliveredProducerAuthority(t *testing.T) {
+	root, path, policy := readerFixture(t)
+	manifestRaw, err := os.ReadFile(filepath.Join(root, derivedview.ManifestPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest derivedview.Manifest
+	if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	exporterPub, exporter, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	producerPub, producer, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle := []byte(`{"schema_version":"agentprovenance.forensics_export/v1","run_id":"run"}`)
+	statement := attest.NewStatement("forensics/run", attest.DigestSHA256(bundle), map[string]any{
+		"kind": "forensics_bundle", "run_id": "run", "bundle_id": "original", "schema_version": "agentprovenance.forensics_export/v1",
+	})
+	envelope, err := attest.Sign(statement, producer, attest.KeyID(producerPub))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seal := func() {
+		t.Helper()
+		manifest.Exporter = derivedview.Exporter{ID: "fixture-exporter"}
+		manifest.FilesSHA256 = ""
+		raw, err := json.Marshal(envelope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, data := range map[string][]byte{"original.json": bundle, "original.dsse.json": raw} {
+			if err := os.WriteFile(filepath.Join(root, name), data, 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		manifest.Sources = []derivedview.Source{{ID: "original", Kind: derivedview.KindForensicsBundle,
+			Digest:    derivedview.Reference{Path: "original.json", SHA256: attest.DigestSHA256(bundle)},
+			Signature: &derivedview.Reference{Path: "original.dsse.json", SHA256: attest.DigestSHA256(raw)}}}
+		manifest.Files, err = derivedview.InventoryFS(context.Background(), os.DirFS(root), derivedview.Limits{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifestRaw, sig, err := derivedview.Sign(manifest, exporter)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, data := range map[string][]byte{derivedview.ManifestPath: manifestRaw, derivedview.SignaturePath: sig} {
+			if err := os.WriteFile(filepath.Join(root, name), data, 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	seal()
+	policy.Keys = []PolicyKey{{KeyID: attest.KeyID(exporterPub), PublicKeyHex: hex.EncodeToString(exporterPub), Roles: []string{"exporter"}}}
+	writePolicy(t, path, policy)
+	result := verifyResult(t, root, path, 2)
+	if !result.DerivedSignature.Trusted || result.SourceSignatures[0].Status != derivedview.SignatureUnknownKey {
+		t.Fatalf("producer inherited exporter trust: %+v", result)
+	}
+	policy.Keys = append(policy.Keys, PolicyKey{KeyID: attest.KeyID(producerPub), PublicKeyHex: hex.EncodeToString(producerPub), Roles: []string{"exporter"}})
+	writePolicy(t, path, policy)
+	verifyResult(t, root, path, 2)
+	policy.Keys[1].Roles = []string{"producer"}
+	writePolicy(t, path, policy)
+	verifyResult(t, root, path, 0)
+	envelope.Signatures[0].Sig = "invalid"
+	seal()
+	result = verifyResult(t, root, path, 1)
+	if result.FileIntegrity != derivedview.IntegrityPassed || !result.DerivedSignature.Trusted || result.SourceSignatures[0].Status != derivedview.SignatureInvalid {
+		t.Fatalf("original failure lost its independent result: %+v", result)
+	}
+}
+
 func TestVerifierDoesNotLoadPackagePolicy(t *testing.T) {
 	root, _, policy := readerFixture(t)
 	inside := filepath.Join(root, "policy.json")

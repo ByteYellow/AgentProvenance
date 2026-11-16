@@ -4,6 +4,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Add explicit reading, selected signed and complete-original delivery modes.
+  Complete deliveries read the selected bundle revision and preserve its exact
+  bytes; selective exports never attach excluded originals. Verify producer and
+  exporter signatures independently with recipient-owned role authorization.
 - Add opt-in exporter signatures for selected offline readers and a standalone
   `agentprov-verify` command. Verify file inventories and Ed25519 signatures
   against recipient-owned keys and roles, with separate trust, source-signature

@@ -48,5 +48,5 @@ func ExampleSign() {
 	fmt.Println(result.Derivation, result.SourceSignatures[0].Status)
 	// Output:
 	// passed valid true
-	// not_checked unsigned
+	// not_checked not_checked
 }
