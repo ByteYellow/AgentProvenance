@@ -2,6 +2,17 @@
 
 English | [中文](zh-CN/gvisor-seccheck.md)
 
+Ordinary containers share the host kernel, where a native Sensor can observe
+their system calls. In gVisor, Sentry handles application system calls; host
+collection observes Sentry's own activity. To follow tasks inside that boundary,
+AgentProvenance receives Sentry's SecCheck events and associates them with a
+registered sandbox instance and lifecycle generation.
+
+For example, two clones can inherit the same inner PID from a checkpoint. Their
+separate instance registrations keep the new execution histories distinct;
+historical records retain their original identities. See [collection placement](deployment-modes.md#choose-collection-by-kernel-boundary)
+for how this differs from running a Sensor inside a KVM guest.
+
 The `internal/seccheck` package provides the transport layer for a gVisor
 producer. It is pinned to `runsc release-20261109.0`, protocol version 1, and
 source commit `a0e6be6fb5e03d8ebea13592f36a097c7e9a41b9`.

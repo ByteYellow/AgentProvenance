@@ -5,6 +5,46 @@ English · [简体中文](zh-CN/deployment-modes.md)
 Start with the local CLI or a daemon beside a workload. A centralized evidence
 service is a separate design, not a prerequisite for either deployment.
 
+## Where the Agent and its tools run
+
+Sandbox integration starts with two questions: where does the Agent make tool
+calls, and where do those calls execute? These three arrangements need different
+evidence links:
+
+| Arrangement | Example | AgentProvenance collection path |
+| --- | --- | --- |
+| Agent in Sandbox | A coding Agent and its tools run in one Linux VM or ordinary Pod | Record the session beside the Agent; collect system events from the task's kernel and associate them through process and cgroup identities |
+| Agent uses Sandbox | An Agent on a Mac sends a command to a Linux VM | Keep the source session and Tool Call; the authenticated executor records a separate target Run, execution attempt and scope, then delivers its signed evidence |
+| Agent in A uses Sandbox B | A containerized Agent delegates an independent command to another executor | Use the same handoff with distinct source and target identities; query from the source call to the remote execution or back from an effect to its recorded caller |
+
+The delivered remote route handles independent native Claude Bash calls. Its
+records include Mac and isolated-container callers, plus WSL-to-KVM acceptance.
+The container case uses a shared host network and a separate executor workspace.
+Sandbox provisioning, scheduling and workload isolation stay with the operator's
+platform; AgentProvenance records the execution and its evidence links.
+
+## Choose collection by kernel boundary
+
+Execution placement and isolation technology are separate choices. Kubernetes
+places workloads; the selected runtime determines which kernel handles their
+system calls. Collection follows that boundary:
+
+- **Native Linux and ordinary containers:** a Sensor in the shared Linux kernel
+  observes process, file and network events. Pod/container metadata and cgroups
+  identify the workload; a node Sensor can observe several workloads.
+- **KVM guests and Firecracker:** the task has a guest kernel. Run the executor
+  and Sensor inside that guest; the outer host sees the VM process. Firecracker
+  also has a guest-image and evidence-retirement recipe.
+- **gVisor:** Sentry handles the sandbox's system calls. Its SecCheck stream feeds
+  a receiver outside Sentry, preserving inner task identities and lifecycle
+  generations. The host's Sentry process remains a separate identity.
+
+Code, browser and desktop sandboxes describe the tools available to an Agent,
+not the kernel boundary. Browser and Notebook adapters add page, operation and
+request context to explain work inside long-lived processes. Linux system
+capture is configured separately. The scope table below lists current entries
+and the remaining desktop, mobile and platform-specific work.
+
 ## First experience: portable replay
 
 The [v0.10.1 release](releases/v0.10.1.md) provides CLI archives for
@@ -62,13 +102,6 @@ exercised, their binary hashes and capture coverage.
 | RL / batch evaluation | Per-run recording, batch manifests, EvalContext and offline evaluator results | Scheduling, training, rewards and sandbox provisioning remain with the calling platform |
 | Enterprise internal platform | Authenticated local APIs, node collection, signed evidence and offline sharing | Central multi-tenant storage, SSO, quotas and HA remain outside the implemented local service |
 | Android / iOS | No native mobile collector or operation adapter | Outside the v1.0 scope |
-
-All three execution placements use these entries: an Agent and its tools in one
-observable Linux environment; an external caller using a Linux executor; or a
-containerized caller using a separate executor. The selected native Claude route
-has Mac and isolated-container caller records, with WSL-to-KVM results in the
-amd64 report. The container case uses a shared host network and a separate
-executor workspace, with explicit source and target identities.
 
 The following integration boundaries matter when choosing a sandbox platform:
 

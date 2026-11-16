@@ -2,6 +2,15 @@
 
 [English](../gvisor-seccheck.md) | 中文
 
+普通容器共享宿主内核，原生 Sensor 可以在该内核中观察系统调用。
+gVisor 的应用系统调用由 Sentry 处理，宿主采集看到的是 Sentry 自身的活动。
+为了追踪这一边界内的任务，AgentProvenance 接收 Sentry 的 SecCheck 事件，
+并将事件归属到已登记的沙箱实例和生命周期代次。
+
+例如，两份克隆可以从检查点继承相同的内部 PID。分别登记实例后，
+两条新执行历史保持独立，历史记录继续保留原身份。
+它与 KVM guest 内部署 Sensor 的区别见[采集位置说明](deployment-modes.md#再按内核边界选择采集器)。
+
 `internal/seccheck` 提供 gVisor producer 的传输接收层，固定使用
 `runsc release-20261109.0`、协议版本 1，以及源码提交
 `a0e6be6fb5e03d8ebea13592f36a097c7e9a41b9`。

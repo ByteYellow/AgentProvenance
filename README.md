@@ -166,6 +166,14 @@ resumed sessions and source formats are covered in the
 
 ### Remote commands, Browser and Notebook
 
+An Agent may live inside a sandbox, call one from outside, or delegate from
+sandbox A to sandbox B. A local process tree covers only part of the latter two
+paths. Browser and Notebook tools also reuse long-lived processes, so their
+operations need page and request identities alongside system events.
+AgentProvenance connects these layers through explicit execution references and
+native application context. The [deployment guide](docs/deployment-modes.md#where-the-agent-and-its-tools-run)
+explains which collection entry fits each arrangement.
+
 The **current source checkout** adds these opt-in entries for the upcoming v1.0.
 Build it using the command above; the v0.10.1 release archives retain their
 original feature set.

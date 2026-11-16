@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -153,12 +154,20 @@ func TestCompleteDocumentationKeepsOverviewAndReference(t *testing.T) {
 		route string
 		need  []string
 	}{
-		{"/demos/guide/start?lang=en", []string{"Agent session", "Runtime capture", "Features and docs", "agentprovenance-cover-en.png", "three-axis-observability.svg", "Browse demos", "/demos/guide/capabilities?lang=en", "Remote commands, Browser and Notebook", "/demos/guide/execution-handoff?lang=en", "/demos/guide/browser-context?lang=en", "/demos/guide/notebook-context?lang=en"}},
-		{"/demos/guide/start?lang=zh-CN", []string{"远端命令、浏览器与 Notebook", "/demos/guide/execution-handoff?lang=zh-CN", "/demos/guide/browser-context?lang=zh-CN", "/demos/guide/notebook-context?lang=zh-CN"}},
-		{"/demos/guide/deployment?lang=en", []string{"Choose a capture entry", "v0.10.1", "/demos/guide/release-notes?lang=en", "/demos/guide/gvisor-seccheck?lang=en", "ARM64 and amd64 systrap", "signed delivery and retirement accepted", "Workload and platform scope", "RuntimeClass"}},
-		{"/demos/guide/deployment?lang=zh-CN", []string{"选择采集入口", "v0.10.1", "/demos/guide/release-notes?lang=zh-CN", "/demos/guide/gvisor-seccheck?lang=zh-CN", "ARM64、amd64 systrap", "签名交付和回收已验收", "业务场景与平台范围", "RuntimeClass"}},
-		{"/demos/guide/execution-handoff?lang=en", []string{"boot_tested: false", "actual Firecracker v1.18.0 boot", "receipt-gated retirement"}},
-		{"/demos/guide/execution-handoff?lang=zh-CN", []string{"boot_tested", "实际启动 guest", "回执齐全后回收"}},
+		{"/demos/guide/start?lang=en", []string{"Agent session", "Runtime capture", "Features and docs", "agentprovenance-cover-en.png", "three-axis-observability.svg", "Browse demos", "/demos/guide/capabilities?lang=en", "Remote commands, Browser and Notebook", "/demos/guide/execution-handoff?lang=en", "/demos/guide/browser-context?lang=en", "/demos/guide/notebook-context?lang=en", "/demos/guide/deployment?lang=en#where-the-agent-and-its-tools-run"}},
+		{"/demos/guide/start?lang=zh-CN", []string{"远端命令、浏览器与 Notebook", "/demos/guide/execution-handoff?lang=zh-CN", "/demos/guide/browser-context?lang=zh-CN", "/demos/guide/notebook-context?lang=zh-CN", "/demos/guide/deployment?lang=zh-CN#" + url.PathEscape("先看-agent-和工具在哪里运行")}},
+		{"/demos/guide/deployment?lang=en", []string{"Where the Agent and its tools run", "Choose collection by kernel boundary", "Choose a capture entry", "v0.10.1", "/demos/guide/release-notes?lang=en", "/demos/guide/gvisor-seccheck?lang=en", "ARM64 and amd64 systrap", "signed delivery and retirement accepted", "Workload and platform scope", "RuntimeClass"}},
+		{"/demos/guide/deployment?lang=zh-CN", []string{"先看 Agent 和工具在哪里运行", "再按内核边界选择采集器", "<strong>原生 Linux 与普通容器</strong>", "选择采集入口", "v0.10.1", "/demos/guide/release-notes?lang=zh-CN", "/demos/guide/gvisor-seccheck?lang=zh-CN", "ARM64、amd64 systrap", "签名交付和回收已验收", "业务场景与平台范围", "RuntimeClass"}},
+		{"/demos/guide/execution-handoff?lang=en", []string{"Follow one command across the boundary", "boot_tested: false", "actual Firecracker v1.18.0 boot", "receipt-gated retirement"}},
+		{"/demos/guide/execution-handoff?lang=zh-CN", []string{"一条命令如何跨越沙箱边界", "boot_tested", "实际启动 guest", "回执齐全后回收"}},
+		{"/demos/guide/browser-context?lang=en", []string{"Why record browser context", "/demos/guide/deployment?lang=en#choose-collection-by-kernel-boundary"}},
+		{"/demos/guide/browser-context?lang=zh-CN", []string{"为什么需要浏览器上下文", "/demos/guide/deployment?lang=zh-CN#" + url.PathEscape("再按内核边界选择采集器")}},
+		{"/demos/guide/notebook-context?lang=en", []string{"Why record requests rather than only processes", "/demos/guide/deployment?lang=en#choose-collection-by-kernel-boundary"}},
+		{"/demos/guide/notebook-context?lang=zh-CN", []string{"为什么记录请求，而不只记录进程", "/demos/guide/deployment?lang=zh-CN#" + url.PathEscape("再按内核边界选择采集器")}},
+		{"/demos/guide/demo-library?lang=en", []string{"Read the v1.0 candidate examples", "What happened", "What to inspect", "synthetic"}},
+		{"/demos/guide/demo-library?lang=zh-CN", []string{"v1.0 候选示例看什么", "案例经过", "阅读顺序", "合成样本"}},
+		{"/demos/guide/release-v1.0.0-preview?lang=en", []string{"Why this version extends the evidence path", "/demos/guide/demo-library?lang=en#read-the-v10-candidate-examples"}},
+		{"/demos/guide/release-v1.0.0-preview?lang=zh-CN", []string{"为什么扩展这条证据链", "<strong>跨环境</strong>", "/demos/guide/demo-library?lang=zh-CN#" + url.PathEscape("v10-候选示例看什么")}},
 		{"/demos/guide/gvisor-seccheck?lang=en", []string{"exercised on\nARM64 and amd64", "original receive, fault-recovery and restore/two-clone results"}},
 		{"/demos/guide/gvisor-seccheck?lang=zh-CN", []string{"已在 ARM64 和 amd64 实测", "原始结果及程序哈希"}},
 		{"/demos/guide/capabilities?lang=zh-CN", []string{"核心模型", "部署模式", "外部评估器协议", "架构", "evidence-dag-zh-CN.svg"}},

@@ -4,6 +4,37 @@
 
 AgentProvenance 可以从本地命令开始使用，无需先部署一套平台。现有实现支持命令行记录和本地服务；中心化服务目前只有设计。
 
+## 先看 Agent 和工具在哪里运行
+
+接入沙箱前，先区分两个位置：Agent 在哪里发起工具调用，工具又在哪里执行。
+常见的三种用法，对应不同的证据关联方式：
+
+| 用法 | 例子 | AgentProvenance 的采集与关联方式 |
+| --- | --- | --- |
+| Agent 整体在沙箱内 | Coding Agent 与工具一起运行在 Linux VM 或普通 Pod 内 | 在 Agent 侧记录会话，在任务所在内核采集系统事件，通过进程与 cgroup 身份关联 |
+| Agent 在外部使用沙箱 | Mac 上的 Agent 将命令发给 Linux VM | 来源端保存会话和 Tool Call；已鉴权的执行器建立目标 Run、执行尝试和作用域，再交付签名证据 |
+| Agent 在沙箱 A，工具在沙箱 B | 容器内的 Agent 向另一执行器派发独立命令 | 沿用跨沙箱交接，分别登记两端身份；可以从来源调用查远端执行，也可以从执行结果反查已记录的调用方 |
+
+当前远端入口接入 Claude 原生 Bash 独立调用，已有 Mac、隔离容器调用端记录，
+以及 WSL 到 KVM 的验收。容器案例共享宿主网络，执行端使用独立工作区。
+沙箱创建、调度和负载隔离由使用方的平台负责，AgentProvenance 负责记录执行及其证据关联。
+
+## 再按内核边界选择采集器
+
+执行位置与隔离技术是两项选择。Kubernetes 负责安置工作负载，具体运行时决定
+哪个内核处理任务的系统调用。采集器应放在相应的边界上：
+
+- **原生 Linux 与普通容器**：Sensor 在共享的 Linux 内核中采集进程、文件和网络事件，
+  通过 Pod、容器元数据及 cgroup 区分负载，一个节点 Sensor 可以观察多个负载。
+- **KVM guest 与 Firecracker**：任务使用独立的 guest 内核，执行器和 Sensor 部署在
+  guest 内。外层宿主机看到的是 VM 进程。Firecracker 另提供 guest 镜像与证据回收方案。
+- **gVisor**：Sentry 处理沙箱内的系统调用，通过 SecCheck 将事件交给外部接收器，
+  保留内部任务身份及生命周期代次；宿主机上的 Sentry 进程单独标识。
+
+代码、浏览器、桌面沙箱描述的是 Agent 能使用哪些工具，与上述内核边界可以组合。
+Browser 和 Notebook 适配器补充页面、操作和请求上下文，用于解释长驻进程内发生的任务。
+Linux 系统采集单独配置。下方的范围表列出已接入的场景，以及桌面、移动端和平台专用适配的边界。
+
 ## 首次体验：下载后回放
 
 [v0.10.1 版本](releases/v0.10.1.md)提供 Linux 和 macOS 的 amd64、arm64 命令行压缩包。运行 `agentprov demo` 可打开本地示例首页，其中包括十二份签名回放（含一份合成样本）和两个可选评估器指南。阅读页与 Dashboard 使用相同的视觉风格，支持目录、图片、表格和代码复制。
@@ -48,22 +79,17 @@ guest 内核与 Sentry 分别使用对应入口，宿主运行时进程与内部
 | 企业内部平台 | 已鉴权的本地 API、节点采集、签名证据和离线分享 | 中心化多租户存储、SSO、配额和高可用不在现有本地服务范围内 |
 | Android／iOS | 暂无移动端原生采集器或操作适配器 | 不纳入 v1.0 |
 
-三种执行位置均可使用这些入口：Agent 与工具同处一个可观测的 Linux 环境、
-外部 Agent 调用 Linux 执行器、容器内 Agent 调用独立执行器。选定的 Claude 原生入口
-已有 Mac 调用端和隔离容器调用端记录；amd64 报告另有 WSL 到 KVM 的结果。
-容器案例共享宿主网络，执行端使用独立工作区，两端分别登记来源与目标身份。
-
 选择沙箱平台时，还需区分以下接入范围：
 
-- **原生 Linux、普通 Pod 与 KVM guest：**Sensor 部署在实际执行任务的内核。
+- **原生 Linux、普通 Pod 与 KVM guest**：Sensor 部署在实际执行任务的内核。
   Pod informer 维护容器与 cgroup 归属，目前未实现按 Kubernetes `RuntimeClass`
   handler 自动选择内部采集器。
-- **gVisor 与 Firecracker：**gVisor 使用独立 SecCheck producer；Firecracker 在 guest
+- **gVisor 与 Firecracker**：gVisor 使用独立 SecCheck producer；Firecracker 在 guest
   内运行原生执行器。远端执行器内置采集模式为 `native`，将远端工具调用派发到 Sentry
   仍需对接执行入口。恢复／克隆验收选用 gVisor；Firecracker 验收覆盖启动、执行、交付和回收。
-- **Kata、Cloud Hypervisor 等 guest 运行时：**可复用 guest 内采集方案，镜像／内核、
+- **Kata、Cloud Hypervisor 等 guest 运行时**：可复用 guest 内采集方案，镜像／内核、
   实例身份、传输和生命周期仍需针对所选运行时接入并验收。
-- **沙箱平台与共享工作节点：**当前没有 E2B、OpenSandbox、SIG Agent Sandbox、
+- **沙箱平台与共享工作节点**：当前没有 E2B、OpenSandbox、SIG Agent Sandbox、
   OpenKruise、AIO 或 Actor 平台的专用适配器。接入方可使用现有执行与证据接口，
   同时提供任务到实例的登记和生命周期通知。一个工作 Pod 承载多个独立沙箱 Actor 时，
   需要进一步区分各实例身份。

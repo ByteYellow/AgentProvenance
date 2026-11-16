@@ -7,6 +7,23 @@ operations, pages, frames, requests, redirects, service-worker traffic, download
 digests, screenshots and privacy-projected HAR; import through the existing context interface and share
 through signed Bundles or offline reading copies.
 
+## Why record browser context
+
+A research task may open a page, read its text and take a screenshot while the
+same browser processes continue serving other pages. System telemetry identifies
+those processes and their network or file activity. Page, frame and operation
+IDs add the task-level context needed to inspect each action and its saved result.
+
+The Playwright entry records these identities at the browser boundary. For an
+"open, read, screenshot" task, follow the Agent tool result to the recorded
+operation, page and retained text or image. Requests, redirects and background
+workers keep their own references, so their relationship to an operation can be
+inspected in the saved records.
+
+Use the Python entry in an existing tool, or the supplied stdio MCP server to
+connect an Agent. Add Linux system collection when process/file/network evidence
+is needed; choose its location using the [deployment guide](deployment-modes.md#choose-collection-by-kernel-boundary).
+
 ## Install
 
 Use Python 3.12 or newer in a dedicated environment:

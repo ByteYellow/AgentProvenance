@@ -6,13 +6,38 @@ This protocol connects an originating Agent Tool Call to independent commands
 executed by another trusted producer. It preserves each executor's local Run and
 uses explicit references for navigation and evidence delivery.
 
+## Follow one command across the boundary
+
+Suppose an Agent on a Mac, or inside sandbox A, asks sandbox B to run
+`python analyze.py`. The source session records the request; the target owns
+the process, files and network activity. The handoff joins those two records:
+
+```text
+Source Run / session / native Tool Call
+  -> authenticated dispatch / execution attempt
+  -> target Run / execution scope / process and runtime events
+  -> saved output / signed Bundle / receiving receipt
+```
+
+The trusted route supplies the source reference, and the executor records its
+actual attempt and scope. This makes the question "which call produced this
+remote file?" navigable across Runs. See [deployment choices](deployment-modes.md#where-the-agent-and-its-tools-run)
+for the three supported placement patterns.
+
+Read three states separately: **execution** reports what happened to the command,
+**capture** reports the observations retained, and **delivery** reports the
+evidence package and receipt. A lost response is handled by retrying the same
+operation; an explicit rerun creates another attempt. This keeps transport
+recovery distinct from running the command again.
+
 The current implementation provides durable admission, a bounded command worker,
 restart recovery, stop requests and an authenticated HTTP API in `internal/handoff`
 and `internal/daemon`. Signed packages and durable receiving receipts are available
 through the pull API and `forensics collect-execution`. Native capture checkpoints
 retain probe capabilities, scope boundaries and drain results. Read-only
-execution-link APIs expose both directions; Dashboard controls are still under
-development. The existing synchronous `POST /v1/record` API keeps its current behavior.
+execution-link APIs expose both directions. The corresponding reader is available
+in the [candidate preview](../previews/v1.0-reader/README.md), pending formal
+Dashboard integration. The existing synchronous `POST /v1/record` API keeps its current behavior.
 
 For a first integration, follow [executor setup](#enable-the-executor),
 [native Claude routing](#route-native-claude-bash-calls), and

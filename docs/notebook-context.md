@@ -6,6 +6,23 @@ Record a selected Jupyter client's messages, then import them into an existing
 AgentProvenance Run. The adapter records native requests and outputs without
 changing the kernel's code execution or retry behavior.
 
+## Why record requests rather than only processes
+
+A data-analysis task can load a CSV, calculate a summary and plot a chart in the
+same long-lived kernel. Process identity groups that work, while Jupyter request
+and parent-message IDs identify which cell produced an output. Late output and
+kernel restarts make those native references particularly useful.
+
+The adapter retains the frontend session, kernel session, request and output
+references. Investigate from a tool call to its submitted code, then to the
+result, error or saved chart. Outputs keep their original request, and a
+restarted kernel has a separate identity. Linux system events retain their
+process/scope attribution alongside this cell-level application context.
+
+Choose the recorder when integrating an existing Jupyter client, or the supplied
+stdio MCP server when the Agent needs a managed kernel. See [deployment choices](deployment-modes.md#choose-collection-by-kernel-boundary)
+for the independent system-collection setup.
+
 ## Integration
 
 Use `agentprov.notebook.Recorder` from the repository's optional Python package.

@@ -21,6 +21,25 @@ Notebook outputs retain their original request across late output and restarts.
 For a controlled remote command, use the [execution handoff guide](execution-handoff.md).
 For Sentry-origin events, use the [gVisor collection guide](gvisor-seccheck.md).
 
+## Read the v1.0 candidate examples
+
+The [local reader preview](../previews/v1.0-reader/README.md) has four entries.
+Start with the question in each row, then follow its evidence path:
+
+| Entry | What happened | What to inspect |
+| --- | --- | --- |
+| Task investigation | DeepSeek investigated a task before and after a configuration repair | Read the task and tool results, then use Compare to inspect the configuration and file changes across the two Runs |
+| Cross-environment execution | Two Claude sessions made three remote execution attempts; the capture also exercised a lost receipt response | Select a source Tool Call, follow its target Run and attempt, then compare execution, capture and delivery states; navigate back to the original call |
+| Browser | An Agent used the recorded browser entry for a web task | Expand the Agent session and open Browser / Notebook; inspect an operation's native references, saved text and screenshot, with request evidence alongside it |
+| Notebook | A synthetic Jupyter capture contains a chart and a kernel restart | Inspect the request and parent-message references, open the chart, and compare kernel identities across the restart |
+
+The first three use recorded candidate executions. The Notebook sample is
+synthetic; the earlier real Claude Notebook recording remains in the
+[candidate archive](benchmarks/v1.0-candidate/README.md). These are saved
+observations: opening them reads evidence without rerunning the workload.
+The preview preserves the current graph and adds local reading controls. Its
+entries are separate from the released `agentprov demo` catalog below.
+
 ## Chapters and preserved entry names
 
 | Story | Existing entry names | Distinct evidence |
