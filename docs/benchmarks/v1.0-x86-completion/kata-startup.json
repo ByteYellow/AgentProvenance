@@ -1,0 +1,408 @@
+{
+  "status": "incomplete",
+  "attempts": [
+    {
+      "status": "FAIL",
+      "error": "Command '['kubectl', '--context', 'default', '--request-timeout=15s', '-n', 'agentprov-v1-kata', 'get', 'pod', 'ap-kata-df58cc6a61e3', '-o', 'json']' timed out after 30 seconds",
+      "source": {
+        "dirty": false,
+        "head": "076ddafe64bc3c60f32f9478948b44648132d259"
+      },
+      "binary_sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+      "lock_sha256": "ad7ad71839cca302935008dfc8704f2b3941b423e6868f43869e10e5869653fe",
+      "fixture_sha256": {
+        "python/agentprov/__init__.py": "fd6a8e330de26ec3363ddbd7f9f5f0f2f5975bb626d4b1b2df5756a0547128cd",
+        "python/agentprov/workspace_mcp.py": "287b9442a9a3c38b5d6654d7ec9bc62e5136e91113eb69977e92aca9d64f9af2",
+        "python/agentprov_eval/__init__.py": "f724163de1719e304001ae01f644498caf6cfc665fc05c7801ec7fad095d1f26",
+        "scripts/accept_execution_delivery.py": "dfb791d7926ded6a21653a0ccfc5c1aebdaaefc836e12be6adce16dc868c7dba",
+        "scripts/accept_execution_handoff.py": "4d123734a52a3542d2f347f74809f86da130cd23728864ae663c4c6ff225c434",
+        "scripts/accept_workspace.py": "b5c939f33c591fb94c7f0e423cb320c6c85bc3c4735c48317a2571e1197d4bfd",
+        "scripts/acceptance/kata-qemu/binding.py": "819862a7e9239622da6c9dd0b0677b5483d7485c92a1d95fdb8b3a3783c052f4",
+        "scripts/acceptance/kata-qemu/common.py": "8d050caa46b7b468326581625be49917ab07c7bd66d3dbd54cf5d91fc13d78c6",
+        "scripts/acceptance/kata-qemu/guest.py": "0436497aad23249be4f7e0af314fd32f8d0e2ab2bdc9cc1df1e4a0b25c8208f4",
+        "scripts/acceptance/kata-qemu/reader.py": "11f850ef32f95b4777c9ff783c241d7eb3c44f2ac8edfb840dcfc6aba2b4d4f1",
+        "scripts/acceptance/kata-qemu/run.py": "56315785003fb2a9a1beb5a060e190f9a5e43113a3e3fe4e7bd19a6b99df134a",
+        "scripts/acceptance/kata-qemu/test_cleanup.py": "480d76d071c029226fc96dfb4edf1e3210bf6d05e989ddd60552a0fc1f5a0062",
+        "scripts/acceptance/kata-qemu/test_contracts.py": "ba8dd3007166800a0981cc8bbb9f9b62f0a0c869a7dbf9509dce8f5e3a259354",
+        "scripts/acceptance/kata-qemu/test_workspace_case.py": "3caa9c580b126372bcbadccf68c6e30f584274cfe3a2b8ffbbba6c8cd45ad39a",
+        "scripts/acceptance/kata-qemu/workspace_case.py": "fdccc2ac4139b997fb07a50606239f43da2b0d41b37d8f10ef426a3a346cb528"
+      },
+      "label": "first",
+      "original_report_sha256": "57c620d13e455d6b37d0064621203c33f307bd2cce2005eb8dd376201ff99c6f"
+    },
+    {
+      "status": "FAIL",
+      "error": "Command '['kubectl', '--context', 'default', '--request-timeout=15s', '-n', 'agentprov-v1-kata', 'exec', 'ap-kata-8e664efee25b', '-c', 'fixture', '--', 'python3', '-c', \"from pathlib import Path; print(Path('/proc/sys/kernel/random/boot_id').read_text().strip())\"]' timed out after 30 seconds",
+      "source": {
+        "dirty": false,
+        "head": "91a4a959763193325a7e825107d63c86d736c475"
+      },
+      "binary_sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+      "lock_sha256": "ad7ad71839cca302935008dfc8704f2b3941b423e6868f43869e10e5869653fe",
+      "fixture_sha256": {
+        "python/agentprov/__init__.py": "fd6a8e330de26ec3363ddbd7f9f5f0f2f5975bb626d4b1b2df5756a0547128cd",
+        "python/agentprov/workspace_mcp.py": "287b9442a9a3c38b5d6654d7ec9bc62e5136e91113eb69977e92aca9d64f9af2",
+        "python/agentprov_eval/__init__.py": "f724163de1719e304001ae01f644498caf6cfc665fc05c7801ec7fad095d1f26",
+        "scripts/accept_execution_delivery.py": "dfb791d7926ded6a21653a0ccfc5c1aebdaaefc836e12be6adce16dc868c7dba",
+        "scripts/accept_execution_handoff.py": "4d123734a52a3542d2f347f74809f86da130cd23728864ae663c4c6ff225c434",
+        "scripts/accept_workspace.py": "b5c939f33c591fb94c7f0e423cb320c6c85bc3c4735c48317a2571e1197d4bfd",
+        "scripts/acceptance/kata-qemu/binding.py": "819862a7e9239622da6c9dd0b0677b5483d7485c92a1d95fdb8b3a3783c052f4",
+        "scripts/acceptance/kata-qemu/common.py": "8d050caa46b7b468326581625be49917ab07c7bd66d3dbd54cf5d91fc13d78c6",
+        "scripts/acceptance/kata-qemu/guest.py": "0436497aad23249be4f7e0af314fd32f8d0e2ab2bdc9cc1df1e4a0b25c8208f4",
+        "scripts/acceptance/kata-qemu/reader.py": "11f850ef32f95b4777c9ff783c241d7eb3c44f2ac8edfb840dcfc6aba2b4d4f1",
+        "scripts/acceptance/kata-qemu/run.py": "9f8a752d569632f2ff71b983d8db23c60a30c4d8d074004eae6e7c7d4ab3a8ae",
+        "scripts/acceptance/kata-qemu/test_cleanup.py": "480d76d071c029226fc96dfb4edf1e3210bf6d05e989ddd60552a0fc1f5a0062",
+        "scripts/acceptance/kata-qemu/test_contracts.py": "6ff15ecbce2ff360b4c0b78f1c16b1a6c83dcfb280c37fe2b45774ab5cf5a559",
+        "scripts/acceptance/kata-qemu/test_workspace_case.py": "3caa9c580b126372bcbadccf68c6e30f584274cfe3a2b8ffbbba6c8cd45ad39a",
+        "scripts/acceptance/kata-qemu/workspace_case.py": "fdccc2ac4139b997fb07a50606239f43da2b0d41b37d8f10ef426a3a346cb528"
+      },
+      "label": "second",
+      "original_report_sha256": "8b7ab1c09d6f93398eb761eb8e84b6c803f205c0b720def8e1272ce2b4031047",
+      "guest": {
+        "status": "FAIL",
+        "error": "Guest fixture exceeded its bounded deadline",
+        "kernel_check": {},
+        "original_report_sha256": "713f8fdc22950a6e00c8d2970bea01e3b01f937c41b71894db822b4d654fc33e"
+      }
+    },
+    {
+      "status": "BLOCKED",
+      "error": "Guest native capture readiness deadline expired",
+      "source": {
+        "dirty": false,
+        "head": "91a4a959763193325a7e825107d63c86d736c475"
+      },
+      "binary_sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+      "lock_sha256": "ad7ad71839cca302935008dfc8704f2b3941b423e6868f43869e10e5869653fe",
+      "fixture_sha256": {
+        "python/agentprov/__init__.py": "fd6a8e330de26ec3363ddbd7f9f5f0f2f5975bb626d4b1b2df5756a0547128cd",
+        "python/agentprov/workspace_mcp.py": "287b9442a9a3c38b5d6654d7ec9bc62e5136e91113eb69977e92aca9d64f9af2",
+        "python/agentprov_eval/__init__.py": "f724163de1719e304001ae01f644498caf6cfc665fc05c7801ec7fad095d1f26",
+        "scripts/accept_execution_delivery.py": "dfb791d7926ded6a21653a0ccfc5c1aebdaaefc836e12be6adce16dc868c7dba",
+        "scripts/accept_execution_handoff.py": "4d123734a52a3542d2f347f74809f86da130cd23728864ae663c4c6ff225c434",
+        "scripts/accept_workspace.py": "b5c939f33c591fb94c7f0e423cb320c6c85bc3c4735c48317a2571e1197d4bfd",
+        "scripts/acceptance/kata-qemu/binding.py": "819862a7e9239622da6c9dd0b0677b5483d7485c92a1d95fdb8b3a3783c052f4",
+        "scripts/acceptance/kata-qemu/common.py": "8d050caa46b7b468326581625be49917ab07c7bd66d3dbd54cf5d91fc13d78c6",
+        "scripts/acceptance/kata-qemu/guest.py": "0436497aad23249be4f7e0af314fd32f8d0e2ab2bdc9cc1df1e4a0b25c8208f4",
+        "scripts/acceptance/kata-qemu/reader.py": "11f850ef32f95b4777c9ff783c241d7eb3c44f2ac8edfb840dcfc6aba2b4d4f1",
+        "scripts/acceptance/kata-qemu/run.py": "9f8a752d569632f2ff71b983d8db23c60a30c4d8d074004eae6e7c7d4ab3a8ae",
+        "scripts/acceptance/kata-qemu/test_cleanup.py": "480d76d071c029226fc96dfb4edf1e3210bf6d05e989ddd60552a0fc1f5a0062",
+        "scripts/acceptance/kata-qemu/test_contracts.py": "6ff15ecbce2ff360b4c0b78f1c16b1a6c83dcfb280c37fe2b45774ab5cf5a559",
+        "scripts/acceptance/kata-qemu/test_workspace_case.py": "3caa9c580b126372bcbadccf68c6e30f584274cfe3a2b8ffbbba6c8cd45ad39a",
+        "scripts/acceptance/kata-qemu/workspace_case.py": "fdccc2ac4139b997fb07a50606239f43da2b0d41b37d8f10ef426a3a346cb528"
+      },
+      "label": "third",
+      "original_report_sha256": "b6c578fae0f991faaf7c053df50296e8a93c320a58802abc4eb1ca6b790caee8",
+      "guest": {
+        "status": "BLOCKED",
+        "error": "Guest native capture readiness deadline expired",
+        "platform_binding": {
+          "container_id": "419669cbea13291aa546805899a77725df34998fb23783998aac057201855f2b",
+          "guest_boot_id": "7523a08f-cce1-4d9f-8aa9-4122dfa31824",
+          "mode": "guest",
+          "pod_uid": "f3965d9e-4f51-4e83-bbf3-290f3c171f98",
+          "runtime_class": "kata-qemu-runtime-rs",
+          "runtime_handler": "kata-qemu-runtime-rs",
+          "target": {
+            "generation": "g-6d8e9d87bfd542558caceb9f86005282",
+            "instance_id": "f3965d9e-4f51-4e83-bbf3-290f3c171f98",
+            "producer_id": "kata-acceptance-fixture"
+          }
+        },
+        "binding_rejections": [
+          "observed_pod_uid_rejected",
+          "observed_guest_boot_id_rejected",
+          "target_instance_id_rejected",
+          "target_generation_rejected"
+        ],
+        "kernel_check": {
+          "status": "PASS",
+          "kernel": "6.18.56",
+          "btf_sha256": "b602f3349fd04bc5575500346f6e235023140e09a671d5a8e6039b45367a41bc",
+          "boot_id": "7523a08f-cce1-4d9f-8aa9-4122dfa31824",
+          "namespaces": {
+            "cgroup": "cgroup:[4026532316]",
+            "mnt": "mnt:[4026532315]",
+            "pid": "pid:[4026532314]",
+            "user": "user:[4026531837]"
+          },
+          "privileges": [
+            "CapEff:\t000001ffffffffff",
+            "NoNewPrivs:\t0",
+            "Seccomp:\t0"
+          ],
+          "tracefs": "/sys/kernel/tracing"
+        },
+        "original_report_sha256": "53fb80d0db0808481cd1b2dbb213cf72c7f1686ec9b89bb559e2be836c07371d"
+      }
+    },
+    {
+      "status": "BLOCKED",
+      "error": "Guest native capture readiness deadline expired",
+      "source": {
+        "dirty": true,
+        "head": "91a4a959763193325a7e825107d63c86d736c475"
+      },
+      "binary_sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+      "lock_sha256": "ad7ad71839cca302935008dfc8704f2b3941b423e6868f43869e10e5869653fe",
+      "fixture_sha256": {
+        "python/agentprov/__init__.py": "fd6a8e330de26ec3363ddbd7f9f5f0f2f5975bb626d4b1b2df5756a0547128cd",
+        "python/agentprov/workspace_mcp.py": "287b9442a9a3c38b5d6654d7ec9bc62e5136e91113eb69977e92aca9d64f9af2",
+        "python/agentprov_eval/__init__.py": "f724163de1719e304001ae01f644498caf6cfc665fc05c7801ec7fad095d1f26",
+        "scripts/accept_execution_delivery.py": "dfb791d7926ded6a21653a0ccfc5c1aebdaaefc836e12be6adce16dc868c7dba",
+        "scripts/accept_execution_handoff.py": "4d123734a52a3542d2f347f74809f86da130cd23728864ae663c4c6ff225c434",
+        "scripts/accept_workspace.py": "b5c939f33c591fb94c7f0e423cb320c6c85bc3c4735c48317a2571e1197d4bfd",
+        "scripts/acceptance/kata-qemu/binding.py": "819862a7e9239622da6c9dd0b0677b5483d7485c92a1d95fdb8b3a3783c052f4",
+        "scripts/acceptance/kata-qemu/common.py": "8d050caa46b7b468326581625be49917ab07c7bd66d3dbd54cf5d91fc13d78c6",
+        "scripts/acceptance/kata-qemu/guest.py": "afa6abbcbe5271c30c35d2e7d21ff1938a3d0610b09dea3281a5f16fde2dccf4",
+        "scripts/acceptance/kata-qemu/reader.py": "11f850ef32f95b4777c9ff783c241d7eb3c44f2ac8edfb840dcfc6aba2b4d4f1",
+        "scripts/acceptance/kata-qemu/run.py": "9f8a752d569632f2ff71b983d8db23c60a30c4d8d074004eae6e7c7d4ab3a8ae",
+        "scripts/acceptance/kata-qemu/test_cleanup.py": "480d76d071c029226fc96dfb4edf1e3210bf6d05e989ddd60552a0fc1f5a0062",
+        "scripts/acceptance/kata-qemu/test_contracts.py": "6ff15ecbce2ff360b4c0b78f1c16b1a6c83dcfb280c37fe2b45774ab5cf5a559",
+        "scripts/acceptance/kata-qemu/test_workspace_case.py": "3caa9c580b126372bcbadccf68c6e30f584274cfe3a2b8ffbbba6c8cd45ad39a",
+        "scripts/acceptance/kata-qemu/workspace_case.py": "fdccc2ac4139b997fb07a50606239f43da2b0d41b37d8f10ef426a3a346cb528"
+      },
+      "label": "diagnostic",
+      "original_report_sha256": "e56ed1da0870e17b5db80ed6006ad89235eaa69d20cd32e7bfafbfe9e36d57e1",
+      "guest": {
+        "status": "BLOCKED",
+        "error": "Guest native capture readiness deadline expired",
+        "startup_failure": {
+          "elapsed_seconds": 45.175939134000004,
+          "last_ready": null,
+          "owned_pid": 6,
+          "process_status": [
+            "State:\tR (running)",
+            "VmPeak:\t 1368500 kB",
+            "VmRSS:\t   54228 kB",
+            "Threads:\t9"
+          ],
+          "stack_dump_error": "TimeoutExpired",
+          "wait_channel": "0"
+        },
+        "platform_binding": {
+          "container_id": "38a85633ad2ed46749b616765d730d193cba446345d134020dbf241091a4d47a",
+          "guest_boot_id": "9c92e1a9-645a-496a-a26f-c6a57b581213",
+          "mode": "guest",
+          "pod_uid": "b50a4b41-d10a-4799-af64-0925979b3a21",
+          "runtime_class": "kata-qemu-runtime-rs",
+          "runtime_handler": "kata-qemu-runtime-rs",
+          "target": {
+            "generation": "g-93917101c4f640a5a354a030428616b3",
+            "instance_id": "b50a4b41-d10a-4799-af64-0925979b3a21",
+            "producer_id": "kata-acceptance-fixture"
+          }
+        },
+        "binding_rejections": [
+          "observed_pod_uid_rejected",
+          "observed_guest_boot_id_rejected",
+          "target_instance_id_rejected",
+          "target_generation_rejected"
+        ],
+        "kernel_check": {
+          "status": "PASS",
+          "kernel": "6.18.56",
+          "btf_sha256": "b602f3349fd04bc5575500346f6e235023140e09a671d5a8e6039b45367a41bc",
+          "boot_id": "9c92e1a9-645a-496a-a26f-c6a57b581213",
+          "namespaces": {
+            "cgroup": "cgroup:[4026532316]",
+            "mnt": "mnt:[4026532315]",
+            "pid": "pid:[4026532314]",
+            "user": "user:[4026531837]"
+          },
+          "privileges": [
+            "CapEff:\t000001ffffffffff",
+            "NoNewPrivs:\t0",
+            "Seccomp:\t0"
+          ],
+          "tracefs": "/sys/kernel/tracing"
+        },
+        "original_report_sha256": "d41218d9bbd9db3bec62c0faf8c2fb96640f46cd7e87919b4b129d4322285e51"
+      }
+    },
+    {
+      "status": "BLOCKED",
+      "error": "Guest native capture readiness deadline expired",
+      "source": {
+        "dirty": true,
+        "head": "91a4a959763193325a7e825107d63c86d736c475"
+      },
+      "binary_sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+      "lock_sha256": "ad7ad71839cca302935008dfc8704f2b3941b423e6868f43869e10e5869653fe",
+      "fixture_sha256": {
+        "python/agentprov/__init__.py": "fd6a8e330de26ec3363ddbd7f9f5f0f2f5975bb626d4b1b2df5756a0547128cd",
+        "python/agentprov/workspace_mcp.py": "287b9442a9a3c38b5d6654d7ec9bc62e5136e91113eb69977e92aca9d64f9af2",
+        "python/agentprov_eval/__init__.py": "f724163de1719e304001ae01f644498caf6cfc665fc05c7801ec7fad095d1f26",
+        "scripts/accept_execution_delivery.py": "dfb791d7926ded6a21653a0ccfc5c1aebdaaefc836e12be6adce16dc868c7dba",
+        "scripts/accept_execution_handoff.py": "4d123734a52a3542d2f347f74809f86da130cd23728864ae663c4c6ff225c434",
+        "scripts/accept_workspace.py": "b5c939f33c591fb94c7f0e423cb320c6c85bc3c4735c48317a2571e1197d4bfd",
+        "scripts/acceptance/kata-qemu/binding.py": "137d9dde337d50243eb2e21967bc80dc3763b162be9355d2bcd0c62a151a64eb",
+        "scripts/acceptance/kata-qemu/common.py": "8d050caa46b7b468326581625be49917ab07c7bd66d3dbd54cf5d91fc13d78c6",
+        "scripts/acceptance/kata-qemu/guest.py": "36b5bedca711e2737b67495c68eda4e5acb11bd5d8fd18145083aca6739ff91c",
+        "scripts/acceptance/kata-qemu/reader.py": "11f850ef32f95b4777c9ff783c241d7eb3c44f2ac8edfb840dcfc6aba2b4d4f1",
+        "scripts/acceptance/kata-qemu/run.py": "9f8a752d569632f2ff71b983d8db23c60a30c4d8d074004eae6e7c7d4ab3a8ae",
+        "scripts/acceptance/kata-qemu/test_cleanup.py": "480d76d071c029226fc96dfb4edf1e3210bf6d05e989ddd60552a0fc1f5a0062",
+        "scripts/acceptance/kata-qemu/test_contracts.py": "6ff15ecbce2ff360b4c0b78f1c16b1a6c83dcfb280c37fe2b45774ab5cf5a559",
+        "scripts/acceptance/kata-qemu/test_workspace_case.py": "3caa9c580b126372bcbadccf68c6e30f584274cfe3a2b8ffbbba6c8cd45ad39a",
+        "scripts/acceptance/kata-qemu/workspace_case.py": "fdccc2ac4139b997fb07a50606239f43da2b0d41b37d8f10ef426a3a346cb528"
+      },
+      "label": "resourceprofile",
+      "original_report_sha256": "2886eb97412e17a827824ceb5a3f31bb3ba79116bc61429b3ccaeec4daf3eb4b",
+      "guest": {
+        "status": "BLOCKED",
+        "error": "Guest native capture readiness deadline expired",
+        "startup_failure": {
+          "elapsed_seconds": 75.15964549700001,
+          "last_ready": null,
+          "owned_pid": 6,
+          "process_status": [
+            "State:\tS (sleeping)",
+            "VmPeak:\t 1432008 kB",
+            "VmRSS:\t   84196 kB",
+            "Threads:\t9"
+          ],
+          "stack_dump_error": "TimeoutExpired",
+          "wait_channel": "futex_do_wait"
+        },
+        "platform_binding": {
+          "container_id": "75799f6cdabe460a819fcc80a3822eb50f19441df4df8e2282e678a42c7af10e",
+          "guest_boot_id": "ef17bfa2-8189-4190-8b67-ffd867f4eac6",
+          "mode": "guest",
+          "pod_uid": "25ee2caf-5b37-46e6-86af-10eee89daaa9",
+          "runtime_class": "kata-qemu-runtime-rs",
+          "runtime_handler": "kata-qemu-runtime-rs",
+          "target": {
+            "generation": "g-4ee376a9dddd4c9697d65089692853ee",
+            "instance_id": "25ee2caf-5b37-46e6-86af-10eee89daaa9",
+            "producer_id": "kata-acceptance-fixture"
+          }
+        },
+        "binding_rejections": [
+          "observed_pod_uid_rejected",
+          "observed_guest_boot_id_rejected",
+          "target_instance_id_rejected",
+          "target_generation_rejected"
+        ],
+        "kernel_check": {
+          "status": "PASS",
+          "kernel": "6.18.56",
+          "btf_sha256": "b602f3349fd04bc5575500346f6e235023140e09a671d5a8e6039b45367a41bc",
+          "boot_id": "ef17bfa2-8189-4190-8b67-ffd867f4eac6",
+          "namespaces": {
+            "cgroup": "cgroup:[4026532316]",
+            "mnt": "mnt:[4026532315]",
+            "pid": "pid:[4026532314]",
+            "user": "user:[4026531837]"
+          },
+          "privileges": [
+            "CapEff:\t000001ffffffffff",
+            "NoNewPrivs:\t0",
+            "Seccomp:\t0"
+          ],
+          "tracefs": "/sys/kernel/tracing"
+        },
+        "original_report_sha256": "440f41078a80c1c864ab068d4ad418d1edc7bd783833cc8c3c317e55bb5e9489"
+      }
+    }
+  ],
+  "ring_allocation_probes": {
+    "kata-ring-probe.log": {
+      "sha256": "81ea0b6d66d16b6cdc3d57b34ad1230fd280001c280ddfb6d5254021d0b3e049",
+      "records": [
+        {
+          "kernel": "6.18.56",
+          "cpus": "0-2",
+          "mem": [
+            "MemTotal:        1991604 kB",
+            "MemAvailable:    1913064 kB"
+          ]
+        },
+        {
+          "starting_mib": 1
+        },
+        {
+          "mib": 1,
+          "seconds": 0.010913035000001514,
+          "fd": 3,
+          "errno": 0
+        },
+        {
+          "starting_mib": 4
+        },
+        {
+          "mib": 4,
+          "seconds": 0.8929806929999984,
+          "fd": 3,
+          "errno": 0
+        },
+        {
+          "starting_mib": 16
+        },
+        {
+          "mib": 16,
+          "seconds": 5.820020367000012,
+          "fd": 3,
+          "errno": 0
+        },
+        {
+          "starting_mib": 64
+        },
+        {
+          "mib": 64,
+          "seconds": 22.711205541999988,
+          "fd": 3,
+          "errno": 0
+        }
+      ]
+    },
+    "kata-ring-probe-1cpu.log": {
+      "sha256": "17b1174b5c66a05ed3a817bbcad0764cd2026385524936c5c24b895e9e4fe9df",
+      "records": [
+        {
+          "kernel": "6.18.56",
+          "cpus": "0",
+          "mem": [
+            "MemTotal:        1992004 kB",
+            "MemAvailable:    1918656 kB"
+          ]
+        },
+        {
+          "starting_mib": 1
+        },
+        {
+          "mib": 1,
+          "seconds": 0.0397165010000009,
+          "fd": 3,
+          "errno": 0
+        },
+        {
+          "starting_mib": 4
+        },
+        {
+          "mib": 4,
+          "seconds": 0.2473924239999974,
+          "fd": 3,
+          "errno": 0
+        },
+        {
+          "starting_mib": 16
+        },
+        {
+          "mib": 16,
+          "seconds": 17.388027784000002,
+          "fd": 3,
+          "errno": 0
+        },
+        {
+          "starting_mib": 64
+        },
+        {
+          "mib": 64,
+          "seconds": 26.071187536000025,
+          "fd": 3,
+          "errno": 0
+        }
+      ]
+    }
+  }
+}

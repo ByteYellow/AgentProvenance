@@ -12,6 +12,10 @@ The remote [runtime commit](https://github.com/ByteYellow/AgentProvenance/commit
 has the identical full source tree. The result index records both commit IDs
 and the verified tree hash; the archive retains its original build identity.
 
+The later [x86 completion evidence](../v1.0-x86-completion/README.md) records
+Workspace/Browser native capture and delivery, controlled runsc launch, and the
+remaining Kata startup work with separate source and result identities.
+
 ## Correctness changes
 
 - Restoring an execution reads the checkpoint referenced by the verified,

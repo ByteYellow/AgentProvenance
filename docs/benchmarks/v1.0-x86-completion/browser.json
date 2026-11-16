@@ -1,0 +1,446 @@
+{
+  "schema_version": "agentprovenance.acceptance_summary/v1",
+  "cases": {
+    "native": {
+      "status": "passed",
+      "run_id": "browser-native-acceptance",
+      "binary_sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+      "record_exit": 0,
+      "collector_exit": 0,
+      "original_report_sha256": "768c1a984162e7345d51329bf48c3ff53b116208f7f1da593cdd84e25efebd3a",
+      "producer": {
+        "architecture": "amd64",
+        "boot_id": "39017941-774b-41a9-be89-a4d00203dfec",
+        "commit": "cdfb7cb9506f95db4626e23fa8d95cc6feae6e4a",
+        "kernel": "6.8.0-149-generic",
+        "name": "agentprov-sensor",
+        "os": "linux",
+        "placement": "guest_kernel",
+        "placement_basis": "operator_configuration",
+        "version": "v1.0.0-candidate"
+      },
+      "required_probes": [
+        {
+          "category": "process_lifecycle",
+          "name": "sched/sched_process_fork",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "sched/sched_process_exec",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "sched/sched_process_exit",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_connect",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_execve",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_openat",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_exit_connect",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_exit_openat",
+          "required": true,
+          "status": "attached"
+        }
+      ],
+      "capture_buffers": {
+        "queue_bytes": 15073280,
+        "queue_events": 16384,
+        "ring_bytes": 8388608
+      },
+      "final_capture": {
+        "counters": {
+          "captured": 3768,
+          "excluded": 2658,
+          "expired_uncorrelated": 185,
+          "ingested": 3583,
+          "read": 6426
+        },
+        "queued_batches": 0,
+        "queued_bytes": 0,
+        "pending_events": 0,
+        "cleanup_pending_batches": 0
+      },
+      "browser": {
+        "status": "passed",
+        "cases": [
+          "parallel_contexts",
+          "parallel_tabs",
+          "redirect",
+          "iframe",
+          "worker",
+          "background",
+          "download",
+          "wrong_context_rejected",
+          "pending_receipt",
+          "restart_query_without_reexecute"
+        ],
+        "pending_operation": "0363508b-665a-4fed-8156-105bf05178e3",
+        "post_requests_before_query": 3,
+        "post_requests_after_query": 3
+      }
+    },
+    "crash_recovery": {
+      "status": "passed",
+      "run_id": "browser-native-crash-drain",
+      "binary_sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+      "record_exit": 0,
+      "collector_exit": 0,
+      "original_report_sha256": "900f5aefe899481727e02967c9ba34f1334fa89007a8d98692975851c08b8b65",
+      "producer": {
+        "architecture": "amd64",
+        "boot_id": "39017941-774b-41a9-be89-a4d00203dfec",
+        "commit": "cdfb7cb9506f95db4626e23fa8d95cc6feae6e4a",
+        "kernel": "6.8.0-149-generic",
+        "name": "agentprov-sensor",
+        "os": "linux",
+        "placement": "guest_kernel",
+        "placement_basis": "operator_configuration",
+        "version": "v1.0.0-candidate"
+      },
+      "required_probes": [
+        {
+          "category": "process_lifecycle",
+          "name": "sched/sched_process_fork",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "sched/sched_process_exec",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "sched/sched_process_exit",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_connect",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_execve",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_enter_openat",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_exit_connect",
+          "required": true,
+          "status": "attached"
+        },
+        {
+          "category": "syscall",
+          "name": "syscalls/sys_exit_openat",
+          "required": true,
+          "status": "attached"
+        }
+      ],
+      "capture_buffers": {
+        "queue_bytes": 15073280,
+        "queue_events": 16384,
+        "ring_bytes": 8388608
+      },
+      "final_capture": {
+        "counters": {
+          "captured": 2263,
+          "excluded": 1839,
+          "expired_uncorrelated": 224,
+          "ingested": 2039,
+          "read": 4102
+        },
+        "queued_batches": 0,
+        "queued_bytes": 0,
+        "pending_events": 0,
+        "cleanup_pending_batches": 0
+      },
+      "browser": {
+        "status": "passed",
+        "passed": true,
+        "custody": {
+          "observed_launches": [
+            {
+              "basis": "owned_launcher_cdp_pidfd_and_kernel_exec",
+              "checked_monotonic_ns": "5852148321675",
+              "executable_sha256": "045558b2f167db04624e36d952496705418a85d87ff9b5fb55a8c40cc59201ae",
+              "host_id": "1a2989a0d0ca488eb5411b741dece049",
+              "launch_marker": "apb-fgFHFP_gQBSQDYedPXJkoQ",
+              "native_event": {
+                "id": "evt-258a4e5e063c",
+                "monotonic_ns": "5847045388089",
+                "owned_launch_exec": true,
+                "pid": 31028,
+                "raw_event_id": "sensor-613bf2f52a79:1036"
+              },
+              "opened_monotonic_ns": "5847489961582",
+              "pid": 31028,
+              "process_instance_id": "39017941-774b-41a9-be89-a4d00203dfec:31028:5847023673180",
+              "procfs_pid": 31028,
+              "procfs_pid_namespace": "pid:[4026531836]",
+              "role": "browser",
+              "run_id": "browser-native-crash-drain",
+              "schema_version": "agentprovenance.browser_launch_witness/v1",
+              "scope": {
+                "browser_id": "39c8350a-7b77-40d0-9de3-1e261eb1205a",
+                "context_id": "2ECCFA1C6D62F117B6A33744C9E0DDF8",
+                "generation": "second",
+                "instance_id": "owned",
+                "namespace": "acceptance",
+                "producer_id": "b01-live"
+              }
+            },
+            {
+              "basis": "owned_launcher_cdp_pidfd_and_kernel_exec",
+              "checked_monotonic_ns": "5845688668417",
+              "executable_sha256": "045558b2f167db04624e36d952496705418a85d87ff9b5fb55a8c40cc59201ae",
+              "host_id": "1a2989a0d0ca488eb5411b741dece049",
+              "launch_marker": "apb-v78aJ6cPRI-bbShyVraCxA",
+              "native_event": {
+                "id": "evt-b3cc5b20dbcf",
+                "monotonic_ns": "5845111665248",
+                "owned_launch_exec": true,
+                "pid": 30769,
+                "raw_event_id": "sensor-613bf2f52a79:153"
+              },
+              "opened_monotonic_ns": "5845574901217",
+              "pid": 30769,
+              "process_instance_id": "39017941-774b-41a9-be89-a4d00203dfec:30769:5845089552183",
+              "procfs_pid": 30769,
+              "procfs_pid_namespace": "pid:[4026531836]",
+              "role": "browser",
+              "run_id": "browser-native-crash-drain",
+              "schema_version": "agentprovenance.browser_launch_witness/v1",
+              "scope": {
+                "browser_id": "07c7012c-3c1c-4d9e-af74-df1114943e18",
+                "context_id": "1B9CE652063639C48443E86EE497B09D",
+                "generation": "first",
+                "instance_id": "owned",
+                "namespace": "acceptance",
+                "producer_id": "b01-live"
+              }
+            }
+          ],
+          "sealed_generations": [
+            "second"
+          ],
+          "interrupted_generation": "first",
+          "interrupted_capture": "unsealed"
+        },
+        "original_actions": 3,
+        "actions_after_queries": 3,
+        "total_actions": 20,
+        "side_effect_counts": {
+          "/complete": 1,
+          "/pending": 1
+        },
+        "completed_status": "ok",
+        "interrupted_status": "unknown",
+        "old_generation": "first",
+        "new_generation": "second"
+      }
+    }
+  },
+  "delivery": {
+    "schema_version": "agentprovenance.browser_native_delivery/v1",
+    "status": "passed",
+    "run_id": "browser-native-acceptance",
+    "binary_sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+    "verifier_sha256": "72671f158207201a72a4f8fe1e284c79a21d1303f4dfd14a1a9942ff15f4d495",
+    "scopes": [
+      {
+        "scope": {
+          "browser_id": "358c09bb-6eef-4205-b3df-d0429bee3854",
+          "context_id": "9CE3605E54C2A01B749789B136618B1B",
+          "generation": "generation-2",
+          "instance_id": "local-fixture",
+          "namespace": "owned",
+          "producer_id": "browser-native-acceptance"
+        },
+        "native_relations": 1322,
+        "matched_native_process_observations": 661,
+        "reader_native_relations": 1322,
+        "selected_native_relations": 0,
+        "wrong_generation_rejected": true,
+        "reader_sha256": "9feeff9037895403739bc53fd6c8bbdcf1b7302ca30629ce5c084d6053fe95fb",
+        "selected_sha256": "56d029b893066a355debe81f38a8b1813628d09deb83560ae72c7120bcdeca37"
+      },
+      {
+        "scope": {
+          "browser_id": "47b860ad-fda8-4f64-93a4-d6aacaa859ac",
+          "context_id": "E71442B1431329B28DE1C4FC8B3F4D4F",
+          "generation": "generation-1",
+          "instance_id": "local-fixture",
+          "namespace": "owned",
+          "producer_id": "browser-native-acceptance"
+        },
+        "native_relations": 1358,
+        "matched_native_process_observations": 679,
+        "reader_native_relations": 1358,
+        "selected_native_relations": 0,
+        "wrong_generation_rejected": true,
+        "reader_sha256": "04d081cc3c86366373cd67999d92e53b37dbe0975d68934c7069251b2b960896",
+        "selected_sha256": "497f70c205d9d538779de9010e423699f27752b3568ed5f4aeec836ca3175210"
+      },
+      {
+        "scope": {
+          "browser_id": "a24f22a0-777f-4ab4-a282-4d6648746ff7",
+          "context_id": "61C27B17CB75103DBE99E0A0915AD0ED",
+          "generation": "generation-1",
+          "instance_id": "local-fixture",
+          "namespace": "owned",
+          "producer_id": "browser-native-acceptance"
+        },
+        "native_relations": 1414,
+        "matched_native_process_observations": 707,
+        "reader_native_relations": 1414,
+        "selected_native_relations": 0,
+        "wrong_generation_rejected": true,
+        "reader_sha256": "3c26adaa074362547ca49281fd5689bc1eaccd14450a8d67e2101f0b415fa77c",
+        "selected_sha256": "e96672e67ad33bda1c6f189b32cc3862c526dbe6b2d5b850be77fbde1ae6280a"
+      }
+    ],
+    "duplicate_import": "passed",
+    "signed_bundle": "passed",
+    "retained_binding_refs": 10,
+    "bundle_sha256": "983257526fb008e63a69cde98d56b12f8c5a6a41160f56db6d1dbd337f4c2dc5"
+  },
+  "delivery_report_sha256": "686f88e434d836c00b175c35f3188184b046a08414bfff503ef1cd9d15d0bc0c",
+  "offline": {
+    "log_sha256": "6cf634ca5812621939421845b2e8de1ef994b6b428fedf3bb28c937ec4bb6cf9",
+    "offlineReplayPassed": true,
+    "reports": [
+      {
+        "run": "browser-native-acceptance",
+        "files": 11865,
+        "shards": 11840,
+        "queries": 931,
+        "views": 36,
+        "sessions": 3,
+        "contextBodies": 294,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "derived",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "browser-native-acceptance"
+        ],
+        "captureObservations": 495,
+        "executionLinks": 0,
+        "auditDecisions": 0,
+        "harAttachments": 3,
+        "attachments": 3
+      },
+      {
+        "run": "browser-native-acceptance",
+        "files": 11865,
+        "shards": 11840,
+        "queries": 931,
+        "views": 36,
+        "sessions": 3,
+        "contextBodies": 294,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "derived",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "browser-native-acceptance"
+        ],
+        "captureObservations": 495,
+        "executionLinks": 0,
+        "auditDecisions": 0,
+        "harAttachments": 3,
+        "attachments": 3
+      },
+      {
+        "run": "browser-native-acceptance",
+        "files": 11865,
+        "shards": 11840,
+        "queries": 931,
+        "views": 36,
+        "sessions": 3,
+        "contextBodies": 294,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "derived",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "browser-native-acceptance"
+        ],
+        "captureObservations": 495,
+        "executionLinks": 0,
+        "auditDecisions": 0,
+        "harAttachments": 3,
+        "attachments": 3
+      },
+      {
+        "run": "browser-native-acceptance",
+        "files": 13586,
+        "shards": 13561,
+        "queries": 748,
+        "views": 36,
+        "sessions": 3,
+        "contextBodies": 292,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "derived",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "browser-native-acceptance"
+        ],
+        "captureObservations": 325,
+        "executionLinks": 0,
+        "auditDecisions": 0,
+        "harAttachments": 3,
+        "attachments": 3
+      }
+    ]
+  },
+  "binary_source": {
+    "build_source_sha": "cdfb7cb9506f95db4626e23fa8d95cc6feae6e4a",
+    "published_equal_tree_sha": "71d86254786cd8507162d8fde27ee756050b76f1",
+    "tree": "20c69bc4af15afd2f56baeee94acfe7927d4c6f8"
+  },
+  "fixture_source_metadata": "Original top-level runtime report did not record a fixture checkout SHA; original report digests are retained."
+}

@@ -1,0 +1,181 @@
+{
+  "status": "passed",
+  "source_sha": "45ce9ad3179d55091073775af1893f805336e240",
+  "source_dirty": false,
+  "platform": "Linux-6.8.0-149-generic-x86_64-with-glibc2.39",
+  "boot_id": "695e3798-9052-4b07-aa8c-27ad2ae32116",
+  "cpu_count": 8,
+  "binary_sha256": "cc30b26c75ec448b7dccf599b4bf3f093416ab1a14ab3b5ab0b77113c3273988",
+  "test_binary_sha256": "c3f297033eee856949348fff103885f486d282961c41ff24b883569f7e44cb4d",
+  "runtime_sha256": "c58f1dc2a3855487bf3bedc2edf074123ad433f1d98fb7f451f56790e87b5c9f",
+  "test": "TestRunscLiveExecutionIdentityEvidence",
+  "exit_code": 0,
+  "log_sha256": "e939ef561962cee28a1025245b9bcc60ab06c129d04c7bd4027edbea854188bc",
+  "cases": {
+    "adapter-gate-checkpoint.json": {
+      "sha256": "d90265677ec0299ec889b774b26fa655c28c0586772bddbf6ed98a120bcae213",
+      "result": {
+        "schema_version": "agentprovenance.runtime_adapter/v1",
+        "binding": {
+          "target": {
+            "producer_id": "acceptance",
+            "instance_id": "run-750540689",
+            "generation": "generation-1"
+          },
+          "mode": "runsc",
+          "container_id": "agentprov-adapter-test",
+          "state_created": "2026-11-16T15:17:54.23094576Z"
+        },
+        "operation_id": "gated-success",
+        "attempt_id": "gated-success-1",
+        "run_id": "run",
+        "state": "running",
+        "started": false,
+        "runtime_release": "release-20261109.0",
+        "sentry_pid": 3,
+        "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+        "sentry_start_ns": "1794842274325017193",
+        "gaps": [
+          "command_capture_watermark_unavailable",
+          "external_container_execution_untracked"
+        ]
+      }
+    },
+    "adapter-gate-success.json": {
+      "sha256": "ece39ff2605341e593e597447a0623c61f07b10fe974702c30345d47a72d9828",
+      "result": {
+        "schema_version": "agentprovenance.runtime_adapter/v1",
+        "binding": {
+          "target": {
+            "producer_id": "acceptance",
+            "instance_id": "run-750540689",
+            "generation": "generation-1"
+          },
+          "mode": "runsc",
+          "container_id": "agentprov-adapter-test",
+          "state_created": "2026-11-16T15:17:54.23094576Z"
+        },
+        "operation_id": "gated-success",
+        "attempt_id": "gated-success-1",
+        "run_id": "run",
+        "state": "succeeded",
+        "started": true,
+        "exit_code": 0,
+        "runtime_release": "release-20261109.0",
+        "sentry_pid": 3,
+        "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+        "sentry_start_ns": "1794842274325017193",
+        "gate_released": true,
+        "gaps": [
+          "command_capture_watermark_unavailable",
+          "external_container_execution_untracked"
+        ]
+      }
+    },
+    "adapter-gate-denied.json": {
+      "sha256": "67fd8a3e062f52d4460e953b371481411729513a4446556b0bd9397b61c05939",
+      "result": {
+        "schema_version": "agentprovenance.runtime_adapter/v1",
+        "binding": {
+          "target": {
+            "producer_id": "acceptance",
+            "instance_id": "run-750540689",
+            "generation": "generation-1"
+          },
+          "mode": "runsc",
+          "container_id": "agentprov-adapter-test",
+          "state_created": "2026-11-16T15:17:54.23094576Z"
+        },
+        "operation_id": "gated-denied",
+        "attempt_id": "gated-denied-1",
+        "run_id": "run",
+        "state": "failed",
+        "started": false,
+        "runtime_release": "release-20261109.0",
+        "sentry_pid": 13,
+        "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+        "sentry_start_ns": "1794842274406886797",
+        "gaps": [
+          "command_capture_watermark_unavailable",
+          "external_container_execution_untracked",
+          "controlled_gate_not_released"
+        ]
+      }
+    },
+    "adapter-gate-cancel-checkpoint.json": {
+      "sha256": "7994656729bf9da33e0d54488da8119806d5e266d19b85feeab51d2a6de74b25",
+      "result": {
+        "schema_version": "agentprovenance.runtime_adapter/v1",
+        "binding": {
+          "target": {
+            "producer_id": "acceptance",
+            "instance_id": "run-750540689",
+            "generation": "generation-1"
+          },
+          "mode": "runsc",
+          "container_id": "agentprov-adapter-test",
+          "state_created": "2026-11-16T15:17:54.23094576Z"
+        },
+        "operation_id": "gated-cancel",
+        "attempt_id": "gated-cancel-1",
+        "run_id": "run",
+        "state": "running",
+        "started": false,
+        "runtime_release": "release-20261109.0",
+        "sentry_pid": 21,
+        "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+        "sentry_start_ns": "1794842274436733333",
+        "gaps": [
+          "command_capture_watermark_unavailable",
+          "external_container_execution_untracked"
+        ]
+      }
+    },
+    "adapter-gate-cancelled.json": {
+      "sha256": "facc53e9d10b2dddd7637eb6bf47a955b2d6aeb2eb3173f73acc7bb02254b1cc",
+      "result": {
+        "schema_version": "agentprovenance.runtime_adapter/v1",
+        "binding": {
+          "target": {
+            "producer_id": "acceptance",
+            "instance_id": "run-750540689",
+            "generation": "generation-1"
+          },
+          "mode": "runsc",
+          "container_id": "agentprov-adapter-test",
+          "state_created": "2026-11-16T15:17:54.23094576Z"
+        },
+        "operation_id": "gated-cancel",
+        "attempt_id": "gated-cancel-1",
+        "run_id": "run",
+        "state": "unknown",
+        "started": true,
+        "runtime_release": "release-20261109.0",
+        "sentry_pid": 21,
+        "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+        "sentry_start_ns": "1794842274436733333",
+        "gate_released": true,
+        "gaps": [
+          "command_capture_watermark_unavailable",
+          "external_container_execution_untracked",
+          "workload_completion_unknown",
+          "transport_stopped_workload_stop_unconfirmed"
+        ]
+      }
+    },
+    "runtime-lifecycle.json": {
+      "sha256": "fa37f617e61cec6d26e14c9ff762345d6b5439267515c8d053a04e5a03a862ca",
+      "result": {
+        "id": "agentprov-adapter-test",
+        "createdAt": "2026-11-16T15:17:54.23094576Z",
+        "sandbox": {
+          "id": "agentprov-adapter-test"
+        }
+      }
+    }
+  },
+  "remaining": [
+    "command_scope_ancestry_and_durable_watermark",
+    "full_executor_receiver_fault_matrix"
+  ]
+}

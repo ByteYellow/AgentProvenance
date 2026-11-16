@@ -1,0 +1,1039 @@
+{
+  "schema_version": "agentprovenance.acceptance_summary/v1",
+  "status": "passed",
+  "original_report_sha256": "ae993c6d0210b0833cfef4b193784e369d3a632293269cb928f139981b8df4ca",
+  "original_delivery_report_sha256": "344b3153f0984e8234be6d959868f537c0bb0c3d9fc8acc42923239d9db8118f",
+  "platform": "Linux-6.8.0-149-generic-x86_64-with-glibc2.39",
+  "architecture": "x86_64",
+  "binary_sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+  "mcp_version": "2.3.0",
+  "cases": {
+    "contract": {
+      "status": "passed",
+      "run_id": "run-w01-8293ab2b80454da786ff9356be385247",
+      "checks": [
+        "read_edit_write_bash_same_bytes",
+        "record_snapshot",
+        "cas_conflict_reread",
+        "concurrent_cas",
+        "restart_query_no_replay",
+        "path_symlink_rejection",
+        "stale_generation",
+        "current_run_evidence",
+        "trusted_context"
+      ],
+      "record_attempts": 1,
+      "context_results": 14,
+      "target": {
+        "producer_id": "workspace-acceptance",
+        "instance_id": "agentprov-kvm-amd64",
+        "generation": "fixture-24f6cec383174b34ad5af7fc5445e04d"
+      },
+      "sensor": {
+        "status": "passed",
+        "command": [
+          "/var/tmp/ap-v1-completion/bin/agentprov",
+          "--data-dir",
+          "/var/tmp/ap-v1-completion/workspace-first/contract/operator/data",
+          "sensor",
+          "stream",
+          "--placement",
+          "guest_kernel",
+          "--no-policy",
+          "--auto-tls=false",
+          "--apparmor-state=false",
+          "--seccomp-state=false",
+          "--ring-buffer-mib",
+          "4",
+          "--flush-interval",
+          "100ms",
+          "--pending-ttl",
+          "1ms",
+          "--max-queued-bytes",
+          "16777216",
+          "--max-queued-batches",
+          "128"
+        ],
+        "returncode": 0,
+        "producer": {
+          "architecture": "amd64",
+          "boot_id": "39017941-774b-41a9-be89-a4d00203dfec",
+          "commit": "cdfb7cb9506f95db4626e23fa8d95cc6feae6e4a",
+          "kernel": "6.8.0-149-generic",
+          "name": "agentprov-sensor",
+          "os": "linux",
+          "placement": "guest_kernel",
+          "placement_basis": "operator_configuration",
+          "version": "v1.0.0-candidate"
+        },
+        "required_probes": [
+          {
+            "category": "process_lifecycle",
+            "name": "sched/sched_process_fork",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "sched/sched_process_exec",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "sched/sched_process_exit",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_connect",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_execve",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_openat",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_exit_connect",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_exit_openat",
+            "required": true,
+            "status": "attached"
+          }
+        ],
+        "capture_buffers": {
+          "queue_bytes": 15073280,
+          "queue_events": 16384,
+          "ring_bytes": 4194304
+        },
+        "final_capture": {
+          "counters": {
+            "captured": 163,
+            "excluded": 942,
+            "expired_uncorrelated": 152,
+            "ingested": 11,
+            "read": 1105
+          },
+          "queued_batches": 0,
+          "queued_bytes": 0,
+          "pending_events": 0,
+          "cleanup_pending_batches": 0
+        },
+        "drain": "collector_stopped_store_empty",
+        "evidence": {
+          "run_id": "run-w01-8293ab2b80454da786ff9356be385247",
+          "target": {
+            "producer_id": "workspace-acceptance",
+            "instance_id": "agentprov-kvm-amd64",
+            "generation": "fixture-24f6cec383174b34ad5af7fc5445e04d"
+          },
+          "attempt_id": "attempt-cfd399348770",
+          "tool_call_id": "tool-cd9f1bcb72f6",
+          "binding_id": "bind-7aca3a59d42f",
+          "cgroup_id": "7361",
+          "workspace_receipts": [
+            "sha256:48483217392f4d286d37d5fd7df76326d6d1dba72e56b5bc8d46ebe75911ba64"
+          ],
+          "association": "owned_record_cgroup",
+          "native_events": [
+            {
+              "id": "evt-2d219ac1e56d",
+              "raw_event_id": "sensor-5c3519d67d1e:65",
+              "event_type": "syscall_result",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7361",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-3d06f3ca112d",
+              "raw_event_id": "sensor-5c3519d67d1e:64",
+              "event_type": "file_open",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7361",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-3e4726aea9de",
+              "raw_event_id": "sensor-5c3519d67d1e:62",
+              "event_type": "execve",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7361",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-60a054629ee7",
+              "raw_event_id": "sensor-5c3519d67d1e:69",
+              "event_type": "execve",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7361",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-6951eb6988dc",
+              "raw_event_id": "sensor-5c3519d67d1e:66",
+              "event_type": "process_observed",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7361",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-b6be05347de9",
+              "raw_event_id": "sensor-5c3519d67d1e:61",
+              "event_type": "process_observed",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7361",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-bc88c8351f57",
+              "raw_event_id": "sensor-5c3519d67d1e:68",
+              "event_type": "syscall_result",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7361",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-d082b27384e6",
+              "raw_event_id": "sensor-5c3519d67d1e:71",
+              "event_type": "process_exit",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7361",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-e1c4e741a181",
+              "raw_event_id": "sensor-5c3519d67d1e:63",
+              "event_type": "file_write",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7361",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-eddff41709e0",
+              "raw_event_id": "sensor-5c3519d67d1e:70",
+              "event_type": "process_exit",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7361",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-eea68922f156",
+              "raw_event_id": "sensor-5c3519d67d1e:67",
+              "event_type": "file_write",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7361",
+              "tool_call_id": ""
+            }
+          ]
+        }
+      },
+      "delivery": {
+        "status": "PASS",
+        "bundle_sha256": "cced25d63054040d5b7a6296c89ed49bee47e6b4a1d5175fc175f6f92a0993f3",
+        "attestation_sha256": "edd35917d767ed0f2861839db76cbc0219d76f96bf5b96883302370d8296786e",
+        "verification": {
+          "schema_version": "agentprovenance.verify/v1",
+          "run_id": "run-w01-8293ab2b80454da786ff9356be385247",
+          "status": "ok",
+          "issue_count": 0,
+          "error_count": 0,
+          "warning_count": 0,
+          "issues": null
+        },
+        "evidence": {
+          "object_refs": [
+            "sha256:15c82e8b40f90b1b23c6ce7ac5764329c61048536b686834eb1858bdf2b6e096",
+            "sha256:2b76ce561787c85583bae5a7f18dca96d75a1086ba48a399d087c936b7f91f70",
+            "sha256:48483217392f4d286d37d5fd7df76326d6d1dba72e56b5bc8d46ebe75911ba64",
+            "sha256:5bca1d5c53956359401815cf288134c570355a3790c227793205f5e5bba9fa94",
+            "sha256:5ec0f88d72b8c48dbee37d044a95f5f5ba2c2255124902ccc4908c554ee06c09",
+            "sha256:7a7ea3c0e9b4e2988ea42156b4c71a5e408aa0d325c96ef969fbaeb2240a8f34",
+            "sha256:7eadcbd23ce5a17bcadec8d0965f7d257850918fa7f2f1cb3f531ad27dd871a0",
+            "sha256:a3b3e1ca26b24260160ddb741c5f30a8d63b89033493e10d74fe5883c135b7db",
+            "sha256:b476c5796dbcf055dd87ee354abf5c7b1200436a86d51c13fcd0d6336e9a06b6",
+            "sha256:cd8710df135a55556797fd9cf8bf411741fdbcf6fe6c7c26e4e03bad8555f449",
+            "sha256:cdd354a064718283d3021cccaa9a34c833503634f12193d72193081aa1b34cea",
+            "sha256:f9f181f4ce0b40cf5573f50d6a8275e41b46e310988f27d7b4b84f6bb8550b4a"
+          ],
+          "record": {
+            "attempt_id": "attempt-cfd399348770",
+            "base_snapshot_id": "snap-0a7377e87d0d",
+            "rollout_id": "rollout-5aff3c87ebbf",
+            "run_id": "run-w01-8293ab2b80454da786ff9356be385247"
+          },
+          "cgroup_id": "7361",
+          "input_manifest_ref": "sha256:a3b3e1ca26b24260160ddb741c5f30a8d63b89033493e10d74fe5883c135b7db",
+          "output_manifest_ref": "sha256:2b76ce561787c85583bae5a7f18dca96d75a1086ba48a399d087c936b7f91f70",
+          "input_revision": 3,
+          "output_revision": 4,
+          "association": "owned_record_cgroup",
+          "native_events": [
+            {
+              "id": "evt-2d219ac1e56d",
+              "raw_event_id": "sensor-5c3519d67d1e:65",
+              "cgroup_id": "7361",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "syscall_result"
+            },
+            {
+              "id": "evt-3d06f3ca112d",
+              "raw_event_id": "sensor-5c3519d67d1e:64",
+              "cgroup_id": "7361",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "file_open"
+            },
+            {
+              "id": "evt-3e4726aea9de",
+              "raw_event_id": "sensor-5c3519d67d1e:62",
+              "cgroup_id": "7361",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "execve"
+            },
+            {
+              "id": "evt-60a054629ee7",
+              "raw_event_id": "sensor-5c3519d67d1e:69",
+              "cgroup_id": "7361",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "execve"
+            },
+            {
+              "id": "evt-6951eb6988dc",
+              "raw_event_id": "sensor-5c3519d67d1e:66",
+              "cgroup_id": "7361",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_observed"
+            },
+            {
+              "id": "evt-b6be05347de9",
+              "raw_event_id": "sensor-5c3519d67d1e:61",
+              "cgroup_id": "7361",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_observed"
+            },
+            {
+              "id": "evt-bc88c8351f57",
+              "raw_event_id": "sensor-5c3519d67d1e:68",
+              "cgroup_id": "7361",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "syscall_result"
+            },
+            {
+              "id": "evt-d082b27384e6",
+              "raw_event_id": "sensor-5c3519d67d1e:71",
+              "cgroup_id": "7361",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_exit"
+            },
+            {
+              "id": "evt-e1c4e741a181",
+              "raw_event_id": "sensor-5c3519d67d1e:63",
+              "cgroup_id": "7361",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "file_write"
+            },
+            {
+              "id": "evt-eddff41709e0",
+              "raw_event_id": "sensor-5c3519d67d1e:70",
+              "cgroup_id": "7361",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_exit"
+            },
+            {
+              "id": "evt-eea68922f156",
+              "raw_event_id": "sensor-5c3519d67d1e:67",
+              "cgroup_id": "7361",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "file_write"
+            }
+          ]
+        },
+        "reader": {
+          "status": "PASS",
+          "archive_sha256": "520a803d7913b0877eada6676a1b1bc8054c8f74e3127d923e082e5ef5940d5e",
+          "policy_sha256": "67bfeee96d43e0284e70942bd684a337858b03592412de5038b6c813816f8872",
+          "binary_sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+          "verifier_sha256": "72671f158207201a72a4f8fe1e284c79a21d1303f4dfd14a1a9942ff15f4d495",
+          "checks": {
+            "trusted": {
+              "manifest_status": "present",
+              "file_integrity": "passed",
+              "derived_signature": {
+                "status": "valid",
+                "cryptographic": "passed",
+                "trusted": true,
+                "key_id": "dfb84fa23bb44ac1",
+                "role": "exporter"
+              },
+              "source_signatures": [
+                {
+                  "source_id": "frozen-source",
+                  "status": "not_checked",
+                  "cryptographic": "not_checked",
+                  "trusted": false
+                }
+              ],
+              "derivation": "not_checked",
+              "declared_coverage": {
+                "state": "unknown",
+                "scope": "whole_run"
+              }
+            },
+            "unknown_key": {
+              "manifest_status": "present",
+              "file_integrity": "passed",
+              "derived_signature": {
+                "status": "unknown_key",
+                "cryptographic": "passed",
+                "trusted": false,
+                "key_id": "dfb84fa23bb44ac1",
+                "role": "exporter",
+                "reason": "signer is not in the external trust policy"
+              },
+              "source_signatures": [
+                {
+                  "source_id": "frozen-source",
+                  "status": "not_checked",
+                  "cryptographic": "not_checked",
+                  "trusted": false
+                }
+              ],
+              "derivation": "not_checked",
+              "declared_coverage": {
+                "state": "unknown",
+                "scope": "whole_run"
+              }
+            },
+            "wrong_role": {
+              "manifest_status": "present",
+              "file_integrity": "passed",
+              "derived_signature": {
+                "status": "untrusted_role",
+                "cryptographic": "passed",
+                "trusted": false,
+                "key_id": "dfb84fa23bb44ac1",
+                "role": "exporter",
+                "reason": "external policy does not authorize the exporter role"
+              },
+              "source_signatures": [
+                {
+                  "source_id": "frozen-source",
+                  "status": "not_checked",
+                  "cryptographic": "not_checked",
+                  "trusted": false
+                }
+              ],
+              "derivation": "not_checked",
+              "declared_coverage": {
+                "state": "unknown",
+                "scope": "whole_run"
+              }
+            },
+            "tampered": {
+              "manifest_status": "present",
+              "file_integrity": "failed",
+              "derived_signature": {
+                "status": "valid",
+                "cryptographic": "passed",
+                "trusted": true,
+                "key_id": "dfb84fa23bb44ac1",
+                "role": "exporter"
+              },
+              "source_signatures": [
+                {
+                  "source_id": "frozen-source",
+                  "status": "not_checked",
+                  "cryptographic": "not_checked",
+                  "trusted": false
+                }
+              ],
+              "derivation": "not_checked",
+              "declared_coverage": {
+                "state": "unknown",
+                "scope": "whole_run"
+              },
+              "issues": [
+                {
+                  "code": "length_mismatch",
+                  "path": "en/index.html"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "harness": {
+      "status": "passed",
+      "run_id": "run-w01-cd4e31af80e64aa196d76d83307d174b",
+      "controlled_calls": [
+        {
+          "id": "call_00_ET_UAk3xOKDi75x7tvjhAy04090",
+          "name": "mcp__agentprov_workspace__workspace_inspect"
+        },
+        {
+          "id": "call_00_8ZNyfxK9ZFsHXnLY0l765283",
+          "name": "mcp__agentprov_workspace__workspace_read"
+        },
+        {
+          "id": "call_00_bOpARd9blKyzURgXBayE0292",
+          "name": "mcp__agentprov_workspace__workspace_edit"
+        },
+        {
+          "id": "call_00_qDPfTpeb2oeXeA0UYEpo5397",
+          "name": "mcp__agentprov_workspace__workspace_write"
+        },
+        {
+          "id": "call_00_ET_3VsxHHt7CHTXMEFJoSFN3894",
+          "name": "mcp__agentprov_workspace__workspace_bash"
+        },
+        {
+          "id": "call_00_ET_VhPVPlC6hyelOdkRJTPk9069",
+          "name": "mcp__agentprov_workspace__workspace_read"
+        }
+      ],
+      "record_attempts": 1,
+      "context_results": 6,
+      "artifact_sha256": "31f345176bd06a508eff6bd45943f211eb9cbacd019c0683d038dc538e869027",
+      "target": {
+        "producer_id": "workspace-acceptance",
+        "instance_id": "agentprov-kvm-amd64",
+        "generation": "fixture-23d68e58ed64421fb559415b0a66108e"
+      },
+      "sensor": {
+        "status": "passed",
+        "command": [
+          "/var/tmp/ap-v1-completion/bin/agentprov",
+          "--data-dir",
+          "/var/tmp/ap-v1-completion/workspace-first/harness/operator/data",
+          "sensor",
+          "stream",
+          "--placement",
+          "guest_kernel",
+          "--no-policy",
+          "--auto-tls=false",
+          "--apparmor-state=false",
+          "--seccomp-state=false",
+          "--ring-buffer-mib",
+          "4",
+          "--flush-interval",
+          "100ms",
+          "--pending-ttl",
+          "1ms",
+          "--max-queued-bytes",
+          "16777216",
+          "--max-queued-batches",
+          "128"
+        ],
+        "returncode": 0,
+        "producer": {
+          "architecture": "amd64",
+          "boot_id": "39017941-774b-41a9-be89-a4d00203dfec",
+          "commit": "cdfb7cb9506f95db4626e23fa8d95cc6feae6e4a",
+          "kernel": "6.8.0-149-generic",
+          "name": "agentprov-sensor",
+          "os": "linux",
+          "placement": "guest_kernel",
+          "placement_basis": "operator_configuration",
+          "version": "v1.0.0-candidate"
+        },
+        "required_probes": [
+          {
+            "category": "process_lifecycle",
+            "name": "sched/sched_process_fork",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "sched/sched_process_exec",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "sched/sched_process_exit",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_connect",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_execve",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_openat",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_exit_connect",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_exit_openat",
+            "required": true,
+            "status": "attached"
+          }
+        ],
+        "capture_buffers": {
+          "queue_bytes": 15073280,
+          "queue_events": 16384,
+          "ring_bytes": 4194304
+        },
+        "final_capture": {
+          "counters": {
+            "captured": 171,
+            "excluded": 897,
+            "expired_uncorrelated": 160,
+            "ingested": 11,
+            "read": 1068
+          },
+          "queued_batches": 0,
+          "queued_bytes": 0,
+          "pending_events": 0,
+          "cleanup_pending_batches": 0
+        },
+        "drain": "collector_stopped_store_empty",
+        "evidence": {
+          "run_id": "run-w01-cd4e31af80e64aa196d76d83307d174b",
+          "target": {
+            "producer_id": "workspace-acceptance",
+            "instance_id": "agentprov-kvm-amd64",
+            "generation": "fixture-23d68e58ed64421fb559415b0a66108e"
+          },
+          "attempt_id": "attempt-2b1ba0163007",
+          "tool_call_id": "tool-0ead0cde6ccb",
+          "binding_id": "bind-8af3063fe9e1",
+          "cgroup_id": "7379",
+          "workspace_receipts": [
+            "sha256:7b640ccc99414360677372f89eb1f5c8ddd3114887513f60dcf95f2f65e443b9"
+          ],
+          "association": "owned_record_cgroup",
+          "native_events": [
+            {
+              "id": "evt-1f5d77bec476",
+              "raw_event_id": "sensor-76f6b3ce5f75:136",
+              "event_type": "syscall_result",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7379",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-50eda33b49b5",
+              "raw_event_id": "sensor-76f6b3ce5f75:139",
+              "event_type": "process_exit",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7379",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-6f8c5dbfb0fd",
+              "raw_event_id": "sensor-76f6b3ce5f75:134",
+              "event_type": "process_observed",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7379",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-7e2a58573b91",
+              "raw_event_id": "sensor-76f6b3ce5f75:130",
+              "event_type": "execve",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7379",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-9a9321fec203",
+              "raw_event_id": "sensor-76f6b3ce5f75:138",
+              "event_type": "process_exit",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7379",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-adc0c79a6c4c",
+              "raw_event_id": "sensor-76f6b3ce5f75:133",
+              "event_type": "syscall_result",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7379",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-bd24d8ccca7d",
+              "raw_event_id": "sensor-76f6b3ce5f75:132",
+              "event_type": "file_open",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7379",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-cddabe736203",
+              "raw_event_id": "sensor-76f6b3ce5f75:137",
+              "event_type": "execve",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7379",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-d8f1fd81cef3",
+              "raw_event_id": "sensor-76f6b3ce5f75:135",
+              "event_type": "file_write",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7379",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-e297a9b313f8",
+              "raw_event_id": "sensor-76f6b3ce5f75:129",
+              "event_type": "process_observed",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7379",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-ec23c11fe694",
+              "raw_event_id": "sensor-76f6b3ce5f75:131",
+              "event_type": "file_write",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "7379",
+              "tool_call_id": ""
+            }
+          ]
+        }
+      },
+      "delivery": {
+        "status": "PASS",
+        "bundle_sha256": "32999c5ec4db775d2b158eb8d73f0be7702ca8567f078a9b7e6bf6f81f9defc7",
+        "attestation_sha256": "0d07c74e7d69e947adca74290e0f195f1f02008d710a0e922ebdfd019852e258",
+        "verification": {
+          "schema_version": "agentprovenance.verify/v1",
+          "run_id": "run-w01-cd4e31af80e64aa196d76d83307d174b",
+          "status": "ok",
+          "issue_count": 0,
+          "error_count": 0,
+          "warning_count": 0,
+          "issues": null
+        },
+        "evidence": {
+          "object_refs": [
+            "sha256:05e3ccf786bc564659dc19fd8e90b0da7a351b30f4204631284526ce0c729cd9",
+            "sha256:26556a3968d40ee3f6b249a32836cb21ba8427a09bafb3754646fd4bd7da68b9",
+            "sha256:49ab30455681e1c7adaa4539b98df04aa52603d4fa519303004ebfebd7e6c988",
+            "sha256:7b640ccc99414360677372f89eb1f5c8ddd3114887513f60dcf95f2f65e443b9",
+            "sha256:9965e412408878c4291b7003ec54a4764b8189d7920e1903bd1c8cf8923a9e53",
+            "sha256:aaa6598343ab1d33762a5f479e49cd46f80c6f48eb3cee73969432145d5404be",
+            "sha256:ad1cbd369d005915e419c3344417c59f1b964d70008ff8eebc30babb3c6803d8",
+            "sha256:c89c8c8a7a890863046f1892a6c2f6b2f10aa8d13f90f8f2728b1871d0938fdc",
+            "sha256:f07254b9e3b0196947364d0a4526d831e7291ef79e3d72203cd61d218cab840c",
+            "sha256:f849e6c1e0b8bea1748a5bbcb02ae60ab885e0809c6c48c0800db55d936bfce4"
+          ],
+          "record": {
+            "attempt_id": "attempt-2b1ba0163007",
+            "base_snapshot_id": "snap-8677f5780b39",
+            "rollout_id": "rollout-4093b761fac9",
+            "run_id": "run-w01-cd4e31af80e64aa196d76d83307d174b"
+          },
+          "cgroup_id": "7379",
+          "input_manifest_ref": "sha256:aaa6598343ab1d33762a5f479e49cd46f80c6f48eb3cee73969432145d5404be",
+          "output_manifest_ref": "sha256:ad1cbd369d005915e419c3344417c59f1b964d70008ff8eebc30babb3c6803d8",
+          "input_revision": 3,
+          "output_revision": 4,
+          "association": "owned_record_cgroup",
+          "native_events": [
+            {
+              "id": "evt-1f5d77bec476",
+              "raw_event_id": "sensor-76f6b3ce5f75:136",
+              "cgroup_id": "7379",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "syscall_result"
+            },
+            {
+              "id": "evt-50eda33b49b5",
+              "raw_event_id": "sensor-76f6b3ce5f75:139",
+              "cgroup_id": "7379",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_exit"
+            },
+            {
+              "id": "evt-6f8c5dbfb0fd",
+              "raw_event_id": "sensor-76f6b3ce5f75:134",
+              "cgroup_id": "7379",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_observed"
+            },
+            {
+              "id": "evt-7e2a58573b91",
+              "raw_event_id": "sensor-76f6b3ce5f75:130",
+              "cgroup_id": "7379",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "execve"
+            },
+            {
+              "id": "evt-9a9321fec203",
+              "raw_event_id": "sensor-76f6b3ce5f75:138",
+              "cgroup_id": "7379",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_exit"
+            },
+            {
+              "id": "evt-adc0c79a6c4c",
+              "raw_event_id": "sensor-76f6b3ce5f75:133",
+              "cgroup_id": "7379",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "syscall_result"
+            },
+            {
+              "id": "evt-bd24d8ccca7d",
+              "raw_event_id": "sensor-76f6b3ce5f75:132",
+              "cgroup_id": "7379",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "file_open"
+            },
+            {
+              "id": "evt-cddabe736203",
+              "raw_event_id": "sensor-76f6b3ce5f75:137",
+              "cgroup_id": "7379",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "execve"
+            },
+            {
+              "id": "evt-d8f1fd81cef3",
+              "raw_event_id": "sensor-76f6b3ce5f75:135",
+              "cgroup_id": "7379",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "file_write"
+            },
+            {
+              "id": "evt-e297a9b313f8",
+              "raw_event_id": "sensor-76f6b3ce5f75:129",
+              "cgroup_id": "7379",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_observed"
+            },
+            {
+              "id": "evt-ec23c11fe694",
+              "raw_event_id": "sensor-76f6b3ce5f75:131",
+              "cgroup_id": "7379",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "file_write"
+            }
+          ]
+        },
+        "reader": {
+          "status": "PASS",
+          "archive_sha256": "579be5ce2fcb49708654eaf72c75255f4f7d438a0eb8e08e7e4d3a306f59b0d8",
+          "policy_sha256": "9959b1f6e7321c50e7c781b1e86a889d809c26f414d0b4b66ddf1c5f9ceb9036",
+          "binary_sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+          "verifier_sha256": "72671f158207201a72a4f8fe1e284c79a21d1303f4dfd14a1a9942ff15f4d495",
+          "checks": {
+            "trusted": {
+              "manifest_status": "present",
+              "file_integrity": "passed",
+              "derived_signature": {
+                "status": "valid",
+                "cryptographic": "passed",
+                "trusted": true,
+                "key_id": "9ea7a74e19f84aa1",
+                "role": "exporter"
+              },
+              "source_signatures": [
+                {
+                  "source_id": "frozen-source",
+                  "status": "not_checked",
+                  "cryptographic": "not_checked",
+                  "trusted": false
+                }
+              ],
+              "derivation": "not_checked",
+              "declared_coverage": {
+                "state": "unknown",
+                "scope": "whole_run"
+              }
+            },
+            "unknown_key": {
+              "manifest_status": "present",
+              "file_integrity": "passed",
+              "derived_signature": {
+                "status": "unknown_key",
+                "cryptographic": "passed",
+                "trusted": false,
+                "key_id": "9ea7a74e19f84aa1",
+                "role": "exporter",
+                "reason": "signer is not in the external trust policy"
+              },
+              "source_signatures": [
+                {
+                  "source_id": "frozen-source",
+                  "status": "not_checked",
+                  "cryptographic": "not_checked",
+                  "trusted": false
+                }
+              ],
+              "derivation": "not_checked",
+              "declared_coverage": {
+                "state": "unknown",
+                "scope": "whole_run"
+              }
+            },
+            "wrong_role": {
+              "manifest_status": "present",
+              "file_integrity": "passed",
+              "derived_signature": {
+                "status": "untrusted_role",
+                "cryptographic": "passed",
+                "trusted": false,
+                "key_id": "9ea7a74e19f84aa1",
+                "role": "exporter",
+                "reason": "external policy does not authorize the exporter role"
+              },
+              "source_signatures": [
+                {
+                  "source_id": "frozen-source",
+                  "status": "not_checked",
+                  "cryptographic": "not_checked",
+                  "trusted": false
+                }
+              ],
+              "derivation": "not_checked",
+              "declared_coverage": {
+                "state": "unknown",
+                "scope": "whole_run"
+              }
+            },
+            "tampered": {
+              "manifest_status": "present",
+              "file_integrity": "failed",
+              "derived_signature": {
+                "status": "valid",
+                "cryptographic": "passed",
+                "trusted": true,
+                "key_id": "9ea7a74e19f84aa1",
+                "role": "exporter"
+              },
+              "source_signatures": [
+                {
+                  "source_id": "frozen-source",
+                  "status": "not_checked",
+                  "cryptographic": "not_checked",
+                  "trusted": false
+                }
+              ],
+              "derivation": "not_checked",
+              "declared_coverage": {
+                "state": "unknown",
+                "scope": "whole_run"
+              },
+              "issues": [
+                {
+                  "code": "length_mismatch",
+                  "path": "en/index.html"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "source_stores_retired": true,
+  "offline": {
+    "log_sha256": "d44bfc17115a8d2b0aefae90caa81cc7eb5e28ea7890cd2bff5c20ea5c38af43",
+    "offlineReplayPassed": true,
+    "reports": [
+      {
+        "run": "run-w01-8293ab2b80454da786ff9356be385247",
+        "files": 260,
+        "shards": 235,
+        "queries": 137,
+        "views": 36,
+        "sessions": 1,
+        "contextBodies": 28,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "derived",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "run-w01-8293ab2b80454da786ff9356be385247"
+        ],
+        "captureObservations": 35,
+        "executionLinks": 0,
+        "auditDecisions": 0
+      },
+      {
+        "run": "run-w01-cd4e31af80e64aa196d76d83307d174b",
+        "files": 212,
+        "shards": 187,
+        "queries": 101,
+        "views": 36,
+        "sessions": 1,
+        "contextBodies": 12,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "derived",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "run-w01-cd4e31af80e64aa196d76d83307d174b"
+        ],
+        "captureObservations": 17,
+        "executionLinks": 0,
+        "auditDecisions": 0
+      }
+    ]
+  },
+  "binary_source": {
+    "build_source_sha": "cdfb7cb9506f95db4626e23fa8d95cc6feae6e4a",
+    "published_equal_tree_sha": "71d86254786cd8507162d8fde27ee756050b76f1",
+    "tree": "20c69bc4af15afd2f56baeee94acfe7927d4c6f8"
+  },
+  "fixture_source_metadata": "Original top-level runtime report did not record a fixture checkout SHA; original report digests are retained."
+}

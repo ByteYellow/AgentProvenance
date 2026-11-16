@@ -79,7 +79,16 @@ async def live_acceptance(directory, channel=None, *, custody_dir=None, native_d
         with (directory / (generation + ".log")).open("w") as log:
             async with stdio_client(parameters, errlog=log) as (read, write):
                 async with ClientSession(read, write) as client:
-                    await client.initialize()
+                    try:
+                        await client.initialize()
+                    except BaseException as error:
+                        # This fixture uses synthetic loopback pages and no
+                        # credentials. Preserve the child startup cause instead
+                        # of reporting only an MCP "Connection closed" wrapper.
+                        log.flush()
+                        detail = (directory / (generation + ".log")).read_bytes()[-4096:].decode("utf-8", "replace")
+                        error.add_note("Browser fixture " + generation + " startup diagnostics:\n" + detail)
+                        raise
                     yield client, int(pid_file.read_text())
 
     async def call(client, tool, **arguments):
