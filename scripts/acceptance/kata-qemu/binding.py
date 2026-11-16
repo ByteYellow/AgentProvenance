@@ -36,10 +36,10 @@ def configuration(target, identity, *, apparmor_state=True):
         "backend": {"mode": "guest", "guest": {key: identity[key] for key in GUEST_FIELDS}},
         "caller": {"principal_id": "fixture-router", "producer_id": "fixture-caller", "namespace": "fixture"},
         "concurrency": 2,
-        # Fixed resource profile for the 2 GiB nested Guest. Map allocation is
-        # part of startup; readiness and zero-loss/drain checks remain required.
+        # Use the normal 64 MiB collector ring inside the 2 GiB Guest. Native
+        # capture includes shared Guest bursts; zero-loss/drain checks remain required.
         "capture": {"mode": "native", "placement": "guest_kernel", "auto_tls": False, "no_policy": True,
-                    "ring_buffer_mib": 4, "startup_timeout_seconds": 120,
+                    "ring_buffer_mib": 64, "startup_timeout_seconds": 120,
                     "apparmor_state": apparmor_state, "seccomp_state": True},
         "delivery": {"receiver_id": "fixture-receiver", "sign_key_file": "/binding/executor.key",
                      "receiver_public_key_file": "/binding/receiver.pub"},

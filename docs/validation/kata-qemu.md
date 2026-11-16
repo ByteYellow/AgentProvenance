@@ -81,9 +81,9 @@ paths, sizes, hashes and staging time; evidence stays on the retained evidence
 volume. The tmpfs is removed after owned processes stop. Staging shares the
 existing 600-second Guest deadline.
 
-The fixed 2 GiB Guest capture profile uses a 4 MiB ring and a 120-second Sensor
-startup budget. These settings account for nested Guest map allocation and BTF
-loading. Each startup records its elapsed time and actual capabilities; the
+The fixed 2 GiB Guest capture profile uses the standard 64 MiB ring and a
+120-second Sensor startup budget. The ring includes shared Guest traffic during
+concurrent executions. Each startup records its elapsed time and actual capabilities; the
 execution and loss/drain checks still determine acceptance. A startup timeout
 retains process state and an owned-daemon stack dump in the private log. Store
 initialization has a separate 60-second budget, observed through the owned
