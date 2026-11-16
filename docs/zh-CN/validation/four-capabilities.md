@@ -4,6 +4,8 @@
 
 本文交接 `feature/v1.0-portable-evidence` 分支的四项能力：受控工作区、证据交付、
 运行时适配和 Browser 分层证据。正式 Dashboard 保持现有布局，页面调整仍保留在局部预览。
+[验收结果](../../benchmarks/v1.0-four-capabilities/README.zh-CN.md)分别记录固定源码复测、
+历史采集和剩余环境验收项。
 
 ## 当前范围
 
@@ -11,11 +13,11 @@
 | --- | --- | --- |
 | C-01 | 观测层、范围、策略对象、能力时间区间和运行时身份投影 | 在选定 x86 部署中核对新增运行时观测 |
 | W-01 | 远端权威工作区、版本/摘要冲突检测、CLI 和 stdio MCP | 用最终 x86 构建与 Sensor 复测，再组合 Kata |
-| E-01/E-02 | 阅读副本、选定内容签名、完整原件、接收方信任和独立验证器 | 最终构建回归；Dashboard 控件等待预览确认 |
+| E-01/E-02 | 阅读副本、选定内容签名、完整原件、接收方信任和独立验证器 | Dashboard 控件等待预览确认；签名模式横幅待同步 |
 | R-01 | 分开定义平台、执行和采集，保留 native 默认行为 | 新平台集成矩阵 |
 | R-02 | Guest 绑定、固定 runsc 容器执行、独立范围的 SecCheck 观测 | 实机身份探针及故障矩阵；逐命令关联还需共同调用/出生身份和采集水位 |
 | R-03 | Kata/QEMU Guest 绑定与有界验收脚本 | 在 Kubernetes 上固定 `kata-qemu-runtime-rs` 组合，核对 Guest Sensor 权限并实跑 |
-| B-01 | 持久 accept/result、重启查询、接收方控制的回执核验 | 最终构建复测，并与 Sensor-on 组合 |
+| B-01 | 持久 accept/result、重启查询、接收方控制的回执核验 | 与 Sensor-on 组合验收 |
 | B-02 | 按原生 ID 建立 Browser 分层关系，保存规则版本与引用 | Linux 可控站点场景矩阵 |
 | B-03 | 显式运行时托管关系与内核进程生命周期检查 | 建立实际 launcher 身份映射，实测 Sensor-on 的进程/OS 关系 |
 | Q-01 | 回归脚本、独立交付检查、有界 soak 采样器 | 24 小时运行、故障恢复及资源趋势复核、两个完整 Linux 案例 |
@@ -23,7 +25,7 @@
 R-02 当前分别保存容器证据和命令回执。x86 身份探针用于取得后续关联所需字段，
 逐命令关联仍有实现工作。不要用命令文本、单独 PID 或时间邻近替代共同身份。
 
-本地工作区案例在 ARM Linux VM 内，使用 Claude Code 2.1.293 和已有 DeepSeek 配置，
+此前的工作区案例在 ARM Linux VM 内，使用 Claude Code 2.1.293 和已有 DeepSeek 配置，
 通过 `agentprov_workspace` 完成 Inspect、Read、Edit、Write、Bash 和最终 Read。
 一次实际命令生成了预期文件；该轮 Sensor 关闭。完整原件、生产者签名和导出者签名
 已通过接收方独立核验；离线 Chrome 检查了 99 次查询、36 个视图、12 条正文，外部请求为 0。
@@ -115,6 +117,26 @@ go test ./internal/agentcontext ./internal/browserlink ./internal/provenance \
 
 这里的 pin 确认仅用于测试产生的受控采集副本。真实导入使用独立批准、位于采集目录外的
 接收方配置，固定 Run、bridge、placement 和 manifest 摘要。回执或包内内容不参与授权配置。
+
+测试生成两份证据库：`browser-import/data` 是初次导入，`browser-import/received`
+是签名 Bundle 回导后的接收库。对两者分别导出，使用不同文件名；Run 均为
+`browser-owned-acceptance`：
+
+```sh
+"$OUT/agentprov" --data-dir "$OUT/browser-import/data" dashboard export \
+  --run browser-owned-acceptance --output "$OUT/browser-source-reader.zip"
+"$OUT/agentprov" --data-dir "$OUT/browser-import/received" dashboard export \
+  --run browser-owned-acceptance --output "$OUT/browser-received-reader.zip"
+PLAYWRIGHT_CHANNEL=chrome AGENTPROV_REPLAY_SEARCH_QUERY=/pending \
+  node scripts/accept_offline_replay.cjs "$OUT/browser-source-reader.zip"
+PLAYWRIGHT_CHANNEL=chrome AGENTPROV_REPLAY_SEARCH_QUERY=/pending \
+  node scripts/accept_offline_replay.cjs "$OUT/browser-received-reader.zip"
+```
+
+分别离线打开两份阅读副本，核对保存的 scope、回执与原生引用。这两份测试库的
+Sensor 关闭；下面的 B-03 检查改用包含实际 Sensor 事件和操作者运行时映射的证据库。
+`/pending` 来自该案例实际保留的 URL，basic 模式也可检索。
+使用 Playwright 安装的 Chromium 时，去掉 `PLAYWRIGHT_CHANNEL` 即可。
 
 B-03 需同时保存完整 Browser scope、操作者观测到的进程生命周期和 Sensor 证据，
 包含 host/boot、进程出生身份、采集范围、支撑事件 ID。按实际粒度核对 context 到进程、

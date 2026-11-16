@@ -1,0 +1,1434 @@
+{
+  "schema": "agentprovenance.acceptance_summary/v1",
+  "recorded_at": "2026-11-16T09:02:37.452Z",
+  "product_source_commit": "831e85426393bdbf7757d37ee221cd8f3f0fd9ff",
+  "product_source_tree": "4a64142468be41988b6270f5c432bef81cbd3065",
+  "source_archive_sha256": "81dcc4ad92938ab87575a646248e9d8f89cd423419ddee3920adcc38672b4422",
+  "build": {
+    "from": "git archive",
+    "tracked_modifications_in_archive": false,
+    "go": "go1.23.0",
+    "buildvcs": false,
+    "trimpath": true,
+    "embedded_version": "v1.0.0-dev",
+    "embedded_commit": "831e85426393bdbf7757d37ee221cd8f3f0fd9ff",
+    "embedded_date": "2026-11-16T08:11:53Z",
+    "command": "go build -buildvcs=false -trimpath -ldflags \"-X github.com/byteyellow/agentprovenance/internal/buildinfo.Version=v1.0.0-dev -X github.com/byteyellow/agentprovenance/internal/buildinfo.Commit=831e85426393bdbf7757d37ee221cd8f3f0fd9ff -X github.com/byteyellow/agentprovenance/internal/buildinfo.Date=2026-11-16T08:11:53Z\" -o \"$BIN\" ./cmd/agentprov",
+    "verifier_package": "./cmd/agentprov-verify",
+    "linux_build_environment": "CGO_ENABLED=0 GOOS=linux GOARCH=arm64 or amd64"
+  },
+  "acceptance_script_commit": "476ad41508a253b416e9d6689639e9760630d8f3",
+  "final_regression_script_commit": "dcc30062c499f16fdca3520d2876a1ff73e350e6",
+  "test_checkout": {
+    "commit": "dcc30062c499f16fdca3520d2876a1ff73e350e6",
+    "tracked_dirty": true,
+    "changed_paths": [
+      "docs/validation/four-capabilities.md",
+      "docs/zh-CN/validation/four-capabilities.md"
+    ],
+    "changed_scope": "Unembedded acceptance documentation only",
+    "runtime_source_matches_build_archive": true
+  },
+  "later_change_scope": "Workspace acceptance prompt and static navigation regression tests only; runtime and verifier source unchanged.",
+  "branch": "feature/v1.0-portable-evidence",
+  "status": "local_acceptance_complete_with_recorded_follow_up",
+  "binaries": [
+    {
+      "name": "agentprov-darwin-arm64",
+      "bytes": 117079778,
+      "sha256": "ffb6c1b854cd9d09eb9d2cc656b1e1289c04536c772f2bd5f10fca90b74c1cf2"
+    },
+    {
+      "name": "agentprov-linux-amd64",
+      "bytes": 121562660,
+      "sha256": "ea25b6ff116a86bfbc1bb30544c613c87d7d1ca3fd644b97cbaa9fc8fde27f8b"
+    },
+    {
+      "name": "agentprov-linux-arm64",
+      "bytes": 118445998,
+      "sha256": "523e4236cc989d7a88f26e9090d74150c8380867ffc702b0a45ab34744c0df70"
+    },
+    {
+      "name": "agentprov-verify-darwin-arm64",
+      "bytes": 3886226,
+      "sha256": "b5ad7e9c5538b2ceb123e4611fc115b6c91a6baa22158b455b3e660cd207729f"
+    },
+    {
+      "name": "agentprov-verify-linux-amd64",
+      "bytes": 4086701,
+      "sha256": "d4417f5fbf77c794b03c9d51ff337d8e51506e4d68af7045792c3c5a57c380ca"
+    },
+    {
+      "name": "agentprov-verify-linux-arm64",
+      "bytes": 3972937,
+      "sha256": "d9c65ce69afc8db9be84a4c2fc006abb449d5bc448b0889dbdc21dfa7946176b"
+    }
+  ],
+  "tests": [
+    {
+      "name": "go-test",
+      "command": "go test -p 2 -timeout 20m ./...",
+      "exit_code": 0,
+      "source_commit": "dcc30062c499f16fdca3520d2876a1ff73e350e6",
+      "package_results": 49,
+      "go_test_cache": "enabled",
+      "log": {
+        "file": "go-test-final-script.log",
+        "sha256": "bea423365e2c12d890bd52721b985d70de28c48a540ee96d81e2b0da25fe907a"
+      },
+      "preceding_log": {
+        "file": "go-test.log",
+        "sha256": "a4bff31c80144221ac186668bf0d1ef193d168d9d1d798ffc2deca832c313237"
+      }
+    },
+    {
+      "name": "go-vet",
+      "command": "go vet ./...",
+      "exit_code": 0,
+      "source_commit": "dcc30062c499f16fdca3520d2876a1ff73e350e6",
+      "log": {
+        "file": "go-vet-final-script.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "name": "go-race",
+      "command": "go test -race -p 2 -timeout 20m ./...",
+      "exit_code": 0,
+      "source_commit": "dcc30062c499f16fdca3520d2876a1ff73e350e6",
+      "package_results": 49,
+      "go_test_cache": "enabled",
+      "log": {
+        "file": "go-race-final-script.log",
+        "sha256": "bea423365e2c12d890bd52721b985d70de28c48a540ee96d81e2b0da25fe907a"
+      },
+      "preceding_log": {
+        "file": "go-race.log",
+        "sha256": "e5047ffc55d1d8a9f4e57ddc562b275ce9d429bd725eca7123f1880562dc8ef8"
+      }
+    },
+    {
+      "name": "gofmt",
+      "command": "gofmt -l internal cmd",
+      "exit_code": 0,
+      "unformatted_files": []
+    },
+    {
+      "name": "python",
+      "command": "PYTHONPATH=python python -m unittest discover -s python/tests -p test_*.py -v",
+      "exit_code": 0,
+      "passed": 98,
+      "skipped": 2,
+      "log": {
+        "file": "python.log",
+        "sha256": "3d9169476d266632ce596e385598263bdff137f57812186f57b5fd3db054a880"
+      },
+      "skips": [
+        "opt-in Chromium/MCP live test (separately exercised with Chrome)",
+        "Notebook live test: optional Jupyter dependencies absent"
+      ]
+    },
+    {
+      "name": "workspace-sensor-prompt",
+      "command": "python3 -m unittest discover -s scripts -p test_accept_workspace.py -v",
+      "exit_code": 0,
+      "passed": 37,
+      "script_source": "476ad41508a253b416e9d6689639e9760630d8f3",
+      "log": {
+        "file": "script-tests.log",
+        "sha256": "1d4fe589b6c79f484cafe4277c51fd27d16deed42b614bb3b6381191bcff2a41"
+      }
+    },
+    {
+      "name": "workspace-mcp",
+      "command": "PYTHONPATH=python python3 -m unittest discover -s python/tests -p test_workspace_mcp.py -v",
+      "exit_code": 0,
+      "passed": 20,
+      "log": {
+        "file": "mcp-tests.log",
+        "sha256": "1f1635cdb8a7b2dc8437d5d503774a72d2c83ca0fb88f08424f897e6e490380d"
+      }
+    },
+    {
+      "name": "kata-acceptance",
+      "command": "python3 -m unittest discover -s scripts/acceptance/kata-qemu -p test_*.py -v",
+      "exit_code": 0,
+      "passed": 51,
+      "log": {
+        "file": "kata-units.log",
+        "sha256": "9ed184db9cfe47f17fcab9b48ded86b5383728d3f2c680efe14e8fa9b6b88814"
+      }
+    },
+    {
+      "name": "soak-sampler",
+      "command": "python3 -m unittest discover -s scripts -p test_execution_soak.py -v",
+      "exit_code": 0,
+      "passed": 18,
+      "log": {
+        "file": "soak-units.log",
+        "sha256": "f1152489ecc81554b31afd5c04da006542cbfe8e32495492de82e3e78d965507"
+      }
+    },
+    {
+      "name": "workspace-runtime-contracts",
+      "command": "go test ./scripts/acceptance/kata-qemu ./internal/runtimeadapter ./internal/handoff ./internal/cli -run 'TestGenerated|TestGuest|TestPlatformBinding|TestExecutionBackend|TestWorkspace' -count=1",
+      "exit_code": 0,
+      "log": {
+        "file": "workspace-runtime-contracts.log",
+        "sha256": "338891098d2cc30843bd98e299a5199f07b4710774a674b3ebd13474f44dac0d"
+      }
+    },
+    {
+      "name": "static-navigation-contract",
+      "command": "node scripts/test_static_demo_navigation.cjs",
+      "exit_code": 0,
+      "passed": 14,
+      "source_commit": "dcc30062c499f16fdca3520d2876a1ff73e350e6",
+      "log": {
+        "file": "static-navigation-unit.log",
+        "sha256": "ba8d642f391d5118ae98612260fa15ae62dc4aeec98c4e470bd3f40e07d56544"
+      }
+    },
+    {
+      "name": "test_context_readable.mjs",
+      "command": "node scripts/test_context_readable.mjs",
+      "exit_code": 0,
+      "log": {
+        "file": "test_context_readable.mjs.log",
+        "sha256": "f6dad52718697a34c9ece5270772afe65d31742024afd40cbd17d457d0d23509"
+      }
+    },
+    {
+      "name": "test_context_coverage.mjs",
+      "command": "node scripts/test_context_coverage.mjs",
+      "exit_code": 0,
+      "log": {
+        "file": "test_context_coverage.mjs.log",
+        "sha256": "2864e6476882bb37910620f56d974674086a5de07f2bffbe6050828dcbb0642e"
+      }
+    },
+    {
+      "name": "test_dashboard_workspace.mjs",
+      "command": "node scripts/test_dashboard_workspace.mjs",
+      "exit_code": 0,
+      "log": {
+        "file": "test_dashboard_workspace.mjs.log",
+        "sha256": "60c57b74f9b7275d96dfa7aeebe16bf1fcba151c3cf84f845d7d9ddb48b5c754"
+      }
+    },
+    {
+      "name": "test_search_engine.mjs",
+      "command": "node scripts/test_search_engine.mjs",
+      "exit_code": 0,
+      "log": {
+        "file": "test_search_engine.mjs.log",
+        "sha256": "a321f49b387045cc99af4bdb9fdc9a432fcc6bb37898148641a994ee47d23efb"
+      }
+    },
+    {
+      "name": "test_compare_engine.mjs",
+      "command": "node scripts/test_compare_engine.mjs",
+      "exit_code": 0,
+      "log": {
+        "file": "test_compare_engine.mjs.log",
+        "sha256": "33e2f93965d26f5f03683d89204f9118e3325fb0aa9914a8e8aa13a48a96fc60"
+      }
+    },
+    {
+      "name": "test_compare_completeness.mjs",
+      "command": "node scripts/test_compare_completeness.mjs",
+      "exit_code": 0,
+      "log": {
+        "file": "test_compare_completeness.mjs.log",
+        "sha256": "50da209d0bffca310ba317e7c14f2773797897940003b087ff139f7fbb2b0fde"
+      }
+    },
+    {
+      "name": "test_static_reader.cjs",
+      "command": "node scripts/test_static_reader.cjs",
+      "exit_code": 0,
+      "log": {
+        "file": "test_static_reader.cjs.log",
+        "sha256": "e61a0687bdf4061410d752621c08c2b150e72098ad4af2a298a6b5a2b9e792e0"
+      }
+    },
+    {
+      "name": "test_evidence_status.cjs",
+      "command": "node scripts/test_evidence_status.cjs",
+      "exit_code": 0,
+      "log": {
+        "file": "test_evidence_status.cjs.log",
+        "sha256": "91e969bd1a9b301e00fb2267d72c84e44cf903ee841f977ae62c5ace0a354df4"
+      }
+    }
+  ],
+  "workspace": {
+    "command": "python scripts/accept_workspace.py --agentprov \"$BIN\" --python-package \"$PYTHON_PACKAGE\" --claude \"$EXISTING_AUTHENTICATED_CLAUDE_WRAPPER\" --output \"$NEW_PRIVATE_OUTPUT\"",
+    "mac_contract": {
+      "status": "passed",
+      "binary_sha256": "ffb6c1b854cd9d09eb9d2cc656b1e1289c04536c772f2bd5f10fca90b74c1cf2",
+      "platform": "macOS-27.0.1-arm64-arm-64bit",
+      "sensor": "off",
+      "mcp_version": "2.3.0",
+      "contract": {
+        "status": "passed",
+        "checks": [
+          "read_edit_write_bash_same_bytes",
+          "record_snapshot",
+          "cas_conflict_reread",
+          "concurrent_cas",
+          "restart_query_no_replay",
+          "path_symlink_rejection",
+          "stale_generation",
+          "current_run_evidence",
+          "trusted_context"
+        ],
+        "record_attempts": 1,
+        "context_results": 14,
+        "verified_refs": [
+          "sha256:1e0f332991cbb6cc9a8ef36a930a84c5a277b19c91806f0d44a94208a1a9dfc7",
+          "sha256:223c0ad2bc7a522f1ac73da2da6308e6960eef525719462be4598441d271fe44",
+          "sha256:44a3ccd59264e3893ff61d53f16b8bb4e9a99dc114039004f275a6e8796a2590",
+          "sha256:45cc629615bee0e54f202e8afaca200162ec514728874f08532699200d10ef08",
+          "sha256:4e6e4b462f2f744e413981d090073ed6688c752d33b60e74bc55712d47a1977a",
+          "sha256:505f09f5b4409833672128f95675725781e1937c0b3dcb0e3210b155aac5c115",
+          "sha256:5c1ba64ebc8ee9da7f662fe9b313722773eb4cbce2ec9320488356b4b3fd09ce",
+          "sha256:65507646ec577fdcae3d31707512feb5f34b75e1acfac7ed6a7822b33b9eb225",
+          "sha256:67fb8c88128af2db3ab77bd403d23ec17686c6ab6af3fea13dbfd2dbce1d0a9b",
+          "sha256:74c107cb897bc8ed944b0940eaa294ac9846323cd567df380015d75ccb9f2fc4",
+          "sha256:7aee3939935040b789cbc423d3fa8c48082bfb4228e0ac191fa15908765c8c65",
+          "sha256:86850b31b9b2b87ece893a5e36c53ad9379735731b5be502908d3158bff623f5",
+          "sha256:8694d42231f00da485129d7455e58968ba11b44c6e4c5b5ec79251b63fd63146",
+          "sha256:9916f394baebc78778e87f96f31b2d949bf2482ebe70829f85cefea2a7302174",
+          "sha256:b4e280569792c553505e9de09473b6b44e3121b9ca638ea94bd9ecccdb721ac3",
+          "sha256:e52748ed9f847a2f7ac4146d16f2949fe53bcb6453d66bc5df09b1a1b12bf9a5"
+        ]
+      },
+      "harness": {
+        "status": "not_requested"
+      },
+      "exit_code": 0,
+      "report": {
+        "file": "report.json",
+        "sha256": "f7b9cacb0a0c7bd75d042456db00fd99501267f9e36e5fc310c6169e8e712c94"
+      }
+    },
+    "arm_first": {
+      "status": "failed",
+      "binary_sha256": "523e4236cc989d7a88f26e9090d74150c8380867ffc702b0a45ab34744c0df70",
+      "platform": "Linux-6.8.0-149-generic-aarch64-with-glibc2.39",
+      "sensor": "off",
+      "mcp_version": "2.3.0",
+      "contract": {
+        "status": "passed",
+        "checks": [
+          "read_edit_write_bash_same_bytes",
+          "record_snapshot",
+          "cas_conflict_reread",
+          "concurrent_cas",
+          "restart_query_no_replay",
+          "path_symlink_rejection",
+          "stale_generation",
+          "current_run_evidence",
+          "trusted_context"
+        ],
+        "record_attempts": 1,
+        "context_results": 14,
+        "verified_refs": [
+          "sha256:2ddd26692d9dfa4f41c6f86117fbd4baf1e04301e68fd43d614ee4a1d2422523",
+          "sha256:34a495c20bb5473949872ce737986697380becc61a588168263cbc8037c7e708",
+          "sha256:5916955ec5eb297ed6166f322be49c257191654f253b2cde150bc0c5ec42f4f8",
+          "sha256:6508c127aab64228715b024ce1d69c467bdb530151fce3edcd03959278bb1dbf",
+          "sha256:65f8711eccfc728f2c83fb349c0c713d20514ed8f5585225bdcf89aca73da805",
+          "sha256:71528a5466567fa5f28953db092540d71d657bd2547902ce40f4c48552682262",
+          "sha256:92d22c7aeb6cd345570ba0abe20ad85639620daa2965acaf4744cabad8ad2436",
+          "sha256:9ca8a8c80438806f921a91a437511d1fef94d0a03c677e6df48c8cd65fc336f3",
+          "sha256:9d098582d4c7884d1f257d3f0252fa7c13b9db17a7453317cd2c924fa4f04409",
+          "sha256:9d4180f567a56a3a304780d3c2ae7b16ef2c06b7261d403d4f8428880bddf0d2",
+          "sha256:9f418025ca08cfe2986415caca4f559c2822a3a8a080d9173fa65c57b74e2b9b",
+          "sha256:a44e50d72b6acb31bbfa4c50e3fefa7d257d7d02b0de3776628ccbff912c12a7",
+          "sha256:c7727740149db6a6aff689210c775893b94a06eb62a07c9e9cd61485eb1dfdc7",
+          "sha256:cfacde0b6fce758ace0ab23caafd1216463d59acfb8f8d14c9bb88fb98058164",
+          "sha256:f223162f71b3e8cfcd16aa5312cdfaf7f70eb5bb370fe21b333f35a697d957cd",
+          "sha256:fb9eec44101f1a6b161ec70bfe0d24fe427c9a396fcb231afb51f67bdbca3d0d"
+        ]
+      },
+      "harness": {
+        "status": "failed",
+        "failure_code": "artifact_mismatch"
+      },
+      "exit_code": 1,
+      "actual_artifact_bytes": 18,
+      "expected_artifact_bytes": 19,
+      "failure": "The tool received agent-note without the final LF; the artifact preserved those exact bytes.",
+      "report": {
+        "file": "report.json",
+        "sha256": "7fac09605826e448469a3e2e1fbc6f263cc39c399334848ab3f6df36e9ce87db"
+      }
+    },
+    "arm_prompt_clarified": {
+      "status": "passed",
+      "binary_sha256": "523e4236cc989d7a88f26e9090d74150c8380867ffc702b0a45ab34744c0df70",
+      "platform": "Linux-6.8.0-149-generic-aarch64-with-glibc2.39",
+      "sensor": "off",
+      "mcp_version": "2.3.0",
+      "contract": {
+        "status": "passed",
+        "checks": [
+          "read_edit_write_bash_same_bytes",
+          "record_snapshot",
+          "cas_conflict_reread",
+          "concurrent_cas",
+          "restart_query_no_replay",
+          "path_symlink_rejection",
+          "stale_generation",
+          "current_run_evidence",
+          "trusted_context"
+        ],
+        "record_attempts": 1,
+        "context_results": 14,
+        "verified_refs": [
+          "sha256:08623bbc02e9114ffb43dd2af368c9029370ccd0a0b97d4ac6690709d00400f6",
+          "sha256:1e82994841785a346169680733336b9e9d1c7e7d0a6248a1f1069be1f316ae8a",
+          "sha256:251dc9415dc1357ad164854e2ead68b25825997c567a23c0688c25712f46fb51",
+          "sha256:2b6a16364b6d2d99743a4f89a6235880db30e68b5a36ec09340caf81625dfb4b",
+          "sha256:2d08512534c6b141b229f5d98134ab7b1e7fe7409ee470cbbae158901d6a9a8b",
+          "sha256:38a8c66ec4b47d75a753bea5e5f2ab7fded01bb7a9cbd6541e27472892b7511a",
+          "sha256:72d3e4a3f549a706b9f0885fe0a17dab30c645f0ad47ebb836483bfa98bca31c",
+          "sha256:734c69aa61ec05b27a98e2546497d53c8cc73d0215e84221bfeb1c3a26e34901",
+          "sha256:7f2b7af93ca531bc999f4758ce29dd24ce1af25fb8f2c8a0a896ef604af75061",
+          "sha256:7fecfcd04f912e1384789c54f49b37c265f58ad81525d9200c8e43dcedcf3c8c",
+          "sha256:87957013f18993812862801512c5c8c21b8316eb79503cb20b9684074db6b932",
+          "sha256:97f5fdb04b99b6e14e1acfc9f689b2cbb03d7c2e884c9902b3a64b3049130fae",
+          "sha256:aca9dae9b930240047799e1f2f281c61157bb703f867ae196e2a5c081da5f1c3",
+          "sha256:cf4048d03bd89112c6b91e7d88a3672e8ef6e4c793b6bcbd9a1b4415867ef17d",
+          "sha256:e223e95c817ce814f18dc19d56549ffcd1c73bab60444b73cf37945f20fd9b52",
+          "sha256:e6618bf6a4751cd1ceaa03b3085d715e6db8ddfdba6d1a3748546fe411f4184d"
+        ]
+      },
+      "harness": {
+        "status": "passed",
+        "record_attempts": 1,
+        "context_results": 6,
+        "artifact_sha256": "31f345176bd06a508eff6bd45943f211eb9cbacd019c0683d038dc538e869027",
+        "tools": [
+          "mcp__agentprov_workspace__workspace_inspect",
+          "mcp__agentprov_workspace__workspace_read",
+          "mcp__agentprov_workspace__workspace_edit",
+          "mcp__agentprov_workspace__workspace_write",
+          "mcp__agentprov_workspace__workspace_bash",
+          "mcp__agentprov_workspace__workspace_read"
+        ]
+      },
+      "exit_code": 0,
+      "real_harness_invocations": 1,
+      "artifact_bytes": 19,
+      "harness_configuration": "Claude Code 2.1.293 with the existing DeepSeek provider",
+      "report": {
+        "file": "report.json",
+        "sha256": "6eff98fafd6e74a81fd5e90b474fcdf4cfbbe50f2b6c31e6d0251faab49ef1a7"
+      },
+      "handoff": {
+        "file": "handoff.json",
+        "sha256": "c43964f278ec9869ddd41d124afd4089e22f2777f7c0f57aa4ef8efd0f57746d"
+      }
+    },
+    "prompt_change": {
+      "binary_source_commit": "831e85426393bdbf7757d37ee221cd8f3f0fd9ff",
+      "script_base_commit": "831e85426393bdbf7757d37ee221cd8f3f0fd9ff",
+      "change": "PROMPT only",
+      "all_non_prompt_code_unchanged": true,
+      "verify_harness_run_unchanged": true,
+      "verify_harness_run_sha256": "083a1bbd15bc9b8647e404aea8a071270f459cd7aef63f083e5f639d88fee929",
+      "original_script_sha256": "6166572b38012262950c156c30df338caf7cc6ee88da35a900fcc372b6f57f0f",
+      "new_script_sha256": "b5c939f33c591fb94c7f0e423cb320c6c85bc3c4735c48317a2571e1197d4bfd",
+      "new_test_sha256": "637c525d0c6f107b46888f9fedbb04b80c36ad584b46c7d7e0c27515f16d745e",
+      "local_tests": [
+        {
+          "command": "python3 -m unittest discover -s scripts -p test_accept_workspace.py -k HarnessPrompt -v",
+          "stage": "before_prompt_change",
+          "count": 3,
+          "failures": 2,
+          "exit_code": 1,
+          "log": "prompt-before.log"
+        },
+        {
+          "command": "python3 -m unittest discover -s scripts -p test_accept_workspace.py -v",
+          "count": 37,
+          "exit_code": 0,
+          "log": "script-tests.log"
+        },
+        {
+          "command": "env PYTHONPATH=python python3 -m unittest discover -s python/tests -p test_workspace_mcp.py -v",
+          "count": 20,
+          "exit_code": 0,
+          "log": "mcp-tests.log"
+        }
+      ],
+      "evidence": {
+        "file": "prompt-change-audit.json",
+        "sha256": "bae52b68e17652e9e08d510d8b6026eda481c116dd06ad5239ae5b5eb33eb8c2"
+      }
+    }
+  },
+  "browser_import": {
+    "command_exit_code": 0,
+    "passed": true,
+    "fixture_operator_pin": true,
+    "production_launch_authentication": "not_evaluated",
+    "verified_receipts": 10,
+    "unique_bindings": 5,
+    "generations": [
+      "first",
+      "second"
+    ],
+    "negative_cases_rejected": [
+      "wrong-external-pin",
+      "artifact-self-config",
+      "self-verified-receipt",
+      "cross-generation"
+    ],
+    "repeat_import_idempotent": true,
+    "signed_roundtrip": true,
+    "graph_errors": 0,
+    "graph_warnings": 0,
+    "source_actions_before": 4,
+    "source_actions_after": 4,
+    "source_files_checked": 8,
+    "source_bytes_unchanged": true,
+    "original_actions_rerun": false,
+    "sensor": "off",
+    "command": "python scripts/accept_browser_owned_import.py --agentprov \"$BIN\" --artifacts \"$EXISTING_CHROME_CAPTURE\" --output \"$NEW_PRIVATE_OUTPUT\" --approve-fixture-pin"
+  },
+  "delivery": {
+    "command": "python scripts/accept_derived_view.py --agentprov \"$BIN\" --verifier \"$VERIFIER\" --out \"$NEW_PRIVATE_OUTPUT\"",
+    "result": {
+      "command_exit_code": 0,
+      "passed": true,
+      "cases": 21,
+      "all_expected_exit_codes_matched": true,
+      "checks": [
+        {
+          "name": "keygen",
+          "exit_code": 0,
+          "expected_exit_code": 0
+        },
+        {
+          "name": "record",
+          "exit_code": 0,
+          "expected_exit_code": 0
+        },
+        {
+          "name": "export-signed",
+          "exit_code": 0,
+          "expected_exit_code": 0
+        },
+        {
+          "name": "export-unsigned",
+          "exit_code": 0,
+          "expected_exit_code": 0
+        },
+        {
+          "name": "trusted",
+          "exit_code": 0,
+          "expected_exit_code": 0
+        },
+        {
+          "name": "unknown-key",
+          "exit_code": 2,
+          "expected_exit_code": 2
+        },
+        {
+          "name": "unsigned",
+          "exit_code": 2,
+          "expected_exit_code": 2
+        },
+        {
+          "name": "wrong-role",
+          "exit_code": 2,
+          "expected_exit_code": 2
+        },
+        {
+          "name": "directory",
+          "exit_code": 0,
+          "expected_exit_code": 0
+        },
+        {
+          "name": "tampered",
+          "exit_code": 1,
+          "expected_exit_code": 1
+        },
+        {
+          "name": "extra-policy",
+          "exit_code": 1,
+          "expected_exit_code": 1
+        },
+        {
+          "name": "restored",
+          "exit_code": 0,
+          "expected_exit_code": 0
+        },
+        {
+          "name": "producer-keygen",
+          "exit_code": 0,
+          "expected_exit_code": 0
+        },
+        {
+          "name": "original-bundle",
+          "exit_code": 0,
+          "expected_exit_code": 0
+        },
+        {
+          "name": "originals-require-confirmation",
+          "exit_code": 1,
+          "expected_exit_code": 1
+        },
+        {
+          "name": "originals-reject-exclusion",
+          "exit_code": 1,
+          "expected_exit_code": 1
+        },
+        {
+          "name": "export-originals",
+          "exit_code": 0,
+          "expected_exit_code": 0
+        },
+        {
+          "name": "originals-trusted",
+          "exit_code": 0,
+          "expected_exit_code": 0
+        },
+        {
+          "name": "originals-unknown-producer",
+          "exit_code": 2,
+          "expected_exit_code": 2
+        },
+        {
+          "name": "original-valid-reader-tampered",
+          "exit_code": 1,
+          "expected_exit_code": 1
+        },
+        {
+          "name": "complete-restored",
+          "exit_code": 0,
+          "expected_exit_code": 0
+        }
+      ]
+    },
+    "offline_command": "PLAYWRIGHT_CHANNEL=chrome AGENTPROV_REPLAY_SEARCH_QUERY=\"recorded reader fixture\" node scripts/accept_offline_replay.cjs \"$ZIP\"",
+    "verification_command": "agentprov-verify --trust-policy \"$EXTERNAL_RECIPIENT_POLICY\" \"$ZIP\"",
+    "cases": [
+      {
+        "archive": "signed.zip",
+        "sha256": "d39f582d449f333bb7598c0b83a0fcf62ad6a8488a3781d31846e5ea2b1b0a77",
+        "offline_exit_code": 0,
+        "offline_passed": true,
+        "queries": 72,
+        "views": 36,
+        "network_requests": 0,
+        "external_trust_sha256": "fb003bdecde0b278d7b9e0b6a77dd6e38de60eacc0e4844f9a01a8c01bb4c227",
+        "verifier_exit_code": 0,
+        "expected_verifier_exit_code": 0,
+        "file_integrity": "passed",
+        "derived_signature": {
+          "status": "valid",
+          "cryptographic": "passed",
+          "trusted": true,
+          "key_id": "2c321a4566768d8c",
+          "role": "exporter"
+        },
+        "source_signatures": [
+          {
+            "source_id": "frozen-source",
+            "status": "not_checked",
+            "cryptographic": "not_checked",
+            "trusted": false
+          }
+        ],
+        "derivation": "not_checked"
+      },
+      {
+        "archive": "unsigned.zip",
+        "sha256": "211f3f66c136a37d789c149943bbb55f833c509d5ee332edaf6211e4ad66f082",
+        "offline_exit_code": 0,
+        "offline_passed": true,
+        "queries": 72,
+        "views": 36,
+        "network_requests": 0,
+        "external_trust_sha256": "fb003bdecde0b278d7b9e0b6a77dd6e38de60eacc0e4844f9a01a8c01bb4c227",
+        "verifier_exit_code": 2,
+        "expected_verifier_exit_code": 2,
+        "file_integrity": "not_checked",
+        "derived_signature": {
+          "status": "unsigned",
+          "cryptographic": "not_checked",
+          "trusted": false
+        },
+        "derivation": "not_checked"
+      },
+      {
+        "archive": "originals.zip",
+        "sha256": "2fe4fe2a8eefe36311f0504b3d0ea13442120ed73a53f72592869ef00767aa07",
+        "offline_exit_code": 0,
+        "offline_passed": true,
+        "queries": 72,
+        "views": 36,
+        "network_requests": 0,
+        "external_trust_sha256": "570564936f361f52d35c81d87455082cef6ba448009f21d2536d63e03ee1bf97",
+        "verifier_exit_code": 0,
+        "expected_verifier_exit_code": 0,
+        "file_integrity": "passed",
+        "derived_signature": {
+          "status": "valid",
+          "cryptographic": "passed",
+          "trusted": true,
+          "key_id": "2c321a4566768d8c",
+          "role": "exporter"
+        },
+        "source_signatures": [
+          {
+            "source_id": "frozen-source",
+            "status": "not_checked",
+            "cryptographic": "not_checked",
+            "trusted": false
+          },
+          {
+            "source_id": "forensics-a55a0376493b",
+            "status": "valid",
+            "cryptographic": "passed",
+            "trusted": true,
+            "key_id": "6addad098923021a",
+            "role": "producer"
+          }
+        ],
+        "derivation": "not_checked"
+      }
+    ],
+    "evidence": {
+      "file": "report.json",
+      "sha256": "83bb3220a2fb6383d3ed18a0d26631a239df22569cc506dcc1d014413fe61aae"
+    },
+    "browser_readers": [
+      {
+        "label": "source",
+        "archive": "browser-source-reader.zip",
+        "archive_sha256": "ffae9b611d80376693aa7d3d03964873747aaccac342834cf87621e4835e9276",
+        "export_exit_code": 0,
+        "offline_exit_code": 0,
+        "query": "/pending",
+        "context_entries": 39,
+        "content_refs": 4,
+        "context_sha256": "caddd1613bc125d038f6541333b7e8a9a1377f9fba23747a8767730af0cb16d3",
+        "reports": [
+          {
+            "run": "browser-owned-acceptance",
+            "files": 254,
+            "shards": 229,
+            "queries": 87,
+            "views": 36,
+            "sessions": 2,
+            "contextBodies": 4,
+            "networkRequests": 0,
+            "knownUILimitations": [],
+            "deliveryMode": "reading",
+            "signed": false,
+            "scope": "whole_run",
+            "runs": [
+              "browser-owned-acceptance"
+            ],
+            "captureObservations": 5,
+            "executionLinks": 0,
+            "auditDecisions": 0
+          }
+        ]
+      },
+      {
+        "label": "received",
+        "archive": "browser-received-reader.zip",
+        "archive_sha256": "13d65257f5a755fef5f5798bd1139409fff8c114563e717a2a4b10335c5acd7a",
+        "export_exit_code": 0,
+        "offline_exit_code": 0,
+        "query": "/pending",
+        "context_entries": 39,
+        "content_refs": 4,
+        "context_sha256": "caddd1613bc125d038f6541333b7e8a9a1377f9fba23747a8767730af0cb16d3",
+        "reports": [
+          {
+            "run": "browser-owned-acceptance",
+            "files": 254,
+            "shards": 229,
+            "queries": 87,
+            "views": 36,
+            "sessions": 2,
+            "contextBodies": 4,
+            "networkRequests": 0,
+            "knownUILimitations": [],
+            "deliveryMode": "reading",
+            "signed": false,
+            "scope": "whole_run",
+            "runs": [
+              "browser-owned-acceptance"
+            ],
+            "captureObservations": 5,
+            "executionLinks": 0,
+            "auditDecisions": 0
+          }
+        ]
+      }
+    ],
+    "source_received_context_equal": true,
+    "known_ui_limitations": [
+      {
+        "archive": "signed.zip",
+        "code": "signed_reader_legacy_unsigned_copy",
+        "status": "PENDING",
+        "locale": "en",
+        "run": "reader-acceptance",
+        "observed": "Offline replay · unsigned sharing copy\nWhole run · recorded content\nExport inventory",
+        "signatureAuthority": "independent agentprov-verify, not reader UI"
+      },
+      {
+        "archive": "signed.zip",
+        "code": "signed_reader_legacy_unsigned_copy",
+        "status": "PENDING",
+        "locale": "zh-CN",
+        "run": "reader-acceptance",
+        "observed": "离线回放 · 未签名的分享副本\n整个 Run · 已保存内容\n导出清单",
+        "signatureAuthority": "independent agentprov-verify, not reader UI"
+      },
+      {
+        "archive": "originals.zip",
+        "code": "signed_reader_legacy_unsigned_copy",
+        "status": "PENDING",
+        "locale": "en",
+        "run": "reader-acceptance",
+        "observed": "Offline replay · unsigned sharing copy\nWhole run · recorded content\nExport inventory",
+        "signatureAuthority": "independent agentprov-verify, not reader UI"
+      },
+      {
+        "archive": "originals.zip",
+        "code": "signed_reader_legacy_unsigned_copy",
+        "status": "PENDING",
+        "locale": "zh-CN",
+        "run": "reader-acceptance",
+        "observed": "离线回放 · 未签名的分享副本\n整个 Run · 已保存内容\n导出清单",
+        "signatureAuthority": "independent agentprov-verify, not reader UI"
+      }
+    ],
+    "trust_authority": "Receiver-side policies generated outside the ZIP by the existing acceptance script; explicit --trust-policy. No authority taken from archive-carried policy.",
+    "verifier_semantics": "signed: trusted exporter; originals: trusted exporter and producer; unsigned: expected exit 2 and status unsigned; derivation remains not_checked."
+  },
+  "remaining": [
+    {
+      "task": "R-02",
+      "status": "implementation_and_runtime_acceptance_pending",
+      "requirement": "Shared per-command birth/call identity and capture watermark; fixed runsc execution and SecCheck remain separate evidence scopes."
+    },
+    {
+      "task": "W-01/R-03",
+      "status": "environment_pending",
+      "requirement": "Pinned Kubernetes Kata/QEMU, Guest Sensor-on, actual Guest Harness and signed delivery."
+    },
+    {
+      "task": "B-02/B-03",
+      "status": "environment_pending",
+      "requirement": "Linux native Browser event matrix, independent launcher custody and Sensor-on process/file/network associations."
+    },
+    {
+      "task": "Q-01",
+      "status": "environment_pending",
+      "requirement": "24-hour soak, resource trend and fault recovery checks; current live smoke is 60 seconds."
+    },
+    {
+      "task": "UI",
+      "status": "preview_only",
+      "requirement": "Dashboard integration and signed-mode status banners await preview acceptance."
+    }
+  ],
+  "publication": {
+    "main_merge": false,
+    "pull_request_created": false,
+    "release_tag": false,
+    "release": false,
+    "pages_deployed": false
+  },
+  "privacy": "Only allowlisted summaries and hashes are public. Private paths, credentials, raw provider logs and personal captures are excluded.",
+  "frontend": {
+    "report": {
+      "file": "results.json",
+      "sha256": "dc5a420d66e5fd5a7201d45a43c22a9623f4a46afda528c5a6624dbc6c46dc8e"
+    },
+    "source_commit": "831e85426393bdbf7757d37ee221cd8f3f0fd9ff",
+    "exit_code": 1,
+    "browser_version": "155.0.8059.85",
+    "scripts_unchanged": true,
+    "binary_unchanged": true,
+    "binary_sha256": "ffb6c1b854cd9d09eb9d2cc656b1e1289c04536c772f2bd5f10fca90b74c1cf2",
+    "site_files": 16898,
+    "site_bytes": 83131691,
+    "site_hash_manifest_sha256": "6d034eb04303957bd96b26868b07f18adb4e92ae1fca0d93526276d7d2858070",
+    "scripts": {
+      "scripts/test_demo_guides.cjs": "862b3265ab54e4aecfddd4f349a10ac04fb33586dc1cb49c7fd634156e334651",
+      "scripts/accept_static_demo.cjs": "67d94aff11e4275434eaa0af6b4bf8001ea3e6125ebb942c43186a49e6a6e903",
+      "scripts/test_dashboard_graph_controls.js": "754689929a9786138821fc6ff72b56af6e06e07f8245f12bda32036ddcff29a4",
+      "scripts/test_dashboard_export_selection.js": "e541dc18f49a21a15c10d288f023a5103d226b648f51fb477ce723eab8aa78e5"
+    },
+    "runs": [
+      {
+        "run": "run-48baa3821074",
+        "events": 702
+      },
+      {
+        "run": "run-2fd63df0ab9b",
+        "events": 548
+      },
+      {
+        "run": "ui-endpoint-candidates",
+        "events": 3
+      },
+      {
+        "run": "run-2267309eda57",
+        "events": 578
+      },
+      {
+        "run": "run-e9c3f452461a",
+        "events": 510
+      },
+      {
+        "run": "run-dbc2adf273d4",
+        "events": 157
+      },
+      {
+        "run": "run-grok-3routes",
+        "events": 159
+      },
+      {
+        "run": "run-grok-exfil",
+        "events": 331
+      },
+      {
+        "run": "run-snake-supervised",
+        "events": 895
+      },
+      {
+        "run": "run-double-attempt",
+        "events": 2308
+      },
+      {
+        "run": "a2a-demo",
+        "events": 128
+      },
+      {
+        "run": "claude-demo",
+        "events": 98
+      }
+    ],
+    "commands": [
+      {
+        "name": "guides",
+        "exit_code": 0,
+        "assertions": {
+          "passed": 287,
+          "failed": 0,
+          "methods": {
+            "equal": 230,
+            "ok": 56,
+            "deepEqual": 1
+          },
+          "exit_code": 0
+        },
+        "log": {
+          "file": "command.log",
+          "sha256": "be7c60f8107862745a131f3a544b7467c100d2eda946ba871184fe8e0b170eb4"
+        }
+      },
+      {
+        "name": "export",
+        "exit_code": 0,
+        "log": {
+          "file": "command.log",
+          "sha256": "b327a5284f9577a37a7b3dbc2d342266acd4e9c29d31d9b64dcc2189d4dc11a6"
+        }
+      },
+      {
+        "name": "static-parity",
+        "exit_code": 1,
+        "assertions": {
+          "passed": 37470,
+          "failed": 1,
+          "methods": {
+            "equal": 18610,
+            "ok": 930,
+            "deepEqual": 17928,
+            "notEqual": 2
+          },
+          "exit_code": 1
+        },
+        "log": {
+          "file": "command.log",
+          "sha256": "2426f5e6c359d3aa458b08d8f5182901db01bd1851cd8e2e9d110a3e0b08ad81"
+        }
+      }
+    ],
+    "browser_callbacks": [
+      {
+        "name": "graph-controls-native",
+        "script": "scripts/test_dashboard_graph_controls.js",
+        "exit_code": 0,
+        "checks": 21
+      },
+      {
+        "name": "graph-controls-static",
+        "script": "scripts/test_dashboard_graph_controls.js",
+        "exit_code": 0,
+        "checks": 21
+      },
+      {
+        "name": "export-selection",
+        "script": "scripts/test_dashboard_export_selection.js",
+        "exit_code": 0,
+        "checks": 58,
+        "archives": [
+          {
+            "run": "run-dbc2adf273d4",
+            "scope": "session",
+            "events": 2,
+            "included": 50,
+            "excluded": 197,
+            "warnings": 0,
+            "bytes": 821034,
+            "sha256": "ca1b86d994243ee2b3b3657be5aa398d302b0398914bcd9a63675dd2f37fb539"
+          },
+          {
+            "run": "run-double-attempt",
+            "scope": "whole_run",
+            "events": 2308,
+            "included": 2345,
+            "excluded": 195,
+            "warnings": 0,
+            "bytes": 7613853,
+            "sha256": "71b71d7935fc4696b0ba7cb08169d17a0e5c77167511eda955524858f2afbcf9"
+          }
+        ]
+      }
+    ],
+    "servers_closed": true,
+    "corrected": {
+      "product_commit": "831e85426393bdbf7757d37ee221cd8f3f0fd9ff",
+      "head": "dcc30062c499f16fdca3520d2876a1ff73e350e6",
+      "exit_code": 0,
+      "assertions": {
+        "passed": 42956,
+        "failed": 0,
+        "methods": {
+          "equal": 23983,
+          "ok": 1040,
+          "deepEqual": 17931,
+          "notEqual": 2
+        },
+        "exit_code": 0
+      },
+      "test_files": {
+        "scripts/accept_static_demo.cjs": "8508ed354ce0dfe5608fdb145213e9b7ea92773b56a1399f42c5a5dccbec765b",
+        "scripts/test_static_demo_navigation.cjs": "edb611b248aeefab7bfd00b57d4751d44e6ab5fe19dc2bbc0d271ee537c3f987"
+      },
+      "binary_sha256": "ffb6c1b854cd9d09eb9d2cc656b1e1289c04536c772f2bd5f10fca90b74c1cf2",
+      "site_hash_manifest_sha256": "6d034eb04303957bd96b26868b07f18adb4e92ae1fca0d93526276d7d2858070",
+      "test_files_unchanged": true,
+      "binary_unchanged": true,
+      "site_manifest_unchanged": true,
+      "before_evidence_unchanged": true,
+      "started_at": "2026-11-16T08:50:23.830Z",
+      "finished_at": "2026-11-16T08:59:32.269Z",
+      "command": "PLAYWRIGHT_CHANNEL=chrome node scripts/accept_static_demo.cjs \"$STATIC_SITE_URL\" \"$ISOLATED_DEMO_URL\"",
+      "workflow": {
+        "parity": 17910,
+        "pages": 106,
+        "runs": 12,
+        "sessions": 11,
+        "focusedGraphs": 1886,
+        "contentPages": 7324,
+        "runIndexes": 12,
+        "ui": "graph, files, session paging, graph navigation and language passed",
+        "runLabels": "English and Chinese run and comparison selectors preserve evidence IDs",
+        "comparison": "historical Grok and DeepSeek/multiagent parity; Grok source reading, graph return and mobile passed",
+        "attribution": "real intent and TLS detail, synthetic endpoint candidates; bilingual desktop/mobile passed",
+        "passed": true
+      },
+      "freeze": {
+        "evidence": {
+          "file": "freeze.json",
+          "sha256": "478d973cae2c445de183849d679c6efa62576e579f7ca5725a099c9f700d5e74"
+        },
+        "site": {
+          "files": 16898,
+          "bytes": 83131691,
+          "manifest_sha256": "6d034eb04303957bd96b26868b07f18adb4e92ae1fca0d93526276d7d2858070",
+          "mismatches": [],
+          "unchanged": true
+        },
+        "browser": {
+          "version": "155.0.8059.85",
+          "page_errors": 0,
+          "recorded_console_errors": 2
+        },
+        "artifacts": {
+          "screenshots": 8,
+          "traces": 5
+        },
+        "cleanup": {
+          "owned_servers_all_exited": true,
+          "native_port_closed": true,
+          "static_port_closed": true,
+          "temporary_demo_stores_remaining": []
+        },
+        "console_note": "Two automatic /favicon.ico requests returned HTTP 404; no unhandled page errors."
+      },
+      "report": {
+        "file": "results.json",
+        "sha256": "618248af813701e1a36b9d1f1f179172d175cc07ec4a1c3cf2ba30e3e2e2dbf5"
+      },
+      "log": {
+        "file": "command.log",
+        "sha256": "b9c4d9d9e1b31c2f533f68ec0345483717f315fc30e0e46f79018259f3c07aff"
+      },
+      "servers_closed": true,
+      "change": "Compare the exact native and static navigation sets; still visit all manifest pages, including linked-only Kata reference pages."
+    }
+  },
+  "historical_evidence": {
+    "schema_version": "agentprovenance.historical_acceptance_summary/v1",
+    "evidence_date": "2026-11-16",
+    "basis": "Existing retained evidence only; no new acceptance run",
+    "evidence": [
+      {
+        "id": "arm-linux-real-daemon-60s",
+        "kind": "real_isolated_daemon",
+        "status": "passed",
+        "platform": "Linux 6.8.0-149-generic aarch64",
+        "commands": [
+          {
+            "role": "daemon",
+            "command": "\"$AGENTPROV_BIN\" --data-dir \"$FIXTURE_DATA_DIR\" daemon serve --execution-config \"$OPERATOR_CONFIG\" --listen \"127.0.0.1:$LOOPBACK_PORT\" --sample-interval 0 --record-timeout 5s",
+            "exit_code": 0,
+            "exit_code_basis": "validation.daemon_cleanup.returncode"
+          },
+          {
+            "role": "soak",
+            "command": "python3 \"$SOAK_SCRIPT\" --url \"$LOOPBACK_URL\" --config \"$OPERATOR_CONFIG\" --token-file \"$TOKEN_FILE\" --daemon-pid \"$OWNED_DAEMON_PID\" --agentprov \"$AGENTPROV_BIN\" --duration-seconds 60 --sample-interval 2 --operation-interval 10 --operation-timeout 5 --output \"$RESULT_DIR\"",
+            "exit_code": 0,
+            "exit_code_basis": "validation.soak_returncode"
+          }
+        ],
+        "source": {
+          "script_checkout_revision": "4e367089eb9f768be4592b1268e93d05166097a8",
+          "tracked_worktree_dirty": true,
+          "soak_script_sha256": "884b75eac66aa2d529b91e131edccd51bbf2413bb3b7676ff45cffa8f8bd73d8",
+          "handoff_script_sha256": "4d123734a52a3542d2f347f74809f86da130cd23728864ae663c4c6ff225c434",
+          "remote_report_source_sha": null,
+          "remote_report_source_sha_reason": "Standalone script payload without Git metadata; checkout provenance retained separately"
+        },
+        "binary": {
+          "name": "agentprov-linux-arm64",
+          "sha256": "559bf91ad36d1761e591b36b61810978d8558338905aea9c636af64b5f9223db",
+          "go_version": "go1.23.0",
+          "vcs_revision": "52c7200f1c3e382040f210a83d3af665d2396325",
+          "vcs_modified": true,
+          "process_executable_hash_matched": true
+        },
+        "results": {
+          "actual_duration_seconds": 60.001009719999274,
+          "health_samples": 30,
+          "independent_operations": 6,
+          "jsonl_records": 36,
+          "compatibility_checks_passed": 12,
+          "compatibility_checks_total": 12,
+          "all_health_samples_http_200_ready_ok": true,
+          "all_sampled_queues_empty": true,
+          "process_unavailable_or_changed_samples": 0,
+          "cpu_interval_samples": 29,
+          "cpu_percent_mean": 3.7585285011981475,
+          "cpu_percent_max": 19.98225448993089,
+          "rss_bytes_first": 48758784,
+          "rss_bytes_last_and_max": 60686336,
+          "health_latency_ms_p95": 33.300703995337244,
+          "health_latency_ms_max": 474.6611269947607,
+          "checkpoint_consistency": "matched for all six operations",
+          "native_capture": "none",
+          "sensor_started": false,
+          "coverage_status": "not_observed",
+          "observed_capture_states": [
+            "draining"
+          ],
+          "availability_and_backlog_recovery": "not_observed",
+          "q01_24h_status": "PENDING",
+          "q01_24h_duration_met": false,
+          "q01_24h_reason": "short_run"
+        },
+        "cleanup": {
+          "owned_daemon_reaped": true,
+          "forced_kill": false,
+          "temporary_token_removed": true
+        },
+        "retained_evidence_sha256": {
+          "soak_report_json": "17efacac5c41765e6ff82046812be6e88b1e6911cece1dae71fa4d391fa952a6",
+          "validation_json": "dff5a4e5234cc1558696701ea68863adaa98b1f625235730dfba995bca81bd19",
+          "samples_jsonl": "c0a4bfe8bdb8c2e148d23d943bbb03e019cfd9247780b576b0ab776331989fc8"
+        }
+      },
+      {
+        "id": "local-ui-preview-259",
+        "kind": "local_chrome_playwright_preview",
+        "status": "passed",
+        "command": "NODE_PATH=\"$PLAYWRIGHT_NODE_MODULES\" node output/v1-four-capabilities-preview/check-preview.cjs",
+        "exit_code": null,
+        "exit_code_status": "not_recorded_in_retained_report; passed=true is recorded",
+        "browser": {
+          "name": "Google Chrome",
+          "channel": "chrome",
+          "version": "155.0.8059.85",
+          "binary_sha256": null,
+          "binary_sha256_status": "not_recorded"
+        },
+        "source": {
+          "state": "dirty_uncommitted_local_preview",
+          "dirty_basis": "Preview artifacts were local additions; preview delivery recorded no commit",
+          "git_revision": null,
+          "historical_tracked_worktree_dirty": null,
+          "missing_provenance": "Historical Git revision and tracked-worktree dirty flag were not recorded by the UI checker",
+          "retained_checker_sha256": "f00eb2316fe5c83b7d98d8c1258c2cbc55e74ef273edd4ef643977c7028848d8",
+          "retained_preview_html_sha256": "ab8dca13e3571b9023accb29a012d837f8ccacdafa13267c093383fc555ad7a4",
+          "retained_preview_data_sha256": "f5481cd4e691779ca0a003f1d489a6f1bbab077460dacf16474ac76cae04fb72"
+        },
+        "results": {
+          "passed": true,
+          "checks": 259,
+          "screenshots": 13,
+          "browser_errors": 0,
+          "external_http_requests": 0,
+          "languages": [
+            "zh-CN",
+            "en"
+          ],
+          "viewport_widths": [
+            1440,
+            390,
+            320
+          ],
+          "scope": "Preview interaction, layout and saved-data presentation",
+          "workspace_example": "illustrative",
+          "browser_receipt_source": "saved sensor-off Browser acceptance receipts",
+          "delivery_report_source": "separate saved delivery verifier reports",
+          "formal_ui_integrated": false
+        },
+        "retained_evidence_sha256": {
+          "verification_json": "f1ac937fc7202f133bc73441458a008cb93bff830d5f36d8cbaabeee56d5efe1"
+        }
+      }
+    ]
+  },
+  "historical_browser_regression": {
+    "source_commit": "d13762266244e5701366eb80126fa34c70d20c64",
+    "browser": "155.0.8059.85",
+    "exit_code": 0,
+    "passed_checks": 301,
+    "suites": [
+      {
+        "name": "search",
+        "checks": 31
+      },
+      {
+        "name": "compare",
+        "checks": 37
+      },
+      {
+        "name": "context",
+        "checks": 83
+      },
+      {
+        "name": "sessions",
+        "checks": 32
+      },
+      {
+        "name": "relations",
+        "checks": 18
+      },
+      {
+        "name": "endpoint",
+        "checks": 20
+      },
+      {
+        "name": "capture_settings",
+        "checks": 34
+      },
+      {
+        "name": "requests",
+        "checks": 13
+      },
+      {
+        "name": "workspace",
+        "checks": 33
+      }
+    ],
+    "report": {
+      "file": "results.json",
+      "sha256": "adde6ec5f859a4ff9235da669f2fb42b82f181b719597e3a6d6d76b5a0391636"
+    },
+    "inspection": {
+      "browser_suite_exit_code": 0,
+      "browser_checks": 345,
+      "model_checks": 16,
+      "page_errors": [],
+      "screenshot_count": 34,
+      "trace_count": 9,
+      "download_count": 2
+    },
+    "fixture_note": "Synthetic comparison fixture separately reported a missing_runtime_event_file_edge diagnostic; retained with the original inspection."
+  },
+  "retained_regression_evidence": [
+    {
+      "name": "c01-before.txt",
+      "file": "c01-before.txt",
+      "sha256": "07fd39b7cc59b0450ea72883bffe793b2ec317c721b2e0c994a1cfdb0918720a"
+    },
+    {
+      "name": "guides-before.txt",
+      "file": "guides-before.txt",
+      "sha256": "37ed5e582ebd16f6f43ba0bb50fb326ee2efb495203fcffaab0f1e1fa05b26c8"
+    },
+    {
+      "name": "guides-after.txt",
+      "file": "guides-after.txt",
+      "sha256": "3320eaa17e1c948d11b510f3c1b04ee5e03873a2d4db82c2fc7bbb23bdfc9a26"
+    },
+    {
+      "name": "browser/native-review-before.log",
+      "file": "native-review-before.log",
+      "sha256": "fc2c1c18aefd6863e0abc58c9d37064b18115b8310be8bcc657a0c2f468b179f"
+    },
+    {
+      "name": "browser/native-review-zip-before.log",
+      "file": "native-review-zip-before.log",
+      "sha256": "f1e5ed5b38a05c1a3f2401b75d5a4d02fe430febd58c76c858f48201fd479e28"
+    },
+    {
+      "name": "browser/native-review-after.log",
+      "file": "native-review-after.log",
+      "sha256": "3559b52deb2afbc67285c5a82defa3a1ab2118cdb4b9b4718184bef3a0817db6"
+    },
+    {
+      "name": "go-race-integration.log",
+      "file": "go-race-integration.log",
+      "sha256": "8036fdb7d37c8569f879873d69b048b875af56878bc6cfc134cfeb85d80fc0ea"
+    },
+    {
+      "name": "go-race-ci-config.log",
+      "file": "go-race-ci-config.log",
+      "sha256": "6dc9a427ebe54846a2f99ca95ce7b5371991c0f1f05e23672eda812e8c0339d3"
+    },
+    {
+      "name": "kata-cleanup-before",
+      "file": "cleanup-before.log",
+      "sha256": "51a63d4b90b393c2ec98599e0a70a71e774292d39bf282426bbbf69c97b30f7d"
+    },
+    {
+      "name": "kata-cleanup-after",
+      "file": "cleanup-confirmed.log",
+      "sha256": "51d53fd1191419b2414b3a74c652ccda537d73255f7fcbc5e5de0a4bb9f61356"
+    }
+  ],
+  "regressions": [
+    {
+      "scope": "C-01 observation contracts",
+      "before_exit_code": 1,
+      "after_exit_code": 0,
+      "before": {
+        "file": "c01-before.txt",
+        "sha256": "07fd39b7cc59b0450ea72883bffe793b2ec317c721b2e0c994a1cfdb0918720a"
+      },
+      "after": {
+        "file": "c01-after.log",
+        "sha256": "b3cb3fa35c05815fd8b5cb89929eac730e585286e400b8227067d97276bb7663"
+      }
+    },
+    {
+      "scope": "Browser latest revisions, redirect support and conflicting operation ownership",
+      "before_exit_code": 1,
+      "after_exit_code": 0,
+      "before": {
+        "file": "native-review-before.log",
+        "sha256": "fc2c1c18aefd6863e0abc58c9d37064b18115b8310be8bcc657a0c2f468b179f"
+      },
+      "after": {
+        "file": "native-review-after.log",
+        "sha256": "3559b52deb2afbc67285c5a82defa3a1ab2118cdb4b9b4718184bef3a0817db6"
+      }
+    },
+    {
+      "scope": "Kata bilingual guide routing",
+      "before_exit_code": 1,
+      "after_exit_code": 0,
+      "before": {
+        "file": "guides-before.txt",
+        "sha256": "37ed5e582ebd16f6f43ba0bb50fb326ee2efb495203fcffaab0f1e1fa05b26c8"
+      },
+      "after": {
+        "file": "guides-after.txt",
+        "sha256": "3320eaa17e1c948d11b510f3c1b04ee5e03873a2d4db82c2fc7bbb23bdfc9a26"
+      }
+    },
+    {
+      "scope": "Kata owned-process and Pod cleanup",
+      "before_failures": 5,
+      "after_passed": 6,
+      "before": {
+        "file": "cleanup-before.log",
+        "sha256": "51a63d4b90b393c2ec98599e0a70a71e774292d39bf282426bbbf69c97b30f7d"
+      },
+      "after": {
+        "file": "cleanup-confirmed.log",
+        "sha256": "51d53fd1191419b2414b3a74c652ccda537d73255f7fcbc5e5de0a4bb9f61356"
+      }
+    },
+    {
+      "scope": "Workspace exact-byte task specification",
+      "before_exit_code": 1,
+      "before_failed": 2,
+      "after_exit_code": 0,
+      "verifier_unchanged": true,
+      "prompt_change": {
+        "binary_source_commit": "831e85426393bdbf7757d37ee221cd8f3f0fd9ff",
+        "script_base_commit": "831e85426393bdbf7757d37ee221cd8f3f0fd9ff",
+        "change": "PROMPT only",
+        "all_non_prompt_code_unchanged": true,
+        "verify_harness_run_unchanged": true,
+        "verify_harness_run_sha256": "083a1bbd15bc9b8647e404aea8a071270f459cd7aef63f083e5f639d88fee929",
+        "original_script_sha256": "6166572b38012262950c156c30df338caf7cc6ee88da35a900fcc372b6f57f0f",
+        "new_script_sha256": "b5c939f33c591fb94c7f0e423cb320c6c85bc3c4735c48317a2571e1197d4bfd",
+        "new_test_sha256": "637c525d0c6f107b46888f9fedbb04b80c36ad584b46c7d7e0c27515f16d745e",
+        "local_tests": [
+          {
+            "command": "python3 -m unittest discover -s scripts -p test_accept_workspace.py -k HarnessPrompt -v",
+            "stage": "before_prompt_change",
+            "count": 3,
+            "failures": 2,
+            "exit_code": 1,
+            "log": "prompt-before.log"
+          },
+          {
+            "command": "python3 -m unittest discover -s scripts -p test_accept_workspace.py -v",
+            "count": 37,
+            "exit_code": 0,
+            "log": "script-tests.log"
+          },
+          {
+            "command": "env PYTHONPATH=python python3 -m unittest discover -s python/tests -p test_workspace_mcp.py -v",
+            "count": 20,
+            "exit_code": 0,
+            "log": "mcp-tests.log"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -6,6 +6,8 @@ This guide covers the four-capability source increment on
 `feature/v1.0-portable-evidence`: controlled workspaces, evidence delivery,
 runtime adapters and layered Browser evidence. It is an acceptance handoff,
 not a release announcement. The Dashboard changes remain in local preview.
+The [acceptance results](../benchmarks/v1.0-four-capabilities/README.md) separate
+fixed-source reruns from earlier captures and record the remaining environment checks.
 
 ## Current Scope
 
@@ -13,11 +15,11 @@ not a release announcement. The Dashboard changes remain in local preview.
 | --- | --- | --- |
 | C-01 | Observation domain, scope, policy subject, capability intervals and runtime identity projections | Check new runtime observations on the selected x86 deployment |
 | W-01 | Remote-authoritative workspace, revision/digest conflicts, CLI and stdio MCP | Repeat with the final x86 build and Sensor; combine with Kata |
-| E-01/E-02 | Reading, signed selected reader, exact originals, recipient-owned trust and independent verifier | Final-build regression; Dashboard controls await review |
+| E-01/E-02 | Reading, signed selected reader, exact originals, recipient-owned trust and independent verifier | Dashboard controls await review; signed-mode status banner remains a UI item |
 | R-01 | Separate platform, execution and capture contracts; native default retained | New-platform integration matrix |
 | R-02 | Guest binding, fixed-container runsc execution, separately scoped SecCheck observations | Real runtime identity probe and failure matrix; per-command Sentry association still needs a shared call/lifetime identity and capture watermark |
 | R-03 | Kata/QEMU Guest binding and bounded acceptance fixture | Run on Kubernetes with `kata-qemu-runtime-rs`, pinned artifacts and Guest Sensor permissions |
-| B-01 | Persistent Browser acceptance/results, restart queries and receiver-owned receipt verification | Repeat with final build; combine with Sensor-on capture |
+| B-01 | Persistent Browser acceptance/results, restart queries and receiver-owned receipt verification | Combine with Sensor-on capture |
 | B-02 | Native-ID-based Browser layers, versioned rules and evidence references | Run the controlled Browser scenario matrix on Linux |
 | B-03 | Explicit runtime custody and kernel process-lifetime checks | Establish actual launcher custody and validate process/OS relations with Sensor on |
 | Q-01 | Regression scripts, independent export checks and bounded soak sampler | 24-hour run, recovery/resource review and two complete Linux cases |
@@ -27,7 +29,7 @@ x86 identity probe gathers the fields needed to close that implementation gap;
 its success alone does not finish per-command association. Do not replace this
 join with command text, PID alone or a time window.
 
-The local workspace case used an ARM Linux VM, Claude Code 2.1.293 and its
+The earlier workspace case used an ARM Linux VM, Claude Code 2.1.293 and its
 existing DeepSeek provider. It completed Inspect, Read, Edit, Write, Bash and a
 final Read through `agentprov_workspace`; one recorded command produced the
 expected file. Sensor was off. Its original bundle, exporter signature and
@@ -132,6 +134,27 @@ The pin approval applies only to the synthetic fixture's copied capture. Real
 imports use an independently approved receiver configuration outside the capture
 directory. It fixes the run, bridge, placement and manifest digest. A receipt or
 bundle cannot configure its own trust.
+
+The fixture produces two stores: `browser-import/data` holds the first import;
+`browser-import/received` holds its signed bundle after recipient-side import.
+Export both with distinct output names, using run `browser-owned-acceptance`:
+
+```sh
+"$OUT/agentprov" --data-dir "$OUT/browser-import/data" dashboard export \
+  --run browser-owned-acceptance --output "$OUT/browser-source-reader.zip"
+"$OUT/agentprov" --data-dir "$OUT/browser-import/received" dashboard export \
+  --run browser-owned-acceptance --output "$OUT/browser-received-reader.zip"
+PLAYWRIGHT_CHANNEL=chrome AGENTPROV_REPLAY_SEARCH_QUERY=/pending \
+  node scripts/accept_offline_replay.cjs "$OUT/browser-source-reader.zip"
+PLAYWRIGHT_CHANNEL=chrome AGENTPROV_REPLAY_SEARCH_QUERY=/pending \
+  node scripts/accept_offline_replay.cjs "$OUT/browser-received-reader.zip"
+```
+
+Open each reader offline and compare its saved scopes, receipts and native
+references. These fixture stores have Sensor off. The next check uses a separate
+store containing actual native Sensor events and the operator's runtime mapping.
+The `/pending` search phrase comes from the retained fixture URL, including in
+basic mode. Omit `PLAYWRIGHT_CHANNEL` when using Playwright's installed Chromium.
 
 For B-03, retain the complete Browser scope and operator-observed process
 lifetime alongside Sensor evidence. Include the host/boot, process birth,
