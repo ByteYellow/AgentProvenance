@@ -119,6 +119,10 @@ agentprov --data-dir /var/lib/agentprov-executor daemon serve \
 
 checkpoint 只保留选中 receiver 的状态，省略 `node_spool`。collector ID、connection ID 及累计接收/丢失/身份缺口计数均属于容器 receiver 范围，不按单条命令计数。collector 重启、重连和损失变化分别记录 gap。
 
+采集清单还保存精确的 Sentry 出生时间和命令证据引用。已完成命令的
+`command_processes`、`command_events` 按 `execution_attempt` 计数；接收器的累计
+计数继续使用 `sentry_connection` 范围。查询和离线阅读均保留这两种范围。
+
 命令封存依次核对四件事：执行前保存根进程出生身份；沿原生 clone 记录追踪子进程；通过 `runsc ps` 确认整棵所属进程树已退出；由另一受控进程发出只读标记，并等它写入 SQLite。迟到 clone 扩大范围时，重新核对进程树并发送标记。标记进程自身的 clone 事件同时用于检查 clone 采集点正在工作。
 
 `capture.command` 保存进程身份、根进程原生退出状态、进程列表观测及标记引用。`capture.evidence_ref` 指向随签名包交付的内容对象，其中保留命令事件的原始 ID、Run ID、payload、标记证据及推导规则。区间摘要标识分析读取的 receiver 区间；命令对象保留所属事件和边界事件，完整区间仍在 receiver Run 中。单次分析最多读取 16,384 条记录、32 MiB、4,096 个进程组；执行器最多等待 30 秒完成封存，触及限制时记录具体缺口。

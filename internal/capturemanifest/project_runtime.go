@@ -2,8 +2,10 @@ package capturemanifest
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/handoff"
 	"github.com/byteyellow/agentprovenance/internal/runtimeadapter"
@@ -55,6 +57,9 @@ func (r *Record) projectRuntime(c handoff.Checkpoint, run string) error {
 	r.Identity["runtime_release"], r.Identity["runtime_operation_id"] = v.RuntimeRelease, v.OperationID
 	if v.SentryPID > 0 {
 		r.Identity["sentry_pid"], r.Identity["sentry_pid_basis"] = strconv.FormatInt(int64(v.SentryPID), 10), v.SentryPIDBasis
+	}
+	if v.SentryStartNS > 0 {
+		r.Identity["sentry_start_ns"] = strconv.FormatInt(v.SentryStartNS, 10)
 	}
 	r.Issues = append(r.Issues, v.Gaps...)
 	if c.Runtime.Capture == nil {
@@ -118,6 +123,26 @@ func (r *Record) projectRuntime(c handoff.Checkpoint, run string) error {
 		}
 		r.Counts = append(r.Counts, Counter{Name: "accepted_records", Scope: "sentry_connection", ScopeID: selected.ConnectionID,
 			Value: decimal(&selected.AcceptedRecords), Basis: boundary.name + "_cumulative"})
+	}
+	if command := capture.Command; command != nil {
+		digest, validRef := strings.CutPrefix(capture.EvidenceRef, "sha256:")
+		raw, err := hex.DecodeString(digest)
+		if !validRef || err != nil || len(raw) != 32 || command.Root.PID != v.SentryPID ||
+			command.Root.StartNS <= 0 || command.Root.StartNS != v.SentryStartNS ||
+			command.ProcessCount <= 0 || command.EventCount <= 0 || command.Basis == "" {
+			return fmt.Errorf("runtime command capture identity or evidence reference mismatch")
+		}
+		r.Identity["command_evidence_ref"] = capture.EvidenceRef
+		r.Identity["command_capture_basis"] = command.Basis
+		// Keep receiver cumulative counts above, scoped to their connection.
+		// Only the saved command watermark supplies per-attempt membership.
+		for _, counter := range []struct {
+			name  string
+			value int
+		}{{"command_processes", command.ProcessCount}, {"command_events", command.EventCount}} {
+			r.Counts = append(r.Counts, Counter{Name: counter.name, Scope: "execution_attempt", ScopeID: c.AttemptID,
+				Value: ptr(strconv.Itoa(counter.value)), Basis: "saved_command_watermark"})
+		}
 	}
 	return nil
 }

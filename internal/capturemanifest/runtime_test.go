@@ -76,6 +76,73 @@ func TestRuntimeCheckpointPreservesSentryBoundaryScope(t *testing.T) {
 	}
 }
 
+func commandRuntimeCheckpoint() handoff.Checkpoint {
+	c := sentryRuntimeCheckpoint()
+	c.State.Capture = handoff.Sealed
+	c.Runtime.Execution.SentryStartNS = 1794847878073098217
+	capture := c.Runtime.Capture
+	capture.State, capture.Gaps = "sealed", []string{}
+	end := *capture.Start
+	end.ObservedAt = c.At.Add(time.Second)
+	end.Status.Targets = append([]telemetry.SecCheckTargetStatus{}, capture.Start.Status.Targets...)
+	end.Status.Targets[0].AcceptedRecords = 40
+	capture.End = &end
+	capture.EvidenceRef = "sha256:" + strings.Repeat("a", 64)
+	capture.Command = &runtimeadapter.CommandWatermark{
+		Root:         runtimeadapter.SentryProcess{PID: c.Runtime.Execution.SentryPID, StartNS: c.Runtime.Execution.SentryStartNS},
+		ProcessCount: 2, EventCount: 7, Basis: "controlled_birth_clone_closure_taskset_absence_and_committed_barrier",
+	}
+	return c
+}
+
+func TestRuntimeCommandSummaryKeepsBirthAndSeparateCounterScopes(t *testing.T) {
+	db, paths := testStore(t)
+	c := commandRuntimeCheckpoint()
+	checkpointRef := put(t, db, paths, "r", "execution_checkpoint", "runtime", c)
+	r := all(t, db, "r", 1)[0]
+	if r.Identity["sentry_start_ns"] != "1794847878073098217" || r.Observation.ScopeKind != "execution_attempt" ||
+		r.Observation.ScopeRef != c.AttemptID || !reflect.DeepEqual(r.Observation.EvidenceRefs, []string{checkpointRef, c.Runtime.Capture.EvidenceRef}) {
+		t.Fatalf("command identity or references lost: %+v", r)
+	}
+	want := []Counter{
+		{Name: "accepted_records", Scope: "sentry_connection", ScopeID: "before", Value: ptr("20"), Basis: "start_cumulative"},
+		{Name: "accepted_records", Scope: "sentry_connection", ScopeID: "before", Value: ptr("40"), Basis: "end_cumulative"},
+		{Name: "command_processes", Scope: "execution_attempt", ScopeID: "attempt", Value: ptr("2"), Basis: "saved_command_watermark"},
+		{Name: "command_events", Scope: "execution_attempt", ScopeID: "attempt", Value: ptr("7"), Basis: "saved_command_watermark"},
+	}
+	if !reflect.DeepEqual(r.Counts, want) {
+		t.Fatalf("command membership confused with receiver counters: %+v", r.Counts)
+	}
+	for _, snapshot := range r.Snapshots {
+		if snapshot.Observation.ScopeKind != "sentry_connection" {
+			t.Fatalf("receiver boundary scope changed: %+v", snapshot)
+		}
+	}
+}
+
+func TestRuntimeCommandSummaryRejectsWrongBirthAndMissingEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		change func(*handoff.Checkpoint)
+	}{
+		{"reused-pid", func(c *handoff.Checkpoint) { c.Runtime.Capture.Command.Root.StartNS++ }},
+		{"foreign-pid", func(c *handoff.Checkpoint) { c.Runtime.Capture.Command.Root.PID++ }},
+		{"missing-evidence", func(c *handoff.Checkpoint) { c.Runtime.Capture.EvidenceRef = "" }},
+		{"invalid-evidence", func(c *handoff.Checkpoint) { c.Runtime.Capture.EvidenceRef = "sha256:" + strings.Repeat("z", 64) }},
+		{"missing-membership", func(c *handoff.Checkpoint) { c.Runtime.Capture.Command.ProcessCount = 0 }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, paths := testStore(t)
+			c := commandRuntimeCheckpoint()
+			tc.change(&c)
+			put(t, db, paths, "r", "execution_checkpoint", "runtime", c)
+			if _, err := (Service{DB: db}).List(context.Background(), Options{RunID: "r"}); err == nil {
+				t.Fatal("incompatible command evidence accepted")
+			}
+		})
+	}
+}
+
 func TestRuntimeCheckpointRejectsCrossBoundaryEvidence(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -104,41 +171,51 @@ func TestRuntimeCheckpointRejectsCrossBoundaryEvidence(t *testing.T) {
 }
 
 func TestRuntimeCheckpointSignedRoundTrip(t *testing.T) {
-	db, paths := testStore(t)
-	c := sentryRuntimeCheckpoint()
-	p := c.Runtime.Capture.End
-	foreign := p.Status.Targets[0]
-	foreign.Target.Registration.InstanceID = "unselected-private-instance"
-	p.Status.Targets = append(p.Status.Targets, foreign)
-	put(t, db, paths, "r", "execution_checkpoint", "runtime", c)
-	before := all(t, db, "r", 1)
-	pub, key, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bundle, err := (forensics.Service{DB: db, Paths: paths, SignKey: key}).ExportBundle("r")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := forensics.VerifyBundleAttestation(bundle.Path, bundle.AttestationPath, pub); err != nil {
-		t.Fatal(err)
-	}
-	raw, err := os.ReadFile(bundle.Path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "unselected-private-instance") {
-		t.Fatal("foreign receiver identity leaked into the bundle")
-	}
-	dst, dest := testStore(t)
-	if _, err := (forensics.Service{DB: dst, Paths: dest}).ImportBundle(bundle.Path); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(paths.Provenance, paths.Provenance+"-unavailable"); err != nil {
-		t.Fatal(err)
-	}
-	if got := all(t, dst, "r", 1); !reflect.DeepEqual(got, before) {
-		t.Fatalf("runtime boundary facts changed on import: %+v / %+v", before, got)
+	for _, tc := range []struct {
+		name    string
+		fixture func() handoff.Checkpoint
+	}{{"receiver-boundaries", sentryRuntimeCheckpoint}, {"command-watermark", commandRuntimeCheckpoint}} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, paths := testStore(t)
+			c := tc.fixture()
+			if c.Runtime.Capture.Command != nil {
+				c.Runtime.Capture.EvidenceRef = put(t, db, paths, "r", "runtime_command_evidence", "command", c.Runtime.Capture.Command)
+			}
+			p := c.Runtime.Capture.End
+			foreign := p.Status.Targets[0]
+			foreign.Target.Registration.InstanceID = "unselected-private-instance"
+			p.Status.Targets = append(p.Status.Targets, foreign)
+			put(t, db, paths, "r", "execution_checkpoint", "runtime", c)
+			before := all(t, db, "r", 1)
+			pub, key, err := ed25519.GenerateKey(rand.Reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			bundle, err := (forensics.Service{DB: db, Paths: paths, SignKey: key}).ExportBundle("r")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := forensics.VerifyBundleAttestation(bundle.Path, bundle.AttestationPath, pub); err != nil {
+				t.Fatal(err)
+			}
+			raw, err := os.ReadFile(bundle.Path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(raw), "unselected-private-instance") {
+				t.Fatal("foreign receiver identity leaked into the bundle")
+			}
+			dst, dest := testStore(t)
+			if _, err := (forensics.Service{DB: dst, Paths: dest}).ImportBundle(bundle.Path); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(paths.Provenance, paths.Provenance+"-unavailable"); err != nil {
+				t.Fatal(err)
+			}
+			if got := all(t, dst, "r", 1); !reflect.DeepEqual(got, before) {
+				t.Fatalf("runtime boundary facts changed on import: %+v / %+v", before, got)
+			}
+		})
 	}
 }
 

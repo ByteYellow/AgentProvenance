@@ -169,8 +169,8 @@ components:
             required: [name, scope, value, basis]
             properties:
               name: {type: string}
-              scope: {enum: [run, node, collector, scope_prefix, processing_range, sentry_connection, recorder]}
-              scope_id: {type: string, description: Collector, Sentry connection or recorder attempt identity}
+              scope: {enum: [run, node, collector, scope_prefix, processing_range, sentry_connection, recorder, execution_attempt]}
+              scope_id: {type: string, description: Collector, Sentry connection or execution/recorder attempt identity}
               value:
                 type: [string, 'null']
                 pattern: '^[0-9]+$'
@@ -192,6 +192,9 @@ components:
         historical serialized readers. Scope references are qualified by the
         containing record's identity, including instance and generation.
         Collector scope describes capabilities, not workload-wide coverage.
+        A saved runsc command watermark uses execution_attempt scope and references
+        both its checkpoint and original command evidence object. Command event/process
+        counts stay separate from cumulative sentry_connection counters.
       required: [rule_version, layer, layer_basis, scope_kind, evidence_refs]
       properties:
         rule_version: {const: agentprov.capture_observation/v1}

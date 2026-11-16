@@ -75,6 +75,11 @@ func (r *Record) projectObservation() {
 	case "execution_capture":
 		o = observation("unknown", "capture_not_recorded", "execution_attempt", r.Identity["attempt_id"], r.EvidenceRef)
 	case "runtime_execution":
+		if ref := r.Identity["command_evidence_ref"]; ref != "" {
+			o = observation("sentry", "saved_command_watermark", "execution_attempt", r.Identity["attempt_id"], r.EvidenceRef)
+			o.EvidenceRefs = append(o.EvidenceRefs, ref)
+			break
+		}
 		o = observation("unknown", "capture_not_recorded", "execution_attempt", r.Identity["attempt_id"], r.EvidenceRef)
 		for i, snapshot := range r.Snapshots {
 			if i == 0 {

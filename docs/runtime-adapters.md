@@ -123,6 +123,11 @@ Run these in separate root-managed processes. The receiver must be connected bef
 
 Only the selected receiver target is retained in checkpoint status snapshots. `node_spool` is omitted. Collector ID, connection ID, accepted-record/loss/identity-gap counters describe the container receiver boundary, not a per-command event count. Receiver restart, reconnect and loss changes remain explicit gaps.
 
+The saved capture manifest also retains the exact Sentry birth and the command
+evidence reference. A completed command's `command_processes` and `command_events`
+use `execution_attempt` scope; the receiver's cumulative counters keep
+`sentry_connection` scope. Queries and offline readers preserve both scopes.
+
 The command boundary has four steps: bind the root birth before release; follow native clone births; observe the entire resulting process tree absent from `runsc ps`; and wait for a private read-only marker from another controlled process to be committed to SQLite. A late clone expands the tree and repeats the last two steps. The marker's own clone events also verify that clone checkpoints are active. A procfs miss or a spool acknowledgement alone never seals capture.
 
 `capture.command` saves the process identities, native root wait status, task-set observation and marker references. `capture.evidence_ref` points to a content-addressed object included in signed delivery, preserving original event IDs, Run IDs and payloads, together with marker evidence and the derivation rule. Its interval digest identifies the receiver interval used for analysis; the object retains command and boundary records, while the full interval remains in the receiver Run. Collection is bounded to 16,384 observations, 32 MiB and 4,096 process groups. The executor allows 30 seconds for closure and records a gap if a bound is reached.
