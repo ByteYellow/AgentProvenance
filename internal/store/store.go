@@ -102,14 +102,22 @@ func Open(paths Paths) (*sql.DB, error) {
 }
 
 func EnsureSchema(db *sql.DB) error {
+	// A fresh pooled connection can hit SQLITE_BUSY while enabling WAL, before
+	// the first schema query or transaction starts. Retry the whole attempt:
+	// migration writes commit atomically, and WithTx rolls back on failure.
+	ctx := context.Background()
+	return RetryBusy(ctx, func() error { return ensureSchemaOnce(ctx, db) })
+}
+
+func ensureSchemaOnce(ctx context.Context, db *sql.DB) error {
 	// Refuse an unknown newer store before executing any migration DDL.
 	var exists int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_versions'`).Scan(&exists); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='schema_versions'`).Scan(&exists); err != nil {
 		return err
 	}
 	if exists != 0 {
 		var version int
-		if err := db.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_versions`).Scan(&version); err != nil {
+		if err := db.QueryRowContext(ctx, `SELECT COALESCE(MAX(version),0) FROM schema_versions`).Scan(&version); err != nil {
 			return err
 		}
 		if version > SchemaVersion {
@@ -125,7 +133,6 @@ func EnsureSchema(db *sql.DB) error {
 	// Initialize/migrate the entire schema and version marker in one commit.
 	// Reserving the writer precedes the in-transaction version check, so two
 	// initializers cannot race a newer version or expose partial migrations.
-	ctx := context.Background()
 	return WithTx(ctx, db, func(tx *sql.Tx) error {
 		if err := RetryBusy(ctx, func() error {
 			_, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_versions (
