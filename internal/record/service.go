@@ -271,11 +271,16 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 	// Publish the scope before the child can emit its first syscall. A live
 	// collector may otherwise drain exec/open/connect before cmd.Start returns
 	// and permanently drop them as uncorrelated (especially on a quiet node).
-	bindingID, err := correlation.RecordBinding(s.DB, correlation.Binding{
-		RunID: req.RunID, SessionID: sessionID, AttemptID: attemptID,
-		ToolCallID: toolCallID, ProcessID: processID,
-		ContainerID: "agentprov-record-" + attemptID, CgroupID: scopeCgroupID,
-		StartedAt: startedAt, BindingSource: "zero_sdk_record",
+	var bindingID string
+	err = store.WithWriteTx(execCtx, s.DB, func(tx *sql.Tx) error {
+		var err error
+		bindingID, err = correlation.RecordBinding(tx, correlation.Binding{
+			RunID: req.RunID, SessionID: sessionID, AttemptID: attemptID,
+			ToolCallID: toolCallID, ProcessID: processID,
+			ContainerID: "agentprov-record-" + attemptID, CgroupID: scopeCgroupID,
+			StartedAt: startedAt, BindingSource: "zero_sdk_record",
+		})
+		return err
 	})
 	if err != nil {
 		return Result{}, errors.Join(fmt.Errorf("publish execution scope before launch: %w", err),

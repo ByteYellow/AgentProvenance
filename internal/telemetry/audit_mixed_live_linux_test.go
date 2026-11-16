@@ -100,6 +100,9 @@ func TestLiveAccessControlMixedMatrix(t *testing.T) {
 	var pids []int64
 	var states bytes.Buffer
 	for _, tc := range cases {
+		// These are independent processes. Pace their audit records as in the
+		// adjacent-call fixture; each process still executes its original call.
+		time.Sleep(750 * time.Millisecond)
 		profile := ""
 		if tc.profile != "" {
 			profile = prefix + "-" + tc.profile
@@ -203,6 +206,11 @@ func TestLiveAccessControlMixedMatrix(t *testing.T) {
 	if n := counts["silent-errno/seccomp/ERRNO"]; n > 0 {
 		want["silent-errno/seccomp/ERRNO"] = 1
 	}
+	// Retain the actual inputs even if a host audit record is missing. This
+	// lets a failed CI artifact distinguish source loss from import errors.
+	saveLiveAuditFixture(t, "mixed-runtime.jsonl", runtime)
+	saveLiveAuditFixture(t, "mixed-state.jsonl", states.Bytes())
+	saveLiveAuditFixture(t, "mixed-journal.jsonl", selected.Bytes())
 	if !reflect.DeepEqual(counts, want) {
 		t.Fatalf("mixed audit decisions got=%v want=%v", counts, want)
 	}
@@ -216,9 +224,6 @@ func TestLiveAccessControlMixedMatrix(t *testing.T) {
 			t.Fatalf("seccomp acquired an invented target/profile: %+v", record)
 		}
 	}
-	saveLiveAuditFixture(t, "mixed-runtime.jsonl", runtime)
-	saveLiveAuditFixture(t, "mixed-state.jsonl", states.Bytes())
-	saveLiveAuditFixture(t, "mixed-journal.jsonl", selected.Bytes())
 	db, _ := nativeTestStore(t)
 	const run = "live-audit-mixed"
 	for _, input := range [][]byte{runtime, states.Bytes()} {

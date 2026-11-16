@@ -4,6 +4,14 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Bind runsc commands to Sentry process lifetimes and native descendants. Seal
+  command capture after a committed completion marker, include its original
+  events in signed delivery, and preserve gaps across receiver/executor failures.
+- Commit schema upgrades and record preparation atomically. Reserve the store
+  writer before publishing an execution scope, keeping workload launch behind
+  the saved binding when native ingestion is active.
+- Reuse parsed kernel BTF across native probe loads. Add pinned executable
+  staging and separate store/capture startup diagnostics to the Kata fixture.
 - Project Browser operations, requests, redirects and documents through native
   references. Add receiver-owned process bindings to local graph queries and
   offline export; recompute relationships when support is excluded. Preserve

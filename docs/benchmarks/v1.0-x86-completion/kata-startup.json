@@ -303,6 +303,843 @@
         },
         "original_report_sha256": "440f41078a80c1c864ab068d4ad418d1edc7bd783833cc8c3c317e55bb5e9489"
       }
+    },
+    {
+      "status": "BLOCKED",
+      "error": "Guest native capture readiness deadline expired",
+      "source": {
+        "dirty": false,
+        "head": "9ddfdf3d3ad7c6f61bef814083192d99d80f9f19"
+      },
+      "binary_sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+      "lock_sha256": "ad7ad71839cca302935008dfc8704f2b3941b423e6868f43869e10e5869653fe",
+      "fixture_sha256": {
+        "python/agentprov/__init__.py": "fd6a8e330de26ec3363ddbd7f9f5f0f2f5975bb626d4b1b2df5756a0547128cd",
+        "python/agentprov/workspace_mcp.py": "287b9442a9a3c38b5d6654d7ec9bc62e5136e91113eb69977e92aca9d64f9af2",
+        "python/agentprov_eval/__init__.py": "f724163de1719e304001ae01f644498caf6cfc665fc05c7801ec7fad095d1f26",
+        "scripts/accept_execution_delivery.py": "dfb791d7926ded6a21653a0ccfc5c1aebdaaefc836e12be6adce16dc868c7dba",
+        "scripts/accept_execution_handoff.py": "4d123734a52a3542d2f347f74809f86da130cd23728864ae663c4c6ff225c434",
+        "scripts/accept_workspace.py": "b5c939f33c591fb94c7f0e423cb320c6c85bc3c4735c48317a2571e1197d4bfd",
+        "scripts/acceptance/kata-qemu/binding.py": "ca92fdf50d5749d645b560be526c18771efc527aa684c3d696ca570b02dd55ac",
+        "scripts/acceptance/kata-qemu/common.py": "8d050caa46b7b468326581625be49917ab07c7bd66d3dbd54cf5d91fc13d78c6",
+        "scripts/acceptance/kata-qemu/guest.py": "62fb357e83eaef5ff0a5ec8b46f73dfc71032592f58ce5d503b63c594cb6a4fe",
+        "scripts/acceptance/kata-qemu/reader.py": "11f850ef32f95b4777c9ff783c241d7eb3c44f2ac8edfb840dcfc6aba2b4d4f1",
+        "scripts/acceptance/kata-qemu/run.py": "9d0c22508c9ec697aba75d42fc3aa3f36ff6e3cc138c4f5afe053ad4a9f94c89",
+        "scripts/acceptance/kata-qemu/staging.py": "c2d216483d92a668348d64c29b47758f55373176bf9ea5c7a3a65354a567d1c5",
+        "scripts/acceptance/kata-qemu/test_cleanup.py": "480d76d071c029226fc96dfb4edf1e3210bf6d05e989ddd60552a0fc1f5a0062",
+        "scripts/acceptance/kata-qemu/test_contracts.py": "6ff15ecbce2ff360b4c0b78f1c16b1a6c83dcfb280c37fe2b45774ab5cf5a559",
+        "scripts/acceptance/kata-qemu/test_staging.py": "2291a956678fd5f2d659646aa0a77f42445a3bc7d81f18ed73e89a28e0169d5d",
+        "scripts/acceptance/kata-qemu/test_workspace_case.py": "3caa9c580b126372bcbadccf68c6e30f584274cfe3a2b8ffbbba6c8cd45ad39a",
+        "scripts/acceptance/kata-qemu/workspace_case.py": "fdccc2ac4139b997fb07a50606239f43da2b0d41b37d8f10ef426a3a346cb528"
+      },
+      "label": "staged",
+      "original_report_sha256": "dc69c1bd883a30d3215951b108b030358e8cfb09dae682017ba9524853dcc0b2",
+      "guest": {
+        "status": "BLOCKED",
+        "error": "Guest native capture readiness deadline expired",
+        "startup_failure": {
+          "elapsed_seconds": 135.13190106899998,
+          "last_ready": null,
+          "owned_pid": 7,
+          "process_status": [
+            "State:\tS (sleeping)",
+            "VmPeak:\t 1432392 kB",
+            "VmRSS:\t  109092 kB",
+            "Threads:\t9"
+          ],
+          "stack_dump_error": "TimeoutExpired",
+          "wait_channel": "futex_do_wait"
+        },
+        "platform_binding": {
+          "container_id": "7aefc4be16afd468fc441b4ab42b424f79cc87de0be7a875b19d7acab098e2ee",
+          "guest_boot_id": "5a7ed34d-c8bb-461d-b041-504ec3dcae4f",
+          "mode": "guest",
+          "pod_uid": "92c07963-a9b3-49e6-b3cd-e00ede664956",
+          "runtime_class": "kata-qemu-runtime-rs",
+          "runtime_handler": "kata-qemu-runtime-rs",
+          "target": {
+            "generation": "g-68ef1e6a5a14483396be2aad8e697b6e",
+            "instance_id": "92c07963-a9b3-49e6-b3cd-e00ede664956",
+            "producer_id": "kata-acceptance-fixture"
+          }
+        },
+        "binding_rejections": [
+          "observed_pod_uid_rejected",
+          "observed_guest_boot_id_rejected",
+          "target_instance_id_rejected",
+          "target_generation_rejected"
+        ],
+        "executable_staging": {
+          "elapsed_seconds": 49.225867145999985,
+          "executables": [
+            {
+              "bytes": 96170146,
+              "path": "/run/agentprov-executables-c2yf5zqd/agentprov",
+              "sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+              "source": "/fixture/agentprov"
+            },
+            {
+              "bytes": 3068066,
+              "path": "/run/agentprov-executables-c2yf5zqd/agentprov-verify",
+              "sha256": "72671f158207201a72a4f8fe1e284c79a21d1303f4dfd14a1a9942ff15f4d495",
+              "source": "/fixture/agentprov-verify"
+            }
+          ],
+          "filesystem": "tmpfs",
+          "guest_boot_id": "5a7ed34d-c8bb-461d-b041-504ec3dcae4f",
+          "limit_mib": 384
+        },
+        "original_report_sha256": "2df342a5ee591eea5494aa26dfeb8f4d00585a743b53d844cdcfd6b20a9c440e",
+        "kernel_check": {
+          "status": "PASS",
+          "kernel": "6.18.56",
+          "btf_sha256": "b602f3349fd04bc5575500346f6e235023140e09a671d5a8e6039b45367a41bc",
+          "boot_id": "5a7ed34d-c8bb-461d-b041-504ec3dcae4f",
+          "namespaces": {
+            "cgroup": "cgroup:[4026532316]",
+            "mnt": "mnt:[4026532315]",
+            "pid": "pid:[4026532314]",
+            "user": "user:[4026531837]"
+          },
+          "privileges": [
+            "CapEff:\t000001ffffffffff",
+            "NoNewPrivs:\t0",
+            "Seccomp:\t0"
+          ],
+          "tracefs": "/sys/kernel/tracing"
+        },
+        "required_probe_snapshots": [],
+        "execution_checkpoints": []
+      }
+    },
+    {
+      "status": "BLOCKED",
+      "error": "Guest native capture readiness deadline expired",
+      "source": {
+        "dirty": false,
+        "head": "d7878ea2ef632afb354fdac6d4c1ea109892f152"
+      },
+      "binary_sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+      "lock_sha256": "ad7ad71839cca302935008dfc8704f2b3941b423e6868f43869e10e5869653fe",
+      "fixture_sha256": {
+        "python/agentprov/__init__.py": "fd6a8e330de26ec3363ddbd7f9f5f0f2f5975bb626d4b1b2df5756a0547128cd",
+        "python/agentprov/workspace_mcp.py": "287b9442a9a3c38b5d6654d7ec9bc62e5136e91113eb69977e92aca9d64f9af2",
+        "python/agentprov_eval/__init__.py": "f724163de1719e304001ae01f644498caf6cfc665fc05c7801ec7fad095d1f26",
+        "scripts/accept_execution_delivery.py": "dfb791d7926ded6a21653a0ccfc5c1aebdaaefc836e12be6adce16dc868c7dba",
+        "scripts/accept_execution_handoff.py": "4d123734a52a3542d2f347f74809f86da130cd23728864ae663c4c6ff225c434",
+        "scripts/accept_workspace.py": "b5c939f33c591fb94c7f0e423cb320c6c85bc3c4735c48317a2571e1197d4bfd",
+        "scripts/acceptance/kata-qemu/binding.py": "ca92fdf50d5749d645b560be526c18771efc527aa684c3d696ca570b02dd55ac",
+        "scripts/acceptance/kata-qemu/common.py": "8d050caa46b7b468326581625be49917ab07c7bd66d3dbd54cf5d91fc13d78c6",
+        "scripts/acceptance/kata-qemu/guest.py": "d642818c2e53968d3a31d3fc563e0ae17a27609190e2673927d0775598bd38d9",
+        "scripts/acceptance/kata-qemu/reader.py": "11f850ef32f95b4777c9ff783c241d7eb3c44f2ac8edfb840dcfc6aba2b4d4f1",
+        "scripts/acceptance/kata-qemu/run.py": "9d0c22508c9ec697aba75d42fc3aa3f36ff6e3cc138c4f5afe053ad4a9f94c89",
+        "scripts/acceptance/kata-qemu/staging.py": "c2d216483d92a668348d64c29b47758f55373176bf9ea5c7a3a65354a567d1c5",
+        "scripts/acceptance/kata-qemu/test_cleanup.py": "480d76d071c029226fc96dfb4edf1e3210bf6d05e989ddd60552a0fc1f5a0062",
+        "scripts/acceptance/kata-qemu/test_contracts.py": "6ff15ecbce2ff360b4c0b78f1c16b1a6c83dcfb280c37fe2b45774ab5cf5a559",
+        "scripts/acceptance/kata-qemu/test_staging.py": "2291a956678fd5f2d659646aa0a77f42445a3bc7d81f18ed73e89a28e0169d5d",
+        "scripts/acceptance/kata-qemu/test_workspace_case.py": "3caa9c580b126372bcbadccf68c6e30f584274cfe3a2b8ffbbba6c8cd45ad39a",
+        "scripts/acceptance/kata-qemu/workspace_case.py": "fdccc2ac4139b997fb07a50606239f43da2b0d41b37d8f10ef426a3a346cb528"
+      },
+      "label": "stagephase",
+      "original_report_sha256": "32b0c5895d71e53148318dab7805bf992af4393f2e1b7ba584cb0fc5ad4a555f",
+      "guest": {
+        "status": "BLOCKED",
+        "error": "Guest native capture readiness deadline expired",
+        "startup_failure": {
+          "elapsed_seconds": 187.47141772099997,
+          "last_ready": null,
+          "owned_pid": 7,
+          "phase": "capture_startup",
+          "process_status": [
+            "State:\tS (sleeping)",
+            "VmPeak:\t 1432584 kB",
+            "VmRSS:\t  113204 kB",
+            "Threads:\t9"
+          ],
+          "stack_dump_error": "TimeoutExpired",
+          "store_initialization_seconds": 52.27137869500001,
+          "wait_channel": "futex_do_wait"
+        },
+        "platform_binding": {
+          "container_id": "7c1f7323d19ce0bc17ff43fde467d9bdced163b054d31adb4f630d699019555f",
+          "guest_boot_id": "a715ca69-4aa2-4ff2-b39b-fbb259d1845a",
+          "mode": "guest",
+          "pod_uid": "837a78b0-db16-4f0c-b32d-d37a9b8063d0",
+          "runtime_class": "kata-qemu-runtime-rs",
+          "runtime_handler": "kata-qemu-runtime-rs",
+          "target": {
+            "generation": "g-f83414216c354abdbb1e24d529420955",
+            "instance_id": "837a78b0-db16-4f0c-b32d-d37a9b8063d0",
+            "producer_id": "kata-acceptance-fixture"
+          }
+        },
+        "binding_rejections": [
+          "observed_pod_uid_rejected",
+          "observed_guest_boot_id_rejected",
+          "target_instance_id_rejected",
+          "target_generation_rejected"
+        ],
+        "executable_staging": {
+          "elapsed_seconds": 65.78737768900001,
+          "executables": [
+            {
+              "bytes": 96170146,
+              "path": "/run/agentprov-executables-otb35nnw/agentprov",
+              "sha256": "0f597b0c0c575e6fcf67af2f19af250a5bbf70e61220c36bd9d2f9db49e86801",
+              "source": "/fixture/agentprov"
+            },
+            {
+              "bytes": 3068066,
+              "path": "/run/agentprov-executables-otb35nnw/agentprov-verify",
+              "sha256": "72671f158207201a72a4f8fe1e284c79a21d1303f4dfd14a1a9942ff15f4d495",
+              "source": "/fixture/agentprov-verify"
+            }
+          ],
+          "filesystem": "tmpfs",
+          "guest_boot_id": "a715ca69-4aa2-4ff2-b39b-fbb259d1845a",
+          "limit_mib": 384
+        },
+        "original_report_sha256": "6a0642f6c27d8439a120f66823dd215027166989b48d79093708066b21c39d72",
+        "kernel_check": {
+          "status": "PASS",
+          "kernel": "6.18.56",
+          "btf_sha256": "b602f3349fd04bc5575500346f6e235023140e09a671d5a8e6039b45367a41bc",
+          "boot_id": "a715ca69-4aa2-4ff2-b39b-fbb259d1845a",
+          "namespaces": {
+            "cgroup": "cgroup:[4026532316]",
+            "mnt": "mnt:[4026532315]",
+            "pid": "pid:[4026532314]",
+            "user": "user:[4026531837]"
+          },
+          "privileges": [
+            "CapEff:\t000001ffffffffff",
+            "NoNewPrivs:\t0",
+            "Seccomp:\t0"
+          ],
+          "tracefs": "/sys/kernel/tracing"
+        },
+        "required_probe_snapshots": [],
+        "execution_checkpoints": []
+      }
+    },
+    {
+      "status": "FAIL",
+      "error": "Guest acceptance failed; inspect retained guest report",
+      "source": {
+        "dirty": false,
+        "head": "1f517f8bcef86970a1a762f0a6106ca37740cb03"
+      },
+      "binary_sha256": "f08d26ee2106db3207396b89ba065207970731c3df25cd7a732ba5e48e15466f",
+      "lock_sha256": "b79701ff6cbb0b78dbef4d9e75ebe7eb9aee7803755493c776f835a51d0c0f11",
+      "fixture_sha256": {
+        "python/agentprov/__init__.py": "fd6a8e330de26ec3363ddbd7f9f5f0f2f5975bb626d4b1b2df5756a0547128cd",
+        "python/agentprov/workspace_mcp.py": "287b9442a9a3c38b5d6654d7ec9bc62e5136e91113eb69977e92aca9d64f9af2",
+        "python/agentprov_eval/__init__.py": "f724163de1719e304001ae01f644498caf6cfc665fc05c7801ec7fad095d1f26",
+        "scripts/accept_execution_delivery.py": "dfb791d7926ded6a21653a0ccfc5c1aebdaaefc836e12be6adce16dc868c7dba",
+        "scripts/accept_execution_handoff.py": "4d123734a52a3542d2f347f74809f86da130cd23728864ae663c4c6ff225c434",
+        "scripts/accept_workspace.py": "b5c939f33c591fb94c7f0e423cb320c6c85bc3c4735c48317a2571e1197d4bfd",
+        "scripts/acceptance/kata-qemu/binding.py": "ca92fdf50d5749d645b560be526c18771efc527aa684c3d696ca570b02dd55ac",
+        "scripts/acceptance/kata-qemu/common.py": "8d050caa46b7b468326581625be49917ab07c7bd66d3dbd54cf5d91fc13d78c6",
+        "scripts/acceptance/kata-qemu/guest.py": "d642818c2e53968d3a31d3fc563e0ae17a27609190e2673927d0775598bd38d9",
+        "scripts/acceptance/kata-qemu/reader.py": "11f850ef32f95b4777c9ff783c241d7eb3c44f2ac8edfb840dcfc6aba2b4d4f1",
+        "scripts/acceptance/kata-qemu/run.py": "9d0c22508c9ec697aba75d42fc3aa3f36ff6e3cc138c4f5afe053ad4a9f94c89",
+        "scripts/acceptance/kata-qemu/staging.py": "c2d216483d92a668348d64c29b47758f55373176bf9ea5c7a3a65354a567d1c5",
+        "scripts/acceptance/kata-qemu/test_cleanup.py": "480d76d071c029226fc96dfb4edf1e3210bf6d05e989ddd60552a0fc1f5a0062",
+        "scripts/acceptance/kata-qemu/test_contracts.py": "6ff15ecbce2ff360b4c0b78f1c16b1a6c83dcfb280c37fe2b45774ab5cf5a559",
+        "scripts/acceptance/kata-qemu/test_staging.py": "2291a956678fd5f2d659646aa0a77f42445a3bc7d81f18ed73e89a28e0169d5d",
+        "scripts/acceptance/kata-qemu/test_workspace_case.py": "3caa9c580b126372bcbadccf68c6e30f584274cfe3a2b8ffbbba6c8cd45ad39a",
+        "scripts/acceptance/kata-qemu/workspace_case.py": "fdccc2ac4139b997fb07a50606239f43da2b0d41b37d8f10ef426a3a346cb528"
+      },
+      "label": "btfreuse",
+      "original_report_sha256": "59eaa15aa964fa7c47e6287544cad20f3177e8cdaad2577b84135a75beaf0321",
+      "guest": {
+        "status": "FAIL",
+        "error": "python3 exit 1: Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/fixture/accept_execution_delivery.py\", line 74, in main\n    raise RuntimeError(\"execution did not succeed: \" + state)\nRuntimeError: execution did not succeed: failed\n",
+        "startup_observations": [
+          {
+            "capture_configuration": {
+              "auto_tls": false,
+              "mode": "native",
+              "no_policy": true,
+              "placement": "guest_kernel",
+              "ring_buffer_mib": 4,
+              "startup_timeout_seconds": 120
+            },
+            "elapsed_seconds": 169.914902956,
+            "owned_pid": 7,
+            "store_initialization_seconds": 49.34869782999999
+          }
+        ],
+        "platform_binding": {
+          "container_id": "a8f07d98e8ce9f8eb5eacdb107f1dd1200bb059b290aa6fbbd229d074d8cd876",
+          "guest_boot_id": "a495acb4-bc1f-40e8-abfb-30b0e94c21a8",
+          "mode": "guest",
+          "pod_uid": "cf7a3a3c-8fe4-4337-b01f-64685612595b",
+          "runtime_class": "kata-qemu-runtime-rs",
+          "runtime_handler": "kata-qemu-runtime-rs",
+          "target": {
+            "generation": "g-3d2c11364ae442b29933283115d5fe4d",
+            "instance_id": "cf7a3a3c-8fe4-4337-b01f-64685612595b",
+            "producer_id": "kata-acceptance-fixture"
+          }
+        },
+        "binding_rejections": [
+          "observed_pod_uid_rejected",
+          "observed_guest_boot_id_rejected",
+          "target_instance_id_rejected",
+          "target_generation_rejected"
+        ],
+        "executable_staging": {
+          "elapsed_seconds": 71.98039678499998,
+          "executables": [
+            {
+              "bytes": 122144311,
+              "path": "/run/agentprov-executables-y0vk28pj/agentprov",
+              "sha256": "f08d26ee2106db3207396b89ba065207970731c3df25cd7a732ba5e48e15466f",
+              "source": "/fixture/agentprov"
+            },
+            {
+              "bytes": 3068066,
+              "path": "/run/agentprov-executables-y0vk28pj/agentprov-verify",
+              "sha256": "72671f158207201a72a4f8fe1e284c79a21d1303f4dfd14a1a9942ff15f4d495",
+              "source": "/fixture/agentprov-verify"
+            }
+          ],
+          "filesystem": "tmpfs",
+          "guest_boot_id": "a495acb4-bc1f-40e8-abfb-30b0e94c21a8",
+          "limit_mib": 384
+        },
+        "original_report_sha256": "c5be1010a37ebe7a32156ff53e8547e99cd4034d91c632aff86fdf52a122765c",
+        "kernel_check": {
+          "status": "PASS",
+          "kernel": "6.18.56",
+          "btf_sha256": "b602f3349fd04bc5575500346f6e235023140e09a671d5a8e6039b45367a41bc",
+          "boot_id": "a495acb4-bc1f-40e8-abfb-30b0e94c21a8",
+          "namespaces": {
+            "cgroup": "cgroup:[4026532316]",
+            "mnt": "mnt:[4026532315]",
+            "pid": "pid:[4026532314]",
+            "user": "user:[4026531837]"
+          },
+          "privileges": [
+            "CapEff:\t000001ffffffffff",
+            "NoNewPrivs:\t0",
+            "Seccomp:\t0"
+          ],
+          "tracefs": "/sys/kernel/tracing"
+        },
+        "required_probe_snapshots": [
+          {
+            "ready": true,
+            "producer": {
+              "architecture": "amd64",
+              "boot_id": "a495acb4-bc1f-40e8-abfb-30b0e94c21a8",
+              "commit": "1f517f8bcef86970a1a762f0a6106ca37740cb03",
+              "kernel": "6.18.56",
+              "name": "agentprov-sensor",
+              "os": "linux",
+              "placement": "guest_kernel",
+              "placement_basis": "operator_configuration",
+              "version": "v1.0.0-candidate"
+            },
+            "collector_id": "sensor-boundary-d5fa690445ce",
+            "probes": [
+              {
+                "category": "buffer",
+                "name": "capture_checkpoint",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "process_lifecycle",
+                "name": "sched/sched_process_fork",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "sched/sched_process_exec",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "sched/sched_process_exit",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "syscalls/sys_enter_connect",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "syscalls/sys_enter_execve",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "syscalls/sys_enter_openat",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "syscalls/sys_exit_connect",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "syscalls/sys_exit_openat",
+                "required": true,
+                "status": "attached"
+              }
+            ]
+          }
+        ],
+        "execution_checkpoints": [
+          {
+            "object_sha256": "9dd4b61f9c93354a447410501897624d8a9c126208bc5c221a241ea95469e7d3",
+            "attempt_id": "execution-f52675ae2ac504137643634f4682e937",
+            "revision": 2,
+            "reason": "executor_claim",
+            "state": {
+              "capture": "not_ready",
+              "delivery": "pending",
+              "execution": "starting"
+            },
+            "runtime_report": {
+              "execution": {
+                "attempt_id": "execution-f52675ae2ac504137643634f4682e937",
+                "binding": {
+                  "container_id": "a8f07d98e8ce9f8eb5eacdb107f1dd1200bb059b290aa6fbbd229d074d8cd876",
+                  "guest_boot_id": "a495acb4-bc1f-40e8-abfb-30b0e94c21a8",
+                  "mode": "guest",
+                  "pod_uid": "cf7a3a3c-8fe4-4337-b01f-64685612595b",
+                  "runtime_class": "kata-qemu-runtime-rs",
+                  "runtime_handler": "kata-qemu-runtime-rs",
+                  "target": {
+                    "generation": "g-3d2c11364ae442b29933283115d5fe4d",
+                    "instance_id": "cf7a3a3c-8fe4-4337-b01f-64685612595b",
+                    "producer_id": "kata-acceptance-fixture"
+                  }
+                },
+                "gaps": [],
+                "operation_id": "submit-b1ae50ce1adf4075a036e02d0cd77919",
+                "run_id": "run-0b316abad91b297348bc92e4b158c3f9",
+                "schema_version": "agentprovenance.runtime_adapter/v1",
+                "started": false,
+                "state": "starting"
+              }
+            }
+          },
+          {
+            "object_sha256": "692de20c015186347248032684ca9df6953e92450b66c685bc767c8908ea06e4",
+            "attempt_id": "execution-f52675ae2ac504137643634f4682e937",
+            "revision": 3,
+            "reason": "execution_interrupted",
+            "state": {
+              "capture": "incomplete",
+              "delivery": "pending",
+              "execution": "failed"
+            },
+            "error": "database is locked (5) (SQLITE_BUSY)",
+            "runtime_report": {
+              "execution": {
+                "attempt_id": "execution-f52675ae2ac504137643634f4682e937",
+                "binding": {
+                  "container_id": "a8f07d98e8ce9f8eb5eacdb107f1dd1200bb059b290aa6fbbd229d074d8cd876",
+                  "guest_boot_id": "a495acb4-bc1f-40e8-abfb-30b0e94c21a8",
+                  "mode": "guest",
+                  "pod_uid": "cf7a3a3c-8fe4-4337-b01f-64685612595b",
+                  "runtime_class": "kata-qemu-runtime-rs",
+                  "runtime_handler": "kata-qemu-runtime-rs",
+                  "target": {
+                    "generation": "g-3d2c11364ae442b29933283115d5fe4d",
+                    "instance_id": "cf7a3a3c-8fe4-4337-b01f-64685612595b",
+                    "producer_id": "kata-acceptance-fixture"
+                  }
+                },
+                "gaps": [],
+                "operation_id": "submit-b1ae50ce1adf4075a036e02d0cd77919",
+                "run_id": "run-0b316abad91b297348bc92e4b158c3f9",
+                "schema_version": "agentprovenance.runtime_adapter/v1",
+                "started": false,
+                "state": "failed"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "status": "BLOCKED",
+      "error": "Guest native capture readiness deadline expired",
+      "source": {
+        "dirty": false,
+        "head": "ce18a72d545a39a98f2af78e1a5c6cc2517f6647"
+      },
+      "binary_sha256": "dd62b6b9ff2490c46059f9b96eeb675a7dabce36d964dd0480494c3929a1488d",
+      "lock_sha256": "1bbf472622b0d69c9a3c224e415b5eb2b07dccaa04535163f6292abd6e1456a6",
+      "fixture_sha256": {
+        "python/agentprov/__init__.py": "fd6a8e330de26ec3363ddbd7f9f5f0f2f5975bb626d4b1b2df5756a0547128cd",
+        "python/agentprov/workspace_mcp.py": "287b9442a9a3c38b5d6654d7ec9bc62e5136e91113eb69977e92aca9d64f9af2",
+        "python/agentprov_eval/__init__.py": "f724163de1719e304001ae01f644498caf6cfc665fc05c7801ec7fad095d1f26",
+        "scripts/accept_execution_delivery.py": "dfb791d7926ded6a21653a0ccfc5c1aebdaaefc836e12be6adce16dc868c7dba",
+        "scripts/accept_execution_handoff.py": "4d123734a52a3542d2f347f74809f86da130cd23728864ae663c4c6ff225c434",
+        "scripts/accept_workspace.py": "b5c939f33c591fb94c7f0e423cb320c6c85bc3c4735c48317a2571e1197d4bfd",
+        "scripts/acceptance/kata-qemu/binding.py": "ca92fdf50d5749d645b560be526c18771efc527aa684c3d696ca570b02dd55ac",
+        "scripts/acceptance/kata-qemu/common.py": "8d050caa46b7b468326581625be49917ab07c7bd66d3dbd54cf5d91fc13d78c6",
+        "scripts/acceptance/kata-qemu/guest.py": "d642818c2e53968d3a31d3fc563e0ae17a27609190e2673927d0775598bd38d9",
+        "scripts/acceptance/kata-qemu/reader.py": "11f850ef32f95b4777c9ff783c241d7eb3c44f2ac8edfb840dcfc6aba2b4d4f1",
+        "scripts/acceptance/kata-qemu/run.py": "9d0c22508c9ec697aba75d42fc3aa3f36ff6e3cc138c4f5afe053ad4a9f94c89",
+        "scripts/acceptance/kata-qemu/staging.py": "c2d216483d92a668348d64c29b47758f55373176bf9ea5c7a3a65354a567d1c5",
+        "scripts/acceptance/kata-qemu/test_cleanup.py": "480d76d071c029226fc96dfb4edf1e3210bf6d05e989ddd60552a0fc1f5a0062",
+        "scripts/acceptance/kata-qemu/test_contracts.py": "6ff15ecbce2ff360b4c0b78f1c16b1a6c83dcfb280c37fe2b45774ab5cf5a559",
+        "scripts/acceptance/kata-qemu/test_staging.py": "2291a956678fd5f2d659646aa0a77f42445a3bc7d81f18ed73e89a28e0169d5d",
+        "scripts/acceptance/kata-qemu/test_workspace_case.py": "3caa9c580b126372bcbadccf68c6e30f584274cfe3a2b8ffbbba6c8cd45ad39a",
+        "scripts/acceptance/kata-qemu/workspace_case.py": "fdccc2ac4139b997fb07a50606239f43da2b0d41b37d8f10ef426a3a346cb528"
+      },
+      "label": "atomicfixed",
+      "original_report_sha256": "d1518c36c03c20119aa1dc97342baae97f57eba7bbf0534deb804fbb668bcefa",
+      "guest": {
+        "status": "BLOCKED",
+        "error": "Guest native capture readiness deadline expired",
+        "startup_failure": {
+          "elapsed_seconds": 60.03529324600004,
+          "last_ready": null,
+          "owned_pid": 7,
+          "phase": "store_initialization",
+          "process_status": [
+            "State:\tR (running)",
+            "VmPeak:\t 1368676 kB",
+            "VmRSS:\t   47948 kB",
+            "Threads:\t5"
+          ],
+          "stack_dump_error": "TimeoutExpired",
+          "store_initialization_seconds": null,
+          "wait_channel": "futex_do_wait"
+        },
+        "platform_binding": {
+          "container_id": "a9d0c326dbf36f7e8c06fa1eb50ba02a0f404fcd77c995367b9b9363ea2ea684",
+          "guest_boot_id": "fcacfce9-448f-4f63-92b5-ba20d0d56490",
+          "mode": "guest",
+          "pod_uid": "2e8a7f4d-282d-4cd0-93b6-bab0d3ac03d8",
+          "runtime_class": "kata-qemu-runtime-rs",
+          "runtime_handler": "kata-qemu-runtime-rs",
+          "target": {
+            "generation": "g-ba7c2b20fd854ee5aa1e35fe3496f95d",
+            "instance_id": "2e8a7f4d-282d-4cd0-93b6-bab0d3ac03d8",
+            "producer_id": "kata-acceptance-fixture"
+          }
+        },
+        "binding_rejections": [
+          "observed_pod_uid_rejected",
+          "observed_guest_boot_id_rejected",
+          "target_instance_id_rejected",
+          "target_generation_rejected"
+        ],
+        "executable_staging": {
+          "elapsed_seconds": 68.37923515999998,
+          "executables": [
+            {
+              "bytes": 122265034,
+              "path": "/run/agentprov-executables-aap1qvpq/agentprov",
+              "sha256": "dd62b6b9ff2490c46059f9b96eeb675a7dabce36d964dd0480494c3929a1488d",
+              "source": "/fixture/agentprov"
+            },
+            {
+              "bytes": 3068066,
+              "path": "/run/agentprov-executables-aap1qvpq/agentprov-verify",
+              "sha256": "72671f158207201a72a4f8fe1e284c79a21d1303f4dfd14a1a9942ff15f4d495",
+              "source": "/fixture/agentprov-verify"
+            }
+          ],
+          "filesystem": "tmpfs",
+          "guest_boot_id": "fcacfce9-448f-4f63-92b5-ba20d0d56490",
+          "limit_mib": 384
+        },
+        "original_report_sha256": "bcdc4461d28a43676dc7eb42335d8d2ee44f8bd2a17f228c248a407fc0f35908",
+        "kernel_check": {
+          "status": "PASS",
+          "kernel": "6.18.56",
+          "btf_sha256": "b602f3349fd04bc5575500346f6e235023140e09a671d5a8e6039b45367a41bc",
+          "boot_id": "fcacfce9-448f-4f63-92b5-ba20d0d56490",
+          "namespaces": {
+            "cgroup": "cgroup:[4026532316]",
+            "mnt": "mnt:[4026532315]",
+            "pid": "pid:[4026532314]",
+            "user": "user:[4026531837]"
+          },
+          "privileges": [
+            "CapEff:\t000001ffffffffff",
+            "NoNewPrivs:\t0",
+            "Seccomp:\t0"
+          ],
+          "tracefs": "/sys/kernel/tracing"
+        },
+        "required_probe_snapshots": [],
+        "execution_checkpoints": []
+      }
+    },
+    {
+      "status": "FAIL",
+      "error": "bounded Pod acceptance exceeded 690s",
+      "source": {
+        "dirty": false,
+        "head": "afe3f9616ca017ce09a4e76719226500c1d812c1"
+      },
+      "binary_sha256": "3ef44f99a9aad818b011a79254be09a315a11386d2fbd6d809b7e94afec9d1b7",
+      "lock_sha256": "0c840ca2cb42806509e248fd325207a44671f78e236820ccab4403a36827174d",
+      "fixture_sha256": {
+        "python/agentprov/__init__.py": "fd6a8e330de26ec3363ddbd7f9f5f0f2f5975bb626d4b1b2df5756a0547128cd",
+        "python/agentprov/workspace_mcp.py": "287b9442a9a3c38b5d6654d7ec9bc62e5136e91113eb69977e92aca9d64f9af2",
+        "python/agentprov_eval/__init__.py": "f724163de1719e304001ae01f644498caf6cfc665fc05c7801ec7fad095d1f26",
+        "scripts/accept_execution_delivery.py": "dfb791d7926ded6a21653a0ccfc5c1aebdaaefc836e12be6adce16dc868c7dba",
+        "scripts/accept_execution_handoff.py": "4d123734a52a3542d2f347f74809f86da130cd23728864ae663c4c6ff225c434",
+        "scripts/accept_workspace.py": "b5c939f33c591fb94c7f0e423cb320c6c85bc3c4735c48317a2571e1197d4bfd",
+        "scripts/acceptance/kata-qemu/binding.py": "ca92fdf50d5749d645b560be526c18771efc527aa684c3d696ca570b02dd55ac",
+        "scripts/acceptance/kata-qemu/common.py": "8d050caa46b7b468326581625be49917ab07c7bd66d3dbd54cf5d91fc13d78c6",
+        "scripts/acceptance/kata-qemu/guest.py": "d642818c2e53968d3a31d3fc563e0ae17a27609190e2673927d0775598bd38d9",
+        "scripts/acceptance/kata-qemu/reader.py": "11f850ef32f95b4777c9ff783c241d7eb3c44f2ac8edfb840dcfc6aba2b4d4f1",
+        "scripts/acceptance/kata-qemu/run.py": "9d0c22508c9ec697aba75d42fc3aa3f36ff6e3cc138c4f5afe053ad4a9f94c89",
+        "scripts/acceptance/kata-qemu/staging.py": "c2d216483d92a668348d64c29b47758f55373176bf9ea5c7a3a65354a567d1c5",
+        "scripts/acceptance/kata-qemu/test_cleanup.py": "480d76d071c029226fc96dfb4edf1e3210bf6d05e989ddd60552a0fc1f5a0062",
+        "scripts/acceptance/kata-qemu/test_contracts.py": "6ff15ecbce2ff360b4c0b78f1c16b1a6c83dcfb280c37fe2b45774ab5cf5a559",
+        "scripts/acceptance/kata-qemu/test_staging.py": "2291a956678fd5f2d659646aa0a77f42445a3bc7d81f18ed73e89a28e0169d5d",
+        "scripts/acceptance/kata-qemu/test_workspace_case.py": "3caa9c580b126372bcbadccf68c6e30f584274cfe3a2b8ffbbba6c8cd45ad39a",
+        "scripts/acceptance/kata-qemu/workspace_case.py": "fdccc2ac4139b997fb07a50606239f43da2b0d41b37d8f10ef426a3a346cb528"
+      },
+      "label": "schema",
+      "original_report_sha256": "bb0270cb1db8b8c5a458e95073b960af4646633f513b4d247a027653de83dcf8",
+      "guest": {
+        "status": "FAIL",
+        "error": "python3 exit 1: Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n  File \"/fixture/accept_execution_delivery.py\", line 74, in main\n    raise RuntimeError(\"execution did not succeed: \" + state)\nRuntimeError: execution did not succeed: starting\n",
+        "cleanup_error": "Guest fixture exceeded its bounded deadline",
+        "startup_observations": [
+          {
+            "capture_configuration": {
+              "auto_tls": false,
+              "mode": "native",
+              "no_policy": true,
+              "placement": "guest_kernel",
+              "ring_buffer_mib": 4,
+              "startup_timeout_seconds": 120
+            },
+            "elapsed_seconds": 212.19762463700005,
+            "owned_pid": 7,
+            "store_initialization_seconds": 55.69562355199997
+          }
+        ],
+        "platform_binding": {
+          "container_id": "1766d38bc4ec3ba1fc093c1d94595ad270d9817e1ba308275e1971a2e4e7fec2",
+          "guest_boot_id": "3e7a87d8-12c7-48f8-8988-9bf604dfa986",
+          "mode": "guest",
+          "pod_uid": "edbc3cb2-e071-4065-8761-056aadb517f8",
+          "runtime_class": "kata-qemu-runtime-rs",
+          "runtime_handler": "kata-qemu-runtime-rs",
+          "target": {
+            "generation": "g-d814334e27544af2859f5df01081a124",
+            "instance_id": "edbc3cb2-e071-4065-8761-056aadb517f8",
+            "producer_id": "kata-acceptance-fixture"
+          }
+        },
+        "binding_rejections": [
+          "observed_pod_uid_rejected",
+          "observed_guest_boot_id_rejected",
+          "target_instance_id_rejected",
+          "target_generation_rejected"
+        ],
+        "executable_staging": {
+          "elapsed_seconds": 74.49954434199998,
+          "executables": [
+            {
+              "bytes": 122265083,
+              "path": "/run/agentprov-executables-rr9kbxiq/agentprov",
+              "sha256": "3ef44f99a9aad818b011a79254be09a315a11386d2fbd6d809b7e94afec9d1b7",
+              "source": "/fixture/agentprov"
+            },
+            {
+              "bytes": 3068066,
+              "path": "/run/agentprov-executables-rr9kbxiq/agentprov-verify",
+              "sha256": "72671f158207201a72a4f8fe1e284c79a21d1303f4dfd14a1a9942ff15f4d495",
+              "source": "/fixture/agentprov-verify"
+            }
+          ],
+          "filesystem": "tmpfs",
+          "guest_boot_id": "3e7a87d8-12c7-48f8-8988-9bf604dfa986",
+          "limit_mib": 384
+        },
+        "original_report_sha256": "2e13c82b8f361d6612e477c033a1f442971d40ea2a145916ecf21fc50ca5747d",
+        "kernel_check": {
+          "status": "PASS",
+          "kernel": "6.18.56",
+          "btf_sha256": "b602f3349fd04bc5575500346f6e235023140e09a671d5a8e6039b45367a41bc",
+          "boot_id": "3e7a87d8-12c7-48f8-8988-9bf604dfa986",
+          "namespaces": {
+            "cgroup": "cgroup:[4026532316]",
+            "mnt": "mnt:[4026532315]",
+            "pid": "pid:[4026532314]",
+            "user": "user:[4026531837]"
+          },
+          "privileges": [
+            "CapEff:\t000001ffffffffff",
+            "NoNewPrivs:\t0",
+            "Seccomp:\t0"
+          ],
+          "tracefs": "/sys/kernel/tracing"
+        },
+        "required_probe_snapshots": [
+          {
+            "ready": true,
+            "producer": {
+              "architecture": "amd64",
+              "boot_id": "3e7a87d8-12c7-48f8-8988-9bf604dfa986",
+              "commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+              "kernel": "6.18.56",
+              "name": "agentprov-sensor",
+              "os": "linux",
+              "placement": "guest_kernel",
+              "placement_basis": "operator_configuration",
+              "version": "v1.0.0-candidate"
+            },
+            "collector_id": "sensor-boundary-42e1304f33c2",
+            "probes": [
+              {
+                "category": "buffer",
+                "name": "capture_checkpoint",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "process_lifecycle",
+                "name": "sched/sched_process_fork",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "sched/sched_process_exec",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "sched/sched_process_exit",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "syscalls/sys_enter_connect",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "syscalls/sys_enter_execve",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "syscalls/sys_enter_openat",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "syscalls/sys_exit_connect",
+                "required": true,
+                "status": "attached"
+              },
+              {
+                "category": "syscall",
+                "name": "syscalls/sys_exit_openat",
+                "required": true,
+                "status": "attached"
+              }
+            ]
+          }
+        ],
+        "execution_checkpoints": [
+          {
+            "object_sha256": "630a541450e0ffd0681ca3544ec2b0ee0e6e3749c0d68e10dae6ff3041c45a49",
+            "attempt_id": "execution-1536bc4b818a126b9bdc8e6f5a3ae636",
+            "revision": 2,
+            "reason": "executor_claim",
+            "state": {
+              "capture": "not_ready",
+              "delivery": "pending",
+              "execution": "starting"
+            },
+            "runtime_report": {
+              "execution": {
+                "attempt_id": "execution-1536bc4b818a126b9bdc8e6f5a3ae636",
+                "binding": {
+                  "container_id": "1766d38bc4ec3ba1fc093c1d94595ad270d9817e1ba308275e1971a2e4e7fec2",
+                  "guest_boot_id": "3e7a87d8-12c7-48f8-8988-9bf604dfa986",
+                  "mode": "guest",
+                  "pod_uid": "edbc3cb2-e071-4065-8761-056aadb517f8",
+                  "runtime_class": "kata-qemu-runtime-rs",
+                  "runtime_handler": "kata-qemu-runtime-rs",
+                  "target": {
+                    "generation": "g-d814334e27544af2859f5df01081a124",
+                    "instance_id": "edbc3cb2-e071-4065-8761-056aadb517f8",
+                    "producer_id": "kata-acceptance-fixture"
+                  }
+                },
+                "gaps": [],
+                "operation_id": "submit-0e99b956b57440d0ba67aa72708eca98",
+                "run_id": "run-f7f69b36a600fc78f6b3335c4f16679e",
+                "schema_version": "agentprovenance.runtime_adapter/v1",
+                "started": false,
+                "state": "starting"
+              }
+            }
+          },
+          {
+            "object_sha256": "6a6bced6e59b2d7f3c0ad9e026b97b70348cd9e7a297c60903adc1753ade518d",
+            "attempt_id": "execution-1536bc4b818a126b9bdc8e6f5a3ae636",
+            "revision": 3,
+            "reason": "execution_interrupted",
+            "state": {
+              "capture": "incomplete",
+              "delivery": "pending",
+              "execution": "failed"
+            },
+            "error": "publish execution scope before launch: database is locked (5) (SQLITE_BUSY)",
+            "runtime_report": {
+              "execution": {
+                "attempt_id": "execution-1536bc4b818a126b9bdc8e6f5a3ae636",
+                "binding": {
+                  "container_id": "1766d38bc4ec3ba1fc093c1d94595ad270d9817e1ba308275e1971a2e4e7fec2",
+                  "guest_boot_id": "3e7a87d8-12c7-48f8-8988-9bf604dfa986",
+                  "mode": "guest",
+                  "pod_uid": "edbc3cb2-e071-4065-8761-056aadb517f8",
+                  "runtime_class": "kata-qemu-runtime-rs",
+                  "runtime_handler": "kata-qemu-runtime-rs",
+                  "target": {
+                    "generation": "g-d814334e27544af2859f5df01081a124",
+                    "instance_id": "edbc3cb2-e071-4065-8761-056aadb517f8",
+                    "producer_id": "kata-acceptance-fixture"
+                  }
+                },
+                "gaps": [],
+                "operation_id": "submit-0e99b956b57440d0ba67aa72708eca98",
+                "run_id": "run-f7f69b36a600fc78f6b3335c4f16679e",
+                "schema_version": "agentprovenance.runtime_adapter/v1",
+                "started": false,
+                "state": "failed"
+              }
+            }
+          }
+        ]
+      }
     }
   ],
   "ring_allocation_probes": {
@@ -404,5 +1241,11 @@
         }
       ]
     }
-  }
+  },
+  "remaining": [
+    "Kata execution under concurrent native ingestion",
+    "full command/concurrency/recovery matrix",
+    "Pod rebuild and real Workspace Harness",
+    "signed delivery and offline reader"
+  ]
 }

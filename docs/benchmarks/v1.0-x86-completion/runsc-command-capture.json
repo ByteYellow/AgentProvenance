@@ -1,0 +1,1093 @@
+{
+  "schema_version": "agentprovenance.runsc_command_capture_review/v1",
+  "status": "PASS",
+  "exit_code": 0,
+  "cli_source_sha": "19b3dd0b6554504562e97ef0f44052ca2a8b1784",
+  "fixture_source_sha": "77ddd19da17d0aa92083f93bc0d43c358b7f47e9",
+  "source_dirty": false,
+  "fixture_dirty": false,
+  "cli_sha256": "3753d2ecc8517802858889454d328c650f5d3a0a8cfd292273e2e7e1ed23bd5a",
+  "fixture_binary_sha256": "8d9ed6077196cf3f257fe3e0b7f34803b9283010cc9f81d93c9a011779107977",
+  "runsc_sha256": "c58f1dc2a3855487bf3bedc2edf074123ad433f1d98fb7f451f56790e87b5c9f",
+  "test": "TestRunscLiveCommandCapture",
+  "log_sha256": "fa7f6ce9905ecea1367e2847dc59b697eed33600b8eb2d1f6fa14b22d7252171",
+  "cases": {
+    "zero_exit": {
+      "checkpoint": {
+        "sha256": "df4e6a0e26bc617e23561f585c56a18a30ffee5b86e2afe03f113e669425e670",
+        "result": {
+          "schema_version": "agentprovenance.runtime_adapter/v1",
+          "binding": {
+            "target": {
+              "producer_id": "acceptance",
+              "instance_id": "capture-483366010",
+              "generation": "generation-1"
+            },
+            "mode": "runsc",
+            "container_id": "agentprov-capture-test",
+            "state_created": "2026-11-16T16:34:52.677806231Z"
+          },
+          "operation_id": "command-0",
+          "attempt_id": "command-0-attempt",
+          "run_id": "run",
+          "state": "running",
+          "started": false,
+          "runtime_release": "release-20261109.0",
+          "sentry_pid": 2,
+          "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+          "sentry_start_ns": "1794846892787350397",
+          "gaps": [
+            "command_capture_watermark_unavailable",
+            "external_container_execution_untracked"
+          ]
+        }
+      },
+      "execution": {
+        "sha256": "d0f6f0c780955ba175e75b9a0c2f128dfd167fcc3701d2409b366c008edf7e7b",
+        "result": {
+          "schema_version": "agentprovenance.runtime_adapter/v1",
+          "binding": {
+            "target": {
+              "producer_id": "acceptance",
+              "instance_id": "capture-483366010",
+              "generation": "generation-1"
+            },
+            "mode": "runsc",
+            "container_id": "agentprov-capture-test",
+            "state_created": "2026-11-16T16:34:52.677806231Z"
+          },
+          "operation_id": "command-0",
+          "attempt_id": "command-0-attempt",
+          "run_id": "run",
+          "state": "succeeded",
+          "started": true,
+          "exit_code": 0,
+          "runtime_release": "release-20261109.0",
+          "sentry_pid": 2,
+          "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+          "sentry_start_ns": "1794846892787350397",
+          "gate_released": true,
+          "gaps": [
+            "command_capture_watermark_unavailable",
+            "external_container_execution_untracked"
+          ]
+        }
+      },
+      "capture": {
+        "sha256": "5881701d1c0f70cbef4ce769e014acd85532394f885444f7c5534de9edaa79d9",
+        "result": {
+          "observation_layer": "sentry",
+          "scope_ref": "gvisor/d3b5ebf7c08cee073604d4f9af6013c9c22cdb36bc3712893d2021c3967f366f",
+          "state": "sealed",
+          "start": {
+            "target": {
+              "producer_id": "acceptance",
+              "instance_id": "capture-483366010",
+              "generation": "generation-1"
+            },
+            "observed_at": "2026-11-16T16:34:52.766613549Z",
+            "receiver_status": {
+              "schema_version": "agentprovenance.seccheck_status/v1",
+              "collector_id": "seccheck-63f5f716b9a9",
+              "generated_at": "2026-11-16T16:34:52.759583303Z",
+              "state": "listening",
+              "expected_runtime_release": "release-20261109.0",
+              "protocol_version": 1,
+              "capabilities": {
+                "producer": "agentprov",
+                "producer_version": "dev",
+                "producer_commit": "unknown",
+                "placement": "host_receiver",
+                "identity_domain": "sentry",
+                "system_telemetry": "partial",
+                "model_intent": "none",
+                "app_context": "none",
+                "supported_points": [
+                  "container/start",
+                  "sentry/clone",
+                  "sentry/execve",
+                  "sentry/task_exit",
+                  "sentry/exit_notify_parent",
+                  "syscall/openat/enter",
+                  "syscall/openat/exit",
+                  "syscall/connect/enter",
+                  "syscall/connect/exit",
+                  "syscall/execve/enter",
+                  "syscall/execve/exit"
+                ],
+                "enabled_points_basis": "observed_records",
+                "runtime_release_basis": "trusted_launcher_assertion",
+                "raw_packets_retained": false
+              },
+              "targets": [
+                {
+                  "run_id": "native-container",
+                  "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+                  "registration": {
+                    "namespace": "acceptance",
+                    "instance_id": "capture-483366010",
+                    "generation": "generation-1",
+                    "sandbox_id": "agentprov-capture-test",
+                    "container_id": "agentprov-capture-test",
+                    "peer_uid": 0
+                  },
+                  "state": "connected",
+                  "connection_id": "secconn-5a3a51b07dd2",
+                  "last_sequence": 5,
+                  "last_observation_at": "2026-11-16T16:34:52.734598554Z",
+                  "accepted_records": 6,
+                  "reported_dropped_events": 0,
+                  "drop_counter_decreases": 0,
+                  "identity_gap_records": 0,
+                  "last_diagnostic": "connected"
+                }
+              ]
+            },
+            "receiver_target": {
+              "run_id": "native-container",
+              "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+              "registration": {
+                "namespace": "acceptance",
+                "instance_id": "capture-483366010",
+                "generation": "generation-1",
+                "sandbox_id": "agentprov-capture-test",
+                "container_id": "agentprov-capture-test",
+                "peer_uid": 0
+              }
+            }
+          },
+          "end": {
+            "target": {
+              "producer_id": "acceptance",
+              "instance_id": "capture-483366010",
+              "generation": "generation-1"
+            },
+            "observed_at": "2026-11-16T16:34:53.554344842Z",
+            "receiver_status": {
+              "schema_version": "agentprovenance.seccheck_status/v1",
+              "collector_id": "seccheck-63f5f716b9a9",
+              "generated_at": "2026-11-16T16:34:53.45491691Z",
+              "state": "listening",
+              "expected_runtime_release": "release-20261109.0",
+              "protocol_version": 1,
+              "capabilities": {
+                "producer": "agentprov",
+                "producer_version": "dev",
+                "producer_commit": "unknown",
+                "placement": "host_receiver",
+                "identity_domain": "sentry",
+                "system_telemetry": "partial",
+                "model_intent": "none",
+                "app_context": "none",
+                "supported_points": [
+                  "container/start",
+                  "sentry/clone",
+                  "sentry/execve",
+                  "sentry/task_exit",
+                  "sentry/exit_notify_parent",
+                  "syscall/openat/enter",
+                  "syscall/openat/exit",
+                  "syscall/connect/enter",
+                  "syscall/connect/exit",
+                  "syscall/execve/enter",
+                  "syscall/execve/exit"
+                ],
+                "enabled_points_basis": "observed_records",
+                "runtime_release_basis": "trusted_launcher_assertion",
+                "raw_packets_retained": false
+              },
+              "targets": [
+                {
+                  "run_id": "native-container",
+                  "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+                  "registration": {
+                    "namespace": "acceptance",
+                    "instance_id": "capture-483366010",
+                    "generation": "generation-1",
+                    "sandbox_id": "agentprov-capture-test",
+                    "container_id": "agentprov-capture-test",
+                    "peer_uid": 0
+                  },
+                  "state": "connected",
+                  "connection_id": "secconn-5a3a51b07dd2",
+                  "last_sequence": 70,
+                  "last_observation_at": "2026-11-16T16:34:53.419607782Z",
+                  "accepted_records": 71,
+                  "reported_dropped_events": 0,
+                  "drop_counter_decreases": 0,
+                  "identity_gap_records": 0,
+                  "last_diagnostic": "connected"
+                }
+              ]
+            },
+            "receiver_target": {
+              "run_id": "native-container",
+              "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+              "registration": {
+                "namespace": "acceptance",
+                "instance_id": "capture-483366010",
+                "generation": "generation-1",
+                "sandbox_id": "agentprov-capture-test",
+                "container_id": "agentprov-capture-test",
+                "peer_uid": 0
+              }
+            }
+          },
+          "gaps": [],
+          "command": {
+            "root": {
+              "pid": 2,
+              "start_ns": "1794846892787350397"
+            },
+            "drain": {
+              "observed_at": "2026-11-16T16:34:53.257006077Z",
+              "basis": "runsc_ps_root_taskset",
+              "empty": true,
+              "remaining": []
+            },
+            "barrier": {
+              "process": {
+                "pid": 11,
+                "start_ns": "1794846893283839607"
+              },
+              "marker": "/.agentprov-watermark-c2ce20b73c6e4439767cba4be0ae723f"
+            },
+            "barrier_event_ref": "evt-seccheck-28c6164b612c96108c4db4eea54865496e52e5357d5fca9c916e8eb165be964c",
+            "barrier_sequence": 60,
+            "clone_event_refs": [
+              "evt-seccheck-0777dabeda7e726e5149b893758b6a28a0240e13b1e9639c1fbfad89e576fbd8",
+              "evt-seccheck-1a475f0a50102cc2a37afd696eece7f2e67839b3c0d00a4e814d5de8919c9f69",
+              "evt-seccheck-0fc535ebeb2ae21381c0387105657666f808206ab14e203dca1b013feccafe65",
+              "evt-seccheck-fbdffe99277e59e66c8943dd6438b2fdbe047fb59394ec3d7adfcee973356593",
+              "evt-seccheck-364c2314d2d8e4ff825aed6b9eb76a97dbf61a46f21012595127760770328eeb",
+              "evt-seccheck-14036320fa76e32bab1fbce66289c470ec4ebede8e7c5d86bbf3868385e10484",
+              "evt-seccheck-ba87c4435c7cea54cd047764aa638375db8f67c0cc50d30bf6bf3cda1ebe5748",
+              "evt-seccheck-d9d3dc9f0e247c3bb1b98cc20bd1a1ca5f2aa5698aadc342f7716323486fddd9"
+            ],
+            "process_count": 1,
+            "event_count": 35,
+            "root_wait_status": 0,
+            "basis": "controlled_birth_clone_closure_taskset_absence_and_committed_barrier"
+          }
+        }
+      },
+      "evidence": {
+        "original_sha256": "4f6d0758041ed831e369a825320278915d7fb07a1a6f4098be76762273c6b794",
+        "event_count": 35,
+        "boundary_event_count": 30,
+        "derivation_rule": "sentry-clone-birth/v1",
+        "receiver": {
+          "run_id": "native-container",
+          "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+          "registration": {
+            "namespace": "acceptance",
+            "instance_id": "capture-483366010",
+            "generation": "generation-1",
+            "sandbox_id": "agentprov-capture-test",
+            "container_id": "agentprov-capture-test",
+            "peer_uid": 0
+          }
+        },
+        "connection_id": "secconn-5a3a51b07dd2",
+        "first_sequence": 6,
+        "last_sequence": 70,
+        "range_sha256": "c0de5c5dcfabfb9a3a4281b0bddef2fedfc6e14ad6d179d4c210b7214e024052",
+        "root": {
+          "pid": 2,
+          "start_ns": "1794846892787350397"
+        },
+        "processes": [
+          {
+            "pid": 2,
+            "start_ns": "1794846892787350397"
+          }
+        ],
+        "root_exec_ref": "evt-seccheck-aca459418c2990bdf1ede2150cf2dc2f76d278d303fedf16d6eb138dee53dee5",
+        "root_exit_ref": "evt-seccheck-349ea86516e31da774bec9b77bbbbee214500ba514ec44ce89135c8318d94303",
+        "root_wait_status": 0,
+        "watermark": {
+          "root": {
+            "pid": 2,
+            "start_ns": "1794846892787350397"
+          },
+          "drain": {
+            "observed_at": "2026-11-16T16:34:53.257006077Z",
+            "basis": "runsc_ps_root_taskset",
+            "empty": true,
+            "remaining": []
+          },
+          "barrier": {
+            "process": {
+              "pid": 11,
+              "start_ns": "1794846893283839607"
+            },
+            "marker": "/.agentprov-watermark-c2ce20b73c6e4439767cba4be0ae723f"
+          },
+          "barrier_event_ref": "evt-seccheck-28c6164b612c96108c4db4eea54865496e52e5357d5fca9c916e8eb165be964c",
+          "barrier_sequence": 60,
+          "clone_event_refs": [
+            "evt-seccheck-0777dabeda7e726e5149b893758b6a28a0240e13b1e9639c1fbfad89e576fbd8",
+            "evt-seccheck-1a475f0a50102cc2a37afd696eece7f2e67839b3c0d00a4e814d5de8919c9f69",
+            "evt-seccheck-0fc535ebeb2ae21381c0387105657666f808206ab14e203dca1b013feccafe65",
+            "evt-seccheck-fbdffe99277e59e66c8943dd6438b2fdbe047fb59394ec3d7adfcee973356593",
+            "evt-seccheck-364c2314d2d8e4ff825aed6b9eb76a97dbf61a46f21012595127760770328eeb",
+            "evt-seccheck-14036320fa76e32bab1fbce66289c470ec4ebede8e7c5d86bbf3868385e10484",
+            "evt-seccheck-ba87c4435c7cea54cd047764aa638375db8f67c0cc50d30bf6bf3cda1ebe5748",
+            "evt-seccheck-d9d3dc9f0e247c3bb1b98cc20bd1a1ca5f2aa5698aadc342f7716323486fddd9"
+          ],
+          "process_count": 1,
+          "event_count": 35,
+          "root_wait_status": 0,
+          "basis": "controlled_birth_clone_closure_taskset_absence_and_committed_barrier"
+        }
+      }
+    },
+    "child_process": {
+      "checkpoint": {
+        "sha256": "7c4fd19d24fe6d15709cad6e6f0edc4c9a2e7b1bcd33b8842f728186b75769df",
+        "result": {
+          "schema_version": "agentprovenance.runtime_adapter/v1",
+          "binding": {
+            "target": {
+              "producer_id": "acceptance",
+              "instance_id": "capture-483366010",
+              "generation": "generation-1"
+            },
+            "mode": "runsc",
+            "container_id": "agentprov-capture-test",
+            "state_created": "2026-11-16T16:34:52.677806231Z"
+          },
+          "operation_id": "command-1",
+          "attempt_id": "command-1-attempt",
+          "run_id": "run",
+          "state": "running",
+          "started": false,
+          "runtime_release": "release-20261109.0",
+          "sentry_pid": 20,
+          "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+          "sentry_start_ns": "1794846893622682819",
+          "gaps": [
+            "command_capture_watermark_unavailable",
+            "external_container_execution_untracked"
+          ]
+        }
+      },
+      "execution": {
+        "sha256": "214becf4d9d386b55dc92c35df742b43820d69a4c398bdf1964ce678ae3ef6fd",
+        "result": {
+          "schema_version": "agentprovenance.runtime_adapter/v1",
+          "binding": {
+            "target": {
+              "producer_id": "acceptance",
+              "instance_id": "capture-483366010",
+              "generation": "generation-1"
+            },
+            "mode": "runsc",
+            "container_id": "agentprov-capture-test",
+            "state_created": "2026-11-16T16:34:52.677806231Z"
+          },
+          "operation_id": "command-1",
+          "attempt_id": "command-1-attempt",
+          "run_id": "run",
+          "state": "succeeded",
+          "started": true,
+          "exit_code": 0,
+          "runtime_release": "release-20261109.0",
+          "sentry_pid": 20,
+          "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+          "sentry_start_ns": "1794846893622682819",
+          "gate_released": true,
+          "gaps": [
+            "command_capture_watermark_unavailable",
+            "external_container_execution_untracked"
+          ]
+        }
+      },
+      "capture": {
+        "sha256": "291db4df8498531c5c8ed753b84da2f2f1985243a657e49bc50f467a6ffa0eb6",
+        "result": {
+          "observation_layer": "sentry",
+          "scope_ref": "gvisor/d3b5ebf7c08cee073604d4f9af6013c9c22cdb36bc3712893d2021c3967f366f",
+          "state": "sealed",
+          "start": {
+            "target": {
+              "producer_id": "acceptance",
+              "instance_id": "capture-483366010",
+              "generation": "generation-1"
+            },
+            "observed_at": "2026-11-16T16:34:53.598146915Z",
+            "receiver_status": {
+              "schema_version": "agentprovenance.seccheck_status/v1",
+              "collector_id": "seccheck-63f5f716b9a9",
+              "generated_at": "2026-11-16T16:34:53.560174898Z",
+              "state": "listening",
+              "expected_runtime_release": "release-20261109.0",
+              "protocol_version": 1,
+              "capabilities": {
+                "producer": "agentprov",
+                "producer_version": "dev",
+                "producer_commit": "unknown",
+                "placement": "host_receiver",
+                "identity_domain": "sentry",
+                "system_telemetry": "partial",
+                "model_intent": "none",
+                "app_context": "none",
+                "supported_points": [
+                  "container/start",
+                  "sentry/clone",
+                  "sentry/execve",
+                  "sentry/task_exit",
+                  "sentry/exit_notify_parent",
+                  "syscall/openat/enter",
+                  "syscall/openat/exit",
+                  "syscall/connect/enter",
+                  "syscall/connect/exit",
+                  "syscall/execve/enter",
+                  "syscall/execve/exit"
+                ],
+                "enabled_points_basis": "observed_records",
+                "runtime_release_basis": "trusted_launcher_assertion",
+                "raw_packets_retained": false
+              },
+              "targets": [
+                {
+                  "run_id": "native-container",
+                  "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+                  "registration": {
+                    "namespace": "acceptance",
+                    "instance_id": "capture-483366010",
+                    "generation": "generation-1",
+                    "sandbox_id": "agentprov-capture-test",
+                    "container_id": "agentprov-capture-test",
+                    "peer_uid": 0
+                  },
+                  "state": "connected",
+                  "connection_id": "secconn-5a3a51b07dd2",
+                  "last_sequence": 70,
+                  "last_observation_at": "2026-11-16T16:34:53.419607782Z",
+                  "accepted_records": 71,
+                  "reported_dropped_events": 0,
+                  "drop_counter_decreases": 0,
+                  "identity_gap_records": 0,
+                  "last_diagnostic": "connected"
+                }
+              ]
+            },
+            "receiver_target": {
+              "run_id": "native-container",
+              "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+              "registration": {
+                "namespace": "acceptance",
+                "instance_id": "capture-483366010",
+                "generation": "generation-1",
+                "sandbox_id": "agentprov-capture-test",
+                "container_id": "agentprov-capture-test",
+                "peer_uid": 0
+              }
+            }
+          },
+          "end": {
+            "target": {
+              "producer_id": "acceptance",
+              "instance_id": "capture-483366010",
+              "generation": "generation-1"
+            },
+            "observed_at": "2026-11-16T16:34:56.598915701Z",
+            "receiver_status": {
+              "schema_version": "agentprovenance.seccheck_status/v1",
+              "collector_id": "seccheck-63f5f716b9a9",
+              "generated_at": "2026-11-16T16:34:56.555299128Z",
+              "state": "listening",
+              "expected_runtime_release": "release-20261109.0",
+              "protocol_version": 1,
+              "capabilities": {
+                "producer": "agentprov",
+                "producer_version": "dev",
+                "producer_commit": "unknown",
+                "placement": "host_receiver",
+                "identity_domain": "sentry",
+                "system_telemetry": "partial",
+                "model_intent": "none",
+                "app_context": "none",
+                "supported_points": [
+                  "container/start",
+                  "sentry/clone",
+                  "sentry/execve",
+                  "sentry/task_exit",
+                  "sentry/exit_notify_parent",
+                  "syscall/openat/enter",
+                  "syscall/openat/exit",
+                  "syscall/connect/enter",
+                  "syscall/connect/exit",
+                  "syscall/execve/enter",
+                  "syscall/execve/exit"
+                ],
+                "enabled_points_basis": "observed_records",
+                "runtime_release_basis": "trusted_launcher_assertion",
+                "raw_packets_retained": false
+              },
+              "targets": [
+                {
+                  "run_id": "native-container",
+                  "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+                  "registration": {
+                    "namespace": "acceptance",
+                    "instance_id": "capture-483366010",
+                    "generation": "generation-1",
+                    "sandbox_id": "agentprov-capture-test",
+                    "container_id": "agentprov-capture-test",
+                    "peer_uid": 0
+                  },
+                  "state": "connected",
+                  "connection_id": "secconn-5a3a51b07dd2",
+                  "last_sequence": 159,
+                  "last_observation_at": "2026-11-16T16:34:56.492020374Z",
+                  "accepted_records": 160,
+                  "reported_dropped_events": 0,
+                  "drop_counter_decreases": 0,
+                  "identity_gap_records": 0,
+                  "last_diagnostic": "connected"
+                }
+              ]
+            },
+            "receiver_target": {
+              "run_id": "native-container",
+              "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+              "registration": {
+                "namespace": "acceptance",
+                "instance_id": "capture-483366010",
+                "generation": "generation-1",
+                "sandbox_id": "agentprov-capture-test",
+                "container_id": "agentprov-capture-test",
+                "peer_uid": 0
+              }
+            }
+          },
+          "gaps": [],
+          "command": {
+            "root": {
+              "pid": 20,
+              "start_ns": "1794846893622682819"
+            },
+            "drain": {
+              "observed_at": "2026-11-16T16:34:56.310722803Z",
+              "basis": "runsc_ps_root_taskset",
+              "empty": true,
+              "remaining": []
+            },
+            "barrier": {
+              "process": {
+                "pid": 32,
+                "start_ns": "1794846896337819346"
+              },
+              "marker": "/.agentprov-watermark-a2182504623781b5fade416331e5dd80"
+            },
+            "barrier_event_ref": "evt-seccheck-2656fe1db8c02c1a18213241a762dd915027044b402f724f23d3e5353e2bd060",
+            "barrier_sequence": 149,
+            "clone_event_refs": [
+              "evt-seccheck-6c46c42e6b843e5e7054f688d0bc276bcb86e8520309a87158b07155c310a234",
+              "evt-seccheck-5eecbf9e732dc0cf5c02ed57539e074dfccc56d1fbbf682081e1a707705eb417",
+              "evt-seccheck-14dcd9e7d2a6bbaf1d8c918d054feed3bb430a0a197a094f8e5c4a3771eea2e5",
+              "evt-seccheck-5641cc48b9d13db104ffce2cd35c542a35aa22608ee84a9a305576535a64376f",
+              "evt-seccheck-6e697d604b2973b9a23ca2213debf12da5e712a1aa6f962be20ad396ca3922b9",
+              "evt-seccheck-9aded22d9cd0ba275157715e1af5bf677f523938f5910ceac7468b3c40dc3a26",
+              "evt-seccheck-068a7ea8734c881b81418e6c02e4043a215b90ea9f7c3905a8ed3ac69102d4e5",
+              "evt-seccheck-654306e72718f4ecea348f58e8ec6e32bd175d982d4bd7d3aef9052de99d9537"
+            ],
+            "process_count": 3,
+            "event_count": 59,
+            "root_wait_status": 0,
+            "basis": "controlled_birth_clone_closure_taskset_absence_and_committed_barrier"
+          }
+        }
+      },
+      "evidence": {
+        "original_sha256": "0eaf5dff2f772b73b8eae9a8e284cbbb8ce6fe92f26959a0084b700d44ff0f43",
+        "event_count": 59,
+        "boundary_event_count": 24,
+        "derivation_rule": "sentry-clone-birth/v1",
+        "receiver": {
+          "run_id": "native-container",
+          "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+          "registration": {
+            "namespace": "acceptance",
+            "instance_id": "capture-483366010",
+            "generation": "generation-1",
+            "sandbox_id": "agentprov-capture-test",
+            "container_id": "agentprov-capture-test",
+            "peer_uid": 0
+          }
+        },
+        "connection_id": "secconn-5a3a51b07dd2",
+        "first_sequence": 71,
+        "last_sequence": 153,
+        "range_sha256": "84097ac018860bf187bb3c90d61ed99d80859db24e1012db7067b1f69d3af7f6",
+        "root": {
+          "pid": 20,
+          "start_ns": "1794846893622682819"
+        },
+        "processes": [
+          {
+            "pid": 20,
+            "start_ns": "1794846893622682819"
+          },
+          {
+            "pid": 30,
+            "start_ns": "1794846893690940347"
+          },
+          {
+            "pid": 31,
+            "start_ns": "1794846893780526903"
+          }
+        ],
+        "root_exec_ref": "evt-seccheck-897f05144f6af898499b9f935b30f5a0f38bc8b340bb5e342ade324bc1629ce8",
+        "root_exit_ref": "evt-seccheck-96876fd1c682cc7cb8a166a24fa8065083e7a14bf30c9113e58883d28404adb0",
+        "root_wait_status": 0,
+        "watermark": {
+          "root": {
+            "pid": 20,
+            "start_ns": "1794846893622682819"
+          },
+          "drain": {
+            "observed_at": "2026-11-16T16:34:56.310722803Z",
+            "basis": "runsc_ps_root_taskset",
+            "empty": true,
+            "remaining": []
+          },
+          "barrier": {
+            "process": {
+              "pid": 32,
+              "start_ns": "1794846896337819346"
+            },
+            "marker": "/.agentprov-watermark-a2182504623781b5fade416331e5dd80"
+          },
+          "barrier_event_ref": "evt-seccheck-2656fe1db8c02c1a18213241a762dd915027044b402f724f23d3e5353e2bd060",
+          "barrier_sequence": 149,
+          "clone_event_refs": [
+            "evt-seccheck-6c46c42e6b843e5e7054f688d0bc276bcb86e8520309a87158b07155c310a234",
+            "evt-seccheck-5eecbf9e732dc0cf5c02ed57539e074dfccc56d1fbbf682081e1a707705eb417",
+            "evt-seccheck-14dcd9e7d2a6bbaf1d8c918d054feed3bb430a0a197a094f8e5c4a3771eea2e5",
+            "evt-seccheck-5641cc48b9d13db104ffce2cd35c542a35aa22608ee84a9a305576535a64376f",
+            "evt-seccheck-6e697d604b2973b9a23ca2213debf12da5e712a1aa6f962be20ad396ca3922b9",
+            "evt-seccheck-9aded22d9cd0ba275157715e1af5bf677f523938f5910ceac7468b3c40dc3a26",
+            "evt-seccheck-068a7ea8734c881b81418e6c02e4043a215b90ea9f7c3905a8ed3ac69102d4e5",
+            "evt-seccheck-654306e72718f4ecea348f58e8ec6e32bd175d982d4bd7d3aef9052de99d9537"
+          ],
+          "process_count": 3,
+          "event_count": 59,
+          "root_wait_status": 0,
+          "basis": "controlled_birth_clone_closure_taskset_absence_and_committed_barrier"
+        }
+      }
+    },
+    "nonzero_exit": {
+      "checkpoint": {
+        "sha256": "2269c429915f230ce0ed5690060abf7c39c01cc0ddbfd1303b0fe286f815be64",
+        "result": {
+          "schema_version": "agentprovenance.runtime_adapter/v1",
+          "binding": {
+            "target": {
+              "producer_id": "acceptance",
+              "instance_id": "capture-483366010",
+              "generation": "generation-1"
+            },
+            "mode": "runsc",
+            "container_id": "agentprov-capture-test",
+            "state_created": "2026-11-16T16:34:52.677806231Z"
+          },
+          "operation_id": "command-2",
+          "attempt_id": "command-2-attempt",
+          "run_id": "run",
+          "state": "running",
+          "started": false,
+          "runtime_release": "release-20261109.0",
+          "sentry_pid": 41,
+          "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+          "sentry_start_ns": "1794846896657521526",
+          "gaps": [
+            "command_capture_watermark_unavailable",
+            "external_container_execution_untracked"
+          ]
+        }
+      },
+      "execution": {
+        "sha256": "6540e3313544537451806beac78c8c11dc73dd3bce0c9915bf764e9c9e9e1b5e",
+        "result": {
+          "schema_version": "agentprovenance.runtime_adapter/v1",
+          "binding": {
+            "target": {
+              "producer_id": "acceptance",
+              "instance_id": "capture-483366010",
+              "generation": "generation-1"
+            },
+            "mode": "runsc",
+            "container_id": "agentprov-capture-test",
+            "state_created": "2026-11-16T16:34:52.677806231Z"
+          },
+          "operation_id": "command-2",
+          "attempt_id": "command-2-attempt",
+          "run_id": "run",
+          "state": "unknown",
+          "started": true,
+          "runtime_release": "release-20261109.0",
+          "sentry_pid": 41,
+          "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+          "sentry_start_ns": "1794846896657521526",
+          "gate_released": true,
+          "gaps": [
+            "command_capture_watermark_unavailable",
+            "external_container_execution_untracked",
+            "workload_completion_unknown"
+          ]
+        }
+      },
+      "capture": {
+        "sha256": "7e458cc3ec3f3ade818f6d1b1931e399e237f2ae931eea038a411d4841d7998f",
+        "result": {
+          "observation_layer": "sentry",
+          "scope_ref": "gvisor/d3b5ebf7c08cee073604d4f9af6013c9c22cdb36bc3712893d2021c3967f366f",
+          "state": "sealed",
+          "start": {
+            "target": {
+              "producer_id": "acceptance",
+              "instance_id": "capture-483366010",
+              "generation": "generation-1"
+            },
+            "observed_at": "2026-11-16T16:34:56.63976914Z",
+            "receiver_status": {
+              "schema_version": "agentprovenance.seccheck_status/v1",
+              "collector_id": "seccheck-63f5f716b9a9",
+              "generated_at": "2026-11-16T16:34:56.555299128Z",
+              "state": "listening",
+              "expected_runtime_release": "release-20261109.0",
+              "protocol_version": 1,
+              "capabilities": {
+                "producer": "agentprov",
+                "producer_version": "dev",
+                "producer_commit": "unknown",
+                "placement": "host_receiver",
+                "identity_domain": "sentry",
+                "system_telemetry": "partial",
+                "model_intent": "none",
+                "app_context": "none",
+                "supported_points": [
+                  "container/start",
+                  "sentry/clone",
+                  "sentry/execve",
+                  "sentry/task_exit",
+                  "sentry/exit_notify_parent",
+                  "syscall/openat/enter",
+                  "syscall/openat/exit",
+                  "syscall/connect/enter",
+                  "syscall/connect/exit",
+                  "syscall/execve/enter",
+                  "syscall/execve/exit"
+                ],
+                "enabled_points_basis": "observed_records",
+                "runtime_release_basis": "trusted_launcher_assertion",
+                "raw_packets_retained": false
+              },
+              "targets": [
+                {
+                  "run_id": "native-container",
+                  "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+                  "registration": {
+                    "namespace": "acceptance",
+                    "instance_id": "capture-483366010",
+                    "generation": "generation-1",
+                    "sandbox_id": "agentprov-capture-test",
+                    "container_id": "agentprov-capture-test",
+                    "peer_uid": 0
+                  },
+                  "state": "connected",
+                  "connection_id": "secconn-5a3a51b07dd2",
+                  "last_sequence": 159,
+                  "last_observation_at": "2026-11-16T16:34:56.492020374Z",
+                  "accepted_records": 160,
+                  "reported_dropped_events": 0,
+                  "drop_counter_decreases": 0,
+                  "identity_gap_records": 0,
+                  "last_diagnostic": "connected"
+                }
+              ]
+            },
+            "receiver_target": {
+              "run_id": "native-container",
+              "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+              "registration": {
+                "namespace": "acceptance",
+                "instance_id": "capture-483366010",
+                "generation": "generation-1",
+                "sandbox_id": "agentprov-capture-test",
+                "container_id": "agentprov-capture-test",
+                "peer_uid": 0
+              }
+            }
+          },
+          "end": {
+            "target": {
+              "producer_id": "acceptance",
+              "instance_id": "capture-483366010",
+              "generation": "generation-1"
+            },
+            "observed_at": "2026-11-16T16:34:57.301228109Z",
+            "receiver_status": {
+              "schema_version": "agentprovenance.seccheck_status/v1",
+              "collector_id": "seccheck-63f5f716b9a9",
+              "generated_at": "2026-11-16T16:34:57.255202701Z",
+              "state": "listening",
+              "expected_runtime_release": "release-20261109.0",
+              "protocol_version": 1,
+              "capabilities": {
+                "producer": "agentprov",
+                "producer_version": "dev",
+                "producer_commit": "unknown",
+                "placement": "host_receiver",
+                "identity_domain": "sentry",
+                "system_telemetry": "partial",
+                "model_intent": "none",
+                "app_context": "none",
+                "supported_points": [
+                  "container/start",
+                  "sentry/clone",
+                  "sentry/execve",
+                  "sentry/task_exit",
+                  "sentry/exit_notify_parent",
+                  "syscall/openat/enter",
+                  "syscall/openat/exit",
+                  "syscall/connect/enter",
+                  "syscall/connect/exit",
+                  "syscall/execve/enter",
+                  "syscall/execve/exit"
+                ],
+                "enabled_points_basis": "observed_records",
+                "runtime_release_basis": "trusted_launcher_assertion",
+                "raw_packets_retained": false
+              },
+              "targets": [
+                {
+                  "run_id": "native-container",
+                  "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+                  "registration": {
+                    "namespace": "acceptance",
+                    "instance_id": "capture-483366010",
+                    "generation": "generation-1",
+                    "sandbox_id": "agentprov-capture-test",
+                    "container_id": "agentprov-capture-test",
+                    "peer_uid": 0
+                  },
+                  "state": "connected",
+                  "connection_id": "secconn-5a3a51b07dd2",
+                  "last_sequence": 230,
+                  "last_observation_at": "2026-11-16T16:34:57.202317517Z",
+                  "accepted_records": 231,
+                  "reported_dropped_events": 0,
+                  "drop_counter_decreases": 0,
+                  "identity_gap_records": 0,
+                  "last_diagnostic": "connected"
+                }
+              ]
+            },
+            "receiver_target": {
+              "run_id": "native-container",
+              "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+              "registration": {
+                "namespace": "acceptance",
+                "instance_id": "capture-483366010",
+                "generation": "generation-1",
+                "sandbox_id": "agentprov-capture-test",
+                "container_id": "agentprov-capture-test",
+                "peer_uid": 0
+              }
+            }
+          },
+          "gaps": [],
+          "command": {
+            "root": {
+              "pid": 41,
+              "start_ns": "1794846896657521526"
+            },
+            "drain": {
+              "observed_at": "2026-11-16T16:34:57.012331279Z",
+              "basis": "runsc_ps_root_taskset",
+              "empty": true,
+              "remaining": []
+            },
+            "barrier": {
+              "process": {
+                "pid": 51,
+                "start_ns": "1794846897036965894"
+              },
+              "marker": "/.agentprov-watermark-75906b589737e67553cb78fec5c1ea1e"
+            },
+            "barrier_event_ref": "evt-seccheck-7c178c4a9f040101e70b588c1d9afe0a6acb51a5677d760825e871dd947fd9a3",
+            "barrier_sequence": 218,
+            "clone_event_refs": [
+              "evt-seccheck-c8fc46795e6e4ad7ed6b154990ff93a18f15def0e8b12173c5432513acff085b",
+              "evt-seccheck-15cff8392602a57068a2441d70f1b4b19f71a9e36e89ec99f2edff8c6c12663a",
+              "evt-seccheck-453fb565e0a33c0af4130c89759c34b0c7d8a77d97a87bde34273334e103869c",
+              "evt-seccheck-fc45df36972d67d7868a2337ea987ed2af5238036958660e41b28779c520c13b",
+              "evt-seccheck-33e6213d377be9d57981ed71fea7f511ad3626b5503f63c626dc1437d4f052b7",
+              "evt-seccheck-93c6d1deb7b3035e1a755fa643483755b88fed65df27778c61069e338847954f",
+              "evt-seccheck-09e5a9f840cbc790a1993b4589b1e4eb2a98a83e1701851994834d1bcc37f321",
+              "evt-seccheck-bbeedbb800a9b48775173b724aae94bc1d865b65bd73a16047391e4115f3740f",
+              "evt-seccheck-380df108a448345fcfa75afe3e08ae63beec69c1c7386bf0d07390137a896226",
+              "evt-seccheck-ebc2d8de982aec8fc6fccbde3760af75ba9a5320b9e1593e5c2472fc13348e2f"
+            ],
+            "process_count": 1,
+            "event_count": 37,
+            "root_wait_status": 1792,
+            "basis": "controlled_birth_clone_closure_taskset_absence_and_committed_barrier"
+          }
+        }
+      },
+      "evidence": {
+        "original_sha256": "9ce6c7f1e3e17394593464e2f13d4dfb511811609cb03f5bd6802481d558b59c",
+        "event_count": 37,
+        "boundary_event_count": 23,
+        "derivation_rule": "sentry-clone-birth/v1",
+        "receiver": {
+          "run_id": "native-container",
+          "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+          "registration": {
+            "namespace": "acceptance",
+            "instance_id": "capture-483366010",
+            "generation": "generation-1",
+            "sandbox_id": "agentprov-capture-test",
+            "container_id": "agentprov-capture-test",
+            "peer_uid": 0
+          }
+        },
+        "connection_id": "secconn-5a3a51b07dd2",
+        "first_sequence": 160,
+        "last_sequence": 219,
+        "range_sha256": "0bf5762687c3f02e9e18961597c853246e76941012c59f9c998e5dfa01ffcfc2",
+        "root": {
+          "pid": 41,
+          "start_ns": "1794846896657521526"
+        },
+        "processes": [
+          {
+            "pid": 41,
+            "start_ns": "1794846896657521526"
+          }
+        ],
+        "root_exec_ref": "evt-seccheck-4457c1f4a5456bc173fafb2aa9773155dc61c19e888aa29a46356443f7d599f2",
+        "root_exit_ref": "evt-seccheck-0463562ae1dff8450e6c7e78620980a800e17ee2ff09dd4d9640432f7531fca3",
+        "root_wait_status": 1792,
+        "watermark": {
+          "root": {
+            "pid": 41,
+            "start_ns": "1794846896657521526"
+          },
+          "drain": {
+            "observed_at": "2026-11-16T16:34:57.012331279Z",
+            "basis": "runsc_ps_root_taskset",
+            "empty": true,
+            "remaining": []
+          },
+          "barrier": {
+            "process": {
+              "pid": 51,
+              "start_ns": "1794846897036965894"
+            },
+            "marker": "/.agentprov-watermark-75906b589737e67553cb78fec5c1ea1e"
+          },
+          "barrier_event_ref": "evt-seccheck-7c178c4a9f040101e70b588c1d9afe0a6acb51a5677d760825e871dd947fd9a3",
+          "barrier_sequence": 218,
+          "clone_event_refs": [
+            "evt-seccheck-c8fc46795e6e4ad7ed6b154990ff93a18f15def0e8b12173c5432513acff085b",
+            "evt-seccheck-15cff8392602a57068a2441d70f1b4b19f71a9e36e89ec99f2edff8c6c12663a",
+            "evt-seccheck-453fb565e0a33c0af4130c89759c34b0c7d8a77d97a87bde34273334e103869c",
+            "evt-seccheck-fc45df36972d67d7868a2337ea987ed2af5238036958660e41b28779c520c13b",
+            "evt-seccheck-33e6213d377be9d57981ed71fea7f511ad3626b5503f63c626dc1437d4f052b7",
+            "evt-seccheck-93c6d1deb7b3035e1a755fa643483755b88fed65df27778c61069e338847954f",
+            "evt-seccheck-09e5a9f840cbc790a1993b4589b1e4eb2a98a83e1701851994834d1bcc37f321",
+            "evt-seccheck-bbeedbb800a9b48775173b724aae94bc1d865b65bd73a16047391e4115f3740f",
+            "evt-seccheck-380df108a448345fcfa75afe3e08ae63beec69c1c7386bf0d07390137a896226",
+            "evt-seccheck-ebc2d8de982aec8fc6fccbde3760af75ba9a5320b9e1593e5c2472fc13348e2f"
+          ],
+          "process_count": 1,
+          "event_count": 37,
+          "root_wait_status": 1792,
+          "basis": "controlled_birth_clone_closure_taskset_absence_and_committed_barrier"
+        }
+      }
+    }
+  },
+  "receiver_final": {
+    "sha256": "227039bc39b1a27dc7da29562b52b45c0e779e90e0b5152798761965226d0f26",
+    "result": {
+      "schema_version": "agentprovenance.seccheck_status/v1",
+      "collector_id": "seccheck-63f5f716b9a9",
+      "generated_at": "2026-11-16T16:34:57.487260162Z",
+      "state": "stopped",
+      "expected_runtime_release": "release-20261109.0",
+      "protocol_version": 1,
+      "capabilities": {
+        "producer": "agentprov",
+        "producer_version": "dev",
+        "producer_commit": "unknown",
+        "placement": "host_receiver",
+        "identity_domain": "sentry",
+        "system_telemetry": "partial",
+        "model_intent": "none",
+        "app_context": "none",
+        "supported_points": [
+          "container/start",
+          "sentry/clone",
+          "sentry/execve",
+          "sentry/task_exit",
+          "sentry/exit_notify_parent",
+          "syscall/openat/enter",
+          "syscall/openat/exit",
+          "syscall/connect/enter",
+          "syscall/connect/exit",
+          "syscall/execve/enter",
+          "syscall/execve/exit"
+        ],
+        "enabled_points_basis": "observed_records",
+        "runtime_release_basis": "trusted_launcher_assertion",
+        "raw_packets_retained": false
+      },
+      "targets": [
+        {
+          "run_id": "native-container",
+          "socket_path": "/root/ap-r02-watermark/capture-483366010/events.sock",
+          "registration": {
+            "namespace": "acceptance",
+            "instance_id": "capture-483366010",
+            "generation": "generation-1",
+            "sandbox_id": "agentprov-capture-test",
+            "container_id": "agentprov-capture-test",
+            "peer_uid": 0
+          },
+          "state": "stopped",
+          "connection_id": "secconn-5a3a51b07dd2",
+          "last_sequence": 231,
+          "last_observation_at": "2026-11-16T16:34:57.349652659Z",
+          "accepted_records": 232,
+          "reported_dropped_events": 0,
+          "drop_counter_decreases": 0,
+          "identity_gap_records": 0,
+          "last_diagnostic": "disconnected"
+        }
+      ],
+      "node_spool": {
+        "counters": {
+          "captured": 234,
+          "connected": 1,
+          "disconnected": 1,
+          "ingested": 234,
+          "read": 234,
+          "receiver_ready": 1,
+          "receiver_stopped": 1
+        },
+        "queued_batches": 0,
+        "queued_bytes": 0,
+        "pending_events": 0,
+        "cleanup_pending_batches": 0
+      }
+    }
+  }
+}

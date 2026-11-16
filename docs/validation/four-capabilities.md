@@ -15,19 +15,22 @@ fixed-source reruns from earlier captures and record the remaining environment c
 | --- | --- | --- |
 | C-01 | Observation domain, scope, policy subject, capability intervals and runtime identity projections | Check new runtime observations on the selected x86 deployment |
 | W-01 | Remote-authoritative workspace, revision/digest conflicts, CLI and stdio MCP | Repeat with the final x86 build and Sensor; combine with Kata |
-| E-01/E-02 | Reading, signed selected reader, exact originals, recipient-owned trust and independent verifier | Dashboard controls await review; signed-mode status banner remains a UI item |
+| E-01/E-02 | Reading, signed selected reader, exact originals, recipient-owned trust, independent verifier and corrected signed-mode banner | Final same-source packages and reader checks; Dashboard controls await review |
 | R-01 | Separate platform, execution and capture contracts; native default retained | New-platform integration matrix |
-| R-02 | Guest binding, fixed-container runsc execution, separately scoped SecCheck observations | Real runtime identity probe and failure matrix; per-command Sentry association still needs a shared call/lifetime identity and capture watermark |
+| R-02 | Exact Sentry birth, descendant ownership, committed capture watermark and signed command evidence | Passed the real command and receiver/executor fault matrix; retain final candidate regression |
 | R-03 | Kata/QEMU Guest binding and bounded acceptance fixture | Run on Kubernetes with `kata-qemu-runtime-rs`, pinned artifacts and Guest Sensor permissions |
-| B-01 | Persistent Browser acceptance/results, restart queries and receiver-owned receipt verification | Combine with Sensor-on capture |
-| B-02 | Native-ID-based Browser layers, versioned rules and evidence references | Run the controlled Browser scenario matrix on Linux |
-| B-03 | Explicit runtime custody and kernel process-lifetime checks | Establish actual launcher custody and validate process/OS relations with Sensor on |
-| Q-01 | Regression scripts, independent export checks and bounded soak sampler | 24-hour run, recovery/resource review and two complete Linux cases |
+| B-01 | Persistent Browser acceptance/results, restart queries and receiver-owned receipt verification | Sensor-on and SIGKILL recovery passed; repeat final candidate checks |
+| B-02 | Native-ID-based Browser layers, versioned rules and evidence references | Linux context/tab, redirect, iframe/worker, background and download matrix passed |
+| B-03 | Explicit runtime custody and kernel process-lifetime checks | Actual launcher custody, native process scopes and selective export passed |
+| Q-01 | Regression scripts, independent export checks and bounded soak sampler | Bounded resource and final-build checks remain; 24-hour soak is maintainer-deferred |
 
-R-02's container evidence and command receipts currently remain separate. The
-x86 identity probe gathers the fields needed to close that implementation gap;
-its success alone does not finish per-command association. Do not replace this
-join with command text, PID alone or a time window.
+The [x86 completion results](../benchmarks/v1.0-x86-completion/README.md) include
+native Workspace and Browser cases and runsc's command/fault matrix. runsc binds
+each command before dispatch using its Sentry PID and birth identity, follows
+native descendant records, and seals after a private completion marker reaches
+the durable receiver store. Receiver discontinuities keep the old command
+incomplete; cancellation and executor restart preserve unknown outcomes and
+fence that generation. Repeated submission and queries reuse the saved attempt.
 
 The earlier workspace case used an ARM Linux VM, Claude Code 2.1.293 and its
 existing DeepSeek provider. It completed Inspect, Read, Edit, Write, Bash and a

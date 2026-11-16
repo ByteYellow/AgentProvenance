@@ -1,0 +1,2894 @@
+{
+  "sha256": "34edadffab673707d28e16997b36f9dd994ae78b1e4add858ede250dc8c218d6",
+  "result": {
+    "schema_version": "agentprovenance.runsc_execution_acceptance/v1",
+    "status": "PASS",
+    "cli_source_sha": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+    "fixture_source_sha": "fbaebd3d43ba359bb89d93ce5c5077bf8df5056e",
+    "fixture_sha256": "0c1d6a2123db96a7cfb6a97dcbe3c805c2be691b937d91fbbf28318a0ed3e74c",
+    "command": [
+      "/opt/agentprov-v1-completion/runsc-fixture-fbae/scripts/accept_execution_runsc.py",
+      "--cli",
+      "/opt/agentprov-v1-completion/agentprov-schema",
+      "--runsc",
+      "/opt/agentprov-v1-completion/runsc",
+      "--rootfs",
+      "/var/tmp/apv1/runtime/rootfs",
+      "--output",
+      "/root/ap-r02-api-4",
+      "--source-sha",
+      "afe3f9616ca017ce09a4e76719226500c1d812c1",
+      "--fixture-source-sha",
+      "fbaebd3d43ba359bb89d93ce5c5077bf8df5056e"
+    ],
+    "cli_version": "agentprov version v1.0.0-candidate (afe3f9616ca017ce09a4e76719226500c1d812c1; unknown; linux/amd64)",
+    "python_version": "3.12.3",
+    "cli_sha256": "3ef44f99a9aad818b011a79254be09a315a11386d2fbd6d809b7e94afec9d1b7",
+    "runsc_sha256": "c58f1dc2a3855487bf3bedc2edf074123ad433f1d98fb7f451f56790e87b5c9f",
+    "kernel": "6.8.0-149-generic",
+    "architecture": "x86_64",
+    "checks": {
+      "baseline": {
+        "status": "PASS",
+        "checks": [
+          "lost_admission_reply",
+          "duplicate_submission",
+          "query_no_reexecution",
+          "explicit_retry",
+          "wrong_generation",
+          "native_nonzero_exit",
+          "signed_command_evidence",
+          "receipt_restart"
+        ],
+        "target": {
+          "producer_id": "runsc-acceptance",
+          "instance_id": "ap-r02-api-4-baseline",
+          "generation": "generation-1"
+        }
+      },
+      "receiver-reconnect": {
+        "status": "PASS",
+        "checks": [
+          "receiver-reconnect",
+          "query_no_reexecution",
+          "committed_events_preserved"
+        ],
+        "target": {
+          "producer_id": "runsc-acceptance",
+          "instance_id": "ap-r02-api-4-receiver-reconnect",
+          "generation": "generation-1"
+        }
+      },
+      "receiver-restart": {
+        "status": "PASS",
+        "checks": [
+          "receiver-restart",
+          "query_no_reexecution",
+          "committed_events_preserved"
+        ],
+        "target": {
+          "producer_id": "runsc-acceptance",
+          "instance_id": "ap-r02-api-4-receiver-restart",
+          "generation": "generation-1"
+        }
+      },
+      "executor-restart": {
+        "status": "PASS",
+        "checks": [
+          "executor-restart",
+          "query_no_reexecution",
+          "committed_events_preserved"
+        ],
+        "target": {
+          "producer_id": "runsc-acceptance",
+          "instance_id": "ap-r02-api-4-executor-restart",
+          "generation": "generation-1"
+        }
+      },
+      "cancel": {
+        "status": "PASS",
+        "checks": [
+          "cancel",
+          "query_no_reexecution",
+          "committed_events_preserved"
+        ],
+        "target": {
+          "producer_id": "runsc-acceptance",
+          "instance_id": "ap-r02-api-4-cancel",
+          "generation": "generation-1"
+        }
+      }
+    },
+    "elapsed_seconds": 82.98319668299973
+  },
+  "schema_version": "agentprovenance.runsc_reviewed_acceptance/v1",
+  "exit_code": 0,
+  "source_dirty": false,
+  "fixture_dirty": false,
+  "system": {
+    "kernel": "6.8.0-149-generic",
+    "architecture": "x86_64",
+    "boot_id": "695e3798-9052-4b07-aa8c-27ad2ae32116"
+  },
+  "source_tree_sha": "0fdf504ef812d2c854ba8441fdb04223d1d563bd",
+  "log_sha256": "a5d13a6fd4d61e9500b251ef4e48cc63d0cca14bb39edfe2f53dfe419505f57e",
+  "cases": {
+    "baseline/exit-seven-report.json": {
+      "original_report_sha256": "ef240440c117aff4c534318204c0bf896068843901e3fd01005542663f6039c6",
+      "attempt_id": "execution-633f69a6d15f5f96467ff7e03b484d27",
+      "state": {
+        "execution": "failed",
+        "capture": "sealed",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:af3a63df28e2cffffd51a928cb38c34a7cde083e6e4c142efb5eb9e2630f3538",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "runtime_completed",
+        "state": {
+          "execution": "failed",
+          "capture": "sealed",
+          "delivery": "pending"
+        },
+        "error": "exit status 7",
+        "runtime_report": {
+          "execution": {
+            "schema_version": "agentprovenance.runtime_adapter/v1",
+            "binding": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-baseline",
+                "generation": "generation-1"
+              },
+              "mode": "runsc",
+              "container_id": "ap-r02-baseline",
+              "state_created": "2026-11-16T16:46:54.100944867Z"
+            },
+            "operation_id": "exit-seven-submit",
+            "attempt_id": "execution-633f69a6d15f5f96467ff7e03b484d27",
+            "run_id": "run-c6d1a1da07753d2629981f6397ac3f16",
+            "state": "failed",
+            "started": true,
+            "exit_code": 7,
+            "runtime_release": "release-20261109.0",
+            "sentry_pid": 39,
+            "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+            "sentry_start_ns": "1794847627515470060",
+            "gate_released": true,
+            "gaps": [
+              "external_container_execution_untracked"
+            ]
+          },
+          "capture": {
+            "observation_layer": "sentry",
+            "scope_ref": "gvisor/512406de8cec672e9caa1896bc687cd4d8904bd19d1d814d442bb53b7556080d",
+            "state": "sealed",
+            "start": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-baseline",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:07.211167436Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-c26c130532b8",
+                "generated_at": "2026-11-16T16:47:07.114838904Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-baseline",
+                    "socket_path": "/root/ap-r02-api-4/baseline/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-baseline",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-baseline",
+                      "container_id": "ap-r02-baseline",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-5114974f8202",
+                    "last_sequence": 152,
+                    "last_observation_at": "2026-11-16T16:47:06.794718189Z",
+                    "accepted_records": 153,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-baseline",
+                "socket_path": "/root/ap-r02-api-4/baseline/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-baseline",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-baseline",
+                  "container_id": "ap-r02-baseline",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "end": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-baseline",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:12.216047493Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-c26c130532b8",
+                "generated_at": "2026-11-16T16:47:12.214068614Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-baseline",
+                    "socket_path": "/root/ap-r02-api-4/baseline/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-baseline",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-baseline",
+                      "container_id": "ap-r02-baseline",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-5114974f8202",
+                    "last_sequence": 217,
+                    "last_observation_at": "2026-11-16T16:47:11.105827847Z",
+                    "accepted_records": 218,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-baseline",
+                "socket_path": "/root/ap-r02-api-4/baseline/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-baseline",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-baseline",
+                  "container_id": "ap-r02-baseline",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "gaps": [],
+            "command": {
+              "root": {
+                "pid": 39,
+                "start_ns": "1794847627515470060"
+              },
+              "drain": {
+                "observed_at": "2026-11-16T16:47:09.902819894Z",
+                "basis": "runsc_ps_root_taskset",
+                "empty": true,
+                "remaining": []
+              },
+              "barrier": {
+                "process": {
+                  "pid": 48,
+                  "start_ns": "1794847630023376777"
+                },
+                "marker": "/.agentprov-watermark-fb7369f06b10dd71fddd9caa86478c79"
+              },
+              "barrier_event_ref": "evt-seccheck-d7e3580ffd4622838497e7d75c99702c30f179530426aa65ee46b7c7a8162688",
+              "barrier_sequence": 207,
+              "clone_event_refs": [
+                "evt-seccheck-8718041e21f2af1a4d3b2d4ebda5f3a21b248e7271ae27c83c8bc64b5bf0ea4c",
+                "evt-seccheck-87b495641d615158837f751fde4aaa4ba2a2fd4ab9ce4a1dc60fd392332534e5",
+                "evt-seccheck-30151db6f536038ad089a67ae4c1aca19e4505218fd54c5a33e49e19bec69942",
+                "evt-seccheck-08a4fb18b6a16d0be90cf4b287a77b90fe1e775ff523b54d7a45ae852e2ad415",
+                "evt-seccheck-6be8bc0c26fa22ca4d76ca5b90a9f64d3148d9891120ccaaa1603605904ff6bd",
+                "evt-seccheck-9cd7ef6d8780a667c42cf0229014f0ac07be1c84409d8aa6f6905a2b7e2702e6",
+                "evt-seccheck-2aa5f7fc899faabc768e261a5aac50ceec2c8fe71321efb426b9c661526cf5ed",
+                "evt-seccheck-580e693dc20be0547e41fea9c8c4919b6145dcfcb4b56461a53709f6a513f855"
+              ],
+              "process_count": 1,
+              "event_count": 35,
+              "root_wait_status": 1792,
+              "basis": "controlled_birth_clone_closure_taskset_absence_and_committed_barrier"
+            },
+            "evidence_ref": "sha256:6307731dbe7a524ef93b4332348babb27d0c983dc03205f3f945b265e195efd1"
+          }
+        }
+      }
+    },
+    "baseline/explicit-retry-report.json": {
+      "original_report_sha256": "290bf5e28a395007a73e0b78a4849ba6de1b56118f03816850a5048d2a92a7e8",
+      "attempt_id": "execution-f764e6e2f05065bd6fa3ab8f2eba84f5",
+      "state": {
+        "execution": "succeeded",
+        "capture": "sealed",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:8652845f01c4c9606aa54bf0f365c3a4ba2022349df9960c27ed4a5ecea027e4",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "runtime_completed",
+        "state": {
+          "execution": "succeeded",
+          "capture": "sealed",
+          "delivery": "pending"
+        },
+        "runtime_report": {
+          "execution": {
+            "schema_version": "agentprovenance.runtime_adapter/v1",
+            "binding": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-baseline",
+                "generation": "generation-1"
+              },
+              "mode": "runsc",
+              "container_id": "ap-r02-baseline",
+              "state_created": "2026-11-16T16:46:54.100944867Z"
+            },
+            "operation_id": "once-explicit-retry",
+            "attempt_id": "execution-f764e6e2f05065bd6fa3ab8f2eba84f5",
+            "run_id": "run-84366d82dcce7233b5ac73982221944a",
+            "state": "succeeded",
+            "started": true,
+            "exit_code": 0,
+            "runtime_release": "release-20261109.0",
+            "sentry_pid": 20,
+            "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+            "sentry_start_ns": "1794847622119173958",
+            "gate_released": true,
+            "gaps": [
+              "external_container_execution_untracked"
+            ]
+          },
+          "capture": {
+            "observation_layer": "sentry",
+            "scope_ref": "gvisor/512406de8cec672e9caa1896bc687cd4d8904bd19d1d814d442bb53b7556080d",
+            "state": "sealed",
+            "start": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-baseline",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:01.713522067Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-c26c130532b8",
+                "generated_at": "2026-11-16T16:47:01.613979941Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-baseline",
+                    "socket_path": "/root/ap-r02-api-4/baseline/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-baseline",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-baseline",
+                      "container_id": "ap-r02-baseline",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-5114974f8202",
+                    "last_sequence": 75,
+                    "last_observation_at": "2026-11-16T16:47:00.801454678Z",
+                    "accepted_records": 76,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-baseline",
+                "socket_path": "/root/ap-r02-api-4/baseline/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-baseline",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-baseline",
+                  "container_id": "ap-r02-baseline",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "end": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-baseline",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:06.61167174Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-c26c130532b8",
+                "generated_at": "2026-11-16T16:47:06.513021463Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-baseline",
+                    "socket_path": "/root/ap-r02-api-4/baseline/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-baseline",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-baseline",
+                      "container_id": "ap-r02-baseline",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-5114974f8202",
+                    "last_sequence": 146,
+                    "last_observation_at": "2026-11-16T16:47:05.895359104Z",
+                    "accepted_records": 147,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-baseline",
+                "socket_path": "/root/ap-r02-api-4/baseline/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-baseline",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-baseline",
+                  "container_id": "ap-r02-baseline",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "gaps": [],
+            "command": {
+              "root": {
+                "pid": 20,
+                "start_ns": "1794847622119173958"
+              },
+              "drain": {
+                "observed_at": "2026-11-16T16:47:04.715046787Z",
+                "basis": "runsc_ps_root_taskset",
+                "empty": true,
+                "remaining": []
+              },
+              "barrier": {
+                "process": {
+                  "pid": 30,
+                  "start_ns": "1794847624832689334"
+                },
+                "marker": "/.agentprov-watermark-de1862cd49ad6af0c02324eef346f394"
+              },
+              "barrier_event_ref": "evt-seccheck-4d068d66e7879ebb6a59fb7704a871c9e24dbd46d527284432f9bee3000d7a62",
+              "barrier_sequence": 142,
+              "clone_event_refs": [
+                "evt-seccheck-cea38f95627284552804031ce60fd8fb7145bf099dce4322ebbdd41ba8153ecf",
+                "evt-seccheck-8a1970ddd441156a9b44c3adbfc889647864d6abecc96740e3b3e372f31a7aab",
+                "evt-seccheck-3a6bc5cb9ec2c930c32a844cbe4e79228197348ceb9df0d801ee614e231aa8f7",
+                "evt-seccheck-8df6c867f38e6a96050064cb8307287f0ac0673a0ee2c7ff5d48cb3faf3d19a1",
+                "evt-seccheck-b7b87fc4446e26167e0cb972496b4de082a59678d42001e8fd5b1d8222e2e079",
+                "evt-seccheck-da61099b5eb95b7ae65fe543829b26350e33a733b52b30489c102981c16fe31c",
+                "evt-seccheck-6df8f9d1963a0499cd5edfda11538486af4ac4efcadc32e535d9721836ca1538",
+                "evt-seccheck-654a8954300d1588f675381b4da4356312d465c8ff8aec43b046cebc7c345263"
+              ],
+              "process_count": 2,
+              "event_count": 47,
+              "root_wait_status": 0,
+              "basis": "controlled_birth_clone_closure_taskset_absence_and_committed_barrier"
+            },
+            "evidence_ref": "sha256:54977b207028e827c43e02a2b95f0bb46a95858ec376675e4a1710a2a7976463"
+          }
+        }
+      }
+    },
+    "baseline/once-report.json": {
+      "original_report_sha256": "62ab32136525f6d7067bfef481ab3d028d2f5304249e8df24fc1354c6c494813",
+      "attempt_id": "execution-5e087c748acdf2d92d959bccc73b3348",
+      "state": {
+        "execution": "succeeded",
+        "capture": "sealed",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:13ef7d5b265c44b18b68e7e9585adaf95012f5c0b57dba8cba662597f27a7c35",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "runtime_completed",
+        "state": {
+          "execution": "succeeded",
+          "capture": "sealed",
+          "delivery": "pending"
+        },
+        "runtime_report": {
+          "execution": {
+            "schema_version": "agentprovenance.runtime_adapter/v1",
+            "binding": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-baseline",
+                "generation": "generation-1"
+              },
+              "mode": "runsc",
+              "container_id": "ap-r02-baseline",
+              "state_created": "2026-11-16T16:46:54.100944867Z"
+            },
+            "operation_id": "once-submit",
+            "attempt_id": "execution-5e087c748acdf2d92d959bccc73b3348",
+            "run_id": "run-d07182fb3a495e89db6443b6378162ae",
+            "state": "succeeded",
+            "started": true,
+            "exit_code": 0,
+            "runtime_release": "release-20261109.0",
+            "sentry_pid": 2,
+            "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+            "sentry_start_ns": "1794847616174455956",
+            "gate_released": true,
+            "gaps": [
+              "external_container_execution_untracked"
+            ]
+          },
+          "capture": {
+            "observation_layer": "sentry",
+            "scope_ref": "gvisor/512406de8cec672e9caa1896bc687cd4d8904bd19d1d814d442bb53b7556080d",
+            "state": "sealed",
+            "start": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-baseline",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:46:56.015751188Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-c26c130532b8",
+                "generated_at": "2026-11-16T16:46:56.013949643Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-baseline",
+                    "socket_path": "/root/ap-r02-api-4/baseline/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-baseline",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-baseline",
+                      "container_id": "ap-r02-baseline",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-5114974f8202",
+                    "last_sequence": 0,
+                    "last_observation_at": "2026-11-16T16:46:54.392298156Z",
+                    "accepted_records": 1,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-baseline",
+                "socket_path": "/root/ap-r02-api-4/baseline/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-baseline",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-baseline",
+                  "container_id": "ap-r02-baseline",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "end": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-baseline",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:00.900197816Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-c26c130532b8",
+                "generated_at": "2026-11-16T16:47:00.813262043Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-baseline",
+                    "socket_path": "/root/ap-r02-api-4/baseline/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-baseline",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-baseline",
+                      "container_id": "ap-r02-baseline",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-5114974f8202",
+                    "last_sequence": 75,
+                    "last_observation_at": "2026-11-16T16:47:00.801454678Z",
+                    "accepted_records": 76,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-baseline",
+                "socket_path": "/root/ap-r02-api-4/baseline/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-baseline",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-baseline",
+                  "container_id": "ap-r02-baseline",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "gaps": [],
+            "command": {
+              "root": {
+                "pid": 2,
+                "start_ns": "1794847616174455956"
+              },
+              "drain": {
+                "observed_at": "2026-11-16T16:46:58.788367503Z",
+                "basis": "runsc_ps_root_taskset",
+                "empty": true,
+                "remaining": []
+              },
+              "barrier": {
+                "process": {
+                  "pid": 11,
+                  "start_ns": "1794847618812132434"
+                },
+                "marker": "/.agentprov-watermark-44fb5ce83a3468742c146c54ea7bf735"
+              },
+              "barrier_event_ref": "evt-seccheck-06060ea66fb458cee53ca30e3abbbfc8af3f7e3b76d067d5667c8a5ea860a0cd",
+              "barrier_sequence": 65,
+              "clone_event_refs": [
+                "evt-seccheck-8f382e09f66db3c7736c15d9cd7c77705271edfd259ab4fbb6033a0e5639c864",
+                "evt-seccheck-b6cdfa4364443b709ce2e6058eec1465510daaf042528e0cdbe19ef6b524f34c",
+                "evt-seccheck-b195bfee5b36b7aed75cbd565e7eb40e00e5f3048c4b0b4b0ada5410dba80681",
+                "evt-seccheck-0c863864cb09c4272c321ad5c617238766c658cbc58082df9c12ac3f02b73d64",
+                "evt-seccheck-d6cc49499016932ee7be158e1cca2babfbe16c3f8b94eaa104df1f1427624861",
+                "evt-seccheck-478d9a1765b249fba775ffdfbc768222e8fd7c6a5569978939f2089b524255f5",
+                "evt-seccheck-019435c3d966fcbcf4ae6a08601fd03314b8294d473397b5abd36df3e971292a",
+                "evt-seccheck-a2245c405b551e98ef61515ced50d46e167d219c721a411ff5554ef7a5f65206"
+              ],
+              "process_count": 2,
+              "event_count": 45,
+              "root_wait_status": 0,
+              "basis": "controlled_birth_clone_closure_taskset_absence_and_committed_barrier"
+            },
+            "evidence_ref": "sha256:63edb495fa00149c8d7844e681066a7681df9f7c3f444fecc54e18ed515e7eac"
+          }
+        }
+      }
+    },
+    "cancel/cancel-report.json": {
+      "original_report_sha256": "12ec0fb5d22c52ad12776cc367b68c93419ebee0a070371c962de49f0e6ca841",
+      "attempt_id": "execution-38bf2a917e7880c8463b791298801152",
+      "state": {
+        "execution": "unknown",
+        "capture": "incomplete",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:9692931a6cbff772a42cc250f564f8edba2018f365676665470be3b858c71124",
+      "stop_requested": true,
+      "checkpoint": {
+        "reason": "runtime_completed",
+        "state": {
+          "execution": "unknown",
+          "capture": "incomplete",
+          "delivery": "pending"
+        },
+        "error": "context canceled\nsignal: killed",
+        "runtime_report": {
+          "execution": {
+            "schema_version": "agentprovenance.runtime_adapter/v1",
+            "binding": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-cancel",
+                "generation": "generation-1"
+              },
+              "mode": "runsc",
+              "container_id": "ap-r02-cancel",
+              "state_created": "2026-11-16T16:47:42.099416138Z"
+            },
+            "operation_id": "cancel-submit",
+            "attempt_id": "execution-38bf2a917e7880c8463b791298801152",
+            "run_id": "run-bdeb30fe8bb19ef650a5349128019b0c",
+            "state": "unknown",
+            "started": true,
+            "runtime_release": "release-20261109.0",
+            "sentry_pid": 2,
+            "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+            "sentry_start_ns": "1794847663814019190",
+            "gate_released": true,
+            "gaps": [
+              "command_capture_watermark_unavailable",
+              "external_container_execution_untracked",
+              "workload_completion_unknown",
+              "transport_stopped_workload_stop_unconfirmed"
+            ]
+          },
+          "capture": {
+            "observation_layer": "sentry",
+            "scope_ref": "gvisor/d265da598ece0a19e9568f5df068797d716142c46e38fbb6f589d246d3cae582",
+            "state": "incomplete",
+            "start": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-cancel",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:43.793049007Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-660476923a14",
+                "generated_at": "2026-11-16T16:47:43.791425059Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-cancel",
+                    "socket_path": "/root/ap-r02-api-4/cancel/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-cancel",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-cancel",
+                      "container_id": "ap-r02-cancel",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-e705cecb3bcd",
+                    "last_sequence": 0,
+                    "last_observation_at": "2026-11-16T16:47:42.236980841Z",
+                    "accepted_records": 1,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-cancel",
+                "socket_path": "/root/ap-r02-api-4/cancel/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-cancel",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-cancel",
+                  "container_id": "ap-r02-cancel",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "end": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-cancel",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:48:15.209380068Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-660476923a14",
+                "generated_at": "2026-11-16T16:48:15.197628718Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-cancel",
+                    "socket_path": "/root/ap-r02-api-4/cancel/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-cancel",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-cancel",
+                      "container_id": "ap-r02-cancel",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-e705cecb3bcd",
+                    "last_sequence": 55,
+                    "last_observation_at": "2026-11-16T16:47:45.886960255Z",
+                    "accepted_records": 56,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-cancel",
+                "socket_path": "/root/ap-r02-api-4/cancel/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-cancel",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-cancel",
+                  "container_id": "ap-r02-cancel",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "gaps": [
+              "command_capture_watermark_unavailable",
+              "command_capture_deadline"
+            ],
+            "error": "context deadline exceeded",
+            "evidence_ref": "sha256:2899062ede04d3d70cbe499524536991f9193789b6f555508417b7142c163914"
+          }
+        }
+      }
+    },
+    "cancel/cancel-running-report.json": {
+      "original_report_sha256": "9a7377602a7eafc8c90fb8f25c5125c335e0a43ab5d6f905d1984f8f9718acea",
+      "attempt_id": "execution-38bf2a917e7880c8463b791298801152",
+      "state": {
+        "execution": "running",
+        "capture": "collecting",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:d1606cd55dac97eba8b00e4bb0080841304ce27c46ac372979d66ab46fc9dc7e",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "runtime_dispatched",
+        "state": {
+          "execution": "running",
+          "capture": "collecting",
+          "delivery": "pending"
+        },
+        "runtime_report": {
+          "execution": {
+            "schema_version": "agentprovenance.runtime_adapter/v1",
+            "binding": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-cancel",
+                "generation": "generation-1"
+              },
+              "mode": "runsc",
+              "container_id": "ap-r02-cancel",
+              "state_created": "2026-11-16T16:47:42.099416138Z"
+            },
+            "operation_id": "cancel-submit",
+            "attempt_id": "execution-38bf2a917e7880c8463b791298801152",
+            "run_id": "run-bdeb30fe8bb19ef650a5349128019b0c",
+            "state": "running",
+            "started": false,
+            "runtime_release": "release-20261109.0",
+            "sentry_pid": 2,
+            "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+            "sentry_start_ns": "1794847663814019190",
+            "gaps": [
+              "command_capture_watermark_unavailable",
+              "external_container_execution_untracked"
+            ]
+          },
+          "capture": {
+            "observation_layer": "sentry",
+            "scope_ref": "",
+            "state": "collecting",
+            "start": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-cancel",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:43.793049007Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-660476923a14",
+                "generated_at": "2026-11-16T16:47:43.791425059Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-cancel",
+                    "socket_path": "/root/ap-r02-api-4/cancel/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-cancel",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-cancel",
+                      "container_id": "ap-r02-cancel",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-e705cecb3bcd",
+                    "last_sequence": 0,
+                    "last_observation_at": "2026-11-16T16:47:42.236980841Z",
+                    "accepted_records": 1,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-cancel",
+                "socket_path": "/root/ap-r02-api-4/cancel/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-cancel",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-cancel",
+                  "container_id": "ap-r02-cancel",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "gaps": [
+              "shared_call_identity_unavailable"
+            ]
+          }
+        }
+      }
+    },
+    "cancel/fenced-report.json": {
+      "original_report_sha256": "336ec5c0d42d927c3ab957d67fec89d678cf22a6937b4e97503de0354e0aecc7",
+      "attempt_id": "execution-186c92628ec01be0efee31ef15b40836",
+      "state": {
+        "execution": "failed",
+        "capture": "incomplete",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:7813447e752f7be2185c62f9a1397cb80fc8301aa211314b00d6a5c7b867e9f4",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "execution_interrupted",
+        "state": {
+          "execution": "failed",
+          "capture": "incomplete",
+          "delivery": "pending"
+        },
+        "error": "runtime target has an unresolved attempt; retire its generation before executing again"
+      }
+    },
+    "executor-restart/executor-restart-report.json": {
+      "original_report_sha256": "eea947e8d9291353fa64f3e28b9154a47f02aefa8ecc613cfb038d023a7581e4",
+      "attempt_id": "execution-b1ae8612d8c505ca75cfb2d360c941d3",
+      "state": {
+        "execution": "unknown",
+        "capture": "incomplete",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:262b59a2e6257ab5ef4b571cc2a6b3350f309b658df481761fc78874ee3fd10d",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "executor_restarted_unknown",
+        "state": {
+          "execution": "unknown",
+          "capture": "incomplete",
+          "delivery": "pending"
+        },
+        "runtime_report": {
+          "execution": {
+            "schema_version": "agentprovenance.runtime_adapter/v1",
+            "binding": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-executor-restart",
+                "generation": "generation-1"
+              },
+              "mode": "runsc",
+              "container_id": "ap-r02-executor-restart",
+              "state_created": "2026-11-16T16:47:37.68197765Z"
+            },
+            "operation_id": "executor-restart-submit",
+            "attempt_id": "execution-b1ae8612d8c505ca75cfb2d360c941d3",
+            "run_id": "run-2ce0f69427cb17ab445d51d437526168",
+            "state": "unknown",
+            "started": false,
+            "runtime_release": "release-20261109.0",
+            "sentry_pid": 2,
+            "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+            "sentry_start_ns": "1794847659110203011",
+            "gaps": [
+              "command_capture_watermark_unavailable",
+              "external_container_execution_untracked",
+              "executor_restart_result_unknown"
+            ]
+          },
+          "capture": {
+            "observation_layer": "sentry",
+            "scope_ref": "",
+            "state": "incomplete",
+            "start": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-executor-restart",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:39.016529892Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-8b702cfca5c5",
+                "generated_at": "2026-11-16T16:47:39.011572975Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-executor-restart",
+                    "socket_path": "/root/ap-r02-api-4/executor-restart/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-executor-restart",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-executor-restart",
+                      "container_id": "ap-r02-executor-restart",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-00065976bf2a",
+                    "last_sequence": 0,
+                    "last_observation_at": "2026-11-16T16:47:37.911425435Z",
+                    "accepted_records": 1,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-executor-restart",
+                "socket_path": "/root/ap-r02-api-4/executor-restart/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-executor-restart",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-executor-restart",
+                  "container_id": "ap-r02-executor-restart",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "gaps": [
+              "shared_call_identity_unavailable",
+              "executor_restart_capture_unknown"
+            ]
+          }
+        }
+      }
+    },
+    "executor-restart/executor-restart-running-report.json": {
+      "original_report_sha256": "3945f5c9c95c250227159132d36355911dd8a46d5fc873a5a8eabf4963b24804",
+      "attempt_id": "execution-b1ae8612d8c505ca75cfb2d360c941d3",
+      "state": {
+        "execution": "running",
+        "capture": "collecting",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:6f30d2dd33b96b119fada23de0c1df5f774f05188681d00705c726e5998416c6",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "runtime_dispatched",
+        "state": {
+          "execution": "running",
+          "capture": "collecting",
+          "delivery": "pending"
+        },
+        "runtime_report": {
+          "execution": {
+            "schema_version": "agentprovenance.runtime_adapter/v1",
+            "binding": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-executor-restart",
+                "generation": "generation-1"
+              },
+              "mode": "runsc",
+              "container_id": "ap-r02-executor-restart",
+              "state_created": "2026-11-16T16:47:37.68197765Z"
+            },
+            "operation_id": "executor-restart-submit",
+            "attempt_id": "execution-b1ae8612d8c505ca75cfb2d360c941d3",
+            "run_id": "run-2ce0f69427cb17ab445d51d437526168",
+            "state": "running",
+            "started": false,
+            "runtime_release": "release-20261109.0",
+            "sentry_pid": 2,
+            "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+            "sentry_start_ns": "1794847659110203011",
+            "gaps": [
+              "command_capture_watermark_unavailable",
+              "external_container_execution_untracked"
+            ]
+          },
+          "capture": {
+            "observation_layer": "sentry",
+            "scope_ref": "",
+            "state": "collecting",
+            "start": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-executor-restart",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:39.016529892Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-8b702cfca5c5",
+                "generated_at": "2026-11-16T16:47:39.011572975Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-executor-restart",
+                    "socket_path": "/root/ap-r02-api-4/executor-restart/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-executor-restart",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-executor-restart",
+                      "container_id": "ap-r02-executor-restart",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-00065976bf2a",
+                    "last_sequence": 0,
+                    "last_observation_at": "2026-11-16T16:47:37.911425435Z",
+                    "accepted_records": 1,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-executor-restart",
+                "socket_path": "/root/ap-r02-api-4/executor-restart/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-executor-restart",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-executor-restart",
+                  "container_id": "ap-r02-executor-restart",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "gaps": [
+              "shared_call_identity_unavailable"
+            ]
+          }
+        }
+      }
+    },
+    "executor-restart/fenced-report.json": {
+      "original_report_sha256": "163294f493447e7bc7326fa7f33ecf04bc67e6d73f043fa5fca03e192527856a",
+      "attempt_id": "execution-548993f6f343550da8cc78b121d218b2",
+      "state": {
+        "execution": "failed",
+        "capture": "incomplete",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:43a8275a5f9505663601d8cfea7a9e1d87a947b4a4bc4278d2471a629ee8a29f",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "execution_interrupted",
+        "state": {
+          "execution": "failed",
+          "capture": "incomplete",
+          "delivery": "pending"
+        },
+        "error": "runtime target has an unresolved attempt; retire its generation before executing again"
+      }
+    },
+    "receiver-reconnect/after-reconnect-report.json": {
+      "original_report_sha256": "260bb55a88dfdc15a9a6952bc74e4c9d625b9bbd7d6e77e05bbf1fc50a309a8c",
+      "attempt_id": "execution-f6cae6e08f71952740feb48a28ad8cf5",
+      "state": {
+        "execution": "succeeded",
+        "capture": "sealed",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:db4eaca02626d3b47ca13e45af7e3ea489ac2316c4b4fc491fb526bfa2038b2e",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "runtime_completed",
+        "state": {
+          "execution": "succeeded",
+          "capture": "sealed",
+          "delivery": "pending"
+        },
+        "runtime_report": {
+          "execution": {
+            "schema_version": "agentprovenance.runtime_adapter/v1",
+            "binding": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-reconnect",
+                "generation": "generation-1"
+              },
+              "mode": "runsc",
+              "container_id": "ap-r02-receiver-reconnect",
+              "state_created": "2026-11-16T16:47:17.506807055Z"
+            },
+            "operation_id": "after-reconnect-submit",
+            "attempt_id": "execution-f6cae6e08f71952740feb48a28ad8cf5",
+            "run_id": "run-f17f0082f296c06c74a0bd69fc11781e",
+            "state": "succeeded",
+            "started": true,
+            "exit_code": 0,
+            "runtime_release": "release-20261109.0",
+            "sentry_pid": 22,
+            "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+            "sentry_start_ns": "1794847642698505239",
+            "gate_released": true,
+            "gaps": [
+              "external_container_execution_untracked"
+            ]
+          },
+          "capture": {
+            "observation_layer": "sentry",
+            "scope_ref": "gvisor/15a8c8fbdceb008b5b5c553bde567f03b9ac0fa42d71e86020300495dd3f4471",
+            "state": "sealed",
+            "start": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-reconnect",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:22.411044666Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-e0d18ddbc1ed",
+                "generated_at": "2026-11-16T16:47:22.400126735Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-receiver-reconnect",
+                    "socket_path": "/root/ap-r02-api-4/receiver-reconnect/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-receiver-reconnect",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-receiver-reconnect",
+                      "container_id": "ap-r02-receiver-reconnect",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-cee0a5e75735",
+                    "last_sequence": 12,
+                    "last_observation_at": "2026-11-16T16:47:21.226223534Z",
+                    "accepted_records": 70,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-receiver-reconnect",
+                "socket_path": "/root/ap-r02-api-4/receiver-reconnect/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-receiver-reconnect",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-receiver-reconnect",
+                  "container_id": "ap-r02-receiver-reconnect",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "end": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-reconnect",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:26.904591048Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-e0d18ddbc1ed",
+                "generated_at": "2026-11-16T16:47:26.900790317Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-receiver-reconnect",
+                    "socket_path": "/root/ap-r02-api-4/receiver-reconnect/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-receiver-reconnect",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-receiver-reconnect",
+                      "container_id": "ap-r02-receiver-reconnect",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-cee0a5e75735",
+                    "last_sequence": 93,
+                    "last_observation_at": "2026-11-16T16:47:26.518333242Z",
+                    "accepted_records": 151,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-receiver-reconnect",
+                "socket_path": "/root/ap-r02-api-4/receiver-reconnect/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-receiver-reconnect",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-receiver-reconnect",
+                  "container_id": "ap-r02-receiver-reconnect",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "gaps": [],
+            "command": {
+              "root": {
+                "pid": 22,
+                "start_ns": "1794847642698505239"
+              },
+              "drain": {
+                "observed_at": "2026-11-16T16:47:25.612289979Z",
+                "basis": "runsc_ps_root_taskset",
+                "empty": true,
+                "remaining": []
+              },
+              "barrier": {
+                "process": {
+                  "pid": 32,
+                  "start_ns": "1794847645712326577"
+                },
+                "marker": "/.agentprov-watermark-43e9407989db9eb76d419bacc2226f7c"
+              },
+              "barrier_event_ref": "evt-seccheck-b2c2207c2f8b7121239b4b576de277ecd06d2f7019acfc9276bc2977847e10b1",
+              "barrier_sequence": 84,
+              "clone_event_refs": [
+                "evt-seccheck-02458c49f8f7083841ac10f28ec104bc0bf86fbe82da21d19ae3144e7d0831f9",
+                "evt-seccheck-03ddaade51fcfa7784698812e8873e229b40d812291cf40f584869d036541525",
+                "evt-seccheck-9d48635c8e6e708850b1d1d87a9c3f9623e9109a28cbe12eafbbc58365771703",
+                "evt-seccheck-1226eb91bd6c39a0bb0b8d52e4df2d45087af97b2f01121dc8a46c338f112c2b",
+                "evt-seccheck-a02ef7fafdbfda288a8a3f40ee5e42958bfdf6b6805d3dde763e0afbb6e2ddb8",
+                "evt-seccheck-b274d532c1e0c402d8a6f3ddc3adcdca1a65d47647b709ad39b67dd2b385ed92",
+                "evt-seccheck-3e813d554f899fb2211aa61c13af18008c98d1048138d27f48cd0020141ea09b"
+              ],
+              "process_count": 2,
+              "event_count": 45,
+              "root_wait_status": 0,
+              "basis": "controlled_birth_clone_closure_taskset_absence_and_committed_barrier"
+            },
+            "evidence_ref": "sha256:b32494fe7f4b23aaabde8fb7df393e38bb1b9f211277031854a58ca50b837d1b"
+          }
+        }
+      }
+    },
+    "receiver-reconnect/receiver-reconnect-report.json": {
+      "original_report_sha256": "e83c0a32235ac5581a8bfaac6cc6b88459ba2aa50de5e4a559f2946976518934",
+      "attempt_id": "execution-a1b3da61eb7579223125c22b7f5d1598",
+      "state": {
+        "execution": "succeeded",
+        "capture": "incomplete",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:c6bddcba5eb8ba9b587ebc8f05f75808b69ee25f26b62bbb991063fe4b90dd5e",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "runtime_completed",
+        "state": {
+          "execution": "succeeded",
+          "capture": "incomplete",
+          "delivery": "pending"
+        },
+        "runtime_report": {
+          "execution": {
+            "schema_version": "agentprovenance.runtime_adapter/v1",
+            "binding": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-reconnect",
+                "generation": "generation-1"
+              },
+              "mode": "runsc",
+              "container_id": "ap-r02-receiver-reconnect",
+              "state_created": "2026-11-16T16:47:17.506807055Z"
+            },
+            "operation_id": "receiver-reconnect-submit",
+            "attempt_id": "execution-a1b3da61eb7579223125c22b7f5d1598",
+            "run_id": "run-b6f18410f63b3c5b7b5c12fa6a7cb16c",
+            "state": "succeeded",
+            "started": true,
+            "exit_code": 0,
+            "runtime_release": "release-20261109.0",
+            "sentry_pid": 2,
+            "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+            "sentry_start_ns": "1794847639117407464",
+            "gate_released": true,
+            "gaps": [
+              "command_capture_watermark_unavailable",
+              "external_container_execution_untracked"
+            ]
+          },
+          "capture": {
+            "observation_layer": "sentry",
+            "scope_ref": "gvisor/15a8c8fbdceb008b5b5c553bde567f03b9ac0fa42d71e86020300495dd3f4471",
+            "state": "incomplete",
+            "start": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-reconnect",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:18.911594592Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-e0d18ddbc1ed",
+                "generated_at": "2026-11-16T16:47:18.900749952Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-receiver-reconnect",
+                    "socket_path": "/root/ap-r02-api-4/receiver-reconnect/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-receiver-reconnect",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-receiver-reconnect",
+                      "container_id": "ap-r02-receiver-reconnect",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-0b55d6e1b140",
+                    "last_sequence": 0,
+                    "last_observation_at": "2026-11-16T16:47:17.789381873Z",
+                    "accepted_records": 1,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-receiver-reconnect",
+                "socket_path": "/root/ap-r02-api-4/receiver-reconnect/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-receiver-reconnect",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-receiver-reconnect",
+                  "container_id": "ap-r02-receiver-reconnect",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "end": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-reconnect",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:21.317522114Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-e0d18ddbc1ed",
+                "generated_at": "2026-11-16T16:47:21.30887406Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-receiver-reconnect",
+                    "socket_path": "/root/ap-r02-api-4/receiver-reconnect/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-receiver-reconnect",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-receiver-reconnect",
+                      "container_id": "ap-r02-receiver-reconnect",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-cee0a5e75735",
+                    "last_sequence": 12,
+                    "last_observation_at": "2026-11-16T16:47:21.226223534Z",
+                    "accepted_records": 70,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-receiver-reconnect",
+                "socket_path": "/root/ap-r02-api-4/receiver-reconnect/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-receiver-reconnect",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-receiver-reconnect",
+                  "container_id": "ap-r02-receiver-reconnect",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "gaps": [
+              "command_capture_watermark_unavailable",
+              "receiver_reconnected"
+            ]
+          }
+        }
+      }
+    },
+    "receiver-reconnect/receiver-reconnect-running-report.json": {
+      "original_report_sha256": "0d4e406129c4d36e233770cff7566fe248c95873b233e9371e205c275ea0515a",
+      "attempt_id": "execution-a1b3da61eb7579223125c22b7f5d1598",
+      "state": {
+        "execution": "running",
+        "capture": "collecting",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:eba0e90f6572986174a787dce52d919f9f3b20502a1afc4114e7a63209b0720b",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "runtime_dispatched",
+        "state": {
+          "execution": "running",
+          "capture": "collecting",
+          "delivery": "pending"
+        },
+        "runtime_report": {
+          "execution": {
+            "schema_version": "agentprovenance.runtime_adapter/v1",
+            "binding": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-reconnect",
+                "generation": "generation-1"
+              },
+              "mode": "runsc",
+              "container_id": "ap-r02-receiver-reconnect",
+              "state_created": "2026-11-16T16:47:17.506807055Z"
+            },
+            "operation_id": "receiver-reconnect-submit",
+            "attempt_id": "execution-a1b3da61eb7579223125c22b7f5d1598",
+            "run_id": "run-b6f18410f63b3c5b7b5c12fa6a7cb16c",
+            "state": "running",
+            "started": false,
+            "runtime_release": "release-20261109.0",
+            "sentry_pid": 2,
+            "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+            "sentry_start_ns": "1794847639117407464",
+            "gaps": [
+              "command_capture_watermark_unavailable",
+              "external_container_execution_untracked"
+            ]
+          },
+          "capture": {
+            "observation_layer": "sentry",
+            "scope_ref": "",
+            "state": "collecting",
+            "start": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-reconnect",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:18.911594592Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-e0d18ddbc1ed",
+                "generated_at": "2026-11-16T16:47:18.900749952Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-receiver-reconnect",
+                    "socket_path": "/root/ap-r02-api-4/receiver-reconnect/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-receiver-reconnect",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-receiver-reconnect",
+                      "container_id": "ap-r02-receiver-reconnect",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-0b55d6e1b140",
+                    "last_sequence": 0,
+                    "last_observation_at": "2026-11-16T16:47:17.789381873Z",
+                    "accepted_records": 1,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-receiver-reconnect",
+                "socket_path": "/root/ap-r02-api-4/receiver-reconnect/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-receiver-reconnect",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-receiver-reconnect",
+                  "container_id": "ap-r02-receiver-reconnect",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "gaps": [
+              "shared_call_identity_unavailable"
+            ]
+          }
+        }
+      }
+    },
+    "receiver-restart/after-reconnect-report.json": {
+      "original_report_sha256": "c2fd4d4534a779ff668025b0da0025e40b8bd065e989fbce3fc62eecb4d6118c",
+      "attempt_id": "execution-b90eff0954594a9c3fdb25c761610dec",
+      "state": {
+        "execution": "succeeded",
+        "capture": "sealed",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:d869b55731b15637286110d84872b772a7a3032b966da8e27dcb40e235a7161b",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "runtime_completed",
+        "state": {
+          "execution": "succeeded",
+          "capture": "sealed",
+          "delivery": "pending"
+        },
+        "runtime_report": {
+          "execution": {
+            "schema_version": "agentprovenance.runtime_adapter/v1",
+            "binding": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-restart",
+                "generation": "generation-1"
+              },
+              "mode": "runsc",
+              "container_id": "ap-r02-receiver-restart",
+              "state_created": "2026-11-16T16:47:27.995186827Z"
+            },
+            "operation_id": "after-reconnect-submit",
+            "attempt_id": "execution-b90eff0954594a9c3fdb25c761610dec",
+            "run_id": "run-7465183d38e41652469b4dcb4ce6f710",
+            "state": "succeeded",
+            "started": true,
+            "exit_code": 0,
+            "runtime_release": "release-20261109.0",
+            "sentry_pid": 20,
+            "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+            "sentry_start_ns": "1794847651562379779",
+            "gate_released": true,
+            "gaps": [
+              "external_container_execution_untracked"
+            ]
+          },
+          "capture": {
+            "observation_layer": "sentry",
+            "scope_ref": "gvisor/c008e206eb46336b73be0b230964eeaabd97da211b715f7d6dad84d6503a48fa",
+            "state": "sealed",
+            "start": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-restart",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:31.30030791Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-d546d3c6c21c",
+                "generated_at": "2026-11-16T16:47:31.212274259Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-receiver-restart",
+                    "socket_path": "/root/ap-r02-api-4/receiver-restart/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-receiver-restart",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-receiver-restart",
+                      "container_id": "ap-r02-receiver-restart",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-013a90f03cac",
+                    "last_sequence": 16,
+                    "last_observation_at": "2026-11-16T16:47:31.1039565Z",
+                    "accepted_records": 18,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-receiver-restart",
+                "socket_path": "/root/ap-r02-api-4/receiver-restart/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-receiver-restart",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-receiver-restart",
+                  "container_id": "ap-r02-receiver-restart",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "end": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-restart",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:36.215107667Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-d546d3c6c21c",
+                "generated_at": "2026-11-16T16:47:36.21246698Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-receiver-restart",
+                    "socket_path": "/root/ap-r02-api-4/receiver-restart/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-receiver-restart",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-receiver-restart",
+                      "container_id": "ap-r02-receiver-restart",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-013a90f03cac",
+                    "last_sequence": 89,
+                    "last_observation_at": "2026-11-16T16:47:35.626475414Z",
+                    "accepted_records": 91,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-receiver-restart",
+                "socket_path": "/root/ap-r02-api-4/receiver-restart/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-receiver-restart",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-receiver-restart",
+                  "container_id": "ap-r02-receiver-restart",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "gaps": [],
+            "command": {
+              "root": {
+                "pid": 20,
+                "start_ns": "1794847651562379779"
+              },
+              "drain": {
+                "observed_at": "2026-11-16T16:47:34.91552526Z",
+                "basis": "runsc_ps_root_taskset",
+                "empty": true,
+                "remaining": []
+              },
+              "barrier": {
+                "process": {
+                  "pid": 29,
+                  "start_ns": "1794847655106899352"
+                },
+                "marker": "/.agentprov-watermark-55449f2a9c617c71c0aec0b5607bab87"
+              },
+              "barrier_event_ref": "evt-seccheck-d4764546ab299771319a4c6dbc1918f84b4bc914c2866c08b0b6e63f780f562c",
+              "barrier_sequence": 79,
+              "clone_event_refs": [
+                "evt-seccheck-217a349248b5ebd2f300e9ff4e996f7ed6d88237612f808232e19f8826611f1a",
+                "evt-seccheck-fa88e03c73121f6326970ae1f8d67c61ddb35d24484e8544ee1c23e283d70830",
+                "evt-seccheck-c98dd51bd762ac31766d4e819a6ea134af8678ddcd0e271fcb703ba184de182f",
+                "evt-seccheck-b1db458e88c6df378c8b417fd5a45a8c676c88949921cfc9837ceff8f6636221",
+                "evt-seccheck-9df9cb8eb7522f2321e7fed5697bdf75e5d20f3d29be39f947c5d697cb133503",
+                "evt-seccheck-3da497001767ce70f548f82f37ee24a54f00d1146e3a45c8b30cff265cccbc4f",
+                "evt-seccheck-b0090a134c9b6bb3e9962628de15cc4d20247dd55ce551aace2e59d73fd65283",
+                "evt-seccheck-aa4749b217465e37e2bb6d13ff8590f6280d086954c4e1ac0faa7e68e65e1936"
+              ],
+              "process_count": 2,
+              "event_count": 43,
+              "root_wait_status": 0,
+              "basis": "controlled_birth_clone_closure_taskset_absence_and_committed_barrier"
+            },
+            "evidence_ref": "sha256:fe212e44fb2af9d3fb6719b6c67ee9b005570b09871732eb88e6359fadb6118f"
+          }
+        }
+      }
+    },
+    "receiver-restart/receiver-restart-report.json": {
+      "original_report_sha256": "2d28477123ff26dfeb06d0edde7b5ed605efec872447446bf559d88f0661abbf",
+      "attempt_id": "execution-1e3592bfe99efe3d5f9cd4df0d65024c",
+      "state": {
+        "execution": "succeeded",
+        "capture": "incomplete",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:782a5fe603605fbf469c8748981f5a845e3c3befaff52810db67db5a13a5cac1",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "runtime_completed",
+        "state": {
+          "execution": "succeeded",
+          "capture": "incomplete",
+          "delivery": "pending"
+        },
+        "runtime_report": {
+          "execution": {
+            "schema_version": "agentprovenance.runtime_adapter/v1",
+            "binding": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-restart",
+                "generation": "generation-1"
+              },
+              "mode": "runsc",
+              "container_id": "ap-r02-receiver-restart",
+              "state_created": "2026-11-16T16:47:27.995186827Z"
+            },
+            "operation_id": "receiver-restart-submit",
+            "attempt_id": "execution-1e3592bfe99efe3d5f9cd4df0d65024c",
+            "run_id": "run-6bc4f200d55e0fbffaecef3cc2c435a1",
+            "state": "succeeded",
+            "started": true,
+            "exit_code": 0,
+            "runtime_release": "release-20261109.0",
+            "sentry_pid": 2,
+            "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+            "sentry_start_ns": "1794847649487788715",
+            "gate_released": true,
+            "gaps": [
+              "command_capture_watermark_unavailable",
+              "external_container_execution_untracked"
+            ]
+          },
+          "capture": {
+            "observation_layer": "sentry",
+            "scope_ref": "gvisor/c008e206eb46336b73be0b230964eeaabd97da211b715f7d6dad84d6503a48fa",
+            "state": "incomplete",
+            "start": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-restart",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:29.316727014Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-e4f7f1e67d98",
+                "generated_at": "2026-11-16T16:47:29.303650349Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-receiver-restart",
+                    "socket_path": "/root/ap-r02-api-4/receiver-restart/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-receiver-restart",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-receiver-restart",
+                      "container_id": "ap-r02-receiver-restart",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-2013b2c678a3",
+                    "last_sequence": 0,
+                    "last_observation_at": "2026-11-16T16:47:28.103575401Z",
+                    "accepted_records": 1,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-receiver-restart",
+                "socket_path": "/root/ap-r02-api-4/receiver-restart/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-receiver-restart",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-receiver-restart",
+                  "container_id": "ap-r02-receiver-restart",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "end": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-restart",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:30.999388333Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-d546d3c6c21c",
+                "generated_at": "2026-11-16T16:47:30.911806961Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-receiver-restart",
+                    "socket_path": "/root/ap-r02-api-4/receiver-restart/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-receiver-restart",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-receiver-restart",
+                      "container_id": "ap-r02-receiver-restart",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-013a90f03cac",
+                    "last_sequence": 8,
+                    "last_observation_at": "2026-11-16T16:47:30.906265204Z",
+                    "accepted_records": 10,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-receiver-restart",
+                "socket_path": "/root/ap-r02-api-4/receiver-restart/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-receiver-restart",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-receiver-restart",
+                  "container_id": "ap-r02-receiver-restart",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "gaps": [
+              "command_capture_watermark_unavailable",
+              "receiver_reconnected"
+            ]
+          }
+        }
+      }
+    },
+    "receiver-restart/receiver-restart-running-report.json": {
+      "original_report_sha256": "5926e91404ad023b9008803ddfa1cba774b2d850cbeea0f5a0cc9c392c897f8d",
+      "attempt_id": "execution-1e3592bfe99efe3d5f9cd4df0d65024c",
+      "state": {
+        "execution": "running",
+        "capture": "collecting",
+        "delivery": "pending"
+      },
+      "checkpoint_ref": "sha256:e9704ff6b99af469ef3139f15639c437a6c9e17f9f40afda27f26e6ac4c4fddb",
+      "stop_requested": false,
+      "checkpoint": {
+        "reason": "runtime_dispatched",
+        "state": {
+          "execution": "running",
+          "capture": "collecting",
+          "delivery": "pending"
+        },
+        "runtime_report": {
+          "execution": {
+            "schema_version": "agentprovenance.runtime_adapter/v1",
+            "binding": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-restart",
+                "generation": "generation-1"
+              },
+              "mode": "runsc",
+              "container_id": "ap-r02-receiver-restart",
+              "state_created": "2026-11-16T16:47:27.995186827Z"
+            },
+            "operation_id": "receiver-restart-submit",
+            "attempt_id": "execution-1e3592bfe99efe3d5f9cd4df0d65024c",
+            "run_id": "run-6bc4f200d55e0fbffaecef3cc2c435a1",
+            "state": "running",
+            "started": false,
+            "runtime_release": "release-20261109.0",
+            "sentry_pid": 2,
+            "sentry_pid_basis": "private_exec_fd_gate_and_runsc_procfs",
+            "sentry_start_ns": "1794847649487788715",
+            "gaps": [
+              "command_capture_watermark_unavailable",
+              "external_container_execution_untracked"
+            ]
+          },
+          "capture": {
+            "observation_layer": "sentry",
+            "scope_ref": "",
+            "state": "collecting",
+            "start": {
+              "target": {
+                "producer_id": "runsc-acceptance",
+                "instance_id": "ap-r02-api-4-receiver-restart",
+                "generation": "generation-1"
+              },
+              "observed_at": "2026-11-16T16:47:29.316727014Z",
+              "receiver_status": {
+                "schema_version": "agentprovenance.seccheck_status/v1",
+                "collector_id": "seccheck-e4f7f1e67d98",
+                "generated_at": "2026-11-16T16:47:29.303650349Z",
+                "state": "listening",
+                "expected_runtime_release": "release-20261109.0",
+                "protocol_version": 1,
+                "capabilities": {
+                  "producer": "agentprov",
+                  "producer_version": "v1.0.0-candidate",
+                  "producer_commit": "afe3f9616ca017ce09a4e76719226500c1d812c1",
+                  "placement": "host_receiver",
+                  "identity_domain": "sentry",
+                  "system_telemetry": "partial",
+                  "model_intent": "none",
+                  "app_context": "none",
+                  "supported_points": [
+                    "container/start",
+                    "sentry/clone",
+                    "sentry/execve",
+                    "sentry/task_exit",
+                    "sentry/exit_notify_parent",
+                    "syscall/openat/enter",
+                    "syscall/openat/exit",
+                    "syscall/connect/enter",
+                    "syscall/connect/exit",
+                    "syscall/execve/enter",
+                    "syscall/execve/exit"
+                  ],
+                  "enabled_points_basis": "observed_records",
+                  "runtime_release_basis": "trusted_launcher_assertion",
+                  "raw_packets_retained": false
+                },
+                "targets": [
+                  {
+                    "run_id": "receiver-receiver-restart",
+                    "socket_path": "/root/ap-r02-api-4/receiver-restart/events.sock",
+                    "registration": {
+                      "namespace": "runsc-acceptance",
+                      "instance_id": "ap-r02-api-4-receiver-restart",
+                      "generation": "generation-1",
+                      "sandbox_id": "ap-r02-receiver-restart",
+                      "container_id": "ap-r02-receiver-restart",
+                      "peer_uid": 0
+                    },
+                    "state": "connected",
+                    "connection_id": "secconn-2013b2c678a3",
+                    "last_sequence": 0,
+                    "last_observation_at": "2026-11-16T16:47:28.103575401Z",
+                    "accepted_records": 1,
+                    "reported_dropped_events": 0,
+                    "drop_counter_decreases": 0,
+                    "identity_gap_records": 0,
+                    "last_diagnostic": "connected"
+                  }
+                ]
+              },
+              "receiver_target": {
+                "run_id": "receiver-receiver-restart",
+                "socket_path": "/root/ap-r02-api-4/receiver-restart/events.sock",
+                "registration": {
+                  "namespace": "runsc-acceptance",
+                  "instance_id": "ap-r02-api-4-receiver-restart",
+                  "generation": "generation-1",
+                  "sandbox_id": "ap-r02-receiver-restart",
+                  "container_id": "ap-r02-receiver-restart",
+                  "peer_uid": 0
+                }
+              }
+            },
+            "gaps": [
+              "shared_call_identity_unavailable"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "signed_delivery": {
+    "sha256": "460fb7efef5a620e053a32be1afcef2c760dd7a98567fc2d9758dbd59d08c3fb",
+    "result": {
+      "schema_version": "agentprovenance.execution_delivery/v1",
+      "delivery_id": "597a67eea700f59cf7e22b70b106a22544ae41bdb1d6c3dfaebb2399d8fe36f8",
+      "local_run_id": "run-d07182fb3a495e89db6443b6378162ae",
+      "manifest_sha256": "998e155f846ae8992da45eb328c3defd7c8a9dd5dec634f1a1e938aaf8d9efa2",
+      "bundle_sha256": "f0761e0a11359902f3ca3b375a8089a639c559e6f0f5e3fcfd36b568cba3bd3b",
+      "status": "acknowledged",
+      "receipt": {
+        "payloadType": "application/vnd.in-toto+json",
+        "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJzdWJqZWN0IjpbeyJuYW1lIjoiZXhlY3V0aW9uLWRlbGl2ZXJ5LzU5N2E2N2VlYTcwMGY1OWNmN2UyMmI3MGIxMDZhMjI1NDRhZTQxYmRiMWQ2YzNkZmFlYmIyMzk5ZDhmZTM2ZjgiLCJkaWdlc3QiOnsic2hhMjU2IjoiOTk4ZTE1NWY4NDZhZTg5OTJkYTQ1ZWIzMjhjM2RlZmQ3YzhhOWRkNWRlYzYzNGYxYTFlOTM4YWFmOGQ5ZWZhMiJ9fV0sInByZWRpY2F0ZVR5cGUiOiJodHRwczovL2FnZW50cHJvdmVuYW5jZS5kZXYvRXhlY3V0aW9uUmVjZWlwdC92MSIsInByZWRpY2F0ZSI6eyJzY2hlbWFfdmVyc2lvbiI6ImFnZW50cHJvdmVuYW5jZS5leGVjdXRpb25fcmVjZWlwdC92MSIsImRlbGl2ZXJ5X2lkIjoiNTk3YTY3ZWVhNzAwZjU5Y2Y3ZTIyYjcwYjEwNmEyMjU0NGFlNDFiZGIxZDZjM2RmYWViYjIzOTlkOGZlMzZmOCIsImlkZW50aXR5Ijp7InNvdXJjZSI6eyJwcm9kdWNlcl9pZCI6ImNhbGxlciIsIm5hbWVzcGFjZSI6ImZpeHR1cmUiLCJydW5faWQiOiJiYXNlbGluZSIsImhhcm5lc3MiOiJydW5zYy1odHRwLWZpeHR1cmUiLCJzZXNzaW9uX2lkIjoib25jZSIsInRvb2xfY2FsbF9pZCI6InRvb2wifSwidGFyZ2V0Ijp7InByb2R1Y2VyX2lkIjoicnVuc2MtYWNjZXB0YW5jZSIsImluc3RhbmNlX2lkIjoiYXAtcjAyLWFwaS00LWJhc2VsaW5lIiwiZ2VuZXJhdGlvbiI6ImdlbmVyYXRpb24tMSJ9LCJkaXNwYXRjaF9pZCI6Im9uY2UiLCJhdHRlbXB0X2lkIjoiZXhlY3V0aW9uLTVlMDg3Yzc0OGFjZGYyZDkyZDk1OWJjY2M3M2IzMzQ4IiwicmVxdWVzdF9oYXNoIjoiNDEwNDdjNzM1YmUxMTkwYjEwMWU0NjJhZDI2MjgwYzk3MDM1ODc2YmNlYjQwMjk5ZjU4YjE0YTQ1MjNiMzI3NyIsImRpZ2VzdF92ZXJzaW9uIjoiYWdlbnRwcm92ZW5hbmNlLmV4ZWN1dGlvbl9yZXF1ZXN0X3NoYTI1Ni92MSIsImxvY2FsX3J1bl9pZCI6InJ1bi1kMDcxODJmYjNhNDk1ZTg5ZGI2NDQzYjYzNzgxNjJhZSJ9LCJyZWNlaXZlcl9pZCI6InJlYWRlciIsInBhY2thZ2VfdmVyc2lvbiI6MSwibWFuaWZlc3Rfc2hhMjU2IjoiOTk4ZTE1NWY4NDZhZTg5OTJkYTQ1ZWIzMjhjM2RlZmQ3YzhhOWRkNWRlYzYzNGYxYTFlOTM4YWFmOGQ5ZWZhMiIsImJ1bmRsZV9zaGEyNTYiOiJmMDc2MWUwYTExMzU5OTAyZjNjYTNiMzc1YTgwODlhNjM5YzU1OWU2ZjBmNWUzZmNmZDM2YjU2OGNiYTNiZDNiIiwiYnVuZGxlX2J5dGVzIjoyMTM3NDksInN0YXR1cyI6InBlcnNpc3RlZCIsInJlY2VpdmVkX2F0IjoiMjAyNi0xMS0xNlQxNjo0NzoxNC44MDUyNzMwNDJaIn19",
+        "signatures": [
+          {
+            "keyid": "2f95348f5fa19b21",
+            "sig": "aYiU1Ruun6g6f2mbynEkV58YMrx4fTCjLAzBXfC26P8xLs7NpC0WEPrW1Pit+Z4sQhcKHDv/nYh0Aa+ZUEv0BQ=="
+          }
+        ]
+      }
+    }
+  },
+  "prior_attempts": [
+    {
+      "sha256": "9419f32e5cbfa23e913e59b5a370f1b7124fafb9d12131d7a62180ec1f634f01",
+      "result": {
+        "schema_version": "agentprovenance.runsc_execution_acceptance/v1",
+        "status": "FAIL",
+        "cli_source_sha": "19b3dd0b6554504562e97ef0f44052ca2a8b1784",
+        "fixture_source_sha": "2247bb6b7dd15bc256568edf83870e3df9de8570",
+        "fixture_sha256": "a9430f068983252b7f0bb70e345a4cac7231009ee869fd64bf497ecdf52de54e",
+        "command": [
+          "/opt/agentprov-v1-completion/runsc-fixture-2247/scripts/accept_execution_runsc.py",
+          "--cli",
+          "/opt/agentprov-v1-completion/agentprov-watermark2",
+          "--runsc",
+          "/opt/agentprov-v1-completion/runsc",
+          "--rootfs",
+          "/var/tmp/apv1/runtime/rootfs",
+          "--output",
+          "/root/ap-r02-api-1",
+          "--source-sha",
+          "19b3dd0b6554504562e97ef0f44052ca2a8b1784",
+          "--fixture-source-sha",
+          "2247bb6b7dd15bc256568edf83870e3df9de8570"
+        ],
+        "cli_version": "agentprov version v1.0.0-candidate (19b3dd0b6554504562e97ef0f44052ca2a8b1784; unknown; linux/amd64)",
+        "python_version": "3.12.3",
+        "cli_sha256": "3753d2ecc8517802858889454d328c650f5d3a0a8cfd292273e2e7e1ed23bd5a",
+        "runsc_sha256": "c58f1dc2a3855487bf3bedc2edf074123ad433f1d98fb7f451f56790e87b5c9f",
+        "kernel": "6.8.0-149-generic",
+        "architecture": "x86_64",
+        "checks": {
+          "baseline": {
+            "status": "PASS",
+            "checks": [
+              "lost_admission_reply",
+              "duplicate_submission",
+              "query_no_reexecution",
+              "explicit_retry",
+              "wrong_generation",
+              "native_nonzero_exit",
+              "signed_command_evidence",
+              "receipt_restart"
+            ],
+            "target": {
+              "producer_id": "runsc-acceptance",
+              "instance_id": "ap-r02-api-1-baseline",
+              "generation": "generation-1"
+            }
+          }
+        },
+        "error": "command failed: creating session: sending handshake message: write /root/ap-r02-api-1/receiver-reconnect/events.sock: broken pipe\n",
+        "elapsed_seconds": 11.236607793000076
+      },
+      "correction": "Close the existing trace before creating its replacement: the receiver admits one producer per scope."
+    },
+    {
+      "sha256": "66c6dcdaec4f33bb02b220f8da99ea30553760237679ad19a9789e4affb33267",
+      "result": {
+        "schema_version": "agentprovenance.runsc_execution_acceptance/v1",
+        "status": "FAIL",
+        "cli_source_sha": "19b3dd0b6554504562e97ef0f44052ca2a8b1784",
+        "fixture_source_sha": "862a2b8a9bc3e84a3ccdbae07c8a0a32f91d3f7f",
+        "fixture_sha256": "22980db2266d2c6b4b46597eea7a08485652d70d8392a4a1d96da0703ec7bea3",
+        "command": [
+          "/opt/agentprov-v1-completion/runsc-fixture-862a/scripts/accept_execution_runsc.py",
+          "--cli",
+          "/opt/agentprov-v1-completion/agentprov-watermark2",
+          "--runsc",
+          "/opt/agentprov-v1-completion/runsc",
+          "--rootfs",
+          "/var/tmp/apv1/runtime/rootfs",
+          "--output",
+          "/root/ap-r02-api-2",
+          "--source-sha",
+          "19b3dd0b6554504562e97ef0f44052ca2a8b1784",
+          "--fixture-source-sha",
+          "862a2b8a9bc3e84a3ccdbae07c8a0a32f91d3f7f"
+        ],
+        "cli_version": "agentprov version v1.0.0-candidate (19b3dd0b6554504562e97ef0f44052ca2a8b1784; unknown; linux/amd64)",
+        "python_version": "3.12.3",
+        "cli_sha256": "3753d2ecc8517802858889454d328c650f5d3a0a8cfd292273e2e7e1ed23bd5a",
+        "runsc_sha256": "c58f1dc2a3855487bf3bedc2edf074123ad433f1d98fb7f451f56790e87b5c9f",
+        "kernel": "6.8.0-149-generic",
+        "architecture": "x86_64",
+        "checks": {
+          "baseline": {
+            "status": "PASS",
+            "checks": [
+              "lost_admission_reply",
+              "duplicate_submission",
+              "query_no_reexecution",
+              "explicit_retry",
+              "wrong_generation",
+              "native_nonzero_exit",
+              "signed_command_evidence",
+              "receipt_restart"
+            ],
+            "target": {
+              "producer_id": "runsc-acceptance",
+              "instance_id": "ap-r02-api-2-baseline",
+              "generation": "generation-1"
+            }
+          }
+        },
+        "error": "deadline: old trace disconnected",
+        "elapsed_seconds": 29.363610102000166
+      },
+      "correction": "Create tracing after OCI running, using a short-lived trace client; the initial launcher retained a sink descriptor."
+    },
+    {
+      "sha256": "abb28d16bfc10e067ce18b14fc91ec179fff8f8b0b21c547f2c2f95f8268e066",
+      "result": {
+        "schema_version": "agentprovenance.runsc_execution_acceptance/v1",
+        "status": "FAIL",
+        "cli_source_sha": "19b3dd0b6554504562e97ef0f44052ca2a8b1784",
+        "fixture_source_sha": "6a70e1d773be584dbf8f2a49837e7cb036890fc9",
+        "fixture_sha256": "52ea4cc2c6028f48b0c48ca2cb896ec5b7379f30ea4f4aa1564e3708f85e4d12",
+        "command": [
+          "/opt/agentprov-v1-completion/runsc-fixture-6a70/scripts/accept_execution_runsc.py",
+          "--cli",
+          "/opt/agentprov-v1-completion/agentprov-watermark2",
+          "--runsc",
+          "/opt/agentprov-v1-completion/runsc",
+          "--rootfs",
+          "/var/tmp/apv1/runtime/rootfs",
+          "--output",
+          "/root/ap-r02-api-3",
+          "--source-sha",
+          "19b3dd0b6554504562e97ef0f44052ca2a8b1784",
+          "--fixture-source-sha",
+          "6a70e1d773be584dbf8f2a49837e7cb036890fc9"
+        ],
+        "cli_version": "agentprov version v1.0.0-candidate (19b3dd0b6554504562e97ef0f44052ca2a8b1784; unknown; linux/amd64)",
+        "python_version": "3.12.3",
+        "cli_sha256": "3753d2ecc8517802858889454d328c650f5d3a0a8cfd292273e2e7e1ed23bd5a",
+        "runsc_sha256": "c58f1dc2a3855487bf3bedc2edf074123ad433f1d98fb7f451f56790e87b5c9f",
+        "kernel": "6.8.0-149-generic",
+        "architecture": "x86_64",
+        "checks": {
+          "baseline": {
+            "status": "PASS",
+            "checks": [
+              "lost_admission_reply",
+              "duplicate_submission",
+              "query_no_reexecution",
+              "explicit_retry",
+              "wrong_generation",
+              "native_nonzero_exit",
+              "signed_command_evidence",
+              "receipt_restart"
+            ],
+            "target": {
+              "producer_id": "runsc-acceptance",
+              "instance_id": "ap-r02-api-3-baseline",
+              "generation": "generation-1"
+            }
+          },
+          "receiver-reconnect": {
+            "status": "PASS",
+            "checks": [
+              "receiver-reconnect",
+              "query_no_reexecution",
+              "committed_events_preserved"
+            ],
+            "target": {
+              "producer_id": "runsc-acceptance",
+              "instance_id": "ap-r02-api-3-receiver-reconnect",
+              "generation": "generation-1"
+            }
+          }
+        },
+        "error": "preservation check requires committed observations",
+        "elapsed_seconds": 121.88897279699995
+      },
+      "correction": "Wait for committed native rows before fault injection; an immediate empty snapshot invalidated the preservation assertion."
+    }
+  ],
+  "cli_build_info": [
+    "go1.26.8",
+    "build\t-buildmode=exe",
+    "build\t-compiler=gc",
+    "build\t-trimpath=true",
+    "build\tDefaultGODEBUG=containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,httpcookiemaxnum=0,multipathtcp=0,randseednop=0,rsa1024min=0,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0",
+    "build\tCGO_ENABLED=0",
+    "build\tGOARCH=amd64",
+    "build\tGOOS=linux",
+    "build\tGOAMD64=v1"
+  ],
+  "published_runtime_source": {
+    "commit": "5fea599144418585f86287144a856c922dc0fb1b",
+    "difference_from_cli_source": [
+      "scripts/accept_execution_runsc.py"
+    ]
+  }
+}

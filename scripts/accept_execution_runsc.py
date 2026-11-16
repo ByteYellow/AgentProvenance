@@ -276,7 +276,7 @@ def fault(s, mode):
     admission = s.submit(request)
     s.wait(admission, mode + "-running", running=True)
     wait_for(lambda: (s.control / "entered").exists(), "workload dispatched")
-    before = s.events()
+    before = wait_for(s.events, "pre-fault receiver events committed")
     if mode == "executor-restart":
         s.daemon.kill(); require(s.daemon.wait(timeout=10) == -signal.SIGKILL, "executor kill failed")
         s.start_daemon()
