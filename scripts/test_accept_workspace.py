@@ -1,6 +1,8 @@
+import ast
 import asyncio
 import contextlib
 import hashlib
+import inspect
 import io
 import json
 from pathlib import Path
@@ -76,6 +78,43 @@ class FixtureTests(unittest.TestCase):
             function()
         self.assertEqual(caught.exception.code, code)
         return caught.exception
+
+
+class HarnessPromptTests(FixtureTests):
+    def content(self, filename):
+        prefix = filename + " content (JSON string): "
+        values = [line[len(prefix):] for line in acceptance.PROMPT.splitlines() if line.startswith(prefix)]
+        self.assertEqual(len(values), 1, "prompt must contain one explicit JSON string for " + filename)
+        return json.loads(values[0]).encode("utf-8")
+
+    def test_note_json_has_exact_trailing_lf(self):
+        note = self.content("note.txt")
+        self.assertEqual(note, b"agent-note\n")
+        self.assertEqual(len(note), 11)
+
+    def test_result_json_matches_unchanged_verifier_bytes(self):
+        tree = ast.parse(inspect.getsource(acceptance.verify_harness_run))
+        literals = [node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, bytes)]
+        self.assertEqual(literals, [b"value=2\nagent-note\n"])
+        result = self.content("result.txt")
+        self.assertEqual(result, literals[0])
+        self.assertEqual(len(result), 19)
+        self.assertIn("19 UTF-8 bytes", acceptance.PROMPT)
+        self.assertIn("LF (0x0A)", acceptance.PROMPT)
+
+    def test_original_verifier_still_rejects_missing_final_lf(self):
+        prefix = "mcp__" + acceptance.MCP_SERVER + "__"
+        events = [
+            {"type": "system", "subtype": "init", "tools": sorted(prefix + tool for tool in acceptance.TOOLS),
+             "mcp_servers": [{"name": acceptance.MCP_SERVER, "status": "connected"}]},
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "id": name, "name": prefix + "workspace_" + name}
+                for name in ("inspect", "read", "edit", "write", "bash", "read")]}},
+            {"type": "result", "subtype": "success", "is_error": False},
+        ]
+        (self.base / "claude.stdout").write_text("\n".join(json.dumps(event) for event in events))
+        (Path(self.config["root"]) / "result.txt").write_bytes(b"value=2\nagent-note")
+        self.assert_failure("artifact_mismatch", lambda: acceptance.verify_harness_run(self.base, self.config, 0))
 
 
 class SensorEvidenceTests(FixtureTests):

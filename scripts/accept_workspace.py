@@ -30,12 +30,19 @@ from urllib.parse import quote
 
 MCP_SERVER = "agentprov_workspace"
 TOOLS = {"workspace_inspect", "workspace_read", "workspace_edit", "workspace_write", "workspace_bash"}
-PROMPT = """Use only the workspace MCP tools for this small task. First inspect the binding,
+PROMPT = r"""Use only the workspace MCP tools for this small task. First inspect the binding,
 then read input.txt. Replace value=1 with value=2 using workspace_edit and the revision/digest
-returned by that read. Use workspace_write to create note.txt containing exactly agent-note\n,
-with the current revision or expected_digest='absent'. Then call workspace_bash with the current
+returned by that read. Use workspace_write to create note.txt with the decoded content below,
+using the current revision or expected_digest='absent'.
+note.txt content (JSON string): "agent-note\n"
+The JSON escape \n represents an actual LF (0x0A) byte; the quotes are JSON delimiters.
+Pass that decoded string as the tool's content: exactly 11 UTF-8 bytes, including the final LF.
+Then call workspace_bash with the current
 observed revision and command: cat input.txt note.txt > result.txt; printf WORKSPACE_HARNESS_OK
-Read result.txt to verify its exact content is value=2\nagent-note\n. Do not install packages,
+Read result.txt and verify the exact decoded content below:
+result.txt content (JSON string): "value=2\nagent-note\n"
+The file must contain exactly 19 UTF-8 bytes, with one LF after each line, including the final line.
+Do not install packages,
 use background commands, or use any other tools. On CAS conflict reread and decide a new edit;
 on unknown/recovery inspect rather than replaying Bash. Finish with the verified result name."""
 
