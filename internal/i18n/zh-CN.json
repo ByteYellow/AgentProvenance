@@ -2881,6 +2881,7 @@
   "workspace write from a JSON stdin request": "从标准输入读取 JSON 请求，写入工作区文件",
   "explicit receiver-owned Browser import configuration, outside the capture directory": "接收方配置的浏览器导入配置文件，须位于采集目录之外",
   "private JSON array of Browser receipts to verify against the receiver-pinned capture": "待核验的浏览器回执 JSON 数组文件，根据接收方固定的采集记录进行验证",
+  "owned Browser import requires --run, --harness browser, --browser-owned-config and --browser-receipts; source overrides are not allowed": "受控浏览器导入须指定 --run、--harness browser、--browser-owned-config 和 --browser-receipts；来源由接收方配置固定",
   "omit messages, tools, configuration, files, or runtime (repeatable)": "排除 messages、tools、configuration、files 或 runtime 类别，可重复指定",
   "omit a search catalog record ID and its linked readers (repeatable)": "排除搜索目录中的记录 ID 及其关联阅读入口，可重复指定",
   "limit to a native session; requires --session": "限定到原生会话，需同时指定 --session",
