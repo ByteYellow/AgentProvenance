@@ -43,7 +43,7 @@ Code, browser and desktop sandboxes describe the tools available to an Agent,
 not the kernel boundary. Browser and Notebook adapters add page, operation and
 request context to explain work inside long-lived processes. Linux system
 capture is configured separately. The scope table below lists current entries
-and the remaining desktop, mobile and platform-specific work.
+and the remaining desktop and platform-specific work.
 
 ## First experience: portable replay
 
@@ -101,7 +101,6 @@ exercised, their binary hashes and capture coverage.
 | Long-running and branching tasks | Sessions, execution attempts, durable delivery and lifecycle generations | Pinned gVisor memory restore and two-clone evidence continuity; browser login and external connection recovery require separate workflow checks |
 | RL / batch evaluation | Per-run recording, batch manifests, EvalContext and offline evaluator results | Scheduling, training, rewards and sandbox provisioning remain with the calling platform |
 | Enterprise internal platform | Authenticated local APIs, node collection, signed evidence and offline sharing | Central multi-tenant storage, SSO, quotas and HA remain outside the implemented local service |
-| Android / iOS | No native mobile collector or operation adapter | Outside the v1.0 scope |
 
 The following integration boundaries matter when choosing a sandbox platform:
 
