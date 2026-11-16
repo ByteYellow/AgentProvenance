@@ -25,6 +25,7 @@ import uuid
 from common import Blocked, artifact_inventory, clean_env, command, digest, load, redact, require, save, start_owned, stop_owned
 from binding import expected_platform, rejection_checks, trusted_read, validate_checkpoint, validate_receipt
 from reader import verify_reader
+from workspace_case import run_case
 
 
 HERE = Path(__file__).resolve().parent
@@ -342,6 +343,12 @@ class Guest:
                     "Guest standalone verifier build metadata mismatch")
             self.report["checks"]["derived_verifier"] = verify_reader(self.args.binary, self.args.verifier,
                 self.root / "offline", run_id, self.root / "reader", source=self.receipt["source"])
+        if self.args.workspace_case:
+            require(json.loads(trusted_read(self.control / "workspace-target.json")) == self.config["target"],
+                    "workspace operator target differs from the bound Guest")
+            self.report["checks"]["workspace_case"] = run_case(self.args.binary, self.args.verifier,
+                HERE / "accept_workspace.py", HERE / "python", self.control, self.root / "workspace",
+                self.config, self.lock, self.receipt["source"], self.args.workspace_case)
 
     def stop(self):
         if self.process:
@@ -371,6 +378,7 @@ def main():
     parser.add_argument("--binding-dir", type=Path, required=True)
     parser.add_argument("--verifier", type=Path)
     parser.add_argument("--previous-target")
+    parser.add_argument("--workspace-case", choices=("contract", "harness"))
     parser.add_argument("--timeout", type=int, default=600)
     args = parser.parse_args()
     os.umask(0o077)

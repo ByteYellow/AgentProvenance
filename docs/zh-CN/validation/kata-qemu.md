@@ -166,6 +166,49 @@ Guest 步骤总时限 600 秒，Pod active deadline 为 720 秒；节点等待�
 `agentprov-verify --trust-policy FILE ZIP`。接收方策略在包外单独提供，并授权 `exporter`
 角色。未指定验证器时，`derived_verifier` 保留待验收。
 
+## 可选 Workspace 案例
+
+在同一节点命令中加入 `--workspace-case contract --verifier /srv/agentprov/agentprov-verify`，
+即可在**重建后的第二个 Guest** 内复用 `scripts/accept_workspace.py` 的 stdio MCP fixture。
+省略该选项时，原两次启动流程不变；只写 `--workspace-case` 时默认选择 `contract`。
+填写 `lock.verifier`，并将
+`lock.workspace.mcp_version` 固定为工作负载镜像内已经安装的 MCP 包版本。
+runner 复制并校验现有 Python MCP bridge 和 SDK 模块摘要，不安装依赖。
+
+Workspace 使用与 `execution.json` 相同的操作者授权 Target，由只读
+`/binding/workspace-target.json` 传入。各案例只修改自身副本来测试过期 generation 拒绝，
+不修改操作者文件。每个案例的 Read、Edit、Write、Bash 使用同一个 remote-authoritative root。
+输入/输出 revision、manifest 和实际 record attempt 由内容寻址的 workspace 证据核对，
+签名导入后再次检查。
+
+现有 handoff collector 停止后才启动 workspace capture。Workspace fixture 在自身 store
+上运行 `sensor stream --placement guest_kernel`，等待必需探针 attached，结束时停止并
+排空 collector 后再导出。同 run、record attempt 必须在其非零 owned cgroup 中有原生
+exec/file 观察。接受的 correlation method 为 `cgroup_time_window:*` 或
+`kernel_process_instance:*`，且每条所选事件的 cgroup 必须与该作用域相同。
+scope-only 事件保留空 tool ID，以 `owned_record_cgroup` 报告，不升级为工具级归属。
+Sensor build、placement、Guest boot 和 collector 生命周期与锁和操作者绑定核对。
+环境前提缺失保留 `BLOCKED`/退出码 2。
+
+MCP fixture 完成后，使用已有签名 `forensics export` 和固定公钥导入到新 store，
+比较导入前后的 workspace/native-event 证据，再执行签名 derived-reader 导出和独立验证器。
+报告和交付包保留在 `boot-2/workspace/{contract,harness}-delivery/`；
+`kata-workspace.json` 记录模式、Target 和验证结果。
+
+`contract` 是真实 CLI/MCP 契约测试，不调用模型 provider；通过后记录契约结果，完整
+`workspace_case` 矩阵行仍为 `PENDING`。真实 Harness 模式选择 `--workspace-case harness`，
+并将 `lock.workspace.harness.path` 和 `.sha256` 固定为 **Guest 容器内已有且已认证的 Claude
+入口**。同一 fixture 复用已有 `--claude` 路径，检查实际受控 MCP tool call。
+认证由操作者的既有部署提供，凭据不得写入镜像、lock、入口脚本、Pod plan 或证据。
+runner 不复制凭据、不增加 Secret 挂载、不登录，也不通过 MCP 工具参数转发 provider 凭据；
+入口缺失时报告缺项，不自动部署。Harness 日志保持私有并脱敏。
+
+只有真实 native Guest Harness 案例及签名交付全部通过，才设置 `workspace_case=PASS`。
+本地 Sensor-off CLI/MCP、dry-run 和 contract-only 模式均保留该行待实跑。
+原 Guest 600 秒、节点 stage 690 秒、Pod 720 秒时限不变，可选案例共享这一预算。
+案例子进程另外限定为 contract 150 秒、含既有有界 Harness 流程的模式 400 秒。
+此接线不需要 UI 改动。
+
 ## 产物与隐私
 
 `report.json` 记录当前源码 SHA/dirty 状态、二进制及 fixture 摘要、锁摘要、节点/运行时身份、
@@ -198,7 +241,7 @@ Q-01 及报告整体状态继续保持 `PENDING`。
 dry-run 和仅节点 preflight 均保留所有硬件验收行为待执行。
 
 Q-01 还保留以下 `PENDING` 项：晚到证据、强制回收、受支持的 restore/clone、24 小时 soak、
-旧数据兼容、remote-authoritative workspace 案例及 Browser 案例。
+旧数据兼容及 Browser 案例。Workspace 行在可选 native Harness 案例完成前继续待实跑。
 这里的恢复同时重启 collector 和所属 daemon。其他 attempt 的最终包继续保留，等待回执对账；
 验收脚本不授权删除证据。
 

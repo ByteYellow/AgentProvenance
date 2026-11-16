@@ -5,6 +5,9 @@ Run this on the machine hosting the entire Harness and workspace. The default
 fixture uses no provider credentials, HTTP server, sensor, or privileged setup.
 --claude opts into a bounded real Harness run using the operator's existing
 provider setup; credentials are never read, printed, or copied by this script.
+--sensor opts into Linux kernel capture in each fixture's own store. It requires
+BPF/perf permissions and a writable cgroup v2 /sys/fs/cgroup/agentprov subtree.
+Exit 2 means a missing environment prerequisite; exit 1 means failed acceptance.
 """
 
 import argparse
@@ -15,9 +18,12 @@ import json
 import os
 from pathlib import Path
 import platform
+import signal
 import sqlite3
+import stat
 import subprocess
 import sys
+import time
 import uuid
 from urllib.parse import quote
 
@@ -40,6 +46,10 @@ class AcceptanceFailure(AssertionError):
         self.code = code
 
 
+class AcceptanceBlocked(AcceptanceFailure):
+    pass
+
+
 def write_json(path, value):
     with path.open("x", encoding="utf-8") as stream:
         os.chmod(path, 0o600)
@@ -47,14 +57,34 @@ def write_json(path, value):
         stream.write("\n")
 
 
-def layout(base, label):
+def load_target(path):
+    if path is None:
+        return None
+    with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb") as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or before.st_mode & 0o022 or before.st_uid not in (0, os.geteuid()):
+            raise AcceptanceFailure("unsafe_target_file", "Target must be operator-owned and not group/world-writable")
+        raw = stream.read(16385)
+        after = os.fstat(stream.fileno())
+    if len(raw) > 16384 or (before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_size, after.st_mtime_ns, after.st_ctime_ns):
+        raise AcceptanceFailure("invalid_target_file", "Target exceeded its limit or changed while being read")
+    target = json.loads(raw)
+    if (not isinstance(target, dict) or set(target) != {"producer_id", "instance_id", "generation"} or
+            any(not isinstance(v, str) or not v or len(v.encode()) > 256 or
+                any(c.isspace() or ord(c) < 32 for c in v) for v in target.values())):
+        raise AcceptanceFailure("invalid_target_file", "Target must contain producer_id, instance_id and generation")
+    return target
+
+
+def layout(base, label, target=None):
     base.mkdir(mode=0o700)
     work, operator = base / "work", base / "operator"
     work.mkdir()
     operator.mkdir(mode=0o700)
     (work / "input.txt").write_text("value=1\n", encoding="utf-8")
-    target = {"producer_id": "workspace-acceptance", "instance_id": platform.node() or "local",
-              "generation": "fixture-" + uuid.uuid4().hex}
+    target = dict(target) if target is not None else {
+        "producer_id": "workspace-acceptance", "instance_id": platform.node() or "local",
+        "generation": "fixture-" + uuid.uuid4().hex}
     config = {"schema": "agentprovenance.workspace_cli/v1", "workspace_id": label,
               "run_id": "run-w01-" + uuid.uuid4().hex, "root": str(work),
               "state_dir": str(operator / "state"), "data_dir": str(operator / "data"),
@@ -68,6 +98,207 @@ def layout(base, label):
 
 def connect(config):
     return sqlite3.connect("file:" + quote(str(Path(config["data_dir"]) / "agentprov.db")) + "?mode=ro", uri=True)
+
+
+def verify_sensor_records(config):
+    with connect(config) as db:
+        attempts = db.execute("""SELECT a.id,a.tool_call_id,a.snapshot_id FROM fork_attempts a
+            JOIN tool_calls t ON t.id=a.tool_call_id AND t.attempt_id=a.id
+            WHERE t.run_id=? AND a.workspace_path=? AND a.exit_code=0""",
+            (config["run_id"], config["root"])).fetchall()
+        if len(attempts) != 1:
+            raise AcceptanceFailure("sensor_record_mismatch", "Expected exactly one successful workspace record")
+        attempt, tool, snapshot = attempts[0]
+        bindings = db.execute("""SELECT id,cgroup_id FROM execution_context_bindings
+            WHERE run_id=? AND attempt_id=? AND tool_call_id=? AND binding_source='zero_sdk_record' AND cgroup_id!=''""",
+            (config["run_id"], attempt, tool)).fetchall()
+        if len(bindings) != 1 or not bindings[0][1].isdecimal() or int(bindings[0][1]) <= 0:
+            raise AcceptanceBlocked("sensor_cgroup_unavailable", "Record needs an owned kernel cgroup, not a logical scope")
+        binding, cgroup = bindings[0]
+        # Native correlation deliberately retains scope-only attribution. Link
+        # through record's owned cgroup/attempt, not a fabricated event tool ID.
+        events = db.execute("""SELECT id,raw_event_id,event_type,correlation_method,cgroup_id,tool_call_id FROM events
+            WHERE run_id=? AND cgroup_id=? AND source='agentprov_ebpf'
+            AND json_extract(payload,'$.attempt_id')=? AND raw_event_id!=''
+            ORDER BY id LIMIT 4097""", (config["run_id"], cgroup, attempt)).fetchall()
+        if len(events) > 4096:
+            raise AcceptanceFailure("sensor_evidence_limit", "Fixture native event evidence exceeded its bound")
+        events = [row for row in events if row[3].startswith(("kernel_process_instance:", "cgroup_time_window:"))]
+        kinds = {row[2] for row in events}
+        if not {"execve", "file_open"} <= kinds:
+            raise AcceptanceFailure("sensor_record_events_missing", "Missing native exec/file observations in the actual record scope")
+        receipts = []
+        objects = db.execute("SELECT hash,path FROM provenance_objects WHERE run_id=? AND object_type='workspace_operation' LIMIT 1025",
+                             (config["run_id"],)).fetchall()
+        if len(objects) > 1024:
+            raise AcceptanceFailure("sensor_evidence_limit", "Fixture workspace evidence exceeded its bound")
+        for digest, path in objects:
+            with open(path, "rb") as stream:
+                raw = stream.read((4 << 20) + 1)
+            if len(raw) > 4 << 20 or "sha256:" + hashlib.sha256(raw).hexdigest() != digest:
+                raise AcceptanceFailure("sensor_workspace_evidence_invalid", "Workspace evidence hash or size is invalid")
+            obj = json.loads(raw)
+            payload = obj.get("payload", {})
+            receipt = payload.get("receipt", {})
+            record = receipt.get("record") or {}
+            if record.get("attempt_id") != attempt:
+                continue
+            workspace = payload.get("binding", {})
+            if (obj.get("run_id") != config["run_id"] or record.get("run_id") != config["run_id"] or
+                    record.get("base_snapshot_id") != snapshot or workspace.get("target") != config["target"] or
+                    workspace.get("root") != config["root"] or workspace.get("workspace_id") != config["workspace_id"] or
+                    not receipt.get("input_manifest_ref") or not receipt.get("output_manifest_ref")):
+                raise AcceptanceFailure("sensor_workspace_binding_mismatch", "Record receipt does not match the configured workspace Target")
+            receipts.append(digest)
+        if not receipts:
+            raise AcceptanceFailure("sensor_workspace_receipt_missing", "No workspace evidence refers to the captured record")
+    return {"run_id": config["run_id"], "target": config["target"], "attempt_id": attempt,
+            "tool_call_id": tool, "binding_id": binding, "cgroup_id": cgroup, "workspace_receipts": receipts,
+            "association": "owned_record_cgroup", "native_events": [
+                {"id": row[0], "raw_event_id": row[1], "event_type": row[2], "correlation_method": row[3],
+                 "cgroup_id": row[4], "tool_call_id": row[5]} for row in events]}
+
+
+class SensorCapture:
+    """Own one collector lifetime, outside the workspace's per-operation lock."""
+
+    def __init__(self, base, binary, config, options=None):
+        self.base, self.binary, self.config, self.options = base, binary, config, options
+        self.enabled = options is not None and options.sensor
+        self.process = None
+        self.stdout = self.stderr = None
+        self.report = {"status": "off"}
+
+    def status(self):
+        result = subprocess.run([str(self.binary), "--data-dir", self.config["data_dir"], "sensor", "status", "--json"],
+                                env=self.environment, capture_output=True, timeout=5)
+        if result.returncode:
+            raise AcceptanceFailure("sensor_status_failed", "sensor status failed; inspect the private collector logs")
+        value = json.loads(result.stdout)
+        if not isinstance(value, dict) or not isinstance(value.get("capture"), dict):
+            raise AcceptanceFailure("sensor_status_invalid", "sensor status returned an invalid response")
+        return value
+
+    def log_tail(self):
+        with (self.base / "sensor.stderr").open("rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            stream.seek(max(0, stream.tell() - (64 << 10)))
+            return stream.read().decode("utf-8", errors="replace")
+
+    def start(self):
+        if platform.system() != "Linux":
+            raise AcceptanceBlocked("sensor_requires_linux", "Sensor acceptance requires Linux")
+        cgroup = Path("/sys/fs/cgroup/agentprov")
+        if not Path("/sys/fs/cgroup/cgroup.controllers").is_file() or not os.access(cgroup if cgroup.exists() else cgroup.parent, os.W_OK):
+            raise AcceptanceBlocked("sensor_cgroup_unavailable", "Delegate a writable cgroup v2 /sys/fs/cgroup/agentprov subtree")
+        self.environment = {k: os.environ[k] for k in ("PATH", "HOME", "TMPDIR") if k in os.environ}
+        self.environment.update(AGENTPROV_LANG="en", AGENTPROV_DAEMON_URL="")
+        # Record publishes its cgroup binding before exec. Expire unowned node
+        # traffic promptly; this fixture does not exercise late binding recovery.
+        argv = [str(self.binary), "--data-dir", self.config["data_dir"], "sensor", "stream",
+                "--placement", self.options.sensor_placement, "--no-policy", "--auto-tls=false",
+                "--apparmor-state=false", "--seccomp-state=false", "--ring-buffer-mib", "4",
+                "--flush-interval", "100ms", "--pending-ttl", "1ms", "--max-queued-bytes", "16777216",
+                "--max-queued-batches", "128"]
+        self.report.update(status="starting", command=argv)
+        self.stdout = (self.base / "sensor.stdout").open("xb")
+        self.stderr = (self.base / "sensor.stderr").open("xb")
+        self.process = subprocess.Popen(argv, env=self.environment, stdout=self.stdout, stderr=self.stderr)
+        deadline = time.monotonic() + self.options.sensor_ready_timeout
+        while time.monotonic() < deadline:
+            log = self.log_tail()
+            if self.process.poll() is not None:
+                if any(reason in log.lower() for reason in ("operation not permitted", "permission denied", "not supported", "no btf")):
+                    raise AcceptanceBlocked("sensor_prerequisite_unavailable", "Sensor permissions or kernel prerequisites are missing; inspect sensor.stderr")
+                raise AcceptanceFailure("sensor_start_failed", "Sensor exited before readiness; inspect sensor.stderr")
+            if "agentprov sensor stream: ready probes-attached" in log:
+                ready = self.status()
+                caps = ready.get("capabilities") or {}
+                required = [p for p in caps.get("probes", []) if p.get("required")]
+                if (ready.get("collector_running") is True and ready.get("capabilities_historical") is False and
+                        caps.get("ready") is True and caps.get("collector_id") and required and
+                        all(p.get("status") == "attached" for p in required)):
+                    if caps.get("producer", {}).get("placement") != self.options.sensor_placement:
+                        raise AcceptanceFailure("sensor_placement_mismatch", "Sensor reported a different observation placement")
+                    self.report.update(status="ready", ready=ready)
+                    write_json(self.base / "sensor-ready.json", ready)
+                    return
+            time.sleep(0.1)
+        raise AcceptanceFailure("sensor_ready_timeout", "Sensor did not become ready within the deadline")
+
+    def stop(self, validate):
+        if self.process is None:
+            return
+        exited_early = self.process.poll() is not None
+        if not exited_early:
+            self.process.terminate()
+        try:
+            code = self.process.wait(timeout=self.options.sensor_drain_timeout)
+        except subprocess.TimeoutExpired as error:
+            self.process.kill()
+            self.process.wait(timeout=5)
+            raise AcceptanceFailure("sensor_drain_timeout", "Collector exceeded stop/drain deadline; forced termination") from error
+        self.report["returncode"] = code
+        final = self.status()
+        self.report["final"] = final
+        write_json(self.base / "sensor-final.json", final)
+        if not validate:
+            return
+        if exited_early or code:
+            raise AcceptanceFailure("sensor_stopped_unexpectedly", "Collector exited before the task finished or failed during shutdown")
+        if final.get("collector_running") is not False or final.get("capabilities_historical") is not True:
+            raise AcceptanceFailure("sensor_still_running", "Collector lock is still held after shutdown")
+        caps = final.get("capabilities") or {}
+        if caps.get("collector_id") != self.report["ready"]["capabilities"]["collector_id"] or caps.get("status") != "stopped":
+            raise AcceptanceFailure("sensor_lifetime_mismatch", "Final capability report is not this stopped collector")
+        capture = final["capture"]
+        if any(capture.get(key) != 0 for key in ("queued_batches", "queued_bytes", "pending_events", "cleanup_pending_batches")) or capture.get("last_error"):
+            raise AcceptanceFailure("sensor_drain_incomplete", "Pending capture or spool cleanup remains after shutdown")
+        counters = capture.get("counters", {})
+        loss = {k: v for k, v in counters.items() if v and (k.startswith("dropped_") or k in ("invalid", "failed", "kernel_dropped_events"))}
+        if loss:
+            self.report["loss"] = loss
+            raise AcceptanceFailure("sensor_capture_loss", "Collector reported dropped or invalid capture")
+        self.report["evidence"] = verify_sensor_records(self.config)
+        self.report.update(status="passed", drain="collector_stopped_store_empty")
+
+    def finish(self, error):
+        try:
+            self.stop(validate=error is None)
+        except BaseException as cleanup:
+            if error is None:
+                error = cleanup
+            else:
+                self.report["cleanup_failure"] = getattr(cleanup, "code", type(cleanup).__name__)
+        finally:
+            for stream in (self.stdout, self.stderr):
+                if stream is not None:
+                    stream.close()
+        if error is not None:
+            self.report.update(status="blocked" if isinstance(error, AcceptanceBlocked) else "failed",
+                               failure_code=getattr(error, "code", type(error).__name__))
+            error.sensor = self.report
+        write_json(self.base / "sensor.json", self.report)
+        return error
+
+    def __enter__(self):
+        if self.enabled:
+            self.report = {"status": "starting", "run_id": self.config["run_id"], "target": self.config["target"],
+                           "data_dir": self.config["data_dir"], "placement": self.options.sensor_placement,
+                           "report_path": str(self.base / "sensor.json")}
+            try:
+                self.start()
+            except BaseException as error:
+                self.finish(error)
+                raise
+        return self
+
+    def __exit__(self, kind, error, traceback):
+        if self.enabled:
+            result = self.finish(error)
+            if error is None and result is not None:
+                raise result
+        return False
 
 
 def verify_refs(config, results):
@@ -98,11 +329,20 @@ def verify_refs(config, results):
     return {"verified_refs": sorted(refs), "record_attempts": len(attempts), "context_results": contexts}
 
 
-async def contract_acceptance(base, binary, package):
+async def contract_acceptance(base, binary, package, options=None, target=None):
+    path, config = layout(base, "contract", target)
+    with SensorCapture(base, binary, config, options) as sensor:
+        result = await contract_tools(base, binary, package, path, config)
+    result.update(config_path=str(path), target=config["target"])
+    if sensor.enabled:
+        result["sensor"] = sensor.report
+    return result
+
+
+async def contract_tools(base, binary, package, path, config):
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
-    path, config = layout(base, "contract")
     environment = {k: os.environ[k] for k in ("PATH", "HOME", "TMPDIR", "LANG") if k in os.environ}
     environment["PYTHONPATH"] = str(package)
     parameters = StdioServerParameters(command=sys.executable, args=["-m", "agentprov.workspace_mcp", "--agentprov", str(binary), "--config", str(path)], env=environment)
@@ -256,8 +496,17 @@ def verify_harness_run(base, config, returncode):
             "record_attempts": attempts, "context_results": result_entries, "artifact_sha256": hashlib.sha256((Path(config["root"]) / "result.txt").read_bytes()).hexdigest()}
 
 
-def harness_acceptance(base, binary, package, claude):
-    config_path, config = layout(base, "harness")
+def harness_acceptance(base, binary, package, claude, options=None, target=None):
+    config_path, config = layout(base, "harness", target)
+    with SensorCapture(base, binary, config, options) as sensor:
+        result = harness_tools(base, binary, package, claude, config_path, config)
+    result.update(config_path=str(config_path), target=config["target"])
+    if sensor.enabled:
+        result["sensor"] = sensor.report
+    return result
+
+
+def harness_tools(base, binary, package, claude, config_path, config):
     mcp_config = {"mcpServers": {MCP_SERVER: {"command": sys.executable,
                   "args": ["-m", "agentprov.workspace_mcp", "--agentprov", str(binary), "--config", str(config_path)],
                   "env": {"PYTHONPATH": str(package)}}}}
@@ -282,29 +531,48 @@ def main():
     parser.add_argument("--agentprov", required=True, type=Path)
     parser.add_argument("--claude", type=Path, help="opt in to the real Harness using existing operator credentials")
     parser.add_argument("--python-package", type=Path, default=Path(__file__).resolve().parent.parent / "python")
+    parser.add_argument("--target-file", type=Path, help="operator-owned Target JSON; copied, never modified")
+    parser.add_argument("--sensor", action="store_true", help="opt in to Linux sensor stream/status and same-record native evidence checks")
+    parser.add_argument("--sensor-placement", choices=("local_kernel", "host_kernel", "guest_kernel"), default="local_kernel")
+    parser.add_argument("--sensor-ready-timeout", type=int, default=30, help="readiness deadline in seconds (1..120)")
+    parser.add_argument("--sensor-drain-timeout", type=int, default=30, help="stop/drain deadline in seconds (1..120)")
     args = parser.parse_args()
+    if not all(1 <= value <= 120 for value in (args.sensor_ready_timeout, args.sensor_drain_timeout)):
+        parser.error("sensor timeouts must be between 1 and 120 seconds")
     out = args.output.resolve()
     out.mkdir(mode=0o700)
     binary, package = args.agentprov.resolve(strict=True), args.python_package.resolve(strict=True)
-    report = {"platform": platform.platform(), "architecture": platform.machine(), "sensor": "off",
-              "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(), "mcp_version": importlib.metadata.version("mcp"),
+    report = {"platform": platform.platform(), "architecture": platform.machine(), "sensor": "on" if args.sensor else "off",
+              "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
               "harness": {"status": "not_requested"}}
     phase = "contract"
+    def interrupted(signum, frame):
+        raise AcceptanceFailure("acceptance_interrupted", "Acceptance interrupted; owned collector will be stopped")
+    previous_sigterm = signal.signal(signal.SIGTERM, interrupted)
     try:
-        report["contract"] = asyncio.run(contract_acceptance(out / "contract", binary, package))
+        try:
+            report["mcp_version"] = importlib.metadata.version("mcp")
+        except importlib.metadata.PackageNotFoundError as error:
+            raise AcceptanceBlocked("mcp_dependency_missing", "Use a Python environment with the existing MCP dependency") from error
+        target = load_target(args.target_file)
+        report["contract"] = asyncio.run(contract_acceptance(out / "contract", binary, package, args, target))
         if args.claude:
             phase = "harness"
-            report["harness"] = harness_acceptance(out / "harness", binary, package, args.claude.absolute())
+            report["harness"] = harness_acceptance(out / "harness", binary, package, args.claude.absolute(), args, target)
     except BaseException as error:
-        report["status"] = "failed"
+        report["status"] = "blocked" if isinstance(error, AcceptanceBlocked) else "failed"
         report["failure_type"] = type(error).__name__
         report["failure_code"] = getattr(error, "code", "acceptance_error")
         report["failure_phase"] = phase
-        report[phase] = {"status": "failed", "failure_code": report["failure_code"]}
+        report[phase] = {"status": report["status"], "failure_code": report["failure_code"]}
+        if hasattr(error, "sensor"):
+            report[phase]["sensor"] = error.sensor
         write_json(out / "report.json", report)
-        print(json.dumps({"status": "failed", "failure_type": type(error).__name__, "failure_code": report["failure_code"],
+        print(json.dumps({"status": report["status"], "failure_type": type(error).__name__, "failure_code": report["failure_code"],
                           "failure_phase": phase, "report": str(out / "report.json")}))
-        raise SystemExit(1)
+        raise SystemExit(2 if isinstance(error, AcceptanceBlocked) else 1)
+    finally:
+        signal.signal(signal.SIGTERM, previous_sigterm)
     report["status"] = "passed"
     write_json(out / "report.json", report)
     print(json.dumps({"status": "passed", "architecture": report["architecture"], "contract": report["contract"]["status"],

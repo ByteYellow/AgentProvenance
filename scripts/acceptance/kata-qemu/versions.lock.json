@@ -44,6 +44,7 @@
   "containerd": {"version": null},
   "workload_image": null,
   "verifier": {"version": null, "source_sha": null, "sha256": null},
+  "workspace": {"mcp_version": null, "harness": {"path": null, "sha256": null}},
   "candidate_reference": {
     "kata": "4.3.1",
     "source_sha": "03cf2ec06a5d302f23af811744f6bcea49988bfb",

@@ -185,6 +185,61 @@ runs `agentprov-verify --trust-policy FILE ZIP`. The recipient policy is supplie
 separately from the archive and authorizes the `exporter` role. Omitting this
 option leaves `derived_verifier` pending.
 
+## Optional Workspace Case
+
+Add `--workspace-case contract --verifier /srv/agentprov/agentprov-verify` to the
+same node command to exercise the existing `scripts/accept_workspace.py` stdio
+MCP fixture in the **second, rebuilt Guest**. The default two-boot profile is
+unchanged when this option is omitted; `--workspace-case` alone selects `contract`.
+Complete `lock.verifier` and set
+`lock.workspace.mcp_version` to the exact MCP package version already installed
+in the workload image. The runner copies and hashes the existing Python MCP
+bridge and SDK modules; it does not install dependencies.
+
+The fixture uses the same operator-authorized Target as `execution.json`, from
+the read-only `/binding/workspace-target.json`. Each workspace keeps a private
+copy for stale-generation rejection tests; the operator file is never edited.
+Read, Edit, Write and Bash operate on one remote-authoritative root per case.
+Input/output revisions, manifests and the actual record attempt are checked
+again from content-addressed workspace evidence, including after signed import.
+
+The existing handoff collector is stopped before workspace capture starts. The
+workspace fixture runs `sensor stream --placement guest_kernel` against its own
+store, waits for attached required probes, and stops/drains that collector before
+export. The same run and record attempt must have native exec/file observations
+in its nonzero owned cgroup. Accepted correlation methods are
+`cgroup_time_window:*` and `kernel_process_instance:*`; every selected event's
+cgroup must equal that scope. Scope-only events retain their empty tool ID and
+are reported as `owned_record_cgroup`, not upgraded to tool-level attribution.
+Sensor build/placement/Guest boot and collector lifetime are checked against
+the lock and operator binding. Missing prerequisites remain `BLOCKED`/exit 2.
+
+After the MCP fixture, the runner uses the existing signed `forensics export`
+and pinned-public-key import into a fresh store, compares imported workspace
+and native-event evidence, then runs the signed derived-reader export and
+independent verifier. Results and packages are retained under
+`boot-2/workspace/{contract,harness}-delivery/`; `kata-workspace.json` records the
+case, target and verification results.
+
+`contract` is a real CLI/MCP contract test without a model provider. Its success
+records the contract result while leaving the full `workspace_case` matrix row
+`PENDING`. For the real Harness case, select `--workspace-case harness` and set
+`lock.workspace.harness.path` and `.sha256` to an **existing authenticated Claude
+entrypoint inside the Guest container**. The same fixture uses its existing
+`--claude` path and verifies actual controlled MCP tool calls. Authentication
+must already be available there through the operator's deployment. Never put
+credentials in the image, lock, entrypoint script, Pod plan or evidence. The
+runner does not copy credential files, add Secret mounts, log in, or forward
+provider credentials through MCP tool arguments. Missing entrypoints are
+reported rather than provisioned. Harness logs remain private and are redacted.
+
+Only a successful native Guest Harness case plus verified signed delivery sets
+`workspace_case=PASS`. Local Sensor-off CLI/MCP runs, dry-runs and contract-only
+mode keep that row pending. The existing 600-second Guest flow, 690-second node
+stage and 720-second Pod deadlines still apply; the optional case shares that
+budget. Its own subprocess bound is 150 seconds for contract mode and 400
+seconds with the existing bounded Harness run. No UI integration is required.
+
 ## Results and Privacy
 
 `report.json` records current source SHA/dirty state, binary and fixture hashes,
@@ -227,8 +282,9 @@ phase completed; inspect `r03_status`, `q01_status` and the matrix for its scope
 Dry-run and node-only preflight leave all hardware acceptance rows pending.
 
 Q-01 additionally retains `PENDING` rows for late evidence, forced retirement,
-supported restore/clone, 24-hour soak, compatibility, remote-authoritative
-workspace and Browser scenarios. Recovery here restarts the collector together
+supported restore/clone, 24-hour soak, compatibility and Browser scenarios. The
+workspace row stays pending unless the optional native Harness case completes.
+Recovery here restarts the collector together
 with its owning daemon. Final packages for other attempts remain retained until
 their receipts are reconciled; the fixture never authorizes evidence reclamation.
 

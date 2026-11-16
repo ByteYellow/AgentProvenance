@@ -16,6 +16,7 @@ import uuid
 
 from common import Blocked, clean_env, command, digest, load, require, save, redact
 from binding import SCHEMA as BINDING_SCHEMA, configuration, expected_platform, validate_receipt
+from workspace_case import WORKSPACE_INPUTS, option_issues
 
 
 HERE = Path(__file__).resolve().parent
@@ -118,13 +119,15 @@ def cri_version(text):
     return fields
 
 
-def pod_manifest(args, lock, name, assets, data, previous=None, binding_dir=None):
+def pod_manifest(args, lock, name, assets, data, previous=None, binding_dir=None, workspace_case=None):
     argv = ["python3", "/fixture/guest.py", "--binary", "/fixture/agentprov", "--data-dir", "/evidence",
             "--lock", "/fixture/lock.json", "--binding-dir", "/binding", "--timeout", "600"]
     if getattr(args, "verifier", None):
         argv += ["--verifier", "/fixture/agentprov-verify"]
     if previous:
         argv += ["--previous-target", json.dumps(previous)]
+    if workspace_case:
+        argv += ["--workspace-case", workspace_case]
     return {"apiVersion": "v1", "kind": "Pod", "metadata": {
         "name": name, "namespace": args.namespace, "labels": {
             "agentprov.io/acceptance": name, "agentprov.io/acceptance-owner": uuid.uuid4().hex}},
@@ -258,6 +261,8 @@ class Node:
             command([self.args.binary, "forensics", "keygen", "--priv", binding_dir / (name + ".key"),
                      "--pub", binding_dir / (name + ".pub")], env=clean_env())
         save(binding_dir / "execution.json", config)
+        if getattr(self.args, "workspace_case", None):
+            save(binding_dir / "workspace-target.json", target)
         receipt = {"schema_version": BINDING_SCHEMA, "authority": "operator_kubernetes_cri", "identity": identity,
                    "target": target, "source": self.source, "configuration_sha256": digest(binding_dir / "execution.json"),
                    "lock_sha256": digest(self.args.data_dir / "assets/lock.json"), "binary_sha256": digest(self.args.binary),
@@ -382,6 +387,8 @@ def main():
     for key in ("binary", "data-dir", "output", "lock"):
         parser.add_argument("--" + key, type=Path, required=True)
     parser.add_argument("--verifier", type=Path, help="optional Linux amd64 agentprov-verify, pinned in lock.verifier")
+    parser.add_argument("--workspace-case", choices=("contract", "harness"), nargs="?", const="contract",
+                        help="optional remote-authoritative MCP/Sensor case in the rebuilt second Guest")
     for key in ("context", "namespace", "node", "cri-endpoint"):
         parser.add_argument("--" + key, required=True)
     parser.add_argument("--kubectl", default="kubectl")
@@ -420,11 +427,17 @@ def main():
         report["lock_sha256"] = digest(args.lock)
         report["fixture_sha256"] = {str(p.relative_to(REPO)): digest(p) for p in sorted(HERE.glob("*.py"))}
         report["fixture_sha256"].update({p: digest(REPO / p) for p in FIXTURES})
+        if args.workspace_case:
+            report["fixture_sha256"].update({p: digest(REPO / p) for p in WORKSPACE_INPUTS})
+            report["profile"].update(workspace_mode="remote-authoritative", workspace_case=args.workspace_case,
+                                     workspace_stage=2, workspace_harness="requested" if args.workspace_case == "harness" else "PENDING")
         report["pipeline_reference_sha256"] = {p: digest(REPO / p) for p in REFERENCED_PIPELINE}
         report["lock_issues"] = lock_issues(lock)
+        report["lock_issues"] += option_issues(args.workspace_case, lock, args.verifier)
         save(args.output / "lock.json", lock)
         name = "ap-kata-" + uuid.uuid4().hex[:12]
-        save(args.output / "pod-plan.json", pod_manifest(args, lock, name, args.data_dir / "assets", args.data_dir / "boot-1"))
+        save(args.output / "pod-plan.json", pod_manifest(args, lock, name, args.data_dir / "assets", args.data_dir / "boot-1",
+                                                       workspace_case=args.workspace_case))
         save(args.output / "runtimeclass-reference.json", {"apiVersion": "node.k8s.io/v1", "kind": "RuntimeClass",
              "metadata": {"name": "kata-qemu-runtime-rs"}, "handler": "kata-qemu-runtime-rs"})
         require(not report["lock_issues"], "incomplete lock: " + ", ".join(report["lock_issues"]))
@@ -449,9 +462,15 @@ def main():
         args.data_dir.mkdir(parents=True, exist_ok=False)
         assets = args.data_dir / "assets"
         assets.mkdir()
-        for file in (HERE / "common.py", HERE / "binding.py", HERE / "reader.py", HERE / "guest.py", *(REPO / p for p in FIXTURES)):
+        for file in (HERE / "common.py", HERE / "binding.py", HERE / "reader.py", HERE / "workspace_case.py", HERE / "guest.py", *(REPO / p for p in FIXTURES)):
             shutil.copyfile(file, assets / file.name)
             require(digest(assets / file.name) == report["fixture_sha256"][str(file.relative_to(REPO))], "fixture changed during preflight")
+        if args.workspace_case:
+            for relative in WORKSPACE_INPUTS:
+                destination = assets / (Path(relative).name if relative.startswith("scripts/") else relative)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(REPO / relative, destination)
+                require(digest(destination) == report["fixture_sha256"][relative], "workspace fixture changed during preflight")
         shutil.copyfile(args.binary, assets / "agentprov")
         require(digest(assets / "agentprov") == lock["sensor"]["sha256"], "binary changed during preflight")
         (assets / "agentprov").chmod(0o500)
@@ -468,7 +487,8 @@ def main():
             binding_dir.mkdir(mode=0o700)
             stage = {"index": index, "evidence_directory": str(data)}
             report["stages"].append(stage)
-            manifest = pod_manifest(args, lock, name, assets, data, previous, binding_dir)
+            manifest = pod_manifest(args, lock, name, assets, data, previous, binding_dir,
+                                    workspace_case=args.workspace_case if index == 2 else None)
             save(args.output / f"pod-{index}.json", manifest)
             guest = node.stage(manifest, data, stage, binding_dir)
             previous = guest["target"]
@@ -487,6 +507,12 @@ def main():
         if args.verifier:
             report["matrix"]["derived_verifier"]["status"] = "PASS"
         report["matrix"]["pod_rebuild"]["status"] = "PASS"
+        if args.workspace_case:
+            workspace = second["guest"]["checks"].get("workspace_case", {})
+            require(workspace.get("status") == "PASS" and workspace.get("target") == second["guest"]["target"],
+                    "optional workspace case failed or used another Guest generation")
+            report["matrix"]["workspace_case"].update(status=workspace["matrix_status"], mode=args.workspace_case,
+                                                        contract="PASS", harness=workspace["harness"])
         report["r03_status"], report["status"], exit_code = "PASS", "PENDING", 0
         report["pending_release_checks"] = [key for key, value in report["matrix"].items() if value["status"] == "PENDING"]
     except InterruptedError as error:
