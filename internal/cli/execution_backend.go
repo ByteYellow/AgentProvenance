@@ -3,8 +3,10 @@ package cli
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/handoff"
 	"github.com/byteyellow/agentprovenance/internal/runtimeadapter"
+	"github.com/byteyellow/agentprovenance/internal/store"
 	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
@@ -83,16 +86,38 @@ func configureExecutionBackend(e *handoff.Executor, c handoff.Config) error {
 	if err != nil {
 		return fmt.Errorf("locate runsc gate executable: %w", err)
 	}
-	e.Backend = runtimeadapter.Runsc{Binding: b, Config: runsc, Options: e.Options, StateDir: stateDir, GateBinary: gate}
+	backend := runtimeadapter.Runsc{Binding: b, Config: runsc, Options: e.Options, StateDir: stateDir, GateBinary: gate}
+	e.Backend = backend
 	if c.Backend.SecCheck != nil {
 		capture := *c.Backend.SecCheck
-		e.RuntimeCapture = runtimeadapter.SecCheck{Target: b.Target, Receiver: capture.Target,
+		captureBackend := runtimeadapter.SecCheck{Target: b.Target, Receiver: capture.Target,
 			ReadStatus: func(ctx context.Context) (telemetry.SecCheckCollectStatus, error) {
 				if err := ctx.Err(); err != nil {
 					return telemetry.SecCheckCollectStatus{}, err
 				}
 				return runtimeadapter.ReadSecCheckStatus(capture.StatusFile)
 			}}
+		if capture.DataDir != "" {
+			paths := store.ResolvePaths(capture.DataDir)
+			if err := runtimeadapter.ValidateTrustedPath(paths.DB, false); err != nil {
+				return fmt.Errorf("SecCheck receiver store: %w", err)
+			}
+			captureBackend.ReadEvents = func(ctx context.Context, connection string, first uint64, count int) ([]telemetry.EventRecord, error) {
+				if err := runtimeadapter.ValidateTrustedPath(paths.DB, false); err != nil {
+					return nil, err
+				}
+				u := url.URL{Scheme: "file", Path: paths.DB, RawQuery: "mode=ro&_pragma=busy_timeout(2000)"}
+				db, err := sql.Open("sqlite", u.String())
+				if err != nil {
+					return nil, err
+				}
+				defer db.Close()
+				return telemetry.ReadSecCheckSequence(ctx, db, capture.Target.RunID, capture.Target.Registration, connection, first, count)
+			}
+			captureBackend.ObserveProcesses = backend.ObserveProcesses
+			captureBackend.Barrier = backend.Barrier
+		}
+		e.RuntimeCapture = captureBackend
 	}
 	return nil
 }

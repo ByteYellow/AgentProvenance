@@ -1,6 +1,7 @@
 package handoff
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -193,17 +194,50 @@ func (e *Executor) commitCheckpoint(ctx context.Context, a Attempt, c Checkpoint
 		c.SchemaVersion, c.AttemptID, c.Revision, c.At = SchemaVersion, a.ID, a.Revision, a.UpdatedAt
 		c.Source, c.Target, c.DispatchID = a.Request.Source, a.Request.Target, a.Request.DispatchID
 		c.RequestHash, c.DigestVersion = a.RequestHash, a.DigestVersion
+		if c.Runtime != nil && c.Runtime.Capture != nil && c.Runtime.Capture.Evidence != nil {
+			capture := c.Runtime.Capture
+			evidence := capture.Evidence
+			registration := evidence.Receiver.Registration
+			if registration.Namespace != a.Request.Target.ProducerID || registration.InstanceID != a.Request.Target.InstanceID ||
+				registration.Generation != a.Request.Target.Generation || evidence.Root.PID != c.Runtime.Execution.SentryPID || evidence.Root.StartNS != c.Runtime.Execution.SentryStartNS {
+				return fmt.Errorf("command capture evidence differs from execution binding")
+			}
+			raw, err := json.Marshal(evidence)
+			if err != nil {
+				return err
+			}
+			var payload map[string]any
+			decoder := json.NewDecoder(bytes.NewReader(raw))
+			decoder.UseNumber()
+			if err := decoder.Decode(&payload); err != nil {
+				return err
+			}
+			obj, err := (provenance.ObjectStore{DB: e.Ledger.DB, Paths: e.Paths, Tx: tx}).PutExternalObject(provenance.ExternalObjectInput{
+				Type: "runtime_command_evidence", RunID: a.LocalRunID, SourceID: a.ID + "/capture/" + evidence.RangeSHA256,
+				Refs: map[string]any{"attempt_id": a.ID, "receiver_run_id": evidence.Receiver.RunID}, Payload: payload})
+			if err != nil {
+				return err
+			}
+			copy := *capture
+			copy.EvidenceRef, copy.Evidence = obj.Hash, nil
+			c.Runtime.Capture = &copy
+		}
 		raw, err := json.Marshal(c)
 		if err != nil {
 			return err
 		}
 		var payload map[string]any
-		if err := json.Unmarshal(raw, &payload); err != nil {
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.UseNumber()
+		if err := decoder.Decode(&payload); err != nil {
 			return err
 		}
 		parents := []string{}
 		if previousRef != "" {
 			parents = append(parents, previousRef)
+		}
+		if c.Runtime != nil && c.Runtime.Capture != nil && c.Runtime.Capture.EvidenceRef != "" {
+			parents = append(parents, c.Runtime.Capture.EvidenceRef)
 		}
 		for _, out := range []*Output{c.Stdout, c.Stderr} {
 			if out != nil && out.Ref != "" {

@@ -100,6 +100,9 @@ func TestSecCheckCollectorConnectionRecoveryAndShutdown(t *testing.T) {
 			return len(s.Targets) == 1 && s.Targets[0].State == "disconnected" && s.Targets[0].AcceptedRecords >= uint64((attempt+1)*3)
 		})
 		connectionIDs[s.Targets[0].ConnectionID] = true
+		if s.Targets[0].LastSequence == nil || *s.Targets[0].LastSequence != 2 {
+			t.Fatalf("connection sequence did not restart at its own boundary: %+v", s.Targets[0])
+		}
 	}
 	stop()
 	err := <-done

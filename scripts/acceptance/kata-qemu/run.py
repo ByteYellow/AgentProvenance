@@ -152,6 +152,8 @@ def pod_manifest(args, lock, name, assets, data, previous=None, binding_dir=None
             "--lock", "/fixture/lock.json", "--binding-dir", "/binding", "--timeout", "600"]
     if getattr(args, "verifier", None):
         argv += ["--verifier", "/fixture/agentprov-verify"]
+    if getattr(args, "stage_guest_binaries", False):
+        argv.append("--stage-guest-binaries")
     if previous:
         argv += ["--previous-target", json.dumps(previous)]
     if workspace_case:
@@ -452,6 +454,8 @@ def main():
     parser.add_argument("--allow-privileged-guest", action="store_true")
     parser.add_argument("--mount-guest-tracefs", action="store_true",
                         help="explicitly mount tracefs inside each owned Guest fixture before publishing its binding")
+    parser.add_argument("--stage-guest-binaries", action="store_true",
+                        help="copy hash-pinned executables into a private 384 MiB Guest tmpfs for this fixture")
     args = parser.parse_args()
     os.umask(0o077)
     args.output = args.output.resolve()
@@ -519,7 +523,7 @@ def main():
         args.data_dir.mkdir(parents=True, exist_ok=False)
         assets = args.data_dir / "assets"
         assets.mkdir()
-        for file in (HERE / "common.py", HERE / "binding.py", HERE / "reader.py", HERE / "workspace_case.py", HERE / "guest.py", *(REPO / p for p in FIXTURES)):
+        for file in (HERE / "common.py", HERE / "binding.py", HERE / "reader.py", HERE / "workspace_case.py", HERE / "staging.py", HERE / "guest.py", *(REPO / p for p in FIXTURES)):
             shutil.copyfile(file, assets / file.name)
             require(digest(assets / file.name) == report["fixture_sha256"][str(file.relative_to(REPO))], "fixture changed during preflight")
         if args.workspace_case:

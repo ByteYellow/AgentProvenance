@@ -66,6 +66,23 @@ the node runner mounts tracefs inside that owned container before publishing its
 binding. Each stage records the mount and boot identity. The default remains an
 inspection-only prerequisite check; this option does not mount the node's tracefs.
 
+For slow shared executable mounts, add `--stage-guest-binaries`. After validating
+the operator receipt and distinct node/Guest boots, the fixture copies the CLI
+and optional verifier into a private 384 MiB tmpfs under Guest `/run`. Every copy
+must match the version lock before it becomes executable. The report records
+paths, sizes, hashes and staging time; evidence stays on the retained evidence
+volume. The tmpfs is removed after owned processes stop. Staging shares the
+existing 600-second Guest deadline.
+
+The fixed 2 GiB Guest capture profile uses a 4 MiB ring and a 120-second Sensor
+startup budget. These settings account for nested Guest map allocation and BTF
+loading. Each startup records its elapsed time and actual capabilities; the
+execution and loss/drain checks still determine acceptance. A startup timeout
+retains process state and an owned-daemon stack dump in the private log. Store
+initialization has a separate 60-second budget, observed through the owned
+daemon's instance lock, before the Sensor budget starts. Both phases remain
+inside the overall Guest deadline and their timings are recorded separately.
+
 The handler check reads **the running CRI's `info`**, not labels or an arbitrary
 configuration file. For each created Pod it also checks CRI `inspectp`
 `runtimeHandler` by Pod UID. The node boot ID, node/API versions, runtime binary

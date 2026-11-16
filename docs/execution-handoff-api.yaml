@@ -621,18 +621,59 @@ components:
       additionalProperties: false
       required: [observation_layer, scope_ref, state, gaps]
       description: >
-        Container/Sentry-range observations from a separate receiver Run. Current
-        runsc capture ends incomplete: shared_call_identity_unavailable and
-        command_capture_watermark_unavailable remain explicit. Receiver counters
-        are cumulative selected-target boundaries, not per-command event counts.
+        Receiver counters are cumulative selected-target boundaries. A command
+        watermark requires controlled process birth, clone ancestry, task-set
+        absence and a barrier committed to the receiver database. Missing proof
+        leaves explicit gaps. evidence_ref preserves original receiver identities
+        in a content-addressed command evidence object.
       properties:
         observation_layer: { const: sentry }
         scope_ref: { type: string, description: Registered Sentry lifecycle scope; empty before a final receiver report is available. }
-        state: { type: string, enum: [collecting, incomplete] }
+        state: { type: string, enum: [collecting, draining, incomplete, sealed] }
         start: { $ref: '#/components/schemas/RuntimeCapturePoint' }
         end: { $ref: '#/components/schemas/RuntimeCapturePoint' }
         gaps: { type: array, items: { type: string } }
         error: { type: string }
+        command: { $ref: '#/components/schemas/RuntimeCommandWatermark' }
+        evidence_ref: { type: string }
+    SentryProcess:
+      type: object
+      additionalProperties: false
+      required: [pid, start_ns]
+      properties:
+        pid: { type: integer, minimum: 1 }
+        start_ns: { type: string, pattern: '^[1-9][0-9]*$', description: Exact Sentry group birth in nanoseconds, within the receiver lifecycle. }
+    RuntimeProcessDrain:
+      type: object
+      additionalProperties: false
+      required: [observed_at, basis, empty, remaining]
+      properties:
+        observed_at: { type: string, format: date-time }
+        basis: { const: runsc_ps_root_taskset }
+        empty: { type: boolean }
+        remaining: { type: array, items: { $ref: '#/components/schemas/SentryProcess' } }
+    RuntimeBarrier:
+      type: object
+      additionalProperties: false
+      required: [process, marker]
+      properties:
+        process: { $ref: '#/components/schemas/SentryProcess' }
+        marker: { type: string }
+    RuntimeCommandWatermark:
+      type: object
+      additionalProperties: false
+      required: [root, drain, barrier, barrier_event_ref, barrier_sequence, clone_event_refs, process_count, event_count, root_wait_status, basis]
+      properties:
+        root: { $ref: '#/components/schemas/SentryProcess' }
+        drain: { $ref: '#/components/schemas/RuntimeProcessDrain' }
+        barrier: { $ref: '#/components/schemas/RuntimeBarrier' }
+        barrier_event_ref: { type: string }
+        barrier_sequence: { type: integer, minimum: 1 }
+        clone_event_refs: { type: array, minItems: 1, items: { type: string } }
+        process_count: { type: integer, minimum: 1 }
+        event_count: { type: integer, minimum: 1 }
+        root_wait_status: { type: integer, description: Native wait status; signals remain distinct from normal exit codes. }
+        basis: { const: controlled_birth_clone_closure_taskset_absence_and_committed_barrier }
     RuntimeCapturePoint:
       type: object
       additionalProperties: false
@@ -698,6 +739,7 @@ components:
         registration: { $ref: '#/components/schemas/RuntimeReceiverRegistration' }
         state: { const: connected }
         connection_id: { type: string }
+        last_sequence: { type: integer, minimum: 0, description: Last record durably accepted by the receiver spool on this connection. Database ingestion is checked separately. Absent in older status documents. }
         last_observation_at: { type: string, format: date-time }
         accepted_records: { type: integer, minimum: 0 }
         reported_dropped_events: { type: integer, minimum: 0 }

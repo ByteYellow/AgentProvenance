@@ -17,6 +17,36 @@ type SecCheckPoint struct {
 	SyscallNumber *uint64
 }
 
+// SecCheckDetails decodes projected operation fields without routing Sentry
+// birth timestamps through float64. Callers must also check the wire point.
+type SecCheckDetails struct {
+	Operation            string   `json:"operation"`
+	CreatedThreadID      int32    `json:"created_thread_id"`
+	CreatedGroupID       int32    `json:"created_thread_group_id"`
+	CreatedThreadStartNS int64    `json:"created_thread_start_ns"`
+	CloneFlags           uint64   `json:"clone_flags"`
+	Argv                 []string `json:"argv"`
+	Path                 string   `json:"path"`
+	WaitStatus           *int32   `json:"wait_status"`
+}
+
+func ReadSecCheckDetails(event EventRecord) (SecCheckDetails, error) {
+	var d SecCheckDetails
+	if _, err := ReadSecCheckEvidence(event); err != nil {
+		return d, err
+	}
+	body, err := readSecCheckBody(event.Payload)
+	if err != nil {
+		return d, err
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return d, err
+	}
+	err = json.Unmarshal(raw, &d)
+	return d, err
+}
+
 func ReadSecCheckPoint(event EventRecord) (SecCheckPoint, error) {
 	var point SecCheckPoint
 	e, err := ReadSecCheckEvidence(event)

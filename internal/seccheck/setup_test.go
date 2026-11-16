@@ -53,7 +53,7 @@ func TestTraceConfigurationKeepsCheckpointAndCapabilityScope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(b), "credentials") || strings.Contains(string(b), "env") || len(c["trace_session"].(map[string]any)["points"].([]TracePoint)) != 10 {
+	if strings.Contains(string(b), "credentials") || strings.Contains(string(b), "env") || len(c["trace_session"].(map[string]any)["points"].([]TracePoint)) != 11 {
 		t.Fatal(string(b))
 	}
 	cap := ReceiverCapabilities()

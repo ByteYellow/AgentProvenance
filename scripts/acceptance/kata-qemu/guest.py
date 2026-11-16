@@ -2,7 +2,7 @@
 """Run the existing Guest handoff pipeline in one explicitly privileged Kata Pod.
 
 Uses the handoff guest backend and its persisted platform binding.
-It never mounts filesystems, installs packages, or changes kernel/host policy.
+Optional executable staging mounts only a private tmpfs in the bound Guest.
 """
 import argparse
 import concurrent.futures
@@ -26,6 +26,7 @@ from common import Blocked, artifact_inventory, clean_env, command, digest, load
 from binding import expected_platform, rejection_checks, trusted_read, validate_checkpoint, validate_receipt
 from reader import verify_reader
 from workspace_case import run_case
+from staging import GuestBinaries
 
 
 HERE = Path(__file__).resolve().parent
@@ -106,6 +107,7 @@ class Guest:
         observed = {"pod_uid": os.environ["AP_POD_UID"], "guest_boot_id": Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
                     "lock_sha256": digest(args.lock), "binary_sha256": digest(args.binary)}
         self.config = validate_receipt(self.receipt, config_raw, observed, lock)
+        self.staged = None
         for key in ("executor", "receiver"):
             require(digest(self.control / (key + ".pub")) == self.receipt["key_sha256"][key], "operator public key changed")
         self.report.update(target=self.config["target"], binding_receipt_sha256=digest(self.control / "receipt.json"),
@@ -115,6 +117,8 @@ class Guest:
             port.bind(("127.0.0.1", 0))
             self.port = port.getsockname()[1]
         self.url = "http://127.0.0.1:" + str(self.port)
+        if getattr(args, "stage_guest_binaries", False):
+            self.staged = GuestBinaries(args, lock, self.receipt, self.report)
 
     def cli(self, *argv, timeout=60):
         return command([self.args.binary, *argv], timeout=timeout, env=self.env, secrets=(self.token,))
@@ -149,11 +153,28 @@ class Guest:
                 "--listen", "127.0.0.1:" + str(self.port), "--execution-config", str(self.config_path),
                 "--sample-interval", "0", "--gc-interval", "0"], stdout=stream, stderr=subprocess.STDOUT,
                 env=dict(self.env, AGENTPROV_DAEMON_TOKEN=self.token))
-        deadline = time.monotonic() + 45
+        started_at = time.monotonic()
+        startup_budget = self.config["capture"].get("startup_timeout_seconds", 15)
+        require(isinstance(startup_budget, int) and 1 <= startup_budget <= 120, "invalid Guest Sensor startup budget")
+        # NewServer initializes SQLite before taking its instance lock and
+        # starting capture. Shared-volume fsync time is a separate phase; it
+        # must not consume the Sensor's configured startup budget.
+        deadline = started_at + 60
+        store_ready_at = None
+        last_ready = None
         while time.monotonic() < deadline:
             require(self.process.poll() is None, "Guest daemon exited before native probes were ready; see retained redacted log")
+            if store_ready_at is None:
+                try:
+                    lock = load(self.store / ".daemon.lock")
+                    if lock.get("pid") == self.process.pid and lock.get("addr") == "127.0.0.1:" + str(self.port):
+                        store_ready_at = time.monotonic()
+                        deadline = store_ready_at + startup_budget + 15
+                except (OSError, ValueError):
+                    pass
             try:
-                if self.api("GET", "/v1/ready").get("ready"):
+                last_ready = self.api("GET", "/v1/ready")
+                if last_ready.get("ready"):
                     lock = load(self.store / ".daemon.lock")
                     require(lock.get("pid") == self.process.pid and lock.get("addr") == "127.0.0.1:" + str(self.port), "listener ownership mismatch")
                     status = json.loads(self.cli("--data-dir", self.store, "sensor", "status", "--json"))
@@ -166,10 +187,30 @@ class Guest:
                     required = [p for p in capability.get("probes", []) if p.get("required")]
                     require(bool(required) and all(p["status"] == "attached" for p in required), "required native probes are not attached")
                     self.report.setdefault("capabilities", []).append(capability)
+                    self.report.setdefault("startup_observations", []).append({
+                        "elapsed_seconds": time.monotonic() - started_at,
+                        "store_initialization_seconds": None if store_ready_at is None else store_ready_at - started_at,
+                        "capture_configuration": self.config["capture"], "owned_pid": self.process.pid})
                     return
             except (OSError, KeyError):
                 pass
             time.sleep(0.2)
+        diagnostic = {"elapsed_seconds": time.monotonic() - started_at, "last_ready": last_ready,
+                      "owned_pid": self.process.pid, "phase": "store_initialization" if store_ready_at is None else "capture_startup",
+                      "store_initialization_seconds": None if store_ready_at is None else store_ready_at - started_at}
+        try:
+            process = Path("/proc") / str(self.process.pid)
+            diagnostic["wait_channel"] = (process / "wchan").read_text().strip()
+            diagnostic["process_status"] = [line for line in (process / "status").read_text().splitlines()
+                                             if line.startswith(("State:", "VmRSS:", "VmPeak:", "Threads:"))]
+            # Only the Popen-owned fixture daemon is signalled. Go's stack dump
+            # stays in the private daemon log and preserves the failed startup.
+            self.process.send_signal(signal.SIGQUIT)
+            self.process.wait(timeout=3)
+            diagnostic["stack_dump_exit"] = self.process.returncode
+        except (OSError, subprocess.TimeoutExpired) as error:
+            diagnostic["stack_dump_error"] = type(error).__name__
+        self.report["startup_failure"] = diagnostic
         raise Blocked("Guest native capture readiness deadline expired")
 
     def fixture(self, name, argv, timeout):
@@ -379,6 +420,7 @@ def main():
     parser.add_argument("--verifier", type=Path)
     parser.add_argument("--previous-target")
     parser.add_argument("--workspace-case", choices=("contract", "harness"))
+    parser.add_argument("--stage-guest-binaries", action="store_true")
     parser.add_argument("--timeout", type=int, default=600)
     args = parser.parse_args()
     os.umask(0o077)
@@ -409,6 +451,8 @@ def main():
         if guest:
             try:
                 guest.cleanup()
+                if guest.staged:
+                    guest.staged.close()
             except Exception as error:
                 report["status"], report["cleanup_error"], code = "FAIL", redact(str(error), (guest.token,)), 1
         if args.data_dir.is_dir():

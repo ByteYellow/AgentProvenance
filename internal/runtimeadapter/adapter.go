@@ -168,3 +168,7 @@ type CaptureBackend interface {
 	Probe(context.Context, Target) (CapturePoint, error)
 	Finish(context.Context, Target, CapturePoint) CaptureReport
 }
+
+type CommandCaptureBackend interface {
+	FinishCommand(context.Context, Request, Execution, CapturePoint) CaptureReport
+}

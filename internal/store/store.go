@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"net/url"
 	"os"
@@ -121,6 +122,39 @@ func EnsureSchema(db *sql.DB) error {
 		}
 	}
 
+	// Initialize/migrate the entire schema and version marker in one commit.
+	// Reserving the writer precedes the in-transaction version check, so two
+	// initializers cannot race a newer version or expose partial migrations.
+	ctx := context.Background()
+	return WithTx(ctx, db, func(tx *sql.Tx) error {
+		if err := RetryBusy(ctx, func() error {
+			_, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS schema_versions (
+				version INTEGER PRIMARY KEY, description TEXT NOT NULL, applied_at TEXT NOT NULL)`)
+			return err
+		}); err != nil {
+			return err
+		}
+		if err := RetryBusy(ctx, func() error {
+			_, err := tx.ExecContext(ctx, `UPDATE schema_versions SET version=version WHERE 0`)
+			return err
+		}); err != nil {
+			return err
+		}
+		var version int
+		if err := tx.QueryRow(`SELECT COALESCE(MAX(version),0) FROM schema_versions`).Scan(&version); err != nil {
+			return err
+		}
+		if version > SchemaVersion {
+			return i18n.Errorf("database schema %d is newer than supported %d; downgrade is not supported", version, SchemaVersion)
+		}
+		if version == SchemaVersion {
+			return nil
+		}
+		return ensureSchemaTx(tx)
+	})
+}
+
+func ensureSchemaTx(db *sql.Tx) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS schema_versions (
 			version INTEGER PRIMARY KEY,

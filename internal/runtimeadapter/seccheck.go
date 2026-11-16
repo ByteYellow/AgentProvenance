@@ -46,24 +46,30 @@ func (p CapturePoint) MarshalJSON() ([]byte, error) {
 }
 
 type CaptureReport struct {
-	ObservationLayer string        `json:"observation_layer"`
-	ScopeRef         string        `json:"scope_ref"`
-	State            string        `json:"state"`
-	Start            *CapturePoint `json:"start,omitempty"`
-	End              *CapturePoint `json:"end,omitempty"`
-	Gaps             []string      `json:"gaps"`
-	Error            string        `json:"error,omitempty"`
+	ObservationLayer string            `json:"observation_layer"`
+	ScopeRef         string            `json:"scope_ref"`
+	State            string            `json:"state"`
+	Start            *CapturePoint     `json:"start,omitempty"`
+	End              *CapturePoint     `json:"end,omitempty"`
+	Gaps             []string          `json:"gaps"`
+	Error            string            `json:"error,omitempty"`
+	Command          *CommandWatermark `json:"command,omitempty"`
+	EvidenceRef      string            `json:"evidence_ref,omitempty"`
+	Evidence         *CommandEvidence  `json:"-"`
 }
 
 // SecCheck reads the separately managed receiver's existing status. The
 // receiver keeps its own authenticated socket, durable spool and event store.
 // Container status has no call identity or command-scoped drain watermark.
 type SecCheck struct {
-	Target     Target
-	Receiver   seccheck.Target
-	ReadStatus func(context.Context) (telemetry.SecCheckCollectStatus, error)
-	MaxAge     time.Duration
-	Now        func() time.Time
+	Target           Target
+	Receiver         seccheck.Target
+	ReadStatus       func(context.Context) (telemetry.SecCheckCollectStatus, error)
+	MaxAge           time.Duration
+	Now              func() time.Time
+	ReadEvents       func(context.Context, string, uint64, int) ([]telemetry.EventRecord, error)
+	ObserveProcesses func(context.Context, []SentryProcess) (ProcessDrain, error)
+	Barrier          func(context.Context, string) (RuntimeBarrier, error)
 }
 
 func (s SecCheck) Probe(ctx context.Context, target Target) (CapturePoint, error) {

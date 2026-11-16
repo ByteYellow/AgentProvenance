@@ -29,6 +29,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/tlsintent"
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
@@ -98,7 +99,23 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		}
 		err = spec.RewriteConstants(map[string]interface{}{"tls_auto_discovery": enabled})
 		if err == nil {
-			err = spec.LoadAndAssign(&objs, nil)
+			// cilium/ebpf v0.16 copies the complete kernel BTF for each CO-RE
+			// program when KernelTypes is nil. Reuse one private copy across
+			// this collection; nested Guests otherwise spend most startup time
+			// copying the same large type graph. Preserve the normal loader's
+			// missing-BTF behavior for collections that do not need CO-RE.
+			var loadOptions ebpf.CollectionOptions
+		programs:
+			for _, program := range spec.Programs {
+				iterator := program.Instructions.Iterate()
+				for iterator.Next() {
+					if btf.CORERelocationMetadata(iterator.Ins) != nil {
+						loadOptions.Programs.KernelTypes, _ = btf.LoadKernelSpec()
+						break programs
+					}
+				}
+			}
+			err = spec.LoadAndAssign(&objs, &loadOptions)
 		}
 	}
 	if err != nil {

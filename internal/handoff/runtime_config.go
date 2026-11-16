@@ -18,6 +18,7 @@ type BackendConfig struct {
 type SecCheckConfig struct {
 	Target     seccheck.Target `json:"target"`
 	StatusFile string          `json:"status_file"`
+	DataDir    string          `json:"data_dir,omitempty"`
 }
 
 func (c Config) validateBackendConfig() error {
@@ -63,6 +64,9 @@ func (c Config) validateBackendConfig() error {
 			}
 			if !filepath.IsAbs(s.StatusFile) || filepath.Clean(s.StatusFile) != s.StatusFile {
 				return fmt.Errorf("SecCheck status_file must be a clean absolute path")
+			}
+			if s.DataDir != "" && (!filepath.IsAbs(s.DataDir) || filepath.Clean(s.DataDir) != s.DataDir) {
+				return fmt.Errorf("SecCheck data_dir must be a clean absolute path")
 			}
 		}
 	default:

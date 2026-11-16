@@ -53,6 +53,10 @@ func (s Runsc) processBirth(ctx context.Context, pid int32) (int64, error) {
 }
 
 func (s Runsc) runGated(ctx context.Context, r Request, started func(Execution) error) (Execution, error) {
+	return s.runPrivateGate(ctx, r, started, runtimegate.Entry)
+}
+
+func (s Runsc) runPrivateGate(ctx context.Context, r Request, started func(Execution) error, entry string) (Execution, error) {
 	e := NewExecution(s.Binding, r)
 	e.RuntimeRelease = s.Config.RuntimeRelease
 	e.Gaps = []string{"command_capture_watermark_unavailable", "external_container_execution_untracked"}
@@ -83,7 +87,7 @@ func (s Runsc) runGated(ctx context.Context, r Request, started func(Execution) 
 	defer helper.Close()
 	pidFile := filepath.Join(dir, "internal.pid")
 	args := []string{"--root=" + s.Config.Root, "exec", "--new-pidns", "--internal-pid-file=" + pidFile,
-		"--cwd=" + s.Config.Workdir, "--pass-fd=3:3", "--exec-fd=4", s.Config.ContainerID, "agentprov", runtimegate.Entry}
+		"--cwd=" + s.Config.Workdir, "--pass-fd=3:3", "--exec-fd=4", s.Config.ContainerID, "agentprov", entry}
 	args = append(args, r.Command.Command...)
 	cmd := exec.CommandContext(ctx, s.Config.Binary, args...)
 	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin"}

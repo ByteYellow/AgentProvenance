@@ -8,9 +8,9 @@ Runtime adaptation separates a trusted platform binding, command execution, and 
 | --- | --- | --- | --- |
 | Default / `native` | Existing `record.Service`, policies, snapshots, scope lifecycle and recovery | Existing native capture controller | Existing native behavior and local regression tests |
 | `guest` | The same executor inside the Guest | Native sensor with `guest_kernel` placement | Trusted Guest mapping and the existing native evidence pipeline; platform-specific live validation remains separate |
-| `runsc` | One fixed `runsc exec` container entry | A separately managed SecCheck receiver | Container/Sentry range observations plus operation API receipts; per-command event association remains pending |
+| `runsc` | One fixed `runsc exec` container entry | A separately managed SecCheck receiver | Controlled process birth, child-process ancestry and a committed command boundary; live acceptance records are listed below |
 
-Per-command event association remains pending for runsc. A successful execution receipt may coexist with `capture=incomplete`, retaining `shared_call_identity_unavailable` and `command_capture_watermark_unavailable`. Receiver events stay in their configured run, separately from the command run; read both scopes during an investigation. Deployment-host validation for this entry and the new Kata/QEMU combination uses the commands below.
+Runsc command capture uses the controlled process birth and native clone records. With the receiver store configured, the executor waits for the complete owned process tree to leave the runtime task set, then for an exact marker to reach the receiver database. Missing identities, loss, reconnects or an unfinished boundary retain `capture=incomplete`. Receiver events keep their original Run IDs; a command evidence object carries the matching records into signed delivery. Deployment-host validation for this entry and the Kata/QEMU combination uses the commands below.
 
 ## Native And Guest Configuration
 
@@ -65,6 +65,7 @@ The supported protocol pin is `release-20261109.0`, upstream commit `a0e6be6fb5e
     },
     "seccheck": {
       "status_file":"/run/agentprov/receiver-status.jsonl",
+      "data_dir":"/var/lib/agentprov-sentry",
       "target": {
         "run_id":"sentry-container-run",
         "socket_path":"/run/agentprov/events.sock",
@@ -118,17 +119,21 @@ agentprov --data-dir /var/lib/agentprov-executor daemon serve \
   --execution-config /run/agentprov/execution.json --record-timeout 30s
 ```
 
-Run these in separate root-managed processes. The receiver must be connected before a command is executed. A missing, stale, disconnected or mismatched configured receiver fails command admission. Omitting it is an explicit execution-only configuration with `receiver_not_configured`. The mandatory `allow_uncorrelated=true` acknowledges the remaining operation-to-Sentry association gap.
+Run these in separate root-managed processes. The receiver must be connected before a command is executed. A missing, stale, disconnected or mismatched configured receiver fails command admission. Omitting it is an explicit execution-only configuration with `receiver_not_configured`. The retained `allow_uncorrelated=true` option allows execution even when complete command capture is unavailable. Omitting `data_dir` retains the status-only receiver integration and incomplete command capture. A configured store must use trusted root-owned paths and belong to this receiver.
 
 Only the selected receiver target is retained in checkpoint status snapshots. `node_spool` is omitted. Collector ID, connection ID, accepted-record/loss/identity-gap counters describe the container receiver boundary, not a per-command event count. Receiver restart, reconnect and loss changes remain explicit gaps.
+
+The command boundary has four steps: bind the root birth before release; follow native clone births; observe the entire resulting process tree absent from `runsc ps`; and wait for a private read-only marker from another controlled process to be committed to SQLite. A late clone expands the tree and repeats the last two steps. The marker's own clone events also verify that clone checkpoints are active. A procfs miss or a spool acknowledgement alone never seals capture.
+
+`capture.command` saves the process identities, native root wait status, task-set observation and marker references. `capture.evidence_ref` points to a content-addressed object included in signed delivery, preserving original event IDs, Run IDs and payloads, together with marker evidence and the derivation rule. Its interval digest identifies the receiver interval used for analysis; the object retains command and boundary records, while the full interval remains in the receiver Run. Collection is bounded to 16,384 observations, 32 MiB and 4,096 process groups. The executor allows 30 seconds for closure and records a gap if a bound is reached.
 
 ## Results And Recovery
 
 The original `/v1/executions` admission, query and stop APIs are unchanged. Read `checkpoint.runtime_report.execution` and `.capture` for the adapter receipt. Query and duplicate admission never invoke `runsc exec` again.
 
 - Successful runsc transport completion after the identity checkpoint and gate release records execution success.
-- A failure before dispatch records failure. Nonzero runsc completion after dispatch stays unknown because the CLI shares its failure channel with runtime/control errors.
-- Timeout, cancellation, lost result or executor restart keeps an unresolved workload result unknown. Its exit code is absent.
+- A failure before dispatch records failure. After dispatch, a sealed native root-exit record supplies the workload result even when the control transport fails. Signal termination retains the native wait status and uses exit code `-1`.
+- Nonzero transport completion, timeout, cancellation or a lost reply without that native boundary leaves the workload result unknown. Executor restart preserves an interrupted result as unknown; its exit code is absent.
 - An unresolved attempt fences further executions for that Target in the durable ledger, including after restart. Retire the old workload and assign a new generation through the trusted launcher before continuing.
 - `concurrency=1` serializes this executor. External container executions remain explicitly untracked.
 
@@ -139,9 +144,9 @@ The pinned [`exec` implementation](https://github.com/google/gvisor/blob/a0e6be6
 The private gate binds a call to the exact process birth before workload dispatch.
 The x86 probe verifies that this identity survives `exec`, that a failed identity
 checkpoint prevents execution, and that cancellation after release retains an
-unknown result. The command-scoped event closure, durable receiver watermark and
-complete restart matrix remain the next R-02 integration steps. Capture reports
-continue to retain their outstanding gaps while those steps are implemented.
+unknown result. The command-scoped event closure and durable receiver boundary
+have local contract and signed-delivery tests. The complete real command and
+restart matrix remains an R-02 acceptance item until its artifacts are collected.
 
 ## Validation Commands
 
@@ -162,10 +167,12 @@ AGENTPROV_TEST_RUNSC=/usr/local/bin/runsc \
 AGENTPROV_TEST_RUNSC_CONTROLLED_BINARY=/usr/local/bin/agentprov \
 AGENTPROV_TEST_GVISOR_ROOTFS=/opt/agentprov-test/rootfs \
 AGENTPROV_TEST_RUNTIME_ADAPTER_OUTPUT=/root/ap-r02 \
-go test ./internal/runtimeadapter -run '^TestRunscLiveExecutionIdentityEvidence$' -count=1 -v
+go test ./internal/runtimeadapter -run '^TestRunscLive(ExecutionIdentityEvidence|CommandCapture)$' -count=1 -v
 ```
 
 The probe creates and removes its own container and keeps artifacts under a new `run-*` output directory. It records `runtime-state.json`, successful/cancelled operation receipts, `acceptance-boundary.json`, and `sentry-identity-records.json`. Identity samples retain exact protobuf `time_ns`, thread ID/birth, group ID/birth, container ID, parent group ID and `is_exec_session`, plus registration, connection, sequence, packet digest/header and loss delta. Protobuf 64-bit values are encoded as decimal strings, without float conversion. Credentials, argv and environment are excluded. Transport peer PID is labelled separately.
+
+The command-capture fixture additionally needs `/bin/sh`. It saves its receiver database, command checkpoints, native command evidence and closure reports in a `capture-*` directory. It checks success, a background child and exit status 7 against the real Sentry stream. These fixture commands contain no credentials.
 
 This probe checks the real runtime entry and receiver identity fields. Complete integration acceptance additionally runs the existing authenticated handoff API against the configured daemon, verifies duplicate/query/no-reexecution and generation rejection, exercises receiver restart/disconnect and executor restart, and collects the command and container-run evidence separately. For native/Guest capture, retain the existing live tests:
 

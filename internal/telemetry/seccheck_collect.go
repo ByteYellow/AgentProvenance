@@ -22,14 +22,17 @@ type SecCheckCollectOptions struct {
 
 type SecCheckTargetStatus struct {
 	seccheck.Target
-	State                string `json:"state"`
-	ConnectionID         string `json:"connection_id,omitempty"`
-	LastObservationAt    string `json:"last_observation_at,omitempty"`
-	AcceptedRecords      uint64 `json:"accepted_records"`
-	ReportedDrops        uint64 `json:"reported_dropped_events"`
-	DropCounterDecreases uint64 `json:"drop_counter_decreases"`
-	IdentityGapRecords   uint64 `json:"identity_gap_records"`
-	LastDiagnostic       string `json:"last_diagnostic,omitempty"`
+	State        string `json:"state"`
+	ConnectionID string `json:"connection_id,omitempty"`
+	// Nil identifies older status documents. Zero is a connected stream before
+	// its first event. This is durable spool acceptance, not database ingestion.
+	LastSequence         *uint64 `json:"last_sequence,omitempty"`
+	LastObservationAt    string  `json:"last_observation_at,omitempty"`
+	AcceptedRecords      uint64  `json:"accepted_records"`
+	ReportedDrops        uint64  `json:"reported_dropped_events"`
+	DropCounterDecreases uint64  `json:"drop_counter_decreases"`
+	IdentityGapRecords   uint64  `json:"identity_gap_records"`
+	LastDiagnostic       string  `json:"last_diagnostic,omitempty"`
 }
 
 type SecCheckCollectStatus struct {
@@ -143,6 +146,8 @@ func CollectSecCheck(ctx context.Context, db *sql.DB, paths store.Paths, config 
 				s := &state[i]
 				s.AcceptedRecords++
 				s.ConnectionID, s.LastObservationAt = rec.ConnectionID, rec.ReceivedAt.UTC().Format(time.RFC3339Nano)
+				sequence := rec.Sequence
+				s.LastSequence = &sequence
 				if rec.DroppedDelta != nil {
 					s.ReportedDrops += *rec.DroppedDelta
 				}

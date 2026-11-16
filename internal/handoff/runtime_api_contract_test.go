@@ -70,6 +70,10 @@ func TestRuntimeOpenAPISchemasMatchJSONFields(t *testing.T) {
 		"RuntimeReceiverRegistration": seccheck.Registration{},
 		"RuntimeReceiverTargetStatus": telemetry.SecCheckTargetStatus{},
 		"RuntimeReceiverCapabilities": seccheck.Capabilities{},
+		"SentryProcess":               runtimeadapter.SentryProcess{},
+		"RuntimeProcessDrain":         runtimeadapter.ProcessDrain{},
+		"RuntimeBarrier":              runtimeadapter.RuntimeBarrier{},
+		"RuntimeCommandWatermark":     runtimeadapter.CommandWatermark{},
 	} {
 		t.Run(name, func(t *testing.T) {
 			schema := schemas[name].(map[string]any)

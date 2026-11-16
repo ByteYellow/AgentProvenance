@@ -73,6 +73,11 @@ func TraceConfig(socket string) (map[string]any, error) {
 	points := make([]TracePoint, 0, len(CheckpointNames()))
 	for _, name := range CheckpointNames() {
 		p := TracePoint{Name: name, ContextFields: []string{"time", "thread_id", "task_start_time", "group_id", "thread_group_start_time", "container_id", "cwd", "process_name", "parent_thread_group_id", "is_exec_session"}}
+		if name == "sentry/exit_notify_parent" {
+			// This checkpoint has no task cwd or exec-session fields in the
+			// pinned runtime; requesting them rejects the entire trace session.
+			p.ContextFields = []string{"time", "thread_id", "task_start_time", "group_id", "thread_group_start_time", "container_id", "process_name", "parent_thread_group_id"}
+		}
 		if strings.HasPrefix(name, "syscall/openat/") {
 			p.OptionalFields = []string{"fd_path"}
 		}
@@ -82,7 +87,7 @@ func TraceConfig(socket string) (map[string]any, error) {
 }
 
 func CheckpointNames() []string {
-	return []string{"container/start", "sentry/clone", "sentry/execve", "sentry/task_exit", "syscall/openat/enter", "syscall/openat/exit", "syscall/connect/enter", "syscall/connect/exit", "syscall/execve/enter", "syscall/execve/exit"}
+	return []string{"container/start", "sentry/clone", "sentry/execve", "sentry/task_exit", "sentry/exit_notify_parent", "syscall/openat/enter", "syscall/openat/exit", "syscall/connect/enter", "syscall/connect/exit", "syscall/execve/enter", "syscall/execve/exit"}
 }
 
 type Capabilities struct {

@@ -8,9 +8,9 @@
 | --- | --- | --- | --- |
 | 默认 / `native` | 复用本机执行、策略、快照、作用域与恢复 | 原生 Sensor | 保持现有默认行为 |
 | `guest` | 在虚拟机内部运行同一执行器 | 位于 Guest 内核的原生 Sensor | 保存平台身份与 Guest 证据 |
-| `runsc` | 在一个固定容器中通过 `runsc exec` 执行 | 独立 SecCheck 接收器 | 保存操作回执和容器/Sentry 范围的观测 |
+| `runsc` | 在一个固定容器中通过 `runsc exec` 执行 | 独立 SecCheck 接收器 | 受控进程出生身份、子进程归属和命令采集完成边界；实机验收见下文 |
 
-当前 runsc 路径尚未建立逐命令事件关联，因此命令成功时采集状态仍可为 `capture=incomplete`，并保留 `shared_call_identity_unavailable` 和 `command_capture_watermark_unavailable`。接收器事件与命令回执分别保存在独立 Run 中，调查时需同时读取。该路径及新增 Kata/QEMU 组合的实机验证见文末命令。
+runsc 使用受控进程出生身份和原生 clone 记录确定命令范围。配置接收器数据库后，执行器等待所属进程树全部退出，再确认带精确身份的标记事件已入库。身份缺失、丢失、重连或完成边界未确认时，采集状态为 `incomplete`。原始事件保留原 Run ID；匹配记录会随命令证据对象进入签名交付包。该路径及 Kata/QEMU 组合的实机验证见文末命令。
 
 ## Native 与 Guest 配置
 
@@ -65,6 +65,7 @@ Guest/runsc 配置文件及全部父目录须为 root 所有、禁止 group/othe
     },
     "seccheck": {
       "status_file":"/run/agentprov/receiver-status.jsonl",
+      "data_dir":"/var/lib/agentprov-sentry",
       "target": {
         "run_id":"sentry-container-run",
         "socket_path":"/run/agentprov/events.sock",
@@ -114,17 +115,21 @@ agentprov --data-dir /var/lib/agentprov-executor daemon serve \
   --execution-config /run/agentprov/execution.json --record-timeout 30s
 ```
 
-配置了 receiver 时，执行前要求其已连接。状态缺失、过期、断连或身份不符均拒绝该命令。省略 receiver 是明确的 execution-only 配置，保留 `receiver_not_configured`。必须填写的 `allow_uncorrelated=true` 表示接受当前操作与 Sentry 事件之间的关联缺口。
+配置了 receiver 时，执行前要求其已连接。状态缺失、过期、断连或身份不符均拒绝该命令。省略 receiver 是明确的 execution-only 配置，保留 `receiver_not_configured`。沿用的 `allow_uncorrelated=true` 允许在命令采集不完整时执行。省略 `data_dir` 时只接入 receiver 状态，命令采集仍为不完整；填写后要求数据库属于该 receiver，且路径由 root 管理。
 
 checkpoint 只保留选中 receiver 的状态，省略 `node_spool`。collector ID、connection ID 及累计接收/丢失/身份缺口计数均属于容器 receiver 范围，不按单条命令计数。collector 重启、重连和损失变化分别记录 gap。
+
+命令封存依次核对四件事：执行前保存根进程出生身份；沿原生 clone 记录追踪子进程；通过 `runsc ps` 确认整棵所属进程树已退出；由另一受控进程发出只读标记，并等它写入 SQLite。迟到 clone 扩大范围时，重新核对进程树并发送标记。标记进程自身的 clone 事件同时用于检查 clone 采集点正在工作。
+
+`capture.command` 保存进程身份、根进程原生退出状态、进程列表观测及标记引用。`capture.evidence_ref` 指向随签名包交付的内容对象，其中保留命令事件的原始 ID、Run ID、payload、标记证据及推导规则。区间摘要标识分析读取的 receiver 区间；命令对象保留所属事件和边界事件，完整区间仍在 receiver Run 中。单次分析最多读取 16,384 条记录、32 MiB、4,096 个进程组；执行器最多等待 30 秒完成封存，触及限制时记录具体缺口。
 
 ## 状态与恢复
 
 沿用 `/v1/executions` 的准入、查询、stop API；adapter 结果位于 `checkpoint.runtime_report.execution` 与 `.capture`。重复提交和查询不调用第二次 `runsc exec`。
 
 - 身份回执已保存、命令已放行且 runsc 正常返回时，记录执行成功。
-- dispatch 前失败记录 Failed。dispatch 后非零返回与 runtime/control error 共用退出通道，保留 Unknown。
-- 超时、取消、结果丢失或 executor 重启后，未确认的工作负载结果为 Unknown，退出码为空。
+- dispatch 前失败记录 Failed。dispatch 后若已核对原生根进程退出事件和采集边界，即使控制通道报错，也按原生事件记录结果。信号终止保留原始 wait status，退出码使用 `-1`。
+- 非零返回、超时、取消或响应丢失且未取得上述边界时，工作负载结果为 Unknown。executor 重启后中断的执行保留 Unknown，退出码为空。
 - 同一 Target 的 unresolved attempt 会通过 Ledger 阻止后续执行，重启后仍有效。继续执行前，由可信 launcher 回收旧工作负载并分配新 generation。
 - `concurrency=1` 约束本 executor；容器外部执行保留 `external_container_execution_untracked`。
 
@@ -134,8 +139,8 @@ checkpoint 只保留选中 receiver 的状态，省略 `node_spool`。collector 
 
 私有启动管道让调用在执行前就与精确出生身份绑定。x86 实测已核对 `exec` 前后的
 身份一致性、回执保存失败时不执行命令，以及放行后取消时保留未知结果。
-R-02 接下来还需完成命令及其子进程的事件归属、接收端持久化完成水位和完整重启矩阵。
-这些工作完成前，采集报告继续保留对应缺口。
+命令及其子进程的归属、接收端持久化边界已补上本地契约和签名交付测试。
+真实命令与完整重启矩阵仍是 R-02 的待验收项，结果将随产物归档。
 
 ## 验证与 X86 交接
 
@@ -156,10 +161,12 @@ AGENTPROV_TEST_RUNSC=/usr/local/bin/runsc \
 AGENTPROV_TEST_RUNSC_CONTROLLED_BINARY=/usr/local/bin/agentprov \
 AGENTPROV_TEST_GVISOR_ROOTFS=/opt/agentprov-test/rootfs \
 AGENTPROV_TEST_RUNTIME_ADAPTER_OUTPUT=/root/ap-r02 \
-go test ./internal/runtimeadapter -run '^TestRunscLiveExecutionIdentityEvidence$' -count=1 -v
+go test ./internal/runtimeadapter -run '^TestRunscLive(ExecutionIdentityEvidence|CommandCapture)$' -count=1 -v
 ```
 
 测试自行创建并删除一次性容器，产物保存在新建的 `run-*` 目录：`runtime-state.json`、成功/取消操作回执、`acceptance-boundary.json`、`sentry-identity-records.json`。身份样本保留精确 protobuf `time_ns`、thread ID/birth、group ID/birth、container ID、parent group ID、`is_exec_session`，以及 registration、connection、sequence、packet digest/header 和 loss delta。64 位 protobuf 值使用十进制字符串，避免浮点精度损失；不保留凭据、argv、环境。transport peer PID 单独标识。
+
+命令采集用例还需要 `/bin/sh`，会在 `capture-*` 目录保存 receiver 数据库、命令回执、原生证据及封存报告。它在真实 Sentry 事件流上核对成功执行、后台子进程和退出状态 7；这些测试命令不含凭据。
 
 该探针覆盖真实 runtime 入口及 receiver 身份字段。完整集成验收还需对已配置 daemon 调用现有认证 handoff API，检查重复提交/查询不重执行、错代拒绝、receiver 重启/断连、executor 重启，并分别收集命令和容器 Run 的证据。native/Guest 继续使用原实机测试：
 

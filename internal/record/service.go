@@ -165,61 +165,69 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 			return Result{}, err
 		}
 	}
-	_, err = s.DB.Exec(`INSERT INTO snapshots
-		(id, name, kind, source, path, manifest_hash, file_count, bytes, snapshot_semantic_type, snapshot_physical_type, logical_bytes, physical_bytes, dirty_bytes_estimate, inode_estimate, storage_amplification_ratio, status, created_at)
-		VALUES (?, ?, 'ready', 'record', ?, ?, ?, ?, 'directory', 'copy', ?, ?, ?, ?, 1, 'ready', ?)`,
-		baseSnapshotID, req.Name+"-base", baseDir, baseManifest.Hash, baseManifest.Files, baseManifest.Bytes, baseManifest.Bytes, baseManifest.Bytes, baseManifest.Bytes, baseManifest.Files, now)
-	if err != nil {
-		return Result{}, err
-	}
-
 	rolloutID := ids.New("rollout")
 	attemptID := ids.New("attempt")
 	sessionID := "record-" + attemptID
 	leaseID := "lease-" + attemptID
 	toolCallID := ids.New("tool")
 	processID := ids.New("proc")
-	_, err = s.DB.Exec(`INSERT INTO leases (id, run_id, task_path, task_yaml, status, created_at, updated_at)
-		VALUES (?, ?, ?, '{}', 'allocated', ?, ?)`, leaseID, req.RunID, "record:"+absWorkdir, now, now)
+	// Commit the pre-launch graph as one unit. The collector may already be
+	// writing; reserve the writer before creating any execution rows.
+	err = store.WithWriteTx(ctx, s.DB, func(tx *sql.Tx) error {
+		_, err = tx.ExecContext(ctx, `INSERT INTO snapshots
+			(id, name, kind, source, path, manifest_hash, file_count, bytes, snapshot_semantic_type, snapshot_physical_type, logical_bytes, physical_bytes, dirty_bytes_estimate, inode_estimate, storage_amplification_ratio, status, created_at)
+			VALUES (?, ?, 'ready', 'record', ?, ?, ?, ?, 'directory', 'copy', ?, ?, ?, ?, 1, 'ready', ?)`,
+			baseSnapshotID, req.Name+"-base", baseDir, baseManifest.Hash, baseManifest.Files, baseManifest.Bytes, baseManifest.Bytes, baseManifest.Bytes, baseManifest.Bytes, baseManifest.Files, now)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.ExecContext(ctx, `INSERT INTO leases (id, run_id, task_path, task_yaml, status, created_at, updated_at)
+			VALUES (?, ?, ?, '{}', 'allocated', ?, ?)`, leaseID, req.RunID, "record:"+absWorkdir, now, now)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO sessions
+			(id, lease_id, run_id, container_id, workspace_host_path, runtime, parent_snapshot_id, status, startup_cold_ms, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, 'record', ?, 'running', 0, ?, ?)`,
+			sessionID, leaseID, req.RunID, "agentprov-record-"+attemptID, absWorkdir, baseSnapshotID, now, now)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO rollouts
+			(id, run_id, task_path, base_snapshot_id, status, fanout, risk_status, created_at, updated_at)
+			VALUES (?, ?, ?, ?, 'running', 1, 'pending', ?, ?)`,
+			rolloutID, req.RunID, "record:"+absWorkdir, baseSnapshotID, now, now)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO fork_attempts
+			(id, rollout_id, tool_call_id, snapshot_id, workspace_path, fork_ms, strategy, command, status, risk_status, created_at)
+			VALUES (?, ?, ?, ?, ?, 0, 'zero-sdk-record', ?, 'running', 'clean', ?)`,
+			attemptID, rolloutID, toolCallID, baseSnapshotID, absWorkdir, commandText, now)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO tool_calls
+			(id, run_id, rollout_id, attempt_id, session_id, command, args_hash, status, policy_decision, created_at, started_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, 'running', 'allow', ?, ?)`,
+			toolCallID, req.RunID, rolloutID, attemptID, sessionID, commandText, argsHash(commandText), now, now)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `INSERT INTO processes
+			(id, session_id, tool_call_id, command, status, started_at)
+			VALUES (?, ?, ?, ?, 'running', ?)`, processID, sessionID, toolCallID, commandText, now)
+		if err != nil {
+			return err
+		}
+		if err := s.insertGraphEdges(ctx, tx, req.RunID, rolloutID, baseSnapshotID, attemptID, sessionID, toolCallID, processID, now); err != nil {
+			return err
+		}
+		return nil
+	})
 	if err != nil {
-		return Result{}, err
-	}
-	_, err = s.DB.Exec(`INSERT INTO sessions
-		(id, lease_id, run_id, container_id, workspace_host_path, runtime, parent_snapshot_id, status, startup_cold_ms, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, 'record', ?, 'running', 0, ?, ?)`,
-		sessionID, leaseID, req.RunID, "agentprov-record-"+attemptID, absWorkdir, baseSnapshotID, now, now)
-	if err != nil {
-		return Result{}, err
-	}
-	_, err = s.DB.Exec(`INSERT INTO rollouts
-		(id, run_id, task_path, base_snapshot_id, status, fanout, risk_status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 'running', 1, 'pending', ?, ?)`,
-		rolloutID, req.RunID, "record:"+absWorkdir, baseSnapshotID, now, now)
-	if err != nil {
-		return Result{}, err
-	}
-	_, err = s.DB.Exec(`INSERT INTO fork_attempts
-		(id, rollout_id, tool_call_id, snapshot_id, workspace_path, fork_ms, strategy, command, status, risk_status, created_at)
-		VALUES (?, ?, ?, ?, ?, 0, 'zero-sdk-record', ?, 'running', 'clean', ?)`,
-		attemptID, rolloutID, toolCallID, baseSnapshotID, absWorkdir, commandText, now)
-	if err != nil {
-		return Result{}, err
-	}
-	_, err = s.DB.Exec(`INSERT INTO tool_calls
-		(id, run_id, rollout_id, attempt_id, session_id, command, args_hash, status, policy_decision, created_at, started_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 'running', 'allow', ?, ?)`,
-		toolCallID, req.RunID, rolloutID, attemptID, sessionID, commandText, argsHash(commandText), now, now)
-	if err != nil {
-		return Result{}, err
-	}
-	_, err = s.DB.Exec(`INSERT INTO processes
-		(id, session_id, tool_call_id, command, status, started_at)
-		VALUES (?, ?, ?, ?, 'running', ?)`, processID, sessionID, toolCallID, commandText, now)
-	if err != nil {
-		return Result{}, err
-	}
-	if err := s.insertGraphEdges(req.RunID, rolloutID, baseSnapshotID, attemptID, sessionID, toolCallID, processID, now); err != nil {
-		return Result{}, errors.Join(err, s.markFailed(req.RunID, rolloutID, attemptID, sessionID, toolCallID, processID, err.Error()))
+		return Result{}, fmt.Errorf("prepare execution records: %w", err)
 	}
 
 	// The execution owner supplies cancellation; timeout uses the same stop path.
@@ -720,7 +728,7 @@ func descendantsOf(rootPID int64, procs []ObservedProcess) []ObservedProcess {
 	return out
 }
 
-func (s Service) insertGraphEdges(runID, rolloutID, snapshotID, attemptID, sessionID, toolCallID, processID, createdAt string) error {
+func (s Service) insertGraphEdges(ctx context.Context, tx *sql.Tx, runID, rolloutID, snapshotID, attemptID, sessionID, toolCallID, processID, createdAt string) error {
 	edges := [][3]string{
 		{rolloutID, attemptID, "rollout_attempt"},
 		{snapshotID, attemptID, "snapshot_attempt"},
@@ -729,16 +737,14 @@ func (s Service) insertGraphEdges(runID, rolloutID, snapshotID, attemptID, sessi
 		{toolCallID, sessionID, "tool_call_session"},
 		{toolCallID, processID, "tool_call_process"},
 	}
-	return store.WithWriteTx(context.Background(), s.DB, func(tx *sql.Tx) error {
-		for _, edge := range edges {
-			if _, err := tx.Exec(`INSERT INTO graph_edges (id, run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at)
+	for _, edge := range edges {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO graph_edges (id, run_id, rollout_id, from_id, to_id, edge_type, source_event_id, created_at)
 			VALUES (?, ?, ?, ?, ?, ?, 'record', ?)`,
-				ids.New("edge"), runID, rolloutID, edge[0], edge[1], edge[2], createdAt); err != nil {
-				return err
-			}
+			ids.New("edge"), runID, rolloutID, edge[0], edge[1], edge[2], createdAt); err != nil {
+			return err
 		}
-		return nil
-	})
+	}
+	return nil
 }
 
 func (s Service) markFailed(runID, rolloutID, attemptID, sessionID, toolCallID, processID, reason string) error {

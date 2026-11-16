@@ -193,16 +193,50 @@ func (e *Executor) executeBackend(ctx context.Context, a Attempt) error {
 	}
 	report.Execution = result
 	if start != nil {
-		finishCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		capture := e.RuntimeCapture.Finish(finishCtx, r.Target, *start)
-		cancel()
-		// Current runsc transport has no command-scoped SecCheck receipt. Keep
-		// this gap even if a supplied receiver reports container-level completion.
-		capture.State = "incomplete"
-		for _, gap := range []string{"shared_call_identity_unavailable", "command_capture_watermark_unavailable"} {
-			if !slices.Contains(capture.Gaps, gap) {
-				capture.Gaps = append(capture.Gaps, gap)
+		if a.State.Capture == Collecting {
+			draining := report
+			draining.Execution.State, draining.Execution.ExitCode = string(a.State.Execution), nil
+			capture := *draining.Capture
+			capture.State = "draining"
+			draining.Capture = &capture
+			drainState := a.State
+			drainState.Capture = Draining
+			a, err = e.saveCheckpoint(context.Background(), a, Checkpoint{State: drainState, Reason: "runtime_draining", Runtime: &draining})
+			if err != nil {
+				return err
 			}
+		}
+		finishCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		var capture runtimeadapter.CaptureReport
+		if scoped, ok := e.RuntimeCapture.(runtimeadapter.CommandCaptureBackend); ok {
+			capture = scoped.FinishCommand(finishCtx, r, result, *start)
+		} else {
+			capture = e.RuntimeCapture.Finish(finishCtx, r.Target, *start)
+			capture.State = "incomplete"
+			for _, gap := range []string{"shared_call_identity_unavailable", "command_capture_watermark_unavailable"} {
+				if !slices.Contains(capture.Gaps, gap) {
+					capture.Gaps = append(capture.Gaps, gap)
+				}
+			}
+		}
+		cancel()
+		if capture.State == "sealed" && capture.Command != nil && capture.Evidence != nil && len(capture.Gaps) == 0 {
+			state.Capture = Sealed
+			// A native group-exit record resolves a failed/lost control
+			// transport. Keep signal termination distinct from exit status 0.
+			wait := capture.Command.RootWaitStatus
+			code := -1
+			if wait&0x7f == 0 {
+				code = int((wait >> 8) & 0xff)
+			}
+			state.Execution = Failed
+			if code == 0 {
+				state.Execution = Succeeded
+			}
+			report.Execution.State, report.Execution.ExitCode = string(state.Execution), &code
+			report.Execution.Gaps = slices.DeleteFunc(report.Execution.Gaps, func(gap string) bool {
+				return gap == "command_capture_watermark_unavailable" || gap == "workload_completion_unknown" || gap == "transport_stopped_workload_stop_unconfirmed"
+			})
 		}
 		report.Capture = &capture
 	}
