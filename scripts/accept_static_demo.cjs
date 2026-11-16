@@ -1,13 +1,41 @@
 // End-to-end static replay parity against a current, isolated `agentprov demo`.
 // Usage: node scripts/accept_static_demo.cjs SITE_URL LOCAL_DEMO_URL
 // Run SITE_URL under a project subpath to catch GitHub Pages routing mistakes.
-const { chromium } = require('playwright');
 const assert = require('node:assert/strict');
 const { gunzipSync } = require('node:zlib');
 const { tmpdir } = require('node:os');
 const { createHash } = require('node:crypto');
 
+function assertNavigationParity(nativeHrefs, staticHrefs, {native, site, lang}) {
+  const nativeBase=new URL(native), siteBase=new URL(site);
+  assert.ok(siteBase.pathname.endsWith('/'),'Static site base must end with a slash');
+  const canonical=url=>{url.searchParams.sort();return url.href;};
+  const expected=[];
+  for(const href of nativeHrefs){
+    const url=new URL(href,nativeBase),parts=url.pathname.split('/');
+    if(url.origin!==nativeBase.origin || parts.length!==4 || parts[1]!=='demos' || !['docs','guide'].includes(parts[2]) || !parts[3])continue;
+    assert.equal(url.searchParams.get('lang')||lang,lang,'Native navigation must use the selected language');
+    const translated=new URL(lang+'/'+(parts[2]==='docs'?'demos':'guides')+'/'+parts[3]+'.html',siteBase);
+    url.searchParams.delete('lang');
+    translated.search=url.search;
+    translated.hash=url.hash;
+    expected.push(canonical(translated));
+  }
+  const actual=[];
+  for(const href of staticHrefs){
+    const url=new URL(href,siteBase);
+    if(url.origin!==siteBase.origin || !url.pathname.startsWith(siteBase.pathname))continue;
+    const parts=url.pathname.slice(siteBase.pathname.length).split('/');
+    if(parts.length===3 && ['demos','guides'].includes(parts[1]) && parts[2].endsWith('.html'))actual.push(canonical(url));
+  }
+  const links=[...new Set(actual)].sort();
+  assert.ok(expected.length>0,'Native documentation navigation must not be empty');
+  assert.deepEqual(links,[...new Set(expected)].sort(),'Static documentation navigation must exactly match native navigation');
+  return links;
+}
+
 async function main() {
+  const { chromium } = require('playwright');
   const site = new URL(process.argv[2]), native = new URL(process.argv[3]);
   const browser = await chromium.launch({headless:true, ...(process.env.PLAYWRIGHT_CHANNEL ? {channel:process.env.PLAYWRIGHT_CHANNEL} : {})});
   const report = {parity:0, pages:0, runs:0, sessions:0, focusedGraphs:0, contentPages:0, runIndexes:0};
@@ -318,9 +346,12 @@ async function main() {
     // All published guides, images and table-of-contents links, at both sizes.
     for(const lang of ['en','zh-CN']){
       await page.goto(new URL(lang+'/index.html',site).href);
-      const links=await page.locator('a[href]').evaluateAll(a=>[...new Set(a.map(x=>x.href).filter(s=>/\/(demos|guides)\/[^/]+\.html/.test(s)))]);
-      assert.equal(links.length,manifest.guides.filter(g=>!g.ID.startsWith('release-v')).length+14);
+      const nativeGallery=await context.request.get(new URL('/demos/?lang='+lang,native).href);
+      assert.equal(nativeGallery.status(),200);
+      const nativeLinks=await page.evaluate(html=>[...new DOMParser().parseFromString(html,'text/html').querySelectorAll('a[href]')].map(a=>a.getAttribute('href')),await nativeGallery.text());
+      const links=assertNavigationParity(nativeLinks,await page.locator('a[href]').evaluateAll(a=>a.map(x=>x.href)),{native,site,lang});
       assert.equal(await page.locator('a[href*="benchmarks"]').count(),0);
+      // Linked reference pages are exported and checked even when absent from navigation.
       const allGuides=[...new Set([...links,...manifest.guides.map(g=>new URL(lang+'/guides/'+g.ID+'.html',site).href)])];
       for(const href of allGuides){
         assert.equal((await page.goto(href)).status(),200);
@@ -341,4 +372,5 @@ async function main() {
     throw error;
   } finally {await browser.close();}
 }
-main().catch(error=>{console.error(error);process.exitCode=1;});
+module.exports={assertNavigationParity};
+if(require.main===module)main().catch(error=>{console.error(error);process.exitCode=1;});
