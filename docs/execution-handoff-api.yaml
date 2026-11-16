@@ -562,6 +562,163 @@ components:
         error: { type: string }
         capture_report: { $ref: '#/components/schemas/NativeCaptureReport' }
         recovery_report: { $ref: '#/components/schemas/ScopeRecoveryReport' }
+        platform_binding: { $ref: '#/components/schemas/PlatformBinding' }
+        runtime_report: { $ref: '#/components/schemas/RuntimeReport' }
+    PlatformBinding:
+      type: object
+      additionalProperties: false
+      required: [target, mode]
+      description: >
+        Trusted launcher mapping for the complete checkpoint Target. Optional in
+        older checkpoints. Native has only target and mode. Guest optionally adds
+        all five of runtime_class, runtime_handler, pod_uid, container_id and
+        guest_boot_id; the daemon verifies the configured boot ID against its
+        Guest kernel. Runsc requires container_id and state_created and omits
+        Guest fields. Changing a saved mapping requires a new Target generation.
+      properties:
+        target: { $ref: '#/components/schemas/Target' }
+        mode: { type: string, enum: [native, guest, runsc] }
+        container_id: { type: string, minLength: 1, description: Trusted CRI container identity for Guest or the configured runsc container ID. }
+        state_created: { type: string, format: date-time, description: Exact runsc state creation value checked before dispatch. }
+        runtime_class: { type: string, minLength: 1 }
+        runtime_handler: { type: string, minLength: 1 }
+        pod_uid: { type: string, minLength: 1 }
+        guest_boot_id: { type: string, minLength: 1 }
+    RuntimeReport:
+      type: object
+      additionalProperties: false
+      required: [execution]
+      description: >
+        Runtime metadata in the authoritative handoff checkpoint, not another
+        execution journal. Omitted by the default native path and older
+        checkpoints. Guest uses execution with mode=guest and omits capture;
+        its native sensor evidence remains in checkpoint.capture_report. Runsc
+        uses capture for separate SecCheck receiver observations.
+      properties:
+        execution: { $ref: '#/components/schemas/RuntimeExecution' }
+        capture: { $ref: '#/components/schemas/RuntimeCaptureReport' }
+    RuntimeExecution:
+      type: object
+      additionalProperties: false
+      required: [schema_version, binding, operation_id, attempt_id, run_id, state, started, gaps]
+      properties:
+        schema_version: { const: agentprovenance.runtime_adapter/v1 }
+        binding: { $ref: '#/components/schemas/PlatformBinding', description: Same trusted mapping as checkpoint.platform_binding. }
+        operation_id: { type: string, minLength: 1, description: Attempt.request.operation_id. }
+        attempt_id: { type: string, minLength: 1, description: Handoff Attempt.id, separate from the native record attempt identity. }
+        run_id: { type: string, minLength: 1, description: Attempt.local_run_id. }
+        state: { $ref: '#/components/schemas/State/properties/execution', description: Execution observation projected into the checkpoint; status queries do not execute work. }
+        started: { type: boolean, description: Native scope/result evidence or a started runtime transport; not confirmation that a cancelled workload terminated. }
+        exit_code: { type: integer, description: Omitted when unknown. Guest uses the native exec_end result; current runsc reports zero only on confirmed success and leaves nonzero transport outcomes unknown. }
+        runtime_release: { type: string, description: Pinned runsc release; absent for Guest. }
+        sentry_pid: { type: integer, minimum: 1, maximum: 2147483647, description: Sentry root-namespace process ID read from runsc internal PID output, not a host PID or a process-birth witness. }
+        sentry_pid_basis: { type: string, enum: [runsc_internal_pid_file] }
+        gaps: { type: array, items: { type: string }, description: Explicit association or execution gaps; an empty array is retained. }
+    RuntimeCaptureReport:
+      type: object
+      additionalProperties: false
+      required: [observation_layer, scope_ref, state, gaps]
+      description: >
+        Container/Sentry-range observations from a separate receiver Run. Current
+        runsc capture ends incomplete: shared_call_identity_unavailable and
+        command_capture_watermark_unavailable remain explicit. Receiver counters
+        are cumulative selected-target boundaries, not per-command event counts.
+      properties:
+        observation_layer: { const: sentry }
+        scope_ref: { type: string, description: Registered Sentry lifecycle scope; empty before a final receiver report is available. }
+        state: { type: string, enum: [collecting, incomplete] }
+        start: { $ref: '#/components/schemas/RuntimeCapturePoint' }
+        end: { $ref: '#/components/schemas/RuntimeCapturePoint' }
+        gaps: { type: array, items: { type: string } }
+        error: { type: string }
+    RuntimeCapturePoint:
+      type: object
+      additionalProperties: false
+      required: [target, observed_at, receiver_status, receiver_target]
+      properties:
+        target: { $ref: '#/components/schemas/Target' }
+        observed_at: { type: string, format: date-time }
+        receiver_status: { $ref: '#/components/schemas/RuntimeReceiverStatus' }
+        receiver_target: { $ref: '#/components/schemas/RuntimeReceiverTarget' }
+    RuntimeReceiverTarget:
+      type: object
+      additionalProperties: false
+      required: [run_id, socket_path, registration]
+      properties:
+        run_id: { type: string, minLength: 1, description: Independent receiver evidence Run, not RuntimeExecution.run_id. }
+        socket_path: { type: string, minLength: 1, description: Trusted private receiver socket path. }
+        registration: { $ref: '#/components/schemas/RuntimeReceiverRegistration' }
+    RuntimeReceiverRegistration:
+      type: object
+      additionalProperties: false
+      required: [namespace, instance_id, generation, sandbox_id, container_id, peer_uid]
+      description: >
+        Namespace, instance_id and generation match the full execution Target
+        (namespace maps to producer_id). Peer UID authenticates the local
+        receiver connection; it is separate from Tool Call identity.
+      properties:
+        namespace: { type: string, minLength: 1 }
+        instance_id: { type: string, minLength: 1 }
+        generation: { type: string, minLength: 1 }
+        sandbox_id: { type: string, minLength: 1 }
+        container_id: { type: string, minLength: 1 }
+        peer_uid: { type: integer, minimum: 0, maximum: 4294967295 }
+    RuntimeReceiverStatus:
+      type: object
+      additionalProperties: false
+      required: [schema_version, collector_id, generated_at, state, expected_runtime_release, protocol_version, capabilities, targets]
+      description: >
+        Selected-target projection of receiver status. Collector identity and
+        capabilities describe the receiver instance. Exactly one targets entry
+        matches receiver_target; other targets, node_spool and node-wide errors
+        are omitted from persisted command checkpoints.
+      properties:
+        schema_version: { const: agentprovenance.seccheck_status/v1 }
+        collector_id: { type: string, minLength: 1 }
+        generated_at: { type: string, format: date-time }
+        state: { const: listening }
+        expected_runtime_release: { const: release-20261109.0 }
+        protocol_version: { const: 1 }
+        capabilities: { $ref: '#/components/schemas/RuntimeReceiverCapabilities' }
+        targets:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items: { $ref: '#/components/schemas/RuntimeReceiverTargetStatus' }
+    RuntimeReceiverTargetStatus:
+      type: object
+      additionalProperties: false
+      required: [run_id, socket_path, registration, state, accepted_records, reported_dropped_events, drop_counter_decreases, identity_gap_records]
+      description: Cumulative counters for this receiver target within the collector lifetime; compare collector_id and connection_id across boundaries.
+      properties:
+        run_id: { type: string, minLength: 1 }
+        socket_path: { type: string, minLength: 1 }
+        registration: { $ref: '#/components/schemas/RuntimeReceiverRegistration' }
+        state: { const: connected }
+        connection_id: { type: string }
+        last_observation_at: { type: string, format: date-time }
+        accepted_records: { type: integer, minimum: 0 }
+        reported_dropped_events: { type: integer, minimum: 0 }
+        drop_counter_decreases: { type: integer, minimum: 0 }
+        identity_gap_records: { type: integer, minimum: 0 }
+        last_diagnostic: { type: string }
+    RuntimeReceiverCapabilities:
+      type: object
+      additionalProperties: false
+      required: [producer, producer_version, producer_commit, placement, identity_domain, system_telemetry, model_intent, app_context, supported_points, enabled_points_basis, runtime_release_basis, raw_packets_retained]
+      properties:
+        producer: { type: string }
+        producer_version: { type: string }
+        producer_commit: { type: string }
+        placement: { const: host_receiver }
+        identity_domain: { const: sentry }
+        system_telemetry: { const: partial }
+        model_intent: { const: none }
+        app_context: { const: none }
+        supported_points: { type: array, items: { type: string } }
+        enabled_points_basis: { const: observed_records }
+        runtime_release_basis: { const: trusted_launcher_assertion }
+        raw_packets_retained: { const: false }
     ScopeRecoveryAnchor:
       type: object
       required: [schema_version, boot_id, filesystem_id]
