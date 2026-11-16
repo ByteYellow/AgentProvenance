@@ -87,10 +87,10 @@ func buildGraphLensFromData(opts GraphLensOptions, nodes map[string]GraphLensNod
 	prioritizeLensEdges(filteredEdges, nodes)
 	manifest.Edges, manifest.DerivedEdges, manifest.Query.Truncated = splitAndLimitLensEdges(filteredEdges, opts.Limit)
 	// Build the visible node set from the RETURNED edges only, so no node is ever
-	// shown without a connecting edge. (Previously `used` was built from every
+	// retained only because its edge fell outside the budget. (`used` was once built from every
 	// pre-truncation edge, so a node whose only edge fell past the cut still
-	// appeared -- floating.) Genuinely edgeless nodes are dropped rather than
-	// left disconnected; drill/focus recovers detail for a specific node.
+	// appeared -- floating.) Standalone records relevant to the selected lens
+	// are added separately, without inventing relationships for them.
 	used := map[string]bool{}
 	for _, edge := range append(append([]GraphLensEdge{}, manifest.Edges...), manifest.DerivedEdges...) {
 		if edge.EdgeType == "possible_sensitive_data_flow_summary" && edge.ToID != "" {
@@ -109,6 +109,22 @@ func buildGraphLensFromData(opts GraphLensOptions, nodes map[string]GraphLensNod
 	if opts.SessionScope != nil && lens == "default" && detail != "summary" && opts.Focus == "" {
 		for _, id := range opts.SessionScope.ToolIDs {
 			used[id] = true
+		}
+	}
+	if opts.Focus == "" && (lens == "intent" || lens == "file-artifact" && detail != "summary") {
+		// A saved call can have no intent verdict or agent edge. An artifact can
+		// likewise have no known producer. Both must remain inspectable.
+		for _, n := range lensNodesInOrder(nodes) {
+			matches := lens == "intent" && n.Kind == "tool_call" ||
+				lens == "file-artifact" && detail != "summary" && (n.Kind == "artifact" || n.Kind == "file")
+			if !matches || used[n.ID] {
+				continue
+			}
+			if len(used) >= opts.Limit {
+				manifest.Query.Truncated = true
+				break
+			}
+			used[n.ID] = true
 		}
 	}
 	manifest.Nodes = sortedLensNodes(nodes, used)

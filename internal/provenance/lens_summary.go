@@ -396,14 +396,12 @@ func overviewCounts(nodes map[string]GraphLensNode, events map[string]lensEvent,
 			counts.RuntimeProcesses++
 		case "file":
 			fileIDs[node.ID] = true
-		case "artifact", "llm_prompt", "llm_completion", "message":
+		case "artifact":
 			counts.Artifacts++
-			if node.Kind == "message" {
-				counts.AgentMessages++
-			}
-			if node.Kind == "llm_prompt" || node.Kind == "llm_completion" {
-				counts.LLMIntents++
-			}
+		case "message":
+			counts.AgentMessages++
+		case "llm_prompt", "llm_completion":
+			counts.LLMIntents++
 		case "risk_signal":
 			if isLoopbackPrivateRiskNode(node, events) {
 				continue
@@ -512,6 +510,7 @@ func buildFileGroupEdges(runID string, nodes map[string]GraphLensNode, edges []G
 	rootID := "run/" + runID
 	nodes[rootID] = GraphLensNode{ID: rootID, Kind: "run", Label: runID, Data: map[string]any{"run_id": runID}}
 	filesByCategory := map[string]map[string]bool{}
+	artifacts := 0
 	addFile := func(id string) {
 		if !strings.HasPrefix(id, "workspace_file/") {
 			return
@@ -524,6 +523,9 @@ func buildFileGroupEdges(runID string, nodes map[string]GraphLensNode, edges []G
 		filesByCategory[category][path] = true
 	}
 	for id, node := range nodes {
+		if node.Kind == "artifact" {
+			artifacts++
+		}
 		if node.Kind != "file" {
 			continue
 		}
@@ -545,6 +547,12 @@ func buildFileGroupEdges(runID string, nodes map[string]GraphLensNode, edges []G
 		label := fmt.Sprintf("%s: %d", strings.ReplaceAll(key, "_", " "), count)
 		nodes[id] = GraphLensNode{ID: id, Kind: "file_group", Subtype: key, Label: label, Risk: riskIf(key == "secret_or_config"), TrustOrigin: "summary", Data: map[string]any{"category": key, "count": count, "drilldown_lens": "file-artifact", "drilldown_detail": "raw"}}
 		out = append(out, GraphLensEdge{ID: "summary-file-" + key, FromID: rootID, ToID: id, EdgeType: "run_file_group", Data: map[string]any{"category": key, "count": count}})
+	}
+	if artifacts > 0 {
+		id := "file_group/artifacts"
+		data := map[string]any{"category": "artifacts", "count": artifacts, "drilldown_lens": "file-artifact", "drilldown_detail": "raw"}
+		nodes[id] = GraphLensNode{ID: id, Kind: "file_group", Subtype: "artifacts", Label: fmt.Sprintf("artifacts: %d", artifacts), TrustOrigin: "summary", Data: data}
+		out = append(out, GraphLensEdge{ID: "summary-file-artifacts", FromID: rootID, ToID: id, EdgeType: "run_file_group", Data: data})
 	}
 	return out
 }

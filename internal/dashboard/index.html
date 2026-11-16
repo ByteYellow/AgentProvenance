@@ -1937,7 +1937,7 @@ async function loadRun(run,options={}){
   const q='run='+encodeURIComponent(run);
   const scopeQuery=SESSION_SCOPE?'&harness='+encodeURIComponent(SESSION_SCOPE.harness)+'&session='+encodeURIComponent(SESSION_SCOPE.session_id):'';
   const lq=q+scopeQuery+'&lens='+encodeURIComponent(LENS)+'&detail='+encodeURIComponent(DETAIL)+(GRAPH_FOCUS?'&focus='+encodeURIComponent(GRAPH_FOCUS):'')+[...OV].map(o=>'&overlay='+o).join('');
-  const overviewQ=q+'&lens=default&detail=summary';
+  const overviewQ=q+scopeQuery+'&lens=default&detail=summary';
   let results;
   try{results=await Promise.all([j('/api/overview?'+q),j('/api/lens?'+lq),j('/api/lens?'+overviewQ),j('/api/egress?'+q),j('/api/processes?'+q),j('/api/outbound?'+q)]);}
   catch(error){if(request!==runRequest || cur!==run)return;throw error;}

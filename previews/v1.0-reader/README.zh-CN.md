@@ -43,6 +43,11 @@ Jupyter 合成验收记录，包含静态图表和 kernel 重启；完整阅读�
 文件校验清单。`review.json` 列出示例入口；每份清单记录来源 ZIP 的哈希及
 待审核状态。阅读副本本身未签名。
 
+阅读器会更新历史回放的图展示：模型消息不再计入产物，没有关联边的调用和产物
+仍可查看，调查入口的数量跟随所选会话。保存的证据与归因关系保持原样。采集详情
+按本次执行范围展示计数，分别说明 AppArmor/seccomp 状态补采缺失、事件丢失和
+待入库情况。
+
 ## 检查交互
 
 安装 Node.js、Playwright 及其 Chromium 后执行：
@@ -52,7 +57,8 @@ AGENTPROV_PREVIEW_URL=http://127.0.0.1:47920 \
   node previews/v1.0-reader/check.cjs /tmp/agentprov-v1-reader-check
 ```
 
-检查覆盖双向执行跳转、来源命令定位、会话默认折叠、Compare 保留、Browser 和
+检查覆盖 Run 和会话范围的非零图跳转、采集详情、双向执行跳转、来源命令定位、
+会话默认折叠、Compare 保留、Browser 和
 Notebook 正文及图片阅读、脚本报错和意外网络请求。截图和 JSON 报告写入指定目录。
 
 正式接入时，需要把确认后的设计移入 Dashboard 共用资源，移除预览用的会话

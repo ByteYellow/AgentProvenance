@@ -1,5 +1,6 @@
 from pathlib import Path
 import argparse, base64, gzip, hashlib, html, json, re, shutil, zipfile
+from graph_navigation import refresh_graph_navigation
 
 base=Path(__file__).resolve().parent
 repo=base.parents[1]
@@ -31,12 +32,14 @@ for slug,name,title in cases:
         entries=saved(run['context']).get('entries',[]) if run.get('context') else []
         return sum(len(x.get('attachments',[]))*100+int(bool(x.get('browser') or x.get('notebook'))) for x in entries)
     selected=max(catalog['runs'].items(),key=score)[0]
+    refresh_graph_navigation(root,catalog,saved)
     # Select the relevant recorded run before the existing reader boots.
     bootstrap='<script>if(!new URL(location.href).searchParams.has("run")){const u=new URL(location.href);u.searchParams.set("run",'+json.dumps(selected)+');history.replaceState(null,"",u);}</script>'
     index=root/'index.html'
     index.write_text(index.read_text().replace('<body>','<body>'+bootstrap))
     for language in ['en','zh-CN']:
         index=root/language/'index.html';text=index.read_text()
+        text=text.replace("const overviewQ=q+'&lens=default&detail=summary';", "const overviewQ=q+scopeQuery+'&lens=default&detail=summary';")
         text=text.replace('</head>','<link rel="stylesheet" href="../assets/evidence-preview.css"></head>')
         bar=nav.replace('href="../','href="../../')
         if language=='zh-CN':

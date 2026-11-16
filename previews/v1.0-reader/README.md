@@ -50,6 +50,12 @@ and regenerates the reading-copy file inventory. `review.json` records the
 selected examples. Each inventory records the original ZIP hash and pending
 approval. These remain unsigned reading copies.
 
+The reader refreshes the archived graph projections: model messages no longer
+count as artifacts, standalone calls and artifacts remain inspectable, and
+investigation counts follow the selected session. Saved evidence and attribution
+edges are unchanged. Capture details distinguish missing AppArmor/seccomp state
+snapshots from event loss and pending ingestion, using the saved execution scope.
+
 ## Check interactions
 
 With Node.js, Playwright, and its Chromium browser installed:
@@ -59,7 +65,8 @@ AGENTPROV_PREVIEW_URL=http://127.0.0.1:47920 \
   node previews/v1.0-reader/check.cjs /tmp/agentprov-v1-reader-check
 ```
 
-The check covers both directions of execution navigation, the exact source
+The check covers nonzero graph drilldowns across runs and sessions, capture
+details, both directions of execution navigation, the exact source
 command, collapsed sessions, existing Compare, Browser and Notebook body/image
 reading, script errors, and unexpected network requests. Screenshots and a JSON
 report are written under the chosen check directory.
