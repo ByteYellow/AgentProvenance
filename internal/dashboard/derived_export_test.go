@@ -122,13 +122,17 @@ func TestDerivedExportDoesNotUseMutablePublicInventory(t *testing.T) {
 }
 
 func TestDerivedExportHTTPPreviewUsesOperatorSigner(t *testing.T) {
-	m, h := previewFixture(t)
+	m, _ := previewFixture(t)
 	pub, key, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.server.ReplaySigner = &ReplaySigner{ExporterID: "local-operator", Key: key,
-		ImplementationSHA256: attest.DigestSHA256([]byte("fixture-binary"))}
+	config := Server{DB: m.server.DB, ReplaySigner: &ReplaySigner{ExporterID: "local-operator", Key: key,
+		ImplementationSHA256: attest.DigestSHA256([]byte("fixture-binary"))}}
+	exports := NewReplayExports(config)
+	t.Cleanup(exports.Close)
+	config.ReplayExports = exports
+	h := config.Handler()
 	if w := previewCall(h, "POST", "/api/replay/previews", `{"run":"preview-run","scope":"whole_run","sign_key":"attacker"}`); w.Code != 400 {
 		t.Fatalf("request accepted a signing key: %d", w.Code)
 	}
