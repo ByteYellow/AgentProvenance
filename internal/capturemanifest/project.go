@@ -82,6 +82,7 @@ func (s Service) read(ctx context.Context, run string, e evidence) (Record, erro
 		r.Source, r.Placement, r.IdentityDomain = "execution_capture", "executor", "execution_scope"
 		r.Identity = map[string]string{"producer_id": c.Target.ProducerID, "instance_id": c.Target.InstanceID, "generation": c.Target.Generation, "attempt_id": c.AttemptID}
 		r.ObservedAt, r.Status, r.IntervalBasis = timestamp(c.At), string(c.State.Capture), "boundary_samples"
+		r.ExecutionState = &c.State
 		if c.Scope != nil {
 			r.Identity["scope_kind"], r.Identity["cgroup_id"] = c.Scope.ScopeKind, c.Scope.CgroupID
 		}
@@ -223,11 +224,20 @@ func sensorSnapshot(boundary string, c sensor.CapabilityReport) Snapshot {
 		return s
 	}
 	s.Ready = ptr(c.Ready)
+	s.Identity = map[string]string{}
 	if c.CollectorID != "" {
-		s.Identity = map[string]string{"collector_id": c.CollectorID, "capability_revision": strconv.FormatUint(c.Revision, 10), "changed_at": c.ChangedAt}
-		if p := c.Producer; p != nil {
-			s.Identity["producer_version"], s.Identity["producer_commit"], s.Identity["placement"] = p.Version, p.Commit, p.Placement
-		}
+		s.Identity["collector_id"], s.Identity["capability_revision"], s.Identity["changed_at"] = c.CollectorID, strconv.FormatUint(c.Revision, 10), c.ChangedAt
+	}
+	if p := c.Producer; p != nil {
+		s.Identity["producer_version"], s.Identity["producer_commit"], s.Identity["placement"] = p.Version, p.Commit, p.Placement
+		s.Identity["sensor_name"], s.Identity["os"], s.Identity["architecture"] = p.Name, p.OS, p.Architecture
+		s.Identity["kernel"], s.Identity["boot_id"], s.Identity["placement_basis"] = p.Kernel, p.BootID, p.PlacementBasis
+	}
+	if p := c.ProcfsIdentity; p != nil {
+		s.Identity["pid_namespace"], s.Identity["pid_namespace_basis"] = p.PIDNamespace, p.Mode
+	}
+	if len(s.Identity) == 0 {
+		s.Identity = nil
 	}
 	for _, p := range c.Probes {
 		f := Feature{Name: p.Name, Category: p.Category, Target: p.Target, State: p.Status, Reason: p.Reason, Basis: "probe_observation"}

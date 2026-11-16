@@ -605,6 +605,21 @@ scope and basis: a node or collector count stays at that scope. Counter values
 are decimal strings to retain 64-bit precision in browser clients. Capture
 retention and query/export selection are separate facts.
 
+The `observation` object separates the evidence layer (`host_kernel`,
+`guest_kernel`, `sentry`, or `application`) from receiver placement. Each
+snapshot preserves its own boot, collector, producer version and placement
+basis. Unspecified kernel topology stays `unknown`; differing boundaries use
+`mixed` in the record summary. Read the individual snapshots for those changes.
+Scope references are qualified by the containing identity, including generation.
+The projection carries its rule version and original evidence references.
+
+AppArmor/seccomp state-sampling features describe collection configuration;
+their `policy_subject.role` stays `unknown`. A decision's affected process and
+policy belong to the original access-control evidence. Execution checkpoints
+also expose `execution_state` with separate execution, capture and delivery
+axes. For example, `succeeded` execution can have `incomplete` capture and
+`pending` delivery. Historical checkpoints retain missing axis values.
+
 New offline exports include the same paged query under `file://`. Whole exports
 keep all saved observations. Selected exports read only the frozen selection and
 report `selection_scope: selected_evidence`; excluded native checkpoint bodies

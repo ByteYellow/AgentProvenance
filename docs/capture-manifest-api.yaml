@@ -120,6 +120,15 @@ components:
             and restart. An unsealed window reports its last observation and the
             collector_receive_window_unsealed issue, not a workload end time.
         status: {type: string, description: Original source status; not a unified completeness verdict}
+        observation: {$ref: '#/components/schemas/Observation'}
+        execution_state:
+          type: object
+          description: Original checkpoint axes, available for execution checkpoints; historical missing values remain empty
+          required: [execution, capture, delivery]
+          properties:
+            execution: {type: string}
+            capture: {type: string}
+            delivery: {type: string}
         snapshots:
           type: array
           items:
@@ -133,6 +142,7 @@ components:
               identity: {type: object, additionalProperties: {type: string}, description: Boundary-qualified collector identity when saved}
               ready: {type: [boolean, 'null']}
               features: {type: array, items: {$ref: '#/components/schemas/Feature'}}
+              observation: {$ref: '#/components/schemas/Observation'}
         retention:
           type: array
           items:
@@ -165,6 +175,23 @@ components:
             kernel losses. Observed time is receipt persistence time.
           items: *captureCounter
         issues: {type: array, items: {type: string}}
+    Observation:
+      type: object
+      description: >
+        Versioned projection from the referenced saved evidence. Optional in
+        historical serialized readers. Scope references are qualified by the
+        containing record's identity, including instance and generation.
+        Collector scope describes capabilities, not workload-wide coverage.
+      required: [rule_version, layer, layer_basis, scope_kind, evidence_refs]
+      properties:
+        rule_version: {const: agentprov.capture_observation/v1}
+        layer:
+          enum: [host_kernel, guest_kernel, sentry, application, unknown, mixed]
+          description: mixed summarizes differing boundary observations; inspect each snapshot
+        layer_basis: {type: string, description: Saved producer declaration or source protocol; unspecified kernel topology stays unknown}
+        scope_kind: {type: string}
+        scope_ref: {type: string}
+        evidence_refs: {type: array, items: {type: string}}
     Feature:
       type: object
       required: [name, category, supported, enabled, state, basis]
@@ -185,3 +212,11 @@ components:
         state: {type: string}
         basis: {type: string}
         reason: {type: string}
+        policy_subject:
+          type: object
+          description: State sampling configuration only; actual policy decisions retain their own task identities
+          required: [layer, role, basis]
+          properties:
+            layer: {enum: [host_kernel, guest_kernel, unknown]}
+            role: {const: unknown}
+            basis: {const: state_collection_configuration}

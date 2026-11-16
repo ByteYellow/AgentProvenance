@@ -10,6 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/byteyellow/agentprovenance/internal/handoff"
 )
 
 const SchemaVersion = "agentprovenance.capture_manifest/v1"
@@ -54,29 +56,33 @@ type Record struct {
 	Loss            []Counter         `json:"loss"`
 	Counts          []Counter         `json:"counts,omitempty"`
 	Issues          []string          `json:"issues"`
+	Observation     Observation       `json:"observation"`
+	ExecutionState  *handoff.State    `json:"execution_state,omitempty"`
 }
 
 type Snapshot struct {
-	ObservedAt string            `json:"observed_at,omitempty"`
-	Boundary   string            `json:"boundary"`
-	Status     string            `json:"status"`
-	Reason     string            `json:"reason,omitempty"`
-	Identity   map[string]string `json:"identity,omitempty"`
-	Ready      *bool             `json:"ready"`
-	Features   []Feature         `json:"features"`
+	ObservedAt  string            `json:"observed_at,omitempty"`
+	Boundary    string            `json:"boundary"`
+	Status      string            `json:"status"`
+	Reason      string            `json:"reason,omitempty"`
+	Identity    map[string]string `json:"identity,omitempty"`
+	Ready       *bool             `json:"ready"`
+	Features    []Feature         `json:"features"`
+	Observation Observation       `json:"observation"`
 }
 
 // Unknown support/enabled values are intentionally separate from false.
 type Feature struct {
-	Name      string `json:"name"`
-	Category  string `json:"category"`
-	Target    string `json:"target,omitempty"`
-	Supported *bool  `json:"supported"`
-	Enabled   *bool  `json:"enabled"`
-	Observed  *bool  `json:"observed,omitempty"`
-	State     string `json:"state"`
-	Basis     string `json:"basis"`
-	Reason    string `json:"reason,omitempty"`
+	Name          string         `json:"name"`
+	Category      string         `json:"category"`
+	Target        string         `json:"target,omitempty"`
+	Supported     *bool          `json:"supported"`
+	Enabled       *bool          `json:"enabled"`
+	Observed      *bool          `json:"observed,omitempty"`
+	State         string         `json:"state"`
+	Basis         string         `json:"basis"`
+	Reason        string         `json:"reason,omitempty"`
+	PolicySubject *PolicySubject `json:"policy_subject,omitempty"`
 }
 
 type Retention struct {
@@ -191,6 +197,7 @@ func (s Service) List(ctx context.Context, opts Options) (Page, error) {
 		if err != nil {
 			return p, fmt.Errorf("capture evidence %s: %w", e.id, err)
 		}
+		r.projectObservation()
 		p.Records = append(p.Records, r)
 	}
 	if p.HasMore {

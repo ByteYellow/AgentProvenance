@@ -106,6 +106,10 @@ func TestCaptureManifestExportEnumeratesAllPages(t *testing.T) {
 			if seen[r.ID] {
 				t.Fatal("duplicate capture observation")
 			}
+			if r.Observation.RuleVersion != capturemanifest.ObservationRuleVersion || r.Observation.Layer != "unknown" ||
+				len(r.Observation.EvidenceRefs) != 1 || r.Observation.EvidenceRefs[0] != r.EvidenceRef {
+				t.Fatalf("offline capture observation changed: %+v", r.Observation)
+			}
 			seen[r.ID] = true
 		}
 	}
