@@ -14,6 +14,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// The Unix implementation installs this factory without importing its core on
+// unsupported platforms. Keep the command discoverable on Windows as well.
+var workspaceCmd = func() *cobra.Command {
+	return &cobra.Command{Use: "workspace", Short: "controlled remote-authoritative workspace tools",
+		RunE: func(*cobra.Command, []string) error { return fmt.Errorf("workspace requires Linux or Darwin") }}
+}
+
 func NewRootCommand() *cobra.Command {
 	var dataDir string
 	var daemonURL string
@@ -43,6 +50,7 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(templateCmd(&dataDir))
 	root.AddCommand(apiCmd(&dataDir))
 	root.AddCommand(recordCmd(&dataDir))
+	root.AddCommand(workspaceCmd())
 	root.AddCommand(sandboxCmd(&dataDir))
 	root.AddCommand(sensorCmd(&dataDir))
 	root.AddCommand(observeCmd(&dataDir, &daemonURL))
