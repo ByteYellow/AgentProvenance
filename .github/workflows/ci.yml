@@ -93,6 +93,16 @@ jobs:
       - run: PYTHONPATH=python python scripts/accept_browser_mcp.py --output "$RUNNER_TEMP/browser-mcp-check"
       - run: go build -o "$RUNNER_TEMP/agentprov-browser-check" ./cmd/agentprov
       - run: PYTHONPATH=python python scripts/accept_browser.py --output "$RUNNER_TEMP/browser-check" --agentprov "$RUNNER_TEMP/agentprov-browser-check"
+      - name: Verify durable Browser receipts and receiver-owned import
+        run: |
+          PYTHONPATH=python python python/tests/test_browser_receipts_live.py --output "$RUNNER_TEMP/browser-receipts"
+          python scripts/accept_browser_owned_import.py --agentprov "$RUNNER_TEMP/agentprov-browser-check" \
+            --artifacts "$RUNNER_TEMP/browser-receipts" --output "$RUNNER_TEMP/browser-owned-import" --approve-fixture-pin
+      - name: Verify keyless workspace MCP contract
+        run: |
+          PYTHONPATH=python python -m unittest discover -s python/tests -p test_workspace_mcp.py -v
+          python scripts/accept_workspace.py --agentprov "$RUNNER_TEMP/agentprov-browser-check" \
+            --python-package "$GITHUB_WORKSPACE/python" --output "$RUNNER_TEMP/workspace-contract"
 
   test:
     name: Go tests
@@ -123,6 +133,12 @@ jobs:
       - name: Check SecCheck acceptance assertions
         run: python3 -m unittest discover -s scripts -p 'test_accept_seccheck*.py' -v
 
+      - name: Check Kata and bounded soak acceptance contracts
+        run: |
+          python3 -m unittest discover -s scripts/acceptance/kata-qemu -p 'test_*.py' -v
+          python3 -m unittest discover -s scripts -p test_execution_soak.py -v
+          python3 -m unittest discover -s scripts -p test_accept_workspace.py -v
+
       - name: Check telemetry performance measurements
         run: python3 -m unittest discover -s scripts -p 'test_telemetry_pressure.py' -v
 
@@ -145,6 +161,11 @@ jobs:
         run: |
           GOTOOLCHAIN=local go build -o "$RUNNER_TEMP/agentprov-context-check" ./cmd/agentprov
           python3 scripts/accept_deepseek_context.py --binary "$RUNNER_TEMP/agentprov-context-check" --output "$RUNNER_TEMP/deepseek-context-check"
+      - name: Verify selected and original evidence delivery independently
+        run: |
+          GOTOOLCHAIN=local go build -o "$RUNNER_TEMP/agentprov-verify" ./cmd/agentprov-verify
+          python3 scripts/accept_derived_view.py --agentprov "$RUNNER_TEMP/agentprov-context-check" \
+            --verifier "$RUNNER_TEMP/agentprov-verify" --out "$RUNNER_TEMP/derived-view-check"
       - name: Fetch pinned v0.8.2 verifier
         run: |
           python3 - <<'PY'

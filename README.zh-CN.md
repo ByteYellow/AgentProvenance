@@ -514,6 +514,8 @@ MCP 还提供动作预检和显式上下文写入；写入 Agent 上下文不会
 | 查看控制项映射与规则覆盖 | [合规映射](docs/zh-CN/compliance.md) |
 | 让其他程序查询证据 | [HTTP API](docs/zh-CN/openapi.yaml)、[会话 API](docs/agent-context-api.yaml)、[Python SDK](docs/zh-CN/python-sdk.md) |
 | 让 Agent 使用证据查询工具 | [AI 工具与 MCP](docs/zh-CN/ai-tools.md) |
+| 让远端文件工具与命令使用同一版本 | [受控远端工作区](docs/zh-CN/workspace.md) |
+| 分别配置执行与采集 | [运行时适配](docs/zh-CN/runtime-adapters.md) |
 | 接入外部评估器 | [LLM Judge](demo/llm-judge/README.zh-CN.md)、[Jev](demo/jev-judge/README.zh-CN.md) |
 | 了解部署方式和内部架构 | [部署模式](docs/zh-CN/deployment-modes.md)、[功能与架构参考](docs/zh-CN/capabilities.md) |
 
@@ -531,8 +533,8 @@ v0.10.1 加强 daemon 访问控制，保留本地采集的交互与兼容性，
 原生采集补齐有界缓冲和可靠停机。新增签名实录展示这些变化，
 原有调查、对比和离线分享示例继续保留。
 
-当前源码正在准备 v1.0，包含跨沙箱执行交接、gVisor 采集、Browser／Notebook
-上下文及可离线交付的调查示例。使用方式见 [v1.0 源码预览](docs/zh-CN/releases/v1.0.0-preview.md)，
+当前源码正在准备 v1.0，包含跨沙箱执行交接、受控远端工作区、gVisor 采集、
+Browser／Notebook 上下文及可独立验证的证据交付。使用方式见 [v1.0 源码预览](docs/zh-CN/releases/v1.0.0-preview.md)，
 接入条件见[部署指南](docs/zh-CN/deployment-modes.md)，
 已实现的改动见[未发布变更](CHANGELOG.zh-CN.md#未发布)。
 v1.0 发布前，上面的发行包示例继续使用 v0.10.1。

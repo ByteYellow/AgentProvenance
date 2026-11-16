@@ -558,6 +558,8 @@ evaluators consume the same recorded evidence.
 | Inspect control mappings and rule coverage | [Compliance mapping](docs/compliance.md) |
 | Query evidence from another application | [HTTP API](docs/openapi.yaml), [context API](docs/agent-context-api.yaml), [Python SDK](docs/python-sdk.md) |
 | Give an agent access to evidence tools | [AI tools and MCP](docs/ai-tools.md) |
+| Keep remote file tools and commands on one revision | [Controlled workspace](docs/workspace.md) |
+| Configure execution and collection separately | [Runtime adapters](docs/runtime-adapters.md) |
 | Add an external evaluator | [LLM Judge](demo/llm-judge/README.md), [Jev](demo/jev-judge/README.md) |
 | Understand deployment and architecture | [Deployment modes](docs/deployment-modes.md), [capability reference](docs/capabilities.md) |
 
@@ -576,8 +578,9 @@ the existing evidence readers. Native capture gains bounded buffering and
 reliable shutdown. New signed captures demonstrate these details alongside the
 historical investigation, comparison and offline-sharing examples.
 
-The current source is preparing v1.0: cross-sandbox execution handoff, gVisor
-collection, Browser/Notebook context and portable investigation examples.
+The current source is preparing v1.0: cross-sandbox execution handoff, controlled
+remote workspaces, gVisor collection, Browser/Notebook context and independently
+verifiable evidence delivery.
 Read the [v1.0 source preview](docs/releases/v1.0.0-preview.md) for the workflows,
 the [deployment guide](docs/deployment-modes.md) for entry requirements, and
 the [unreleased changelog](CHANGELOG.md#unreleased) for individual changes.

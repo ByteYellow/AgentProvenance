@@ -4,6 +4,21 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Project Browser operations, requests, redirects and documents through native
+  references. Add receiver-owned process bindings to local graph queries and
+  offline export; recompute relationships when support is excluded. Preserve
+  operation conflicts and redirect ambiguity across selected exports.
+- Persist Browser operation acceptance and results before recovery queries.
+  Verify receipts against receiver-owned, digest-pinned captures, retain their
+  original generation, and keep query-only recovery from repeating actions.
+- Add a version-pinned Kata/QEMU acceptance fixture and bounded execution soak
+  sampling. Keep hardware and long-duration results separate from local tests.
+- Add a controlled remote-authoritative workspace with revision/digest conflict
+  checks, input/output manifests and existing record snapshots. Expose Read,
+  Edit, Write and Bash through a JSON CLI and optional stdio MCP bridge.
+- Separate runtime platform bindings, execution and capture while preserving the
+  native default. Retain Guest platform identities and fixed runsc operation
+  receipts, with target-scoped SecCheck boundaries and explicit association gaps.
 - Add explicit reading, selected signed and complete-original delivery modes.
   Complete deliveries read the selected bundle revision and preserve its exact
   bytes; selective exports never attach excluded originals. Verify producer and
