@@ -1,29 +1,40 @@
 import asyncio
 from pathlib import Path
 import tempfile
-from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from agentprov.browser import Capture
 from agentprov.browser_mcp import BrowserRuntime, MAX_OUTPUT_BYTES
 
 
 class FakeBrowser:
-    def __init__(self):
-        self.capture = SimpleNamespace(scope={k: k for k in (
-            "producer_id", "namespace", "instance_id", "generation", "browser_id", "context_id")}, stopped=False)
+    def __init__(self, directory):
+        directory.mkdir(mode=0o700)
+        with patch("importlib.metadata.version", return_value="fixture"):
+            self.capture = Capture(directory / "browser.jsonl", {k: k for k in (
+                "producer_id", "namespace", "instance_id", "generation", "browser_id", "context_id")}, browser_version="fixture")
         self.pages, self.first_page, self.failure = {"a": None, "b": None}, "a", None
         self.sent, self.gate, self.error = [], asyncio.Event(), False
 
     async def operation(self, page, action, value, *, operation_id):
         self.sent.append((page, action, operation_id))
-        await self.gate.wait()
-        if self.error:
-            raise RuntimeError("private browser exception")
-        return {"text": "x" * (MAX_OUTPUT_BYTES + 1), "unselected": "PRIVATE"}
+        identity = dict(target_id=page, operation=action, operation_id=operation_id)
+        self.capture.event("action_start", **identity, payload={})
+        try:
+            await self.gate.wait()
+            if self.error:
+                raise RuntimeError("private browser exception")
+            result = {"text": "x" * (MAX_OUTPUT_BYTES + 1), "unselected": "PRIVATE"}
+            self.capture.event("action_end", **identity, payload=result)
+            return result
+        except BaseException:
+            self.capture.event("action_end", **identity, status="unknown", payload={"reason": "operation_incomplete"})
+            raise
 
     async def close(self):
         self.capture.stopped = True
+        self.capture.close()
 
 
 class BrowserMCPTests(unittest.IsolatedAsyncioTestCase):
@@ -32,13 +43,15 @@ class BrowserMCPTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.temp.cleanup)
         placement = {k: k for k in ("producer_id", "namespace", "instance_id", "generation")}
         self.runtime = BrowserRuntime(Path(self.temp.name) / "capture", placement)
-        self.runtime.browser = FakeBrowser()
+        self.runtime.browser = FakeBrowser(self.runtime.capture_dir)
         self.addAsyncCleanup(self.runtime.close)
 
     async def test_timeout_poll_preserves_one_operation(self):
         result = await self.runtime.execute("a", "click", "#once", .1)
         self.assertEqual(result["waiting_state"], "pending")
         self.assertEqual(result["execution_status"], "unknown")
+        self.assertEqual(result["capture_status"], "ok")
+        self.assertEqual(result["execution_reason"], "")
         op = result["browser_operation"]["operation_id"]
         for _ in range(3):
             self.assertEqual(self.runtime.result(op)["operation"], "read")

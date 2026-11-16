@@ -49,10 +49,16 @@ class Capture:
             raise ValueError("invalid browser capture budget")
         self.scope, self.count, self.size, self.stopped = dict(scope), 0, 0, False
         self.max_events, self.max_bytes = max_events, max_bytes
-        self.file = os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb")
+        self.file = os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb", buffering=0)
         try:
             self._write({"type": "browser_session", **scope, "browser_version": browser_version,
                          "playwright_version": importlib.metadata.version("playwright")})
+            if hasattr(os, "O_DIRECTORY"):
+                directory = os.open(Path(path).parent, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
         except BaseException:
             self.file.close()
             raise
@@ -63,9 +69,22 @@ class Capture:
 
     def _write(self, value):
         raw = self._encode(value)
-        self.file.write(raw)
-        self.file.flush()
-        os.fsync(self.file.fileno())
+        offset = self.file.tell()
+        try:
+            if self.file.write(raw) != len(raw):
+                raise OSError("short browser capture write")
+            self.file.flush()
+            os.fsync(self.file.fileno())
+        except OSError:
+            # Keep a failed append from masquerading as a committed action_end
+            # in a live query. Recovery also rejects incomplete JSONL tails.
+            try:
+                self.file.truncate(offset)
+                self.file.seek(offset)
+                os.fsync(self.file.fileno())
+            except OSError:
+                self.stopped = True
+            raise
         self.size += len(raw)
 
     def event(self, kind, **value):
@@ -420,8 +439,7 @@ class Browser:
                 raise
             if image is not None:
                 self._emit("screenshot", identity, image=base64.b64encode(image).decode("ascii"), payload=result)
-            else:
-                self._emit("action_end", identity, payload=result)
+            self._emit("action_end", identity, payload=result)
             if self.failure:
                 raise RuntimeError("browser operation completed but capture is incomplete")
             return {"scope": dict(self.capture.scope), "operation_id": identity["operation_id"], "target_id": target, **result}

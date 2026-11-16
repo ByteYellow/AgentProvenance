@@ -37,6 +37,7 @@ func contextCmd(dataDir *string) *cobra.Command {
 	}
 	var opts agentcontext.ParseOptions
 	var capture captureFlags
+	var browserOwnedConfig, browserReceipts string
 	importCmd := &cobra.Command{Use: "import", Short: "Import one explicitly selected transcript without changing earlier evidence", Args: cobra.NoArgs}
 	capture.bind(importCmd)
 	importCmd.Flags().StringVar(&opts.Path, "file", "", "JSONL or Zstandard transcript file")
@@ -44,7 +45,31 @@ func contextCmd(dataDir *string) *cobra.Command {
 	importCmd.Flags().StringVar(&opts.SessionID, "session", "", "expected native session id; required if absent in the source")
 	importCmd.Flags().StringVar(&opts.AgentID, "agent", "", "source-provided agent id, when separate from session identity")
 	importCmd.Flags().Int64Var(&opts.AfterLine, "after-line", 0, "retain records through this resume cursor as prior context, not current execution")
+	importCmd.Flags().StringVar(&browserOwnedConfig, "browser-owned-config", "", "explicit receiver-owned Browser import configuration, outside the capture directory")
+	importCmd.Flags().StringVar(&browserReceipts, "browser-receipts", "", "private JSON array of Browser receipts to verify against the receiver-pinned capture")
 	importCmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		if browserOwnedConfig != "" || browserReceipts != "" {
+			if browserOwnedConfig == "" || browserReceipts == "" || opts.Harness != "browser" || opts.Path != "" ||
+				opts.SessionID != "" || opts.AgentID != "" || opts.AfterLine != 0 || run == "" {
+				return commandErrorf("owned Browser import requires --run, --harness browser, --browser-owned-config and --browser-receipts; source overrides are not allowed")
+			}
+			policy, err := capture.policy(cmd, true)
+			if err != nil {
+				return err
+			}
+			cfg, err := agentcontext.LoadBrowserLocalImportConfig(cmd.Context(), browserOwnedConfig)
+			if err != nil {
+				return err
+			}
+			receipts, err := agentcontext.LoadBrowserReceiptList(cmd.Context(), browserReceipts)
+			if err != nil {
+				return err
+			}
+			return withService(cmd, func(s agentcontext.Service) (any, error) {
+				s.CapturePolicy = policy
+				return s.ImportOwnedBrowser(cmd.Context(), run, cfg, receipts)
+			})
+		}
 		if opts.Path == "" || opts.Harness == "" {
 			return commandErrorf("--file and --harness are required")
 		}

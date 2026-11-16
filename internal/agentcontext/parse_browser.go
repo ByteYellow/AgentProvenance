@@ -36,25 +36,26 @@ func (s BrowserScope) valid() bool {
 // OperationID is present only for explicit tool observations. A page's unrelated
 // requests keep their native identity without borrowing the last tool call.
 type BrowserEvent struct {
-	EventID            string   `json:"event_id"`
-	Kind               string   `json:"kind"`
-	TargetID           string   `json:"target_id,omitempty"`
-	TargetType         string   `json:"target_type,omitempty"`
-	CDPSessionID       string   `json:"cdp_session_id,omitempty"`
-	FrameID            string   `json:"frame_id,omitempty"`
-	LoaderID           string   `json:"loader_id,omitempty"`
-	RequestID          string   `json:"request_id,omitempty"`
-	RedirectIndex      int      `json:"redirect_index"`
-	RequestKey         string   `json:"request_key,omitempty"`
-	InitiatorRequestID string   `json:"initiator_request_id,omitempty"`
-	OperationID        string   `json:"operation_id,omitempty"`
-	Operation          string   `json:"operation,omitempty"`
-	DownloadID         string   `json:"download_id,omitempty"`
-	Association        string   `json:"association"`
-	URL                string   `json:"url,omitempty"`
-	Method             string   `json:"method,omitempty"`
-	HTTPStatus         int      `json:"http_status,omitempty"`
-	RequestKeys        []string `json:"request_keys,omitempty"`
+	EventID            string                     `json:"event_id"`
+	Kind               string                     `json:"kind"`
+	TargetID           string                     `json:"target_id,omitempty"`
+	TargetType         string                     `json:"target_type,omitempty"`
+	CDPSessionID       string                     `json:"cdp_session_id,omitempty"`
+	FrameID            string                     `json:"frame_id,omitempty"`
+	LoaderID           string                     `json:"loader_id,omitempty"`
+	RequestID          string                     `json:"request_id,omitempty"`
+	RedirectIndex      int                        `json:"redirect_index"`
+	RequestKey         string                     `json:"request_key,omitempty"`
+	InitiatorRequestID string                     `json:"initiator_request_id,omitempty"`
+	OperationID        string                     `json:"operation_id,omitempty"`
+	Operation          string                     `json:"operation,omitempty"`
+	DownloadID         string                     `json:"download_id,omitempty"`
+	Association        string                     `json:"association"`
+	URL                string                     `json:"url,omitempty"`
+	Method             string                     `json:"method,omitempty"`
+	HTTPStatus         int                        `json:"http_status,omitempty"`
+	RequestKeys        []string                   `json:"request_keys,omitempty"`
+	Receipt            *BrowserReceiptObservation `json:"receipt,omitempty"`
 }
 
 func browserURL(raw string) string {
@@ -121,6 +122,7 @@ func (p *parser) browser(top row) bool {
 	// fields. RawContent is this privacy projection, never the unfiltered row.
 	event.RequestKey, event.Association, event.URL, event.Method, event.HTTPStatus = "", "browser_target", "", "", 0
 	event.RequestKeys = nil
+	event.Receipt = nil
 	payload := obj(top["payload"])
 	projected := row{}
 	for _, field := range []string{"url", "initiator_url", "redirect_url"} {
@@ -161,6 +163,42 @@ func (p *parser) browser(top row) bool {
 		status, event.Association = "capture_incomplete", "browser_context"
 	case "closed":
 		status, event.Association = "context_closed", "browser_context"
+	case "action_accept", "action_result":
+		if !notebookIDValid(event.OperationID) || !notebookIDValid(event.TargetID) {
+			p.issue("browser_operation_invalid", "operation_id")
+			*p.counts().Failed++
+			return true
+		}
+		if !nativeResultJSON(top["payload"]) {
+			p.issue("browser_receipt_invalid", "payload")
+			*p.counts().Failed++
+			return true
+		}
+		if event.Kind == "action_accept" {
+			event.Receipt = p.browserAdmission(event, top, payload)
+			kind, status = "session", "accepted"
+		} else {
+			event.Receipt = p.browserStoredReceipt(payload)
+			kind, status = "tool_result", "returned"
+		}
+		if event.Receipt == nil {
+			p.issue("browser_receipt_invalid", "receipt")
+			*p.counts().Failed++
+			return true
+		}
+		ref := BrowserOperation{Scope: *p.Source.Browser, TargetID: event.TargetID, OperationID: event.OperationID, Operation: event.Operation}
+		if event.Receipt.Receipt.reference().Key() != ref.Key() {
+			p.identityConflict = true
+			p.issue("browser_receipt_scope_conflict", "receipt")
+			return true
+		}
+		if event.Kind == "action_result" && event.Receipt.Receipt.Outcome == "unknown" {
+			status = "unknown"
+		}
+		callID, tool = "browser-call-"+digest([]string{p.Source.SessionID, event.OperationID}), "browser."+event.Operation
+		event.Association = "tool_operation"
+		receiptJSON, _ := json.Marshal(event.Receipt)
+		projected = row{"receipt": receiptJSON}
 	case "action_start", "action_end", "screenshot":
 		if !notebookIDValid(event.OperationID) || !notebookIDValid(event.Operation) {
 			p.issue("browser_operation_invalid", "operation_id")
@@ -193,7 +231,8 @@ func (p *parser) browser(top row) bool {
 		return false
 	}
 	validTarget := event.TargetType == "page" || event.TargetType == "iframe" || event.TargetType == "worker" || event.TargetType == "service_worker"
-	if event.Kind != "gap" && event.Kind != "closed" && event.Kind != "har" && (!notebookIDValid(event.TargetID) || !validTarget || !notebookIDValid(event.CDPSessionID)) {
+	receiptWithoutCDP := (event.Kind == "action_accept" || event.Kind == "action_result") && event.TargetType == "" && event.CDPSessionID == ""
+	if event.Kind != "gap" && event.Kind != "closed" && event.Kind != "har" && !receiptWithoutCDP && (!notebookIDValid(event.TargetID) || !validTarget || !notebookIDValid(event.CDPSessionID)) {
 		p.issue("browser_target_invalid", "target_id")
 		*p.counts().Failed++
 		return true
@@ -206,7 +245,10 @@ func (p *parser) browser(top row) bool {
 		owners["session:"+event.CDPSessionID] = digest([]string{event.TargetID, event.TargetType})
 	}
 	if event.OperationID != "" {
-		owners["operation:"+event.OperationID] = digest([]string{event.TargetID, event.CDPSessionID, event.Operation})
+		owners["operation_identity:"+event.OperationID] = digest([]string{event.TargetID, event.Operation})
+		if event.CDPSessionID != "" {
+			owners["operation:"+event.OperationID] = digest([]string{event.TargetID, event.CDPSessionID, event.Operation})
+		}
 	}
 	if event.Kind == "request" {
 		owners["request:"+event.RequestKey] = digest([]string{event.TargetID, event.TargetType, event.FrameID, event.LoaderID})
@@ -224,12 +266,17 @@ func (p *parser) browser(top row) bool {
 		p.browserEvents = map[string]string{}
 	}
 	fingerprint := digest(top)
-	if previous, exists := p.browserEvents[key]; exists && previous != fingerprint {
-		p.identityConflict = true
-		p.issue("browser_event_identity_conflict", "event_id")
+	if previous, exists := p.browserEvents[key]; exists {
+		if previous != fingerprint {
+			p.identityConflict = true
+			p.issue("browser_event_identity_conflict", "event_id")
+		}
 		return true
 	}
 	p.browserEvents[key] = fingerprint
+	if !p.browserTerminal(&event, projected, &kind, &status) {
+		return true
+	}
 	before := len(p.Records)
 	p.add(kind, key, "", callID, tool, status, eventTime(top), whole(projected))
 	if len(p.Records) == before {

@@ -96,7 +96,13 @@ page, and `browser_execute(page_id, action, value)` for one operation. After a
 waiting timeout, call `browser_result(operation_id)` instead of repeating the
 operation. Waiting, execution and capture have separate status fields. Caller
 cancellation stops waiting; server shutdown cancels outstanding tasks and closes
-the owned browser. There is no HTTP listener or persistent reconnect protocol.
+the owned browser. Reusing the private capture directory after a bridge restart
+allows `browser_result` to recover the original receipt without opening a browser
+or executing an action. Missing results remain `unknown`; historical receipts
+keep their original scope and generation. The current producer/namespace/instance
+bounds lookup, and conflicting IDs or damaged journals return explicit gaps.
+Admission is durably recorded before dispatch. There is no HTTP listener or
+session reconnect protocol.
 
 Record the Agent with `agentprov launch` or its supported hooks/transcript
 integration. Import `CAPTURE_DIR/browser.jsonl` into that same Run, then project:
@@ -138,6 +144,102 @@ events remain available. Read either type with `context attachment`; omit select
 bytes from sharing copies with `dashboard export --exclude-attachment REF`.
 Excluding a supporting request record also excludes its entire HAR archive from
 that reading copy, with reason `har_request_excluded`; the original stays intact.
+
+### Receiver-pinned local import
+
+The synchronous local operator path uses the same `context import` command and
+evidence store. On Linux or macOS:
+
+```sh
+agentprov context import --run RUN --harness browser --capture basic \
+  --browser-owned-config /private/receiver/browser-import.json \
+  --browser-receipts /private/captures/task-1/receipts.json
+```
+
+`receipts.json` is a JSON array of the original `browser_receipt` values from
+`browser_execute` or `browser_result`. Source overrides (`--file`, `--session`,
+`--agent`, nonzero `--after-line`) are rejected for this path. Ordinary `--file`
+imports and transcript `action_result` receipts retain `unverified` source trust.
+
+The receiver operator supplies this configuration **outside the capture directory**:
+
+```json
+{
+  "directory": "/private/captures/task-1",
+  "manifest_name": "browser-owned.json",
+  "manifest_sha256": "sha256:<receiver-approved manifest digest>",
+  "run_id": "RUN",
+  "placement": {
+    "producer_id": "node-a", "namespace": "research",
+    "instance_id": "sandbox-42", "generation": "launch-1"
+  },
+  "bridge_id": "research-browser-bridge",
+  "bridge_config_digest": "sha256:<receiver-approved bridge configuration digest>"
+}
+```
+
+Replace digest placeholders with `sha256:` followed by 64 lowercase hexadecimal
+characters. The operator obtains the manifest pin and expected placement/bridge
+configuration from its trusted launcher or collector channel. The importer never
+derives an authority pin from an incoming artifact. A self-supplied manifest,
+copied config, transcript trust string, or private file mode is not that channel;
+same-UID agents require an independently protected operator boundary.
+
+The pinned manifest seals exact complete JSONL prefixes:
+
+```json
+{
+  "schema_version": "agentprovenance.browser_owned_capture/v1",
+  "run_id": "RUN",
+  "placement": {
+    "producer_id": "node-a", "namespace": "research",
+    "instance_id": "sandbox-42", "generation": "launch-1"
+  },
+  "bridge_id": "research-browser-bridge",
+  "bridge_config_digest": "sha256:<same approved configuration digest>",
+  "logs": [{
+    "name": "browser.jsonl",
+    "scope": {
+      "producer_id": "node-a", "namespace": "research",
+      "instance_id": "sandbox-42", "generation": "launch-1",
+      "browser_id": "<recorded browser id>", "context_id": "<recorded context id>"
+    },
+    "prefix_bytes": 12345,
+    "sha256": "sha256:<digest of those exact prefix bytes>"
+  }]
+}
+```
+
+Use the real prefix length and recorded IDs. The manifest digest covers its exact
+file bytes, not reserialized JSON. Paths must be absolute, canonical and free of
+symlinks. Capture and receiver directories must be owned by the effective user
+and private (normally `0700`); input files must be private regular files with one
+hard link (normally `0600`). The loader rejects unsafe files, replacement,
+truncation, duplicate JSON fields, corrupt sealed lines and identity conflicts.
+Append-only growth beyond the sealed prefix is ignored until the operator pins
+a new manifest. Each configuration binds one original generation.
+
+All receipts are validated before a single transaction stores context records
+and independent `browser_receipt_binding` objects. The JSON response contains
+`verified_receipts`, `imports`, `bindings` and stable `binding_refs`. Each binding
+records `basis=local_operator_pinned_capture`, exact run/scope/bridge, manifest
+and receipt digests, and verified original source refs. Input/result digests are
+recomputed from privacy-projected journal fields; source line hashes include the
+newline. The original receipt's `bridge_identity.authentication` stays
+`unverified`. Repeated import is idempotent, and verification performs no actions.
+Signed bundles preserve the binding as evidence; another receiver must validate
+it against its own operator configuration before granting local bridge authority.
+
+The synchronous Go APIs are `LoadBrowserLocalImportConfig`,
+`LoadBrowserReceiptList` and `Service.ImportOwnedBrowser(ctx, runID, cfg, receipts)`.
+For in-process verification without persistence, use `ImportOwnedBrowserCapture`
+then `VerifyReceipt`; its opaque `VerifiedBrowserReceipt` cannot be constructed
+by decoding JSON. Limits are 64 logs, 128 MiB per log, 256 MiB total sealed bytes,
+and 1,024 receipts / 4 MiB per import. `unknown` stays `unknown`; a navigate
+admission without `action_start` lacks the URL projection needed to recompute its
+input digest and returns `browser_import_input_projection_unavailable` on this
+trusted path. Ordinary recovery still retains that admission. Process/socket/file
+attribution uses separately witnessed runtime identities, outside this binding.
 
 ## HAR network records
 
@@ -199,6 +301,26 @@ Exercise the actual stdio MCP protocol without a model key:
 ```sh
 PYTHONPATH=python .venv-browser/bin/python scripts/accept_browser_mcp.py --output /tmp/browser-mcp-check
 ```
+
+Verify existing Chrome live artifacts through the actual owned-import CLI:
+
+```sh
+python3 scripts/accept_browser_owned_import.py \
+  --agentprov /absolute/path/to/agentprov \
+  --artifacts /absolute/path/to/chrome-live-artifacts \
+  --output /private/browser-owned-import-check --approve-fixture-pin
+```
+
+The input directory contains `results.json` with
+`observations[].result.browser_receipt` and the original `capture/*.jsonl`.
+The script reads those bytes without running a browser, copies private snapshots,
+and creates separate receiver configurations with explicitly approved **fixture**
+pins. It checks receipt/source/digest preservation, original generations,
+idempotence, false pins, artifact self-authorization, forged receipts,
+cross-generation rejection, and signed bundle import into a separate store.
+`results.json` records `fixture_operator_pin=true`; this is an importer check of
+actual Chrome bytes, while production launch authentication uses the receiver's
+own external pin. Fixture signing keys stay private in the output directory.
 
 For a real Agent task, use an existing Claude Code provider configuration:
 

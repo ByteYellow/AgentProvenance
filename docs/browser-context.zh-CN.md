@@ -72,7 +72,9 @@ async with Browser("browser.jsonl", placement) as browser:
 }
 ```
 
-先用 `browser_pages` 获取默认页面，用 `browser_new_page` 创建其他页面，再调用 `browser_execute(page_id, action, value)` 执行操作。等待超时后，用 `browser_result(operation_id)` 查询原操作，不要重新发起。等待、执行和采集各有状态字段。调用方取消时停止等待；服务关闭时取消待处理任务并关闭自身浏览器。此入口使用 stdio，不开放 HTTP 端口，也不提供跨服务重启的续接协议。
+先用 `browser_pages` 获取默认页面，用 `browser_new_page` 创建其他页面，再调用 `browser_execute(page_id, action, value)` 执行操作。等待超时后，用 `browser_result(operation_id)` 查询原操作，不要重新发起。等待、执行和采集各有状态字段。调用方取消时停止等待；服务关闭时取消待处理任务并关闭自身浏览器。
+
+bridge 重启后复用原私有采集目录，`browser_result` 可从持久日志恢复原 receipt，无需启动浏览器或执行动作。缺少结果时保持 `unknown`，历史 receipt 保留原 scope 和 generation；查询限制在当前 producer／namespace／instance 的历史内，ID 冲突或日志损坏返回明确缺口。动作派发前先持久记录受理事件。入口使用 stdio，不开放 HTTP 端口或会话续接协议。
 
 通过 `agentprov launch` 或已支持的 hooks／会话适配记录 Agent。将 `CAPTURE_DIR/browser.jsonl` 导入同一个 Run 后生成关联：
 
@@ -96,6 +98,70 @@ agentprov dashboard export --run research --output research.zip
 ```
 
 `--capture basic` 保留身份与操作摘要，省略可选的原始记录、结果正文、截图和 HAR。`--capture-attachments=false` 可独立关闭附件存储。采集端的 `screenshots=False` 跳过像素获取，`har=False` 跳过 HAR 构建，原生网络事件仍保留。使用 `context attachment` 分页读取附件，使用 `dashboard export --exclude-attachment REF` 从分享副本中排除其字节内容。
+
+### Receiver 固定摘要的本地可信导入
+
+本地 operator 使用现有 `context import` 同步导入，复用原证据存储。支持 Linux 和 macOS：
+
+```sh
+agentprov context import --run RUN --harness browser --capture basic \
+  --browser-owned-config /private/receiver/browser-import.json \
+  --browser-receipts /private/captures/task-1/receipts.json
+```
+
+`receipts.json` 是 JSON 数组，元素为 `browser_execute` 或 `browser_result` 返回的原始 `browser_receipt`。此入口拒绝 `--file`、`--session`、`--agent` 和非零 `--after-line` 来源覆盖参数。普通 `--file` 导入和 transcript 中的 `action_result` receipt 保留 `unverified` 来源等级。
+
+Receiver operator 在**采集目录之外**提供配置：
+
+```json
+{
+  "directory": "/private/captures/task-1",
+  "manifest_name": "browser-owned.json",
+  "manifest_sha256": "sha256:<receiver-approved manifest digest>",
+  "run_id": "RUN",
+  "placement": {
+    "producer_id": "node-a", "namespace": "research",
+    "instance_id": "sandbox-42", "generation": "launch-1"
+  },
+  "bridge_id": "research-browser-bridge",
+  "bridge_config_digest": "sha256:<receiver-approved bridge configuration digest>"
+}
+```
+
+摘要占位符应替换为 `sha256:` 加 64 位小写十六进制字符串。Operator 通过可信 launcher／collector 通道取得 manifest pin、预期 placement 和 bridge 配置。导入器不从传入 artifact 自动生成授信 pin；artifact 自带 manifest、复制的配置、transcript 认证字段和私有文件权限均作为数据处理。与 Agent 共用 UID 的部署需要独立保护 operator 配置通道。
+
+被 pin 固定的 manifest 指定完整 JSONL 行组成的精确前缀：
+
+```json
+{
+  "schema_version": "agentprovenance.browser_owned_capture/v1",
+  "run_id": "RUN",
+  "placement": {
+    "producer_id": "node-a", "namespace": "research",
+    "instance_id": "sandbox-42", "generation": "launch-1"
+  },
+  "bridge_id": "research-browser-bridge",
+  "bridge_config_digest": "sha256:<same approved configuration digest>",
+  "logs": [{
+    "name": "browser.jsonl",
+    "scope": {
+      "producer_id": "node-a", "namespace": "research",
+      "instance_id": "sandbox-42", "generation": "launch-1",
+      "browser_id": "<recorded browser id>", "context_id": "<recorded context id>"
+    },
+    "prefix_bytes": 12345,
+    "sha256": "sha256:<digest of those exact prefix bytes>"
+  }]
+}
+```
+
+填写实际前缀长度和原记录 ID。Manifest 摘要覆盖文件原始字节，而非重新序列化后的 JSON。路径必须为无符号链接的规范绝对路径。采集目录、配置目录由当前有效 UID 所有且为私有目录，通常为 `0700`；输入文件为私有普通文件且仅有一个硬链接，通常为 `0600`。读取器拒绝不安全文件、替换、截断、重复 JSON 字段、固定前缀中的损坏行及身份冲突。前缀之后的追加内容忽略，直到 operator 提供新 pin。每份配置绑定一个原始 generation。
+
+全部 receipt 校验完成后，单一事务保存 context 记录和独立 `browser_receipt_binding` 对象。JSON 响应包含 `verified_receipts`、`imports`、`bindings`、稳定的 `binding_refs`。Binding 记录 `basis=local_operator_pinned_capture`、精确 run／scope／bridge、manifest 与 receipt 摘要及已核对的原 source refs。输入和结果摘要由日志中的隐私投影字段重新计算，源行摘要包含换行符。原 receipt 的 `bridge_identity.authentication` 保留 `unverified`。重复导入幂等，校验过程只读。签名 bundle 保存独立 binding 证据；接收端以自己的 operator 配置重新核验后使用本地 bridge 授权。
+
+同步 Go API 为 `LoadBrowserLocalImportConfig`、`LoadBrowserReceiptList`、`Service.ImportOwnedBrowser(ctx, runID, cfg, receipts)`。仅做进程内校验时，调用 `ImportOwnedBrowserCapture` 后使用 `VerifyReceipt`，返回的 opaque `VerifiedBrowserReceipt` 拒绝通过 JSON 反序列化构造。上限为 64 份日志、每份 128 MiB、固定前缀合计 256 MiB，每次导入 1,024 份 receipt／4 MiB。
+
+`unknown` 保持原状态。只有受理记录、没有 `action_start` 的 navigate 缺少 URL 投影，可信入口返回 `browser_import_input_projection_unavailable`；普通恢复仍保留该受理记录。进程、socket、文件归属使用另外采集的运行时身份，不由此 binding 推断。
 
 ## HAR 网络记录
 
@@ -131,6 +197,17 @@ PYTHONPATH=python .venv-browser/bin/python scripts/accept_browser.py \
 ```sh
 PYTHONPATH=python .venv-browser/bin/python scripts/accept_browser_mcp.py --output /tmp/browser-mcp-check
 ```
+
+用已有 Chrome live 产物验收真实 owned-import CLI：
+
+```sh
+python3 scripts/accept_browser_owned_import.py \
+  --agentprov /absolute/path/to/agentprov \
+  --artifacts /absolute/path/to/chrome-live-artifacts \
+  --output /private/browser-owned-import-check --approve-fixture-pin
+```
+
+输入目录包含 `results.json` 中的 `observations[].result.browser_receipt` 和原始 `capture/*.jsonl`。脚本只读这些字节，复制私有快照，并在独立 receiver 目录生成经显式批准的 **fixture pin**，无需启动浏览器。验收覆盖 receipt／source ref／摘要、原 generation、重复导入、错误外部 pin、artifact 自授信、伪造 receipt、跨 generation 拒绝和独立存储中的签名 bundle 往返。报告 `results.json` 明确记录 `fixture_operator_pin=true`：这里检查真实 Chrome 字节的导入路径，生产启动认证使用 receiver 自有的外部 pin。验收签名密钥保留在私有输出目录。
 
 使用现有 Claude Code 服务配置，运行真实 Agent 任务：
 

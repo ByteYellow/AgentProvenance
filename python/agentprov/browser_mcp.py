@@ -3,18 +3,18 @@
 import argparse
 import asyncio
 import contextlib
-import copy
+import os
 from pathlib import Path
 import uuid
 from typing import Any
 
 from agentprov.browser import Browser, safe_url
+from agentprov.browser_receipts import MAX_LOGS, MAX_OUTPUT_BYTES, ReceiptStore, private_directory
 
 
 RESULT_SCHEMA = "agentprovenance.browser_tool_result/v1"
 MAX_OPERATIONS = 1024
 MAX_PENDING = 32
-MAX_OUTPUT_BYTES = 32 << 10
 
 
 class BrowserRuntime:
@@ -22,12 +22,31 @@ class BrowserRuntime:
         self.capture_dir = Path(capture_dir).absolute()
         self.browser = Browser(self.capture_dir / "browser.jsonl", placement,
                                screenshots=screenshots, har=har, channel=channel)
+        self.receipts = ReceiptStore(self.capture_dir, placement)
         self.requests = {}
         self.closed = False
+        self.lock_file = None
 
     async def start(self):
-        self.capture_dir.mkdir(mode=0o700)
-        await self.browser.start()
+        if self.closed or self.lock_file is not None:
+            raise RuntimeError("browser runtime already started or closed")
+        private_directory(self.capture_dir, create=True)
+        # One live owner per journal directory. Readers never take this lock;
+        # a crashed writer releases it without a stale PID/lease recovery path.
+        import fcntl
+        fd = os.open(self.capture_dir / ".bridge.lock", os.O_WRONLY | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        self.lock_file = os.fdopen(fd, "wb")
+        try:
+            fcntl.flock(self.lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.receipts.refresh()
+            if self.receipts.gap or len(self.receipts.logs) >= MAX_LOGS:
+                raise RuntimeError("browser receipt history unavailable")
+            if self.browser.path.exists():
+                self.browser.path = self.capture_dir / ("browser-" + str(uuid.uuid4()) + ".jsonl")
+            await self.browser.start()
+        except BaseException:
+            await self.close()
+            raise
 
     def pages(self):
         return {"scope": dict(self.browser.capture.scope), "page_ids": list(self.browser.pages),
@@ -46,14 +65,16 @@ class BrowserRuntime:
             raise ValueError("invalid browser action value")
         if not 0.1 <= timeout_seconds <= 60:
             raise ValueError("timeout_seconds must be between 0.1 and 60")
-        if self.closed or self.browser.failure or self.browser.capture.stopped:
+        if self.closed or self.browser.failure or self.browser.capture is None or self.browser.capture.stopped:
             raise RuntimeError("browser capture is not ready")
         if len(self.requests) >= MAX_OPERATIONS or sum(not r["task"].done() for r in self.requests.values()) >= MAX_PENDING:
             raise RuntimeError("browser operation budget exceeded")
         operation_id = str(uuid.uuid4())
         request = {"reference": {"scope": dict(self.browser.capture.scope), "target_id": page_id,
                                   "operation_id": operation_id, "operation": action},
-                   "status": "unknown", "reason": "", "output": {}, "output_truncated": False}
+                   "status": "unknown", "output": {}, "output_truncated": False}
+        # Admission must reach stable storage before scheduling any browser work.
+        self.receipts.accept(self.browser.capture, page_id, action, value, operation_id)
         task = asyncio.create_task(self._execute(request, value))
         request["task"] = task
         self.requests[operation_id] = request
@@ -68,31 +89,28 @@ class BrowserRuntime:
     async def _execute(self, request, value):
         ref = request["reference"]
         try:
-            result = await self.browser.operation(ref["target_id"], ref["operation"], value, operation_id=ref["operation_id"])
-            output = {k: result[k] for k in ("url", "status", "text", "bytes", "sha256", "reason") if k in result}
-            if "text" in output:
-                raw = output["text"].encode("utf-8")
-                output["text"] = raw[:MAX_OUTPUT_BYTES].decode("utf-8", errors="ignore")
-                request["output_truncated"] = len(raw) > MAX_OUTPUT_BYTES
-            request["output"], request["status"] = output, "ok"
+            await self.browser.operation(ref["target_id"], ref["operation"], value, operation_id=ref["operation_id"])
         except asyncio.CancelledError:
-            request["reason"] = "operation_cancelled"
             raise
         except Exception:
-            request["reason"] = "operation_incomplete"
+            pass
+        finally:
+            result = self.receipts.result(ref["operation_id"])
+            request["status"], request["output"] = result["execution_status"], result["output"]
+            request["output_truncated"] = result["output_truncated"]
 
     def _result(self, request, operation):
-        return {"schema_version": RESULT_SCHEMA, "operation": operation,
-                "browser_operation": copy.deepcopy(request["reference"]),
-                "execution_status": request["status"], "execution_reason": request["reason"],
-                "waiting_state": "pending" if not request["task"].done() else "settled",
-                "capture_status": "partial" if self.browser.failure or self.browser.capture.stopped else "ok",
-                "capture_reason": self.browser.failure or "",
-                "output": copy.deepcopy(request["output"]), "output_truncated": request["output_truncated"]}
+        pending = not request["task"].done()
+        result = self.receipts.result(request["reference"]["operation_id"], pending=pending)
+        if self.browser.failure or self.browser.capture.stopped:
+            result["capture_status"], result["capture_reason"] = "partial", self.browser.failure or "capture_stopped"
+        return {"schema_version": RESULT_SCHEMA, "operation": operation, **result,
+                "waiting_state": "pending" if pending else "settled"}
 
     def result(self, operation_id):
         if operation_id not in self.requests:
-            raise ValueError("unknown browser operation")
+            return {"schema_version": RESULT_SCHEMA, "operation": "read", **self.receipts.result(operation_id),
+                    "waiting_state": "settled"}
         return self._result(self.requests[operation_id], "read")
 
     async def close(self):
@@ -102,14 +120,19 @@ class BrowserRuntime:
             if not task.done():
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        await self.browser.close()
+        try:
+            await self.browser.close()
+        finally:
+            if self.lock_file:
+                self.lock_file.close()
+                self.lock_file = None
 
 
 def main():
     from mcp.server.mcpserver import Context, MCPServer
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--capture-dir", required=True, help="new private directory outside the task workspace")
+    parser.add_argument("--capture-dir", required=True, help="private capture journal directory; reuse to recover receipts")
     for name in ("producer-id", "namespace", "instance-id", "generation"):
         parser.add_argument("--" + name, required=True)
     parser.add_argument("--no-screenshots", action="store_true")
