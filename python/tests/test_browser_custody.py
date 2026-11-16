@@ -9,6 +9,7 @@ import tempfile
 import time
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from agentprov.browser_custody import NativeCustody, _fields
 
@@ -68,6 +69,28 @@ class CustodyTests(unittest.IsolatedAsyncioTestCase):
         witness = json.loads((self.output / "launch-witness.json").read_text())
         self.assertEqual(witness["procfs_pid"], self.child.pid)
         self.assertEqual(witness["native_event"]["id"], "observed")
+
+    async def test_parallel_operations_publish_one_launch_witness(self):
+        self.event()
+        send = self.browser.cdp.send
+
+        async def yielding_send(method):
+            await asyncio.sleep(.01)
+            return await send(method)
+
+        self.browser.cdp.send = yielding_send
+        results = await asyncio.gather(*(self.c.observe(self.browser) for _ in range(8)))
+        self.assertEqual(results, [True] * 8)
+        self.assertEqual(json.loads((self.output / "launch-witness.json").read_text()), self.c.witness)
+
+    async def test_failed_witness_write_does_not_publish_identity(self):
+        self.event()
+        with patch("agentprov.browser_custody._write", side_effect=OSError("injected write failure")):
+            with self.assertRaises(OSError):
+                await self.c.observe(self.browser)
+        self.assertIsNone(self.c.identity)
+        self.assertIsNone(self.c.witness)
+        self.assertTrue(await self.c.observe(self.browser))
 
     async def test_old_wrong_host_namespace_and_other_run_are_not_authority(self):
         for changes, run in [({"monotonic_ns": str(self.c.fence_ns - 1)}, "run"),

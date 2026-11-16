@@ -5,6 +5,7 @@ pidfd keeps that selection tied to its lifetime while the matching kernel exec
 or a later observation supplies the exact nanosecond birth identity.
 """
 
+import asyncio
 import base64
 import hashlib
 from contextlib import closing
@@ -72,6 +73,7 @@ class NativeCustody:
             raise ValueError("native custody requires an existing run")
         self.run_id, self.pidfd, self.scope, self.identity = run_id, None, None, None
         self.witness, self.ready = None, False
+        self.observation_lock = asyncio.Lock()
         self.launch_path = self.launch_receipt = None
         self.launch_marker = None
         self.executable_sha256 = None
@@ -183,6 +185,12 @@ class NativeCustody:
         return not poller.poll(0)
 
     async def observe(self, browser):
+        # Concurrent tab operations may return from CDP together. Publish the
+        # single durable witness before another observer reuses its identity.
+        async with self.observation_lock:
+            return await self._observe(browser)
+
+    async def _observe(self, browser):
         if self.identity:
             return True
         if not self._alive() or await self._browser_pid(browser) != self.pid:
@@ -223,16 +231,17 @@ class NativeCustody:
         if not matches:
             return False
         instance, event = next(iter(matches.items()))
-        self.identity = {"role": "browser", "host_id": self.host_id, "pid": event["pid"],
-                         "process_instance_id": instance}
-        self.witness = {"schema_version": "agentprovenance.browser_launch_witness/v1", "scope": self.scope,
-                        "run_id": self.run_id, **self.identity,
+        identity = {"role": "browser", "host_id": self.host_id, "pid": event["pid"],
+                    "process_instance_id": instance}
+        witness = {"schema_version": "agentprovenance.browser_launch_witness/v1", "scope": self.scope,
+                        "run_id": self.run_id, **identity,
                         "basis": "owned_launcher_cdp_pidfd_and_kernel_exec" if event["owned_launch_exec"] else "owned_cdp_pidfd_and_live_kernel_observation",
                         "procfs_pid": self.pid, "procfs_pid_namespace": self.pid_namespace,
                         "opened_monotonic_ns": str(self.fence_ns), "checked_monotonic_ns": str(now),
                         "launch_marker": self.launch_marker, "executable_sha256": self.executable_sha256,
                         "native_event": event}
-        _write(self.output / "launch-witness.json", self.witness)
+        _write(self.output / "launch-witness.json", witness)
+        self.identity, self.witness = identity, witness
         return True
 
     def seal(self, runtime):
