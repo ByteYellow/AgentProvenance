@@ -2853,6 +2853,7 @@
   "Linux, KVM and Kubernetes": "Linux、KVM 与 Kubernetes",
   "Controlled remote workspace": "受控远端工作区",
   "Runtime adapters": "运行时适配",
+  "Kata/QEMU acceptance": "Kata/QEMU 验收",
   "Security and policies": "安全与策略",
   "Python integration": "Python 接入",
   "Release notes": "发行说明",

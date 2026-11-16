@@ -168,6 +168,8 @@ func TestCompleteDocumentationKeepsOverviewAndReference(t *testing.T) {
 		{"/demos/guide/demo-library?lang=zh-CN", []string{"v1.0 候选示例看什么", "案例经过", "阅读顺序", "合成样本"}},
 		{"/demos/guide/release-v1.0.0-preview?lang=en", []string{"Why this version extends the evidence path", "/demos/guide/demo-library?lang=en#read-the-v10-candidate-examples"}},
 		{"/demos/guide/release-v1.0.0-preview?lang=zh-CN", []string{"为什么扩展这条证据链", "<strong>跨环境</strong>", "/demos/guide/demo-library?lang=zh-CN#" + url.PathEscape("v10-候选示例看什么")}},
+		{"/demos/guide/kata-qemu-acceptance?lang=en", []string{"Kata/QEMU x86 Acceptance", "kata-qemu-runtime-rs", "/demos/guide/kata-qemu-acceptance?lang=zh-CN"}},
+		{"/demos/guide/kata-qemu-acceptance?lang=zh-CN", []string{"kata-qemu-runtime-rs", "/demos/guide/kata-qemu-acceptance?lang=en"}},
 		{"/demos/guide/gvisor-seccheck?lang=en", []string{"exercised on\nARM64 and amd64", "original receive, fault-recovery and restore/two-clone results"}},
 		{"/demos/guide/gvisor-seccheck?lang=zh-CN", []string{"已在 ARM64 和 amd64 实测", "原始结果及程序哈希"}},
 		{"/demos/guide/capabilities?lang=zh-CN", []string{"核心模型", "部署模式", "外部评估器协议", "架构", "evidence-dag-zh-CN.svg"}},

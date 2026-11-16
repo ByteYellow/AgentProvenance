@@ -1,0 +1,59 @@
+{
+  "schema_version": "agentprovenance.kata_acceptance_lock/v1",
+  "platform": "linux/amd64",
+  "runtime_class": "kata-qemu-runtime-rs",
+  "runtime_handler": "kata-qemu-runtime-rs",
+  "runtime_type": "io.containerd.kata-qemu-runtime-rs.v2",
+  "artifacts": {
+    "kata": {
+      "version": null,
+      "source_sha": null,
+      "path": "/opt/kata/runtime-rs/bin/containerd-shim-kata-v2",
+      "sha256": null
+    },
+    "qemu": {
+      "version": null,
+      "path": "/opt/kata/bin/qemu-system-x86_64",
+      "sha256": null
+    },
+    "guest_kernel": {
+      "version": null,
+      "release": null,
+      "path": "/opt/kata/share/kata-containers/vmlinux.container",
+      "sha256": null,
+      "btf_sha256": null
+    },
+    "guest_image": {
+      "version": null,
+      "path": "/opt/kata/share/kata-containers/kata-containers.img",
+      "sha256": null
+    },
+    "kata_config": {
+      "version": null,
+      "path": "/opt/kata/share/defaults/kata-containers/configuration-qemu-runtime-rs.toml",
+      "sha256": null
+    }
+  },
+  "sensor": {
+    "version": null,
+    "source_sha": null,
+    "sha256": null,
+    "packaging": "embedded-in-agentprov"
+  },
+  "kubernetes": {"server_version": null, "kubelet_version": null},
+  "containerd": {"version": null},
+  "workload_image": null,
+  "verifier": {"version": null, "source_sha": null, "sha256": null},
+  "candidate_reference": {
+    "kata": "4.3.1",
+    "source_sha": "03cf2ec06a5d302f23af811744f6bcea49988bfb",
+    "qemu": "11.0.1",
+    "guest_kernel": "6.18.56",
+    "purpose": "Research reference only; pin the supported installed combination in artifacts without reinstalling it"
+  },
+  "references": [
+    "https://kata-containers.github.io/kata-containers/kata-deploy-runtimeclasses/",
+    "https://github.com/kata-containers/kata-containers/blob/03cf2ec06a5d302f23af811744f6bcea49988bfb/versions.yaml",
+    "https://github.com/kata-containers/kata-containers/blob/03cf2ec06a5d302f23af811744f6bcea49988bfb/tools/packaging/kata-deploy/binary/src/runtime/containerd.rs"
+  ]
+}

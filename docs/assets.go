@@ -16,6 +16,7 @@ import (
 //go:embed capture-manifest-api.yaml
 //go:embed derived-evidence.md zh-CN/derived-evidence.md
 //go:embed workspace.md zh-CN/workspace.md runtime-adapters.md zh-CN/runtime-adapters.md
+//go:embed validation/kata-qemu.md zh-CN/validation/kata-qemu.md
 var Files embed.FS
 
 type Entry struct{ ID, Title, Path, Group string }
@@ -80,9 +81,10 @@ func Groups() []Group {
 	return groups
 }
 
-// Pages adds release notes without crowding current documentation navigation.
+// Pages adds linked reference pages without crowding current documentation navigation.
 func Pages() []Entry {
 	pages := Catalog()
+	pages = append(pages, Entry{"kata-qemu-acceptance", "Kata/QEMU acceptance", "docs/validation/kata-qemu.md", "Reference"})
 	for _, version := range []string{"v0.7.2", "v0.8.0", "v0.8.1", "v0.8.2-rc.1", "v0.8.2-rc.2", "v0.8.2", "v0.9.0", "v0.10.0", "v0.10.1", "v1.0.0-preview"} {
 		pages = append(pages, Entry{"release-" + version, version, "docs/releases/" + version + ".md", "Reference"})
 	}
