@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -134,6 +135,12 @@ func TestRunscLiveExecutionIdentityEvidence(t *testing.T) {
 	defer cancel()
 	launch := exec.CommandContext(ctx, binary, "--root="+state, "--platform=systrap", "--network=none", "--pod-init-config="+filepath.Join(root, "trace.json"), "run", "--bundle="+root, container)
 	launch.WaitDelay = time.Second
+	launchLog, err := os.OpenFile(filepath.Join(root, "runtime-launch.log"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer launchLog.Close()
+	launch.Stdout, launch.Stderr = launchLog, launchLog
 	if err := launch.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -155,9 +162,8 @@ func TestRunscLiveExecutionIdentityEvidence(t *testing.T) {
 	}()
 	var stateRaw []byte
 	var current struct {
-		ID      string `json:"id"`
-		Status  string `json:"status"`
-		Created string `json:"created"`
+		ID     string `json:"id"`
+		Status string `json:"status"`
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
@@ -171,11 +177,22 @@ func TestRunscLiveExecutionIdentityEvidence(t *testing.T) {
 		t.Fatalf("container did not start: %s %v", stateRaw, err)
 	}
 	writeJSON("runtime-state.json", json.RawMessage(stateRaw))
-	s := Runsc{Binding: Binding{Target: target, Mode: "runsc", ContainerID: container, StateCreated: current.Created}, Config: RunscConfig{
-		Binary: binary, Root: state, ContainerID: container, StateCreated: current.Created, RuntimeRelease: seccheck.RuntimeRelease, Workdir: "/", AllowUncorrelated: true}, StateDir: root}
+	lifecycle, err := readRunscLifecycle(state, container)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeJSON("runtime-lifecycle.json", lifecycle)
+	s := Runsc{Binding: Binding{Target: target, Mode: "runsc", ContainerID: container, StateCreated: lifecycle.CreatedAt}, Config: RunscConfig{
+		Binary: binary, Root: state, ContainerID: container, StateCreated: lifecycle.CreatedAt, RuntimeRelease: seccheck.RuntimeRelease, Workdir: "/", AllowUncorrelated: true}, StateDir: root}
 	r := testRequest()
 	r.Target = target
 	r.Command.Command = []string{"/bin/true"}
+	stale := s
+	stale.Config.StateCreated = "2000-01-01T00:00:00Z"
+	stale.Binding.StateCreated = stale.Config.StateCreated
+	if err := stale.Admit(ctx, r); err == nil || !strings.Contains(err.Error(), "lifecycle") {
+		t.Fatalf("accepted a replaced container lifecycle: %v", err)
+	}
 	result, err := s.Run(ctx, r, nil)
 	writeJSON("execution-success.json", result)
 	if err != nil || result.State != "succeeded" || result.SentryPID <= 0 {
@@ -204,11 +221,67 @@ func TestRunscLiveExecutionIdentityEvidence(t *testing.T) {
 	r.Command.Command = []string{"/bin/sleep", "30"}
 	cancelCtx, cancelExec := context.WithCancel(ctx)
 	defer cancelExec()
-	cancelled, cancelErr := s.Run(cancelCtx, r, func(Execution) error { cancelExec(); return nil })
+	var controlBirth int64
+	var controlPID int32
+	cancelled, cancelErr := s.Run(cancelCtx, r, func(e Execution) error {
+		defer cancelExec()
+		// The runtime control plane exposes exact nanosecond birth time. Retain
+		// only identity fields; the full procfs dump also contains environment.
+		raw, err := s.control(ctx, "--root="+state, "trace", "procfs", container)
+		if err != nil {
+			return fmt.Errorf("probe runtime birth identity: %w", err)
+		}
+		for _, line := range strings.Split(string(raw), "\n") {
+			if !strings.HasPrefix(line, "{") {
+				continue
+			}
+			var p struct {
+				Start  int64 `json:"clone_ts"`
+				Status struct {
+					PID int32 `json:"pid"`
+				} `json:"status"`
+			}
+			if err := json.Unmarshal([]byte(line), &p); err != nil {
+				return err
+			}
+			if p.Status.PID == e.SentryPID {
+				controlPID, controlBirth = p.Status.PID, p.Start
+			}
+		}
+		if controlBirth <= 0 {
+			return fmt.Errorf("runtime process birth identity missing")
+		}
+		writeJSON("runtime-process-birth.json", struct {
+			PID   int32  `json:"sentry_pid"`
+			Birth int64  `json:"start_time_ns,string"`
+			Basis string `json:"basis"`
+		}{controlPID, controlBirth, "runsc_trace_procfs"})
+		return nil
+	})
 	writeJSON("execution-cancelled.json", cancelled)
 	if cancelErr == nil || cancelled.State != "unknown" || cancelled.ExitCode != nil {
 		t.Fatalf("cancelled runtime result: %+v %v", cancelled, cancelErr)
 	}
+	matchedBirth := false
+	deadline = time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		for _, c := range contexts {
+			if c.ThreadGroupId == controlPID && c.ThreadGroupStartTimeNs == controlBirth && c.IsExecSession && c.ContainerId == container {
+				matchedBirth = controlBirth > 0
+				break
+			}
+		}
+		mu.Unlock()
+		if matchedBirth {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !matchedBirth {
+		t.Error("runtime control birth did not match exact SecCheck process identity")
+	}
 	writeJSON("acceptance-boundary.json", map[string]any{"schema_version": Schema, "target": target, "runtime_release": seccheck.RuntimeRelease,
-		"operation_receipts_observed": true, "matching_pid_birth_sample_observed": observed, "shared_call_identity": "unavailable", "per_command_event_association": "pending", "capture_completion": "incomplete"})
+		"operation_receipts_observed": true, "matching_pid_birth_sample_observed": observed, "control_plane_birth_matches_sentry": matchedBirth,
+		"shared_call_identity": "pending_controlled_start_gate", "per_command_event_association": "pending", "capture_completion": "incomplete"})
 }

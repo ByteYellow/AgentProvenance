@@ -49,6 +49,7 @@ func TestReplayOriginalDeliveryReadsExactBundleRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer p.Close()
+	assertReplayDeliveryBanner(t, p, DeliveryOriginals)
 	if p.Inventory.DeliveryMode != DeliveryOriginals || p.Inventory.Events != 1 || len(p.Inventory.Originals) != 1 {
 		t.Fatalf("wrong revision: %+v", p.Inventory)
 	}

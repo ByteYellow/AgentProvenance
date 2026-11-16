@@ -19,7 +19,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/seccheck"
 )
 
-// RunscConfig pins one container and the creation value returned by runsc state.
+// RunscConfig pins one container and its trusted runtime metadata creation value.
 // The launcher must retire this binding before replacing/restoring the container.
 type RunscConfig struct {
 	Binary            string `json:"binary"`
@@ -107,22 +107,76 @@ func (s Runsc) Admit(ctx context.Context, r Request) error {
 	if err != nil {
 		return fmt.Errorf("read runsc container state: %w", err)
 	}
-	return s.validateState(state)
+	if err := s.validateState(state); err != nil {
+		return err
+	}
+	lifecycle, err := readRunscLifecycle(s.Config.Root, s.Config.ContainerID)
+	if err != nil {
+		return fmt.Errorf("read runsc container lifecycle: %w", err)
+	}
+	if lifecycle.CreatedAt != s.Config.StateCreated {
+		return fmt.Errorf("runsc container lifecycle or generation mismatch")
+	}
+	return nil
 }
 
 func (s Runsc) validateState(state []byte) error {
 	var current struct {
-		ID      string `json:"id"`
-		Status  string `json:"status"`
-		Created string `json:"created"`
+		ID     string `json:"id"`
+		Status string `json:"status"`
+		PID    int    `json:"pid"`
 	}
 	if err := json.Unmarshal(state, &current); err != nil {
 		return fmt.Errorf("decode runsc state: %w", err)
 	}
-	if current.ID != s.Config.ContainerID || current.Created != s.Config.StateCreated || current.Status != "running" {
+	if current.ID != s.Config.ContainerID || current.PID <= 0 || current.Status != "running" {
 		return fmt.Errorf("runsc container lifecycle or generation mismatch")
 	}
 	return nil
+}
+
+// OCI state has no creation timestamp. The pinned runsc version atomically
+// replaces its root-owned metadata file and stores CreatedAt there. Decode only
+// lifecycle fields: the rest of that file can contain workload environment.
+type runscLifecycle struct {
+	ID        string `json:"id"`
+	CreatedAt string `json:"createdAt"`
+	Sandbox   struct {
+		ID string `json:"id"`
+	} `json:"sandbox"`
+}
+
+func decodeRunscLifecycle(raw []byte, containerID, filename string) (runscLifecycle, error) {
+	var lifecycle runscLifecycle
+	if err := json.Unmarshal(raw, &lifecycle); err != nil {
+		return lifecycle, fmt.Errorf("decode runsc lifecycle: %w", err)
+	}
+	if lifecycle.ID != containerID || !safeName(lifecycle.Sandbox.ID) ||
+		filename != containerID+"_sandbox:"+lifecycle.Sandbox.ID+".state" {
+		return lifecycle, fmt.Errorf("runsc lifecycle metadata identity mismatch")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, lifecycle.CreatedAt); err != nil {
+		return lifecycle, fmt.Errorf("runsc lifecycle metadata has no valid creation time")
+	}
+	return lifecycle, nil
+}
+
+func readRunscLifecycle(root, containerID string) (runscLifecycle, error) {
+	if !safeName(containerID) {
+		return runscLifecycle{}, fmt.Errorf("invalid runsc container identity")
+	}
+	if err := ValidateTrustedPath(root, true); err != nil {
+		return runscLifecycle{}, err
+	}
+	files, err := filepath.Glob(filepath.Join(root, containerID+"_sandbox:*.state"))
+	if err != nil || len(files) != 1 {
+		return runscLifecycle{}, fmt.Errorf("runsc requires exactly one container lifecycle metadata file")
+	}
+	raw, err := ReadTrustedFile(files[0], 4<<20)
+	if err != nil {
+		return runscLifecycle{}, err
+	}
+	return decodeRunscLifecycle(raw, containerID, filepath.Base(files[0]))
 }
 
 type boundedBuffer struct{ data []byte }

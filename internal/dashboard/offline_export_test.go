@@ -49,6 +49,7 @@ func TestOfflineReplayFreezesOneRunAndSavedContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer p.Close()
+	assertReplayDeliveryBanner(t, p, DeliveryReading)
 	if p.Inventory.RunID != "selected-run" || p.Inventory.Scope != "whole_run" || p.Inventory.Signed || p.Inventory.Events != 1 {
 		t.Fatalf("inventory: %+v", p.Inventory)
 	}

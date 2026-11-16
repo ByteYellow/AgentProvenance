@@ -114,8 +114,14 @@ async function main(){
         const recordSignatureUI=async(locale,unsignedCopy)=>{
           const text=await page.locator('.offline-replay-bar').innerText();
           if(!signed)assert.match(text,unsignedCopy);
-          else if(unsignedCopy.test(text))report.knownUILimitations.push({code:'signed_reader_legacy_unsigned_copy',
-            status:'PENDING',locale,run:runID,observed:text,signatureAuthority:'independent agentprov-verify, not reader UI'});
+          else {
+            assert.doesNotMatch(text,unsignedCopy,'signed reader describes its actual delivery mode');
+            const bar=page.locator('.offline-replay-bar');
+            assert.equal(await bar.getAttribute('data-delivery-mode'),mode);
+            assert.equal(await bar.getAttribute('data-verification-state'),'not_checked');
+            assert.match(text,locale==='en'?/recipient verification pending/:/等待接收方验证/);
+            if(mode==='originals')assert.match(text,locale==='en'?/original bundles/:/原始证据包/);
+          }
         };
         await recordSignatureUI('en',/unsigned sharing copy/);
         const query=async q=>{report.queries++;return page.evaluate(q=>AgentProvReplay.query(q),q);};

@@ -14,6 +14,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/attest"
 	"github.com/byteyellow/agentprovenance/internal/derivedview"
+	"github.com/byteyellow/agentprovenance/internal/i18n"
 )
 
 const replayProjectionRule = "agentprov.offline_replay/v1"
@@ -105,6 +106,34 @@ func (p *PreparedReplay) signDerived(ctx context.Context, source string, signer 
 		inventory.DeliveryMode = DeliveryDerived
 	}
 	inventory.Signature = &ReplaySignature{Kind: "derived_view", ExporterID: signer.ExporterID, KeyID: attest.KeyID(pub)}
+	for i, file := range inventory.Files {
+		locale := i18n.English
+		if file.Path == "zh-CN/index.html" {
+			locale = i18n.Chinese
+		} else if file.Path != "en/index.html" {
+			continue
+		}
+		name := filepath.Join(p.root, file.Path)
+		raw, err := os.ReadFile(name)
+		if err != nil {
+			return err
+		}
+		if replayDigest(raw) != file.SHA256 || int64(len(raw)) != file.Bytes {
+			return fmt.Errorf("prepared reader changed before signing")
+		}
+		page, err := signedOfflineHTML(raw, locale, inventory.DeliveryMode)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(name, page, 0600); err != nil {
+			return err
+		}
+		inventory.Bytes += int64(len(page)) - file.Bytes
+		inventory.Files[i] = ReplayFile{Path: file.Path, SHA256: replayDigest(page), Bytes: int64(len(page))}
+	}
+	if inventory.Bytes > 1280<<20 {
+		return fmt.Errorf("offline delivery exceeds 1280 MiB")
+	}
 	raw, err := json.MarshalIndent(inventory, "", "  ")
 	if err != nil {
 		return err

@@ -83,6 +83,11 @@ and opens web pages in Chinese.
 
 ## Platforms and verification
 
+- Every archive includes `agentprov-verify`. Verify a received reader ZIP without
+  Go or a running server: `./agentprov-verify --trust-policy recipient-trust.json selected.zip`.
+  Keep your recipient key policy outside the ZIP. With no policy, the verifier
+  reports unknown signers and exits with code 2. Signing and recipient trust are
+  reported separately from collection coverage.
 - Linux archives include the optional native sensor. Kernel capture needs the
   appropriate kernel, cgroup access and BPF/perf permissions.
 - macOS supports application recording and replay. The CLI is not Apple

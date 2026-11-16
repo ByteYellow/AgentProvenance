@@ -29,6 +29,8 @@ def main():
             tar.extractall(root, filter='data')
         cli = root / 'agentprov'
         meta = json.loads((root / 'build-info.json').read_text())
+        for program in meta['programs']:
+            assert hashlib.sha256((root / program).read_bytes()).hexdigest() == meta['program_sha256'][program], program
         home = root / 'private home'
         home.mkdir()
         scratch = root / 'temporary state'
@@ -39,6 +41,37 @@ def main():
             return subprocess.check_output([str(cli), *args], cwd=root, env=env, text=True, timeout=30)
         version = run('--version')
         assert meta['version'] in version and meta['commit'] in version, version
+        verifier = root / 'agentprov-verify'
+        assert 'agentprov-verify' in meta['programs'] and verifier.is_file()
+        verifier_version = subprocess.check_output([str(verifier), '--version'], cwd=root, env=env, text=True, timeout=15)
+        assert meta['version'] in verifier_version and meta['commit'] in verifier_version, verifier_version
+        # Exercise the shipped verifier with real signed bytes, no Go, and a
+        # separate recipient policy. All fixture secrets stay in this temp tree.
+        private, public = root / 'exporter.private', root / 'exporter.public'
+        run('forensics', 'keygen', '--priv', str(private), '--pub', str(public))
+        public_bytes = bytes.fromhex(public.read_text().strip())
+        policy = root / 'recipient-trust.json'
+        policy.write_text(json.dumps({'schema_version': 'agentprovenance.reader_trust/v1', 'id': 'release-fixture',
+            'keys': [{'key_id': hashlib.sha256(public_bytes).hexdigest()[:16],
+                      'public_key_hex': public_bytes.hex(), 'roles': ['exporter']}]}))
+        data, workspace = root / 'fixture-store', root / 'fixture-workspace'
+        workspace.mkdir()
+        run('--data-dir', str(data), 'record', '--run', 'release-verifier', '--workdir', str(workspace),
+            '--json', '--', '/bin/echo', 'portable verifier fixture')
+        signed = root / 'signed-reader.zip'
+        run('--data-dir', str(data), 'dashboard', 'export', '--run', 'release-verifier', '--output', str(signed),
+            '--sign-key', str(private), '--exporter-id', 'release-fixture')
+        private.unlink()
+        def verify(expected_code, *args):
+            result = subprocess.run([str(verifier), *map(str, args)], cwd=root, env=env,
+                                    capture_output=True, text=True, timeout=30)
+            assert result.returncode == expected_code, (result.returncode, result.stderr)
+            return json.loads(result.stdout)
+        trusted = verify(0, '--trust-policy', policy, signed)
+        assert trusted['file_integrity'] == 'passed' and trusted['derived_signature']['trusted']
+        unknown = verify(2, signed)
+        assert unknown['derived_signature']['status'] == 'unknown_key'
+        assert unknown['derived_signature']['cryptographic'] == 'passed'
         catalog = json.loads(run('demo', '--list', '--json'))
         replay = [d for d in catalog if d.get('run')]
         expected_replays = {
@@ -145,7 +178,7 @@ def main():
             if process.poll() is None:
                 process.kill()
                 process.wait()
-        print(json.dumps({'archive': archive.name, 'platform': meta['os'] + '/' + meta['arch'], 'signed_replays': len(replay), 'guides': len(catalog), 'user_guides': len(guide_ids), 'guide_languages': ['en', 'zh-CN'], 'recorded_context': 'passed', 'no_go_required': True, 'cleanup': 'passed'}))
+        print(json.dumps({'archive': archive.name, 'platform': meta['os'] + '/' + meta['arch'], 'signed_replays': len(replay), 'guides': len(catalog), 'user_guides': len(guide_ids), 'guide_languages': ['en', 'zh-CN'], 'recorded_context': 'passed', 'standalone_verifier': 'passed', 'verifier_unknown_key_exit': 2, 'no_go_required': True, 'cleanup': 'passed'}))
 
 
 if __name__ == '__main__':

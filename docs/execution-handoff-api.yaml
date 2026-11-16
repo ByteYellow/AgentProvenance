@@ -579,7 +579,7 @@ components:
         target: { $ref: '#/components/schemas/Target' }
         mode: { type: string, enum: [native, guest, runsc] }
         container_id: { type: string, minLength: 1, description: Trusted CRI container identity for Guest or the configured runsc container ID. }
-        state_created: { type: string, format: date-time, description: Exact runsc state creation value checked before dispatch. }
+        state_created: { type: string, format: date-time, description: Exact createdAt from root-owned runsc lifecycle metadata checked before dispatch; OCI state has no creation timestamp. }
         runtime_class: { type: string, minLength: 1 }
         runtime_handler: { type: string, minLength: 1 }
         pod_uid: { type: string, minLength: 1 }

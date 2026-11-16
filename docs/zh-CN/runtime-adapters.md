@@ -78,7 +78,16 @@ Guest/runsc 配置文件及全部父目录须为 root 所有、禁止 group/othe
 }
 ```
 
-`state_created` 必须取自实际 `runsc --root=ROOT state CONTAINER` 返回值。每次执行前校验该值、容器 ID、running 状态与二进制版本。替换/恢复容器前，可信 launcher 需先退役旧绑定。路径使用绝对路径；`workdir` 固定为容器内部路径。请求需设置 `command.disable_snapshot=true`，`command.workdir` 留空或严格等于配置值。容器工作区不使用宿主快照和宿主路径解析。
+`state_created` 取自固定版本 runtime 在 root-owned 目录中保存的
+`ROOT/CONTAINER_sandbox:SANDBOX.state` 文件里的 `createdAt`。
+适配器有界读取该文件，核对容器、sandbox 身份及创建时间；另行调用
+`runsc --root=ROOT state CONTAINER` 检查 OCI ID、运行状态和 sandbox PID。
+OCI state 输出没有创建时间字段。每次执行前还会核对二进制版本。
+安装时将发布包中的 `gvisor-bin/` 配套目录与 `runsc` 放在一起，目录及文件同样
+要求 root 所有且不可由其他用户写入。
+替换或恢复容器前，可信 launcher 先退役旧绑定。路径使用绝对路径；`workdir`
+固定为容器内部路径。请求设置 `command.disable_snapshot=true`，
+`command.workdir` 留空或严格等于配置值。容器工作区沿用容器内路径。
 
 执行命令固定为：
 

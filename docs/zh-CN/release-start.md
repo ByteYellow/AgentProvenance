@@ -70,6 +70,10 @@ Jev 需要 Python 3.9+；实际评估还需要模型凭据，并允许发送选�
 
 ## 平台与校验
 
+- 每个平台的包都附带 `agentprov-verify`，无需 Go 或启动服务即可验证收到的阅读副本：
+  `./agentprov-verify --trust-policy recipient-trust.json selected.zip`。
+  接收方的公钥授权配置单独保存在 ZIP 之外；省略配置时，未知签名者会返回退出码 2。
+  签名、接收方信任和采集覆盖分别报告。
 - Linux 包附带可选的原生传感器；内核采集需要相应内核、cgroup 和 BPF/perf 权限。
 - macOS 支持应用侧记录与回放。CLI 尚未经过 Apple Developer ID 签名或公证。
 - Windows 用户在 WSL 中使用 Linux 包。

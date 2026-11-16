@@ -79,17 +79,39 @@ func TestRunscAdmissionRejectsUnsupportedGuarantees(t *testing.T) {
 
 func TestRunscRuntimeLifecycleFence(t *testing.T) {
 	s := testRunsc()
-	if err := s.validateState([]byte(`{"id":"container","status":"running","created":"2026-11-16T00:00:00Z"}`)); err != nil {
+	// Exact OCI output shape observed from the pinned runtime, with no created field.
+	if err := s.validateState([]byte(`{"ociVersion":"1.2.1","id":"container","status":"running","pid":2767,"bundle":"/root/fixture"}`)); err != nil {
 		t.Fatal(err)
 	}
 	for _, raw := range []string{
-		`{"id":"container","status":"running","created":"2026-11-16T00:00:01Z"}`,
-		`{"id":"container","status":"stopped","created":"2026-11-16T00:00:00Z"}`,
-		`{"id":"reused","status":"running","created":"2026-11-16T00:00:00Z"}`,
+		`{"id":"container","status":"running","pid":0}`,
+		`{"id":"container","status":"stopped","pid":2767}`,
+		`{"id":"reused","status":"running","pid":2767}`,
 		`{"id":"container","status":"running"}`,
 	} {
 		if err := s.validateState([]byte(raw)); err == nil {
 			t.Fatalf("accepted lifecycle mismatch: %s", raw)
 		}
+	}
+}
+
+func TestRunscLifecycleUsesPinnedRuntimeMetadata(t *testing.T) {
+	good := `{"id":"container","createdAt":"2026-11-16T00:00:00.123456789Z","sandbox":{"id":"sandbox"},"spec":{"process":{"env":["PRIVATE=fixture"]}}}`
+	lifecycle, err := decodeRunscLifecycle([]byte(good), "container", "container_sandbox:sandbox.state")
+	if err != nil || lifecycle.CreatedAt != "2026-11-16T00:00:00.123456789Z" {
+		t.Fatalf("runtime creation identity: %+v %v", lifecycle, err)
+	}
+	for _, raw := range []string{
+		strings.Replace(good, `"id":"container"`, `"id":"other"`, 1),
+		strings.Replace(good, `"id":"sandbox"`, `"id":"../sandbox"`, 1),
+		strings.Replace(good, `"createdAt"`, `"created"`, 1),
+		strings.Replace(good, "2026-11-16T00:00:00.123456789Z", "invalid", 1),
+	} {
+		if _, err := decodeRunscLifecycle([]byte(raw), "container", "container_sandbox:sandbox.state"); err == nil {
+			t.Fatal("accepted invalid lifecycle metadata")
+		}
+	}
+	if _, err := decodeRunscLifecycle([]byte(good), "container", "container_sandbox:other.state"); err == nil {
+		t.Fatal("accepted lifecycle metadata from a different sandbox")
 	}
 }

@@ -21,6 +21,7 @@ func offlineReplayHTMLSelection(raw []byte, locale i18n.Locale, selection Replay
 }
 
 func offlineReplayHTMLSet(raw []byte, locale i18n.Locale, selections []ReplaySelection, partial, analysisOmitted bool) ([]byte, error) {
+	delivery := DeliveryReading
 	doc, err := html.Parse(bytes.NewReader(raw))
 	if err != nil {
 		return nil, err
@@ -83,9 +84,13 @@ func offlineReplayHTMLSet(raw []byte, locale i18n.Locale, selections []ReplaySel
 	if err = prepend(head, `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"><meta name="agentprov-site-root" content="../"><script src="../assets/catalog.js"></script><script src="../assets/offline.js"></script><script src="../assets/replay.js"></script><style>#live{display:none}.offline-replay-bar{padding:10px 26px;border-bottom:1px solid var(--line);font-size:12px;color:var(--mut);display:flex;gap:16px;flex-wrap:wrap}.offline-replay-bar a{color:var(--acc)}</style>`); err != nil {
 		return nil, err
 	}
-	label, scope, inventory := "Offline replay · unsigned sharing copy", "Whole run · recorded content", "Export inventory"
+	label, verification, err := offlineDeliveryText(locale, delivery)
+	if err != nil {
+		return nil, err
+	}
+	scope, inventory := "Whole run · recorded content", "Export inventory"
 	if locale == i18n.Chinese {
-		label, scope, inventory = "离线回放 · 未签名的分享副本", "整个 Run · 已保存内容", "导出清单"
+		scope, inventory = "整个 Run · 已保存内容", "导出清单"
 	}
 	selection := selections[0]
 	if len(selections) > 1 {
@@ -112,12 +117,94 @@ func offlineReplayHTMLSet(raw []byte, locale i18n.Locale, selections []ReplaySel
 			scope += " · some analyses omitted; see inventory"
 		}
 	}
-	if err = prepend(body, `<nav class="offline-replay-bar"><strong>`+label+`</strong><span>`+htmltext.EscapeString(scope)+`</span><a href="../export-inventory.json" target="_blank" rel="noopener">`+inventory+`</a></nav>`); err != nil {
+	if err = prepend(body, `<nav class="offline-replay-bar" data-delivery-mode="`+delivery+`" data-verification-state="not_checked"><strong>`+label+`</strong><span>`+htmltext.EscapeString(scope)+`</span><span class="offline-signature-status">`+verification+`</span><a href="../export-inventory.json" target="_blank" rel="noopener">`+inventory+`</a></nav>`); err != nil {
 		return nil, err
 	}
 	var out bytes.Buffer
 	err = html.Render(&out, doc)
 	return out.Bytes(), err
+}
+
+func offlineDeliveryText(locale i18n.Locale, delivery string) (label, verification string, err error) {
+	label, verification = "Offline replay · unsigned sharing copy", "Recipient verification: not run"
+	if locale == i18n.Chinese {
+		label, verification = "离线回放 · 未签名的分享副本", "接收方验证：尚未执行"
+	}
+	switch delivery {
+	case DeliveryReading:
+	case DeliveryDerived, DeliveryOriginals:
+		label, verification = "Offline replay · exporter-signed reader", "Signatures supplied · recipient verification pending"
+		if delivery == DeliveryOriginals {
+			label = "Offline replay · original bundles and signed reader"
+		}
+		if locale == i18n.Chinese {
+			label, verification = "离线回放 · 导出者签名的阅读副本", "已附签名 · 等待接收方验证"
+			if delivery == DeliveryOriginals {
+				label = "离线回放 · 原始证据包与签名阅读副本"
+			}
+		}
+	default:
+		err = fmt.Errorf("invalid offline delivery mode")
+	}
+	return
+}
+
+// A prepared reading copy can be signed later. Its presentation is part of the
+// signed payload, so update it before computing the final manifest hashes.
+func signedOfflineHTML(raw []byte, locale i18n.Locale, delivery string) ([]byte, error) {
+	label, verification, err := offlineDeliveryText(locale, delivery)
+	if err != nil {
+		return nil, err
+	}
+	doc, err := html.Parse(bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	var bars int
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "nav" && strings.Contains(" "+htmlAttribute(n, "class")+" ", " offline-replay-bar ") {
+			bars++
+			for i := range n.Attr {
+				if n.Attr[i].Key == "data-delivery-mode" {
+					n.Attr[i].Val = delivery
+				}
+			}
+			for child := n.FirstChild; child != nil; child = child.NextSibling {
+				text := ""
+				if child.Data == "strong" {
+					text = label
+				} else if child.Data == "span" && htmlAttribute(child, "class") == "offline-signature-status" {
+					text = verification
+				}
+				if text != "" {
+					for child.FirstChild != nil {
+						child.RemoveChild(child.FirstChild)
+					}
+					child.AppendChild(&html.Node{Type: html.TextNode, Data: text})
+				}
+			}
+		}
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(doc)
+	if bars != 1 {
+		return nil, fmt.Errorf("prepared reader must have one delivery banner")
+	}
+	var out bytes.Buffer
+	err = html.Render(&out, doc)
+	return out.Bytes(), err
+}
+
+func htmlAttribute(n *html.Node, key string) string {
+	for _, attr := range n.Attr {
+		if attr.Key == key {
+			return attr.Val
+		}
+	}
+	return ""
 }
 
 const offlineReplayIndex = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>AgentProvenance offline replay</title></head><body><p><a href="en/index.html">English replay</a> · <a href="zh-CN/index.html">中文回放</a></p><script>

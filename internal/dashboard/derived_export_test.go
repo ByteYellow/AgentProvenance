@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/byteyellow/agentprovenance/internal/agentcontext"
@@ -40,6 +41,7 @@ func TestDerivedExportSignsFrozenSelectedPayload(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer p.Close()
+	assertReplayDeliveryBanner(t, p, DeliveryDerived)
 	if !p.Inventory.Signed || p.Inventory.Signature == nil || p.Inventory.Signature.Kind != "derived_view" {
 		t.Fatalf("missing exporter signature identity: %+v", p.Inventory)
 	}
@@ -114,10 +116,47 @@ func TestDerivedExportDoesNotUseMutablePublicInventory(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	assertReplayDeliveryBanner(t, p, DeliveryDerived)
 	var saved derivedview.Manifest
 	raw, err := os.ReadFile(filepath.Join(p.root, derivedview.ManifestPath))
 	if err != nil || json.Unmarshal(raw, &saved) != nil || saved.Selection.Path == "private-original.json" || len(saved.Files) < 2 {
 		t.Fatalf("mutable public inventory used for signing: %+v %v", saved, err)
+	}
+}
+
+func assertReplayDeliveryBanner(t *testing.T, p *PreparedReplay, mode string) {
+	t.Helper()
+	for _, locale := range []string{"en", "zh-CN"} {
+		raw, err := os.ReadFile(filepath.Join(p.root, locale, "index.html"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		page := string(raw)
+		start := strings.Index(page, `<nav class="offline-replay-bar"`)
+		if start < 0 {
+			t.Fatalf("missing delivery banner in %s", locale)
+		}
+		page = page[start:]
+		end := strings.Index(page, "</nav>")
+		if end < 0 {
+			t.Fatalf("invalid delivery banner in %s", locale)
+		}
+		page = page[:end]
+		if !strings.Contains(page, `data-delivery-mode="`+mode+`"`) || !strings.Contains(page, `data-verification-state="not_checked"`) {
+			t.Fatalf("missing delivery/verification state in %s", locale)
+		}
+		if mode != DeliveryReading && (strings.Contains(page, "unsigned sharing copy") || strings.Contains(page, "未签名的分享副本")) {
+			t.Fatalf("signed payload still claims unsigned in %s", locale)
+		}
+		if mode != DeliveryReading {
+			want := "recipient verification pending"
+			if locale == "zh-CN" {
+				want = "等待接收方验证"
+			}
+			if !strings.Contains(page, want) {
+				t.Fatalf("exporter supplied a recipient verification claim in %s", locale)
+			}
+		}
 	}
 }
 

@@ -78,7 +78,18 @@ The supported protocol pin is `release-20261109.0`, upstream commit `a0e6be6fb5e
 }
 ```
 
-Read `state_created` from the actual `runsc --root=ROOT state CONTAINER` result. It is checked before execution, alongside the container ID, running state and binary version. A trusted launcher must retire the binding before replacing/restoring its container. Paths are absolute; `workdir` is fixed inside the container. Requests must set `command.disable_snapshot=true` and either omit `command.workdir` or use this exact workdir. Host-side snapshots and host path walks are not used for a container workspace.
+Read `state_created` from `createdAt` in the pinned runtime's root-owned
+`ROOT/CONTAINER_sandbox:SANDBOX.state` metadata file. The adapter reads this
+bounded file, verifies both IDs and checks the creation value before execution.
+The separate `runsc --root=ROOT state CONTAINER` OCI response supplies the ID,
+live status and sandbox PID; it has no creation timestamp. The runtime binary
+version is also checked. Install the release's companion `gvisor-bin/` directory
+alongside `runsc`, with the same root-owned, non-writable directory boundary.
+A trusted launcher must retire the binding before replacing/restoring its
+container. Paths are absolute; `workdir` is fixed inside the container. Requests
+must set `command.disable_snapshot=true` and either omit `command.workdir` or use
+this exact workdir. Host-side snapshots and host path walks are not used for a
+container workspace.
 
 The entry is fixed to:
 
