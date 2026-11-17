@@ -699,5 +699,30 @@
     "signed_bundle": "passed",
     "retained_binding_refs": 10,
     "bundle_sha256": "2683c0762d142e4201a399cee8e5d7f0e767aa8370b663c8809d99cda274615d"
+  },
+  "cli_projection_regression": {
+    "status": "PASS",
+    "test_source": "b9e6b8f41e936b265ec0525f24e8a88fc51ed6ea",
+    "production_source_unchanged": "e82f1a37aaa2896d59afec10aa2fce28e1dbba74",
+    "prior_ci": {
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43994090540",
+      "source": "2e3f872dbea24a81fef8a708a7cc58e2f07596f1",
+      "status": "FAIL",
+      "log_sha256": "9c10406952131ab48f445873d58c0e282257a1eada62d5ef50e4ab9ddb0246be"
+    },
+    "cause": "The CLI regression helper read inline focus_edges but did not follow shared graph indexes.",
+    "change": "Resolve each exported lens through its own graph and focus indexes; keep complete edge equality and exclusion assertions.",
+    "command": "GOTOOLCHAIN=go1.26.4 go test -race ./internal/cli -run 'TestBrowserCustody(GraphAndSelectedExportCLI|ExecutableGraphAndExport)$' -count=1",
+    "exit_code": 0,
+    "duration_seconds": 19.492,
+    "log_sha256": "afa602abaa04443b00cb60b5fddca984d616e11eeb53cd23e606e29573164218",
+    "checks": [
+      "basic capture online/offline equality",
+      "detailed capture online/offline equality",
+      "supporting record exclusion",
+      "runtime category exclusion",
+      "no receiver custody configuration",
+      "actual executable graph/export equality"
+    ]
   }
 }

@@ -1,0 +1,1897 @@
+{
+  "schema_version": "agentprovenance.acceptance_summary/v1",
+  "status": "PASS",
+  "source": {
+    "head": "b9e6b8f41e936b265ec0525f24e8a88fc51ed6ea",
+    "tree": "6eafb4a652de243a886ac86a74ec8babae298f03"
+  },
+  "candidate_source": "b9e6b8f41e936b265ec0525f24e8a88fc51ed6ea",
+  "workflow": {
+    "id": 43997596391,
+    "attempt": 1,
+    "path": ".github/workflows/ci.yml",
+    "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391",
+    "status": "completed",
+    "conclusion": "success",
+    "created_at": "2026-11-17T01:42:22Z",
+    "updated_at": "2026-11-17T02:14:45Z"
+  },
+  "jobs": [
+    {
+      "id": 133753372610,
+      "name": "Chinese documentation coverage",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133753372610",
+      "started_at": "2026-11-17T01:42:24Z",
+      "completed_at": "2026-11-17T01:42:35Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:25Z",
+          "completed_at": "2026-11-17T01:42:26Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:26Z",
+          "completed_at": "2026-11-17T01:42:30Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:30Z",
+          "completed_at": "2026-11-17T01:42:30Z"
+        },
+        {
+          "number": 4,
+          "name": "Run python scripts/check_localized_docs.py",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:30Z",
+          "completed_at": "2026-11-17T01:42:30Z"
+        },
+        {
+          "number": 5,
+          "name": "Run python -m unittest discover -s scripts -p 'test_compare_acceptance_budget.py' -v",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:30Z",
+          "completed_at": "2026-11-17T01:42:31Z"
+        },
+        {
+          "number": 6,
+          "name": "Investigation capture manifest",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:31Z",
+          "completed_at": "2026-11-17T01:42:32Z"
+        },
+        {
+          "number": 7,
+          "name": "Guest lifecycle hooks and image definition",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:32Z",
+          "completed_at": "2026-11-17T01:42:32Z"
+        },
+        {
+          "number": 8,
+          "name": "Pinned guest kernel recipe",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:32Z",
+          "completed_at": "2026-11-17T01:42:32Z"
+        },
+        {
+          "number": 15,
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:32Z",
+          "completed_at": "2026-11-17T01:42:32Z"
+        },
+        {
+          "number": 16,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:32Z",
+          "completed_at": "2026-11-17T01:42:33Z"
+        },
+        {
+          "number": 17,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:33Z",
+          "completed_at": "2026-11-17T01:42:33Z"
+        }
+      ]
+    },
+    {
+      "id": 133753372756,
+      "name": "Recorded context display",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133753372756",
+      "started_at": "2026-11-17T01:42:24Z",
+      "completed_at": "2026-11-17T01:42:38Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:24Z",
+          "completed_at": "2026-11-17T01:42:27Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:27Z",
+          "completed_at": "2026-11-17T01:42:30Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:30Z",
+          "completed_at": "2026-11-17T01:42:35Z"
+        },
+        {
+          "number": 4,
+          "name": "Run node scripts/test_context_readable.mjs",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:35Z",
+          "completed_at": "2026-11-17T01:42:35Z"
+        },
+        {
+          "number": 5,
+          "name": "Run node scripts/test_context_coverage.mjs",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:35Z",
+          "completed_at": "2026-11-17T01:42:35Z"
+        },
+        {
+          "number": 6,
+          "name": "Run node scripts/test_dashboard_workspace.mjs",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:35Z",
+          "completed_at": "2026-11-17T01:42:35Z"
+        },
+        {
+          "number": 7,
+          "name": "Run node scripts/test_search_engine.mjs",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:35Z",
+          "completed_at": "2026-11-17T01:42:35Z"
+        },
+        {
+          "number": 8,
+          "name": "Run node scripts/test_compare_engine.mjs",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:35Z",
+          "completed_at": "2026-11-17T01:42:35Z"
+        },
+        {
+          "number": 9,
+          "name": "Run node scripts/test_compare_completeness.mjs",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:35Z",
+          "completed_at": "2026-11-17T01:42:36Z"
+        },
+        {
+          "number": 10,
+          "name": "Run node scripts/test_static_reader.cjs",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:36Z",
+          "completed_at": "2026-11-17T01:42:36Z"
+        },
+        {
+          "number": 11,
+          "name": "Run node scripts/test_replay_graph.cjs",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:36Z",
+          "completed_at": "2026-11-17T01:42:37Z"
+        },
+        {
+          "number": 12,
+          "name": "Run node scripts/test_evidence_status.cjs",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:37Z",
+          "completed_at": "2026-11-17T01:42:37Z"
+        },
+        {
+          "number": 23,
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:37Z",
+          "completed_at": "2026-11-17T01:42:37Z"
+        },
+        {
+          "number": 24,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:37Z",
+          "completed_at": "2026-11-17T01:42:37Z"
+        },
+        {
+          "number": 25,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:37Z",
+          "completed_at": "2026-11-17T01:42:37Z"
+        }
+      ]
+    },
+    {
+      "id": 133753372935,
+      "name": "amd64 syscalls and TLS (Go 1.26.x)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133753372935",
+      "started_at": "2026-11-17T01:42:24Z",
+      "completed_at": "2026-11-17T01:44:42Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:25Z",
+          "completed_at": "2026-11-17T01:42:26Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:26Z",
+          "completed_at": "2026-11-17T01:42:30Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:30Z",
+          "completed_at": "2026-11-17T01:42:33Z"
+        },
+        {
+          "number": 4,
+          "name": "Install local TLS fixture dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:33Z",
+          "completed_at": "2026-11-17T01:42:45Z"
+        },
+        {
+          "number": 5,
+          "name": "Build sensor and fixture clients",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:45Z",
+          "completed_at": "2026-11-17T01:42:50Z"
+        },
+        {
+          "number": 6,
+          "name": "Verify amd64 syscall, C ABI, Go ABI and queued event timestamps",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:50Z",
+          "completed_at": "2026-11-17T01:42:55Z"
+        },
+        {
+          "number": 7,
+          "name": "Verify captured process lifetimes through durable ingestion",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:55Z",
+          "completed_at": "2026-11-17T01:43:00Z"
+        },
+        {
+          "number": 8,
+          "name": "Verify concurrent Go TLS reads across goroutine stack growth",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:00Z",
+          "completed_at": "2026-11-17T01:43:10Z"
+        },
+        {
+          "number": 9,
+          "name": "Verify OpenSSL read pairing and connection lifecycle isolation",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:10Z",
+          "completed_at": "2026-11-17T01:43:15Z"
+        },
+        {
+          "number": 10,
+          "name": "Verify bounded discovery of short-lived TLS clients",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:15Z",
+          "completed_at": "2026-11-17T01:43:40Z"
+        },
+        {
+          "number": 11,
+          "name": "Verify shutdown under continuous node traffic",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:40Z",
+          "completed_at": "2026-11-17T01:43:45Z"
+        },
+        {
+          "number": 12,
+          "name": "Verify procfs identity in a nested PID namespace",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:45Z",
+          "completed_at": "2026-11-17T01:43:59Z"
+        },
+        {
+          "number": 13,
+          "name": "Verify syscall outcomes and thread-group exits",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:59Z",
+          "completed_at": "2026-11-17T01:44:01Z"
+        },
+        {
+          "number": 14,
+          "name": "Verify real audit decisions against native syscall outcomes",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:01Z",
+          "completed_at": "2026-11-17T01:44:03Z"
+        },
+        {
+          "number": 15,
+          "name": "Verify audit file following and signed diagnostic replay",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:03Z",
+          "completed_at": "2026-11-17T01:44:07Z"
+        },
+        {
+          "number": 16,
+          "name": "Verify adjacent seccomp calls never borrow executed results",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:07Z",
+          "completed_at": "2026-11-17T01:44:23Z"
+        },
+        {
+          "number": 17,
+          "name": "Verify mixed access-control decisions and both retention presets",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:23Z",
+          "completed_at": "2026-11-17T01:44:35Z"
+        },
+        {
+          "number": 18,
+          "name": "Verify task state and automatic procfs snapshots",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:35Z",
+          "completed_at": "2026-11-17T01:44:39Z"
+        },
+        {
+          "number": 19,
+          "name": "Make live evidence readable for artifact upload",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:39Z",
+          "completed_at": "2026-11-17T01:44:39Z"
+        },
+        {
+          "number": 20,
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:39Z",
+          "completed_at": "2026-11-17T01:44:40Z"
+        },
+        {
+          "number": 39,
+          "name": "Post Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:40Z",
+          "completed_at": "2026-11-17T01:44:40Z"
+        },
+        {
+          "number": 40,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:40Z",
+          "completed_at": "2026-11-17T01:44:40Z"
+        },
+        {
+          "number": 41,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:40Z",
+          "completed_at": "2026-11-17T01:44:40Z"
+        }
+      ]
+    },
+    {
+      "id": 133753372953,
+      "name": "Go tests",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133753372953",
+      "started_at": "2026-11-17T01:42:24Z",
+      "completed_at": "2026-11-17T02:13:13Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:25Z",
+          "completed_at": "2026-11-17T01:42:26Z"
+        },
+        {
+          "number": 2,
+          "name": "Check out repository",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:26Z",
+          "completed_at": "2026-11-17T01:42:29Z"
+        },
+        {
+          "number": 3,
+          "name": "Set up Go",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:29Z",
+          "completed_at": "2026-11-17T01:42:45Z"
+        },
+        {
+          "number": 4,
+          "name": "gofmt (fail on unformatted files)",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:45Z",
+          "completed_at": "2026-11-17T01:42:46Z"
+        },
+        {
+          "number": 5,
+          "name": "go vet",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:46Z",
+          "completed_at": "2026-11-17T01:43:07Z"
+        },
+        {
+          "number": 6,
+          "name": "Check native execution acceptance assertions",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:07Z",
+          "completed_at": "2026-11-17T01:43:08Z"
+        },
+        {
+          "number": 7,
+          "name": "Check SecCheck acceptance assertions",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:08Z",
+          "completed_at": "2026-11-17T01:43:09Z"
+        },
+        {
+          "number": 8,
+          "name": "Check Kata and bounded soak acceptance contracts",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:09Z",
+          "completed_at": "2026-11-17T01:43:17Z"
+        },
+        {
+          "number": 9,
+          "name": "Check telemetry performance measurements",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:17Z",
+          "completed_at": "2026-11-17T01:43:17Z"
+        },
+        {
+          "number": 10,
+          "name": "Check native Sensor performance measurements",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:17Z",
+          "completed_at": "2026-11-17T01:43:17Z"
+        },
+        {
+          "number": 11,
+          "name": "Check context storage and export measurements",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:17Z",
+          "completed_at": "2026-11-17T01:43:18Z"
+        },
+        {
+          "number": 12,
+          "name": "Exercise authenticated telemetry pressure path",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:18Z",
+          "completed_at": "2026-11-17T01:43:22Z"
+        },
+        {
+          "number": 13,
+          "name": "Check notebook capture adapter",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:22Z",
+          "completed_at": "2026-11-17T01:43:22Z"
+        },
+        {
+          "number": 14,
+          "name": "Run unit tests (race detector)",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:22Z",
+          "completed_at": "2026-11-17T02:12:09Z"
+        },
+        {
+          "number": 15,
+          "name": "Verify real DeepSeek evidence offline",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:12:09Z",
+          "completed_at": "2026-11-17T02:12:13Z"
+        },
+        {
+          "number": 16,
+          "name": "Verify selected and original evidence delivery independently",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:12:13Z",
+          "completed_at": "2026-11-17T02:12:15Z"
+        },
+        {
+          "number": 17,
+          "name": "Fetch pinned v0.8.2 verifier",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:12:15Z",
+          "completed_at": "2026-11-17T02:12:16Z"
+        },
+        {
+          "number": 18,
+          "name": "Verify six historical bundles and real database upgrades",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:12:16Z",
+          "completed_at": "2026-11-17T02:13:08Z"
+        },
+        {
+          "number": 19,
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:08Z",
+          "completed_at": "2026-11-17T02:13:09Z"
+        },
+        {
+          "number": 37,
+          "name": "Post Set up Go",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:09Z",
+          "completed_at": "2026-11-17T02:13:10Z"
+        },
+        {
+          "number": 38,
+          "name": "Post Check out repository",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:10Z",
+          "completed_at": "2026-11-17T02:13:10Z"
+        },
+        {
+          "number": 39,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:10Z",
+          "completed_at": "2026-11-17T02:13:10Z"
+        }
+      ]
+    },
+    {
+      "id": 133753372971,
+      "name": "amd64 syscalls and TLS (Go 1.25.x)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133753372971",
+      "started_at": "2026-11-17T01:42:24Z",
+      "completed_at": "2026-11-17T01:45:26Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:25Z",
+          "completed_at": "2026-11-17T01:42:25Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:25Z",
+          "completed_at": "2026-11-17T01:42:29Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:29Z",
+          "completed_at": "2026-11-17T01:42:35Z"
+        },
+        {
+          "number": 4,
+          "name": "Install local TLS fixture dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:35Z",
+          "completed_at": "2026-11-17T01:42:48Z"
+        },
+        {
+          "number": 5,
+          "name": "Build sensor and fixture clients",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:48Z",
+          "completed_at": "2026-11-17T01:43:00Z"
+        },
+        {
+          "number": 6,
+          "name": "Verify amd64 syscall, C ABI, Go ABI and queued event timestamps",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:00Z",
+          "completed_at": "2026-11-17T01:43:05Z"
+        },
+        {
+          "number": 7,
+          "name": "Verify captured process lifetimes through durable ingestion",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:05Z",
+          "completed_at": "2026-11-17T01:43:13Z"
+        },
+        {
+          "number": 8,
+          "name": "Verify concurrent Go TLS reads across goroutine stack growth",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:13Z",
+          "completed_at": "2026-11-17T01:43:28Z"
+        },
+        {
+          "number": 9,
+          "name": "Verify OpenSSL read pairing and connection lifecycle isolation",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:28Z",
+          "completed_at": "2026-11-17T01:43:34Z"
+        },
+        {
+          "number": 10,
+          "name": "Verify bounded discovery of short-lived TLS clients",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:34Z",
+          "completed_at": "2026-11-17T01:44:07Z"
+        },
+        {
+          "number": 11,
+          "name": "Verify shutdown under continuous node traffic",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:07Z",
+          "completed_at": "2026-11-17T01:44:14Z"
+        },
+        {
+          "number": 12,
+          "name": "Verify procfs identity in a nested PID namespace",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:14Z",
+          "completed_at": "2026-11-17T01:44:32Z"
+        },
+        {
+          "number": 13,
+          "name": "Verify syscall outcomes and thread-group exits",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:32Z",
+          "completed_at": "2026-11-17T01:44:35Z"
+        },
+        {
+          "number": 14,
+          "name": "Verify real audit decisions against native syscall outcomes",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:35Z",
+          "completed_at": "2026-11-17T01:44:38Z"
+        },
+        {
+          "number": 15,
+          "name": "Verify audit file following and signed diagnostic replay",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:38Z",
+          "completed_at": "2026-11-17T01:44:45Z"
+        },
+        {
+          "number": 16,
+          "name": "Verify adjacent seccomp calls never borrow executed results",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:45Z",
+          "completed_at": "2026-11-17T01:45:02Z"
+        },
+        {
+          "number": 17,
+          "name": "Verify mixed access-control decisions and both retention presets",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:02Z",
+          "completed_at": "2026-11-17T01:45:18Z"
+        },
+        {
+          "number": 18,
+          "name": "Verify task state and automatic procfs snapshots",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:18Z",
+          "completed_at": "2026-11-17T01:45:23Z"
+        },
+        {
+          "number": 19,
+          "name": "Make live evidence readable for artifact upload",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:23Z",
+          "completed_at": "2026-11-17T01:45:23Z"
+        },
+        {
+          "number": 20,
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:23Z",
+          "completed_at": "2026-11-17T01:45:24Z"
+        },
+        {
+          "number": 39,
+          "name": "Post Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:24Z",
+          "completed_at": "2026-11-17T01:45:24Z"
+        },
+        {
+          "number": 40,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:24Z",
+          "completed_at": "2026-11-17T01:45:24Z"
+        },
+        {
+          "number": 41,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:24Z",
+          "completed_at": "2026-11-17T01:45:24Z"
+        }
+      ]
+    },
+    {
+      "id": 133753373052,
+      "name": "Native Chromium context",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133753373052",
+      "started_at": "2026-11-17T01:42:24Z",
+      "completed_at": "2026-11-17T01:44:45Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:25Z",
+          "completed_at": "2026-11-17T01:42:28Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:28Z",
+          "completed_at": "2026-11-17T01:42:40Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:40Z",
+          "completed_at": "2026-11-17T01:42:54Z"
+        },
+        {
+          "number": 4,
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:54Z",
+          "completed_at": "2026-11-17T01:42:59Z"
+        },
+        {
+          "number": 5,
+          "name": "Run python -m pip install -r python/browser-requirements.txt",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:59Z",
+          "completed_at": "2026-11-17T01:43:09Z"
+        },
+        {
+          "number": 6,
+          "name": "Run python -m playwright install --with-deps chromium",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:09Z",
+          "completed_at": "2026-11-17T01:43:55Z"
+        },
+        {
+          "number": 7,
+          "name": "Run PYTHONPATH=python python -m unittest discover -s python/tests -p 'test_browser*.py' -v",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:55Z",
+          "completed_at": "2026-11-17T01:43:58Z"
+        },
+        {
+          "number": 8,
+          "name": "Run PYTHONPATH=python python scripts/accept_browser_mcp.py --output \"$RUNNER_TEMP/browser-mcp-check\"",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:58Z",
+          "completed_at": "2026-11-17T01:44:04Z"
+        },
+        {
+          "number": 9,
+          "name": "Run go build -o \"$RUNNER_TEMP/agentprov-browser-check\" ./cmd/agentprov",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:04Z",
+          "completed_at": "2026-11-17T01:44:15Z"
+        },
+        {
+          "number": 10,
+          "name": "Run PYTHONPATH=python python scripts/accept_browser.py --output \"$RUNNER_TEMP/browser-check\" --agentprov \"$RUNNER_TEMP/agentprov-browser-check\"",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:15Z",
+          "completed_at": "2026-11-17T01:44:32Z"
+        },
+        {
+          "number": 11,
+          "name": "Verify durable Browser receipts and receiver-owned import",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:32Z",
+          "completed_at": "2026-11-17T01:44:38Z"
+        },
+        {
+          "number": 12,
+          "name": "Verify keyless workspace MCP contract",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:38Z",
+          "completed_at": "2026-11-17T01:44:43Z"
+        },
+        {
+          "number": 13,
+          "name": "Retain Browser receipt failure diagnostics",
+          "status": "completed",
+          "conclusion": "skipped",
+          "started_at": "2026-11-17T01:44:43Z",
+          "completed_at": "2026-11-17T01:44:43Z"
+        },
+        {
+          "number": 24,
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:43Z",
+          "completed_at": "2026-11-17T01:44:43Z"
+        },
+        {
+          "number": 25,
+          "name": "Post Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:43Z",
+          "completed_at": "2026-11-17T01:44:44Z"
+        },
+        {
+          "number": 26,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:44Z",
+          "completed_at": "2026-11-17T01:44:44Z"
+        },
+        {
+          "number": 27,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:44Z",
+          "completed_at": "2026-11-17T01:44:44Z"
+        }
+      ]
+    },
+    {
+      "id": 133753373066,
+      "name": "Jev demo (keyless, Python 3.9)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133753373066",
+      "started_at": "2026-11-17T01:42:25Z",
+      "completed_at": "2026-11-17T01:42:52Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:25Z",
+          "completed_at": "2026-11-17T01:42:28Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:28Z",
+          "completed_at": "2026-11-17T01:42:37Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:37Z",
+          "completed_at": "2026-11-17T01:42:45Z"
+        },
+        {
+          "number": 4,
+          "name": "Verify external evaluator and local review boundaries",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:45Z",
+          "completed_at": "2026-11-17T01:42:49Z"
+        },
+        {
+          "number": 7,
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:49Z",
+          "completed_at": "2026-11-17T01:42:49Z"
+        },
+        {
+          "number": 8,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:49Z",
+          "completed_at": "2026-11-17T01:42:49Z"
+        },
+        {
+          "number": 9,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:49Z",
+          "completed_at": "2026-11-17T01:42:49Z"
+        }
+      ]
+    },
+    {
+      "id": 133753373119,
+      "name": "Jev demo (keyless, Python 3.13)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133753373119",
+      "started_at": "2026-11-17T01:42:24Z",
+      "completed_at": "2026-11-17T01:42:37Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:25Z",
+          "completed_at": "2026-11-17T01:42:26Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:26Z",
+          "completed_at": "2026-11-17T01:42:30Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:30Z",
+          "completed_at": "2026-11-17T01:42:30Z"
+        },
+        {
+          "number": 4,
+          "name": "Verify external evaluator and local review boundaries",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:30Z",
+          "completed_at": "2026-11-17T01:42:35Z"
+        },
+        {
+          "number": 7,
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:35Z",
+          "completed_at": "2026-11-17T01:42:35Z"
+        },
+        {
+          "number": 8,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:35Z",
+          "completed_at": "2026-11-17T01:42:36Z"
+        },
+        {
+          "number": 9,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:36Z",
+          "completed_at": "2026-11-17T01:42:36Z"
+        }
+      ]
+    },
+    {
+      "id": 133753373123,
+      "name": "amd64 syscalls and TLS (Go 1.23.x)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133753373123",
+      "started_at": "2026-11-17T01:42:24Z",
+      "completed_at": "2026-11-17T01:45:50Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:25Z",
+          "completed_at": "2026-11-17T01:42:27Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:27Z",
+          "completed_at": "2026-11-17T01:42:33Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:33Z",
+          "completed_at": "2026-11-17T01:42:52Z"
+        },
+        {
+          "number": 4,
+          "name": "Install local TLS fixture dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:52Z",
+          "completed_at": "2026-11-17T01:43:06Z"
+        },
+        {
+          "number": 5,
+          "name": "Build sensor and fixture clients",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:06Z",
+          "completed_at": "2026-11-17T01:43:11Z"
+        },
+        {
+          "number": 6,
+          "name": "Verify amd64 syscall, C ABI, Go ABI and queued event timestamps",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:11Z",
+          "completed_at": "2026-11-17T01:43:17Z"
+        },
+        {
+          "number": 7,
+          "name": "Verify captured process lifetimes through durable ingestion",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:17Z",
+          "completed_at": "2026-11-17T01:43:30Z"
+        },
+        {
+          "number": 8,
+          "name": "Verify concurrent Go TLS reads across goroutine stack growth",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:30Z",
+          "completed_at": "2026-11-17T01:43:42Z"
+        },
+        {
+          "number": 9,
+          "name": "Verify OpenSSL read pairing and connection lifecycle isolation",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:42Z",
+          "completed_at": "2026-11-17T01:43:48Z"
+        },
+        {
+          "number": 10,
+          "name": "Verify bounded discovery of short-lived TLS clients",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:48Z",
+          "completed_at": "2026-11-17T01:44:24Z"
+        },
+        {
+          "number": 11,
+          "name": "Verify shutdown under continuous node traffic",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:24Z",
+          "completed_at": "2026-11-17T01:44:31Z"
+        },
+        {
+          "number": 12,
+          "name": "Verify procfs identity in a nested PID namespace",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:31Z",
+          "completed_at": "2026-11-17T01:44:50Z"
+        },
+        {
+          "number": 13,
+          "name": "Verify syscall outcomes and thread-group exits",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:50Z",
+          "completed_at": "2026-11-17T01:44:52Z"
+        },
+        {
+          "number": 14,
+          "name": "Verify real audit decisions against native syscall outcomes",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:52Z",
+          "completed_at": "2026-11-17T01:44:56Z"
+        },
+        {
+          "number": 15,
+          "name": "Verify audit file following and signed diagnostic replay",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:56Z",
+          "completed_at": "2026-11-17T01:45:03Z"
+        },
+        {
+          "number": 16,
+          "name": "Verify adjacent seccomp calls never borrow executed results",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:03Z",
+          "completed_at": "2026-11-17T01:45:20Z"
+        },
+        {
+          "number": 17,
+          "name": "Verify mixed access-control decisions and both retention presets",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:20Z",
+          "completed_at": "2026-11-17T01:45:36Z"
+        },
+        {
+          "number": 18,
+          "name": "Verify task state and automatic procfs snapshots",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:36Z",
+          "completed_at": "2026-11-17T01:45:42Z"
+        },
+        {
+          "number": 19,
+          "name": "Make live evidence readable for artifact upload",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:42Z",
+          "completed_at": "2026-11-17T01:45:42Z"
+        },
+        {
+          "number": 20,
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:42Z",
+          "completed_at": "2026-11-17T01:45:46Z"
+        },
+        {
+          "number": 39,
+          "name": "Post Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:46Z",
+          "completed_at": "2026-11-17T01:45:47Z"
+        },
+        {
+          "number": 40,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:47Z",
+          "completed_at": "2026-11-17T01:45:47Z"
+        },
+        {
+          "number": 41,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:47Z",
+          "completed_at": "2026-11-17T01:45:47Z"
+        }
+      ]
+    },
+    {
+      "id": 133753373136,
+      "name": "Notebook MCP protocol",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133753373136",
+      "started_at": "2026-11-17T01:42:24Z",
+      "completed_at": "2026-11-17T01:42:56Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:24Z",
+          "completed_at": "2026-11-17T01:42:27Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:27Z",
+          "completed_at": "2026-11-17T01:42:31Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:31Z",
+          "completed_at": "2026-11-17T01:42:35Z"
+        },
+        {
+          "number": 4,
+          "name": "Run python -m pip install -r python/notebook-requirements.txt",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:35Z",
+          "completed_at": "2026-11-17T01:42:46Z"
+        },
+        {
+          "number": 5,
+          "name": "Run PYTHONPATH=python python -m unittest discover -s python/tests -p 'test_notebook*.py' -v",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:46Z",
+          "completed_at": "2026-11-17T01:42:50Z"
+        },
+        {
+          "number": 6,
+          "name": "Run PYTHONPATH=python python scripts/accept_notebook_mcp.py --output \"$RUNNER_TEMP/notebook-mcp-check\"",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:50Z",
+          "completed_at": "2026-11-17T01:42:54Z"
+        },
+        {
+          "number": 11,
+          "name": "Post Run actions/setup-python@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:54Z",
+          "completed_at": "2026-11-17T01:42:54Z"
+        },
+        {
+          "number": 12,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:54Z",
+          "completed_at": "2026-11-17T01:42:54Z"
+        },
+        {
+          "number": 13,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:54Z",
+          "completed_at": "2026-11-17T01:42:54Z"
+        }
+      ]
+    },
+    {
+      "id": 133753373224,
+      "name": "amd64 syscalls and TLS (Go 1.24.x)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133753373224",
+      "started_at": "2026-11-17T01:42:24Z",
+      "completed_at": "2026-11-17T01:45:34Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:25Z",
+          "completed_at": "2026-11-17T01:42:26Z"
+        },
+        {
+          "number": 2,
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:26Z",
+          "completed_at": "2026-11-17T01:42:29Z"
+        },
+        {
+          "number": 3,
+          "name": "Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:29Z",
+          "completed_at": "2026-11-17T01:42:34Z"
+        },
+        {
+          "number": 4,
+          "name": "Install local TLS fixture dependencies",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:34Z",
+          "completed_at": "2026-11-17T01:42:54Z"
+        },
+        {
+          "number": 5,
+          "name": "Build sensor and fixture clients",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:42:54Z",
+          "completed_at": "2026-11-17T01:43:02Z"
+        },
+        {
+          "number": 6,
+          "name": "Verify amd64 syscall, C ABI, Go ABI and queued event timestamps",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:02Z",
+          "completed_at": "2026-11-17T01:43:08Z"
+        },
+        {
+          "number": 7,
+          "name": "Verify captured process lifetimes through durable ingestion",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:08Z",
+          "completed_at": "2026-11-17T01:43:15Z"
+        },
+        {
+          "number": 8,
+          "name": "Verify concurrent Go TLS reads across goroutine stack growth",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:15Z",
+          "completed_at": "2026-11-17T01:43:29Z"
+        },
+        {
+          "number": 9,
+          "name": "Verify OpenSSL read pairing and connection lifecycle isolation",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:29Z",
+          "completed_at": "2026-11-17T01:43:35Z"
+        },
+        {
+          "number": 10,
+          "name": "Verify bounded discovery of short-lived TLS clients",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:43:35Z",
+          "completed_at": "2026-11-17T01:44:08Z"
+        },
+        {
+          "number": 11,
+          "name": "Verify shutdown under continuous node traffic",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:08Z",
+          "completed_at": "2026-11-17T01:44:15Z"
+        },
+        {
+          "number": 12,
+          "name": "Verify procfs identity in a nested PID namespace",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:15Z",
+          "completed_at": "2026-11-17T01:44:34Z"
+        },
+        {
+          "number": 13,
+          "name": "Verify syscall outcomes and thread-group exits",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:34Z",
+          "completed_at": "2026-11-17T01:44:36Z"
+        },
+        {
+          "number": 14,
+          "name": "Verify real audit decisions against native syscall outcomes",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:36Z",
+          "completed_at": "2026-11-17T01:44:40Z"
+        },
+        {
+          "number": 15,
+          "name": "Verify audit file following and signed diagnostic replay",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:40Z",
+          "completed_at": "2026-11-17T01:44:47Z"
+        },
+        {
+          "number": 16,
+          "name": "Verify adjacent seccomp calls never borrow executed results",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:44:47Z",
+          "completed_at": "2026-11-17T01:45:04Z"
+        },
+        {
+          "number": 17,
+          "name": "Verify mixed access-control decisions and both retention presets",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:04Z",
+          "completed_at": "2026-11-17T01:45:20Z"
+        },
+        {
+          "number": 18,
+          "name": "Verify task state and automatic procfs snapshots",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:20Z",
+          "completed_at": "2026-11-17T01:45:25Z"
+        },
+        {
+          "number": 19,
+          "name": "Make live evidence readable for artifact upload",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:25Z",
+          "completed_at": "2026-11-17T01:45:25Z"
+        },
+        {
+          "number": 20,
+          "name": "Run actions/upload-artifact@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:25Z",
+          "completed_at": "2026-11-17T01:45:32Z"
+        },
+        {
+          "number": 39,
+          "name": "Post Run actions/setup-go@v5",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:32Z",
+          "completed_at": "2026-11-17T01:45:32Z"
+        },
+        {
+          "number": 40,
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:32Z",
+          "completed_at": "2026-11-17T01:45:32Z"
+        },
+        {
+          "number": 41,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T01:45:32Z",
+          "completed_at": "2026-11-17T01:45:32Z"
+        }
+      ]
+    },
+    {
+      "id": 133765914334,
+      "name": "Linux amd64 builds from committed bindings",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133765914334",
+      "started_at": "2026-11-17T02:13:15Z",
+      "completed_at": "2026-11-17T02:14:31Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:15Z",
+          "completed_at": "2026-11-17T02:13:16Z"
+        },
+        {
+          "number": 2,
+          "name": "Check out repository",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:16Z",
+          "completed_at": "2026-11-17T02:13:20Z"
+        },
+        {
+          "number": 3,
+          "name": "Set up Go",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:20Z",
+          "completed_at": "2026-11-17T02:13:41Z"
+        },
+        {
+          "number": 4,
+          "name": "Build CLI and sensor from committed bindings",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:41Z",
+          "completed_at": "2026-11-17T02:14:28Z"
+        },
+        {
+          "number": 7,
+          "name": "Post Set up Go",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:14:28Z",
+          "completed_at": "2026-11-17T02:14:29Z"
+        },
+        {
+          "number": 8,
+          "name": "Post Check out repository",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:14:29Z",
+          "completed_at": "2026-11-17T02:14:29Z"
+        },
+        {
+          "number": 9,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:14:29Z",
+          "completed_at": "2026-11-17T02:14:29Z"
+        }
+      ]
+    },
+    {
+      "id": 133765914422,
+      "name": "Phase 1 observability smoke",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133765914422",
+      "started_at": "2026-11-17T02:13:14Z",
+      "completed_at": "2026-11-17T02:13:56Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:15Z",
+          "completed_at": "2026-11-17T02:13:16Z"
+        },
+        {
+          "number": 2,
+          "name": "Check out repository",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:16Z",
+          "completed_at": "2026-11-17T02:13:19Z"
+        },
+        {
+          "number": 3,
+          "name": "Set up Go",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:19Z",
+          "completed_at": "2026-11-17T02:13:36Z"
+        },
+        {
+          "number": 4,
+          "name": "Run Phase 1 observability/provenance gate",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:36Z",
+          "completed_at": "2026-11-17T02:13:47Z"
+        },
+        {
+          "number": 5,
+          "name": "Verify daemon readiness under storage and schema faults",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:47Z",
+          "completed_at": "2026-11-17T02:13:50Z"
+        },
+        {
+          "number": 6,
+          "name": "Verify audit interfaces with real CLI, HTTP, SDK and MCP",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:50Z",
+          "completed_at": "2026-11-17T02:13:53Z"
+        },
+        {
+          "number": 7,
+          "name": "Upload audit interface acceptance",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:53Z",
+          "completed_at": "2026-11-17T02:13:54Z"
+        },
+        {
+          "number": 13,
+          "name": "Post Set up Go",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:54Z",
+          "completed_at": "2026-11-17T02:13:54Z"
+        },
+        {
+          "number": 14,
+          "name": "Post Check out repository",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:54Z",
+          "completed_at": "2026-11-17T02:13:54Z"
+        },
+        {
+          "number": 15,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:54Z",
+          "completed_at": "2026-11-17T02:13:54Z"
+        }
+      ]
+    },
+    {
+      "id": 133765914438,
+      "name": "eBPF sensor bindings drift check",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133765914438",
+      "started_at": "2026-11-17T02:13:14Z",
+      "completed_at": "2026-11-17T02:14:36Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:15Z",
+          "completed_at": "2026-11-17T02:13:16Z"
+        },
+        {
+          "number": 2,
+          "name": "Check out repository",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:16Z",
+          "completed_at": "2026-11-17T02:13:19Z"
+        },
+        {
+          "number": 3,
+          "name": "Set up Go",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:19Z",
+          "completed_at": "2026-11-17T02:13:36Z"
+        },
+        {
+          "number": 4,
+          "name": "Install eBPF compile toolchain",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:36Z",
+          "completed_at": "2026-11-17T02:14:27Z"
+        },
+        {
+          "number": 5,
+          "name": "Regenerate and fail on drift of committed .go bindings",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:14:27Z",
+          "completed_at": "2026-11-17T02:14:33Z"
+        },
+        {
+          "number": 9,
+          "name": "Post Set up Go",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:14:33Z",
+          "completed_at": "2026-11-17T02:14:33Z"
+        },
+        {
+          "number": 10,
+          "name": "Post Check out repository",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:14:33Z",
+          "completed_at": "2026-11-17T02:14:34Z"
+        },
+        {
+          "number": 11,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:14:34Z",
+          "completed_at": "2026-11-17T02:14:34Z"
+        }
+      ]
+    },
+    {
+      "id": 133765914445,
+      "name": "Linux arm64 builds from committed bindings",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391/job/133765914445",
+      "started_at": "2026-11-17T02:13:14Z",
+      "completed_at": "2026-11-17T02:14:44Z",
+      "steps": [
+        {
+          "number": 1,
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:15Z",
+          "completed_at": "2026-11-17T02:13:16Z"
+        },
+        {
+          "number": 2,
+          "name": "Check out repository",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:16Z",
+          "completed_at": "2026-11-17T02:13:20Z"
+        },
+        {
+          "number": 3,
+          "name": "Set up Go",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:20Z",
+          "completed_at": "2026-11-17T02:13:40Z"
+        },
+        {
+          "number": 4,
+          "name": "Build CLI and sensor from committed bindings",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:13:40Z",
+          "completed_at": "2026-11-17T02:14:42Z"
+        },
+        {
+          "number": 7,
+          "name": "Post Set up Go",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:14:42Z",
+          "completed_at": "2026-11-17T02:14:42Z"
+        },
+        {
+          "number": 8,
+          "name": "Post Check out repository",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:14:42Z",
+          "completed_at": "2026-11-17T02:14:43Z"
+        },
+        {
+          "number": 9,
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-17T02:14:43Z",
+          "completed_at": "2026-11-17T02:14:43Z"
+        }
+      ]
+    }
+  ],
+  "previous_run": {
+    "id": 43994090540,
+    "source": "2e3f872dbea24a81fef8a708a7cc58e2f07596f1",
+    "conclusion": "failure",
+    "url": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43994090540",
+    "reason": "CLI custody regression helper did not follow shared graph references; fixed in b9e6b8f without changing edge equality or exclusion assertions.",
+    "details": "browser-final.json"
+  },
+  "report_followup": "The final archive commit changes only acceptance results and indexes; implementation and tests remain at the source recorded above.",
+  "go_race": {
+    "command": "GOTOOLCHAIN=local go test -race -p 2 -timeout 20m ./...",
+    "passed_packages": 50,
+    "failed_packages": 0,
+    "retained_log_sha256": "fe7c8853af83b067ff354c634c71d3269934ed3059badb24025f2a06e6a1bfc9"
+  }
+}

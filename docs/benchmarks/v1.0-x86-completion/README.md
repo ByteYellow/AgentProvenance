@@ -16,10 +16,11 @@ The maintainer has deferred the 24-hour soak, formal UI integration and publicat
 | E-01/E-02 | Three delivery modes, producer/exporter trust, unknown key, wrong role and tamper outcomes; four same-source packages include the independent verifier | [Candidate packages](candidate-packages.json) |
 | R-01 | Native, K3s, gVisor and Firecracker evidence retained; new runsc and Guest bindings checked against observed lifetimes | [Earlier platform matrix](../v1.0-amd64/README.md), [runsc](runsc-final.json), [Kata](kata-final.json) |
 | R-02 | Five scenarios pass: baseline, receiver reconnect, receiver restart, executor restart and cancellation; duplicate submit/query, lost reply, explicit retry and wrong-generation rejection | [runsc final](runsc-final.json) |
-| R-03 | Nine required checks pass: Guest kernel, single delivery, concurrency, recovery, runtime binding, offline delivery, verifier, Pod rebuild and real Workspace Harness | [Kata final](kata-final.json), [version lock](kata-versions.lock.json) |
+| R-03 | Nine required checks pass: Guest kernel, single delivery, concurrency, recovery, runtime binding, offline delivery, verifier, Pod rebuild and real Workspace Harness | [Kata final](kata-final.json), [version lock](kata-versions.lock.json), [four offline readers](kata-offline-final.json) |
 | B-01/B-02/B-03 | Concurrent contexts/tabs, redirect, iframe/worker, background requests, download, process custody, SIGKILL recovery and query without repeated actions; selected readers remove unsupported native relations | [Browser final](browser-final.json) |
 | Q-01, bounded scope | Sensor pressure, 100,000-event ingestion, resource and context/export budgets pass; frozen limits and earlier failures retained | [Performance final](performance-final.json) |
 | Reader preview | Five desktop examples; English/Chinese mobile and offline checks; real selected Workspace export; existing graph, Compare, search, body and attachment readers retained | [Preview final](preview-final.json) |
+| Full CI | All 15 jobs pass at `b9e6b8f`, including race checks for 50 Go packages, historical bundles/database upgrades, both Linux architectures and eBPF bindings | [CI run](https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391), [full result](ci-final.json) |
 
 ## Versions and Reuse
 
@@ -28,7 +29,8 @@ Each result preserves its actual capture and export identity:
 - Native Workspace, runsc and Kata binaries: clean `d8a7b60`.
 - Browser launcher and final Kata fixture: clean `85dd7be`; capture binaries remain `d8a7b60`.
 - Shared graph encoding and Workspace/Browser reader exports: clean `f3deb10`.
-- Final packages and audit rule v4: clean `e82f1a3`; includes the retained CI failure regression.
+- Final packages: clean `b9e6b8f`, including the updated embedded guides.
+- Audit rule v4: `e82f1a3`, including the retained CI failure regression.
 - Acceptance helpers and performance comparison rules: `4fb34ea`.
 
 The `f3deb10` reader stores repeated complete graph objects once. All 36
@@ -56,7 +58,7 @@ contracts and defers the long run.
 The final comparisons pass 18 Sensor checks, five ingestion checks and 68 context
 checks. Recorded durations are approximately 201 seconds for the Sensor matrix,
 24 seconds for full-ring pressure, 52 seconds for 100,000-event ingestion and
-62 seconds for final context/export measurement.
+56 seconds for final context/export measurement.
 
 The first strict comparison rejected a 4 KiB Linux `MemTotal` variation after a
 VM boot. An explicit comparison records that one-page difference; all other
@@ -69,11 +71,16 @@ and AppArmor configuration, ring pressure, and the owned K3s API/CoreDNS binding
 The final fixed combination passes. Host C-drive exhaustion interrupted later
 archiving; WSL and the owned VM were recovered before the final export checks.
 
-The final CI audit regression also exposed a short-process lifetime ending outside
+CI also exposed a short-process lifetime falling just after
 the nominal coarse-clock window. Rule v4 applies the validated saved journal
 receipt to process candidates, matching the existing operation-time rule.
 Actual failing AppArmor/seccomp records, PID reuse and invalid-clock regressions
 are retained in [the audit result](audit-final.json).
+
+Browser CLI regression tests now resolve the shared graph format (`b9e6b8f`).
+They preserve exact online/offline edge comparisons and require unsupported
+relations to disappear when source records or runtime data are excluded.
+The [Browser result](browser-final.json) records the executable CLI and race checks.
 
 ## Candidate Packages and Review
 

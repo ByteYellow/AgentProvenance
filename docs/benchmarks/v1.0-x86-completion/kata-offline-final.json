@@ -1,0 +1,155 @@
+{
+  "schema_version": "agentprovenance.acceptance_summary/v1",
+  "status": "PASS",
+  "capture_source": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+  "fixture_source": "85dd7be16cb1cf0f36914e098b64bcd26e144f1d",
+  "verification_source": "b9e6b8f41e936b265ec0525f24e8a88fc51ed6ea",
+  "source_services_stopped": true,
+  "verifier_sha256": "e89641725cfd148adcf5c558482163fdbcbd6016ff81b98f889215ada8cca5e4",
+  "verification": [
+    {
+      "case": "boot-1",
+      "file_integrity": "passed",
+      "derived_signature": {
+        "status": "valid",
+        "cryptographic": "passed",
+        "trusted": true,
+        "key_id": "cfac882e04896e97",
+        "role": "exporter"
+      }
+    },
+    {
+      "case": "boot-2",
+      "file_integrity": "passed",
+      "derived_signature": {
+        "status": "valid",
+        "cryptographic": "passed",
+        "trusted": true,
+        "key_id": "6e847a54e3542846",
+        "role": "exporter"
+      }
+    },
+    {
+      "case": "contract",
+      "file_integrity": "passed",
+      "derived_signature": {
+        "status": "valid",
+        "cryptographic": "passed",
+        "trusted": true,
+        "key_id": "ba7fa4602780efbf",
+        "role": "exporter"
+      }
+    },
+    {
+      "case": "harness",
+      "file_integrity": "passed",
+      "derived_signature": {
+        "status": "valid",
+        "cryptographic": "passed",
+        "trusted": true,
+        "key_id": "664f9c2e4e3aaaca",
+        "role": "exporter"
+      }
+    }
+  ],
+  "offline": {
+    "two_guest_boots": {
+      "log_sha256": "e5b1601c16d9e437307ecbbc0e45ec417fb65edb379414868e132493f36d1ae9",
+      "offlineReplayPassed": true,
+      "reports": [
+        {
+          "run": "run-bca34eb2046b6df06a567e78f33589ee",
+          "files": 120,
+          "shards": 95,
+          "queries": 81,
+          "views": 36,
+          "sessions": 0,
+          "contextBodies": 0,
+          "networkRequests": 0,
+          "knownUILimitations": [],
+          "deliveryMode": "derived",
+          "signed": true,
+          "scope": "whole_run",
+          "runs": [
+            "run-bca34eb2046b6df06a567e78f33589ee"
+          ],
+          "captureObservations": 11,
+          "executionLinks": 0,
+          "auditDecisions": 0
+        },
+        {
+          "run": "run-03d63ffbae01431570bc4812ce5c2837",
+          "files": 120,
+          "shards": 95,
+          "queries": 81,
+          "views": 36,
+          "sessions": 0,
+          "contextBodies": 0,
+          "networkRequests": 0,
+          "knownUILimitations": [],
+          "deliveryMode": "derived",
+          "signed": true,
+          "scope": "whole_run",
+          "runs": [
+            "run-03d63ffbae01431570bc4812ce5c2837"
+          ],
+          "captureObservations": 11,
+          "executionLinks": 0,
+          "auditDecisions": 0
+        }
+      ]
+    },
+    "workspace_contract_and_harness": {
+      "log_sha256": "9076435e73c8f1b480d73b19bfa0fe5d3daee3902489c2302c2f0d7d0f8a0512",
+      "offlineReplayPassed": true,
+      "reports": [
+        {
+          "run": "run-w01-7efa157d580941289e627040514d27e9",
+          "files": 260,
+          "shards": 235,
+          "queries": 134,
+          "views": 36,
+          "sessions": 1,
+          "contextBodies": 28,
+          "networkRequests": 0,
+          "knownUILimitations": [],
+          "deliveryMode": "derived",
+          "signed": true,
+          "scope": "whole_run",
+          "runs": [
+            "run-w01-7efa157d580941289e627040514d27e9"
+          ],
+          "captureObservations": 33,
+          "executionLinks": 0,
+          "auditDecisions": 0
+        },
+        {
+          "run": "run-w01-3ab0b45254d6414e9b1cb31a7c6826ce",
+          "files": 212,
+          "shards": 187,
+          "queries": 104,
+          "views": 36,
+          "sessions": 1,
+          "contextBodies": 12,
+          "networkRequests": 0,
+          "knownUILimitations": [],
+          "deliveryMode": "derived",
+          "signed": true,
+          "scope": "whole_run",
+          "runs": [
+            "run-w01-3ab0b45254d6414e9b1cb31a7c6826ce"
+          ],
+          "captureObservations": 19,
+          "executionLinks": 0,
+          "auditDecisions": 0
+        }
+      ]
+    }
+  },
+  "archives": {
+    "boot-1-derived.zip": "736a41b592bec850ac930d766f9dc5149e149cd818713a78d6bc81b3e1da198a",
+    "boot-2-derived.zip": "f4c55904ccf78e22009668d5aed992eb2749a138f9f5b90e2d22a597297ec4c6",
+    "contract-derived.zip": "d31d791fb418c0d1f3db5e2f0b11c7c5b75d142ab13d91f638dd63eb2a49b7a4",
+    "harness-derived.zip": "06dd07fbb247423e163c972d6983851392e8c93fa860195b25aba9ba576ec356"
+  }
+}

@@ -16,10 +16,11 @@ Dashboard 交互保留在[本地预览](../../../previews/v1.0-reader/README.zh-
 | E-01/E-02 | 三种交付模式、生产者／导出者信任、未知密钥、错误角色和篡改检查通过；四个平台安装包来自同一源码，均包含独立验证器 | [候选包结果](candidate-packages.json) |
 | R-01 | 沿用 native、K3s、gVisor、Firecracker 的已有证据，补验 runsc 与 Guest 平台身份绑定 | [已有平台矩阵](../v1.0-amd64/README.zh-CN.md)、[runsc](runsc-final.json)、[Kata](kata-final.json) |
 | R-02 | 正常执行、接收端重连、接收端重启、执行器重启和取消共五组场景通过；覆盖重复提交／查询、响应丢失、显式重试和错误代次拒绝 | [runsc 最终结果](runsc-final.json) |
-| R-03 | 九项检查通过：Guest 内核、单命令交付、并发隔离、故障恢复、运行时绑定、离线交付、独立验证、Pod 重建、真实 Workspace Harness | [Kata 最终结果](kata-final.json)、[版本锁](kata-versions.lock.json) |
+| R-03 | 九项检查通过：Guest 内核、单命令交付、并发隔离、故障恢复、运行时绑定、离线交付、独立验证、Pod 重建、真实 Workspace Harness | [Kata 最终结果](kata-final.json)、[版本锁](kata-versions.lock.json)、[四份离线阅读包](kata-offline-final.json) |
 | B-01/B-02/B-03 | 并发 context/tab、重定向、iframe/worker、后台请求、下载、进程身份绑定、SIGKILL 恢复和查询不重复执行通过；选择性导出移除失去支撑的原生关联 | [Browser 最终结果](browser-final.json) |
 | Q-01，本轮有界范围 | Sensor 压力、10 万事件摄入、资源和上下文／导出预算通过；原预算及此前失败记录均保留 | [性能最终结果](performance-final.json) |
 | 阅读器预览 | 五组桌面案例、中英文移动端与断网阅读、真实 Workspace 选择性导出通过；图谱、Compare、搜索、正文和附件入口保留 | [预览结果](preview-final.json) |
+| 完整 CI | `b9e6b8f` 上 15 项门禁全部通过，含 50 个 Go 测试包的 race 检查、历史包与数据库升级、双架构构建和 eBPF 绑定检查 | [CI 运行](https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391)、[完整结果](ci-final.json) |
 
 ## 测试版本
 
@@ -28,7 +29,8 @@ Dashboard 交互保留在[本地预览](../../../previews/v1.0-reader/README.zh-
 - Workspace、runsc 和 Kata 的采集程序：干净源码 `d8a7b60`。
 - Browser 启动辅助程序和最终 Kata 验收脚本：干净源码 `85dd7be`；采集二进制仍为 `d8a7b60`。
 - 图存储改进和 Workspace/Browser 阅读副本：干净源码 `f3deb10`。
-- 最终候选包和审计规则 v4：干净源码 `e82f1a3`，包含真实 CI 失败记录的回归。
+- 最终候选包：干净源码 `b9e6b8f`，内置本轮整理后的文档。
+- 审计规则 v4：`e82f1a3`，包含真实 CI 失败记录的回归。
 - 验收辅助脚本及性能比较规则：`4fb34ea`。
 
 `f3deb10` 将图视图中重复的完整节点和边合并保存，36 组视图／查询对比结果一致，
@@ -51,7 +53,7 @@ Workspace Harness，并确认旧 Target 被拒绝。
 [performance](performance) 目录保留原始报告、冻结预算和比较结果。
 最终通过 18 项 Sensor 检查、5 项摄入检查和 68 项上下文检查。实测时长约为：
 Sensor 矩阵 201 秒、满环形缓冲压力 24 秒、10 万事件摄入 52 秒、
-最终上下文／导出测量 62 秒。
+最终上下文／导出测量 56 秒。
 
 首次严格比较因虚拟机重启后 Linux `MemTotal` 相差 4 KiB 而失败。
 后续比较显式记录这一页内存的差异，其他环境、输入、测量脚本和全部性能限额保持原样。
@@ -61,9 +63,13 @@ Kata 前三轮的失败及原报告摘要分别保留：Guest 身份与 AppArmor
 任务专用 K3s 的 API／CoreDNS 绑定。修正后固定组合通过。
 后续归档曾被宿主机 C 盘空间耗尽中断，恢复 WSL 和验收虚拟机后完成了最终导出检查。
 
-最后一轮 CI 还暴露了一处短命进程漏关联：粗粒度审计时间窗口结束时，进程尚未启动。
+收尾 CI 还暴露了一处短命进程漏关联：粗粒度审计时间窗口结束时，进程尚未启动。
 v4 规则将已验证的 journal 接收时间用于进程候选，与已有系统调用规则保持一致。
 真实 AppArmor/seccomp 失败记录、PID 重用及无效时钟回归见[审计结果](audit-final.json)。
+
+Browser CLI 回归测试也已同步共享图格式（`b9e6b8f`），保留在线／离线关系逐项一致、
+排除支撑记录和运行时数据后移除关联的断言。实际 CLI 与 race 回归结果见
+[Browser 结果](browser-final.json)。
 
 ## 候选包与审阅入口
 

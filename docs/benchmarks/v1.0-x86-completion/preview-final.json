@@ -177,6 +177,57 @@
     "preview-portable-check-v3/workspace-en-mobile.png": "b3ca8fd9a850551226b8539ff9a2c82ebbf59016b98cf15fab7f00332f7ece28",
     "preview-portable-check-v3/workspace-zh-CN-mobile.png": "04e34c76df74f581176005b39faac67bc0e43f989ebe0844cbb26a52f0a2794b",
     "preview-selected-check-r2/en-US.png": "18eb635baa043d9df8fbe8ac9c39d9d9d74ac65f70679519c513d335f2f2aca7",
-    "preview-selected-check-r2/zh-CN.png": "a5ba5b1c1fe70f3e104216854ff29b70563a31c33316996c93b4fe44997bb84c"
+    "preview-selected-check-r2/zh-CN.png": "a5ba5b1c1fe70f3e104216854ff29b70563a31c33316996c93b4fe44997bb84c",
+    "preview-delivery-check/ui-screenshots/browser.png": "5f4f4bb646929d87e44f2b346e4cd3c1f551d24fb87de1d108c451099c425903",
+    "preview-delivery-check/ui-screenshots/execution.png": "89515ca6646846f86f9faeb1f4b7073ea1d784e3dc21a1b137f27e6857cca6f7",
+    "preview-delivery-check/ui-screenshots/investigation.png": "da9686e0a74018251eca69a112c4df0c5be722e488e91bb29bd00ddf439a3672",
+    "preview-delivery-check/ui-screenshots/notebook.png": "aefbe7de41b2fa87e7196d61282b2a2f8761cc73bd2a72908608c807eb9fa7ca",
+    "preview-delivery-check/ui-screenshots/workspace.png": "d47dec40109b5bf31cff437a42beaf97a902fd09e618fab84e271183b823778a"
+  },
+  "desktop_delivery": {
+    "log_sha256": "694eb0ad49e569cb5bae1296097a7e04a205a2902da165e49c1fbdd240d7677e",
+    "reports": [
+      {
+        "name": "execution",
+        "errors": [],
+        "outside": [],
+        "drilldowns": 64,
+        "attempts": 2,
+        "bidirectional": true
+      },
+      {
+        "name": "workspace",
+        "errors": [],
+        "outside": [],
+        "drilldowns": 13,
+        "receipt": "sha256:443d6e34f41a39c12ac6bdee5e01b1068e3ffdd16e7cd235bc74e7cb8ef0a9bf",
+        "versions": true,
+        "deliveryModes": true
+      },
+      {
+        "name": "browser",
+        "errors": [],
+        "outside": [],
+        "drilldowns": 11,
+        "records": 23,
+        "image": true,
+        "content": true
+      },
+      {
+        "name": "notebook",
+        "errors": [],
+        "outside": [],
+        "drilldowns": 6,
+        "records": 26,
+        "image": true,
+        "content": true
+      },
+      {
+        "name": "investigation",
+        "errors": [],
+        "outside": [],
+        "drilldowns": 70
+      }
+    ]
   }
 }
