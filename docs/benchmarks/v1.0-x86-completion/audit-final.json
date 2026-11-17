@@ -1,0 +1,48 @@
+{
+  "schema_version": "agentprovenance.acceptance_summary/v1",
+  "status": "PASS",
+  "source_sha": "e82f1a37aaa2896d59afec10aa2fce28e1dbba74",
+  "analysis_rule": "agentprov.audit_lifecycle_operation/v4",
+  "failure_run": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43991220944",
+  "failure_artifact_id": 14286624976,
+  "failure_artifact_sha256": "06aeb88c01e7e3a3eefbcc257b30ae278b9c350e0d1f36d81340efee06067428",
+  "diagnosis": "A 1 ms coarse clock plus decimal precision ended before short process births. Syscall matching already used the saved journal receipt, while the process-lifetime filter still used only the nominal interval.",
+  "fix": "Use validated source journal realtime/monotonic receipt bounds for process candidates, retain the nominal audit interval and report the process basis separately.",
+  "checks": [
+    "Actual AppArmor ALLOWED and DENIED lifetime, exit and return observations",
+    "Actual seccomp LOG lifetime and successful connect result",
+    "Actual KILL_PROCESS lifetime and exit without an invented syscall",
+    "Missing receipt, earlier receipt, inconsistent clock pair and wrong format rejected",
+    "PID reuse in a delayed receipt window remains ambiguous",
+    "Frozen v1/v2/v3/v4 reader rules retained; mismatched and unknown rules rejected"
+  ],
+  "local_tests": [
+    {
+      "command": "go test ./internal/telemetry -run TestAudit -count=1",
+      "exit_code": 0,
+      "log_sha256": "dfa7cac24156f3c9ecc4343dc9a27f81ab4e46cee80903324d4a2fb1411f5aa5"
+    },
+    {
+      "command": "go test -race ./internal/telemetry -run TestAudit -count=1",
+      "exit_code": 0,
+      "log_sha256": "7a25144729eb1e3ddaf525ca93ad1ef17cd85bfcee94dde4756d9b2c57d2155c"
+    },
+    {
+      "command": "node scripts/test_static_reader.cjs && node scripts/test_replay_graph.cjs",
+      "exit_code": 0
+    }
+  ],
+  "fixtures": {
+    "internal/telemetry/testdata/audit-journal-short-lifetime/apparmor-journal.jsonl": "bde84f5f3b65948b6fcddc50f2176f40ec9bb353c130718886ee72300c602ac4",
+    "internal/telemetry/testdata/audit-journal-short-lifetime/apparmor-runtime.jsonl": "f2e73da14936e38fb0419c3aa14a860c3a7fa6a04bb5e3972db3186cef8454c6",
+    "internal/telemetry/testdata/audit-journal-short-lifetime/seccomp-journal.jsonl": "712d0af18e0aa3c46ac38d5096bc51bc2075373de21fd4691ee23d165eef60db",
+    "internal/telemetry/testdata/audit-journal-short-lifetime/seccomp-runtime.jsonl": "6d07a1ff689a3a7cd1e612e87ec789cd7e0b8199ad266d1d39b17060140cbed8"
+  },
+  "live_ci_run": "https://github.com/ByteYellow/AgentProvenance/actions/runs/43992942379",
+  "live_matrix": {
+    "Go 1.23": "PASS",
+    "Go 1.24": "PASS",
+    "Go 1.25": "PASS",
+    "Go 1.26": "PASS"
+  }
+}

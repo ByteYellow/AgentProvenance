@@ -1,0 +1,1469 @@
+{
+  "schema_version": "agentprovenance.context_cost/v1",
+  "run_id": "8edff9ee3808439a926ad2b257f5fde3",
+  "passed": true,
+  "samples": [
+    {
+      "harness": "browser",
+      "preset": "basic",
+      "run_id": "context-cost-browser",
+      "passed": true,
+      "entries": 131,
+      "attachments": [
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13863,
+          "source_sha256": "11cc3fd7c77c59e71710e556bc423dde11bcc1e048fe291f2fdead78a541eba1",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13783,
+          "source_sha256": "6aa35818f2f163fbabd4c17fcf0ae3f6c9497d293edbf66210669fa929d3a462",
+          "source_digest_scope": "decoded_source_bytes"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.37172507300010693,
+        "project_seconds": 0.05477943700009291,
+        "query_seconds": 0.06444367799997508,
+        "bundle_seconds": 0.06581314799996107,
+        "replay_seconds": 1.1384086329999263,
+        "excluded_replay_seconds": 0.0,
+        "store_bytes": 1280299,
+        "attachment_bytes": 0,
+        "bundle_bytes": 731806,
+        "replay_bytes": 2447882,
+        "cpu_seconds": 2.5224819999999997,
+        "peak_rss_bytes": 77385728
+      },
+      "archives": {
+        "whole": {
+          "bytes": 2447882,
+          "sha256": "39c9e70b846a14e5941bb100c57d0022d8db16c2407f7ead9e1de07584e7a974"
+        }
+      },
+      "bundle_sha256": "bf06596d7e3d800ee501197b0481006fbd505837fbf78c7527af4eb4c105935a",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-browser",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "65e4d2c49a9081976f06ba41a6db4fda483cdd2d68d5e2d830f79fcc5243548a",
+      "repeat": 1
+    },
+    {
+      "harness": "browser",
+      "preset": "detailed",
+      "run_id": "context-cost-browser",
+      "passed": true,
+      "entries": 131,
+      "attachments": [
+        {
+          "ref": "sha256:75e27817ea6f23c8fb523ec3d743f15975210ea4fb96715d90bd3141d33fd1b8",
+          "bytes": 17693,
+          "sha256": "7c79732ddc1e8f735d2176b152763b35d2b24c549af81bcac9a34e31afad0663",
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_raster_bytes",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes",
+          "width": 1280,
+          "height": 720,
+          "transformation": "raster_reencode/v1",
+          "privacy": "visual_content_unredacted"
+        },
+        {
+          "ref": "sha256:262bd9eca8400901259935e89e1b145f9f29e482bdd689821098c12ea23f24e8",
+          "bytes": 13798,
+          "sha256": "a58890fca97514bfcae56822fef80360dbd3e963618d8421aadca52d45405414",
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_har_bytes",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13863,
+          "source_sha256": "11cc3fd7c77c59e71710e556bc423dde11bcc1e048fe291f2fdead78a541eba1",
+          "source_digest_scope": "decoded_source_bytes",
+          "transformation": "har_projection/v1",
+          "privacy": "headers_cookies_query_bodies_omitted"
+        },
+        {
+          "ref": "sha256:75e27817ea6f23c8fb523ec3d743f15975210ea4fb96715d90bd3141d33fd1b8",
+          "bytes": 17693,
+          "sha256": "7c79732ddc1e8f735d2176b152763b35d2b24c549af81bcac9a34e31afad0663",
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_raster_bytes",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes",
+          "width": 1280,
+          "height": 720,
+          "transformation": "raster_reencode/v1",
+          "privacy": "visual_content_unredacted"
+        },
+        {
+          "ref": "sha256:907ba3f4a5b08f402ea27a58a796666b3eee385d45394ac8b9a88b350cf5ea42",
+          "bytes": 13724,
+          "sha256": "273667e24efcbaaee17a3b72041ba696e8f8db067b224e4800e7aa2d8ab2fc71",
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_har_bytes",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13783,
+          "source_sha256": "6aa35818f2f163fbabd4c17fcf0ae3f6c9497d293edbf66210669fa929d3a462",
+          "source_digest_scope": "decoded_source_bytes",
+          "transformation": "har_projection/v1",
+          "privacy": "headers_cookies_query_bodies_omitted"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.6022054179999259,
+        "project_seconds": 0.068984496999974,
+        "query_seconds": 0.07316644299999098,
+        "bundle_seconds": 0.07635594999999284,
+        "replay_seconds": 1.396182696999972,
+        "excluded_replay_seconds": 1.415483303999963,
+        "store_bytes": 2051217,
+        "attachment_bytes": 45215,
+        "bundle_bytes": 1722862,
+        "replay_bytes": 2784449,
+        "cpu_seconds": 5.502803,
+        "peak_rss_bytes": 80322560
+      },
+      "archives": {
+        "whole": {
+          "bytes": 2784449,
+          "sha256": "b2f54a4ad3d12d7e6c12127d86ff95a7bd756147bbe31bd95f4efdd48048a269"
+        },
+        "excluded": {
+          "bytes": 2758014,
+          "sha256": "4cd70a81e24540a29c4f9e13d7ec1862d4739e361a8285054fdf4726d54e17d6"
+        }
+      },
+      "bundle_sha256": "2bc0a9916594dea893ba863567248144bfa4d14c1b47d7e7bf766e6ba0cba5f6",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-browser",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "65e4d2c49a9081976f06ba41a6db4fda483cdd2d68d5e2d830f79fcc5243548a",
+      "repeat": 1
+    },
+    {
+      "harness": "browser",
+      "preset": "detailed-no-attachments",
+      "run_id": "context-cost-browser",
+      "passed": true,
+      "entries": 131,
+      "attachments": [
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13863,
+          "source_sha256": "11cc3fd7c77c59e71710e556bc423dde11bcc1e048fe291f2fdead78a541eba1",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13783,
+          "source_sha256": "6aa35818f2f163fbabd4c17fcf0ae3f6c9497d293edbf66210669fa929d3a462",
+          "source_digest_scope": "decoded_source_bytes"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.52314212400006,
+        "project_seconds": 0.05790012700003899,
+        "query_seconds": 0.06625269899996056,
+        "bundle_seconds": 0.0678781889999982,
+        "replay_seconds": 1.4511821840000039,
+        "excluded_replay_seconds": 0.0,
+        "store_bytes": 1982320,
+        "attachment_bytes": 0,
+        "bundle_bytes": 1641381,
+        "replay_bytes": 2751069,
+        "cpu_seconds": 3.457982,
+        "peak_rss_bytes": 77819904
+      },
+      "archives": {
+        "whole": {
+          "bytes": 2751069,
+          "sha256": "766140d7e4d0cd99b9a503b6843dc65b649d3532b888468fb5982d61941b7297"
+        }
+      },
+      "bundle_sha256": "1f7c74f6cb1d595ba6d44f7a3c0bba162596d162c99ad2bafbcdca82c4ec88f5",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-browser",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "65e4d2c49a9081976f06ba41a6db4fda483cdd2d68d5e2d830f79fcc5243548a",
+      "repeat": 1
+    },
+    {
+      "harness": "jupyter",
+      "preset": "basic",
+      "run_id": "context-cost-jupyter",
+      "passed": true,
+      "entries": 28,
+      "attachments": [
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 2678,
+          "source_sha256": "31c7ebdfb78a187b3c31aa74806b986985b3c1615826487cf749df8588649367",
+          "source_digest_scope": "decoded_source_bytes"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.15496032800001558,
+        "project_seconds": 0.03580441500002962,
+        "query_seconds": 0.026579093999998804,
+        "bundle_seconds": 0.03835242000002381,
+        "replay_seconds": 0.32695083600003727,
+        "excluded_replay_seconds": 0.0,
+        "store_bytes": 794202,
+        "attachment_bytes": 0,
+        "bundle_bytes": 193014,
+        "replay_bytes": 592351,
+        "cpu_seconds": 0.9360569999999999,
+        "peak_rss_bytes": 66260992
+      },
+      "archives": {
+        "whole": {
+          "bytes": 592351,
+          "sha256": "bf574f87c44145e0655f0c4b8b0b237d3fa37dcc3963e52c7d544b37ad38b3b7"
+        }
+      },
+      "bundle_sha256": "bfa82d209c53a19f95a583fa84895329209ec0aaa2498b34c5f9a8d64f108521",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-jupyter",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "aef8c6dedf1c586f4bec127c2c2747fee6c2b5b5ebbc45d532db9223ae3c7648",
+      "repeat": 1
+    },
+    {
+      "harness": "jupyter",
+      "preset": "detailed",
+      "run_id": "context-cost-jupyter",
+      "passed": true,
+      "entries": 28,
+      "attachments": [
+        {
+          "ref": "sha256:d6972434c146fe11c7fd7fe309876719c68bb99a2c67b568d2d5e8ec719454a1",
+          "bytes": 1011,
+          "sha256": "dc4771fda3a8b6c94f4548571320dc8e5e86fbe89fb5bba0a3554179531f27c0",
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_raster_bytes",
+          "source_media_type": "image/png",
+          "source_bytes": 2678,
+          "source_sha256": "31c7ebdfb78a187b3c31aa74806b986985b3c1615826487cf749df8588649367",
+          "source_digest_scope": "decoded_source_bytes",
+          "width": 480,
+          "height": 240,
+          "transformation": "raster_reencode/v1",
+          "privacy": "visual_content_unredacted"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.17751699999996617,
+        "project_seconds": 0.035763784999971904,
+        "query_seconds": 0.027396167000006244,
+        "bundle_seconds": 0.04221518899998955,
+        "replay_seconds": 0.4370263439999462,
+        "excluded_replay_seconds": 0.397325574999968,
+        "store_bytes": 945497,
+        "attachment_bytes": 1011,
+        "bundle_bytes": 385207,
+        "replay_bytes": 654891,
+        "cpu_seconds": 1.6555939999999998,
+        "peak_rss_bytes": 69124096
+      },
+      "archives": {
+        "whole": {
+          "bytes": 654891,
+          "sha256": "2606da471c54500a08c513c3ab7cee73125f8b13f61fbeb70f3064c8afbb808d"
+        },
+        "excluded": {
+          "bytes": 653965,
+          "sha256": "ba98548d9b243c209bfc4fbc4b827666a9a01e688b657a1968182eb887859a00"
+        }
+      },
+      "bundle_sha256": "ab6678463e1064024fc7299ff6b9e842d69094fcd91edb4670917e8cde077505",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-jupyter",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "aef8c6dedf1c586f4bec127c2c2747fee6c2b5b5ebbc45d532db9223ae3c7648",
+      "repeat": 1
+    },
+    {
+      "harness": "jupyter",
+      "preset": "detailed-no-attachments",
+      "run_id": "context-cost-jupyter",
+      "passed": true,
+      "entries": 28,
+      "attachments": [
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 2678,
+          "source_sha256": "31c7ebdfb78a187b3c31aa74806b986985b3c1615826487cf749df8588649367",
+          "source_digest_scope": "decoded_source_bytes"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.18793225599995367,
+        "project_seconds": 0.03504387400005271,
+        "query_seconds": 0.02657768799997484,
+        "bundle_seconds": 0.04091694499993537,
+        "replay_seconds": 0.45277369400002954,
+        "excluded_replay_seconds": 0.0,
+        "store_bytes": 942884,
+        "attachment_bytes": 0,
+        "bundle_bytes": 382422,
+        "replay_bytes": 652857,
+        "cpu_seconds": 1.195141,
+        "peak_rss_bytes": 65478656
+      },
+      "archives": {
+        "whole": {
+          "bytes": 652857,
+          "sha256": "5e8a435914e44bf56f995d5c4caf32a8dab848255414d9d0761c0f7f79a73519"
+        }
+      },
+      "bundle_sha256": "86ebe803eaf5b26eb2b93e2562c5d967b940af33e56f6e049fff37f3f53e1cd1",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-jupyter",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "aef8c6dedf1c586f4bec127c2c2747fee6c2b5b5ebbc45d532db9223ae3c7648",
+      "repeat": 1
+    },
+    {
+      "harness": "browser",
+      "preset": "detailed",
+      "run_id": "context-cost-browser",
+      "passed": true,
+      "entries": 131,
+      "attachments": [
+        {
+          "ref": "sha256:75e27817ea6f23c8fb523ec3d743f15975210ea4fb96715d90bd3141d33fd1b8",
+          "bytes": 17693,
+          "sha256": "7c79732ddc1e8f735d2176b152763b35d2b24c549af81bcac9a34e31afad0663",
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_raster_bytes",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes",
+          "width": 1280,
+          "height": 720,
+          "transformation": "raster_reencode/v1",
+          "privacy": "visual_content_unredacted"
+        },
+        {
+          "ref": "sha256:262bd9eca8400901259935e89e1b145f9f29e482bdd689821098c12ea23f24e8",
+          "bytes": 13798,
+          "sha256": "a58890fca97514bfcae56822fef80360dbd3e963618d8421aadca52d45405414",
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_har_bytes",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13863,
+          "source_sha256": "11cc3fd7c77c59e71710e556bc423dde11bcc1e048fe291f2fdead78a541eba1",
+          "source_digest_scope": "decoded_source_bytes",
+          "transformation": "har_projection/v1",
+          "privacy": "headers_cookies_query_bodies_omitted"
+        },
+        {
+          "ref": "sha256:75e27817ea6f23c8fb523ec3d743f15975210ea4fb96715d90bd3141d33fd1b8",
+          "bytes": 17693,
+          "sha256": "7c79732ddc1e8f735d2176b152763b35d2b24c549af81bcac9a34e31afad0663",
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_raster_bytes",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes",
+          "width": 1280,
+          "height": 720,
+          "transformation": "raster_reencode/v1",
+          "privacy": "visual_content_unredacted"
+        },
+        {
+          "ref": "sha256:907ba3f4a5b08f402ea27a58a796666b3eee385d45394ac8b9a88b350cf5ea42",
+          "bytes": 13724,
+          "sha256": "273667e24efcbaaee17a3b72041ba696e8f8db067b224e4800e7aa2d8ab2fc71",
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_har_bytes",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13783,
+          "source_sha256": "6aa35818f2f163fbabd4c17fcf0ae3f6c9497d293edbf66210669fa929d3a462",
+          "source_digest_scope": "decoded_source_bytes",
+          "transformation": "har_projection/v1",
+          "privacy": "headers_cookies_query_bodies_omitted"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.6062656460001108,
+        "project_seconds": 0.057814512000049945,
+        "query_seconds": 0.06381362699983129,
+        "bundle_seconds": 0.0765980710000349,
+        "replay_seconds": 1.425038465000057,
+        "excluded_replay_seconds": 1.3872664829999621,
+        "store_bytes": 2051218,
+        "attachment_bytes": 45215,
+        "bundle_bytes": 1722861,
+        "replay_bytes": 2784175,
+        "cpu_seconds": 5.643365,
+        "peak_rss_bytes": 80269312
+      },
+      "archives": {
+        "whole": {
+          "bytes": 2784175,
+          "sha256": "0063379b07663d7d8d75af52a7d031d6c7a9b0e7aaa06bb9cd3402fa95b9b996"
+        },
+        "excluded": {
+          "bytes": 2757904,
+          "sha256": "6e34927e9d4abf21ddf4e4ca8997a98d7aae7d56588c0837b032cfafd19a898b"
+        }
+      },
+      "bundle_sha256": "b68dec953052c7087fe753ea91593b0f496bc83306fb5395b54b5412bfe15ea8",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-browser",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "65e4d2c49a9081976f06ba41a6db4fda483cdd2d68d5e2d830f79fcc5243548a",
+      "repeat": 2
+    },
+    {
+      "harness": "browser",
+      "preset": "detailed-no-attachments",
+      "run_id": "context-cost-browser",
+      "passed": true,
+      "entries": 131,
+      "attachments": [
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13863,
+          "source_sha256": "11cc3fd7c77c59e71710e556bc423dde11bcc1e048fe291f2fdead78a541eba1",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13783,
+          "source_sha256": "6aa35818f2f163fbabd4c17fcf0ae3f6c9497d293edbf66210669fa929d3a462",
+          "source_digest_scope": "decoded_source_bytes"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.4909980549999773,
+        "project_seconds": 0.051215695999985655,
+        "query_seconds": 0.0652222390000361,
+        "bundle_seconds": 0.06500782900002378,
+        "replay_seconds": 1.4428399790000412,
+        "excluded_replay_seconds": 0.0,
+        "store_bytes": 1982320,
+        "attachment_bytes": 0,
+        "bundle_bytes": 1641382,
+        "replay_bytes": 2750814,
+        "cpu_seconds": 3.4822109999999995,
+        "peak_rss_bytes": 75448320
+      },
+      "archives": {
+        "whole": {
+          "bytes": 2750814,
+          "sha256": "e12748a981bed9ddcd58119b188fd741f6748d96616976d567e88f29026c8ef4"
+        }
+      },
+      "bundle_sha256": "d581c3c3f97cd1f92e6abf68465b9993c58e93dee991610ac7af07e89c237d2a",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-browser",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "65e4d2c49a9081976f06ba41a6db4fda483cdd2d68d5e2d830f79fcc5243548a",
+      "repeat": 2
+    },
+    {
+      "harness": "browser",
+      "preset": "basic",
+      "run_id": "context-cost-browser",
+      "passed": true,
+      "entries": 131,
+      "attachments": [
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13863,
+          "source_sha256": "11cc3fd7c77c59e71710e556bc423dde11bcc1e048fe291f2fdead78a541eba1",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13783,
+          "source_sha256": "6aa35818f2f163fbabd4c17fcf0ae3f6c9497d293edbf66210669fa929d3a462",
+          "source_digest_scope": "decoded_source_bytes"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.35782029599999987,
+        "project_seconds": 0.049706143000094016,
+        "query_seconds": 0.06291118299998288,
+        "bundle_seconds": 0.053318495000098665,
+        "replay_seconds": 1.1656498130000728,
+        "excluded_replay_seconds": 0.0,
+        "store_bytes": 1280299,
+        "attachment_bytes": 0,
+        "bundle_bytes": 731806,
+        "replay_bytes": 2447919,
+        "cpu_seconds": 2.512466,
+        "peak_rss_bytes": 73687040
+      },
+      "archives": {
+        "whole": {
+          "bytes": 2447919,
+          "sha256": "1ff339026bb9d2b3a5aaf17cd9db02a0935d6a86a3caac87a2c3b43b197b36f1"
+        }
+      },
+      "bundle_sha256": "f159db82ebb41c57923a22284404df13f0fa4475200849fa437a34880fd97507",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-browser",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "65e4d2c49a9081976f06ba41a6db4fda483cdd2d68d5e2d830f79fcc5243548a",
+      "repeat": 2
+    },
+    {
+      "harness": "jupyter",
+      "preset": "detailed",
+      "run_id": "context-cost-jupyter",
+      "passed": true,
+      "entries": 28,
+      "attachments": [
+        {
+          "ref": "sha256:d6972434c146fe11c7fd7fe309876719c68bb99a2c67b568d2d5e8ec719454a1",
+          "bytes": 1011,
+          "sha256": "dc4771fda3a8b6c94f4548571320dc8e5e86fbe89fb5bba0a3554179531f27c0",
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_raster_bytes",
+          "source_media_type": "image/png",
+          "source_bytes": 2678,
+          "source_sha256": "31c7ebdfb78a187b3c31aa74806b986985b3c1615826487cf749df8588649367",
+          "source_digest_scope": "decoded_source_bytes",
+          "width": 480,
+          "height": 240,
+          "transformation": "raster_reencode/v1",
+          "privacy": "visual_content_unredacted"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.22436307999998917,
+        "project_seconds": 0.03523000100005902,
+        "query_seconds": 0.026706572999955824,
+        "bundle_seconds": 0.04626822400007313,
+        "replay_seconds": 0.4051871259999871,
+        "excluded_replay_seconds": 0.5235329759999559,
+        "store_bytes": 945499,
+        "attachment_bytes": 1011,
+        "bundle_bytes": 385206,
+        "replay_bytes": 654703,
+        "cpu_seconds": 1.735443,
+        "peak_rss_bytes": 69386240
+      },
+      "archives": {
+        "whole": {
+          "bytes": 654703,
+          "sha256": "092038f27e85934a373a48c8cc4836f16e09df250f642668ee697a66ff6a1a6d"
+        },
+        "excluded": {
+          "bytes": 653750,
+          "sha256": "88712ae5cce967038cb08dd1c7b218d3de10ebd950c9afb756f67d7b0c4b86e4"
+        }
+      },
+      "bundle_sha256": "eedf780056d5250c1fbd23a8c5b4bfbc6c43e43b3c628ecfb8c8b055b300d689",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-jupyter",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "aef8c6dedf1c586f4bec127c2c2747fee6c2b5b5ebbc45d532db9223ae3c7648",
+      "repeat": 2
+    },
+    {
+      "harness": "jupyter",
+      "preset": "detailed-no-attachments",
+      "run_id": "context-cost-jupyter",
+      "passed": true,
+      "entries": 28,
+      "attachments": [
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 2678,
+          "source_sha256": "31c7ebdfb78a187b3c31aa74806b986985b3c1615826487cf749df8588649367",
+          "source_digest_scope": "decoded_source_bytes"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.17287118700005522,
+        "project_seconds": 0.03631308100000297,
+        "query_seconds": 0.025738365000052,
+        "bundle_seconds": 0.039565186999993784,
+        "replay_seconds": 0.3863268779999771,
+        "excluded_replay_seconds": 0.0,
+        "store_bytes": 942883,
+        "attachment_bytes": 0,
+        "bundle_bytes": 382413,
+        "replay_bytes": 653004,
+        "cpu_seconds": 1.147453,
+        "peak_rss_bytes": 66637824
+      },
+      "archives": {
+        "whole": {
+          "bytes": 653004,
+          "sha256": "fb694abd7d5380c124489c282090c6f75a5987fff3f1f9cc9c880d0baf498748"
+        }
+      },
+      "bundle_sha256": "6abd385f4c7759ec1298131d685f9675fa1b5f7e9b2f6915f8f509047d2dcd10",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-jupyter",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "aef8c6dedf1c586f4bec127c2c2747fee6c2b5b5ebbc45d532db9223ae3c7648",
+      "repeat": 2
+    },
+    {
+      "harness": "jupyter",
+      "preset": "basic",
+      "run_id": "context-cost-jupyter",
+      "passed": true,
+      "entries": 28,
+      "attachments": [
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 2678,
+          "source_sha256": "31c7ebdfb78a187b3c31aa74806b986985b3c1615826487cf749df8588649367",
+          "source_digest_scope": "decoded_source_bytes"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.1634199359999684,
+        "project_seconds": 0.03490419600007044,
+        "query_seconds": 0.028212939000013648,
+        "bundle_seconds": 0.037869627000077344,
+        "replay_seconds": 0.3551054509999858,
+        "excluded_replay_seconds": 0.0,
+        "store_bytes": 794202,
+        "attachment_bytes": 0,
+        "bundle_bytes": 193015,
+        "replay_bytes": 592249,
+        "cpu_seconds": 0.956136,
+        "peak_rss_bytes": 66768896
+      },
+      "archives": {
+        "whole": {
+          "bytes": 592249,
+          "sha256": "3801a8d6f3f20de9df27ac3224109f3739555c79122b5aa00b1a7baae5aca07e"
+        }
+      },
+      "bundle_sha256": "6b2c2455e7dc131f9c366627ddba03efcd8a8ae2610eb4405bd40fba3a578ee9",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-jupyter",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "aef8c6dedf1c586f4bec127c2c2747fee6c2b5b5ebbc45d532db9223ae3c7648",
+      "repeat": 2
+    },
+    {
+      "harness": "browser",
+      "preset": "detailed-no-attachments",
+      "run_id": "context-cost-browser",
+      "passed": true,
+      "entries": 131,
+      "attachments": [
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13863,
+          "source_sha256": "11cc3fd7c77c59e71710e556bc423dde11bcc1e048fe291f2fdead78a541eba1",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13783,
+          "source_sha256": "6aa35818f2f163fbabd4c17fcf0ae3f6c9497d293edbf66210669fa929d3a462",
+          "source_digest_scope": "decoded_source_bytes"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.5087276519999477,
+        "project_seconds": 0.05181723500004409,
+        "query_seconds": 0.06764240000006794,
+        "bundle_seconds": 0.07047694999994292,
+        "replay_seconds": 1.3550479049999922,
+        "excluded_replay_seconds": 0.0,
+        "store_bytes": 1986416,
+        "attachment_bytes": 0,
+        "bundle_bytes": 1641376,
+        "replay_bytes": 2749800,
+        "cpu_seconds": 3.393573,
+        "peak_rss_bytes": 76574720
+      },
+      "archives": {
+        "whole": {
+          "bytes": 2749800,
+          "sha256": "d794ea8c0951e0ee86148d87ad2ebd1b184b34cdcebaf46bc37c70e71df53813"
+        }
+      },
+      "bundle_sha256": "f4bf375537bba7c599adeee2c9e25c049d8c25e80bea2b8c66a8d47a01809ad1",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-browser",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "65e4d2c49a9081976f06ba41a6db4fda483cdd2d68d5e2d830f79fcc5243548a",
+      "repeat": 3
+    },
+    {
+      "harness": "browser",
+      "preset": "basic",
+      "run_id": "context-cost-browser",
+      "passed": true,
+      "entries": 131,
+      "attachments": [
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13863,
+          "source_sha256": "11cc3fd7c77c59e71710e556bc423dde11bcc1e048fe291f2fdead78a541eba1",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes"
+        },
+        {
+          "bytes": null,
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13783,
+          "source_sha256": "6aa35818f2f163fbabd4c17fcf0ae3f6c9497d293edbf66210669fa929d3a462",
+          "source_digest_scope": "decoded_source_bytes"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.4034682879999991,
+        "project_seconds": 0.05193964000000051,
+        "query_seconds": 0.062511230000041,
+        "bundle_seconds": 0.04839442100001179,
+        "replay_seconds": 1.1598905179999974,
+        "excluded_replay_seconds": 0.0,
+        "store_bytes": 1280299,
+        "attachment_bytes": 0,
+        "bundle_bytes": 731802,
+        "replay_bytes": 2448109,
+        "cpu_seconds": 2.493047,
+        "peak_rss_bytes": 74817536
+      },
+      "archives": {
+        "whole": {
+          "bytes": 2448109,
+          "sha256": "471fc991aa7715f4576a0cc63377b4d3df459dce23a03a4b221d8eb7344d241c"
+        }
+      },
+      "bundle_sha256": "44b39c9fe134de7b9d4404d3b194f7471d8f326a3ed8d9c9c733856cd6fc8da9",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-browser",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "65e4d2c49a9081976f06ba41a6db4fda483cdd2d68d5e2d830f79fcc5243548a",
+      "repeat": 3
+    },
+    {
+      "harness": "browser",
+      "preset": "detailed",
+      "run_id": "context-cost-browser",
+      "passed": true,
+      "entries": 131,
+      "attachments": [
+        {
+          "ref": "sha256:75e27817ea6f23c8fb523ec3d743f15975210ea4fb96715d90bd3141d33fd1b8",
+          "bytes": 17693,
+          "sha256": "7c79732ddc1e8f735d2176b152763b35d2b24c549af81bcac9a34e31afad0663",
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_raster_bytes",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes",
+          "width": 1280,
+          "height": 720,
+          "transformation": "raster_reencode/v1",
+          "privacy": "visual_content_unredacted"
+        },
+        {
+          "ref": "sha256:262bd9eca8400901259935e89e1b145f9f29e482bdd689821098c12ea23f24e8",
+          "bytes": 13798,
+          "sha256": "a58890fca97514bfcae56822fef80360dbd3e963618d8421aadca52d45405414",
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_har_bytes",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13863,
+          "source_sha256": "11cc3fd7c77c59e71710e556bc423dde11bcc1e048fe291f2fdead78a541eba1",
+          "source_digest_scope": "decoded_source_bytes",
+          "transformation": "har_projection/v1",
+          "privacy": "headers_cookies_query_bodies_omitted"
+        },
+        {
+          "ref": "sha256:75e27817ea6f23c8fb523ec3d743f15975210ea4fb96715d90bd3141d33fd1b8",
+          "bytes": 17693,
+          "sha256": "7c79732ddc1e8f735d2176b152763b35d2b24c549af81bcac9a34e31afad0663",
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_raster_bytes",
+          "source_media_type": "image/png",
+          "source_bytes": 17850,
+          "source_sha256": "ec75527d3ea3f7860e5775fc1d5dd66633fd358a515bcb30fb2438d4faf12247",
+          "source_digest_scope": "decoded_source_bytes",
+          "width": 1280,
+          "height": 720,
+          "transformation": "raster_reencode/v1",
+          "privacy": "visual_content_unredacted"
+        },
+        {
+          "ref": "sha256:907ba3f4a5b08f402ea27a58a796666b3eee385d45394ac8b9a88b350cf5ea42",
+          "bytes": 13724,
+          "sha256": "273667e24efcbaaee17a3b72041ba696e8f8db067b224e4800e7aa2d8ab2fc71",
+          "media_type": "application/har+json",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_har_bytes",
+          "source_media_type": "application/har+json",
+          "source_bytes": 13783,
+          "source_sha256": "6aa35818f2f163fbabd4c17fcf0ae3f6c9497d293edbf66210669fa929d3a462",
+          "source_digest_scope": "decoded_source_bytes",
+          "transformation": "har_projection/v1",
+          "privacy": "headers_cookies_query_bodies_omitted"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.6292310650001127,
+        "project_seconds": 0.07319886599998426,
+        "query_seconds": 0.0633450369999764,
+        "bundle_seconds": 0.09963433999996596,
+        "replay_seconds": 1.5294775630000004,
+        "excluded_replay_seconds": 1.404097188000037,
+        "store_bytes": 2051218,
+        "attachment_bytes": 45215,
+        "bundle_bytes": 1722850,
+        "replay_bytes": 2784562,
+        "cpu_seconds": 5.687663,
+        "peak_rss_bytes": 78864384
+      },
+      "archives": {
+        "whole": {
+          "bytes": 2784562,
+          "sha256": "1a7b1ff518e495c9636fda2e266d7c871d442625e19e9f71089957fbc817c4b2"
+        },
+        "excluded": {
+          "bytes": 2758154,
+          "sha256": "a5f9ca7caccacef631bfadc70fc290764bfcd24828730a64177cb710c8def7f3"
+        }
+      },
+      "bundle_sha256": "cbe96085bdd0bcee7ff32fa387a0b6bfea0b54758f101c847bc3f586bc14927f",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-browser",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "65e4d2c49a9081976f06ba41a6db4fda483cdd2d68d5e2d830f79fcc5243548a",
+      "repeat": 3
+    },
+    {
+      "harness": "jupyter",
+      "preset": "detailed-no-attachments",
+      "run_id": "context-cost-jupyter",
+      "passed": true,
+      "entries": 28,
+      "attachments": [
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 2678,
+          "source_sha256": "31c7ebdfb78a187b3c31aa74806b986985b3c1615826487cf749df8588649367",
+          "source_digest_scope": "decoded_source_bytes"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.19015738100006274,
+        "project_seconds": 0.03766907800002173,
+        "query_seconds": 0.027725383000074544,
+        "bundle_seconds": 0.04588085700004285,
+        "replay_seconds": 0.4398268549999784,
+        "excluded_replay_seconds": 0.0,
+        "store_bytes": 942883,
+        "attachment_bytes": 0,
+        "bundle_bytes": 382418,
+        "replay_bytes": 652869,
+        "cpu_seconds": 1.168687,
+        "peak_rss_bytes": 68628480
+      },
+      "archives": {
+        "whole": {
+          "bytes": 652869,
+          "sha256": "0109d809d64b19b13e18514efdfbe3c9ef3ee16e55a091089d72481e055dedf9"
+        }
+      },
+      "bundle_sha256": "42e8cc87280e368e2c9d0fa69c39cbf95a22e1652b1c60d305ff5854c0f7715a",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-jupyter",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "aef8c6dedf1c586f4bec127c2c2747fee6c2b5b5ebbc45d532db9223ae3c7648",
+      "repeat": 3
+    },
+    {
+      "harness": "jupyter",
+      "preset": "basic",
+      "run_id": "context-cost-jupyter",
+      "passed": true,
+      "entries": 28,
+      "attachments": [
+        {
+          "bytes": null,
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "omitted",
+          "reason": "capture_policy",
+          "source_media_type": "image/png",
+          "source_bytes": 2678,
+          "source_sha256": "31c7ebdfb78a187b3c31aa74806b986985b3c1615826487cf749df8588649367",
+          "source_digest_scope": "decoded_source_bytes"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.17238876900000832,
+        "project_seconds": 0.03834105800001453,
+        "query_seconds": 0.02841827600002489,
+        "bundle_seconds": 0.037496469000075194,
+        "replay_seconds": 0.323204664000059,
+        "excluded_replay_seconds": 0.0,
+        "store_bytes": 794202,
+        "attachment_bytes": 0,
+        "bundle_bytes": 193017,
+        "replay_bytes": 592151,
+        "cpu_seconds": 0.9722949999999999,
+        "peak_rss_bytes": 67567616
+      },
+      "archives": {
+        "whole": {
+          "bytes": 592151,
+          "sha256": "eb8dd5849546da75fe66bb0e016a82e483c9e932c7c9688f259a502ef0952e36"
+        }
+      },
+      "bundle_sha256": "f2353985391cfb844b82e1ed7f416b90685ec004ab8e9362227d7b850fec01cf",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-jupyter",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "aef8c6dedf1c586f4bec127c2c2747fee6c2b5b5ebbc45d532db9223ae3c7648",
+      "repeat": 3
+    },
+    {
+      "harness": "jupyter",
+      "preset": "detailed",
+      "run_id": "context-cost-jupyter",
+      "passed": true,
+      "entries": 28,
+      "attachments": [
+        {
+          "ref": "sha256:d6972434c146fe11c7fd7fe309876719c68bb99a2c67b568d2d5e8ec719454a1",
+          "bytes": 1011,
+          "sha256": "dc4771fda3a8b6c94f4548571320dc8e5e86fbe89fb5bba0a3554179531f27c0",
+          "media_type": "image/png",
+          "redacted": false,
+          "state": "stored",
+          "digest_scope": "stored_raster_bytes",
+          "source_media_type": "image/png",
+          "source_bytes": 2678,
+          "source_sha256": "31c7ebdfb78a187b3c31aa74806b986985b3c1615826487cf749df8588649367",
+          "source_digest_scope": "decoded_source_bytes",
+          "width": 480,
+          "height": 240,
+          "transformation": "raster_reencode/v1",
+          "privacy": "visual_content_unredacted"
+        }
+      ],
+      "metrics": {
+        "import_seconds": 0.19252023100000315,
+        "project_seconds": 0.039429596999980276,
+        "query_seconds": 0.027341428999989148,
+        "bundle_seconds": 0.04183732800004236,
+        "replay_seconds": 0.44284736300005534,
+        "excluded_replay_seconds": 0.4400553379999792,
+        "store_bytes": 945499,
+        "attachment_bytes": 1011,
+        "bundle_bytes": 385206,
+        "replay_bytes": 654944,
+        "cpu_seconds": 1.694176,
+        "peak_rss_bytes": 69120000
+      },
+      "archives": {
+        "whole": {
+          "bytes": 654944,
+          "sha256": "3e90d23014a50f4c7edee2c38bd3362bce6feddd86c7ca52faa5f6213ece9706"
+        },
+        "excluded": {
+          "bytes": 654027,
+          "sha256": "676892a201a068a801b0b9f9a7de1eaf1006b96396b70d31b50263718c37fede"
+        }
+      },
+      "bundle_sha256": "8a71e32cdd55d0dde8ed633ec467c49a71679635a6c423fdaa99eade010f9de4",
+      "graph": {
+        "schema_version": "agentprovenance.verify/v1",
+        "run_id": "context-cost-jupyter",
+        "status": "ok",
+        "issue_count": 0,
+        "error_count": 0,
+        "warning_count": 0,
+        "issues": null
+      },
+      "native_identity_sha256": "aef8c6dedf1c586f4bec127c2c2747fee6c2b5b5ebbc45d532db9223ae3c7648",
+      "repeat": 3
+    }
+  ],
+  "started_at": "2026-11-16T18:30:04.053975+00:00",
+  "source_commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+  "binary_sha256": "8be090fb6b322398083c1c1befde0ba85b835029c6941b6924208ffa79d66818",
+  "environment": {
+    "system": "Linux",
+    "architecture": "x86_64",
+    "kernel": "6.8.0-149-generic",
+    "hostname": "agentprov-kvm-amd64",
+    "cpu_count": 4,
+    "python": "3.12.3",
+    "memory_bytes": 4105363456
+  },
+  "repeats": 3,
+  "inputs": {
+    "browser": [
+      {
+        "sha256": "9241f5bf8d78122609e79fdbcb15c76041e704a3ddd2f4c395449a82ca6d370e",
+        "bytes": 74444
+      },
+      {
+        "sha256": "8e770280edb79bb9314c8c72fff4913cff9ac078debdf058053b9ceadb0a10bc",
+        "bytes": 73744
+      }
+    ],
+    "jupyter": [
+      {
+        "sha256": "6aeb1dd5ba930d55bc853303d47a41427c9788ea61e35f38df82c03983e937bd",
+        "bytes": 12641
+      },
+      {
+        "sha256": "99aef0fb952e309d204192845021b6875ee499074f559a7c8cc3545f6a8e1072",
+        "bytes": 12925
+      }
+    ]
+  },
+  "measurement_sha256": "9c29381b0675ace3388fae965b10e75615f3fd1d88edfad786610e8c4ac280fb",
+  "methods": {
+    "cpu": "sum of child user+system time, including validation commands",
+    "rss": "maximum per-child wait4 peak, not the sum of simultaneous processes",
+    "wall": "monotonic through blocking wait4; measured stages exclude verification commands",
+    "storage": "logical files after import/project/query and before Bundle export",
+    "inputs": "fixed historical recorder captures; no Agent, browser, kernel or Sensor started"
+  },
+  "binary_version": "agentprov version v1.0.0-candidate (d8a7b60db8824361fcba31b62db72a5e0f82d346; 2026-11-16T17:49:09+00:00; linux/amd64)",
+  "summary": {
+    "browser/basic": {
+      "store_bytes": 1280299,
+      "attachment_bytes": 0,
+      "bundle_bytes": 731806,
+      "replay_bytes": 2447919,
+      "peak_rss_bytes": 74817536,
+      "cpu_seconds": 2.512466,
+      "import_seconds": 0.37172507300010693,
+      "project_seconds": 0.05193964000000051,
+      "query_seconds": 0.06291118299998288,
+      "bundle_seconds": 0.053318495000098665,
+      "replay_seconds": 1.1598905179999974
+    },
+    "browser/detailed": {
+      "store_bytes": 2051218,
+      "attachment_bytes": 45215,
+      "bundle_bytes": 1722861,
+      "replay_bytes": 2784449,
+      "peak_rss_bytes": 80269312,
+      "cpu_seconds": 5.643365,
+      "import_seconds": 0.6062656460001108,
+      "project_seconds": 0.068984496999974,
+      "query_seconds": 0.06381362699983129,
+      "bundle_seconds": 0.0765980710000349,
+      "replay_seconds": 1.425038465000057,
+      "excluded_replay_seconds": 1.404097188000037
+    },
+    "browser/detailed-no-attachments": {
+      "store_bytes": 1982320,
+      "attachment_bytes": 0,
+      "bundle_bytes": 1641381,
+      "replay_bytes": 2750814,
+      "peak_rss_bytes": 76574720,
+      "cpu_seconds": 3.457982,
+      "import_seconds": 0.5087276519999477,
+      "project_seconds": 0.05181723500004409,
+      "query_seconds": 0.06625269899996056,
+      "bundle_seconds": 0.0678781889999982,
+      "replay_seconds": 1.4428399790000412
+    },
+    "jupyter/basic": {
+      "store_bytes": 794202,
+      "attachment_bytes": 0,
+      "bundle_bytes": 193015,
+      "replay_bytes": 592249,
+      "peak_rss_bytes": 66768896,
+      "cpu_seconds": 0.956136,
+      "import_seconds": 0.1634199359999684,
+      "project_seconds": 0.03580441500002962,
+      "query_seconds": 0.028212939000013648,
+      "bundle_seconds": 0.037869627000077344,
+      "replay_seconds": 0.32695083600003727
+    },
+    "jupyter/detailed": {
+      "store_bytes": 945499,
+      "attachment_bytes": 1011,
+      "bundle_bytes": 385206,
+      "replay_bytes": 654891,
+      "peak_rss_bytes": 69124096,
+      "cpu_seconds": 1.694176,
+      "import_seconds": 0.19252023100000315,
+      "project_seconds": 0.035763784999971904,
+      "query_seconds": 0.027341428999989148,
+      "bundle_seconds": 0.04221518899998955,
+      "replay_seconds": 0.4370263439999462,
+      "excluded_replay_seconds": 0.4400553379999792
+    },
+    "jupyter/detailed-no-attachments": {
+      "store_bytes": 942883,
+      "attachment_bytes": 0,
+      "bundle_bytes": 382418,
+      "replay_bytes": 652869,
+      "peak_rss_bytes": 66637824,
+      "cpu_seconds": 1.168687,
+      "import_seconds": 0.18793225599995367,
+      "project_seconds": 0.03631308100000297,
+      "query_seconds": 0.02657768799997484,
+      "bundle_seconds": 0.04091694499993537,
+      "replay_seconds": 0.4398268549999784
+    }
+  },
+  "finished_at": "2026-11-16T18:30:59.694999+00:00"
+}

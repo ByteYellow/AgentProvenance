@@ -1,0 +1,1367 @@
+{
+  "schema_version": "agentprovenance.acceptance_summary/v1",
+  "status": "PASS",
+  "capture_source": {
+    "head": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+    "tree": "b6bffa380e3bc19df4fea668beb691f6fe874c47",
+    "dirty": false
+  },
+  "export_source": {
+    "head": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+    "tree": "12b9d1760f0ff445727efd518af80ef5f97e74d1",
+    "dirty": false
+  },
+  "capture_report": {
+    "file": "report.json",
+    "sha256": "8d21345996adcff682e6e345ff2a494f51541ca6960341160446bf1433c229b3"
+  },
+  "delivery_report": {
+    "file": "delivery.json",
+    "sha256": "a78e348ec962ac79265c1dd88dafb6b15b097f7d2a9c3393d9ad4d8b9934fe16"
+  },
+  "candidate_reader_report": {
+    "file": "report.json",
+    "sha256": "db2d6122a4f24f1f667f49fac18b584f270751d5f01adb2099d9b8c79f193380"
+  },
+  "source_stores_retired": true,
+  "platform": "Linux-6.8.0-149-generic-x86_64-with-glibc2.39",
+  "architecture": "x86_64",
+  "binary_sha256": "8be090fb6b322398083c1c1befde0ba85b835029c6941b6924208ffa79d66818",
+  "mcp_version": "2.3.0",
+  "cases": {
+    "contract": {
+      "status": "passed",
+      "run_id": "run-w01-445a3a164ae14723b82f90634cff96f5",
+      "checks": [
+        "read_edit_write_bash_same_bytes",
+        "record_snapshot",
+        "cas_conflict_reread",
+        "concurrent_cas",
+        "restart_query_no_replay",
+        "path_symlink_rejection",
+        "stale_generation",
+        "current_run_evidence",
+        "trusted_context"
+      ],
+      "record_attempts": 1,
+      "context_results": 14,
+      "target": {
+        "producer_id": "workspace-acceptance",
+        "instance_id": "agentprov-kvm-amd64",
+        "generation": "fixture-5f84766018ae487bb9f93445f0059493"
+      },
+      "sensor": {
+        "status": "passed",
+        "command": [
+          "/var/tmp/ap-v1-completion/candidate-d8a7b60/agentprov",
+          "--data-dir",
+          "/var/tmp/ap-v1-completion/workspace-final-d8a7b60/contract/operator/data",
+          "sensor",
+          "stream",
+          "--placement",
+          "local_kernel",
+          "--no-policy",
+          "--auto-tls=false",
+          "--apparmor-state=false",
+          "--seccomp-state=false",
+          "--ring-buffer-mib",
+          "4",
+          "--flush-interval",
+          "100ms",
+          "--pending-ttl",
+          "1ms",
+          "--max-queued-bytes",
+          "16777216",
+          "--max-queued-batches",
+          "128"
+        ],
+        "returncode": 0,
+        "drain": "collector_stopped_store_empty",
+        "evidence": {
+          "run_id": "run-w01-445a3a164ae14723b82f90634cff96f5",
+          "target": {
+            "producer_id": "workspace-acceptance",
+            "instance_id": "agentprov-kvm-amd64",
+            "generation": "fixture-5f84766018ae487bb9f93445f0059493"
+          },
+          "attempt_id": "attempt-bb0b84234927",
+          "tool_call_id": "tool-f6cff62cf04f",
+          "binding_id": "bind-68fe86537b00",
+          "cgroup_id": "64418",
+          "workspace_receipts": [
+            "sha256:443d6e34f41a39c12ac6bdee5e01b1068e3ffdd16e7cd235bc74e7cb8ef0a9bf"
+          ],
+          "association": "owned_record_cgroup",
+          "native_events": [
+            {
+              "id": "evt-2b27b9df7dcf",
+              "raw_event_id": "sensor-dc5a08b648f7:50",
+              "event_type": "execve",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64418",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-381fa9c84a2b",
+              "raw_event_id": "sensor-dc5a08b648f7:53",
+              "event_type": "syscall_result",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64418",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-4e2e752fa39c",
+              "raw_event_id": "sensor-dc5a08b648f7:54",
+              "event_type": "process_observed",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64418",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-53b1805d1a82",
+              "raw_event_id": "sensor-dc5a08b648f7:58",
+              "event_type": "process_exit",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64418",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-71ff084a01f6",
+              "raw_event_id": "sensor-dc5a08b648f7:49",
+              "event_type": "process_observed",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64418",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-90f06d847d74",
+              "raw_event_id": "sensor-dc5a08b648f7:55",
+              "event_type": "file_write",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64418",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-9753ca2c1cab",
+              "raw_event_id": "sensor-dc5a08b648f7:56",
+              "event_type": "syscall_result",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64418",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-e1bbdb0ac868",
+              "raw_event_id": "sensor-dc5a08b648f7:52",
+              "event_type": "file_open",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64418",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-e93eeeab3f04",
+              "raw_event_id": "sensor-dc5a08b648f7:57",
+              "event_type": "execve",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64418",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-e9e8d121fc3a",
+              "raw_event_id": "sensor-dc5a08b648f7:51",
+              "event_type": "file_write",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64418",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-fcd497e93f43",
+              "raw_event_id": "sensor-dc5a08b648f7:59",
+              "event_type": "process_exit",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64418",
+              "tool_call_id": ""
+            }
+          ]
+        },
+        "capabilities": {
+          "access_control_state": {
+            "apparmor_collection_enabled": false,
+            "cache_capacity": 2048,
+            "min_interval_ms": 2000,
+            "mode": "event_triggered_procfs_snapshot",
+            "queue_capacity": 128,
+            "seccomp_collection_enabled": false
+          },
+          "capture_buffers": {
+            "queue_bytes": 15073280,
+            "queue_events": 16384,
+            "ring_bytes": 4194304
+          },
+          "changed_at": "2026-11-16T18:03:06.541759611Z",
+          "collector_id": "sensor-5d1e5281e14d",
+          "probes": [
+            {
+              "category": "dns",
+              "name": "syscalls/sys_enter_sendto",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "dns",
+              "name": "getaddrinfo",
+              "required": false,
+              "status": "attached",
+              "target": "/lib/x86_64-linux-gnu/libc.so.6"
+            },
+            {
+              "category": "process_lifecycle",
+              "name": "sched/sched_process_fork",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "sched/sched_process_exec",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "sched/sched_process_exit",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_connect",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_execve",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_open",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_openat",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_ptrace",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_rename",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_renameat",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_renameat2",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_setgid",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_setuid",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_unlink",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_unlinkat",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_exit_connect",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_exit_open",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_exit_openat",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "tls",
+              "name": "container_tls_discovery",
+              "reason": "automatic discovery disabled",
+              "required": false,
+              "status": "disabled"
+            }
+          ],
+          "procfs_identity": {
+            "lookup_misses": 0,
+            "map_capacity": 16384,
+            "mode": "kernel_namespace_mapping",
+            "outside_namespace_events": 0,
+            "pid_namespace": "pid:[4026531836]",
+            "translated_events": 0
+          },
+          "producer": {
+            "architecture": "amd64",
+            "boot_id": "695e3798-9052-4b07-aa8c-27ad2ae32116",
+            "commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+            "kernel": "6.8.0-149-generic",
+            "name": "agentprov-sensor",
+            "os": "linux",
+            "placement": "local_kernel",
+            "placement_basis": "local_kernel_only",
+            "version": "v1.0.0-candidate"
+          },
+          "ready": true,
+          "revision": 3,
+          "schema_version": "agentprovenance.sensor_capabilities/v1",
+          "status": "ready",
+          "tls_discovery": {
+            "active_targets": 0,
+            "enabled": false,
+            "limitations": [
+              "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+              "first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
+              "amd64 Go 1.23–1.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported"
+            ],
+            "max_processes_per_scan": 4096,
+            "max_targets": 128,
+            "processes_scanned": 0,
+            "scan_complete": true,
+            "scan_interval_ms": 2000,
+            "skipped_targets": 0,
+            "sweep_passes": 0,
+            "truncated_maps": 0,
+            "unreadable_processes": 0,
+            "unresolved_mounts": 0,
+            "unsupported_executables": 0
+          },
+          "updated_at": "2026-11-16T18:03:06.541759611Z"
+        },
+        "final_capture": {
+          "counters": {
+            "captured": 99,
+            "excluded": 941,
+            "expired_uncorrelated": 88,
+            "ingested": 11,
+            "read": 1040
+          },
+          "queued_batches": 0,
+          "queued_bytes": 0,
+          "pending_events": 0,
+          "cleanup_pending_batches": 0
+        }
+      },
+      "delivery": {
+        "status": "PASS",
+        "bundle_sha256": "19b85eab7fa16fc20fbb80a97f335c5047082df2ca8eca0efec2b5c8013be3fc",
+        "attestation_sha256": "20b2c9a8a44ec6d20402fbba1cd79d325f040a15c9d4e83e74b56b28b99f6bb0",
+        "verification": {
+          "schema_version": "agentprovenance.verify/v1",
+          "run_id": "run-w01-445a3a164ae14723b82f90634cff96f5",
+          "status": "ok",
+          "issue_count": 0,
+          "error_count": 0,
+          "warning_count": 0,
+          "issues": null
+        },
+        "evidence": {
+          "object_refs": [
+            "sha256:3b1da2c7ac63116d38469b68943886c0a605ebcbf5813ba9ccf32a013eb46fd0",
+            "sha256:443d6e34f41a39c12ac6bdee5e01b1068e3ffdd16e7cd235bc74e7cb8ef0a9bf",
+            "sha256:538db8a70e29fd89247a7a31f06a6c2be6e276304b13c9929ad9ed71759fc928",
+            "sha256:53d117ab0a99063fac77eef938c72e946547207ebb320a8370c6a3cfa388aed2",
+            "sha256:5fdc8a9e1c4e68f980edc4a24e98ac744e5ded2ac3d8771c9f00022fc27a46f9",
+            "sha256:60dbebe4a68c9af5d24de13823af31cf7f32ded6f1e67c48addc2ab64e16b8b9",
+            "sha256:ac6d3e5f370a42f6c79b4b85d3916b95cc3a483e81292bb7d385748615c0867a",
+            "sha256:ad3ade64f1a44ede6242f90ff80a6def8963ab23f54fe68d2015e6fdb8366fe7",
+            "sha256:b00a21626011a70beaed57ee6d02f9713b7035eda94fb8b069ec6df9a0298379",
+            "sha256:b01c3218ec6a14563522ae48a3e43aedf1153677220f3aa180b7735086846d8d",
+            "sha256:cf71021102ed073dd32fc3e2abdce81bda95fe9b21be616f31db0a75e13460bc",
+            "sha256:eea124ecd9a8d603b6f9d9a200ed805bf2ef1ff0cf612edcda86920b3aec27f1"
+          ],
+          "record": {
+            "attempt_id": "attempt-bb0b84234927",
+            "base_snapshot_id": "snap-7ed3046f3759",
+            "rollout_id": "rollout-5f44de05cfc4",
+            "run_id": "run-w01-445a3a164ae14723b82f90634cff96f5"
+          },
+          "cgroup_id": "64418",
+          "input_manifest_ref": "sha256:eea124ecd9a8d603b6f9d9a200ed805bf2ef1ff0cf612edcda86920b3aec27f1",
+          "output_manifest_ref": "sha256:5fdc8a9e1c4e68f980edc4a24e98ac744e5ded2ac3d8771c9f00022fc27a46f9",
+          "input_revision": 3,
+          "output_revision": 4,
+          "association": "owned_record_cgroup",
+          "native_events": [
+            {
+              "id": "evt-2b27b9df7dcf",
+              "raw_event_id": "sensor-dc5a08b648f7:50",
+              "cgroup_id": "64418",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "execve"
+            },
+            {
+              "id": "evt-381fa9c84a2b",
+              "raw_event_id": "sensor-dc5a08b648f7:53",
+              "cgroup_id": "64418",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "syscall_result"
+            },
+            {
+              "id": "evt-4e2e752fa39c",
+              "raw_event_id": "sensor-dc5a08b648f7:54",
+              "cgroup_id": "64418",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_observed"
+            },
+            {
+              "id": "evt-53b1805d1a82",
+              "raw_event_id": "sensor-dc5a08b648f7:58",
+              "cgroup_id": "64418",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_exit"
+            },
+            {
+              "id": "evt-71ff084a01f6",
+              "raw_event_id": "sensor-dc5a08b648f7:49",
+              "cgroup_id": "64418",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_observed"
+            },
+            {
+              "id": "evt-90f06d847d74",
+              "raw_event_id": "sensor-dc5a08b648f7:55",
+              "cgroup_id": "64418",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "file_write"
+            },
+            {
+              "id": "evt-9753ca2c1cab",
+              "raw_event_id": "sensor-dc5a08b648f7:56",
+              "cgroup_id": "64418",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "syscall_result"
+            },
+            {
+              "id": "evt-e1bbdb0ac868",
+              "raw_event_id": "sensor-dc5a08b648f7:52",
+              "cgroup_id": "64418",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "file_open"
+            },
+            {
+              "id": "evt-e93eeeab3f04",
+              "raw_event_id": "sensor-dc5a08b648f7:57",
+              "cgroup_id": "64418",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "execve"
+            },
+            {
+              "id": "evt-e9e8d121fc3a",
+              "raw_event_id": "sensor-dc5a08b648f7:51",
+              "cgroup_id": "64418",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "file_write"
+            },
+            {
+              "id": "evt-fcd497e93f43",
+              "raw_event_id": "sensor-dc5a08b648f7:59",
+              "cgroup_id": "64418",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_exit"
+            }
+          ]
+        }
+      },
+      "candidate_reader": {
+        "schema_version": "agentprovenance.kata_reader_acceptance/v1",
+        "status": "PASS",
+        "run_id": "run-w01-445a3a164ae14723b82f90634cff96f5",
+        "binary_sha256": "d90703cc4b6171cd73a35cdee470db5b8a689be5b6aa5b19ec3cdb68b9b91dd2",
+        "verifier_sha256": "fa587cbfa23617325b91bed18aa86923b6cbb1557e5597b828da641fc8bcf5b7",
+        "checks": {
+          "trusted": {
+            "manifest_status": "present",
+            "file_integrity": "passed",
+            "derived_signature": {
+              "status": "valid",
+              "cryptographic": "passed",
+              "trusted": true,
+              "key_id": "aeed6897be963bf4",
+              "role": "exporter"
+            },
+            "source_signatures": [
+              {
+                "source_id": "frozen-source",
+                "status": "not_checked",
+                "cryptographic": "not_checked",
+                "trusted": false
+              }
+            ],
+            "derivation": "not_checked",
+            "declared_coverage": {
+              "state": "unknown",
+              "scope": "whole_run"
+            }
+          },
+          "unknown_key": {
+            "manifest_status": "present",
+            "file_integrity": "passed",
+            "derived_signature": {
+              "status": "unknown_key",
+              "cryptographic": "passed",
+              "trusted": false,
+              "key_id": "aeed6897be963bf4",
+              "role": "exporter",
+              "reason": "signer is not in the external trust policy"
+            },
+            "source_signatures": [
+              {
+                "source_id": "frozen-source",
+                "status": "not_checked",
+                "cryptographic": "not_checked",
+                "trusted": false
+              }
+            ],
+            "derivation": "not_checked",
+            "declared_coverage": {
+              "state": "unknown",
+              "scope": "whole_run"
+            }
+          },
+          "wrong_role": {
+            "manifest_status": "present",
+            "file_integrity": "passed",
+            "derived_signature": {
+              "status": "untrusted_role",
+              "cryptographic": "passed",
+              "trusted": false,
+              "key_id": "aeed6897be963bf4",
+              "role": "exporter",
+              "reason": "external policy does not authorize the exporter role"
+            },
+            "source_signatures": [
+              {
+                "source_id": "frozen-source",
+                "status": "not_checked",
+                "cryptographic": "not_checked",
+                "trusted": false
+              }
+            ],
+            "derivation": "not_checked",
+            "declared_coverage": {
+              "state": "unknown",
+              "scope": "whole_run"
+            }
+          },
+          "tampered": {
+            "manifest_status": "present",
+            "file_integrity": "failed",
+            "derived_signature": {
+              "status": "valid",
+              "cryptographic": "passed",
+              "trusted": true,
+              "key_id": "aeed6897be963bf4",
+              "role": "exporter"
+            },
+            "source_signatures": [
+              {
+                "source_id": "frozen-source",
+                "status": "not_checked",
+                "cryptographic": "not_checked",
+                "trusted": false
+              }
+            ],
+            "derivation": "not_checked",
+            "declared_coverage": {
+              "state": "unknown",
+              "scope": "whole_run"
+            },
+            "issues": [
+              {
+                "code": "length_mismatch",
+                "path": "en/index.html"
+              }
+            ]
+          }
+        },
+        "source": {
+          "head": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+          "dirty": false
+        },
+        "fixture_sha256": {
+          "reader.py": "11f850ef32f95b4777c9ff783c241d7eb3c44f2ac8edfb840dcfc6aba2b4d4f1",
+          "common.py": "8d050caa46b7b468326581625be49917ab07c7bd66d3dbd54cf5d91fc13d78c6"
+        },
+        "builds": {
+          "agentprov": "agentprov version v1.0.0-candidate (f3deb10b98c6f589f870f202d2dad251c1129d5c; 2026-11-17T00:34:29+00:00; linux/amd64)",
+          "verifier": "agentprov-verify v1.0.0-candidate (f3deb10b98c6f589f870f202d2dad251c1129d5c)"
+        },
+        "archive_sha256": "1fbac78490069b6e7732109b2685ec50414d580cf90180825e85b888011c03e1",
+        "policy_sha256": "498c734cfeaee100f85ae677451c413883a3a256e168002a8ebcca1cd9041d9c"
+      }
+    },
+    "harness": {
+      "status": "passed",
+      "run_id": "run-w01-840c8e5fb69b405fb8723aaa3b09f196",
+      "controlled_calls": [
+        {
+          "id": "call_00_ET_uGjidYHnRH6VSlzsqWoC3252",
+          "name": "mcp__agentprov_workspace__workspace_inspect"
+        },
+        {
+          "id": "call_00_ET_W4ionZzZ2XBoHMssMIuQ9720",
+          "name": "mcp__agentprov_workspace__workspace_read"
+        },
+        {
+          "id": "call_00_ET_QTSnAAuGiBoIG5hPxNxI1041",
+          "name": "mcp__agentprov_workspace__workspace_edit"
+        },
+        {
+          "id": "call_01_ET_005ZCokDICq1KDcIwJXR2276",
+          "name": "mcp__agentprov_workspace__workspace_write"
+        },
+        {
+          "id": "call_00_EH0TZbzqoFycDyAbsEMF8472",
+          "name": "mcp__agentprov_workspace__workspace_write"
+        },
+        {
+          "id": "call_00_ET_DmuTXvkpqXxrketwm77I1477",
+          "name": "mcp__agentprov_workspace__workspace_bash"
+        },
+        {
+          "id": "call_00_xuioM3IBFeZCWLsic5cr2853",
+          "name": "mcp__agentprov_workspace__workspace_read"
+        }
+      ],
+      "record_attempts": 1,
+      "context_results": 7,
+      "artifact_sha256": "31f345176bd06a508eff6bd45943f211eb9cbacd019c0683d038dc538e869027",
+      "target": {
+        "producer_id": "workspace-acceptance",
+        "instance_id": "agentprov-kvm-amd64",
+        "generation": "fixture-8ca9f43784e5417f89e015ee531ea127"
+      },
+      "sensor": {
+        "status": "passed",
+        "command": [
+          "/var/tmp/ap-v1-completion/candidate-d8a7b60/agentprov",
+          "--data-dir",
+          "/var/tmp/ap-v1-completion/workspace-final-d8a7b60/harness/operator/data",
+          "sensor",
+          "stream",
+          "--placement",
+          "local_kernel",
+          "--no-policy",
+          "--auto-tls=false",
+          "--apparmor-state=false",
+          "--seccomp-state=false",
+          "--ring-buffer-mib",
+          "4",
+          "--flush-interval",
+          "100ms",
+          "--pending-ttl",
+          "1ms",
+          "--max-queued-bytes",
+          "16777216",
+          "--max-queued-batches",
+          "128"
+        ],
+        "returncode": 0,
+        "drain": "collector_stopped_store_empty",
+        "evidence": {
+          "run_id": "run-w01-840c8e5fb69b405fb8723aaa3b09f196",
+          "target": {
+            "producer_id": "workspace-acceptance",
+            "instance_id": "agentprov-kvm-amd64",
+            "generation": "fixture-8ca9f43784e5417f89e015ee531ea127"
+          },
+          "attempt_id": "attempt-e615ddc18534",
+          "tool_call_id": "tool-936d9a7809ff",
+          "binding_id": "bind-55b1177d4dda",
+          "cgroup_id": "64485",
+          "workspace_receipts": [
+            "sha256:17532a5c1d0ae5b580577824e4273c5abcbc57b3f7cb5f1a22922c3e62476760"
+          ],
+          "association": "owned_record_cgroup",
+          "native_events": [
+            {
+              "id": "evt-1cbce1ad7fe5",
+              "raw_event_id": "sensor-8e8a2aece97a:361",
+              "event_type": "process_exit",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64485",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-1fb5f6bc0c73",
+              "raw_event_id": "sensor-8e8a2aece97a:359",
+              "event_type": "execve",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64485",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-5298211d08a9",
+              "raw_event_id": "sensor-8e8a2aece97a:354",
+              "event_type": "file_open",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64485",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-5c92780f252f",
+              "raw_event_id": "sensor-8e8a2aece97a:355",
+              "event_type": "syscall_result",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64485",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-6a51255286ff",
+              "raw_event_id": "sensor-8e8a2aece97a:353",
+              "event_type": "file_write",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64485",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-71db28a9ec64",
+              "raw_event_id": "sensor-8e8a2aece97a:357",
+              "event_type": "file_write",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64485",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-a91676198ad9",
+              "raw_event_id": "sensor-8e8a2aece97a:360",
+              "event_type": "process_exit",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64485",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-afe540620c4b",
+              "raw_event_id": "sensor-8e8a2aece97a:352",
+              "event_type": "execve",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64485",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-c155d339a30a",
+              "raw_event_id": "sensor-8e8a2aece97a:358",
+              "event_type": "syscall_result",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64485",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-c86e0dd22e6d",
+              "raw_event_id": "sensor-8e8a2aece97a:356",
+              "event_type": "process_observed",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64485",
+              "tool_call_id": ""
+            },
+            {
+              "id": "evt-defa98d6d159",
+              "raw_event_id": "sensor-8e8a2aece97a:351",
+              "event_type": "process_observed",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "cgroup_id": "64485",
+              "tool_call_id": ""
+            }
+          ]
+        },
+        "capabilities": {
+          "access_control_state": {
+            "apparmor_collection_enabled": false,
+            "cache_capacity": 2048,
+            "min_interval_ms": 2000,
+            "mode": "event_triggered_procfs_snapshot",
+            "queue_capacity": 128,
+            "seccomp_collection_enabled": false
+          },
+          "capture_buffers": {
+            "queue_bytes": 15073280,
+            "queue_events": 16384,
+            "ring_bytes": 4194304
+          },
+          "changed_at": "2026-11-16T18:03:11.664680968Z",
+          "collector_id": "sensor-79ce04877c7a",
+          "probes": [
+            {
+              "category": "dns",
+              "name": "syscalls/sys_enter_sendto",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "dns",
+              "name": "getaddrinfo",
+              "required": false,
+              "status": "attached",
+              "target": "/lib/x86_64-linux-gnu/libc.so.6"
+            },
+            {
+              "category": "process_lifecycle",
+              "name": "sched/sched_process_fork",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "sched/sched_process_exec",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "sched/sched_process_exit",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_connect",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_execve",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_open",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_openat",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_ptrace",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_rename",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_renameat",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_renameat2",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_setgid",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_setuid",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_unlink",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_enter_unlinkat",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_exit_connect",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_exit_open",
+              "required": false,
+              "status": "attached"
+            },
+            {
+              "category": "syscall",
+              "name": "syscalls/sys_exit_openat",
+              "required": true,
+              "status": "attached"
+            },
+            {
+              "category": "tls",
+              "name": "container_tls_discovery",
+              "reason": "automatic discovery disabled",
+              "required": false,
+              "status": "disabled"
+            }
+          ],
+          "procfs_identity": {
+            "lookup_misses": 0,
+            "map_capacity": 16384,
+            "mode": "kernel_namespace_mapping",
+            "outside_namespace_events": 0,
+            "pid_namespace": "pid:[4026531836]",
+            "translated_events": 0
+          },
+          "producer": {
+            "architecture": "amd64",
+            "boot_id": "695e3798-9052-4b07-aa8c-27ad2ae32116",
+            "commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+            "kernel": "6.8.0-149-generic",
+            "name": "agentprov-sensor",
+            "os": "linux",
+            "placement": "local_kernel",
+            "placement_basis": "local_kernel_only",
+            "version": "v1.0.0-candidate"
+          },
+          "ready": true,
+          "revision": 3,
+          "schema_version": "agentprovenance.sensor_capabilities/v1",
+          "status": "ready",
+          "tls_discovery": {
+            "active_targets": 0,
+            "enabled": false,
+            "limitations": [
+              "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+              "first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
+              "amd64 Go 1.23–1.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported"
+            ],
+            "max_processes_per_scan": 4096,
+            "max_targets": 128,
+            "processes_scanned": 0,
+            "scan_complete": true,
+            "scan_interval_ms": 2000,
+            "skipped_targets": 0,
+            "sweep_passes": 0,
+            "truncated_maps": 0,
+            "unreadable_processes": 0,
+            "unresolved_mounts": 0,
+            "unsupported_executables": 0
+          },
+          "updated_at": "2026-11-16T18:03:11.664680968Z"
+        },
+        "final_capture": {
+          "counters": {
+            "captured": 371,
+            "excluded": 929,
+            "expired_uncorrelated": 360,
+            "ingested": 11,
+            "read": 1300
+          },
+          "queued_batches": 0,
+          "queued_bytes": 0,
+          "pending_events": 0,
+          "cleanup_pending_batches": 0
+        }
+      },
+      "delivery": {
+        "status": "PASS",
+        "bundle_sha256": "859696ac008199ded3d0f478b1381c203f7f3efab3fa87a70c44f0c755d0526b",
+        "attestation_sha256": "c0ce90379095168b5a9c314595984b99871f85a8c74a547f597b214af3a63a06",
+        "verification": {
+          "schema_version": "agentprovenance.verify/v1",
+          "run_id": "run-w01-840c8e5fb69b405fb8723aaa3b09f196",
+          "status": "ok",
+          "issue_count": 0,
+          "error_count": 0,
+          "warning_count": 0,
+          "issues": null
+        },
+        "evidence": {
+          "object_refs": [
+            "sha256:17532a5c1d0ae5b580577824e4273c5abcbc57b3f7cb5f1a22922c3e62476760",
+            "sha256:399dd8dfd90d3ac8cfa7b643e80b7ab02aa5614d3406b845ffb5f59f8e810c01",
+            "sha256:6cb39a9ad3379b9f2365f5dedc5b8eb15eadf26e2e264d8e62c63f7e6078ee64",
+            "sha256:893ae748caac167a6c1978f4a991053142f3dce46469d178958c23e168b6a145",
+            "sha256:912a057a79a379d726220a8b3f701bbdfb4b40b49fd62716bd1a0de16e7639d1",
+            "sha256:b53a39629620c61f068edf5a93e153fcb4e36edfeb330fefd874cd88d451303f",
+            "sha256:bb605996e2d7e1698bfee845c9aa0d223b331cdf39d6c93b3baeeb6dedafba9d",
+            "sha256:c0bc309f0f0a674123157ffaf6accd1eddd060f60c8ff5502d00e2495a728a1c",
+            "sha256:d347ebe79911954e999462d8a19b8fa95fc58ac4a91dc0743b321ce1fe7c5bd7",
+            "sha256:d536d4f2c0dd016c4cbd48c3286533517a1b51c548304fac49eae2c8d66bf0e8"
+          ],
+          "record": {
+            "attempt_id": "attempt-e615ddc18534",
+            "base_snapshot_id": "snap-5f1eaa17668d",
+            "rollout_id": "rollout-f5421a32e650",
+            "run_id": "run-w01-840c8e5fb69b405fb8723aaa3b09f196"
+          },
+          "cgroup_id": "64485",
+          "input_manifest_ref": "sha256:399dd8dfd90d3ac8cfa7b643e80b7ab02aa5614d3406b845ffb5f59f8e810c01",
+          "output_manifest_ref": "sha256:b53a39629620c61f068edf5a93e153fcb4e36edfeb330fefd874cd88d451303f",
+          "input_revision": 3,
+          "output_revision": 4,
+          "association": "owned_record_cgroup",
+          "native_events": [
+            {
+              "id": "evt-1cbce1ad7fe5",
+              "raw_event_id": "sensor-8e8a2aece97a:361",
+              "cgroup_id": "64485",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_exit"
+            },
+            {
+              "id": "evt-1fb5f6bc0c73",
+              "raw_event_id": "sensor-8e8a2aece97a:359",
+              "cgroup_id": "64485",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "execve"
+            },
+            {
+              "id": "evt-5298211d08a9",
+              "raw_event_id": "sensor-8e8a2aece97a:354",
+              "cgroup_id": "64485",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "file_open"
+            },
+            {
+              "id": "evt-5c92780f252f",
+              "raw_event_id": "sensor-8e8a2aece97a:355",
+              "cgroup_id": "64485",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "syscall_result"
+            },
+            {
+              "id": "evt-6a51255286ff",
+              "raw_event_id": "sensor-8e8a2aece97a:353",
+              "cgroup_id": "64485",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "file_write"
+            },
+            {
+              "id": "evt-71db28a9ec64",
+              "raw_event_id": "sensor-8e8a2aece97a:357",
+              "cgroup_id": "64485",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "file_write"
+            },
+            {
+              "id": "evt-a91676198ad9",
+              "raw_event_id": "sensor-8e8a2aece97a:360",
+              "cgroup_id": "64485",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_exit"
+            },
+            {
+              "id": "evt-afe540620c4b",
+              "raw_event_id": "sensor-8e8a2aece97a:352",
+              "cgroup_id": "64485",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "execve"
+            },
+            {
+              "id": "evt-c155d339a30a",
+              "raw_event_id": "sensor-8e8a2aece97a:358",
+              "cgroup_id": "64485",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "syscall_result"
+            },
+            {
+              "id": "evt-c86e0dd22e6d",
+              "raw_event_id": "sensor-8e8a2aece97a:356",
+              "cgroup_id": "64485",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_observed"
+            },
+            {
+              "id": "evt-defa98d6d159",
+              "raw_event_id": "sensor-8e8a2aece97a:351",
+              "cgroup_id": "64485",
+              "correlation_method": "kernel_process_instance:host+boot+pid+start",
+              "tool_call_id": "",
+              "event_type": "process_observed"
+            }
+          ]
+        }
+      },
+      "candidate_reader": {
+        "schema_version": "agentprovenance.kata_reader_acceptance/v1",
+        "status": "PASS",
+        "run_id": "run-w01-840c8e5fb69b405fb8723aaa3b09f196",
+        "binary_sha256": "d90703cc4b6171cd73a35cdee470db5b8a689be5b6aa5b19ec3cdb68b9b91dd2",
+        "verifier_sha256": "fa587cbfa23617325b91bed18aa86923b6cbb1557e5597b828da641fc8bcf5b7",
+        "checks": {
+          "trusted": {
+            "manifest_status": "present",
+            "file_integrity": "passed",
+            "derived_signature": {
+              "status": "valid",
+              "cryptographic": "passed",
+              "trusted": true,
+              "key_id": "f6fb66e3a0a0749e",
+              "role": "exporter"
+            },
+            "source_signatures": [
+              {
+                "source_id": "frozen-source",
+                "status": "not_checked",
+                "cryptographic": "not_checked",
+                "trusted": false
+              }
+            ],
+            "derivation": "not_checked",
+            "declared_coverage": {
+              "state": "unknown",
+              "scope": "whole_run"
+            }
+          },
+          "unknown_key": {
+            "manifest_status": "present",
+            "file_integrity": "passed",
+            "derived_signature": {
+              "status": "unknown_key",
+              "cryptographic": "passed",
+              "trusted": false,
+              "key_id": "f6fb66e3a0a0749e",
+              "role": "exporter",
+              "reason": "signer is not in the external trust policy"
+            },
+            "source_signatures": [
+              {
+                "source_id": "frozen-source",
+                "status": "not_checked",
+                "cryptographic": "not_checked",
+                "trusted": false
+              }
+            ],
+            "derivation": "not_checked",
+            "declared_coverage": {
+              "state": "unknown",
+              "scope": "whole_run"
+            }
+          },
+          "wrong_role": {
+            "manifest_status": "present",
+            "file_integrity": "passed",
+            "derived_signature": {
+              "status": "untrusted_role",
+              "cryptographic": "passed",
+              "trusted": false,
+              "key_id": "f6fb66e3a0a0749e",
+              "role": "exporter",
+              "reason": "external policy does not authorize the exporter role"
+            },
+            "source_signatures": [
+              {
+                "source_id": "frozen-source",
+                "status": "not_checked",
+                "cryptographic": "not_checked",
+                "trusted": false
+              }
+            ],
+            "derivation": "not_checked",
+            "declared_coverage": {
+              "state": "unknown",
+              "scope": "whole_run"
+            }
+          },
+          "tampered": {
+            "manifest_status": "present",
+            "file_integrity": "failed",
+            "derived_signature": {
+              "status": "valid",
+              "cryptographic": "passed",
+              "trusted": true,
+              "key_id": "f6fb66e3a0a0749e",
+              "role": "exporter"
+            },
+            "source_signatures": [
+              {
+                "source_id": "frozen-source",
+                "status": "not_checked",
+                "cryptographic": "not_checked",
+                "trusted": false
+              }
+            ],
+            "derivation": "not_checked",
+            "declared_coverage": {
+              "state": "unknown",
+              "scope": "whole_run"
+            },
+            "issues": [
+              {
+                "code": "length_mismatch",
+                "path": "en/index.html"
+              }
+            ]
+          }
+        },
+        "source": {
+          "head": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+          "dirty": false
+        },
+        "fixture_sha256": {
+          "reader.py": "11f850ef32f95b4777c9ff783c241d7eb3c44f2ac8edfb840dcfc6aba2b4d4f1",
+          "common.py": "8d050caa46b7b468326581625be49917ab07c7bd66d3dbd54cf5d91fc13d78c6"
+        },
+        "builds": {
+          "agentprov": "agentprov version v1.0.0-candidate (f3deb10b98c6f589f870f202d2dad251c1129d5c; 2026-11-17T00:34:29+00:00; linux/amd64)",
+          "verifier": "agentprov-verify v1.0.0-candidate (f3deb10b98c6f589f870f202d2dad251c1129d5c)"
+        },
+        "archive_sha256": "b4a58ec4a370989dc0987cb96ae59c23ac095d70692dd9cdab32904e3c4e4787",
+        "policy_sha256": "d3a6e882b27e0fc18053911da956c201c7a6496a37ecab97eab255305a92e5c4"
+      }
+    }
+  },
+  "offline_contract_and_selection": {
+    "original_log": {
+      "file": "workspace-offline-f3deb10.log",
+      "sha256": "12c717154de7a46122942d97117a4f6ab1e6738bd9c9d7637d018ee0fb21e552"
+    },
+    "offlineReplayPassed": true,
+    "reports": [
+      {
+        "run": "run-w01-445a3a164ae14723b82f90634cff96f5",
+        "files": 262,
+        "shards": 237,
+        "queries": 134,
+        "views": 36,
+        "sessions": 1,
+        "contextBodies": 28,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "derived",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "run-w01-445a3a164ae14723b82f90634cff96f5"
+        ],
+        "captureObservations": 33,
+        "executionLinks": 0,
+        "auditDecisions": 0
+      },
+      {
+        "run": "run-w01-445a3a164ae14723b82f90634cff96f5",
+        "files": 275,
+        "shards": 250,
+        "queries": 132,
+        "views": 36,
+        "sessions": 1,
+        "contextBodies": 27,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "reading",
+        "signed": false,
+        "scope": "whole_run",
+        "runs": [
+          "run-w01-445a3a164ae14723b82f90634cff96f5"
+        ],
+        "captureObservations": 32,
+        "executionLinks": 0,
+        "auditDecisions": 0
+      }
+    ]
+  },
+  "offline_harness": {
+    "original_log": {
+      "file": "workspace-harness-offline-f3deb10.log",
+      "sha256": "57fe3be97857c18af6883d6df33ae6f5200ff01054a5ee87a7b2c397399fe75c"
+    },
+    "offlineReplayPassed": true,
+    "reports": [
+      {
+        "run": "run-w01-840c8e5fb69b405fb8723aaa3b09f196",
+        "files": 220,
+        "shards": 195,
+        "queries": 109,
+        "views": 36,
+        "sessions": 1,
+        "contextBodies": 14,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "derived",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "run-w01-840c8e5fb69b405fb8723aaa3b09f196"
+        ],
+        "captureObservations": 22,
+        "executionLinks": 0,
+        "auditDecisions": 0
+      }
+    ]
+  }
+}

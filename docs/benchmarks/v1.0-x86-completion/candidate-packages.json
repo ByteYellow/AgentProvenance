@@ -1,0 +1,325 @@
+{
+  "schema_version": "agentprovenance.acceptance_summary/v1",
+  "source": {
+    "head": "e82f1a37aaa2896d59afec10aa2fce28e1dbba74",
+    "tree": "a87fdb1e323b2fc1596e76c0be31d359e5ade01a",
+    "dirty": false
+  },
+  "status": "PASS",
+  "packages": [
+    {
+      "file": "agentprov_v1.0.0-candidate_darwin_amd64.tar.gz",
+      "sha256": "2f5303bcbefb8e833952069d2423577b885e209a5a1764fc202c681c0969414e",
+      "bytes": 69134054,
+      "build_info": {
+        "version": "v1.0.0-candidate",
+        "commit": "e82f1a37aaa2896d59afec10aa2fce28e1dbba74",
+        "build_date": "2026-11-17T01:06:09+00:00",
+        "go": "go version go1.26.4 linux/amd64",
+        "os": "darwin",
+        "arch": "amd64",
+        "cgo_enabled": false,
+        "programs": [
+          "agentprov",
+          "agentprov-verify"
+        ],
+        "program_sha256": {
+          "agentprov": "0b77628f65bfba08223556ccb089dce2e65fe32b189214a389cfac9e7594cef4",
+          "agentprov-verify": "5376045b6f6b3ced773fc49d7473175ea03a3e620d1716eeae45d05f153a9dea"
+        }
+      }
+    },
+    {
+      "file": "agentprov_v1.0.0-candidate_darwin_arm64.tar.gz",
+      "sha256": "0a0b136b4d67cbb2cb604ab29baf93768005b1ca599303aa584ead9b93942e3c",
+      "bytes": 67741767,
+      "build_info": {
+        "version": "v1.0.0-candidate",
+        "commit": "e82f1a37aaa2896d59afec10aa2fce28e1dbba74",
+        "build_date": "2026-11-17T01:06:09+00:00",
+        "go": "go version go1.26.4 linux/amd64",
+        "os": "darwin",
+        "arch": "arm64",
+        "cgo_enabled": false,
+        "programs": [
+          "agentprov",
+          "agentprov-verify"
+        ],
+        "program_sha256": {
+          "agentprov": "f71e4f8f6fb6b463b1c75c3d3ef189077e07c8f11e3f00afdf45ce91f8fbe213",
+          "agentprov-verify": "34e962c88f22b108f4f928d4a9d04e93d60f323262f9e4fb15d6bda7a695d876"
+        }
+      }
+    },
+    {
+      "file": "agentprov_v1.0.0-candidate_linux_amd64.tar.gz",
+      "sha256": "29f5d326dafb5a27d1f17f8fec567d34dc56860e516563d96490f3841464c24e",
+      "bytes": 72525039,
+      "build_info": {
+        "version": "v1.0.0-candidate",
+        "commit": "e82f1a37aaa2896d59afec10aa2fce28e1dbba74",
+        "build_date": "2026-11-17T01:06:09+00:00",
+        "go": "go version go1.26.4 linux/amd64",
+        "os": "linux",
+        "arch": "amd64",
+        "cgo_enabled": false,
+        "programs": [
+          "agentprov",
+          "agentprov-verify",
+          "agentprov-sensor"
+        ],
+        "program_sha256": {
+          "agentprov": "4b34ca0df40e432c30a8206c9f1657befcbfc32f6b9424ace21515c8cd2316d8",
+          "agentprov-verify": "21355c3409257624f55a1a354d13f9cc163ad2d26c86049b979f9ee6871f2947",
+          "agentprov-sensor": "8fb704bc6ce8cd20a81daee665b313c2aa872b2f2837c209d000be8eab3d11d1"
+        }
+      }
+    },
+    {
+      "file": "agentprov_v1.0.0-candidate_linux_arm64.tar.gz",
+      "sha256": "c0528dc3ebcb12a2555aa175aaddbb01a0f6900d8fba2c5d0072f34afc4a38c6",
+      "bytes": 69955472,
+      "build_info": {
+        "version": "v1.0.0-candidate",
+        "commit": "e82f1a37aaa2896d59afec10aa2fce28e1dbba74",
+        "build_date": "2026-11-17T01:06:09+00:00",
+        "go": "go version go1.26.4 linux/amd64",
+        "os": "linux",
+        "arch": "arm64",
+        "cgo_enabled": false,
+        "programs": [
+          "agentprov",
+          "agentprov-verify",
+          "agentprov-sensor"
+        ],
+        "program_sha256": {
+          "agentprov": "bbd91e45ba8c2ed2227c8626da87db176ae5011287ea9284123c53464401430f",
+          "agentprov-verify": "a29b54fb0d3850ab85e0faba1df7e0949079d134f168cf4f0c111e04506789e3",
+          "agentprov-sensor": "5f7205e274564c45b7bc90fb0d111711986eab845813d2511b56f1d2ca17bac5"
+        }
+      }
+    }
+  ],
+  "linux_amd64_package_acceptance": {
+    "archive": "agentprov_v1.0.0-candidate_linux_amd64.tar.gz",
+    "platform": "linux/amd64",
+    "signed_replays": 12,
+    "guides": 14,
+    "user_guides": 20,
+    "guide_languages": [
+      "en",
+      "zh-CN"
+    ],
+    "recorded_context": "passed",
+    "standalone_verifier": "passed",
+    "verifier_unknown_key_exit": 2,
+    "no_go_required": true,
+    "cleanup": "passed"
+  },
+  "package_acceptance_log": {
+    "file": "release-v4-no-go-r2.log",
+    "sha256": "5f723404631b014dfa4b4352ec3a1353d7a3957c59fcf58098c47e89c861ffd1"
+  },
+  "derived_verifier_acceptance": {
+    "schema_version": "agentprovenance.derived_acceptance/v1",
+    "passed": true,
+    "binaries": {
+      "agentprov": "4b34ca0df40e432c30a8206c9f1657befcbfc32f6b9424ace21515c8cd2316d8",
+      "agentprov_verify": "21355c3409257624f55a1a354d13f9cc163ad2d26c86049b979f9ee6871f2947"
+    },
+    "checks": [
+      {
+        "name": "keygen",
+        "exit_code": 0,
+        "expected_exit_code": 0
+      },
+      {
+        "name": "record",
+        "exit_code": 0,
+        "expected_exit_code": 0
+      },
+      {
+        "name": "export-signed",
+        "exit_code": 0,
+        "expected_exit_code": 0
+      },
+      {
+        "name": "export-unsigned",
+        "exit_code": 0,
+        "expected_exit_code": 0
+      },
+      {
+        "name": "trusted",
+        "exit_code": 0,
+        "expected_exit_code": 0
+      },
+      {
+        "name": "unknown-key",
+        "exit_code": 2,
+        "expected_exit_code": 2
+      },
+      {
+        "name": "unsigned",
+        "exit_code": 2,
+        "expected_exit_code": 2
+      },
+      {
+        "name": "wrong-role",
+        "exit_code": 2,
+        "expected_exit_code": 2
+      },
+      {
+        "name": "directory",
+        "exit_code": 0,
+        "expected_exit_code": 0
+      },
+      {
+        "name": "tampered",
+        "exit_code": 1,
+        "expected_exit_code": 1
+      },
+      {
+        "name": "extra-policy",
+        "exit_code": 1,
+        "expected_exit_code": 1
+      },
+      {
+        "name": "restored",
+        "exit_code": 0,
+        "expected_exit_code": 0
+      },
+      {
+        "name": "producer-keygen",
+        "exit_code": 0,
+        "expected_exit_code": 0
+      },
+      {
+        "name": "original-bundle",
+        "exit_code": 0,
+        "expected_exit_code": 0
+      },
+      {
+        "name": "originals-require-confirmation",
+        "exit_code": 1,
+        "expected_exit_code": 1
+      },
+      {
+        "name": "originals-reject-exclusion",
+        "exit_code": 1,
+        "expected_exit_code": 1
+      },
+      {
+        "name": "export-originals",
+        "exit_code": 0,
+        "expected_exit_code": 0
+      },
+      {
+        "name": "originals-trusted",
+        "exit_code": 0,
+        "expected_exit_code": 0
+      },
+      {
+        "name": "originals-unknown-producer",
+        "exit_code": 2,
+        "expected_exit_code": 2
+      },
+      {
+        "name": "original-valid-reader-tampered",
+        "exit_code": 1,
+        "expected_exit_code": 1
+      },
+      {
+        "name": "complete-restored",
+        "exit_code": 0,
+        "expected_exit_code": 0
+      }
+    ],
+    "artifacts": {
+      "signed.zip": "f4e4657c27414eb09776f45ba6db0fb6bdf9b362c246e9ca552a3ea3b654e10e",
+      "unsigned.zip": "c70afee77f6a32ff14b86ec58feb959b865ef11a480ec8efce0d5ffa98824be0",
+      "originals.zip": "641e0010f53d9617cd46d4cb5156fd4c48743ff8f7c381257b4f562e10838030",
+      "recipient-trust.json": "1d882a23c542dae1a53aab731a5f38bd49b17a89141a93585f6f89b440c916a4",
+      "complete-trust.json": "612e7ac78445239f7a7b78be9c7c6692b77bb5f75b9081ccdb54b59113157519"
+    },
+    "reader": "reader/en/index.html"
+  },
+  "derived_verifier_report": {
+    "file": "result.json",
+    "sha256": "1340f5e025e938c9fb074449896c401fb40e40ace43b806ada6985793bf1a03f"
+  },
+  "offline_delivery_modes": {
+    "original_log": {
+      "file": "derived-offline-final-v4.log",
+      "sha256": "04574200965ca8f6e9bd020dccc0413002b5244ec3df3ff811722eb89d65e781"
+    },
+    "offlineReplayPassed": true,
+    "reports": [
+      {
+        "run": "reader-acceptance",
+        "files": 99,
+        "shards": 74,
+        "queries": 72,
+        "views": 36,
+        "sessions": 0,
+        "contextBodies": 0,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "derived",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "reader-acceptance"
+        ],
+        "captureObservations": 2,
+        "executionLinks": 0,
+        "auditDecisions": 0
+      },
+      {
+        "run": "reader-acceptance",
+        "files": 99,
+        "shards": 74,
+        "queries": 72,
+        "views": 36,
+        "sessions": 0,
+        "contextBodies": 0,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "reading",
+        "signed": false,
+        "scope": "whole_run",
+        "runs": [
+          "reader-acceptance"
+        ],
+        "captureObservations": 2,
+        "executionLinks": 0,
+        "auditDecisions": 0
+      },
+      {
+        "run": "reader-acceptance",
+        "files": 101,
+        "shards": 74,
+        "queries": 72,
+        "views": 36,
+        "sessions": 0,
+        "contextBodies": 0,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "originals",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "reader-acceptance"
+        ],
+        "captureObservations": 2,
+        "executionLinks": 0,
+        "auditDecisions": 0
+      }
+    ]
+  },
+  "platform_validation": {
+    "linux_amd64": "executed",
+    "linux_arm64": "cross-built; existing runtime evidence reused",
+    "darwin_amd64": "cross-built",
+    "darwin_arm64": "cross-built; existing macOS evidence reused"
+  }
+}

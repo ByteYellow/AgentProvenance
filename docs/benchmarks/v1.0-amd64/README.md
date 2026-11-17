@@ -14,7 +14,7 @@ and the verified tree hash; the archive retains its original build identity.
 
 The later [x86 completion evidence](../v1.0-x86-completion/README.md) records
 Workspace/Browser native capture and delivery, controlled runsc launch, and the
-remaining Kata startup work with separate source and result identities.
+completed Kata/QEMU R-03 checks, with separate source and result identities.
 
 ## Correctness changes
 

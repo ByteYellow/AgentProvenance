@@ -1,0 +1,147 @@
+{
+  "schema_version": "agentprovenance.frozen_budget_comparison/v1",
+  "kind": "sensor",
+  "passed": true,
+  "environment_comparison": {
+    "exact_match": false,
+    "rule": "linux_boot_memory_at_most_one_4k_page",
+    "field": "memory_kib",
+    "baseline": 4009140,
+    "candidate": 4009144,
+    "difference_bytes": 4096,
+    "maximum_difference_bytes": 4096,
+    "other_environment_fields_equal": true
+  },
+  "metric_limits_changed": false,
+  "checks": [
+    {
+      "case": "off/burst",
+      "metric": "workload_seconds",
+      "actual": 0.03321412699995108,
+      "maximum": 0.06089625000005981,
+      "passed": true
+    },
+    {
+      "case": "minimal/burst",
+      "metric": "workload_seconds",
+      "actual": 0.08002097000002095,
+      "maximum": 0.12830727999973532,
+      "passed": true
+    },
+    {
+      "case": "minimal/burst",
+      "metric": "sensor_cpu_seconds",
+      "actual": 2.5790539999999913,
+      "maximum": 4.585363749999999,
+      "passed": true
+    },
+    {
+      "case": "minimal/burst",
+      "metric": "peak_rss_kib",
+      "actual": 249712,
+      "maximum": 313425.0,
+      "passed": true
+    },
+    {
+      "case": "minimal/burst",
+      "metric": "fixture_output_bytes",
+      "actual": 91040326,
+      "maximum": 116100862.5,
+      "passed": true
+    },
+    {
+      "case": "default/burst",
+      "metric": "workload_seconds",
+      "actual": 0.0884234370000172,
+      "maximum": 0.12457753750017674,
+      "passed": true
+    },
+    {
+      "case": "default/burst",
+      "metric": "sensor_cpu_seconds",
+      "actual": 3.344043000000001,
+      "maximum": 5.405112500000004,
+      "passed": true
+    },
+    {
+      "case": "default/burst",
+      "metric": "peak_rss_kib",
+      "actual": 279432,
+      "maximum": 332055.0,
+      "passed": true
+    },
+    {
+      "case": "default/burst",
+      "metric": "fixture_output_bytes",
+      "actual": 91040651,
+      "maximum": 116100933.75,
+      "passed": true
+    },
+    {
+      "case": "off/paced",
+      "metric": "workload_seconds",
+      "actual": 16.302532343000053,
+      "maximum": 20.439010656249838,
+      "passed": true
+    },
+    {
+      "case": "minimal/paced",
+      "metric": "workload_seconds",
+      "actual": 16.830134369999996,
+      "maximum": 21.069771328750353,
+      "passed": true
+    },
+    {
+      "case": "minimal/paced",
+      "metric": "sensor_cpu_seconds",
+      "actual": 8.199068999999998,
+      "maximum": 13.390326250000006,
+      "passed": true
+    },
+    {
+      "case": "minimal/paced",
+      "metric": "peak_rss_kib",
+      "actual": 250744,
+      "maximum": 313270.0,
+      "passed": true
+    },
+    {
+      "case": "minimal/paced",
+      "metric": "fixture_output_bytes",
+      "actual": 364189948,
+      "maximum": 464441062.5,
+      "passed": true
+    },
+    {
+      "case": "default/paced",
+      "metric": "workload_seconds",
+      "actual": 16.79674528999999,
+      "maximum": 21.054238262499798,
+      "passed": true
+    },
+    {
+      "case": "default/paced",
+      "metric": "sensor_cpu_seconds",
+      "actual": 9.497300000000001,
+      "maximum": 14.574437500000009,
+      "passed": true
+    },
+    {
+      "case": "default/paced",
+      "metric": "peak_rss_kib",
+      "actual": 261284,
+      "maximum": 336515.0,
+      "passed": true
+    },
+    {
+      "case": "default/paced",
+      "metric": "fixture_output_bytes",
+      "actual": 364190715,
+      "maximum": 464440010.0,
+      "passed": true
+    }
+  ],
+  "report_sha256": "3526b358fd1ab7e90dc742c5c13ef6151c7d7c6d9ec757bda76f8f1d20aeccbd",
+  "budget_sha256": "55ea21d937a389aef76088a81fa974d45939c764127746e301f971a4a1e392c2",
+  "comparison_script_sha256": "82306f25d6c78f30b4dab19d96c970bc97f6e16210c1dbe41cf964496297f48c"
+}

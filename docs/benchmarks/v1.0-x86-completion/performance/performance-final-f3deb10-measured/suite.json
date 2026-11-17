@@ -1,0 +1,57 @@
+{
+  "status": "PASS",
+  "source_sha": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+  "fixture_sha": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+  "source_dirty": false,
+  "started_at": "2026-11-17T00:38:03.373571+00:00",
+  "service_states_before": {
+    "k3s.service": "active",
+    "docker.service": "active",
+    "docker.socket": "active",
+    "agentprov-sensor.service": "active"
+  },
+  "budget_sha256": {
+    "sensor": "55ea21d937a389aef76088a81fa974d45939c764127746e301f971a4a1e392c2",
+    "telemetry": "b9e50695460af29cf01b65acbc11232f377de3faed9efde1be6828f7bb76512a",
+    "context": "ae0a8edc7c4b80e300b8ce95abbca05ed791a0db1a9b9acdc44712a46b28970e"
+  },
+  "program_sha256": {
+    "agentprov": "d90703cc4b6171cd73a35cdee470db5b8a689be5b6aa5b19ec3cdb68b9b91dd2",
+    "agentprov-sensor": "c8038d3ebce493c6cea1e1fc7bb1c744ace8437baec11b9953adcb21629b98ec",
+    "agentprov-verify": "fa587cbfa23617325b91bed18aa86923b6cbb1557e5597b828da641fc8bcf5b7"
+  },
+  "results": [
+    {
+      "name": "context",
+      "command": [
+        "python3",
+        "/var/tmp/ap-v1-completion/final-candidate-f3deb10/scripts/accept_context_cost.py",
+        "run",
+        "--agentprov",
+        "/var/tmp/ap-v1-completion/candidate-f3deb10/agentprov",
+        "--browser-input",
+        "/var/tmp/apv1/cost-inputs/browser/first.jsonl",
+        "--browser-input",
+        "/var/tmp/apv1/cost-inputs/browser/second.jsonl",
+        "--notebook-input",
+        "/var/tmp/apv1/cost-inputs/notebook/first.jsonl",
+        "--notebook-input",
+        "/var/tmp/apv1/cost-inputs/notebook/restarted.jsonl",
+        "--source-commit",
+        "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+        "--output",
+        "/var/tmp/ap-v1-completion/performance-final-f3deb10-measured/context-candidate"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 61.75988162200008
+    }
+  ],
+  "service_states_after": {
+    "k3s.service": "active",
+    "docker.service": "active",
+    "docker.socket": "active",
+    "agentprov-sensor.service": "active"
+  },
+  "finished_at": "2026-11-17T00:39:15.489972+00:00",
+  "budgets_unchanged": true
+}

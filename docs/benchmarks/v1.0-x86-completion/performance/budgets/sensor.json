@@ -1,0 +1,142 @@
+{
+  "schema_version": "agentprovenance.sensor_overhead_budget/v1",
+  "frozen_at": "2026-11-15T18:56:10.297614+00:00",
+  "baseline_run_id": "10285d2370cd4472bd8ee346f07e0f45",
+  "baseline_sensor_sha256": "9c6b997c5c2dcc8f964cd18d494b131a6ab9f627309e75455ffabbf4e845f8ad",
+  "identity": {
+    "environment": {
+      "hostname": "agentprov-kvm-amd64",
+      "system": "Linux",
+      "architecture": "x86_64",
+      "kernel": "6.8.0-149-generic",
+      "cpu_count": 4,
+      "memory_kib": 4009140,
+      "python": "3.12.3"
+    },
+    "workloads": {
+      "burst": [
+        10000,
+        0
+      ],
+      "paced": [
+        40000,
+        10000
+      ]
+    },
+    "profiles": {
+      "off": null,
+      "minimal": [
+        "--auto-tls=false",
+        "--apparmor-state=false",
+        "--seccomp-state=false"
+      ],
+      "default": [
+        "--auto-tls=true",
+        "--apparmor-state=true",
+        "--seccomp-state=true"
+      ]
+    },
+    "repeats": 3,
+    "measurement_sha256": {
+      "accept_sensor_overhead.py": "f5f3d92d43060aa22e1659e3e701c016de3b4c3d5ccea79ab343f5289b037e25",
+      "accept_sensor_pressure.py": "7a8b1fc1952fbb34df86c338435b91a823519b5e7153fdaddc66f59318a43d60"
+    },
+    "fixture_source_sha256": "5b5524db83c99cb6b6e255f17fe86b056e176f3c824e10cfb4115256a23f814b",
+    "fixture_binary_sha256": "a3e012e46b1d1df0cee7861d56638c4df9f430d10398d77bdb33473ba3ba592e",
+    "compiler": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+  },
+  "allowed_regression": 0.25,
+  "fixed_allowances": {
+    "workload_seconds": 0.02,
+    "sensor_cpu_seconds": 0.02,
+    "peak_rss_kib": 0,
+    "fixture_output_bytes": 0
+  },
+  "limits": {
+    "off/burst": {
+      "workload_seconds": {
+        "baseline_median": 0.03271700000004785,
+        "maximum": 0.06089625000005981
+      }
+    },
+    "minimal/burst": {
+      "workload_seconds": {
+        "baseline_median": 0.08664582399978826,
+        "maximum": 0.12830727999973532
+      },
+      "sensor_cpu_seconds": {
+        "baseline_median": 3.652291,
+        "maximum": 4.585363749999999
+      },
+      "peak_rss_kib": {
+        "baseline_median": 250740,
+        "maximum": 313425.0
+      },
+      "fixture_output_bytes": {
+        "baseline_median": 92880690,
+        "maximum": 116100862.5
+      }
+    },
+    "default/burst": {
+      "workload_seconds": {
+        "baseline_median": 0.08366203000014139,
+        "maximum": 0.12457753750017674
+      },
+      "sensor_cpu_seconds": {
+        "baseline_median": 4.3080900000000035,
+        "maximum": 5.405112500000004
+      },
+      "peak_rss_kib": {
+        "baseline_median": 265644,
+        "maximum": 332055.0
+      },
+      "fixture_output_bytes": {
+        "baseline_median": 92880747,
+        "maximum": 116100933.75
+      }
+    },
+    "off/paced": {
+      "workload_seconds": {
+        "baseline_median": 16.33520852499987,
+        "maximum": 20.439010656249838
+      }
+    },
+    "minimal/paced": {
+      "workload_seconds": {
+        "baseline_median": 16.839817063000282,
+        "maximum": 21.069771328750353
+      },
+      "sensor_cpu_seconds": {
+        "baseline_median": 10.696261000000005,
+        "maximum": 13.390326250000006
+      },
+      "peak_rss_kib": {
+        "baseline_median": 250616,
+        "maximum": 313270.0
+      },
+      "fixture_output_bytes": {
+        "baseline_median": 371552850,
+        "maximum": 464441062.5
+      }
+    },
+    "default/paced": {
+      "workload_seconds": {
+        "baseline_median": 16.82739060999984,
+        "maximum": 21.054238262499798
+      },
+      "sensor_cpu_seconds": {
+        "baseline_median": 11.643550000000008,
+        "maximum": 14.574437500000009
+      },
+      "peak_rss_kib": {
+        "baseline_median": 269212,
+        "maximum": 336515.0
+      },
+      "fixture_output_bytes": {
+        "baseline_median": 371552008,
+        "maximum": 464440010.0
+      }
+    }
+  },
+  "baseline_report_sha256": "4880891bfbfe20ad44e5f83317a9fca1d94b8e88713d830f53a3048b49fb90fc"
+}

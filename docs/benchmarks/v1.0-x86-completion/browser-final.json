@@ -1,0 +1,703 @@
+{
+  "schema_version": "agentprovenance.acceptance_summary/v1",
+  "status": "PASS",
+  "capture_cli": {
+    "head": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+    "tree": "b6bffa380e3bc19df4fea668beb691f6fe874c47",
+    "dirty": false
+  },
+  "browser_fixture": {
+    "head": "85dd7be16cb1cf0f36914e098b64bcd26e144f1d",
+    "tree": "81323d89d596a4f48894c4e68ab8787e9980bdc0",
+    "dirty": false
+  },
+  "export_source": {
+    "head": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+    "tree": "12b9d1760f0ff445727efd518af80ef5f97e74d1",
+    "dirty": false
+  },
+  "delivery_fixture_sha256": "239ded574cf79f209ad1686db3d5a47556b60e44d7ed852067dd24068e374f75",
+  "cases": {
+    "native": {
+      "original_report": {
+        "file": "report.json",
+        "sha256": "8bb5b6a3c64a973297f8ae7adef0d4b5aa8b8b00a0780f60d1e2a5595d728b51"
+      },
+      "status": "passed",
+      "run_id": "browser-final-85dd7be",
+      "binary_sha256": "8be090fb6b322398083c1c1befde0ba85b835029c6941b6924208ffa79d66818",
+      "record_exit": 0,
+      "collector_exit": 0,
+      "capabilities": {
+        "access_control_state": {
+          "apparmor_collection_enabled": false,
+          "cache_capacity": 2048,
+          "min_interval_ms": 2000,
+          "mode": "event_triggered_procfs_snapshot",
+          "queue_capacity": 128,
+          "seccomp_collection_enabled": false
+        },
+        "capture_buffers": {
+          "queue_bytes": 15073280,
+          "queue_events": 16384,
+          "ring_bytes": 8388608
+        },
+        "changed_at": "2026-11-16T18:13:43.480967175Z",
+        "collector_id": "sensor-8c5c125bc5df",
+        "probes": [
+          {
+            "category": "dns",
+            "name": "syscalls/sys_enter_sendto",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "dns",
+            "name": "getaddrinfo",
+            "required": false,
+            "status": "attached",
+            "target": "/lib/x86_64-linux-gnu/libc.so.6"
+          },
+          {
+            "category": "process_lifecycle",
+            "name": "sched/sched_process_fork",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "sched/sched_process_exec",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "sched/sched_process_exit",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_connect",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_execve",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_open",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_openat",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_ptrace",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_rename",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_renameat",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_renameat2",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_setgid",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_setuid",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_unlink",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_unlinkat",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_exit_connect",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_exit_open",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_exit_openat",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "tls",
+            "name": "container_tls_discovery",
+            "reason": "automatic discovery disabled",
+            "required": false,
+            "status": "disabled"
+          }
+        ],
+        "procfs_identity": {
+          "lookup_misses": 0,
+          "map_capacity": 16384,
+          "mode": "kernel_namespace_mapping",
+          "outside_namespace_events": 0,
+          "pid_namespace": "pid:[4026531836]",
+          "translated_events": 0
+        },
+        "producer": {
+          "architecture": "amd64",
+          "boot_id": "695e3798-9052-4b07-aa8c-27ad2ae32116",
+          "commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+          "kernel": "6.8.0-149-generic",
+          "name": "agentprov-sensor",
+          "os": "linux",
+          "placement": "guest_kernel",
+          "placement_basis": "operator_configuration",
+          "version": "v1.0.0-candidate"
+        },
+        "ready": true,
+        "revision": 3,
+        "schema_version": "agentprovenance.sensor_capabilities/v1",
+        "status": "ready",
+        "tls_discovery": {
+          "active_targets": 0,
+          "enabled": false,
+          "limitations": [
+            "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+            "first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
+            "amd64 Go 1.23–1.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported"
+          ],
+          "max_processes_per_scan": 4096,
+          "max_targets": 128,
+          "processes_scanned": 0,
+          "scan_complete": true,
+          "scan_interval_ms": 2000,
+          "skipped_targets": 0,
+          "sweep_passes": 0,
+          "truncated_maps": 0,
+          "unreadable_processes": 0,
+          "unresolved_mounts": 0,
+          "unsupported_executables": 0
+        },
+        "updated_at": "2026-11-16T18:13:43.480967175Z"
+      },
+      "final_capture": {
+        "counters": {
+          "captured": 3898,
+          "excluded": 3603,
+          "expired_uncorrelated": 239,
+          "ingested": 3659,
+          "read": 7501
+        },
+        "queued_batches": 0,
+        "queued_bytes": 0,
+        "pending_events": 0,
+        "cleanup_pending_batches": 0
+      },
+      "browser": {
+        "status": "passed",
+        "cases": [
+          "parallel_contexts",
+          "parallel_tabs",
+          "redirect",
+          "iframe",
+          "worker",
+          "background",
+          "download",
+          "wrong_context_rejected",
+          "pending_receipt",
+          "restart_query_without_reexecute"
+        ],
+        "pending_operation": "1474da70-8490-4e84-8882-b2b7f3df2bfd",
+        "post_requests_before_query": 3,
+        "post_requests_after_query": 3
+      }
+    },
+    "crash_recovery": {
+      "original_report": {
+        "file": "crash.json",
+        "sha256": "7860899b30b256c8d69f116c59ffed59bfe60f42c19b1dc0234b2aa5421074c8"
+      },
+      "status": "passed",
+      "run_id": "browser-crash-final-85dd7be",
+      "binary_sha256": "8be090fb6b322398083c1c1befde0ba85b835029c6941b6924208ffa79d66818",
+      "record_exit": 0,
+      "collector_exit": 0,
+      "capabilities": {
+        "access_control_state": {
+          "apparmor_collection_enabled": false,
+          "cache_capacity": 2048,
+          "min_interval_ms": 2000,
+          "mode": "event_triggered_procfs_snapshot",
+          "queue_capacity": 128,
+          "seccomp_collection_enabled": false
+        },
+        "capture_buffers": {
+          "queue_bytes": 15073280,
+          "queue_events": 16384,
+          "ring_bytes": 8388608
+        },
+        "changed_at": "2026-11-16T18:14:43.081057008Z",
+        "collector_id": "sensor-575f852e3733",
+        "probes": [
+          {
+            "category": "dns",
+            "name": "syscalls/sys_enter_sendto",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "dns",
+            "name": "getaddrinfo",
+            "required": false,
+            "status": "attached",
+            "target": "/lib/x86_64-linux-gnu/libc.so.6"
+          },
+          {
+            "category": "process_lifecycle",
+            "name": "sched/sched_process_fork",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "sched/sched_process_exec",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "sched/sched_process_exit",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_connect",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_execve",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_open",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_openat",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_ptrace",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_rename",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_renameat",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_renameat2",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_setgid",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_setuid",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_unlink",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_enter_unlinkat",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_exit_connect",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_exit_open",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "category": "syscall",
+            "name": "syscalls/sys_exit_openat",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "category": "tls",
+            "name": "container_tls_discovery",
+            "reason": "automatic discovery disabled",
+            "required": false,
+            "status": "disabled"
+          }
+        ],
+        "procfs_identity": {
+          "lookup_misses": 0,
+          "map_capacity": 16384,
+          "mode": "kernel_namespace_mapping",
+          "outside_namespace_events": 0,
+          "pid_namespace": "pid:[4026531836]",
+          "translated_events": 0
+        },
+        "producer": {
+          "architecture": "amd64",
+          "boot_id": "695e3798-9052-4b07-aa8c-27ad2ae32116",
+          "commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+          "kernel": "6.8.0-149-generic",
+          "name": "agentprov-sensor",
+          "os": "linux",
+          "placement": "guest_kernel",
+          "placement_basis": "operator_configuration",
+          "version": "v1.0.0-candidate"
+        },
+        "ready": true,
+        "revision": 3,
+        "schema_version": "agentprovenance.sensor_capabilities/v1",
+        "status": "ready",
+        "tls_discovery": {
+          "active_targets": 0,
+          "enabled": false,
+          "limitations": [
+            "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+            "first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
+            "amd64 Go 1.23–1.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported"
+          ],
+          "max_processes_per_scan": 4096,
+          "max_targets": 128,
+          "processes_scanned": 0,
+          "scan_complete": true,
+          "scan_interval_ms": 2000,
+          "skipped_targets": 0,
+          "sweep_passes": 0,
+          "truncated_maps": 0,
+          "unreadable_processes": 0,
+          "unresolved_mounts": 0,
+          "unsupported_executables": 0
+        },
+        "updated_at": "2026-11-16T18:14:43.081057008Z"
+      },
+      "final_capture": {
+        "counters": {
+          "captured": 2163,
+          "excluded": 1385,
+          "expired_uncorrelated": 84,
+          "ingested": 2079,
+          "read": 3548
+        },
+        "queued_batches": 0,
+        "queued_bytes": 0,
+        "pending_events": 0,
+        "cleanup_pending_batches": 0
+      },
+      "browser": {
+        "status": "passed",
+        "passed": true,
+        "side_effect_counts": {
+          "/complete": 1,
+          "/pending": 1
+        },
+        "completed_status": "ok",
+        "interrupted_status": "unknown",
+        "old_generation": "first",
+        "new_generation": "second",
+        "original_actions": 3,
+        "actions_after_queries": 3,
+        "total_actions": 11
+      }
+    }
+  },
+  "offline": {
+    "original_log": {
+      "file": "browser-offline-f3deb10.log",
+      "sha256": "f1bab4f9a4adf2d2512af48af77d7c64c4a94393e9dc125d13ab194335c00c90"
+    },
+    "offlineReplayPassed": true,
+    "reports": [
+      {
+        "run": "browser-final-85dd7be",
+        "files": 12099,
+        "shards": 12074,
+        "queries": 1016,
+        "views": 36,
+        "sessions": 3,
+        "contextBodies": 292,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "derived",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "browser-final-85dd7be"
+        ],
+        "captureObservations": 578,
+        "executionLinks": 0,
+        "auditDecisions": 0,
+        "harAttachments": 3,
+        "attachments": 3
+      },
+      {
+        "run": "browser-final-85dd7be",
+        "files": 13823,
+        "shards": 13798,
+        "queries": 787,
+        "views": 36,
+        "sessions": 3,
+        "contextBodies": 290,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "derived",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "browser-final-85dd7be"
+        ],
+        "captureObservations": 364,
+        "executionLinks": 0,
+        "auditDecisions": 0,
+        "harAttachments": 3,
+        "attachments": 3
+      },
+      {
+        "run": "browser-final-85dd7be",
+        "files": 12099,
+        "shards": 12074,
+        "queries": 1016,
+        "views": 36,
+        "sessions": 3,
+        "contextBodies": 292,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "derived",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "browser-final-85dd7be"
+        ],
+        "captureObservations": 578,
+        "executionLinks": 0,
+        "auditDecisions": 0,
+        "harAttachments": 3,
+        "attachments": 3
+      },
+      {
+        "run": "browser-final-85dd7be",
+        "files": 13823,
+        "shards": 13798,
+        "queries": 787,
+        "views": 36,
+        "sessions": 3,
+        "contextBodies": 290,
+        "networkRequests": 0,
+        "knownUILimitations": [],
+        "deliveryMode": "derived",
+        "signed": true,
+        "scope": "whole_run",
+        "runs": [
+          "browser-final-85dd7be"
+        ],
+        "captureObservations": 364,
+        "executionLinks": 0,
+        "auditDecisions": 0,
+        "harAttachments": 3,
+        "attachments": 3
+      }
+    ]
+  },
+  "launcher_reports": [
+    {
+      "original_report": {
+        "file": "operator-0.json",
+        "sha256": "f401261d24b657876c6d10867d99b29a234d57bd9b7cd29c616c556275473f66"
+      },
+      "scope": {
+        "browser_id": "2aaedb89-a543-478f-838f-99e1e4c692bf",
+        "context_id": "820004C5617819FB53B16024998CF524",
+        "generation": "generation-1",
+        "instance_id": "local-fixture",
+        "namespace": "owned",
+        "producer_id": "browser-native-acceptance"
+      },
+      "native": "supported",
+      "diagnostic": null,
+      "gap": null
+    },
+    {
+      "original_report": {
+        "file": "operator-1.json",
+        "sha256": "58d8862a614ac6be563b43c35fdf6cf597cffdfdf75300c46088a9a24f9923cb"
+      },
+      "scope": {
+        "browser_id": "7291dbc9-6354-436d-a8bf-00b833e5e540",
+        "context_id": "955E74A313F8A6D0B0AC53A0A00B8D6A",
+        "generation": "generation-1",
+        "instance_id": "local-fixture",
+        "namespace": "owned",
+        "producer_id": "browser-native-acceptance"
+      },
+      "native": "supported",
+      "diagnostic": null,
+      "gap": null
+    },
+    {
+      "original_report": {
+        "file": "operator-2.json",
+        "sha256": "76b06f8ff440c9ef6a1b51544335f2d8e92009bd2190fdc4b49e7f5c0cd9e6c3"
+      },
+      "scope": {
+        "browser_id": "afa4f7a7-c4dd-40db-8953-664129095ff6",
+        "context_id": "7552FDE0B605353943637646401A6EC4",
+        "generation": "generation-2",
+        "instance_id": "local-fixture",
+        "namespace": "owned",
+        "producer_id": "browser-native-acceptance"
+      },
+      "native": "supported",
+      "diagnostic": null,
+      "gap": null
+    }
+  ],
+  "delivery": {
+    "original_report": {
+      "file": "report.json",
+      "sha256": "bb702a541803533c14326346301da337aec32e2846d01ecaeb9965a8e3661ab6"
+    },
+    "schema_version": "agentprovenance.browser_native_delivery/v1",
+    "status": "passed",
+    "run_id": "browser-final-85dd7be",
+    "binary_sha256": "d90703cc4b6171cd73a35cdee470db5b8a689be5b6aa5b19ec3cdb68b9b91dd2",
+    "verifier_sha256": "fa587cbfa23617325b91bed18aa86923b6cbb1557e5597b828da641fc8bcf5b7",
+    "scopes": [
+      {
+        "scope": {
+          "browser_id": "2aaedb89-a543-478f-838f-99e1e4c692bf",
+          "context_id": "820004C5617819FB53B16024998CF524",
+          "generation": "generation-1",
+          "instance_id": "local-fixture",
+          "namespace": "owned",
+          "producer_id": "browser-native-acceptance"
+        },
+        "native_relations": 1358,
+        "matched_native_process_observations": 679,
+        "reader_native_relations": 1358,
+        "selected_native_relations": 0,
+        "wrong_generation_rejected": true,
+        "reader_sha256": "47cb47ab22b6281740909d800c03fc8b8645735c828f6bac19d587495d30ac21",
+        "selected_sha256": "0aac99836a292dae4dd5777f217b2912dab2cd1a44a20ac494d23956fbb12da4"
+      },
+      {
+        "scope": {
+          "browser_id": "7291dbc9-6354-436d-a8bf-00b833e5e540",
+          "context_id": "955E74A313F8A6D0B0AC53A0A00B8D6A",
+          "generation": "generation-1",
+          "instance_id": "local-fixture",
+          "namespace": "owned",
+          "producer_id": "browser-native-acceptance"
+        },
+        "native_relations": 1414,
+        "matched_native_process_observations": 707,
+        "reader_native_relations": 1414,
+        "selected_native_relations": 0,
+        "wrong_generation_rejected": true,
+        "reader_sha256": "b64523a19d715f45173fc1e5b8f9b6198ebc9493d6f41df43c7a35e3b0e568b0",
+        "selected_sha256": "7ff21038210db9c0a79f8a52f62021055f60d019d66a022c9b97e42b6e736eda"
+      },
+      {
+        "scope": {
+          "browser_id": "afa4f7a7-c4dd-40db-8953-664129095ff6",
+          "context_id": "7552FDE0B605353943637646401A6EC4",
+          "generation": "generation-2",
+          "instance_id": "local-fixture",
+          "namespace": "owned",
+          "producer_id": "browser-native-acceptance"
+        },
+        "native_relations": 1358,
+        "matched_native_process_observations": 679,
+        "reader_native_relations": 1358,
+        "selected_native_relations": 0,
+        "wrong_generation_rejected": true,
+        "reader_sha256": "f0b9509d3d68664b16e06650ddad462e17783fe3b9d52439e5badff39cd3c96e",
+        "selected_sha256": "9a53ecb1d480ff5a236b8c51aa6f1bed9c63a427339a9f11bb31eae79b366ef7"
+      }
+    ],
+    "duplicate_import": "passed",
+    "signed_bundle": "passed",
+    "retained_binding_refs": 10,
+    "bundle_sha256": "2683c0762d142e4201a399cee8e5d7f0e767aa8370b663c8809d99cda274615d"
+  }
+}

@@ -25,6 +25,31 @@ def refresh_graph_navigation(root, catalog, saved):
     for run_id, run in catalog["runs"].items():
         for holder in [run, *run.get("sessions", {}).values()]:
             index = saved(holder["lenses"])
+            # Review edits use the historical full-view representation. Expand
+            # shared storage first, retaining every saved view and focus edge.
+            if index.get("graph"):
+                graph = saved(index["graph"])
+                if graph.get("schema_version") != "agentprovenance.replay_graph/v1":
+                    raise ValueError("unsupported shared graph schema")
+                def resolve(kind, refs):
+                    if refs is None:
+                        return None
+                    pool = graph[kind]
+                    if any(type(i) is not int or i < 0 or i >= len(pool) for i in refs):
+                        raise ValueError("invalid shared graph reference")
+                    return [copy.deepcopy(pool[i]) for i in refs]
+                for key, ref in list(index["views"].items()):
+                    view = saved(ref)
+                    if view.pop("schema_version", None) != "agentprovenance.replay_lens_view/v2":
+                        raise ValueError("unsupported shared view schema")
+                    manifest = view["manifest"]
+                    manifest["nodes"] = resolve("nodes", view.pop("node_indexes"))
+                    manifest["edges"] = resolve("edges", view.pop("edge_indexes"))
+                    if "derived_indexes" in view:
+                        manifest["derived_edges"] = resolve("edges", view.pop("derived_indexes"))
+                    view["focus_edges"] = resolve("edges", view.pop("focus_indexes"))
+                    index["views"][key] = write(view)
+                del index["graph"]
             nodes, focus = saved(index["nodes"]), saved(index["focus_nodes"])
             canonical = [nodes[key] for key in index.get("present") or []]
             artifacts = sum(n["kind"] == "artifact" for n in canonical)

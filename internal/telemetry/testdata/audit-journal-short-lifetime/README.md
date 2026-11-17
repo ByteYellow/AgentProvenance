@@ -1,5 +1,7 @@
 # Short lifetimes with stale audit timestamps
 
+[中文](README.zh-CN.md)
+
 These are the original synthetic runtime and kernel journal records from
 [CI run 43991220944, Go 1.24](https://github.com/ByteYellow/AgentProvenance/actions/runs/43991220944).
 The nominal 1 ms coarse clock plus audit decimal precision ended before the

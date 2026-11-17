@@ -7,7 +7,7 @@ const previewURL=(process.env.AGENTPROV_PREVIEW_URL||'http://127.0.0.1:47920').r
   const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})});
   const reports=[];fs.mkdirSync(root+'/ui-screenshots',{recursive:true});
   try {
-    for(const name of ['execution','browser','notebook','investigation']){
+    for(const name of ['execution','workspace','browser','notebook','investigation']){
       const context=await browser.newContext({viewport:{width:1440,height:1050},locale:'en-US'});
       const page=await context.newPage();const errors=[];
       page.on('pageerror',error=>errors.push(error.message));
@@ -76,6 +76,21 @@ const previewURL=(process.env.AGENTPROV_PREVIEW_URL||'http://127.0.0.1:47920').r
           return document.querySelector('.qbtn[data-node="overview/tool_calls"] .m').textContent===nodeLabel(n);
         }),'investigation counts follow the selected session');
         result.bidirectional=true;
+      }else if(name==='workspace'){
+        await page.locator('#context-fold>summary').click();await page.locator('#portable-workspace-tab').click();
+        const row=page.locator('[data-workspace-entry]').filter({has:page.locator('h3',{hasText:'workspace_bash'})});
+        await row.locator('[data-native-body]').click();
+        await page.waitForSelector('[data-workspace-receipt]');
+        const body=await page.locator('#portable-dialog-body').innerText();
+        assert.match(body,/Input revision/);assert.match(body,/Output manifest/);assert.match(body,/Record attempt/);assert.match(body,/"exit_code":0/);
+        result.receipt=await page.locator('[data-workspace-receipt]').getAttribute('data-workspace-receipt');
+        assert.match(result.receipt,/^sha256:[a-f0-9]{64}$/);
+        await page.screenshot({path:root+'/ui-screenshots/workspace.png'});
+        await page.locator('.portable-evidence-head button').click();
+        await page.locator('#portable-delivery-details').click();
+        const modes=await page.locator('#portable-dialog-body').innerText();
+        for(const mode of ['reading','derived','originals'])assert.ok(modes.includes(mode));
+        result.versions=true;result.deliveryModes=true;
       }else if(name==='browser'||name==='notebook'){
         await page.locator('#context-fold>summary').click();await page.locator('#portable-native-tab').click();
         await page.waitForSelector('[data-native-entry]');result.records=await page.locator('[data-native-entry]').count();

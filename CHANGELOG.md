@@ -4,6 +4,15 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Use validated journal receipt times for short process lifetimes in audit rule v4.
+  Preserve reused-PID ambiguity and historical v1–v3 reader results; regress
+  against actual failing CI captures.
+- Deduplicate complete graph objects across portable reader views while preserving
+  query results and historical-reader compatibility. Restore Browser export sizes
+  to the frozen budgets; archive final x86, Kata, delivery and package checks.
+- Extend the retained reader preview with Workspace versions and receipts,
+  Browser identity fields and delivery-mode details; verify bilingual mobile,
+  offline and selected-export reading.
 - Bind runsc commands to Sentry process lifetimes and native descendants. Seal
   command capture after a committed completion marker, include its original
   events in signed delivery, and preserve gaps across receiver/executor failures.

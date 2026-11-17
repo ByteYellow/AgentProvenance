@@ -21,6 +21,11 @@ details[open]>.portable-summary::before {transform:rotate(90deg)}
 .portable-facts dt {color:var(--mut)}
 .portable-facts dd {margin:0;overflow-wrap:anywhere;white-space:pre-wrap}
 .portable-ref {font:11px/1.6 ui-monospace,monospace;color:var(--mut);overflow-wrap:anywhere}
+.portable-change-table {width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px;margin:12px 0 20px}
+.portable-change-table th,.portable-change-table td {text-align:left;vertical-align:top;padding:9px;border-bottom:1px solid var(--line);overflow-wrap:anywhere;white-space:normal}
+.portable-change-table th {font-weight:500;color:var(--mut)}
+.portable-change-table small {display:block;color:var(--mut);margin-top:4px}
+.portable-workspace-result h3 {font-size:14px;margin:16px 0 8px}
 .portable-guidance {background:var(--panel2);border-left:2px solid var(--line2);padding:10px 12px;margin-top:12px;font-size:12px;line-height:1.7}
 .portable-guidance p {color:var(--tx)}
 .portable-native {padding:0 20px 20px;max-height:620px;overflow:auto}

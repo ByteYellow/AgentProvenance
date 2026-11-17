@@ -1,0 +1,52 @@
+{
+  "schema_version": "agentprovenance.context_cost/v1",
+  "run_id": "63b25521416540e4a5f3063ebf3e4ffb",
+  "passed": false,
+  "samples": [],
+  "started_at": "2026-11-16T18:22:21.970946+00:00",
+  "source_commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+  "binary_sha256": "8be090fb6b322398083c1c1befde0ba85b835029c6941b6924208ffa79d66818",
+  "environment": {
+    "system": "Linux",
+    "architecture": "x86_64",
+    "kernel": "6.8.0-149-generic",
+    "hostname": "agentprov-kvm-amd64",
+    "cpu_count": 4,
+    "python": "3.12.3",
+    "memory_bytes": 4105363456
+  },
+  "repeats": 3,
+  "inputs": {
+    "browser": [
+      {
+        "sha256": "9241f5bf8d78122609e79fdbcb15c76041e704a3ddd2f4c395449a82ca6d370e",
+        "bytes": 74444
+      },
+      {
+        "sha256": "8e770280edb79bb9314c8c72fff4913cff9ac078debdf058053b9ceadb0a10bc",
+        "bytes": 73744
+      }
+    ],
+    "jupyter": [
+      {
+        "sha256": "6aeb1dd5ba930d55bc853303d47a41427c9788ea61e35f38df82c03983e937bd",
+        "bytes": 12641
+      },
+      {
+        "sha256": "99aef0fb952e309d204192845021b6875ee499074f559a7c8cc3545f6a8e1072",
+        "bytes": 12925
+      }
+    ]
+  },
+  "measurement_sha256": "9c29381b0675ace3388fae965b10e75615f3fd1d88edfad786610e8c4ac280fb",
+  "methods": {
+    "cpu": "sum of child user+system time, including validation commands",
+    "rss": "maximum per-child wait4 peak, not the sum of simultaneous processes",
+    "wall": "monotonic through blocking wait4; measured stages exclude verification commands",
+    "storage": "logical files after import/project/query and before Bundle export",
+    "inputs": "fixed historical recorder captures; no Agent, browser, kernel or Sensor started"
+  },
+  "binary_version": "agentprov version v1.0.0-candidate (d8a7b60db8824361fcba31b62db72a5e0f82d346; 2026-11-16T17:49:09+00:00; linux/amd64)",
+  "error": "ValueError: budget identity mismatch before measurement",
+  "finished_at": "2026-11-16T18:22:22.045125+00:00"
+}

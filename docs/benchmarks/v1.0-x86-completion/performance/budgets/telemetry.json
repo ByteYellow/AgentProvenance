@@ -1,0 +1,59 @@
+{
+  "schema_version": "agentprovenance.telemetry_pressure_budget/v1",
+  "generated_at": "2026-11-15T19:02:51.704953+00:00",
+  "baseline_sha256": [
+    "24105773dee56e3826f202d7d8509f165415db7854587170c60e8f624ab69f6c",
+    "e00a82f6cae36c0a0bbbc01204ff17bdef7c49a550b7ac5bacd669e0af2976a0",
+    "37751e2e963e10cf0d349ceeda99543f6698ba0b09d20e776bc9431f0ef7473a"
+  ],
+  "baseline_binary_sha256": "df4e5b95e468214698120b31d93b512d7c0d7c50f7244e0ce8629e10f26e4c93",
+  "environment": {
+    "system": "Linux",
+    "machine": "x86_64",
+    "kernel": "6.8.0-149-generic",
+    "cpu_count": 4,
+    "memory_bytes": 4105359360,
+    "python": "3.12.3"
+  },
+  "profile": {
+    "name": "falco-execve-no-policy/v1",
+    "events": 100000,
+    "input_sha256": "1c6d73f3468ca5a39cd65459af805cce876eec30c21c379ff7585995c4433a42",
+    "daemon_flags": [
+      "--sample-interval",
+      "0",
+      "--spool-interval",
+      "0",
+      "--spool-limit",
+      "1",
+      "--spool-max-queued",
+      "2",
+      "--spool-drop-policy",
+      "reject",
+      "--evidence-interval",
+      "0",
+      "--gc-interval",
+      "0"
+    ],
+    "page_limit": 5,
+    "during_probe_limit": 10,
+    "after_samples": 30
+  },
+  "script_sha256": "8ac08d806469003c24c9bfa95aad56228a15044001e6c29084a3fc26f0330693",
+  "allowed_regression": 0.25,
+  "query_timer_allowance_ms": 1,
+  "baseline_medians": {
+    "drain_ms": 55351.912622999866,
+    "daemon_peak_rss_bytes": 83558400,
+    "stopped_store_bytes": 256071681,
+    "health_after_p95_ms": 1.4737500000592263,
+    "query_after_p95_ms": 9.99211699991065
+  },
+  "maximums": {
+    "drain_ms": 69189.89077874983,
+    "daemon_peak_rss_bytes": 104448000.0,
+    "stopped_store_bytes": 320089601.25,
+    "health_after_p95_ms": 2.842187500074033,
+    "query_after_p95_ms": 13.490146249888312
+  }
+}

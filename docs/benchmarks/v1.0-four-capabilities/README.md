@@ -70,23 +70,10 @@ The UI preview was an uncommitted local artifact; its historical Git revision,
 process exit code and Chrome executable hash were not recorded. Original report
 hashes and provenance are retained separately in the [result index](report.json).
 
-## Remaining Acceptance
+## Later x86 Completion
 
-**R-02 implementation gap:** per-command runsc/Sentry association still requires
-a shared birth/call identity and a command-scoped capture watermark. Container
-observations and command receipts remain separate, with explicit incomplete
-capture. The live identity probe collects supporting fields; closing the join
-requires implementation work as well as validation. See
-[runtime adapters](../../runtime-adapters.md).
-
-| x86 work | Status and required evidence |
-| --- | --- |
-| Fixed-source Linux amd64 build and regression | Pending on the selected x86 deployment; record source/dirty state, toolchain, binary hashes and executed/skipped tests. |
-| Native Sensor-on workspace and Browser cases | Pending; verify real process/file/network evidence, process lifetimes and receipt ownership, including concurrent activity, restart and missing evidence. Complete two Linux end-to-end cases with signed delivery and offline reading. |
-| runsc identity and failure matrix | Pending live validation; exercise duplicate admission/query, generation rejection, receiver disconnect/restart and executor restart. Keep the R-02 implementation gap explicit. |
-| Real Kata/QEMU with Guest Sensor on | Pending; pin RuntimeClass/handler, runtime, kernel/image and executable hashes; validate API/CRI/Guest identities, BTF/cgroups, concurrent commands, recovery, Pod rebuild and delivery. Follow the [Kata procedure](../../validation/kata-qemu.md). |
-| 24-hour soak | Pending; run the bounded sampler for the full duration and review CPU/RSS, queues, loss counters, latency and observed recovery. The historical 60-second run retains its short-run status. |
-
-Public results contain reviewed summaries and evidence hashes. Credentials,
-private paths, personal captures and raw provider/diagnostic logs stay outside
-the published evidence set.
+The final [x86 results](../v1.0-x86-completion/README.md) close the earlier runsc,
+Workspace/Browser Sensor-on and pinned Kata/QEMU requirements. They also record
+bounded performance, same-source packages and the retained reader preview.
+The 24-hour soak remains maintainer-deferred. Earlier measurements above retain
+their original versions and conditions.

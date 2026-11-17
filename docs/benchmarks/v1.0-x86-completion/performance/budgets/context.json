@@ -1,0 +1,330 @@
+{
+  "schema_version": "agentprovenance.context_cost_budget/v1",
+  "frozen_at": "2026-11-15T19:05:08.597944+00:00",
+  "baseline_run_id": "b68e0861f8744ae9b8cc939181cf9605",
+  "baseline_binary_sha256": "ec65c79ed53f81e0f2a6fb735a522c10c67b7271def6cf4f8fa57db349413579",
+  "identity": {
+    "environment": {
+      "system": "Linux",
+      "architecture": "x86_64",
+      "kernel": "6.8.0-149-generic",
+      "hostname": "agentprov-kvm-amd64",
+      "cpu_count": 4,
+      "python": "3.12.3",
+      "memory_bytes": 4105359360
+    },
+    "inputs": {
+      "browser": [
+        {
+          "sha256": "9241f5bf8d78122609e79fdbcb15c76041e704a3ddd2f4c395449a82ca6d370e",
+          "bytes": 74444
+        },
+        {
+          "sha256": "8e770280edb79bb9314c8c72fff4913cff9ac078debdf058053b9ceadb0a10bc",
+          "bytes": 73744
+        }
+      ],
+      "jupyter": [
+        {
+          "sha256": "6aeb1dd5ba930d55bc853303d47a41427c9788ea61e35f38df82c03983e937bd",
+          "bytes": 12641
+        },
+        {
+          "sha256": "99aef0fb952e309d204192845021b6875ee499074f559a7c8cc3545f6a8e1072",
+          "bytes": 12925
+        }
+      ]
+    },
+    "measurement_sha256": "9c29381b0675ace3388fae965b10e75615f3fd1d88edfad786610e8c4ac280fb",
+    "repeats": 3
+  },
+  "allowed_regression": 0.25,
+  "time_allowance_seconds": 0.05,
+  "limits": {
+    "browser/basic": {
+      "store_bytes": {
+        "baseline_median": 1268057,
+        "maximum": 1585071.25
+      },
+      "attachment_bytes": {
+        "baseline_median": 0,
+        "maximum": 0.0
+      },
+      "bundle_bytes": {
+        "baseline_median": 720735,
+        "maximum": 900918.75
+      },
+      "replay_bytes": {
+        "baseline_median": 1236384,
+        "maximum": 1545480.0
+      },
+      "peak_rss_bytes": {
+        "baseline_median": 67817472,
+        "maximum": 84771840.0
+      },
+      "cpu_seconds": {
+        "baseline_median": 2.557436,
+        "maximum": 3.2467949999999997
+      },
+      "import_seconds": {
+        "baseline_median": 0.8472887460002312,
+        "maximum": 1.109110932500289
+      },
+      "project_seconds": {
+        "baseline_median": 0.06283558699988134,
+        "maximum": 0.12854448374985167
+      },
+      "query_seconds": {
+        "baseline_median": 0.07372549700039599,
+        "maximum": 0.14215687125049498
+      },
+      "bundle_seconds": {
+        "baseline_median": 0.05711926100002529,
+        "maximum": 0.12139907625003162
+      },
+      "replay_seconds": {
+        "baseline_median": 1.0836573149999822,
+        "maximum": 1.4045716437499778
+      }
+    },
+    "browser/detailed": {
+      "store_bytes": {
+        "baseline_median": 2006208,
+        "maximum": 2507760.0
+      },
+      "attachment_bytes": {
+        "baseline_median": 45215,
+        "maximum": 56518.75
+      },
+      "bundle_bytes": {
+        "baseline_median": 1696963,
+        "maximum": 2121203.75
+      },
+      "replay_bytes": {
+        "baseline_median": 1564085,
+        "maximum": 1955106.25
+      },
+      "peak_rss_bytes": {
+        "baseline_median": 73396224,
+        "maximum": 91745280.0
+      },
+      "cpu_seconds": {
+        "baseline_median": 5.880224999999999,
+        "maximum": 7.400281249999999
+      },
+      "import_seconds": {
+        "baseline_median": 0.9140681239996411,
+        "maximum": 1.1925851549995514
+      },
+      "project_seconds": {
+        "baseline_median": 0.06564441499995155,
+        "maximum": 0.13205551874993943
+      },
+      "query_seconds": {
+        "baseline_median": 0.07297173799997836,
+        "maximum": 0.14121467249997294
+      },
+      "bundle_seconds": {
+        "baseline_median": 0.09609115599960205,
+        "maximum": 0.17011394499950255
+      },
+      "replay_seconds": {
+        "baseline_median": 1.4091662840000936,
+        "maximum": 1.811457855000117
+      },
+      "excluded_replay_seconds": {
+        "baseline_median": 1.6836574579997432,
+        "maximum": 2.154571822499679
+      }
+    },
+    "browser/detailed-no-attachments": {
+      "store_bytes": {
+        "baseline_median": 1953693,
+        "maximum": 2442116.25
+      },
+      "attachment_bytes": {
+        "baseline_median": 0,
+        "maximum": 0.0
+      },
+      "bundle_bytes": {
+        "baseline_median": 1615663,
+        "maximum": 2019578.75
+      },
+      "replay_bytes": {
+        "baseline_median": 1534804,
+        "maximum": 1918505.0
+      },
+      "peak_rss_bytes": {
+        "baseline_median": 70758400,
+        "maximum": 88448000.0
+      },
+      "cpu_seconds": {
+        "baseline_median": 3.474585,
+        "maximum": 4.3932312499999995
+      },
+      "import_seconds": {
+        "baseline_median": 0.9515186369999356,
+        "maximum": 1.2393982962499195
+      },
+      "project_seconds": {
+        "baseline_median": 0.0776412589998472,
+        "maximum": 0.14705157374980898
+      },
+      "query_seconds": {
+        "baseline_median": 0.06746842899929106,
+        "maximum": 0.13433553624911382
+      },
+      "bundle_seconds": {
+        "baseline_median": 0.0858284270002514,
+        "maximum": 0.15728553375031423
+      },
+      "replay_seconds": {
+        "baseline_median": 1.3390142670000387,
+        "maximum": 1.7237678337500484
+      }
+    },
+    "jupyter/basic": {
+      "store_bytes": {
+        "baseline_median": 793242,
+        "maximum": 991552.5
+      },
+      "attachment_bytes": {
+        "baseline_median": 0,
+        "maximum": 0.0
+      },
+      "bundle_bytes": {
+        "baseline_median": 189814,
+        "maximum": 237267.5
+      },
+      "replay_bytes": {
+        "baseline_median": 585503,
+        "maximum": 731878.75
+      },
+      "peak_rss_bytes": {
+        "baseline_median": 66244608,
+        "maximum": 82805760.0
+      },
+      "cpu_seconds": {
+        "baseline_median": 1.066836,
+        "maximum": 1.383545
+      },
+      "import_seconds": {
+        "baseline_median": 0.6142984589996558,
+        "maximum": 0.8178730737495699
+      },
+      "project_seconds": {
+        "baseline_median": 0.04285979299993414,
+        "maximum": 0.10357474124991768
+      },
+      "query_seconds": {
+        "baseline_median": 0.02783815800012235,
+        "maximum": 0.08479769750015294
+      },
+      "bundle_seconds": {
+        "baseline_median": 0.0523883199998636,
+        "maximum": 0.1154853999998295
+      },
+      "replay_seconds": {
+        "baseline_median": 0.351190681999924,
+        "maximum": 0.48898835249990497
+      }
+    },
+    "jupyter/detailed": {
+      "store_bytes": {
+        "baseline_median": 936347,
+        "maximum": 1170433.75
+      },
+      "attachment_bytes": {
+        "baseline_median": 1011,
+        "maximum": 1263.75
+      },
+      "bundle_bytes": {
+        "baseline_median": 379010,
+        "maximum": 473762.5
+      },
+      "replay_bytes": {
+        "baseline_median": 648475,
+        "maximum": 810593.75
+      },
+      "peak_rss_bytes": {
+        "baseline_median": 69517312,
+        "maximum": 86896640.0
+      },
+      "cpu_seconds": {
+        "baseline_median": 1.8831229999999999,
+        "maximum": 2.4039037499999996
+      },
+      "import_seconds": {
+        "baseline_median": 0.46935454100048446,
+        "maximum": 0.6366931762506056
+      },
+      "project_seconds": {
+        "baseline_median": 0.0381883969998853,
+        "maximum": 0.09773549624985663
+      },
+      "query_seconds": {
+        "baseline_median": 0.027698893999968277,
+        "maximum": 0.08462361749996035
+      },
+      "bundle_seconds": {
+        "baseline_median": 0.04517063100001906,
+        "maximum": 0.10646328875002382
+      },
+      "replay_seconds": {
+        "baseline_median": 0.4599702209998213,
+        "maximum": 0.6249627762497767
+      },
+      "excluded_replay_seconds": {
+        "baseline_median": 0.8529713130001255,
+        "maximum": 1.116214141250157
+      }
+    },
+    "jupyter/detailed-no-attachments": {
+      "store_bytes": {
+        "baseline_median": 933731,
+        "maximum": 1167163.75
+      },
+      "attachment_bytes": {
+        "baseline_median": 0,
+        "maximum": 0.0
+      },
+      "bundle_bytes": {
+        "baseline_median": 376278,
+        "maximum": 470347.5
+      },
+      "replay_bytes": {
+        "baseline_median": 646628,
+        "maximum": 808285.0
+      },
+      "peak_rss_bytes": {
+        "baseline_median": 66125824,
+        "maximum": 82657280.0
+      },
+      "cpu_seconds": {
+        "baseline_median": 1.290608,
+        "maximum": 1.66326
+      },
+      "import_seconds": {
+        "baseline_median": 0.5373405499994988,
+        "maximum": 0.7216756874993735
+      },
+      "project_seconds": {
+        "baseline_median": 0.043298081000102684,
+        "maximum": 0.10412260125012836
+      },
+      "query_seconds": {
+        "baseline_median": 0.027628737000213732,
+        "maximum": 0.08453592125026717
+      },
+      "bundle_seconds": {
+        "baseline_median": 0.05108362800001487,
+        "maximum": 0.11385453500001859
+      },
+      "replay_seconds": {
+        "baseline_median": 0.4557377709998036,
+        "maximum": 0.6196722137497546
+      }
+    }
+  },
+  "baseline_report_sha256": "4e494247827a16430833873b9c3436a46081c918bbfd0e220c11d7902e0c3646"
+}

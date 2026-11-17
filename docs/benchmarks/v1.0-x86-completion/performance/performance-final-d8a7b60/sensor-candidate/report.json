@@ -1,0 +1,58 @@
+{
+  "schema_version": "agentprovenance.sensor_overhead/v1",
+  "run_id": "de976c2140334e9eaf70b829744fc419",
+  "started_at": "2026-11-16T18:21:08.832839+00:00",
+  "passed": false,
+  "runs": [],
+  "source_commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+  "sensor_sha256": "a3e18b184dc9a4a37f5553736b4c8ca5526cc11f18c88a2bc46f70e4642dbd5d",
+  "environment": {
+    "hostname": "agentprov-kvm-amd64",
+    "system": "Linux",
+    "architecture": "x86_64",
+    "kernel": "6.8.0-149-generic",
+    "cpu_count": 4,
+    "memory_kib": 4009144,
+    "python": "3.12.3"
+  },
+  "workloads": {
+    "burst": [
+      10000,
+      0
+    ],
+    "paced": [
+      40000,
+      10000
+    ]
+  },
+  "profiles": {
+    "off": null,
+    "minimal": [
+      "--auto-tls=false",
+      "--apparmor-state=false",
+      "--seccomp-state=false"
+    ],
+    "default": [
+      "--auto-tls=true",
+      "--apparmor-state=true",
+      "--seccomp-state=true"
+    ]
+  },
+  "repeats": 3,
+  "measurement_sha256": {
+    "accept_sensor_overhead.py": "f5f3d92d43060aa22e1659e3e701c016de3b4c3d5ccea79ab343f5289b037e25",
+    "accept_sensor_pressure.py": "7a8b1fc1952fbb34df86c338435b91a823519b5e7153fdaddc66f59318a43d60"
+  },
+  "fixture_source_sha256": "5b5524db83c99cb6b6e255f17fe86b056e176f3c824e10cfb4115256a23f814b",
+  "methods": {
+    "cpu": "waited child user+system seconds; sensor includes startup and drain",
+    "rss": "/proc/PID/status VmRSS polled every 20 ms",
+    "wall": "monotonic clock through wait4; fixture forks four workers",
+    "output": "JSONL to local disk; gzip level 1 after timing; node-wide capture",
+    "off": "no Sensor; capture counts and resource metrics remain unknown"
+  },
+  "compiler": "cc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+  "fixture_binary_sha256": "a3e012e46b1d1df0cee7861d56638c4df9f430d10398d77bdb33473ba3ba592e",
+  "error": "ValueError: budget identity mismatch before measurement",
+  "finished_at": "2026-11-16T18:21:09.056638+00:00"
+}

@@ -1,0 +1,51 @@
+{
+  "schema_version": "agentprovenance.frozen_budget_comparison/v1",
+  "kind": "telemetry",
+  "passed": true,
+  "environment_comparison": {
+    "exact_match": false,
+    "rule": "linux_boot_memory_at_most_one_4k_page",
+    "field": "memory_bytes",
+    "baseline": 4105359360,
+    "candidate": 4105363456,
+    "difference_bytes": 4096,
+    "maximum_difference_bytes": 4096,
+    "other_environment_fields_equal": true
+  },
+  "metric_limits_changed": false,
+  "checks": [
+    {
+      "metric": "drain_ms",
+      "actual": 48416.553450000036,
+      "maximum": 69189.89077874983,
+      "passed": true
+    },
+    {
+      "metric": "daemon_peak_rss_bytes",
+      "actual": 86294528,
+      "maximum": 104448000.0,
+      "passed": true
+    },
+    {
+      "metric": "stopped_store_bytes",
+      "actual": 256129025,
+      "maximum": 320089601.25,
+      "passed": true
+    },
+    {
+      "metric": "health_after_p95_ms",
+      "actual": 1.3126989999818761,
+      "maximum": 2.842187500074033,
+      "passed": true
+    },
+    {
+      "metric": "query_after_p95_ms",
+      "actual": 8.74600100007683,
+      "maximum": 13.490146249888312,
+      "passed": true
+    }
+  ],
+  "report_sha256": "b4863fdb9a5ae44cc087a4490fb89e36b996dd045d4aaa46486d251cba1c7a3c",
+  "budget_sha256": "b9e50695460af29cf01b65acbc11232f377de3faed9efde1be6828f7bb76512a",
+  "comparison_script_sha256": "82306f25d6c78f30b4dab19d96c970bc97f6e16210c1dbe41cf964496297f48c"
+}

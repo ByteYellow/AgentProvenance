@@ -61,21 +61,9 @@ ARM 采样脚本 checkout 为 `4e367089eb9f768be4592b1268e93d05166097a8`，
 UI 预览为未提交的本地产物；当时的 Git revision、进程退出码和 Chrome 可执行文件哈希
 未记录。原始报告哈希及来源信息在[结果索引](report.json)中单独保留。
 
-## 剩余验收
+## 后续 x86 收尾
 
-**R-02 实现缺口：**runsc/Sentry 逐命令关联仍需共同的出生/调用身份
-（shared birth/call identity）和命令范围的采集水位（capture watermark）。
-容器观测与命令回执继续分开保存，采集状态明确保留 incomplete。
-实机身份探针用于采集支撑字段；完成关联还需要实现工作与验证。
-具体契约见[运行时适配指南](../../zh-CN/runtime-adapters.md)。
-
-| x86 工作 | 状态与所需证据 |
-| --- | --- |
-| 固定源码 Linux amd64 构建与回归 | 待选定 x86 部署实测；记录源码/dirty 状态、工具链、二进制哈希和已执行/跳过的测试。 |
-| 原生 Sensor-on 工作区与 Browser 案例 | 待实测；核对真实进程/文件/网络证据、进程生命周期和回执归属，覆盖并发、重启及缺证据。完成两个包含签名交付与离线阅读的 Linux 端到端案例。 |
-| runsc 身份与故障矩阵 | 待实机验证；覆盖重复提交/查询、generation 拒绝、receiver 断连/重启和 executor 重启，继续明确保留 R-02 实现缺口。 |
-| 真实 Kata/QEMU 与 Guest Sensor-on | 待实测；固定 RuntimeClass/handler、运行时、内核/镜像及可执行文件哈希，核对 API/CRI/Guest 身份、BTF/cgroup、并发命令、恢复、Pod 重建和交付。按 [Kata 流程](../../zh-CN/validation/kata-qemu.md)执行。 |
-| 24 小时 soak | 待完整时长运行；复核 CPU/RSS、队列、丢失计数、延迟与实际恢复过程。历史 60 秒记录继续标记为短测。 |
-
-公开结果仅包含经复核的摘要和证据哈希。凭据、私有路径、个人采集内容及原始 provider/
-诊断日志留在公开证据集之外。
+最终 [x86 结果](../v1.0-x86-completion/README.zh-CN.md)已完成此前的 runsc、
+Workspace/Browser 原生采集和固定 Kata/QEMU 验收，并收录有界性能、
+同源码候选安装包及保留的阅读器预览。24 小时长测由维护者暂缓。
+上文历史测量继续保留原版本和环境条件。

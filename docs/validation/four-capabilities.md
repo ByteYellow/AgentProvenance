@@ -11,18 +11,18 @@ fixed-source reruns from earlier captures and record the remaining environment c
 
 ## Current Scope
 
-| Task | Available implementation | Acceptance remaining |
+| Task | Implementation | Recorded acceptance |
 | --- | --- | --- |
-| C-01 | Observation domain, scope, policy subject, capability intervals and runtime identity projections | Check new runtime observations on the selected x86 deployment |
-| W-01 | Remote-authoritative workspace, revision/digest conflicts, CLI and stdio MCP | Repeat with the final x86 build and Sensor; combine with Kata |
-| E-01/E-02 | Reading, signed selected reader, exact originals, recipient-owned trust, independent verifier and corrected signed-mode banner | Final same-source packages and reader checks; Dashboard controls await review |
-| R-01 | Separate platform, execution and capture contracts; native default retained | New-platform integration matrix |
-| R-02 | Exact Sentry birth, descendant ownership, committed capture watermark and signed command evidence | Passed the real command and receiver/executor fault matrix; retain final candidate regression |
-| R-03 | Kata/QEMU Guest binding and bounded acceptance fixture | Run on Kubernetes with `kata-qemu-runtime-rs`, pinned artifacts and Guest Sensor permissions |
-| B-01 | Persistent Browser acceptance/results, restart queries and receiver-owned receipt verification | Sensor-on and SIGKILL recovery passed; repeat final candidate checks |
-| B-02 | Native-ID-based Browser layers, versioned rules and evidence references | Linux context/tab, redirect, iframe/worker, background and download matrix passed |
-| B-03 | Explicit runtime custody and kernel process-lifetime checks | Actual launcher custody, native process scopes and selective export passed |
-| Q-01 | Regression scripts, independent export checks and bounded soak sampler | Bounded resource and final-build checks remain; 24-hour soak is maintainer-deferred |
+| C-01 | Observation domains, capability intervals and runtime identities | Passed recipient API, command watermark and scope/count checks |
+| W-01 | Authoritative workspace, revision conflicts, CLI and stdio MCP | Passed native x86 and Kata real Harness, signed delivery and offline reading |
+| E-01/E-02 | Reading, derived and originals; recipient-owned trust and verifier | Four same-source packages and all three delivery modes passed; UI controls await review |
+| R-01 | Separate platform, execution and capture contracts | Native/K3s/gVisor/Firecracker evidence retained; new platform bindings passed |
+| R-02 | Exact Sentry birth, descendants and durable command boundary | Final five-scenario command and receiver/executor fault matrix passed |
+| R-03 | Pinned Kata/QEMU Guest binding and capture | All nine R-03 checks passed, including Pod rebuild and real Workspace Harness |
+| B-01 | Persistent accept/result and receiver-owned verification | Final Sensor-on, SIGKILL recovery and query-without-reexecution checks passed |
+| B-02 | Native Browser layers, rules and evidence references | Context/tab, redirect, iframe/worker, background and download matrix passed |
+| B-03 | Runtime custody and process lifetime binding | Three actual launcher scopes and selected signed-reader checks passed |
+| Q-01 | Bounded pressure/resource checks and regression gates | 18 Sensor, 5 ingestion and 68 context budget checks passed; 24-hour soak deferred |
 
 The [x86 completion results](../benchmarks/v1.0-x86-completion/README.md) include
 native Workspace and Browser cases and runsc's command/fault matrix. runsc binds

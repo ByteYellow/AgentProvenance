@@ -1,0 +1,78 @@
+{
+  "schema_version": "agentprovenance.kata_acceptance_lock/v1",
+  "platform": "linux/amd64",
+  "runtime_class": "kata-qemu-runtime-rs",
+  "runtime_handler": "kata-qemu-runtime-rs",
+  "runtime_type": "io.containerd.kata-qemu-runtime-rs.v2",
+  "artifacts": {
+    "kata": {
+      "version": "4.3.1",
+      "source_sha": "03cf2ec06a5d302f23af811744f6bcea49988bfb",
+      "path": "/opt/kata/runtime-rs/bin/containerd-shim-kata-v2",
+      "sha256": "c9a43977c61ff649c8233efd9ce6cf28e0bf777523071e838b8ebc3362f57016"
+    },
+    "qemu": {
+      "version": "11.0.1",
+      "path": "/opt/kata/bin/qemu-system-x86_64",
+      "sha256": "6c0dab34e6b191ccf933c57c3a97f166b50250b616319a706fc492b78c20b3d6"
+    },
+    "guest_kernel": {
+      "version": "6.18.56-208-debug",
+      "release": "6.18.56",
+      "path": "/opt/kata/share/kata-containers/vmlinuz-6.18.56-208-debug",
+      "sha256": "6d3addca16f6d6f309a0d40771968c2debc24f312d0e66875483b77d3a53496f",
+      "btf_sha256": "b602f3349fd04bc5575500346f6e235023140e09a671d5a8e6039b45367a41bc"
+    },
+    "guest_image": {
+      "version": "kata-4.3.1-ubuntu-resolute",
+      "path": "/opt/kata/share/kata-containers/kata-ubuntu-resolute.image",
+      "sha256": "6770db2cca5710593f27c9ac5e1d9d7aab836422695a5e5c4807496a92a0f24d"
+    },
+    "kata_config": {
+      "version": "agentprov-x86-20261116-v1",
+      "path": "/var/tmp/agentprov-v1-completion-20261116/configuration-qemu-runtime-rs.toml",
+      "sha256": "b1adee9c325eac9543848acc50c2329ef7fd37c4acd3dc3decc213e78942b9be"
+    }
+  },
+  "sensor": {
+    "version": "v1.0.0-candidate",
+    "source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+    "sha256": "8be090fb6b322398083c1c1befde0ba85b835029c6941b6924208ffa79d66818",
+    "packaging": "embedded-in-agentprov"
+  },
+  "kubernetes": {
+    "server_version": "v1.36.4+k3s1",
+    "kubelet_version": "v1.36.4+k3s1"
+  },
+  "containerd": {
+    "version": "2.3.4-k3s1.36"
+  },
+  "workload_image": "docker.io/library/agentprov-kata-acceptance@sha256:30790f991f2f5b9b16457ad342798f05433ff49b17939a59077611f9c5b456f7",
+  "verifier": {
+    "version": "v1.0.0-candidate",
+    "source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+    "sha256": "09309738a201fe2af0b4c9e6aabdaa31f815598e43e7a88eff26bf43d3baaaa0"
+  },
+  "workspace": {
+    "mcp_version": "2.3.0",
+    "harness": {
+      "path": "/usr/local/bin/claude",
+      "sha256": "0dc4f4a9a165fc60746d7ae8489712e5fc352f1e7ad4eb22e7141bd0812eb0cf"
+    }
+  },
+  "candidate_reference": {
+    "kata": "4.3.1",
+    "source_sha": "03cf2ec06a5d302f23af811744f6bcea49988bfb",
+    "qemu": "11.0.1",
+    "guest_kernel": "6.18.56",
+    "purpose": "Research reference only; pin the supported installed combination in artifacts without reinstalling it"
+  },
+  "references": [
+    "https://kata-containers.github.io/kata-containers/kata-deploy-runtimeclasses/",
+    "https://github.com/kata-containers/kata-containers/blob/03cf2ec06a5d302f23af811744f6bcea49988bfb/versions.yaml",
+    "https://github.com/kata-containers/kata-containers/blob/03cf2ec06a5d302f23af811744f6bcea49988bfb/tools/packaging/kata-deploy/binary/src/runtime/containerd.rs"
+  ],
+  "capture": {
+    "apparmor_state": false
+  }
+}

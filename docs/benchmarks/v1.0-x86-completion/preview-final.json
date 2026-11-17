@@ -1,0 +1,182 @@
+{
+  "schema_version": "agentprovenance.acceptance_summary/v1",
+  "status": "PASS",
+  "formal_ui_approval": "pending",
+  "desktop": [
+    {
+      "name": "execution",
+      "errors": [],
+      "outside": [],
+      "drilldowns": 64,
+      "attempts": 2,
+      "bidirectional": true
+    },
+    {
+      "name": "workspace",
+      "errors": [],
+      "outside": [],
+      "drilldowns": 13,
+      "receipt": "sha256:443d6e34f41a39c12ac6bdee5e01b1068e3ffdd16e7cd235bc74e7cb8ef0a9bf",
+      "versions": true,
+      "deliveryModes": true
+    },
+    {
+      "name": "browser",
+      "errors": [],
+      "outside": [],
+      "drilldowns": 11,
+      "records": 23,
+      "image": true,
+      "content": true
+    },
+    {
+      "name": "notebook",
+      "errors": [],
+      "outside": [],
+      "drilldowns": 6,
+      "records": 26,
+      "image": true,
+      "content": true
+    },
+    {
+      "name": "investigation",
+      "errors": [],
+      "outside": [],
+      "drilldowns": 70
+    }
+  ],
+  "mobile_offline": {
+    "portablePreviewPassed": true,
+    "reports": [
+      {
+        "name": "execution",
+        "language": "en",
+        "browserLocale": "fr-FR",
+        "offline": true,
+        "mobile": true,
+        "networkRequests": 0,
+        "errors": []
+      },
+      {
+        "name": "execution",
+        "language": "zh-CN",
+        "browserLocale": "zh-CN",
+        "offline": true,
+        "mobile": true,
+        "networkRequests": 0,
+        "errors": []
+      },
+      {
+        "name": "workspace",
+        "language": "en",
+        "browserLocale": "fr-FR",
+        "offline": true,
+        "mobile": true,
+        "networkRequests": 0,
+        "errors": []
+      },
+      {
+        "name": "workspace",
+        "language": "zh-CN",
+        "browserLocale": "zh-CN",
+        "offline": true,
+        "mobile": true,
+        "networkRequests": 0,
+        "errors": []
+      },
+      {
+        "name": "browser",
+        "language": "en",
+        "browserLocale": "fr-FR",
+        "offline": true,
+        "mobile": true,
+        "networkRequests": 0,
+        "errors": []
+      },
+      {
+        "name": "browser",
+        "language": "zh-CN",
+        "browserLocale": "zh-CN",
+        "offline": true,
+        "mobile": true,
+        "networkRequests": 0,
+        "errors": []
+      },
+      {
+        "name": "notebook",
+        "language": "en",
+        "browserLocale": "fr-FR",
+        "offline": true,
+        "mobile": true,
+        "networkRequests": 0,
+        "errors": []
+      },
+      {
+        "name": "notebook",
+        "language": "zh-CN",
+        "browserLocale": "zh-CN",
+        "offline": true,
+        "mobile": true,
+        "networkRequests": 0,
+        "errors": []
+      },
+      {
+        "name": "investigation",
+        "language": "en",
+        "browserLocale": "fr-FR",
+        "offline": true,
+        "mobile": true,
+        "networkRequests": 0,
+        "errors": []
+      },
+      {
+        "name": "investigation",
+        "language": "zh-CN",
+        "browserLocale": "zh-CN",
+        "offline": true,
+        "mobile": true,
+        "networkRequests": 0,
+        "errors": []
+      }
+    ]
+  },
+  "selected_export": {
+    "selectivePreviewPassed": true,
+    "reports": [
+      {
+        "locale": "en-US",
+        "excludedEntry": "context-2283a16b64efd434803956031ef46d4f01cfa17cee16e2b39f91b884cffe9c96",
+        "retainedWorkspaceRecords": 13,
+        "retainedContentReadable": true,
+        "networkRequests": 0,
+        "errors": []
+      },
+      {
+        "locale": "zh-CN",
+        "excludedEntry": "context-2283a16b64efd434803956031ef46d4f01cfa17cee16e2b39f91b884cffe9c96",
+        "retainedWorkspaceRecords": 13,
+        "retainedContentReadable": true,
+        "networkRequests": 0,
+        "errors": []
+      }
+    ]
+  },
+  "fixture_sha256": {
+    "previews/v1.0-reader/fixtures/notebook-attachments.zip": "012879ab8aade3ce15eb504a3a84f96ba4c8e39e377d56f4cdc0ad2a830ed4c6",
+    "previews/v1.0-reader/fixtures/workspace-contract.zip": "4dc4230ee69e8e0f28d86e1671e584201fdb5799a82ee5cf0c34ae7526a2136a"
+  },
+  "screenshots": {
+    "preview-portable-check-v3/browser-en-mobile.png": "2e91ca9fb2971b39b8ab268991e8d42686589548ea743329eff75686657eff5c",
+    "preview-portable-check-v3/browser-zh-CN-mobile.png": "8c9b7c8a5da74cfb59e696eeace138376e3a1a9343a02c20c06011ab5edd48ad",
+    "preview-portable-check-v3/execution-en-mobile.png": "c3d54d3339a9ca0307a27b67a0035f079ecb06dc4a2ec775f64a74c5dc43b538",
+    "preview-portable-check-v3/execution-zh-CN-mobile.png": "de1cec05704215d82c85701085df3c40259a1ffc8407efdeee68c96eeebf269d",
+    "preview-portable-check-v3/investigation-en-mobile.png": "e9bf07be0bdf4bedca1c16a1fadec1d7074abd0036da4e688770092e284b1e15",
+    "preview-portable-check-v3/investigation-zh-CN-mobile.png": "e4687ab7b924b79ba0b5107bcfa46d32cb003400a218a687d1c1ba06ba210f71",
+    "preview-portable-check-v3/notebook-en-mobile.png": "c4830c2bee0316aa7453d5c613d42e1475bac50fcf3073dc980aae12fc04146a",
+    "preview-portable-check-v3/notebook-zh-CN-mobile.png": "d666e902ba3876ebfe6e79e452eddf5efbe86541ff49b386d0d4133937fd79d6",
+    "preview-portable-check-v3/workspace-en-mobile.png": "b3ca8fd9a850551226b8539ff9a2c82ebbf59016b98cf15fab7f00332f7ece28",
+    "preview-portable-check-v3/workspace-zh-CN-mobile.png": "04e34c76df74f581176005b39faac67bc0e43f989ebe0844cbb26a52f0a2794b",
+    "preview-selected-check-r2/en-US.png": "18eb635baa043d9df8fbe8ac9c39d9d9d74ac65f70679519c513d335f2f2aca7",
+    "preview-selected-check-r2/zh-CN.png": "a5ba5b1c1fe70f3e104216854ff29b70563a31c33316996c93b4fe44997bb84c"
+  }
+}

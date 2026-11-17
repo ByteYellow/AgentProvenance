@@ -1,0 +1,335 @@
+{
+  "schema_version": "agentprovenance.telemetry_pressure_report/v2",
+  "generated_at": "2026-11-16T18:29:12.090078+00:00",
+  "environment": {
+    "system": "Linux",
+    "machine": "x86_64",
+    "kernel": "6.8.0-149-generic",
+    "cpu_count": 4,
+    "memory_bytes": 4105363456,
+    "python": "3.12.3"
+  },
+  "profile": {
+    "name": "falco-execve-no-policy/v1",
+    "events": 100000,
+    "input_sha256": "1c6d73f3468ca5a39cd65459af805cce876eec30c21c379ff7585995c4433a42",
+    "daemon_flags": [
+      "--sample-interval",
+      "0",
+      "--spool-interval",
+      "0",
+      "--spool-limit",
+      "1",
+      "--spool-max-queued",
+      "2",
+      "--spool-drop-policy",
+      "reject",
+      "--evidence-interval",
+      "0",
+      "--gc-interval",
+      "0"
+    ],
+    "page_limit": 5,
+    "during_probe_limit": 10,
+    "after_samples": 30
+  },
+  "source_commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+  "binary_sha256": "8be090fb6b322398083c1c1befde0ba85b835029c6941b6924208ffa79d66818",
+  "binary_version": "agentprov version v1.0.0-candidate (d8a7b60db8824361fcba31b62db72a5e0f82d346; 2026-11-16T17:49:09+00:00; linux/amd64)",
+  "script_sha256": "8ac08d806469003c24c9bfa95aad56228a15044001e6c29084a3fc26f0330693",
+  "input_bytes": 21592000,
+  "passed": true,
+  "enqueue_ms": 33.331889999999476,
+  "queued_storage": {
+    "logical_bytes": 22300874,
+    "files": {
+      ".daemon.lock": 73,
+      "agentprov.db": 659456,
+      "agentprov.db-wal": 16512,
+      "agentprov.db-shm": 32768,
+      "auth-token": 65,
+      "spool/spool-e7076000b4d1.jsonl": 21592000
+    }
+  },
+  "queued_snapshot": {
+    "schema_version": "agentprovenance.producer_health/v1",
+    "generated_at": "2026-11-16T18:29:14.545991305Z",
+    "run_id": "run-100k-pressure",
+    "limits": {
+      "max_queued_batches": 2,
+      "max_queued_bytes": 1073741824,
+      "max_batch_bytes": 268435456,
+      "drop_policy": "reject"
+    },
+    "spool": {
+      "received_batches": 1,
+      "queued_batches": 1,
+      "queued_bytes": 21592000,
+      "processing_batches": 0,
+      "processed_batches": 0,
+      "dropped_batches": 0,
+      "dropped_bytes": 0,
+      "failed_batches": 0,
+      "ingested_events": 0,
+      "failed_events": 0,
+      "by_status": {
+        "queued": 1
+      }
+    },
+    "events": {
+      "runtime_events": 0,
+      "correlated_events": 0,
+      "uncorrelated_events": 0,
+      "sensor_dropped_events": 0,
+      "by_source": {}
+    },
+    "coverage": {
+      "correlation_ratio": 0,
+      "has_sensor_drops": false,
+      "complete": false
+    },
+    "native_node_capture": {
+      "counters": {
+        "captured": 0
+      },
+      "queued_batches": 0,
+      "queued_bytes": 0,
+      "pending_events": 0,
+      "cleanup_pending_batches": 0
+    },
+    "seccheck_node_capture": {
+      "counters": {
+        "captured": 0
+      },
+      "queued_batches": 0,
+      "queued_bytes": 0,
+      "pending_events": 0,
+      "cleanup_pending_batches": 0
+    }
+  },
+  "drain_ms": 48416.553450000036,
+  "process_result": {
+    "id": "spool-e7076000b4d1",
+    "ingest_batch_id": "telbatch-b8f2a1bc4551",
+    "ingested_count": 100000,
+    "failed_count": 0,
+    "row_results_truncated": true
+  },
+  "producer_health": {
+    "schema_version": "agentprovenance.producer_health/v1",
+    "generated_at": "2026-11-16T18:30:03.844932589Z",
+    "run_id": "run-100k-pressure",
+    "limits": {
+      "max_queued_batches": 2,
+      "max_queued_bytes": 1073741824,
+      "max_batch_bytes": 268435456,
+      "drop_policy": "reject"
+    },
+    "spool": {
+      "received_batches": 1,
+      "queued_batches": 0,
+      "queued_bytes": 0,
+      "processing_batches": 0,
+      "processed_batches": 1,
+      "dropped_batches": 0,
+      "dropped_bytes": 0,
+      "failed_batches": 0,
+      "ingested_events": 100000,
+      "failed_events": 0,
+      "by_status": {
+        "processed": 1
+      }
+    },
+    "events": {
+      "runtime_events": 100000,
+      "correlated_events": 0,
+      "uncorrelated_events": 100000,
+      "sensor_dropped_events": 0,
+      "by_source": {
+        "falco_jsonl": 100000
+      }
+    },
+    "coverage": {
+      "correlation_ratio": 0,
+      "has_sensor_drops": false,
+      "complete": false
+    },
+    "native_node_capture": {
+      "counters": {
+        "captured": 0
+      },
+      "queued_batches": 0,
+      "queued_bytes": 0,
+      "pending_events": 0,
+      "cleanup_pending_batches": 0
+    },
+    "seccheck_node_capture": {
+      "counters": {
+        "captured": 0
+      },
+      "queued_batches": 0,
+      "queued_bytes": 0,
+      "pending_events": 0,
+      "cleanup_pending_batches": 0
+    }
+  },
+  "drained_storage": {
+    "logical_bytes": 491926402,
+    "files": {
+      ".daemon.lock": 73,
+      "agentprov.db": 234536960,
+      "agentprov.db-wal": 235338552,
+      "agentprov.db-shm": 458752,
+      "auth-token": 65,
+      "spool/spool-e7076000b4d1.jsonl": 21592000
+    }
+  },
+  "daemon_exit_code": 0,
+  "stopped_storage": {
+    "logical_bytes": 256129025,
+    "files": {
+      "agentprov.db": 234536960,
+      "auth-token": 65,
+      "spool/spool-e7076000b4d1.jsonl": 21592000
+    }
+  },
+  "latency_samples_ms": {
+    "during": {
+      "health": [
+        1.783797000030063,
+        0.9708170000521932,
+        0.9484690000363116,
+        0.9855549999429059,
+        1.4770980000093914,
+        1.0550580000199261,
+        2.243364000037218,
+        1.0103550000621908,
+        1.1264969999729146,
+        1.0777789999565357
+      ],
+      "query": [
+        0.5485760000283335,
+        0.6382790000998284,
+        0.5240289999619563,
+        0.5425770000329067,
+        0.7918169999356905,
+        0.5522600000631428,
+        0.5852460000141946,
+        0.6045520000270699,
+        0.5345360000319488,
+        0.5238819999249245
+      ]
+    },
+    "after": {
+      "health": [
+        5.125857999928485,
+        1.3126989999818761,
+        0.8909800000083123,
+        0.7391100000404549,
+        0.7269320000204971,
+        0.7765729999391624,
+        0.9911549999515046,
+        0.9712830000125905,
+        1.162988000032783,
+        0.7724609999968379,
+        0.7908840000254713,
+        0.7055319999835774,
+        0.8210350000581457,
+        0.8158000000548782,
+        0.7253190000255927,
+        0.6888220000291767,
+        0.7810920000110855,
+        0.8192269999653945,
+        0.714514000037525,
+        0.6969669999534744,
+        0.6700860000137254,
+        0.6873840000025666,
+        0.6829909999623851,
+        0.6829050000760617,
+        0.6721109999716646,
+        0.7123059999685211,
+        0.740497999913714,
+        0.8527399999138652,
+        0.9718189999148308,
+        0.6793880000941499
+      ],
+      "query": [
+        12.191121999990173,
+        8.36340000000746,
+        7.3831509999990885,
+        7.297517999973024,
+        7.281363000060992,
+        7.01728000001367,
+        6.9356149999748595,
+        7.072517999972661,
+        7.370682999976452,
+        7.438332999981867,
+        6.7929560000266065,
+        8.74600100007683,
+        6.893588000025375,
+        7.4117730000580195,
+        6.675164000057521,
+        6.891864000067471,
+        8.637240999973983,
+        7.537045000049147,
+        6.978769000056673,
+        7.4045840000280805,
+        7.306278999976712,
+        7.225157999982912,
+        7.16159000000971,
+        6.799964000038017,
+        6.8846289999555665,
+        7.579107999958978,
+        6.787010999914855,
+        6.9664860000102635,
+        6.8699690000357805,
+        7.6102409999521115
+      ]
+    }
+  },
+  "latency": {
+    "during": {
+      "health": {
+        "samples": 10,
+        "p50_ms": 1.066418499988231,
+        "p95_ms": 2.243364000037218,
+        "p99_ms": 2.243364000037218,
+        "max_ms": 2.243364000037218
+      },
+      "query": {
+        "samples": 10,
+        "p50_ms": 0.5504180000457382,
+        "p95_ms": 0.7918169999356905,
+        "p99_ms": 0.7918169999356905,
+        "max_ms": 0.7918169999356905
+      }
+    },
+    "after": {
+      "health": {
+        "samples": 30,
+        "p50_ms": 0.756479499955276,
+        "p95_ms": 1.3126989999818761,
+        "p99_ms": 5.125857999928485,
+        "max_ms": 5.125857999928485
+      },
+      "query": {
+        "samples": 30,
+        "p50_ms": 7.253260500021952,
+        "p95_ms": 8.74600100007683,
+        "p99_ms": 12.191121999990173,
+        "max_ms": 12.191121999990173
+      }
+    }
+  },
+  "metrics": {
+    "drain_ms": 48416.553450000036,
+    "daemon_peak_rss_bytes": 86294528,
+    "stopped_store_bytes": 256129025,
+    "health_after_p95_ms": 1.3126989999818761,
+    "query_after_p95_ms": 8.74600100007683
+  },
+  "ingest_events_per_second": 2065.4093047591746,
+  "monitor_errors": [],
+  "daemon_peak_cpu_percent": 177.4366928912059,
+  "cpu_measurement": "proc_stat_interval_100ms"
+}

@@ -144,7 +144,7 @@ checkpoint 只保留选中 receiver 的状态，省略 `node_spool`。collector 
 私有启动管道让调用在执行前就与精确出生身份绑定。x86 实测已核对 `exec` 前后的
 身份一致性、回执保存失败时不执行命令，以及放行后取消时保留未知结果。
 命令及其子进程的归属、接收端持久化边界已补上本地契约和签名交付测试。
-真实命令与完整重启矩阵仍是 R-02 的待验收项，结果将随产物归档。
+真实命令与完整重启矩阵已通过，见 [x86 runsc 结果](../benchmarks/v1.0-x86-completion/runsc-final.json)。
 
 ## 验证与 X86 交接
 
@@ -179,4 +179,4 @@ AGENTPROV_TEST_EXECUTION_CAPTURE=1 go test ./internal/handoff -run '^TestLiveExe
 AGENTPROV_TEST_REQUIRE_CGROUP=1 go test ./internal/handoff -run '^TestExecutorRecoversLiveScope$' -count=1 -v
 ```
 
-验收记录需包含 commit、架构、runsc 摘要、kernel/rootfs 版本、配置摘要及产物。真实 x86 运行、完整 R-02 故障矩阵、Kata/QEMU 平台验收待采集这些产物后确认。
+验收记录需包含 commit、架构、runsc 摘要、kernel/rootfs 版本、配置摘要及产物。[x86 收尾索引](../benchmarks/v1.0-x86-completion/README.zh-CN.md)已收录完整 R-02 故障矩阵和固定 Kata/QEMU 的 R-03 验收。

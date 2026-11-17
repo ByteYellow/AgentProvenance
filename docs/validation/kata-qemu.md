@@ -2,6 +2,11 @@
 
 [简体中文](../zh-CN/validation/kata-qemu.md)
 
+The 2026-11-17 [x86 result](../benchmarks/v1.0-x86-completion/kata-final.json)
+records all nine R-03 checks passing with real Guest Sensor and Workspace Harness.
+Its [version lock](../benchmarks/v1.0-x86-completion/kata-versions.lock.json)
+contains the measured runtime, kernel, image and executable hashes.
+
 This is the R-03/Q-01 portable acceptance fixture for **Kubernetes +
 `kata-qemu-runtime-rs` on Linux x86_64**. The runner uses the existing Guest
 executor, native Sensor, execution handoff and signed delivery protocol. Run it

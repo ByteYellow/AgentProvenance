@@ -2,6 +2,11 @@
 
 [English](../../validation/kata-qemu.md)
 
+2026-11-17 的 [x86 结果](../../benchmarks/v1.0-x86-completion/kata-final.json)
+已记录九项 R-03 检查通过，包含真实 Guest Sensor 和 Workspace Harness。
+[版本锁](../../benchmarks/v1.0-x86-completion/kata-versions.lock.json)保存实测运行时、
+内核、镜像和程序摘要。
+
 本目录交付 R-03/Q-01 的 **Kubernetes + `kata-qemu-runtime-rs`、Linux x86_64** 验收脚本。
 脚本复用现有 Guest executor、原生 Sensor、execution handoff 和签名交付协议。
 请在选定的 Kubernetes 节点上运行，使用已获授权的专用验收 namespace。

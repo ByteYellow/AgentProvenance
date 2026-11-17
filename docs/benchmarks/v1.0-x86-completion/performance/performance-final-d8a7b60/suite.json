@@ -1,0 +1,110 @@
+{
+  "status": "FAIL",
+  "source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+  "fixture_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+  "source_dirty": false,
+  "started_at": "2026-11-16T18:21:02.768203+00:00",
+  "service_states_before": {
+    "k3s.service": "active",
+    "docker.service": "active",
+    "docker.socket": "active",
+    "agentprov-sensor.service": "active"
+  },
+  "budget_sha256": {
+    "sensor": "55ea21d937a389aef76088a81fa974d45939c764127746e301f971a4a1e392c2",
+    "telemetry": "b9e50695460af29cf01b65acbc11232f377de3faed9efde1be6828f7bb76512a",
+    "context": "ae0a8edc7c4b80e300b8ce95abbca05ed791a0db1a9b9acdc44712a46b28970e"
+  },
+  "program_sha256": {
+    "agentprov": "8be090fb6b322398083c1c1befde0ba85b835029c6941b6924208ffa79d66818",
+    "agentprov-sensor": "a3e18b184dc9a4a37f5553736b4c8ca5526cc11f18c88a2bc46f70e4642dbd5d",
+    "agentprov-verify": "09309738a201fe2af0b4c9e6aabdaa31f815598e43e7a88eff26bf43d3baaaa0"
+  },
+  "results": [
+    {
+      "name": "sensor",
+      "command": [
+        "python3",
+        "/var/tmp/ap-v1-completion/final-candidate-source/scripts/accept_sensor_overhead.py",
+        "run",
+        "--sensor",
+        "/var/tmp/ap-v1-completion/candidate-d8a7b60/agentprov-sensor",
+        "--budget",
+        "/var/tmp/apv1/performance-final/sensor-budget.json",
+        "--source-commit",
+        "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+        "--output",
+        "/var/tmp/ap-v1-completion/performance-final-d8a7b60/sensor-candidate"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 0.3193005429999971
+    },
+    {
+      "name": "pressure",
+      "command": [
+        "python3",
+        "/var/tmp/ap-v1-completion/final-candidate-source/scripts/accept_sensor_pressure.py",
+        "--sensor",
+        "/var/tmp/ap-v1-completion/candidate-d8a7b60/agentprov-sensor",
+        "--report",
+        "/var/tmp/ap-v1-completion/performance-final-d8a7b60/sensor-pressure.json"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 24.430993345999994
+    },
+    {
+      "name": "telemetry",
+      "command": [
+        "python3",
+        "/var/tmp/ap-v1-completion/final-candidate-source/scripts/accept_telemetry_100k_pressure.py",
+        "run",
+        "--agentprov",
+        "/var/tmp/ap-v1-completion/candidate-d8a7b60/agentprov",
+        "--events",
+        "100000",
+        "--budget",
+        "/var/tmp/apv1/performance-final/telemetry-budget.json",
+        "--source-commit",
+        "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+        "--output",
+        "/var/tmp/ap-v1-completion/performance-final-d8a7b60/telemetry-candidate"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 48.402114912
+    },
+    {
+      "name": "context",
+      "command": [
+        "python3",
+        "/var/tmp/ap-v1-completion/final-candidate-source/scripts/accept_context_cost.py",
+        "run",
+        "--agentprov",
+        "/var/tmp/ap-v1-completion/candidate-d8a7b60/agentprov",
+        "--browser-input",
+        "/var/tmp/apv1/cost-inputs/browser/first.jsonl",
+        "--browser-input",
+        "/var/tmp/apv1/cost-inputs/browser/second.jsonl",
+        "--notebook-input",
+        "/var/tmp/apv1/cost-inputs/notebook/first.jsonl",
+        "--notebook-input",
+        "/var/tmp/apv1/cost-inputs/notebook/restarted.jsonl",
+        "--budget",
+        "/var/tmp/apv1/performance-final/context-budget.json",
+        "--source-commit",
+        "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+        "--output",
+        "/var/tmp/ap-v1-completion/performance-final-d8a7b60/context-candidate"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 0.16436604300000113
+    }
+  ],
+  "service_states_after": {
+    "k3s.service": "active",
+    "docker.service": "active",
+    "docker.socket": "active",
+    "agentprov-sensor.service": "active"
+  },
+  "finished_at": "2026-11-16T18:22:25.929035+00:00",
+  "budgets_unchanged": true
+}

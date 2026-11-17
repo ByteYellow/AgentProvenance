@@ -1,0 +1,1243 @@
+{
+  "schema_version": "agentprovenance.sensor_pressure/v1",
+  "runs": [
+    {
+      "label": "candidate-burst",
+      "expected_opens": 40000,
+      "sensor_flags": [
+        "--auto-tls=false",
+        "--apparmor-state=false",
+        "--seccomp-state=false"
+      ],
+      "passed": true,
+      "startup_seconds": 0.9722415859999956,
+      "workload_seconds": 0.07641245499999627,
+      "workload_cpu_seconds": 0.206975,
+      "drain_seconds": 1.1157939289999916,
+      "total_and_drain_seconds": 1.1923291720000009,
+      "sensor_cpu_seconds": 2.64112,
+      "sensor_exit_code": 0,
+      "peak_rss_kib": 249500,
+      "counts": {
+        "file_open": 40000,
+        "syscall_result": 40000,
+        "process_exit": 5
+      },
+      "kernel_drops": 0,
+      "resource_drops": {},
+      "node_access_state_status_counts": {},
+      "output_bytes": 91042026,
+      "fixture_output_bytes": 91040321,
+      "output_sha256": "b9e9571801979524c054ebbc6c3a577d0fd08ee8f3c4da2bab85564cdd276946",
+      "last_ready_capabilities": {
+        "capture_buffers": {
+          "ring_bytes": 67108864,
+          "queue_events": 16384,
+          "queue_bytes": 15073280
+        },
+        "producer": {
+          "name": "agentprov-sensor",
+          "version": "v1.0.0-candidate",
+          "commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+          "os": "linux",
+          "architecture": "amd64",
+          "kernel": "6.8.0-149-generic",
+          "boot_id": "936ed6b1-e1c4-4c1c-b0b7-d4a47f623aa5",
+          "placement": "local_kernel",
+          "placement_basis": "local_kernel_only"
+        },
+        "collector_id": "sensor-78234309aded",
+        "revision": 3,
+        "changed_at": "2026-11-16T18:21:10.135286317Z",
+        "schema_version": "agentprovenance.sensor_capabilities/v1",
+        "updated_at": "2026-11-16T18:21:10.135286317Z",
+        "ready": true,
+        "status": "ready",
+        "probes": [
+          {
+            "name": "syscalls/sys_enter_sendto",
+            "category": "dns",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "getaddrinfo",
+            "category": "dns",
+            "target": "/lib/x86_64-linux-gnu/libc.so.6",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "sched/sched_process_fork",
+            "category": "process_lifecycle",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "sched/sched_process_exec",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "sched/sched_process_exit",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_connect",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_execve",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_open",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_openat",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_ptrace",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_rename",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_renameat",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_renameat2",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_setgid",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_setuid",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_unlink",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_unlinkat",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_exit_connect",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_exit_open",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_exit_openat",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "container_tls_discovery",
+            "category": "tls",
+            "required": false,
+            "status": "disabled",
+            "reason": "automatic discovery disabled"
+          }
+        ],
+        "tls_discovery": {
+          "enabled": false,
+          "scan_interval_ms": 2000,
+          "max_targets": 128,
+          "max_processes_per_scan": 4096,
+          "active_targets": 0,
+          "scan_complete": true,
+          "processes_scanned": 0,
+          "unreadable_processes": 0,
+          "unresolved_mounts": 0,
+          "truncated_maps": 0,
+          "skipped_targets": 0,
+          "unsupported_executables": 0,
+          "limitations": [
+            "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+            "first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
+            "amd64 Go 1.23\u20131.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported"
+          ],
+          "sweep_passes": 0
+        },
+        "access_control_state": {
+          "apparmor_collection_enabled": false,
+          "seccomp_collection_enabled": false,
+          "mode": "event_triggered_procfs_snapshot",
+          "queue_capacity": 128,
+          "cache_capacity": 2048,
+          "min_interval_ms": 2000
+        },
+        "procfs_identity": {
+          "mode": "kernel_namespace_mapping",
+          "pid_namespace": "pid:[4026531836]",
+          "map_capacity": 16384,
+          "translated_events": 0,
+          "outside_namespace_events": 0,
+          "lookup_misses": 0
+        }
+      },
+      "last_capabilities": {
+        "capture_buffers": {
+          "ring_bytes": 67108864,
+          "queue_events": 16384,
+          "queue_bytes": 15073280
+        },
+        "producer": {
+          "name": "agentprov-sensor",
+          "version": "v1.0.0-candidate",
+          "commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+          "os": "linux",
+          "architecture": "amd64",
+          "kernel": "6.8.0-149-generic",
+          "boot_id": "936ed6b1-e1c4-4c1c-b0b7-d4a47f623aa5",
+          "placement": "local_kernel",
+          "placement_basis": "local_kernel_only"
+        },
+        "collector_id": "sensor-78234309aded",
+        "revision": 4,
+        "changed_at": "2026-11-16T18:21:11.285677264Z",
+        "schema_version": "agentprovenance.sensor_capabilities/v1",
+        "updated_at": "2026-11-16T18:21:11.285677264Z",
+        "ready": false,
+        "status": "stopped",
+        "probes": [
+          {
+            "name": "syscalls/sys_enter_sendto",
+            "category": "dns",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "getaddrinfo",
+            "category": "dns",
+            "target": "/lib/x86_64-linux-gnu/libc.so.6",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "sched/sched_process_fork",
+            "category": "process_lifecycle",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "sched/sched_process_exec",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "sched/sched_process_exit",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_connect",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_execve",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_open",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_openat",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_ptrace",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_rename",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_renameat",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_renameat2",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_setgid",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_setuid",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_unlink",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_unlinkat",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_exit_connect",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_exit_open",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_exit_openat",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "container_tls_discovery",
+            "category": "tls",
+            "required": false,
+            "status": "disabled",
+            "reason": "automatic discovery disabled"
+          }
+        ],
+        "tls_discovery": {
+          "enabled": false,
+          "scan_interval_ms": 2000,
+          "max_targets": 128,
+          "max_processes_per_scan": 4096,
+          "active_targets": 0,
+          "scan_complete": true,
+          "processes_scanned": 0,
+          "unreadable_processes": 0,
+          "unresolved_mounts": 0,
+          "truncated_maps": 0,
+          "skipped_targets": 0,
+          "unsupported_executables": 0,
+          "limitations": [
+            "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+            "first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
+            "amd64 Go 1.23\u20131.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported"
+          ],
+          "sweep_passes": 0
+        },
+        "access_control_state": {
+          "apparmor_collection_enabled": false,
+          "seccomp_collection_enabled": false,
+          "mode": "event_triggered_procfs_snapshot",
+          "queue_capacity": 128,
+          "cache_capacity": 2048,
+          "min_interval_ms": 2000
+        },
+        "procfs_identity": {
+          "mode": "kernel_namespace_mapping",
+          "pid_namespace": "pid:[4026531836]",
+          "map_capacity": 16384,
+          "translated_events": 0,
+          "outside_namespace_events": 0,
+          "lookup_misses": 0
+        }
+      }
+    },
+    {
+      "label": "candidate-paced",
+      "expected_opens": 160000,
+      "sensor_flags": [
+        "--auto-tls=false",
+        "--apparmor-state=false",
+        "--seccomp-state=false"
+      ],
+      "passed": true,
+      "startup_seconds": 0.9286484020000074,
+      "workload_seconds": 16.792209756999995,
+      "workload_cpu_seconds": 2.601004,
+      "drain_seconds": 0.5647795690000095,
+      "total_and_drain_seconds": 17.357189367999993,
+      "sensor_cpu_seconds": 8.225697,
+      "sensor_exit_code": 0,
+      "peak_rss_kib": 250816,
+      "counts": {
+        "file_open": 160000,
+        "syscall_result": 160000,
+        "process_exit": 5
+      },
+      "kernel_drops": 0,
+      "resource_drops": {},
+      "node_access_state_status_counts": {},
+      "output_bytes": 364265082,
+      "fixture_output_bytes": 364189467,
+      "output_sha256": "8d827f1b54f75b9a4c30f03ebfd0e489d4902d29db2dd76720183140e704d0dd",
+      "last_ready_capabilities": {
+        "capture_buffers": {
+          "ring_bytes": 67108864,
+          "queue_events": 16384,
+          "queue_bytes": 15073280
+        },
+        "producer": {
+          "name": "agentprov-sensor",
+          "version": "v1.0.0-candidate",
+          "commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+          "os": "linux",
+          "architecture": "amd64",
+          "kernel": "6.8.0-149-generic",
+          "boot_id": "936ed6b1-e1c4-4c1c-b0b7-d4a47f623aa5",
+          "placement": "local_kernel",
+          "placement_basis": "local_kernel_only"
+        },
+        "collector_id": "sensor-5f5c76cca046",
+        "revision": 3,
+        "changed_at": "2026-11-16T18:21:12.710236714Z",
+        "schema_version": "agentprovenance.sensor_capabilities/v1",
+        "updated_at": "2026-11-16T18:21:12.710236714Z",
+        "ready": true,
+        "status": "ready",
+        "probes": [
+          {
+            "name": "syscalls/sys_enter_sendto",
+            "category": "dns",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "getaddrinfo",
+            "category": "dns",
+            "target": "/lib/x86_64-linux-gnu/libc.so.6",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "sched/sched_process_fork",
+            "category": "process_lifecycle",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "sched/sched_process_exec",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "sched/sched_process_exit",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_connect",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_execve",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_open",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_openat",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_ptrace",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_rename",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_renameat",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_renameat2",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_setgid",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_setuid",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_unlink",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_unlinkat",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_exit_connect",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_exit_open",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_exit_openat",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "container_tls_discovery",
+            "category": "tls",
+            "required": false,
+            "status": "disabled",
+            "reason": "automatic discovery disabled"
+          }
+        ],
+        "tls_discovery": {
+          "enabled": false,
+          "scan_interval_ms": 2000,
+          "max_targets": 128,
+          "max_processes_per_scan": 4096,
+          "active_targets": 0,
+          "scan_complete": true,
+          "processes_scanned": 0,
+          "unreadable_processes": 0,
+          "unresolved_mounts": 0,
+          "truncated_maps": 0,
+          "skipped_targets": 0,
+          "unsupported_executables": 0,
+          "limitations": [
+            "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+            "first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
+            "amd64 Go 1.23\u20131.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported"
+          ],
+          "sweep_passes": 0
+        },
+        "access_control_state": {
+          "apparmor_collection_enabled": false,
+          "seccomp_collection_enabled": false,
+          "mode": "event_triggered_procfs_snapshot",
+          "queue_capacity": 128,
+          "cache_capacity": 2048,
+          "min_interval_ms": 2000
+        },
+        "procfs_identity": {
+          "mode": "kernel_namespace_mapping",
+          "pid_namespace": "pid:[4026531836]",
+          "map_capacity": 16384,
+          "translated_events": 0,
+          "outside_namespace_events": 0,
+          "lookup_misses": 0
+        }
+      },
+      "last_capabilities": {
+        "capture_buffers": {
+          "ring_bytes": 67108864,
+          "queue_events": 16384,
+          "queue_bytes": 15073280
+        },
+        "producer": {
+          "name": "agentprov-sensor",
+          "version": "v1.0.0-candidate",
+          "commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+          "os": "linux",
+          "architecture": "amd64",
+          "kernel": "6.8.0-149-generic",
+          "boot_id": "936ed6b1-e1c4-4c1c-b0b7-d4a47f623aa5",
+          "placement": "local_kernel",
+          "placement_basis": "local_kernel_only"
+        },
+        "collector_id": "sensor-5f5c76cca046",
+        "revision": 4,
+        "changed_at": "2026-11-16T18:21:30.03697725Z",
+        "schema_version": "agentprovenance.sensor_capabilities/v1",
+        "updated_at": "2026-11-16T18:21:30.03697725Z",
+        "ready": false,
+        "status": "stopped",
+        "probes": [
+          {
+            "name": "syscalls/sys_enter_sendto",
+            "category": "dns",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "getaddrinfo",
+            "category": "dns",
+            "target": "/lib/x86_64-linux-gnu/libc.so.6",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "sched/sched_process_fork",
+            "category": "process_lifecycle",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "sched/sched_process_exec",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "sched/sched_process_exit",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_connect",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_execve",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_open",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_openat",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_ptrace",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_rename",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_renameat",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_renameat2",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_setgid",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_setuid",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_unlink",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_unlinkat",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_exit_connect",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_exit_open",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_exit_openat",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "container_tls_discovery",
+            "category": "tls",
+            "required": false,
+            "status": "disabled",
+            "reason": "automatic discovery disabled"
+          }
+        ],
+        "tls_discovery": {
+          "enabled": false,
+          "scan_interval_ms": 2000,
+          "max_targets": 128,
+          "max_processes_per_scan": 4096,
+          "active_targets": 0,
+          "scan_complete": true,
+          "processes_scanned": 0,
+          "unreadable_processes": 0,
+          "unresolved_mounts": 0,
+          "truncated_maps": 0,
+          "skipped_targets": 0,
+          "unsupported_executables": 0,
+          "limitations": [
+            "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+            "first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
+            "amd64 Go 1.23\u20131.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported"
+          ],
+          "sweep_passes": 0
+        },
+        "access_control_state": {
+          "apparmor_collection_enabled": false,
+          "seccomp_collection_enabled": false,
+          "mode": "event_triggered_procfs_snapshot",
+          "queue_capacity": 128,
+          "cache_capacity": 2048,
+          "min_interval_ms": 2000
+        },
+        "procfs_identity": {
+          "mode": "kernel_namespace_mapping",
+          "pid_namespace": "pid:[4026531836]",
+          "map_capacity": 16384,
+          "translated_events": 0,
+          "outside_namespace_events": 0,
+          "lookup_misses": 0
+        }
+      }
+    },
+    {
+      "label": "overload-1MiB",
+      "expected_opens": 40000,
+      "sensor_flags": [
+        "--auto-tls=false",
+        "--apparmor-state=false",
+        "--seccomp-state=false",
+        "--ring-buffer-mib",
+        "1"
+      ],
+      "passed": true,
+      "startup_seconds": 0.9296465959999978,
+      "workload_seconds": 0.07554799999999773,
+      "workload_cpu_seconds": 0.19056499999999998,
+      "drain_seconds": 0.5657337880000028,
+      "total_and_drain_seconds": 0.6413880730000017,
+      "sensor_cpu_seconds": 1.346937000000001,
+      "sensor_exit_code": 0,
+      "peak_rss_kib": 118596,
+      "counts": {
+        "file_open": 10028,
+        "syscall_result": 10030,
+        "process_exit": 2
+      },
+      "kernel_drops": 59945,
+      "resource_drops": {
+        "sensor_ringbuf": 59945
+      },
+      "node_access_state_status_counts": {},
+      "output_bytes": 22832082,
+      "fixture_output_bytes": 22830183,
+      "output_sha256": "8be00f9e408410eea3c4f61538f6c934b425c5394178f8d0f16ea0c59dceb023",
+      "last_ready_capabilities": {
+        "capture_buffers": {
+          "ring_bytes": 1048576,
+          "queue_events": 16384,
+          "queue_bytes": 15073280
+        },
+        "producer": {
+          "name": "agentprov-sensor",
+          "version": "v1.0.0-candidate",
+          "commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+          "os": "linux",
+          "architecture": "amd64",
+          "kernel": "6.8.0-149-generic",
+          "boot_id": "936ed6b1-e1c4-4c1c-b0b7-d4a47f623aa5",
+          "placement": "local_kernel",
+          "placement_basis": "local_kernel_only"
+        },
+        "collector_id": "sensor-6125a9ab1010",
+        "revision": 3,
+        "changed_at": "2026-11-16T18:21:32.735130244Z",
+        "schema_version": "agentprovenance.sensor_capabilities/v1",
+        "updated_at": "2026-11-16T18:21:32.735130244Z",
+        "ready": true,
+        "status": "ready",
+        "probes": [
+          {
+            "name": "syscalls/sys_enter_sendto",
+            "category": "dns",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "getaddrinfo",
+            "category": "dns",
+            "target": "/lib/x86_64-linux-gnu/libc.so.6",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "sched/sched_process_fork",
+            "category": "process_lifecycle",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "sched/sched_process_exec",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "sched/sched_process_exit",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_connect",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_execve",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_open",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_openat",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_ptrace",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_rename",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_renameat",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_renameat2",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_setgid",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_setuid",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_unlink",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_enter_unlinkat",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_exit_connect",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_exit_open",
+            "category": "syscall",
+            "required": false,
+            "status": "attached"
+          },
+          {
+            "name": "syscalls/sys_exit_openat",
+            "category": "syscall",
+            "required": true,
+            "status": "attached"
+          },
+          {
+            "name": "container_tls_discovery",
+            "category": "tls",
+            "required": false,
+            "status": "disabled",
+            "reason": "automatic discovery disabled"
+          }
+        ],
+        "tls_discovery": {
+          "enabled": false,
+          "scan_interval_ms": 2000,
+          "max_targets": 128,
+          "max_processes_per_scan": 4096,
+          "active_targets": 0,
+          "scan_complete": true,
+          "processes_scanned": 0,
+          "unreadable_processes": 0,
+          "unresolved_mounts": 0,
+          "truncated_maps": 0,
+          "skipped_targets": 0,
+          "unsupported_executables": 0,
+          "limitations": [
+            "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+            "first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
+            "amd64 Go 1.23\u20131.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported"
+          ],
+          "sweep_passes": 0
+        },
+        "access_control_state": {
+          "apparmor_collection_enabled": false,
+          "seccomp_collection_enabled": false,
+          "mode": "event_triggered_procfs_snapshot",
+          "queue_capacity": 128,
+          "cache_capacity": 2048,
+          "min_interval_ms": 2000
+        },
+        "procfs_identity": {
+          "mode": "kernel_namespace_mapping",
+          "pid_namespace": "pid:[4026531836]",
+          "map_capacity": 16384,
+          "translated_events": 0,
+          "outside_namespace_events": 0,
+          "lookup_misses": 0
+        }
+      },
+      "last_capabilities": {
+        "capture_buffers": {
+          "ring_bytes": 1048576,
+          "queue_events": 16384,
+          "queue_bytes": 15073280
+        },
+        "producer": {
+          "name": "agentprov-sensor",
+          "version": "v1.0.0-candidate",
+          "commit": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+          "os": "linux",
+          "architecture": "amd64",
+          "kernel": "6.8.0-149-generic",
+          "boot_id": "936ed6b1-e1c4-4c1c-b0b7-d4a47f623aa5",
+          "placement": "local_kernel",
+          "placement_basis": "local_kernel_only"
+        },
+        "collector_id": "sensor-6125a9ab1010",
+        "revision": 4,
+        "changed_at": "2026-11-16T18:21:33.376830336Z",
+        "schema_version": "agentprovenance.sensor_capabilities/v1",
+        "updated_at": "2026-11-16T18:21:33.376830336Z",
+        "ready": false,
+        "status": "stopped",
+        "probes": [
+          {
+            "name": "syscalls/sys_enter_sendto",
+            "category": "dns",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "getaddrinfo",
+            "category": "dns",
+            "target": "/lib/x86_64-linux-gnu/libc.so.6",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "sched/sched_process_fork",
+            "category": "process_lifecycle",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "sched/sched_process_exec",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "sched/sched_process_exit",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_connect",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_execve",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_open",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_openat",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_ptrace",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_rename",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_renameat",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_renameat2",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_setgid",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_setuid",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_unlink",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_enter_unlinkat",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_exit_connect",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_exit_open",
+            "category": "syscall",
+            "required": false,
+            "status": "detached"
+          },
+          {
+            "name": "syscalls/sys_exit_openat",
+            "category": "syscall",
+            "required": true,
+            "status": "detached"
+          },
+          {
+            "name": "container_tls_discovery",
+            "category": "tls",
+            "required": false,
+            "status": "disabled",
+            "reason": "automatic discovery disabled"
+          }
+        ],
+        "tls_discovery": {
+          "enabled": false,
+          "scan_interval_ms": 2000,
+          "max_targets": 128,
+          "max_processes_per_scan": 4096,
+          "active_targets": 0,
+          "scan_complete": true,
+          "processes_scanned": 0,
+          "unreadable_processes": 0,
+          "unresolved_mounts": 0,
+          "truncated_maps": 0,
+          "skipped_targets": 0,
+          "unsupported_executables": 0,
+          "limitations": [
+            "processes must be visible in the sensor PID namespace; container roots/maps must be readable",
+            "first TLS use can precede event-driven attachment; explicit targets are attached before readiness",
+            "amd64 Go 1.23\u20131.26 supports stripped ELF with pclntab; unknown ABIs and symbol-less custom C TLS are unsupported"
+          ],
+          "sweep_passes": 0
+        },
+        "access_control_state": {
+          "apparmor_collection_enabled": false,
+          "seccomp_collection_enabled": false,
+          "mode": "event_triggered_procfs_snapshot",
+          "queue_capacity": 128,
+          "cache_capacity": 2048,
+          "min_interval_ms": 2000
+        },
+        "procfs_identity": {
+          "mode": "kernel_namespace_mapping",
+          "pid_namespace": "pid:[4026531836]",
+          "map_capacity": 16384,
+          "translated_events": 0,
+          "outside_namespace_events": 0,
+          "lookup_misses": 0
+        }
+      }
+    }
+  ],
+  "passed": true
+}

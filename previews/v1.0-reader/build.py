@@ -6,15 +6,17 @@ base=Path(__file__).resolve().parent
 repo=base.parents[1]
 parser=argparse.ArgumentParser(description='Build the v1.0 candidate reader without changing the formal Dashboard.')
 parser.add_argument('--output', type=Path, required=True, help='new output directory')
+parser.add_argument('--workspace-archive', type=Path, help='unsigned Workspace reading copy for selection review')
 args=parser.parse_args()
 target=args.output.resolve()
 target.mkdir(parents=True, exist_ok=False)
-cases=[('investigation','task-investigation','Task investigation'),('execution','native-matrix','Cross-environment execution'),('browser','browser-detailed','Browser'),('notebook','notebook-detailed','Notebook')]
+cases=[('investigation','task-investigation','Task investigation'),('execution','native-matrix','Cross-environment execution'),('workspace','workspace-contract','Workspace'),('browser','browser-detailed','Browser'),('notebook','notebook-detailed','Notebook')]
 nav='<nav class="review-nav" aria-label="Candidate examples"><strong>v1.0 · PREVIEW</strong>'+''.join(f'<a href="../{slug}/index.html">{html.escape(title)}</a>' for slug,_,title in cases)+'<span>Saved evidence · Read only</span></nav>'
 manifest=[]
 for slug,name,title in cases:
     src=repo/'docs/benchmarks/v1.0-candidate/replays'/(name+'.zip')
     if slug=='notebook':src=base/'fixtures/notebook-attachments.zip'
+    if slug=='workspace':src=args.workspace_archive.resolve() if args.workspace_archive else base/'fixtures/workspace-contract.zip'
     root=target/slug
     root.mkdir(exist_ok=True)
     with zipfile.ZipFile(src) as archive:
@@ -22,6 +24,9 @@ for slug,name,title in cases:
             path=Path(info.filename)
             if path.is_absolute() or '..' in path.parts or '\\' in info.filename:raise ValueError('invalid archive path')
         archive.extractall(root)
+    inventory=json.loads((root/'export-inventory.json').read_text())
+    if inventory.get('signed') is not False or inventory.get('delivery_mode','reading')!='reading':
+        raise ValueError('Preview assets require an unsigned reading copy')
     catalog=json.loads(base64.b64decode(re.search(r'"([A-Za-z0-9+/=]+)"',(root/'assets/catalog.js').read_text()).group(1)))
     def saved(ref):
         data=(root/ref['path'].replace('.json.gz','.js')).read_text()
@@ -30,6 +35,7 @@ for slug,name,title in cases:
         run_id,run=item
         if slug=='execution':return sum(s['count'] for s in run.get('execution_links',{}).get('directions',{}).get('outgoing',[]))
         entries=saved(run['context']).get('entries',[]) if run.get('context') else []
+        if slug=='workspace':return sum(x.get('tool_name','').startswith('workspace_') for x in entries)
         return sum(len(x.get('attachments',[]))*100+int(bool(x.get('browser') or x.get('notebook'))) for x in entries)
     selected=max(catalog['runs'].items(),key=score)[0]
     refresh_graph_navigation(root,catalog,saved)
@@ -40,6 +46,7 @@ for slug,name,title in cases:
     for language in ['en','zh-CN']:
         index=root/language/'index.html';text=index.read_text()
         text=text.replace("const overviewQ=q+'&lens=default&detail=summary';", "const overviewQ=q+scopeQuery+'&lens=default&detail=summary';")
+        text=text.replace('<nav class="offline-replay-bar">','<nav class="offline-replay-bar" data-delivery-mode="reading" data-verification-state="not_checked">')
         text=text.replace('</head>','<link rel="stylesheet" href="../assets/evidence-preview.css"></head>')
         bar=nav.replace('href="../','href="../../')
         if language=='zh-CN':
@@ -48,7 +55,6 @@ for slug,name,title in cases:
         text=text.replace('</body>','<script src="../assets/evidence-preview.js"></script></body>')
         index.write_text(text)
     for ext in ['css','js']:shutil.copy2(base/('evidence.'+ext),root/'assets'/('evidence-preview.'+ext))
-    inventory=json.loads((root/'export-inventory.json').read_text())
     items=[]
     for p in sorted(root.rglob('*')):
         if not p.is_file() or p.name=='export-inventory.json':continue
@@ -56,7 +62,7 @@ for slug,name,title in cases:
     inventory['files']=items;inventory['bytes_excluding_inventory']=sum(x['bytes'] for x in items)
     inventory['ui_review']={'original_archive_sha256':hashlib.sha256(src.read_bytes()).hexdigest(),'source_branch':'feature/v1.0-portable-evidence','formal_ui_approval':'pending'}
     (root/'export-inventory.json').write_text(json.dumps(inventory,indent=2)+'\n')
-    manifest.append({'case':slug,'source':str(src.relative_to(repo)),'run':selected,'url':slug+'/index.html','files':len(items)})
+    manifest.append({'case':slug,'source':str(src.relative_to(repo)) if src.is_relative_to(repo) else src.name,'run':selected,'url':slug+'/index.html','files':len(items)})
 (target/'review.json').write_text(json.dumps(manifest,indent=2)+'\n')
 (target/'index.html').write_text('<!doctype html><html lang="en"><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=execution/index.html"><title>AgentProvenance v1.0 preview</title><a href="execution/index.html">Open candidate preview</a></html>')
 print(json.dumps(manifest))

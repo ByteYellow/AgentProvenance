@@ -12,7 +12,7 @@
 压缩包保留原始构建标识。
 
 后续的 [x86 收尾验收](../v1.0-x86-completion/README.zh-CN.md)记录 Workspace/Browser
-原生采集与交付、runsc 受控启动，以及仍待完成的 Kata 启动工作，并分别保留
+原生采集与交付、runsc 受控启动，以及已完成的 Kata/QEMU R-03 验收，并分别保留
 源码版本和验收结果。
 
 ## 本轮修复

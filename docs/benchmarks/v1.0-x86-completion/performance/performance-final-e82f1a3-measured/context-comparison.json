@@ -1,0 +1,497 @@
+{
+  "schema_version": "agentprovenance.frozen_budget_comparison/v1",
+  "kind": "context",
+  "passed": true,
+  "environment_comparison": {
+    "exact_match": false,
+    "rule": "linux_boot_memory_at_most_one_4k_page",
+    "field": "memory_bytes",
+    "baseline": 4105359360,
+    "candidate": 4105363456,
+    "difference_bytes": 4096,
+    "maximum_difference_bytes": 4096,
+    "other_environment_fields_equal": true
+  },
+  "metric_limits_changed": false,
+  "checks": [
+    {
+      "case": "browser/basic",
+      "metric": "store_bytes",
+      "actual": 1280299,
+      "maximum": 1585071.25,
+      "passed": true
+    },
+    {
+      "case": "browser/basic",
+      "metric": "attachment_bytes",
+      "actual": 0,
+      "maximum": 0.0,
+      "passed": true
+    },
+    {
+      "case": "browser/basic",
+      "metric": "bundle_bytes",
+      "actual": 731809,
+      "maximum": 900918.75,
+      "passed": true
+    },
+    {
+      "case": "browser/basic",
+      "metric": "replay_bytes",
+      "actual": 1475787,
+      "maximum": 1545480.0,
+      "passed": true
+    },
+    {
+      "case": "browser/basic",
+      "metric": "peak_rss_bytes",
+      "actual": 74551296,
+      "maximum": 84771840.0,
+      "passed": true
+    },
+    {
+      "case": "browser/basic",
+      "metric": "cpu_seconds",
+      "actual": 2.4262829999999997,
+      "maximum": 3.2467949999999997,
+      "passed": true
+    },
+    {
+      "case": "browser/basic",
+      "metric": "import_seconds",
+      "actual": 0.36122501599993484,
+      "maximum": 1.109110932500289,
+      "passed": true
+    },
+    {
+      "case": "browser/basic",
+      "metric": "project_seconds",
+      "actual": 0.05167049000010593,
+      "maximum": 0.12854448374985167,
+      "passed": true
+    },
+    {
+      "case": "browser/basic",
+      "metric": "query_seconds",
+      "actual": 0.06549601200003963,
+      "maximum": 0.14215687125049498,
+      "passed": true
+    },
+    {
+      "case": "browser/basic",
+      "metric": "bundle_seconds",
+      "actual": 0.05023890900019978,
+      "maximum": 0.12139907625003162,
+      "passed": true
+    },
+    {
+      "case": "browser/basic",
+      "metric": "replay_seconds",
+      "actual": 1.075007653999819,
+      "maximum": 1.4045716437499778,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed",
+      "metric": "store_bytes",
+      "actual": 2051218,
+      "maximum": 2507760.0,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed",
+      "metric": "attachment_bytes",
+      "actual": 45215,
+      "maximum": 56518.75,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed",
+      "metric": "bundle_bytes",
+      "actual": 1722861,
+      "maximum": 2121203.75,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed",
+      "metric": "replay_bytes",
+      "actual": 1803653,
+      "maximum": 1955106.25,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed",
+      "metric": "peak_rss_bytes",
+      "actual": 78622720,
+      "maximum": 91745280.0,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed",
+      "metric": "cpu_seconds",
+      "actual": 5.485931,
+      "maximum": 7.400281249999999,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed",
+      "metric": "import_seconds",
+      "actual": 0.5644334749999871,
+      "maximum": 1.1925851549995514,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed",
+      "metric": "project_seconds",
+      "actual": 0.05449781700008316,
+      "maximum": 0.13205551874993943,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed",
+      "metric": "query_seconds",
+      "actual": 0.0641182510003091,
+      "maximum": 0.14121467249997294,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed",
+      "metric": "bundle_seconds",
+      "actual": 0.07093851900026493,
+      "maximum": 0.17011394499950255,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed",
+      "metric": "replay_seconds",
+      "actual": 1.3980543729999226,
+      "maximum": 1.811457855000117,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed",
+      "metric": "excluded_replay_seconds",
+      "actual": 1.3151327639998271,
+      "maximum": 2.154571822499679,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed-no-attachments",
+      "metric": "store_bytes",
+      "actual": 1982321,
+      "maximum": 2442116.25,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed-no-attachments",
+      "metric": "attachment_bytes",
+      "actual": 0,
+      "maximum": 0.0,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed-no-attachments",
+      "metric": "bundle_bytes",
+      "actual": 1641385,
+      "maximum": 2019578.75,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed-no-attachments",
+      "metric": "replay_bytes",
+      "actual": 1774950,
+      "maximum": 1918505.0,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed-no-attachments",
+      "metric": "peak_rss_bytes",
+      "actual": 76095488,
+      "maximum": 88448000.0,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed-no-attachments",
+      "metric": "cpu_seconds",
+      "actual": 3.538157,
+      "maximum": 4.3932312499999995,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed-no-attachments",
+      "metric": "import_seconds",
+      "actual": 0.5344713290000982,
+      "maximum": 1.2393982962499195,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed-no-attachments",
+      "metric": "project_seconds",
+      "actual": 0.06391922499960856,
+      "maximum": 0.14705157374980898,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed-no-attachments",
+      "metric": "query_seconds",
+      "actual": 0.06524351100006243,
+      "maximum": 0.13433553624911382,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed-no-attachments",
+      "metric": "bundle_seconds",
+      "actual": 0.0734126280003693,
+      "maximum": 0.15728553375031423,
+      "passed": true
+    },
+    {
+      "case": "browser/detailed-no-attachments",
+      "metric": "replay_seconds",
+      "actual": 1.4061785219996636,
+      "maximum": 1.7237678337500484,
+      "passed": true
+    },
+    {
+      "case": "jupyter/basic",
+      "metric": "store_bytes",
+      "actual": 794202,
+      "maximum": 991552.5,
+      "passed": true
+    },
+    {
+      "case": "jupyter/basic",
+      "metric": "attachment_bytes",
+      "actual": 0,
+      "maximum": 0.0,
+      "passed": true
+    },
+    {
+      "case": "jupyter/basic",
+      "metric": "bundle_bytes",
+      "actual": 193014,
+      "maximum": 237267.5,
+      "passed": true
+    },
+    {
+      "case": "jupyter/basic",
+      "metric": "replay_bytes",
+      "actual": 577404,
+      "maximum": 731878.75,
+      "passed": true
+    },
+    {
+      "case": "jupyter/basic",
+      "metric": "peak_rss_bytes",
+      "actual": 65769472,
+      "maximum": 82805760.0,
+      "passed": true
+    },
+    {
+      "case": "jupyter/basic",
+      "metric": "cpu_seconds",
+      "actual": 0.9767669999999999,
+      "maximum": 1.383545,
+      "passed": true
+    },
+    {
+      "case": "jupyter/basic",
+      "metric": "import_seconds",
+      "actual": 0.1604842610004198,
+      "maximum": 0.8178730737495699,
+      "passed": true
+    },
+    {
+      "case": "jupyter/basic",
+      "metric": "project_seconds",
+      "actual": 0.036585046000254806,
+      "maximum": 0.10357474124991768,
+      "passed": true
+    },
+    {
+      "case": "jupyter/basic",
+      "metric": "query_seconds",
+      "actual": 0.025777841999570228,
+      "maximum": 0.08479769750015294,
+      "passed": true
+    },
+    {
+      "case": "jupyter/basic",
+      "metric": "bundle_seconds",
+      "actual": 0.03815479300010338,
+      "maximum": 0.1154853999998295,
+      "passed": true
+    },
+    {
+      "case": "jupyter/basic",
+      "metric": "replay_seconds",
+      "actual": 0.3341009179998764,
+      "maximum": 0.48898835249990497,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed",
+      "metric": "store_bytes",
+      "actual": 945499,
+      "maximum": 1170433.75,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed",
+      "metric": "attachment_bytes",
+      "actual": 1011,
+      "maximum": 1263.75,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed",
+      "metric": "bundle_bytes",
+      "actual": 385211,
+      "maximum": 473762.5,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed",
+      "metric": "replay_bytes",
+      "actual": 640353,
+      "maximum": 810593.75,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed",
+      "metric": "peak_rss_bytes",
+      "actual": 69357568,
+      "maximum": 86896640.0,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed",
+      "metric": "cpu_seconds",
+      "actual": 1.721168,
+      "maximum": 2.4039037499999996,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed",
+      "metric": "import_seconds",
+      "actual": 0.20089433400016787,
+      "maximum": 0.6366931762506056,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed",
+      "metric": "project_seconds",
+      "actual": 0.036938564000138285,
+      "maximum": 0.09773549624985663,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed",
+      "metric": "query_seconds",
+      "actual": 0.027554267000141408,
+      "maximum": 0.08462361749996035,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed",
+      "metric": "bundle_seconds",
+      "actual": 0.053376905000277475,
+      "maximum": 0.10646328875002382,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed",
+      "metric": "replay_seconds",
+      "actual": 0.399463631999879,
+      "maximum": 0.6249627762497767,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed",
+      "metric": "excluded_replay_seconds",
+      "actual": 0.4018286639998223,
+      "maximum": 1.116214141250157,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed-no-attachments",
+      "metric": "store_bytes",
+      "actual": 942884,
+      "maximum": 1167163.75,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed-no-attachments",
+      "metric": "attachment_bytes",
+      "actual": 0,
+      "maximum": 0.0,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed-no-attachments",
+      "metric": "bundle_bytes",
+      "actual": 382417,
+      "maximum": 470347.5,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed-no-attachments",
+      "metric": "replay_bytes",
+      "actual": 638604,
+      "maximum": 808285.0,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed-no-attachments",
+      "metric": "peak_rss_bytes",
+      "actual": 67293184,
+      "maximum": 82657280.0,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed-no-attachments",
+      "metric": "cpu_seconds",
+      "actual": 1.13781,
+      "maximum": 1.66326,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed-no-attachments",
+      "metric": "import_seconds",
+      "actual": 0.18288763400005337,
+      "maximum": 0.7216756874993735,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed-no-attachments",
+      "metric": "project_seconds",
+      "actual": 0.03562098000020342,
+      "maximum": 0.10412260125012836,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed-no-attachments",
+      "metric": "query_seconds",
+      "actual": 0.027477437000015925,
+      "maximum": 0.08453592125026717,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed-no-attachments",
+      "metric": "bundle_seconds",
+      "actual": 0.04373261399996409,
+      "maximum": 0.11385453500001859,
+      "passed": true
+    },
+    {
+      "case": "jupyter/detailed-no-attachments",
+      "metric": "replay_seconds",
+      "actual": 0.38901826600022105,
+      "maximum": 0.6196722137497546,
+      "passed": true
+    }
+  ],
+  "report_sha256": "dffdeaf6cba8f42c7d933dd1a48cf5d6f68d069ae87867ff6d7219d13a2c5c20",
+  "budget_sha256": "ae0a8edc7c4b80e300b8ce95abbca05ed791a0db1a9b9acdc44712a46b28970e",
+  "comparison_script_sha256": "82306f25d6c78f30b4dab19d96c970bc97f6e16210c1dbe41cf964496297f48c"
+}

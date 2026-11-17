@@ -150,8 +150,8 @@ The private gate binds a call to the exact process birth before workload dispatc
 The x86 probe verifies that this identity survives `exec`, that a failed identity
 checkpoint prevents execution, and that cancellation after release retains an
 unknown result. The command-scoped event closure and durable receiver boundary
-have local contract and signed-delivery tests. The complete real command and
-restart matrix remains an R-02 acceptance item until its artifacts are collected.
+have local contract and signed-delivery tests. The final real command and restart matrix passed; see the
+[x86 runsc result](benchmarks/v1.0-x86-completion/runsc-final.json).
 
 ## Validation Commands
 
@@ -186,4 +186,4 @@ AGENTPROV_TEST_EXECUTION_CAPTURE=1 go test ./internal/handoff -run '^TestLiveExe
 AGENTPROV_TEST_REQUIRE_CGROUP=1 go test ./internal/handoff -run '^TestExecutorRecoversLiveScope$' -count=1 -v
 ```
 
-Record the commit, architecture, runsc digest, kernel/rootfs versions, configuration hashes and acceptance artifacts. The real x86 run, complete R-02 fault matrix and Kata/QEMU platform acceptance remain pending until those artifacts are collected.
+Record the commit, architecture, runsc digest, kernel/rootfs versions, configuration hashes and acceptance artifacts. The [x86 completion index](benchmarks/v1.0-x86-completion/README.md) records the completed R-02 fault matrix and the fixed Kata/QEMU R-03 combination.
