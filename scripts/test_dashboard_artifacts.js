@@ -37,8 +37,10 @@ async (page) => {
   await page.locator('#content-choice').selectOption({label:'Raw saved object'});
   await ready('content_ref');
   check((await body()).includes('agentprov.provenance.object.v1'),'raw shows saved descriptor, not the live file');
+  check(await page.locator('#inspection-selection').textContent()==='Raw saved object','reader title follows the raw selection');
   await page.locator('#content-choice').selectOption({label:'Recorded graph content'});
   await ready('SYNTHETIC-FILE-START');
+  check(await page.locator('#inspection-selection').textContent()==='Recorded graph content','reader title follows the body selection');
   await page.locator('#content-next').click();
   await page.waitForFunction(()=>document.querySelector('#content-page-label').textContent.includes('Bytes 65536–'));
   const second = await body();

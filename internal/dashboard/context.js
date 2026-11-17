@@ -120,7 +120,11 @@ window.AgentContextUI = (() => {
       else { state.node = ''; resetPage(); }
       state.returnView = null; syncControls(); loadList(true);
     };
-    $('content-choice').onchange = () => { previewOffsets = [0]; loadContent(); };
+    $('content-choice').onchange = () => {
+      previewOffsets = [0];
+      api.contentChanged?.(previewKey,previewChoices[Number($('content-choice').value)]?.label);
+      loadContent();
+    };
     $('content-format').onchange = renderContentFormat;
     $('content-prev').onclick = () => { if (previewOffsets.length > 1) { previewOffsets.pop(); loadContent(); } };
     $('content-next').onclick = () => { if (previewPage?.has_more) { previewOffsets.push(previewPage.next_offset); loadContent(); } };

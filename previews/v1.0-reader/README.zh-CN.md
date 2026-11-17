@@ -79,6 +79,16 @@ Notebook 正文及图片阅读、脚本报错和意外网络请求。截图和 J
 node previews/v1.0-reader/check-portable.cjs /tmp/agentprov-v1-reader /tmp/agentprov-v1-mobile-check
 ```
 
+预览保留下拉控件。在支持的浏览器中，选项菜单由页面绘制，统一字号，跟随控件
+定位，并限制列表高度；其他浏览器继续使用原生菜单。构建时同步当前共用的正文
+阅读脚本，保留证据记录。检查中英文、桌面和手机的下拉操作，以及文件正文与
+原始对象之间的切换：
+
+```sh
+node previews/v1.0-reader/check-select.cjs /tmp/agentprov-v1-reader /tmp/agentprov-v1-select-check
+node previews/v1.0-reader/check-reader.cjs /tmp/agentprov-v1-reader /tmp/agentprov-v1-content-check
+```
+
 审阅真实 Workspace 选择性导出时，可用 `--workspace-archive /path/to/selected.zip`
 构建另一份预览。输入须为未签名的 `reading` 副本，也支持最终候选包的共享图存储格式。
 随后运行 `check-selection.cjs BUILD_DIR EXCLUDED_CONTEXT_ID CHECK_DIR`，检查被排除的

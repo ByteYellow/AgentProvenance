@@ -46,4 +46,19 @@ details[open]>.portable-summary::before {transform:rotate(90deg)}
 .review-nav strong {font-size:11px;letter-spacing:.04em;color:var(--mut)}
 .review-nav a {text-decoration:none;color:var(--acc)}
 .review-nav span {margin-left:auto;color:var(--mut)}
+/* Keep native selection semantics, with an in-page picker on supporting browsers. */
+@supports (appearance:base-select) {
+  select:not([multiple]):not([size]),select:not([multiple]):not([size])::picker(select) {appearance:base-select}
+  select:not([multiple]):not([size]) {gap:8px;align-items:center;min-width:0;max-width:100%;line-height:1.3;white-space:normal;overflow-wrap:anywhere;cursor:pointer}
+  #lenssel {width:270px}
+  #detailsel {width:88px}
+  select:not([multiple]):not([size])::picker-icon {flex:none;color:var(--mut)}
+  select:not([multiple]):not([size])::picker(select) {box-sizing:border-box;min-width:anchor-size(width);max-width:calc(100vw - 24px);max-height:min(360px,60dvh);overflow:auto;overscroll-behavior:contain;margin-block:4px;padding:4px;background:var(--panel);color:var(--tx);border:1px solid var(--line2);border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.12);font:inherit;font-weight:400;letter-spacing:0}
+  select:not([multiple]):not([size]) option {gap:8px;padding:7px 10px;border-radius:4px;min-width:0;white-space:normal;overflow-wrap:anywhere;cursor:pointer}
+  select:not([multiple]):not([size]) option:checked {background:var(--panel2);color:var(--acc)}
+  select:not([multiple]):not([size]) option:is(:hover,:focus-visible) {background:#eaf3ff;color:var(--tx);outline:1px solid var(--acc);outline-offset:-1px}
+  select:not([multiple]):not([size]):disabled,select:not([multiple]):not([size]) option:disabled {color:var(--mut);cursor:default}
+  select:not([multiple]):not([size]) option::checkmark {color:var(--acc)}
+}
+select:focus-visible {outline:2px solid var(--acc);outline-offset:2px}
 @media(max-width:720px){.portable-states {grid-template-columns:1fr}.portable-facts {grid-template-columns:100px minmax(0,1fr)}.portable-summary,.portable-body {padding-left:14px;padding-right:14px}.review-nav {padding:8px 14px}.review-nav span {margin-left:0}}

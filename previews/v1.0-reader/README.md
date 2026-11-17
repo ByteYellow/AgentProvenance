@@ -59,7 +59,8 @@ Workspace contract case, captured with CLI `d8a7b60` and native Sensor enabled.
 It contains the controlled fixture's files and saved results. Its SHA-256 is
 `4dc4230ee69e8e0f28d86e1671e584201fdb5799a82ee5cf0c34ae7526a2136a`.
 
-The builder preserves the evidence records, adds preview assets to a new copy,
+The builder preserves the evidence records, adds preview assets and the current
+shared content reader to a new copy,
 and regenerates the reading-copy file inventory. `review.json` records the
 selected examples. Each inventory records the original ZIP hash and pending
 approval. These remain unsigned reading copies.
@@ -91,6 +92,16 @@ reading for all five examples:
 
 ```sh
 node previews/v1.0-reader/check-portable.cjs /tmp/agentprov-v1-reader /tmp/agentprov-v1-mobile-check
+```
+
+The preview keeps dropdown controls and uses a page-rendered picker where
+supported, with consistent typography, anchored placement and bounded scrolling.
+Other browsers retain their native picker. Check dropdown interaction and the
+saved file / raw object reader in English and Chinese, on desktop and mobile:
+
+```sh
+node previews/v1.0-reader/check-select.cjs /tmp/agentprov-v1-reader /tmp/agentprov-v1-select-check
+node previews/v1.0-reader/check-reader.cjs /tmp/agentprov-v1-reader /tmp/agentprov-v1-content-check
 ```
 
 To review an actual selective Workspace export, build another copy using

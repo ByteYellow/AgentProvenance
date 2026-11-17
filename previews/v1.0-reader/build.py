@@ -55,6 +55,7 @@ for slug,name,title in cases:
         text=text.replace('</body>','<script src="../assets/evidence-preview.js"></script></body>')
         index.write_text(text)
     for ext in ['css','js']:shutil.copy2(base/('evidence.'+ext),root/'assets'/('evidence-preview.'+ext))
+    shutil.copy2(repo/'internal/dashboard/context.js',root/'assets/context.js')
     items=[]
     for p in sorted(root.rglob('*')):
         if not p.is_file() or p.name=='export-inventory.json':continue
