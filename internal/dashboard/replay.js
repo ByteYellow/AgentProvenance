@@ -103,6 +103,26 @@ window.AgentProvReplay = (() => {
     }
     overlays(result,wanted,data.nodes,new Set(data.present));return result;
   }
+  async function readLensView(index,ref){
+    const stored=await asset(ref);
+    // Historical packages contain complete views and need no graph dictionary.
+    if(!stored.schema_version){if(index.graph)fail('Graph view encoding does not match its index');return stored;}
+    if(stored.schema_version!=='agentprovenance.replay_lens_view/v2'||!index.graph)fail('Unsupported graph view encoding');
+    const graph=await asset(index.graph);
+    if(graph.schema_version!=='agentprovenance.replay_graph/v1'||!Array.isArray(graph.nodes)||!Array.isArray(graph.edges))fail('Invalid shared replay graph');
+    const expand=(indexes,pool)=>{
+      if(indexes===null)return null;
+      if(!Array.isArray(indexes))fail('Invalid graph object indexes');
+      return indexes.map(i=>{if(!Number.isSafeInteger(i)||i<0||i>=pool.length)fail('Graph object index is out of range');return pool[i];});
+    };
+    const view=copy(stored);
+    view.manifest.nodes=expand(view.node_indexes,graph.nodes);
+    view.manifest.edges=expand(view.edge_indexes,graph.edges);
+    if(Object.hasOwn(view,'derived_indexes'))view.manifest.derived_edges=expand(view.derived_indexes,graph.edges);
+    view.focus_edges=expand(view.focus_indexes,graph.edges);
+    if((view.focus_edges?.length||0)!==(view.priorities?.length||0))fail('Graph focus priorities do not match edges');
+    return view;
+  }
   function pageEvents(events,p,extra={}){const total=events.length,limit=clamp(p.get('limit'),50,1,500),offset=clamp(p.get('offset'),0,0,extra.schema_version?1000000000:total);return {...extra,events:events.slice(offset,offset+limit),total,limit,offset};}
   function filterEvents(events,p,run){
     const refs=[...new Set([...p.getAll('ref'),p.get('refs')||''].flatMap(v=>v.split(',')).map(v=>v.trim()).filter(Boolean))];
@@ -310,7 +330,7 @@ window.AgentProvReplay = (() => {
     if(path==='lens'){
       const index=await asset(session?session.lenses:run.lenses),key=(p.get('lens')||'default')+'/'+(p.get('detail')||'summary');
       if(!index.views[key])fail('Unknown graph view');
-      const [view,nodes]=await Promise.all([asset(index.views[key]),asset(p.get('focus')?index.focus_nodes:index.nodes)]);
+      const [view,nodes]=await Promise.all([readLensView(index,index.views[key]),asset(p.get('focus')?index.focus_nodes:index.nodes)]);
       if(session&&p.get('focus')&&!(index.present||[]).includes(p.get('focus'))&&!view.manifest.nodes.some(n=>n.id===p.get('focus')))fail('Focus is outside the recorded session graph');
       return lensView({views:{[key]:view},nodes,present:index.present},p);
     }

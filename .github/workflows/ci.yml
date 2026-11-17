@@ -58,6 +58,7 @@ jobs:
       - run: node scripts/test_compare_engine.mjs
       - run: node scripts/test_compare_completeness.mjs
       - run: node scripts/test_static_reader.cjs
+      - run: node scripts/test_replay_graph.cjs
       - run: node scripts/test_evidence_status.cjs
 
   notebook-entry:

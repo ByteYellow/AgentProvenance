@@ -50,6 +50,7 @@ func writeReplayLenses(w *staticdata.Writer, lenses provenance.ReplayLenses) (st
 		Nodes      staticdata.Ref            `json:"nodes"`
 		Present    []string                  `json:"present"`
 		FocusNodes staticdata.Ref            `json:"focus_nodes"`
+		Graph      staticdata.Ref            `json:"graph"`
 		Views      map[string]staticdata.Ref `json:"views"`
 	}{Present: lenses.Present, Views: map[string]staticdata.Ref{}}
 	var err error
@@ -59,10 +60,23 @@ func writeReplayLenses(w *staticdata.Writer, lenses provenance.ReplayLenses) (st
 	if index.FocusNodes, err = w.JSON(lenses.FocusNodes); err != nil {
 		return staticdata.Ref{}, err
 	}
-	for key, view := range lenses.Views {
+	pool := newReplayGraphPool()
+	keys := make([]string, 0, len(lenses.Views))
+	for key := range lenses.Views {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		view, viewErr := pool.view(lenses.Views[key])
+		if viewErr != nil {
+			return staticdata.Ref{}, viewErr
+		}
 		if index.Views[key], err = w.JSON(view); err != nil {
 			return staticdata.Ref{}, err
 		}
+	}
+	if index.Graph, err = w.JSON(pool); err != nil {
+		return staticdata.Ref{}, err
 	}
 	return w.JSON(index)
 }
