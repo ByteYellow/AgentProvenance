@@ -1,0 +1,7 @@
+{
+  "name": "agentprov-tour-preview",
+  "private": true,
+  "dependencies": {
+    "driver.js": "1.14.0"
+  }
+}
