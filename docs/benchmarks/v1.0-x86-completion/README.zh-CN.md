@@ -4,8 +4,10 @@
 
 更新于 2026-11-17，工作分支为 `feature/v1.0-portable-evidence`。
 本轮 x86 实机案例、有界性能测试和候选安装包已整理好，供维护者审阅。
-Dashboard 交互保留在[本地预览](../../../previews/v1.0-reader/README.zh-CN.md)中。
-24 小时长测、正式界面接入和发布按维护者安排暂缓。
+已确认的示例首页和阅读器已接入当前源码的正式构建，构建方式见
+[本地阅读器](../../../previews/v1.0-reader/README.zh-CN.md)。
+24 小时长测、安装包更新和发布按维护者安排暂缓。下表保留各次验收的实际版本；
+后续界面调整沿用这些记录，采集时间与原始签名保持原样。
 
 ## 需求与结果
 
@@ -19,7 +21,7 @@ Dashboard 交互保留在[本地预览](../../../previews/v1.0-reader/README.zh-
 | R-03 | 九项检查通过：Guest 内核、单命令交付、并发隔离、故障恢复、运行时绑定、离线交付、独立验证、Pod 重建、真实 Workspace Harness | [Kata 最终结果](kata-final.json)、[版本锁](kata-versions.lock.json)、[四份离线阅读包](kata-offline-final.json) |
 | B-01/B-02/B-03 | 并发 context/tab、重定向、iframe/worker、后台请求、下载、进程身份绑定、SIGKILL 恢复和查询不重复执行通过；选择性导出移除失去支撑的原生关联 | [Browser 最终结果](browser-final.json) |
 | Q-01，本轮有界范围 | Sensor 压力、10 万事件摄入、资源和上下文／导出预算通过；原预算及此前失败记录均保留 | [性能最终结果](performance-final.json) |
-| 阅读器预览 | 五组桌面案例、中英文移动端与断网阅读、真实 Workspace 选择性导出通过；图谱、Compare、搜索、正文和附件入口保留 | [预览结果](preview-final.json) |
+| 阅读器历史验收 | 五组桌面案例、中英文移动端与断网阅读、真实 Workspace 选择性导出通过；图谱、Compare、搜索、正文和附件入口保留 | [预览结果](preview-final.json) |
 | 完整 CI | `b9e6b8f` 上 15 项门禁全部通过，含 50 个 Go 测试包的 race 检查、历史包与数据库升级、双架构构建和 eBPF 绑定检查 | [CI 运行](https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391)、[完整结果](ci-final.json) |
 
 ## 测试版本

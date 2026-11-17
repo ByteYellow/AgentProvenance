@@ -4,6 +4,12 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Freeze delivery and replay snapshots through an independent read-only SQLite
+  connection, preserving a committed view while collector queries are cancelled.
+- Restore saved capture observations when returning to a Run's collection tab.
+  Keep loaded reader pages, scroll position and live refresh behavior intact.
+- Add a first-visit investigation path and a task-oriented map of reading,
+  search, comparison, collection diagnostics and evidence sharing to the demo guide.
 - Integrate the approved demo homepage and shared Workspace / Browser / Notebook
   reader into source builds, static sites and offline exports. Keep original
   evidence downloads and existing reader URLs; validate diagrams, direct

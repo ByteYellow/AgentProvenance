@@ -29,6 +29,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/observability"
 	"github.com/byteyellow/agentprovenance/internal/staticdata"
+	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
 type ReplayFile struct {
@@ -108,7 +109,7 @@ func (s Server) freezeReplaySource(ctx context.Context) (_ *replaySnapshot, err 
 		}
 	}()
 	path := filepath.Join(private, "snapshot.db")
-	if _, err = s.DB.ExecContext(ctx, "VACUUM INTO ?", path); err != nil {
+	if err = store.FreezeDatabase(ctx, s.DB, path); err != nil {
 		return nil, fmt.Errorf("freeze replay database: %w", err)
 	}
 	u := url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro&_pragma=query_only(1)"}

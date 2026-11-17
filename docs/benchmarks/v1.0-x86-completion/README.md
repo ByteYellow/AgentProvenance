@@ -3,9 +3,12 @@
 [简体中文](README.zh-CN.md)
 
 Updated 2026-11-17 for `feature/v1.0-portable-evidence`. The recorded x86 cases,
-bounded performance checks and portable packages are ready for review. Dashboard
-changes remain in [local preview](../../../previews/v1.0-reader/README.md).
-The maintainer has deferred the 24-hour soak, formal UI integration and publication.
+bounded performance checks and portable packages are ready for review. The approved
+homepage and reader are included in the current source build; see the
+[local reader instructions](../../../previews/v1.0-reader/README.md).
+The maintainer has deferred the 24-hour soak, package refresh and publication.
+The table retains each acceptance version. Later UI changes reuse these records
+with their original capture times and signatures.
 
 ## Requirement Results
 
@@ -19,7 +22,7 @@ The maintainer has deferred the 24-hour soak, formal UI integration and publicat
 | R-03 | Nine required checks pass: Guest kernel, single delivery, concurrency, recovery, runtime binding, offline delivery, verifier, Pod rebuild and real Workspace Harness | [Kata final](kata-final.json), [version lock](kata-versions.lock.json), [four offline readers](kata-offline-final.json) |
 | B-01/B-02/B-03 | Concurrent contexts/tabs, redirect, iframe/worker, background requests, download, process custody, SIGKILL recovery and query without repeated actions; selected readers remove unsupported native relations | [Browser final](browser-final.json) |
 | Q-01, bounded scope | Sensor pressure, 100,000-event ingestion, resource and context/export budgets pass; frozen limits and earlier failures retained | [Performance final](performance-final.json) |
-| Reader preview | Five desktop examples; English/Chinese mobile and offline checks; real selected Workspace export; existing graph, Compare, search, body and attachment readers retained | [Preview final](preview-final.json) |
+| Historical reader acceptance | Five desktop examples; English/Chinese mobile and offline checks; real selected Workspace export; existing graph, Compare, search, body and attachment readers retained | [Preview final](preview-final.json) |
 | Full CI | All 15 jobs pass at `b9e6b8f`, including race checks for 50 Go packages, historical bundles/database upgrades, both Linux architectures and eBPF bindings | [CI run](https://github.com/ByteYellow/AgentProvenance/actions/runs/43997596391), [full result](ci-final.json) |
 
 ## Versions and Reuse

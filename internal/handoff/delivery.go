@@ -120,7 +120,7 @@ func (s *DeliveryService) Prepare(ctx context.Context, p Principal, attemptID, o
 	if err := os.MkdirAll(frozenPaths.Root, 0o700); err != nil {
 		return Delivery{}, false, err
 	}
-	if _, err := s.Ledger.DB.ExecContext(ctx, "VACUUM INTO ?", frozenPaths.DB); err != nil {
+	if err := store.FreezeDatabase(ctx, s.Ledger.DB, frozenPaths.DB); err != nil {
 		return Delivery{}, false, err
 	}
 	if _, err := store.Init(frozenPaths.Root); err != nil {
