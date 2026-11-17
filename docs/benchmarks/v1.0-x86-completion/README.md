@@ -101,6 +101,11 @@ See the [candidate notes](../../releases/v1.0.0-preview.md) and
 
 ## Archive Scope
 
+The [recorded replay handoff](replays/README.md) includes seven offline reading
+ZIPs and six preserved signed packages for real Claude Workspace, Browser with
+Sensor and interrupted-operation recovery, and Kata/QEMU. Its manifest lists
+Run IDs, capture/export source SHAs and file checksums.
+
 The `*-final.json` files contain reviewed machine-readable summaries and original
 report hashes. Performance JSON and the Kata lock preserve source bytes.
 Private keys, provider credentials and raw model transcripts remain local.

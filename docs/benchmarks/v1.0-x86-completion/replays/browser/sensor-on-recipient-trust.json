@@ -1,0 +1,13 @@
+{
+  "schema_version": "agentprovenance.reader_trust/v1",
+  "id": "browser-native-recipient",
+  "keys": [
+    {
+      "key_id": "f2e2f76ffdb9237e",
+      "public_key_hex": "7456fa16d3984b4d1531c740de4819fd074f47977a94ae8675287e8c21e85e27",
+      "roles": [
+        "exporter"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,363 @@
+{
+  "schema_version": "agentprovenance.public_replay_handoff/v1",
+  "prepared_at": "2026-11-17T12:22:57.378970+00:00",
+  "capture_architecture": "linux/amd64",
+  "cases": [
+    {
+      "id": "workspace-harness",
+      "title": "Real Claude Workspace",
+      "run_id": "run-w01-840c8e5fb69b405fb8723aaa3b09f196",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+      "acceptance": "../workspace-final.json",
+      "reading": "workspace/harness-reading.zip",
+      "events": 14,
+      "contents": {
+        "sessions": 1,
+        "context_entries": 14,
+        "latest_context_entries": 14,
+        "context_body_refs": 14,
+        "context_raw_refs": 0,
+        "attachment_refs": 0,
+        "indexed_sources": {
+          "files": 1,
+          "runtime": 14,
+          "tools": 15
+        }
+      },
+      "preserved_signed": "workspace/harness-derived.zip",
+      "recipient_trust_policy": "workspace/harness-recipient-trust.json"
+    },
+    {
+      "id": "browser-sensor-on",
+      "title": "Browser with native Sensor",
+      "run_id": "browser-final-85dd7be",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+      "acceptance": "../browser-final.json",
+      "reading": "browser/sensor-on-reading.zip",
+      "events": 3706,
+      "contents": {
+        "sessions": 3,
+        "context_entries": 149,
+        "latest_context_entries": 149,
+        "context_body_refs": 146,
+        "context_raw_refs": 146,
+        "attachment_refs": 3,
+        "indexed_sources": {
+          "configuration": 129,
+          "runtime": 3706,
+          "tools": 21
+        }
+      },
+      "fixture_source_sha": "85dd7be16cb1cf0f36914e098b64bcd26e144f1d",
+      "browser_native_relations": 1358,
+      "preserved_signed": "browser/sensor-on-derived.zip",
+      "recipient_trust_policy": "browser/sensor-on-recipient-trust.json"
+    },
+    {
+      "id": "browser-crash-recovery",
+      "title": "Browser interrupted-operation recovery",
+      "run_id": "browser-crash-final-85dd7be",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+      "acceptance": "../browser-final.json",
+      "reading": "browser/crash-recovery-reading.zip",
+      "events": 2114,
+      "contents": {
+        "sessions": 2,
+        "context_entries": 60,
+        "latest_context_entries": 60,
+        "context_body_refs": 58,
+        "context_raw_refs": 58,
+        "attachment_refs": 0,
+        "indexed_sources": {
+          "configuration": 39,
+          "runtime": 2114,
+          "tools": 22
+        }
+      },
+      "fixture_source_sha": "85dd7be16cb1cf0f36914e098b64bcd26e144f1d",
+      "browser_native_relations": 1322,
+      "preparation": "Exported from a private copy of the saved Sensor store after importing both existing Browser transcripts; original capture files retained.",
+      "recovery": {
+        "generations": [
+          "first",
+          "second"
+        ],
+        "interrupted_generation": "first",
+        "interrupted_capture": "unsealed",
+        "interrupted_operation_outcome": "unknown",
+        "verified_receipts": 8,
+        "sealed_generation": "second",
+        "screenshots_and_har": "disabled in the original fixture"
+      },
+      "existing_capture_inputs": [
+        {
+          "file": "data/agentprov.db",
+          "sha256": "0c147c5528f33151da5d813906ae797e523ba040a66f52c1f620f818e50988dd"
+        },
+        {
+          "file": "recovery/capture/browser.jsonl",
+          "sha256": "41b8080138ac968c07ed87ccc3f721a6f45cfac4f7e3cda62f5b1784de2a355a"
+        },
+        {
+          "file": "recovery/capture/browser-76ed77b7-aa08-42a3-9122-30a37d2797fe.jsonl",
+          "sha256": "52a2c0e5f5f616753dede5e6b7ce6d746f5e27ca5c40031a8fe2a707f52edb4f"
+        },
+        {
+          "file": "operator/7070c86c-3dea-46d4-bcbd-f6edc19f8847/receipts.json",
+          "sha256": "ceea597f86e722080b0f5dada86809aca92ba6023038864938b0bf21b01b626a"
+        }
+      ]
+    },
+    {
+      "id": "kata-harness",
+      "title": "Kata/QEMU real Claude Workspace",
+      "run_id": "run-w01-3ab0b45254d6414e9b1cb31a7c6826ce",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "acceptance": "../kata-final.json",
+      "reading": "kata/harness-reading.zip",
+      "events": 14,
+      "contents": {
+        "sessions": 1,
+        "context_entries": 12,
+        "latest_context_entries": 12,
+        "context_body_refs": 12,
+        "context_raw_refs": 0,
+        "attachment_refs": 0,
+        "indexed_sources": {
+          "files": 1,
+          "runtime": 14,
+          "tools": 13
+        }
+      },
+      "fixture_source_sha": "85dd7be16cb1cf0f36914e098b64bcd26e144f1d",
+      "preserved_signed": "kata/harness-derived.zip",
+      "recipient_trust_policy": "kata/harness-recipient-trust.json"
+    },
+    {
+      "id": "kata-boot-1",
+      "title": "Kata/QEMU first Guest boot",
+      "run_id": "run-bca34eb2046b6df06a567e78f33589ee",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "acceptance": "../kata-offline-final.json",
+      "reading": "kata/boot-1-reading.zip",
+      "events": 10,
+      "contents": {
+        "sessions": 0,
+        "context_entries": 0,
+        "latest_context_entries": 0,
+        "context_body_refs": 0,
+        "context_raw_refs": 0,
+        "attachment_refs": 0,
+        "indexed_sources": {
+          "files": 1,
+          "runtime": 10,
+          "tools": 1
+        }
+      },
+      "fixture_source_sha": "85dd7be16cb1cf0f36914e098b64bcd26e144f1d",
+      "preserved_signed": "kata/boot-1-derived.zip",
+      "recipient_trust_policy": "kata/boot-1-recipient-trust.json"
+    },
+    {
+      "id": "kata-boot-2",
+      "title": "Kata/QEMU rebuilt Guest",
+      "run_id": "run-03d63ffbae01431570bc4812ce5c2837",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "acceptance": "../kata-offline-final.json",
+      "reading": "kata/boot-2-reading.zip",
+      "events": 10,
+      "contents": {
+        "sessions": 0,
+        "context_entries": 0,
+        "latest_context_entries": 0,
+        "context_body_refs": 0,
+        "context_raw_refs": 0,
+        "attachment_refs": 0,
+        "indexed_sources": {
+          "files": 1,
+          "runtime": 10,
+          "tools": 1
+        }
+      },
+      "fixture_source_sha": "85dd7be16cb1cf0f36914e098b64bcd26e144f1d",
+      "preserved_signed": "kata/boot-2-derived.zip",
+      "recipient_trust_policy": "kata/boot-2-recipient-trust.json"
+    },
+    {
+      "id": "kata-contract",
+      "title": "Kata/QEMU Workspace contract",
+      "run_id": "run-w01-7efa157d580941289e627040514d27e9",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "acceptance": "../kata-final.json",
+      "reading": "kata/contract-reading.zip",
+      "events": 14,
+      "contents": {
+        "sessions": 1,
+        "context_entries": 28,
+        "latest_context_entries": 28,
+        "context_body_refs": 28,
+        "context_raw_refs": 0,
+        "attachment_refs": 0,
+        "indexed_sources": {
+          "files": 1,
+          "runtime": 14,
+          "tools": 29
+        }
+      },
+      "fixture_source_sha": "85dd7be16cb1cf0f36914e098b64bcd26e144f1d",
+      "preserved_signed": "kata/contract-derived.zip",
+      "recipient_trust_policy": "kata/contract-recipient-trust.json"
+    }
+  ],
+  "artifacts": [
+    {
+      "file": "workspace/harness-reading.zip",
+      "case": "workspace-harness",
+      "run_id": "run-w01-840c8e5fb69b405fb8723aaa3b09f196",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+      "delivery_mode": "reading",
+      "bytes": 532534,
+      "sha256": "502fe66951936a4434701f3892075fdb6c058dde4f47c6f936babc80b0e85cf8",
+      "reading_from_sha256": "b4a58ec4a370989dc0987cb96ae59c23ac095d70692dd9cdab32904e3c4e4787",
+      "reading_converter_sha256": "fd6952e247ec04d410e6762c2039fb27bbb1250310cb183f0133d9dbbe23cc0d"
+    },
+    {
+      "file": "workspace/harness-derived.zip",
+      "case": "workspace-harness",
+      "run_id": "run-w01-840c8e5fb69b405fb8723aaa3b09f196",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+      "delivery_mode": "derived",
+      "bytes": 556328,
+      "sha256": "b4a58ec4a370989dc0987cb96ae59c23ac095d70692dd9cdab32904e3c4e4787"
+    },
+    {
+      "file": "browser/sensor-on-reading.zip",
+      "case": "browser-sensor-on",
+      "run_id": "browser-final-85dd7be",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+      "delivery_mode": "reading",
+      "bytes": 20621720,
+      "sha256": "97f2ff07c009f005a1a569679c32c5cd0601c5838e0dc5e8652072382d43015e",
+      "reading_from_sha256": "47cb47ab22b6281740909d800c03fc8b8645735c828f6bac19d587495d30ac21",
+      "reading_converter_sha256": "fd6952e247ec04d410e6762c2039fb27bbb1250310cb183f0133d9dbbe23cc0d"
+    },
+    {
+      "file": "browser/sensor-on-derived.zip",
+      "case": "browser-sensor-on",
+      "run_id": "browser-final-85dd7be",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+      "delivery_mode": "derived",
+      "bytes": 21608205,
+      "sha256": "47cb47ab22b6281740909d800c03fc8b8645735c828f6bac19d587495d30ac21"
+    },
+    {
+      "file": "browser/crash-recovery-reading.zip",
+      "case": "browser-crash-recovery",
+      "run_id": "browser-crash-final-85dd7be",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "f3deb10b98c6f589f870f202d2dad251c1129d5c",
+      "delivery_mode": "reading",
+      "bytes": 11922288,
+      "sha256": "c27530ece10b5bb68868f338d1929f0da6497f235bbdac25b6eb6efedfb99d92"
+    },
+    {
+      "file": "kata/harness-reading.zip",
+      "case": "kata-harness",
+      "run_id": "run-w01-3ab0b45254d6414e9b1cb31a7c6826ce",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "delivery_mode": "reading",
+      "bytes": 542211,
+      "sha256": "ccb47502c4d429325d5b2e9c04b1814e53cdef4403de1dc0c30ccf2942d8bfd0",
+      "reading_from_sha256": "06dd07fbb247423e163c972d6983851392e8c93fa860195b25aba9ba576ec356",
+      "reading_converter_sha256": "fd6952e247ec04d410e6762c2039fb27bbb1250310cb183f0133d9dbbe23cc0d"
+    },
+    {
+      "file": "kata/harness-derived.zip",
+      "case": "kata-harness",
+      "run_id": "run-w01-3ab0b45254d6414e9b1cb31a7c6826ce",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "delivery_mode": "derived",
+      "bytes": 565338,
+      "sha256": "06dd07fbb247423e163c972d6983851392e8c93fa860195b25aba9ba576ec356"
+    },
+    {
+      "file": "kata/boot-1-reading.zip",
+      "case": "kata-boot-1",
+      "run_id": "run-bca34eb2046b6df06a567e78f33589ee",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "delivery_mode": "reading",
+      "bytes": 408983,
+      "sha256": "0ecb508f407ad10270f3c07c6683711a836cd91099a3c9609d641a48d55bc427",
+      "reading_from_sha256": "736a41b592bec850ac930d766f9dc5149e149cd818713a78d6bc81b3e1da198a",
+      "reading_converter_sha256": "fd6952e247ec04d410e6762c2039fb27bbb1250310cb183f0133d9dbbe23cc0d"
+    },
+    {
+      "file": "kata/boot-1-derived.zip",
+      "case": "kata-boot-1",
+      "run_id": "run-bca34eb2046b6df06a567e78f33589ee",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "delivery_mode": "derived",
+      "bytes": 424507,
+      "sha256": "736a41b592bec850ac930d766f9dc5149e149cd818713a78d6bc81b3e1da198a"
+    },
+    {
+      "file": "kata/boot-2-reading.zip",
+      "case": "kata-boot-2",
+      "run_id": "run-03d63ffbae01431570bc4812ce5c2837",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "delivery_mode": "reading",
+      "bytes": 409415,
+      "sha256": "a463b7203c8afdcada28c3f53a08d603c677a5236fc73a70a906a99fbff6ce30",
+      "reading_from_sha256": "f4c55904ccf78e22009668d5aed992eb2749a138f9f5b90e2d22a597297ec4c6",
+      "reading_converter_sha256": "fd6952e247ec04d410e6762c2039fb27bbb1250310cb183f0133d9dbbe23cc0d"
+    },
+    {
+      "file": "kata/boot-2-derived.zip",
+      "case": "kata-boot-2",
+      "run_id": "run-03d63ffbae01431570bc4812ce5c2837",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "delivery_mode": "derived",
+      "bytes": 424960,
+      "sha256": "f4c55904ccf78e22009668d5aed992eb2749a138f9f5b90e2d22a597297ec4c6"
+    },
+    {
+      "file": "kata/contract-reading.zip",
+      "case": "kata-contract",
+      "run_id": "run-w01-7efa157d580941289e627040514d27e9",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "delivery_mode": "reading",
+      "bytes": 629356,
+      "sha256": "68969305d832c98d07852949c5968e655e7c097d3f17cfeb03abee0369ccef47",
+      "reading_from_sha256": "d31d791fb418c0d1f3db5e2f0b11c7c5b75d142ab13d91f638dd63eb2a49b7a4",
+      "reading_converter_sha256": "fd6952e247ec04d410e6762c2039fb27bbb1250310cb183f0133d9dbbe23cc0d"
+    },
+    {
+      "file": "kata/contract-derived.zip",
+      "case": "kata-contract",
+      "run_id": "run-w01-7efa157d580941289e627040514d27e9",
+      "capture_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "export_source_sha": "d8a7b60db8824361fcba31b62db72a5e0f82d346",
+      "delivery_mode": "derived",
+      "bytes": 656268,
+      "sha256": "d31d791fb418c0d1f3db5e2f0b11c7c5b75d142ab13d91f638dd63eb2a49b7a4"
+    }
+  ]
+}

@@ -87,6 +87,10 @@ ARM/macOS 实测沿用此前的验收记录。
 
 ## 归档范围
 
+[实机回放包](replays/README.zh-CN.md)包含七份离线阅读 ZIP 和六份保留原样的签名包，
+覆盖真实 Claude Workspace、开启 Sensor 的 Browser、中断恢复及 Kata/QEMU。
+随附清单列出 Run、采集／导出源码 SHA 和文件校验值。
+
 `*-final.json` 是经过检查的机器可读汇总，包含原始报告摘要；性能 JSON 和 Kata
 版本锁保留源文件字节。私钥、接口凭据和原始模型日志留在本地私有验收目录。
 [SHA256SUMS](SHA256SUMS)覆盖此目录中的公开文件。

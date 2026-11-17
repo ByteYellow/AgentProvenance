@@ -1,0 +1,402 @@
+{
+  "schema_version": "agentprovenance.replay_handoff_verification/v1",
+  "status": "PASS",
+  "verification_source_sha": "bdc023253129c5458cc5e92543e28be2deaa540c",
+  "offline": [
+    {
+      "run": "run-w01-840c8e5fb69b405fb8723aaa3b09f196",
+      "files": 220,
+      "shards": 195,
+      "queries": 109,
+      "views": 36,
+      "sessions": 1,
+      "contextBodies": 14,
+      "networkRequests": 0,
+      "knownUILimitations": [],
+      "deliveryMode": "reading",
+      "signed": false,
+      "scope": "whole_run",
+      "runs": [
+        "run-w01-840c8e5fb69b405fb8723aaa3b09f196"
+      ],
+      "captureObservations": 22,
+      "executionLinks": 0,
+      "auditDecisions": 0
+    },
+    {
+      "run": "run-w01-3ab0b45254d6414e9b1cb31a7c6826ce",
+      "files": 212,
+      "shards": 187,
+      "queries": 104,
+      "views": 36,
+      "sessions": 1,
+      "contextBodies": 12,
+      "networkRequests": 0,
+      "knownUILimitations": [],
+      "deliveryMode": "reading",
+      "signed": false,
+      "scope": "whole_run",
+      "runs": [
+        "run-w01-3ab0b45254d6414e9b1cb31a7c6826ce"
+      ],
+      "captureObservations": 19,
+      "executionLinks": 0,
+      "auditDecisions": 0
+    },
+    {
+      "run": "run-w01-7efa157d580941289e627040514d27e9",
+      "files": 260,
+      "shards": 235,
+      "queries": 134,
+      "views": 36,
+      "sessions": 1,
+      "contextBodies": 28,
+      "networkRequests": 0,
+      "knownUILimitations": [],
+      "deliveryMode": "reading",
+      "signed": false,
+      "scope": "whole_run",
+      "runs": [
+        "run-w01-7efa157d580941289e627040514d27e9"
+      ],
+      "captureObservations": 33,
+      "executionLinks": 0,
+      "auditDecisions": 0
+    },
+    {
+      "run": "run-bca34eb2046b6df06a567e78f33589ee",
+      "files": 120,
+      "shards": 95,
+      "queries": 81,
+      "views": 36,
+      "sessions": 0,
+      "contextBodies": 0,
+      "networkRequests": 0,
+      "knownUILimitations": [],
+      "deliveryMode": "reading",
+      "signed": false,
+      "scope": "whole_run",
+      "runs": [
+        "run-bca34eb2046b6df06a567e78f33589ee"
+      ],
+      "captureObservations": 11,
+      "executionLinks": 0,
+      "auditDecisions": 0
+    },
+    {
+      "run": "run-03d63ffbae01431570bc4812ce5c2837",
+      "files": 120,
+      "shards": 95,
+      "queries": 81,
+      "views": 36,
+      "sessions": 0,
+      "contextBodies": 0,
+      "networkRequests": 0,
+      "knownUILimitations": [],
+      "deliveryMode": "reading",
+      "signed": false,
+      "scope": "whole_run",
+      "runs": [
+        "run-03d63ffbae01431570bc4812ce5c2837"
+      ],
+      "captureObservations": 11,
+      "executionLinks": 0,
+      "auditDecisions": 0
+    },
+    {
+      "run": "browser-final-85dd7be",
+      "files": 12099,
+      "shards": 12074,
+      "queries": 1016,
+      "views": 36,
+      "sessions": 3,
+      "contextBodies": 292,
+      "networkRequests": 0,
+      "knownUILimitations": [],
+      "deliveryMode": "reading",
+      "signed": false,
+      "scope": "whole_run",
+      "runs": [
+        "browser-final-85dd7be"
+      ],
+      "captureObservations": 578,
+      "executionLinks": 0,
+      "auditDecisions": 0,
+      "harAttachments": 3,
+      "attachments": 3
+    },
+    {
+      "run": "browser-crash-final-85dd7be",
+      "files": 6846,
+      "shards": 6821,
+      "queries": 550,
+      "views": 36,
+      "sessions": 2,
+      "contextBodies": 116,
+      "networkRequests": 0,
+      "knownUILimitations": [],
+      "deliveryMode": "reading",
+      "signed": false,
+      "scope": "whole_run",
+      "runs": [
+        "browser-crash-final-85dd7be"
+      ],
+      "captureObservations": 325,
+      "executionLinks": 0,
+      "auditDecisions": 0
+    }
+  ],
+  "signed_originals": [
+    {
+      "file": "browser/sensor-on-derived.zip",
+      "file_integrity": "passed",
+      "derived_signature": {
+        "status": "valid",
+        "cryptographic": "passed",
+        "trusted": true,
+        "key_id": "f2e2f76ffdb9237e",
+        "role": "exporter"
+      }
+    },
+    {
+      "file": "kata/boot-1-derived.zip",
+      "file_integrity": "passed",
+      "derived_signature": {
+        "status": "valid",
+        "cryptographic": "passed",
+        "trusted": true,
+        "key_id": "cfac882e04896e97",
+        "role": "exporter"
+      }
+    },
+    {
+      "file": "kata/boot-2-derived.zip",
+      "file_integrity": "passed",
+      "derived_signature": {
+        "status": "valid",
+        "cryptographic": "passed",
+        "trusted": true,
+        "key_id": "6e847a54e3542846",
+        "role": "exporter"
+      }
+    },
+    {
+      "file": "kata/contract-derived.zip",
+      "file_integrity": "passed",
+      "derived_signature": {
+        "status": "valid",
+        "cryptographic": "passed",
+        "trusted": true,
+        "key_id": "ba7fa4602780efbf",
+        "role": "exporter"
+      }
+    },
+    {
+      "file": "kata/harness-derived.zip",
+      "file_integrity": "passed",
+      "derived_signature": {
+        "status": "valid",
+        "cryptographic": "passed",
+        "trusted": true,
+        "key_id": "664f9c2e4e3aaaca",
+        "role": "exporter"
+      }
+    },
+    {
+      "file": "workspace/harness-derived.zip",
+      "file_integrity": "passed",
+      "derived_signature": {
+        "status": "valid",
+        "cryptographic": "passed",
+        "trusted": true,
+        "key_id": "f6fb66e3a0a0749e",
+        "role": "exporter"
+      }
+    }
+  ],
+  "privacy": [
+    {
+      "case": "workspace-harness",
+      "reviewed_file": "workspace/harness-derived.zip",
+      "sha256": "b4a58ec4a370989dc0987cb96ae59c23ac095d70692dd9cdab32904e3c4e4787",
+      "files_scanned": 223,
+      "unique_decoded_bytes": 2086096,
+      "credential_findings": 0,
+      "checks": [
+        "archive members",
+        "decoded JSON and gzip/base64 content",
+        "nested attachments",
+        "private keys",
+        "provider keys",
+        "access tokens",
+        "authentication headers",
+        "credential fields"
+      ],
+      "fixture_content": "Generated acceptance workspace or controlled loopback Browser pages; reading copies preserve reviewed evidence bytes."
+    },
+    {
+      "case": "browser-sensor-on",
+      "reviewed_file": "browser/sensor-on-derived.zip",
+      "sha256": "47cb47ab22b6281740909d800c03fc8b8645735c828f6bac19d587495d30ac21",
+      "files_scanned": 12102,
+      "unique_decoded_bytes": 91403900,
+      "credential_findings": 0,
+      "checks": [
+        "archive members",
+        "decoded JSON and gzip/base64 content",
+        "nested attachments",
+        "private keys",
+        "provider keys",
+        "access tokens",
+        "authentication headers",
+        "credential fields"
+      ],
+      "fixture_content": "Generated acceptance workspace or controlled loopback Browser pages; reading copies preserve reviewed evidence bytes."
+    },
+    {
+      "case": "browser-crash-recovery",
+      "reviewed_file": "browser/crash-recovery-reading.zip",
+      "sha256": "c27530ece10b5bb68868f338d1929f0da6497f235bbdac25b6eb6efedfb99d92",
+      "files_scanned": 6847,
+      "unique_decoded_bytes": 52330931,
+      "credential_findings": 0,
+      "checks": [
+        "archive members",
+        "decoded JSON and gzip/base64 content",
+        "nested attachments",
+        "private keys",
+        "provider keys",
+        "access tokens",
+        "authentication headers",
+        "credential fields"
+      ],
+      "fixture_content": "Generated acceptance workspace or controlled loopback Browser pages; reading copies preserve reviewed evidence bytes."
+    },
+    {
+      "case": "kata-harness",
+      "reviewed_file": "kata/harness-derived.zip",
+      "sha256": "06dd07fbb247423e163c972d6983851392e8c93fa860195b25aba9ba576ec356",
+      "files_scanned": 215,
+      "unique_decoded_bytes": 2274264,
+      "credential_findings": 0,
+      "checks": [
+        "archive members",
+        "decoded JSON and gzip/base64 content",
+        "nested attachments",
+        "private keys",
+        "provider keys",
+        "access tokens",
+        "authentication headers",
+        "credential fields"
+      ],
+      "fixture_content": "Generated acceptance workspace or controlled loopback Browser pages; reading copies preserve reviewed evidence bytes."
+    },
+    {
+      "case": "kata-boot-1",
+      "reviewed_file": "kata/boot-1-derived.zip",
+      "sha256": "736a41b592bec850ac930d766f9dc5149e149cd818713a78d6bc81b3e1da198a",
+      "files_scanned": 123,
+      "unique_decoded_bytes": 1803870,
+      "credential_findings": 0,
+      "checks": [
+        "archive members",
+        "decoded JSON and gzip/base64 content",
+        "nested attachments",
+        "private keys",
+        "provider keys",
+        "access tokens",
+        "authentication headers",
+        "credential fields"
+      ],
+      "fixture_content": "Generated acceptance workspace or controlled loopback Browser pages; reading copies preserve reviewed evidence bytes."
+    },
+    {
+      "case": "kata-boot-2",
+      "reviewed_file": "kata/boot-2-derived.zip",
+      "sha256": "f4c55904ccf78e22009668d5aed992eb2749a138f9f5b90e2d22a597297ec4c6",
+      "files_scanned": 123,
+      "unique_decoded_bytes": 1804301,
+      "credential_findings": 0,
+      "checks": [
+        "archive members",
+        "decoded JSON and gzip/base64 content",
+        "nested attachments",
+        "private keys",
+        "provider keys",
+        "access tokens",
+        "authentication headers",
+        "credential fields"
+      ],
+      "fixture_content": "Generated acceptance workspace or controlled loopback Browser pages; reading copies preserve reviewed evidence bytes."
+    },
+    {
+      "case": "kata-contract",
+      "reviewed_file": "kata/contract-derived.zip",
+      "sha256": "d31d791fb418c0d1f3db5e2f0b11c7c5b75d142ab13d91f638dd63eb2a49b7a4",
+      "files_scanned": 263,
+      "unique_decoded_bytes": 2629491,
+      "credential_findings": 0,
+      "checks": [
+        "archive members",
+        "decoded JSON and gzip/base64 content",
+        "nested attachments",
+        "private keys",
+        "provider keys",
+        "access tokens",
+        "authentication headers",
+        "credential fields"
+      ],
+      "fixture_content": "Generated acceptance workspace or controlled loopback Browser pages; reading copies preserve reviewed evidence bytes."
+    }
+  ],
+  "reading_copies": [
+    {
+      "file": "workspace/harness-reading.zip",
+      "source_file": "workspace/harness-derived.zip",
+      "source_sha256": "b4a58ec4a370989dc0987cb96ae59c23ac095d70692dd9cdab32904e3c4e4787",
+      "evidence_files_compared": 197,
+      "evidence_bytes_unchanged": true,
+      "converter_sha256": "fd6952e247ec04d410e6762c2039fb27bbb1250310cb183f0133d9dbbe23cc0d"
+    },
+    {
+      "file": "browser/sensor-on-reading.zip",
+      "source_file": "browser/sensor-on-derived.zip",
+      "source_sha256": "47cb47ab22b6281740909d800c03fc8b8645735c828f6bac19d587495d30ac21",
+      "evidence_files_compared": 12076,
+      "evidence_bytes_unchanged": true,
+      "converter_sha256": "fd6952e247ec04d410e6762c2039fb27bbb1250310cb183f0133d9dbbe23cc0d"
+    },
+    {
+      "file": "kata/harness-reading.zip",
+      "source_file": "kata/harness-derived.zip",
+      "source_sha256": "06dd07fbb247423e163c972d6983851392e8c93fa860195b25aba9ba576ec356",
+      "evidence_files_compared": 189,
+      "evidence_bytes_unchanged": true,
+      "converter_sha256": "fd6952e247ec04d410e6762c2039fb27bbb1250310cb183f0133d9dbbe23cc0d"
+    },
+    {
+      "file": "kata/boot-1-reading.zip",
+      "source_file": "kata/boot-1-derived.zip",
+      "source_sha256": "736a41b592bec850ac930d766f9dc5149e149cd818713a78d6bc81b3e1da198a",
+      "evidence_files_compared": 97,
+      "evidence_bytes_unchanged": true,
+      "converter_sha256": "fd6952e247ec04d410e6762c2039fb27bbb1250310cb183f0133d9dbbe23cc0d"
+    },
+    {
+      "file": "kata/boot-2-reading.zip",
+      "source_file": "kata/boot-2-derived.zip",
+      "source_sha256": "f4c55904ccf78e22009668d5aed992eb2749a138f9f5b90e2d22a597297ec4c6",
+      "evidence_files_compared": 97,
+      "evidence_bytes_unchanged": true,
+      "converter_sha256": "fd6952e247ec04d410e6762c2039fb27bbb1250310cb183f0133d9dbbe23cc0d"
+    },
+    {
+      "file": "kata/contract-reading.zip",
+      "source_file": "kata/contract-derived.zip",
+      "source_sha256": "d31d791fb418c0d1f3db5e2f0b11c7c5b75d142ab13d91f638dd63eb2a49b7a4",
+      "evidence_files_compared": 237,
+      "evidence_bytes_unchanged": true,
+      "converter_sha256": "fd6952e247ec04d410e6762c2039fb27bbb1250310cb183f0133d9dbbe23cc0d"
+    }
+  ]
+}

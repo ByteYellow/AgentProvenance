@@ -1,0 +1,13 @@
+{
+  "id": "kata-fixture-recipient",
+  "keys": [
+    {
+      "key_id": "664f9c2e4e3aaaca",
+      "public_key_hex": "0c6aa81af9eb65031055839467015fa383b125f41520e6fa7ba6d1fab1358a8b",
+      "roles": [
+        "exporter"
+      ]
+    }
+  ],
+  "schema_version": "agentprovenance.reader_trust/v1"
+}
