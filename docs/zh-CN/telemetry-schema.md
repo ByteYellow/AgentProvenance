@@ -330,7 +330,7 @@ Python 使用 `Client.audit_associations`，AI/MCP 使用只读工具 `get_audit
 审计导入仍由受信任的采集端或 CLI 执行。
 
 用 `--event EVENT` 查看单条已保存审计，或用 `--cursor` 读取下一页。
-在线查询标明分析规则 `agentprov.audit_lifecycle_operation/v3`，保留原审计 PID、Agent 会话和图边。
+在线查询标明分析规则 `agentprov.audit_lifecycle_operation/v4`，保留原审计 PID、Agent 会话和图边。
 迟到记录到达后，再次查询会在同一数据库快照上重新计算候选。
 签名 Bundle 导出、导入保留分析输入，可在离线数据库上使用同一规则复核。
 
@@ -338,8 +338,7 @@ Python 使用 `Client.audit_associations`，AI/MCP 使用只读工具 `get_audit
 部分导出只包含所选审计记录；如果支持证据或竞争候选被排除，则以 `replay_evidence_excluded`
 标记并省略该关联，避免把剩余候选升级为唯一匹配。被排除的工具上下文同样省略。
 报告 schema 仍为 `agentprovenance.audit_associations/v1`，分析规则单独版本化。
-已经冻结的 v1 网页回放保留原规则和结果，不重新计算或改标为 v2。回放读取器支持冻结的
-v1 和 v2 分页；旧索引未标记 `rule` 时按 v1 读取。分页与索引规则必须一致，游标也须使用同一规则。
+已经冻结的网页回放保留原规则和结果。回放读取器支持冻结的 v1、v2、v3 和 v4 分页；旧索引未标记 `rule` 时按 v1 读取。分页与索引规则必须一致，游标也须使用同一规则。
 不含这项数据的旧网页回放会明确提示未收录。
 
 `analysis_scope=query_page` 描述当前在线查询的有界分析，`export_pages` 描述回放查询读取的
@@ -555,3 +554,9 @@ agentprov --data-dir <dir> sensor stream
 运行 `graph materialize --run <run_id>` 后，批次也会保存为 `telemetry_batch` 内容寻址对象，父对象哈希指向该批次产生的标准化事件对象。`graph explain --event <event_id> --json` 的 `telemetry_batches` 列出对应的接收批次、输入哈希、事件标识和对象引用。
 
 同一解释结果的 `telemetry` 部分报告接收器、来源格式、标准化类型、关联身份键、格式校验状态和关联状态。可据此追踪一条采集端事件如何进入溯源图。
+
+v4 规则也将已保存的 journal 接收时间用于进程生命周期候选范围，处理粗粒度审计
+时间早于短命进程启动的情况。来源的实时时钟／单调时钟须与原生观测一致；
+接收之后才启动的进程被排除，PID 重用产生多个候选时仍显示歧义。
+原审计时间窗口保留，使用接收时间的进程关联标记为
+`host_boot_lifetime_to_journal_receipt`。

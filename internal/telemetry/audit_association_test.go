@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -145,6 +147,119 @@ func TestAuditJournalReceiptRejectsLaterCallsAndClockConflicts(t *testing.T) {
 			item := associateAudit(a, indexAuditRuntime(auditRuntimeSet()))
 			if item.Operation.Status != "unassociated" || len(item.Operations) != 0 {
 				t.Fatalf("invalid receipt matched: %+v", item)
+			}
+		})
+	}
+}
+
+func TestAuditJournalReceiptIncludesShortLifetimeAfterCoarseWindow(t *testing.T) {
+	// Retained CI captures had audit .650 with a 1 ms coarse clock, while the
+	// process lived from .652289 to .652602 and the journal received at .652712.
+	events := auditRuntimeSet()
+	offsets := []time.Duration{2289 * time.Microsecond, 2475 * time.Microsecond, 2544 * time.Microsecond, 2602 * time.Microsecond}
+	for i := range events {
+		e := &events[i]
+		e.at = auditAssociationTime.Add(offsets[i])
+		e.mono = uint64(int64(10*time.Second) + int64(offsets[i]))
+		e.fields.Monotonic = strconv.FormatUint(e.mono, 10)
+		e.fields.CoarseClockNS = int64(time.Millisecond)
+		if e.fields.Stage != "" {
+			e.fields.SyscallStart = "10002475000"
+			e.fields.OperationID = "syscall-v1:" + e.fields.Thread + ":42:1000000000:10002475000"
+		}
+	}
+	events[3].etype, events[3].fields.ExitScope = "process_exit", "thread_group"
+	a := auditInputFixture(t)
+	a.record.SourceFormat = "journal_json"
+	a.record.JournalReceivedAt = auditAssociationTime.Add(2712 * time.Microsecond).Format(time.RFC3339Nano)
+	a.record.JournalMonotonicNS = "10002712000"
+	item := associateAudit(a, indexAuditRuntime(events))
+	if item.Process.Status != "inferred" || item.Process.Basis != "host_boot_lifetime_to_journal_receipt" || item.Operation.Status != "inferred" || len(item.ProcessExits) != 1 {
+		t.Fatalf("short lifetime lost: %+v", item)
+	}
+	if item.TimeWindow.Until != auditAssociationTime.Add(2*time.Millisecond).Format(time.RFC3339Nano) {
+		t.Fatal("nominal audit precision was rewritten")
+	}
+	t.Run("PID reuse remains ambiguous", func(t *testing.T) {
+		reused := append([]auditRuntime(nil), events...)
+		for i, offset := range []time.Duration{2650 * time.Microsecond, 2680 * time.Microsecond} {
+			e := auditRuntimeFixture(fmt.Sprintf("reused-%d", i), offset, "")
+			e.fields.Start = "10002640000"
+			e.fields.Instance = associationBoot + ":42:10002640000"
+			e.fields.CoarseClockNS = int64(time.Millisecond)
+			reused = append(reused, e)
+		}
+		got := associateAudit(a, indexAuditRuntime(reused))
+		if got.Process.Status != "ambiguous" || got.Process.CandidateCount != 2 || len(got.Operations) != 0 {
+			t.Fatalf("delayed receipt guessed a reused PID: %+v", got)
+		}
+	})
+	for _, mode := range []string{"no receipt", "before birth", "clock conflict", "wrong format"} {
+		t.Run(mode, func(t *testing.T) {
+			bad := a
+			switch mode {
+			case "no receipt":
+				bad.record.JournalReceivedAt, bad.record.JournalMonotonicNS = "", ""
+			case "before birth":
+				bad.record.JournalReceivedAt = auditAssociationTime.Add(2 * time.Millisecond).Format(time.RFC3339Nano)
+				bad.record.JournalMonotonicNS = "10002000000"
+			case "clock conflict":
+				bad.record.JournalMonotonicNS = "20002712000"
+			case "wrong format":
+				bad.record.SourceFormat = "audit_text"
+			}
+			if got := associateAudit(bad, indexAuditRuntime(events)); got.Process.Status != "unassociated" || len(got.Operations) != 0 {
+				t.Fatalf("invalid receipt joined a lifetime: %+v", got)
+			}
+		})
+	}
+}
+
+func TestAuditJournalShortLifetimeCapturedCIRegression(t *testing.T) {
+	for _, name := range []string{"apparmor", "seccomp"} {
+		t.Run(name, func(t *testing.T) {
+			db, _ := nativeTestStore(t)
+			root := filepath.Join("testdata", "audit-journal-short-lifetime")
+			runtime, err := os.ReadFile(filepath.Join(root, name+"-runtime.jsonl"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, line := range strings.Split(strings.TrimSpace(string(runtime)), "\n") {
+				var raw map[string]any
+				if err := json.Unmarshal([]byte(line), &raw); err != nil {
+					t.Fatal(err)
+				}
+				event, ok, err := mapNative(raw)
+				if err != nil || !ok {
+					t.Fatalf("native mapping: %v", err)
+				}
+				event.RunID = name
+				if _, err := IngestFiltered(db, event); err != nil {
+					t.Fatal(err)
+				}
+			}
+			journal, err := os.ReadFile(filepath.Join(root, name+"-journal.jsonl"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := IngestAuditReader(context.Background(), db, AuditIngestOptions{RunID: name, RetainRaw: true}, strings.NewReader(string(journal))); err != nil {
+				t.Fatal(err)
+			}
+			report, err := BuildAuditAssociations(context.Background(), db, AuditAssociationOptions{RunID: name})
+			if err != nil || len(report.Items) != 2 {
+				t.Fatalf("report: %+v %v", report, err)
+			}
+			for _, item := range report.Items {
+				if item.Process.Status != "inferred" || len(item.ProcessExits) != 1 {
+					t.Fatalf("missing actual lifetime: %+v", item)
+				}
+				if item.Decision == "KILL_PROCESS" {
+					if item.Operation.Status != "unassociated" || len(item.Operations) != 0 {
+						t.Fatal("invented suppressed call")
+					}
+				} else if item.Operation.Status != "inferred" || len(item.Operations) != 1 {
+					t.Fatalf("missing actual operation: %+v", item)
+				}
 			}
 		})
 	}

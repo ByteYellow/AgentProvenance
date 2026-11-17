@@ -466,7 +466,7 @@ English in every locale; recorded evidence retains its original text. Audit
 import remains a trusted collector/CLI operation.
 
 Use `--event EVENT` to inspect one saved audit record, or `--cursor` for the
-next page. Live queries use `agentprov.audit_lifecycle_operation/v3` as their
+next page. Live queries use `agentprov.audit_lifecycle_operation/v4` as their
 analysis rule. It does not overwrite an audit PID, Agent session or graph edge.
 Re-querying after a late arrival recomputes the candidates from one database
 snapshot. The saved input records survive signed Bundle export/import, so the
@@ -480,7 +480,7 @@ candidate is not promoted to a unique match. Excluded tool context is omitted.
 The report schema stays `agentprovenance.audit_associations/v1`; the analysis
 rule is versioned separately. Existing frozen webpage replays retain their
 original rule and results, rather than being recomputed or relabeled.
-The replay reader accepts frozen v1, v2 and v3 pages; a legacy index without `rule`
+The replay reader accepts frozen v1, v2, v3 and v4 pages; a legacy index without `rule`
 means v1. Page and index rules must agree, and cursors must use the same rule.
 Older webpage exports without this reader report that the data was not included.
 
@@ -866,3 +866,10 @@ runtime events. It reports the receiver (`tetragon`, `falco`,
 identity keys used for correlation, schema validation status, and correlation
 status. This is the main inspection surface for answering how a substrate event
 became part of the provenance DAG.
+
+Rule v4 also uses the saved journal receipt to bound process-lifetime candidates.
+This handles short-lived processes that start after a stale coarse audit timestamp.
+The source realtime/monotonic pair must agree with the native observations;
+processes born after receipt are excluded and PID reuse remains ambiguous.
+The nominal audit time window is preserved; process basis is
+`host_boot_lifetime_to_journal_receipt` when the receipt is used.

@@ -277,8 +277,24 @@ func associateAudit(input auditAssociationInput, index auditRuntimeIndex) AuditA
 	to := from.Add(time.Duration(a.TimestampPrecisionNS + resolution))
 	item.TimeWindow = &AuditTimeWindow{from.Format(time.RFC3339Nano), to.Format(time.RFC3339Nano),
 		a.TimestampPrecisionNS, resolution, "audit_decimal_plus_source_coarse_clock"}
+	// A coarse audit timestamp may predate a short-lived process even when its
+	// declared resolution is 1 ms. Use the saved source journal receipt for the
+	// process window as well as the operation window; keep the nominal interval
+	// above unchanged and expose this different basis on the process projection.
+	processTo, processBasis := to, "host_boot_lifetime_bracket"
+	var receiptMono uint64
+	if a.JournalReceivedAt != "" || a.JournalMonotonicNS != "" {
+		received, err := time.Parse(time.RFC3339Nano, a.JournalReceivedAt)
+		mono, monoErr := strconv.ParseUint(a.JournalMonotonicNS, 10, 64)
+		if a.SourceFormat != "journal_json" || err != nil || monoErr != nil || received.Before(from) || mono == 0 || mono > math.MaxInt64-1000 {
+			item.Process = auditUnknown("invalid_journal_receipt")
+			return item
+		}
+		processTo, receiptMono = received.Add(time.Microsecond), mono
+		processBasis = "host_boot_lifetime_to_journal_receipt"
+	}
 	for _, e := range index.unscoped[*a.AuditPID] {
-		if !e.at.IsZero() && !e.at.Before(from) && e.at.Before(to) &&
+		if !e.at.IsZero() && !e.at.Before(from) && e.at.Before(processTo) &&
 			(e.fields.HostID == "" || e.fields.HostID == a.HostID) && (e.fields.BootID == "" || normalizeAuditBoot(e.fields.BootID) == a.BootID) {
 			item.Process = auditUnknown("runtime_lifetime_incomplete")
 			return item
@@ -287,7 +303,16 @@ func associateAudit(input auditAssociationInput, index auditRuntimeIndex) AuditA
 	lives := index.lifetimes[origin]
 	var matched []*auditLifetime
 	for _, life := range lives {
-		refs, ok, clockIssue := life.bracket(from, to)
+		refs, ok, clockIssue := life.bracket(from, processTo)
+		if ok && receiptMono != 0 {
+			first := life.points[0]
+			if first.mono >= receiptMono+1000 {
+				ok = false
+			} else {
+				delta := processTo.Add(-time.Microsecond).Sub(first.at) - time.Duration(int64(receiptMono)-int64(first.mono))
+				clockIssue = clockIssue || delta > 2*time.Millisecond || delta < -2*time.Millisecond
+			}
+		}
 		if clockIssue {
 			item.Process = auditUnknown("runtime_clock_or_lifetime_conflict")
 			return item
@@ -297,7 +322,7 @@ func associateAudit(input auditAssociationInput, index auditRuntimeIndex) AuditA
 			item.Process.Candidates = append(item.Process.Candidates, AuditCandidate{life.id, refs})
 		}
 	}
-	item.Process = finishAuditAssociation(item.Process.Candidates, "host_boot_lifetime_bracket", "process_lifetime_not_observed")
+	item.Process = finishAuditAssociation(item.Process.Candidates, processBasis, "process_lifetime_not_observed")
 	if len(matched) != 1 {
 		if len(matched) > 1 {
 			item.Operation.Reason = "process_lifetime_ambiguous"

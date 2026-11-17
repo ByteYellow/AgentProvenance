@@ -155,9 +155,9 @@ async function main(){
  files.set(executionPath,gzipSync(Buffer.from('x'.repeat(originalExecution.data.bytes))));
  await assert.rejects(()=>setup().query('/api/execution-links?run=run'),/integrity check failed/);
  files.set(executionPath,executionBytes);
- // Old exports without an index rule retain v1. New exports freeze v3, and
+ // Old exports without an index rule retain v1. New exports freeze v4, and
  // mismatched or unknown versions fail instead of silently reinterpreting data.
- for(const version of [1,2,3]){
+ for(const version of [1,2,3,4]){
   const rule='agentprov.audit_lifecycle_operation/v'+version;
   const item={event_id:'audit-1',decision:'ERRNO',operation:{status:version===1?'inferred':'unassociated'}};
   const data=save({schema_version:'agentprovenance.audit_associations/v1',run_id:'run',rule,status:'complete',issues:[],items:[item]});

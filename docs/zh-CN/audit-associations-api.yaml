@@ -87,7 +87,7 @@ components:
         schema_version: { type: string, enum: [agentprovenance.audit_associations/v1] }
         rule:
           type: string
-          enum: [agentprov.audit_lifecycle_operation/v1, agentprov.audit_lifecycle_operation/v2, agentprov.audit_lifecycle_operation/v3]
+          enum: [agentprov.audit_lifecycle_operation/v1, agentprov.audit_lifecycle_operation/v2, agentprov.audit_lifecycle_operation/v3, agentprov.audit_lifecycle_operation/v4]
           description: 在线查询和新导出使用 v2。冻结回放保留导出时的 v1 或 v2 规则及结果，不重新计算。旧回放索引未标记 rule 时按 v1 读取，分页与索引的规则必须一致。报告 schema 仍为 v1。
         run_id: { type: string }
         status: { type: string, enum: [complete, incomplete] }
