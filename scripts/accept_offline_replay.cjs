@@ -142,15 +142,30 @@ async function main(){
           assert.deepEqual(actual,expected,'record manifest matches every source in the exported search catalog');
           assert.deepEqual(selection.records.filter(r=>r.included&&r.id.startsWith('entry/')).map(r=>r.id.slice(6)).sort(),saved(run.context).entries.map(e=>e.id).sort(),'record manifest includes only selected context revisions');
         }
+        const expectedView=(index,ref)=>{
+          const view=saved(ref),manifest=view.manifest;
+          if(!view.schema_version){assert.equal(index.graph,undefined);return manifest;}
+          assert.equal(view.schema_version,'agentprovenance.replay_lens_view/v2');
+          const graph=saved(index.graph);assert.equal(graph.schema_version,'agentprovenance.replay_graph/v1');
+          for(const [key,ids,pool] of [['nodes',view.node_indexes,graph.nodes],['edges',view.edge_indexes,graph.edges],['derived_edges',view.derived_indexes,graph.edges]]){
+            if(ids===undefined){assert.equal(key,'derived_edges');continue;}
+            if(ids===null){manifest[key]=null;continue;}
+            assert.ok(Array.isArray(ids)&&Array.isArray(pool));
+            manifest[key]=ids.map(i=>{assert.ok(Number.isSafeInteger(i)&&i>=0&&i<pool.length);return pool[i];});
+          }
+          assert.equal(view.focus_indexes?.length||0,view.priorities?.length||0);
+          for(const i of view.focus_indexes||[])assert.ok(Number.isSafeInteger(i)&&i>=0&&i<graph.edges.length);
+          return manifest;
+        };
         const index=saved(run.lenses);
         for(const [key,ref] of Object.entries(index.views)){
-          const [lens,detail]=key.split('/'),expected=saved(ref).manifest;
+          const [lens,detail]=key.split('/'),expected=expectedView(index,ref);
           assert.deepEqual(await query('/api/lens'+q+'&lens='+lens+'&detail='+detail+'&overlay=risk&overlay=trust'),expected);report.views++;
         }
         for(const [key,scope] of Object.entries(run.sessions||{})){
           const [harness,session]=JSON.parse(key),extra='&harness='+encodeURIComponent(harness)+'&session='+encodeURIComponent(session);
           const scoped=saved(scope.lenses);
-          assert.deepEqual(await query('/api/lens'+q+extra+'&overlay=risk&overlay=trust'),saved(scoped.views['default/summary']).manifest);
+          assert.deepEqual(await query('/api/lens'+q+extra+'&overlay=risk&overlay=trust'),expectedView(scoped,scoped.views['default/summary']));
           const events=await query('/api/events'+q+extra+'&limit=500');assert.ok(events.events.every(e=>scope.event_ids.includes(e.id)));report.sessions++;
         }
         let events=[];

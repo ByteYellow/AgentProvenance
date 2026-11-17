@@ -76,6 +76,26 @@ Exceeding any limit returns a nonzero exit code with the actual value and limit.
 Keep failed candidate results; investigate them before changing the workload or
 budget. The budget is a regression gate for the named environment, not an SLA.
 
+### A one-page Linux boot accounting difference
+
+On the same VM configuration, Linux may report a 4 KiB difference in `MemTotal`
+after reboot. Keep the strict comparison failure and both original environment
+records. After checking the CPU/RAM allocation and all other identity fields,
+measure into a fresh directory without `--budget`, then use the explicit
+comparison below. It accepts at most 4,096 bytes of physical-memory accounting
+difference; every metric limit, workload and instrument check stays unchanged.
+The result records the exact difference and hashes both unmodified input files.
+
+```sh
+python3 scripts/compare_acceptance_budget.py sensor \
+  --report "$MEASUREMENTS/candidate-measured/report.json" \
+  --budget "$MEASUREMENTS/budget.json" \
+  --allow-memory-page-variation --output "$MEASUREMENTS/comparison.json"
+```
+
+The same entry supports `telemetry` and `context`. Larger memory differences or
+changes to CPU count, kernel, Python or other identity fields still fail.
+
 ## Existing shell entry
 
 `scripts/accept_telemetry_100k_pressure.sh` forwards to the same Python measurement.

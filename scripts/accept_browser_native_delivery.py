@@ -50,7 +50,10 @@ def reader_relations(path):
             args = json.loads("[" + raw.removeprefix("window.AgentProvOffline.accept(").removesuffix(");") + "]")
             value = json.loads(gzip.decompress(base64.b64decode(args[1])))
             if isinstance(value, dict):
-                for edge in value.get("focus_edges") or []:
+                edges = value.get("focus_edges") or []
+                if value.get("schema_version") == "agentprovenance.replay_graph/v1":
+                    edges += value.get("edges") or []
+                for edge in edges:
                     if edge.get("derivation_rule") == RULE:
                         result[edge["id"]] = edge
     return result

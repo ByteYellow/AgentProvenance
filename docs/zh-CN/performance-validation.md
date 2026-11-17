@@ -69,6 +69,24 @@ python3 scripts/accept_telemetry_100k_pressure.py run \
 保留失败结果，先调查原因，再决定是否调整工作负载或预算。
 这份预算用于指定环境的回归验收。
 
+### 重启后相差一页内存时
+
+同一套虚拟机配置重启后，Linux 报告的 `MemTotal` 可能相差 4 KiB。保留严格比较
+失败的结果及两次环境记录，先核对虚拟机的 CPU、内存分配和其余身份字段。
+随后在新目录中不带 `--budget` 完成测量，再显式执行下面的比较。
+这个入口只接受最多 4,096 字节的系统内存统计差异，性能上限、工作负载和测量
+脚本的检查继续沿用冻结预算。结果会列出具体差异和原始文件摘要，输入文件保持原样。
+
+```sh
+python3 scripts/compare_acceptance_budget.py sensor \
+  --report "$MEASUREMENTS/candidate-measured/report.json" \
+  --budget "$MEASUREMENTS/budget.json" \
+  --allow-memory-page-variation --output "$MEASUREMENTS/comparison.json"
+```
+
+同一入口也支持 `telemetry` 和 `context`。更大的内存差异，以及 CPU 数量、内核、
+Python 等其他身份字段变化，仍会使比较失败。
+
 ## 原有 Shell 入口
 
 `scripts/accept_telemetry_100k_pressure.sh` 转发到同一份 Python 实现。
