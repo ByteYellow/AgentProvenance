@@ -26,6 +26,7 @@ import (
 	"github.com/byteyellow/agentprovenance/internal/dashboard"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
+	"github.com/byteyellow/agentprovenance/internal/staticdata"
 	"github.com/byteyellow/agentprovenance/internal/store"
 )
 
@@ -114,7 +115,7 @@ func custodyZIPEdges(t *testing.T, path string) map[string]provenance.GraphLensE
 		t.Fatal(err)
 	}
 	defer z.Close()
-	out := map[string]provenance.GraphLensEdge{}
+	shards := map[string]json.RawMessage{}
 	for _, file := range z.File {
 		if !strings.HasPrefix(file.Name, "data/") {
 			continue
@@ -146,14 +147,75 @@ func custodyZIPEdges(t *testing.T, path string) map[string]provenance.GraphLensE
 		if err != nil {
 			t.Fatal(err)
 		}
-		var view provenance.ReplayLensView
-		if json.Unmarshal(body, &view) == nil {
+		shards[args[0]] = body
+	}
+	read := func(ref staticdata.Ref, target any) {
+		t.Helper()
+		body, ok := shards[ref.Path]
+		if !ok {
+			t.Fatalf("missing replay shard %s", ref.Path)
+		}
+		if err := json.Unmarshal(body, target); err != nil {
+			t.Fatalf("invalid replay shard %s: %v", ref.Path, err)
+		}
+	}
+	out := map[string]provenance.GraphLensEdge{}
+	lensIndexes := 0
+	for _, body := range shards {
+		var index struct {
+			Graph staticdata.Ref            `json:"graph"`
+			Views map[string]staticdata.Ref `json:"views"`
+		}
+		if json.Unmarshal(body, &index) != nil || len(index.Views) == 0 {
+			continue
+		}
+		lensIndexes++
+		var graph struct {
+			SchemaVersion string                     `json:"schema_version"`
+			Edges         []provenance.GraphLensEdge `json:"edges"`
+		}
+		if index.Graph.SHA256 != "" {
+			read(index.Graph, &graph)
+			if graph.SchemaVersion != "agentprovenance.replay_graph/v1" {
+				t.Fatalf("unsupported graph encoding %q", graph.SchemaVersion)
+			}
+		}
+		for _, ref := range index.Views {
+			var view struct {
+				provenance.ReplayLensView
+				SchemaVersion string `json:"schema_version"`
+				FocusIndexes  []int  `json:"focus_indexes"`
+			}
+			read(ref, &view)
+			switch view.SchemaVersion {
+			case "":
+				if index.Graph.SHA256 != "" {
+					t.Fatal("legacy view unexpectedly refers to a shared graph")
+				}
+			case "agentprovenance.replay_lens_view/v2":
+				if index.Graph.SHA256 == "" {
+					t.Fatal("shared view is missing its graph")
+				}
+				// Follow this lens's references; unrelated dictionary entries
+				// must not satisfy the online/offline custody assertions.
+				for _, i := range view.FocusIndexes {
+					if i < 0 || i >= len(graph.Edges) {
+						t.Fatalf("invalid focus edge index %d", i)
+					}
+					view.FocusEdges = append(view.FocusEdges, graph.Edges[i])
+				}
+			default:
+				t.Fatalf("unsupported view encoding %q", view.SchemaVersion)
+			}
 			for _, edge := range view.FocusEdges {
 				if edge.DerivationRule == browserlink.RuntimeRule {
 					out[edge.ID] = edge
 				}
 			}
 		}
+	}
+	if lensIndexes == 0 {
+		t.Fatal("export contains no lens indexes")
 	}
 	return out
 }
