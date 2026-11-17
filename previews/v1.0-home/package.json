@@ -1,0 +1,9 @@
+{
+  "name": "agentprov-home-preview",
+  "private": true,
+  "devDependencies": {
+    "linkedom": "0.18.12",
+    "mermaid": "12.3.0",
+    "playwright": "1.65.1"
+  }
+}
