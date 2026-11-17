@@ -2,22 +2,36 @@
 
 [中文](README.zh-CN.md)
 
-A first-visit, spotlight-style tour of the current demo library and recorded-run
-reader. It highlights one region at a time with a floating explanation and
+A first-visit invitation to explore the current demo library and recorded-run
+reader. A small floating hint points to Page tour without dimming or blocking the
+page. Clicking Page tour starts the spotlight tour, which highlights one region
+at a time with a floating explanation and
 Back, Next and Skip all controls. The original layout, dropdowns, evidence,
 graph controls and investigation entries remain in place.
 
 ## Behavior
 
-- The library and reader have separate tours. Each starts once on first visit.
-- Skip all suppresses automatic tours across both pages in this browser origin.
-- Page tour in the header restarts the current tour. `?tour=1` also starts it.
-- Escape closes the current tour. Keyboard focus stays within the tour while open.
+- The library and reader have separate first-visit hints. The full tour starts
+  only after the visitor clicks Page tour. Dismissing a hint remembers that page type.
+- Skip all suppresses future automatic hints across both pages in this browser origin.
+- Page tour in the header restarts the current tour. `?tour=1` shows the invitation again.
+- Escape closes the current hint or tour. Only the full spotlight tour confines keyboard focus.
 - Closing restores the scroll position, previously focused control and session
   disclosure. It leaves the selected Run, graph view and evidence unchanged.
-- An open comparison or other dialog takes precedence over automatic guidance.
+- A comparison deep link has priority, including while it is still loading. After
+  the visitor closes the comparison with X or Escape, the reader invitation appears.
+  Other dialogs temporarily hide the hint. It returns when the dialog is closed
+  and the header is in view, without changing the visitor's scroll position.
+- The reader tour covers scope and session relationships; search and comparison;
+  graph views, playback, zoom and file content; risk and access control; session
+  configuration, coverage, Workspace and Browser/Notebook; export, delivery and
+  auxiliary views. Execution handoffs appear when that section is available.
 - Chinese and English follow the current page language. Narrow screens use a
   compact header button and wrapping reader shortcuts.
+- The library tour points directly to Documentation, or Quick start on mobile,
+  and explains how to find deployment and integration guidance.
+- Featured screenshots use inset spacing, a fine edge and a subtle shadow.
+  Their existing links are unchanged, with no additional labels or panels.
 
 This remains a separate preview, alongside `previews/v1.0-guided`. It is not
 connected to the production build or published site. Original evidence downloads
@@ -43,6 +57,7 @@ Its MIT license is retained as `tour-assets/driver-LICENSE.txt`. No CDN is requi
 to display the tour. Playwright uses the existing preview test dependency.
 
 The browser check covers both languages on desktop and mobile, every tour step,
-skip and restart, keyboard focus, first-visit persistence, state restoration,
-the direct comparison entry and the existing search controls. It writes
+invitation and explicit start, skip and restart, keyboard focus, first-visit
+persistence, state restoration, delayed comparison loading and closing, and the
+existing search controls. It writes
 screenshots and a JSON report to the selected output directory.
