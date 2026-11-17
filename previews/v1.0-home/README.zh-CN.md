@@ -41,4 +41,5 @@ node previews/v1.0-home/check.cjs http://127.0.0.1:58729/ output/playwright/home
 和新的图片目录。可用 `--screenshots` 指定案例弹窗中的大图目录。
 打开案例只读取证据，不执行 Agent 或调用模型接口。
 
-页面仍待审核。本构建不替换正式 Dashboard，不发布版本，也不部署 GitHub Pages。
+2026-11-17 已选定[精修版首页](refined/README.zh-CN.md)，本版保留用于对比。
+首页与阅读器的正式接入另行处理。本构建不替换正式 Dashboard，不发布版本，也不部署 GitHub Pages。

@@ -41,4 +41,9 @@ To recapture them from a running preview:
 node previews/v1.0-home/refined/capture.cjs http://127.0.0.1:58729/
 ```
 
-This remains a local review variant. The formal build and online site are unchanged.
+## Design approval
+
+This homepage design was approved on 2026-11-17. The previous design remains
+available for comparison. Approval covers the homepage's visual layout;
+integration of the linked reader previews is handled separately. The formal
+build and online site are unchanged.

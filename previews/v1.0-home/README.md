@@ -46,5 +46,7 @@ image directory. An optional `--screenshots` directory supplies larger reader
 screenshots in the case dialogs. Opening these cases does not run an Agent or
 call a model API.
 
-Review approval is still pending. This build does not replace the formal
+The [refined homepage](refined/README.md) was selected on 2026-11-17.
+This earlier design remains available for comparison. Formal integration of
+the homepage and reader is a separate step; this build does not replace the
 Dashboard, publish a release or deploy GitHub Pages.
