@@ -93,6 +93,7 @@ def main():
         run("node", "previews/v1.0-home/refined/check.cjs", url, report / "home")
         run("node", "previews/v1.0-home/check.cjs", url, report / "flows", site)
         run("node", "previews/v1.0-reader/check.cjs", report / "reader", extra_env={"AGENTPROV_PREVIEW_URL": url + "current"})
+        run("node", "previews/v1.0-reader/check-live.cjs", url + "current/", report / "live-reader")
         run("node", "previews/v1.0-reader/check-portable.cjs", site / "current", report / "offline")
         run("node", "previews/v1.0-reader/check-select.cjs", site / "current", report / "select")
         with tempfile.TemporaryDirectory(prefix="agentprov-downloaded-reader-") as folder:

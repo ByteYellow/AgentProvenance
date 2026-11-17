@@ -9,6 +9,7 @@ window.AgentContextUI = (() => {
   let formattedContent = null;
   let readerLoan = null, previewHighlight = '';
   let sessionScope = null;
+  let externalTab = '';
   const sameScope = (a,b) => (a?.harness || '') === (b?.harness || '') && (a?.session_id || '') === (b?.session_id || '');
   const statusNames = {disabled:'Not enabled',no_input:'No source found',empty:'Valid empty source',ok:'Captured',partial:'Partially captured',failed:'Capture failed',ambiguous:'Ambiguous binding',legacy_not_recorded:'Not recorded in this historical run'};
   const associationNames = {no_input:'No runtime input',empty:'No eligible tool input',ok:'Association pass completed',partial:'Partial tool association',ambiguous:'Association ambiguous',failed:'Association failed'};
@@ -192,18 +193,27 @@ window.AgentContextUI = (() => {
   function syncControls() {
     $('context-fold').open = state.open;
     document.querySelectorAll('[data-context-tab]').forEach(button => {
-      const selected = button.dataset.contextTab === state.tab;
+      const selected = !externalTab && button.dataset.contextTab === state.tab;
       button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1;
     });
     $('context-body').setAttribute('aria-labelledby', 'context-tab-' + state.tab);
     $('context-linked').hidden = !state.node;
     $('context-linked-label').textContent = state.node ? t('Only records connected by stored evidence edges') + ': ' + state.node : '';
     $('context-source').value = state.source;
-    $('context-source').disabled = state.tab === 'coverage';
+    $('context-source').disabled = Boolean(externalTab) || state.tab === 'coverage';
     api.sourceChanged?.(state.source);
+  }
+  function setExternalTab(id) {
+    externalTab = id || '';
+    if (state) syncControls();
+  }
+  function revealContextTab() {
+    externalTab = '';
+    $('context-fold').dispatchEvent(new CustomEvent('contexttabchange', {detail:state.tab}));
   }
   function changeTab(tab) {
     state.tab = tab; state.node = ''; state.returnView = null;
+    revealContextTab();
     resetPage(); syncControls(); loadList();
   }
   function scrollRegion(id) {
@@ -217,7 +227,7 @@ window.AgentContextUI = (() => {
     if (!state) return;
     state.open = true; $('context-fold').open = true;
     if (tab && tab !== state.tab) changeTab(tab);
-    else if (!state.page) loadList();
+    else { revealContextTab(); if (!state.page) loadList(); }
     scrollRegion('agentcontext');
   }
   function selectSource(source) {
@@ -487,6 +497,7 @@ window.AgentContextUI = (() => {
     if (!state) return;
     if (!state.node) state.returnView = {tab:state.tab,source:state.source,cursor:state.cursor,history:[...state.history],pageNumber:state.pageNumber,page:state.page,scroll:state.scroll,node:''};
     state.tab = 'conversation'; state.source = ''; state.node = node; state.open = true;
+    revealContextTab();
     resetPage(); syncControls(); loadList();
     scrollRegion('agentcontext');
   }
@@ -654,5 +665,5 @@ window.AgentContextUI = (() => {
     setPreview(choices,'search:'+source.id,reading.raw ? 1 : 0,{offsets,scroll:reading.scroll || 0,format:reading.format || 'bytes'});
   }
   function readerPosition(){return {offset:previewOffsets.at(-1),offsets:previewOffsets.slice(-512),scroll:$('content-body').scrollTop,raw:previewChoices[Number($('content-choice').value)]?.mode==='raw',format:$('content-format').value};}
-  return {init,setRun,selectGraph,selectSource,linkedSession,open,persist,readableContent,coverageSections,borrowReader,releaseReader,searchEvidence,readerPosition,retentionPresentation,retentionText,contentReason,omissionText};
+  return {init,setRun,setExternalTab,selectGraph,selectSource,linkedSession,open,persist,readableContent,coverageSections,borrowReader,releaseReader,searchEvidence,readerPosition,retentionPresentation,retentionText,contentReason,omissionText};
 })();
