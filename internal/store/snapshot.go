@@ -19,7 +19,7 @@ func FreezeDatabase(ctx context.Context, db *sql.DB, destination string) error {
 	if source == "" {
 		return fmt.Errorf("database snapshots require a file-backed source")
 	}
-	uri := url.URL{Scheme: "file", Path: filepath.ToSlash(source), RawQuery: "mode=ro&cache=private&_pragma=busy_timeout(5000)"}
+	uri := url.URL{Scheme: "file", OmitHost: true, Path: filepath.ToSlash(source), RawQuery: "mode=ro&cache=private&_pragma=busy_timeout(5000)"}
 	reader, err := sql.Open("sqlite", uri.String())
 	if err != nil {
 		return err
