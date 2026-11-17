@@ -3,17 +3,18 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const base=process.argv[2]||'http://127.0.0.1:58729/';
+const production=process.env.AGENTPROV_SITE_PRODUCTION==='1';
 const output=path.resolve(process.argv[3]||'output/playwright/refined-home');
 fs.mkdirSync(output,{recursive:true});
 
 (async()=>{
-  const browser=await chromium.launch({channel:'chrome',headless:true});
+  const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})});
   const reports=[],links=new Set();
   try {
     for(const lang of ['zh-CN','en']) for(const width of [1440,760,390,320]) {
       const page=await browser.newPage({viewport:{width,height:960},locale:lang,reducedMotion:'reduce'});
       const errors=[];page.on('pageerror',e=>errors.push(e.message));
-      const route=new URL(`refined.html?lang=${lang}`,base).href;
+      const route=new URL(`${production?'index.html':'refined.html'}?lang=${lang}`,base).href;
       await page.goto(route);
       await page.locator('.story').last().waitFor();
       assert.equal(await page.locator('.story').count(),4);
@@ -55,9 +56,9 @@ fs.mkdirSync(output,{recursive:true});
       }
       const other=lang==='en'?'zh-CN':'en';
       await page.locator(`[data-lang="${other}"]`).click();
-      assert.equal(new URL(page.url()).pathname,'/refined.html');
+      assert.equal(new URL(page.url()).pathname,new URL(route).pathname);
       assert.equal(await page.locator('html').getAttribute('lang'),other);
-      assert.equal(await page.locator('.previous-preview').count(),1);
+      assert.equal(await page.locator('.previous-preview').count(),production?0:1);
       assert((await page.locator('.story-preview img').first().getAttribute('src')).endsWith(`-${other}.png`));
       await page.goto(route+'&case=investigation');
       await page.locator('#case-dialog[open]').waitFor();
@@ -76,6 +77,23 @@ fs.mkdirSync(output,{recursive:true});
       await page.close();
     }
     const context=await browser.newContext();let checked=0;
+    if(production) for(const lang of ['en','zh-CN']) {
+      const page=await context.newPage();
+      await page.goto(new URL(`${lang}/index.html`,base).href);
+      await page.locator('.story').last().waitFor();
+      assert.equal(await page.locator('html').getAttribute('lang'),lang);
+      assert.equal(await page.locator('[data-preview]').count(),0);
+      assert(!/Local review|本地审核|上一版设计/.test(await page.locator('body').innerText()));
+      for(const img of await page.locator('.story img').all()) await img.evaluate(x=>x.decode());
+      for(const href of await page.locator('a[href]').evaluateAll(xs=>xs.map(a=>a.href)))links.add(href);
+      await page.locator('.section-nav a').nth(2).click();
+      assert.equal(new URL(page.url()).pathname,new URL(`${lang}/index.html`,base).pathname);
+      assert.equal(new URL(page.url()).hash,'#history');
+      await page.goto(new URL(`${lang}/`,base).href);
+      await page.locator('.story').last().waitFor();
+      assert.equal(await page.locator('html').getAttribute('lang'),lang);
+      await page.close();
+    }
     for(const href of links){if(!href.startsWith(base))continue;const response=await context.request.head(href);assert(response.ok(),href);checked++;}
     await context.close();
     fs.writeFileSync(path.join(output,'report.json'),JSON.stringify({reports,links:checked},null,2)+'\n');

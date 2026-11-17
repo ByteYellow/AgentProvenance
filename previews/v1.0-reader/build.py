@@ -7,6 +7,7 @@ repo=base.parents[1]
 parser=argparse.ArgumentParser(description='Build the v1.0 candidate reader without changing the formal Dashboard.')
 parser.add_argument('--output', type=Path, required=True, help='new output directory')
 parser.add_argument('--workspace-archive', type=Path, help='unsigned Workspace reading copy for selection review')
+parser.add_argument('--production', action='store_true', help='use the approved reader and site navigation')
 args=parser.parse_args()
 target=args.output.resolve()
 target.mkdir(parents=True, exist_ok=False)
@@ -42,21 +43,26 @@ for slug,name,title in cases:
     # Select the relevant recorded run before the existing reader boots.
     bootstrap='<script>if(!new URL(location.href).searchParams.has("run")){const u=new URL(location.href);u.searchParams.set("run",'+json.dumps(selected)+');history.replaceState(null,"",u);}</script>'
     index=root/'index.html'
-    index.write_text(index.read_text().replace('<body>','<body>'+bootstrap))
+    index.write_text(index.read_text().replace('<body>','<body>'+bootstrap).replace("location.replace(lang+'/index.html?'+q.toString());", "addEventListener('DOMContentLoaded',()=>location.replace(lang+'/index.html?'+q.toString()),{once:true});"))
     for language in ['en','zh-CN']:
         index=root/language/'index.html';text=index.read_text()
         text=text.replace("const overviewQ=q+'&lens=default&detail=summary';", "const overviewQ=q+scopeQuery+'&lens=default&detail=summary';")
         if 'await window.AgentCompareUI.openFromURL(INITIAL);' not in text:
             text=text.replace('await loadRun(first);','await loadRun(first);\n  await window.AgentCompareUI.openFromURL(INITIAL);')
         text=text.replace('<nav class="offline-replay-bar">','<nav class="offline-replay-bar" data-delivery-mode="reading" data-verification-state="not_checked">')
-        text=text.replace('</head>','<link rel="stylesheet" href="../assets/evidence-preview.css"></head>')
+        asset='evidence' if args.production else 'evidence-preview'
+        text=text.replace('</head>',f'<link rel="stylesheet" href="../assets/{asset}.css"></head>')
         bar=nav.replace('href="../','href="../../')
         if language=='zh-CN':
             for en,cn in [('Task investigation','任务调查'),('Cross-environment execution','跨环境执行'),('Saved evidence · Read only','已保存的证据 · 只读'),('PREVIEW','候选预览')]:bar=bar.replace(en,cn)
+        if args.production:
+            label='返回示例库' if language=='zh-CN' else 'Back to demos'
+            docs='文档' if language=='zh-CN' else 'Documentation'
+            bar=f'<nav class="review-nav" data-site-navigation><a href="../../../?lang={language}">{label}</a><a href="../../../{language}/guides/start.html">{docs}</a></nav>'
         text=text.replace('<body>','<body>'+bootstrap+bar)
-        text=text.replace('</body>','<script src="../assets/evidence-preview.js"></script></body>')
+        text=text.replace('</body>',f'<script src="../assets/{asset}.js"></script></body>')
         index.write_text(text)
-    for ext in ['css','js']:shutil.copy2(base/('evidence.'+ext),root/'assets'/('evidence-preview.'+ext))
+    for ext in ['css','js']:shutil.copy2(repo/'internal/dashboard'/('evidence.'+ext),root/'assets'/(asset+'.'+ext))
     shutil.copy2(repo/'internal/dashboard/context.js',root/'assets/context.js')
     shutil.copy2(repo/'internal/dashboard/compare.js',root/'assets/compare.js')
     items=[]
@@ -64,9 +70,9 @@ for slug,name,title in cases:
         if not p.is_file() or p.name=='export-inventory.json':continue
         raw=p.read_bytes();items.append({'path':str(p.relative_to(root)),'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()})
     inventory['files']=items;inventory['bytes_excluding_inventory']=sum(x['bytes'] for x in items)
-    inventory['ui_review']={'original_archive_sha256':hashlib.sha256(src.read_bytes()).hexdigest(),'source_branch':'feature/v1.0-portable-evidence','formal_ui_approval':'pending'}
+    inventory['reader_build' if args.production else 'ui_review']={'original_archive_sha256':hashlib.sha256(src.read_bytes()).hexdigest(),'source_branch':'feature/v1.0-portable-evidence','formal_ui_approval':'approved'}
     (root/'export-inventory.json').write_text(json.dumps(inventory,indent=2)+'\n')
     manifest.append({'case':slug,'source':str(src.relative_to(repo)) if src.is_relative_to(repo) else src.name,'run':selected,'url':slug+'/index.html','files':len(items)})
 (target/'review.json').write_text(json.dumps(manifest,indent=2)+'\n')
-(target/'index.html').write_text('<!doctype html><html lang="en"><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=execution/index.html"><title>AgentProvenance v1.0 preview</title><a href="execution/index.html">Open candidate preview</a></html>')
+(target/'index.html').write_text('<!doctype html><html lang="en"><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=execution/index.html"><title>AgentProvenance recordings</title><a href="execution/index.html">Open recording</a></html>')
 print(json.dumps(manifest))

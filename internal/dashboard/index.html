@@ -303,6 +303,7 @@
 <link rel="stylesheet" href="/assets/search.css">
 <link rel="stylesheet" href="/assets/compare.css">
 <link rel="stylesheet" href="/assets/export.css">
+<link rel="stylesheet" href="/assets/evidence.css">
 </head>
 <body>
 <header>
@@ -2104,5 +2105,6 @@ window.AgentCompareUI.init({tr,tx,esc,j,lang:LANG,
   setInterval(()=>{ if(!LIVE)return; safeUI(refreshRuns(cur).then(r=>r&&loadRun(r))); }, 10000);
 })().catch(showLoadError);
 </script>
+<script src="/assets/evidence.js"></script>
 </body>
 </html>

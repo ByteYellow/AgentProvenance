@@ -1,5 +1,6 @@
 /* Candidate reader; all inputs come from the existing read-only evidence APIs. */
 (() => {
+  if(location.protocol==='file:') document.querySelectorAll('[data-site-navigation]').forEach(nav=>nav.remove());
   'use strict';
   const $=id=>document.getElementById(id), e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const zh=window.AgentProvI18n?.locale==='zh-CN';

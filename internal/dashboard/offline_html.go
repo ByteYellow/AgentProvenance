@@ -208,5 +208,5 @@ func htmlAttribute(n *html.Node, key string) string {
 }
 
 const offlineReplayIndex = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>AgentProvenance offline replay</title></head><body><p><a href="en/index.html">English replay</a> · <a href="zh-CN/index.html">中文回放</a></p><script>
-const q=new URLSearchParams(location.search),lang=/^zh/i.test(q.get('lang')||navigator.language)?'zh-CN':'en';q.set('live','0');location.replace(lang+'/index.html?'+q.toString());
+const q=new URLSearchParams(location.search),lang=/^zh/i.test(q.get('lang')||navigator.language)?'zh-CN':'en';q.set('live','0');addEventListener('DOMContentLoaded',()=>location.replace(lang+'/index.html?'+q.toString()),{once:true});
 </script></body></html>`

@@ -75,7 +75,7 @@ func TestContextDashboardLayoutAndAssets(t *testing.T) {
 			}
 		}
 	}
-	for path, mime := range map[string]string{"/assets/context.js": "application/javascript", "/assets/context.css": "text/css", "/assets/workspace.js": "application/javascript", "/assets/workspace.css": "text/css", "/assets/access-control.js": "application/javascript", "/assets/access-control.css": "text/css"} {
+	for path, mime := range map[string]string{"/assets/context.js": "application/javascript", "/assets/context.css": "text/css", "/assets/evidence.js": "application/javascript", "/assets/evidence.css": "text/css", "/assets/workspace.js": "application/javascript", "/assets/workspace.css": "text/css", "/assets/access-control.js": "application/javascript", "/assets/access-control.css": "text/css"} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 		if w.Code != 200 || w.Body.Len() < 100 || !strings.Contains(w.Header().Get("Content-Type"), mime) {

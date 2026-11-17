@@ -73,6 +73,11 @@ func TestOfflineReplayFreezesOneRunAndSavedContent(t *testing.T) {
 	for _, f := range p.Inventory.Files {
 		expected[f.Path] = f
 	}
+	for _, asset := range []string{"assets/evidence.js", "assets/evidence.css"} {
+		if expected[asset].Bytes == 0 {
+			t.Fatalf("shared evidence reader missing from inventory: %s", asset)
+		}
+	}
 	if len(z.File) != len(expected)+1 {
 		t.Fatalf("unexpected ZIP members: %d != %d", len(z.File), len(expected)+1)
 	}
@@ -216,6 +221,11 @@ func TestOfflineReplayHTMLUsesOnlyLocalResources(t *testing.T) {
 		}
 		if !strings.Contains(s, "connect-src &#39;none&#39;") || !strings.Contains(s, "export-inventory.json") {
 			t.Fatal("offline boundary or inventory link missing")
+		}
+		for _, resource := range []string{`href="../assets/evidence.css"`, `src="../assets/evidence.js"`} {
+			if !strings.Contains(s, resource) {
+				t.Fatalf("shared evidence reader missing from HTML: %s", resource)
+			}
 		}
 	}
 }

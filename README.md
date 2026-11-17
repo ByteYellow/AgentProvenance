@@ -585,8 +585,10 @@ Read the [v1.0 source preview](docs/releases/v1.0.0-preview.md) for the workflow
 the [deployment guide](docs/deployment-modes.md) for entry requirements, and
 the [unreleased changelog](CHANGELOG.md#unreleased) for individual changes.
 The release archive examples above remain on v0.10.1 until v1.0 is published.
-The [reader candidate](previews/v1.0-reader/README.md) can be rebuilt locally for
-review; the formal Dashboard keeps its current layout pending that review.
+The source Dashboard and offline exports now share the approved Workspace,
+Browser and Notebook reader. The [demo website build](previews/v1.0-home/README.md#approved-website-build)
+combines four illustrated entries, topic guides and historical recordings while
+preserving existing links and original evidence downloads.
 
 For upgrades, back up your data directory before opening it with a newer version.
 An upgraded database should not be reopened with an older binary. macOS archives

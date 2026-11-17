@@ -43,7 +43,7 @@ details[open]>.portable-summary::before {transform:rotate(90deg)}
 .portable-evidence-content img {display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:8px}
 .portable-evidence-dialog button:focus-visible,.portable-actions button:focus-visible,.portable-more:focus-visible {outline:2px solid var(--acc);outline-offset:2px}
 .review-nav {display:flex;align-items:center;flex-wrap:wrap;gap:8px 18px;padding:9px 26px;background:var(--panel);border-bottom:1px solid var(--line);font-size:12px}
-.review-nav strong {font-size:11px;letter-spacing:.04em;color:var(--mut)}
+.review-nav strong {font-size:11px;letter-spacing:0;color:var(--mut)}
 .review-nav a {text-decoration:none;color:var(--acc)}
 .review-nav span {margin-left:auto;color:var(--mut)}
 /* Keep native selection semantics, with an in-page picker on supporting browsers. */

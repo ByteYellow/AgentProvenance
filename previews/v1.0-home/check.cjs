@@ -6,13 +6,15 @@ const crypto = require('node:crypto');
 const {pathToFileURL} = require('node:url');
 
 const base = process.argv[2] || 'http://127.0.0.1:58729/';
+const production = process.env.AGENTPROV_SITE_PRODUCTION === '1';
+const archive = production ? '' : 'archive/';
 const output = path.resolve(process.argv[3] || 'output/playwright/home-review');
 fs.mkdirSync(output, {recursive:true});
 const reports = [];
 const links = new Set();
 
 (async()=>{
-  const browser = await chromium.launch({channel:'chrome',headless:true});
+  const browser = await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})});
   try {
     for(const lang of ['zh-CN','en']) for(const [size,width,height] of [['desktop',1440,1050],['mobile',390,844]]) {
       const context = await browser.newContext({viewport:{width,height},locale:lang,reducedMotion:'reduce'});
@@ -23,7 +25,7 @@ const links = new Set();
       await page.locator('.story').last().waitFor();
       assert.equal(await page.locator('.story').count(),4);
       assert.equal(await page.locator('.topic-card').count(),3);
-      assert.equal(await page.locator('.section-nav a[aria-current="location"]').getAttribute('href'),'#topics');
+      assert.equal(await page.locator('.section-nav a[aria-current="location"]').evaluate(a=>a.hash),'#topics');
       assert.equal(await page.locator('.topic-guides a').count(),4);
       assert.equal(await page.locator('.topic-guides a svg').count(),4,'each guide has its own icon');
       assert((await page.locator('h1,h2,h3').allTextContents()).every(text=>!/[.。]$/.test(text.trim())),'headings have no final period');
@@ -32,7 +34,7 @@ const links = new Set();
       assert(topicGuides.some(href=>href.endsWith('/endpoint-attribution.html')));
       assert(topicGuides.every(href=>href.includes('/'+lang+'/demos/')));
       assert.equal(await page.locator('.brand b').evaluate(x=>getComputedStyle(x).color),'rgb(0, 113, 227)');
-      assert.equal(await page.locator('.brand').evaluate(x=>getComputedStyle(x).fontSize),'17px');
+      assert.equal(await page.locator('.brand').evaluate(x=>getComputedStyle(x).fontSize),production?(width===1440?'18px':'17px'):'17px');
       assert.equal(await page.locator('.story').first().evaluate(x=>getComputedStyle(x).borderRadius),'18px');
       for(const img of await page.locator('.story-preview img').all()) {
         await img.scrollIntoViewIfNeeded();
@@ -71,7 +73,7 @@ const links = new Set();
         assert(!(await page.locator('#case-dialog').evaluate(x=>x.open)));
         assert.equal(await page.evaluate(()=>document.activeElement.dataset.story),id);
       }
-      await page.locator('a[href="#history"]').click();
+      await page.locator('.section-nav a').nth(2).click();
       await page.locator('[data-story="archive"]').click();
       assert.equal(await page.locator('.archive-chapter').count(),4);
       await page.screenshot({path:path.join(output,`archive-${lang}-${size}.png`)});
@@ -111,6 +113,14 @@ const links = new Set();
     const digest = crypto.createHash('sha256').update(bytes).digest('hex');
     assert.equal(digest,'4dc4230ee69e8e0f28d86e1671e584201fdb5799a82ee5cf0c34ae7526a2136a');
     fs.writeFileSync(path.join(output,'workspace-contract.zip'),bytes);
+    if(production) {
+      const source = (await request.request.get(base+'sources.json').then(r=>r.json())).find(s=>s.name==='workspace-contract');
+      const updated = await request.request.get(new URL(source.reading_copy,base).href);
+      assert(updated.ok());
+      const reading = await updated.body();
+      assert.equal(crypto.createHash('sha256').update(reading).digest('hex'),source.reading_copy_sha256);
+      fs.writeFileSync(path.join(output,'workspace-current.zip'),reading);
+    }
     await request.close();
     const diagrams=[];
     for(const lang of ['zh-CN','en']) for(const width of [1440,390]) {
@@ -118,7 +128,7 @@ const links = new Set();
       const errors=[],external=[];
       page.on('pageerror',error=>errors.push(error.message));
       page.on('request',request=>{if(!request.url().startsWith(base))external.push(request.url());});
-      await page.goto(base+`archive/${lang}/guides/capabilities.html`);
+      await page.goto(base+`${archive}${lang}/guides/capabilities.html`);
       const figure=page.locator('.rendered-diagram');
       assert.equal(await figure.count(),1);
       await figure.locator('img').evaluate(img=>img.decode());
@@ -149,7 +159,7 @@ const links = new Set();
       ['workspace','current/workspace/zh-CN/index.html?run=run-w01-445a3a164ae14723b82f90634cff96f5&live=0'],
       ['browser','current/browser/zh-CN/index.html?run=run-da25e015ca1f&live=0'],
       ['notebook','recordings/notebook-detailed/zh-CN/index.html?live=0'],
-      ['team','archive/zh-CN/replay.html?run=run-double-attempt&lens=orchestration&live=0']
+      ['team',archive+'zh-CN/replay.html?run=run-double-attempt&lens=orchestration&live=0']
     ];
     const readers = [];
     for(const [id,route] of cases) {
@@ -182,9 +192,9 @@ const links = new Set();
     }
     const comparisons=[];
     const pairs=[
-      ['current/investigation/{lang}/index.html','run-3bfc6838a9c6','run-860466af8a9a'],
-      ['archive/{lang}/replay.html','run-2fd63df0ab9b','run-48baa3821074'],
-      ['archive/{lang}/replay.html','run-e9c3f452461a','run-2267309eda57']
+      ['current/investigation/{lang}/index.html','run-860466af8a9a','run-3bfc6838a9c6'],
+      [archive+'{lang}/replay.html','run-2fd63df0ab9b','run-48baa3821074'],
+      [archive+'{lang}/replay.html','run-e9c3f452461a','run-2267309eda57']
     ];
     for(const lang of ['zh-CN','en']) for(const [index,[route,a,b]] of pairs.entries()) {
       const page=await browser.newPage({viewport:{width:1440,height:1050}});
@@ -229,7 +239,7 @@ const links = new Set();
       assert.equal(await page.locator('#compare-b').inputValue(),b);
       await page.locator('#compare-close').click();
       comparisons.push({offline:true,protocol:'file:',a,b});
-      await page.goto(pathToFileURL(path.join(path.resolve(process.argv[4]),'archive/zh-CN/guides/capabilities.html')).href);
+      await page.goto(pathToFileURL(path.join(path.resolve(process.argv[4]),archive+'zh-CN/guides/capabilities.html')).href);
       await page.locator('.rendered-diagram img').evaluate(img=>img.decode());
       await page.locator('[data-diagram-open]').click();
       await page.locator('.diagram-dialog[open]').waitFor();

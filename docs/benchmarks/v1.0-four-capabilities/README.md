@@ -8,8 +8,10 @@ adapters and layered Browser evidence. The [result index](report.json) records
 commands, exit codes, source/build state, executable and report hashes, and
 skipped conditions for the fixed-revision retest.
 
-**UI status:** the local preview is retained; formal Dashboard integration is
-deferred. The existing visual layout remains in place.
+**UI follow-up (2026-11-17):** the maintainer approved homepage and reader
+integration. Current source builds share the Dashboard reader with offline
+exports; `scripts/accept_demo_site.py` checks the composed website. The fixed
+revision results below remain historical acceptance evidence.
 
 ## Implemented Scope
 

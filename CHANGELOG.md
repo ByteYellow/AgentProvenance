@@ -4,6 +4,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Integrate the approved demo homepage and shared Workspace / Browser / Notebook
+  reader into source builds, static sites and offline exports. Keep original
+  evidence downloads and existing reader URLs; validate diagrams, direct
+  comparisons, bilingual mobile layouts and downloaded offline reading copies.
 - Open paired recordings directly in Compare with explicit A/B links. Preserve
   the current reader on close and report unavailable pairs without substitution.
 - Wait for the owned Chromium endpoint to be published before starting capture;

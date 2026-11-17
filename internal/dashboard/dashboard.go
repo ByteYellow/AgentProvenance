@@ -54,6 +54,12 @@ var contextCSS []byte
 //go:embed context.js
 var contextJS []byte
 
+//go:embed evidence.css
+var evidenceCSS []byte
+
+//go:embed evidence.js
+var evidenceJS []byte
+
 //go:embed workspace.css
 var workspaceCSS []byte
 
@@ -144,6 +150,7 @@ func (s Server) Handler() http.Handler {
 	})
 	for path, asset := range map[string][]byte{"/assets/search-engine.js": searchEngineJS, "/assets/search.js": searchJS, "/assets/search.css": searchCSS,
 		"/assets/access-control.js": accessControlJS, "/assets/access-control.css": accessControlCSS,
+		"/assets/evidence.js": evidenceJS, "/assets/evidence.css": evidenceCSS,
 		"/assets/compare-engine.js": compareEngineJS, "/assets/compare.js": compareJS, "/assets/compare.css": compareCSS,
 		"/assets/export.js": exportJS, "/assets/export.css": exportCSS} {
 		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {

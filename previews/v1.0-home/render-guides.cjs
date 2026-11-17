@@ -5,7 +5,9 @@ const { chromium } = require('playwright');
 const { parseHTML } = require('linkedom');
 
 const output = path.resolve(process.argv[2]);
-const archive = path.join(output, 'archive');
+const production = process.argv.includes('--production');
+const archive = production ? output : path.join(output, 'archive');
+const home = production ? '../../' : '../../../';
 const evidence = [];
 const digest = text => crypto.createHash('sha256').update(text).digest('hex');
 
@@ -13,7 +15,7 @@ const assets = path.join(archive, 'diagram-assets');
 fs.mkdirSync(assets, { recursive: true });
 
 (async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? {channel: process.env.PLAYWRIGHT_CHANNEL} : {}) });
   try {
     const page = await browser.newPage();
     await page.setContent('<!doctype html><html><body></body></html>');
@@ -29,7 +31,7 @@ fs.mkdirSync(assets, { recursive: true });
         if (!filename.endsWith('.html')) continue;
         const input = fs.readFileSync(path.join(archive, language, section, filename), 'utf8');
         const { document } = parseHTML(input);
-        for (const a of document.querySelectorAll('a[href="../index.html"]')) a.setAttribute('href', '../../../?lang=' + language);
+        for (const a of document.querySelectorAll('a[href="../index.html"]')) a.setAttribute('href', home + '?lang=' + language);
         const blocks = [...document.querySelectorAll('pre > code.language-mermaid')];
         for (const [index, code] of blocks.entries()) {
           const original = code.textContent;
@@ -64,9 +66,9 @@ fs.mkdirSync(assets, { recursive: true });
         }
         if (blocks.length) {
           const css = document.createElement('link');
-          css.rel = 'stylesheet'; css.href = '../../../diagrams.css?v=1'; document.head.append(css);
+          css.rel = 'stylesheet'; css.href = home + 'diagrams.css?v=1'; document.head.append(css);
           const js = document.createElement('script');
-          js.src = '../../../diagrams.js?v=1'; js.defer = true; document.head.append(js);
+          js.src = home + 'diagrams.js?v=1'; js.defer = true; document.head.append(js);
         }
         fs.writeFileSync(path.join(archive, language, section, filename), document.toString());
       }

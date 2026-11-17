@@ -248,6 +248,7 @@ func (s Server) prepareReplaySet(ctx context.Context, snapshot *replaySnapshot, 
 	}
 	assets := map[string][]byte{
 		"theme.css": themeCSS, "context.css": contextCSS, "context.js": contextJS,
+		"evidence.css": evidenceCSS, "evidence.js": evidenceJS,
 		"workspace.css": workspaceCSS, "workspace.js": workspaceJS,
 		"access-control.css": accessControlCSS, "access-control.js": accessControlJS,
 		"search-engine.js": searchEngineJS, "search.js": searchJS, "search.css": searchCSS,

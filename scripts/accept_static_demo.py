@@ -12,6 +12,8 @@ import time
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'
+
     def log_message(self, *_args):
         pass
 
@@ -30,6 +32,7 @@ def main():
         log_path = Path(temp) / 'demo.log'
         with log_path.open('w') as log:
             process = subprocess.Popen([str(binary), 'demo', '--no-browser', '--json'], stdout=log, stderr=log)
+            ThreadingHTTPServer.request_queue_size = 128
             server = ThreadingHTTPServer(('127.0.0.1', 0), partial(QuietHandler, directory=str(site.parent)))
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
@@ -48,6 +51,7 @@ def main():
                     raise RuntimeError('Local signed replay did not start')
                 public = f'http://127.0.0.1:{server.server_port}/{site.name}/'
                 subprocess.run(['node', 'scripts/test_static_reader.cjs'], check=True)
+                subprocess.run(['node', 'scripts/test_static_demo_graph.cjs'], check=True)
                 subprocess.run(['node', 'scripts/accept_static_demo.cjs', public, local], check=True)
                 print(json.dumps({'site_bytes': size, 'passed': True}))
             finally:

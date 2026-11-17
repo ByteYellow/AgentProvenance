@@ -5,7 +5,8 @@ English | [中文](README.zh-CN.md)
 An independent visual variant of the [existing homepage preview](../README.md).
 It retains the AgentProvenance wordmark, four featured cases, three topics,
 archive dialogs and reader links. Typography, spacing and evidence excerpts
-are refined without changing the formal Dashboard or recording data.
+are refined without changing recording data. These same assets now supply the
+approved website build; this standalone variant retains its comparison link.
 
 ## Build and review
 
@@ -44,6 +45,7 @@ node previews/v1.0-home/refined/capture.cjs http://127.0.0.1:58729/
 ## Design approval
 
 This homepage design was approved on 2026-11-17. The previous design remains
-available for comparison. Approval covers the homepage's visual layout;
-integration of the linked reader previews is handled separately. The formal
-build and online site are unchanged.
+available for comparison. The maintainer subsequently approved homepage and
+reader integration together. The [approved website build](../README.md#approved-website-build)
+uses these assets without review-only navigation. Release and deployment remain
+separate maintainer decisions.

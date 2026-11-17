@@ -19,6 +19,11 @@ on:
       - 'CHANGELOG*'
       - 'scripts/accept_static_demo.*'
       - 'scripts/test_static_reader.cjs'
+      - 'scripts/test_static_demo_graph.cjs'
+      - 'scripts/build_demo_site.py'
+      - 'scripts/accept_demo_site.py'
+      - 'previews/v1.0-home/**'
+      - 'previews/v1.0-reader/**'
       - 'internal/**'
       - 'cmd/**'
       - 'demo/**'
@@ -97,6 +102,8 @@ jobs:
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      NODE_PATH: ${{ github.workspace }}/previews/v1.0-home/node_modules
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -108,14 +115,18 @@ jobs:
           node-version: '22'
       - name: Install browser acceptance dependencies
         run: |
-          npm install --no-save --package-lock=false playwright@1.56.1
-          npx playwright install --with-deps chromium
+          npm ci --prefix previews/v1.0-home
+          previews/v1.0-home/node_modules/.bin/playwright install --with-deps chromium
       - name: Build the public replay reader
         env:
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
         run: go build -ldflags "-X github.com/byteyellow/agentprovenance/internal/buildinfo.Version=$RELEASE_VERSION -X github.com/byteyellow/agentprovenance/internal/buildinfo.Commit=$GITHUB_SHA" -o /tmp/agentprov-site ./cmd/agentprov
       - name: Compare static replay with the local dashboard
-        run: python3 scripts/accept_static_demo.py --binary /tmp/agentprov-site --site _site/AgentProvenance
+        run: python3 scripts/accept_static_demo.py --binary /tmp/agentprov-site --site _site-base/AgentProvenance
+      - name: Build and check the approved demo library
+        run: |
+          python3 scripts/build_demo_site.py --archive _site-base/AgentProvenance --output _site/AgentProvenance
+          python3 scripts/accept_demo_site.py --site _site/AgentProvenance --archive _site-base/AgentProvenance
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site/AgentProvenance

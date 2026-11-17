@@ -22,11 +22,13 @@
     const intro = root.querySelector('.intro-note');
     intro.innerHTML = `${icon('shield')}<span>${t('只读实录，无需 API Key', 'Read-only recordings. No API key needed.')}</span>`;
     root.querySelector('.saved-status')?.remove();
-    const previous = document.createElement('a');
-    previous.className = 'previous-preview';
-    previous.href = `index.html?lang=${lang}`;
-    previous.textContent = t('查看上一版', 'Previous design');
-    root.querySelector('.languages').before(previous);
+    if (!production) {
+      const previous = document.createElement('a');
+      previous.className = 'previous-preview';
+      previous.href = `index.html?lang=${lang}`;
+      previous.textContent = t('查看上一版', 'Previous design');
+      root.querySelector('.languages').before(previous);
+    }
 
     const cards=stories().map(s=>s.id==='investigation'?{...s,actions:compareLink(comparison(currentInvestigation(),'run-860466af8a9a','run-3bfc6838a9c6'))}:s);
     root.querySelector('.grid').innerHTML = cards.map(s => `<article class="story" data-case="${s.id}">
@@ -37,9 +39,9 @@
     </article>`).join('');
     root.querySelector('#featured .section-head p').textContent = t('真实记录，可直接探索', 'Real recordings, ready to explore');
     root.querySelector('#topics .section-head p').textContent = t('深入方法与接入', 'Methods and integrations');
-    root.querySelector('.page-footer>span').textContent = t('v1.0 首页精修预览 · 本地审核', 'v1.0 refined homepage preview · Local review');
+    root.querySelector('.page-footer>span').textContent = production ? t('AgentProvenance · 执行观测与证据验证', 'AgentProvenance · Verifiable agent observability') : t('v1.0 首页精修预览 · 本地审核', 'v1.0 refined homepage preview · Local review');
     const foot = root.querySelector('.page-footer>span:last-child');
-    foot.innerHTML = link(`index.html?lang=${lang}`,t('上一版设计','Previous design'))+'<span aria-hidden="true">·</span>'+link('archive/'+lang+'/index.html',t('原版示例库','Original demo library'));
+    foot.innerHTML = production ? link(`${lang}/library.html`,t('完整案例目录','Full case catalog'))+'<span aria-hidden="true">·</span>'+link(guide('demo-library'),t('案例指南','Demo guide')) : link(`index.html?lang=${lang}`,t('上一版设计','Previous design'))+'<span aria-hidden="true">·</span>'+link('archive/'+lang+'/index.html',t('原版示例库','Original demo library'));
   }
 
   // The variant shares the existing case data, dialog navigation and run links.

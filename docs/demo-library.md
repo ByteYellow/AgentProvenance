@@ -23,7 +23,13 @@ For Sentry-origin events, use the [gVisor collection guide](gvisor-seccheck.md).
 
 ## Read the v1.0 candidate examples
 
-The [local reader preview](../previews/v1.0-reader/README.md) has five entries.
+The website groups its recordings into four illustrated entries: task investigation,
+remote workspaces, Browser / Notebook, and multi-agent collaboration. Topics and
+older investigations remain in separate sections. The repair card opens Compare
+with the inspection as A and the repair as B.
+
+The shared reader has five reading paths, also available in the
+[rebuildable local examples](../previews/v1.0-reader/README.md).
 Start with the question in each row, then follow its evidence path:
 
 | Entry | What happened | What to inspect |
@@ -38,8 +44,11 @@ The first four use recorded candidate executions. The Notebook sample is
 synthetic; the earlier real Claude Notebook recording remains in the
 [candidate archive](benchmarks/v1.0-candidate/README.md). These are saved
 observations: opening them reads evidence without rerunning the workload.
-The preview preserves the current graph and adds local reading controls. Its
-entries are separate from the released `agentprov demo` catalog below.
+The source build includes these controls in the Dashboard, static readers and
+new offline exports. It preserves the graph layout and adds Workspace revisions,
+execution receipts, and Browser / Notebook text and attachment reading.
+Website downloads include the current reader; original evidence downloads and
+the `agentprov demo` entry names below remain available.
 
 ## Chapters and preserved entry names
 

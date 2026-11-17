@@ -538,8 +538,9 @@ Browser／Notebook 上下文及可独立验证的证据交付。使用方式见 
 接入条件见[部署指南](docs/zh-CN/deployment-modes.md)，
 已实现的改动见[未发布变更](CHANGELOG.zh-CN.md#未发布)。
 v1.0 发布前，上面的发行包示例继续使用 v0.10.1。
-[阅读界面候选预览](previews/v1.0-reader/README.zh-CN.md)可以在本地重新构建；
-正式 Dashboard 保留当前布局，等候选界面审核后再接入。
+源码 Dashboard 与离线导出已共用确认后的工作区、Browser 和 Notebook 阅读器。
+[示例站点构建](previews/v1.0-home/README.zh-CN.md#正式站点构建)以四张精选卡片、专题指南
+和历史记录组织入口，保留既有链接及原始证据下载。
 
 升级前请备份数据目录；升级后的数据库不支持直接用旧版程序打开。
 macOS 包尚未经过 Apple 公证；下载校验和用于检查压缩包完整性。

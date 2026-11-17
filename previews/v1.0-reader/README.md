@@ -5,15 +5,16 @@
 This candidate preserves the current Dashboard and adds a folded execution
 handoff panel, a Browser / Notebook session tab, saved capture observations,
 attachment reading, and recovery guidance. It reads the existing public APIs
-through the offline replay adapter. It is **not enabled in the formal Dashboard**.
+through the offline replay adapter. The approved reader is now shared with the
+formal Dashboard and offline exports through `internal/dashboard/evidence.js`
+and `evidence.css`.
 
 The retained preview now includes Workspace input/output revisions, file changes
 and operation receipts, Browser request/frame attribution fields, and a compact
 explanation of the three delivery modes. The original layout remains available.
 
-On 2026-11-16 the maintainer requested that this code and its instructions remain
-available for review after the other v1.0 work is finished. Layout approval and
-formal integration are deferred to that review.
+On 2026-11-17 the maintainer approved homepage and reader integration. This
+standalone build remains available for focused review; it does not publish or deploy.
 
 ## Build and open
 
@@ -62,8 +63,8 @@ It contains the controlled fixture's files and saved results. Its SHA-256 is
 The builder preserves the evidence records, adds preview assets and the current
 shared content reader to a new copy,
 and regenerates the reading-copy file inventory. `review.json` records the
-selected examples. Each inventory records the original ZIP hash and pending
-approval. These remain unsigned reading copies.
+selected examples. Each inventory records the original ZIP hash and approved
+layout. These remain unsigned reading copies.
 
 The reader refreshes the archived graph projections: model messages no longer
 count as artifacts, standalone calls and artifacts remain inspectable, and
@@ -112,8 +113,8 @@ that the excluded record is absent and retained content still opens offline.
 The [recorded results](../../docs/benchmarks/v1.0-x86-completion/preview-final.json)
 include desktop, mobile, language and selection checks with screenshot hashes.
 
-Before formal integration, move the approved design into the shared Dashboard
-assets, remove the preview-only wrapper around session navigation, and add the
-new elements to live, static, and selective-export regression coverage. The
-preview currently keeps a separate bounded content dialog; the final placement
-of this reader is part of the pending design decision.
+The formal Dashboard embeds the same reader assets. The website build uses
+`--production` to replace review navigation with links back to the demo library.
+Downloaded copies hide site navigation when opened via `file://` and keep their
+own graph, search, comparison and content controls. The combined website checks
+run through `scripts/accept_demo_site.py`; original ZIPs remain unchanged.

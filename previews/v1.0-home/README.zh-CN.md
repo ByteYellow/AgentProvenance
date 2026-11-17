@@ -2,20 +2,21 @@
 
 [English](README.md) | 中文
 
-本目录用于本地审核，与正式示例首页和阅读器分开。
+本目录保存共用首页资源，并保留之前的本地审核构建。
 首页保留四张带图卡片，其余案例按具体任务分类。
 报表修复入口直接打开预选 A/B 的对比窗口，10 月、11 月两次复现各自成对。
 标题末尾不加句号，说明文字保留正常标点。
 
 ## 构建
 
-需要 Node.js、Python 3、Chrome，以及从当前源码构建的 `agentprov`。
+需要 Node.js、Python 3、Playwright Chromium，以及从当前源码构建的 `agentprov`。
 以下命令只读取仓库内的公开记录，生成本地预览文件。
 
 ```sh
 go build -o /tmp/agentprov-review ./cmd/agentprov
 /tmp/agentprov-review demo export --output output/home-review-archive
 npm ci --prefix previews/v1.0-home
+previews/v1.0-home/node_modules/.bin/playwright install chromium
 python3 previews/v1.0-home/build.py \
   --archive output/home-review-archive \
   --output output/home-review
@@ -41,5 +42,26 @@ node previews/v1.0-home/check.cjs http://127.0.0.1:58729/ output/playwright/home
 和新的图片目录。可用 `--screenshots` 指定案例弹窗中的大图目录。
 打开案例只读取证据，不执行 Agent 或调用模型接口。
 
-2026-11-17 已选定[精修版首页](refined/README.zh-CN.md)，本版保留用于对比。
-首页与阅读器的正式接入另行处理。本构建不替换正式 Dashboard，不发布版本，也不部署 GitHub Pages。
+2026-11-17 已确认[精修版首页](refined/README.zh-CN.md)与阅读器一起接入，本版保留用于对比。
+
+## 正式站点构建
+
+发布工作流先验证签名回放目录，再组合确认后的首页和当前阅读器，生成供 Pages 使用的产物。
+以下命令在本地执行相同构建和检查，不会部署线上：
+
+```sh
+export NODE_PATH="$PWD/previews/v1.0-home/node_modules"
+python3 scripts/accept_static_demo.py --binary /tmp/agentprov-review --site output/site-base
+python3 scripts/build_demo_site.py --archive output/site-base --output output/site
+python3 scripts/accept_demo_site.py --archive output/site-base --site output/site
+python3 -m http.server 58730 --bind 127.0.0.1 --protocol HTTP/1.1 --directory output/site
+```
+
+打开 `http://127.0.0.1:58730/`。原有 `/en/` 和 `/zh-CN/` 下的阅读器、指南及下载链接继续有效。
+之前的完整案例目录保存在 `en/library.html` 和 `zh-CN/library.html`。
+`downloads/reading/` 提供包含当前阅读器及新文件清单的阅读副本，原始下载文件保持逐字节一致。
+五个主要案例与三份补充实录共用 Dashboard 内嵌资源，本次接入无需新增公共接口或修改数据库格式。
+
+验收脚本检查中英文四档宽度、档案弹窗、链接、架构图、对比、图谱跳转和附件，
+并实际下载工作区阅读包后断网打开。设置 `PLAYWRIGHT_CHANNEL=chrome` 可改用本机 Chrome。
+构建保留已有目录，每次重建请使用新路径。

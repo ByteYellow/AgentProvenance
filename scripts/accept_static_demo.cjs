@@ -34,6 +34,22 @@ function assertNavigationParity(nativeHrefs, staticHrefs, {native, site, lang}) 
   return links;
 }
 
+async function viewNodes(index, view, readGraph) {
+  if (!view.schema_version) {
+    assert.ok(Array.isArray(view.manifest.nodes), 'Legacy graph nodes are missing');
+    return view.manifest.nodes;
+  }
+  assert.equal(view.schema_version, 'agentprovenance.replay_lens_view/v2');
+  assert.ok(index.graph, 'Shared graph reference is missing');
+  const graph = await readGraph(index.graph);
+  assert.equal(graph.schema_version, 'agentprovenance.replay_graph/v1');
+  assert.ok(Array.isArray(graph.nodes) && Array.isArray(view.node_indexes));
+  return view.node_indexes.map(i => {
+    assert.ok(Number.isInteger(i) && i >= 0 && i < graph.nodes.length, 'Invalid shared node reference');
+    return graph.nodes[i];
+  });
+}
+
 async function main() {
   const { chromium } = require('playwright');
   const site = new URL(process.argv[2]), native = new URL(process.argv[3]);
@@ -69,6 +85,8 @@ async function main() {
       assert.equal(index.run_id,run);assert.deepEqual(index.run,manifest.runs[run]);report.runIndexes++;
     }
     const data=async ref=>{const r=await context.request.get(new URL(ref.path,site).href);assert.ok(r.ok());return JSON.parse(gunzipSync(await r.body()).toString());};
+    const graphs=new Map();
+    const graphData=ref=>{if(!graphs.has(ref.path))graphs.set(ref.path,data(ref));return graphs.get(ref.path);};
     await page.goto(new URL('en/replay.html?run=run-dbc2adf273d4',site).href);
     await page.waitForFunction(()=>window._lensManifest && document.querySelector('#dag svg'));
     const indexPaths=Object.values(catalog.run_indexes).map(ref=>new URL(ref.path,site).pathname);
@@ -94,7 +112,7 @@ async function main() {
         await compare(query);await compare(query+'&overlay=risk&overlay=trust');
         // Cover each displayed kind across summary, expanded and raw filters.
         const view=await data(index.views[key]);
-        const byKind=new Map();for(const node of view.manifest.nodes)if(!byKind.has(node.kind))byKind.set(node.kind,node.id);
+        const byKind=new Map();for(const node of await viewNodes(index,view,graphData))if(!byKind.has(node.kind))byKind.set(node.kind,node.id);
         for(const id of byKind.values()){
           await compare(query+'&focus='+encodeURIComponent(id));report.focusedGraphs++;
         }
@@ -120,7 +138,7 @@ async function main() {
           const [lens,detail]=key.split('/'),query='/api/lens'+params+'&lens='+lens+'&detail='+detail;
           await compare(query);await compare(query+'&overlay=risk&overlay=trust');
           const view=await data(scopedIndex.views[key]);
-          const byKind=new Map();for(const node of view.manifest.nodes)if(!byKind.has(node.kind))byKind.set(node.kind,node.id);
+          const byKind=new Map();for(const node of await viewNodes(scopedIndex,view,graphData))if(!byKind.has(node.kind))byKind.set(node.kind,node.id);
           for(const id of byKind.values())await compare(query+'&focus='+encodeURIComponent(id));
         }
         for(const offset of [0,7,100000])await compare('/api/events'+params+'&limit=7&offset='+offset);
@@ -372,5 +390,5 @@ async function main() {
     throw error;
   } finally {await browser.close();}
 }
-module.exports={assertNavigationParity};
+module.exports={assertNavigationParity,viewNodes};
 if(require.main===module)main().catch(error=>{console.error(error);process.exitCode=1;});

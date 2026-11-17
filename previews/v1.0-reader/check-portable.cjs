@@ -3,7 +3,7 @@ const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=r
 const path=require('node:path'),{pathToFileURL}=require('node:url');
 const root=path.resolve(process.argv[2]),output=path.resolve(process.argv[3]);
 (async()=>{
-  fs.mkdirSync(output,{recursive:true});const browser=await chromium.launch({headless:true}),reports=[];
+  fs.mkdirSync(output,{recursive:true});const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})}),reports=[];
   try{
     for(const name of ['execution','workspace','browser','notebook','investigation'])for(const locale of ['fr-FR','zh-CN']){
       const zh=locale==='zh-CN',context=await browser.newContext({offline:true,locale,viewport:{width:390,height:844}}),page=await context.newPage();

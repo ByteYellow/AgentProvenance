@@ -2,7 +2,13 @@
 const root = document.querySelector('#app');
 const dialog = document.querySelector('#case-dialog');
 const url = new URL(location.href);
-let lang = url.searchParams.get('lang') === 'en' ? 'en' : 'zh-CN';
+const production = document.body.dataset.site === 'production';
+const archivePrefix = production ? '' : 'archive/';
+let preferredLanguage = '';
+try { preferredLanguage = localStorage.getItem('agentprov_language') || ''; } catch {}
+const pathLanguage = /\/(en|zh-CN)\/(?:index\.html)?$/.exec(url.pathname)?.[1];
+let lang = url.searchParams.get('lang') || (production ? pathLanguage || preferredLanguage || (navigator.language.startsWith('zh') ? 'zh-CN' : 'en') : 'zh-CN');
+lang = lang === 'en' ? 'en' : 'zh-CN';
 let activeStory = null;
 const t = (zh, en) => lang === 'zh-CN' ? zh : en;
 const escapeHTML = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -21,11 +27,11 @@ const icons = {
   layers:'<path d="m12 3 10 5-10 5L2 8Zm-10 9 10 5 10-5M2 17l10 5 10-5"/>'
 };
 const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`;
-const link = (href, label, cls = '', extra = '') => `<a href="${escapeHTML(href)}" class="${cls}" ${extra}>${label}</a>`;
+const link = (href, label, cls = '', extra = '') => `<a href="${escapeHTML(production && href.startsWith('#') ? location.pathname + location.search + href : href)}" class="${cls}" ${extra}>${label}</a>`;
 const guideLink = (href, label) => link(href, icon('file') + '<span>' + label + '</span>');
-const guide = id => `archive/${lang}/guides/${id}.html`;
-const originalGuide = id => `archive/${lang}/demos/${id}.html`;
-const historical = (run, lens = 'default') => `archive/${lang}/replay.html?${new URLSearchParams({run,lens,live:'0',detail:'summary'})}`;
+const guide = id => `${archivePrefix}${lang}/guides/${id}.html`;
+const originalGuide = id => `${archivePrefix}${lang}/demos/${id}.html`;
+const historical = (run, lens = 'default') => `${archivePrefix}${lang}/replay.html?${new URLSearchParams({run,lens,live:'0',detail:'summary'})}`;
 const current = (kind, run, lens = 'default') => `current/${kind}/${lang}/index.html?${new URLSearchParams({run,lens,live:'0',detail:'summary'})}`;
 const realNotebook = preset => `recordings/notebook-${preset}/${lang}/index.html?live=0`;
 const primary = (href, text) => link(href, icon('play') + text, 'button primary');
@@ -35,12 +41,12 @@ const workspace = () => current('workspace','run-w01-445a3a164ae14723b82f90634cf
 const browser = () => current('browser','run-da25e015ca1f');
 const team = () => historical('run-double-attempt','orchestration');
 const comparison = (href, a, b) => {
-  const target = new URL(href, location.href);
+  const target = new URL(href, document.baseURI);
   target.searchParams.set('compare_a', a);
   target.searchParams.set('compare_b', b);
   return target.href;
 };
-const investigationCompare = () => comparison(currentInvestigation(), 'run-3bfc6838a9c6', 'run-860466af8a9a');
+const investigationCompare = () => comparison(currentInvestigation(), 'run-860466af8a9a', 'run-3bfc6838a9c6');
 const historicalCompare = (a, b) => comparison(historical(a), a, b);
 
 function stories() {
@@ -57,6 +63,7 @@ function topic(symbol, label, title, description, actions, guides) {
 }
 
 function render() {
+  if(production) { try { localStorage.setItem('agentprov_language',lang); } catch {} }
   document.documentElement.lang = lang;
   document.title = `${t('示例库','Demo library')} · AgentProvenance`;
   document.querySelector('#close-dialog').ariaLabel = t('关闭案例详情','Close case details');
@@ -84,7 +91,7 @@ function render() {
 function syncSectionLinks() {
   const section = ['#featured','#topics','#history','#capture'].includes(location.hash) ? location.hash : '#featured';
   root.querySelectorAll('.section-nav a').forEach(anchor => {
-    if(anchor.getAttribute('href') === section) anchor.setAttribute('aria-current','location');
+    if(anchor.hash === section) anchor.setAttribute('aria-current','location');
     else anchor.removeAttribute('aria-current');
   });
 }
@@ -105,7 +112,7 @@ function caseContent(id) {
   const recorded = t('执行实录','Recorded execution');
   const historic = t('历史实录','Historical recording');
   const open = href => link(href,t('打开记录','Open recording'),'button primary');
-  const download = file => link('downloads/'+file,t('下载只读回放','Download replay'),'','download');
+  const download = file => link('downloads/'+(production?'reading/':'')+file,t('下载只读回放','Download replay'),'','download');
   const nativeNote = `<p class="source-note">${t('本组 Browser / Notebook 实录采集应用上下文，原生 Sensor 关闭。basic 与 detailed 来自分别执行的任务。','These Browser / Notebook recordings capture application context with the native Sensor off. Basic and detailed are separate task executions.')}</p>`;
   if(id==='archive') return {
     title:t('案例档案','The case archive'),
