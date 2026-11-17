@@ -141,6 +141,7 @@
   "Comparing two whole runs. Session filters are retained for your return, not applied to A or B.": "对照两个完整 Run。返回后保留原会话筛选，本窗口不按会话配对。",
   "No second run is available for comparison.": "暂无第二份 Run 可供对照。",
   "Choose two different runs.": "请选择两个不同的 Run。",
+  "This comparison link requires two different runs available in this recording.": "该对比链接需要当前回放中两个不同且可读取的 Run，请重新选择。",
   "Loading comparison records…": "正在加载对照记录…",
   "Checked {count} records": "已检查 {count} 条记录",
   "Comparison limit reached; some saved records are not included.": "已达到本次对照上限，仍有已保存记录未加载。",

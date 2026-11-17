@@ -11,7 +11,7 @@ window.AgentCompareUI=(()=>{
   function init(options){
     api=options;
     $('compare-close').onclick=()=>$('compare-dialog').close();
-    $('compare-dialog').addEventListener('close',()=>{cancel();if(current)current.scroll=$('compare-results').scrollTop;});
+    $('compare-dialog').addEventListener('close',()=>{cancel();if(current)current.scroll=$('compare-results').scrollTop;updateLink(true);});
     $('compare-results').onscroll=()=>{if(current)current.scroll=$('compare-results').scrollTop;};
     $('compare-a').onchange=()=>resetPair();$('compare-b').onchange=()=>resetPair();
     $('compare-swap').onclick=()=>{const a=$('compare-a').value;$('compare-a').value=$('compare-b').value;$('compare-b').value=a;resetPair();};
@@ -24,12 +24,24 @@ window.AgentCompareUI=(()=>{
   }
   function cancel(){controller?.abort();controller=null;epoch++;$('compare-stop').hidden=true;$('compare-refresh').disabled=false;}
   function fresh(run){return {origin:run,a:run,b:'',dimension:'configuration',only:true,limit:100,scroll:0,expanded:new Set(),references:new Map(),reading:new Map(),data:null};}
-  async function open(returning=false){
+  function updateLink(remove=false){
+    const url=new URL(location.href);
+    if(!url.searchParams.has('compare_a')&&!url.searchParams.has('compare_b'))return;
+    for(const side of ['a','b']){
+      if(remove)url.searchParams.delete('compare_'+side);
+      else url.searchParams.set('compare_'+side,current[side]);
+    }
+    history.replaceState(history.state,'',url);
+  }
+  async function openFromURL(params=new URLSearchParams(location.search)){
+    if(params.has('compare_a')||params.has('compare_b'))await open(false,{a:params.get('compare_a'),b:params.get('compare_b')});
+  }
+  async function open(returning=false,pair=null){
     if($('compare-dialog').open)return;
     if(returning&&returnView){await api.restoreView(returnView);returnView=null;$('compare-return').hidden=true;}
     originView=api.captureView();
     const run=originView.run;if(!run)return;
-    current=cache.get(run)||fresh(run);cache.delete(run);cache.set(run,current);if(cache.size>3)cache.delete(cache.keys().next().value);
+    current=pair?fresh(run):cache.get(run)||fresh(run);cache.delete(run);cache.set(run,current);if(cache.size>3)cache.delete(cache.keys().next().value);
     $('compare-only').checked=current.only;
     $('compare-dialog').showModal();$('compare-status').textContent=t('loading…');
     const request=++epoch;
@@ -38,20 +50,30 @@ window.AgentCompareUI=(()=>{
       if(request!==epoch||!$('compare-dialog').open)return;
       const options=runs.map(r=>`<option value="${e(r.run)}" title="${e(r.run)}">${e(window.runDisplayName?.(r.run)||r.run)} (${e(r.events)})</option>`).join('');
       $('compare-a').innerHTML=options;$('compare-b').innerHTML=`<option value="">${e(t('Choose another run'))}</option>`+options;
+      $('compare-scope-note').textContent=t('Comparing two whole runs. Session filters are retained for your return, not applied to A or B.');
+      if(pair){
+        if(!pair.a||!pair.b||pair.a===pair.b||!runs.some(r=>r.run===pair.a)||!runs.some(r=>r.run===pair.b)){
+          current.a='';current.b='';$('compare-a').value='';$('compare-b').value='';render();
+          $('compare-status').textContent=t('This comparison link requires two different runs available in this recording.');
+          return;
+        }
+        current.a=pair.a;current.b=pair.b;
+      }
       if(!runs.some(r=>r.run===current.a)){current.a=run;current.data=null;}
       if(!runs.some(r=>r.run===current.b)){current.b='';current.data=null;}
       $('compare-a').value=current.a;$('compare-b').value=current.b;
-      $('compare-scope-note').textContent=t('Comparing two whole runs. Session filters are retained for your return, not applied to A or B.');
       if(runs.length<2)$('compare-status').textContent=t('No second run is available for comparison.');
       else $('compare-status').textContent=current.data?'':t('Choose another run');
       render();
       $('compare-results').scrollTop=current.scroll;
+      if(pair)await load();
     }catch(error){if(request===epoch)showError(error);}
   }
   function showError(error){$('compare-status').textContent=t('Recorded evidence could not be loaded.')+' '+t(error.message);}
   function resetPair(){
     cancel();
     current.a=$('compare-a').value;current.b=$('compare-b').value;current.data=null;current.expanded.clear();current.reading.clear();current.references.clear();current.limit=100;
+    updateLink();
     render();if(current.a&&current.b&&current.a!==current.b)load();
     else $('compare-status').textContent=t(current.a===current.b?'Choose two different runs.':'Choose another run');
   }
@@ -192,5 +214,5 @@ window.AgentCompareUI=(()=>{
       }catch(error){if(current===active&&request===epoch)$('compare-task-'+side).textContent=t('Recorded evidence could not be loaded.');}
     }
   }
-  return {init,open};
+  return {init,open,openFromURL};
 })();

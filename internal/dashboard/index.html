@@ -2099,6 +2099,7 @@ window.AgentCompareUI.init({tr,tx,esc,j,lang:LANG,
   sel.onchange=()=>{ ++sessionNavigation;relatedSessionHistory.length=0;window.AgentWorkspaceUI.setReturn('');SEL=null; GRAPH_FOCUS=''; EXPAND_MODE='lineage'; EV_FILTER=null; EV_OFFSET=0; tlOffset=0; stopPlay(); safeUI(loadRun(sel.value)); };
   $('#live').onclick=()=>setLive(!LIVE);
   await loadRun(first);
+  await window.AgentCompareUI.openFromURL(INITIAL);
   if(INITIAL.get('replay')==='1'){ setLive(false); togglePlay(); }
   setInterval(()=>{ if(!LIVE)return; safeUI(refreshRuns(cur).then(r=>r&&loadRun(r))); }, 10000);
 })().catch(showLoadError);

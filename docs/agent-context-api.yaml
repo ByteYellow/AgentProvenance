@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: AgentProvenance recorded context API
-  version: "1.12"
+  version: "1.13"
   description: >
     Read-only recorded evidence. Source assertions are not kernel observations
     or inferred authorizations. The dashboard exposes the same routes under
@@ -58,6 +58,8 @@ components:
         target_id: {type: string, minLength: 1}
         operation_id: {type: string, minLength: 1}
         operation: {type: string, enum: [navigate, click, read_text, screenshot]}
+        result_operation: {type: string, enum: [execute, read], description: Execute is an action result; read is a durable receipt lookup and does not dispatch the action again.}
+        receipt: {$ref: '#/components/schemas/BrowserReceiptObservation'}
       description: >
         Versioned execution-result reference from the Browser MCP entry. Retained
         independently of optional bodies. Exact scope, page and operation identity
@@ -68,7 +70,7 @@ components:
       required: [event_id, kind, redirect_index, association]
       properties:
         event_id: {type: string}
-        kind: {type: string, enum: [target, frame, request, response, request_finished, request_failed, action_start, action_end, screenshot, download, download_finished, har, gap, closed]}
+        kind: {type: string, enum: [target, frame, request, response, request_finished, request_failed, action_accept, action_start, action_end, action_result, screenshot, download, download_finished, har, gap, closed]}
         request_keys:
           type: array
           maxItems: 4096
@@ -90,11 +92,90 @@ components:
         url: {type: string, description: HTTP destination/path, with userinfo and fragments removed and the whole query replaced.}
         method: {type: string}
         http_status: {type: integer}
+        receipt: {$ref: '#/components/schemas/BrowserReceiptObservation'}
       description: >
         Native identities survive basic retention. Request observations have no
         tool_call_id based on timing; service-worker requests may have no frame.
         Raw content is a privacy projection without transport headers, cookies
         or POST bodies. Screenshot references use the existing attachment API.
+    BrowserReceiptObservation:
+      type: object
+      required: [phase, origin, authentication, digest_status, receipt]
+      properties:
+        phase: {type: string, enum: [accept, result]}
+        origin: {type: string, enum: [transcript, external_file, local_operator]}
+        authentication: {type: string, enum: [unverified]}
+        digest_status: {type: string, enum: [source_asserted, not_recorded]}
+        receipt: {$ref: '#/components/schemas/BrowserReceipt'}
+      description: >
+        Preserved source observation, independent of optional text retention.
+        Its hashes and bridge identity are source claims. Receiver-side trust
+        and verified bridge bindings are recorded separately, not granted by
+        a transcript or by a local-operator import assertion.
+    BrowserReceipt:
+      type: object
+      required: [schema_version, scope, target_id, operation_id, action, normalized_input_digest, input_digest_basis, input_redactions, accepted_at, started_at, ended_at, sequence, run_id, caller_session_id, caller_tool_call_id, capture_epoch, outcome, gap_refs, source_refs, result_digest]
+      properties:
+        schema_version: {type: string, const: agentprovenance.browser_operation_receipt/v1}
+        scope: {$ref: '#/components/schemas/BrowserScope'}
+        target_id: {type: string, minLength: 1}
+        operation_id: {type: string, minLength: 1}
+        action: {type: string, enum: [navigate, click, read_text, screenshot]}
+        normalized_input_digest: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+        input_digest_basis: {type: string, const: privacy_projected_input/v1}
+        input_redactions:
+          type: [array, "null"]
+          maxItems: 3
+          items: {type: string}
+        accepted_at: {type: string, format: date-time}
+        started_at: {type: [string, "null"], format: date-time}
+        ended_at: {type: [string, "null"], format: date-time}
+        sequence: {type: integer, minimum: 1, maximum: 25000}
+        run_id: {type: [string, "null"]}
+        caller_session_id: {type: [string, "null"]}
+        caller_tool_call_id: {type: [string, "null"]}
+        capture_epoch: {type: string, description: Captured browser incarnation; equals scope.browser_id.}
+        outcome: {type: string, enum: [ok, unknown]}
+        gap_refs:
+          type: [array, "null"]
+          maxItems: 16
+          items: {type: string}
+        source_refs:
+          type: [object, "null"]
+          maxProperties: 3
+          propertyNames: {enum: [accept, start, end]}
+          additionalProperties: {$ref: '#/components/schemas/BrowserReceiptSourceRef'}
+        result_digest: {type: [string, "null"], pattern: '^sha256:[a-f0-9]{64}$'}
+        bridge_identity: {$ref: '#/components/schemas/BrowserBridgeIdentity'}
+        digest: {type: string, pattern: '^sha256:[a-f0-9]{64}$'}
+      description: >
+        An admission observation has unknown outcome, null start/end times,
+        and no terminal digest. A result observation retains the terminal
+        receipt, source references and bridge claims. A missing terminal result
+        remains unknown; querying it does not repeat an action.
+    BrowserReceiptSourceRef:
+      type: object
+      required: [log, event_id, sha256]
+      properties:
+        log: {type: string, description: Base name of the supporting JSONL journal.}
+        event_id: {type: string}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+    BrowserBridgePlacement:
+      type: object
+      required: [producer_id, namespace, instance_id, generation]
+      properties:
+        producer_id: {type: string}
+        namespace: {type: string}
+        instance_id: {type: string}
+        generation: {type: string}
+    BrowserBridgeIdentity:
+      type: object
+      required: [source, authentication, transcript_identity, identity]
+      properties:
+        source: {type: string, const: local_bridge_configuration}
+        authentication: {type: string, enum: [unverified, verified], description: Receipt author's claim; effective receiver trust is evaluated separately.}
+        transcript_identity: {type: string, const: source_asserted_only}
+        identity: {$ref: '#/components/schemas/BrowserBridgePlacement'}
     NotebookScope:
       type: object
       required: [producer_id, namespace, instance_id, generation, notebook_id, kernel_id, kernel_session_id]

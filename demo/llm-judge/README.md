@@ -31,7 +31,7 @@ AGENTPROV_BIN="$PWD/agentprov" python3 demo/llm-judge/judge.py run --offline --l
 
 ## Open from the portable CLI
 
-From an extracted [precompiled release](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.9.0):
+From an extracted [precompiled release](https://github.com/ByteYellow/AgentProvenance/releases/latest):
 
 ```sh
 ./agentprov demo llm-judge

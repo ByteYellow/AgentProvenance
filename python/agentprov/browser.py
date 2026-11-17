@@ -214,9 +214,7 @@ class Browser:
         info = (await probe.send("Target.getTargetInfo"))["targetInfo"]
         await probe.detach()
         self.context_id = info["browserContextId"]
-        port, endpoint = (profile / "DevToolsActivePort").read_text().splitlines()[:2]
-        if not port.isdecimal() or not endpoint.startswith("/devtools/browser/"):
-            raise RuntimeError("owned browser endpoint unavailable")
+        port, endpoint = await self._owned_endpoint(profile)
         ws = await connect("ws://127.0.0.1:" + port + endpoint, proxy=None, max_size=4 << 20, max_queue=32)
         self.capture = Capture(self.path, {**self.placement, "browser_id": endpoint.rsplit("/", 1)[-1],
                                           "context_id": self.context_id}, browser_version=self.owner.browser.version)
@@ -232,6 +230,26 @@ class Browser:
         await self._ready(info["targetId"])
         self.pages[info["targetId"]] = first
         self.first_page = info["targetId"]
+
+    async def _owned_endpoint(self, profile, timeout=15):
+        # Playwright's pipe can be ready before Chromium publishes its TCP endpoint.
+        deadline = asyncio.get_running_loop().time() + timeout
+        while True:
+            if not self.owner.browser.is_connected():
+                raise RuntimeError("owned browser disconnected before endpoint publication")
+            try:
+                lines = (profile / "DevToolsActivePort").read_text().splitlines()
+            except FileNotFoundError:
+                lines = []
+            if len(lines) >= 2:
+                port, endpoint = lines[:2]
+                if (port.isdecimal() and 0 < int(port) <= 65535 and
+                        endpoint.startswith("/devtools/browser/") and endpoint.rsplit("/", 1)[-1]):
+                    return port, endpoint
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise RuntimeError("owned browser endpoint unavailable after startup wait")
+            await asyncio.sleep(min(.05, remaining))
 
     def _spawn(self, coroutine):
         if len(self.tasks) >= 128:

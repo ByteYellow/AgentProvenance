@@ -23,17 +23,18 @@ For Sentry-origin events, use the [gVisor collection guide](gvisor-seccheck.md).
 
 ## Read the v1.0 candidate examples
 
-The [local reader preview](../previews/v1.0-reader/README.md) has four entries.
+The [local reader preview](../previews/v1.0-reader/README.md) has five entries.
 Start with the question in each row, then follow its evidence path:
 
 | Entry | What happened | What to inspect |
 | --- | --- | --- |
 | Task investigation | DeepSeek investigated a task before and after a configuration repair | Read the task and tool results, then use Compare to inspect the configuration and file changes across the two Runs |
 | Cross-environment execution | Two Claude sessions made three remote execution attempts; the capture also exercised a lost receipt response | Select a source Tool Call, follow its target Run and attempt, then compare execution, capture and delivery states; navigate back to the original call |
+| Workspace | A remote-authoritative task read, edited and executed the same workspace | Inspect input and output revisions, operation receipts and the saved `result.txt` body |
 | Browser | An Agent used the recorded browser entry for a web task | Expand the Agent session and open Browser / Notebook; inspect an operation's native references, saved text and screenshot, with request evidence alongside it |
 | Notebook | A synthetic Jupyter capture contains a chart and a kernel restart | Inspect the request and parent-message references, open the chart, and compare kernel identities across the restart |
 
-The first three use recorded candidate executions. The Notebook sample is
+The first four use recorded candidate executions. The Notebook sample is
 synthetic; the earlier real Claude Notebook recording remains in the
 [candidate archive](benchmarks/v1.0-candidate/README.md). These are saved
 observations: opening them reads evidence without rerunning the workload.
@@ -44,9 +45,9 @@ entries are separate from the released `agentprov demo` catalog below.
 
 | Story | Existing entry names | Distinct evidence |
 | --- | --- | --- |
-| Task investigation and repair | `evidence-attribution`, `evidence-attribution-repaired` | Two November captures with tool-scoped intent, audit and TLS attribution details |
-| Task investigation and repair | `investigation-workflow`, `investigation-repaired` | Two October captures with a reviewer, denied diagnostics, repair and comparison |
-| Task investigation and repair | `deepseek-context` | September development task, seven recorded tests, tool results, configuration and final files |
+| Report repair: tools and outbound activity | `evidence-attribution`, `evidence-attribution-repaired` | November reproduction: disabling unnecessary diagnostics restores the report; inspect tool-scoped intent, audit and TLS records |
+| Report repair: denials and configuration changes | `investigation-workflow`, `investigation-repaired` | October reproduction: calculation tests pass but diagnostics fail; inspect the reviewer, denials and changes to `settings.json` |
+| DeepSeek development task | `deepseek-context` | September development task, seven recorded tests, tool results, configuration and final files |
 | Collaboration and placement | `multiagent-provenance` | Logical delegation, peer influence, refusal and later execution |
 | Collaboration and placement | `k8s-cross-pod-a2a`, `k8s-substrate` | Cross-Pod runtime events and deployment identity; the A2A guide identifies replayed application hooks separately |
 | Supply-chain investigation | `snake-supply-chain` | Poisoned install hook, planted test secrets, network attempts and artifact history |
@@ -57,6 +58,11 @@ entries are separate from the released `agentprov demo` catalog below.
 Open an original recording directly with `agentprov demo <entry-name>`. The two
 repair pairs load their companion Run for comparison. Old Run IDs, signatures
 and evidence references continue to identify the original recording.
+
+The October and November pairs are separate reproductions of the report
+workflow. Compare within a pair to inspect a repair. A replay link can open
+Compare directly with `compare_a=<before-run>&compare_b=<after-run>`; both Runs
+must be present in that replay. Closing Compare returns to the current record.
 
 ## Recording types
 

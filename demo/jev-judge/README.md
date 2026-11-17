@@ -26,7 +26,7 @@ The [Chinese review screenshot](review.zh-CN.png) uses synthetic offline answers
 
 ## Open from the portable CLI
 
-From an extracted [precompiled release](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.9.0):
+From an extracted [precompiled release](https://github.com/ByteYellow/AgentProvenance/releases/latest):
 
 ```sh
 ./agentprov demo jev-judge

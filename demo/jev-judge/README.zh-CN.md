@@ -8,7 +8,7 @@
 
 ## 打开指南
 
-下载并解压[预编译版本](https://github.com/ByteYellow/AgentProvenance/releases/tag/v0.9.0)，执行：
+下载并解压[预编译版本](https://github.com/ByteYellow/AgentProvenance/releases/latest)，执行：
 
 ```sh
 ./agentprov demo jev-judge

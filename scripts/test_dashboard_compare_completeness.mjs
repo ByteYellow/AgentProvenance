@@ -57,6 +57,22 @@ try{
       return {...response,records:cursor?records:capped,has_more:!cursor,next_cursor:cursor?'':'next'};
     }});
   },zh);
+  await page.evaluate(()=>window.compareFixture.mode='full');
+  await page.evaluate(()=>window.AgentCompareUI.openFromURL(new URLSearchParams({compare_a:'a',compare_b:'b'})));
+  assert.equal(await page.locator('#compare-dialog').evaluate(el=>el.open),true,'a pair link opens Compare');
+  assert.equal(await page.locator('#compare-a').inputValue(),'a');
+  assert.equal(await page.locator('#compare-b').inputValue(),'b');
+  assert.match(await text('compare-summary'),/Configuration 1/,'a pair link loads the selected records');
+  await page.locator('#compare-close').click();
+  for(const query of [{compare_a:'a'}, {compare_a:'a',compare_b:'a'}, {compare_a:'missing',compare_b:'b'}]) {
+    const calls=await page.evaluate(()=>window.compareFixture.calls.length);
+    await page.evaluate(query=>window.AgentCompareUI.openFromURL(new URLSearchParams(query)),query);
+    assert.match(await text('compare-status'),/comparison link/i);
+    assert.equal(await text('compare-summary'),'','invalid pairs do not retain the previous comparison');
+    assert.equal(await page.evaluate(()=>window.compareFixture.calls.length),calls,'invalid pairs never load another run');
+    await page.locator('#compare-close').click();
+  }
+  await page.evaluate(()=>window.compareFixture.mode='records');
   await page.evaluate(()=>window.AgentCompareUI.open());
   await page.locator('#compare-b').selectOption('b');
   await done();

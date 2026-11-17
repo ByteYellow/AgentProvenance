@@ -18,17 +18,18 @@
 
 ## v1.0 候选示例看什么
 
-[本地阅读器预览](../../previews/v1.0-reader/README.zh-CN.md)提供四个入口。
+[本地阅读器预览](../../previews/v1.0-reader/README.zh-CN.md)提供五个入口。
 先了解每个案例发生了什么，再沿着对应证据阅读：
 
 | 入口 | 案例经过 | 阅读顺序 |
 | --- | --- | --- |
 | 任务调查 | DeepSeek 在配置修复前后分别执行调查任务 | 先读任务和工具结果，再通过 Compare 查看两次 Run 的配置及文件变化 |
 | 跨环境执行 | 两个 Claude 会话产生三个远端执行尝试，并演练回执响应丢失后的恢复 | 选中来源 Tool Call，进入目标 Run 与执行尝试，分别查看执行、采集、交付状态，再返回原调用 |
+| 工作区 | 在远端权威工作区完成读取、修改和执行，始终使用同一份工作内容 | 核对输入与输出版本、操作回执，并阅读保存的 `result.txt` 正文 |
 | Browser | Agent 通过记录式浏览器入口执行网页任务 | 展开 Agent 会话，进入 Browser／Notebook，查看操作的原生引用、正文、截图及相关请求记录 |
 | Notebook | 合成 Jupyter 记录包含图表和一次 kernel 重启 | 查看请求与父消息引用，打开图表，对照重启前后的 kernel 身份 |
 
-前三项使用候选版执行实录。Notebook 展示使用合成样本；此前真实 Claude Notebook
+前四项使用候选版执行实录。Notebook 展示使用合成样本；此前真实 Claude Notebook
 记录保留在[候选验收档案](../benchmarks/v1.0-candidate/README.zh-CN.md)中。
 打开页面是在阅读已保存的观测，不会重新执行任务。预览保留现有图谱，补充局部阅读入口；
 这些入口与下方已发布的 `agentprov demo` 目录分开。
@@ -37,9 +38,9 @@
 
 | 故事 | 现有入口名称 | 独有证据 |
 | --- | --- | --- |
-| 任务调查与修复 | `evidence-attribution`、`evidence-attribution-repaired` | 11 月的两份记录，包含工具调用级意图、审计和 TLS 归因详情 |
-| 任务调查与修复 | `investigation-workflow`、`investigation-repaired` | 10 月的两份记录，包含审阅者、被拒绝的诊断、修复和对比 |
-| 任务调查与修复 | `deepseek-context` | 9 月开发任务，包含七项测试记录、工具结果、配置和最终文件 |
+| 报表修复：工具与外联证据 | `evidence-attribution`、`evidence-attribution-repaired` | 11 月复现：关闭多余诊断后，报表恢复生成；重点查看工具调用级意图、审计和 TLS 记录 |
+| 报表修复：拒绝与配置修改 | `investigation-workflow`、`investigation-repaired` | 10 月复现：计算测试通过，诊断却失败；重点查看审阅者、拒绝记录和 `settings.json` 修改 |
+| DeepSeek 开发任务 | `deepseek-context` | 9 月开发任务，包含七项测试记录、工具结果、配置和最终文件 |
 | 协作与执行位置 | `multiagent-provenance` | 逻辑委派、同伴影响、拒绝和后续执行 |
 | 协作与执行位置 | `k8s-cross-pod-a2a`、`k8s-substrate` | 跨 Pod 运行时事件和部署身份；A2A 指南单独标出回放的应用 hooks |
 | 供应链调查 | `snake-supply-chain` | 恶意安装钩子、植入的测试凭据、网络尝试和制品历史 |
@@ -48,6 +49,10 @@
 | Grok 历史调查 | `grok-codebase-exfil`、`grok-3routes` | 两份带日期的记录，各自保留 Run 和签名密钥 |
 
 使用 `agentprov demo <入口名称>` 直接打开原记录。两组修复案例会一起载入对应的前后 Run，便于比较。旧 Run ID、签名和证据引用继续指向原来的记录。
+
+10 月和 11 月是报表任务的两次独立复现，查看修复效果时分别在组内比较。
+回放链接可以通过 `compare_a=<修复前 Run>&compare_b=<修复后 Run>` 直接打开对比窗口，
+两份 Run 都须包含在该回放中。关闭窗口后回到当前记录。
 
 ## 记录类型
 

@@ -4,6 +4,12 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Open paired recordings directly in Compare with explicit A/B links. Preserve
+  the current reader on close and report unavailable pairs without substitution.
+- Wait for the owned Chromium endpoint to be published before starting capture;
+  cover delayed and partial port-file publication, disconnects and cancellation.
+- Document retained Browser admission/result receipts in OpenAPI, including
+  nullable fields, query-only results and source-asserted trust.
 - Use validated journal receipt times for short process lifetimes in audit rule v4.
   Preserve reused-PID ambiguity and historical v1–v3 reader results; regress
   against actual failing CI captures.

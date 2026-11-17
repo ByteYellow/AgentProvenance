@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 from agentprov.browser import Browser, Capture, _CDP, safe_url
 from agentprov.browser_har import HARCapture
@@ -80,6 +80,34 @@ class BrowserTests(unittest.TestCase):
 
 
 class ProtocolTests(unittest.IsolatedAsyncioTestCase):
+    async def test_owned_endpoint_waits_for_complete_port_file(self):
+        browser = Browser("unused.jsonl", {k: k for k in ("producer_id", "namespace", "instance_id", "generation")})
+        browser.owner = Mock()
+        browser.owner.browser.is_connected.return_value = True
+        states = [FileNotFoundError(), "", "12345\n", "12345\n/devtools/", "12345\n/devtools/browser/owned-id\n"]
+        with patch.object(Path, "read_text", side_effect=states) as read, patch("asyncio.sleep", new_callable=AsyncMock):
+            self.assertEqual(await browser._owned_endpoint(Path("profile")), ("12345", "/devtools/browser/owned-id"))
+            self.assertEqual(read.call_count, len(states))
+
+    async def test_owned_endpoint_failure_and_cancellation(self):
+        browser = Browser("unused.jsonl", {k: k for k in ("producer_id", "namespace", "instance_id", "generation")})
+        browser.owner = Mock()
+        browser.owner.browser.is_connected.return_value = False
+        with self.assertRaisesRegex(RuntimeError, "disconnected"):
+            await browser._owned_endpoint(Path("profile"))
+        browser.owner.browser.is_connected.return_value = True
+        with patch.object(Path, "read_text", side_effect=FileNotFoundError()):
+            with self.assertRaisesRegex(RuntimeError, "endpoint unavailable"):
+                await browser._owned_endpoint(Path("profile"), timeout=0)
+            pending = asyncio.create_task(browser._owned_endpoint(Path("profile")))
+            await asyncio.sleep(0)
+            pending.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await pending
+        with patch.object(Path, "read_text", side_effect=PermissionError("profile permission denied")):
+            with self.assertRaises(PermissionError):
+                await browser._owned_endpoint(Path("profile"))
+
     async def test_paused_worker_initialization_does_not_deadlock(self):
         browser = Browser("unused.jsonl", {k: k for k in ("producer_id", "namespace", "instance_id", "generation")})
         browser.context_id = "context"

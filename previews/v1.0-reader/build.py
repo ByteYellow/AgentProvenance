@@ -46,6 +46,8 @@ for slug,name,title in cases:
     for language in ['en','zh-CN']:
         index=root/language/'index.html';text=index.read_text()
         text=text.replace("const overviewQ=q+'&lens=default&detail=summary';", "const overviewQ=q+scopeQuery+'&lens=default&detail=summary';")
+        if 'await window.AgentCompareUI.openFromURL(INITIAL);' not in text:
+            text=text.replace('await loadRun(first);','await loadRun(first);\n  await window.AgentCompareUI.openFromURL(INITIAL);')
         text=text.replace('<nav class="offline-replay-bar">','<nav class="offline-replay-bar" data-delivery-mode="reading" data-verification-state="not_checked">')
         text=text.replace('</head>','<link rel="stylesheet" href="../assets/evidence-preview.css"></head>')
         bar=nav.replace('href="../','href="../../')
@@ -56,6 +58,7 @@ for slug,name,title in cases:
         index.write_text(text)
     for ext in ['css','js']:shutil.copy2(base/('evidence.'+ext),root/'assets'/('evidence-preview.'+ext))
     shutil.copy2(repo/'internal/dashboard/context.js',root/'assets/context.js')
+    shutil.copy2(repo/'internal/dashboard/compare.js',root/'assets/compare.js')
     items=[]
     for p in sorted(root.rglob('*')):
         if not p.is_file() or p.name=='export-inventory.json':continue
