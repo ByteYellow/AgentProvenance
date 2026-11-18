@@ -18,7 +18,7 @@ sys.path.insert(0, str(READER))
 from graph_navigation import refresh_graph_navigation
 
 
-def refresh_reader(root, production=False):
+def refresh_reader(root, production=False, *, legacy_navigation=True):
     landing = root / "index.html"
     landing.write_text(landing.read_text().replace("location.replace(lang+'/index.html?'+q.toString());", "addEventListener('DOMContentLoaded',()=>location.replace(lang+'/index.html?'+q.toString()),{once:true});"))
     inventory = json.loads((root / "export-inventory.json").read_text())
@@ -30,7 +30,8 @@ def refresh_reader(root, production=False):
         text = (root / ref["path"].replace(".json.gz", ".js")).read_text()
         return json.loads(gzip.decompress(base64.b64decode(re.search(r',"([A-Za-z0-9+/=]+)"', text).group(1))))
 
-    refresh_graph_navigation(root, catalog, saved)
+    if legacy_navigation:
+        refresh_graph_navigation(root, catalog, saved)
     run = next(iter(catalog["runs"]))
     for language in ("en", "zh-CN"):
         page = root / language / "index.html"
@@ -63,6 +64,37 @@ def link_comparison(root, filename):
         if "await window.AgentCompareUI.openFromURL(INITIAL);" not in text:
             text = text.replace("await loadRun(first);", "await loadRun(first);\n  await window.AgentCompareUI.openFromURL(INITIAL);")
         page.write_text(text)
+
+
+def extract_reader(source, root):
+    with zipfile.ZipFile(source) as archive:
+        for info in archive.infolist():
+            path = Path(info.filename)
+            if path.is_absolute() or ".." in path.parts or "\\" in info.filename:
+                raise ValueError("Invalid archive path")
+        archive.extractall(root)
+
+
+def add_x86_recordings(target, production):
+    directory = REPO / "docs/benchmarks/v1.0-x86-completion/replays"
+    manifest = json.loads((directory / "manifest.json").read_text())
+    artifacts = {a["file"]: a for a in manifest["artifacts"] if a["delivery_mode"] == "reading"}
+    sources = []
+    for case in manifest["cases"]:
+        name = "x86-" + case["id"]
+        source = directory / case["reading"]
+        artifact = artifacts[case["reading"]]
+        digest = hashlib.sha256(source.read_bytes()).hexdigest()
+        if digest != artifact["sha256"] or artifact["run_id"] != case["run_id"]:
+            raise ValueError(f"Invalid x86 replay: {name}")
+        root = target / "recordings" / name
+        extract_reader(source, root)
+        refresh_reader(root, production, legacy_navigation=False)
+        dest = target / "downloads" / (name + ".zip")
+        shutil.copy2(source, dest)
+        sources.append({"name": name, "run_id": case["run_id"], "source": str(source.relative_to(REPO)),
+                        "sha256": digest, "reading_copy": str(dest.relative_to(target)), "reading_copy_sha256": digest})
+    return sources
 
 
 def main():
@@ -102,16 +134,12 @@ def main():
         if name not in ("browser-basic", "notebook-basic", "notebook-detailed"):
             continue
         root = target / "recordings" / name
-        with zipfile.ZipFile(source) as archive:
-            for info in archive.infolist():
-                path = Path(info.filename)
-                if path.is_absolute() or ".." in path.parts or "\\" in info.filename:
-                    raise ValueError("Invalid archive path")
-            archive.extractall(root)
+        extract_reader(source, root)
         refresh_reader(root, args.production)
     if args.production:
         build_release_home(target)
         build_reading_downloads(target, sources)
+    sources.extend(add_x86_recordings(target, args.production))
     (target / "sources.json").write_text(json.dumps(sources, indent=2) + "\n")
     subprocess.run(["node", str(BASE / "render-guides.cjs"), str(target)] + (["--production"] if args.production else []), check=True)
     print(target / "index.html")

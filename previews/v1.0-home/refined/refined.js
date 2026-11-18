@@ -30,12 +30,12 @@
       root.querySelector('.languages').before(previous);
     }
 
-    const cards=stories().map(s=>s.id==='investigation'?{...s,actions:compareLink(comparison(currentInvestigation(),'run-860466af8a9a','run-3bfc6838a9c6'))}:s);
+    const cards=stories();
     root.querySelector('.grid').innerHTML = cards.map(s => `<article class="story" data-case="${s.id}">
       <div class="story-copy"><div class="story-head"><span class="story-icon">${icon(s.icon)}</span><span class="kicker">${s.kicker}</span>${s.fresh?`<span class="tag new">${t('1.0 新增','New in 1.0')}</span>`:''}</div>
       <h3>${s.title}</h3><p class="description">${copy[s.id]}</p></div>
       <figure class="story-preview">${link(s.href,`<img src="refined-media/${s.id}-${lang}.png" width="640" height="252" alt="${escapeHTML(caption[s.id])}" decoding="async" loading="${s.id==='investigation'||s.id==='remote'?'eager':'lazy'}">`,'preview-link')}<figcaption>${icon(s.id==='native'?'browser':s.id==='team'?'team':'file')}<span>${caption[s.id]}</span></figcaption></figure>
-      <div class="story-actions"><div class="story-bottom">${s.actions}<button class="text-button" data-story="${s.id}">${t('案例经过','Case details')}${icon('chevron')}</button></div></div>
+      <div class="story-actions"><div class="story-bottom">${s.actions}<button class="text-button" data-story="${s.id}">${t('案例经过','Case details')}${icon('chevron')}</button></div>${x86Shortcuts(s.id)}</div>
     </article>`).join('');
     root.querySelector('#featured .section-head p').textContent = t('真实记录，可直接探索', 'Real recordings, ready to explore');
     root.querySelector('#topics .section-head p').textContent = t('深入方法与接入', 'Methods and integrations');
@@ -48,14 +48,6 @@
   render = function() { originalRender(); refine(); };
   openStory = function(...args) {
     originalOpenStory(...args);
-    document.querySelectorAll('#case-body .compare-action').forEach(a=>{
-      const target=new URL(a.href);
-      if(target.searchParams.get('compare_a')==='run-3bfc6838a9c6'){
-        target.searchParams.set('compare_a','run-860466af8a9a');
-        target.searchParams.set('compare_b','run-3bfc6838a9c6');
-        a.href=target.href;
-      }
-    });
     if(args[0]==='archive') {
       const title = document.querySelector('[data-story="grok"] strong');
       if(title) title.textContent = t('Grok 外发调查', 'Grok outbound investigations');

@@ -49,9 +49,31 @@ const comparison = (href, a, b) => {
 const investigationCompare = () => comparison(currentInvestigation(), 'run-860466af8a9a', 'run-3bfc6838a9c6');
 const historicalCompare = (a, b) => comparison(historical(a), a, b);
 
+function x86Cases(group) {
+  return group === 'remote' ? [
+    ['workspace-harness',t('Claude 工作区','Claude workspace'),t('沿 Read、Edit、Write、Bash 核对输入版本与最终文件。','Follow Read, Edit, Write and Bash through the input revisions and final file.')],
+    ['kata-harness','Kata/QEMU',t('查看同类 Claude 工作区任务在 Kata Guest 内留下的记录。','Inspect a separate Claude workspace task recorded inside a Kata guest.')],
+    ['kata-boot-1',t('Kata 首次启动','First Kata boot'),t('查看首次启动的 Guest 身份及其执行记录。','Inspect the identity and execution of the first guest.')],
+    ['kata-boot-2',t('Kata 重建后','Rebuilt Kata guest'),t('查看重建后独立的 Guest 和运行记录。','Inspect the distinct guest identity and run after rebuilding.')],
+    ['kata-contract',t('Kata 工作区版本','Kata workspace revisions'),t('核对受控任务的工作区操作与版本回执。','Inspect the workspace operations and revision receipts from the controlled task.')]
+  ] : group === 'native' ? [
+    ['browser-sensor-on',t('Browser 开启 Sensor','Browser with Sensor'),t('查看并发页面、请求、OS 关联和三份已保存的 HAR。','Explore concurrent pages, requests, OS relationships and three saved HAR attachments.')],
+    ['browser-crash-recovery',t('中断恢复','Interruption & recovery'),t('对照中断前后两代会话。未完成的操作保留为未知。','Compare the two browser generations. The interrupted operation retains an unknown outcome.')]
+  ] : [];
+}
+const x86Reader = id => `recordings/x86-${id}/${lang}/index.html?live=0`;
+function x86Shortcuts(group) {
+  const cases = x86Cases(group).slice(0,2);
+  return cases.length ? `<div class="story-foot x86-recordings"><span>${t('Linux x86 实录','Linux x86 recordings')}</span>${cases.map(([id,title])=>link(x86Reader(id),title)).join('')}</div>` : '';
+}
+function x86Details(group) {
+  return x86Cases(group).map(([id,title,copy])=>record(title,t('Linux x86 实录','Linux x86 recording'),copy,
+    primary(x86Reader(id),t('打开实录','Open recording'))+link('downloads/x86-'+id+'.zip',t('下载只读回放','Download replay'),'','download'))).join('');
+}
+
 function stories() {
   return [
-    {id:'investigation',icon:'file',kicker:t('任务调查与修复','Investigate & compare'),badge:t('执行实录','Recorded'),title:t('读懂一次任务的执行','Understand an agent run'),description:t('从 DeepSeek 的任务与工具结果，追到文件、网络证据，再比较修复前后的变化。','From the DeepSeek task to its tools, files and network activity. Compare what changed after the repair.'),href:currentInvestigation(),caption:t('文件与产物 · 保存的证据图','Files & artifacts · Recorded graph'),actions:compareLink(investigationCompare()),foot:t('DeepSeek · 两次执行','DeepSeek · Two executions')},
+    {id:'investigation',icon:'file',kicker:t('任务调查与修复','Investigate & compare'),badge:t('执行实录','Recorded'),title:t('读懂一次任务的执行','Understand an agent run'),description:t('从 DeepSeek 的任务与工具结果，追到文件、网络证据，再比较修复前后的变化。','From the DeepSeek task to its tools, files and network activity. Compare what changed after the repair.'),href:investigationCompare(),caption:t('文件与产物 · 保存的证据图','Files & artifacts · Recorded graph'),actions:compareLink(investigationCompare()),foot:t('DeepSeek · 两次执行','DeepSeek · Two executions')},
     {id:'remote',icon:'command',kicker:t('工作区与跨环境执行','Workspace & remote execution'),badge:t('v1.0 新增','New in v1.0'),fresh:true,title:t('远端执行，有据可查','Follow execution across environments'),description:t('核对工作区的输入、修改和最终文件；从跨环境记录继续查看调用交接与恢复回执。','Inspect workspace inputs, edits and output files. Follow handoffs and recovered receipts in a companion recording.'),href:workspace(),caption:t('工作区操作 · 输入与输出版本','Workspace operation · Input & output revisions'),actions:primary(workspace(),t('查看工作区','Open workspace')),foot:t('Linux x86 实录 · 含独立交接案例','Linux x86 recording · Separate handoff case')},
     {id:'native',icon:'browser',kicker:t('Browser 与 Notebook','Browser & Notebook'),badge:t('v1.0 新增','New in v1.0'),fresh:true,title:t('从操作，看到真实结果','From an action to its result'),description:t('查看网页操作、请求与截图，阅读 Notebook 代码和输出。每条记录保留原生身份。','Inspect browser actions, requests and screenshots, or notebook code and output, with native record identities.'),href:browser(),caption:t('浏览器任务 · 会话与工具记录','Browser task · Session & tool records'),actions:primary(browser(),'Browser')+link(realNotebook('detailed'),'Notebook','button'),foot:t('真实 Agent 任务 · 应用上下文','Real agent tasks · Application context')},
     {id:'team',icon:'team',kicker:t('多 Agent 协作','Multi-agent collaboration'),badge:t('经典实录','Historical'),title:t('协作的来龙去脉，一路追踪','Follow the work between agents'),description:t('沿着 Alice 与 Bob 的消息、委派和工具调用，查看谁发起任务、谁实际执行。','Follow Alice and Bob through messages, delegation and tool calls to see who initiated the work and who executed it.'),href:team(),caption:t('Agent 协作 · 消息与调用关系','Agent collaboration · Messages & calls'),actions:primary(team(),t('查看协作图','Open team graph')),foot:t('保留原始采集日期与证据引用','Original capture dates & evidence references')}
@@ -75,7 +97,7 @@ function render() {
   </header><main>
     <section class="intro"><div><p class="eyebrow">AgentProvenance <span>1.0</span></p><h1>${t('示例库','Demo library')}</h1><p>${t('看见 Agent 的真实执行，从一次调用到跨环境协作。','Explore what agents actually did, from a single call to work across environments.')}</p></div><div class="intro-note"><strong>${icon('shield')}${t('打开记录，沿证据探索','Open a recording, follow its evidence')}</strong>${t('无需安装，无需模型 API Key','No installation or model API key required')}</div></section>
     <nav class="section-nav" aria-label="${t('页面章节','Page sections')}">${link('#featured',t('精选案例','Featured cases'))}${link('#topics',t('专题与集成','Topics & integrations'))}${link('#history',t('历史记录','Archive'))}${link('#capture',t('采集自己的任务','Capture your own task')+icon('arrow'),'end')}</nav>
-    <section id="featured"><div class="section-head"><h2>${t('精选执行案例','Featured executions')}</h2><p>${t('先读经过，再打开完整记录','Read the story. Explore the complete record.')}</p></div><div class="grid">${stories().map(s=>`<article class="story" data-case="${s.id}"><div class="story-copy"><div class="story-head"><span class="story-icon">${icon(s.icon)}</span><span class="kicker">${s.kicker}</span><span class="tag ${s.fresh?'new':''}">${s.badge}</span></div><h3>${s.title}</h3><p class="description">${s.description}</p></div><figure class="story-preview">${link(s.href,`<img src="media/${s.id}-${lang}.png" width="1024" height="380" alt="${escapeHTML(s.caption)}" decoding="async" loading="${s.id==='investigation'||s.id==='remote'?'eager':'lazy'}">`,'preview-link')}<figcaption>${s.caption}</figcaption></figure><div class="story-actions"><div class="story-bottom">${s.actions}<button class="text-button" data-story="${s.id}">${t('案例经过','Case details')}${icon('chevron')}</button></div><div class="story-foot">${s.foot}</div></div></article>`).join('')}</div></section>
+    <section id="featured"><div class="section-head"><h2>${t('精选执行案例','Featured executions')}</h2><p>${t('先读经过，再打开完整记录','Read the story. Explore the complete record.')}</p></div><div class="grid">${stories().map(s=>`<article class="story" data-case="${s.id}"><div class="story-copy"><div class="story-head"><span class="story-icon">${icon(s.icon)}</span><span class="kicker">${s.kicker}</span><span class="tag ${s.fresh?'new':''}">${s.badge}</span></div><h3>${s.title}</h3><p class="description">${s.description}</p></div><figure class="story-preview">${link(s.href,`<img src="media/${s.id}-${lang}.png" width="1024" height="380" alt="${escapeHTML(s.caption)}" decoding="async" loading="${s.id==='investigation'||s.id==='remote'?'eager':'lazy'}">`,'preview-link')}<figcaption>${s.caption}</figcaption></figure><div class="story-actions"><div class="story-bottom">${s.actions}<button class="text-button" data-story="${s.id}">${t('案例经过','Case details')}${icon('chevron')}</button></div>${x86Shortcuts(s.id)||`<div class="story-foot">${s.foot}</div>`}</div></article>`).join('')}</div></section>
     <section class="band" id="topics"><div class="section-head"><h2>${t('专题与集成','Topics & integrations')}</h2><p>${t('选一个问题，继续深入','Choose a question. Go a little deeper.')}</p></div><div class="topic-grid">
       ${topic('shield',t('安全调查','Security investigation'),t('依赖安装中的异常行为','Suspicious dependency installation'),t('沿安装钩子，追踪测试凭据读取、外联尝试与产物变化。','Follow an install hook through test-credential reads, network attempts and changed artifacts.'),link(historical('run-snake-supervised'),t('查看实录','Open recording')+icon('arrow')),guideLink(originalGuide('snake-supply-chain'),t('案例说明与复现','Case guide & reproduction')))}
       ${topic('layers',t('关联方法','Evidence relationships'),t('一条关联，依据是什么？','What supports a relationship?'),t('用合成样本读懂正文命中、源读取候选和执行归属。','Use a synthetic example to inspect content matches, source-read candidates and execution identity.'),link(historical('ui-endpoint-candidates','data-flow-taint'),t('查看关联样本','Explore the example')+icon('arrow')),guideLink(originalGuide('endpoint-attribution'),t('三段证据与关联方法','Evidence layers & relationships')))}
@@ -113,7 +135,7 @@ function caseContent(id) {
   const historic = t('历史实录','Historical recording');
   const open = href => link(href,t('打开记录','Open recording'),'button primary');
   const download = file => link('downloads/'+(production?'reading/':'')+file,t('下载只读回放','Download replay'),'','download');
-  const nativeNote = `<p class="source-note">${t('本组 Browser / Notebook 实录采集应用上下文，原生 Sensor 关闭。basic 与 detailed 来自分别执行的任务。','These Browser / Notebook recordings capture application context with the native Sensor off. Basic and detailed are separate task executions.')}</p>`;
+  const nativeNote = `<p class="source-note">${t('这里的 basic 和 detailed 样例分别执行，只采集应用上下文。要看开启原生 Sensor 的 Browser 任务，请选「Linux x86 实录」。','The basic and detailed examples were recorded separately with application context only. For a Browser task with the native Sensor enabled, open the Linux x86 recordings.')}</p>`;
   if(id==='archive') return {
     title:t('案例档案','The case archive'),
     content:`<p class="dialog-intro">${t('按你想调查的问题选择案例。报表修复可以直接打开前后对比，开发任务可以查看工具输出和最终文件。','Choose a case by the question you want to investigate. Compare report repairs directly, or inspect tool output and final files from a development task.')}</p><div class="archive-chapters">${[
@@ -129,11 +151,11 @@ function caseContent(id) {
       [t('读任务','Read the task'),t('展开 Agent 会话，查看指令和工具结果。','Open the agent session to read instructions and tool results.')],
       [t('追证据','Follow evidence'),t('从文件或网络记录进入图谱与保存正文。','Open file or network evidence, its graph and saved content.')],
       [t('看变化','Compare changes'),t('直接对比已配对的修复前、修复后记录。','Open the matched before-and-after recordings in Compare.')]
-    ])+screenshot('investigation')+record(t('配置修复前后','Before & after configuration repair'),recorded,t('同一个阅读副本包含两次执行，保留原始调用、采集状态和支持证据。','One reading copy contains both executions, their original calls, capture status and supporting evidence.'),compareLink(investigationCompare())+link(currentInvestigation(),t('修复前记录','Before repair'))+link(current('investigation','run-860466af8a9a'),t('修复后记录','After repair'))+download('task-investigation.zip'),'run-3bfc6838a9c6 / run-860466af8a9a')
+    ])+screenshot('investigation')+record(t('配置修复前后','Before & after configuration repair'),recorded,t('同一个阅读副本包含两次执行，保留原始调用、采集状态和支持证据。','One reading copy contains both executions, their original calls, capture status and supporting evidence.'),compareLink(investigationCompare())+link(current('investigation','run-860466af8a9a'),t('修复前记录','Before repair'))+link(currentInvestigation(),t('修复后记录','After repair'))+download('task-investigation.zip'),'run-3bfc6838a9c6 / run-860466af8a9a')
   };
   if(id==='remote') return {
     title:t('工作区版本与跨环境执行','Workspace revisions & remote execution'),
-    content:description(t('这条阅读路线包含两组独立实录：先核对远端工作区中的输入、修改和产物，再看来源 Tool Call 如何交接到目标执行。','This route contains two separate recordings: first inspect workspace inputs, edits and outputs, then follow a source Tool Call into a target execution.'),[
+    content:description(t('先核对远端工作区中的输入、修改和产物，再看另一次执行里 Tool Call 如何交接到目标。下方的 Linux x86 实录提供 Claude 工作区和 Kata/QEMU 的完整记录。','Start with the workspace inputs, edits and outputs, then follow a Tool Call into its target in a separate run. The Linux x86 recordings below cover the Claude workspace and Kata/QEMU cases.'),[
       [t('文件一致性','File consistency'),t('核对输入与输出版本，阅读 result.txt。','Inspect input and output revisions and read result.txt.')],
       [t('执行交接','Execution handoff'),t('沿调用跳到目标 Run，检查执行尝试和回执。','Follow a call to its target Run, attempt and receipt.')],
       [t('交付记录','Delivery records'),t('分别查看执行、采集及封包时交付状态。','Inspect execution, capture and sealed delivery status separately.')]
@@ -185,7 +207,7 @@ function openStory(id, updateURL = true) {
   document.querySelector('#case-eyebrow').textContent = t('案例经过与记录','STORY & RECORDINGS');
   document.querySelector('#case-title').textContent = content.title;
   const isArchiveChapter = ['grok','earlier','development','presets'].includes(id);
-  document.querySelector('#case-body').innerHTML = (isArchiveChapter?`<button class="text-button back-to-archive" data-story="archive">${icon('arrow')}${t('全部档案','All archive chapters')}</button>`:'')+content.content;
+  document.querySelector('#case-body').innerHTML = (isArchiveChapter?`<button class="text-button back-to-archive" data-story="archive">${icon('arrow')}${t('全部档案','All archive chapters')}</button>`:'')+content.content+x86Details(id);
   if(!dialog.open) dialog.showModal();
   document.querySelector('#case-body').scrollTop = 0;
   if(updateURL) {

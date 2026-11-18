@@ -67,7 +67,13 @@ def main():
                    for root in site.glob("current/*/export-inventory.json")}
     inventories.update({str(root.parent.relative_to(site)): check_inventory(root.parent)
                         for root in site.glob("recordings/*/export-inventory.json")})
-    assert len(inventories) == 8
+    x86 = json.loads((REPO / "docs/benchmarks/v1.0-x86-completion/replays/manifest.json").read_text())
+    for case in x86["cases"]:
+        name = "x86-" + case["id"]
+        assert "recordings/" + name in inventories
+        source = REPO / "docs/benchmarks/v1.0-x86-completion/replays" / case["reading"]
+        assert digest(source) == digest(site / "downloads" / (name + ".zip"))
+    assert len(inventories) == 8 + len(x86["cases"])
     size = sum(p.stat().st_size for p in site.rglob("*") if p.is_file())
     assert size <= 900 * 1024 * 1024, "Static website exceeds the publication budget"
     for source in json.loads((site / "sources.json").read_text()):

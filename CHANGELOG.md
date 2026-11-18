@@ -4,6 +4,10 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Read historical file diffs, blame and trajectories from saved evidence across workspace reuse. Distinguish snapshot deletions from writes and capture omissions.
+- Support child exit codes in CI with `record --propagate-exit` and forward the `list_events` cursor through the AI and MCP interfaces.
+- Link seven Linux x86 recordings from the Workspace and Browser cards. The repair card's image and action now open the same before/after comparison.
+
 - Freeze delivery and replay snapshots through an independent read-only SQLite
   connection, preserving a committed view while collector queries are cancelled.
 - Restore saved capture observations when returning to a Run's collection tab.

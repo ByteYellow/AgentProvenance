@@ -18,6 +18,9 @@ fs.mkdirSync(output,{recursive:true});
       await page.goto(route);
       await page.locator('.story').last().waitFor();
       assert.equal(await page.locator('.story').count(),4);
+      const pair=page.locator('.story[data-case="investigation"]');
+      assert.equal(await pair.locator('.preview-link').getAttribute('href'),await pair.locator('.compare-action').getAttribute('href'),'comparison image must open the same pair as the button');
+      assert.equal(await page.locator('.story .x86-recordings a').count(),4,'featured cards must expose the real x86 recordings');
       assert.equal(await page.locator('.topic-card').count(),3);
       assert.equal(await page.locator('.topic-guides a svg').count(),4);
       assert((await page.locator('h1,h2,h3').allTextContents()).every(t=>!/[.。]$/.test(t.trim())));
@@ -77,6 +80,26 @@ fs.mkdirSync(output,{recursive:true});
       await page.close();
     }
     const context=await browser.newContext();let checked=0;
+    const x86=(await (await context.request.get(new URL('sources.json',base).href)).json()).filter(x=>x.name.startsWith('x86-'));
+    assert.equal(x86.length,7);
+    for(const lang of ['zh-CN','en']) {
+      const page=await context.newPage();
+      for(const item of x86) {
+        const href=`recordings/${item.name}/${lang}/index.html?live=0`;
+        const reader=new URL(href,base).href;
+        assert(links.has(reader),'missing case link: '+reader);
+        await page.goto(new URL(`${production?'index.html':'refined.html'}?lang=${lang}`,base).href);
+        const shortcut=page.locator(`.x86-recordings a[href="${href}"]`);
+        if(await shortcut.count()) await shortcut.click();
+        else {
+          await page.locator('[data-story="remote"]').click();
+          await page.locator(`#case-dialog a[href="${href}"]`).click();
+        }
+        await page.waitForFunction(run=>document.querySelector('#runsel')?.value===run,item.run_id);
+        await page.locator('#dag svg g[data-id]').first().waitFor();
+      }
+      await page.close();
+    }
     if(production) for(const lang of ['en','zh-CN']) {
       const page=await context.newPage();
       await page.goto(new URL(`${lang}/index.html`,base).href);

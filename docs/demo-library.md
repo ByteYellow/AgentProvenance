@@ -53,6 +53,12 @@ remote workspaces, Browser / Notebook, and multi-agent collaboration. Topics and
 older investigations remain in separate sections. The repair card opens Compare
 with the inspection as A and the repair as B.
 
+Look for **Linux x86 recordings** on the Workspace and Browser / Notebook
+cards. Workspace links directly to the Claude and Kata/QEMU runs; its case
+details also contain the first boot, rebuilt guest and workspace revision
+recordings. Browser links directly to Sensor-on and interruption recovery.
+Each session has its own reader and original read-only ZIP download.
+
 The shared reader has five reading paths, also available in the
 [rebuildable local examples](../previews/v1.0-reader/README.md).
 Start with the question in each row, then follow its evidence path:

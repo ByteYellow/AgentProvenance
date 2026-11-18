@@ -42,3 +42,6 @@ dialog{border:1px solid rgba(0,0,0,.08);border-radius:18px;box-shadow:0 24px 80p
 .button.compare-action svg{fill:none;stroke-width:1.8;width:15px;height:15px}
 @media(max-width:1050px){.topic-card{padding:22px 20px}.topic-card h3{font-size:17px}}
 @media(max-width:700px){.topic-card{padding:22px 23px}.topic-card h3{font-size:18px}.topic-guides{min-height:0}.topic-card .topic-guides a{min-height:40px;padding:9px 0}}
+.story .x86-recordings {display:flex;align-items:baseline;gap:6px 12px;flex-wrap:wrap;font-size:12px}
+.x86-recordings a {color:var(--blue,#006edb);text-underline-offset:3px}
+.x86-recordings a:hover {text-decoration:underline}
