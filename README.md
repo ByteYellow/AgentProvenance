@@ -207,6 +207,10 @@ mkdir -p /tmp/agentprov-record-demo
 Linux sensor adds kernel events; a supported session adapter adds agent context.
 Local recording and replay do not require Docker.
 
+For a CI job that should fail when the recorded command fails, add
+`record --propagate-exit`. By default the CLI reports whether recording succeeded;
+the command's own exit code is in the result.
+
 ### Inspect, trace, compare and export
 
 Each execution has a Run ID. Substitute the IDs printed by your recording:

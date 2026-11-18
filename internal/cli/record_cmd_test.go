@@ -3,12 +3,50 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/byteyellow/agentprovenance/internal/record"
 	"github.com/spf13/cobra"
 )
+
+func TestRecordPropagatesExitOnlyWhenRequested(t *testing.T) {
+	for _, tc := range []struct {
+		mode string
+		want int
+	}{{"default", 0}, {"text", 7}, {"json", 7}} {
+		t.Run(tc.mode, func(t *testing.T) {
+			root := NewRootCommand()
+			var out, stderr bytes.Buffer
+			root.SetOut(&out)
+			root.SetErr(&stderr)
+			args := []string{"--data-dir", t.TempDir(), "record", "--workdir", t.TempDir(), "--post-root-grace-ms", "1"}
+			if tc.mode != "default" {
+				args = append(args, "--propagate-exit")
+			}
+			if tc.mode == "json" {
+				args = append(args, "--json")
+			}
+			root.SetArgs(append(args, "--", "sh", "-c", "exit 7"))
+			err := root.Execute()
+			var exit interface{ ExitCode() int }
+			if tc.want == 0 && err != nil || tc.want != 0 && (!errors.As(err, &exit) || exit.ExitCode() != tc.want) {
+				t.Fatalf("exit: %v", err)
+			}
+			if tc.mode == "json" {
+				var got struct {
+					Code int `json:"exit_code"`
+				}
+				if err := json.Unmarshal(out.Bytes(), &got); err != nil || got.Code != 7 {
+					t.Fatalf("result: %s", out.String())
+				}
+			} else if !strings.Contains(out.String(), "exit=7") {
+				t.Fatalf("no task result: %s", out.String())
+			}
+		})
+	}
+}
 
 func TestRecordJSONKeepsChildOutputSeparate(t *testing.T) {
 	root := NewRootCommand()

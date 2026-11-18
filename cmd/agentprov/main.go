@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -18,6 +19,10 @@ func main() {
 	}
 	cmd := cli.NewRootCommand()
 	if err := cmd.Execute(); err != nil {
+		var child cli.ChildExitError
+		if errors.As(err, &child) {
+			os.Exit(child.ExitCode())
+		}
 		fmt.Fprintln(os.Stderr, cli.ErrorText(cmd, err))
 		os.Exit(1)
 	}

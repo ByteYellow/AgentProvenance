@@ -21,6 +21,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+type ChildExitError int
+
+func (e ChildExitError) ExitCode() int { return int(e) }
+func (e ChildExitError) Error() string {
+	return fmt.Sprintf("recorded command exited with status %d", int(e))
+}
+
 func recordCmd(dataDir *string) *cobra.Command {
 	var runID string
 	var name string
@@ -28,6 +35,7 @@ func recordCmd(dataDir *string) *cobra.Command {
 	var sampleIntervalMS int64
 	var postRootGraceMS int64
 	var withJSON bool
+	var propagateExit bool
 	cmd := &cobra.Command{
 		Use:   "record -- <command...>",
 		Short: "record a command as a zero-SDK agent execution",
@@ -80,12 +88,19 @@ func recordCmd(dataDir *string) *cobra.Command {
 				return err
 			}
 			if withJSON {
-				return printRecordJSON(cmd, result)
+				if err := printRecordJSON(cmd, result); err != nil {
+					return err
+				}
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "run_id=%s trajectory_id=%s base_state=%s execution_scope=%s substrate_scope=%s tool_call=%s process=%s status=%s exit=%d wall_ms=%d changed_files=%d workdir=%s\n"),
+					result.RunID, result.RolloutID, result.BaseSnapshotID, result.AttemptID, result.SessionID, result.ToolCallID, result.ProcessID, result.Status, result.ExitCode, result.WallMS, len(result.ChangedFiles), result.Workdir)
+				for _, file := range result.ChangedFiles {
+					fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "changed_file=%s\n"), file)
+				}
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "run_id=%s trajectory_id=%s base_state=%s execution_scope=%s substrate_scope=%s tool_call=%s process=%s status=%s exit=%d wall_ms=%d changed_files=%d workdir=%s\n"),
-				result.RunID, result.RolloutID, result.BaseSnapshotID, result.AttemptID, result.SessionID, result.ToolCallID, result.ProcessID, result.Status, result.ExitCode, result.WallMS, len(result.ChangedFiles), result.Workdir)
-			for _, file := range result.ChangedFiles {
-				fmt.Fprintf(cmd.OutOrStdout(), commandText(cmd, "changed_file=%s\n"), file)
+			if propagateExit && result.ExitCode != 0 {
+				cmd.SilenceUsage = true
+				return ChildExitError(result.ExitCode)
 			}
 			return nil
 		},
@@ -96,6 +111,7 @@ func recordCmd(dataDir *string) *cobra.Command {
 	cmd.Flags().Int64Var(&sampleIntervalMS, "sample-interval-ms", 25, "zero-SDK process tree sampling interval in milliseconds")
 	cmd.Flags().Int64Var(&postRootGraceMS, "post-root-grace-ms", 250, "time to keep sampling after root process exit")
 	cmd.Flags().BoolVar(&withJSON, "json", false, "emit machine-readable zero-SDK record manifest")
+	cmd.Flags().BoolVar(&propagateExit, "propagate-exit", false, "return the recorded command's exit code after writing the result")
 	cmd.AddCommand(recordBatchCmd(dataDir))
 	return cmd
 }

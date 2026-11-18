@@ -33,11 +33,12 @@
 
 ## `list_events`：查询运行时事件
 
-按类型筛选运行时事件。默认返回最多 50 条；连续翻页请使用 REST 接口的 cursor 参数。
+按类型筛选运行时事件，默认返回最多 50 条。`has_more` 为真时，保留原筛选条件，把返回的 `next_cursor` 传给同一个工具，继续读取下一页。
 
 | 参数 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `limit` | `integer` | 否 | 返回数量上限，默认 50 |
+| `cursor` | `string` | 否 | 上一页返回的 `next_cursor` |
 | `run` | `string` | 是 | 执行 ID |
 | `type` | `string` | 否 | 可选事件类型，例如 execve、metadata_ip |
 

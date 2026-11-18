@@ -72,14 +72,16 @@ func Catalog() []Tool {
 			Name:        "list_events",
 			Description: "List runtime telemetry events for a run (paged), optionally filtered by event type.",
 			InputSchema: objSchema(map[string]any{
-				"run":   strProp("run id"),
-				"type":  strProp("optional event_type filter, e.g. execve, metadata_ip"),
-				"limit": map[string]any{"type": "integer", "description": "max events (default 50)"},
+				"run":    strProp("run id"),
+				"type":   strProp("optional event_type filter, e.g. execve, metadata_ip"),
+				"cursor": strProp("next_cursor from the previous page with the same filters"),
+				"limit":  map[string]any{"type": "integer", "description": "max events (default 50)"},
 			}, "run"),
 			Run: func(db *sql.DB, in map[string]any) (any, error) {
 				return telemetry.ListEventsPage(db, telemetry.ListOptions{
 					Filter: telemetry.Filter{RunID: strArg(in, "run"), Type: strArg(in, "type")},
 					Limit:  intArg(in, "limit", 50),
+					Cursor: strArg(in, "cursor"),
 				})
 			},
 		},

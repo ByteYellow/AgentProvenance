@@ -32,11 +32,12 @@ Read risk signals, recommended actions and evidence references.
 
 ## `list_events`: Query runtime events
 
-Filter runtime events by type. Returns up to 50 events by default. For subsequent pages, use the REST endpoint with its cursor parameter.
+Filter runtime events by type. Returns up to 50 events by default. While `has_more` is true, call the same tool with the same filters and the returned `next_cursor`.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `limit` | `integer` | no | max events (default 50) |
+| `cursor` | `string` | no | previous page's `next_cursor` |
 | `run` | `string` | yes | run id |
 | `type` | `string` | no | optional event_type filter, e.g. execve, metadata_ip |
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/byteyellow/agentprovenance/internal/correlation"
 	"github.com/byteyellow/agentprovenance/internal/store"
+	"github.com/byteyellow/agentprovenance/internal/telemetry"
 )
 
 func openTestStore(t *testing.T) *sql.DB {
@@ -21,6 +22,37 @@ func openTestStore(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	return db
+}
+
+func TestListEventsFollowsCursorWithinFilter(t *testing.T) {
+	db := openTestStore(t)
+	for _, row := range [][]string{{"a", "one", "execve"}, {"b", "one", "execve"}, {"c", "two", "execve"}, {"d", "one", "file_open"}} {
+		if _, err := db.Exec("INSERT INTO events (id,run_id,source,event_type,payload,created_at) VALUES (?,?,'fixture',?,'{}','2026-01-01T00:00:00Z')", row[0], row[1], row[2]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	args := map[string]any{"run": "one", "type": "execve", "limit": 1}
+	first, err := Dispatch(db, "list_events", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := first.(telemetry.ListResult)
+	if !a.HasMore || a.NextCursor == "" || a.Events[0].ID != "a" {
+		t.Fatalf("first page: %+v", a)
+	}
+	args["cursor"] = a.NextCursor
+	second, err := Dispatch(db, "list_events", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := second.(telemetry.ListResult)
+	if b.HasMore || b.TotalCount != 2 || len(b.Events) != 1 || b.Events[0].ID != "b" {
+		t.Fatalf("second page: %+v", b)
+	}
+	args["cursor"] = "invalid"
+	if _, err := Dispatch(db, "list_events", args); err == nil {
+		t.Fatal("invalid cursor accepted")
+	}
 }
 
 func TestCatalogAndProviderShapes(t *testing.T) {
