@@ -60,6 +60,16 @@ func TestDiffAndBlameFileAcrossAttempts(t *testing.T) {
 	}
 	insertDiffAttempt(t, db, "attempt-1", "tool-1", attempt1, "noop", "cat calculator.py", 0, now)
 	insertDiffAttempt(t, db, "attempt-2", "tool-2", attempt2, "correct-add", "sed fix", 1, now)
+	unsealed, err := BuildDiffFile(db, "run-1", "calculator.py")
+	if err != nil || len(unsealed.Attempts) != 2 || unsealed.Attempts[0].ChangeType != "unknown" {
+		t.Fatalf("unsealed fork: %+v %v", unsealed, err)
+	}
+	if _, err := (ObjectStore{DB: db, Paths: paths}).MaterializeRun("run-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(attempt2, "calculator.py"), []byte("later workspace"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	var diffOut bytes.Buffer
 	if err := DiffFile(db, "run-1", "calculator.py", &diffOut); err != nil {
@@ -144,6 +154,9 @@ func TestDiffAndBlameJSON(t *testing.T) {
 	}
 	insertDiffAttempt(t, db, "attempt-1", "tool-1", attempt1, "noop", "cat calculator.py", 0, now)
 	insertDiffAttempt(t, db, "attempt-2", "tool-2", attempt2, "correct-add", "sed fix", 1, now)
+	if _, err := (ObjectStore{DB: db, Paths: paths}).MaterializeRun("run-1"); err != nil {
+		t.Fatal(err)
+	}
 
 	var diffOut bytes.Buffer
 	if err := DiffFileJSON(db, "run-1", "calculator.py", &diffOut); err != nil {
@@ -156,7 +169,7 @@ func TestDiffAndBlameJSON(t *testing.T) {
 	if diffManifest.SchemaVersion != "agentprovenance.diff/v1" || len(diffManifest.Attempts) != 2 {
 		t.Fatalf("unexpected diff manifest: %+v", diffManifest)
 	}
-	if diffManifest.Attempts[0].Changed || !diffManifest.Attempts[1].Changed || !diffManifest.Attempts[1].IsWinner {
+	if boolText(diffManifest.Attempts[0].Changed) != "false" || boolText(diffManifest.Attempts[1].Changed) != "true" || !diffManifest.Attempts[1].IsWinner {
 		t.Fatalf("unexpected diff attempts: %+v", diffManifest.Attempts)
 	}
 	if len(diffManifest.Attempts[1].UnifiedDiff) == 0 {
@@ -186,10 +199,10 @@ func TestDiffAndBlameJSON(t *testing.T) {
 	if err := json.Unmarshal(createdOut.Bytes(), &createdManifest); err != nil {
 		t.Fatalf("invalid created blame json: %v\n%s", err, createdOut.String())
 	}
-	if createdManifest.Entries[0].Changed || createdManifest.Entries[0].Reason != "unchanged_from_base" {
+	if boolText(createdManifest.Entries[0].Changed) != "false" || createdManifest.Entries[0].Reason != "unchanged_from_base" {
 		t.Fatalf("missing file in base and attempt should be unchanged: %+v", createdManifest.Entries[0])
 	}
-	if !createdManifest.Entries[1].Changed || createdManifest.Entries[1].Reason != "created_by_attempt" {
+	if boolText(createdManifest.Entries[1].Changed) != "true" || createdManifest.Entries[1].Reason != "created_by_attempt" {
 		t.Fatalf("expected created_by_attempt: %+v", createdManifest.Entries[1])
 	}
 
@@ -201,7 +214,7 @@ func TestDiffAndBlameJSON(t *testing.T) {
 	if err := json.Unmarshal(createdDiffOut.Bytes(), &createdDiff); err != nil {
 		t.Fatalf("invalid created diff json: %v\n%s", err, createdDiffOut.String())
 	}
-	if createdDiff.Attempts[0].Changed || !createdDiff.Attempts[1].Changed {
+	if boolText(createdDiff.Attempts[0].Changed) != "false" || boolText(createdDiff.Attempts[1].Changed) != "true" {
 		t.Fatalf("unexpected created diff attempts: %+v", createdDiff.Attempts)
 	}
 
@@ -213,7 +226,7 @@ func TestDiffAndBlameJSON(t *testing.T) {
 	if err := json.Unmarshal(deletedOut.Bytes(), &deletedManifest); err != nil {
 		t.Fatalf("invalid deleted blame json: %v\n%s", err, deletedOut.String())
 	}
-	if deletedManifest.Entries[1].Reason != "deleted_by_attempt" || !deletedManifest.Entries[1].Changed {
+	if deletedManifest.Entries[1].Reason != "deleted_by_attempt" || boolText(deletedManifest.Entries[1].Changed) != "true" {
 		t.Fatalf("expected deleted_by_attempt: %+v", deletedManifest.Entries[1])
 	}
 }
@@ -229,6 +242,9 @@ func insertDiffSnapshot(t *testing.T, db *sql.DB, id, path, createdAt string) {
 
 func insertDiffAttempt(t *testing.T, db *sql.DB, id, toolCallID, workspace, strategy, command string, winner int, createdAt string) {
 	t.Helper()
+	if _, err := db.Exec(`INSERT INTO tool_calls (id,run_id,rollout_id,attempt_id,command,status,created_at) VALUES (?,'run-1','rollout-1',?,?,'passed',?)`, toolCallID, id, command, createdAt); err != nil {
+		t.Fatal(err)
+	}
 	_, err := db.Exec(`INSERT INTO fork_attempts
 		(id, rollout_id, tool_call_id, snapshot_id, workspace_path, fork_ms, strategy, command, status, is_winner, created_at)
 		VALUES (?, 'rollout-1', ?, 'snap-1', ?, 1, ?, ?, 'passed', ?, ?)`,

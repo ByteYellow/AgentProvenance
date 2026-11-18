@@ -1001,7 +1001,7 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 			}
 		}
 		isRuntimeTelemetry := correlationMethod != ""
-		isFileTelemetry := eventType == "file_write" || eventType == "file_open"
+		isFileTelemetry := eventType == "file_write" || eventType == "file_open" || eventType == "file_snapshot_removed"
 		if !isRuntimeTelemetry && !isFileTelemetry {
 			continue
 		}
@@ -1047,7 +1047,7 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 				add("error", "missing_runtime_process_thread_edge", id, "thread group %s is not linked to %s", threadGroupNode, processNode)
 			}
 		}
-		if eventType == "file_write" || eventType == "file_open" {
+		if isFileTelemetry {
 			path := verifyPayloadPath(payload)
 			fileNode := "workspace_file/" + path
 			if source == "gvisor_seccheck" {
@@ -1057,7 +1057,7 @@ func verifyRuntimeCausality(db *sql.DB, runID string, add issueAdder) error {
 				if !hasEdge(eventNode, fileNode, "runtime_event_file") {
 					add("error", "missing_runtime_event_file_edge", id, "runtime event %s is not linked to file %s", id, path)
 				}
-				if processID != "" && !hasEdge(processID, fileNode, "runtime_process_file") {
+				if processID != "" && eventType != "file_snapshot_removed" && !hasEdge(processID, fileNode, "runtime_process_file") {
 					add("error", "missing_runtime_process_file_edge", id, "process %s is not linked to file %s", processID, path)
 				}
 				if toolCallID != "" && !hasEdge(toolCallID, fileNode, "runtime_tool_call_file") {

@@ -10,7 +10,7 @@ import (
 )
 
 func TestLocalizedDiffKeepsOriginalPatch(t *testing.T) {
-	m := FileDiffManifest{RunID: "Copy", File: "Run", Attempts: []FileDiffAttempt{{AttemptID: "Search", Changed: true, UnifiedDiff: []string{"-Ready", "+Copy"}}}}
+	m := FileDiffManifest{RunID: "Copy", File: "Run", Attempts: []FileDiffAttempt{{AttemptID: "Search", Changed: boolWhen(true, true), UnifiedDiff: []string{"-Ready", "+Copy"}}}}
 	before, _ := json.Marshal(m)
 	var out bytes.Buffer
 	PrintDiffFile(&out, m, i18n.Chinese)

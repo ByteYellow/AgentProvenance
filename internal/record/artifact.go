@@ -26,6 +26,7 @@ type ArtifactCaptureReport struct {
 	Method           string             `json:"method"`
 	Candidates       *int               `json:"candidates"`
 	Stored           int                `json:"stored"`
+	Deleted          int                `json:"deleted,omitempty"`
 	Omitted          int                `json:"omitted"`
 	Failed           int                `json:"failed"`
 	StoredBytes      int64              `json:"stored_bytes"`
@@ -41,6 +42,7 @@ type ArtifactCaptureReport struct {
 
 type CapturedArtifact struct {
 	Path         string `json:"path"`
+	Change       string `json:"snapshot_change,omitempty"`
 	SourceBytes  *int64 `json:"source_bytes"`
 	ReadBytes    int64  `json:"read_bytes"`
 	ContentState string `json:"content_state"`
@@ -62,7 +64,7 @@ func newArtifactCaptureReport() ArtifactCaptureReport {
 		Reason: "File snapshot capture was not enabled."}
 }
 
-func (s Service) captureArtifacts(runID, rolloutID, workdir string, paths []string) ArtifactCaptureReport {
+func (s Service) captureArtifacts(runID, rolloutID, workdir string, paths []string, changes map[string]string) ArtifactCaptureReport {
 	report := newArtifactCaptureReport()
 	count := len(paths)
 	report.Candidates, report.Status, report.Reason = &count, "ok", ""
@@ -76,13 +78,15 @@ func (s Service) captureArtifacts(runID, rolloutID, workdir string, paths []stri
 			break
 		}
 		remaining := min(report.TotalByteLimit-report.StoredBytes, report.TotalByteLimit-report.ReadBytes)
-		item, err := s.captureArtifact(runID, rolloutID, workdir, path, remaining)
+		item, err := s.captureArtifact(runID, rolloutID, workdir, path, changes[path], remaining)
 		report.ReadBytes += item.ReadBytes
 		if err != nil {
 			item.ContentState, item.ReasonCode = "failed", "storage_failed"
 			item.Reason = "Artifact evidence could not be stored."
 			item.ContentRef, item.ContentBytes, item.SHA256, item.Redacted = "", nil, "", false
 			report.Failed++
+		} else if item.ContentState == "deleted" {
+			report.Deleted++
 		} else if item.ContentState == "stored" {
 			report.Stored++
 			report.StoredBytes += *item.ContentBytes
@@ -102,9 +106,14 @@ func (s Service) captureArtifacts(runID, rolloutID, workdir string, paths []stri
 
 // Each descriptor and its text chunks share a transaction. On a failed write,
 // no usable descriptor points at a partial set of registered chunks.
-func (s Service) captureArtifact(runID, rolloutID, workdir, path string, remaining int64) (CapturedArtifact, error) {
-	item := CapturedArtifact{Path: path, ContentState: "unavailable", CapturedAt: time.Now().UTC().Format(time.RFC3339Nano), Method: "post_execution_snapshot"}
-	data := readArtifactFile(workdir, path, remaining, &item)
+func (s Service) captureArtifact(runID, rolloutID, workdir, path, change string, remaining int64) (CapturedArtifact, error) {
+	item := CapturedArtifact{Path: path, Change: change, ContentState: "unavailable", CapturedAt: time.Now().UTC().Format(time.RFC3339Nano), Method: "post_execution_snapshot"}
+	var data []byte
+	if change == "deleted" {
+		item.ContentState, item.Reason = "deleted", "The file was present before execution and absent in the final snapshot."
+	} else {
+		data = readArtifactFile(workdir, path, remaining, &item)
+	}
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return item, err

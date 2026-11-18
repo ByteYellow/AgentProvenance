@@ -264,17 +264,17 @@ func (s Server) ComparisonRecords(ctx context.Context, run, cursor string) (Comp
 			return out
 		}
 		switch source.Kind {
-		case "file_open", "file_write", "secret_path", "file_rename", "file_unlink":
+		case "file_open", "file_write", "secret_path", "file_rename", "file_unlink", "file_snapshot_removed":
 			path := firstStr(payload, "path", "filename")
 			if path == "" {
 				issue(source, "files", "file_target_not_recorded")
 				continue
 			}
 			operation := source.Kind
-			if source.SourceID == "record_file_diff" {
+			if source.SourceID == "record_file_diff" && source.Kind != "file_snapshot_removed" {
 				operation = "recorded_file_change"
 			}
-			add(source, "files", operation, path, fields("op", "mode", "flags", "ret", "errno", "new_path"), true, false)
+			add(source, "files", operation, path, fields("op", "mode", "flags", "ret", "errno", "new_path", "snapshot_change"), true, false)
 		case "network_connect", "metadata_ip", "private_cidr", "dns_query", "tls_write", "tls_read":
 			op := "connection_attempt"
 			host := firstStr(payload, "dst_host", "host", "dst_ip", "dst")

@@ -140,7 +140,7 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 	baseSnapshotID := ids.New("snap")
 	baseDir := filepath.Join(s.Paths.Snapshots, baseSnapshotID)
 	// Exclude .git/.agentprov from the base snapshot, matching the diff path's
-	// ignoredPath. This keeps the snapshot clean and (with the dst-subtree guard
+	// RecordFileExcluded. This keeps the snapshot clean and (with the dst-subtree guard
 	// in CopyDirFiltered) prevents self-recursion when the .agentprov data dir
 	// lives inside the workdir being recorded.
 	//
@@ -157,7 +157,7 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 			return Result{}, err
 		}
 	} else {
-		if err := state.CopyDirFiltered(absWorkdir, baseDir, ignoredPath); err != nil {
+		if err := state.CopyDirFiltered(absWorkdir, baseDir, state.RecordFileExcluded); err != nil {
 			return Result{}, err
 		}
 		baseManifest, err = state.BuildManifest(baseDir)
@@ -469,15 +469,16 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 		}
 	}
 	var changed []string
+	var changes map[string]string
 	artifactCapture := newArtifactCaptureReport()
 	if !req.DisableSnapshot {
 		var diffErr error
-		changed, diffErr = changedFiles(baseDir, absWorkdir)
+		changed, changes, diffErr = changedFiles(baseDir, absWorkdir)
 		if diffErr != nil {
 			changed = append(changed, "diff_error:"+diffErr.Error())
 			artifactCapture.Status, artifactCapture.Reason = "failed", "Changed files could not be enumerated."
 		} else {
-			artifactCapture = s.captureArtifacts(req.RunID, rolloutID, absWorkdir, changed)
+			artifactCapture = s.captureArtifacts(req.RunID, rolloutID, absWorkdir, changed, changes)
 		}
 	}
 	artifactByPath := make(map[string]CapturedArtifact, len(artifactCapture.Files))
@@ -488,11 +489,16 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 		if strings.HasPrefix(path, "diff_error:") {
 			continue
 		}
-		payload := map[string]any{"path": path, "op": "record_diff", "mode": "zero_sdk"}
+		eventType := "file_write"
+		payload := map[string]any{"path": path, "op": "record_diff", "mode": "zero_sdk", "snapshot_change": changes[path]}
 		if item, ok := artifactByPath[path]; ok {
 			payload["artifact_ref"], payload["content_state"] = item.Ref, item.ContentState
 		} else {
 			payload["content_state"] = "collection_limit"
+		}
+		if changes[path] == "deleted" {
+			eventType = "file_snapshot_removed"
+			payload["content_state"] = "deleted"
 		}
 		raw, _ := json.Marshal(payload)
 		_, ingestErr := telemetry.IngestFiltered(s.DB, telemetry.IngestEvent{
@@ -510,7 +516,7 @@ func (s Service) RunContext(ctx context.Context, req Request) (Result, error) {
 			PPID:       int64(os.Getpid()),
 			Timestamp:  endedAt,
 			Source:     "record_file_diff",
-			EventType:  "file_write",
+			EventType:  eventType,
 			Payload:    string(raw),
 		})
 		if ingestErr != nil && len(artifactCapture.Issues) == 0 {
@@ -788,16 +794,16 @@ func (s Service) markStopped(runID, rolloutID, attemptID, sessionID, toolCallID,
 	})
 }
 
-func changedFiles(baseDir, workdir string) ([]string, error) {
+func changedFiles(baseDir, workdir string) ([]string, map[string]string, error) {
 	base, err := state.BuildFileManifest(baseDir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	current, err := state.BuildFileManifest(workdir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	changedSet := map[string]bool{}
+	changedSet := map[string]string{}
 	baseByPath := map[string]state.FileEntry{}
 	for _, entry := range base {
 		baseByPath[entry.Path] = entry
@@ -807,19 +813,27 @@ func changedFiles(baseDir, workdir string) ([]string, error) {
 		currentByPath[entry.Path] = entry
 	}
 	for path, entry := range currentByPath {
-		if ignoredPath(path) {
+		if state.RecordFileExcluded(path) {
 			continue
 		}
-		if before, ok := baseByPath[path]; !ok || before.Hash != entry.Hash {
-			changedSet[path] = true
+		if before, ok := baseByPath[path]; !ok {
+			changedSet[path] = "created"
+		} else if before.Hash != entry.Hash {
+			changedSet[path] = "modified"
 		}
 	}
 	for path := range baseByPath {
-		if ignoredPath(path) {
+		if state.RecordFileExcluded(path) {
 			continue
 		}
 		if _, ok := currentByPath[path]; !ok {
-			changedSet[path] = true
+			// The manifests enumerate regular files. A replacement symlink or
+			// directory is not evidence that the path itself was removed.
+			if _, err := os.Lstat(filepath.Join(workdir, path)); errors.Is(err, os.ErrNotExist) {
+				changedSet[path] = "deleted"
+			} else {
+				changedSet[path] = "changed"
+			}
 		}
 	}
 	changed := make([]string, 0, len(changedSet))
@@ -827,13 +841,7 @@ func changedFiles(baseDir, workdir string) ([]string, error) {
 		changed = append(changed, path)
 	}
 	sort.Strings(changed)
-	return changed, nil
-}
-
-func ignoredPath(path string) bool {
-	return path == ".git" || strings.HasPrefix(path, ".git/") ||
-		path == ".agentprov" || strings.HasPrefix(path, ".agentprov") ||
-		strings.HasPrefix(path, "agentprov.db")
+	return changed, changedSet, nil
 }
 
 func argsHash(command string) string {

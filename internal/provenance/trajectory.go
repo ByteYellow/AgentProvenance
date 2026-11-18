@@ -53,25 +53,32 @@ type TrajectoryEvidence struct {
 	ExternalEffects        []ReplayExternalEffect `json:"external_effects,omitempty"`
 	FileChanges            []TrajectoryFileChange `json:"file_changes,omitempty"`
 	FileChangeSummary      FileChangeSummary      `json:"file_change_summary"`
+	FileChangeSource       string                 `json:"file_change_source,omitempty"`
+	FileCaptureState       string                 `json:"file_capture_state,omitempty"`
 }
 
 type TrajectoryFileChange struct {
-	Path        string   `json:"path"`
-	ChangeType  string   `json:"change_type"`
-	BaseExists  bool     `json:"base_exists"`
-	NextExists  bool     `json:"next_exists"`
-	BaseSHA256  string   `json:"base_sha256"`
-	NextSHA256  string   `json:"next_sha256"`
-	BaseBytes   int64    `json:"base_bytes"`
-	NextBytes   int64    `json:"next_bytes"`
-	UnifiedDiff []string `json:"unified_diff,omitempty"`
+	Path         string   `json:"path"`
+	ChangeType   string   `json:"change_type"`
+	BaseExists   bool     `json:"base_exists"`
+	NextExists   bool     `json:"next_exists"`
+	BaseSHA256   string   `json:"base_sha256"`
+	NextSHA256   string   `json:"next_sha256"`
+	BaseBytes    int64    `json:"base_bytes"`
+	NextBytes    int64    `json:"next_bytes"`
+	UnifiedDiff  []string `json:"unified_diff,omitempty"`
+	ContentState string   `json:"content_state,omitempty"`
+	PatchState   string   `json:"patch_state,omitempty"`
+	EvidenceRef  string   `json:"evidence_ref,omitempty"`
+	ContentRef   string   `json:"content_ref,omitempty"`
 }
 
 type FileChangeSummary struct {
-	Created   int `json:"created"`
-	Modified  int `json:"modified"`
-	Deleted   int `json:"deleted"`
-	Unchanged int `json:"unchanged"`
+	Created      int `json:"created"`
+	Modified     int `json:"modified"`
+	Deleted      int `json:"deleted"`
+	Unchanged    int `json:"unchanged"`
+	OtherChanges int `json:"other_changes,omitempty"`
 }
 
 type fileSnapshotState struct {
@@ -99,6 +106,10 @@ func TrajectoriesRunJSON(db *sql.DB, runID string, out io.Writer) error {
 }
 
 func BuildTrajectoriesRun(db *sql.DB, runID string) (TrajectoryManifest, error) {
+	return buildTrajectories(db, runID, false)
+}
+
+func buildTrajectories(db *sql.DB, runID string, captureForks bool) (TrajectoryManifest, error) {
 	replay, err := BuildReplayRun(db, runID)
 	if err != nil {
 		return TrajectoryManifest{}, err
@@ -108,6 +119,7 @@ func BuildTrajectoriesRun(db *sql.DB, runID string) (TrajectoryManifest, error) 
 		RunID:         runID,
 		DecisionOwner: "external_evaluator",
 	}
+	var saved map[string]TrajectoryEvidence
 	for _, rollout := range replay.Rollouts {
 		manifest.Rollouts = append(manifest.Rollouts, TrajectoryRollout{
 			ID:             rollout.ID,
@@ -118,19 +130,66 @@ func BuildTrajectoriesRun(db *sql.DB, runID string) (TrajectoryManifest, error) 
 			RiskStatus:     rollout.RiskStatus,
 			BaseSnapshot:   rollout.BaseSnapshot,
 		})
-		baseFiles := map[string]fileSnapshotState{}
-		if rollout.BaseSnapshot != nil {
-			baseFiles, err = collectFileStates(rollout.BaseSnapshot.Path)
-			if err != nil {
-				return TrajectoryManifest{}, err
-			}
-		}
 		for _, attempt := range rollout.Attempts {
-			nextFiles, err := collectFileStates(attempt.Workspace)
-			if err != nil {
-				return TrajectoryManifest{}, err
+			var changes []TrajectoryFileChange
+			var summary FileChangeSummary
+			source, state := "retained_fork_snapshot", "not_recorded"
+			if attempt.Strategy == "zero-sdk-record" {
+				source = "recorded_snapshot"
+				report, err := recordedFilesFor(db, runID, rollout.ID, rollout.BaseSnapshotID)
+				if err != nil {
+					return TrajectoryManifest{}, err
+				}
+				state = report.Status
+				for i := range report.Files {
+					path, err := cleanRelativeFile(report.Files[i].Path)
+					if err != nil {
+						return TrajectoryManifest{}, err
+					}
+					change, err := report.comparison(db, runID, path, &report.Files[i])
+					if err != nil {
+						return TrajectoryManifest{}, err
+					}
+					changes = append(changes, change)
+					switch change.ChangeType {
+					case "created":
+						summary.Created++
+					case "modified":
+						summary.Modified++
+					case "deleted":
+						summary.Deleted++
+					default:
+						summary.OtherChanges++
+					}
+				}
+			} else {
+				if saved == nil {
+					saved, err = savedForkFiles(db, runID)
+					if err != nil {
+						return TrajectoryManifest{}, err
+					}
+				}
+				if old, ok := saved[attempt.ID]; ok && old.RolloutID == rollout.ID {
+					changes, summary, state = old.FileChanges, old.FileChangeSummary, old.FileCaptureState
+					if state == "" {
+						state = "ok"
+					}
+				} else if captureForks && attempt.Workspace != "" && rollout.BaseSnapshot != nil && rollout.BaseSnapshot.Path != "" {
+					baseFiles := map[string]fileSnapshotState{}
+					if rollout.BaseSnapshot != nil {
+						baseFiles, err = collectFileStates(rollout.BaseSnapshot.Path)
+						if err != nil {
+							return TrajectoryManifest{}, err
+						}
+					}
+					nextFiles, err := collectFileStates(attempt.Workspace)
+					if err != nil {
+						return TrajectoryManifest{}, err
+					}
+					changes, summary = compareFileStates(baseFiles, nextFiles)
+					state = "ok"
+				}
 			}
-			changes, summary := compareFileStates(baseFiles, nextFiles)
 			manifest.Trajectories = append(manifest.Trajectories, TrajectoryEvidence{
 				RunID:                  rollout.RunID,
 				RolloutID:              rollout.ID,
@@ -155,6 +214,8 @@ func BuildTrajectoriesRun(db *sql.DB, runID string) (TrajectoryManifest, error) 
 				ExternalEffects:        attempt.ExternalEffects,
 				FileChanges:            changes,
 				FileChangeSummary:      summary,
+				FileChangeSource:       source,
+				FileCaptureState:       state,
 			})
 		}
 	}

@@ -40,6 +40,10 @@
 ./agentprov graph explain --risk <policy_decision_id> --json
 ```
 
+## 查阅文件历史
+
+`graph diff`、`blame` 和 `trajectories` 读取所选执行保存的证据。之后即使复用或移走工作目录，也不会把新内容算到旧执行上。快照确认文件已删除时，结果显示「删除」；未采到正文或缺少文本对比所需的基线时，结果说明具体缺项，未知的布尔字段在 JSON 中为 `null`。对于仍保留原工作目录、尚未保存轨迹的旧 fork，请在复用工作目录前执行 `graph materialize`，保存该目录当时的状态。
+
 ## 验证结果
 
 `graph verify --json` 输出 `agentprovenance.verify/v1`，状态分为三种：

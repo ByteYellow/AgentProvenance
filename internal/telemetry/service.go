@@ -546,6 +546,8 @@ func eventIdentity(event IngestEvent) correlation.RawIdentity {
 
 func AllowedEventType(eventType string) bool {
 	switch eventType {
+	case "file_snapshot_removed":
+		return true
 	case "runtime_collection", "runtime_observation", "execve", "process_exit", "thread_exit", "syscall_result", "access_control", "access_control_state", "access_control_collection", "process_observed", "file_open", "file_write", "network_connect", "metadata_ip", "private_cidr", "secret_path", "abnormal_process_tree", "policy_verdict", "resource_pressure", "tls_write", "tls_read", "setuid", "setgid", "ptrace", "file_rename", "file_unlink", "dns_query":
 		return true
 	default:
@@ -592,7 +594,7 @@ func recordRuntimeCausalityEdges(db sqlStore, event IngestEvent, eventID, now st
 		threadGroupNode, processNode := identity.ThreadGroup.ID, identity.Process.ID
 		insert(threadGroupNode, processNode, "runtime_process_thread")
 	}
-	if event.EventType == "file_write" || event.EventType == "file_open" {
+	if event.EventType == "file_write" || event.EventType == "file_open" || event.EventType == "file_snapshot_removed" {
 		path := payloadPath(event.Payload)
 		if path == "" {
 			// Passive node-side capture (no workspace) writes absolute host paths,
@@ -606,7 +608,7 @@ func recordRuntimeCausalityEdges(db sqlStore, event IngestEvent, eventID, now st
 		}
 		if path != "" && fileNode != "" {
 			insert(eventNode, fileNode, "runtime_event_file")
-			if event.ProcessID != "" {
+			if event.ProcessID != "" && event.EventType != "file_snapshot_removed" {
 				insert(event.ProcessID, fileNode, "runtime_process_file")
 			}
 			if event.ToolCallID != "" {

@@ -713,6 +713,9 @@ func TestExplainFileShowsDiffBlameAndRuntimeEvent(t *testing.T) {
 	}
 
 	var out bytes.Buffer
+	if _, err := (ObjectStore{DB: db, Paths: paths}).MaterializeRun("run-explain"); err != nil {
+		t.Fatal(err)
+	}
 	if err := Explain(db, ExplainOptions{RunID: "run-explain", File: "calculator.py"}, &out); err != nil {
 		t.Fatal(err)
 	}

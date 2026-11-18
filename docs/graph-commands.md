@@ -40,6 +40,16 @@ with a pair of signed captures.
 ./agentprov graph explain --risk <policy_decision_id> --json
 ```
 
+## Reading file history
+
+`graph diff`, `blame` and `trajectories` read the saved evidence for the
+selected execution, even after the workspace is reused or removed. A snapshot
+deletion is a recorded removal, not a file write with a missing body. If the
+capture or the base needed for a text patch is unavailable, the result states
+what is missing; unknown booleans are `null` in JSON. For older fork runs that
+still have their original workspace but no saved trajectory, run `graph
+materialize` to capture the retained workspace before reusing it.
+
 ## Verification results
 
 `graph verify --json` returns `agentprovenance.verify/v1` with three statuses:

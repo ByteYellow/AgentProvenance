@@ -741,6 +741,13 @@ func BuildManifest(root string) (Manifest, error) {
 	return Manifest{Hash: hex.EncodeToString(h.Sum(nil)), Files: files, Bytes: bytes}, nil
 }
 
+// RecordFileExcluded identifies workspace metadata outside the recorder's diff.
+func RecordFileExcluded(path string) bool {
+	path = filepath.ToSlash(path)
+	return path == ".git" || strings.HasPrefix(path, ".git/") ||
+		strings.HasPrefix(path, ".agentprov") || strings.HasPrefix(path, "agentprov.db")
+}
+
 func BuildFileManifest(root string) ([]FileEntry, error) {
 	var entries []FileEntry
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {

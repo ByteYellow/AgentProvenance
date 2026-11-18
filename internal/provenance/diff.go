@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/byteyellow/agentprovenance/internal/i18n"
@@ -25,6 +25,7 @@ type attemptFileView struct {
 	Status        string
 	IsWinner      bool
 	ArtifactRef   string
+	BaseID        string
 }
 
 type FileDiffManifest struct {
@@ -33,7 +34,7 @@ type FileDiffManifest struct {
 	File           string            `json:"file"`
 	BaseSnapshotID string            `json:"base_snapshot_id"`
 	BasePath       string            `json:"base_path"`
-	BaseExists     bool              `json:"base_exists"`
+	BaseExists     *bool             `json:"base_exists"`
 	BaseSHA256     string            `json:"base_sha256"`
 	Attempts       []FileDiffAttempt `json:"attempts"`
 }
@@ -49,10 +50,16 @@ type FileDiffAttempt struct {
 	Status        string   `json:"status"`
 	IsWinner      bool     `json:"is_winner"`
 	ArtifactRef   string   `json:"artifact_ref,omitempty"`
-	Changed       bool     `json:"changed"`
-	FileExists    bool     `json:"file_exists"`
+	Changed       *bool    `json:"changed"`
+	FileExists    *bool    `json:"file_exists"`
 	FileSHA256    string   `json:"file_sha256"`
 	UnifiedDiff   []string `json:"unified_diff,omitempty"`
+	ChangeType    string   `json:"change_type,omitempty"`
+	ContentState  string   `json:"content_state,omitempty"`
+	PatchState    string   `json:"patch_state,omitempty"`
+	Source        string   `json:"source,omitempty"`
+	ContentRef    string   `json:"content_ref,omitempty"`
+	BaseSHA256    string   `json:"base_sha256,omitempty"`
 }
 
 type FileBlameManifest struct {
@@ -71,8 +78,10 @@ type FileBlameEntry struct {
 	ToolCallID    string `json:"tool_call_id"`
 	SnapshotID    string `json:"snapshot_id"`
 	IsWinner      bool   `json:"is_winner"`
-	Changed       bool   `json:"changed"`
+	Changed       *bool  `json:"changed"`
 	Reason        string `json:"reason"`
+	Source        string `json:"source,omitempty"`
+	ContentState  string `json:"content_state,omitempty"`
 	SHA256        string `json:"sha256"`
 	Status        string `json:"status"`
 	Strategy      string `json:"strategy"`
@@ -107,64 +116,54 @@ func BuildDiffFile(db *sql.DB, runID, filePath string) (FileDiffManifest, error)
 	if err != nil {
 		return FileDiffManifest{}, err
 	}
-	baseContent, baseOK, err := readRelativeFile(baseRoot, filePath)
-	if err != nil {
-		return FileDiffManifest{}, err
-	}
 	attempts, err := attemptsForRun(db, runID)
 	if err != nil {
 		return FileDiffManifest{}, err
 	}
-	manifest := FileDiffManifest{
-		SchemaVersion:  "agentprovenance.diff/v1",
-		RunID:          runID,
-		File:           filePath,
-		BaseSnapshotID: baseSnapshotID,
-		BasePath:       filepath.Join(baseRoot, filePath),
-		BaseExists:     baseOK,
-		BaseSHA256:     hashOrMissing(baseContent, baseOK),
-	}
-	for _, attempt := range attempts {
-		content, ok, err := readRelativeFile(attempt.WorkspacePath, filePath)
-		if err != nil {
-			return FileDiffManifest{}, err
+	m := FileDiffManifest{SchemaVersion: "agentprovenance.diff/v1", RunID: runID, File: filePath, BaseSnapshotID: baseSnapshotID, BasePath: filepath.Join(baseRoot, filePath), BaseSHA256: "unknown"}
+	var saved map[string]TrajectoryEvidence
+	for _, a := range attempts {
+		var c TrajectoryFileChange
+		source := "retained_fork_snapshot"
+		if a.Strategy == "zero-sdk-record" {
+			source = "recorded_snapshot"
+			r, err := recordedFilesFor(db, runID, a.RolloutID, a.BaseID)
+			if err != nil {
+				return m, err
+			}
+			var item *recordedFile
+			for i := range r.Files {
+				if r.Files[i].Path == filePath {
+					item = &r.Files[i]
+					break
+				}
+			}
+			c, err = r.comparison(db, runID, filePath, item)
+			if err != nil {
+				return m, err
+			}
+		} else {
+			if saved == nil {
+				saved, err = savedForkFiles(db, runID)
+				if err != nil {
+					return m, err
+				}
+			}
+			c = savedForkFile(saved, a, filePath)
 		}
-		changed := fileChanged(baseContent, baseOK, content, ok)
-		attemptHash := "missing"
-		if ok {
-			attemptHash = sha256Hex(content)
+		if a.BaseID == baseSnapshotID {
+			m.BaseExists, m.BaseSHA256 = boolWhen(c.BaseExists, c.BaseSHA256 != "unknown" || c.BaseExists), c.BaseSHA256
 		}
-		entry := FileDiffAttempt{
-			AttemptID:     attempt.AttemptID,
-			RolloutID:     attempt.RolloutID,
-			ToolCallID:    attempt.ToolCallID,
-			SnapshotID:    attempt.SnapshotID,
-			WorkspacePath: attempt.WorkspacePath,
-			Strategy:      attempt.Strategy,
-			Command:       attempt.Command,
-			Status:        attempt.Status,
-			IsWinner:      attempt.IsWinner,
-			ArtifactRef:   attempt.ArtifactRef,
-			Changed:       changed,
-			FileExists:    ok,
-			FileSHA256:    attemptHash,
+		ref := a.ArtifactRef
+		if c.EvidenceRef != "" {
+			ref = c.EvidenceRef
 		}
-		if changed {
-			entry.UnifiedDiff = unifiedLines(baseContent, baseOK, content, ok)
-		}
-		manifest.Attempts = append(manifest.Attempts, entry)
+		m.Attempts = append(m.Attempts, FileDiffAttempt{AttemptID: a.AttemptID, RolloutID: a.RolloutID, ToolCallID: a.ToolCallID, SnapshotID: a.SnapshotID,
+			WorkspacePath: a.WorkspacePath, Strategy: a.Strategy, Command: a.Command, Status: a.Status, IsWinner: a.IsWinner, ArtifactRef: ref,
+			Changed: boolWhen(c.ChangeType != "unchanged", c.ChangeType != "unknown"), FileExists: boolWhen(c.NextExists, c.NextExists || c.NextSHA256 != "unknown"), FileSHA256: c.NextSHA256,
+			BaseSHA256: c.BaseSHA256, UnifiedDiff: c.UnifiedDiff, ChangeType: c.ChangeType, Source: source, ContentState: c.ContentState, ContentRef: c.ContentRef, PatchState: c.PatchState})
 	}
-	return manifest, nil
-}
-
-func fileChanged(baseContent []byte, baseOK bool, attemptContent []byte, attemptOK bool) bool {
-	if !baseOK && !attemptOK {
-		return false
-	}
-	if baseOK != attemptOK {
-		return true
-	}
-	return sha256Hex(baseContent) != sha256Hex(attemptContent)
+	return m, nil
 }
 
 func PrintDiffFile(out io.Writer, manifest FileDiffManifest, languages ...i18n.Locale) {
@@ -173,9 +172,15 @@ func PrintDiffFile(out io.Writer, manifest FileDiffManifest, languages ...i18n.L
 	fmt.Fprintf(out, i18n.T(lang, "base_sha256=%s base_path=%s\n"), manifest.BaseSHA256, manifest.BasePath)
 	fmt.Fprintln(out, i18n.T(lang, "diffs:"))
 	for _, attempt := range manifest.Attempts {
-		fmt.Fprintf(out, i18n.T(lang, "  attempt=%s rollout=%s tool_call=%s winner=%t status=%s strategy=%s changed=%t base_sha256=%s attempt_sha256=%s workspace=%s\n"),
-			attempt.AttemptID, attempt.RolloutID, attempt.ToolCallID, attempt.IsWinner, attempt.Status, attempt.Strategy, attempt.Changed, manifest.BaseSHA256, attempt.FileSHA256, attempt.WorkspacePath)
-		if !attempt.Changed {
+		fmt.Fprintf(out, i18n.T(lang, "  attempt=%s rollout=%s tool_call=%s winner=%t status=%s strategy=%s changed=%s base_sha256=%s attempt_sha256=%s workspace=%s\n"),
+			attempt.AttemptID, attempt.RolloutID, attempt.ToolCallID, attempt.IsWinner, attempt.Status, attempt.Strategy, boolText(attempt.Changed), attempt.BaseSHA256, attempt.FileSHA256, attempt.WorkspacePath)
+		if attempt.Source != "" {
+			fmt.Fprintf(out, i18n.T(lang, "    source=%s change=%s content=%s\n"), attempt.Source, attempt.ChangeType, attempt.ContentState)
+		}
+		if attempt.PatchState != "" {
+			fmt.Fprintf(out, i18n.T(lang, "    patch=%s\n"), attempt.PatchState)
+		}
+		if len(attempt.UnifiedDiff) == 0 {
 			continue
 		}
 		fmt.Fprintf(out, "  --- base/%s\n", manifest.File)
@@ -195,60 +200,26 @@ func BlameFileJSON(db *sql.DB, runID, filePath string, out io.Writer) error {
 }
 
 func BuildBlameFile(db *sql.DB, runID, filePath string) (FileBlameManifest, error) {
-	filePath, err := cleanRelativeFile(filePath)
+	diff, err := BuildDiffFile(db, runID, filePath)
 	if err != nil {
 		return FileBlameManifest{}, err
 	}
-	baseSnapshotID, baseRoot, err := baseSnapshotForRun(db, runID)
-	if err != nil {
-		return FileBlameManifest{}, err
-	}
-	baseContent, baseOK, err := readRelativeFile(baseRoot, filePath)
-	if err != nil {
-		return FileBlameManifest{}, err
-	}
-	baseHash := hashOrMissing(baseContent, baseOK)
-	attempts, err := attemptsForRun(db, runID)
-	if err != nil {
-		return FileBlameManifest{}, err
-	}
-	manifest := FileBlameManifest{SchemaVersion: "agentprovenance.blame/v1", RunID: runID, File: filePath, BaseSnapshotID: baseSnapshotID, BaseSHA256: baseHash}
-	for _, attempt := range attempts {
-		content, ok, err := readRelativeFile(attempt.WorkspacePath, filePath)
-		if err != nil {
-			return FileBlameManifest{}, err
+	m := FileBlameManifest{SchemaVersion: "agentprovenance.blame/v1", RunID: runID, File: diff.File, BaseSnapshotID: diff.BaseSnapshotID, BaseSHA256: diff.BaseSHA256}
+	for _, a := range diff.Attempts {
+		reason := a.ChangeType
+		switch reason {
+		case "created", "deleted", "modified":
+			reason += "_by_attempt"
+		case "unchanged":
+			reason = "unchanged_from_base"
+		case "changed":
+			reason = "snapshot_change_recorded"
 		}
-		fileHash := "missing"
-		if ok {
-			fileHash = sha256Hex(content)
-		}
-		changed := fileHash != baseHash
-		reason := "unchanged_from_base"
-		if !baseOK && ok {
-			reason = "created_by_attempt"
-		} else if baseOK && !ok {
-			reason = "deleted_by_attempt"
-		} else if changed {
-			reason = "modified_by_attempt"
-		}
-		manifest.Entries = append(manifest.Entries, FileBlameEntry{
-			File:          filePath,
-			AttemptID:     attempt.AttemptID,
-			RolloutID:     attempt.RolloutID,
-			ToolCallID:    attempt.ToolCallID,
-			SnapshotID:    attempt.SnapshotID,
-			IsWinner:      attempt.IsWinner,
-			Changed:       changed,
-			Reason:        reason,
-			SHA256:        fileHash,
-			Status:        attempt.Status,
-			Strategy:      attempt.Strategy,
-			Command:       attempt.Command,
-			ArtifactRef:   attempt.ArtifactRef,
-			WorkspacePath: attempt.WorkspacePath,
-		})
+		m.Entries = append(m.Entries, FileBlameEntry{File: diff.File, AttemptID: a.AttemptID, RolloutID: a.RolloutID, ToolCallID: a.ToolCallID,
+			SnapshotID: a.SnapshotID, IsWinner: a.IsWinner, Changed: a.Changed, Reason: reason, SHA256: a.FileSHA256, Status: a.Status, Strategy: a.Strategy,
+			Command: a.Command, ArtifactRef: a.ArtifactRef, WorkspacePath: a.WorkspacePath, Source: a.Source, ContentState: a.ContentState})
 	}
-	return manifest, nil
+	return m, nil
 }
 
 func PrintBlameFile(out io.Writer, manifest FileBlameManifest, languages ...i18n.Locale) {
@@ -256,9 +227,22 @@ func PrintBlameFile(out io.Writer, manifest FileBlameManifest, languages ...i18n
 	fmt.Fprintf(out, i18n.T(lang, "run=%s file=%s base_snapshot=%s base_sha256=%s\n"), manifest.RunID, manifest.File, manifest.BaseSnapshotID, manifest.BaseSHA256)
 	fmt.Fprintln(out, i18n.T(lang, "blame:"))
 	for _, entry := range manifest.Entries {
-		fmt.Fprintf(out, i18n.T(lang, "  file=%s attempt=%s rollout=%s tool_call=%s winner=%t changed=%t reason=%s sha256=%s status=%s strategy=%s artifact=%s command=%q workspace=%s\n"),
-			entry.File, entry.AttemptID, entry.RolloutID, entry.ToolCallID, entry.IsWinner, entry.Changed, entry.Reason, entry.SHA256, entry.Status, entry.Strategy, entry.ArtifactRef, entry.Command, entry.WorkspacePath)
+		fmt.Fprintf(out, i18n.T(lang, "  file=%s attempt=%s rollout=%s tool_call=%s winner=%t changed=%s reason=%s sha256=%s status=%s strategy=%s artifact=%s command=%q workspace=%s\n"),
+			entry.File, entry.AttemptID, entry.RolloutID, entry.ToolCallID, entry.IsWinner, boolText(entry.Changed), entry.Reason, entry.SHA256, entry.Status, entry.Strategy, entry.ArtifactRef, entry.Command, entry.WorkspacePath)
 	}
+}
+
+func boolWhen(value, known bool) *bool {
+	if !known {
+		return nil
+	}
+	return &value
+}
+func boolText(value *bool) string {
+	if value == nil {
+		return "unknown"
+	}
+	return strconv.FormatBool(*value)
 }
 
 func printJSON(out io.Writer, value any) error {
@@ -293,7 +277,7 @@ func baseSnapshotForRun(db *sql.DB, runID string) (string, string, error) {
 
 func attemptsForRun(db *sql.DB, runID string) ([]attemptFileView, error) {
 	rows, err := db.Query(`SELECT a.id, a.rollout_id, a.tool_call_id, a.snapshot_id, a.workspace_path,
-			a.strategy, a.command, a.status, a.is_winner, COALESCE(a.artifact_result, '')
+			a.strategy, a.command, a.status, a.is_winner, COALESCE(a.artifact_result, ''), r.base_snapshot_id
 		FROM fork_attempts a JOIN rollouts r ON a.rollout_id = r.id
 		WHERE r.run_id = ?
 		ORDER BY a.created_at ASC`, runID)
@@ -305,7 +289,7 @@ func attemptsForRun(db *sql.DB, runID string) ([]attemptFileView, error) {
 	for rows.Next() {
 		var item attemptFileView
 		var isWinner int
-		if err := rows.Scan(&item.AttemptID, &item.RolloutID, &item.ToolCallID, &item.SnapshotID, &item.WorkspacePath, &item.Strategy, &item.Command, &item.Status, &isWinner, &item.ArtifactRef); err != nil {
+		if err := rows.Scan(&item.AttemptID, &item.RolloutID, &item.ToolCallID, &item.SnapshotID, &item.WorkspacePath, &item.Strategy, &item.Command, &item.Status, &isWinner, &item.ArtifactRef, &item.BaseID); err != nil {
 			return nil, err
 		}
 		item.IsWinner = isWinner != 0
@@ -326,18 +310,6 @@ func cleanRelativeFile(value string) (string, error) {
 		return "", fmt.Errorf("--file escapes workspace")
 	}
 	return clean, nil
-}
-
-func readRelativeFile(root, rel string) ([]byte, bool, error) {
-	path := filepath.Join(root, rel)
-	content, err := os.ReadFile(path)
-	if err == nil {
-		return content, true, nil
-	}
-	if os.IsNotExist(err) {
-		return nil, false, nil
-	}
-	return nil, false, err
 }
 
 func sha256Hex(content []byte) string {

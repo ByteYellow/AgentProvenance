@@ -279,7 +279,7 @@ func (s Server) artifact(w http.ResponseWriter, r *http.Request) {
 func (s Server) artifactFileState(run, path string) (string, string, bool, error) {
 	rows, err := s.DB.Query(`SELECT DISTINCT substr(COALESCE(json_extract(p,'$.payload.content_state'),json_extract(p,'$.content_state'),'legacy_not_recorded'),1,128)
 		FROM (SELECT CASE WHEN json_valid(payload) THEN payload ELSE '{}' END AS p FROM events
-		WHERE run_id=? AND source='record_file_diff' AND event_type='file_write')
+		WHERE run_id=? AND source='record_file_diff' AND event_type IN ('file_write','file_snapshot_removed'))
 		WHERE COALESCE(json_extract(p,'$.payload.path'),json_extract(p,'$.path'))=? LIMIT 2`, run, path)
 	if err != nil {
 		return "", "", false, err
@@ -305,6 +305,8 @@ func (s Server) artifactFileState(run, path string) (string, string, bool, error
 	state := states[0]
 	reason := "No saved body for this node; current files are not historical evidence."
 	switch state {
+	case "deleted":
+		reason = "The file was present before execution and absent in the final snapshot."
 	case "collection_limit":
 		reason = "File content was omitted by the capture budget."
 	case "failed":

@@ -105,6 +105,12 @@ func TestTrajectoriesRunJSONEmitsPerAttemptEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if _, err := (ObjectStore{DB: db, Paths: paths}).MaterializeRun("run-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(workspace, filepath.Join(root, "moved-fork")); err != nil {
+		t.Fatal(err)
+	}
 	manifest, err := BuildTrajectoriesRun(db, "run-1")
 	if err != nil {
 		t.Fatal(err)

@@ -973,7 +973,7 @@ func (c *materializeContext) materializeReplayManifest() error {
 }
 
 func (c *materializeContext) materializeTrajectoryManifest() error {
-	manifest, err := BuildTrajectoriesRun(c.store.DB, c.runID)
+	manifest, err := buildTrajectories(c.store.DB, c.runID, true)
 	if err != nil {
 		if err == sql.ErrNoRows || isNoRolloutRun(err) {
 			return nil
@@ -1414,7 +1414,7 @@ func BuildRecordManifest(db *sql.DB, runID string) (RecordManifest, error) {
 	if m.RootPID != 0 {
 		m.ProcessTreeCount = 1 + len(m.ObservedProcesses)
 	}
-	rows, err := db.Query(`SELECT payload FROM events WHERE run_id = ? AND source = 'record_file_diff' AND event_type = 'file_write' ORDER BY created_at ASC`, runID)
+	rows, err := db.Query(`SELECT payload FROM events WHERE run_id = ? AND source = 'record_file_diff' AND event_type IN ('file_write','file_snapshot_removed') ORDER BY created_at ASC`, runID)
 	if err != nil {
 		return RecordManifest{}, err
 	}

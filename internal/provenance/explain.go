@@ -455,7 +455,7 @@ func explainIDsFromFile(diff FileDiffManifest, blame FileBlameManifest, events [
 		if attempt.SnapshotID != "" {
 			ids["snapshot_id"] = attempt.SnapshotID
 		}
-		if attempt.Changed {
+		if attempt.Changed != nil && *attempt.Changed {
 			break
 		}
 	}
