@@ -34,8 +34,9 @@ graph controls and investigation entries remain in place.
   Their existing links are unchanged, with no additional labels or panels.
 
 The demo site builder includes the tour on the homepage and hosted recording
-pages, including the Linux x86 recordings. It packages standalone downloads
-before adding the tour. Highlighting a control does not activate it.
+pages, including the Linux x86 recordings. Each hosted reader carries its tour
+assets in its own inventory and can be moved as a directory. Standalone downloads
+are packaged before the tour is added. Highlighting a control does not activate it.
 
 ## Build and Check
 

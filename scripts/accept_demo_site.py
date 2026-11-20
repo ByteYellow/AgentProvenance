@@ -25,18 +25,21 @@ def check_hosted_tour(site):
     assets = site / "tour-assets"
     assert assets.is_dir(), "Hosted page tour is missing from the default website build"
     assert (assets / "driver-LICENSE.txt").is_file(), "Missing bundled tour license"
-    pages = [site / "index.html"]
+    pages = [(site / "index.html", assets)]
     for language in ("en", "zh-CN"):
-        pages.extend(site / language / name for name in ("index.html", "replay.html"))
+        pages.extend((site / language / name, assets) for name in ("index.html", "replay.html"))
     for group in ("current", "recordings"):
         for inventory in (site / group).glob("*/export-inventory.json"):
-            pages.extend(inventory.parent / lang / "index.html" for lang in ("en", "zh-CN"))
-    for page in pages:
+            local = inventory.parent / "tour-assets"
+            for asset in ("driver-LICENSE.txt", "driver.css", "tour.css", "driver.js.iife.js", "tour.js"):
+                assert digest(local / asset) == digest(assets / asset), (inventory, asset)
+            pages.extend((inventory.parent / lang / "index.html", local) for lang in ("en", "zh-CN"))
+    for page, local in pages:
         text = page.read_text()
         base = site if '<base href="../">' in text else page.parent
         for name in ("driver.css", "tour.css", "driver.js.iife.js", "tour.js"):
-            href = Path(os.path.relpath(assets / name, base)).as_posix()
-            assert (assets / name).is_file() and text.count(f'"{href}"') == 1, (page, href)
+            href = Path(os.path.relpath(local / name, base)).as_posix()
+            assert (local / name).is_file() and text.count(f'"{href}"') == 1, (page, href)
     return len(pages)
 
 

@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -38,6 +39,16 @@ for name in ('tour.js', 'tour.css'):
 for name in ('driver.js.iife.js', 'driver.css'):
     shutil.copy2(driver / 'dist' / name, assets / name)
 shutil.copy2(driver / 'license', assets / 'driver-LICENSE.txt')
+# Each hosted reader is also a movable directory. It must not reach outside
+# its inventory for scripts, styles or the bundled dependency license.
+tour_files = [
+    {'path': 'tour-assets/' + item.name, 'bytes': item.stat().st_size,
+     'sha256': hashlib.sha256(item.read_bytes()).hexdigest()}
+    for item in sorted(assets.iterdir())
+]
+reader_roots = {target / relative.parent for relative in inventories}
+for root in reader_roots:
+    shutil.copytree(assets, root / 'tour-assets')
 pages = [target / 'index.html']
 for lang in ('en', 'zh-CN'):
     pages.extend([target / lang / 'index.html', target / lang / 'replay.html'])
@@ -47,22 +58,24 @@ changed = {}
 for page in pages:
     text = page.read_text()
     # Localized homepages already resolve assets through <base href="../">.
-    prefix = '' if '<base href="../">' in text else '../' * (len(page.relative_to(target).parts) - 1)
-    head = ''.join(f'<link rel="stylesheet" href="{prefix}tour-assets/{name}">' for name in ('driver.css', 'tour.css'))
-    head += ''.join(f'<script defer src="{prefix}tour-assets/{name}"></script>' for name in ('driver.js.iife.js', 'tour.js'))
+    base = target if '<base href="../">' in text else page.parent
+    scope = page.parent.parent if page.parent.parent in reader_roots else target
+    prefix = Path(os.path.relpath(scope / 'tour-assets', base)).as_posix()
+    head = ''.join(f'<link rel="stylesheet" href="{prefix}/{name}">' for name in ('driver.css', 'tour.css'))
+    head += ''.join(f'<script defer src="{prefix}/{name}"></script>' for name in ('driver.js.iife.js', 'tour.js'))
     if text.count('</head>') != 1:
         raise SystemExit(f'Expected one HTML head: {page}')
     body = text.replace('</head>', head + '</head>').encode('utf-8')
     page.write_bytes(body)
     changed[page] = (len(body), hashlib.sha256(body).hexdigest())
-# Only the hosted HTML changed. Keep all other inventory entries and the
-# standalone downloads exactly as produced by their respective builders.
+# Update the hosted HTML and add its local assets. Downloads stay untouched.
 for relative, inventory in inventories.items():
     path = target / relative
     for item in inventory['files']:
         update = changed.get(path.parent / item['path'])
         if update is not None:
             item['bytes'], item['sha256'] = update
+    inventory['files'] = sorted(inventory['files'] + tour_files, key=lambda item: item['path'])
     inventory['bytes_excluding_inventory'] = sum(item['bytes'] for item in inventory['files'])
     path.write_text(json.dumps(inventory, indent=2) + '\n')
 print(target / 'index.html')
