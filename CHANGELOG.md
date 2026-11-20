@@ -4,6 +4,8 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Include an optional page tour on the demo homepage and hosted recording pages. Comparison links show the selected Runs first and offer the tour after the comparison closes. Standalone downloads are unchanged.
+
 - Read historical file diffs, blame and trajectories from saved evidence across workspace reuse. Distinguish snapshot deletions from writes and capture omissions.
 - Support child exit codes in CI with `record --propagate-exit` and forward the `list_events` cursor through the AI and MCP interfaces.
 - Link seven Linux x86 recordings from the Workspace and Browser cards. The repair card's image and action now open the same before/after comparison.

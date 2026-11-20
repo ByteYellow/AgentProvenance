@@ -51,6 +51,7 @@ node previews/v1.0-home/check.cjs http://127.0.0.1:58729/ output/playwright/home
 
 ```sh
 export NODE_PATH="$PWD/previews/v1.0-home/node_modules"
+npm ci --prefix previews/v1.0-tour --ignore-scripts
 python3 scripts/accept_static_demo.py --binary /tmp/agentprov-review --site output/site-base
 python3 scripts/build_demo_site.py --archive output/site-base --output output/site
 python3 scripts/accept_demo_site.py --archive output/site-base --site output/site
@@ -60,7 +61,7 @@ python3 -m http.server 58730 --bind 127.0.0.1 --protocol HTTP/1.1 --directory ou
 打开 `http://127.0.0.1:58730/`。原有 `/en/` 和 `/zh-CN/` 下的阅读器、指南及下载链接继续有效。
 之前的完整案例目录保存在 `en/library.html` 和 `zh-CN/library.html`。
 `downloads/reading/` 提供包含当前阅读器及新文件清单的阅读副本，原始下载文件保持逐字节一致。
-五个主要案例与三份补充实录共用 Dashboard 内嵌资源，本次接入无需新增公共接口或修改数据库格式。
+首页及所有执行记录页均提供[页面导览](../v1.0-tour/README.zh-CN.md)，包括七份 Linux x86 实录。独立下载的回放无需加载站点的导览资源。
 
 验收脚本检查中英文四档宽度、档案弹窗、链接、架构图、对比、图谱跳转和附件，
 并实际下载工作区阅读包后断网打开。设置 `PLAYWRIGHT_CHANNEL=chrome` 可改用本机 Chrome。

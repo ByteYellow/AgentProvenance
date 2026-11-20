@@ -7,6 +7,10 @@ existing demo names; paired captures are chapters of one investigation.
 
 ## First visit
 
+Click **Page tour** in the header for a walkthrough of the library or an open
+recording. Use **Next** or **Skip all** at any step. On comparison links, close
+Compare before starting the reader tour.
+
 Start with Task investigation and repair. It connects the common investigation steps:
 
 1. **Understand the task.** Read the original instructions and tool output to establish the intended work and its recorded result.

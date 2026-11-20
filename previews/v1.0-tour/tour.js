@@ -1,7 +1,8 @@
-/* Review-only page tour. The recorded evidence and underlying layout stay intact. */
+/* Hosted demo tour. The recorded evidence and underlying layout stay intact. */
 (() => {
   'use strict';
   const $ = selector => document.querySelector(selector);
+  // Keep the original key so returning visitors retain their tour preferences.
   const key = 'agentprov.onboarding.preview/v2';
   const isHome = Boolean($('#app'));
   if (!isHome && !$('#runoverview')) return;

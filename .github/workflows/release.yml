@@ -24,6 +24,7 @@ on:
       - 'scripts/accept_demo_site.py'
       - 'previews/v1.0-home/**'
       - 'previews/v1.0-reader/**'
+      - 'previews/v1.0-tour/**'
       - 'internal/**'
       - 'cmd/**'
       - 'demo/**'
@@ -116,6 +117,7 @@ jobs:
       - name: Install browser acceptance dependencies
         run: |
           npm ci --prefix previews/v1.0-home
+          npm ci --prefix previews/v1.0-tour --ignore-scripts
           previews/v1.0-home/node_modules/.bin/playwright install --with-deps chromium
       - name: Build the public replay reader
         env:

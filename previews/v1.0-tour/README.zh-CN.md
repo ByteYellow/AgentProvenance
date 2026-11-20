@@ -1,4 +1,4 @@
-# 页面导览预览
+# 示例站点页面导览
 
 [English](README.md)
 
@@ -25,23 +25,22 @@
 - 首页导览单独指向“文档”，手机上指向“快速开始”，介绍部署与集成指南的查找方式。
 - 四张精选案例截图只增加边距、细描边和轻微阴影；保留原有链接，不新增标签或面板。
 
-这版仍是独立预览，与 `previews/v1.0-guided` 并存，尚未接入正式构建或线上站点。
-原始下载包保持不变，导览仅用于网页预览；导览不会执行命令或触发高亮控件的业务操作。
+示例站点默认在首页和执行记录页提供导览，七份 Linux x86 实录也有相同入口。
+构建先生成独立下载包，再给网页添加导览。高亮某个控件不会触发该控件的操作。
 
 ## 构建与检查
 
-先按[示例站点说明](../v1.0-home/README.md)构建已确认的站点，使用新的输出目录。
-输入应为正式站点构建结果，而不是上一版案例引导预览。
+按[正式站点构建说明](../v1.0-home/README.zh-CN.md#正式站点构建)操作，构建和验收都会包含导览。
+如需在已经生成的站点上单独检查导览：
 
 ```sh
-npm ci --prefix previews/v1.0-tour --ignore-scripts
-python3 previews/v1.0-tour/build.py --site output/site --output output/tour-review
-python3 -m http.server 58732 --bind 127.0.0.1 --protocol HTTP/1.1 --directory output/tour-review
-NODE_PATH=previews/v1.0-home/node_modules PLAYWRIGHT_CHANNEL=chrome \
+python3 -m http.server 58732 --bind 127.0.0.1 --protocol HTTP/1.1 --directory output/site
+# 在另一个终端运行：
+NODE_PATH="$PWD/previews/v1.0-home/node_modules" \
   node previews/v1.0-tour/check.cjs http://127.0.0.1:58732/ output/playwright/tour
 ```
 
-构建会复制站点，刷新未签名阅读副本的文件清单，并将锁定版本的
+构建会更新站点中阅读页的文件清单，并将锁定版本的
 [Driver.js](https://driverjs.com/docs/installation) 打包到本地。
 MIT 许可证保存在 `tour-assets/driver-LICENSE.txt`；显示导览无需访问 CDN。
 浏览器检查复用现有预览的 Playwright 依赖。

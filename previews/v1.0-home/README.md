@@ -58,6 +58,7 @@ These commands build and check the same artifact locally; they do not deploy:
 
 ```sh
 export NODE_PATH="$PWD/previews/v1.0-home/node_modules"
+npm ci --prefix previews/v1.0-tour --ignore-scripts
 python3 scripts/accept_static_demo.py --binary /tmp/agentprov-review --site output/site-base
 python3 scripts/build_demo_site.py --archive output/site-base --output output/site
 python3 scripts/accept_demo_site.py --archive output/site-base --site output/site
@@ -68,9 +69,9 @@ Open `http://127.0.0.1:58730/`. Existing `/en/` and `/zh-CN/` reader, guide and
 download paths remain valid. The previous full catalog is available as
 `en/library.html` or `zh-CN/library.html`. New reading downloads carry the current
 reader and updated inventories under `downloads/reading/`; original downloads
-remain byte-identical. The five current example readers and three supplemental
-recordings share the embedded Dashboard assets. No public API or database format
-changes are required for this integration.
+remain byte-identical. The homepage and hosted readers, including all seven Linux
+x86 recordings, offer a [page tour](../v1.0-tour/README.md). Standalone downloads
+work without these site assets.
 
 The acceptance script checks both languages at four widths, archive dialogs,
 links, diagrams, comparisons, graph drilldowns, attachments and an actual downloaded

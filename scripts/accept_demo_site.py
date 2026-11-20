@@ -21,6 +21,25 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def check_hosted_tour(site):
+    assets = site / "tour-assets"
+    assert assets.is_dir(), "Hosted page tour is missing from the default website build"
+    assert (assets / "driver-LICENSE.txt").is_file(), "Missing bundled tour license"
+    pages = [site / "index.html"]
+    for language in ("en", "zh-CN"):
+        pages.extend(site / language / name for name in ("index.html", "replay.html"))
+    for group in ("current", "recordings"):
+        for inventory in (site / group).glob("*/export-inventory.json"):
+            pages.extend(inventory.parent / lang / "index.html" for lang in ("en", "zh-CN"))
+    for page in pages:
+        text = page.read_text()
+        base = site if '<base href="../">' in text else page.parent
+        for name in ("driver.css", "tour.css", "driver.js.iife.js", "tour.js"):
+            href = Path(os.path.relpath(assets / name, base)).as_posix()
+            assert (assets / name).is_file() and text.count(f'"{href}"') == 1, (page, href)
+    return len(pages)
+
+
 def check_inventory(root):
     inventory = json.loads((root / "export-inventory.json").read_text())
     assert inventory["signed"] is False
@@ -52,6 +71,7 @@ def main():
     args = parser.parse_args()
     site, archive, report = args.site.resolve(), args.archive.resolve(), args.report.resolve()
     report.mkdir(parents=True, exist_ok=True)
+    tour_pages = check_hosted_tour(site)
     for extension in ("js", "css"):
         asset = "evidence." + extension
         assert digest(site / "assets" / asset) == digest(REPO / "internal/dashboard" / asset)
@@ -96,6 +116,7 @@ def main():
 
     try:
         url = f"http://127.0.0.1:{server.server_port}/{site.name}/"
+        run("node", "previews/v1.0-tour/check.cjs", url, report / "tour")
         run("node", "previews/v1.0-home/refined/check.cjs", url, report / "home")
         run("node", "previews/v1.0-home/check.cjs", url, report / "flows", site)
         run("node", "previews/v1.0-reader/check.cjs", report / "reader", extra_env={"AGENTPROV_PREVIEW_URL": url + "current"})
@@ -110,12 +131,14 @@ def main():
                     assert not name.is_absolute() and ".." not in name.parts and "\\" not in item.filename
                 downloaded.extractall(root / "workspace")
             check_inventory(root / "workspace")
+            for language in ("en", "zh-CN"):
+                assert "tour-assets/" not in (root / "workspace" / language / "index.html").read_text()
             run("node", "previews/v1.0-reader/check-reader.cjs", root, report / "downloaded", extra_env={"AGENTPROV_PREVIEW_URL": ""})
     finally:
         server.shutdown()
         server.server_close()
     manifest = json.loads((site / "replay-manifest.json").read_text())
-    result = {"passed": True, "source_commit": manifest["commit"], "preserved_files": preserved, "inventories": inventories,
+    result = {"passed": True, "source_commit": manifest["commit"], "preserved_files": preserved, "inventories": inventories, "tour_pages": tour_pages,
               "site_bytes": size, "commands": commands}
     (report / "report.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result))

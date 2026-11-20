@@ -7,7 +7,7 @@ const preferenceKey = 'agentprov.onboarding.preview/v2';
 
 (async () => {
   fs.mkdirSync(output, {recursive: true});
-  const browser = await chromium.launch({channel: process.env.PLAYWRIGHT_CHANNEL || 'chrome', headless: true});
+  const browser = await chromium.launch({headless: true, ...(process.env.PLAYWRIGHT_CHANNEL ? {channel: process.env.PLAYWRIGHT_CHANNEL} : {})});
   const reports = [];
   try {
     for (const lang of ['zh-CN', 'en']) for (const width of [1440, 390, 320]) {
@@ -206,6 +206,23 @@ const preferenceKey = 'agentprov.onboarding.preview/v2';
       console.log(`PASS ${lang} ${width}px: invitation, ${readerSteps} reader steps, restoration and comparison close`);
       await context.close();
     }
+    const x86Context = await browser.newContext({reducedMotion: 'reduce'});
+    const x86 = (await (await x86Context.request.get(new URL('sources.json', base).href)).json()).filter(s => s.name.startsWith('x86-'));
+    assert.equal(x86.length, 7);
+    const recording = await x86Context.newPage();
+    for (const lang of ['zh-CN', 'en']) for (const source of x86) {
+      await recording.goto(new URL(`recordings/${source.name}/${lang}/index.html?live=0&tour=1`, base).href);
+      await recording.locator('#page-tour-invite').waitFor();
+      assert.equal(await recording.locator('#runsel').inputValue(), source.run_id);
+      assert.equal(await recording.locator('.agentprov-tour').count(), 0);
+      await recording.locator('#page-tour-start').click();
+      await recording.locator('.driver-popover-next-btn').click();
+      assert.match(await recording.locator('.driver-popover-progress-text').innerText(), /^2 \/ /);
+      await recording.locator('.tour-skip').click();
+      await recording.locator('.agentprov-tour').waitFor({state: 'detached'});
+    }
+    reports.push({x86Readers: x86.length, languages: 2, passed: true});
+    await x86Context.close();
     const context = await browser.newContext({reducedMotion: 'reduce'});
     await context.addInitScript(() => {
       Object.defineProperty(window, 'localStorage', {get() { throw new DOMException('Storage unavailable', 'SecurityError'); }});

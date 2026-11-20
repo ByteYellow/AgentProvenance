@@ -142,6 +142,8 @@ def main():
     sources.extend(add_x86_recordings(target, args.production))
     (target / "sources.json").write_text(json.dumps(sources, indent=2) + "\n")
     subprocess.run(["node", str(BASE / "render-guides.cjs"), str(target)] + (["--production"] if args.production else []), check=True)
+    if args.production:
+        subprocess.run([sys.executable, str(BASE.parent / "v1.0-tour/build.py"), "--site", str(target), "--integrate"], check=True)
     print(target / "index.html")
 
 
