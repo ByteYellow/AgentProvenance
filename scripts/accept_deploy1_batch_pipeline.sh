@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_DEPLOY1_DATA_DIR:-.agentprov-deploy1-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_DEPLOY1_DATA_DIR:-output/agentprov-deploy1-accept}"
 BIN="${AGENTPROV_ACCEPT_DEPLOY1_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-deploy1-bin.XXXXXX")}"
 PY_TARGET="$(mktemp -d "${TMPDIR:-/tmp}/agentprov-deploy1-pkg.XXXXXX")"
 WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agentprov-deploy1-work.XXXXXX")"

@@ -11,7 +11,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_NATIVE_DATA_DIR:-.agentprov-native-sensor-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_NATIVE_DATA_DIR:-output/agentprov-native-sensor-accept}"
 BIN="${AGENTPROV_ACCEPT_NATIVE_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-native-bin.XXXXXX")}"
 INGEST_JSON="/tmp/agentprov-native-ingest.json"
 

@@ -13,7 +13,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_UNIFIED_DATA_DIR:-.agentprov-unified-signals-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_UNIFIED_DATA_DIR:-output/agentprov-unified-signals-accept}"
 BIN="${AGENTPROV_ACCEPT_UNIFIED_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-unified-bin.XXXXXX")}"
 LISTEN="${AGENTPROV_ACCEPT_UNIFIED_LISTEN:-127.0.0.1:18599}"
 DAEMON_URL="http://$LISTEN"

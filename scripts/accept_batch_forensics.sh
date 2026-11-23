@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_BATCH_FORENSICS_DATA_DIR:-.agentprov-batch-forensics-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_BATCH_FORENSICS_DATA_DIR:-output/agentprov-batch-forensics-accept}"
 BIN="${AGENTPROV_ACCEPT_BATCH_FORENSICS_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-batch-forensics-bin.XXXXXX")}"
 JOBS_FILE="$(mktemp "${TMPDIR:-/tmp}/agentprov-batch-forensics-jobs.XXXXXX.jsonl")"
 WORKDIR_A="$(mktemp -d "${TMPDIR:-/tmp}/agentprov-batch-forensics-a.XXXXXX")"

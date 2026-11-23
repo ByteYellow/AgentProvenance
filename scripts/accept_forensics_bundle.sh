@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_FORENSICS_DATA_DIR:-.agentprov-forensics-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_FORENSICS_DATA_DIR:-output/agentprov-forensics-accept}"
 BIN="${AGENTPROV_ACCEPT_FORENSICS_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-forensics-bin.XXXXXX")}"
 INGEST_JSON="/tmp/agentprov-forensics-ingest.json"
 BUNDLE_JSON="/tmp/agentprov-forensics-export.json"

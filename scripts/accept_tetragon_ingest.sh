@@ -10,7 +10,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_TETRAGON_DATA_DIR:-.agentprov-tetragon-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_TETRAGON_DATA_DIR:-output/agentprov-tetragon-accept}"
 BIN="${AGENTPROV_ACCEPT_TETRAGON_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-tetragon-bin.XXXXXX")}"
 INGEST_JSON="/tmp/agentprov-tetragon-ingest.json"
 

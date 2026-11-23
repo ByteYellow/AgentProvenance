@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_DAEMON_DATA_DIR:-.agentprov-daemon-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_DAEMON_DATA_DIR:-output/agentprov-daemon-accept}"
 BIN="${AGENTPROV_ACCEPT_DAEMON_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-daemon-bin.XXXXXX")}"
 LISTEN="${AGENTPROV_ACCEPT_DAEMON_LISTEN:-127.0.0.1:18574}"
 DAEMON_URL="http://$LISTEN"

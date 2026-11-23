@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_ZERO_SDK_DATA_DIR:-.agentprov-zero-sdk-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_ZERO_SDK_DATA_DIR:-output/agentprov-zero-sdk-accept}"
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/agentprov-zero-sdk-workdir.XXXXXX")"
 BIN="${AGENTPROV_ACCEPT_ZERO_SDK_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-zero-sdk-bin.XXXXXX")}"
 RECORD_JSON="/tmp/agentprov-zero-sdk-record.json"

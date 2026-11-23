@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_DATA_DIR:-.agentprov-phase1-accept}"
-BIN="./agentprov"
+DATA_DIR="${AGENTPROV_ACCEPT_DATA_DIR:-output/agentprov-phase1-accept}"
+BIN="$(mktemp "${TMPDIR:-/tmp}/agentprov-phase1-bin.XXXXXX")"
 
 cleanup() {
   rm -rf "$DATA_DIR" "$BIN"
@@ -23,7 +23,7 @@ assert_contains() {
 }
 
 echo "== build agentprov"
-GOTOOLCHAIN="${GOTOOLCHAIN:-local}" go build ./cmd/agentprov
+GOTOOLCHAIN="${GOTOOLCHAIN:-local}" go build -o "$BIN" ./cmd/agentprov
 
 echo "== init"
 "$BIN" --data-dir "$DATA_DIR" init

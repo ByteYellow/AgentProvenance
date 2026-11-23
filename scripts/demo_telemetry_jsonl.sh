@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_DEMO_DATA_DIR:-.agentprov-demo-telemetry-jsonl}"
-BIN="./agentprov"
+DATA_DIR="${AGENTPROV_DEMO_DATA_DIR:-output/agentprov-demo-telemetry-jsonl}"
+BIN="$(mktemp "${TMPDIR:-/tmp}/agentprov-telemetry-jsonl-bin.XXXXXX")"
 
 cleanup() {
   rm -rf "$DATA_DIR" "$BIN"
@@ -13,7 +13,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "== build agentprov"
-GOTOOLCHAIN="${GOTOOLCHAIN:-local}" go build ./cmd/agentprov
+GOTOOLCHAIN="${GOTOOLCHAIN:-local}" go build -o "$BIN" ./cmd/agentprov
 
 echo "== init"
 "$BIN" --data-dir "$DATA_DIR" init

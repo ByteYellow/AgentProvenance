@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_FALCO_RISK_DATA_DIR:-.agentprov-falco-risk-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_FALCO_RISK_DATA_DIR:-output/agentprov-falco-risk-accept}"
 BIN="${AGENTPROV_ACCEPT_FALCO_RISK_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-falco-risk-bin.XXXXXX")}"
 INGEST_JSON="/tmp/agentprov-falco-risk-ingest.json"
 

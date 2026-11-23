@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_QUERY_DATA_DIR:-.agentprov-query-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_QUERY_DATA_DIR:-output/agentprov-query-accept}"
 BIN="${AGENTPROV_ACCEPT_QUERY_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-query-bin.XXXXXX")}"
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/agentprov-query-work.XXXXXX")"
 PAGE1="$(mktemp "${TMPDIR:-/tmp}/agentprov-query-page1.XXXXXX.json")"

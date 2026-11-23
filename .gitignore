@@ -48,9 +48,10 @@ demo/llm-judge/.build/
 # Portable release archives.
 /dist/
 
-# Local browser acceptance artifacts.
+# Local acceptance runs, build products and browser artifacts.
 /.playwright-cli/
-/output/playwright/
+/output/*
+!/output/go.mod
 
 # Static demo output and browser test dependencies.
 /_site/

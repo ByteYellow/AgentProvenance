@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_SIGNAL_DATA_DIR:-.agentprov-signal-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_SIGNAL_DATA_DIR:-output/agentprov-signal-accept}"
 BIN="${AGENTPROV_ACCEPT_SIGNAL_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-signal-bin.XXXXXX")}"
 
 cleanup() {

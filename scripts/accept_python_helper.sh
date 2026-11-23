@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DATA_DIR="${AGENTPROV_ACCEPT_PYTHON_HELPER_DATA_DIR:-.agentprov-python-helper-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_PYTHON_HELPER_DATA_DIR:-output/agentprov-python-helper-accept}"
 BIN="${AGENTPROV_ACCEPT_PYTHON_HELPER_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-python-helper-bin.XXXXXX")}"
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/agentprov-python-helper-work.XXXXXX")"
 PY_TARGET="$(mktemp -d "${TMPDIR:-/tmp}/agentprov-python-helper-pkg.XXXXXX")"

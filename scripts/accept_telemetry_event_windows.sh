@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_TELEMETRY_WINDOWS_DATA_DIR:-.agentprov-telemetry-windows-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_TELEMETRY_WINDOWS_DATA_DIR:-output/agentprov-telemetry-windows-accept}"
 BIN="${AGENTPROV_ACCEPT_TELEMETRY_WINDOWS_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-telemetry-windows-bin.XXXXXX")}"
 WINDOWS_JSON="/tmp/agentprov-telemetry-windows.json"
 

@@ -17,9 +17,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Keep commit ancestry for range checks without downloading every historical blob.
+          fetch-depth: 0
+          filter: blob:none
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - name: Check repository artifacts
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [[ "$BASE" =~ ^0+$ ]]; then
+            BASE="origin/$DEFAULT_BRANCH"
+          fi
+          if [[ -n "$BASE" ]]; then
+            python scripts/check_repository_artifacts.py --since "$BASE"
+          else
+            python scripts/check_repository_artifacts.py
+          fi
+          python -m unittest discover -s scripts -p 'test_repository_artifacts.py' -v
       - run: python scripts/check_localized_docs.py
       - run: python -m unittest discover -s scripts -p 'test_compare_acceptance_budget.py' -v
       - name: Investigation capture manifest

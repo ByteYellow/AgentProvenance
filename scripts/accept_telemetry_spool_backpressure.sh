@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-DATA_DIR="${AGENTPROV_ACCEPT_SPOOL_BP_DATA_DIR:-.agentprov-spool-backpressure-accept}"
+DATA_DIR="${AGENTPROV_ACCEPT_SPOOL_BP_DATA_DIR:-output/agentprov-spool-backpressure-accept}"
 BIN="${AGENTPROV_ACCEPT_SPOOL_BP_BIN:-$(mktemp "${TMPDIR:-/tmp}/agentprov-spool-bp-bin.XXXXXX")}"
 LISTEN="${AGENTPROV_ACCEPT_SPOOL_BP_LISTEN:-127.0.0.1:18575}"
 DAEMON_URL="http://$LISTEN"
