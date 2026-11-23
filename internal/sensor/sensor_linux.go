@@ -14,6 +14,7 @@ import (
 	"io"
 	"io/fs"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -33,6 +34,7 @@ import (
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/cilium/ebpf/rlimit"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -97,13 +99,9 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 		if opts.AutoTLS {
 			enabled = 1
 		}
-		err = spec.RewriteConstants(map[string]interface{}{"tls_auto_discovery": enabled})
+		err = setSensorVariable(spec, "tls_auto_discovery", enabled)
 		if err == nil {
-			// cilium/ebpf v0.16 copies the complete kernel BTF for each CO-RE
-			// program when KernelTypes is nil. Reuse one private copy across
-			// this collection; nested Guests otherwise spend most startup time
-			// copying the same large type graph. Preserve the normal loader's
-			// missing-BTF behavior for collections that do not need CO-RE.
+			// Share the kernel BTF across CO-RE programs in this collection.
 			var loadOptions ebpf.CollectionOptions
 		programs:
 			for _, program := range spec.Programs {
@@ -171,6 +169,11 @@ func RunWithOptions(out io.Writer, opts Options) (runErr error) {
 	links = append(links, forkLink)
 	reporter.add(forkProbe)
 	for _, p := range append([]sensorTracepoint{
+		{"syscalls", "sys_exit_execve", objs.HandleExecveCleanup},
+		{"syscalls", "sys_exit_execveat", objs.HandleExecReturn},
+		{"syscalls", "sys_enter_execveat", objs.HandleExecveat},
+		{"syscalls", "sys_exit_openat2", objs.HandleOpenat2Return},
+		{"syscalls", "sys_enter_openat2", objs.HandleOpenat2},
 		{"syscalls", "sys_enter_setuid", objs.HandleSetuid},
 		{"syscalls", "sys_enter_setgid", objs.HandleSetgid},
 		{"syscalls", "sys_enter_ptrace", objs.HandlePtrace},
@@ -777,7 +780,7 @@ func (r *cgroupResolver) forProcess(e sensorbpfSensorEvent, pid uint32) string {
 // by `telemetry ingest` (container_id, cgroup_id, pid/tgid/ppid, source,
 // event_type, payload). container_id is best-effort from /proc/<pid>/cgroup.
 func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver, proc ...procTaskIDs) map[string]any {
-	if (e.Kind == eventOpen || e.Kind == eventSyscallResult && e.SyscallKind != eventConnect) && e.ExitCode == 1 && !sensitiveReadPath(cstr(e.Path[:])) {
+	if (e.Kind == eventOpen || e.Kind == eventSyscallResult && e.SyscallKind == eventOpen) && e.ExitCode == 1 && !sensitiveReadPath(cstr(e.Path[:])) {
 		return nil
 	}
 	task := eventProcTask(e, proc)
@@ -802,6 +805,14 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver, proc ...procTas
 	addProcessIdentity(ev, e)
 	addSyscallIdentity(ev, e)
 	addProcfsIdentity(ev, task)
+	switch e.SyscallNr {
+	case unix.SYS_EXECVEAT:
+		ev["syscall_name"], ev["dirfd"], ev["exec_flags"] = "execveat", e.Dirfd, e.OpFlags
+	case unix.SYS_OPENAT2:
+		ev["syscall_name"], ev["dirfd"] = "openat2", e.Dirfd
+		// Decimal strings retain all 64 Linux ABI bits through JSON/JS replay.
+		ev["open_flags"], ev["open_resolve"] = strconv.FormatUint(e.OpFlags, 10), strconv.FormatUint(e.OpenResolve, 10)
+	}
 	switch e.Kind {
 	case eventFork:
 		ev["event_type"] = "process_observed"
@@ -817,13 +828,13 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver, proc ...procTas
 	case eventConnect:
 		ev["event_type"] = "network_connect"
 		ev["observation_stage"] = "attempt"
-		ev["dst_ip"] = ipv4(e.Daddr)
-		ev["dst_port"] = ntohs(e.Dport)
+		addSocketDestination(ev, e)
 	case eventOpen, eventSyscallResult:
-		if e.Kind == eventSyscallResult && e.SyscallKind == eventConnect {
+		if e.Kind == eventSyscallResult && (e.SyscallKind == eventConnect || e.SyscallKind == eventExec) {
 			ev["event_type"] = "syscall_result"
-			ev["dst_ip"] = ipv4(e.Daddr)
-			ev["dst_port"] = ntohs(e.Dport)
+			if e.SyscallKind == eventConnect {
+				addSocketDestination(ev, e)
+			}
 			addSyscallResult(ev, e)
 			break
 		}
@@ -898,6 +909,18 @@ func normalize(e sensorbpfSensorEvent, resolver *cgroupResolver, proc ...procTas
 		ev["event_type"] = "unknown"
 	}
 	return ev
+}
+
+func addSocketDestination(ev map[string]any, e sensorbpfSensorEvent) {
+	ev["dst_port"] = ntohs(e.Dport)
+	if e.Family == unix.AF_INET6 {
+		ev["address_family"], ev["dst_ip"] = "AF_INET6", netip.AddrFrom16(e.Addr6).String()
+		if e.ScopeId != 0 {
+			ev["scope_id"] = e.ScopeId
+		}
+	} else {
+		ev["address_family"], ev["dst_ip"] = "AF_INET", ipv4(e.Daddr)
+	}
 }
 
 // sensitiveReadPath positively matches the small set of paths whose READ is

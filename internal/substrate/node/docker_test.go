@@ -1,3 +1,5 @@
+//go:build agentprov_tools
+
 package node
 
 import (
@@ -5,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/docker/docker/api/types/mount"
+	"github.com/moby/moby/api/types/mount"
 )
 
 func TestBuildContainerConfigWorkspaceUser(t *testing.T) {

@@ -15,7 +15,7 @@
 使用包含本示例的源码构建：
 
 ```sh
-go build -o agentprov ./cmd/agentprov
+go build -tags agentprov_tools -o agentprov ./cmd/agentprov
 ./agentprov demo investigation-workflow
 ```
 

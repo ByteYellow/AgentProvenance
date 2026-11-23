@@ -38,6 +38,12 @@ func decodeSensorEvent(data []byte) (e sensorbpfSensorEvent, err error) {
 	copy(e.Comm[:], data[136:152])
 	copy(e.Path[:], data[152:408])
 	copy(e.Args[:], data[408:920])
+	e.OpFlags = binary.LittleEndian.Uint64(data[920:928])
+	e.OpenResolve = binary.LittleEndian.Uint64(data[928:936])
+	e.Dirfd = int32(binary.LittleEndian.Uint32(data[936:940]))
+	e.ScopeId = binary.LittleEndian.Uint32(data[940:944])
+	copy(e.Addr6[:], data[944:960])
+	e.Family = binary.LittleEndian.Uint16(data[960:962])
 	return e, nil
 }
 

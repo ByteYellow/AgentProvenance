@@ -106,8 +106,9 @@ func (r *capabilityReporter) updateProcfs(report ProcfsIdentityReport) {
 
 func (r *capabilityReporter) publishLocked() {
 	report := CapabilityReport{
-		SchemaVersion: "agentprovenance.sensor_capabilities/v1",
-		Ready:         r.ready, Status: "starting", TLSDiscovery: r.discovery,
+		SchemaVersion:     "agentprovenance.sensor_capabilities/v1",
+		ObservationLimits: NativeObservationLimits(),
+		Ready:             r.ready, Status: "starting", TLSDiscovery: r.discovery,
 		Probes: append(append([]ProbeCapability{}, r.base...), r.tls...),
 	}
 	producer := r.producer

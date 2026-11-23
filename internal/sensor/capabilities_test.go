@@ -7,6 +7,20 @@ import (
 	"testing"
 )
 
+func TestNativeScopeIsNotAnEventLossOrProbeFailure(t *testing.T) {
+	var report CapabilityReport
+	r := newCapabilityReporter(Options{Diagnostics: io.Discard, OnCapabilities: func(v CapabilityReport) { report = v }})
+	r.add(ProbeCapability{Name: "exec", Category: "syscall", Required: true, Status: "attached"})
+	r.publish(true)
+	if report.Status != "ready" || len(report.ObservationLimits) != 2 || report.ObservationLimits[0].Mode != "not_instrumented" || report.ObservationLimits[1].Mode != "endpoint_only" {
+		t.Fatalf("unexpected capability scope: %+v", report)
+	}
+	var old CapabilityReport
+	if err := json.Unmarshal([]byte(`{"status":"ready"}`), &old); err != nil || old.ObservationLimits != nil {
+		t.Fatalf("legacy report: %+v %v", old, err)
+	}
+}
+
 func TestCapabilityReadyDoesNotHideOptionalFailure(t *testing.T) {
 	var reports []CapabilityReport
 	r := newCapabilityReporter(Options{Diagnostics: io.Discard, OnCapabilities: func(report CapabilityReport) { reports = append(reports, report) }})

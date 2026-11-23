@@ -18,6 +18,7 @@ import (
 	"github.com/byteyellow/agentprovenance/demo"
 	projectdocs "github.com/byteyellow/agentprovenance/docs"
 	"github.com/byteyellow/agentprovenance/internal/buildinfo"
+	"github.com/byteyellow/agentprovenance/internal/companion"
 	"github.com/byteyellow/agentprovenance/internal/dashboard"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/staticdata"
@@ -80,6 +81,9 @@ func demoExportCmd() *cobra.Command {
 		}
 		if output == "" {
 			return fmt.Errorf("--output is required")
+		}
+		if !bundledTools {
+			return companion.Exec()
 		}
 		target, err := filepath.Abs(output)
 		if err != nil {

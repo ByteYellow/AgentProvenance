@@ -126,12 +126,12 @@ The verified KVM path remains available; its nested CPU does not expose `user_sh
 
 ## Build and regenerate
 
-Run on Linux amd64 with Go 1.23 or newer. Building committed objects needs no
+Run on Linux amd64 with Go 1.26.11 or newer. Building committed objects needs no
 Clang or kernel headers:
 
 ```sh
 mkdir -p bin
-CGO_ENABLED=0 go build -o bin/agentprov ./cmd/agentprov
+CGO_ENABLED=0 go build -tags agentprov_tools -o bin/agentprov ./cmd/agentprov
 CGO_ENABLED=0 go build -o bin/agentprov-sensor ./cmd/agentprov-sensor
 ```
 
@@ -209,6 +209,20 @@ OpenSSL-compatible BoringSSL `SSL_read/SSL_write` paths are verified for shared
 libraries and static linkage with function symbols. Missing BoringSSL `_ex`
 APIs are reported as `not_applicable`. Unknown ABIs and C TLS implementations
 without resolvable function symbols require a separate adapter.
+
+**Syscalls and coverage.** The native sensor pairs IPv4/IPv6 `connect` and in-scope
+`openat2` operations with their kernel return values. It records successful
+`execveat` at execution and failed calls separately. An `openat2` path can be
+relative to its recorded directory descriptor. The existing sensitive-path and
+workspace write filters still apply.
+
+`doctor` lists the native sensor's design limits; recorded replays show the limits
+saved by that collector under **Capture diagnostics**. io_uring operations need
+submission and completion evidence paired within the ring's lifetime; the native
+syscall probes do not collect these. For rustls, import a receipt from a controlled
+endpoint via `graph ingest-endpoint`; socket events describe the connection, while
+that receipt supplies the application evidence. These limits are separate from
+dropped events, and historical replays retain their original coverage report.
 
 Automatic discovery pre-attaches installed host OpenSSL libraries before
 readiness. For a known application or container-private library, specify its

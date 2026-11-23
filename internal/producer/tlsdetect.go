@@ -29,7 +29,7 @@ type TLSTarget struct {
 //   - dynamically-linked OpenSSL (imports libssl.so) -> SSLLib   = resolved libssl path
 //
 // Best-effort: a zero TLSTarget means the stack could not be identified (a
-// stripped Go binary, static non-OpenSSL TLS like BoringSSL/rustls, or an
+// binary without recognizable symbols, a native rustls implementation, or an
 // unreadable/non-ELF file), and the caller should fall through to whatever was
 // explicitly configured.
 func DetectTLSTarget(exePath string) TLSTarget {

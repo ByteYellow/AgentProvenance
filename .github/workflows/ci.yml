@@ -12,6 +12,28 @@ permissions:
   contents: read
 
 jobs:
+  go-security:
+    name: Reachable Go vulnerabilities (core and tools)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.10.0
+      - run: govulncheck ./cmd/...
+      - run: govulncheck -tags agentprov_tools ./cmd/...
+      - name: Test optional Docker and Kubernetes integrations
+        run: go test -race -p 2 -tags agentprov_tools ./internal/cli ./internal/substrate/... ./internal/computerapi
+      - name: Check portable CLI size and packaging
+        run: |
+          python3 scripts/build-release.py --version v0.0.0-ci --os linux --arch amd64 --output "$RUNNER_TEMP/package"
+          python3 scripts/accept_release.py "$RUNNER_TEMP"/package/*.tar.gz
+          mkdir -m 700 "$RUNNER_TEMP/core-tools"
+          tar -xzf "$RUNNER_TEMP"/package/*.tar.gz -C "$RUNNER_TEMP/core-tools" agentprov agentprov-tools
+          docker pull alpine:3.22
+          python3 scripts/accept_packaged_docker.py "$RUNNER_TEMP/core-tools/agentprov"
+
   localized-docs:
     name: Chinese documentation coverage
     runs-on: ubuntu-latest
@@ -102,7 +124,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23.x"
+          go-version-file: go.mod
           cache: true
       - uses: actions/setup-python@v5
         with:
@@ -149,7 +171,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23.x"
+          go-version-file: go.mod
           cache: true
 
       - name: gofmt (fail on unformatted files)
@@ -248,7 +270,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23.x"
+          go-version-file: go.mod
           cache: true
 
       # Architecture-specific bpf2go bindings (.go/.o) are committed, so this builds
@@ -275,7 +297,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23.x"
+          go-version-file: go.mod
           cache: true
 
       - name: Install eBPF compile toolchain
@@ -306,7 +328,15 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
-          cache: true
+          cache: false
+      - name: Build TLS fixture with the target application's Go version
+        run: |
+          mkdir -p /tmp/agentprov-live
+          echo "TLS_FIXTURE_GO_BIN=$(GO111MODULE=off GOTOOLCHAIN=local go env GOROOT)/bin" >> "$GITHUB_ENV"
+          GO111MODULE=off GOTOOLCHAIN=local CGO_ENABLED=0 go build -o /tmp/agentprov-live/go-client ./internal/sensor/testdata/tls_client.go
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       - name: Install local TLS fixture dependencies
         run: |
           sudo apt-get update
@@ -316,7 +346,6 @@ jobs:
           python3 -m unittest discover -s scripts -p test_accept_sensor_live.py -v
           mkdir -p /tmp/agentprov-live
           CGO_ENABLED=0 go build -o /tmp/agentprov-live/sensor ./cmd/agentprov-sensor
-          CGO_ENABLED=0 go build -o /tmp/agentprov-live/go-client ./internal/sensor/testdata/tls_client.go
           gcc -O2 internal/sensor/testdata/tls_client.c -lssl -lcrypto -o /tmp/agentprov-live/c-client
       - name: Verify amd64 syscall, C ABI, Go ABI and queued event timestamps
         run: |
@@ -334,7 +363,7 @@ jobs:
         run: |
           go test -c -o /tmp/agentprov-live/sensor-test ./internal/sensor
           cd internal/sensor
-          sudo env PATH="$PATH" AGENTPROV_LIVE_GOTLS=1 \
+          sudo env PATH="$TLS_FIXTURE_GO_BIN:$PATH" GOTOOLCHAIN=local GO111MODULE=off AGENTPROV_LIVE_GOTLS=1 \
             /tmp/agentprov-live/sensor-test -test.run '^TestLiveGoTLSReadConcurrentStackGrowth$' -test.v
       - name: Verify OpenSSL read pairing and connection lifecycle isolation
         run: |
@@ -460,7 +489,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.23.x"
+          go-version-file: go.mod
           cache: true
 
       - name: Run Phase 1 observability/provenance gate

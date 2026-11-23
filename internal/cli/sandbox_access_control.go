@@ -1,3 +1,5 @@
+//go:build agentprov_tools
+
 package cli
 
 import (

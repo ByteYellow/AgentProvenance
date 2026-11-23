@@ -139,7 +139,8 @@ func TestOfflineCaptureManifestFrozenSelection(t *testing.T) {
 	report := observability.RuntimeCaptureReport{SchemaVersion: observability.RuntimeCaptureSchema, RunID: "capture-run", Status: "partial", KernelState: "observed",
 		NodeCounterDelta: map[string]int64{"kernel_dropped_events": 9007199254740993},
 		CapabilitiesStart: &sensor.CapabilityReport{SchemaVersion: "agentprovenance.sensor_capabilities/v1", Ready: true,
-			Probes: []sensor.ProbeCapability{{Name: "file_open", Status: "attached", Target: "CAPTURE-PRIVATE-PROBE"}}}}
+			ObservationLimits: sensor.NativeObservationLimits(),
+			Probes:            []sensor.ProbeCapability{{Name: "file_open", Status: "attached", Target: "CAPTURE-PRIVATE-PROBE"}}}}
 	if err := observability.SaveRuntimeCapture(db, paths, &report); err != nil {
 		t.Fatal(err)
 	}
@@ -210,10 +211,17 @@ func TestOfflineCaptureManifestFrozenSelection(t *testing.T) {
 					}
 				}
 			}
-			for _, raw := range files {
+			savedLimits := false
+			for path, raw := range files {
+				if strings.HasPrefix(path, "data/") && strings.Contains(string(raw), `"mechanism":"io_uring"`) && strings.Contains(string(raw), `"mechanism":"rustls"`) {
+					savedLimits = true
+				}
 				if strings.Contains(string(raw), "LATE-PROBE") || (name == "session" && (strings.Contains(string(raw), "CAPTURE-PRIVATE-PROBE") || strings.Contains(string(raw), "private-version"))) {
 					t.Fatal("excluded or late capture metadata leaked")
 				}
+			}
+			if savedLimits != (name == "whole_run") {
+				t.Fatalf("native limits in %s selection: %t", name, savedLimits)
 			}
 			if root := os.Getenv("AGENTPROV_CAPTURE_REPLAY_OUTPUT"); root != "" {
 				if err := os.MkdirAll(root, 0700); err != nil {

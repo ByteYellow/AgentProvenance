@@ -15,7 +15,7 @@
 查看执行过程，追溯产物来源，比较两次执行，再导出可离线验证的证据。
 
 [![Release](https://img.shields.io/github/v/release/ByteYellow/AgentProvenance?style=flat-square&color=orange&sort=semver)](https://github.com/ByteYellow/AgentProvenance/releases/latest)
-[![Go](https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square)](https://go.dev/)
+[![Go](https://img.shields.io/badge/go-1.26.11+-00ADD8.svg?style=flat-square)](https://go.dev/)
 [![CI](https://img.shields.io/github/actions/workflow/status/ByteYellow/AgentProvenance/ci.yml?branch=main&style=flat-square)](https://github.com/ByteYellow/AgentProvenance/actions/workflows/ci.yml)
 [![Sensor](https://img.shields.io/badge/sensor-Linux_amd64_%7C_arm64-2496ED.svg?style=flat-square)](docs/zh-CN/amd64-kvm-k3s.md)
 [![SQLite](https://img.shields.io/badge/state-SQLite-003B57.svg?style=flat-square)](https://www.sqlite.org/)
@@ -117,10 +117,10 @@ CLI 校验签名后，用独立的临时目录打开可视化界面。按 Ctrl-C
 不会重新运行记录中的命令。无图形界面或远程机器可添加 `--no-browser`，
 通过端口转发访问输出的本地地址。
 
-如需构建当前源码，先安装 Go 1.23+，再从仓库根目录运行：
+如需从源码运行示例，先安装 Go 1.26.11 或更高版本，再从仓库根目录运行：
 
 ```sh
-go build -o agentprov ./cmd/agentprov
+go build -tags agentprov_tools -o agentprov ./cmd/agentprov
 ./agentprov demo
 ```
 
@@ -315,7 +315,7 @@ AgentProvenance 再把这些信息与文件变化、最终产物关联起来：
 在当前源码目录中运行：
 
 ```sh
-go build -o agentprov ./cmd/agentprov
+go build -tags agentprov_tools -o agentprov ./cmd/agentprov
 ./agentprov demo investigation-workflow
 ```
 
@@ -409,9 +409,10 @@ ARM64 和 amd64 的 `systrap` 路径均已实测采集、故障恢复和快照�
 签名交付及回执齐全后的回收已经通过，见 [v1.0 验收结果](docs/benchmarks/v1.0-amd64/README.zh-CN.md)。
 
 TLS 自动发现会跟踪受支持的 OpenSSL 库和 Go 二进制，也会处理容器重建后的目标变化。
-Go TLS 响应采集目前支持 **amd64、有符号信息的 Go 1.23–1.26 二进制**。
-ARM64 Go 响应采集、BoringSSL 和任意自定义 TLS 实现尚未覆盖。
-实际挂载了哪些探针，可查看当前机器的能力报告。
+Linux amd64 支持采集 Go 1.23–1.26 的 TLS 响应；去除符号的程序需要保留可用的 Go 函数表。
+BoringSSL 的兼容接口 `SSL_read` 和 `SSL_write` 已在动态库和保留函数符号的静态程序上验证。
+rustls 的明文证据来自受控端点；原生系统调用探针不采集 io_uring 的提交和完成记录。
+各探针的条件及 ARM64 Go 响应采集边界见[原生采集指南](docs/zh-CN/amd64-kvm-k3s.md)。
 
 <a id="部署模式"></a>
 <a id="本地服务daemon模式"></a>

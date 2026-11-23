@@ -40,6 +40,23 @@ def main():
         def run(*args):
             return subprocess.check_output([str(cli), *args], cwd=root, env=env, text=True, timeout=30)
         version = run('--version')
+        assert cli.stat().st_size <= 30_000_000, 'core CLI exceeds 30 MB'
+        assert 'agentprov-tools' in meta['programs']
+        tools = root / 'agentprov-tools'
+        with tempfile.TemporaryDirectory(dir=root) as isolation:
+            moved = Path(isolation) / tools.name
+            tools.rename(moved)
+            try:
+                assert json.loads(run('demo', '--list', '--json'))
+                missing = subprocess.run([cli, 'demo', '--json'], cwd=scratch, env=env, capture_output=True, text=True, timeout=15)
+                assert missing.returncode and 'agentprov-tools' in missing.stderr, missing
+                tools.write_bytes(b'#!/bin/sh\nexit 0\n')
+                tools.chmod(0o700)
+                wrong = subprocess.run([cli, 'demo', '--json'], cwd=scratch, env=env, capture_output=True, text=True, timeout=15)
+                assert wrong.returncode and 'checksum mismatch' in wrong.stderr, wrong
+            finally:
+                moved.replace(tools)
+        assert '--kubeconfig' in run('sandbox', 'watch', '--help')
         assert meta['version'] in version and meta['commit'] in version, version
         verifier = root / 'agentprov-verify'
         assert 'agentprov-verify' in meta['programs'] and verifier.is_file()

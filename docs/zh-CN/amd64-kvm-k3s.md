@@ -76,11 +76,11 @@ qemu-system-x86_64.exe -accel whpx -cpu max ...
 
 ## 构建与重新生成探针
 
-在 Linux amd64 上使用 Go 1.23 或更高版本。直接构建仓库中已提交的对象，不需要 Clang 或内核头文件：
+在 Linux amd64 上使用 Go 1.26.11 或更高版本。直接构建仓库中已提交的对象，不需要 Clang 或内核头文件：
 
 ```sh
 mkdir -p bin
-CGO_ENABLED=0 go build -o bin/agentprov ./cmd/agentprov
+CGO_ENABLED=0 go build -tags agentprov_tools -o bin/agentprov ./cmd/agentprov
 CGO_ENABLED=0 go build -o bin/agentprov-sensor ./cmd/agentprov-sensor
 ```
 
@@ -134,6 +134,15 @@ AGENTPROV_GO_TLS_BIN=/absolute/path/to/go-agent
 amd64、Go ABIInternal 1.23–1.26 的程序现在支持保留符号和 `-s -w` 去符号两种构建，也支持 PIE。去符号构建需要保留 Go 函数表；解析器会检查元数据大小和指令范围。Go Read 仍在解码得到的返回指令处挂载普通探针。
 
 BoringSSL 的 `SSL_read/SSL_write` 路径已验证动态库和保留函数符号的静态链接程序。BoringSSL 没有提供的 `_ex` 接口标为 `not_applicable`。未知 ABI、无法定位函数的 C TLS 实现需要单独适配。
+
+**系统调用与采集范围。** 原生传感器记录 IPv4、IPv6 的 `connect`，以及符合采集规则的
+`openat2` 调用和内核返回值。`execveat` 成功时记录实际执行，失败时单独记录返回值。
+`openat2` 的路径可能相对于记录中的目录描述符，原有敏感路径和工作区写入筛选规则保持不变。
+
+`doctor` 会列出原生传感器的观测范围。回放页的「采集诊断详情」显示该次运行保存的范围。
+io_uring 需要在同一环的生命周期内关联提交与完成记录，原生系统调用探针未采集这两类记录。
+rustls 的应用层明文可通过 `graph ingest-endpoint` 导入受控端点回执；套接字事件单独记录连接。
+这些范围说明与丢失事件分别展示，历史回放保留原有记录。
 
 自动发现会在就绪前为宿主机已安装的 OpenSSL 库预挂载探针。已知的应用程序或容器专用库可以提前指定可见路径，支持多次传入：
 

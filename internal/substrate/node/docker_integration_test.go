@@ -1,3 +1,5 @@
+//go:build agentprov_tools
+
 package node
 
 import (
@@ -8,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/byteyellow/agentprovenance/internal/ids"
+	"github.com/moby/moby/client"
 )
 
 // Run on a Docker host as its workspace owner, including a non-root account:
@@ -37,12 +40,13 @@ func TestDockerSessionWorkspace(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	info, err := rt.Client.ContainerInspect(context.Background(), id)
+	info, err := rt.Client.ContainerInspect(context.Background(), id, client.ContainerInspectOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.HostConfig.Privileged || len(info.HostConfig.CapAdd) != 0 || len(info.HostConfig.CapDrop) != 1 || info.HostConfig.CapDrop[0] != "ALL" {
-		t.Fatalf("unexpected container capabilities: %+v", info.HostConfig)
+	cfg := info.Container.HostConfig
+	if cfg.Privileged || len(cfg.CapAdd) != 0 || len(cfg.CapDrop) != 1 || cfg.CapDrop[0] != "ALL" {
+		t.Fatalf("unexpected container capabilities: %+v", cfg)
 	}
 	var output bytes.Buffer
 	_, err = rt.ExecWithWriters(id, []string{"sh", "-c", `

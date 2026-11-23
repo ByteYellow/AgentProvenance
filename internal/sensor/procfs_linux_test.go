@@ -66,7 +66,7 @@ func TestProcfsObjectMapIsBoundedAndLifetimeKeyed(t *testing.T) {
 	if m == nil || m.Type != ebpf.LRUHash || m.MaxEntries != 16384 || m.KeySize != 16 || m.ValueSize != 8 {
 		t.Fatalf("unsafe procfs map: %+v", m)
 	}
-	if err := spec.RewriteConstants(map[string]interface{}{"proc_pidns_ino": uint64(123)}); err != nil {
+	if err := setSensorVariable(spec, "proc_pidns_ino", uint64(123)); err != nil {
 		t.Fatal(err)
 	}
 }

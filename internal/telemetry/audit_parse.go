@@ -379,9 +379,9 @@ func auditSyscall(arch string, number *int64) (string, string) {
 		if number != nil && *number&0x40000000 != 0 {
 			return "x32", ""
 		}
-		abi, names = "x86_64", map[int64]string{0: "read", 1: "write", 2: "open", 3: "close", 39: "getpid", 41: "socket", 42: "connect", 59: "execve", 60: "exit", 231: "exit_group", 257: "openat", 322: "execveat"}
+		abi, names = "x86_64", map[int64]string{0: "read", 1: "write", 2: "open", 3: "close", 39: "getpid", 41: "socket", 42: "connect", 59: "execve", 60: "exit", 231: "exit_group", 257: "openat", 322: "execveat", 437: "openat2"}
 	case "c00000b7":
-		abi, names = "aarch64", map[int64]string{56: "openat", 57: "close", 63: "read", 64: "write", 93: "exit", 94: "exit_group", 172: "getpid", 198: "socket", 203: "connect", 221: "execve", 281: "execveat"}
+		abi, names = "aarch64", map[int64]string{56: "openat", 57: "close", 63: "read", 64: "write", 93: "exit", 94: "exit_group", 172: "getpid", 198: "socket", 203: "connect", 221: "execve", 281: "execveat", 437: "openat2"}
 	}
 	if number == nil {
 		return abi, ""

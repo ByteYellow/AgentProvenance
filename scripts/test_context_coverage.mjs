@@ -39,6 +39,13 @@ assert.ok(presentation({status:'partial',issues:['node_backlog_at_seal']}).messa
 assert.equal(presentation({status:'disabled'}).label,'Not enabled');
 assert.equal(presentation({status:'no_input'}).message,'Kernel sensor unavailable');
 assert.equal(sections({}).runtime.state,'legacy_not_recorded');
+assert.equal(sections({}).nativeLimits.length,0,'no present-day limits in an old replay');
+const declared={mechanism:'io_uring',scope:'submission_and_completion',mode:'not_instrumented',detail:'fixture text'};
+const savedScope={observation_limits:[declared]};
+const recorded=sections({runtime_coverage:{capture:{status:'ok',capabilities_start:savedScope,capabilities_end:savedScope}}});
+assert.equal(recorded.nativeLimits.length,1);
+assert.equal(recorded.nativeLimits[0].detail,declared.detail);
+assert.equal(recorded.runtime.state,'ok','design scope does not count as event loss');
 assert.equal(sections({}).sessions.length,0);
 assert.equal(sections({coverage:[{source:{harness:'unknown'},status:'legacy_not_recorded'}]}).sessions.length,1);
 const retention = scope.window.AgentContextUI.retentionPresentation;

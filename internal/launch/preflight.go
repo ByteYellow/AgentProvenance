@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/byteyellow/agentprovenance/internal/sensor"
 )
 
 // CheckStatus is the operator-facing state of one launch preflight check.
@@ -32,11 +34,12 @@ type Check struct {
 
 // PreflightReport is the structured launch readiness report.
 type PreflightReport struct {
-	Command       []string `json:"command,omitempty"`
-	SelfExe       string   `json:"self_exe,omitempty"`
-	DashboardAddr string   `json:"dashboard_addr,omitempty"`
-	SensorMode    string   `json:"sensor_mode,omitempty"`
-	Checks        []Check  `json:"checks"`
+	ObservationLimits []sensor.ObservationLimit `json:"native_observation_limits,omitempty"`
+	Command           []string                  `json:"command,omitempty"`
+	SelfExe           string                    `json:"self_exe,omitempty"`
+	DashboardAddr     string                    `json:"dashboard_addr,omitempty"`
+	SensorMode        string                    `json:"sensor_mode,omitempty"`
+	Checks            []Check                   `json:"checks"`
 }
 
 // Preflight inspects whether launch can observe the requested command before it
@@ -72,6 +75,9 @@ func Preflight(opts Options) PreflightReport {
 	r.Checks = append(r.Checks, checkDashboardAddr(opts.Dashboard, opts.DashboardAddr))
 	r.Checks = append(r.Checks, checkCgroup())
 	r.Checks = append(r.Checks, checkSensor(opts.Sensor, opts.SelfExe))
+	if opts.Sensor != "off" {
+		r.ObservationLimits = sensor.NativeObservationLimits()
+	}
 	if opts.RemoteExecution != "" {
 		r.Checks = append(r.Checks, checkRemoteExecution(opts.RemoteExecution)...)
 	}

@@ -89,6 +89,8 @@ func List(paths store.Paths) []Backend {
 	dockerNotes := "available"
 	if dockerErr != nil {
 		dockerNotes = dockerErr.Error()
+	} else if err := dockerDriver.Runtime.ComponentError(); err != nil {
+		dockerNotes = err.Error()
 	}
 	if dockerAvailable && dockerDriver.Version != "" {
 		dockerNotes = "server=" + dockerDriver.Version

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/byteyellow/agentprovenance/demo"
+	"github.com/byteyellow/agentprovenance/internal/companion"
 	"github.com/byteyellow/agentprovenance/internal/dashboard"
 	"github.com/byteyellow/agentprovenance/internal/i18n"
 	"github.com/byteyellow/agentprovenance/internal/provenance"
@@ -58,6 +59,9 @@ func demoCmd() *cobra.Command {
 			}
 			if cmd.Flags().Changed("data-dir") || cmd.Flags().Changed("daemon-url") {
 				return commandErrorf("demo uses its own temporary store; omit --data-dir and --daemon-url")
+			}
+			if !bundledTools {
+				return companion.Exec()
 			}
 			selected := catalog
 			var chosen *demo.Entry

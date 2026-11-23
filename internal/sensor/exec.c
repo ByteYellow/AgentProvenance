@@ -39,6 +39,7 @@ const volatile __u32 tls_auto_discovery = 0;
 #define EVENT_SSL_CHECKPOINT 17
 #define EVENT_TLS_DISCOVERY 18
 #define AF_INET 2
+#define AF_INET6 10
 
 // argv is captured as fixed-size slots (constant offsets keep the BPF verifier
 // happy on the per-arg write); each slot holds one NUL-terminated, possibly
@@ -75,6 +76,12 @@ struct sensor_event {
 	__u8 comm[16];
 	__u8 path[256];      // exec filename / open path
 	__u8 args[ARGS_BUF]; // exec: MAX_ARGS fixed slots of argv
+	__u64 op_flags;
+	__u64 open_resolve;
+	__s32 dirfd;
+	__u32 scope_id;
+	__u8 addr6[16];
+	__u16 family;
 };
 
 // drops counts capture failures (including bounded read-context overflow), so
@@ -149,17 +156,21 @@ struct {
 	__type(value, struct tls_sequence);
 } tls_sequences SEC(".maps");
 
-// argv_scratch stashes a process's argv (captured at sys_enter_execve) keyed by
-// pid, so the successful sched_process_exec emit can attach the real command
-// line. exec doesn't change the pid between the two probes.
+// A task pointer is private map state, never an exported identity. Unlike TID
+// and start_time, it stays with the calling thread even through de_thread().
 struct argv_val {
 	__u8 args[ARGS_BUF];
+	__s64 nr;
+	__u64 start_ns;
+	__s32 dirfd;
+	__u32 flags;
+	__u8 at;
 };
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 4096);
-	__type(key, __u32);
+	__type(key, __u64);
 	__type(value, struct argv_val);
 } argv_scratch SEC(".maps");
 
@@ -187,8 +198,13 @@ struct syscall_ctx {
 	__s64 nr;
 	__u64 path_ptr;
 	__u64 flags;
+	__u64 resolve;
 	__u32 kind;
+	__s32 dirfd;
 	__u32 daddr;
+	__u32 scope_id;
+	__u8 addr6[16];
+	__u16 family;
 	__u16 dport;
 	__u8 path_retry;
 	__u8 reserved;
@@ -337,6 +353,9 @@ static __always_inline void fill_common(struct sensor_event *e) {
 	e->conn_epoch = 0;
 	e->tls_stream = e->tls_call = 0;
 	e->tls_offset = 0;
+	e->op_flags = e->open_resolve = 0;
+	e->dirfd = e->scope_id = e->family = 0;
+	__builtin_memset(e->addr6, 0, sizeof(e->addr6));
 	capture_cgroup_identity(task, e->cgroup_id);
 #if defined(__TARGET_ARCH_x86)
 	capture_proc_task(task, e);
@@ -375,16 +394,25 @@ int handle_fork(struct bpf_raw_tracepoint_args *ctx) {
 	return 0;
 }
 
-// Capture argv at execve entry into the per-pid scratch map. The space-joined
-// command line is attached on the matching successful sched_process_exec.
-SEC("tp/syscalls/sys_enter_execve")
-int handle_execve(struct trace_event_raw_sys_enter *ctx) {
+// Named native syscall tracepoints on our two 64-bit ABIs expose a 32-bit
+// number at offset 8 and 64-bit slots at offset 16. Keep loads at constant
+// context offsets; a CO-RE array-base adjustment is rejected on Linux 6.8.
+struct named_sys_enter { __u64 header; __s32 id; __u32 pad; __u64 args[6]; };
+
+static __always_inline int capture_argv(struct named_sys_enter *ctx, int at) {
+	__u64 task = bpf_get_current_task();
+	bpf_map_delete_elem(&argv_scratch, &task);
 	__u32 zero = 0;
 	struct argv_val *val = bpf_map_lookup_elem(&argv_build, &zero);
 	if (!val)
 		return 0;
 	__builtin_memset(val->args, 0, sizeof(val->args));
-	const char *const *argv = (const char *const *)ctx->args[1];
+	val->nr = (__s32)ctx->id;
+	val->start_ns = bpf_ktime_get_ns();
+	val->at = at;
+	val->dirfd = at ? (__s32)ctx->args[0] : 0;
+	val->flags = at ? (__u32)ctx->args[4] : 0;
+	const char *const *argv = (const char *const *)ctx->args[at ? 2 : 1];
 #pragma unroll
 	for (int i = 0; i < MAX_ARGS; i++) {
 		const char *argp = NULL;
@@ -393,8 +421,46 @@ int handle_execve(struct trace_event_raw_sys_enter *ctx) {
 		// Constant offset (i unrolled) and constant size -> verifier-safe.
 		bpf_probe_read_user_str(&val->args[i * ARG_SLOT], ARG_SLOT, argp);
 	}
-	__u32 pid = (__u32)(bpf_get_current_pid_tgid() >> 32);
-	bpf_map_update_elem(&argv_scratch, &pid, val, BPF_ANY);
+	if (bpf_map_update_elem(&argv_scratch, &task, val, BPF_ANY))
+		count_drop();
+	return 0;
+}
+
+SEC("tp/syscalls/sys_enter_execve")
+int handle_execve(struct named_sys_enter *ctx) { return capture_argv(ctx, 0); }
+
+SEC("tp/syscalls/sys_enter_execveat")
+int handle_execveat(struct named_sys_enter *ctx) { return capture_argv(ctx, 1); }
+
+SEC("tp/syscalls/sys_exit_execveat")
+int handle_exec_return(struct trace_event_raw_sys_exit *ctx) {
+	__u64 task = bpf_get_current_task();
+	struct argv_val *v = bpf_map_lookup_elem(&argv_scratch, &task);
+	if (v && v->at && v->nr == (__s32)ctx->id && ctx->ret < 0) {
+		struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+		if (!e) { count_drop(); }
+		else {
+			fill_common(e);
+			e->kind = EVENT_SYSCALL_RESULT;
+			e->syscall_kind = EVENT_EXEC;
+			e->syscall_start_ns = v->start_ns;
+			e->syscall_nr = v->nr;
+			e->syscall_result = ctx->ret;
+			e->dirfd = v->dirfd;
+			e->op_flags = v->flags;
+			e->exit_code = e->daddr = e->dport = 0;
+			e->path[0] = e->args[0] = 0;
+			bpf_ringbuf_submit(e, 0);
+		}
+	}
+	bpf_map_delete_elem(&argv_scratch, &task);
+	return 0;
+}
+
+SEC("tp/syscalls/sys_exit_execve")
+int handle_execve_cleanup(struct trace_event_raw_sys_exit *ctx) {
+	__u64 task = bpf_get_current_task();
+	bpf_map_delete_elem(&argv_scratch, &task);
 	return 0;
 }
 
@@ -403,6 +469,7 @@ int handle_exec(struct trace_event_raw_sched_process_exec *ctx) {
 	// A successful exec replaces the address space without returning from TLS.
 	// A non-leader exec also changes TID, so clear the pre-exec identity too.
 	__u64 id = bpf_get_current_pid_tgid();
+	__u64 task = bpf_get_current_task();
 	__u64 old_id = (id & 0xffffffff00000000ULL) | (__u32)BPF_CORE_READ(ctx, old_pid);
 	bpf_map_delete_elem(&syscall_calls, &id);
 	bpf_map_delete_elem(&ssl_read_bufs, &id);
@@ -415,6 +482,7 @@ int handle_exec(struct trace_event_raw_sched_process_exec *ctx) {
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
 	if (!e) {
 		count_drop();
+		bpf_map_delete_elem(&argv_scratch, &task);
 		return 0;
 	}
 	e->exit_code = 0;
@@ -424,10 +492,13 @@ int handle_exec(struct trace_event_raw_sched_process_exec *ctx) {
 	fill_common(e);
 	unsigned int off = ctx->__data_loc_filename & 0xffff;
 	bpf_probe_read_kernel_str(&e->path, sizeof(e->path), (void *)ctx + off);
-	struct argv_val *val = bpf_map_lookup_elem(&argv_scratch, &e->pid);
+	struct argv_val *val = bpf_map_lookup_elem(&argv_scratch, &task);
 	if (val) {
 		__builtin_memcpy(e->args, val->args, sizeof(e->args));
-		bpf_map_delete_elem(&argv_scratch, &e->pid);
+		e->syscall_nr = val->nr;
+		e->dirfd = val->dirfd;
+		e->op_flags = val->flags;
+		bpf_map_delete_elem(&argv_scratch, &task);
 	} else {
 		e->args[0] = 0;
 	}
@@ -446,24 +517,41 @@ static __always_inline void fill_syscall(struct sensor_event *e, struct syscall_
 	e->syscall_start_ns = call->start_ns;
 	e->syscall_nr = call->nr;
 	e->syscall_kind = call->kind;
+	e->family = call->family;
+	e->scope_id = call->scope_id;
+	__builtin_memcpy(e->addr6, call->addr6, sizeof(e->addr6));
+	e->dirfd = call->dirfd;
+	e->op_flags = call->flags;
+	e->open_resolve = call->resolve;
 }
 
 SEC("tp/syscalls/sys_enter_connect")
-int handle_connect(struct trace_event_raw_sys_enter *ctx) {
+int handle_connect(struct named_sys_enter *ctx) {
 	__u64 id = bpf_get_current_pid_tgid();
 	bpf_map_delete_elem(&syscall_calls, &id);
-	struct sockaddr_in sa = {};
 	void *uaddr = (void *)ctx->args[1];
-	if (bpf_probe_read_user(&sa, sizeof(sa), uaddr))
-		return 0;
-	if (sa.sin_family != AF_INET)
-		return 0;
+	int len = (__s32)ctx->args[2];
 	struct task_struct *task = (struct task_struct *)bpf_get_current_task();
 	struct syscall_ctx call = {
 		.task_start_ns = BPF_CORE_READ(task, start_time),
 		.start_ns = bpf_ktime_get_ns(), .nr = syscall_number(ctx->id),
-		.kind = EVENT_CONNECT, .daddr = sa.sin_addr.s_addr, .dport = sa.sin_port,
+		.kind = EVENT_CONNECT,
 	};
+	if (len < 2 || bpf_probe_read_user(&call.family, sizeof(call.family), uaddr))
+		return 0;
+	if (call.family == AF_INET) {
+		struct sockaddr_in sa = {};
+		if (len < sizeof(sa) || bpf_probe_read_user(&sa, sizeof(sa), uaddr)) return 0;
+		call.daddr = sa.sin_addr.s_addr;
+		call.dport = sa.sin_port;
+	} else if (call.family == AF_INET6) {
+		// The original Linux IPv6 sockaddr ABI has no trailing scope ID.
+		struct { __u16 family, port; __u32 flow; __u8 addr[16]; } sa = {};
+		if (len < sizeof(sa) || bpf_probe_read_user(&sa, sizeof(sa), uaddr)) return 0;
+		call.dport = sa.port;
+		__builtin_memcpy(call.addr6, sa.addr, sizeof(call.addr6));
+		if (len >= 28 && bpf_probe_read_user(&call.scope_id, 4, (char *)uaddr + 24)) return 0;
+	} else return 0;
 	if (bpf_map_update_elem(&syscall_calls, &id, &call, BPF_ANY))
 		count_drop();
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
@@ -475,8 +563,8 @@ int handle_connect(struct trace_event_raw_sys_enter *ctx) {
 	e->kind = EVENT_CONNECT;
 	fill_common(e);
 	fill_syscall(e, &call);
-	e->daddr = sa.sin_addr.s_addr;
-	e->dport = sa.sin_port;
+	e->daddr = call.daddr;
+	e->dport = call.dport;
 	e->path[0] = 0;
 	e->args[0] = 0;
 	bpf_ringbuf_submit(e, 0);
@@ -534,7 +622,7 @@ static __always_inline int tls_library_path(const char *p) {
 	return 0;
 }
 
-static __always_inline int emit_open(const char *path, long flags, long nr) {
+static __always_inline int emit_open(const char *path, __u64 flags, long nr, __s32 dirfd, __u64 resolve) {
 	__u64 id = bpf_get_current_pid_tgid();
 	bpf_map_delete_elem(&syscall_calls, &id);
 	int is_write = (flags & OPEN_WRITE_MASK) != 0;
@@ -571,6 +659,8 @@ static __always_inline int emit_open(const char *path, long flags, long nr) {
 	call.kind = EVENT_OPEN;
 	call.path_ptr = (__u64)path;
 	call.flags = flags;
+	call.dirfd = dirfd;
+	call.resolve = resolve;
 	call.path_retry = bpf_probe_read_user_str(call.path, sizeof(call.path), path) <= 0;
 	if (bpf_map_update_elem(&syscall_calls, &id, &call, BPF_ANY))
 		count_drop();
@@ -596,8 +686,20 @@ static __always_inline int emit_open(const char *path, long flags, long nr) {
 }
 
 SEC("tp/syscalls/sys_enter_openat")
-int handle_openat(struct trace_event_raw_sys_enter *ctx) {
-	return emit_open((const char *)ctx->args[1], (long)ctx->args[2], syscall_number(ctx->id));
+int handle_openat(struct named_sys_enter *ctx) {
+	return emit_open((const char *)ctx->args[1], ctx->args[2], syscall_number(ctx->id), ctx->args[0], 0);
+}
+
+SEC("tp/syscalls/sys_enter_openat2")
+int handle_openat2(struct named_sys_enter *ctx) {
+	struct { __u64 flags, mode, resolve; } how = {};
+	if (ctx->args[3] < sizeof(how) || bpf_probe_read_user(&how, sizeof(how), (void *)ctx->args[2])) {
+		__u64 id = bpf_get_current_pid_tgid();
+		bpf_map_delete_elem(&syscall_calls, &id);
+		count_drop();
+		return 0;
+	}
+	return emit_open((const char *)ctx->args[1], how.flags, syscall_number(ctx->id), ctx->args[0], how.resolve);
 }
 
 static __always_inline int emit_syscall_result(struct trace_event_raw_sys_exit *ctx, __u32 kind) {
@@ -652,10 +754,15 @@ int handle_connect_return(struct trace_event_raw_sys_exit *ctx) {
 	return emit_syscall_result(ctx, EVENT_CONNECT);
 }
 
+SEC("tp/syscalls/sys_exit_openat2")
+int handle_openat2_return(struct trace_event_raw_sys_exit *ctx) {
+	return emit_syscall_result(ctx, EVENT_OPEN);
+}
+
 #if defined(__TARGET_ARCH_x86)
 SEC("tp/syscalls/sys_enter_open")
-int handle_open(struct trace_event_raw_sys_enter *ctx) {
-	return emit_open((const char *)ctx->args[0], (long)ctx->args[1], syscall_number(ctx->id));
+int handle_open(struct named_sys_enter *ctx) {
+	return emit_open((const char *)ctx->args[0], ctx->args[1], syscall_number(ctx->id), -100, 0);
 }
 #endif
 
@@ -664,6 +771,8 @@ int handle_open(struct trace_event_raw_sys_enter *ctx) {
 SEC("tp/sched/sched_process_exit")
 int handle_exit(struct trace_event_raw_sched_process_template *ctx) {
 	__u64 id = bpf_get_current_pid_tgid();
+	__u64 task_key = bpf_get_current_task();
+	bpf_map_delete_elem(&argv_scratch, &task_key);
 	bpf_map_delete_elem(&syscall_calls, &id);
 	bpf_map_delete_elem(&ssl_read_bufs, &id);
 	bpf_map_delete_elem(&ssl_read_ex_bufs, &id);
@@ -675,7 +784,6 @@ int handle_exit(struct trace_event_raw_sched_process_template *ctx) {
 		__u8 seen = 1;
 		if (!bpf_map_update_elem(&exited_groups, &key, &seen, BPF_NOEXIST))
 			kind = EVENT_EXIT;
-		bpf_map_delete_elem(&argv_scratch, &pid);
 	}
 	struct sensor_event *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
 	if (!e) {

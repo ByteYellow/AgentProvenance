@@ -1,3 +1,5 @@
+//go:build agentprov_tools
+
 package node
 
 import (
@@ -8,12 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/mount"
-	"github.com/docker/docker/client"
-	"github.com/docker/docker/errdefs"
-	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/containerd/errdefs"
+	"github.com/moby/moby/api/pkg/stdcopy"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
+	"github.com/moby/moby/client"
 )
 
 type DockerRuntime struct {
@@ -21,7 +22,7 @@ type DockerRuntime struct {
 }
 
 func NewDockerRuntime() (*DockerRuntime, error) {
-	opts := []client.Opt{client.FromEnv, client.WithAPIVersionNegotiation()}
+	opts := []client.Opt{client.FromEnv}
 	if os.Getenv("DOCKER_HOST") == "" {
 		if home, err := os.UserHomeDir(); err == nil {
 			desktopSocket := filepath.Join(home, ".docker", "run", "docker.sock")
@@ -30,12 +31,15 @@ func NewDockerRuntime() (*DockerRuntime, error) {
 			}
 		}
 	}
-	cli, err := client.NewClientWithOpts(opts...)
+	cli, err := client.New(opts...)
 	if err != nil {
 		return nil, err
 	}
 	return &DockerRuntime{Client: cli}, nil
 }
+
+func (r *DockerRuntime) ComponentError() error { return nil }
+func (r *DockerRuntime) Close() error          { return r.Client.Close() }
 
 func (r *DockerRuntime) CreateSession(req CreateSessionRequest) (string, error) {
 	ctx := context.Background()
@@ -44,23 +48,25 @@ func (r *DockerRuntime) CreateSession(req CreateSessionRequest) (string, error) 
 	}
 	hostCfg := buildHostConfig(req)
 	cfg := buildContainerConfig(req)
-	resp, err := r.Client.ContainerCreate(ctx, cfg, hostCfg, nil, nil, "agentprov-"+req.SessionID)
+	options := client.ContainerCreateOptions{Config: cfg, HostConfig: hostCfg, Name: "agentprov-" + req.SessionID}
+	resp, err := r.Client.ContainerCreate(ctx, options)
 	if err != nil {
 		if !isNoSuchImage(err) {
 			return "", err
 		}
-		pull, pullErr := r.Client.ImagePull(ctx, req.Image, types.ImagePullOptions{})
+		pull, pullErr := r.Client.ImagePull(ctx, req.Image, client.ImagePullOptions{})
 		if pullErr != nil {
 			return "", pullErr
 		}
-		_, _ = io.Copy(io.Discard, pull)
-		_ = pull.Close()
-		resp, err = r.Client.ContainerCreate(ctx, cfg, hostCfg, nil, nil, "agentprov-"+req.SessionID)
+		if err := pull.Wait(ctx); err != nil {
+			return "", err
+		}
+		resp, err = r.Client.ContainerCreate(ctx, options)
 		if err != nil {
 			return "", err
 		}
 	}
-	if err := r.Client.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+	if _, err := r.Client.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{}); err != nil {
 		return "", err
 	}
 	return resp.ID, nil
@@ -120,7 +126,7 @@ func (r *DockerRuntime) Exec(containerID string, command []string, stream bool) 
 
 func (r *DockerRuntime) ExecWithWriters(containerID string, command []string, stdout, stderr io.Writer) (ExecResult, error) {
 	ctx := context.Background()
-	resp, err := r.Client.ContainerExecCreate(ctx, containerID, types.ExecConfig{
+	resp, err := r.Client.ExecCreate(ctx, containerID, client.ExecCreateOptions{
 		Cmd:          command,
 		AttachStdout: true,
 		AttachStderr: true,
@@ -129,7 +135,7 @@ func (r *DockerRuntime) ExecWithWriters(containerID string, command []string, st
 	if err != nil {
 		return ExecResult{}, err
 	}
-	attach, err := r.Client.ContainerExecAttach(ctx, resp.ID, types.ExecStartCheck{})
+	attach, err := r.Client.ExecAttach(ctx, resp.ID, client.ExecAttachOptions{})
 	if err != nil {
 		return ExecResult{ExecID: resp.ID}, err
 	}
@@ -148,7 +154,7 @@ func (r *DockerRuntime) ExecWithWriters(containerID string, command []string, st
 	if err != nil {
 		return ExecResult{ExecID: resp.ID}, err
 	}
-	inspect, err := r.Client.ContainerExecInspect(ctx, resp.ID)
+	inspect, err := r.Client.ExecInspect(ctx, resp.ID, client.ExecInspectOptions{})
 	if err != nil {
 		return ExecResult{ExecID: resp.ID}, err
 	}
@@ -160,7 +166,8 @@ func (r *DockerRuntime) ExecWithWriters(containerID string, command []string, st
 }
 
 func (r *DockerRuntime) Interrupt(containerID string) error {
-	return r.Client.ContainerKill(context.Background(), containerID, "SIGTERM")
+	_, err := r.Client.ContainerKill(context.Background(), containerID, client.ContainerKillOptions{Signal: "SIGTERM"})
+	return err
 }
 
 func (r *DockerRuntime) SetCPUWeight(ctx context.Context, containerID string, weight int64) error {
@@ -170,8 +177,8 @@ func (r *DockerRuntime) SetCPUWeight(ctx context.Context, containerID string, we
 	if weight > 262144 {
 		weight = 262144
 	}
-	_, err := r.Client.ContainerUpdate(ctx, containerID, container.UpdateConfig{
-		Resources: container.Resources{
+	_, err := r.Client.ContainerUpdate(ctx, containerID, client.ContainerUpdateOptions{
+		Resources: &container.Resources{
 			CPUShares: weight,
 		},
 	})
@@ -179,7 +186,7 @@ func (r *DockerRuntime) SetCPUWeight(ctx context.Context, containerID string, we
 }
 
 func (r *DockerRuntime) Stop(containerID string) error {
-	err := r.Client.ContainerStop(context.Background(), containerID, container.StopOptions{})
+	_, err := r.Client.ContainerStop(context.Background(), containerID, client.ContainerStopOptions{})
 	if errdefs.IsNotFound(err) {
 		return nil
 	}
@@ -187,7 +194,7 @@ func (r *DockerRuntime) Stop(containerID string) error {
 }
 
 func (r *DockerRuntime) Remove(containerID string) error {
-	err := r.Client.ContainerRemove(context.Background(), containerID, types.ContainerRemoveOptions{Force: true})
+	_, err := r.Client.ContainerRemove(context.Background(), containerID, client.ContainerRemoveOptions{Force: true})
 	if errdefs.IsNotFound(err) {
 		return nil
 	}

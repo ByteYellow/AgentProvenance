@@ -5,6 +5,12 @@
 [打开在线 Demo](https://ByteYellow.github.io/AgentProvenance/)，无需安装即可查看图谱、
 Agent 会话和文件正文。站点也收录了完整的项目介绍、采集部署、分析命令、集成参考和版本记录。
 
+记录、调查和导出自己的运行只需 `agentprov`。使用内置签名示例、Docker 驱动或
+`sandbox watch` 时，将同一发行包的 `agentprov-tools` 与主程序放在同一目录，
+只给目录所有者写权限。主程序调用配套工具前会校验 SHA-256。
+从源码构建时，`go build ./cmd/agentprov` 生成核心程序；
+`go build -tags agentprov_tools ./cmd/agentprov` 生成独立可用的完整版。
+
 离线使用时，解压后在当前目录打开示例库：
 
 ```sh

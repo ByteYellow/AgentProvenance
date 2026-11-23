@@ -649,6 +649,9 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 			"command": command,
 			"comm":    comm,
 		}
+		if path != "" {
+			payload["path"] = path
+		}
 		if limited, known := raw["argv_truncated"].(bool); known {
 			payload["argv_truncated"] = limited
 		}
@@ -762,6 +765,7 @@ func mapNative(raw map[string]any) (IngestEvent, bool, error) {
 		"boot_id", "tid", "thread_instance_id", "thread_start_ns", "process_start_ns", "monotonic_ns",
 		"procfs_pid", "procfs_tid", "procfs_pid_namespace",
 		"operation_id", "operation", "syscall_number", "sensor_arch", "syscall_start_ns", "syscall_duration_ns",
+		"syscall_name", "dirfd", "open_flags", "open_resolve", "exec_flags", "address_family", "scope_id",
 		"observation_stage", "syscall_result", "syscall_outcome", "errno",
 	} {
 		if value, ok := raw[key]; ok {

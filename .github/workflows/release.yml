@@ -49,7 +49,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26.x'
+          go-version-file: go.mod
           cache: true
       - uses: actions/setup-python@v5
         with:
@@ -84,7 +84,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26.x'
+          go-version-file: go.mod
           cache: true
       - uses: actions/setup-python@v5
         with:
@@ -109,7 +109,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.26.x'
+          go-version-file: go.mod
           cache: true
       - uses: actions/setup-node@v4
         with:
@@ -122,7 +122,7 @@ jobs:
       - name: Build the public replay reader
         env:
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-        run: go build -ldflags "-X github.com/byteyellow/agentprovenance/internal/buildinfo.Version=$RELEASE_VERSION -X github.com/byteyellow/agentprovenance/internal/buildinfo.Commit=$GITHUB_SHA" -o /tmp/agentprov-site ./cmd/agentprov
+        run: go build -tags agentprov_tools -ldflags "-X github.com/byteyellow/agentprovenance/internal/buildinfo.Version=$RELEASE_VERSION -X github.com/byteyellow/agentprovenance/internal/buildinfo.Commit=$GITHUB_SHA" -o /tmp/agentprov-site ./cmd/agentprov
       - name: Compare static replay with the local dashboard
         run: python3 scripts/accept_static_demo.py --binary /tmp/agentprov-site --site _site-base/AgentProvenance
       - name: Build and check the approved demo library

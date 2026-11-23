@@ -1,3 +1,5 @@
+//go:build agentprov_tools
+
 package cli
 
 import (
@@ -26,107 +28,79 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func sandboxWatchCmd(dataDir *string) *cobra.Command {
-	var namespace, nodeName, kubeconfig, master, selector, runAnnotation, runPrefix string
-	var resync, reportInterval, runFor time.Duration
-	var workers, maxRetries int
-	var jsonOut bool
-	cmd := &cobra.Command{
-		Use:   "watch",
-		Short: "watch this node's pods and maintain passive cgroup scope bindings",
-		Long: "A lightweight client-go informer controller. It List/Watches pods scheduled on one node, " +
-			"creates passive bindings for running and recently terminated containers, closes replaced bindings after " +
-			"container restart, and closes all pod bindings on deletion. It owns scope attribution only; " +
-			"agentprov-sensor and telemetry ingest remain the independent data plane.",
-		RunE: func(c *cobra.Command, _ []string) error {
-			if nodeName == "" {
-				nodeName = strings.TrimSpace(os.Getenv("NODE_NAME"))
-			}
-			if nodeName == "" {
-				nodeName, _ = os.Hostname()
-			}
-			if nodeName == "" {
-				return commandErrorf("--node or NODE_NAME is required")
-			}
-			cfg, err := kubeConfig(master, kubeconfig)
-			if err != nil {
-				return commandErrorf("k8s client config: %w", err)
-			}
-			client, err := kubernetes.NewForConfig(cfg)
-			if err != nil {
-				return commandErrorf("k8s client: %w", err)
-			}
-			paths, err := store.Init(*dataDir)
-			if err != nil {
-				return err
-			}
-			db, err := store.Open(paths)
-			if err != nil {
-				return err
-			}
-			defer db.Close()
-
-			reconciler := &k8sinformer.ScopeReconciler{
-				Resolver: newProcScopeResolver(), Sink: localK8sScopeSink{db: db},
-				RunAnnotation: runAnnotation, RunPrefix: runPrefix,
-			}
-			controller, err := k8sinformer.New(client, k8sinformer.Options{
-				Namespace: namespace, NodeName: nodeName, LabelSelector: selector, Resync: resync,
-				Workers: workers, MaxRetries: maxRetries, Reconciler: reconciler,
-				OnError: func(key string, err error) {
-					fmt.Fprintf(c.ErrOrStderr(), commandText(c, "informer: key=%s error=%v\n"), key, err)
-				},
-			})
-			if err != nil {
-				return err
-			}
-
-			ctx, stop := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
-			defer stop()
-			if runFor > 0 {
-				var cancel context.CancelFunc
-				ctx, cancel = context.WithTimeout(ctx, runFor)
-				defer cancel()
-			}
-			if !jsonOut {
-				fmt.Fprintf(c.OutOrStdout(), commandText(c, "k8s informer starting node=%s namespace=%s scope_source=k8s_cgroup\n"), nodeName, displayNamespace(namespace))
-			}
-			done := make(chan error, 1)
-			go func() { done <- controller.Run(ctx) }()
-			var ticker *time.Ticker
-			if reportInterval > 0 && !jsonOut {
-				ticker = time.NewTicker(reportInterval)
-				defer ticker.Stop()
-			}
-			for {
-				select {
-				case err := <-done:
-					report := informerReport{Controller: controller.Report(), Attribution: reconciler.Report()}
-					if jsonOut {
-						return writeJSON(c.OutOrStdout(), report)
-					}
-					printInformerReport(c, report)
-					return err
-				case <-tickerChan(ticker):
-					printInformerReport(c, informerReport{Controller: controller.Report(), Attribution: reconciler.Report()})
-				}
-			}
-		},
+func runSandboxWatch(c *cobra.Command, dataDir *string, opts watchOptions) error {
+	if opts.nodeName == "" {
+		opts.nodeName = strings.TrimSpace(os.Getenv("NODE_NAME"))
 	}
-	cmd.Flags().StringVar(&namespace, "namespace", "", "watch one namespace; empty watches all namespaces")
-	cmd.Flags().StringVar(&nodeName, "node", "", "Kubernetes node name; defaults to NODE_NAME or hostname")
-	cmd.Flags().StringVar(&selector, "selector", "", "optional Kubernetes label selector for observed pods")
-	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "kubeconfig path; empty uses in-cluster config, then normal loading rules")
-	cmd.Flags().StringVar(&master, "master", "", "Kubernetes API server override")
-	cmd.Flags().StringVar(&runAnnotation, "run-annotation", "agentprov.io/run", "pod annotation containing the target run id")
-	cmd.Flags().StringVar(&runPrefix, "auto-run-prefix", "auto-", "run id prefix when the pod has no run annotation")
-	cmd.Flags().DurationVar(&resync, "resync", 10*time.Minute, "full informer resync interval")
-	cmd.Flags().DurationVar(&reportInterval, "report-interval", 30*time.Second, "human status report interval; 0 disables periodic reports")
-	cmd.Flags().DurationVar(&runFor, "run-for", 0, "stop after this duration; 0 runs until interrupted")
-	cmd.Flags().IntVar(&workers, "workers", 2, "reconcile workers")
-	cmd.Flags().IntVar(&maxRetries, "max-retries", 5, "rate-limited retries per pod event")
-	cmd.Flags().BoolVar(&jsonOut, "json", false, "emit the final machine-readable controller report")
-	return cmd
+	if opts.nodeName == "" {
+		opts.nodeName, _ = os.Hostname()
+	}
+	if opts.nodeName == "" {
+		return commandErrorf("--node or NODE_NAME is required")
+	}
+	cfg, err := kubeConfig(opts.master, opts.kubeconfig)
+	if err != nil {
+		return commandErrorf("k8s client config: %w", err)
+	}
+	client, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return commandErrorf("k8s client: %w", err)
+	}
+	paths, err := store.Init(*dataDir)
+	if err != nil {
+		return err
+	}
+	db, err := store.Open(paths)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	reconciler := &k8sinformer.ScopeReconciler{
+		Resolver: newProcScopeResolver(), Sink: localK8sScopeSink{db: db},
+		RunAnnotation: opts.runAnnotation, RunPrefix: opts.runPrefix,
+	}
+	controller, err := k8sinformer.New(client, k8sinformer.Options{
+		Namespace: opts.namespace, NodeName: opts.nodeName, LabelSelector: opts.selector, Resync: opts.resync,
+		Workers: opts.workers, MaxRetries: opts.maxRetries, Reconciler: reconciler,
+		OnError: func(key string, err error) {
+			fmt.Fprintf(c.ErrOrStderr(), commandText(c, "informer: key=%s error=%v\n"), key, err)
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(c.Context(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if opts.runFor > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, opts.runFor)
+		defer cancel()
+	}
+	if !opts.jsonOut {
+		fmt.Fprintf(c.OutOrStdout(), commandText(c, "k8s informer starting node=%s namespace=%s scope_source=k8s_cgroup\n"), opts.nodeName, displayNamespace(opts.namespace))
+	}
+	done := make(chan error, 1)
+	go func() { done <- controller.Run(ctx) }()
+	var ticker *time.Ticker
+	if opts.reportInterval > 0 && !opts.jsonOut {
+		ticker = time.NewTicker(opts.reportInterval)
+		defer ticker.Stop()
+	}
+	for {
+		select {
+		case err := <-done:
+			report := informerReport{Controller: controller.Report(), Attribution: reconciler.Report()}
+			if opts.jsonOut {
+				return writeJSON(c.OutOrStdout(), report)
+			}
+			printInformerReport(c, report)
+			return err
+		case <-tickerChan(ticker):
+			printInformerReport(c, informerReport{Controller: controller.Report(), Attribution: reconciler.Report()})
+		}
+	}
 }
 
 type procScopeResolver struct {

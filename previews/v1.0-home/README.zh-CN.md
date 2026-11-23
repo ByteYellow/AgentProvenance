@@ -13,7 +13,7 @@
 以下命令只读取仓库内的公开记录，生成本地预览文件。
 
 ```sh
-go build -o /tmp/agentprov-review ./cmd/agentprov
+go build -tags agentprov_tools -o /tmp/agentprov-review ./cmd/agentprov
 /tmp/agentprov-review demo export --output output/home-review-archive
 npm ci --prefix previews/v1.0-home
 previews/v1.0-home/node_modules/.bin/playwright install chromium

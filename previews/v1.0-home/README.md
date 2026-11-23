@@ -14,7 +14,7 @@ Use Node.js, Python 3, Playwright Chromium and a current source build of `agentp
 The commands below only read bundled public recordings and build local files.
 
 ```sh
-go build -o /tmp/agentprov-review ./cmd/agentprov
+go build -tags agentprov_tools -o /tmp/agentprov-review ./cmd/agentprov
 /tmp/agentprov-review demo export --output output/home-review-archive
 npm ci --prefix previews/v1.0-home
 previews/v1.0-home/node_modules/.bin/playwright install chromium

@@ -31,7 +31,7 @@ func configureProcfsNamespace(spec *ebpf.CollectionSpec) (*procfsResolver, error
 			err = fmt.Errorf("proc mount and collector PID namespaces differ")
 		}
 		if err == nil {
-			err = spec.RewriteConstants(map[string]interface{}{"proc_pidns_ino": st.Ino})
+			err = setSensorVariable(spec, "proc_pidns_ino", st.Ino)
 		}
 	}
 	if err != nil {

@@ -78,7 +78,15 @@ window.AgentContextUI = (() => {
       discoveries:reports.filter(c => c.source?.channel === 'discovery'),
       associations:reports.filter(c => c.source?.channel === 'runtime_correlation'),
       runtime:runtimePresentation(value?.runtime_coverage?.capture),
+      nativeLimits:recordedNativeLimits(value?.runtime_coverage?.capture),
     };
+  }
+
+  function recordedNativeLimits(capture) {
+    const snapshots = [capture?.capabilities_start, capture?.capabilities_end];
+    const limits = snapshots.flatMap(s => Array.isArray(s?.observation_limits) ? s.observation_limits : [])
+      .filter(l => l && typeof l.mechanism === 'string' && typeof l.detail === 'string');
+    return [...new Map(limits.map(l => [JSON.stringify([l.mechanism,l.scope,l.mode,l.detail]),l])).values()];
   }
 
   function freshState() {
@@ -439,6 +447,7 @@ window.AgentContextUI = (() => {
     const fields = [['Scope-field gaps',unknown(summary.correlation_gap_count)],['Run-specific dropped events',unknown(capture.run_dropped_events)],['Node pending events at seal',unknown(capture.node_pending_events)],['Kernel capture',t(states[capture.kernel_state] || 'Not recorded')],['Capture interval',[capture.started_at,capture.ended_at].filter(Boolean).join(' → ')],['Run loss assessment',t(capture.run_impact === 'no_node_loss_reported' ? 'No node loss reported; completeness is not established.' : 'Impact on this run is unknown.')],['Probe snapshots',[capture.capabilities_start?.status,capture.capabilities_end?.status].filter(Boolean).join(' → ')],['Saved capture report',capture.ref]];
     const deltas = capture.node_counter_delta;
     const limitations = capture.limitations || [];
+    const limits = recordedNativeLimits(capture);
     const probes = [...(capture.capabilities_start?.probes || []),...(capture.capabilities_end?.probes || [])];
     const unavailable = [...new Map(probes.filter(p=>['failed','unsupported','not_applicable'].includes(p.status)).map(p=>[JSON.stringify([p.name,p.target,p.status,p.reason]),p])).values()];
     const heading = `<h3>${e(t('Runtime capture'))} ${status(presentation.state,presentation.label)}</h3>
@@ -447,6 +456,8 @@ window.AgentContextUI = (() => {
     if (presentation.state === 'legacy_not_recorded') return `<article class="context-coverage" data-runtime-coverage>${heading}</article>`;
     return `<article class="context-coverage" data-runtime-coverage>${heading}
       <details><summary>${e(t('Capture diagnostics'))}</summary>
+      <h4>${e(t('Linux native sensor scope'))}</h4>
+      ${limits.length ? `<dl>${limits.map(l=>`<dt>${e(l.mechanism)}</dt><dd>${e(t(l.detail))}</dd>`).join('')}</dl>` : notice('Not recorded')}
       ${(capture.issues || []).map(issue=>notice(issue)).join('')}
       ${limitations.length ? `<h4>${e(t('Capture capability limits'))}</h4>${limitations.map(notice).join('')}` : ''}
       ${unavailable.length ? `<dl>${unavailable.map(p=>`<dt>${e(p.name)}</dt><dd>${e(t(p.status))}${p.reason ? `: ${e(p.reason)}` : ''}</dd>`).join('')}</dl>` : ''}

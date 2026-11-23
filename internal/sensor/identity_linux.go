@@ -144,6 +144,8 @@ func addSyscallIdentity(ev map[string]any, e sensorbpfSensorEvent) {
 		ev["operation"] = "file_open"
 	case eventConnect:
 		ev["operation"] = "network_connect"
+	case eventExec:
+		ev["operation"] = "process_exec"
 	}
 	// Include the boot and both lifetimes. TID or entry time alone is not an
 	// operation identity across reused threads, processes or host boots.

@@ -122,11 +122,12 @@ type CaptureBufferReport struct {
 }
 
 type CapabilityReport struct {
-	CaptureBuffers *CaptureBufferReport `json:"capture_buffers,omitempty"`
-	Producer       *CapabilityProducer  `json:"producer,omitempty"`
-	CollectorID    string               `json:"collector_id,omitempty"`
-	Revision       uint64               `json:"revision,omitempty"`
-	ChangedAt      string               `json:"changed_at,omitempty"`
+	ObservationLimits []ObservationLimit   `json:"observation_limits,omitempty"`
+	CaptureBuffers    *CaptureBufferReport `json:"capture_buffers,omitempty"`
+	Producer          *CapabilityProducer  `json:"producer,omitempty"`
+	CollectorID       string               `json:"collector_id,omitempty"`
+	Revision          uint64               `json:"revision,omitempty"`
+	ChangedAt         string               `json:"changed_at,omitempty"`
 
 	SchemaVersion      string                     `json:"schema_version"`
 	UpdatedAt          string                     `json:"updated_at"`
@@ -137,6 +138,21 @@ type CapabilityReport struct {
 	TLSDiscovery       TLSDiscoveryReport         `json:"tls_discovery"`
 	AccessControlState *StateCollectionCapability `json:"access_control_state,omitempty"`
 	ProcfsIdentity     *ProcfsIdentityReport      `json:"procfs_identity,omitempty"`
+}
+
+// ObservationLimit describes the collector's design, not workload activity or loss.
+type ObservationLimit struct {
+	Mechanism string `json:"mechanism"`
+	Scope     string `json:"scope"`
+	Mode      string `json:"mode"`
+	Detail    string `json:"detail"`
+}
+
+func NativeObservationLimits() []ObservationLimit {
+	return []ObservationLimit{
+		{"io_uring", "submission_and_completion", "not_instrumented", "Native syscall probes do not capture file or network operations submitted through io_uring."},
+		{"rustls", "tls_plaintext", "endpoint_only", "For rustls plaintext, import a controlled endpoint receipt with graph ingest-endpoint. Socket evidence is separate."},
+	}
 }
 
 type CapabilityProducer struct {
@@ -170,4 +186,4 @@ type StateCollectionCapability struct {
 }
 
 const sensorQueueCapacity = 16384
-const sensorEventBytes = 920
+const sensorEventBytes = 968

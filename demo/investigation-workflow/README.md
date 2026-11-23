@@ -17,7 +17,7 @@ and a portable read-only replay in the existing Dashboard.
 From a source build containing this example:
 
 ```sh
-go build -o agentprov ./cmd/agentprov
+go build -tags agentprov_tools -o agentprov ./cmd/agentprov
 ./agentprov demo investigation-workflow
 ```
 

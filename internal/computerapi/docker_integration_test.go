@@ -31,7 +31,7 @@ func TestDockerComputerWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = driver.Runtime.Client.Close() })
+	t.Cleanup(func() { _ = driver.Runtime.Close() })
 	controller := control.Service{DB: db, Paths: paths, Driver: driver}
 	taskPath := filepath.Join(root, "task.yaml")
 	if err := os.WriteFile(taskPath, []byte("run_id: workspace-test\nimage: python:3-slim\n"), 0o600); err != nil {

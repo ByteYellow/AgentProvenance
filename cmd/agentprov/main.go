@@ -17,6 +17,13 @@ func main() {
 		}
 		return
 	}
+	if handled, err := dispatchTools(os.Args[1:]); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	cmd := cli.NewRootCommand()
 	if err := cmd.Execute(); err != nil {
 		var child cli.ChildExitError

@@ -27,6 +27,17 @@ func TestPreflightRecognizesClaudeHooks(t *testing.T) {
 	}
 }
 
+func TestPreflightSeparatesNativeLimitsFromChecks(t *testing.T) {
+	on := Preflight(Options{Sensor: "auto", SelfExe: os.Args[0]})
+	if len(on.ObservationLimits) != 2 || on.ObservationLimits[0].Mechanism != "io_uring" || on.ObservationLimits[1].Mechanism != "rustls" {
+		t.Fatalf("missing native coverage: %+v", on)
+	}
+	off := Preflight(Options{Sensor: "off", SelfExe: os.Args[0]})
+	if len(off.ObservationLimits) != 0 {
+		t.Fatalf("disabled sensor: %+v", off)
+	}
+}
+
 func TestPreflightWarnsWhenClaudeSettingsAlreadyPresent(t *testing.T) {
 	r := Preflight(Options{
 		Command:       []string{"claude", "--settings", "mine.json"},

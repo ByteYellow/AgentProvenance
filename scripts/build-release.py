@@ -38,9 +38,15 @@ def main():
     archive = args.output / name
     with tempfile.TemporaryDirectory(prefix='agentprov-release-') as work:
         work = Path(work)
-        programs = ['agentprov', 'agentprov-verify'] + (['agentprov-sensor'] if args.os == 'linux' else [])
+        programs = ['agentprov-tools', 'agentprov', 'agentprov-verify'] + (['agentprov-sensor'] if args.os == 'linux' else [])
         for program in programs:
-            subprocess.run(['go', 'build', '-trimpath', '-ldflags', ldflags, '-o', str(work / program), './cmd/' + program], cwd=ROOT, env=env, check=True)
+            flags, cmd, linker = [], program, ldflags
+            if program == 'agentprov-tools':
+                flags, cmd = ['-tags', 'agentprov_tools'], 'agentprov'
+            elif program == 'agentprov':
+                digest = hashlib.sha256((work / 'agentprov-tools').read_bytes()).hexdigest()
+                linker += f' -X github.com/byteyellow/agentprovenance/internal/companion.Digest={digest}'
+            subprocess.run(['go', 'build', '-trimpath', *flags, '-ldflags', linker, '-o', str(work / program), './cmd/' + cmd], cwd=ROOT, env=env, check=True)
         (work / 'build-info.json').write_text(json.dumps({
             'version': args.version, 'commit': commit, 'build_date': date,
             'go': output('go', 'version'), 'os': args.os, 'arch': args.arch,

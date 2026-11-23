@@ -6,6 +6,14 @@ English | [简体中文](zh-CN/release-start.md)
 graph, Agent session and saved files without installing anything. The same site includes the full project overview, capture and deployment guides,
 analysis commands, integration references and release history.
 
+For normal recording, investigation and exporting your own runs, only the
+`agentprov` executable is required. To use the signed demo library, the
+Docker driver or `sandbox watch`, keep `agentprov-tools` beside it in a
+directory writable only by its owner. The CLI verifies the companion against
+the build's SHA-256 before use. From source, `go build ./cmd/agentprov` builds
+the core; `go build -tags agentprov_tools ./cmd/agentprov` builds a standalone
+all-in-one executable.
+
 For offline replay, open the demo library from the extracted archive:
 
 ```sh

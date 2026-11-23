@@ -16,7 +16,7 @@ and network activity they produce. Trace artifacts, compare executions, and
 export evidence you can replay and verify offline.
 
 [![Release](https://img.shields.io/github/v/release/ByteYellow/AgentProvenance?style=flat-square&color=orange&sort=semver)](https://github.com/ByteYellow/AgentProvenance/releases/latest)
-[![Go](https://img.shields.io/badge/go-1.23+-00ADD8.svg?style=flat-square)](https://go.dev/)
+[![Go](https://img.shields.io/badge/go-1.26.11+-00ADD8.svg?style=flat-square)](https://go.dev/)
 [![CI](https://img.shields.io/github/actions/workflow/status/ByteYellow/AgentProvenance/ci.yml?branch=main&style=flat-square)](https://github.com/ByteYellow/AgentProvenance/actions/workflows/ci.yml)
 [![Sensor](https://img.shields.io/badge/sensor-Linux_amd64_%7C_arm64-2496ED.svg?style=flat-square)](docs/amd64-kvm-k3s.md)
 [![SQLite](https://img.shields.io/badge/state-SQLite-003B57.svg?style=flat-square)](https://www.sqlite.org/)
@@ -124,10 +124,10 @@ store. Ctrl-C closes it and removes that store. Recorded commands are never reru
 For remote or headless machines, add `--no-browser` and access the local address
 through your usual port forwarding.
 
-To build the current source checkout, install Go 1.23+ and run from the repository root:
+To build the examples from source, install Go 1.26.11 or later:
 
 ```sh
-go build -o agentprov ./cmd/agentprov
+go build -tags agentprov_tools -o agentprov ./cmd/agentprov
 ./agentprov demo
 ```
 
@@ -344,7 +344,7 @@ errors, inspect AppArmor/seccomp records, compare files and export a selected re
 From the current source checkout:
 
 ```sh
-go build -o agentprov ./cmd/agentprov
+go build -tags agentprov_tools -o agentprov ./cmd/agentprov
 ./agentprov demo investigation-workflow
 ```
 
@@ -443,10 +443,13 @@ hardware boot, signed delivery and receipt-gated retirement are covered by the
 [v1.0 acceptance results](docs/benchmarks/v1.0-amd64/README.md).
 
 TLS discovery follows supported OpenSSL libraries and Go binaries, including
-container replacements. Go TLS response capture currently supports **amd64,
-Go 1.23–1.26, with symbols**. ARM64 Go response capture, BoringSSL and arbitrary
-custom TLS stacks remain outside that coverage. Use the probe report to see
-what actually attached on your machine.
+container replacements. On Linux amd64, Go TLS response capture supports Go 1.23–1.26,
+including stripped executables with a usable Go function table. Compatible BoringSSL
+`SSL_read` and `SSL_write` paths have been verified for shared libraries and static
+binaries with function symbols. Rustls plaintext requires a controlled endpoint
+receipt; native syscall probes do not observe io_uring submissions or completions.
+See [native coverage and probe requirements](docs/amd64-kvm-k3s.md) for the limits,
+including ARM64 Go response capture.
 
 <a id="daemon-mode"></a>
 

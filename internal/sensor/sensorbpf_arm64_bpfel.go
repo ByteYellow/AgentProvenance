@@ -8,21 +8,36 @@ import (
 	_ "embed"
 	"fmt"
 	"io"
+	"structs"
 
 	"github.com/cilium/ebpf"
 )
 
-type sensorbpfArgvVal struct{ Args [512]uint8 }
+type sensorbpfArgvVal struct {
+	_       structs.HostLayout
+	Args    [512]uint8
+	Nr      int64
+	StartNs uint64
+	Dirfd   int32
+	Flags   uint32
+	At      uint8
+	_       [7]byte
+}
 
-type sensorbpfCgroupIdentity struct{ Names [3][96]int8 }
+type sensorbpfCgroupIdentity struct {
+	_     structs.HostLayout
+	Names [3][96]int8
+}
 
 type sensorbpfProcessExitKey struct {
+	_        structs.HostLayout
 	StartNs  uint64
 	Pid      uint32
 	Reserved uint32
 }
 
 type sensorbpfSensorEvent struct {
+	_              structs.HostLayout
 	Kind           uint32
 	Pid            uint32
 	Tid            uint32
@@ -49,9 +64,17 @@ type sensorbpfSensorEvent struct {
 	Comm           [16]uint8
 	Path           [256]uint8
 	Args           [512]uint8
+	OpFlags        uint64
+	OpenResolve    uint64
+	Dirfd          int32
+	ScopeId        uint32
+	Addr6          [16]uint8
+	Family         uint16
+	_              [6]byte
 }
 
 type sensorbpfSslConnKey struct {
+	_        structs.HostLayout
 	Start    uint64
 	Conn     uint64
 	Pid      uint32
@@ -59,10 +82,12 @@ type sensorbpfSslConnKey struct {
 }
 
 type sensorbpfSslReadStack struct {
+	_         structs.HostLayout
 	TaskStart uint64
 	Depth     uint32
 	Reserved  uint32
 	Frames    [4]struct {
+		_         structs.HostLayout
 		Buf       uint64
 		Ssl       uint64
 		Capacity  uint64
@@ -72,31 +97,91 @@ type sensorbpfSslReadStack struct {
 }
 
 type sensorbpfSyscallCtx struct {
+	_           structs.HostLayout
 	TaskStartNs uint64
 	StartNs     uint64
 	Nr          int64
 	PathPtr     uint64
 	Flags       uint64
+	Resolve     uint64
 	Kind        uint32
+	Dirfd       int32
 	Daddr       uint32
+	ScopeId     uint32
+	Addr6       [16]uint8
+	Family      uint16
 	Dport       uint16
 	PathRetry   uint8
 	Reserved    uint8
 	Path        [256]int8
-	_           [4]byte
+	_           [2]byte
 }
 
 type sensorbpfTlsSequence struct {
+	_          structs.HostLayout
 	Generation uint64
 	Calls      uint64
 }
 
 type sensorbpfTlsStreamKey struct {
+	_        structs.HostLayout
 	Conn     sensorbpfSslConnKey
 	Epoch    uint64
 	Kind     uint32
 	Reserved uint32
 }
+
+// Names of all BPF objects in the ELF.
+//
+// Used for safe lookups in a Collection or CollectionSpec.
+const (
+	sensorbpfMapArgvBuild             = "argv_build"
+	sensorbpfMapArgvScratch           = "argv_scratch"
+	sensorbpfMapCgroupNameScratch     = "cgroup_name_scratch"
+	sensorbpfMapCgroupNames           = "cgroup_names"
+	sensorbpfMapDrops                 = "drops"
+	sensorbpfMapEvents                = "events"
+	sensorbpfMapExitedGroups          = "exited_groups"
+	sensorbpfMapSslEpochs             = "ssl_epochs"
+	sensorbpfMapSslReadBufs           = "ssl_read_bufs"
+	sensorbpfMapSslReadExBufs         = "ssl_read_ex_bufs"
+	sensorbpfMapSyscallCalls          = "syscall_calls"
+	sensorbpfMapTlsDiscoverySeen      = "tls_discovery_seen"
+	sensorbpfMapTlsSequences          = "tls_sequences"
+	sensorbpfProgHandleConnect        = "handle_connect"
+	sensorbpfProgHandleConnectReturn  = "handle_connect_return"
+	sensorbpfProgHandleExec           = "handle_exec"
+	sensorbpfProgHandleExecReturn     = "handle_exec_return"
+	sensorbpfProgHandleExecve         = "handle_execve"
+	sensorbpfProgHandleExecveCleanup  = "handle_execve_cleanup"
+	sensorbpfProgHandleExecveat       = "handle_execveat"
+	sensorbpfProgHandleExit           = "handle_exit"
+	sensorbpfProgHandleFork           = "handle_fork"
+	sensorbpfProgHandleGetaddrinfo    = "handle_getaddrinfo"
+	sensorbpfProgHandleGoTlsWrite     = "handle_go_tls_write"
+	sensorbpfProgHandleOpenReturn     = "handle_open_return"
+	sensorbpfProgHandleOpenat         = "handle_openat"
+	sensorbpfProgHandleOpenat2        = "handle_openat2"
+	sensorbpfProgHandleOpenat2Return  = "handle_openat2_return"
+	sensorbpfProgHandlePtrace         = "handle_ptrace"
+	sensorbpfProgHandleRename         = "handle_rename"
+	sensorbpfProgHandleRenamePlain    = "handle_rename_plain"
+	sensorbpfProgHandleSendto         = "handle_sendto"
+	sensorbpfProgHandleSetgid         = "handle_setgid"
+	sensorbpfProgHandleSetuid         = "handle_setuid"
+	sensorbpfProgHandleSslNew         = "handle_ssl_new"
+	sensorbpfProgHandleSslReadEnter   = "handle_ssl_read_enter"
+	sensorbpfProgHandleSslReadExEnter = "handle_ssl_read_ex_enter"
+	sensorbpfProgHandleSslReadExExit  = "handle_ssl_read_ex_exit"
+	sensorbpfProgHandleSslReadExit    = "handle_ssl_read_exit"
+	sensorbpfProgHandleSslRelease     = "handle_ssl_release"
+	sensorbpfProgHandleSslReset       = "handle_ssl_reset"
+	sensorbpfProgHandleSslWrite       = "handle_ssl_write"
+	sensorbpfProgHandleSslWriteEx     = "handle_ssl_write_ex"
+	sensorbpfProgHandleUnlink         = "handle_unlink"
+	sensorbpfVarTlsAutoDiscovery      = "tls_auto_discovery"
+	sensorbpfVarUnusedSensorEvent     = "unused_sensor_event"
+)
 
 // loadSensorbpf returns the embedded CollectionSpec for sensorbpf.
 func loadSensorbpf() (*ebpf.CollectionSpec, error) {
@@ -118,7 +203,7 @@ func loadSensorbpf() (*ebpf.CollectionSpec, error) {
 //	*sensorbpfMaps
 //
 // See ebpf.CollectionSpec.LoadAndAssign documentation for details.
-func loadSensorbpfObjects(obj interface{}, opts *ebpf.CollectionOptions) error {
+func loadSensorbpfObjects(obj any, opts *ebpf.CollectionOptions) error {
 	spec, err := loadSensorbpf()
 	if err != nil {
 		return err
@@ -133,22 +218,28 @@ func loadSensorbpfObjects(obj interface{}, opts *ebpf.CollectionOptions) error {
 type sensorbpfSpecs struct {
 	sensorbpfProgramSpecs
 	sensorbpfMapSpecs
+	sensorbpfVariableSpecs
 }
 
-// sensorbpfSpecs contains programs before they are loaded into the kernel.
+// sensorbpfProgramSpecs contains programs before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type sensorbpfProgramSpecs struct {
 	HandleConnect        *ebpf.ProgramSpec `ebpf:"handle_connect"`
 	HandleConnectReturn  *ebpf.ProgramSpec `ebpf:"handle_connect_return"`
 	HandleExec           *ebpf.ProgramSpec `ebpf:"handle_exec"`
+	HandleExecReturn     *ebpf.ProgramSpec `ebpf:"handle_exec_return"`
 	HandleExecve         *ebpf.ProgramSpec `ebpf:"handle_execve"`
+	HandleExecveCleanup  *ebpf.ProgramSpec `ebpf:"handle_execve_cleanup"`
+	HandleExecveat       *ebpf.ProgramSpec `ebpf:"handle_execveat"`
 	HandleExit           *ebpf.ProgramSpec `ebpf:"handle_exit"`
 	HandleFork           *ebpf.ProgramSpec `ebpf:"handle_fork"`
 	HandleGetaddrinfo    *ebpf.ProgramSpec `ebpf:"handle_getaddrinfo"`
 	HandleGoTlsWrite     *ebpf.ProgramSpec `ebpf:"handle_go_tls_write"`
 	HandleOpenReturn     *ebpf.ProgramSpec `ebpf:"handle_open_return"`
 	HandleOpenat         *ebpf.ProgramSpec `ebpf:"handle_openat"`
+	HandleOpenat2        *ebpf.ProgramSpec `ebpf:"handle_openat2"`
+	HandleOpenat2Return  *ebpf.ProgramSpec `ebpf:"handle_openat2_return"`
 	HandlePtrace         *ebpf.ProgramSpec `ebpf:"handle_ptrace"`
 	HandleRename         *ebpf.ProgramSpec `ebpf:"handle_rename"`
 	HandleRenamePlain    *ebpf.ProgramSpec `ebpf:"handle_rename_plain"`
@@ -186,12 +277,21 @@ type sensorbpfMapSpecs struct {
 	TlsSequences      *ebpf.MapSpec `ebpf:"tls_sequences"`
 }
 
+// sensorbpfVariableSpecs contains global variables before they are loaded into the kernel.
+//
+// It can be passed ebpf.CollectionSpec.Assign.
+type sensorbpfVariableSpecs struct {
+	TlsAutoDiscovery  *ebpf.VariableSpec `ebpf:"tls_auto_discovery"`
+	UnusedSensorEvent *ebpf.VariableSpec `ebpf:"unused_sensor_event"`
+}
+
 // sensorbpfObjects contains all objects after they have been loaded into the kernel.
 //
 // It can be passed to loadSensorbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type sensorbpfObjects struct {
 	sensorbpfPrograms
 	sensorbpfMaps
+	sensorbpfVariables
 }
 
 func (o *sensorbpfObjects) Close() error {
@@ -238,6 +338,14 @@ func (m *sensorbpfMaps) Close() error {
 	)
 }
 
+// sensorbpfVariables contains all global variables after they have been loaded into the kernel.
+//
+// It can be passed to loadSensorbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
+type sensorbpfVariables struct {
+	TlsAutoDiscovery  *ebpf.Variable `ebpf:"tls_auto_discovery"`
+	UnusedSensorEvent *ebpf.Variable `ebpf:"unused_sensor_event"`
+}
+
 // sensorbpfPrograms contains all programs after they have been loaded into the kernel.
 //
 // It can be passed to loadSensorbpfObjects or ebpf.CollectionSpec.LoadAndAssign.
@@ -245,13 +353,18 @@ type sensorbpfPrograms struct {
 	HandleConnect        *ebpf.Program `ebpf:"handle_connect"`
 	HandleConnectReturn  *ebpf.Program `ebpf:"handle_connect_return"`
 	HandleExec           *ebpf.Program `ebpf:"handle_exec"`
+	HandleExecReturn     *ebpf.Program `ebpf:"handle_exec_return"`
 	HandleExecve         *ebpf.Program `ebpf:"handle_execve"`
+	HandleExecveCleanup  *ebpf.Program `ebpf:"handle_execve_cleanup"`
+	HandleExecveat       *ebpf.Program `ebpf:"handle_execveat"`
 	HandleExit           *ebpf.Program `ebpf:"handle_exit"`
 	HandleFork           *ebpf.Program `ebpf:"handle_fork"`
 	HandleGetaddrinfo    *ebpf.Program `ebpf:"handle_getaddrinfo"`
 	HandleGoTlsWrite     *ebpf.Program `ebpf:"handle_go_tls_write"`
 	HandleOpenReturn     *ebpf.Program `ebpf:"handle_open_return"`
 	HandleOpenat         *ebpf.Program `ebpf:"handle_openat"`
+	HandleOpenat2        *ebpf.Program `ebpf:"handle_openat2"`
+	HandleOpenat2Return  *ebpf.Program `ebpf:"handle_openat2_return"`
 	HandlePtrace         *ebpf.Program `ebpf:"handle_ptrace"`
 	HandleRename         *ebpf.Program `ebpf:"handle_rename"`
 	HandleRenamePlain    *ebpf.Program `ebpf:"handle_rename_plain"`
@@ -275,13 +388,18 @@ func (p *sensorbpfPrograms) Close() error {
 		p.HandleConnect,
 		p.HandleConnectReturn,
 		p.HandleExec,
+		p.HandleExecReturn,
 		p.HandleExecve,
+		p.HandleExecveCleanup,
+		p.HandleExecveat,
 		p.HandleExit,
 		p.HandleFork,
 		p.HandleGetaddrinfo,
 		p.HandleGoTlsWrite,
 		p.HandleOpenReturn,
 		p.HandleOpenat,
+		p.HandleOpenat2,
+		p.HandleOpenat2Return,
 		p.HandlePtrace,
 		p.HandleRename,
 		p.HandleRenamePlain,

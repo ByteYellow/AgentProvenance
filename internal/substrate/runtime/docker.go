@@ -23,12 +23,15 @@ func NewDockerDriver(paths store.Paths) (*DockerDriver, error) {
 	if err != nil {
 		return nil, err
 	}
-	_, version := dockerStatus()
+	var version string
+	if rt.ComponentError() == nil {
+		_, version = dockerStatus()
+	}
 	return &DockerDriver{Runtime: rt, Paths: paths, Version: version}, nil
 }
 
 func (d *DockerDriver) Available() bool {
-	return d != nil && d.Runtime != nil
+	return d != nil && d.Runtime != nil && d.Runtime.ComponentError() == nil
 }
 
 func (d *DockerDriver) Name() string { return "docker" }

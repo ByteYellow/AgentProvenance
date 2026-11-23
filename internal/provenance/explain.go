@@ -257,7 +257,7 @@ func PrintExplainManifestJSON(out io.Writer, manifest ExplainManifest) error {
 func PrintExplainManifest(out io.Writer, manifest ExplainManifest, languages ...i18n.Locale) error {
 	lang := presentationLocale(languages)
 	target := manifest.Target
-	fmt.Fprintf(out, i18n.T(lang, "explain:\n"))
+	fmt.Fprint(out, i18n.T(lang, "explain:\n"))
 	fmt.Fprintf(out, i18n.T(lang, "  target=%s id=%s run=%s file=%s\n"), target.Type, target.ID, target.Run, target.File)
 	fmt.Fprintf(out, i18n.T(lang, "  schema=%s result_set=%s page_hash=%s edges=%d truncated=%t\n"),
 		manifest.SchemaVersion, manifest.Query.ResultSetID, manifest.Query.PageHash, manifest.Query.EdgeCount, manifest.Query.Truncated)

@@ -568,6 +568,12 @@ func PrintPreflightLocale(w io.Writer, r PreflightReport, lang i18n.Locale) {
 			fmt.Fprintf(w, i18n.T(lang, "    fix: %s\n"), c.fix.orOriginal(lang, c.Fix))
 		}
 	}
+	if len(r.ObservationLimits) != 0 {
+		fmt.Fprintln(w, i18n.T(lang, "Linux native sensor scope"))
+		for _, l := range r.ObservationLimits {
+			fmt.Fprintf(w, "  %s: %s\n", l.Mechanism, i18n.T(lang, l.Detail))
+		}
+	}
 }
 
 func captureSetup(r Report) string {

@@ -18,7 +18,7 @@ func TestTLSDiscoveryObjectsBoundHintsAndAllowDisabling(t *testing.T) {
 				t.Fatalf("unbounded or PID-only discovery hints: %+v", m)
 			}
 			for _, enabled := range []uint32{0, 1} {
-				if err := spec.Copy().RewriteConstants(map[string]interface{}{"tls_auto_discovery": enabled}); err != nil {
+				if err := setSensorVariable(spec.Copy(), "tls_auto_discovery", enabled); err != nil {
 					t.Fatalf("automatic discovery setting %d: %v", enabled, err)
 				}
 			}

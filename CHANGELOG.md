@@ -4,6 +4,9 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- Record native IPv6 connections and scoped `openat2` and `execveat` operations on Linux. Doctor and saved capture diagnostics describe io_uring and rustls visibility separately from event loss.
+- Split the core CLI from the optional Docker, Kubernetes informer and signed demo tools. The distribution keeps the existing commands; projects building from source can select the all-in-one `agentprov_tools` build. CI checks reachable Go vulnerabilities in both builds.
+
 - Include an optional page tour on the demo homepage and hosted recording pages. Comparison links show the selected Runs first and offer the tour after the comparison closes. Standalone downloads are unchanged.
 
 - Read historical file diffs, blame and trajectories from saved evidence across workspace reuse. Distinguish snapshot deletions from writes and capture omissions.

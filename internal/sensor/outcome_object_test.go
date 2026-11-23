@@ -16,7 +16,7 @@ func TestSyscallResultObjectsHaveBoundedThreadState(t *testing.T) {
 			if m == nil || m.Type != ebpf.Hash || m.KeySize != 8 || m.MaxEntries != 4096 || m.ValueSize > 512 {
 				t.Fatalf("unbounded or process-only syscall state: %+v", m)
 			}
-			for _, probe := range []string{"handle_connect", "handle_connect_return", "handle_openat", "handle_open_return", "handle_exit", "handle_exec"} {
+			for _, probe := range []string{"handle_connect", "handle_connect_return", "handle_openat", "handle_open_return", "handle_openat2", "handle_openat2_return", "handle_execveat", "handle_exec_return", "handle_exit", "handle_exec"} {
 				if spec.Programs[probe] == nil {
 					t.Errorf("missing %s", probe)
 				}
