@@ -21,6 +21,10 @@ func offlineReplayHTMLSelection(raw []byte, locale i18n.Locale, selection Replay
 }
 
 func offlineReplayHTMLSet(raw []byte, locale i18n.Locale, selections []ReplaySelection, partial, analysisOmitted bool) ([]byte, error) {
+	return renderReadingPage(raw, locale, selections, partial, analysisOmitted, "", false)
+}
+
+func renderReadingPage(raw []byte, locale i18n.Locale, selections []ReplaySelection, partial, analysisOmitted bool, defaultRun string, gallery bool) ([]byte, error) {
 	delivery := DeliveryReading
 	doc, err := html.Parse(bytes.NewReader(raw))
 	if err != nil {
@@ -68,6 +72,10 @@ func offlineReplayHTMLSet(raw []byte, locale i18n.Locale, selections []ReplaySel
 	if partial {
 		head.AppendChild(&html.Node{Type: html.ElementNode, Data: "meta", Attr: []html.Attribute{{Key: "name", Val: "agentprov-replay-selection"}, {Key: "content", Val: "partial"}}})
 	}
+	defaultMeta := ""
+	if defaultRun != "" {
+		defaultMeta = `<meta name="agentprov-default-run" content="` + htmltext.EscapeString(defaultRun) + `">`
+	}
 	prepend := func(parent *html.Node, text string) error {
 		nodes, err := html.ParseFragment(strings.NewReader(text), parent)
 		if err != nil {
@@ -81,7 +89,7 @@ func offlineReplayHTMLSet(raw []byte, locale i18n.Locale, selections []ReplaySel
 	}
 	// No network connections, embedded documents or form submissions are needed
 	// to view an export. The application scripts are the same trusted reader.
-	if err = prepend(head, `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"><meta name="agentprov-site-root" content="../"><script src="../assets/catalog.js"></script><script src="../assets/offline.js"></script><script src="../assets/replay.js"></script><style>#live{display:none}.offline-replay-bar{padding:10px 26px;border-bottom:1px solid var(--line);font-size:12px;color:var(--mut);display:flex;gap:16px;flex-wrap:wrap}.offline-replay-bar a{color:var(--acc)}</style>`); err != nil {
+	if err = prepend(head, `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"><meta name="agentprov-site-root" content="../">`+defaultMeta+`<script src="../assets/catalog.js"></script><script src="../assets/offline.js"></script><script src="../assets/replay.js"></script><style>#live{display:none}.offline-replay-bar{padding:10px 26px;border-bottom:1px solid var(--line);font-size:12px;color:var(--mut);display:flex;gap:16px;flex-wrap:wrap}.offline-replay-bar a{color:var(--acc)}</style>`); err != nil {
 		return nil, err
 	}
 	label, verification, err := offlineDeliveryText(locale, delivery)
@@ -117,7 +125,11 @@ func offlineReplayHTMLSet(raw []byte, locale i18n.Locale, selections []ReplaySel
 			scope += " · some analyses omitted; see inventory"
 		}
 	}
-	if err = prepend(body, `<nav class="offline-replay-bar" data-delivery-mode="`+delivery+`" data-verification-state="not_checked"><strong>`+label+`</strong><span>`+htmltext.EscapeString(scope)+`</span><span class="offline-signature-status">`+verification+`</span><a href="../export-inventory.json" target="_blank" rel="noopener">`+inventory+`</a></nav>`); err != nil {
+	links := ""
+	if gallery {
+		links = `<a data-site-navigation href="../../../` + string(locale) + `/index.html">` + i18n.T(locale, "← Demo library") + `</a><a data-site-navigation href="../../../` + string(locale) + `/guides/start.html">` + i18n.T(locale, "Documentation") + `</a><a data-site-navigation href="https://github.com/ByteYellow/AgentProvenance/releases/latest">` + i18n.T(locale, "Download CLI") + `</a>`
+	}
+	if err = prepend(body, `<nav class="offline-replay-bar" data-delivery-mode="`+delivery+`" data-verification-state="not_checked">`+links+`<strong>`+label+`</strong><span>`+htmltext.EscapeString(scope)+`</span><span class="offline-signature-status">`+verification+`</span><a href="../export-inventory.json" target="_blank" rel="noopener">`+inventory+`</a></nav>`); err != nil {
 		return nil, err
 	}
 	var out bytes.Buffer

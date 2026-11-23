@@ -28,7 +28,10 @@ window.AgentProvOffline = (() => {
   }
   const initial = new URL(location.href);
   initial.searchParams.set('live','0');
-  if (!initial.searchParams.get('run')) initial.searchParams.set('run',catalog.summaries[0].run);
+  if (!initial.searchParams.get('run')) {
+    const preferred=document.querySelector('meta[name="agentprov-default-run"]')?.content;
+    initial.searchParams.set('run',preferred&&Object.hasOwn(catalog.runs,preferred)?preferred:catalog.summaries[0].run);
+  }
   history.replaceState(null,'',initial);
   return Object.freeze({read,accept,manifest:()=>structuredClone(catalog)});
 })();

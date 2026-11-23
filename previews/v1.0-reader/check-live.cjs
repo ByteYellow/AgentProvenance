@@ -2,14 +2,13 @@
 const {chromium}=require('playwright');
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const base=process.argv[2],output=path.resolve(process.argv[3]);
-const repo=path.resolve(__dirname,'../..');
 (async()=>{
   fs.mkdirSync(output,{recursive:true});
   const browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})});
   try {
     const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
     page.on('pageerror',error=>errors.push(error.message));
-    for(const asset of ['context.js','evidence.js']) await page.route('**/assets/'+asset,route=>route.fulfill({contentType:'application/javascript',body:fs.readFileSync(asset==='evidence.js'&&process.env.AGENTPROV_EVIDENCE_SOURCE?process.env.AGENTPROV_EVIDENCE_SOURCE:path.join(repo,'internal/dashboard',asset),'utf8')}));
+    if(process.env.AGENTPROV_EVIDENCE_SOURCE) await page.route('**/assets/evidence.js',route=>route.fulfill({contentType:'application/javascript',body:fs.readFileSync(process.env.AGENTPROV_EVIDENCE_SOURCE,'utf8')}));
     await page.goto(new URL('execution/en/index.html?live=0',base).href);
     await page.waitForFunction(()=>window.AgentPortableEvidenceUI&&document.querySelector('#runsel')?.options.length>1);
     await page.locator('#context-fold>summary').click();

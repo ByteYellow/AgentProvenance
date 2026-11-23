@@ -247,17 +247,8 @@ func (s Server) prepareReplaySet(ctx context.Context, snapshot *replaySnapshot, 
 			return nil, err
 		}
 	}
-	assets := map[string][]byte{
-		"theme.css": themeCSS, "context.css": contextCSS, "context.js": contextJS,
-		"evidence.css": evidenceCSS, "evidence.js": evidenceJS,
-		"workspace.css": workspaceCSS, "workspace.js": workspaceJS,
-		"access-control.css": accessControlCSS, "access-control.js": accessControlJS,
-		"search-engine.js": searchEngineJS, "search.js": searchJS, "search.css": searchCSS,
-		"compare-engine.js": compareEngineJS, "compare.js": compareJS, "compare.css": compareCSS,
-		"export.js": exportJS, "export.css": exportCSS,
-		"replay.js": replayJS, "offline.js": offlineJS,
-		"catalog.js": []byte(`window.AgentProvOfflineCatalog="` + base64.StdEncoding.EncodeToString(manifest) + `";`),
-	}
+	assets := offlineReaderAssets()
+	assets["catalog.js"] = []byte(`window.AgentProvOfflineCatalog="` + base64.StdEncoding.EncodeToString(manifest) + `";`)
 	for name, data := range assets {
 		if err = write("assets/"+name, data); err != nil {
 			return nil, err

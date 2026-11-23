@@ -2,9 +2,9 @@
 import argparse
 import hashlib
 import json
-import os
 import shutil
 from pathlib import Path
+from html_assets import hosted_page
 
 BASE = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser(description=__doc__)
@@ -34,10 +34,9 @@ if not args.integrate:
     shutil.copytree(source, target)
 assets = target / 'tour-assets'
 assets.mkdir()
-for name in ('tour.js', 'tour.css'):
-    shutil.copy2(BASE / name, assets / name)
-for name in ('driver.js.iife.js', 'driver.css'):
-    shutil.copy2(driver / 'dist' / name, assets / name)
+for bundle, vendor in [('tour.js', 'driver.js.iife.js'), ('tour.css', 'driver.css')]:
+    joiner = b'\n;\n' if bundle.endswith('.js') else b'\n'
+    (assets / bundle).write_bytes((driver / 'dist' / vendor).read_bytes() + joiner + (BASE / bundle).read_bytes())
 shutil.copy2(driver / 'license', assets / 'driver-LICENSE.txt')
 # Each hosted reader is also a movable directory. It must not reach outside
 # its inventory for scripts, styles or the bundled dependency license.
@@ -57,15 +56,8 @@ pages.extend(target.glob('recordings/*/*/index.html'))
 changed = {}
 for page in pages:
     text = page.read_text()
-    # Localized homepages already resolve assets through <base href="../">.
-    base = target if '<base href="../">' in text else page.parent
     scope = page.parent.parent if page.parent.parent in reader_roots else target
-    prefix = Path(os.path.relpath(scope / 'tour-assets', base)).as_posix()
-    head = ''.join(f'<link rel="stylesheet" href="{prefix}/{name}">' for name in ('driver.css', 'tour.css'))
-    head += ''.join(f'<script defer src="{prefix}/{name}"></script>' for name in ('driver.js.iife.js', 'tour.js'))
-    if text.count('</head>') != 1:
-        raise SystemExit(f'Expected one HTML head: {page}')
-    body = text.replace('</head>', head + '</head>').encode('utf-8')
+    body = hosted_page(text, page, scope / 'tour-assets').encode('utf-8')
     page.write_bytes(body)
     changed[page] = (len(body), hashlib.sha256(body).hexdigest())
 # Update the hosted HTML and add its local assets. Downloads stay untouched.

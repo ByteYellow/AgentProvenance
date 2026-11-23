@@ -1,38 +1,10 @@
 /* Shared reader over the existing read-only evidence APIs. */
 (() => {
   'use strict';
+  if(window.AgentPortableEvidenceUI) return;
   if(location.protocol==='file:') document.querySelectorAll('[data-site-navigation]').forEach(nav=>nav.remove());
   const $=id=>document.getElementById(id), e=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const zh=window.AgentProvI18n?.locale==='zh-CN';
-  const words={
-    'Execution handoffs':'跨环境执行','Saved capture observations':'采集记录','Browser / Notebook':'Browser / Notebook',
-    'Execution':'执行','Capture':'采集','Delivery at packaging':'封包时的交付状态','Succeeded':'成功','Failed':'失败','Running':'运行中','Incomplete':'有采集缺口','Complete':'完成','Pending':'待交付','Not recorded':'未记录','Draining':'正在收尾',
-    'Security state snapshots incomplete':'安全状态补采不完整','Capture details':'查看采集详情','Saved scope events':'作用域事件','Ingested':'已入库','Dropped':'已报告丢失','Pending events':'待处理事件','Missing state snapshots':'状态补采缺失','Capture issues':'采集问题',
-    'Some process identity, AppArmor or seccomp state snapshots were unavailable. The saved source-call identity, execution result and receipt remain available.':'部分进程身份、AppArmor 或 seccomp 状态快照未能取得。来源调用标识、执行结果和回执仍可查看。',
-    'These counts describe the sealed execution interval, not the entire node.':'这些计数对应封包时的本次执行范围。',
-    'scope_state_sampling_gap':'进程安全状态补采缺失','scope_prefix_pending':'本次执行仍有事件待入库','scope_prefix_loss':'本次执行存在事件丢失或入库失败','shared_collector_loss':'共享采集器报告丢失','shared_spool_loss':'共享缓冲报告丢失','shared_tls_pending':'共享采集器仍有 TLS 数据待处理','shared_tls_loss':'共享采集器报告 TLS 数据丢失',
-    'Receipt saved':'回执已保存','Package':'证据包','Open execution':'查看执行','Open source call':'查看来源调用','Saved details':'查看记录详情','Source call':'来源调用','Target':'执行环境','Attempt':'执行尝试','Generation':'代次','Next steps':'接下来怎么处理',
-    'Read saved content':'阅读正文','Screenshot':'截图','Image':'图片','Network archive':'网络记录','More records':'继续加载','Close':'关闭','Loading…':'正在读取…','Recorded evidence could not be loaded.':'记录读取失败。',
-    'No native Browser or Notebook records in this selection.':'当前选择中没有 Browser 或 Notebook 原生记录。',
-    'Scope':'范围','State':'状态','Time':'时间','Source':'来源','Saved bytes':'保存的字节','Not retained':'未保留','Unknown':'未知','Included records':'已包含的记录','Capabilities':'采集能力','Loss counters':'丢失统计',
-    'Excluded from this copy':'未包含在此副本中','Recorded inputs and outputs':'保存的输入与输出','More content':'继续读取正文','Recorded fields':'原始字段','Evidence references':'证据引用',
-    'The saved package has capture gaps. Review the capture observations and use the retained evidence.':'这份证据包有采集缺口，可以查看采集记录和已经保留的证据。',
-    'The command failed. Read the saved output before deciding whether to create a new attempt.':'命令执行失败。先查看保存的输出，再决定是否创建新的执行尝试。',
-    'A receipt is saved. If the sender did not receive its ACK, resend the same receipt; keep the original attempt.':'回执已经保存。如果发送端未收到 ACK，应重发同一份回执，继续使用原执行尝试。',
-    'Collect the existing attempt again to retry delivery. An explicit reexecution creates a separate attempt.':'再次收取现有执行尝试可以重试交付。显式重新执行会创建另一次尝试。',
-    'These are saved observations. Counts and capability changes retain their recorded scope and time.':'这里展示保存的采集记录。计数和能力变化保留各自的范围及时间。',
-    'Only the selected evidence is available in this copy.':'此副本只包含选定的证据。',
-    'Details were excluded from this selection.':'详情未包含在当前选择中。',
-    'Attachment omitted by the capture or export selection.':'附件根据采集设置或导出选择被省略。',
-    'Nothing was executed by this reader.':'阅读器仅展示保存的内容。',
-    'Workspace':'工作区','Versions and receipt':'版本与回执','Saved workspace revision':'保存的工作区版本','Input revision':'输入版本','Output revision':'输出版本','Input manifest':'输入清单','Output manifest':'输出清单','Receipt':'操作回执','Changes':'文件变更','Before':'变更前','After':'变更后','Path':'路径','Outcome':'执行结果','Record attempt':'记录尝试',
-    'No Workspace results in this selection.':'当前选择中没有工作区操作结果。','Inspect the saved Workspace result below.':'下方保留了工作区返回的原始结果。','This observation carries the current workspace version.':'这条观察记录保存了当时的工作区版本。',
-    'Browser operation':'浏览器操作','Request':'网络请求','Initiator request':'发起请求','Frame':'页面框架','Target type':'页面或 Worker 类型','Association basis':'关联依据','Download':'下载',
-    'Delivery details':'交付说明','Current copy':'当前副本','Recipient verification':'接收方验证','Not run':'尚未执行','Delivery mode':'交付模式','Contents':'包含的内容',
-    'Unsigned reading copy':'未签名的阅读副本','Exporter-signed reading copy':'导出者签名的阅读副本','Signed reader with original bundles':'附带原始证据包的签名阅读副本',
-    'Signature trust is evaluated using the recipient’s own trust policy.':'签名者是否可信，由接收方自己的信任策略判断。',
-  };
-  const t=s=>zh?(words[s]||s):s;
+  const t=window.AgentProvI18n.t;
   const q=o=>new URLSearchParams(Object.entries(o).filter(([,v])=>v!==''&&v!=null)).toString();
   const j=(path,opts)=>window.j(path,opts);
   const label=s=>t(({succeeded:'Succeeded',failed:'Failed',running:'Running',incomplete:'Incomplete',complete:'Complete',pending:'Pending',draining:'Draining',persisted:'Receipt saved'})[s]||s||'Not recorded');
@@ -51,22 +23,39 @@
   const showError=(host,error)=>{host.textContent=t('Recorded evidence could not be loaded.')+' '+error.message;host.setAttribute('role','alert');};
   const showDialog=(title)=>{dialogRequest++;$('portable-dialog-title').textContent=title;$('portable-dialog-body').textContent=t('Loading…');if(!dialog.open)dialog.showModal();return dialogRequest;};
   function setNative(active,kind='native'){nativeActive=active;nativeKind=kind;window.AgentContextUI.setExternalTab(active?kind:'');tab.setAttribute('aria-selected',String(active&&kind==='native'));workspaceTab.setAttribute('aria-selected',String(active&&kind==='workspace'));native.setAttribute('aria-labelledby',kind==='workspace'?workspaceTab.id:tab.id);native.hidden=!active;$('context-body').hidden=active;$('context-pager').hidden=active;if(active){document.querySelectorAll('[data-context-tab]').forEach(b=>b.setAttribute('aria-selected','false'));coverage.hidden=true;renderNative();}}
+  let entriesError=null;
+  tab.hidden=true;workspaceTab.hidden=true;
   tab.onclick=()=>setNative(true);
   workspaceTab.onclick=()=>setNative(true,'workspace');
   $('context-fold').addEventListener('contexttabchange',event=>{setNative(false);coverage.hidden=event.detail!=='coverage';if(!coverage.hidden)renderCapture();});
   async function paged(path,field,args,maximum=1000){let values=[],cursor='',seen=new Set();for(;;){const page=await j(path+'?'+q({...args,limit:100,cursor}));values.push(...(page[field]||[]));if(values.length>maximum)throw Error('Use a smaller selection to read these records.');if(!page.has_more)return values;if(!page.next_cursor||seen.has(page.next_cursor))throw Error('Invalid evidence continuation');seen.add(page.next_cursor);cursor=page.next_cursor;}}
   async function prefix(path,field,args,count,limit){const values=[],seen=new Set();let cursor='';do{const page=await j(path+'?'+q({...args,limit,cursor}));values.push(...(page[field]||[]));cursor=page.next_cursor||'';if(page.has_more&&(!cursor||seen.has(cursor)))throw Error('Invalid evidence continuation');seen.add(cursor);if(!page.has_more)return {[field]:values,next_cursor:''};}while(values.length<count);return {[field]:values,next_cursor:cursor};}
+  let detailsToken=0,detailsPending;
   async function refresh(run,nextScope=null,force=false){if(!run)return;const key=JSON.stringify([run,nextScope]),changed=key!==current;if(pending===key||(!changed&&!force))return;current=key;pending=key;scope=nextScope;const token=++revision;
-    if(changed){links=[];records=[];entries=[];entryCursor='';captureCursor='';setNative(false);coverage.hidden=document.querySelector('[data-context-tab="coverage"]').getAttribute('aria-selected')!=='true';card.hidden=true;native.textContent=t('Loading…');if(dialog.open)dialog.close();}
-    const results=await Promise.allSettled([
-      Promise.all(['outgoing','incoming'].map(direction=>paged('/api/execution-links','links',{run,direction,...(nextScope?{harness:nextScope.harness,session:nextScope.session_id}:{})}).then(items=>items.map(item=>({...item,direction}))))),
+    if(changed){links=[];records=[];entries=[];entryCursor='';entriesError=null;captureCursor='';setNative(false);tab.hidden=true;workspaceTab.hidden=true;coverage.hidden=document.querySelector('[data-context-tab="coverage"]').getAttribute('aria-selected')!=='true';card.hidden=true;native.textContent=t('Loading…');if(dialog.open)dialog.close();}
+    const details=(!window.AgentProvReplay||$('context-fold').open)?loadDetails(run,nextScope,token):null;
+    try{
+      const both=await Promise.all(['outgoing','incoming'].map(direction=>paged('/api/execution-links','links',{run,direction,...(nextScope?{harness:nextScope.harness,session:nextScope.session_id}:{})}).then(items=>items.map(item=>({...item,direction})))));
+      if(token!==revision)return;links=both.flat();card.hidden=!links.length;renderLinks();
+    }catch(error){if(token===revision){card.hidden=false;showError($('portable-links'),error);}}
+    finally{if(token===revision)pending='';}
+    await details;
+  }
+  function loadDetails(run,nextScope,token){
+    if(detailsToken===token)return detailsPending;
+    detailsToken=token;
+    detailsPending=Promise.allSettled([
       prefix('/api/capture-manifest','records',{run},Math.max(20,records.length),20),
       prefix('/api/context/entries','entries',{run,...(nextScope?{harness:nextScope.harness,session:nextScope.session_id}:{})},Math.max(100,entries.length),100)
-    ]);if(token!==revision)return;pending='';
-    if(results[0].status==='fulfilled'){links=results[0].value.flat();card.hidden=!links.length;renderLinks();}else{card.hidden=false;showError($('portable-links'),results[0].reason);}
-    if(results[1].status==='fulfilled'){records=results[1].value.records||[];captureCursor=results[1].value.next_cursor||'';renderCapture();}else showError(coverage,results[1].reason);
-    if(results[2].status==='fulfilled'){const next=results[2].value,updated=JSON.stringify([entries,entryCursor])!==JSON.stringify([next.entries||[],next.next_cursor||'']);entries=next.entries||[];entryCursor=next.next_cursor||'';if(changed||updated)renderNative();}else showError(native,results[2].reason);
+    ]).then(([capture,context])=>{
+      if(token!==revision)return;
+      if(capture.status==='fulfilled'){records=capture.value.records;captureCursor=capture.value.next_cursor;renderCapture();}else showError(coverage,capture.reason);
+      if(context.status==='fulfilled'){const next=context.value,updated=entriesError||JSON.stringify([entries,entryCursor])!==JSON.stringify([next.entries,next.next_cursor]);entriesError=null;entries=next.entries;entryCursor=next.next_cursor;if(updated||!nativeActive)renderNative();}
+      else {entriesError=context.reason;renderNative();}
+    });
+    return detailsPending;
   }
+  $('context-fold').addEventListener('toggle',()=>{if(current&&$('context-fold').open)loadDetails(runID(),scope,revision).catch(error=>showError(native,error));});
   $('context-refresh').addEventListener('click',()=>{if(current)refresh(runID(),scope,true).catch(error=>showError(native,error));});
   const runID=()=>JSON.parse(current)[0];
   const stateBox=(name,value,description)=>`<div class="portable-state" data-tone="${value==='failed'?'failed':value==='incomplete'?'attention':value==='succeeded'||value==='complete'?'ok':'neutral'}"><span>${e(t(name))}</span><strong>${e(description||label(value))}</strong></div>`;
@@ -92,10 +81,17 @@
   function renderCapture(){coverage.innerHTML=`<h3>${e(t('Saved capture observations'))}</h3><p class="portable-note">${e(t('These are saved observations. Counts and capability changes retain their recorded scope and time.'))}</p>`+records.map(r=>`<article class="portable-row"><h3>${e(r.source)} · ${e(label(r.status))}</h3>${facts([['Target',r.placement],['Time',[r.started_at,r.ended_at].filter(Boolean).join(' → ')||r.observed_at],['Scope',r.identity_domain]])}<details><summary>${e(t('Capabilities'))}</summary>${(r.snapshots||[]).map(s=>`<p>${e(s.observed_at||t('Not recorded'))} · ${e(s.boundary)} · ${e(label(s.status))}</p>${facts((s.features||[]).map(f=>[f.name,[f.state,f.reason].filter(Boolean).join(' · ')]))}`).join('')}</details><details><summary>${e(t('Loss counters'))}</summary>${facts((r.loss||[]).map(c=>[c.name,`${c.value===null?t('Unknown'):c.value} · ${c.scope}${c.scope_id?' / '+c.scope_id:''}`]))}</details>${r.issues?.length?`<p>${e(r.issues.join(' · '))}</p>`:''}<p class="portable-ref">${e(r.evidence_ref)}</p></article>`).join('')+(captureCursor?`<button class="portable-more">${e(t('More records'))}</button>`:'');
     coverage.querySelector('.portable-more')?.addEventListener('click',async()=>{const token=revision;try{const page=await j('/api/capture-manifest?'+q({run:runID(),limit:20,cursor:captureCursor}));if(token!==revision)return;records.push(...page.records);captureCursor=page.next_cursor||'';renderCapture();}catch(err){showError(coverage,err);}});
   }
-  const nativeEntries=()=>entries.filter(x=>nativeKind==='workspace'?(x.kind==='tool_result'&&/(^|__)workspace_/.test(x.tool_name||'')):(x.browser||x.notebook||x.browser_operation||x.notebook_request||x.attachments?.length));
+  const nativeEntries=(kind=nativeKind)=>entries.filter(x=>kind==='workspace'?(x.kind==='tool_result'&&/(^|__)workspace_/.test(x.tool_name||'')):(x.browser||x.notebook||x.browser_operation||x.notebook_request||x.attachments?.length));
   function entryTitle(x){return x.browser?.operation||x.browser?.kind||x.notebook?.message_type||x.tool_name||x.kind;}
   function entryCard(x,index){if(nativeKind==='workspace')return `<article class="portable-row" data-workspace-entry="${e(x.id)}"><h3>${e(x.tool_name)}</h3>${facts([['Source call',x.tool_call_id],['Time',x.recorded_at]])}<button class="portable-more" data-native-body="${index}">${e(t('Versions and receipt'))}</button></article>`;const b=x.browser,n=x.notebook;return `<article class="portable-row" data-native-entry="${e(x.id)}"><h3>${e(entryTitle(x))}</h3><p>${e(x.source.harness)} · ${e(x.recorded_at||t('Not recorded'))}</p>${facts(b?[['Target',b.target_id],['Target type',b.target_type],['Browser operation',b.operation_id],['Request',b.request_key],['Initiator request',b.initiator_request_id],['Frame',b.frame_id],['Download',b.download_id],['Association basis',b.association]]:n?[['Source',n.parent_message_id||n.message_id],['State',n.association]]:[['Source call',x.tool_call_id]])}<div class="portable-actions"><button data-native-body="${index}">${e(t('Read saved content'))}</button>${(x.attachments||[]).map((a,i)=>`<button data-native-attachment="${index}:${i}" ${a.state!=='stored'?'disabled':''}>${e(t(a.media_type==='image/png'?(b?'Screenshot':'Image'):'Network archive'))}${a.state!=='stored'?' · '+e(t('Not retained')):''}</button>`).join('')}</div></article>`;}
-  function renderNative(){const scroll=native.scrollTop,list=nativeEntries();native.innerHTML=(list.length?list.map(entryCard).join(''):`<p class="portable-note">${e(t(nativeKind==='workspace'?'No Workspace results in this selection.':'No native Browser or Notebook records in this selection.'))}</p>`)+(entryCursor?`<button class="portable-more" data-native-more>${e(t('More records'))}</button>`:'');native.scrollTop=scroll;
+  function renderNative(){
+    // An unread page or a load failure leaves availability unknown.
+    tab.hidden=!entriesError&&!entryCursor&&!nativeEntries('native').length;
+    workspaceTab.hidden=!entriesError&&!entryCursor&&!nativeEntries('workspace').length;
+    if(nativeActive&&(nativeKind==='workspace'?workspaceTab:tab).hidden)setNative(false);
+    if(entriesError){showError(native,entriesError);return;}
+    native.setAttribute('role','tabpanel');
+    const scroll=native.scrollTop,list=nativeEntries();native.innerHTML=(list.length?list.map(entryCard).join(''):`<p class="portable-note">${e(t(nativeKind==='workspace'?'No Workspace results in this selection.':'No native Browser or Notebook records in this selection.'))}</p>`)+(entryCursor?`<button class="portable-more" data-native-more>${e(t('More records'))}</button>`:'');native.scrollTop=scroll;
     native.querySelectorAll('[data-native-body]').forEach(b=>b.onclick=()=>openContent(list[Number(b.dataset.nativeBody)],runID()));
     native.querySelectorAll('[data-native-attachment]').forEach(b=>b.onclick=()=>{const [a,i]=b.dataset.nativeAttachment.split(':').map(Number);openAttachment(list[a].attachments[i],runID());});
     native.querySelector('[data-native-more]')?.addEventListener('click',async event=>{const button=event.currentTarget,token=revision;button.disabled=true;try{const page=await j('/api/context/entries?'+q({run:runID(),limit:100,cursor:entryCursor,...(scope?{harness:scope.harness,session:scope.session_id}:{})}));if(token!==revision)return;entries.push(...page.entries);entryCursor=page.next_cursor||'';renderNative();}catch(err){if(token===revision)showError(native,err);}finally{button.disabled=false;}});
@@ -135,11 +131,10 @@
     if(!['image/png','application/har+json'].includes(a.media_type)||!Number.isSafeInteger(a.bytes)||a.bytes<1||a.bytes>8388608)throw Error('Unsupported attachment');
     const chunks=[];let offset=0;while(offset<a.bytes){const page=await j('/api/context/attachment?'+q({run,ref:a.ref,offset,limit:262144}));if(request!==dialogRequest)return;const bytes=Uint8Array.from(atob(page.data),c=>c.charCodeAt(0));if(page.run_id!==run||page.ref!==a.ref||page.offset!==offset||page.total_bytes!==a.bytes||page.media_type!==a.media_type||page.sha256!==a.sha256||!bytes.length||page.next_offset!==offset+bytes.length||page.next_offset>a.bytes||Boolean(page.has_more)!==(page.next_offset<a.bytes))throw Error('Invalid attachment continuation');chunks.push(bytes);offset=page.next_offset;}
     const bytes=new Uint8Array(a.bytes);let at=0;for(const chunk of chunks){bytes.set(chunk,at);at+=chunk.length;}
-    const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');if(hash!==a.sha256)throw Error('Attachment hash mismatch');if(request!==dialogRequest)return;
+    const hash=await window.agentProvSHA256(bytes);if(hash!==a.sha256)throw Error('Attachment hash mismatch');if(request!==dialogRequest)return;
     const host=$('portable-dialog-body');host.replaceChildren();const meta=document.createElement('p');meta.className='portable-ref';meta.textContent=a.ref+' · '+a.bytes+' bytes';host.append(meta);
     if(a.media_type==='image/png'){const source=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Image could not be read'));reader.readAsDataURL(new Blob([bytes],{type:'image/png'}));});if(request!==dialogRequest)return;const img=document.createElement('img');img.alt=t('Image');img.src=source;host.append(img);}else{const pre=document.createElement('pre');pre.textContent=JSON.stringify(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes)),null,2);host.append(pre);}
   }catch(error){if(request===dialogRequest)showError($('portable-dialog-body'),error);}}
-  const original=window.AgentContextUI.setRun;window.AgentContextUI.setRun=function(run,nextScope){const result=original.apply(this,arguments);refresh(run,nextScope,!window.AgentProvReplay).catch(error=>showError($('portable-links'),error));return result;};
-  window.AgentPortableEvidenceUI={refresh,openAttachment};
-  const initial=new URL(location.href).searchParams;refresh(initial.get('run'),initial.get('session')?{harness:initial.get('harness'),session_id:initial.get('session')}:null);
+  window.AgentPortableEvidenceUI={refresh,openAttachment,prepareSessionTabs:()=>current?loadDetails(runID(),scope,revision):null};
+  window.AgentContextUI.onRunChange((run,nextScope)=>refresh(run,nextScope,!window.AgentProvReplay).catch(error=>showError($('portable-links'),error)));
 })();

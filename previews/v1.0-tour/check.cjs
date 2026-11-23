@@ -132,7 +132,8 @@ const preferenceKey = 'agentprov.onboarding.preview/v2';
       const readerSteps = await readerLength();
       assert(readerSteps >= 21, 'the reader covers its detailed controls');
       const targets = await fullTour(readerSteps, 'reader');
-      for (const target of ['#session-relations-open', '[data-investigation="search"]', '[data-investigation="compare"]', '#scrub', '.zoombar', '#context-nav-files', '.access-bar', '#context-tab-configuration', '#context-tab-coverage', '#portable-workspace-tab', '#portable-native-tab', '[data-investigation="export"]', '#portable-delivery-details', '#timeline-fold>summary']) {
+      assert(!targets.includes('#portable-native-tab'),'a workspace-only recording must not advertise an empty Browser tab');
+      for (const target of ['#session-relations-open', '[data-investigation="search"]', '[data-investigation="compare"]', '#scrub', '.zoombar', '#graph-find', '#context-nav-files', '.access-bar', '#context-tab-configuration', '#context-tab-coverage', '#portable-workspace-tab', '[data-investigation="export"]', '#portable-delivery-details', '#timeline-fold>summary']) {
         assert(targets.includes(target), `reader guide covers ${target}`);
       }
       assert.deepEqual(await state(), before, 'tour restores the existing reading state');

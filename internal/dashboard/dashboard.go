@@ -54,6 +54,20 @@ var contextCSS []byte
 //go:embed context.js
 var contextJS []byte
 
+//go:embed graph-view.js
+var graphViewJS []byte
+
+// js-sha256 0.11.1, distributed under its included MIT license.
+//
+//go:embed third_party/js-sha256/src/sha256.js
+var fallbackSHA []byte
+
+//go:embed third_party/js-sha256/LICENSE.txt
+var fallbackLicense []byte
+
+//go:embed digest.js
+var digestJS []byte
+
 //go:embed evidence.css
 var evidenceCSS []byte
 
@@ -105,6 +119,11 @@ var exportCSS []byte
 // ReplayScript returns the browser reader used by exported public demos.
 func ReplayScript() []byte { return replayJS }
 
+// Pack classic scripts in dependency order so the same reader also runs on file://.
+var readerJS = bytes.Join([][]byte{[]byte("/*"), fallbackLicense, []byte("*/"), fallbackSHA, digestJS, graphViewJS,
+	compareEngineJS, compareJS, exportJS, searchEngineJS, searchJS, workspaceJS, accessControlJS, contextJS}, []byte("\n"))
+var readerCSS = bytes.Join([][]byte{contextCSS, workspaceCSS, accessControlCSS, searchCSS, compareCSS, exportCSS}, []byte("\n"))
+
 // Server serves the dashboard over a single read-only *sql.DB.
 type Server struct {
 	DB               *sql.DB
@@ -148,7 +167,7 @@ func (s Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 		_, _ = w.Write(workspaceJS)
 	})
-	for path, asset := range map[string][]byte{"/assets/search-engine.js": searchEngineJS, "/assets/search.js": searchJS, "/assets/search.css": searchCSS,
+	for path, asset := range map[string][]byte{"/assets/reader.js": readerJS, "/assets/reader.css": readerCSS, "/assets/search-engine.js": searchEngineJS, "/assets/search.js": searchJS, "/assets/search.css": searchCSS,
 		"/assets/access-control.js": accessControlJS, "/assets/access-control.css": accessControlCSS,
 		"/assets/evidence.js": evidenceJS, "/assets/evidence.css": evidenceCSS,
 		"/assets/compare-engine.js": compareEngineJS, "/assets/compare.js": compareJS, "/assets/compare.css": compareCSS,

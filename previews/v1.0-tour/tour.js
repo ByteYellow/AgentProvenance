@@ -84,11 +84,14 @@
         '左侧下拉切换协作、进程、文件和网络等视图；右侧选择摘要、展开或原始记录。点击节点后，统一详情区会展示它的关联依据。',
         'The left selector switches between collaboration, process, file and network views. The right selector changes summary, expanded and raw detail. Select a node to inspect its evidence.'),
       step('#scrub', '按时间阅读执行过程', 'Read the execution over time',
-        '播放按钮和时间滑条用于查看已保存事件的先后顺序。拖动滑条可以停在某一时刻，观察当时出现的节点和关系。',
-        'The play button and time slider navigate saved events in order. Move the slider to a point in time to inspect the nodes and relationships shown there.'),
+        '有时间点时，可以播放或拖动滑条查看当时的节点和关系。摘要没有时间点时，可切换到展开或原始视图。',
+        'Use the slider to inspect nodes and edges at a recorded time. If the summary has no timestamps, try expanded or raw detail.'),
       step('.zoombar', '把大图调整到合适尺度', 'Adjust the graph to a useful scale',
         '使用加减按钮缩放，“适应宽度”重新收拢整张图。图很大时，先选择会话或调查问题，再查看局部。',
         'Use plus and minus to zoom, or Fit to bring the graph back into view. For large graphs, first select a session or investigation question.'),
+      step('#graph-find', '在当前图中查找节点', 'Find a node in this graph',
+        '输入名称或证据 ID，按回车定位匹配项。聚焦节点后按回车可查看证据。',
+        'Enter a name or evidence ID and press Enter to locate a match. Press Enter on the focused node to inspect it.'),
       step('#context-nav-files', '阅读正文，而不只是看节点', 'Read content, not just nodes',
         '文件证据进入统一详情区，区分摘要、关联事件和已保存正文。正文有多份时可用下拉选择，长内容可以分页或放大阅读。',
         'File evidence opens the shared reader for summaries, related events and saved content. Use the content selector for multiple versions, or paginate and expand long text.'),
@@ -146,12 +149,16 @@
       target?.focus({preventScroll: true});
     });
   }
-  function start() {
-    if (tour?.isActive() || $('dialog[open]')) return;
+  let starting=false;
+  async function start() {
+    if (starting || tour?.isActive() || $('dialog[open]')) return;
+    starting=true;
     invite?.destroy();
+    try {await window.AgentPortableEvidenceUI?.prepareSessionTabs?.();} finally {starting=false;}
+    if ($('dialog[open]')) return;
     const fold = $('#context-fold');
     saved = {x: scrollX, y: scrollY, focus: document.activeElement, fold, foldOpen: fold?.open};
-    const selected = steps().filter(item => $(item.element));
+    const selected = steps().filter(item => {const target=$(item.element);return target && !target.hidden;});
     remember();
     tour = window.driver.js.driver({
       steps: selected,
@@ -185,6 +192,7 @@
   function offerTour() {
     clearTimeout(inviteTimer);
     inviteTimer = setTimeout(() => {
+      if(starting)return;
       const button = $('#page-tour-start'), pref = preferences();
       if (!button || waitingForCompare || $('dialog[open]')) { invite?.destroy(); return; }
       if (tour?.isActive() || (!forceInvite && (pref.skipped || pref.seen[pageKind]))) return;
@@ -192,6 +200,7 @@
       if (rect.top < 0 || rect.bottom > innerHeight) { invite?.destroy(); return; }
       if (invite?.isActive()) return;
       const headerBottom = button.closest('header')?.getBoundingClientRect().bottom ?? rect.bottom;
+      let spacer, resize;
       button.classList.add('tour-invited');
       invite = window.driver.js.driver({
         animate: false, overlayOpacity: 0, allowPageInteraction: true, focus: 'none',
@@ -204,8 +213,19 @@
           popover.wrapper.setAttribute('role', 'region');
           popover.wrapper.removeAttribute('aria-modal');
           popover.wrapper.setAttribute('aria-live', 'polite');
+          // The reader's action toolbar sits immediately below the header.
+          if (!isHome) {
+            spacer = document.createElement('div');
+            spacer.setAttribute('aria-hidden', 'true');
+            button.closest('header').after(spacer);
+            resize = new ResizeObserver(() => {
+              spacer.style.height = Math.ceil(popover.wrapper.getBoundingClientRect().height + 24) + 'px';
+            });
+            resize.observe(popover.wrapper);
+          }
         },
         onDestroyed(_, __, opts) {
+          resize?.disconnect(); spacer?.remove();
           button.classList.remove('tour-invited');
           invite = null;
           if (opts.reason === 'close' || opts.reason === 'escape') remember();
@@ -234,8 +254,12 @@
   function boot() {
     if (!window.driver?.js?.driver) return;
     install();
-    const host = isHome ? $('#app') : $('#askgrid');
-    new MutationObserver(install).observe(host, {childList: true});
+    if (isHome) document.addEventListener('agentprov:home-rendered',install);
+    else if (!ready()) {
+      // Cached historical shells may finish loading after the tour script.
+      const loaded = new MutationObserver(() => {if(ready()){loaded.disconnect();install();}});
+      loaded.observe($('#askgrid'), {childList:true});
+    }
     // Compare deep links open asynchronously. Keep their entire modal session first.
     document.addEventListener('close', event => {
       if (event.target.id === 'compare-dialog') waitingForCompare = false;

@@ -529,6 +529,12 @@ event filtering, graph focus and replay selection share this scope.
 
 ## Search Saved Evidence
 
+To find a node already on screen, use **Find a graph node** beside the zoom
+controls. Enter moves to a match; Enter on the focused node opens its evidence.
+Drag the background to pan, or use Ctrl/Command + wheel to zoom. Playback is
+available in views with recorded timestamps. If the summary has none, try
+expanded or raw detail.
+
 Use the magnifying-glass action above the graph. The temporary search window
 shows matching excerpts on the left and the existing evidence reader on the
 right. With a native session selected, search starts within that session;

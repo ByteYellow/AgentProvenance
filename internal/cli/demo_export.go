@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -143,14 +144,7 @@ func demoExportCmd() *cobra.Command {
 		mux := http.NewServeMux()
 		mux.Handle("/", server.Handler())
 		mux.HandleFunc("/demos/", demoGallery(catalog))
-		get := func(route string) ([]byte, error) {
-			response := httptest.NewRecorder()
-			mux.ServeHTTP(response, httptest.NewRequest("GET", route, nil).WithContext(cmd.Context()))
-			if response.Code != 200 {
-				return nil, fmt.Errorf("static page %s: HTTP %d", route, response.Code)
-			}
-			return response.Body.Bytes(), nil
-		}
+		get := demoPageGetter(cmd.Context(), mux)
 		manifest.Summaries, err = get("/api/runs")
 		if err != nil {
 			return err
@@ -162,7 +156,16 @@ func demoExportCmd() *cobra.Command {
 			}
 			return os.WriteFile(dest, data, 0644)
 		}
-		for _, asset := range []string{"/assets/theme.css", "/assets/context.css", "/assets/context.js", "/assets/evidence.css", "/assets/evidence.js", "/assets/workspace.css", "/assets/workspace.js", "/assets/access-control.js", "/assets/access-control.css", "/assets/search-engine.js", "/assets/search.js", "/assets/search.css", "/assets/compare-engine.js", "/assets/compare.js", "/assets/compare.css", "/assets/export.js", "/assets/export.css", "/demos/demo.css", "/demos/guide.js"} {
+		readerFiles, err := publicDemoReaderFiles(get)
+		if err != nil {
+			return err
+		}
+		for name, data := range readerFiles {
+			if err = write(name, data); err != nil {
+				return err
+			}
+		}
+		for _, asset := range []string{"/demos/demo.css", "/demos/guide.js"} {
 			b, err := get(asset)
 			if err != nil {
 				return err
@@ -171,22 +174,9 @@ func demoExportCmd() *cobra.Command {
 				return err
 			}
 		}
-		if err = write("assets/replay.js", dashboard.ReplayScript()); err != nil {
-			return err
-		}
-		if err = write("assets/site.js", []byte(publicSiteJS)); err != nil {
-			return err
-		}
 		for _, locale := range []i18n.Locale{i18n.English, i18n.Chinese} {
 			lang := string(locale)
-			b, err := get("/assets/i18n.js?lang=" + lang)
-			if err != nil {
-				return err
-			}
-			if err = write("assets/i18n."+lang+".js", b); err != nil {
-				return err
-			}
-			pages := map[string]string{lang + "/index.html": "/demos/", lang + "/replay.html": "/"}
+			pages := map[string]string{lang + "/index.html": "/demos/"}
 			for _, entry := range catalog {
 				pages[lang+"/demos/"+entry.ID+".html"] = "/demos/docs/" + entry.ID
 			}
@@ -284,6 +274,51 @@ func demoExportCmd() *cobra.Command {
 	}}
 	cmd.Flags().StringVar(&output, "output", "", "new directory for the static website")
 	return cmd
+}
+
+func demoPageGetter(ctx context.Context, handler http.Handler) func(string) ([]byte, error) {
+	return func(route string) ([]byte, error) {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest("GET", route, nil).WithContext(ctx))
+		if w.Code != http.StatusOK {
+			return nil, fmt.Errorf("static page %s: HTTP %d", route, w.Code)
+		}
+		return w.Body.Bytes(), nil
+	}
+}
+
+// PublicDemoReaderFiles rebuilds the gallery UI without reimporting recordings.
+func PublicDemoReaderFiles(ctx context.Context) (map[string][]byte, error) {
+	return publicDemoReaderFiles(demoPageGetter(ctx, (dashboard.Server{RunLabels: demoRunLabels(demo.Catalog())}).Handler()))
+}
+
+func publicDemoReaderFiles(get func(string) ([]byte, error)) (map[string][]byte, error) {
+	files := map[string][]byte{"assets/replay.js": dashboard.ReplayScript(), "assets/site.js": []byte(publicSiteJS)}
+	for _, name := range []string{"theme.css", "reader.js", "reader.css", "evidence.js", "evidence.css"} {
+		data, err := get("/assets/" + name)
+		if err != nil {
+			return nil, err
+		}
+		files["assets/"+name] = data
+	}
+	for _, locale := range []i18n.Locale{i18n.English, i18n.Chinese} {
+		lang := string(locale)
+		data, err := get("/assets/i18n.js?lang=" + lang)
+		if err != nil {
+			return nil, err
+		}
+		files["assets/i18n."+lang+".js"] = data
+		raw, err := get("/?lang=" + lang)
+		if err != nil {
+			return nil, err
+		}
+		path := lang + "/replay.html"
+		files[path], err = staticDemoHTML(raw, path, locale, true)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return files, nil
 }
 
 func staticDemoURL(value, filename string, locale i18n.Locale) string {

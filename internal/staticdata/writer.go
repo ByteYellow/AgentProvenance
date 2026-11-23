@@ -19,6 +19,7 @@ type Ref struct {
 type Writer struct {
 	Root  string
 	Bytes int64
+	gzip  *gzip.Writer
 }
 
 func (w *Writer) JSON(value any) (Ref, error) {
@@ -35,6 +36,8 @@ func (w *Writer) JSON(value any) (Ref, error) {
 	name := filepath.Join(w.Root, ref.Path)
 	if _, err := os.Stat(name); err == nil {
 		return ref, nil
+	} else if !os.IsNotExist(err) {
+		return Ref{}, err
 	}
 	if err := os.MkdirAll(filepath.Dir(name), 0755); err != nil {
 		return Ref{}, err
@@ -43,7 +46,15 @@ func (w *Writer) JSON(value any) (Ref, error) {
 	if err != nil {
 		return Ref{}, err
 	}
-	z, _ := gzip.NewWriterLevel(f, gzip.BestSpeed)
+	// A single export writes thousands of small shards serially. Reuse the
+	// compressor's buffers; Reset starts an independent gzip stream each time.
+	z := w.gzip
+	if z == nil {
+		z, _ = gzip.NewWriterLevel(f, gzip.BestSpeed)
+		w.gzip = z
+	} else {
+		z.Reset(f)
+	}
 	if _, err = z.Write(data); err != nil {
 		f.Close()
 		return Ref{}, err

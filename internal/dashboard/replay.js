@@ -29,7 +29,7 @@ window.AgentProvReplay = (() => {
         bytes=new Uint8Array(size);let at=0;for(const chunk of chunks){bytes.set(chunk,at);at+=chunk.length;}
       }
       if(bytes.length!==ref.bytes)fail('Replay data size check failed');
-      const digest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
+      const digest=await window.agentProvSHA256(bytes);
       if(digest!==ref.sha256)fail('Replay data integrity check failed');
       return JSON.parse(decoder.decode(bytes));
     })();

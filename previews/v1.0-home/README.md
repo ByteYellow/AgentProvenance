@@ -78,3 +78,8 @@ links, diagrams, comparisons, graph drilldowns, attachments and an actual downlo
 Workspace copy opened offline. Set `PLAYWRIGHT_CHANNEL=chrome` to use installed
 Chrome instead of Playwright Chromium. Existing output directories are preserved;
 choose a new path for every build.
+
+For a reader or homepage change, reuse the previously validated `output/site-base`
+and run only the build and website acceptance steps with a fresh output path.
+Run the full export again when recordings, exported guides, or evidence indexes
+change. The hosted UI is rebuilt from source; the original ZIPs are not repacked.

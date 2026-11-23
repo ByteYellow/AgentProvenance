@@ -1,6 +1,7 @@
 from pathlib import Path
-import argparse, base64, gzip, hashlib, html, json, re, shutil, zipfile
+import argparse, base64, gzip, hashlib, json, re, zipfile
 from graph_navigation import refresh_graph_navigation
+from compose import compose_reader
 
 base=Path(__file__).resolve().parent
 repo=base.parents[1]
@@ -8,11 +9,11 @@ parser=argparse.ArgumentParser(description='Build the v1.0 candidate reader with
 parser.add_argument('--output', type=Path, required=True, help='new output directory')
 parser.add_argument('--workspace-archive', type=Path, help='unsigned Workspace reading copy for selection review')
 parser.add_argument('--production', action='store_true', help='use the approved reader and site navigation')
+parser.add_argument('--reader-tool', type=Path, help=argparse.SUPPRESS)
 args=parser.parse_args()
 target=args.output.resolve()
 target.mkdir(parents=True, exist_ok=False)
 cases=[('investigation','task-investigation','Task investigation'),('execution','native-matrix','Cross-environment execution'),('workspace','workspace-contract','Workspace'),('browser','browser-detailed','Browser'),('notebook','notebook-detailed','Notebook')]
-nav='<nav class="review-nav" aria-label="Candidate examples"><strong>v1.0 · PREVIEW</strong>'+''.join(f'<a href="../{slug}/index.html">{html.escape(title)}</a>' for slug,_,title in cases)+'<span>Saved evidence · Read only</span></nav>'
 manifest=[]
 for slug,name,title in cases:
     src=repo/'docs/benchmarks/v1.0-candidate/replays'/(name+'.zip')
@@ -40,31 +41,7 @@ for slug,name,title in cases:
         return sum(len(x.get('attachments',[]))*100+int(bool(x.get('browser') or x.get('notebook'))) for x in entries)
     selected=max(catalog['runs'].items(),key=score)[0]
     refresh_graph_navigation(root,catalog,saved)
-    # Select the relevant recorded run before the existing reader boots.
-    bootstrap='<script>if(!new URL(location.href).searchParams.has("run")){const u=new URL(location.href);u.searchParams.set("run",'+json.dumps(selected)+');history.replaceState(null,"",u);}</script>'
-    index=root/'index.html'
-    index.write_text(index.read_text().replace('<body>','<body>'+bootstrap).replace("location.replace(lang+'/index.html?'+q.toString());", "addEventListener('DOMContentLoaded',()=>location.replace(lang+'/index.html?'+q.toString()),{once:true});"))
-    for language in ['en','zh-CN']:
-        index=root/language/'index.html';text=index.read_text()
-        text=text.replace("const overviewQ=q+'&lens=default&detail=summary';", "const overviewQ=q+scopeQuery+'&lens=default&detail=summary';")
-        if 'await window.AgentCompareUI.openFromURL(INITIAL);' not in text:
-            text=text.replace('await loadRun(first);','await loadRun(first);\n  await window.AgentCompareUI.openFromURL(INITIAL);')
-        text=text.replace('<nav class="offline-replay-bar">','<nav class="offline-replay-bar" data-delivery-mode="reading" data-verification-state="not_checked">')
-        asset='evidence' if args.production else 'evidence-preview'
-        text=text.replace('</head>',f'<link rel="stylesheet" href="../assets/{asset}.css"></head>')
-        bar=nav.replace('href="../','href="../../')
-        if language=='zh-CN':
-            for en,cn in [('Task investigation','任务调查'),('Cross-environment execution','跨环境执行'),('Saved evidence · Read only','已保存的证据 · 只读'),('PREVIEW','候选预览')]:bar=bar.replace(en,cn)
-        if args.production:
-            label='返回示例库' if language=='zh-CN' else 'Back to demos'
-            docs='文档' if language=='zh-CN' else 'Documentation'
-            bar=f'<nav class="review-nav" data-site-navigation><a href="../../../?lang={language}">{label}</a><a href="../../../{language}/guides/start.html">{docs}</a></nav>'
-        text=text.replace('<body>','<body>'+bootstrap+bar)
-        text=text.replace('</body>',f'<script src="../assets/{asset}.js"></script></body>')
-        index.write_text(text)
-    for ext in ['css','js']:shutil.copy2(repo/'internal/dashboard'/('evidence.'+ext),root/'assets'/(asset+'.'+ext))
-    shutil.copy2(repo/'internal/dashboard/context.js',root/'assets/context.js')
-    shutil.copy2(repo/'internal/dashboard/compare.js',root/'assets/compare.js')
+    compose_reader(root,selected,args.production,args.reader_tool)
     items=[]
     for p in sorted(root.rglob('*')):
         if not p.is_file() or p.name=='export-inventory.json':continue

@@ -16,11 +16,10 @@ REPO = BASE.parents[1]
 READER = BASE.parent / "v1.0-reader"
 sys.path.insert(0, str(READER))
 from graph_navigation import refresh_graph_navigation
+from compose import compose_reader, reader_tool
 
 
 def refresh_reader(root, production=False, *, legacy_navigation=True):
-    landing = root / "index.html"
-    landing.write_text(landing.read_text().replace("location.replace(lang+'/index.html?'+q.toString());", "addEventListener('DOMContentLoaded',()=>location.replace(lang+'/index.html?'+q.toString()),{once:true});"))
     inventory = json.loads((root / "export-inventory.json").read_text())
     if inventory.get("signed") is not False or inventory.get("delivery_mode", "reading") != "reading":
         raise ValueError("Reader refresh requires an unsigned reading copy")
@@ -33,20 +32,7 @@ def refresh_reader(root, production=False, *, legacy_navigation=True):
     if legacy_navigation:
         refresh_graph_navigation(root, catalog, saved)
     run = next(iter(catalog["runs"]))
-    for language in ("en", "zh-CN"):
-        page = root / language / "index.html"
-        text = page.read_text()
-        bootstrap = '<script>if(!new URL(location.href).searchParams.has("run")){const u=new URL(location.href);u.searchParams.set("run",' + json.dumps(run) + ');history.replaceState(null,"",u);}</script>'
-        text = text.replace("<body>", "<body>" + bootstrap)
-        asset = "evidence" if production else "evidence-preview"
-        text = text.replace("</head>", f'<link rel="stylesheet" href="../assets/{asset}.css"></head>')
-        text = text.replace("</body>", f'<script src="../assets/{asset}.js"></script></body>')
-        text = text.replace("const overviewQ=q+'&lens=default&detail=summary';", "const overviewQ=q+scopeQuery+'&lens=default&detail=summary';")
-        page.write_text(text)
-    for extension in ("css", "js"):
-        shutil.copy2(REPO / "internal/dashboard" / ("evidence." + extension), root / "assets" / (asset + "." + extension))
-    shutil.copy2(REPO / "internal/dashboard/context.js", root / "assets/context.js")
-    link_comparison(root, "index.html")
+    compose_reader(root, run, production)
     inventory["files"] = [
         {"path": str(p.relative_to(root)), "bytes": p.stat().st_size, "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
         for p in sorted(root.rglob("*")) if p.is_file() and p.name != "export-inventory.json"
@@ -54,16 +40,6 @@ def refresh_reader(root, production=False, *, legacy_navigation=True):
     inventory["bytes_excluding_inventory"] = sum(item["bytes"] for item in inventory["files"])
     inventory["reader_build" if production else "ui_review"] = {"formal_ui_approval": "approved"}
     (root / "export-inventory.json").write_text(json.dumps(inventory, indent=2) + "\n")
-
-
-def link_comparison(root, filename):
-    shutil.copy2(REPO / "internal/dashboard/compare.js", root / "assets/compare.js")
-    for language in ("en", "zh-CN"):
-        page = root / language / filename
-        text = page.read_text()
-        if "await window.AgentCompareUI.openFromURL(INITIAL);" not in text:
-            text = text.replace("await loadRun(first);", "await loadRun(first);\n  await window.AgentCompareUI.openFromURL(INITIAL);")
-        page.write_text(text)
 
 
 def extract_reader(source, root):
@@ -110,11 +86,11 @@ def main():
         shutil.copytree(args.archive.resolve(), target, dirs_exist_ok=True)
     for name in ("index.html", "home.js", "home.css", "home-apple.css", "diagrams.js", "diagrams.css"):
         shutil.copy2(BASE / name, target / name)
-    shutil.copytree(BASE / "media", target / "media")
     if not args.production:
+        shutil.copytree(BASE / "media", target / "media")
         shutil.copytree(args.archive.resolve(), target / "archive")
-    link_comparison(target if args.production else target / "archive", "replay.html")
-    subprocess.run([sys.executable, str(READER / "build.py"), "--output", str(target / "current")] + (["--production"] if args.production else []), check=True)
+    subprocess.run([reader_tool(), "-public", "-dir", target if args.production else target / "archive"], check=True)
+    subprocess.run([sys.executable, str(READER / "build.py"), "--output", str(target / "current"), "--reader-tool", str(reader_tool())] + (["--production"] if args.production else []), check=True)
     if args.screenshots:
         shutil.copytree(args.screenshots.resolve(), target / "screenshots")
     else:
@@ -155,8 +131,7 @@ def build_release_home(target):
         home = target / language / "index.html"
         shutil.copy2(home, target / language / "library.html")
         home.write_text(template.replace('<html lang="zh-CN">', f'<html lang="{language}">').replace('<head>', '<head><base href="../">'))
-    for name in ("refined.css", "refined.js"):
-        shutil.copy2(refined / name, target / name)
+    shutil.copy2(refined / "refined.css", target / "refined.css")
     shutil.copytree(refined / "media", target / "refined-media")
 
 

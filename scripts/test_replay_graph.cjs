@@ -1,7 +1,7 @@
 // Shared graph encoding must produce exactly the legacy reader's query results.
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const {gzipSync}=require('node:zlib'),{createHash,webcrypto}=require('node:crypto');
-const source=fs.readFileSync('internal/dashboard/replay.js','utf8');
+const source=['digest.js','replay.js'].map(name=>fs.readFileSync('internal/dashboard/'+name,'utf8')).join('\n');
 (async()=>{
   const files=new Map();
   const save=value=>{const b=Buffer.from(JSON.stringify(value)),sha=createHash('sha256').update(b).digest('hex'),path='data/'+sha+'.json.gz';files.set(path,gzipSync(b));return {path,sha256:sha,bytes:b.length};};

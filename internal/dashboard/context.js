@@ -235,6 +235,12 @@ window.AgentContextUI = (() => {
     state.source = source; state.node = ''; state.returnView = null; state.tab = 'conversation';
     resetPage(); syncControls(); open('conversation');
   }
+  const runListeners = new Set();
+  function onRunChange(listener) {
+    runListeners.add(listener);
+    if (run) listener(run,sessionScope);
+    return () => runListeners.delete(listener);
+  }
   function setRun(nextRun,nextScope = null) {
     if (!nextRun) return;
     window.AgentSearchUI?.scopeChanged(nextRun,nextScope);
@@ -261,6 +267,7 @@ window.AgentContextUI = (() => {
       restoreContent(saved?.preview,state);
     }
     refreshSummary();
+    for (const listener of runListeners) listener(run,sessionScope);
   }
   async function refreshSummary() {
     const request = ++summaryRequest, currentRun = run;
@@ -270,10 +277,12 @@ window.AgentContextUI = (() => {
       const coverageChanged = JSON.stringify([overview?.coverage,overview?.runtime_coverage,overview?.capture_policy]) !== JSON.stringify([value.coverage,value.runtime_coverage,value.capture_policy]);
       overview = value;
       const sections = coverageSections(value), reports = sections.sessions.length ? sections.sessions : sections.discoveries;
-      const sources = [...new Set(reports.map(c => c.source?.harness).filter(Boolean))];
-      const hints = [...new Set(reports.map(c => t(statusNames[c.status] || c.status)))];
+      const sources = [...new Set(reports.map(c => c.source?.harness).filter(s => s && s !== 'unknown'))];
+      const hints = [...new Set(reports.map(c => c.status).filter(s => s && s !== 'unknown').map(s => t(statusNames[s] || s)))];
       const processingHint = sections.processing.some(c=>!['ok','empty'].includes(c.status)) ? t('Processing diagnostics require attention') : '';
-      $('context-summary').textContent = [sessionScope ? t('Whole run counts') : '',sources.join(' / '), api.tx('{messages} message records · {calls} tool calls · {results} results', {messages:unknown(value.messages),calls:unknown(value.tool_calls),results:unknown(value.tool_results)}),reports.some(c=>c.prior_context) ? t('Includes prior context') : '',hints.length ? t('Session capture')+': '+hints.join(' / ') : ''].filter(Boolean).join(' · ');
+      const counts = [['{count} message records',value.messages],['{count} tool calls',value.tool_calls],['{count} tool results',value.tool_results]]
+        .filter(([,n]) => Number.isSafeInteger(n)).map(([key,count]) => api.tx(key,{count}));
+      $('context-summary').textContent = [sessionScope ? t('Whole run counts') : '',sources.join(' / '), ...counts, !counts.length ? t('Session counts not recorded') : '',reports.some(c=>c.prior_context) ? t('Includes prior context') : '',hints.length ? t('Session capture')+': '+hints.join(' / ') : ''].filter(Boolean).join(' · ');
       if (value.capture_policy) $('context-summary').textContent += ' · '+retentionText(value.capture_policy);
       if (coverageChanged) $('context-source').innerHTML = `<option value="">${e(t(sessionScope ? 'All sources in this session' : 'All recorded sessions'))}</option>` + sections.sessions.filter(c => c.source?.id && (!sessionScope || c.source.harness === sessionScope.harness && c.source.session_id === sessionScope.session_id)).map(c => `<option value="${e(c.source.id)}">${e(c.source.harness)} · ${e(c.source.session_id || c.source.id)}</option>`).join('');
       syncControls();
@@ -665,5 +674,5 @@ window.AgentContextUI = (() => {
     setPreview(choices,'search:'+source.id,reading.raw ? 1 : 0,{offsets,scroll:reading.scroll || 0,format:reading.format || 'bytes'});
   }
   function readerPosition(){return {offset:previewOffsets.at(-1),offsets:previewOffsets.slice(-512),scroll:$('content-body').scrollTop,raw:previewChoices[Number($('content-choice').value)]?.mode==='raw',format:$('content-format').value};}
-  return {init,setRun,setExternalTab,selectGraph,selectSource,linkedSession,open,persist,readableContent,coverageSections,borrowReader,releaseReader,searchEvidence,readerPosition,retentionPresentation,retentionText,contentReason,omissionText};
+  return {init,setRun,onRunChange,setExternalTab,selectGraph,selectSource,linkedSession,open,persist,readableContent,coverageSections,borrowReader,releaseReader,searchEvidence,readerPosition,retentionPresentation,retentionText,contentReason,omissionText};
 })();

@@ -31,13 +31,13 @@ def check_hosted_tour(site):
     for group in ("current", "recordings"):
         for inventory in (site / group).glob("*/export-inventory.json"):
             local = inventory.parent / "tour-assets"
-            for asset in ("driver-LICENSE.txt", "driver.css", "tour.css", "driver.js.iife.js", "tour.js"):
+            for asset in ("driver-LICENSE.txt", "tour.css", "tour.js"):
                 assert digest(local / asset) == digest(assets / asset), (inventory, asset)
             pages.extend((inventory.parent / lang / "index.html", local) for lang in ("en", "zh-CN"))
     for page, local in pages:
         text = page.read_text()
         base = site if '<base href="../">' in text else page.parent
-        for name in ("driver.css", "tour.css", "driver.js.iife.js", "tour.js"):
+        for name in ("tour.css", "tour.js"):
             href = Path(os.path.relpath(local / name, base)).as_posix()
             assert (local / name).is_file() and text.count(f'"{href}"') == 1, (page, href)
     return len(pages)
@@ -119,6 +119,7 @@ def main():
 
     try:
         url = f"http://127.0.0.1:{server.server_port}/{site.name}/"
+        run("node", "previews/v1.0-reader/check-interactions.cjs", url)
         run("node", "previews/v1.0-tour/check.cjs", url, report / "tour")
         run("node", "previews/v1.0-home/refined/check.cjs", url, report / "home")
         run("node", "previews/v1.0-home/check.cjs", url, report / "flows", site)

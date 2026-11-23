@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const {gzipSync,gunzipSync}=require('node:zlib');
 const {createHash,webcrypto}=require('node:crypto');
-const source=fs.readFileSync('internal/dashboard/replay.js','utf8');
+const source=['digest.js','replay.js'].map(name=>fs.readFileSync('internal/dashboard/'+name,'utf8')).join('\n');
 async function main(){
  const files=new Map(), hash=b=>createHash('sha256').update(b).digest('hex');
  const save=value=>{const b=Buffer.from(JSON.stringify(value)),sha=hash(b),path='data/'+sha+'.json.gz';files.set('/site/'+path,gzipSync(b));return {path,sha256:sha,bytes:b.length};};
@@ -198,6 +198,7 @@ async function catalogChecks(){
   const window={};
   if(options.offline)window.AgentProvOffline={manifest:()=>({schema_version:'agentprovenance.static_replay/v1',runs,summaries:catalog.summaries}),read:ref=>files.get('/site/'+ref.path)};
   const box={window,document:{querySelector:()=>({content:'/site/'})},location:new URL('https://example.test/site/en/replay.html'),URL,URLSearchParams,Map,Set,TextEncoder,TextDecoder,structuredClone,Response,DecompressionStream,crypto:webcrypto,btoa,atob,fetch:async url=>{const path=new URL(url).pathname;requests.push(path);if(options.fetch)return options.fetch(path);const bytes=files.get(path);return new Response(bytes||'missing',{status:bytes?200:404});}};
+  if(options.lan){delete box.crypto;vm.runInNewContext(fs.readFileSync('internal/dashboard/third_party/js-sha256/src/sha256.js','utf8'),box);}
   vm.runInNewContext(source,box);return window.AgentProvReplay;
  };
  const reader=setup();
@@ -226,8 +227,10 @@ async function catalogChecks(){
  }
  catalog.run_indexes.a=good;publish();
  const goodBytes=files.get('/site/'+good.path);
+ assert.equal((await setup({lan:true}).query('/api/summary?run=a')).value,'A');
  files.set('/site/'+good.path,gzipSync(Buffer.from('x'.repeat(good.bytes))));
  await assert.rejects(()=>setup().query('/api/summary?run=a'),/integrity check/);
+ await assert.rejects(()=>setup({lan:true}).query('/api/summary?run=a'),/integrity check/);
  files.delete('/site/'+good.path);
  const recovering=setup();await assert.rejects(()=>recovering.query('/api/summary?run=a'),/HTTP 404/);
  files.set('/site/'+good.path,goodBytes);assert.equal((await recovering.query('/api/summary?run=a')).value,'A');

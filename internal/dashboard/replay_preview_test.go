@@ -123,7 +123,7 @@ func TestReplayPreviewDownloadUsesFrozenInventory(t *testing.T) {
 	if _, err := m.server.DB.Exec(`INSERT INTO events (id,run_id,source,event_type,created_at,payload) VALUES ('late','preview-run','fixture','exec','2026-10-18T01:00:00Z','{"command":"later"}')`); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{base, base + "/files/en/index.html", base + "/files/zh-CN/index.html", base + "/files/assets/export.js", base + "/files/export-inventory.json"} {
+	for _, path := range []string{base, base + "/files/en/index.html", base + "/files/zh-CN/index.html", base + "/files/assets/reader.js", base + "/files/export-inventory.json"} {
 		w := previewCall(h, "GET", path, "")
 		if w.Code != 200 || w.Header().Get("Cache-Control") != "no-store" {
 			t.Fatalf("frozen file %s: %d %s", path, w.Code, w.Body.String())
