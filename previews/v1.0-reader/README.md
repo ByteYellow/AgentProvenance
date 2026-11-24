@@ -1,20 +1,12 @@
-# v1.0 reader review
+# v1.0 reader builder
 
 [中文](README.zh-CN.md)
 
-This candidate preserves the current Dashboard and adds a folded execution
-handoff panel, a Browser / Notebook session tab, saved capture observations,
-attachment reading, and recovery guidance. It reads the existing public APIs
-through the offline replay adapter. The approved reader is now shared with the
-formal Dashboard and offline exports through `internal/dashboard/evidence.js`
-and `evidence.css`.
-
-The retained preview now includes Workspace input/output revisions, file changes
-and operation receipts, Browser request/frame attribution fields, and a compact
-explanation of the three delivery modes. The original layout remains available.
-
-On 2026-11-17 the maintainer approved homepage and reader integration. This
-standalone build remains available for focused review; it does not publish or deploy.
+This directory builds the standalone v1.0 reading workbenches (task investigation,
+cross-environment execution, Workspace, Browser, and Notebook) from packaged
+unsigned reading copies. The unified Evidence Workbench is shared directly with
+the formal Dashboard and offline exports through `internal/dashboard/workbench.js`,
+`workbench.css`, and pure engine modules in `reader.js`.
 
 ## Build and open
 
@@ -26,95 +18,26 @@ python3 previews/v1.0-reader/build.py --output /tmp/agentprov-v1-reader
 python3 -m http.server 47920 --bind 127.0.0.1 --directory /tmp/agentprov-v1-reader
 ```
 
-Open <http://127.0.0.1:47920/>. The top navigation selects task investigation,
-cross-environment execution, Workspace, Browser, or Notebook. The original language switch
-and browser-language default remain available. Each example also opens through
-its `index.html` using `file://`.
+Open <http://127.0.0.1:47920/>. Each example also opens directly through its
+`index.html` using `file://`.
 
-## What to review
+## Fixtures and composition
 
-- The graph remains above the collapsed Agent session. Existing graph views,
-  Compare, timeline, and saved-file reading remain present.
-- Execution links navigate in both directions and locate the recorded source
-  tool call. Execution and capture status belong to the saved package. Its
-  delivery status is labeled **at packaging**; a saved receipt appears separately.
-- Browser / Notebook records expose native identities, saved bodies, screenshots,
-  static images, and HAR. Images and archives are loaded only after a click.
-- The Workspace tab reads saved tool results. It displays the before/after
-  revisions, manifest references, changed files and the matching operation
-  receipt. An inspection's previous receipt is not presented as a new operation.
-- Delivery details explain `reading`, `derived` and `originals`, along with the
-  current copy's status. Recipient trust verification uses an external policy.
-- Collection status retains observed capability changes, their times, scoped
-  counters, and unknown values. Recovery guidance distinguishes resending an
-  existing delivery from creating another execution attempt.
+- The investigation, execution, and Browser samples reuse the reviewed candidate
+  ZIPs in `docs/benchmarks/v1.0-candidate/replays`.
+- `fixtures/notebook-attachments.zip` preserves a synthetic Jupyter acceptance
+  capture with a static chart and kernel restart.
+- `fixtures/workspace-contract.zip` is an unsigned reading copy of the Linux x86
+  Workspace contract case (SHA-256 `4dc4230ee69e8e0f28d86e1671e584201fdb5799a82ee5cf0c34ae7526a2136a`).
+- `compose.py` and `graph_navigation.py` refresh the embedded workbench assets,
+  strip retired legacy scripts, refresh archived graph projections, and
+  regenerate `export-inventory.json` without mutating saved evidence records.
 
-The investigation, execution, and Browser samples reuse the reviewed candidate
-ZIPs in `docs/benchmarks/v1.0-candidate/replays`. The Notebook sample is a synthetic
-Jupyter acceptance capture with a static chart and a kernel restart. Its full
-reading copy is preserved in `fixtures/notebook-attachments.zip`; the earlier
-Claude Notebook sample remains unchanged in the candidate directory.
+## Verification
 
-`fixtures/workspace-contract.zip` is an unsigned reading copy of the Linux x86
-Workspace contract case, captured with CLI `d8a7b60` and native Sensor enabled.
-It contains the controlled fixture's files and saved results. Its SHA-256 is
-`4dc4230ee69e8e0f28d86e1671e584201fdb5799a82ee5cf0c34ae7526a2136a`.
-
-The builder preserves the evidence records, adds preview assets and the current
-shared content reader to a new copy,
-and regenerates the reading-copy file inventory. `review.json` records the
-selected examples. Each inventory records the original ZIP hash and approved
-layout. These remain unsigned reading copies.
-
-The reader refreshes the archived graph projections: model messages no longer
-count as artifacts, standalone calls and artifacts remain inspectable, and
-investigation counts follow the selected session. Saved evidence and attribution
-edges are unchanged. Capture details distinguish missing AppArmor/seccomp state
-snapshots from event loss and pending ingestion, using the saved execution scope.
-
-## Check interactions
-
-With Node.js, Playwright, and its Chromium browser installed:
-
-```sh
-AGENTPROV_PREVIEW_URL=http://127.0.0.1:47920 \
-  node previews/v1.0-reader/check.cjs /tmp/agentprov-v1-reader-check
-```
-
-The check covers nonzero graph drilldowns across runs and sessions, capture
-details, both directions of execution navigation, the exact source
-command, collapsed sessions, existing Compare, Workspace versions and receipts,
-delivery modes, Browser and Notebook body/image
-reading, script errors, and unexpected network requests. Screenshots and a JSON
-report are written under the chosen check directory.
-
-Check browser-language selection, English/Chinese mobile layout and disconnected
-reading for all five examples:
-
-```sh
-node previews/v1.0-reader/check-portable.cjs /tmp/agentprov-v1-reader /tmp/agentprov-v1-mobile-check
-```
-
-The preview keeps dropdown controls and uses a page-rendered picker where
-supported, with consistent typography, anchored placement and bounded scrolling.
-Other browsers retain their native picker. Check dropdown interaction and the
-saved file / raw object reader in English and Chinese, on desktop and mobile:
-
-```sh
-node previews/v1.0-reader/check-select.cjs /tmp/agentprov-v1-reader /tmp/agentprov-v1-select-check
-node previews/v1.0-reader/check-reader.cjs /tmp/agentprov-v1-reader /tmp/agentprov-v1-content-check
-```
-
-To review an actual selective Workspace export, build another copy using
-`--workspace-archive /path/to/selected.zip`. It must be an unsigned `reading`
-copy. The builder also reads the shared graph storage used by the final candidate.
-Then run `check-selection.cjs BUILD_DIR EXCLUDED_CONTEXT_ID CHECK_DIR` to check
-that the excluded record is absent and retained content still opens offline.
-The [recorded results](../../docs/benchmarks/v1.0-x86-completion/preview-final.json)
-include desktop, mobile, language and selection checks with screenshot hashes.
-
-The formal Dashboard embeds the same reader assets. The website build uses
-`--production` to replace review navigation with links back to the demo library.
-Downloaded copies hide site navigation when opened via `file://` and keep their
-own graph, search, comparison and content controls. The combined website checks
-run through `scripts/accept_demo_site.py`; original ZIPs remain unchanged.
+The formal Dashboard embeds the same workbench assets. The website build uses
+`--production` to link back to the demo library; downloaded copies hide site
+navigation when opened via `file://` and keep graph, search, comparison, and
+content controls. End-to-end checks run through `scripts/accept_demo_site.py`
+and `previews/v1.0-home/check-redesign.cjs`. Historical acceptance records are
+preserved in [preview-final.json](../../docs/benchmarks/v1.0-x86-completion/preview-final.json).

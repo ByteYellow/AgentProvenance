@@ -3381,5 +3381,12 @@
   "browser custody config is not a private bounded regular file": "浏览器进程归属配置须为接收方私有且大小受限的普通文件",
   "browser custody config changed during read": "读取期间浏览器进程归属配置发生变化",
   "browser custody config was replaced during read": "读取期间浏览器进程归属配置被替换",
-  "receiver-owned Browser custody is supported on Linux and macOS": "接收方浏览器进程归属验证支持 Linux 和 macOS"
+  "receiver-owned Browser custody is supported on Linux and macOS": "接收方浏览器进程归属验证支持 Linux 和 macOS",
+  "Operation rejected": "操作被拒绝",
+  "Error code": "错误码",
+  "Message": "说明",
+  "Next action": "建议下一步",
+  "conflict": "版本冲突",
+  "reread": "重新读取当前文件",
+  "Evidence Workbench": "证据工作台"
 }

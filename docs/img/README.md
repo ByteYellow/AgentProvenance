@@ -2,14 +2,25 @@
 
 English | [简体中文](README.zh-CN.md)
 
-Screenshots and short replay media referenced from the top-level `README.md`.
-The gallery and reader screenshots use `agentprov demo`; evidence screenshots
-come from the signed DeepSeek, snake, multi-agent and Kubernetes demo bundles.
+The current README uses desktop screenshots from the locally built demo website.
+Each view has an English and a `-zh-CN` image. Run IDs refer to the original public recordings.
+
+| Image | What is open |
+| --- | --- |
+| `demo-gallery.png` | Four featured investigations on the source homepage |
+| `workbench-compare.png` | Both saved versions of `output/diagnostics.json`, before and after repair |
+| `workbench-session.png` | DeepSeek's Bash result with seven tests in `run-dbc2adf273d4` |
+| `workbench-team.png` | The orchestration graph for `run-double-attempt` |
+| `workbench-placement.png` | Recorded workload and cgroup identities in `a2a-demo` |
+
+To refresh, serve a [local website build](../../previews/v1.0-home/README.md#approved-website-build)
+and run `node previews/v1.0-home/capture-readme.cjs http://127.0.0.1:58730/ docs/img` from the repository root.
+The script checks the selected runs and displayed evidence before taking each screenshot.
 
 ## Recorded Agent Context
 
 The v0.9.0 interface screenshots were captured on 2026-10-08 from the signed
-DeepSeek run `run-dbc2adf273d4`. They show the current viewer over the original
+DeepSeek run `run-dbc2adf273d4`. They show the v0.9 viewer over the original
 2026-09-28 evidence, not a new model run. Each has an English and a `-zh-CN` version.
 The images live with the [DeepSeek guide](../../demo/deepseek-context/README.md)
 so the CLI can embed and display them offline.
@@ -29,13 +40,10 @@ For the file view, choose File / Artifact, expand the source group and select
 
 ## Gallery and Evidence Graphs
 
-`demo-gallery.png` and `demo-gallery-zh-CN.png` were refreshed from the same
-build: seven signed replays and two evaluator guides. Earlier graph screenshots
-and playback clips below retain their original demo subjects.
+These older guide screenshots and playback clips retain their original UI and evidence.
 
 | File | What to capture |
 |------|-----------------|
-| `demo-gallery.png` | Signed replays and optional evaluator guides at `/demos/`, desktop width, dashboard theme. |
 | `demo-guide.png` | Formatted LLM Judge guide at `/demos/docs/llm-judge`, including section navigation and code-copy controls. |
 | `dashboard-graph-explorer-taint.png` | Graph Explorer with the **Data-flow · taint** lens selected on `run-snake-supervised`; the red dashed `possible_sensitive_data_flow` edges visible. |
 | `dashboard-side-panel-preview.png` | A node selected so the **Side Panel** shows Evidence + the artifact Preview (e.g. `workspace_file/snake.py`). |

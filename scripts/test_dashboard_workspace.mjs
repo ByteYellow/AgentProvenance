@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const scope = {window:{}};
-for(const name of ['workspace.js','context.js','search.js','search-engine.js','compare.js','compare-engine.js','replay.js','export.js']){
+for(const name of ['digest.js','graph-view.js','search-engine.js','compare-engine.js','display-helpers.js','replay.js','offline.js','workbench.js']){
   new vm.Script(fs.readFileSync(new URL('../internal/dashboard/'+name,import.meta.url),'utf8'),{filename:name});
 }
-vm.runInNewContext(fs.readFileSync(new URL('../internal/dashboard/workspace.js',import.meta.url),'utf8'),scope);
-const directory = scope.window.AgentWorkspaceUI.sessionDirectory;
+vm.runInNewContext(fs.readFileSync(new URL('../internal/dashboard/display-helpers.js',import.meta.url),'utf8'),scope);
+const directory = scope.window.AgentDisplayHelpers.sessionDirectory;
 const report = (id,session,parent = '',harness = 'codex',channel = 'transcript') => ({source:{id,harness,channel,session_id:session,parent_session_id:parent},status:'ok'});
 const data = {coverage:[report('a','parent'),report('b','child','parent'),report('c','child','parent','codex','hooks'),report('d','parent','','claude'),report('e','orphan','elsewhere'),report('f',''),report('g','fake','','launch','processing'),report('h','fake','','codex','discovery'),report('i','fake','','launch','runtime_correlation')],has_more_sources:true};
 const before = JSON.stringify(data), result = directory(data);

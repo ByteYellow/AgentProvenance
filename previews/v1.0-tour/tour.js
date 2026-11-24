@@ -1,275 +1,131 @@
-/* Hosted demo tour. The recorded evidence and underlying layout stay intact. */
+// The page owns its markup and readiness; the tour only highlights existing controls.
 (() => {
   'use strict';
-  const $ = selector => document.querySelector(selector);
-  // Keep the original key so returning visitors retain their tour preferences.
+  const $ = s => document.querySelector(s);
+  const t = (zh, en) => document.documentElement.lang.startsWith('zh') ? zh : en;
   const key = 'agentprov.onboarding.preview/v2';
-  const isHome = Boolean($('#app'));
-  if (!isHome && !$('#runoverview')) return;
-  const pageKind = isHome ? 'library' : 'recording';
-  const t = (cn, en) => document.documentElement.lang.startsWith('zh') ? cn : en;
-  const initialParams = new URLSearchParams(location.search);
-  let memory = {seen: {}, skipped: false}, tour = null, invite = null, saved = null, inviteTimer;
-  let forceInvite = initialParams.get('tour') === '1';
-  let waitingForCompare = initialParams.has('compare_a') || initialParams.has('compare_b');
-  function preferences() {
-    try {
-      const value = JSON.parse(localStorage.getItem(key));
-      if (value && value.seen && typeof value.seen === 'object') memory = value;
-    } catch (_) { /* The tour remains usable without browser storage. */ }
-    return memory;
-  }
+  let prefs = {seen:{}, skipped:false}, guide, trigger, forced = new URLSearchParams(location.search).get('tour') === '1';
+  try { const p = JSON.parse(localStorage.getItem(key)); if (p?.seen) prefs = p; } catch {}
+  const kind = () => document.body.dataset.tourPage;
   function remember(skip = false) {
-    const value = preferences();
-    value.seen[pageKind] = true;
-    if (skip) value.skipped = true;
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* Optional preference. */ }
-    forceInvite = false;
-    const url = new URL(location.href);
-    if (url.searchParams.has('tour')) { url.searchParams.delete('tour'); history.replaceState(history.state, '', url); }
-  }
-  function step(element, cn, en, bodyCN, bodyEN, options = {}) {
-    return {element, popover: {title: t(cn, en), description: t(bodyCN, bodyEN), side: 'bottom', align: 'start'}, ...options};
+    prefs.seen[kind()] = true;
+    if (skip) prefs.skipped = true;
+    try {localStorage.setItem(key, JSON.stringify(prefs));} catch {}
+    if (forced) {
+      forced = false;
+      const u = new URL(location.href); u.searchParams.delete('tour');
+      history.replaceState(history.state, '', u);
+    }
   }
   function steps() {
-    if (isHome) return [
-      step('[data-case="investigation"] .story-copy', '从一个真实案例开始', 'Start with a real case',
-        '这里的四个案例分别介绍任务调查、远端工作区、浏览器和多 Agent 协作。先选一个与你的问题接近的案例。',
-        'These four cases cover task investigation, remote workspaces, browsers and agent collaboration. Choose the one closest to your question.'),
-      step('[data-case="investigation"] .story-bottom', '先看经过，或直接看证据', 'Read the story or open the evidence',
-        '“案例经过”说明当时发生了什么。左侧主按钮直接打开对应记录；修复案例会预选修复前后的两次执行。',
-        'Case details explains what happened. The primary button opens the records; the repair case opens its before-and-after comparison.'),
-      step('.section-nav', '按用途找到入口', 'Find the right section',
-        '精选案例用于体验完整调查；专题与集成介绍具体方法；历史记录保留过去的案例。',
-        'Featured cases walk through investigations. Topics cover specific methods and integrations. The archive keeps earlier recordings.'),
-      step('#topics .section-head', '需要深入时，看专题和指南', 'Explore methods and integrations',
-        '这里集中放安全调查、关联方法和 AI 研判。每个专题都提供相应的实录或接入文档。',
-        'Find security investigations, evidence relationships and AI analysis here, with their recordings or integration guides.'),
-      step('#history', '旧案例仍然可以查看', 'Earlier cases remain available',
-        '历史报表修复、DeepSeek 开发任务和 Grok 调查都在案例档案中，保留各自的采集时间。',
-        'The archive includes earlier report repairs, DeepSeek development tasks and Grok investigations, with their original capture dates.'),
-      step('#capture', '接下来，记录自己的任务', 'Next, record your own task',
-        '体验完案例后，从“快速开始”进入本地采集。远端执行、Browser 和 Notebook 的指南也在这里。右上角可随时重新打开导览。',
-        'After exploring a case, use Quick start to record a local task. Remote execution, Browser and Notebook guides are here too. Reopen this tour from the header anytime.'),
-      step(matchMedia('(max-width:600px)').matches ? '#capture .links a:first-child' : '.top-nav a:nth-child(2)',
-        '用文档把 Demo 变成自己的工作流', 'Use the docs to build your own workflow',
-        '这个入口打开使用文档。第一次安装先看“快速开始”；随后按文档侧栏查找采集与部署、分析与追溯、接入与集成。遇到配置或命令问题时，可以回到这里查完整说明。',
-        'This opens the documentation. Start with Quick start, then use the sidebar for capture and deployment, investigation, and integrations. Return here for configuration and command details.')
-    ];
-    const group = (cn, en, items) => items.map(item => ({...item, data: {section: t(cn, en)}}));
-    const inSession = {onHighlightStarted: () => { $('#context-fold').open = true; }};
-    return [
-      ...group('范围与调查入口', 'Scope and investigation', [
-      step('#runsel', '先确认你正在查看哪次执行', 'Choose the execution to inspect',
-        '这里切换 Run，也就是一次执行记录。图谱、会话和正文都会随所选 Run 更新。',
-        'A Run is one recorded execution. This selector changes the graph, sessions and saved content together.'),
-      step('#session-directory-open', '看清这次执行由谁组成', 'See the sessions behind the run',
-        '打开会话目录，查看参与的 Agent 和来源。选择一个会话后，图谱与对话会聚焦到该会话，也可以返回整个 Run。',
-        'Open the session directory to see participating agents and sources. Selecting a session focuses its graph and conversation; you can return to the whole Run.'),
-      step('#session-relations-open', '追踪会话之间的协作', 'Trace relationships between sessions',
-        '这里查看已记录的父子、fork 和委派关系。展开关系可查看来源依据，并跳转到相关会话。',
-        'Inspect recorded parent, fork and delegation relationships. Expand a relationship to see its source evidence and open the related session.'),
-      step('#askgrid .qbtn', '从你要调查的问题入手', 'Start with an investigation question',
-        '这组入口分别聚焦风险、协作、工具调用、文件和网络。比如点这里，可以查看触发风险的行为及支持证据。',
-        'These entries focus on risks, collaboration, tool calls, files or network activity. This one opens risk-related behavior and its supporting evidence.'),
-      step('[data-investigation="search"]', '用关键词找到原始证据', 'Find evidence by keyword',
-        '搜索已保存的消息、工具输入输出和配置。命中后可以阅读上下文，再定位到对应记录或图谱。',
-        'Search saved messages, tool inputs, outputs and configuration. Read a match in context, then locate its record or graph evidence.'),
-      step('[data-investigation="compare"]', '解释两次执行有什么变化', 'Inspect changes between two Runs',
-        '选择基线 A 和目标 B，对照配置、文件、网络和访问控制。可交换两侧、只看差异；关闭后回到当前记录。',
-        'Choose a baseline A and target B to compare configuration, files, network and access control. Swap sides or show only differences; closing returns to this record.')
-      ]),
-      ...group('图谱与证据', 'Graph and evidence', [
-      step('#graphcard>h2', '图谱用来追踪关联', 'Follow relationships in the graph',
-        '左侧下拉切换协作、进程、文件和网络等视图；右侧选择摘要、展开或原始记录。点击节点后，统一详情区会展示它的关联依据。',
-        'The left selector switches between collaboration, process, file and network views. The right selector changes summary, expanded and raw detail. Select a node to inspect its evidence.'),
-      step('#scrub', '按时间阅读执行过程', 'Read the execution over time',
-        '有时间点时，可以播放或拖动滑条查看当时的节点和关系。摘要没有时间点时，可切换到展开或原始视图。',
-        'Use the slider to inspect nodes and edges at a recorded time. If the summary has no timestamps, try expanded or raw detail.'),
-      step('.zoombar', '把大图调整到合适尺度', 'Adjust the graph to a useful scale',
-        '使用加减按钮缩放，“适应宽度”重新收拢整张图。图很大时，先选择会话或调查问题，再查看局部。',
-        'Use plus and minus to zoom, or Fit to bring the graph back into view. For large graphs, first select a session or investigation question.'),
-      step('#graph-find', '在当前图中查找节点', 'Find a node in this graph',
-        '输入名称或证据 ID，按回车定位匹配项。聚焦节点后按回车可查看证据。',
-        'Enter a name or evidence ID and press Enter to locate a match. Press Enter on the focused node to inspect it.'),
-      step('#context-nav-files', '阅读正文，而不只是看节点', 'Read content, not just nodes',
-        '文件证据进入统一详情区，区分摘要、关联事件和已保存正文。正文有多份时可用下拉选择，长内容可以分页或放大阅读。',
-        'File evidence opens the shared reader for summaries, related events and saved content. Use the content selector for multiple versions, or paginate and expand long text.'),
-      step('.card.side>h2', '重要风险集中在这里', 'Find important risk signals here',
-        '这里汇总风险线索。点选一项可以继续定位相关记录，再结合原文和关联依据判断。',
-        'This area collects risk signals. Select one to locate the related records, then inspect their content and association basis.'),
-      step('.access-bar', '查看 AppArmor 与 seccomp 证据', 'Inspect AppArmor and seccomp evidence',
-        '这里分别展示审计记录、实际状态、配置声明和审计采集情况。点开一类查看原始记录，再核对执行结果。',
-        'Audit records, observed state, configuration declarations and audit collection are separate entries. Open a category to inspect its records alongside execution results.')
-      ]),
-      ...group('会话与执行细节', 'Sessions and execution details', [
-      step('#agentcontext .context-toolbar', '阅读完整的对话与工具调用', 'Read the conversation and tool calls',
-        '会话区保留任务、模型消息和工具输入输出。右侧下拉选择来源会话；较长记录可以在区块底部分页。',
-        'The session area contains tasks, model messages and tool inputs and outputs. Select a source session on the right and use the pager for longer records.', inSession),
-      step('#context-tab-configuration', '核对当时的权限与配置', 'Inspect recorded permissions and configuration',
-        '这里查看 Harness 配置、声明的工具权限和相关上下文。配置内容与上面的实际审计、执行结果分开保存。',
-        'Inspect harness configuration, declared tool permissions and related context. Configuration records are separate from audit observations and execution outcomes.', inSession),
-      step('#context-tab-coverage', '确认记录覆盖了哪些内容', 'Check what was captured',
-        '查看采集来源、basic／detailed 留存档位、主动省略与采集缺口。任务结果、采集覆盖与证据验证各有独立状态。',
-        'Check capture sources, basic or detailed retention, intentional omissions and collection gaps. Task outcome, capture coverage and verification have separate states.', inSession),
-      step('#portable-workspace-tab', '查看工作区版本与操作回执', 'Inspect workspace versions and receipts',
-        'Workspace 记录 Read、Edit、Write 和 Bash 的输入输出版本。打开“版本与回执”，查看修改前后内容、冲突及对应执行。',
-        'Workspace records input and output versions for Read, Edit, Write and Bash. Open Versions and receipt to inspect changes, conflicts and the linked execution.', inSession),
-      step('#portable-native-tab', '阅读 Browser 与 Notebook 原生记录', 'Read Browser and Notebook records',
-        'Browser 可查看操作、请求、下载和已保存附件；Notebook 可查看单元格、输出和图表。每条记录保留原生身份与关联依据。',
-        'Browser records include operations, requests, downloads and retained attachments. Notebook records include cells, outputs and charts, with native identities and association evidence.', inSession),
-      step('#portable-executions:not([hidden])>details>summary', '追踪跨环境执行交接', 'Trace execution across environments',
-        '展开后分别查看执行、采集和交付状态。可以跳转到远端执行，也能返回来源工具调用，继续阅读同一次交接的证据。',
-        'Expand to inspect execution, capture and delivery separately. Open the remote execution or return to its source tool call to follow the same handoff.')
-      ]),
-      ...group('交付与进一步调查', 'Sharing and further investigation', [
-      step('[data-investigation="export"]', '选择要分享的证据', 'Choose evidence to share',
-        '导出入口展示分享范围和记录选择。本地证据库可以生成离线阅读包；在线示例提供已有下载或说明所需的本地操作。',
-        'The export entry shows sharing scope and record selection. A local store can create an offline reader; online examples offer saved downloads or explain the local export workflow.'),
-      step('#portable-delivery-details', '了解这份副本如何验证', 'Understand verification of this copy',
-        '交付说明区分阅读副本、导出者签名副本和原件交付。文件完整性、签名信任及采集覆盖分别核对，签名由接收方自己的信任配置验证。',
-        'Delivery details distinguishes reading copies, exporter-signed copies and originals. File integrity, signer trust and capture coverage are checked separately using recipient-controlled trust.'),
-      step('#profile-fold>summary', '需要时核对执行范围', 'Check the execution scope',
-        '展开这里查看运行环境、采集来源及边界。调查跨容器、沙箱或 Guest 的行为时，可以先确认这些身份信息。',
-        'Expand this section for the runtime environment, capture sources and boundaries. Check these identities when investigating activity across containers, sandboxes or guests.'),
-      step('#timeline-fold>summary', '继续深入时间线与系统行为', 'Explore the timeline and system activity',
-        '下方按需展开时间线、进程树、外联明细和合规信息。它们补充整次 Run 的细节；右上角“页面导览”随时可以重新打开。',
-        'Expand the timeline, process tree, network and compliance sections below for whole-Run detail. Page tour in the header remains available whenever you need it.')
-      ])
-    ];
+    const out = [];
+    function add(selector, zh, en, descZh, descEn) {
+      const el = $(selector);
+      if (el?.getClientRects().length && !el.disabled) {
+        out.push({element:el, popover:{title:t(zh,en),description:t(descZh,descEn),side:'bottom',align:'start'}});
+      }
+    }
+    if (kind() === 'library') {
+      add('.hero-actions a', '先看一次修复前后对比', 'Start with a before/after comparison', '这里直接打开两次执行的文件差异，先看发生了什么变化。', 'This opens both runs on their file differences. Start with what changed.');
+      add('[data-case="investigation"] .actions-row', '从故事进入证据', 'From a case to its evidence', '主按钮进入实录；“案例经过”介绍任务背景、调查顺序和相关记录。', 'The main button opens the recording. Case details gives you the task, investigation path and related records.');
+      add('[data-case="remote"] .sub-links', '查看相关实录和指南', 'Find related recordings and guides', '每张卡片下方都有与该案例相关的文档或实录。这里可以打开 Claude 或 Kata 的工作区记录。', 'Each card links to relevant guides and runs. Here you can open the Claude or Kata workspace recording.');
+      add('#topics .section-head', '按问题找专题', 'Explore by topic', '从这里找安全调查、关联方法和 AI 研判的实录与接入说明。', 'Find recordings and guides for security investigations, evidence relationships and AI evaluation.');
+      add('#archive .chapter-btn', '查找其他案例', 'Browse the archive', '按分类查看 Linux x86、历史调查和采集档位，打开具体记录或下载可用的离线包。', 'Browse Linux x86, historical cases and capture presets. Open a recording or download an available offline copy.');
+      add('#capture h2', '录一次自己的任务', 'Record your own task', '快速开始给出本地命令。录制完成后可以用相同的工作台查看自己的证据。', 'The quick start shows the local commands. Then use the workbench to explore your own evidence.');
+      add(matchMedia('(max-width:600px)').matches ? '#capture a[href*="/guides/quickstart."]' : '.top-nav a[href*="/guides/start."]', '从这里看文档', 'Find the documentation', '从快速开始、部署到接入指南，文档按任务组织。随时可以从页首重新打开导览。', 'Find setup, deployment and integration guides by task. Reopen the tour from the header anytime.');
+      return out;
+    }
+    add('#wb-runsel','先确认执行记录','Choose the run','切换这里会换掉整份证据。先核对任务和运行，再看具体事件。','This selects the whole evidence set. Check the run before investigating individual events.');
+    add('#wb-scopesel','按会话缩小范围','Choose a session','在有多个会话的执行中，可只看其中一个，也可以随时回到整个 Run。','In a multi-session run, narrow the scope to a session or return to the whole run.');
+    add('.wb-tabs','选择调查视图','Choose an investigation view','图谱、会话、风险、合规和时间线分别回答不同问题。工作区与 Browser 等视图按实录内容出现。','Graph, sessions, risk, compliance and timeline answer different questions. Extra views appear when their records are available.');
+    add('#wb-lens-strip','换个角度看图','Choose a graph lens','按文件、网络或协作关系聚焦；视角的数字描述当前记录。','Focus on files, network activity or collaboration using the available lenses.');
+    add('.wb-graph-tools .wb-seg','选择图谱详细程度','Choose graph detail','摘要用于看全貌；展开或原始视图便于追踪节点和时间。','Start with the summary. Expanded and raw views help trace nodes and time.');
+    add('#wb-inspector','点节点读证据','Inspect a graph node','选中节点后，在这里核对关联来源、事件和保存的内容。','Select a node to inspect its sources, events and retained content here.');
+    add('#ws-list .wb-row-btn.on','选择一次工作区操作','Select a workspace operation','每一行是一条工具结果。冲突、成功回执和文件变更分别展示。','Each row is a tool result. Rejected operations, successful receipts and file changes are shown separately.');
+    add('#ws-detail h3','核对版本与实际产物','Check revisions and file changes','这里显示所选调用的回执；比较输入输出版本、文件哈希和原始结果。','Inspect this call’s receipt, its input and output revisions, file hashes and the saved result.');
+    add('#nat-list .wb-row-btn.on','选择原生记录','Choose a native record','从操作、导航或 Notebook 消息进入详情。附件数量是已保存的数量。','Select an operation, navigation or notebook message. The attachment count describes what was saved.');
+    add('#nat-detail h3','读取正文和附件','Read content and attachments','读取附件时会核对 SHA-256；当前记录保留的正文也在这里。','SHA-256 is checked when an attachment is read. Retained content for the selected record appears here.');
+    add('#handoff-body > :first-child','追踪跨环境交接','Trace a handoff','分别核对来源调用、执行实例和证据交付状态。','Inspect the source call, execution instance and evidence delivery separately.');
+    add('[data-mode="session"]','回看对话与工具','Inspect sessions and tools','在这里核对 Agent 收到的任务、工具输入输出，以及保存了哪些内容。','Use this view for task messages, tool inputs and outputs, and retention details.');
+    add('[data-mode="risk"]','核对风险和访问控制','Inspect risk and access control','这里既有风险线索，也有实际访问控制记录，分别阅读。','Investigate risk signals alongside the recorded access-control decisions.');
+    add('[data-mode="compliance"]','查看合规映射','Review compliance mappings','查看规则映射与本次执行记录到的证据。','Inspect the control mappings and the supporting evidence in this run.');
+    add('[data-mode="timeline"]','按时间追踪','Follow the timeline','从时间线继续追查进程和记录到的系统事件。','Use the timeline to follow processes and recorded system events.');
+    add('#wb-btn-search','搜已保存的原文','Search saved evidence','按关键词找消息、输出和文件证据，再返回当前现场。','Search messages, output and file evidence by keyword, then return to the current view.');
+    add('#wb-btn-compare','比较两次执行','Compare two runs','选定 A 和 B 后可以按文件、配置或网络查看差异。','Select A and B to compare files, configuration or network evidence.');
+    add('#wb-verify','查看校验范围','Check what was verified','这里说明图完整性、阅读副本与签名信任。点击页首按钮可随时重看导览。','See graph integrity, copy type and signer trust separately. Use the header to reopen the tour anytime.');
+    return out;
   }
-  function restore() {
-    const state = saved;
-    saved = null;
-    if (!state) return;
-    if (state.fold) state.fold.open = state.foldOpen;
-    requestAnimationFrame(() => {
-      window.scrollTo({left: state.x, top: state.y, behavior: 'instant'});
-      const target = state.focus?.isConnected && state.focus !== document.body ? state.focus : $('#page-tour-start');
-      target?.focus({preventScroll: true});
-    });
+
+  function hideInvitation() {
+    const slot=$('[data-tour-slot]');
+    if (slot) {slot.hidden=true; slot.replaceChildren();}
+    trigger?.classList.remove('tour-invited');
   }
-  let starting=false;
-  async function start() {
-    if (starting || tour?.isActive() || $('dialog[open]')) return;
-    starting=true;
-    invite?.destroy();
-    try {await window.AgentPortableEvidenceUI?.prepareSessionTabs?.();} finally {starting=false;}
-    if ($('dialog[open]')) return;
-    const fold = $('#context-fold');
-    saved = {x: scrollX, y: scrollY, focus: document.activeElement, fold, foldOpen: fold?.open};
-    const selected = steps().filter(item => {const target=$(item.element);return target && !target.hidden;});
-    remember();
-    tour = window.driver.js.driver({
-      steps: selected,
-      animate: !matchMedia('(prefers-reduced-motion: reduce)').matches,
-      duration: 180, smoothScroll: false, overlayColor: '#18202b', overlayOpacity: 0.48,
-      stagePadding: 7, stageRadius: 8, popoverOffset: 14,
-      disableActiveInteraction: true, overlayClickBehavior: 'none', focus: 'popover',
-      showButtons: ['previous', 'next'], showProgress: true,
-      progressText: '{{current}} / {{total}}',
-      nextBtnText: t('下一步', 'Next'), prevBtnText: t('上一步', 'Back'), doneBtnText: t('开始探索', 'Start exploring'),
-      popoverClass: 'agentprov-tour',
-      onPopoverRender(popover, opts) {
-        const caption = document.createElement('div'); caption.className = 'tour-caption';
-        const current = selected[opts.index];
-        popover.wrapper.dataset.tourTarget = current.element;
-        const label = document.createElement('span'); label.textContent = current.data?.section || t('认识示例库', 'DEMO LIBRARY TOUR');
-        caption.append(label, popover.progress); popover.title.before(caption);
-        const meter = document.createElement('div'); meter.className = 'tour-meter'; meter.setAttribute('aria-hidden', 'true');
-        const bar = document.createElement('span'); bar.style.width = ((opts.index + 1) / selected.length * 100) + '%'; meter.append(bar); caption.after(meter);
-        const skip = document.createElement('button'); skip.type = 'button'; skip.className = 'tour-skip'; skip.textContent = t('跳过全部', 'Skip all');
-        skip.onclick = () => { remember(true); tour.destroy(); };
-        popover.footer.prepend(skip);
+  function alignInvitation() {
+    const tip=$('#page-tour-invite');
+    if (!tip || !trigger) return;
+    tip.style.marginLeft='0px';
+    const slot=tip.parentElement.getBoundingClientRect(), btn=trigger.getBoundingClientRect();
+    const center=(btn.left+btn.right)/2-slot.left, width=tip.offsetWidth;
+    const left=Math.max(8,Math.min(slot.width-width-8,center-width+28));
+    tip.style.marginLeft=left+'px';
+    tip.style.setProperty('--tour-arrow', Math.max(12, Math.min(width-16,center-left))+'px');
+  }
+  function offer() {
+    if (!trigger?.isConnected || guide || $('dialog[open]') || (!forced && (prefs.skipped || prefs.seen[kind()]))) {hideInvitation();return;}
+    const slot=$('[data-tour-slot]');
+    if (!slot || !slot.hidden || scrollY>16) return;
+    const tip=document.createElement('aside'); tip.id='page-tour-invite';
+    tip.setAttribute('aria-label',t('页面导览提示','Page tour hint'));
+    const message=document.createElement('span');
+    message.textContent=t('初次来到这里？点击「页面导览」逐步认识界面。','New here? Select Page tour for a walkthrough.');
+    const close=document.createElement('button'); close.type='button'; close.textContent='×';
+    close.setAttribute('aria-label',t('关闭导览提示','Dismiss tour hint'));
+    close.onclick=()=>{remember();hideInvitation();trigger.focus({preventScroll:true});};
+    tip.append(message, close);slot.append(tip);slot.hidden=false;
+    trigger.classList.add('tour-invited');alignInvitation();
+  }
+  function start() {
+    if (guide || $('dialog[open]')) return;
+    const choices=steps(); if(!choices.length) return;
+    const focus=document.activeElement; hideInvitation();remember();
+    const positions=[document.scrollingElement,...document.querySelectorAll('.wb-subbar,.wb-lens-strip,.wb-inspector,.wb-list-scroll,.wb-detail-col,.wb-scroll-page,.top-nav')]
+      .filter(Boolean).map(el=>[el,el.scrollLeft,el.scrollTop]);
+    guide=window.driver.js.driver({
+      steps:choices, animate:!matchMedia('(prefers-reduced-motion: reduce)').matches, smoothScroll:false,
+      disableActiveInteraction:true, overlayClickBehavior:'none', overlayColor:'#18202b',overlayOpacity:0.45,
+      focus:'popover',stagePadding:5,stageRadius:8,popoverOffset:12,
+      showButtons:['previous','next'],showProgress:true,progressText:'{{current}} / {{total}}',
+      popoverClass:'agentprov-tour',nextBtnText:t('下一步','Next'),prevBtnText:t('上一步','Back'),doneBtnText:t('开始探索','Start exploring'),
+      onPopoverRender(popover) {
+        const skip=document.createElement('button');skip.type='button';skip.className='tour-skip';skip.textContent=t('跳过全部','Skip all');
+        skip.onclick=()=>{remember(true);guide.destroy();};popover.footer.prepend(skip);
       },
-      onDestroyed: restore
+      onDestroyed() {
+        guide=null;
+        requestAnimationFrame(()=>{
+          for(const [el,x,y] of positions) if(el.isConnected) el.scrollTo({left:x,top:y,behavior:'instant'});
+          (focus?.isConnected && focus!==document.body ? focus : trigger)?.focus({preventScroll:true});
+        });
+      }
     });
-    tour.drive();
+    guide.drive();
   }
   function ready() {
-    return isHome ? Boolean($('[data-case="investigation"] .story-bottom')) : Boolean($('#runsel')?.options.length && $('#askgrid .qbtn'));
+    if (!kind() || !window.driver?.js?.driver) return;
+    const button=$('#page-tour-start');
+    if (!button) return;
+    trigger=button; button.onclick=start; button.hidden=false;
+    offer();
   }
-  function offerTour() {
-    clearTimeout(inviteTimer);
-    inviteTimer = setTimeout(() => {
-      if(starting)return;
-      const button = $('#page-tour-start'), pref = preferences();
-      if (!button || waitingForCompare || $('dialog[open]')) { invite?.destroy(); return; }
-      if (tour?.isActive() || (!forceInvite && (pref.skipped || pref.seen[pageKind]))) return;
-      const rect = button.getBoundingClientRect();
-      if (rect.top < 0 || rect.bottom > innerHeight) { invite?.destroy(); return; }
-      if (invite?.isActive()) return;
-      const headerBottom = button.closest('header')?.getBoundingClientRect().bottom ?? rect.bottom;
-      let spacer, resize;
-      button.classList.add('tour-invited');
-      invite = window.driver.js.driver({
-        animate: false, overlayOpacity: 0, allowPageInteraction: true, focus: 'none',
-        scrollIntoView: false, overlayClickBehavior: 'none', showButtons: ['close'],
-        popoverClass: 'agentprov-tour-invite', stagePadding: 5,
-        popoverOffset: Math.max(15, Math.ceil(headerBottom - rect.bottom) + 12),
-        closeBtnLabel: t('关闭导览提示', 'Dismiss tour hint'),
-        onPopoverRender(popover) {
-          popover.wrapper.id = 'page-tour-invite';
-          popover.wrapper.setAttribute('role', 'region');
-          popover.wrapper.removeAttribute('aria-modal');
-          popover.wrapper.setAttribute('aria-live', 'polite');
-          // The reader's action toolbar sits immediately below the header.
-          if (!isHome) {
-            spacer = document.createElement('div');
-            spacer.setAttribute('aria-hidden', 'true');
-            button.closest('header').after(spacer);
-            resize = new ResizeObserver(() => {
-              spacer.style.height = Math.ceil(popover.wrapper.getBoundingClientRect().height + 24) + 'px';
-            });
-            resize.observe(popover.wrapper);
-          }
-        },
-        onDestroyed(_, __, opts) {
-          resize?.disconnect(); spacer?.remove();
-          button.classList.remove('tour-invited');
-          invite = null;
-          if (opts.reason === 'close' || opts.reason === 'escape') remember();
-        }
-      });
-      invite.highlight({element: button, popover: {
-        title: t(isHome ? '从这里认识示例库' : '从这里认识执行记录', isHome ? 'Get to know the demo library' : 'Get to know this recording'),
-        description: t('点击上方“页面导览”，逐步了解各个区域和常用操作。', 'Click Page tour above to learn about each area and the main actions.'),
-        side: 'bottom', align: 'end', showButtons: ['close']
-      }});
-    }, 300);
+  // Native dialogs always win, including a comparison opened during initial load.
+  const modalObserver=new MutationObserver(offer);
+  function bind() {
+    document.querySelectorAll('dialog').forEach(d=>modalObserver.observe(d,{attributes:true,attributeFilter:['open']}));
+    ready();
   }
-  function install() {
-    if (!ready()) return;
-    const anchor = isHome ? $('.languages') : $('.language-switch');
-    if (anchor && !$('#page-tour-start')) {
-      const button = document.createElement('button'); button.id = 'page-tour-start'; button.type = 'button';
-      button.innerHTML = '<span class="tour-help-icon" aria-hidden="true">?</span><span class="tour-help-label"></span>';
-      button.onclick = start; anchor.before(button);
-    }
-    const button = $('#page-tour-start');
-    if (button) { button.querySelector('.tour-help-label').textContent = t('页面导览', 'Page tour'); button.title = button.ariaLabel = t('打开页面导览', 'Open the page tour'); }
-    if (invite && !invite.getActiveElement()?.isConnected) invite.destroy();
-    offerTour();
-  }
-  function boot() {
-    if (!window.driver?.js?.driver) return;
-    install();
-    if (isHome) document.addEventListener('agentprov:home-rendered',install);
-    else if (!ready()) {
-      // Cached historical shells may finish loading after the tour script.
-      const loaded = new MutationObserver(() => {if(ready()){loaded.disconnect();install();}});
-      loaded.observe($('#askgrid'), {childList:true});
-    }
-    // Compare deep links open asynchronously. Keep their entire modal session first.
-    document.addEventListener('close', event => {
-      if (event.target.id === 'compare-dialog') waitingForCompare = false;
-      offerTour();
-    }, true);
-    new MutationObserver(() => { if ($('dialog[open]')) invite?.destroy(); offerTour(); })
-      .observe(document.body, {subtree: true, attributes: true, attributeFilter: ['open']});
-    window.addEventListener('scroll', offerTour, {passive: true});
-    window.addEventListener('resize', () => { invite?.destroy(); offerTour(); });
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, {once: true});
-  else boot();
+  document.addEventListener('agentprov:tour-ready',bind);
+  document.addEventListener('close',offer,true);
+  addEventListener('resize',alignInvitation);
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',bind,{once:true}); else bind();
 })();

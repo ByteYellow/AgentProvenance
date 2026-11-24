@@ -1,286 +1,561 @@
 'use strict';
-const root = document.querySelector('#app');
-const dialog = document.querySelector('#case-dialog');
-const url = new URL(location.href);
-const production = document.body.dataset.site === 'production';
-const approvedHome = production || document.body.dataset.preview === 'refined';
-const archivePrefix = production ? '' : 'archive/';
-let preferredLanguage = '';
-try { preferredLanguage = localStorage.getItem('agentprov_language') || ''; } catch {}
-const pathLanguage = /\/(en|zh-CN)\/(?:index\.html)?$/.exec(url.pathname)?.[1];
-let lang = url.searchParams.get('lang') || (production ? pathLanguage || preferredLanguage || (navigator.language.startsWith('zh') ? 'zh-CN' : 'en') : 'zh-CN');
-lang = lang === 'en' ? 'en' : 'zh-CN';
-let activeStory = null;
-const t = (zh, en) => lang === 'zh-CN' ? zh : en;
-const escapeHTML = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-const icons = {
-  arrow:'<path d="M5 12h14m-5-5 5 5-5 5"/>',
-  chevron:'<path d="m9 5 7 7-7 7"/>',
-  play:'<path d="m8 5 11 7-11 7Z"/>',
-  compare:'<path d="m16 3 4 4-4 4M4 7h16M8 21l-4-4 4-4m12 4H4"/>',
-  file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8m-8 4h5"/>',
-  command:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 8 4 4-4 4m6 0h4"/>',
-  browser:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01M13 6.5h.01"/>',
-  team:'<rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4m-7 4v-4h14v4"/>',
-  shield:'<path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6Z"/><path d="m8 12 3 3 5-6"/>',
-  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-  archive:'<rect x="3" y="3" width="18" height="4" rx="1"/><path d="M5 7v13h14V7M10 11h4"/>',
-  layers:'<path d="m12 3 10 5-10 5L2 8Zm-10 9 10 5 10-5M2 17l10 5 10-5"/>'
-};
-const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`;
-const link = (href, label, cls = '', extra = '') => `<a href="${escapeHTML(production && href.startsWith('#') ? location.pathname + location.search + href : href)}" class="${cls}" ${extra}>${label}</a>`;
-const guideLink = (href, label) => link(href, icon('file') + '<span>' + label + '</span>');
-const guide = id => `${archivePrefix}${lang}/guides/${id}.html`;
-const originalGuide = id => `${archivePrefix}${lang}/demos/${id}.html`;
-const historical = (run, lens = 'default') => `${archivePrefix}${lang}/replay.html?${new URLSearchParams({run,lens,live:'0',detail:'summary'})}`;
-const current = (kind, run, lens = 'default') => `current/${kind}/${lang}/index.html?${new URLSearchParams({run,lens,live:'0',detail:'summary'})}`;
-const realNotebook = preset => `recordings/notebook-${preset}/${lang}/index.html?live=0`;
-const primary = (href, text) => link(href, icon('play') + text, 'button primary');
-const compareLink = href => link(href, icon('compare') + t('对比修复前后','Compare before & after'), 'button primary compare-action');
-const currentInvestigation = () => current('investigation','run-3bfc6838a9c6');
-const workspace = () => current('workspace','run-w01-445a3a164ae14723b82f90634cff96f5','file-artifact');
-const browser = () => current('browser','run-da25e015ca1f');
-const team = () => historical('run-double-attempt','orchestration');
-const comparison = (href, a, b) => {
-  const target = new URL(href, document.baseURI);
-  target.searchParams.set('compare_a', a);
-  target.searchParams.set('compare_b', b);
-  return target.href;
-};
-const investigationCompare = () => comparison(currentInvestigation(), 'run-860466af8a9a', 'run-3bfc6838a9c6');
-const historicalCompare = (a, b) => comparison(historical(a), a, b);
+(() => {
+  const root = document.querySelector('#app');
+  const dialog = document.querySelector('#case-dialog');
+  const url = new URL(location.href);
+  let preferred = '';
+  try { preferred = localStorage.getItem('agentprov_language') || ''; } catch {}
+  const pathLang = /\/(en|zh-CN)\/(?:index\.html)?$/.exec(url.pathname)?.[1];
+  let lang = url.searchParams.get('lang') || pathLang || preferred || (navigator.language.startsWith('zh') ? 'zh-CN' : 'en');
+  lang = lang === 'en' ? 'en' : 'zh-CN';
+  let activeCase = null;
 
-function x86Cases(group) {
-  return group === 'remote' ? [
-    ['workspace-harness',t('Claude 工作区','Claude workspace'),t('沿 Read、Edit、Write、Bash 核对输入版本与最终文件。','Follow Read, Edit, Write and Bash through the input revisions and final file.')],
-    ['kata-harness','Kata/QEMU',t('查看同类 Claude 工作区任务在 Kata Guest 内留下的记录。','Inspect a separate Claude workspace task recorded inside a Kata guest.')],
-    ['kata-boot-1',t('Kata 首次启动','First Kata boot'),t('查看首次启动的 Guest 身份及其执行记录。','Inspect the identity and execution of the first guest.')],
-    ['kata-boot-2',t('Kata 重建后','Rebuilt Kata guest'),t('查看重建后独立的 Guest 和运行记录。','Inspect the distinct guest identity and run after rebuilding.')],
-    ['kata-contract',t('Kata 工作区版本','Kata workspace revisions'),t('核对受控任务的工作区操作与版本回执。','Inspect the workspace operations and revision receipts from the controlled task.')]
-  ] : group === 'native' ? [
-    ['browser-sensor-on',t('Browser 开启 Sensor','Browser with Sensor'),t('查看并发页面、请求、OS 关联和三份已保存的 HAR。','Explore concurrent pages, requests, OS relationships and three saved HAR attachments.')],
-    ['browser-crash-recovery',t('中断恢复','Interruption & recovery'),t('对照中断前后两代会话。未完成的操作保留为未知。','Compare the two browser generations. The interrupted operation retains an unknown outcome.')]
-  ] : [];
-}
-const x86Reader = id => `recordings/x86-${id}/${lang}/index.html?live=0`;
-function x86Shortcuts(group) {
-  const cases = x86Cases(group).slice(0,2);
-  return cases.length ? `<div class="story-foot x86-recordings"><span>${t('Linux x86 实录','Linux x86 recordings')}</span>${cases.map(([id,title])=>link(x86Reader(id),title)).join('')}</div>` : '';
-}
-function x86Details(group) {
-  return x86Cases(group).map(([id,title,copy])=>record(title,t('Linux x86 实录','Linux x86 recording'),copy,
-    primary(x86Reader(id),t('打开实录','Open recording'))+link('downloads/x86-'+id+'.zip',t('下载只读回放','Download replay'),'','download'))).join('');
-}
+  const t = (zh, en) => (lang === 'zh-CN' ? zh : en);
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-function stories() {
-  return [
-    {id:'investigation',icon:'file',kicker:t('任务调查与修复','Investigate & compare'),badge:t('执行实录','Recorded'),title:t('读懂一次任务的执行','Understand an agent run'),description:t('从 DeepSeek 的任务与工具结果，追到文件、网络证据，再比较修复前后的变化。','From the DeepSeek task to its tools, files and network activity. Compare what changed after the repair.'),href:investigationCompare(),caption:t('文件与产物 · 保存的证据图','Files & artifacts · Recorded graph'),actions:compareLink(investigationCompare()),foot:t('DeepSeek · 两次执行','DeepSeek · Two executions')},
-    {id:'remote',icon:'command',kicker:t('工作区与跨环境执行','Workspace & remote execution'),badge:t('v1.0 新增','New in v1.0'),fresh:true,title:t('远端执行，有据可查','Follow execution across environments'),description:t('核对工作区的输入、修改和最终文件；从跨环境记录继续查看调用交接与恢复回执。','Inspect workspace inputs, edits and output files. Follow handoffs and recovered receipts in a companion recording.'),href:workspace(),caption:t('工作区操作 · 输入与输出版本','Workspace operation · Input & output revisions'),actions:primary(workspace(),t('查看工作区','Open workspace')),foot:t('Linux x86 实录 · 含独立交接案例','Linux x86 recording · Separate handoff case')},
-    {id:'native',icon:'browser',kicker:t('Browser 与 Notebook','Browser & Notebook'),badge:t('v1.0 新增','New in v1.0'),fresh:true,title:t('从操作，看到真实结果','From an action to its result'),description:t('查看网页操作、请求与截图，阅读 Notebook 代码和输出。每条记录保留原生身份。','Inspect browser actions, requests and screenshots, or notebook code and output, with native record identities.'),href:browser(),caption:t('浏览器任务 · 会话与工具记录','Browser task · Session & tool records'),actions:primary(browser(),'Browser')+link(realNotebook('detailed'),'Notebook','button'),foot:t('真实 Agent 任务 · 应用上下文','Real agent tasks · Application context')},
-    {id:'team',icon:'team',kicker:t('多 Agent 协作','Multi-agent collaboration'),badge:t('经典实录','Historical'),title:t('协作的来龙去脉，一路追踪','Follow the work between agents'),description:t('沿着 Alice 与 Bob 的消息、委派和工具调用，查看谁发起任务、谁实际执行。','Follow Alice and Bob through messages, delegation and tool calls to see who initiated the work and who executed it.'),href:team(),caption:t('Agent 协作 · 消息与调用关系','Agent collaboration · Messages & calls'),actions:primary(team(),t('查看协作图','Open team graph')),foot:t('保留原始采集日期与证据引用','Original capture dates & evidence references')}
-  ];
-}
+  const ICONS = {
+    shield: '<path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+    compare: '<path d="m16 3 4 4-4 4M4 7h16M8 21l-4-4 4-4m12 4H4"/>',
+    play: '<path d="m8 5 11 7-11 7Z"/>',
+    chevron: '<path d="m9 6 6 6-6 6"/>',
+    back: '<path d="m15 6-6 6 6 6"/>',
+    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8m-8 4h5"/>',
+    terminal: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3m5 0h5"/>',
+    browser: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01M13 6.5h.01"/>',
+    team: '<rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4m-7 4v-4h14v4"/>',
+    layers: '<path d="m12 3 10 5-10 5L2 8Zm-10 9 10 5 10-5M2 17l10 5 10-5"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    cpu: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 1v3m6-3v3M9 20v3m6-3v3M20 9h3m-3 6h3M1 9h3m-3 6h3"/>'
+  };
+  const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
 
-function topic(symbol, label, title, description, actions, guides) {
-  return `<article class="topic-card"><div class="topic-label">${icon(symbol)}<span>${label}</span></div><h3>${title}</h3><p>${description}</p><div class="topic-footer">${actions?`<div class="links topic-action">${actions}</div>`:''}<div class="topic-guides"><div class="links">${guides}</div></div></div></article>`;
-}
-
-const captions = () => ({
-  investigation: t('修复前后 · 文件证据对比节选', 'Before and after · File comparison excerpt'),
-  remote: t('工作区 · 最终文件记录节选', 'Workspace · Recorded output file'),
-  native: t('Browser · 保存的页面截图局部', 'Browser · Saved screenshot detail'),
-  team: t('Alice 与 Bob · 协作关系局部', 'Alice and Bob · Collaboration detail')
-});
-const descriptions = () => ({
-  investigation: t('从任务与工具调用追到文件、网络，直接对比修复前后的记录。', 'Follow a task through its tools, files and network activity. Compare the recordings before and after repair.'),
-  remote: t('查看远端工作区中的输入、修改与最终文件，继续追踪执行交接。', 'Inspect the inputs, edits and final files in a remote workspace. Continue into the execution handoff.'),
-  native: t('阅读网页操作、请求与截图，以及 Notebook 中保存的代码和输出。', 'Read browser actions, requests and screenshots, alongside saved notebook code and output.'),
-  team: t('沿着消息、委派和工具调用，看清谁发起任务、谁实际执行。', 'Follow messages, delegation and tool calls to see who started the work and who carried it out.')
-});
-function storyCard(s) {
-  if (approvedHome) {
-    const copy=descriptions(),caption=captions();
-    return `<article class="story" data-case="${s.id}">
-      <div class="story-copy"><div class="story-head"><span class="story-icon">${icon(s.icon)}</span><span class="kicker">${s.kicker}</span>${s.fresh?`<span class="tag new">${t('1.0 新增','New in 1.0')}</span>`:''}</div>
-      <h3>${s.title}</h3><p class="description">${copy[s.id]}</p></div>
-      <figure class="story-preview">${link(s.href,`<img src="refined-media/${s.id}-${lang}.png" width="640" height="252" alt="${escapeHTML(caption[s.id])}" decoding="async" loading="${s.id==='investigation'||s.id==='remote'?'eager':'lazy'}">`,'preview-link')}<figcaption>${icon(s.id==='native'?'browser':s.id==='team'?'team':'file')}<span>${caption[s.id]}</span></figcaption></figure>
-      <div class="story-actions"><div class="story-bottom">${s.actions}<button class="text-button" data-story="${s.id}">${t('案例经过','Case details')}${icon('chevron')}</button></div>${x86Shortcuts(s.id)}</div>
-    </article>`;
-  }
-  return `<article class="story" data-case="${s.id}"><div class="story-copy"><div class="story-head"><span class="story-icon">${icon(s.icon)}</span><span class="kicker">${s.kicker}</span><span class="tag ${s.fresh?'new':''}">${s.badge}</span></div><h3>${s.title}</h3><p class="description">${s.description}</p></div><figure class="story-preview">${link(s.href,`<img src="media/${s.id}-${lang}.png" width="1024" height="380" alt="${escapeHTML(s.caption)}" decoding="async" loading="${s.id==='investigation'||s.id==='remote'?'eager':'lazy'}">`,'preview-link')}<figcaption>${s.caption}</figcaption></figure><div class="story-actions"><div class="story-bottom">${s.actions}<button class="text-button" data-story="${s.id}">${t('案例经过','Case details')}${icon('chevron')}</button></div>${x86Shortcuts(s.id)||`<div class="story-foot">${s.foot}</div>`}</div></article>`;
-}
-
-function render() {
-  if(production) { try { localStorage.setItem('agentprov_language',lang); } catch {} }
-  document.documentElement.lang = lang;
-  document.title = `${t('示例库','Demo library')} · AgentProvenance`;
-  document.querySelector('#close-dialog').ariaLabel = t('关闭案例详情','Close case details');
-  root.innerHTML = `<header class="topbar">
-    ${link('?lang='+lang,'<b>Agent</b>Provenance','brand')}
-    ${approvedHome?'':`<span class="brand-description">${t('Agent 执行观测与证据验证','Verifiable agent observability')}</span><span class="header-divider" aria-hidden="true"></span>`}
-    <nav class="top-nav" aria-label="${t('主导航','Main navigation')}">${link('#featured',t('示例','Demos'),'','aria-current="page"')}${link(guide('start'),t('文档','Documentation'))}${link('https://github.com/ByteYellow/AgentProvenance','GitHub','','target="_blank" rel="noopener noreferrer"')}</nav>
-    <span class="spacer"></span>${approvedHome?(production?'':link(`index.html?lang=${lang}`,t('查看上一版','Previous design'),'previous-preview')):`<span class="saved-status">${icon('clock')}${t('只读回放','Read-only replay')}</span>`}<nav class="languages" aria-label="${t('语言','Language')}"><button data-lang="en" aria-pressed="${lang==='en'}">English</button><button data-lang="zh-CN" aria-pressed="${lang==='zh-CN'}">中文</button></nav>
-  </header><main>
-    <section class="intro"><div><p class="eyebrow">AgentProvenance <span>1.0</span></p><h1>${t('示例库','Demo library')}</h1><p>${t('看见 Agent 的真实执行，从一次调用到跨环境协作。','Explore what agents actually did, from a single call to work across environments.')}</p></div><div class="intro-note">${approvedHome?`${icon('shield')}<span>${t('只读实录，无需 API Key', 'Read-only recordings. No API key needed.')}</span>`:`<strong>${icon('shield')}${t('打开记录，沿证据探索','Open a recording, follow its evidence')}</strong>${t('无需安装，无需模型 API Key','No installation or model API key required')}`}</div></section>
-    <nav class="section-nav" aria-label="${t('页面章节','Page sections')}">${link('#featured',t('精选案例','Featured cases'))}${link('#topics',t('专题与集成','Topics & integrations'))}${link('#history',t('历史记录','Archive'))}${link('#capture',t('采集自己的任务','Capture your own task')+icon('arrow'),'end')}</nav>
-    <section id="featured"><div class="section-head"><h2>${t('精选执行案例','Featured executions')}</h2><p>${approvedHome?t('真实记录，可直接探索','Real recordings, ready to explore'):t('先读经过，再打开完整记录','Read the story. Explore the complete record.')}</p></div><div class="grid">${stories().map(storyCard).join('')}</div></section>
-    <section class="band" id="topics"><div class="section-head"><h2>${t('专题与集成','Topics & integrations')}</h2><p>${approvedHome?t('深入方法与接入','Methods and integrations'):t('选一个问题，继续深入','Choose a question. Go a little deeper.')}</p></div><div class="topic-grid">
-      ${topic('shield',t('安全调查','Security investigation'),t('依赖安装中的异常行为','Suspicious dependency installation'),t('沿安装钩子，追踪测试凭据读取、外联尝试与产物变化。','Follow an install hook through test-credential reads, network attempts and changed artifacts.'),link(historical('run-snake-supervised'),t('查看实录','Open recording')+icon('arrow')),guideLink(originalGuide('snake-supply-chain'),t('案例说明与复现','Case guide & reproduction')))}
-      ${topic('layers',t('关联方法','Evidence relationships'),t('一条关联，依据是什么？','What supports a relationship?'),t('用合成样本读懂正文命中、源读取候选和执行归属。','Use a synthetic example to inspect content matches, source-read candidates and execution identity.'),link(historical('ui-endpoint-candidates','data-flow-taint'),t('查看关联样本','Explore the example')+icon('arrow')),guideLink(originalGuide('endpoint-attribution'),t('三段证据与关联方法','Evidence layers & relationships')))}
-      ${topic('command',t('AI 研判','AI analysis'),t('让 AI 沿着证据分析','Analyze evidence with AI'),t('LLM 分析执行轨迹，Jev 完成结构化判断。指南包含配置、调用和人工复核流程。','Use an LLM to analyze a trace or Jev for structured judgments. Follow the guides for setup, invocation and human review.'),'',guideLink(originalGuide('llm-judge'),t('LLM 接入指南','LLM integration guide'))+guideLink(originalGuide('jev-judge'),t('Jev 接入与评审指南','Jev integration & review')))}
-    </div></section>
-    <section class="archive-strip" id="history" aria-labelledby="archive-heading"><div class="archive-mark">${icon('archive')}</div><div class="archive-copy"><h2 id="archive-heading">${t('案例档案','The case archive')}</h2><p>${t('报表修复前后对比、DeepSeek 开发任务、Grok 外发调查与采集示例。','Report repairs, a DeepSeek development task, Grok outbound investigations and capture examples.')}</p></div><button class="button archive-open" data-story="archive">${t('浏览档案','Browse archive')}${icon('arrow')}</button></section>
-    <section class="start" id="capture"><div><h2>${t('换成你自己的 Agent 任务','Bring your own agent task')}</h2><p>${t('从本地采集开始，按需接入远端执行、Browser 或 Notebook。','Start with local capture, then add remote execution, Browser or Notebook as needed.')}</p></div><div class="links">${link(guide('quickstart'),t('快速开始','Quick start'),'button')}${link(guide('execution-handoff'),t('远端执行','Remote execution'))}${link(guide('browser-context'),'Browser')}${link(guide('notebook-context'),'Notebook')}</div></section>
-    <footer class="page-footer"><span>${production?t('AgentProvenance · 执行观测与证据验证','AgentProvenance · Verifiable agent observability'):t('v1.0 首页预览 · 本地审核','v1.0 homepage preview · Local review')}</span><span>${production?link(`${lang}/library.html`,t('完整案例目录','Full case catalog'))+'<span aria-hidden="true">·</span>'+link(guide('demo-library'),t('案例指南','Demo guide')):(approvedHome?link(`index.html?lang=${lang}`,t('上一版设计','Previous design'))+' · ':'')+link('archive/'+lang+'/index.html',t('原版示例库','Original demo library'))}</span></footer>
-  </main>`;
-  syncSectionLinks();
-  document.dispatchEvent(new Event('agentprov:home-rendered'));
-}
-
-function syncSectionLinks() {
-  const section = ['#featured','#topics','#history','#capture'].includes(location.hash) ? location.hash : '#featured';
-  root.querySelectorAll('.section-nav a').forEach(anchor => {
-    if(anchor.hash === section) anchor.setAttribute('aria-current','location');
-    else anchor.removeAttribute('aria-current');
+  const catalogBase = document.body.dataset.catalogBase;
+  const catalog = file => `${catalogBase}${lang}/${file}`;
+  const guide = id => catalog(`guides/${id}.html`);
+  const demoDoc = id => catalog(`demos/${id}.html`);
+  const reader = (kind, params) => `current/${kind}/${lang}/index.html?${new URLSearchParams({ live: '0', detail: 'summary', ...params })}`;
+  const x86Reader = id => `recordings/x86-${id}/${lang}/index.html?live=0`;
+  const notebookReader = preset => `recordings/notebook-${preset}/${lang}/index.html?live=0&view=native`;
+  const historical = (run, lens = 'default', params = {}) => catalog('replay.html') + '?' +
+    new URLSearchParams({ run, lens, live: '0', detail: 'summary', ...params });
+  const historicalPair = (before, after) => historical(after, 'default', {
+    compare_a: before, compare_b: after, compare_dim: 'files'
   });
-}
 
-function record(title, kind, description, actions, metadata = '') {
-  return `<section class="recording"><div class="recording-top"><h3>${title}</h3><span class="tag">${kind}</span></div><p>${description}</p><div class="links">${actions}</div>${metadata?'<small>'+escapeHTML(metadata)+'</small>':''}</section>`;
-}
+  const { investigation: investigationCard, workspace: workspaceCard, browser: browserCard, team: teamCard } =
+    JSON.parse(document.getElementById('featured-card-data').textContent);
+  const number = value => value.toLocaleString(lang);
+  const investigationCompareURL = () => reader('investigation', {
+    run: investigationCard.after.run,
+    compare_a: investigationCard.before.run,
+    compare_b: investigationCard.after.run,
+    compare_dim: 'files'
+  });
+  const investigationBeforeURL = () => reader('investigation', { run: investigationCard.before.run });
+  const investigationAfterURL = () => reader('investigation', { run: investigationCard.after.run });
+  const workspaceURL = () => reader('workspace', { run: workspaceCard.run, lens: 'file-artifact', view: 'workspace' });
+  const handoffURL = () => reader('execution', { run: 'run-ce9d7ca0a2af', view: 'handoff' });
+  const browserURL = () => reader('browser', { run: browserCard.run, view: 'native' });
+  const teamURL = () => historical(teamCard.run, 'orchestration');
 
-function description(intro, steps) {
-  return `<p class="dialog-intro">${intro}</p><ol class="reading-steps">${steps.map(([title,text])=>`<li><strong>${title}</strong>${text}</li>`).join('')}</ol>`;
-}
-
-function screenshot(id) {
-  return `<details class="image-disclosure"><summary>${t('展开阅读界面截图','Show the reader screenshot')}</summary><img src="screenshots/${id}.png" alt="${t('已保存案例的阅读界面','Reader for the saved case')}" loading="lazy"></details>`;
-}
-
-function caseContent(id) {
-  const recorded = t('执行实录','Recorded execution');
-  const historic = t('历史实录','Historical recording');
-  const open = href => link(href,t('打开记录','Open recording'),'button primary');
-  const download = file => link('downloads/'+(production?'reading/':'')+file,t('下载只读回放','Download replay'),'','download');
-  const nativeNote = `<p class="source-note">${t('这里的 basic 和 detailed 样例分别执行，只采集应用上下文。要看开启原生 Sensor 的 Browser 任务，请选「Linux x86 实录」。','The basic and detailed examples were recorded separately with application context only. For a Browser task with the native Sensor enabled, open the Linux x86 recordings.')}</p>`;
-  if(id==='archive') return {
-    title:t('案例档案','The case archive'),
-    content:`<p class="dialog-intro">${t('按你想调查的问题选择案例。报表修复可以直接打开前后对比，开发任务可以查看工具输出和最终文件。','Choose a case by the question you want to investigate. Compare report repairs directly, or inspect tool output and final files from a development task.')}</p><div class="archive-chapters">${[
-      ['earlier','file',t('测试通过，为什么报表仍然失败？','Tests passed. Why did the report fail?'),t('关闭多余诊断后，报表恢复生成。两次历史复现实录，各自保留修复前后对比。','Disabling unnecessary diagnostics restored the report. Two historical reproductions, each with its own before-and-after pair.')],
-      ['development','command',t('DeepSeek 如何完成一次开发任务','How DeepSeek completed a development task'),t('阅读任务、工具输入输出、7 项测试记录和最终文件。','Read the task, tool inputs and outputs, seven recorded tests and the final files.')],
-      ['grok','clock',approvedHome?t('Grok 外发调查','Grok outbound investigations'):'Grok',t('两份历史调查，阅读代码库外发与三类外发路径。原场景已无法重跑。','Two historical investigations into codebase data and outbound routes. The original scenario cannot be rerun.')],
-      ['presets','layers',t('采集档位与附件','Capture presets & attachments'),t('Browser / Notebook 的 basic 与 detailed 实录，以及 Jupyter 图表样本。','Basic and detailed Browser / Notebook recordings, plus a Jupyter chart example.')]
-    ].map(([key,symbol,title,copy])=>`<button class="archive-chapter" data-story="${key}"><span class="chapter-icon">${icon(symbol)}</span><span><strong>${title}</strong><small>${copy}</small></span>${icon('chevron')}</button>`).join('')}</div>`
-  };
-  if(id==='investigation') return {
-    title:t('任务调查与修复','Task investigation & repair'),
-    content:description(t('DeepSeek 在配置修复前后分别执行调查任务。先读清任务和工具输出，再检查两次运行的配置、文件及网络记录。','DeepSeek performs an investigation before and after a configuration repair. Read the task and tool output, then inspect configuration, files and network records across both runs.'),[
-      [t('读任务','Read the task'),t('展开 Agent 会话，查看指令和工具结果。','Open the agent session to read instructions and tool results.')],
-      [t('追证据','Follow evidence'),t('从文件或网络记录进入图谱与保存正文。','Open file or network evidence, its graph and saved content.')],
-      [t('看变化','Compare changes'),t('直接对比已配对的修复前、修复后记录。','Open the matched before-and-after recordings in Compare.')]
-    ])+screenshot('investigation')+record(t('配置修复前后','Before & after configuration repair'),recorded,t('同一个阅读副本包含两次执行，保留原始调用、采集状态和支持证据。','One reading copy contains both executions, their original calls, capture status and supporting evidence.'),compareLink(investigationCompare())+link(current('investigation','run-860466af8a9a'),t('修复前记录','Before repair'))+link(currentInvestigation(),t('修复后记录','After repair'))+download('task-investigation.zip'),'run-3bfc6838a9c6 / run-860466af8a9a')
-  };
-  if(id==='remote') return {
-    title:t('工作区版本与跨环境执行','Workspace revisions & remote execution'),
-    content:description(t('先核对远端工作区中的输入、修改和产物，再看另一次执行里 Tool Call 如何交接到目标。下方的 Linux x86 实录提供 Claude 工作区和 Kata/QEMU 的完整记录。','Start with the workspace inputs, edits and outputs, then follow a Tool Call into its target in a separate run. The Linux x86 recordings below cover the Claude workspace and Kata/QEMU cases.'),[
-      [t('文件一致性','File consistency'),t('核对输入与输出版本，阅读 result.txt。','Inspect input and output revisions and read result.txt.')],
-      [t('执行交接','Execution handoff'),t('沿调用跳到目标 Run，检查执行尝试和回执。','Follow a call to its target Run, attempt and receipt.')],
-      [t('交付记录','Delivery records'),t('分别查看执行、采集及封包时交付状态。','Inspect execution, capture and sealed delivery status separately.')]
-    ])+screenshot('workspace')+record(t('远端工作区：读、改、跑','Remote workspace: read, edit, run'),t('Linux x86 实录','Linux x86 recording'),t('启用原生 Sensor 的受控工作区任务，保留文件版本、操作回执及最终文件正文。','A controlled workspace task with the native Sensor enabled, file revisions, operation receipts and saved output content.'),open(workspace())+download('workspace-contract.zip'),'run-w01-445a3a164ae14723b82f90634cff96f5')+record(t('跨环境：调用交接与恢复','Cross-environment handoff & recovery'),recorded,t('两个 Claude 会话、三个远端执行尝试，包含回执响应丢失后的查询恢复。','Two Claude sessions and three remote execution attempts, including query recovery after a receipt response is lost.'),open(current('execution','run-ce9d7ca0a2af'))+download('native-matrix.zip'))+`<p class="source-note">${t('下载项为只读阅读副本。工作区及调用交接来自各自的采集记录；原始签名与派生交付在阅读器中分别展示。','Downloads are read-only reading copies. Workspace and handoff cases retain their separate capture records; the reader distinguishes original signatures from derived delivery.')}</p>`
-  };
-  if(id==='native') return {
-    title:t('Browser 与 Notebook 原生记录','Browser & Notebook native records'),
-    content:description(t('从 Agent 的一次调用进入浏览器或 Jupyter 的原生操作记录。正文、输出与附件在对应操作下阅读。','Follow an agent call into a native browser or Jupyter record. Read the content, outputs and attachments associated with that operation.'),[
-      [t('定位调用','Locate the call'),t('从会话中选择 Browser / Notebook。','Select Browser / Notebook in the session.')],
-      [t('阅读原生结果','Read native results'),t('打开请求身份、操作结果及保存正文。','Inspect request identities, results and saved content.')],
-      [t('打开附件','Open attachments'),t('按需查看截图或已保存的输出。','Open screenshots or saved output on demand.')]
-    ])+screenshot('browser')+record('Browser · detailed',recorded,t('网页任务的操作、请求及截图。','Operations, requests and screenshots from a browser task.'),open(browser())+download('browser-detailed.zip'),'run-da25e015ca1f')+record('Notebook · detailed',recorded,t('真实 Claude 任务中的 Jupyter 请求、代码和结果。','Jupyter requests, code and results from a real Claude task.'),open(realNotebook('detailed'))+download('notebook-detailed.zip'))+nativeNote
-  };
-  if(id==='team') return {
-    title:t('多 Agent 协作与执行位置','Multi-agent collaboration & placement'),
-    content:description(t('先看 Alice 与 Bob 之间的委派、拒绝和后续执行。Kubernetes 的两份历史记录则从部署位置与跨 Pod 通信补充另一个观察角度。','Begin with delegation, refusal and subsequent execution between Alice and Bob. Two Kubernetes recordings provide separate perspectives on placement and cross-Pod communication.'),[
-      [t('谁发起','Who initiated?'),t('读取消息与关联会话。','Read messages and related sessions.')],
-      [t('谁执行','Who executed?'),t('沿工具调用追到执行证据。','Follow tool calls to execution evidence.')],
-      [t('在哪里','Where did it run?'),t('从独立 K8s 案例查看工作负载位置。','Inspect placement in the separate Kubernetes cases.')]
-    ])+record(t('Alice / Bob 协作','Alice / Bob collaboration'),historic,t('保留委派、消息、拒绝与后续操作的原始记录。','Original records of delegation, messages, refusal and subsequent actions.'),open(team())+link(originalGuide('multiagent-provenance'),t('案例说明与签名包','Guide & signed bundle')),'run-double-attempt · 2026-07-13')+record(t('跨 Pod 协作','Cross-Pod collaboration'),t('混合来源','Mixed sources'),t('回放的应用 hooks 与当次采集的内核事件，按来源分别呈现。','Replayed application hooks and captured kernel events, identified by source.'),open(historical('a2a-demo','orchestration'))+link(originalGuide('k8s-cross-pod-a2a'),t('来源说明','Source details')))+record(t('Kubernetes 运行环境','Kubernetes placement'),historic,t('查看 Pod、容器与执行范围的对应。','Inspect Pod, container and execution-scope associations.'),open(historical('claude-demo','substrate')))
-  };
-  if(id==='grok') return {
-    title:t('Grok 历史调查','Grok historical investigations'),
-    content:`<p class="dialog-intro">${t('原场景当前无法重新执行。两份原始实录保留各自的 Run、采集日期和签名证据，供继续调查。','The original scenario can no longer be rerun. Both recordings retain their own Runs, dates and signed evidence for investigation.')}</p>`+record(t('代码库外发路径','Outbound codebase data'),historic,t('阅读原始外发行为及其保存内容。','Inspect the recorded outbound behavior and saved content.'),open(historical('run-grok-exfil'))+link(originalGuide('grok-codebase-exfil'),t('指南与原始签名包','Guide & original signed bundle')),'2026-07-14')+record(t('三类外发路径','Three outbound routes'),historic,t('分别查看模型请求、厂商遥测和第三方分析请求。','Inspect model requests, vendor telemetry and third-party analytics separately.'),open(historical('run-grok-3routes'))+link(originalGuide('grok-3routes'),t('指南与原始签名包','Guide & original signed bundle')),'2026-07-15')
-  };
-  if(id==='earlier') return {
-    title:t('测试通过，为什么报表仍然失败？','Tests passed. Why did the report fail?'),
-    content:description(t('计算测试通过，但可选诊断尝试读取受限文件、访问外部地址，导致报表失败。DeepSeek 关闭多余诊断，保留报表计算和原有测试。以下是同类任务在不同日期的两次复现，每组单独对比。','The calculation tests passed, but optional diagnostics tried to read a restricted file and reach an external address, causing the report to fail. DeepSeek disabled those diagnostics while preserving the report and its tests. These are two reproductions of that workflow on different dates, each compared separately.'),[
-      [t('修复前','Before'),t('定位失败的诊断调用及其访问控制记录。','Locate the failed diagnostic calls and access-control records.')],
-      [t('修改了什么','What changed'),t('查看配置文件中的两项诊断开关。','Inspect the two diagnostic switches in the configuration file.')],
-      [t('修复后','After'),t('报表正常生成，总额仍为 42.00。','The report completes with the total still at 42.00.')]
-    ])+record(t('11 月复现：追到具体工具与外联','November: trace tools and outbound activity'),historic,t('重点看哪次工具调用触发了文件访问与外联，以及修复后留下哪些记录。','Focus on the tool calls behind file access and outbound activity, and the records left after repair.'),compareLink(historicalCompare('run-2fd63df0ab9b','run-48baa3821074'))+link(historical('run-2fd63df0ab9b'),t('修复前','Before'))+link(historical('run-48baa3821074'),t('修复后','After'))+link(originalGuide('evidence-attribution'),t('任务经过与证据','Story & evidence')),'2026-11-06')+record(t('10 月复现：查看拒绝与配置修改','October: inspect denials and configuration changes'),historic,t('重点看子 Agent 的审阅、被拒绝的诊断，以及 settings.json 中关闭诊断的修改。','Focus on the subagent review, denied diagnostics and changes disabling diagnostics in settings.json.'),compareLink(historicalCompare('run-e9c3f452461a','run-2267309eda57'))+link(historical('run-e9c3f452461a'),t('修复前','Before'))+link(historical('run-2267309eda57'),t('修复后','After'))+link(originalGuide('investigation-workflow'),t('任务经过与证据','Story & evidence')),'2026-10-19')
-  };
-  if(id==='development') return {
-    title:t('DeepSeek 如何完成一次开发任务','How DeepSeek completed a development task'),
-    content:`<p class="dialog-intro">${t('这是一次完整开发任务的历史记录，适合从头阅读 Agent 的工作过程。','This historical recording follows a complete development task, from the instructions to the final files.')}</p>`+record(t('任务、测试与最终文件','Task, tests and final files'),historic,t('从用户任务开始，逐次查看工具输入输出，检查 7 项已记录的测试结果，再打开最终文件正文。','Start with the user task, follow each tool input and output, inspect seven recorded test results and read the final files.'),open(historical('run-dbc2adf273d4'))+link(originalGuide('deepseek-context'),t('案例说明','Case guide')),'2026-09-28')
-  };
-  if(id==='presets') return {
-    title:t('采集档位与附件示例','Capture presets & attachment example'),
-    content:`<p class="dialog-intro">${t('basic 保留轻量上下文，detailed 额外留存可阅读正文。这里分别打开独立采集的记录。','Basic retains lightweight context; detailed retains additional readable content. These links open independently captured runs.')}</p>`+record('Browser · basic / detailed',recorded,t('查看两次网页任务的应用上下文。','Inspect application context from two browser tasks.'),open('recordings/browser-basic/'+lang+'/index.html?live=0')+link(browser(),'detailed'))+record('Notebook · basic / detailed',recorded,t('查看两次 Jupyter 任务的代码与结果留存。','Inspect captured code and output from two Jupyter tasks.'),open(realNotebook('basic'))+link(realNotebook('detailed'),'detailed'))+record(t('Jupyter 图表与 kernel 重启','Jupyter chart & kernel restart'),t('合成样本','Synthetic example'),t('专门展示图片附件、父消息引用和重启前后的 kernel 身份。','An example for image attachments, parent-message references and kernel identity before and after restart.'),open(current('notebook','notebook-detailed')))+nativeNote
-  };
-  return null;
-}
-
-function openStory(id, updateURL = true) {
-  const content = caseContent(id);
-  if (!content) return;
-  activeStory = id;
-  document.querySelector('#case-eyebrow').textContent = t('案例经过与记录','STORY & RECORDINGS');
-  document.querySelector('#case-title').textContent = content.title;
-  const isArchiveChapter = ['grok','earlier','development','presets'].includes(id);
-  document.querySelector('#case-body').innerHTML = (isArchiveChapter?`<button class="text-button back-to-archive" data-story="archive">${icon('arrow')}${t('全部档案','All archive chapters')}</button>`:'')+content.content+x86Details(id);
-  if(!dialog.open) dialog.showModal();
-  document.querySelector('#case-body').scrollTop = 0;
-  if(updateURL) {
-    const next = new URL(location.href);
-    next.searchParams.set('case',id);
-    history.replaceState({},'',next);
+  function x86List() {
+    return [
+      ['workspace-harness', t('Claude 受控工作区实录', 'Claude controlled workspace'), t('沿 Read / Edit / Write / Bash 核对输入版本、版本递增与最终产物。', 'Follow Read, Edit, Write and Bash through revisions and final output.')],
+      ['kata-harness', 'Kata / QEMU · Claude ' + t('工作区', 'workspace'), t('同类 Claude 工作区任务在 Kata 虚拟化 Guest 中的完整取证。', 'Separate Claude workspace run recorded inside a Kata/QEMU guest.')],
+      ['kata-boot-1', t('Kata 首次启动 Guest 身份', 'First Kata guest boot'), t('首次启动 Guest 身份、代次与执行记录。', 'Identity, generation and execution of the first Kata guest boot.')],
+      ['kata-boot-2', t('Kata 重建后 Guest 身份', 'Rebuilt Kata guest'), t('重建后形成独立 Guest 代次，与首次启动隔离。', 'Distinct guest generation after rebuild.')],
+      ['kata-contract', t('Kata 工作区版本与回执', 'Kata workspace contract'), t('受控任务在 Kata 内的工作区版本操作与回执。', 'Controlled workspace operations and revision receipts inside Kata.')],
+      ['browser-sensor-on', t('Browser + 原生内核 Sensor', 'Browser with native OS sensor'), t('并发页面操作、OS 进程归属关联与 3 份保存的 HAR。', 'Concurrent pages, OS process attribution and 3 saved HAR archives.')],
+      ['browser-crash-recovery', t('Browser 中断恢复两代会话', 'Browser crash & recovery'), t('对比中断前后两代浏览器会话，未完成操作诚实保留为 unknown。', 'Two browser generations; interrupted action stays unknown.')]
+    ];
   }
-}
 
-root.addEventListener('click', event => {
-  const story = event.target.closest('[data-story]');
-  if(story) return openStory(story.dataset.story);
-  const language = event.target.closest('[data-lang]');
-  if(language) {
-    const bodyScroll = document.querySelector('#case-body').scrollTop;
-    const pageScroll = scrollY;
-    lang = language.dataset.lang;
-    const next = new URL(location.href);
-    next.searchParams.set('lang',lang);
-    history.replaceState({},'',next);
-    render();
-    if(activeStory) {
-      openStory(activeStory,false);
-      document.querySelector('#case-body').scrollTop = bodyScroll;
+  function workspaceSteps() {
+    return workspaceCard.rows.map(r => {
+      const rev = r.error || ('rev ' + r.before + '→' + r.after);
+      const detail = r.error ? (r.next === 'reread' ? t('请重新读取 (reread)', 'Next action: reread') : r.next || '') :
+        r.path + ' · ' + (r.kind === 'added' ? r.kind + ' (' + r.size + ' B)' : r.outcome);
+      return `<div class="ws-step${r.error ? ' conflict' : ''}" data-tool-call="${esc(r.call)}">
+        <span class="ws-rev">${r.error ? '⚠ ' : ''}${esc(rev)}</span><span class="ws-op">${esc(r.tool)}</span><span class="ws-detail">${esc(detail)}</span>
+        ${!r.error && r.kind === 'added' ? '<span class="ws-hash">' + esc(r.digest.slice(0, 8)) + '…</span>' : ''}
+      </div>`;
+    }).join('');
+  }
+
+  function renderCards() {
+    const {before, after, settings} = investigationCard;
+    const diagnosticStat = row => row.records > 0 && row.denied === row.records
+      ? t(number(row.denied) + ' 条权限错误', number(row.denied) + (row.denied === 1 ? ' permission error' : ' permission errors'))
+      : t(number(row.records) + ' 条诊断记录', number(row.records) + (row.records === 1 ? ' diagnostic entry' : ' diagnostic entries'));
+    return `
+      <article class="card" data-case="investigation">
+        <div class="card-top">
+          <div class="card-meta">
+            <span class="card-icon">${icon('file')}</span>
+            <span>${t('任务调查与修复', 'Investigate & compare')}</span>
+            <span class="badge">${t('DeepSeek · 两次执行', 'DeepSeek · 2 runs')}</span>
+          </div>
+          <h3>${t('测试全过，为什么诊断还是触发了受限访问？', 'Tests passed. Why did diagnostics hit restricted access?')}</h3>
+          <p class="card-desc">${t('从任务指令与子 Agent 审阅追到受限诊断与外联，一键对比修复前后的真实文件变更。', 'Trace from task prompt and subagent review to denied diagnostics, then diff the exact repair files.')}</p>
+        </div>
+        <a class="stage-link" href="${esc(investigationCompareURL())}">
+          <div class="stage diff-stage">
+            <div class="diff-row" data-event="${esc(before.event)}"><span class="diff-pill before">${t('修复前', 'Before')}</span><span class="diff-file">${esc(before.path)}</span><span class="diff-stat">${esc(diagnosticStat(before))}</span></div>
+            <div class="diff-row" data-event="${esc(settings.event)}"><span class="diff-pill edit">${t('配置', 'Settings')}</span><span class="diff-file">${esc(settings.path)}</span><span class="diff-stat">${t(number(settings.disabled) + ' 项关闭', number(settings.disabled) + ' off')}</span></div>
+            <div class="diff-row" data-event="${esc(after.event)}"><span class="diff-pill after">${t('修复后', 'After')}</span><span class="diff-file">${esc(after.path)}</span><span class="diff-stat">${esc(diagnosticStat(after))}</span></div>
+          </div>
+        </a>
+        <div class="card-foot">
+          <div class="actions-row">
+            <a class="btn primary" href="${esc(investigationCompareURL())}">${icon('compare')}<span>${t('对比修复前后文件', 'Compare repair files')}</span></a>
+            <a class="btn" href="${esc(investigationAfterURL())}">${icon('play')}<span>${t('打开证据图', 'Open graph')}</span></a>
+            <button type="button" class="text-btn" data-story="investigation">${t('案例经过', 'Details')}${icon('chevron')}</button>
+          </div>
+          <div class="sub-links">
+            <span>${t('直达：', 'Jump to:')}</span>
+            <a href="${esc(investigationBeforeURL())}">${t('修复前实录', 'Before repair')}</a>
+            <a href="${esc(reader('investigation', { run: after.run, view: 'compliance' }))}">${t('合规评估', 'Compliance')}</a>
+            <a href="${esc(reader('investigation', { run: after.run, view: 'risk' }))}">${t('访问控制', 'Access control')}</a>
+            <a href="${esc(guide('graph'))}">${t('文档说明', 'Docs')}</a>
+          </div>
+        </div>
+      </article>
+
+      <article class="card" data-case="remote">
+        <div class="card-top">
+          <div class="card-meta">
+            <span class="card-icon">${icon('terminal')}</span>
+            <span>${t('受控工作区与跨环境执行', 'Workspace & remote handoff')}</span>
+            <span class="badge new">${t('v1.0 新增', 'New in v1.0')}</span>
+          </div>
+          <h3>${t('远端改文件、遇冲突，每一步有回执', 'Revisions, conflicts & operation receipts')}</h3>
+          <p class="card-desc">${t('核对 Read / Edit / Write / Bash 的版本链和冲突拒绝原因，并追踪跨环境调用交接。', 'Inspect file revisions, rejected conflict writes and cross-sandbox execution handoffs.')}</p>
+        </div>
+        <a class="stage-link" href="${esc(workspaceURL())}">
+          <div class="stage ws-stage">
+            ${workspaceSteps()}
+          </div>
+        </a>
+        <div class="card-foot">
+          <div class="actions-row">
+            <a class="btn primary" href="${esc(workspaceURL())}">${icon('play')}<span>${t('打开工作区视图', 'Open workspace')}</span></a>
+            <a class="btn" href="${esc(handoffURL())}">${t('跨环境交接', 'Handoffs')}</a>
+            <button type="button" class="text-btn" data-story="remote">${t('案例经过', 'Details')}${icon('chevron')}</button>
+          </div>
+          <div class="sub-links">
+            <span>${t('Linux x86 & 文档：', 'Linux x86 & Docs:')}</span>
+            <a href="${esc(x86Reader('workspace-harness'))}">${t('Claude 工作区', 'Claude workspace')}</a>
+            <a href="${esc(x86Reader('kata-harness'))}">Kata / QEMU</a>
+            <a href="${esc(guide('workspace'))}">${t('工作区文档', 'Workspace docs')}</a>
+            <a href="${esc(guide('execution-handoff'))}">${t('交接文档', 'Handoff docs')}</a>
+          </div>
+        </div>
+      </article>
+
+      <article class="card" data-case="native">
+        <div class="card-top">
+          <div class="card-meta">
+            <span class="card-icon">${icon('browser')}</span>
+            <span>${t('Browser 与 Notebook 原生记录', 'Browser & Notebook context')}</span>
+            <span class="badge new">${t('v1.0 新增', 'New in v1.0')}</span>
+          </div>
+          <h3>${t('网页操作、截图与 HAR 直接联查', 'Actions, screenshots & HAR in one view')}</h3>
+          <p class="card-desc">${t('保留页面、请求、截图与 Jupyter 单元格原生身份，在工作台里直接预览附件与正文。', 'Inspect native page, request, screenshot, HAR and Jupyter records right inside the workbench.')}</p>
+        </div>
+        <a class="stage-link" href="${esc(browserURL())}">
+          <div class="stage browser-stage">
+            <div class="br-trail">
+              <div class="br-item" data-entry="${esc(browserCard.navigation.entry)}"><span class="br-tag">${esc(browserCard.navigation.op)}</span><span class="br-val">${esc(browserCard.navigation.path)}</span></div>
+              <div class="br-item" data-entry="${esc(browserCard.read.entry)}"><span class="br-tag">${esc(browserCard.read.op)}</span><span class="br-val">${esc(browserCard.read.text)}</span></div>
+              <div class="br-item br-attachments">${['har','png'].map(key => `<span class="br-size" data-ref="${esc(browserCard[key].ref)}"><span class="br-tag har">${key.toUpperCase()}</span> ${number(browserCard[key].bytes)} B</span>`).join('')}</div>
+            </div>
+            <div class="br-shot">
+              <div class="br-shot-bar"><span class="br-dot"></span><span class="br-dot"></span><span class="br-dot"></span><span>${t('已保存截图', 'Saved screenshot')} · PNG</span></div>
+              <img src="${esc(browserCard.png.asset)}" alt="${esc(t('实录中的页面截图', 'Screenshot from the recording'))}" loading="eager">
+            </div>
+          </div>
+        </a>
+        <div class="card-foot">
+          <div class="actions-row">
+            <a class="btn primary" href="${esc(browserURL())}">${icon('play')}<span>${t('打开 Browser 视图', 'Open Browser')}</span></a>
+            <a class="btn" href="${esc(notebookReader('detailed'))}">Notebook</a>
+            <button type="button" class="text-btn" data-story="native">${t('案例经过', 'Details')}${icon('chevron')}</button>
+          </div>
+          <div class="sub-links">
+            <span>${t('Linux x86 & 文档：', 'Linux x86 & Docs:')}</span>
+            <a href="${esc(x86Reader('browser-sensor-on'))}">${t('Browser + 原生 Sensor', 'Browser with Sensor')}</a>
+            <a href="${esc(x86Reader('browser-crash-recovery'))}">${t('中断恢复', 'Crash recovery')}</a>
+            <a href="${esc(guide('browser-context'))}">${t('Browser 文档', 'Browser docs')}</a>
+            <a href="${esc(guide('notebook-context'))}">${t('Notebook 文档', 'Notebook docs')}</a>
+          </div>
+        </div>
+      </article>
+
+      <article class="card" data-case="team">
+        <div class="card-top">
+          <div class="card-meta">
+            <span class="card-icon">${icon('team')}</span>
+            <span>${t('多 Agent 协作与安全溯源', 'Multi-agent & security lineage')}</span>
+            <span class="badge">${t('经典实录 · ' + number(teamCard.events) + ' 个事件', 'Classic · ' + number(teamCard.events) + ' events')}</span>
+          </div>
+          <h3>${t('谁发起委派、谁触发了风险，一图看清', 'Trace delegation, refusal & risky execution')}</h3>
+          <p class="card-desc">${t('沿 Alice 与 Bob 的委派消息、模型拒绝与依赖安装，直达敏感文件访问与外联证据。', 'Follow Alice and Bob through peer messages, a refusal, dependency install and runtime risk signals.')}</p>
+        </div>
+        <a class="stage-link" href="${esc(teamURL())}">
+          <div class="stage graph-stage">
+            <div class="graph-frame">
+              <img src="refined-media/team-${lang}.png" alt="${esc(t('Alice 与 Bob 协作关系证据图', 'Alice and Bob collaboration graph'))}" loading="lazy">
+            </div>
+          </div>
+        </a>
+        <div class="card-foot">
+          <div class="actions-row">
+            <a class="btn primary" href="${esc(teamURL())}">${icon('play')}<span>${t('打开协作证据图', 'Open team graph')}</span></a>
+            <a class="btn" href="${esc(historical('a2a-demo', 'orchestration'))}">${t('跨 Pod A2A', 'Cross-Pod A2A')}</a>
+            <button type="button" class="text-btn" data-story="team">${t('案例经过', 'Details')}${icon('chevron')}</button>
+          </div>
+          <div class="sub-links">
+            <span>${t('相关实录 & 文档：', 'Related & Docs:')}</span>
+            <a href="${esc(historical('claude-demo', 'substrate'))}">${t('Kubernetes 部署归属', 'K8s placement')}</a>
+            <a href="${esc(demoDoc('multiagent-provenance'))}">${t('文档说明', 'Guide & docs')}</a>
+            <a href="${esc(demoDoc('k8s-cross-pod-a2a'))}">${t('跨 Pod 文档', 'Cross-Pod docs')}</a>
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  function renderArchiveChapters() {
+    const chapters = [
+      ['x86', 'cpu', 'blue', t('Linux x86 实录合集', 'Linux x86 recordings'), t('Claude 受控工作区、Kata / QEMU 虚拟化 Guest、Browser + 原生 Sensor 与中断恢复（含离线 ZIP 下载）。', 'Claude workspace, Kata/QEMU guest runs, Browser with native sensor and crash recovery (with offline ZIPs).'), t('7 份实录', '7 runs')],
+      ['earlier', 'file', 'orange', t('历史报表修复对比', 'Historical report repair comparisons'), t('2026 年 10 月与 11 月的两次复现实录，各自保留修复前后的配对对比与归因证据。', 'October and November reproductions, each with its own before-and-after comparison pair.'), t('2 组对比', '2 pairs')],
+      ['development', 'terminal', '', t('DeepSeek 完整开发任务', 'DeepSeek full development task'), t('从用户指令一路追踪到工具输入输出、7 项测试通过与最终保存文件正文。', 'Trace task prompt, tool outputs, 7 passing tests and final saved file contents.'), t('1 份实录', '1 run')],
+      ['grok', 'clock', 'red', t('Grok 历史外发调查', 'Grok historical outbound investigations'), t('带采集日期的历史签名实录：代码库外发路径与三类外发面区分（原场景已无法重跑）。', 'Dated historical captures separating model inference, telemetry and third-party analytics.'), t('2 份实录', '2 runs')],
+      ['presets', 'layers', 'purple', t('采集档位与 Jupyter 附件样本', 'Capture presets & Jupyter attachments'), t('对比 Browser / Notebook 的 basic 轻量档与 detailed 留存档，以及图表附件与 Kernel 重启样本。', 'Compare basic vs detailed retention presets plus Jupyter chart attachments and kernel restart.'), t('3 份样本', '3 examples')]
+    ];
+    return `
+      <div class="archive-group">
+        ${chapters.map(([key, ic, tone, title, desc, cnt]) => `
+          <button type="button" class="chapter-btn" data-story="${key}">
+            <span class="chapter-ic ${tone}">${icon(ic)}</span>
+            <span class="chapter-body">
+              <strong class="chapter-title">${esc(title)}</strong>
+              <span class="chapter-desc">${esc(desc)}</span>
+            </span>
+            <span class="chapter-count">${esc(cnt)}</span>
+            <span class="chapter-chev">${icon('chevron')}</span>
+          </button>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function render() {
+    try { localStorage.setItem('agentprov_language', lang); } catch {}
+    document.documentElement.lang = lang;
+    document.title = `${t('交互示例库', 'Interactive Demos')} · AgentProvenance v1.0`;
+    const copyCmd = './agentprov doctor -- claude\n./agentprov launch --file-diff -- claude\n./agentprov dashboard serve';
+
+    root.innerHTML = `
+      <header class="topbar">
+        <a class="brand" href="?lang=${lang}"><span><b>Agent</b>Provenance</span><span class="version-pill">v1.0</span></a>
+        <nav class="top-nav" aria-label="${esc(t('主导航', 'Main navigation'))}">
+          <a href="#featured" aria-current="page">${t('精选实录', 'Featured')}</a>
+          <a href="#archive">${t('案例档案', 'Archive')}</a>
+          <a href="#capture">${t('本地录制', 'Quickstart')}</a>
+          <a href="${esc(guide('start'))}">${t('文档', 'Docs')}</a>
+          <a href="https://github.com/ByteYellow/AgentProvenance" target="_blank" rel="noopener noreferrer">GitHub</a>
+        </nav>
+        <span class="spacer"></span>
+        <button hidden id="page-tour-start" type="button" aria-label="${t('页面导览','Page tour')}" title="${t('页面导览','Page tour')}"><span aria-hidden="true" class="tour-icon">?</span><span class="tour-label">${t('页面导览','Page tour')}</span></button>
+        <nav class="languages" aria-label="${esc(t('语言', 'Language'))}">
+          <button type="button" data-lang="en" aria-pressed="${lang === 'en'}">English</button>
+          <button type="button" data-lang="zh-CN" aria-pressed="${lang === 'zh-CN'}">中文</button>
+        </nav>
+      </header>
+      <div data-tour-slot hidden></div>
+
+      <section class="hero-band">
+        <div class="hero-inner hero-copy">
+          <h1>${t('看清 Agent 到底做了什么', 'See what your AI agent actually did')}</h1>
+          <p class="hero-sub">${t('<span class="hero-clause">把模型对话、工具调用与进程、文件、网络事实，</span><span class="hero-clause">连成一张可回放、可验证的因果证据图。</span>', 'Connect agent conversations and tool calls to OS processes, files and network facts in one verifiable provenance graph.')}</p>
+          <div class="hero-actions">
+            <a class="btn primary" href="${esc(investigationCompareURL())}">${icon('compare')}<span>${t('体验修复前后对比', 'Try before/after compare')}</span></a>
+            <a class="btn" href="#archive">${t('浏览分类案例档案', 'Browse case archive')}</a>
+          </div>
+          <p class="hero-note">${t('只读回放 · 读取时校验内容哈希 · 无需 API Key', 'Read-only replays · Content hashes checked on read · No API key')}</p>
+          <div class="hero-flow" aria-label="${esc(t('三层证据关联', 'Three-layer evidence model'))}">
+            <button type="button" class="flow-chip" data-jump="investigation">
+              <span class="flow-ic blue">${icon('terminal')}</span>
+              <span class="flow-text">
+                <span class="flow-title">${t('会话与工具意图', 'Session & tool intent')}</span>
+                <span class="flow-sub">${t('对话上下文、子 Agent 审阅与工具调用', 'Prompts, subagent reviews & tool calls')}</span>
+              </span>
+              <span class="flow-go" aria-hidden="true">${icon('chevron')}</span>
+            </button>
+            <button type="button" class="flow-chip" data-jump="team">
+              <span class="flow-ic green">${icon('cpu')}</span>
+              <span class="flow-text">
+                <span class="flow-title">${t('进程 · 文件 · 网络', 'OS & network facts')}</span>
+                <span class="flow-sub">${t('内核观测文件变更、访问控制与外联', 'Kernel-observed files, audit & egress')}</span>
+              </span>
+              <span class="flow-go" aria-hidden="true">${icon('chevron')}</span>
+            </button>
+            <button type="button" class="flow-chip" data-jump="remote">
+              <span class="flow-ic purple">${icon('shield')}</span>
+              <span class="flow-text">
+                <span class="flow-title">${t('SHA-256 离线回放包', 'Verifiable reading copy')}</span>
+                <span class="flow-sub">${t('离线读正文，按需核验原件签名', 'Read offline; verify signed originals separately')}</span>
+              </span>
+              <span class="flow-go" aria-hidden="true">${icon('chevron')}</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <main>
+        <section id="featured">
+          <div class="section-head">
+            <h2>${t('精选交互实录', 'Featured interactive recordings')}</h2>
+            <p>${t('点击卡片直接进入证据工作台，支持图谱钻取、合规评估、正文阅读与前后对比', 'Open directly into the evidence workbench with graph drilldown, compliance & compare')}</p>
+          </div>
+          <div class="grid">${renderCards()}</div>
+        </section>
+
+        <section id="topics" class="band">
+          <div class="section-head">
+            <h2>${t('专题调查与评估集成', 'Focused investigations & evaluators')}</h2>
+            <p>${t('按具体安全问题深入，或接入外部评审器', 'Drill into a specific security question or evaluator workflow')}</p>
+          </div>
+          <div class="topic-grid">
+            <article class="topic-card">
+              <span class="topic-kicker"><span class="topic-ic teal">${icon('shield')}</span>${t('供应链安全', 'Supply chain')}</span>
+              <h3>${t('依赖安装中的异常凭据读取', 'Suspicious install-hook exfiltration')}</h3>
+              <p>${t('追踪被投毒的依赖包如何在安装阶段读取测试密钥、尝试外联并污染产物。', 'Follow a poisoned package reading planted test credentials and attempting egress.')}</p>
+              <div class="topic-links">
+                <a href="${esc(historical('run-snake-supervised'))}">${t('打开实录 →', 'Open recording →')}</a>
+                <a href="${esc(demoDoc('snake-supply-chain'))}">${t('复现说明', 'Guide')}</a>
+              </div>
+            </article>
+            <article class="topic-card">
+              <span class="topic-kicker"><span class="topic-ic indigo">${icon('layers')}</span>${t('关联依据 · 合成样本', 'Attribution · Synthetic')}</span>
+              <h3>${t('一条推断关联的依据是什么？', 'What backs a derived edge?')}</h3>
+              <p>${t('清晰区分已观测事实与推断关联：查看正文命中、候选源文件与未消解归属。', 'Inspect body matches, candidate source reads and unresolved execution identity honestly.')}</p>
+              <div class="topic-links">
+                <a href="${esc(historical('ui-endpoint-candidates', 'data-flow-taint'))}">${t('查看样本 →', 'Explore example →')}</a>
+                <a href="${esc(demoDoc('endpoint-attribution'))}">${t('关联方法', 'Methodology')}</a>
+              </div>
+            </article>
+            <article class="topic-card">
+              <span class="topic-kicker"><span class="topic-ic purple">${icon('terminal')}</span>${t('外部评测', 'Evaluators')}</span>
+              <h3>${t('让 LLM / Jev 沿着证据打分', 'Feed evidence to LLM Judge & Jev')}</h3>
+              <p>${t('通过 JSON / Python / MCP 将可验证轨迹交给外部评测器，把评分与证据引用写回同一张图。', 'Score recorded trajectories via JSON, Python or MCP with verifiable evidence refs.')}</p>
+              <div class="topic-links">
+                <a href="${esc(demoDoc('llm-judge'))}">${t('LLM Judge 指南', 'LLM Judge')}</a>
+                <a href="${esc(demoDoc('jev-judge'))}">${t('Jev 评审指南', 'Jev evaluator')}</a>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="archive" class="band">
+          <div class="section-head">
+            <h2>${t('案例档案', 'Case archive')}</h2>
+            <p>${t('按主题分类收纳其余 15 份 Linux x86、历史复现、安全调查与采集档位实录', '15 additional Linux x86, historical, security and preset recordings organized by chapter')}</p>
+          </div>
+          ${renderArchiveChapters()}
+        </section>
+
+        <section id="capture" class="quickstart-card">
+          <div>
+            <h2>${t('录下自己的 Agent 任务', 'Record your own agent task')}</h2>
+            <p>${t('零外部依赖、本地 SQLite 存储 + 内置离线 Dashboard，录制完成后即可在浏览器里回放与对比。', 'Local SQLite + embedded Dashboard with zero external services. Replay and compare right in your browser.')}</p>
+            <div class="harness-pills">
+              <span>Claude Code</span>
+              <span>Codex</span>
+              <span>DeepSeek Harness</span>
+              <span>Browser / Jupyter</span>
+            </div>
+            <div class="rec-links" style="margin-top:0">
+              <a href="${esc(guide('quickstart'))}">${t('快速开始文档 →', 'Quickstart docs →')}</a>
+              <a href="${esc(guide('execution-handoff'))}">${t('远端执行', 'Handoff')}</a>
+              <a href="${esc(guide('browser-context'))}">Browser</a>
+              <a href="${esc(guide('notebook-context'))}">Notebook</a>
+            </div>
+          </div>
+          <div class="terminal">
+            <div class="term-dots" aria-hidden="true"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+            <button type="button" class="copy-btn" id="copy-cmd">${t('复制命令', 'Copy')}</button>
+            <div><span class="dim">$ </span><span class="cmd-bin">./agentprov</span> doctor <span class="cmd-flag">--</span> claude</div>
+            <div><span class="dim">$ </span><span class="cmd-bin">./agentprov</span> launch <span class="cmd-flag">--file-diff --</span> claude</div>
+            <div><span class="dim">$ </span><span class="cmd-bin">./agentprov</span> dashboard serve</div>
+          </div>
+        </section>
+
+        <footer class="page-footer">
+          <span>AgentProvenance · ${t('交互示例库', 'Interactive demo library')}</span>
+          <nav>
+            <a href="${esc(catalog(catalogBase ? 'index.html' : 'library.html'))}">${t('全部命令行示例', 'CLI demo catalog')}</a>
+            <a href="${esc(guide('demo-library'))}">${t('案例指南', 'Demo guide')}</a>
+            <a href="https://github.com/ByteYellow/AgentProvenance/releases/latest" target="_blank" rel="noopener noreferrer">${t('下载 CLI', 'Download CLI')}</a>
+          </nav>
+        </footer>
+      </main>
+    `;
+
+    root.querySelector('#copy-cmd')?.addEventListener('click', async e => {
+      const btn = e.currentTarget;
+      let ok = false;
+      try {
+        if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(copyCmd); ok = true; }
+      } catch {}
+      if (!ok) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = copyCmd; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.append(ta); ta.select(); ok = document.execCommand('copy'); ta.remove();
+        } catch {}
+      }
+      btn.textContent = ok ? t('已复制', 'Copied') : t('请手动复制', 'Select to copy');
+      setTimeout(() => { btn.textContent = t('复制命令', 'Copy'); }, 1500);
+    });
+    document.dispatchEvent(new Event('agentprov:tour-ready'));
+  }
+
+  function rec(title, tag, desc, links, meta = '') {
+    return `<div class="rec-item"><div class="rec-top"><h3>${title}</h3><span class="badge">${tag}</span></div><p>${desc}</p><div class="rec-links">${links}</div>${meta ? `<small>${esc(meta)}</small>` : ''}</div>`;
+  }
+
+  function caseBody(id) {
+    const open = (href, txt) => `<a class="btn primary sm" href="${esc(href)}">${txt}</a>`;
+    const dl = file => `<a href="downloads/reading/${esc(file)}" download>${t('下载离线阅读包', 'Download offline ZIP')}</a>`;
+    if (id === 'archive') return {
+      title: t('案例档案分类', 'Case archive chapters'),
+      html: `<p class="dlg-intro">${t('按主题分类浏览全部 15 份历史实录、Linux x86 录制与采集档位样本。', 'Browse all 15 Linux x86, historical, security and preset recordings by topic.')}</p>` + renderArchiveChapters()
+    };
+    if (id === 'investigation') return {
+      title: t('任务调查与修复', 'Task investigation & repair'),
+      html: `<p class="dlg-intro">${t('DeepSeek 在配置修复前后分别执行报表流水线检查。你可以直接对比两次执行的文件变化，或进入任一执行查看图谱、工具输出、合规评估与访问控制记录。', 'DeepSeek ran the reporting pipeline before and after disabling two optional diagnostic switches. Compare changed files directly or inspect either execution in the workbench.')}</p>
+        <ol class="steps">
+          <li><strong>1. ${t('看差异', 'Inspect the diff')}</strong>${t('直接定位 settings.json、diagnostics.json 与 review.md 的内容变化并阅读正文。', 'See exact changes across settings.json, diagnostics.json and review.md with full body preview.')}</li>
+          <li><strong>2. ${t('读会话与工具', 'Read session & tools')}</strong>${t('查看主会话与子 Agent 审阅过程及完整工具输出。', 'Read the main session, subagent review and tool outputs.')}</li>
+          <li><strong>3. ${t('核对合规与访问控制', 'Check compliance & audit')}</strong>${t('查看合规控制映射、AppArmor/seccomp 状态与网络外联。', 'Inspect compliance mappings, AppArmor/seccomp states and egress records.')}</li>
+        </ol>`
+        + rec(t('修复前后配对对比', 'Paired before & after'), t('执行实录', 'Recorded'), t('直接打开「文件证据」差异，跳过实例元数据噪音，并支持直接阅读正文。', 'Opens directly to File evidence diffs with body preview.'),
+          open(investigationCompareURL(), t('对比修复前后文件', 'Compare files')) + `<a href="${esc(investigationBeforeURL())}">${t('修复前', 'Before')}</a><a href="${esc(investigationAfterURL())}">${t('修复后', 'After')}</a><a href="${esc(guide('graph'))}">${t('追溯与比较文档', 'Graph & compare docs')}</a>` + dl('task-investigation.zip'), investigationCard.before.run + ' → ' + investigationCard.after.run)
+    };
+    if (id === 'remote') return {
+      title: t('受控工作区与跨环境执行', 'Workspace revisions & remote handoff'),
+      html: `<p class="dlg-intro">${t('工作区实录展示了版本递增、冲突拒绝（conflict → reread）与最终文件产物；跨环境交接展示了 2 个 Claude 会话与 3 次远端执行尝试及回执恢复。', 'The workspace run captures revision chains, a rejected conflict write and final artifact; the handoff run captures 2 Claude sessions, 3 remote attempts and receipt recovery.')}</p>`
+        + rec(t('远端工作区：读、改、冲突、产物', 'Remote workspace: read, edit, conflict, output'), 'Linux x86', t('原生 Sensor + 工作区版本链，包含 conflict 拒绝回执。', 'Native sensor + workspace revisions including a conflict rejection.'), open(workspaceURL(), t('打开工作区视图', 'Open workspace')) + `<a href="${esc(guide('workspace'))}">${t('工作区文档', 'Workspace docs')}</a>` + dl('workspace-contract.zip'), workspaceCard.run)
+        + rec(t('跨环境：调用交接与恢复', 'Cross-environment handoff & recovery'), t('执行实录', 'Recorded'), t('两个 Claude 会话、三次远端执行尝试与回执丢失恢复。', 'Two Claude sessions, three remote attempts and receipt recovery.'), open(handoffURL(), t('打开交接实录', 'Open handoff')) + `<a href="${esc(guide('execution-handoff'))}">${t('交接文档', 'Handoff docs')}</a>` + dl('native-matrix.zip'), 'run-ce9d7ca0a2af')
+    };
+    if (id === 'native') return {
+      title: t('Browser 与 Notebook 原生记录', 'Browser & Notebook native records'),
+      html: `<p class="dlg-intro">${t('在工作台的 Browser / Notebook 顶层视图中直接阅读操作、请求身份、内联截图预览与格式化 HAR。', 'Inspect browser actions, request identities, inline screenshots and formatted HAR directly in the top-level Browser / Notebook view.')}</p>`
+        + rec('Browser · detailed', t('执行实录', 'Recorded'), t('网页导航、点击、文本读取、PNG 截图与 HAR 网络记录。', 'Navigation, clicks, text reads, PNG screenshot and HAR capture.'), open(browserURL(), t('打开 Browser 视图', 'Open Browser')) + `<a href="${esc(guide('browser-context'))}">${t('Browser 文档', 'Browser docs')}</a>` + dl('browser-detailed.zip'), browserCard.run)
+        + rec('Notebook · detailed', t('执行实录', 'Recorded'), t('真实 Claude 任务中的 Jupyter 单元格输入与执行输出。', 'Jupyter cells and outputs from a real Claude task.'), open(notebookReader('detailed'), t('打开 Notebook 视图', 'Open Notebook')) + `<a href="${esc(guide('notebook-context'))}">${t('Notebook 文档', 'Notebook docs')}</a>` + dl('notebook-detailed.zip'))
+    };
+    if (id === 'team') return {
+      title: t('多 Agent 协作与 Kubernetes 归属', 'Multi-agent collaboration & placement'),
+      html: `<p class="dlg-intro">${t('追踪 Alice 与 Bob 的委派、拒绝与风险执行，并可对比 Kubernetes 跨 Pod A2A 与工作负载位置记录。', 'Follow Alice & Bob delegation, refusal and risk execution, alongside Kubernetes cross-Pod A2A and workload placement.')}</p>`
+        + rec(t('Alice / Bob 团队协作', 'Alice / Bob collaboration'), t('历史实录', 'Historical'), t('含委派、同伴消息、模型拒绝与投毒依赖安装。', 'Delegation, peer messages, refusal and poisoned package install.'), open(teamURL(), t('打开协作图', 'Open graph')) + `<a href="${esc(demoDoc('multiagent-provenance'))}">${t('调查指南', 'Guide')}</a>`, teamCard.run + ' · 2026-07-13')
+        + rec(t('跨 Pod A2A 协作', 'Cross-Pod A2A'), t('混合来源', 'Mixed'), t('单节点 Sensor 捕获两个 Pod 的跨 Pod 通信。', 'Single node sensor attributing two Pods.'), open(historical('a2a-demo', 'orchestration'), t('打开实录', 'Open')) + `<a href="${esc(demoDoc('k8s-cross-pod-a2a'))}">${t('来源说明', 'Details')}</a>`)
+        + rec(t('Kubernetes 运行位置', 'Kubernetes placement'), t('历史实录', 'Historical'), t('Pod、容器与 cgroup 执行范围对应。', 'Pod, container and cgroup attribution.'), open(historical('claude-demo', 'substrate'), t('打开实录', 'Open')))
+    };
+    if (id === 'x86') return {
+      title: t('Linux x86 实录合集（7 份）', 'Linux x86 recordings (7)'),
+      chapter: true,
+      html: `<p class="dlg-intro">${t('在 Linux x86 原生内核 Sensor 与 Kata / QEMU 环境中录制的 7 份独立实录，均提供离线只读 ZIP 下载。', '7 standalone runs recorded on Linux x86 with native kernel sensor and Kata/QEMU, each with an offline ZIP.')}</p>`
+        + x86List().map(([xid, name, copy]) =>
+          rec(name, 'Linux x86', copy, open(x86Reader(xid), t('打开工作台', 'Open')) + `<a href="downloads/x86-${xid}.zip" download>${t('下载离线包', 'Download ZIP')}</a>`, `x86-${xid}`)
+        ).join('')
+    };
+    if (id === 'earlier') return {
+      title: t('历史报表修复对比（10 月 / 11 月复现）', 'Historical report repair comparisons'),
+      chapter: true,
+      html: `<p class="dlg-intro">${t('同类报表修复任务在不同日期的两次独立复现，每组均保留修复前后的配对对比与调查指南。', 'Two independent reproductions of the reporting pipeline repair on different dates, each with its paired comparison.')}</p>`
+        + rec(t('11 月复现：工具与外联归因', 'November reproduction: tool & egress attribution'), t('历史实录', 'Historical'), t('追到具体工具调用、访问控制决策与 TLS 片段。', 'Tool-scoped intent, audit decisions and TLS fragments.'), open(historicalPair('run-2fd63df0ab9b', 'run-48baa3821074'), t('对比修复前后', 'Compare')) + `<a href="${esc(historical('run-2fd63df0ab9b'))}">${t('修复前', 'Before')}</a><a href="${esc(historical('run-48baa3821074'))}">${t('修复后', 'After')}</a><a href="${esc(demoDoc('evidence-attribution'))}">${t('案例指南', 'Guide')}</a>`, '2026-11-06')
+        + rec(t('10 月复现：拒绝与配置修改', 'October reproduction: subagent review & config diff'), t('历史实录', 'Historical'), t('子 Agent 审阅、被拒诊断与 settings.json 修改。', 'Subagent review, denied diagnostics and settings.json diff.'), open(historicalPair('run-e9c3f452461a', 'run-2267309eda57'), t('对比修复前后', 'Compare')) + `<a href="${esc(historical('run-e9c3f452461a'))}">${t('修复前', 'Before')}</a><a href="${esc(historical('run-2267309eda57'))}">${t('修复后', 'After')}</a><a href="${esc(demoDoc('investigation-workflow'))}">${t('案例指南', 'Guide')}</a>`, '2026-10-19')
+    };
+    if (id === 'development') return {
+      title: t('DeepSeek 完整开发任务', 'DeepSeek full development task'),
+      chapter: true,
+      html: `<p class="dlg-intro">${t('一次从头到尾的完整开发任务历史实录，适合沿时间线阅读 Agent 的完整工作流。', 'A complete end-to-end development task recording from user instructions to final files.')}</p>`
+        + rec(t('任务、7 项测试与最终文件', 'Task, 7 tests & final files'), t('历史实录', 'Historical'), t('从用户指令一路追踪到工具结果、测试通过与最终文件正文。', 'Follow instructions, tool results, 7 passing tests and final files.'), open(historical('run-dbc2adf273d4'), t('打开工作台', 'Open')) + `<a href="${esc(demoDoc('deepseek-context'))}">${t('案例说明', 'Guide')}</a>`, 'run-dbc2adf273d4 · 2026-09-28')
+    };
+    if (id === 'grok') return {
+      title: t('Grok 历史外发调查', 'Grok historical outbound investigations'),
+      chapter: true,
+      html: `<p class="dlg-intro">${t('带采集日期的历史实录，原线上场景已无法复现，完整保留原始签名证据供调查。', 'Dated historical captures retained with original signed evidence.')}</p>`
+        + rec(t('代码库外发路径', 'Codebase outbound data'), t('历史实录', 'Historical'), t('阅读原始外发行为及保存正文。', 'Inspect recorded outbound behavior and saved content.'), open(historical('run-grok-exfil'), t('打开工作台', 'Open')) + `<a href="${esc(demoDoc('grok-codebase-exfil'))}">${t('调查指南', 'Guide')}</a>`, 'run-grok-exfil · 2026-07-14')
+        + rec(t('三类外发路径', 'Three outbound routes'), t('历史实录', 'Historical'), t('区分模型推理请求、厂商遥测与第三方分析。', 'Separate model requests, vendor telemetry and third-party analytics.'), open(historical('run-grok-3routes'), t('打开工作台', 'Open')) + `<a href="${esc(demoDoc('grok-3routes'))}">${t('调查指南', 'Guide')}</a>`, 'run-grok-3routes · 2026-07-15')
+    };
+    if (id === 'presets') return {
+      title: t('采集档位与 Jupyter 附件样本', 'Capture presets & Jupyter attachments'),
+      chapter: true,
+      html: `<p class="dlg-intro">${t('对比 basic 轻量元数据留存与 detailed 完整正文/附件留存，以及 Jupyter 图表附件与 Kernel 重启身份。', 'Compare basic vs detailed capture retention presets and inspect Jupyter chart attachments.')}</p>`
+        + rec('Browser · basic / detailed', t('执行实录', 'Recorded'), t('对比仅留存元数据的轻量档与完整截图/HAR 档。', 'Compare lightweight metadata retention vs detailed PNG/HAR capture.'), open(`recordings/browser-basic/${lang}/index.html?live=0&view=native`, t('打开 basic', 'Open basic')) + `<a href="${esc(browserURL())}">${t('打开 detailed', 'Open detailed')}</a>` + dl('browser-basic.zip'))
+        + rec('Notebook · basic / detailed', t('执行实录', 'Recorded'), t('Jupyter 请求、单元格代码与输出留存。', 'Jupyter requests, code and output retention.'), open(notebookReader('basic'), t('打开 basic', 'Open basic')) + `<a href="${esc(notebookReader('detailed'))}">${t('打开 detailed', 'Open detailed')}</a>` + dl('notebook-basic.zip'))
+        + rec(t('Jupyter 图表与 Kernel 重启', 'Jupyter chart & kernel restart'), t('合成样本', 'Synthetic'), t('展示 PNG 图表附件、父消息引用与重启前后 Kernel 身份。', 'PNG chart attachments, parent-message refs and restarted kernel identity.'), open(reader('notebook', { run: 'notebook-detailed', view: 'native' }), t('打开样本', 'Open example')))
+    };
+    return null;
+  }
+
+  function openCase(id) {
+    const info = caseBody(id);
+    if (!info) return;
+    activeCase = id;
+    document.querySelector('#case-eyebrow').textContent = info.chapter ? t('案例档案', 'CASE ARCHIVE') : t('案例经过与实录入口', 'CASE STORY & RECORDINGS');
+    document.querySelector('#case-title').textContent = info.title;
+    const back = info.chapter ? `<button type="button" class="back-btn" data-story="archive">${icon('back')}${t('返回全部分类', 'All archive chapters')}</button>` : '';
+    document.querySelector('#case-body').innerHTML = back + info.html;
+    if (!dialog.open) dialog.showModal();
+    document.querySelector('#case-body').scrollTop = 0;
+  }
+
+  root.addEventListener('click', e => {
+    const story = e.target.closest('[data-story]');
+    if (story) return openCase(story.dataset.story);
+    const jump = e.target.closest('[data-jump]');
+    if (jump) {
+      const card = root.querySelector(`.card[data-case="${jump.dataset.jump}"]`);
+      card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card?.animate([{ boxShadow: '0 0 0 3px rgba(0,113,227,0.35)' }, { boxShadow: 'none' }], { duration: 900 });
+      return;
     }
-    scrollTo(0,pageScroll);
-    root.querySelector(`[data-lang="${lang}"]`).focus({preventScroll:true});
-  }
-});
-dialog.addEventListener('click',event=>{
-  const story = event.target.closest('[data-story]');
-  if(story) openStory(story.dataset.story);
-});
-document.querySelector('#close-dialog').addEventListener('click',()=>dialog.close());
-dialog.addEventListener('click',event=>{if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom) dialog.close();}});
-dialog.addEventListener('close',()=>{
-  const trigger = root.querySelector(`[data-story="${activeStory}"]`) || root.querySelector('[data-story="archive"]');
-  activeStory = null;
-  const next = new URL(location.href);
-  next.searchParams.delete('case');
-  history.replaceState({},'',next);
-  trigger?.focus({preventScroll:true});
-});
-render();
-window.addEventListener('hashchange',syncSectionLinks);
-if(['#featured','#topics','#history','#capture'].includes(location.hash)) {
-  requestAnimationFrame(()=>document.getElementById(location.hash.slice(1))?.scrollIntoView({behavior:'instant'}));
-}
-if(url.searchParams.has('case')) openStory(url.searchParams.get('case'),false);
+    const lb = e.target.closest('[data-lang]');
+    if (lb && lb.dataset.lang !== lang) {
+      lang = lb.dataset.lang;
+      const next = new URL(location.href);
+      next.searchParams.set('lang', lang);
+      history.replaceState({}, '', next);
+      render();
+      if (activeCase) openCase(activeCase);
+    }
+  });
+  dialog.addEventListener('click', e => {
+    if (e.target === dialog) return dialog.close();
+    const story = e.target.closest('[data-story]');
+    if (story) openCase(story.dataset.story);
+  });
+  document.querySelector('#close-dialog').onclick = () => dialog.close();
+  dialog.addEventListener('close', () => { activeCase = null; });
+
+  render();
+  if (url.searchParams.has('case')) openCase(url.searchParams.get('case'));
+
+  const updateActiveNav = () => {
+    const ids = ['featured', 'archive', 'capture'];
+    let cur = 'featured';
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (el && el.getBoundingClientRect().top <= 160) cur = id;
+    }
+    root.querySelectorAll('.top-nav a[href^="#"]').forEach(a => {
+      if (a.getAttribute('href') === '#' + cur) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
+    });
+  };
+  addEventListener('scroll', updateActiveNav, { passive: true });
+})();

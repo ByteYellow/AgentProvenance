@@ -4,8 +4,8 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const scope = {window:{}};
-vm.runInNewContext(fs.readFileSync(new URL('../internal/dashboard/context.js', import.meta.url), 'utf8'), scope);
-const format = scope.window.AgentContextUI.readableContent;
+vm.runInNewContext(fs.readFileSync(new URL('../internal/dashboard/display-helpers.js', import.meta.url), 'utf8'), scope);
+const format = scope.window.AgentDisplayHelpers.readableContent;
 const entry = {kind:'tool_result',source:{harness:'deepseek'}};
 const result = {
   message:{role:'tool',toolCallId:'call-1',content:[{type:'text',text:'line 1\nline 2\nRan 7 tests\nOK'}],isError:true},

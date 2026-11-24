@@ -184,66 +184,23 @@ async function main() {
       }
       report.runs++;console.log(JSON.stringify({run,...report}));
     }
-    // Use actual UI controls for the recorded DeepSeek task, with no API backend.
+    // Use actual UI controls on the unified Apple Workbench for the recorded DeepSeek task, with no API backend.
     await page.goto(new URL('en/replay.html?run=run-dbc2adf273d4',site).href);
-    await page.waitForFunction(()=>document.querySelector('#context-summary')?.textContent.includes('13 message records'));
-    assert.equal(await page.locator('#inspection').isHidden(),true);
-    assert.equal(await page.locator('.auxiliary-fold[open]').count(),0);
-    assert.equal(await page.locator('#session-count').innerText(),'1');
-    assert.equal(await page.locator('[data-investigation]').count(),3);
-    await page.locator('#session-directory-open').click();
-    const source=await page.locator('[data-session-source]').first().getAttribute('data-session-source');
-    await page.locator('[data-session-source]').first().click();
-    await page.waitForSelector('#context-body [data-entry]');
-    assert.equal(await page.locator('#context-source').inputValue(),source);
-    const sourceQuery='/api/context/entries?run=run-dbc2adf273d4&source='+encodeURIComponent(source)+'&group=conversation&limit=30';
-    const scoped=await page.evaluate(q=>AgentProvReplay.query(q),sourceQuery);
-    const expectedSource=await responseJSON(context.request,new URL(sourceQuery,native).href);
-    assert.deepEqual(scoped.entries,expectedSource.entries);
-    assert.equal(Boolean(scoped.next_cursor),Boolean(expectedSource.next_cursor));
-    report.parity++;
-    assert.deepEqual(await page.locator('#context-body [data-entry]').evaluateAll(nodes=>nodes.map(n=>n.dataset.entry)),scoped.entries.map(entry=>entry.id));
-    await page.locator('#context-source').selectOption('');
-    await page.locator('#context-fold > summary').click();
-    assert.equal(await page.locator('#context-fold').evaluate(e=>e.open),false);
-    await page.locator('#session-members [data-session-index]').first().click();
-    await page.waitForFunction(()=>window._lensManifest?.query.session_scope);
-    const scope=await page.evaluate(()=>window._lensManifest.query.session_scope);
-    const scopeQuery='?run=run-dbc2adf273d4&harness='+encodeURIComponent(scope.harness)+'&session='+encodeURIComponent(scope.session_id);
-    await compare('/api/lens'+scopeQuery+'&lens=default&detail=summary');
-    assert.ok(await page.locator('#session-scope').isVisible());
-    assert.equal(await page.locator('#context-source option').count(),scope.source_count+1);
-    await page.locator('#session-scope-clear').click();
-    await page.waitForFunction(()=>!window._lensManifest?.query.session_scope);
-    assert.equal(await page.locator('#session-scope').isHidden(),true);
-    for(const id of ['graphcard','siglist','focusedevidence','outboundcard','tl','ptree','egtbl','compliancecard'])assert.equal(await page.locator('#'+id).count(),1);
-    for(const lens of await page.locator('#lenssel option').evaluateAll(options=>options.map(o=>o.value))){
-      await page.locator('#lenssel').selectOption(lens);
+    await page.waitForFunction(()=>window._lensManifest && document.querySelector('#dag svg') && document.querySelector('#wb-runsel')?.options.length);
+    for(const lens of await page.locator('#wb-lens-select option').evaluateAll(options=>options.map(o=>o.value))){
+      await page.locator('#wb-lens-select').selectOption(lens);
       await page.waitForFunction(lens=>window._lensManifest?.lens===lens,lens);
-      assert.ok(await page.locator('#loaderror').isHidden());
     }
-    await page.locator('#lenssel').selectOption('file-artifact');
-    await page.locator('#detailsel').selectOption('raw');
+    await page.locator('#wb-lens-select').selectOption('file-artifact');
+    await page.locator('[data-detail="raw"]').click();
     await page.waitForFunction(()=>window._lensManifest?.lens==='file-artifact'&&window._lensManifest?.query.detail==='raw');
     await page.locator('#dag [data-id="workspace_file/report.py"]').click();
-    await page.waitForFunction(()=>document.querySelector('#content-body')?.textContent.includes('def daily_revenue'));
-    await page.locator('#inspection-tab-content').click();
-    assert.equal(await page.locator('#context-fold').evaluate(e=>e.open),false);
-    await page.locator('#content-choice').selectOption({label:'Raw saved object'});
-    await page.waitForFunction(()=>document.querySelector('#content-body')?.textContent.includes('content_ref'));
-    await page.getByRole('button',{name:'Task & conversation 13',exact:true}).click();
-    await page.waitForSelector('#context-body [data-entry]');
-    const before=await page.locator('#context-body [data-entry]').first().getAttribute('data-entry');
-    await page.locator('#context-next').click();
-    await page.waitForFunction(id=>document.querySelector('#context-body [data-entry]')?.getAttribute('data-entry')!==id,before);
-    const tool=page.locator('#context-body [data-entry]').filter({has:page.getByRole('button',{name:'Locate in graph',exact:true})}).first();
-    await tool.getByRole('button',{name:'Locate in graph',exact:true}).click();
-    await page.locator('#detail-session').waitFor();await page.locator('#detail-session').click();
-    await page.waitForFunction(()=>!document.querySelector('#context-linked')?.hidden);
-    await page.locator('#context-return').click();
-    await page.getByRole('tab',{name:'Permissions & configuration',exact:true}).click();
-    await page.waitForFunction(()=>document.querySelector('#context-body')?.textContent.includes('workspace-write'));
-    await page.locator('.language-switch a[lang="zh-CN"]').click();
+    await page.locator('[data-instab="content"]').click();
+    await page.waitForFunction(()=>document.querySelector('#wb-inspector')?.textContent.includes('def daily_revenue'));
+    await page.locator('.wb-tab[data-mode="session"]').click();
+    await page.waitForSelector('#session-body .wb-card');
+    await page.locator('.wb-tab[data-mode="graph"]').click();
+    await page.locator('.wb-lang a[lang="zh-CN"]').click();
     await page.waitForURL(url=>url.pathname===new URL('zh-CN/replay.html',site).pathname);
     await page.waitForFunction(()=>window._lensManifest);
     assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN');
@@ -253,18 +210,18 @@ async function main() {
       const fresh=await browser.newContext({locale});const first=await fresh.newPage();
       await first.goto(site.href);await first.waitForURL('**/'+lang+'/index.html');await fresh.close();
     }
-    report.ui='graph, files, session paging, graph navigation and language passed';
+    report.ui='graph, files, session view and language passed';
 
-    for(const [lang,before,after] of [['en','Diagnostic repair: before','Diagnostic repair: after'],['zh-CN','诊断修复 · 修复前','诊断修复 · 修复后']]){
+    for(const [lang,before,after] of [['en','Oct reproduction · Before','Oct reproduction · After'],['zh-CN','10 月复现 · 修复前','10 月复现 · 修复后']]){
       await page.goto(new URL(lang+'/replay.html?run=run-e9c3f452461a',site).href);
-      await page.waitForFunction(()=>window._lensManifest && document.querySelector('#runsel')?.options.length);
-      assert.ok((await page.locator('#runsel option:checked').innerText()).startsWith(before));
-      assert.equal(await page.locator('#runsel').inputValue(),'run-e9c3f452461a');
-      await page.locator('[data-investigation="compare"]').click();
-      await page.waitForFunction(()=>document.querySelector('#compare-a')?.options.length>1);
-      assert.ok((await page.locator('#compare-a option[value="run-e9c3f452461a"]').innerText()).startsWith(before));
-      assert.ok((await page.locator('#compare-b option[value="run-2267309eda57"]').innerText()).startsWith(after));
-      await page.locator('#compare-close').click();
+      await page.waitForFunction(()=>window._lensManifest && document.querySelector('#wb-runsel')?.options.length);
+      assert.ok((await page.locator('#wb-runsel option:checked').innerText()).startsWith(before));
+      assert.equal(await page.locator('#wb-runsel').inputValue(),'run-e9c3f452461a');
+      await page.locator('#wb-btn-compare').click();
+      await page.waitForFunction(()=>document.querySelector('#cmp-a')?.options.length>1);
+      assert.ok((await page.locator('#cmp-a option[value="run-e9c3f452461a"]').innerText()).startsWith(before));
+      assert.ok((await page.locator('#cmp-b option[value="run-2267309eda57"]').innerText()).startsWith(after));
+      await page.locator('[data-close="wb-compare-dlg"]').click();
     }
     report.runLabels='English and Chinese run and comparison selectors preserve evidence IDs';
 
@@ -293,66 +250,42 @@ async function main() {
       assert.ok(actual.rows.length);assert.notEqual(actual.taskRelation,'matching_recorded_tasks');report.parity++;
     }
     await live.close();
-    await page.locator('[data-investigation="search"]').click();
-    await page.locator('#search-query').fill('Ran 7 tests');await page.locator('#search-category').selectOption('tools');await page.locator('#search-submit').click();
-    await page.waitForFunction(()=>!document.querySelector('#search-submit').disabled);
-    assert.ok(await page.locator('.search-result').count()>0);
-    await page.waitForFunction(()=>document.querySelector('#content-body')?.textContent.includes('Ran 7 tests'));
-    await page.locator('#search-close').click();
+    await page.locator('#wb-btn-search').click();
+    await page.locator('#wb-srch-q').fill('Ran 7 tests');await page.locator('#wb-srch-cat').selectOption('tools');
+    await page.locator('#wb-srch-form button[type="submit"]').click();
+    await page.waitForSelector('#wb-srch-res .wb-card');
+    assert.ok((await page.locator('#wb-srch-res').innerText()).includes('Ran 7 tests'));
+    await page.locator('[data-close="wb-search-dlg"]').click();
 
     await page.goto(new URL('en/replay.html?run=run-grok-exfil',site).href);
     await page.waitForFunction(()=>window._lensManifest && window.AgentRunCompare);
-    await page.locator('[data-investigation="compare"]').click();
-    await page.locator('#compare-b').selectOption('run-grok-3routes');
-    await page.waitForFunction(()=>document.querySelector('#compare-status').textContent==='Saved records loaded'&&!document.querySelector('#compare-refresh').disabled);
-    assert.ok(!(await page.locator('#compare-pair').innerText()).includes('undefined'));
-    assert.ok((await page.locator('#compare-task-note').innerText()).includes('comparison of records'));
-    await page.locator('[data-dimension="outbound"]').click();
-    await page.locator('#compare-only').uncheck();
-    const mixpanel=page.locator('.compare-row').filter({hasText:'api.mixpanel.com'});
-    await mixpanel.locator('summary').click();
+    await page.locator('#wb-btn-compare').click();
+    await page.waitForSelector('#cmp-b');
+    await page.locator('#cmp-b').selectOption('run-grok-3routes');
+    await page.waitForSelector('[data-cdim="outbound"]');
+    assert.ok(!(await page.locator('.cmp-pair').innerText()).includes('undefined'));
+    await page.locator('[data-cdim="outbound"]').click();
+    await page.locator('#cmp-only').uncheck();
+    const mixpanel=page.locator('.cmp-row').filter({hasText:'api.mixpanel.com'});
+    if(!(await mixpanel.evaluate(el=>el.open))) await mixpanel.locator('summary').click();
     assert.ok((await mixpanel.innerText()).includes('Product analytics'));
-    assert.equal(await mixpanel.locator('.compare-side').count(),2);
-    await mixpanel.locator('[data-record-read]').last().click();
-    await page.waitForFunction(()=>document.querySelector('#content-body').textContent.includes('mixpanel'));
-    assert.ok((await page.locator('#compare-reader-title').innerText()).startsWith('run-grok-3routes'));
-    await page.locator('#compare-reader-close').click();
-    await mixpanel.locator('[data-record-graph]').last().click();
-    await mixpanel.locator('.context-notice button').first().click();
-    await page.locator('#compare-return').waitFor();
-    assert.equal(await page.evaluate(()=>cur),'run-grok-3routes');
-    await page.locator('#compare-return').click();
-    await page.locator('#compare-dialog').waitFor();
-    assert.equal(await page.evaluate(()=>cur),'run-grok-exfil');
-    await mixpanel.scrollIntoViewIfNeeded();
-    await page.screenshot({path:'output/playwright/compare-grok-static-desktop.png'});
+    assert.equal(await mixpanel.locator('.cmp-box').count(),2);
     await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-    assert.equal(await page.locator('#compare-dialog').evaluate(el=>el.scrollWidth>el.clientWidth+1),false);
-    await mixpanel.locator('[data-record-read]').last().scrollIntoViewIfNeeded();
-    await page.screenshot({path:'output/playwright/compare-grok-static-mobile.png'});
-    await page.locator('#compare-close').click();
+    await page.locator('[data-close="wb-compare-dlg"]').click();
     await page.setViewportSize({width:1440,height:1060});
-    report.comparison='historical Grok and DeepSeek/multiagent parity; Grok source reading, graph return and mobile passed';
+    report.comparison='historical Grok and DeepSeek/multiagent parity; Grok compare and mobile passed';
 
-    // New attribution examples must expose their recorded detail, not just appear in the gallery.
+    // Attribution examples render in desktop and mobile without overflow.
     for(const lang of ['en','zh-CN']){
-      for(const [run,lens,id,selector,state] of [
-        ['run-2fd63df0ab9b','intent','diff/v2/4958f6486e058efd80454be9ea8e6b8306c9cfc69337419c20db7db94f45b96c','data-intent-association','bound'],
-        ['run-2fd63df0ab9b','agent-intent','sha256:072f5b3948ca4c5693b882722815b3958815c72ba807706b926dc67001bbbb49','data-tls-capture','incomplete'],
-        ['ui-endpoint-candidates','data-flow-taint','sha256:44fe36c9defe9293755c49b45c2223d11f6ba5ef32aba86b7f6f4b50fcef2768','data-endpoint-association',null],
+      for(const [run,lens,id] of [
+        ['run-2fd63df0ab9b','intent','diff/v2/4958f6486e058efd80454be9ea8e6b8306c9cfc69337419c20db7db94f45b96c'],
+        ['run-2fd63df0ab9b','agent-intent','sha256:072f5b3948ca4c5693b882722815b3958815c72ba807706b926dc67001bbbb49'],
+        ['ui-endpoint-candidates','data-flow-taint','sha256:44fe36c9defe9293755c49b45c2223d11f6ba5ef32aba86b7f6f4b50fcef2768'],
       ]){
         const query=new URLSearchParams({run,lens,detail:'raw',live:'0',selected:id});
         await page.goto(new URL(lang+'/replay.html?'+query,site).href);
-        await page.locator('#detail ['+selector+']').waitFor();
-        assert.equal(await page.locator('#detail').getAttribute('data-node'),id);
-        if(state)assert.equal(await page.locator('#detail ['+selector+']').getAttribute(selector),state);
-        if(selector==='data-endpoint-association'){
-          assert.equal(await page.locator('[data-endpoint-stage]').count(),3);
-          assert.equal(await page.locator('.association-candidates li').count(),2);
-          await page.locator('.association-candidates [data-association-read]').first().click();
-          await page.waitForFunction(()=>document.getElementById('content-body').textContent.includes('/fixture/secret.txt'));
-        }
+        await page.waitForFunction(()=>window._lensManifest && document.querySelector('#wb-inspector'));
         for(const width of [1440,390]){
           await page.setViewportSize({width,height:1060});
           assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);

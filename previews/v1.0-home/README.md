@@ -1,12 +1,13 @@
-# Demo homepage preview
+# Demo homepage
 
 English | [中文](README.zh-CN.md)
 
-This directory holds the shared homepage assets and a retained local review build.
-It preserves four illustrated entry cards and groups the remaining cases by
-their actual tasks. Report-repair links open Compare with an explicit A/B pair.
-The October and November reproductions remain separate. Headings omit final
-periods; descriptive text retains punctuation.
+This directory holds the single-source v1.0 demo homepage (`index.html`, `home.css`,
+`home.js`), build-time shard extractors (`featured_cards.py`, `workspace_card.py`,
+`replay_card_source.py`), and the Playwright acceptance suite (`check-redesign.cjs`).
+Four featured cards pull real excerpts directly from the packaged replays, and the
+remaining cases are grouped by task. Report-repair links open Compare with an
+explicit A/B pair; October and November reproductions remain separate.
 
 ## Build
 
@@ -17,8 +18,9 @@ The commands below only read bundled public recordings and build local files.
 go build -tags agentprov_tools -o /tmp/agentprov-review ./cmd/agentprov
 /tmp/agentprov-review demo export --output output/home-review-archive
 npm ci --prefix previews/v1.0-home
+npm ci --prefix previews/v1.0-tour --ignore-scripts
 previews/v1.0-home/node_modules/.bin/playwright install chromium
-python3 previews/v1.0-home/build.py \
+python3 scripts/build_demo_site.py \
   --archive output/home-review-archive \
   --output output/home-review
 python3 -m http.server 58729 --bind 127.0.0.1 --protocol HTTP/1.1 --directory output/home-review
@@ -32,23 +34,18 @@ renders Mermaid locally; the resulting pages need no external diagram service.
 ## Review
 
 ```sh
-node previews/v1.0-home/check.cjs http://127.0.0.1:58729/ output/playwright/home-review output/home-review
+python3 previews/v1.0-home/test_workspace_card.py -v
+node previews/v1.0-home/check-redesign.cjs \
+  http://127.0.0.1:58729/ output/playwright/home-review.json output/home-review --extended
 ```
 
-The check covers both languages, desktop/mobile layouts, each archive chapter,
-guide links, per-link icons, heading punctuation, paired comparisons, restored
-reader state, diagram zoom and downloaded replay bytes. The optional last
-argument enables offline `file://` checks. Invalid pairs and other Compare
-behavior have a separate regression in `scripts/test_dashboard_compare_completeness.mjs`.
-
-`media/` contains screenshots of the saved recordings, not generated task data.
-To recapture them, run `capture-thumbnails.cjs` with the preview URL and a new
-image directory. An optional `--screenshots` directory supplies larger reader
-screenshots in the case dialogs. Opening these cases does not run an Agent or
-call a model API.
-
-The [refined homepage](refined/README.md) and reader were approved for integration
-on 2026-11-17. This earlier design remains available for comparison.
+The check covers both languages, responsive desktop/tablet/mobile layouts, featured
+snapshot parity against linked runs, explicit verification states, paired
+comparisons, restored reader state, opt-in page tours and downloaded offline
+`file://` reading packages without `localStorage`. `media/` retains the static
+collaboration graph thumbnails (`team-en.png`, `team-zh-CN.png`); the Browser card
+screenshot is extracted directly from the packaged replay at build time. Opening
+these cases does not run an Agent or call a model API.
 
 ## Approved website build
 

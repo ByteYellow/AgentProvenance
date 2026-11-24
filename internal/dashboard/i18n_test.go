@@ -20,7 +20,7 @@ func TestDashboardLanguageKeepsMachineIdentifiers(t *testing.T) {
 		if w.Code != 200 {
 			t.Fatalf("page failed for %s: %d %s", lang, w.Code, body)
 		}
-		for _, want := range []string{`<html lang="` + lang + `">`, `<option value="summary">`, `<option value="expanded">`, `<option value="raw">`, `data-ov="risk"`, `id="runsel"`, `/assets/i18n.js?lang=` + lang, `</html>`} {
+		for _, want := range []string{`<html lang="` + lang + `">`, `href="/assets/workbench.css"`, `src="/assets/workbench.js"`, `id="wb-root"`, `/assets/i18n.js?lang=` + lang, `</html>`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("missing %s", want)
 			}
@@ -28,12 +28,12 @@ func TestDashboardLanguageKeepsMachineIdentifiers(t *testing.T) {
 		if strings.Contains(body, "#ZgotmplZ") {
 			t.Fatal("template rejected a presentation value")
 		}
-		heading := "Run Overview"
+		heading := "Evidence Workbench"
 		if lang == "zh-CN" {
-			heading = "执行概览"
+			heading = "证据工作台"
 		}
-		if !strings.Contains(body, "<h2>"+heading) {
-			t.Errorf("wrong heading for %s", lang)
+		if !strings.Contains(body, heading) {
+			t.Errorf("wrong title for %s", lang)
 		}
 		if !strings.Contains(body, "lens=security") || !strings.Contains(body, "run=original-run") {
 			t.Error("language link lost replay selection")
@@ -47,7 +47,7 @@ func TestDashboardUnknownRoutesDoNotRenderTheRunPage(t *testing.T) {
 		for _, method := range []string{http.MethodGet, http.MethodHead} {
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, httptest.NewRequest(method, path, nil))
-			if w.Code != http.StatusNotFound || strings.Contains(w.Body.String(), "id=\"runsel\"") {
+			if w.Code != http.StatusNotFound || strings.Contains(w.Body.String(), "id=\"wb-root\"") {
 				t.Errorf("%s %s returned dashboard instead of 404: %d", method, path, w.Code)
 			}
 		}
@@ -84,7 +84,7 @@ func TestDashboardCopyHasChineseCatalogEntries(t *testing.T) {
 	// these lookups are actually used in rendered controls and error states.
 	patterns := []string{`\{\{tr \.Lang "([^"]+)"`, `\b(?:tr|tx|t|notice)\(\s*"([^"\\]*(?:\\.[^"\\]*)*)"`, `\b(?:tr|tx|t|notice)\(\s*'([^'\\]*(?:\\.[^'\\]*)*)'`}
 	for _, pattern := range patterns {
-		for _, m := range regexp.MustCompile(pattern).FindAllStringSubmatch(string(indexHTML)+string(contextJS)+string(workspaceJS)+string(accessControlJS)+string(searchJS)+string(compareJS)+string(exportJS), -1) {
+		for _, m := range regexp.MustCompile(pattern).FindAllStringSubmatch(string(indexHTML)+string(workbenchJS)+string(displayHelpersJS), -1) {
 			source := strings.ReplaceAll(m[1], `\'`, `'`)
 			if !i18n.HasChinese(source) {
 				t.Errorf("missing Chinese copy: %q", source)

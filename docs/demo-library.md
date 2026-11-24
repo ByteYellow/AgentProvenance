@@ -16,19 +16,19 @@ Start with Task investigation and repair. It connects the common investigation s
 1. **Understand the task.** Read the original instructions and tool output to establish the intended work and its recorded result.
 2. **Check the evidence.** Find the relevant file or outbound record, read its saved content, and inspect the supporting events.
 3. **Compare changes.** Compare the before-and-after Runs from the same repair case. Check configuration, files and network activity; differences in capture scope remain visible.
-4. **Share the result.** Select the Runs or sessions to share, review the included content, and download the offline reader.
+4. **Share the result.** Open the case details to download its reading copy. To select records from your own local store, use [dashboard export](derived-evidence.md#export).
 
 For a specific question, use the direct entry below. The graph follows relationships;
 raw records supply the underlying detail.
 
 | What you need | Entry | Result |
 | --- | --- | --- |
-| What the agent said and invoked | Task and conversation, Tool calls | Original instructions, inputs, outputs and timestamps |
+| What the agent said and invoked | Session & tools → Conversation & tools | Original instructions, inputs, outputs and timestamps |
 | A particular error, domain or filename | Search | Matching saved text, full content and evidence links |
 | Changes across two executions | Compare | Configuration, file and network comparisons with capture scope |
 | The origin of file or network activity | Evidence graph | Supporting events, association basis and scope |
 | Missing or omitted records | Collection status | Retained content, intentional omissions and capture gaps |
-| Evidence for another investigator | Export | An offline reader; see the [verification guide](derived-evidence.md) for signed delivery |
+| Evidence for another investigator | Case details → offline ZIP | A portable reader; see the [verification guide](derived-evidence.md) for signed delivery |
 
 Execution status describes the task outcome, capture status describes recorded
 coverage, and verification describes evidence checks. Start with the result and
@@ -72,7 +72,7 @@ Start with the question in each row, then follow its evidence path:
 | Task investigation | DeepSeek investigated a task before and after a configuration repair | Read the task and tool results, then use Compare to inspect the configuration and file changes across the two Runs |
 | Cross-environment execution | Two Claude sessions made three remote execution attempts; the capture also exercised a lost receipt response | Select a source Tool Call, follow its target Run and attempt, then compare execution, capture and delivery states; navigate back to the original call |
 | Workspace | A remote-authoritative task read, edited and executed the same workspace | Inspect input and output revisions, operation receipts and the saved `result.txt` body |
-| Browser | An Agent used the recorded browser entry for a web task | Expand the Agent session and open Browser / Notebook; inspect an operation's native references, saved text and screenshot, with request evidence alongside it |
+| Browser | An Agent used the recorded browser entry for a web task | Open the Browser / Notebook tab and choose an operation to inspect the saved text, screenshot and request evidence |
 | Notebook | A synthetic Jupyter capture contains a chart and a kernel restart | Inspect the request and parent-message references, open the chart, and compare kernel identities across the restart |
 
 The first four use recorded candidate executions. The Notebook sample is
@@ -132,7 +132,8 @@ and separate signed bundles.
 
 ## Sharing an investigation
 
-Use the Dashboard export preview to select Runs, sessions and retained records.
+Download the case's offline ZIP, extract it and open its index. For your own
+local run, use `agentprov dashboard export --run RUN_ID --output reading.zip`.
 The resulting read-only directory works without the original workspace. A
 selected reading copy and its original signed evidence bundle are separate
 artifacts; keep the original bundle and public key when signature verification

@@ -1,35 +1,23 @@
-#app .story .story-preview{margin:0;background:#fff}
-#app .story .preview-link{aspect-ratio:640/252;margin:0 24px;border:1px solid #e1e5eb;border-radius:6px;background:#fff;box-shadow:0 3px 10px #25314a0c}
-#app .story .preview-link img{width:100%;height:100%;object-fit:contain;background:#fff}
-#page-tour-start{display:inline-flex;align-items:center;gap:7px;flex-shrink:0;padding:7px 10px;border:1px solid #d9dce2;border-radius:6px;background:#fff;color:#515763;font:inherit;font-size:12px;line-height:1.4;cursor:pointer;white-space:nowrap}
-#page-tour-start:hover{border-color:#0071e3;color:#0071e3;background:#f5f9ff}
-#page-tour-start.tour-invited{border-color:#0071e3;color:#0071e3;background:#f5f9ff;box-shadow:0 0 0 4px #0071e31f}
-.driver-popover.agentprov-tour-invite{box-sizing:border-box;width:310px;max-width:calc(100vw - 24px);padding:20px;border:1px solid #dce4ef;border-radius:8px;background:#fff;box-shadow:0 12px 40px #16213124;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1d1d1f}
-.agentprov-tour-invite .driver-popover-title{padding-right:26px;font-size:16px;line-height:1.5;font-weight:650;letter-spacing:0;margin:0 0 8px}
-.agentprov-tour-invite .driver-popover-description{font-size:13px;line-height:1.75;color:#59616d;letter-spacing:0}
-.agentprov-tour-invite .driver-popover-close-btn{top:12px;right:12px;width:26px;height:26px;border-radius:5px;color:#626b77;font-size:20px;line-height:1}
-.agentprov-tour-invite .driver-popover-close-btn:hover{background:#f0f3f7;color:#1d1d1f}
-.agentprov-tour-invite .driver-popover-footer{display:none}
-.agentprov-tour-invite button:focus-visible{outline:3px solid #99c8ff;outline-offset:2px}
-.tour-help-icon{display:inline-grid;place-items:center;border:1.3px solid currentColor;border-radius:50%;width:16px;height:16px;font-size:12px;font-weight:600;line-height:1}
-.driver-popover.agentprov-tour{box-sizing:border-box;width:354px;max-width:calc(100vw - 24px);padding:22px;border:1px solid #e0e4e9;border-radius:8px;background:#fff;box-shadow:0 16px 56px #1621312b,0 3px 12px #16213112;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1d1d1f}
-.agentprov-tour .tour-caption{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;color:#606a78;font-size:11px;line-height:1.5;font-weight:500;letter-spacing:0}
-.agentprov-tour .driver-popover-progress-text{color:#606a78;font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
-.agentprov-tour .tour-meter{height:3px;margin-bottom:18px;border-radius:2px;background:#eef0f4;overflow:hidden}
-.agentprov-tour .tour-meter span{display:block;height:100%;background:#0071e3;transition:width .18s ease}
-.agentprov-tour .driver-popover-title{font-size:18px;font-weight:650;line-height:1.5;letter-spacing:0;margin:0 0 10px;color:#1d1d1f;padding:0}
-.agentprov-tour .driver-popover-description{font-size:14px;line-height:1.75;letter-spacing:0;color:#59616d;font-weight:400}
-.agentprov-tour .driver-popover-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:22px 0 0;padding:0}
-.agentprov-tour .driver-popover-navigation-btns{display:flex;align-items:center;gap:8px;flex:0 0 auto}
-.agentprov-tour button{font-family:inherit!important;font-size:12px!important;font-weight:500!important;line-height:1.4!important;text-shadow:none!important;letter-spacing:0}
-.agentprov-tour .driver-popover-next-btn{padding:9px 14px!important;border:1px solid #0071e3!important;border-radius:6px!important;background:#0071e3!important;color:white!important}
-.agentprov-tour .driver-popover-next-btn:hover{background:#0064ca!important}
-.agentprov-tour .driver-popover-prev-btn{padding:9px 11px!important;border:1px solid #d9dce2!important;border-radius:6px!important;background:#fff!important;color:#343b46!important}
-.agentprov-tour .driver-popover-prev-btn.driver-popover-btn-disabled{visibility:hidden}
-.agentprov-tour .tour-skip{border:0!important;box-shadow:none!important;background:none!important;color:#606a78!important;padding:8px 0!important;cursor:pointer;white-space:nowrap}
-.agentprov-tour .tour-skip:hover{color:#0071e3!important}
-.agentprov-tour button:focus-visible,#page-tour-start:focus-visible{outline:3px solid #99c8ff;outline-offset:3px}
-.agentprov-tour .driver-popover-arrow{filter:drop-shadow(0 0 0 #e0e4e9)}
-@media(max-width:600px){#page-tour-start .tour-help-label{display:none}#page-tour-start{width:32px;height:32px;justify-content:center;padding:0}.driver-popover.agentprov-tour{padding:18px;width:340px}.agentprov-tour .driver-popover-title{font-size:17px}.agentprov-tour .driver-popover-footer{gap:8px}.agentprov-tour .driver-popover-description{font-size:13px;line-height:1.7}}
-@media(max-width:720px){.context-nav button{flex:1 1 140px;min-width:0;text-align:left}.context-nav button[data-context-open="coverage"]{flex-basis:100%}}
-@media(prefers-reduced-motion:reduce){.agentprov-tour .tour-meter span{transition:none}}
+#page-tour-start{display:inline-flex;align-items:center;flex-shrink:0;gap:5px;border:0;border-radius:980px;background:#f2f2f5;color:#36383c;padding:6px 9px;font:500 12px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;white-space:nowrap;cursor:pointer}
+#page-tour-start[hidden],[data-tour-slot][hidden]{display:none}
+#page-tour-start .tour-icon{display:grid;place-items:center;width:16px;height:16px;border:1.3px solid currentColor;border-radius:50%;font-size:11px}
+#page-tour-start:hover,#page-tour-start.tour-invited{color:#0066c6;background:#eaf3ff}
+#page-tour-start:focus-visible,#page-tour-invite button:focus-visible,.agentprov-tour button:focus-visible{outline:2px solid #0071e3;outline-offset:2px}
+[data-tour-slot]{flex:0 0 auto;max-width:100%;overflow-x:clip;overflow-y:visible;padding:7px 0 5px}
+#page-tour-invite{box-sizing:border-box;position:relative;display:flex;align-items:center;gap:10px;width:max-content;max-width:calc(100% - 16px);padding:8px 10px 8px 14px;border:1px solid rgba(0,113,227,0.18);border-radius:14px;background:rgba(255,255,255,0.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#1d1d1f;font:12.5px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif;box-shadow:0 4px 18px -4px rgba(0,0,0,0.12),0 1px 3px rgba(0,0,0,0.04)}
+#page-tour-invite:before{content:"";position:absolute;top:-4px;left:var(--tour-arrow,50%);width:6px;height:6px;transform:rotate(45deg);border-top:1px solid rgba(0,113,227,0.18);border-left:1px solid rgba(0,113,227,0.18);background:#ffffff}
+#page-tour-invite button{border:0;background:none;font:18px/1 sans-serif;color:#6e6e73;padding:4px;cursor:pointer}
+.driver-popover.agentprov-tour{box-sizing:border-box;width:336px;max-width:calc(100vw - 20px);padding:18px;border-radius:14px;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",sans-serif;box-shadow:0 20px 48px -12px rgba(0,0,0,0.24),0 0 0 1px rgba(0,0,0,0.06)}
+.agentprov-tour .driver-popover-title{font-size:16px}.agentprov-tour .driver-popover-description{font-size:13px;line-height:1.6;color:#42464d}
+.agentprov-tour .driver-popover-footer{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.agentprov-tour button{font-family:inherit!important;text-shadow:none!important}
+.agentprov-tour .tour-skip{background:none!important;border:0!important;box-shadow:none!important;color:#525963!important}
+.agentprov-tour .driver-popover-footer .driver-popover-next-btn,.agentprov-tour .driver-popover-footer .driver-popover-prev-btn{border-radius:980px;padding:5px 12px}
+.agentprov-tour .driver-popover-next-btn{background:#0071e3!important;color:white!important;border:1px solid #0071e3!important}
+@media(min-width:981px){.topbar+[data-tour-slot]{position:relative;z-index:2;height:0;padding:0}.topbar+[data-tour-slot] #page-tour-invite{top:5px}}
+@media(max-width:980px){
+  .topbar:has(#page-tour-start){display:grid;grid-template-columns:minmax(0,1fr) max-content;grid-template-areas:"brand lang" "nav tour";gap:6px 10px}
+  .topbar .brand{grid-area:brand;justify-self:start}.topbar .languages{grid-area:lang;justify-self:end}
+  .topbar .top-nav{grid-area:nav;min-width:0}.topbar #page-tour-start{grid-area:tour;justify-self:end}
+  #page-tour-start{padding:5px 7px}
+}

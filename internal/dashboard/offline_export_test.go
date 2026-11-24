@@ -73,9 +73,9 @@ func TestOfflineReplayFreezesOneRunAndSavedContent(t *testing.T) {
 	for _, f := range p.Inventory.Files {
 		expected[f.Path] = f
 	}
-	for _, asset := range []string{"assets/evidence.js", "assets/evidence.css"} {
+	for _, asset := range []string{"assets/workbench.js", "assets/workbench.css"} {
 		if expected[asset].Bytes == 0 {
-			t.Fatalf("shared evidence reader missing from inventory: %s", asset)
+			t.Fatalf("shared workbench asset missing from inventory: %s", asset)
 		}
 	}
 	if len(z.File) != len(expected)+1 {
@@ -207,7 +207,7 @@ func TestOfflineReplayHTMLUsesOnlyLocalResources(t *testing.T) {
 		}
 		s := string(out)
 		last := -1
-		for _, part := range []string{"Content-Security-Policy", "../assets/catalog.js", "../assets/offline.js", "../assets/replay.js", "../assets/i18n." + string(locale) + ".js", "window.AgentWorkspaceUI"} {
+		for _, part := range []string{"Content-Security-Policy", "../assets/catalog.js", "../assets/offline.js", "../assets/replay.js", "../assets/i18n." + string(locale) + ".js", "../assets/reader.js", "../assets/workbench.js"} {
 			at := strings.Index(s, part)
 			if at <= last {
 				t.Fatalf("missing/out-of-order resource: %s", part)
@@ -222,9 +222,9 @@ func TestOfflineReplayHTMLUsesOnlyLocalResources(t *testing.T) {
 		if !strings.Contains(s, "connect-src &#39;none&#39;") || !strings.Contains(s, "export-inventory.json") {
 			t.Fatal("offline boundary or inventory link missing")
 		}
-		for _, resource := range []string{`href="../assets/evidence.css"`, `src="../assets/evidence.js"`} {
+		for _, resource := range []string{`href="../assets/workbench.css"`, `src="../assets/workbench.js"`} {
 			if !strings.Contains(s, resource) {
-				t.Fatalf("shared evidence reader missing from HTML: %s", resource)
+				t.Fatalf("shared workbench asset missing from HTML: %s", resource)
 			}
 		}
 	}

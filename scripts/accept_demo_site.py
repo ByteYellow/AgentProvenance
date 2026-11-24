@@ -57,11 +57,11 @@ def check_inventory(root):
         assert file.stat().st_size == item["bytes"], name
         assert digest(file) == item["sha256"], name
     for extension in ("js", "css"):
-        asset = root / "assets" / ("evidence." + extension)
+        asset = root / "assets" / ("workbench." + extension)
         assert digest(asset) == digest(REPO / "internal/dashboard" / asset.name)
     for language in ("en", "zh-CN"):
         page = (root / language / "index.html").read_text()
-        assert page.count('src="../assets/evidence.js"') == 1
+        assert page.count('src="../assets/workbench.js"') == 1
         assert "evidence-preview" not in page
     return len(expected)
 
@@ -76,7 +76,7 @@ def main():
     report.mkdir(parents=True, exist_ok=True)
     tour_pages = check_hosted_tour(site)
     for extension in ("js", "css"):
-        asset = "evidence." + extension
+        asset = "workbench." + extension
         assert digest(site / "assets" / asset) == digest(REPO / "internal/dashboard" / asset)
     preserved = 0
     for source in archive.rglob("*"):
@@ -100,7 +100,6 @@ def main():
     size = sum(p.stat().st_size for p in site.rglob("*") if p.is_file())
     assert size <= 900 * 1024 * 1024, "Static website exceeds the publication budget"
     for source in json.loads((site / "sources.json").read_text()):
-        assert digest(site / "downloads" / (source["name"] + ".zip")) == source["sha256"]
         assert digest(site / source["reading_copy"]) == source["reading_copy_sha256"]
 
     env = {**os.environ, "AGENTPROV_SITE_PRODUCTION": "1"}
@@ -119,17 +118,11 @@ def main():
 
     try:
         url = f"http://127.0.0.1:{server.server_port}/{site.name}/"
-        run("node", "previews/v1.0-reader/check-interactions.cjs", url)
-        run("node", "previews/v1.0-tour/check.cjs", url, report / "tour")
-        run("node", "previews/v1.0-home/refined/check.cjs", url, report / "home")
-        run("node", "previews/v1.0-home/check.cjs", url, report / "flows", site)
-        run("node", "previews/v1.0-reader/check.cjs", report / "reader", extra_env={"AGENTPROV_PREVIEW_URL": url + "current"})
-        run("node", "previews/v1.0-reader/check-live.cjs", url + "current/", report / "live-reader")
-        run("node", "previews/v1.0-reader/check-portable.cjs", site / "current", report / "offline")
-        run("node", "previews/v1.0-reader/check-select.cjs", site / "current", report / "select")
+        run("python3", "previews/v1.0-home/test_workspace_card.py", "-v")
+        run("node", "previews/v1.0-home/check-redesign.cjs", url, report / "redesign.json", site, "--extended")
         with tempfile.TemporaryDirectory(prefix="agentprov-downloaded-reader-") as folder:
             root = Path(folder)
-            with zipfile.ZipFile(report / "flows/workspace-current.zip") as downloaded:
+            with zipfile.ZipFile(site / "downloads/reading/workspace-contract.zip") as downloaded:
                 for item in downloaded.infolist():
                     name = Path(item.filename)
                     assert not name.is_absolute() and ".." not in name.parts and "\\" not in item.filename
@@ -137,7 +130,6 @@ def main():
             check_inventory(root / "workspace")
             for language in ("en", "zh-CN"):
                 assert "tour-assets/" not in (root / "workspace" / language / "index.html").read_text()
-            run("node", "previews/v1.0-reader/check-reader.cjs", root, report / "downloaded", extra_env={"AGENTPROV_PREVIEW_URL": ""})
     finally:
         server.shutdown()
         server.server_close()

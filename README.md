@@ -76,7 +76,11 @@ unexpected behavior, and building evaluation or audit workflows.
 the graph, Agent session and saved files in your browser. The same site includes
 the illustrated demo guides and user documentation. No installation is needed.
 
-To replay offline, download the CLI:
+The **v1.0 source preview** below has four starting points: compare a repair,
+inspect a remote workspace, follow a Browser or Notebook task, or trace work
+between agents. [Choose a recording](docs/demo-library.md) to see what each contains.
+
+![Four featured investigations in the v1.0 source demo library](docs/img/demo-gallery.png)
 
 Download the archive for your platform and its `.sha256` file from
 [Releases](https://github.com/ByteYellow/AgentProvenance/releases).
@@ -104,12 +108,8 @@ On macOS, use the matching `darwin` archive and `shasum -a 256 -c` to check it.
 Windows users run the Linux archive inside WSL. Replay needs no Go, Docker,
 agent account or API key and works offline.
 
-[![Demo library — open the online demo](docs/img/demo-gallery.png)](https://ByteYellow.github.io/AgentProvenance/)
-
-Choose **Open replay** to explore a signed execution, or **Read guide** to open
-its illustrated guide. The current demo library includes **twelve signed replays
-and fourteen demo guides**, including one labeled synthetic attribution example.
-Start with the new evidence-attribution captures:
+In the release CLI, choose **Open replay** to read a recorded run or **Read guide**
+for its walkthrough. To go straight to a case or list the available names:
 
 ```sh
 ./agentprov demo evidence-attribution
@@ -268,17 +268,17 @@ actions, not access to a model's internal reasoning.
 
 ## Agent session
 
-Read the task and conversation in the same view as execution evidence.
-The graph stays above **Agent session**, which is **collapsed by default**.
+Select a run, then open **Session & tools**. In the DeepSeek example, open the
+Bash result under **Conversation & tools** to read the seven recorded test results.
+Choose **Related sessions** to see which sessions are linked and the records that support each link.
 
 | View | What you can inspect |
 | --- | --- |
-| Conversation and tools | User/assistant messages, tool inputs, results and errors, with links to their source records and runtime evidence |
-| Permissions and configuration | Recorded tasks, model, workspace, approval and sandbox settings; compare snapshots from different points in a session or across runs |
-| Collection status | Which session sources were read, missing fields, parsing failures, runtime probe coverage and association gaps |
-| Saved content | Full tool output and captured file text in a separate paged reader; keep reading with the session collapsed |
+| Conversation & tools | The task, messages, tool calls and results. Choose **Read body** to open the retained text. |
+| Permissions & config | Recorded model, workspace, approval and sandbox settings |
+| Collection & manifest | Session sources, runtime coverage, retention policy and reported gaps |
 
-![Recorded task and tool results](demo/deepseek-context/dashboard-session.png)
+![Saved Bash result from the DeepSeek session showing seven tests](docs/img/workbench-session.png)
 
 ### Supported agents
 
@@ -312,14 +312,14 @@ activity, risk signals and saved evidence into one investigation view.
 | --- | --- |
 | Graph Explorer | Switch between process, file/artifact, network, agent intent, orchestration, data flow and deployment views |
 | Timeline and details | Follow the order of events, select a node and inspect its source evidence |
-| Agent session | Navigate from a tool result to linked graph evidence; inspect task and permission/configuration history |
-| Related sessions | Open the overview button or a session's relationship button to inspect saved parent, delegation and shared-evidence links |
-| Saved-content reader | Read captured tool output or file text in pages, independently of the session panel |
+| Agent session | Read saved tool results, inspect recorded permissions and configuration, and follow links between related sessions |
+| Workspace / Browser / Notebook | Open a revision receipt, browser attachment or notebook output in runs that recorded them |
+| Saved content | Open the retained body of a tool result or a file version |
 | Access control | Inspect AppArmor/seccomp audit records, task-state observations and configuration; follow an operation attempt through its decision and recorded result |
-| Search, compare and export | Find saved text, compare two runs or preview a read-only export in temporary investigation windows |
+| Search and compare | Find saved text or compare recorded file versions side by side. To package a selection from your local store, use [dashboard export](docs/derived-evidence.md#export). |
 | Coverage and verification | Review session capture, probe availability, association gaps and integrity results |
 
-![Investigation workflow: sessions, access-control evidence and the execution graph](demo/investigation-workflow/dashboard-overview.png)
+![The repair comparison, with both recorded versions of diagnostics.json open](docs/img/workbench-compare.png)
 
 Open your own recorded runs with:
 
@@ -361,7 +361,7 @@ An agent delegates work; a peer message leads another agent to install a poisone
 package. Follow the message and tool call into the attributed file reads and
 network connection. The recording also includes an earlier refused action.
 
-![Recorded agent delegation, peer messages and runtime evidence](docs/img/demo-multiagent-agent-network.gif)
+![Alice and Bob in the orchestration view of the recorded agent team](docs/img/workbench-team.png)
 
 ```sh
 ./agentprov demo multiagent-provenance
@@ -378,7 +378,7 @@ One node sensor captures two Pods, preserving their cgroup identities and
 Kubernetes metadata. Explore workload placement, the cross-Pod connection and
 the worker's runtime activity in the same graph.
 
-![Cross-Pod execution and workload attribution](docs/img/demo-k8s-a2a-substrate-dashboard.png)
+![Recorded cgroups and workloads in the cross-Pod deployment view](docs/img/workbench-placement.png)
 
 ```sh
 ./agentprov demo k8s-cross-pod-a2a

@@ -48,12 +48,6 @@ var indexTemplate = template.Must(template.New("dashboard").Funcs(template.FuncM
 //go:embed theme.css
 var themeCSS []byte
 
-//go:embed context.css
-var contextCSS []byte
-
-//go:embed context.js
-var contextJS []byte
-
 //go:embed graph-view.js
 var graphViewJS []byte
 
@@ -68,41 +62,14 @@ var fallbackLicense []byte
 //go:embed digest.js
 var digestJS []byte
 
-//go:embed evidence.css
-var evidenceCSS []byte
-
-//go:embed evidence.js
-var evidenceJS []byte
-
-//go:embed workspace.css
-var workspaceCSS []byte
-
-//go:embed workspace.js
-var workspaceJS []byte
-
-//go:embed access-control.js
-var accessControlJS []byte
-
-//go:embed access-control.css
-var accessControlCSS []byte
-
 //go:embed search-engine.js
 var searchEngineJS []byte
-
-//go:embed search.js
-var searchJS []byte
-
-//go:embed search.css
-var searchCSS []byte
 
 //go:embed compare-engine.js
 var compareEngineJS []byte
 
-//go:embed compare.js
-var compareJS []byte
-
-//go:embed compare.css
-var compareCSS []byte
+//go:embed display-helpers.js
+var displayHelpersJS []byte
 
 //go:embed replay.js
 var replayJS []byte
@@ -110,19 +77,18 @@ var replayJS []byte
 //go:embed offline.js
 var offlineJS []byte
 
-//go:embed export.js
-var exportJS []byte
+//go:embed workbench.css
+var workbenchCSS []byte
 
-//go:embed export.css
-var exportCSS []byte
+//go:embed workbench.js
+var workbenchJS []byte
 
 // ReplayScript returns the browser reader used by exported public demos.
 func ReplayScript() []byte { return replayJS }
 
-// Pack classic scripts in dependency order so the same reader also runs on file://.
+// Pack pure engine scripts in dependency order so the unified workbench runs online and on file://.
 var readerJS = bytes.Join([][]byte{[]byte("/*"), fallbackLicense, []byte("*/"), fallbackSHA, digestJS, graphViewJS,
-	compareEngineJS, compareJS, exportJS, searchEngineJS, searchJS, workspaceJS, accessControlJS, contextJS}, []byte("\n"))
-var readerCSS = bytes.Join([][]byte{contextCSS, workspaceCSS, accessControlCSS, searchCSS, compareCSS, exportCSS}, []byte("\n"))
+	compareEngineJS, searchEngineJS, displayHelpersJS}, []byte("\n"))
 
 // Server serves the dashboard over a single read-only *sql.DB.
 type Server struct {
@@ -151,27 +117,13 @@ func (s Server) Handler() http.Handler {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		_, _ = w.Write(themeCSS)
 	})
-	mux.HandleFunc("GET /assets/context.css", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		_, _ = w.Write(contextCSS)
-	})
-	mux.HandleFunc("GET /assets/context.js", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		_, _ = w.Write(contextJS)
-	})
-	mux.HandleFunc("GET /assets/workspace.css", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-		_, _ = w.Write(workspaceCSS)
-	})
-	mux.HandleFunc("GET /assets/workspace.js", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		_, _ = w.Write(workspaceJS)
-	})
-	for path, asset := range map[string][]byte{"/assets/reader.js": readerJS, "/assets/reader.css": readerCSS, "/assets/search-engine.js": searchEngineJS, "/assets/search.js": searchJS, "/assets/search.css": searchCSS,
-		"/assets/access-control.js": accessControlJS, "/assets/access-control.css": accessControlCSS,
-		"/assets/evidence.js": evidenceJS, "/assets/evidence.css": evidenceCSS,
-		"/assets/compare-engine.js": compareEngineJS, "/assets/compare.js": compareJS, "/assets/compare.css": compareCSS,
-		"/assets/export.js": exportJS, "/assets/export.css": exportCSS} {
+	for path, asset := range map[string][]byte{
+		"/assets/reader.js":         readerJS,
+		"/assets/workbench.js":      workbenchJS,
+		"/assets/workbench.css":     workbenchCSS,
+		"/assets/search-engine.js":  searchEngineJS,
+		"/assets/compare-engine.js": compareEngineJS,
+	} {
 		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
 			mime := "application/javascript; charset=utf-8"
 			if strings.HasSuffix(path, ".css") {

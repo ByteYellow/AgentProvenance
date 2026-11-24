@@ -25,7 +25,7 @@ func TestGalleryReaderKeepsFrozenSelectionAndSingleAssets(t *testing.T) {
 	}
 	for _, lang := range []string{"en", "zh-CN"} {
 		page := string(files[lang+"/index.html"])
-		for _, value := range []string{`src="../assets/reader.js"`, `src="../assets/evidence.js"`, `href="../assets/evidence.css"`, `name="agentprov-replay-selection" content="partial"`, `class="offline-replay-bar"`, `href="https://github.com/ByteYellow/AgentProvenance/releases/latest"`, `codex / s`} {
+		for _, value := range []string{`src="../assets/reader.js"`, `src="../assets/workbench.js"`, `href="../assets/workbench.css"`, `name="agentprov-replay-selection" content="partial"`, `class="offline-replay-bar"`, `href="https://github.com/ByteYellow/AgentProvenance/releases/latest"`, `codex / s`} {
 			if strings.Count(page, value) != 1 {
 				t.Fatalf("%s expected exactly one %s", lang, value)
 			}

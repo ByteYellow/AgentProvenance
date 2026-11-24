@@ -4,6 +4,8 @@ English | [中文](CHANGELOG.zh-CN.md)
 
 ## Unreleased
 
+- The demo library links its four featured cases to the evidence workbench. The repair case opens both file versions side by side. English and Chinese guides now show the recorded cases in that same reader.
+
 - Record native IPv6 connections and scoped `openat2` and `execveat` operations on Linux. Doctor and saved capture diagnostics describe io_uring and rustls visibility separately from event loss.
 - Split the core CLI from the optional Docker, Kubernetes informer and signed demo tools. The distribution keeps the existing commands; projects building from source can select the all-in-one `agentprov_tools` build. CI checks reachable Go vulnerabilities in both builds.
 

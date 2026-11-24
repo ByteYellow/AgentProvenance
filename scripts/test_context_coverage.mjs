@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const scope = {window:{}};
-vm.runInNewContext(fs.readFileSync(new URL('../internal/dashboard/context.js', import.meta.url), 'utf8'), scope);
-const sections = scope.window.AgentContextUI.coverageSections;
+vm.runInNewContext(fs.readFileSync(new URL('../internal/dashboard/display-helpers.js', import.meta.url), 'utf8'), scope);
+const sections = scope.window.AgentDisplayHelpers.coverageSections;
 const value = {
   coverage:[
     {source:{harness:'launch',channel:'runtime_correlation'},status:'partial',counts:{stored:0}},
@@ -48,7 +48,7 @@ assert.equal(recorded.nativeLimits[0].detail,declared.detail);
 assert.equal(recorded.runtime.state,'ok','design scope does not count as event loss');
 assert.equal(sections({}).sessions.length,0);
 assert.equal(sections({coverage:[{source:{harness:'unknown'},status:'legacy_not_recorded'}]}).sessions.length,1);
-const retention = scope.window.AgentContextUI.retentionPresentation;
+const retention = scope.window.AgentDisplayHelpers.retentionPresentation;
 assert.equal(retention(null).label,'Retention settings not recorded');
 assert.equal(retention({preset:'basic',tool_results:false,source_records:false,history:false,configuration:false}).label,'Basic context');
 const overridden=retention({preset:'detailed',tool_results:false,source_records:false,history:true,configuration:true,overrides:{tool_results:false}});
@@ -56,6 +56,6 @@ assert.equal(overridden.label,'Detailed context');
 assert.equal(overridden.settings.find(s=>s.key==='tool_results').override,true);
 assert.equal(overridden.settings.find(s=>s.key==='source_records').enabled,false);
 assert.equal(retention({preset:'basic'}).settings[0].enabled,null,'missing fields remain unknown');
-assert.equal(scope.window.AgentContextUI.contentReason({reason:'capture_policy'}),'Not saved by this run’s retention settings.');
-assert.equal(scope.window.AgentContextUI.contentReason({reason:'capture_limit'}),'capture_limit','budget failures stay separate from selected omissions');
+assert.equal(scope.window.AgentDisplayHelpers.contentReason({reason:'capture_policy'}),'Not saved by this run’s retention settings.');
+assert.equal(scope.window.AgentDisplayHelpers.contentReason({reason:'capture_limit'}),'capture_limit','budget failures stay separate from selected omissions');
 console.log('context coverage presentation checks passed');

@@ -72,7 +72,9 @@ AgentProvenance 把任务要求、工具返回结果和操作系统中的实际�
 [打开在线 Demo](https://ByteYellow.github.io/AgentProvenance/)，直接在浏览器里查看
 图谱、Agent 会话和文件正文，无需安装。同一站点也收录了示例图文说明和使用指南。
 
-需要离线回放时，下载 CLI：
+下图是 **v1.0 源码预览**。首页有四个入口：对比报表修复、查看远端工作区、追踪 Browser／Notebook 操作，以及调查多 Agent 协作。[案例指南](docs/zh-CN/demo-library.md)列出了每个案例里值得看的记录。
+
+![v1.0 源码示例库中的四个精选案例](docs/img/demo-gallery-zh-CN.png)
 
 在[发行页](https://github.com/ByteYellow/AgentProvenance/releases)下载对应平台的
 压缩包和同名 `.sha256` 校验文件。下载示例使用 v0.10.1，
@@ -99,11 +101,8 @@ macOS 使用对应的 `darwin` 包，并将校验命令换为 `shasum -a 256 -c`
 Windows 用户在 WSL 中运行 Linux 包。回放可以离线使用，
 无需 Go、Docker、Agent 账号或 API Key。
 
-[![Demo 示例首页，点击在线体验](docs/img/demo-gallery-zh-CN.png)](https://ByteYellow.github.io/AgentProvenance/)
-
-点击**打开回放**查看签名执行记录，点击**阅读指南**查看图文说明。
-当前示例库共有 **12 份签名回放、14 篇示例指南**，其中一份明确标注为合成归因示例。
-建议先查看本期新增的证据关联实录：
+在发行版 CLI 中，点击**打开回放**查看执行记录，点击**阅读指南**查看图文说明。
+也可以用命令直接打开案例，或列出可用名称：
 
 ```sh
 ./agentprov demo evidence-attribution
@@ -245,16 +244,16 @@ AgentProvenance 再把这些信息与文件变化、最终产物关联起来：
 
 ## Agent 会话
 
-任务、对话和执行证据在同一页面阅读。**执行图谱在上，Agent 会话在下，默认收起。**
+选中一次运行，打开**会话与工具**。以 DeepSeek 为例，在**对话与工具**中打开 Bash 工具结果，就能读到当时七项测试的输出。
+点**关联会话**，可以查看哪些会话有关联，以及每条关联引用了哪些记录。
 
 | 视图 | 可以查看什么 |
 | --- | --- |
-| 对话与工具 | 用户与助手消息、工具输入、结果和错误，以及对应的来源记录和运行时证据 |
-| 权限与配置 | 当时记录的任务、模型、工作目录、审批与沙箱设置；可以比较同一会话内或两次执行之间的快照 |
-| 采集情况 | 读取了哪些会话、缺少哪些字段、哪里解析失败，以及运行时探针覆盖和关联缺口 |
-| 已保存正文 | 在独立阅读区分页查看完整工具输出和文件内容；收起会话后仍可继续阅读 |
+| 对话与工具 | 任务、消息、调用和结果。点击**阅读保存正文**可打开留存的原文 |
+| 权限与配置 | 当时记录的模型、工作目录、审批与沙箱设置 |
+| 采集覆盖与清单 | 会话来源、运行时覆盖、留存策略和已报告的缺口 |
 
-![Agent 会话中的任务与工具结果](demo/deepseek-context/dashboard-session-zh-CN.png)
+![DeepSeek 会话保存的 Bash 结果，正文中有七项测试的输出](docs/img/workbench-session-zh-CN.png)
 
 ### 支持的 Agent
 
@@ -286,14 +285,14 @@ AgentProvenance 再把这些信息与文件变化、最终产物关联起来：
 | --- | --- |
 | 图谱浏览 | 按进程、文件与产物、网络、Agent 意图、协作关系、数据流和部署环境查看同一次执行 |
 | 时间线与详情 | 按发生顺序浏览事件，选中节点后检查对应的来源证据 |
-| Agent 会话 | 从工具结果跳转到关联图谱，查看任务、权限和配置历史 |
-| 关联会话 | 从概览或单个会话的按钮进入，查看已保存的父子、委派与共享证据关系 |
-| 正文阅读区 | 分页阅读已保存的工具输出和文件内容，不依赖会话面板是否展开 |
+| Agent 会话 | 阅读保存的工具结果，查看当时的权限与配置，追踪有关联的会话 |
+| 工作区、Browser／Notebook | 在有对应记录的运行中，查看工作区版本回执、浏览器附件或 Notebook 输出 |
+| 已保存正文 | 打开工具结果或某个文件版本留存的正文 |
 | 访问控制 | 查看 AppArmor/seccomp 审计、任务状态与配置，沿操作尝试检查机制判定及已记录的结果 |
-| 搜索、对比与导出 | 在临时调查窗口中查找正文、比较两次运行，或预览只读导出的内容 |
+| 搜索与对比 | 查找已保存的文字，或并排比较两次运行的文件版本。需要从本地数据中选取记录打包时，使用[导出命令](docs/zh-CN/derived-evidence.md)。 |
 | 采集与校验 | 检查会话采集情况、探针是否可用、关联缺口和完整性校验结果 |
 
-![调查与修复：会话、访问控制证据与执行图谱](demo/investigation-workflow/dashboard-overview-zh-CN.png)
+![修复前后两次运行中，diagnostics.json 的已保存正文并排对照](docs/img/workbench-compare-zh-CN.png)
 
 查看自己的执行记录：
 
@@ -331,7 +330,7 @@ go build -tags agentprov_tools -o agentprov ./cmd/agentprov
 沿消息和工具调用，可以追踪到这次执行对应的文件读取与网络连接；
 记录中也保留了此前一次被拒绝的动作。
 
-![已记录的 Agent 委派、协作消息与运行时证据](docs/img/demo-multiagent-agent-network-zh-CN.gif)
+![多 Agent 实录：协作视图中的 Alice 和 Bob](docs/img/workbench-team-zh-CN.png)
 
 ```sh
 ./agentprov demo multiagent-provenance
@@ -347,7 +346,7 @@ go build -tags agentprov_tools -o agentprov ./cmd/agentprov
 一个节点传感器采集两个 Pod 的行为，保留各自的 cgroup 身份与 Kubernetes 元数据。
 可以在同一张图里查看工作负载位置、跨 Pod 连接和执行端的运行时活动。
 
-![跨 Pod 执行与工作负载归属](docs/img/demo-k8s-a2a-substrate-dashboard-zh-CN.png)
+![跨 Pod 运行实录的部署视图，包含已记录的 cgroup 与工作负载](docs/img/workbench-placement-zh-CN.png)
 
 ```sh
 ./agentprov demo k8s-cross-pod-a2a

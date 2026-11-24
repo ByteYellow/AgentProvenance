@@ -298,7 +298,7 @@ func PublicDemoReaderFiles(ctx context.Context) (map[string][]byte, error) {
 
 func publicDemoReaderFiles(get func(string) ([]byte, error)) (map[string][]byte, error) {
 	files := map[string][]byte{"assets/replay.js": dashboard.ReplayScript(), "assets/site.js": []byte(publicSiteJS)}
-	for _, name := range []string{"theme.css", "reader.js", "reader.css", "evidence.js", "evidence.css"} {
+	for _, name := range []string{"theme.css", "reader.js", "workbench.js", "workbench.css"} {
 		data, err := get("/assets/" + name)
 		if err != nil {
 			return nil, err

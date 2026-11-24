@@ -1,11 +1,11 @@
-# 示例首页预览
+# 示例首页
 
 [English](README.md) | 中文
 
-本目录保存共用首页资源，并保留之前的本地审核构建。
-首页保留四张带图卡片，其余案例按具体任务分类。
+本目录保存 v1.0 单源示例首页（`index.html`、`home.css`、`home.js`）、构建期真实分片提取器
+（`featured_cards.py`、`workspace_card.py`、`replay_card_source.py`）以及 Playwright 验收脚本
+（`check-redesign.cjs`）。四张精选卡片直接从真实回放分片提取摘要，其余案例按任务分类。
 报表修复入口直接打开预选 A/B 的对比窗口，10 月、11 月两次复现各自成对。
-标题末尾不加句号，说明文字保留正常标点。
 
 ## 构建
 
@@ -16,8 +16,9 @@
 go build -tags agentprov_tools -o /tmp/agentprov-review ./cmd/agentprov
 /tmp/agentprov-review demo export --output output/home-review-archive
 npm ci --prefix previews/v1.0-home
+npm ci --prefix previews/v1.0-tour --ignore-scripts
 previews/v1.0-home/node_modules/.bin/playwright install chromium
-python3 previews/v1.0-home/build.py \
+python3 scripts/build_demo_site.py \
   --archive output/home-review-archive \
   --output output/home-review
 python3 -m http.server 58729 --bind 127.0.0.1 --protocol HTTP/1.1 --directory output/home-review
@@ -30,19 +31,15 @@ python3 -m http.server 58729 --bind 127.0.0.1 --protocol HTTP/1.1 --directory ou
 ## 检查
 
 ```sh
-node previews/v1.0-home/check.cjs http://127.0.0.1:58729/ output/playwright/home-review output/home-review
+python3 previews/v1.0-home/test_workspace_card.py -v
+node previews/v1.0-home/check-redesign.cjs \
+  http://127.0.0.1:58729/ output/playwright/home-review.json output/home-review --extended
 ```
 
-检查覆盖中英文、桌面和手机、全部档案章节、指南链接、独立图标、标题标点、成对对比、
-返回阅读现场、架构图缩放和下载回放文件。最后一个参数可选，用于断网 `file://` 验证。
-无效配对等对比组件检查另有
-`scripts/test_dashboard_compare_completeness.mjs` 回归。
-
-`media/` 是已保存案例的界面截图。重新截图时，向 `capture-thumbnails.cjs` 传入预览地址
-和新的图片目录。可用 `--screenshots` 指定案例弹窗中的大图目录。
+检查覆盖中英文、桌面/平板/手机响应式布局、精选卡片与目标实录的数据一致性、显式校验状态、
+成对对比、返回阅读现场、可选页面导览以及脱离 `localStorage` 的离线 `file://` 阅读包验证。
+`media/` 仅保留协作图谱缩略图（`team-en.png`、`team-zh-CN.png`），Browser 卡片截图在构建期直接从真实回放包中提取。
 打开案例只读取证据，不执行 Agent 或调用模型接口。
-
-2026-11-17 已确认[精修版首页](refined/README.zh-CN.md)与阅读器一起接入，本版保留用于对比。
 
 ## 正式站点构建
 

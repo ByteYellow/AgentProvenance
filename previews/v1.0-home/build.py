@@ -14,9 +14,12 @@ import zipfile
 BASE = Path(__file__).resolve().parent
 REPO = BASE.parents[1]
 READER = BASE.parent / "v1.0-reader"
+sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(READER))
+from featured_cards import browser_card, investigation_card, team_card
 from graph_navigation import refresh_graph_navigation
 from compose import compose_reader, reader_tool
+from workspace_card import workspace_card
 
 
 def refresh_reader(root, production=False, *, legacy_navigation=True):
@@ -73,76 +76,56 @@ def add_x86_recordings(target, production):
     return sources
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--archive", type=Path, required=True, help="public site from agentprov demo export")
-    parser.add_argument("--screenshots", type=Path, help="optional case-detail screenshots from reader acceptance")
-    parser.add_argument("--output", type=Path, required=True, help="new preview directory")
-    parser.add_argument("--production", action="store_true", help="build the approved homepage and preserve published reader paths")
-    args = parser.parse_args()
-    target = args.output.resolve()
-    target.mkdir(parents=True, exist_ok=False)
-    if args.production:
-        shutil.copytree(args.archive.resolve(), target, dirs_exist_ok=True)
-    for name in ("index.html", "home.js", "home.css", "home-apple.css", "diagrams.js", "diagrams.css"):
-        shutil.copy2(BASE / name, target / name)
-    if not args.production:
-        shutil.copytree(BASE / "media", target / "media")
-        shutil.copytree(args.archive.resolve(), target / "archive")
-    subprocess.run([reader_tool(), "-public", "-dir", target if args.production else target / "archive"], check=True)
-    subprocess.run([sys.executable, str(READER / "build.py"), "--output", str(target / "current"), "--reader-tool", str(reader_tool())] + (["--production"] if args.production else []), check=True)
-    if args.screenshots:
-        shutil.copytree(args.screenshots.resolve(), target / "screenshots")
-    else:
-        # These optional screenshots supplement the live reader links.
-        for name in ("investigation", "workspace", "browser"):
-            (target / "screenshots").mkdir(exist_ok=True)
-            source = {"workspace": "remote", "browser": "native"}.get(name, name)
-            shutil.copy2(BASE / "media" / (source + "-zh-CN.png"), target / "screenshots" / (name + ".png"))
-    (target / "downloads").mkdir(exist_ok=True)
-    sources = []
-    for name in ("task-investigation", "native-matrix", "workspace-contract", "browser-detailed", "browser-basic", "notebook-detailed", "notebook-basic"):
-        source = REPO / "docs/benchmarks/v1.0-candidate/replays" / (name + ".zip")
-        if name == "workspace-contract":
-            source = READER / "fixtures/workspace-contract.zip"
-        shutil.copy2(source, target / "downloads" / source.name)
-        sources.append({"name": name, "source": str(source.relative_to(REPO)), "sha256": hashlib.sha256(source.read_bytes()).hexdigest()})
-        if name not in ("browser-basic", "notebook-basic", "notebook-detailed"):
-            continue
-        root = target / "recordings" / name
-        extract_reader(source, root)
-        refresh_reader(root, args.production)
-    if args.production:
-        build_release_home(target)
-        build_reading_downloads(target, sources)
-    sources.extend(add_x86_recordings(target, args.production))
-    (target / "sources.json").write_text(json.dumps(sources, indent=2) + "\n")
-    subprocess.run(["node", str(BASE / "render-guides.cjs"), str(target)] + (["--production"] if args.production else []), check=True)
-    if args.production:
-        subprocess.run([sys.executable, str(BASE.parent / "v1.0-tour/build.py"), "--site", str(target), "--integrate"], check=True)
-    print(target / "index.html")
+def build_home_pages(target, archive_root):
+    """Render the single-source Apple homepage with build-time real-shard excerpts."""
+    browser, png = browser_card(target / "current/browser")
+    browser["png"]["asset"] = "refined-media/featured-browser.png"
+    cards = {
+        "investigation": investigation_card(target / "current/investigation"),
+        "workspace": workspace_card(target / "current/workspace"),
+        "browser": browser,
+        "team": team_card(archive_root),
+    }
+    media_dir = target / "refined-media"
+    media_dir.mkdir(exist_ok=True)
+    for lang in ("zh-CN", "en"):
+        shutil.copy2(BASE / "media" / f"team-{lang}.png", media_dir / f"team-{lang}.png")
+    (target / browser["png"]["asset"]).write_bytes(png)
 
-
-def build_release_home(target):
-    refined = BASE / "refined"
-    template = (refined / "index.html").read_text().replace('data-preview="refined"', 'data-site="production"')
+    shutil.copy2(BASE / "home.css", target / "home.css")
+    shutil.copy2(BASE / "home.js", target / "home.js")
+    data = json.dumps(cards, separators=(",", ":")).replace("<", "\\u003c")
+    catalog_dir = archive_root.relative_to(target)
+    catalog_base = catalog_dir.as_posix() + "/" if catalog_dir.parts else ""
+    template = ((BASE / "index.html").read_text()
+                .replace("__CATALOG_BASE__", catalog_base)
+                .replace("__FEATURED_CARD_JSON__", data))
     (target / "index.html").write_text(template)
     for language in ("en", "zh-CN"):
-        home = target / language / "index.html"
-        shutil.copy2(home, target / language / "library.html")
-        home.write_text(template.replace('<html lang="zh-CN">', f'<html lang="{language}">').replace('<head>', '<head><base href="../">'))
-    shutil.copy2(refined / "refined.css", target / "refined.css")
-    shutil.copytree(refined / "media", target / "refined-media")
+        lang_dir = target / language
+        lang_dir.mkdir(exist_ok=True)
+        home = lang_dir / "index.html"
+        if home.exists():
+            shutil.copy2(home, lang_dir / "library.html")
+        home.write_text(
+            template.replace('<html lang="zh-CN">', f'<html lang="{language}">')
+                    .replace("<head>", '<head><base href="../">')
+        )
 
 
 def build_reading_downloads(target, sources):
-    # New unsigned copies receive new inventories. The original downloads stay byte-identical.
-    paths = {"task-investigation": "current/investigation", "native-matrix": "current/execution",
-             "workspace-contract": "current/workspace", "browser-detailed": "current/browser",
-             "browser-basic": "recordings/browser-basic", "notebook-basic": "recordings/notebook-basic",
-             "notebook-detailed": "recordings/notebook-detailed"}
+    """Package each refreshed unsigned reading copy once under downloads/reading/."""
+    paths = {
+        "task-investigation": "current/investigation",
+        "native-matrix": "current/execution",
+        "workspace-contract": "current/workspace",
+        "browser-detailed": "current/browser",
+        "browser-basic": "recordings/browser-basic",
+        "notebook-basic": "recordings/notebook-basic",
+        "notebook-detailed": "recordings/notebook-detailed",
+    }
     folder = target / "downloads/reading"
-    folder.mkdir()
+    folder.mkdir(parents=True, exist_ok=True)
     for source in sources:
         root = target / paths[source["name"]]
         dest = folder / (source["name"] + ".zip")
@@ -152,6 +135,50 @@ def build_reading_downloads(target, sources):
                     archive.write(path, path.relative_to(root).as_posix())
         source["reading_copy"] = str(dest.relative_to(target))
         source["reading_copy_sha256"] = hashlib.sha256(dest.read_bytes()).hexdigest()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--archive", type=Path, required=True, help="public site from agentprov demo export")
+    parser.add_argument("--screenshots", type=Path, help="optional legacy screenshot argument (unused by single-source home)")
+    parser.add_argument("--output", type=Path, required=True, help="new output directory")
+    parser.add_argument("--production", action="store_true", help="build the approved homepage and preserve published reader paths")
+    args = parser.parse_args()
+    target = args.output.resolve()
+    target.mkdir(parents=True, exist_ok=False)
+    if args.production:
+        shutil.copytree(args.archive.resolve(), target, dirs_exist_ok=True)
+    else:
+        shutil.copytree(args.archive.resolve(), target / "archive")
+    for name in ("diagrams.js", "diagrams.css"):
+        shutil.copy2(BASE / name, target / name)
+
+    subprocess.run([reader_tool(), "-public", "-dir", target if args.production else target / "archive"], check=True)
+    subprocess.run([sys.executable, str(READER / "build.py"), "--output", str(target / "current"), "--reader-tool", str(reader_tool())] + (["--production"] if args.production else []), check=True)
+
+    (target / "downloads").mkdir(exist_ok=True)
+    sources = []
+    for name in ("task-investigation", "native-matrix", "workspace-contract", "browser-detailed", "browser-basic", "notebook-detailed", "notebook-basic"):
+        source = REPO / "docs/benchmarks/v1.0-candidate/replays" / (name + ".zip")
+        if name == "workspace-contract":
+            source = READER / "fixtures/workspace-contract.zip"
+        sources.append({"name": name, "source": str(source.relative_to(REPO)), "sha256": hashlib.sha256(source.read_bytes()).hexdigest()})
+        if name not in ("browser-basic", "notebook-basic", "notebook-detailed"):
+            continue
+        root = target / "recordings" / name
+        extract_reader(source, root)
+        refresh_reader(root, args.production)
+
+    archive_root = target if args.production else target / "archive"
+    build_home_pages(target, archive_root)
+    build_reading_downloads(target, sources)
+
+    sources.extend(add_x86_recordings(target, args.production))
+    (target / "sources.json").write_text(json.dumps(sources, indent=2) + "\n")
+    subprocess.run(["node", str(BASE / "render-guides.cjs"), str(target)] + (["--production"] if args.production else []), check=True)
+    if args.production:
+        subprocess.run([sys.executable, str(BASE.parent / "v1.0-tour/build.py"), "--site", str(target), "--integrate"], check=True)
+    print(target / "index.html")
 
 
 if __name__ == "__main__":

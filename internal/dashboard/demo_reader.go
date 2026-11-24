@@ -8,8 +8,8 @@ import (
 )
 
 func offlineReaderAssets() map[string][]byte {
-	return map[string][]byte{"reader.js": readerJS, "reader.css": readerCSS, "theme.css": themeCSS,
-		"evidence.js": evidenceJS, "evidence.css": evidenceCSS, "offline.js": offlineJS, "replay.js": replayJS}
+	return map[string][]byte{"reader.js": readerJS, "workbench.js": workbenchJS, "workbench.css": workbenchCSS,
+		"offline.js": offlineJS, "replay.js": replayJS}
 }
 
 // DemoReaderFiles renders only the presentation of an unsigned gallery copy.
