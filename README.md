@@ -1,160 +1,646 @@
+![AgentProvenance: What are your AI agents actually doing?](docs/img/agentprovenance-cover-en.png)
+
+<div align="center">
+
+[![Try the online demo](docs/assets/online-demo-button.svg)](https://ByteYellow.github.io/AgentProvenance/)
+
+**Replay an agent run in your browser: explore its graph, read the session, and inspect access decisions and saved files.**
+No installation, account or API key required.
+
 # AgentProvenance
 
-English · [简体中文](README.zh-CN.md)
+### What did your agent actually do? Follow the evidence.
 
-**Follow an agent's tool call to the process it started, the file it changed, or the network connection it opened.** When a result is unexpected, start with the file or connection, trace it back to the call, and read the saved tool output. You can share the same evidence for offline review.
+Record agent tasks, conversations and tool calls alongside the processes, files
+and network activity they produce. Trace artifacts, compare executions, and
+export evidence you can replay and verify offline.
 
-[![Try the online demo](docs/assets/online-demo-button.svg)](https://ByteYellow.github.io/AgentProvenance/) · [Record your own agent](#record-your-own-agent) · [Case guides](docs/demo-library.md) · [Download the CLI](https://github.com/ByteYellow/AgentProvenance/releases/latest)
-
-[![Release](https://img.shields.io/github/v/release/ByteYellow/AgentProvenance?style=flat-square&sort=semver)](https://github.com/ByteYellow/AgentProvenance/releases/latest)
+[![Release](https://img.shields.io/github/v/release/ByteYellow/AgentProvenance?style=flat-square&color=orange&sort=semver)](https://github.com/ByteYellow/AgentProvenance/releases/latest)
+[![Go](https://img.shields.io/badge/go-1.26.11+-00ADD8.svg?style=flat-square)](https://go.dev/)
 [![CI](https://img.shields.io/github/actions/workflow/status/ByteYellow/AgentProvenance/ci.yml?branch=main&style=flat-square)](https://github.com/ByteYellow/AgentProvenance/actions/workflows/ci.yml)
+[![Sensor](https://img.shields.io/badge/sensor-Linux_amd64_%7C_arm64-2496ED.svg?style=flat-square)](docs/amd64-kvm-k3s.md)
+[![SQLite](https://img.shields.io/badge/state-SQLite-003B57.svg?style=flat-square)](https://www.sqlite.org/)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg?style=flat-square)](LICENSE)
 
-<p align="center"><img src="docs/img/agentprovenance-cover-en.png" width="720" alt="A tool call traced to process, file, and network activity"></p>
+**[Online demo](https://ByteYellow.github.io/AgentProvenance/)** | **[Quickstart](#quickstart)** | **[Capabilities](#what-you-can-do)** | **[Agent session](#agent-session)** | **[Demos](#demos)** | **[Architecture](#architecture)** | **[Docs](#features-and-docs)**
 
-<a id="current-capability"></a><a id="contents"></a><a id="why"></a><a id="three-axis-execution-observability-for-sandboxed-ai-agents"></a><a id="what-you-can-do"></a><a id="what-did-your-agent-actually-do-follow-the-evidence"></a>
+English | [简体中文](README.zh-CN.md)
+
+</div>
+
+---
+
+**Git-like provenance for agent execution:** record → inspect → trace → compare → verify.
+
+AgentProvenance connects three parts of an execution: what the agent was asked
+to do, what its tools reported, and what happened in the operating system.
+Use the same evidence to debug a failed task, inspect an unexpected file change,
+investigate a network connection, or feed an external evaluator.
+
+![AgentProvenance: runtime facts, agent context and model intent in one verifiable execution graph](docs/assets/three-axis-observability.svg)
+
+<a id="current-capability"></a>
+<a id="contents"></a>
+<a id="why"></a>
+<a id="three-axis-execution-observability-for-sandboxed-ai-agents"></a>
+
+## What you can do
+
+| Capability | What it gives you |
+| --- | --- |
+| Record an execution | Wrap an agent or ordinary command; save process activity, workspace changes and supported session records |
+| Follow cause and effect | Connect tasks and tool calls to processes, files and network events; inspect the evidence behind an association |
+| Trace files and artifacts | Use `graph explain`, `diff` and `blame` to see what changed and which execution produced it |
+| Inspect Agent sessions | Read messages and tool results, compare task/configuration snapshots, and review collection gaps |
+| Investigate security | Apply policies, inspect blocking decisions, trace sensitive data flow and compare behavior against a baseline |
+| Understand agent teams | Follow delegation and peer messages into the execution evidence attributed to each agent |
+| Capture across environments | Collect on Linux amd64/arm64, inside KVM guests, or on Kubernetes nodes with Pod/container attribution |
+| Replay and verify | Export content-addressed evidence, optionally sign it, and share a replay that works offline |
+| Integrate with other tools | Query through CLI/JSON, HTTP, Python or MCP; attach external evaluation results to the same evidence |
+
+Use it for debugging coding agents, reviewing generated artifacts, investigating
+unexpected behavior, and building evaluation or audit workflows.
+
+**On this page:** [Quickstart](#quickstart) · [Evidence model](#core-model) ·
+[Agent session](#agent-session) · [Dashboard](#web-dashboard) · [Demos](#demos) ·
+[Runtime capture](#runtime-capture) · [Security and evaluation](#security-and-evaluation) ·
+[Architecture](#architecture) · [Documentation](#features-and-docs)
 
 ## Quickstart
 
-**Just looking?** The online demo above runs in your browser without an install or API key. Start with the [report repair](demo/investigation-workflow/README.md): the tests passed, so why did the report still contain two denied diagnostic operations? Read the tool output, then compare the configuration and files saved by the two runs.
+<a id="download-and-replay--no-go-required"></a>
 
-<a id="download-and-replay--no-go-required"></a><a id="try-a-recorded-execution"></a><a id="explore-all-examples"></a><a id="cli-replays-and-integration-guides"></a><a id="demos"></a><a id="demo-agent-in-a-sandbox-supply-chain-exfiltration-caught-by-provenance"></a>
+### Try a recorded execution
 
-### Replay a run offline
+[Open the online demo](https://ByteYellow.github.io/AgentProvenance/) to explore
+the graph, Agent session and saved files in your browser. The same site includes
+the illustrated demo guides and user documentation. No installation is needed.
 
-Download the archive for your platform from [Releases](https://github.com/ByteYellow/AgentProvenance/releases/latest), [verify and extract it](docs/release-start.md), and run this from the extracted directory:
+The **v1.0 source preview** below has four starting points: compare a repair,
+inspect a remote workspace, follow a Browser or Notebook task, or trace work
+between agents. [Choose a recording](docs/demo-library.md) to see what each contains.
+
+![Four featured investigations in the v1.0 source demo library](docs/img/demo-gallery.png)
+
+Download the archive for your platform and its `.sha256` file from
+[Releases](https://github.com/ByteYellow/AgentProvenance/releases).
+The archive example below uses v0.10.1, including the new evidence-attribution
+replays and the historical investigation demos; see [release status](#release-status).
+
+| Platform | Archive suffix |
+| --- | --- |
+| Linux / WSL, x86-64 | `linux_amd64.tar.gz` |
+| Linux / WSL, ARM64 | `linux_arm64.tar.gz` |
+| macOS, Intel | `darwin_amd64.tar.gz` |
+| macOS, Apple Silicon | `darwin_arm64.tar.gz` |
+
+On Linux x86-64, verify and extract the downloaded archive:
 
 ```sh
+sha256sum -c agentprov_v0.10.1_linux_amd64.tar.gz.sha256
+mkdir agentprov-demo
+tar -xzf agentprov_v0.10.1_linux_amd64.tar.gz -C agentprov-demo
+cd agentprov-demo
 ./agentprov demo
 ```
 
-The CLI verifies the signatures and opens the full gallery in your browser. For just the report repair, use `./agentprov demo investigation-workflow` to load the two runs on their own. Replay reads the original records without executing their commands. Press `Ctrl-C` to exit.
+On macOS, use the matching `darwin` archive and `shasum -a 256 -c` to check it.
+Windows users run the Linux archive inside WSL. Replay needs no Go, Docker,
+agent account or API key and works offline.
 
-The CLI ships **12 signed replays**, counting each side of a before-and-after pair separately. One is a labeled synthetic attribution sample. The [bundled catalog](demo/README.md) also lists two separate integration guides, LLM Judge and Jev. Use `./agentprov demo --list` to see what your installed version includes.
+In the release CLI, choose **Open replay** to read a recorded run or **Read guide**
+for its walkthrough. To go straight to a case or list the available names:
 
-<a id="capture-your-own-agent"></a><a id="record-a-command-without-an-agent"></a><a id="record-an-ordinary-command"></a><a id="inspect-trace-compare-and-export"></a>
+```sh
+./agentprov demo evidence-attribution
+./agentprov demo investigation-workflow
+./agentprov demo deepseek-context
+./agentprov demo multiagent-provenance
+./agentprov demo --list
+```
+
+The CLI verifies the evidence signature and opens the dashboard with a temporary
+store. Ctrl-C closes it and removes that store. Recorded commands are never rerun.
+For remote or headless machines, add `--no-browser` and access the local address
+through your usual port forwarding.
+
+To build the examples from source, install Go 1.26.11 or later:
+
+```sh
+go build -tags agentprov_tools -o agentprov ./cmd/agentprov
+./agentprov demo
+```
+
+[All demos](demo/README.md) · [Archive guide](docs/release-start.md)
+
+<a id="capture-your-own-agent"></a>
 
 ### Record your own agent
 
-With Claude Code installed and authenticated, run these commands in your project directory:
+With your agent installed and authenticated:
 
 ```sh
 ./agentprov doctor -- claude
 ./agentprov launch --file-diff -- claude
 ```
 
-Give Claude a task as usual. Once it exits, open a tool call in the dashboard to read its result, then select a changed file to read its saved contents. For Codex, replace `claude` with `codex`. The [Agent session guide](docs/agent-context.md) covers DeepSeek and other harnesses, supported formats, and retention settings.
+`doctor` checks the local capture setup. `launch` starts the agent and dashboard,
+then collects the session when the agent exits. `--file-diff` also saves workspace
+changes and final changed-file text. Claude receives a per-run hooks overlay;
+your normal Claude settings stay in place.
 
-To try recording without an agent account, run an ordinary command instead:
-
-```sh
-workdir=$(mktemp -d)
-run_id=$(basename "$workdir")
-./agentprov record --run "$run_id" --workdir "$workdir" -- \
-  sh -c 'printf "ready\n" > result.txt'
-./agentprov graph explain --run "$run_id" --file result.txt
-```
-
-Look for `change=created` and `+ready`: the file was created with one line of text. The `tool_call` field identifies the invocation that wrote it.
-
-<a id="investigate-a-failure-then-compare-the-repair"></a>
-
-## Web Dashboard
-
-**See what changed between two runs.** In the report repair from the v1.0 source preview, open `output/diagnostics.json` side by side: the earlier file contains two denied diagnostics; the repaired run saved `[]`. Open `settings.json` next to see which diagnostics were switched off. [Walk through the cases](docs/demo-library.md#read-the-v10-candidate-examples).
-
-![Before-and-after comparison showing the saved contents of output/diagnostics.json](docs/img/workbench-compare.png)
-
-<a id="agent-session"></a><a id="supported-agents"></a><a id="follow-a-multi-agent-execution"></a><a id="demo-multi-agent-causality-delegation-peer-message-syscall-evidence"></a><a id="trace-execution-across-pods"></a><a id="demo-kubernetes-cross-pod-a2a-one-node-sensor-two-pods-one-graph"></a>
-
-| Question | Where to look |
-| --- | --- |
-| Which tool ran the tests, and what did it return? | Open the [DeepSeek session](demo/deepseek-context/README.md) and read the [saved Bash output](docs/img/workbench-session.png) for the seven tests. |
-| What happened after Alice sent Bob a message? | Select the message in the [agent team's](demo/multiagent-provenance/README.md) [orchestration view](docs/img/workbench-team.png), then follow the tool calls and the records supporting each link. |
-| How do I tell apart actions from two Pods? | Inspect cgroups, workloads, and connections in the [deployment view](docs/img/workbench-placement.png) of the [cross-Pod case](demo/k8s-cross-pod-a2a/README.md). |
-
-See the [case index](docs/demo-library.md) or the [v1.0 gallery screenshot](docs/img/demo-gallery.png) for more starting points. The two historical Grok replays retain their original signatures and capture dates; the original environment is no longer reproducible.
-
-**Hand an investigation to a colleague.** Use `./agentprov dashboard serve` to reopen your local runs. With the v1.0 source build, substitute a real run ID below to export a read-only replay:
+Codex and DeepSeek Harness use the same entry point:
 
 ```sh
-./agentprov dashboard export --run RUN_ID --output replay.zip
+./agentprov launch --file-diff -- codex
+./agentprov launch --file-diff -- dsh headless --json 'Inspect the project and run its tests.'
 ```
 
-The recipient can unzip it and read it offline in a browser without the CLI or your working directory. The default export is an unsigned reading copy; review the retained files and tool output before sharing. For signed originals or a selected subset, see the [evidence delivery guide](docs/derived-evidence.md).
-
-<a id="evidence-layers"></a><a id="runtime-facts-and-correlation"></a><a id="architecture"></a><a id="boundaries"></a><a id="repository-layout"></a><a id="relationship-to-existing-systems"></a>
-
-## Core model
-
-A run brings together three kinds of records while preserving where each one came from:
-
-- **Tasks and tool calls** come from session logs or hooks: what the agent was asked to do, which tool it called, and what the tool returned.
-- **Execution and side effects** come from process sampling, workspace snapshots, and the optional Linux kernel sensor: which processes, file changes, and network activity were observed.
-- **Model declarations** come from retained messages or supported model traffic: what the agent said it would do, which you can compare with the subsequent records.
-
-Tool call IDs, process instances, and cgroups help attribute observations across sources. When calls share a process, the graph exposes the basis for an inference, competing candidates, or gaps in capture. Hashes and signatures let a recipient verify the delivered records; the run's coverage report describes what the sensors observed.
-
-[How the three sources fit together](docs/assets/three-axis-observability.svg) · [Architecture diagram](docs/assets/agentprovenance-architecture.svg) · [Capabilities and architecture](docs/capabilities.md)
-
-<a id="substrates-and-telemetry"></a><a id="daemon-mode"></a><a id="deployment-modes"></a>
-
-## Runtime capture
-
-On **macOS (Intel or Apple Silicon)**, record sessions, commands, and workspace files, then replay them locally. On **Linux (amd64 or arm64)**, an optional eBPF sensor also captures process, file, and network events. Use `agentprov doctor` to check your kernel, permissions, and available probes. On Windows, use the Linux CLI inside WSL.
-
-Place the collector where the tool runs. An ordinary container shares its Linux node's kernel; a VM has a separate guest kernel; gVisor emits SecCheck records from its Sentry. The [deployment guide](docs/deployment-modes.md#where-the-agent-and-its-tools-run) walks through the choice, and the [native capture guide](docs/amd64-kvm-k3s.md) lists syscall and TLS coverage.
+Linux eBPF capture requires the sensor, a supported kernel and BPF/perf access.
+Agent context uses the detailed capture preset by default. Add `--capture basic`
+to `launch` to retain less supplemental context; kernel, TLS and workspace
+capture remain independently configurable.
+macOS supports application recording and replay. Custom session directories,
+resumed sessions and source formats are covered in the
+[Agent session guide](docs/agent-context.md).
 
 ### Remote commands, Browser and Notebook
 
-These paths are in the **v1.0 source preview**. See [Development](#development) to build it.
+An Agent may live inside a sandbox, call one from outside, or delegate from
+sandbox A to sandbox B. A local process tree covers only part of the latter two
+paths. Browser and Notebook tools also reuse long-lived processes, so their
+operations need page and request identities alongside system events.
+AgentProvenance connects these layers through explicit execution references and
+native application context. The [deployment guide](docs/deployment-modes.md#where-the-agent-and-its-tools-run)
+explains which collection entry fits each arrangement.
 
-| Scenario | What you can inspect |
+The **current source checkout** adds these opt-in entries for the upcoming v1.0.
+Build it using the command above; the v0.10.1 release archives retain their
+original feature set.
+
+| Task | Entry and guide |
 | --- | --- |
-| The agent calls a tool in A; the command runs in B | [Execution handoff](docs/execution-handoff.md) links the original call, execution attempt, and signed receipt. A [remote workspace](docs/workspace.md) ties reads, edits, and commands to a file revision. |
-| Several actions share a browser or kernel process | [Browser context](docs/browser-context.md) retains action receipts, page and request identities, and saved attachments. [Notebook context](docs/notebook-context.md) associates cell output with requests and tracks kernel restarts. |
-| A tool runs under an isolation runtime | [Runtime adapters](docs/runtime-adapters.md) distinguish host, Sentry, and guest observations. The [deployment guide](docs/deployment-modes.md) lists tested combinations. |
+| Run an Agent's command in another Linux VM or container | [Execution handoff](docs/execution-handoff.md): route native Claude Bash calls through an authenticated executor; collect signed results and receiving receipts |
+| Investigate a browser task | [Browser context](docs/browser-context.md): owned Chromium through Python or stdio MCP, with page/request identities, screenshots and HAR |
+| Investigate a notebook task | [Notebook context](docs/notebook-context.md): Jupyter requests and outputs through a recorder or stdio MCP, including late output and kernel restarts |
+| Share selected evidence or complete originals | [Evidence delivery and verification](docs/derived-evidence.md): explicit delivery modes, separate producer/exporter signatures and offline verification using recipient-owned trust |
 
-<a id="ai-callable-evidence-tools"></a><a id="compliance-evidence-not-certification"></a><a id="custom-rules-in-python"></a><a id="external-evaluator-protocol"></a><a id="intent-conformance"></a><a id="security-evidence-commands"></a><a id="security-loop"></a><a id="worked-example-an-llm-as-security-judge"></a><a id="security-and-evaluation"></a><a id="graph-commands"></a><a id="interface-language"></a>
+Browser and Notebook entries use optional Python dependencies. Their guides cover
+installation, Agent configuration, retention and import into the task's Run.
+For each entry, application context and Linux runtime capture are configured separately.
 
-## Features and docs
+<a id="record-a-command-without-an-agent"></a>
 
-| Task | Guide |
+### Record an ordinary command
+
+You can start without an agent integration:
+
+```sh
+mkdir -p /tmp/agentprov-record-demo
+./agentprov record --run run-record-demo --workdir /tmp/agentprov-record-demo -- \
+  sh -c 'echo artifact > artifact.txt'
+./agentprov observe summary --run run-record-demo
+./agentprov graph explain --run run-record-demo --file artifact.txt
+```
+
+`record` captures the command, process samples and workspace changes. A running
+Linux sensor adds kernel events; a supported session adapter adds agent context.
+Local recording and replay do not require Docker.
+
+For a CI job that should fail when the recorded command fails, add
+`record --propagate-exit`. By default the CLI reports whether recording succeeded;
+the command's own exit code is in the result.
+
+### Inspect, trace, compare and export
+
+Each execution has a Run ID. Substitute the IDs printed by your recording:
+
+```sh
+./agentprov observe summary --run RUN_ID
+./agentprov graph explain --run RUN_ID --file path/to/artifact
+./agentprov graph diff --run RUN_ID --file path/to/artifact
+./agentprov graph blame --run RUN_ID --file path/to/artifact
+./agentprov context coverage --run RUN_ID
+./agentprov graph verify --run RUN_ID
+./agentprov forensics export RUN_ID
+```
+
+Use the dashboard to follow tools into runtime events, open saved file content,
+and compare recorded task or configuration entries. The [graph reference](docs/graph-commands.md)
+covers execution comparisons and artifact lineage. Add `--sign-key` during
+recording when you want a signed run; signing is opt-in.
+
+<a id="evidence-layers"></a>
+<a id="runtime-facts-and-correlation"></a>
+
+## Core model
+
+An agent transcript explains the task and tool decisions. Runtime telemetry
+records process, file and network effects. AgentProvenance brings them together
+with file changes and saved artifacts:
+
+```text
+Task / conversation / agent delegation
+  → tool call
+    → process and child processes
+      → file access / network connection / runtime event
+        → changed file / artifact / evidence object
+```
+
+| Evidence layer | Sources | What it explains |
+| --- | --- | --- |
+| Runtime facts | Process sampling, file diffs, native eBPF and compatible telemetry receivers | What processes did, which files changed and where connections went |
+| Agent context | Session logs, hooks and explicit context producers | The task, conversation, tools, agent identities, delegation and recorded permissions |
+| Model requests and intent | Supported transcript formats and TLS plaintext probes | Captured requests/responses, declared actions and refusals |
+
+Correlation uses process identity, cgroups, containers, working directories,
+time ranges and recorded tool identifiers. Raw kernel events do not need an
+agent-specific `tool_call_id`. Derived relationships retain their supporting
+evidence and confidence; missing or ambiguous context remains visible.
+
+Evidence objects have content hashes and parent references. Verification checks
+those objects and their links; optional signatures let a recipient verify a
+bundle against its signing key. Captured intent means recorded messages and
+actions, not access to a model's internal reasoning.
+
+[Detailed evidence model](docs/capabilities.md#core-model) ·
+[Correlation and graph queries](docs/graph-commands.md)
+
+## Agent session
+
+Select a run, then open **Session & tools**. In the DeepSeek example, open the
+Bash result under **Conversation & tools** to read the seven recorded test results.
+Choose **Related sessions** to see which sessions are linked and the records that support each link.
+
+| View | What you can inspect |
 | --- | --- |
-| Trace a file or compare two runs | [Evidence graph: explain, diff, blame](docs/graph-commands.md) |
-| Choose what session content to retain | [Agent sessions and capture profiles](docs/agent-context.md) |
-| Share evidence with a reviewer | [Read-only replay, signed originals, and redacted copies](docs/derived-evidence.md): choose what to include; the recipient can verify the delivery independently. |
-| Investigate a risk or inspect a policy decision | [Security commands](docs/security-commands.md) · [Control-to-evidence mapping](docs/compliance.md) |
-| Query or submit records from another tool | [HTTP API](docs/openapi.yaml) · [Session API](docs/agent-context-api.yaml) · [Python SDK](docs/python-sdk.md) · [MCP](docs/ai-tools.md) |
-| Ask a model to evaluate recorded evidence | [LLM Judge](demo/llm-judge/README.md) · [Jev integration and human review](demo/jev-judge/README.md) |
+| Conversation & tools | The task, messages, tool calls and results. Choose **Read body** to open the retained text. |
+| Permissions & config | Recorded model, workspace, approval and sandbox settings |
+| Collection & manifest | Session sources, runtime coverage, retention policy and reported gaps |
 
-<a id="roadmap"></a><a id="core-demo-acceptance"></a>
+![Saved Bash result from the DeepSeek session showing seven tests](docs/img/workbench-session.png)
 
-## Release status
+### Supported agents
 
-**The current release is [v0.10.1](docs/releases/v0.10.1.md).** Back up your data directory before upgrading from an earlier version and follow the [upgrade guide](docs/upgrading-v0.10.1.md).
+| Agent | Integration and available context |
+| --- | --- |
+| Claude Code | Per-run hooks and native transcripts: messages, tools, permission-mode changes and session metadata |
+| Codex | Native rollout records: messages, tool results, thread settings and recorded child-thread identities |
+| DeepSeek Harness | v3 JSONL and native v4 Zstandard sessions: messages, tools, PTC sub-calls and configuration |
+| Kimi / Grok | Existing supported transcript integrations and historical replay formats |
+| Other commands or harnesses | Process/file recording through `record`; add semantic context through hooks, MCP or explicit producers |
 
-**v1.0 is not yet released.** The [source preview](docs/releases/v1.0.0-preview.md) and [unreleased changes](CHANGELOG.md#unreleased) cover this branch's workbench, cross-environment execution, and offline evidence delivery. The project's priorities are attribution accuracy and ease of use.
+Custom directories and resumed sessions can be selected explicitly. Incremental
+imports retain source positions and deduplicate repeated records. Configuration
+and task snapshots can be compared within a run or across runs. The
+[compatibility table](docs/agent-context.md#native-format-compatibility) lists
+checked versions and source formats.
 
-## Development
+Context is collected **after the agent exits**. Permission history contains what
+the source recorded; missing decisions appear as unrecorded. The coverage report
+shows capture gaps separately from graph and signature verification.
 
-To build the CLI with bundled replays, use Go 1.26.11 or later:
+[Explore the DeepSeek example](demo/deepseek-context/README.md) ·
+[Session commands and API](docs/agent-context.md)
+
+## Web Dashboard
+
+The Dashboard brings the execution graph, timeline, process tree, network
+activity, risk signals and saved evidence into one investigation view.
+
+| View | Use it to |
+| --- | --- |
+| Graph Explorer | Switch between process, file/artifact, network, agent intent, orchestration, data flow and deployment views |
+| Timeline and details | Follow the order of events, select a node and inspect its source evidence |
+| Agent session | Read saved tool results, inspect recorded permissions and configuration, and follow links between related sessions |
+| Workspace / Browser / Notebook | Open a revision receipt, browser attachment or notebook output in runs that recorded them |
+| Saved content | Open the retained body of a tool result or a file version |
+| Access control | Inspect AppArmor/seccomp audit records, task-state observations and configuration; follow an operation attempt through its decision and recorded result |
+| Search and compare | Find saved text or compare recorded file versions side by side. To package a selection from your local store, use [dashboard export](docs/derived-evidence.md#export). |
+| Coverage and verification | Review session capture, probe availability, association gaps and integrity results |
+
+![The repair comparison, with both recorded versions of diagnostics.json open](docs/img/workbench-compare.png)
+
+Open your own recorded runs with:
+
+```sh
+./agentprov dashboard serve
+```
+
+The local Dashboard serves its assets from the CLI and needs no external web
+service. The online demo provides read-only investigation of the bundled public
+captures. Views summarize large event sets and let you
+drill into details instead of placing every raw event on one canvas.
+
+## Demos
+
+### Investigate a failure, then compare the repair
+
+One real DeepSeek session spans two executions: delegate code review, run seven
+tests, inspect denied optional diagnostics, then disable those diagnostics and
+produce the report successfully. Follow parent/child sessions, search saved
+errors, inspect AppArmor/seccomp records, compare files and export a selected replay.
+
+From the current source checkout:
 
 ```sh
 go build -tags agentprov_tools -o agentprov ./cmd/agentprov
-./agentprov demo --list
-go test ./...
-go vet ./...
+./agentprov demo investigation-workflow
 ```
 
-[CI workflow](.github/workflows/ci.yml) · [Benchmarks and acceptance reports](docs/benchmarks/) · [KVM and K3s setup](docs/amd64-kvm-k3s.md)
+The command loads both signed captures together. In **Compare**, choose
+**Diagnostic repair: before** as A and **Diagnostic repair: after** as B.
+Inspect `settings.json` and the generated reports under **File evidence**;
+**Configuration** shows the Harness settings. [Follow the walkthrough](demo/investigation-workflow/README.md).
+
+<a id="demo-multi-agent-causality-delegation-peer-message-syscall-evidence"></a>
+
+### Follow a multi-agent execution
+
+An agent delegates work; a peer message leads another agent to install a poisoned
+package. Follow the message and tool call into the attributed file reads and
+network connection. The recording also includes an earlier refused action.
+
+![Alice and Bob in the orchestration view of the recorded agent team](docs/img/workbench-team.png)
+
+```sh
+./agentprov demo multiagent-provenance
+```
+
+[Read the investigation](demo/multiagent-provenance/README.md). Shared-process
+agent attribution is inferred from the recorded hooks and command evidence.
+
+<a id="demo-kubernetes-cross-pod-a2a-one-node-sensor-two-pods-one-graph"></a>
+
+### Trace execution across Pods
+
+One node sensor captures two Pods, preserving their cgroup identities and
+Kubernetes metadata. Explore workload placement, the cross-Pod connection and
+the worker's runtime activity in the same graph.
+
+![Recorded cgroups and workloads in the cross-Pod deployment view](docs/img/workbench-placement.png)
+
+```sh
+./agentprov demo k8s-cross-pod-a2a
+```
+
+The network and syscall events were captured live; the delegation hooks reuse
+the agent-team recording. [The guide](demo/k8s-cross-pod-a2a/README.md) explains
+how these sources are joined.
+
+<a id="demo-agent-in-a-sandbox-supply-chain-exfiltration-caught-by-provenance"></a>
+
+### Explore all examples
+
+| Example | What to look for |
+| --- | --- |
+| [Report repair: before and after](demo/investigation-workflow/README.md) | Compare the diagnostic settings, test results and reports from the inspection and repair runs |
+| [Evidence attribution: before and after](demo/evidence-attribution/README.md) | November DeepSeek captures with tool-scoped intent, audit decisions and retained TLS fragments |
+| [Outbound attribution: synthetic example](demo/endpoint-attribution/README.md) | A body match, two candidate source reads and unresolved execution identity |
+| [DeepSeek development task](demo/deepseek-context/README.md) | Task, tool results, configuration history, passing tests and final file content |
+| [Snake supply chain](demo/snake-supply-chain/README.md) | A poisoned dependency, planted test secrets, network activity and artifact provenance |
+| [Agent team](demo/multiagent-provenance/README.md) | Delegation, peer influence, a refusal and the later execution path |
+| [Kubernetes cross-Pod A2A](demo/k8s-cross-pod-a2a/README.md) | Separate workloads connected by one node's evidence |
+| [Kubernetes placement](demo/k8s-substrate/README.md) | Container identity and workload placement |
+| [Grok codebase-exfil investigation](demo/grok-codebase-exfil/README.md) | Historical evidence, reported behavior and reproduction limits; replay with `grok-codebase-exfil` |
+| [Grok outbound routes](demo/grok-codebase-exfil/README.md) | Model requests, vendor telemetry and third-party analytics; replay with `grok-3routes` |
+| [LLM Judge](demo/llm-judge/README.md) | An external model reads evidence and returns findings with evidence references |
+| [Jev evaluator](demo/jev-judge/README.md) | Structured evaluation, rule comparison and human review |
+
+The CLI includes 12 signed replays for offline use. Each side of a repair pair counts as one replay; the outbound attribution example uses synthetic data. LLM Judge and Jev are optional
+integration guides; live evaluation requires the provider setup described in
+each guide. Grok examples are dated captures with reproduction limits, not a
+statement about the current service.
+
+<a id="substrates-and-telemetry"></a>
+
+## Runtime capture
+
+The native sensor records process, file and network activity on Linux amd64 and
+arm64. It runs on a Linux host, **inside a KVM guest**, or as a node sensor for
+Kubernetes/K3s. Pod metadata connects events to workloads; disk buffering and
+late attribution handle events that arrive before their workload binding.
+Probe reports show the syscalls, DNS and TLS paths available in that environment.
+
+| Environment | Available workflow |
+| --- | --- |
+| Linux amd64 / arm64 | Agent sessions, command recording, native eBPF capture, queries and replay |
+| KVM Linux guest | Capture inside the guest using its kernel and process identities |
+| Kubernetes / K3s | One sensor per node with Pod/container attribution and lifecycle tracking |
+| macOS Intel / Apple Silicon | Agent sessions, command and file recording, queries and replay |
+| Windows | Run the Linux tools in WSL; kernel capture depends on the WSL kernel and permissions |
+
+[KVM/K3s setup and TLS support](docs/amd64-kvm-k3s.md) ·
+[Durable capture](docs/native-capture-spool.md) ·
+[Kubernetes attribution](docs/design-k8s-auto-attribution.md)
+
+The current source also includes a [gVisor SecCheck receiver](docs/gvisor-seccheck.md).
+Its ARM64 and amd64 `systrap` paths have live collection, recovery and snapshot/clone checks;
+events retain their **Sentry** identity rather than the host runtime process's
+identity. Native eBPF observes the selected Linux host or guest kernel.
+The [Firecracker guest recipe](docs/execution-handoff.md#guest-service-and-image)
+provides pinned kernel/rootfs builders and a systemd capture service. Its amd64
+hardware boot, signed delivery and receipt-gated retirement are covered by the
+[v1.0 acceptance results](docs/benchmarks/v1.0-amd64/README.md).
+
+TLS discovery follows supported OpenSSL libraries and Go binaries, including
+container replacements. On Linux amd64, Go TLS response capture supports Go 1.23–1.26,
+including stripped executables with a usable Go function table. Compatible BoringSSL
+`SSL_read` and `SSL_write` paths have been verified for shared libraries and static
+binaries with function symbols. Rustls plaintext requires a controlled endpoint
+receipt; native syscall probes do not observe io_uring submissions or completions.
+See [native coverage and probe requirements](docs/amd64-kvm-k3s.md) for the limits,
+including ARM64 Go response capture.
+
+<a id="daemon-mode"></a>
+
+### Deployment modes
+
+| Mode | How it runs | Typical use |
+| --- | --- | --- |
+| Local CLI | One CLI with a local SQLite database and evidence objects | Development, offline replay, CI jobs and evaluators |
+| Local daemon / sidecar | A service beside a worker or sandbox host, with ingest and query APIs | Shared local queries and buffered event ingestion |
+| Kubernetes node capture | A sensor on each selected node with workload attribution | Multi-workload capture in Kubernetes/K3s |
+
+The sensor runs within the Linux host or guest being observed. AgentProvenance
+uses existing runtimes and orchestrators; it does not provision VMs or replace
+Kubernetes. Existing Falco/Tetragon receivers remain compatibility paths.
+A centralized multi-tenant evidence service is a future design.
+
+<a id="ai-callable-evidence-tools"></a>
+<a id="compliance-evidence-not-certification"></a>
+<a id="custom-rules-in-python"></a>
+<a id="external-evaluator-protocol"></a>
+<a id="intent-conformance"></a>
+<a id="security-evidence-commands"></a>
+<a id="security-loop"></a>
+<a id="worked-example-an-llm-as-security-judge"></a>
+
+## Security and evaluation
+
+Use policies and behavior baselines to find unexpected secret access, network
+egress or process activity. The evidence graph connects findings to their tools,
+processes and artifacts; data-flow views expose possible sensitive-data paths.
+Intent comparison highlights differences between declared actions and observed
+effects, including actions that happened after a recorded refusal.
+
+```sh
+./agentprov security risks --run RUN_ID
+./agentprov policy decisions --run RUN_ID
+./agentprov security responses --run RUN_ID
+./agentprov intent diff --run RUN_ID
+```
+
+Blocking uses the applicable policy gate or response integration. The recorded
+decision and response history show what was requested and what happened;
+importing historical evidence does not block an already completed action.
+OWASP Agentic and NIST mappings show which controls have supporting evidence
+and where gaps remain.
+
+External evaluators can read a trajectory, score it and write back signals
+with evidence references. LLM Judge and Jev demonstrate this workflow; an
+evaluation or training pipeline owns its scoring and reward rules.
+
+```sh
+./agentprov signal context --run RUN_ID
+./agentprov ai tools --provider openai
+./agentprov ai mcp
+```
+
+CLI/JSON, HTTP APIs, the Python SDK and MCP expose evidence to other tools.
+MCP also provides action preflight and explicit context-write tools; writing
+agent context does not execute an action or create kernel telemetry.
+
+[Security commands](docs/security-commands.md) · [Compliance mapping](docs/compliance.md) ·
+[AI tools and MCP](docs/ai-tools.md) · [Python SDK](docs/python-sdk.md)
+
+<a id="boundaries"></a>
+<a id="repository-layout"></a>
+<a id="relationship-to-existing-systems"></a>
+
+## Architecture
+
+![Collection, attribution, evidence storage and investigation interfaces](docs/assets/agentprovenance-architecture.svg)
+
+1. **Collect** session records, hooks, command/file observations and runtime events.
+2. **Normalize and associate** them with runs, tool scopes, processes and workloads;
+   redact sensitive values and buffer streaming input where configured.
+3. **Store evidence** in SQLite and content-addressed objects, retaining source
+   identities, revisions and the basis for derived relationships.
+4. **Inspect and exchange** it through the graph, timeline, CLI, APIs, signed
+   bundles and read-only replay. Security rules and external evaluators add
+   findings tied to the same evidence.
+
+The default deployment keeps these modules in a local service/CLI with an
+optional privileged sensor. A hosted control plane is not required.
+
+| Code area | Responsibility |
+| --- | --- |
+| `internal/launch`, `record`, `hooksbridge`, `agentcontext` | Start executions and collect agent context |
+| `internal/sensor`, `producer`, `telemetry` | Native collection, workload identities and ingestion |
+| `internal/correlation`, `provenance`, `store` | Association, evidence graph, objects and persistence |
+| `internal/security`, `signals`, `attest`, `forensics` | Analysis, external results, signing and export |
+| `internal/cli`, `dashboard`, `daemon`, `mcpserver` | User and integration interfaces |
+
+Git-like provenance covers history, differences, attribution and verification.
+It does not roll back external effects. Hashes and signatures check recorded
+evidence; collection reports separately explain what was observed or missed.
+
+[Full architecture and repository map](docs/capabilities.md#architecture) ·
+[Relationship to other systems](docs/comparisons.md)
+
+<a id="graph-commands"></a>
+<a id="interface-language"></a>
+
+## Features and docs
+
+The session view sits alongside the existing timeline, process tree, network,
+risk signals, data-flow and rule-coverage views. Security analysis and external
+evaluators consume the same recorded evidence.
+
+| What you want to do | Guide |
+| --- | --- |
+| Trace tools, files and execution differences | [Graph commands](docs/graph-commands.md) |
+| Capture sessions and compare configuration | [Agent session](docs/agent-context.md) |
+| Investigate risk, apply policies and inspect blocking decisions | [Security commands](docs/security-commands.md) |
+| Inspect control mappings and rule coverage | [Compliance mapping](docs/compliance.md) |
+| Query evidence from another application | [HTTP API](docs/openapi.yaml), [context API](docs/agent-context-api.yaml), [Python SDK](docs/python-sdk.md) |
+| Give an agent access to evidence tools | [AI tools and MCP](docs/ai-tools.md) |
+| Keep remote file tools and commands on one revision | [Controlled workspace](docs/workspace.md) |
+| Configure execution and collection separately | [Runtime adapters](docs/runtime-adapters.md) |
+| Add an external evaluator | [LLM Judge](demo/llm-judge/README.md), [Jev](demo/jev-judge/README.md) |
+| Understand deployment and architecture | [Deployment modes](docs/deployment-modes.md), [capability reference](docs/capabilities.md) |
+
+Web pages follow your browser language initially, falling back to English, and
+remember manual switches. CLI and tool output default to English; original
+evidence is kept as recorded.
+
+<a id="roadmap"></a>
+<a id="core-demo-acceptance"></a>
+
+## Release status
+
+v0.10.1 strengthens daemon access control, preserves local recording compatibility,
+and explains intent associations, outbound attribution and TLS capture gaps in
+the existing evidence readers. Native capture gains bounded buffering and
+reliable shutdown. New signed captures demonstrate these details alongside the
+historical investigation, comparison and offline-sharing examples.
+
+The current source is preparing v1.0: cross-sandbox execution handoff, controlled
+remote workspaces, gVisor collection, Browser/Notebook context and independently
+verifiable evidence delivery.
+Read the [v1.0 source preview](docs/releases/v1.0.0-preview.md) for the workflows,
+the [deployment guide](docs/deployment-modes.md) for entry requirements, and
+the [unreleased changelog](CHANGELOG.md#unreleased) for individual changes.
+The release archive examples above remain on v0.10.1 until v1.0 is published.
+The source Dashboard and offline exports now share the approved Workspace,
+Browser and Notebook reader. The [demo website build](previews/v1.0-home/README.md#approved-website-build)
+combines four illustrated entries, topic guides and historical recordings while
+preserving existing links and original evidence downloads.
+
+For upgrades, back up your data directory before opening it with a newer version.
+An upgraded database should not be reopened with an older binary. macOS archives
+are not Apple notarized; download checksums verify archive integrity.
+
+[Release notes](docs/releases/v0.10.1.md) · [Changelog](CHANGELOG.md) ·
+[Future work](docs/capabilities.md#future-work)
+
+Before upgrading, read the [v0.10.1 upgrade guide](docs/upgrading-v0.10.1.md)
+for changed authentication, HTTP execution and signed-import defaults.
+
+## Development
+
+```sh
+go test -race ./...
+go vet ./...
+gofmt -l internal cmd
+
+# Portable end-to-end evidence and verification smoke.
+./scripts/accept_phase1.sh
+```
+
+[CI](.github/workflows/ci.yml) runs these gates, static Linux amd64/arm64 builds,
+the native bindings drift check, daemon readiness faults, and live amd64
+syscall/OpenSSL/Go TLS tests across Go 1.23–1.26. Live ARM64 and KVM/K3s lab
+reports are distinct from hosted CI.
+
+Acceptance scripts are environment-specific. Do not run every
+`scripts/accept_*.sh` indiscriminately: some require root, create Pods, or install
+services. Use the [KVM/K3s runbook](docs/amd64-kvm-k3s.md) for those gates and the
+[deployment and performance baseline](docs/project-closeout.md) for the single-node pressure tests.
 
 ## Security
 
-Report suspected vulnerabilities through [GitHub private reporting](https://github.com/ByteYellow/AgentProvenance/security/advisories/new) or email [byteyellow@qq.com](mailto:byteyellow@qq.com). See the [security policy](SECURITY.md) for supported versions and response times.
+Report suspected vulnerabilities through [GitHub private reporting](https://github.com/ByteYellow/AgentProvenance/security/advisories/new)
+or email [byteyellow@qq.com](mailto:byteyellow@qq.com).
+See the [security policy](SECURITY.md) for supported versions and the reporting process.
 
 ## Author and License
 
-Developed and maintained by [ByteYellow](https://github.com/ByteYellow). Thanks to [@8eeth0ven](https://github.com/8eeth0ven) for the security hardening contributed in [PR #34](https://github.com/ByteYellow/AgentProvenance/pull/34).
+Built and maintained by [ByteYellow](https://github.com/ByteYellow).
 
-Copyright 2026 ByteYellow. Licensed under [Apache License 2.0](LICENSE).
+Thanks to [@8eeth0ven](https://github.com/8eeth0ven) for the security hardening
+contributions in [PR #34](https://github.com/ByteYellow/AgentProvenance/pull/34).
+
+Licensed under the Apache License 2.0 — see [LICENSE](LICENSE).
+Copyright 2026 ByteYellow.
