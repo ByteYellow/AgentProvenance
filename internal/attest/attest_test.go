@@ -1,6 +1,7 @@
 package attest
 
 import (
+	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -64,6 +65,28 @@ func TestVerifyRejectsWrongKey(t *testing.T) {
 	}
 	if _, err := Verify(env, otherPub); err == nil {
 		t.Fatal("verify accepted a signature from the wrong key")
+	}
+}
+
+func TestVerifyRejectsUnexpectedPayloadType(t *testing.T) {
+	pub, priv, keyID, err := GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(NewStatement("x", DigestSHA256([]byte("y")), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, payloadType := range []string{"", "application/json"} {
+		sig := ed25519.Sign(priv, pae(payloadType, payload))
+		env := Envelope{
+			PayloadType: payloadType,
+			Payload:     base64.StdEncoding.EncodeToString(payload),
+			Signatures:  []Signature{{KeyID: keyID, Sig: base64.StdEncoding.EncodeToString(sig)}},
+		}
+		if _, err := Verify(env, pub); err == nil {
+			t.Fatalf("verify accepted unexpected payload type %q", payloadType)
+		}
 	}
 }
 

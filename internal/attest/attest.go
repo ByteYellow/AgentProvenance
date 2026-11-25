@@ -100,11 +100,14 @@ func Sign(stmt Statement, key ed25519.PrivateKey, keyID string) (Envelope, error
 }
 
 // Verify checks that at least one signature on the envelope is valid for pub and
-// returns the decoded statement. It fails closed: any decode error, or no valid
-// signature, is an error.
+// returns the decoded statement. It fails closed: any decode error, unexpected
+// payload type, or no valid signature, is an error.
 func Verify(env Envelope, pub ed25519.PublicKey) (Statement, error) {
 	if len(pub) != ed25519.PublicKeySize {
 		return Statement{}, fmt.Errorf("attest: invalid public key size")
+	}
+	if env.PayloadType != dssePayloadType {
+		return Statement{}, fmt.Errorf("attest: unexpected payload type %q", env.PayloadType)
 	}
 	payload, err := base64.StdEncoding.DecodeString(env.Payload)
 	if err != nil {
