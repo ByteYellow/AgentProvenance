@@ -36,7 +36,7 @@ v1 声明的是**完整性校验能力**。`graph verify` 从本地 SQLite 重�
 | 3 | 图校验：对象哈希、父对象和链 | 已完成 | `provenance/verify.go` 的 `verifyObjects`、`verifyRiskAndResponses` |
 | 4 | Falco 摄入 | 已完成 | `IngestFalco`；`accept_falco_risk_realistic.sh` |
 | 4 | Tetragon 摄入 | 已完成 | `mapTetragon`、单元测试和示例；补充验收脚本见第 2 节 |
-| 4 | 原生 eBPF 传感器接收端 | 已完成 | `mapNative` 原生格式；`accept_native_sensor_risk.sh`；2026-06-27 虚拟机端到端验证 |
+| 4 | 原生 eBPF 传感器接收端 | 已完成 | `mapNative` 原生格式；[当时的风险信号检查](https://github.com/ByteYellow/AgentProvenance/blob/d17d0f40a4c4e2c5026ccb10317b1b4afc00331d/scripts/accept_native_sensor_risk.sh)；2026-06-27 虚拟机端到端验证 |
 | 4 | 原生 eBPF 采集程序构建 | 已完成 | 仓库已提交 bpf2go 绑定 `internal/sensor/sensorbpf_{x86,arm64}_bpfel.go/.o`；Linux 新检出后可直接 `go build ./cmd/agentprov-sensor`，无需 clang；`scripts/regen-sensor.sh --check` 和 CI 检查生成文件是否一致 |
 | 4 | 原始事件无需提供 `tool_call_id` | 已完成 | `telemetry/service.go` 的 `IngestFiltered` 回退到 `correlation.Resolve` |
 | 4 | 按容器、cgroup、PID 和时间关联 | 已完成 | 当时 `correlation/binding.go` 的匹配等级：process `1.0`、cgroup `0.98`、container `0.92`、pid `0.85`；这些是历史记录，非当前配置说明 |
@@ -72,7 +72,7 @@ v1 声明的是**完整性校验能力**。`graph verify` 从本地 SQLite 重�
 2. **区分置信来源**：`telemetry.CorrelationClass` 分为 `self_observed`、`context_asserted`、`kernel_correlated`、`uncorrelated`，在遥测列表和事件解释 JSON 中展示，提交 `4e1a6f7`。
 3. **并发写入提醒**：`daemon serve` 持有 `.daemon.lock` 建议锁；CLI 通过 `daemon.WarnIfDaemonActive` 提醒用户改用 `--daemon-url`。WAL 负责文件层面的写入安全，提交 `9f2204a`。
 4. **eBPF 传感器可重复构建**：提交 bpf2go 绑定后，新检出的 Linux 仓库无需 clang 即可执行 `go build ./cmd/agentprov-sensor`；`scripts/regen-sensor.sh` 及其 `--check` 模式和两项 CI 检查负责构建与生成文件一致性，提交 `50f1106`。
-5. **异常与覆盖测试**：`scripts/accept_evidence_tamper_detection.sh` 检查对象文件及库内清单修改，预期 `object_hash_mismatch` 或 `record_manifest_mismatch`，提交 `6692c62`；并发写入图一致性检查见 `record.TestConcurrentRecord...`，提交 `d84812a`；子进程 PID 不同仍可通过容器关联、Tetragon 摄入脚本 `scripts/accept_tetragon_ingest.sh` 和 10 秒窗口断言见提交 `f7f2a6b`。10 万事件延迟使用保存的实测报告，不设跨机器统一 SLA。
+5. **异常与覆盖测试**：[当时的完整性检查](https://github.com/ByteYellow/AgentProvenance/blob/d17d0f40a4c4e2c5026ccb10317b1b4afc00331d/scripts/accept_evidence_tamper_detection.sh) 检查对象文件及库内清单修改，预期 `object_hash_mismatch` 或 `record_manifest_mismatch`，提交 `6692c62`；并发写入图一致性检查见 `record.TestConcurrentRecord...`，提交 `d84812a`；子进程 PID 不同仍可通过容器关联、Tetragon 摄入脚本 [当时的脚本](https://github.com/ByteYellow/AgentProvenance/blob/d17d0f40a4c4e2c5026ccb10317b1b4afc00331d/scripts/accept_tetragon_ingest.sh) 和 10 秒窗口断言见提交 `f7f2a6b`。10 万事件延迟使用保存的实测报告，不设跨机器统一 SLA。
 6. **健康接口契约**：服务 `health` 补充 `schema_version`，提交 `2f2b4d7`；其他报告处理器已有版本字段。所有响应共用一个外层结构会改变现有数据格式，仍留待 v2。
 
 这份历史清单中的 v1 加固工作已结束；当时排除的项目列在下一节。后续版本的完成情况应查阅相应发行说明和验收记录。

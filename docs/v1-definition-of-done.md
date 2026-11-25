@@ -47,7 +47,7 @@ tamper-evident against a malicious host root.
 | 3 | Storage: graph verify object hash/parent/chain | DONE | `provenance/verify.go` verifyObjects + verifyRiskAndResponses |
 | 4 | Ingest: Falco | DONE | `IngestFalco`; `accept_falco_risk_realistic.sh` |
 | 4 | Ingest: Tetragon | DONE | `mapTetragon`; unit + demo (no accept script -- see Sec 2 tests) |
-| 4 | Ingest: own eBPF sensor -- receiver | DONE | `mapNative` native format; `accept_native_sensor_risk.sh`; live VM E2E 2026-06-27 |
+| 4 | Ingest: own eBPF sensor -- receiver | DONE | `mapNative` native format; [historical risk signal check](https://github.com/ByteYellow/AgentProvenance/blob/d17d0f40a4c4e2c5026ccb10317b1b4afc00331d/scripts/accept_native_sensor_risk.sh); live VM E2E 2026-06-27 |
 | 4 | Ingest: own eBPF sensor -- capture binary build | DONE | bpf2go bindings committed (`internal/sensor/sensorbpf_{x86,arm64}_bpfel.go/.o`); fresh Linux `go build ./cmd/agentprov-sensor` works without clang; `scripts/regen-sensor.sh --check` + CI guard drift |
 | 4 | Ingest: raw events need no tool_call_id | DONE | `telemetry/service.go` IngestFiltered -> correlation.Resolve fallback |
 | 4 | Correlation by container/cgroup/pid/time | DONE | `correlation/binding.go`: process 1.0 / cgroup 0.98 / container 0.92 / pid 0.85 |
@@ -90,10 +90,10 @@ tamper-evident against a malicious host root.
    (+ `--check`) and two CI jobs guard build + drift (commit 50f1106).
 5. **[DONE]** Adversarial / coverage tests:
    - object-file + in-DB tamper -> `graph verify` (object_hash_mismatch /
-     record_manifest_mismatch); `scripts/accept_evidence_tamper_detection.sh` (6692c62)
+     record_manifest_mismatch); [the original tamper check](https://github.com/ByteYellow/AgentProvenance/blob/d17d0f40a4c4e2c5026ccb10317b1b4afc00331d/scripts/accept_evidence_tamper_detection.sh) (6692c62)
    - concurrent writers -> graph consistency; record TestConcurrentRecord... (d84812a)
    - child pid != binding pid attributes via container; correlation test (f7f2a6b)
-   - Tetragon `scripts/accept_tetragon_ingest.sh`; 10s window assertion (f7f2a6b)
+   - Tetragon [the original ingestion check](https://github.com/ByteYellow/AgentProvenance/blob/d17d0f40a4c4e2c5026ccb10317b1b4afc00331d/scripts/accept_tetragon_ingest.sh); 10s window assertion (f7f2a6b)
    - 100k latency uses a persisted measured report rather than a fixed SLA;
      machine-specific latency assertions remain intentionally avoided.
 6. **[DONE]** Contract: daemon `health` now emits `schema_version` (the one

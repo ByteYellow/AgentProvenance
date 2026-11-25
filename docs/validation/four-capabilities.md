@@ -147,13 +147,15 @@ Export both with distinct output names, using run `browser-owned-acceptance`:
   --run browser-owned-acceptance --output "$OUT/browser-source-reader.zip"
 "$OUT/agentprov" --data-dir "$OUT/browser-import/received" dashboard export \
   --run browser-owned-acceptance --output "$OUT/browser-received-reader.zip"
-PLAYWRIGHT_CHANNEL=chrome AGENTPROV_REPLAY_SEARCH_QUERY=/pending \
-  node scripts/accept_offline_replay.cjs "$OUT/browser-source-reader.zip"
-PLAYWRIGHT_CHANNEL=chrome AGENTPROV_REPLAY_SEARCH_QUERY=/pending \
-  node scripts/accept_offline_replay.cjs "$OUT/browser-received-reader.zip"
+for reader in "$OUT/browser-source-reader.zip" "$OUT/browser-received-reader.zip"; do
+  unzip -tq "$reader" || exit 1
+  rc=0
+  "$OUT/agentprov-verify" "$reader" > "$reader.verify.json" || rc=$?
+  [ "$rc" -eq 2 ] && jq -e '.derived_signature.status == "unsigned"' "$reader.verify.json" >/dev/null || exit 1
+done
 ```
 
-Open each reader offline and compare its saved scopes, receipts and native
+Both readers are unsigned (verifier exit 2; the example uses `jq` to check the status). Extract each ZIP, open its `index.html` offline, search for `/pending` and compare its saved scopes, receipts and native
 references. These fixture stores have Sensor off. The next check uses a separate
 store containing actual native Sensor events and the operator's runtime mapping.
 The `/pending` search phrase comes from the retained fixture URL, including in
@@ -211,21 +213,14 @@ python3 scripts/accept_derived_view.py --agentprov "$OUT/agentprov" \
 
 The fixture covers valid/unknown/wrong-role signers, tampered readers and
 originals, selection boundaries and package-local policy replacement. Use the
-actual generated ZIPs for the browser test. Set a known saved search phrase for
-each custom capture:
+actual exported ZIP and the recipient’s own trust policy for signature verification (exit 0):
 
 ```sh
-PLAYWRIGHT_CHANNEL=chrome AGENTPROV_REPLAY_SEARCH_QUERY=result.txt \
-  node scripts/accept_offline_replay.cjs /absolute/workspace-originals.zip
 "$OUT/agentprov-verify" --trust-policy /absolute/recipient-policy.json \
   /absolute/workspace-originals.zip
 ```
 
-The browser fixture uses offline `file://` access and no source database. It
-checks selection, indexed content, graph views, search, Compare and mobile
-overflow. The existing reader's unsigned-copy banner remains a known UI item
-for signed modes while the UI preview is held. Use the independent verifier's
-separate integrity, producer, exporter and trust fields for acceptance.
+Extract that ZIP, open `index.html` via `file://` offline, search for `result.txt`, and check the saved content, graph and selection boundaries. Read integrity, producer, exporter and trust separately in the verifier result. For the demo site's automated browser checks, see [build and acceptance](../../previews/v1.0-home/README.md#approved-website-build).
 
 ## Soak and Result Handoff
 

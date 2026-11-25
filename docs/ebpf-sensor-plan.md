@@ -124,8 +124,7 @@ scope id; that is correct when no kernel sensor is present.
 2. On Linux: run the sensor, exec a command / open a secret path / connect to a
    metadata IP inside a container; confirm events are captured and, after ingest,
    correlate to the ToolCallScope and raise the existing risk signals.
-3. Extend `accept_unified_signals_attestation.sh` (or a new accept script) to
-   drive the loop from REAL sensor output instead of the synthetic Falco JSONL.
+3. Capture live events with the [Sensor acceptance check](../scripts/accept_sensor_live.py), then feed those events into the receiver to check risk signals.
 
 ## Boundaries (not in this phase)
 

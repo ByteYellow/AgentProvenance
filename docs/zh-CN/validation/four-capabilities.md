@@ -130,13 +130,15 @@ go test ./internal/agentcontext ./internal/browserlink ./internal/provenance \
   --run browser-owned-acceptance --output "$OUT/browser-source-reader.zip"
 "$OUT/agentprov" --data-dir "$OUT/browser-import/received" dashboard export \
   --run browser-owned-acceptance --output "$OUT/browser-received-reader.zip"
-PLAYWRIGHT_CHANNEL=chrome AGENTPROV_REPLAY_SEARCH_QUERY=/pending \
-  node scripts/accept_offline_replay.cjs "$OUT/browser-source-reader.zip"
-PLAYWRIGHT_CHANNEL=chrome AGENTPROV_REPLAY_SEARCH_QUERY=/pending \
-  node scripts/accept_offline_replay.cjs "$OUT/browser-received-reader.zip"
+for reader in "$OUT/browser-source-reader.zip" "$OUT/browser-received-reader.zip"; do
+  unzip -tq "$reader" || exit 1
+  rc=0
+  "$OUT/agentprov-verify" "$reader" > "$reader.verify.json" || rc=$?
+  [ "$rc" -eq 2 ] && jq -e '.derived_signature.status == "unsigned"' "$reader.verify.json" >/dev/null || exit 1
+done
 ```
 
-分别离线打开两份阅读副本，核对保存的 scope、回执与原生引用。这两份测试库的
+这两份副本均未签名，验证器退出码应为 2；上例使用 `jq` 检查签名状态。分别解压，断网打开 `index.html`，搜索 `/pending`，核对 scope、回执和原生引用。这两份测试库的
 Sensor 关闭；下面的 B-03 检查改用包含实际 Sensor 事件和操作者运行时映射的证据库。
 `/pending` 来自该案例实际保留的 URL，basic 模式也可检索。
 使用 Playwright 安装的 Chromium 时，去掉 `PLAYWRIGHT_CHANNEL` 即可。
@@ -182,18 +184,14 @@ python3 scripts/accept_derived_view.py --agentprov "$OUT/agentprov" \
 ```
 
 脚本覆盖可信/未知/角色错误的签名者、阅读内容及原件篡改、选择边界和包内策略替换。
-浏览器验收使用实际 ZIP，搜索词选择该案例已保存的内容：
+对包含原件的签名包，先用接收方自己的信任策略验签（成功退出码为 0）：
 
 ```sh
-PLAYWRIGHT_CHANNEL=chrome AGENTPROV_REPLAY_SEARCH_QUERY=result.txt \
-  node scripts/accept_offline_replay.cjs /absolute/workspace-originals.zip
 "$OUT/agentprov-verify" --trust-policy /absolute/recipient-policy.json \
   /absolute/workspace-originals.zip
 ```
 
-浏览器使用断网 `file://`，检查选择范围、正文索引、图谱、搜索、Compare 和手机横向溢出。
-目前签名模式沿用的阅读器仍有“未签名副本”旧文案，随页面预览确认后处理。
-本轮签名验收读取独立验证器的完整性、生产者签名、导出者签名和信任字段。
+再解压该 ZIP，断网通过 `file://` 打开 `index.html`，搜索 `result.txt`，核对正文、图谱和导出选择范围。签名结论取自验证器的完整性、生产者、导出者及信任字段。示例站的自动浏览器验收见[构建与验证](../../../previews/v1.0-home/README.zh-CN.md#正式站点构建)。
 
 ## 长时间运行与结果回传
 

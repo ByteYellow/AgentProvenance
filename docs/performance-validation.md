@@ -221,16 +221,22 @@ memory. Each command retains arguments, stdout, stderr, duration and exit status
 
 The runner checks duplicate import, verified signed import into an independent
 store, unchanged records after moving the source store, graph verification,
-paged attachment digests and export selection counts. The complete reading check
-is a separate browser step, run against candidate archives after services stop:
+paged attachment digests and export selection counts. These four exports are unsigned reading copies. Test their ZIP entries and confirm the independent verifier reports the expected unsigned status (exit 2). This example uses `jq`:
 
 ```sh
-node scripts/accept_offline_replay.cjs \
-  "$MEASUREMENTS/candidate/1-browser-detailed/whole.zip" \
-  "$MEASUREMENTS/candidate/1-browser-detailed/excluded.zip" \
-  "$MEASUREMENTS/candidate/1-jupyter-detailed/whole.zip" \
-  "$MEASUREMENTS/candidate/1-jupyter-detailed/excluded.zip"
+go build -o "$MEASUREMENTS/agentprov-verify" ./cmd/agentprov-verify
+for task in 1-browser-detailed 1-jupyter-detailed; do
+  for view in whole excluded; do
+    zip="$MEASUREMENTS/candidate/$task/$view.zip"
+    unzip -tq "$zip" || exit 1
+    rc=0
+    "$MEASUREMENTS/agentprov-verify" "$zip" > "$zip.verify.json" || rc=$?
+    [ "$rc" -eq 2 ] && jq -e '.manifest_status == "missing" and .file_integrity == "not_checked" and .derived_signature.status == "unsigned"' "$zip.verify.json" >/dev/null || exit 1
+  done
+done
 ```
+
+Stop the services, extract each ZIP separately and open its `index.html` offline. Open a known attachment in the whole reader. In the excluded reader, its bytes must be unavailable, including through search and graph links; the retained event may still mention it. For automated browser checks on the built demo site, see the [site acceptance instructions](../previews/v1.0-home/README.md#approved-website-build).
 
 Budgets freeze the median of three repeats for each harness/preset, allow a 25%
 increase, and add a predeclared 50 ms allowance to CLI timing and CPU metrics.

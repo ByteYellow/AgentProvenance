@@ -149,11 +149,12 @@ Existing replay links and original signed bundles remain available. The reader
 also supports older sites with a single manifest and self-contained offline
 exports.
 
-To compare two exported sites on the same machine, run
-`node scripts/bench_static_replay.cjs BEFORE_DIRECTORY AFTER_DIRECTORY` with the
-Playwright dependency installed. `PLAYWRIGHT_CHANNEL=chrome` selects an installed
-Chrome browser. The JSON report separates cold and warm cache measurements,
-transferred bytes, graph readiness and retained JavaScript heap. It also records
-the browser, CPU and source commits.
+Follow the [site build instructions](../previews/v1.0-home/README.md#approved-website-build) to export the replay catalog and build the website, then check the homepage, readers and offline download:
+
+```sh
+python3 scripts/accept_demo_site.py --archive output/site-base --site output/site
+```
+
+For the earlier cold- and warm-cache measurements, use the [benchmark from that revision](https://github.com/ByteYellow/AgentProvenance/blob/d17d0f40a4c4e2c5026ccb10317b1b4afc00331d/scripts/bench_static_replay.cjs).
 
 Return to [all demo commands](../demo/README.md) or the [project quickstart](../README.md#quickstart).

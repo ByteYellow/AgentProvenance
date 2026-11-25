@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check Chinese documentation coverage and local links without network access."""
+"""Check Chinese documentation coverage, local links, and documented shell commands."""
 
 from pathlib import Path
 import re
@@ -9,6 +9,7 @@ from urllib.parse import unquote, urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SCRIPT_PATH = re.compile(r"(?<![\w/.$-])(?:\./)?(scripts/[\w./-]+\.(?:cjs|mjs|js|py|sh))(?=[\s`'\";|)]|$)")
 
 
 def prose(path):
@@ -31,6 +32,26 @@ def anchors(path):
     return result
 
 
+def command_scripts(path):
+    fence = None
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        marker = re.match(r"^\s*(`{3,}|~{3,})([\w+-]*)", line)
+        if marker:
+            if fence is None:
+                fence = (marker[1], marker[2])
+            elif marker[1].startswith(fence[0]) and not marker[2]:
+                fence = None
+            continue
+        if fence:
+            snippets = [line] if fence[1] in {"sh", "bash", "shell", "zsh", "console"} else []
+        else:
+            snippets = re.findall(r"`((?:(?:node|python3|bash|sh)\s+)?(?:\./)?scripts/[^`]+)`", line)
+        for snippet in snippets:
+            if not snippet.lstrip().startswith("#"):
+                for name in SCRIPT_PATH.findall(snippet):
+                    yield number, name
+
+
 def main():
     tracked = subprocess.check_output(
         ["git", "ls-files", "-z", "--", "*.md"], cwd=ROOT
@@ -39,6 +60,11 @@ def main():
     chinese = [p for p in files if "zh-CN" in p.parts or p.name.endswith(".zh-CN.md")]
     errors = []
     for path in files:
+        relative = path.relative_to(ROOT)
+        if relative.parts[0] == "docs" and not {"benchmarks", "releases"}.intersection(relative.parts):
+            for line, name in command_scripts(path):
+                if not (ROOT / name).is_file():
+                    errors.append(f"{relative}:{line}: command uses missing {name}")
         if path in chinese or path.name in {"AGENTS.md", "SKILL.md"}:
             continue
         candidates = [path.with_name(path.stem + ".zh-CN.md")]

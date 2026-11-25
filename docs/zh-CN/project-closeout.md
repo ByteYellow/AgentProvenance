@@ -85,7 +85,7 @@ amd64 KVM/K3s 验收重复了该流程：8 个工作负载、8 个 cgroup、1,28
 
 ```sh
 go test ./...
-./scripts/accept_telemetry_spool_backpressure.sh
+go test ./internal/telemetry -run '^TestSpoolEnqueue' -count=1
 AGENTPROV_ACCEPT_100K_REPORT=/tmp/agentprov-100k.json \
   ./scripts/accept_telemetry_100k_pressure.sh
 

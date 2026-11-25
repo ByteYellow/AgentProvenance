@@ -130,8 +130,11 @@ their real absolute host paths) flow through the identical correlation, policy,
 risk, and unified-signal path as third-party telemetry. Raw file telemetry now
 accepts absolute host paths (e.g. a write to `/home/agent/.aws/credentials`),
 which the policy path rules still catch; only the workspace file-node graph keeps
-its relative-path constraint. `scripts/accept_native_sensor_risk.sh` proves the
-loop end to end (own kernel telemetry to a unified `security` signal).
+its relative-path constraint. The [live Sensor check](../scripts/accept_sensor_live.py) exercises syscall and TLS capture on a Linux host with probe privileges. To check how the receiver attributes native events and raises risk signals, run:
+
+```sh
+go test ./internal/telemetry -run '^TestIngestNativeSensorRiskEventsAndCorrelates$' -count=1
+```
 
 `ingest-falco` is the compatibility receiver for hosts that already run Falco
 (or where the native sensor cannot run); it folds Falco JSON/stdout streams
@@ -982,7 +985,7 @@ Run:
 ```sh
 ./scripts/demo_telemetry_jsonl.sh
 ./scripts/accept_phase1.sh
-./scripts/accept_zero_sdk_realistic.sh
+go test ./internal/record -run '^TestRecordRunCreatesZeroSDKProvenance$' -count=1
 ```
 
 ## Architecture

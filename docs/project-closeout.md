@@ -139,7 +139,7 @@ The project does not implement:
 
 ```sh
 go test ./...
-./scripts/accept_telemetry_spool_backpressure.sh
+go test ./internal/telemetry -run '^TestSpoolEnqueue' -count=1
 AGENTPROV_ACCEPT_100K_REPORT=/tmp/agentprov-100k.json \
   ./scripts/accept_telemetry_100k_pressure.sh
 

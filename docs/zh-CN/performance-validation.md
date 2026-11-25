@@ -198,15 +198,22 @@ python3 scripts/accept_context_cost.py freeze \
 中的最大值。每条命令保留参数、标准输出、标准错误、耗时和退出码。
 
 脚本检查重复导入、独立存储中的签名验证、移走来源存储后的记录一致性、图谱验证、
-附件分页摘要及导出选择数量。完整阅读体验另用浏览器验收；服务停止后执行：
+附件分页摘要及导出选择数量。以下四个输出是未签名阅读副本。检查 ZIP 是否能完整解压，以及独立验证器是否按预期报告未签名（退出码 2）；需要 `jq`：
 
 ```sh
-node scripts/accept_offline_replay.cjs \
-  "$MEASUREMENTS/candidate/1-browser-detailed/whole.zip" \
-  "$MEASUREMENTS/candidate/1-browser-detailed/excluded.zip" \
-  "$MEASUREMENTS/candidate/1-jupyter-detailed/whole.zip" \
-  "$MEASUREMENTS/candidate/1-jupyter-detailed/excluded.zip"
+go build -o "$MEASUREMENTS/agentprov-verify" ./cmd/agentprov-verify
+for task in 1-browser-detailed 1-jupyter-detailed; do
+  for view in whole excluded; do
+    zip="$MEASUREMENTS/candidate/$task/$view.zip"
+    unzip -tq "$zip" || exit 1
+    rc=0
+    "$MEASUREMENTS/agentprov-verify" "$zip" > "$zip.verify.json" || rc=$?
+    [ "$rc" -eq 2 ] && jq -e '.manifest_status == "missing" and .file_integrity == "not_checked" and .derived_signature.status == "unsigned"' "$zip.verify.json" >/dev/null || exit 1
+  done
+done
 ```
+
+停止服务，分别解压四份 ZIP，断网打开各自的 `index.html`。选一个已知附件：完整副本可以打开；排除该附件的副本即使保留了提到它的事件，也无法通过搜索或图谱读到附件正文。示例站的自动浏览器验收见[站点检查](../../previews/v1.0-home/README.zh-CN.md#正式站点构建)。
 
 预算取各 harness、档位三次结果的中位数，允许增加 25%；CLI 耗时及 CPU 另加预先
 声明的 50 毫秒余量。输入哈希、环境和测量脚本必须一致。缺少指标、原生关联变化

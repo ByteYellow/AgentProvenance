@@ -111,6 +111,12 @@ Grok 原场景当前无法复现。两份原记录继续支持签名校验、导
 
 旧回放链接和原始签名包继续保留。阅读器也支持使用单一清单的旧站点，以及自包含的离线导出目录。
 
-在同一台机器上比较两份导出站点，可安装 Playwright 依赖后运行 `node scripts/bench_static_replay.cjs BEFORE_DIRECTORY AFTER_DIRECTORY`。设置 `PLAYWRIGHT_CHANNEL=chrome` 可使用已安装的 Chrome。JSON 报告分别记录冷、热缓存下的传输字节数、图谱可用时间和保留的 JavaScript 堆内存，并附上浏览器、CPU 与源码提交。
+按[站点构建说明](../../previews/v1.0-home/README.zh-CN.md#正式站点构建)生成回放目录和完整站点，再检查首页、阅读器和离线下载：
+
+```sh
+python3 scripts/accept_demo_site.py --archive output/site-base --site output/site
+```
+
+需要复查早期冷、热缓存性能数据时，请使用[当时版本的测量脚本](https://github.com/ByteYellow/AgentProvenance/blob/d17d0f40a4c4e2c5026ccb10317b1b4afc00331d/scripts/bench_static_replay.cjs)。
 
 返回[示例命令目录](../../demo/README.zh-CN.md)或[项目快速开始](../../README.zh-CN.md#快速开始)。

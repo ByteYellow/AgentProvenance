@@ -113,7 +113,11 @@ agentprov telemetry ingest-falco --file falco-events.jsonl
 与第三方遥测共用关联、策略、风险和统一信号处理流程。
 文件事件可以保留宿主机上的绝对路径，例如 `/home/agent/.aws/credentials`，
 并接受路径规则检查；工作区文件节点则使用相对路径。
-`scripts/accept_native_sensor_risk.sh` 验证了从原生采集到 `security` 信号的完整链路。
+在有探针权限的 Linux 主机上，用[实机采集检查](../../scripts/accept_sensor_live.py)验证系统调用和 TLS 事件。要单独检查原生事件的归属及风险信号，在仓库根目录运行：
+
+```sh
+go test ./internal/telemetry -run '^TestIngestNativeSensorRiskEventsAndCorrelates$' -count=1
+```
 
 已有 Falco 的主机也可使用 `ingest-falco`，将 Falco 的 JSON/stdout 输出接入
 同一流程。用法见 [Falco 接收器说明](../../docs/zh-CN/falco-receiver.md)。
@@ -849,7 +853,7 @@ TLS 自动发现会根据执行、连接和库打开事件，定向检查对应�
 ```sh
 ./scripts/demo_telemetry_jsonl.sh
 ./scripts/accept_phase1.sh
-./scripts/accept_zero_sdk_realistic.sh
+go test ./internal/record -run '^TestRecordRunCreatesZeroSDKProvenance$' -count=1
 ```
 
 ## 架构

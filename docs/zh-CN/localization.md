@@ -41,15 +41,19 @@
 python3 scripts/check_localized_docs.py
 ```
 
-它检查每份已跟踪的英文 Markdown 使用文档是否有中文版本，以及中文文档中的本地链接、图片和章节锚点。CI 和正式发布流程都会执行它。
+它检查英文文档是否有中文版，以及中文文档的本地链接、图片和章节锚点；还会检查中英文使用文档中 shell 示例引用的仓库脚本是否存在。CI 和正式发布流程都会执行它。
 
-Dashboard 浏览器检查需要 Playwright。先运行 `agentprov demo --no-browser`，再将输出地址传给脚本：
+在仓库根目录构建带示例导出功能的 CLI，并按[站点构建说明](../../previews/v1.0-home/README.zh-CN.md#正式站点构建)准备 Playwright 和浏览器。按顺序检查原始中英文回放、生成站点，再检查首页和工作台：
 
 ```sh
-node scripts/accept_dashboard_i18n.cjs http://127.0.0.1:PORT
+go build -tags agentprov_tools -o /tmp/agentprov-review ./cmd/agentprov
+export NODE_PATH="$PWD/previews/v1.0-home/node_modules"
+python3 scripts/accept_static_demo.py --binary /tmp/agentprov-review --site output/site-base
+python3 scripts/build_demo_site.py --archive output/site-base --output output/site
+python3 scripts/accept_demo_site.py --archive output/site-base --site output/site
 ```
 
-将 `PORT` 替换为实际端口。可设置 `PLAYWRIGHT_CHANNEL=msedge` 使用本机 Edge，否则使用 Playwright 的 Chromium。
+已安装 Chrome 时，可先设置 `export PLAYWRIGHT_CHANNEL=chrome`。
 
 `scripts/accept_jev_i18n.cjs` 检查工作台语言与交互，仅使用新的合成测试数据，避免修改真实评审。真实请求响应、模型回答和原始签名包不参与翻译。
 
@@ -57,6 +61,6 @@ node scripts/accept_dashboard_i18n.cjs http://127.0.0.1:PORT
 
 [发布工作流](../../.github/workflows/release.yml)先运行中文文档检查、Go 静态检查和竞态测试，再分别构建四个平台的压缩包。
 
-每个平台执行 `scripts/accept_release.py`：校验下载哈希和版本信息，在 PATH 不包含 Go 的环境中打开九份签名记录、十一个指南的中英文页面，检查 Dashboard 接口、评估器帮助与退出清理。工作流收集四份通过验收的压缩包，生成 `SHA256SUMS` 后发布。
+每个平台执行 `scripts/accept_release.py`：校验下载哈希和版本信息，在 PATH 不包含 Go 的环境中打开随包提供的签名示例和中英文指南，检查 Dashboard 接口、评估器帮助与退出清理。工作流收集通过验收的压缩包，生成 `SHA256SUMS` 后发布。
 
 [x86 采集与基础 CI](../../.github/workflows/ci.yml)继续检查 Linux 双架构构建、eBPF 绑定及 Go 1.23–1.26 的 amd64 系统调用和 TLS 采集。本次中文适配沿用已有采集能力与证据格式。
