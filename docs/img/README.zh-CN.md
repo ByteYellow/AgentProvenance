@@ -57,8 +57,6 @@ v0.9.0 界面截图于 2026-10-08 拍摄，使用签名 DeepSeek 记录
 | `dashboard-graph-explorer-taint.png`、`dashboard-graph-explorer-taint-zh-CN.png` | `run-snake-supervised` 的数据流与污点传播视图；红色虚线表示推断关系 |
 | `dashboard-side-panel-preview.png` | 英文节点详情与产物预览 |
 | `dashboard-side-panel-preview-zh-CN.png` | 中文节点详情与原始命令预览 |
-| `dashboard-mobile-zh-CN.png` | 390 像素宽度下的中文首页 |
-| `demo-multiagent-overview.png` | 多 Agent 执行记录的英文概览、风险与时间线 |
 | `demo-multiagent-orchestration.png`、`demo-multiagent-orchestration-zh-CN.png` | 主 Agent、子 Agent、协作消息、工具调用及系统调用归属 |
 | `demo-multiagent-risk-path.png`、`demo-multiagent-risk-path-zh-CN.png` | 聚焦云元数据访问风险及其关联证据 |
 | `demo-multiagent-network-egress.png`、`demo-multiagent-network-egress-zh-CN.png` | 多 Agent 执行中的网络外发证据 |
@@ -66,16 +64,11 @@ v0.9.0 界面截图于 2026-10-08 拍摄，使用签名 DeepSeek 记录
 
 这些图片均为真实界面截图。图中的关系由证据查询生成；不要用手工绘制或生成图片替代验收截图。
 
-## 回放动画与帧
+## 回放动画
 
 | 文件 | 内容 |
 |---|---|
-| `demo-snake-taint-replay.png` | 贪吃蛇示例的时间回放帧，展示敏感文件读取与后续网络行为 |
 | `demo-snake-taint-replay.gif`、`demo-snake-taint-replay-zh-CN.gif` | 数据流视图的中英文回放片段 |
-| `demo-multiagent-agent-network.gif`、`demo-multiagent-agent-network-zh-CN.gif` | 使用 Dashboard 播放按钮录制的中英文协作视图片段 |
-| `demo-snake-taint-replay-zh-CN.png`、`demo-multiagent-agent-network-zh-CN.png` | 两段中文动画的结束帧 |
-| `demo-multiagent-agent-network-01-start.png` | 播放开始前的原始帧 |
-| `demo-multiagent-agent-network-02-play.png` 至 `demo-multiagent-agent-network-07-play.png` | 播放过程中的原始帧 |
 
 ## 重新采集截图
 
