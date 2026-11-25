@@ -10,10 +10,8 @@ MAX_BYTES = 10 * 1024 * 1024
 BOUNDARY = b"output/go.mod"
 # Existing public evidence: only these exact Git blobs at these paths are exempt.
 LEGACY = {
-    b"artifacts/acceptance/v0.10.1/AgentProvenance-v0.10.1-x86-acceptance-4828cce.zip": b"908aa6ab43e69a85ac9ec3d11334a0ac6e7b639a",
     b"docs/benchmarks/v1.0-candidate/replays/task-investigation.zip": b"b5d203ca8167bef49753bfa8173ea303337b735f",
     b"docs/benchmarks/v1.0-x86-completion/replays/browser/crash-recovery-reading.zip": b"cf1ed1ec9fe3d3d5589c84936da0d74c5a82df7b",
-    b"docs/benchmarks/v1.0-x86-completion/replays/browser/sensor-on-derived.zip": b"4490881ba1bf8002b97c0b4d086f12c02d0a5a5b",
     b"docs/benchmarks/v1.0-x86-completion/replays/browser/sensor-on-reading.zip": b"77e1c8849322798c855dc7e752dea92ba391f5ea",
 }
 

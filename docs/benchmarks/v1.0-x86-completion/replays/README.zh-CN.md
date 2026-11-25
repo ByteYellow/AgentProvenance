@@ -8,7 +8,7 @@
 | 案例 | 阅读副本 | 保留的签名原包 | 验收记录 |
 | --- | --- | --- | --- |
 | 真实 Claude Workspace：Read、Edit、Write、Bash、文件版本和原生事件 | [harness-reading.zip](workspace/harness-reading.zip) | [harness-derived.zip](workspace/harness-derived.zip) | [Workspace](../workspace-final.json) |
-| Browser 开启 Sensor：并发上下文、重启、回执、OS 关联和三份 HAR 附件 | [sensor-on-reading.zip](browser/sensor-on-reading.zip) | [sensor-on-derived.zip](browser/sensor-on-derived.zip) | [Browser](../browser-final.json) |
+| Browser 开启 Sensor：并发上下文、重启、回执、OS 关联和三份 HAR 附件 | [sensor-on-reading.zip](browser/sensor-on-reading.zip) | [sensor-on-derived.zip](https://raw.githubusercontent.com/ByteYellow/AgentProvenance/541b33cabec7af3028a54b64ae421931ef690775/docs/benchmarks/v1.0-x86-completion/replays/browser/sensor-on-derived.zip) | [Browser](../browser-final.json) |
 | Browser 中断恢复：前后两代会话、已保存的操作结果和原生事件 | [crash-recovery-reading.zip](browser/crash-recovery-reading.zip) | — | [Browser](../browser-final.json) |
 | Kata/QEMU 真实 Claude Workspace | [harness-reading.zip](kata/harness-reading.zip) | [harness-derived.zip](kata/harness-derived.zip) | [Kata](../kata-final.json) |
 | Kata/QEMU 首次启动 Guest | [boot-1-reading.zip](kata/boot-1-reading.zip) | [boot-1-derived.zip](kata/boot-1-derived.zip) | [离线交付](../kata-offline-final.json) |
@@ -31,7 +31,9 @@ API Key、私钥和登录凭据留在 x86 机器上。
 随附的 `*-recipient-trust.json` 仅包含用于验证签名原包的导出者公钥。
 校验示例：
 
+[完整原始交接目录](https://github.com/ByteYellow/AgentProvenance/tree/541b33cabec7af3028a54b64ae421931ef690775/docs/benchmarks/v1.0-x86-completion/replays)保留了当时的说明和全部文件，可在该版本运行 `sha256sum -c SHA256SUMS`。只核验当前目录中的 Workspace 示例时，运行：
+
 ```sh
-sha256sum -c SHA256SUMS
+grep -F '  workspace/harness-derived.zip' SHA256SUMS | sha256sum -c -
 agentprov-verify --trust-policy workspace/harness-recipient-trust.json workspace/harness-derived.zip
 ```

@@ -6,7 +6,7 @@
 
 - 源码：[`4828cce10f0b53630d0a298affc760d5b1d6682c`](https://github.com/ByteYellow/AgentProvenance/tree/4828cce10f0b53630d0a298affc760d5b1d6682c)。
 - 构建：Go 1.23.0，`linux/amd64`，`CGO_ENABLED=0`。
-- [下载 ZIP](AgentProvenance-v0.10.1-x86-acceptance-4828cce.zip?raw=true)，约 68 MiB。
+- [下载原始验收包](https://raw.githubusercontent.com/ByteYellow/AgentProvenance/82c8f4615cfdc9daf8a0d96888a45e65a051b3f5/artifacts/acceptance/v0.10.1/AgentProvenance-v0.10.1-x86-acceptance-4828cce.zip)（约 68 MiB）。
 - [压缩包校验值](SHA256SUMS)；包内另附逐文件校验值。
 - ARM64 已完成验收。原 x86 包及修正后的程序已于 2026-11-06 通过 Ubuntu guest 验收，详见[结果与环境限制](../../../docs/benchmarks/v0.10.1-x86/README.zh-CN.md)。本 ZIP 仍保留原始 `4828cce` 构建。
 
@@ -22,7 +22,7 @@
 
 ```sh
 set -eu
-base='https://raw.githubusercontent.com/ByteYellow/AgentProvenance/fix/v0.10.1-pr34-integration/artifacts/acceptance/v0.10.1'
+base='https://raw.githubusercontent.com/ByteYellow/AgentProvenance/82c8f4615cfdc9daf8a0d96888a45e65a051b3f5/artifacts/acceptance/v0.10.1'
 archive='AgentProvenance-v0.10.1-x86-acceptance-4828cce.zip'
 curl -fL "$base/$archive" -o "$archive"
 curl -fL "$base/SHA256SUMS" -o SHA256SUMS

@@ -8,7 +8,7 @@ extract it, and open `index.html`. Each package works offline.
 | Case | Reading copy | Preserved signed package | Acceptance |
 | --- | --- | --- | --- |
 | Real Claude Workspace: Read, Edit, Write, Bash, file versions and native events | [harness-reading.zip](workspace/harness-reading.zip) | [harness-derived.zip](workspace/harness-derived.zip) | [Workspace](../workspace-final.json) |
-| Browser with Sensor: parallel contexts, restart, receipts, OS links and three HAR attachments | [sensor-on-reading.zip](browser/sensor-on-reading.zip) | [sensor-on-derived.zip](browser/sensor-on-derived.zip) | [Browser](../browser-final.json) |
+| Browser with Sensor: parallel contexts, restart, receipts, OS links and three HAR attachments | [sensor-on-reading.zip](browser/sensor-on-reading.zip) | [sensor-on-derived.zip](https://raw.githubusercontent.com/ByteYellow/AgentProvenance/541b33cabec7af3028a54b64ae421931ef690775/docs/benchmarks/v1.0-x86-completion/replays/browser/sensor-on-derived.zip) | [Browser](../browser-final.json) |
 | Browser interrupted-operation recovery: both generations, saved outcomes and native events | [crash-recovery-reading.zip](browser/crash-recovery-reading.zip) | — | [Browser](../browser-final.json) |
 | Kata/QEMU real Claude Workspace | [harness-reading.zip](kata/harness-reading.zip) | [harness-derived.zip](kata/harness-derived.zip) | [Kata](../kata-final.json) |
 | Kata/QEMU first Guest boot | [boot-1-reading.zip](kata/boot-1-reading.zip) | [boot-1-derived.zip](kata/boot-1-derived.zip) | [Offline delivery](../kata-offline-final.json) |
@@ -35,7 +35,9 @@ API keys, private keys and login credentials stay on the x86 machine. Public
 `*-recipient-trust.json` files contain exporter public keys for the preserved
 signed readers. To verify one:
 
+To verify every file, run `sha256sum -c SHA256SUMS` in the [original handoff directory](https://github.com/ByteYellow/AgentProvenance/tree/541b33cabec7af3028a54b64ae421931ef690775/docs/benchmarks/v1.0-x86-completion/replays), which includes the archived guides and all ZIPs. To check just the Workspace example in this checkout:
+
 ```sh
-sha256sum -c SHA256SUMS
+grep -F '  workspace/harness-derived.zip' SHA256SUMS | sha256sum -c -
 agentprov-verify --trust-policy workspace/harness-recipient-trust.json workspace/harness-derived.zip
 ```

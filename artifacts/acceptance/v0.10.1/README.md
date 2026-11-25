@@ -8,7 +8,7 @@ artifact, not a published release.
 
 - Source: [`4828cce10f0b53630d0a298affc760d5b1d6682c`](https://github.com/ByteYellow/AgentProvenance/tree/4828cce10f0b53630d0a298affc760d5b1d6682c).
 - Build: Go 1.23.0, `linux/amd64`, `CGO_ENABLED=0`.
-- [Download ZIP](AgentProvenance-v0.10.1-x86-acceptance-4828cce.zip?raw=true) (about 68 MiB).
+- [Download the original acceptance ZIP](https://raw.githubusercontent.com/ByteYellow/AgentProvenance/82c8f4615cfdc9daf8a0d96888a45e65a051b3f5/artifacts/acceptance/v0.10.1/AgentProvenance-v0.10.1-x86-acceptance-4828cce.zip) (about 68 MiB).
 - [Archive checksum](SHA256SUMS); individual file checksums are inside the ZIP.
 - ARM64 acceptance was completed earlier. The x86 package and corrected build passed the Ubuntu guest gates on 2026-11-06; see the [report and remaining environment limits](../../../docs/benchmarks/v0.10.1-x86/README.md). This ZIP retains the original `4828cce` build.
 
@@ -26,7 +26,7 @@ In a dedicated working directory:
 
 ```sh
 set -eu
-base='https://raw.githubusercontent.com/ByteYellow/AgentProvenance/fix/v0.10.1-pr34-integration/artifacts/acceptance/v0.10.1'
+base='https://raw.githubusercontent.com/ByteYellow/AgentProvenance/82c8f4615cfdc9daf8a0d96888a45e65a051b3f5/artifacts/acceptance/v0.10.1'
 archive='AgentProvenance-v0.10.1-x86-acceptance-4828cce.zip'
 curl -fL "$base/$archive" -o "$archive"
 curl -fL "$base/SHA256SUMS" -o SHA256SUMS
