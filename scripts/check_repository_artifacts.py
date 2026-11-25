@@ -14,6 +14,11 @@ LEGACY = {
     b"docs/benchmarks/v1.0-x86-completion/replays/browser/crash-recovery-reading.zip": b"cf1ed1ec9fe3d3d5589c84936da0d74c5a82df7b",
     b"docs/benchmarks/v1.0-x86-completion/replays/browser/sensor-on-reading.zip": b"77e1c8849322798c855dc7e752dea92ba391f5ea",
 }
+# Removed archives may occur in a PR's older history, never in its index or a new commit.
+RETIRED_ADDITIONS = {
+    (b"45d1c00ae896097c96121c7944c16d02d95ae24b", b"artifacts/acceptance/v0.10.1/AgentProvenance-v0.10.1-x86-acceptance-4828cce.zip", b"908aa6ab43e69a85ac9ec3d11334a0ac6e7b639a"),
+    (b"541b33cabec7af3028a54b64ae421931ef690775", b"docs/benchmarks/v1.0-x86-completion/replays/browser/sensor-on-derived.zip", b"4490881ba1bf8002b97c0b4d086f12c02d0a5a5b"),
+}
 
 
 def git(*args, data=None):
@@ -35,13 +40,18 @@ def history_entries(base):
     if git("rev-parse", "--is-shallow-repository").strip() == b"true":
         raise ValueError("Range checks need full commit history; use a full checkout or check the index only.")
     base_oid = git("rev-parse", "--verify", "--end-of-options", base + "^{commit}").strip().decode()
-    records = git("log", "--format=", "--raw", "-z", "--no-abbrev", "--no-renames",
+    records = git("log", "--format=commit:%H", "--raw", "-z", "--no-abbrev", "--no-renames",
                   "--root", "-m", "--diff-filter=AMT", base_oid + "..HEAD", "--")
     fields = iter(records.split(b"\0"))
+    commit = None
     for meta in fields:
-        if meta:
+        if meta.startswith(b"commit:"):
+            commit = meta[len(b"commit:"):]
+        elif meta:
             _, mode, _, oid, _ = meta.split()
-            yield next(fields), oid, mode
+            path = next(fields)
+            if (commit, path, oid) not in RETIRED_ADDITIONS:
+                yield path, oid, mode
 
 
 def main():

@@ -4,6 +4,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+
+import check_repository_artifacts as policy
 
 
 CHECK = Path(__file__).with_name("check_repository_artifacts.py").resolve()
@@ -71,6 +74,29 @@ class ArtifactPolicyTest(unittest.TestCase):
         result = self.check()
         self.assertEqual(result.returncode, 1)
         self.assertIn(path.name, result.stderr)
+
+    def test_retired_archive_exception_is_only_for_original_commit(self):
+        path = "archived evidence.zip"
+        with (self.root / path).open("wb") as out:
+            out.truncate(LIMIT + 1)
+        self.git("add", "--", path)
+        self.git("commit", "-qm", "original handoff")
+        original = self.git("rev-parse", "HEAD").strip()
+        oid = self.git("rev-parse", f"HEAD:{path}").strip().encode()
+        retired = {(original.encode(), path.encode(), oid)}
+        def git(*args):
+            return subprocess.check_output(["git", *args], cwd=self.root)
+        with patch.object(policy, "git", git), patch.object(policy, "RETIRED_ADDITIONS", retired):
+            self.git("rm", "-q", "--", path)
+            self.git("commit", "-qm", "archive externally")
+            self.assertEqual(list(policy.history_entries(self.base)), [])
+            self.git("restore", "--source", original, "--staged", "--worktree", "--", path)
+            self.assertIn((path.encode(), oid, b"100644"), list(policy.index_entries()))
+            self.assertEqual(self.check().returncode, 1)
+            self.git("commit", "-qm", "bring back the same bytes")
+            self.git("rm", "-q", "--", path)
+            self.git("commit", "-qm", "remove again")
+            self.assertEqual(list(policy.history_entries(self.base)), [(path.encode(), oid, b"100644")])
 
     def test_missing_output_module_boundary(self):
         self.git("rm", "-q", "output/go.mod")
