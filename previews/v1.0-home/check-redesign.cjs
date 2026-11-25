@@ -30,6 +30,30 @@ const wait = selector => page => page.locator(selector).waitFor({state:'visible'
     console.log(JSON.stringify(results.at(-1)));
   }
   try {
+    await test('wide evidence graphs fit on entry and preserve manual zoom',async(p,go)=>{
+      for(const [run,lens] of [['run-double-attempt','orchestration'],['a2a-demo','substrate']]){
+        await go('zh-CN/replay.html?'+new URLSearchParams({run,lens,live:'0'}));
+        const svg=p.locator('#dag svg'), frame=svg.locator('[data-id] .frame').first();
+        await frame.waitFor();
+        const width=()=>svg.evaluate(el=>el.width.baseVal.value);
+        const fitted=await width(), panel=await p.locator('#dag').evaluate(el=>el.clientWidth);
+        assert.ok(fitted<=panel && fitted>panel-20);
+        await p.locator('#wb-zin').click();
+        const manual=await width();
+        assert.ok(manual>fitted);
+        const id=await p.evaluate(()=>window._lensManifest.nodes.find(n=>!n.data?.drilldown_lens).id);
+        const node=svg.locator('[data-id='+JSON.stringify(id)+']');
+        await node.click();
+        assert.equal(await node.getAttribute('aria-pressed'),'true');
+        assert.equal(await width(),manual);
+        await p.setViewportSize({width:1366,height:900});
+        assert.equal(await width(),manual);
+        await p.locator('#wb-zfit').click();
+        assert.ok(await width()<=await p.locator('#dag').evaluate(el=>el.clientWidth));
+        await p.setViewportSize({width:1440,height:900});
+        await p.waitForFunction(w=>document.querySelector('#dag svg')?.width.baseVal.value===w,fitted);
+      }
+    });
     await test('workspace card agrees with owned receipt',async(p,go)=>{
       await go(home('zh-CN'));
       const row=p.locator('.ws-step').filter({hasText:'result.txt'});

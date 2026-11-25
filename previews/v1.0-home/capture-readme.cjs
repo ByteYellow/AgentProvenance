@@ -47,10 +47,23 @@ async function capture(page, home, lang, output) {
 
   await page.goto(team.href);
   const dag = page.locator('#dag svg');
+  async function checkGraphWidth() {
+    const bounds = await dag.evaluate(svg => {
+      const host = svg.parentElement, left = host.getBoundingClientRect().left + host.clientLeft;
+      const frames = [...svg.querySelectorAll('[data-id] .frame')].map(n => n.getBoundingClientRect());
+      return {count: frames.length, left: Math.min(...frames.map(r => r.left)) - left,
+        right: Math.max(...frames.map(r => r.right)) - left, width: host.clientWidth,
+        scale: svg.getScreenCTM().a};
+    });
+    assert.ok(bounds.count && bounds.left >= -1 && bounds.right <= bounds.width + 1,
+      'Initial graph clips nodes: ' + JSON.stringify(bounds));
+    assert.ok(bounds.scale >= 0.68, 'Desktop graph labels too small: ' + JSON.stringify(bounds));
+  }
   await dag.getByText('alice', {exact:true}).first().waitFor();
   await dag.getByText('bob', {exact:true}).first().waitFor();
   const hint = page.locator('#page-tour-invite button');
   if (await hint.isVisible()) await hint.click();
+  await checkGraphWidth();
   await save('workbench-team');
 
   const historical = new URL(team);
@@ -58,6 +71,7 @@ async function capture(page, home, lang, output) {
   await page.goto(historical.href);
   for (const id of ['368026', '368305']) await dag.locator('text').filter({hasText:id}).first().waitFor();
   if (await hint.isVisible()) await hint.click();
+  await checkGraphWidth();
   await save('workbench-placement');
 
   historical.search = new URLSearchParams({run:'run-dbc2adf273d4', view:'session', live:'0'});

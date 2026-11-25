@@ -309,8 +309,7 @@
     expandMode: 'lineage',
     overlays: new Set(),
     zoom: 1,
-    fit: true,
-    exactFit: false,
+    zoomMode: 'auto',
     times: [],
     tcur: null,
     playing: null,
@@ -602,7 +601,11 @@
     $('#wb-focus-clear').onclick = () => setLens(S.lens, S.detail, '');
     $('#wb-zout').onclick = () => setZoom(0.8);
     $('#wb-zin').onclick = () => setZoom(1.25);
-    $('#wb-zfit').onclick = () => { S.fit = true; S.exactFit = !S.exactFit; S.graphView?.resize(); renderGraph(); };
+    $('#wb-zfit').onclick = () => {
+      S.zoomMode = fitsWidth() ? 'reading' : 'width';
+      S.graphView?.resize(); updateFitButton();
+    };
+    desktopGraph.addEventListener('change', () => { S.graphView?.resize(); updateFitButton(); });
     $('#wb-play').onclick = togglePlay;
     $('#wb-slider').oninput = () => { stopPlay(); setScrub(+$('#wb-slider').value); };
     $('#wb-scrub-hint').onclick = () => setLens(S.lens, 'expanded', S.focus);
@@ -643,8 +646,7 @@
     S.sel = S.focus || null;
     S.insContentMode = 'body';
     S.insContentNode = '';
-    S.fit = true;
-    S.exactFit = false;
+    S.zoomMode = 'auto';
     stopPlay();
     if (S.mode !== 'graph') setMode('graph'); else syncURL();
     loadGraph();
@@ -707,19 +709,21 @@
         cols[k].forEach((n, i) => { idx[n.id] = i; });
       });
     }
-    const ROWH = 80, NW = 166, NH = 52, PADX = 28, PADY = 26;
+    // Give wide graphs less empty space between columns before scaling their text.
+    const wide = nums.length >= 4;
+    const ROWH = 80, NW = wide ? 144 : 166, NH = 52, PADX = wide ? 18 : 28, PADY = 26;
     const pos = {}; let x = PADX, right = PADX + NW;
     for (const k of nums) {
       let widest = NW;
       cols[k].forEach((n, i) => {
-        const w = Math.max(NW, Math.min(320, 38 + Math.ceil(textW(nodeLabel(n)))));
+        const w = Math.max(NW, Math.min(wide ? 236 : 320, 38 + Math.ceil(textW(nodeLabel(n)))));
         pos[n.id] = { x, y: PADY + i * ROWH, w, h: NH };
         widest = Math.max(widest, w);
       });
-      right = x + widest; x += Math.max(260, widest + 42);
+      right = x + widest; x += wide ? widest + 20 : Math.max(260, widest + 42);
     }
     const maxRows = Math.max(1, ...Object.values(cols).map(c => c.length));
-    return { pos, W: right + PADX, H: PADY * 2 + (maxRows - 1) * ROWH + NH };
+    return { pos, wide, W: right + PADX, H: PADY * 2 + (maxRows - 1) * ROWH + NH };
   }
   function localScope(g, sel, mode) {
     if (!sel) return null;
@@ -733,25 +737,29 @@
     else { walk(sel, out); walk(sel, inc); }
     return { nodes, edges };
   }
+  const desktopGraph = matchMedia('(min-width: 981px)');
+  function fitsWidth() {
+    return S.zoomMode === 'width' || (S.zoomMode === 'auto' && S.layout?.wide && desktopGraph.matches);
+  }
   function graphZoom(W) {
-    if (S.fit) {
-      const el = $('#dag');
-      const cw = (el && el.clientWidth) || W;
-      const raw = Math.min(1, (cw - 12) / W);
-      if (S.exactFit) return raw;
-      return S.lens === 'orchestration' && matchMedia('(min-width: 981px)').matches ? 1.1 : Math.max(0.62, raw);
+    if (S.zoomMode === 'manual') return S.zoom;
+    const cw = $('#dag')?.clientWidth || W;
+    const raw = Math.min(1, Math.max(1, cw - 12) / W);
+    if (fitsWidth()) return raw;
+    if (desktopGraph.matches && (S.zoomMode === 'reading' || S.lens === 'orchestration')) {
+      return S.lens === 'orchestration' ? 1.1 : 1;
     }
-    return S.zoom;
+    return Math.max(0.62, raw);
   }
   function setZoom(m) {
-    if (S.fit && S.layout) S.zoom = graphZoom(S.layout.W);
-    S.fit = false; S.exactFit = false; S.zoom = Math.max(0.25, Math.min(3, S.zoom * m));
+    const previous = S.layout ? graphZoom(S.layout.W) : S.zoom;
+    S.zoomMode = 'manual'; S.zoom = Math.max(0.25, Math.min(3, previous * m));
     S.graphView?.resize(); updateFitButton();
   }
   function updateFitButton() {
     const fit = $('#wb-zfit');
-    fit.textContent = S.exactFit ? L('阅读比例', 'Reading size') : L('全图', 'Fit width');
-    fit.title = S.exactFit ? L('恢复默认阅读字号', 'Restore default reading size') : L('按宽度查看整张图', 'Fit the entire graph width');
+    fit.textContent = fitsWidth() ? L('阅读比例', 'Reading size') : L('全图', 'Fit width');
+    fit.title = fitsWidth() ? L('恢复默认阅读字号', 'Restore default reading size') : L('按宽度查看整张图', 'Fit the entire graph width');
   }
   function stopPlay() { if (S.playing) { clearInterval(S.playing); S.playing = null; } $('#wb-play').textContent = '▶'; }
   function togglePlay() {
@@ -820,13 +828,13 @@
 
   function renderGraph() {
     if (!S.graph) return;
-    updateFitButton();
     const g = S.graph;
     const key = S.gsig;
     if (S.layoutKey !== key || !S.layout) {
       S.layout = computeLayout(g.nodes, g.edges);
       S.layoutKey = key;
     }
+    updateFitButton();
     S.graphView ??= window.AgentGraphView({
       host: $('#dag'), find: $('#wb-find'), next: $('#wb-next'), count: $('#wb-matches'),
       activate: selectNode, scale: graphZoom, zoomAt: setZoom, translate: tr
@@ -2418,7 +2426,7 @@
 
   async function loadRun(runId, keepRoute = false) {
     S.run = runId;
-    if (!keepRoute) { S.scope = null; S.sel = null; S.focus = ''; S.insTab = 'summary'; S.fit = true; S.exactFit = false; }
+    if (!keepRoute) { S.scope = null; S.sel = null; S.focus = ''; S.insTab = 'summary'; S.zoomMode = 'auto'; }
     S.overview = null; showVerifyBadge(null);
     S.wsItems = []; S.wsSelected = 0; S.nativeItems = []; S.nativeSelected = 0; S.handoffs = [];
     S.entries = []; S.entriesCursor = ''; S.sessionSourceFilter = '';
