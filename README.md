@@ -227,8 +227,12 @@ Each execution has a Run ID. Substitute the IDs printed by your recording:
 
 Use the dashboard to follow tools into runtime events, open saved file content,
 and compare recorded task or configuration entries. The [graph reference](docs/graph-commands.md)
-covers execution comparisons and artifact lineage. Add `--sign-key` during
-recording when you want a signed run; signing is opt-in.
+covers execution comparisons and artifact lineage.
+
+Signing is optional. `KEY_PATH` is the path to your Ed25519 private key file:
+
+- **After `record`:** sign the evidence bundle on export with `./agentprov forensics export RUN_ID --sign-key KEY_PATH`.
+- **With `launch`:** pass the key at startup, for example `./agentprov launch --sign-key KEY_PATH -- claude`. The bundle is signed when the agent exits.
 
 <a id="evidence-layers"></a>
 <a id="runtime-facts-and-correlation"></a>

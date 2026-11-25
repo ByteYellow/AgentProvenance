@@ -208,7 +208,11 @@ mkdir -p /tmp/agentprov-record-demo
 
 在可视化界面中，可以从工具调用定位到运行时事件、打开已保存的文件正文，
 也可以比较不同时间的任务或配置。执行差异和产物来源查询见[证据图命令](docs/zh-CN/graph-commands.md)。
-如需给执行记录签名，在记录时添加 `--sign-key`；签名默认关闭。
+
+签名默认关闭。`KEY_PATH` 是 Ed25519 私钥文件的路径：
+
+- **用 `record` 记录普通命令：** 录制结束后，运行 `./agentprov forensics export RUN_ID --sign-key KEY_PATH`，在导出时给证据包签名。
+- **用 `launch` 启动 Agent：** 启动时传入私钥路径，例如 `./agentprov launch --sign-key KEY_PATH -- claude`。Agent 退出时会自动给证据包签名。
 
 <a id="证据分层"></a>
 <a id="运行时事实与关联"></a>
